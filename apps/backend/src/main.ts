@@ -152,6 +152,11 @@ import {
 	ensureSshPasswordSynced,
 	getSshStatus,
 } from "./modules/system/ssh.ts";
+import { reconcileAptChannel } from "./modules/system/update-apt-channel.ts";
+import { readUpdateCapabilities } from "./modules/system/update-capabilities.ts";
+import { startUpdateOrchestrator } from "./modules/system/update-orchestrator/runtime.ts";
+import { loadUpdateSettings } from "./modules/system/update-settings.ts";
+import { updatePinController } from "./modules/system/update-transport/pin.ts";
 import { initHotspotCredentials } from "./modules/wifi/hotspot-credentials.ts";
 import { applyPersistedCountry } from "./modules/wifi/regdomain.ts";
 import { reconcileWifiAdapterModes } from "./modules/wifi/wifi-adapter-mode-transition.ts";
@@ -255,6 +260,12 @@ await runCritical("systemd-ready", notifyServiceReady);
 //     failure is logged, flags the device readiness-reduced (surfaced on
 //     /api/health via the boot-readiness rollup), and is swallowed so boot never
 //     crashes and the WS server (bound above) stays reachable. ---
+
+// Recovery must finish before an update may install any new UID routing rule.
+if (await isRealDevice())
+	await guardNonCritical("update-route-sweep", () =>
+		updatePinController.sweep(),
+	);
 
 // Resolve device_id + paired state before anything that gates the control
 // channel (spec §9: it MUST NOT dial until identity is resolved).
@@ -408,6 +419,25 @@ setInterval(updateGwWrapper, UPDATE_GW_INT);
 
 // Self-gating: it no-ops when updates are disabled for this device or when the
 // host is a dev/mock box (a dev machine must never be handed to apt).
+await guardNonCritical("apt-channel-reconcile", async () => {
+	const mode = (await readUpdateCapabilities()).mode;
+	if (mode === "capable")
+		await reconcileAptChannel(mode, (await loadUpdateSettings()).channel);
+});
+// Todo 36: the packages+OS+slot-sync orchestrator. Its own resume path (G17)
+// is the ONLY thing that reattaches to a persisted `committing` phase's
+// detached apt unit on this boot — running it BEFORE the general standalone
+// recovery call below is what stops the two from racing over the SAME unit.
+// A recovered, already-finished unit's outcome is awaited (bounded: drain +
+// cleanup only, see software-updates.ts recoverSoftwareUpdate()) before
+// resume reads it, and the orchestrator's own synchronous state persist then
+// runs in the SAME continuation, ahead of the deliberate crash-to-restart a
+// successful recovery's completion schedules. The standalone call after it
+// is then a safe no-op whenever the orchestrator already handled the unit,
+// and remains the only recovery path for a detached transaction the
+// orchestrator itself never tracked (e.g. one started via
+// `system.startUpdate` directly).
+await guardNonCritical("update-orchestrator", startUpdateOrchestrator);
 await guardNonCritical("software-update-recovery", async () => {
 	await recoverSoftwareUpdateIfRunning();
 });

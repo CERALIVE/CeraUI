@@ -1,5 +1,25 @@
 # CeraUI
 
+**Device updates [EXISTS].** One update agent on the device checks for package
+and system updates on a schedule, installs them only while the device is idle,
+and never lets an update and a stream collide: while packages commit or services
+restart, Go Live is refused with a clear reason, and a download in progress is
+cancelled so the stream can start. Settings → Software Updates shows packages,
+system image, slots, automation (auto toggles, schedule window, channel),
+cellular allowances with per-candidate approval, and the update connection. A
+busy update shows an app-wide badge, and the Live cockpit warns before Go Live;
+Start stays enabled because the device decides admission. Implementation
+reference: [device updates](docs/DEVICE-UPDATES.md).
+
+**What today's images can use [PARTIAL].** Every image shipping today is a
+legacy image: it keeps the 15-package update roster, and the dialog states which
+sections it cannot back instead of hiding them. Updating every package by origin,
+signed system-image updates and the slot mirror are implemented but need image
+capabilities no released image declares yet. System-image updates additionally
+need an `/etc/ceralive/os-release-version` stamp, so current boards refuse them.
+All of this is unit-, fixture- and Playwright-tested, not exercised on a board.
+See also [update recovery](docs/UPDATE-RECOVERY.md).
+
 Generic raw capture inputs now have an honest, non-streamable **Raw video** row
 rather than a false Cam Link identity. Both consumers now pin published bindings
 2026.9.11; see [publication and rollout](docs/RAW-CAPTURE-CLASSIFICATION.md).
@@ -111,6 +131,9 @@ A dev-only DevTools destination is available in development builds.
   stagger instead of walking every DNS answer serially, while active SRTLA links
   use passive RTT/NAK telemetry instead of competing probes. Captive portals
   remain visible as degraded links.
+  An update-specific, stateless selector also has fixture-proven APT/OS host
+  checks per uplink and address family. Live first-party deployment validation
+  awaits the update infrastructure; see `docs/HOST-UPLINK-ELECTION.md`.
 - **Flow-sticky client sharing**: the backend assigns new hotspot/shared-LAN flows
   across healthy uplinks while preserving established-flow affinity and keeping
   locally-originated SRTLA traffic outside its NAT path. The image carrier is the

@@ -104,6 +104,72 @@ stale pin plus new-field usage into a silent runtime strip instead of a
 compile-time error — it is what made the PR #303 case invisible to `tsc`, and it
 is what this gate exists because the type system alone could not catch.
 
+## THE DEVICE UPDATE SYSTEM [EXISTS; capable-image paths PARTIAL]
+
+One update agent, `apps/backend/src/modules/system/update-orchestrator/`, owns
+package discovery and install, OS staging and activation, the lagged slot mirror
+and the stream/update admission rule. The implementation reference is
+[`docs/DEVICE-UPDATES.md`](docs/DEVICE-UPDATES.md); the backend's load-bearing
+rules are in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → THE UPDATE
+ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
+
+- **[EXISTS] Orchestrator.** A pure 18-phase reducer (`reduceOrchestrator`) plus
+  one effects layer (`runtime.ts`), persisted to
+  `/data/ceralive/update-state/agent.json` and resumed at boot without ever
+  re-running dpkg. It pushes the additive `status.update_orchestrator` field on
+  every transition; the older `update_state` union is unchanged.
+- **[EXISTS] D8 admission.** `committing` and `restarting-services` refuse a
+  stream start with the typed `update_in_progress` class; `downloading` and
+  `os-staging` allow it and abort the transfer; `syncing` continues. Wired as the
+  last gate of `stream-session-orchestrator.ts`'s `start()` through
+  `admitAndPrepareStreamStart()`. See [`docs/START-LIFECYCLE.md`](docs/START-LIFECYCLE.md).
+- **[EXISTS] Schedule and idle.** 6 h package / 12 h OS checks with jitter and a
+  24 h-capped backoff, gated by `packagesAuto` / `systemAuto`. Installs start
+  only when idle (`getIdleStatus()`: 30 minutes without stream, preview, start
+  lease, remote command or UI heartbeat, inside the configured window). Remote
+  presence is a five-minute command-recency heuristic, not true presence.
+- **[EXISTS] Settings, capabilities and RPCs.** `system.getUpdateSettings`,
+  `setUpdateSettings`, `getUpdateCapabilities`, `checkUpdatesNow`,
+  `installUpdatesNow`, `allowCellularOnce`, `getUpdateDetails`. Operator actions
+  bypass idle, never D8.
+- **[EXISTS] Updates dialog and global surfaces.** Settings → Software Updates
+  shows Packages, System image, Slots, Automation, Over cellular and Update
+  connection, gated by `updateCapabilityView()`; a legacy image states the limit
+  instead of hiding it. `UpdateOrchestratorBadge` shows a busy update app-wide;
+  `live/UpdateRefusalBand` warns before Go Live (live push first, typed refusal
+  as fallback) and never disables Start. Every settings write is pessimistic.
+- **[EXISTS] Recovery.** Quarantine of exact failed candidates
+  (`quarantine.json`), idle-only restart of stale services with a protected-unit
+  list, and keyed update notifications. Contract:
+  [`docs/UPDATE-RECOVERY.md`](docs/UPDATE-RECOVERY.md).
+- **[PARTIAL] APT all-package scope.** Origin-filtered, exact `name=version`
+  installs under one flock. Active only on an image declaring `apt-all-packages`;
+  every shipping image is legacy (`features: []`) and keeps the exact-name
+  15-package roster.
+- **[PARTIAL] Signed OS agent.** CMS-verified channel manifests, RAUC staging,
+  deferred activation, post-boot verification. Needs `apt-all-packages` +
+  `rauc-verity-streaming` and the release-only `/etc/ceralive/os-release-version`
+  stamp, so every current board refuses OS staging with `booted_version_unknown`.
+- **[PARTIAL] Lagged slot mirror.** `slotSyncGate()` with eight typed refusals,
+  then the image's `ceralive-slot-sync.service`. Needs `slot-sync`.
+- **[PARTIAL] Update transport.** `selectUpdateTransport()` plus
+  `updatePinController` (UID-scoped route, 15-minute failover hold). Used only by
+  the OS agent; package transactions still use the apt reachability preflight.
+  DNS is not pinned. See [`docs/HOST-UPLINK-ELECTION.md`](docs/HOST-UPLINK-ELECTION.md).
+
+Known gaps, recorded rather than smoothed over:
+
+- **Nothing dispatches `RESET`,** so `quarantined` and `failed` persist until
+  `agent.json` is removed.
+- **The Packages section still calls `system.startUpdate` /
+  `system.checkForUpdates`,** which bypass the orchestrator; D8 does not see a
+  transaction started there (the older `isUpdating()` start guard still refuses
+  a stream during it).
+- **No certificate-expiry countdown.** The wire carries no expiry date,
+  `credentials-expiring` has no producer, and the credentials band keys on an
+  `apt`-profile transport finding that no production path produces yet.
+- **Nothing is board-proven.** Unit, fixture, netns and Playwright tests only.
+
 ## STRUCTURE
 
 The live cockpit consumes an authoritative session-switch namespace, distinct from
@@ -169,6 +235,7 @@ CeraUI/
 | Task | Location |
 |------|----------|
 | Live destination (stream control) | `apps/frontend/src/main/LiveView.svelte` |
+| **Device updates (orchestrator, D8 admission, OS agent, slot mirror, update transport)** | backend `apps/backend/src/modules/system/update-orchestrator/` + `update-transport/`; frontend `apps/frontend/src/lib/updates/` + `main/dialogs/UpdatesDialog.svelte`; reference [`docs/DEVICE-UPDATES.md`](docs/DEVICE-UPDATES.md) |
 | Network destination (links/WiFi/modems) | `apps/frontend/src/main/NetworkView.svelte` |
 | Settings destination (config entry points) | `apps/frontend/src/main/SettingsView.svelte` |
 | Persistent HUD bar | `apps/frontend/src/main/HudBar.svelte` + `apps/frontend/src/lib/stores/hud.svelte.ts` |

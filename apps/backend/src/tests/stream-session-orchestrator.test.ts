@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { StreamStartFailure } from "../modules/streaming/start-failure-taxonomy.ts";
 import {
 	createStreamSessionOrchestrator,
+	STREAM_LAUNCH_ORIGINS,
 	type StartRetryDiagnostic,
 	type StreamLaunchContext,
 } from "../modules/streaming/stream-session-orchestrator.ts";
@@ -688,5 +689,187 @@ describe("stream session orchestrator", () => {
 		expect(statusEdges).toEqual([]);
 		expect(await orchestrator.reconcile()).toBe("idle");
 		expect(statusEdges).toEqual([false]);
+	});
+});
+
+// ─── update-orchestrator D8 admission wiring (Todo 37) ─────────────────────
+//
+// `admitUpdate` is the ONE shared choke point every real launch origin
+// (ui / autostart / remote-control / set-profile / restoration) passes
+// through, because they all call `productionOrchestrator.start()` — this
+// factory function IS that orchestrator. Looping every declared origin here
+// proves the admission check is origin-agnostic by construction (there is no
+// origin-based branch around the `deps.admitUpdate` call), which is the
+// property that makes wiring it once here equivalent to wiring it at all
+// three real call sites the plan names.
+describe("update-orchestrator D8 admission — refusal", () => {
+	test("every declared launch origin is refused identically, and launch() is never called", async () => {
+		for (const origin of STREAM_LAUNCH_ORIGINS) {
+			let launched = false;
+			const marks: string[] = [];
+			const orchestrator = createStreamSessionOrchestrator({
+				createAttemptId: attemptIds(),
+				setStreamingStatus: () => {},
+				stopRuntime: async () => {},
+				queryRuntime: async () => "idle",
+				admitUpdate: async () => ({
+					allowed: false,
+					reason: "update_in_progress",
+					phase: "committing",
+					percent: 72,
+					etaSeconds: 15,
+				}),
+				markStreamingForOta: () => marks.push("mark"),
+				unmarkStreamingForOta: () => marks.push("unmark"),
+			});
+
+			const result = await orchestrator.start({
+				origin,
+				launch: async () => {
+					launched = true;
+				},
+			});
+
+			expect(launched).toBe(false);
+			expect(result.result).toBe("failed");
+			if (result.result === "failed") {
+				expect(result.failure.class).toBe("update_in_progress");
+				expect(result.failure.retriable).toBe(false);
+				expect(result.failure.updatePhase).toBe("committing");
+				expect(result.failure.updatePercent).toBe(72);
+				expect(result.failure.updateEtaSeconds).toBe(15);
+			}
+			// A refused update-admission must never have touched the OTA
+			// sentinel — nothing was admitted.
+			expect(marks).toEqual([]);
+			expect(orchestrator.snapshot().state).toBe("idle");
+		}
+	});
+
+	test("a restarting-services refusal carries through identically", async () => {
+		let launched = false;
+		const orchestrator = createStreamSessionOrchestrator({
+			createAttemptId: attemptIds(),
+			setStreamingStatus: () => {},
+			stopRuntime: async () => {},
+			queryRuntime: async () => "idle",
+			admitUpdate: async () => ({
+				allowed: false,
+				reason: "update_in_progress",
+				phase: "restarting-services",
+				percent: 100,
+				etaSeconds: 0,
+			}),
+		});
+
+		const result = await orchestrator.start({
+			origin: "autostart",
+			launch: async () => {
+				launched = true;
+			},
+		});
+
+		expect(launched).toBe(false);
+		expect(result).toEqual({
+			result: "failed",
+			attemptId: "attempt-1",
+			failure: {
+				attemptId: "attempt-1",
+				phase: "params",
+				class: "update_in_progress",
+				updatePhase: "restarting-services",
+				updatePercent: 100,
+				updateEtaSeconds: 0,
+				retriable: false,
+			},
+		});
+	});
+});
+
+describe("update-orchestrator D8 admission — allowed: OTA sentinel lifecycle", () => {
+	test("set on admitted start, held through a successful launch, cleared on stop()", async () => {
+		const marks: Array<"mark" | "unmark"> = [];
+		const orchestrator = createStreamSessionOrchestrator({
+			createAttemptId: attemptIds(),
+			setStreamingStatus: () => {},
+			stopRuntime: async () => {},
+			queryRuntime: async () => "idle",
+			admitUpdate: async () => ({ allowed: true }),
+			markStreamingForOta: () => marks.push("mark"),
+			unmarkStreamingForOta: () => marks.push("unmark"),
+		});
+
+		const result = await orchestrator.start({
+			origin: "ui",
+			launch: async () => {},
+		});
+
+		expect(result).toEqual({ result: "started", attemptId: "attempt-1" });
+		// Marked exactly once, on the admitted start — not yet cleared.
+		expect(marks).toEqual(["mark"]);
+
+		await orchestrator.stop("operator");
+		expect(marks).toEqual(["mark", "unmark"]);
+	});
+
+	test("a launch that fails AFTER an allowed update-admission still clears the sentinel", async () => {
+		const marks: Array<"mark" | "unmark"> = [];
+		const orchestrator = createStreamSessionOrchestrator({
+			createAttemptId: attemptIds(),
+			setStreamingStatus: () => {},
+			stopRuntime: async () => {},
+			queryRuntime: async () => "idle",
+			retryPolicy: {
+				maxAttempts: 1,
+				totalBudgetMs: 60_000,
+				baseDelayMs: 2_000,
+				maxDelayMs: 16_000,
+			},
+			admitUpdate: async () => ({ allowed: true }),
+			markStreamingForOta: () => marks.push("mark"),
+			unmarkStreamingForOta: () => marks.push("unmark"),
+		});
+
+		const result = await orchestrator.start({
+			origin: "ui",
+			launch: async ({ attemptId }) => {
+				throw new StreamStartFailure({
+					attemptId,
+					phase: "connect",
+					class: "engine_internal",
+					retriable: false,
+				});
+			},
+		});
+
+		expect(result.result).toBe("failed");
+		// Marked when admitted, then unmarked immediately because the launch
+		// never actually went live — the stream never touched the sentinel's
+		// real purpose (deferring OTA activation while a stream IS running).
+		expect(marks).toEqual(["mark", "unmark"]);
+	});
+
+	test("admitUpdate absent (no update orchestrator wired) never calls the marker deps and starts normally", async () => {
+		const marks: string[] = [];
+		const orchestrator = createStreamSessionOrchestrator({
+			createAttemptId: attemptIds(),
+			setStreamingStatus: () => {},
+			stopRuntime: async () => {},
+			queryRuntime: async () => "idle",
+			markStreamingForOta: () => marks.push("mark"),
+			unmarkStreamingForOta: () => marks.push("unmark"),
+		});
+
+		const result = await orchestrator.start({
+			origin: "ui",
+			launch: async () => {},
+		});
+
+		expect(result).toEqual({ result: "started", attemptId: "attempt-1" });
+		// admitUpdate itself was never wired, but markStreamingForOta is NOT
+		// gated on it — every admitted start marks the sentinel regardless of
+		// whether an update orchestrator is present, matching its documented
+		// purpose (defer OTA activation while ANY stream is live).
+		expect(marks).toEqual(["mark"]);
 	});
 });

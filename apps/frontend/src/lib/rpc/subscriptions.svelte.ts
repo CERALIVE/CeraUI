@@ -30,6 +30,7 @@ import type {
 	SharingDiag,
 	SourcesMessage,
 	StatusResponse,
+	UpdateOrchestratorWireState,
 	UpdateState,
 	UplinkShaperStatus,
 	UplinkSteeringStatus,
@@ -135,6 +136,11 @@ let availableUpdatesState = $state.raw<
 // Locked by `main/Layout.updating-overlay.test.ts`.
 let updatingState = $state.raw<StatusResponse["updating"]>(null);
 let updateStateState = $state.raw<UpdateState | undefined>(undefined);
+// `undefined` means no frame has carried the orchestrator block (an older
+// backend), which is NOT the same fact as `phase: 'idle'`.
+let updateOrchestratorState = $state.raw<
+	UpdateOrchestratorWireState | undefined
+>(undefined);
 
 // Network state
 let netifState = $state.raw<NetifMessage | undefined>(undefined);
@@ -302,6 +308,12 @@ export function getUpdating() {
 
 export function getUpdateState() {
 	return updateStateState;
+}
+
+export function getUpdateOrchestratorState():
+	| UpdateOrchestratorWireState
+	| undefined {
+	return updateOrchestratorState;
 }
 
 export function getNetif() {
@@ -519,6 +531,12 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 				updateStateState = preserveWireIdentity(
 					updateStateState,
 					statusData.update_state,
+				);
+			}
+			if (statusData.update_orchestrator !== undefined) {
+				updateOrchestratorState = preserveWireIdentity(
+					updateOrchestratorState,
+					statusData.update_orchestrator,
 				);
 			}
 			if (statusData.wifi !== undefined) {
@@ -1163,6 +1181,7 @@ export function resetState(): void {
 	sshState = undefined;
 	availableUpdatesState = undefined;
 	updatingState = null;
+	updateOrchestratorState = undefined;
 	netifState = undefined;
 	uplinksState = undefined;
 	sharingDiagState = undefined;

@@ -4,6 +4,7 @@
  */
 
 import {
+	allowCellularOnceInputSchema,
 	autostartInputSchema,
 	autostartOutputSchema,
 	cloudProviderEndpointSchema,
@@ -21,6 +22,10 @@ import {
 	sensorsStatusSchema,
 	sshPersistentInputSchema,
 	successResponseSchema,
+	updateCapabilitiesSchema,
+	updateDetailsSchema,
+	updateSettingsInputSchema,
+	updateSettingsSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
 import { z } from "zod";
@@ -61,6 +66,18 @@ import {
 	setSshPersistent,
 	startStopSsh,
 } from "../../modules/system/ssh.ts";
+import { reconcileAptChannel } from "../../modules/system/update-apt-channel.ts";
+import { readUpdateCapabilities } from "../../modules/system/update-capabilities.ts";
+import { readUpdateDetails } from "../../modules/system/update-orchestrator/details.ts";
+import {
+	allowCellularOnce,
+	checkUpdatesNow,
+	installUpdatesNow,
+} from "../../modules/system/update-orchestrator/runtime.ts";
+import {
+	loadUpdateSettings,
+	saveUpdateSettings,
+} from "../../modules/system/update-settings.ts";
 import { mintPreviewToken } from "../../modules/ui/preview-token.ts";
 import { simulateDevReboot } from "../events.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
@@ -71,6 +88,23 @@ const baseProcedure = os.$context<RPCContext>();
 
 // Authenticated procedure
 const authedProcedure = baseProcedure.use(authMiddleware);
+
+export const getUpdateSettingsProcedure = authedProcedure
+	.output(updateSettingsSchema)
+	.handler(() => loadUpdateSettings());
+
+export const setUpdateSettingsProcedure = authedProcedure
+	.input(updateSettingsInputSchema)
+	.output(updateSettingsSchema)
+	.handler(async ({ input }) => {
+		const mode = (await readUpdateCapabilities()).mode;
+		if (mode === "capable") await reconcileAptChannel(mode, input.channel);
+		return saveUpdateSettings(input);
+	});
+
+export const getUpdateCapabilitiesProcedure = authedProcedure
+	.output(updateCapabilitiesSchema)
+	.handler(() => readUpdateCapabilities());
 
 /**
  * Get revisions procedure
@@ -208,6 +242,60 @@ export const startUpdateProcedure = authedProcedure
 		logger.info("System: software update started");
 		return { success: true };
 	});
+
+/**
+ * Update-orchestrator operator actions (Todo 36). Both `checkUpdatesNow` and
+ * `installUpdatesNow` bypass the IDLE requirement — an operator asking for
+ * this explicitly does not need to wait for a quiet window — but NEVER bypass
+ * the D8 stream-admission block; `installUpdatesNow` refuses outright while a
+ * stream is live rather than silently queuing behind it (queuing an update
+ * behind a stream is the plan's explicit prohibition, not merely undesirable).
+ */
+export const checkUpdatesNowProcedure = authedProcedure
+	.output(successResponseSchema)
+	.handler(async () => {
+		const outcome = await checkUpdatesNow();
+		if (!outcome.started) {
+			logger.info(`System: manual update check refused (${outcome.reason})`);
+			return { success: false, error: outcome.reason };
+		}
+		logger.info("System: manual update check started (orchestrator)");
+		return { success: true };
+	});
+
+export const installUpdatesNowProcedure = authedProcedure
+	.output(successResponseSchema)
+	.handler(async () => {
+		const outcome = await installUpdatesNow();
+		if (!outcome.started) {
+			logger.info(`System: manual update install refused (${outcome.reason})`);
+			return { success: false, error: outcome.reason };
+		}
+		logger.info("System: manual update install started (orchestrator)");
+		return { success: true };
+	});
+
+// Re-exported from its `@ceraui/rpc` home (Todo 41 moved it there so the
+// contract and the frontend share one definition); the name stays exported here
+// for existing importers.
+export { allowCellularOnceInputSchema };
+
+export const allowCellularOnceProcedure = authedProcedure
+	.input(allowCellularOnceInputSchema)
+	.output(successResponseSchema)
+	.handler(({ input }) => {
+		allowCellularOnce(input.id);
+		logger.info(`System: one-time cellular override granted (${input.id})`);
+		return { success: true };
+	});
+
+/**
+ * The Updates dialog's pull (Todo 41). A pure read — see
+ * `update-orchestrator/details.ts` for the per-block honest-absence rules.
+ */
+export const getUpdateDetailsProcedure = authedProcedure
+	.output(updateDetailsSchema)
+	.handler(() => readUpdateDetails());
 
 /**
  * Manual "check for updates now". Runs the same discovery the periodic loop

@@ -368,7 +368,7 @@ via `bun run build:federation` from the CeraUI root (delegates to the frontend
   the typed host adapter. Shared graph code is split into sibling chunks
   co-located at the same versioned path.
 - **`<ceraui-version>`** is read at build time from the workspace-root `package.json` `version`
-(CalVer, `2026.9.4` at time of writing) — the single source of truth, matching the platform's
+(CalVer, `2026.9.5` at time of writing) — the single source of truth, matching the platform's
   `ceraui-version` claim.
 - **The catalog is STATIC here, not lazy.** Each entry still calls
   `registerFederationMessages()` (`@ceraui/i18n/eager`) at module scope and
@@ -2126,6 +2126,14 @@ Rule-E proof captured in both directions: reverting the fix reddens 7 of 7 e2e
 legs and 3 of 10 unit tests.
 
 ## CONNECTION RELIABILITY
+
+**Visible operator heartbeat [PARTIAL, Todo 32].** `Layout.svelte` sends the
+authenticated `ui.heartbeat` every 30 seconds only while the page is visible
+AND has focus, and sends on focus/visibility return. Unmount or authentication
+loss clears the timer/listeners. The backend stamps receipt; an unfocused kiosk
+preview is still a separate preview blocker, never inferred idle from the lack
+of a UI heartbeat. This is a detector signal only; no update scheduling UI or
+automatic commit path ships with it.
 
 ### Connection-ready gate
 

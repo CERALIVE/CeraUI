@@ -20,10 +20,12 @@ import {
 } from "./software-update-output.ts";
 import {
 	DetachedAptServiceCommandError,
+	expectedAptAllScript,
 	InvalidDetachedAptUpgradeArgumentsError,
 	isExpectedAptUpgradeArgv,
 	SOFTWARE_UPDATE_DESCRIPTION,
 	SOFTWARE_UPDATE_FRAGMENT_PATH,
+	SOFTWARE_UPDATE_LOCK,
 	SOFTWARE_UPDATE_UNIT,
 	validateDetachedAptServiceFragment,
 } from "./software-update-service-contract.ts";
@@ -110,6 +112,45 @@ export function buildDetachedAptUpgradeCommand(
 		"--",
 		"/usr/bin/apt-get",
 		...aptArgs,
+	];
+}
+
+export function buildDetachedAptAllCommand(
+	installArgs: readonly string[],
+	verdict: "any" | "force_ipv4" | "force_ipv6",
+	outputPaths: SoftwareUpdateOutputPaths,
+): string[] {
+	const family =
+		verdict === "any"
+			? []
+			: ["-o", `Acquire::ForceIPv${verdict === "force_ipv4" ? "4" : "6"}=true`];
+	const script = expectedAptAllScript(installArgs, family);
+	const trusted = softwareUpdateOutputPaths();
+	if (
+		outputPaths.stdout !== trusted.stdout ||
+		outputPaths.stderr !== trusted.stderr
+	)
+		throw new UnsafeSoftwareUpdateOutputPathError(
+			outputPaths.stdout,
+			"runtime paths are fixed",
+		);
+	return [
+		"systemd-run",
+		`--unit=${SOFTWARE_UPDATE_UNIT}`,
+		`--description=${SOFTWARE_UPDATE_DESCRIPTION}`,
+		"--remain-after-exit",
+		"--quiet",
+		"--service-type=exec",
+		"--expand-environment=no",
+		`--property=StandardOutput=append:${outputPaths.stdout}`,
+		`--property=StandardError=append:${outputPaths.stderr}`,
+		"--",
+		"/usr/bin/flock",
+		"-x",
+		SOFTWARE_UPDATE_LOCK,
+		"/bin/sh",
+		"-ec",
+		script,
 	];
 }
 

@@ -9,6 +9,7 @@
 */
 
 import {
+	buildDetachedAptAllCommand,
 	buildDetachedAptUpgradeCommand,
 	type DetachedAptServiceDeps,
 	type DetachedAptServiceState,
@@ -33,6 +34,15 @@ export type DetachedAptUpgradeDeps = DetachedAptServiceDeps;
 
 export type RecoveredDetachedAptUpgrade = {
 	readonly completion: Promise<number>;
+	/**
+	 * True when the unit was ALREADY in its "finished" state at the moment we
+	 * inspected it — i.e. only a bounded final drain + cleanup remain on
+	 * `completion`, never an unbounded poll loop (the "running" case can take
+	 * minutes). A caller may safely AWAIT `completion` when this is true; it
+	 * must not when it is false, or it risks blocking boot on a live apt
+	 * transaction. See software-updates.ts `recoverSoftwareUpdate()`.
+	 */
+	readonly wasAlreadyFinished: boolean;
 };
 
 type OutputCursor = {
@@ -222,6 +232,22 @@ export async function runDetachedAptUpgrade(
 	return observeDetachedAptUpgrade({ kind: "running" }, handlers, deps);
 }
 
+export async function runDetachedAptAll(
+	installArgs: readonly string[],
+	verdict: "any" | "force_ipv4" | "force_ipv6",
+	handlers: SoftwareUpdateOutputHandlers,
+	deps: DetachedAptUpgradeDeps = defaultDetachedAptServiceDeps(),
+): Promise<number> {
+	const existing = await deps.inspect();
+	if (existing.kind !== "absent")
+		throw new DetachedAptServiceAlreadyExistsError();
+	await deps.prepareOutput();
+	await deps.start(
+		buildDetachedAptAllCommand(installArgs, verdict, deps.outputPaths),
+	);
+	return observeDetachedAptUpgrade({ kind: "running" }, handlers, deps);
+}
+
 export async function recoverDetachedAptUpgrade(
 	handlers: SoftwareUpdateOutputHandlers,
 	deps: DetachedAptUpgradeDeps = defaultDetachedAptServiceDeps(),
@@ -231,5 +257,6 @@ export async function recoverDetachedAptUpgrade(
 	handlers.onAttached?.();
 	return {
 		completion: observeDetachedAptUpgrade(state, handlers, deps),
+		wasAlreadyFinished: state.kind === "finished",
 	};
 }

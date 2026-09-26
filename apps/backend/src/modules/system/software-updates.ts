@@ -42,6 +42,14 @@ import {
 	notificationRemove,
 } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import {
+	AptAllRefusalError,
+	assertPinnedInstallSimulation,
+	buildAptAllDiscoveryArgs,
+	buildAptAllInstallArgs,
+	discoverAptAllPackages,
+	type PinnedAptPackage,
+} from "./apt-all-packages.ts";
 import { cleanAptCache } from "./apt-cache-clean.ts";
 /* Software updates */
 import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
@@ -67,6 +75,7 @@ import { classifyPackageLayer } from "./package-layer.ts";
 import {
 	DetachedAptServiceCleanupError,
 	recoverDetachedAptUpgrade,
+	runDetachedAptAll,
 	runDetachedAptUpgrade,
 	type SoftwareUpdateOutputHandlers,
 } from "./software-update-process.ts";
@@ -75,6 +84,9 @@ import {
 	recoverSoftwareUpdateWithCoordination,
 	resetSoftwareUpdateRecovery,
 } from "./software-update-recovery.ts";
+import { reconcileAptChannel } from "./update-apt-channel.ts";
+import { readUpdateCapabilities } from "./update-capabilities.ts";
+import { loadUpdateSettings } from "./update-settings.ts";
 import {
 	deriveUpdateIdentity,
 	deriveUpdateState,
@@ -105,6 +117,9 @@ let aptDiscoveryRunning = false;
 let aptGetUpdateFailures = 0;
 let aptHeldBackPackages: string | undefined;
 let actionableAppPackages: string[] = [];
+let actionableAllPackages: PinnedAptPackage[] = [];
+let aptAllRefusal: AptAllRefusalError | null = null;
+let aptAllMode = false;
 let discoveredPackages: UpdatePackage[] = [];
 let lastAptReachability: AptReachabilityWire | undefined;
 let delayedSoftwareUpdateStart: ReturnType<typeof setTimeout> | undefined;
@@ -164,12 +179,21 @@ function aptReachabilityWire(
 	});
 }
 
+const defaultAptCommandRunner: typeof spawnWithTimeout = (argv, options) =>
+	spawnWithTimeout(argv, options);
+let aptCommandRunner = defaultAptCommandRunner;
+export function setAptCommandRunnerForTest(
+	runner: typeof spawnWithTimeout | null,
+): void {
+	aptCommandRunner = runner ?? defaultAptCommandRunner;
+}
+
 async function runAptCommand(
 	argv: string[],
 	timeoutMs: number,
 ): Promise<SpawnWithTimeoutResult> {
 	try {
-		return await spawnWithTimeout(argv, { timeoutMs });
+		return await aptCommandRunner(argv, { timeoutMs });
 	} catch (error) {
 		return {
 			exitCode: 1,
@@ -265,6 +289,9 @@ export function resetSoftwareUpdateState(): void {
 	lastCheckedAt = null;
 	lastAptReachability = undefined;
 	actionableAppPackages = [];
+	actionableAllPackages = [];
+	aptAllRefusal = null;
+	aptAllMode = false;
 	discoveredPackages = [];
 }
 
@@ -305,7 +332,9 @@ export function getUpdateState(): UpdateState {
 						...(discoveredPackages.length > 0
 							? { packages: discoveredPackages }
 							: {}),
-						actionable_count: actionableAppPackages.length,
+						actionable_count: aptAllMode
+							? actionableAllPackages.length
+							: actionableAppPackages.length,
 					}
 				: null;
 	return deriveUpdateState({
@@ -483,6 +512,94 @@ export function buildAptDiscoveryArgs(
 	];
 }
 
+async function getCapableUpdateSize(
+	reachability: AptReachability,
+): Promise<SoftwareUpdateError> {
+	aptAllMode = true;
+	const settings = await loadUpdateSettings();
+	await reconcileAptChannel("capable", settings.channel);
+	const simulation = await runAptCommand(
+		buildAptAllDiscoveryArgs(aptFamilyArgs(reachability.verdict)),
+		APT_DISCOVERY_TIMEOUT_MS,
+	);
+	if (simulation.exitCode !== 0) {
+		failCurrentCheck("discovery_failed");
+		return "discovery_failed";
+	}
+	const holds = await runAptCommand(
+		["/usr/bin/apt-mark", "showhold"],
+		APT_DISCOVERY_TIMEOUT_MS,
+	);
+	if (holds.exitCode !== 0) {
+		failCurrentCheck("discovery_failed");
+		return "discovery_failed";
+	}
+	try {
+		const result = await discoverAptAllPackages(
+			simulation.stdout,
+			holds.stdout,
+			async (name) => {
+				const policy = await runAptCommand(
+					["/usr/bin/apt-cache", "policy", name],
+					APT_DISCOVERY_TIMEOUT_MS,
+				);
+				if (policy.exitCode !== 0)
+					throw new AptAllRefusalError("discovery_failed");
+				return policy.stdout;
+			},
+		);
+		aptAllRefusal = null;
+		actionableAllPackages = result.actionable;
+		discoveredPackages = result.packages;
+		const packageNames = result.packages.map((item) => item.name);
+		availableIdentity =
+			packageNames.length > 0
+				? deriveUpdateIdentity(packageNames, packageNames.length)
+				: null;
+		availableUpdates = { package_count: packageNames.length };
+		if (
+			result.actionable.some(
+				({ name }) => name.startsWith("ceralive-") || name === "cerastream",
+			)
+		) {
+			notificationBroadcast(
+				"ceralive_update",
+				"warning",
+				"A CERALIVE update is available. Open Settings → Software Updates to install it.",
+				0,
+				true,
+				true,
+			);
+		}
+		broadcastMsg("status", {
+			available_updates: availableUpdates,
+			update_state: getUpdateState(),
+		});
+		return null;
+	} catch (error) {
+		if (!(error instanceof AptAllRefusalError)) throw error;
+		aptAllRefusal = error;
+		actionableAllPackages = [];
+		availableUpdates = null;
+		availableIdentity = null;
+		discoveredPackages = [];
+		lastUpdateFailure = { reason: error.reason };
+		notificationBroadcast(
+			"ceralive_update_failed",
+			"error",
+			"The software update was refused. Open Settings → Software Updates to see the reason.",
+			0,
+			true,
+			true,
+		);
+		broadcastMsg("status", {
+			available_updates: availableUpdates,
+			update_state: getUpdateState(),
+		});
+		return "discovery_failed";
+	}
+}
+
 function aptFamilyArgs(verdict: AptReachability["verdict"]): readonly string[] {
 	if (verdict === "force_ipv4") return ["-o", "Acquire::ForceIPv4=true"];
 	if (verdict === "force_ipv6") return ["-o", "Acquire::ForceIPv6=true"];
@@ -631,6 +748,9 @@ async function getSoftwareUpdateSize(reachability: AptReachability) {
 	// Never advertise an update the install path would refuse to run.
 	if (!aptUpdatesEnabled()) return null;
 	if (getIsStreaming() || isUpdating() || aptGetUpdating) return "busy";
+	if ((await readUpdateCapabilities()).mode === "capable")
+		return getCapableUpdateSize(reachability);
+	aptAllMode = false;
 
 	// First see if any packages can be upgraded by dist-upgrade
 	const upgradeResult = await runAptCommand(
@@ -750,6 +870,7 @@ export type SoftwareUpdateError =
 	| ExecException
 	| "busy"
 	| "repos_unreachable"
+	| "discovery_failed"
 	| "captive_portal"
 	| true
 	| null;
@@ -814,13 +935,18 @@ function checkForSoftwareUpdates(
 		broadcastUpdateState();
 		if (
 			reachability.verdict === "unreachable" ||
-			reachability.verdict === "captive_portal"
+			reachability.verdict === "captive_portal" ||
+			reachability.verdict === "probe_unavailable" ||
+			reachability.verdict === "credentials_invalid"
 		) {
 			aptGetUpdating = false;
 			const reason =
-				reachability.verdict === "unreachable"
-					? "repos_unreachable"
-					: "captive_portal";
+				reachability.verdict === "probe_unavailable" ||
+				reachability.verdict === "credentials_invalid"
+					? "discovery_failed"
+					: reachability.verdict === "unreachable"
+						? "repos_unreachable"
+						: "captive_portal";
 			failCurrentCheck(reason);
 			callback(reason, aptGetUpdateFailures);
 			return;
@@ -924,6 +1050,13 @@ export async function runUpdateDiscoveryAndReport(): Promise<SoftwareUpdateError
 	try {
 		const reachability = await prepareAptNetwork();
 		lastAptReachability = aptReachabilityWire(reachability);
+		if (
+			reachability.verdict === "probe_unavailable" ||
+			reachability.verdict === "credentials_invalid"
+		) {
+			failCurrentCheck("discovery_failed");
+			return "discovery_failed";
+		}
 		if (reachability.verdict === "unreachable") {
 			failCurrentCheck("repos_unreachable");
 			return "repos_unreachable";
@@ -1217,7 +1350,13 @@ export function startSoftwareUpdate(): UpdateStartOutcome {
 
 type SoftwareUpdateProcessMonitor = {
 	readonly handlers: SoftwareUpdateOutputHandlers;
-	readonly finish: (completion: Promise<number>) => void;
+	// Resolves once softUpdateStatus/lastUpdateSucceeded/lastUpdateFailure are
+	// settled — NOT once the detached logging + crash-to-restart tail below has
+	// run. That tail deliberately throws via invariant() on a plain success to
+	// force an unhandled rejection that restarts the process; a caller
+	// awaiting the returned promise must observe getUpdateState() settle
+	// without being able to catch (and thus swallow) that intentional crash.
+	readonly finish: (completion: Promise<number>) => Promise<void>;
 };
 
 export function deriveAptProgress(
@@ -1289,41 +1428,55 @@ function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
 		},
 	};
 
-	const finish = (completion: Promise<number>): void => {
-		void (async () => {
-			let code: number;
+	// Bounded and total: resolves the transaction's exit code and settles
+	// softUpdateStatus/lastUpdateSucceeded/lastUpdateFailure. Never throws —
+	// cleanAptCache() swallows its own errors, and a rejected `completion` is
+	// converted to a plain exit code above. This is the part a caller may
+	// safely await (see recoverSoftwareUpdate()'s wasAlreadyFinished branch):
+	// once it resolves, getUpdateState() reflects the real outcome.
+	const settle = async (completion: Promise<number>): Promise<number> => {
+		let code: number;
+		try {
+			code = await completion;
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			aptErr += aptErr.length > 0 ? `\n${message}` : message;
+			code =
+				err instanceof DetachedAptServiceCleanupError &&
+				err.transactionExitCode !== 0
+					? err.transactionExitCode
+					: 1;
+		}
+
+		// Keep the in-flight latch until cleanup settles; its result cannot change code.
+		const cleaned = await cleanAptCache(defaultAptSpaceDeps.run);
+		lastCleanupWarning =
+			code === 0 && !cleaned ? "post_clean_failed" : undefined;
+
+		if (softUpdateStatus) {
+			const failure =
+				code === 0
+					? null
+					: {
+							reason: aptErr.trim() || `apt-get exited with code ${code}`,
+							...((currentUpdateIdentity ?? availableIdentity)
+								? {
+										identity: (currentUpdateIdentity ??
+											availableIdentity) as UpdateIdentity,
+									}
+								: {}),
+						};
+			// getUpdateState()-relevant assignments happen FIRST and
+			// unconditionally, before any broadcast/notification call below —
+			// a caller awaiting settle() must observe the real outcome even if
+			// a broadcast fails for some unrelated reason.
+			lastUpdateSucceeded = code === 0;
+			lastUpdateFailure = failure;
+			softUpdateStatus.result = code === 0 ? code : aptErr;
+			const settledStatus = softUpdateStatus;
+			softUpdateStatus = null;
 			try {
-				code = await completion;
-			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err);
-				aptErr += aptErr.length > 0 ? `\n${message}` : message;
-				code =
-					err instanceof DetachedAptServiceCleanupError &&
-					err.transactionExitCode !== 0
-						? err.transactionExitCode
-						: 1;
-			}
-
-			// Keep the in-flight latch until cleanup settles; its result cannot change code.
-			const cleaned = await cleanAptCache(defaultAptSpaceDeps.run);
-			lastCleanupWarning =
-				code === 0 && !cleaned ? "post_clean_failed" : undefined;
-
-			if (softUpdateStatus) {
-				if (code === 0) {
-					lastUpdateSucceeded = true;
-					lastUpdateFailure = null;
-				} else {
-					lastUpdateSucceeded = false;
-					lastUpdateFailure = {
-						reason: aptErr.trim() || `apt-get exited with code ${code}`,
-						...((currentUpdateIdentity ?? availableIdentity)
-							? {
-									identity: (currentUpdateIdentity ??
-										availableIdentity) as UpdateIdentity,
-								}
-							: {}),
-					};
+				if (failure) {
 					notificationBroadcast(
 						"ceralive_update_failed",
 						"error",
@@ -1344,15 +1497,34 @@ function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
 						},
 					);
 				}
-				softUpdateStatus.result = code === 0 ? code : aptErr;
 				broadcastMsg("status", {
-					updating: softUpdateStatus,
+					updating: settledStatus,
 					update_state: getUpdateState(),
 				});
-				softUpdateStatus = null;
 				broadcastUpdateState();
+			} catch (broadcastError) {
+				// The outcome is already recorded above; a broadcast/notification
+				// failure must never mask it or make settle() throw — that would
+				// let an upstream guard (guardNonCritical) swallow the deliberate
+				// crash-to-restart `finish()`'s tail fires on a plain success.
+				logger.warn("Software update settle: broadcast failed", {
+					error: broadcastError,
+				});
 			}
+		}
 
+		return code;
+	};
+
+	const finish = (completion: Promise<number>): Promise<void> => {
+		const settled = settle(completion);
+		// Detached on purpose: logging plus the deliberate crash-to-restart on a
+		// plain success. `settled` never rejects (see above), so this can only
+		// throw from invariant() itself — exactly the unhandled rejection this
+		// path exists to produce. Chaining it onto the returned promise would
+		// let an upstream await/try-catch (main.ts's guardNonCritical, or the
+		// orchestrator's resume) swallow that intentional crash instead.
+		void settled.then((code) => {
 			if (aptLog) logger.info(aptLog);
 			if (aptErr) logger.error(aptErr);
 
@@ -1366,7 +1538,8 @@ function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
 					);
 				}
 			}
-		})();
+		});
+		return settled.then(() => undefined);
 	};
 
 	return { handlers, finish };
@@ -1376,18 +1549,40 @@ async function doSoftwareUpdate(): Promise<void> {
 	if (!aptUpdatesEnabled() || getIsStreaming()) return;
 
 	const reachability = await prepareAptNetwork({ maxAgeMs: 0 });
+	const capable = (await readUpdateCapabilities()).mode === "capable";
+	if (capable) {
+		const discovery = await getCapableUpdateSize(reachability);
+		if (discovery !== null) {
+			if (softUpdateStatus)
+				softUpdateStatus.result = aptAllRefusal?.reason ?? "discovery_failed";
+			softUpdateStatus = null;
+			broadcastMsg("status", {
+				updating: null,
+				update_state: getUpdateState(),
+			});
+			return;
+		}
+	}
 	lastAptReachability = aptReachabilityWire(reachability);
 	if (
 		reachability.verdict === "unreachable" ||
 		reachability.verdict === "captive_portal" ||
-		actionableAppPackages.length === 0
+		reachability.verdict === "probe_unavailable" ||
+		reachability.verdict === "credentials_invalid" ||
+		(capable
+			? actionableAllPackages.length === 0
+			: actionableAppPackages.length === 0)
 	) {
 		const reason =
 			reachability.verdict === "captive_portal"
 				? "A captive portal prevented the software update."
-				: reachability.verdict === "unreachable"
-					? "The software repositories are unreachable."
-					: "No actionable application packages are available.";
+				: reachability.verdict === "probe_unavailable"
+					? "The repository probe tooling is unavailable."
+					: reachability.verdict === "credentials_invalid"
+						? "The APT client certificate was rejected."
+						: reachability.verdict === "unreachable"
+							? "The software repositories are unreachable."
+							: "No actionable application packages are available.";
 		lastUpdateSucceeded = false;
 		lastUpdateFailure = { reason };
 		if (softUpdateStatus) softUpdateStatus.result = reason;
@@ -1399,7 +1594,49 @@ async function doSoftwareUpdate(): Promise<void> {
 		broadcastUpdateState();
 		return;
 	}
-	const args = buildAptUpgradeArgs(actionableAppPackages, reachability.verdict);
+	const args = capable
+		? buildAptAllInstallArgs(actionableAllPackages, reachability.verdict)
+		: buildAptUpgradeArgs(actionableAppPackages, reachability.verdict);
+	if (capable) {
+		try {
+			const probe = await runAptCommand(
+				[
+					"/usr/bin/apt-get",
+					"-s",
+					"-o",
+					"Debug::NoLocking=1",
+					...args.filter((arg) => arg !== "-y" && arg !== "--no-download"),
+				],
+				APT_DISCOVERY_TIMEOUT_MS,
+			);
+			if (probe.exitCode !== 0)
+				throw new AptAllRefusalError("discovery_failed");
+			assertPinnedInstallSimulation(probe.stdout, actionableAllPackages);
+		} catch (error) {
+			if (!(error instanceof AptAllRefusalError)) throw error;
+			lastUpdateFailure = { reason: error.reason };
+			softUpdateStatus = null;
+			notificationBroadcast(
+				"ceralive_update_failed",
+				"error",
+				"The software update was refused. Open Settings → Software Updates to see the reason.",
+				0,
+				true,
+				true,
+			);
+			broadcastMsg("status", {
+				updating: null,
+				update_state: getUpdateState(),
+			});
+			return;
+		}
+	}
+	if (capable && aptAllRefusal !== null) {
+		lastUpdateFailure = { reason: aptAllRefusal.reason };
+		softUpdateStatus = null;
+		broadcastMsg("status", { updating: null, update_state: getUpdateState() });
+		return;
+	}
 	try {
 		await preflightAptSpace(args);
 	} catch (error) {
@@ -1424,7 +1661,19 @@ async function doSoftwareUpdate(): Promise<void> {
 	// running it in this unit's cgroup then lets that restart kill the package
 	// transaction itself. PID 1 owns this service, and the next backend process
 	// reattaches to its durable output instead of relaunching apt.
-	monitor.finish(runDetachedAptUpgrade(args, monitor.handlers));
+	void monitor.finish(
+		capable
+			? runDetachedAptAll(
+					args,
+					reachability.verdict === "force_ipv4"
+						? "force_ipv4"
+						: reachability.verdict === "force_ipv6"
+							? "force_ipv6"
+							: "any",
+					monitor.handlers,
+				)
+			: runDetachedAptUpgrade(args, monitor.handlers),
+	);
 }
 
 async function recoverSoftwareUpdate(
@@ -1449,15 +1698,38 @@ async function recoverSoftwareUpdate(
 			logger.warn(
 				"Software update: reattached to the detached apt transaction",
 			);
-			broadcastMsg("status", {
-				updating: softUpdateStatus,
-				update_state: getUpdateState(),
-			});
+			try {
+				broadcastMsg("status", {
+					updating: softUpdateStatus,
+					update_state: getUpdateState(),
+				});
+			} catch (broadcastError) {
+				// The reattachment above already happened; a broadcast failure
+				// must never turn into a thrown, uncaught exception here — that
+				// would reject the whole recovery attempt and lose the very
+				// evidence (an already-finished unit's outcome) this path exists
+				// to observe.
+				logger.warn("Software update recovery: broadcast failed", {
+					error: broadcastError,
+				});
+			}
 		},
 	});
 	if (!recovered) return false;
 
-	monitor.finish(recovered.completion);
+	if (recovered.wasAlreadyFinished) {
+		// Only a bounded final drain + cleanup remain (no poll loop) — awaiting
+		// it here is what makes getUpdateState() authoritative the instant this
+		// function returns, instead of leaving a window where the unit is
+		// already gone from systemd's view but its outcome is not yet recorded.
+		// That window is exactly what let the update-orchestrator's own resume
+		// (resume.ts resumeCommitting()) observe neither a live nor a settled
+		// state and misclassify a successful recovery as unresolved.
+		await monitor.finish(recovered.completion);
+	} else {
+		// Still running: this can take minutes. Never block boot on it.
+		void monitor.finish(recovered.completion);
+	}
 	return true;
 }
 

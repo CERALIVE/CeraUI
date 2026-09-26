@@ -23,6 +23,14 @@ import { gzipSync } from 'node:zlib';
 const KIB = 1024;
 
 const SPA_BASELINE = {
+	// ACCEPTED, TRACKED REGRESSION — re-derived 2026-09-25 for the Todo 41
+	// Updates dialog rebuild, app-wide orchestrator badge and Go Live refusal
+	// band. The dialog remains a lazy chunk (10.5 KiB gzip, off the initial route);
+	// ten-locale operator copy and the new surfaces increased total SPA gzip by
+	// 42,142 B (+3.7%) and precache gzip by 42,167 B (+3.3%) over the displaced
+	// 1,146,314 B / 1,287,181 B baselines. TD-spa-i18n-catalog-size stays open;
+	// both displaced measurements are retained below. The 16 KiB absolute
+	// headroom, initial-route and single-chunk ceilings are unchanged.
 	// ACCEPTED, TRACKED REGRESSION — re-derived 2026-09-23 for the
 	// capture-failover-resilience operator surface (6 notice + 21 UI keys across
 	// all 10 locales). Fresh origin/main still passed; this branch exceeded the
@@ -44,12 +52,12 @@ const SPA_BASELINE = {
 	// single-chunk ceilings are NOT widened. Both aggregates now carry a SECOND,
 	// absolute ceiling so a re-derivation cannot hand back a fresh 12% to spend
 	// silently — precache gained one here for the reason totalGzip already had.
-	totalGzip: 1_146_314,
+	totalGzip: 1_188_456,
 	initialRouteGzip: 497_196,
 	largestChunkGzip: 461_577,
 	// Keep the tighter experience-stability precache baseline on integration;
 	// the parallel media-island measurement is retained below, not added to it.
-	precacheGzip: 1_287_181,
+	precacheGzip: 1_329_348,
 };
 
 // The aggregate's binding constraint. A ratio applied to a freshly re-derived
@@ -76,6 +84,7 @@ const SPA_DISPLACED_BASELINES = {
 		{ bytes: 982_392, label: 'Phase-C', debt: 'TD-spa-i18n-catalog-size' },
 		{ bytes: 1_103_680, label: 'pre-composition', debt: 'TD-spa-i18n-catalog-size' },
 		{ bytes: 1_121_005, label: 'pre-capture-failover', debt: 'TD-spa-i18n-catalog-size' },
+		{ bytes: 1_146_314, label: 'pre-update-orchestrator', debt: 'TD-spa-i18n-catalog-size' },
 	],
 	precacheGzip: [
 		{ bytes: 903_286, label: 'pre-Phase-C', debt: 'TD-modem-phase-c-spa-size' },
@@ -92,6 +101,11 @@ const SPA_DISPLACED_BASELINES = {
 		{
 			bytes: 1_259_658,
 			label: 'pre-capture-failover',
+			debt: 'TD-spa-i18n-catalog-size',
+		},
+		{
+			bytes: 1_287_181,
+			label: 'pre-update-orchestrator',
 			debt: 'TD-spa-i18n-catalog-size',
 		},
 	],

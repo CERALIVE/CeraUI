@@ -19,6 +19,10 @@ import {
 	type SpawnWithTimeoutResult,
 	spawnWithTimeout,
 } from "../../helpers/spawn-policy.ts";
+import {
+	type AptClientPaths,
+	aptClientPaths,
+} from "../addons/apt-client-tls.ts";
 import { deviceBindingArgs } from "../network/device-bound-probe.ts";
 import { type AptOrigin, parseAptSourceOrigins } from "./apt-source-origins.ts";
 
@@ -34,7 +38,9 @@ export type AptReachabilityVerdict =
 	| "force_ipv6"
 	| "any"
 	| "unreachable"
-	| "captive_portal";
+	| "captive_portal"
+	| "probe_unavailable"
+	| "credentials_invalid";
 
 export type AptOriginProbe = {
 	readonly origin: AptOrigin;
@@ -65,7 +71,9 @@ export function buildProbeArgv(
 	family: 4 | 6,
 	url: string,
 	ifname?: string,
+	credentials?: AptClientPaths,
 ): string[] {
+	const firstParty = new URL(url).hostname === "apt.ceralive.tv";
 	return [
 		"curl",
 		"-q",
@@ -78,11 +86,14 @@ export function buildProbeArgv(
 		"--max-time",
 		"3",
 		"-sS",
-		"-I",
-		"-o",
-		"/dev/null",
+		...(firstParty ? [] : ["-I", "-o", "/dev/null"]),
+		...(firstParty && credentials
+			? ["--cert", credentials.cert, "--key", credentials.key]
+			: []),
 		"-w",
-		"%{http_code} %{redirect_url}",
+		firstParty
+			? "\n<<<apt-probe>>>%{http_code}"
+			: "%{http_code} %{redirect_url}",
 		ifname === undefined ? url : url.replace(/^http:/, "https:"),
 	];
 }
@@ -94,6 +105,21 @@ export function classifyProbe(outcome: {
 	readonly scheme: AptOrigin["scheme"];
 }): AptFamilyProbe {
 	if (outcome.exitCode === 0) {
+		if (outcome.originHost === "apt.ceralive.tv") {
+			const [body, status] = outcome.stdout.split("\n<<<apt-probe>>>");
+			if (Number.parseInt(status ?? "", 10) !== 200) return "unknown";
+			try {
+				const parsed: unknown = JSON.parse(body ?? "");
+				return typeof parsed === "object" &&
+					parsed !== null &&
+					"certVerified" in parsed &&
+					parsed.certVerified === true
+					? "ok"
+					: "credentials_invalid";
+			} catch {
+				return "unknown";
+			}
+		}
 		const [rawCode, ...redirectParts] = outcome.stdout.trim().split(/\s+/);
 		const code = Number.parseInt(rawCode ?? "", 10);
 		if (code >= 100) {
@@ -122,6 +148,10 @@ export function classifyProbe(outcome: {
 			return "no_route";
 		case 6:
 			return "dns_failed";
+		case 58:
+			return outcome.originHost === "apt.ceralive.tv"
+				? "credentials_invalid"
+				: "unknown";
 		default:
 			return "unknown";
 	}
@@ -132,6 +162,10 @@ function foldFamily(
 	family: "ipv4" | "ipv6",
 ): AptFamilyProbe {
 	if (byOrigin.length === 0) return "unknown";
+	if (byOrigin.some((entry) => entry[family] === "probe_unavailable"))
+		return "probe_unavailable";
+	if (byOrigin.some((entry) => entry[family] === "credentials_invalid"))
+		return "credentials_invalid";
 	if (byOrigin.every((entry) => entry[family] === "ok")) return "ok";
 	if (byOrigin.some((entry) => entry[family] === "captive")) return "captive";
 	return (
@@ -147,15 +181,23 @@ export function deriveVerdict(
 	const ipv4Usable = byOrigin.length > 0 && ipv4 === "ok";
 	const ipv6Usable = byOrigin.length > 0 && ipv6 === "ok";
 	const captive = ipv4 === "captive" || ipv6 === "captive";
+	const unavailable =
+		ipv4 === "probe_unavailable" || ipv6 === "probe_unavailable";
+	const invalidCredentials =
+		ipv4 === "credentials_invalid" || ipv6 === "credentials_invalid";
 	const verdict: AptReachabilityVerdict = ipv4Usable
 		? ipv6Usable
 			? "any"
 			: "force_ipv4"
 		: ipv6Usable
 			? "force_ipv6"
-			: captive
-				? "captive_portal"
-				: "unreachable";
+			: unavailable
+				? "probe_unavailable"
+				: invalidCredentials
+					? "credentials_invalid"
+					: captive
+						? "captive_portal"
+						: "unreachable";
 	const used =
 		verdict === "any"
 			? "any"
@@ -176,19 +218,19 @@ export function deriveVerdict(
 	return { ipv4, ipv6, used, verdict, detail };
 }
 
-async function readAptSources(): Promise<string> {
-	const names = (await readdir(APT_SOURCE_DIR))
-		.filter((name) => name.endsWith(".sources"))
+export async function readAptSources(
+	dir: string = APT_SOURCE_DIR,
+): Promise<string> {
+	const names = (await readdir(dir))
+		.filter((name) => name.endsWith(".sources") || name.endsWith(".list"))
 		.sort();
 	return (
-		await Promise.all(
-			names.map((name) => Bun.file(`${APT_SOURCE_DIR}/${name}`).text()),
-		)
+		await Promise.all(names.map((name) => Bun.file(`${dir}/${name}`).text()))
 	).join("\n\n");
 }
 
 export const defaultAptReachabilityDeps: AptReachabilityDeps = {
-	readSources: readAptSources,
+	readSources: () => readAptSources(),
 	runProbe: (argv) => spawnWithTimeout(argv, { timeoutMs: PROBE_TIMEOUT_MS }),
 };
 
@@ -226,10 +268,12 @@ export async function probeAptReachability(
 
 	const byOrigin = await Promise.all(
 		origins.map(async (origin): Promise<AptOriginProbe> => {
+			const credentials =
+				origin.host === "apt.ceralive.tv" ? await aptClientPaths() : undefined;
 			const probe = async (family: 4 | 6): Promise<AptFamilyProbe> => {
 				try {
 					const result = await deps.runProbe(
-						buildProbeArgv(family, origin.probeUrl, deps.ifname),
+						buildProbeArgv(family, origin.probeUrl, deps.ifname, credentials),
 					);
 					return classifyProbe({
 						exitCode: result.exitCode,
@@ -237,8 +281,11 @@ export async function probeAptReachability(
 						originHost: origin.host,
 						scheme: deps.ifname === undefined ? origin.scheme : "https",
 					});
-				} catch {
-					return "unknown";
+				} catch (error) {
+					return error instanceof Error &&
+						/not found|ENOENT|Executable/i.test(error.message)
+						? "probe_unavailable"
+						: "unknown";
 				}
 			};
 			const [ipv4, ipv6] = await Promise.all([probe(4), probe(6)]);

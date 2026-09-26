@@ -6,6 +6,19 @@ Parent: [`../../AGENTS.md`](../../AGENTS.md)
 
 Shared oRPC contract + Zod schema layer. The single source of truth for the WebSocket RPC surface between frontend and backend. Both consumers import from here — never define contracts inline.
 
+Update-system foundation [PARTIAL]: `schemas/update-settings.schema.ts` owns
+the persisted/default and strict complete mutation shapes; `schemas/update-capabilities.schema.ts`
+owns the image-file validator and the `{mode,features}` RPC output.
+`contracts/system.contract.ts` registers get/set settings and get capabilities.
+No backend-local wire types or alternate schemas may shadow them. A valid
+image with no `apt-all-packages` feature is still legacy, and a `capable`
+result never implies OS or slot-sync support without those explicit features.
+Todo 35 adds optional `version` and `origin` to `updatePackageSchema` for
+origin-vetted APT discovery; legacy frames omit both and parse unchanged.
+`contracts/ui.contract.ts` adds authenticated `ui.heartbeat` using the existing
+shared `successResponseSchema`; it carries no timestamp or new producer-owned
+wire shape. The backend stamps receive time, not a client-supplied clock.
+
 ## STRUCTURE
 
 ```

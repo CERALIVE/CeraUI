@@ -108,12 +108,18 @@ import {
 	switchInputProcedure,
 } from "./procedures/streaming.procedure.ts";
 import {
+	allowCellularOnceProcedure,
 	checkForUpdatesProcedure,
+	checkUpdatesNowProcedure,
 	getCloudProvidersProcedure,
 	getLogProcedure,
 	getRevisionsProcedure,
 	getSensorsProcedure,
 	getSyslogProcedure,
+	getUpdateCapabilitiesProcedure,
+	getUpdateDetailsProcedure,
+	getUpdateSettingsProcedure,
+	installUpdatesNowProcedure,
 	kioskConfigureProcedure,
 	kioskOskProcedure,
 	kioskStartProcedure,
@@ -124,12 +130,14 @@ import {
 	rebootProcedure,
 	setAutostartProcedure,
 	setRemoteConfigProcedure,
+	setUpdateSettingsProcedure,
 	sshResetPasswordProcedure,
 	sshSetPersistentProcedure,
 	sshStartProcedure,
 	sshStopProcedure,
 	startUpdateProcedure,
 } from "./procedures/system.procedure.ts";
+import { heartbeatProcedure } from "./procedures/ui.procedure.ts";
 import {
 	getWifiAdapterModesProcedure,
 	getWifiStatusProcedure,
@@ -153,6 +161,7 @@ import type { RPCContext } from "./types.ts";
 const base = os.$context<RPCContext>();
 
 const stableRoutes = {
+	ui: base.router({ heartbeat: heartbeatProcedure }),
 	auth: base.router({
 		login: loginProcedure,
 		setPassword: setPasswordProcedure,
@@ -261,7 +270,14 @@ const stableRoutes = {
 		poweroff: poweroffProcedure,
 		reboot: rebootProcedure,
 		startUpdate: startUpdateProcedure,
+		getUpdateSettings: getUpdateSettingsProcedure,
+		setUpdateSettings: setUpdateSettingsProcedure,
+		getUpdateCapabilities: getUpdateCapabilitiesProcedure,
 		checkForUpdates: checkForUpdatesProcedure,
+		checkUpdatesNow: checkUpdatesNowProcedure,
+		installUpdatesNow: installUpdatesNowProcedure,
+		allowCellularOnce: allowCellularOnceProcedure,
+		getUpdateDetails: getUpdateDetailsProcedure,
 		sshStart: sshStartProcedure,
 		sshStop: sshStopProcedure,
 		sshSetPersistent: sshSetPersistentProcedure,

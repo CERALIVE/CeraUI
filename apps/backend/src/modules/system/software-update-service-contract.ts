@@ -14,6 +14,7 @@ import { softwareUpdateOutputPaths } from "./software-update-output.ts";
 export const SOFTWARE_UPDATE_UNIT = "ceralive-software-update.service";
 export const SOFTWARE_UPDATE_DESCRIPTION = "CeraLive software update";
 export const SOFTWARE_UPDATE_FRAGMENT_PATH = `/run/systemd/transient/${SOFTWARE_UPDATE_UNIT}`;
+export const SOFTWARE_UPDATE_LOCK = "/run/lock/ceralive-update.lock";
 
 const APT_UPGRADE_PREFIX = [
 	"/usr/bin/apt-get",
@@ -78,6 +79,68 @@ export function isExpectedAptUpgradeArgv(argv: readonly string[]): boolean {
 	);
 }
 
+export function isExpectedAptAllInstallArgv(argv: readonly string[]): boolean {
+	const prefix = [
+		"/usr/bin/apt-get",
+		"-y",
+		"--no-download",
+		"--no-remove",
+		"-o",
+		"Dpkg::Options::=--force-confdef",
+		"-o",
+		"Dpkg::Options::=--force-confold",
+	];
+	if (!prefix.every((item, i) => argv[i] === item)) return false;
+	let index = prefix.length;
+	if (argv[index] === "-o") {
+		if (
+			!["Acquire::ForceIPv4=true", "Acquire::ForceIPv6=true"].includes(
+				argv[index + 1] ?? "",
+			)
+		)
+			return false;
+		index += 2;
+	}
+	if (argv[index++] !== "install" || index === argv.length) return false;
+	let previous = "";
+	for (const token of argv.slice(index)) {
+		const separator = token.indexOf("=");
+		const name = token.slice(0, separator);
+		const version = token.slice(separator + 1);
+		if (
+			separator < 1 ||
+			!APT_PACKAGE_NAME_RE.test(name) ||
+			!/^[0-9][A-Za-z0-9.+:~-]*$/.test(version) ||
+			name <= previous
+		)
+			return false;
+		previous = name;
+	}
+	return true;
+}
+
+export function expectedAptAllScript(
+	install: readonly string[],
+	family: readonly string[],
+): string {
+	if (!isExpectedAptAllInstallArgv(["/usr/bin/apt-get", ...install]))
+		throw new InvalidDetachedAptUpgradeArgumentsError();
+	if (
+		family.length !== 0 &&
+		!(
+			family.length === 2 &&
+			family[0] === "-o" &&
+			["Acquire::ForceIPv4=true", "Acquire::ForceIPv6=true"].includes(
+				family[1] ?? "",
+			)
+		)
+	)
+		throw new InvalidDetachedAptUpgradeArgumentsError();
+	if (family.length && !install.includes(family[1] ?? ""))
+		throw new InvalidDetachedAptUpgradeArgumentsError();
+	return `/usr/bin/apt-get -d -y upgrade --with-new-pkgs${family.length ? ` ${family.join(" ")}` : ""} && /usr/bin/apt-get ${install.join(" ")}`;
+}
+
 function parseProperties(output: string): Map<string, string> {
 	const properties = new Map<string, string>();
 	for (const line of output.split("\n")) {
@@ -100,12 +163,15 @@ export function validateDetachedAptServiceIdentity(output: string): void {
 		["StandardOutput", "append"],
 		["StandardError", "append"],
 		["User", ""],
-		["ExecStartPre", ""],
-		["ExecStartPost", ""],
 	]);
 	for (const [name, value] of expected) {
 		if (properties.get(name) !== value) {
 			throw new DetachedAptServiceIdentityError(`${name} does not match`);
+		}
+	}
+	for (const hook of ["ExecStartPre", "ExecStartPost"] as const) {
+		if ((properties.get(hook) ?? "") !== "") {
+			throw new DetachedAptServiceIdentityError(`${hook} does not match`);
 		}
 	}
 
@@ -113,6 +179,32 @@ export function validateDetachedAptServiceIdentity(output: string): void {
 	const argvMarker = "argv[]=";
 	const argvStart = execStart.indexOf(argvMarker);
 	const argvEnd = execStart.indexOf(" ;", argvStart);
+	if (execStart.startsWith("{ path=/usr/bin/flock ; ")) {
+		const marker = `argv[]=/usr/bin/flock -x ${SOFTWARE_UPDATE_LOCK} /bin/sh -ec `;
+		const script = execStart
+			.slice(execStart.indexOf(marker) + marker.length, -4)
+			.replace(/^['"]|['"]$/g, "");
+		const match =
+			/^\/usr\/bin\/apt-get -d -y upgrade --with-new-pkgs(?<family> -o Acquire::ForceIPv[46]=true)? && \/usr\/bin\/apt-get (?<install>.+)$/.exec(
+				script,
+			);
+		const family = match?.groups?.family?.trim().split(" ") ?? [];
+		const install = match?.groups?.install?.split(" ") ?? [];
+		let canonical = "";
+		try {
+			canonical = expectedAptAllScript(install, family);
+		} catch {
+			/* a foreign command is not adoptable */
+		}
+		if (
+			!execStart.includes(marker) ||
+			!execStart.endsWith(" ; }") ||
+			canonical !== script
+		) {
+			throw new DetachedAptServiceIdentityError("flock wrapper does not match");
+		}
+		return;
+	}
 	if (
 		!execStart.startsWith("{ path=/usr/bin/apt-get ; ") ||
 		argvStart < 0 ||

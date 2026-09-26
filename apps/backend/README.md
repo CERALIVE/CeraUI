@@ -255,6 +255,14 @@ configuration remain unchanged, and status still reports the modem's live state.
 
 ### Software update admission
 
+On images declaring `apt-all-packages`, APT discovery simulates an upgrade,
+refuses removal plans or held first-party packages, and admits only candidates
+from the permitted Debian Trixie suites or apt.ceralive.tv. Commit installs the
+discovered packages by exact version inside one detached flock-protected service;
+the backend can restart without releasing the lock. Stable APT sources remain
+enabled when beta is selected. Older images keep the original 15-name path.
+This path is fixture-proven; a capable device image has not yet shipped.
+
 `startSoftwareUpdate()` acknowledges dispatch synchronously. Its asynchronous
 update-check continuation clears cached downloads and checks space before stamping
 planned shutdown, immediately before the detached package transaction launches.
