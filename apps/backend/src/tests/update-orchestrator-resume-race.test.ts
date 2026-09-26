@@ -34,13 +34,27 @@
  * the correct terminal state instead of a transient or absent one.
  */
 
-import { describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import * as invariantModule from "../helpers/invariant.ts";
 import {
 	getUpdateState,
 	recoverSoftwareUpdateIfRunning,
 	type SoftwareUpdateRecoveryDeps,
 } from "../modules/system/software-updates.ts";
+import {
+	saveOrchestratorState,
+	setOrchestratorStateFilePathForTest,
+} from "../modules/system/update-orchestrator/persistence.ts";
 import { resumeOrchestratorState } from "../modules/system/update-orchestrator/resume.ts";
+import {
+	defaultOrchestratorRuntimeDeps,
+	getOrchestratorState,
+	resetOrchestratorRuntimeForTest,
+	startUpdateOrchestrator,
+} from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
 import * as compat from "../rpc/compat.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
@@ -60,6 +74,78 @@ function persistedCommitting(percent: number) {
 }
 
 describe("boot double-recovery race — resume must not misread evidence a startup cleanup already consumed", () => {
+	let tempRoot: string | undefined;
+
+	afterEach(async () => {
+		resetOrchestratorRuntimeForTest();
+		setOrchestratorStateFilePathForTest(null);
+		if (tempRoot) await rm(tempRoot, { recursive: true, force: true });
+		tempRoot = undefined;
+	});
+
+	test("startUpdateOrchestrator() persists the recovered success phase before the crash-to-restart tail fires — proves persist-before-crash ordering end to end, not just by inspection", async () => {
+		tempRoot = await mkdtemp(join(tmpdir(), "ceraui-resume-race-"));
+		setOrchestratorStateFilePathForTest(join(tempRoot, "agent.json"));
+		saveOrchestratorState({
+			...initialOrchestratorState(1),
+			phase: "committing",
+			progress: { percent: 50, etaSeconds: 10 },
+		});
+
+		const order: string[] = [];
+		const restart = spyOn(invariantModule, "invariant").mockImplementation(
+			(condition, message): asserts condition => {
+				if (condition) return;
+				if (message === "software update complete; exiting to restart CeraUI") {
+					order.push("crash");
+					return;
+				}
+				throw new Error(message);
+			},
+		);
+		try {
+			await startUpdateOrchestrator({
+				...defaultOrchestratorRuntimeDeps,
+				recoverSoftwareUpdateIfRunning: () =>
+					recoverSoftwareUpdateIfRunning({
+						recover: async ({ onAttached }) => {
+							onAttached?.();
+							return {
+								completion: Promise.resolve(0),
+								wasAlreadyFinished: true,
+							};
+						},
+						scheduleRetry: () => {},
+						resumePeriodicChecks: () => {},
+					}),
+				getPackageInstallWireState: getUpdateState,
+				persist: (state) => {
+					order.push(`persist:${state.phase}`);
+					saveOrchestratorState(state);
+				},
+			});
+
+			// `finish()` registers the crash-tail's `.then()` reaction on
+			// `settled` BEFORE the reaction that unblocks this call's own
+			// continuation, so the crash-tail callback runs FIRST — that
+			// ordering is unaffected by which caller asked. What matters is
+			// that it does NOT stop the SAME microtask wave from continuing:
+			// resumeCommitting()'s continuation, reduceOrchestrator(), and
+			// this synchronous persist() all still run as later reactions of
+			// that SAME wave, with no new real I/O boundary in between (the
+			// boot reorder is what removes such a boundary — see main.ts).
+			// A real `invariant()` throw only becomes a process-terminating
+			// unhandled rejection once the ENGINE'S MICROTASK QUEUE IS FULLY
+			// DRAINED, which is after persist() below has already run — so the
+			// durable write survives even though the crash attempt is logged
+			// first here.
+			expect(order).toEqual(["crash", "persist:restarting-services"]);
+			expect(getOrchestratorState().phase).toBe("restarting-services");
+		} finally {
+			restart.mockRestore();
+		}
+	});
+
 	test("a transaction that ACTUALLY SUCCEEDED resolves resume to restarting-services, not failed", async () => {
 		await using h = await updateHarness();
 
