@@ -424,16 +424,24 @@ await guardNonCritical("apt-channel-reconcile", async () => {
 	if (mode === "capable")
 		await reconcileAptChannel(mode, (await loadUpdateSettings()).channel);
 });
+// Todo 36: the packages+OS+slot-sync orchestrator. Its own resume path (G17)
+// is the ONLY thing that reattaches to a persisted `committing` phase's
+// detached apt unit on this boot — running it BEFORE the general standalone
+// recovery call below is what stops the two from racing over the SAME unit.
+// A recovered, already-finished unit's outcome is awaited (bounded: drain +
+// cleanup only, see software-updates.ts recoverSoftwareUpdate()) before
+// resume reads it, and the orchestrator's own synchronous state persist then
+// runs in the SAME continuation, ahead of the deliberate crash-to-restart a
+// successful recovery's completion schedules. The standalone call after it
+// is then a safe no-op whenever the orchestrator already handled the unit,
+// and remains the only recovery path for a detached transaction the
+// orchestrator itself never tracked (e.g. one started via
+// `system.startUpdate` directly).
+await guardNonCritical("update-orchestrator", startUpdateOrchestrator);
 await guardNonCritical("software-update-recovery", async () => {
 	await recoverSoftwareUpdateIfRunning();
 });
 periodicCheckForSoftwareUpdates();
-// Todo 36: the packages+OS+slot-sync orchestrator. Its own resume path (G17)
-// separately reconciles a persisted `committing` phase against the recovery
-// probe just above — starting it AFTER that recovery call lets the
-// orchestrator observe an already-settled `getUpdateState()` rather than a
-// stale in-flight one.
-await guardNonCritical("update-orchestrator", startUpdateOrchestrator);
 
 initNetworkInterfaceMonitoring();
 initUplinkHealth();

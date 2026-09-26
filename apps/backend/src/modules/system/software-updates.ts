@@ -1454,47 +1454,63 @@ function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
 			code === 0 && !cleaned ? "post_clean_failed" : undefined;
 
 		if (softUpdateStatus) {
-			if (code === 0) {
-				lastUpdateSucceeded = true;
-				lastUpdateFailure = null;
-			} else {
-				lastUpdateSucceeded = false;
-				lastUpdateFailure = {
-					reason: aptErr.trim() || `apt-get exited with code ${code}`,
-					...((currentUpdateIdentity ?? availableIdentity)
-						? {
-								identity: (currentUpdateIdentity ??
-									availableIdentity) as UpdateIdentity,
-							}
-						: {}),
-				};
-				notificationBroadcast(
-					"ceralive_update_failed",
-					"error",
-					"The software update failed. Open Settings → Software Updates to see the reason and retry.",
-					0,
-					true,
-					true,
-					true,
-					"notifications.ceraliveUpdateFailed",
-					undefined,
-					{
-						action: {
-							schema: 1,
-							kind: "navigate",
-							target: "updates-dialog",
-							labelKey: "notifications.openUpdates",
-						},
-					},
-				);
-			}
+			const failure =
+				code === 0
+					? null
+					: {
+							reason: aptErr.trim() || `apt-get exited with code ${code}`,
+							...((currentUpdateIdentity ?? availableIdentity)
+								? {
+										identity: (currentUpdateIdentity ??
+											availableIdentity) as UpdateIdentity,
+									}
+								: {}),
+						};
+			// getUpdateState()-relevant assignments happen FIRST and
+			// unconditionally, before any broadcast/notification call below —
+			// a caller awaiting settle() must observe the real outcome even if
+			// a broadcast fails for some unrelated reason.
+			lastUpdateSucceeded = code === 0;
+			lastUpdateFailure = failure;
 			softUpdateStatus.result = code === 0 ? code : aptErr;
-			broadcastMsg("status", {
-				updating: softUpdateStatus,
-				update_state: getUpdateState(),
-			});
+			const settledStatus = softUpdateStatus;
 			softUpdateStatus = null;
-			broadcastUpdateState();
+			try {
+				if (failure) {
+					notificationBroadcast(
+						"ceralive_update_failed",
+						"error",
+						"The software update failed. Open Settings → Software Updates to see the reason and retry.",
+						0,
+						true,
+						true,
+						true,
+						"notifications.ceraliveUpdateFailed",
+						undefined,
+						{
+							action: {
+								schema: 1,
+								kind: "navigate",
+								target: "updates-dialog",
+								labelKey: "notifications.openUpdates",
+							},
+						},
+					);
+				}
+				broadcastMsg("status", {
+					updating: settledStatus,
+					update_state: getUpdateState(),
+				});
+				broadcastUpdateState();
+			} catch (broadcastError) {
+				// The outcome is already recorded above; a broadcast/notification
+				// failure must never mask it or make settle() throw — that would
+				// let an upstream guard (guardNonCritical) swallow the deliberate
+				// crash-to-restart `finish()`'s tail fires on a plain success.
+				logger.warn("Software update settle: broadcast failed", {
+					error: broadcastError,
+				});
+			}
 		}
 
 		return code;
@@ -1682,10 +1698,21 @@ async function recoverSoftwareUpdate(
 			logger.warn(
 				"Software update: reattached to the detached apt transaction",
 			);
-			broadcastMsg("status", {
-				updating: softUpdateStatus,
-				update_state: getUpdateState(),
-			});
+			try {
+				broadcastMsg("status", {
+					updating: softUpdateStatus,
+					update_state: getUpdateState(),
+				});
+			} catch (broadcastError) {
+				// The reattachment above already happened; a broadcast failure
+				// must never turn into a thrown, uncaught exception here — that
+				// would reject the whole recovery attempt and lose the very
+				// evidence (an already-finished unit's outcome) this path exists
+				// to observe.
+				logger.warn("Software update recovery: broadcast failed", {
+					error: broadcastError,
+				});
+			}
 		},
 	});
 	if (!recovered) return false;

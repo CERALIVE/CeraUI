@@ -34,7 +34,7 @@
  * the correct terminal state instead of a transient or absent one.
  */
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import {
 	getUpdateState,
 	recoverSoftwareUpdateIfRunning,
@@ -42,6 +42,7 @@ import {
 } from "../modules/system/software-updates.ts";
 import { resumeOrchestratorState } from "../modules/system/update-orchestrator/resume.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
+import * as compat from "../rpc/compat.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
 
 const NOTHING_LEFT_TO_RECOVER: SoftwareUpdateRecoveryDeps = {
@@ -118,6 +119,32 @@ describe("boot double-recovery race — resume must not misread evidence a start
 
 		expect(resumed.phase).toBe("quarantined");
 		expect(resumed.failureReason).toBeDefined();
+	});
+
+	test("a broadcast failure during settle never masks the recorded outcome, and settle() itself never throws", async () => {
+		await using h = await updateHarness();
+		const throwingBroadcast = spyOn(compat, "broadcastMsg").mockImplementation(
+			() => {
+				throw new Error("socket exploded");
+			},
+		);
+		try {
+			const bootRecovered = await recoverSoftwareUpdateIfRunning({
+				recover: async ({ onAttached }) => {
+					onAttached?.();
+					return { completion: Promise.resolve(0), wasAlreadyFinished: true };
+				},
+				scheduleRetry: () => {},
+				resumePeriodicChecks: () => {},
+			});
+			// A throwing broadcast must not surface as a rejected recovery — the
+			// outcome is still recorded, never lost behind an upstream catch.
+			expect(bootRecovered).toBe(true);
+			expect(getUpdateState()).toEqual({ kind: "success" });
+			expect(h.restarts).toBe(1);
+		} finally {
+			throwingBroadcast.mockRestore();
+		}
 	});
 
 	test("negative control — genuinely nothing was ever running still resolves the honest unresolved failure", async () => {

@@ -928,6 +928,19 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 		expect(recovery).toBeGreaterThan(-1);
 		expect(periodic).toBeGreaterThan(recovery);
 	});
+
+	it("starts the update-orchestrator BEFORE the general standalone recovery call, so its own resume is the first (and only relevant) reader of a persisted committing phase's detached unit", async () => {
+		const source = await Bun.file(MAIN_PATH).text();
+		const orchestrator = source.indexOf(
+			'await guardNonCritical("update-orchestrator"',
+		);
+		const recovery = source.indexOf(
+			'await guardNonCritical("software-update-recovery"',
+		);
+		expect(orchestrator).toBeGreaterThan(-1);
+		expect(recovery).toBeGreaterThan(-1);
+		expect(recovery).toBeGreaterThan(orchestrator);
+	});
 });
 
 describe("parseDetachedAptServiceState() — restart recovery", () => {
