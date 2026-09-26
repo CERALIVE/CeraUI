@@ -163,12 +163,15 @@ export function validateDetachedAptServiceIdentity(output: string): void {
 		["StandardOutput", "append"],
 		["StandardError", "append"],
 		["User", ""],
-		["ExecStartPre", ""],
-		["ExecStartPost", ""],
 	]);
 	for (const [name, value] of expected) {
 		if (properties.get(name) !== value) {
 			throw new DetachedAptServiceIdentityError(`${name} does not match`);
+		}
+	}
+	for (const hook of ["ExecStartPre", "ExecStartPost"] as const) {
+		if ((properties.get(hook) ?? "") !== "") {
+			throw new DetachedAptServiceIdentityError(`${hook} does not match`);
 		}
 	}
 
