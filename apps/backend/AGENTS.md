@@ -3178,8 +3178,13 @@ never refuses in silence.
   exact unit id and transient fragment path, transient-service description/type,
   exact non-duplicated `[Service]` stdout/stderr append destinations, no pre/post
   hooks, and the canonical
-  `/usr/bin/apt-get` upgrade argv; a foreign same-named unit is never trusted. An
-  unreadable probe keeps discovery and starts gated
+  `/usr/bin/apt-get` upgrade argv; a foreign same-named unit is never trusted.
+  Rock 5B+ systemd omits unset `ExecStartPre`/`ExecStartPost` even when explicitly
+  requested by `systemctl show`. The checker accepts omitted or empty hooks only;
+  a populated hook still fails identity. The old empty-only check retried forever
+  over the finished `active/exited` unit, leaving the orchestrator `committing`.
+  `tests/software-update-service-hooks.test.ts` pins the measured show shape and
+  both foreign-hook refusals. An unreadable probe keeps discovery and starts gated
   instead of treating uncertainty as absence, and schedules a coalesced retry that
   resumes the periodic loop after a conclusive answer. Concurrent recovery callers
   join one probe/observer, so only one consumer can replay and settle the retained

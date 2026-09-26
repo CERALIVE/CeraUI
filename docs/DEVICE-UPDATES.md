@@ -193,6 +193,14 @@ inconclusive unit dispatches `COMMIT_RESUME_UNRESOLVED`. Every other phase
 resumes unchanged; the next tick re-observes it. A resumed commit that lands in
 `quarantined` also records the pending package failure.
 
+The observer checks the retained systemd unit's identity on every poll before
+trusting its terminal exit status. On the Rock 5B+, `systemctl show` omits unset
+`ExecStartPre` and `ExecStartPost` even when requested; omitted and explicitly
+empty both mean no hook, while any populated hook still rejects a foreign unit.
+The earlier empty-only check never saw `active/exited` after a real transaction:
+it retried every 250 ms and held `committing` at 100% until a backend restart.
+The correction is in the identity reader, not in the detached apt launcher.
+
 ### Scheduling
 
 The tick runs every 3 s while a phase is active (`downloading`, `committing`,
