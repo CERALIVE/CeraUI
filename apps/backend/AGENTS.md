@@ -2955,6 +2955,20 @@ board has run any of it from this branch.
   `downloading` vs `committing` is inferred from its own progress counters.
   **Do NOT split that unit into two to get a pause between download and commit**
   The single flock is what stops an `apt-get update` racing the transaction.
+
+  **APT candidate origin is a two-command join.** `apt-cache policy <name>` gives
+  the candidate version's package-file line but NO Release annotations on the
+  bench APT version. Unscoped `apt-cache policy` gives the `release`/`origin`
+  annotations for that same complete line. Read the inventory once per discovery,
+  join on the full URL/distribution/component line (not the hostname alone), and
+  fail closed on a missing or conflicting join. The first-party branch requires
+  HTTPS `apt.ceralive.tv` plus CeraLive Origin/Label and stable/beta; the Debian
+  branch requires a Debian host plus Debian Origin/Label and one of the three
+  Trixie suites. The regression fixture transcribes both Rock 5B+ command shapes.
+  The 2026-09-27 bench-only capability drill confirmed an actionable
+  `ceralive-apt-credentials` 1.0.1 row and its real installation. Its completed
+  unit left progress latched until a service restart, tracked independently in
+  the root effort issues; that is not a claim of lifecycle qualification.
 - **Idle drives the schedule.** Scheduled checks (6 h ± 30 min packages, 12 h ±
   60 min OS; 60 s doubling backoff, 5 min for an apt 429/5xx, 24 h ceiling) start
   only from `idle` with the D7 toggle on. The install unit starts only with no
