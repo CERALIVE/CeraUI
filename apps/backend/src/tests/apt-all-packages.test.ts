@@ -32,40 +32,87 @@ import {
 	setUpdateCapabilityPathForTest,
 } from "../modules/system/update-capabilities.ts";
 
-const simulation = `Inst cerastream [2026.9.6] (2026.9.7 apt.ceralive.tv [arm64])\nInst libc6 [2.41] (2.41-12 Debian:13.0/stable [arm64])\nInst outsider [1] (2 other [arm64])\nConf cerastream (2026.9.7 apt.ceralive.tv [arm64])\n`;
-const policy = (name: string) => {
-	const version =
-		name === "cerastream" ? "2026.9.7" : name === "libc6" ? "2.41-12" : "2";
-	const origin =
-		name === "cerastream"
-			? "apt.ceralive.tv"
-			: name === "libc6"
-				? "deb.debian.org"
-				: "foreign.example";
-	const release =
-		name === "libc6"
-			? "release o=Debian,a=stable,n=trixie,l=Debian"
-			: "release o=Other,n=other";
-	return `${name}:\n  Installed: 1\n  Candidate: ${version}\n  Version table:\n     ${version} 990\n        990 https://${origin}/dists/stable/binary-arm64/ ./ Packages\n            ${release}\n            origin ${origin}\n`;
-};
+// Captured on rock-5b-plus, 2026-09-27, LC_ALL=C apt-cache policy <name>
+// and apt-cache policy (unscoped). The foreign source below changes only the
+// host and release metadata to exercise a repository the board does not carry.
+const credentialPolicy = `ceralive-apt-credentials:
+  Installed: 1.0.0
+  Candidate: 1.0.1
+  Version table:
+     1.0.1 990
+        500 https://apt.ceralive.tv/dists/stable/binary-arm64 ./ Packages
+ *** 1.0.0 990
+        500 https://apt.ceralive.tv/dists/stable/binary-arm64 ./ Packages
+        100 /var/lib/dpkg/status
+`;
+const debianPolicy = `libc6:
+  Installed: 2.41-12+deb13u4
+  Candidate: 2.41-12+deb13u4
+  Version table:
+ *** 2.41-12+deb13u4 500
+        500 https://deb.debian.org/debian trixie/main arm64 Packages
+        100 /var/lib/dpkg/status
+`;
+const foreignPolicy = debianPolicy
+	.replaceAll("libc6", "outsider")
+	.replaceAll("2.41-12+deb13u4", "2")
+	.replace(
+		"deb.debian.org/debian trixie/main",
+		"foreign.example/debian trixie/main",
+	);
+const policy = (name: string): string =>
+	name === "ceralive-apt-credentials"
+		? credentialPolicy
+		: name === "libc6"
+			? debianPolicy
+			: foreignPolicy;
+const sourcePolicy = `Package files:
+ 100 /var/lib/dpkg/status
+     release a=now
+ 500 https://deb.debian.org/debian trixie-updates/main arm64 Packages
+     release v=13-updates,o=Debian,a=stable-updates,n=trixie-updates,l=Debian,c=main,b=arm64
+     origin deb.debian.org
+ 500 https://deb.debian.org/debian-security trixie-security/main arm64 Packages
+     release v=13,o=Debian,a=stable-security,n=trixie-security,l=Debian-Security,c=main,b=arm64
+     origin deb.debian.org
+ 500 https://deb.debian.org/debian trixie/non-free-firmware arm64 Packages
+     release v=13.7,o=Debian,a=stable,n=trixie,l=Debian,c=non-free-firmware,b=arm64
+     origin deb.debian.org
+ 500 https://deb.debian.org/debian trixie/main arm64 Packages
+     release v=13.7,o=Debian,a=stable,n=trixie,l=Debian,c=main,b=arm64
+     origin deb.debian.org
+ 500 https://apt.ceralive.tv/dists/stable/binary-arm64 ./ Packages
+     release o=CeraLive,a=stable,n=stable,l=CeraLive,c=
+     origin apt.ceralive.tv
+Pinned packages:
+`;
+const foreignSource = ` 500 https://foreign.example/debian trixie/main arm64 Packages
+     release o=Other,a=stable,n=trixie,l=Other,c=main,b=arm64
+     origin foreign.example
+`;
+const inventory = sourcePolicy.replace(
+	"Pinned packages:",
+	`${foreignSource}Pinned packages:`,
+);
+const simulation = `Inst ceralive-apt-credentials [1.0.0] (1.0.1 apt.ceralive.tv [arm64])\nInst libc6 [2.41] (2.41-12+deb13u4 Debian:13.0/stable [arm64])\nInst outsider [1] (2 other [arm64])\nConf ceralive-apt-credentials (1.0.1 apt.ceralive.tv [arm64])\n`;
 
 describe("apt-all-packages admission", () => {
 	it("parses simulation versions and refuses ANY removal", () => {
 		expect(parseAptSimulation(simulation)).toEqual([
-			{ name: "cerastream", version: "2026.9.7" },
-			{ name: "libc6", version: "2.41-12" },
+			{ name: "ceralive-apt-credentials", version: "1.0.1" },
+			{ name: "libc6", version: "2.41-12+deb13u4" },
 			{ name: "outsider", version: "2" },
 		]);
 		expect(() => parseAptSimulation(`${simulation}Remv libfoo [1]\n`)).toThrow(
 			"removals_required",
 		);
 		assertPinnedInstallSimulation(
-			"Inst cerastream [1] (2026.9.7 apt.ceralive.tv [arm64])\n",
-			[{ name: "cerastream", version: "2026.9.7" }],
+			"Inst ceralive-apt-credentials [1] (1.0.1 apt.ceralive.tv [arm64])\n",
+			[{ name: "ceralive-apt-credentials", version: "1.0.1" }],
 		);
 		expect(() =>
 			assertPinnedInstallSimulation(simulation, [
-				{ name: "cerastream", version: "2026.9.7" },
+				{ name: "ceralive-apt-credentials", version: "1.0.1" },
 			]),
 		).toThrow("discovery_failed");
 	});
@@ -79,18 +126,31 @@ describe("apt-all-packages admission", () => {
 				seen.push(name);
 				return policy(name);
 			},
+			inventory,
 		);
-		expect(seen).toEqual(["cerastream", "libc6", "outsider"]);
+		expect(seen).toEqual(["ceralive-apt-credentials", "libc6", "outsider"]);
 		expect(result.actionable).toEqual([
-			{ name: "cerastream", version: "2026.9.7" },
-			{ name: "libc6", version: "2.41-12" },
+			{ name: "ceralive-apt-credentials", version: "1.0.1" },
+			{ name: "libc6", version: "2.41-12+deb13u4" },
 		]);
+		expect(
+			result.packages.find((p) => p.name === "ceralive-apt-credentials"),
+		).toMatchObject({
+			origin: "apt.ceralive.tv",
+			layer: "app",
+			actionable: true,
+		});
+		expect(result.packages.find((p) => p.name === "libc6")).toMatchObject({
+			origin: "Debian trixie",
+			layer: "app",
+			actionable: true,
+		});
 		expect(result.packages.find((p) => p.name === "outsider")?.actionable).toBe(
 			false,
 		);
 		const parsed = updateStateSchema.parse({
 			kind: "available",
-			identity: { version: "fixture", packages: ["cerastream"] },
+			identity: { version: "fixture", packages: ["ceralive-apt-credentials"] },
 			package_count: 1,
 			packages: result.packages,
 			actionable_count: 2,
@@ -107,8 +167,8 @@ describe("apt-all-packages admission", () => {
 			"-o",
 			"Dpkg::Options::=--force-confold",
 			"install",
-			"cerastream=2026.9.7",
-			"libc6=2.41-12",
+			"ceralive-apt-credentials=1.0.1",
+			"libc6=2.41-12+deb13u4",
 		]);
 		expect(() =>
 			buildAptAllInstallArgs(
@@ -116,20 +176,123 @@ describe("apt-all-packages admission", () => {
 				"any",
 			),
 		).toThrow();
-		const duplicated = `${policy("cerastream")}        990 https://foreign.example/dists/stable/binary-arm64/ ./ Packages\n            release o=Other,n=other\n            origin foreign.example\n`;
+		const duplicated = credentialPolicy.replace(
+			" *** 1.0.0",
+			"        500 https://foreign.example/debian trixie/main arm64 Packages\n *** 1.0.0",
+		);
 		expect(
 			(
-				await discoverAptAllPackages(simulation, "", async (name) =>
-					name === "cerastream" ? duplicated : policy(name),
+				await discoverAptAllPackages(
+					simulation,
+					"",
+					async (name) =>
+						name === "ceralive-apt-credentials" ? duplicated : policy(name),
+					inventory,
 				)
 			).actionable.map((p) => p.name),
 		).toEqual(["libc6"]);
 	});
 
+	it("fails closed on spoofed, missing or conflicting source metadata and disallowed Debian suites", async () => {
+		const onlyCredentials =
+			"Inst ceralive-apt-credentials [1.0.0] (1.0.1 apt.ceralive.tv [arm64])\n";
+		for (const sources of [
+			"Package files:\nPinned packages:\n",
+			sourcePolicy.replace("o=CeraLive", "o=Other"),
+			sourcePolicy.replace("origin apt.ceralive.tv", "origin foreign.example"),
+			sourcePolicy.replace(
+				"Pinned packages:",
+				` 500 https://apt.ceralive.tv/dists/stable/binary-arm64 ./ Packages\n     release o=Other,n=stable,l=Other\n     origin apt.ceralive.tv\nPinned packages:`,
+			),
+		]) {
+			expect(
+				(
+					await discoverAptAllPackages(
+						onlyCredentials,
+						"",
+						async () => credentialPolicy,
+						sources,
+					)
+				).actionable,
+			).toEqual([]);
+		}
+		const onlyDebian =
+			"Inst libc6 [2.41] (2.41-12+deb13u4 Debian:13.0/stable [arm64])\n";
+		for (const sources of [
+			sourcePolicy.replace(
+				"n=trixie,l=Debian,c=main",
+				"n=bookworm,l=Debian,c=main",
+			),
+			sourcePolicy.replace(
+				"o=Debian,a=stable,n=trixie,l=Debian,c=main",
+				"o=Other,a=stable,n=trixie,l=Debian,c=main",
+			),
+		]) {
+			expect(
+				(
+					await discoverAptAllPackages(
+						onlyDebian,
+						"",
+						async () => debianPolicy,
+						sources,
+					)
+				).actionable,
+			).toEqual([]);
+		}
+		const spoofed = inventory.replace(
+			"o=Other,a=stable,n=trixie,l=Other",
+			"o=Debian,a=stable,n=trixie,l=Debian",
+		);
+		expect(
+			(
+				await discoverAptAllPackages(
+					"Inst outsider [1] (2 other [arm64])\n",
+					"",
+					async () => foreignPolicy,
+					spoofed,
+				)
+			).actionable,
+		).toEqual([]);
+	});
+
+	it("admits Debian updates and security only under their captured Release identities", async () => {
+		const onlyDebian =
+			"Inst libc6 [2.41] (2.41-12+deb13u4 Debian:13.0/stable [arm64])\n";
+		for (const [suite, file] of [
+			[
+				"trixie-updates",
+				"https://deb.debian.org/debian trixie-updates/main arm64 Packages",
+			],
+			[
+				"trixie-security",
+				"https://deb.debian.org/debian-security trixie-security/main arm64 Packages",
+			],
+		] as const) {
+			const policy = debianPolicy.replace(
+				"https://deb.debian.org/debian trixie/main arm64 Packages",
+				file,
+			);
+			const result = await discoverAptAllPackages(
+				onlyDebian,
+				"",
+				async () => policy,
+				sourcePolicy,
+			);
+			expect(result.packages[0]).toMatchObject({
+				origin: `Debian ${suite}`,
+				layer: "app",
+				actionable: true,
+			});
+		}
+	});
+
 	it("refuses the whole transaction when a first-party package is held", async () => {
 		await expect(
-			discoverAptAllPackages(simulation, "cerastream\n", async (name) =>
-				policy(name),
+			discoverAptAllPackages(
+				simulation,
+				"ceralive-apt-credentials\n",
+				async (name) => policy(name),
+				inventory,
 			),
 		).rejects.toThrow("first_party_held_back");
 	});
@@ -158,7 +321,9 @@ describe("apt-all-packages admission", () => {
 					: argv[1] === "showhold"
 						? "linux-image-7.2\n"
 						: argv[1] === "policy"
-							? policy(argv[2] ?? "")
+							? argv[2]
+								? policy(argv[2])
+								: inventory
 							: `The following packages will be upgraded:\n  cerastream\n1 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\nNeed to get 1 MB of archives.\n`;
 			return { exitCode: 0, stdout: result, stderr: "" };
 		});
@@ -209,6 +374,9 @@ describe("apt-all-packages admission", () => {
 				kind: "available",
 				actionable_count: 2,
 			});
+			expect(
+				seen.filter((argv) => argv[1] === "policy" && argv.length === 2),
+			).toHaveLength(1);
 			expect(await readFile(source, "utf8")).toBe(
 				buildCeraliveSources("stable", "amd64"),
 			);
@@ -253,7 +421,9 @@ describe("apt-all-packages admission", () => {
 					? simulated
 					: argv[1] === "showhold"
 						? holds
-						: policy(argv[2] ?? ""),
+						: argv[2]
+							? policy(argv[2])
+							: inventory,
 		}));
 		try {
 			await runUpdateDiscoveryAndReport();
@@ -263,7 +433,7 @@ describe("apt-all-packages admission", () => {
 			});
 			resetSoftwareUpdateState();
 			simulated = simulation;
-			holds = "cerastream\n";
+			holds = "ceralive-apt-credentials\n";
 			await runUpdateDiscoveryAndReport();
 			expect(getUpdateState()).toMatchObject({
 				kind: "failed",
@@ -439,6 +609,7 @@ describe("APT channel", () => {
 				async () => {
 					throw new Error("no candidate must be resolved");
 				},
+				sourcePolicy,
 			);
 			expect(stableAfterBeta.actionable).toEqual([]);
 		} finally {

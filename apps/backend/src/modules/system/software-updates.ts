@@ -535,6 +535,12 @@ async function getCapableUpdateSize(
 		return "discovery_failed";
 	}
 	try {
+		const sourcePolicy = await runAptCommand(
+			["/usr/bin/apt-cache", "policy"],
+			APT_DISCOVERY_TIMEOUT_MS,
+		);
+		if (sourcePolicy.exitCode !== 0)
+			throw new AptAllRefusalError("discovery_failed");
 		const result = await discoverAptAllPackages(
 			simulation.stdout,
 			holds.stdout,
@@ -547,6 +553,7 @@ async function getCapableUpdateSize(
 					throw new AptAllRefusalError("discovery_failed");
 				return policy.stdout;
 			},
+			sourcePolicy.stdout,
 		);
 		aptAllRefusal = null;
 		actionableAllPackages = result.actionable;

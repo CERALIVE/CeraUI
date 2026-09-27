@@ -47,9 +47,61 @@ export function parseAptSimulation(text: string): PinnedAptPackage[] {
 	return result;
 }
 
+function sourceOrigin(
+	source: string,
+	release: string,
+	origin: string,
+): string | null {
+	const url = /^https:\/\/\S+/.exec(source)?.[0];
+	if (!url || !URL.canParse(url)) return null;
+	const host = new URL(url).hostname;
+	if (host !== origin) return null;
+	if (
+		host === "apt.ceralive.tv" &&
+		/(?:^|,)o=CeraLive(?:,|$)/.test(release) &&
+		/(?:^|,)l=CeraLive(?:,|$)/.test(release) &&
+		/(?:^|,)n=(?:stable|beta)(?:,|$)/.test(release)
+	)
+		return host;
+	const suite = /(?:^|,)n=(trixie(?:-updates|-security)?)(?:,|$)/.exec(
+		release,
+	)?.[1];
+	if (
+		(host === "deb.debian.org" || host === "security.debian.org") &&
+		/(?:^|,)o=Debian(?:,|$)/.test(release) &&
+		/(?:^|,)l=Debian(?:-Security)?(?:,|$)/.test(release) &&
+		suite
+	)
+		return `Debian ${suite}`;
+	return null;
+}
+
+function policySources(inventory: string): Map<string, string | null> {
+	const sources = new Map<string, string | null>();
+	const lines = inventory.split("\n");
+	if (lines[0] !== "Package files:") return sources;
+	for (let i = 1; i < lines.length && lines[i] !== "Pinned packages:"; i++) {
+		const source = /^\s*\d+\s+(https?:\/\/\S+\s+.+\s+Packages)\s*$/.exec(
+			lines[i] ?? "",
+		)?.[1];
+		if (!source) continue;
+		const release = /^\s+release\s+(.+)$/.exec(lines[i + 1] ?? "")?.[1];
+		const origin = /^\s+origin\s+(\S+)\s*$/.exec(lines[i + 2] ?? "")?.[1];
+		const allowed =
+			release && origin ? sourceOrigin(source, release, origin) : null;
+		if (sources.has(source) && sources.get(source) !== allowed) {
+			sources.set(source, null);
+		} else if (!sources.has(source)) {
+			sources.set(source, allowed);
+		}
+	}
+	return sources;
+}
+
 export function candidateOrigin(
 	policy: string,
 	version: string,
+	sources: ReadonlyMap<string, string | null>,
 ): string | null {
 	const candidate = /^\s*Candidate:\s*(\S+)/m.exec(policy)?.[1];
 	if (candidate !== version) return null;
@@ -65,27 +117,13 @@ export function candidateOrigin(
 	let allowedOrigin: string | null = null;
 	for (const line of lines) {
 		if (/^\s{2,}(?:\*\*\* )?\S+\s+\d+\s*$/.test(line)) break;
-		const url = /^\s+\d+\s+(https?:\/\/\S+)/.exec(line)?.[1];
-		if (!url) continue;
-		const host = new URL(url).hostname;
-		const origin = /^\s+origin\s+(\S+)/.exec(
-			lines[lines.indexOf(line) + 2] ?? "",
+		const source = /^\s+\d+\s+(https?:\/\/\S+\s+.+\s+Packages)\s*$/.exec(
+			line,
 		)?.[1];
-		if (host === "apt.ceralive.tv" && origin === host) {
-			allowedOrigin ??= host;
-			continue;
-		}
-		const release = lines[lines.indexOf(line) + 1] ?? "";
-		if (
-			origin === host &&
-			/^\s+release\s+/.test(release) &&
-			/(?:\s|,)o=Debian(?:,|$)/.test(release) &&
-			/(?:\s|,)n=trixie(?:-updates|-security)?(?:,|$)/.test(release)
-		) {
-			allowedOrigin ??= `Debian ${/n=(trixie(?:-updates|-security)?)/.exec(release)?.[1]}`;
-			continue;
-		}
-		return null;
+		if (!source) continue;
+		const origin = sources.get(source);
+		if (!origin) return null;
+		allowedOrigin ??= origin;
 	}
 	return allowedOrigin;
 }
@@ -94,6 +132,7 @@ export async function discoverAptAllPackages(
 	simulation: string,
 	holds: string,
 	policyFor: (name: string) => Promise<string>,
+	sourcePolicy: string,
 ): Promise<{
 	readonly packages: UpdatePackage[];
 	readonly actionable: PinnedAptPackage[];
@@ -102,10 +141,15 @@ export async function discoverAptAllPackages(
 	if ([...held].some((name) => FIRST_PARTY.test(name)))
 		throw new AptAllRefusalError("first_party_held_back");
 	const simulated = parseAptSimulation(simulation);
+	const sources = policySources(sourcePolicy);
 	const packages: UpdatePackage[] = [];
 	const actionable: PinnedAptPackage[] = [];
 	for (const pair of simulated) {
-		const origin = candidateOrigin(await policyFor(pair.name), pair.version);
+		const origin = candidateOrigin(
+			await policyFor(pair.name),
+			pair.version,
+			sources,
+		);
 		const allowed = origin !== null && !held.has(pair.name);
 		const layer = origin === null ? "platform" : "app";
 		packages.push({
