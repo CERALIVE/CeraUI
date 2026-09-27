@@ -145,7 +145,9 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
 - **[PARTIAL] APT all-package scope.** Origin-filtered, exact `name=version`
   installs under one flock. Active only on an image declaring `apt-all-packages`;
   every shipping image is legacy (`features: []`) and keeps the exact-name
-  15-package roster.
+  15-package roster. A bench-enabled Rock 5B+ classified and installed
+  `ceralive-apt-credentials` 1.0.1 through the repaired package-policy/unscoped-
+  inventory join; completion-state reconciliation remained a separate gap.
 - **[PARTIAL] Signed OS agent.** CMS-verified channel manifests, RAUC staging,
   deferred activation, post-boot verification. Needs `apt-all-packages` +
   `rauc-verity-streaming` and the release-only `/etc/ceralive/os-release-version`
@@ -168,7 +170,9 @@ Known gaps, recorded rather than smoothed over:
 - **No certificate-expiry countdown.** The wire carries no expiry date,
   `credentials-expiring` has no producer, and the credentials band keys on an
   `apt`-profile transport finding that no production path produces yet.
-- **Nothing is board-proven.** Unit, fixture, netns and Playwright tests only.
+- **Board evidence is narrow.** The capable APT candidate/installation above was
+  verified on a bench-enabled board, not a released capable image. OS staging,
+  slot mirroring and UID-pinned transport are still not qualified by that run.
 
 ## STRUCTURE
 

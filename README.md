@@ -17,7 +17,9 @@ sections it cannot back instead of hiding them. Updating every package by origin
 signed system-image updates and the slot mirror are implemented but need image
 capabilities no released image declares yet. System-image updates additionally
 need an `/etc/ceralive/os-release-version` stamp, so current boards refuse them.
-All of this is unit-, fixture- and Playwright-tested, not exercised on a board.
+The origin-classification fix and one credentials upgrade were exercised on a
+bench-capability-enabled Rock 5B+; the OS/slot flows remain fixture-only, and
+the package completion-state latch still needs a separate repair.
 See also [update recovery](docs/UPDATE-RECOVERY.md).
 
 Generic raw capture inputs now have an honest, non-streamable **Raw video** row

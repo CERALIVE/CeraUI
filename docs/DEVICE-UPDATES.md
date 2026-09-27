@@ -2,17 +2,17 @@
 
 This is the engineering reference for how a CeraLive device discovers, downloads,
 installs and verifies its own updates. It describes the code on this branch, file
-by file, and says plainly where a path is implemented but inert on every image
-that ships today.
+by file, and says plainly where a path is implemented but not released on any
+image today.
 
 **Status in one paragraph.** The orchestrator, its D8 stream admission, the
 package pipeline, the Updates dialog and its global surfaces are implemented and
 run on every device ([EXISTS]). The APT all-package scope, the OS agent, the
 lagged slot mirror and the UID-pinned transport are implemented and
 fixture-tested, but each is gated on an image capability that no shipped image
-declares yet ([PARTIAL]). Nothing on this page has been exercised on a board by
-this effort: every claim below is backed by unit, fixture, netns or Playwright
-tests, never by a hardware receipt.
+declares yet ([PARTIAL]). The one exception to fixture-only evidence is the
+bench-enabled APT candidate-origin check and credentials upgrade described
+below; it does not qualify a released capable image or the OS/slot paths.
 
 ## Where things live
 
@@ -71,6 +71,19 @@ Every image shipping today is a legacy image: the current image carrier declares
 `features: []`. The frontend mirrors the split in `updateCapabilityView()`
 (`apps/frontend/src/lib/updates/update-view.ts`), which states the limit on a
 legacy image instead of hiding sections silently.
+
+In capable mode the candidate version's `apt-cache policy <name>` package-file
+line is joined to the complete line in one unscoped `apt-cache policy` reading
+per discovery. Only the unscoped inventory carries Release Origin/Label and the
+Debian suite. Unknown or ambiguous joins remain informational, not installable;
+the Rock 5B+ capture of both APT forms is the regression fixture. This repairs
+the former fixture-only origin parser, which looked for inventory annotations
+under each package-specific candidate and rejected every real candidate.
+On 2026-09-27 a Rock 5B+ with bench-enabled capabilities classified
+`ceralive-apt-credentials` 1.0.1 as an actionable app-origin upgrade and installed
+it via `system.checkUpdatesNow` / `system.installUpdatesNow` (unit exit 0,
+installed version 1.0.1). The progress state did not settle until a backend
+restart; that distinct completion defect remains open in the effort issues log.
 
 `setup.json`'s explicit `"apt_update_enabled": false` still vetoes every APT
 transaction on both kinds of image. The orchestrator does not bypass it: a
