@@ -22,12 +22,16 @@ export { buildDetachedAptUpgradeCommand } from "./software-update-service.ts";
 
 const OUTPUT_POLL_INTERVAL_MS = 250;
 const FINAL_DRAIN_MAX_FAILURES = 20;
+const INSPECT_RETRY_MAX_MS = 30_000;
 
 export type SoftwareUpdateOutputHandlers = {
 	readonly onStdout: (chunk: string) => void;
 	readonly onStderr: (chunk: string) => void;
 	readonly onAttached?: () => void;
-	readonly onObserverError?: (error: unknown) => void;
+	readonly onObserverError?: (
+		error: unknown,
+		suppressedRetries?: number,
+	) => void;
 };
 
 export type DetachedAptUpgradeDeps = DetachedAptServiceDeps;
@@ -165,6 +169,9 @@ async function observeDetachedAptUpgrade(
 		deps.outputPaths,
 		handlers,
 	);
+	let inspectRetryMs = 1_000;
+	let lastInspectReportAt = -Infinity;
+	let suppressedInspectErrors = 0;
 
 	while (state.kind === "running") {
 		const drained = await drainAvailableOutput(
@@ -179,9 +186,21 @@ async function observeDetachedAptUpgrade(
 		try {
 			state = await deps.inspect();
 		} catch (error) {
-			reportObserverError(handlers, error);
+			const now = deps.now?.() ?? Date.now();
+			if (now - lastInspectReportAt >= INSPECT_RETRY_MAX_MS) {
+				handlers.onObserverError?.(error, suppressedInspectErrors);
+				lastInspectReportAt = now;
+				suppressedInspectErrors = 0;
+			} else {
+				suppressedInspectErrors++;
+			}
+			await deps.sleep(inspectRetryMs);
+			inspectRetryMs = Math.min(inspectRetryMs * 2, INSPECT_RETRY_MAX_MS);
 			continue;
 		}
+		inspectRetryMs = 1_000;
+		lastInspectReportAt = -Infinity;
+		suppressedInspectErrors = 0;
 		if (state.kind === "absent") throw new DetachedAptServiceVanishedError();
 	}
 	if (state.kind !== "finished") throw new DetachedAptServiceVanishedError();

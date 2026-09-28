@@ -3231,7 +3231,10 @@ never refuses in silence.
   a populated hook still fails identity. The old empty-only check retried forever
   over the finished `active/exited` unit, leaving the orchestrator `committing`.
   `tests/software-update-service-hooks.test.ts` pins the measured show shape and
-  both foreign-hook refusals. An unreadable probe keeps discovery and starts gated
+  both foreign-hook refusals. Flock identity is parsed against real systemd
+  rendering, with a finished fixture captured from the Rock 5B+ on 2026-09-28
+  and its reported running-form variant; wrapper, lock and script remain exact.
+  An unreadable probe keeps discovery and starts gated
   instead of treating uncertainty as absence, and schedules a coalesced retry that
   resumes the periodic loop after a conclusive answer. Concurrent recovery callers
   join one probe/observer, so only one consumer can replay and settle the retained
@@ -3240,7 +3243,9 @@ never refuses in silence.
   also refuses any apt operation outside the upgrade/install-held-packages contract.
   Once attached, transient read/probe failures are retried without clearing
   `softUpdateStatus`; stdout and stderr advance independently, so one failed read
-  cannot replay the other, and the terminal unit is retained until BOTH final drains
+  cannot replay the other. Repeated inspection failures back off from 1 s to 30 s
+  and report on the first failure, then at most once per 30 s with a suppressed
+  retry count. The terminal unit is retained until BOTH final drains
   succeed. A permanently unreadable final output is bounded to 20 local attempts,
   reports failure, and deliberately leaves the terminal unit intact for the next
   recovery instead of deleting evidence. Only a complete drain permits stop/reset.

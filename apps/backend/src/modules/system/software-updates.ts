@@ -1425,11 +1425,12 @@ function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
 		onStderr: (data) => {
 			aptErr += data;
 		},
-		onObserverError: (error) => {
+		onObserverError: (error, suppressedRetries = 0) => {
 			logger.warn(
 				"Software update observer retrying after a local read failure",
 				{
 					error,
+					suppressed_retries: suppressedRetries,
 				},
 			);
 		},

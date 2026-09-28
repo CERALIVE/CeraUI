@@ -69,6 +69,7 @@ export type DetachedAptServiceDeps = {
 		offset: number,
 	) => Promise<SoftwareUpdateOutputRead>;
 	readonly sleep: (milliseconds: number) => Promise<void>;
+	readonly now?: () => number;
 };
 
 export function buildDetachedAptUpgradeCommand(

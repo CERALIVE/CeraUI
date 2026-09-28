@@ -180,10 +180,18 @@ export function validateDetachedAptServiceIdentity(output: string): void {
 	const argvStart = execStart.indexOf(argvMarker);
 	const argvEnd = execStart.indexOf(" ;", argvStart);
 	if (execStart.startsWith("{ path=/usr/bin/flock ; ")) {
-		const marker = `argv[]=/usr/bin/flock -x ${SOFTWARE_UPDATE_LOCK} /bin/sh -ec `;
-		const script = execStart
-			.slice(execStart.indexOf(marker) + marker.length, -4)
-			.replace(/^['"]|['"]$/g, "");
+		const prefix = `{ path=/usr/bin/flock ; argv[]=/usr/bin/flock -x ${SOFTWARE_UPDATE_LOCK} /bin/sh -ec `;
+		const scriptEnd = execStart.indexOf(" ; ignore_errors=", prefix.length);
+		if (
+			!execStart.startsWith(prefix) ||
+			scriptEnd < 0 ||
+			!/^ ; ignore_errors=no ; start_time=\[[^\]\n]+\] ; stop_time=\[[^\]\n]+\] ; pid=\d+ ; code=(?:\(null\)|exited|killed|dumped) ; status=\d+(?:\/[A-Za-z0-9_-]+)? }$/.test(
+				execStart.slice(scriptEnd),
+			)
+		) {
+			throw new DetachedAptServiceIdentityError("flock wrapper does not match");
+		}
+		const script = execStart.slice(prefix.length, scriptEnd);
 		const match =
 			/^\/usr\/bin\/apt-get -d -y upgrade --with-new-pkgs(?<family> -o Acquire::ForceIPv[46]=true)? && \/usr\/bin\/apt-get (?<install>.+)$/.exec(
 				script,
@@ -196,11 +204,7 @@ export function validateDetachedAptServiceIdentity(output: string): void {
 		} catch {
 			/* a foreign command is not adoptable */
 		}
-		if (
-			!execStart.includes(marker) ||
-			!execStart.endsWith(" ; }") ||
-			canonical !== script
-		) {
+		if (canonical !== script) {
 			throw new DetachedAptServiceIdentityError("flock wrapper does not match");
 		}
 		return;
