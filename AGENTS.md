@@ -167,8 +167,11 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
 
 Known gaps, recorded rather than smoothed over:
 
-- **Nothing dispatches `RESET`,** so `quarantined` and `failed` persist until
-  `agent.json` is removed.
+- **Nothing dispatches `RESET`.** A root-only packaged maintenance tool can
+  adjudicate only `failed`/`commit_unit_absent_on_resume` on the current slot,
+  after an inactive/runtime-masked backend and durable plan-bearing receipt.
+  Every other sticky failure still has no product clearance path. The tool's
+  root/systemd/APT end-to-end board proof is owed; see `docs/UPDATE-RECOVERY.md`.
 - **The Packages section still calls `system.startUpdate` /
   `system.checkForUpdates`,** which bypass the orchestrator; D8 does not see a
   transaction started there (the older `isUpdating()` start guard still refuses
