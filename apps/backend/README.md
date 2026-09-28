@@ -264,8 +264,13 @@ enabled when beta is selected. Older images keep the original 15-name path.
 No capable device image has been released. The candidate-origin fix was
 bench-tested with the capability enabled on a Rock 5B+: it identified and
 installed `ceralive-apt-credentials` 1.0.0→1.0.1 through authenticated update
-RPCs. The completed transaction's progress latch needed a backend restart to
-settle; this is recorded separately in the update-system issues ledger.
+RPCs. On 2026-09-28 the Rock 5B+ completed apt at 18:06:04Z, yet the backend
+still reported `installing` / `committing` 84+ minutes later until a restart.
+The detached-unit identity checker rejected systemd's real flock-wrapped
+`ExecStart` rendering (`flock wrapper does not match`), repeatedly blocking
+observation of the successful exit. The source fix on this branch accepts the
+real rendering and backs off repeated observer failures; that fixed build has
+not yet been re-proven on a board.
 
 Candidate provenance joins two APT readings: `apt-cache policy <name>` supplies
 the version's package-file line, while one unscoped `apt-cache policy` reading

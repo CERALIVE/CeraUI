@@ -147,7 +147,9 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
   every shipping image is legacy (`features: []`) and keeps the exact-name
   15-package roster. A bench-enabled Rock 5B+ classified and installed
   `ceralive-apt-credentials` 1.0.1 through the repaired package-policy/unscoped-
-  inventory join; completion-state reconciliation remained a separate gap.
+  inventory join. Its completed unit left progress in `committing` on the board;
+  the flock-wrapped systemd `ExecStart` identity mismatch causing that latch is
+  fixed in this branch, but the fixed build has not been re-proven on a board.
 - **[PARTIAL] Signed OS agent.** CMS-verified channel manifests, RAUC staging,
   deferred activation, post-boot verification. Needs `apt-all-packages` +
   `rauc-verity-streaming` and the release-only `/etc/ceralive/os-release-version`

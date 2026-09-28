@@ -19,7 +19,12 @@ capabilities no released image declares yet. System-image updates additionally
 need an `/etc/ceralive/os-release-version` stamp, so current boards refuse them.
 The origin-classification fix and one credentials upgrade were exercised on a
 bench-capability-enabled Rock 5B+; the OS/slot flows remain fixture-only, and
-the package completion-state latch still needs a separate repair.
+the package completion-state latch seen on that board was traced to the
+detached-unit identity check rejecting systemd's real flock-wrapped `ExecStart`.
+This branch accepts the real rendering and backs off observer retries. On
+2026-09-28 the Rock 5B+ had completed apt at 18:06:04Z but still reported
+`committing` 84+ minutes later until a backend restart; the fixed build has
+not yet been re-proven on a board.
 See also [update recovery](docs/UPDATE-RECOVERY.md).
 
 A root-only, local `.deb` maintenance executable now implements the narrow

@@ -2989,8 +2989,10 @@ board has run any of it from this branch.
   Trixie suites. The regression fixture transcribes both Rock 5B+ command shapes.
   The 2026-09-27 bench-only capability drill confirmed an actionable
   `ceralive-apt-credentials` 1.0.1 row and its real installation. Its completed
-  unit left progress latched until a service restart, tracked independently in
-  the root effort issues; that is not a claim of lifecycle qualification.
+  unit left progress latched until a service restart: the identity validator
+  rejected systemd's real flock-wrapped `ExecStart` rendering. This branch
+  accepts that rendering and backs off observer failures, but the fixed build
+  has not yet been re-proven on a board; the install is not lifecycle qualification.
 - **Idle drives the schedule.** Scheduled checks (6 h ± 30 min packages, 12 h ±
   60 min OS; 60 s doubling backoff, 5 min for an apt 429/5xx, 24 h ceiling) start
   only from `idle` with the D7 toggle on. The install unit starts only with no

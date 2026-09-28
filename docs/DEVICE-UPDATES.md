@@ -82,8 +82,15 @@ under each package-specific candidate and rejected every real candidate.
 On 2026-09-27 a Rock 5B+ with bench-enabled capabilities classified
 `ceralive-apt-credentials` 1.0.1 as an actionable app-origin upgrade and installed
 it via `system.checkUpdatesNow` / `system.installUpdatesNow` (unit exit 0,
-installed version 1.0.1). The progress state did not settle until a backend
-restart; that distinct completion defect remains open in the effort issues log.
+installed version 1.0.1). A later Rock 5B+ capture on 2026-09-28 showed apt
+success at 18:06:04Z while the backend remained `installing` / `committing` for
+84+ minutes, clearing only after a backend restart. The observer repeatedly
+raised `DetachedAptServiceIdentityError` (`flock wrapper does not match`, about
+3.5 times/s) because the identity contract rejected systemd's real flock-wrapped
+`ExecStart` rendering before it could observe the completed unit. This branch
+parses that rendering and backs off repeated failures. The fixed build has NOT
+yet been re-proven on a board; the earlier installation is not a settled-lifecycle
+qualification.
 
 `setup.json`'s explicit `"apt_update_enabled": false` still vetoes every APT
 transaction on both kinds of image. The orchestrator does not bypass it: a
