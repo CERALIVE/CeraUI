@@ -152,6 +152,14 @@ function parseProperties(output: string): Map<string, string> {
 }
 
 export function validateDetachedAptServiceIdentity(output: string): void {
+	if (
+		output.split("\n").filter((line) => line.startsWith("ExecStart="))
+			.length !== 1
+	) {
+		throw new DetachedAptServiceIdentityError(
+			"expected exactly one ExecStart property",
+		);
+	}
 	const properties = parseProperties(output);
 	const expected = new Map([
 		["Id", SOFTWARE_UPDATE_UNIT],

@@ -82,6 +82,41 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 		).toEqual({ kind: "running" });
 	});
 
+	it.each(["--allow-unauthenticated", "-o", "-y", "+x", ".x", ":x", "~x"])(
+		"refuses a real-rendering flock unit with %s as a pinned package name",
+		(name) => {
+			expect(() =>
+				probe(
+					flockUnit(
+						flockFinishedExecStart.replace(
+							"ceralive-apt-credentials=1.0.1 cerastream=2026.9.8 ; ignore_errors=",
+							`${name}=1 ; ignore_errors=`,
+						),
+					),
+				),
+			).toThrow(DetachedAptServiceIdentityError);
+		},
+	);
+
+	it.each(["foreign-first", "foreign-last"])(
+		"refuses two ExecStart properties with %s",
+		(order) => {
+			const foreign = "ExecStart={ path=/bin/true ; argv[]=/bin/true ; }";
+			const extra =
+				order === "foreign-first"
+					? `${foreign}\n${flockFinishedExecStart}`
+					: `${flockFinishedExecStart}\n${foreign}`;
+			expect(() =>
+				probe(
+					flockUnit(flockFinishedExecStart).replace(
+						flockFinishedExecStart,
+						extra,
+					),
+				),
+			).toThrow(DetachedAptServiceIdentityError);
+		},
+	);
+
 	it("round-trips the launcher's script through systemd's real ExecStart rendering", () => {
 		const launcher = buildDetachedAptAllCommand(
 			[
