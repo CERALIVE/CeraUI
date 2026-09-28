@@ -97,6 +97,60 @@ const inventory = sourcePolicy.replace(
 const simulation = `Inst ceralive-apt-credentials [1.0.0] (1.0.1 apt.ceralive.tv [arm64])\nInst libc6 [2.41] (2.41-12+deb13u4 Debian:13.0/stable [arm64])\nInst outsider [1] (2 other [arm64])\nConf ceralive-apt-credentials (1.0.1 apt.ceralive.tv [arm64])\n`;
 
 describe("apt-all-packages admission", () => {
+	it.each(["--allow-unauthenticated", "-o", "-y", "+x", ".x", ":x", "~x"])(
+		"rejects %s at discovery and both install builders",
+		(name) => {
+			const pair = { name, version: "1" };
+			expect(() =>
+				parseAptSimulation(`Inst ${name} (1 Debian [arm64])\n`),
+			).toThrow("discovery_failed");
+			expect(() => buildAptAllInstallArgs([pair], "any")).toThrow(
+				"discovery_failed",
+			);
+			const install = [
+				"-y",
+				"--no-download",
+				"--no-remove",
+				"-o",
+				"Dpkg::Options::=--force-confdef",
+				"-o",
+				"Dpkg::Options::=--force-confold",
+				"install",
+				`${name}=1`,
+			];
+			expect(() =>
+				buildDetachedAptAllCommand(install, "any", {
+					stdout: "/run/ceralive/software-update.stdout",
+					stderr: "/run/ceralive/software-update.stderr",
+				}),
+			).toThrow();
+		},
+	);
+
+	it("keeps Debian names with internal punctuation at discovery and install", () => {
+		const names = [
+			"cerastream",
+			"libc6",
+			"g++",
+			"libstdc++6",
+			"python3.13",
+			"gcc-14",
+		];
+		for (const name of names) {
+			expect(parseAptSimulation(`Inst ${name} (1 Debian [arm64])\n`)).toEqual([
+				{ name, version: "1" },
+			]);
+			const install = buildAptAllInstallArgs([{ name, version: "1" }], "any");
+			expect(install.at(-1)).toBe(`${name}=1`);
+			expect(
+				buildDetachedAptAllCommand(install, "any", {
+					stdout: "/run/ceralive/software-update.stdout",
+					stderr: "/run/ceralive/software-update.stderr",
+				}).at(-1),
+			).toContain(`install ${name}=1`);
+		}
+	});
+
 	it("parses simulation versions and refuses ANY removal", () => {
 		expect(parseAptSimulation(simulation)).toEqual([
 			{ name: "ceralive-apt-credentials", version: "1.0.1" },

@@ -713,13 +713,16 @@ export function parseAptUpgradeSummary(
 		);
 	}
 
+	const names = packageList.value
+		.split(/\s+/)
+		.filter((name) => APT_PACKAGE_NAME_RE.test(name));
 	return parseOk({
 		upgradeCount: upgradeCount.value,
 		downloadSize: downloadSize.value,
-		ceralivePackages: packageList.value
-			.split(/\s+/)
-			.some((name) => classifyPackageLayer(name) === "app"),
-		packages: packageList.value.split(/\s+/).filter((n) => n.length > 0),
+		ceralivePackages: names.some(
+			(name) => classifyPackageLayer(name) === "app",
+		),
+		packages: names,
 	});
 }
 

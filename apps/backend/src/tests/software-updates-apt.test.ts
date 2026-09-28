@@ -118,6 +118,14 @@ function serviceState(properties: {
 }
 
 describe("parseHeldBackPackages() — charset validation", () => {
+	it.each(["--foo", "-o", "-y", "+x", ".x", ":x", "~x"])(
+		"rejects %s rather than passing it to apt",
+		(name) => {
+			expect(() => parseHeldBackPackages(`cerastream ${name}`)).toThrow(
+				/invalid package name/,
+			);
+		},
+	);
 	it("splits a whitespace-separated list into individual package names", () => {
 		expect(parseHeldBackPackages("pkg-a pkg-b")).toEqual(["pkg-a", "pkg-b"]);
 	});
@@ -1353,6 +1361,21 @@ function availableArm(packages: readonly UpdatePackage[]) {
 }
 
 describe("discovery classifies every package by layer and kept-back state", () => {
+	it.each(["--foo", "-o", "-y", "+x", ".x", ":x", "~x"])(
+		"drops %s from upgraded and kept-back apt output",
+		(name) => {
+			const summary = parseAptUpgradeSummary(
+				`The following packages will be upgraded:\n  cerastream ${name}\n2 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\nNeed to get 1 MB of archives.\n`,
+			);
+			expect(summary.ok).toBe(true);
+			if (summary.ok) expect(summary.value.packages).toEqual(["cerastream"]);
+			expect(
+				parseKeptBackPackageNames(
+					`The following packages have been kept back:\n  cerastream ${name}\n0 upgraded, 0 newly installed, 0 to remove and 2 not upgraded.\n`,
+				),
+			).toEqual(["cerastream"]);
+		},
+	);
 	it("an app-only upgrade set is fully actionable", () => {
 		const summary = parseAptUpgradeSummary(APP_ONLY_STDOUT);
 		expect(summary.ok).toBe(true);
