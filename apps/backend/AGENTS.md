@@ -2967,6 +2967,14 @@ board has run any of it from this branch.
   transient unit runs `flock -x /run/lock/ceralive-update.lock` around download
   AND commit. `awaiting-idle` therefore gates the start of that whole unit, and
   `downloading` vs `committing` is inferred from its own progress counters.
+  A discovery with only informational or kept-back packages is a successful
+  check with nothing installable: the orchestrator reads the legacy wire's
+  `actionable_count`, not its inclusive `package_count`, and returns to `idle`
+  without calling `startSoftwareUpdate()` or emitting a failed install. The
+  legacy launch still refuses a direct stale install with no actionable names.
+  This does not clear an already persisted `failed` phase: those still need an
+  independently authorized recovery decision; the narrow
+  `ceralive-update-recover` tool admits only `commit_unit_absent_on_resume`.
   **Do NOT split that unit into two to get a pause between download and commit**
   The single flock is what stops an `apt-get update` racing the transaction.
 

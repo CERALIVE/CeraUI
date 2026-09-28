@@ -313,6 +313,17 @@ path in `apt-all-packages.ts`:
 - one PID-1-owned transient service runs download and commit inside a single
   `flock -x /run/lock/ceralive-update.lock`.
 
+The package check reads `update_state.available.actionable_count` rather than
+the inclusive `package_count`: a successful discovery listing only platform or
+kept-back packages returns to `idle`, leaving the OS check eligible on a capable
+image. It never launches the legacy installer just to discover it has nothing
+actionable. A direct legacy `system.startUpdate` with no actionable names still
+reports its existing refusal. This fix prevents a *new* sticky failure; an
+existing `failed` `agent.json` is not reclassified on restart or the next tick.
+The root-only `ceralive-update-recover` tool admits only the exact
+`commit_unit_absent_on_resume` reason, not a no-actionable-packages failure;
+clearing another reason requires a separately reviewed recovery procedure.
+
 Because download and commit share one unit, `awaiting-idle` gates the start of
 the whole unit. The orchestrator then infers `downloading` versus `committing`
 from the unit's progress counters (unpacking or setting-up counts above zero

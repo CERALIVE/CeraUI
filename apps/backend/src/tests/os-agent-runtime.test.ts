@@ -114,7 +114,6 @@ describe("OS install dispatch", () => {
 	test("missing release stamp propagates typed booted_version_unknown refusal", async () => {
 		setup({
 			runPackageCheck: async () => null,
-			getAvailablePackageCount: () => 0,
 			getPackageInstallWireState: () => ({ kind: "idle" }),
 			checkOsManifest: async () => ({
 				available: false,

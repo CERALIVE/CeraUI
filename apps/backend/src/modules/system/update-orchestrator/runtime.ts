@@ -35,7 +35,6 @@ import { cleanAptCache } from "../apt-cache-clean.ts";
 import { isRealDevice } from "../device-detection.ts";
 import { getIdleStatus } from "../idle-activity.ts";
 import {
-	getAvailableUpdates,
 	getUpdateState,
 	recoverSoftwareUpdateIfRunning,
 	runUpdateDiscoveryAndReport,
@@ -106,7 +105,6 @@ export interface OrchestratorRuntimeDeps {
 	readonly isStreamLive: () => boolean;
 	readonly onlyMeteredCandidateExists: () => Promise<boolean>;
 	readonly runPackageCheck: () => Promise<SoftwareUpdateError>;
-	readonly getAvailablePackageCount: () => number;
 	readonly startPackageInstall: () => { started: boolean };
 	readonly getPackageInstallWireState: () => UpdateState;
 	/**
@@ -196,10 +194,6 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	isStreamLive: getIsStreaming,
 	onlyMeteredCandidateExists: defaultOnlyMeteredCandidateExists,
 	runPackageCheck: runUpdateDiscoveryAndReport,
-	getAvailablePackageCount: () => {
-		const available = getAvailableUpdates();
-		return available ? available.package_count : 0;
-	},
 	startPackageInstall: () => {
 		const outcome = startSoftwareUpdate();
 		return { started: outcome.started };
@@ -565,15 +559,16 @@ async function runPackageCheckCycle(): Promise<void> {
 	const error = await deps.runPackageCheck();
 	const outcomeNow = deps.now();
 	if (error === null) {
-		const packageCount = deps.getAvailablePackageCount();
 		const wire = deps.getPackageInstallWireState();
+		const actionableCount =
+			wire.kind === "available" ? (wire.actionable_count ?? 0) : 0;
 		if (wire.kind === "available") {
 			await deps.quarantine.reconcileCandidates(
 				wire.packages?.flatMap((item) =>
 					item.version ? [{ name: item.name, version: item.version }] : [],
 				) ?? [],
 			);
-			if (packageCount > 0)
+			if (actionableCount > 0)
 				notifyUpdate({
 					kind: "updates-available",
 					id:
@@ -593,7 +588,7 @@ async function runPackageCheckCycle(): Promise<void> {
 				randomUnit: deps.random(),
 			});
 		dispatch(
-			packageCount > 0
+			actionableCount > 0
 				? {
 						type: "CHECK_SUCCEEDED_PACKAGES",
 						now: outcomeNow,

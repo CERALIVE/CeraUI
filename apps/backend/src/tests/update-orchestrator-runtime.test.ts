@@ -56,7 +56,6 @@ function fakeDeps(
 		isStreamLive: () => false,
 		onlyMeteredCandidateExists: async () => false,
 		runPackageCheck: async () => null,
-		getAvailablePackageCount: () => 0,
 		startPackageInstall: () => ({ started: true }),
 		getPackageInstallWireState: () => ({ kind: "idle" }) as UpdateState,
 		checkOsManifest: async () => ({
@@ -94,7 +93,6 @@ describe("checkUpdatesNow", () => {
 					return false;
 				},
 				runPackageCheck: async () => null,
-				getAvailablePackageCount: () => 0,
 			}),
 		);
 		setOrchestratorStateForTest(initialOrchestratorState(0));
@@ -109,12 +107,47 @@ describe("checkUpdatesNow", () => {
 		setOrchestratorRuntimeDepsForTest(
 			fakeDeps({
 				runPackageCheck: async () => null,
-				getAvailablePackageCount: () => 3,
+				getPackageInstallWireState: () => ({
+					kind: "available",
+					identity: { version: "app-update", packages: ["cerastream"] },
+					package_count: 1,
+					actionable_count: 1,
+				}),
 			}),
 		);
 		setOrchestratorStateForTest(initialOrchestratorState(0));
 		await checkUpdatesNow();
 		expect(getOrchestratorState().phase).toBe("available");
+	});
+
+	test("a successful check with only informational packages stays idle and never starts an install", async () => {
+		let installs = 0;
+		setOrchestratorRuntimeDepsForTest(
+			fakeDeps({
+				getPackageInstallWireState: () => ({
+					kind: "available",
+					identity: { version: "platform-only", packages: ["linux-image"] },
+					package_count: 1,
+					actionable_count: 0,
+					packages: [
+						{ name: "linux-image", layer: "platform", actionable: false },
+					],
+				}),
+				startPackageInstall: () => {
+					installs++;
+					return { started: true };
+				},
+			}),
+		);
+		setOrchestratorStateForTest(initialOrchestratorState(0));
+
+		await checkUpdatesNow();
+		await runOrchestratorTick();
+
+		expect(getOrchestratorState().phase).toBe("idle");
+		expect(getOrchestratorState().failureReason).toBeNull();
+		expect(getOrchestratorState().packageCheck.lastSuccessAt).not.toBeNull();
+		expect(installs).toBe(0);
 	});
 });
 
