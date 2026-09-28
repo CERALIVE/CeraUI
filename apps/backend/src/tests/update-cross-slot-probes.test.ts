@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { recoverCrossSlot } from "../modules/system/update-orchestrator/recovery.ts";
 import {
 	createRecoveryProbes,
 	type RecoveryProbeIo,
 } from "../modules/system/update-orchestrator/recovery-probes.ts";
-import { recoverCrossSlot } from "../modules/system/update-orchestrator/recovery.ts";
 import { createRecoveryFixture } from "./update-cross-slot-fixture.ts";
 
 describe("the shipped local probe boundary", () => {
