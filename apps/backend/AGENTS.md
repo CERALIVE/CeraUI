@@ -2928,14 +2928,28 @@ board has run any of it from this branch.
   time is what the shared `/run/lock/ceralive-update.lock` allows, so one field
   is enough; the cost is that packages and OS are never both "available" at
   once (packages win). The transition table lives in `docs/DEVICE-UPDATES.md`.
-- **`quarantined` ≠ `failed`, and both are sticky today.** `COMMIT_FAILED`
+- **`quarantined` ≠ `failed`, and both are sticky by default.** `COMMIT_FAILED`
   quarantines (dpkg ran and failed, so there is an exact candidate to pin);
   `COMMIT_RESUME_UNRESOLVED`, `DOWNLOAD_FAILED`, `OS_STAGING_FAILED` and
   `SYNC_FAILED` go to `failed` (nothing proven bad). **No production code
   dispatches `RESET`**. The reducer accepts it and nothing sends it, so either
   phase persists across restarts in `agent.json`, `system.checkUpdatesNow`
-  answers `busy` and `system.installUpdatesNow` answers `not_available`. That is
-  a known gap, not a design; do not describe it as a recovery path.
+  answers `busy` and `system.installUpdatesNow` answers `not_available`. The
+  single exception is `failed` with exact `commit_unit_absent_on_resume`:
+  `/usr/sbin/ceralive-update-recover` is a separately packaged root-only local
+  executable, with no RPC/remote/sudoers entry. It requires the backend inactive
+  and runtime-masked, then holds the shared lock, verifies exact byte hashes,
+  current boot/slot/compatible/OS version, detached-unit absence, no concurrent
+  apt/dpkg/RAUC operation and a clean dpkg database. It durably records the old
+  plan in a unique receipt before archiving it, then reduces the narrow
+  `HISTORICAL_COMMIT_ADJUDICATED` event; fresh discovery is required. Tests inject
+  probes and fault each crash boundary. The physical RAUC compatible and boot-id
+  readers were extracted to the pure `os-identity.ts` so the standalone compiled
+  tool does not import `os-agent.ts`'s backend boot graph or demand `setup.json`;
+  `os-agent.ts` re-exports both readers and `OsAgentError` unchanged for existing
+  callers. Actual root/systemd/APT board proof is
+  still owed; see `docs/UPDATE-RECOVERY.md`. All other sticky states have no
+  product clearance path.
 - **Persistence and resume.** Every real transition is written atomically to
   `/data/ceralive/update-state/agent.json` and pushed as the additive
   `status.update_orchestrator` (`getOrchestratorWireState()`), a SIBLING of the
