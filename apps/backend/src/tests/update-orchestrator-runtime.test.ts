@@ -122,7 +122,6 @@ describe("checkUpdatesNow", () => {
 			fakeDeps({
 				quarantine: testQuarantine(),
 				runPackageCheck: async () => null,
-				getAvailablePackageCount: () => 1,
 				getPackageInstallWireState: () => ({
 					kind: "available",
 					identity: { version: "app-update", packages: ["cerastream"] },
@@ -150,9 +149,7 @@ describe("checkUpdatesNow", () => {
 		setOrchestratorRuntimeDepsForTest(
 			fakeDeps({
 				quarantine: testQuarantine(),
-				// The pre-fix decision used the inclusive discovery count, which is
-				// nonzero even when its only package cannot be installed.
-				getAvailablePackageCount: () => 1,
+				// package_count is the inclusive count (informational rows included); only actionable_count may decide whether an install is launched.
 				getPackageInstallWireState: () => ({
 					kind: "available",
 					identity: { version: "platform-only", packages: ["linux-image"] },
