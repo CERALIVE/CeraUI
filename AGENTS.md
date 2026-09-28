@@ -151,7 +151,13 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
 - **[PARTIAL] Signed OS agent.** CMS-verified channel manifests, RAUC staging,
   deferred activation, post-boot verification. Needs `apt-all-packages` +
   `rauc-verity-streaming` and the release-only `/etc/ceralive/os-release-version`
-  stamp, so every current board refuses OS staging with `booted_version_unknown`.
+  stamp. Channel lookup maps only exact physical RAUC compatibles:
+  `ceralive-rock-5b-plus` → `rock-5b-plus`, `ceralive-orangepi5-plus` →
+  `orange-pi-5-plus`. The signed pointer still has to state that product board
+  and the unmodified physical compatible exactly; the bundle is installed only
+  after RAUC validates its own compatible. The Orange Pi drill pointer still
+  needs the separate image-publisher repair and a newly installed CeraUI binary
+  before OS staging can resume; this source fix is not board validation.
 - **[PARTIAL] Lagged slot mirror.** `slotSyncGate()` with eight typed refusals,
   then the image's `ceralive-slot-sync.service`. Needs `slot-sync`.
 - **[PARTIAL] Update transport.** `selectUpdateTransport()` plus

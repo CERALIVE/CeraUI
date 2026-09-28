@@ -330,11 +330,23 @@ Active only with `apt-all-packages` and `rauc-verity-streaming`.
 - `checkOsChannel()` fetches `channels/<channel>/<board>.json` and its `.sig`
   from `images.ceralive.tv` as the image's `ota_uid`, inside
   `updatePinController.run("os", ...)`.
+- `readBoardIdentity()` derives the channel filename from a **closed exact map**
+  of physical RAUC compatibles: `ceralive-rock-5b-plus` selects
+  `rock-5b-plus`; `ceralive-orangepi5-plus` selects `orange-pi-5-plus`.
+  Unknown and near matches refuse before transport selection and fetch. Orange's
+  `orangepi5-plus` board ID is not the `orange-pi-5-plus` product slug; Rock's
+  two names happen to coincide. This translation is only for the URL and the
+  signed `board` comparison, never for the physical compatible comparison.
 - `validateSignedOsManifest()` verifies the CMS signature against
   `/etc/rauc/ceralive-keyring.pem`, requires the exact manifest signer CN with
   the codeSigning EKU and without emailProtection, then checks the strict v1
   fields: board, compatible string, per-channel serial, expiry, CalVer
-  anti-downgrade, quarantine and `min_ceraui_version`.
+  anti-downgrade, quarantine and `min_ceraui_version`. A signed Orange pointer
+  must say `board: orange-pi-5-plus`, `compatible: ceralive-orangepi5-plus`;
+  the presently published serial-4 drill pointer says the latter as
+  `ceralive-orange-pi-5-plus` and still fails closed. Publisher repair and a
+  refreshed signed pointer are separate prerequisites; the old binary on the
+  2026.10.6 candidate also needs replacement after boot before another OS check.
 - The booted version is read only from `/etc/ceralive/os-release-version`
   (`readBootedOsReleaseVersion()`). Absent or malformed means
   `booted_version_unknown`, never a fallback to the build timestamp or commit.

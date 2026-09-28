@@ -22,6 +22,12 @@ bench-capability-enabled Rock 5B+; the OS/slot flows remain fixture-only, and
 the package completion-state latch still needs a separate repair.
 See also [update recovery](docs/UPDATE-RECOVERY.md).
 
+The OS channel reader now selects the Orange Pi product channel from its exact
+physical RAUC compatible without changing the compatible used for signed-pointer
+validation. The currently published Orange Pi drill pointer still needs its
+publisher-side correction, and the fixed CeraUI binary has not been deployed;
+this is not permission to stage that image. See [device updates](docs/DEVICE-UPDATES.md).
+
 Generic raw capture inputs now have an honest, non-streamable **Raw video** row
 rather than a false Cam Link identity. Both consumers now pin published bindings
 2026.9.11; see [publication and rollout](docs/RAW-CAPTURE-CLASSIFICATION.md).

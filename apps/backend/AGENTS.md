@@ -3052,6 +3052,17 @@ writes the INACTIVE slot.
   days pending, only without a stream). A new boot compares the booted CalVer to
   the staged version and quarantines a mismatch. An idle RAUC with no receipt
   after a restart fails closed (`os_stage_outcome_unknown_after_restart`).
+- **Channel identity is not bundle identity.** `readBoardIdentity()` admits exactly
+  `ceralive-rock-5b-plus` → `rock-5b-plus` and
+  `ceralive-orangepi5-plus` → `orange-pi-5-plus` for channel URL selection.
+  Unknown, near-spelled or product-slug-shaped physical compatibles refuse before
+  transport selection or fetch. The original compatible reaches CMS-verified
+  `validateSignedOsManifest()` and `stageOsBundle()` unchanged; both require
+  exact signed board AND compatible equality. The Orange Pi publisher's signed
+  pointer is still wrong until separately repaired; this CeraUI change cannot
+  authorize that pointer or a bundle with an aliased compatible. Regression:
+  `tests/os-board-identity.test.ts` (both boards, near matches, cross-board
+  signed pointers) plus `tests/os-manifest.test.ts` (signer, serial, version).
 - **The only anti-downgrade source is `/etc/ceralive/os-release-version`**
   (`readBootedOsReleaseVersion()`); absent or malformed is
   `booted_version_unknown`, never a timestamp/commit fallback. The stamp exists
