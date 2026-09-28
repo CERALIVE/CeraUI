@@ -15,7 +15,11 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { UpdateState } from "@ceraui/rpc/schemas";
+import { UpdateQuarantine } from "../modules/system/update-orchestrator/quarantine.ts";
 import {
 	admitAndPrepareStreamStart,
 	allowCellularOnce,
@@ -32,8 +36,17 @@ import {
 } from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
 
+const quarantineDirs: string[] = [];
+
+function testQuarantine(): UpdateQuarantine {
+	const dir = mkdtempSync(join(tmpdir(), "ceraui-orchestrator-runtime-"));
+	quarantineDirs.push(dir);
+	return new UpdateQuarantine(join(dir, "quarantine.json"));
+}
+
 afterEach(() => {
 	resetOrchestratorRuntimeForTest();
+	for (const dir of quarantineDirs.splice(0)) rmSync(dir, { recursive: true });
 });
 
 function fakeDeps(
@@ -103,27 +116,43 @@ describe("checkUpdatesNow", () => {
 		expect(getOrchestratorState().phase).toBe("idle");
 	});
 
-	test("a successful check with packages found lands on available", async () => {
+	test("a successful check with actionable packages reaches the installer", async () => {
+		let installs = 0;
 		setOrchestratorRuntimeDepsForTest(
 			fakeDeps({
+				quarantine: testQuarantine(),
 				runPackageCheck: async () => null,
+				getAvailablePackageCount: () => 1,
 				getPackageInstallWireState: () => ({
 					kind: "available",
 					identity: { version: "app-update", packages: ["cerastream"] },
 					package_count: 1,
 					actionable_count: 1,
+					packages: [{ name: "cerastream", layer: "app", actionable: true }],
 				}),
+				startPackageInstall: () => {
+					installs++;
+					return { started: true };
+				},
 			}),
 		);
 		setOrchestratorStateForTest(initialOrchestratorState(0));
 		await checkUpdatesNow();
 		expect(getOrchestratorState().phase).toBe("available");
+		await runOrchestratorTick();
+		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).toBe("downloading");
+		expect(installs).toBe(1);
 	});
 
 	test("a successful check with only informational packages stays idle and never starts an install", async () => {
 		let installs = 0;
 		setOrchestratorRuntimeDepsForTest(
 			fakeDeps({
+				quarantine: testQuarantine(),
+				// The pre-fix decision used the inclusive discovery count, which is
+				// nonzero even when its only package cannot be installed.
+				getAvailablePackageCount: () => 1,
 				getPackageInstallWireState: () => ({
 					kind: "available",
 					identity: { version: "platform-only", packages: ["linux-image"] },
@@ -143,11 +172,12 @@ describe("checkUpdatesNow", () => {
 
 		await checkUpdatesNow();
 		await runOrchestratorTick();
+		await runOrchestratorTick();
 
+		expect(installs).toBe(0);
 		expect(getOrchestratorState().phase).toBe("idle");
 		expect(getOrchestratorState().failureReason).toBeNull();
 		expect(getOrchestratorState().packageCheck.lastSuccessAt).not.toBeNull();
-		expect(installs).toBe(0);
 	});
 });
 
