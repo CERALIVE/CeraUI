@@ -42,13 +42,34 @@ restore the unit **before** starting the backend:
 systemctl unmask ceralive.service
 mv /etc/systemd/system/ceralive.service.recovery-backup /etc/systemd/system/ceralive.service
 systemctl daemon-reload
+systemctl is-enabled ceralive.service
+systemctl enable ceralive.service   # only when the line above printed "disabled"
 systemctl start ceralive.service
 ```
 
+**`unmask` strips the boot-time enablement symlink too, so re-enable before
+starting.** `systemctl unmask` removes every symlink that resolves to the mask
+target, directly or through another link. After the `/etc` unit is moved aside
+and masked, `multi-user.target.wants/ceralive.service` — the enablement symlink
+the package's `postinst` installs for the unit's `WantedBy=multi-user.target` —
+resolves through `/etc/systemd/system/ceralive.service`, which is itself the
+mask's `/dev/null` symlink; `unmask` therefore deletes both, and the restored
+unit comes back `disabled` even while it runs. Board-proven on a Rock 5B+
+(2026-09-28): after the unmask/restore/reload sequence,
+`systemctl show ceralive.service --property=UnitFileState` read `disabled` and
+the service would not have survived a reboot. Check
+`systemctl is-enabled ceralive.service`; a `disabled` reading means the next
+reboot silently drops the backend. `systemctl enable ceralive.service` recreates
+the `multi-user.target.wants` symlink and is safe to run against an
+already-started unit — it does not restart or otherwise disturb the running
+process.
+
 If any preparation step fails after the move, do not run recovery; restore the
-file using the same unmask/move/reload/start sequence. Do not overwrite an
+file using the same unmask/move/reload/enable/start sequence. Do not overwrite an
 existing backup or lose the real unit file across a reboot. A persistent mask
-left in place after maintenance prevents normal backend startup.
+left in place after maintenance prevents normal backend startup — this stripped
+enablement symlink is the same class of gap, a second way the backend fails to
+come back after a reboot.
 
 Invoke as root with the six independently captured, exact expected readings:
 
