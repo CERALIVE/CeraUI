@@ -24,7 +24,7 @@ See also [update recovery](docs/UPDATE-RECOVERY.md).
 
 A root-only, local `.deb` maintenance executable now implements the narrow
 cross-slot unresolved-commit adjudication. It cannot be invoked through the UI
-or remote control and requires the backend inactive/runtime-masked; its plan-
+or remote control and requires the backend inactive/effectively masked; its plan-
 bearing receipt is durable before clearance. The unprivileged test suite covers
 the decision/crash path; real root/systemd/APT board proof remains owed. See
 [the recovery contract](docs/UPDATE-RECOVERY.md) before any maintenance window.

@@ -169,7 +169,7 @@ Known gaps, recorded rather than smoothed over:
 
 - **Nothing dispatches `RESET`.** A root-only packaged maintenance tool can
   adjudicate only `failed`/`commit_unit_absent_on_resume` on the current slot,
-  after an inactive/runtime-masked backend and durable plan-bearing receipt.
+  after an inactive/effectively masked backend and durable plan-bearing receipt.
   Every other sticky failure still has no product clearance path. The tool's
   root/systemd/APT end-to-end board proof is owed; see `docs/UPDATE-RECOVERY.md`.
 - **The Packages section still calls `system.startUpdate` /
