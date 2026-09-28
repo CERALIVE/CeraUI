@@ -82,6 +82,7 @@ log_step "Preparing package structure"
 # Create directory structure
 mkdir -p "$TEMP_DIR/usr/local/bin"
 mkdir -p "$TEMP_DIR/usr/bin"
+mkdir -p "$TEMP_DIR/usr/sbin" "$TEMP_DIR/usr/libexec/ceralive"
 mkdir -p "$TEMP_DIR/etc/systemd/system"
 mkdir -p "$TEMP_DIR/etc/udev/rules.d"
 mkdir -p "$TEMP_DIR/etc/sudoers.d"
@@ -121,12 +122,15 @@ cp dist/reset-to-default.sh "$TEMP_DIR/usr/local/bin/"
 # straight from the repo (a plain script, not a bun-build artifact).
 cp apps/backend/ceralive-addon-helper "$TEMP_DIR/usr/bin/ceralive-addon-helper"
 cp apps/backend/ceralive-addon-helper.sudoers "$TEMP_DIR/etc/sudoers.d/ceralive-addon-helper"
+cp deployment/ceralive-update-recover "$TEMP_DIR/usr/sbin/ceralive-update-recover"
+bun build apps/backend/src/modules/system/update-orchestrator/recovery-cli.ts --compile --target="bun-linux-${ARCHITECTURE}" --outfile="$TEMP_DIR/usr/libexec/ceralive/ceralive-update-recover"
 
 # Make binaries executable
 chmod +x "$TEMP_DIR/usr/local/bin/ceralive"
 chmod +x "$TEMP_DIR/usr/local/bin/override-ceralive.sh"
 chmod +x "$TEMP_DIR/usr/local/bin/reset-to-default.sh"
 chmod 0755 "$TEMP_DIR/usr/bin/ceralive-addon-helper"
+chmod 0700 "$TEMP_DIR/usr/sbin/ceralive-update-recover" "$TEMP_DIR/usr/libexec/ceralive/ceralive-update-recover"
 # sudo REFUSES a drop-in that is group/world-writable — ship it 0440.
 chmod 0440 "$TEMP_DIR/etc/sudoers.d/ceralive-addon-helper"
 
@@ -200,6 +204,8 @@ if [ -f /usr/bin/ceralive-addon-helper ]; then
     chown root:root /usr/bin/ceralive-addon-helper
     chmod 0755 /usr/bin/ceralive-addon-helper
 fi
+chown root:root /usr/sbin/ceralive-update-recover /usr/libexec/ceralive/ceralive-update-recover
+chmod 0700 /usr/sbin/ceralive-update-recover /usr/libexec/ceralive/ceralive-update-recover
 
 echo "✅ CeraLive device software configured successfully!"
 echo ""
@@ -296,6 +302,7 @@ fpm -s dir -t deb \
     --depends "udev" \
     --depends "adduser" \
     --depends "sudo" \
+    --depends "util-linux" \
     --depends "network-manager" \
     --depends "modemmanager" \
     --depends "cerastream" \

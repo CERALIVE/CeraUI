@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+if [ "$(id -u)" -ne 0 ]; then
+    exit 77
+fi
+exec /usr/bin/flock -n -x /run/lock/ceralive-update.lock /usr/libexec/ceralive/ceralive-update-recover --locked "$@"
