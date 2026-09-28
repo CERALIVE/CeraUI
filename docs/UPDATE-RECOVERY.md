@@ -12,14 +12,43 @@ from `os-identity.ts`; it never initializes the normal backend boot graph or
 loads `setup.json`. An unprivileged host build reaches its explicit `root_required`
 refusal after parsing valid arguments, without a device setup file.
 
-To prepare a maintenance
-window, an authorized root operator must stop `ceralive.service` and **runtime
-mask** it (`systemctl mask --runtime ceralive.service`); the tool refuses unless
-the unit is inactive/dead, has no main/control PID or queued job, and the
-`/run/systemd/system/ceralive.service` mask points to `/dev/null`. Do not
-unmask/start the backend until the tool has exited. This is the admission fence
-that excludes the legacy `system.startUpdate` updater, which does not take the
-shared lock. The tool never stops or masks services itself.
+For a root-authorized maintenance window, stop the backend and make the mask
+**effective** before invoking the tool. The package installs a regular unit file
+at `/etc/systemd/system/ceralive.service`. A `systemctl --runtime mask
+ceralive.service` only adds a `/run/systemd/system/ceralive.service` symlink;
+systemd prefers the real `/etc` file over `/run`, so that mask leaves
+`LoadState=loaded` and the unit can still start. `systemctl mask --force` does
+not replace a regular `/etc` file either. Do not use either shortcut.
+
+With external APT initiators quiesced, and with a vacant, protected backup path
+that will survive until restoration, run as root:
+
+```sh
+systemctl stop ceralive.service
+mv /etc/systemd/system/ceralive.service /etc/systemd/system/ceralive.service.recovery-backup
+systemctl mask ceralive.service
+systemctl show ceralive.service --property=LoadState,ActiveState,SubState,MainPID,ControlPID,Job
+```
+
+Proceed only when systemd reports `LoadState=masked`, `ActiveState=inactive`,
+`SubState=dead`, both PIDs zero, and no pending job. The tool checks those same
+properties at each admission boundary; it does not stop or mask the service
+itself. This is the fence against a new legacy `system.startUpdate` request,
+whose detached APT unit does not take the shared lock. Keep the backup and mask
+in place until the recovery tool has exited, even if it refuses or fails. Then
+restore the unit **before** starting the backend:
+
+```sh
+systemctl unmask ceralive.service
+mv /etc/systemd/system/ceralive.service.recovery-backup /etc/systemd/system/ceralive.service
+systemctl daemon-reload
+systemctl start ceralive.service
+```
+
+If any preparation step fails after the move, do not run recovery; restore the
+file using the same unmask/move/reload/start sequence. Do not overwrite an
+existing backup or lose the real unit file across a reboot. A persistent mask
+left in place after maintenance prevents normal backend startup.
 
 Invoke as root with the six independently captured, exact expected readings:
 
@@ -64,11 +93,13 @@ emitted. The broad `RESET` event is not exposed or used by this path.
 The decision table, injected systemd/dpkg/lock probes, byte-level receipt and
 crash windows run unprivileged in `update-cross-slot-recovery.test.ts`; the
 shipped entrypoint/packaging and RPC/remote isolation are statically checked.
-**Residual [PARTIAL]:** no real root/systemd/APT end-to-end test or Rock recovery
-invocation has run. A separately authorized maintenance-window board step must
-verify the runtime mask holds against the legacy launch, external apt timers are
-quiesced, and this exact packaged executable succeeds before any live clearance
-is claimed. No board, image worktree or published pointer was touched here.
+**Residual [PARTIAL]:** the ineffective runtime mask was reproduced on a Rock
+5B+ with a throwaway `/etc` unit; the corrected recovery tool has not been run
+against a genuinely masked `ceralive.service` there. A separately authorized
+maintenance-window board step must verify effective masking and legacy-launch
+exclusion, quiesce external apt timers, and run this exact packaged executable
+before any live clearance is claimed. No recovery invocation or release is
+inferred from the unit-level mask experiment.
 
 ### Historical investigation and superseded STOP (2026-09-28)
 
@@ -139,14 +170,15 @@ while a maintenance process holds the lock. A process-list snapshot or one
 `systemctl show` read does not close the interval until clearance either.
 
 A safe implementation must first make the backend unable to accept new requests
-(for example, require its systemd service to be stopped **and runtime-masked**
-for the entire local maintenance invocation), then acquire the shared lock and
+(require its systemd service to be stopped **and effectively masked** for the
+entire local maintenance invocation), then acquire the shared lock and
 positively establish the detached unit is `LoadState=not-found` with a successful
 systemd probe. Nonzero/unreadable `systemctl show` is **unknown**, not absence.
 Also exclude still-running apt/dpkg, other CeraLive update units and RAUC
 operations, and require a clean dpkg database before each irreversible step.
-This is a proposal for a gate, **not** a claim that a runtime mask and the legacy
-service's actual launch behavior have been tested together. Ordinary Debian apt
+This was a proposal for a gate; the runtime-mask mechanism was disproved by the
+`/etc`-vs-`/run` priority test above. The corrected tool's legacy-service launch
+behavior has not been tested end-to-end. Ordinary Debian apt
 timers and an unrelated local root caller are outside the CeraUI phase model;
 their admission must be accounted for rather than inferred from its state.
 
@@ -155,7 +187,7 @@ unprivileged worktree to demonstrate that the proposed backend shutdown/mask,
 legacy detached launch, and concurrent admission really exclude one another
 under the same lock. The legacy unit does not acquire that lock. A mocked
 `systemctl` result would only prove the parser, not the race. The STOP on a
-lock-only receipt/RESET implementation was superseded by the runtime-masked,
+lock-only receipt/RESET implementation was superseded by the masked,
 inactive-backend precondition above; it remains a warning against a lock-only
 path, not a current instruction to defer this implementation. An absent unit,
 empty dpkg audit, and old-slot install receipt still do not prove success on B.

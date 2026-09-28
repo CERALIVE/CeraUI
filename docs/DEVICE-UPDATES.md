@@ -186,7 +186,7 @@ or `failed` the tick does nothing, `system.checkUpdatesNow` answers `busy`,
 `system.installUpdatesNow` answers `not_available`, and the phase survives a
 backend restart because `agent.json` persists it. Other sticky failures have no
 product clearance path. The one narrow exception is the root-only, inactive/
-runtime-masked-service cross-slot unresolved commit adjudication; it never
+effectively-masked-service cross-slot unresolved commit adjudication; it never
 dispatches `RESET` and requires byte-bound evidence, a durable receipt and plan
 retirement before its own transition. See [`UPDATE-RECOVERY.md`](UPDATE-RECOVERY.md).
 Streaming is not affected (D8 allows every start in both phases).
