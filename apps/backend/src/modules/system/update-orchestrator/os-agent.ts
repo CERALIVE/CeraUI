@@ -11,6 +11,7 @@ import { loadUpdateSettings } from "../update-settings.ts";
 import { selectUpdateTransport } from "../update-transport/executor.ts";
 import { updatePinController } from "../update-transport/pin.ts";
 import { SOFTWARE_UPDATE_LOCK } from "./lock.ts";
+import { OsAgentError, readBoardIdentity, readBootId } from "./os-identity.ts";
 import {
 	defaultOsChannelDeps,
 	OS_UPDATE_STATE_DIR,
@@ -24,8 +25,9 @@ import {
 import { UpdateQuarantine } from "./quarantine.ts";
 
 const KEYRING = "/etc/rauc/ceralive-keyring.pem";
-const RAUC_CONFIG = "/etc/rauc/system.conf";
-const BOOT_ID = "/proc/sys/kernel/random/boot_id";
+
+export { OsAgentError, readBoardIdentity, readBootId };
+
 const RECEIPT = join(OS_UPDATE_STATE_DIR, "os-staged.json");
 const CALVER = /^[0-9]{4}\.[0-9]+\.[0-9]+$/;
 const SERIAL = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -66,16 +68,6 @@ export function parseManifestSignerDetails(
 			]
 		: [];
 	return { cn, eku };
-}
-
-export class OsAgentError extends Error {
-	override readonly name = "OsAgentError";
-	constructor(
-		readonly reason: string,
-		cause?: unknown,
-	) {
-		super(reason, { cause });
-	}
 }
 
 export async function readManifestSerial(
@@ -120,32 +112,6 @@ export async function readStagedReceipt(): Promise<OsStageReceipt | undefined> {
 	const parsed = receiptSchema.safeParse(await Bun.file(RECEIPT).json());
 	if (!parsed.success) throw new OsAgentError("staged_receipt_invalid");
 	return parsed.data;
-}
-
-export async function readBootId(): Promise<string> {
-	const id = (await Bun.file(BOOT_ID).text()).trim();
-	if (!z.uuid().safeParse(id).success)
-		throw new OsAgentError("boot_id_unknown");
-	return id;
-}
-
-export async function readBoardIdentity(path = RAUC_CONFIG): Promise<{
-	readonly board: string;
-	readonly compatible: string;
-}> {
-	const conf = await Bun.file(path).text();
-	const section = conf.split(/^\[system\]\s*$/m)[1]?.split(/^\[.*\]\s*$/m)[0];
-	const matches = section?.match(/^compatible\s*=\s*(\S+)\s*$/gm) ?? [];
-	if (matches.length !== 1) throw new OsAgentError("rauc_compatible_unknown");
-	const compatible = matches[0]?.split("=")[1]?.trim();
-	switch (compatible) {
-		case "ceralive-rock-5b-plus":
-			return { board: "rock-5b-plus", compatible };
-		case "ceralive-orangepi5-plus":
-			return { board: "orange-pi-5-plus", compatible };
-		default:
-			throw new OsAgentError("rauc_compatible_unknown");
-	}
 }
 
 async function command(argv: string[], timeoutMs = 10_000): Promise<string> {
