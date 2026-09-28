@@ -1,4 +1,164 @@
-# Update recovery contract [PARTIAL]
+# Update recovery contract [PARTIAL — local recovery implemented, board proof owed]
+
+## Cross-slot missing-commit adjudication [EXISTS — root-only, fixture-proven]
+
+`/usr/sbin/ceralive-update-recover` is a root-only (0700, root-owned) local
+maintenance entrypoint in the CeraUI `.deb`. It is **not** a browser, RPC,
+remote-control or sudoers operation. The wrapper takes the shared
+`/run/lock/ceralive-update.lock` nonblockingly and executes the separately
+compiled root-only recovery binary under that lock. The standalone binary
+imports the shared *pure* RAUC identity readers
+from `os-identity.ts`; it never initializes the normal backend boot graph or
+loads `setup.json`. An unprivileged host build reaches its explicit `root_required`
+refusal after parsing valid arguments, without a device setup file.
+
+To prepare a maintenance
+window, an authorized root operator must stop `ceralive.service` and **runtime
+mask** it (`systemctl mask --runtime ceralive.service`); the tool refuses unless
+the unit is inactive/dead, has no main/control PID or queued job, and the
+`/run/systemd/system/ceralive.service` mask points to `/dev/null`. Do not
+unmask/start the backend until the tool has exited. This is the admission fence
+that excludes the legacy `system.startUpdate` updater, which does not take the
+shared lock. The tool never stops or masks services itself.
+
+Invoke as root with the six independently captured, exact expected readings:
+
+```text
+/usr/sbin/ceralive-update-recover \
+  --agent-sha256 <64 lowercase hex of agent.json bytes> \
+  --plan-sha256 <64 lowercase hex of pending-packages.json bytes> \
+  --boot-id <current UUID> --slot rootfs.1 \
+  --compatible ceralive-rock-5b-plus --os-version <current CalVer>
+```
+
+`rootfs.1` is an **example**, not a default: read the booted rootfs name from
+RAUC first. The six values are assertions about THIS boot/current slot, never
+about the old slot. The actual tool re-reads them under the lock and refuses on
+any mismatch. It requires an explicit `LoadState=not-found` apt detached unit
+(an unreadable probe is not absence), no live apt/dpkg process or other active
+update unit, RAUC `Operation=idle`, empty `dpkg --audit` output and an empty
+`/var/lib/dpkg/updates/` directory. It parses the persisted failed state and
+the exact pending plan, checks `commit_unit_absent_on_resume` and confirms each
+planned version differs from the installed version on the **current** slot.
+The prior slot's observed 1.0.1 is not a claim that B runs 1.0.1; B's observed
+1.0.0 must be checked afresh at execution time. Every probe that fails or
+cannot be read refuses. Ordinary Debian timers and unrelated root callers do
+not obey the CeraUI update lock; the tool checks their running units/processes
+before each irreversible boundary, but this is a snapshot, not a claim of a
+system-wide timer mask. The board maintenance run must additionally quiesce
+external APT initiators and prove the actual systemd/APT interaction.
+
+After admission, a unique `recovery-<sha256>.json` receipt records the decision
+`historical_outcome_unresolved_current_slot_unapplied` and the **original bytes**
+of both files (base64), the six identity readings, and the expected cleared-state
+digest. It is written to a private temp file, fsynced, renamed and parent-fsynced
+before the old plan is unlinked and directory-fsynced. Only then does the narrow
+`HISTORICAL_COMMIT_ADJUDICATED` reducer event move this exact failed reason to
+idle, durably writing the state. Its scheduling clocks are invalidated; the plan
+is gone and cannot be reused. A subsequent install requires new discovery. A
+receipt-first or archive-first crash replays from the receipt's byte-exact plan;
+an already-cleared repeat compares the final state digest and never creates a
+second receipt. No installed notice, quarantine entry or automatic replay is
+emitted. The broad `RESET` event is not exposed or used by this path.
+
+The decision table, injected systemd/dpkg/lock probes, byte-level receipt and
+crash windows run unprivileged in `update-cross-slot-recovery.test.ts`; the
+shipped entrypoint/packaging and RPC/remote isolation are statically checked.
+**Residual [PARTIAL]:** no real root/systemd/APT end-to-end test or Rock recovery
+invocation has run. A separately authorized maintenance-window board step must
+verify the runtime mask holds against the legacy launch, external apt timers are
+quiesced, and this exact packaged executable succeeds before any live clearance
+is claimed. No board, image worktree or published pointer was touched here.
+
+### Historical investigation and superseded STOP (2026-09-28)
+
+A Rock 5B+ investigation on 2026-09-28 found `agent.json` in `failed` with
+`commit_unit_absent_on_resume` and an old pending credentials 1.0.1 plan. The
+historical 1.0.1 installation was observed on a previous rootfs; the running
+B/2026.10.5 rootfs has 1.0.0 and no retained unit/output. The absent unit proves
+neither success nor failure on B. At that point the implementation had **no** safe
+adjudication action: `RESET` existed only in the reducer and must not be exposed
+as a general recovery RPC. Do not remove `agent.json` or `pending-packages.json`
+to make the agent idle, replay the old package plan, emit an installed notice,
+quarantine its candidate, or stage an OS update from this failed state.
+
+The recovery implemented above must establish all of these before clearance:
+
+1. A principal stronger than an ordinary authenticated browser session must
+   authorize the exact decision. The local WebSocket authentication context has
+   **no admin role**; the cloud control channel's owner claim does not confer
+   local authority. Pick and review a concrete local privilege mechanism first.
+2. Bind the decision to the exact bytes of the failed `agent.json` and pending
+   plan (cryptographic digests), expected reason, current boot ID, physical RAUC
+   board/compatible, booted slot and OS version. Prove the planned candidate is
+   not installed on this slot. A missing or changed reading refuses; no inference
+   from the stale `/opt/ceralive/revision` marker is permitted.
+3. Under the **existing shared update lock**, establish an absent (not merely
+   unreadable) detached apt unit, no active apt/dpkg, an empty `dpkg --audit`
+   result and an empty `/var/lib/dpkg/updates/`, and exclude a concurrent update
+   operation. The legacy `system.startUpdate` path does not join the orchestrator
+   state machine, so a phase check alone is not sufficient serialization.
+4. Durably record an append-only, uniquely identified receipt of the decision
+   `historical_outcome_unresolved_current_slot_unapplied` *before* any clearance.
+   Retire the old pending plan into the audit record **before** `failed → idle`;
+   a crash at each intermediate point must restart safely and idempotently. The
+   first subsequent install must require a new discovery on the running slot.
+   A repeated decision must not create a second receipt or re-use the old plan.
+
+The following was an implementation requirement at the first investigation,
+**not an implemented or board-validated recovery procedure at that time**.
+In particular, simply attaching an `authedProcedure` to
+`RESET`, or adding a check that `systemctl show` says `not-found`, would violate
+the contract. Board deployment/reconciliation remains a separate, explicitly
+authorized maintenance-window operation after exact-head review and tests.
+
+### Local-only design gate (2026-09-28; historical pre-implementation STOP)
+
+The selected authority is a **root-invoked local maintenance executable**, not
+an RPC, control-channel command, or an extension of the sudoers-authorized
+`ceralive-addon-helper` (the backend's account can invoke that helper). A separate
+executable must not be callable by that account through sudoers. Its arguments
+must bind the operator's decision to the expected SHA-256 of *both* persisted
+files and to the boot ID, physical RAUC compatible, booted slot and OS release;
+it must read the actual bytes again while holding the shared update lock. The
+receipt must carry the original plan bytes, not merely its package names, and
+must be durably published before the plan is retired and before `failed → idle`.
+After a receipt-first crash, replay must check the same identity and finish the
+retirement exactly once; after an archive-first crash, it must still be able to
+finish the state transition. A terminal repeat must not mint another receipt.
+
+**The shared lock does not exclude the legacy updater.**
+`software-update-service.ts`'s `buildDetachedAptUpgradeCommand()` launches
+`/usr/bin/apt-get` directly (`systemd-run ... -- /usr/bin/apt-get`); only
+`buildDetachedAptAllCommand()` wraps download and commit in `flock -x
+/run/lock/ceralive-update.lock`. The unit-identity validator deliberately
+accepts both forms for reattachment. The legacy `system.startUpdate` RPC also
+bypasses orchestrator phases. Thus taking the lock and observing `failed` is
+**not** an admission fence: an authenticated browser can start a legacy update
+while a maintenance process holds the lock. A process-list snapshot or one
+`systemctl show` read does not close the interval until clearance either.
+
+A safe implementation must first make the backend unable to accept new requests
+(for example, require its systemd service to be stopped **and runtime-masked**
+for the entire local maintenance invocation), then acquire the shared lock and
+positively establish the detached unit is `LoadState=not-found` with a successful
+systemd probe. Nonzero/unreadable `systemctl show` is **unknown**, not absence.
+Also exclude still-running apt/dpkg, other CeraLive update units and RAUC
+operations, and require a clean dpkg database before each irreversible step.
+This is a proposal for a gate, **not** a claim that a runtime mask and the legacy
+service's actual launch behavior have been tested together. Ordinary Debian apt
+timers and an unrelated local root caller are outside the CeraUI phase model;
+their admission must be accounted for rather than inferred from its state.
+
+At the time of this STOP, no root-capable isolated systemd/APT integration harness was available in this
+unprivileged worktree to demonstrate that the proposed backend shutdown/mask,
+legacy detached launch, and concurrent admission really exclude one another
+under the same lock. The legacy unit does not acquire that lock. A mocked
+`systemctl` result would only prove the parser, not the race. The STOP on a
+lock-only receipt/RESET implementation was superseded by the runtime-masked,
+inactive-backend precondition above; it remains a warning against a lock-only
+path, not a current instruction to defer this implementation. An absent unit,
+empty dpkg audit, and old-slot install receipt still do not prove success on B.
 
 After a successful package commit, `update-orchestrator/stale-services.ts` scans
 `/proc/<pid>/maps` for deleted mappings under `/usr/` or `/lib/`, then reads

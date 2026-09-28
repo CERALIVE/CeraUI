@@ -166,6 +166,7 @@ transcribed from `reducer.ts`:
 | `synced` | `SYNC_SETTLED` | `idle` |
 | `quarantined` | `RESET` | `idle` |
 | `failed` | `RESET` | `idle` |
+| `failed` with exact `commit_unit_absent_on_resume` | root-only `HISTORICAL_COMMIT_ADJUDICATED` after durable receipt and plan archive | `idle` |
 
 Three distinctions in that table carry weight:
 
@@ -179,13 +180,16 @@ Three distinctions in that table carry weight:
 - A sync failure is `failed`, never `quarantined`. It means the mirror failed,
   not that the running slot is bad.
 
-**Known gap: nothing dispatches `RESET` today.** The reducer accepts it, but no
+**No production caller dispatches `RESET`.** The reducer accepts it, but no
 RPC, tick branch or resume path sends it. Once the phase reaches `quarantined`
 or `failed` the tick does nothing, `system.checkUpdatesNow` answers `busy`,
 `system.installUpdatesNow` answers `not_available`, and the phase survives a
-backend restart because `agent.json` persists it. Leaving that phase currently
-requires removing `/data/ceralive/update-state/agent.json`. Streaming is not
-affected (D8 allows every start in both phases).
+backend restart because `agent.json` persists it. Other sticky failures have no
+product clearance path. The one narrow exception is the root-only, inactive/
+runtime-masked-service cross-slot unresolved commit adjudication; it never
+dispatches `RESET` and requires byte-bound evidence, a durable receipt and plan
+retirement before its own transition. See [`UPDATE-RECOVERY.md`](UPDATE-RECOVERY.md).
+Streaming is not affected (D8 allows every start in both phases).
 
 The additive wire field is `status.update_orchestrator`
 (`updateOrchestratorWireStateSchema`): `{schema: 1, phase, progress,
