@@ -166,6 +166,27 @@ describe("update-orchestrator reducer — pure state machine", () => {
 		}
 	});
 
+	test("historical adjudication clears only the exact unresolved commit with a receipt identity", () => {
+		const event = {
+			type: "HISTORICAL_COMMIT_ADJUDICATED",
+			now: 5,
+			decision: "historical_outcome_unresolved_current_slot_unapplied",
+			receiptId: "a".repeat(64),
+		} as const;
+		const failed = {
+			...initialOrchestratorState(0),
+			phase: "failed" as const,
+			failureReason: "commit_unit_absent_on_resume",
+		};
+		expect(reduceOrchestrator(failed, event).phase).toBe("idle");
+		expect(
+			reduceOrchestrator({ ...failed, failureReason: "other" }, event).phase,
+		).toBe("failed");
+		expect(
+			reduceOrchestrator({ ...failed, phase: "quarantined" }, event).phase,
+		).toBe("quarantined");
+	});
+
 	test("os path happy sequence through to sync-eligible / syncing / synced", () => {
 		let state = initialOrchestratorState(0);
 		state = reduceOrchestrator(state, { type: "OS_CHECK_STARTED", now: 1 });

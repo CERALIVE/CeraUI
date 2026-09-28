@@ -504,6 +504,22 @@ function reduceFailed(
 	event: OrchestratorEvent,
 ): OrchestratorState {
 	switch (event.type) {
+		case "HISTORICAL_COMMIT_ADJUDICATED":
+			if (
+				state.failureReason !== "commit_unit_absent_on_resume" ||
+				event.decision !==
+					"historical_outcome_unresolved_current_slot_unapplied" ||
+				!/^[a-f0-9]{64}$/.test(event.receiptId)
+			)
+				return state;
+			return enter(state, event.now, {
+				phase: "idle",
+				failureReason: null,
+				progress: null,
+				packageCheck: { ...state.packageCheck, nextAttemptAt: null },
+				osCheck: { ...state.osCheck, nextAttemptAt: null },
+				cellularOverrideId: null,
+			});
 		case "RESET":
 			return enter(state, event.now, { phase: "idle", failureReason: null });
 		default:

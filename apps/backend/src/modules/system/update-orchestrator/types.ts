@@ -255,6 +255,12 @@ export type OrchestratorEvent =
 			readonly now: number;
 			readonly id: string;
 	  }
+	| {
+			readonly type: "HISTORICAL_COMMIT_ADJUDICATED";
+			readonly now: number;
+			readonly decision: "historical_outcome_unresolved_current_slot_unapplied";
+			readonly receiptId: string;
+	  }
 	// Manual/auto retry after a terminal failure once conditions allow it again
 	// (e.g. a newer candidate, or an operator acknowledgement — Todo 38's job to
 	// decide WHEN; this event is the mechanism).
