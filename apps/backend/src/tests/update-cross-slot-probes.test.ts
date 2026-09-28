@@ -3,6 +3,8 @@ import {
 	createRecoveryProbes,
 	type RecoveryProbeIo,
 } from "../modules/system/update-orchestrator/recovery-probes.ts";
+import { recoverCrossSlot } from "../modules/system/update-orchestrator/recovery.ts";
+import { createRecoveryFixture } from "./update-cross-slot-fixture.ts";
 
 describe("the shipped local probe boundary", () => {
 	const properties =
@@ -14,7 +16,6 @@ describe("the shipped local probe boundary", () => {
 	let audit = "";
 	let updates: readonly string[] = [];
 	let processes: readonly string[] = [];
-	let mask = "/dev/null";
 	let operation = 's "idle"';
 	const io: RecoveryProbeIo = {
 		run: async (argv) => {
@@ -37,7 +38,6 @@ describe("the shipped local probe boundary", () => {
 		read: async () => processes[0] ?? "",
 		list: async (path) =>
 			path === "/proc" ? (processes.length ? ["123"] : []) : updates,
-		maskTarget: async () => mask,
 	};
 	beforeEach(() => {
 		unitOutput = properties;
@@ -47,17 +47,50 @@ describe("the shipped local probe boundary", () => {
 		audit = "";
 		updates = [];
 		processes = [];
-		mask = "/dev/null";
 		operation = 's "idle"';
 	});
-	test("requires runtime mask and a dead service, not merely inactive", async () => {
+	test("requires an effective mask and a dead service, not merely inactive", async () => {
 		const probes = createRecoveryProbes(io, () => true);
 		expect(await probes.backendStopped()).toBe(true);
-		mask = "/other";
+		unitOutput = properties.replace("LoadState=masked", "LoadState=loaded");
 		expect(await probes.backendStopped()).toBe(false);
-		mask = "/dev/null";
 		unitOutput = properties.replace("inactive", "active");
 		expect(await probes.backendStopped()).toBe(false);
+	});
+	test("refuses recovery when the /run mask loses to the loaded /etc unit", async () => {
+		const fixture = await createRecoveryFixture();
+		try {
+			unitOutput = properties.replace("LoadState=masked", "LoadState=loaded");
+			const deps = {
+				...fixture.deps,
+				probes: {
+					...fixture.deps.probes,
+					backendStopped: createRecoveryProbes(io, () => true).backendStopped,
+				},
+			};
+			await expect(recoverCrossSlot(fixture.identity, deps)).rejects.toThrow(
+				"backend_must_be_inactive_and_runtime_masked",
+			);
+		} finally {
+			await fixture.close();
+		}
+	});
+	test("admits recovery past backend shutdown when systemd reports masked", async () => {
+		const fixture = await createRecoveryFixture();
+		try {
+			const deps = {
+				...fixture.deps,
+				probes: {
+					...fixture.deps.probes,
+					backendStopped: createRecoveryProbes(io, () => true).backendStopped,
+				},
+			};
+			expect((await recoverCrossSlot(fixture.identity, deps)).kind).toBe(
+				"cleared",
+			);
+		} finally {
+			await fixture.close();
+		}
 	});
 	test("unit live or unreadable refuses; explicit not-found admits", async () => {
 		const probes = createRecoveryProbes(io, () => true);

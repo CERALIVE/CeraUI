@@ -1,4 +1,4 @@
-import { readdir, readlink } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { z } from "zod";
 import { SOFTWARE_UPDATE_UNIT } from "../software-update-service-contract.ts";
 import { readBoardIdentity, readBootId } from "./os-identity.ts";
@@ -45,7 +45,6 @@ export interface RecoveryProbeIo {
 	run(argv: readonly string[]): Promise<RecoveryCommandResult>;
 	read(path: string): Promise<string>;
 	list(path: string): Promise<readonly string[]>;
-	maskTarget(): Promise<string>;
 }
 
 async function runChecked(
@@ -96,7 +95,7 @@ export function createRecoveryProbes(
 		backendStopped: async () => {
 			const unit = await unitProperties(io, "ceralive.service");
 			return (
-				(await io.maskTarget()) === "/dev/null" &&
+				unit.get("LoadState") === "masked" &&
 				unit.get("ActiveState") === "inactive" &&
 				unit.get("SubState") === "dead" &&
 				unit.get("MainPID") === "0" &&
@@ -213,5 +212,4 @@ export const defaultRecoveryProbeIo: RecoveryProbeIo = {
 	},
 	read: (path) => Bun.file(path).text(),
 	list: readdir,
-	maskTarget: () => readlink("/run/systemd/system/ceralive.service"),
 };
