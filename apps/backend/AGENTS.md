@@ -2938,7 +2938,7 @@ board has run any of it from this branch.
   single exception is `failed` with exact `commit_unit_absent_on_resume`:
   `/usr/sbin/ceralive-update-recover` is a separately packaged root-only local
   executable, with no RPC/remote/sudoers entry. It requires the backend inactive
-  and runtime-masked, then holds the shared lock, verifies exact byte hashes,
+  and effectively masked, then holds the shared lock, verifies exact byte hashes,
   current boot/slot/compatible/OS version, detached-unit absence, no concurrent
   apt/dpkg/RAUC operation and a clean dpkg database. It durably records the old
   plan in a unique receipt before archiving it, then reduces the narrow

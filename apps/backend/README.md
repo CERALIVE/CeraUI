@@ -275,7 +275,7 @@ fixture captures both command forms from the Rock 5B+ on 2026-09-27.
 
 The separate packaged `/usr/sbin/ceralive-update-recover` is a root-only local
 maintenance tool for one cross-slot failed reason. It requires the backend to
-be inactive and runtime-masked, reads exact expected current-slot evidence,
+be inactive and effectively masked, reads exact expected current-slot evidence,
 and durably archives the old plan before a narrow failed-to-idle transition.
 It has no RPC/remote/sudoers entry. Its injected-probe decision tree is tested
 without root; real systemd/APT board proof is still owed. See
