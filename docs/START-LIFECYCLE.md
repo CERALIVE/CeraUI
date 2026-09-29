@@ -138,10 +138,19 @@ worth knowing when consuming it:
   when no push is available. `UpdateRefusalBand.svelte` renders the result and
   never disables Start; admission stays on the device.
 - An update launched through the older `system.startUpdate` RPC bypasses the
-  orchestrator, so this class is not produced for it. A start during such a
-transaction is refused instead by `streamloop/session.ts`'s `isUpdating()`
-guard, at phase `connect`, as retriable `engine_restarting` with code
-`stream_start_suppressed_update`.
+  orchestrator. When the orchestrator is not tracking an install of its own,
+  this class is not produced for it and its package unit is never stopped: a start during such
+  a transaction is refused instead by `streamloop/session.ts`'s `isUpdating()`
+  guard, at phase `connect`, as retriable `engine_restarting` with code
+  `stream_start_suppressed_update`. The exception is a narrow race: a legacy
+  launch that lands after the orchestrator's own install ended without success
+  but before its next tick (up to 60 s after `system.installUpdatesNow`) is
+  adopted as the orchestrator's `downloading` unit. A start can then stop it,
+  guarded by the forced-fresh read and the commit-stage probe (the
+  check-then-stop gap on a capable image's two-stage unit; only a running
+  `dpkg` detected on a non-capable image's single-stage unit), or, once the
+  orchestrator has entered `committing` from that wire, is refused with this
+  class.
 
 The orchestrator's phases, the full D8 table and what is proven are in
 [DEVICE-UPDATES.md](./DEVICE-UPDATES.md).

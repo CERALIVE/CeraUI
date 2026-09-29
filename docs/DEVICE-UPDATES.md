@@ -206,8 +206,10 @@ Three distinctions in that table carry weight:
   because a restarted backend could not establish what dpkg did, and nothing is
   pinned on a guess.
 - `DOWNLOAD_ABORTED_FOR_STREAM` and `OS_STAGING_ABORTED_FOR_STREAM` are not
-  failures. A stream started, the transfer was cancelled with nothing installed,
-  and the candidate is offered again.
+  failures. A stream started, the transfer was cancelled after the forced-fresh
+  read and the commit-stage probe both found no commit stage running (see
+  "D8: stream admission" for the gap that remains), and the candidate is
+  offered again.
 - A sync failure is `failed`, never `quarantined`. It means the mirror failed,
   not that the running slot is bad.
 
@@ -316,11 +318,29 @@ dialog's System section calls `system.checkUpdatesNow` and
 `system.installUpdatesNow`. Its Packages section, preserved unchanged from before
 the orchestrator, still calls the older `system.checkForUpdates` and
 `system.startUpdate`, which run `triggerManualUpdateCheck()` and
-`startSoftwareUpdate()` directly. A transaction started that way never moves the
-orchestrator's phase, so the D8 table below does not see it. A stream start
-during it is still refused, by the pre-existing `isUpdating()` guard in
+`startSoftwareUpdate()` directly and dispatch nothing to the orchestrator. When
+the orchestrator is not tracking an install of its own, the D8 table below
+admits a stream start during such a transaction and never stops its package
+unit; the start is still refused, by the pre-existing `isUpdating()` guard in
 `streamloop/session.ts`, but as the retriable `engine_restarting` class with code
 `stream_start_suppressed_update`, not as `update_in_progress`.
+
+The exception is a narrow race. `startSoftwareUpdate()` has no
+orchestrator-phase guard and clears the previous failure, and the orchestrator
+learns that its own install ended without success only at its next tick (a
+failure has no callback; only a successful capable-image commit does), which
+after a `system.installUpdatesNow` launch can be up to 60 s away. A legacy launch in that window lands while the orchestrator
+still reads `downloading`; its tick then treats the shared wire state as its own
+(`DOWNLOAD_PROGRESS`, then `COMMIT_PHASE_ENTERED`, after which a start is
+refused as `update_in_progress`). Before that, a stream start can stop the
+legacy transaction's unit, which is the same unit name, guarded exactly as the
+orchestrator's own: the forced-fresh read and the commit-stage probe below. The
+unit's stage count follows the image, not the caller, so the exposure is the
+same as for the orchestrator's own unit on that image: the check-then-stop gap
+on a capable image's two-stage unit, and only a running `dpkg` detected on a
+non-capable image's single-stage unit. If the orchestrator still reads
+`committing` from its own failed install, a start is refused as
+`update_in_progress` instead.
 
 ## D8: stream admission
 

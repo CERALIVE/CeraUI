@@ -189,9 +189,17 @@ Known gaps, recorded rather than smoothed over:
   Every other sticky failure still has no product clearance path. The tool's
   root/systemd/APT end-to-end board proof is owed; see `docs/UPDATE-RECOVERY.md`.
 - **The Packages section still calls `system.startUpdate` /
-  `system.checkForUpdates`,** which bypass the orchestrator; D8 does not see a
-  transaction started there (the older `isUpdating()` start guard still refuses
-  a stream during it).
+  `system.checkForUpdates`,** which bypass the orchestrator. When the
+  orchestrator is not tracking an install of its own, D8 admits a stream start
+  during such a transaction and never stops its package unit; the older
+  `isUpdating()` start guard refuses it. The exception is a narrow race: a legacy launch that lands
+  after the orchestrator's own install ended without success but before its
+  next tick (up to 60 s after `system.installUpdatesNow`) is adopted as the
+  orchestrator's `downloading` unit, and a stream start can then stop it,
+  guarded by the forced-fresh read and the commit-stage probe (the
+  check-then-stop gap on a capable image's two-stage unit; only a running
+  `dpkg` detected on a non-capable image's single-stage unit). See
+  `apps/backend/AGENTS.md`, D8.
 - **No certificate-expiry countdown.** The wire carries no expiry date,
   `credentials-expiring` has no producer, and the credentials band keys on an
   `apt`-profile transport finding that no production path produces yet.
