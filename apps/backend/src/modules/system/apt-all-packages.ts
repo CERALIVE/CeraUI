@@ -29,7 +29,10 @@ export function parseAptSimulation(text: string): PinnedAptPackage[] {
 	const names = new Set<string>();
 	for (const line of text.split("\n")) {
 		if (!line.startsWith("Inst ")) continue;
-		const match = /^Inst (\S+) (?:\[[^\]]+\] )?\((\S+) .+\)$/.exec(line);
+		const match =
+			/^Inst (\S+) (?:\[[0-9][A-Za-z0-9.+:~-]*\] )?\(([0-9][A-Za-z0-9.+:~-]*) [A-Za-z0-9][A-Za-z0-9.+:/_-]*(?:(?:, *| +)[A-Za-z0-9][A-Za-z0-9.+:/_-]*)* \[[a-z0-9][a-z0-9-]*\]\)$/.exec(
+				line,
+			);
 		if (
 			!match ||
 			!APT_PACKAGE_NAME_RE.test(match[1] ?? "") ||

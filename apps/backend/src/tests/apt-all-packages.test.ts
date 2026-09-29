@@ -171,6 +171,38 @@ describe("apt-all-packages admission", () => {
 		).toThrow("discovery_failed");
 	});
 
+	it("accepts complete apt annotations including multiple origins, architecture and epochs", () => {
+		const lines = [
+			"Inst rsync [3.4.1+ds1-5+deb13u4] (3.5.0+ds1-0+deb13u1 Debian-Security:13/stable-security [arm64])",
+			"Inst ceralive-apt-credentials [1.0.0] (1.0.1 CeraLive:stable [all])",
+			"Inst libc6 (2:2.41-12+deb13u4 Debian:13/stable, Debian-Security:13/stable-security [arm64])",
+		].join("\n");
+		expect(parseAptSimulation(lines)).toEqual([
+			{ name: "rsync", version: "3.5.0+ds1-0+deb13u1" },
+			{ name: "ceralive-apt-credentials", version: "1.0.1" },
+			{ name: "libc6", version: "2:2.41-12+deb13u4" },
+		]);
+	});
+
+	it.each([
+		"Inst foo (1 ; ignore_errors=no Debian [arm64])",
+		"Inst foo (1 Debian [arm64]) trailing junk",
+		"Inst foo 1 Debian [arm64]",
+		"Inst foo (1 Debian [arm64]) (2 Debian [arm64])",
+		"Inst foo (1 Debian [arm64])\rgarbage",
+		"Inst foo (1 Debian [arm64\x00])",
+	])(
+		"refuses malformed simulation line %j in both discovery and install preflight",
+		(line) => {
+			expect(() => parseAptSimulation(`${line}\n`)).toThrow("discovery_failed");
+			expect(() =>
+				assertPinnedInstallSimulation(`${line}\n`, [
+					{ name: "foo", version: "1" },
+				]),
+			).toThrow("discovery_failed");
+		},
+	);
+
 	it("filters candidates by origin, excludes held names and pins exactly the actionable set", async () => {
 		const seen: string[] = [];
 		const result = await discoverAptAllPackages(
