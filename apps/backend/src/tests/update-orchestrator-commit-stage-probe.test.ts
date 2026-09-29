@@ -16,7 +16,7 @@
  *
  * Measured motivation (Rock 5B+, 2026-09-29): a stream start sent 1 ms after
  * dpkg appeared was admitted because the wire still read `downloading`, and
- * dpkg was killed 84 ms later. The probe must say "commit stage" for the
+ * dpkg was gone 84 ms after it appeared. The probe must say "commit stage" for the
  * second-stage `apt-get --no-download install` and for any `dpkg`, and must
  * NOT say so for the first (download) stage, which stays abortable.
  */
@@ -282,5 +282,57 @@ describe("isCommitStageRunning — default readers over a fake cgroup/proc tree"
 			procRoot: "/nonexistent-proc-root",
 		};
 		expect(await isCommitStageRunning(deps)).toBe(false);
+	});
+
+	function showState(active: string, sub: string): SpawnWithTimeoutResult {
+		return {
+			exitCode: 0,
+			stdout: `LoadState=loaded\nActiveState=${active}\nSubState=${sub}\nControlGroup=${UNIT_CGROUP}\n`,
+			stderr: "",
+		};
+	}
+
+	test("activating unit: its cgroup is read (dpkg -> true, download stage -> false)", async () => {
+		const dpkg = tree({
+			show: showState("activating", "start"),
+			processes: [{ pid: 103, comm: "dpkg", argv: ["/usr/bin/dpkg"] }],
+		});
+		expect(await isCommitStageRunning(dpkg)).toBe(true);
+		const download = tree({
+			show: showState("activating", "start"),
+			processes: [{ pid: 102, comm: "apt-get", argv: STAGE_ONE }],
+		});
+		expect(await isCommitStageRunning(download)).toBe(false);
+	});
+
+	test("deactivating unit: its cgroup is read (dpkg -> true, download stage -> false)", async () => {
+		const dpkg = tree({
+			show: showState("deactivating", "stop-sigterm"),
+			processes: [{ pid: 103, comm: "dpkg", argv: ["/usr/bin/dpkg"] }],
+		});
+		expect(await isCommitStageRunning(dpkg)).toBe(true);
+		const download = tree({
+			show: showState("deactivating", "stop-sigterm"),
+			processes: [{ pid: 102, comm: "apt-get", argv: STAGE_ONE }],
+		});
+		expect(await isCommitStageRunning(download)).toBe(false);
+	});
+
+	test("failed unit -> false, without reading any process list", async () => {
+		const deps: CommitStageProbeDeps = {
+			showUnit: async () => showState("failed", "failed"),
+			cgroupRoot: "/nonexistent-cgroup-root",
+			procRoot: "/nonexistent-proc-root",
+		};
+		expect(await isCommitStageRunning(deps)).toBe(false);
+	});
+
+	test("FAIL CLOSED: empty systemctl show output with exit 0 -> true", async () => {
+		const deps: CommitStageProbeDeps = {
+			showUnit: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+			cgroupRoot: "/nonexistent-cgroup-root",
+			procRoot: "/nonexistent-proc-root",
+		};
+		expect(await isCommitStageRunning(deps)).toBe(true);
 	});
 });

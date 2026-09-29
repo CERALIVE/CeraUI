@@ -504,31 +504,39 @@ export function allowCellularOnce(id: string): void {
 // no I/O, no staleness risk in the DANGEROUS direction (a phase that has
 // already moved past committing only ever gets MORE refusing, never less).
 //
-// The abort-network arm is where the stop decision lives. The cached phase
-// stays `downloading` for the whole unit on a successful install (the tick
-// only re-reads the wire every ACTIVE_TICK_MS, and the wire only reports
-// `installing` once dpkg's first `Unpacking` line has been ingested), so the
+// The abort-network arm is where the stop decision lives. The cached phase can
+// stay `downloading` while dpkg runs: the tick re-reads the wire only on its
+// own cadence (after an operator-RPC install the next tick can be up to
+// IDLE_TICK_MS away; a scheduled install then ticks every ACTIVE_TICK_MS), and
+// even a tick that lands during dpkg sees `installing` only once
+// dpkg's first `Unpacking` or `Setting up` line has been ingested. So the
 // cached phase alone cannot tell a download from a running dpkg. Measured on a
 // Rock 5B+: a start 1 ms after dpkg appeared saw a wire still reading
-// `downloading`; the old code stopped the unit and dpkg died 84 ms later.
+// `downloading`; the old code stopped the unit and dpkg was gone 84 ms after
+// it appeared.
 //
-// So immediately before any stop, this function asks two independent
-// questions and REFUSES (zero kill/stop calls, `COMMIT_PHASE_ENTERED`
-// dispatched) if either says the commit stage has begun:
-//   1. a forced-fresh wire read (`installing` / `success`), and
+// So immediately before any stop, this function asks two questions and
+// REFUSES with zero kill/stop calls if either says the commit stage has begun:
+//   1. a forced-fresh wire read (`installing` / `success`). That is evidence
+//      dpkg ran, so it also dispatches `COMMIT_PHASE_ENTERED`.
 //   2. `deps.isCommitStageRunning()` (commit-stage-probe.ts), which reads the
 //      unit's own processes: the second-stage `apt-get --no-download … install`
 //      or any `dpkg`/`dpkg-*`. It FAILS CLOSED — an unreadable process list for
-//      an active unit, or a throw, refuses.
-// The stop therefore only lands in the first (`apt-get -d`) download stage or
-// between the two stages, where nothing on the live root has been mutated.
-// The remaining check-then-stop gap is tens of milliseconds; at worst it
-// catches a second-stage apt-get that has just started and is still reading
-// its caches, long before it spawns dpkg. Do not "fix" that gap by splitting
-// Todo 35's single-unit/single-flock design into two units. If dpkg is
-// nonetheless interrupted by any cause (power loss, crash),
+//      a running unit, or a throw, refuses. A probe-only refusal dispatches
+//      NOTHING: it is not evidence that dpkg ran (the second stage can fail
+//      before dpkg, and a throw proves nothing), so the phase keeps download
+//      semantics and the next start probes again.
+// What the stop can still reach depends on the unit. On a capable image the
+// orchestrator runs the two-stage unit, and the remaining exposure is the
+// check-then-stop gap: a second-stage apt-get that starts in that gap is
+// stopped, normally before it spawns the unpacking dpkg (not measured). On a
+// non-capable image the orchestrator launches the single-stage
+// `runDetachedAptUpgrade` unit, which has no `--no-download` stage, so the
+// probe detects only a running `dpkg` and the gap sits right before the dpkg
+// spawn. Do not "fix" either by splitting Todo 35's single-unit/single-flock
+// design into two units. If dpkg is interrupted (power loss, crash),
 // image-building-pipeline's `ceralive-dpkg-recover.service` runs
-// `dpkg --configure -a` on boot; that repairs an interrupted configure, not a
+// `dpkg --configure -a` when it finds that on boot; that repairs an interrupted configure, not a
 // package left half-installed, which is why the stop must not reach dpkg.
 export type StreamStartUpdateAdmission =
 	| { readonly allowed: true }
@@ -539,6 +547,14 @@ export type StreamStartUpdateAdmission =
 			readonly percent: number;
 			readonly etaSeconds: number;
 	  };
+
+const COMMIT_STAGE_REFUSAL: StreamStartUpdateAdmission = {
+	allowed: false,
+	reason: "update_in_progress",
+	phase: "committing",
+	percent: 0,
+	etaSeconds: 0,
+};
 
 async function commitStageRunning(): Promise<boolean> {
 	try {
@@ -566,27 +582,22 @@ export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdm
 		// Forced fresh read — bypasses the cached `state.phase`. See the
 		// module comment above.
 		const freshWire = deps.getPackageInstallWireState();
-		if (
-			freshWire.kind === "installing" ||
-			freshWire.kind === "success" ||
-			(await commitStageRunning())
-		) {
-			// The commit stage has ALREADY started (or finished) since our
-			// cached read — refuse instead of sending a kill signal. Correct the
-			// cached state too, so a subsequent admission check reads fresh.
+		if (freshWire.kind === "installing" || freshWire.kind === "success") {
+			// The wire has seen dpkg output since our cached read: dpkg ran.
+			// Refuse, and correct the cached state from that evidence.
 			dispatch({ type: "COMMIT_PHASE_ENTERED", now: deps.now() });
 			const refreshed = admitStreamStart(state);
 			if (!refreshed.allowed) return refreshed;
 			// Unreachable in practice (COMMIT_PHASE_ENTERED always produces a
-			// refusing "committing" phase) — kept as a defensive, total
-			// fallback rather than an assertion.
-			return {
-				allowed: false,
-				reason: "update_in_progress",
-				phase: "committing",
-				percent: 0,
-				etaSeconds: 0,
-			};
+			// refusing "committing" phase) — kept as a total fallback.
+			return COMMIT_STAGE_REFUSAL;
+		}
+		if (await commitStageRunning()) {
+			// Probe-only: refuse, but dispatch nothing. A running second stage
+			// or a thrown probe is not proof that dpkg ran, and latching
+			// `committing` here would turn a later pre-dpkg failure into a
+			// quarantining COMMIT_FAILED. The next start probes again.
+			return COMMIT_STAGE_REFUSAL;
 		}
 		// Genuinely still downloading — safe to abort.
 		await deps.stopPackageInstallUnit();

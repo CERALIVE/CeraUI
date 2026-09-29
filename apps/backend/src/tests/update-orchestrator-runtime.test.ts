@@ -617,8 +617,8 @@ describe("runOrchestratorTick — auto-acknowledges terminal rest phases", () =>
 // (update-orchestrator-admission.test.ts) against the PURE `admitStreamStart`/
 // `onStreamStart`. This suite covers the EFFECTFUL wrapper: the abort-network
 // I/O dispatch, the reducer transitions that follow it, and — the safety-
-// critical property this task exists to prove — the forced-fresh-read
-// refusal that narrows the TOCTOU window documented on the function itself.
+// critical property this task exists to prove — a refusal, with no stop, once
+// the forced-fresh read or the commit-stage probe says the commit stage began.
 describe("admitAndPrepareStreamStart — D8 wired to real abort I/O", () => {
 	function abortSpyDeps(overrides: Partial<OrchestratorRuntimeDeps> = {}): {
 		deps: OrchestratorRuntimeDeps;
@@ -776,9 +776,12 @@ describe("admitAndPrepareStreamStart — D8 wired to real abort I/O", () => {
 	// The measured Rock 5B+ failure (2026-09-29): dpkg had started, but the
 	// wire had not yet ingested its first `Unpacking` line, so the forced-fresh
 	// read still said `downloading`. The wire-independent commit-stage probe is
-	// what must refuse here.
-	test("DEDICATED: wire still says downloading but the commit stage is running — refuses, ZERO kill/stop calls", async () => {
+	// what must refuse here. The probe is NOT evidence that dpkg ran, so the
+	// refusal must leave the orchestrator's phase alone: no COMMIT_PHASE_ENTERED,
+	// nothing persisted, and the next start asks the probe again.
+	test("DEDICATED: wire still says downloading but the commit stage is running — refuses, ZERO kill/stop calls, phase NOT latched", async () => {
 		let probes = 0;
+		let persists = 0;
 		const { deps, calls } = abortSpyDeps({
 			getPackageInstallWireState: () =>
 				({
@@ -789,16 +792,22 @@ describe("admitAndPrepareStreamStart — D8 wired to real abort I/O", () => {
 				probes++;
 				return true;
 			},
+			persist: () => {
+				persists++;
+			},
 		});
 		setOrchestratorRuntimeDepsForTest(deps);
 		setOrchestratorStateForTest({
 			...initialOrchestratorState(0),
 			phase: "downloading",
-			progress: { percent: 0, etaSeconds: 0 },
+			progress: { percent: 20, etaSeconds: 90 },
 		});
 
 		const result = await admitAndPrepareStreamStart();
 
+		// Probe-only refusals carry a fixed shape: the phase that renders as
+		// "an update commit is in progress", and no progress figures (the cached
+		// ones are download progress and say nothing about a commit).
 		expect(result).toEqual({
 			allowed: false,
 			reason: "update_in_progress",
@@ -809,7 +818,88 @@ describe("admitAndPrepareStreamStart — D8 wired to real abort I/O", () => {
 		expect(probes).toBe(1);
 		expect(calls.stop).toBe(0);
 		expect(calls.kill).toBe(0);
-		expect(getOrchestratorState().phase).toBe("committing");
+		expect(getOrchestratorState().phase).toBe("downloading");
+		expect(getOrchestratorState().progress).toEqual({
+			percent: 20,
+			etaSeconds: 90,
+		});
+		expect(persists).toBe(0);
+
+		const again = await admitAndPrepareStreamStart();
+		expect(again).toEqual(result);
+		expect(probes).toBe(2);
+		expect(calls.stop).toBe(0);
+		expect(getOrchestratorState().phase).toBe("downloading");
+		expect(persists).toBe(0);
+	});
+
+	test("a probe-only refusal keeps download semantics: a later wire `failed` is DOWNLOAD_FAILED, never COMMIT_FAILED/quarantine", async () => {
+		const quarantine = testQuarantine();
+		let recorded = 0;
+		quarantine.recordPackageFailure = async () => {
+			recorded++;
+		};
+		let wire: UpdateState = {
+			kind: "downloading",
+			progress: { downloading: 3, unpacking: 0, setting_up: 0, total: 3 },
+		} as UpdateState;
+		const { deps, calls } = abortSpyDeps({
+			quarantine,
+			getPackageInstallWireState: () => wire,
+			isCommitStageRunning: async () => true,
+		});
+		setOrchestratorRuntimeDepsForTest(deps);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "downloading",
+		});
+
+		expect((await admitAndPrepareStreamStart()).allowed).toBe(false);
+		expect(calls.stop).toBe(0);
+
+		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).toBe("downloading");
+
+		// Stage 2 failed before dpkg ever ran (e.g. a missing archive under
+		// --no-download): nothing was installed, so nothing may be quarantined.
+		wire = {
+			kind: "failed",
+			reason: "E: missing archive",
+		} as UpdateState;
+		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).toBe("failed");
+		expect(getOrchestratorState().failureReason).toBe("E: missing archive");
+		expect(recorded).toBe(0);
+	});
+
+	test("probe throws while downloading: refused, phase stays downloading; the next start with a false probe stops the unit and is admitted", async () => {
+		let probeAnswer: () => Promise<boolean> = async () => {
+			throw new Error("ENOENT: cgroup.procs");
+		};
+		const { deps, calls } = abortSpyDeps({
+			getPackageInstallWireState: () =>
+				({
+					kind: "downloading",
+					progress: { downloading: 1, unpacking: 0, setting_up: 0, total: 3 },
+				}) as UpdateState,
+			isCommitStageRunning: () => probeAnswer(),
+		});
+		setOrchestratorRuntimeDepsForTest(deps);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "downloading",
+		});
+
+		const refused = await admitAndPrepareStreamStart();
+		expect(refused.allowed).toBe(false);
+		expect(calls.stop).toBe(0);
+		expect(getOrchestratorState().phase).toBe("downloading");
+
+		probeAnswer = async () => false;
+		const admitted = await admitAndPrepareStreamStart();
+		expect(admitted).toEqual({ allowed: true });
+		expect(calls.stop).toBe(1);
+		expect(getOrchestratorState().phase).toBe("available");
 	});
 
 	test("the commit-stage probe is consulted on the downloading arm and a false answer still aborts the download", async () => {
