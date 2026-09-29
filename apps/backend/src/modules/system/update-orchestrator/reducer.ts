@@ -9,18 +9,8 @@
 */
 
 /**
- * The pure orchestrator state-transition function (Todo 36).
- *
- * `reduceOrchestrator` is TOTAL: it never throws, and any (phase, event) pair
- * it does not explicitly recognise is a no-op that returns the SAME state
- * object (referential equality preserved, so effects layers can cheaply detect
- * "nothing changed"). This is deliberate — an unexpected or stale event (e.g. a
- * COMMIT_SUCCEEDED arriving after a resume already moved the phase on) must
- * never crash the orchestrator or silently corrupt an unrelated phase.
- *
- * No I/O of any kind happens here. Every timestamp is the event's own `now`;
- * every scheduling delay is pre-computed by schedule.ts and threaded through
- * the event, never invented here.
+ * Returning the same state for an unrecognized pair lets dispatch skip unchanged
+ * persistence/publication and avoids applying stale events to an unrelated phase.
  */
 
 import type {
@@ -133,8 +123,6 @@ function reduceIdle(
 				osCheck: clockAtAttemptStart(state.osCheck, event.now),
 			});
 		case "SYNC_ELIGIBILITY_CONFIRMED":
-			// APT never dispatches OS_VERIFIED. Recheck its boot-health receipt
-			// on startup and every idle tick, then use the same sync-eligible path.
 			return enter(state, event.now, { phase: "sync-eligible" });
 		case "CELLULAR_OVERRIDE_GRANTED":
 			return { ...state, cellularOverrideId: event.id };
@@ -143,10 +131,6 @@ function reduceIdle(
 	}
 }
 
-// `checking` does not remember which cadence started it (both are equally
-// non-disruptive, network-only probes; D8 leaves "checking" unmentioned, i.e.
-// allowed+none regardless). The OUTCOME event tells us which result kind
-// applies and updates the matching clock.
 function reduceChecking(
 	state: OrchestratorState,
 	event: OrchestratorEvent,
@@ -227,10 +211,7 @@ function reduceAvailable(
 	}
 }
 
-// INSTALL_UNIT_STARTED moves the phase to `downloading` after the launcher
-// accepts; a deferred or preparing launch may not have a unit yet. On capable
-// images, once created, that unit holds both download and commit. D8's
-// `awaiting-idle` action is "none" (root AGENTS.md D8 Known gaps (f)-(g)).
+// Launch-acceptance limits: root AGENTS.md D8 Known gaps (f)-(g).
 function reduceAwaitingIdle(
 	state: OrchestratorState,
 	event: OrchestratorEvent,
@@ -266,9 +247,6 @@ function reduceDownloading(
 				progress: null,
 				failureReason: event.reason,
 			});
-		// D8 dispatches this only after the fresh read and probe found no commit
-		// stage and it issued a unit stop. The phase returns to `available`,
-		// but the event does not cancel a launch whose unit did not yet exist.
 		case "DOWNLOAD_ABORTED_FOR_STREAM":
 			return enter(state, event.now, { phase: "available", progress: null });
 		default:
@@ -297,9 +275,7 @@ function reduceCommitting(
 				progress: null,
 				failureReason: event.reason,
 			});
-		// An UNRESOLVED resume (dpkg's outcome could not be established at all) is
-		// a bare "failed", never "quarantined" — there is no confirmed-bad version
-		// here to pin, only genuine uncertainty an operator must investigate.
+		// An unresolved outcome does not establish a bad candidate to pin.
 		case "COMMIT_RESUME_UNRESOLVED":
 			return enter(state, event.now, {
 				phase: "failed",
@@ -323,11 +299,6 @@ function reduceRestartingServices(
 	}
 }
 
-// `settled` is a real, observable resting phase (a notification-worthy "the
-// install finished" moment) rather than an instantaneous alias for `idle` — but
-// no NEW check may start from it. The effects layer promptly (not necessarily
-// synchronously) acknowledges it back to `idle`, at which point the normal
-// check-scheduling gate (phase === "idle") applies again.
 function reduceSettled(
 	state: OrchestratorState,
 	event: OrchestratorEvent,
@@ -382,8 +353,6 @@ function reduceOsStaging(
 				progress: null,
 				failureReason: event.reason,
 			});
-		// D8 allows OS staging and kills/restarts RAUC without a package wire
-		// read or commit-stage probe; unlike downloading, this arm never refuses.
 		case "OS_STAGING_ABORTED_FOR_STREAM":
 			return enter(state, event.now, {
 				phase: "os-available",
@@ -459,11 +428,7 @@ function reduceSyncing(
 	switch (event.type) {
 		case "SYNC_SUCCEEDED":
 			return enter(state, event.now, { phase: "synced", progress: null });
-		// A sync failure means the MIRROR failed, not that the running slot or the
-		// just-verified OS version is bad — the slot-sync script itself leaves the
-		// OTHER slot marked bad and this orchestrator never touches the booted
-		// slot, so `failed` (not `quarantined`) is correct: nothing here should
-		// pin/refuse the current, still-good, running version.
+		// A failed mirror is not evidence that the running version is bad.
 		case "SYNC_FAILED":
 			return enter(state, event.now, {
 				phase: "failed",

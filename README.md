@@ -3,10 +3,9 @@
 **Device updates [EXISTS].** The update orchestrator checks for package and
 system updates on a schedule alongside the older package-update RPC path. It
 automatically installs while idle, and
-allows operator actions to bypass that idle wait. D8 refuses Go Live in its
-tracked commit/service-restart phases; in `downloading` it checks for the commit
-stage before requesting a unit stop. Admission does not guarantee that a later
-launch succeeds or a pending pre-unit update is cancelled (see [D8 Known gaps](AGENTS.md)).
+allows operator actions to bypass that idle wait. Stream/update admission:
+[D8 detail](docs/DEVICE-UPDATES.md#d8-stream-admission) and
+[D8 Known gaps](AGENTS.md).
 Settings → Software Updates shows packages,
 system image, slots, automation (auto toggles, schedule window, channel),
 cellular allowances with per-candidate approval, and the update connection. A
@@ -85,7 +84,7 @@ The app is organized into three primary destinations:
 
 - **Live** — a unified device-first source list leads the destination: every capture device, built-in pipeline, test pattern, and LAN network-ingest (RTMP/SRT) slot renders as one picker, with a single "Codec & delay" affordance owning all audio configuration. Below it, a "Stream setup" card shows three always-visible readiness rows (Encoder, Destination, Network — no collapse, no ready bar) each fusing a state dot with its config summary and a one-tap edit/fix affordance, plus the Start control. Pick a source, adjust encoder/server settings, and go live. While streaming, the view switches to a live cockpit: telemetry strip, bitrate hot-adjust, per-link ingest stats, and Stop. A persistent HUD bar shows four at-a-glance facts (live/idle/offline state, health verdict, bitrate, SoC temperature) across all destinations, with per-link signal detail and full telemetry available in an expanded sheet.
 - **Network** — connectivity overview. Bonded link status, WiFi networks (connect/disconnect/forget), cellular modems (APN, roaming, network type), Ethernet interfaces, hotspot configuration, and provider-aware Bluetooth controls. PipeWire images never try to start the retired BlueALSA unit, and a connected Bluetooth microphone is offered only when the installed provider agrees with the selected audio backend. Newly attached cellular hardware remains visible while modem services probe it. After two authoritative misses, only strong cellular evidence retains a non-actionable “Not controllable” row; descriptor-only guesses disappear and stay retired while attached, including across monitor restarts. Bluetooth descriptors never qualify by shape alone: wireless admission requires the full RNDIS triplet `e00103`, and `ID_MM_DEVICE_IGNORE=1` always excludes the device. Successful SIM PIN, PUK, and PIN2 unlocks update the affected modem row immediately over the existing push channel, without a page reload. Calm info/warning bands surface interface-topology issues without ever blocking a connection: a same-subnet notice when two bonded links deliberately share a subnet (normal for policy-routed bonding), and a policy-route warning if a bonded WiFi/modem link is missing its expected routing table.
-- **Settings** — system and device configuration. All actions open focused dialogs: cloud remote, LAN password, SSH, logs, software updates, power, version info, and per-protocol network-ingest (RTMP/SRT) enable/disable. The software-update dialog now answers rather than going quiet: a check that could not reach the repositories, or that landed on a captive portal, says so instead of reporting "up to date"; the result names which address family worked when only one did; a package that ships with the next OS image or that apt kept back is listed as such rather than offered for install; and an update refused before it starts — most often for insufficient free space — reports its own reason and clears the progress overlay instead of leaving "Applying…" on screen.
+- **Settings** — system and device configuration. All actions open focused dialogs: cloud remote, LAN password, SSH, logs, software updates, power, version info, and per-protocol network-ingest (RTMP/SRT) enable/disable. Software-update preflight refusals report their reason and clear the progress overlay. The post-acceptance silent-return gap is recorded in [D8 Known gaps](AGENTS.md), item (c). Update-state details: [device updates](docs/DEVICE-UPDATES.md).
 
 A dev-only DevTools destination is available in development builds.
 

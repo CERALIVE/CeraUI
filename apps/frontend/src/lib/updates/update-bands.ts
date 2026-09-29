@@ -1,8 +1,6 @@
 /**
  * The two update bands that live OUTSIDE the Updates dialog's own sections
- * (Todo 41): the Go-Live refusal band on the Live destination, and the
- * credentials band at the top of the dialog. Pure and rune-free, like
- * `update-view.ts`, which supplies the phase rules both of them lean on.
+ * (Todo 41): the Go-Live refusal band and the credentials band.
  */
 import type {
 	StartFailure,
@@ -18,7 +16,6 @@ import {
 } from "./update-view";
 
 export interface GoLiveUpdateRefusal {
-	/** `undefined` only when a refusal from an older backend named no phase. */
 	readonly phase: UpdateOrchestratorPhase | undefined;
 	readonly percent: number | undefined;
 	readonly etaMinutes: number | undefined;
@@ -32,14 +29,8 @@ function wholePercent(percent: number | undefined): number | undefined {
 }
 
 /**
- * Whether the stream-start surface must say that an update owns the device.
- *
- * The pushed orchestrator state wins whenever it exists: it is fresher than any
- * refusal, and once it has moved past `committing`/`restarting-services` the
- * start the operator was refused is admissible again, so the band must go away
- * even though the refusal it came from is still the last failure on record.
- * Only a backend that publishes no orchestrator state falls back to the typed
- * `update_in_progress` refusal and the progress it carried.
+ * Prefer pushed state so an old refusal does not leave a stale band. This is
+ * display precedence, not proof a start is admissible (root AGENTS.md D8 Known gaps).
  */
 export function goLiveUpdateRefusal(
 	wire: UpdateOrchestratorWireState | undefined | null,
@@ -64,10 +55,7 @@ export function goLiveUpdateRefusal(
 }
 
 /**
- * The update server refused this device's client certificate on the last
- * transport selection. This is the ONLY credential fact on the wire: nothing
- * publishes the certificate's expiry date, so the dialog states a rejection it
- * observed and never a countdown it would have to invent.
+ * State a reported rejection rather than inventing a certificate-expiry date.
  */
 export function transportCredentialsRejected(
 	details: UpdateDetails | undefined,

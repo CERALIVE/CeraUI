@@ -89,65 +89,18 @@ StartFailure = {
 
 ### `update_in_progress` (Todo 37)
 
-The stream-session orchestrator's `start()` — the ONE choke point every launch
-origin (UI, remote-control, autostart, set-profile, restoration) calls through
-— consults the update orchestrator's D8 admission table
-(`modules/system/update-orchestrator/admission.ts`) before ever reaching the
-engine. `committing`/`restarting-services` REFUSE with this class, always at
-`phase: 'params'` (the same phase `modem_transition_active`/`recovery_pending`/
-`mutation_blocked` use — refused before the engine is ever touched) and always
-`retriable: false`. Wait for the commit-stage refusal to clear; `settled` is
-not required. A failed commit can end in `quarantined`/`failed`, and a
-probe-only refusal can clear while the orchestrator stays in `downloading`.
-Do not automatically retry this non-retriable class.
+`typedUpdateInProgressFailure()` builds this refusal at `phase: 'params'` with
+`retriable: false`. Wait for the refusing condition to clear, not an automatic
+retry; `settled` is not required.
 
-`downloading`/`os-staging` can admit a start and issue an abort request
-(stopping the detached apt unit, or SIGTERM-killing and restarting
-`rauc.service`) — see
-`modules/system/update-orchestrator/runtime.ts`'s `admitAndPrepareStreamStart`
-and `stream-abort.ts`. Immediately before dispatching any stop, the apt abort
-path performs a FORCED FRESH re-read of the wire state (bypassing the
-orchestrator's own cached phase, which can lag the unit) AND consults the commit-stage
-probe (`commit-stage-probe.ts`), which reads the unit's own processes. If the
-wire says `installing`/`success`, or the unit is running its second-stage
-`apt-get --no-download` or any `dpkg`, the start is REFUSED with
-`update_in_progress` instead; the probe fails closed, and a refusal from the
-probe alone leaves the orchestrator phase untouched. On a capable image's
-two-stage unit the stop can still land in the check-then-stop gap; on a non-capable
-image's single-stage unit the probe detects only a running `dpkg`, so that gap
-sits right before the dpkg spawn. See the code comment on
-`admitAndPrepareStreamStart` and `apps/backend/AGENTS.md`'s D8 section for the
-measured failure this closes and why `image-building-pipeline`'s
-`ceralive-dpkg-recover.service` is a backstop only. The package stop guarantee
-applies only to an existing orchestrator-launched unit tracked in `downloading`;
-see the root AGENTS.md D8 Known gaps for other launch and post-admission limits.
+Probe, stop and OTA-marker semantics are in the
+[DEVICE-UPDATES D8 section](./DEVICE-UPDATES.md#d8-stream-admission);
+see the root AGENTS.md D8 Known gaps for launch and post-admission limits.
 
-An admitted start also sets `/run/ceralive/streaming` — the same sentinel the
-image-side `ceralive-rauc-activate.sh` (Todo 28) checks before staging an OTA
-slot activation — and clears it on every stream-end path (a failed launch that
-never went live, `stop()`, and a config-change transaction that ends the
-stream without a `stop()` call).
-
-Verified against the implementation on this branch (Todo 42). The class set is
-unchanged: `update_in_progress` is the D8 refusal class, built by
-`typedUpdateInProgressFailure()` at phase `params`; the later legacy
-`isUpdating()` refusal uses `engine_restarting`. Three facts are
-worth knowing when consuming it:
-
-- `updateEtaSeconds` is always `0` today. Neither the package progress
-  projection nor the OS staging progress computes an ETA, so a consumer must
-  treat `0` as unknown, not as "done".
-- The frontend does not rely on this failure alone. `goLiveUpdateRefusal()`
-  (`apps/frontend/src/lib/updates/update-bands.ts`) prefers the live
-  `status.update_orchestrator` push and falls back to this typed failure only
-  when no push is available. `UpdateRefusalBand.svelte` renders the result and
-  never disables Start; admission stays on the device.
-- An update launched through the older `system.startUpdate` RPC bypasses the
-  orchestrator. Other launch and post-admission gaps are in "D8 stream/update admission:
-  what it does NOT cover" under Known gaps in the root
-  [`AGENTS.md`](../AGENTS.md). That paragraph also records when the separate
-  `isUpdating()` guard (`stream_start_suppressed_update`) does and does not
-  refuse such a start.
+Treat `updateEtaSeconds: 0` as unknown, not as "done". Other launch and
+post-admission gaps are in "D8 stream/update admission:
+what it does NOT cover" under Known gaps in the root
+[`AGENTS.md`](../AGENTS.md).
 
 The orchestrator's phases, the full D8 table and what is proven are in
 [DEVICE-UPDATES.md](./DEVICE-UPDATES.md).

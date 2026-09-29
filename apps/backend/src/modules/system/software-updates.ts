@@ -203,10 +203,6 @@ async function runAptCommand(
 	}
 }
 
-// Unified-update-state signals (Todo 24). The identity of the currently-available
-// update; the identity being installed; and the terminal outcome of the last run.
-// A terminal failure/success PERSISTS across background discovery re-runs — only a
-// new install (startSoftwareUpdate) or a manual re-check clears it.
 let availableIdentity: UpdateIdentity | null = null;
 let currentUpdateIdentity: UpdateIdentity | null = null;
 let lastUpdateFailure: UpdateFailure | null = null;
@@ -217,12 +213,7 @@ let lastCleanupWarning: Extract<
 	{ kind: "success" }
 >["cleanup_warning"];
 
-// Check-cycle outcome, separate from the install-cycle signals above. A check
-// that could not complete MUST NOT read as "up to date", and a check that
-// completed with nothing to do must still leave proof it ran — otherwise the
-// operator's only evidence is a button that appears to do nothing (the live
-// Rock 5B+ report this fixes: apt-get update ran and succeeded in 1.8 s while the
-// dialog showed no spinner, no result and no error for 11 s).
+// Distinguish a failed check from "up to date", and an empty result from no check.
 let lastCheckFailure: UpdateCheckFailureReason | null = null;
 let lastCheckedAt: number | null = null;
 
@@ -230,9 +221,8 @@ function failCurrentCheck(reason: UpdateCheckFailureReason): void {
 	lastCheckFailure = reason;
 }
 
-// Why an update start was refused. A refusal is ALWAYS one of these — never a
-// bare `return` — so the operator gets a reason instead of a dialog that shows
-// "Applying…" and reverts in silence (the live Rock 5B+ report this fixes).
+// Synchronous start refusals. Post-acceptance limits are in root AGENTS.md's
+// "D8 stream/update admission: what it does NOT cover", item (c).
 export type UpdateStartRefusal =
 	| "updates_disabled"
 	| "streaming"
@@ -248,9 +238,6 @@ function refuseUpdateStart(reason: UpdateStartRefusal): UpdateStartOutcome {
 	return { started: false, reason };
 }
 
-// The ONE predicate for "may this device install apt updates". Discovery, the
-// periodic check, and the install path all read it, so the UI can never offer an
-// update the install path would refuse.
 export function aptUpdatesEnabled(): boolean {
 	return setup.apt_update_enabled !== false;
 }
@@ -459,11 +446,7 @@ export function parseKeptBackPackageNames(stdout: string): string[] {
 		.filter((name) => name.length > 0 && APT_PACKAGE_NAME_RE.test(name));
 }
 
-// Every package discovery saw, tagged with its layer and whether apt kept it
-// back. `actionable` is derived here ONCE — `layer === "app" && !kept_back` — so
-// the install argv, the wire count and the operator's band can never disagree.
-// Kept-back membership WINS over the upgradable list: apt can name a package in
-// both, and the honest answer for such an entry is that it is not installable.
+// A package named in both lists remains kept-back, rather than installable.
 export function buildDiscoveredPackages(
 	upgradable: readonly string[],
 	keptBack: readonly string[],
@@ -755,14 +738,12 @@ export function reportUpdateCheckFailure(upgrade: {
 }
 
 async function getSoftwareUpdateSize(reachability: AptReachability) {
-	// Never advertise an update the install path would refuse to run.
 	if (!aptUpdatesEnabled()) return null;
 	if (getIsStreaming() || isUpdating() || aptGetUpdating) return "busy";
 	if ((await readUpdateCapabilities()).mode === "capable")
 		return getCapableUpdateSize(reachability);
 	aptAllMode = false;
 
-	// First see if any packages can be upgraded by dist-upgrade
 	const upgradeResult = await runAptCommand(
 		buildAptDiscoveryArgs(reachability.verdict),
 		APT_DISCOVERY_TIMEOUT_MS,
@@ -785,7 +766,6 @@ async function getSoftwareUpdateSize(reachability: AptReachability) {
 	let res = parsedSummary.value;
 	let fromHeldBack = false;
 
-	// Otherwise, check if any packages have been held back (e.g. by dependencies changing)
 	if (res.upgradeCount === 0) {
 		const heldBackPackages = parseAptPackageList(
 			upgrade.stdout,
@@ -812,7 +792,6 @@ async function getSoftwareUpdateSize(reachability: AptReachability) {
 			res = parsedSummary.value;
 		}
 	} else {
-		// Reset aptHeldBackPackages if some upgrades became available via dist-upgrade
 		aptHeldBackPackages = undefined;
 	}
 	// The kept-back block is read from the ORIGINAL dist-upgrade output on every
@@ -888,11 +867,6 @@ export type SoftwareUpdateError =
 /**
  * Classify the outcome of `apt-get update` into the legacy `errOrStderr` value.
  *
- * Preserves the exact pre-migration semantics of the `exec()` callback:
- *   - captive-portal signatures ⇒ `captive_portal`;
- *   - any stderr output ⇒ `true` (treated as an error, even on exit 0);
- *   - otherwise a non-zero exit ⇒ an ExecException-shaped error;
- *   - otherwise (exit 0, no stderr) ⇒ `null` (success).
  */
 export function classifyAptUpdateResult(
 	exitCode: number,
@@ -930,10 +904,6 @@ function checkForSoftwareUpdates(
 		return false;
 	}
 
-	// A fresh cycle supersedes the previous one's verdict, and the `checking`
-	// transition is BROADCAST: it is derivable server-side the moment this flag
-	// flips, but nothing published it, so no client could ever observe a check in
-	// flight and the dialog cancelled its own spinner on the next frame.
 	lastCheckFailure = null;
 	lastAptReachability = undefined;
 	aptGetUpdating = true;
@@ -1028,10 +998,7 @@ export function resetSoftwareUpdateCheckRunner(): void {
 	softwareUpdateCheckRunner = checkForSoftwareUpdates;
 }
 
-// Discovery DI seam wrapping getSoftwareUpdateSize (the SOLE `available_updates`
-// broadcaster). Callers invoke it unconditionally: a noisy-but-nonfatal `apt-get update`
-// (benign apt warnings on stderr, or one repo down) must not suppress the broadcast, and
-// getSoftwareUpdateSize still surfaces a truly-broken apt via reportUpdateCheckFailure.
+// Benign refresh warnings must not suppress discovery's publication.
 type SoftwareUpdateSizeRunner = (
 	reachability: AptReachability,
 ) => Promise<SoftwareUpdateError>;
@@ -1048,11 +1015,7 @@ export function resetSoftwareUpdateSizeRunner(): void {
 	softwareUpdateSizeRunner = getSoftwareUpdateSize;
 }
 
-// The ONE place a check cycle lands, for both the periodic loop and the manual
-// re-check. It stamps the attempt before discovery (so the discovery broadcast
-// already carries it) and always emits a terminal frame — discovery has several
-// early returns that broadcast nothing, and each of those used to leave the
-// operator on whatever the dialog happened to be showing.
+// Publish after discovery's early returns so an empty result is observable.
 export async function runUpdateDiscoveryAndReport(): Promise<SoftwareUpdateError> {
 	if (aptDiscoveryRunning) return "busy";
 	aptDiscoveryRunning = true;
@@ -1095,8 +1058,7 @@ function scheduleNextSoftwareUpdateCheck(delay: number): void {
 
 export function periodicCheckForSoftwareUpdates() {
 	if (!aptUpdatesEnabled()) return;
-	// A dev/CI host must never be handed to apt. The manual check has its own
-	// mock branch; this background loop simply does not run there.
+	// Protect the dev host from background APT effects.
 	if (shouldUseMocks()) return;
 	if (isSoftwareUpdateRecoveryInconclusive()) return;
 	if (nextCheckForSoftwareUpdatesTimer) {
@@ -1114,9 +1076,6 @@ export function periodicCheckForSoftwareUpdates() {
 	}
 
 	const started = softwareUpdateCheckRunner(async (err_, failures) => {
-		// Discovery runs on every completed check; err_/failures drive ONLY the retry
-		// cadence, so a failed apt-get update refresh retries sooner without ever
-		// suppressing the available_updates broadcast.
 		const discovery = await runUpdateDiscoveryAndReport();
 		const err = err_ === null ? discovery : err_;
 		scheduleNextSoftwareUpdateCheck(computeNextCheckDelay(err, failures));
@@ -1129,8 +1088,6 @@ export function periodicCheckForSoftwareUpdates() {
 	}
 }
 
-// Reuses the periodic discovery + skip guard but never touches its timer.
-// Returns false when skipped (streaming/updating/apt busy).
 export function triggerManualUpdateCheck(): boolean {
 	if (isSoftwareUpdateRecoveryInconclusive()) return false;
 	if (shouldUseMocks()) {
@@ -1184,13 +1141,6 @@ export function triggerManualUpdateCheck(): boolean {
 	return started;
 }
 
-// apt spawn seam (T8): the default kicks off the real `apt-get update` →
-// dist-upgrade pipeline. The dev/mock path NEVER calls it (it simulates the
-// progress sequence instead); tests spy it to assert the real path fired (prod)
-// or stayed untouched (dev). This is SEPARATE from the rebootRunner seam above,
-// which only gates the post-update reboot — this gates the entire apt spawn.
-// The runner reports its own outcome: a refusal is only discoverable once the
-// apt package-list refresh has been dispatched.
 type SoftwareUpdateRunner = (
 	onCommitSucceeded?: () => void,
 ) => UpdateStartOutcome;
@@ -1243,13 +1193,8 @@ const defaultSoftwareUpdateRunner: SoftwareUpdateRunner = (
 		}
 	});
 
-	// On this path the callback above (for example its error branch, or
-	// doSoftwareUpdate and the process monitor it starts) clears
-	// softUpdateStatus, so latching it after a check that declined to run would
-	// leave isUpdating() true for the lifetime of the process — refusing every
-	// later update and silently killing the periodic check loop. Some callback
-	// paths also leave it set, for example doSoftwareUpdate's streaming early
-	// return: see "D8 stream/update admission: what it does NOT cover" in
+	// Latching a declined check would wedge isUpdating(). For later latch gaps,
+	// see "D8 stream/update admission: what it does NOT cover" in
 	// AGENTS.md.
 	if (!checkStarted) return refuseUpdateStart("check_unavailable");
 
@@ -1280,10 +1225,6 @@ export function getMockSoftwareUpdatePromise(): Promise<void> | null {
 	return mockSoftwareUpdatePromise;
 }
 
-// Emulate the on-device update progression WITHOUT spawning apt: total resolves,
-// then downloading, unpacking and setting_up each fill to total in turn, and
-// finally a completion frame (result: 0) — the same wire shape doSoftwareUpdate
-// produces from real apt stdout.
 async function simulateMockSoftwareUpdate(): Promise<void> {
 	softUpdateStatus = { total: 0, downloading: 0, unpacking: 0, setting_up: 0 };
 	broadcastMsg("status", { updating: softUpdateStatus });
@@ -1325,14 +1266,12 @@ export function startSoftwareUpdate(
 		return refuseUpdateStart("check_unavailable");
 	}
 
-	// A fresh install supersedes any prior terminal outcome (Todo 24).
 	currentUpdateIdentity = availableIdentity;
 	lastUpdateFailure = null;
 	lastUpdateSucceeded = false;
 	lastPreflightFailure = null;
 	lastCleanupWarning = undefined;
 
-	// if an apt-get update is already in progress, retry later
 	if (aptGetUpdating || aptDiscoveryRunning) {
 		if (!delayedSoftwareUpdateStart) {
 			delayedSoftwareUpdateStart = setTimeout(() => {
@@ -1357,8 +1296,6 @@ export function startSoftwareUpdate(
 		return { started: true };
 	}
 
-	// Dev/mock seam: simulate the progress→complete sequence without ever
-	// spawning apt, so the update UI is exercisable on a dev box.
 	if (shouldUseMocks()) {
 		mockSoftwareUpdatePromise = simulateMockSoftwareUpdate();
 		void mockSoftwareUpdatePromise;
@@ -1452,12 +1389,6 @@ export function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonit
 		},
 	};
 
-	// Bounded and total: resolves the transaction's exit code and settles
-	// softUpdateStatus/lastUpdateSucceeded/lastUpdateFailure. Never throws —
-	// cleanAptCache() swallows its own errors, and a rejected `completion` is
-	// converted to a plain exit code above. This is the part a caller may
-	// safely await (see recoverSoftwareUpdate()'s wasAlreadyFinished branch):
-	// once it resolves, getUpdateState() reflects the real outcome.
 	const settle = async (completion: Promise<number>): Promise<number> => {
 		let code: number;
 		try {
@@ -1545,12 +1476,7 @@ export function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonit
 		onCommitSucceeded?: () => void,
 	): Promise<void> => {
 		const settled = settle(completion);
-		// Detached on purpose: logging plus the deliberate crash-to-restart on a
-		// plain success. `settled` never rejects (see above), so this can only
-		// throw from invariant() itself — exactly the unhandled rejection this
-		// path exists to produce. Chaining it onto the returned promise would
-		// let an upstream await/try-catch (main.ts's guardNonCritical, or the
-		// orchestrator's resume) swallow that intentional crash instead.
+		// Keep the deliberate restart detached so a caller's catch cannot swallow it.
 		void settled.then((code) => {
 			if (aptLog) logger.info(aptLog);
 			if (aptErr) logger.error(aptErr);
@@ -1683,7 +1609,7 @@ async function doSoftwareUpdate(onCommitSucceeded?: () => void): Promise<void> {
 		broadcastMsg("status", { updating: null, update_state: getUpdateState() });
 		return;
 	}
-	// Admission is now proven. A refused attempt must never suppress stream restoration.
+	// Stamp after preflight so a refusal does not suppress stream restoration.
 	notePlannedShutdown("software_update");
 	const monitor = createSoftwareUpdateProcessMonitor();
 

@@ -9,21 +9,7 @@
 */
 
 /**
- * Pure scheduling decisions (Todo 36): jitter/backoff cadence, and the D7/D12
- * gates that decide whether an automatic check/install attempt may run right
- * now. This EXTENDS the existing `software-updates.ts::computeNextCheckDelay`
- * PATTERN (a pure `(outcome, failures) -> delayMs` function driving a
- * self-rescheduling timer) rather than reusing that exact function: that
- * function is the LEGACY internal `apt-get update` retry sub-loop (hourly on
- * success, 10s/12-retry-then-1-minute on failure) — a different cadence for a
- * different, narrower purpose. The orchestrator owns a NEW top-level cadence
- * (6h/12h with jitter, exponential backoff capped at 24h) as the plan
- * specifies, and this module is that cadence's pure decision surface.
- *
- * No I/O, no Date.now(), no Math.random() — every "now" and every random unit
- * interval [0, 1) is supplied by the caller (the effects layer in
- * `runtime.ts`), so every decision here is exhaustively testable with fixed
- * inputs.
+ * Keep the top-level update cadence separate from the legacy refresh retry loop.
  */
 
 import type { OrchestratorPhase, OrchestratorScheduleClock } from "./types.ts";
@@ -33,15 +19,8 @@ export const PACKAGE_CHECK_JITTER_MS = 30 * 60 * 1000;
 export const OS_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
 export const OS_CHECK_JITTER_MS = 60 * 60 * 1000;
 
-// Transient-failure backoff base. Doubles per consecutive failure, capped at
-// BACKOFF_MAX_MS.
 export const BACKOFF_BASE_MS = 60 * 1000;
-// A SEPARATE, more conservative base for HTTP 429/5xx specifically — named
-// apart in the plan as "Cloudflare Free-plan quota safety, a real operational
-// concern, not decorative": apt.ceralive.tv is Cloudflare-fronted, and a tight
-// retry loop against a rate-limited or overloaded origin is exactly the
-// traffic pattern that burns a free-tier quota fastest. Both share the same
-// 24h ceiling and the same doubling curve; only the starting point differs.
+// Give a throttled or overloaded origin more room before retrying.
 export const BACKOFF_BASE_RATE_LIMITED_MS = 5 * 60 * 1000;
 export const BACKOFF_MAX_MS = 24 * 60 * 60 * 1000;
 
@@ -96,12 +75,6 @@ export function computeNextCheckDelayMs(input: {
 }
 
 // ─── D7 — update-settings toggles ──────────────────────────────────────────
-// `packagesAuto`/`systemAuto` gate the entire AUTOMATIC pipeline (scheduled
-// check through install) for their respective update kind. A manual RPC call
-// (system.checkUpdatesNow / installUpdatesNow) is a deliberate operator
-// override and is NEVER subject to this gate — only the schedule's own timer
-// is. This mirrors ordinary "automatic updates on/off" UX: off means "I will
-// drive this myself", not "hide the feature".
 export function autoPipelineEnabled(
 	kind: CheckKind,
 	settings: { readonly packagesAuto: boolean; readonly systemAuto: boolean },
@@ -109,8 +82,6 @@ export function autoPipelineEnabled(
 	return kind === "packages" ? settings.packagesAuto : settings.systemAuto;
 }
 
-// A scheduled (non-manual) check may start only when the clock says it is due
-// AND the phase is quiescent (idle) AND the D7 toggle for this kind is on.
 export function shouldAttemptScheduledCheck(input: {
 	readonly now: number;
 	readonly phase: OrchestratorPhase;
@@ -127,18 +98,10 @@ export function shouldAttemptScheduledCheck(input: {
 	return input.now >= input.clock.nextAttemptAt;
 }
 
-// A manual check (system.checkUpdatesNow) bypasses the schedule's due-time and
-// the D7 toggle, but it can never run out of a phase that is already doing
-// something else — that guard is structural (the reducer's PACKAGE_CHECK_STARTED
-// only transitions from idle/available/settled-once-acked), and this function
-// mirrors it explicitly so the effects layer has one place to ask "can a
-// manual check start right now" without re-deriving the reducer's own rule.
 export function canStartManualCheck(phase: OrchestratorPhase): boolean {
 	return phase === "idle" || phase === "available" || phase === "os-available";
 }
 
-// A pending automatic package install has not launched a unit yet: an operator
-// may take it past the idle gate, but not past stream admission.
 export function canStartManualInstall(
 	phase: OrchestratorPhase,
 	kind: CheckKind,
@@ -155,26 +118,8 @@ export type CellularGateResult =
 	| { readonly allowed: false; readonly needsOverride: boolean };
 
 /**
- * `onlyMeteredCandidateExists`: true iff every currently reachable uplink
- * candidate (from `update-transport/core.ts::discoverCandidates`) is metered —
- * i.e. there is no unmetered path available at all, not merely "a metered link
- * exists among others".
- *
- * Packages: gated on `allowPackagesOverCellular` alone, for both the check and
- * the install — package deltas are small and the existing legacy path already
- * treats them this way.
- *
- * OS CHECK (small manifest fetch): gated on `allowSystemOverCellular` — this is
- * the toggle's role for the OS kind. If false, the orchestrator does not even
- * spend metered bytes finding out whether an OS update exists.
- *
- * OS STAGING (the actual multi-hundred-MB bundle download): per the plan,
- * ALWAYS held on a metered-only uplink regardless of `allowSystemOverCellular`
- * — the toggle does not reach this decision at all. The only way past it is
- * `system.allowCellularOnce(id)` matching the exact candidate id, consumed on
- * use. This asymmetry (toggle gates the cheap check, never the expensive
- * stage) is what makes both `allowSystemOverCellular` and the one-time
- * override meaningful at once, rather than one making the other redundant.
+ * A cheap OS check and a large bundle stage have different billing consequences;
+ * staging requires candidate-specific approval on a metered-only path.
  */
 export function decideCellularGate(input: {
 	readonly onlyMeteredCandidateExists: boolean;

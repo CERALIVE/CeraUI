@@ -185,12 +185,8 @@ export function typedStartFailure(
 }
 
 /**
- * Build the `update_in_progress` `StartFailure` (Todo 37) from the update
- * orchestrator's D8 refusal (cached phase, fresh wire or probe-only).
- * Always at the `params` phase — like `modem_transition_active`,
- * `recovery_pending` and `mutation_blocked`, this is refused before the engine
- * is ever touched — and never retriable: the caller must wait for the refusing
- * condition to clear, not retry automatically; `settled` is not required.
+ * D8 refusal payload; condition and probe-only semantics are in
+ * docs/DEVICE-UPDATES.md's D8 section.
  */
 export function typedUpdateInProgressFailure(
 	attemptId: string,

@@ -2905,140 +2905,40 @@ retention, and IPv6 URL handling at all three consumers).
 ## THE UPDATE ORCHESTRATOR AND D8 ADMISSION [EXISTS]
 
 `modules/system/update-orchestrator/` tracks the new update path, alongside
-the still-running legacy update RPCs and periodic loop. It owns discovery,
-download, commit, OS staging, activation, verification and the lagged slot
-mirror for its own path. The full reference (every phase, every transition, every
-gate, and the explicit list of what is and is not proven) is
-[`docs/DEVICE-UPDATES.md`](../../docs/DEVICE-UPDATES.md). This section keeps
-only the rules a change to this module must not break.
+the still-running legacy update RPCs and periodic loop. Reference:
+[`docs/DEVICE-UPDATES.md`](../../docs/DEVICE-UPDATES.md).
 
-**Status split, stated exactly.** The orchestrator, its D8 admission, the package
-pipeline and the Updates dialog run on every device. The APT all-package scope,
-the OS agent, the slot mirror and the UID-pinned transport are implemented and
-fixture-tested but each is gated on an image capability no released image
-declares (`features: []` in the released fleet), so they remain [PARTIAL].
-Bench-enabled capable images exercised the APT identity and commit paths on
-both boards, but did not complete the orchestrator lifecycle; OS staging and
-UID-pinned transport have not been qualified by those installs.
+Capable-image qualification limits are recorded in `docs/DEVICE-UPDATES.md`.
 
-- **Pure core.** `types.ts`, `reducer.ts` (`reduceOrchestrator`),
-  `admission.ts` and `schedule.ts` contain no I/O, no `Date.now()` and no
-  `Math.random()`. `runtime.ts` performs its effects mostly through injected
-  dependencies; effectful helpers such as `os-agent.ts` also perform I/O. The reducer is total: an
-  unlisted (phase, event) pair returns the SAME object, which `dispatch()` uses
-  to skip persisting and pushing an unchanged state.
-- **18 phases, one field.** `ORCHESTRATOR_PHASES` tracks the orchestrator's
-  workflow, not a legacy RPC's independent launch. Packages and OS are never
-  both tracked as "available" at once (packages win). The transition table
-  lives in `docs/DEVICE-UPDATES.md`; legacy overlap is in the root D8 Known gaps.
+- Keep decision inputs injectable so reducer/admission tests do not need OS mocks.
+- The transition table lives in `docs/DEVICE-UPDATES.md`; legacy overlap is in
+  the root D8 Known gaps.
 - **`quarantined` ≠ `failed`, and both are sticky by default.** `COMMIT_FAILED`
   quarantines (dpkg ran and failed, so there is an exact candidate to pin; the
   `committing` race under Known gaps in the root [`AGENTS.md`](../../AGENTS.md)
-  can book a legacy unit's failure here instead);
-  `COMMIT_RESUME_UNRESOLVED`, `DOWNLOAD_FAILED`, `OS_STAGING_FAILED` and
-  `SYNC_FAILED` go to `failed` (nothing proven bad). **No production code
-  dispatches `RESET`**. The reducer accepts it and nothing sends it, so either
-  phase persists across restarts in `agent.json`, `system.checkUpdatesNow`
-  answers `busy` and `system.installUpdatesNow` answers `not_available`. The
-  single exception is `failed` with exact `commit_unit_absent_on_resume`:
+  can book a legacy unit's failure here instead).
+  Unresolved outcomes are not evidence of a bad version to quarantine. Recovery
+  for `failed` with exact `commit_unit_absent_on_resume` is documented at
+  `docs/UPDATE-RECOVERY.md`:
   `/usr/sbin/ceralive-update-recover` is a separately packaged root-only local
   executable, with no RPC/remote/sudoers entry. It requires the backend inactive
-  and effectively masked, then holds the shared lock, verifies exact byte hashes,
-  current boot/slot/compatible/OS version, detached-unit absence, no concurrent
-  apt/dpkg/RAUC operation and a clean dpkg database. It durably records the old
-  plan in a unique receipt before archiving it, then reduces the narrow
-  `HISTORICAL_COMMIT_ADJUDICATED` event; fresh discovery is required. Tests inject
-  probes and fault each crash boundary. The physical RAUC compatible and boot-id
-  readers were extracted to the dependency-light `os-identity.ts` so the standalone compiled
-  tool does not import `os-agent.ts`'s backend boot graph or demand `setup.json`;
-  `os-agent.ts` re-exports both readers and `OsAgentError` unchanged for existing
-  callers. Actual root/systemd/APT board proof is
-  still owed; see `docs/UPDATE-RECOVERY.md`. All other sticky states have no
-  product clearance path.
-- **Persistence and resume.** Every real transition is written atomically to
-  `/data/ceralive/update-state/agent.json` and pushed as the additive
-  `status.update_orchestrator` (`getOrchestratorWireState()`), a SIBLING of the
-  unchanged `update_state` union. `resumeOrchestratorState()` never starts
-  another apt install or upgrade: for `committing` it calls the existing
-  detached-unit reattachment `recoverSoftwareUpdateIfRunning()` plus
-  `getUpdateState()`; settling a recovered transaction may run `apt-get clean`.
-  An absent or inconclusive unit becomes `COMMIT_RESUME_UNRESOLVED`, never
-  `COMMIT_FAILED` (quarantine implies a confirmed-bad version). Every other phase resumes as a
-  pass-through and the next tick re-observes it.
-- **The package step reuses the existing launcher.** `startPackageInstall` wraps
-  `startSoftwareUpdate()` (below), so its synchronous refusals, detached
-  PID-1-owned unit, space admission and reattach rules still hold; the
-  post-acceptance silent early return is in root D8 Known gaps (c). On a legacy image
-  that launch is the 15-name roster; on an `apt-all-packages` image it is the
-  origin-filtered, exact `name=version` path in `apt-all-packages.ts`, whose ONE
-  transient unit runs `flock -x /run/lock/ceralive-update.lock` around download
-  AND commit. Scheduled installs wait in `awaiting-idle`, but a manual install
-  bypasses the idle check; an accepted launch need not have created the unit
-  yet. `downloading` vs `committing` follows observed progress (root D8 Known
-  gaps (b), (g)).
-  A discovery with only informational or kept-back packages is a successful
-  check with nothing installable: the orchestrator reads the legacy wire's
-  `actionable_count`, not its inclusive `package_count`, and returns to `idle`
-  without calling `startSoftwareUpdate()` or emitting a failed install. The
-  legacy launch still refuses a direct stale install with no actionable names.
-  This does not clear an already persisted `failed` phase: those still need an
-  independently authorized recovery decision; the narrow
-  `ceralive-update-recover` tool admits only `commit_unit_absent_on_resume`.
-  **Do NOT split that unit into two to get a pause between download and commit**
-  The single flock is what stops an `apt-get update` racing the transaction.
+  and effectively masked. Actual root/systemd/APT board proof is still owed.
+- **Persistence and resume.** Reattach rather than replay an uncertain transaction;
+  a replay could run dpkg twice. Settlement may run `apt-get clean`.
+- **The package step reuses `startSoftwareUpdate()`.** Post-acceptance limits:
+  root D8 Known gaps (b), (c), (g). Classify availability by `actionable_count`,
+  not the inclusive `package_count`, to avoid launching an empty install.
+  **Do NOT split that unit into two to get a pause between download and commit.**
+  Keep download and commit under the same unit-held flock, without a lock handoff.
 
-  **APT candidate origin is a two-command join.** `apt-cache policy <name>` gives
-  the candidate version's package-file line but NO Release annotations on the
-  bench APT version. Unscoped `apt-cache policy` gives the `release`/`origin`
-  annotations for that same complete line. Read the inventory once per discovery,
-  join on the full URL/distribution/component line (not the hostname alone), and
-  fail closed on a missing or conflicting join. The first-party branch requires
-  HTTPS `apt.ceralive.tv` plus CeraLive Origin/Label and stable/beta; the Debian
-  branch requires a Debian host plus Debian Origin/Label and one of the three
-  Trixie suites. The regression fixture transcribes both Rock 5B+ command shapes.
-  The 2026-09-27 bench-only capability drill confirmed an actionable
-  `ceralive-apt-credentials` 1.0.1 row and its real installation. A later
-  completed unit initially latched progress because the identity validator
-  rejected systemd's flock-wrapped `ExecStart`. That validator was repaired and
-  exercised on both benches, exposing a distinct completion-order bug: after a
-  proven zero exit, `software-updates.ts` deliberately exited before the next
-  orchestrator tick could persist `COMMIT_SUCCEEDED`. Both boards resumed from
-  `committing` with the unit absent to sticky `failed /
-  commit_unit_absent_on_resume`. This branch now persists `restarting-services`
-  before the deliberate exit for orchestrator-owned capable installs; the fixed
-  build has NOT been re-proven on a board. Installed packages do not qualify
-  the lifecycle as settled.
-- **Successful commit ordering is a safety boundary.** `finish()` gets the
-  detached unit's zero exit only after final output drain and unit cleanup;
-  its completion callback moves `downloading` through `committing` if needed,
-  dispatches `COMMIT_SUCCEEDED` and persists `restarting-services` before the
-  legacy crash-to-restart. `pending-packages.json` stays until the resumed
-  `restarting-services` tick confirms idle-gated stale-unit reconciliation.
-  A stale `ceralive.service` is restarted there only when no transaction is
-  running; no reboot is forced. Legacy-image launches still use the unchanged
-  restart/reboot branch. An absent unit with no observed exit is still UNKNOWN:
-  `resumeCommitting()` keeps `failed / commit_unit_absent_on_resume`, never
-  guesses from dpkg or the pending plan. The alternatives and ordering proof
-  are in `docs/DEVICE-UPDATES.md`.
-- **Idle drives the schedule.** Scheduled checks (6 h ± 30 min packages, 12 h ±
-  60 min OS; 60 s doubling backoff, 5 min for an apt 429/5xx, 24 h ceiling) start
-  only from `idle` with the D7 toggle on. A scheduled install launch waits for
-  no live stream and `getIdleStatus()` idle: 30 minutes since the latest stream end,
-  preview end, start-lease end, routed remote command or UI heartbeat, inside the
-  configured window. `hasActiveRemoteSession()` is a five-minute command-recency
-  heuristic, NOT hub presence; a quiet connected operator can be missed.
-- **Operator RPCs bypass idle and D7.** `system.checkUpdatesNow`,
-  `system.installUpdatesNow` (requests packages from `available` or the scheduled
-  `awaiting-idle` intent without another idle wait; refuses `stream_active`
-  before requesting the launch and refuses an already-starting/running transaction;
-  it checks for a LIVE stream, not an admitted start),
-  `system.allowCellularOnce`, and the read-only
-  `system.getUpdateDetails` (`readUpdateDetails()`, every block independently
-  nullable; it never touches the S1-locked `device-stats.raucSlot`).
-- **The legacy periodic loop still runs.** `main.ts` starts
-  `startUpdateOrchestrator()` first, then standalone
-  `recoverSoftwareUpdateIfRunning()`, then `periodicCheckForSoftwareUpdates()`;
-  both discovery loops land through `runUpdateDiscoveryAndReport()`.
+  **APT candidate origin is a two-command join.** Join the full
+  URL/distribution/component line, not the hostname alone, and fail closed on
+  missing or conflicting metadata. Command shapes and bench limits:
+  `docs/DEVICE-UPDATES.md`.
+- **Successful commit ordering is a safety boundary.** Persist the observed
+  successful commit before the deliberate backend exit, or resume can lose its
+  evidence. Ordering proof: `docs/DEVICE-UPDATES.md`.
+- Schedule, idle inputs and operator RPC behavior: `docs/DEVICE-UPDATES.md`.
 - **So do the legacy RPCs, and they bypass the orchestrator.** The Updates
   dialog's Packages section still calls `system.checkForUpdates` /
   `system.startUpdate`, which run `triggerManualUpdateCheck()` /
@@ -3046,109 +2946,21 @@ UID-pinned transport have not been qualified by those installs.
   For launch and admission gaps see "D8 stream/update admission: what it does NOT
   cover" under Known gaps in the root [`AGENTS.md`](../../AGENTS.md).
 
-### D8: THE STREAM/UPDATE ADMISSION TABLE [EXISTS]
+### D8: STREAM/UPDATE ADMISSION [EXISTS]
 
-`admission.ts` is the one table; `assertExhaustivePhaseClassification()` runs at
-module load.
-
-| Phase | Stream start | Update action |
-|---|---|---|
-| `committing`, `restarting-services` | REFUSED, `update_in_progress` | none |
-| `downloading` | REFUSED on a fresh wire reading of `installing` or `success`, or a positive/fail-closed commit-stage probe (see below); otherwise allowed once the stop call returns | best-effort `stopPackageInstallUnitForStream()`, never issued on a refusal; a nonzero exit is logged, not proof of cancellation |
-| `os-staging` | allowed once the kill/restart calls return | `killAndRestartRaucForStream()`, no fresh read or probe; a nonzero exit is logged, not proof of cancellation |
-| `syncing` | allowed | continues (local rsync) |
-| all other phases | allowed | none |
-
-`modules/streaming/stream-session-orchestrator.ts`'s `start()`, the single
-choke point every launch origin (UI, remote-control, autostart, set-profile,
-restoration) funnels through, calls `admitAndPrepareStreamStart()` as its last
-gate in THIS orchestrator, after duplicate-start, the modem-transition lease,
-the recovery barrier and blocking-mutation, so an update-unit stop or RAUC
-kill is not issued for an attempt those gates already refused. A
-refusal is the typed, non-retriable `update_in_progress` class at phase `params`
-(`typedUpdateInProgressFailure()`), carrying `updatePhase` / `updatePercent` /
-`updateEtaSeconds`; `updateEtaSeconds` is always `0` today because no progress
-path computes an ETA. See [`docs/START-LIFECYCLE.md`](../../docs/START-LIFECYCLE.md).
-An admitted attempt then sets `/run/ceralive/streaming`; the later
-`streamloop/session.ts` `isUpdating()` guard can still refuse its launch while
-the stopped unit's monitor settles (root AGENTS.md D8 Known gaps (h)).
-That marker (`streaming/ota-streaming-marker.ts`) is the SAME sentinel the image's
-`ceralive-rauc-activate.sh` checks before arming an OS slot, and every
-stream-end path clears it (a launch that never went live, every `stop()`, and a
-config-change transaction that ends the stream without one).
+The detailed table and probe semantics are in
+[`docs/DEVICE-UPDATES.md`](../../docs/DEVICE-UPDATES.md#d8-stream-admission).
+Keep D8 after earlier session gates so an update stop is not issued for an
+attempt they already refused. Later launch limits: root AGENTS.md D8 Known gaps (h).
 
 **THE STOP MUST NOT REACH DPKG: read before touching the abort-network path.**
-The cached phase can stay `downloading` while dpkg runs, so the cached phase
-alone cannot tell a download from a running dpkg. Two things produce that. The
-tick re-reads the wire only on its own cadence: after an operator-RPC install
-(`system.installUpdatesNow`, which does not reschedule the tick) the next tick
-can be up to `IDLE_TICK_MS` (60 s) away, while a scheduled install then ticks
-every `ACTIVE_TICK_MS` (3 s) and `pollPackageInstallProgress()` dispatches
-`COMMIT_PHASE_ENTERED` when it sees wire `installing`. And the wire reports
-`installing` only once the first `Unpacking` or `Setting up` line is ingested
-(`deriveInstallState` in `update-state.ts`), counted up to the `total` parsed
-from apt's summary; while no summary total has been parsed that total is `0`
-and the wire cannot report `installing` at all. On a successful capable-image
-install whose ticks never saw `installing`, `notePackageCommitSucceeded` moves the phase
-through `committing` to `restarting-services` in one call. Measured on a Rock
-5B+ (2026-09-29, operator-RPC install): a stream start sent 1 ms after dpkg
-appeared still read `downloading`, was admitted, and dpkg was gone 84 ms after
-it appeared. So immediately before the package-unit stop, `admitAndPrepareStreamStart()`
-asks two questions and, if either says yes, refuses with `update_in_progress`
-and ZERO stop/kill calls:
+Cached download progress can lag dpkg. Keep the fresh read and probe ahead of
+the stop to reduce the risk of a half-installed package. A probe-only refusal
+is not proof dpkg ran: latching `committing` would misclassify a pre-dpkg failure
+as a bad candidate to quarantine. Preserve the single-unit/flock design and
+exact ExecStart identity.
 
-1. a forced-fresh `deps.getPackageInstallWireState()` read showing `installing`
-   or `success`. That is evidence dpkg ran, so this arm also dispatches
-   `COMMIT_PHASE_ENTERED`.
-2. `deps.isCommitStageRunning()` (`update-orchestrator/commit-stage-probe.ts`):
-   a bounded `systemctl show` for the unit's `ControlGroup`, then its
-   `cgroup.procs` (child cgroups included) and each pid's `/proc/<pid>/comm` and
-   `cmdline`. The commit stage is running when any process is `dpkg`/`dpkg-*`, or
-   an `apt-get` whose argv contains the exact element `--no-download` (the second
-   stage, which starts before dpkg does). The first stage (`apt-get -d … upgrade`)
-   and the `flock`/`sh` wrappers (whose argv only CONTAINS the script text) do
-   not count, so a genuine download stays abortable. It FAILS CLOSED: a running
-   unit whose process list cannot be read, a non-zero `systemctl show` that does not
-   say `not-found`, output with no readable `LoadState=loaded`, or a throw from
-   the dep all answer "running". In the unit-state check, only
-   `LoadState=not-found`, `ActiveState=inactive`/`failed`, or `SubState=exited`
-   answer "not running" without reading the process list. A running unit
-   (`active`, `activating`, `deactivating` or `reloading`) is answered from its
-   process list, so one whose readable list holds no matching process also
-   answers "not running" (the normal download case). A mocked install creates no unit, so the default
-   dep answers `false` under `shouldUseMocks()`.
-
-A refusal from the probe ALONE dispatches NOTHING: it returns the fixed shape
-`{phase: "committing", percent: 0, etaSeconds: 0}` (the phase that renders as
-"an update commit is in progress"; the cached percent is download progress and
-says nothing about a commit) and leaves the orchestrator phase at `downloading`.
-A running second stage or a thrown probe is not proof that dpkg ran: the second
-stage can fail before dpkg (a missing archive under `--no-download`, a resolver
-error), and latching `committing` would turn that later wire `failed` into a
-`COMMIT_FAILED` that quarantines the candidates, where the download semantics
-give `DOWNLOAD_FAILED` (`failed`, nothing quarantined). The next start probes
-again. Because the pushed `status.update_orchestrator` still reads
-`downloading`, the Go-Live band (which prefers the pushed phase) stays hidden in
-that window; the typed refusal itself is what the operator sees.
-
-What the stop can still reach depends on which unit the orchestrator launched.
-On a capable (`apt-all-packages`) image it is the two-stage unit, and the
-remaining exposure is the check-then-stop gap: a second-stage `apt-get` that
-starts inside it is stopped, normally before it spawns the unpacking dpkg (not
-measured). On a non-capable image `startSoftwareUpdate()` launches the
-single-stage `runDetachedAptUpgrade` unit, which has no `--no-download` stage,
-so the probe detects only a running `dpkg` and the gap sits right before the
-dpkg spawn. `image-building-pipeline`'s `ceralive-dpkg-recover.service` still
-runs on every boot and runs `dpkg --configure -a` when it finds dpkg
-interrupted (power loss, crash), but it repairs an interrupted configure, not a package left
-half-installed — which is why the stop must not reach dpkg. **Do NOT "fix"
-anything here by re-architecting the single-unit/single-flock apt design into
-two units, and do NOT change the unit's ExecStart (its identity is validated
-exactly).** The probe is deliberately NOT consulted by the progress tick, for
-the same quarantine reason.
-
-The stop guarantee above is for an existing orchestrator-launched unit tracked
-in `downloading`. For other windows see "D8 stream/update
+For launch windows see "D8 stream/update
 admission: what it does NOT cover" under Known gaps in the root
 [`AGENTS.md`](../../AGENTS.md). Coverage:
 `update-orchestrator-runtime.test.ts` (the measured refusal and its no-latch
@@ -3156,8 +2968,7 @@ repeat, the probe-false abort, the fail-closed throw followed by a
 probe-false admit, and a probe-only refusal whose later wire `failed` stays
 `DOWNLOAD_FAILED`) and `update-orchestrator-commit-stage-probe.test.ts` (a real
 fake cgroup/proc tree, incl. not-found, inactive, failed, exited, activating
-and deactivating units, and empty `systemctl show` output). `os-staging` needs no fresh read: RAUC
-only ever writes the INACTIVE slot.
+and deactivating units, and empty `systemctl show` output).
 
 ### THE OS AGENT, THE SLOT MIRROR AND THE TRANSPORT PIN [PARTIAL]
 
@@ -3171,12 +2982,7 @@ only ever writes the INACTIVE slot.
   or `CN=CeraLive RAUC Bench Intermediate CA,O=CeraLive` (persistent bench).
   A root-direct or other intermediate is refused as `signer_issuer_invalid`,
   before the strict v1 fields.
-  `stageOsBundle()` runs `rauc install` under the same pin to completion, writes
-  `os-staged.json` BEFORE `manifest-serial.<channel>`, then
-  `ceralive-rauc-arm@arm.service` arms next-idle activation (`@now` after seven
-  days pending, only without a stream). A new boot compares the booted CalVer to
-  the staged version and quarantines a mismatch. An idle RAUC with no receipt
-  after a restart fails closed (`os_stage_outcome_unknown_after_restart`).
+  Receipt and activation ordering: `docs/DEVICE-UPDATES.md`.
 - **Channel identity is not bundle identity.** `readBoardIdentity()` admits exactly
   `ceralive-rock-5b-plus` → `rock-5b-plus` and
   `ceralive-orangepi5-plus` → `orange-pi-5-plus` for channel URL selection.
@@ -3188,65 +2994,28 @@ only ever writes the INACTIVE slot.
   authorize that pointer or a bundle with an aliased compatible. Regression:
   `tests/os-board-identity.test.ts` (both boards, near matches, cross-board
   signed pointers) plus `tests/os-manifest.test.ts` (signer, serial, version).
-- **The only anti-downgrade source is `/etc/ceralive/os-release-version`**
-  (`readBootedOsReleaseVersion()`); absent or malformed is
-  `booted_version_unknown`, never a timestamp/commit fallback. The stamp exists
-  only on a release-cut image, so **every currently booted board refuses OS
-  staging**.
-- **Slot mirror** (needs `slot-sync`). `slotSyncGate()` is the pure pre-check with
-  eight typed refusals (`capability-absent`, `not-yet-booted`, `packages-changed`,
-  `build-changed`, `already-synced`, `os-install-pending`, `already-syncing`,
-  `update-busy`); `readSlotSyncEvidence()` reads the image-owned
-  `healthy-state.json` / `sync-receipt.json` and hashes dpkg status with
-  `node:crypto`. Boot and every idle tick dispatch `SYNC_ELIGIBILITY_CONFIRMED`;
-  `OS_VERIFIED` reaches `sync-eligible` directly. The gate is rechecked before
-  `startSlotSync()`. Integrity and external-lock checks stay atomic in the unit
-  (exit 75); do not duplicate them in TypeScript. `lock.ts` re-exports the SAME
-  `SOFTWARE_UPDATE_LOCK` constant rather than a second literal (the unit takes it
-  with `flock -n`), and `inspectSlotSync()` tells exit 75 (`refused`) from an
-  operational failure through the shared `processExitCode` conversion, so the
-  two probes cannot disagree about a (code, status) pair. Success is settled only once
-  the receipt carries the CURRENT dpkg SHA, then four independent best-effort
-  cleanups and the `slots-current` notice. Contract:
+- **Booted-version identity:** `/etc/ceralive/os-release-version`
+  (`readBootedOsReleaseVersion()`). Do not infer a version from a build timestamp
+  or commit; that would weaken anti-downgrade admission.
+- **Slot mirror** (needs `slot-sync`). Integrity and external-lock checks stay
+  atomic in the unit; a TypeScript pre-check cannot close that race. Contract:
   [`docs/UPDATE-RECOVERY.md`](../../docs/UPDATE-RECOVERY.md).
-- **Transport** (`update-transport/`). `selectUpdateTransport()` ranks every
-  uplink × family and records the result for the dialog
-  (`recordTransportSelection()`, never a routing input).
-  `updatePinController.run()` installs a UID-scoped priority-120 lookup into
-  table 100000 (`apt`) / 100001 (`os`), an other-family `prohibit` and an
-  `unreachable` floor, removes them in `finally`, holds a failed exact pair for
-  15 minutes and tries at most three. The boot sweep (`updatePinController.sweep()`
-  in `main.ts`) must succeed before any pinned step is admitted. **Only the OS
-  agent calls it.** The package path (legacy AND `apt-all-packages`) still uses
-  the `apt-reachability.ts` preflight below; the `apt` job has no production
-  caller. **DNS is not UID-pinned**: a direct resolver reachable only over the
-  prohibited family makes the job's own lookups fail as `dns-failed` and fail
-  over. Details: [`docs/HOST-UPLINK-ELECTION.md`](../../docs/HOST-UPLINK-ELECTION.md).
+- **Transport** (`update-transport/`). Routing scope and DNS limits:
+  [`docs/HOST-UPLINK-ELECTION.md`](../../docs/HOST-UPLINK-ELECTION.md).
 
 ### CELLULAR, QUARANTINE, STALE SERVICES, NOTIFICATIONS [EXISTS]
 
-- **D12** (`decideCellularGate()`): only when EVERY reachable uplink is metered.
-  Packages follow `allowPackagesOverCellular` for check and install; the OS
-  CHECK follows `allowSystemOverCellular`; the OS INSTALL is ALWAYS held and is
-  released only by `system.allowCellularOnce(id)` naming that exact candidate,
-  consumed by `OS_STAGING_STARTED`. The grant is reduced in BOTH `idle` and
-  `os-available`: `os-available` is where the gate actually holds a candidate,
-  and reducing it from `idle` alone made the approval a silent no-op.
+- **D12** (`decideCellularGate()`): keep cheap checks and large bundle stages
+  distinct so a check toggle does not imply approval of cellular download costs.
 - **Quarantine** (`UpdateQuarantine`, `quarantine.json` schema 1): exact failed
   candidates pinned at -1 through `systemd-run`, lifted by a newer candidate;
   `isOsVersionQuarantined()` feeds the OS agent. Schema:
   [`docs/UPDATE-RECOVERY.md`](../../docs/UPDATE-RECOVERY.md).
-- **Stale services** (`reconcileStaleUnits()`, `mayRestartUnit()`): restart only
-  at idle; `systemd*`, `dbus`, `NetworkManager*`, `ModemManager*`,
-  `wpa_supplicant*`, `rauc*`, `pipewire*`, `wireplumber*` NEVER restart and get a
-  `restart-recommended` notice; `ceralive.service` waits only while the unit is
-  still downloading or installing. No PID is ever killed.
+- **Stale services** (`reconcileStaleUnits()`, `mayRestartUnit()`): preserve the
+  protected-unit policy to avoid disrupting connectivity and media services;
+  see `docs/UPDATE-RECOVERY.md`.
 - **Notifications** (`notifyUpdate()`, `update:<kind>:<id>`, re-send suppressed).
-  `download-paused`, `credentials-expiring` and `transport-unhealthy` are in the
-  vocabulary and translated but have **no producer**. There is no certificate
-  expiry on the wire and therefore no countdown; the dialog's credentials band
-  keys only on a transport finding of `credentials-invalid`, which only an `apt`
-  profile selection can produce, and nothing runs one yet.
+  Producer and credential-band limits: `docs/DEVICE-UPDATES.md`.
 
 ### SETTINGS AND IMAGE CAPABILITIES [EXISTS]
 
@@ -3254,12 +3023,7 @@ only ever writes the INACTIVE slot.
 `config.json`) through `loadJsonConfig` / `writeFileAtomicSync`; absent gets the
 `@ceraui/rpc` defaults, malformed PRESENT content throws
 `UpdateSettingsValidationError` instead of partial salvage. `channel` is
-stable/beta only, never `drill`. `readUpdateCapabilities()` reads
-`/usr/lib/ceralive/update-capabilities.json`; absent, invalid, or no
-`apt-all-packages` token is `{mode:"legacy",features:[]}`, and every capable path
-checks its own feature token rather than the mode. `aptUpdatesEnabled()` remains
-the hard switch: an explicit `setup.apt_update_enabled === false` refuses the
-launch, and the orchestrator simply stays in `awaiting-idle`.
+stable/beta. Capability and launcher gates: `docs/DEVICE-UPDATES.md`.
 
 Coverage: `tests/update-orchestrator-{reducer,admission,schedule,persistence,resume,runtime,lock}.test.ts`,
 `update-recovery`, `update-details`, `slot-sync-{gate,state,runtime}`,
@@ -3272,38 +3036,19 @@ All fixture, netns or Playwright proof; no board receipt.
 
 This is the launcher the orchestrator's package step calls
 (`startSoftwareUpdate()`), on legacy and `apt-all-packages` images alike.
-Every rule below still governs that launch.
 
-`modules/system/software-updates.ts` owns synchronous dispatch refusals; its
-post-acceptance streaming/disabled early return is silent and leaves the latch
-set (root AGENTS.md D8 Known gaps (c)).
+Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
 
-- **`aptUpdatesEnabled()` is the ONE predicate.** Discovery
-  (`getSoftwareUpdateSize`), the apt package-list refresh
-  (`checkForSoftwareUpdates`), the periodic loop, and the install path all read
-  it, so the UI can never advertise an update the install path would refuse.
 - **`apt_update_enabled` defaults to TRUE** (`SETUP_CONFIG_DEFAULTS`,
-  `helpers/config-schemas.ts`). The shipped `setup.json` carries no such key and
-  the field is `z.boolean().optional()`, so "absent ⇒ falsy" left the install
-  path dead on 100% of field hardware while discovery — which was never gated —
-  kept offering an Update button. Confirmed live on a Rock 5B+: `debug.log`
-  recorded `System: software update started` and then nothing at all. Only an
-  explicit `"apt_update_enabled": false` opts a device out.
+  `helpers/config-schemas.ts`). Do not treat an absent optional key as disabled.
 - **`startSoftwareUpdate(): UpdateStartOutcome`.** Every synchronous refusal is a typed
   `UpdateStartRefusal` — `updates_disabled` / `streaming` / `already_updating` /
   `check_unavailable` — logged at `warn` and returned to the caller.
   `rpc/procedures/system.procedure.ts` `startUpdateProcedure` forwards it as
   `{success:false, error:<reason>}` and does NOT re-check the guards itself;
   duplicating them is what let a refusal answer `{success:true}`.
-- **A skipped pre-check no longer wedges the latch.** `defaultSoftwareUpdateRunner`
-  routes through the `softwareUpdateCheckRunner` seam and latches `softUpdateStatus`
-  only once the check has actually started. On this launch path the latch is
-  cleared by the check's callback (for example its error branch, or
-  `doSoftwareUpdate()` and the process monitor it starts), so latching it after a
-  declined check left `isUpdating()` true for the lifetime of the process —
-  refusing every later update and silently killing the periodic loop with it.
-  Some callback paths also leave the latch set, for example
-  `doSoftwareUpdate()`'s streaming early return; see "D8 stream/update admission: what it does NOT cover" under Known gaps in
+- Latching a declined pre-check would wedge `isUpdating()`. For later latch gaps,
+  see "D8 stream/update admission: what it does NOT cover" under Known gaps in
   the root [`AGENTS.md`](../../AGENTS.md).
 - **`resetSoftwareUpdateState()`** is a test seam (mirrors the `reset*Runner`
   seams): it drops the in-flight latch and the last terminal outcome. Never call
@@ -3326,89 +3071,41 @@ set (root AGENTS.md D8 Known gaps (c)).
   Progress is derived from the cumulative log, so tokens split across arbitrary
   file reads are still counted exactly once. No wall-clock deadline is added: a
   valid package transaction may run for minutes.
-- **A restarted backend reattaches; it never starts a second apt.** The transient
-  service uses `RemainAfterExit` so PID 1 retains both a running transaction and
-  its terminal `ExecMainStatus`. During boot, `main.ts` awaits the bounded
-  recovery probe BEFORE starting the periodic apt refresh. Adoption requires the
+- **Reattachment identity is a safety boundary.** Adoption requires the
   exact unit id and transient fragment path, transient-service description/type,
   exact non-duplicated `[Service]` stdout/stderr append destinations, no pre/post
   hooks, and the canonical
-  `/usr/bin/apt-get` upgrade argv; a foreign same-named unit is never trusted.
-  Rock 5B+ systemd omits unset `ExecStartPre`/`ExecStartPost` even when explicitly
-  requested by `systemctl show`. The checker accepts omitted or empty hooks only;
-  a populated hook still fails identity. The old empty-only check retried forever
-  over the finished `active/exited` unit, leaving the orchestrator `committing`.
-  `tests/software-update-service-hooks.test.ts` pins the measured show shape and
-  both foreign-hook refusals. Flock identity is parsed against real systemd
-  rendering, with a finished fixture captured from the Rock 5B+ on 2026-09-28
-  and its reported running-form variant; wrapper, lock and script remain exact.
-  An unreadable probe keeps discovery and starts gated
-  instead of treating uncertainty as absence, and schedules a coalesced retry that
-  resumes the periodic loop after a conclusive answer. Concurrent recovery callers
-  join one probe/observer, so only one consumer can replay and settle the retained
-  unit. Before a fresh launch, a
-  second probe rejects any existing unit before output is reset; the command builder
-  also refuses any apt operation outside the upgrade/install-held-packages contract.
-  Once attached, transient read/probe failures are retried without clearing
-  `softUpdateStatus`; stdout and stderr advance independently, so one failed read
-  cannot replay the other. Repeated inspection failures back off from 1 s to 30 s
-  and report on the first failure, then at most once per 30 s with a suppressed
-  retry count. The terminal unit is retained until BOTH final drains
-  succeed. A permanently unreadable final output is bounded to 20 local attempts,
-  reports failure, and deliberately leaves the terminal unit intact for the next
-  recovery instead of deleting evidence. Only a complete drain permits stop/reset.
-  Cleanup failure is an explicit failed outcome. Package discovery is single-flight;
-  delayed starts while a refresh/discovery is active are coalesced to one timer, and
-  a later refusal is published as a terminal failure rather than disappearing.
-  The package-list refresh and read-only `dist-upgrade --assume-no` discovery are
-  argv-only `/usr/bin/apt-get` `spawnWithTimeout` calls too (5-minute and 2-minute
-  local bounds respectively); no privileged apt call resolves through `PATH`. Those
-  bounds cover checks only and never cap the detached package transaction. A non-zero
-  `systemctl show` is unknowable and retries fail-closed even if it emitted
-  valid-looking properties; only an explicit `LoadState=not-found` is absence.
+  `/usr/bin/apt-get` upgrade argv. Do not loosen these checks to adopt a foreign
+  same-named unit. Keep final output drain ahead of unit cleanup so recovery
+  does not discard an unobserved outcome. Probe and drain contracts:
+  `software-update-service-contract.ts`, `software-update-process.ts`,
+  `tests/software-update-service-hooks.test.ts` and `docs/DEVICE-UPDATES.md`.
 
 Coverage: `tests/software-updates-start-refusal.test.ts`,
 `tests/software-updates-apt.test.ts`.
 
 ## SOFTWARE-UPDATE CHECK CONTRACT [EXISTS]
 
-The install path reports synchronous refusals (but not every later early
-return; see D8 Known gaps (c)). The CHECK path reports its result. A manual "Check for updates" used to change nothing
-observable at all — confirmed live on a Rock 5B+, where the button produced no
-spinner, no result and no error for 11 s while `debug.log` recorded
-`System: manual software update check started` and `apt-get update: success`
-1.8 s later. The check ran; only its result was unpublished.
+Install post-acceptance limits: D8 Known gaps (c). Check wire reference:
+`docs/DEVICE-UPDATES.md`.
 
-- **A check has THREE outcomes, never zero.** `update_state` gains
-  `check_failed` (typed `UpdateCheckFailureReason`: `refresh_failed` /
-  `discovery_failed`) and a `checked_at` epoch-ms stamp on
-  `idle`/`checking`/`available`/`check_failed`. `check_failed` is DISTINCT from
-  `failed` — the latter is an install that ran and failed; the former means the
-  device could not establish whether an update exists at all.
+- Keep `check_failed` distinct from an install failure: it says the device
+  could not establish whether an update exists.
 - **`checked_at` is load-bearing, not decoration.** Without it a successful check
   that finds nothing rebroadcasts a byte-identical state, so a working check and a
-  dead button are indistinguishable. It is also the ONLY completion signal the
-  frontend can latch on: `checking` sits below `available` in precedence, so a
-  device that already knows about an update never publishes a `checking` frame.
+  dead button are indistinguishable.
 - **Precedence** (`deriveUpdateState`): `check_failed` sits BELOW `available` — a
   proven-available update stays installable even when a later refresh could not
   confirm it — and ABOVE `idle`, because "we could not check" must never render as
   "up to date".
-- **The operator-visible verdict keys on the apt EXIT CODE, never stderr.**
-  `classifyAptUpdateResult`'s stderr rule is retained for the RETRY CADENCE only.
-  apt writes benign warnings on a healthy refresh, and one unreachable repo among
-  several still exits 0 (verified on the board) — escalating either would
-  false-alarm and would break the documented "a noisy-but-nonfatal `apt-get
-  update` must not suppress the broadcast" invariant.
+- Apt writes benign warnings on a healthy refresh; do not use those warnings
+  as proof of a failed check.
 - **A failed refresh is NOT cleared by a later successful discovery.** Only the
   START of a new cycle clears it. Otherwise `dist-upgrade --assume-no` parsing the
   STALE package lists reports "0 upgraded" and erases the very failure that made
   the answer untrustworthy — that is exactly how the device came to answer
   "System is up to date" when it had reached no repository at all.
-- **`runUpdateDiscoveryAndReport()` is the ONE landing seam** for both the
-  periodic loop and the manual re-check: it stamps `checked_at` BEFORE discovery
-  (so discovery's own broadcast already carries it) and ALWAYS emits a terminal
-  frame, because discovery has several early returns that broadcast nothing.
+- Publish the discovery outcome so its early returns do not leave a dead button.
 - **A refused check restores what it did not replace.** `triggerManualUpdateCheck`
   save/restores `lastUpdateFailure`/`lastUpdateSucceeded` around dispatch, so a
   skipped check no longer wipes the failed-install state the operator was reading
@@ -3417,44 +3114,14 @@ spinner, no result and no error for 11 s while `debug.log` recorded
 Coverage: `tests/software-updates-check-visibility.test.ts` + the frontend half in
 `apps/frontend/src/main/dialogs/UpdatesDialog.check.test.ts`.
 
-**Each check chooses an address family before apt runs.**
-`apt-reachability.ts` probes every configured origin over both families; refresh
-and discovery append exactly one `Acquire::ForceIPv4=true` or
-`Acquire::ForceIPv6=true` option when only that family reaches every origin.
-Neither-family and captive-portal verdicts stop before apt and publish
-`check_failed` as `repos_unreachable` or `captive_portal`, with both family
-results carried on the update state. Mock/dev execution never launches curl:
-the default probe is `isRealDevice()`-gated, and `MOCK_SCENARIO` keeps its existing
-software-update simulation path.
-
-Detached installs take a fresh, uncached verdict. On a legacy image they install
-only the sorted app allowlist in `modules/system/package-layer.ts`; on an
-`apt-all-packages` image the argv is `buildAptAllInstallArgs()`'s exact
-`name=version` set (see THE UPDATE ORCHESTRATOR above). The transient-service builder
-rejects `dist-upgrade`, platform/unknown packages, and unsorted package vectors;
-service recovery remains tolerant of the historical `dist-upgrade` identity so
-an update started by an older backend can still be reattached safely.
+Address-family and install-set rules are in `docs/DEVICE-UPDATES.md`.
 
 ### …AND DISCOVERY REPORTS WHAT IT CANNOT INSTALL [EXISTS]
 
-This is the LEGACY-image classifier, which is every image shipping today. On an
-`apt-all-packages` image discovery runs `discoverAptAllPackages()` instead and
-actionability is decided by candidate origin and the held set, never by name.
+Legacy classification is exact-name (`package-layer.ts`); capable-image
+classification is origin-based (`apt-all-packages.ts`). See `docs/DEVICE-UPDATES.md`.
 
-Discovery no longer answers with a bare package list. `buildDiscoveredPackages`
-tags every name the `dist-upgrade --assume-no` cycle saw with its layer — from
-`classifyPackageLayer`, the ONE exact-name allowlist in
-`modules/system/package-layer.ts`, never a substring or prefix test — and with
-whether apt kept it back. It derives `actionable` ONCE, as
-`layer === "app" && !kept_back`, so the install argv, the wire count and the
-operator's band cannot disagree.
-
-- **The kept-back block is read on EVERY cycle**, from the original dist-upgrade
-  stdout, not only when nothing could be upgraded. apt reports kept-back packages
-  alongside real upgrades, and an operator must be told either way. The existing
-  count-0 `apt-get install --assume-no` fallback is unchanged; in that branch the
-  re-parsed summary describes an explicit install plan rather than an upgrade set,
-  so nothing there is treated as upgradable and every entry is a kept-back one.
+- Apt reports kept-back packages alongside real upgrades; retain both readings.
 - **Kept-back membership WINS over the upgradable list.** apt can name a package
   in both, and the honest answer for such an entry is that it is not installable —
   so an `app`-layer package that was kept back is reported, and is NOT actionable.
@@ -3463,16 +3130,8 @@ operator's band cannot disagree.
   `parseHeldBackPackages`. That one feeds an argv and stays fail-loud; this list
   is informational, so a malformed entry must cost one row, never the whole
   discovery cycle. Do not "unify" the two readers.
-- **Platform and kept-back entries never reach an install argv.**
-  `actionableAppNames` is what `buildAptUpgradeArgs` and `doSoftwareUpdate` read,
-  and the existing `actionableAppPackages.length === 0` refusal is what makes a
-  platform-only or kept-back-only discovery uninstallable by construction.
-- **The wire carries both facts.** `update_state`'s `available` arm gains
-  `packages` (each entry `{name, layer, kept_back?, actionable}`) and
-  `actionable_count`. The count is emitted even when it is `0` — that is a real
-  answer, and it is what a consumer gates the Install control on, never
-  `package_count`. `packages` is OMITTED when nothing was classified, so a
-  pre-classification frame keeps parsing.
+- Keep install argv and the Install control tied to actionability, rather than
+  the inclusive discovered package count.
 
 Coverage: `tests/software-updates-apt.test.ts` — app-only, platform-only, mixed,
 kept-back-only, the app-package-kept-back case, the COMPLETE ModemManager closure
@@ -3490,44 +3149,24 @@ boards do: the Orange Pi 5+ carries only default IPv6 routes it cannot use, so
 about a repository that was reachable the entire time over IPv4. The fix is a
 verdict, taken fresh, spent on ONE run.
 
-- **The verdict is per-origin and per-family, and it is derived, never guessed.**
-  `parseAptSourceOrigins` reads the deb822 stanzas under `/etc/apt/sources.list.d`
-  (the ONLY `/etc/apt` path this module touches), `buildProbeArgv` builds an
-  argv-only `curl` probe per origin×family, and `classifyProbe` folds curl's exit
-  code and status line into the wire enum `AptFamilyProbe`
-  (`ok`/`blocked`/`no_route`/`dns_failed`/`captive`/`unknown`). A 4xx is `ok` — it
-  proves the path, which is the question being asked. `deriveVerdict` then answers
-  `any` / `force_ipv4` / `force_ipv6` / `unreachable` / `captive_portal`, and a
-  family only wins by reaching **every** origin: successes split across origins
-  complete no refresh, so that folds to `unreachable`, not to a family.
+- A family must reach the configured origins together; split-origin successes
+  do not establish a usable refresh path. Probe vocabulary: `docs/DEVICE-UPDATES.md`.
 - **The choice is spent as a COMMAND-LINE OPTION and is NEVER persistent.** Refresh,
   discovery and the detached install append at most one
   `-o Acquire::ForceIPv4=true` / `-o Acquire::ForceIPv6=true` pair. Nothing here
   writes `/etc/apt/apt.conf`, `gai.conf`, a sysctl, `disable_ipv6`, or an interface
   binding — a device whose IPv6 comes back must not still be pinned to IPv4 by a
-  file some earlier check wrote. `tests/apt-reachability.test.ts` carries a STATIC
-  guard that scans the module's own source for every one of those literals, and the
-  guard was proven falsifiable against a temporary copy outside the repo with a
-  `writeFile` appended.
+  file some earlier check wrote.
 - **The argv allow-list had to ADMIT the option before it could be sent.**
   `validateDetachedAptServiceIdentity` tokenizes the transient unit's `ExecStart`
   and matches the exact flags-first prefix; it now admits zero or one pair from the
   CLOSED Force set and keeps the exact operation-tail checks. It is still exact
   matching — no substring test, no `arrayContaining` — because the predicate is what
   stops a foreign same-named unit being adopted as ours.
-- **Neither-family and captive verdicts stop BEFORE apt.** They publish
-  `check_failed` with `repos_unreachable` or `captive_portal`, and the block itself
-  rides `update_state`'s `idle`/`checking`/`check_failed`/`available` arms. Both
-  families are ALWAYS stated inside that block — a present-only-when-true family
-  cannot be lowered by a merging consumer (the `policy_route_missing` latch,
-  exactly), and an operator reading "no route on v6" is being told something the
-  absence of a key cannot say.
 - **The result is cached for `APT_REACHABILITY_TTL_MS` (60 s), and the install path
   deliberately opts out.** A manual check pressed twice must not re-probe every
   origin, but a transaction that is about to run for minutes takes a fresh verdict
   (`maxAgeMs: 0`) rather than a stale one about a link that may have moved.
-- **Mock/dev execution never launches curl.** The default probe is
-  `isRealDevice()`-gated and `MOCK_SCENARIO` keeps its existing simulation path.
 
 The family probe now also supplies uncached device-bound HTTPS observations to
 host election as a ranking input. A repository outage does not erase the ordinary
@@ -3535,10 +3174,6 @@ connectivity fallback or change shared-client health. Apt still consumes a separ
 fresh UNBOUND verdict after awaited route repair; a bound success cannot stand in
 for that reading. See `docs/HOST-UPLINK-ELECTION.md` from the repo root.
 
-This per-run family preflight is what EVERY package transaction uses, on legacy
-and `apt-all-packages` images alike. The UID-pinned update transport
-(`update-transport/pin.ts`) is used only by the OS agent; see THE UPDATE
-ORCHESTRATOR above.
 
 Board evidence: the Orange Pi 5+ drill observed the real `apt-get` argv from
 `/proc` carrying `-o Acquire::ForceIPv4=true` on BOTH the refresh and the discovery

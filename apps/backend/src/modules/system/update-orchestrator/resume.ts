@@ -9,29 +9,8 @@
 */
 
 /**
- * Backend-start resume reconciliation (Todo 36, G17: the backend may be
- * restarted by its OWN package upgrade). Every phase must be handled
- * gracefully on resume; `committing` is the SAFETY-CRITICAL one:
- *
- *   dpkg MUST NEVER run twice for the same transaction.
- *
- * This module does not start another apt install or upgrade. Settling an
- * attached transaction may run `apt-get clean`. For
- * `committing` it queries Todo 35's EXISTING, already-boot-wired recovery
- * mechanism (`recoverSoftwareUpdateIfRunning` — probes the detached
- * `ceralive-software-update.service` unit's live systemd state and re-attaches
- * to it if still running, or reports its already-finished exit code) and
- * reads the SAME derived `getUpdateState()` the rest of the backend trusts.
- * The state decision maps those results onto the persisted phase; reattachment
- * may settle the unit and clean its apt cache.
- *
- * Every other "in-flight operation" phase (`os-staging`, `syncing`,
- * `os-activation-armed`) has no equivalent live-recovery mechanism to query
- * yet (OS staging is Todo 39's job; a slot-sync run's own liveness is only
- * observable via `inspectSlotSync`, which the runtime's normal tick loop
- * already re-polls). Resume therefore leaves them UNCHANGED rather than
- * guessing — the conservative choice is always to re-observe on the next tick,
- * never to re-issue a privileged action from an ambiguous restart.
+ * Reattach rather than replay an uncertain package transaction: replay could
+ * run dpkg twice. Settlement can run `apt-get clean`; see docs/UPDATE-RECOVERY.md.
  */
 
 import type { UpdateState } from "@ceraui/rpc/schemas";
@@ -52,8 +31,6 @@ function estimateCommitProgress(
 		total > 0
 			? Math.min(100, Math.round(((unpacking + settingUp) / (2 * total)) * 100))
 			: 0;
-	// etaSeconds is honestly unknown across a resume boundary (no timing history
-	// survives a process restart) — 0 rather than a fabricated estimate.
 	return { percent, etaSeconds: 0 };
 }
 
@@ -62,8 +39,6 @@ async function resumeCommitting(
 	deps: OrchestratorResumeDeps,
 ): Promise<OrchestratorState> {
 	const now = deps.now();
-	// Reattach to the detached unit if still running or read its recorded exit;
-	// settlement may run apt-get clean, but never a second install.
 	const recovered = await deps.recoverSoftwareUpdateIfRunning();
 	const wire = deps.getUpdateState();
 
@@ -80,16 +55,8 @@ async function resumeCommitting(
 			reason: wire.reason,
 		});
 	}
-	// The unit was genuinely ABSENT (recoverSoftwareUpdateIfRunning found
-	// nothing to reattach to) — never started, or already garbage-collected
-	// with nothing to show. Rather than guess "it must have succeeded" (which
-	// could silently leave a half-applied transaction unresolved) or blindly
-	// retry (which could double-run dpkg if some OTHER path already started
-	// it), this resolves to a typed, operator-visible UNRESOLVED outcome that
-	// requires an explicit RESET before any further automatic action. This is
-	// deliberately COMMIT_RESUME_UNRESOLVED, not COMMIT_FAILED: dpkg is not
-	// known to have run at all, so there is no confirmed-bad version to
-	// quarantine/pin (quarantined) — only genuine uncertainty (failed).
+	// Absence proves neither success nor a bad candidate. Missing-unit clearance
+	// uses HISTORICAL_COMMIT_ADJUDICATED or RESET; see reducer.ts and UPDATE-RECOVERY.md.
 	if (!recovered) {
 		return reduceOrchestrator(persisted, {
 			type: "COMMIT_RESUME_UNRESOLVED",
@@ -97,10 +64,6 @@ async function resumeCommitting(
 			reason: "commit_unit_absent_on_resume",
 		});
 	}
-	// recovered === true but the wire state is neither installing/downloading
-	// nor a terminal success/failure (e.g. still "idle" or "checking" —
-	// shouldn't happen given recoverSoftwareUpdateIfRunning's own contract, but
-	// the reducer/resume path must stay total). Same conservative treatment.
 	return reduceOrchestrator(persisted, {
 		type: "COMMIT_RESUME_UNRESOLVED",
 		now,
@@ -115,9 +78,5 @@ export async function resumeOrchestratorState(
 	if (persisted.phase === "committing") {
 		return resumeCommitting(persisted, deps);
 	}
-	// Every other phase (including the other lock-holding phases os-staging and
-	// syncing) resumes as a structural pass-through: no new privileged effect is
-	// triggered by resume itself. The runtime's normal scheduler/tick loop is
-	// what re-observes and continues (or times out) an in-flight operation.
 	return persisted;
 }

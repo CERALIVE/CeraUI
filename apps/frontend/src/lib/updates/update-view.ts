@@ -1,11 +1,8 @@
 /**
- * Pure, rune-free rules behind the Updates dialog, the global orchestrator
+ * Rules behind the Updates dialog, the global orchestrator
  * badge and the Go-Live refusal band (Todo 41).
  *
- * Every function here answers from the wire alone so the three surfaces cannot
- * disagree about what the device is doing, and every operator string is an
- * i18n DOT-PATH KEY resolved at the render site — a machine token never reaches
- * the screen.
+ * Resolve returned i18n keys at the render site rather than showing wire tokens.
  */
 import type {
 	UpdateCapabilities,
@@ -16,13 +13,6 @@ import type {
 	UpdateTransportUplinkKind,
 } from "@ceraui/rpc/schemas";
 
-/**
- * Phases in which the orchestrator is doing work an operator should see from
- * anywhere in the app: a download or install running, one waiting for the
- * device to go idle, a staged system image armed for the next restart, or a
- * slot mirror copying. `checking` is deliberately absent (a short read with
- * nothing to act on), as are the resting and terminal phases.
- */
 export const UPDATE_BUSY_PHASES: readonly UpdateOrchestratorPhase[] = [
 	"downloading",
 	"awaiting-idle",
@@ -34,10 +24,8 @@ export const UPDATE_BUSY_PHASES: readonly UpdateOrchestratorPhase[] = [
 ];
 
 /**
- * The phases in which D8's phase table (`update-orchestrator/admission.ts`)
- * refuses a start; only these warn before Go Live. D8 can also refuse in
- * `downloading` (see the root AGENTS.md D8 admission note), which this list
- * does not predict.
+ * This display list does not predict downloading-unit refusals; see the root
+ * AGENTS.md D8 admission note and docs/DEVICE-UPDATES.md's D8 section.
  */
 export const UPDATE_REFUSING_PHASES: readonly UpdateOrchestratorPhase[] = [
 	"committing",
@@ -64,7 +52,6 @@ export function isUpdateRefusingStart(
 	);
 }
 
-/** TOTAL over the phase enum, so a nineteenth phase fails the typecheck. */
 const PHASE_LABEL_KEYS: Readonly<Record<UpdateOrchestratorPhase, string>> = {
 	idle: "settings.updates.phase.idle",
 	checking: "settings.updates.phase.checking",
@@ -124,20 +111,11 @@ export function progressPercent(
 // ─── capabilities ──────────────────────────────────────────────────────────
 
 export interface UpdateCapabilityView {
-	/** No capability file, or one without `apt-all-packages`. */
 	readonly legacy: boolean;
-	/** The OS agent can stage verity bundles on this image. */
 	readonly system: boolean;
-	/** The image carries the lagged slot mirror. */
 	readonly slots: boolean;
 }
 
-/**
- * Per-section gating. Package automation works on EVERY image — the
- * orchestrator's package path does not need a capable image — so only the
- * system-image surfaces and the slot table are gated. An absent answer is
- * treated as legacy: the device has not said it can do more.
- */
 export function updateCapabilityView(
 	caps: UpdateCapabilities | undefined,
 ): UpdateCapabilityView {
@@ -191,12 +169,6 @@ export function scheduleDraftFrom(
 	return { ...schedule, crossesMidnight };
 }
 
-/**
- * `undefined` when the draft may be saved. Mirrors the backend idle detector
- * (start inclusive, end exclusive, `start == end` never matches) and adds the
- * explicit midnight confirmation the wire cannot carry. `any-idle` ignores the
- * times entirely.
- */
 export function validateSchedule(
 	draft: ScheduleDraft,
 ): ScheduleError | undefined {

@@ -9,32 +9,8 @@
 */
 
 /**
- * The shared `/run/lock/ceralive-update.lock` (Todo 36). This orchestrator is
- * the FIRST consumer that actually invokes `ceralive-slot-sync` from CeraUI's
- * side (Todo 26 built the script; its own header comment names "the future
- * lagged-mirror orchestrator... the CeraUI update agent" as its caller).
- *
- * There is no separate "acquire the lock" primitive to import here: Todo 35's
- * OWN mechanism is "wrap the privileged command in `flock -x
- * SOFTWARE_UPDATE_LOCK ...` inside the systemd-run invocation" (see
- * `software-update-service-contract.ts::expectedAptAllScript`), and
- * `ceralive-slot-sync run` takes the SAME lock path NON-BLOCKINGLY (`flock -n
- * -x`) INSIDE its own script (image-building-pipeline
- * `mkosi/runtime/ceralive-slot-sync.sh`, read-only reference). Both share the
- * identical `SOFTWARE_UPDATE_LOCK` constant re-exported below rather than a
- * second literal path — the "small helper" this task reuses IS that shared
- * constant plus the systemd-run/flock WRAPPING TECHNIQUE, not a new
- * lock-acquisition function, because there is nothing for a Node/Bun-side
- * `flock()` call to do: every lock-holding operation is a SEPARATE process
- * (a detached apt unit, or the slot-sync unit) that takes and releases the OS
- * lock itself.
- *
- * `systemctl start --no-block` returns immediately once the unit is queued —
- * it does NOT wait for (or report) the lock outcome. The lock is INSIDE the
- * unit's `run` subcommand, so a "lock busy" refusal only becomes observable
- * once the unit finishes and is probed (`inspectSlotSync`), reported as exit
- * code 75 (`EX_REFUSE`, the script's own documented convention) with
- * `ActiveState=failed`.
+ * The slot-sync unit owns its lock. A queued systemd job is not a lock verdict;
+ * inspect the unit's result rather than adding a backend-owned flock.
  */
 
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
@@ -68,16 +44,6 @@ function parseProperties(output: string): Map<string, string> {
 	return properties;
 }
 
-/**
- * `ceralive-slot-sync.service` is `Type=oneshot` with NO `RemainAfterExit` —
- * a SUCCESSFUL run returns to `ActiveState=inactive`/`SubState=dead` (exactly
- * like "never started"), so `succeeded` is distinguished ONLY by
- * `ExecMainCode`/`ExecMainStatus` still being readable and zero. A FAILED run
- * (any non-zero exit, including the refused-gate exit 75) transitions systemd
- * into `ActiveState=failed` and STAYS there until the unit is started again —
- * this is what lets `refused`/`failed` be told apart from a fresh "absent"
- * unit at all.
- */
 export function parseSlotSyncProbe(output: string): SlotSyncProbeState {
 	const properties = parseProperties(output);
 	if (properties.get("LoadState") !== "loaded") return { kind: "absent" };
@@ -106,8 +72,7 @@ export function parseSlotSyncProbe(output: string): SlotSyncProbeState {
 			: { kind: "failed", exitCode };
 	}
 
-	// inactive/dead. Never started (mainCodeRaw empty) vs a previous SUCCESSFUL
-	// run (ExecMainCode=1/CLD_EXITED, ExecMainStatus=0) are both possible here.
+	// Inactive alone does not distinguish a fresh unit from a completed run.
 	if (mainCodeRaw === "" || mainCodeRaw === "0") return { kind: "absent" };
 	const exitCode = processExitCode(
 		Number.parseInt(mainCodeRaw, 10),
@@ -116,10 +81,6 @@ export function parseSlotSyncProbe(output: string): SlotSyncProbeState {
 	return exitCode === 0 ? { kind: "succeeded" } : { kind: "failed", exitCode };
 }
 
-/**
- * Fires the unit and returns as soon as systemd has QUEUED it — `--no-block`
- * means this call says nothing about the lock outcome (see module doc).
- */
 export async function startSlotSync(): Promise<void> {
 	await spawnWithTimeout(["systemctl", "start", "--no-block", SLOT_SYNC_UNIT], {
 		timeoutMs: SPAWN_TIMEOUT_MS,
@@ -140,8 +101,6 @@ export async function inspectSlotSync(): Promise<SlotSyncProbeState> {
 	return parseSlotSyncProbe(result.stdout);
 }
 
-/** Mirrors Todo 35's terminal-cleanup step so a failed/refused run does not
- * leave the unit stuck in `ActiveState=failed` for the next attempt. */
 export async function resetSlotSyncFailure(): Promise<void> {
 	await spawnWithTimeout(["systemctl", "reset-failed", SLOT_SYNC_UNIT], {
 		timeoutMs: SPAWN_TIMEOUT_MS,

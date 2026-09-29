@@ -9,17 +9,7 @@
 */
 
 /**
- * The orchestrator's effects layer (Todo 36). It holds the in-memory singleton
- * state and the scheduler tick, and performs persistence and privileged actions
- * mostly through the injectable `OrchestratorRuntimeDeps`; helpers such as
- * `os-agent.ts`, `commit-stage-probe.ts` and `stream-abort.ts` do their own I/O.
- *
- * D7/D12/idle gating, the schedule cadence and the D8 phase table are NOT
- * re-implemented here — this module calls the pure functions in
- * `schedule.ts`/`admission.ts` with real, observed inputs and dispatches
- * whatever event they imply. It adds I/O sequencing (what to call, in what
- * order, on a failure) and D8's `downloading` fresh-read/probe refusal; tests
- * cover both with an injected fake `OrchestratorRuntimeDeps`.
+ * Update effects and scheduler. Admission detail lives in docs/DEVICE-UPDATES.md.
  */
 
 import type {
@@ -110,18 +100,8 @@ export interface OrchestratorRuntimeDeps {
 	readonly runPackageCheck: () => Promise<SoftwareUpdateError>;
 	readonly startPackageInstall: () => UpdateStartOutcome;
 	readonly getPackageInstallWireState: () => UpdateState;
-	/**
-	 * D8 abort-network I/O (Todo 37): stop the in-flight detached apt unit /
-	 * kill+restart RAUC. Both are separate deps (not folded into one) so a test
-	 * can assert exactly which one fired, or neither.
-	 */
 	readonly stopPackageInstallUnit: () => Promise<void>;
 	readonly killAndRestartRaucForStream: () => Promise<void>;
-	/**
-	 * Wire-independent D8 guard: true while the unit's second stage
-	 * (`apt-get --no-download … install`) or any dpkg runs, and whenever that
-	 * cannot be ruled out. A throw is treated as true by the caller.
-	 */
 	readonly isCommitStageRunning: () => Promise<boolean>;
 	readonly checkOsManifest: (channel?: "stable" | "beta") => Promise<{
 		readonly available: boolean;
@@ -157,12 +137,7 @@ export interface OrchestratorRuntimeDeps {
 		transactionRunning: () => boolean,
 	) => Promise<boolean>;
 	/**
-	 * Push the additive `update_orchestrator` wire projection after every real
-	 * state transition (Todo 41). Before this, the field reached a client only
-	 * in the post-login snapshot and the `status.getStatus` pull, so the global
-	 * badge and the Go-Live refusal band would have described the phase the
-	 * device was in when the operator logged in. Optional so a test that builds
-	 * a complete deps object by hand stays valid; the default broadcasts.
+	 * Publish on transitions so connected operators do not retain login-time state.
 	 */
 	readonly publishWireState?: (wire: UpdateOrchestratorWireState) => void;
 }
@@ -232,8 +207,6 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	getPackageInstallWireState: getUpdateState,
 	stopPackageInstallUnit: stopPackageInstallUnitForStream,
 	killAndRestartRaucForStream,
-	// A mocked install never creates the transient unit, so there is nothing
-	// to observe.
 	isCommitStageRunning: async () =>
 		shouldUseMocks() ? false : isCommitStageRunning(),
 	checkOsManifest: async (channel) =>
@@ -277,11 +250,6 @@ let osCandidate: OsChannelManifest | undefined;
 let osStageInProcess = false;
 let packageInstallStarting = false;
 let osForceActivated = false;
-// The OS candidate the D12 gate is HOLDING for an explicit one-time cellular
-// approval (Todo 41's "Download over cellular now" prompt). Set only where the
-// gate answers `needsOverride`, cleared the moment staging may proceed or the
-// candidate it names is no longer the one on offer — so the prompt can never
-// ask to approve a download that is not actually waiting.
 let pendingCellularApproval:
 	| { readonly id: string; readonly sizeBytes: number }
 	| undefined;
@@ -314,9 +282,6 @@ export function getOrchestratorState(): OrchestratorState {
 	return state;
 }
 
-/** Test-only direct state injection (the `set*ForTest` convention). Never
- * called from production code — every real transition goes through
- * `dispatch()`/`reduceOrchestrator`. */
 export function setOrchestratorStateForTest(next: OrchestratorState): void {
 	state = next;
 }
@@ -331,13 +296,6 @@ export function getOrchestratorWireState(): UpdateOrchestratorWireState {
 	};
 }
 
-/**
- * What the OS agent currently has on offer, for the Updates dialog's System and
- * Cellular sections (Todo 41). A read of in-memory runtime state only — it
- * performs no I/O and changes nothing. `candidate` is the verified manifest the
- * last successful channel check found (not yet staged); `pendingCellular` is set
- * only while that candidate is held behind the metered-only D12 gate.
- */
 export type OsUpdateSummary = {
 	readonly candidate: {
 		readonly version: string;
@@ -362,8 +320,7 @@ export function getOsUpdateSummary(): OsUpdateSummary {
 	};
 }
 
-// The push is an observation of the state that was just persisted; a failing
-// broadcast must never undo or block the transition it describes.
+// A failed broadcast must not undo the persisted transition.
 function publishWireState(): void {
 	try {
 		deps.publishWireState?.(getOrchestratorWireState());
@@ -391,12 +348,8 @@ function notePackageCommitSucceeded(): void {
 		throw new Error("package commit success could not be persisted");
 }
 
-// ─── operator RPC actions (system.checkUpdatesNow / installUpdatesNow /
-// allowCellularOnce) — see rpc/procedures/system.procedure.ts. Manual installs
-// bypass idle, not the stream-LIVE check. Both scheduled and manual package
-// launches use maybeStartPackageInstall; a separate poll, completion callback
-// or D8 fresh wire read can enter `committing`. D8 governs stream starts, not
-// the full launch window (root AGENTS.md D8 Known gaps (f)-(g)).
+// ─── operator RPC actions ──────────────────────────────────────────────────
+// Launch windows: root AGENTS.md D8 Known gaps (f)-(g).
 
 export type ManualCheckOutcome =
 	| { readonly started: true }
@@ -466,9 +419,7 @@ export async function installUpdatesNow(): Promise<ManualInstallOutcome> {
 				: "not_available",
 		};
 	}
-	// A manual install bypasses idle but refuses while the stream is LIVE.
-	// A start already admitted but not yet live is not covered (root AGENTS.md
-	// D8 Known gaps (f)).
+	// Starting-stream window: root AGENTS.md D8 Known gaps (f).
 	if (deps.isStreamLive()) return { started: false, reason: "stream_active" };
 	if (state.phase === "available")
 		dispatch({ type: "AWAIT_IDLE_FOR_INSTALL", now: deps.now() });
@@ -497,48 +448,11 @@ export function allowCellularOnce(id: string): void {
 
 // ─── stream-start admission (Todo 37) ──────────────────────────────────────
 //
-// Wires D8 (admission.ts) into a real stream-start attempt. The refusal arm
-// (committing/restarting-services) is a straight read of the cached `state` —
-// no I/O; a stale refusing phase can over-refuse until it is advanced.
-//
-// The abort-network arm is where the stop decision lives. The cached phase can
-// stay `downloading` while dpkg runs: the tick re-reads the wire only on its
-// own cadence (after an operator-RPC install the next tick can be up to
-// IDLE_TICK_MS away; a scheduled install then ticks every ACTIVE_TICK_MS), and
-// even a tick that lands during dpkg sees `installing` only once
-// dpkg's first `Unpacking` or `Setting up` line has been ingested. So the
-// cached phase alone cannot tell a download from a running dpkg. Measured on a
-// Rock 5B+: a start 1 ms after dpkg appeared saw a wire still reading
-// `downloading`; the old code stopped the unit and dpkg was gone 84 ms after
-// it appeared.
-//
-// So immediately before the package-unit stop, this function asks two
-// questions and REFUSES with zero kill/stop calls if either answers yes:
-//   1. a forced-fresh wire read (`installing` / `success`). That is evidence
-//      dpkg ran, so it also dispatches `COMMIT_PHASE_ENTERED`.
-//   2. `deps.isCommitStageRunning()` (commit-stage-probe.ts), which reads the
-//      unit's own processes: the second-stage `apt-get --no-download … install`
-//      or any `dpkg`/`dpkg-*`. It FAILS CLOSED — an unreadable process list for
-//      a running unit, or a throw, refuses. A probe-only refusal dispatches
-//      NOTHING: it is not evidence that dpkg ran (the second stage can fail
-//      before dpkg, and a throw proves nothing), so the phase keeps download
-//      semantics and the next start probes again.
-// What the stop can still reach depends on the unit. On a capable image the
-// orchestrator runs the two-stage unit, and the remaining exposure is the
-// check-then-stop gap: a second-stage apt-get that starts in that gap is
-// stopped, normally before it spawns the unpacking dpkg (not measured). On a
-// non-capable image the orchestrator launches the single-stage
-// `runDetachedAptUpgrade` unit, which has no `--no-download` stage, so the
-// probe detects only a running `dpkg` and the gap sits right before the dpkg
-// spawn. All of this is for a unit the orchestrator launched itself and is
-// tracking in `downloading` with an existing unit. Other windows, including
-// a launch still in preparation, are outside D8's guarantee: see "D8
+// Cached download progress can lag dpkg; interrupting dpkg risks a half-installed
+// package. Keep the fresh read and probe ahead of the stop. See "D8
 // stream/update admission: what it does NOT cover" under Known gaps in the
-// root AGENTS.md. Do not "fix" either image's stop gap by splitting Todo 35's
-// single-unit/single-flock design into two units. If dpkg is interrupted (power loss, crash),
-// image-building-pipeline's `ceralive-dpkg-recover.service` runs
-// `dpkg --configure -a` when it finds that on boot; that repairs an interrupted configure, not a
-// package left half-installed, which is why the stop must not reach dpkg.
+// root AGENTS.md and docs/DEVICE-UPDATES.md's D8 section. Preserve the
+// single-unit/flock design and exact ExecStart identity.
 export type StreamStartUpdateAdmission =
 	| { readonly allowed: true }
 	| {
@@ -578,19 +492,12 @@ export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdm
 		return { allowed: true };
 	}
 
-	// action === "abort-network"
 	if (state.phase === "downloading") {
-		// Forced fresh read — bypasses the cached `state.phase`. See the
-		// module comment above.
 		const freshWire = deps.getPackageInstallWireState();
 		if (freshWire.kind === "installing" || freshWire.kind === "success") {
-			// The wire has seen dpkg output since our cached read: dpkg ran.
-			// Refuse, and correct the cached state from that evidence.
 			dispatch({ type: "COMMIT_PHASE_ENTERED", now: deps.now() });
 			const refreshed = admitStreamStart(state);
 			if (!refreshed.allowed) return refreshed;
-			// Unreachable in practice (COMMIT_PHASE_ENTERED always produces a
-			// refusing "committing" phase) — kept as a total fallback.
 			return COMMIT_STAGE_REFUSAL;
 		}
 		if (await commitStageRunning()) {
@@ -600,19 +507,13 @@ export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdm
 			// quarantining COMMIT_FAILED. The next start probes again.
 			return COMMIT_STAGE_REFUSAL;
 		}
-		// Neither check found the commit stage: stop the unit. The remaining
-		// gap is described in the module comment above.
 		await deps.stopPackageInstallUnit();
 		dispatch({ type: "DOWNLOAD_ABORTED_FOR_STREAM", now: deps.now() });
 		return { allowed: true };
 	}
 
 	if (state.phase === "os-staging") {
-		// No forced-fresh-read equivalent is needed here: RAUC only ever
-		// writes to the INACTIVE (target) slot, never the booted one, so a
-		// kill mid-write cannot corrupt anything the device is running from —
-		// unlike apt/dpkg, which mutates the live root in place. See
-		// stream-abort.ts.
+		// RAUC targets the inactive slot, unlike apt's live-root transaction.
 		await deps.killAndRestartRaucForStream();
 		dispatch({ type: "OS_STAGING_ABORTED_FOR_STREAM", now: deps.now() });
 		return { allowed: true };
@@ -703,12 +604,7 @@ async function runPackageCheckCycle(): Promise<void> {
 	});
 }
 
-// SoftwareUpdateError's typed cases don't carry an HTTP status directly, but
-// `refresh_failed`/an ExecException surfaces apt's own exit code and message,
-// which includes the HTTP status apt itself printed for a mirror-level 4xx/5xx.
-// A best-effort classification: apt renders "429" / "5xx"-family text on a
-// throttled or overloaded mirror. False negatives are safe (they fall back to
-// the standard, still-capped backoff curve, only slower to widen).
+// Best-effort mirror-status detection affects cadence, not the update verdict.
 function isRateLimitedError(error: SoftwareUpdateError): boolean {
 	if (
 		error === true ||

@@ -73,10 +73,7 @@ from the orchestrator or the Settings button, reaches the repository through the
 host's default route after the awaited election and fresh family reading in
 "Applying the election and admitting apt" below. The selector's last answer is
 recorded by `recordTransportSelection()` for the Updates dialog's Connection
-section and is never read back as a routing input. The OS agent is itself gated
-on image capabilities no shipped image declares yet, so on today's images no
-pinned transfer runs at all. Orchestrator phases, D8 admission and the cellular
-gate that decide *whether* a transfer runs are in
+section. Stream admission (D8) and cellular policy are documented in
 [DEVICE-UPDATES.md](./DEVICE-UPDATES.md).
 
 The boot sweep is `updatePinController.sweep()`, called from `main.ts` after the

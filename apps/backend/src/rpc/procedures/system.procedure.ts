@@ -227,9 +227,7 @@ export const rebootProcedure = authedProcedure
 /**
  * Start update procedure
  */
-// startSoftwareUpdate() owns synchronous dispatch refusals; this procedure
-// forwards them. A later streaming/disabled early return in doSoftwareUpdate()
-// is silent (root AGENTS.md D8 Known gaps (c)).
+// Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
 export const startUpdateProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(() => {
@@ -243,10 +241,9 @@ export const startUpdateProcedure = authedProcedure
 	});
 
 /**
- * Update-orchestrator operator actions (Todo 36). Both `checkUpdatesNow` and
- * `installUpdatesNow` bypasses idle but checks whether a stream is LIVE.
- * A start already admitted but not live is not covered (root AGENTS.md D8
- * Known gaps (f)). `checkUpdatesNow` starts discovery, not an install.
+ * Both actions bypass idle. `checkUpdatesNow` has no stream check;
+ * `installUpdatesNow` checks for a live stream, not a starting one (root
+ * AGENTS.md D8 Known gaps (f)).
  */
 export const checkUpdatesNowProcedure = authedProcedure
 	.output(successResponseSchema)
@@ -287,7 +284,7 @@ export const allowCellularOnceProcedure = authedProcedure
 	});
 
 /**
- * The Updates dialog's pull (Todo 41). A pure read — see
+ * The Updates dialog's pull — see
  * `update-orchestrator/details.ts` for the per-block honest-absence rules.
  */
 export const getUpdateDetailsProcedure = authedProcedure

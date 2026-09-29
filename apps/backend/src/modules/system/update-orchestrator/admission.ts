@@ -9,29 +9,9 @@
 */
 
 /**
- * D8 — the stream/update mutual-admission matrix (Todo 36). This is the single
- * most safety-critical property this task delivers: a wrong answer here can
- * either brick a live stream (refusing a start that should be allowed) or let
- * a disruptive update corrupt a stream (allowing a start that should be
- * refused). Both functions are pure and total over every OrchestratorPhase —
- * no phase is ever left to an implicit/default branch that could silently do
- * the wrong thing as the phase list grows.
- *
- * The D8 phase classification (runtime.ts checks a downloading unit separately):
- *   - `committing` / `restarting-services` -> REFUSE based on the tracked
- *     phase; a stale phase can over-refuse.
- *   - `downloading` / `os-staging` -> this table ALLOWS the start and asks for
- *     an abort. The cached `downloading` phase can include dpkg, so
- *     runtime.ts's `admitAndPrepareStreamStart` first does a forced-fresh wire
- *     read and the commit-stage probe, and refuses on a wire `installing`/
- *     `success` or a positive (or fail-closed) probe; otherwise it issues a
- *     best-effort unit stop. `os-staging` kills and restarts RAUC with neither
- *     check.
- *   - `syncing` -> ALLOWED, and the local slot mirror continues.
- *   - every other phase is ALLOWED with action "none". D8 does not interrupt
- *     a discovery in `checking` or prevent an install being launched after a
- *     start is admitted but before it is live. See "D8 stream/update admission:
- *     what it does NOT cover" under Known gaps in the root AGENTS.md.
+ * Cached-phase admission; downloading-unit evidence is checked in runtime.ts.
+ * See "D8 stream/update admission: what it does NOT cover" under Known gaps in
+ * the root AGENTS.md and docs/DEVICE-UPDATES.md's D8 section before changing it.
  */
 
 import {
@@ -42,10 +22,6 @@ import {
 	type StreamStartAction,
 } from "./types.ts";
 
-// The exact refusal set. Exported so tests (and, in Todo 37, the real
-// stream-start call site) can assert against ONE source of truth rather than
-// re-deriving it, and so a future new phase is forced to be added here
-// deliberately rather than silently falling into either bucket.
 export const STREAM_REFUSING_PHASES: readonly OrchestratorPhase[] = [
 	"committing",
 	"restarting-services",
@@ -58,11 +34,8 @@ const ABORT_NETWORK_PHASES: readonly OrchestratorPhase[] = [
 
 const CONTINUE_LOCAL_PHASES: readonly OrchestratorPhase[] = ["syncing"];
 
-// Compile-time-ish completeness check: every phase must be classified into
-// exactly one of refuse / abort-network / continue-local / none. Asserted at
-// module load (throws immediately on any drift, e.g. a new phase added to
-// ORCHESTRATOR_PHASES without updating this file) rather than only in a test,
-// so a missed phase fails loudly the moment the module is imported anywhere.
+// This checks overlapping buckets, not missing classifications. An unlisted
+// phase defaults to allowed/action "none"; classify new phases deliberately.
 function assertExhaustivePhaseClassification(): void {
 	for (const phase of ORCHESTRATOR_PHASES) {
 		const buckets = [

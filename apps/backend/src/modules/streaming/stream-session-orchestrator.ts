@@ -460,13 +460,8 @@ export function createStreamSessionOrchestrator(
 		attemptId: string,
 		request: StreamStartRequest,
 	): Promise<StartResult> => {
-		// The update-orchestrator D8 check (`admitAndPrepareStreamStart` in
-		// update-orchestrator/runtime.ts) runs after the other gates in this
-		// orchestrator (duplicate-start, modem-transition lease, recovery
-		// barrier, blocking-mutation) so an update-unit stop or RAUC kill is
-		// not issued for an attempt those gates already refused. The launch
-		// can still be refused later, e.g. by session.ts's isUpdating() guard
-		// (root AGENTS.md D8 Known gaps (h)).
+		// Keep D8 after earlier gates to avoid stopping an update for a refused
+		// attempt. Later launch limits: root AGENTS.md D8 Known gaps (h).
 		const admitUpdate = deps.admitUpdate;
 		if (admitUpdate !== undefined) {
 			const updateAdmission = await admitUpdate();
@@ -478,9 +473,6 @@ export function createStreamSessionOrchestrator(
 				};
 			}
 		}
-		// Set the OTA-activation sentinel for this admitted attempt.
-		// Cleared below on a failed launch, and unconditionally at the top of
-		// every `stop()` call.
 		deps.markStreamingForOta?.();
 
 		generation += 1;
@@ -555,10 +547,6 @@ export function createStreamSessionOrchestrator(
 			transition("idle");
 			active = undefined;
 			deps.setStreamingStatus(false);
-			// The launch never went live — clear the OTA sentinel we set above.
-			// A genuine live→stop transition clears it via `stop()`'s own
-			// unconditional call instead (this attempt already failed before
-			// reaching that point).
 			deps.unmarkStreamingForOta?.();
 			return {
 				result: "failed",

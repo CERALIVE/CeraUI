@@ -9,12 +9,8 @@
 */
 
 /**
- * Backend-start resume (Todo 36, G17). Persistence-resume tests starting from
- * EVERY one of the 18 phases, with `committing` covered in depth: it is the
- * ONLY phase that queries Todo 35's existing detached-unit recovery mechanism,
- * and it must NEVER re-invoke apt-get/dpkg — proven here by asserting the
- * injected recovery/wire-state dependencies are the ONLY calls made, with no
- * "start install" style dependency present or callable at all.
+ * Resume decisions against injected recovery and wire-state dependencies.
+ * These fakes do not exercise production settlement's `apt-get clean`.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -119,7 +115,6 @@ describe('resume from "committing" — the safety-critical crash-resume path', (
 		const resumed = await resumeOrchestratorState(persisted, d);
 		expect(resumed.phase).toBe("restarting-services");
 		expect(resumed.progress).toBeNull();
-		// Recovery was consulted read-only exactly once; nothing else happened.
 		expect(calls.recover).toBe(1);
 	});
 
@@ -156,9 +151,7 @@ describe('resume from "committing" — the safety-critical crash-resume path', (
 	});
 
 	test("resume NEVER calls anything named like a package-install/download start — only the two read-only deps are invoked", async () => {
-		// This is the structural double-dpkg guard: the OrchestratorResumeDeps
-		// type itself carries no "start"/"install" capability, so there is
-		// nothing for resume to call that would re-run apt-get even by mistake.
+		// "Read-only" in this title describes the fakes, not production recovery.
 		const providedDepNames = Object.keys(
 			deps().deps as unknown as Record<string, unknown>,
 		);
@@ -200,8 +193,6 @@ describe("resume — full-boot proof: dpkg is invoked at most once across a simu
 		const resumed = await resumeOrchestratorState(persistedAtCrash, d);
 
 		expect(resumed.phase).toBe("restarting-services");
-		// The resume path has no capability to invoke apt-get/dpkg at all — the
-		// counter above is exactly what it was before resume ran.
 		expect(dpkgInvocations).toBe(1);
 	});
 });
