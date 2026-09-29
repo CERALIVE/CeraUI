@@ -305,7 +305,12 @@ async function endpoint(
 		deps,
 		host === "apt.ceralive.tv" ? credentials : undefined,
 	);
-	let state: ProbeState = secure.state;
+	// A completed, verified-TLS HEAD to our OS object can prove the link even when the channel has no publication.
+	const absentOsObject =
+		host === "images.ceralive.tv" &&
+		secure.state === "captive-http" &&
+		(secure.code === 404 || secure.code === 410);
+	let state: ProbeState = absentOsObject ? "clear" : secure.state;
 	if (secure.state === "tls-error") state = classifyTransfer("tls", captive);
 	else if (secure.state === "clear" && host === "apt.ceralive.tv") {
 		try {
