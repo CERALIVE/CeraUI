@@ -189,14 +189,23 @@ async function compareVersions(left: string, right: string): Promise<boolean> {
 	return result.exitCode === 0;
 }
 
-async function fetchAsOta(
+type OsFetchDeps = {
+	readonly readUid: () => Promise<string>;
+	readonly run: typeof spawnWithTimeout;
+};
+
+export async function fetchAsOta(
 	url: string,
 	target: string,
 	uid: number,
-): Promise<void> {
-	const actualUid = (await command(["id", "-u", "ceralive-ota"])).trim();
+	deps: OsFetchDeps = {
+		readUid: async () => (await command(["id", "-u", "ceralive-ota"])).trim(),
+		run: spawnWithTimeout,
+	},
+): Promise<boolean> {
+	const actualUid = await deps.readUid();
 	if (actualUid !== String(uid)) throw new OsAgentError("ota_uid_mismatch");
-	const result = await spawnWithTimeout(
+	const result = await deps.run(
 		[
 			"runuser",
 			"-u",
@@ -219,22 +228,30 @@ async function fetchAsOta(
 			"262144",
 			"--output",
 			target,
+			"--write-out",
+			"%{http_code}",
 			url,
 		],
 		{ timeoutMs: 65_000 },
 	);
+	if (
+		result.exitCode === 22 &&
+		(result.stdout === "404" || result.stdout === "410")
+	)
+		return false;
 	if (result.exitCode !== 0)
 		throw new OsAgentError(
 			/\b429\b|\b5\d\d\b/.test(result.stderr)
 				? "rate_limited"
 				: "manifest_fetch_failed",
 		);
+	return true;
 }
 
 export async function checkOsChannel(
 	settingsChannel: "stable" | "beta",
 	quarantine: UpdateQuarantine,
-): Promise<OsChannelManifest> {
+): Promise<OsChannelManifest | undefined> {
 	const bootedVersion = await readBootedOsReleaseVersion();
 	if (!bootedVersion) throw new OsAgentError("booted_version_unknown");
 	const { board, compatible } = await readBoardIdentity();
@@ -263,8 +280,9 @@ export async function checkOsChannel(
 			await chown(dir, file.ota_uid, 0);
 			const json = join(dir, "manifest.json");
 			const sig = join(dir, "manifest.sig");
-			await fetchAsOta(base, json, file.ota_uid);
-			await fetchAsOta(`${base}.sig`, sig, file.ota_uid);
+			if (!(await fetchAsOta(base, json, file.ota_uid))) return undefined;
+			if (!(await fetchAsOta(`${base}.sig`, sig, file.ota_uid)))
+				return undefined;
 			const installed = (
 				await command([
 					"dpkg-query",
@@ -309,6 +327,7 @@ export async function stageOsBundle(
 	const settings = await loadUpdateSettings();
 	const fresh = await checkOsChannel(settings.channel, new UpdateQuarantine());
 	if (
+		!fresh ||
 		fresh.version !== verified.version ||
 		fresh.channel !== verified.channel ||
 		fresh.serial !== verified.serial ||

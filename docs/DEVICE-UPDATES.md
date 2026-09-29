@@ -420,6 +420,17 @@ then Ethernet, Wi-Fi, dongle, cellular, then latency. The selection is recorded
 by `recordTransportSelection()` for the dialog's Connection section and is never
 read back as a routing input.
 
+For an OS channel, the plain-HTTP `generate_204` probe still requires exactly
+204 with an empty body: redirects or portal content remain `captive-http`.
+Only a completed, certificate-verified HTTPS HEAD to the expected
+`images.ceralive.tv` channel `.json.sig` object may treat 404/410 as a **healthy
+transport with an absent publication**; TLS errors, resets, timeouts and 5xx
+remain unhealthy. The subsequent pinned JSON and signature GETs independently
+require both objects. A verified 404/410 on either returns a successful OS check
+with no candidate (`idle`, no failure notification), not `no-transport`; a
+different fetch or signature failure still refuses. This fix is fixture-tested,
+**not yet board-proven on the fixed build**.
+
 `updatePinController.run(job, selection, step)` (`pin.ts`, `pin-rules.ts`) runs
 one awaited step under a private policy rule for the job's UID:
 

@@ -184,6 +184,31 @@ async function defaultOnlyMeteredCandidateExists(): Promise<boolean> {
 	return candidates.length > 0 && candidates.every((c) => c.metered);
 }
 
+export async function checkOsManifestResult(
+	channel: "stable" | "beta",
+	check: typeof checkOsChannel = checkOsChannel,
+): ReturnType<OrchestratorRuntimeDeps["checkOsManifest"]> {
+	try {
+		const manifest = await check(channel, new UpdateQuarantine());
+		return {
+			available: manifest !== undefined,
+			rateLimited: false,
+			failed: false,
+			reason: "",
+			...(manifest ? { manifest } : {}),
+		};
+	} catch (error) {
+		const reason =
+			error instanceof Error ? error.message : "manifest_check_failed";
+		return {
+			available: false,
+			rateLimited: reason === "rate_limited",
+			failed: true,
+			reason,
+		};
+	}
+}
+
 export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	now: () => Date.now(),
 	random: () => Math.random(),
@@ -201,30 +226,8 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	getPackageInstallWireState: getUpdateState,
 	stopPackageInstallUnit: stopPackageInstallUnitForStream,
 	killAndRestartRaucForStream,
-	checkOsManifest: async (channel) => {
-		try {
-			const manifest = await checkOsChannel(
-				channel ?? (await loadUpdateSettings()).channel,
-				new UpdateQuarantine(),
-			);
-			return {
-				available: true,
-				rateLimited: false,
-				failed: false,
-				reason: "",
-				manifest,
-			};
-		} catch (error) {
-			const reason =
-				error instanceof Error ? error.message : "manifest_check_failed";
-			return {
-				available: false,
-				rateLimited: reason === "rate_limited",
-				failed: true,
-				reason,
-			};
-		}
-	},
+	checkOsManifest: async (channel) =>
+		checkOsManifestResult(channel ?? (await loadUpdateSettings()).channel),
 	stageOs: async (manifest, onProgress) => {
 		await stageOsBundle(manifest, onProgress);
 	},

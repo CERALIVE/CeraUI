@@ -169,7 +169,10 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
 - **[PARTIAL] Update transport.** `selectUpdateTransport()` plus
   `updatePinController` (UID-scoped route, 15-minute failover hold). Used only by
   the OS agent; package transactions still use the apt reachability preflight.
-  DNS is not pinned. See [`docs/HOST-UPLINK-ELECTION.md`](docs/HOST-UPLINK-ELECTION.md).
+  DNS is not pinned. A verified-TLS 404/410 on the expected OS channel signature
+  proves the uplink while the pinned manifest fetch reports no publication; it
+  cannot become a captive-portal or `no-transport` verdict. The corrected build
+  is not yet board-proven. See [`docs/DEVICE-UPDATES.md`](docs/DEVICE-UPDATES.md).
 
 Known gaps, recorded rather than smoothed over:
 
