@@ -37,9 +37,11 @@ below; it does not qualify a released capable image or the OS/slot paths.
 | Frontend | `apps/frontend/src/lib/updates/`, `main/dialogs/UpdatesDialog.svelte`, `main/dialogs/updates/`, `main/layout/UpdateOrchestratorBadge.svelte`, `main/live/UpdateRefusalBand.svelte` |
 
 The orchestrator starts at boot through `startUpdateOrchestrator()`, wired in
-`main.ts` as `guardNonCritical("update-orchestrator", ...)` after the existing
-`recoverSoftwareUpdateIfRunning()` probe and `periodicCheckForSoftwareUpdates()`
-loop. The legacy periodic loop still runs beside it; both land their discovery
+`main.ts` as `guardNonCritical("update-orchestrator", ...)` before the standalone
+`recoverSoftwareUpdateIfRunning()` probe and then the
+`periodicCheckForSoftwareUpdates()` loop. Orchestrator resume reattaches its
+tracked detached unit first; standalone recovery handles an untracked unit.
+The legacy periodic loop still runs beside it; both land their discovery
 through the same `runUpdateDiscoveryAndReport()` seam.
 
 ## Capability gating: legacy images and capable images
@@ -94,6 +96,20 @@ earlier installs nor the identity proof qualify a settled update lifecycle.
 transaction on both kinds of image. The orchestrator does not bypass it: a
 refused `startSoftwareUpdate()` leaves the phase in `awaiting-idle`, retried on
 the next tick.
+
+Manual `installUpdatesNow` reports launch refusals using its existing reason
+vocabulary (no RPC schema change):
+
+| `startSoftwareUpdate()` refusal | Manual reason |
+|---|---|
+| `streaming` | `stream_active` |
+| `already_updating` | `busy` |
+| `check_unavailable` | `not_available` |
+| `updates_disabled` | `busy` (no fitting existing manual reason) |
+
+The launcher rechecks streaming after pending-plan persistence; a stream that
+starts during that await therefore returns `stream_active`, not generic `busy`.
+Scheduled refusals remain in `awaiting-idle` for the next tick.
 
 ## Settings
 

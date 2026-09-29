@@ -3028,8 +3028,9 @@ UID-pinned transport have not been qualified by those installs.
   `system.getUpdateDetails` (`readUpdateDetails()`, every block independently
   nullable; it never touches the S1-locked `device-stats.raucSlot`).
 - **The legacy periodic loop still runs.** `main.ts` starts
-  `periodicCheckForSoftwareUpdates()` and then `startUpdateOrchestrator()`; both
-  land discovery through `runUpdateDiscoveryAndReport()`.
+  `startUpdateOrchestrator()` first, then standalone
+  `recoverSoftwareUpdateIfRunning()`, then `periodicCheckForSoftwareUpdates()`;
+  both discovery loops land through `runUpdateDiscoveryAndReport()`.
 - **So do the legacy RPCs, and they bypass the orchestrator.** The Updates
   dialog's Packages section still calls `system.checkForUpdates` /
   `system.startUpdate`, which run `triggerManualUpdateCheck()` /
