@@ -10,10 +10,10 @@
 
 /**
  * The I/O half of D8's "abort-network" action (Todo 37) — the privileged
- * `systemctl` calls `runtime.ts`'s `admitAndPrepareStreamStart` dispatches once
- * it has decided (after its forced-fresh wire-state re-check AND the
- * commit-stage process probe) that neither check found the commit stage of
- * the in-flight operation.
+ * `systemctl` calls `runtime.ts`'s `admitAndPrepareStreamStart` dispatches for
+ * an admitted start. The apt stop is issued only after its forced-fresh
+ * wire-state re-check AND the commit-stage process probe found no commit
+ * stage; the RAUC kill has neither check (RAUC writes only the inactive slot).
  *
  * Both functions are BEST-EFFORT: once admitted, `downloading`/`os-staging`
  * starts proceed regardless of whether the abort itself succeeds (the admitted

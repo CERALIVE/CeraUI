@@ -23,14 +23,17 @@
  *   - `downloading` / `os-staging` -> ALLOWED, and the update ABORTS over the
  *     network. The cached `downloading` phase can include a running dpkg, so
  *     runtime.ts's `admitAndPrepareStreamStart` does a forced-fresh wire read
- *     and the commit-stage probe before any stop and refuses if either finds
- *     the commit stage; the gap that remains is described there.
+ *     and the commit-stage probe before stopping the package unit and refuses
+ *     if either finds the commit stage; the gap that remains is described
+ *     there. `os-staging` kills and restarts RAUC with neither check.
  *   - `syncing` -> ALLOWED, and the sync CONTINUES locally (an rsync mirror
  *     between two local block devices does not compete with stream bandwidth
  *     or CPU in any way that matters, and it never touches the booted slot).
- *   - every other phase has no in-flight, abortable-or-not operation to
- *     interact with a starting stream at all, so it is ALLOWED with action
- *     "none".
+ *   - every other phase has no in-flight orchestrator operation to interact
+ *     with a starting stream, so it is ALLOWED with action "none". An install
+ *     launched through the legacy path, or during the launch deferral, is
+ *     outside D8's guarantee: see "D8 stream/update admission: what it does
+ *     NOT cover" under Known gaps in the root AGENTS.md.
  */
 
 import {

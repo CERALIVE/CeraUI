@@ -209,13 +209,13 @@ Known gaps, recorded rather than smoothed over:
   `system.checkForUpdates`, which dispatch nothing to the orchestrator. The
   stop is issued only from the orchestrator's `downloading` phase
   (`runtime.ts` l.585-609), so in any other phase D8 does not stop such a
-  unit, and its admission answer does not depend on it. `isUpdating()`
+  unit, and admission does not consult it. `isUpdating()`
   (`streamloop/session.ts` l.80, retriable `engine_restarting` /
   `stream_start_suppressed_update`) refuses a start only once the launch has
-  set `softUpdateStatus` (`software-updates.ts` l.1254). (b) Launch
+  set `softUpdateStatus` (`software-updates.ts` l.1256). (b) Launch
   deferral: while `apt-get update` or discovery runs, `startSoftwareUpdate()`
   arms a 3 s timer and returns `{started:true}` without setting
-  `softUpdateStatus` (`software-updates.ts` l.1334-1355), so the RPC answers
+  `softUpdateStatus` (`software-updates.ts` l.1336-1357), so the RPC answers
   `success:true`, `isUpdating()` is false and no unit exists for D8 to find;
   neither refuses a start on the pending launch's account. The orchestrator's
   own launch uses the same function and dispatches `INSTALL_UNIT_STARTED` on
@@ -224,13 +224,13 @@ Known gaps, recorded rather than smoothed over:
   (`reducer.ts` l.274-275). D8's abort does not cancel the timer (its only
   `clearTimeout` is the test reset, `software-updates.ts` l.274). When it
   fires, the re-entered `startSoftwareUpdate()`'s one stream check is
-  `getIsStreaming()` (l.1320, and `doSoftwareUpdate()` again at l.1577 before
+  `getIsStreaming()` (l.1322, and `doSoftwareUpdate()` again at l.1579 before
   awaited preparation), which is true only once a stream is live, so the
   timer can launch an install while a stream is still starting, and the
   orchestrator does not track that install (except through the adoption in
   (d)). (c) If a stream is live when
   `doSoftwareUpdate()` runs, its early return at `software-updates.ts`
-  l.1577 leaves `softUpdateStatus` set, so `isUpdating()` stays true and
+  l.1579 leaves `softUpdateStatus` set, so `isUpdating()` stays true and
   later stream starts are refused by `session.ts` l.80 until the backend
   restarts. (d) Adoption race: `startSoftwareUpdate()` has no
   orchestrator-phase guard, and the orchestrator learns that its own install
@@ -242,13 +242,21 @@ Known gaps, recorded rather than smoothed over:
   launch landing in that window is adopted as the orchestrator's
   `downloading` unit (`pollPackageInstallProgress`, `runtime.ts` l.767-818),
   and a stream start can then stop it, guarded only by the forced-fresh read
-  and the probe, with the same exposure as above. (e) The stage count follows
+  and the probe, with the same exposure as above. The same race in
+  `committing` (the orchestrator's own install failed before its next tick
+  saw it): the legacy launch clears `lastUpdateFailure`
+  (`software-updates.ts` l.1330), so the tick keeps `committing` while the
+  wire reads `downloading` (`runtime.ts` l.772), starts stay refused as
+  `update_in_progress`, and the tick then treats the legacy unit's outcome as
+  its own commit: `COMMIT_SUCCEEDED`, or `COMMIT_FAILED`, which records its
+  own pending plan as quarantined with the legacy reason (`runtime.ts`
+  l.791-815). (e) The stage count follows
   the image, not the RPC: `doSoftwareUpdate()` runs `capable ?
-  runDetachedAptAll : runDetachedAptUpgrade` (`software-updates.ts` l.1580,
-  l.1692-1703) for every caller. Suggested fix direction, not implemented:
+  runDetachedAptAll : runDetachedAptUpgrade` (`software-updates.ts` l.1582,
+  l.1694-1705) for every caller. Suggested fix direction, not implemented:
   cancel the pending deferral when D8 aborts for a stream, have the deferred
   continuation and `doSoftwareUpdate()` consult the orchestrator's launching
-  state, and clear `softUpdateStatus` on the l.1577 early return.
+  state, and clear `softUpdateStatus` on the l.1579 early return.
 - **No certificate-expiry countdown.** The wire carries no expiry date,
   `credentials-expiring` has no producer, and the credentials band keys on an
   `apt`-profile transport finding that no production path produces yet.

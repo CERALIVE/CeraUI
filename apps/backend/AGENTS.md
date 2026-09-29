@@ -2931,7 +2931,9 @@ UID-pinned transport have not been qualified by those installs.
   is enough; the cost is that packages and OS are never both "available" at
   once (packages win). The transition table lives in `docs/DEVICE-UPDATES.md`.
 - **`quarantined` ≠ `failed`, and both are sticky by default.** `COMMIT_FAILED`
-  quarantines (dpkg ran and failed, so there is an exact candidate to pin);
+  quarantines (dpkg ran and failed, so there is an exact candidate to pin; the
+  `committing` race under Known gaps in the root [`AGENTS.md`](../../AGENTS.md)
+  can book a legacy unit's failure here instead);
   `COMMIT_RESUME_UNRESOLVED`, `DOWNLOAD_FAILED`, `OS_STAGING_FAILED` and
   `SYNC_FAILED` go to `failed` (nothing proven bad). **No production code
   dispatches `RESET`**. The reducer accepts it and nothing sends it, so either
@@ -3289,12 +3291,12 @@ never refuses in silence.
 - **A skipped pre-check no longer wedges the latch.** `defaultSoftwareUpdateRunner`
   routes through the `softwareUpdateCheckRunner` seam and latches `softUpdateStatus`
   only once the check has actually started. On this launch path the latch is
-  cleared by the check's callback (`doSoftwareUpdate()` and the process monitor
-  it starts), so latching it after a declined check
-  left `isUpdating()` true for the lifetime of the process — refusing every later
-  update and silently killing the periodic loop with it. That callback path
-  itself leaves the latch set on `doSoftwareUpdate()`'s streaming early return;
-  see "D8 stream/update admission: what it does NOT cover" under Known gaps in
+  cleared by the check's callback (for example its error branch, or
+  `doSoftwareUpdate()` and the process monitor it starts), so latching it after a
+  declined check left `isUpdating()` true for the lifetime of the process —
+  refusing every later update and silently killing the periodic loop with it.
+  Some callback paths also leave the latch set, for example
+  `doSoftwareUpdate()`'s streaming early return; see "D8 stream/update admission: what it does NOT cover" under Known gaps in
   the root [`AGENTS.md`](../../AGENTS.md).
 - **`resetSoftwareUpdateState()`** is a test seam (mirrors the `reset*Runner`
   seams): it drops the in-flight latch and the last terminal outcome. Never call

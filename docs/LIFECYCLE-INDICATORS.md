@@ -286,7 +286,10 @@ installed nothing. Two properties make that state unrepresentable now:
 
 - **The backend never refuses silently.** `startSoftwareUpdate()` returns a typed
   `UpdateStartOutcome`; `system.startUpdate` answers `{success:false, error:<reason>}`
-  instead of a phantom `{success:true}`, and the refusal is logged. The
+  for every synchronous refusal; a launch deferred behind a running
+  `apt-get update`/discovery answers `{success:true}`, and a later refusal of
+  that deferred launch is recorded as `lastUpdateFailure` and broadcast rather
+  than returned. The refusal is logged. The
   procedure no longer duplicates the guards — `startSoftwareUpdate()` is the one
   place that decides whether an update may run.
 - **The dialog latches the outcome itself.** The async-op phase decays to `idle`

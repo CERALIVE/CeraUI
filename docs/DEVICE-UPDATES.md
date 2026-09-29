@@ -202,17 +202,21 @@ transcribed from `reducer.ts`:
 Three distinctions in that table carry weight:
 
 - `COMMIT_FAILED` goes to `quarantined` because dpkg ran and failed, so there is
-  a confirmed-bad candidate to pin. `COMMIT_RESUME_UNRESOLVED` goes to `failed`
+  a confirmed-bad candidate to pin (the `committing` race under Known gaps in
+  the root [`AGENTS.md`](../AGENTS.md) can book a legacy unit's failure here
+  instead). `COMMIT_RESUME_UNRESOLVED` goes to `failed`
   because a restarted backend could not establish what dpkg did, and nothing is
   pinned on a guess.
 - `DOWNLOAD_ABORTED_FOR_STREAM` and `OS_STAGING_ABORTED_FOR_STREAM` are not
-  failures. A stream started and, after the forced-fresh read and the
-  commit-stage probe both found no commit stage running, the unit (if one was
-  running) was stopped (see "D8: stream admission" for the gap that remains),
-  and the candidate is offered again. A launch still pending in the launch
-  deferral is not cancelled by this; that and every other legacy-path case is
-  outside D8's guarantee: see "D8 stream/update admission: what it does NOT
-  cover" under Known gaps in the root [`AGENTS.md`](../AGENTS.md).
+  failures; each offers the candidate again. For `DOWNLOAD_ABORTED_FOR_STREAM`,
+  a stream start found no commit stage running in the forced-fresh read and the
+  commit-stage probe, and the package unit (if one was running) was stopped
+  (see "D8: stream admission" for the gap that remains). A launch still pending
+  in the launch deferral is not cancelled by this; that and every other
+  legacy-path case is outside D8's guarantee: see "D8 stream/update admission:
+  what it does NOT cover" under Known gaps in the root [`AGENTS.md`](../AGENTS.md).
+  For `OS_STAGING_ABORTED_FOR_STREAM`, `rauc.service` was killed and restarted,
+  with no fresh read or probe, because RAUC writes only the inactive slot.
 - A sync failure is `failed`, never `quarantined`. It means the mirror failed,
   not that the running slot is bad.
 
