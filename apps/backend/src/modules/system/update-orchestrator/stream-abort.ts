@@ -11,16 +11,16 @@
 /**
  * The I/O half of D8's "abort-network" action (Todo 37) — the privileged
  * `systemctl` calls `runtime.ts`'s `admitAndPrepareStreamStart` dispatches once
- * it has decided (after its own forced-fresh wire-state re-check) that it is
- * genuinely safe to interrupt the in-flight operation.
+ * it has decided (after its forced-fresh wire-state re-check AND the
+ * commit-stage process probe) that it is genuinely safe to interrupt the
+ * in-flight operation.
  *
- * Both functions are BEST-EFFORT: D8 says `downloading`/`os-staging` are
- * ALLOWED regardless of whether the abort itself succeeds (the admitted stream
- * start must never be blocked by a `systemctl` hiccup), so neither throws on a
- * non-zero exit — it logs and lets the caller proceed. See the accepted-risk
- * comment on `admitAndPrepareStreamStart` for why an occasional interrupted
- * dpkg run (a DIFFERENT, narrower risk than this file's job) is fine to leave
- * to Todo 27's `ceralive-dpkg-recover.service` rather than engineered away here.
+ * Both functions are BEST-EFFORT: once admitted, `downloading`/`os-staging`
+ * starts proceed regardless of whether the abort itself succeeds (the admitted
+ * stream start must never be blocked by a `systemctl` hiccup), so neither
+ * throws on a non-zero exit — it logs and lets the caller proceed. See the
+ * comment on `admitAndPrepareStreamStart` for why the apt stop can only land
+ * in the download stage.
  */
 
 import { logger } from "../../../helpers/logger.ts";
@@ -38,7 +38,7 @@ export const RAUC_SERVICE_UNIT = "rauc.service";
  * unit's cgroup (default `KillMode=control-group`), which tears down the
  * wrapping `flock`/`sh -ec` shell AND its `apt-get` child together — safe to
  * call ONLY while still genuinely downloading (the caller has already done
- * the forced-fresh re-check before reaching here).
+ * the forced-fresh re-check and the commit-stage probe before reaching here).
  */
 export async function stopPackageInstallUnitForStream(): Promise<void> {
 	const result = await spawnWithTimeout(

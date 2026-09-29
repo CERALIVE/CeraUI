@@ -676,7 +676,25 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		},
 		status: "enforced",
 		mechanism:
-			"D8 abort-network (Todo 37): fired only after a FORCED FRESH re-read of the wire state confirms dpkg has not started; best-effort (exit code observed, never thrown) so a stop failure never blocks the admitted stream start it is protecting",
+			"D8 abort-network (Todo 37): fired only after a FORCED FRESH re-read of the wire state AND the commit-stage process probe both confirm the second stage/dpkg has not started; best-effort (exit code observed, never thrown) so a stop failure never blocks the admitted stream start it is protecting",
+	},
+	{
+		id: "updateOrchestrator.probeCommitStage",
+		file: "modules/system/update-orchestrator/commit-stage-probe.ts",
+		symbol: "defaultCommitStageProbeDeps.showUnit",
+		command:
+			"[systemctl, show, ceralive-software-update.service, --property=LoadState,ActiveState,SubState,ControlGroup, --no-pager]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"D8 commit-stage probe: bounded read of the unit's ControlGroup before its cgroup.procs + /proc comm/cmdline are inspected; any failure while the unit is active fails CLOSED (refuse the stream start, never stop the unit)",
 	},
 	{
 		id: "updateOrchestrator.killRaucForStream",

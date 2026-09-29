@@ -71,6 +71,7 @@ function fakeDeps(
 		runPackageCheck: async () => null,
 		startPackageInstall: () => ({ started: true }),
 		getPackageInstallWireState: () => ({ kind: "idle" }) as UpdateState,
+		isCommitStageRunning: async () => false,
 		checkOsManifest: async () => ({
 			available: false,
 			rateLimited: false,
@@ -768,6 +769,96 @@ describe("admitAndPrepareStreamStart — D8 wired to real abort I/O", () => {
 		});
 		const result = await admitAndPrepareStreamStart();
 		expect(result.allowed).toBe(false);
+		expect(calls.stop).toBe(0);
+		expect(calls.kill).toBe(0);
+	});
+
+	// The measured Rock 5B+ failure (2026-09-29): dpkg had started, but the
+	// wire had not yet ingested its first `Unpacking` line, so the forced-fresh
+	// read still said `downloading`. The wire-independent commit-stage probe is
+	// what must refuse here.
+	test("DEDICATED: wire still says downloading but the commit stage is running — refuses, ZERO kill/stop calls", async () => {
+		let probes = 0;
+		const { deps, calls } = abortSpyDeps({
+			getPackageInstallWireState: () =>
+				({
+					kind: "downloading",
+					progress: { downloading: 3, unpacking: 0, setting_up: 0, total: 3 },
+				}) as UpdateState,
+			isCommitStageRunning: async () => {
+				probes++;
+				return true;
+			},
+		});
+		setOrchestratorRuntimeDepsForTest(deps);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "downloading",
+			progress: { percent: 0, etaSeconds: 0 },
+		});
+
+		const result = await admitAndPrepareStreamStart();
+
+		expect(result).toEqual({
+			allowed: false,
+			reason: "update_in_progress",
+			phase: "committing",
+			percent: 0,
+			etaSeconds: 0,
+		});
+		expect(probes).toBe(1);
+		expect(calls.stop).toBe(0);
+		expect(calls.kill).toBe(0);
+		expect(getOrchestratorState().phase).toBe("committing");
+	});
+
+	test("the commit-stage probe is consulted on the downloading arm and a false answer still aborts the download", async () => {
+		let probes = 0;
+		const { deps, calls } = abortSpyDeps({
+			getPackageInstallWireState: () =>
+				({
+					kind: "downloading",
+					progress: { downloading: 1, unpacking: 0, setting_up: 0, total: 3 },
+				}) as UpdateState,
+			isCommitStageRunning: async () => {
+				probes++;
+				return false;
+			},
+		});
+		setOrchestratorRuntimeDepsForTest(deps);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "downloading",
+		});
+		const result = await admitAndPrepareStreamStart();
+		expect(result).toEqual({ allowed: true });
+		expect(probes).toBe(1);
+		expect(calls.stop).toBe(1);
+		expect(getOrchestratorState().phase).toBe("available");
+	});
+
+	test("FAIL CLOSED: the commit-stage probe throws — refuses, ZERO kill/stop calls", async () => {
+		const { deps, calls } = abortSpyDeps({
+			getPackageInstallWireState: () =>
+				({
+					kind: "downloading",
+					progress: { downloading: 1, unpacking: 0, setting_up: 0, total: 3 },
+				}) as UpdateState,
+			isCommitStageRunning: async () => {
+				throw new Error("cgroup unreadable");
+			},
+		});
+		setOrchestratorRuntimeDepsForTest(deps);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "downloading",
+		});
+		const result = await admitAndPrepareStreamStart();
+		expect(result).toMatchObject({
+			allowed: false,
+			reason: "update_in_progress",
+			phase: "committing",
+		});
 		expect(calls.stop).toBe(0);
 		expect(calls.kill).toBe(0);
 	});

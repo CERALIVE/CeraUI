@@ -29,6 +29,7 @@ import type {
 	UpdateState,
 } from "@ceraui/rpc/schemas";
 import { logger } from "../../../helpers/logger.ts";
+import { shouldUseMocks } from "../../../mocks/mock-service.ts";
 import { getIsStreaming } from "../../streaming/streaming.ts";
 import { broadcastMsg } from "../../ui/websocket-server.ts";
 import { cleanAptCache } from "../apt-cache-clean.ts";
@@ -47,6 +48,7 @@ import { loadUpdateSettings } from "../update-settings.ts";
 import { discoverCandidates } from "../update-transport/core.ts";
 import { defaultUpdateTransportDeps } from "../update-transport/executor.ts";
 import { admitStreamStart, onStreamStart } from "./admission.ts";
+import { isCommitStageRunning } from "./commit-stage-probe.ts";
 import {
 	inspectSlotSync,
 	resetSlotSyncFailure,
@@ -115,6 +117,12 @@ export interface OrchestratorRuntimeDeps {
 	 */
 	readonly stopPackageInstallUnit: () => Promise<void>;
 	readonly killAndRestartRaucForStream: () => Promise<void>;
+	/**
+	 * Wire-independent D8 guard: true while the unit's second stage
+	 * (`apt-get --no-download … install`) or any dpkg runs, and whenever that
+	 * cannot be ruled out. A throw is treated as true by the caller.
+	 */
+	readonly isCommitStageRunning: () => Promise<boolean>;
 	readonly checkOsManifest: (channel?: "stable" | "beta") => Promise<{
 		readonly available: boolean;
 		readonly rateLimited: boolean;
@@ -224,6 +232,10 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	getPackageInstallWireState: getUpdateState,
 	stopPackageInstallUnit: stopPackageInstallUnitForStream,
 	killAndRestartRaucForStream,
+	// A mocked install never creates the transient unit, so there is nothing
+	// to observe.
+	isCommitStageRunning: async () =>
+		shouldUseMocks() ? false : isCommitStageRunning(),
 	checkOsManifest: async (channel) =>
 		checkOsManifestResult(channel ?? (await loadUpdateSettings()).channel),
 	stageOs: async (manifest, onProgress) => {
@@ -492,32 +504,32 @@ export function allowCellularOnce(id: string): void {
 // no I/O, no staleness risk in the DANGEROUS direction (a phase that has
 // already moved past committing only ever gets MORE refusing, never less).
 //
-// The abort-network arm is where the documented TOCTOU race lives: Todo 36's
-// `getPackageInstallWireState()` wire read is only re-consulted by the
-// orchestrator's own tick, which runs at most every ACTIVE_TICK_MS (3s) while
-// a package install is active. If a stream-admission `kill`/`stop` fires on a
-// STALE cached `state.phase === "downloading"` that has, in reality, already
-// crossed into dpkg committing, the kill could interrupt dpkg mid-write.
+// The abort-network arm is where the stop decision lives. The cached phase
+// stays `downloading` for the whole unit on a successful install (the tick
+// only re-reads the wire every ACTIVE_TICK_MS, and the wire only reports
+// `installing` once dpkg's first `Unpacking` line has been ingested), so the
+// cached phase alone cannot tell a download from a running dpkg. Measured on a
+// Rock 5B+: a start 1 ms after dpkg appeared saw a wire still reading
+// `downloading`; the old code stopped the unit and dpkg died 84 ms later.
 //
-// ACCEPTED, BOUNDED, RECOVERABLE RISK — do not "fix" this by re-architecting
-// Todo 35's single-unit/single-flock design into two units. image-building-
-// pipeline's `ceralive-dpkg-recover.service` (Todo 27, already shipped) runs
-// on every boot, checks `/var/lib/dpkg/updates/` + `dpkg --audit`, and runs
-// `dpkg --configure -a` (600s budget) whenever dpkg was left interrupted —
-// regardless of cause (power loss, crash, or this kill are indistinguishable
-// to it). That is what makes an occasional interrupted-dpkg outcome from this
-// path recoverable rather than corrupting. See the matching AGENTS.md note in
-// this repo's "SOFTWARE-UPDATE START CONTRACT" section.
-//
-// What THIS function does is narrow the exposure window from "up to one
-// scheduler tick" (3s) to "one wire-state read round trip": immediately
-// before dispatching any kill/stop, it calls `deps.getPackageInstallWireState()`
-// DIRECTLY — bypassing the cached `state.phase` — for a forced-fresh read. If
-// that fresh read shows dpkg has actually started (`installing`) or already
-// finished (`success`), this REFUSES the start instead of killing anything:
-// zero kill/stop calls are dispatched. This is the same correctness D8's
-// admission table already has for the `committing` phase — just re-confirmed
-// at the latest possible instant before an irreversible action.
+// So immediately before any stop, this function asks two independent
+// questions and REFUSES (zero kill/stop calls, `COMMIT_PHASE_ENTERED`
+// dispatched) if either says the commit stage has begun:
+//   1. a forced-fresh wire read (`installing` / `success`), and
+//   2. `deps.isCommitStageRunning()` (commit-stage-probe.ts), which reads the
+//      unit's own processes: the second-stage `apt-get --no-download … install`
+//      or any `dpkg`/`dpkg-*`. It FAILS CLOSED — an unreadable process list for
+//      an active unit, or a throw, refuses.
+// The stop therefore only lands in the first (`apt-get -d`) download stage or
+// between the two stages, where nothing on the live root has been mutated.
+// The remaining check-then-stop gap is tens of milliseconds; at worst it
+// catches a second-stage apt-get that has just started and is still reading
+// its caches, long before it spawns dpkg. Do not "fix" that gap by splitting
+// Todo 35's single-unit/single-flock design into two units. If dpkg is
+// nonetheless interrupted by any cause (power loss, crash),
+// image-building-pipeline's `ceralive-dpkg-recover.service` runs
+// `dpkg --configure -a` on boot; that repairs an interrupted configure, not a
+// package left half-installed, which is why the stop must not reach dpkg.
 export type StreamStartUpdateAdmission =
 	| { readonly allowed: true }
 	| {
@@ -527,6 +539,18 @@ export type StreamStartUpdateAdmission =
 			readonly percent: number;
 			readonly etaSeconds: number;
 	  };
+
+async function commitStageRunning(): Promise<boolean> {
+	try {
+		return await deps.isCommitStageRunning();
+	} catch (error) {
+		logger.warn(
+			"update-orchestrator: commit-stage probe failed; refusing the stream start rather than stopping the install",
+			{ error },
+		);
+		return true;
+	}
+}
 
 export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdmission> {
 	const cached = admitStreamStart(state);
@@ -542,10 +566,14 @@ export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdm
 		// Forced fresh read — bypasses the cached `state.phase`. See the
 		// module comment above.
 		const freshWire = deps.getPackageInstallWireState();
-		if (freshWire.kind === "installing" || freshWire.kind === "success") {
-			// dpkg has ALREADY started (or finished) since our cached read —
-			// refuse instead of sending a kill signal. Correct the cached
-			// state too, so a subsequent admission check reads fresh.
+		if (
+			freshWire.kind === "installing" ||
+			freshWire.kind === "success" ||
+			(await commitStageRunning())
+		) {
+			// The commit stage has ALREADY started (or finished) since our
+			// cached read — refuse instead of sending a kill signal. Correct the
+			// cached state too, so a subsequent admission check reads fresh.
 			dispatch({ type: "COMMIT_PHASE_ENTERED", now: deps.now() });
 			const refreshed = admitStreamStart(state);
 			if (!refreshed.allowed) return refreshed;
