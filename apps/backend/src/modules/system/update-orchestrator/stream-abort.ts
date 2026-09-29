@@ -19,8 +19,9 @@
  * starts proceed regardless of whether the abort itself succeeds (the admitted
  * stream start must never be blocked by a `systemctl` hiccup), so neither
  * throws on a non-zero exit — it logs and lets the caller proceed. See the
- * comment on `admitAndPrepareStreamStart` for why the apt stop can only land
- * in the download stage.
+ * comment on `admitAndPrepareStreamStart` for what the apt stop can still
+ * reach (the check-then-stop gap, and the single-stage unit on non-capable
+ * images).
  */
 
 import { logger } from "../../../helpers/logger.ts";

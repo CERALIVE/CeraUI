@@ -10,17 +10,21 @@
 
 /**
  * D8's wire-independent answer to "may the package-install unit still be
- * stopped?". The unit runs `apt-get -d … upgrade && apt-get --no-download …
- * install` under one flock; stopping it during the first (download) stage is
- * safe, stopping it once the second stage or any dpkg runs is not. The wire
- * only reports `installing` after dpkg prints its first `Unpacking` line, so
- * this reads the unit's own processes instead: the commit stage is running
- * when any process in the unit's cgroup is `dpkg`/`dpkg-*` or an `apt-get`
- * whose argv carries `--no-download`.
+ * stopped?". The capable-image unit runs `apt-get -d … upgrade && apt-get
+ * --no-download … install` under one flock; stopping it during the first
+ * (download) stage is safe, stopping a running dpkg is not, and the second
+ * stage is treated as the commit stage because it spawns dpkg. The wire
+ * only reports `installing` once a dpkg `Unpacking` or `Setting up` line has
+ * been ingested, so this reads the unit's own processes instead: the commit
+ * stage is running when any process in the unit's cgroup is `dpkg`/`dpkg-*`
+ * or an `apt-get` whose argv carries `--no-download`. The single-stage unit a
+ * non-capable image runs has no `--no-download` stage, so there only a running
+ * `dpkg` is detected.
  *
- * FAIL CLOSED: an active unit whose processes cannot be read answers `true`
- * (a refused stream start is safe; a killed dpkg is not). An absent or
- * inactive unit answers `false`.
+ * FAIL CLOSED: a running unit whose process list cannot be read answers `true`
+ * (a refused stream start is safe; a killed dpkg is not). An absent,
+ * inactive, failed or exited unit answers `false`, as does a running unit
+ * whose readable process list holds no matching process.
  */
 
 import { readdir } from "node:fs/promises";

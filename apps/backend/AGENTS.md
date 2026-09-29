@@ -3049,7 +3049,7 @@ module load.
 | Phase | Stream start | Update action |
 |---|---|---|
 | `committing`, `restarting-services` | REFUSED, `update_in_progress` | none |
-| `downloading` | allowed while still downloading; REFUSED once the commit stage runs (see below) | `stopPackageInstallUnitForStream()` only when admitted |
+| `downloading` | allowed while still downloading; REFUSED when the commit stage is found running (see below) | `stopPackageInstallUnitForStream()` only when admitted |
 | `os-staging` | allowed | `killAndRestartRaucForStream()` |
 | `syncing` | allowed | continues (local rsync) |
 | all other phases | allowed | none |
@@ -3069,20 +3069,29 @@ An admitted start then sets `/run/ceralive/streaming`
 stream-end path clears it (a launch that never went live, every `stop()`, and a
 config-change transaction that ends the stream without one).
 
-**THE STOP MAY ONLY LAND IN THE DOWNLOAD STAGE: read before touching the
-abort-network path.** The cached phase stays `downloading` for the whole unit on
-a successful install (`notePackageCommitSucceeded` moves it through `committing`
-to `restarting-services` in one call), and the wire only reports `installing`
-once the first `Unpacking`/`Setting up` line is ingested (capped at the `total`
-parsed from apt's summary, so a failed summary parse never reports it at all).
-Measured on a Rock 5B+ (2026-09-29): a stream start sent 1 ms after dpkg
-appeared still read `downloading`, was admitted, and dpkg was killed 84 ms later.
-So immediately before any stop, `admitAndPrepareStreamStart()` asks two
-independent questions and, if either says yes, dispatches `COMMIT_PHASE_ENTERED`
-and refuses with `update_in_progress` and ZERO stop/kill calls:
+**THE STOP MUST NOT REACH DPKG: read before touching the abort-network path.**
+The cached phase can stay `downloading` while dpkg runs, so the cached phase
+alone cannot tell a download from a running dpkg. Two things produce that. The
+tick re-reads the wire only on its own cadence: after an operator-RPC install
+(`system.installUpdatesNow`, which does not reschedule the tick) the next tick
+can be up to `IDLE_TICK_MS` (60 s) away, while a scheduled install then ticks
+every `ACTIVE_TICK_MS` (3 s) and `pollPackageInstallProgress()` dispatches
+`COMMIT_PHASE_ENTERED` when it sees wire `installing`. And the wire reports
+`installing` only once the first `Unpacking` or `Setting up` line is ingested
+(`deriveInstallState` in `update-state.ts`), counted up to the `total` parsed
+from apt's summary; while no summary total has been parsed that total is `0`
+and the wire cannot report `installing` at all. On a successful install whose
+ticks never saw `installing`, `notePackageCommitSucceeded` moves the phase
+through `committing` to `restarting-services` in one call. Measured on a Rock
+5B+ (2026-09-29, operator-RPC install): a stream start sent 1 ms after dpkg
+appeared still read `downloading`, was admitted, and dpkg was gone 84 ms after
+it appeared. So immediately before any stop, `admitAndPrepareStreamStart()`
+asks two questions and, if either says yes, refuses with `update_in_progress`
+and ZERO stop/kill calls:
 
 1. a forced-fresh `deps.getPackageInstallWireState()` read showing `installing`
-   or `success`; and
+   or `success`. That is evidence dpkg ran, so this arm also dispatches
+   `COMMIT_PHASE_ENTERED`.
 2. `deps.isCommitStageRunning()` (`update-orchestrator/commit-stage-probe.ts`):
    a bounded `systemctl show` for the unit's `ControlGroup`, then its
    `cgroup.procs` (child cgroups included) and each pid's `/proc/<pid>/comm` and
@@ -3090,29 +3099,57 @@ and refuses with `update_in_progress` and ZERO stop/kill calls:
    an `apt-get` whose argv contains the exact element `--no-download` (the second
    stage, which starts before dpkg does). The first stage (`apt-get -d … upgrade`)
    and the `flock`/`sh` wrappers (whose argv only CONTAINS the script text) do
-   not count, so a genuine download stays abortable. It FAILS CLOSED: an active
-   unit whose processes cannot be read, a non-zero `systemctl show` that does not
-   say `not-found`, or a throw from the dep all answer "running". Only
-   `LoadState=not-found`, `inactive`/`failed`, or `SubState=exited` answer
-   "not running". A mocked install creates no unit, so the default dep answers
-   `false` under `shouldUseMocks()`.
+   not count, so a genuine download stays abortable. It FAILS CLOSED: a running
+   unit whose process list cannot be read, a non-zero `systemctl show` that does not
+   say `not-found`, output with no readable `LoadState=loaded`, or a throw from
+   the dep all answer "running". In the unit-state check, only
+   `LoadState=not-found`, `ActiveState=inactive`/`failed`, or `SubState=exited`
+   answer "not running" without reading the process list. A running unit
+   (`active`, `activating`, `deactivating` or `reloading`) is answered from its
+   process list, so one whose readable list holds no matching process also
+   answers "not running" (the normal download case). A mocked install creates no unit, so the default
+   dep answers `false` under `shouldUseMocks()`.
 
-The wire read stays as the second, independent signal. The remaining
-check-then-stop gap is tens of milliseconds and can at worst catch a second-stage
-`apt-get` still reading its caches, long before it spawns dpkg.
-`image-building-pipeline`'s `ceralive-dpkg-recover.service` still runs
-`dpkg --configure -a` on every boot for any interrupted dpkg (power loss, crash),
-but it repairs an interrupted configure, not a package left half-installed —
-which is why the stop must never reach dpkg. **Do NOT "fix" anything here by
-re-architecting the single-unit/single-flock apt design into two units, and do
-NOT change the unit's ExecStart (its identity is validated exactly).** The probe
-is deliberately NOT consulted by the 3 s progress tick: doing so would turn a
-second-stage apt failure before dpkg (a `DOWNLOAD_FAILED`, retryable) into a
-`COMMIT_FAILED` that quarantines the candidates. Coverage:
-`update-orchestrator-runtime.test.ts` (the measured refusal, the probe-false
-abort, the fail-closed throw) and `update-orchestrator-commit-stage-probe.test.ts`
-(a real fake cgroup/proc tree). `os-staging` needs no fresh read: RAUC only ever
-writes the INACTIVE slot.
+A refusal from the probe ALONE dispatches NOTHING: it returns the fixed shape
+`{phase: "committing", percent: 0, etaSeconds: 0}` (the phase that renders as
+"an update commit is in progress"; the cached percent is download progress and
+says nothing about a commit) and leaves the orchestrator phase at `downloading`.
+A running second stage or a thrown probe is not proof that dpkg ran: the second
+stage can fail before dpkg (a missing archive under `--no-download`, a resolver
+error), and latching `committing` would turn that later wire `failed` into a
+`COMMIT_FAILED` that quarantines the candidates, where the download semantics
+give `DOWNLOAD_FAILED` (`failed`, nothing quarantined). The next start probes
+again. Because the pushed `status.update_orchestrator` still reads
+`downloading`, the Go-Live band (which prefers the pushed phase) stays hidden in
+that window; the typed refusal itself is what the operator sees.
+
+What the stop can still reach depends on which unit the orchestrator launched.
+On a capable (`apt-all-packages`) image it is the two-stage unit, and the
+remaining exposure is the check-then-stop gap: a second-stage `apt-get` that
+starts inside it is stopped, normally before it spawns the unpacking dpkg (not
+measured). On a non-capable image `startSoftwareUpdate()` launches the
+single-stage `runDetachedAptUpgrade` unit, which has no `--no-download` stage,
+so the probe detects only a running `dpkg` and the gap sits right before the
+dpkg spawn. `image-building-pipeline`'s `ceralive-dpkg-recover.service` still
+runs on every boot and runs `dpkg --configure -a` when it finds dpkg
+interrupted (power loss, crash), but it repairs an interrupted configure, not a package left
+half-installed — which is why the stop must not reach dpkg. **Do NOT "fix"
+anything here by re-architecting the single-unit/single-flock apt design into
+two units, and do NOT change the unit's ExecStart (its identity is validated
+exactly).** The probe is deliberately NOT consulted by the progress tick, for
+the same quarantine reason. The legacy `system.startUpdate` launcher never
+moves the orchestrator phase, and the stop is issued only from the orchestrator's
+own `downloading` phase (entered by `INSTALL_UNIT_STARTED` in
+`maybeStartPackageInstall`), so for a transaction started that way admission
+issues no stop; the start is refused by the launch-path `isUpdating()` gate in
+`streamloop/session.ts` instead. D8 has no kill exposure there. Coverage:
+`update-orchestrator-runtime.test.ts` (the measured refusal and its no-latch
+repeat, the probe-false abort, the fail-closed throw followed by a
+probe-false admit, and a probe-only refusal whose later wire `failed` stays
+`DOWNLOAD_FAILED`) and `update-orchestrator-commit-stage-probe.test.ts` (a real
+fake cgroup/proc tree, incl. not-found, inactive, failed, exited, activating
+and deactivating units, and empty `systemctl show` output). `os-staging` needs no fresh read: RAUC
+only ever writes the INACTIVE slot.
 
 ### THE OS AGENT, THE SLOT MIRROR AND THE TRANSPORT PIN [PARTIAL]
 

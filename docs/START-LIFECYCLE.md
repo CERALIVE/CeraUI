@@ -105,12 +105,15 @@ SIGTERM-killing and restarting `rauc.service`) — see
 `modules/system/update-orchestrator/runtime.ts`'s `admitAndPrepareStreamStart`
 and `stream-abort.ts`. Immediately before dispatching any stop, the apt abort
 path performs a FORCED FRESH re-read of the wire state (bypassing the
-orchestrator's own cached, up-to-3s-stale phase) AND consults the commit-stage
+orchestrator's own cached phase, which can lag the unit) AND consults the commit-stage
 probe (`commit-stage-probe.ts`), which reads the unit's own processes. If the
 wire says `installing`/`success`, or the unit is running its second-stage
 `apt-get --no-download` or any `dpkg`, the start is REFUSED with
-`update_in_progress` instead; the probe fails closed. The stop therefore only
-lands in the download stage. See the code comment on
+`update_in_progress` instead; the probe fails closed, and a refusal from the
+probe alone leaves the orchestrator phase untouched. On a capable image's
+two-stage unit the stop can still land in the check-then-stop gap; on a non-capable
+image's single-stage unit the probe detects only a running `dpkg`, so that gap
+sits right before the dpkg spawn. See the code comment on
 `admitAndPrepareStreamStart` and `apps/backend/AGENTS.md`'s D8 section for the
 measured failure this closes and why `image-building-pipeline`'s
 `ceralive-dpkg-recover.service` is a backstop only.
