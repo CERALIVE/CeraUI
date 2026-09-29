@@ -56,6 +56,7 @@ const deps = {
 	verifyCms: async (_data: Uint8Array, _signature: Uint8Array) => ({
 		cn: "CeraLive OTA Manifest Signer",
 		eku: ["codeSigning"],
+		issuer: "CN=CeraLive RAUC Intermediate CA,O=CeraLive",
 	}),
 	compare: async (newer: string, older: string) => {
 		const result = Bun.spawnSync([
@@ -76,16 +77,23 @@ describe("signed OS manifest validation", () => {
 			parseManifestSignerDetails(
 				"subject=CN=CeraLive OTA Manifest Signer\n",
 				"X509v3 Extended Key Usage:\n    Code Signing\n",
+				"issuer=CN=CeraLive RAUC Intermediate CA,O=CeraLive\n",
 			),
-		).toEqual({ cn: "CeraLive OTA Manifest Signer", eku: ["codeSigning"] });
+		).toEqual({
+			cn: "CeraLive OTA Manifest Signer",
+			eku: ["codeSigning"],
+			issuer: "CN=CeraLive RAUC Intermediate CA,O=CeraLive",
+		});
 		expect(
 			parseManifestSignerDetails(
 				"subject=CN=CeraLive Bundle Signer\n",
 				"X509v3 Extended Key Usage:\n    E-mail Protection, Code Signing\n",
+				"issuer=CN=CeraLive RAUC Intermediate CA,O=CeraLive\n",
 			),
 		).toEqual({
 			cn: "CeraLive Bundle Signer",
 			eku: ["codeSigning", "emailProtection"],
+			issuer: "CN=CeraLive RAUC Intermediate CA,O=CeraLive",
 		});
 	});
 	test("signature is checked before parsing any untrusted fields", async () => {
@@ -108,6 +116,7 @@ describe("signed OS manifest validation", () => {
 			verifyCms: async () => ({
 				cn: "CeraLive Bundle Signer",
 				eku: ["emailProtection", "codeSigning"],
+				issuer: "CN=CeraLive RAUC Intermediate CA,O=CeraLive",
 			}),
 		});
 		expect(result).toEqual({ ok: false, reason: "signer_not_manifest_signer" });

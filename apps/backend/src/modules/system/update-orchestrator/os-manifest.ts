@@ -38,6 +38,7 @@ export type OsChannel = OsChannelManifest["channel"];
 export type ManifestRefusal =
 	| "signature_invalid"
 	| "signer_not_manifest_signer"
+	| "signer_issuer_invalid"
 	| "schema_invalid"
 	| "wrong_board"
 	| "wrong_compatible"
@@ -65,10 +66,20 @@ export type ManifestVerificationDeps = {
 	readonly verifyCms: (
 		data: Uint8Array,
 		signature: Uint8Array,
-	) => Promise<{ readonly cn: string; readonly eku: readonly string[] }>;
+	) => Promise<{
+		readonly cn: string;
+		readonly eku: readonly string[];
+		readonly issuer: string;
+	}>;
 	readonly compare: (candidate: string, installed: string) => Promise<boolean>;
 	readonly isQuarantined: (version: string) => Promise<boolean>;
 };
+
+// The production and persistent bench RAUC intermediates are the only manifest issuers.
+const MANIFEST_SIGNER_ISSUERS = [
+	"CN=CeraLive RAUC Intermediate CA,O=CeraLive",
+	"CN=CeraLive RAUC Bench Intermediate CA,O=CeraLive",
+] as const;
 
 /** CMS trust precedes *all* manifest parsing: an unsigned payload reveals no field-validation result. */
 export async function validateSignedOsManifest(
@@ -89,6 +100,8 @@ export async function validateSignedOsManifest(
 		signer.eku.includes("emailProtection")
 	)
 		return { ok: false, reason: "signer_not_manifest_signer" };
+	if (!MANIFEST_SIGNER_ISSUERS.some((issuer) => issuer === signer.issuer))
+		return { ok: false, reason: "signer_issuer_invalid" };
 	let raw: unknown;
 	try {
 		raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(data));

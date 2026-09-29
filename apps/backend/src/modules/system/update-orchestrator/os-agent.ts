@@ -45,7 +45,12 @@ export type OsStageReceipt = z.infer<typeof receiptSchema>;
 export function parseManifestSignerDetails(
 	subject: string,
 	extension: string,
-): { readonly cn: string; readonly eku: readonly string[] } {
+	issuer: string,
+): {
+	readonly cn: string;
+	readonly eku: readonly string[];
+	readonly issuer: string;
+} {
 	const cn =
 		subject
 			.replace(/^subject=/, "")
@@ -67,7 +72,11 @@ export function parseManifestSignerDetails(
 					: []),
 			]
 		: [];
-	return { cn, eku };
+	return {
+		cn,
+		eku,
+		issuer: issuer.replace(/^issuer=/, "").replace(/\r?\n$/, ""),
+	};
 }
 
 export async function readManifestSerial(
@@ -120,10 +129,15 @@ async function command(argv: string[], timeoutMs = 10_000): Promise<string> {
 	return result.stdout;
 }
 
-async function cmsSigner(
+export async function cmsSigner(
 	data: Uint8Array,
 	signature: Uint8Array,
-): Promise<{ cn: string; eku: readonly string[] }> {
+	keyring = KEYRING,
+): Promise<{
+	readonly cn: string;
+	readonly eku: readonly string[];
+	readonly issuer: string;
+}> {
 	const dir = await mkdtemp(join(tmpdir(), "ceraui-cms-"));
 	try {
 		const json = join(dir, "manifest.json");
@@ -143,7 +157,7 @@ async function cmsSigner(
 			"-content",
 			json,
 			"-CAfile",
-			KEYRING,
+			keyring,
 			"-purpose",
 			"any",
 			"-signer",
@@ -173,7 +187,17 @@ async function cmsSigner(
 			"-ext",
 			"extendedKeyUsage",
 		]);
-		return parseManifestSignerDetails(subject, extension);
+		const issuer = await command([
+			"openssl",
+			"x509",
+			"-in",
+			cert,
+			"-noout",
+			"-issuer",
+			"-nameopt",
+			"RFC2253",
+		]);
+		return parseManifestSignerDetails(subject, extension, issuer);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}

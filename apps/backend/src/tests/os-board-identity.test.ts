@@ -92,6 +92,7 @@ async function verifyOrangePointer(pointer: unknown) {
 		verifyCms: async () => ({
 			cn: "CeraLive OTA Manifest Signer",
 			eku: ["codeSigning"],
+			issuer: "CN=CeraLive RAUC Intermediate CA,O=CeraLive",
 		}),
 		compare: async (candidate: string, current: string) =>
 			candidate === "2026.10.6" && current === "2026.10.5",
