@@ -3021,8 +3021,10 @@ UID-pinned transport have not been qualified by those installs.
   configured window. `hasActiveRemoteSession()` is a five-minute command-recency
   heuristic, NOT hub presence; a quiet connected operator can be missed.
 - **Operator RPCs bypass idle and D7, never D8.** `system.checkUpdatesNow`,
-  `system.installUpdatesNow` (refuses `stream_active` itself, before the phase
-  leaves `available`), `system.allowCellularOnce`, and the pure read
+  `system.installUpdatesNow` (starts packages from `available` or the scheduled
+  `awaiting-idle` intent without another idle wait; refuses `stream_active`
+  before starting the unit and refuses an already-starting/running transaction),
+  `system.allowCellularOnce`, and the pure read
   `system.getUpdateDetails` (`readUpdateDetails()`, every block independently
   nullable; it never touches the S1-locked `device-stats.raucSlot`).
 - **The legacy periodic loop still runs.** `main.ts` starts

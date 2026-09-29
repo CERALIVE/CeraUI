@@ -175,8 +175,11 @@ describe("schedule.ts — manual-action structural gates", () => {
 		expect(canStartManualCheck("committing")).toBe(false);
 		expect(canStartManualCheck("downloading")).toBe(false);
 	});
-	test("canStartManualInstall requires the matching kind's available phase", () => {
+	test("canStartManualInstall admits a pending package intent but not an active unit", () => {
 		expect(canStartManualInstall("available", "packages")).toBe(true);
+		expect(canStartManualInstall("awaiting-idle", "packages")).toBe(true);
+		expect(canStartManualInstall("downloading", "packages")).toBe(false);
+		expect(canStartManualInstall("awaiting-idle", "os")).toBe(false);
 		expect(canStartManualInstall("os-available", "packages")).toBe(false);
 		expect(canStartManualInstall("os-available", "os")).toBe(true);
 		expect(canStartManualInstall("idle", "packages")).toBe(false);

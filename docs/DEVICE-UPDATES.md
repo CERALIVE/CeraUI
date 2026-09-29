@@ -281,7 +281,7 @@ remote operator can be missed.
 | RPC | Runtime function | Behaviour |
 |---|---|---|
 | `system.checkUpdatesNow` | `checkUpdatesNow()` | Bypasses the due time and D7. Allowed from `idle`, `available` and `os-available`, otherwise `busy`. Runs a package check, then an OS check on a capable image. |
-| `system.installUpdatesNow` | `installUpdatesNow()` | Bypasses idle, never D8. Refuses `stream_active` while a stream is live, `booted_version_unknown` when the last OS check failed for that reason, `busy` while the package pipeline is running, `not_available` otherwise. |
+| `system.installUpdatesNow` | `installUpdatesNow()` | From `available` **or `awaiting-idle`**, starts the pending package unit immediately without waiting for the 30-minute idle gate; OS `os-available` staging also bypasses idle. Never bypasses stream admission: `stream_active` refuses even a pending package intent without starting a unit. An already-starting or running package unit remains `busy`; `committing`/`restarting-services` cannot start another. `booted_version_unknown` and `not_available` retain their distinct refusals. |
 | `system.allowCellularOnce` | `allowCellularOnce()` | Records a one-time cellular approval for the named OS candidate. |
 | `system.getUpdateDetails` | `readUpdateDetails()` | Pure read for the dialog: slots, booted/staged/candidate OS version, check clocks, pending cellular approval, last transport selection. Every block is independently nullable. |
 

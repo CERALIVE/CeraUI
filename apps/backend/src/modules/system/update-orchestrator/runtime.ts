@@ -262,6 +262,7 @@ let tickTimer: ReturnType<typeof setTimeout> | undefined;
 let started = false;
 let osCandidate: OsChannelManifest | undefined;
 let osStageInProcess = false;
+let packageInstallStarting = false;
 let osForceActivated = false;
 // The OS candidate the D12 gate is HOLDING for an explicit one-time cellular
 // approval (Todo 41's "Download over cellular now" prompt). Set only where the
@@ -291,6 +292,7 @@ export function resetOrchestratorRuntimeForTest(): void {
 	deps = defaultOrchestratorRuntimeDeps;
 	osCandidate = undefined;
 	osStageInProcess = false;
+	packageInstallStarting = false;
 	osForceActivated = false;
 	pendingCellularApproval = undefined;
 }
@@ -443,6 +445,7 @@ export async function installUpdatesNow(): Promise<ManualInstallOutcome> {
 			? { started: true }
 			: { started: false, reason: "not_available" };
 	}
+	if (packageInstallStarting) return { started: false, reason: "busy" };
 	if (!canStartManualInstall(state.phase, "packages")) {
 		return {
 			started: false,
@@ -456,9 +459,12 @@ export async function installUpdatesNow(): Promise<ManualInstallOutcome> {
 	// before the state even leaves `available`, so an active stream refuses the
 	// whole attempt rather than parking it in `awaiting-idle` forever.
 	if (deps.isStreamLive()) return { started: false, reason: "stream_active" };
-	dispatch({ type: "AWAIT_IDLE_FOR_INSTALL", now: deps.now() });
+	if (state.phase === "available")
+		dispatch({ type: "AWAIT_IDLE_FOR_INSTALL", now: deps.now() });
 	await maybeStartPackageInstall({ bypassIdle: true });
-	return { started: true };
+	return getOrchestratorState().phase === "downloading"
+		? { started: true }
+		: { started: false, reason: "busy" };
 }
 
 export function allowCellularOnce(id: string): void {
@@ -674,23 +680,29 @@ async function maybeStartPackageInstall(opts: {
 		const idle = await deps.isIdle(settings.schedule);
 		if (!idle) return;
 	}
-	const available = deps.getPackageInstallWireState();
-	if (available.kind === "available") {
-		await deps.quarantine.savePending(
-			available.packages
-				?.filter((item) => item.actionable)
-				.map((item) => ({
-					name: item.name,
-					...(item.version ? { version: item.version } : {}),
-				})) ?? available.identity.packages.map((name) => ({ name })),
-		);
+	if (state.phase !== "awaiting-idle" || packageInstallStarting) return;
+	packageInstallStarting = true;
+	try {
+		const available = deps.getPackageInstallWireState();
+		if (available.kind === "available") {
+			await deps.quarantine.savePending(
+				available.packages
+					?.filter((item) => item.actionable)
+					.map((item) => ({
+						name: item.name,
+						...(item.version ? { version: item.version } : {}),
+					})) ?? available.identity.packages.map((name) => ({ name })),
+			);
+		}
+		const result = deps.startPackageInstall();
+		if (!result.started) {
+			await deps.quarantine.clearPending();
+			return; // stays awaiting-idle; retried next tick
+		}
+		dispatch({ type: "INSTALL_UNIT_STARTED", now: deps.now() });
+	} finally {
+		packageInstallStarting = false;
 	}
-	const result = deps.startPackageInstall();
-	if (!result.started) {
-		await deps.quarantine.clearPending();
-		return; // stays awaiting-idle; retried next tick
-	}
-	dispatch({ type: "INSTALL_UNIT_STARTED", now: deps.now() });
 }
 
 async function pollPackageInstallProgress(): Promise<void> {

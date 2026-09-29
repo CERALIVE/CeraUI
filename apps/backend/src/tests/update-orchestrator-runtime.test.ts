@@ -242,6 +242,124 @@ describe("installUpdatesNow — bypasses idle, NEVER bypasses stream-admission",
 		expect(idleChecked).toBe(false);
 		expect(getOrchestratorState().phase).toBe("downloading");
 	});
+
+	test("starts a pending automatic install immediately when the operator asks during awaiting-idle", async () => {
+		let installs = 0;
+		let idleChecks = 0;
+		setOrchestratorRuntimeDepsForTest(
+			fakeDeps({
+				quarantine: testQuarantine(),
+				isIdle: async () => {
+					idleChecks++;
+					return false;
+				},
+				getPackageInstallWireState: () => ({
+					kind: "available",
+					identity: { version: "app-update", packages: ["cerastream"] },
+					package_count: 1,
+					actionable_count: 1,
+					packages: [{ name: "cerastream", layer: "app", actionable: true }],
+				}),
+				startPackageInstall: () => {
+					installs++;
+					return { started: true };
+				},
+			}),
+		);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "available",
+		});
+		await runOrchestratorTick();
+		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).toBe("awaiting-idle");
+		expect(installs).toBe(0);
+
+		expect(await installUpdatesNow()).toEqual({ started: true });
+		expect(getOrchestratorState().phase).toBe("downloading");
+		expect(installs).toBe(1);
+		expect(idleChecks).toBe(1);
+		expect(await installUpdatesNow()).toEqual({
+			started: false,
+			reason: "busy",
+		});
+		expect(installs).toBe(1);
+	});
+
+	test("refuses a live stream from awaiting-idle without launching or changing the pending phase", async () => {
+		let installs = 0;
+		setOrchestratorRuntimeDepsForTest(
+			fakeDeps({
+				isStreamLive: () => true,
+				startPackageInstall: () => {
+					installs++;
+					return { started: true };
+				},
+			}),
+		);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "awaiting-idle",
+		});
+		expect(await installUpdatesNow()).toEqual({
+			started: false,
+			reason: "stream_active",
+		});
+		expect(getOrchestratorState().phase).toBe("awaiting-idle");
+		expect(installs).toBe(0);
+	});
+
+	test("two simultaneous manual requests for the same pending install launch only one unit", async () => {
+		let installs = 0;
+		setOrchestratorRuntimeDepsForTest(
+			fakeDeps({
+				quarantine: testQuarantine(),
+				getPackageInstallWireState: () => ({
+					kind: "available",
+					identity: { version: "app-update", packages: ["cerastream"] },
+					package_count: 1,
+					actionable_count: 1,
+					packages: [{ name: "cerastream", layer: "app", actionable: true }],
+				}),
+				startPackageInstall: () => {
+					installs++;
+					return { started: true };
+				},
+			}),
+		);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "awaiting-idle",
+		});
+		const first = installUpdatesNow();
+		const second = installUpdatesNow();
+		expect(await Promise.all([first, second])).toEqual([
+			{ started: true },
+			{ started: false, reason: "busy" },
+		]);
+		expect(installs).toBe(1);
+	});
+
+	test("refuses manual install while committing or restarting services", async () => {
+		let installs = 0;
+		setOrchestratorRuntimeDepsForTest(
+			fakeDeps({
+				startPackageInstall: () => {
+					installs++;
+					return { started: true };
+				},
+			}),
+		);
+		for (const phase of ["committing", "restarting-services"] as const) {
+			setOrchestratorStateForTest({ ...initialOrchestratorState(0), phase });
+			expect(await installUpdatesNow()).toEqual({
+				started: false,
+				reason: "busy",
+			});
+			expect(getOrchestratorState().phase).toBe(phase);
+		}
+		expect(installs).toBe(0);
+	});
 });
 
 describe("allowCellularOnce", () => {

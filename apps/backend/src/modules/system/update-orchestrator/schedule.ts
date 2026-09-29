@@ -137,15 +137,15 @@ export function canStartManualCheck(phase: OrchestratorPhase): boolean {
 	return phase === "idle" || phase === "available" || phase === "os-available";
 }
 
-// A manual install (system.installUpdatesNow) bypasses idle (Todo 32) but MUST
-// still hold: (a) an update is actually known available for the requested
-// kind, and (b) the stream-admission block is untouched — that is enforced
-// separately by admission.ts / the future Todo-37 wiring, never here.
+// A pending automatic package install has not launched a unit yet: an operator
+// may take it past the idle gate, but not past stream admission.
 export function canStartManualInstall(
 	phase: OrchestratorPhase,
 	kind: CheckKind,
 ): boolean {
-	return kind === "packages" ? phase === "available" : phase === "os-available";
+	return kind === "packages"
+		? phase === "available" || phase === "awaiting-idle"
+		: phase === "os-available";
 }
 
 // ─── D12 — cellular policy ──────────────────────────────────────────────────
