@@ -460,16 +460,13 @@ export function createStreamSessionOrchestrator(
 		attemptId: string,
 		request: StreamStartRequest,
 	): Promise<StartResult> => {
-		// The update-orchestrator D8 check runs LAST among admission gates,
-		// deliberately: it is the only one with a SIDE EFFECT (aborting an
-		// in-flight apt download / killing an in-flight RAUC install — see
-		// `admitAndPrepareStreamStart` in update-orchestrator/runtime.ts). By
-		// the time we reach here every other gate (duplicate-start,
-		// modem-transition lease, recovery barrier, blocking-mutation) has
-		// already passed, so no later gate in THIS orchestrator refuses after
-		// the abort. The launch can still be refused later by session.ts's
-		// isUpdating() guard while the stopped unit settles (root AGENTS.md D8
-		// Known gaps (h)).
+		// The update-orchestrator D8 check (`admitAndPrepareStreamStart` in
+		// update-orchestrator/runtime.ts) runs after the other gates in this
+		// orchestrator (duplicate-start, modem-transition lease, recovery
+		// barrier, blocking-mutation) so an update-unit stop or RAUC kill is
+		// not issued for an attempt those gates already refused. The launch
+		// can still be refused later, e.g. by session.ts's isUpdating() guard
+		// (root AGENTS.md D8 Known gaps (h)).
 		const admitUpdate = deps.admitUpdate;
 		if (admitUpdate !== undefined) {
 			const updateAdmission = await admitUpdate();

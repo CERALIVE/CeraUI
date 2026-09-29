@@ -231,7 +231,7 @@ product clearance path. The one narrow exception is the root-only, inactive/
 effectively-masked-service cross-slot unresolved commit adjudication; it never
 dispatches `RESET` and requires byte-bound evidence, a durable receipt and plan
 retirement before its own transition. See [`UPDATE-RECOVERY.md`](UPDATE-RECOVERY.md).
-Streaming is not affected (D8 allows every start in both phases).
+D8 allows every start in both phases.
 
 The additive wire field is `status.update_orchestrator`
 (`updateOrchestratorWireStateSchema`): `{schema: 1, phase, progress,
@@ -322,7 +322,7 @@ remote operator can be missed.
 | `system.checkUpdatesNow` | `checkUpdatesNow()` | Bypasses the due time and D7. Allowed from `idle`, `available` and `os-available`, otherwise `busy`. Runs a package check, then an OS check on a capable image. |
 | `system.installUpdatesNow` | `installUpdatesNow()` | From `available` **or `awaiting-idle`**, requests a package install without waiting for idle; OS staging also bypasses idle. It refuses `stream_active` while a stream is LIVE, not while it is still starting (root AGENTS.md D8 Known gaps (f)). An already-starting or running package pipeline remains `busy`; `committing`/`restarting-services` cannot start another. `booted_version_unknown` and `not_available` retain their distinct refusals. |
 | `system.allowCellularOnce` | `allowCellularOnce()` | Records a one-time cellular approval for the named OS candidate. |
-| `system.getUpdateDetails` | `readUpdateDetails()` | Pure read for the dialog: slots, booted/staged/candidate OS version, check clocks, pending cellular approval, last transport selection. Every block is independently nullable. |
+| `system.getUpdateDetails` | `readUpdateDetails()` | Read-only query for the dialog: slots, booted/staged/candidate OS version, check clocks, pending cellular approval, last transport selection. Every block is independently nullable. |
 
 **Two launch paths exist, and only one goes through the orchestrator.** The
 dialog's System section calls `system.checkUpdatesNow` and
@@ -343,8 +343,8 @@ throws if a phase is placed in more than one bucket.
 | Phase | Start allowed? | Action on the update |
 |---|---|---|
 | `committing`, `restarting-services` | **refused** (`update_in_progress`) | none |
-| `downloading` | allowed while still downloading; **refused** when the commit stage is found running | abort over network: stop the detached apt unit (only when admitted) |
-| `os-staging` | allowed | abort over network: kill and restart `rauc.service` |
+| `downloading` | **refused** on a fresh wire reading of `installing` or `success`, or a positive/fail-closed commit-stage probe; otherwise allowed once the stop call returns | best-effort `systemctl stop` of the detached apt unit, never issued on a refusal; a nonzero exit is logged, not proof of cancellation |
+| `os-staging` | allowed once the calls return | kill and restart `rauc.service`, no fresh read or probe; a nonzero exit is logged, not proof of cancellation |
 | `syncing` | allowed | continue locally |
 | every other phase | allowed | none |
 

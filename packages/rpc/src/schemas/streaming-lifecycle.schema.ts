@@ -134,10 +134,11 @@ export const startFailureSchema = z.object({
 	code: z.union([z.number(), z.string()]).optional(),
 	message: z.string().optional(),
 	captureCause: startFailureCaptureCauseSchema.optional(),
-	// Present ONLY on `update_in_progress` — the update orchestrator's own
-	// phase/progress at the moment the start was refused (Todo 37). Named
-	// `update*` rather than reusing the bare `phase` field above: `phase` here
-	// is the START pipeline's own phase enum (params/connect/hello/...), a
+	// Present ONLY on `update_in_progress` (Todo 37): normally the update
+	// orchestrator's phase/progress at refusal; a probe-only refusal carries
+	// the fixed `committing`/0/0 while the orchestrator stays `downloading`.
+	// Named `update*` rather than reusing the bare `phase` field above: `phase`
+	// here is the START pipeline's own phase enum (params/connect/hello/...), a
 	// completely different axis from the update orchestrator's phase.
 	updatePhase: updateOrchestratorPhaseSchema.optional(),
 	updatePercent: z.number().min(0).max(100).optional(),
@@ -303,6 +304,9 @@ export const START_FAILURE_RETRIABILITY: Record<
 		retriablePhases: [],
 		why: 'The capture input could not be brought up, and by default that is a standing condition — an unsupported signal format and an absent signal both fail identically on retry. The ONE transient cause is overridden per-cause below rather than by widening this row, so a class that is deterministic for two of its three causes never advertises itself as retriable.',
 	},
+	// Note on the `why` below: D8 also refuses in `downloading` (fresh wire
+	// read or commit-stage probe), and a refusal can clear without the
+	// orchestrator reaching `settled` (docs/START-LIFECYCLE.md).
 	update_in_progress: {
 		retriablePhases: [],
 		why: 'The update orchestrator is committing a package transaction or restarting services — an irreversible, non-abortable operation (Todo 35\u2019s single-flock, single-unit design). An automatic retry here would either queue the start behind the update or race it; the honest answer is a typed refusal the caller can act on once the orchestrator reaches `settled`, never a blind retry loop.',

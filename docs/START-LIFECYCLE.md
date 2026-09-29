@@ -322,7 +322,7 @@ start, so Todo 27 rolls back and escalates instead.
 | `protocol_incompatible` | *(none)* | An engine/bindings protocol-major mismatch is deterministic — the same binaries never negotiate on retry, so surface an update prompt instead of looping. |
 | `start_invalid` | *(none)* | Invalid params/config are deterministic — an identical retry fails identically, so the operator (or cloud) must fix the input first. |
 | `engine_internal` | *(none)* | A deterministic engine-side fault or state conflict (e.g. already_streaming / -32603); retrying masks a real bug and can orphan resources — surface with a journal pointer. |
-| `update_in_progress` | *(none)* | A cached refusing phase, fresh wire read or fail-closed probe blocked admission. Wait for that condition to clear; automatic retry is not authorized. |
+| `update_in_progress` | *(none)* | A cached refusing phase, fresh wire read or positive/fail-closed probe blocked admission. Wait for that condition to clear; automatic retry is not authorized. |
 
 ---
 

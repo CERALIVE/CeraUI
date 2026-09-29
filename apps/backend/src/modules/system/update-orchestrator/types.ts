@@ -269,10 +269,11 @@ export type StreamAdmission =
 	  };
 
 // What the orchestrator must DO to its own in-flight operation when a stream
-// is admitted to start. "none" covers every phase with nothing in flight to
-// act on (idle/checking/available/awaiting-idle/settled/os-available/
-// os-staged/os-activation-armed/os-verifying/sync-eligible/synced/quarantined/
-// failed) as well as the two refused phases (committing/restarting-services),
+// is admitted to start. "none" covers every phase in which D8 acts on
+// nothing, even if work is in flight there (e.g. a `checking` discovery):
+// idle/checking/available/awaiting-idle/settled/os-available/os-staged/
+// os-activation-armed/os-verifying/sync-eligible/synced/quarantined/failed,
+// as well as the two refused phases (committing/restarting-services),
 // for which onStreamStart is never actually consulted by a caller that
 // correctly checked admitStreamStart first — it still returns a defined,
 // non-throwing answer so the function stays total.

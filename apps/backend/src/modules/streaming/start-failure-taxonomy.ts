@@ -189,8 +189,8 @@ export function typedStartFailure(
  * orchestrator's D8 refusal (cached phase, fresh wire or probe-only).
  * Always at the `params` phase — like `modem_transition_active`,
  * `recovery_pending` and `mutation_blocked`, this is refused before the engine
- * is ever touched — and never retriable (see the taxonomy's own row: the
- * caller must wait for the orchestrator to reach `settled`, not loop).
+ * is ever touched — and never retriable: the caller must wait for the refusing
+ * condition to clear, not retry automatically; `settled` is not required.
  */
 export function typedUpdateInProgressFailure(
 	attemptId: string,

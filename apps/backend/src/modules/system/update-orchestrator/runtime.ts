@@ -9,17 +9,17 @@
 */
 
 /**
- * The orchestrator's effects layer (Todo 36): the ONLY place in this feature
- * that performs I/O. Owns the in-memory singleton state, persistence, the
- * scheduler tick, and every privileged action the pure reducer/schedule
- * modules only ever *describe*.
+ * The orchestrator's effects layer (Todo 36). It holds the in-memory singleton
+ * state and the scheduler tick, and performs persistence and privileged actions
+ * mostly through the injectable `OrchestratorRuntimeDeps`; helpers such as
+ * `os-agent.ts`, `commit-stage-probe.ts` and `stream-abort.ts` do their own I/O.
  *
- * D7/D12/idle gating, the schedule cadence and the D8 admission matrix are
- * NOT re-implemented here — this module calls the pure functions in
+ * D7/D12/idle gating, the schedule cadence and the D8 phase table are NOT
+ * re-implemented here — this module calls the pure functions in
  * `schedule.ts`/`admission.ts` with real, observed inputs and dispatches
- * whatever event they imply. The one exception, unavoidably, is I/O sequencing
- * (what to call, in what order, on a failure) — a property tests in this file
- * cover with an injected fake `OrchestratorRuntimeDeps`, never the real OS.
+ * whatever event they imply. It adds I/O sequencing (what to call, in what
+ * order, on a failure) and D8's `downloading` fresh-read/probe refusal; tests
+ * cover both with an injected fake `OrchestratorRuntimeDeps`.
  */
 
 import type {
@@ -512,8 +512,8 @@ export function allowCellularOnce(id: string): void {
 // `downloading`; the old code stopped the unit and dpkg was gone 84 ms after
 // it appeared.
 //
-// So immediately before any stop, this function asks two questions and
-// REFUSES with zero kill/stop calls if either says the commit stage has begun:
+// So immediately before the package-unit stop, this function asks two
+// questions and REFUSES with zero kill/stop calls if either answers yes:
 //   1. a forced-fresh wire read (`installing` / `success`). That is evidence
 //      dpkg ran, so it also dispatches `COMMIT_PHASE_ENTERED`.
 //   2. `deps.isCommitStageRunning()` (commit-stage-probe.ts), which reads the

@@ -7,7 +7,7 @@ maintenance entrypoint in the CeraUI `.deb`. It is **not** a browser, RPC,
 remote-control or sudoers operation. The wrapper takes the shared
 `/run/lock/ceralive-update.lock` nonblockingly and executes the separately
 compiled root-only recovery binary under that lock. The standalone binary
-imports the shared *pure* RAUC identity readers
+imports the shared, dependency-light RAUC identity readers
 from `os-identity.ts`; it never initializes the normal backend boot graph or
 loads `setup.json`. An unprivileged host build reaches its explicit `root_required`
 refusal after parsing valid arguments, without a device setup file.

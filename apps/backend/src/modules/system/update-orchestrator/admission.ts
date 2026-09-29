@@ -20,12 +20,13 @@
  * The D8 phase classification (runtime.ts checks a downloading unit separately):
  *   - `committing` / `restarting-services` -> REFUSE based on the tracked
  *     phase; a stale phase can over-refuse.
- *   - `downloading` / `os-staging` -> the start is initially ALLOWED and an
- *     abort is requested. The cached `downloading` phase can include dpkg, so
- *     runtime.ts's `admitAndPrepareStreamStart` does a forced-fresh wire read
- *     and the commit-stage probe before stopping the package unit and refuses
- *     if either finds the commit stage; the gap that remains is described
- *     there. `os-staging` kills and restarts RAUC with neither check.
+ *   - `downloading` / `os-staging` -> this table ALLOWS the start and asks for
+ *     an abort. The cached `downloading` phase can include dpkg, so
+ *     runtime.ts's `admitAndPrepareStreamStart` first does a forced-fresh wire
+ *     read and the commit-stage probe, and refuses on a wire `installing`/
+ *     `success` or a positive (or fail-closed) probe; otherwise it issues a
+ *     best-effort unit stop. `os-staging` kills and restarts RAUC with neither
+ *     check.
  *   - `syncing` -> ALLOWED, and the local slot mirror continues.
  *   - every other phase is ALLOWED with action "none". D8 does not interrupt
  *     a discovery in `checking` or prevent an install being launched after a

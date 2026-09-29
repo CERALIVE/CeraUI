@@ -2902,7 +2902,7 @@ branches discard the speculative answer, query-failure falls back, the IPv4
 short-circuit, AAAA-first/A-first/one-family outcomes, both-family cache
 retention, and IPv6 URL handling at all three consumers).
 
-## THE UPDATE ORCHESTRATOR: ONE AGENT, ONE LOCK, D8 ADMISSION [EXISTS]
+## THE UPDATE ORCHESTRATOR AND D8 ADMISSION [EXISTS]
 
 `modules/system/update-orchestrator/` tracks the new update path, alongside
 the still-running legacy update RPCs and periodic loop. It owns discovery,
@@ -2921,9 +2921,10 @@ Bench-enabled capable images exercised the APT identity and commit paths on
 both boards, but did not complete the orchestrator lifecycle; OS staging and
 UID-pinned transport have not been qualified by those installs.
 
-- **Pure core, one effects layer.** `types.ts`, `reducer.ts` (`reduceOrchestrator`),
+- **Pure core.** `types.ts`, `reducer.ts` (`reduceOrchestrator`),
   `admission.ts` and `schedule.ts` contain no I/O, no `Date.now()` and no
-  `Math.random()`; `runtime.ts` is the only I/O. The reducer is total: an
+  `Math.random()`. `runtime.ts` performs its effects mostly through injected
+  dependencies; effectful helpers such as `os-agent.ts` also perform I/O. The reducer is total: an
   unlisted (phase, event) pair returns the SAME object, which `dispatch()` uses
   to skip persisting and pushing an unchanged state.
 - **18 phases, one field.** `ORCHESTRATOR_PHASES` tracks the orchestrator's
@@ -2948,7 +2949,7 @@ UID-pinned transport have not been qualified by those installs.
   plan in a unique receipt before archiving it, then reduces the narrow
   `HISTORICAL_COMMIT_ADJUDICATED` event; fresh discovery is required. Tests inject
   probes and fault each crash boundary. The physical RAUC compatible and boot-id
-  readers were extracted to the pure `os-identity.ts` so the standalone compiled
+  readers were extracted to the dependency-light `os-identity.ts` so the standalone compiled
   tool does not import `os-agent.ts`'s backend boot graph or demand `setup.json`;
   `os-agent.ts` re-exports both readers and `OsAgentError` unchanged for existing
   callers. Actual root/systemd/APT board proof is
@@ -3031,7 +3032,7 @@ UID-pinned transport have not been qualified by those installs.
   `awaiting-idle` intent without another idle wait; refuses `stream_active`
   before requesting the launch and refuses an already-starting/running transaction;
   it checks for a LIVE stream, not an admitted start),
-  `system.allowCellularOnce`, and the pure read
+  `system.allowCellularOnce`, and the read-only
   `system.getUpdateDetails` (`readUpdateDetails()`, every block independently
   nullable; it never touches the S1-locked `device-stats.raucSlot`).
 - **The legacy periodic loop still runs.** `main.ts` starts
@@ -3053,8 +3054,8 @@ module load.
 | Phase | Stream start | Update action |
 |---|---|---|
 | `committing`, `restarting-services` | REFUSED, `update_in_progress` | none |
-| `downloading` | allowed while still downloading; REFUSED when the commit stage is found running (see below) | `stopPackageInstallUnitForStream()` only when admitted |
-| `os-staging` | allowed | `killAndRestartRaucForStream()` |
+| `downloading` | REFUSED on a fresh wire reading of `installing` or `success`, or a positive/fail-closed commit-stage probe (see below); otherwise allowed once the stop call returns | best-effort `stopPackageInstallUnitForStream()`, never issued on a refusal; a nonzero exit is logged, not proof of cancellation |
+| `os-staging` | allowed once the kill/restart calls return | `killAndRestartRaucForStream()`, no fresh read or probe; a nonzero exit is logged, not proof of cancellation |
 | `syncing` | allowed | continues (local rsync) |
 | all other phases | allowed | none |
 
@@ -3062,8 +3063,8 @@ module load.
 choke point every launch origin (UI, remote-control, autostart, set-profile,
 restoration) funnels through, calls `admitAndPrepareStreamStart()` as its last
 gate in THIS orchestrator, after duplicate-start, the modem-transition lease,
-the recovery barrier and blocking-mutation, because it is the only gate with
-a side effect. A
+the recovery barrier and blocking-mutation, so an update-unit stop or RAUC
+kill is not issued for an attempt those gates already refused. A
 refusal is the typed, non-retriable `update_in_progress` class at phase `params`
 (`typedUpdateInProgressFailure()`), carrying `updatePhase` / `updatePercent` /
 `updateEtaSeconds`; `updateEtaSeconds` is always `0` today because no progress
@@ -3092,7 +3093,7 @@ install whose ticks never saw `installing`, `notePackageCommitSucceeded` moves t
 through `committing` to `restarting-services` in one call. Measured on a Rock
 5B+ (2026-09-29, operator-RPC install): a stream start sent 1 ms after dpkg
 appeared still read `downloading`, was admitted, and dpkg was gone 84 ms after
-it appeared. So immediately before any stop, `admitAndPrepareStreamStart()`
+it appeared. So immediately before the package-unit stop, `admitAndPrepareStreamStart()`
 asks two questions and, if either says yes, refuses with `update_in_progress`
 and ZERO stop/kill calls:
 

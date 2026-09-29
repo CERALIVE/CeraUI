@@ -106,24 +106,26 @@ is what this gate exists because the type system alone could not catch.
 
 ## THE DEVICE UPDATE SYSTEM [EXISTS; capable-image paths PARTIAL]
 
-One update agent, `apps/backend/src/modules/system/update-orchestrator/`, owns
-package discovery and install, OS staging and activation, the lagged slot mirror
-and the stream/update admission rule. The implementation reference is
+The update orchestrator, `apps/backend/src/modules/system/update-orchestrator/`,
+tracks package discovery/install, OS staging/activation and slot mirroring for
+its own path, alongside legacy package-update RPCs and a periodic loop; D8
+supplies stream-start admission against its tracked phase. The implementation reference is
 [`docs/DEVICE-UPDATES.md`](docs/DEVICE-UPDATES.md); the backend's load-bearing
 rules are in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → THE UPDATE
 ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
 
-- **[EXISTS] Orchestrator.** A pure 18-phase reducer (`reduceOrchestrator`) plus
-  one effects layer (`runtime.ts`), persisted to
+- **[EXISTS] Orchestrator.** A pure 18-phase reducer (`reduceOrchestrator`)
+  driven by `runtime.ts`, persisted to
   `/data/ceralive/update-state/agent.json` and resumed at boot without ever
   re-running dpkg. It pushes the additive `status.update_orchestrator` field on
   every transition; the older `update_state` union is unchanged.
 - **[EXISTS] D8 admission.** `committing` and `restarting-services` refuse a
-  stream start with the typed `update_in_progress` class; `downloading` and
-  `os-staging` allow it and abort the transfer, except that `downloading` is
-  also refused when a probe of the package unit's processes finds its commit
-  stage (second-stage `apt-get --no-download` or any `dpkg`; fails closed, and
-  leaves the orchestrator phase untouched); `syncing` continues. Wired as the
+  stream start with the typed `update_in_progress` class. In `downloading`, a
+  fresh wire reading of `installing` or `success`, or a positive/fail-closed
+  commit-stage probe, refuses; otherwise D8 issues a best-effort package-unit
+  stop and admits the attempt once that call returns. In `os-staging`, D8
+  issues a RAUC kill/restart and admits if those calls return. In either arm a
+  nonzero exit is logged, not proof of cancellation. `syncing` continues. Wired as the
   last gate of `stream-session-orchestrator.ts`'s `start()` through
   `admitAndPrepareStreamStart()`. See [`docs/START-LIFECYCLE.md`](docs/START-LIFECYCLE.md).
   See "D8 stream/update admission: what it does NOT cover" under Known gaps below.
@@ -196,8 +198,8 @@ Known gaps, recorded rather than smoothed over:
   `update-orchestrator/runtime.ts` l.572-621) covers a package unit the
   orchestrator launched itself, whose systemd unit already exists, without the
   deferral in (b), and is tracking in `downloading`. Before the package-unit
-  stop it does a forced-fresh wire read and the commit-stage probe; if either
-  finds the commit stage it refuses with
+  stop it does a forced-fresh wire read and the commit-stage probe; on a wire
+  `installing`/`success` or a positive probe it refuses with
   `update_in_progress` and stops nothing (the probe fails closed, e.g. on an
   unreadable process list for a running unit, or a throw). The remaining
   exposure of that unit is the check-then-stop gap (capable image,
@@ -258,7 +260,7 @@ Known gaps, recorded rather than smoothed over:
   legacy `startSoftwareUpdate()` check only for a live stream (`runtime.ts`
   l.472, l.732, l.752; `software-updates.ts` l.1322). That flag stays false
   until the stream is live (`streaming.ts` l.88-102;
-  `stream-session-orchestrator.ts` l.573), whereas D8 runs only at
+  `stream-session-orchestrator.ts` l.570), whereas D8 runs only at
   start admission. An install launched after admission but before live is not
   stopped by D8; if the stream is live when `doSoftwareUpdate()` runs, (c)
   applies. (g) Pre-unit window: even a non-deferred orchestrator launch enters

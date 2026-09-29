@@ -16,8 +16,8 @@
  * stage; the RAUC kill has neither check (RAUC writes only the inactive slot).
  *
  * Both functions log rather than throw on a nonzero `systemctl` exit, so D8
- * returns allowed even if the abort did not succeed. A later `isUpdating()`
- * check can still refuse the launch until the update monitor settles; see the
+ * still returns allowed after one; a spawn failure or the 10 s timeout throws
+ * instead. A later `isUpdating()` check can still refuse the launch; see the
  * root AGENTS.md D8 Known gaps (h). An absent unit is not a cancelled launch
  * (item (g)).
  */

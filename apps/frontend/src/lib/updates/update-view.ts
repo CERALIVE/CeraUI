@@ -34,10 +34,10 @@ export const UPDATE_BUSY_PHASES: readonly UpdateOrchestratorPhase[] = [
 ];
 
 /**
- * The phases the backend's stream admission REFUSES a start in (D8,
- * `update-orchestrator/admission.ts`): dpkg or a service restart is running and
- * cannot be interrupted. Every other phase either allows the start or aborts
- * its own network work for it, so only these two may warn before Go Live.
+ * The phases in which D8's phase table (`update-orchestrator/admission.ts`)
+ * refuses a start; only these warn before Go Live. D8 can also refuse in
+ * `downloading` (see the root AGENTS.md D8 admission note), which this list
+ * does not predict.
  */
 export const UPDATE_REFUSING_PHASES: readonly UpdateOrchestratorPhase[] = [
 	"committing",
