@@ -1243,10 +1243,12 @@ const defaultSoftwareUpdateRunner: SoftwareUpdateRunner = (
 		}
 	});
 
-	// The callback above is the ONLY thing that ever clears softUpdateStatus, so
-	// latching it after a check that declined to run would leave isUpdating()
-	// true for the lifetime of the process — refusing every later update and
-	// silently killing the periodic check loop with it.
+	// On this path the callback above (doSoftwareUpdate and the process monitor
+	// it starts) clears softUpdateStatus, so latching it after a check that
+	// declined to run would leave isUpdating() true for the lifetime of the
+	// process — refusing every later update and silently killing the periodic
+	// check loop. doSoftwareUpdate's streaming early return also leaves it set:
+	// see "D8 stream/update admission: what it does NOT cover" in AGENTS.md.
 	if (!checkStarted) return refuseUpdateStart("check_unavailable");
 
 	softUpdateStatus = { downloading: 0, unpacking: 0, setting_up: 0, total: 0 };

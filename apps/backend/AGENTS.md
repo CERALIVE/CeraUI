@@ -3036,14 +3036,9 @@ UID-pinned transport have not been qualified by those installs.
   dialog's Packages section still calls `system.checkForUpdates` /
   `system.startUpdate`, which run `triggerManualUpdateCheck()` /
   `startSoftwareUpdate()` directly and dispatch nothing to the orchestrator.
-  When the orchestrator is not tracking an install of its own, D8 admits a
-  stream start during such a transaction and never stops its package unit;
-  the older `isUpdating()` guard in `streamloop/session.ts` refuses it, as retriable
-  `engine_restarting` / `stream_start_suppressed_update`, not as
-  `update_in_progress`. The exception is the legacy-launch race described
-  under the D8 table below: a legacy launch that lands after the orchestrator's
-  own install ended without success but before its next tick is adopted as the
-  orchestrator's `downloading` unit, and a stream start can then stop it.
+  An install launched through the legacy path, or during the launch deferral,
+  is outside D8's guarantee: see "D8 stream/update admission: what it does NOT
+  cover" under Known gaps in the root [`AGENTS.md`](../../AGENTS.md).
 
 ### D8: THE STREAM/UPDATE ADMISSION TABLE [EXISTS]
 
@@ -3084,8 +3079,8 @@ every `ACTIVE_TICK_MS` (3 s) and `pollPackageInstallProgress()` dispatches
 `installing` only once the first `Unpacking` or `Setting up` line is ingested
 (`deriveInstallState` in `update-state.ts`), counted up to the `total` parsed
 from apt's summary; while no summary total has been parsed that total is `0`
-and the wire cannot report `installing` at all. On a successful install whose
-ticks never saw `installing`, `notePackageCommitSucceeded` moves the phase
+and the wire cannot report `installing` at all. On a successful capable-image
+install whose ticks never saw `installing`, `notePackageCommitSucceeded` moves the phase
 through `committing` to `restarting-services` in one call. Measured on a Rock
 5B+ (2026-09-29, operator-RPC install): a stream start sent 1 ms after dpkg
 appeared still read `downloading`, was admitted, and dpkg was gone 84 ms after
@@ -3143,26 +3138,11 @@ two units, and do NOT change the unit's ExecStart (its identity is validated
 exactly).** The probe is deliberately NOT consulted by the progress tick, for
 the same quarantine reason.
 
-The legacy `system.startUpdate` launcher dispatches nothing to the orchestrator,
-and the stop is issued only from the orchestrator's `downloading` phase
-(entered by `INSTALL_UNIT_STARTED` in `maybeStartPackageInstall`). When the
-orchestrator is not tracking an install of its own, admission therefore never
-stops a legacy transaction's package unit; the start is refused by the
-launch-path `isUpdating()` gate in `streamloop/session.ts` instead. The exception is a
-narrow race. `startSoftwareUpdate()` has no orchestrator-phase guard and clears
-`lastUpdateFailure`, and the orchestrator learns that its own install ended
-without success only at its next tick (a failure has no callback; only a
-successful capable-image commit does, `onCommitSucceeded`), which after a `system.installUpdatesNow` launch can be up
-to `IDLE_TICK_MS` (60 s) away. A legacy launch in that window lands while the
-orchestrator still reads `downloading`, and the tick then treats the shared
-wire state as its own (`DOWNLOAD_PROGRESS`, then `COMMIT_PHASE_ENTERED`). A
-stream start in that window can stop the legacy transaction's unit (the same
-`SOFTWARE_UPDATE_UNIT`), guarded exactly as the orchestrator's own: the
-forced-fresh read and the commit-stage probe. The unit's stage count follows
-the image, not the caller, so the remaining gap is the one above: the
-check-then-stop gap on a capable image's two-stage unit, and only a running
-`dpkg` detected on a non-capable image's single-stage unit. The exposure is no
-wider than for the orchestrator's own unit on the same image. Coverage:
+The guarantee above is for a unit the orchestrator launched itself and is
+tracking in `downloading`. An install launched through the legacy path, or
+during the launch deferral, is outside D8's guarantee: see "D8 stream/update
+admission: what it does NOT cover" under Known gaps in the root
+[`AGENTS.md`](../../AGENTS.md). Coverage:
 `update-orchestrator-runtime.test.ts` (the measured refusal and its no-latch
 repeat, the probe-false abort, the fail-closed throw followed by a
 probe-false admit, and a probe-only refusal whose later wire `failed` stays
@@ -3308,10 +3288,14 @@ never refuses in silence.
   duplicating them is what let a refusal answer `{success:true}`.
 - **A skipped pre-check no longer wedges the latch.** `defaultSoftwareUpdateRunner`
   routes through the `softwareUpdateCheckRunner` seam and latches `softUpdateStatus`
-  only once the check has actually started. The check's callback is the ONLY
-  thing that ever clears that latch, so latching it after a declined check left
-  `isUpdating()` true for the lifetime of the process — refusing every later
-  update and silently killing the periodic loop with it.
+  only once the check has actually started. On this launch path the latch is
+  cleared by the check's callback (`doSoftwareUpdate()` and the process monitor
+  it starts), so latching it after a declined check
+  left `isUpdating()` true for the lifetime of the process — refusing every later
+  update and silently killing the periodic loop with it. That callback path
+  itself leaves the latch set on `doSoftwareUpdate()`'s streaming early return;
+  see "D8 stream/update admission: what it does NOT cover" under Known gaps in
+  the root [`AGENTS.md`](../../AGENTS.md).
 - **`resetSoftwareUpdateState()`** is a test seam (mirrors the `reset*Runner`
   seams): it drops the in-flight latch and the last terminal outcome. Never call
   it from production code — it would discard a real in-flight update.

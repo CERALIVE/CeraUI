@@ -161,8 +161,8 @@ export type OrchestratorEvent =
 	// calls installUpdatesNow) — see the "single combined unit" note below.
 	| { readonly type: "AWAIT_IDLE_FOR_INSTALL"; readonly now: number }
 	// awaiting-idle -> downloading: idle has been reached (or bypassed by
-	// system.installUpdatesNow) AND no stream is currently live, so the ONE
-	// combined download+commit detached unit (Todo 35's
+	// system.installUpdatesNow) AND no stream is currently live, so on a
+	// capable image the ONE combined download+commit detached unit (Todo 35's
 	// `buildDetachedAptAllCommand` — apt-get -d && apt-get install, one flock,
 	// one systemd-run unit) is launched. There is no separate "download-only"
 	// unit to start independently: Todo 35's own mechanism deliberately chains
@@ -182,6 +182,10 @@ export type OrchestratorEvent =
 	// What remains: on a capable image's two-stage unit, the check-then-stop
 	// gap only; on a non-capable image's single-stage unit, the probe detects
 	// only a running `dpkg`, so the gap sits right before the dpkg spawn.
+	// This event is also dispatched when startSoftwareUpdate() only deferred
+	// the launch; that deferral, and any install launched through the legacy
+	// path, is outside D8's guarantee: see "D8 stream/update admission: what it
+	// does NOT cover" under Known gaps in the root AGENTS.md.
 	| { readonly type: "INSTALL_UNIT_STARTED"; readonly now: number }
 	| {
 			readonly type: "DOWNLOAD_PROGRESS";

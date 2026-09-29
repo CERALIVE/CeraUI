@@ -116,7 +116,10 @@ image's single-stage unit the probe detects only a running `dpkg`, so that gap
 sits right before the dpkg spawn. See the code comment on
 `admitAndPrepareStreamStart` and `apps/backend/AGENTS.md`'s D8 section for the
 measured failure this closes and why `image-building-pipeline`'s
-`ceralive-dpkg-recover.service` is a backstop only.
+`ceralive-dpkg-recover.service` is a backstop only. All of this holds for a
+unit the orchestrator launched itself and is tracking in `downloading`; an
+install launched through the legacy path, or during the launch deferral, is
+outside D8's guarantee (see the last bullet below).
 
 An admitted start also sets `/run/ceralive/streaming` — the same sentinel the
 image-side `ceralive-rauc-activate.sh` (Todo 28) checks before staging an OTA
@@ -138,19 +141,12 @@ worth knowing when consuming it:
   when no push is available. `UpdateRefusalBand.svelte` renders the result and
   never disables Start; admission stays on the device.
 - An update launched through the older `system.startUpdate` RPC bypasses the
-  orchestrator. When the orchestrator is not tracking an install of its own,
-  this class is not produced for it and its package unit is never stopped: a start during such
-  a transaction is refused instead by `streamloop/session.ts`'s `isUpdating()`
-  guard, at phase `connect`, as retriable `engine_restarting` with code
-  `stream_start_suppressed_update`. The exception is a narrow race: a legacy
-  launch that lands after the orchestrator's own install ended without success
-  but before its next tick (up to 60 s after `system.installUpdatesNow`) is
-  adopted as the orchestrator's `downloading` unit. A start can then stop it,
-  guarded by the forced-fresh read and the commit-stage probe (the
-  check-then-stop gap on a capable image's two-stage unit; only a running
-  `dpkg` detected on a non-capable image's single-stage unit), or, once the
-  orchestrator has entered `committing` from that wire, is refused with this
-  class.
+  orchestrator. An install launched through the legacy path, or during the
+  launch deferral, is outside D8's guarantee: see "D8 stream/update admission:
+  what it does NOT cover" under Known gaps in the root
+  [`AGENTS.md`](../AGENTS.md). That paragraph also records when the separate
+  `isUpdating()` guard (`stream_start_suppressed_update`) does and does not
+  refuse such a start.
 
 The orchestrator's phases, the full D8 table and what is proven are in
 [DEVICE-UPDATES.md](./DEVICE-UPDATES.md).

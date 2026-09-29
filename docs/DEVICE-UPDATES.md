@@ -206,10 +206,13 @@ Three distinctions in that table carry weight:
   because a restarted backend could not establish what dpkg did, and nothing is
   pinned on a guess.
 - `DOWNLOAD_ABORTED_FOR_STREAM` and `OS_STAGING_ABORTED_FOR_STREAM` are not
-  failures. A stream started, the transfer was cancelled after the forced-fresh
-  read and the commit-stage probe both found no commit stage running (see
-  "D8: stream admission" for the gap that remains), and the candidate is
-  offered again.
+  failures. A stream started and, after the forced-fresh read and the
+  commit-stage probe both found no commit stage running, the unit (if one was
+  running) was stopped (see "D8: stream admission" for the gap that remains),
+  and the candidate is offered again. A launch still pending in the launch
+  deferral is not cancelled by this; that and every other legacy-path case is
+  outside D8's guarantee: see "D8 stream/update admission: what it does NOT
+  cover" under Known gaps in the root [`AGENTS.md`](../AGENTS.md).
 - A sync failure is `failed`, never `quarantined`. It means the mirror failed,
   not that the running slot is bad.
 
@@ -318,29 +321,10 @@ dialog's System section calls `system.checkUpdatesNow` and
 `system.installUpdatesNow`. Its Packages section, preserved unchanged from before
 the orchestrator, still calls the older `system.checkForUpdates` and
 `system.startUpdate`, which run `triggerManualUpdateCheck()` and
-`startSoftwareUpdate()` directly and dispatch nothing to the orchestrator. When
-the orchestrator is not tracking an install of its own, the D8 table below
-admits a stream start during such a transaction and never stops its package
-unit; the start is still refused, by the pre-existing `isUpdating()` guard in
-`streamloop/session.ts`, but as the retriable `engine_restarting` class with code
-`stream_start_suppressed_update`, not as `update_in_progress`.
-
-The exception is a narrow race. `startSoftwareUpdate()` has no
-orchestrator-phase guard and clears the previous failure, and the orchestrator
-learns that its own install ended without success only at its next tick (a
-failure has no callback; only a successful capable-image commit does), which
-after a `system.installUpdatesNow` launch can be up to 60 s away. A legacy launch in that window lands while the orchestrator
-still reads `downloading`; its tick then treats the shared wire state as its own
-(`DOWNLOAD_PROGRESS`, then `COMMIT_PHASE_ENTERED`, after which a start is
-refused as `update_in_progress`). Before that, a stream start can stop the
-legacy transaction's unit, which is the same unit name, guarded exactly as the
-orchestrator's own: the forced-fresh read and the commit-stage probe below. The
-unit's stage count follows the image, not the caller, so the exposure is the
-same as for the orchestrator's own unit on that image: the check-then-stop gap
-on a capable image's two-stage unit, and only a running `dpkg` detected on a
-non-capable image's single-stage unit. If the orchestrator still reads
-`committing` from its own failed install, a start is refused as
-`update_in_progress` instead.
+`startSoftwareUpdate()` directly and dispatch nothing to the orchestrator. An
+install launched through the legacy path, or during the launch deferral, is
+outside D8's guarantee: see "D8 stream/update admission: what it does NOT
+cover" under Known gaps in the root [`AGENTS.md`](../AGENTS.md).
 
 ## D8: stream admission
 
@@ -385,7 +369,8 @@ not proof that dpkg ran, and a second stage that fails before dpkg must still
 end as `DOWNLOAD_FAILED` (`failed`, nothing quarantined), not a quarantining
 `COMMIT_FAILED`. The next start probes again.
 
-What the stop can still reach depends on the unit. A capable image runs the
+For a unit the orchestrator launched itself and is tracking in `downloading`,
+what the stop can still reach depends on the image. A capable image runs the
 two-stage unit, where the remaining exposure is the check-then-stop gap: a
 second-stage `apt-get` that starts inside it is stopped, normally before it
 spawns the unpacking dpkg (not measured). A non-capable image runs the
@@ -393,7 +378,10 @@ single-stage `runDetachedAptUpgrade` unit, which has no `--no-download` stage, s
 the probe detects only a running `dpkg` and the gap sits right before the dpkg
 spawn. The boot-time `ceralive-dpkg-recover.service` (`dpkg --configure -a`)
 remains a backstop for interruptions such as power loss, and does not repair a
-package left half-installed. An admitted start sets `/run/ceralive/streaming`,
+package left half-installed. An install launched through the legacy path, or
+during the launch deferral, is outside D8's guarantee: see "D8 stream/update
+admission: what it does NOT cover" under Known gaps in the root
+[`AGENTS.md`](../AGENTS.md). An admitted start sets `/run/ceralive/streaming`,
 which the image's activation script checks before arming an OS slot, and every
 stream-end path clears it. The typed failure is documented in
 [START-LIFECYCLE.md](./START-LIFECYCLE.md).

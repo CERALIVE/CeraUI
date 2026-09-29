@@ -533,11 +533,11 @@ export function allowCellularOnce(id: string): void {
 // non-capable image the orchestrator launches the single-stage
 // `runDetachedAptUpgrade` unit, which has no `--no-download` stage, so the
 // probe detects only a running `dpkg` and the gap sits right before the dpkg
-// spawn. The unit being stopped need not be the orchestrator's own: a legacy
-// `system.startUpdate` launch that lands after the orchestrator's own install
-// ended without success, but before its next tick, is adopted as this
-// `downloading` unit (same unit name, stage count set by the image); see
-// apps/backend/AGENTS.md, D8. Do not "fix" either by splitting Todo 35's
+// spawn. All of this is for a unit the orchestrator launched itself and is
+// tracking in `downloading`. An install launched through the legacy path, or
+// during the launch deferral, is outside D8's guarantee: see "D8
+// stream/update admission: what it does NOT cover" under Known gaps in the
+// root AGENTS.md. Do not "fix" either image's stop gap by splitting Todo 35's
 // single-unit/single-flock design into two units. If dpkg is interrupted (power loss, crash),
 // image-building-pipeline's `ceralive-dpkg-recover.service` runs
 // `dpkg --configure -a` when it finds that on boot; that repairs an interrupted configure, not a
