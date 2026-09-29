@@ -282,16 +282,19 @@ renders a standing `update-start-refused` band carrying the device's own reason
 and calls out a start the device accepted but never reported progress for.
 **Status: EXISTS** — added after a live Rock 5B+ report where Update → confirm
 showed "Applying…", reverted to the Update button a few seconds later, and
-installed nothing. Two properties make that state unrepresentable now:
+installed nothing. Two mechanisms improve visibility, but the post-acceptance
+early return described below remains silent:
 
-- **The backend never refuses silently.** `startSoftwareUpdate()` returns a typed
+- **Synchronous start refusals are reported.** `startSoftwareUpdate()` returns a typed
   `UpdateStartOutcome`; `system.startUpdate` answers `{success:false, error:<reason>}`
   for every synchronous refusal; a launch deferred behind a running
   `apt-get update`/discovery answers `{success:true}`, and a later refusal of
   that deferred launch is recorded as `lastUpdateFailure` and broadcast rather
   than returned. The refusal is logged. The
-  procedure no longer duplicates the guards — `startSoftwareUpdate()` is the one
-  place that decides whether an update may run.
+  procedure no longer duplicates the guards. A post-acceptance early return in
+  `doSoftwareUpdate()` when a stream is live or updates are disabled records
+  and broadcasts nothing and leaves `softUpdateStatus` set (root AGENTS.md D8
+  Known gaps (c)).
 - **The dialog latches the outcome itself.** The async-op phase decays to `idle`
   after `ASYNC_OP_TERMINAL_LINGER_MS`, which is precisely how the old surface lost
   its explanation; the dialog records the last start outcome in its own state so

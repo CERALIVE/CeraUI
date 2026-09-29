@@ -147,10 +147,10 @@ values in this order: `idle`, `checking`, `available`, `downloading`,
 `os-available`, `os-staging`, `os-staged`, `os-activation-armed`,
 `os-verifying`, `sync-eligible`, `syncing`, `synced`, `quarantined`, `failed`.
 
-One phase is enough because the single update lock allows only one disruptive
-operation at a time. The trade-off: a package update and an OS update are never
-both tracked as available at once. Packages go first, and the OS check waits
-while a package phase is active.
+One phase tracks the orchestrator's workflow, not legacy RPC launches. A package
+update and an OS update are never both tracked as available at once. Packages
+go first, and the OS check waits while a package phase is active. See the root
+AGENTS.md D8 Known gaps for overlap with the independent legacy launcher.
 
 `reduceOrchestrator` is pure and total. A (phase, event) pair it does not list
 returns the same state object unchanged. This is the complete transition table,
@@ -209,14 +209,16 @@ Three distinctions in that table carry weight:
   pinned on a guess.
 - `DOWNLOAD_ABORTED_FOR_STREAM` and `OS_STAGING_ABORTED_FOR_STREAM` are not
   failures; each offers the candidate again. For `DOWNLOAD_ABORTED_FOR_STREAM`,
-  a stream start found no commit stage running in the forced-fresh read and the
-  commit-stage probe, and the package unit (if one was running) was stopped
-  (see "D8: stream admission" for the gap that remains). A launch still pending
-  in the launch deferral is not cancelled by this; that and every other
-  legacy-path case is outside D8's guarantee: see "D8 stream/update admission:
+  a stream start found no commit stage in the forced-fresh read or probe and
+  issued a `systemctl stop` for the package unit (a nonzero exit is logged, but
+  the event is still dispatched). A pending launch is NOT cancelled if no unit
+  exists yet, whether deferred or still in the orchestrator's pre-unit
+  preparation. It can continue untracked after the phase becomes `available`.
+  See "D8 stream/update admission:
   what it does NOT cover" under Known gaps in the root [`AGENTS.md`](../AGENTS.md).
-  For `OS_STAGING_ABORTED_FOR_STREAM`, `rauc.service` was killed and restarted,
-  with no fresh read or probe, because RAUC writes only the inactive slot.
+  For `OS_STAGING_ABORTED_FOR_STREAM`, a kill and restart of `rauc.service`
+  were issued without a fresh read or probe; nonzero exits are logged, not
+  treated as a refused start. RAUC writes only the inactive slot.
 - A sync failure is `failed`, never `quarantined`. It means the mirror failed,
   not that the running slot is bad.
 
@@ -242,7 +244,8 @@ older `update_state` union keeps its original meaning.
 Every transition that changes state is written atomically to
 `/data/ceralive/update-state/agent.json`. On boot, `resumeOrchestratorState()`
 treats `committing` as the one safety-critical case: dpkg must never run twice.
-It never starts another apt install or upgrade; settling a recovered transaction may run `apt-get clean`. It calls the existing detached-unit reattachment
+It never starts another apt install or upgrade; settling a recovered transaction
+may run `apt-get clean`. It calls the existing detached-unit reattachment
 `recoverSoftwareUpdateIfRunning()` and reads `getUpdateState()`, then maps the
 answer: still running keeps `committing` with progress, `success` dispatches
 `COMMIT_SUCCEEDED`, `failed` dispatches `COMMIT_FAILED`, and an absent or
@@ -300,9 +303,10 @@ The tick runs every 3 s while a phase is active (`downloading`, `committing`,
 
 A scheduled check starts only from `idle`, only when due, and only when the D7
 toggle (`packagesAuto` or `systemAuto`) is on. In `available` the tick moves to
-`awaiting-idle` only when `packagesAuto` is on. In `awaiting-idle` the combined
-download and commit unit starts only when no stream is live and the device is
-idle.
+`awaiting-idle` only when `packagesAuto` is on. In `awaiting-idle` a scheduled
+install is requested only when no stream is live and the device is idle; an
+accepted request may still be pre-unit or deferred (root AGENTS.md D8 Known
+gaps (b), (g)).
 
 Idle comes from `getIdleStatus()`: 30 minutes since the latest of stream end,
 preview end, start-lease end, last routed remote command and last UI heartbeat,
@@ -316,7 +320,7 @@ remote operator can be missed.
 | RPC | Runtime function | Behaviour |
 |---|---|---|
 | `system.checkUpdatesNow` | `checkUpdatesNow()` | Bypasses the due time and D7. Allowed from `idle`, `available` and `os-available`, otherwise `busy`. Runs a package check, then an OS check on a capable image. |
-| `system.installUpdatesNow` | `installUpdatesNow()` | From `available` **or `awaiting-idle`**, starts the pending package unit immediately without waiting for the 30-minute idle gate; OS `os-available` staging also bypasses idle. Never bypasses stream admission: `stream_active` refuses even a pending package intent without starting a unit. An already-starting or running package unit remains `busy`; `committing`/`restarting-services` cannot start another. `booted_version_unknown` and `not_available` retain their distinct refusals. |
+| `system.installUpdatesNow` | `installUpdatesNow()` | From `available` **or `awaiting-idle`**, requests a package install without waiting for idle; OS staging also bypasses idle. It refuses `stream_active` while a stream is LIVE, not while it is still starting (root AGENTS.md D8 Known gaps (f)). An already-starting or running package pipeline remains `busy`; `committing`/`restarting-services` cannot start another. `booted_version_unknown` and `not_available` retain their distinct refusals. |
 | `system.allowCellularOnce` | `allowCellularOnce()` | Records a one-time cellular approval for the named OS candidate. |
 | `system.getUpdateDetails` | `readUpdateDetails()` | Pure read for the dialog: slots, booted/staged/candidate OS version, check clocks, pending cellular approval, last transport selection. Every block is independently nullable. |
 
@@ -352,8 +356,13 @@ package nor the OS progress path computes an ETA.
 The live wiring is `admitAndPrepareStreamStart()` in `runtime.ts`, called from
 `stream-session-orchestrator.ts` as the last admission gate, after
 duplicate-start, the modem-transition lease, the recovery barrier and the
-blocking-mutation check. It is last because it is the only gate with a side
-effect. The cached phase can stay `downloading` while dpkg runs: the tick
+blocking-mutation check. It is last among THIS orchestrator's admission gates;
+`streamloop/session.ts` can still refuse the admitted launch via `isUpdating()`
+while the unit monitor settles (including `apt-get clean`). That refusal is
+retriable `engine_restarting`/`stream_start_suppressed_update`; the next attempt
+may succeed after settlement, but a failed stop or untracked pre-unit launch
+can exhaust the retry budget (root AGENTS.md D8 Known gaps (g)-(h)).
+The cached phase can stay `downloading` while dpkg runs: the tick
 re-reads the wire only on its own cadence (after an operator-RPC install the next
 tick can be up to 60 s away), and the wire reports `installing` only once a dpkg
 `Unpacking` or `Setting up` line has been ingested. On a Rock 5B+ a start 1 ms
@@ -373,7 +382,7 @@ not proof that dpkg ran, and a second stage that fails before dpkg must still
 end as `DOWNLOAD_FAILED` (`failed`, nothing quarantined), not a quarantining
 `COMMIT_FAILED`. The next start probes again.
 
-For a unit the orchestrator launched itself and is tracking in `downloading`,
+For an existing unit the orchestrator launched itself and is tracking in `downloading`,
 what the stop can still reach depends on the image. A capable image runs the
 two-stage unit, where the remaining exposure is the check-then-stop gap: a
 second-stage `apt-get` that starts inside it is stopped, normally before it
@@ -382,8 +391,7 @@ single-stage `runDetachedAptUpgrade` unit, which has no `--no-download` stage, s
 the probe detects only a running `dpkg` and the gap sits right before the dpkg
 spawn. The boot-time `ceralive-dpkg-recover.service` (`dpkg --configure -a`)
 remains a backstop for interruptions such as power loss, and does not repair a
-package left half-installed. An install launched through the legacy path, or
-during the launch deferral, is outside D8's guarantee: see "D8 stream/update
+package left half-installed. For other windows see "D8 stream/update
 admission: what it does NOT cover" under Known gaps in the root
 [`AGENTS.md`](../AGENTS.md). An admitted start sets `/run/ceralive/streaming`,
 which the image's activation script checks before arming an OS slot, and every

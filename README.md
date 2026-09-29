@@ -1,10 +1,13 @@
 # CeraUI
 
-**Device updates [EXISTS].** One update agent on the device checks for package
-and system updates on a schedule, installs them only while the device is idle,
-and never lets an update and a stream collide: while packages commit or services
-restart, Go Live is refused with a clear reason, and a download in progress is
-cancelled so the stream can start. Settings → Software Updates shows packages,
+**Device updates [EXISTS].** The update orchestrator checks for package and
+system updates on a schedule alongside the older package-update RPC path. It
+automatically installs while idle, and
+allows operator actions to bypass that idle wait. D8 refuses Go Live in its
+tracked commit/service-restart phases; in `downloading` it checks for the commit
+stage before requesting a unit stop. Admission does not guarantee that a later
+launch succeeds or a pending pre-unit update is cancelled (see [D8 Known gaps](AGENTS.md)).
+Settings → Software Updates shows packages,
 system image, slots, automation (auto toggles, schedule window, channel),
 cellular allowances with per-candidate approval, and the update connection. A
 busy update shows an app-wide badge, and the Live cockpit warns before Go Live;

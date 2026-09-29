@@ -2904,10 +2904,10 @@ retention, and IPv6 URL handling at all three consumers).
 
 ## THE UPDATE ORCHESTRATOR: ONE AGENT, ONE LOCK, D8 ADMISSION [EXISTS]
 
-`modules/system/update-orchestrator/` is the device's single update agent. It
-owns discovery, download, commit, OS staging, activation, verification and the
-lagged slot mirror, and it is the only thing that decides when an update may
-touch the device. The full reference (every phase, every transition, every
+`modules/system/update-orchestrator/` tracks the new update path, alongside
+the still-running legacy update RPCs and periodic loop. It owns discovery,
+download, commit, OS staging, activation, verification and the lagged slot
+mirror for its own path. The full reference (every phase, every transition, every
 gate, and the explicit list of what is and is not proven) is
 [`docs/DEVICE-UPDATES.md`](../../docs/DEVICE-UPDATES.md). This section keeps
 only the rules a change to this module must not break.
@@ -2926,10 +2926,10 @@ UID-pinned transport have not been qualified by those installs.
   `Math.random()`; `runtime.ts` is the only I/O. The reducer is total: an
   unlisted (phase, event) pair returns the SAME object, which `dispatch()` uses
   to skip persisting and pushing an unchanged state.
-- **18 phases, one field.** `ORCHESTRATOR_PHASES`. One disruptive operation at a
-  time is what the shared `/run/lock/ceralive-update.lock` allows, so one field
-  is enough; the cost is that packages and OS are never both "available" at
-  once (packages win). The transition table lives in `docs/DEVICE-UPDATES.md`.
+- **18 phases, one field.** `ORCHESTRATOR_PHASES` tracks the orchestrator's
+  workflow, not a legacy RPC's independent launch. Packages and OS are never
+  both tracked as "available" at once (packages win). The transition table
+  lives in `docs/DEVICE-UPDATES.md`; legacy overlap is in the root D8 Known gaps.
 - **`quarantined` ≠ `failed`, and both are sticky by default.** `COMMIT_FAILED`
   quarantines (dpkg ran and failed, so there is an exact candidate to pin; the
   `committing` race under Known gaps in the root [`AGENTS.md`](../../AGENTS.md)
@@ -2965,13 +2965,16 @@ UID-pinned transport have not been qualified by those installs.
   `COMMIT_FAILED` (quarantine implies a confirmed-bad version). Every other phase resumes as a
   pass-through and the next tick re-observes it.
 - **The package step reuses the existing launcher.** `startPackageInstall` wraps
-  `startSoftwareUpdate()` (below), so every refusal, the detached PID-1-owned
-  unit, the space admission and the reattach rules still hold. On a legacy image
+  `startSoftwareUpdate()` (below), so its synchronous refusals, detached
+  PID-1-owned unit, space admission and reattach rules still hold; the
+  post-acceptance silent early return is in root D8 Known gaps (c). On a legacy image
   that launch is the 15-name roster; on an `apt-all-packages` image it is the
   origin-filtered, exact `name=version` path in `apt-all-packages.ts`, whose ONE
   transient unit runs `flock -x /run/lock/ceralive-update.lock` around download
-  AND commit. `awaiting-idle` therefore gates the start of that whole unit, and
-  `downloading` vs `committing` is inferred from its own progress counters.
+  AND commit. Scheduled installs wait in `awaiting-idle`, but a manual install
+  bypasses the idle check; an accepted launch need not have created the unit
+  yet. `downloading` vs `committing` follows observed progress (root D8 Known
+  gaps (b), (g)).
   A discovery with only informational or kept-back packages is a successful
   check with nothing installable: the orchestrator reads the legacy wire's
   `actionable_count`, not its inclusive `package_count`, and returns to `idle`
@@ -3018,15 +3021,16 @@ UID-pinned transport have not been qualified by those installs.
   are in `docs/DEVICE-UPDATES.md`.
 - **Idle drives the schedule.** Scheduled checks (6 h ± 30 min packages, 12 h ±
   60 min OS; 60 s doubling backoff, 5 min for an apt 429/5xx, 24 h ceiling) start
-  only from `idle` with the D7 toggle on. The install unit starts only with no
-  live stream and `getIdleStatus()` idle: 30 minutes since the latest stream end,
+  only from `idle` with the D7 toggle on. A scheduled install launch waits for
+  no live stream and `getIdleStatus()` idle: 30 minutes since the latest stream end,
   preview end, start-lease end, routed remote command or UI heartbeat, inside the
   configured window. `hasActiveRemoteSession()` is a five-minute command-recency
   heuristic, NOT hub presence; a quiet connected operator can be missed.
-- **Operator RPCs bypass idle and D7, never D8.** `system.checkUpdatesNow`,
-  `system.installUpdatesNow` (starts packages from `available` or the scheduled
+- **Operator RPCs bypass idle and D7.** `system.checkUpdatesNow`,
+  `system.installUpdatesNow` (requests packages from `available` or the scheduled
   `awaiting-idle` intent without another idle wait; refuses `stream_active`
-  before starting the unit and refuses an already-starting/running transaction),
+  before requesting the launch and refuses an already-starting/running transaction;
+  it checks for a LIVE stream, not an admitted start),
   `system.allowCellularOnce`, and the pure read
   `system.getUpdateDetails` (`readUpdateDetails()`, every block independently
   nullable; it never touches the S1-locked `device-stats.raucSlot`).
@@ -3038,8 +3042,7 @@ UID-pinned transport have not been qualified by those installs.
   dialog's Packages section still calls `system.checkForUpdates` /
   `system.startUpdate`, which run `triggerManualUpdateCheck()` /
   `startSoftwareUpdate()` directly and dispatch nothing to the orchestrator.
-  An install launched through the legacy path, or during the launch deferral,
-  is outside D8's guarantee: see "D8 stream/update admission: what it does NOT
+  For launch and admission gaps see "D8 stream/update admission: what it does NOT
   cover" under Known gaps in the root [`AGENTS.md`](../../AGENTS.md).
 
 ### D8: THE STREAM/UPDATE ADMISSION TABLE [EXISTS]
@@ -3057,15 +3060,18 @@ module load.
 
 `modules/streaming/stream-session-orchestrator.ts`'s `start()`, the single
 choke point every launch origin (UI, remote-control, autostart, set-profile,
-restoration) funnels through, calls `admitAndPrepareStreamStart()` as its LAST
-admission gate, after duplicate-start, the modem-transition lease, the recovery
-barrier and blocking-mutation, because it is the only gate with a side effect. A
+restoration) funnels through, calls `admitAndPrepareStreamStart()` as its last
+gate in THIS orchestrator, after duplicate-start, the modem-transition lease,
+the recovery barrier and blocking-mutation, because it is the only gate with
+a side effect. A
 refusal is the typed, non-retriable `update_in_progress` class at phase `params`
 (`typedUpdateInProgressFailure()`), carrying `updatePhase` / `updatePercent` /
 `updateEtaSeconds`; `updateEtaSeconds` is always `0` today because no progress
 path computes an ETA. See [`docs/START-LIFECYCLE.md`](../../docs/START-LIFECYCLE.md).
-An admitted start then sets `/run/ceralive/streaming`
-(`streaming/ota-streaming-marker.ts`), the SAME sentinel the image's
+An admitted attempt then sets `/run/ceralive/streaming`; the later
+`streamloop/session.ts` `isUpdating()` guard can still refuse its launch while
+the stopped unit's monitor settles (root AGENTS.md D8 Known gaps (h)).
+That marker (`streaming/ota-streaming-marker.ts`) is the SAME sentinel the image's
 `ceralive-rauc-activate.sh` checks before arming an OS slot, and every
 stream-end path clears it (a launch that never went live, every `stop()`, and a
 config-change transaction that ends the stream without one).
@@ -3140,9 +3146,8 @@ two units, and do NOT change the unit's ExecStart (its identity is validated
 exactly).** The probe is deliberately NOT consulted by the progress tick, for
 the same quarantine reason.
 
-The guarantee above is for a unit the orchestrator launched itself and is
-tracking in `downloading`. An install launched through the legacy path, or
-during the launch deferral, is outside D8's guarantee: see "D8 stream/update
+The stop guarantee above is for an existing orchestrator-launched unit tracked
+in `downloading`. For other windows see "D8 stream/update
 admission: what it does NOT cover" under Known gaps in the root
 [`AGENTS.md`](../../AGENTS.md). Coverage:
 `update-orchestrator-runtime.test.ts` (the measured refusal and its no-latch
@@ -3268,8 +3273,9 @@ This is the launcher the orchestrator's package step calls
 (`startSoftwareUpdate()`), on legacy and `apt-all-packages` images alike.
 Every rule below still governs that launch.
 
-`modules/system/software-updates.ts` owns whether an apt update may run, and it
-never refuses in silence.
+`modules/system/software-updates.ts` owns synchronous dispatch refusals; its
+post-acceptance streaming/disabled early return is silent and leaves the latch
+set (root AGENTS.md D8 Known gaps (c)).
 
 - **`aptUpdatesEnabled()` is the ONE predicate.** Discovery
   (`getSoftwareUpdateSize`), the apt package-list refresh
@@ -3282,7 +3288,7 @@ never refuses in silence.
   kept offering an Update button. Confirmed live on a Rock 5B+: `debug.log`
   recorded `System: software update started` and then nothing at all. Only an
   explicit `"apt_update_enabled": false` opts a device out.
-- **`startSoftwareUpdate(): UpdateStartOutcome`.** Every refusal is a typed
+- **`startSoftwareUpdate(): UpdateStartOutcome`.** Every synchronous refusal is a typed
   `UpdateStartRefusal` — `updates_disabled` / `streaming` / `already_updating` /
   `check_unavailable` — logged at `warn` and returned to the caller.
   `rpc/procedures/system.procedure.ts` `startUpdateProcedure` forwards it as
@@ -3365,8 +3371,8 @@ Coverage: `tests/software-updates-start-refusal.test.ts`,
 
 ## SOFTWARE-UPDATE CHECK CONTRACT [EXISTS]
 
-The install path above never refuses in silence; the CHECK path now never
-*answers* in silence either. A manual "Check for updates" used to change nothing
+The install path reports synchronous refusals (but not every later early
+return; see D8 Known gaps (c)). The CHECK path reports its result. A manual "Check for updates" used to change nothing
 observable at all — confirmed live on a Rock 5B+, where the button produced no
 spinner, no result and no error for 11 s while `debug.log` recorded
 `System: manual software update check started` and `apt-get update: success`
@@ -10115,9 +10121,10 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't read config files with raw `fs` — use `helpers/config-loader.ts`.
 - Don't drive the engine directly — route through `getStreamingBackend()`, never
   the `cerastreamBackend` singleton.
-- Don't refuse a software update with a bare `return`, and don't re-check the
-  update guards at a call site — `startSoftwareUpdate()` owns every refusal and
-  always names it (see SOFTWARE-UPDATE START CONTRACT).
+- Don't add another bare return to an update path, and don't re-check
+  `startSoftwareUpdate()`'s synchronous guards at a call site. Its later
+  `doSoftwareUpdate()` early return is already silent; see root AGENTS.md D8
+  Known gaps (c).
 - Don't let an update CHECK end without publishing something: route every cycle
   through `runUpdateDiscoveryAndReport()`, and don't derive a check failure from
   apt's stderr (benign warnings) or clear one on a stale-list discovery success —

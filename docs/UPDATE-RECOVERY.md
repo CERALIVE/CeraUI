@@ -33,8 +33,10 @@ systemctl show ceralive.service --property=LoadState,ActiveState,SubState,MainPI
 Proceed only when systemd reports `LoadState=masked`, `ActiveState=inactive`,
 `SubState=dead`, both PIDs zero, and no pending job. The tool checks those same
 properties at each admission boundary; it does not stop or mask the service
-itself. This is the fence against a new legacy `system.startUpdate` request,
-whose detached APT unit does not take the shared lock. Keep the backup and mask
+itself. This fences new legacy `system.startUpdate` requests, which bypass
+orchestrator phases: on a legacy image the detached unit does not take the
+shared lock; on a capable image it waits on the lock and could run after the
+tool releases it. Keep the backup and mask
 in place until the recovery tool has exited, even if it refuses or fails. Then
 restore the unit **before** starting the backend:
 
@@ -179,15 +181,17 @@ After a receipt-first crash, replay must check the same identity and finish the
 retirement exactly once; after an archive-first crash, it must still be able to
 finish the state transition. A terminal repeat must not mint another receipt.
 
-**The shared lock does not exclude the legacy updater.**
+**The shared lock alone does not exclude the legacy updater.**
 `software-update-service.ts`'s `buildDetachedAptUpgradeCommand()` launches
 `/usr/bin/apt-get` directly (`systemd-run ... -- /usr/bin/apt-get`); only
 `buildDetachedAptAllCommand()` wraps download and commit in `flock -x
-/run/lock/ceralive-update.lock`. The unit-identity validator deliberately
+/run/lock/ceralive-update.lock` (which waits rather than refusing a new launch).
+The unit-identity validator deliberately
 accepts both forms for reattachment. The legacy `system.startUpdate` RPC also
 bypasses orchestrator phases. Thus taking the lock and observing `failed` is
 **not** an admission fence: an authenticated browser can start a legacy update
-while a maintenance process holds the lock. A process-list snapshot or one
+while a maintenance process holds the lock (and a capable-image unit can wait
+until that lock is released). A process-list snapshot or one
 `systemctl show` read does not close the interval until clearance either.
 
 A safe implementation must first make the backend unable to accept new requests
@@ -206,7 +210,7 @@ their admission must be accounted for rather than inferred from its state.
 At the time of this STOP, no root-capable isolated systemd/APT integration harness was available in this
 unprivileged worktree to demonstrate that the proposed backend shutdown/mask,
 legacy detached launch, and concurrent admission really exclude one another
-under the same lock. The legacy unit does not acquire that lock. A mocked
+under the backend mask. The legacy-image unit does not acquire that lock. A mocked
 `systemctl` result would only prove the parser, not the race. The STOP on a
 lock-only receipt/RESET implementation was superseded by the masked,
 inactive-backend precondition above; it remains a warning against a lock-only

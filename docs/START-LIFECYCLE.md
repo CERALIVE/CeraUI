@@ -75,8 +75,8 @@ StartFailure = {
        | 'start_invalid' | 'engine_internal' | 'start_timeout'
        | 'update_in_progress';
   code?: number | string;            // engine JSON-RPC numeric code, or its string data-code
-  // Present ONLY on `update_in_progress` (Todo 37) — the update orchestrator's
-  // own phase/progress at the moment the start was refused.
+  // Present ONLY on `update_in_progress` (Todo 37). A probe-only refusal
+  // reports fixed committing/0/0 while the orchestrator stays downloading.
   updatePhase?: 'idle' | 'checking' | 'available' | 'downloading' | 'awaiting-idle'
        | 'committing' | 'restarting-services' | 'settled' | 'os-available'
        | 'os-staging' | 'os-staged' | 'os-activation-armed' | 'os-verifying'
@@ -96,12 +96,14 @@ origin (UI, remote-control, autostart, set-profile, restoration) calls through
 engine. `committing`/`restarting-services` REFUSE with this class, always at
 `phase: 'params'` (the same phase `modem_transition_active`/`recovery_pending`/
 `mutation_blocked` use — refused before the engine is ever touched) and always
-`retriable: false` — the caller must wait for the orchestrator to reach
-`settled`, never loop.
+`retriable: false`. Wait for the commit-stage refusal to clear; `settled` is
+not required. A failed commit can end in `quarantined`/`failed`, and a
+probe-only refusal can clear while the orchestrator stays in `downloading`.
+Do not automatically retry this non-retriable class.
 
-`downloading`/`os-staging` are ALLOWED, but the admitted start first aborts the
-in-flight operation over the network (killing the detached apt unit, or
-SIGTERM-killing and restarting `rauc.service`) — see
+`downloading`/`os-staging` can admit a start and issue an abort request
+(stopping the detached apt unit, or SIGTERM-killing and restarting
+`rauc.service`) — see
 `modules/system/update-orchestrator/runtime.ts`'s `admitAndPrepareStreamStart`
 and `stream-abort.ts`. Immediately before dispatching any stop, the apt abort
 path performs a FORCED FRESH re-read of the wire state (bypassing the
@@ -116,10 +118,9 @@ image's single-stage unit the probe detects only a running `dpkg`, so that gap
 sits right before the dpkg spawn. See the code comment on
 `admitAndPrepareStreamStart` and `apps/backend/AGENTS.md`'s D8 section for the
 measured failure this closes and why `image-building-pipeline`'s
-`ceralive-dpkg-recover.service` is a backstop only. All of this holds for a
-unit the orchestrator launched itself and is tracking in `downloading`; an
-install launched through the legacy path, or during the launch deferral, is
-outside D8's guarantee (see the last bullet below).
+`ceralive-dpkg-recover.service` is a backstop only. The package stop guarantee
+applies only to an existing orchestrator-launched unit tracked in `downloading`;
+see the root AGENTS.md D8 Known gaps for other launch and post-admission limits.
 
 An admitted start also sets `/run/ceralive/streaming` — the same sentinel the
 image-side `ceralive-rauc-activate.sh` (Todo 28) checks before staging an OTA
@@ -127,9 +128,10 @@ slot activation — and clears it on every stream-end path (a failed launch that
 never went live, `stop()`, and a config-change transaction that ends the
 stream without a `stop()` call).
 
-Verified against the merged implementation (Todo 42). The class set is
-unchanged: `update_in_progress` is still the only update-related start class,
-built by `typedUpdateInProgressFailure()` at phase `params`. Three facts are
+Verified against the implementation on this branch (Todo 42). The class set is
+unchanged: `update_in_progress` is the D8 refusal class, built by
+`typedUpdateInProgressFailure()` at phase `params`; the later legacy
+`isUpdating()` refusal uses `engine_restarting`. Three facts are
 worth knowing when consuming it:
 
 - `updateEtaSeconds` is always `0` today. Neither the package progress
@@ -141,8 +143,7 @@ worth knowing when consuming it:
   when no push is available. `UpdateRefusalBand.svelte` renders the result and
   never disables Start; admission stays on the device.
 - An update launched through the older `system.startUpdate` RPC bypasses the
-  orchestrator. An install launched through the legacy path, or during the
-  launch deferral, is outside D8's guarantee: see "D8 stream/update admission:
+  orchestrator. Other launch and post-admission gaps are in "D8 stream/update admission:
   what it does NOT cover" under Known gaps in the root
   [`AGENTS.md`](../AGENTS.md). That paragraph also records when the separate
   `isUpdating()` guard (`stream_start_suppressed_update`) does and does not
@@ -321,7 +322,7 @@ start, so Todo 27 rolls back and escalates instead.
 | `protocol_incompatible` | *(none)* | An engine/bindings protocol-major mismatch is deterministic — the same binaries never negotiate on retry, so surface an update prompt instead of looping. |
 | `start_invalid` | *(none)* | Invalid params/config are deterministic — an identical retry fails identically, so the operator (or cloud) must fix the input first. |
 | `engine_internal` | *(none)* | A deterministic engine-side fault or state conflict (e.g. already_streaming / -32603); retrying masks a real bug and can orphan resources — surface with a journal pointer. |
-| `update_in_progress` | *(none)* | The update orchestrator is committing a package transaction or restarting services (Todo 35's single-flock, non-abortable design). Waiting for the orchestrator to reach `settled` is the only correct response — an automatic retry would either queue behind the update or race it. |
+| `update_in_progress` | *(none)* | A cached refusing phase, fresh wire read or fail-closed probe blocked admission. Wait for that condition to clear; automatic retry is not authorized. |
 
 ---
 

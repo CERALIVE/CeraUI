@@ -126,18 +126,17 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
   leaves the orchestrator phase untouched); `syncing` continues. Wired as the
   last gate of `stream-session-orchestrator.ts`'s `start()` through
   `admitAndPrepareStreamStart()`. See [`docs/START-LIFECYCLE.md`](docs/START-LIFECYCLE.md).
-  An install launched through the legacy path, or during the launch deferral,
-  is outside D8's guarantee: see "D8 stream/update admission: what it does NOT
-  cover" under Known gaps below.
+  See "D8 stream/update admission: what it does NOT cover" under Known gaps below.
 - **[EXISTS] Schedule and idle.** 6 h package / 12 h OS checks with jitter and a
-  24 h-capped backoff, gated by `packagesAuto` / `systemAuto`. Installs start
-  only when idle (`getIdleStatus()`: 30 minutes without stream, preview, start
+  24 h-capped backoff, gated by `packagesAuto` / `systemAuto`. Scheduled installs
+  wait for idle (`getIdleStatus()`: 30 minutes without stream, preview, start
   lease, remote command or UI heartbeat, inside the configured window). Remote
   presence is a five-minute command-recency heuristic, not true presence.
 - **[EXISTS] Settings, capabilities and RPCs.** `system.getUpdateSettings`,
   `setUpdateSettings`, `getUpdateCapabilities`, `checkUpdatesNow`,
   `installUpdatesNow`, `allowCellularOnce`, `getUpdateDetails`. Operator actions
-  bypass idle, never D8.
+  bypass idle, but install admission checks only whether a stream is live;
+  see D8 Known gaps (f) below.
 - **[EXISTS] Updates dialog and global surfaces.** Settings → Software Updates
   shows Packages, System image, Slots, Automation, Over cellular and Update
   connection, gated by `updateCapabilityView()`; a legacy image states the limit
@@ -194,21 +193,21 @@ Known gaps, recorded rather than smoothed over:
 - **D8 stream/update admission: what it does NOT cover.** This is the one
   canonical statement of D8's limits; the other D8 descriptions point here. D8's
   guarantee (`admitAndPrepareStreamStart`,
-  `update-orchestrator/runtime.ts` l.575-625) covers a package unit the
-  orchestrator launched itself, without the deferral in (b), and is tracking
-  in `downloading`: before any stop it does a forced-fresh wire read and the
-  commit-stage probe, and if either finds the commit stage it refuses with
+  `update-orchestrator/runtime.ts` l.572-621) covers a package unit the
+  orchestrator launched itself, whose systemd unit already exists, without the
+  deferral in (b), and is tracking in `downloading`. Before the package-unit
+  stop it does a forced-fresh wire read and the commit-stage probe; if either
+  finds the commit stage it refuses with
   `update_in_progress` and stops nothing (the probe fails closed, e.g. on an
   unreadable process list for a running unit, or a throw). The remaining
   exposure of that unit is the check-then-stop gap (capable image,
   two-stage unit) or the gap before the dpkg spawn (non-capable image,
-  single-stage unit). The cases below are outside that guarantee. They are
-  pre-existing gaps of the legacy launcher, `startSoftwareUpdate()` in
-  `modules/system/software-updates.ts`, not introduced by the probe.
+  single-stage unit). The cases below are outside that guarantee; they are
+  launch/admission integration gaps, not fixed by the probe.
   (a) The Packages section still calls `system.startUpdate` /
   `system.checkForUpdates`, which dispatch nothing to the orchestrator. The
   stop is issued only from the orchestrator's `downloading` phase
-  (`runtime.ts` l.585-609), so in any other phase D8 does not stop such a
+  (`runtime.ts` l.582-606), so in any other phase D8 does not stop such a
   unit, and admission does not consult it. `isUpdating()`
   (`streamloop/session.ts` l.80, retriable `engine_restarting` /
   `stream_start_suppressed_update`) refuses a start only once the launch has
@@ -219,17 +218,17 @@ Known gaps, recorded rather than smoothed over:
   `success:true`, `isUpdating()` is false and no unit exists for D8 to find;
   neither refuses a start on the pending launch's account. The orchestrator's
   own launch uses the same function and dispatches `INSTALL_UNIT_STARTED` on
-  that answer (`runtime.ts` l.755-760); a start admitted then issues the stop
+  that answer (`runtime.ts` l.752-757); a start admitted then issues the stop
   for a unit that does not exist yet and moves the phase to `available`
-  (`reducer.ts` l.274-275). D8's abort does not cancel the timer (its only
+  (`reducer.ts` l.272-273). D8's abort does not cancel the timer (its only
   `clearTimeout` is the test reset, `software-updates.ts` l.274). When it
   fires, the re-entered `startSoftwareUpdate()`'s one stream check is
   `getIsStreaming()` (l.1322, and `doSoftwareUpdate()` again at l.1579 before
   awaited preparation), which is true only once a stream is live, so the
   timer can launch an install while a stream is still starting, and the
   orchestrator does not track that install (except through the adoption in
-  (d)). (c) If a stream is live when
-  `doSoftwareUpdate()` runs, its early return at `software-updates.ts`
+  (d)). (c) If a stream is live or updates are disabled when
+  `doSoftwareUpdate()` runs, its silent early return at `software-updates.ts`
   l.1579 leaves `softUpdateStatus` set, so `isUpdating()` stays true and
   later stream starts are refused by `session.ts` l.80 until the backend
   restarts. (d) Adoption race: `startSoftwareUpdate()` has no
@@ -240,23 +239,43 @@ Known gaps, recorded rather than smoothed over:
   `system.installUpdatesNow` launch, because `installUpdatesNow()` does not
   reschedule it. A legacy
   launch landing in that window is adopted as the orchestrator's
-  `downloading` unit (`pollPackageInstallProgress`, `runtime.ts` l.767-818),
+  `downloading` unit (`pollPackageInstallProgress`, `runtime.ts` l.764-815),
   and a stream start can then stop it, guarded only by the forced-fresh read
   and the probe, with the same exposure as above. The same race in
   `committing` (the orchestrator's own install failed before its next tick
   saw it): the legacy launch clears `lastUpdateFailure`
   (`software-updates.ts` l.1330), so the tick keeps `committing` while the
-  wire reads `downloading` (`runtime.ts` l.772), starts stay refused as
+  wire reads `downloading` (or `checking`/`available` while the legacy launch
+  is still deferred; `runtime.ts` l.765-775), starts stay refused as
   `update_in_progress`, and the tick then treats the legacy unit's outcome as
   its own commit: `COMMIT_SUCCEEDED`, or `COMMIT_FAILED`, which records its
   own pending plan as quarantined with the legacy reason (`runtime.ts`
-  l.791-815). (e) The stage count follows
+  l.788-812). (e) The stage count follows
   the image, not the RPC: `doSoftwareUpdate()` runs `capable ?
   runDetachedAptAll : runDetachedAptUpgrade` (`software-updates.ts` l.1582,
-  l.1694-1705) for every caller. Suggested fix direction, not implemented:
-  cancel the pending deferral when D8 aborts for a stream, have the deferred
-  continuation and `doSoftwareUpdate()` consult the orchestrator's launching
-  state, and clear `softUpdateStatus` on the l.1579 early return.
+  l.1694-1705) for every caller. (f) Launch into a starting stream: the
+  orchestrator's `installUpdatesNow()` and `maybeStartPackageInstall()` and the
+  legacy `startSoftwareUpdate()` check only for a live stream (`runtime.ts`
+  l.472, l.732, l.752; `software-updates.ts` l.1322). That flag stays false
+  until the stream is live (`streaming.ts` l.88-102;
+  `stream-session-orchestrator.ts` l.573), whereas D8 runs only at
+  start admission. An install launched after admission but before live is not
+  stopped by D8; if the stream is live when `doSoftwareUpdate()` runs, (c)
+  applies. (g) Pre-unit window: even a non-deferred orchestrator launch enters
+  `downloading` before its `apt-get update` callback and preparation finish;
+  the unit is created only later by `runDetachedApt*` (`software-updates.ts`
+  l.1201-1203, l.1578-1707). A start can then probe an absent unit and issue
+  a stop that does not cancel the callback. The phase moves to `available`,
+  while the callback may create an untracked unit. (h) Admitted does not imply
+  launched: after D8 stops a unit, `streamloop/session.ts` can still refuse
+  `stream_start_suppressed_update` while `isUpdating()` stays true until the
+  unit's monitor settles (including `apt-get clean`). This timing is inferred
+  from the code, not separately tested. A failed stop or (g) can exhaust the
+  bounded start retries. Suggested fix direction, NOT implemented: cancel
+  pending launches when D8 aborts, fence the pre-unit callback/preparation,
+  gate launches on a starting stream rather than only a live one, clear
+  `softUpdateStatus` on the (c) early return, and reconcile D8 with the later
+  `isUpdating()` guard.
 - **No certificate-expiry countdown.** The wire carries no expiry date,
   `credentials-expiring` has no producer, and the credentials band keys on an
   `apt`-profile transport finding that no production path produces yet.
