@@ -39,8 +39,10 @@ below; it does not qualify a released capable image or the OS/slot paths.
 The orchestrator starts at boot through `startUpdateOrchestrator()`, wired in
 `main.ts` as `guardNonCritical("update-orchestrator", ...)` before the standalone
 `recoverSoftwareUpdateIfRunning()` probe and then the
-`periodicCheckForSoftwareUpdates()` loop. Orchestrator resume reattaches its
-tracked detached unit first; standalone recovery handles an untracked unit.
+`periodicCheckForSoftwareUpdates()` loop. Orchestrator resume reattaches a
+persisted `committing` unit first; standalone recovery afterwards also covers
+any detached unit that resume did not reattach, including one the orchestrator
+tracks as `downloading`.
 The legacy periodic loop still runs beside it; both land their discovery
 through the same `runUpdateDiscoveryAndReport()` seam.
 
@@ -105,7 +107,12 @@ vocabulary (no RPC schema change):
 | `streaming` | `stream_active` |
 | `already_updating` | `busy` |
 | `check_unavailable` | `not_available` |
-| `updates_disabled` | `busy` (no fitting existing manual reason) |
+| `updates_disabled` | `busy` (updates are disabled, not necessarily another running step) |
+
+For a disabled update, the existing `busy` UI copy, “Another update step is
+already running,” is generic and does not literally describe the refusal. A
+dedicated disabled-updates reason requires a separate reviewed wire-and-copy
+change; this mapping does not add one.
 
 The launcher rechecks streaming after pending-plan persistence; a stream that
 starts during that await therefore returns `stream_active`, not generic `busy`.
