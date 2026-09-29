@@ -84,13 +84,8 @@ export const START_FAILURE_CLASSES = [
 	// deterministic by definition ("an identical retry fails identically"), and
 	// one of this class's causes is transient — see `captureCause` below.
 	'capture_source_unavailable',
-	// The update orchestrator (Todo 36) is `committing` or `restarting-services`
-	// — dpkg or a service restart is running and cannot be safely interrupted
-	// (D8). Distinct from every class above: this is never a stream-side fault,
-	// it is a REFUSAL to start at all while the device's own update pipeline
-	// owns an irreversible operation. `updatePhase`/`updatePercent`/
-	// `updateEtaSeconds` (below) carry the orchestrator's own progress so the
-	// operator sees a concrete "why", not a bare refusal.
+	// D8 admission refusal; see docs/DEVICE-UPDATES.md and root AGENTS.md's
+	// "D8 stream/update admission: what it does NOT cover".
 	'update_in_progress',
 ] as const;
 export const startFailureClassSchema = z.enum(START_FAILURE_CLASSES);
@@ -134,12 +129,8 @@ export const startFailureSchema = z.object({
 	code: z.union([z.number(), z.string()]).optional(),
 	message: z.string().optional(),
 	captureCause: startFailureCaptureCauseSchema.optional(),
-	// Present ONLY on `update_in_progress` (Todo 37): normally the update
-	// orchestrator's phase/progress at refusal; a probe-only refusal carries
-	// the fixed `committing`/0/0 while the orchestrator stays `downloading`.
-	// Named `update*` rather than reusing the bare `phase` field above: `phase`
-	// here is the START pipeline's own phase enum (params/connect/hello/...), a
-	// completely different axis from the update orchestrator's phase.
+	// Update phase is a different axis from the start pipeline's `phase` above.
+	// Probe-only payload semantics: docs/DEVICE-UPDATES.md, D8 section.
 	updatePhase: updateOrchestratorPhaseSchema.optional(),
 	updatePercent: z.number().min(0).max(100).optional(),
 	updateEtaSeconds: z.number().min(0).optional(),
@@ -304,12 +295,9 @@ export const START_FAILURE_RETRIABILITY: Record<
 		retriablePhases: [],
 		why: 'The capture input could not be brought up, and by default that is a standing condition — an unsupported signal format and an absent signal both fail identically on retry. The ONE transient cause is overridden per-cause below rather than by widening this row, so a class that is deterministic for two of its three causes never advertises itself as retriable.',
 	},
-	// Note on the `why` below: D8 also refuses in `downloading` (fresh wire
-	// read or commit-stage probe), and a refusal can clear without the
-	// orchestrator reaching `settled` (docs/START-LIFECYCLE.md).
 	update_in_progress: {
 		retriablePhases: [],
-		why: 'The update orchestrator is committing a package transaction or restarting services — an irreversible, non-abortable operation (Todo 35\u2019s single-flock, single-unit design). An automatic retry here would either queue the start behind the update or race it; the honest answer is a typed refusal the caller can act on once the orchestrator reaches `settled`, never a blind retry loop.',
+		why: 'Wait for the update-admission refusal condition to clear rather than retry automatically. A positive or fail-closed commit-stage probe can refuse without a known commit; reaching `settled` is not required.',
 	},
 };
 

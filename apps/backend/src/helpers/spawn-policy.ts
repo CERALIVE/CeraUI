@@ -676,7 +676,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		},
 		status: "enforced",
 		mechanism:
-			"D8 abort-network (Todo 37): fired only after a FORCED FRESH re-read of the wire state AND the commit-stage process probe both report no commit stage running; best-effort (exit code observed, never thrown) so a stop failure never blocks the admitted stream start it is protecting",
+			"D8 package-unit stop after the fresh wire read and commit-stage probe permit it; nonzero exits are logged, spawn failures/timeouts throw, and the later isUpdating() guard can still refuse launch",
 	},
 	{
 		id: "updateOrchestrator.probeCommitStage",
