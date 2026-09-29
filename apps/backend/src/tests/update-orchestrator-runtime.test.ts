@@ -286,6 +286,59 @@ describe("installUpdatesNow — bypasses idle, NEVER bypasses stream-admission",
 		expect(installs).toBe(1);
 	});
 
+	test("manual awaiting-idle install persists commit success and releases the launch guard", async () => {
+		let installs = 0;
+		let wire: UpdateState = {
+			kind: "available",
+			identity: { version: "app-update", packages: ["cerastream"] },
+			package_count: 1,
+			actionable_count: 1,
+			packages: [{ name: "cerastream", layer: "app", actionable: true }],
+		};
+		const persisted: string[] = [];
+		setOrchestratorRuntimeDepsForTest(
+			fakeDeps({
+				quarantine: testQuarantine(),
+				isIdle: async () => false,
+				getPackageInstallWireState: () => wire,
+				startPackageInstall: () => {
+					installs++;
+					return { started: true };
+				},
+				persist: (next) => persisted.push(next.phase),
+			}),
+		);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "awaiting-idle",
+		});
+
+		expect(await installUpdatesNow()).toEqual({ started: true });
+		expect(installs).toBe(1);
+		wire = { kind: "success" } as UpdateState;
+		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).toBe("restarting-services");
+		expect(persisted).toEqual([
+			"downloading",
+			"committing",
+			"restarting-services",
+		]);
+
+		wire = {
+			kind: "available",
+			identity: { version: "next-update", packages: ["cerastream"] },
+			package_count: 1,
+			actionable_count: 1,
+			packages: [{ name: "cerastream", layer: "app", actionable: true }],
+		};
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "awaiting-idle",
+		});
+		expect(await installUpdatesNow()).toEqual({ started: true });
+		expect(installs).toBe(2);
+	});
+
 	test("refuses a live stream from awaiting-idle without launching or changing the pending phase", async () => {
 		let installs = 0;
 		setOrchestratorRuntimeDepsForTest(
