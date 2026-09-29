@@ -21,7 +21,10 @@
  *   - `committing` / `restarting-services` -> REFUSE (dpkg or a service
  *     restart is running; neither can be safely interrupted).
  *   - `downloading` / `os-staging` -> ALLOWED, and the update ABORTS over the
- *     network (nothing has been installed yet; safe to cancel).
+ *     network. The cached `downloading` phase can include a running dpkg, so
+ *     runtime.ts's `admitAndPrepareStreamStart` does a forced-fresh wire read
+ *     and the commit-stage probe before any stop and refuses if either finds
+ *     the commit stage; the gap that remains is described there.
  *   - `syncing` -> ALLOWED, and the sync CONTINUES locally (an rsync mirror
  *     between two local block devices does not compete with stream bandwidth
  *     or CPU in any way that matters, and it never touches the booted slot).
