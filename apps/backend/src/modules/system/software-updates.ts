@@ -1191,12 +1191,16 @@ export function triggerManualUpdateCheck(): boolean {
 // which only gates the post-update reboot — this gates the entire apt spawn.
 // The runner reports its own outcome: a refusal is only discoverable once the
 // apt package-list refresh has been dispatched.
-type SoftwareUpdateRunner = () => UpdateStartOutcome;
+type SoftwareUpdateRunner = (
+	onCommitSucceeded?: () => void,
+) => UpdateStartOutcome;
 
-const defaultSoftwareUpdateRunner: SoftwareUpdateRunner = () => {
+const defaultSoftwareUpdateRunner: SoftwareUpdateRunner = (
+	onCommitSucceeded,
+) => {
 	const checkStarted = softwareUpdateCheckRunner(async (err) => {
 		if (err === null) {
-			await doSoftwareUpdate();
+			await doSoftwareUpdate(onCommitSucceeded);
 		} else if (softUpdateStatus) {
 			const reason =
 				"Failed to fetch the updated package list; aborting the update.";
@@ -1307,7 +1311,9 @@ async function simulateMockSoftwareUpdate(): Promise<void> {
 	broadcastUpdateState();
 }
 
-export function startSoftwareUpdate(): UpdateStartOutcome {
+export function startSoftwareUpdate(
+	onCommitSucceeded?: () => void,
+): UpdateStartOutcome {
 	if (!aptUpdatesEnabled()) return refuseUpdateStart("updates_disabled");
 	if (getIsStreaming()) return refuseUpdateStart("streaming");
 	if (isUpdating()) return refuseUpdateStart("already_updating");
@@ -1327,7 +1333,7 @@ export function startSoftwareUpdate(): UpdateStartOutcome {
 		if (!delayedSoftwareUpdateStart) {
 			delayedSoftwareUpdateStart = setTimeout(() => {
 				delayedSoftwareUpdateStart = undefined;
-				const outcome = startSoftwareUpdate();
+				const outcome = startSoftwareUpdate(onCommitSucceeded);
 				if (!outcome.started) {
 					lastUpdateSucceeded = false;
 					lastUpdateFailure = {
@@ -1355,7 +1361,7 @@ export function startSoftwareUpdate(): UpdateStartOutcome {
 		return { started: true };
 	}
 
-	return softwareUpdateRunner();
+	return softwareUpdateRunner(onCommitSucceeded);
 }
 
 type SoftwareUpdateProcessMonitor = {
@@ -1366,7 +1372,10 @@ type SoftwareUpdateProcessMonitor = {
 	// force an unhandled rejection that restarts the process; a caller
 	// awaiting the returned promise must observe getUpdateState() settle
 	// without being able to catch (and thus swallow) that intentional crash.
-	readonly finish: (completion: Promise<number>) => Promise<void>;
+	readonly finish: (
+		completion: Promise<number>,
+		onCommitSucceeded?: () => void,
+	) => Promise<void>;
 };
 
 export function deriveAptProgress(
@@ -1390,7 +1399,7 @@ export function deriveAptProgress(
 	};
 }
 
-function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
+export function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
 	let rebootAfterUpgrade = false;
 	let aptLog = "";
 	let aptErr = "";
@@ -1527,7 +1536,10 @@ function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
 		return code;
 	};
 
-	const finish = (completion: Promise<number>): Promise<void> => {
+	const finish = (
+		completion: Promise<number>,
+		onCommitSucceeded?: () => void,
+	): Promise<void> => {
 		const settled = settle(completion);
 		// Detached on purpose: logging plus the deliberate crash-to-restart on a
 		// plain success. `settled` never rejects (see above), so this can only
@@ -1540,7 +1552,10 @@ function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
 			if (aptErr) logger.error(aptErr);
 
 			if (code === 0) {
-				if (rebootAfterUpgrade) {
+				// An orchestrated commit must be durable before the legacy restart
+				// removes the unit whose exit code proved it succeeded.
+				onCommitSucceeded?.();
+				if (rebootAfterUpgrade && !onCommitSucceeded) {
 					rebootAfterUpdate();
 				} else {
 					invariant(
@@ -1556,7 +1571,7 @@ function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
 	return { handlers, finish };
 }
 
-async function doSoftwareUpdate(): Promise<void> {
+async function doSoftwareUpdate(onCommitSucceeded?: () => void): Promise<void> {
 	if (!aptUpdatesEnabled() || getIsStreaming()) return;
 
 	const reachability = await prepareAptNetwork({ maxAgeMs: 0 });
@@ -1684,6 +1699,7 @@ async function doSoftwareUpdate(): Promise<void> {
 					monitor.handlers,
 				)
 			: runDetachedAptUpgrade(args, monitor.handlers),
+		capable ? onCommitSucceeded : undefined,
 	);
 }
 

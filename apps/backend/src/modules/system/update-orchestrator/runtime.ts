@@ -195,7 +195,7 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	onlyMeteredCandidateExists: defaultOnlyMeteredCandidateExists,
 	runPackageCheck: runUpdateDiscoveryAndReport,
 	startPackageInstall: () => {
-		const outcome = startSoftwareUpdate();
+		const outcome = startSoftwareUpdate(notePackageCommitSucceeded);
 		return { started: outcome.started };
 	},
 	getPackageInstallWireState: getUpdateState,
@@ -365,6 +365,15 @@ function dispatch(event: OrchestratorEvent): OrchestratorState {
 		publishWireState();
 	}
 	return state;
+}
+
+function notePackageCommitSucceeded(): void {
+	const now = deps.now();
+	if (state.phase === "downloading")
+		dispatch({ type: "COMMIT_PHASE_ENTERED", now });
+	if (state.phase === "committing") dispatch({ type: "COMMIT_SUCCEEDED", now });
+	if (state.phase !== "restarting-services" && state.phase !== "settled")
+		throw new Error("package commit success could not be persisted");
 }
 
 // ─── operator RPC actions (system.checkUpdatesNow / installUpdatesNow /

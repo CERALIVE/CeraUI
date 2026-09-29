@@ -40,19 +40,27 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as invariantModule from "../helpers/invariant.ts";
 import {
+	createSoftwareUpdateProcessMonitor,
 	getUpdateState,
 	recoverSoftwareUpdateIfRunning,
+	resetSoftwareUpdateRunner,
 	type SoftwareUpdateRecoveryDeps,
+	setSoftwareUpdateRunner,
 } from "../modules/system/software-updates.ts";
 import {
+	loadOrchestratorState,
 	saveOrchestratorState,
 	setOrchestratorStateFilePathForTest,
 } from "../modules/system/update-orchestrator/persistence.ts";
+import { UpdateQuarantine } from "../modules/system/update-orchestrator/quarantine.ts";
 import { resumeOrchestratorState } from "../modules/system/update-orchestrator/resume.ts";
 import {
 	defaultOrchestratorRuntimeDeps,
 	getOrchestratorState,
 	resetOrchestratorRuntimeForTest,
+	runOrchestratorTick,
+	setOrchestratorRuntimeDepsForTest,
+	setOrchestratorStateForTest,
 	startUpdateOrchestrator,
 } from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
@@ -78,6 +86,7 @@ describe("boot double-recovery race — resume must not misread evidence a start
 
 	afterEach(async () => {
 		resetOrchestratorRuntimeForTest();
+		resetSoftwareUpdateRunner();
 		setOrchestratorStateFilePathForTest(null);
 		if (tempRoot) await rm(tempRoot, { recursive: true, force: true });
 		tempRoot = undefined;
@@ -247,5 +256,92 @@ describe("boot double-recovery race — resume must not misread evidence a start
 
 		expect(resumed.phase).toBe("failed");
 		expect(resumed.failureReason).toBe("commit_unit_absent_on_resume");
+	});
+
+	test("a completed unit persists restarting-services before its deliberate exit, even between ticks", async () => {
+		await using h = await updateHarness();
+		tempRoot = await mkdtemp(join(tmpdir(), "ceraui-complete-order-"));
+		setOrchestratorStateFilePathForTest(join(tempRoot, "agent.json"));
+		const pending = new UpdateQuarantine(join(tempRoot, "quarantine.json"));
+		await pending.savePending([{ name: "cerastream", version: "2026.9.8" }]);
+		const persistedBeforeExit: string[] = [];
+		setOrchestratorRuntimeDepsForTest({
+			persist: (state) => {
+				persistedBeforeExit.push(`${state.phase}:${h.restarts}`);
+				saveOrchestratorState(state);
+			},
+		});
+		let onCommitSucceeded: (() => void) | undefined;
+		setSoftwareUpdateRunner((hook) => {
+			onCommitSucceeded = hook;
+			return { started: true };
+		});
+		expect(defaultOrchestratorRuntimeDeps.startPackageInstall()).toEqual({
+			started: true,
+		});
+		setOrchestratorStateForTest(persistedCommitting(50));
+		const monitor = createSoftwareUpdateProcessMonitor();
+
+		await monitor.finish(Promise.resolve(0), onCommitSucceeded);
+
+		expect(persistedBeforeExit).toEqual(["restarting-services:0"]);
+		expect(h.restarts).toBe(1);
+		expect((await loadOrchestratorState())?.phase).toBe("restarting-services");
+		expect(await pending.readPending()).toEqual([
+			{ name: "cerastream", version: "2026.9.8" },
+		]);
+		resetOrchestratorRuntimeForTest();
+		await startUpdateOrchestrator({
+			...defaultOrchestratorRuntimeDeps,
+			recoverSoftwareUpdateIfRunning: async () => false,
+			persist: saveOrchestratorState,
+		});
+		expect(getOrchestratorState().phase).toBe("restarting-services");
+		expect(getOrchestratorState().failureReason).toBeNull();
+	});
+
+	test("a proven post-commit restart waits for idle then settles and clears the pending plan with no unit", async () => {
+		tempRoot = await mkdtemp(join(tmpdir(), "ceraui-complete-resume-"));
+		setOrchestratorStateFilePathForTest(join(tempRoot, "agent.json"));
+		const quarantine = new UpdateQuarantine(join(tempRoot, "quarantine.json"));
+		await quarantine.savePending([{ name: "cerastream", version: "2026.9.8" }]);
+		saveOrchestratorState({
+			...persistedCommitting(50),
+			phase: "restarting-services",
+			progress: null,
+		});
+		let idle = false;
+		let recoveryCalls = 0;
+		await startUpdateOrchestrator({
+			...defaultOrchestratorRuntimeDeps,
+			quarantine,
+			recoverSoftwareUpdateIfRunning: async () => {
+				recoveryCalls++;
+				return false;
+			},
+			loadSettings: async () => ({
+				packagesAuto: false,
+				systemAuto: false,
+				schedule: { mode: "any-idle", start: "03:00", end: "05:00" },
+				channel: "stable",
+				allowPackagesOverCellular: false,
+				allowSystemOverCellular: false,
+			}),
+			restartStale: async (isIdle) => isIdle(),
+			isIdle: async () => idle,
+			getPackageInstallWireState: () => ({ kind: "idle" }),
+			persist: saveOrchestratorState,
+		});
+		expect(recoveryCalls).toBe(0);
+		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).toBe("restarting-services");
+		expect(await quarantine.readPending()).toHaveLength(1);
+		idle = true;
+		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).toBe("settled");
+		expect(await quarantine.readPending()).toEqual([]);
+		await runOrchestratorTick();
+		expect((await loadOrchestratorState())?.phase).toBe("idle");
+		expect(recoveryCalls).toBe(0);
 	});
 });
