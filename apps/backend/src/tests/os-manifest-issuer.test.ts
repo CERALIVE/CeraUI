@@ -183,7 +183,9 @@ beforeAll(async () => {
 		"intermediate",
 		"basicConstraints=critical,CA:FALSE\nkeyUsage=digitalSignature\nextendedKeyUsage=codeSigning,emailProtection\n",
 	);
-});
+	// Twelve synchronous RSA-2048 keygens: ~1 s on an idle workstation, but
+	// they exceeded bun's 5 s default hook bound on a loaded CI runner.
+}, 60_000);
 
 afterAll(async () => {
 	if (dir) await rm(dir, { recursive: true, force: true });
