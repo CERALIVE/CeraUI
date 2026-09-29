@@ -39,10 +39,14 @@ below; it does not qualify a released capable image or the OS/slot paths.
 The orchestrator starts at boot through `startUpdateOrchestrator()`, wired in
 `main.ts` as `guardNonCritical("update-orchestrator", ...)` before the standalone
 `recoverSoftwareUpdateIfRunning()` probe and then the
-`periodicCheckForSoftwareUpdates()` loop. Orchestrator resume reattaches a
-persisted `committing` unit first; standalone recovery afterwards also covers
-any detached unit that resume did not reattach, including one the orchestrator
-tracks as `downloading`.
+`periodicCheckForSoftwareUpdates()` loop. Orchestrator resume runs recovery only
+for a persisted `committing` phase; every other persisted phase passes through it
+unchanged. The standalone probe runs afterwards and, unless APT updates are
+disabled, mocks are on, or this process is already tracking an update, it
+independently probes the detached unit whatever phase the orchestrator is in: it
+can adopt a still-running unit (including one the orchestrator tracks as
+`downloading`) or settle one that has already finished. Neither path ever spawns
+apt.
 The legacy periodic loop still runs beside it; both land their discovery
 through the same `runUpdateDiscoveryAndReport()` seam.
 
