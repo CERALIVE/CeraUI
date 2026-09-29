@@ -171,9 +171,17 @@ export type OrchestratorEvent =
 	// This orchestrator therefore gates the WHOLE unit's start on idle, and
 	// distinguishes its `downloading` vs `committing` sub-phase purely by
 	// inspecting the SAME running unit's output stream (mirroring
-	// update-state.ts's own `unpacking>0||setting_up>0` heuristic) — so D8's
-	// "downloading ⇒ allowed + abort" remains exactly meaningful: the unit can
-	// still be safely killed with nothing installed while in that sub-phase.
+	// update-state.ts's own `unpacking>0||setting_up>0` heuristic). That
+	// inference lags: the wire reports `installing` only once dpkg's first
+	// `Unpacking`/`Setting up` line is ingested, so the inferred `downloading`
+	// sub-phase can include a running dpkg (measured on a Rock 5B+). D8's
+	// "downloading ⇒ allowed + abort" therefore does not stop on this phase
+	// alone: `admitAndPrepareStreamStart` (runtime.ts) first does a
+	// forced-fresh wire read and asks the commit-stage probe
+	// (commit-stage-probe.ts), and refuses if either finds the commit stage.
+	// What remains: on a capable image's two-stage unit, the check-then-stop
+	// gap only; on a non-capable image's single-stage unit, the probe detects
+	// only a running `dpkg`, so the gap sits right before the dpkg spawn.
 	| { readonly type: "INSTALL_UNIT_STARTED"; readonly now: number }
 	| {
 			readonly type: "DOWNLOAD_PROGRESS";
