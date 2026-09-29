@@ -243,6 +243,103 @@ describe("installUpdatesNow — bypasses idle, NEVER bypasses stream-admission",
 		expect(getOrchestratorState().phase).toBe("downloading");
 	});
 
+	test("reports stream_active when the stream starts during pending-plan persistence", async () => {
+		let releasePending: (() => void) | undefined;
+		const pending = new Promise<void>((resolve) => {
+			releasePending = resolve;
+		});
+		let savingPending: (() => void) | undefined;
+		const saving = new Promise<void>((resolve) => {
+			savingPending = resolve;
+		});
+		let streamLive = false;
+		let launches = 0;
+		const quarantine = testQuarantine();
+		const savePending = quarantine.savePending.bind(quarantine);
+		quarantine.savePending = async (packages) => {
+			savingPending?.();
+			await pending;
+			await savePending(packages);
+		};
+		setOrchestratorRuntimeDepsForTest(
+			fakeDeps({
+				quarantine,
+				isStreamLive: () => streamLive,
+				getPackageInstallWireState: () => ({
+					kind: "available",
+					identity: { version: "app-update", packages: ["cerastream"] },
+					package_count: 1,
+					actionable_count: 1,
+					packages: [{ name: "cerastream", layer: "app", actionable: true }],
+				}),
+				startPackageInstall: () => {
+					launches++;
+					return streamLive
+						? { started: false, reason: "streaming" }
+						: { started: true };
+				},
+			}),
+		);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "available",
+		});
+
+		const attempt = installUpdatesNow();
+		await saving;
+		streamLive = true;
+		releasePending?.();
+
+		expect(await attempt).toEqual({ started: false, reason: "stream_active" });
+		expect(launches).toBe(1);
+		expect(getOrchestratorState().phase).toBe("awaiting-idle");
+		expect(await quarantine.readPending()).toEqual([]);
+	});
+
+	test.each([
+		["already_updating", "busy"],
+		["check_unavailable", "not_available"],
+		["updates_disabled", "busy"],
+	] as const)("maps launch refusal %s to %s", async (refusal, reason) => {
+		setOrchestratorRuntimeDepsForTest(
+			fakeDeps({
+				startPackageInstall: () => ({ started: false, reason: refusal }),
+			}),
+		);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "available",
+		});
+
+		expect(await installUpdatesNow()).toEqual({ started: false, reason });
+		expect(getOrchestratorState().phase).toBe("awaiting-idle");
+	});
+
+	test("a refused scheduled launch remains pending for the next tick", async () => {
+		let attempts = 0;
+		setOrchestratorRuntimeDepsForTest(
+			fakeDeps({
+				startPackageInstall: () => {
+					attempts++;
+					return attempts === 1
+						? { started: false, reason: "already_updating" }
+						: { started: true };
+				},
+			}),
+		);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "awaiting-idle",
+		});
+
+		await runOrchestratorTick();
+		expect(attempts).toBe(1);
+		expect(getOrchestratorState().phase).toBe("awaiting-idle");
+		await runOrchestratorTick();
+		expect(attempts).toBe(2);
+		expect(getOrchestratorState().phase).toBe("downloading");
+	});
+
 	test("starts a pending automatic install immediately when the operator asks during awaiting-idle", async () => {
 		let installs = 0;
 		let idleChecks = 0;

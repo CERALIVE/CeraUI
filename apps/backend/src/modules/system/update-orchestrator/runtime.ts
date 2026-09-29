@@ -40,6 +40,7 @@ import {
 	runUpdateDiscoveryAndReport,
 	type SoftwareUpdateError,
 	startSoftwareUpdate,
+	type UpdateStartOutcome,
 } from "../software-updates.ts";
 import { readUpdateCapabilities } from "../update-capabilities.ts";
 import { loadUpdateSettings } from "../update-settings.ts";
@@ -105,7 +106,7 @@ export interface OrchestratorRuntimeDeps {
 	readonly isStreamLive: () => boolean;
 	readonly onlyMeteredCandidateExists: () => Promise<boolean>;
 	readonly runPackageCheck: () => Promise<SoftwareUpdateError>;
-	readonly startPackageInstall: () => { started: boolean };
+	readonly startPackageInstall: () => UpdateStartOutcome;
 	readonly getPackageInstallWireState: () => UpdateState;
 	/**
 	 * D8 abort-network I/O (Todo 37): stop the in-flight detached apt unit /
@@ -219,10 +220,7 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	isStreamLive: getIsStreaming,
 	onlyMeteredCandidateExists: defaultOnlyMeteredCandidateExists,
 	runPackageCheck: runUpdateDiscoveryAndReport,
-	startPackageInstall: () => {
-		const outcome = startSoftwareUpdate(notePackageCommitSucceeded);
-		return { started: outcome.started };
-	},
+	startPackageInstall: () => startSoftwareUpdate(notePackageCommitSucceeded),
 	getPackageInstallWireState: getUpdateState,
 	stopPackageInstallUnit: stopPackageInstallUnitForStream,
 	killAndRestartRaucForStream,
@@ -464,10 +462,23 @@ export async function installUpdatesNow(): Promise<ManualInstallOutcome> {
 	if (deps.isStreamLive()) return { started: false, reason: "stream_active" };
 	if (state.phase === "available")
 		dispatch({ type: "AWAIT_IDLE_FOR_INSTALL", now: deps.now() });
-	await maybeStartPackageInstall({ bypassIdle: true });
-	return getOrchestratorState().phase === "downloading"
-		? { started: true }
-		: { started: false, reason: "busy" };
+	const launch = await maybeStartPackageInstall({ bypassIdle: true });
+	if (launch?.started) return { started: true };
+	const reason = launch?.reason;
+	switch (reason) {
+		case "streaming":
+			return { started: false, reason: "stream_active" };
+		case "check_unavailable":
+			return { started: false, reason: "not_available" };
+		case "already_updating":
+		case "updates_disabled":
+		case undefined:
+			return { started: false, reason: "busy" };
+		default: {
+			const unreachable: never = reason;
+			return unreachable;
+		}
+	}
 }
 
 export function allowCellularOnce(id: string): void {
@@ -675,9 +686,9 @@ function isRateLimitedError(error: SoftwareUpdateError): boolean {
 
 async function maybeStartPackageInstall(opts: {
 	readonly bypassIdle: boolean;
-}): Promise<void> {
+}): Promise<UpdateStartOutcome | undefined> {
 	if (state.phase !== "awaiting-idle") return;
-	if (deps.isStreamLive()) return; // stays awaiting-idle; retried next tick
+	if (deps.isStreamLive()) return { started: false, reason: "streaming" };
 	if (!opts.bypassIdle) {
 		const settings = await deps.loadSettings();
 		const idle = await deps.isIdle(settings.schedule);
@@ -700,9 +711,10 @@ async function maybeStartPackageInstall(opts: {
 		const result = deps.startPackageInstall();
 		if (!result.started) {
 			await deps.quarantine.clearPending();
-			return; // stays awaiting-idle; retried next tick
+			return result; // stays awaiting-idle; retried next tick
 		}
 		dispatch({ type: "INSTALL_UNIT_STARTED", now: deps.now() });
+		return result;
 	} finally {
 		packageInstallStarting = false;
 	}
