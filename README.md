@@ -17,14 +17,14 @@ sections it cannot back instead of hiding them. Updating every package by origin
 signed system-image updates and the slot mirror are implemented but need image
 capabilities no released image declares yet. System-image updates additionally
 need an `/etc/ceralive/os-release-version` stamp, so current boards refuse them.
-The origin-classification fix and one credentials upgrade were exercised on a
-bench-capability-enabled Rock 5B+; the OS/slot flows remain fixture-only, and
-the package completion-state latch seen on that board was traced to the
-detached-unit identity check rejecting systemd's real flock-wrapped `ExecStart`.
-This branch accepts the real rendering and backs off observer retries. On
-2026-09-28 the Rock 5B+ had completed apt at 18:06:04Z but still reported
-`committing` 84+ minutes later until a backend restart; the fixed build has
-not yet been re-proven on a board.
+The origin-classification and detached-unit identity fixes were exercised on
+bench-enabled Rock 5B+ and Orange Pi 5+ boards; packages installed, but both
+successful installs left sticky `failed / commit_unit_absent_on_resume` because
+the backend exited before recording the orchestrator's success transition.
+This branch now persists `restarting-services` before exiting after an
+orchestrator-owned capable install, without guessing success on an uncertain
+resume or changing legacy-image behaviour. The fixed build has **not** been
+re-proven on a board; the OS/slot flows are not qualified by these installs.
 See also [update recovery](docs/UPDATE-RECOVERY.md).
 
 A root-only, local `.deb` maintenance executable now implements the narrow

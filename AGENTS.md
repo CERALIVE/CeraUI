@@ -145,11 +145,15 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
 - **[PARTIAL] APT all-package scope.** Origin-filtered, exact `name=version`
   installs under one flock. Active only on an image declaring `apt-all-packages`;
   every shipping image is legacy (`features: []`) and keeps the exact-name
-  15-package roster. A bench-enabled Rock 5B+ classified and installed
-  `ceralive-apt-credentials` 1.0.1 through the repaired package-policy/unscoped-
-  inventory join. Its completed unit left progress in `committing` on the board;
-  the flock-wrapped systemd `ExecStart` identity mismatch causing that latch is
-  fixed in this branch, but the fixed build has not been re-proven on a board.
+  15-package roster. The repaired package-policy join and flock-wrapped systemd
+  identity were exercised on bench-enabled Rock 5B+ and Orange Pi 5+ boards;
+  packages installed, but both installs ended in sticky
+  `failed / commit_unit_absent_on_resume`. The legacy completion exit ran before
+  the orchestrator persisted `COMMIT_SUCCEEDED`. On this branch a capable,
+  orchestrator-owned completion now persists `restarting-services` before exit;
+  the fixed build has **not** been re-proven on a board. See
+  [`docs/DEVICE-UPDATES.md`](docs/DEVICE-UPDATES.md) for the ordering and the
+  unchanged fail-closed resume rule.
 - **[PARTIAL] Signed OS agent.** CMS-verified channel manifests, RAUC staging,
   deferred activation, post-boot verification. Needs `apt-all-packages` +
   `rauc-verity-streaming` and the release-only `/etc/ceralive/os-release-version`
