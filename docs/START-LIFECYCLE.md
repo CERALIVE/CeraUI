@@ -103,14 +103,17 @@ engine. `committing`/`restarting-services` REFUSE with this class, always at
 in-flight operation over the network (killing the detached apt unit, or
 SIGTERM-killing and restarting `rauc.service`) — see
 `modules/system/update-orchestrator/runtime.ts`'s `admitAndPrepareStreamStart`
-and `stream-abort.ts`. That abort path performs a FORCED FRESH re-read of the
-wire state (bypassing the orchestrator's own cached, up-to-3s-stale phase)
-immediately before dispatching any kill/stop signal, closing a documented
-TOCTOU window down to one wire-state read round trip; see the code comment on
-`admitAndPrepareStreamStart` and `AGENTS.md`'s "SOFTWARE-UPDATE START
-CONTRACT" section for the full accepted-risk rationale and its
-recovery-mechanism backstop (`image-building-pipeline`'s
-`ceralive-dpkg-recover.service`).
+and `stream-abort.ts`. Immediately before dispatching any stop, the apt abort
+path performs a FORCED FRESH re-read of the wire state (bypassing the
+orchestrator's own cached, up-to-3s-stale phase) AND consults the commit-stage
+probe (`commit-stage-probe.ts`), which reads the unit's own processes. If the
+wire says `installing`/`success`, or the unit is running its second-stage
+`apt-get --no-download` or any `dpkg`, the start is REFUSED with
+`update_in_progress` instead; the probe fails closed. The stop therefore only
+lands in the download stage. See the code comment on
+`admitAndPrepareStreamStart` and `apps/backend/AGENTS.md`'s D8 section for the
+measured failure this closes and why `image-building-pipeline`'s
+`ceralive-dpkg-recover.service` is a backstop only.
 
 An admitted start also sets `/run/ceralive/streaming` — the same sentinel the
 image-side `ceralive-rauc-activate.sh` (Todo 28) checks before staging an OTA

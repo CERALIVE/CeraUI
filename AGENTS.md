@@ -120,7 +120,10 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
   every transition; the older `update_state` union is unchanged.
 - **[EXISTS] D8 admission.** `committing` and `restarting-services` refuse a
   stream start with the typed `update_in_progress` class; `downloading` and
-  `os-staging` allow it and abort the transfer; `syncing` continues. Wired as the
+  `os-staging` allow it and abort the transfer, except that `downloading` is
+  also refused once the package unit's commit stage runs (second-stage
+  `apt-get --no-download` or any `dpkg`, read from the unit's processes and
+  failing closed); `syncing` continues. Wired as the
   last gate of `stream-session-orchestrator.ts`'s `start()` through
   `admitAndPrepareStreamStart()`. See [`docs/START-LIFECYCLE.md`](docs/START-LIFECYCLE.md).
 - **[EXISTS] Schedule and idle.** 6 h package / 12 h OS checks with jitter and a

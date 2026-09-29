@@ -331,7 +331,7 @@ throws if a phase is placed in more than one bucket.
 | Phase | Start allowed? | Action on the update |
 |---|---|---|
 | `committing`, `restarting-services` | **refused** (`update_in_progress`) | none |
-| `downloading` | allowed | abort over network: stop the detached apt unit |
+| `downloading` | allowed while still downloading; **refused** once the commit stage runs | abort over network: stop the detached apt unit (only when admitted) |
 | `os-staging` | allowed | abort over network: kill and restart `rauc.service` |
 | `syncing` | allowed | continue locally |
 | every other phase | allowed | none |
@@ -344,11 +344,24 @@ The live wiring is `admitAndPrepareStreamStart()` in `runtime.ts`, called from
 `stream-session-orchestrator.ts` as the last admission gate, after
 duplicate-start, the modem-transition lease, the recovery barrier and the
 blocking-mutation check. It is last because it is the only gate with a side
-effect. Before stopping a `downloading` unit it takes a forced-fresh read of
-`getPackageInstallWireState()`. If dpkg has already started, it dispatches
-`COMMIT_PHASE_ENTERED` and refuses instead of killing anything. The small
-remaining window is covered by the image's boot-time
-`ceralive-dpkg-recover.service`. An admitted start sets `/run/ceralive/streaming`,
+effect. The cached phase stays `downloading` through the whole unit on a
+successful install, and the wire only reports `installing` after dpkg's first
+`Unpacking` line is ingested; on a Rock 5B+ a start 1 ms after dpkg appeared was
+admitted and dpkg was killed. So before stopping a `downloading` unit it asks two
+independent questions: a forced-fresh read of `getPackageInstallWireState()`
+(`installing`/`success`), and the commit-stage probe
+(`update-orchestrator/commit-stage-probe.ts`), which reads the unit's own
+processes through its `ControlGroup`, `cgroup.procs` and `/proc/<pid>/comm` +
+`cmdline`. The commit stage is running when any process is `dpkg`/`dpkg-*` or an
+`apt-get` whose argv contains `--no-download` (the second stage, which starts
+before dpkg). The first `apt-get -d … upgrade` stage does not count, so a genuine
+download stays abortable. The probe fails closed: an active unit whose processes
+cannot be read refuses. If either question says yes, it dispatches
+`COMMIT_PHASE_ENTERED` and refuses instead of killing anything. The stop can
+therefore only land in the download stage; the boot-time
+`ceralive-dpkg-recover.service` (`dpkg --configure -a`) remains a backstop for
+other interruptions such as power loss, and does not repair a package left
+half-installed. An admitted start sets `/run/ceralive/streaming`,
 which the image's activation script checks before arming an OS slot, and every
 stream-end path clears it. The typed failure is documented in
 [START-LIFECYCLE.md](./START-LIFECYCLE.md).
