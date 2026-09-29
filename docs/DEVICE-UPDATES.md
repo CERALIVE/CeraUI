@@ -79,18 +79,16 @@ Debian suite. Unknown or ambiguous joins remain informational, not installable;
 the Rock 5B+ capture of both APT forms is the regression fixture. This repairs
 the former fixture-only origin parser, which looked for inventory annotations
 under each package-specific candidate and rejected every real candidate.
-On 2026-09-27 a Rock 5B+ with bench-enabled capabilities classified
-`ceralive-apt-credentials` 1.0.1 as an actionable app-origin upgrade and installed
-it via `system.checkUpdatesNow` / `system.installUpdatesNow` (unit exit 0,
-installed version 1.0.1). A later Rock 5B+ capture on 2026-09-28 showed apt
-success at 18:06:04Z while the backend remained `installing` / `committing` for
-84+ minutes, clearing only after a backend restart. The observer repeatedly
-raised `DetachedAptServiceIdentityError` (`flock wrapper does not match`, about
-3.5 times/s) because the identity contract rejected systemd's real flock-wrapped
-`ExecStart` rendering before it could observe the completed unit. This branch
-parses that rendering and backs off repeated failures. The fixed build has NOT
-yet been re-proven on a board; the earlier installation is not a settled-lifecycle
-qualification.
+On 2026-09-27 a Rock 5B+ with bench-enabled capabilities classified and installed
+`ceralive-apt-credentials` 1.0.1. A later Rock capture showed apt success but
+`committing` stuck for 84+ minutes: the observer rejected systemd's flock-wrapped
+`ExecStart`. The identity and retry fixes were then exercised on both benches:
+the detached unit completed and the selected packages installed, but the backend
+exited on success before the orchestrator's next tick persisted that result.
+Both boards resumed to sticky `failed / commit_unit_absent_on_resume`, with
+`pending-packages.json` still populated. The completion-order fix below is
+source-tested; **its fixed build has not yet been board-proven**. Neither the
+earlier installs nor the identity proof qualify a settled update lifecycle.
 
 `setup.json`'s explicit `"apt_update_enabled": false` still vetoes every APT
 transaction on both kinds of image. The orchestrator does not bypass it: a
@@ -216,6 +214,32 @@ answer: still running keeps `committing` with progress, `success` dispatches
 inconclusive unit dispatches `COMMIT_RESUME_UNRESOLVED`. Every other phase
 resumes unchanged; the next tick re-observes it. A resumed commit that lands in
 `quarantined` also records the pending package failure.
+
+**Successful capable-image commits have a persist-before-exit boundary.**
+`software-updates.ts`'s `finish()` settles the detached unit's exit and post-clean
+before its legacy deliberate exit. The orchestrator's normal 3 s tick cannot
+be expected to run between that settle and the exit: it previously left
+`agent.json` at `committing` while the observer removed the already-finished
+unit. On restart, `resumeCommitting()` correctly refused to guess success from
+an absent unit and persisted `failed / commit_unit_absent_on_resume`. For a
+transaction launched by the orchestrator on a capable image, the completion
+callback now dispatches `COMMIT_SUCCEEDED` (entering `committing` first if a
+fast unit outran the tick) and synchronously persists `restarting-services`
+**before** the exit. The pending package plan remains intact. Resume passes
+through `restarting-services` without needing the absent unit, and the idle-gated
+stale-service reconciliation clears the plan only after it finishes; a stale
+`ceralive.service` can restart itself there when no transaction is running.
+This does not force a reboot. Legacy images and direct legacy RPC launches retain
+their previous restart/reboot behaviour. A genuinely interrupted commit with no
+retained unit or outcome still fails closed with `commit_unit_absent_on_resume`;
+there is no dpkg-state inference or automatic RESET.
+
+We rejected waiting solely for the next tick: the exit wins deterministically.
+Suppressing the exit on capable images would leave a newly installed CeraUI binary
+running stale until the 30-minute idle gate, with a version-skew window.
+Inferring success on resume from dpkg or the pending plan would turn an uncertain
+mid-commit crash into an unproved success. Only the observed zero exit after a
+complete output drain and service cleanup may author the transition.
 
 The observer checks the retained systemd unit's identity on every poll before
 trusting its terminal exit status. On the Rock 5B+, `systemctl show` omits unset

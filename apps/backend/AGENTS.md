@@ -2915,9 +2915,11 @@ only the rules a change to this module must not break.
 **Status split, stated exactly.** The orchestrator, its D8 admission, the package
 pipeline and the Updates dialog run on every device. The APT all-package scope,
 the OS agent, the slot mirror and the UID-pinned transport are implemented and
-fixture-tested but each is gated on an image capability no shipped image
-declares (`features: []` today), so they are inert in the field [PARTIAL]. No
-board has run any of it from this branch.
+fixture-tested but each is gated on an image capability no released image
+declares (`features: []` in the released fleet), so they remain [PARTIAL].
+Bench-enabled capable images exercised the APT identity and commit paths on
+both boards, but did not complete the orchestrator lifecycle; OS staging and
+UID-pinned transport have not been qualified by those installs.
 
 - **Pure core, one effects layer.** `types.ts`, `reducer.ts` (`reduceOrchestrator`),
   `admission.ts` and `schedule.ts` contain no I/O, no `Date.now()` and no
@@ -2988,11 +2990,29 @@ board has run any of it from this branch.
   branch requires a Debian host plus Debian Origin/Label and one of the three
   Trixie suites. The regression fixture transcribes both Rock 5B+ command shapes.
   The 2026-09-27 bench-only capability drill confirmed an actionable
-  `ceralive-apt-credentials` 1.0.1 row and its real installation. Its completed
-  unit left progress latched until a service restart: the identity validator
-  rejected systemd's real flock-wrapped `ExecStart` rendering. This branch
-  accepts that rendering and backs off observer failures, but the fixed build
-  has not yet been re-proven on a board; the install is not lifecycle qualification.
+  `ceralive-apt-credentials` 1.0.1 row and its real installation. A later
+  completed unit initially latched progress because the identity validator
+  rejected systemd's flock-wrapped `ExecStart`. That validator was repaired and
+  exercised on both benches, exposing a distinct completion-order bug: after a
+  proven zero exit, `software-updates.ts` deliberately exited before the next
+  orchestrator tick could persist `COMMIT_SUCCEEDED`. Both boards resumed from
+  `committing` with the unit absent to sticky `failed /
+  commit_unit_absent_on_resume`. This branch now persists `restarting-services`
+  before the deliberate exit for orchestrator-owned capable installs; the fixed
+  build has NOT been re-proven on a board. Installed packages do not qualify
+  the lifecycle as settled.
+- **Successful commit ordering is a safety boundary.** `finish()` gets the
+  detached unit's zero exit only after final output drain and unit cleanup;
+  its completion callback moves `downloading` through `committing` if needed,
+  dispatches `COMMIT_SUCCEEDED` and persists `restarting-services` before the
+  legacy crash-to-restart. `pending-packages.json` stays until the resumed
+  `restarting-services` tick confirms idle-gated stale-unit reconciliation.
+  A stale `ceralive.service` is restarted there only when no transaction is
+  running; no reboot is forced. Legacy-image launches still use the unchanged
+  restart/reboot branch. An absent unit with no observed exit is still UNKNOWN:
+  `resumeCommitting()` keeps `failed / commit_unit_absent_on_resume`, never
+  guesses from dpkg or the pending plan. The alternatives and ordering proof
+  are in `docs/DEVICE-UPDATES.md`.
 - **Idle drives the schedule.** Scheduled checks (6 h ± 30 min packages, 12 h ±
   60 min OS; 60 s doubling backoff, 5 min for an apt 429/5xx, 24 h ceiling) start
   only from `idle` with the D7 toggle on. The install unit starts only with no

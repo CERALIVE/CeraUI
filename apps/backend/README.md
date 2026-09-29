@@ -268,9 +268,14 @@ RPCs. On 2026-09-28 the Rock 5B+ completed apt at 18:06:04Z, yet the backend
 still reported `installing` / `committing` 84+ minutes later until a restart.
 The detached-unit identity checker rejected systemd's real flock-wrapped
 `ExecStart` rendering (`flock wrapper does not match`), repeatedly blocking
-observation of the successful exit. The source fix on this branch accepts the
-real rendering and backs off repeated observer failures; that fixed build has
-not yet been re-proven on a board.
+observation of the successful exit. The repaired identity check was exercised on
+both benches; both installs then reached the next bug: the backend exited before
+the orchestrator persisted `COMMIT_SUCCEEDED`, and resumed to sticky
+`failed / commit_unit_absent_on_resume` with the pending plan intact. The capable,
+orchestrator-owned path now persists `restarting-services` before its deliberate
+exit; legacy images retain their old restart/reboot behaviour, and a genuinely
+uncertain commit still fails closed. The new build has not yet been board-proven.
+See [`DEVICE-UPDATES.md`](../../docs/DEVICE-UPDATES.md).
 
 Candidate provenance joins two APT readings: `apt-cache policy <name>` supplies
 the version's package-file line, while one unscoped `apt-cache policy` reading
