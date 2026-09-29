@@ -227,10 +227,9 @@ export const rebootProcedure = authedProcedure
 /**
  * Start update procedure
  */
-// startSoftwareUpdate() owns every refusal so there is exactly ONE place that
-// decides whether an update may run, and it always names the reason. Duplicating
-// the guards here is what let a refusal answer `{success:true}` while nothing
-// happened, parking the dialog on "Applying…" until it silently timed out.
+// startSoftwareUpdate() owns synchronous dispatch refusals; this procedure
+// forwards them. A later streaming/disabled early return in doSoftwareUpdate()
+// is silent (root AGENTS.md D8 Known gaps (c)).
 export const startUpdateProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(() => {
@@ -245,11 +244,9 @@ export const startUpdateProcedure = authedProcedure
 
 /**
  * Update-orchestrator operator actions (Todo 36). Both `checkUpdatesNow` and
- * `installUpdatesNow` bypass the IDLE requirement — an operator asking for
- * this explicitly does not need to wait for a quiet window — but NEVER bypass
- * the D8 stream-admission block; `installUpdatesNow` refuses outright while a
- * stream is live rather than silently queuing behind it (queuing an update
- * behind a stream is the plan's explicit prohibition, not merely undesirable).
+ * `installUpdatesNow` bypasses idle but checks whether a stream is LIVE.
+ * A start already admitted but not live is not covered (root AGENTS.md D8
+ * Known gaps (f)). `checkUpdatesNow` starts discovery, not an install.
  */
 export const checkUpdatesNowProcedure = authedProcedure
 	.output(successResponseSchema)

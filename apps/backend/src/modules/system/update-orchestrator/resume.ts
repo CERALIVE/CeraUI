@@ -15,14 +15,15 @@
  *
  *   dpkg MUST NEVER run twice for the same transaction.
  *
- * This module therefore NEVER spawns a new apt/dpkg invocation. For
+ * This module does not start another apt install or upgrade. Settling an
+ * attached transaction may run `apt-get clean`. For
  * `committing` it queries Todo 35's EXISTING, already-boot-wired recovery
  * mechanism (`recoverSoftwareUpdateIfRunning` — probes the detached
  * `ceralive-software-update.service` unit's live systemd state and re-attaches
- * to it if still running, or reports its already-finished exit code; it never
- * re-invokes apt-get) and reads the SAME derived `getUpdateState()` the rest
- * of the backend already trusts. The resume decision is a pure MAPPING of
- * those two read-only observations onto the persisted orchestrator phase.
+ * to it if still running, or reports its already-finished exit code) and
+ * reads the SAME derived `getUpdateState()` the rest of the backend trusts.
+ * The state decision maps those results onto the persisted phase; reattachment
+ * may settle the unit and clean its apt cache.
  *
  * Every other "in-flight operation" phase (`os-staging`, `syncing`,
  * `os-activation-armed`) has no equivalent live-recovery mechanism to query
@@ -61,8 +62,8 @@ async function resumeCommitting(
 	deps: OrchestratorResumeDeps,
 ): Promise<OrchestratorState> {
 	const now = deps.now();
-	// Read-only: reattaches to the detached unit's OWN process if it is still
-	// running, or reads its already-recorded exit outcome. Never spawns apt.
+	// Reattach to the detached unit if still running or read its recorded exit;
+	// settlement may run apt-get clean, but never a second install.
 	const recovered = await deps.recoverSoftwareUpdateIfRunning();
 	const wire = deps.getUpdateState();
 

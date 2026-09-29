@@ -52,12 +52,9 @@ export const ORCHESTRATOR_PHASES = [
 ] as const;
 export type OrchestratorPhase = (typeof ORCHESTRATOR_PHASES)[number];
 
-// The three phases that hold `/run/lock/ceralive-update.lock` (D8's refusal
-// set is a STRICT SUBSET of these two: committing/restarting-services refuse a
-// stream; os-staging/syncing stay ALLOWED because they are either abortable
-// (os-staging, network) or non-competing (syncing, local rsync)). Exported so
-// tests can assert the D8 matrix and the lock-holding set are not silently
-// re-derived differently in two places.
+// Lock-associated transaction phases. This is NOT D8's refusal set:
+// `restarting-services` refuses without holding the lock, whereas OS staging
+// and syncing allow a start. Exported to keep lock and admission tests separate.
 export const LOCK_HOLDING_PHASES: readonly OrchestratorPhase[] = [
 	"committing",
 	"os-staging",
@@ -160,32 +157,12 @@ export type OrchestratorEvent =
 	// available and the automatic pipeline wants to proceed (or an operator
 	// calls installUpdatesNow) — see the "single combined unit" note below.
 	| { readonly type: "AWAIT_IDLE_FOR_INSTALL"; readonly now: number }
-	// awaiting-idle -> downloading: idle has been reached (or bypassed by
-	// system.installUpdatesNow) AND no stream is currently live, so on a
-	// capable image the ONE combined download+commit detached unit (Todo 35's
-	// `buildDetachedAptAllCommand` — apt-get -d && apt-get install, one flock,
-	// one systemd-run unit) is launched. There is no separate "download-only"
-	// unit to start independently: Todo 35's own mechanism deliberately chains
-	// download and commit inside a single flock hold so no `apt-get update` can
-	// race between them (see the Todo-36 notepad entry for the full reasoning).
-	// This orchestrator therefore gates the WHOLE unit's start on idle, and
-	// distinguishes its `downloading` vs `committing` sub-phase purely by
-	// inspecting the SAME running unit's output stream (mirroring
-	// update-state.ts's own `unpacking>0||setting_up>0` heuristic). That
-	// inference lags: the wire reports `installing` only once dpkg's first
-	// `Unpacking`/`Setting up` line is ingested, so the inferred `downloading`
-	// sub-phase can include a running dpkg (measured on a Rock 5B+). D8's
-	// "downloading ⇒ allowed + abort" therefore does not stop on this phase
-	// alone: `admitAndPrepareStreamStart` (runtime.ts) first does a
-	// forced-fresh wire read and asks the commit-stage probe
-	// (commit-stage-probe.ts), and refuses if either finds the commit stage.
-	// What remains: on a capable image's two-stage unit, the check-then-stop
-	// gap only; on a non-capable image's single-stage unit, the probe detects
-	// only a running `dpkg`, so the gap sits right before the dpkg spawn.
-	// This event is also dispatched when startSoftwareUpdate() only deferred
-	// the launch; that deferral, and any install launched through the legacy
-	// path, is outside D8's guarantee: see "D8 stream/update admission: what it
-	// does NOT cover" under Known gaps in the root AGENTS.md.
+	// awaiting-idle -> downloading records launch ACCEPTANCE, not unit creation.
+	// It can be deferred or still preparing; the stream-live check is not a
+	// starting-stream fence. Once a capable-image unit exists, download and
+	// commit run inside one flock. Wire progress can lag dpkg, so D8 reads
+	// fresh wire state and probes the unit before issuing a stop. See root
+	// AGENTS.md D8 Known gaps (b), (f), (g) for the uncovered windows.
 	| { readonly type: "INSTALL_UNIT_STARTED"; readonly now: number }
 	| {
 			readonly type: "DOWNLOAD_PROGRESS";
@@ -197,12 +174,13 @@ export type OrchestratorEvent =
 			readonly now: number;
 			readonly reason: string;
 	  }
-	// The ONLY event onStreamStart's "abort-network" action drives: the download
-	// was aborted because a stream started, NOT because it actually failed.
+	// Dispatched by the downloading abort-network arm after issuing the unit
+	// stop. This is not a download failure; it cannot cancel a launch without
+	// a unit yet (root AGENTS.md D8 Known gaps (b), (g)).
 	| { readonly type: "DOWNLOAD_ABORTED_FOR_STREAM"; readonly now: number }
-	// The SAME unit's output has crossed from "downloading" into
-	// "unpacking/setting up" — dpkg is now running, so from this point a stream
-	// start must REFUSE (D8).
+	// A fresh wire read or the poll found `installing` or `success`: dpkg has
+	// run. A successful completion callback can also enter this phase before
+	// `COMMIT_SUCCEEDED`. D8 refuses starts in this phase.
 	| { readonly type: "COMMIT_PHASE_ENTERED"; readonly now: number }
 	| {
 			readonly type: "COMMIT_PROGRESS";

@@ -392,12 +392,11 @@ function notePackageCommitSucceeded(): void {
 }
 
 // ─── operator RPC actions (system.checkUpdatesNow / installUpdatesNow /
-// allowCellularOnce) — see rpc/procedures/system.procedure.ts. All three
-// bypass IDLE; NONE bypasses the D8 stream-admission block, which is enforced
-// structurally: none of these ever drives the phase INTO `committing` or
-// `restarting-services` directly — only the scheduler's own
-// awaiting-idle -> downloading step does that, and it always re-checks
-// isStreamLive() immediately beforehand (see maybeStartPackageInstall below).
+// allowCellularOnce) — see rpc/procedures/system.procedure.ts. Manual installs
+// bypass idle, not the stream-LIVE check. Both scheduled and manual package
+// launches use maybeStartPackageInstall; a separate poll, completion callback
+// or D8 fresh wire read can enter `committing`. D8 governs stream starts, not
+// the full launch window (root AGENTS.md D8 Known gaps (f)-(g)).
 
 export type ManualCheckOutcome =
 	| { readonly started: true }
@@ -467,10 +466,9 @@ export async function installUpdatesNow(): Promise<ManualInstallOutcome> {
 				: "not_available",
 		};
 	}
-	// The stream-admission block is never bypassed, even for a manual,
-	// idle-bypassing operator action (Todo-36 MUST NOT DO). Checked HERE,
-	// before the state even leaves `available`, so an active stream refuses the
-	// whole attempt rather than parking it in `awaiting-idle` forever.
+	// A manual install bypasses idle but refuses while the stream is LIVE.
+	// A start already admitted but not yet live is not covered (root AGENTS.md
+	// D8 Known gaps (f)).
 	if (deps.isStreamLive()) return { started: false, reason: "stream_active" };
 	if (state.phase === "available")
 		dispatch({ type: "AWAIT_IDLE_FOR_INSTALL", now: deps.now() });
@@ -501,8 +499,7 @@ export function allowCellularOnce(id: string): void {
 //
 // Wires D8 (admission.ts) into a real stream-start attempt. The refusal arm
 // (committing/restarting-services) is a straight read of the cached `state` —
-// no I/O, no staleness risk in the DANGEROUS direction (a phase that has
-// already moved past committing only ever gets MORE refusing, never less).
+// no I/O; a stale refusing phase can over-refuse until it is advanced.
 //
 // The abort-network arm is where the stop decision lives. The cached phase can
 // stay `downloading` while dpkg runs: the tick re-reads the wire only on its
@@ -534,8 +531,8 @@ export function allowCellularOnce(id: string): void {
 // `runDetachedAptUpgrade` unit, which has no `--no-download` stage, so the
 // probe detects only a running `dpkg` and the gap sits right before the dpkg
 // spawn. All of this is for a unit the orchestrator launched itself and is
-// tracking in `downloading`. An install launched through the legacy path, or
-// during the launch deferral, is outside D8's guarantee: see "D8
+// tracking in `downloading` with an existing unit. Other windows, including
+// a launch still in preparation, are outside D8's guarantee: see "D8
 // stream/update admission: what it does NOT cover" under Known gaps in the
 // root AGENTS.md. Do not "fix" either image's stop gap by splitting Todo 35's
 // single-unit/single-flock design into two units. If dpkg is interrupted (power loss, crash),

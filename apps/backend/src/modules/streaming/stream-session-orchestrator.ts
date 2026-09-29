@@ -466,10 +466,10 @@ export function createStreamSessionOrchestrator(
 		// `admitAndPrepareStreamStart` in update-orchestrator/runtime.ts). By
 		// the time we reach here every other gate (duplicate-start,
 		// modem-transition lease, recovery barrier, blocking-mutation) has
-		// already passed, so we only ever touch the update pipeline for a
-		// launch that is genuinely about to proceed — never abort a download
-		// for a start that was going to be refused for an unrelated reason a
-		// moment later.
+		// already passed, so no later gate in THIS orchestrator refuses after
+		// the abort. The launch can still be refused later by session.ts's
+		// isUpdating() guard while the stopped unit settles (root AGENTS.md D8
+		// Known gaps (h)).
 		const admitUpdate = deps.admitUpdate;
 		if (admitUpdate !== undefined) {
 			const updateAdmission = await admitUpdate();
@@ -481,7 +481,7 @@ export function createStreamSessionOrchestrator(
 				};
 			}
 		}
-		// Set the OTA-activation sentinel now — we are genuinely proceeding.
+		// Set the OTA-activation sentinel for this admitted attempt.
 		// Cleared below on a failed launch, and unconditionally at the top of
 		// every `stop()` call.
 		deps.markStreamingForOta?.();

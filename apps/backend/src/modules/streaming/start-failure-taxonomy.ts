@@ -186,7 +186,7 @@ export function typedStartFailure(
 
 /**
  * Build the `update_in_progress` `StartFailure` (Todo 37) from the update
- * orchestrator's own D8 refusal (`admitStreamStart`'s `allowed: false` arm).
+ * orchestrator's D8 refusal (cached phase, fresh wire or probe-only).
  * Always at the `params` phase — like `modem_transition_active`,
  * `recovery_pending` and `mutation_blocked`, this is refused before the engine
  * is ever touched — and never retriable (see the taxonomy's own row: the

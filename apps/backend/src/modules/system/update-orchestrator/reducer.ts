@@ -227,11 +227,10 @@ function reduceAvailable(
 	}
 }
 
-// See types.ts's INSTALL_UNIT_STARTED doc: idle (real or operator-bypassed)
-// has been reached and no stream is live, so the ONE combined download+commit
-// unit is launched. Nothing may abort from `awaiting-idle` itself — there is
-// no process running yet to abort, matching D8 leaving it unmentioned
-// (allowed + "none").
+// INSTALL_UNIT_STARTED moves the phase to `downloading` after the launcher
+// accepts; a deferred or preparing launch may not have a unit yet. On capable
+// images, once created, that unit holds both download and commit. D8's
+// `awaiting-idle` action is "none" (root AGENTS.md D8 Known gaps (f)-(g)).
 function reduceAwaitingIdle(
 	state: OrchestratorState,
 	event: OrchestratorEvent,
@@ -259,18 +258,17 @@ function reduceDownloading(
 				phase: "committing",
 				progress: state.progress,
 			});
-		// A failure purely in the download/discovery-simulation portion, before
-		// any dpkg step ran — `failed`, never `quarantined`: nothing was
-		// installed, so there is no bad version to pin.
+		// A failure while the phase is still `downloading` goes to `failed`, not
+		// `quarantined`: the wire has not established a failed dpkg commit.
 		case "DOWNLOAD_FAILED":
 			return enter(state, event.now, {
 				phase: "failed",
 				progress: null,
 				failureReason: event.reason,
 			});
-		// D8: a stream starting during `downloading` is ALLOWED, and the update
-		// aborts over network. This is not a failure of the update — it goes back
-		// to `available` so the schedule/operator can retry once the stream ends.
+		// D8 dispatches this only after the fresh read and probe found no commit
+		// stage and it issued a unit stop. The phase returns to `available`,
+		// but the event does not cancel a launch whose unit did not yet exist.
 		case "DOWNLOAD_ABORTED_FOR_STREAM":
 			return enter(state, event.now, { phase: "available", progress: null });
 		default:
@@ -290,8 +288,9 @@ function reduceCommitting(
 				phase: "restarting-services",
 				progress: null,
 			});
-		// A failed commit is QUARANTINE, never a bare "failed" — Todo 38 pins the
-		// installed (bad) version so it is not retried automatically.
+		// A failed commit quarantines the pending candidate; the legacy-unit
+		// adoption race can misattribute a different unit's outcome here (root
+		// AGENTS.md D8 Known gaps (d)).
 		case "COMMIT_FAILED":
 			return enter(state, event.now, {
 				phase: "quarantined",
@@ -383,7 +382,8 @@ function reduceOsStaging(
 				progress: null,
 				failureReason: event.reason,
 			});
-		// D8: allowed + abort, same as the package download leg.
+		// D8 allows OS staging and kills/restarts RAUC without a package wire
+		// read or commit-stage probe; unlike downloading, this arm never refuses.
 		case "OS_STAGING_ABORTED_FOR_STREAM":
 			return enter(state, event.now, {
 				phase: "os-available",

@@ -11,8 +11,9 @@
 /**
  * D8's wire-independent answer to "may the package-install unit still be
  * stopped?". The capable-image unit runs `apt-get -d … upgrade && apt-get
- * --no-download … install` under one flock; stopping it during the first
- * (download) stage is safe, stopping a running dpkg is not, and the second
+ * --no-download … install` under one flock; the first (download) stage is
+ * intended to be stoppable, not the dpkg stage. A check-then-stop race remains
+ * (root AGENTS.md D8 Known gaps). The second
  * stage is treated as the commit stage because it spawns dpkg. The wire
  * only reports `installing` once a dpkg `Unpacking` or `Setting up` line has
  * been ingested, so this reads the unit's own processes instead: the commit
@@ -24,7 +25,8 @@
  * FAIL CLOSED: a running unit whose process list cannot be read answers `true`
  * (a refused stream start is safe; a killed dpkg is not). An absent,
  * inactive, failed or exited unit answers `false`, as does a running unit
- * whose readable process list holds no matching process.
+ * whose readable process list holds no matching process. An absent unit during
+ * launch preparation does NOT mean the pending launch was cancelled (item (g)).
  */
 
 import { readdir } from "node:fs/promises";

@@ -179,7 +179,7 @@ describe("checkUpdatesNow", () => {
 	});
 });
 
-describe("installUpdatesNow — bypasses idle, NEVER bypasses stream-admission", () => {
+describe("installUpdatesNow — bypasses idle, NEVER bypasses the stream-live check", () => {
 	test("refuses with a typed reason when no update is available (not in the available phase)", async () => {
 		setOrchestratorRuntimeDepsForTest(fakeDeps());
 		setOrchestratorStateForTest(initialOrchestratorState(0));

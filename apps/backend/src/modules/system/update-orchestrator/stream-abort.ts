@@ -15,13 +15,11 @@
  * wire-state re-check AND the commit-stage process probe found no commit
  * stage; the RAUC kill has neither check (RAUC writes only the inactive slot).
  *
- * Both functions are BEST-EFFORT: once admitted, `downloading`/`os-staging`
- * starts proceed regardless of whether the abort itself succeeds (the admitted
- * stream start must never be blocked by a `systemctl` hiccup), so neither
- * throws on a non-zero exit — it logs and lets the caller proceed. See the
- * comment on `admitAndPrepareStreamStart` for what the apt stop can still
- * reach (the check-then-stop gap, and the single-stage unit on non-capable
- * images).
+ * Both functions log rather than throw on a nonzero `systemctl` exit, so D8
+ * returns allowed even if the abort did not succeed. A later `isUpdating()`
+ * check can still refuse the launch until the update monitor settles; see the
+ * root AGENTS.md D8 Known gaps (h). An absent unit is not a cancelled launch
+ * (item (g)).
  */
 
 import { logger } from "../../../helpers/logger.ts";
