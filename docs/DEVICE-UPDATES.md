@@ -613,5 +613,10 @@ Not proven, and not claimed:
   `transport-uidrange`, so every capable path is inert in the field;
 - no live signed channel manifest, hosted bundle or live `apt.ceralive.tv` mTLS
   verification has been exercised;
-- `quarantined` and `failed` cannot be left without removing `agent.json` (see
-  the known gap above).
+- No production caller dispatches `RESET`: `quarantined` and most `failed`
+  states remain sticky. The sole narrow exception is root-only
+  `commit_unit_absent_on_resume` adjudication through the local recovery CLI
+  described above; it preserves a durable receipt and requires a fresh discovery.
+  That CLI exists in source packaging but has not shipped in a released `.deb` or
+  image, and its root/systemd/APT board proof remains outstanding. Never delete
+  `agent.json` to clear a failure.
