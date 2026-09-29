@@ -45,8 +45,7 @@ unchanged. The standalone probe runs afterwards and, unless APT updates are
 disabled, mocks are on, or this process is already tracking an update, it
 independently probes the detached unit whatever phase the orchestrator is in: it
 can adopt a still-running unit (including one the orchestrator tracks as
-`downloading`) or settle one that has already finished. Neither path ever spawns
-apt.
+`downloading`) or settle one that has already finished. Neither recovery path starts another apt install or upgrade; settling a recovered transaction may run `apt-get clean`.
 The legacy periodic loop still runs beside it; both land their discovery
 through the same `runUpdateDiscoveryAndReport()` seam.
 
@@ -234,7 +233,7 @@ older `update_state` union keeps its original meaning.
 Every transition that changes state is written atomically to
 `/data/ceralive/update-state/agent.json`. On boot, `resumeOrchestratorState()`
 treats `committing` as the one safety-critical case: dpkg must never run twice.
-It never spawns apt. It calls the existing read-only
+It never starts another apt install or upgrade; settling a recovered transaction may run `apt-get clean`. It calls the existing detached-unit reattachment
 `recoverSoftwareUpdateIfRunning()` and reads `getUpdateState()`, then maps the
 answer: still running keeps `committing` with progress, `success` dispatches
 `COMMIT_SUCCEEDED`, `failed` dispatches `COMMIT_FAILED`, and an absent or
@@ -412,9 +411,15 @@ Active only with `apt-all-packages` and `rauc-verity-streaming`.
   signed `board` comparison, never for the physical compatible comparison.
 - `validateSignedOsManifest()` verifies the CMS signature against
   `/etc/rauc/ceralive-keyring.pem`, requires the exact manifest signer CN with
-  the codeSigning EKU and without emailProtection, then checks the strict v1
-  fields: board, compatible string, per-channel serial, expiry, CalVer
-  anti-downgrade, quarantine and `min_ceraui_version`. A signed Orange pointer
+  the codeSigning EKU and without emailProtection, and requires the extracted
+  leaf's RFC2253 issuer DN to equal exactly
+  `CN=CeraLive RAUC Intermediate CA,O=CeraLive` (production) or
+  `CN=CeraLive RAUC Bench Intermediate CA,O=CeraLive` (persistent bench).
+  A root-direct or alternate-intermediate signer is refused as
+  `signer_issuer_invalid` even if the CMS signature verifies to the keyring.
+  Only then does it check the strict v1 fields: board, compatible string,
+  per-channel serial, expiry, CalVer anti-downgrade, quarantine and
+  `min_ceraui_version`. A signed Orange pointer
   must say `board: orange-pi-5-plus`, `compatible: ceralive-orangepi5-plus`;
   the presently published serial-4 drill pointer says the latter as
   `ceralive-orange-pi-5-plus` and still fails closed. Publisher repair and a

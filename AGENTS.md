@@ -157,7 +157,11 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
 - **[PARTIAL] Signed OS agent.** CMS-verified channel manifests, RAUC staging,
   deferred activation, post-boot verification. Needs `apt-all-packages` +
   `rauc-verity-streaming` and the release-only `/etc/ceralive/os-release-version`
-  stamp. Channel lookup maps only exact physical RAUC compatibles:
+  stamp. The leaf's RFC2253 issuer is pinned to the production RAUC intermediate
+  (`CN=CeraLive RAUC Intermediate CA,O=CeraLive`) or the persistent bench RAUC
+  intermediate (`CN=CeraLive RAUC Bench Intermediate CA,O=CeraLive`); root-direct
+  and other intermediate signatures are refused after CMS verification.
+  Channel lookup maps only exact physical RAUC compatibles:
   `ceralive-rock-5b-plus` → `rock-5b-plus`, `ceralive-orangepi5-plus` →
   `orange-pi-5-plus`. The signed pointer still has to state that product board
   and the unmodified physical compatible exactly; the bundle is installed only

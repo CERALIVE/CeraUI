@@ -2955,11 +2955,12 @@ UID-pinned transport have not been qualified by those installs.
 - **Persistence and resume.** Every real transition is written atomically to
   `/data/ceralive/update-state/agent.json` and pushed as the additive
   `status.update_orchestrator` (`getOrchestratorWireState()`), a SIBLING of the
-  unchanged `update_state` union. `resumeOrchestratorState()` never spawns apt:
-  for `committing` it calls the existing read-only
-  `recoverSoftwareUpdateIfRunning()` plus `getUpdateState()`; an absent or
-  inconclusive unit becomes `COMMIT_RESUME_UNRESOLVED`, never `COMMIT_FAILED`
-  (quarantine implies a confirmed-bad version). Every other phase resumes as a
+  unchanged `update_state` union. `resumeOrchestratorState()` never starts
+  another apt install or upgrade: for `committing` it calls the existing
+  detached-unit reattachment `recoverSoftwareUpdateIfRunning()` plus
+  `getUpdateState()`; settling a recovered transaction may run `apt-get clean`.
+  An absent or inconclusive unit becomes `COMMIT_RESUME_UNRESOLVED`, never
+  `COMMIT_FAILED` (quarantine implies a confirmed-bad version). Every other phase resumes as a
   pass-through and the next tick re-observes it.
 - **The package step reuses the existing launcher.** `startPackageInstall` wraps
   `startSoftwareUpdate()` (below), so every refusal, the detached PID-1-owned
@@ -3092,7 +3093,11 @@ writes the INACTIVE slot.
   `channels/<channel>/<board>.json` and `.sig` as `ota_uid` under
   `updatePinController.run("os", ...)`; `validateSignedOsManifest()` accepts only
   a CMS verified against `/etc/rauc/ceralive-keyring.pem` with the exact signer
-  CN, codeSigning and no emailProtection, then the strict v1 fields.
+  CN, codeSigning and no emailProtection, and the extracted signer's RFC2253
+  issuer DN exactly `CN=CeraLive RAUC Intermediate CA,O=CeraLive` (production)
+  or `CN=CeraLive RAUC Bench Intermediate CA,O=CeraLive` (persistent bench).
+  A root-direct or other intermediate is refused as `signer_issuer_invalid`,
+  before the strict v1 fields.
   `stageOsBundle()` runs `rauc install` under the same pin to completion, writes
   `os-staged.json` BEFORE `manifest-serial.<channel>`, then
   `ceralive-rauc-arm@arm.service` arms next-idle activation (`@now` after seven
