@@ -190,7 +190,8 @@ comes from `/etc/os-release`'s first `BUILD_ID=` (quotes removed), falling back
 to `/etc/ceralive/image-build-commit` only when empty. The image's
 `sync-receipt.json` carries `state_sha256`, `build_id`, `image_version`,
 `target_slot`, `completed_at`; an absent receipt permits a first sync, while a
-matching status SHA means the state is already mirrored. An APT commit within
+matching status SHA whose `target_slot` names the slot that is not booted now
+means the state is already mirrored. An APT commit within
 the current uptime has no matching boot-health record and cannot be mirrored.
 
 At startup and on every idle tick, a passing predicate dispatches
@@ -237,11 +238,17 @@ so refused and failed runs are still detected from the unit; an exit status of
 `inactive/dead`.
 
 On either validated shape during `syncing`, `pollSlotSync` reads the receipt.
-It matches when its state SHA-256 equals the current dpkg status AND its
-`target_slot` names the slot that is not booted now, decided only through the
-`/etc/rauc/system.conf` bootname map and this boot's healthy record; an
-identity that cannot be resolved never matches (and the gate skips, rather
-than dispatches, a mirror whose identity is unknown). On a match it takes a
+Its slot identity (`classifyReceiptTarget`) is resolved from the
+`/etc/rauc/system.conf` bootname map and this boot's healthy record, never from
+a timestamp, and is one of `other` (it names the slot that is not booted now),
+`not-other` (it names a known slot that is not the other rootfs slot, such as
+the booted one) or `unknown` (that map and record cannot decide). The
+pre-dispatch gate and the poll treat `unknown` differently. The gate never
+dispatches on it: with a matching SHA it skips the tick
+(`slot-identity-unknown`). The poll keeps a receipt whose state SHA-256 equals
+the current dpkg status as a candidate unless its identity is `not-other`;
+only `not-other` rules a receipt out, and for an `unknown` one RAUC decides
+below. On a candidate it takes a
 second, fresh probe, and if that probe again reads one of the two shapes it
 reads RAUC (`rauc status --detailed`, rootfs slots only) before any verdict.
 It settles `synced` only when RAUC reports exactly one `booted` and one
@@ -266,9 +273,12 @@ record only once the backend is up, so the first polls see an `unknown` slot
 identity; such a receipt stays a candidate and RAUC, which names this boot's
 booted and inactive slots itself, decides between `synced`,
 `slot-sync-incomplete` and no verdict. A matching receipt alone does not prove
-that this run finished cleanly. The gate refuses (`already-synced`) to dispatch while a matching
-receipt already exists, so a match was written by this run, but the unit writes
-it before its last step, and the first probe can still be the previous run's
+that this run finished cleanly. Within one boot the gate refuses
+(`already-synced`) to dispatch while a matching receipt already exists, so on
+that path a candidate was written by this run. On the resume path after a
+reboot the receipt can predate the reboot, and what proves the mirror is RAUC's
+view of this boot's slots, not the receipt's age. Either way the unit writes
+the receipt before its last step, and the first probe can still be the previous run's
 finished record while this run's job was queued. A second probe that reads
 `running` waits; `failed` or `refused` fails with that verdict, persisted
 before `reset-failed` clears the unit's record; anything else fails as

@@ -3030,8 +3030,11 @@ and deactivating units, and empty `systemctl show` output).
   swaps the booted slot without changing dpkg, and a SHA-only match skipped
   the post-activation mirror on hardware (task-45d OPI D1). Slot identity is
   tri-state (`classifyReceiptTarget`: `other` / `not-other` / `unknown`) from
-  the system.conf bootname map only, never timestamps; `unknown` with a
-  matching SHA skips the tick (`slot-identity-unknown`), never dispatches. Contract:
+  the system.conf bootname map and this boot's healthy record, never
+  timestamps. The GATE never dispatches on `unknown`: with a matching SHA it
+  skips the tick (`slot-identity-unknown`). The POLL rules out only
+  `not-other`; an `unknown` receipt with this dpkg SHA stays a candidate and
+  RAUC decides. Contract:
   [`docs/UPDATE-RECOVERY.md`](../../docs/UPDATE-RECOVERY.md).
 - **Transport** (`update-transport/`). Routing scope and DNS limits:
   [`docs/HOST-UPLINK-ELECTION.md`](../../docs/HOST-UPLINK-ELECTION.md).
