@@ -23,6 +23,7 @@ import {
 } from "../modules/system/update-orchestrator/runtime.ts";
 import type { SlotSyncEvidence } from "../modules/system/update-orchestrator/slot-sync-gate.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
+import { raucSlots } from "./helpers/slot-sync-rauc.ts";
 
 // Interleavings around `pollSlotSync`'s awaits: a process death between two
 // steps, or a read that still returns the previous run's state.
@@ -41,6 +42,7 @@ const matching: SlotSyncEvidence = {
 	buildId: "build-new",
 	receiptStateSha256: statusSha256,
 	receiptTargetsOtherSlot: true,
+	receiptTargetSlot: "rootfs.1",
 };
 
 const show = (props: Record<string, string>) => ({
@@ -100,6 +102,7 @@ function deps(overrides: Partial<typeof defaultOrchestratorRuntimeDeps>) {
 		}),
 		isStreamLive: () => false,
 		readSlotSyncEvidence: async () => matching,
+		readRootSlots: async () => raucSlots("A"),
 		startSlotSync: async () => {},
 		resetSlotSyncFailure: async () => {},
 		cleanSlotSyncArchives: async () => {

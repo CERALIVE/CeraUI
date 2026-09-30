@@ -492,7 +492,12 @@ this run's receipt, may be a `--no-block` job still queued behind
 `ceralive-healthcheck.service`, so it fails as `slot-sync-unit-absent` only
 after `SLOT_SYNC_QUEUED_START_GRACE_MS` (90 s from entering `syncing`) and,
 for `inactive-clean`, a fresh re-probe and receipt read. The receipt alone
-is not enough, because the unit writes it before `rauc status mark-good other`.
+is not enough, because the unit writes it before `rauc status mark-good other`:
+before `synced` is persisted, RAUC must report exactly one booted and one
+inactive rootfs slot, with the receipt's `target_slot` naming the inactive one
+and that slot `good`. A `bad` target is an interrupted mark-good and fails as
+`slot-sync-incomplete`; an unreadable or undecidable RAUC answer leaves the
+phase `syncing` with no verdict.
 The parser's `running`, `failed` and `refused` verdicts are kept unchanged; a
 failed unit is retained and read from systemd.
 

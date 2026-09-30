@@ -239,9 +239,21 @@ so refused and failed runs are still detected from the unit; an exit status of
 On either validated shape during `syncing`, `pollSlotSync` reads the receipt.
 It matches when its state SHA-256 equals the current dpkg status AND its
 `target_slot` names the slot that is not booted now. On a match it takes a
-second, fresh probe and settles `synced` only if that probe again reads one of
-the two shapes. A matching receipt alone does not prove that this run finished
-cleanly. The gate refuses (`already-synced`) to dispatch while a matching
+second, fresh probe, and if that probe again reads one of the two shapes it
+reads RAUC (`rauc status --detailed`, rootfs slots only) before any verdict.
+It settles `synced` only when RAUC reports exactly one `booted` and one
+`inactive` rootfs slot, the receipt's `target_slot` names the inactive one (by
+slot name such as `rootfs.0` or by bootname), and that slot's `boot_status` is
+`good`. If that slot is `bad`, the mirror was interrupted between its receipt
+and `rauc status mark-good other` (for example a power loss; after the reboot
+the unit reads as never run this boot): the phase fails as
+`slot-sync-incomplete`, persisted before anything else, rather than claiming a
+mirror RAUC never confirmed. If RAUC cannot be read, reports another shape or
+status, or the receipt names the booted slot, there is no verdict this poll:
+the phase stays `syncing`, a warning is logged once per change of reason, and
+the next poll asks again. The healthy record's slot identifies the booted slot
+only when its `boot_id` is this boot's. A matching receipt alone does not prove
+that this run finished cleanly. The gate refuses (`already-synced`) to dispatch while a matching
 receipt already exists, so a match was written by this run, but the unit writes
 it before its last step, and the first probe can still be the previous run's
 finished record while this run's job was queued. A second probe that reads

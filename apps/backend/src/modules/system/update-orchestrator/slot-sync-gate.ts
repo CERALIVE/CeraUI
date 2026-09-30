@@ -1,4 +1,5 @@
 import type { UpdateCapabilities } from "@ceraui/rpc/schemas";
+import type { RootSlotStatus } from "./slot-status.ts";
 import type { OrchestratorPhase } from "./types.ts";
 
 export type HealthySlotState = {
@@ -18,6 +19,7 @@ export type SlotSyncEvidence = {
 	// The receipt names the slot that is not booted now; see
 	// receiptTargetsOtherSlot() for why the SHA alone is not enough.
 	readonly receiptTargetsOtherSlot: boolean;
+	readonly receiptTargetSlot: string | null;
 };
 
 /** The unit's receipt records a mirror of THIS dpkg state into the CURRENT
@@ -27,6 +29,45 @@ export function receiptConfirmsMirror(evidence: SlotSyncEvidence): boolean {
 		evidence.receiptStateSha256 === evidence.statusSha256 &&
 		evidence.receiptTargetsOtherSlot
 	);
+}
+
+export type MirrorTargetVerdict = "good" | "bad" | "not-target" | "undecidable";
+
+/**
+ * Whether RAUC confirms the mirror the receipt describes. The unit writes the
+ * receipt, then runs `rauc status mark-good other`, then exits, so a finished
+ * run leaves the inactive slot `good`; a receipt that survived a power loss
+ * between the first two steps leaves it `bad`. Anything RAUC does not state
+ * plainly (not exactly one booted and one inactive rootfs slot, or another
+ * boot status) is undecidable.
+ */
+export function judgeMirrorTarget(
+	slots: readonly Pick<
+		RootSlotStatus,
+		"name" | "bootname" | "state" | "bootStatus"
+	>[],
+	receiptTargetSlot: string | null,
+): MirrorTargetVerdict {
+	const booted = slots.filter((slot) => slot.state === "booted");
+	const [inactive, ...moreInactive] = slots.filter(
+		(slot) => slot.state === "inactive",
+	);
+	if (
+		slots.length !== 2 ||
+		booted.length !== 1 ||
+		!inactive ||
+		moreInactive.length > 0
+	)
+		return "undecidable";
+	if (
+		receiptTargetSlot === null ||
+		(receiptTargetSlot !== inactive.name &&
+			receiptTargetSlot !== inactive.bootname)
+	)
+		return "not-target";
+	if (inactive.bootStatus === "good") return "good";
+	if (inactive.bootStatus === "bad") return "bad";
+	return "undecidable";
 }
 
 export type SlotSyncGateInput = SlotSyncEvidence & {

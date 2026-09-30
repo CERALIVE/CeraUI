@@ -23,6 +23,7 @@ const eligible: SlotSyncGateInput = {
 	buildId: healthy.build_id,
 	receiptStateSha256: "a".repeat(64),
 	receiptTargetsOtherSlot: true,
+	receiptTargetSlot: "rootfs.0",
 	phase: "idle",
 };
 

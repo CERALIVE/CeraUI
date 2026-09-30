@@ -17,6 +17,7 @@ import {
 import type { SlotSyncEvidence } from "../modules/system/update-orchestrator/slot-sync-gate.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
 import { notificationExists } from "../modules/ui/notifications.ts";
+import { raucSlots } from "./helpers/slot-sync-rauc.ts";
 
 const statusSha256 = "a".repeat(64);
 // Polls past the queued-start grace, where an unconfirmed unit fails closed.
@@ -34,6 +35,7 @@ const evidence: SlotSyncEvidence = {
 	buildId: "build-new",
 	receiptStateSha256: "b".repeat(64),
 	receiptTargetsOtherSlot: true,
+	receiptTargetSlot: "rootfs.1",
 };
 let root: string | undefined;
 afterEach(async () => {
@@ -70,6 +72,7 @@ function fixture(
 		}),
 		isStreamLive: () => true, // a local-only mirror is permitted mid-stream
 		readSlotSyncEvidence: async () => observed,
+		readRootSlots: async () => raucSlots("A"),
 		startSlotSync: async () => {
 			commands.push([
 				"systemctl",

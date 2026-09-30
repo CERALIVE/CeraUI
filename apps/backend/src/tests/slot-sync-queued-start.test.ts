@@ -14,6 +14,7 @@ import {
 } from "../modules/system/update-orchestrator/runtime.ts";
 import type { SlotSyncEvidence } from "../modules/system/update-orchestrator/slot-sync-gate.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
+import { raucSlots } from "./helpers/slot-sync-rauc.ts";
 
 // N1 (round 13): `systemctl start --no-block` can queue the job behind
 // ceralive-healthcheck.service, so the unit keeps reading the PREVIOUS run's
@@ -34,6 +35,7 @@ const matching: SlotSyncEvidence = {
 	buildId: "build-new",
 	receiptStateSha256: statusSha256,
 	receiptTargetsOtherSlot: true,
+	receiptTargetSlot: "rootfs.1",
 };
 const nonMatching: ReadonlyArray<readonly [string, SlotSyncEvidence]> = [
 	["missing", { ...matching, receiptStateSha256: null }],
@@ -97,6 +99,7 @@ function harness(start: {
 			return probe;
 		},
 		readSlotSyncEvidence: () => evidenceHook?.() ?? Promise.resolve(evidence),
+		readRootSlots: async () => raucSlots("A"),
 		resetSlotSyncFailure: async () => {},
 		cleanSlotSyncArchives: async () => {
 			cleanup.push("apt");

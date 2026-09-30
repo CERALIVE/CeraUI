@@ -18,6 +18,7 @@ import {
 	receiptTargetsOtherSlot,
 } from "../modules/system/update-orchestrator/slot-sync-state.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
+import { raucSlots } from "./helpers/slot-sync-rauc.ts";
 
 // OPI task-45d D1: v1 and v2 share one package set and build id, so after the
 // activation of v2 into B the A->B receipt from v1 matched the new dpkg state
@@ -74,8 +75,10 @@ const evidenceFor = (
 	receiptTargetsOtherSlot: receiptTargetsOtherSlot({
 		receipt,
 		healthyState,
+		bootId: healthyState.boot_id,
 		bootnames,
 	}),
+	receiptTargetSlot: receipt?.target_slot ?? null,
 });
 const gate = (evidence: SlotSyncEvidence) =>
 	slotSyncGate({
@@ -124,6 +127,7 @@ describe("OPI-D1: already-synced means the CURRENT other slot was mirrored", () 
 				receiptTargetsOtherSlot({
 					receipt: { ...receiptBefore, target_slot: target },
 					healthyState: healthy,
+					bootId: healthy.boot_id,
 					bootnames,
 				}),
 			).toBe(other);
@@ -139,6 +143,7 @@ describe("OPI-D1: already-synced means the CURRENT other slot was mirrored", () 
 					completed_at: completedAt,
 				},
 				healthyState: bootedB,
+				bootId: bootedB.boot_id,
 				bootnames: unmapped,
 			});
 		// Before this boot's healthy record: it may name either slot, so mirror.
@@ -155,6 +160,7 @@ describe("OPI-D1: already-synced means the CURRENT other slot was mirrored", () 
 			receiptTargetsOtherSlot({
 				receipt: null,
 				healthyState: bootedB,
+				bootId: bootedB.boot_id,
 				bootnames,
 			}),
 		).toBe(false);
@@ -162,6 +168,7 @@ describe("OPI-D1: already-synced means the CURRENT other slot was mirrored", () 
 			receiptTargetsOtherSlot({
 				receipt: receiptBefore,
 				healthyState: null,
+				bootId: bootedB.boot_id,
 				bootnames,
 			}),
 		).toBe(false);
@@ -192,6 +199,7 @@ describe("OPI-D1 through the runtime", () => {
 			onlyMeteredCandidateExists: async () => false,
 			runPackageCheck: async () => null,
 			readSlotSyncEvidence: async () => evidenceFor(receipt),
+			readRootSlots: async () => raucSlots("B"),
 			startSlotSync: async () => {
 				starts++;
 			},

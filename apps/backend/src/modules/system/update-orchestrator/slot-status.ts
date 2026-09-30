@@ -156,6 +156,13 @@ export async function readBothSlotStatus(
 	return parseBothSlotStatus(stdout, receipt);
 }
 
+/** Rootfs slot facts only; the settle check must not see the receipt overlay. */
+export async function readRootSlots(
+	run: typeof spawnWithTimeout = spawnWithTimeout,
+): Promise<RootSlotStatus[]> {
+	return parseBothSlotStatus(await readRaucStatusDetailed(run), null);
+}
+
 export async function readStagedActivation(
 	run: typeof spawnWithTimeout = spawnWithTimeout,
 ): Promise<StagedActivation> {

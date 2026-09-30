@@ -70,7 +70,9 @@ import {
 	shouldAttemptScheduledCheck,
 } from "./schedule.ts";
 import {
+	type RootSlotStatus,
 	readBothSlotStatus,
+	readRootSlots,
 	readStagedActivation,
 	type StagedActivation,
 } from "./slot-status.ts";
@@ -79,6 +81,7 @@ import {
 	removeRaucDownloads,
 } from "./slot-sync-cleanup.ts";
 import {
+	judgeMirrorTarget,
 	receiptConfirmsMirror,
 	type SlotSyncEvidence,
 	slotSyncGate,
@@ -138,6 +141,7 @@ export interface OrchestratorRuntimeDeps {
 	readonly inspectSlotSync: () => Promise<SlotSyncProbeState>;
 	readonly resetSlotSyncFailure: () => Promise<void>;
 	readonly readSlotSyncEvidence: () => Promise<SlotSyncEvidence>;
+	readonly readRootSlots: () => Promise<readonly RootSlotStatus[]>;
 	readonly cleanSlotSyncArchives: () => Promise<boolean>;
 	readonly removeRaucDownloads: () => Promise<void>;
 	readonly dropSupersededQuarantine: (
@@ -240,6 +244,7 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	inspectSlotSync,
 	resetSlotSyncFailure,
 	readSlotSyncEvidence,
+	readRootSlots,
 	cleanSlotSyncArchives: cleanAptCache,
 	removeRaucDownloads,
 	dropSupersededQuarantine,
@@ -268,6 +273,7 @@ let osStageInProcess = false;
 let raucStreamAbortInProcess = false;
 let packageInstallStarting = false;
 let osForceActivated = false;
+let slotSyncUndecidedReason: string | null = null;
 let pendingCellularApproval:
 	| { readonly id: string; readonly sizeBytes: number }
 	| undefined;
@@ -294,6 +300,7 @@ export function resetOrchestratorRuntimeForTest(): void {
 	raucStreamAbortInProcess = false;
 	packageInstallStarting = false;
 	osForceActivated = false;
+	slotSyncUndecidedReason = null;
 	pendingCellularApproval = undefined;
 }
 
@@ -772,6 +779,7 @@ async function checkSlotSyncGate() {
 					buildId: "",
 					receiptStateSha256: null,
 					receiptTargetsOtherSlot: false,
+					receiptTargetSlot: null,
 				};
 	return slotSyncGate({
 		...evidence,
@@ -847,6 +855,53 @@ async function settleSlotSyncSucceeded(now: number): Promise<void> {
 		}
 	}
 	notifyUpdate({ kind: "slots-current", id: String(now) });
+}
+
+function noteSlotSyncUndecided(reason: string, error?: unknown): void {
+	if (slotSyncUndecidedReason === reason) return;
+	slotSyncUndecidedReason = reason;
+	logger.warn("update-orchestrator: slot-sync verdict deferred", {
+		reason,
+		error,
+	});
+}
+
+// Two clean unit reads and a matching receipt cannot tell a finished run from
+// one whose power was cut between the receipt and `mark-good other`: after the
+// reboot the unit reads as never run. Only RAUC says whether the target slot
+// was confirmed, so success waits for it and an unreadable answer is no answer.
+async function settleIfMirrorTargetGood(
+	receiptTargetSlot: string | null,
+	now: number,
+): Promise<void> {
+	let slots: readonly RootSlotStatus[];
+	try {
+		slots = await deps.readRootSlots();
+	} catch (error) {
+		noteSlotSyncUndecided("rauc-unreadable", error);
+		return;
+	}
+	const verdict = judgeMirrorTarget(slots, receiptTargetSlot);
+	switch (verdict) {
+		case "good":
+			slotSyncUndecidedReason = null;
+			await settleSlotSyncSucceeded(now);
+			return;
+		case "bad":
+			slotSyncUndecidedReason = null;
+			dispatch({ type: "SYNC_FAILED", now, reason: "slot-sync-incomplete" });
+			return;
+		// The receipt and RAUC disagree about which slot is the other one:
+		// neither success nor a failure verdict can be stated.
+		case "not-target":
+		case "undecidable":
+			noteSlotSyncUndecided(verdict);
+			return;
+		default: {
+			const unreachable: never = verdict;
+			return unreachable;
+		}
+	}
 }
 
 async function failSlotSyncFromUnit(
@@ -969,7 +1024,8 @@ async function pollSlotSync(): Promise<void> {
 			return unreachable;
 		}
 	}
-	if (!receiptMatches(await readSlotSyncEvidenceOrNull())) {
+	const evidence = await readSlotSyncEvidenceOrNull();
+	if (!evidence || !receiptMatches(evidence)) {
 		// A retained exit 0 can be the previous run's while this one is queued.
 		if (probe.kind === "succeeded") return;
 		await concludeWithoutMatchingReceipt(now);
@@ -988,7 +1044,7 @@ async function pollSlotSync(): Promise<void> {
 			return;
 		case "succeeded":
 		case "inactive-clean":
-			await settleSlotSyncSucceeded(now);
+			await settleIfMirrorTargetGood(evidence.receiptTargetSlot, now);
 			return;
 		default: {
 			const unreachable: never = confirmation;

@@ -74,10 +74,14 @@ type SyncReceipt = z.infer<typeof syncReceiptSchema>;
 export function receiptTargetsOtherSlot(input: {
 	readonly receipt: Pick<SyncReceipt, "target_slot" | "completed_at"> | null;
 	readonly healthyState: HealthySlotState | null;
+	readonly bootId: string;
 	readonly bootnames: ReadonlyMap<string, string>;
 }): boolean {
-	const { receipt, healthyState, bootnames } = input;
-	if (!receipt || !healthyState) return false;
+	const { receipt, healthyState, bootId, bootnames } = input;
+	// A previous boot's record names the slot booted THEN, which an
+	// activation or fallback may since have swapped.
+	if (!receipt || !healthyState || !bootId || healthyState.boot_id !== bootId)
+		return false;
 	if (receipt.target_slot === healthyState.slot) return false;
 	const known = new Set(bootnames.values());
 	const bootnameOf = (slot: string): string | null =>
@@ -140,7 +144,9 @@ export async function readSlotSyncEvidence(): Promise<SlotSyncEvidence> {
 		receiptTargetsOtherSlot: receiptTargetsOtherSlot({
 			receipt,
 			healthyState,
+			bootId,
 			bootnames: parseRaucSlotBootnames(systemConf),
 		}),
+		receiptTargetSlot: receipt?.target_slot ?? null,
 	};
 }

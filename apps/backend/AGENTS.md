@@ -3009,7 +3009,11 @@ and deactivating units, and empty `systemctl show` output).
   `ExecMainCode=1`/`ExecMainStatus=0`, or both exit fields empty/`0`). The unit
   writes the receipt before `rauc status mark-good other`, so a matching receipt
   does not prove the run finished: settle only when the re-probe again reads one
-  of those shapes. A read that would otherwise be one of those shapes but fails
+  of those shapes AND RAUC, read before `SYNC_SUCCEEDED`, reports the receipt's
+  target as the one inactive rootfs slot with `boot_status` `good`. A `bad`
+  target fails as `slot-sync-incomplete` (mark-good interrupted); unreadable or
+  undecidable RAUC gives no verdict. The healthy record names the booted slot
+  only when its `boot_id` is this boot's. A read that would otherwise be one of those shapes but fails
   that validation is `absent` and must fail closed, but only after
   `SLOT_SYNC_QUEUED_START_GRACE_MS` (90 s from entering `syncing`): a
   `--no-block` job queued behind the healthcheck still reads the previous
