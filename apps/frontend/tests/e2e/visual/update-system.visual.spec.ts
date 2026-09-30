@@ -27,8 +27,9 @@ import {
  *
  * A dialog is therefore captured as the viewport the operator sees, after its
  * body is scrolled to the promised block; a full-page capture grows the
- * document, never the dialog's own scroll box. The approval and the slot table
- * are too far apart for one frame, so the capable image takes two captures.
+ * document, never the dialog's own scroll box. The approval sits too far below
+ * the System image section and the slot table to share their frame, so the
+ * capable image takes two captures.
  */
 
 const UPDATES_DIALOG = 'Software Updates';
@@ -63,6 +64,32 @@ async function expectInFrame(page: Page, blocks: readonly Locator[]): Promise<vo
 	}
 }
 
+/**
+ * Centre the run from the first to the last matched block in their scroll box.
+ * `scrollIntoViewIfNeeded` moves as little as it can for ONE element (it centres
+ * a hidden one and edge-aligns a partly visible one), so whether a pair lands in
+ * one frame depends on where the scroll started. Centring their span does not,
+ * and it leaves a margin on both edges instead of a block flush with one.
+ */
+async function centreRun(run: Locator): Promise<void> {
+	await run.evaluateAll((blocks) => {
+		const first = blocks[0];
+		const last = blocks[blocks.length - 1];
+		const scrolls = (el: HTMLElement) =>
+			el.scrollHeight > el.clientHeight && /auto|scroll/.test(getComputedStyle(el).overflowY);
+		let box = first?.parentElement ?? null;
+		while (box && !scrolls(box)) {
+			box = box.parentElement;
+		}
+		if (!first || !last || !box) {
+			throw new Error('centreRun: no blocks, or no scroll box around them');
+		}
+		const view = box.getBoundingClientRect();
+		const middle = (first.getBoundingClientRect().top + last.getBoundingClientRect().bottom) / 2;
+		box.scrollTop += middle - (view.top + view.bottom) / 2;
+	});
+}
+
 test.describe('device update surfaces @visual', () => {
 	test.beforeEach(({ browserName }) => {
 		test.skip(browserName !== 'chromium', 'single-browser evidence set');
@@ -84,6 +111,7 @@ test.describe('device update surfaces @visual', () => {
 		await page.getByTestId('settings-entry-updates').click();
 		const dialog = page.getByRole('dialog', { name: UPDATES_DIALOG });
 		const heldImage = dialog.getByTestId('update-cellular-pending');
+		const system = dialog.getByTestId('updates-system');
 		const slots = dialog.getByTestId('updates-slots');
 		await expect(heldImage).toBeVisible();
 		await expect(slots).toBeVisible();
@@ -93,7 +121,8 @@ test.describe('device update surfaces @visual', () => {
 			path: evidencePath(`todo-41-updates-capable-${testInfo.project.name}.png`),
 		});
 
-		await expectInFrame(page, [slots]);
+		await centreRun(system.or(slots));
+		await expectInFrame(page, [system, slots]);
 		await page.screenshot({
 			path: evidencePath(`todo-41-updates-capable-slots-${testInfo.project.name}.png`),
 		});
