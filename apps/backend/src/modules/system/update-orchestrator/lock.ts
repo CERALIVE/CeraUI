@@ -93,23 +93,34 @@ const PROBE_PROPERTIES = [
 	"ExecMainStatus",
 ] as const;
 
+const isUnset = (value: string | undefined): boolean =>
+	value === "" || value === "0";
+
 // The unit writes its receipt before `rauc status mark-good other`, which can
-// still fail, so a read failure must never pass for the clean shape: every
-// property present and systemctl exit 0, or it stays `absent` and fails closed.
+// still fail, so both shapes that consult the receipt must be read positively:
+// systemctl exit 0, every property present (the parser defaults missing ones
+// into success), and a loaded, inactive/dead unit whose exit record is either
+// a clean CLD_EXITED 0 or wholly unset. Anything else is `absent`, which fails.
+// Running/failed/refused keep the parser's verdict: none of them settles.
 export function classifySlotSyncProbe(result: {
 	readonly exitCode: number;
 	readonly stdout: string;
 }): SlotSyncProbeState {
 	const parsed = parseSlotSyncProbe(result.stdout);
-	if (parsed.kind !== "absent" || result.exitCode !== 0) return parsed;
+	if (parsed.kind !== "absent" && parsed.kind !== "succeeded") return parsed;
 	const properties = parseProperties(result.stdout);
-	const complete = PROBE_PROPERTIES.every((key) => properties.has(key));
-	return complete &&
+	const readable =
+		result.exitCode === 0 &&
+		PROBE_PROPERTIES.every((key) => properties.has(key)) &&
 		properties.get("LoadState") === "loaded" &&
 		properties.get("ActiveState") === "inactive" &&
-		properties.get("SubState") === "dead"
-		? { kind: "inactive-clean" }
-		: parsed;
+		properties.get("SubState") === "dead";
+	if (!readable) return { kind: "absent" };
+	const code = properties.get("ExecMainCode");
+	const status = properties.get("ExecMainStatus");
+	if (code === "1" && status === "0") return { kind: "succeeded" };
+	if (isUnset(code) && isUnset(status)) return { kind: "inactive-clean" };
+	return { kind: "absent" };
 }
 
 export async function startSlotSync(): Promise<void> {

@@ -266,6 +266,125 @@ describe("classifySlotSyncProbe — only a positively read clean unit may consul
 	});
 });
 
+describe("classifySlotSyncProbe — both success-capable shapes pass one validation gate", () => {
+	const completeSucceeded = fixture({
+		LoadState: "loaded",
+		ActiveState: "inactive",
+		SubState: "dead",
+		ExecMainCode: "1",
+		ExecMainStatus: "0",
+	});
+
+	test("a complete, exit-0 CLD_EXITED/0 read is succeeded", () => {
+		expect(
+			classifySlotSyncProbe({ exitCode: 0, stdout: completeSucceeded }),
+		).toEqual({ kind: "succeeded" });
+	});
+
+	test("the oracle's three reproductions never classify as a success shape", () => {
+		const reproductions: ReadonlyArray<{ exitCode: number; stdout: string }> = [
+			// (a) systemctl failed, yet the body reads like a clean exit.
+			{ exitCode: 1, stdout: completeSucceeded },
+			// (b) the parser would default every missing key into success.
+			{
+				exitCode: 0,
+				stdout: fixture({ LoadState: "loaded", ExecMainCode: "1" }),
+			},
+			// (c) a nonzero status with code 0 is not a clean unit.
+			{
+				exitCode: 0,
+				stdout: fixture({
+					LoadState: "loaded",
+					ActiveState: "inactive",
+					SubState: "dead",
+					ExecMainCode: "0",
+					ExecMainStatus: "1",
+				}),
+			},
+		];
+		for (const result of reproductions) {
+			expect(classifySlotSyncProbe(result)).toEqual({ kind: "absent" });
+		}
+	});
+
+	test("every incomplete or incoherent success-looking read fails closed", () => {
+		const base = {
+			LoadState: "loaded",
+			ActiveState: "inactive",
+			SubState: "dead",
+			ExecMainCode: "1",
+			ExecMainStatus: "0",
+		};
+		const variants: ReadonlyArray<Record<string, string>> = [
+			// one property missing at a time, for both shapes
+			...(Object.keys(base) as Array<keyof typeof base>).flatMap((key) => {
+				const { [key]: _drop, ...rest } = base;
+				const clean = { ...base, ExecMainCode: "0", ExecMainStatus: "0" };
+				const { [key]: _dropClean, ...restClean } = clean;
+				return [rest, restClean];
+			}),
+			// incoherent lifecycle for a recorded exit
+			{ ...base, SubState: "exited" },
+			{ ...base, ActiveState: "maintenance" },
+			{ ...base, ExecMainStatus: "" },
+			{ ...base, ExecMainStatus: "x" },
+			{ ...base, ExecMainCode: "x" },
+			// a killed main process never reads as a clean exit
+			{ ...base, ExecMainCode: "2", ExecMainStatus: "0" },
+			// incoherent "clean" shapes
+			{ ...base, ExecMainCode: "0", ExecMainStatus: "7" },
+			{ ...base, ExecMainCode: "", ExecMainStatus: "1" },
+			{ ...base, ExecMainCode: "0", ExecMainStatus: "0", SubState: "exited" },
+			{ ...base, ExecMainCode: "0", ExecMainStatus: "0", SubState: "" },
+		];
+		for (const props of variants) {
+			const verdict = classifySlotSyncProbe({
+				exitCode: 0,
+				stdout: fixture(props),
+			});
+			expect(verdict.kind).not.toBe("succeeded");
+			expect(verdict.kind).not.toBe("inactive-clean");
+		}
+		for (const exitCode of [1, 3, 4, 124, -1]) {
+			for (const stdout of [
+				completeSucceeded,
+				fixture({ ...base, ExecMainCode: "0", ExecMainStatus: "0" }),
+			]) {
+				expect(classifySlotSyncProbe({ exitCode, stdout })).toEqual({
+					kind: "absent",
+				});
+			}
+		}
+	});
+
+	test("complete exit-0 running, refused and failed reads keep their classification", () => {
+		const unit = (active: string, sub: string, code: string, status: string) =>
+			classifySlotSyncProbe({
+				exitCode: 0,
+				stdout: fixture({
+					LoadState: "loaded",
+					ActiveState: active,
+					SubState: sub,
+					ExecMainCode: code,
+					ExecMainStatus: status,
+				}),
+			});
+		expect(unit("active", "start", "0", "0")).toEqual({ kind: "running" });
+		expect(unit("failed", "failed", "1", "75")).toEqual({
+			kind: "refused",
+			exitCode: 75,
+		});
+		expect(unit("failed", "failed", "1", "1")).toEqual({
+			kind: "failed",
+			exitCode: 1,
+		});
+		expect(unit("inactive", "dead", "1", "3")).toEqual({
+			kind: "failed",
+			exitCode: 3,
+		});
+	});
+});
+
 describe("lock.ts — structural lock-contention guard (orchestrator level)", () => {
 	// The orchestrator's OWN structural guard: slot-sync may only be started
 	// from `sync-eligible` (see reducer.ts's `SYNC_STARTED` handler, which is

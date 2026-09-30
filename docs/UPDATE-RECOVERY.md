@@ -211,17 +211,22 @@ SHA-256 receipt.
 Completion is confirmed by that receipt, not by the unit's exit status. The unit
 is `Type=oneshot` without `RemainAfterExit`, and systemd 257 (Trixie) unloads a
 finished oneshot within about a second, which resets `ExecMainCode`; the probe
-then reads `inactive-clean`, so an exit 0 is only seen if a poll lands inside
-that window. `inactive-clean` is only the positively parsed shape: `systemctl
-show` exited 0 and reported all five properties with `LoadState=loaded`,
-`ActiveState=inactive`, `SubState=dead` and `ExecMainCode` empty or `0`
-(`classifySlotSyncProbe`, `lock.ts`). On that shape during `syncing`,
-`pollSlotSync` reads the receipt and settles `synced` through the same success
-path if its state SHA-256 equals the current dpkg status. A match cannot be
-stale: the gate refuses (`already-synced`) to dispatch while one already
-exists. A mismatched, missing or unreadable receipt still fails as
-`slot-sync-unit-absent`. A probe that cannot be read that way (nonzero exit,
-empty or incomplete output, `LoadState` other than `loaded`) reads `absent` and
+then reads `inactive-clean`, so an exit 0 (`succeeded`) is only seen if a poll
+lands inside that window. The receipt is consulted for exactly two positively
+validated shapes, and for no other (`classifySlotSyncProbe`, `lock.ts`). Both
+require `systemctl show` to have exited 0 and to have reported all five
+properties with `LoadState=loaded`, `ActiveState=inactive` and `SubState=dead`;
+`succeeded` additionally requires `ExecMainCode=1` (CLD_EXITED) with
+`ExecMainStatus=0`, and `inactive-clean` requires both `ExecMainCode` and
+`ExecMainStatus` to be empty or `0`. On either shape during `syncing`,
+`pollSlotSync` reads the receipt and settles `synced` if its state SHA-256
+equals the current dpkg status. A match cannot be stale: the gate refuses
+(`already-synced`) to dispatch while one already exists. A mismatched, missing
+or unreadable receipt leaves `succeeded` waiting (the unit may be a queued
+re-run still showing the previous exit) and fails `inactive-clean` as
+`slot-sync-unit-absent`. Any other read that looks like either shape (nonzero
+exit, empty or incomplete output, any other lifecycle or exit record, such as a
+nonzero `ExecMainStatus` beside `ExecMainCode=0`) is classified `absent` and
 fails as `slot-sync-unit-absent` without consulting the receipt, because the
 unit writes the receipt before its last step, `rauc status mark-good other`,
 which can still fail. A failed unit is not unloaded, so refused and failed runs

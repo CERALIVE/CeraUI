@@ -3003,9 +3003,11 @@ and deactivating units, and empty `systemctl show` output).
   is the matching `sync-receipt.json`, never the probe alone: systemd unloads
   the finished oneshot and resets `ExecMainCode`, so success usually probes
   `inactive-clean`; do not fail that without reading the receipt. Consult the
-  receipt ONLY for that positively parsed shape (exit 0, all properties,
-  loaded/inactive/dead, clean `ExecMainCode`): the unit writes it before
-  `rauc status mark-good other`, so an unreadable probe (`absent`) must fail
+  receipt ONLY for the two positively validated shapes, `succeeded` and
+  `inactive-clean` (both: exit 0, all five properties, loaded/inactive/dead;
+  then `ExecMainCode=1`/`ExecMainStatus=0`, or both exit fields empty/`0`).
+  The unit writes it before `rauc status mark-good other`, so every other read
+  (nonzero exit, incomplete or incoherent output) is `absent` and must fail
   closed, and a failed unit is retained and caught from systemd. Contract:
   [`docs/UPDATE-RECOVERY.md`](../../docs/UPDATE-RECOVERY.md).
 - **Transport** (`update-transport/`). Routing scope and DNS limits:
