@@ -257,7 +257,7 @@ throws if a phase is placed in more than one bucket.
 |---|---|---|
 | `committing`, `restarting-services` | **refused** (`update_in_progress`) | none |
 | `downloading` | **refused** on a fresh wire reading of `installing` or `success`, or a positive/fail-closed commit-stage probe; otherwise allowed once the stop call returns | best-effort `systemctl stop` of the detached apt unit, never issued on a refusal; a nonzero exit is logged, not proof of cancellation |
-| `os-staging` | allowed once the calls return | the phase moves to `os-available` first, then `rauc.service` is killed and restarted, so the stage the SIGTERM ends is not recorded as a failure; no new OS stage starts until the restart call returns and the interrupted stage has settled, including one whose preflight was already awaiting when the abort began (the phase, live stream, both fences and the candidate are re-read after the last preflight await, with no await before the stage is taken); if the restart call throws, the error propagates with the phase already `os-available` and both fences released; no fresh read or probe; a nonzero exit is logged, not proof of cancellation |
+| `os-staging` | allowed once the calls return | the phase moves to `os-available` first, then `rauc.service` is killed and restarted, so the stage the SIGTERM ends is not recorded as a failure; no new OS stage starts until the restart call returns and the interrupted stage has settled, including one whose preflight was already awaiting when the abort began (the phase, live stream, both fences and the candidate are re-read after the last preflight await, with no await before the stage is taken); if the restart call throws, the error propagates with the phase already `os-available`; the abort fence (`raucStreamAbortInProcess`) is released when the kill/restart call settles, either way, and the stage fence (`osStageInProcess`) independently when the interrupted stage's own promise settles, which can be later; no fresh read or probe; a nonzero exit is logged, not proof of cancellation |
 | `syncing` | allowed | continue locally |
 | every other phase | allowed | none |
 
@@ -391,7 +391,9 @@ Active only with `apt-all-packages` and `rauc-verity-streaming`.
   the phase stays `os-activation-armed`, the receipt is rebound to the new boot
   id, and nothing is quarantined or notified. An unreadable or inconclusive RAUC
   status reaches no verdict and is retried on the next tick: the phase stays
-  armed, nothing is rebound and nothing is persisted. Inconclusive includes a
+  armed, no activation verdict is persisted and the receipt is not rebound
+  (when this happens at startup, the ordinary persistence of the resumed state
+  still runs once). Inconclusive includes a
   `boot_primary` naming neither rootfs slot (it is read as a slot name, the
   form every capture carries) and an other slot with no usable install stamp
   or an unusable activation stamp; missing metadata is never read as
@@ -471,16 +473,17 @@ falling back to `/etc/ceralive/image-build-commit`.
 
 Completion is confirmed by `sync-receipt.json` matching the current dpkg SHA
 followed by a fresh probe that again reads finished and clean, not by the unit's
-exit status alone: systemd unloads the finished oneshot within
-about a second, so a successful run usually probes as `inactive-clean`
-(`pollSlotSync`, `runtime.ts`). The receipt is consulted for exactly two
-positively validated shapes and for no other: `succeeded` (`systemctl show`
-exit 0, each of the five properties exactly once, loaded/inactive/dead,
-`ExecMainCode=1`, `ExecMainStatus=0`) and `inactive-clean` (the same, with both exit fields empty
-or `0`). Every other read of that kind, whether nonzero exit, incomplete or
-incoherent, is `absent` and fails as `slot-sync-unit-absent`, because the unit
-writes the receipt before `rauc status mark-good other`; a failed unit is
-retained and read from systemd.
+exit status alone: systemd unloads the finished oneshot within about a second,
+so a successful run usually probes as `inactive-clean` (`pollSlotSync`,
+`runtime.ts`). The receipt is consulted for exactly two positively validated
+shapes and for no other: `succeeded` (`systemctl show` exit 0, each of the five
+properties exactly once, loaded/inactive/dead, `ExecMainCode=1`,
+`ExecMainStatus=0`) and `inactive-clean` (the same, with both exit fields empty
+or `0`). A read that would otherwise be one of those shapes but fails that
+validation is `absent` and fails as `slot-sync-unit-absent`. The receipt alone
+is not enough, because the unit writes it before `rauc status mark-good other`.
+The parser's `running`, `failed` and `refused` verdicts are kept unchanged; a
+failed unit is retained and read from systemd.
 
 Lock, receipt and cleanup ordering:
 [UPDATE-RECOVERY.md](./UPDATE-RECOVERY.md).

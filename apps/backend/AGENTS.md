@@ -3000,16 +3000,20 @@ and deactivating units, and empty `systemctl show` output).
   or commit; that would weaken anti-downgrade admission.
 - **Slot mirror** (needs `slot-sync`). Integrity and external-lock checks stay
   atomic in the unit; a TypeScript pre-check cannot close that race. Completion
-  is the matching `sync-receipt.json`, never the probe alone: systemd unloads
-  the finished oneshot and resets `ExecMainCode`, so success usually probes
-  `inactive-clean`; do not fail that without reading the receipt. Consult the
-  receipt ONLY for the two positively validated shapes, `succeeded` and
-  `inactive-clean` (both: exit 0, each of the five properties exactly once,
-  loaded/inactive/dead; then `ExecMainCode=1`/`ExecMainStatus=0`, or both exit
-  fields empty/`0`).
-  The unit writes it before `rauc status mark-good other`, so every other read
-  (nonzero exit, incomplete or incoherent output) is `absent` and must fail
-  closed, and a failed unit is retained and caught from systemd. Contract:
+  is the matching `sync-receipt.json` plus a fresh probe taken after it, never
+  the probe alone: systemd unloads the finished oneshot and resets
+  `ExecMainCode`, so success usually probes `inactive-clean`; do not fail that
+  without reading the receipt. Consult the receipt ONLY for the two positively
+  validated shapes, `succeeded` and `inactive-clean` (both: exit 0, each of the
+  five properties exactly once, loaded/inactive/dead; then
+  `ExecMainCode=1`/`ExecMainStatus=0`, or both exit fields empty/`0`). The unit
+  writes the receipt before `rauc status mark-good other`, so a matching receipt
+  does not prove the run finished: settle only when the re-probe again reads one
+  of those shapes. A read that would otherwise be one of those shapes but fails
+  that validation is `absent` and must fail closed. The parser's `running`,
+  `failed` and `refused` verdicts are kept (exit 75 is `refused` on either
+  lifecycle), and a failed or refused verdict is persisted before
+  `reset-failed` clears the unit's record. Contract:
   [`docs/UPDATE-RECOVERY.md`](../../docs/UPDATE-RECOVERY.md).
 - **Transport** (`update-transport/`). Routing scope and DNS limits:
   [`docs/HOST-UPLINK-ELECTION.md`](../../docs/HOST-UPLINK-ELECTION.md).

@@ -216,28 +216,38 @@ lands inside that window. The receipt is consulted for exactly two positively
 validated shapes, and for no other (`classifySlotSyncProbe`, `lock.ts`). Both
 require `systemctl show` to have exited 0 and to have reported each of the five
 properties exactly once (a repeated key, even with an equal value, fails
-closed, because the last value would otherwise win) with `LoadState=loaded`, `ActiveState=inactive` and `SubState=dead`;
-`succeeded` additionally requires `ExecMainCode=1` (CLD_EXITED) with
-`ExecMainStatus=0`, and `inactive-clean` requires both `ExecMainCode` and
-`ExecMainStatus` to be empty or `0`. On either shape during `syncing`,
-`pollSlotSync` reads the receipt; if its state SHA-256 equals the current dpkg
-status it takes a second, fresh probe and settles `synced` only if that probe
-again reads one of the two shapes. The receipt alone is not enough: the gate
-refuses (`already-synced`) to dispatch while a matching one exists, so a match
-was written by this run, but the unit writes it before its last step, and the
-first probe can still be the previous run's record while this run's job was
-queued. A second probe that reads running waits; failed or refused fails with
-that verdict; anything else fails as `slot-sync-unit-absent`. A mismatched, missing
-or unreadable receipt leaves `succeeded` waiting (the unit may be a queued
-re-run still showing the previous exit) and fails `inactive-clean` as
-`slot-sync-unit-absent`. Any other read that looks like either shape (nonzero
-exit, empty or incomplete output, any other lifecycle or exit record, such as a
-nonzero `ExecMainStatus` beside `ExecMainCode=0`) is classified `absent` and
-fails as `slot-sync-unit-absent` without consulting the receipt, because the
-unit writes the receipt before its last step, `rauc status mark-good other`,
-which can still fail. A failed unit is not unloaded, so refused and failed runs
-are still detected from the unit; an exit status of 75 is the typed refusal
-whether systemd records it as `failed/failed` or as `inactive/dead`. Hardware basis: both bench boards recorded `slot-sync-unit-absent` 1-3 s
+closed, because the last value would otherwise win) with `LoadState=loaded`,
+`ActiveState=inactive` and `SubState=dead`; `succeeded` additionally requires
+`ExecMainCode=1` (CLD_EXITED) with `ExecMainStatus=0`, and `inactive-clean`
+requires both `ExecMainCode` and `ExecMainStatus` to be empty or `0`. A read
+the parser would have taken for either of those shapes but that fails this
+validation (nonzero `systemctl` exit, empty or incomplete output, a repeated
+key, any other lifecycle, a killed process, a nonzero `ExecMainStatus` beside
+`ExecMainCode=0`) is classified `absent` and fails as `slot-sync-unit-absent`
+without consulting the receipt, because the unit writes the receipt before its
+last step, `rauc status mark-good other`, which can still fail. The restriction
+covers only those two receipt-consulting branches: the parser's `running`,
+`failed` and `refused` verdicts are kept as they are, and none of them settles.
+For example, `ActiveState=active` still reads `running` even if `systemctl`
+exited nonzero, and a complete inactive/dead record with `ExecMainCode=1` and
+an unparseable `ExecMainStatus` reads `failed`. A failed unit is not unloaded,
+so refused and failed runs are still detected from the unit; an exit status of
+75 is the typed refusal whether systemd records it as `failed/failed` or as
+`inactive/dead`.
+
+On either validated shape during `syncing`, `pollSlotSync` reads the receipt;
+if its state SHA-256 equals the current dpkg status it takes a second, fresh
+probe and settles `synced` only if that probe again reads one of the two
+shapes. A matching receipt alone does not prove that this run finished
+cleanly. The gate refuses (`already-synced`) to dispatch while a matching
+receipt already exists, so a match was written by this run, but the unit writes
+it before its last step, and the first probe can still be the previous run's
+finished record while this run's job was queued. A second probe that reads
+`running` waits; `failed` or `refused` fails with that verdict, persisted
+before `reset-failed` clears the unit's record; anything else fails as
+`slot-sync-unit-absent`. A mismatched, missing or unreadable receipt leaves
+`succeeded` waiting (the unit may be a queued re-run still showing the previous
+exit) and fails `inactive-clean` as `slot-sync-unit-absent`. Hardware basis: both bench boards recorded `slot-sync-unit-absent` 1-3 s
 after a successful mirror had written its receipt and marked the other slot good.
 
 On confirmed success the phase becomes `synced` *before* four independent,
