@@ -266,7 +266,14 @@ Known gaps, recorded rather than smoothed over:
   `stream_start_suppressed_update` while `isUpdating()` stays true until the
   unit's monitor settles (including `apt-get clean`). This timing is inferred
   from the code, not separately tested. A failed stop or (g) can exhaust the
-  bounded start retries. Suggested fix direction, NOT implemented: cancel
+  bounded start retries. The same ordering reaches OS staging: `admittedStart()`
+  runs D8 before `request.launch` (`stream-session-orchestrator.ts` l.465-491),
+  and launch-time `params`/`spawn-sender` validation errors only then classify
+  as `start_invalid` (`start-failure-taxonomy.ts` l.261-267), so in `os-staging`
+  a start that can never stream (for example no SRTLA address) has already
+  SIGTERMed `rauc.service` (`killAndRestartRaucForStream`,
+  `update-orchestrator/stream-abort.ts` l.42; dispatched at `runtime.ts`
+  l.515-519) and discarded the download. Suggested fix direction, NOT implemented: cancel
   pending launches when D8 aborts, fence the pre-unit callback/preparation,
   gate launches on a starting stream rather than only a live one, clear
   `softUpdateStatus` on the (c) early return, and reconcile D8 with the later
