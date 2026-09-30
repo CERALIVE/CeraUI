@@ -475,8 +475,8 @@ exit status alone: systemd unloads the finished oneshot within
 about a second, so a successful run usually probes as `inactive-clean`
 (`pollSlotSync`, `runtime.ts`). The receipt is consulted for exactly two
 positively validated shapes and for no other: `succeeded` (`systemctl show`
-exit 0, all five properties, loaded/inactive/dead, `ExecMainCode=1`,
-`ExecMainStatus=0`) and `inactive-clean` (the same, with both exit fields empty
+exit 0, each of the five properties exactly once, loaded/inactive/dead,
+`ExecMainCode=1`, `ExecMainStatus=0`) and `inactive-clean` (the same, with both exit fields empty
 or `0`). Every other read of that kind, whether nonzero exit, incomplete or
 incoherent, is `absent` and fails as `slot-sync-unit-absent`, because the unit
 writes the receipt before `rauc status mark-good other`; a failed unit is

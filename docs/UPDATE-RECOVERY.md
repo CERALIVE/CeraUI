@@ -214,8 +214,9 @@ finished oneshot within about a second, which resets `ExecMainCode`; the probe
 then reads `inactive-clean`, so an exit 0 (`succeeded`) is only seen if a poll
 lands inside that window. The receipt is consulted for exactly two positively
 validated shapes, and for no other (`classifySlotSyncProbe`, `lock.ts`). Both
-require `systemctl show` to have exited 0 and to have reported all five
-properties with `LoadState=loaded`, `ActiveState=inactive` and `SubState=dead`;
+require `systemctl show` to have exited 0 and to have reported each of the five
+properties exactly once (a repeated key, even with an equal value, fails
+closed, because the last value would otherwise win) with `LoadState=loaded`, `ActiveState=inactive` and `SubState=dead`;
 `succeeded` additionally requires `ExecMainCode=1` (CLD_EXITED) with
 `ExecMainStatus=0`, and `inactive-clean` requires both `ExecMainCode` and
 `ExecMainStatus` to be empty or `0`. On either shape during `syncing`,
@@ -235,7 +236,8 @@ nonzero `ExecMainStatus` beside `ExecMainCode=0`) is classified `absent` and
 fails as `slot-sync-unit-absent` without consulting the receipt, because the
 unit writes the receipt before its last step, `rauc status mark-good other`,
 which can still fail. A failed unit is not unloaded, so refused and failed runs
-are still detected from the unit. Hardware basis: both bench boards recorded `slot-sync-unit-absent` 1-3 s
+are still detected from the unit; an exit status of 75 is the typed refusal
+whether systemd records it as `failed/failed` or as `inactive/dead`. Hardware basis: both bench boards recorded `slot-sync-unit-absent` 1-3 s
 after a successful mirror had written its receipt and marked the other slot good.
 
 On confirmed success the phase becomes `synced` *before* four independent,

@@ -66,23 +66,27 @@ export function parseSlotSyncProbe(output: string): SlotSyncProbeState {
 		return { kind: "running" };
 	}
 
-	if (activeState === "failed" || subState === "failed") {
-		const exitCode = processExitCode(
-			Number.parseInt(mainCodeRaw || "0", 10),
-			Number.parseInt(mainStatusRaw || "0", 10),
-		);
-		return exitCode === SLOT_SYNC_REFUSE_EXIT_CODE
-			? { kind: "refused", exitCode }
-			: { kind: "failed", exitCode };
-	}
+	if (activeState === "failed" || subState === "failed")
+		return unsuccessfulExit(exitCodeOf(mainCodeRaw || "0", mainStatusRaw));
 
 	// Inactive alone does not distinguish a fresh unit from a completed run.
 	if (mainCodeRaw === "" || mainCodeRaw === "0") return { kind: "absent" };
-	const exitCode = processExitCode(
+	const exitCode = exitCodeOf(mainCodeRaw, mainStatusRaw);
+	return exitCode === 0 ? { kind: "succeeded" } : unsuccessfulExit(exitCode);
+}
+
+const exitCodeOf = (mainCodeRaw: string, mainStatusRaw: string): number =>
+	processExitCode(
 		Number.parseInt(mainCodeRaw, 10),
 		Number.parseInt(mainStatusRaw || "0", 10),
 	);
-	return exitCode === 0 ? { kind: "succeeded" } : { kind: "failed", exitCode };
+
+// The script's refusal code means the same whichever lifecycle systemd leaves
+// behind: a unit with SuccessExitStatus=75 would read inactive/dead, not failed.
+function unsuccessfulExit(exitCode: number): SlotSyncProbeState {
+	return exitCode === SLOT_SYNC_REFUSE_EXIT_CODE
+		? { kind: "refused", exitCode }
+		: { kind: "failed", exitCode };
 }
 
 const PROBE_PROPERTIES = [
@@ -109,9 +113,14 @@ export function classifySlotSyncProbe(result: {
 	const parsed = parseSlotSyncProbe(result.stdout);
 	if (parsed.kind !== "absent" && parsed.kind !== "succeeded") return parsed;
 	const properties = parseProperties(result.stdout);
+	const lines = result.stdout.split("\n");
+	// parseProperties keeps the last duplicate, so a repeated key could hide a
+	// contradicting value; count raw lines instead of trusting the map.
 	const readable =
 		result.exitCode === 0 &&
-		PROBE_PROPERTIES.every((key) => properties.has(key)) &&
+		PROBE_PROPERTIES.every(
+			(key) => lines.filter((line) => line.startsWith(`${key}=`)).length === 1,
+		) &&
 		properties.get("LoadState") === "loaded" &&
 		properties.get("ActiveState") === "inactive" &&
 		properties.get("SubState") === "dead";
