@@ -229,7 +229,10 @@ notice say “Both system slots are up to date.” A cleanup failure warns but
 cannot reverse the mirror verdict. The internal `readBothSlotStatus` /
 `parseBothSlotStatus` seam reads RAUC's detailed rootfs slot records and overlays
 the target's receipt version (RAUC keeps an old bundle version after rsync);
-an OS install newer than the receipt supersedes it. Todo 41 exposes it through
+an OS install newer than the receipt supersedes it. Bundle version and install
+time are read from RAUC 1.15's nested `slot_status` (the flat shape is still
+accepted), and a non-rootfs slot such as `certs.0` with `null` bootname and
+boot status is tolerated and left out. Todo 41 exposes it through
 the additive `system.getUpdateDetails` RPC (`slots` is `null` unless the image
 declares `slot-sync` and `rauc status` answered), and the Updates dialog's Slots
 section renders A/B version, state, health and last mirror time from it.

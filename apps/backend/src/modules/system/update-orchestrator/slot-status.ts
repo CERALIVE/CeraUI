@@ -2,13 +2,20 @@ import { z } from "zod";
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
 import { SYNC_RECEIPT_FILE, syncReceiptSchema } from "./slot-sync-state.ts";
 
+const slotContentSchema = {
+	bundle: z.object({ version: z.string().nullish() }).nullish(),
+	installed: z.object({ timestamp: z.string().nullish() }).nullish(),
+};
+// RAUC 1.15 reports a non-bootable slot (certs.0) with null bootname and
+// boot_status, and nests bundle/installed under slot_status. A strict string
+// or a top-level-only read rejects or empties every real document.
 const raucSlotSchema = z.object({
 	class: z.string(),
-	bootname: z.string().optional(),
+	bootname: z.string().nullish(),
 	state: z.string(),
-	boot_status: z.string().optional(),
-	bundle: z.object({ version: z.string().optional() }).optional(),
-	installed: z.object({ timestamp: z.string().optional() }).optional(),
+	boot_status: z.string().nullish(),
+	...slotContentSchema,
+	slot_status: z.object(slotContentSchema).nullish(),
 });
 const raucStatusSchema = z.object({
 	slots: z.array(z.record(z.string(), raucSlotSchema)),
@@ -33,13 +40,17 @@ export function parseBothSlotStatus(
 	return parsed.slots.flatMap((item) =>
 		Object.entries(item).flatMap(([name, slot]) => {
 			if (slot.class !== "rootfs") return [];
+			const installedAt =
+				slot.slot_status?.installed?.timestamp ?? slot.installed?.timestamp;
+			const bundleVersion =
+				slot.slot_status?.bundle?.version ?? slot.bundle?.version;
 			const mirror =
 				validReceipt.success &&
 				(validReceipt.data.target_slot === name ||
 					validReceipt.data.target_slot === slot.bootname) &&
-				(!slot.installed?.timestamp ||
-					(Number.isFinite(Date.parse(slot.installed.timestamp)) &&
-						Date.parse(slot.installed.timestamp) <=
+				(!installedAt ||
+					(Number.isFinite(Date.parse(installedAt)) &&
+						Date.parse(installedAt) <=
 							Date.parse(validReceipt.data.completed_at)))
 					? validReceipt.data
 					: null;
@@ -49,7 +60,7 @@ export function parseBothSlotStatus(
 					bootname: slot.bootname ?? null,
 					state: slot.state,
 					bootStatus: slot.boot_status ?? null,
-					version: mirror?.image_version || slot.bundle?.version || null,
+					version: mirror?.image_version || bundleVersion || null,
 					lastSyncedAt: mirror?.completed_at ?? null,
 				},
 			];
