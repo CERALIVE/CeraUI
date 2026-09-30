@@ -329,6 +329,31 @@ Known gaps, recorded rather than smoothed over:
   `rauc.service` is active again; without that latch a stage started on a dead
   RAUC would fail and recreate the sticky `failed` state that the F9 fix
   removed.
+- **G1: a restart of the healthcheck kills a running slot mirror (observed
+  once, Orange Pi 5+ bench, 2026-09-30).** `ceralive-slot-sync.service` has
+  `Requires=`/`After=ceralive-healthcheck.service` (image-building-pipeline
+  `mkosi/runtime/ceralive-slot-sync.service` l.10-11 at `36d8131`), so a stop
+  or restart of the healthcheck propagates to a RUNNING mirror. The healthcheck
+  itself only `Wants=ceralive.service` (`ceralive-healthcheck.service` l.13,
+  since image `808446d`); what restarts it is the hostname reconcile, whose
+  identity-consumer restart names both `ceralive.service` and
+  `ceralive-healthcheck.service` (`mkosi/customize/postinst.d/hostname.sh`
+  l.71-77, l.378-379). On the bench an Avahi `published=ceralive-2` conflict
+  made `ceralive-hostname-reconcile` restart them shortly after boot, about
+  20 s into the rsync: the mirror got SIGTERM, exited 143 and left the target slot
+  `bad`, then systemd re-ran the unit, which completed. The orchestrator stayed
+  clean only by timing: the old backend was stopping and never read the killed
+  run's `failed` record. Had the new backend polled before the re-run, the
+  documented rules would have read `failed` with exit 143 (`lock.ts` l.69-70
+  and l.86-90; `processExitCode`, `software-update-service-state.ts` l.59-62)
+  and persisted `failed / slot-sync failed (exit 143)`
+  (`failSlotSyncFromUnit`, `update-orchestrator/runtime.ts` l.950-970), which
+  is sticky. A plain stop of the healthcheck mid-mirror would leave the other
+  slot `bad` with no re-run. Remedies, an OWNER DECISION and NOT implemented:
+  in the image, order the mirror after the healthcheck with `Wants=` or
+  ordering only instead of `Requires=` (or drop the healthcheck from the
+  reconcile's restart list); in CeraUI, treat exit 143 as an interrupted run
+  and probe again, with a bound, before persisting a verdict.
 - **No certificate-expiry countdown.** The wire carries no expiry date,
   `credentials-expiring` has no producer, and the credentials band keys on an
   `apt`-profile transport finding that no production path produces yet.

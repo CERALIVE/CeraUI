@@ -3022,7 +3022,10 @@ and deactivating units, and empty `systemctl show` output).
   `--no-block` job queued behind the healthcheck still reads the previous
   run's shape. On the shipped image that queue lasts milliseconds (the
   healthcheck is `RemainAfterExit=yes` and a re-run is a boot-id no-op), so the
-  90 s is a defensive bound. An `absent` CONFIRMATION probe (the second read,
+  90 s is a defensive bound; it is wall-clock, so an NTP step forward can
+  shorten it, and a backend crash between persisting `SYNC_STARTED` and
+  `systemctl start` fails as a sticky `slot-sync-unit-absent` after it (both
+  documented in UPDATE-RECOVERY.md). An `absent` CONFIRMATION probe (the second read,
   after a matching receipt) gives no verdict; the next poll's first probe
   decides. An `inactive-clean` read without this run's receipt waits out
   the same grace and is then re-probed, and the receipt re-read, before it

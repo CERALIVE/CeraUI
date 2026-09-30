@@ -309,6 +309,18 @@ poll. Only a clean re-probe with a still non-matching receipt fails as
 Hardware basis: both bench boards recorded `slot-sync-unit-absent` 1-3 s
 after a successful mirror had written its receipt and marked the other slot good.
 
+Known limitations of the grace, recorded rather than fixed:
+
+- The grace is measured on the wall clock (`deps.now()` against `enteredAt`).
+  An NTP step FORWARD while the phase is `syncing` makes the elapsed time jump
+  and can therefore shorten the grace; a step backwards counts as past the
+  grace, as above. Both fail closed, never towards a false `synced`.
+- `SYNC_STARTED` is persisted before `systemctl start --no-block` runs. A
+  backend that dies between the two leaves a persisted `syncing` phase with no
+  job ever queued, so after the grace the unit still reads its previous
+  unloaded shape and the mirror fails as `slot-sync-unit-absent`. That failure
+  is sticky (nothing dispatches `RESET`) but honest: no mirror ran.
+
 On confirmed success the phase becomes `synced` *before* four independent,
 best-effort effects: reuse bounded `apt-get clean`, remove leftovers from
 `/data/ceralive/rauc-downloads`, reconcile superseded failed package versions,
