@@ -174,8 +174,12 @@ version observed after a reboot/rollback and is diagnostic only. The writer
 booted slot's actual version differs from the expected staged version. Never
 quarantine the surviving version. A new slot that boots but fails its
 healthcheck is not verified: the orchestrator stays in `os-verifying` across
-its repeat boots, and the entry is written by the later boot on the old slot
-(the bootloader fallback), with `bootedVersion` naming that old version. `isOsVersionQuarantined(version)` is the query
+its repeat boots. If those failures come before `rauc status mark-good`, the
+entry is written by the later boot on the old slot (the bootloader fallback),
+with `bootedVersion` naming that old version. If the slot was marked good but
+its healthy record could not be written, there is no fallback and no entry:
+the orchestrator waits in `os-verifying` indefinitely (see
+[DEVICE-UPDATES.md](./DEVICE-UPDATES.md)). `isOsVersionQuarantined(version)` is the query
 API; it does not mutate state or infer a rollback from a failed download.
 
 Notifications use stable `update:<event-kind>:<identity>` names and the existing

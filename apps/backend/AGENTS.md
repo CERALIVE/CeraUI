@@ -2996,6 +2996,12 @@ and deactivating units, and empty `systemctl show` output).
   and fails its healthcheck was declared verified that way on the Orange Pi 5+
   drill (task-45 opi-r5 C1), and the bootloader fallback was never quarantined.
   The UI therefore stays in the verifying state until the healthcheck passes.
+  Fallback only follows failures BEFORE `mark-good`: the healthcheck marks good
+  first and writes the record after, and `mark-good` refills the attempt
+  budget, so a failed record write leaves a good slot in `os-verifying` with no
+  timeout (checks, installs and the mirror blocked, streams allowed). Do not
+  add a timeout or read RAUC `good` as a substitute; the remedy is on the
+  image side (`docs/DEVICE-UPDATES.md`).
   Coverage: `tests/os-verify-healthcheck.test.ts` (drill replay with the
   board's boot ids).
 - **Channel identity is not bundle identity.** `readBoardIdentity()` admits exactly

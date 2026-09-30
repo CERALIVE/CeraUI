@@ -413,17 +413,38 @@ Active only with `apt-all-packages` and `rauc-verity-streaming`.
   the phase stays `os-verifying`, nothing is notified, and the next tick (every
   60 s) or backend start asks again. The phase is persisted, so it survives
   backend restarts on the same boot and repeat boots of the same failing slot.
-  A slot whose healthcheck keeps failing is booted until its bootcount runs out;
-  the bootloader then starts the old slot, whose CalVer differs, and that boot
-  reaches the rollback path above (`quarantine.json` `os[]`, the persistent
-  `os-rollback` notice, sticky `quarantined`). The version check comes first,
-  so a rollback never depends on the healthy record. Operator-visible
-  consequence: after the reboot into a new OS the UI shows the verifying state
-  until that boot's healthcheck passes, typically within a couple of minutes,
-  and for as long as the new slot keeps failing it. Replayed from the Orange Pi
-  5+ drill A2 (task-45 opi-r5, C1), where the previous rule declared a failed v3
-  boot verified and never recorded the fallback; hermetic only, not yet
-  re-drilled on hardware.
+  A slot whose healthcheck fails **before** `rauc status mark-good` succeeds is
+  booted again until its bootcount runs out; the bootloader then starts the old
+  slot, whose CalVer differs, and that boot reaches the rollback path above
+  (`quarantine.json` `os[]`, the persistent `os-rollback` notice, sticky
+  `quarantined`). The version check comes first, so a rollback never depends on
+  the healthy record. Operator-visible consequence: after the reboot into a new
+  OS the UI shows the verifying state until that boot's healthcheck passes,
+  typically within a couple of minutes, and for as long as the new slot keeps
+  failing it before `mark-good`. Replayed from the Orange Pi 5+ drill A2
+  (task-45 opi-r5, C1), where the previous rule declared a failed v3 boot
+  verified and never recorded the fallback; hermetic only, not yet re-drilled
+  on hardware.
+- **Boundary: a slot marked good with no readable verdict waits
+  indefinitely.** The healthcheck calls `rauc status mark-good` first and only
+  then writes its boot marker and `healthy-state.json`. If either write fails,
+  the healthcheck fails *after* the slot was marked good, and every successful
+  `mark-good` refills that slot's boot attempts, so the bootloader never falls
+  back. The booted version equals the staged one, so neither branch above
+  fires: the phase stays `os-verifying` with no timeout and no other
+  adjudication, on this boot and on every later boot where the record still
+  cannot be written. While it waits, scheduled package and OS checks, manual
+  checks and installs, and the slot mirror do not run (checks and installs
+  need `idle` or an available phase, the tick services only verification, and
+  the mirror gate refuses with `os-install-pending`); stream starts stay
+  allowed. Nothing clears the update for the product: there is no
+  `os-activated` notice and no `os-rollback`. The orchestrator never writes or
+  infers the healthy record itself, and RAUC's `good` status is not a
+  substitute for it. Operator remedy: find out why the healthcheck cannot
+  write its record (the `ceralive-healthcheck.service` journal, `/data` space
+  and permissions), fix that, and reboot; the healthcheck runs again on the
+  next boot, and a record written for that boot verifies the update. Do not
+  mark slots good or bad by hand to get out of this state.
 - If the backend restarts during staging and RAUC reports idle with no receipt,
   the tick fails closed with `os_stage_outcome_unknown_after_restart`.
 - A root-owned `/data/ceralive/update-state/os-channel-override` containing
@@ -572,7 +593,7 @@ name is not re-sent. Keys are translated in all ten catalogs.
 | `cellular-approval` | an OS install held by D12 |
 | `os-staged` | a successful OS stage |
 | `os-activated` | a forced `@now` activation, and a boot of the staged version whose healthcheck passed (this boot's `healthy-state.json`) |
-| `os-rollback` | a booted version that differs from the staged one after the armed activation ran, including the bootloader fallback after the new slot kept failing its healthcheck |
+| `os-rollback` | a booted version that differs from the staged one after the armed activation ran, including the bootloader fallback after the new slot kept failing its healthcheck before `mark-good` |
 | `slots-current` | a confirmed slot mirror |
 | `download-paused` | **no producer** |
 | `credentials-expiring` | **no producer** |
