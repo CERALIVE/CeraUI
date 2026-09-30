@@ -817,96 +817,124 @@ async function maybeStartSlotSync(): Promise<void> {
 	}
 }
 
+async function settleSlotSyncSucceeded(now: number): Promise<void> {
+	dispatch({ type: "SYNC_SUCCEEDED", now });
+	// The mirror is already committed. Each cleanup is independent and cannot
+	// change its verdict; a later tick sees synced, never a second cleanup.
+	const cleanups: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
+		["apt archives", deps.cleanSlotSyncArchives],
+		["RAUC downloads", deps.removeRaucDownloads],
+		["quarantine", () => deps.dropSupersededQuarantine(deps.quarantine)],
+		["slot status", deps.refreshSlots],
+	];
+	for (const [name, cleanup] of cleanups) {
+		try {
+			const result = await cleanup();
+			if (result === false)
+				logger.warn("update-orchestrator: slot-sync cleanup failed", {
+					name,
+				});
+		} catch (error) {
+			logger.warn("update-orchestrator: slot-sync cleanup failed", {
+				name,
+				error,
+			});
+		}
+	}
+	notifyUpdate({ kind: "slots-current", id: String(now) });
+}
+
+async function failSlotSyncFromUnit(
+	probe: Extract<SlotSyncProbeState, { kind: "refused" | "failed" }>,
+	now: number,
+): Promise<void> {
+	// Persist the verdict before clearing systemd's failure record: once the
+	// record is gone the unit reads inactive-clean, and a matching receipt
+	// (published before mark-good) would turn a restart into a false success.
+	dispatch({
+		type: "SYNC_FAILED",
+		now,
+		reason:
+			probe.kind === "refused"
+				? `slot-sync refused (exit ${probe.exitCode})`
+				: `slot-sync failed (exit ${probe.exitCode})`,
+	});
+	await deps.resetSlotSyncFailure().catch((error) => {
+		logger.warn("update-orchestrator: slot-sync reset-failed cleanup failed", {
+			error,
+		});
+	});
+}
+
+// Each await below is a point where the process may die (nothing is persisted
+// until a verdict) or where a read may still describe the PREVIOUS run.
+// A Type=oneshot unit without RemainAfterExit reads inactive/dead once
+// finished, and systemd 257 unloads it within about a second, resetting
+// ExecMainCode, so a success reads "succeeded" or "inactive-clean". Either can
+// also be the previous run's record while --no-block's job is still queued.
+// The receipt for THIS dpkg state ties the verdict to this run, but the unit
+// publishes it before its last step (mark-good), so it proves only that the
+// run got that far: a fresh probe taken after the receipt must again read
+// finished-and-clean. An unreadable probe ("absent") never consults the
+// receipt; otherwise the unit vanished inconclusively: fail, do not spin.
 async function pollSlotSync(): Promise<void> {
 	if (state.phase !== "syncing") return;
 	const probe = await deps.inspectSlotSync();
 	const now = deps.now();
-	if (probe.kind === "running") return;
-	const settleSucceeded = async (): Promise<void> => {
-		dispatch({ type: "SYNC_SUCCEEDED", now });
-		// The mirror is already committed. Each cleanup is independent and cannot
-		// change its verdict; a later tick sees synced, never a second cleanup.
-		const cleanups: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
-			["apt archives", deps.cleanSlotSyncArchives],
-			["RAUC downloads", deps.removeRaucDownloads],
-			["quarantine", () => deps.dropSupersededQuarantine(deps.quarantine)],
-			["slot status", deps.refreshSlots],
-		];
-		for (const [name, cleanup] of cleanups) {
-			try {
-				const result = await cleanup();
-				if (result === false)
-					logger.warn("update-orchestrator: slot-sync cleanup failed", {
-						name,
-					});
-			} catch (error) {
-				logger.warn("update-orchestrator: slot-sync cleanup failed", {
-					name,
-					error,
-				});
-			}
-		}
-		notifyUpdate({ kind: "slots-current", id: String(now) });
-	};
-	if (probe.kind === "succeeded") {
-		// A Type=oneshot unit without RemainAfterExit returns inactive/dead after
-		// success; --no-block can briefly expose the PREVIOUS run's exit 0 while
-		// the new job is queued. Only the receipt for THIS dpkg state confirms it.
-		try {
-			const evidence = await deps.readSlotSyncEvidence();
-			if (evidence.receiptStateSha256 !== evidence.statusSha256) return;
-		} catch (error) {
-			logger.warn("update-orchestrator: slot-sync receipt not yet readable", {
-				error,
-			});
+	switch (probe.kind) {
+		case "running":
 			return;
-		}
-		await settleSucceeded();
-		return;
-	}
-	if (probe.kind === "refused" || probe.kind === "failed") {
-		// Persist the verdict before clearing systemd's failure record: once the
-		// record is gone the unit reads inactive-clean, and a matching receipt
-		// (published before mark-good) would turn a restart into a false success.
-		dispatch({
-			type: "SYNC_FAILED",
-			now,
-			reason:
-				probe.kind === "refused"
-					? `slot-sync refused (exit ${probe.exitCode})`
-					: `slot-sync failed (exit ${probe.exitCode})`,
-		});
-		await deps.resetSlotSyncFailure().catch((error) => {
-			logger.warn(
-				"update-orchestrator: slot-sync reset-failed cleanup failed",
-				{
-					error,
-				},
-			);
-		});
-		return;
-	}
-	// systemd 257 unloads a finished oneshot within about a second, resetting
-	// ExecMainCode, so a successful run usually reads "inactive-clean" here. The
-	// receipt for THIS dpkg state is the durable proof; the sync gate refused to
-	// dispatch while a matching receipt already existed, so a match cannot be
-	// stale. A failed unit is retained and caught above. An unreadable probe
-	// ("absent") never consults the receipt: the unit publishes it before its
-	// last step. Otherwise the unit vanished inconclusively: fail, do not spin.
-	if (probe.kind === "inactive-clean") {
-		try {
-			const evidence = await deps.readSlotSyncEvidence();
-			if (evidence.receiptStateSha256 === evidence.statusSha256) {
-				await settleSucceeded();
-				return;
-			}
-		} catch (error) {
-			logger.warn("update-orchestrator: slot-sync receipt unreadable", {
-				error,
-			});
+		case "refused":
+		case "failed":
+			await failSlotSyncFromUnit(probe, now);
+			return;
+		case "absent":
+			dispatch({ type: "SYNC_FAILED", now, reason: "slot-sync-unit-absent" });
+			return;
+		case "succeeded":
+		case "inactive-clean":
+			break;
+		default: {
+			const unreachable: never = probe;
+			return unreachable;
 		}
 	}
-	dispatch({ type: "SYNC_FAILED", now, reason: "slot-sync-unit-absent" });
+	let receiptMatches = false;
+	try {
+		const evidence = await deps.readSlotSyncEvidence();
+		receiptMatches = evidence.receiptStateSha256 === evidence.statusSha256;
+	} catch (error) {
+		logger.warn("update-orchestrator: slot-sync receipt unreadable", {
+			error,
+		});
+	}
+	if (!receiptMatches) {
+		// A retained exit 0 can be the previous run's while this one is queued;
+		// an unloaded unit with no receipt for this state vanished.
+		if (probe.kind === "succeeded") return;
+		dispatch({ type: "SYNC_FAILED", now, reason: "slot-sync-unit-absent" });
+		return;
+	}
+	const confirmation = await deps.inspectSlotSync();
+	switch (confirmation.kind) {
+		case "running":
+			return;
+		case "refused":
+		case "failed":
+			await failSlotSyncFromUnit(confirmation, now);
+			return;
+		case "absent":
+			dispatch({ type: "SYNC_FAILED", now, reason: "slot-sync-unit-absent" });
+			return;
+		case "succeeded":
+		case "inactive-clean":
+			await settleSlotSyncSucceeded(now);
+			return;
+		default: {
+			const unreachable: never = confirmation;
+			return unreachable;
+		}
+	}
 }
 
 const OS_FORCE_ACTIVATION_MS = 7 * 24 * 60 * 60_000;

@@ -209,3 +209,116 @@ describe("B1: the failure verdict is durable before the systemd record is cleare
 		}
 	});
 });
+
+describe("B2: a matching receipt settles only after a fresh finished-and-clean probe", () => {
+	type Show = ReturnType<typeof show>;
+	const previousRunFinished: ReadonlyArray<
+		readonly ["succeeded" | "inactive-clean", Show]
+	> = [
+		["succeeded", succeededExit0],
+		["inactive-clean", inactiveClean],
+	];
+
+	for (const [label, finished] of previousRunFinished) {
+		test(`a receipt published by a still-running run cannot settle from the previous run's ${label} probe`, async () => {
+			let current: Show = finished;
+			let reads = 0;
+			let release: ((value: SlotSyncEvidence) => void) | undefined;
+			const deferred = new Promise<SlotSyncEvidence>((resolve) => {
+				release = resolve;
+			});
+			const probes: SlotSyncProbeState["kind"][] = [];
+			const h = deps({
+				inspectSlotSync: async () => {
+					const probe = classifySlotSyncProbe(current);
+					probes.push(probe.kind);
+					return probe;
+				},
+				readSlotSyncEvidence: () => {
+					reads++;
+					return reads === 1 ? deferred : Promise.resolve(matching);
+				},
+			});
+			setOrchestratorRuntimeDepsForTest(h.value);
+			syncing();
+			const tick = runOrchestratorTick();
+			while (reads === 0) await Bun.sleep(0);
+			// The new run starts and publishes its receipt before mark-good.
+			current = stillRunning;
+			release?.(matching);
+			await tick;
+			expect(getOrchestratorState().phase).toBe("syncing");
+			expect(h.cleanup).toEqual([]);
+			expect(probes).toEqual([label, "running"]);
+
+			current = finished;
+			await runOrchestratorTick();
+			expect(getOrchestratorState().phase).toBe("synced");
+			expect(h.cleanup).toEqual(["apt", "downloads", "quarantine", "slots"]);
+		});
+	}
+
+	test("a run that fails between the receipt and the re-probe keeps its failure verdict", async () => {
+		const refused = show({
+			LoadState: "loaded",
+			ActiveState: "failed",
+			SubState: "failed",
+			ExecMainCode: "1",
+			ExecMainStatus: "75",
+		});
+		const cases: ReadonlyArray<readonly [Show, Show, string]> = [
+			[succeededExit0, unitFailed, "slot-sync failed (exit 1)"],
+			[inactiveClean, unitFailed, "slot-sync failed (exit 1)"],
+			[inactiveClean, refused, "slot-sync refused (exit 75)"],
+			[
+				succeededExit0,
+				show({ LoadState: "not-found" }),
+				"slot-sync-unit-absent",
+			],
+		];
+		for (const [first, second, reason] of cases) {
+			resetOrchestratorRuntimeForTest();
+			const sequence = [first, second];
+			let resets = 0;
+			const h = deps({
+				inspectSlotSync: async () =>
+					classifySlotSyncProbe(sequence.shift() ?? second),
+				resetSlotSyncFailure: async () => {
+					resets++;
+				},
+			});
+			setOrchestratorRuntimeDepsForTest(h.value);
+			syncing();
+			await runOrchestratorTick();
+			expect(getOrchestratorState().phase).toBe("failed");
+			expect(getOrchestratorState().failureReason).toBe(reason);
+			expect(h.cleanup).toEqual([]);
+			expect(resets).toBe(reason === "slot-sync-unit-absent" ? 0 : 1);
+		}
+	});
+
+	test("a receipt that cannot be read leaves a succeeded probe waiting and fails an inactive-clean one", async () => {
+		for (const [finished, phase] of [
+			[succeededExit0, "syncing"],
+			[inactiveClean, "failed"],
+		] as const) {
+			resetOrchestratorRuntimeForTest();
+			let probes = 0;
+			const h = deps({
+				inspectSlotSync: async () => {
+					probes++;
+					return classifySlotSyncProbe(finished);
+				},
+				readSlotSyncEvidence: async () => {
+					throw new Error("receipt unreadable");
+				},
+			});
+			setOrchestratorRuntimeDepsForTest(h.value);
+			syncing();
+			await runOrchestratorTick();
+			expect(getOrchestratorState().phase).toBe(phase);
+			expect(probes).toBe(1);
+			expect(h.cleanup).toEqual([]);
+		}
+	});
+});

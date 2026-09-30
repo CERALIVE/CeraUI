@@ -219,9 +219,14 @@ properties with `LoadState=loaded`, `ActiveState=inactive` and `SubState=dead`;
 `succeeded` additionally requires `ExecMainCode=1` (CLD_EXITED) with
 `ExecMainStatus=0`, and `inactive-clean` requires both `ExecMainCode` and
 `ExecMainStatus` to be empty or `0`. On either shape during `syncing`,
-`pollSlotSync` reads the receipt and settles `synced` if its state SHA-256
-equals the current dpkg status. A match cannot be stale: the gate refuses
-(`already-synced`) to dispatch while one already exists. A mismatched, missing
+`pollSlotSync` reads the receipt; if its state SHA-256 equals the current dpkg
+status it takes a second, fresh probe and settles `synced` only if that probe
+again reads one of the two shapes. The receipt alone is not enough: the gate
+refuses (`already-synced`) to dispatch while a matching one exists, so a match
+was written by this run, but the unit writes it before its last step, and the
+first probe can still be the previous run's record while this run's job was
+queued. A second probe that reads running waits; failed or refused fails with
+that verdict; anything else fails as `slot-sync-unit-absent`. A mismatched, missing
 or unreadable receipt leaves `succeeded` waiting (the unit may be a queued
 re-run still showing the previous exit) and fails `inactive-clean` as
 `slot-sync-unit-absent`. Any other read that looks like either shape (nonzero
