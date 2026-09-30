@@ -248,6 +248,7 @@ let tickTimer: ReturnType<typeof setTimeout> | undefined;
 let started = false;
 let osCandidate: OsChannelManifest | undefined;
 let osStageInProcess = false;
+let raucStreamAbortInProcess = false;
 let packageInstallStarting = false;
 let osForceActivated = false;
 let pendingCellularApproval:
@@ -273,6 +274,7 @@ export function resetOrchestratorRuntimeForTest(): void {
 	deps = defaultOrchestratorRuntimeDeps;
 	osCandidate = undefined;
 	osStageInProcess = false;
+	raucStreamAbortInProcess = false;
 	packageInstallStarting = false;
 	osForceActivated = false;
 	pendingCellularApproval = undefined;
@@ -514,8 +516,15 @@ export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdm
 
 	if (state.phase === "os-staging") {
 		// RAUC targets the inactive slot, unlike apt's live-root transaction.
-		await deps.killAndRestartRaucForStream();
+		// Leave os-staging BEFORE the kill: the SIGTERM fails the in-flight
+		// install at once, and its catch must see the abort, not a failure.
 		dispatch({ type: "OS_STAGING_ABORTED_FOR_STREAM", now: deps.now() });
+		raucStreamAbortInProcess = true;
+		try {
+			await deps.killAndRestartRaucForStream();
+		} finally {
+			raucStreamAbortInProcess = false;
+		}
 		return { allowed: true };
 	}
 
@@ -887,7 +896,16 @@ async function pollSlotSync(): Promise<void> {
 const OS_FORCE_ACTIVATION_MS = 7 * 24 * 60 * 60_000;
 
 async function maybeStartOsStage(bypassIdle: boolean): Promise<void> {
-	if (state.phase !== "os-available" || deps.isStreamLive()) return;
+	// os-available is entered before a stream abort finishes restarting RAUC
+	// and before the aborted stage settles; a new stage in that window would
+	// race both, and the old stage's catch would fail the new one.
+	if (
+		state.phase !== "os-available" ||
+		deps.isStreamLive() ||
+		osStageInProcess ||
+		raucStreamAbortInProcess
+	)
+		return;
 	if (!osCandidate) {
 		await runOsCheckAfterCellularGate(await deps.loadSettings());
 		if (state.phase !== "os-available" || !osCandidate) return;

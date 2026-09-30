@@ -3,6 +3,7 @@ import { fetchAsOta } from "../modules/system/update-orchestrator/os-agent.ts";
 import { osChannelManifestSchema } from "../modules/system/update-orchestrator/os-manifest.ts";
 import { UpdateQuarantine } from "../modules/system/update-orchestrator/quarantine.ts";
 import {
+	admitAndPrepareStreamStart,
 	checkOsManifestResult,
 	checkUpdatesNow,
 	type defaultOrchestratorRuntimeDeps,
@@ -386,5 +387,52 @@ describe("OS channel publication over a healthy transport", () => {
 			(error: unknown) => error,
 		);
 		expect(outcome).toMatchObject({ reason: "manifest_fetch_failed" });
+	});
+});
+
+describe("stream start during an in-flight OS stage", () => {
+	// On hardware the SIGTERM ends the `rauc install` client at once, so the
+	// stage rejects while the kill/restart call is still in progress.
+	function inFlightStage(onAbortWindow: () => Promise<void> = async () => {}) {
+		let rejectStage: (error: Error) => void = () => {};
+		let stages = 0;
+		setup({
+			stageOs: () => {
+				stages += 1;
+				return new Promise<void>((_resolve, reject) => {
+					rejectStage = reject;
+				});
+			},
+			killAndRestartRaucForStream: async () => {
+				rejectStage(new Error("rauc_install_failed"));
+				await new Promise((resolve) => setTimeout(resolve, 5));
+				await onAbortWindow();
+			},
+		});
+		return { stages: () => stages };
+	}
+
+	test("the interrupted stage returns to os-available, not a sticky failure", async () => {
+		inFlightStage();
+		const install = installUpdatesNow();
+		while (getOrchestratorState().phase !== "os-staging")
+			await new Promise((resolve) => setTimeout(resolve, 1));
+		expect(await admitAndPrepareStreamStart()).toEqual({ allowed: true });
+		await install;
+		expect(getOrchestratorState().phase).toBe("os-available");
+		expect(getOrchestratorState().failureReason).toBeNull();
+	});
+
+	test("no tick starts a second stage while the abort is still restarting RAUC", async () => {
+		const { stages } = inFlightStage(async () => {
+			await runOrchestratorTick();
+		});
+		const install = installUpdatesNow();
+		while (getOrchestratorState().phase !== "os-staging")
+			await new Promise((resolve) => setTimeout(resolve, 1));
+		await admitAndPrepareStreamStart();
+		await install;
+		expect(stages()).toBe(1);
+		expect(getOrchestratorState().phase).toBe("os-available");
 	});
 });
