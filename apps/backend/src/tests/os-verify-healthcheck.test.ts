@@ -391,6 +391,22 @@ describe("drill A2 replay: boots that fail their healthcheck, then the fallback"
 		).toMatchObject({ ok: true });
 	});
 
+	test("a backend start on the first boot of the new slot waits for its healthcheck", async () => {
+		const statePath = await useStateFile();
+		const b = board("2026.10.110", { healthy: healthyFor(STAGE_BOOT) });
+		const deps = { ...b.deps, persist: saveOrchestratorState };
+		saveOrchestratorState({
+			...initialOrchestratorState(0),
+			phase: "os-activation-armed",
+		});
+		await startUpdateOrchestrator(deps);
+		expect(getOrchestratorState().phase).toBe("os-verifying");
+		expect(await Bun.file(statePath).json()).toMatchObject({
+			phase: "os-verifying",
+		});
+		expect(notices("os-activated", "2026.10.110")).toBe(0);
+	});
+
 	test("a restart between the boot and a passing healthcheck still verifies", async () => {
 		const statePath = await useStateFile();
 		const b = board("2026.10.108", { healthy: healthyFor(STAGE_BOOT) });
