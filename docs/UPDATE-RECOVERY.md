@@ -251,11 +251,21 @@ slot name such as `rootfs.0` or by bootname), and that slot's `boot_status` is
 and `rauc status mark-good other` (for example a power loss; after the reboot
 the unit reads as never run this boot): the phase fails as
 `slot-sync-incomplete`, persisted before anything else, rather than claiming a
-mirror RAUC never confirmed. If RAUC cannot be read, reports another shape or
-status, or the receipt names the booted slot, there is no verdict this poll:
-the phase stays `syncing`, a warning is logged once per change of reason, and
-the next poll asks again. The healthy record's slot identifies the booted slot
-only when its `boot_id` is this boot's. A matching receipt alone does not prove
+mirror RAUC never confirmed. Before calling it incomplete the unit is probed once more: a
+re-run that has started meanwhile (it un-marks its target while copying) keeps
+the phase `syncing`, and a failed or refused re-run keeps its own verdict. If
+RAUC cannot be read or reports another shape or status, there is no verdict
+this poll: the phase stays `syncing`, a warning is logged once per change of
+reason, and the next poll asks again. If RAUC shows that the receipt names the
+booted slot, the receipt is not evidence for this run and is handled like a
+non-matching one (grace, re-probe, then `slot-sync-unit-absent`); re-reading
+that same receipt cannot defer the verdict again. The healthy record's slot
+identifies the booted slot only when its `boot_id` is this boot's. After a
+reboot with the phase still `syncing`, the new boot's healthcheck rewrites that
+record only once the backend is up, so the first polls see an `unknown` slot
+identity; such a receipt stays a candidate and RAUC, which names this boot's
+booted and inactive slots itself, decides between `synced`,
+`slot-sync-incomplete` and no verdict. A matching receipt alone does not prove
 that this run finished cleanly. The gate refuses (`already-synced`) to dispatch while a matching
 receipt already exists, so a match was written by this run, but the unit writes
 it before its last step, and the first probe can still be the previous run's

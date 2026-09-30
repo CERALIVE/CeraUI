@@ -241,3 +241,68 @@ describe("N2: success needs the CURRENT boot's facts and a good mirror target", 
 		}
 	});
 });
+
+// Enumerating pollSlotSync's awaits against a reboot: the new boot's
+// healthcheck rewrites healthy-state.json only after the backend is up, so the
+// first polls of a resumed `syncing` phase read the PREVIOUS boot's record.
+describe("a resumed mirror is judged by this boot's RAUC facts, not by a previous boot's record", () => {
+	const previousBoot = {
+		...mirroredIntoA,
+		healthyState: mirroredIntoA.healthyState
+			? { ...mirroredIntoA.healthyState, boot_id: "previous-boot" }
+			: null,
+		receiptTarget: "unknown" as const,
+	};
+
+	test("a mirror that finished before the reboot settles synced once RAUC shows the target good", async () => {
+		const h = harness({
+			slots: async () => targetGood,
+			evidence: previousBoot,
+		});
+		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).toBe("synced");
+		expect(h.cleanup).toEqual(["apt", "downloads", "quarantine", "slots"]);
+	});
+
+	test("a mirror whose mark-good was lost is slot-sync-incomplete, not unit-absent", async () => {
+		harness({ slots: async () => targetBad, evidence: previousBoot });
+		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).toBe("failed");
+		expect(getOrchestratorState().failureReason).toBe("slot-sync-incomplete");
+	});
+
+	test("a receipt RAUC shows naming the now-booted slot fails once, without looping", async () => {
+		const h = harness({
+			slots: async () => targetGood,
+			evidence: { ...previousBoot, receiptTargetSlot: "rootfs.1" },
+		});
+		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).toBe("failed");
+		expect(getOrchestratorState().failureReason).toBe("slot-sync-unit-absent");
+		expect(h.cleanup).toEqual([]);
+	});
+
+	test("a bad target read while the unit runs again is not called incomplete", async () => {
+		let probes = 0;
+		const h = harness({ slots: async () => targetBad });
+		setOrchestratorRuntimeDepsForTest({
+			...defaultOrchestratorRuntimeDeps,
+			now: () => REBOOT_NOW,
+			inspectSlotSync: async () => {
+				probes++;
+				// Clean for the first two reads, then a re-run has started and is
+				// rewriting (so un-marking) the target.
+				return probes <= 2
+					? classifySlotSyncProbe(notRunThisBoot)
+					: { kind: "running" };
+			},
+			readSlotSyncEvidence: async () => mirroredIntoA,
+			readRootSlots: async () => targetBad,
+			persist: () => {},
+		});
+		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).toBe("syncing");
+		expect(probes).toBe(3);
+		expect(h.cleanup).toEqual([]);
+	});
+});

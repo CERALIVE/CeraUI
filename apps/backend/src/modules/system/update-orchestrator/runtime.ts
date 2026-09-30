@@ -82,7 +82,6 @@ import {
 } from "./slot-sync-cleanup.ts";
 import {
 	judgeMirrorTarget,
-	receiptConfirmsMirror,
 	type SlotSyncEvidence,
 	slotSyncGate,
 } from "./slot-sync-gate.ts";
@@ -871,7 +870,7 @@ function noteSlotSyncUndecided(reason: string, error?: unknown): void {
 // reboot the unit reads as never run. Only RAUC says whether the target slot
 // was confirmed, so success waits for it and an unreadable answer is no answer.
 async function settleIfMirrorTargetGood(
-	receiptTargetSlot: string | null,
+	evidence: SlotSyncEvidence,
 	now: number,
 ): Promise<void> {
 	let slots: readonly RootSlotStatus[];
@@ -881,7 +880,7 @@ async function settleIfMirrorTargetGood(
 		noteSlotSyncUndecided("rauc-unreadable", error);
 		return;
 	}
-	const verdict = judgeMirrorTarget(slots, receiptTargetSlot);
+	const verdict = judgeMirrorTarget(slots, evidence.receiptTargetSlot);
 	switch (verdict) {
 		case "good":
 			slotSyncUndecidedReason = null;
@@ -889,16 +888,43 @@ async function settleIfMirrorTargetGood(
 			return;
 		case "bad":
 			slotSyncUndecidedReason = null;
-			dispatch({ type: "SYNC_FAILED", now, reason: "slot-sync-incomplete" });
+			await failIncompleteUnlessRerunning(now);
 			return;
-		// The receipt and RAUC disagree about which slot is the other one:
-		// neither success nor a failure verdict can be stated.
+		// RAUC shows the receipt is not this boot's other slot: it is not
+		// evidence for this run, whatever the healthy record said.
 		case "not-target":
+			slotSyncUndecidedReason = null;
+			await concludeWithoutMatchingReceipt(now, evidence);
+			return;
 		case "undecidable":
 			noteSlotSyncUndecided(verdict);
 			return;
 		default: {
 			const unreachable: never = verdict;
+			return unreachable;
+		}
+	}
+}
+
+// A target read bad right after two clean probes is an interrupted mark-good,
+// unless a new run of the unit (which un-marks its target while copying) began
+// in between.
+async function failIncompleteUnlessRerunning(now: number): Promise<void> {
+	const recheck = await deps.inspectSlotSync();
+	switch (recheck.kind) {
+		case "running":
+			return;
+		case "refused":
+		case "failed":
+			await failSlotSyncFromUnit(recheck, now);
+			return;
+		case "absent":
+		case "succeeded":
+		case "inactive-clean":
+			dispatch({ type: "SYNC_FAILED", now, reason: "slot-sync-incomplete" });
+			return;
+		default: {
+			const unreachable: never = recheck;
 			return unreachable;
 		}
 	}
@@ -953,14 +979,37 @@ async function readSlotSyncEvidenceOrNull(): Promise<SlotSyncEvidence | null> {
 	}
 }
 
-function receiptMatches(evidence: SlotSyncEvidence | null): boolean {
-	return evidence !== null && receiptConfirmsMirror(evidence);
+// The poll, unlike the gate, may read the PREVIOUS boot's healthy record: after
+// a reboot the new boot's healthcheck rewrites it only once the backend is up.
+// A receipt for this dpkg state whose slot identity is therefore unknown stays
+// a candidate, because RAUC is read before any success and names this boot's
+// booted and inactive slots itself.
+function receiptMayConfirmMirror(
+	evidence: SlotSyncEvidence | null,
+): evidence is SlotSyncEvidence {
+	return (
+		evidence !== null &&
+		evidence.receiptStateSha256 === evidence.statusSha256 &&
+		evidence.receiptTarget !== "not-other"
+	);
+}
+
+function sameReceipt(a: SlotSyncEvidence, b: SlotSyncEvidence): boolean {
+	return (
+		a.receiptStateSha256 === b.receiptStateSha256 &&
+		a.receiptTargetSlot === b.receiptTargetSlot
+	);
 }
 
 // A terminal-clean unit without this run's receipt. Both reads may be older
 // than the job, which can have started (or finished) while they ran, so the
 // failure is only concluded from a re-probe and a receipt read after it.
-async function concludeWithoutMatchingReceipt(now: number): Promise<void> {
+// `rejected` is a receipt RAUC already showed is not this boot's other slot:
+// reading the same one again must not defer the verdict forever.
+async function concludeWithoutMatchingReceipt(
+	now: number,
+	rejected?: SlotSyncEvidence,
+): Promise<void> {
 	if (withinQueuedStartGrace(now)) return;
 	const recheck = await deps.inspectSlotSync();
 	switch (recheck.kind) {
@@ -983,7 +1032,12 @@ async function concludeWithoutMatchingReceipt(now: number): Promise<void> {
 	}
 	// A receipt that matches now is judged by the next poll, which re-probes
 	// after reading it; a retained exit 0 keeps waiting as before.
-	if (receiptMatches(await readSlotSyncEvidenceOrNull())) return;
+	const fresh = await readSlotSyncEvidenceOrNull();
+	if (
+		receiptMayConfirmMirror(fresh) &&
+		!(rejected !== undefined && sameReceipt(fresh, rejected))
+	)
+		return;
 	if (recheck.kind === "succeeded") return;
 	dispatch({ type: "SYNC_FAILED", now, reason: "slot-sync-unit-absent" });
 }
@@ -1025,7 +1079,7 @@ async function pollSlotSync(): Promise<void> {
 		}
 	}
 	const evidence = await readSlotSyncEvidenceOrNull();
-	if (!evidence || !receiptMatches(evidence)) {
+	if (!receiptMayConfirmMirror(evidence)) {
 		// A retained exit 0 can be the previous run's while this one is queued.
 		if (probe.kind === "succeeded") return;
 		await concludeWithoutMatchingReceipt(now);
@@ -1044,7 +1098,7 @@ async function pollSlotSync(): Promise<void> {
 			return;
 		case "succeeded":
 		case "inactive-clean":
-			await settleIfMirrorTargetGood(evidence.receiptTargetSlot, now);
+			await settleIfMirrorTargetGood(evidence, now);
 			return;
 		default: {
 			const unreachable: never = confirmation;

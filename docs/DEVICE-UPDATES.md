@@ -504,8 +504,11 @@ is not enough, because the unit writes it before `rauc status mark-good other`:
 before `synced` is persisted, RAUC must report exactly one booted and one
 inactive rootfs slot, with the receipt's `target_slot` naming the inactive one
 and that slot `good`. A `bad` target is an interrupted mark-good and fails as
-`slot-sync-incomplete`; an unreadable or undecidable RAUC answer leaves the
-phase `syncing` with no verdict.
+`slot-sync-incomplete` (unless a re-probe shows the unit running again); an
+unreadable or undecidable RAUC answer leaves the phase `syncing` with no
+verdict. Because RAUC names this boot's slots, a resumed `syncing` phase whose
+healthy record is still the previous boot's is judged by RAUC rather than
+failed for lack of an identity.
 The parser's `running`, `failed` and `refused` verdicts are kept unchanged; a
 failed unit is retained and read from systemd.
 
