@@ -461,7 +461,7 @@ other slot. `slotSyncGate()` is the pure pre-dispatch check. It answers
 | `packages-changed` | the SHA-256 of `/var/lib/dpkg/status` differs from the record |
 | `build-changed` | the build id differs from the record |
 | `already-synced` | the sync receipt records this dpkg SHA AND names the slot that is not booted now (an OS activation swaps the booted slot without changing dpkg, so the SHA alone can describe the mirror into the slot now running) |
-| `slot-identity-unknown` | the sync receipt records this dpkg SHA but the booted slot cannot be resolved (unreadable or bootname-less `/etc/rauc/system.conf`, or a booted-slot name it does not map), so the tick is skipped and retried rather than suppressing or dispatching the mirror |
+| `slot-identity-unknown` | the sync receipt records this dpkg SHA but its slot identity cannot be resolved (unreadable or bootname-less `/etc/rauc/system.conf`, a booted-slot name it does not map, or a receipt target the map lacks while it does not name the other rootfs slot either), so the tick is skipped and retried rather than suppressing or dispatching the mirror; a warning is logged once per change, not every tick |
 | `os-install-pending` | phase is `os-staging`, `os-staged`, `os-activation-armed` or `os-verifying` |
 | `already-syncing` | phase is `syncing` |
 | `update-busy` | phase is `awaiting-idle`, `downloading`, `committing` or `restarting-services` |
@@ -477,9 +477,11 @@ while RAUC is wedged. It is read as a GLib key file: whitespace around `=`
 (`bootname = A`), CRLF line ends and `#`/`;` comment lines are accepted, and
 only `[slot.rootfs.<n>]` sections count. The answer is one of three: `other` (the receipt names the
 other rootfs slot, so with a matching SHA the gate says `already-synced`),
-`not-other` (it names the booted slot, `certs.0`, or any name that is not the
-other rootfs slot, so the mirror is allowed), or `unknown` (no current-boot
-healthy record, or the booted slot has no mapping). Completion timestamps are
+`not-other` (it names the booted slot, a slot of another class such as
+`certs.0`, or a name the map lacks while the map already names the other
+rootfs slot, so the mirror is allowed), or `unknown` (no current-boot healthy
+record, the booted slot has no mapping, or the target is a name the map lacks
+that could be the unmapped other rootfs slot). Completion timestamps are
 never used as identity: a clock can step and a time names no slot. With a
 matching SHA, `unknown` makes the gate skip this tick (`slot-identity-unknown`)
 and retry on the next one: dispatching blind could meet a wedged RAUC whose
@@ -498,8 +500,12 @@ or `0`). A read that would otherwise be one of those shapes but fails that
 validation is `absent`. An `absent` read, or an `inactive-clean` read without
 this run's receipt, may be a `--no-block` job still queued behind
 `ceralive-healthcheck.service`, so it fails as `slot-sync-unit-absent` only
-after `SLOT_SYNC_QUEUED_START_GRACE_MS` (90 s from entering `syncing`) and,
-for `inactive-clean`, a fresh re-probe and receipt read. The receipt alone
+after `SLOT_SYNC_QUEUED_START_GRACE_MS` (90 s from entering `syncing`, a
+defensive bound: on the shipped image the healthcheck has already finished and
+is `RemainAfterExit=yes`, so the real queue lasts milliseconds) and, for
+`inactive-clean`, a fresh re-probe and receipt read. An `absent` confirmation
+probe taken right after a matching receipt gives no verdict that poll; the
+next poll's first probe decides. The receipt alone
 is not enough, because the unit writes it before `rauc status mark-good other`:
 before `synced` is persisted, RAUC must report exactly one booted and one
 inactive rootfs slot, with the receipt's `target_slot` naming the inactive one

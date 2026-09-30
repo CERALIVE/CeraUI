@@ -83,6 +83,7 @@ import {
 import {
 	judgeMirrorTarget,
 	type SlotSyncEvidence,
+	type SlotSyncGate,
 	slotSyncGate,
 } from "./slot-sync-gate.ts";
 import { readSlotSyncEvidence } from "./slot-sync-state.ts";
@@ -273,6 +274,7 @@ let raucStreamAbortInProcess = false;
 let packageInstallStarting = false;
 let osForceActivated = false;
 let slotSyncUndecidedReason: string | null = null;
+let slotIdentityUnknownWarned = false;
 let pendingCellularApproval:
 	| { readonly id: string; readonly sizeBytes: number }
 	| undefined;
@@ -300,6 +302,7 @@ export function resetOrchestratorRuntimeForTest(): void {
 	packageInstallStarting = false;
 	osForceActivated = false;
 	slotSyncUndecidedReason = null;
+	slotIdentityUnknownWarned = false;
 	pendingCellularApproval = undefined;
 }
 
@@ -787,10 +790,23 @@ async function checkSlotSyncGate() {
 	});
 }
 
+// The gate runs on every tick and this skip never resolves on its own, so a
+// debug line would leave a mirror that never runs invisible on a device.
+function noteSlotIdentityGate(gate: SlotSyncGate): void {
+	const unknown = !gate.allowed && gate.reason === "slot-identity-unknown";
+	if (unknown && !slotIdentityUnknownWarned)
+		logger.warn(
+			"update-orchestrator: slot-sync skipped, receipt slot identity unknown",
+			{ reason: "slot-identity-unknown" },
+		);
+	slotIdentityUnknownWarned = unknown;
+}
+
 async function maybeFindSlotSyncCandidate(): Promise<void> {
 	if (state.phase !== "idle") return;
 	try {
 		const gate = await checkSlotSyncGate();
+		noteSlotIdentityGate(gate);
 		if (gate.allowed && state.phase === "idle")
 			dispatch({ type: "SYNC_ELIGIBILITY_CONFIRMED", now: deps.now() });
 	} catch (error) {
@@ -804,6 +820,7 @@ async function maybeStartSlotSync(): Promise<void> {
 	if (state.phase !== "sync-eligible") return;
 	try {
 		const gate = await checkSlotSyncGate();
+		noteSlotIdentityGate(gate);
 		if (state.phase !== "sync-eligible") return;
 		if (!gate.allowed) {
 			logger.debug("update-orchestrator: slot-sync preflight skipped", {
@@ -955,10 +972,14 @@ async function failSlotSyncFromUnit(
 /**
  * How long an unloaded or unreadable unit without this run's receipt is read
  * as a job still queued rather than a mirror that vanished. The unit has
- * Requires=/After= ceralive-healthcheck.service, whose own budget is
- * HEALTHCHECK_TIMEOUT=60 s plus 5 s probe timeouts; until that finishes the
- * --no-block job has not started and the unit reads the previous run's shape.
- * 90 s is that budget with margin, 30 polls at ACTIVE_TICK_MS.
+ * Requires=/After= ceralive-healthcheck.service, but on the shipped image the
+ * gate only dispatches after that healthcheck wrote this boot's healthy record
+ * as its last step, the healthcheck is RemainAfterExit=yes, and a re-run is a
+ * boot-id no-op (image `mkosi/runtime/ceralive-healthcheck.sh` l.444-456 and
+ * l.474-476 at 36d8131), so the queue behind it lasts milliseconds. 90 s
+ * (the healthcheck's own 60 s + 5 s budget with margin, 30 polls at
+ * ACTIVE_TICK_MS) is a defensive bound for any delayed start job, not a
+ * measured wait.
  */
 export const SLOT_SYNC_QUEUED_START_GRACE_MS = 90_000;
 
@@ -1093,8 +1114,11 @@ async function pollSlotSync(): Promise<void> {
 		case "failed":
 			await failSlotSyncFromUnit(confirmation, now);
 			return;
+		// One unreadable read right after a clean one is more likely a
+		// transient `systemctl show` failure than a vanished unit. A later
+		// poll's first probe still fails a persistent `absent` once the
+		// queued-start grace has passed, so waiting never hides a real one.
 		case "absent":
-			dispatch({ type: "SYNC_FAILED", now, reason: "slot-sync-unit-absent" });
 			return;
 		case "succeeded":
 		case "inactive-clean":

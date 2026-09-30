@@ -281,18 +281,26 @@ view of this boot's slots, not the receipt's age. Either way the unit writes
 the receipt before its last step, and the first probe can still be the previous run's
 finished record while this run's job was queued. A second probe that reads
 `running` waits; `failed` or `refused` fails with that verdict, persisted
-before `reset-failed` clears the unit's record; anything else fails as
-`slot-sync-unit-absent`. A mismatched, missing or unreadable receipt leaves
+before `reset-failed` clears the unit's record; an `absent` second probe gives
+no verdict this poll (one unreadable `systemctl show` right after a clean read
+is more likely transient than a vanished unit), and the next poll's first probe
+fails a persistent `absent` as `slot-sync-unit-absent` once the queued-start
+grace below has passed. A mismatched, missing or unreadable receipt leaves
 `succeeded` waiting (the unit may be a queued re-run still showing the previous
 exit). For `inactive-clean` and `absent` it is not terminal at first:
 `systemctl start --no-block` queues the job behind
 `ceralive-healthcheck.service` (the unit has `Requires=`/`After=` on it), and
 until the job starts the unit still reads the previous run's unloaded shape.
-Such a read is only failed once `SLOT_SYNC_QUEUED_START_GRACE_MS` (90 s: the
-healthcheck's 60 s `HEALTHCHECK_TIMEOUT` plus its 5 s probe timeouts, with
-margin; 30 polls at the 3 s active tick) has passed since the phase entered
-`syncing` (`enteredAt`); a clock that stepped behind that start counts as past
-the grace. Even then an `inactive-clean` read is re-probed first, because the
+Such a read is only failed once `SLOT_SYNC_QUEUED_START_GRACE_MS` (90 s, 30
+polls at the 3 s active tick) has passed since the phase entered `syncing`
+(`enteredAt`); a clock that stepped behind that start counts as past the grace.
+On the shipped image that queue lasts milliseconds: the gate dispatches only
+after the healthcheck wrote this boot's healthy record as its last step, the
+healthcheck unit is `RemainAfterExit=yes`, and a re-run is a boot-id no-op
+(image-building-pipeline `mkosi/runtime/ceralive-healthcheck.sh` l.444-456 and
+l.474-476, `ceralive-healthcheck.service` l.22, at `36d8131`). The 90 s (the
+healthcheck's own 60 s `HEALTHCHECK_TIMEOUT` plus 5 s probe timeouts, with
+margin) is a defensive bound for any delayed start job, not a measured wait. Even then an `inactive-clean` read is re-probed first, because the
 job may have started or finished while the receipt was read: `running` waits,
 `failed`/`refused` keep their verdicts, and a clean re-probe re-reads the
 receipt and judges that fresh copy, leaving a now-matching receipt to the next

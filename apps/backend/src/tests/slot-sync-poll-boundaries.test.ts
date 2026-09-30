@@ -295,6 +295,17 @@ describe("B2: a matching receipt settles only after a fresh finished-and-clean p
 			setOrchestratorRuntimeDepsForTest(h.value);
 			syncing();
 			await runOrchestratorTick();
+			if (reason === "slot-sync-unit-absent") {
+				// An unreadable confirmation is waited out once; the next poll's
+				// first probe reads it again and fails once past the queued-start
+				// grace (round 15, item 1).
+				expect(getOrchestratorState().phase).toBe("syncing");
+				setOrchestratorRuntimeDepsForTest({
+					...h.value,
+					now: () => SLOT_SYNC_QUEUED_START_GRACE_MS + 9_000,
+				});
+				await runOrchestratorTick();
+			}
 			expect(getOrchestratorState().phase).toBe("failed");
 			expect(getOrchestratorState().failureReason).toBe(reason);
 			expect(h.cleanup).toEqual([]);

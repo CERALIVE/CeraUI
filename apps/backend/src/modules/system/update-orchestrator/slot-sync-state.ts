@@ -48,6 +48,7 @@ const ROOTFS_SECTION = /^\[\s*slot\.(rootfs\.\d+)\s*\]$/;
 const ANY_SECTION = /^\[.*\]$/;
 // GLib key files allow whitespace around `=`, so `bootname = A` is valid.
 const BOOTNAME_KEY = /^bootname\s*=\s*(.*)$/;
+const NAMED_SLOT = /^[A-Za-z0-9_-]+\.\d+$/;
 
 /** RAUC rootfs slot name -> bootname, from `[slot.rootfs.<n>]` `bootname`. */
 export function parseRaucSlotBootnames(
@@ -77,8 +78,9 @@ type SyncReceipt = z.infer<typeof syncReceiptSchema>;
  * run from (task-45d OPI D1). Identity comes only from this boot's healthy
  * record and the static system.conf bootname map, never from timestamps: a
  * clock can step, and a completion time says nothing about which slot was
- * written. `unknown` means the booted slot cannot be resolved; the gate then
- * neither suppresses nor dispatches the mirror.
+ * written. `unknown` means the booted slot cannot be resolved, or the target
+ * is a name the map lacks that could be the other rootfs slot; the gate then
+ * neither suppresses nor dispatches the mirror, and the poll lets RAUC decide.
  */
 export function classifyReceiptTarget(input: {
 	readonly receipt: Pick<SyncReceipt, "target_slot"> | null;
@@ -99,7 +101,16 @@ export function classifyReceiptTarget(input: {
 	const booted = bootnameOf(healthyState.slot);
 	if (booted === null) return "unknown";
 	const target = bootnameOf(receipt.target_slot);
-	return target !== null && target !== booted ? "other" : "not-other";
+	if (target !== null) return target !== booted ? "other" : "not-other";
+	// An unmapped name is ruled out only when it provably cannot be the other
+	// rootfs slot: the map already names that slot, or the name is a RAUC slot
+	// of another class (`certs.0`). Otherwise a partial map would turn a real
+	// mirror's own receipt into `not-other` and the mirror would fail.
+	const otherSlotMapped = [...known].some((name) => name !== booted);
+	const otherClassSlot =
+		NAMED_SLOT.test(receipt.target_slot) &&
+		!receipt.target_slot.startsWith("rootfs.");
+	return otherSlotMapped || otherClassSlot ? "not-other" : "unknown";
 }
 
 export async function readSlotSyncEvidence(): Promise<SlotSyncEvidence> {
