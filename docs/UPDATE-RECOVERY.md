@@ -211,14 +211,21 @@ SHA-256 receipt.
 Completion is confirmed by that receipt, not by the unit's exit status. The unit
 is `Type=oneshot` without `RemainAfterExit`, and systemd 257 (Trixie) unloads a
 finished oneshot within about a second, which resets `ExecMainCode`; the probe
-then reads `absent`, so an exit 0 is only seen if a poll lands inside that
-window. When the probe answers `absent` during `syncing`, `pollSlotSync` reads
-the receipt and settles `synced` through the same success path if its state
-SHA-256 equals the current dpkg status. A match cannot be stale: the gate
-refuses (`already-synced`) to dispatch while one already exists. A mismatched,
-missing or unreadable receipt still fails as `slot-sync-unit-absent`. A failed
-unit is not unloaded, so refused and failed runs are still detected from the
-unit. Hardware basis: both bench boards recorded `slot-sync-unit-absent` 1-3 s
+then reads `inactive-clean`, so an exit 0 is only seen if a poll lands inside
+that window. `inactive-clean` is only the positively parsed shape: `systemctl
+show` exited 0 and reported all five properties with `LoadState=loaded`,
+`ActiveState=inactive`, `SubState=dead` and `ExecMainCode` empty or `0`
+(`classifySlotSyncProbe`, `lock.ts`). On that shape during `syncing`,
+`pollSlotSync` reads the receipt and settles `synced` through the same success
+path if its state SHA-256 equals the current dpkg status. A match cannot be
+stale: the gate refuses (`already-synced`) to dispatch while one already
+exists. A mismatched, missing or unreadable receipt still fails as
+`slot-sync-unit-absent`. A probe that cannot be read that way (nonzero exit,
+empty or incomplete output, `LoadState` other than `loaded`) reads `absent` and
+fails as `slot-sync-unit-absent` without consulting the receipt, because the
+unit writes the receipt before its last step, `rauc status mark-good other`,
+which can still fail. A failed unit is not unloaded, so refused and failed runs
+are still detected from the unit. Hardware basis: both bench boards recorded `slot-sync-unit-absent` 1-3 s
 after a successful mirror had written its receipt and marked the other slot good.
 
 On confirmed success the phase becomes `synced` *before* four independent,

@@ -455,8 +455,13 @@ falling back to `/etc/ceralive/image-build-commit`.
 
 Completion is confirmed by `sync-receipt.json` matching the current dpkg SHA,
 not by the unit's exit status: systemd unloads the finished oneshot within
-about a second, so a successful run usually probes as `absent`
-(`pollSlotSync`, `runtime.ts`).
+about a second, so a successful run usually probes as `inactive-clean`
+(`pollSlotSync`, `runtime.ts`). The receipt is consulted only for that
+positively parsed shape (`systemctl show` exit 0, all properties present,
+loaded/inactive/dead, clean `ExecMainCode`); an unreadable probe fails as
+`slot-sync-unit-absent`, because the unit writes the receipt before
+`rauc status mark-good other` and a failed unit is retained and read from
+systemd.
 
 Lock, receipt and cleanup ordering:
 [UPDATE-RECOVERY.md](./UPDATE-RECOVERY.md).

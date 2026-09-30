@@ -21,6 +21,7 @@
 import { describe, expect, test } from "bun:test";
 import { SOFTWARE_UPDATE_LOCK as SHARED_LOCK_CONSTANT } from "../modules/system/software-update-service-contract.ts";
 import {
+	classifySlotSyncProbe,
 	parseSlotSyncProbe,
 	SLOT_SYNC_REFUSE_EXIT_CODE,
 	SOFTWARE_UPDATE_LOCK,
@@ -173,6 +174,95 @@ describe("parseSlotSyncProbe — unit lifecycle states", () => {
 			}),
 		);
 		expect(refused.kind).toBe("refused");
+	});
+});
+
+describe("classifySlotSyncProbe — only a positively read clean unit may consult the receipt", () => {
+	// Verbatim `systemctl show` from the Orange Pi 5+ (2026-09-30), taken after
+	// the unit had written its receipt and marked the other slot good.
+	const opiAfterSuccess = [
+		"ExecMainCode=0",
+		"ExecMainStatus=0",
+		"LoadState=loaded",
+		"ActiveState=inactive",
+		"SubState=dead",
+	].join("\n");
+
+	test("the captured post-GC text with systemctl exit 0 -> inactive-clean", () => {
+		expect(
+			classifySlotSyncProbe({ exitCode: 0, stdout: opiAfterSuccess }),
+		).toEqual({ kind: "inactive-clean" });
+	});
+
+	test("an empty ExecMainCode is the same clean shape", () => {
+		expect(
+			classifySlotSyncProbe({
+				exitCode: 0,
+				stdout: fixture({
+					LoadState: "loaded",
+					ActiveState: "inactive",
+					SubState: "dead",
+					ExecMainCode: "",
+					ExecMainStatus: "0",
+				}),
+			}),
+		).toEqual({ kind: "inactive-clean" });
+	});
+
+	test("a failed read stays absent: nonzero exit, empty or incomplete output, unit not loaded", () => {
+		const unreadable: ReadonlyArray<{ exitCode: number; stdout: string }> = [
+			{ exitCode: 1, stdout: opiAfterSuccess },
+			{ exitCode: 0, stdout: "" },
+			{
+				exitCode: 0,
+				stdout: opiAfterSuccess.replace("LoadState=loaded\n", ""),
+			},
+			{
+				exitCode: 0,
+				stdout: opiAfterSuccess.replace("ExecMainCode=0\n", ""),
+			},
+			{
+				exitCode: 0,
+				stdout: opiAfterSuccess.replace("SubState=dead", ""),
+			},
+			{
+				exitCode: 0,
+				stdout: opiAfterSuccess.replace(
+					"LoadState=loaded",
+					"LoadState=not-found",
+				),
+			},
+		];
+		for (const result of unreadable) {
+			expect(classifySlotSyncProbe(result)).toEqual({ kind: "absent" });
+		}
+	});
+
+	test("every other lifecycle shape keeps its existing classification", () => {
+		expect(
+			classifySlotSyncProbe({
+				exitCode: 0,
+				stdout: fixture({
+					LoadState: "loaded",
+					ActiveState: "failed",
+					SubState: "failed",
+					ExecMainCode: "1",
+					ExecMainStatus: "75",
+				}),
+			}),
+		).toEqual({ kind: "refused", exitCode: 75 });
+		expect(
+			classifySlotSyncProbe({
+				exitCode: 0,
+				stdout: fixture({
+					LoadState: "loaded",
+					ActiveState: "activating",
+					SubState: "start",
+					ExecMainCode: "0",
+					ExecMainStatus: "0",
+				}),
+			}),
+		).toEqual({ kind: "running" });
 	});
 });
 

@@ -3002,7 +3002,11 @@ and deactivating units, and empty `systemctl show` output).
   atomic in the unit; a TypeScript pre-check cannot close that race. Completion
   is the matching `sync-receipt.json`, never the probe alone: systemd unloads
   the finished oneshot and resets `ExecMainCode`, so success usually probes
-  `absent`; do not fail that without reading the receipt. Contract:
+  `inactive-clean`; do not fail that without reading the receipt. Consult the
+  receipt ONLY for that positively parsed shape (exit 0, all properties,
+  loaded/inactive/dead, clean `ExecMainCode`): the unit writes it before
+  `rauc status mark-good other`, so an unreadable probe (`absent`) must fail
+  closed, and a failed unit is retained and caught from systemd. Contract:
   [`docs/UPDATE-RECOVERY.md`](../../docs/UPDATE-RECOVERY.md).
 - **Transport** (`update-transport/`). Routing scope and DNS limits:
   [`docs/HOST-UPLINK-ELECTION.md`](../../docs/HOST-UPLINK-ELECTION.md).

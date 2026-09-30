@@ -29,6 +29,10 @@ const SPAWN_TIMEOUT_MS = 10_000;
 
 export type SlotSyncProbeState =
 	| { readonly kind: "absent" }
+	// Positively read as loaded, inactive, dead and clean: a finished run that
+	// systemd has already garbage-collected, or one that never ran. Only the
+	// receipt can tell those apart, so only this shape may consult it.
+	| { readonly kind: "inactive-clean" }
 	| { readonly kind: "running" }
 	| { readonly kind: "succeeded" }
 	| { readonly kind: "refused"; readonly exitCode: number }
@@ -81,6 +85,33 @@ export function parseSlotSyncProbe(output: string): SlotSyncProbeState {
 	return exitCode === 0 ? { kind: "succeeded" } : { kind: "failed", exitCode };
 }
 
+const PROBE_PROPERTIES = [
+	"LoadState",
+	"ActiveState",
+	"SubState",
+	"ExecMainCode",
+	"ExecMainStatus",
+] as const;
+
+// The unit writes its receipt before `rauc status mark-good other`, which can
+// still fail, so a read failure must never pass for the clean shape: every
+// property present and systemctl exit 0, or it stays `absent` and fails closed.
+export function classifySlotSyncProbe(result: {
+	readonly exitCode: number;
+	readonly stdout: string;
+}): SlotSyncProbeState {
+	const parsed = parseSlotSyncProbe(result.stdout);
+	if (parsed.kind !== "absent" || result.exitCode !== 0) return parsed;
+	const properties = parseProperties(result.stdout);
+	const complete = PROBE_PROPERTIES.every((key) => properties.has(key));
+	return complete &&
+		properties.get("LoadState") === "loaded" &&
+		properties.get("ActiveState") === "inactive" &&
+		properties.get("SubState") === "dead"
+		? { kind: "inactive-clean" }
+		: parsed;
+}
+
 export async function startSlotSync(): Promise<void> {
 	await spawnWithTimeout(["systemctl", "start", "--no-block", SLOT_SYNC_UNIT], {
 		timeoutMs: SPAWN_TIMEOUT_MS,
@@ -98,7 +129,7 @@ export async function inspectSlotSync(): Promise<SlotSyncProbeState> {
 		],
 		{ timeoutMs: SPAWN_TIMEOUT_MS },
 	);
-	return parseSlotSyncProbe(result.stdout);
+	return classifySlotSyncProbe(result);
 }
 
 export async function resetSlotSyncFailure(): Promise<void> {

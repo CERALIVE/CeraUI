@@ -862,20 +862,24 @@ async function pollSlotSync(): Promise<void> {
 		return;
 	}
 	// systemd 257 unloads a finished oneshot within about a second, resetting
-	// ExecMainCode, so a successful run usually reads "absent" here. The receipt
-	// for THIS dpkg state is the durable proof; the sync gate refused to dispatch
-	// while a matching receipt already existed, so a match cannot be stale.
-	// Without it the unit vanished inconclusively: fail rather than spin.
-	try {
-		const evidence = await deps.readSlotSyncEvidence();
-		if (evidence.receiptStateSha256 === evidence.statusSha256) {
-			await settleSucceeded();
-			return;
+	// ExecMainCode, so a successful run usually reads "inactive-clean" here. The
+	// receipt for THIS dpkg state is the durable proof; the sync gate refused to
+	// dispatch while a matching receipt already existed, so a match cannot be
+	// stale. A failed unit is retained and caught above. An unreadable probe
+	// ("absent") never consults the receipt: the unit publishes it before its
+	// last step. Otherwise the unit vanished inconclusively: fail, do not spin.
+	if (probe.kind === "inactive-clean") {
+		try {
+			const evidence = await deps.readSlotSyncEvidence();
+			if (evidence.receiptStateSha256 === evidence.statusSha256) {
+				await settleSucceeded();
+				return;
+			}
+		} catch (error) {
+			logger.warn("update-orchestrator: slot-sync receipt unreadable", {
+				error,
+			});
 		}
-	} catch (error) {
-		logger.warn("update-orchestrator: slot-sync receipt unreadable", {
-			error,
-		});
 	}
 	dispatch({ type: "SYNC_FAILED", now, reason: "slot-sync-unit-absent" });
 }
