@@ -473,7 +473,9 @@ hashes the dpkg status file with `node:crypto`, byte for byte as the image's
 `rootfs.0`, or a bootname) is compared with this boot's healthy record's booted
 `slot` through the `[slot.rootfs.<n>] bootname=` map in `/etc/rauc/system.conf`
 (`classifyReceiptTarget()`, `slot-sync-state.ts`), which is static and readable
-while RAUC is wedged. The answer is one of three: `other` (the receipt names the
+while RAUC is wedged. It is read as a GLib key file: whitespace around `=`
+(`bootname = A`), CRLF line ends and `#`/`;` comment lines are accepted, and
+only `[slot.rootfs.<n>]` sections count. The answer is one of three: `other` (the receipt names the
 other rootfs slot, so with a matching SHA the gate says `already-synced`),
 `not-other` (it names the booted slot, `certs.0`, or any name that is not the
 other rootfs slot, so the mirror is allowed), or `unknown` (no current-boot

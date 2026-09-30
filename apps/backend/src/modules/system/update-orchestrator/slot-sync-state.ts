@@ -44,21 +44,26 @@ export function buildIdFromOsRelease(
 
 const RAUC_SYSTEM_CONF = "/etc/rauc/system.conf";
 
-/** RAUC slot name -> bootname, from `[slot.<name>]` sections with `bootname=`. */
+const ROOTFS_SECTION = /^\[\s*slot\.(rootfs\.\d+)\s*\]$/;
+const ANY_SECTION = /^\[.*\]$/;
+// GLib key files allow whitespace around `=`, so `bootname = A` is valid.
+const BOOTNAME_KEY = /^bootname\s*=\s*(.*)$/;
+
+/** RAUC rootfs slot name -> bootname, from `[slot.rootfs.<n>]` `bootname`. */
 export function parseRaucSlotBootnames(
 	systemConf: string,
 ): ReadonlyMap<string, string> {
 	const bootnames = new Map<string, string>();
 	let slot: string | null = null;
-	for (const raw of systemConf.split("\n")) {
+	for (const raw of systemConf.split(/\r?\n/)) {
 		const line = raw.trim();
-		const section = /^\[(.+)\]$/.exec(line)?.[1];
-		if (section !== undefined) {
-			slot = section.startsWith("slot.") ? section.slice("slot.".length) : null;
+		if (line.startsWith("#") || line.startsWith(";")) continue;
+		if (ANY_SECTION.test(line)) {
+			slot = ROOTFS_SECTION.exec(line)?.[1] ?? null;
 			continue;
 		}
-		if (slot && line.startsWith("bootname="))
-			bootnames.set(slot, line.slice("bootname=".length).trim());
+		const bootname = BOOTNAME_KEY.exec(line)?.[1]?.trim();
+		if (slot && bootname) bootnames.set(slot, bootname);
 	}
 	return bootnames;
 }
