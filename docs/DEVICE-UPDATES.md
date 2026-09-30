@@ -390,7 +390,14 @@ Active only with `apt-all-packages` and `rauc-verity-streaming`.
   the reboot was unclean (crash, watchdog, power loss before the shutdown hook):
   the phase stays `os-activation-armed`, the receipt is rebound to the new boot
   id, and nothing is quarantined or notified. An unreadable or inconclusive RAUC
-  status reaches no verdict and is retried on the next tick. Only after a real
+  status reaches no verdict and is retried on the next tick: the phase stays
+  armed, nothing is rebound and nothing is persisted. Inconclusive includes a
+  `boot_primary` naming neither rootfs slot (it is read as a slot name, the
+  form every capture carries) and an other slot with no usable install stamp
+  or an unusable activation stamp; missing metadata is never read as
+  activation. A real activation needs positive evidence: the other slot is the
+  primary (the bootloader fell back from it), or its activation stamp is at or
+  after its install stamp. Only after a real
   activation is the booted CalVer compared: equal dispatches `OS_VERIFIED`,
   different records the rollback in quarantine and dispatches
   `OS_ROLLBACK_DETECTED`.

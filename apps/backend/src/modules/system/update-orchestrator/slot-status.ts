@@ -75,18 +75,30 @@ export function parseBothSlotStatus(
  * `ceralive-rauc-activate` uses to decide whether to run `mark-active other`.
  *
  * - `pending`: that hook would still activate: the booted slot is RAUC's
- *   primary and the other slot holds an install newer than its last activation
- *   (RAUC drops the `activated` stamp when it installs). Nothing was activated,
- *   so a reboot in this state (crash, watchdog, power loss) is not a rollback.
- * - `consumed`: the hook has nothing left to activate (the other slot's install
- *   was activated, the bootloader is not booting the primary, or the other slot
- *   carries no install), so the reboot may be judged against the staged version.
- * - `unknown`: the document cannot answer; the caller must not reach a verdict.
+ *   primary and the other slot holds a usable install stamp newer than its
+ *   last activation, or has none (RAUC drops the `activated` stamp when it
+ *   installs). Nothing was activated, so a reboot in this state (crash,
+ *   watchdog, power loss) is not a rollback.
+ * - `consumed`: positive evidence that the activation already ran: the other
+ *   rootfs slot is the primary (the bootloader fell back from it), or its
+ *   activation stamp is at or after its install stamp. Only then may the
+ *   reboot be judged against the staged version.
+ * - `unknown`: the document cannot answer, including a primary that names
+ *   neither rootfs slot and absent or unusable install evidence; the caller
+ *   must not reach a verdict. A hook that did nothing because metadata was
+ *   missing is not evidence that activation ran.
  */
 export type StagedActivation = "pending" | "consumed" | "unknown";
 
-function stampMs(value: string | null | undefined): number | undefined {
-	return value ? Date.parse(value) : undefined;
+type Stamp =
+	| { readonly kind: "absent" }
+	| { readonly kind: "at"; readonly ms: number }
+	| { readonly kind: "unusable" };
+
+function readStamp(value: string | null | undefined): Stamp {
+	if (value === null || value === undefined) return { kind: "absent" };
+	const ms = Date.parse(value);
+	return Number.isFinite(ms) ? { kind: "at", ms } : { kind: "unusable" };
 }
 
 export function parseStagedActivation(stdout: string): StagedActivation {
@@ -106,18 +118,20 @@ export function parseStagedActivation(stdout: string): StagedActivation {
 	const [bootedName] = booted[0] ?? [];
 	if (rootfs.length !== 2 || booted.length !== 1 || !bootedName || !other)
 		return "unknown";
-	if (!parsed.data.boot_primary) return "unknown";
-	if (parsed.data.boot_primary !== bootedName) return "consumed";
-	const [, slot] = other;
-	const installed = stampMs(
+	const [otherName, slot] = other;
+	// RAUC reports boot_primary by slot name (every capture: "rootfs.1").
+	const primary = parsed.data.boot_primary;
+	if (primary === otherName) return "consumed";
+	if (primary !== bootedName) return "unknown";
+	const installed = readStamp(
 		slot.slot_status?.installed?.timestamp ?? slot.installed?.timestamp,
 	);
-	const activated = stampMs(
+	const activated = readStamp(
 		slot.slot_status?.activated?.timestamp ?? slot.activated?.timestamp,
 	);
-	if (installed === undefined) return "consumed";
-	if (Number.isNaN(installed) || Number.isNaN(activated)) return "unknown";
-	return activated === undefined || installed > activated
+	if (installed.kind !== "at" || activated.kind === "unusable")
+		return "unknown";
+	return activated.kind === "absent" || installed.ms > activated.ms
 		? "pending"
 		: "consumed";
 }

@@ -39,6 +39,21 @@ const PRE_CRASH_BOOT = "704ce001-1dce-4eba-b911-ec390923f270";
 const POST_CRASH_BOOT = "0b3c1676-a8be-4b82-bebe-5cc7ea99ef0f";
 
 type Deps = Partial<typeof defaultOrchestratorRuntimeDeps>;
+type CrashDocument = {
+	boot_primary?: string;
+	slots: Record<
+		string,
+		{ slot_status: Record<string, unknown> | null } | undefined
+	>[];
+};
+
+function otherSlot(document: CrashDocument): {
+	slot_status: Record<string, unknown> | null;
+} {
+	const slot = document.slots.find((item) => "rootfs.0" in item)?.["rootfs.0"];
+	if (!slot) throw new Error("fixture has no rootfs.0");
+	return slot;
+}
 
 function armedAt(version: string): {
 	readonly rollbacks: string[];
@@ -134,6 +149,53 @@ describe("boot-id change while os-activation-armed", () => {
 		expect(run.rollbacks).toEqual([]);
 		expect(run.persisted).toEqual([]);
 		expect(run.rebinds).toEqual([]);
+	});
+
+	test("missing activation evidence neither quarantines nor rebinds", async () => {
+		const withoutEvidence: ReadonlyArray<
+			readonly [string, (document: CrashDocument) => void]
+		> = [
+			[
+				"other-slot status unavailable",
+				(document) => {
+					otherSlot(document).slot_status = null;
+				},
+			],
+			[
+				"install without a timestamp",
+				(document) => {
+					const status = otherSlot(document).slot_status;
+					if (status) status.installed = { count: 3 };
+				},
+			],
+			[
+				"primary names no rootfs slot",
+				(document) => {
+					document.boot_primary = "certs.0";
+				},
+			],
+		];
+		for (const [label, damage] of withoutEvidence) {
+			resetOrchestratorRuntimeForTest();
+			const run = armedAt("2026.10.31");
+			const document: CrashDocument = JSON.parse(crashRauc);
+			damage(document);
+			const status = JSON.stringify(document);
+			setOrchestratorRuntimeDepsForTest({
+				...run.deps,
+				readStagedActivation: async () => parseStagedActivation(status),
+			});
+			await runOrchestratorTick();
+			expect({ label, phase: getOrchestratorState().phase }).toEqual({
+				label,
+				phase: "os-activation-armed",
+			});
+			expect(getOrchestratorState().failureReason).toBeNull();
+			expect(run.rollbacks).toEqual([]);
+			expect(rollbackNotices("2026.10.31")).toBe(0);
+			expect(run.persisted).toEqual([]);
+			expect(run.rebinds).toEqual([]);
+		}
 	});
 
 	test("a mismatch after a real activation is still a rollback", async () => {
