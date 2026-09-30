@@ -79,6 +79,19 @@ describe("parseSlotSyncProbe — unit lifecycle states", () => {
 		).toEqual({ kind: "absent" });
 	});
 
+	test("a finished, already-unloaded oneshot reads absent: systemd 257 resets ExecMainCode", () => {
+		// Verbatim `systemctl show` from the Orange Pi 5+ (2026-09-30), taken
+		// after the unit had written its receipt and marked the other slot good.
+		const opiAfterSuccess = [
+			"ExecMainCode=0",
+			"ExecMainStatus=0",
+			"LoadState=loaded",
+			"ActiveState=inactive",
+			"SubState=dead",
+		].join("\n");
+		expect(parseSlotSyncProbe(opiAfterSuccess)).toEqual({ kind: "absent" });
+	});
+
 	test("inactive/dead with a recorded successful run (CLD_EXITED, status 0) -> succeeded", () => {
 		expect(
 			parseSlotSyncProbe(

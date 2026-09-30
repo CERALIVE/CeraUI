@@ -14,6 +14,7 @@ import {
 } from "../modules/system/update-orchestrator/runtime.ts";
 import type { SlotSyncEvidence } from "../modules/system/update-orchestrator/slot-sync-gate.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
+import { notificationExists } from "../modules/ui/notifications.ts";
 
 const statusSha256 = "a".repeat(64);
 const evidence: SlotSyncEvidence = {
@@ -42,7 +43,7 @@ function fixture(
 ) {
 	const commands: string[][] = [];
 	const cleanup: string[] = [];
-	let probe: "running" | "succeeded" = "running";
+	let probe: "running" | "succeeded" | "absent" = "running";
 	let observed = evidence;
 	const deps = {
 		...defaultOrchestratorRuntimeDeps,
@@ -98,7 +99,7 @@ function fixture(
 		setEvidence: (value: SlotSyncEvidence) => {
 			observed = value;
 		},
-		setProbe: (value: "running" | "succeeded") => {
+		setProbe: (value: "running" | "succeeded" | "absent") => {
 			probe = value;
 		},
 	};
@@ -226,6 +227,64 @@ describe("reboot-proven slot mirror orchestration", () => {
 		h.setEvidence({ ...evidence, receiptStateSha256: statusSha256 });
 		await runOrchestratorTick();
 		expect(getOrchestratorState().phase).toBe("synced");
+	});
+
+	test("an unloaded finished unit settles synced when this run's receipt matches", async () => {
+		const h = fixture({ now: () => 4_000 });
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "syncing",
+		});
+		h.setProbe("absent");
+		h.setEvidence({ ...evidence, receiptStateSha256: statusSha256 });
+		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).toBe("synced");
+		expect(getOrchestratorState().failureReason).toBeNull();
+		expect(h.cleanup).toEqual(["apt", "downloads", "quarantine", "slots"]);
+		expect(notificationExists("update:slots-current:4000")).toBeDefined();
+	});
+
+	test("an absent unit without this run's receipt still fails as absent", async () => {
+		const receipts: ReadonlyArray<SlotSyncEvidence["receiptStateSha256"]> = [
+			"b".repeat(64),
+			null,
+		];
+		for (const receiptStateSha256 of receipts) {
+			resetOrchestratorRuntimeForTest();
+			const h = fixture({ now: () => 5_000 });
+			setOrchestratorStateForTest({
+				...initialOrchestratorState(0),
+				phase: "syncing",
+			});
+			h.setProbe("absent");
+			h.setEvidence({ ...evidence, receiptStateSha256 });
+			await runOrchestratorTick();
+			expect(getOrchestratorState().phase).toBe("failed");
+			expect(getOrchestratorState().failureReason).toBe(
+				"slot-sync-unit-absent",
+			);
+			expect(h.cleanup).toEqual([]);
+		}
+		expect(notificationExists("update:slots-current:5000")).toBeUndefined();
+	});
+
+	test("an absent unit whose receipt cannot be read fails rather than succeeding", async () => {
+		const h = fixture({
+			now: () => 6_000,
+			readSlotSyncEvidence: async () => {
+				throw new Error("receipt unreadable");
+			},
+		});
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "syncing",
+		});
+		h.setProbe("absent");
+		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).toBe("failed");
+		expect(getOrchestratorState().failureReason).toBe("slot-sync-unit-absent");
+		expect(h.cleanup).toEqual([]);
+		expect(notificationExists("update:slots-current:6000")).toBeUndefined();
 	});
 
 	test("startup rechecks persisted idle and fires the healthy lagged candidate immediately", async () => {

@@ -800,19 +800,7 @@ async function pollSlotSync(): Promise<void> {
 	const probe = await deps.inspectSlotSync();
 	const now = deps.now();
 	if (probe.kind === "running") return;
-	if (probe.kind === "succeeded") {
-		// A Type=oneshot unit without RemainAfterExit returns inactive/dead after
-		// success; --no-block can briefly expose the PREVIOUS run's exit 0 while
-		// the new job is queued. Only the receipt for THIS dpkg state confirms it.
-		try {
-			const evidence = await deps.readSlotSyncEvidence();
-			if (evidence.receiptStateSha256 !== evidence.statusSha256) return;
-		} catch (error) {
-			logger.warn("update-orchestrator: slot-sync receipt not yet readable", {
-				error,
-			});
-			return;
-		}
+	const settleSucceeded = async (): Promise<void> => {
 		dispatch({ type: "SYNC_SUCCEEDED", now });
 		// The mirror is already committed. Each cleanup is independent and cannot
 		// change its verdict; a later tick sees synced, never a second cleanup.
@@ -837,6 +825,21 @@ async function pollSlotSync(): Promise<void> {
 			}
 		}
 		notifyUpdate({ kind: "slots-current", id: String(now) });
+	};
+	if (probe.kind === "succeeded") {
+		// A Type=oneshot unit without RemainAfterExit returns inactive/dead after
+		// success; --no-block can briefly expose the PREVIOUS run's exit 0 while
+		// the new job is queued. Only the receipt for THIS dpkg state confirms it.
+		try {
+			const evidence = await deps.readSlotSyncEvidence();
+			if (evidence.receiptStateSha256 !== evidence.statusSha256) return;
+		} catch (error) {
+			logger.warn("update-orchestrator: slot-sync receipt not yet readable", {
+				error,
+			});
+			return;
+		}
+		await settleSucceeded();
 		return;
 	}
 	if (probe.kind === "refused" || probe.kind === "failed") {
@@ -858,9 +861,22 @@ async function pollSlotSync(): Promise<void> {
 		});
 		return;
 	}
-	// "absent" while phase says "syncing" means the unit vanished without a
-	// trace we can read (e.g. a transient probe error) — treat as inconclusive
-	// failure rather than spin forever.
+	// systemd 257 unloads a finished oneshot within about a second, resetting
+	// ExecMainCode, so a successful run usually reads "absent" here. The receipt
+	// for THIS dpkg state is the durable proof; the sync gate refused to dispatch
+	// while a matching receipt already existed, so a match cannot be stale.
+	// Without it the unit vanished inconclusively: fail rather than spin.
+	try {
+		const evidence = await deps.readSlotSyncEvidence();
+		if (evidence.receiptStateSha256 === evidence.statusSha256) {
+			await settleSucceeded();
+			return;
+		}
+	} catch (error) {
+		logger.warn("update-orchestrator: slot-sync receipt unreadable", {
+			error,
+		});
+	}
 	dispatch({ type: "SYNC_FAILED", now, reason: "slot-sync-unit-absent" });
 }
 

@@ -208,6 +208,19 @@ race. Exit 75 is a typed refusal, unlike an operational failure. A oneshot's
 stale previous exit-0 does not settle a newly queued run without its current
 SHA-256 receipt.
 
+Completion is confirmed by that receipt, not by the unit's exit status. The unit
+is `Type=oneshot` without `RemainAfterExit`, and systemd 257 (Trixie) unloads a
+finished oneshot within about a second, which resets `ExecMainCode`; the probe
+then reads `absent`, so an exit 0 is only seen if a poll lands inside that
+window. When the probe answers `absent` during `syncing`, `pollSlotSync` reads
+the receipt and settles `synced` through the same success path if its state
+SHA-256 equals the current dpkg status. A match cannot be stale: the gate
+refuses (`already-synced`) to dispatch while one already exists. A mismatched,
+missing or unreadable receipt still fails as `slot-sync-unit-absent`. A failed
+unit is not unloaded, so refused and failed runs are still detected from the
+unit. Hardware basis: both bench boards recorded `slot-sync-unit-absent` 1-3 s
+after a successful mirror had written its receipt and marked the other slot good.
+
 On confirmed success the phase becomes `synced` *before* four independent,
 best-effort effects: reuse bounded `apt-get clean`, remove leftovers from
 `/data/ceralive/rauc-downloads`, reconcile superseded failed package versions,

@@ -453,6 +453,11 @@ hashes the dpkg status file with `node:crypto`, byte for byte as the image's
 `sha256sum` does. The build id is the first `BUILD_ID=` of `/etc/os-release`,
 falling back to `/etc/ceralive/image-build-commit`.
 
+Completion is confirmed by `sync-receipt.json` matching the current dpkg SHA,
+not by the unit's exit status: systemd unloads the finished oneshot within
+about a second, so a successful run usually probes as `absent`
+(`pollSlotSync`, `runtime.ts`).
+
 Lock, receipt and cleanup ordering:
 [UPDATE-RECOVERY.md](./UPDATE-RECOVERY.md).
 

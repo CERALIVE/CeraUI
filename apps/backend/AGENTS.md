@@ -2999,7 +2999,10 @@ and deactivating units, and empty `systemctl show` output).
   (`readBootedOsReleaseVersion()`). Do not infer a version from a build timestamp
   or commit; that would weaken anti-downgrade admission.
 - **Slot mirror** (needs `slot-sync`). Integrity and external-lock checks stay
-  atomic in the unit; a TypeScript pre-check cannot close that race. Contract:
+  atomic in the unit; a TypeScript pre-check cannot close that race. Completion
+  is the matching `sync-receipt.json`, never the probe alone: systemd unloads
+  the finished oneshot and resets `ExecMainCode`, so success usually probes
+  `absent`; do not fail that without reading the receipt. Contract:
   [`docs/UPDATE-RECOVERY.md`](../../docs/UPDATE-RECOVERY.md).
 - **Transport** (`update-transport/`). Routing scope and DNS limits:
   [`docs/HOST-UPLINK-ELECTION.md`](../../docs/HOST-UPLINK-ELECTION.md).
