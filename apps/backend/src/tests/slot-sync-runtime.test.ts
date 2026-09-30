@@ -9,6 +9,7 @@ import {
 	getOrchestratorState,
 	resetOrchestratorRuntimeForTest,
 	runOrchestratorTick,
+	SLOT_SYNC_QUEUED_START_GRACE_MS,
 	setOrchestratorRuntimeDepsForTest,
 	setOrchestratorStateForTest,
 	startUpdateOrchestrator,
@@ -18,6 +19,8 @@ import { initialOrchestratorState } from "../modules/system/update-orchestrator/
 import { notificationExists } from "../modules/ui/notifications.ts";
 
 const statusSha256 = "a".repeat(64);
+// Polls past the queued-start grace, where an unconfirmed unit fails closed.
+const pastGrace = (ms: number) => SLOT_SYNC_QUEUED_START_GRACE_MS + ms;
 const evidence: SlotSyncEvidence = {
 	healthyState: {
 		boot_id: "boot-new",
@@ -251,7 +254,7 @@ describe("reboot-proven slot mirror orchestration", () => {
 	test("a probe that could not positively read the unit never settles from a matching receipt", async () => {
 		// The unit publishes its receipt before `rauc status mark-good other`,
 		// so a matching receipt alone does not prove the run finished cleanly.
-		const h = fixture({ now: () => 4_500 });
+		const h = fixture({ now: () => pastGrace(4_500) });
 		setOrchestratorStateForTest({
 			...initialOrchestratorState(0),
 			phase: "syncing",
@@ -262,7 +265,9 @@ describe("reboot-proven slot mirror orchestration", () => {
 		expect(getOrchestratorState().phase).toBe("failed");
 		expect(getOrchestratorState().failureReason).toBe("slot-sync-unit-absent");
 		expect(h.cleanup).toEqual([]);
-		expect(notificationExists("update:slots-current:4500")).toBeUndefined();
+		expect(
+			notificationExists(`update:slots-current:${pastGrace(4_500)}`),
+		).toBeUndefined();
 	});
 
 	test("an inactive-clean unit without this run's receipt still fails as absent", async () => {
@@ -272,7 +277,7 @@ describe("reboot-proven slot mirror orchestration", () => {
 		];
 		for (const receiptStateSha256 of receipts) {
 			resetOrchestratorRuntimeForTest();
-			const h = fixture({ now: () => 5_500 });
+			const h = fixture({ now: () => pastGrace(5_500) });
 			setOrchestratorStateForTest({
 				...initialOrchestratorState(0),
 				phase: "syncing",
@@ -290,7 +295,7 @@ describe("reboot-proven slot mirror orchestration", () => {
 
 	test("an inactive-clean unit whose receipt cannot be read fails rather than succeeding", async () => {
 		const h = fixture({
-			now: () => 6_500,
+			now: () => pastGrace(6_500),
 			readSlotSyncEvidence: async () => {
 				throw new Error("receipt unreadable");
 			},
@@ -313,7 +318,7 @@ describe("reboot-proven slot mirror orchestration", () => {
 		];
 		for (const receiptStateSha256 of receipts) {
 			resetOrchestratorRuntimeForTest();
-			const h = fixture({ now: () => 5_000 });
+			const h = fixture({ now: () => pastGrace(5_000) });
 			setOrchestratorStateForTest({
 				...initialOrchestratorState(0),
 				phase: "syncing",
@@ -327,12 +332,14 @@ describe("reboot-proven slot mirror orchestration", () => {
 			);
 			expect(h.cleanup).toEqual([]);
 		}
-		expect(notificationExists("update:slots-current:5000")).toBeUndefined();
+		expect(
+			notificationExists(`update:slots-current:${pastGrace(5_000)}`),
+		).toBeUndefined();
 	});
 
 	test("an absent unit whose receipt cannot be read fails rather than succeeding", async () => {
 		const h = fixture({
-			now: () => 6_000,
+			now: () => pastGrace(6_000),
 			readSlotSyncEvidence: async () => {
 				throw new Error("receipt unreadable");
 			},
@@ -346,7 +353,9 @@ describe("reboot-proven slot mirror orchestration", () => {
 		expect(getOrchestratorState().phase).toBe("failed");
 		expect(getOrchestratorState().failureReason).toBe("slot-sync-unit-absent");
 		expect(h.cleanup).toEqual([]);
-		expect(notificationExists("update:slots-current:6000")).toBeUndefined();
+		expect(
+			notificationExists(`update:slots-current:${pastGrace(6_000)}`),
+		).toBeUndefined();
 	});
 
 	describe("the real probe classifier decides whether the receipt may settle", () => {
@@ -360,7 +369,7 @@ describe("reboot-proven slot mirror orchestration", () => {
 		) => {
 			resetOrchestratorRuntimeForTest();
 			const h = fixture({
-				now: () => 7_000,
+				now: () => pastGrace(7_000),
 				inspectSlotSync: async () => classifySlotSyncProbe(result),
 			});
 			h.setEvidence({ ...evidence, receiptStateSha256 });

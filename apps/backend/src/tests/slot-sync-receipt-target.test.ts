@@ -4,6 +4,7 @@ import {
 	getOrchestratorState,
 	resetOrchestratorRuntimeForTest,
 	runOrchestratorTick,
+	SLOT_SYNC_QUEUED_START_GRACE_MS,
 	setOrchestratorRuntimeDepsForTest,
 	setOrchestratorStateForTest,
 } from "../modules/system/update-orchestrator/runtime.ts";
@@ -226,7 +227,7 @@ describe("OPI-D1 through the runtime", () => {
 	test("a stale receipt for the booted slot cannot settle a run whose unit still reads inactive-clean", async () => {
 		setOrchestratorRuntimeDepsForTest({
 			...defaultOrchestratorRuntimeDeps,
-			now: () => 11_000,
+			now: () => SLOT_SYNC_QUEUED_START_GRACE_MS + 11_000,
 			readSlotSyncEvidence: async () => evidenceFor(receiptBefore),
 			inspectSlotSync: async () => ({ kind: "inactive-clean" }),
 			persist: () => {},

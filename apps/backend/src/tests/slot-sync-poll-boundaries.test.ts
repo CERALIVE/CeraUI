@@ -16,6 +16,7 @@ import {
 	getOrchestratorState,
 	resetOrchestratorRuntimeForTest,
 	runOrchestratorTick,
+	SLOT_SYNC_QUEUED_START_GRACE_MS,
 	setOrchestratorRuntimeDepsForTest,
 	setOrchestratorStateForTest,
 	startUpdateOrchestrator,
@@ -299,13 +300,16 @@ describe("B2: a matching receipt settles only after a fresh finished-and-clean p
 	});
 
 	test("a receipt that cannot be read leaves a succeeded probe waiting and fails an inactive-clean one", async () => {
-		for (const [finished, phase] of [
-			[succeededExit0, "syncing"],
-			[inactiveClean, "failed"],
+		// Past the queued-start grace, the inactive-clean failure is concluded
+		// only from a second, fresh probe (N1).
+		for (const [finished, phase, expectedProbes] of [
+			[succeededExit0, "syncing", 1],
+			[inactiveClean, "failed", 2],
 		] as const) {
 			resetOrchestratorRuntimeForTest();
 			let probes = 0;
 			const h = deps({
+				now: () => SLOT_SYNC_QUEUED_START_GRACE_MS + 9_000,
 				inspectSlotSync: async () => {
 					probes++;
 					return classifySlotSyncProbe(finished);
@@ -318,7 +322,7 @@ describe("B2: a matching receipt settles only after a fresh finished-and-clean p
 			syncing();
 			await runOrchestratorTick();
 			expect(getOrchestratorState().phase).toBe(phase);
-			expect(probes).toBe(1);
+			expect(probes).toBe(expectedProbes);
 			expect(h.cleanup).toEqual([]);
 		}
 	});

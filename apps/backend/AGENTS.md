@@ -3010,7 +3010,12 @@ and deactivating units, and empty `systemctl show` output).
   writes the receipt before `rauc status mark-good other`, so a matching receipt
   does not prove the run finished: settle only when the re-probe again reads one
   of those shapes. A read that would otherwise be one of those shapes but fails
-  that validation is `absent` and must fail closed. The parser's `running`,
+  that validation is `absent` and must fail closed, but only after
+  `SLOT_SYNC_QUEUED_START_GRACE_MS` (90 s from entering `syncing`): a
+  `--no-block` job queued behind the healthcheck still reads the previous
+  run's shape. An `inactive-clean` read without this run's receipt waits out
+  the same grace and is then re-probed, and the receipt re-read, before it
+  fails. The parser's `running`,
   `failed` and `refused` verdicts are kept (exit 75 is `refused` on either
   lifecycle), and a failed or refused verdict is persisted before
   `reset-failed` clears the unit's record. A receipt matches only when its

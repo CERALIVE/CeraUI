@@ -871,18 +871,81 @@ async function failSlotSyncFromUnit(
 	});
 }
 
+/**
+ * How long an unloaded or unreadable unit without this run's receipt is read
+ * as a job still queued rather than a mirror that vanished. The unit has
+ * Requires=/After= ceralive-healthcheck.service, whose own budget is
+ * HEALTHCHECK_TIMEOUT=60 s plus 5 s probe timeouts; until that finishes the
+ * --no-block job has not started and the unit reads the previous run's shape.
+ * 90 s is that budget with margin, 30 polls at ACTIVE_TICK_MS.
+ */
+export const SLOT_SYNC_QUEUED_START_GRACE_MS = 90_000;
+
+function withinQueuedStartGrace(now: number): boolean {
+	const elapsed = now - state.enteredAt;
+	// A clock that stepped behind the start bounds nothing: fail closed.
+	return elapsed >= 0 && elapsed < SLOT_SYNC_QUEUED_START_GRACE_MS;
+}
+
+async function readSlotSyncEvidenceOrNull(): Promise<SlotSyncEvidence | null> {
+	try {
+		return await deps.readSlotSyncEvidence();
+	} catch (error) {
+		logger.warn("update-orchestrator: slot-sync receipt unreadable", {
+			error,
+		});
+		return null;
+	}
+}
+
+function receiptMatches(evidence: SlotSyncEvidence | null): boolean {
+	return evidence !== null && receiptConfirmsMirror(evidence);
+}
+
+// A terminal-clean unit without this run's receipt. Both reads may be older
+// than the job, which can have started (or finished) while they ran, so the
+// failure is only concluded from a re-probe and a receipt read after it.
+async function concludeWithoutMatchingReceipt(now: number): Promise<void> {
+	if (withinQueuedStartGrace(now)) return;
+	const recheck = await deps.inspectSlotSync();
+	switch (recheck.kind) {
+		case "running":
+			return;
+		case "refused":
+		case "failed":
+			await failSlotSyncFromUnit(recheck, now);
+			return;
+		case "absent":
+			dispatch({ type: "SYNC_FAILED", now, reason: "slot-sync-unit-absent" });
+			return;
+		case "succeeded":
+		case "inactive-clean":
+			break;
+		default: {
+			const unreachable: never = recheck;
+			return unreachable;
+		}
+	}
+	// A receipt that matches now is judged by the next poll, which re-probes
+	// after reading it; a retained exit 0 keeps waiting as before.
+	if (receiptMatches(await readSlotSyncEvidenceOrNull())) return;
+	if (recheck.kind === "succeeded") return;
+	dispatch({ type: "SYNC_FAILED", now, reason: "slot-sync-unit-absent" });
+}
+
 // Each await below is a point where the process may die (nothing is persisted
 // until a verdict) or where a read may still describe the PREVIOUS run.
 // A Type=oneshot unit without RemainAfterExit reads inactive/dead once
 // finished, and systemd 257 unloads it within about a second, resetting
 // ExecMainCode, so a success reads "succeeded" or "inactive-clean". Either can
-// also be the previous run's record while --no-block's job is still queued.
+// also be the previous run's record while --no-block's job is still queued,
+// which is why an unloaded or unreadable unit without this run's receipt is
+// only failed after SLOT_SYNC_QUEUED_START_GRACE_MS and a fresh re-probe.
 // The receipt for THIS dpkg state and the current other slot ties the verdict
 // to this run, but the unit publishes it before its last step (mark-good), so
 // it proves only that the run got that far: a fresh probe taken after the
 // receipt must again read finished-and-clean. An unreadable probe ("absent")
-// never consults the receipt; otherwise the unit vanished inconclusively:
-// fail, do not spin.
+// never consults the receipt.
 async function pollSlotSync(): Promise<void> {
 	if (state.phase !== "syncing") return;
 	const probe = await deps.inspectSlotSync();
@@ -895,6 +958,7 @@ async function pollSlotSync(): Promise<void> {
 			await failSlotSyncFromUnit(probe, now);
 			return;
 		case "absent":
+			if (withinQueuedStartGrace(now)) return;
 			dispatch({ type: "SYNC_FAILED", now, reason: "slot-sync-unit-absent" });
 			return;
 		case "succeeded":
@@ -905,20 +969,10 @@ async function pollSlotSync(): Promise<void> {
 			return unreachable;
 		}
 	}
-	let receiptMatches = false;
-	try {
-		const evidence = await deps.readSlotSyncEvidence();
-		receiptMatches = receiptConfirmsMirror(evidence);
-	} catch (error) {
-		logger.warn("update-orchestrator: slot-sync receipt unreadable", {
-			error,
-		});
-	}
-	if (!receiptMatches) {
-		// A retained exit 0 can be the previous run's while this one is queued;
-		// an unloaded unit with no receipt for this state vanished.
+	if (!receiptMatches(await readSlotSyncEvidenceOrNull())) {
+		// A retained exit 0 can be the previous run's while this one is queued.
 		if (probe.kind === "succeeded") return;
-		dispatch({ type: "SYNC_FAILED", now, reason: "slot-sync-unit-absent" });
+		await concludeWithoutMatchingReceipt(now);
 		return;
 	}
 	const confirmation = await deps.inspectSlotSync();

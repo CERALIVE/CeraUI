@@ -487,7 +487,11 @@ shapes and for no other: `succeeded` (`systemctl show` exit 0, each of the five
 properties exactly once, loaded/inactive/dead, `ExecMainCode=1`,
 `ExecMainStatus=0`) and `inactive-clean` (the same, with both exit fields empty
 or `0`). A read that would otherwise be one of those shapes but fails that
-validation is `absent` and fails as `slot-sync-unit-absent`. The receipt alone
+validation is `absent`. An `absent` read, or an `inactive-clean` read without
+this run's receipt, may be a `--no-block` job still queued behind
+`ceralive-healthcheck.service`, so it fails as `slot-sync-unit-absent` only
+after `SLOT_SYNC_QUEUED_START_GRACE_MS` (90 s from entering `syncing`) and,
+for `inactive-clean`, a fresh re-probe and receipt read. The receipt alone
 is not enough, because the unit writes it before `rauc status mark-good other`.
 The parser's `running`, `failed` and `refused` verdicts are kept unchanged; a
 failed unit is retained and read from systemd.

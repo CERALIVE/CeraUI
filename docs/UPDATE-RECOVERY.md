@@ -223,8 +223,9 @@ requires both `ExecMainCode` and `ExecMainStatus` to be empty or `0`. A read
 the parser would have taken for either of those shapes but that fails this
 validation (nonzero `systemctl` exit, empty or incomplete output, a repeated
 key, any other lifecycle, a killed process, a nonzero `ExecMainStatus` beside
-`ExecMainCode=0`) is classified `absent` and fails as `slot-sync-unit-absent`
-without consulting the receipt, because the unit writes the receipt before its
+`ExecMainCode=0`) is classified `absent` and, once the queued-start grace
+below has passed, fails as `slot-sync-unit-absent` without consulting the
+receipt, because the unit writes the receipt before its
 last step, `rauc status mark-good other`, which can still fail. The restriction
 covers only those two receipt-consulting branches: the parser's `running`,
 `failed` and `refused` verdicts are kept as they are, and none of them settles.
@@ -248,7 +249,20 @@ finished record while this run's job was queued. A second probe that reads
 before `reset-failed` clears the unit's record; anything else fails as
 `slot-sync-unit-absent`. A mismatched, missing or unreadable receipt leaves
 `succeeded` waiting (the unit may be a queued re-run still showing the previous
-exit) and fails `inactive-clean` as `slot-sync-unit-absent`.
+exit). For `inactive-clean` and `absent` it is not terminal at first:
+`systemctl start --no-block` queues the job behind
+`ceralive-healthcheck.service` (the unit has `Requires=`/`After=` on it), and
+until the job starts the unit still reads the previous run's unloaded shape.
+Such a read is only failed once `SLOT_SYNC_QUEUED_START_GRACE_MS` (90 s: the
+healthcheck's 60 s `HEALTHCHECK_TIMEOUT` plus its 5 s probe timeouts, with
+margin; 30 polls at the 3 s active tick) has passed since the phase entered
+`syncing` (`enteredAt`); a clock that stepped behind that start counts as past
+the grace. Even then an `inactive-clean` read is re-probed first, because the
+job may have started or finished while the receipt was read: `running` waits,
+`failed`/`refused` keep their verdicts, and a clean re-probe re-reads the
+receipt and judges that fresh copy, leaving a now-matching receipt to the next
+poll. Only a clean re-probe with a still non-matching receipt fails as
+`slot-sync-unit-absent`.
 Hardware basis: both bench boards recorded `slot-sync-unit-absent` 1-3 s
 after a successful mirror had written its receipt and marked the other slot good.
 
