@@ -7,6 +7,7 @@ import {
 	loadJsonConfig,
 	writeFileAtomicSync,
 } from "../../helpers/config-loader.ts";
+import { logger } from "../../helpers/logger.ts";
 
 export const UPDATE_SETTINGS_FILE = "update-settings.json";
 const DEFAULTS = updateSettingsSchema.parse({});
@@ -24,16 +25,27 @@ export function setUpdateSettingsFilePathForTest(
 	updateSettingsFilePath = filePath ?? UPDATE_SETTINGS_FILE;
 }
 
+// No settings file is the factory state, and settings are re-read on every
+// orchestrator tick; the shared loader's missing-file warn would repeat every
+// 3 s for the life of the process. Say it once per path, at info.
+const reportedAbsent = new Set<string>();
+
 export async function loadUpdateSettings(
 	filePath = updateSettingsFilePath,
 ): Promise<UpdateSettings> {
 	const present = await Bun.file(filePath).exists();
+	if (!present) {
+		if (!reportedAbsent.has(filePath)) {
+			reportedAbsent.add(filePath);
+			logger.info(`Update settings not saved yet: ${filePath}, using defaults`);
+		}
+		return updateSettingsSchema.parse({});
+	}
 	const result = await loadJsonConfig(filePath, updateSettingsSchema, DEFAULTS);
 	if (
-		present &&
-		(!result.loaded ||
-			result.invalidFields.length > 0 ||
-			(result.modified && result.defaultedFields.length === 0))
+		!result.loaded ||
+		result.invalidFields.length > 0 ||
+		(result.modified && result.defaultedFields.length === 0)
 	) {
 		throw new UpdateSettingsValidationError(
 			"Invalid persisted update settings",

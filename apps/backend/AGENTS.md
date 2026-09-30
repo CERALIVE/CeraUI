@@ -3025,7 +3025,9 @@ and deactivating units, and empty `systemctl show` output).
 
 `update-settings.ts` reads/writes `update-settings.json` (CWD-relative like
 `config.json`) through `loadJsonConfig` / `writeFileAtomicSync`; absent gets the
-`@ceraui/rpc` defaults, malformed PRESENT content throws
+`@ceraui/rpc` defaults without touching the loader, logged once per path at info
+(settings are re-read every orchestrator tick, so the loader's missing-file warn
+would repeat every 3 s), malformed PRESENT content still warns and throws
 `UpdateSettingsValidationError` instead of partial salvage. `channel` is
 stable/beta. Capability and launcher gates: `docs/DEVICE-UPDATES.md`.
 
