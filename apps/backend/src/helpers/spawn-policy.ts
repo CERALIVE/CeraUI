@@ -647,7 +647,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 	{
 		id: "updateOrchestrator.readBothSlots",
 		file: "modules/system/update-orchestrator/slot-status.ts",
-		symbol: "readBothSlotStatus",
+		symbol: "readRaucStatusDetailed",
 		command: "[rauc, status, --detailed, --output-format=json]",
 		class: "bounded-probe",
 		contract: {
@@ -659,7 +659,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		},
 		status: "enforced",
 		mechanism:
-			"Bounded read of both RAUC rootfs slots after a confirmed mirror; no mutation or wire change",
+			"Bounded read of both RAUC rootfs slots, for the mirror view and for whether an armed activation ran; no mutation or wire change",
 	},
 	{
 		id: "updateOrchestrator.stopPackageInstallForStream",

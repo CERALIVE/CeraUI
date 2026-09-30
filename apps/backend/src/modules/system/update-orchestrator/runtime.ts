@@ -50,8 +50,10 @@ import {
 	armOsActivation,
 	checkOsChannel,
 	inspectOsOperation,
+	type OsStageReceipt,
 	readBootId,
 	readStagedReceipt,
+	rebindStagedReceipt,
 	stageOsBundle,
 } from "./os-agent.ts";
 import type { OsChannelManifest } from "./os-manifest.ts";
@@ -67,7 +69,11 @@ import {
 	decideCellularGate,
 	shouldAttemptScheduledCheck,
 } from "./schedule.ts";
-import { readBothSlotStatus } from "./slot-status.ts";
+import {
+	readBothSlotStatus,
+	readStagedActivation,
+	type StagedActivation,
+} from "./slot-status.ts";
 import {
 	dropSupersededQuarantine,
 	removeRaucDownloads,
@@ -116,6 +122,11 @@ export interface OrchestratorRuntimeDeps {
 	) => Promise<void>;
 	readonly armOs: (now: boolean) => Promise<void>;
 	readonly readOsReceipt: typeof readStagedReceipt;
+	readonly rebindOsReceipt: (
+		receipt: OsStageReceipt,
+		bootId: string,
+	) => Promise<void>;
+	readonly readStagedActivation: () => Promise<StagedActivation>;
 	readonly readBootId: typeof readBootId;
 	readonly readBootedVersion: typeof readBootedOsReleaseVersion;
 	readonly inspectOsOperation: typeof inspectOsOperation;
@@ -216,6 +227,8 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	},
 	armOs: armOsActivation,
 	readOsReceipt: readStagedReceipt,
+	rebindOsReceipt: rebindStagedReceipt,
+	readStagedActivation,
 	readBootId,
 	readBootedVersion: readBootedOsReleaseVersion,
 	inspectOsOperation,
@@ -989,7 +1002,9 @@ async function reconcileOsActivation(): Promise<void> {
 	if (state.phase !== "os-activation-armed") return;
 	const receipt = await deps.readOsReceipt();
 	if (!receipt) return;
-	if (receipt.bootId !== (await deps.readBootId())) {
+	const bootId = await deps.readBootId();
+	if (receipt.bootId !== bootId) {
+		if (!(await rebootFollowedActivation(receipt, bootId))) return;
 		dispatch({ type: "OS_REBOOT_OBSERVED", now: deps.now() });
 		await verifyOsBoot();
 		return;
@@ -1006,6 +1021,50 @@ async function reconcileOsActivation(): Promise<void> {
 			id: receipt.version,
 			version: receipt.version,
 		});
+	}
+}
+
+// A new boot id alone does not mean the activation reboot happened: a crash,
+// watchdog or power loss before the clean-shutdown hook ran `mark-active` boots
+// the same slot again. Judging that boot against the staged version would
+// quarantine a version that never booted and leave the arming in place.
+async function rebootFollowedActivation(
+	receipt: OsStageReceipt,
+	bootId: string,
+): Promise<boolean> {
+	if ((await deps.readBootedVersion()) === receipt.version) return true;
+	let activation: StagedActivation;
+	try {
+		activation = await deps.readStagedActivation();
+	} catch (error) {
+		logger.warn("update-orchestrator: activation state unreadable", {
+			error,
+		});
+		return false;
+	}
+	switch (activation) {
+		case "consumed":
+			return true;
+		case "pending":
+			logger.warn(
+				"update-orchestrator: rebooted before the staged slot was activated; still armed",
+				{ version: receipt.version },
+			);
+			try {
+				await deps.rebindOsReceipt(receipt, bootId);
+			} catch (error) {
+				logger.warn("update-orchestrator: staged receipt rebind deferred", {
+					error,
+				});
+			}
+			return false;
+		case "unknown":
+			logger.warn("update-orchestrator: activation state inconclusive");
+			return false;
+		default: {
+			const unreachable: never = activation;
+			return unreachable;
+		}
 	}
 }
 

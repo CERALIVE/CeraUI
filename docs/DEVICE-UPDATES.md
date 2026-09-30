@@ -157,7 +157,7 @@ gaps for overlap with the independent legacy launcher. Transition table from
 | `os-staging` | `OS_STAGING_FAILED` | `failed` |
 | `os-staging` | `OS_STAGING_ABORTED_FOR_STREAM` | `os-available` |
 | `os-staged` | `OS_ACTIVATION_ARMED` | `os-activation-armed` |
-| `os-activation-armed` | `OS_REBOOT_OBSERVED` | `os-verifying` |
+| `os-activation-armed` | `OS_REBOOT_OBSERVED` | `os-verifying` (only once RAUC shows the armed activation ran, or the staged version booted) |
 | `os-verifying` | `OS_VERIFIED` | `sync-eligible` |
 | `os-verifying` | `OS_ROLLBACK_DETECTED` | `quarantined` |
 | `sync-eligible` | `SYNC_STARTED` | `syncing` |
@@ -382,9 +382,18 @@ Active only with `apt-all-packages` and `rauc-verity-streaming`.
   writes `os-staged.json`, then the per-channel `manifest-serial.<channel>` file.
 - Activation is armed through `ceralive-rauc-arm@arm.service` (next idle
   shutdown). After seven days pending with no live stream, `@now` is used.
-- After a reboot (the receipt's boot id no longer matches), the booted CalVer is
-  compared to the staged version: equal dispatches `OS_VERIFIED`, different
-  records the rollback in quarantine and dispatches `OS_ROLLBACK_DETECTED`.
+- After a reboot (the receipt's boot id no longer matches), a booted CalVer equal
+  to the staged version goes straight to verification. Otherwise RAUC is asked
+  whether the activation ran at all (`parseStagedActivation()`, the same test
+  `ceralive-rauc-activate` applies: the booted slot is still the primary and the
+  other slot holds an install newer than its last activation). If it did not,
+  the reboot was unclean (crash, watchdog, power loss before the shutdown hook):
+  the phase stays `os-activation-armed`, the receipt is rebound to the new boot
+  id, and nothing is quarantined or notified. An unreadable or inconclusive RAUC
+  status reaches no verdict and is retried on the next tick. Only after a real
+  activation is the booted CalVer compared: equal dispatches `OS_VERIFIED`,
+  different records the rollback in quarantine and dispatches
+  `OS_ROLLBACK_DETECTED`.
 - If the backend restarts during staging and RAUC reports idle with no receipt,
   the tick fails closed with `os_stage_outcome_unknown_after_restart`.
 - A root-owned `/data/ceralive/update-state/os-channel-override` containing
@@ -496,7 +505,7 @@ name is not re-sent. Keys are translated in all ten catalogs.
 | `cellular-approval` | an OS install held by D12 |
 | `os-staged` | a successful OS stage |
 | `os-activated` | a forced `@now` activation, and a verified boot |
-| `os-rollback` | a booted version that differs from the staged one |
+| `os-rollback` | a booted version that differs from the staged one after the armed activation ran |
 | `slots-current` | a confirmed slot mirror |
 | `download-paused` | **no producer** |
 | `credentials-expiring` | **no producer** |

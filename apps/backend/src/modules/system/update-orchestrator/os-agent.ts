@@ -116,6 +116,20 @@ export async function saveStagedManifest(
 	return receipt;
 }
 
+/**
+ * Moves the receipt to the current boot after a reboot that activated nothing,
+ * so the next reboot is judged afresh and the seven-day `@now` clock (keyed on
+ * the unchanged `stagedAt`) keeps running on this boot.
+ */
+export async function rebindStagedReceipt(
+	receipt: OsStageReceipt,
+	bootId: string,
+	dir = OS_UPDATE_STATE_DIR,
+): Promise<void> {
+	const rebound = receiptSchema.parse({ ...receipt, bootId });
+	writeFileAtomicSync(join(dir, "os-staged.json"), JSON.stringify(rebound));
+}
+
 export async function readStagedReceipt(): Promise<OsStageReceipt | undefined> {
 	if (!(await Bun.file(RECEIPT).exists())) return undefined;
 	const parsed = receiptSchema.safeParse(await Bun.file(RECEIPT).json());

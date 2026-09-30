@@ -214,6 +214,9 @@ describe("OS install dispatch", () => {
 		setup({
 			readBootId: async () => "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
 			readBootedVersion: async () => "2026.9.0",
+			// A rollback presupposes the activation ran; a reboot that activated
+			// nothing is covered by os-activation-unclean-reboot.test.ts.
+			readStagedActivation: async () => "consumed",
 			quarantine: new RecordingQuarantine(),
 		});
 		setOrchestratorStateForTest({
