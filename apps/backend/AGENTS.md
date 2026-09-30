@@ -3013,7 +3013,10 @@ and deactivating units, and empty `systemctl show` output).
   that validation is `absent` and must fail closed. The parser's `running`,
   `failed` and `refused` verdicts are kept (exit 75 is `refused` on either
   lifecycle), and a failed or refused verdict is persisted before
-  `reset-failed` clears the unit's record. Contract:
+  `reset-failed` clears the unit's record. A receipt matches only when its
+  `target_slot` also names the slot that is not booted now: an OS activation
+  swaps the booted slot without changing dpkg, and a SHA-only match skipped
+  the post-activation mirror on hardware (task-45d OPI D1). Contract:
   [`docs/UPDATE-RECOVERY.md`](../../docs/UPDATE-RECOVERY.md).
 - **Transport** (`update-transport/`). Routing scope and DNS limits:
   [`docs/HOST-UPLINK-ELECTION.md`](../../docs/HOST-UPLINK-ELECTION.md).

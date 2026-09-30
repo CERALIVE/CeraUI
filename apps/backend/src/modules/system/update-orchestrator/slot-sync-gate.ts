@@ -15,7 +15,19 @@ export type SlotSyncEvidence = {
 	readonly statusSha256: string;
 	readonly buildId: string;
 	readonly receiptStateSha256: string | null;
+	// The receipt names the slot that is not booted now; see
+	// receiptTargetsOtherSlot() for why the SHA alone is not enough.
+	readonly receiptTargetsOtherSlot: boolean;
 };
+
+/** The unit's receipt records a mirror of THIS dpkg state into the CURRENT
+ * other slot. */
+export function receiptConfirmsMirror(evidence: SlotSyncEvidence): boolean {
+	return (
+		evidence.receiptStateSha256 === evidence.statusSha256 &&
+		evidence.receiptTargetsOtherSlot
+	);
+}
 
 export type SlotSyncGateInput = SlotSyncEvidence & {
 	readonly capabilities: UpdateCapabilities;
@@ -62,7 +74,7 @@ export function slotSyncGate(input: SlotSyncGateInput): SlotSyncGate {
 		return { allowed: false, reason: "packages-changed" };
 	if (!input.buildId || input.healthyState.build_id !== input.buildId)
 		return { allowed: false, reason: "build-changed" };
-	if (input.receiptStateSha256 === input.statusSha256)
+	if (receiptConfirmsMirror(input))
 		return { allowed: false, reason: "already-synced" };
 	if (
 		["os-staging", "os-staged", "os-activation-armed", "os-verifying"].includes(

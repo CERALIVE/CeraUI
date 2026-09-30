@@ -39,6 +39,7 @@ const matching: SlotSyncEvidence = {
 	statusSha256,
 	buildId: "build-new",
 	receiptStateSha256: statusSha256,
+	receiptTargetsOtherSlot: true,
 };
 
 const show = (props: Record<string, string>) => ({

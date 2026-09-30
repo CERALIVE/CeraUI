@@ -30,6 +30,7 @@ const evidence: SlotSyncEvidence = {
 	statusSha256,
 	buildId: "build-new",
 	receiptStateSha256: "b".repeat(64),
+	receiptTargetsOtherSlot: true,
 };
 let root: string | undefined;
 afterEach(async () => {

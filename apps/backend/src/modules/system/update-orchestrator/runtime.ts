@@ -78,7 +78,11 @@ import {
 	dropSupersededQuarantine,
 	removeRaucDownloads,
 } from "./slot-sync-cleanup.ts";
-import { type SlotSyncEvidence, slotSyncGate } from "./slot-sync-gate.ts";
+import {
+	receiptConfirmsMirror,
+	type SlotSyncEvidence,
+	slotSyncGate,
+} from "./slot-sync-gate.ts";
 import { readSlotSyncEvidence } from "./slot-sync-state.ts";
 import {
 	defaultStaleServiceDeps,
@@ -767,6 +771,7 @@ async function checkSlotSyncGate() {
 					statusSha256: "",
 					buildId: "",
 					receiptStateSha256: null,
+					receiptTargetsOtherSlot: false,
 				};
 	return slotSyncGate({
 		...evidence,
@@ -872,11 +877,12 @@ async function failSlotSyncFromUnit(
 // finished, and systemd 257 unloads it within about a second, resetting
 // ExecMainCode, so a success reads "succeeded" or "inactive-clean". Either can
 // also be the previous run's record while --no-block's job is still queued.
-// The receipt for THIS dpkg state ties the verdict to this run, but the unit
-// publishes it before its last step (mark-good), so it proves only that the
-// run got that far: a fresh probe taken after the receipt must again read
-// finished-and-clean. An unreadable probe ("absent") never consults the
-// receipt; otherwise the unit vanished inconclusively: fail, do not spin.
+// The receipt for THIS dpkg state and the current other slot ties the verdict
+// to this run, but the unit publishes it before its last step (mark-good), so
+// it proves only that the run got that far: a fresh probe taken after the
+// receipt must again read finished-and-clean. An unreadable probe ("absent")
+// never consults the receipt; otherwise the unit vanished inconclusively:
+// fail, do not spin.
 async function pollSlotSync(): Promise<void> {
 	if (state.phase !== "syncing") return;
 	const probe = await deps.inspectSlotSync();
@@ -902,7 +908,7 @@ async function pollSlotSync(): Promise<void> {
 	let receiptMatches = false;
 	try {
 		const evidence = await deps.readSlotSyncEvidence();
-		receiptMatches = evidence.receiptStateSha256 === evidence.statusSha256;
+		receiptMatches = receiptConfirmsMirror(evidence);
 	} catch (error) {
 		logger.warn("update-orchestrator: slot-sync receipt unreadable", {
 			error,
