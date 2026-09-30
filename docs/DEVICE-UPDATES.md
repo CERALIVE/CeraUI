@@ -461,6 +461,7 @@ other slot. `slotSyncGate()` is the pure pre-dispatch check. It answers
 | `packages-changed` | the SHA-256 of `/var/lib/dpkg/status` differs from the record |
 | `build-changed` | the build id differs from the record |
 | `already-synced` | the sync receipt records this dpkg SHA AND names the slot that is not booted now (an OS activation swaps the booted slot without changing dpkg, so the SHA alone can describe the mirror into the slot now running) |
+| `slot-identity-unknown` | the sync receipt records this dpkg SHA but the booted slot cannot be resolved (unreadable or bootname-less `/etc/rauc/system.conf`, or a booted-slot name it does not map), so the tick is skipped and retried rather than suppressing or dispatching the mirror |
 | `os-install-pending` | phase is `os-staging`, `os-staged`, `os-activation-armed` or `os-verifying` |
 | `already-syncing` | phase is `syncing` |
 | `update-busy` | phase is `awaiting-idle`, `downloading`, `committing` or `restarting-services` |
@@ -469,13 +470,18 @@ other slot. `slotSyncGate()` is the pure pre-dispatch check. It answers
 `/data/ceralive/update-state/healthy-state.json` and `sync-receipt.json`, and
 hashes the dpkg status file with `node:crypto`, byte for byte as the image's
 `sha256sum` does. The receipt's `target_slot` (a RAUC slot name such as
-`rootfs.0`, or a bootname) is compared with the healthy record's booted `slot`
-through the `[slot.<name>] bootname=` map in `/etc/rauc/system.conf`
-(`receiptTargetsOtherSlot()`, `slot-sync-state.ts`). When that cannot be
-decided, only a receipt completed at or after this boot's healthy record counts
-as the other slot's, since the unit refuses to run before that record exists:
-an undecidable older receipt lets one mirror run rather than skip a stale
-fallback, and the receipt that mirror writes ends the repeat. The build id is the first `BUILD_ID=` of `/etc/os-release`,
+`rootfs.0`, or a bootname) is compared with this boot's healthy record's booted
+`slot` through the `[slot.rootfs.<n>] bootname=` map in `/etc/rauc/system.conf`
+(`classifyReceiptTarget()`, `slot-sync-state.ts`), which is static and readable
+while RAUC is wedged. The answer is one of three: `other` (the receipt names the
+other rootfs slot, so with a matching SHA the gate says `already-synced`),
+`not-other` (it names the booted slot, `certs.0`, or any name that is not the
+other rootfs slot, so the mirror is allowed), or `unknown` (no current-boot
+healthy record, or the booted slot has no mapping). Completion timestamps are
+never used as identity: a clock can step and a time names no slot. With a
+matching SHA, `unknown` makes the gate skip this tick (`slot-identity-unknown`)
+and retry on the next one: dispatching blind could meet a wedged RAUC whose
+exit-75 refusal would leave a sticky failure. The build id is the first `BUILD_ID=` of `/etc/os-release`,
 falling back to `/etc/ceralive/image-build-commit`.
 
 Completion is confirmed by `sync-receipt.json` matching the current dpkg SHA

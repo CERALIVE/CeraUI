@@ -34,7 +34,7 @@ const evidence: SlotSyncEvidence = {
 	statusSha256,
 	buildId: "build-new",
 	receiptStateSha256: "b".repeat(64),
-	receiptTargetsOtherSlot: true,
+	receiptTarget: "other",
 	receiptTargetSlot: "rootfs.1",
 };
 let root: string | undefined;

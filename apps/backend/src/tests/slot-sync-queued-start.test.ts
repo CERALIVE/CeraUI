@@ -34,13 +34,13 @@ const matching: SlotSyncEvidence = {
 	statusSha256,
 	buildId: "build-new",
 	receiptStateSha256: statusSha256,
-	receiptTargetsOtherSlot: true,
+	receiptTarget: "other",
 	receiptTargetSlot: "rootfs.1",
 };
 const nonMatching: ReadonlyArray<readonly [string, SlotSyncEvidence]> = [
 	["missing", { ...matching, receiptStateSha256: null }],
 	["wrong-sha", { ...matching, receiptStateSha256: "b".repeat(64) }],
-	["wrong-target", { ...matching, receiptTargetsOtherSlot: false }],
+	["wrong-target", { ...matching, receiptTarget: "not-other" }],
 ];
 
 const show = (props: Record<string, string>) => ({

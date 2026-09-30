@@ -778,7 +778,7 @@ async function checkSlotSyncGate() {
 					statusSha256: "",
 					buildId: "",
 					receiptStateSha256: null,
-					receiptTargetsOtherSlot: false,
+					receiptTarget: "not-other",
 					receiptTargetSlot: null,
 				};
 	return slotSyncGate({

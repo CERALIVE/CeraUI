@@ -10,15 +10,17 @@ export type HealthySlotState = {
 	readonly recorded_at: string;
 };
 
+export type ReceiptTarget = "other" | "not-other" | "unknown";
+
 export type SlotSyncEvidence = {
 	readonly healthyState: HealthySlotState | null;
 	readonly bootId: string;
 	readonly statusSha256: string;
 	readonly buildId: string;
 	readonly receiptStateSha256: string | null;
-	// The receipt names the slot that is not booted now; see
-	// receiptTargetsOtherSlot() for why the SHA alone is not enough.
-	readonly receiptTargetsOtherSlot: boolean;
+	// Whether the receipt names the slot that is not booted now; see
+	// classifyReceiptTarget() for why the SHA alone is not enough.
+	readonly receiptTarget: ReceiptTarget;
 	readonly receiptTargetSlot: string | null;
 };
 
@@ -27,7 +29,7 @@ export type SlotSyncEvidence = {
 export function receiptConfirmsMirror(evidence: SlotSyncEvidence): boolean {
 	return (
 		evidence.receiptStateSha256 === evidence.statusSha256 &&
-		evidence.receiptTargetsOtherSlot
+		evidence.receiptTarget === "other"
 	);
 }
 
@@ -85,6 +87,7 @@ export type SlotSyncGate =
 				| "packages-changed"
 				| "build-changed"
 				| "already-synced"
+				| "slot-identity-unknown"
 				| "os-install-pending"
 				| "update-busy"
 				| "already-syncing";
@@ -117,6 +120,14 @@ export function slotSyncGate(input: SlotSyncGateInput): SlotSyncGate {
 		return { allowed: false, reason: "build-changed" };
 	if (receiptConfirmsMirror(input))
 		return { allowed: false, reason: "already-synced" };
+	// Dispatching blind could meet a wedged RAUC, whose exit 75 refusal would
+	// leave a sticky failure; not dispatching could hide a stale fallback. A
+	// later tick retries once the identity resolves.
+	if (
+		input.receiptStateSha256 === input.statusSha256 &&
+		input.receiptTarget === "unknown"
+	)
+		return { allowed: false, reason: "slot-identity-unknown" };
 	if (
 		["os-staging", "os-staged", "os-activation-armed", "os-verifying"].includes(
 			input.phase,

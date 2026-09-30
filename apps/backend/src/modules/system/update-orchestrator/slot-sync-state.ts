@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { readBootId } from "./os-agent.ts";
-import type { HealthySlotState, SlotSyncEvidence } from "./slot-sync-gate.ts";
+import type {
+	HealthySlotState,
+	ReceiptTarget,
+	SlotSyncEvidence,
+} from "./slot-sync-gate.ts";
 
 export const SYNC_RECEIPT_FILE =
 	"/data/ceralive/update-state/sync-receipt.json";
@@ -62,40 +66,35 @@ export function parseRaucSlotBootnames(
 type SyncReceipt = z.infer<typeof syncReceiptSchema>;
 
 /**
- * Whether the receipt records a mirror INTO the slot that is not booted now.
- * An OS activation swaps the booted slot without touching dpkg, so a receipt
- * whose SHA still matches can describe the mirror into the slot we now run
- * from (task-45d OPI D1). Undecidable reads answer false, which lets the
- * mirror run: an unneeded mirror re-copies a healthy slot under the unit's own
- * gates, while a skipped one leaves a stale fallback. The receipt the unit
- * then writes this boot ends the repeat even without a slot map, because the
- * unit refuses to run before this boot's healthy record exists.
+ * Which slot the receipt records a mirror INTO, relative to the slot booted
+ * now. An OS activation swaps the booted slot without touching dpkg, so a
+ * receipt whose SHA still matches can describe the mirror into the slot we now
+ * run from (task-45d OPI D1). Identity comes only from this boot's healthy
+ * record and the static system.conf bootname map, never from timestamps: a
+ * clock can step, and a completion time says nothing about which slot was
+ * written. `unknown` means the booted slot cannot be resolved; the gate then
+ * neither suppresses nor dispatches the mirror.
  */
-export function receiptTargetsOtherSlot(input: {
-	readonly receipt: Pick<SyncReceipt, "target_slot" | "completed_at"> | null;
+export function classifyReceiptTarget(input: {
+	readonly receipt: Pick<SyncReceipt, "target_slot"> | null;
 	readonly healthyState: HealthySlotState | null;
 	readonly bootId: string;
 	readonly bootnames: ReadonlyMap<string, string>;
-}): boolean {
+}): ReceiptTarget {
 	const { receipt, healthyState, bootId, bootnames } = input;
+	if (!receipt) return "not-other";
 	// A previous boot's record names the slot booted THEN, which an
 	// activation or fallback may since have swapped.
-	if (!receipt || !healthyState || !bootId || healthyState.boot_id !== bootId)
-		return false;
-	if (receipt.target_slot === healthyState.slot) return false;
+	if (!healthyState || !bootId || healthyState.boot_id !== bootId)
+		return "unknown";
+	if (receipt.target_slot === healthyState.slot) return "not-other";
 	const known = new Set(bootnames.values());
 	const bootnameOf = (slot: string): string | null =>
 		bootnames.get(slot) ?? (known.has(slot) ? slot : null);
-	const target = bootnameOf(receipt.target_slot);
 	const booted = bootnameOf(healthyState.slot);
-	if (target !== null && booted !== null) return target !== booted;
-	const completedAt = Date.parse(receipt.completed_at);
-	const bootRecordedAt = Date.parse(healthyState.recorded_at);
-	return (
-		Number.isFinite(completedAt) &&
-		Number.isFinite(bootRecordedAt) &&
-		completedAt >= bootRecordedAt
-	);
+	if (booted === null) return "unknown";
+	const target = bootnameOf(receipt.target_slot);
+	return target !== null && target !== booted ? "other" : "not-other";
 }
 
 export async function readSlotSyncEvidence(): Promise<SlotSyncEvidence> {
@@ -141,7 +140,7 @@ export async function readSlotSyncEvidence(): Promise<SlotSyncEvidence> {
 		statusSha256,
 		buildId: buildIdFromOsRelease(osRelease, fallback),
 		receiptStateSha256: receipt?.state_sha256 ?? null,
-		receiptTargetsOtherSlot: receiptTargetsOtherSlot({
+		receiptTarget: classifyReceiptTarget({
 			receipt,
 			healthyState,
 			bootId,

@@ -238,7 +238,10 @@ so refused and failed runs are still detected from the unit; an exit status of
 
 On either validated shape during `syncing`, `pollSlotSync` reads the receipt.
 It matches when its state SHA-256 equals the current dpkg status AND its
-`target_slot` names the slot that is not booted now. On a match it takes a
+`target_slot` names the slot that is not booted now, decided only through the
+`/etc/rauc/system.conf` bootname map and this boot's healthy record; an
+identity that cannot be resolved never matches (and the gate skips, rather
+than dispatches, a mirror whose identity is unknown). On a match it takes a
 second, fresh probe, and if that probe again reads one of the two shapes it
 reads RAUC (`rauc status --detailed`, rootfs slots only) before any verdict.
 It settles `synced` only when RAUC reports exactly one `booted` and one

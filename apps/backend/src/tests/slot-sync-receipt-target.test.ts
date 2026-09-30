@@ -14,8 +14,8 @@ import {
 	slotSyncGate,
 } from "../modules/system/update-orchestrator/slot-sync-gate.ts";
 import {
+	classifyReceiptTarget,
 	parseRaucSlotBootnames,
-	receiptTargetsOtherSlot,
 } from "../modules/system/update-orchestrator/slot-sync-state.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
 import { raucSlots } from "./helpers/slot-sync-rauc.ts";
@@ -72,7 +72,7 @@ const evidenceFor = (
 	statusSha256: dpkgSha,
 	buildId,
 	receiptStateSha256: receipt?.state_sha256 ?? null,
-	receiptTargetsOtherSlot: receiptTargetsOtherSlot({
+	receiptTarget: classifyReceiptTarget({
 		receipt,
 		healthyState,
 		bootId: healthyState.boot_id,
@@ -100,13 +100,13 @@ describe("OPI-D1: already-synced means the CURRENT other slot was mirrored", () 
 
 	test("the hardware case: a receipt that targets the now-booted slot does not suppress the mirror", () => {
 		const evidence = evidenceFor(receiptBefore);
-		expect(evidence.receiptTargetsOtherSlot).toBe(false);
+		expect(evidence.receiptTarget).toBe("not-other");
 		expect(gate(evidence)).toEqual({ allowed: true });
 	});
 
 	test("a receipt for the current other slot with this dpkg state is already-synced", () => {
 		const evidence = evidenceFor({ ...receiptBefore, target_slot: "rootfs.0" });
-		expect(evidence.receiptTargetsOtherSlot).toBe(true);
+		expect(evidence.receiptTarget).toBe("other");
 		expect(gate(evidence)).toEqual({
 			allowed: false,
 			reason: "already-synced",
@@ -116,15 +116,15 @@ describe("OPI-D1: already-synced means the CURRENT other slot was mirrored", () 
 	test("the target and the booted slot may each be a slot name or a bootname", () => {
 		const named: HealthySlotState = { ...bootedB, slot: "rootfs.1" };
 		for (const [target, healthy, other] of [
-			["A", bootedB, true],
-			["B", bootedB, false],
-			["rootfs.0", named, true],
-			["rootfs.1", named, false],
-			["A", named, true],
-			["B", named, false],
+			["A", bootedB, "other"],
+			["B", bootedB, "not-other"],
+			["rootfs.0", named, "other"],
+			["rootfs.1", named, "not-other"],
+			["A", named, "other"],
+			["B", named, "not-other"],
 		] as const)
 			expect(
-				receiptTargetsOtherSlot({
+				classifyReceiptTarget({
 					receipt: { ...receiptBefore, target_slot: target },
 					healthyState: healthy,
 					bootId: healthy.boot_id,
@@ -133,10 +133,12 @@ describe("OPI-D1: already-synced means the CURRENT other slot was mirrored", () 
 			).toBe(other);
 	});
 
-	test("without a slot map only a receipt written during this boot counts, so an unneeded mirror runs at most once", () => {
+	// Round 13 (N3) reverses the earlier completion-time fallback: a clock can
+	// step and a timestamp names no slot, so an unmapped identity is unknown.
+	test("without a slot map the target is unknown whatever its timestamp, and only a literal booted name is decided", () => {
 		const unmapped = new Map<string, string>();
 		const decide = (completedAt: string, target = "rootfs.0") =>
-			receiptTargetsOtherSlot({
+			classifyReceiptTarget({
 				receipt: {
 					...receiptBefore,
 					target_slot: target,
@@ -146,32 +148,32 @@ describe("OPI-D1: already-synced means the CURRENT other slot was mirrored", () 
 				bootId: bootedB.boot_id,
 				bootnames: unmapped,
 			});
-		// Before this boot's healthy record: it may name either slot, so mirror.
-		expect(decide("2026-09-30T06:15:26Z")).toBe(false);
-		// The unit refuses to run before this boot's healthy record exists, so a
-		// receipt written after it is this boot's mirror of the booted slot.
-		expect(decide("2026-09-30T11:40:00Z")).toBe(true);
-		expect(decide("2026-09-30T11:33:49Z")).toBe(true);
+		for (const completedAt of [
+			"2026-09-30T06:15:26Z",
+			"2026-09-30T11:40:00Z",
+			"2026-09-30T11:33:49Z",
+			"not a time",
+		])
+			expect(decide(completedAt)).toBe("unknown");
 		// A target spelled exactly like the booted slot is never the other one.
-		expect(decide("2026-09-30T11:40:00Z", "B")).toBe(false);
-		expect(decide("not a time")).toBe(false);
+		expect(decide("2026-09-30T11:40:00Z", "B")).toBe("not-other");
 		expect(parseRaucSlotBootnames("")).toEqual(new Map());
 		expect(
-			receiptTargetsOtherSlot({
+			classifyReceiptTarget({
 				receipt: null,
 				healthyState: bootedB,
 				bootId: bootedB.boot_id,
 				bootnames,
 			}),
-		).toBe(false);
+		).toBe("not-other");
 		expect(
-			receiptTargetsOtherSlot({
+			classifyReceiptTarget({
 				receipt: receiptBefore,
 				healthyState: null,
 				bootId: bootedB.boot_id,
 				bootnames,
 			}),
-		).toBe(false);
+		).toBe("unknown");
 	});
 });
 

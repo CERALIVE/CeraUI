@@ -3025,7 +3025,10 @@ and deactivating units, and empty `systemctl show` output).
   `reset-failed` clears the unit's record. A receipt matches only when its
   `target_slot` also names the slot that is not booted now: an OS activation
   swaps the booted slot without changing dpkg, and a SHA-only match skipped
-  the post-activation mirror on hardware (task-45d OPI D1). Contract:
+  the post-activation mirror on hardware (task-45d OPI D1). Slot identity is
+  tri-state (`classifyReceiptTarget`: `other` / `not-other` / `unknown`) from
+  the system.conf bootname map only, never timestamps; `unknown` with a
+  matching SHA skips the tick (`slot-identity-unknown`), never dispatches. Contract:
   [`docs/UPDATE-RECOVERY.md`](../../docs/UPDATE-RECOVERY.md).
 - **Transport** (`update-transport/`). Routing scope and DNS limits:
   [`docs/HOST-UPLINK-ELECTION.md`](../../docs/HOST-UPLINK-ELECTION.md).

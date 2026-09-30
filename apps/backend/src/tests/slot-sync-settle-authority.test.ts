@@ -14,8 +14,8 @@ import {
 } from "../modules/system/update-orchestrator/slot-status.ts";
 import type { SlotSyncEvidence } from "../modules/system/update-orchestrator/slot-sync-gate.ts";
 import {
+	classifyReceiptTarget,
 	parseRaucSlotBootnames,
-	receiptTargetsOtherSlot,
 } from "../modules/system/update-orchestrator/slot-sync-state.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
 
@@ -58,7 +58,7 @@ const mirroredIntoA: SlotSyncEvidence = {
 	statusSha256,
 	buildId: "build",
 	receiptStateSha256: statusSha256,
-	receiptTargetsOtherSlot: true,
+	receiptTarget: "other",
 	receiptTargetSlot: "rootfs.0",
 };
 
@@ -159,26 +159,23 @@ describe("N2: success needs the CURRENT boot's facts and a good mirror target", 
 			dpkg_status_sha256: statusSha256,
 			recorded_at: "2026-09-29T00:00:00Z",
 		};
-		const receipt = {
-			target_slot: "rootfs.1",
-			completed_at: "2026-09-29T00:10:00Z",
-		};
+		const receipt = { target_slot: "rootfs.1" };
 		expect(
-			receiptTargetsOtherSlot({
+			classifyReceiptTarget({
 				receipt,
 				healthyState: stale,
 				bootId: "current-boot",
 				bootnames,
 			}),
-		).not.toBe(true);
+		).not.toBe("other");
 		expect(
-			receiptTargetsOtherSlot({
+			classifyReceiptTarget({
 				receipt,
 				healthyState: { ...stale, boot_id: "current-boot" },
 				bootId: "current-boot",
 				bootnames,
 			}),
-		).toBe(true);
+		).toBe("other");
 	});
 
 	test("the real shape: inactive slot good, receipt naming it, clean fresh probe settles synced", async () => {
