@@ -270,10 +270,12 @@ Known gaps, recorded rather than smoothed over:
   runs D8 before `request.launch` (`stream-session-orchestrator.ts` l.465-491),
   and launch-time `params`/`spawn-sender` validation errors only then classify
   as `start_invalid` (`start-failure-taxonomy.ts` l.261-267), so in `os-staging`
-  a start that can never stream (for example no SRTLA address) has already
-  SIGTERMed `rauc.service` (`killAndRestartRaucForStream`,
-  `update-orchestrator/stream-abort.ts` l.42; dispatched at `runtime.ts`
-  l.515-519) and discarded the download. Suggested fix direction, NOT implemented: cancel
+  D8 REQUESTS the SIGTERM and restart of `rauc.service`
+  (`killAndRestartRaucForStream`, `update-orchestrator/stream-abort.ts` l.42-61,
+  which only logs a nonzero exit; called from `admitAndPrepareStreamStart` in
+  `update-orchestrator/runtime.ts`) before launch validation runs, and an active
+  OS stage CAN therefore be interrupted by a start that can never stream (for
+  example no SRTLA address) and then fails `start_invalid`. Suggested fix direction, NOT implemented: cancel
   pending launches when D8 aborts, fence the pre-unit callback/preparation,
   gate launches on a starting stream rather than only a live one, clear
   `softUpdateStatus` on the (c) early return, and reconcile D8 with the later
