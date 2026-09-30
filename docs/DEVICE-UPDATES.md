@@ -171,10 +171,11 @@ gaps for overlap with the independent legacy launcher. Transition table from
 
 Distinctions in that table carry weight:
 
-- `COMMIT_FAILED` goes to `quarantined` because dpkg ran and failed, so there is
-  a confirmed-bad candidate to pin (the `committing` race under Known gaps in
-  the root [`AGENTS.md`](../AGENTS.md) can book a legacy unit's failure here
-  instead). `COMMIT_RESUME_UNRESOLVED` goes to `failed`
+- `COMMIT_FAILED` moves tracked `committing` to `quarantined` on a wire failure;
+  it does not prove dpkg itself failed. Detached-service cleanup can fail after
+  transaction exit 0, and the legacy adoption race under root
+  [`AGENTS.md`](../AGENTS.md) D8 Known gaps (d) can misattribute another unit's
+  failure. `COMMIT_RESUME_UNRESOLVED` goes to `failed`
   because a restarted backend could not establish what dpkg did, and nothing is
   pinned on a guess.
 - Stream-abort semantics are in the D8 section below. Launch limits:
@@ -248,7 +249,7 @@ cover" under Known gaps in the root [`AGENTS.md`](../AGENTS.md).
 
 ## D8: stream admission
 
-A stream start and an update are mutually admitted through one table in
+D8 classifies stream-start admission against the cached update phase in
 `admission.ts`. `assertExhaustivePhaseClassification()` runs at module load and
 throws if a phase is placed in more than one bucket.
 

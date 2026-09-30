@@ -177,11 +177,7 @@ API; it does not mutate state or infer a rollback from a failed download.
 
 Notifications use stable `update:<event-kind>:<identity>` names and the existing
 persistent-notification store, dismissal store, and allowlisted `updates-dialog`
-action. Runtime events currently wired: package discovery, refusal, commit,
-stale-service recommendation, and slot-sync completion. The OS-stage/activation/
-rollback, one-time cellular approval, credential expiry, and transport-health
-producer hooks require their respective later update-agent/credential tasks;
-`notifyUpdate` already provides the keyed, translated event vocabulary for them.
+action. Notification producers and their current limits are listed in [DEVICE-UPDATES.md](./DEVICE-UPDATES.md#notifications).
 
 ## Lagged slot mirror [PARTIAL — fixture-tested, no CeraUI board drill]
 

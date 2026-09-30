@@ -1482,8 +1482,8 @@ export function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonit
 			if (aptErr) logger.error(aptErr);
 
 			if (code === 0) {
-				// An orchestrated commit must be durable before the legacy restart
-				// removes the unit whose exit code proved it succeeded.
+				// Persist the observed commit success before deliberately exiting;
+				// the observer has already drained output and cleaned up the unit.
 				onCommitSucceeded?.();
 				if (rebootAfterUpgrade && !onCommitSucceeded) {
 					rebootAfterUpdate();

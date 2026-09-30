@@ -256,9 +256,9 @@ generic disconnect banner and the existing user-initiated-reboot banner. This is
 the **backend-restart signal** follow-up (see Named Follow-ups below).
 
 ### `update-in-progress`
-**Current indicator:** `apps/frontend/src/main/dialogs/UpdatesDialog.svelte:40-71,133-147`
+**Current indicator:** `apps/frontend/src/main/dialogs/UpdatesDialog.svelte`
 tracks update progress and disables a duplicate concurrent start;
-`apps/frontend/src/lib/components/updating-overlay.svelte:23-84,92-130` renders
+`apps/frontend/src/lib/components/updating-overlay.svelte` renders
 the downloading/unpacking/setting-up phases and the completion state.
 **Status: EXISTS.** Failure and success render separately; see
 `updating-overlay.test.ts`. The overlay clears when `status.updating` clears.

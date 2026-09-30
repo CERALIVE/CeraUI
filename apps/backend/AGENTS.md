@@ -2914,9 +2914,10 @@ Capable-image qualification limits are recorded in `docs/DEVICE-UPDATES.md`.
 - The transition table lives in `docs/DEVICE-UPDATES.md`; legacy overlap is in
   the root D8 Known gaps.
 - **`quarantined` ≠ `failed`, and both are sticky by default.** `COMMIT_FAILED`
-  quarantines (dpkg ran and failed, so there is an exact candidate to pin; the
-  `committing` race under Known gaps in the root [`AGENTS.md`](../../AGENTS.md)
-  can book a legacy unit's failure here instead).
+  moves tracked `committing` to `quarantined` on a wire failure; it does not
+  prove dpkg itself failed. Detached-service cleanup can fail after transaction
+  exit 0, and the legacy adoption race under root [`AGENTS.md`](../../AGENTS.md)
+  D8 Known gaps (d) can misattribute another unit's failure.
   Unresolved outcomes are not evidence of a bad version to quarantine. Recovery
   for `failed` with exact `commit_unit_absent_on_resume` is documented at
   `docs/UPDATE-RECOVERY.md`:
@@ -2939,7 +2940,7 @@ Capable-image qualification limits are recorded in `docs/DEVICE-UPDATES.md`.
   successful commit before the deliberate backend exit, or resume can lose its
   evidence. Ordering proof: `docs/DEVICE-UPDATES.md`.
 - Schedule, idle inputs and operator RPC behavior: `docs/DEVICE-UPDATES.md`.
-- **So do the legacy RPCs, and they bypass the orchestrator.** The Updates
+- **The legacy RPCs bypass the orchestrator.** The Updates
   dialog's Packages section still calls `system.checkForUpdates` /
   `system.startUpdate`, which run `triggerManualUpdateCheck()` /
   `startSoftwareUpdate()` directly and dispatch nothing to the orchestrator.
