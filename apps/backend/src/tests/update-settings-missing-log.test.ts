@@ -6,7 +6,7 @@
  * the shared loader by anyone else, must still warn.
  */
 import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { updateSettingsSchema } from "@ceraui/rpc/schemas";
@@ -46,10 +46,24 @@ describe("update settings missing-file logging", () => {
 	test("a corrupt settings file still warns and still refuses", async () => {
 		const file = join(dir, "corrupt-update-settings.json");
 		writeFileSync(file, "{not json");
-		await expect(loadUpdateSettings(file)).rejects.toBeInstanceOf(
-			UpdateSettingsValidationError,
+		const outcome = await loadUpdateSettings(file).catch(
+			(error: unknown) => error,
 		);
+		expect(outcome).toBeInstanceOf(UpdateSettingsValidationError);
 		expect(warnsNaming(file)).toBe(1);
+	});
+
+	test("a directory at the settings path is not absence: it still warns", async () => {
+		const path = join(dir, "directory-update-settings.json");
+		mkdirSync(path);
+		expect(await loadUpdateSettings(path)).toEqual(
+			updateSettingsSchema.parse({}),
+		);
+		expect(
+			warn.mock.calls.filter((args) =>
+				String(args[0]).startsWith(`Failed to read config file: ${path}`),
+			).length,
+		).toBe(1);
 	});
 
 	test("the shared loader still warns for any other missing config", async () => {

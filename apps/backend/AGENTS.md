@@ -3031,7 +3031,9 @@ and deactivating units, and empty `systemctl show` output).
 `config.json`) through `loadJsonConfig` / `writeFileAtomicSync`; absent gets the
 `@ceraui/rpc` defaults without touching the loader, logged once per path at info
 (settings are re-read every orchestrator tick, so the loader's missing-file warn
-would repeat every 3 s), malformed PRESENT content still warns and throws
+would repeat every 3 s). Absent means `ENOENT` only: any other non-file path
+state, such as a directory, still goes through the loader, which warns and
+yields the defaults as before. Malformed PRESENT content still warns and throws
 `UpdateSettingsValidationError` instead of partial salvage. `channel` is
 stable/beta. Capability and launcher gates: `docs/DEVICE-UPDATES.md`.
 

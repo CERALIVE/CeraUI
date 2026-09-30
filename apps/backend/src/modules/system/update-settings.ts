@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises";
 import {
 	type UpdateSettings,
 	updateSettingsInputSchema,
@@ -30,11 +31,22 @@ export function setUpdateSettingsFilePathForTest(
 // 3 s for the life of the process. Say it once per path, at info.
 const reportedAbsent = new Set<string>();
 
+// Bun.file().exists() is also false for a directory, so only ENOENT counts as
+// the factory state; any other path state keeps the shared loader's warning.
+async function isAbsent(filePath: string): Promise<boolean> {
+	try {
+		await stat(filePath);
+		return false;
+	} catch (error) {
+		return error instanceof Error && "code" in error && error.code === "ENOENT";
+	}
+}
+
 export async function loadUpdateSettings(
 	filePath = updateSettingsFilePath,
 ): Promise<UpdateSettings> {
 	const present = await Bun.file(filePath).exists();
-	if (!present) {
+	if (!present && (await isAbsent(filePath))) {
 		if (!reportedAbsent.has(filePath)) {
 			reportedAbsent.add(filePath);
 			logger.info(`Update settings not saved yet: ${filePath}, using defaults`);
@@ -43,9 +55,10 @@ export async function loadUpdateSettings(
 	}
 	const result = await loadJsonConfig(filePath, updateSettingsSchema, DEFAULTS);
 	if (
-		!result.loaded ||
-		result.invalidFields.length > 0 ||
-		(result.modified && result.defaultedFields.length === 0)
+		present &&
+		(!result.loaded ||
+			result.invalidFields.length > 0 ||
+			(result.modified && result.defaultedFields.length === 0))
 	) {
 		throw new UpdateSettingsValidationError(
 			"Invalid persisted update settings",
