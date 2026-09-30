@@ -865,14 +865,9 @@ async function pollSlotSync(): Promise<void> {
 		return;
 	}
 	if (probe.kind === "refused" || probe.kind === "failed") {
-		await deps.resetSlotSyncFailure().catch((error) => {
-			logger.warn(
-				"update-orchestrator: slot-sync reset-failed cleanup failed",
-				{
-					error,
-				},
-			);
-		});
+		// Persist the verdict before clearing systemd's failure record: once the
+		// record is gone the unit reads inactive-clean, and a matching receipt
+		// (published before mark-good) would turn a restart into a false success.
 		dispatch({
 			type: "SYNC_FAILED",
 			now,
@@ -880,6 +875,14 @@ async function pollSlotSync(): Promise<void> {
 				probe.kind === "refused"
 					? `slot-sync refused (exit ${probe.exitCode})`
 					: `slot-sync failed (exit ${probe.exitCode})`,
+		});
+		await deps.resetSlotSyncFailure().catch((error) => {
+			logger.warn(
+				"update-orchestrator: slot-sync reset-failed cleanup failed",
+				{
+					error,
+				},
+			);
 		});
 		return;
 	}
