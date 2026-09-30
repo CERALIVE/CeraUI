@@ -280,6 +280,28 @@ Known gaps, recorded rather than smoothed over:
   gate launches on a starting stream rather than only a live one, clear
   `softUpdateStatus` on the (c) early return, and reconcile D8 with the later
   `isUpdating()` guard.
+- **A manual OS install outlives the RPC that started it (separate from the D8
+  list above).** For an OS candidate, `installUpdatesNow()`
+  (`update-orchestrator/runtime.ts` l.413-426) awaits `maybeStartOsStage(true)`,
+  which awaits the whole `rauc install` through `deps.stageOs` /
+  `stageOsBundle()` (`runtime.ts` l.963-967, `os-agent.ts` l.359) before
+  `system.installUpdatesNow` (`rpc/procedures/system.procedure.ts` l.260-270)
+  answers. The frontend has no per-procedure override for it
+  (`PROCEDURE_TIMEOUT_MS`, `apps/frontend/src/lib/rpc/client.ts` l.560-562), so
+  the 30 s default of `RPCClient.call` (l.463) rejects with `Request timeout`
+  (l.472-475); `osCommand` turns that rejection into a failed operation and
+  `undefined` (`rpc/async-operation.svelte.ts` l.593-606), and the update
+  surface records the Install action as refused (`update-surface.svelte.ts` l.146), while the stage keeps running server-side
+  and succeeds. On the Rock bench the uninterrupted adaptive stage of the
+  1.4 GB bundle took 101 s. The awaiting semantics are pinned by `os-agent-runtime.test.ts`:
+  "manual install bypasses idle, stages once and arms without immediate
+  activation" (expects `os-staged` when the call returns) and "a stage failure
+  never becomes staged or armed" (expects `{started:false}` for a failed stage),
+  plus the two interrupted-stage tests that `await install`. Proposed remedy,
+  an owner decision and NOT implemented: answer `{started:true}` as soon as
+  `OS_STAGING_STARTED` is dispatched and run the stage in the background, as
+  the package path already does, reporting its outcome through the phase and
+  the `os-staged` / `refused` notifications.
 - **No certificate-expiry countdown.** The wire carries no expiry date,
   `credentials-expiring` has no producer, and the credentials band keys on an
   `apt`-profile transport finding that no production path produces yet.
