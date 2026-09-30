@@ -257,7 +257,7 @@ throws if a phase is placed in more than one bucket.
 |---|---|---|
 | `committing`, `restarting-services` | **refused** (`update_in_progress`) | none |
 | `downloading` | **refused** on a fresh wire reading of `installing` or `success`, or a positive/fail-closed commit-stage probe; otherwise allowed once the stop call returns | best-effort `systemctl stop` of the detached apt unit, never issued on a refusal; a nonzero exit is logged, not proof of cancellation |
-| `os-staging` | allowed once the calls return | the phase moves to `os-available` first, then `rauc.service` is killed and restarted, so the stage the SIGTERM ends is not recorded as a failure; no new OS stage starts until the restart call returns and the interrupted stage has settled; no fresh read or probe; a nonzero exit is logged, not proof of cancellation |
+| `os-staging` | allowed once the calls return | the phase moves to `os-available` first, then `rauc.service` is killed and restarted, so the stage the SIGTERM ends is not recorded as a failure; no new OS stage starts until the restart call returns and the interrupted stage has settled, including one whose preflight was already awaiting when the abort began (the phase, live stream, both fences and the candidate are re-read after the last preflight await, with no await before the stage is taken); if the restart call throws, the error propagates with the phase already `os-available` and both fences released; no fresh read or probe; a nonzero exit is logged, not proof of cancellation |
 | `syncing` | allowed | continue locally |
 | every other phase | allowed | none |
 

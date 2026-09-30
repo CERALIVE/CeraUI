@@ -908,21 +908,25 @@ async function pollSlotSync(): Promise<void> {
 
 const OS_FORCE_ACTIVATION_MS = 7 * 24 * 60 * 60_000;
 
-async function maybeStartOsStage(bypassIdle: boolean): Promise<void> {
-	// os-available is entered before a stream abort finishes restarting RAUC
-	// and before the aborted stage settles; a new stage in that window would
-	// race both, and the old stage's catch would fail the new one.
-	if (
+// os-available is entered before a stream abort finishes restarting RAUC and
+// before the aborted stage settles; a new stage in that window would race
+// both, and the old stage's catch would fail the new one.
+function osStageBlocked(): boolean {
+	return (
 		state.phase !== "os-available" ||
 		deps.isStreamLive() ||
 		osStageInProcess ||
 		raucStreamAbortInProcess
-	)
-		return;
+	);
+}
+
+async function maybeStartOsStage(bypassIdle: boolean): Promise<void> {
+	if (osStageBlocked()) return;
 	if (!osCandidate) {
 		await runOsCheckAfterCellularGate(await deps.loadSettings());
 		if (state.phase !== "os-available" || !osCandidate) return;
 	}
+	const candidate = osCandidate;
 	const capabilities = await deps.loadCapabilities();
 	if (
 		capabilities.mode !== "capable" ||
@@ -942,24 +946,28 @@ async function maybeStartOsStage(bypassIdle: boolean): Promise<void> {
 		allowPackagesOverCellular: settings.allowPackagesOverCellular,
 		allowSystemOverCellular: settings.allowSystemOverCellular,
 		cellularOverrideId: state.cellularOverrideId,
-		candidateId: osCandidate.version,
+		candidateId: candidate.version,
 	});
+	// Every await above can let a manual install, a stream abort or a new
+	// check run; the entry fences are only true again if re-read here, and
+	// nothing may await between this re-read and taking the stage.
+	if (osStageBlocked() || osCandidate !== candidate) return;
 	if (!gate.allowed) {
 		if (gate.needsOverride) {
 			pendingCellularApproval = {
-				id: osCandidate.version,
-				sizeBytes: osCandidate.bundle.size,
+				id: candidate.version,
+				sizeBytes: candidate.bundle.size,
 			};
 			notifyUpdate({
 				kind: "cellular-approval",
-				id: osCandidate.version,
-				size: String(osCandidate.bundle.size),
+				id: candidate.version,
+				size: String(candidate.bundle.size),
 			});
 		}
 		return;
 	}
 	pendingCellularApproval = undefined;
-	const manifest = osCandidate;
+	const manifest = candidate;
 	dispatch({ type: "OS_STAGING_STARTED", now: deps.now() });
 	osStageInProcess = true;
 	scheduleNextTick();
