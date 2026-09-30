@@ -302,6 +302,33 @@ Known gaps, recorded rather than smoothed over:
   `OS_STAGING_STARTED` is dispatched and run the stage in the background, as
   the package path already does, reporting its outcome through the phase and
   the `os-staged` / `refused` notifications.
+- **A stream start during `os-staging` can be refused while RAUC cannot be
+  restarted (observed once, Rock bench, task-45d D1).** D8 moves the phase to
+  `os-available`, then `killAndRestartRaucForStream()`
+  (`update-orchestrator/stream-abort.ts` l.42-61) SIGTERMs `rauc.service` and
+  awaits `systemctl restart rauc.service` under `SYSTEMD_COMMAND_TIMEOUT_MS`
+  (10 s, l.21). On the Rock the kill landed while RAUC's installer thread was
+  reading the bundle through `nbd0`; `rauc-nbd` died and that thread stayed in
+  uninterruptible sleep until the kernel's NBD dead-connection timeout, so the
+  restart outlived the 10 s limit and `spawnWithTimeout` threw
+  `SpawnTimeoutError` ("Spawn timed out: systemctl restart rauc.service",
+  `helpers/spawn-policy.ts` l.1048-1054). The throw leaves
+  `admitAndPrepareStreamStart()` (`update-orchestrator/runtime.ts` l.534-545,
+  abort fence released in its `finally`) and `admittedStart()`
+  (`streaming/stream-session-orchestrator.ts` l.459-475, before any launch),
+  and the RPC adapter answers it as `INTERNAL_ERROR` (`rpc/adapter.ts`
+  l.168-176). The operator sees the stream start refused with an internal
+  error, and RAUC (status, staging, slot reads) was unusable for 5 min 14 s
+  until the NBD timeout reaped the old process; a retry once `rauc.service` is
+  active again succeeds. The phase and failure reason were correct
+  (`os-available`, no failure), and the target slot was left `bad`/pending with
+  no leftover NBD, dm or mount state. n=1: an earlier kill at 46 % restarted
+  promptly. Proposed remedy, an owner decision and NOT implemented: restart
+  `rauc.service` without waiting on it (`--no-block`) so the stream is admitted
+  at once, and hold a latch that keeps a new OS stage from starting until
+  `rauc.service` is active again; without that latch a stage started on a dead
+  RAUC would fail and recreate the sticky `failed` state that the F9 fix
+  removed.
 - **No certificate-expiry countdown.** The wire carries no expiry date,
   `credentials-expiring` has no producer, and the credentials band keys on an
   `apt`-profile transport finding that no production path produces yet.
