@@ -212,7 +212,10 @@ describe("boot-id change while os-activation-armed", () => {
 		expect(run.rebinds).toEqual([]);
 	});
 
-	test("booting the staged version verifies without consulting RAUC", async () => {
+	// Booting the staged version no longer verifies by itself (task-45 opi-r5
+	// C1); it needs this boot's healthcheck verdict. Either way, RAUC's
+	// activation state is not consulted once the staged CalVer is booted.
+	test("booting the staged version without this boot's healthcheck verdict waits, without consulting RAUC", async () => {
 		const run = armedAt("2026.10.30");
 		let raucReads = 0;
 		setOrchestratorRuntimeDepsForTest({
@@ -221,6 +224,32 @@ describe("boot-id change while os-activation-armed", () => {
 				raucReads += 1;
 				return "unknown";
 			},
+			readHealthyState: async () => null,
+			startSlotSync: async () => {},
+		});
+		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).toBe("os-verifying");
+		expect(run.persisted.map((state) => state.phase)).toEqual(["os-verifying"]);
+		expect(run.rollbacks).toEqual([]);
+		expect(raucReads).toBe(0);
+	});
+
+	test("booting the staged version with this boot's healthcheck verdict verifies, without consulting RAUC", async () => {
+		const run = armedAt("2026.10.30");
+		let raucReads = 0;
+		setOrchestratorRuntimeDepsForTest({
+			...run.deps,
+			readStagedActivation: async () => {
+				raucReads += 1;
+				return "unknown";
+			},
+			readHealthyState: async () => ({
+				boot_id: POST_CRASH_BOOT,
+				slot: "A",
+				build_id: "build",
+				dpkg_status_sha256: "a".repeat(64),
+				recorded_at: "2026-09-30T00:00:00Z",
+			}),
 			startSlotSync: async () => {},
 		});
 		await runOrchestratorTick();

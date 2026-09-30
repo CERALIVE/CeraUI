@@ -86,7 +86,7 @@ import {
 	type SlotSyncGate,
 	slotSyncGate,
 } from "./slot-sync-gate.ts";
-import { readSlotSyncEvidence } from "./slot-sync-state.ts";
+import { readHealthyState, readSlotSyncEvidence } from "./slot-sync-state.ts";
 import {
 	defaultStaleServiceDeps,
 	reconcileStaleUnits,
@@ -141,6 +141,7 @@ export interface OrchestratorRuntimeDeps {
 	readonly inspectSlotSync: () => Promise<SlotSyncProbeState>;
 	readonly resetSlotSyncFailure: () => Promise<void>;
 	readonly readSlotSyncEvidence: () => Promise<SlotSyncEvidence>;
+	readonly readHealthyState: typeof readHealthyState;
 	readonly readRootSlots: () => Promise<readonly RootSlotStatus[]>;
 	readonly cleanSlotSyncArchives: () => Promise<boolean>;
 	readonly removeRaucDownloads: () => Promise<void>;
@@ -244,6 +245,7 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	inspectSlotSync,
 	resetSlotSyncFailure,
 	readSlotSyncEvidence,
+	readHealthyState,
 	readRootSlots,
 	cleanSlotSyncArchives: cleanAptCache,
 	removeRaucDownloads,
@@ -1307,14 +1309,7 @@ async function verifyOsBoot(): Promise<void> {
 	if (!receipt) return;
 	const booted = await deps.readBootedVersion();
 	if (!booted) return; // no evidence to declare a rollback
-	if (booted === receipt.version) {
-		dispatch({ type: "OS_VERIFIED", now: deps.now() });
-		notifyUpdate({
-			kind: "os-activated",
-			id: receipt.version,
-			version: receipt.version,
-		});
-	} else {
+	if (booted !== receipt.version) {
 		await deps.quarantine.recordOsRollback(receipt.version, booted);
 		dispatch({
 			type: "OS_ROLLBACK_DETECTED",
@@ -1326,6 +1321,36 @@ async function verifyOsBoot(): Promise<void> {
 			id: receipt.version,
 			version: receipt.version,
 		});
+		return;
+	}
+	// Booting the staged version proves only that the bootloader tried the new
+	// slot. A slot that fails its healthcheck boots again until its counter runs
+	// out and the old slot comes back, so stay here until this boot's verdict is
+	// in; the fallback boot then reaches the rollback branch above.
+	if (!(await thisBootPassedHealthcheck())) return;
+	dispatch({ type: "OS_VERIFIED", now: deps.now() });
+	notifyUpdate({
+		kind: "os-activated",
+		id: receipt.version,
+		version: receipt.version,
+	});
+}
+
+// The healthcheck writes its record with the boot id only after a passing check
+// and `mark-good`; a record from any earlier boot says nothing about this one.
+async function thisBootPassedHealthcheck(): Promise<boolean> {
+	try {
+		const [healthy, bootId] = await Promise.all([
+			deps.readHealthyState(),
+			deps.readBootId(),
+		]);
+		return healthy !== null && healthy.boot_id === bootId;
+	} catch (error) {
+		logger.warn(
+			"update-orchestrator: boot health unreadable, OS verification deferred",
+			{ error },
+		);
+		return false;
 	}
 }
 

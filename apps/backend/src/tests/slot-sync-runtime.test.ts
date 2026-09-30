@@ -468,7 +468,7 @@ describe("reboot-proven slot mirror orchestration", () => {
 		expect(h.commands).toHaveLength(1);
 	});
 
-	test("OS verification still transitions unconditionally and attempts the mirror immediately", async () => {
+	test("OS verification on this boot's passing healthcheck attempts the mirror immediately", async () => {
 		const h = fixture({
 			readOsReceipt: async () => ({
 				schema: 1,
@@ -478,6 +478,8 @@ describe("reboot-proven slot mirror orchestration", () => {
 				bootId: "boot-old",
 			}),
 			readBootedVersion: async () => "2026.10.0",
+			readBootId: async () => evidence.bootId,
+			readHealthyState: async () => evidence.healthyState,
 		});
 		setOrchestratorStateForTest({
 			...initialOrchestratorState(0),

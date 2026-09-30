@@ -113,8 +113,16 @@ export function classifyReceiptTarget(input: {
 	return otherSlotMapped || otherClassSlot ? "not-other" : "unknown";
 }
 
-export async function readSlotSyncEvidence(): Promise<SlotSyncEvidence> {
+/** The healthcheck's record, written after a passing check and `mark-good`;
+ * null when absent. A garbled file throws: callers treat that as no verdict. */
+export async function readHealthyState(): Promise<HealthySlotState | null> {
 	const healthyFile = Bun.file(HEALTHY_STATE_FILE);
+	return (await healthyFile.exists())
+		? healthyStateSchema.parse(await healthyFile.json())
+		: null;
+}
+
+export async function readSlotSyncEvidence(): Promise<SlotSyncEvidence> {
 	const receiptFile = Bun.file(SYNC_RECEIPT_FILE);
 	const [bootId, bytes, osRelease, healthyState, receipt, systemConf] =
 		await Promise.all([
@@ -123,11 +131,7 @@ export async function readSlotSyncEvidence(): Promise<SlotSyncEvidence> {
 			Bun.file("/etc/os-release")
 				.text()
 				.catch(() => ""),
-			healthyFile
-				.exists()
-				.then(async (exists) =>
-					exists ? healthyStateSchema.parse(await healthyFile.json()) : null,
-				),
+			readHealthyState(),
 			receiptFile
 				.exists()
 				.then(async (exists) =>
