@@ -151,7 +151,9 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
   [`docs/DEVICE-UPDATES.md`](docs/DEVICE-UPDATES.md) for the ordering and the
   unchanged fail-closed resume rule.
 - **[PARTIAL] Signed OS agent.** CMS-verified channel manifests, RAUC staging,
-  deferred activation, post-boot verification. Needs `apt-all-packages` +
+  deferred activation, post-boot verification by that boot's healthcheck
+  verdict (a failing new slot stays `os-verifying` until the bootloader falls
+  back, which is then quarantined as a rollback). Needs `apt-all-packages` +
   `rauc-verity-streaming` and the release-only `/etc/ceralive/os-release-version`
   stamp. The leaf's RFC2253 issuer is pinned to the production RAUC intermediate
   (`CN=CeraLive RAUC Intermediate CA,O=CeraLive`) or the persistent bench RAUC

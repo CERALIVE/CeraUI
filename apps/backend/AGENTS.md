@@ -2984,6 +2984,20 @@ and deactivating units, and empty `systemctl show` output).
   A root-direct or other intermediate is refused as `signer_issuer_invalid`,
   before the strict v1 fields.
   Receipt and activation ordering: `docs/DEVICE-UPDATES.md`.
+- **An OS update is verified by THIS boot's healthcheck verdict, never by the
+  CalVer alone.** In `os-verifying`, a booted staged version dispatches
+  `OS_VERIFIED` + `os-activated` only when `healthy-state.json`'s `boot_id` is
+  the current boot id (`readHealthyState()`, the same strict parser the slot
+  mirror uses). A stale record from an earlier boot, a missing or garbled one,
+  or an unreadable boot id keeps the phase in `os-verifying` (persisted, retried
+  per tick and at backend start, no notice). A boot on another version is the
+  unchanged `os_version_mismatch` rollback, judged first and without the healthy
+  record. Do not "shortcut" this back to a CalVer comparison: a slot that boots
+  and fails its healthcheck was declared verified that way on the Orange Pi 5+
+  drill (task-45 opi-r5 C1), and the bootloader fallback was never quarantined.
+  The UI therefore stays in the verifying state until the healthcheck passes.
+  Coverage: `tests/os-verify-healthcheck.test.ts` (drill replay with the
+  board's boot ids).
 - **Channel identity is not bundle identity.** `readBoardIdentity()` admits exactly
   `ceralive-rock-5b-plus` → `rock-5b-plus` and
   `ceralive-orangepi5-plus` → `orange-pi-5-plus` for channel URL selection.

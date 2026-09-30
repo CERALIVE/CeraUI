@@ -172,7 +172,10 @@ expected *staged* version after activation; `bootedVersion` records the survivin
 version observed after a reboot/rollback and is diagnostic only. The writer
 `recordOsRollback(expectedVersion, bootedVersion)` must be called only after the
 booted slot's actual version differs from the expected staged version. Never
-quarantine the surviving version. `isOsVersionQuarantined(version)` is the query
+quarantine the surviving version. A new slot that boots but fails its
+healthcheck is not verified: the orchestrator stays in `os-verifying` across
+its repeat boots, and the entry is written by the later boot on the old slot
+(the bootloader fallback), with `bootedVersion` naming that old version. `isOsVersionQuarantined(version)` is the query
 API; it does not mutate state or infer a rollback from a failed download.
 
 Notifications use stable `update:<event-kind>:<identity>` names and the existing
@@ -197,8 +200,10 @@ the current uptime has no matching boot-health record and cannot be mirrored.
 At startup and on every idle tick, a passing predicate dispatches
 `SYNC_ELIGIBILITY_CONFIRMED` (`idle → sync-eligible`), then the same predicate is
 rechecked before `SYNC_STARTED` and `systemctl start --no-block
-ceralive-slot-sync.service`. The existing unconditional `OS_VERIFIED` transition
-also reaches `sync-eligible` and attempts promptly. A failed precheck returns
+ceralive-slot-sync.service`. `OS_VERIFIED` also reaches `sync-eligible` and
+attempts promptly; it is dispatched only once this boot's healthy record exists
+(see [DEVICE-UPDATES.md](./DEVICE-UPDATES.md)), so the gate's boot-health
+condition already holds for the first mirror attempt after an OS update. A failed precheck returns
 to idle with no unit start. A stream does not block this local-only operation;
 commits and OS staging do. CeraUI treats its own busy phases as the cheap lock
 precheck; the unit holds the shared update and dpkg locks nonblockingly. It also

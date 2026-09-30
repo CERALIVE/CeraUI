@@ -158,8 +158,8 @@ gaps for overlap with the independent legacy launcher. Transition table from
 | `os-staging` | `OS_STAGING_ABORTED_FOR_STREAM` | `os-available` |
 | `os-staged` | `OS_ACTIVATION_ARMED` | `os-activation-armed` |
 | `os-activation-armed` | `OS_REBOOT_OBSERVED` | `os-verifying` (only once RAUC shows the armed activation ran, or the staged version booted) |
-| `os-verifying` | `OS_VERIFIED` | `sync-eligible` |
-| `os-verifying` | `OS_ROLLBACK_DETECTED` | `quarantined` |
+| `os-verifying` | `OS_VERIFIED` | `sync-eligible` (only once `healthy-state.json` carries this boot's id) |
+| `os-verifying` | `OS_ROLLBACK_DETECTED` | `quarantined` (a boot on a version other than the staged one) |
 | `sync-eligible` | `SYNC_STARTED` | `syncing` |
 | `sync-eligible` | `SYNC_SKIPPED` | `idle` |
 | `syncing` | `SYNC_SUCCEEDED` | `synced` |
@@ -400,9 +400,30 @@ Active only with `apt-all-packages` and `rauc-verity-streaming`.
   activation. A real activation needs positive evidence: the other slot is the
   primary (the bootloader fell back from it), or its activation stamp is at or
   after its install stamp. Only after a real
-  activation is the booted CalVer compared: equal dispatches `OS_VERIFIED`,
-  different records the rollback in quarantine and dispatches
-  `OS_ROLLBACK_DETECTED`.
+  activation is the booted CalVer compared. Different records the rollback in
+  quarantine and dispatches `OS_ROLLBACK_DETECTED`. Equal proves only that the
+  bootloader tried the new slot, so it is not yet a verdict.
+- In `os-verifying`, a booted staged version is verified by **this boot's
+  healthcheck verdict**: `OS_VERIFIED` (and the `os-activated` notice) needs
+  `/data/ceralive/update-state/healthy-state.json` whose `boot_id` equals the
+  current `/proc/sys/kernel/random/boot_id`. The on-image healthcheck writes
+  that record only after a passing check and `rauc status mark-good`. A record
+  from an earlier boot (always present on `/data`, since the stage boot wrote
+  one), a missing or garbled record, or an unreadable boot id is no verdict:
+  the phase stays `os-verifying`, nothing is notified, and the next tick (every
+  60 s) or backend start asks again. The phase is persisted, so it survives
+  backend restarts on the same boot and repeat boots of the same failing slot.
+  A slot whose healthcheck keeps failing is booted until its bootcount runs out;
+  the bootloader then starts the old slot, whose CalVer differs, and that boot
+  reaches the rollback path above (`quarantine.json` `os[]`, the persistent
+  `os-rollback` notice, sticky `quarantined`). The version check comes first,
+  so a rollback never depends on the healthy record. Operator-visible
+  consequence: after the reboot into a new OS the UI shows the verifying state
+  until that boot's healthcheck passes, typically within a couple of minutes,
+  and for as long as the new slot keeps failing it. Replayed from the Orange Pi
+  5+ drill A2 (task-45 opi-r5, C1), where the previous rule declared a failed v3
+  boot verified and never recorded the fallback; hermetic only, not yet
+  re-drilled on hardware.
 - If the backend restarts during staging and RAUC reports idle with no receipt,
   the tick fails closed with `os_stage_outcome_unknown_after_restart`.
 - A root-owned `/data/ceralive/update-state/os-channel-override` containing
@@ -550,8 +571,8 @@ name is not re-sent. Keys are translated in all ten catalogs.
 | `restart-recommended` | a protected unit with stale mappings |
 | `cellular-approval` | an OS install held by D12 |
 | `os-staged` | a successful OS stage |
-| `os-activated` | a forced `@now` activation, and a verified boot |
-| `os-rollback` | a booted version that differs from the staged one after the armed activation ran |
+| `os-activated` | a forced `@now` activation, and a boot of the staged version whose healthcheck passed (this boot's `healthy-state.json`) |
+| `os-rollback` | a booted version that differs from the staged one after the armed activation ran, including the bootloader fallback after the new slot kept failing its healthcheck |
 | `slots-current` | a confirmed slot mirror |
 | `download-paused` | **no producer** |
 | `credentials-expiring` | **no producer** |
