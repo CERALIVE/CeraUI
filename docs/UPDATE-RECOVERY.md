@@ -129,12 +129,49 @@ After a successful package commit, `update-orchestrator/stale-services.ts` scans
 `/proc/<pid>/cgroup` to identify the owning `.service` unit. A missing or
 unreadable mapping or unit is **not** restart evidence. A service may restart only
 after the existing idle detector approves. `systemd*`, `dbus*`,
-`NetworkManager*`, `ModemManager*`, `wpa_supplicant*`, `rauc*`, `pipewire*` and
-`wireplumber*` are never restarted automatically: a persistent, dismissible
-restart recommendation with a stable unit ID appears instead. `ceralive.service`
+`NetworkManager*`, `ModemManager*`, `wpa_supplicant*`, `rauc*`, `pipewire*`,
+`wireplumber*`, `polkit` and `user@*` are never restarted automatically: a
+persistent, dismissible restart recommendation with a stable unit ID appears
+instead. `polkit` is listed because `ModemManager.service` has
+`Requires=polkit.service`, so restarting polkit restarted ModemManager on the
+Orange Pi 5+ drill (2026-09-30, X4). `user@*` is listed because a user-unit
+process reports its session manager as the owning service. The policy is a
+name list, not a dependency graph: any other unit that `Requires=` an
+auto-restarted unit can still restart with it. `ceralive.service`
 is deferred while the update transaction is actually running and can restart
 once the detached APT unit has settled; a stale mapping is never a reason to
 terminate a process by PID. This is fixture-proven, not board-proven.
+
+## Resuming an interrupted download [EXISTS — fixture-proven]
+
+The persisted phase can lag a short commit: the tick enters `committing` only
+after it sees the wire report `installing`, and dpkg can finish in a few
+seconds, so a power cut inside dpkg can leave `downloading` on disk. On the
+Orange Pi 5+ drill (2026-09-30, X1) that left the orchestrator in
+`downloading` after the reboot, with no unit, every check and install refused
+as `busy`, and the half-installed package never repaired.
+
+On resume, a persisted `downloading` is adjudicated as follows. If recovery
+reattaches a unit, or the wire is `installing`, `downloading`, `success` or
+`failed`, the phase is kept and the tick reads the outcome as before. If the
+unit probe is unreadable, the phase is also kept. Otherwise the unit is gone,
+and `DOWNLOAD_RESUME_UNIT_ABSENT` returns the phase to `awaiting-idle` with one
+warning; `pending-packages.json` is left intact, nothing is quarantined, and the
+next idle tick starts a new install. That is a retry, not a replay: nothing
+else runs after a reboot, apt reinstalls a half-installed package, and an
+already-applied version is a no-op. An uncertain `committing` is still never
+retried (see above).
+
+Still open:
+
+- The persisted phase still lags a short commit (B1); this change does not
+  alter how often `committing` is persisted.
+- `ceralive-dpkg-recover` cannot repair a package interrupted during unpack
+  (`iHR`); only the retried install does.
+- A healthcheck that fails before `rauc status mark-good` marks nothing good
+  but does not reboot the board, so the bootloader fallback only happens on a
+  later reboot. One that fails after `mark-good` never falls back (see
+  [DEVICE-UPDATES.md](./DEVICE-UPDATES.md)).
 
 ## `quarantine.json` version 1
 

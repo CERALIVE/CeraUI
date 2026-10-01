@@ -143,6 +143,7 @@ gaps for overlap with the independent legacy launcher. Transition table from
 | `downloading` | `COMMIT_PHASE_ENTERED` | `committing` |
 | `downloading` | `DOWNLOAD_FAILED` | `failed` |
 | `downloading` | `DOWNLOAD_ABORTED_FOR_STREAM` | `available` |
+| `downloading` | `DOWNLOAD_RESUME_UNIT_ABSENT` | `awaiting-idle` (resume only, when the install unit is gone) |
 | `committing` | `COMMIT_PROGRESS` | `committing` |
 | `committing` | `COMMIT_SUCCEEDED` | `restarting-services` |
 | `committing` | `COMMIT_FAILED` | `quarantined` |
@@ -211,6 +212,12 @@ and stale-service policy: [UPDATE-RECOVERY.md](./UPDATE-RECOVERY.md).
 Inferring success on resume from dpkg or the pending plan would turn an uncertain
 mid-commit crash into an unproved success. Preserve the output-drain and exact
 unit-identity checks before trusting the exit status.
+
+A persisted `downloading` whose unit is gone after a restart is different: it
+returns to `awaiting-idle` and the install is retried, because the persisted
+phase can lag a short commit and the retried apt run repairs what dpkg left.
+Rules and still-open limitations:
+[UPDATE-RECOVERY.md](./UPDATE-RECOVERY.md#resuming-an-interrupted-download-exists--fixture-proven).
 
 ### Scheduling
 

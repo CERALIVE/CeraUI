@@ -2925,7 +2925,12 @@ Capable-image qualification limits are recorded in `docs/DEVICE-UPDATES.md`.
   executable, with no RPC/remote/sudoers entry. It requires the backend inactive
   and effectively masked. Actual root/systemd/APT board proof is still owed.
 - **Persistence and resume.** Reattach rather than replay an uncertain transaction;
-  a replay could run dpkg twice. Settlement may run `apt-get clean`.
+  a replay could run dpkg twice. Settlement may run `apt-get clean`. A persisted
+  `downloading` whose unit is gone (no reattach, wire not `installing`/
+  `downloading`/`success`/`failed`) returns to `awaiting-idle` via
+  `DOWNLOAD_RESUME_UNIT_ABSENT` and is retried: the persisted phase can lag a
+  short commit, and only the retried apt run repairs a package dpkg left
+  half-installed. Never extend that retry to `committing`.
 - **The package step reuses `startSoftwareUpdate()`.** Post-acceptance limits:
   root D8 Known gaps (b), (c), (g). Classify availability by `actionable_count`,
   not the inclusive `package_count`, to avoid launching an empty install.
@@ -3076,7 +3081,9 @@ and deactivating units, and empty `systemctl show` output).
   [`docs/UPDATE-RECOVERY.md`](../../docs/UPDATE-RECOVERY.md).
 - **Stale services** (`reconcileStaleUnits()`, `mayRestartUnit()`): preserve the
   protected-unit policy to avoid disrupting connectivity and media services;
-  see `docs/UPDATE-RECOVERY.md`.
+  see `docs/UPDATE-RECOVERY.md`. `polkit` and `user@*` are in it because a
+  restart also restarts units that `Requires=` the target (ModemManager requires
+  polkit); the list is not a dependency graph.
 - **Notifications** (`notifyUpdate()`, `update:<kind>:<id>`, re-send suppressed).
   Producer and credential-band limits: `docs/DEVICE-UPDATES.md`.
 
