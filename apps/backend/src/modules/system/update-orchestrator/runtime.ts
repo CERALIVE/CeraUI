@@ -65,6 +65,7 @@ import { UpdateQuarantine } from "./quarantine.ts";
 import { reduceOrchestrator } from "./reducer.ts";
 import {
 	adjudicateInterruptedDownload,
+	type DownloadResumeDecision,
 	type OrchestratorResumeDeps,
 	resumeOrchestratorState,
 } from "./resume.ts";
@@ -288,10 +289,15 @@ let slotIdentityUnknownWarned = false;
 let pendingCellularApproval:
 	| { readonly id: string; readonly sizeBytes: number }
 	| undefined;
-// `enteredAt` of a resumed download whose unit probe was inconclusive. Keyed
-// on it so a NEW download (re-entry sets a new enteredAt) is never judged for
-// absence: its unit may simply not exist yet.
-let deferredDownloadEnteredAt: number | null = null;
+// Bumped on every state change. A wall-clock `enteredAt` is not an identity
+// (an abort and a replacement install can share a millisecond), so "is this
+// still the download we deferred / did anything move while we awaited" is
+// answered by the generation instead.
+let stateGeneration = 0;
+// Generation at which a resumed download's unit probe was inconclusive. Any
+// later state change clears it: the download was left, or the poll path is
+// already reading its unit (DOWNLOAD_PROGRESS is the only in-phase change).
+let deferredDownloadGeneration: number | null = null;
 
 const IDLE_TICK_MS = 60_000;
 const ACTIVE_TICK_MS = 3_000;
@@ -318,7 +324,8 @@ export function resetOrchestratorRuntimeForTest(): void {
 	slotSyncUndecidedReason = null;
 	slotIdentityUnknownWarned = false;
 	pendingCellularApproval = undefined;
-	deferredDownloadEnteredAt = null;
+	stateGeneration = 0;
+	deferredDownloadGeneration = null;
 }
 
 export function getOrchestratorState(): OrchestratorState {
@@ -326,7 +333,7 @@ export function getOrchestratorState(): OrchestratorState {
 }
 
 export function setOrchestratorStateForTest(next: OrchestratorState): void {
-	state = next;
+	adoptState(next);
 }
 
 export function getOrchestratorWireState(): UpdateOrchestratorWireState {
@@ -372,10 +379,16 @@ function publishWireState(): void {
 	}
 }
 
+function adoptState(next: OrchestratorState): void {
+	if (next === state) return;
+	state = next;
+	stateGeneration++;
+}
+
 function dispatch(event: OrchestratorEvent): OrchestratorState {
 	const next = reduceOrchestrator(state, event);
 	if (next !== state) {
-		state = next;
+		adoptState(next);
 		deps.persist(state);
 		publishWireState();
 	}
@@ -685,7 +698,10 @@ async function maybeStartPackageInstall(opts: {
 	packageInstallStarting = true;
 	try {
 		const available = deps.getPackageInstallWireState();
-		if (available.kind === "available") {
+		// Always replaced, never left over: a dropped download leaves its plan on
+		// disk, and the commit/settle readers must only see this install's. This
+		// runs in the install-start path itself, so it cannot race a newer plan.
+		if (available.kind === "available")
 			await deps.quarantine.savePending(
 				available.packages
 					?.filter((item) => item.actionable)
@@ -694,7 +710,7 @@ async function maybeStartPackageInstall(opts: {
 						...(item.version ? { version: item.version } : {}),
 					})) ?? available.identity.packages.map((name) => ({ name })),
 			);
-		}
+		else await deps.quarantine.clearPending();
 		const result = deps.startPackageInstall();
 		if (!result.started) {
 			await deps.quarantine.clearPending();
@@ -1378,51 +1394,56 @@ function resumeDeps(): OrchestratorResumeDeps {
 	};
 }
 
-// Returns the state to adopt for `current`; the caller persists it. The stale
-// pending record is cleared BEFORE the transition is persisted, so a crash in
-// between re-adjudicates instead of leaving it to name a later install.
-async function adjudicateDownloadResume(
-	current: OrchestratorState,
-): Promise<OrchestratorState> {
-	const decision = await adjudicateInterruptedDownload(current, resumeDeps());
+// Applies a resume decision taken for the state at `generation`. Nothing here
+// awaits, so the generation check and the state change are one synchronous
+// step: a stream abort or a replacement install that ran while the probe was
+// awaited makes the stale decision a no-op. There is deliberately no pending-
+// plan cleanup: every install start rewrites `pending-packages.json` before its
+// unit exists, and a dropped download has no reader in between.
+function applyDownloadDecision(
+	decision: DownloadResumeDecision,
+	generation: number,
+	persistNow: boolean,
+): void {
+	if (stateGeneration !== generation) return;
 	switch (decision.kind) {
 		case "unit-observed":
-			deferredDownloadEnteredAt = null;
-			return current;
+			deferredDownloadGeneration = null;
+			return;
 		case "undecided":
-			if (deferredDownloadEnteredAt !== current.enteredAt)
+			if (deferredDownloadGeneration !== generation)
 				logger.warn(
 					"update-orchestrator: cannot tell whether the interrupted download's install unit survived; re-checking each tick",
 					{ cause: decision.cause, error: decision.error },
 				);
-			deferredDownloadEnteredAt = current.enteredAt;
-			return current;
+			deferredDownloadGeneration = generation;
+			return;
 		case "unit-absent":
-			deferredDownloadEnteredAt = null;
 			logger.warn(
-				"update-orchestrator: interrupted download has no install unit; dropping the plan and re-checking for updates",
-				{ enteredAt: current.enteredAt },
+				"update-orchestrator: interrupted download has no install unit; dropping the attempt and re-checking for updates",
+				{ enteredAt: state.enteredAt },
 			);
-			await deps.quarantine.clearPending();
-			return decision.state;
+			if (persistNow)
+				dispatch({ type: "DOWNLOAD_RESUME_UNIT_ABSENT", now: deps.now() });
+			else adoptState(decision.state);
+			deferredDownloadGeneration = null;
+			return;
 		default: {
 			const unreachable: never = decision;
-			return unreachable;
+			throw new Error(`unhandled resume decision: ${String(unreachable)}`);
 		}
 	}
 }
 
 async function readjudicateDeferredDownload(): Promise<void> {
-	const deferred = deferredDownloadEnteredAt;
+	const deferred = deferredDownloadGeneration;
 	if (deferred === null) return;
-	if (state.phase !== "downloading" || state.enteredAt !== deferred) {
-		deferredDownloadEnteredAt = null;
+	if (state.phase !== "downloading" || stateGeneration !== deferred) {
+		deferredDownloadGeneration = null;
 		return;
 	}
-	const next = await adjudicateDownloadResume(state);
-	// The probe awaits: a stream start may have moved the phase meanwhile.
-	if (next === state || state.enteredAt !== deferred) return;
-	dispatch({ type: "DOWNLOAD_RESUME_UNIT_ABSENT", now: deps.now() });
+	const decision = await adjudicateInterruptedDownload(state, resumeDeps());
+	applyDownloadDecision(decision, deferred, true);
 }
 
 // ─── settle/sync acknowledgement ───────────────────────────────────────────
@@ -1649,10 +1670,19 @@ export async function startUpdateOrchestrator(
 	const now = deps.now();
 	const persisted = await loadOrchestratorState();
 	const baseline = persisted ?? initialOrchestratorState(now);
-	state =
-		baseline.phase === "downloading"
-			? await adjudicateDownloadResume(baseline)
-			: await resumeOrchestratorState(baseline, resumeDeps());
+	if (baseline.phase === "downloading") {
+		// Visible to D8 while the probe awaits, so a stream start meanwhile
+		// still reaches the commit-stage probe; its abort then wins.
+		adoptState(baseline);
+		const generation = stateGeneration;
+		applyDownloadDecision(
+			await adjudicateInterruptedDownload(baseline, resumeDeps()),
+			generation,
+			false,
+		);
+	} else {
+		adoptState(await resumeOrchestratorState(baseline, resumeDeps()));
+	}
 	if (state.phase === "os-activation-armed" || state.phase === "os-verifying")
 		await reconcileOsActivation();
 	if (state.phase === "os-verifying") await verifyOsBoot();
