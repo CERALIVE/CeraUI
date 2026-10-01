@@ -698,10 +698,7 @@ async function maybeStartPackageInstall(opts: {
 	packageInstallStarting = true;
 	try {
 		const available = deps.getPackageInstallWireState();
-		// Always replaced, never left over: a dropped download leaves its plan on
-		// disk, and the commit/settle readers must only see this install's. This
-		// runs in the install-start path itself, so it cannot race a newer plan.
-		if (available.kind === "available")
+		if (available.kind === "available") {
 			await deps.quarantine.savePending(
 				available.packages
 					?.filter((item) => item.actionable)
@@ -710,7 +707,7 @@ async function maybeStartPackageInstall(opts: {
 						...(item.version ? { version: item.version } : {}),
 					})) ?? available.identity.packages.map((name) => ({ name })),
 			);
-		else await deps.quarantine.clearPending();
+		}
 		const result = deps.startPackageInstall();
 		if (!result.started) {
 			await deps.quarantine.clearPending();
@@ -1398,8 +1395,12 @@ function resumeDeps(): OrchestratorResumeDeps {
 // awaits, so the generation check and the state change are one synchronous
 // step: a stream abort or a replacement install that ran while the probe was
 // awaited makes the stale decision a no-op. There is deliberately no pending-
-// plan cleanup: every install start rewrites `pending-packages.json` before its
-// unit exists, and a dropped download has no reader in between.
+// plan cleanup here. A dropped download goes idle with the package check due
+// now, so discovery always runs before the next install start, and a start
+// from an `available` wire overwrites `pending-packages.json` before its unit
+// exists; the stale record has no reader in between. A start from a
+// non-`available` wire (restart while `awaiting-idle`, before rediscovery)
+// keeps whatever record is on disk, which is the pre-existing behaviour.
 function applyDownloadDecision(
 	decision: DownloadResumeDecision,
 	generation: number,
