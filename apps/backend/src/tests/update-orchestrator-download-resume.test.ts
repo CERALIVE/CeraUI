@@ -199,7 +199,7 @@ const NOTHING_ACTIONABLE: UpdateState = {
 };
 
 describe("resume of a persisted download whose unit is gone (opi r5x X1 replay)", () => {
-	test("a proven absence returns to idle with the check due and the stale plan dropped; discovery then finds the half-installed package", async () => {
+	test("a proven absence returns to idle with the check due, leaving the old plan for the next install to overwrite; discovery then finds the half-installed package", async () => {
 		const notices = spyOn(notifications, "notifyUpdate");
 		const probe = scriptedProbe(["absent"]);
 		let wire: UpdateState = { kind: "idle" };
@@ -221,7 +221,9 @@ describe("resume of a persisted download whose unit is gone (opi r5x X1 replay)"
 				DRILL_ENTERED_AT + 45_000,
 			);
 			expect(b.persisted).toEqual(["idle"]);
-			expect(await b.quarantine.readPending()).toEqual([]);
+			// Not deleted on adjudication (a racy delete could hit a newer plan);
+			// every install start rewrites it before anything reads it.
+			expect(await b.quarantine.readPending()).toEqual(DRILL_PENDING);
 			const quarantined = await b.quarantine.read();
 			expect(quarantined.packages).toEqual([]);
 			expect(quarantined.failedCommits).toEqual([]);
@@ -406,7 +408,6 @@ describe("trace 2 — an inconclusive probe defers adjudication to later ticks",
 			expect(probe.calls.count).toBe(3);
 			expect(getOrchestratorState().phase).toBe("idle");
 			expect(b.persisted.filter((phase) => phase === "idle")).toHaveLength(1);
-			expect(await b.quarantine.readPending()).toEqual([]);
 
 			await runOrchestratorTick(); // discovery: available
 			await runOrchestratorTick(); // packagesAuto: awaiting-idle
@@ -520,7 +521,6 @@ describe("trace 3 — a proven absence rediscovers instead of replaying the inte
 			expect(getOrchestratorState().packageCheck.nextAttemptAt).toBe(
 				DRILL_ENTERED_AT + 45_000,
 			);
-			expect(await b.quarantine.readPending()).toEqual([]);
 
 			for (let i = 0; i < 4; i++) await runOrchestratorTick();
 
@@ -632,5 +632,165 @@ describe("trace 4 — a restart at each step adjudicates idempotently", () => {
 		expect((await loadOrchestratorState())?.phase).toBe("idle");
 		expect(getOrchestratorState().phase).toBe("idle");
 		expect(b.persisted).not.toContain("failed");
+	});
+});
+
+// ─── round 18: the deferred adjudication is fenced by a state generation ────
+
+/** Like scriptedProbe, but call number `gatedCall` (1-based) waits for `release()`. */
+function gatedProbe(outcomes: readonly ProbeOutcome[], gatedCall: number) {
+	const scripted = scriptedProbe(outcomes);
+	const recover = scripted.deps.recoverSoftwareUpdateIfRunning;
+	let release: () => void = () => {};
+	let markEntered: () => void = () => {};
+	const gate = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	const entered = new Promise<void>((resolve) => {
+		markEntered = resolve;
+	});
+	return {
+		calls: scripted.calls,
+		release: () => release(),
+		entered,
+		deps: {
+			...scripted.deps,
+			recoverSoftwareUpdateIfRunning: async () => {
+				if (scripted.calls.count + 1 === gatedCall) {
+					markEntered();
+					await gate;
+				}
+				return (await recover?.()) ?? false;
+			},
+		} as Partial<OrchestratorRuntimeDeps>,
+	};
+}
+
+describe("round 18 — a stale deferred verdict never touches a newer attempt", () => {
+	test("probe slow while D8 aborts and a replacement install starts: the replacement and its plan survive", async () => {
+		const probe = gatedProbe(["not-probed", "absent"], 2);
+		let wire: UpdateState = { kind: "idle" };
+		let stops = 0;
+		const b = await boot(persistedDownloading, {
+			...probe.deps,
+			getPackageInstallWireState: () => wire,
+			stopPackageInstallUnit: async () => {
+				stops++;
+			},
+		});
+		expect(getOrchestratorState().phase).toBe("downloading");
+
+		const tick = runOrchestratorTick();
+		await probe.entered;
+		expect(await admitAndPrepareStreamStart()).toEqual({ allowed: true });
+		wire = DRILL_WIRE_AFTER_BOOT;
+		expect(await installUpdatesNow()).toEqual({ started: true });
+		const replacement = getOrchestratorState();
+		expect(replacement.phase).toBe("downloading");
+		probe.release();
+		await tick;
+
+		expect(stops).toBe(1);
+		expect(getOrchestratorState()).toEqual(replacement);
+		expect(b.installs.count).toBe(1);
+		expect(await b.quarantine.readPending()).toEqual([
+			{ name: "linux-cpupower", version: "6.12.111-1" },
+		]);
+		await runOrchestratorTick();
+		expect(probe.calls.count).toBe(2);
+		expect(getOrchestratorState().phase).toBe("downloading");
+	});
+
+	test("an abort and a replacement in the same millisecond are still a different download", async () => {
+		const probe = scriptedProbe(["not-probed", "absent"]);
+		let wire: UpdateState = { kind: "idle" };
+		const b = await boot(persistedDownloading, {
+			...probe.deps,
+			now: () => DRILL_ENTERED_AT,
+			getPackageInstallWireState: () => wire,
+			stopPackageInstallUnit: async () => {},
+		});
+		expect(await admitAndPrepareStreamStart()).toEqual({ allowed: true });
+		wire = DRILL_WIRE_AFTER_BOOT;
+		expect(await installUpdatesNow()).toEqual({ started: true });
+		expect(getOrchestratorState().enteredAt).toBe(DRILL_ENTERED_AT);
+
+		await runOrchestratorTick();
+		await runOrchestratorTick();
+		expect(probe.calls.count).toBe(1);
+		expect(getOrchestratorState().phase).toBe("downloading");
+		expect(b.installs.count).toBe(1);
+	});
+
+	test("a stream start during the BOOT probe sees the download, aborts it, and the late absence is ignored", async () => {
+		const probe = gatedProbe(["absent"], 1);
+		let stops = 0;
+		const booting = boot(persistedDownloading, {
+			...probe.deps,
+			getPackageInstallWireState: () => ({ kind: "idle" }),
+			stopPackageInstallUnit: async () => {
+				stops++;
+			},
+		});
+		await probe.entered;
+		expect(getOrchestratorState().phase).toBe("downloading");
+		expect(await admitAndPrepareStreamStart()).toEqual({ allowed: true });
+		probe.release();
+		const b = await booting;
+
+		expect(stops).toBe(1);
+		expect(getOrchestratorState().phase).toBe("available");
+		expect((await loadOrchestratorState())?.phase).toBe("available");
+		expect(b.persisted).not.toContain("idle");
+	});
+
+	test("a persist failure on the recovery leaves the obligation on disk and nothing wedged", async () => {
+		const probe = scriptedProbe(["throws", "absent"]);
+		let failNextIdleWrite = true;
+		await boot(persistedDownloading, {
+			...probe.deps,
+			getPackageInstallWireState: () => ({ kind: "idle" }),
+			persist: (next) => {
+				if (next.phase === "idle" && failNextIdleWrite) {
+					failNextIdleWrite = false;
+					throw new Error("EIO: agent.json");
+				}
+				saveOrchestratorState(next);
+			},
+		});
+		await expect(runOrchestratorTick()).rejects.toThrow("EIO");
+		expect((await loadOrchestratorState())?.phase).toBe("downloading");
+
+		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).not.toBe("downloading");
+
+		const onDisk = await loadOrchestratorState();
+		resetOrchestratorRuntimeForTest();
+		const again = scriptedProbe(["absent"]);
+		await boot(onDisk ?? persistedDownloading, {
+			...again.deps,
+			getPackageInstallWireState: () => ({ kind: "idle" }),
+		});
+		expect(getOrchestratorState().phase).not.toBe("downloading");
+	});
+
+	test("an install whose discovery changed under it never inherits the dropped download's plan", async () => {
+		const probe = scriptedProbe(["absent"]);
+		let wire: UpdateState = { kind: "idle" };
+		const b = await boot(persistedDownloading, {
+			...probe.deps,
+			getPackageInstallWireState: () => wire,
+			runPackageCheck: async () => {
+				wire = DRILL_WIRE_AFTER_BOOT;
+				return null;
+			},
+		});
+		expect(await b.quarantine.readPending()).toEqual(DRILL_PENDING);
+		await runOrchestratorTick(); // discovery: available
+		await runOrchestratorTick(); // awaiting-idle
+		wire = { kind: "idle" }; // a concurrent refresh reset the wire
+		await runOrchestratorTick(); // install starts
+		expect(getOrchestratorState().phase).toBe("downloading");
+		expect(await b.quarantine.readPending()).toEqual([]);
 	});
 });
