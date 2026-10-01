@@ -14,6 +14,24 @@ export function owningService(cgroup: string): string | undefined {
 	return undefined;
 }
 
+// Units that are only ever recommended for restart, never restarted. A restart
+// also restarts every unit that `Requires=` it, so units core units depend on
+// belong here too: ModemManager.service has `Requires=polkit.service`, and
+// restarting polkit restarted ModemManager (opi r5x X4). `user@` is a whole
+// session manager, which owningService() reports for any user-unit process.
+export const NEVER_RESTART_UNIT_NAMES: readonly string[] = ["dbus", "polkit"];
+export const NEVER_RESTART_UNIT_PREFIXES: readonly string[] = [
+	"systemd",
+	"dbus-",
+	"NetworkManager",
+	"ModemManager",
+	"wpa_supplicant",
+	"rauc",
+	"pipewire",
+	"wireplumber",
+	"user@",
+];
+
 export function mayRestartUnit(
 	unit: string,
 	transactionRunning: boolean,
@@ -22,15 +40,8 @@ export function mayRestartUnit(
 	const name = unit.slice(0, -".service".length);
 	if (name === "ceralive") return !transactionRunning;
 	return !(
-		name.startsWith("systemd") ||
-		name === "dbus" ||
-		name.startsWith("dbus-") ||
-		name.startsWith("NetworkManager") ||
-		name.startsWith("ModemManager") ||
-		name.startsWith("wpa_supplicant") ||
-		name.startsWith("rauc") ||
-		name.startsWith("pipewire") ||
-		name.startsWith("wireplumber")
+		NEVER_RESTART_UNIT_NAMES.includes(name) ||
+		NEVER_RESTART_UNIT_PREFIXES.some((prefix) => name.startsWith(prefix))
 	);
 }
 
