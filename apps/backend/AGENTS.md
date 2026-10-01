@@ -2931,11 +2931,16 @@ Capable-image qualification limits are recorded in `docs/DEVICE-UPDATES.md`.
   goes to `idle` with the package check due now, so discovery, not the stale
   plan, decides what is left (an empty plan would fail the launcher). The plan
   file is NOT deleted there (a delete raced a newer install's plan), and no
-  install start clears it either: the next start after the drop comes through
-  discovery, so its `available` wire overwrites the record before the unit
-  exists. A start from a non-`available` wire (restart in `awaiting-idle`
-  before rediscovery) keeps the record as it was; clearing it there lost the
-  plan the commit-failure quarantine and the installed notice read. Recovery's `false` also means "never
+  install start clears it either. The record has no reader before the next
+  install start, which normally comes through discovery: a start from an
+  `available` wire rewrites it before the unit exists. Discovery does not
+  ensure the wire is still `available` at launch (a wire reset, or a restart
+  in `awaiting-idle` before rediscovery); such a start keeps the record as it
+  was (a6b8210c behaviour), so the commit-failure quarantine, the installed
+  notice and the `committing` startup baseline then read the earlier plan.
+  That is an inherited limitation on the owner-decision list, not a fix
+  target here; clearing the record on that path lost the plan those readers
+  need. Recovery's `false` also means "never
   probed" (updates disabled, mocks, already observing), so it is not absence:
   the phase stays `downloading` and that resumed download only is
   re-adjudicated each tick, fenced by `stateGeneration` (bumped on every state

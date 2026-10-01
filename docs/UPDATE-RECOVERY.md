@@ -163,10 +163,14 @@ unit probe actually established, never against a bare "nothing was recovered":
   instead. `DOWNLOAD_RESUME_UNIT_ABSENT` drops the interrupted attempt: the
   phase returns to `idle` with the package check due immediately. The old plan
   is not replayed and is not deleted either: `pending-packages.json` is only
-  read on the commit/settle path of an install, and from `idle` the next
-  install start always comes through discovery, so it starts from an
-  `available` wire and overwrites the record with discovery's plan before its
-  unit exists. If discovery still finds actionable packages, the
+  read on the commit/settle path of an install, so it has no reader before the
+  next install start. From `idle` that start normally comes through discovery
+  (`available` → `awaiting-idle` → start), and a start from an `available`
+  wire rewrites the record with discovery's plan before its unit exists.
+  Discovery does not ensure the wire still reads `available` at launch,
+  though: if the wire is reset in between, or the backend restarts in
+  `awaiting-idle`, the start keeps the earlier record (the existing limitation
+  under "Still open" below). If discovery still finds actionable packages, the
   normal `available` → `awaiting-idle` path installs them; if it finds none
   (the transaction completed before the cut, or boot-time dpkg recovery
   finished it), the device stays `idle`. Nothing is quarantined, no
@@ -202,9 +206,14 @@ Still open:
   `available`. After a backend restart in `awaiting-idle` the wire is `idle` or
   `checking` until rediscovery, and a manual install or the scheduled idle gate
   started then keeps the record on disk as it was; the launcher rediscovers
-  the plan itself. That record is the plan persisted before the restart, so it
+  the plan itself.   That record is the plan persisted before the restart, so it
   names the packages actually installed only if discovery's plan did not change
-  in between.
+  in between. The same holds after a dropped interrupted download (above) when
+  the wire stops reading `available` between discovery and the launch: the
+  start keeps the dropped attempt's record, and its readers (the
+  commit-failure quarantine, the `restarting-services` installed notice, the
+  `committing` startup baseline) see that earlier plan, so a later commit
+  failure can quarantine the earlier plan's packages. Owner decision pending.
 - `ceralive-dpkg-recover` cannot repair a package interrupted during unpack
   (`iHR`); only a later install of that package does, and that now depends on
   discovery offering it again. Whether discovery and the install succeed while

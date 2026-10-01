@@ -222,7 +222,8 @@ describe("resume of a persisted download whose unit is gone (opi r5x X1 replay)"
 			);
 			expect(b.persisted).toEqual(["idle"]);
 			// Not deleted on adjudication (a racy delete could hit a newer plan);
-			// the next install start comes through discovery and overwrites it.
+			// a later start from an `available` wire rewrites it. A start after
+			// the wire stopped reading `available` keeps it (see below).
 			expect(await b.quarantine.readPending()).toEqual(DRILL_PENDING);
 			const quarantined = await b.quarantine.read();
 			expect(quarantined.packages).toEqual([]);
@@ -774,6 +775,9 @@ describe("round 18 — a stale deferred verdict never touches a newer attempt", 
 		expect(getOrchestratorState().phase).not.toBe("downloading");
 	});
 
+	// After an X1 drop, discovery alone does not keep the wire `available`
+	// until launch: a reset here makes the start keep the dropped plan, so a
+	// later commit failure would quarantine it. Inherited, owner list.
 	test("an install started from a non-available wire leaves the plan on disk as it was (a6b8210c behaviour)", async () => {
 		const probe = scriptedProbe(["absent"]);
 		let wire: UpdateState = { kind: "idle" };
@@ -878,6 +882,8 @@ describe("round 19 — a restart in awaiting-idle keeps plan A for the install i
 	});
 });
 
+// The usual path only: the wire is still `available` at launch. When it is
+// not, the record is kept (see the non-available-wire test above).
 describe("round 19 — after a proven-absent drop the next install overwrites the stale plan", () => {
 	test("plan A dropped, discovery finds plan B, the install records B and a commit failure quarantines B only", async () => {
 		const probe = scriptedProbe(["absent"]);

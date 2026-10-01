@@ -211,8 +211,10 @@ and stale-service policy: [UPDATE-RECOVERY.md](./UPDATE-RECOVERY.md).
 
 A persisted `downloading` resumes differently: only a probe that found the
 fixed unit name `LoadState=not-found` drops the attempt (to `idle`, check due
-now; the next install start comes through discovery and overwrites the
-pending plan); a skipped or failed
+now; the next install start normally comes through discovery, and a start
+from an `available` wire rewrites the pending plan, while a start after the
+wire stopped reading `available` keeps the earlier plan, an inherited
+limitation); a skipped or failed
 probe keeps `downloading` and re-asks on each tick, fenced so a late answer
 never touches a newer attempt.
 Detail: [UPDATE-RECOVERY.md](./UPDATE-RECOVERY.md#resuming-an-interrupted-download-exists--fixture-proven).

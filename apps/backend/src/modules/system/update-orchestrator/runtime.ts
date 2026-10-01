@@ -1396,11 +1396,12 @@ function resumeDeps(): OrchestratorResumeDeps {
 // step: a stream abort or a replacement install that ran while the probe was
 // awaited makes the stale decision a no-op. There is deliberately no pending-
 // plan cleanup here. A dropped download goes idle with the package check due
-// now, so discovery always runs before the next install start, and a start
-// from an `available` wire overwrites `pending-packages.json` before its unit
-// exists; the stale record has no reader in between. A start from a
-// non-`available` wire (restart while `awaiting-idle`, before rediscovery)
-// keeps whatever record is on disk, which is the pre-existing behaviour.
+// now; the stale record has no reader before the next install start, which
+// normally comes through discovery, and a start from an `available` wire
+// rewrites `pending-packages.json` before its unit exists. Discovery does not
+// keep the wire `available` until launch (a reset, or a restart while
+// `awaiting-idle`): an accepted start from a non-`available` wire keeps the
+// record on disk, as at a6b8210c, and its readers then see the earlier plan.
 function applyDownloadDecision(
 	decision: DownloadResumeDecision,
 	generation: number,
