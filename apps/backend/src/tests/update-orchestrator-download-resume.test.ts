@@ -16,7 +16,7 @@
  * the orchestrator sat in `downloading` refusing every check/install.
  *
  * Round 17 narrowed the recovery: only a probe that PROVED the unit gone drops
- * the attempt (to `idle`, check due, plan cleared); a skipped or failed probe
+ * the attempt (to `idle`, check due, plan left on disk); a skipped or failed probe
  * keeps `downloading` and is re-asked on later ticks.
  */
 
@@ -222,7 +222,7 @@ describe("resume of a persisted download whose unit is gone (opi r5x X1 replay)"
 			);
 			expect(b.persisted).toEqual(["idle"]);
 			// Not deleted on adjudication (a racy delete could hit a newer plan);
-			// every install start rewrites it before anything reads it.
+			// the next install start comes through discovery and overwrites it.
 			expect(await b.quarantine.readPending()).toEqual(DRILL_PENDING);
 			const quarantined = await b.quarantine.read();
 			expect(quarantined.packages).toEqual([]);
