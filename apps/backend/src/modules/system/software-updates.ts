@@ -265,6 +265,7 @@ export function resetSoftwareUpdateState(): void {
 	delayedSoftwareUpdateStart = undefined;
 	softwareUpdateRecoveryRetryTimer = undefined;
 	resetSoftwareUpdateRecovery();
+	lastInstallUnitVerdict = "not-probed";
 	aptDiscoveryRunning = false;
 	softUpdateStatus = null;
 	currentUpdateIdentity = null;
@@ -1633,9 +1634,25 @@ async function doSoftwareUpdate(onCommitSucceeded?: () => void): Promise<void> {
 	);
 }
 
+/**
+ * What the last recovery attempt established about the detached install unit.
+ * `false` from recovery covers both a unit proven gone and a probe that never
+ * ran (updates disabled, mocks, a transaction already observed), and only the
+ * first may be read as "nothing survived the restart".
+ */
+export type InstallUnitVerdict = "attached" | "absent" | "not-probed";
+
+let lastInstallUnitVerdict: InstallUnitVerdict = "not-probed";
+
+export function getLastInstallUnitVerdict(): InstallUnitVerdict {
+	return lastInstallUnitVerdict;
+}
+
 async function recoverSoftwareUpdate(
 	deps: SoftwareUpdateRecoveryDeps = defaultSoftwareUpdateRecoveryDeps,
 ): Promise<boolean> {
+	// Reset first: a throwing probe must not leave an older attempt's verdict.
+	lastInstallUnitVerdict = "not-probed";
 	if (!aptUpdatesEnabled() || shouldUseMocks() || isUpdating()) return false;
 
 	const monitor = createSoftwareUpdateProcessMonitor();
@@ -1672,7 +1689,13 @@ async function recoverSoftwareUpdate(
 			}
 		},
 	});
-	if (!recovered) return false;
+	// `null` comes only from an identity-checked `LoadState=not-found` probe of
+	// the exact unit name; anything unreadable throws instead.
+	if (!recovered) {
+		lastInstallUnitVerdict = "absent";
+		return false;
+	}
+	lastInstallUnitVerdict = "attached";
 
 	if (recovered.wasAlreadyFinished) {
 		// Only a bounded final drain + cleanup remain (no poll loop) — awaiting
