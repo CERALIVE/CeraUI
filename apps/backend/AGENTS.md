@@ -2930,8 +2930,12 @@ Capable-image qualification limits are recorded in `docs/DEVICE-UPDATES.md`.
   (`getLastInstallUnitVerdict() === "absent"`): `DOWNLOAD_RESUME_UNIT_ABSENT`
   goes to `idle` with the package check due now, so discovery, not the stale
   plan, decides what is left (an empty plan would fail the launcher). The plan
-  file is NOT deleted there (a delete raced a newer install's plan); every
-  install start rewrites it instead. Recovery's `false` also means "never
+  file is NOT deleted there (a delete raced a newer install's plan), and no
+  install start clears it either: the next start after the drop comes through
+  discovery, so its `available` wire overwrites the record before the unit
+  exists. A start from a non-`available` wire (restart in `awaiting-idle`
+  before rediscovery) keeps the record as it was; clearing it there lost the
+  plan the commit-failure quarantine and the installed notice read. Recovery's `false` also means "never
   probed" (updates disabled, mocks, already observing), so it is not absence:
   the phase stays `downloading` and that resumed download only is
   re-adjudicated each tick, fenced by `stateGeneration` (bumped on every state

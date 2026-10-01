@@ -211,7 +211,8 @@ and stale-service policy: [UPDATE-RECOVERY.md](./UPDATE-RECOVERY.md).
 
 A persisted `downloading` resumes differently: only a probe that found the
 fixed unit name `LoadState=not-found` drops the attempt (to `idle`, check due
-now; the next install start rewrites the pending plan); a skipped or failed
+now; the next install start comes through discovery and overwrites the
+pending plan); a skipped or failed
 probe keeps `downloading` and re-asks on each tick, fenced so a late answer
 never touches a newer attempt.
 Detail: [UPDATE-RECOVERY.md](./UPDATE-RECOVERY.md#resuming-an-interrupted-download-exists--fixture-proven).
@@ -219,12 +220,6 @@ Detail: [UPDATE-RECOVERY.md](./UPDATE-RECOVERY.md#resuming-an-interrupted-downlo
 Inferring success on resume from dpkg or the pending plan would turn an uncertain
 mid-commit crash into an unproved success. Preserve the output-drain and exact
 unit-identity checks before trusting the exit status.
-
-A persisted `downloading` whose unit is gone after a restart is different: it
-returns to `awaiting-idle` and the install is retried, because the persisted
-phase can lag a short commit and the retried apt run repairs what dpkg left.
-Rules and still-open limitations:
-[UPDATE-RECOVERY.md](./UPDATE-RECOVERY.md#resuming-an-interrupted-download-exists--fixture-proven).
 
 ### Scheduling
 

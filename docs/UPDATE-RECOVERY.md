@@ -163,8 +163,10 @@ unit probe actually established, never against a bare "nothing was recovered":
   instead. `DOWNLOAD_RESUME_UNIT_ABSENT` drops the interrupted attempt: the
   phase returns to `idle` with the package check due immediately. The old plan
   is not replayed and is not deleted either: `pending-packages.json` is only
-  read on the commit/settle path of an install, and every install start rewrites
-  it (an empty plan when discovery has nothing) before its unit exists. If discovery still finds actionable packages, the
+  read on the commit/settle path of an install, and from `idle` the next
+  install start always comes through discovery, so it starts from an
+  `available` wire and overwrites the record with discovery's plan before its
+  unit exists. If discovery still finds actionable packages, the
   normal `available` → `awaiting-idle` path installs them; if it finds none
   (the transaction completed before the cut, or boot-time dpkg recovery
   finished it), the device stays `idle`. Nothing is quarantined, no
@@ -195,6 +197,14 @@ Still open:
 
 - The persisted phase still lags a short commit (B1); this change does not
   alter how often `committing` is persisted.
+- Existing limitation, unchanged since before the interrupted-download work:
+  an install start overwrites `pending-packages.json` only when the wire reads
+  `available`. After a backend restart in `awaiting-idle` the wire is `idle` or
+  `checking` until rediscovery, and a manual install or the scheduled idle gate
+  started then keeps the record on disk as it was; the launcher rediscovers
+  the plan itself. That record is the plan persisted before the restart, so it
+  names the packages actually installed only if discovery's plan did not change
+  in between.
 - `ceralive-dpkg-recover` cannot repair a package interrupted during unpack
   (`iHR`); only a later install of that package does, and that now depends on
   discovery offering it again. Whether discovery and the install succeed while
