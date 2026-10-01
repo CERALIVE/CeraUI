@@ -1895,7 +1895,7 @@
 	"notifications.updatePausedForStream": "Der Download wurde für den Streamstart unterbrochen.",
 	"notifications.updateSystemStaged": "Systemversion {version} ist vorbereitet. Sie wird nach dem nächsten regulären Neustart aktiviert.",
 	"notifications.updateSystemActivated": "Systemversion {version} ist jetzt aktiv.",
-	"notifications.updateRollback": "Das Gerät wurde von Systemversion {version} zurückgesetzt.",
+	"notifications.updateRollback": "Das Gerät ist von Systemversion {version} zur vorherigen Version zurückgekehrt.",
 	"notifications.updateSlotsCurrent": "Beide System-Slots sind aktuell.",
 	"notifications.updateRestartRecommended": "Neustart von {unit} nach dem Update empfohlen. Das Gerät startet diesen Dienst nicht automatisch neu.",
 	"notifications.updateCellularApproval": "Dieser Download benötigt eine Freigabe für Mobilfunkdaten ({size}).",
