@@ -774,7 +774,7 @@ describe("round 18 — a stale deferred verdict never touches a newer attempt", 
 		expect(getOrchestratorState().phase).not.toBe("downloading");
 	});
 
-	test("an install whose discovery changed under it never inherits the dropped download's plan", async () => {
+	test("an install started from a non-available wire leaves the plan on disk as it was (a6b8210c behaviour)", async () => {
 		const probe = scriptedProbe(["absent"]);
 		let wire: UpdateState = { kind: "idle" };
 		const b = await boot(persistedDownloading, {
@@ -791,6 +791,127 @@ describe("round 18 — a stale deferred verdict never touches a newer attempt", 
 		wire = { kind: "idle" }; // a concurrent refresh reset the wire
 		await runOrchestratorTick(); // install starts
 		expect(getOrchestratorState().phase).toBe("downloading");
-		expect(await b.quarantine.readPending()).toEqual([]);
+		expect(await b.quarantine.readPending()).toEqual(DRILL_PENDING);
+	});
+});
+
+// ─── round 19: a non-available wire at install start keeps the record ──────
+
+const CPUPOWER_PLAN = [{ name: "linux-cpupower", version: "6.12.111-1" }];
+const DOWNLOADING_WIRE: UpdateState = {
+	kind: "downloading",
+	progress: { total: 1, downloading: 1, unpacking: 0, setting_up: 0 },
+	identity: DRILL_WIRE_AFTER_BOOT.identity,
+};
+const INSTALLING_WIRE: UpdateState = {
+	kind: "installing",
+	progress: { total: 1, downloading: 0, unpacking: 1, setting_up: 0 },
+	identity: DRILL_WIRE_AFTER_BOOT.identity,
+};
+
+/**
+ * Restart while `awaiting-idle` with plan A on disk: the wire is process-local,
+ * so it reads `idle` until rediscovery; the launcher then rediscovers A itself.
+ */
+async function bootAwaitingIdleWithCpupowerPlan() {
+	let wire: UpdateState = { kind: "idle" };
+	const b = await boot(
+		{ ...persistedDownloading, phase: "awaiting-idle", progress: null },
+		{
+			recoverSoftwareUpdateIfRunning: async () => false,
+			getPackageInstallWireState: () => wire,
+			startPackageInstall: () => {
+				wire = DOWNLOADING_WIRE;
+				return { started: true };
+			},
+			restartStale: async () => true,
+		},
+	);
+	await b.quarantine.savePending(CPUPOWER_PLAN);
+	return {
+		quarantine: b.quarantine,
+		setWire: (next: UpdateState) => {
+			wire = next;
+		},
+	};
+}
+
+describe("round 19 — a restart in awaiting-idle keeps plan A for the install it launches", () => {
+	test("a manual install from an idle wire that then fails quarantines plan A", async () => {
+		const r = await bootAwaitingIdleWithCpupowerPlan();
+		expect(getOrchestratorState().phase).toBe("awaiting-idle");
+
+		expect(await installUpdatesNow()).toEqual({ started: true });
+		expect(getOrchestratorState().phase).toBe("downloading");
+		expect(await r.quarantine.readPending()).toEqual(CPUPOWER_PLAN);
+
+		r.setWire(INSTALLING_WIRE);
+		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).toBe("committing");
+		r.setWire({ kind: "failed", reason: "apt-exit-nonzero" });
+		await runOrchestratorTick();
+
+		expect(getOrchestratorState().phase).toBe("quarantined");
+		expect((await r.quarantine.read()).packages).toEqual(CPUPOWER_PLAN);
+	});
+
+	test("a manual install from an idle wire that succeeds names plan A in the installed notice", async () => {
+		const notices = spyOn(notifications, "notifyUpdate");
+		try {
+			const r = await bootAwaitingIdleWithCpupowerPlan();
+			expect(await installUpdatesNow()).toEqual({ started: true });
+			r.setWire(INSTALLING_WIRE);
+			await runOrchestratorTick();
+			r.setWire({ kind: "success" });
+			await runOrchestratorTick();
+			expect(getOrchestratorState().phase).toBe("restarting-services");
+			await runOrchestratorTick();
+
+			const installed = notices.mock.calls
+				.map(([notice]) => notice)
+				.filter((notice) => notice.kind === "installed");
+			expect(installed).toHaveLength(1);
+			expect(installed[0]).toMatchObject({ packages: ["linux-cpupower"] });
+		} finally {
+			notices.mockRestore();
+		}
+	});
+});
+
+describe("round 19 — after a proven-absent drop the next install overwrites the stale plan", () => {
+	test("plan A dropped, discovery finds plan B, the install records B and a commit failure quarantines B only", async () => {
+		const probe = scriptedProbe(["absent"]);
+		let wire: UpdateState = { kind: "idle" };
+		const b = await boot(persistedDownloading, {
+			...probe.deps,
+			getPackageInstallWireState: () => wire,
+			runPackageCheck: async () => {
+				wire = DRILL_WIRE_AFTER_BOOT;
+				return null;
+			},
+			startPackageInstall: () => {
+				wire = DOWNLOADING_WIRE;
+				return { started: true };
+			},
+		});
+		expect(getOrchestratorState().phase).toBe("idle");
+		expect(getOrchestratorState().packageCheck.nextAttemptAt).toBe(
+			DRILL_ENTERED_AT + 45_000,
+		);
+		expect(await b.quarantine.readPending()).toEqual(DRILL_PENDING);
+
+		await runOrchestratorTick(); // discovery: available (plan B)
+		await runOrchestratorTick(); // awaiting-idle
+		await runOrchestratorTick(); // install starts from the available wire
+		expect(getOrchestratorState().phase).toBe("downloading");
+		expect(await b.quarantine.readPending()).toEqual(CPUPOWER_PLAN);
+
+		wire = INSTALLING_WIRE;
+		await runOrchestratorTick();
+		wire = { kind: "failed", reason: "apt-exit-nonzero" };
+		await runOrchestratorTick();
+
+		expect(getOrchestratorState().phase).toBe("quarantined");
+		expect((await b.quarantine.read()).packages).toEqual(CPUPOWER_PLAN);
 	});
 });
