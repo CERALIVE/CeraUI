@@ -42,6 +42,62 @@ describe("stale processes", () => {
 		expect(mayRestartUnit("ssh.service", false)).toBe(true);
 		expect(mayRestartUnit("ceralive.service", true)).toBe(false);
 	});
+
+	// The units the opi r5x drill (X4, 46.4/12-restarts-at-settle.txt) saw
+	// restarted at settle, and whether the policy may restart each one now.
+	for (const [unit, restartable] of [
+		["polkit.service", false],
+		["user@1000.service", false],
+		["user@0.service", false],
+		["bluetooth.service", true],
+		["cerastream.service", true],
+		["nginx.service", true],
+		["ssh.service", true],
+		["polkitd-helper.service", true],
+		["user-runtime-dir@1000.service", true],
+	] as const) {
+		test(`${unit} ${restartable ? "may be restarted" : "is only ever recommended"}`, () => {
+			expect(mayRestartUnit(unit, false)).toBe(restartable);
+		});
+	}
+
+	test("a stale polkit or user session manager becomes a recommendation, never a restart", async () => {
+		const restarted: string[] = [];
+		const recommended: string[] = [];
+		const root = await fixture();
+		await mkdir(join(root, "200"));
+		await writeFile(
+			join(root, "200/maps"),
+			"7f00-7f01 r-xp 0 00:00 1 /usr/lib/aarch64-linux-gnu/libpcre2-8.so.0.14.0 (deleted)\n",
+		);
+		await writeFile(
+			join(root, "200/cgroup"),
+			"0::/system.slice/polkit.service\n",
+		);
+		await mkdir(join(root, "201"));
+		await writeFile(
+			join(root, "201/maps"),
+			"7f00-7f01 r-xp 0 00:00 1 /usr/lib/aarch64-linux-gnu/libpcre2-8.so.0.14.0 (deleted)\n",
+		);
+		await writeFile(
+			join(root, "201/cgroup"),
+			"0::/user.slice/user-1000.slice/user@1000.service/app.slice/mpris-proxy.service\n",
+		);
+		const done = await reconcileStaleUnits({
+			procRoot: root,
+			isIdle: async () => true,
+			transactionRunning: () => false,
+			restart: async (unit) => {
+				restarted.push(unit);
+			},
+			recommend: (unit) => {
+				recommended.push(unit);
+			},
+		});
+		expect(restarted).toEqual([]);
+		expect(recommended).toEqual(["polkit.service", "user@1000.service"]);
+		expect(done).toBe(true);
+	});
 	test("detects only deleted system files and resolves exact systemd units", async () => {
 		const root = await fixture();
 		await mkdir(join(root, "100"));
