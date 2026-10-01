@@ -14,6 +14,10 @@
  * persisted phase still said `downloading`, the board rebooted with no install
  * unit, discovery reported the half-installed package as available again, and
  * the orchestrator sat in `downloading` refusing every check/install.
+ *
+ * Round 17 narrowed the recovery: only a probe that PROVED the unit gone drops
+ * the attempt (to `idle`, check due, plan cleared); a skipped or failed probe
+ * keeps `downloading` and is re-asked on later ticks.
  */
 
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
@@ -141,21 +145,57 @@ const persistedDownloading: OrchestratorState = {
 	progress: { percent: 0, etaSeconds: 0 },
 };
 
+type ProbeOutcome = "attached" | "absent" | "not-probed" | "throws";
+
+/**
+ * Stands in for the boot recovery call plus the verdict its probe left behind.
+ * `not-probed` is what the real call answers when it never looked (updates
+ * disabled, mocks, already observing a transaction): `false`, like `absent`.
+ */
+function scriptedProbe(outcomes: readonly ProbeOutcome[]) {
+	const calls = { count: 0 };
+	let last: "attached" | "absent" | "not-probed" = "not-probed";
+	return {
+		calls,
+		deps: {
+			recoverSoftwareUpdateIfRunning: async () => {
+				const outcome =
+					outcomes[Math.min(calls.count, outcomes.length - 1)] ?? "not-probed";
+				calls.count++;
+				last = "not-probed";
+				if (outcome === "throws") throw new Error("systemctl show: unreadable");
+				last = outcome;
+				return outcome === "attached";
+			},
+			lastInstallUnitVerdict: () => last,
+		} as Partial<OrchestratorRuntimeDeps>,
+	};
+}
+
 describe("resume of a persisted download whose unit is gone (opi r5x X1 replay)", () => {
-	test("returns to awaiting-idle with the pending record intact, then the next tick installs again", async () => {
+	test("a proven absence returns to idle with the check due and the stale plan dropped; discovery then finds the half-installed package", async () => {
 		const notices = spyOn(notifications, "notifyUpdate");
+		const probe = scriptedProbe(["absent"]);
+		let wire: UpdateState = { kind: "idle" };
 		try {
 			const b = await boot(persistedDownloading, {
-				recoverSoftwareUpdateIfRunning: async () => false,
-				getPackageInstallWireState: () => DRILL_WIRE_AFTER_BOOT,
+				...probe.deps,
+				getPackageInstallWireState: () => wire,
+				runPackageCheck: async () => {
+					wire = DRILL_WIRE_AFTER_BOOT;
+					return null;
+				},
 			});
 
 			const resumed = getOrchestratorState();
-			expect(resumed.phase).toBe("awaiting-idle");
+			expect(resumed.phase).toBe("idle");
 			expect(resumed.failureReason).toBeNull();
 			expect(resumed.progress).toBeNull();
-			expect(b.persisted).toEqual(["awaiting-idle"]);
-			expect(await b.quarantine.readPending()).toEqual(DRILL_PENDING);
+			expect(resumed.packageCheck.nextAttemptAt).toBe(
+				DRILL_ENTERED_AT + 45_000,
+			);
+			expect(b.persisted).toEqual(["idle"]);
+			expect(await b.quarantine.readPending()).toEqual([]);
 			const quarantined = await b.quarantine.read();
 			expect(quarantined.packages).toEqual([]);
 			expect(quarantined.failedCommits).toEqual([]);
@@ -165,8 +205,8 @@ describe("resume of a persisted download whose unit is gone (opi r5x X1 replay)"
 
 			await runOrchestratorTick();
 
-			expect(b.installs.count).toBe(1);
-			expect(getOrchestratorState().phase).toBe("downloading");
+			expect(getOrchestratorState().phase).toBe("available");
+			expect(b.installs.count).toBe(0);
 		} finally {
 			notices.mockRestore();
 		}

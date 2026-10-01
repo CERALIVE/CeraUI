@@ -234,7 +234,7 @@ describe("resume — phase enumeration completeness lock", () => {
 	});
 });
 
-describe('resume from "downloading" — retry only when the install unit is gone', () => {
+describe('resume from "downloading" — rediscover only when the install unit is PROVEN gone', () => {
 	const persisted: OrchestratorState = {
 		...initialOrchestratorState(1),
 		phase: "downloading",
@@ -247,17 +247,35 @@ describe('resume from "downloading" — retry only when the install unit is gone
 		"available",
 		"check_failed",
 	] as const) {
-		test(`no unit and wire "${kind}" -> awaiting-idle, never a commit outcome`, async () => {
+		test(`proven absence and wire "${kind}" -> idle with the package check due, never a commit outcome`, async () => {
 			const { deps: d, calls } = deps({
 				recoverSoftwareUpdateIfRunning: async () => false,
 				getUpdateState: () => ({ kind }) as UpdateState,
 			});
-			const resumed = await resumeOrchestratorState(persisted, d);
-			expect(resumed.phase).toBe("awaiting-idle");
+			const resumed = await resumeOrchestratorState(persisted, {
+				...d,
+				lastInstallUnitVerdict: () => "absent",
+			});
+			expect(resumed.phase).toBe("idle");
 			expect(resumed.failureReason).toBeNull();
 			expect(resumed.progress).toBeNull();
 			expect(resumed.enteredAt).toBe(9999);
+			expect(resumed.packageCheck.nextAttemptAt).toBe(9999);
 			expect(calls).toEqual({ recover: 1, wire: 1 });
+		});
+
+		test(`recovery false WITHOUT a proven absence and wire "${kind}" keeps the persisted download`, async () => {
+			const { deps: d } = deps({
+				recoverSoftwareUpdateIfRunning: async () => false,
+				getUpdateState: () => ({ kind }) as UpdateState,
+			});
+			expect(await resumeOrchestratorState(persisted, d)).toEqual(persisted);
+			expect(
+				await resumeOrchestratorState(persisted, {
+					...d,
+					lastInstallUnitVerdict: () => "not-probed",
+				}),
+			).toEqual(persisted);
 		});
 	}
 

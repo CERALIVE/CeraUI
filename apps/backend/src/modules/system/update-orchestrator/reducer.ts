@@ -249,13 +249,15 @@ function reduceDownloading(
 			});
 		case "DOWNLOAD_ABORTED_FOR_STREAM":
 			return enter(state, event.now, { phase: "available", progress: null });
-		// Straight back to `awaiting-idle`, not `available`: the install was
-		// already approved and was interrupted, not declined, so it must not
-		// wait on `packagesAuto` again. The idle gate still applies.
+		// To `idle` with the package check due now, not to `awaiting-idle`: the
+		// interrupted plan may already be applied (an empty install fails the
+		// launcher) or stale, so discovery, not the old intent, decides what is
+		// left. Nothing is claimed installed and nothing is quarantined.
 		case "DOWNLOAD_RESUME_UNIT_ABSENT":
 			return enter(state, event.now, {
-				phase: "awaiting-idle",
+				phase: "idle",
 				progress: null,
+				packageCheck: { ...state.packageCheck, nextAttemptAt: event.now },
 			});
 		default:
 			return state;

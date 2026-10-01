@@ -11,17 +11,23 @@
 /**
  * Reattach rather than replay an uncertain package transaction: replay could
  * run dpkg twice. Settlement can run `apt-get clean`; see docs/UPDATE-RECOVERY.md.
- * A persisted `downloading` with no unit left is retried instead; see
- * resumeDownloading() for why that is not a replay.
+ * A persisted `downloading` whose unit is PROVEN gone is neither replayed nor
+ * retried: the interrupted plan is dropped and fresh discovery decides whether
+ * anything is still left to install (adjudicateInterruptedDownload()).
  */
 
 import type { UpdateState } from "@ceraui/rpc/schemas";
-import { logger } from "../../../helpers/logger.ts";
+import type { InstallUnitVerdict } from "../software-updates.ts";
 import { reduceOrchestrator } from "./reducer.ts";
 import type { OrchestratorState } from "./types.ts";
 
 export interface OrchestratorResumeDeps {
 	readonly recoverSoftwareUpdateIfRunning: () => Promise<boolean>;
+	/**
+	 * What the recovery call's own probe established. Without it a download
+	 * can never be proved interrupted, so it stays deferred (the safe side).
+	 */
+	readonly lastInstallUnitVerdict?: () => InstallUnitVerdict;
 	readonly getUpdateState: () => UpdateState;
 	readonly now: () => number;
 }
@@ -74,31 +80,37 @@ async function resumeCommitting(
 	});
 }
 
-// Unlike an uncertain COMMIT, a DOWNLOAD may be retried. The persisted phase
-// can lag a short commit (dpkg may already have run when the board died), but
-// the retry is a fresh apt run, not a replay of the old one: nothing else runs
-// after a reboot, apt repairs a half-installed package, and an already applied
-// version is a no-op. Staying in `downloading` instead wedged the orchestrator
-// with no unit left to report an outcome.
-async function resumeDownloading(
+export type DownloadResumeDecision =
+	/** A unit was reattached or the wire already carries its outcome. */
+	| { readonly kind: "unit-observed" }
+	/** No unit by our name exists and nothing on the wire says otherwise. */
+	| { readonly kind: "unit-absent"; readonly state: OrchestratorState }
+	/** The probe did not run or failed: absence is unproven, ask again later. */
+	| {
+			readonly kind: "undecided";
+			readonly cause: "probe-failed" | "not-probed";
+			readonly error?: unknown;
+	  };
+
+// The persisted phase can lag a short commit, so a missing unit says nothing
+// about dpkg: the transaction may have finished, half-finished, or never run.
+// Replaying the stored plan would act on that stale intent (an empty plan even
+// fails the launcher), so a proven absence only returns to `idle` with the
+// package check due, and discovery decides from the system as it is now. A
+// `false` from recovery is not proof: it also means "never looked" (updates
+// disabled), and treating that as absence once let a stream start skip the
+// commit-stage probe while a surviving unit could be running dpkg.
+export async function adjudicateInterruptedDownload(
 	persisted: OrchestratorState,
 	deps: OrchestratorResumeDeps,
-): Promise<OrchestratorState> {
+): Promise<DownloadResumeDecision> {
 	let recovered: boolean;
 	try {
 		recovered = await deps.recoverSoftwareUpdateIfRunning();
 	} catch (error) {
-		// An unreadable probe proves nothing about the unit; the standalone
-		// recovery retry may still reattach, so keep the phase as it is.
-		logger.warn(
-			"update-orchestrator: download resume could not probe the install unit; phase kept",
-			{ error },
-		);
-		return persisted;
+		return { kind: "undecided", cause: "probe-failed", error };
 	}
 	const wire = deps.getUpdateState();
-	// A live unit, or a finished one whose outcome the tick will read, keeps
-	// the existing poll path.
 	if (
 		recovered ||
 		wire.kind === "installing" ||
@@ -106,16 +118,18 @@ async function resumeDownloading(
 		wire.kind === "success" ||
 		wire.kind === "failed"
 	) {
-		return persisted;
+		return { kind: "unit-observed" };
 	}
-	logger.warn(
-		"update-orchestrator: persisted download has no install unit after restart; retrying the install",
-		{ wire: wire.kind, enteredAt: persisted.enteredAt },
-	);
-	return reduceOrchestrator(persisted, {
-		type: "DOWNLOAD_RESUME_UNIT_ABSENT",
-		now: deps.now(),
-	});
+	if (deps.lastInstallUnitVerdict?.() !== "absent") {
+		return { kind: "undecided", cause: "not-probed" };
+	}
+	return {
+		kind: "unit-absent",
+		state: reduceOrchestrator(persisted, {
+			type: "DOWNLOAD_RESUME_UNIT_ABSENT",
+			now: deps.now(),
+		}),
+	};
 }
 
 export async function resumeOrchestratorState(
@@ -126,7 +140,8 @@ export async function resumeOrchestratorState(
 		return resumeCommitting(persisted, deps);
 	}
 	if (persisted.phase === "downloading") {
-		return resumeDownloading(persisted, deps);
+		const decision = await adjudicateInterruptedDownload(persisted, deps);
+		return decision.kind === "unit-absent" ? decision.state : persisted;
 	}
 	return persisted;
 }

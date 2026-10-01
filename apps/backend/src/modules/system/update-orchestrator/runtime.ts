@@ -26,7 +26,9 @@ import { cleanAptCache } from "../apt-cache-clean.ts";
 import { isRealDevice } from "../device-detection.ts";
 import { getIdleStatus } from "../idle-activity.ts";
 import {
+	getLastInstallUnitVerdict,
 	getUpdateState,
+	type InstallUnitVerdict,
 	recoverSoftwareUpdateIfRunning,
 	runUpdateDiscoveryAndReport,
 	type SoftwareUpdateError,
@@ -61,7 +63,11 @@ import { readBootedOsReleaseVersion } from "./os-manifest.ts";
 import { loadOrchestratorState, saveOrchestratorState } from "./persistence.ts";
 import { UpdateQuarantine } from "./quarantine.ts";
 import { reduceOrchestrator } from "./reducer.ts";
-import { resumeOrchestratorState } from "./resume.ts";
+import {
+	adjudicateInterruptedDownload,
+	type OrchestratorResumeDeps,
+	resumeOrchestratorState,
+} from "./resume.ts";
 import {
 	canStartManualCheck,
 	canStartManualInstall,
@@ -150,6 +156,7 @@ export interface OrchestratorRuntimeDeps {
 	) => Promise<void>;
 	readonly refreshSlots: () => Promise<unknown>;
 	readonly recoverSoftwareUpdateIfRunning: () => Promise<boolean>;
+	readonly lastInstallUnitVerdict: () => InstallUnitVerdict;
 	readonly persist: (state: OrchestratorState) => void;
 	readonly quarantine: UpdateQuarantine;
 	readonly restartStale: (
@@ -252,6 +259,7 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	dropSupersededQuarantine,
 	refreshSlots: readBothSlotStatus,
 	recoverSoftwareUpdateIfRunning,
+	lastInstallUnitVerdict: getLastInstallUnitVerdict,
 	persist: saveOrchestratorState,
 	quarantine: new UpdateQuarantine(),
 	restartStale: async (isIdle, transactionRunning) => {
@@ -280,6 +288,10 @@ let slotIdentityUnknownWarned = false;
 let pendingCellularApproval:
 	| { readonly id: string; readonly sizeBytes: number }
 	| undefined;
+// `enteredAt` of a resumed download whose unit probe was inconclusive. Keyed
+// on it so a NEW download (re-entry sets a new enteredAt) is never judged for
+// absence: its unit may simply not exist yet.
+let deferredDownloadEnteredAt: number | null = null;
 
 const IDLE_TICK_MS = 60_000;
 const ACTIVE_TICK_MS = 3_000;
@@ -306,6 +318,7 @@ export function resetOrchestratorRuntimeForTest(): void {
 	slotSyncUndecidedReason = null;
 	slotIdentityUnknownWarned = false;
 	pendingCellularApproval = undefined;
+	deferredDownloadEnteredAt = null;
 }
 
 export function getOrchestratorState(): OrchestratorState {
@@ -1354,6 +1367,64 @@ async function thisBootPassedHealthcheck(): Promise<boolean> {
 	}
 }
 
+// ─── interrupted download (resume, then deferred re-adjudication) ──────────
+
+function resumeDeps(): OrchestratorResumeDeps {
+	return {
+		recoverSoftwareUpdateIfRunning: deps.recoverSoftwareUpdateIfRunning,
+		lastInstallUnitVerdict: deps.lastInstallUnitVerdict,
+		getUpdateState: deps.getPackageInstallWireState,
+		now: deps.now,
+	};
+}
+
+// Returns the state to adopt for `current`; the caller persists it. The stale
+// pending record is cleared BEFORE the transition is persisted, so a crash in
+// between re-adjudicates instead of leaving it to name a later install.
+async function adjudicateDownloadResume(
+	current: OrchestratorState,
+): Promise<OrchestratorState> {
+	const decision = await adjudicateInterruptedDownload(current, resumeDeps());
+	switch (decision.kind) {
+		case "unit-observed":
+			deferredDownloadEnteredAt = null;
+			return current;
+		case "undecided":
+			if (deferredDownloadEnteredAt !== current.enteredAt)
+				logger.warn(
+					"update-orchestrator: cannot tell whether the interrupted download's install unit survived; re-checking each tick",
+					{ cause: decision.cause, error: decision.error },
+				);
+			deferredDownloadEnteredAt = current.enteredAt;
+			return current;
+		case "unit-absent":
+			deferredDownloadEnteredAt = null;
+			logger.warn(
+				"update-orchestrator: interrupted download has no install unit; dropping the plan and re-checking for updates",
+				{ enteredAt: current.enteredAt },
+			);
+			await deps.quarantine.clearPending();
+			return decision.state;
+		default: {
+			const unreachable: never = decision;
+			return unreachable;
+		}
+	}
+}
+
+async function readjudicateDeferredDownload(): Promise<void> {
+	const deferred = deferredDownloadEnteredAt;
+	if (deferred === null) return;
+	if (state.phase !== "downloading" || state.enteredAt !== deferred) {
+		deferredDownloadEnteredAt = null;
+		return;
+	}
+	const next = await adjudicateDownloadResume(state);
+	// The probe awaits: a stream start may have moved the phase meanwhile.
+	if (next === state || state.enteredAt !== deferred) return;
+	dispatch({ type: "DOWNLOAD_RESUME_UNIT_ABSENT", now: deps.now() });
+}
+
 // ─── settle/sync acknowledgement ───────────────────────────────────────────
 
 function acknowledgeTerminalRestPhases(): void {
@@ -1408,6 +1479,7 @@ export async function runOrchestratorTick(): Promise<void> {
 	} else if (state.phase === "awaiting-idle") {
 		await maybeStartPackageInstall({ bypassIdle: false });
 	} else if (state.phase === "downloading" || state.phase === "committing") {
+		await readjudicateDeferredDownload();
 		await pollPackageInstallProgress();
 	} else if (state.phase === "restarting-services") {
 		const settings = await deps.loadSettings();
@@ -1577,11 +1649,10 @@ export async function startUpdateOrchestrator(
 	const now = deps.now();
 	const persisted = await loadOrchestratorState();
 	const baseline = persisted ?? initialOrchestratorState(now);
-	state = await resumeOrchestratorState(baseline, {
-		recoverSoftwareUpdateIfRunning: deps.recoverSoftwareUpdateIfRunning,
-		getUpdateState: deps.getPackageInstallWireState,
-		now: deps.now,
-	});
+	state =
+		baseline.phase === "downloading"
+			? await adjudicateDownloadResume(baseline)
+			: await resumeOrchestratorState(baseline, resumeDeps());
 	if (state.phase === "os-activation-armed" || state.phase === "os-verifying")
 		await reconcileOsActivation();
 	if (state.phase === "os-verifying") await verifyOsBoot();
