@@ -49,8 +49,17 @@ function deps(overrides: Partial<OrchestratorResumeDeps> = {}): {
 	return { deps: merged, calls };
 }
 
-describe("resume — every non-committing phase is a pure structural pass-through", () => {
-	const nonCommitting = ORCHESTRATOR_PHASES.filter((p) => p !== "committing");
+// `downloading` left this sweep when resume began adjudicating a persisted
+// download whose unit is gone (opi r5x X1); its own suite is below.
+const ADJUDICATED_ON_RESUME: readonly OrchestratorPhase[] = [
+	"committing",
+	"downloading",
+];
+
+describe("resume — every phase without an install unit to adjudicate is a pure structural pass-through", () => {
+	const nonCommitting = ORCHESTRATOR_PHASES.filter(
+		(p) => !ADJUDICATED_ON_RESUME.includes(p),
+	);
 
 	for (const phase of nonCommitting) {
 		test(`resume from "${phase}" changes nothing and calls NO recovery dependency`, async () => {
@@ -66,9 +75,10 @@ describe("resume — every non-committing phase is a pure structural pass-throug
 		});
 	}
 
-	test("every phase except committing is covered by the pass-through sweep above", () => {
-		expect(nonCommitting).toHaveLength(ORCHESTRATOR_PHASES.length - 1);
+	test("every phase except committing and downloading is covered by the pass-through sweep above", () => {
+		expect(nonCommitting).toHaveLength(ORCHESTRATOR_PHASES.length - 2);
 		expect(nonCommitting).not.toContain("committing");
+		expect(nonCommitting).not.toContain("downloading");
 	});
 });
 
@@ -221,5 +231,78 @@ describe("resume — phase enumeration completeness lock", () => {
 		];
 		expect([...ORCHESTRATOR_PHASES].sort()).toEqual([...expected].sort());
 		expect(ORCHESTRATOR_PHASES).toHaveLength(18);
+	});
+});
+
+describe('resume from "downloading" — retry only when the install unit is gone', () => {
+	const persisted: OrchestratorState = {
+		...initialOrchestratorState(1),
+		phase: "downloading",
+		progress: { percent: 0, etaSeconds: 0 },
+	};
+
+	for (const kind of [
+		"idle",
+		"checking",
+		"available",
+		"check_failed",
+	] as const) {
+		test(`no unit and wire "${kind}" -> awaiting-idle, never a commit outcome`, async () => {
+			const { deps: d, calls } = deps({
+				recoverSoftwareUpdateIfRunning: async () => false,
+				getUpdateState: () => ({ kind }) as UpdateState,
+			});
+			const resumed = await resumeOrchestratorState(persisted, d);
+			expect(resumed.phase).toBe("awaiting-idle");
+			expect(resumed.failureReason).toBeNull();
+			expect(resumed.progress).toBeNull();
+			expect(resumed.enteredAt).toBe(9999);
+			expect(calls).toEqual({ recover: 1, wire: 1 });
+		});
+	}
+
+	for (const [kind, wire] of [
+		[
+			"installing",
+			{
+				kind: "installing",
+				progress: { total: 1, downloading: 1, unpacking: 1, setting_up: 0 },
+			},
+		],
+		[
+			"downloading",
+			{
+				kind: "downloading",
+				progress: { total: 1, downloading: 0, unpacking: 0, setting_up: 0 },
+			},
+		],
+		["success", { kind: "success" }],
+		["failed", { kind: "failed", reason: "apt-exit-nonzero" }],
+	] as const) {
+		test(`wire "${kind}" keeps the persisted download unchanged for the tick to read`, async () => {
+			const { deps: d } = deps({
+				recoverSoftwareUpdateIfRunning: async () => false,
+				getUpdateState: () => wire as UpdateState,
+			});
+			expect(await resumeOrchestratorState(persisted, d)).toEqual(persisted);
+		});
+	}
+
+	test("a reattached unit keeps the persisted download even when the wire is not yet in flight", async () => {
+		const { deps: d } = deps({
+			recoverSoftwareUpdateIfRunning: async () => true,
+			getUpdateState: () => ({ kind: "idle" }) as UpdateState,
+		});
+		expect(await resumeOrchestratorState(persisted, d)).toEqual(persisted);
+	});
+
+	test("an unreadable unit probe keeps the persisted download and does not throw", async () => {
+		const { deps: d, calls } = deps({
+			recoverSoftwareUpdateIfRunning: async () => {
+				throw new Error("systemctl show: unreadable");
+			},
+		});
+		expect(await resumeOrchestratorState(persisted, d)).toEqual(persisted);
+		expect(calls.wire).toBe(0);
 	});
 });
