@@ -1689,8 +1689,9 @@ async function recoverSoftwareUpdate(
 			}
 		},
 	});
-	// `null` comes only from an identity-checked `LoadState=not-found` probe of
-	// the exact unit name; anything unreadable throws instead.
+	// `null` means `systemctl show` named the fixed unit and answered
+	// `LoadState=not-found`. Absence is not identity-checked (there is nothing
+	// to check); a loaded unit is, and an unreadable probe throws instead.
 	if (!recovered) {
 		lastInstallUnitVerdict = "absent";
 		return false;

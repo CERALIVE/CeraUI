@@ -2928,12 +2928,17 @@ Capable-image qualification limits are recorded in `docs/DEVICE-UPDATES.md`.
   a replay could run dpkg twice. Settlement may run `apt-get clean`. A persisted
   `downloading` is dropped only when the unit probe PROVED it gone
   (`getLastInstallUnitVerdict() === "absent"`): `DOWNLOAD_RESUME_UNIT_ABSENT`
-  goes to `idle` with the package check due now and the pending plan cleared,
-  so discovery, not the stale plan, decides what is left (an empty plan would
-  fail the launcher). Recovery's `false` also means "never probed" (updates
-  disabled, mocks, already observing), so it is not absence: the phase stays
-  `downloading` and that resumed download only is re-adjudicated each tick,
-  keyed on its `enteredAt`. Never extend this to `committing`.
+  goes to `idle` with the package check due now, so discovery, not the stale
+  plan, decides what is left (an empty plan would fail the launcher). The plan
+  file is NOT deleted there (a delete raced a newer install's plan); every
+  install start rewrites it instead. Recovery's `false` also means "never
+  probed" (updates disabled, mocks, already observing), so it is not absence:
+  the phase stays `downloading` and that resumed download only is
+  re-adjudicated each tick, fenced by `stateGeneration` (bumped on every state
+  change, never `enteredAt`): an answer is applied only if nothing moved while
+  the probe was awaited, with no `await` between that check and the dispatch.
+  Absence itself is `LoadState=not-found` for the fixed unit name, not an
+  identity check. Never extend this to `committing`.
 - **The package step reuses `startSoftwareUpdate()`.** Post-acceptance limits:
   root D8 Known gaps (b), (c), (g). Classify availability by `actionable_count`,
   not the inclusive `package_count`, to avoid launching an empty install.

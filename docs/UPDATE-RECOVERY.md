@@ -157,12 +157,14 @@ unit probe actually established, never against a bare "nothing was recovered":
 - **Unit observed.** Recovery reattaches a unit, or the wire is `installing`,
   `downloading`, `success` or `failed`: the phase is kept and the tick reads the
   outcome as before.
-- **Absence proven.** The probe ran and systemd reported no unit by the exact
-  transient name (`LoadState=not-found`; an unreadable or foreign unit throws
-  instead). `DOWNLOAD_RESUME_UNIT_ABSENT` drops the interrupted attempt: the
-  phase returns to `idle` with the package check due immediately, and
-  `pending-packages.json` is cleared before that transition is persisted. The
-  old plan is not replayed. If discovery still finds actionable packages, the
+- **Absence proven.** The probe ran: `systemctl show` named the fixed transient
+  unit and answered `LoadState=not-found`. Absence is not identity-checked
+  (there is no unit to check); a loaded unit is, and an unreadable probe throws
+  instead. `DOWNLOAD_RESUME_UNIT_ABSENT` drops the interrupted attempt: the
+  phase returns to `idle` with the package check due immediately. The old plan
+  is not replayed and is not deleted either: `pending-packages.json` is only
+  read on the commit/settle path of an install, and every install start rewrites
+  it (an empty plan when discovery has nothing) before its unit exists. If discovery still finds actionable packages, the
   normal `available` → `awaiting-idle` path installs them; if it finds none
   (the transaction completed before the cut, or boot-time dpkg recovery
   finished it), the device stays `idle`. Nothing is quarantined, no
@@ -176,7 +178,11 @@ unit probe actually established, never against a bare "nothing was recovered":
   on every tick for that resumed download only. It clears once a probe is
   conclusive: a reattached unit goes to the normal poll path, a proven absence
   to the recovery above. A download started later is never judged this way:
-  the deferral is keyed on the resumed download's `enteredAt`.
+  the deferral is tied to a state generation that every state change advances
+  (not to `enteredAt`, which two attempts can share), and a probe answer is
+  applied only if nothing changed while it was awaited, in the same synchronous
+  step as the transition. A stream start during the boot probe already sees the
+  persisted `downloading`; its abort wins over a late answer.
 
 With updates disabled the deferral lasts until they are re-enabled, and the
 phase keeps reporting `downloading`. The immediate package check honours the
