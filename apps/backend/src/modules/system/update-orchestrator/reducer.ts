@@ -249,6 +249,14 @@ function reduceDownloading(
 			});
 		case "DOWNLOAD_ABORTED_FOR_STREAM":
 			return enter(state, event.now, { phase: "available", progress: null });
+		// Straight back to `awaiting-idle`, not `available`: the install was
+		// already approved and was interrupted, not declined, so it must not
+		// wait on `packagesAuto` again. The idle gate still applies.
+		case "DOWNLOAD_RESUME_UNIT_ABSENT":
+			return enter(state, event.now, {
+				phase: "awaiting-idle",
+				progress: null,
+			});
 		default:
 			return state;
 	}

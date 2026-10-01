@@ -137,6 +137,10 @@ export type OrchestratorEvent =
 	  }
 	// Records a stop request, not cancellation (root AGENTS.md D8 Known gaps (b), (g)).
 	| { readonly type: "DOWNLOAD_ABORTED_FOR_STREAM"; readonly now: number }
+	// Resume-only: a persisted `downloading` whose unit is gone after a restart.
+	// The phase can lag a short commit, so this proves nothing about dpkg; it
+	// only schedules a fresh, idempotent apt run (resume.ts).
+	| { readonly type: "DOWNLOAD_RESUME_UNIT_ABSENT"; readonly now: number }
 	| { readonly type: "COMMIT_PHASE_ENTERED"; readonly now: number }
 	| {
 			readonly type: "COMMIT_PROGRESS";

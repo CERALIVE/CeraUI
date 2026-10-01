@@ -11,9 +11,12 @@
 /**
  * Reattach rather than replay an uncertain package transaction: replay could
  * run dpkg twice. Settlement can run `apt-get clean`; see docs/UPDATE-RECOVERY.md.
+ * A persisted `downloading` with no unit left is retried instead; see
+ * resumeDownloading() for why that is not a replay.
  */
 
 import type { UpdateState } from "@ceraui/rpc/schemas";
+import { logger } from "../../../helpers/logger.ts";
 import { reduceOrchestrator } from "./reducer.ts";
 import type { OrchestratorState } from "./types.ts";
 
@@ -71,12 +74,59 @@ async function resumeCommitting(
 	});
 }
 
+// Unlike an uncertain COMMIT, a DOWNLOAD may be retried. The persisted phase
+// can lag a short commit (dpkg may already have run when the board died), but
+// the retry is a fresh apt run, not a replay of the old one: nothing else runs
+// after a reboot, apt repairs a half-installed package, and an already applied
+// version is a no-op. Staying in `downloading` instead wedged the orchestrator
+// with no unit left to report an outcome.
+async function resumeDownloading(
+	persisted: OrchestratorState,
+	deps: OrchestratorResumeDeps,
+): Promise<OrchestratorState> {
+	let recovered: boolean;
+	try {
+		recovered = await deps.recoverSoftwareUpdateIfRunning();
+	} catch (error) {
+		// An unreadable probe proves nothing about the unit; the standalone
+		// recovery retry may still reattach, so keep the phase as it is.
+		logger.warn(
+			"update-orchestrator: download resume could not probe the install unit; phase kept",
+			{ error },
+		);
+		return persisted;
+	}
+	const wire = deps.getUpdateState();
+	// A live unit, or a finished one whose outcome the tick will read, keeps
+	// the existing poll path.
+	if (
+		recovered ||
+		wire.kind === "installing" ||
+		wire.kind === "downloading" ||
+		wire.kind === "success" ||
+		wire.kind === "failed"
+	) {
+		return persisted;
+	}
+	logger.warn(
+		"update-orchestrator: persisted download has no install unit after restart; retrying the install",
+		{ wire: wire.kind, enteredAt: persisted.enteredAt },
+	);
+	return reduceOrchestrator(persisted, {
+		type: "DOWNLOAD_RESUME_UNIT_ABSENT",
+		now: deps.now(),
+	});
+}
+
 export async function resumeOrchestratorState(
 	persisted: OrchestratorState,
 	deps: OrchestratorResumeDeps,
 ): Promise<OrchestratorState> {
 	if (persisted.phase === "committing") {
 		return resumeCommitting(persisted, deps);
+	}
+	if (persisted.phase === "downloading") {
+		return resumeDownloading(persisted, deps);
 	}
 	return persisted;
 }
