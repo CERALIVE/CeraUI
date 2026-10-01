@@ -1850,7 +1850,7 @@
 	"notifications.updatePausedForStream": "配信開始のためダウンロードを一時停止しました。",
 	"notifications.updateSystemStaged": "システムバージョン {version} を準備しました。次の通常の再起動後に適用されます。",
 	"notifications.updateSystemActivated": "システムバージョン {version} が有効になりました。",
-	"notifications.updateRollback": "バージョン {version} は起動できず、以前のシステムに戻りました。",
+	"notifications.updateRollback": "システムバージョン {version} から以前のシステムに戻りました。",
 	"notifications.updateSlotsCurrent": "両方のシステムスロットが最新です。",
 	"notifications.updateRestartRecommended": "更新後に {unit} の再起動を推奨します。自動的には再起動しません。",
 	"notifications.updateCellularApproval": "このダウンロードにはモバイルデータ通信の承認が必要です（{size}）。",

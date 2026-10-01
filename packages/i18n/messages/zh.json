@@ -1850,7 +1850,7 @@
 	"notifications.updatePausedForStream": "为开始直播，下载已暂停。",
 	"notifications.updateSystemStaged": "系统版本 {version} 已准备就绪，将在下次正常重启后生效。",
 	"notifications.updateSystemActivated": "系统版本 {version} 已启用。",
-	"notifications.updateRollback": "版本 {version} 未能启动；设备已回滚。",
+	"notifications.updateRollback": "设备已从系统版本 {version} 回滚。",
 	"notifications.updateSlotsCurrent": "两个系统分区都已是最新版本。",
 	"notifications.updateRestartRecommended": "建议更新后重启 {unit}。设备不会自动重启该服务。",
 	"notifications.updateCellularApproval": "此下载需要移动数据使用许可（{size}）。",

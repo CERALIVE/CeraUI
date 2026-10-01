@@ -1895,7 +1895,7 @@
 	"notifications.updatePausedForStream": "The download was paused so streaming could start.",
 	"notifications.updateSystemStaged": "System version {version} is staged. It applies after the next clean restart.",
 	"notifications.updateSystemActivated": "System version {version} is now active.",
-	"notifications.updateRollback": "System version {version} did not start; the device rolled back.",
+	"notifications.updateRollback": "The device rolled back from system version {version}.",
 	"notifications.updateSlotsCurrent": "Both system slots are up to date.",
 	"notifications.updateRestartRecommended": "Restart recommended for {unit} after this update. The device will not restart it automatically.",
 	"notifications.updateCellularApproval": "This system download needs one-time approval to use cellular data ({size}).",

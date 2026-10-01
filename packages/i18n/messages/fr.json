@@ -1898,7 +1898,7 @@
 	"notifications.updatePausedForStream": "Le téléchargement a été interrompu pour démarrer la diffusion.",
 	"notifications.updateSystemStaged": "La version système {version} est prête. Elle sera appliquée après le prochain redémarrage normal.",
 	"notifications.updateSystemActivated": "La version système {version} est active.",
-	"notifications.updateRollback": "La version {version} n'a pas démarré ; l'appareil est revenu à la version précédente.",
+	"notifications.updateRollback": "L'appareil a annulé la version système {version} et est revenu à la version précédente.",
 	"notifications.updateSlotsCurrent": "Les deux partitions système sont à jour.",
 	"notifications.updateRestartRecommended": "Redémarrage conseillé pour {unit} après la mise à jour. L'appareil ne le fera pas automatiquement.",
 	"notifications.updateCellularApproval": "Ce téléchargement nécessite une autorisation pour utiliser les données mobiles ({size}).",

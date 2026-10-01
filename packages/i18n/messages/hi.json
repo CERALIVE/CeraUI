@@ -1895,7 +1895,7 @@
 	"notifications.updatePausedForStream": "स्ट्रीम शुरू होने के लिए डाउनलोड रोक दिया गया है।",
 	"notifications.updateSystemStaged": "सिस्टम संस्करण {version} तैयार है। अगली सामान्य रीस्टार्ट के बाद लागू होगा।",
 	"notifications.updateSystemActivated": "सिस्टम संस्करण {version} अब सक्रिय है।",
-	"notifications.updateRollback": "संस्करण {version} शुरू नहीं हुआ; डिवाइस पिछले संस्करण पर लौट गया।",
+	"notifications.updateRollback": "डिवाइस सिस्टम संस्करण {version} से पिछले संस्करण पर लौट गया।",
 	"notifications.updateSlotsCurrent": "दोनों सिस्टम स्लॉट अपडेट हैं।",
 	"notifications.updateRestartRecommended": "अपडेट के बाद {unit} को रीस्टार्ट करें। डिवाइस इसे अपने आप रीस्टार्ट नहीं करेगा।",
 	"notifications.updateCellularApproval": "इस डाउनलोड के लिए मोबाइल डेटा की अनुमति चाहिए ({size})।",

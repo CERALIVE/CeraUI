@@ -1850,7 +1850,7 @@
 	"notifications.updatePausedForStream": "스트리밍을 시작하기 위해 다운로드를 일시 중지했습니다.",
 	"notifications.updateSystemStaged": "시스템 버전 {version}이 준비되었습니다. 다음 정상적인 재시작 후 적용됩니다.",
 	"notifications.updateSystemActivated": "시스템 버전 {version}이 활성화되었습니다.",
-	"notifications.updateRollback": "버전 {version}이 부팅되지 않아 이전 시스템으로 되돌렸습니다.",
+	"notifications.updateRollback": "시스템 버전 {version}에서 이전 시스템으로 되돌렸습니다.",
 	"notifications.updateSlotsCurrent": "두 시스템 슬롯 모두 최신 상태입니다.",
 	"notifications.updateRestartRecommended": "업데이트 후 {unit} 재시작을 권장합니다. 자동으로 재시작하지 않습니다.",
 	"notifications.updateCellularApproval": "이 다운로드에는 모바일 데이터 사용 승인({size})이 필요합니다.",

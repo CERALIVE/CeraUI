@@ -1898,7 +1898,7 @@
 	"notifications.updatePausedForStream": "La descarga se pausó para iniciar la transmisión.",
 	"notifications.updateSystemStaged": "La versión {version} del sistema está preparada. Se aplicará tras el próximo reinicio seguro.",
 	"notifications.updateSystemActivated": "La versión {version} del sistema está activa.",
-	"notifications.updateRollback": "La versión {version} no arrancó; el dispositivo volvió a la anterior.",
+	"notifications.updateRollback": "El dispositivo revirtió la versión del sistema {version} y volvió a la anterior.",
 	"notifications.updateSlotsCurrent": "Ambas particiones del sistema están actualizadas.",
 	"notifications.updateRestartRecommended": "Se recomienda reiniciar {unit} después de actualizar. No se reiniciará automáticamente.",
 	"notifications.updateCellularApproval": "Esta descarga necesita autorización para usar datos móviles ({size}).",
