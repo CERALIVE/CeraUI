@@ -151,23 +151,48 @@ Orange Pi 5+ drill (2026-09-30, X1) that left the orchestrator in
 `downloading` after the reboot, with no unit, every check and install refused
 as `busy`, and the half-installed package never repaired.
 
-On resume, a persisted `downloading` is adjudicated as follows. If recovery
-reattaches a unit, or the wire is `installing`, `downloading`, `success` or
-`failed`, the phase is kept and the tick reads the outcome as before. If the
-unit probe is unreadable, the phase is also kept. Otherwise the unit is gone,
-and `DOWNLOAD_RESUME_UNIT_ABSENT` returns the phase to `awaiting-idle` with one
-warning; `pending-packages.json` is left intact, nothing is quarantined, and the
-next idle tick starts a new install. That is a retry, not a replay: nothing
-else runs after a reboot, apt reinstalls a half-installed package, and an
-already-applied version is a no-op. An uncertain `committing` is still never
-retried (see above).
+On resume, a persisted `downloading` is adjudicated against what the install
+unit probe actually established, never against a bare "nothing was recovered":
+
+- **Unit observed.** Recovery reattaches a unit, or the wire is `installing`,
+  `downloading`, `success` or `failed`: the phase is kept and the tick reads the
+  outcome as before.
+- **Absence proven.** The probe ran and systemd reported no unit by the exact
+  transient name (`LoadState=not-found`; an unreadable or foreign unit throws
+  instead). `DOWNLOAD_RESUME_UNIT_ABSENT` drops the interrupted attempt: the
+  phase returns to `idle` with the package check due immediately, and
+  `pending-packages.json` is cleared before that transition is persisted. The
+  old plan is not replayed. If discovery still finds actionable packages, the
+  normal `available` → `awaiting-idle` path installs them; if it finds none
+  (the transaction completed before the cut, or boot-time dpkg recovery
+  finished it), the device stays `idle`. Nothing is quarantined, no
+  `installed` notification is sent for the uncertain transaction, and no
+  `failed` phase is entered.
+- **Undecided.** The probe threw, or never ran (updates disabled with
+  `apt_update_enabled: false`, mock mode, or this process already observing a
+  transaction). Recovery answers `false` in those cases too, and that is not
+  proof of absence. The phase stays `downloading`, so a stream start still runs
+  the D8 commit-stage probe, and the orchestrator asks the same question again
+  on every tick for that resumed download only. It clears once a probe is
+  conclusive: a reattached unit goes to the normal poll path, a proven absence
+  to the recovery above. A download started later is never judged this way:
+  the deferral is keyed on the resumed download's `enteredAt`.
+
+With updates disabled the deferral lasts until they are re-enabled, and the
+phase keeps reporting `downloading`. The immediate package check honours the
+usual gates (`packagesAuto`, the cellular policy); with `packagesAuto` off it
+waits for a manual check. A restart at any of these points adjudicates again
+from the persisted phase. An uncertain `committing` is still never retried
+(see above).
 
 Still open:
 
 - The persisted phase still lags a short commit (B1); this change does not
   alter how often `committing` is persisted.
 - `ceralive-dpkg-recover` cannot repair a package interrupted during unpack
-  (`iHR`); only the retried install does.
+  (`iHR`); only a later install of that package does, and that now depends on
+  discovery offering it again. Whether discovery and the install succeed while
+  dpkg reports an interrupted state is not board-proven.
 - A healthcheck that fails before `rauc status mark-good` marks nothing good
   but does not reboot the board, so the bootloader fallback only happens on a
   later reboot. One that fails after `mark-good` never falls back (see

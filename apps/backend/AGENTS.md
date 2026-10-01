@@ -2926,11 +2926,14 @@ Capable-image qualification limits are recorded in `docs/DEVICE-UPDATES.md`.
   and effectively masked. Actual root/systemd/APT board proof is still owed.
 - **Persistence and resume.** Reattach rather than replay an uncertain transaction;
   a replay could run dpkg twice. Settlement may run `apt-get clean`. A persisted
-  `downloading` whose unit is gone (no reattach, wire not `installing`/
-  `downloading`/`success`/`failed`) returns to `awaiting-idle` via
-  `DOWNLOAD_RESUME_UNIT_ABSENT` and is retried: the persisted phase can lag a
-  short commit, and only the retried apt run repairs a package dpkg left
-  half-installed. Never extend that retry to `committing`.
+  `downloading` is dropped only when the unit probe PROVED it gone
+  (`getLastInstallUnitVerdict() === "absent"`): `DOWNLOAD_RESUME_UNIT_ABSENT`
+  goes to `idle` with the package check due now and the pending plan cleared,
+  so discovery, not the stale plan, decides what is left (an empty plan would
+  fail the launcher). Recovery's `false` also means "never probed" (updates
+  disabled, mocks, already observing), so it is not absence: the phase stays
+  `downloading` and that resumed download only is re-adjudicated each tick,
+  keyed on its `enteredAt`. Never extend this to `committing`.
 - **The package step reuses `startSoftwareUpdate()`.** Post-acceptance limits:
   root D8 Known gaps (b), (c), (g). Classify availability by `actionable_count`,
   not the inclusive `package_count`, to avoid launching an empty install.

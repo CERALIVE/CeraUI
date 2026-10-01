@@ -143,7 +143,7 @@ gaps for overlap with the independent legacy launcher. Transition table from
 | `downloading` | `COMMIT_PHASE_ENTERED` | `committing` |
 | `downloading` | `DOWNLOAD_FAILED` | `failed` |
 | `downloading` | `DOWNLOAD_ABORTED_FOR_STREAM` | `available` |
-| `downloading` | `DOWNLOAD_RESUME_UNIT_ABSENT` | `awaiting-idle` (resume only, when the install unit is gone) |
+| `downloading` | `DOWNLOAD_RESUME_UNIT_ABSENT` | `idle` with the package check due now (resume only, when a probe proved the install unit gone) |
 | `committing` | `COMMIT_PROGRESS` | `committing` |
 | `committing` | `COMMIT_SUCCEEDED` | `restarting-services` |
 | `committing` | `COMMIT_FAILED` | `quarantined` |
@@ -208,6 +208,11 @@ fast unit outran the tick) and synchronously persists `restarting-services`
 **before** the exit. The pending package plan remains intact. Resume passes
 through `restarting-services` without needing the absent unit. Failure-clearance
 and stale-service policy: [UPDATE-RECOVERY.md](./UPDATE-RECOVERY.md).
+
+A persisted `downloading` resumes differently: only a probe that proved the
+install unit gone drops the attempt (to `idle`, check due now, pending plan
+cleared); a skipped or failed probe keeps `downloading` and re-asks on each tick.
+Detail: [UPDATE-RECOVERY.md](./UPDATE-RECOVERY.md#resuming-an-interrupted-download-exists--fixture-proven).
 
 Inferring success on resume from dpkg or the pending plan would turn an uncertain
 mid-commit crash into an unproved success. Preserve the output-drain and exact
