@@ -68,12 +68,42 @@ StartFailure = {
   attemptId: string;                 // REQUIRED — Todo 29 fences on it
   phase: 'params' | 'spawn-sender' | 'connect' | 'hello'
        | 'subscribe' | 'start-rpc' | 'playing-wait';
+  // Closed enum — see streaming-lifecycle.schema.ts `START_FAILURE_CLASSES`
+  // for the full, current list (audio/modem/capture classes added later,
+  // `update_in_progress` added by Todo 37, are not all repeated here).
   class: 'engine_unavailable' | 'engine_restarting' | 'protocol_incompatible'
-       | 'start_invalid' | 'engine_internal' | 'start_timeout';
+       | 'start_invalid' | 'engine_internal' | 'start_timeout'
+       | 'update_in_progress';
   code?: number | string;            // engine JSON-RPC numeric code, or its string data-code
+  // Present ONLY on `update_in_progress` (Todo 37). A probe-only refusal
+  // reports fixed committing/0/0 while the orchestrator stays downloading.
+  updatePhase?: 'idle' | 'checking' | 'available' | 'downloading' | 'awaiting-idle'
+       | 'committing' | 'restarting-services' | 'settled' | 'os-available'
+       | 'os-staging' | 'os-staged' | 'os-activation-armed' | 'os-verifying'
+       | 'sync-eligible' | 'syncing' | 'synced' | 'quarantined' | 'failed';
+  updatePercent?: number;
+  updateEtaSeconds?: number;
   retriable: boolean;                // materialized verdict for THIS (class, phase)
 }
 ```
+
+### `update_in_progress` (Todo 37)
+
+`typedUpdateInProgressFailure()` builds this refusal at `phase: 'params'` with
+`retriable: false`. Wait for the refusing condition to clear, not an automatic
+retry; `settled` is not required.
+
+Probe, stop and OTA-marker semantics are in the
+[DEVICE-UPDATES D8 section](./DEVICE-UPDATES.md#d8-stream-admission);
+see the root AGENTS.md D8 Known gaps for launch and post-admission limits.
+
+Treat `updateEtaSeconds: 0` as unknown, not as "done". Other launch and
+post-admission gaps are in "D8 stream/update admission:
+what it does NOT cover" under Known gaps in the root
+[`AGENTS.md`](../AGENTS.md).
+
+The orchestrator's phases, the full D8 table and what is proven are in
+[DEVICE-UPDATES.md](./DEVICE-UPDATES.md).
 
 `phase` mirrors the real start pipeline; `class` is a small, behaviour-oriented
 bucket (retry vs. surface vs. update-prompt), NOT a 1:1 mirror of every engine
@@ -245,6 +275,7 @@ start, so Todo 27 rolls back and escalates instead.
 | `protocol_incompatible` | *(none)* | An engine/bindings protocol-major mismatch is deterministic — the same binaries never negotiate on retry, so surface an update prompt instead of looping. |
 | `start_invalid` | *(none)* | Invalid params/config are deterministic — an identical retry fails identically, so the operator (or cloud) must fix the input first. |
 | `engine_internal` | *(none)* | A deterministic engine-side fault or state conflict (e.g. already_streaming / -32603); retrying masks a real bug and can orphan resources — surface with a journal pointer. |
+| `update_in_progress` | *(none)* | A cached refusing phase, fresh wire read or positive/fail-closed probe blocked admission. Wait for that condition to clear; automatic retry is not authorized. |
 
 ---
 

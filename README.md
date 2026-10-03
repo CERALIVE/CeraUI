@@ -1,5 +1,104 @@
 # CeraUI
 
+**Device updates [EXISTS].** The update orchestrator checks for package and
+system updates on a schedule alongside the older package-update RPC path. It
+automatically installs while idle, and
+allows operator actions to bypass that idle wait. Stream/update admission:
+[D8 detail](docs/DEVICE-UPDATES.md#d8-stream-admission) and
+[D8 Known gaps](AGENTS.md).
+Settings → Software Updates shows packages,
+system image, slots, automation (auto toggles, schedule window, channel),
+cellular allowances with per-candidate approval, and the update connection. A
+busy update shows an app-wide badge, and the Live cockpit warns before Go Live;
+Start stays enabled because the device decides admission. Implementation
+reference: [device updates](docs/DEVICE-UPDATES.md).
+
+**What today's images can use [PARTIAL].** Every image shipping today is a
+legacy image: it keeps the 15-package update roster, and the dialog states which
+sections it cannot back instead of hiding them. Updating every package by origin,
+signed system-image updates and the slot mirror are implemented but need image
+capabilities no released image declares yet. System-image updates additionally
+need an `/etc/ceralive/os-release-version` stamp, so current boards refuse them.
+The origin-classification and detached-unit identity fixes were exercised on
+bench-enabled Rock 5B+ and Orange Pi 5+ boards; packages installed, but both
+successful installs left sticky `failed / commit_unit_absent_on_resume` because
+the backend exited before recording the orchestrator's success transition.
+This branch now persists `restarting-services` before exiting after an
+orchestrator-owned capable install, without guessing success on an uncertain
+resume or changing legacy-image behaviour. The fixed build has **not** been
+re-proven on a board; the OS/slot flows are not qualified by these installs.
+See also [update recovery](docs/UPDATE-RECOVERY.md).
+
+Tracked package recovery reserves exit authority for both committing and
+downloading snapshots. Owned wire `success` precedes restart-permission checking,
+so it does not prove a new backend is running. If durable success cannot be written,
+new packages stay installed while the old backend runs; the error log and latched
+`update-orchestrator-maintenance` health flag identify that condition. A separate
+pending-success fence blocks new scheduler and legacy command/channel submissions,
+including admitted continuations at their post-await boundaries, while ticks
+retry the successful snapshot under CONTROL. Already-submitted work is not cancelled.
+Ticks service independent snapshot and intent/witness recovery before package replay,
+so package priority cannot starve the recovery it needs. Both startup-tail snapshot/
+package-completion observation orders are host-tested, not board-qualified.
+Manual readiness requires valid startup and both OS/package durability; D8 uses its
+existing update-in-progress refusal. A readable renamed success after failed directory
+sync still requires successful re-persistence. Persistent drift escalates to local
+maintenance without clearing the fence. Only authoritative success persistence
+restores normal restart authority; no maintenance clear API is added.
+Avoid Check AND Install, preserve agent/plan/unit/output evidence and repair
+storage/ownership while alive. An accepted legacy Check clears retained wire success
+outside the fence. Terminal startup refusal by itself still leaves legacy RPCs and
+independent periodic callers active. Restart only after a positive safe baseline;
+hardware, power-loss and rendered maintenance feedback remain unqualified. Full
+[owner-decision inventory](docs/UPDATE-RECOVERY.md#owner-decision-pending-package-success-and-the-old-running-backend).
+
+OS receipt publication is not final release success: pending producers cannot
+arm activation, and a matching unsafe release failure stays terminal without
+deleting the receipt. Invalid recovery metadata also stays terminal on startup
+instead of clearing an earlier failure. Manual confirmation is limited to settled,
+typed unsafe OS outcomes with positive proof. These repairs are hermetically
+tested; the updated candidate still needs independent review and a board re-drill.
+
+Admission observation is bounded to a fail-closed 10-second refusal, not a writer
+deadline. Orphan settlement parses systemd absence by property, and a configured
+NBD device cannot lose its recorded ownership merely because its creator PID was
+reused. These safety repairs likewise remain hardware-unqualified.
+
+State-side unlaunched OS settlement requires a private completed witness matching
+the persisted attempt, signed candidate and current boot, plus fresh readiness.
+It returns to operator retry without counting an already-counted failure twice.
+Legacy D8 records without attempt provenance remain unsafe. A strict private
+two-phase attempt intent additionally covers pre-effect publication
+rollback: exact publishing authority plus positive no-producer proof restores the
+pre-state across a restart without inventing a failed round. Launching/missing-intent
+staging keeps the existing unsafe policy. See the [intent recovery table](docs/UPDATE-RECOVERY.md#durable-os-attempt-intent-partial--host-crash-point-proof-board-power-loss-proof-owed).
+Guard/state integration
+is implemented and fixture-tested; board qualification is owed.
+Valid stale launching intent cannot hold a cleared or superseding attempt hostage:
+it is retired only under ownership absence. A failed retirement leaves admission
+closed behind logged cleanup retry, without replacing the producer's outcome.
+Settlement and
+new-attempt admission share the control lease and recheck authoritative state;
+that lease is acquired regardless of device detection or development/mock settings;
+pending durability keeps admission closed. Startup restores missing recovery
+notices without replay churn. See [witness recovery](docs/UPDATE-RECOVERY.md#unlaunched-settlement-witness-partial).
+
+A root-only, local `.deb` maintenance executable now implements the narrow
+cross-slot unresolved-commit adjudication. It cannot be invoked through the UI
+or remote control and requires the backend inactive/effectively masked; its plan-
+bearing receipt is durable before clearance. The unprivileged test suite covers
+the decision/crash path; real root/systemd/APT board proof remains owed. See
+[the recovery contract](docs/UPDATE-RECOVERY.md) before any maintenance window.
+
+The OS channel reader now selects the Orange Pi product channel from its exact
+physical RAUC compatible without changing the compatible used for signed-pointer
+validation. The currently published Orange Pi drill pointer still needs its
+publisher-side correction, and the fixed CeraUI binary has not been deployed;
+this is not permission to stage that image. See [device updates](docs/DEVICE-UPDATES.md).
+An unpublished stable/beta channel no longer makes a healthy, TLS-verified link
+look captive or offline: the OS check reports no candidate instead. This
+correction is not yet board-proven on the fixed build.
+
 Generic raw capture inputs now have an honest, non-streamable **Raw video** row
 rather than a false Cam Link identity. Both consumers now pin published bindings
 2026.9.11; see [publication and rollout](docs/RAW-CAPTURE-CLASSIFICATION.md).
@@ -39,7 +138,7 @@ The app is organized into three primary destinations:
 
 - **Live** — a unified device-first source list leads the destination: every capture device, built-in pipeline, test pattern, and LAN network-ingest (RTMP/SRT) slot renders as one picker, with a single "Codec & delay" affordance owning all audio configuration. Below it, a "Stream setup" card shows three always-visible readiness rows (Encoder, Destination, Network — no collapse, no ready bar) each fusing a state dot with its config summary and a one-tap edit/fix affordance, plus the Start control. Pick a source, adjust encoder/server settings, and go live. While streaming, the view switches to a live cockpit: telemetry strip, bitrate hot-adjust, per-link ingest stats, and Stop. A persistent HUD bar shows four at-a-glance facts (live/idle/offline state, health verdict, bitrate, SoC temperature) across all destinations, with per-link signal detail and full telemetry available in an expanded sheet.
 - **Network** — connectivity overview. Bonded link status, WiFi networks (connect/disconnect/forget), cellular modems (APN, roaming, network type), Ethernet interfaces, hotspot configuration, and provider-aware Bluetooth controls. PipeWire images never try to start the retired BlueALSA unit, and a connected Bluetooth microphone is offered only when the installed provider agrees with the selected audio backend. Newly attached cellular hardware remains visible while modem services probe it. After two authoritative misses, only strong cellular evidence retains a non-actionable “Not controllable” row; descriptor-only guesses disappear and stay retired while attached, including across monitor restarts. Bluetooth descriptors never qualify by shape alone: wireless admission requires the full RNDIS triplet `e00103`, and `ID_MM_DEVICE_IGNORE=1` always excludes the device. Successful SIM PIN, PUK, and PIN2 unlocks update the affected modem row immediately over the existing push channel, without a page reload. Calm info/warning bands surface interface-topology issues without ever blocking a connection: a same-subnet notice when two bonded links deliberately share a subnet (normal for policy-routed bonding), and a policy-route warning if a bonded WiFi/modem link is missing its expected routing table.
-- **Settings** — system and device configuration. All actions open focused dialogs: cloud remote, LAN password, SSH, logs, software updates, power, version info, and per-protocol network-ingest (RTMP/SRT) enable/disable. The software-update dialog now answers rather than going quiet: a check that could not reach the repositories, or that landed on a captive portal, says so instead of reporting "up to date"; the result names which address family worked when only one did; a package that ships with the next OS image or that apt kept back is listed as such rather than offered for install; and an update refused before it starts — most often for insufficient free space — reports its own reason and clears the progress overlay instead of leaving "Applying…" on screen.
+- **Settings** — system and device configuration. All actions open focused dialogs: cloud remote, LAN password, SSH, logs, software updates, power, version info, and per-protocol network-ingest (RTMP/SRT) enable/disable. Software-update preflight refusals report their reason and clear the progress overlay. The post-acceptance silent-return gap is recorded in [D8 Known gaps](AGENTS.md), item (c). Update-state details: [device updates](docs/DEVICE-UPDATES.md).
 
 A dev-only DevTools destination is available in development builds.
 
@@ -111,6 +210,9 @@ A dev-only DevTools destination is available in development builds.
   stagger instead of walking every DNS answer serially, while active SRTLA links
   use passive RTT/NAK telemetry instead of competing probes. Captive portals
   remain visible as degraded links.
+  An update-specific, stateless selector also has fixture-proven APT/OS host
+  checks per uplink and address family. Live first-party deployment validation
+  awaits the update infrastructure; see `docs/HOST-UPLINK-ELECTION.md`.
 - **Flow-sticky client sharing**: the backend assigns new hotspot/shared-LAN flows
   across healthy uplinks while preserving established-flow affinity and keeping
   locally-originated SRTLA traffic outside its NAT path. The image carrier is the

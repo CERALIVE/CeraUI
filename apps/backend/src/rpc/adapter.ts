@@ -3,7 +3,7 @@
  * Handles WebSocket connections and routes messages to ORPC procedures
  */
 
-import { call } from "@orpc/server";
+import { call, ORPCError } from "@orpc/server";
 import type { ServerWebSocket, WebSocketHandler } from "bun";
 
 import { logger, logRedact } from "../helpers/logger.ts";
@@ -166,13 +166,21 @@ export async function handleORPCMessage(
 			: [];
 
 		const rawMessage = error instanceof Error ? error.message : "Unknown error";
+		const updateStartupPending =
+			error instanceof ORPCError &&
+			error.code === "UPDATE_ORCHESTRATOR_INITIALIZING";
 		ws.send(
 			JSON.stringify({
 				id: message.id,
 				error: {
 					// logRedact keeps a secret-shaped message from leaking to the client.
 					message: String(logRedact(rawMessage)),
-					code: isValidation ? "VALIDATION_ERROR" : "INTERNAL_ERROR",
+					code: updateStartupPending
+						? error.code
+						: isValidation
+							? "VALIDATION_ERROR"
+							: "INTERNAL_ERROR",
+					...(updateStartupPending ? { retryable: true } : {}),
 					...(fields.length > 0 ? { fields } : {}),
 				},
 			}),

@@ -207,6 +207,17 @@ re-deriving under the 1.12 ratio alone would have released ~135 KiB of unearned 
 untouched. This entry stays open: the reduction it asks for still has not happened, and
 the aggregate is now ~32 message keys from its next ceiling on both metrics.
 
+**2026-09-25 — the update-orchestrator operator surfaces crossed both aggregate
+ceilings.** Todo 41 rebuilt the lazily loaded Updates dialog and added the
+app-wide orchestrator badge and Go Live refusal band, with operator copy in all
+ten locales. The new build measured 1,188,456 B total SPA gzip and 1,329,348 B
+precache, up 42,142 B (+3.7%) and 42,167 B (+3.3%) from the displaced
+1,146,314 B and 1,287,181 B baselines. The dialog remains off the initial
+route (10.5 KiB gzip). Both displaced measurements stay visible in every report;
+the 16 KiB absolute headroom on each aggregate and the initial-route and
+largest-chunk baselines are unchanged. This entry stays open until the
+ten-locale catalog footprint is reduced without dropping copy or languages.
+
 **2026-09-23 — capture-failover operator copy crossed both aggregate ceilings.**
 The `capture-failover-resilience` branch adds 6 notice keys and 21 UI keys across
 all 10 locales. A fresh `origin/main` build passed at 1,106.1 KiB total SPA gzip

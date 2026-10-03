@@ -39,7 +39,6 @@
  */
 
 import fs from "node:fs";
-
 import {
 	type AddonConfig,
 	type AddonDescriptor,
@@ -47,7 +46,6 @@ import {
 	type AddonPhase,
 	type AddonState,
 } from "@ceraui/rpc/schemas";
-
 import { addonRefresh } from "../../helpers/addon-helper.ts";
 import { execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
@@ -58,6 +56,7 @@ import {
 } from "../../mocks/providers/addons.ts";
 import { isRealDevice } from "../system/device-detection.ts";
 import { getHardwareKindCached } from "../system/hardware-kind.ts";
+import { aptClientTlsFor } from "./apt-client-tls.ts";
 
 /** Persisted on `lastError` when no compatible artifact exists for the live OS. */
 export const ADDON_NOT_AVAILABLE_FOR_OS_VERSION =
@@ -385,6 +384,7 @@ function substitutePlaceholders(
 async function fetchCapped(url: string, maxBytes: number): Promise<Uint8Array> {
 	const res = await fetch(url, {
 		signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+		...(await aptClientTlsFor(url)),
 	});
 	if (!res.ok) throw new Error(`fetch ${url} failed: HTTP ${res.status}`);
 	const buf = new Uint8Array(await res.arrayBuffer());

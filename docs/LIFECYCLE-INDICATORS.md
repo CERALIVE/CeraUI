@@ -256,48 +256,21 @@ generic disconnect banner and the existing user-initiated-reboot banner. This is
 the **backend-restart signal** follow-up (see Named Follow-ups below).
 
 ### `update-in-progress`
-**Current indicator:** `apps/frontend/src/main/dialogs/UpdatesDialog.svelte:40-71,133-147`
+**Current indicator:** `apps/frontend/src/main/dialogs/UpdatesDialog.svelte`
 tracks update progress and disables a duplicate concurrent start;
-`apps/frontend/src/lib/components/updating-overlay.svelte:23-84,92-130` renders
+`apps/frontend/src/lib/components/updating-overlay.svelte` renders
 the downloading/unpacking/setting-up phases and the completion state.
-**Status: EXISTS** — the in-progress rendering itself is solid, and the related
-gap the Todo-1 salvage branch flagged is now **CONSUMED** (device-quality-wave2).
-The "failed update shown as Successfully Updated" bug is FIXED:
-`updating-overlay.svelte` now splits the single `isComplete` into truthful
-`failureReason`/`isFailure`/`isSuccess` derivations — a string `result` (the apt
-failure message) renders a `failed` phase (`XCircle` + error toast carrying the
-real apt reason), never the green checkmark (CeraUI PR `fix/updating-overlay-false-success`,
-merged `e8704449`; covered by `updating-overlay.test.ts`). Todo 24
-(update-notification unification, PR #184) additionally shipped the truthful
-`UpdatesDialog` `failed(reason)` band + retry off the unified update state
-machine. The overlay auto-clears when the update loop clears `status.updating`,
-so the salvage branch's separate "dismiss escape hatch" is subsumed. See
-**update rollback lifecycle** in Named Follow-ups below (now resolved) and the
-Todo-37 triage section.
+**Status: EXISTS.** Failure and success render separately; see
+`updating-overlay.test.ts`. The overlay clears when `status.updating` clears.
 
 ### `update-start-refused` / `update-start-unacknowledged`
 **Current indicator:** `apps/frontend/src/main/dialogs/UpdatesDialog.svelte`
 renders a standing `update-start-refused` band carrying the device's own reason
 (`updates_disabled` / `streaming` / `already_updating` / `check_unavailable`),
 and calls out a start the device accepted but never reported progress for.
-**Status: EXISTS** — added after a live Rock 5B+ report where Update → confirm
-showed "Applying…", reverted to the Update button a few seconds later, and
-installed nothing. Two properties make that state unrepresentable now:
-
-- **The backend never refuses silently.** `startSoftwareUpdate()` returns a typed
-  `UpdateStartOutcome`; `system.startUpdate` answers `{success:false, error:<reason>}`
-  instead of a phantom `{success:true}`, and the refusal is logged. The
-  procedure no longer duplicates the guards — `startSoftwareUpdate()` is the one
-  place that decides whether an update may run.
-- **The dialog latches the outcome itself.** The async-op phase decays to `idle`
-  after `ASYNC_OP_TERMINAL_LINGER_MS`, which is precisely how the old surface lost
-  its explanation; the dialog records the last start outcome in its own state so
-  the band stands until the operator acts.
-
-The overlay's global mount is unchanged and was never trigger-specific: `Layout.svelte`
-mounts `updating-overlay.svelte` off `status.updating` alone, so the Settings →
-Software Updates path and the notification path show the identical live
-percentage/phase/step counts. Locked by `Layout.updating-overlay.test.ts`.
+**Status: EXISTS.** The dialog latches its outcome so the async-op terminal
+linger does not erase the explanation. Post-acceptance limits: root AGENTS.md D8
+Known gaps (c). Global overlay mounting is covered by `Layout.updating-overlay.test.ts`.
 
 ---
 

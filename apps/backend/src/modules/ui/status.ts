@@ -69,6 +69,7 @@ import {
 	getUpdateState,
 } from "../system/software-updates.ts";
 import { getCachedSshStatus, getSshStatus } from "../system/ssh.ts";
+import { getOrchestratorWireState } from "../system/update-orchestrator/runtime.ts";
 import { wifiBuildMsg } from "../wifi/wifi.ts";
 import { notificationSendPersistent } from "./notifications.ts";
 import { buildMsg } from "./websocket-server.ts";
@@ -79,6 +80,7 @@ export type StatusResponseMessage = {
 	available_updates?: ReturnType<typeof getAvailableUpdates>;
 	updating?: ReturnType<typeof getSoftUpdateStatus>;
 	update_state?: ReturnType<typeof getUpdateState>;
+	update_orchestrator?: ReturnType<typeof getOrchestratorWireState>;
 	ssh?: ReturnType<typeof getCachedSshStatus>;
 	wifi?: ReturnType<typeof wifiBuildMsg>;
 	modems?: ReturnType<typeof buildModemsWireMessage>;
@@ -114,6 +116,7 @@ export function sendStatus(conn: WebSocket) {
 			available_updates: getAvailableUpdates(),
 			updating: getSoftUpdateStatus(),
 			update_state: getUpdateState(),
+			update_orchestrator: getOrchestratorWireState(),
 			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),
 			modems: buildModemsWireMessage(),

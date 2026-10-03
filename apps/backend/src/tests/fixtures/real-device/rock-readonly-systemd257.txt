@@ -1,0 +1,308 @@
+# Board: Rock 5B+; OS: Debian 13.7 Trixie; systemd: 257.13-1~deb13u1
+# Captured: 2026-10-02; read-only idle-board command batch.
+# Normalisation: Cloudflare request ID -> fixed hex; NEL report URL token -> fixture-report-token.
+# No hostname, machine-id, boot-id, UUID, serial or SSID collected; timestamps, PIDs and whitespace retained.
+# IPv4 -> stable 198.51.100.x; IPv6 -> stable 2001:db8::x; physical MACs/derived enx names -> stable 02:00:00:00:00:NN.
+# Repeated originals remain equal; prefix lengths, scopes, flags, metrics and JSON whitespace retained.
+# Cmdline inventory is a redacted RAUC-service-only selection, base64 preserves NUL bytes; no credentials collected.
+
+##### b2-version
+systemd 257 (257.13-1~deb13u1)
++PAM +AUDIT +SELINUX +APPARMOR +IMA +IPE +SMACK +SECCOMP +GCRYPT -GNUTLS +OPENSSL +ACL +BLKID +CURL +ELFUTILS +FIDO2 +IDN2 -IDN +IPTC +KMOD +LIBCRYPTSETUP +LIBCRYPTSETUP_PLUGINS +LIBFDISK +PCRE2 +PWQUALITY +P11KIT +QRENCODE +TPM2 +BZIP2 +LZ4 +XZ +ZLIB +ZSTD +BPF_FRAMEWORK +BTF -XKBCOMMON -UTMP +SYSVINIT +LIBARCHIVE
+
+##### b2-version-stderr
+
+##### b2-version-exit
+0
+
+##### dns-images.ceralive.tv-4
+images.ceralive.tv: 198.51.100.10                          -- link: eth0
+                    198.51.100.11                           -- link: eth0
+
+-- Information acquired via protocol DNS in 15.7ms.
+-- Data is authenticated: no; Data was acquired via local or encrypted transport: no
+-- Data from: network
+
+##### dns-images.ceralive.tv-4-stderr
+
+##### dns-images.ceralive.tv-4-exit
+0
+
+##### dns-images.ceralive.tv-6
+images.ceralive.tv: 2001:db8::12               -- link: eth0
+                    2001:db8::13               -- link: eth0
+
+-- Information acquired via protocol DNS in 16.1ms.
+-- Data is authenticated: no; Data was acquired via local or encrypted transport: no
+-- Data from: network
+
+##### dns-images.ceralive.tv-6-stderr
+
+##### dns-images.ceralive.tv-6-exit
+0
+
+##### dns-apt.ceralive.tv-4
+apt.ceralive.tv: 198.51.100.11                              -- link: eth0
+                 198.51.100.10                             -- link: eth0
+
+-- Information acquired via protocol DNS in 1.9ms.
+-- Data is authenticated: no; Data was acquired via local or encrypted transport: no
+-- Data from: cache
+
+##### dns-apt.ceralive.tv-4-stderr
+
+##### dns-apt.ceralive.tv-4-exit
+0
+
+##### dns-apt.ceralive.tv-6
+apt.ceralive.tv: 2001:db8::12                  -- link: eth0
+                 2001:db8::13                  -- link: eth0
+
+-- Information acquired via protocol DNS in 1.9ms.
+-- Data is authenticated: no; Data was acquired via local or encrypted transport: no
+-- Data from: cache
+
+##### dns-apt.ceralive.tv-6-stderr
+
+##### dns-apt.ceralive.tv-6-exit
+0
+
+##### curl-http
+
+<<<update-probe>>>204 0.148704
+##### curl-http-stderr
+
+##### curl-http-exit
+0
+
+##### curl-head
+HTTP/2 404 
+date: Fri, 02 Oct 2026 06:25:38 GMT
+content-type: application/octet-stream
+cf-ray: 0000000000000000-MIA
+cf-cache-status: DYNAMIC
+cache-control: no-store
+server: cloudflare
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=fixture-report-token"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+alt-svc: h3=":443"; ma=86400
+
+
+<<<update-probe>>>404 0.285206
+##### curl-head-stderr
+
+##### curl-head-exit
+0
+
+##### b2-rules4
+0:	from all lookup local
+32766:	from all lookup main
+32767:	from all lookup default
+
+##### b2-rules4-stderr
+
+##### b2-rules4-exit
+0
+
+##### b2-rules6
+0:	from all lookup local
+32766:	from all lookup main
+
+##### b2-rules6-stderr
+
+##### b2-rules6-exit
+0
+
+##### routes-100000-4
+[]
+
+##### routes-100000-4-stderr
+Error: ipv4: FIB table does not exist.
+Dump terminated
+
+##### routes-100000-4-exit
+2
+
+##### routes-100000-6
+[]
+
+##### routes-100000-6-stderr
+Error: ipv6: FIB table does not exist.
+Dump terminated
+
+##### routes-100000-6-exit
+2
+
+##### routes-100001-4
+[]
+
+##### routes-100001-4-stderr
+
+##### routes-100001-4-exit
+0
+
+##### routes-100001-6
+[]
+
+##### routes-100001-6-stderr
+Error: ipv6: FIB table does not exist.
+Dump terminated
+
+##### routes-100001-6-exit
+2
+
+##### b2-links
+[{"ifindex":1,"ifname":"lo","flags":["LOOPBACK","UP","LOWER_UP"],"mtu":65536,"qdisc":"noqueue","operstate":"UNKNOWN","linkmode":"DEFAULT","group":"default","txqlen":1000,"link_type":"loopback","address":"00:00:00:00:00:00","broadcast":"00:00:00:00:00:00"},{"ifindex":3,"ifname":"eth0","flags":["BROADCAST","MULTICAST","UP","LOWER_UP"],"mtu":1500,"qdisc":"pfifo_fast","operstate":"UP","linkmode":"DEFAULT","group":"default","txqlen":1000,"link_type":"ether","address":"02:00:00:00:00:01","broadcast":"ff:ff:ff:ff:ff:ff"},{"ifindex":4,"ifname":"wlan0","flags":["NO-CARRIER","BROADCAST","MULTICAST","UP"],"mtu":1500,"qdisc":"noqueue","operstate":"DOWN","linkmode":"DORMANT","group":"default","txqlen":1000,"link_type":"ether","address":"02:00:00:00:00:02","broadcast":"ff:ff:ff:ff:ff:ff","permaddr":"02:00:00:00:00:03"},{"ifindex":5,"ifname":"wwu1u4u1i2","flags":["POINTOPOINT","MULTICAST","NOARP"],"mtu":1500,"qdisc":"noop","operstate":"DOWN","linkmode":"DEFAULT","group":"default","txqlen":1000,"link_type":"none"},{"ifindex":6,"ifname":"enx020000000004","flags":["BROADCAST","MULTICAST","UP","LOWER_UP"],"mtu":1500,"qdisc":"pfifo_fast","operstate":"UP","linkmode":"DEFAULT","group":"default","txqlen":1000,"link_type":"ether","address":"02:00:00:00:00:04","broadcast":"ff:ff:ff:ff:ff:ff"},{"ifindex":7,"ifname":"eth1","flags":["BROADCAST","MULTICAST","UP","LOWER_UP"],"mtu":1500,"qdisc":"pfifo_fast","operstate":"UP","linkmode":"DEFAULT","group":"default","txqlen":1000,"link_type":"ether","address":"02:00:00:00:00:04","broadcast":"ff:ff:ff:ff:ff:ff"},{"ifindex":8,"ifname":"wwu1u4u4i4","flags":["POINTOPOINT","MULTICAST","NOARP"],"mtu":1500,"qdisc":"noop","operstate":"DOWN","linkmode":"DEFAULT","group":"default","txqlen":1000,"link_type":"none"},{"ifindex":9,"ifname":"clap-wlan0","flags":["BROADCAST","MULTICAST"],"mtu":1500,"qdisc":"noop","operstate":"DOWN","linkmode":"DEFAULT","group":"default","txqlen":1000,"link_type":"ether","address":"02:00:00:00:00:05","broadcast":"ff:ff:ff:ff:ff:ff","permaddr":"02:00:00:00:00:03"},{"ifindex":10,"ifname":"enx020000000006","flags":["BROADCAST","MULTICAST","UP","LOWER_UP"],"mtu":1500,"qdisc":"pfifo_fast","operstate":"UNKNOWN","linkmode":"DEFAULT","group":"default","txqlen":1000,"link_type":"ether","address":"02:00:00:00:00:06","broadcast":"ff:ff:ff:ff:ff:ff"}]
+
+##### b2-links-stderr
+
+##### b2-links-exit
+0
+
+##### b2-addresses
+[{"ifindex":3,"ifname":"eth0","flags":["BROADCAST","MULTICAST","UP","LOWER_UP"],"mtu":1500,"qdisc":"pfifo_fast","operstate":"UP","group":"default","txqlen":1000,"link_type":"ether","address":"02:00:00:00:00:01","broadcast":"ff:ff:ff:ff:ff:ff","addr_info":[{"family":"inet","local":"198.51.100.14","prefixlen":16,"broadcast":"198.51.100.15","scope":"link","noprefixroute":true,"label":"eth0","valid_life_time":4294967295,"preferred_life_time":4294967295},{"family":"inet","local":"198.51.100.16","prefixlen":24,"broadcast":"198.51.100.17","scope":"global","dynamic":true,"noprefixroute":true,"label":"eth0","valid_life_time":25294,"preferred_life_time":25294},{"family":"inet6","local":"2001:db8::18","prefixlen":64,"scope":"global","dynamic":true,"noprefixroute":true,"valid_life_time":1628,"preferred_life_time":1628},{"family":"inet6","local":"2001:db8::19","prefixlen":64,"scope":"link","noprefixroute":true,"valid_life_time":4294967295,"preferred_life_time":4294967295}]}]
+
+##### b2-addresses-stderr
+
+##### b2-addresses-exit
+0
+
+##### b2-carrier
+1
+
+##### b2-carrier-stderr
+
+##### b2-carrier-exit
+0
+
+##### b2-status
+{"compatible":"ceralive-rock-5b-plus","variant":"","booted":"A","boot_primary":"rootfs.0","slots":[{"rootfs.1":{"class":"rootfs","device":"/dev/disk/by-partlabel/rootfs_b","type":"ext4","bootname":"B","state":"inactive","parent":null,"mountpoint":null,"boot_status":"good","slot_status":{"bundle":{"compatible":"ceralive-rock-5b-plus","version":"36d8131","hash":"c4e2f3390229c0bec1a0ebe0be48f44022419607a1a8d99a7ab679e2d5ffdbc2"},"checksum":{"sha256":"256307371b9173b9de888cc82c26f262953671fd031fc2f6ef084e3ed9a774ff","size":4294967296},"installed":{"timestamp":"2026-10-01T04:47:52Z","count":5},"activated":{"timestamp":"2026-10-01T04:55:46Z","count":3},"status":"ok"}}},{"rootfs.0":{"class":"rootfs","device":"/dev/disk/by-partlabel/rootfs_a","type":"ext4","bootname":"A","state":"booted","parent":null,"mountpoint":null,"boot_status":"good","slot_status":{"bundle":{"compatible":"ceralive-rock-5b-plus","version":"36d8131","hash":"3a28ed5cf0c89a74797a770893b4b329caf4d65d525f2baf32c1e0b6f9ad6707"},"checksum":{"sha256":"4fb9097e5eb1b9b68b869b2d8248d016f30e819b402937a9a3dcd88954cf53e8","size":4294967296},"installed":{"timestamp":"2026-10-01T09:21:45Z","count":5},"activated":{"timestamp":"2026-10-01T09:27:13Z","count":5},"status":"ok"}}},{"certs.0":{"class":"certs","device":"/data/ceralive/certs/.rauc-certs-slot","type":"raw","bootname":null,"state":"inactive","parent":null,"mountpoint":null,"boot_status":null,"slot_status":{"bundle":{"compatible":null}}}}],"artifact-repositories":[]}
+
+##### b2-status-stderr
+
+##### b2-status-exit
+0
+
+##### b2-operation
+s "idle"
+
+##### b2-operation-stderr
+
+##### b2-operation-exit
+0
+
+##### b2-rauc-service
+MainPID=656
+ControlGroup=/system.slice/rauc.service
+ActiveState=active
+
+##### b2-rauc-service-stderr
+
+##### b2-rauc-service-exit
+0
+
+##### b2-rauc-stat
+656 (rauc) S 1 656 656 0 -1 4194560 2085315 44436630 38 801 3045 3430 43473 34012 20 0 5 0 879 338096128 2811 18446744073709551615 187650725904384 187650726423888 281474547507712 0 0 0 0 4096 16384 0 0 0 17 2 0 0 0 0 0 187650726484736 187650726498872 187651388792832 281474547511028 281474547511072 281474547511072 281474547511274 0
+
+##### b2-rauc-stat-stderr
+
+##### b2-rauc-stat-exit
+0
+
+##### b2-rauc-cgroup
+0::/system.slice/rauc.service
+
+##### b2-rauc-cgroup-stderr
+
+##### b2-rauc-cgroup-exit
+0
+
+##### b2-rauc-cgroup-procs
+656
+
+##### b2-rauc-cgroup-procs-stderr
+
+##### b2-rauc-cgroup-procs-exit
+0
+
+##### b2-mountinfo
+27 1 179:98 / / rw,relatime shared:1 - ext4 /dev/root rw
+28 27 0:7 / /dev rw,relatime shared:2 - devtmpfs devtmpfs rw,size=3965260k,nr_inodes=991315,mode=755
+29 27 0:25 / /proc rw,nosuid,nodev,noexec,relatime shared:5 - proc proc rw
+30 27 0:26 / /sys rw,nosuid,nodev,noexec,relatime shared:6 - sysfs sysfs rw
+31 30 0:8 / /sys/kernel/security rw,nosuid,nodev,noexec,relatime shared:7 - securityfs securityfs rw
+32 28 0:27 / /dev/shm rw,nosuid,nodev shared:3 - tmpfs tmpfs rw
+33 28 0:28 / /dev/pts rw,nosuid,noexec,relatime shared:4 - devpts devpts rw,gid=5,mode=600,ptmxmode=000
+34 27 0:29 / /run rw,nosuid,nodev shared:11 - tmpfs tmpfs rw,size=1593172k,nr_inodes=819200,mode=755
+35 30 0:30 / /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime shared:8 - cgroup2 cgroup2 rw,nsdelegate,memory_recursiveprot
+36 30 0:31 / /sys/fs/pstore rw,nosuid,nodev,noexec,relatime shared:9 - pstore none rw
+37 30 0:32 / /sys/fs/bpf rw,nosuid,nodev,noexec,relatime shared:10 - bpf bpf rw,mode=700
+38 28 0:23 / /dev/mqueue rw,nosuid,nodev,noexec,relatime shared:12 - mqueue mqueue rw
+39 30 0:13 / /sys/kernel/tracing rw,nosuid,nodev,noexec,relatime shared:13 - tracefs tracefs rw
+40 28 0:33 / /dev/hugepages rw,nosuid,nodev,relatime shared:14 - hugetlbfs hugetlbfs rw,pagesize=2M
+41 30 0:9 / /sys/kernel/debug rw,nosuid,nodev,noexec,relatime shared:15 - debugfs debugfs rw
+42 34 0:34 / /run/lock rw,nosuid,nodev,noexec,relatime shared:16 - tmpfs tmpfs rw,size=5120k
+86 34 0:35 / /run/credentials/systemd-journald.service ro,nosuid,nodev,noexec,relatime,nosymfollow shared:34 - tmpfs tmpfs rw,size=1024k,nr_inodes=1024,mode=700,noswap
+43 30 0:36 / /sys/fs/fuse/connections rw,nosuid,nodev,noexec,relatime shared:18 - fusectl fusectl rw
+44 30 0:24 / /sys/kernel/config rw,nosuid,nodev,noexec,relatime shared:17 - configfs configfs rw
+68 34 0:38 / /run/credentials/systemd-resolved.service ro,nosuid,nodev,noexec,relatime,nosymfollow shared:20 - tmpfs tmpfs rw,size=1024k,nr_inodes=1024,mode=700,noswap
+49 27 179:97 / /boot rw,nosuid,nodev,noexec,relatime shared:75 - vfat /dev/mmcblk1p1 rw,fmask=0077,dmask=0077,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro
+52 27 0:44 / /tmp rw,noatime shared:78 - tmpfs tmpfs rw,size=1048576k
+55 27 179:100 / /data rw,noatime shared:81 - ext4 /dev/mmcblk1p4 rw
+58 27 179:100 /log /var/log rw,noatime shared:81 - ext4 /dev/mmcblk1p4 rw
+61 27 179:100 /nm/system-connections /etc/NetworkManager/system-connections rw,noatime shared:81 - ext4 /dev/mmcblk1p4 rw
+64 27 179:100 /ceralive /opt/ceralive rw,noatime shared:81 - ext4 /dev/mmcblk1p4 rw
+609 34 0:59 / /run/credentials/getty@tty1.service ro,nosuid,nodev,noexec,relatime,nosymfollow shared:171 - tmpfs tmpfs rw,size=1024k,nr_inodes=1024,mode=700,noswap
+625 34 0:60 / /run/credentials/serial-getty@ttyS2.service ro,nosuid,nodev,noexec,relatime,nosymfollow shared:510 - tmpfs tmpfs rw,size=1024k,nr_inodes=1024,mode=700,noswap
+134 34 0:56 / /run/user/1000 rw,nosuid,nodev,relatime shared:434 - tmpfs tmpfs rw,size=796584k,nr_inodes=199146,mode=700,uid=1000,gid=1000
+
+##### b2-mountinfo-stderr
+
+##### b2-mountinfo-exit
+0
+
+##### b2-dm
+no_dm_devices
+
+##### b2-dm-stderr
+
+##### b2-dm-exit
+0
+
+##### b2-nbd
+no_nbd_pid_files
+
+##### b2-nbd-stderr
+
+##### b2-nbd-exit
+0
+
+##### b2-blocks
+loop0
+loop1
+loop2
+loop3
+loop4
+loop5
+loop6
+loop7
+mmcblk0
+mmcblk0boot0
+mmcblk0boot1
+mmcblk1
+mtdblock0
+sda
+sdb
+
+##### b2-blocks-stderr
+
+##### b2-blocks-exit
+0
+
+##### b2-clients
+656 rauc L3Vzci9iaW4vcmF1YwAtLW1vdW50PS9ydW4vcmF1Yy9tbnQAc2VydmljZQA=
+
+##### b2-clients-stderr
+
+##### b2-clients-exit
+0

@@ -13,6 +13,7 @@ import { relayContract } from './relay.contract';
 import { statusContract } from './status.contract';
 import { streamingContract } from './streaming.contract';
 import { systemContract } from './system.contract';
+import { uiContract } from './ui.contract';
 import { wifiContract } from './wifi.contract';
 
 /**
@@ -35,6 +36,7 @@ export const appContract = oc.router({
 	bluetooth: bluetoothContract,
 	network: networkContract,
 	system: systemContract,
+	ui: uiContract,
 	status: statusContract,
 	relay: relayContract,
 	notifications: notificationsContract,
@@ -57,4 +59,5 @@ export { relayContract } from './relay.contract';
 export { statusContract } from './status.contract';
 export { streamingContract } from './streaming.contract';
 export { systemContract } from './system.contract';
+export { uiContract } from './ui.contract';
 export { wifiContract } from './wifi.contract';

@@ -27,6 +27,8 @@
 
 import { z } from 'zod';
 
+import { updateOrchestratorPhaseSchema } from './update-orchestrator.schema';
+
 // ─── (a) StartFailure taxonomy ───────────────────────────────────────────────
 
 /**
@@ -82,6 +84,9 @@ export const START_FAILURE_CLASSES = [
 	// deterministic by definition ("an identical retry fails identically"), and
 	// one of this class's causes is transient — see `captureCause` below.
 	'capture_source_unavailable',
+	// D8 admission refusal; see docs/DEVICE-UPDATES.md and root AGENTS.md's
+	// "D8 stream/update admission: what it does NOT cover".
+	'update_in_progress',
 ] as const;
 export const startFailureClassSchema = z.enum(START_FAILURE_CLASSES);
 export type StartFailureClass = z.infer<typeof startFailureClassSchema>;
@@ -124,6 +129,11 @@ export const startFailureSchema = z.object({
 	code: z.union([z.number(), z.string()]).optional(),
 	message: z.string().optional(),
 	captureCause: startFailureCaptureCauseSchema.optional(),
+	// Update phase is a different axis from the start pipeline's `phase` above.
+	// Probe-only payload semantics: docs/DEVICE-UPDATES.md, D8 section.
+	updatePhase: updateOrchestratorPhaseSchema.optional(),
+	updatePercent: z.number().min(0).max(100).optional(),
+	updateEtaSeconds: z.number().min(0).optional(),
 	retriable: z.boolean(),
 });
 export type StartFailure = z.infer<typeof startFailureSchema>;
@@ -284,6 +294,10 @@ export const START_FAILURE_RETRIABILITY: Record<
 	capture_source_unavailable: {
 		retriablePhases: [],
 		why: 'The capture input could not be brought up, and by default that is a standing condition — an unsupported signal format and an absent signal both fail identically on retry. The ONE transient cause is overridden per-cause below rather than by widening this row, so a class that is deterministic for two of its three causes never advertises itself as retriable.',
+	},
+	update_in_progress: {
+		retriablePhases: [],
+		why: 'Wait for the update-admission refusal condition to clear rather than retry automatically. A positive or fail-closed commit-stage probe can refuse without a known commit; reaching `settled` is not required.',
 	},
 };
 

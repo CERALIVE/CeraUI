@@ -7,6 +7,7 @@ import { OfflinePage, PWAStatus } from '$lib/components/custom/pwa';
 import { Button } from '$lib/components/ui/button';
 import * as Tooltip from '$lib/components/ui/tooltip';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
+import { rpc } from '$lib/rpc';
 import { getStatus } from '$lib/rpc/subscriptions.svelte';
 import {
 	authenticateWithToken,
@@ -26,6 +27,7 @@ import Auth from './Auth.svelte';
 import DisconnectedBanner from './DisconnectedBanner.svelte';
 import LayoutToastHost from './layout/LayoutToastHost.svelte';
 import UpdateBanner from './layout/UpdateBanner.svelte';
+import UpdateOrchestratorBadge from './layout/UpdateOrchestratorBadge.svelte';
 import Main from './MainView.svelte';
 
 let isCheckingAuthStatus = $state(true);
@@ -158,6 +160,24 @@ $effect(() => {
 // store by one render, which is a flash of the pre-auth shell on every re-mount.
 const authStatus = $derived(authStatusStore.value);
 
+$effect(() => {
+	if (!authStatus) return;
+	const sendHeartbeat = () => {
+		if (document.visibilityState === 'visible' && document.hasFocus()) {
+			void rpc.ui.heartbeat().catch(() => undefined);
+		}
+	};
+	sendHeartbeat();
+	const interval = setInterval(sendHeartbeat, 30_000);
+	window.addEventListener('focus', sendHeartbeat);
+	document.addEventListener('visibilitychange', sendHeartbeat);
+	return () => {
+		clearInterval(interval);
+		window.removeEventListener('focus', sendHeartbeat);
+		document.removeEventListener('visibilitychange', sendHeartbeat);
+	};
+});
+
 // Aggressive fallback for mobile/PWA: if we're stuck in any loading state, assume offline with NaN safety
 const userAgent = navigator.userAgent || '';
 const isMobileDevice = /iphone|ipad|ipod|android/i.test(userAgent);
@@ -201,6 +221,7 @@ $effect(() => {
 			<UpdatingOverlay details={updatingStatus}></UpdatingOverlay>
 		{/if}
 		<UpdateBanner />
+		<UpdateOrchestratorBadge />
 		<DisconnectedBanner />
 		<Main></Main>
 	{:else if connectionSurfaces.showAuthTimeout}

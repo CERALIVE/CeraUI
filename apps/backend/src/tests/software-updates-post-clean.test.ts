@@ -33,6 +33,20 @@ describe("best-effort post-clean", () => {
 			expect(h.restarts).toBe(1);
 		},
 	);
+	test("legacy completion keeps its original exit without calling the orchestrator hook", async () => {
+		await using h = await updateHarness();
+		h.completion = Promise.resolve(0);
+		let hookCalls = 0;
+
+		startSoftwareUpdate(() => {
+			hookCalls++;
+		});
+		await h.check();
+
+		expect(getUpdateState()).toEqual({ kind: "success" });
+		expect(hookCalls).toBe(0);
+		expect(h.restarts).toBe(1);
+	});
 	test("preserves the original transaction failure when post-clean also fails", async () => {
 		// Given an install error; when post-clean fails too; then it must not mask the original reason.
 		await using h = await updateHarness();
@@ -89,7 +103,7 @@ describe("best-effort post-clean", () => {
 		await recoverSoftwareUpdateIfRunning({
 			recover: async ({ onAttached }) => {
 				onAttached?.();
-				return { completion: Promise.resolve(0) };
+				return { completion: Promise.resolve(0), wasAlreadyFinished: true };
 			},
 			scheduleRetry: () => {},
 			resumePeriodicChecks: () => {},

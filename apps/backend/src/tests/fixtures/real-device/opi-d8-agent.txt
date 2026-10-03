@@ -1,0 +1,9 @@
+# Orange Pi 5 Plus; Debian 13; CeraUI DEV e29eded3; captured 2026-10-02T00:33:44.122Z
+# Source: D8/22-state-after-unsafe.txt, complete == agent section, line 13.
+# Normalisation: no substitutions needed in this selected payload. It contains
+# no device UUID, hostname, MAC, IP, SSID or credential. Public release identities
+# (version, channel, board, manifest counter, URL, SHA-256) are unchanged.
+# The capture's output newline is envelope framing, not part of agent.json (812 B).
+##### agent.json
+{"schema":1,"phase":"failed","enteredAt":1790901041749,"progress":null,"failureReason":"rauc_recovery_unproven","packageCheck":{"lastAttemptAt":1790900877919,"lastSuccessAt":1790900877919,"consecutiveFailures":0,"lastFailureWasRateLimited":false,"nextAttemptAt":1790922297054},"osCheck":{"lastAttemptAt":1790900880010,"lastSuccessAt":1790900880010,"consecutiveFailures":0,"lastFailureWasRateLimited":false,"nextAttemptAt":1790941516453},"cellularOverrideId":null,"osStageRecovery":{"candidateKey":"2026.10.52|13|drill|orange-pi-5-plus|ceralive-orangepi5-plus|https://images.ceralive.tv/releases/orange-pi-5-plus/2026.10.52/bundle.raucb|3acb98f25ca876a2b36ea215d62a4aff9997bb6cb5041d7ee8df3d0873b9aef0","activeAttemptId":null,"failedRounds":1,"nextRetryAt":null,"mode":"unsafe","reason":"rauc_recovery_unproven"}}
+##### end

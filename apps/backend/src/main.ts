@@ -17,6 +17,10 @@
 
 import pkg from "../package.json" with { type: "json" };
 import {
+	backendSingletonApplies,
+	enforceBackendSingleton,
+} from "./helpers/backend-singleton.ts";
+import {
 	APP_NAME,
 	buildBootBanner,
 	createBootTimer,
@@ -152,6 +156,15 @@ import {
 	ensureSshPasswordSynced,
 	getSshStatus,
 } from "./modules/system/ssh.ts";
+import { reconcileAptChannel } from "./modules/system/update-apt-channel.ts";
+import { runUpdateBootstrap } from "./modules/system/update-bootstrap.ts";
+import { readUpdateCapabilities } from "./modules/system/update-capabilities.ts";
+import { reconcileOsStageStartup } from "./modules/system/update-orchestrator/os-stage-startup.ts";
+import {
+	awaitUpdateStartupAdjudication,
+	startUpdateOrchestrator,
+} from "./modules/system/update-orchestrator/runtime.ts";
+import { loadUpdateSettings } from "./modules/system/update-settings.ts";
 import { initHotspotCredentials } from "./modules/wifi/hotspot-credentials.ts";
 import { applyPersistedCountry } from "./modules/wifi/regdomain.ts";
 import { reconcileWifiAdapterModes } from "./modules/wifi/wifi-adapter-mode-transition.ts";
@@ -206,6 +219,14 @@ if (isDevelopment()) {
 // `armBootSignalHandler`, which replays a poke that arrived in the meantime.
 installBootSignalGuards();
 
+if (backendSingletonApplies()) {
+	await runCritical("backend-singleton", enforceBackendSingleton);
+} else {
+	logger.warn(
+		"Backend singleton is not enforced for a source-development process; production services never take this path",
+	);
+}
+
 checkExecPath(srtlaSendExec);
 
 // CRITICAL boot phase. A failure here is genuinely fatal: the device cannot
@@ -255,6 +276,12 @@ await runCritical("systemd-ready", notifyServiceReady);
 //     failure is logged, flags the device readiness-reduced (surfaced on
 //     /api/health via the boot-readiness rollup), and is swallowed so boot never
 //     crashes and the WS server (bound above) stays reachable. ---
+
+// Recovery must finish before an update may install any new UID routing rule.
+if (await isRealDevice())
+	void guardNonCritical("update-route-sweep", async () => {
+		await reconcileOsStageStartup();
+	});
 
 // Resolve device_id + paired state before anything that gates the control
 // channel (spec §9: it MUST NOT dial until identity is resolved).
@@ -408,10 +435,40 @@ setInterval(updateGwWrapper, UPDATE_GW_INT);
 
 // Self-gating: it no-ops when updates are disabled for this device or when the
 // host is a dev/mock box (a dev machine must never be handed to apt).
-await guardNonCritical("software-update-recovery", async () => {
-	await recoverSoftwareUpdateIfRunning();
+await guardNonCritical("apt-channel-reconcile", async () => {
+	const mode = (await readUpdateCapabilities()).mode;
+	if (mode === "capable")
+		await reconcileAptChannel(mode, (await loadUpdateSettings()).channel);
 });
-periodicCheckForSoftwareUpdates();
+// Todo 36: the packages+OS+slot-sync orchestrator. Its own resume path (G17)
+// is the ONLY thing that reattaches to a persisted `committing` phase's
+// detached apt unit on this boot — running it BEFORE the general standalone
+// recovery call below is what stops the two from racing over the SAME unit.
+// A recovered, already-finished unit's outcome is awaited (bounded: drain +
+// cleanup only, see software-updates.ts recoverSoftwareUpdate()) before
+// resume reads it. An explicit recovered-owner hook withholds deliberate exit
+// until startup adjudication and durable success under CONTROL, including a
+// unit still running at boot. Microtask ordering is not authority. The standalone call after it
+// is then a safe no-op whenever the orchestrator already handled the unit,
+// and remains the only recovery path for a detached transaction the
+// orchestrator itself never tracked (e.g. one started via
+// `system.startUpdate` directly).
+void guardNonCritical("update-bootstrap", () =>
+	runUpdateBootstrap({
+		start: async () => {
+			await guardNonCritical("update-orchestrator", startUpdateOrchestrator);
+			return awaitUpdateStartupAdjudication();
+		},
+		recover: async () => {
+			await guardNonCritical("software-update-recovery", async () => {
+				await recoverSoftwareUpdateIfRunning();
+			});
+		},
+		periodic: () => {
+			periodicCheckForSoftwareUpdates();
+		},
+	}),
+);
 
 initNetworkInterfaceMonitoring();
 initUplinkHealth();

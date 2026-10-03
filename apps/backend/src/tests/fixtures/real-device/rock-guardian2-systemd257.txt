@@ -1,0 +1,3735 @@
+# Board: Rock 5B+; OS: Debian GNU/Linux 13 (trixie); systemd 257 (exact version below)
+# Capture: 2026-10-02T10:49:23Z; shipped deb #5; REAL unchanged product helper in isolated guard2 unit.
+# Normalisation: released token -> 33333333-3333-4333-8333-333333333333; killed token -> 44444444-4444-4444-8444-444444444444.
+# Released/killed InvocationID -> 55555555555545558555555555555555 / 66666666666646668666666666666666.
+# Cmdline base64 decoded, identical token substitution, re-encoded; NUL separators preserved.
+# Historical helper environment names -> FIXTURE_CAPTURE_DIR / FIXTURE_CAPTURE_UID; values retained.
+# No other substitution; PIDs, start ticks, device/inode/mount IDs, fd rows, complete lock tables and whitespace retained.
+# Hostname/machine-id/boot-id/MAC/LAN addresses absent from selected commands; no placeholders fabricated for absent fields.
+# Full/subset/combined observation requests are independent real commands, never concatenated.
+# start-0000-ready was absent before show, but combined show was already live; pre-ready shape NOT proved.
+# ack-0000 has release present and MainPID live. No transient stat captured; 32 second-fs files had no equal inode.
+
+##### ack-0000-full
+Type=exec
+ExitType=main
+Restart=no
+RestartMode=normal
+NotifyAccess=none
+RestartUSec=100ms
+RestartSteps=0
+RestartMaxDelayUSec=infinity
+RestartUSecNext=100ms
+TimeoutStartUSec=1min 30s
+TimeoutStopUSec=1min 30s
+TimeoutAbortUSec=1min 30s
+TimeoutStartFailureMode=terminate
+TimeoutStopFailureMode=terminate
+RuntimeMaxUSec=infinity
+RuntimeRandomizedExtraUSec=0
+WatchdogUSec=0
+WatchdogTimestampMonotonic=0
+RootDirectoryStartOnly=no
+RemainAfterExit=yes
+GuessMainPID=yes
+MainPID=1640654
+ControlPID=0
+FileDescriptorStoreMax=0
+NFileDescriptorStore=0
+FileDescriptorStorePreserve=restart
+StatusErrno=0
+Result=success
+ReloadResult=success
+CleanResult=success
+LiveMountResult=success
+UID=[not set]
+GID=[not set]
+NRestarts=0
+OOMPolicy=stop
+ReloadSignal=1
+ExecMainStartTimestamp=Fri 2026-10-02 10:49:23 UTC
+ExecMainStartTimestampMonotonic=55345833150
+ExecMainExitTimestampMonotonic=0
+ExecMainHandoffTimestamp=Fri 2026-10-02 10:49:23 UTC
+ExecMainHandoffTimestampMonotonic=55345852407
+ExecMainPID=1640654
+ExecMainCode=0
+ExecMainStatus=0
+ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 33333333-3333-4333-8333-333333333333 ; ignore_errors=no ; start_time=[Fri 2026-10-02 10:49:23 UTC] ; stop_time=[n/a] ; pid=1640654 ; code=(null) ; status=0/0 }
+ExecStartEx={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 33333333-3333-4333-8333-333333333333 ; flags= ; start_time=[Fri 2026-10-02 10:49:23 UTC] ; stop_time=[n/a] ; pid=1640654 ; code=(null) ; status=0/0 }
+Slice=system.slice
+ControlGroup=/system.slice/uso-fixture-guard2.service
+ControlGroupId=106840
+MemoryCurrent=1839104
+MemoryPeak=1929216
+MemorySwapCurrent=0
+MemorySwapPeak=0
+MemoryZSwapCurrent=[not set]
+MemoryAvailable=7523028992
+EffectiveMemoryMax=8157028352
+EffectiveMemoryHigh=8157028352
+CPUUsageNSec=17767000
+TasksCurrent=3
+EffectiveTasksMax=9330
+IPIngressBytes=[no data]
+IPIngressPackets=[no data]
+IPEgressBytes=[no data]
+IPEgressPackets=[no data]
+IOReadBytes=[not set]
+IOReadOperations=[not set]
+IOWriteBytes=[not set]
+IOWriteOperations=[not set]
+Delegate=no
+CPUAccounting=yes
+CPUWeight=[not set]
+StartupCPUWeight=[not set]
+CPUShares=[not set]
+StartupCPUShares=[not set]
+CPUQuotaPerSecUSec=infinity
+CPUQuotaPeriodUSec=infinity
+IOAccounting=no
+IOWeight=[not set]
+StartupIOWeight=[not set]
+BlockIOAccounting=no
+BlockIOWeight=[not set]
+StartupBlockIOWeight=[not set]
+MemoryAccounting=yes
+DefaultMemoryLow=0
+DefaultStartupMemoryLow=0
+DefaultMemoryMin=0
+MemoryMin=0
+MemoryLow=0
+StartupMemoryLow=0
+MemoryHigh=infinity
+StartupMemoryHigh=infinity
+MemoryMax=infinity
+StartupMemoryMax=infinity
+MemorySwapMax=infinity
+StartupMemorySwapMax=infinity
+MemoryZSwapMax=infinity
+StartupMemoryZSwapMax=infinity
+MemoryZSwapWriteback=yes
+MemoryLimit=infinity
+DevicePolicy=auto
+TasksAccounting=yes
+TasksMax=9330
+IPAccounting=no
+ManagedOOMSwap=auto
+ManagedOOMMemoryPressure=auto
+ManagedOOMMemoryPressureLimit=0
+ManagedOOMMemoryPressureDurationUSec=[not set]
+ManagedOOMPreference=none
+MemoryPressureWatch=auto
+MemoryPressureThresholdUSec=200ms
+CoredumpReceive=no
+Environment=FIXTURE_CAPTURE_DIR=/run/uso-fixture-guard2/os-stage FIXTURE_CAPTURE_UID=0
+UMask=0022
+LimitCPU=infinity
+LimitCPUSoft=infinity
+LimitFSIZE=infinity
+LimitFSIZESoft=infinity
+LimitDATA=infinity
+LimitDATASoft=infinity
+LimitSTACK=infinity
+LimitSTACKSoft=8388608
+LimitCORE=infinity
+LimitCORESoft=0
+LimitRSS=infinity
+LimitRSSSoft=infinity
+LimitNOFILE=524288
+LimitNOFILESoft=1024
+LimitAS=infinity
+LimitASSoft=infinity
+LimitNPROC=31101
+LimitNPROCSoft=31101
+LimitMEMLOCK=8388608
+LimitMEMLOCKSoft=8388608
+LimitLOCKS=infinity
+LimitLOCKSSoft=infinity
+LimitSIGPENDING=31101
+LimitSIGPENDINGSoft=31101
+LimitMSGQUEUE=819200
+LimitMSGQUEUESoft=819200
+LimitNICE=0
+LimitNICESoft=0
+LimitRTPRIO=0
+LimitRTPRIOSoft=0
+LimitRTTIME=infinity
+LimitRTTIMESoft=infinity
+RootEphemeral=no
+OOMScoreAdjust=0
+CoredumpFilter=0x23
+Nice=0
+IOSchedulingClass=2
+IOSchedulingPriority=4
+CPUSchedulingPolicy=0
+CPUSchedulingPriority=0
+CPUAffinityFromNUMA=no
+NUMAPolicy=n/a
+TimerSlackNSec=50000
+CPUSchedulingResetOnFork=no
+NonBlocking=no
+StandardInput=null
+StandardOutput=null
+StandardError=journal
+TTYReset=no
+TTYVHangup=no
+TTYVTDisallocate=no
+SyslogPriority=30
+SyslogLevelPrefix=yes
+SyslogLevel=6
+SyslogFacility=3
+LogLevelMax=-1
+LogRateLimitIntervalUSec=0
+LogRateLimitBurst=0
+SecureBits=0
+CapabilityBoundingSet=cap_chown cap_dac_override cap_dac_read_search cap_fowner cap_fsetid cap_kill cap_setgid cap_setuid cap_setpcap cap_linux_immutable cap_net_bind_service cap_net_broadcast cap_net_admin cap_net_raw cap_ipc_lock cap_ipc_owner cap_sys_module cap_sys_rawio cap_sys_chroot cap_sys_ptrace cap_sys_pacct cap_sys_admin cap_sys_boot cap_sys_nice cap_sys_resource cap_sys_time cap_sys_tty_config cap_mknod cap_lease cap_audit_write cap_audit_control cap_setfcap cap_mac_override cap_mac_admin cap_syslog cap_wake_alarm cap_block_suspend cap_audit_read cap_perfmon cap_bpf cap_checkpoint_restore
+DynamicUser=no
+SetLoginEnvironment=no
+RemoveIPC=no
+PrivateTmp=no
+PrivateTmpEx=no
+PrivateDevices=no
+ProtectClock=no
+ProtectKernelTunables=no
+ProtectKernelModules=no
+ProtectKernelLogs=no
+ProtectControlGroups=no
+ProtectControlGroupsEx=no
+PrivateNetwork=no
+PrivateUsers=no
+PrivateUsersEx=no
+PrivateMounts=no
+PrivateIPC=no
+PrivatePIDs=no
+ProtectHome=no
+ProtectSystem=no
+SameProcessGroup=no
+UtmpMode=init
+IgnoreSIGPIPE=yes
+NoNewPrivileges=no
+SystemCallErrorNumber=2147483646
+LockPersonality=no
+RuntimeDirectoryPreserve=no
+RuntimeDirectoryMode=0755
+StateDirectoryMode=0755
+CacheDirectoryMode=0755
+LogsDirectoryMode=0755
+ConfigurationDirectoryMode=0755
+TimeoutCleanUSec=infinity
+MemoryDenyWriteExecute=no
+RestrictRealtime=no
+RestrictSUIDSGID=no
+RestrictNamespaces=no
+MountAPIVFS=no
+BindLogSockets=no
+KeyringMode=private
+ProtectProc=default
+ProcSubset=all
+ProtectHostname=no
+MemoryKSM=no
+RootImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+MountImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+ExtensionImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+KillMode=control-group
+KillSignal=15
+RestartKillSignal=15
+FinalKillSignal=9
+SendSIGKILL=yes
+SendSIGHUP=no
+WatchdogSignal=6
+Id=uso-fixture-guard2.service
+Names=uso-fixture-guard2.service
+Requires=sysinit.target system.slice
+Conflicts=shutdown.target
+Before=shutdown.target
+After=systemd-journald.socket system.slice basic.target sysinit.target
+Description=uso fixture guard 2
+LoadState=loaded
+ActiveState=active
+FreezerState=running
+SubState=running
+FragmentPath=/run/systemd/transient/uso-fixture-guard2.service
+UnitFileState=transient
+UnitFilePreset=enabled
+StateChangeTimestamp=Fri 2026-10-02 10:49:23 UTC
+StateChangeTimestampMonotonic=55345853414
+InactiveExitTimestamp=Fri 2026-10-02 10:49:23 UTC
+InactiveExitTimestampMonotonic=55345833686
+ActiveEnterTimestamp=Fri 2026-10-02 10:49:23 UTC
+ActiveEnterTimestampMonotonic=55345853414
+ActiveExitTimestampMonotonic=0
+InactiveEnterTimestampMonotonic=0
+CanStart=yes
+CanStop=yes
+CanReload=no
+CanIsolate=no
+CanFreeze=yes
+CanLiveMount=no
+StopWhenUnneeded=no
+RefuseManualStart=no
+RefuseManualStop=no
+AllowIsolate=no
+DefaultDependencies=yes
+SurviveFinalKillSignal=no
+OnSuccessJobMode=fail
+OnFailureJobMode=replace
+IgnoreOnIsolate=no
+NeedDaemonReload=no
+JobTimeoutUSec=infinity
+JobRunningTimeoutUSec=infinity
+JobTimeoutAction=none
+ConditionResult=yes
+AssertResult=yes
+ConditionTimestamp=Fri 2026-10-02 10:49:23 UTC
+ConditionTimestampMonotonic=55345832212
+AssertTimestamp=Fri 2026-10-02 10:49:23 UTC
+AssertTimestampMonotonic=55345832215
+Transient=yes
+Perpetual=no
+StartLimitIntervalUSec=10s
+StartLimitBurst=5
+StartLimitAction=none
+FailureAction=none
+SuccessAction=none
+InvocationID=55555555555545558555555555555555
+CollectMode=inactive
+DebugInvocation=no
+
+
+##### ack-0000-full-stderr
+
+
+##### ack-0000-full-exit
+0
+
+
+##### ack-0000-locks
+1: FLOCK  ADVISORY  WRITE 800 00:1d:2293 0 EOF
+2: FLOCK  ADVISORY  WRITE 554 00:1d:2131 0 EOF
+3: FLOCK  ADVISORY  WRITE 554 00:1d:2130 0 EOF
+4: FLOCK  ADVISORY  WRITE 1640654 00:1d:9713 0 EOF
+
+
+##### ack-0000-locks-stderr
+
+
+##### ack-0000-locks-exit
+0
+
+
+##### ack-0000-observation
+Type=exec
+Restart=no
+RemainAfterExit=yes
+MainPID=1640654
+ControlPID=0
+ExecMainCode=0
+ExecMainStatus=0
+ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 33333333-3333-4333-8333-333333333333 ; ignore_errors=no ; start_time=[Fri 2026-10-02 10:49:23 UTC] ; stop_time=[n/a] ; pid=1640654 ; code=(null) ; status=0/0 }
+ControlGroup=/system.slice/uso-fixture-guard2.service
+User=
+Id=uso-fixture-guard2.service
+Description=uso fixture guard 2
+LoadState=loaded
+ActiveState=active
+FragmentPath=/run/systemd/transient/uso-fixture-guard2.service
+DropInPaths=
+Transient=yes
+InvocationID=55555555555545558555555555555555
+
+
+##### ack-0000-observation-stderr
+
+
+##### ack-0000-observation-exit
+0
+
+
+##### ack-0000-procs
+1640654
+1640666
+1641332
+
+
+##### ack-0000-procs-stderr
+
+
+##### ack-0000-procs-exit
+0
+
+
+##### ack-0000-properties
+Type=exec
+RemainAfterExit=yes
+MainPID=1640654
+ExecMainStatus=0
+ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 33333333-3333-4333-8333-333333333333 ; ignore_errors=no ; start_time=[Fri 2026-10-02 10:49:23 UTC] ; stop_time=[n/a] ; pid=1640654 ; code=(null) ; status=0/0 }
+User=
+Id=uso-fixture-guard2.service
+Description=uso fixture guard 2
+ActiveState=active
+FragmentPath=/run/systemd/transient/uso-fixture-guard2.service
+DropInPaths=
+Transient=yes
+
+
+##### ack-0000-properties-stderr
+
+
+##### ack-0000-properties-exit
+0
+
+
+##### ack-0000-release-stat
+0:600:1 /run/uso-fixture-guard2/os-stage/release
+
+
+##### ack-0000-release-stat-stderr
+
+
+##### ack-0000-release-stat-exit
+0
+
+
+##### ack-0001-full
+Type=exec
+ExitType=main
+Restart=no
+RestartMode=normal
+NotifyAccess=none
+RestartUSec=100ms
+RestartSteps=0
+RestartMaxDelayUSec=infinity
+RestartUSecNext=100ms
+TimeoutStartUSec=1min 30s
+TimeoutStopUSec=1min 30s
+TimeoutAbortUSec=1min 30s
+TimeoutStartFailureMode=terminate
+TimeoutStopFailureMode=terminate
+RuntimeMaxUSec=infinity
+RuntimeRandomizedExtraUSec=0
+WatchdogUSec=0
+WatchdogTimestampMonotonic=0
+RootDirectoryStartOnly=no
+RemainAfterExit=yes
+GuessMainPID=yes
+MainPID=0
+ControlPID=0
+FileDescriptorStoreMax=0
+NFileDescriptorStore=0
+FileDescriptorStorePreserve=restart
+StatusErrno=0
+Result=success
+ReloadResult=success
+CleanResult=success
+LiveMountResult=success
+UID=[not set]
+GID=[not set]
+NRestarts=0
+OOMPolicy=stop
+ReloadSignal=1
+ExecMainStartTimestamp=Fri 2026-10-02 10:49:23 UTC
+ExecMainStartTimestampMonotonic=55345833150
+ExecMainExitTimestamp=Fri 2026-10-02 10:49:25 UTC
+ExecMainExitTimestampMonotonic=55347867950
+ExecMainHandoffTimestamp=Fri 2026-10-02 10:49:23 UTC
+ExecMainHandoffTimestampMonotonic=55345852407
+ExecMainPID=1640654
+ExecMainCode=1
+ExecMainStatus=0
+ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 33333333-3333-4333-8333-333333333333 ; ignore_errors=no ; start_time=[Fri 2026-10-02 10:49:23 UTC] ; stop_time=[Fri 2026-10-02 10:49:25 UTC] ; pid=1640654 ; code=exited ; status=0 }
+ExecStartEx={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 33333333-3333-4333-8333-333333333333 ; flags= ; start_time=[Fri 2026-10-02 10:49:23 UTC] ; stop_time=[Fri 2026-10-02 10:49:25 UTC] ; pid=1640654 ; code=exited ; status=0 }
+Slice=system.slice
+ControlGroupId=106840
+MemoryCurrent=[not set]
+MemoryPeak=2125824
+MemorySwapCurrent=[not set]
+MemorySwapPeak=0
+MemoryZSwapCurrent=[not set]
+MemoryAvailable=7527837696
+EffectiveMemoryMax=8157028352
+EffectiveMemoryHigh=8157028352
+CPUUsageNSec=20325000
+TasksCurrent=[not set]
+EffectiveTasksMax=9330
+IPIngressBytes=[no data]
+IPIngressPackets=[no data]
+IPEgressBytes=[no data]
+IPEgressPackets=[no data]
+IOReadBytes=[not set]
+IOReadOperations=[not set]
+IOWriteBytes=[not set]
+IOWriteOperations=[not set]
+Delegate=no
+CPUAccounting=yes
+CPUWeight=[not set]
+StartupCPUWeight=[not set]
+CPUShares=[not set]
+StartupCPUShares=[not set]
+CPUQuotaPerSecUSec=infinity
+CPUQuotaPeriodUSec=infinity
+IOAccounting=no
+IOWeight=[not set]
+StartupIOWeight=[not set]
+BlockIOAccounting=no
+BlockIOWeight=[not set]
+StartupBlockIOWeight=[not set]
+MemoryAccounting=yes
+DefaultMemoryLow=0
+DefaultStartupMemoryLow=0
+DefaultMemoryMin=0
+MemoryMin=0
+MemoryLow=0
+StartupMemoryLow=0
+MemoryHigh=infinity
+StartupMemoryHigh=infinity
+MemoryMax=infinity
+StartupMemoryMax=infinity
+MemorySwapMax=infinity
+StartupMemorySwapMax=infinity
+MemoryZSwapMax=infinity
+StartupMemoryZSwapMax=infinity
+MemoryZSwapWriteback=yes
+MemoryLimit=infinity
+DevicePolicy=auto
+TasksAccounting=yes
+TasksMax=9330
+IPAccounting=no
+ManagedOOMSwap=auto
+ManagedOOMMemoryPressure=auto
+ManagedOOMMemoryPressureLimit=0
+ManagedOOMMemoryPressureDurationUSec=[not set]
+ManagedOOMPreference=none
+MemoryPressureWatch=auto
+MemoryPressureThresholdUSec=200ms
+CoredumpReceive=no
+Environment=FIXTURE_CAPTURE_DIR=/run/uso-fixture-guard2/os-stage FIXTURE_CAPTURE_UID=0
+UMask=0022
+LimitCPU=infinity
+LimitCPUSoft=infinity
+LimitFSIZE=infinity
+LimitFSIZESoft=infinity
+LimitDATA=infinity
+LimitDATASoft=infinity
+LimitSTACK=infinity
+LimitSTACKSoft=8388608
+LimitCORE=infinity
+LimitCORESoft=0
+LimitRSS=infinity
+LimitRSSSoft=infinity
+LimitNOFILE=524288
+LimitNOFILESoft=1024
+LimitAS=infinity
+LimitASSoft=infinity
+LimitNPROC=31101
+LimitNPROCSoft=31101
+LimitMEMLOCK=8388608
+LimitMEMLOCKSoft=8388608
+LimitLOCKS=infinity
+LimitLOCKSSoft=infinity
+LimitSIGPENDING=31101
+LimitSIGPENDINGSoft=31101
+LimitMSGQUEUE=819200
+LimitMSGQUEUESoft=819200
+LimitNICE=0
+LimitNICESoft=0
+LimitRTPRIO=0
+LimitRTPRIOSoft=0
+LimitRTTIME=infinity
+LimitRTTIMESoft=infinity
+RootEphemeral=no
+OOMScoreAdjust=0
+CoredumpFilter=0x23
+Nice=0
+IOSchedulingClass=2
+IOSchedulingPriority=4
+CPUSchedulingPolicy=0
+CPUSchedulingPriority=0
+CPUAffinityFromNUMA=no
+NUMAPolicy=n/a
+TimerSlackNSec=50000
+CPUSchedulingResetOnFork=no
+NonBlocking=no
+StandardInput=null
+StandardOutput=null
+StandardError=journal
+TTYReset=no
+TTYVHangup=no
+TTYVTDisallocate=no
+SyslogPriority=30
+SyslogLevelPrefix=yes
+SyslogLevel=6
+SyslogFacility=3
+LogLevelMax=-1
+LogRateLimitIntervalUSec=0
+LogRateLimitBurst=0
+SecureBits=0
+CapabilityBoundingSet=cap_chown cap_dac_override cap_dac_read_search cap_fowner cap_fsetid cap_kill cap_setgid cap_setuid cap_setpcap cap_linux_immutable cap_net_bind_service cap_net_broadcast cap_net_admin cap_net_raw cap_ipc_lock cap_ipc_owner cap_sys_module cap_sys_rawio cap_sys_chroot cap_sys_ptrace cap_sys_pacct cap_sys_admin cap_sys_boot cap_sys_nice cap_sys_resource cap_sys_time cap_sys_tty_config cap_mknod cap_lease cap_audit_write cap_audit_control cap_setfcap cap_mac_override cap_mac_admin cap_syslog cap_wake_alarm cap_block_suspend cap_audit_read cap_perfmon cap_bpf cap_checkpoint_restore
+DynamicUser=no
+SetLoginEnvironment=no
+RemoveIPC=no
+PrivateTmp=no
+PrivateTmpEx=no
+PrivateDevices=no
+ProtectClock=no
+ProtectKernelTunables=no
+ProtectKernelModules=no
+ProtectKernelLogs=no
+ProtectControlGroups=no
+ProtectControlGroupsEx=no
+PrivateNetwork=no
+PrivateUsers=no
+PrivateUsersEx=no
+PrivateMounts=no
+PrivateIPC=no
+PrivatePIDs=no
+ProtectHome=no
+ProtectSystem=no
+SameProcessGroup=no
+UtmpMode=init
+IgnoreSIGPIPE=yes
+NoNewPrivileges=no
+SystemCallErrorNumber=2147483646
+LockPersonality=no
+RuntimeDirectoryPreserve=no
+RuntimeDirectoryMode=0755
+StateDirectoryMode=0755
+CacheDirectoryMode=0755
+LogsDirectoryMode=0755
+ConfigurationDirectoryMode=0755
+TimeoutCleanUSec=infinity
+MemoryDenyWriteExecute=no
+RestrictRealtime=no
+RestrictSUIDSGID=no
+RestrictNamespaces=no
+MountAPIVFS=no
+BindLogSockets=no
+KeyringMode=private
+ProtectProc=default
+ProcSubset=all
+ProtectHostname=no
+MemoryKSM=no
+RootImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+MountImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+ExtensionImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+KillMode=control-group
+KillSignal=15
+RestartKillSignal=15
+FinalKillSignal=9
+SendSIGKILL=yes
+SendSIGHUP=no
+WatchdogSignal=6
+Id=uso-fixture-guard2.service
+Names=uso-fixture-guard2.service
+Requires=sysinit.target system.slice
+Conflicts=shutdown.target
+Before=shutdown.target
+After=systemd-journald.socket system.slice basic.target sysinit.target
+Description=uso fixture guard 2
+LoadState=loaded
+ActiveState=active
+FreezerState=running
+SubState=exited
+FragmentPath=/run/systemd/transient/uso-fixture-guard2.service
+UnitFileState=transient
+UnitFilePreset=enabled
+StateChangeTimestamp=Fri 2026-10-02 10:49:25 UTC
+StateChangeTimestampMonotonic=55347868733
+InactiveExitTimestamp=Fri 2026-10-02 10:49:23 UTC
+InactiveExitTimestampMonotonic=55345833686
+ActiveEnterTimestamp=Fri 2026-10-02 10:49:23 UTC
+ActiveEnterTimestampMonotonic=55345853414
+ActiveExitTimestampMonotonic=0
+InactiveEnterTimestampMonotonic=0
+CanStart=yes
+CanStop=yes
+CanReload=no
+CanIsolate=no
+CanFreeze=yes
+CanLiveMount=no
+StopWhenUnneeded=no
+RefuseManualStart=no
+RefuseManualStop=no
+AllowIsolate=no
+DefaultDependencies=yes
+SurviveFinalKillSignal=no
+OnSuccessJobMode=fail
+OnFailureJobMode=replace
+IgnoreOnIsolate=no
+NeedDaemonReload=no
+JobTimeoutUSec=infinity
+JobRunningTimeoutUSec=infinity
+JobTimeoutAction=none
+ConditionResult=yes
+AssertResult=yes
+ConditionTimestamp=Fri 2026-10-02 10:49:23 UTC
+ConditionTimestampMonotonic=55345832212
+AssertTimestamp=Fri 2026-10-02 10:49:23 UTC
+AssertTimestampMonotonic=55345832215
+Transient=yes
+Perpetual=no
+StartLimitIntervalUSec=10s
+StartLimitBurst=5
+StartLimitAction=none
+FailureAction=none
+SuccessAction=none
+InvocationID=55555555555545558555555555555555
+CollectMode=inactive
+DebugInvocation=no
+
+
+##### ack-0001-full-stderr
+
+
+##### ack-0001-full-exit
+0
+
+
+##### ack-0001-locks
+1: FLOCK  ADVISORY  WRITE 800 00:1d:2293 0 EOF
+2: FLOCK  ADVISORY  WRITE 554 00:1d:2131 0 EOF
+3: FLOCK  ADVISORY  WRITE 554 00:1d:2130 0 EOF
+
+
+##### ack-0001-locks-stderr
+
+
+##### ack-0001-locks-exit
+0
+
+
+##### ack-0001-observation
+Type=exec
+Restart=no
+RemainAfterExit=yes
+MainPID=0
+ControlPID=0
+ExecMainCode=1
+ExecMainStatus=0
+ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 33333333-3333-4333-8333-333333333333 ; ignore_errors=no ; start_time=[Fri 2026-10-02 10:49:23 UTC] ; stop_time=[Fri 2026-10-02 10:49:25 UTC] ; pid=1640654 ; code=exited ; status=0 }
+ControlGroup=
+User=
+Id=uso-fixture-guard2.service
+Description=uso fixture guard 2
+LoadState=loaded
+ActiveState=active
+FragmentPath=/run/systemd/transient/uso-fixture-guard2.service
+DropInPaths=
+Transient=yes
+InvocationID=55555555555545558555555555555555
+
+
+##### ack-0001-observation-stderr
+
+
+##### ack-0001-observation-exit
+0
+
+
+##### ack-0001-procs
+
+
+##### ack-0001-procs-stderr
+cat: /sys/fs/cgroup/system.slice/uso-fixture-guard2.service/cgroup.procs: No such file or directory
+
+
+##### ack-0001-procs-exit
+1
+
+
+##### ack-0001-properties
+Type=exec
+RemainAfterExit=yes
+MainPID=0
+ExecMainStatus=0
+ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 33333333-3333-4333-8333-333333333333 ; ignore_errors=no ; start_time=[Fri 2026-10-02 10:49:23 UTC] ; stop_time=[Fri 2026-10-02 10:49:25 UTC] ; pid=1640654 ; code=exited ; status=0 }
+User=
+Id=uso-fixture-guard2.service
+Description=uso fixture guard 2
+ActiveState=active
+FragmentPath=/run/systemd/transient/uso-fixture-guard2.service
+DropInPaths=
+Transient=yes
+
+
+##### ack-0001-properties-stderr
+
+
+##### ack-0001-properties-exit
+0
+
+
+##### ack-0001-release-stat
+0:600:1 /run/uso-fixture-guard2/os-stage/release
+
+
+##### ack-0001-release-stat-stderr
+
+
+##### ack-0001-release-stat-exit
+0
+
+
+##### contender-echo
+rc=75
+
+
+##### contender-echo-stderr
+
+
+##### contender-echo-exit
+0
+
+
+##### contender
+
+
+##### contender-stderr
+
+
+##### contender-exit
+75
+
+
+##### exited-full
+Type=exec
+ExitType=main
+Restart=no
+RestartMode=normal
+NotifyAccess=none
+RestartUSec=100ms
+RestartSteps=0
+RestartMaxDelayUSec=infinity
+RestartUSecNext=100ms
+TimeoutStartUSec=1min 30s
+TimeoutStopUSec=1min 30s
+TimeoutAbortUSec=1min 30s
+TimeoutStartFailureMode=terminate
+TimeoutStopFailureMode=terminate
+RuntimeMaxUSec=infinity
+RuntimeRandomizedExtraUSec=0
+WatchdogUSec=0
+WatchdogTimestampMonotonic=0
+RootDirectoryStartOnly=no
+RemainAfterExit=yes
+GuessMainPID=yes
+MainPID=0
+ControlPID=0
+FileDescriptorStoreMax=0
+NFileDescriptorStore=0
+FileDescriptorStorePreserve=restart
+StatusErrno=0
+Result=success
+ReloadResult=success
+CleanResult=success
+LiveMountResult=success
+UID=[not set]
+GID=[not set]
+NRestarts=0
+OOMPolicy=stop
+ReloadSignal=1
+ExecMainStartTimestamp=Fri 2026-10-02 10:49:23 UTC
+ExecMainStartTimestampMonotonic=55345833150
+ExecMainExitTimestamp=Fri 2026-10-02 10:49:25 UTC
+ExecMainExitTimestampMonotonic=55347867950
+ExecMainHandoffTimestamp=Fri 2026-10-02 10:49:23 UTC
+ExecMainHandoffTimestampMonotonic=55345852407
+ExecMainPID=1640654
+ExecMainCode=1
+ExecMainStatus=0
+ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 33333333-3333-4333-8333-333333333333 ; ignore_errors=no ; start_time=[Fri 2026-10-02 10:49:23 UTC] ; stop_time=[Fri 2026-10-02 10:49:25 UTC] ; pid=1640654 ; code=exited ; status=0 }
+ExecStartEx={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 33333333-3333-4333-8333-333333333333 ; flags= ; start_time=[Fri 2026-10-02 10:49:23 UTC] ; stop_time=[Fri 2026-10-02 10:49:25 UTC] ; pid=1640654 ; code=exited ; status=0 }
+Slice=system.slice
+ControlGroupId=106840
+MemoryCurrent=[not set]
+MemoryPeak=2125824
+MemorySwapCurrent=[not set]
+MemorySwapPeak=0
+MemoryZSwapCurrent=[not set]
+MemoryAvailable=7524638720
+EffectiveMemoryMax=8157028352
+EffectiveMemoryHigh=8157028352
+CPUUsageNSec=20325000
+TasksCurrent=[not set]
+EffectiveTasksMax=9330
+IPIngressBytes=[no data]
+IPIngressPackets=[no data]
+IPEgressBytes=[no data]
+IPEgressPackets=[no data]
+IOReadBytes=[not set]
+IOReadOperations=[not set]
+IOWriteBytes=[not set]
+IOWriteOperations=[not set]
+Delegate=no
+CPUAccounting=yes
+CPUWeight=[not set]
+StartupCPUWeight=[not set]
+CPUShares=[not set]
+StartupCPUShares=[not set]
+CPUQuotaPerSecUSec=infinity
+CPUQuotaPeriodUSec=infinity
+IOAccounting=no
+IOWeight=[not set]
+StartupIOWeight=[not set]
+BlockIOAccounting=no
+BlockIOWeight=[not set]
+StartupBlockIOWeight=[not set]
+MemoryAccounting=yes
+DefaultMemoryLow=0
+DefaultStartupMemoryLow=0
+DefaultMemoryMin=0
+MemoryMin=0
+MemoryLow=0
+StartupMemoryLow=0
+MemoryHigh=infinity
+StartupMemoryHigh=infinity
+MemoryMax=infinity
+StartupMemoryMax=infinity
+MemorySwapMax=infinity
+StartupMemorySwapMax=infinity
+MemoryZSwapMax=infinity
+StartupMemoryZSwapMax=infinity
+MemoryZSwapWriteback=yes
+MemoryLimit=infinity
+DevicePolicy=auto
+TasksAccounting=yes
+TasksMax=9330
+IPAccounting=no
+ManagedOOMSwap=auto
+ManagedOOMMemoryPressure=auto
+ManagedOOMMemoryPressureLimit=0
+ManagedOOMMemoryPressureDurationUSec=[not set]
+ManagedOOMPreference=none
+MemoryPressureWatch=auto
+MemoryPressureThresholdUSec=200ms
+CoredumpReceive=no
+Environment=FIXTURE_CAPTURE_DIR=/run/uso-fixture-guard2/os-stage FIXTURE_CAPTURE_UID=0
+UMask=0022
+LimitCPU=infinity
+LimitCPUSoft=infinity
+LimitFSIZE=infinity
+LimitFSIZESoft=infinity
+LimitDATA=infinity
+LimitDATASoft=infinity
+LimitSTACK=infinity
+LimitSTACKSoft=8388608
+LimitCORE=infinity
+LimitCORESoft=0
+LimitRSS=infinity
+LimitRSSSoft=infinity
+LimitNOFILE=524288
+LimitNOFILESoft=1024
+LimitAS=infinity
+LimitASSoft=infinity
+LimitNPROC=31101
+LimitNPROCSoft=31101
+LimitMEMLOCK=8388608
+LimitMEMLOCKSoft=8388608
+LimitLOCKS=infinity
+LimitLOCKSSoft=infinity
+LimitSIGPENDING=31101
+LimitSIGPENDINGSoft=31101
+LimitMSGQUEUE=819200
+LimitMSGQUEUESoft=819200
+LimitNICE=0
+LimitNICESoft=0
+LimitRTPRIO=0
+LimitRTPRIOSoft=0
+LimitRTTIME=infinity
+LimitRTTIMESoft=infinity
+RootEphemeral=no
+OOMScoreAdjust=0
+CoredumpFilter=0x23
+Nice=0
+IOSchedulingClass=2
+IOSchedulingPriority=4
+CPUSchedulingPolicy=0
+CPUSchedulingPriority=0
+CPUAffinityFromNUMA=no
+NUMAPolicy=n/a
+TimerSlackNSec=50000
+CPUSchedulingResetOnFork=no
+NonBlocking=no
+StandardInput=null
+StandardOutput=null
+StandardError=journal
+TTYReset=no
+TTYVHangup=no
+TTYVTDisallocate=no
+SyslogPriority=30
+SyslogLevelPrefix=yes
+SyslogLevel=6
+SyslogFacility=3
+LogLevelMax=-1
+LogRateLimitIntervalUSec=0
+LogRateLimitBurst=0
+SecureBits=0
+CapabilityBoundingSet=cap_chown cap_dac_override cap_dac_read_search cap_fowner cap_fsetid cap_kill cap_setgid cap_setuid cap_setpcap cap_linux_immutable cap_net_bind_service cap_net_broadcast cap_net_admin cap_net_raw cap_ipc_lock cap_ipc_owner cap_sys_module cap_sys_rawio cap_sys_chroot cap_sys_ptrace cap_sys_pacct cap_sys_admin cap_sys_boot cap_sys_nice cap_sys_resource cap_sys_time cap_sys_tty_config cap_mknod cap_lease cap_audit_write cap_audit_control cap_setfcap cap_mac_override cap_mac_admin cap_syslog cap_wake_alarm cap_block_suspend cap_audit_read cap_perfmon cap_bpf cap_checkpoint_restore
+DynamicUser=no
+SetLoginEnvironment=no
+RemoveIPC=no
+PrivateTmp=no
+PrivateTmpEx=no
+PrivateDevices=no
+ProtectClock=no
+ProtectKernelTunables=no
+ProtectKernelModules=no
+ProtectKernelLogs=no
+ProtectControlGroups=no
+ProtectControlGroupsEx=no
+PrivateNetwork=no
+PrivateUsers=no
+PrivateUsersEx=no
+PrivateMounts=no
+PrivateIPC=no
+PrivatePIDs=no
+ProtectHome=no
+ProtectSystem=no
+SameProcessGroup=no
+UtmpMode=init
+IgnoreSIGPIPE=yes
+NoNewPrivileges=no
+SystemCallErrorNumber=2147483646
+LockPersonality=no
+RuntimeDirectoryPreserve=no
+RuntimeDirectoryMode=0755
+StateDirectoryMode=0755
+CacheDirectoryMode=0755
+LogsDirectoryMode=0755
+ConfigurationDirectoryMode=0755
+TimeoutCleanUSec=infinity
+MemoryDenyWriteExecute=no
+RestrictRealtime=no
+RestrictSUIDSGID=no
+RestrictNamespaces=no
+MountAPIVFS=no
+BindLogSockets=no
+KeyringMode=private
+ProtectProc=default
+ProcSubset=all
+ProtectHostname=no
+MemoryKSM=no
+RootImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+MountImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+ExtensionImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+KillMode=control-group
+KillSignal=15
+RestartKillSignal=15
+FinalKillSignal=9
+SendSIGKILL=yes
+SendSIGHUP=no
+WatchdogSignal=6
+Id=uso-fixture-guard2.service
+Names=uso-fixture-guard2.service
+Requires=sysinit.target system.slice
+Conflicts=shutdown.target
+Before=shutdown.target
+After=systemd-journald.socket system.slice basic.target sysinit.target
+Description=uso fixture guard 2
+LoadState=loaded
+ActiveState=active
+FreezerState=running
+SubState=exited
+FragmentPath=/run/systemd/transient/uso-fixture-guard2.service
+UnitFileState=transient
+UnitFilePreset=enabled
+StateChangeTimestamp=Fri 2026-10-02 10:49:25 UTC
+StateChangeTimestampMonotonic=55347868733
+InactiveExitTimestamp=Fri 2026-10-02 10:49:23 UTC
+InactiveExitTimestampMonotonic=55345833686
+ActiveEnterTimestamp=Fri 2026-10-02 10:49:23 UTC
+ActiveEnterTimestampMonotonic=55345853414
+ActiveExitTimestampMonotonic=0
+InactiveEnterTimestampMonotonic=0
+CanStart=yes
+CanStop=yes
+CanReload=no
+CanIsolate=no
+CanFreeze=yes
+CanLiveMount=no
+StopWhenUnneeded=no
+RefuseManualStart=no
+RefuseManualStop=no
+AllowIsolate=no
+DefaultDependencies=yes
+SurviveFinalKillSignal=no
+OnSuccessJobMode=fail
+OnFailureJobMode=replace
+IgnoreOnIsolate=no
+NeedDaemonReload=no
+JobTimeoutUSec=infinity
+JobRunningTimeoutUSec=infinity
+JobTimeoutAction=none
+ConditionResult=yes
+AssertResult=yes
+ConditionTimestamp=Fri 2026-10-02 10:49:23 UTC
+ConditionTimestampMonotonic=55345832212
+AssertTimestamp=Fri 2026-10-02 10:49:23 UTC
+AssertTimestampMonotonic=55345832215
+Transient=yes
+Perpetual=no
+StartLimitIntervalUSec=10s
+StartLimitBurst=5
+StartLimitAction=none
+FailureAction=none
+SuccessAction=none
+InvocationID=55555555555545558555555555555555
+CollectMode=inactive
+DebugInvocation=no
+
+
+##### exited-full-stderr
+
+
+##### exited-full-exit
+0
+
+
+##### exited-job
+(uo) 0 "/"
+
+
+##### exited-job-stderr
+
+
+##### exited-job-exit
+0
+
+
+##### exited-locks
+1: FLOCK  ADVISORY  WRITE 800 00:1d:2293 0 EOF
+2: FLOCK  ADVISORY  WRITE 554 00:1d:2131 0 EOF
+3: FLOCK  ADVISORY  WRITE 554 00:1d:2130 0 EOF
+
+
+##### exited-locks-stderr
+
+
+##### exited-locks-exit
+0
+
+
+##### exited-observation
+Type=exec
+Restart=no
+RemainAfterExit=yes
+MainPID=0
+ControlPID=0
+ExecMainCode=1
+ExecMainStatus=0
+ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 33333333-3333-4333-8333-333333333333 ; ignore_errors=no ; start_time=[Fri 2026-10-02 10:49:23 UTC] ; stop_time=[Fri 2026-10-02 10:49:25 UTC] ; pid=1640654 ; code=exited ; status=0 }
+ControlGroup=
+User=
+Id=uso-fixture-guard2.service
+Description=uso fixture guard 2
+LoadState=loaded
+ActiveState=active
+FragmentPath=/run/systemd/transient/uso-fixture-guard2.service
+DropInPaths=
+Transient=yes
+InvocationID=55555555555545558555555555555555
+
+
+##### exited-observation-stderr
+
+
+##### exited-observation-exit
+0
+
+
+##### exited-properties
+Type=exec
+RemainAfterExit=yes
+MainPID=0
+ExecMainStatus=0
+ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 33333333-3333-4333-8333-333333333333 ; ignore_errors=no ; start_time=[Fri 2026-10-02 10:49:23 UTC] ; stop_time=[Fri 2026-10-02 10:49:25 UTC] ; pid=1640654 ; code=exited ; status=0 }
+User=
+Id=uso-fixture-guard2.service
+Description=uso fixture guard 2
+ActiveState=active
+FragmentPath=/run/systemd/transient/uso-fixture-guard2.service
+DropInPaths=
+Transient=yes
+
+
+##### exited-properties-stderr
+
+
+##### exited-properties-exit
+0
+
+
+##### failed-after
+  UNIT LOAD ACTIVE SUB DESCRIPTION
+
+0 loaded units listed.
+
+
+##### failed-after-stderr
+
+
+##### failed-after-exit
+0
+
+
+##### failed-full
+Type=exec
+ExitType=main
+Restart=no
+RestartMode=normal
+NotifyAccess=none
+RestartUSec=100ms
+RestartSteps=0
+RestartMaxDelayUSec=infinity
+RestartUSecNext=100ms
+TimeoutStartUSec=1min 30s
+TimeoutStopUSec=1min 30s
+TimeoutAbortUSec=1min 30s
+TimeoutStartFailureMode=terminate
+TimeoutStopFailureMode=terminate
+RuntimeMaxUSec=infinity
+RuntimeRandomizedExtraUSec=0
+WatchdogUSec=0
+WatchdogTimestampMonotonic=0
+RootDirectoryStartOnly=no
+RemainAfterExit=yes
+GuessMainPID=yes
+MainPID=0
+ControlPID=0
+FileDescriptorStoreMax=0
+NFileDescriptorStore=0
+FileDescriptorStorePreserve=restart
+StatusErrno=0
+Result=signal
+ReloadResult=success
+CleanResult=success
+LiveMountResult=success
+UID=[not set]
+GID=[not set]
+NRestarts=0
+OOMPolicy=stop
+ReloadSignal=1
+ExecMainStartTimestamp=Fri 2026-10-02 10:49:25 UTC
+ExecMainStartTimestampMonotonic=55348304360
+ExecMainExitTimestamp=Fri 2026-10-02 10:49:25 UTC
+ExecMainExitTimestampMonotonic=55348375600
+ExecMainHandoffTimestamp=Fri 2026-10-02 10:49:25 UTC
+ExecMainHandoffTimestampMonotonic=55348340654
+ExecMainPID=1641945
+ExecMainCode=2
+ExecMainStatus=9
+ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 44444444-4444-4444-8444-444444444444 ; ignore_errors=no ; start_time=[Fri 2026-10-02 10:49:25 UTC] ; stop_time=[Fri 2026-10-02 10:49:25 UTC] ; pid=1641945 ; code=killed ; status=9/KILL }
+ExecStartEx={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 44444444-4444-4444-8444-444444444444 ; flags= ; start_time=[Fri 2026-10-02 10:49:25 UTC] ; stop_time=[Fri 2026-10-02 10:49:25 UTC] ; pid=1641945 ; code=killed ; status=9/KILL }
+Slice=system.slice
+ControlGroupId=106880
+MemoryCurrent=[not set]
+MemoryPeak=2301952
+MemorySwapCurrent=[not set]
+MemorySwapPeak=0
+MemoryZSwapCurrent=[not set]
+MemoryAvailable=7534501888
+EffectiveMemoryMax=8157028352
+EffectiveMemoryHigh=8157028352
+CPUUsageNSec=27001000
+TasksCurrent=[not set]
+EffectiveTasksMax=9330
+IPIngressBytes=[no data]
+IPIngressPackets=[no data]
+IPEgressBytes=[no data]
+IPEgressPackets=[no data]
+IOReadBytes=[not set]
+IOReadOperations=[not set]
+IOWriteBytes=[not set]
+IOWriteOperations=[not set]
+Delegate=no
+CPUAccounting=yes
+CPUWeight=[not set]
+StartupCPUWeight=[not set]
+CPUShares=[not set]
+StartupCPUShares=[not set]
+CPUQuotaPerSecUSec=infinity
+CPUQuotaPeriodUSec=infinity
+IOAccounting=no
+IOWeight=[not set]
+StartupIOWeight=[not set]
+BlockIOAccounting=no
+BlockIOWeight=[not set]
+StartupBlockIOWeight=[not set]
+MemoryAccounting=yes
+DefaultMemoryLow=0
+DefaultStartupMemoryLow=0
+DefaultMemoryMin=0
+MemoryMin=0
+MemoryLow=0
+StartupMemoryLow=0
+MemoryHigh=infinity
+StartupMemoryHigh=infinity
+MemoryMax=infinity
+StartupMemoryMax=infinity
+MemorySwapMax=infinity
+StartupMemorySwapMax=infinity
+MemoryZSwapMax=infinity
+StartupMemoryZSwapMax=infinity
+MemoryZSwapWriteback=yes
+MemoryLimit=infinity
+DevicePolicy=auto
+TasksAccounting=yes
+TasksMax=9330
+IPAccounting=no
+ManagedOOMSwap=auto
+ManagedOOMMemoryPressure=auto
+ManagedOOMMemoryPressureLimit=0
+ManagedOOMMemoryPressureDurationUSec=[not set]
+ManagedOOMPreference=none
+MemoryPressureWatch=auto
+MemoryPressureThresholdUSec=200ms
+CoredumpReceive=no
+Environment=FIXTURE_CAPTURE_DIR=/run/uso-fixture-guard2/os-stage FIXTURE_CAPTURE_UID=0
+UMask=0022
+LimitCPU=infinity
+LimitCPUSoft=infinity
+LimitFSIZE=infinity
+LimitFSIZESoft=infinity
+LimitDATA=infinity
+LimitDATASoft=infinity
+LimitSTACK=infinity
+LimitSTACKSoft=8388608
+LimitCORE=infinity
+LimitCORESoft=0
+LimitRSS=infinity
+LimitRSSSoft=infinity
+LimitNOFILE=524288
+LimitNOFILESoft=1024
+LimitAS=infinity
+LimitASSoft=infinity
+LimitNPROC=31101
+LimitNPROCSoft=31101
+LimitMEMLOCK=8388608
+LimitMEMLOCKSoft=8388608
+LimitLOCKS=infinity
+LimitLOCKSSoft=infinity
+LimitSIGPENDING=31101
+LimitSIGPENDINGSoft=31101
+LimitMSGQUEUE=819200
+LimitMSGQUEUESoft=819200
+LimitNICE=0
+LimitNICESoft=0
+LimitRTPRIO=0
+LimitRTPRIOSoft=0
+LimitRTTIME=infinity
+LimitRTTIMESoft=infinity
+RootEphemeral=no
+OOMScoreAdjust=0
+CoredumpFilter=0x23
+Nice=0
+IOSchedulingClass=2
+IOSchedulingPriority=4
+CPUSchedulingPolicy=0
+CPUSchedulingPriority=0
+CPUAffinityFromNUMA=no
+NUMAPolicy=n/a
+TimerSlackNSec=50000
+CPUSchedulingResetOnFork=no
+NonBlocking=no
+StandardInput=null
+StandardOutput=null
+StandardError=journal
+TTYReset=no
+TTYVHangup=no
+TTYVTDisallocate=no
+SyslogPriority=30
+SyslogLevelPrefix=yes
+SyslogLevel=6
+SyslogFacility=3
+LogLevelMax=-1
+LogRateLimitIntervalUSec=0
+LogRateLimitBurst=0
+SecureBits=0
+CapabilityBoundingSet=cap_chown cap_dac_override cap_dac_read_search cap_fowner cap_fsetid cap_kill cap_setgid cap_setuid cap_setpcap cap_linux_immutable cap_net_bind_service cap_net_broadcast cap_net_admin cap_net_raw cap_ipc_lock cap_ipc_owner cap_sys_module cap_sys_rawio cap_sys_chroot cap_sys_ptrace cap_sys_pacct cap_sys_admin cap_sys_boot cap_sys_nice cap_sys_resource cap_sys_time cap_sys_tty_config cap_mknod cap_lease cap_audit_write cap_audit_control cap_setfcap cap_mac_override cap_mac_admin cap_syslog cap_wake_alarm cap_block_suspend cap_audit_read cap_perfmon cap_bpf cap_checkpoint_restore
+DynamicUser=no
+SetLoginEnvironment=no
+RemoveIPC=no
+PrivateTmp=no
+PrivateTmpEx=no
+PrivateDevices=no
+ProtectClock=no
+ProtectKernelTunables=no
+ProtectKernelModules=no
+ProtectKernelLogs=no
+ProtectControlGroups=no
+ProtectControlGroupsEx=no
+PrivateNetwork=no
+PrivateUsers=no
+PrivateUsersEx=no
+PrivateMounts=no
+PrivateIPC=no
+PrivatePIDs=no
+ProtectHome=no
+ProtectSystem=no
+SameProcessGroup=no
+UtmpMode=init
+IgnoreSIGPIPE=yes
+NoNewPrivileges=no
+SystemCallErrorNumber=2147483646
+LockPersonality=no
+RuntimeDirectoryPreserve=no
+RuntimeDirectoryMode=0755
+StateDirectoryMode=0755
+CacheDirectoryMode=0755
+LogsDirectoryMode=0755
+ConfigurationDirectoryMode=0755
+TimeoutCleanUSec=infinity
+MemoryDenyWriteExecute=no
+RestrictRealtime=no
+RestrictSUIDSGID=no
+RestrictNamespaces=no
+MountAPIVFS=no
+BindLogSockets=no
+KeyringMode=private
+ProtectProc=default
+ProcSubset=all
+ProtectHostname=no
+MemoryKSM=no
+RootImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+MountImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+ExtensionImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+KillMode=control-group
+KillSignal=15
+RestartKillSignal=15
+FinalKillSignal=9
+SendSIGKILL=yes
+SendSIGHUP=no
+WatchdogSignal=6
+Id=uso-fixture-guard2.service
+Names=uso-fixture-guard2.service
+Requires=sysinit.target system.slice
+Conflicts=shutdown.target
+Before=shutdown.target
+After=basic.target sysinit.target system.slice systemd-journald.socket
+Description=uso fixture guard 2
+LoadState=loaded
+ActiveState=failed
+FreezerState=running
+SubState=failed
+FragmentPath=/run/systemd/transient/uso-fixture-guard2.service
+UnitFileState=transient
+UnitFilePreset=enabled
+StateChangeTimestamp=Fri 2026-10-02 10:49:25 UTC
+StateChangeTimestampMonotonic=55348375769
+InactiveExitTimestamp=Fri 2026-10-02 10:49:25 UTC
+InactiveExitTimestampMonotonic=55348305669
+ActiveEnterTimestamp=Fri 2026-10-02 10:49:25 UTC
+ActiveEnterTimestampMonotonic=55348342203
+ActiveExitTimestamp=Fri 2026-10-02 10:49:25 UTC
+ActiveExitTimestampMonotonic=55348375769
+InactiveEnterTimestamp=Fri 2026-10-02 10:49:25 UTC
+InactiveEnterTimestampMonotonic=55348375769
+CanStart=yes
+CanStop=yes
+CanReload=no
+CanIsolate=no
+CanFreeze=yes
+CanLiveMount=no
+StopWhenUnneeded=no
+RefuseManualStart=no
+RefuseManualStop=no
+AllowIsolate=no
+DefaultDependencies=yes
+SurviveFinalKillSignal=no
+OnSuccessJobMode=fail
+OnFailureJobMode=replace
+IgnoreOnIsolate=no
+NeedDaemonReload=no
+JobTimeoutUSec=infinity
+JobRunningTimeoutUSec=infinity
+JobTimeoutAction=none
+ConditionResult=yes
+AssertResult=yes
+ConditionTimestamp=Fri 2026-10-02 10:49:25 UTC
+ConditionTimestampMonotonic=55348302063
+AssertTimestamp=Fri 2026-10-02 10:49:25 UTC
+AssertTimestampMonotonic=55348302068
+Transient=yes
+Perpetual=no
+StartLimitIntervalUSec=10s
+StartLimitBurst=5
+StartLimitAction=none
+FailureAction=none
+SuccessAction=none
+InvocationID=66666666666646668666666666666666
+CollectMode=inactive
+DebugInvocation=no
+
+
+##### failed-full-stderr
+
+
+##### failed-full-exit
+0
+
+
+##### failed-locks
+1: FLOCK  ADVISORY  WRITE 800 00:1d:2293 0 EOF
+2: FLOCK  ADVISORY  WRITE 554 00:1d:2131 0 EOF
+3: FLOCK  ADVISORY  WRITE 554 00:1d:2130 0 EOF
+
+
+##### failed-locks-stderr
+
+
+##### failed-locks-exit
+0
+
+
+##### failed-observation
+Type=exec
+Restart=no
+RemainAfterExit=yes
+MainPID=0
+ControlPID=0
+ExecMainCode=2
+ExecMainStatus=9
+ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 44444444-4444-4444-8444-444444444444 ; ignore_errors=no ; start_time=[Fri 2026-10-02 10:49:25 UTC] ; stop_time=[Fri 2026-10-02 10:49:25 UTC] ; pid=1641945 ; code=killed ; status=9/KILL }
+ControlGroup=
+User=
+Id=uso-fixture-guard2.service
+Description=uso fixture guard 2
+LoadState=loaded
+ActiveState=failed
+FragmentPath=/run/systemd/transient/uso-fixture-guard2.service
+DropInPaths=
+Transient=yes
+InvocationID=66666666666646668666666666666666
+
+
+##### failed-observation-stderr
+
+
+##### failed-observation-exit
+0
+
+
+##### failed-procs
+
+
+##### failed-procs-stderr
+cat: /sys/fs/cgroup/system.slice/uso-fixture-guard2.service/cgroup.procs: No such file or directory
+
+
+##### failed-procs-exit
+1
+
+
+##### failed-properties
+Type=exec
+RemainAfterExit=yes
+MainPID=0
+ExecMainStatus=9
+ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 44444444-4444-4444-8444-444444444444 ; ignore_errors=no ; start_time=[Fri 2026-10-02 10:49:25 UTC] ; stop_time=[Fri 2026-10-02 10:49:25 UTC] ; pid=1641945 ; code=killed ; status=9/KILL }
+User=
+Id=uso-fixture-guard2.service
+Description=uso fixture guard 2
+ActiveState=failed
+FragmentPath=/run/systemd/transient/uso-fixture-guard2.service
+DropInPaths=
+Transient=yes
+
+
+##### failed-properties-stderr
+
+
+##### failed-properties-exit
+0
+
+
+##### helper-sha
+86c56895216bc2d6df5ae05034607abf535e375f5f1251f65e8fc42fac55f931  /run/uso-fixture-guard2/helper
+
+
+##### helper-sha-stderr
+
+
+##### helper-sha-exit
+0
+
+
+##### job
+(uo) 0 "/"
+
+
+##### job-stderr
+
+
+##### job-exit
+0
+
+
+##### lock-stat
+1d 29 9713 /run/uso-fixture2.lock
+
+
+##### lock-stat-stderr
+
+
+##### lock-stat-exit
+0
+
+
+##### locks
+1: FLOCK  ADVISORY  WRITE 800 00:1d:2293 0 EOF
+2: FLOCK  ADVISORY  WRITE 554 00:1d:2131 0 EOF
+3: FLOCK  ADVISORY  WRITE 554 00:1d:2130 0 EOF
+4: FLOCK  ADVISORY  WRITE 1640654 00:1d:9713 0 EOF
+
+
+##### locks-stderr
+
+
+##### locks-exit
+0
+
+
+##### mountinfo
+27 1 179:98 / / rw,relatime shared:1 - ext4 /dev/root rw
+28 27 0:7 / /dev rw,relatime shared:2 - devtmpfs devtmpfs rw,size=3965260k,nr_inodes=991315,mode=755
+29 27 0:25 / /proc rw,nosuid,nodev,noexec,relatime shared:5 - proc proc rw
+30 27 0:26 / /sys rw,nosuid,nodev,noexec,relatime shared:6 - sysfs sysfs rw
+31 30 0:8 / /sys/kernel/security rw,nosuid,nodev,noexec,relatime shared:7 - securityfs securityfs rw
+32 28 0:27 / /dev/shm rw,nosuid,nodev shared:3 - tmpfs tmpfs rw
+33 28 0:28 / /dev/pts rw,nosuid,noexec,relatime shared:4 - devpts devpts rw,gid=5,mode=600,ptmxmode=000
+34 27 0:29 / /run rw,nosuid,nodev shared:11 - tmpfs tmpfs rw,size=1593172k,nr_inodes=819200,mode=755
+35 30 0:30 / /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime shared:8 - cgroup2 cgroup2 rw,nsdelegate,memory_recursiveprot
+36 30 0:31 / /sys/fs/pstore rw,nosuid,nodev,noexec,relatime shared:9 - pstore none rw
+37 30 0:32 / /sys/fs/bpf rw,nosuid,nodev,noexec,relatime shared:10 - bpf bpf rw,mode=700
+38 28 0:23 / /dev/mqueue rw,nosuid,nodev,noexec,relatime shared:12 - mqueue mqueue rw
+39 30 0:13 / /sys/kernel/tracing rw,nosuid,nodev,noexec,relatime shared:13 - tracefs tracefs rw
+40 28 0:33 / /dev/hugepages rw,nosuid,nodev,relatime shared:14 - hugetlbfs hugetlbfs rw,pagesize=2M
+41 30 0:9 / /sys/kernel/debug rw,nosuid,nodev,noexec,relatime shared:15 - debugfs debugfs rw
+42 34 0:34 / /run/lock rw,nosuid,nodev,noexec,relatime shared:16 - tmpfs tmpfs rw,size=5120k
+86 34 0:35 / /run/credentials/systemd-journald.service ro,nosuid,nodev,noexec,relatime,nosymfollow shared:34 - tmpfs tmpfs rw,size=1024k,nr_inodes=1024,mode=700,noswap
+43 30 0:36 / /sys/fs/fuse/connections rw,nosuid,nodev,noexec,relatime shared:18 - fusectl fusectl rw
+44 30 0:24 / /sys/kernel/config rw,nosuid,nodev,noexec,relatime shared:17 - configfs configfs rw
+68 34 0:38 / /run/credentials/systemd-resolved.service ro,nosuid,nodev,noexec,relatime,nosymfollow shared:20 - tmpfs tmpfs rw,size=1024k,nr_inodes=1024,mode=700,noswap
+49 27 179:97 / /boot rw,nosuid,nodev,noexec,relatime shared:75 - vfat /dev/mmcblk1p1 rw,fmask=0077,dmask=0077,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro
+52 27 0:44 / /tmp rw,noatime shared:78 - tmpfs tmpfs rw,size=1048576k
+55 27 179:100 / /data rw,noatime shared:81 - ext4 /dev/mmcblk1p4 rw
+58 27 179:100 /log /var/log rw,noatime shared:81 - ext4 /dev/mmcblk1p4 rw
+61 27 179:100 /nm/system-connections /etc/NetworkManager/system-connections rw,noatime shared:81 - ext4 /dev/mmcblk1p4 rw
+64 27 179:100 /ceralive /opt/ceralive rw,noatime shared:81 - ext4 /dev/mmcblk1p4 rw
+609 34 0:59 / /run/credentials/getty@tty1.service ro,nosuid,nodev,noexec,relatime,nosymfollow shared:171 - tmpfs tmpfs rw,size=1024k,nr_inodes=1024,mode=700,noswap
+625 34 0:60 / /run/credentials/serial-getty@ttyS2.service ro,nosuid,nodev,noexec,relatime,nosymfollow shared:510 - tmpfs tmpfs rw,size=1024k,nr_inodes=1024,mode=700,noswap
+134 34 0:56 / /run/user/1000 rw,nosuid,nodev,relatime shared:434 - tmpfs tmpfs rw,size=796584k,nr_inodes=199146,mode=700,uid=1000,gid=1000
+
+
+##### mountinfo-stderr
+
+
+##### mountinfo-exit
+0
+
+
+##### os
+PRETTY_NAME="Debian GNU/Linux 13 (trixie)"
+NAME="Debian GNU/Linux"
+VERSION_ID="13"
+VERSION="13 (trixie)"
+VERSION_CODENAME=trixie
+DEBIAN_VERSION_FULL=13.7
+ID=debian
+HOME_URL="https://www.debian.org/"
+SUPPORT_URL="https://www.debian.org/support"
+BUG_REPORT_URL="https://bugs.debian.org/"
+
+
+##### os-stderr
+
+
+##### os-exit
+0
+
+
+##### reset-absent-full
+ExitType=main
+Restart=no
+RestartMode=normal
+NotifyAccess=none
+RestartUSec=100ms
+RestartSteps=0
+RestartMaxDelayUSec=infinity
+RestartUSecNext=100ms
+TimeoutStartUSec=1min 30s
+TimeoutStopUSec=1min 30s
+TimeoutAbortUSec=1min 30s
+TimeoutStartFailureMode=terminate
+TimeoutStopFailureMode=terminate
+RuntimeMaxUSec=infinity
+RuntimeRandomizedExtraUSec=0
+WatchdogUSec=infinity
+WatchdogTimestampMonotonic=0
+RootDirectoryStartOnly=no
+RemainAfterExit=no
+GuessMainPID=yes
+MainPID=0
+ControlPID=0
+FileDescriptorStoreMax=0
+NFileDescriptorStore=0
+FileDescriptorStorePreserve=restart
+StatusErrno=0
+Result=success
+ReloadResult=success
+CleanResult=success
+LiveMountResult=success
+UID=[not set]
+GID=[not set]
+NRestarts=0
+ReloadSignal=1
+ExecMainStartTimestampMonotonic=0
+ExecMainExitTimestampMonotonic=0
+ExecMainHandoffTimestampMonotonic=0
+ExecMainPID=0
+ExecMainCode=0
+ExecMainStatus=0
+ControlGroupId=0
+MemoryCurrent=[not set]
+MemoryPeak=[not set]
+MemorySwapCurrent=[not set]
+MemorySwapPeak=[not set]
+MemoryZSwapCurrent=[not set]
+MemoryAvailable=[not set]
+EffectiveMemoryMax=infinity
+EffectiveMemoryHigh=infinity
+CPUUsageNSec=[not set]
+TasksCurrent=[not set]
+EffectiveTasksMax=9330
+IPIngressBytes=[no data]
+IPIngressPackets=[no data]
+IPEgressBytes=[no data]
+IPEgressPackets=[no data]
+IOReadBytes=[not set]
+IOReadOperations=[not set]
+IOWriteBytes=[not set]
+IOWriteOperations=[not set]
+Delegate=no
+CPUAccounting=yes
+CPUWeight=[not set]
+StartupCPUWeight=[not set]
+CPUShares=[not set]
+StartupCPUShares=[not set]
+CPUQuotaPerSecUSec=infinity
+CPUQuotaPeriodUSec=infinity
+IOAccounting=no
+IOWeight=[not set]
+StartupIOWeight=[not set]
+BlockIOAccounting=no
+BlockIOWeight=[not set]
+StartupBlockIOWeight=[not set]
+MemoryAccounting=yes
+DefaultMemoryLow=0
+DefaultStartupMemoryLow=0
+DefaultMemoryMin=0
+MemoryMin=0
+MemoryLow=0
+StartupMemoryLow=0
+MemoryHigh=infinity
+StartupMemoryHigh=infinity
+MemoryMax=infinity
+StartupMemoryMax=infinity
+MemorySwapMax=infinity
+StartupMemorySwapMax=infinity
+MemoryZSwapMax=infinity
+StartupMemoryZSwapMax=infinity
+MemoryZSwapWriteback=yes
+MemoryLimit=infinity
+DevicePolicy=auto
+TasksAccounting=yes
+TasksMax=9330
+IPAccounting=no
+ManagedOOMSwap=auto
+ManagedOOMMemoryPressure=auto
+ManagedOOMMemoryPressureLimit=0
+ManagedOOMMemoryPressureDurationUSec=[not set]
+ManagedOOMPreference=none
+MemoryPressureWatch=auto
+MemoryPressureThresholdUSec=200ms
+CoredumpReceive=no
+UMask=0022
+LimitCPU=infinity
+LimitCPUSoft=infinity
+LimitFSIZE=infinity
+LimitFSIZESoft=infinity
+LimitDATA=infinity
+LimitDATASoft=infinity
+LimitSTACK=infinity
+LimitSTACKSoft=8388608
+LimitCORE=infinity
+LimitCORESoft=infinity
+LimitRSS=infinity
+LimitRSSSoft=infinity
+LimitNOFILE=1073741816
+LimitNOFILESoft=1073741816
+LimitAS=infinity
+LimitASSoft=infinity
+LimitNPROC=31101
+LimitNPROCSoft=31101
+LimitMEMLOCK=1019625472
+LimitMEMLOCKSoft=1019625472
+LimitLOCKS=infinity
+LimitLOCKSSoft=infinity
+LimitSIGPENDING=31101
+LimitSIGPENDINGSoft=31101
+LimitMSGQUEUE=819200
+LimitMSGQUEUESoft=819200
+LimitNICE=0
+LimitNICESoft=0
+LimitRTPRIO=0
+LimitRTPRIOSoft=0
+LimitRTTIME=infinity
+LimitRTTIMESoft=infinity
+RootEphemeral=no
+OOMScoreAdjust=0
+CoredumpFilter=0x23
+Nice=0
+IOSchedulingClass=2
+IOSchedulingPriority=4
+CPUSchedulingPolicy=0
+CPUSchedulingPriority=0
+CPUAffinityFromNUMA=no
+NUMAPolicy=n/a
+TimerSlackNSec=50000
+CPUSchedulingResetOnFork=no
+NonBlocking=no
+StandardInput=null
+StandardOutput=inherit
+StandardError=inherit
+TTYReset=no
+TTYVHangup=no
+TTYVTDisallocate=no
+SyslogPriority=30
+SyslogLevelPrefix=yes
+SyslogLevel=6
+SyslogFacility=3
+LogLevelMax=-1
+LogRateLimitIntervalUSec=0
+LogRateLimitBurst=0
+SecureBits=0
+CapabilityBoundingSet=cap_chown cap_dac_override cap_dac_read_search cap_fowner cap_fsetid cap_kill cap_setgid cap_setuid cap_setpcap cap_linux_immutable cap_net_bind_service cap_net_broadcast cap_net_admin cap_net_raw cap_ipc_lock cap_ipc_owner cap_sys_module cap_sys_rawio cap_sys_chroot cap_sys_ptrace cap_sys_pacct cap_sys_admin cap_sys_boot cap_sys_nice cap_sys_resource cap_sys_time cap_sys_tty_config cap_mknod cap_lease cap_audit_write cap_audit_control cap_setfcap cap_mac_override cap_mac_admin cap_syslog cap_wake_alarm cap_block_suspend cap_audit_read cap_perfmon cap_bpf cap_checkpoint_restore
+DynamicUser=no
+SetLoginEnvironment=no
+RemoveIPC=no
+PrivateTmp=no
+PrivateTmpEx=no
+PrivateDevices=no
+ProtectClock=no
+ProtectKernelTunables=no
+ProtectKernelModules=no
+ProtectKernelLogs=no
+ProtectControlGroups=no
+ProtectControlGroupsEx=no
+PrivateNetwork=no
+PrivateUsers=no
+PrivateUsersEx=no
+PrivateMounts=no
+PrivateIPC=no
+PrivatePIDs=no
+ProtectHome=no
+ProtectSystem=no
+SameProcessGroup=no
+UtmpMode=init
+IgnoreSIGPIPE=yes
+NoNewPrivileges=no
+SystemCallErrorNumber=2147483646
+LockPersonality=no
+RuntimeDirectoryPreserve=no
+RuntimeDirectoryMode=0755
+StateDirectoryMode=0755
+CacheDirectoryMode=0755
+LogsDirectoryMode=0755
+ConfigurationDirectoryMode=0755
+TimeoutCleanUSec=infinity
+MemoryDenyWriteExecute=no
+RestrictRealtime=no
+RestrictSUIDSGID=no
+RestrictNamespaces=no
+MountAPIVFS=no
+BindLogSockets=no
+KeyringMode=private
+ProtectProc=default
+ProcSubset=all
+ProtectHostname=no
+MemoryKSM=no
+RootImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+MountImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+ExtensionImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+KillMode=control-group
+KillSignal=15
+RestartKillSignal=15
+FinalKillSignal=9
+SendSIGKILL=yes
+SendSIGHUP=no
+WatchdogSignal=6
+Id=uso-fixture-guard2.service
+Names=uso-fixture-guard2.service
+Description=uso-fixture-guard2.service
+LoadState=not-found
+ActiveState=inactive
+FreezerState=running
+SubState=dead
+StateChangeTimestampMonotonic=0
+InactiveExitTimestampMonotonic=0
+ActiveEnterTimestampMonotonic=0
+ActiveExitTimestampMonotonic=0
+InactiveEnterTimestampMonotonic=0
+CanStart=no
+CanStop=yes
+CanReload=no
+CanIsolate=no
+CanFreeze=yes
+CanLiveMount=no
+StopWhenUnneeded=no
+RefuseManualStart=no
+RefuseManualStop=no
+AllowIsolate=no
+DefaultDependencies=yes
+SurviveFinalKillSignal=no
+OnSuccessJobMode=fail
+OnFailureJobMode=replace
+IgnoreOnIsolate=no
+NeedDaemonReload=no
+JobTimeoutUSec=infinity
+JobRunningTimeoutUSec=infinity
+JobTimeoutAction=none
+ConditionResult=no
+AssertResult=no
+ConditionTimestampMonotonic=0
+AssertTimestampMonotonic=0
+LoadError=org.freedesktop.systemd1.NoSuchUnit "Unit uso-fixture-guard2.service not found."
+Transient=no
+Perpetual=no
+StartLimitIntervalUSec=10s
+StartLimitBurst=5
+StartLimitAction=none
+FailureAction=none
+SuccessAction=none
+CollectMode=inactive
+DebugInvocation=no
+
+
+##### reset-absent-full-stderr
+
+
+##### reset-absent-full-exit
+0
+
+
+##### reset-absent-observation
+Type=
+Restart=no
+RemainAfterExit=no
+MainPID=0
+ControlPID=0
+ExecMainCode=0
+ExecMainStatus=0
+ControlGroup=
+User=
+Id=uso-fixture-guard2.service
+Description=uso-fixture-guard2.service
+LoadState=not-found
+ActiveState=inactive
+FragmentPath=
+DropInPaths=
+Transient=no
+InvocationID=
+
+
+##### reset-absent-observation-stderr
+
+
+##### reset-absent-observation-exit
+0
+
+
+##### reset-absent-properties
+Type=
+RemainAfterExit=no
+MainPID=0
+ExecMainStatus=0
+User=
+Id=uso-fixture-guard2.service
+Description=uso-fixture-guard2.service
+ActiveState=inactive
+FragmentPath=
+DropInPaths=
+Transient=no
+
+
+##### reset-absent-properties-stderr
+
+
+##### reset-absent-properties-exit
+0
+
+
+##### reset
+
+
+##### reset-stderr
+
+
+##### reset-exit
+0
+
+
+##### running-1640654-cgroup
+0::/system.slice/uso-fixture-guard2.service
+
+
+##### running-1640654-cgroup-stderr
+
+
+##### running-1640654-cgroup-exit
+0
+
+
+##### running-1640654-cmdline
+L3Vzci9iaW4vZmxvY2sALW4ALUUANzUALXgAL3J1bi91c28tZml4dHVyZTIubG9jawAvcnVuL3Vzby1maXh0dXJlLWd1YXJkMi9oZWxwZXIAMzMzMzMzMzMtMzMzMy00MzMzLTgzMzMtMzMzMzMzMzMzMzMzAA==
+
+##### running-1640654-cmdline-stderr
+
+
+##### running-1640654-cmdline-exit
+0
+
+
+##### running-1640654-fd-0-stat
+7 7 9 /proc/1640654/fd/0
+
+
+##### running-1640654-fd-0-stat-stderr
+
+
+##### running-1640654-fd-0-stat-exit
+0
+
+
+##### running-1640654-fd-1-stat
+7 7 9 /proc/1640654/fd/1
+
+
+##### running-1640654-fd-1-stat-stderr
+
+
+##### running-1640654-fd-1-stat-exit
+0
+
+
+##### running-1640654-fd-2-stat
+a 10 2324820 /proc/1640654/fd/2
+
+
+##### running-1640654-fd-2-stat-stderr
+
+
+##### running-1640654-fd-2-stat-exit
+0
+
+
+##### running-1640654-fd-3-stat
+1d 29 9713 /proc/1640654/fd/3
+
+
+##### running-1640654-fd-3-stat-stderr
+
+
+##### running-1640654-fd-3-stat-exit
+0
+
+
+##### running-1640654-fdinfo-3
+pos:	0
+flags:	0400000
+mnt_id:	34
+ino:	9713
+lock:	1: FLOCK  ADVISORY  WRITE 1640654 00:1d:9713 0 EOF
+
+
+##### running-1640654-fdinfo-3-stderr
+
+
+##### running-1640654-fdinfo-3-exit
+0
+
+
+##### running-1640654-fds
+total 0
+lr-x------ 1 root root 64 Oct  2 10:49 0 -> /dev/null
+l-wx------ 1 root root 64 Oct  2 10:49 1 -> /dev/null
+lrwx------ 1 root root 64 Oct  2 10:49 2 -> socket:[2324820]
+lr-x------ 1 root root 64 Oct  2 10:49 3 -> /run/uso-fixture2.lock
+
+
+##### running-1640654-fds-stderr
+
+
+##### running-1640654-fds-exit
+0
+
+
+##### running-1640654-stat
+1640654 (flock) S 1 1640654 1640654 0 -1 4194560 553 0 0 0 0 0 0 0 20 0 1 0 5534583 2809856 383 18446744073709551615 187650072051712 187650072088444 281474389313696 0 0 0 0 4096 0 1 0 0 17 7 0 0 0 0 0 187650072181080 187650072182868 187650200317952 281474389315178 281474389315296 281474389315296 281474389315561 0
+
+
+##### running-1640654-stat-stderr
+
+
+##### running-1640654-stat-exit
+0
+
+
+##### running-1640666-cgroup
+0::/system.slice/uso-fixture-guard2.service
+
+
+##### running-1640666-cgroup-stderr
+
+
+##### running-1640666-cgroup-exit
+0
+
+
+##### running-1640666-cmdline
+L2Jpbi9iYXNoAC9ydW4vdXNvLWZpeHR1cmUtZ3VhcmQyL2hlbHBlcgAzMzMzMzMzMy0zMzMzLTQzMzMtODMzMy0zMzMzMzMzMzMzMzMA
+
+##### running-1640666-cmdline-stderr
+
+
+##### running-1640666-cmdline-exit
+0
+
+
+##### running-1640666-fd-0-stat
+7 7 9 /proc/1640666/fd/0
+
+
+##### running-1640666-fd-0-stat-stderr
+
+
+##### running-1640666-fd-0-stat-exit
+0
+
+
+##### running-1640666-fd-1-stat
+7 7 9 /proc/1640666/fd/1
+
+
+##### running-1640666-fd-1-stat-stderr
+
+
+##### running-1640666-fd-1-stat-exit
+0
+
+
+##### running-1640666-fd-2-stat
+a 10 2324820 /proc/1640666/fd/2
+
+
+##### running-1640666-fd-2-stat-stderr
+
+
+##### running-1640666-fd-2-stat-exit
+0
+
+
+##### running-1640666-fd-255-stat
+1d 29 9696 /proc/1640666/fd/255
+
+
+##### running-1640666-fd-255-stat-stderr
+
+
+##### running-1640666-fd-255-stat-exit
+0
+
+
+##### running-1640666-fd-3-stat
+1d 29 9713 /proc/1640666/fd/3
+
+
+##### running-1640666-fd-3-stat-stderr
+
+
+##### running-1640666-fd-3-stat-exit
+0
+
+
+##### running-1640666-fdinfo-3
+pos:	0
+flags:	0400000
+mnt_id:	34
+ino:	9713
+lock:	1: FLOCK  ADVISORY  WRITE 1640654 00:1d:9713 0 EOF
+
+
+##### running-1640666-fdinfo-3-stderr
+
+
+##### running-1640666-fdinfo-3-exit
+0
+
+
+##### running-1640666-fds
+total 0
+lr-x------ 1 root root 64 Oct  2 10:49 0 -> /dev/null
+l-wx------ 1 root root 64 Oct  2 10:49 1 -> /dev/null
+lrwx------ 1 root root 64 Oct  2 10:49 2 -> socket:[2324820]
+lr-x------ 1 root root 64 Oct  2 10:49 255 -> /run/uso-fixture-guard2/helper
+lr-x------ 1 root root 64 Oct  2 10:49 3 -> /run/uso-fixture2.lock
+
+
+##### running-1640666-fds-stderr
+
+
+##### running-1640666-fds-exit
+0
+
+
+##### running-1640666-stat
+1640666 (helper) S 1640654 1640654 1640654 0 -1 4194304 291 319 0 0 0 0 0 0 20 0 1 0 5534585 4583424 812 18446744073709551615 187649992687616 187649994002224 281474606571552 0 0 0 65536 20487 65536 1 0 0 17 4 0 0 0 0 0 187649994111728 187649994163132 187650564698112 281474606575234 281474606575312 281474606575312 281474606575577 0
+
+
+##### running-1640666-stat-stderr
+
+
+##### running-1640666-stat-exit
+0
+
+
+##### running-1640675-cgroup
+0::/system.slice/uso-fixture-guard2.service
+
+
+##### running-1640675-cgroup-stderr
+
+
+##### running-1640675-cgroup-exit
+0
+
+
+##### running-1640675-cmdline
+c2xlZXAAMQA=
+
+##### running-1640675-cmdline-stderr
+
+
+##### running-1640675-cmdline-exit
+0
+
+
+##### running-1640675-fd-0-stat
+7 7 9 /proc/1640675/fd/0
+
+
+##### running-1640675-fd-0-stat-stderr
+
+
+##### running-1640675-fd-0-stat-exit
+0
+
+
+##### running-1640675-fd-1-stat
+7 7 9 /proc/1640675/fd/1
+
+
+##### running-1640675-fd-1-stat-stderr
+
+
+##### running-1640675-fd-1-stat-exit
+0
+
+
+##### running-1640675-fd-2-stat
+a 10 2324820 /proc/1640675/fd/2
+
+
+##### running-1640675-fd-2-stat-stderr
+
+
+##### running-1640675-fd-2-stat-exit
+0
+
+
+##### running-1640675-fd-3-stat
+1d 29 9713 /proc/1640675/fd/3
+
+
+##### running-1640675-fd-3-stat-stderr
+
+
+##### running-1640675-fd-3-stat-exit
+0
+
+
+##### running-1640675-fdinfo-3
+pos:	0
+flags:	0400000
+mnt_id:	34
+ino:	9713
+lock:	1: FLOCK  ADVISORY  WRITE 1640654 00:1d:9713 0 EOF
+
+
+##### running-1640675-fdinfo-3-stderr
+
+
+##### running-1640675-fdinfo-3-exit
+0
+
+
+##### running-1640675-fds
+total 0
+lr-x------ 1 root root 64 Oct  2 10:49 0 -> /dev/null
+l-wx------ 1 root root 64 Oct  2 10:49 1 -> /dev/null
+lrwx------ 1 root root 64 Oct  2 10:49 2 -> socket:[2324820]
+lr-x------ 1 root root 64 Oct  2 10:49 3 -> /run/uso-fixture2.lock
+
+
+##### running-1640675-fds-stderr
+
+
+##### running-1640675-fds-exit
+0
+
+
+##### running-1640675-stat
+1640675 (sleep) S 1640666 1640654 1640654 0 -1 4194304 96 0 0 0 0 0 0 0 20 0 1 0 5534585 2809856 384 18446744073709551615 187650685927424 187650685963864 281474777221280 0 0 0 0 20483 0 1 0 0 17 0 0 0 0 0 0 187650686057168 187650686058728 187651179065344 281474777222841 281474777222849 281474777222849 281474777223145 0
+
+
+##### running-1640675-stat-stderr
+
+
+##### running-1640675-stat-exit
+0
+
+
+##### running-full
+Type=exec
+ExitType=main
+Restart=no
+RestartMode=normal
+NotifyAccess=none
+RestartUSec=100ms
+RestartSteps=0
+RestartMaxDelayUSec=infinity
+RestartUSecNext=100ms
+TimeoutStartUSec=1min 30s
+TimeoutStopUSec=1min 30s
+TimeoutAbortUSec=1min 30s
+TimeoutStartFailureMode=terminate
+TimeoutStopFailureMode=terminate
+RuntimeMaxUSec=infinity
+RuntimeRandomizedExtraUSec=0
+WatchdogUSec=0
+WatchdogTimestampMonotonic=0
+RootDirectoryStartOnly=no
+RemainAfterExit=yes
+GuessMainPID=yes
+MainPID=1640654
+ControlPID=0
+FileDescriptorStoreMax=0
+NFileDescriptorStore=0
+FileDescriptorStorePreserve=restart
+StatusErrno=0
+Result=success
+ReloadResult=success
+CleanResult=success
+LiveMountResult=success
+UID=[not set]
+GID=[not set]
+NRestarts=0
+OOMPolicy=stop
+ReloadSignal=1
+ExecMainStartTimestamp=Fri 2026-10-02 10:49:23 UTC
+ExecMainStartTimestampMonotonic=55345833150
+ExecMainExitTimestampMonotonic=0
+ExecMainHandoffTimestamp=Fri 2026-10-02 10:49:23 UTC
+ExecMainHandoffTimestampMonotonic=55345852407
+ExecMainPID=1640654
+ExecMainCode=0
+ExecMainStatus=0
+ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 33333333-3333-4333-8333-333333333333 ; ignore_errors=no ; start_time=[Fri 2026-10-02 10:49:23 UTC] ; stop_time=[n/a] ; pid=1640654 ; code=(null) ; status=0/0 }
+ExecStartEx={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 33333333-3333-4333-8333-333333333333 ; flags= ; start_time=[Fri 2026-10-02 10:49:23 UTC] ; stop_time=[n/a] ; pid=1640654 ; code=(null) ; status=0/0 }
+Slice=system.slice
+ControlGroup=/system.slice/uso-fixture-guard2.service
+ControlGroupId=106840
+MemoryCurrent=1712128
+MemoryPeak=1929216
+MemorySwapCurrent=0
+MemorySwapPeak=0
+MemoryZSwapCurrent=[not set]
+MemoryAvailable=7554035712
+EffectiveMemoryMax=8157028352
+EffectiveMemoryHigh=8157028352
+CPUUsageNSec=15560000
+TasksCurrent=3
+EffectiveTasksMax=9330
+IPIngressBytes=[no data]
+IPIngressPackets=[no data]
+IPEgressBytes=[no data]
+IPEgressPackets=[no data]
+IOReadBytes=[not set]
+IOReadOperations=[not set]
+IOWriteBytes=[not set]
+IOWriteOperations=[not set]
+Delegate=no
+CPUAccounting=yes
+CPUWeight=[not set]
+StartupCPUWeight=[not set]
+CPUShares=[not set]
+StartupCPUShares=[not set]
+CPUQuotaPerSecUSec=infinity
+CPUQuotaPeriodUSec=infinity
+IOAccounting=no
+IOWeight=[not set]
+StartupIOWeight=[not set]
+BlockIOAccounting=no
+BlockIOWeight=[not set]
+StartupBlockIOWeight=[not set]
+MemoryAccounting=yes
+DefaultMemoryLow=0
+DefaultStartupMemoryLow=0
+DefaultMemoryMin=0
+MemoryMin=0
+MemoryLow=0
+StartupMemoryLow=0
+MemoryHigh=infinity
+StartupMemoryHigh=infinity
+MemoryMax=infinity
+StartupMemoryMax=infinity
+MemorySwapMax=infinity
+StartupMemorySwapMax=infinity
+MemoryZSwapMax=infinity
+StartupMemoryZSwapMax=infinity
+MemoryZSwapWriteback=yes
+MemoryLimit=infinity
+DevicePolicy=auto
+TasksAccounting=yes
+TasksMax=9330
+IPAccounting=no
+ManagedOOMSwap=auto
+ManagedOOMMemoryPressure=auto
+ManagedOOMMemoryPressureLimit=0
+ManagedOOMMemoryPressureDurationUSec=[not set]
+ManagedOOMPreference=none
+MemoryPressureWatch=auto
+MemoryPressureThresholdUSec=200ms
+CoredumpReceive=no
+Environment=FIXTURE_CAPTURE_DIR=/run/uso-fixture-guard2/os-stage FIXTURE_CAPTURE_UID=0
+UMask=0022
+LimitCPU=infinity
+LimitCPUSoft=infinity
+LimitFSIZE=infinity
+LimitFSIZESoft=infinity
+LimitDATA=infinity
+LimitDATASoft=infinity
+LimitSTACK=infinity
+LimitSTACKSoft=8388608
+LimitCORE=infinity
+LimitCORESoft=0
+LimitRSS=infinity
+LimitRSSSoft=infinity
+LimitNOFILE=524288
+LimitNOFILESoft=1024
+LimitAS=infinity
+LimitASSoft=infinity
+LimitNPROC=31101
+LimitNPROCSoft=31101
+LimitMEMLOCK=8388608
+LimitMEMLOCKSoft=8388608
+LimitLOCKS=infinity
+LimitLOCKSSoft=infinity
+LimitSIGPENDING=31101
+LimitSIGPENDINGSoft=31101
+LimitMSGQUEUE=819200
+LimitMSGQUEUESoft=819200
+LimitNICE=0
+LimitNICESoft=0
+LimitRTPRIO=0
+LimitRTPRIOSoft=0
+LimitRTTIME=infinity
+LimitRTTIMESoft=infinity
+RootEphemeral=no
+OOMScoreAdjust=0
+CoredumpFilter=0x23
+Nice=0
+IOSchedulingClass=2
+IOSchedulingPriority=4
+CPUSchedulingPolicy=0
+CPUSchedulingPriority=0
+CPUAffinityFromNUMA=no
+NUMAPolicy=n/a
+TimerSlackNSec=50000
+CPUSchedulingResetOnFork=no
+NonBlocking=no
+StandardInput=null
+StandardOutput=null
+StandardError=journal
+TTYReset=no
+TTYVHangup=no
+TTYVTDisallocate=no
+SyslogPriority=30
+SyslogLevelPrefix=yes
+SyslogLevel=6
+SyslogFacility=3
+LogLevelMax=-1
+LogRateLimitIntervalUSec=0
+LogRateLimitBurst=0
+SecureBits=0
+CapabilityBoundingSet=cap_chown cap_dac_override cap_dac_read_search cap_fowner cap_fsetid cap_kill cap_setgid cap_setuid cap_setpcap cap_linux_immutable cap_net_bind_service cap_net_broadcast cap_net_admin cap_net_raw cap_ipc_lock cap_ipc_owner cap_sys_module cap_sys_rawio cap_sys_chroot cap_sys_ptrace cap_sys_pacct cap_sys_admin cap_sys_boot cap_sys_nice cap_sys_resource cap_sys_time cap_sys_tty_config cap_mknod cap_lease cap_audit_write cap_audit_control cap_setfcap cap_mac_override cap_mac_admin cap_syslog cap_wake_alarm cap_block_suspend cap_audit_read cap_perfmon cap_bpf cap_checkpoint_restore
+DynamicUser=no
+SetLoginEnvironment=no
+RemoveIPC=no
+PrivateTmp=no
+PrivateTmpEx=no
+PrivateDevices=no
+ProtectClock=no
+ProtectKernelTunables=no
+ProtectKernelModules=no
+ProtectKernelLogs=no
+ProtectControlGroups=no
+ProtectControlGroupsEx=no
+PrivateNetwork=no
+PrivateUsers=no
+PrivateUsersEx=no
+PrivateMounts=no
+PrivateIPC=no
+PrivatePIDs=no
+ProtectHome=no
+ProtectSystem=no
+SameProcessGroup=no
+UtmpMode=init
+IgnoreSIGPIPE=yes
+NoNewPrivileges=no
+SystemCallErrorNumber=2147483646
+LockPersonality=no
+RuntimeDirectoryPreserve=no
+RuntimeDirectoryMode=0755
+StateDirectoryMode=0755
+CacheDirectoryMode=0755
+LogsDirectoryMode=0755
+ConfigurationDirectoryMode=0755
+TimeoutCleanUSec=infinity
+MemoryDenyWriteExecute=no
+RestrictRealtime=no
+RestrictSUIDSGID=no
+RestrictNamespaces=no
+MountAPIVFS=no
+BindLogSockets=no
+KeyringMode=private
+ProtectProc=default
+ProcSubset=all
+ProtectHostname=no
+MemoryKSM=no
+RootImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+MountImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+ExtensionImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+KillMode=control-group
+KillSignal=15
+RestartKillSignal=15
+FinalKillSignal=9
+SendSIGKILL=yes
+SendSIGHUP=no
+WatchdogSignal=6
+Id=uso-fixture-guard2.service
+Names=uso-fixture-guard2.service
+Requires=sysinit.target system.slice
+Conflicts=shutdown.target
+Before=shutdown.target
+After=systemd-journald.socket system.slice basic.target sysinit.target
+Description=uso fixture guard 2
+LoadState=loaded
+ActiveState=active
+FreezerState=running
+SubState=running
+FragmentPath=/run/systemd/transient/uso-fixture-guard2.service
+UnitFileState=transient
+UnitFilePreset=enabled
+StateChangeTimestamp=Fri 2026-10-02 10:49:23 UTC
+StateChangeTimestampMonotonic=55345853414
+InactiveExitTimestamp=Fri 2026-10-02 10:49:23 UTC
+InactiveExitTimestampMonotonic=55345833686
+ActiveEnterTimestamp=Fri 2026-10-02 10:49:23 UTC
+ActiveEnterTimestampMonotonic=55345853414
+ActiveExitTimestampMonotonic=0
+InactiveEnterTimestampMonotonic=0
+CanStart=yes
+CanStop=yes
+CanReload=no
+CanIsolate=no
+CanFreeze=yes
+CanLiveMount=no
+StopWhenUnneeded=no
+RefuseManualStart=no
+RefuseManualStop=no
+AllowIsolate=no
+DefaultDependencies=yes
+SurviveFinalKillSignal=no
+OnSuccessJobMode=fail
+OnFailureJobMode=replace
+IgnoreOnIsolate=no
+NeedDaemonReload=no
+JobTimeoutUSec=infinity
+JobRunningTimeoutUSec=infinity
+JobTimeoutAction=none
+ConditionResult=yes
+AssertResult=yes
+ConditionTimestamp=Fri 2026-10-02 10:49:23 UTC
+ConditionTimestampMonotonic=55345832212
+AssertTimestamp=Fri 2026-10-02 10:49:23 UTC
+AssertTimestampMonotonic=55345832215
+Transient=yes
+Perpetual=no
+StartLimitIntervalUSec=10s
+StartLimitBurst=5
+StartLimitAction=none
+FailureAction=none
+SuccessAction=none
+InvocationID=55555555555545558555555555555555
+CollectMode=inactive
+DebugInvocation=no
+
+
+##### running-full-stderr
+
+
+##### running-full-exit
+0
+
+
+##### running-observation
+Type=exec
+Restart=no
+RemainAfterExit=yes
+MainPID=1640654
+ControlPID=0
+ExecMainCode=0
+ExecMainStatus=0
+ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 33333333-3333-4333-8333-333333333333 ; ignore_errors=no ; start_time=[Fri 2026-10-02 10:49:23 UTC] ; stop_time=[n/a] ; pid=1640654 ; code=(null) ; status=0/0 }
+ControlGroup=/system.slice/uso-fixture-guard2.service
+User=
+Id=uso-fixture-guard2.service
+Description=uso fixture guard 2
+LoadState=loaded
+ActiveState=active
+FragmentPath=/run/systemd/transient/uso-fixture-guard2.service
+DropInPaths=
+Transient=yes
+InvocationID=55555555555545558555555555555555
+
+
+##### running-observation-stderr
+
+
+##### running-observation-exit
+0
+
+
+##### running-procs
+1640654
+1640666
+1640675
+
+
+##### running-procs-stderr
+
+
+##### running-procs-exit
+0
+
+
+##### running-properties
+Type=exec
+RemainAfterExit=yes
+MainPID=1640654
+ExecMainStatus=0
+ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 33333333-3333-4333-8333-333333333333 ; ignore_errors=no ; start_time=[Fri 2026-10-02 10:49:23 UTC] ; stop_time=[n/a] ; pid=1640654 ; code=(null) ; status=0/0 }
+User=
+Id=uso-fixture-guard2.service
+Description=uso fixture guard 2
+ActiveState=active
+FragmentPath=/run/systemd/transient/uso-fixture-guard2.service
+DropInPaths=
+Transient=yes
+
+
+##### running-properties-stderr
+
+
+##### running-properties-exit
+0
+
+
+##### second-stat-0
+b362 45922 131123 /var/tmp/uso-fixture-h3f2/0
+
+
+##### second-stat-0-stderr
+
+
+##### second-stat-0-exit
+0
+
+
+##### second-stat-1
+b362 45922 131130 /var/tmp/uso-fixture-h3f2/1
+
+
+##### second-stat-1-stderr
+
+
+##### second-stat-1-exit
+0
+
+
+##### second-stat-10
+b362 45922 131178 /var/tmp/uso-fixture-h3f2/10
+
+
+##### second-stat-10-stderr
+
+
+##### second-stat-10-exit
+0
+
+
+##### second-stat-11
+b362 45922 131179 /var/tmp/uso-fixture-h3f2/11
+
+
+##### second-stat-11-stderr
+
+
+##### second-stat-11-exit
+0
+
+
+##### second-stat-12
+b362 45922 131180 /var/tmp/uso-fixture-h3f2/12
+
+
+##### second-stat-12-stderr
+
+
+##### second-stat-12-exit
+0
+
+
+##### second-stat-13
+b362 45922 131181 /var/tmp/uso-fixture-h3f2/13
+
+
+##### second-stat-13-stderr
+
+
+##### second-stat-13-exit
+0
+
+
+##### second-stat-14
+b362 45922 131182 /var/tmp/uso-fixture-h3f2/14
+
+
+##### second-stat-14-stderr
+
+
+##### second-stat-14-exit
+0
+
+
+##### second-stat-15
+b362 45922 131183 /var/tmp/uso-fixture-h3f2/15
+
+
+##### second-stat-15-stderr
+
+
+##### second-stat-15-exit
+0
+
+
+##### second-stat-16
+b362 45922 131184 /var/tmp/uso-fixture-h3f2/16
+
+
+##### second-stat-16-stderr
+
+
+##### second-stat-16-exit
+0
+
+
+##### second-stat-17
+b362 45922 131185 /var/tmp/uso-fixture-h3f2/17
+
+
+##### second-stat-17-stderr
+
+
+##### second-stat-17-exit
+0
+
+
+##### second-stat-18
+b362 45922 131186 /var/tmp/uso-fixture-h3f2/18
+
+
+##### second-stat-18-stderr
+
+
+##### second-stat-18-exit
+0
+
+
+##### second-stat-19
+b362 45922 131187 /var/tmp/uso-fixture-h3f2/19
+
+
+##### second-stat-19-stderr
+
+
+##### second-stat-19-exit
+0
+
+
+##### second-stat-2
+b362 45922 131131 /var/tmp/uso-fixture-h3f2/2
+
+
+##### second-stat-2-stderr
+
+
+##### second-stat-2-exit
+0
+
+
+##### second-stat-20
+b362 45922 131188 /var/tmp/uso-fixture-h3f2/20
+
+
+##### second-stat-20-stderr
+
+
+##### second-stat-20-exit
+0
+
+
+##### second-stat-21
+b362 45922 131189 /var/tmp/uso-fixture-h3f2/21
+
+
+##### second-stat-21-stderr
+
+
+##### second-stat-21-exit
+0
+
+
+##### second-stat-22
+b362 45922 131190 /var/tmp/uso-fixture-h3f2/22
+
+
+##### second-stat-22-stderr
+
+
+##### second-stat-22-exit
+0
+
+
+##### second-stat-23
+b362 45922 131191 /var/tmp/uso-fixture-h3f2/23
+
+
+##### second-stat-23-stderr
+
+
+##### second-stat-23-exit
+0
+
+
+##### second-stat-24
+b362 45922 131192 /var/tmp/uso-fixture-h3f2/24
+
+
+##### second-stat-24-stderr
+
+
+##### second-stat-24-exit
+0
+
+
+##### second-stat-25
+b362 45922 131193 /var/tmp/uso-fixture-h3f2/25
+
+
+##### second-stat-25-stderr
+
+
+##### second-stat-25-exit
+0
+
+
+##### second-stat-26
+b362 45922 131203 /var/tmp/uso-fixture-h3f2/26
+
+
+##### second-stat-26-stderr
+
+
+##### second-stat-26-exit
+0
+
+
+##### second-stat-27
+b362 45922 131204 /var/tmp/uso-fixture-h3f2/27
+
+
+##### second-stat-27-stderr
+
+
+##### second-stat-27-exit
+0
+
+
+##### second-stat-28
+b362 45922 131205 /var/tmp/uso-fixture-h3f2/28
+
+
+##### second-stat-28-stderr
+
+
+##### second-stat-28-exit
+0
+
+
+##### second-stat-29
+b362 45922 131206 /var/tmp/uso-fixture-h3f2/29
+
+
+##### second-stat-29-stderr
+
+
+##### second-stat-29-exit
+0
+
+
+##### second-stat-3
+b362 45922 131144 /var/tmp/uso-fixture-h3f2/3
+
+
+##### second-stat-3-stderr
+
+
+##### second-stat-3-exit
+0
+
+
+##### second-stat-30
+b362 45922 131207 /var/tmp/uso-fixture-h3f2/30
+
+
+##### second-stat-30-stderr
+
+
+##### second-stat-30-exit
+0
+
+
+##### second-stat-31
+b362 45922 131208 /var/tmp/uso-fixture-h3f2/31
+
+
+##### second-stat-31-stderr
+
+
+##### second-stat-31-exit
+0
+
+
+##### second-stat-4
+b362 45922 131168 /var/tmp/uso-fixture-h3f2/4
+
+
+##### second-stat-4-stderr
+
+
+##### second-stat-4-exit
+0
+
+
+##### second-stat-5
+b362 45922 131171 /var/tmp/uso-fixture-h3f2/5
+
+
+##### second-stat-5-stderr
+
+
+##### second-stat-5-exit
+0
+
+
+##### second-stat-6
+b362 45922 131172 /var/tmp/uso-fixture-h3f2/6
+
+
+##### second-stat-6-stderr
+
+
+##### second-stat-6-exit
+0
+
+
+##### second-stat-7
+b362 45922 131173 /var/tmp/uso-fixture-h3f2/7
+
+
+##### second-stat-7-stderr
+
+
+##### second-stat-7-exit
+0
+
+
+##### second-stat-8
+b362 45922 131174 /var/tmp/uso-fixture-h3f2/8
+
+
+##### second-stat-8-stderr
+
+
+##### second-stat-8-exit
+0
+
+
+##### second-stat-9
+b362 45922 131175 /var/tmp/uso-fixture-h3f2/9
+
+
+##### second-stat-9-stderr
+
+
+##### second-stat-9-exit
+0
+
+
+##### start-0000-full
+ExitType=main
+Restart=no
+RestartMode=normal
+NotifyAccess=none
+RestartUSec=100ms
+RestartSteps=0
+RestartMaxDelayUSec=infinity
+RestartUSecNext=100ms
+TimeoutStartUSec=1min 30s
+TimeoutStopUSec=1min 30s
+TimeoutAbortUSec=1min 30s
+TimeoutStartFailureMode=terminate
+TimeoutStopFailureMode=terminate
+RuntimeMaxUSec=infinity
+RuntimeRandomizedExtraUSec=0
+WatchdogUSec=infinity
+WatchdogTimestampMonotonic=0
+RootDirectoryStartOnly=no
+RemainAfterExit=no
+GuessMainPID=yes
+MainPID=0
+ControlPID=0
+FileDescriptorStoreMax=0
+NFileDescriptorStore=0
+FileDescriptorStorePreserve=restart
+StatusErrno=0
+Result=success
+ReloadResult=success
+CleanResult=success
+LiveMountResult=success
+UID=[not set]
+GID=[not set]
+NRestarts=0
+ReloadSignal=1
+ExecMainStartTimestampMonotonic=0
+ExecMainExitTimestampMonotonic=0
+ExecMainHandoffTimestampMonotonic=0
+ExecMainPID=0
+ExecMainCode=0
+ExecMainStatus=0
+ControlGroupId=0
+MemoryCurrent=[not set]
+MemoryPeak=[not set]
+MemorySwapCurrent=[not set]
+MemorySwapPeak=[not set]
+MemoryZSwapCurrent=[not set]
+MemoryAvailable=[not set]
+EffectiveMemoryMax=infinity
+EffectiveMemoryHigh=infinity
+CPUUsageNSec=[not set]
+TasksCurrent=[not set]
+EffectiveTasksMax=9330
+IPIngressBytes=[no data]
+IPIngressPackets=[no data]
+IPEgressBytes=[no data]
+IPEgressPackets=[no data]
+IOReadBytes=[not set]
+IOReadOperations=[not set]
+IOWriteBytes=[not set]
+IOWriteOperations=[not set]
+Delegate=no
+CPUAccounting=yes
+CPUWeight=[not set]
+StartupCPUWeight=[not set]
+CPUShares=[not set]
+StartupCPUShares=[not set]
+CPUQuotaPerSecUSec=infinity
+CPUQuotaPeriodUSec=infinity
+IOAccounting=no
+IOWeight=[not set]
+StartupIOWeight=[not set]
+BlockIOAccounting=no
+BlockIOWeight=[not set]
+StartupBlockIOWeight=[not set]
+MemoryAccounting=yes
+DefaultMemoryLow=0
+DefaultStartupMemoryLow=0
+DefaultMemoryMin=0
+MemoryMin=0
+MemoryLow=0
+StartupMemoryLow=0
+MemoryHigh=infinity
+StartupMemoryHigh=infinity
+MemoryMax=infinity
+StartupMemoryMax=infinity
+MemorySwapMax=infinity
+StartupMemorySwapMax=infinity
+MemoryZSwapMax=infinity
+StartupMemoryZSwapMax=infinity
+MemoryZSwapWriteback=yes
+MemoryLimit=infinity
+DevicePolicy=auto
+TasksAccounting=yes
+TasksMax=9330
+IPAccounting=no
+ManagedOOMSwap=auto
+ManagedOOMMemoryPressure=auto
+ManagedOOMMemoryPressureLimit=0
+ManagedOOMMemoryPressureDurationUSec=[not set]
+ManagedOOMPreference=none
+MemoryPressureWatch=auto
+MemoryPressureThresholdUSec=200ms
+CoredumpReceive=no
+UMask=0022
+LimitCPU=infinity
+LimitCPUSoft=infinity
+LimitFSIZE=infinity
+LimitFSIZESoft=infinity
+LimitDATA=infinity
+LimitDATASoft=infinity
+LimitSTACK=infinity
+LimitSTACKSoft=8388608
+LimitCORE=infinity
+LimitCORESoft=infinity
+LimitRSS=infinity
+LimitRSSSoft=infinity
+LimitNOFILE=1073741816
+LimitNOFILESoft=1073741816
+LimitAS=infinity
+LimitASSoft=infinity
+LimitNPROC=31101
+LimitNPROCSoft=31101
+LimitMEMLOCK=1019625472
+LimitMEMLOCKSoft=1019625472
+LimitLOCKS=infinity
+LimitLOCKSSoft=infinity
+LimitSIGPENDING=31101
+LimitSIGPENDINGSoft=31101
+LimitMSGQUEUE=819200
+LimitMSGQUEUESoft=819200
+LimitNICE=0
+LimitNICESoft=0
+LimitRTPRIO=0
+LimitRTPRIOSoft=0
+LimitRTTIME=infinity
+LimitRTTIMESoft=infinity
+RootEphemeral=no
+OOMScoreAdjust=0
+CoredumpFilter=0x23
+Nice=0
+IOSchedulingClass=2
+IOSchedulingPriority=4
+CPUSchedulingPolicy=0
+CPUSchedulingPriority=0
+CPUAffinityFromNUMA=no
+NUMAPolicy=n/a
+TimerSlackNSec=50000
+CPUSchedulingResetOnFork=no
+NonBlocking=no
+StandardInput=null
+StandardOutput=inherit
+StandardError=inherit
+TTYReset=no
+TTYVHangup=no
+TTYVTDisallocate=no
+SyslogPriority=30
+SyslogLevelPrefix=yes
+SyslogLevel=6
+SyslogFacility=3
+LogLevelMax=-1
+LogRateLimitIntervalUSec=0
+LogRateLimitBurst=0
+SecureBits=0
+CapabilityBoundingSet=cap_chown cap_dac_override cap_dac_read_search cap_fowner cap_fsetid cap_kill cap_setgid cap_setuid cap_setpcap cap_linux_immutable cap_net_bind_service cap_net_broadcast cap_net_admin cap_net_raw cap_ipc_lock cap_ipc_owner cap_sys_module cap_sys_rawio cap_sys_chroot cap_sys_ptrace cap_sys_pacct cap_sys_admin cap_sys_boot cap_sys_nice cap_sys_resource cap_sys_time cap_sys_tty_config cap_mknod cap_lease cap_audit_write cap_audit_control cap_setfcap cap_mac_override cap_mac_admin cap_syslog cap_wake_alarm cap_block_suspend cap_audit_read cap_perfmon cap_bpf cap_checkpoint_restore
+DynamicUser=no
+SetLoginEnvironment=no
+RemoveIPC=no
+PrivateTmp=no
+PrivateTmpEx=no
+PrivateDevices=no
+ProtectClock=no
+ProtectKernelTunables=no
+ProtectKernelModules=no
+ProtectKernelLogs=no
+ProtectControlGroups=no
+ProtectControlGroupsEx=no
+PrivateNetwork=no
+PrivateUsers=no
+PrivateUsersEx=no
+PrivateMounts=no
+PrivateIPC=no
+PrivatePIDs=no
+ProtectHome=no
+ProtectSystem=no
+SameProcessGroup=no
+UtmpMode=init
+IgnoreSIGPIPE=yes
+NoNewPrivileges=no
+SystemCallErrorNumber=2147483646
+LockPersonality=no
+RuntimeDirectoryPreserve=no
+RuntimeDirectoryMode=0755
+StateDirectoryMode=0755
+CacheDirectoryMode=0755
+LogsDirectoryMode=0755
+ConfigurationDirectoryMode=0755
+TimeoutCleanUSec=infinity
+MemoryDenyWriteExecute=no
+RestrictRealtime=no
+RestrictSUIDSGID=no
+RestrictNamespaces=no
+MountAPIVFS=no
+BindLogSockets=no
+KeyringMode=private
+ProtectProc=default
+ProcSubset=all
+ProtectHostname=no
+MemoryKSM=no
+RootImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+MountImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+ExtensionImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+KillMode=control-group
+KillSignal=15
+RestartKillSignal=15
+FinalKillSignal=9
+SendSIGKILL=yes
+SendSIGHUP=no
+WatchdogSignal=6
+Id=uso-fixture-guard2.service
+Names=uso-fixture-guard2.service
+Description=uso-fixture-guard2.service
+LoadState=not-found
+ActiveState=inactive
+FreezerState=running
+SubState=dead
+StateChangeTimestampMonotonic=0
+InactiveExitTimestampMonotonic=0
+ActiveEnterTimestampMonotonic=0
+ActiveExitTimestampMonotonic=0
+InactiveEnterTimestampMonotonic=0
+CanStart=no
+CanStop=yes
+CanReload=no
+CanIsolate=no
+CanFreeze=yes
+CanLiveMount=no
+StopWhenUnneeded=no
+RefuseManualStart=no
+RefuseManualStop=no
+AllowIsolate=no
+DefaultDependencies=yes
+SurviveFinalKillSignal=no
+OnSuccessJobMode=fail
+OnFailureJobMode=replace
+IgnoreOnIsolate=no
+NeedDaemonReload=no
+JobTimeoutUSec=infinity
+JobRunningTimeoutUSec=infinity
+JobTimeoutAction=none
+ConditionResult=no
+AssertResult=no
+ConditionTimestampMonotonic=0
+AssertTimestampMonotonic=0
+LoadError=org.freedesktop.systemd1.NoSuchUnit "Unit uso-fixture-guard2.service not found."
+Transient=no
+Perpetual=no
+StartLimitIntervalUSec=10s
+StartLimitBurst=5
+StartLimitAction=none
+FailureAction=none
+SuccessAction=none
+CollectMode=inactive
+DebugInvocation=no
+
+
+##### start-0000-full-stderr
+
+
+##### start-0000-full-exit
+0
+
+
+##### start-0000-observation
+Type=exec
+Restart=no
+RemainAfterExit=yes
+MainPID=1640654
+ControlPID=0
+ExecMainCode=0
+ExecMainStatus=0
+ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 33333333-3333-4333-8333-333333333333 ; ignore_errors=no ; start_time=[Fri 2026-10-02 10:49:23 UTC] ; stop_time=[n/a] ; pid=1640654 ; code=(null) ; status=0/0 }
+ControlGroup=/system.slice/uso-fixture-guard2.service
+User=
+Id=uso-fixture-guard2.service
+Description=uso fixture guard 2
+LoadState=loaded
+ActiveState=active
+FragmentPath=/run/systemd/transient/uso-fixture-guard2.service
+DropInPaths=
+Transient=yes
+InvocationID=55555555555545558555555555555555
+
+
+##### start-0000-observation-stderr
+
+
+##### start-0000-observation-exit
+0
+
+
+##### start-0000-procs
+1640654
+1640666
+1640675
+
+
+##### start-0000-procs-stderr
+
+
+##### start-0000-procs-exit
+0
+
+
+##### start-0000-properties
+Type=exec
+RemainAfterExit=yes
+MainPID=1640654
+ExecMainStatus=0
+ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/uso-fixture2.lock /run/uso-fixture-guard2/helper 33333333-3333-4333-8333-333333333333 ; ignore_errors=no ; start_time=[Fri 2026-10-02 10:49:23 UTC] ; stop_time=[n/a] ; pid=1640654 ; code=(null) ; status=0/0 }
+User=
+Id=uso-fixture-guard2.service
+Description=uso fixture guard 2
+ActiveState=activating
+FragmentPath=/run/systemd/transient/uso-fixture-guard2.service
+DropInPaths=
+Transient=yes
+
+
+##### start-0000-properties-stderr
+
+
+##### start-0000-properties-exit
+0
+
+
+##### start-0000-ready
+
+
+##### start-0000-ready-stderr
+
+
+##### start-0000-ready-exit
+1
+
+
+##### stop-absent-full
+ExitType=main
+Restart=no
+RestartMode=normal
+NotifyAccess=none
+RestartUSec=100ms
+RestartSteps=0
+RestartMaxDelayUSec=infinity
+RestartUSecNext=100ms
+TimeoutStartUSec=1min 30s
+TimeoutStopUSec=1min 30s
+TimeoutAbortUSec=1min 30s
+TimeoutStartFailureMode=terminate
+TimeoutStopFailureMode=terminate
+RuntimeMaxUSec=infinity
+RuntimeRandomizedExtraUSec=0
+WatchdogUSec=infinity
+WatchdogTimestampMonotonic=0
+RootDirectoryStartOnly=no
+RemainAfterExit=no
+GuessMainPID=yes
+MainPID=0
+ControlPID=0
+FileDescriptorStoreMax=0
+NFileDescriptorStore=0
+FileDescriptorStorePreserve=restart
+StatusErrno=0
+Result=success
+ReloadResult=success
+CleanResult=success
+LiveMountResult=success
+UID=[not set]
+GID=[not set]
+NRestarts=0
+ReloadSignal=1
+ExecMainStartTimestampMonotonic=0
+ExecMainExitTimestampMonotonic=0
+ExecMainHandoffTimestampMonotonic=0
+ExecMainPID=0
+ExecMainCode=0
+ExecMainStatus=0
+ControlGroupId=0
+MemoryCurrent=[not set]
+MemoryPeak=[not set]
+MemorySwapCurrent=[not set]
+MemorySwapPeak=[not set]
+MemoryZSwapCurrent=[not set]
+MemoryAvailable=[not set]
+EffectiveMemoryMax=infinity
+EffectiveMemoryHigh=infinity
+CPUUsageNSec=[not set]
+TasksCurrent=[not set]
+EffectiveTasksMax=9330
+IPIngressBytes=[no data]
+IPIngressPackets=[no data]
+IPEgressBytes=[no data]
+IPEgressPackets=[no data]
+IOReadBytes=[not set]
+IOReadOperations=[not set]
+IOWriteBytes=[not set]
+IOWriteOperations=[not set]
+Delegate=no
+CPUAccounting=yes
+CPUWeight=[not set]
+StartupCPUWeight=[not set]
+CPUShares=[not set]
+StartupCPUShares=[not set]
+CPUQuotaPerSecUSec=infinity
+CPUQuotaPeriodUSec=infinity
+IOAccounting=no
+IOWeight=[not set]
+StartupIOWeight=[not set]
+BlockIOAccounting=no
+BlockIOWeight=[not set]
+StartupBlockIOWeight=[not set]
+MemoryAccounting=yes
+DefaultMemoryLow=0
+DefaultStartupMemoryLow=0
+DefaultMemoryMin=0
+MemoryMin=0
+MemoryLow=0
+StartupMemoryLow=0
+MemoryHigh=infinity
+StartupMemoryHigh=infinity
+MemoryMax=infinity
+StartupMemoryMax=infinity
+MemorySwapMax=infinity
+StartupMemorySwapMax=infinity
+MemoryZSwapMax=infinity
+StartupMemoryZSwapMax=infinity
+MemoryZSwapWriteback=yes
+MemoryLimit=infinity
+DevicePolicy=auto
+TasksAccounting=yes
+TasksMax=9330
+IPAccounting=no
+ManagedOOMSwap=auto
+ManagedOOMMemoryPressure=auto
+ManagedOOMMemoryPressureLimit=0
+ManagedOOMMemoryPressureDurationUSec=[not set]
+ManagedOOMPreference=none
+MemoryPressureWatch=auto
+MemoryPressureThresholdUSec=200ms
+CoredumpReceive=no
+UMask=0022
+LimitCPU=infinity
+LimitCPUSoft=infinity
+LimitFSIZE=infinity
+LimitFSIZESoft=infinity
+LimitDATA=infinity
+LimitDATASoft=infinity
+LimitSTACK=infinity
+LimitSTACKSoft=8388608
+LimitCORE=infinity
+LimitCORESoft=infinity
+LimitRSS=infinity
+LimitRSSSoft=infinity
+LimitNOFILE=1073741816
+LimitNOFILESoft=1073741816
+LimitAS=infinity
+LimitASSoft=infinity
+LimitNPROC=31101
+LimitNPROCSoft=31101
+LimitMEMLOCK=1019625472
+LimitMEMLOCKSoft=1019625472
+LimitLOCKS=infinity
+LimitLOCKSSoft=infinity
+LimitSIGPENDING=31101
+LimitSIGPENDINGSoft=31101
+LimitMSGQUEUE=819200
+LimitMSGQUEUESoft=819200
+LimitNICE=0
+LimitNICESoft=0
+LimitRTPRIO=0
+LimitRTPRIOSoft=0
+LimitRTTIME=infinity
+LimitRTTIMESoft=infinity
+RootEphemeral=no
+OOMScoreAdjust=0
+CoredumpFilter=0x23
+Nice=0
+IOSchedulingClass=2
+IOSchedulingPriority=4
+CPUSchedulingPolicy=0
+CPUSchedulingPriority=0
+CPUAffinityFromNUMA=no
+NUMAPolicy=n/a
+TimerSlackNSec=50000
+CPUSchedulingResetOnFork=no
+NonBlocking=no
+StandardInput=null
+StandardOutput=inherit
+StandardError=inherit
+TTYReset=no
+TTYVHangup=no
+TTYVTDisallocate=no
+SyslogPriority=30
+SyslogLevelPrefix=yes
+SyslogLevel=6
+SyslogFacility=3
+LogLevelMax=-1
+LogRateLimitIntervalUSec=0
+LogRateLimitBurst=0
+SecureBits=0
+CapabilityBoundingSet=cap_chown cap_dac_override cap_dac_read_search cap_fowner cap_fsetid cap_kill cap_setgid cap_setuid cap_setpcap cap_linux_immutable cap_net_bind_service cap_net_broadcast cap_net_admin cap_net_raw cap_ipc_lock cap_ipc_owner cap_sys_module cap_sys_rawio cap_sys_chroot cap_sys_ptrace cap_sys_pacct cap_sys_admin cap_sys_boot cap_sys_nice cap_sys_resource cap_sys_time cap_sys_tty_config cap_mknod cap_lease cap_audit_write cap_audit_control cap_setfcap cap_mac_override cap_mac_admin cap_syslog cap_wake_alarm cap_block_suspend cap_audit_read cap_perfmon cap_bpf cap_checkpoint_restore
+DynamicUser=no
+SetLoginEnvironment=no
+RemoveIPC=no
+PrivateTmp=no
+PrivateTmpEx=no
+PrivateDevices=no
+ProtectClock=no
+ProtectKernelTunables=no
+ProtectKernelModules=no
+ProtectKernelLogs=no
+ProtectControlGroups=no
+ProtectControlGroupsEx=no
+PrivateNetwork=no
+PrivateUsers=no
+PrivateUsersEx=no
+PrivateMounts=no
+PrivateIPC=no
+PrivatePIDs=no
+ProtectHome=no
+ProtectSystem=no
+SameProcessGroup=no
+UtmpMode=init
+IgnoreSIGPIPE=yes
+NoNewPrivileges=no
+SystemCallErrorNumber=2147483646
+LockPersonality=no
+RuntimeDirectoryPreserve=no
+RuntimeDirectoryMode=0755
+StateDirectoryMode=0755
+CacheDirectoryMode=0755
+LogsDirectoryMode=0755
+ConfigurationDirectoryMode=0755
+TimeoutCleanUSec=infinity
+MemoryDenyWriteExecute=no
+RestrictRealtime=no
+RestrictSUIDSGID=no
+RestrictNamespaces=no
+MountAPIVFS=no
+BindLogSockets=no
+KeyringMode=private
+ProtectProc=default
+ProcSubset=all
+ProtectHostname=no
+MemoryKSM=no
+RootImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+MountImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+ExtensionImagePolicy=root=verity+signed+encrypted+unprotected+absent:usr=verity+signed+encrypted+unprotected+absent:home=encrypted+unprotected+absent:srv=encrypted+unprotected+absent:tmp=encrypted+unprotected+absent:var=encrypted+unprotected+absent
+KillMode=control-group
+KillSignal=15
+RestartKillSignal=15
+FinalKillSignal=9
+SendSIGKILL=yes
+SendSIGHUP=no
+WatchdogSignal=6
+Id=uso-fixture-guard2.service
+Names=uso-fixture-guard2.service
+Description=uso-fixture-guard2.service
+LoadState=not-found
+ActiveState=inactive
+FreezerState=running
+SubState=dead
+StateChangeTimestampMonotonic=0
+InactiveExitTimestampMonotonic=0
+ActiveEnterTimestampMonotonic=0
+ActiveExitTimestampMonotonic=0
+InactiveEnterTimestampMonotonic=0
+CanStart=no
+CanStop=yes
+CanReload=no
+CanIsolate=no
+CanFreeze=yes
+CanLiveMount=no
+StopWhenUnneeded=no
+RefuseManualStart=no
+RefuseManualStop=no
+AllowIsolate=no
+DefaultDependencies=yes
+SurviveFinalKillSignal=no
+OnSuccessJobMode=fail
+OnFailureJobMode=replace
+IgnoreOnIsolate=no
+NeedDaemonReload=no
+JobTimeoutUSec=infinity
+JobRunningTimeoutUSec=infinity
+JobTimeoutAction=none
+ConditionResult=no
+AssertResult=no
+ConditionTimestampMonotonic=0
+AssertTimestampMonotonic=0
+LoadError=org.freedesktop.systemd1.NoSuchUnit "Unit uso-fixture-guard2.service not found."
+Transient=no
+Perpetual=no
+StartLimitIntervalUSec=10s
+StartLimitBurst=5
+StartLimitAction=none
+FailureAction=none
+SuccessAction=none
+CollectMode=inactive
+DebugInvocation=no
+
+
+##### stop-absent-full-stderr
+
+
+##### stop-absent-full-exit
+0
+
+
+##### stop-absent-observation
+Type=
+Restart=no
+RemainAfterExit=no
+MainPID=0
+ControlPID=0
+ExecMainCode=0
+ExecMainStatus=0
+ControlGroup=
+User=
+Id=uso-fixture-guard2.service
+Description=uso-fixture-guard2.service
+LoadState=not-found
+ActiveState=inactive
+FragmentPath=
+DropInPaths=
+Transient=no
+InvocationID=
+
+
+##### stop-absent-observation-stderr
+
+
+##### stop-absent-observation-exit
+0
+
+
+##### stop-absent-properties
+Type=
+RemainAfterExit=no
+MainPID=0
+ExecMainStatus=0
+User=
+Id=uso-fixture-guard2.service
+Description=uso-fixture-guard2.service
+ActiveState=inactive
+FragmentPath=
+DropInPaths=
+Transient=no
+
+
+##### stop-absent-properties-stderr
+
+
+##### stop-absent-properties-exit
+0
+
+
+##### stop
+
+
+##### stop-stderr
+
+
+##### stop-exit
+0
+
+
+##### token-stat
+0:700:2 /run/uso-fixture-guard2/os-stage
+0:600:1 /run/uso-fixture-guard2/os-stage/token
+
+
+##### token-stat-stderr
+
+
+##### token-stat-exit
+0
+
+
+##### units-after
+  UNIT LOAD ACTIVE SUB DESCRIPTION
+
+0 loaded units listed.
+To show all installed unit files use 'systemctl list-unit-files'.
+
+
+##### units-after-stderr
+
+
+##### units-after-exit
+0
+
+
+##### version
+systemd 257 (257.13-1~deb13u1)
++PAM +AUDIT +SELINUX +APPARMOR +IMA +IPE +SMACK +SECCOMP +GCRYPT -GNUTLS +OPENSSL +ACL +BLKID +CURL +ELFUTILS +FIDO2 +IDN2 -IDN +IPTC +KMOD +LIBCRYPTSETUP +LIBCRYPTSETUP_PLUGINS +LIBFDISK +PCRE2 +PWQUALITY +P11KIT +QRENCODE +TPM2 +BZIP2 +LZ4 +XZ +ZLIB +ZSTD +BPF_FRAMEWORK +BTF -XKBCOMMON -UTMP +SYSVINIT +LIBARCHIVE
+
+
+##### version-stderr
+
+
+##### version-exit
+0
+

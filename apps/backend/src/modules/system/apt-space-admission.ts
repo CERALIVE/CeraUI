@@ -44,10 +44,17 @@ export async function preflightAptSpace(
 	if (config.exitCode !== 0) throw new AptPreflightError("apt_config_failed");
 	const archives = parseAptArchivePath(config.stdout);
 	const probe = await deps
-		.run(["/usr/bin/apt-get", "--print-uris", ...installArgs], {
-			timeoutMs: 120_000,
-			env: { ...process.env, LC_ALL: "C" },
-		})
+		.run(
+			[
+				"/usr/bin/apt-get",
+				"--print-uris",
+				...installArgs.filter((arg) => arg !== "--no-download"),
+			],
+			{
+				timeoutMs: 120_000,
+				env: { ...process.env, LC_ALL: "C" },
+			},
+		)
 		.catch((cause: unknown) => {
 			throw new AptPreflightError("probe_failed", { cause });
 		});

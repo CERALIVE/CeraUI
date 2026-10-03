@@ -54,6 +54,7 @@ import {
 	getUpdateState,
 } from "../../modules/system/software-updates.ts";
 import { getCachedSshStatus, getSshStatus } from "../../modules/system/ssh.ts";
+import { getOrchestratorWireState } from "../../modules/system/update-orchestrator/runtime.ts";
 import { getPersistentNotifications } from "../../modules/ui/notifications.ts";
 import { wifiBuildMsg } from "../../modules/wifi/wifi.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
@@ -85,6 +86,7 @@ export const getStatusProcedure = authedProcedure
 			available_updates: getAvailableUpdates(),
 			updating: getSoftUpdateStatus(),
 			update_state: getUpdateState(),
+			update_orchestrator: getOrchestratorWireState(),
 			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),
 			modems: modemListSchema.parse(buildModemsWireMessage()),
@@ -133,6 +135,7 @@ export function buildInitialStatus() {
 			available_updates: getAvailableUpdates(),
 			updating: getSoftUpdateStatus(),
 			update_state: getUpdateState(),
+			update_orchestrator: getOrchestratorWireState(),
 			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),
 			modems: modemListSchema.parse(buildModemsWireMessage()),

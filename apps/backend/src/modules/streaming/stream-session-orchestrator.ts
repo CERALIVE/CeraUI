@@ -16,6 +16,10 @@ import {
 } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
+import {
+	admitAndPrepareStreamStart,
+	type StreamStartUpdateAdmission,
+} from "../system/update-orchestrator/runtime.ts";
 import { notificationBroadcast } from "../ui/notifications.ts";
 import {
 	noteStreamStopped,
@@ -35,6 +39,10 @@ import {
 	streamingBlockingMutation,
 	tryAcquireLifecycle,
 } from "./lifecycle-admission.ts";
+import {
+	clearOtaStreamingMarker,
+	setOtaStreamingMarker,
+} from "./ota-streaming-marker.ts";
 import { awaitRecoveryBarrier, isRecoveryPending } from "./recovery-barrier.ts";
 import {
 	classifyStartFailure,
@@ -42,6 +50,7 @@ import {
 	type RetryPolicy,
 	type SuppressionContext,
 	typedStartFailure,
+	typedUpdateInProgressFailure,
 } from "./start-failure-taxonomy.ts";
 import {
 	ENGINE_TRANSITION_STOP_DEADLINE_MS,
@@ -210,6 +219,23 @@ export type StreamSessionOrchestratorDeps = {
 	 * the device cannot say what state that modem is in, so it does not bond it.
 	 */
 	readonly blockingMutation?: () => { readonly stableKey: string } | undefined;
+	/**
+	 * The update orchestrator's D8 admission check (Todo 37), consulted once
+	 * every prior admission gate above has already passed — see the ordering
+	 * note on `admittedStart` below for why. ABSENT means "no update
+	 * orchestrator wired" (test default), matching every other admission dep
+	 * on this type.
+	 */
+	readonly admitUpdate?: () => Promise<StreamStartUpdateAdmission>;
+	/**
+	 * Sets/clears `/run/ceralive/streaming` — the same sentinel the image-side
+	 * `ceralive-rauc-activate.sh` (Todo 28) checks before staging an OTA
+	 * activation. Set once this launch is genuinely proceeding (past every
+	 * admission gate); cleared on every path back to "no stream in flight"
+	 * (a failed launch that never went live, and every `stop()` call).
+	 */
+	readonly markStreamingForOta?: () => void;
+	readonly unmarkStreamingForOta?: () => void;
 };
 
 /**
@@ -434,6 +460,21 @@ export function createStreamSessionOrchestrator(
 		attemptId: string,
 		request: StreamStartRequest,
 	): Promise<StartResult> => {
+		// Keep D8 after earlier gates to avoid stopping an update for a refused
+		// attempt. Later launch limits: root AGENTS.md D8 Known gaps (h).
+		const admitUpdate = deps.admitUpdate;
+		if (admitUpdate !== undefined) {
+			const updateAdmission = await admitUpdate();
+			if (!updateAdmission.allowed) {
+				return {
+					result: "failed",
+					attemptId,
+					failure: typedUpdateInProgressFailure(attemptId, updateAdmission),
+				};
+			}
+		}
+		deps.markStreamingForOta?.();
+
 		generation += 1;
 		const attempt: ActiveAttempt = {
 			attemptId,
@@ -506,6 +547,7 @@ export function createStreamSessionOrchestrator(
 			transition("idle");
 			active = undefined;
 			deps.setStreamingStatus(false);
+			deps.unmarkStreamingForOta?.();
 			return {
 				result: "failed",
 				attemptId,
@@ -655,6 +697,12 @@ export function createStreamSessionOrchestrator(
 		// that parks behind a transaction must not leave the marker armed for the
 		// minute it waits.
 		deps.onStreamStopped?.(cause);
+		// Clear the OTA-activation sentinel on EVERY stop() call, unconditionally
+		// (idempotent — clearing an already-absent marker is a no-op). This is
+		// deliberately over-inclusive rather than state-gated: it is the one
+		// call every real stream-end path (operator stop, engine-loss retire,
+		// reconfigure-triggered stop) already goes through.
+		deps.unmarkStreamingForOta?.();
 		// A change transaction already owns the engine's lifecycle mutex and the
 		// capture hardware. Racing a 12 s stop deadline against it would report a
 		// healthy 65 s transaction as `stop_failed`, so the stop WAITS and is then
@@ -773,10 +821,13 @@ export function createStreamSessionOrchestrator(
 			return "reconciling";
 		}
 		// Every other rollback_failed is the engine telling us it gave up and went
-		// Idle (the `teardown_timeout` escalation is the canonical case).
+		// Idle (the `teardown_timeout` escalation is the canonical case). This is
+		// a genuine stream-end that never routes through stop() — clear the OTA
+		// sentinel here too.
 		transition("idle");
 		active = undefined;
 		deps.setStreamingStatus(false);
+		deps.unmarkStreamingForOta?.();
 		return "idle";
 	};
 
@@ -923,6 +974,9 @@ const productionOrchestrator = createStreamSessionOrchestrator({
 	awaitRecovery: awaitRecoveryBarrier,
 	recoveryPending: isRecoveryPending,
 	blockingMutation: streamingBlockingMutation,
+	admitUpdate: admitAndPrepareStreamStart,
+	markStreamingForOta: setOtaStreamingMarker,
+	unmarkStreamingForOta: clearOtaStreamingMarker,
 	// Statically imported, unlike the arming hook: `armed-stream-marker.ts` holds
 	// no streaming-graph edges, and a SYNCHRONOUS clear is what guarantees an
 	// operator Stop has disarmed restoration before anything else can read the

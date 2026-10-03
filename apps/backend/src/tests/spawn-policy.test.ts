@@ -28,10 +28,65 @@ const alive = (proc: ManagedProcess): boolean =>
 	proc.exitCode === null && proc.signalCode === null;
 
 describe("spawn-policy registry consistency", () => {
-	it("classifies all 34 production spawn sites with unique ids", () => {
-		expect(SPAWN_POLICY).toHaveLength(34);
+	it("classifies all 64 production spawn sites with unique ids", () => {
+		expect(SPAWN_POLICY).toHaveLength(64);
 		const ids = new Set(SPAWN_POLICY.map((s) => s.id));
-		expect(ids.size).toBe(34);
+		expect(ids.size).toBe(64);
+		// The reconciliation lock is a scoped owner, never a timed RAUC writer.
+		expect(getSpawnSite("osStage.orphanLock")).toMatchObject({
+			file: "modules/system/update-orchestrator/os-stage-orphan-lock.ts",
+			class: "supervised-worker",
+			contract: {
+				timed: false,
+				startupTimeout: true,
+				shutdownCleanup: true,
+				lifetimeTimeoutExempt: true,
+			},
+		});
+		// Inspection/retirement mutates only the proven orphan's exact unit.
+		expect(getSpawnSite("osStage.orphanSettlement")).toMatchObject({
+			file: "modules/system/update-orchestrator/os-stage-orphan.ts",
+			class: "bounded-command",
+			contract: { timed: true, lifetimeTimeoutExempt: false },
+		});
+		expect(getSpawnSite("osStage.startupGuardianProbe")).toMatchObject({
+			file: "modules/system/update-orchestrator/os-stage-startup.ts",
+			class: "bounded-probe",
+			contract: { timed: true },
+		});
+		expect(
+			getSpawnSite("updateOrchestrator.restartRaucForStream")?.command,
+		).toBe("[systemctl, restart, --no-block, rauc.service]");
+		for (const id of [
+			"osStage.guardSubmit",
+			"osStage.guardInspect",
+			"osStage.guardRetire",
+		])
+			expect(getSpawnSite(id)).toMatchObject({
+				file: "modules/system/update-orchestrator/os-stage-job.ts",
+				contract: { timed: true },
+			});
+		for (const id of [
+			"osStage.pathObservation",
+			"osStage.bundleHead",
+			"osStage.installAttempt",
+		])
+			expect(getSpawnSite(id)?.contract.timed).toBe(true);
+		for (const id of [
+			"osStage.serviceObservation",
+			"osStage.operationObservation",
+			"osStage.slotObservation",
+		]) {
+			expect(getSpawnSite(id)).toMatchObject({
+				file: "modules/system/update-orchestrator/os-stage-observation.ts",
+				class: "bounded-probe",
+				contract: { timed: true },
+			});
+		}
+		expect(getSpawnSite("updates.transportProbe")).toMatchObject({
+			class: "bounded-probe",
+			contract: { timed: true },
+		});
 		expect(getSpawnSite("boot.systemdReady")).toMatchObject({
 			file: "helpers/systemd-ready.ts",
 			class: "bounded-command",

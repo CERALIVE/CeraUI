@@ -102,6 +102,7 @@ import { encoderSaveErrorMessage } from '$lib/streaming/encoderSaveError';
 import { canLiveSwitchInput, isAudioInputId } from '$lib/streaming/liveAudioSwitch';
 import { pipelinesFromSources } from '$lib/streaming/sources-view-model';
 import { buildStartConfig } from '$lib/streaming/startStreaming';
+import { goLiveUpdateRefusal } from '$lib/updates/update-bands';
 // The TYPES stay static — `import type` is erased at compile, so it creates no
 // runtime edge and cannot pull the dialog into the entry chunk. The COMPONENTS
 // load on first open. This split is a bundling change, not an API change.
@@ -111,6 +112,7 @@ import CapabilityTierBanner from '$main/live/CapabilityTierBanner.svelte';
 import IdleCockpit from '$main/live/IdleCockpit.svelte';
 import LiveCockpit from '$main/live/LiveCockpit.svelte';
 import LiveHeader from '$main/live/LiveHeader.svelte';
+import UpdateRefusalBand from '$main/live/UpdateRefusalBand.svelte';
 import type { ConfigRow } from '$main/live/StreamSettingsCard.svelte';
 
 // Reactive state — non-deprecated subscriptions getters only.
@@ -139,6 +141,12 @@ const streamingStopReason = $derived(getStreamingStopReason());
 // carried one. Rendered class-first with retry state; the legacy string reason
 // is the fallback for code-only reverts.
 const streamingStartFailure = $derived(getStreamingStartFailure());
+// Todo 41: an update committing packages or restarting services refuses a
+// start (D8). Read off the same merged `status` every other Live fact comes
+// from, so the band retracts on the push that moves the phase on.
+const updateRefusal = $derived(
+	goLiveUpdateRefusal(getStatus()?.update_orchestrator, streamingStartFailure),
+);
 // Truthful stop-stuck banner (T0): shown only while the authoritative flag still
 // says streaming after the bounded stopping watchdog pulled + re-dispatched.
 const stopStuckBanner = $derived(getStopStuckBannerVisible());
@@ -1066,6 +1074,9 @@ const configRows = $derived<ConfigRow[]>([
 		     (readiness rows + config edits + Start at its foot) → Preview + Roadmap
 		     disclosures. Absorbs the old onboarding checklist, no-server empty-state,
 		     ServerReadiness and StreamSettingsCard. -->
+		{#if updateRefusal}
+			<UpdateRefusalBand refusal={updateRefusal} />
+		{/if}
 		<IdleCockpit
 			{config}
 			caps={getCapabilities()}

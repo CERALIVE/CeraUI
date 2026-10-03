@@ -61,6 +61,7 @@ const TERMINAL_NOTIFICATION_KEYS: Readonly<Record<StartFailureClass, string>> =
 		mutation_blocked: "notifications.streamStartMutationBlockedFailed",
 		capture_source_unavailable:
 			"notifications.streamStartCaptureSourceUnavailableFailed",
+		update_in_progress: "notifications.streamStartUpdateInProgressFailed",
 	};
 
 // The class alone names no operator action — an unsupported signal format, a
@@ -129,6 +130,8 @@ const TERMINAL_FALLBACK_MESSAGES: Partial<Record<StartFailureClass, string>> = {
 		"Stream failed to start: a modem change could not be undone, so its state is unknown. Review the blocked modem in Settings before streaming.",
 	capture_source_unavailable:
 		"Stream failed to start: the video input could not be used. Check the camera and cable, then start again.",
+	update_in_progress:
+		"Stream failed to start: a software update is being installed and can't be interrupted. Try again once it finishes.",
 };
 
 function notificationParams(

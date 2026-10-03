@@ -25,7 +25,8 @@ function fieldValue(stanza: string, field: string): string | undefined {
 }
 
 function aptProbeUrl(uri: URL, suite: string): string {
-	if (uri.host.toLowerCase() === FIRST_PARTY_APT_HOST) return `${uri.origin}/`;
+	if (uri.host.toLowerCase() === FIRST_PARTY_APT_HOST)
+		return `${uri.origin}/__tls-probe`;
 	const base = uri.href.replace(/\/+$/, "");
 	return `${base}/dists/${suite.replace(/^\/+|\/+$/g, "")}/InRelease`;
 }
@@ -33,6 +34,22 @@ function aptProbeUrl(uri: URL, suite: string): string {
 export function parseAptSourceOrigins(text: string): AptOrigin[] {
 	const origins: AptOrigin[] = [];
 	for (const stanza of text.split(/\r?\n\s*\r?\n/)) {
+		for (const line of stanza.split(/\r?\n/)) {
+			const match = line
+				.trim()
+				.match(/^deb\s+(?:\[[^\]]*\]\s+)?(https?:\/\/\S+)\s+(\S+)\s+/);
+			if (!match) continue;
+			const rawUri = match[1] ?? "";
+			if (!URL.canParse(rawUri)) continue;
+			const uri = new URL(rawUri);
+			const suite = match[2] ?? "";
+			origins.push({
+				url: uri.href.replace(/\/+$/, ""),
+				host: uri.host,
+				scheme: uri.protocol === "http:" ? "http" : "https",
+				probeUrl: aptProbeUrl(uri, suite),
+			});
+		}
 		if (fieldValue(stanza, "Enabled")?.toLowerCase() === "no") continue;
 		const uris = fieldValue(stanza, "URIs")?.split(/\s+/).filter(Boolean) ?? [];
 		const suites =

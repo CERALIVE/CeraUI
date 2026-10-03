@@ -42,6 +42,14 @@ import {
 	notificationRemove,
 } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import {
+	AptAllRefusalError,
+	assertPinnedInstallSimulation,
+	buildAptAllDiscoveryArgs,
+	buildAptAllInstallArgs,
+	discoverAptAllPackages,
+	type PinnedAptPackage,
+} from "./apt-all-packages.ts";
 import { cleanAptCache } from "./apt-cache-clean.ts";
 /* Software updates */
 import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
@@ -65,8 +73,13 @@ import {
 import { isRealDevice } from "./device-detection.ts";
 import { classifyPackageLayer } from "./package-layer.ts";
 import {
+	pendingAwareAptSpaceDeps,
+	runLegacyPackageEffects,
+} from "./software-update-pending-effects.ts";
+import {
 	DetachedAptServiceCleanupError,
 	recoverDetachedAptUpgrade,
+	runDetachedAptAll,
 	runDetachedAptUpgrade,
 	type SoftwareUpdateOutputHandlers,
 } from "./software-update-process.ts";
@@ -75,6 +88,18 @@ import {
 	recoverSoftwareUpdateWithCoordination,
 	resetSoftwareUpdateRecovery,
 } from "./software-update-recovery.ts";
+import {
+	type CommitExitHook,
+	finishSoftwareUpdateRestart,
+} from "./software-update-restart.ts";
+import { reconcileAptChannel } from "./update-apt-channel.ts";
+import { readUpdateCapabilities } from "./update-capabilities.ts";
+import {
+	PendingPackageSuccessError,
+	pendingPackageSuccess,
+} from "./update-orchestrator/pending-success-fence.ts";
+import { getRecoveredUpdateExitHook } from "./update-orchestrator/recovery-exit-gate.ts";
+import { loadUpdateSettings } from "./update-settings.ts";
 import {
 	deriveUpdateIdentity,
 	deriveUpdateState,
@@ -105,6 +130,9 @@ let aptDiscoveryRunning = false;
 let aptGetUpdateFailures = 0;
 let aptHeldBackPackages: string | undefined;
 let actionableAppPackages: string[] = [];
+let actionableAllPackages: PinnedAptPackage[] = [];
+let aptAllRefusal: AptAllRefusalError | null = null;
+let aptAllMode = false;
 let discoveredPackages: UpdatePackage[] = [];
 let lastAptReachability: AptReachabilityWire | undefined;
 let delayedSoftwareUpdateStart: ReturnType<typeof setTimeout> | undefined;
@@ -164,13 +192,26 @@ function aptReachabilityWire(
 	});
 }
 
+const defaultAptCommandRunner: typeof spawnWithTimeout = (argv, options) =>
+	spawnWithTimeout(argv, options);
+let aptCommandRunner = defaultAptCommandRunner;
+export function setAptCommandRunnerForTest(
+	runner: typeof spawnWithTimeout | null,
+): void {
+	aptCommandRunner = runner ?? defaultAptCommandRunner;
+}
+
 async function runAptCommand(
 	argv: string[],
 	timeoutMs: number,
 ): Promise<SpawnWithTimeoutResult> {
+	pendingPackageSuccess.assertEffectsAllowed();
 	try {
-		return await spawnWithTimeout(argv, { timeoutMs });
+		const result = await aptCommandRunner(argv, { timeoutMs });
+		pendingPackageSuccess.assertEffectsAllowed();
+		return result;
 	} catch (error) {
+		if (error instanceof PendingPackageSuccessError) throw error;
 		return {
 			exitCode: 1,
 			stdout: "",
@@ -179,10 +220,6 @@ async function runAptCommand(
 	}
 }
 
-// Unified-update-state signals (Todo 24). The identity of the currently-available
-// update; the identity being installed; and the terminal outcome of the last run.
-// A terminal failure/success PERSISTS across background discovery re-runs — only a
-// new install (startSoftwareUpdate) or a manual re-check clears it.
 let availableIdentity: UpdateIdentity | null = null;
 let currentUpdateIdentity: UpdateIdentity | null = null;
 let lastUpdateFailure: UpdateFailure | null = null;
@@ -193,12 +230,7 @@ let lastCleanupWarning: Extract<
 	{ kind: "success" }
 >["cleanup_warning"];
 
-// Check-cycle outcome, separate from the install-cycle signals above. A check
-// that could not complete MUST NOT read as "up to date", and a check that
-// completed with nothing to do must still leave proof it ran — otherwise the
-// operator's only evidence is a button that appears to do nothing (the live
-// Rock 5B+ report this fixes: apt-get update ran and succeeded in 1.8 s while the
-// dialog showed no spinner, no result and no error for 11 s).
+// Distinguish a failed check from "up to date", and an empty result from no check.
 let lastCheckFailure: UpdateCheckFailureReason | null = null;
 let lastCheckedAt: number | null = null;
 
@@ -206,9 +238,8 @@ function failCurrentCheck(reason: UpdateCheckFailureReason): void {
 	lastCheckFailure = reason;
 }
 
-// Why an update start was refused. A refusal is ALWAYS one of these — never a
-// bare `return` — so the operator gets a reason instead of a dialog that shows
-// "Applying…" and reverts in silence (the live Rock 5B+ report this fixes).
+// Synchronous start refusals. Post-acceptance limits are in root AGENTS.md's
+// "D8 stream/update admission: what it does NOT cover", item (c).
 export type UpdateStartRefusal =
 	| "updates_disabled"
 	| "streaming"
@@ -224,9 +255,6 @@ function refuseUpdateStart(reason: UpdateStartRefusal): UpdateStartOutcome {
 	return { started: false, reason };
 }
 
-// The ONE predicate for "may this device install apt updates". Discovery, the
-// periodic check, and the install path all read it, so the UI can never offer an
-// update the install path would refuse.
 export function aptUpdatesEnabled(): boolean {
 	return setup.apt_update_enabled !== false;
 }
@@ -254,6 +282,7 @@ export function resetSoftwareUpdateState(): void {
 	delayedSoftwareUpdateStart = undefined;
 	softwareUpdateRecoveryRetryTimer = undefined;
 	resetSoftwareUpdateRecovery();
+	lastInstallUnitVerdict = "not-probed";
 	aptDiscoveryRunning = false;
 	softUpdateStatus = null;
 	currentUpdateIdentity = null;
@@ -265,6 +294,9 @@ export function resetSoftwareUpdateState(): void {
 	lastCheckedAt = null;
 	lastAptReachability = undefined;
 	actionableAppPackages = [];
+	actionableAllPackages = [];
+	aptAllRefusal = null;
+	aptAllMode = false;
 	discoveredPackages = [];
 }
 
@@ -305,7 +337,9 @@ export function getUpdateState(): UpdateState {
 						...(discoveredPackages.length > 0
 							? { packages: discoveredPackages }
 							: {}),
-						actionable_count: actionableAppPackages.length,
+						actionable_count: aptAllMode
+							? actionableAllPackages.length
+							: actionableAppPackages.length,
 					}
 				: null;
 	return deriveUpdateState({
@@ -430,11 +464,7 @@ export function parseKeptBackPackageNames(stdout: string): string[] {
 		.filter((name) => name.length > 0 && APT_PACKAGE_NAME_RE.test(name));
 }
 
-// Every package discovery saw, tagged with its layer and whether apt kept it
-// back. `actionable` is derived here ONCE — `layer === "app" && !kept_back` — so
-// the install argv, the wire count and the operator's band can never disagree.
-// Kept-back membership WINS over the upgradable list: apt can name a package in
-// both, and the honest answer for such an entry is that it is not installable.
+// A package named in both lists remains kept-back, rather than installable.
 export function buildDiscoveredPackages(
 	upgradable: readonly string[],
 	keptBack: readonly string[],
@@ -481,6 +511,103 @@ export function buildAptDiscoveryArgs(
 		"--assume-no",
 		...aptFamilyArgs(verdict),
 	];
+}
+
+async function getCapableUpdateSize(
+	reachability: AptReachability,
+): Promise<SoftwareUpdateError> {
+	aptAllMode = true;
+	const settings = await loadUpdateSettings();
+	pendingPackageSuccess.assertEffectsAllowed();
+	await reconcileAptChannel("capable", settings.channel);
+	const simulation = await runAptCommand(
+		buildAptAllDiscoveryArgs(aptFamilyArgs(reachability.verdict)),
+		APT_DISCOVERY_TIMEOUT_MS,
+	);
+	if (simulation.exitCode !== 0) {
+		failCurrentCheck("discovery_failed");
+		return "discovery_failed";
+	}
+	const holds = await runAptCommand(
+		["/usr/bin/apt-mark", "showhold"],
+		APT_DISCOVERY_TIMEOUT_MS,
+	);
+	if (holds.exitCode !== 0) {
+		failCurrentCheck("discovery_failed");
+		return "discovery_failed";
+	}
+	try {
+		const sourcePolicy = await runAptCommand(
+			["/usr/bin/apt-cache", "policy"],
+			APT_DISCOVERY_TIMEOUT_MS,
+		);
+		if (sourcePolicy.exitCode !== 0)
+			throw new AptAllRefusalError("discovery_failed");
+		const result = await discoverAptAllPackages(
+			simulation.stdout,
+			holds.stdout,
+			async (name) => {
+				const policy = await runAptCommand(
+					["/usr/bin/apt-cache", "policy", name],
+					APT_DISCOVERY_TIMEOUT_MS,
+				);
+				if (policy.exitCode !== 0)
+					throw new AptAllRefusalError("discovery_failed");
+				return policy.stdout;
+			},
+			sourcePolicy.stdout,
+		);
+		pendingPackageSuccess.assertEffectsAllowed();
+		aptAllRefusal = null;
+		actionableAllPackages = result.actionable;
+		discoveredPackages = result.packages;
+		const packageNames = result.packages.map((item) => item.name);
+		availableIdentity =
+			packageNames.length > 0
+				? deriveUpdateIdentity(packageNames, packageNames.length)
+				: null;
+		availableUpdates = { package_count: packageNames.length };
+		if (
+			result.actionable.some(
+				({ name }) => name.startsWith("ceralive-") || name === "cerastream",
+			)
+		) {
+			notificationBroadcast(
+				"ceralive_update",
+				"warning",
+				"A CERALIVE update is available. Open Settings → Software Updates to install it.",
+				0,
+				true,
+				true,
+			);
+		}
+		broadcastMsg("status", {
+			available_updates: availableUpdates,
+			update_state: getUpdateState(),
+		});
+		return null;
+	} catch (error) {
+		if (!(error instanceof AptAllRefusalError)) throw error;
+		aptAllRefusal = error;
+		actionableAllPackages = [];
+		availableUpdates = null;
+		availableIdentity = null;
+		discoveredPackages = [];
+		lastUpdateFailure = { reason: error.reason };
+		notificationBroadcast(
+			"ceralive_update_failed",
+			"error",
+			"The software update was refused. Open Settings → Software Updates to see the reason.",
+			0,
+			true,
+			true,
+		);
+		broadcastMsg("status", {
+			available_updates: availableUpdates,
+			update_state: getUpdateState(),
+		});
+		return "discovery_failed";
+	}
 }
 
 function aptFamilyArgs(verdict: AptReachability["verdict"]): readonly string[] {
@@ -589,13 +716,16 @@ export function parseAptUpgradeSummary(
 		);
 	}
 
+	const names = packageList.value
+		.split(/\s+/)
+		.filter((name) => APT_PACKAGE_NAME_RE.test(name));
 	return parseOk({
 		upgradeCount: upgradeCount.value,
 		downloadSize: downloadSize.value,
-		ceralivePackages: packageList.value
-			.split(/\s+/)
-			.some((name) => classifyPackageLayer(name) === "app"),
-		packages: packageList.value.split(/\s+/).filter((n) => n.length > 0),
+		ceralivePackages: names.some(
+			(name) => classifyPackageLayer(name) === "app",
+		),
+		packages: names,
 	});
 }
 
@@ -628,11 +758,14 @@ export function reportUpdateCheckFailure(upgrade: {
 }
 
 async function getSoftwareUpdateSize(reachability: AptReachability) {
-	// Never advertise an update the install path would refuse to run.
 	if (!aptUpdatesEnabled()) return null;
 	if (getIsStreaming() || isUpdating() || aptGetUpdating) return "busy";
+	const capabilities = await readUpdateCapabilities();
+	pendingPackageSuccess.assertEffectsAllowed();
+	if (capabilities.mode === "capable")
+		return getCapableUpdateSize(reachability);
+	aptAllMode = false;
 
-	// First see if any packages can be upgraded by dist-upgrade
 	const upgradeResult = await runAptCommand(
 		buildAptDiscoveryArgs(reachability.verdict),
 		APT_DISCOVERY_TIMEOUT_MS,
@@ -655,7 +788,6 @@ async function getSoftwareUpdateSize(reachability: AptReachability) {
 	let res = parsedSummary.value;
 	let fromHeldBack = false;
 
-	// Otherwise, check if any packages have been held back (e.g. by dependencies changing)
 	if (res.upgradeCount === 0) {
 		const heldBackPackages = parseAptPackageList(
 			upgrade.stdout,
@@ -682,7 +814,6 @@ async function getSoftwareUpdateSize(reachability: AptReachability) {
 			res = parsedSummary.value;
 		}
 	} else {
-		// Reset aptHeldBackPackages if some upgrades became available via dist-upgrade
 		aptHeldBackPackages = undefined;
 	}
 	// The kept-back block is read from the ORIGINAL dist-upgrade output on every
@@ -750,6 +881,7 @@ export type SoftwareUpdateError =
 	| ExecException
 	| "busy"
 	| "repos_unreachable"
+	| "discovery_failed"
 	| "captive_portal"
 	| true
 	| null;
@@ -757,11 +889,6 @@ export type SoftwareUpdateError =
 /**
  * Classify the outcome of `apt-get update` into the legacy `errOrStderr` value.
  *
- * Preserves the exact pre-migration semantics of the `exec()` callback:
- *   - captive-portal signatures ⇒ `captive_portal`;
- *   - any stderr output ⇒ `true` (treated as an error, even on exit 0);
- *   - otherwise a non-zero exit ⇒ an ExecException-shaped error;
- *   - otherwise (exit 0, no stderr) ⇒ `null` (success).
  */
 export function classifyAptUpdateResult(
 	exitCode: number,
@@ -789,6 +916,7 @@ export function classifyAptUpdateResult(
 function checkForSoftwareUpdates(
 	callback: (err: SoftwareUpdateError, aptGetUpdateFailures: number) => unknown,
 ): boolean {
+	if (pendingPackageSuccess.pending) return false;
 	if (!aptUpdatesEnabled()) return false;
 	if (
 		getIsStreaming() ||
@@ -799,65 +927,73 @@ function checkForSoftwareUpdates(
 		return false;
 	}
 
-	// A fresh cycle supersedes the previous one's verdict, and the `checking`
-	// transition is BROADCAST: it is derivable server-side the moment this flag
-	// flips, but nothing published it, so no client could ever observe a check in
-	// flight and the dialog cancelled its own spinner on the next frame.
 	lastCheckFailure = null;
 	lastAptReachability = undefined;
 	aptGetUpdating = true;
 	broadcastUpdateState();
 
-	void (async () => {
-		const reachability = await prepareAptNetwork();
-		lastAptReachability = aptReachabilityWire(reachability);
-		broadcastUpdateState();
-		if (
-			reachability.verdict === "unreachable" ||
-			reachability.verdict === "captive_portal"
-		) {
+	void runLegacyPackageEffects(
+		async () => {
+			const reachability = await prepareAptNetwork();
+			pendingPackageSuccess.assertEffectsAllowed();
+			lastAptReachability = aptReachabilityWire(reachability);
+			broadcastUpdateState();
+			if (
+				reachability.verdict === "unreachable" ||
+				reachability.verdict === "captive_portal" ||
+				reachability.verdict === "probe_unavailable" ||
+				reachability.verdict === "credentials_invalid"
+			) {
+				aptGetUpdating = false;
+				const reason =
+					reachability.verdict === "probe_unavailable" ||
+					reachability.verdict === "credentials_invalid"
+						? "discovery_failed"
+						: reachability.verdict === "unreachable"
+							? "repos_unreachable"
+							: "captive_portal";
+				failCurrentCheck(reason);
+				callback(reason, aptGetUpdateFailures);
+				return;
+			}
+			const res = await runAptCommand(
+				buildAptRefreshArgs(reachability.verdict),
+				APT_REFRESH_TIMEOUT_MS,
+			);
+			const stdout = res.stdout;
+			const stderr = res.stderr;
+
 			aptGetUpdating = false;
-			const reason =
-				reachability.verdict === "unreachable"
-					? "repos_unreachable"
-					: "captive_portal";
-			failCurrentCheck(reason);
-			callback(reason, aptGetUpdateFailures);
-			return;
-		}
-		const res = await runAptCommand(
-			buildAptRefreshArgs(reachability.verdict),
-			APT_REFRESH_TIMEOUT_MS,
-		);
-		const stdout = res.stdout;
-		const stderr = res.stderr;
 
+			// The operator-visible generic refresh verdict keys on the exit code because
+			// apt writes benign warnings to stderr. Only the two captive-portal signatures
+			// are specific enough for stderr to override that rule.
+			const errOrStderr = classifyAptUpdateResult(res.exitCode, stderr);
+			if (errOrStderr === "captive_portal") {
+				failCurrentCheck("captive_portal");
+			} else if (res.exitCode !== 0) {
+				failCurrentCheck("refresh_failed");
+			}
+
+			if (stderr.length) {
+				aptGetUpdateFailures++;
+			} else {
+				aptGetUpdateFailures = 0;
+			}
+
+			logger.info(
+				`apt-get update: ${errOrStderr === null ? "success" : "error"}`,
+			);
+			if (stdout) logger.info(stdout);
+			if (stderr) logger.error(stderr);
+
+			if (callback) callback(errOrStderr, aptGetUpdateFailures);
+		},
+		() => callback("discovery_failed", aptGetUpdateFailures),
+	).finally(() => {
 		aptGetUpdating = false;
-
-		// The operator-visible generic refresh verdict keys on the exit code because
-		// apt writes benign warnings to stderr. Only the two captive-portal signatures
-		// are specific enough for stderr to override that rule.
-		const errOrStderr = classifyAptUpdateResult(res.exitCode, stderr);
-		if (errOrStderr === "captive_portal") {
-			failCurrentCheck("captive_portal");
-		} else if (res.exitCode !== 0) {
-			failCurrentCheck("refresh_failed");
-		}
-
-		if (stderr.length) {
-			aptGetUpdateFailures++;
-		} else {
-			aptGetUpdateFailures = 0;
-		}
-
-		logger.info(
-			`apt-get update: ${errOrStderr === null ? "success" : "error"}`,
-		);
-		if (stdout) logger.info(stdout);
-		if (stderr) logger.error(stderr);
-
-		if (callback) callback(errOrStderr, aptGetUpdateFailures);
-	})();
+		broadcastUpdateState();
+	});
 	return true;
 }
 
@@ -892,10 +1028,7 @@ export function resetSoftwareUpdateCheckRunner(): void {
 	softwareUpdateCheckRunner = checkForSoftwareUpdates;
 }
 
-// Discovery DI seam wrapping getSoftwareUpdateSize (the SOLE `available_updates`
-// broadcaster). Callers invoke it unconditionally: a noisy-but-nonfatal `apt-get update`
-// (benign apt warnings on stderr, or one repo down) must not suppress the broadcast, and
-// getSoftwareUpdateSize still surfaces a truly-broken apt via reportUpdateCheckFailure.
+// Benign refresh warnings must not suppress discovery's publication.
 type SoftwareUpdateSizeRunner = (
 	reachability: AptReachability,
 ) => Promise<SoftwareUpdateError>;
@@ -912,18 +1045,23 @@ export function resetSoftwareUpdateSizeRunner(): void {
 	softwareUpdateSizeRunner = getSoftwareUpdateSize;
 }
 
-// The ONE place a check cycle lands, for both the periodic loop and the manual
-// re-check. It stamps the attempt before discovery (so the discovery broadcast
-// already carries it) and always emits a terminal frame — discovery has several
-// early returns that broadcast nothing, and each of those used to leave the
-// operator on whatever the dialog happened to be showing.
+// Publish after discovery's early returns so an empty result is observable.
 export async function runUpdateDiscoveryAndReport(): Promise<SoftwareUpdateError> {
+	if (pendingPackageSuccess.pending) return "discovery_failed";
 	if (aptDiscoveryRunning) return "busy";
 	aptDiscoveryRunning = true;
 	lastCheckedAt = Date.now();
 	try {
 		const reachability = await prepareAptNetwork();
+		pendingPackageSuccess.assertEffectsAllowed();
 		lastAptReachability = aptReachabilityWire(reachability);
+		if (
+			reachability.verdict === "probe_unavailable" ||
+			reachability.verdict === "credentials_invalid"
+		) {
+			failCurrentCheck("discovery_failed");
+			return "discovery_failed";
+		}
 		if (reachability.verdict === "unreachable") {
 			failCurrentCheck("repos_unreachable");
 			return "repos_unreachable";
@@ -932,7 +1070,13 @@ export async function runUpdateDiscoveryAndReport(): Promise<SoftwareUpdateError
 			failCurrentCheck("captive_portal");
 			return "captive_portal";
 		}
-		return await softwareUpdateSizeRunner(reachability);
+		return await runLegacyPackageEffects(
+			() => softwareUpdateSizeRunner(reachability),
+			() => "discovery_failed" as const,
+		);
+	} catch (error) {
+		if (error instanceof PendingPackageSuccessError) return "discovery_failed";
+		throw error;
 	} finally {
 		aptDiscoveryRunning = false;
 		broadcastUpdateState();
@@ -951,9 +1095,14 @@ function scheduleNextSoftwareUpdateCheck(delay: number): void {
 }
 
 export function periodicCheckForSoftwareUpdates() {
+	if (pendingPackageSuccess.pending) {
+		if (nextCheckForSoftwareUpdatesTimer)
+			clearTimeout(nextCheckForSoftwareUpdatesTimer);
+		scheduleNextSoftwareUpdateCheck(SKIP_RETRY_DELAY_MS);
+		return;
+	}
 	if (!aptUpdatesEnabled()) return;
-	// A dev/CI host must never be handed to apt. The manual check has its own
-	// mock branch; this background loop simply does not run there.
+	// Protect the dev host from background APT effects.
 	if (shouldUseMocks()) return;
 	if (isSoftwareUpdateRecoveryInconclusive()) return;
 	if (nextCheckForSoftwareUpdatesTimer) {
@@ -971,9 +1120,6 @@ export function periodicCheckForSoftwareUpdates() {
 	}
 
 	const started = softwareUpdateCheckRunner(async (err_, failures) => {
-		// Discovery runs on every completed check; err_/failures drive ONLY the retry
-		// cadence, so a failed apt-get update refresh retries sooner without ever
-		// suppressing the available_updates broadcast.
 		const discovery = await runUpdateDiscoveryAndReport();
 		const err = err_ === null ? discovery : err_;
 		scheduleNextSoftwareUpdateCheck(computeNextCheckDelay(err, failures));
@@ -986,9 +1132,8 @@ export function periodicCheckForSoftwareUpdates() {
 	}
 }
 
-// Reuses the periodic discovery + skip guard but never touches its timer.
-// Returns false when skipped (streaming/updating/apt busy).
 export function triggerManualUpdateCheck(): boolean {
+	if (pendingPackageSuccess.pending) return false;
 	if (isSoftwareUpdateRecoveryInconclusive()) return false;
 	if (shouldUseMocks()) {
 		if (
@@ -1041,19 +1186,16 @@ export function triggerManualUpdateCheck(): boolean {
 	return started;
 }
 
-// apt spawn seam (T8): the default kicks off the real `apt-get update` →
-// dist-upgrade pipeline. The dev/mock path NEVER calls it (it simulates the
-// progress sequence instead); tests spy it to assert the real path fired (prod)
-// or stayed untouched (dev). This is SEPARATE from the rebootRunner seam above,
-// which only gates the post-update reboot — this gates the entire apt spawn.
-// The runner reports its own outcome: a refusal is only discoverable once the
-// apt package-list refresh has been dispatched.
-type SoftwareUpdateRunner = () => UpdateStartOutcome;
+type SoftwareUpdateRunner = (
+	onCommitSucceeded?: () => void,
+) => UpdateStartOutcome;
 
-const defaultSoftwareUpdateRunner: SoftwareUpdateRunner = () => {
+const defaultSoftwareUpdateRunner: SoftwareUpdateRunner = (
+	onCommitSucceeded,
+) => {
 	const checkStarted = softwareUpdateCheckRunner(async (err) => {
 		if (err === null) {
-			await doSoftwareUpdate();
+			await doSoftwareUpdate(onCommitSucceeded);
 		} else if (softUpdateStatus) {
 			const reason =
 				"Failed to fetch the updated package list; aborting the update.";
@@ -1096,10 +1238,9 @@ const defaultSoftwareUpdateRunner: SoftwareUpdateRunner = () => {
 		}
 	});
 
-	// The callback above is the ONLY thing that ever clears softUpdateStatus, so
-	// latching it after a check that declined to run would leave isUpdating()
-	// true for the lifetime of the process — refusing every later update and
-	// silently killing the periodic check loop with it.
+	// Latching a declined check would wedge isUpdating(). For later latch gaps,
+	// see "D8 stream/update admission: what it does NOT cover" in
+	// AGENTS.md.
 	if (!checkStarted) return refuseUpdateStart("check_unavailable");
 
 	softUpdateStatus = { downloading: 0, unpacking: 0, setting_up: 0, total: 0 };
@@ -1129,10 +1270,6 @@ export function getMockSoftwareUpdatePromise(): Promise<void> | null {
 	return mockSoftwareUpdatePromise;
 }
 
-// Emulate the on-device update progression WITHOUT spawning apt: total resolves,
-// then downloading, unpacking and setting_up each fill to total in turn, and
-// finally a completion frame (result: 0) — the same wire shape doSoftwareUpdate
-// produces from real apt stdout.
 async function simulateMockSoftwareUpdate(): Promise<void> {
 	softUpdateStatus = { total: 0, downloading: 0, unpacking: 0, setting_up: 0 };
 	broadcastMsg("status", { updating: softUpdateStatus });
@@ -1164,7 +1301,11 @@ async function simulateMockSoftwareUpdate(): Promise<void> {
 	broadcastUpdateState();
 }
 
-export function startSoftwareUpdate(): UpdateStartOutcome {
+export function startSoftwareUpdate(
+	onCommitSucceeded?: () => void,
+): UpdateStartOutcome {
+	if (pendingPackageSuccess.pending)
+		return refuseUpdateStart("check_unavailable");
 	if (!aptUpdatesEnabled()) return refuseUpdateStart("updates_disabled");
 	if (getIsStreaming()) return refuseUpdateStart("streaming");
 	if (isUpdating()) return refuseUpdateStart("already_updating");
@@ -1172,19 +1313,18 @@ export function startSoftwareUpdate(): UpdateStartOutcome {
 		return refuseUpdateStart("check_unavailable");
 	}
 
-	// A fresh install supersedes any prior terminal outcome (Todo 24).
 	currentUpdateIdentity = availableIdentity;
 	lastUpdateFailure = null;
 	lastUpdateSucceeded = false;
 	lastPreflightFailure = null;
 	lastCleanupWarning = undefined;
 
-	// if an apt-get update is already in progress, retry later
 	if (aptGetUpdating || aptDiscoveryRunning) {
 		if (!delayedSoftwareUpdateStart) {
 			delayedSoftwareUpdateStart = setTimeout(() => {
 				delayedSoftwareUpdateStart = undefined;
-				const outcome = startSoftwareUpdate();
+				if (pendingPackageSuccess.pending) return;
+				const outcome = startSoftwareUpdate(onCommitSucceeded);
 				if (!outcome.started) {
 					lastUpdateSucceeded = false;
 					lastUpdateFailure = {
@@ -1204,20 +1344,27 @@ export function startSoftwareUpdate(): UpdateStartOutcome {
 		return { started: true };
 	}
 
-	// Dev/mock seam: simulate the progress→complete sequence without ever
-	// spawning apt, so the update UI is exercisable on a dev box.
 	if (shouldUseMocks()) {
 		mockSoftwareUpdatePromise = simulateMockSoftwareUpdate();
 		void mockSoftwareUpdatePromise;
 		return { started: true };
 	}
 
-	return softwareUpdateRunner();
+	return softwareUpdateRunner(onCommitSucceeded);
 }
 
 type SoftwareUpdateProcessMonitor = {
 	readonly handlers: SoftwareUpdateOutputHandlers;
-	readonly finish: (completion: Promise<number>) => void;
+	// Resolves once softUpdateStatus/lastUpdateSucceeded/lastUpdateFailure are
+	// settled — NOT once the detached logging + crash-to-restart tail below has
+	// run. That tail deliberately throws via invariant() on a plain success to
+	// force an unhandled rejection that restarts the process; a caller
+	// awaiting the returned promise must observe getUpdateState() settle
+	// without being able to catch (and thus swallow) that intentional crash.
+	readonly finish: (
+		completion: Promise<number>,
+		onCommitSucceeded?: CommitExitHook,
+	) => Promise<void>;
 };
 
 export function deriveAptProgress(
@@ -1241,7 +1388,7 @@ export function deriveAptProgress(
 	};
 }
 
-function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
+export function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
 	let rebootAfterUpgrade = false;
 	let aptLog = "";
 	let aptErr = "";
@@ -1279,51 +1426,64 @@ function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
 		onStderr: (data) => {
 			aptErr += data;
 		},
-		onObserverError: (error) => {
+		onObserverError: (error, suppressedRetries = 0) => {
 			logger.warn(
 				"Software update observer retrying after a local read failure",
 				{
 					error,
+					suppressed_retries: suppressedRetries,
 				},
 			);
 		},
 	};
 
-	const finish = (completion: Promise<number>): void => {
-		void (async () => {
-			let code: number;
+	const settle = async (
+		completion: Promise<number>,
+		owned: boolean,
+	): Promise<number> => {
+		let code: number;
+		try {
+			code = await completion;
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			aptErr += aptErr.length > 0 ? `\n${message}` : message;
+			code =
+				err instanceof DetachedAptServiceCleanupError &&
+				err.transactionExitCode !== 0
+					? err.transactionExitCode
+					: 1;
+		}
+
+		// Keep the in-flight latch until cleanup settles; its result cannot change code.
+		const cleaned = await cleanAptCache(defaultAptSpaceDeps.run);
+		lastCleanupWarning =
+			code === 0 && !cleaned ? "post_clean_failed" : undefined;
+
+		if (softUpdateStatus) {
+			const failure =
+				code === 0
+					? null
+					: {
+							reason: aptErr.trim() || `apt-get exited with code ${code}`,
+							...((currentUpdateIdentity ?? availableIdentity)
+								? {
+										identity: (currentUpdateIdentity ??
+											availableIdentity) as UpdateIdentity,
+									}
+								: {}),
+						};
+			// getUpdateState()-relevant assignments happen FIRST and
+			// unconditionally, before any broadcast/notification call below —
+			// a caller awaiting settle() must observe the real outcome even if
+			// a broadcast fails for some unrelated reason.
+			lastUpdateSucceeded = code === 0;
+			if (code === 0 && owned) pendingPackageSuccess.observe();
+			lastUpdateFailure = failure;
+			softUpdateStatus.result = code === 0 ? code : aptErr;
+			const settledStatus = softUpdateStatus;
+			softUpdateStatus = null;
 			try {
-				code = await completion;
-			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err);
-				aptErr += aptErr.length > 0 ? `\n${message}` : message;
-				code =
-					err instanceof DetachedAptServiceCleanupError &&
-					err.transactionExitCode !== 0
-						? err.transactionExitCode
-						: 1;
-			}
-
-			// Keep the in-flight latch until cleanup settles; its result cannot change code.
-			const cleaned = await cleanAptCache(defaultAptSpaceDeps.run);
-			lastCleanupWarning =
-				code === 0 && !cleaned ? "post_clean_failed" : undefined;
-
-			if (softUpdateStatus) {
-				if (code === 0) {
-					lastUpdateSucceeded = true;
-					lastUpdateFailure = null;
-				} else {
-					lastUpdateSucceeded = false;
-					lastUpdateFailure = {
-						reason: aptErr.trim() || `apt-get exited with code ${code}`,
-						...((currentUpdateIdentity ?? availableIdentity)
-							? {
-									identity: (currentUpdateIdentity ??
-										availableIdentity) as UpdateIdentity,
-								}
-							: {}),
-					};
+				if (failure) {
 					notificationBroadcast(
 						"ceralive_update_failed",
 						"error",
@@ -1344,50 +1504,112 @@ function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
 						},
 					);
 				}
-				softUpdateStatus.result = code === 0 ? code : aptErr;
 				broadcastMsg("status", {
-					updating: softUpdateStatus,
+					updating: settledStatus,
 					update_state: getUpdateState(),
 				});
-				softUpdateStatus = null;
 				broadcastUpdateState();
+			} catch (broadcastError) {
+				// The outcome is already recorded above; a broadcast/notification
+				// failure must never mask it or make settle() throw — that would
+				// let an upstream guard (guardNonCritical) swallow the deliberate
+				// crash-to-restart `finish()`'s tail fires on a plain success.
+				logger.warn("Software update settle: broadcast failed", {
+					error: broadcastError,
+				});
 			}
+		}
 
+		return code;
+	};
+
+	const finish = (
+		completion: Promise<number>,
+		onCommitSucceeded?: CommitExitHook,
+	): Promise<void> => {
+		const settled = settle(completion, onCommitSucceeded !== undefined);
+		// Keep the deliberate restart detached so a caller's catch cannot swallow it.
+		void settled.then((code) => {
 			if (aptLog) logger.info(aptLog);
 			if (aptErr) logger.error(aptErr);
 
 			if (code === 0) {
-				if (rebootAfterUpgrade) {
-					rebootAfterUpdate();
-				} else {
-					invariant(
-						false,
-						"software update complete; exiting to restart CeraUI",
-					);
-				}
+				// Persist the observed commit success before deliberately exiting;
+				// the observer has already drained output and cleaned up the unit.
+				void finishSoftwareUpdateRestart(onCommitSucceeded, () => {
+					if (rebootAfterUpgrade && !onCommitSucceeded) {
+						rebootAfterUpdate();
+					} else {
+						invariant(
+							false,
+							"software update complete; exiting to restart CeraUI",
+						);
+					}
+				});
 			}
-		})();
+		});
+		return settled.then(() => undefined);
 	};
 
 	return { handlers, finish };
 }
 
-async function doSoftwareUpdate(): Promise<void> {
+async function doSoftwareUpdate(onCommitSucceeded?: () => void): Promise<void> {
+	return runLegacyPackageEffects(
+		() => prepareSoftwareUpdate(onCommitSucceeded),
+		() => {
+			softUpdateStatus = null;
+			broadcastMsg("status", {
+				updating: null,
+				update_state: getUpdateState(),
+			});
+		},
+	);
+}
+
+async function prepareSoftwareUpdate(
+	onCommitSucceeded?: () => void,
+): Promise<void> {
+	pendingPackageSuccess.assertEffectsAllowed();
 	if (!aptUpdatesEnabled() || getIsStreaming()) return;
 
 	const reachability = await prepareAptNetwork({ maxAgeMs: 0 });
+	pendingPackageSuccess.assertEffectsAllowed();
+	const capable = (await readUpdateCapabilities()).mode === "capable";
+	pendingPackageSuccess.assertEffectsAllowed();
+	if (capable) {
+		const discovery = await getCapableUpdateSize(reachability);
+		if (discovery !== null) {
+			if (softUpdateStatus)
+				softUpdateStatus.result = aptAllRefusal?.reason ?? "discovery_failed";
+			softUpdateStatus = null;
+			broadcastMsg("status", {
+				updating: null,
+				update_state: getUpdateState(),
+			});
+			return;
+		}
+	}
 	lastAptReachability = aptReachabilityWire(reachability);
 	if (
 		reachability.verdict === "unreachable" ||
 		reachability.verdict === "captive_portal" ||
-		actionableAppPackages.length === 0
+		reachability.verdict === "probe_unavailable" ||
+		reachability.verdict === "credentials_invalid" ||
+		(capable
+			? actionableAllPackages.length === 0
+			: actionableAppPackages.length === 0)
 	) {
 		const reason =
 			reachability.verdict === "captive_portal"
 				? "A captive portal prevented the software update."
-				: reachability.verdict === "unreachable"
-					? "The software repositories are unreachable."
-					: "No actionable application packages are available.";
+				: reachability.verdict === "probe_unavailable"
+					? "The repository probe tooling is unavailable."
+					: reachability.verdict === "credentials_invalid"
+						? "The APT client certificate was rejected."
+						: reachability.verdict === "unreachable"
+							? "The software repositories are unreachable."
+							: "No actionable application packages are available.";
 		lastUpdateSucceeded = false;
 		lastUpdateFailure = { reason };
 		if (softUpdateStatus) softUpdateStatus.result = reason;
@@ -1399,10 +1621,56 @@ async function doSoftwareUpdate(): Promise<void> {
 		broadcastUpdateState();
 		return;
 	}
-	const args = buildAptUpgradeArgs(actionableAppPackages, reachability.verdict);
+	const args = capable
+		? buildAptAllInstallArgs(actionableAllPackages, reachability.verdict)
+		: buildAptUpgradeArgs(actionableAppPackages, reachability.verdict);
+	if (capable) {
+		try {
+			const probe = await runAptCommand(
+				[
+					"/usr/bin/apt-get",
+					"-s",
+					"-o",
+					"Debug::NoLocking=1",
+					...args.filter((arg) => arg !== "-y" && arg !== "--no-download"),
+				],
+				APT_DISCOVERY_TIMEOUT_MS,
+			);
+			if (probe.exitCode !== 0)
+				throw new AptAllRefusalError("discovery_failed");
+			assertPinnedInstallSimulation(probe.stdout, actionableAllPackages);
+		} catch (error) {
+			if (!(error instanceof AptAllRefusalError)) throw error;
+			lastUpdateFailure = { reason: error.reason };
+			softUpdateStatus = null;
+			notificationBroadcast(
+				"ceralive_update_failed",
+				"error",
+				"The software update was refused. Open Settings → Software Updates to see the reason.",
+				0,
+				true,
+				true,
+			);
+			broadcastMsg("status", {
+				updating: null,
+				update_state: getUpdateState(),
+			});
+			return;
+		}
+	}
+	if (capable && aptAllRefusal !== null) {
+		lastUpdateFailure = { reason: aptAllRefusal.reason };
+		softUpdateStatus = null;
+		broadcastMsg("status", { updating: null, update_state: getUpdateState() });
+		return;
+	}
 	try {
-		await preflightAptSpace(args);
+		await preflightAptSpace(args, pendingAwareAptSpaceDeps);
 	} catch (error) {
+		if (pendingPackageSuccess.pending)
+			throw new PendingPackageSuccessError(
+				"package success persistence pending",
+			);
 		if (!(error instanceof AptPreflightError)) throw error;
 		lastPreflightFailure = error.reason;
 		lastUpdateFailure = null;
@@ -1416,7 +1684,8 @@ async function doSoftwareUpdate(): Promise<void> {
 		broadcastMsg("status", { updating: null, update_state: getUpdateState() });
 		return;
 	}
-	// Admission is now proven. A refused attempt must never suppress stream restoration.
+	// Stamp after preflight so a refusal does not suppress stream restoration.
+	pendingPackageSuccess.assertEffectsAllowed();
 	notePlannedShutdown("software_update");
 	const monitor = createSoftwareUpdateProcessMonitor();
 
@@ -1424,12 +1693,42 @@ async function doSoftwareUpdate(): Promise<void> {
 	// running it in this unit's cgroup then lets that restart kill the package
 	// transaction itself. PID 1 owns this service, and the next backend process
 	// reattaches to its durable output instead of relaunching apt.
-	monitor.finish(runDetachedAptUpgrade(args, monitor.handlers));
+	void monitor.finish(
+		capable
+			? runDetachedAptAll(
+					args,
+					reachability.verdict === "force_ipv4"
+						? "force_ipv4"
+						: reachability.verdict === "force_ipv6"
+							? "force_ipv6"
+							: "any",
+					monitor.handlers,
+				)
+			: runDetachedAptUpgrade(args, monitor.handlers),
+		capable ? onCommitSucceeded : undefined,
+	);
+}
+
+/**
+ * What the last recovery attempt established about the detached install unit.
+ * `false` from recovery covers both a unit proven gone and a probe that never
+ * ran (updates disabled, mocks, a transaction already observed), and only the
+ * first may be read as "nothing survived the restart".
+ */
+export type InstallUnitVerdict = "attached" | "absent" | "not-probed";
+
+let lastInstallUnitVerdict: InstallUnitVerdict = "not-probed";
+
+export function getLastInstallUnitVerdict(): InstallUnitVerdict {
+	return lastInstallUnitVerdict;
 }
 
 async function recoverSoftwareUpdate(
 	deps: SoftwareUpdateRecoveryDeps = defaultSoftwareUpdateRecoveryDeps,
 ): Promise<boolean> {
+	if (pendingPackageSuccess.pending) return false;
+	// Reset first: a throwing probe must not leave an older attempt's verdict.
+	lastInstallUnitVerdict = "not-probed";
 	if (!aptUpdatesEnabled() || shouldUseMocks() || isUpdating()) return false;
 
 	const monitor = createSoftwareUpdateProcessMonitor();
@@ -1449,15 +1748,45 @@ async function recoverSoftwareUpdate(
 			logger.warn(
 				"Software update: reattached to the detached apt transaction",
 			);
-			broadcastMsg("status", {
-				updating: softUpdateStatus,
-				update_state: getUpdateState(),
-			});
+			try {
+				broadcastMsg("status", {
+					updating: softUpdateStatus,
+					update_state: getUpdateState(),
+				});
+			} catch (broadcastError) {
+				// The reattachment above already happened; a broadcast failure
+				// must never turn into a thrown, uncaught exception here — that
+				// would reject the whole recovery attempt and lose the very
+				// evidence (an already-finished unit's outcome) this path exists
+				// to observe.
+				logger.warn("Software update recovery: broadcast failed", {
+					error: broadcastError,
+				});
+			}
 		},
 	});
-	if (!recovered) return false;
+	// `null` means `systemctl show` named the fixed unit and answered
+	// `LoadState=not-found`. Absence is not identity-checked (there is nothing
+	// to check); a loaded unit is, and an unreadable probe throws instead.
+	if (!recovered) {
+		lastInstallUnitVerdict = "absent";
+		return false;
+	}
+	lastInstallUnitVerdict = "attached";
 
-	monitor.finish(recovered.completion);
+	if (recovered.wasAlreadyFinished) {
+		// Only a bounded final drain + cleanup remain (no poll loop) — awaiting
+		// it here is what makes getUpdateState() authoritative the instant this
+		// function returns, instead of leaving a window where the unit is
+		// already gone from systemd's view but its outcome is not yet recorded.
+		// That window is exactly what let the update-orchestrator's own resume
+		// (resume.ts resumeCommitting()) observe neither a live nor a settled
+		// state and misclassify a successful recovery as unresolved.
+		await monitor.finish(recovered.completion, getRecoveredUpdateExitHook());
+	} else {
+		// Still running: this can take minutes. Never block boot on it.
+		void monitor.finish(recovered.completion, getRecoveredUpdateExitHook());
+	}
 	return true;
 }
 
