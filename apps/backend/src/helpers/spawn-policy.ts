@@ -114,6 +114,117 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 	...(
 		[
 			[
+				"osStage.guardSubmit",
+				"acquire",
+				"[systemd-run, fixed exec service properties, /usr/bin/flock, -n, -E, 75, -x, shared-update-lock, fixed guardian helper, attempt UUID]",
+				"bounded-command",
+			],
+			[
+				"osStage.guardInspect",
+				"inspect / acquire",
+				"[systemctl, show, ceralive-os-stage-guard.service, fixed property list]",
+				"bounded-probe",
+			],
+			[
+				"osStage.guardRetire",
+				"release / acquire",
+				"[systemctl, stop|reset-failed, ceralive-os-stage-guard.service]",
+				"bounded-command",
+			],
+		] as const
+	).map(([id, symbol, command, kind]) => ({
+		id,
+		symbol,
+		command,
+		file: "modules/system/update-orchestrator/os-stage-job.ts",
+		class: kind,
+		status: "enforced" as const,
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		mechanism:
+			"Bounded PID-1 submission/probes; guardian has no pipe or backend lifetime; retirement requires exact transient identity/token and positive quiescence",
+	})),
+	...(
+		[
+			[
+				"osStage.pathObservation",
+				"os-stage-path.ts",
+				"readPinnedTopology",
+				"[ip, -j, link|address|route, show, fixed OS private-table/interface]",
+				"bounded-probe",
+			],
+			[
+				"osStage.bundleHead",
+				"os-stage-path.ts",
+				"probePinnedBundle",
+				"[runuser, -u, ceralive-ota, --, curl, -q, -4|-6, --head, fixed immutable bundle URL]",
+				"bounded-probe",
+			],
+			[
+				"osStage.installAttempt",
+				"os-stage-attempt.ts",
+				"beginOsStageAttempt",
+				"[rauc, install, verified immutable bundle URL]",
+				"bounded-command",
+			],
+		] as const
+	).map(([id, file, symbol, command, kind]) => ({
+		id,
+		file: `modules/system/update-orchestrator/${file}`,
+		symbol,
+		command,
+		class: kind,
+		status: "enforced" as const,
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		mechanism:
+			"argv-only bounded probes and 2-hour CLI supervision; attempt AbortSignal cancels observation/CLI, not daemon-proof recovery",
+	})),
+	...(
+		[
+			[
+				"osStage.serviceObservation",
+				"[systemctl, show, rauc.service, --property=ActiveState,MainPID,ControlGroup]",
+			],
+			[
+				"osStage.operationObservation",
+				"[busctl, get-property, de.pengutronix.rauc, /, de.pengutronix.rauc.Installer, Operation]",
+			],
+			[
+				"osStage.slotObservation",
+				"[rauc, status, --detailed, --output-format=json]",
+			],
+		] as const
+	).map(([id, command]) => ({
+		id,
+		command,
+		file: "modules/system/update-orchestrator/os-stage-observation.ts",
+		symbol: "observeRaucStage",
+		class: "bounded-probe" as const,
+		status: "enforced" as const,
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		mechanism:
+			"Read-only argv probes bounded at 2 seconds; missing evidence withholds RAUC quiescence",
+	})),
+	...(
+		[
+			[
 				"osManifest.cmsAndMetadata",
 				"command / cmsSigner",
 				"[openssl|dpkg-query|id, validated fixed argv]",
@@ -130,12 +241,6 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 				"compareVersions",
 				"[dpkg, --compare-versions, CalVer, gt, CalVer]",
 				"bounded-probe",
-			],
-			[
-				"osManifest.raucInstall",
-				"stageOsBundle",
-				"[flock, -n, -x, shared-update-lock, rauc, install, verified-bundle-url]",
-				"bounded-command",
 			],
 			[
 				"osManifest.raucProgress",
@@ -167,6 +272,77 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		mechanism:
 			"argv-only spawnWithTimeout; RAUC install stays inside the UID pin through confirmed completion",
 	})),
+	{
+		id: "osStage.orphanLock",
+		file: "modules/system/update-orchestrator/os-stage-orphan-lock.ts",
+		symbol: "acquireOsOrphanLock",
+		command:
+			"[/usr/bin/flock, -n, -E, 75, -x, shared-update-lock, fixed guardian helper, --orphan-lock]",
+		class: "supervised-worker",
+		status: "enforced",
+		contract: {
+			timed: false,
+			startupTimeout: true,
+			shutdownCleanup: true,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: true,
+		},
+		mechanism:
+			"Readiness acknowledges flock acquisition; scoped async disposal ends reconciliation-only stdin; no writer is owned or restarted",
+	},
+	{
+		id: "backend.singleton",
+		file: "helpers/backend-singleton.ts",
+		symbol: "acquireBackendSingleton",
+		command:
+			"[/usr/bin/flock, -n, -E, 75, -x, fixed backend lock, fixed guardian helper, --orphan-lock]",
+		class: "supervised-worker",
+		status: "enforced",
+		contract: {
+			timed: false,
+			startupTimeout: true,
+			shutdownCleanup: true,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: true,
+		},
+		mechanism:
+			"Readiness proves acquisition; observer EOF releases on backend death; unexpected helper exit terminates the backend; startup failure joins cleanup",
+	},
+	{
+		id: "osStage.orphanSettlement",
+		file: "modules/system/update-orchestrator/os-stage-orphan.ts",
+		symbol: "settleOsStageOrphan",
+		command: "[systemctl, show|stop, exact OS guardian unit]",
+		class: "bounded-command",
+		status: "enforced",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		mechanism:
+			"Bounded inspection and retirement only under shared lock and fresh orphan/writer/slot proof",
+	},
+	{
+		id: "osStage.startupGuardianProbe",
+		file: "modules/system/update-orchestrator/os-stage-startup.ts",
+		symbol: "reconcileOsStageStartup",
+		command:
+			"[systemctl, show, ceralive-os-stage-guard.service, --property=LoadState]",
+		class: "bounded-probe",
+		status: "enforced",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		mechanism:
+			"Read-only 2-second unit-presence probe before exact owned-guardian adoption; missing or unreadable identity blocks update admission, never control readiness",
+	},
 	{
 		id: "boot.systemdReady",
 		file: "helpers/systemd-ready.ts",
@@ -717,7 +893,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		id: "updateOrchestrator.restartRaucForStream",
 		file: "modules/system/update-orchestrator/stream-abort.ts",
 		symbol: "killAndRestartRaucForStream",
-		command: "[systemctl, restart, rauc.service]",
+		command: "[systemctl, restart, --no-block, rauc.service]",
 		class: "bounded-command",
 		contract: {
 			timed: true,
@@ -728,7 +904,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		},
 		status: "enforced",
 		mechanism:
-			"Restarts rauc.service immediately after the SIGTERM kill above so the D-Bus service is available again for the next staging attempt",
+			"Queues restart after SIGTERM; stream admission awaits submission only, while OS staging requires independently proved RAUC quiescence",
 	},
 	{
 		id: "addons.runValidateCmd",

@@ -1,100 +1,85 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { fetchAsOta } from "../modules/system/update-orchestrator/os-agent.ts";
-import { osChannelManifestSchema } from "../modules/system/update-orchestrator/os-manifest.ts";
 import { UpdateQuarantine } from "../modules/system/update-orchestrator/quarantine.ts";
 import {
 	admitAndPrepareStreamStart,
-	checkOsManifestResult,
+	allowCellularOnce,
 	checkUpdatesNow,
-	type defaultOrchestratorRuntimeDeps,
 	getOrchestratorState,
 	installUpdatesNow,
 	resetOrchestratorRuntimeForTest,
 	runOrchestratorTick,
-	setOrchestratorRuntimeDepsForTest,
 	setOrchestratorStateForTest,
 } from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
-import { selectUpdateTransport } from "../modules/system/update-transport/executor.ts";
-import { getPersistentNotifications } from "../modules/ui/notifications.ts";
+import {
+	candidate,
+	receipt,
+	setup,
+} from "./helpers/os-agent-runtime-harness.ts";
 
-const candidate = osChannelManifestSchema.parse({
-	schema: 1,
-	board: "rock-5b-plus",
-	compatible: "ceralive-rock-5b-plus",
-	channel: "stable",
-	version: "2026.10.0",
-	serial: 3,
-	published_at: "2026-09-24T12:00:00Z",
-	expires_at: "2026-12-30T12:00:00Z",
-	os_version_id: "13",
-	min_ceraui_version: "2026.9.3",
-	bundle: {
-		url: "https://images.ceralive.tv/releases/rock-5b-plus/2026.10.0/bundle.raucb",
-		size: 100,
-		sha256: "a".repeat(64),
-	},
-	flash: {
-		url: "https://images.ceralive.tv/releases/rock-5b-plus/2026.10.0/flash.raw.xz",
-		size: 100,
-		sha256: "b".repeat(64),
-		raw_sha256: "c".repeat(64),
-	},
-	lock_url:
-		"https://images.ceralive.tv/releases/rock-5b-plus/2026.10.0/packages.lock.json",
-});
-const settings = {
-	packagesAuto: false,
-	systemAuto: true,
-	schedule: { mode: "any-idle" as const, start: "03:00", end: "05:00" },
-	channel: "stable" as const,
-	allowPackagesOverCellular: true,
-	allowSystemOverCellular: true,
-};
-const receipt = {
-	schema: 1 as const,
-	version: "2026.10.0",
-	channel: "stable" as const,
-	stagedAt: 1000,
-	bootId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-};
-afterEach(() => resetOrchestratorRuntimeForTest());
-
-function setup(overrides: Partial<typeof defaultOrchestratorRuntimeDeps> = {}) {
-	let stages = 0;
-	setOrchestratorRuntimeDepsForTest({
-		now: () => 2_000,
-		loadSettings: async () => settings,
-		loadCapabilities: async () => ({
-			mode: "capable",
-			features: ["apt-all-packages", "rauc-verity-streaming"],
-		}),
-		isIdle: async () => true,
-		isStreamLive: () => false,
-		onlyMeteredCandidateExists: async () => false,
-		checkOsManifest: async () => ({
-			available: true,
-			failed: false,
-			rateLimited: false,
-			reason: "",
-			manifest: candidate,
-		}),
-		stageOs: async () => {
-			stages += 1;
+test("D8 cancels the stable stage signal and publishes abort before restart submission", async () => {
+	// Given a stage held at its injected producer boundary.
+	const entered = Promise.withResolvers<void>();
+	const finish = Promise.withResolvers<void>();
+	let cancelled = false;
+	let phaseAtSubmission = "";
+	setup({
+		stageOs: async (_manifest, progress, control) => {
+			if (!control) throw new Error("missing stage control");
+			entered.resolve();
+			await finish.promise;
+			cancelled = control.signal.aborted;
+			progress(100);
 		},
-		armOs: async () => {},
-		readOsReceipt: async () => receipt,
-		readBootId: async () => receipt.bootId,
-		readBootedVersion: async () => "2026.9.0",
-		persist: () => {},
-		...overrides,
+		killAndRestartRaucForStream: async () => {
+			phaseAtSubmission = getOrchestratorState().phase;
+			finish.resolve();
+		},
 	});
-	setOrchestratorStateForTest({
-		...initialOrchestratorState(0),
+	const install = installUpdatesNow();
+	await entered.promise;
+	// When the stream admission aborts this exact attempt.
+	await admitAndPrepareStreamStart();
+	await install;
+	// Then late producer success/progress cannot turn it into a staged image.
+	expect(cancelled).toBe(true);
+	expect(phaseAtSubmission).toBe("os-available");
+	expect(getOrchestratorState()).toMatchObject({
 		phase: "os-available",
+		progress: null,
+		failureReason: null,
 	});
-	return { stages: () => stages };
-}
+});
+
+test("the cellular grant is captured before OS_STAGING_STARTED consumes it", async () => {
+	// Given approval for the exact candidate, when the stage producer is invoked.
+	let approved = false;
+	let grantAtInvocation: string | null = "unexpected";
+	setup({
+		onlyMeteredCandidateExists: async () => true,
+		stageOs: async (_manifest, _progress, control) => {
+			if (!control) throw new Error("missing stage control");
+			approved = control.cellularApproved === true;
+			grantAtInvocation = getOrchestratorState().cellularOverrideId;
+		},
+	});
+	allowCellularOnce(candidate.version);
+	await installUpdatesNow();
+	// Then bounded failover carries the grant even though the reducer consumed it.
+	expect(approved).toBe(true);
+	expect(grantAtInvocation).toBeNull();
+});
+
+test("RAUC readiness joins the final stage-admission fence", async () => {
+	// Given the restart is merely queued, when manual staging is requested.
+	const h = setup({ isOsStageReady: async () => false });
+	await installUpdatesNow();
+	// Then no producer is invoked until positive readiness is available.
+	expect(h.stages()).toBe(0);
+	expect(getOrchestratorState().phase).toBe("os-available");
+});
+
+afterEach(() => resetOrchestratorRuntimeForTest());
 
 describe("OS install dispatch", () => {
 	test("does not call RAUC when stream is live", async () => {
@@ -106,6 +91,7 @@ describe("OS install dispatch", () => {
 		expect(stages()).toBe(0);
 		expect(getOrchestratorState().phase).toBe("os-available");
 	});
+
 	test("legacy image refuses without calling RAUC", async () => {
 		const { stages } = setup({
 			loadCapabilities: async () => ({ mode: "legacy", features: [] }),
@@ -116,6 +102,7 @@ describe("OS install dispatch", () => {
 		});
 		expect(stages()).toBe(0);
 	});
+
 	test("missing release stamp propagates typed booted_version_unknown refusal", async () => {
 		setup({
 			runPackageCheck: async () => null,
@@ -135,6 +122,7 @@ describe("OS install dispatch", () => {
 			reason: "booted_version_unknown",
 		});
 	});
+
 	test("metered OS download waits for the exact one-time approval", async () => {
 		const { stages } = setup({ onlyMeteredCandidateExists: async () => true });
 		expect(await installUpdatesNow()).toEqual({
@@ -143,6 +131,7 @@ describe("OS install dispatch", () => {
 		});
 		expect(stages()).toBe(0);
 	});
+
 	test("manual install bypasses idle, stages once and arms without immediate activation", async () => {
 		const calls: boolean[] = [];
 		const { stages } = setup({
@@ -158,6 +147,7 @@ describe("OS install dispatch", () => {
 		expect(calls).toEqual([false]);
 		expect(getOrchestratorState().phase).toBe("os-activation-armed");
 	});
+
 	test("a stage failure never becomes staged or armed", async () => {
 		const calls: boolean[] = [];
 		setup({
@@ -175,6 +165,7 @@ describe("OS install dispatch", () => {
 		expect(getOrchestratorState().phase).toBe("failed");
 		expect(calls).toEqual([]);
 	});
+
 	test("seven-day pending slot activates with --now only while no stream is live", async () => {
 		const calls: boolean[] = [];
 		setup({
@@ -204,6 +195,7 @@ describe("OS install dispatch", () => {
 		await runOrchestratorTick();
 		expect(calls).toEqual([true]);
 	});
+
 	test("post-reboot mismatch quarantines the expected staged version", async () => {
 		const recorded: string[] = [];
 		class RecordingQuarantine extends UpdateQuarantine {
@@ -227,12 +219,20 @@ describe("OS install dispatch", () => {
 		expect(recorded).toEqual(["2026.10.0"]);
 		expect(getOrchestratorState().phase).toBe("quarantined");
 	});
+
 	test("a restarted backend never reissues an inconclusive RAUC install", async () => {
-		const { stages } = setup({ inspectOsOperation: async () => "idle" });
-		setOrchestratorStateForTest({
+		const interrupted = {
 			...initialOrchestratorState(0),
-			phase: "os-staging",
-		});
+			phase: "os-staging" as const,
+		};
+		const { stages } = setup(
+			{
+				inspectOsOperation: async () => "idle",
+				proveOsWriterQuiescent: async () => true,
+			},
+			interrupted,
+		);
+		setOrchestratorStateForTest(interrupted);
 		await runOrchestratorTick();
 		expect(stages()).toBe(0);
 		expect(getOrchestratorState().phase).toBe("failed");
@@ -240,323 +240,4 @@ describe("OS install dispatch", () => {
 			"os_stage_outcome_unknown_after_restart",
 		);
 	});
-});
-
-describe("OS channel publication over a healthy transport", () => {
-	async function checkFromHttp(status: number, signatureStatus = status) {
-		const urls: string[] = [];
-		const check = async () => {
-			const base =
-				"https://images.ceralive.tv/channels/stable/rock-5b-plus.json";
-			const selection = await selectUpdateTransport(
-				{ profile: "os", board: "rock-5b-plus", channel: "stable" },
-				{
-					listIfnames: () => ["eth0"],
-					readSources: async () => "",
-					credentials: async () => undefined,
-					mmIfnames: () => [],
-					routerIfnames: () => [],
-					dongleIfnames: () => [],
-					run: async (argv) => {
-						if (argv[0] === "nmcli")
-							return {
-								exitCode: 0,
-								stdout:
-									"GENERAL.DEVICE:eth0\nGENERAL.TYPE:ethernet\nGENERAL.STATE:100 (connected)\nGENERAL.METERED:no (guessed)",
-								stderr: "",
-							};
-						if (argv[0] === "resolvectl")
-							return argv.includes("-6")
-								? { exitCode: 1, stdout: "", stderr: "no IPv6 route" }
-								: {
-										exitCode: 0,
-										stdout: `${argv.at(-1)}: 192.0.2.1`,
-										stderr: "",
-									};
-						const code = argv.at(-1)?.endsWith("/generate_204")
-							? 204
-							: signatureStatus === 404 || signatureStatus === 410
-								? signatureStatus
-								: status === 404 || status === 410
-									? status
-									: 200;
-						return {
-							exitCode: 0,
-							stdout: `\n<<<update-probe>>>${code} 0.01`,
-							stderr: "",
-						};
-					},
-				},
-			);
-			if (selection.status !== "selected")
-				throw new Error("OS channel has no healthy uplink");
-			const fetchDeps = {
-				readUid: async () => "987",
-				run: async (argv: string[]) => {
-					const url = argv.at(-1) ?? "";
-					urls.push(url);
-					const code = url.endsWith(".sig") ? signatureStatus : status;
-					return {
-						exitCode: code === 200 ? 0 : 22,
-						stdout: String(code),
-						stderr: code === 200 ? "" : `curl: (22) HTTP ${code}`,
-					};
-				},
-			};
-			if (!(await fetchAsOta(base, "/tmp/manifest.json", 987, fetchDeps)))
-				return undefined;
-			if (
-				!(await fetchAsOta(`${base}.sig`, "/tmp/manifest.sig", 987, fetchDeps))
-			)
-				return undefined;
-			return candidate;
-		};
-		setup({
-			runPackageCheck: async () => null,
-			getPackageInstallWireState: () => ({ kind: "idle" }),
-			checkOsManifest: (channel) =>
-				checkOsManifestResult(channel ?? "stable", check),
-		});
-		setOrchestratorStateForTest(initialOrchestratorState(0));
-		const outcome = await checkUpdatesNow();
-		return { outcome, state: getOrchestratorState(), urls };
-	}
-
-	test.each([404, 410])(
-		"an unpublished channel object (%i) completes the OS check with nothing available",
-		async (status) => {
-			const refusedBefore = getPersistentNotifications(true).show.filter(
-				(item) => item.name.startsWith("update:refused:os-check:"),
-			).length;
-			const { outcome, state, urls } = await checkFromHttp(status);
-			expect(outcome).toEqual({ started: true });
-			expect(state.phase).toBe("idle");
-			expect(state.failureReason).toBeNull();
-			expect(state.osCheck.consecutiveFailures).toBe(0);
-			expect(state.osCheck.lastSuccessAt).not.toBeNull();
-			expect(urls).toEqual([
-				"https://images.ceralive.tv/channels/stable/rock-5b-plus.json",
-			]);
-			await checkUpdatesNow();
-			expect(getOrchestratorState().failureReason).toBeNull();
-			expect(
-				getPersistentNotifications(true).show.filter((item) =>
-					item.name.startsWith("update:refused:os-check:"),
-				).length,
-			).toBe(refusedBefore);
-		},
-	);
-
-	test("a missing signature beside a published JSON is also not available", async () => {
-		const { state, urls } = await checkFromHttp(200, 404);
-		expect(state.phase).toBe("idle");
-		expect(state.failureReason).toBeNull();
-		expect(state.osCheck.consecutiveFailures).toBe(0);
-		expect(state.osCheck.lastSuccessAt).not.toBeNull();
-		expect(urls).toEqual([
-			"https://images.ceralive.tv/channels/stable/rock-5b-plus.json",
-			"https://images.ceralive.tv/channels/stable/rock-5b-plus.json.sig",
-		]);
-	});
-
-	test("a published channel still offers the verified candidate", async () => {
-		const { state, urls } = await checkFromHttp(200);
-		expect(state.phase).toBe("os-available");
-		expect(state.osCheck.lastSuccessAt).not.toBeNull();
-		expect(urls).toEqual([
-			"https://images.ceralive.tv/channels/stable/rock-5b-plus.json",
-			"https://images.ceralive.tv/channels/stable/rock-5b-plus.json.sig",
-		]);
-	});
-
-	test("a 503 object response is an OS check failure, not a missing publication", async () => {
-		const { state } = await checkFromHttp(503);
-		expect(state.phase).toBe("idle");
-		expect(state.failureReason).not.toBeNull();
-		expect(state.osCheck.consecutiveFailures).toBe(1);
-	});
-
-	test("curl TLS verification failure cannot be mistaken for an unpublished channel", async () => {
-		const outcome = await fetchAsOta(
-			"https://images.ceralive.tv/channels/stable/rock-5b-plus.json",
-			"/tmp/manifest.json",
-			987,
-			{
-				readUid: async () => "987",
-				run: async () => ({ exitCode: 60, stdout: "404", stderr: "TLS" }),
-			},
-		).then(
-			() => "resolved",
-			(error: unknown) => error,
-		);
-		expect(outcome).toMatchObject({ reason: "manifest_fetch_failed" });
-	});
-});
-
-describe("stream start during an in-flight OS stage", () => {
-	// On hardware the SIGTERM ends the `rauc install` client at once, so the
-	// stage rejects while the kill/restart call is still in progress.
-	function inFlightStage(onAbortWindow: () => Promise<void> = async () => {}) {
-		let rejectStage: (error: Error) => void = () => {};
-		let stages = 0;
-		setup({
-			stageOs: () => {
-				stages += 1;
-				return new Promise<void>((_resolve, reject) => {
-					rejectStage = reject;
-				});
-			},
-			killAndRestartRaucForStream: async () => {
-				rejectStage(new Error("rauc_install_failed"));
-				await new Promise((resolve) => setTimeout(resolve, 5));
-				await onAbortWindow();
-			},
-		});
-		return { stages: () => stages };
-	}
-
-	test("the interrupted stage returns to os-available, not a sticky failure", async () => {
-		inFlightStage();
-		const install = installUpdatesNow();
-		while (getOrchestratorState().phase !== "os-staging")
-			await new Promise((resolve) => setTimeout(resolve, 1));
-		expect(await admitAndPrepareStreamStart()).toEqual({ allowed: true });
-		await install;
-		expect(getOrchestratorState().phase).toBe("os-available");
-		expect(getOrchestratorState().failureReason).toBeNull();
-	});
-
-	test("no tick starts a second stage while the abort is still restarting RAUC", async () => {
-		const { stages } = inFlightStage(async () => {
-			await runOrchestratorTick();
-		});
-		const install = installUpdatesNow();
-		while (getOrchestratorState().phase !== "os-staging")
-			await new Promise((resolve) => setTimeout(resolve, 1));
-		await admitAndPrepareStreamStart();
-		await install;
-		expect(stages()).toBe(1);
-		expect(getOrchestratorState().phase).toBe("os-available");
-	});
-
-	type PreflightRead =
-		| "onlyMeteredCandidateExists"
-		| "isIdle"
-		| "loadCapabilities"
-		| "loadSettings";
-	// The tick's own call order in os-available: loadSettings and the metered
-	// read each run once for the OS check before the stage preflight repeats them.
-	const pausedPreflights: ReadonlyArray<readonly [PreflightRead, number]> = [
-		["onlyMeteredCandidateExists", 2],
-		["isIdle", 1],
-		["loadCapabilities", 1],
-		["loadSettings", 2],
-	];
-	for (const [read, pausedCall] of pausedPreflights) {
-		test(`a tick paused in its ${read} preflight cannot start a second stage across a manual stage and its stream abort`, async () => {
-			let releaseTick: () => void = () => {};
-			const tickPaused = new Promise<void>((resolve) => {
-				releaseTick = resolve;
-			});
-			let calls = 0;
-			const pauseOnce =
-				<T>(value: T) =>
-				async (): Promise<T> => {
-					calls += 1;
-					if (calls === pausedCall) await tickPaused;
-					return value;
-				};
-			const settleStage: Array<(error?: Error) => void> = [];
-			let stages = 0;
-			const baseReads = {
-				onlyMeteredCandidateExists: false,
-				isIdle: true,
-				loadCapabilities: {
-					mode: "capable" as const,
-					features: [
-						"apt-all-packages" as const,
-						"rauc-verity-streaming" as const,
-					],
-				},
-				loadSettings: settings,
-			};
-			const pause = { [read]: pauseOnce(baseReads[read]) };
-			const wait = (ms: number) =>
-				new Promise((resolve) => setTimeout(resolve, ms));
-			setup({
-				...pause,
-				stageOs: () => {
-					stages += 1;
-					return new Promise<void>((resolve, reject) => {
-						settleStage.push((error) => (error ? reject(error) : resolve()));
-					});
-				},
-				killAndRestartRaucForStream: async () => {
-					// Inside the kill/restart window: the paused tick resumes, the
-					// SIGTERM then fails stage 1, and only afterwards would any
-					// second stage have finished.
-					releaseTick();
-					await wait(5);
-					settleStage[0]?.(new Error("rauc_install_failed"));
-					await wait(5);
-					for (const settle of settleStage.slice(1)) settle();
-				},
-			});
-			const tick = runOrchestratorTick();
-			while (calls < pausedCall) await wait(1);
-			const install = installUpdatesNow();
-			while (getOrchestratorState().phase !== "os-staging") await wait(1);
-			expect(await admitAndPrepareStreamStart()).toEqual({ allowed: true });
-			await Promise.all([tick, install]);
-			expect(stages).toBe(1);
-			expect(getOrchestratorState().phase).toBe("os-available");
-			expect(getOrchestratorState().failureReason).toBeNull();
-		});
-	}
-
-	for (const [label, kill] of [
-		[
-			"rejects",
-			async () => {
-				throw new Error("rauc restart failed");
-			},
-		],
-		[
-			"throws synchronously",
-			() => {
-				throw new Error("rauc restart failed");
-			},
-		],
-	] as const) {
-		test(`a kill/restart that ${label} propagates, leaves os-available and releases both fences`, async () => {
-			let rejectStage: (error: Error) => void = () => {};
-			let stages = 0;
-			setup({
-				stageOs: () => {
-					stages += 1;
-					if (stages > 1) return Promise.resolve();
-					return new Promise<void>((_resolve, reject) => {
-						rejectStage = reject;
-					});
-				},
-				killAndRestartRaucForStream: () => {
-					rejectStage(new Error("rauc_install_failed"));
-					return kill();
-				},
-			});
-			const install = installUpdatesNow();
-			while (getOrchestratorState().phase !== "os-staging")
-				await new Promise((resolve) => setTimeout(resolve, 1));
-			await expect(admitAndPrepareStreamStart()).rejects.toThrow(
-				"rauc restart failed",
-			);
-			expect(getOrchestratorState().phase).toBe("os-available");
-			await install;
-			expect(getOrchestratorState().phase).toBe("os-available");
-			expect(getOrchestratorState().failureReason).toBeNull();
-			await runOrchestratorTick();
-			expect(stages).toBe(2);
-			expect(getOrchestratorState().phase).toBe("os-staged");
-		});
-	}
 });

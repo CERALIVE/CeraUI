@@ -17,7 +17,7 @@ import type {
 
 import { getOperationPhase, osCommand } from "$lib/rpc/async-operation.svelte";
 import { rpc } from "$lib/rpc/client";
-
+import { UpdateActionFailure } from "./update-action-failure";
 import { withSettings } from "./update-view";
 
 export const UPDATE_SETTINGS_OP = "update-settings";
@@ -30,6 +30,7 @@ type ActionKind = "check" | "install" | "cellular";
 export interface ActionRefusal {
 	readonly action: ActionKind;
 	readonly reason: string | undefined;
+	readonly retryable?: boolean;
 }
 
 export interface UpdateSurface {
@@ -137,13 +138,21 @@ export function createUpdateSurface(): UpdateSurface {
 		call: () => Promise<{ success: boolean; error?: string }>,
 	): Promise<void> {
 		refusal = undefined;
+		const failure = new UpdateActionFailure();
 		const result = await osCommand({
 			key: ACTION_OPS[action],
-			rpc: call,
+			rpc: () => failure.run(call),
 			confirmOnResolve: true,
 			silent: true,
 		});
-		if (!result?.success) refusal = { action, reason: result?.error };
+		if (!result?.success)
+			refusal = {
+				action,
+				reason: result?.error ?? failure.envelope?.code,
+				...(failure.envelope?.retryable !== undefined
+					? { retryable: failure.envelope.retryable }
+					: {}),
+			};
 		await reloadDetails();
 	}
 

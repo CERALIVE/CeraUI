@@ -16,12 +16,14 @@ import type { Notification } from "@ceraui/rpc/schemas";
 
 export const RPC_VALIDATION_ERROR_CODE = "VALIDATION_ERROR";
 export const RPC_INTERNAL_ERROR_CODE = "INTERNAL_ERROR";
+export const RPC_UPDATE_INITIALIZING_CODE = "UPDATE_ORCHESTRATOR_INITIALIZING";
 
 /** The additive-optional error envelope the adapter sends on the wire. */
 export interface RpcErrorEnvelope {
 	message: string;
 	code: string;
 	fields?: string[];
+	retryable?: boolean;
 }
 
 /**
@@ -32,12 +34,14 @@ export interface RpcErrorEnvelope {
 export class RpcError extends Error {
 	readonly code: string;
 	readonly fields: string[];
+	readonly retryable: boolean | undefined;
 
 	constructor(envelope: RpcErrorEnvelope) {
 		super(envelope.message);
 		this.name = "RpcError";
 		this.code = envelope.code;
 		this.fields = envelope.fields ?? [];
+		this.retryable = envelope.retryable;
 	}
 }
 

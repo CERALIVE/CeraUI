@@ -1,6 +1,8 @@
 import { lstat } from "node:fs/promises";
 import { z } from "zod";
 
+// allow: SIZE_OK — Keep trust, admission and discovery colocated for the frozen-tree security comparison.
+
 export const BOOTED_OS_RELEASE_VERSION = "/etc/ceralive/os-release-version";
 export const OS_CHANNEL_OVERRIDE =
 	"/data/ceralive/update-state/os-channel-override";
@@ -52,6 +54,13 @@ export type ManifestRefusal =
 export type ManifestResult =
 	| { readonly ok: true; readonly manifest: OsChannelManifest }
 	| { readonly ok: false; readonly reason: ManifestRefusal };
+export type OsManifestDiscovery =
+	| { readonly kind: "candidate"; readonly manifest: OsChannelManifest }
+	| {
+			readonly kind: "none";
+			readonly classification: "current" | "installed-serial";
+	  }
+	| { readonly kind: "refused"; readonly reason: ManifestRefusal };
 
 export type ManifestContext = {
 	readonly board: string;
@@ -82,7 +91,7 @@ const MANIFEST_SIGNER_ISSUERS = [
 ] as const;
 
 /** CMS trust precedes *all* manifest parsing: an unsigned payload reveals no field-validation result. */
-export async function validateSignedOsManifest(
+export async function verifySignedOsManifestTrust(
 	data: Uint8Array,
 	signature: Uint8Array,
 	context: ManifestContext,
@@ -117,6 +126,15 @@ export async function validateSignedOsManifest(
 		return { ok: false, reason: "wrong_compatible" };
 	if (manifest.channel !== context.channel)
 		return { ok: false, reason: "wrong_channel" };
+	return { ok: true, manifest };
+}
+
+/** Installation admission preserves replay refusal before all version checks. */
+export async function admitTrustedOsManifest(
+	manifest: OsChannelManifest,
+	context: ManifestContext,
+	deps: ManifestVerificationDeps,
+): Promise<ManifestResult> {
 	if (manifest.serial <= context.serial)
 		return { ok: false, reason: "serial_replayed" };
 	if (Date.parse(manifest.expires_at) <= context.now)
@@ -133,6 +151,82 @@ export async function validateSignedOsManifest(
 	if (await deps.compare(manifest.min_ceraui_version, context.installedVersion))
 		return { ok: false, reason: "ceraui_too_old" };
 	return { ok: true, manifest };
+}
+
+export async function validateSignedOsManifest(
+	data: Uint8Array,
+	signature: Uint8Array,
+	context: ManifestContext,
+	deps: ManifestVerificationDeps,
+): Promise<ManifestResult> {
+	const trusted = await verifySignedOsManifestTrust(
+		data,
+		signature,
+		context,
+		deps,
+	);
+	switch (trusted.ok) {
+		case false:
+			return trusted;
+		case true:
+			return admitTrustedOsManifest(trusted.manifest, context, deps);
+		default: {
+			const exhaustive: never = trusted;
+			return exhaustive;
+		}
+	}
+}
+
+/** No-candidate discovery is not permission to install a consumed pointer. */
+export async function discoverSignedOsManifest(
+	data: Uint8Array,
+	signature: Uint8Array,
+	context: ManifestContext,
+	deps: ManifestVerificationDeps,
+): Promise<OsManifestDiscovery> {
+	const trusted = await verifySignedOsManifestTrust(
+		data,
+		signature,
+		context,
+		deps,
+	);
+	switch (trusted.ok) {
+		case false:
+			return { kind: "refused", reason: trusted.reason };
+		case true:
+			break;
+		default: {
+			const exhaustive: never = trusted;
+			return exhaustive;
+		}
+	}
+	const manifest = trusted.manifest;
+	if (Date.parse(manifest.expires_at) <= context.now)
+		return { kind: "refused", reason: "expired" };
+	if (
+		!context.bootedVersion ||
+		!calVer.safeParse(context.bootedVersion).success
+	)
+		return { kind: "refused", reason: "booted_version_unknown" };
+	if (manifest.version === context.bootedVersion)
+		return { kind: "none", classification: "current" };
+	if (
+		manifest.serial === context.serial &&
+		(await deps.compare(context.bootedVersion, manifest.version)) &&
+		!(await deps.isQuarantined(manifest.version))
+	)
+		return { kind: "none", classification: "installed-serial" };
+	const admitted = await admitTrustedOsManifest(manifest, context, deps);
+	switch (admitted.ok) {
+		case false:
+			return { kind: "refused", reason: admitted.reason };
+		case true:
+			return { kind: "candidate", manifest: admitted.manifest };
+		default: {
+			const exhaustive: never = admitted;
+			return exhaustive;
+		}
+	}
 }
 
 export async function readBootedOsReleaseVersion(

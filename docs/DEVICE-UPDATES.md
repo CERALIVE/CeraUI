@@ -85,6 +85,11 @@ Both boards resumed to sticky `failed / commit_unit_absent_on_resume`, with
 source-tested; **its fixed build has not yet been board-proven**. Neither the
 earlier installs nor the identity proof qualify a settled update lifecycle.
 
+Runtime check/install, tick and activation admission share only an
+in-flight ownership probe, preserving concurrent caller order without caching
+a settled permission. Live OS ownership is still re-read after the job-file read
+and before startup reconciliation can be queued.
+
 Manual `installUpdatesNow` reports launch refusals using its existing reason
 vocabulary (no RPC schema change):
 
@@ -150,14 +155,21 @@ gaps for overlap with the independent legacy launcher. Transition table from
 | `committing` | `COMMIT_RESUME_UNRESOLVED` | `failed` |
 | `restarting-services` | `SERVICES_RESTARTED` | `settled` |
 | `settled` | `SETTLE_ACKNOWLEDGED` | `idle` |
-| `os-available` | `OS_STAGING_STARTED` | `os-staging` (consumes the cellular override) |
+| `os-available` | `OS_STAGING_STARTED` | `os-staging` (consumes the cellular override; persists the attempt id before RAUC runs) |
 | `os-available` | `OS_CHECK_STARTED` | `checking` |
 | `os-available` | `CELLULAR_OVERRIDE_GRANTED` | `os-available` (records the id) |
+| `os-available` with an OS recovery record | `PACKAGE_CHECK_STARTED` | `checking` (the record rides through the package phases) |
 | `os-staging` | `OS_STAGING_PROGRESS` | `os-staging` |
-| `os-staging` | `OS_STAGED` | `os-staged` |
-| `os-staging` | `OS_STAGING_FAILED` | `failed` |
-| `os-staging` | `OS_STAGING_ABORTED_FOR_STREAM` | `os-available` |
-| `os-staged` | `OS_ACTIVATION_ARMED` | `os-activation-armed` |
+| `os-staging` | `OS_STAGED` | `os-staged` (tokened publication retains the active recovery record until producer settlement; legacy completed-success event clears it) |
+| `os-staging` | `OS_STAGING_FAILED`, typed `automatic` | `os-available`, retry scheduled (see below) |
+| `os-staging` | `OS_STAGING_FAILED`, typed `operator`, or a third automatic round | `os-available`, operator-only (no automatic stage) |
+| `os-staging` | `OS_STAGING_FAILED`, typed `unsafe`, or untyped | `failed` |
+| `os-staging` | `OS_STAGING_ABORTED_FOR_STREAM` | `os-available` (no failed round counted) |
+| `os-staging` | `OS_STAGE_OFFER_INVALIDATED`, matching active attempt | `idle`, stale offer/policy dropped, fresh OS discovery due |
+| `os-staging` with persisted attempt identity | `OS_UNLAUNCHED_STAGE_SETTLED`, exact current-boot/candidate/attempt witness plus fresh readiness | `os-available`, one failed round counted, `rauc_install_failed` / operator-only |
+| `os-staged` | `OS_STAGE_SETTLED`, matching active attempt | `os-staged`, recovery record cleared after producer success |
+| `os-staged` | `OS_STAGING_FAILED`, matching active attempt and `unsafe` | `failed`, unsafe recovery persisted; receipt retained, no activation or quarantine |
+| `os-staged` without a pending active attempt | `OS_ACTIVATION_ARMED` | `os-activation-armed` |
 | `os-activation-armed` | `OS_REBOOT_OBSERVED` | `os-verifying` (only once RAUC shows the armed activation ran, or the staged version booted) |
 | `os-verifying` | `OS_VERIFIED` | `sync-eligible` (only once `healthy-state.json` carries this boot's id) |
 | `os-verifying` | `OS_ROLLBACK_DETECTED` | `quarantined` (a boot on a version other than the staged one) |
@@ -169,6 +181,9 @@ gaps for overlap with the independent legacy launcher. Transition table from
 | `quarantined` | `RESET` | `idle` |
 | `failed` | `RESET` | `idle` |
 | `failed` with exact `commit_unit_absent_on_resume` | root-only `HISTORICAL_COMMIT_ADJUDICATED` after durable receipt and plan archive | `idle` |
+| `failed` with a settled `unsafe` OS record (`activeAttemptId:null`), reason matching `failureReason` and exactly `rauc_recovery_unproven` or `os_stage_outcome_unknown_after_restart` | `OS_STAGE_RECOVERY_CONFIRMED` from a manual check, after positive OS evidence | `idle`, OS check due now, next round operator-only; notice cleared only on acceptance |
+| `failed` with exact `rauc_install_failed` and no recovery record (persisted by an older build) | `OS_STAGE_LEGACY_FAILURE_MIGRATED`, after positive OS evidence | `idle`, OS check due in 15 min |
+| `failed` with settled confirmable unsafe OS record and persisted attempt identity | `OS_UNLAUNCHED_STAGE_SETTLED`, exact current-boot/candidate/attempt witness plus fresh readiness | `os-available`, failed-round count unchanged, `rauc_install_failed` / operator-only; matching unresolved notice replaced |
 
 Distinctions in that table carry weight:
 
@@ -184,6 +199,89 @@ Distinctions in that table carry weight:
   what it does NOT cover" under Known gaps in the root [`AGENTS.md`](../AGENTS.md).
 - A sync failure is `failed`, never `quarantined`. It means the mirror failed,
   not that the running slot is bad.
+- An OS staging failure is terminal only when it is unsafe or untyped. The
+  staging adapter throws an `OsStageError` whose reason maps to `automatic`,
+  `operator`, `unsafe` or `cancelled`; any other error stays fail-closed as
+  `failed`. No staging failure writes quarantine.
+
+### OS staging recovery [PARTIAL, fixture-proven]
+
+`osStageRecovery` (persisted, optional within schema 1) belongs to one exact
+candidate: version, serial, channel, board, compatible, bundle URL and digest.
+It records the active attempt id, the failed rounds, the next retry time, the
+mode (`automatic`, `operator`, `unsafe`) and the machine reason. Future attempts
+also retain optional `attemptId` after settlement clears `activeAttemptId`.
+This is persistence-only, not an addition to the RPC wire. No boot ID is stored
+in the recovery record; the settlement witness must match the current boot.
+A present `attemptId` must be a UUID; a malformed one is invalid recovery
+metadata and closes admission on load. An accepted witness settlement whose
+state write has not durably succeeded keeps admission closed (no new attempt,
+no witness retirement) until a later write succeeds.
+
+| Settled round | Result |
+|---|---|
+| first automatic failure | retry 15 min later |
+| second automatic failure | retry 30 min later |
+| third automatic failure | operator-only pause; packages continue |
+| operator failure | operator-only pause; packages continue |
+| unsafe failure, or an attempt found idle after a restart without matching completed unlaunched evidence | `failed`, no automatic retry |
+| exact attempt proven unlaunched by completed same-boot witness and fresh readiness | `os-available`, operator-only; previously counted rounds stay unchanged |
+| stream cancellation | no round counted |
+| success | record cleared |
+
+A positively identified pre-write stale/expired admission drops the offer and
+returns to fresh discovery; every other untyped staging error remains terminal.
+Terminal settlement withdraws that candidate's stage-policy notice before the
+refusal, without clearing other candidates or OS-check notices. Progress callbacks
+belong to the active attempt id, so a retained callback cannot advance a later round.
+Receipt publication is not producer success. The attempt remains pending in
+`os-staged` until the producer resolves; the 60-second tick cannot arm it in that
+window, even if a stream starts. A matching late unsafe release failure moves it
+to `failed` and replaces any retry notice with unresolved recovery. A late untyped
+or non-unsafe error is also unsafe here, never a permission to retry a published
+receipt. The receipt and serial watermark are retained for diagnosis, not treated
+as activation permission, and no staging failure writes quarantine.
+Retry deadlines use wall-clock time: a backward clock jump prolongs the wait;
+there is no compensation policy.
+
+- A round counts once, when the attempt that started it settles; a settlement
+  for any other attempt id is ignored.
+- A newly admitted candidate (different key) starts a fresh budget; an OS check
+  that finds no candidate drops the record. A successful check of the same
+  candidate keeps it.
+- Same-candidate successful refreshes preserve the pending retry deadline;
+  idle scheduling also consults persisted `osStageRecovery.nextRetryAt`, so idle
+  scheduling re-discovers the candidate when it is due, and a due package check
+  leaves `os-available` for the normal package path.
+- A due automatic restage first re-admits the signed candidate through a fresh
+  OS check, then stages on a later tick, still behind the idle, automation and
+  cellular gates.
+- Install now on an operator-paused candidate runs one more round.
+- An `os-staging` found after a restart is observed, never replayed: while RAUC
+  runs it waits, an unreadable probe defers, and once RAUC is idle and the
+  guarded adapter proves writer quiescence the attempt
+  settles `unsafe` (`os_stage_outcome_unknown_after_restart`) unless the private
+  completed unlaunched witness first proves this exact persisted attempt never
+  dispatched an install. That narrow event returns directly to operator retry,
+  counts only an uncounted staging round, and never grants staged success. Success is never
+  inferred from a good slot, a matching version or a receipt.
+  The same rule covers `os-staged` with a still-active publication identity:
+  release was not recorded complete, so it cannot arm and settles unknown/unsafe
+  only after the writer proof. A retained receipt also prevents manual confirmation.
+- Present but invalid/inconsistent recovery metadata is never first boot. Shared
+  schema validation binds phase, attempt and deadline; startup keeps a terminal
+  outcome and any valid legacy failure reason, preserves the original file and
+  refuses migration/check/install until maintenance repairs it and restarts the
+  backend. Files without these optional fields retain the existing resume rules.
+- Generic manual confirmation of `failed` needs positive evidence, all of it: RAUC idle, a writer
+  quiescence proof from the RAUC recovery adapter, the booted slot good with
+  this boot's healthy record, the one other rootfs inactive and `bad`, no staged
+  receipt and no armed activation. The production adapter supplies positive
+  guardian/resource proof; an unreadable or uncertain observation stays closed.
+  The separate witnessed-unlaunched path permits a good inactive target only
+  because exact never-launched provenance is present; it does not weaken this
+  bad-target rule. Missing/stale/invalid witnesses and legacy records without
+  `attemptId` never auto-clear. See the witness/crash contract in UPDATE-RECOVERY.
 
 Failure clearance and receipt requirements:
 [`UPDATE-RECOVERY.md`](UPDATE-RECOVERY.md). Do not erase persisted failure state
@@ -268,7 +366,7 @@ throws if a phase is placed in more than one bucket.
 |---|---|---|
 | `committing`, `restarting-services` | **refused** (`update_in_progress`) | none |
 | `downloading` | **refused** on a fresh wire reading of `installing` or `success`, or a positive/fail-closed commit-stage probe; otherwise allowed once the stop call returns | best-effort `systemctl stop` of the detached apt unit, never issued on a refusal; a nonzero exit is logged, not proof of cancellation |
-| `os-staging` | allowed once the calls return | the phase moves to `os-available` first, then `rauc.service` is killed and restarted, so the stage the SIGTERM ends is not recorded as a failure; no new OS stage starts until the restart call returns and the interrupted stage has settled, including one whose preflight was already awaiting when the abort began (the phase, live stream, both fences and the candidate are re-read after the last preflight await, with no await before the stage is taken); if the restart call throws, the error propagates with the phase already `os-available`; the abort fence (`raucStreamAbortInProcess`) is released when the kill/restart call settles, either way, and the stage fence (`osStageInProcess`) independently when the interrupted stage's own promise settles, which can be later; no fresh read or probe; a nonzero exit is logged, not proof of cancellation |
+| `os-staging` | allowed once termination/restart submission returns, not after daemon recovery | cancel the stable attempt signal and move to `os-available` before termination; queue `systemctl restart --no-block rauc.service`; propagate submission errors, but never wait for the daemon's delayed retirement here. The submission fence and interrupted-stage fence remain independent. New OS work requires positive readiness, and cancellation wins over simultaneous link failure or late producer callbacks. |
 | `syncing` | allowed | continue locally |
 | every other phase | allowed | none |
 
@@ -370,7 +468,7 @@ Active only with `apt-all-packages` and `rauc-verity-streaming`.
   `orangepi5-plus` board ID is not the `orange-pi-5-plus` product slug; Rock's
   two names happen to coincide. This translation is only for the URL and the
   signed `board` comparison, never for the physical compatible comparison.
-- `validateSignedOsManifest()` verifies the CMS signature against
+- `verifySignedOsManifestTrust()` verifies the CMS signature against
   `/etc/rauc/ceralive-keyring.pem`, requires the exact manifest signer CN with
   the codeSigning EKU and without emailProtection, and requires the extracted
   leaf's RFC2253 issuer DN to equal exactly
@@ -378,9 +476,11 @@ Active only with `apt-all-packages` and `rauc-verity-streaming`.
   `CN=CeraLive RAUC Bench Intermediate CA,O=CeraLive` (persistent bench).
   A root-direct or alternate-intermediate signer is refused as
   `signer_issuer_invalid` even if the CMS signature verifies to the keyring.
-  Only then does it check the strict v1 fields: board, compatible string,
-  per-channel serial, expiry, CalVer anti-downgrade, quarantine and
-  `min_ceraui_version`. A signed Orange pointer
+  Only then does it parse the strict v1 schema and check exact board, compatible
+  and channel identity. `validateSignedOsManifest()` remains strict installation
+  admission through `admitTrustedOsManifest()`: per-channel serial replay is
+  refused before expiry, booted-version, anti-downgrade, quarantine and
+  `min_ceraui_version` checks. A signed Orange pointer
   must say `board: orange-pi-5-plus`, `compatible: ceralive-orangepi5-plus`;
   the presently published serial-4 drill pointer says the latter as
   `ceralive-orange-pi-5-plus` and still fails closed. Publisher repair and a
@@ -389,8 +489,24 @@ Active only with `apt-all-packages` and `rauc-verity-streaming`.
 - The booted version is read only from `/etc/ceralive/os-release-version`
   (`readBootedOsReleaseVersion()`). Absent or malformed means
   `booted_version_unknown`, never a fallback to the build timestamp or commit.
-- `stageOsBundle()` runs `rauc install` under the same pin until RAUC finishes,
-  writes `os-staged.json`, then the per-channel `manifest-serial.<channel>` file.
+- `discoverSignedOsManifest()` separates discovery from installation admission.
+  After trust, expiry and a known booted version, an exact current version is a
+  successful check with no candidate, regardless of the serial watermark or
+  installation-only CeraUI floor. A non-current pointer is also no candidate when
+  its serial equals the stored serial, its version is positively older than the
+  booted release and it is not quarantined. All other pointers pass strict
+  admission; a replayed newer target remains refused, including after rollback.
+  Neither discovery outcome advances `manifest-serial.<channel>` or stages an
+  image. No-candidate success resets check failures, records a fresh success and
+  uses the normal 11–13 h cadence without a new notice. Trusted-current discovery
+  retracts only `os-check:downgrade_or_same` and `os-check:serial_replayed`
+  refusal notices; expired, untrusted and unrelated notices are not cleared.
+- `stageOsBundle()` delegates to the guarded OS job below. Every selected pair
+  strictly revalidates the signed candidate through its existing OTA UID pin.
+  Confirmed RAUC completion and pin teardown precede receipt preparation;
+  the final attempt check, synchronous `os-staged.json` and per-channel serial
+  writes, and `OS_STAGED` publication have no intervening await. They run under
+  the job lock. Activation waits until the producer has completely settled.
 - Activation is armed through `ceralive-rauc-arm@arm.service` (next idle
   shutdown). After seven days pending with no live stream, `@now` is used.
 - After a reboot (the receipt's boot id no longer matches), a booted CalVer equal
@@ -456,8 +572,11 @@ Active only with `apt-all-packages` and `rauc-verity-streaming`.
   and permissions), fix that, and reboot; the healthcheck runs again on the
   next boot, and a record written for that boot verifies the update. Do not
   mark slots good or bad by hand to get out of this state.
-- If the backend restarts during staging and RAUC reports idle with no receipt,
-  the tick fails closed with `os_stage_outcome_unknown_after_restart`.
+- A backend restart first reconciles any exactly owned OS guardian without
+  blocking control-server readiness. It retains the old pin and lock until
+  writer quiescence is proved. Reconciliation never replays an install or
+  manufactures staging success; an idle daemon alone leaves the interrupted
+  outcome `os_stage_outcome_unknown_after_restart`.
 - A root-owned `/data/ceralive/update-state/os-channel-override` containing
   exactly `drill` switches the OS channel for bench work. APT always follows
   Settings.
@@ -484,6 +603,41 @@ tested, but no package transaction calls the controller.
 Do not remove the prohibit rule or pin global DNS to work around the DNS scope
 limit documented in [HOST-UPLINK-ELECTION.md](./HOST-UPLINK-ELECTION.md).
 
+### Bounded OS staging failover [PARTIAL — hermetic proof, hardware drill owed]
+
+The existing pin controller owns the only retry loop: at most **three distinct
+interface/address-family pairs** per staging job. A positively failed pair is
+held unhealthy for 15 minutes, after safe writer recovery and routing teardown.
+Fresh selection can discover a newly restored uplink; it cannot reset the
+attempt budget. Moving the pin does not repair an existing TCP connection:
+failover starts a new RAUC install after the old writer has retired.
+
+Detection is independent of progress and interface byte counters. Fresh
+pinned-path topology is checked every 3 seconds with a 2-second read bound.
+Positive interface removal, administrative/carrier down, family-address loss
+or missing private-table default route triggers recovery. A TLS-verified HEAD
+of the immutable bundle runs as the OTA UID in the selected family every
+10 seconds, capped at 5 seconds; two consecutive transport failures trigger
+recovery. HTTP 429/5xx means origin unavailability, not a bad uplink. Unknown
+reads, unavailable probes, 404/410, flat progress and SIGBUS/EOF alone cannot
+manufacture a transport verdict. The install client's overall bound remains
+two hours; an unclassified timeout is not automatically a network failure.
+
+Before another install, the previous CLI must have settled, RAUC must be active
+with exact `Operation=idle`, the old failed daemon/installer and captured
+mount/NBD/dm identities must have retired, and the healthy booted rootfs and
+inactive target identities must be unchanged. The job lock must still be held,
+no activation marker may be armed, and routing cleanup must have succeeded.
+Stream intent is checked again after recovery, reselection and admission awaits.
+Recovery polls every second for at most six minutes; expiration retains the
+lock and reports `rauc_recovery_unproven`, never permission to force-clean.
+Creator PID reuse cannot retire an NBD device the job already owns: while its
+connection remains configured, the original tracked identity stays in the proof.
+Shared admission observation has a separate 10-second fail-closed deadline,
+which neither releases that ownership nor replaces recovery evidence.
+This reduces detection delay; it does **not** promise fast retirement of a
+kernel-blocked installer. Lock/startup details: [UPDATE-RECOVERY.md](./UPDATE-RECOVERY.md#os-staging-lock-and-startup-reconciliation).
+
 ## Cellular policy (D12)
 
 `decideCellularGate()` in `schedule.ts` applies only when every reachable uplink
@@ -499,7 +653,10 @@ A held OS install sets a pending approval, raises the `cellular-approval`
 notification with the bundle size, and appears in `readUpdateDetails()` as
 `pendingCellular`. `system.allowCellularOnce(id)` dispatches
 `CELLULAR_OVERRIDE_GRANTED`; the gate then allows exactly that candidate id, and
-`OS_STAGING_STARTED` clears the override. One approval buys one attempt.
+`OS_STAGING_STARTED` clears the override. The producer captures it before that
+transition: one approval buys one bounded staging job, including its internal
+pair failover, not a later job. A cheap-check toggle never permits unapproved
+cellular bundle failover.
 
 ## Lagged slot mirror
 
@@ -593,12 +750,18 @@ Protected-unit and restart policy: [UPDATE-RECOVERY.md](./UPDATE-RECOVERY.md).
 
 `notifyUpdate()` sends a persistent, dismissible notification named
 `update:<kind>:<id>` with an action that opens the Updates dialog. An existing
-name is not re-sent. Keys are translated in all ten catalogs.
+name is not re-sent. Keys are translated in all ten catalogs. The three
+`os-stage-*` notices carry the version only (the machine reason stays in the
+log), use one id per exact candidate, and replace each other: each settled job
+raises exactly one, and successful staging or a superseding candidate clears it.
 
 | Kind | Produced by |
 |---|---|
 | `updates-available` | a package check that found candidates; an OS check that found a manifest |
-| `refused` | a failed package check, a failed commit, a failed OS check, a failed OS stage |
+| `refused` | a failed package check, a failed commit, a failed OS check, an untyped OS stage failure |
+| `os-stage-retry` | a typed OS stage failure with an automatic retry scheduled |
+| `os-stage-operator` | a typed OS stage failure that needs the operator (operator mode or the third automatic round) |
+| `os-stage-unresolved` | an unsafe OS stage failure, including an attempt found idle after a restart |
 | `installed` | leaving `restarting-services` |
 | `restart-recommended` | a protected unit with stale mappings |
 | `cellular-approval` | an OS install held by D12 |
@@ -661,9 +824,11 @@ Not proven, and not claimed:
 - no live signed channel manifest, hosted bundle or live `apt.ceralive.tv` mTLS
   verification has been exercised;
 - No production caller dispatches `RESET`: `quarantined` and most `failed`
-  states remain sticky. The sole narrow exception is root-only
+  states remain sticky. The narrow exceptions are root-only
   `commit_unit_absent_on_resume` adjudication through the local recovery CLI
-  described above; it preserves a durable receipt and requires a fresh discovery.
+  described above (it preserves a durable receipt and requires a fresh
+  discovery) and the two OS staging exits above, which need positive OS
+   evidence from the guarded OS writer adapter (not yet board-qualified).
   That CLI exists in source packaging but has not shipped in a released `.deb` or
   image, and its root/systemd/APT board proof remains outstanding. Never delete
   `agent.json` to clear a failure.

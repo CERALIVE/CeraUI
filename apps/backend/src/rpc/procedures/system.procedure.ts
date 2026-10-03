@@ -274,6 +274,10 @@ export const installUpdatesNowProcedure = authedProcedure
 // for existing importers.
 export { allowCellularOnceInputSchema };
 
+// All agent.json mutations enter the runtime's validated-startup barrier:
+// checkUpdatesNow, installUpdatesNow and this synchronous cellular grant.
+// There is no pause or confirmation RPC; confirmation runs inside manual Check.
+
 export const allowCellularOnceProcedure = authedProcedure
 	.input(allowCellularOnceInputSchema)
 	.output(successResponseSchema)

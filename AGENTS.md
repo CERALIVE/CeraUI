@@ -151,6 +151,14 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
   [`docs/DEVICE-UPDATES.md`](docs/DEVICE-UPDATES.md) for the ordering and the
   unchanged fail-closed resume rule.
 - **[PARTIAL] Signed OS agent.** CMS-verified channel manifests, RAUC staging,
+  authenticated discovery distinct from strict installation admission: an
+  unexpired current pointer (at any serial watermark), or a non-quarantined
+  consumed pointer positively older than booted at exactly the stored serial,
+  succeeds with no candidate and normal check cadence. Discovery never advances
+  the serial watermark; newer replayed targets still refuse. Trusted-current
+  discovery clears only obsolete equality/replay OS-check refusal notices.
+  Staging revalidates through strict admission. These discovery regressions are
+  hermetically tested, not hardware-qualified. The agent also handles
   deferred activation, post-boot verification by that boot's healthcheck
   verdict (a new slot failing before `mark-good` stays `os-verifying` until the
   bootloader falls back, which is then quarantined as a rollback; a slot marked
@@ -178,13 +186,64 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
   cannot become a captive-portal or `no-transport` verdict. The corrected build
   is not yet board-proven. See [`docs/DEVICE-UPDATES.md`](docs/DEVICE-UPDATES.md).
 
+OS staging now detects pinned-path loss independently of RAUC progress and
+refreshes transport selection only after positive writer recovery and pin
+teardown, within one three-pair budget. A PID-1 guardian retains the shared
+flock through CLI failure, recovery and backend death. Receipt/serial writes
+and `OS_STAGED` publication share a synchronous attempt fence under that lock;
+startup reconciliation keeps uncertain ownership closed without delaying the
+control server. These are hermetic implementation claims, not a device drill.
+Publication retains the active attempt until producer release settles; a matching
+unsafe release failure remains terminal even after `OS_STAGED`, with the receipt
+retained and activation refused. Invalid present recovery metadata preserves the
+original file and a terminal startup outcome, never first-boot idle. Manual unsafe
+confirmation requires a settled attempt, matching failure reason, one of the two
+typed unsafe OS outcomes and positive proof; rejection retains the unresolved notice.
+RAUC's bootloader-selected `boot_primary` is retained separately from slot state:
+unknown, ambiguous, target-selected or changed activation identity refuses admission,
+recovery and final settlement. An inactive slot alone is not a writable target.
+Admission rechecks the live producer after reading job files; queued startup
+reconciliation cannot adopt that exact attempt while its producer is running.
+Preparation-only and acknowledged-release orphans settle only under a separate
+short-lived reconciliation flock with fresh writer/resource/activation proof.
+Live guardians keep ownership; unknown or foreign state keeps admission closed.
+Absent orphan units are recognized by the exact parsed `LoadState=not-found`
+property, not by whole-output equality. A previously owned NBD device retains
+its tracked identity while configured, even if its creator PID is reused.
+Shared admission observation refuses after 10 seconds; that deadline neither
+releases a writer nor proves retirement. Late observations cannot change the
+expired caller's verdict or clear a replacement probe.
+See [bounded failover](docs/DEVICE-UPDATES.md#bounded-os-staging-failover-partial--hermetic-proof-hardware-drill-owed)
+and [lock recovery](docs/UPDATE-RECOVERY.md#os-staging-lock-and-startup-reconciliation).
+
+A private durable unlaunched-settlement witness now has a state-side consumer.
+Future attempts retain optional persistence-only `osStageRecovery.attemptId`;
+startup, ticks and manual admission require its exact candidate/attempt plus a
+current-boot witness and fresh readiness. Interrupted attempts count once;
+already-counted unsafe records keep their count and become operator-only.
+Legacy D8 records without that identity remain unsafe. Guard/state integration
+is implemented and fixture-tested; board qualification is owed. Settlement and
+new-attempt admission share the control lease, compare authoritative recovery
+identity and retain admission closure until settlement is durably persisted.
+Runtime control-lease acquisition is unconditional: device detection and
+development/mock environment settings cannot select a held no-op. Hermetic
+tests inject `acquireTestOsStageControl` through the existing dependency port.
+Startup is single-flight and hydrates missing recovery notices without replay
+remove/show churn; see
+[witness settlement](docs/UPDATE-RECOVERY.md#unlaunched-settlement-witness-partial).
+
 Known gaps, recorded rather than smoothed over:
 
 - **Nothing dispatches `RESET`.** A root-only packaged maintenance tool can
   adjudicate only `failed`/`commit_unit_absent_on_resume` on the current slot,
   after an inactive/effectively masked backend and durable plan-bearing receipt.
-  Every other sticky failure still has no product clearance path. The tool's
-  root/systemd/APT end-to-end board proof is owed; see `docs/UPDATE-RECOVERY.md`.
+  A failed OS stage is not sticky by default: typed `automatic`/`operator`
+  failures return to `os-available` under a bounded retry budget, and an
+  `unsafe` one (or an older build's exact `rauc_install_failed`) leaves
+  `failed` only on positive OS evidence that the RAUC recovery adapter must
+  supply through the guarded job's positive quiescence proof. Every other sticky failure still has no product clearance path. The
+  tool's root/systemd/APT end-to-end board proof is owed; see
+  `docs/UPDATE-RECOVERY.md`.
 - **D8 stream/update admission: what it does NOT cover.** This is the one
   canonical statement of D8's limits; the other D8 descriptions point here. D8's
   guarantee (`admitAndPrepareStreamStart`,
@@ -276,7 +335,7 @@ Known gaps, recorded rather than smoothed over:
   as `start_invalid` (`start-failure-taxonomy.ts` l.261-267), so in `os-staging`
   D8 REQUESTS the SIGTERM and restart of `rauc.service`
   (`killAndRestartRaucForStream`, `update-orchestrator/stream-abort.ts` l.42-61,
-  which only logs a nonzero exit; called from `admitAndPrepareStreamStart` in
+  which propagates submission errors; called from `admitAndPrepareStreamStart` in
   `update-orchestrator/runtime.ts`) before launch validation runs, and an active
   OS stage CAN therefore be interrupted by a start that can never stream (for
   example no SRTLA address) and then fails `start_invalid`. Suggested fix direction, NOT implemented: cancel
@@ -306,7 +365,7 @@ Known gaps, recorded rather than smoothed over:
   `OS_STAGING_STARTED` is dispatched and run the stage in the background, as
   the package path already does, reporting its outcome through the phase and
   the `os-staged` / `refused` notifications.
-- **A stream start during `os-staging` can be refused while RAUC cannot be
+- **Historical pre-fix receipt: a stream start during `os-staging` could be refused while RAUC could not be
   restarted (observed once, Rock bench, task-45d D1).** D8 moves the phase to
   `os-available`, then `killAndRestartRaucForStream()`
   (`update-orchestrator/stream-abort.ts` l.42-61) SIGTERMs `rauc.service` and
@@ -327,12 +386,12 @@ Known gaps, recorded rather than smoothed over:
   active again succeeds. The phase and failure reason were correct
   (`os-available`, no failure), and the target slot was left `bad`/pending with
   no leftover NBD, dm or mount state. n=1: an earlier kill at 46 % restarted
-  promptly. Proposed remedy, an owner decision and NOT implemented: restart
-  `rauc.service` without waiting on it (`--no-block`) so the stream is admitted
-  at once, and hold a latch that keeps a new OS stage from starting until
-  `rauc.service` is active again; without that latch a stage started on a dead
-  RAUC would fail and recreate the sticky `failed` state that the F9 fix
-  removed.
+  promptly. The current source queues restart with `--no-block` and propagates
+  only submission errors at D8; it no longer waits for daemon recovery there.
+  New OS work requires the interrupted job to settle and positive writer
+  readiness, not a queue acknowledgement or `active` alone. This fix has not
+  been re-drilled on hardware; it does not change the later launch-validation
+  limits described in (h).
 - **G1: a restart of the healthcheck kills a running slot mirror (observed
   once, Orange Pi 5+ bench, 2026-09-30).** `ceralive-slot-sync.service` has
   `Requires=`/`After=ceralive-healthcheck.service` (image-building-pipeline

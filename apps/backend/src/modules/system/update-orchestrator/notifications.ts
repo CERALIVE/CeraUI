@@ -48,7 +48,19 @@ export type UpdateNotice =
 			readonly kind: "transport-unhealthy";
 			readonly id: string;
 			readonly reasons: readonly string[];
+	  }
+	| {
+			readonly kind: OsStageNoticeKind;
+			readonly id: string;
+			readonly version: string;
 	  };
+
+export const OS_STAGE_NOTICE_KINDS = [
+	"os-stage-retry",
+	"os-stage-operator",
+	"os-stage-unresolved",
+] as const;
+export type OsStageNoticeKind = (typeof OS_STAGE_NOTICE_KINDS)[number];
 
 const notices = {
 	"updates-available": { key: "notifications.updateAvailable", tone: "info" },
@@ -81,6 +93,18 @@ const notices = {
 		key: "notifications.updateTransportUnhealthy",
 		tone: "warning",
 	},
+	"os-stage-retry": {
+		key: "notifications.updateSystemStageRetry",
+		tone: "info",
+	},
+	"os-stage-operator": {
+		key: "notifications.updateSystemStageOperator",
+		tone: "warning",
+	},
+	"os-stage-unresolved": {
+		key: "notifications.updateSystemStageUnresolved",
+		tone: "error",
+	},
 } as const;
 
 /** Stable identity = event kind + exact transaction/version/unit; a retry is silent. */
@@ -99,6 +123,9 @@ export function notifyUpdate(event: UpdateNotice): boolean {
 		case "os-staged":
 		case "os-activated":
 		case "os-rollback":
+		case "os-stage-retry":
+		case "os-stage-operator":
+		case "os-stage-unresolved":
 			params.version = event.version;
 			break;
 		case "restart-recommended":
@@ -153,4 +180,22 @@ export function clearUpdateNotice(
 ): void {
 	const name = `update:${kind}:${id}`;
 	if (notificationExists(name)) notificationRemove(name);
+}
+
+/** Withdraws every staging-failure notice of one exact OS candidate. */
+export function clearOsStageNotices(id: string): void {
+	for (const kind of OS_STAGE_NOTICE_KINDS) clearUpdateNotice(kind, id);
+}
+
+/**
+ * One notice per settled staging job: the candidate's previous notice is
+ * replaced, so a retry notice gives way when the policy turns operator-only.
+ */
+export function announceOsStageSettlement(
+	kind: OsStageNoticeKind,
+	id: string,
+	version: string,
+): boolean {
+	clearOsStageNotices(id);
+	return notifyUpdate({ kind, id, version });
 }

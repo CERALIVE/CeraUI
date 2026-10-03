@@ -157,6 +157,12 @@ the device's own `netif` frame.
 
 ## RPC PATTERN
 
+Update actions retain the RPC envelope's optional `retryable` and distinct
+`UPDATE_ORCHESTRATOR_INITIALIZING` code before `osCommand` consumes a rejection.
+The existing Updates refusal band resolves that code to translated initialising/
+retry-shortly copy in all ten catalogs; unknown codes and transport failures stay
+generic. This changes neither persisted recovery data nor OS-stage reasons.
+
 `LiveSourceSwitch` uses `active_encode.switch_targets` when present, including
 synthetic legs; two distinct roster members form a switchable pair. Empty is authoritative,
 absent retains the old two-capture gate. Each has its own localized notice, so unknown

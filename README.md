@@ -29,6 +29,60 @@ resume or changing legacy-image behaviour. The fixed build has **not** been
 re-proven on a board; the OS/slot flows are not qualified by these installs.
 See also [update recovery](docs/UPDATE-RECOVERY.md).
 
+Tracked package recovery reserves exit authority for both committing and
+downloading snapshots. Owned wire `success` precedes restart-permission checking,
+so it does not prove a new backend is running. If durable success cannot be written,
+new packages stay installed while the old backend runs; the error log and latched
+`update-orchestrator-maintenance` health flag identify that condition. A separate
+pending-success fence blocks new scheduler and legacy command/channel submissions,
+including admitted continuations at their post-await boundaries, while ticks
+retry the successful snapshot under CONTROL. Already-submitted work is not cancelled.
+Ticks service independent snapshot and intent/witness recovery before package replay,
+so package priority cannot starve the recovery it needs. Both startup-tail snapshot/
+package-completion observation orders are host-tested, not board-qualified.
+Manual readiness requires valid startup and both OS/package durability; D8 uses its
+existing update-in-progress refusal. A readable renamed success after failed directory
+sync still requires successful re-persistence. Persistent drift escalates to local
+maintenance without clearing the fence. Only authoritative success persistence
+restores normal restart authority; no maintenance clear API is added.
+Avoid Check AND Install, preserve agent/plan/unit/output evidence and repair
+storage/ownership while alive. An accepted legacy Check clears retained wire success
+outside the fence. Terminal startup refusal by itself still leaves legacy RPCs and
+independent periodic callers active. Restart only after a positive safe baseline;
+hardware, power-loss and rendered maintenance feedback remain unqualified. Full
+[owner-decision inventory](docs/UPDATE-RECOVERY.md#owner-decision-pending-package-success-and-the-old-running-backend).
+
+OS receipt publication is not final release success: pending producers cannot
+arm activation, and a matching unsafe release failure stays terminal without
+deleting the receipt. Invalid recovery metadata also stays terminal on startup
+instead of clearing an earlier failure. Manual confirmation is limited to settled,
+typed unsafe OS outcomes with positive proof. These repairs are hermetically
+tested; the updated candidate still needs independent review and a board re-drill.
+
+Admission observation is bounded to a fail-closed 10-second refusal, not a writer
+deadline. Orphan settlement parses systemd absence by property, and a configured
+NBD device cannot lose its recorded ownership merely because its creator PID was
+reused. These safety repairs likewise remain hardware-unqualified.
+
+State-side unlaunched OS settlement requires a private completed witness matching
+the persisted attempt, signed candidate and current boot, plus fresh readiness.
+It returns to operator retry without counting an already-counted failure twice.
+Legacy D8 records without attempt provenance remain unsafe. A strict private
+two-phase attempt intent additionally covers pre-effect publication
+rollback: exact publishing authority plus positive no-producer proof restores the
+pre-state across a restart without inventing a failed round. Launching/missing-intent
+staging keeps the existing unsafe policy. See the [intent recovery table](docs/UPDATE-RECOVERY.md#durable-os-attempt-intent-partial--host-crash-point-proof-board-power-loss-proof-owed).
+Guard/state integration
+is implemented and fixture-tested; board qualification is owed.
+Valid stale launching intent cannot hold a cleared or superseding attempt hostage:
+it is retired only under ownership absence. A failed retirement leaves admission
+closed behind logged cleanup retry, without replacing the producer's outcome.
+Settlement and
+new-attempt admission share the control lease and recheck authoritative state;
+that lease is acquired regardless of device detection or development/mock settings;
+pending durability keeps admission closed. Startup restores missing recovery
+notices without replay churn. See [witness recovery](docs/UPDATE-RECOVERY.md#unlaunched-settlement-witness-partial).
+
 A root-only, local `.deb` maintenance executable now implements the narrow
 cross-slot unresolved-commit adjudication. It cannot be invoked through the UI
 or remote control and requires the backend inactive/effectively masked; its plan-

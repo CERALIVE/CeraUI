@@ -141,3 +141,92 @@ describe("update-orchestrator persistence", () => {
 		expect(await loadOrchestratorState()).toEqual(second);
 	});
 });
+
+describe("update-orchestrator persistence — OS stage recovery metadata", () => {
+	test("a migrated delay survives reload before a candidate has been discovered", async () => {
+		const state = {
+			...initialOrchestratorState(1),
+			osStageDiscoveryRetryAt: 900_001,
+		};
+		saveOrchestratorState(state, file);
+		expect(await loadOrchestratorState(file)).toEqual(state);
+	});
+
+	const recovery = {
+		candidateKey: "2026.10.0|3|stable|rock-5b-plus|ceralive-rock-5b-plus|u|d",
+		activeAttemptId: null,
+		failedRounds: 2,
+		nextRetryAt: 9_000_000,
+		mode: "automatic" as const,
+		reason: "os_transport_failed",
+	};
+
+	test("the retry deadline and budget survive a save/load cycle", async () => {
+		setOrchestratorStateFilePathForTest(file);
+		const state = {
+			...initialOrchestratorState(1),
+			phase: "os-available" as const,
+			osStageRecovery: recovery,
+		};
+		saveOrchestratorState(state);
+		expect(await loadOrchestratorState()).toEqual(state);
+	});
+
+	test("an active attempt identity survives a save/load cycle", async () => {
+		setOrchestratorStateFilePathForTest(file);
+		const state = {
+			...initialOrchestratorState(1),
+			phase: "os-staging" as const,
+			osStageRecovery: {
+				...recovery,
+				activeAttemptId: "attempt-1",
+				nextRetryAt: null,
+			},
+		};
+		saveOrchestratorState(state);
+		expect(await loadOrchestratorState()).toEqual(state);
+	});
+
+	test("a schema-1 file written before the field existed loads with no metadata injected", async () => {
+		setOrchestratorStateFilePathForTest(file);
+		writeFileSync(
+			file,
+			JSON.stringify({
+				schema: 1,
+				phase: "failed",
+				enteredAt: 7,
+				progress: null,
+				failureReason: "rauc_install_failed",
+				packageCheck: initialScheduleClock(),
+				osCheck: initialScheduleClock(),
+				cellularOverrideId: null,
+			}),
+			"utf8",
+		);
+		const loaded = await loadOrchestratorState();
+		expect(loaded?.phase).toBe("failed");
+		expect(loaded !== null && "osStageRecovery" in loaded).toBe(false);
+		expect(loaded === null ? {} : toPersisted(loaded)).not.toHaveProperty(
+			"osStageRecovery",
+		);
+	});
+
+	test("a malformed recovery record makes the whole file untrusted", async () => {
+		setOrchestratorStateFilePathForTest(file);
+		writeFileSync(
+			file,
+			JSON.stringify({
+				...toPersisted(initialOrchestratorState(1)),
+				osStageRecovery: { ...recovery, mode: "retry-forever" },
+			}),
+			"utf8",
+		);
+		await expect(loadOrchestratorState()).rejects.toMatchObject({
+			name: "OrchestratorRecoveryLoadError",
+			terminalState: {
+				phase: "failed",
+				failureReason: "os_stage_recovery_invalid",
+			},
+		});
+	});
+});

@@ -123,6 +123,7 @@ cp dist/reset-to-default.sh "$TEMP_DIR/usr/local/bin/"
 cp apps/backend/ceralive-addon-helper "$TEMP_DIR/usr/bin/ceralive-addon-helper"
 cp apps/backend/ceralive-addon-helper.sudoers "$TEMP_DIR/etc/sudoers.d/ceralive-addon-helper"
 cp deployment/ceralive-update-recover "$TEMP_DIR/usr/sbin/ceralive-update-recover"
+cp deployment/ceralive-os-stage-guard "$TEMP_DIR/usr/libexec/ceralive/ceralive-os-stage-guard"
 bun build apps/backend/src/modules/system/update-orchestrator/recovery-cli.ts --compile --target="bun-linux-${ARCHITECTURE}" --outfile="$TEMP_DIR/usr/libexec/ceralive/ceralive-update-recover"
 
 # Make binaries executable
@@ -131,6 +132,7 @@ chmod +x "$TEMP_DIR/usr/local/bin/override-ceralive.sh"
 chmod +x "$TEMP_DIR/usr/local/bin/reset-to-default.sh"
 chmod 0755 "$TEMP_DIR/usr/bin/ceralive-addon-helper"
 chmod 0700 "$TEMP_DIR/usr/sbin/ceralive-update-recover" "$TEMP_DIR/usr/libexec/ceralive/ceralive-update-recover"
+chmod 0700 "$TEMP_DIR/usr/libexec/ceralive/ceralive-os-stage-guard"
 # sudo REFUSES a drop-in that is group/world-writable — ship it 0440.
 chmod 0440 "$TEMP_DIR/etc/sudoers.d/ceralive-addon-helper"
 

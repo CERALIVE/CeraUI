@@ -1,4 +1,5 @@
 import { writeFileAtomicSync } from "../../helpers/config-loader.ts";
+import { pendingPackageSuccess } from "./update-orchestrator/pending-success-fence.ts";
 
 export const CERALIVE_SOURCES_FILE = "/etc/apt/sources.list.d/ceralive.sources";
 let sourcesPath = CERALIVE_SOURCES_FILE;
@@ -26,6 +27,7 @@ export async function reconcileAptChannel(
 	file = sourcesPath,
 	arch: string = process.arch === "arm64" ? "arm64" : "amd64",
 ): Promise<boolean> {
+	if (pendingPackageSuccess.pending) return false;
 	if (mode !== "capable") return false;
 	const desired = buildCeraliveSources(channel, arch);
 	let current: string | undefined;
@@ -35,6 +37,7 @@ export async function reconcileAptChannel(
 		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 	}
 	if (current === desired) return false;
+	if (pendingPackageSuccess.pending) return false;
 	writeFileAtomicSync(file, desired);
 	return true;
 }

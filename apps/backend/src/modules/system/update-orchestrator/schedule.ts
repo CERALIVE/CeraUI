@@ -82,6 +82,20 @@ export function autoPipelineEnabled(
 	return kind === "packages" ? settings.packagesAuto : settings.systemAuto;
 }
 
+export function scheduledCheckDue(input: {
+	readonly now: number;
+	readonly clock: OrchestratorScheduleClock;
+	readonly kind: CheckKind;
+	readonly settings: {
+		readonly packagesAuto: boolean;
+		readonly systemAuto: boolean;
+	};
+}): boolean {
+	if (!autoPipelineEnabled(input.kind, input.settings)) return false;
+	if (input.clock.nextAttemptAt === null) return true;
+	return input.now >= input.clock.nextAttemptAt;
+}
+
 export function shouldAttemptScheduledCheck(input: {
 	readonly now: number;
 	readonly phase: OrchestratorPhase;
@@ -93,9 +107,7 @@ export function shouldAttemptScheduledCheck(input: {
 	};
 }): boolean {
 	if (input.phase !== "idle") return false;
-	if (!autoPipelineEnabled(input.kind, input.settings)) return false;
-	if (input.clock.nextAttemptAt === null) return true;
-	return input.now >= input.clock.nextAttemptAt;
+	return scheduledCheckDue(input);
 }
 
 export function canStartManualCheck(phase: OrchestratorPhase): boolean {

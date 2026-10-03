@@ -22,18 +22,33 @@ import {
 	type UpdateOrchestratorPersistedState,
 	updateOrchestratorPersistedStateSchema,
 } from "@ceraui/rpc/schemas";
+import { z } from "zod";
 import {
 	loadJsonConfig,
 	writeFileAtomicSync,
 } from "../../../helpers/config-loader.ts";
-import type { OrchestratorState } from "./types.ts";
+import { syncOrchestratorDirectory } from "./orchestrator-directory-sync.ts";
+import { initialOrchestratorState, type OrchestratorState } from "./types.ts";
 
 export const ORCHESTRATOR_STATE_FILE = "/data/ceralive/update-state/agent.json";
 
 let statePath = ORCHESTRATOR_STATE_FILE;
 
+export class OrchestratorRecoveryLoadError extends Error {
+	override readonly name = "OrchestratorRecoveryLoadError";
+	constructor(readonly terminalState: OrchestratorState) {
+		super(
+			"Invalid OS recovery metadata; persisted update state requires maintenance",
+		);
+	}
+}
+
 export function setOrchestratorStateFilePathForTest(path: string | null): void {
 	statePath = path ?? ORCHESTRATOR_STATE_FILE;
+}
+
+export function orchestratorStateFilePath(): string {
+	return statePath;
 }
 
 export function toPersisted(
@@ -48,6 +63,12 @@ export function toPersisted(
 		packageCheck: state.packageCheck,
 		osCheck: state.osCheck,
 		cellularOverrideId: state.cellularOverrideId,
+		...(state.osStageDiscoveryRetryAt !== undefined
+			? { osStageDiscoveryRetryAt: state.osStageDiscoveryRetryAt }
+			: {}),
+		...(state.osStageRecovery
+			? { osStageRecovery: state.osStageRecovery }
+			: {}),
 	};
 }
 
@@ -62,6 +83,12 @@ export function fromPersisted(
 		packageCheck: persisted.packageCheck,
 		osCheck: persisted.osCheck,
 		cellularOverrideId: persisted.cellularOverrideId,
+		...(persisted.osStageDiscoveryRetryAt !== undefined
+			? { osStageDiscoveryRetryAt: persisted.osStageDiscoveryRetryAt }
+			: {}),
+		...(persisted.osStageRecovery
+			? { osStageRecovery: persisted.osStageRecovery }
+			: {}),
 	};
 }
 
@@ -69,7 +96,8 @@ export function fromPersisted(
  * Returns `null` when no valid persisted state exists (first boot, missing
  * file, or a corrupt/foreign file that fails schema validation) — the caller
  * (resume.ts) treats that as "start fresh from idle", never as a reason to
- * throw or to guess a state.
+ * throw or to guess a state. Invalid present OS recovery metadata is different:
+ * it throws a typed terminal snapshot so startup cannot erase a prior failure.
  */
 export async function loadOrchestratorState(
 	filePath = statePath,
@@ -78,18 +106,40 @@ export async function loadOrchestratorState(
 	if (!present) return null;
 	const result = await loadJsonConfig(
 		filePath,
-		updateOrchestratorPersistedStateSchema,
+		z.record(z.string(), z.unknown()),
 	);
 	if (!result.loaded || result.invalidFields.length > 0) return null;
 	const parsed = updateOrchestratorPersistedStateSchema.safeParse(result.data);
-	if (!parsed.success) return null;
+	if (!parsed.success) {
+		if (
+			!Object.hasOwn(result.data, "osStageRecovery") &&
+			!Object.hasOwn(result.data, "osStageDiscoveryRetryAt")
+		)
+			return null;
+		const legacy = updateOrchestratorPersistedStateSchema.safeParse({
+			...result.data,
+			osStageRecovery: undefined,
+			osStageDiscoveryRetryAt: undefined,
+		});
+		const terminal = legacy.success
+			? fromPersisted(legacy.data)
+			: initialOrchestratorState(0);
+		throw new OrchestratorRecoveryLoadError({
+			...terminal,
+			phase: terminal.phase === "quarantined" ? "quarantined" : "failed",
+			progress: null,
+			failureReason: terminal.failureReason ?? "os_stage_recovery_invalid",
+		});
+	}
 	return fromPersisted(parsed.data);
 }
 
 export function saveOrchestratorState(
 	state: OrchestratorState,
 	filePath = statePath,
+	syncParent: (filePath: string) => void = syncOrchestratorDirectory,
 ): void {
 	mkdirSync(dirname(filePath), { recursive: true, mode: 0o700 });
 	writeFileAtomicSync(filePath, JSON.stringify(toPersisted(state)));
+	syncParent(filePath);
 }

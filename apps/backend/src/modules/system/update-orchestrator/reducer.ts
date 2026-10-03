@@ -13,11 +13,28 @@
  * persistence/publication and avoids applying stale events to an unrelated phase.
  */
 
+import { OS_STAGE_CONFIRMABLE_UNSAFE_REASONS } from "@ceraui/rpc/schemas";
+import {
+	settleFailedOsStageRound,
+	startOsStageAttempt,
+} from "./os-stage-retry.ts";
+import { reduceOsUnlaunchedSettlement } from "./os-unlaunched-state.ts";
 import type {
 	OrchestratorEvent,
 	OrchestratorScheduleClock,
 	OrchestratorState,
 } from "./types.ts";
+
+function withoutOsStageRecovery(state: OrchestratorState): OrchestratorState {
+	if (!state.osStageRecovery && state.osStageDiscoveryRetryAt === undefined)
+		return state;
+	const {
+		osStageRecovery: _dropped,
+		osStageDiscoveryRetryAt: _delay,
+		...rest
+	} = state;
+	return rest;
+}
 
 function enter(
 	state: OrchestratorState,
@@ -66,6 +83,8 @@ export function reduceOrchestrator(
 	state: OrchestratorState,
 	event: OrchestratorEvent,
 ): OrchestratorState {
+	if (event.type === "OS_UNLAUNCHED_STAGE_SETTLED")
+		return reduceOsUnlaunchedSettlement(state, event);
 	switch (state.phase) {
 		case "idle":
 			return reduceIdle(state, event);
@@ -141,23 +160,56 @@ function reduceChecking(
 				event.kind === "packages"
 					? { packageCheck: clockAfterSuccess(event.now, event.nextAttemptAt) }
 					: { osCheck: clockAfterSuccess(event.now, event.nextAttemptAt) };
-			return enter(state, event.now, {
-				phase: "idle",
-				failureReason: null,
-				...clockPatch,
-			});
+			// No OS candidate is offered any more, so its recovery budget is moot.
+			return enter(
+				event.kind === "os" ? withoutOsStageRecovery(state) : state,
+				event.now,
+				{ phase: "idle", failureReason: null, ...clockPatch },
+			);
 		}
 		case "CHECK_SUCCEEDED_PACKAGES":
 			return enter(state, event.now, {
 				phase: "available",
 				packageCheck: clockAfterSuccess(event.now, event.nextAttemptAt),
 			});
-		case "CHECK_SUCCEEDED_OS":
-			return enter(state, event.now, {
-				phase: "os-available",
-				failureReason: null,
-				osCheck: clockAfterSuccess(event.now, event.nextAttemptAt),
-			});
+		case "CHECK_SUCCEEDED_OS": {
+			const superseded =
+				event.candidateKey !== undefined &&
+				state.osStageRecovery !== undefined &&
+				state.osStageRecovery.candidateKey !== event.candidateKey;
+			const migrated =
+				state.osStageDiscoveryRetryAt !== undefined &&
+				event.candidateKey !== undefined
+					? {
+							candidateKey: event.candidateKey,
+							activeAttemptId: null,
+							failedRounds: 1,
+							nextRetryAt: state.osStageDiscoveryRetryAt,
+							mode: "automatic" as const,
+							reason: "rauc_install_failed",
+						}
+					: undefined;
+			const recovery = superseded
+				? undefined
+				: (migrated ?? state.osStageRecovery);
+			const retryAt =
+				recovery?.mode === "automatic" ? recovery.nextRetryAt : null;
+			return enter(
+				superseded || migrated ? withoutOsStageRecovery(state) : state,
+				event.now,
+				{
+					phase: "os-available",
+					failureReason: null,
+					...(migrated ? { osStageRecovery: migrated } : {}),
+					osCheck: clockAfterSuccess(
+						event.now,
+						retryAt === null || retryAt === undefined
+							? event.nextAttemptAt
+							: Math.min(event.nextAttemptAt, retryAt),
+					),
+				},
+			);
+		}
 		case "CHECK_FAILED": {
 			const clockPatch =
 				event.kind === "packages"
@@ -332,11 +384,28 @@ function reduceOsAvailable(
 				progress: { percent: 0, etaSeconds: 0 },
 				failureReason: null,
 				cellularOverrideId: null,
+				...(event.attempt
+					? {
+							osStageRecovery: startOsStageAttempt(
+								state.osStageRecovery,
+								event.attempt.candidateKey,
+								event.attempt.attemptId,
+							),
+						}
+					: {}),
 			});
 		case "OS_CHECK_STARTED":
 			return enter(state, event.now, {
 				phase: "checking",
 				osCheck: clockAtAttemptStart(state.osCheck, event.now),
+			});
+		// While a failed stage waits for its retry or the operator, packages keep
+		// their own schedule; the recovery record rides through their phases.
+		case "PACKAGE_CHECK_STARTED":
+			if (!state.osStageRecovery) return state;
+			return enter(state, event.now, {
+				phase: "checking",
+				packageCheck: clockAtAttemptStart(state.packageCheck, event.now),
 			});
 		// `os-available` is the ONLY phase in which the D12 install gate can hold
 		// a candidate for one-time approval, so the grant must land here too —
@@ -356,21 +425,106 @@ function reduceOsStaging(
 		case "OS_STAGING_PROGRESS":
 			return { ...state, progress: event.progress };
 		case "OS_STAGED":
-			return enter(state, event.now, { phase: "os-staged", progress: null });
+			if (
+				event.attemptId &&
+				state.osStageRecovery?.activeAttemptId !== event.attemptId
+			)
+				return state;
+			return enter(
+				event.attemptId ? state : withoutOsStageRecovery(state),
+				event.now,
+				{
+					phase: "os-staged",
+					progress: null,
+				},
+			);
 		case "OS_STAGING_FAILED":
-			return enter(state, event.now, {
-				phase: "failed",
+			return reduceOsStagingFailed(state, event);
+		case "OS_STAGE_OFFER_INVALIDATED":
+			if (state.osStageRecovery?.activeAttemptId !== event.attemptId)
+				return state;
+			return enter(withoutOsStageRecovery(state), event.now, {
+				phase: "idle",
 				progress: null,
-				failureReason: event.reason,
+				failureReason: null,
+				osCheck: { ...state.osCheck, nextAttemptAt: event.now },
 			});
+		// A cancellation is not a failed round: only the attempt identity ends.
 		case "OS_STAGING_ABORTED_FOR_STREAM":
 			return enter(state, event.now, {
 				phase: "os-available",
 				progress: null,
+				...(state.osStageRecovery
+					? {
+							osStageRecovery: {
+								...state.osStageRecovery,
+								activeAttemptId: null,
+							},
+						}
+					: {}),
 			});
 		default:
 			return state;
 	}
+}
+
+function reduceOsStagingFailed(
+	state: OrchestratorState,
+	event: Extract<OrchestratorEvent, { type: "OS_STAGING_FAILED" }>,
+): OrchestratorState {
+	const record = state.osStageRecovery;
+	if (!event.recovery) {
+		return enter(state, event.now, {
+			phase: "failed",
+			progress: null,
+			failureReason: event.reason,
+			...(record
+				? {
+						osStageRecovery: settleFailedOsStageRound(
+							record,
+							"unsafe",
+							event.reason,
+							event.now,
+						),
+					}
+				: {}),
+		});
+	}
+	// Only the attempt this record is waiting on may settle it, once.
+	if (!record || record.activeAttemptId !== event.recovery.attemptId)
+		return state;
+	const settled = settleFailedOsStageRound(
+		record,
+		event.recovery.mode,
+		event.reason,
+		event.now,
+	);
+	if (settled.mode === "unsafe")
+		return enter(state, event.now, {
+			phase: "failed",
+			progress: null,
+			failureReason: event.reason,
+			osStageRecovery: settled,
+		});
+	const retryAt = settled.nextRetryAt;
+	return enter(state, event.now, {
+		phase: "os-available",
+		progress: null,
+		failureReason: event.reason,
+		osStageRecovery: settled,
+		// Idle scheduling re-discovers the candidate when its retry is due.
+		...(retryAt === null
+			? {}
+			: {
+					osCheck: {
+						...state.osCheck,
+						nextAttemptAt: Math.min(
+							state.osCheck.nextAttemptAt ?? retryAt,
+							retryAt,
+						),
+					},
+				}),
+	});
 }
 
 function reduceOsStaged(
@@ -378,7 +532,19 @@ function reduceOsStaged(
 	event: OrchestratorEvent,
 ): OrchestratorState {
 	switch (event.type) {
+		case "OS_STAGE_SETTLED":
+			if (state.osStageRecovery?.activeAttemptId !== event.attemptId)
+				return state;
+			return withoutOsStageRecovery(state);
+		case "OS_STAGING_FAILED":
+			if (
+				event.recovery?.mode !== "unsafe" ||
+				state.osStageRecovery?.activeAttemptId !== event.recovery.attemptId
+			)
+				return state;
+			return reduceOsStagingFailed(state, event);
 		case "OS_ACTIVATION_ARMED":
+			if (state.osStageRecovery?.activeAttemptId) return state;
 			return enter(state, event.now, { phase: "os-activation-armed" });
 		default:
 			return state;
@@ -494,6 +660,40 @@ function reduceFailed(
 				packageCheck: { ...state.packageCheck, nextAttemptAt: null },
 				osCheck: { ...state.osCheck, nextAttemptAt: null },
 				cellularOverrideId: null,
+			});
+		case "OS_STAGE_RECOVERY_CONFIRMED": {
+			const record = state.osStageRecovery;
+			if (
+				record?.mode !== "unsafe" ||
+				record.activeAttemptId !== null ||
+				record.candidateKey !== event.candidateKey ||
+				!OS_STAGE_CONFIRMABLE_UNSAFE_REASONS.some(
+					(reason) => reason === record.reason,
+				) ||
+				state.failureReason !== record.reason
+			)
+				return state;
+			// The operator asked; the next round is theirs too, never automatic.
+			return enter(state, event.now, {
+				phase: "idle",
+				failureReason: null,
+				progress: null,
+				osStageRecovery: { ...record, mode: "operator", nextRetryAt: null },
+				osCheck: { ...state.osCheck, nextAttemptAt: event.now },
+			});
+		}
+		case "OS_STAGE_LEGACY_FAILURE_MIGRATED":
+			if (
+				state.failureReason !== "rauc_install_failed" ||
+				state.osStageRecovery
+			)
+				return state;
+			return enter(state, event.now, {
+				phase: "idle",
+				failureReason: null,
+				progress: null,
+				osStageDiscoveryRetryAt: event.retryAt,
+				osCheck: { ...state.osCheck, nextAttemptAt: event.retryAt },
 			});
 		case "RESET":
 			return enter(state, event.now, { phase: "idle", failureReason: null });

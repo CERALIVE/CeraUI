@@ -17,6 +17,10 @@
 
 import pkg from "../package.json" with { type: "json" };
 import {
+	backendSingletonApplies,
+	enforceBackendSingleton,
+} from "./helpers/backend-singleton.ts";
+import {
 	APP_NAME,
 	buildBootBanner,
 	createBootTimer,
@@ -153,10 +157,14 @@ import {
 	getSshStatus,
 } from "./modules/system/ssh.ts";
 import { reconcileAptChannel } from "./modules/system/update-apt-channel.ts";
+import { runUpdateBootstrap } from "./modules/system/update-bootstrap.ts";
 import { readUpdateCapabilities } from "./modules/system/update-capabilities.ts";
-import { startUpdateOrchestrator } from "./modules/system/update-orchestrator/runtime.ts";
+import { reconcileOsStageStartup } from "./modules/system/update-orchestrator/os-stage-startup.ts";
+import {
+	awaitUpdateStartupAdjudication,
+	startUpdateOrchestrator,
+} from "./modules/system/update-orchestrator/runtime.ts";
 import { loadUpdateSettings } from "./modules/system/update-settings.ts";
-import { updatePinController } from "./modules/system/update-transport/pin.ts";
 import { initHotspotCredentials } from "./modules/wifi/hotspot-credentials.ts";
 import { applyPersistedCountry } from "./modules/wifi/regdomain.ts";
 import { reconcileWifiAdapterModes } from "./modules/wifi/wifi-adapter-mode-transition.ts";
@@ -211,6 +219,14 @@ if (isDevelopment()) {
 // `armBootSignalHandler`, which replays a poke that arrived in the meantime.
 installBootSignalGuards();
 
+if (backendSingletonApplies()) {
+	await runCritical("backend-singleton", enforceBackendSingleton);
+} else {
+	logger.warn(
+		"Backend singleton is not enforced for a source-development process; production services never take this path",
+	);
+}
+
 checkExecPath(srtlaSendExec);
 
 // CRITICAL boot phase. A failure here is genuinely fatal: the device cannot
@@ -263,9 +279,9 @@ await runCritical("systemd-ready", notifyServiceReady);
 
 // Recovery must finish before an update may install any new UID routing rule.
 if (await isRealDevice())
-	await guardNonCritical("update-route-sweep", () =>
-		updatePinController.sweep(),
-	);
+	void guardNonCritical("update-route-sweep", async () => {
+		await reconcileOsStageStartup();
+	});
 
 // Resolve device_id + paired state before anything that gates the control
 // channel (spec §9: it MUST NOT dial until identity is resolved).
@@ -430,18 +446,29 @@ await guardNonCritical("apt-channel-reconcile", async () => {
 // recovery call below is what stops the two from racing over the SAME unit.
 // A recovered, already-finished unit's outcome is awaited (bounded: drain +
 // cleanup only, see software-updates.ts recoverSoftwareUpdate()) before
-// resume reads it, and the orchestrator's own synchronous state persist then
-// runs in the SAME continuation, ahead of the deliberate crash-to-restart a
-// successful recovery's completion schedules. The standalone call after it
+// resume reads it. An explicit recovered-owner hook withholds deliberate exit
+// until startup adjudication and durable success under CONTROL, including a
+// unit still running at boot. Microtask ordering is not authority. The standalone call after it
 // is then a safe no-op whenever the orchestrator already handled the unit,
 // and remains the only recovery path for a detached transaction the
 // orchestrator itself never tracked (e.g. one started via
 // `system.startUpdate` directly).
-await guardNonCritical("update-orchestrator", startUpdateOrchestrator);
-await guardNonCritical("software-update-recovery", async () => {
-	await recoverSoftwareUpdateIfRunning();
-});
-periodicCheckForSoftwareUpdates();
+void guardNonCritical("update-bootstrap", () =>
+	runUpdateBootstrap({
+		start: async () => {
+			await guardNonCritical("update-orchestrator", startUpdateOrchestrator);
+			return awaitUpdateStartupAdjudication();
+		},
+		recover: async () => {
+			await guardNonCritical("software-update-recovery", async () => {
+				await recoverSoftwareUpdateIfRunning();
+			});
+		},
+		periodic: () => {
+			periodicCheckForSoftwareUpdates();
+		},
+	}),
+);
 
 initNetworkInterfaceMonitoring();
 initUplinkHealth();

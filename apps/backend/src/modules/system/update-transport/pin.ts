@@ -28,6 +28,7 @@ export class UpdateTransferError extends Error {
 	constructor(
 		readonly reason: "dns-failed" | "no-route" | "blocked" | "tls-error",
 		cause?: unknown,
+		readonly attemptedPairs: readonly string[] = [],
 	) {
 		super(`update transfer: ${reason}`, { cause });
 		this.name = "UpdateTransferError";
@@ -82,6 +83,12 @@ type Step<T> = (
 	aptFlags: readonly string[],
 ) => Promise<T>;
 
+export type UpdateStepControl = {
+	readonly refreshSelection?: () => Promise<TransportSelection>;
+	readonly checkCancelled?: () => void;
+	readonly approveMetered?: (transport: RankedTransport) => boolean;
+};
+
 export function createUpdatePinController(overrides: Partial<PinDeps> = {}) {
 	const deps: PinDeps = {
 		readCapabilities: readUpdateCapabilityFile,
@@ -105,6 +112,7 @@ export function createUpdatePinController(overrides: Partial<PinDeps> = {}) {
 		job: UpdateJob,
 		selection: TransportSelection,
 		step: Step<T>,
+		control: UpdateStepControl = {},
 	): Promise<T> {
 		if (!swept) throw new UpdatePinError("sweep-required");
 		if (active.has(job)) throw new UpdatePinError("busy");
@@ -113,32 +121,56 @@ export function createUpdatePinController(overrides: Partial<PinDeps> = {}) {
 			const file = await deps.readCapabilities();
 			if (!file) throw new UpdatePinError("capabilities-unavailable");
 			const uid = uidFor(job, file);
-			const candidates = selection.ranked
-				.filter(
+			const attempted = new Set<string>();
+			let ranking = selection;
+			let lastFailure: UpdateTransferError | undefined;
+			while (attempted.size < MAX_ATTEMPTS) {
+				control.checkCancelled?.();
+				if (lastFailure && control.refreshSelection) {
+					ranking = await control.refreshSelection();
+					control.checkCancelled?.();
+				}
+				const candidate = ranking.ranked.find(
 					(row) =>
-						row.healthy && !unhealthyUntil(row.candidate.ifname, row.family),
-				)
-				.slice(0, MAX_ATTEMPTS);
-			if (!candidates.length) throw new UpdatePinError("no-transport");
-			for (const [index, candidate] of candidates.entries()) {
+						row.healthy &&
+						!attempted.has(key(row.candidate.ifname, row.family)) &&
+						!unhealthyUntil(row.candidate.ifname, row.family) &&
+						(!row.candidate.metered ||
+							!control.approveMetered ||
+							control.approveMetered(row)),
+				);
+				if (!candidate) break;
+				control.checkCancelled?.();
+				attempted.add(key(candidate.candidate.ifname, candidate.family));
 				try {
 					return await runPinnedStep({
 						job,
 						uid,
 						transport: candidate,
-						step,
+						step: (transport, flags) => {
+							control.checkCancelled?.();
+							return step(transport, flags);
+						},
 						runner: deps.run,
 					});
 				} catch (error) {
 					const transfer = classifyUpdateTransferError(error);
 					if (!transfer) throw error;
+					// runPinnedStep has already cleaned up; an AggregateError is never classified.
+					control.checkCancelled?.();
 					unhealthy.set(
 						key(candidate.candidate.ifname, candidate.family),
 						deps.now() + UPDATE_TRANSPORT_HOLD_MS,
 					);
-					if (index === candidates.length - 1) throw transfer;
+					lastFailure = transfer;
 				}
 			}
+			if (lastFailure)
+				throw new UpdateTransferError(
+					lastFailure.reason,
+					lastFailure,
+					[...attempted].map((pair) => pair.replace("\0", "/")),
+				);
 			throw new UpdatePinError("no-transport");
 		} finally {
 			active.delete(job);

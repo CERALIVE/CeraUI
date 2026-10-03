@@ -25,6 +25,118 @@ const capabilities = updateCapabilityFileSchema.parse({
 	apt_uid: 42042,
 	ota_uid: 42043,
 });
+
+describe("fresh update-step selection", () => {
+	function harness() {
+		const calls: string[] = [];
+		const controller = createUpdatePinController({
+			readCapabilities: async () => capabilities,
+			now: () => 1000,
+			run: async (_bin, args) => {
+				calls.push(args.join(" "));
+				return args.join(" ").endsWith("route show default")
+					? samples
+							.map(({ candidate }) => `default dev ${candidate.ifname}`)
+							.join("\n")
+					: "";
+			},
+		});
+		return { controller, calls };
+	}
+
+	test("reaches Ethernet restored only after cleanup and fresh selection", async () => {
+		// Given Ethernet was not usable in the original ranking.
+		const { controller, calls } = harness();
+		await controller.sweep();
+		const attempts: string[] = [];
+		// When the pinned transfer fails and selection discovers the restored link.
+		const result = await controller.run(
+			"os",
+			rankTransports(samples.slice(0, 1)),
+			async ({ candidate }) => {
+				attempts.push(candidate.ifname);
+				if (candidate.ifname === "eth0")
+					throw new UpdateTransferError("blocked");
+				return "installed";
+			},
+			{
+				refreshSelection: async () => {
+					expect(calls.at(-1)).toBe(
+						`-6 route flush table ${UPDATE_TRANSPORT_TABLE_BASE + 1}`,
+					);
+					return rankTransports(samples.slice(1));
+				},
+			},
+		);
+		// Then cleanup preceded selection and the failed exact pair is held.
+		expect(result).toBe("installed");
+		expect(attempts).toEqual(["eth0", "eth1"]);
+		expect(controller.unhealthyUntil("eth0", 4)).toBe(901000);
+	});
+
+	test("keeps the distinct-pair budget across refreshed rankings", async () => {
+		// Given each refreshed ranking repeats a previous pair and adds more links.
+		const { controller } = harness();
+		await controller.sweep();
+		const attempts: string[] = [];
+		// When every selected pair fails.
+		const outcome = await controller
+			.run(
+				"os",
+				selection,
+				async ({ candidate }) => {
+					attempts.push(candidate.ifname);
+					throw new UpdateTransferError("blocked");
+				},
+				{
+					refreshSelection: async () => rankTransports([...samples].reverse()),
+				},
+			)
+			.catch((error: unknown) => error);
+		// Then there is one failure containing three distinct pairs, never the fourth.
+		expect(attempts).toEqual(["eth0", "eth1", "eth2"]);
+		expect(outcome).toMatchObject({
+			attemptedPairs: ["eth0/4", "eth1/4", "eth2/4"],
+		});
+	});
+
+	test.each(["before", "during", "pin"] as const)(
+		"cancellation %s refresh prevents the next step",
+		async (at) => {
+			// Given cancellation can occur while cleaning up, refreshing, or installing the pin.
+			let cancelled = false;
+			let refreshes = 0;
+			const { controller } = harness();
+			await controller.sweep();
+			const attempts: string[] = [];
+			// When the cancellation fence is crossed.
+			const operation = controller.run(
+				"os",
+				selection,
+				async ({ candidate }) => {
+					attempts.push(candidate.ifname);
+					cancelled = at === "before";
+					throw new UpdateTransferError("blocked");
+				},
+				{
+					refreshSelection: async () => {
+						refreshes++;
+						cancelled = at === "during";
+						return selection;
+					},
+					checkCancelled: () => {
+						if (at === "pin" && refreshes > 0) cancelled = true;
+						if (cancelled) throw new Error("cancelled");
+					},
+				},
+			);
+			// Then no retry escapes the cancellation.
+			await expect(operation).rejects.toThrow("cancelled");
+			expect(attempts).toEqual(["eth0"]);
+			expect(refreshes).toBe(at === "before" ? 0 : 1);
+		},
+	);
+});
 const samples: TransportSample[] = ["eth0", "eth1", "eth2", "eth3"].map(
 	(ifname) => ({
 		candidate: { ifname, kind: "ethernet", metered: false },

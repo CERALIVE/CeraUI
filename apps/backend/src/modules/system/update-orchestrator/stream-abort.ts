@@ -17,6 +17,7 @@
 import { logger } from "../../../helpers/logger.ts";
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
 import { SOFTWARE_UPDATE_UNIT } from "../software-update-service-contract.ts";
+import { OsStageError } from "./os-stage-error.ts";
 
 const SYSTEMD_COMMAND_TIMEOUT_MS = 10_000;
 
@@ -39,8 +40,10 @@ export async function stopPackageInstallUnitForStream(): Promise<void> {
 	}
 }
 
-export async function killAndRestartRaucForStream(): Promise<void> {
-	const killResult = await spawnWithTimeout(
+export async function killAndRestartRaucForStream(
+	run = spawnWithTimeout,
+): Promise<void> {
+	const killResult = await run(
 		["systemctl", "kill", "--signal=SIGTERM", RAUC_SERVICE_UNIT],
 		{ timeoutMs: SYSTEMD_COMMAND_TIMEOUT_MS },
 	);
@@ -50,14 +53,15 @@ export async function killAndRestartRaucForStream(): Promise<void> {
 			{ exitCode: killResult.exitCode, stderr: killResult.stderr },
 		);
 	}
-	const restartResult = await spawnWithTimeout(
-		["systemctl", "restart", RAUC_SERVICE_UNIT],
+	const restartResult = await run(
+		["systemctl", "restart", "--no-block", RAUC_SERVICE_UNIT],
 		{ timeoutMs: SYSTEMD_COMMAND_TIMEOUT_MS },
 	);
 	if (restartResult.exitCode !== 0) {
 		logger.warn(
-			"update-orchestrator: restarting rauc.service after an admitted-stream kill did not exit cleanly",
+			"update-orchestrator: submitting rauc.service restart after an admitted-stream kill did not exit cleanly",
 			{ exitCode: restartResult.exitCode, stderr: restartResult.stderr },
 		);
+		throw new OsStageError("rauc_recovery_unproven", { cause: restartResult });
 	}
 }

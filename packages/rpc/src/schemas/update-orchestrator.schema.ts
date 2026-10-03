@@ -51,10 +51,44 @@ export const updateOrchestratorScheduleClockSchema = z.object({
 });
 export type UpdateOrchestratorScheduleClock = z.infer<typeof updateOrchestratorScheduleClockSchema>;
 
+export const OS_STAGE_RECOVERY_MODES = ['automatic', 'operator', 'unsafe'] as const;
+export const OS_STAGE_CONFIRMABLE_UNSAFE_REASONS = [
+	'rauc_recovery_unproven',
+	'os_stage_outcome_unknown_after_restart',
+] as const;
+
+// Recovery policy for ONE exact OS candidate after a staging attempt. It rides
+// through package phases untouched, so an OS stage waiting for its retry never
+// stops package updates. An attempt counts as a failed round once, when it
+// settles; `activeAttemptId` is persisted before the attempt has any effect.
+export const osStageRecoverySchema = z
+	.object({
+		candidateKey: z.string().min(1),
+		activeAttemptId: z.string().min(1).nullable(),
+		// Persistence-only provenance retained after activeAttemptId is cleared.
+		attemptId: z.uuid().optional(),
+		failedRounds: z.number().int().min(0),
+		nextRetryAt: z.number().nullable(),
+		mode: z.enum(OS_STAGE_RECOVERY_MODES),
+		reason: z.string().nullable(),
+	})
+	.strict()
+	.refine(
+		(record) =>
+			record.mode !== 'unsafe' ||
+			!['apt-exit-nonzero', 'commit_unit_absent_on_resume', 'commit_resume_inconclusive'].includes(
+				record.reason ?? '',
+			),
+		{ message: 'Non-OS failure cannot be an unsafe OS staging record' },
+	);
+export type OsStageRecovery = z.infer<typeof osStageRecoverySchema>;
+
 // The FULL persisted shape. `.strict()` so a corrupt/foreign agent.json (an
 // unknown key) fails validation rather than silently round-tripping extra
 // data — the resume path treats a failed parse as "no trustworthy persisted
-// state", never as "trust it anyway".
+// state", never as "trust it anyway". `osStageRecovery` is optional within
+// schema 1: a file written before it existed stays valid, but a binary from
+// before it existed rejects a file that carries it (strict) and starts fresh.
 export const updateOrchestratorPersistedStateSchema = z
 	.object({
 		schema: z.literal(1),
@@ -65,8 +99,47 @@ export const updateOrchestratorPersistedStateSchema = z
 		packageCheck: updateOrchestratorScheduleClockSchema,
 		osCheck: updateOrchestratorScheduleClockSchema,
 		cellularOverrideId: z.string().nullable(),
+		osStageRecovery: osStageRecoverySchema.optional(),
+		osStageDiscoveryRetryAt: z.number().optional(),
 	})
-	.strict();
+	.strict()
+	.superRefine((state, ctx) => {
+		const record = state.osStageRecovery;
+		if (!record) return;
+		const active = record.activeAttemptId !== null;
+		const staging = state.phase === 'os-staging' || state.phase === 'os-staged';
+		let consistent = active === staging && !(active && record.nextRetryAt !== null);
+		if (active && record.attemptId !== undefined)
+			consistent = consistent && record.attemptId === record.activeAttemptId;
+		if (state.osStageDiscoveryRetryAt !== undefined) consistent = false;
+		switch (record.mode) {
+			case 'unsafe':
+				consistent =
+					consistent &&
+					state.phase === 'failed' &&
+					!active &&
+					record.nextRetryAt === null &&
+					record.reason !== null &&
+					state.failureReason === record.reason;
+				break;
+			case 'operator':
+				consistent = consistent && record.nextRetryAt === null;
+				break;
+			case 'automatic':
+				consistent = consistent && (record.nextRetryAt === null || record.failedRounds > 0);
+				break;
+			default: {
+				const unreachable: never = record.mode;
+				return unreachable;
+			}
+		}
+		if (!consistent)
+			ctx.addIssue({
+				code: 'custom',
+				path: ['osStageRecovery'],
+				message: 'OS recovery phase, attempt and retry policy disagree',
+			});
+	});
 export type UpdateOrchestratorPersistedState = z.infer<
 	typeof updateOrchestratorPersistedStateSchema
 >;

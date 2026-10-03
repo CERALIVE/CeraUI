@@ -12,14 +12,18 @@
  * Update effects and scheduler. Admission detail lives in docs/DEVICE-UPDATES.md.
  */
 
+import { randomUUID } from "node:crypto";
 import type {
 	UpdateCapabilities,
 	UpdateOrchestratorWireState,
 	UpdateSettings,
 	UpdateState,
 } from "@ceraui/rpc/schemas";
+import { OS_STAGE_CONFIRMABLE_UNSAFE_REASONS } from "@ceraui/rpc/schemas";
+import { awaitUpdatePhysicalReconciliation } from "../../../helpers/boot-guard.ts";
 import { logger } from "../../../helpers/logger.ts";
 import { shouldUseMocks } from "../../../mocks/mock-service.ts";
+import { currentLifecycleHolder } from "../../streaming/lifecycle-admission.ts";
 import { getIsStreaming } from "../../streaming/streaming.ts";
 import { broadcastMsg } from "../../ui/websocket-server.ts";
 import { cleanAptCache } from "../apt-cache-clean.ts";
@@ -47,21 +51,91 @@ import {
 	type SlotSyncProbeState,
 	startSlotSync,
 } from "./lock.ts";
-import { notifyUpdate } from "./notifications.ts";
+import { clearOsStageNotices, notifyUpdate } from "./notifications.ts";
 import {
 	armOsActivation,
 	checkOsChannel,
 	inspectOsOperation,
+	OsAgentError,
+	type OsStageBundleControl,
 	type OsStageReceipt,
 	readBootId,
 	readStagedReceipt,
 	rebindStagedReceipt,
 	stageOsBundle,
 } from "./os-agent.ts";
+import {
+	awaitPublishingIntentForStream,
+	publishingIntentPending,
+} from "./os-attempt-intent-admission.ts";
+import {
+	finishOsAttemptIntent,
+	recoverOsAttemptLifecycle,
+} from "./os-attempt-intent-cleanup.ts";
+import type { OsAttemptIntentStore } from "./os-attempt-intent-store.ts";
+import {
+	OsAttemptPublicationError,
+	publishOsAttempt,
+} from "./os-attempt-publication.ts";
+import {
+	beginOsRecoverySettlement,
+	saveAuthoritativeStartupState,
+} from "./os-authoritative-settlement.ts";
 import type { OsChannelManifest } from "./os-manifest.ts";
-import { readBootedOsReleaseVersion } from "./os-manifest.ts";
-import { loadOrchestratorState, saveOrchestratorState } from "./persistence.ts";
+import {
+	OS_UPDATE_STATE_DIR,
+	readBootedOsReleaseVersion,
+} from "./os-manifest.ts";
+import { sameOsRecoveryIdentity } from "./os-recovery-identity.ts";
+import {
+	hydrateOsStageRecoveryNotice,
+	replaceOsStageRecoveryNotice,
+} from "./os-recovery-notice.ts";
+import {
+	acquireRuntimeOsStageControl as acquireRuntimeControl,
+	proveRuntimeOsWriterQuiescent,
+} from "./os-runtime-control.ts";
+import { readRuntimeOsSettlementEvidence } from "./os-runtime-evidence.ts";
+import { OsSettlementPersistence } from "./os-settlement-persistence.ts";
+import type {
+	acquireOsStageControlLease,
+	OsStageControlLease,
+} from "./os-stage-control-lease.ts";
+import { isOsStageError, OsStageError } from "./os-stage-error.ts";
+import { readOsStageJob } from "./os-stage-job-files.ts";
+import {
+	OS_STAGE_FIRST_RETRY_DELAY_MS,
+	type OsStageSettlementEvidence,
+	osStageCandidateKey,
+	osStageFailureSettledSafely,
+	osStageNoticeId,
+	osStagePermission,
+} from "./os-stage-retry.ts";
+import {
+	ensureOsUpdateAdmissionReady,
+	isOsStageReady,
+	type OsStartupDeps,
+	setOsStageLiveProducerProbe,
+} from "./os-stage-startup.ts";
+import {
+	consumeOsUnlaunchedWitness,
+	readOsUnlaunchedWitness,
+} from "./os-stage-unlaunched-witness.ts";
+import { settleOsUnlaunchedWitness } from "./os-unlaunched-adapter.ts";
+import { progressFromWire } from "./package-progress.ts";
+import { pendingPackageSuccess } from "./pending-success-fence.ts";
+import { fencePackageSuccessEffects } from "./pending-success-runtime.ts";
+import {
+	loadOrchestratorState,
+	OrchestratorRecoveryLoadError,
+	saveOrchestratorState,
+} from "./persistence.ts";
 import { UpdateQuarantine } from "./quarantine.ts";
+import {
+	persistRecoveredCommitSuccess,
+	reserveRecoveredUpdateExit,
+	resetRecoveredUpdateExitForTest,
+} from "./recovery-exit-gate.ts";
 import { reduceOrchestrator } from "./reducer.ts";
 import {
 	adjudicateInterruptedDownload,
@@ -74,6 +148,7 @@ import {
 	canStartManualInstall,
 	computeNextCheckDelayMs,
 	decideCellularGate,
+	scheduledCheckDue,
 	shouldAttemptScheduledCheck,
 } from "./schedule.ts";
 import {
@@ -98,6 +173,11 @@ import {
 	defaultStaleServiceDeps,
 	reconcileStaleUnits,
 } from "./stale-services.ts";
+import { UpdateStartupCadence } from "./startup-cadence.ts";
+import { normalizeStartupDiscovery } from "./startup-discovery.ts";
+import { OrchestratorStartupFlight } from "./startup-flight.ts";
+import { UpdateStartupReadiness } from "./startup-readiness.ts";
+import type { StartupRetryClock } from "./startup-retry.ts";
 import {
 	killAndRestartRaucForStream,
 	stopPackageInstallUnitForStream,
@@ -108,9 +188,16 @@ import {
 	type OrchestratorPhase,
 	type OrchestratorState,
 } from "./types.ts";
+import { armUpdateAdmissionDeadline } from "./update-admission-deadline.ts";
+
+/** Identity and cancellation of one staging attempt, owned by the runtime. */
+export type OsStageControl = OsStageBundleControl & {
+	readonly controlLease?: OsStageControlLease;
+};
 
 export interface OrchestratorRuntimeDeps {
 	readonly now: () => number;
+	readonly startupRetryClock?: StartupRetryClock;
 	readonly random: () => number;
 	readonly loadSettings: () => Promise<UpdateSettings>;
 	readonly loadCapabilities: () => Promise<UpdateCapabilities>;
@@ -133,7 +220,26 @@ export interface OrchestratorRuntimeDeps {
 	readonly stageOs: (
 		manifest: OsChannelManifest,
 		onProgress: (percent: number) => void,
+		control?: OsStageControl,
 	) => Promise<void>;
+	readonly newOsAttemptId: () => string;
+	readonly acquireOsStageControl?: typeof acquireOsStageControlLease;
+	readonly readPersistedState?: typeof loadOrchestratorState;
+	readonly osAttemptIntentStore?: OsAttemptIntentStore;
+	readonly readOsUnlaunchedWitness?: typeof readOsUnlaunchedWitness;
+	readonly consumeOsUnlaunchedWitness?: typeof consumeOsUnlaunchedWitness;
+	/**
+	 * Positive proof that no RAUC writer or attempt-owned resource survives a
+	 * failed stage, supplied by the guarded RAUC recovery adapter.
+	 */
+	readonly proveOsWriterQuiescent: (
+		lease?: OsStageControlLease,
+	) => Promise<boolean>;
+	readonly readActivationArmed: () => Promise<boolean>;
+	readonly isOsStageReady?: () => Promise<boolean>;
+	readonly isUpdateAdmissionReady?: () => Promise<boolean>;
+	readonly readOsStageJob?: typeof readOsStageJob;
+	readonly osStageStartupDeps?: Partial<OsStartupDeps>;
 	readonly armOs: (now: boolean) => Promise<void>;
 	readonly readOsReceipt: typeof readStagedReceipt;
 	readonly rebindOsReceipt: (
@@ -239,9 +345,32 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 		shouldUseMocks() ? false : isCommitStageRunning(),
 	checkOsManifest: async (channel) =>
 		checkOsManifestResult(channel ?? (await loadUpdateSettings()).channel),
-	stageOs: async (manifest, onProgress) => {
-		await stageOsBundle(manifest, onProgress);
+	stageOs: async (manifest, onProgress, control) => {
+		await stageOsBundle(manifest, onProgress, control);
 	},
+	readActivationArmed: () =>
+		Bun.file(`${OS_UPDATE_STATE_DIR}/activation-armed`).exists(),
+	isOsStageReady: async () =>
+		!(await isRealDevice()) || (await isOsStageReady()),
+	isUpdateAdmissionReady: async () => {
+		if (!(await isRealDevice())) return true;
+		try {
+			const job = await (deps.readOsStageJob ?? readOsStageJob)();
+			if (osStageInProcess || activeOsStage)
+				return job === null || job.attemptId === activeOsStage?.attemptId;
+			return ensureOsUpdateAdmissionReady(
+				job !== null,
+				deps.osStageStartupDeps,
+			);
+		} catch (error) {
+			logger.warn("update-orchestrator: OS job ownership unreadable", {
+				error,
+			});
+			return false;
+		}
+	},
+	newOsAttemptId: () => randomUUID(),
+	proveOsWriterQuiescent: proveRuntimeOsWriterQuiescent,
 	armOs: armOsActivation,
 	readOsReceipt: readStagedReceipt,
 	rebindOsReceipt: rebindStagedReceipt,
@@ -279,13 +408,28 @@ let deps: OrchestratorRuntimeDeps = defaultOrchestratorRuntimeDeps;
 let state: OrchestratorState = initialOrchestratorState(Date.now());
 let tickTimer: ReturnType<typeof setTimeout> | undefined;
 let started = false;
+const startupFlight = new OrchestratorStartupFlight();
+const startupCadence = new UpdateStartupCadence();
+const startupReadiness = new UpdateStartupReadiness(
+	() => !pendingPackageSuccess.pending,
+);
 let osCandidate: OsChannelManifest | undefined;
 let osStageInProcess = false;
+let activeOsStage:
+	| { readonly attemptId: string; readonly controller: AbortController }
+	| undefined;
+setOsStageLiveProducerProbe(() => activeOsStage?.attemptId ?? null);
 let raucStreamAbortInProcess = false;
 let packageInstallStarting = false;
+let updateAdmissionProbe: Promise<boolean> | undefined;
 let osForceActivated = false;
 let slotSyncUndecidedReason: string | null = null;
 let slotIdentityUnknownWarned = false;
+let legacyOsFailureWarned = false;
+let recoveryPersistenceValid = true;
+const osSettlementPersistence = new OsSettlementPersistence(() =>
+	publishingIntentPending(deps.osAttemptIntentStore),
+);
 let pendingCellularApproval:
 	| { readonly id: string; readonly sizeBytes: number }
 	| undefined;
@@ -299,6 +443,41 @@ let stateGeneration = 0;
 // already reading its unit (DOWNLOAD_PROGRESS is the only in-phase change).
 let deferredDownloadGeneration: number | null = null;
 
+function acquireRuntimeOsStageControl(): Promise<OsStageControlLease> {
+	return acquireRuntimeControl(deps.acquireOsStageControl);
+}
+
+function osRecoverySettlementPort() {
+	return {
+		snapshot: () => state,
+		pending: () => osSettlementPersistence.pending,
+		acquireControl: acquireRuntimeOsStageControl,
+		readPersisted: deps.readPersistedState ?? loadOrchestratorState,
+		persist: deps.persist,
+		persistSnapshot: (
+			baseline: OrchestratorState | null,
+			settled: OrchestratorState,
+		) =>
+			osSettlementPersistence.save(baseline, settled, () =>
+				deps.persist(settled),
+			),
+	};
+}
+
+function dispatchOsSettlement(event: OrchestratorEvent): OrchestratorState {
+	return osSettlementPersistence.settle(
+		{ snapshot: () => state, dispatch },
+		event,
+	);
+}
+
+function replayPendingOsSettlement(): Promise<boolean> {
+	return osSettlementPersistence.replay({
+		...osRecoverySettlementPort(),
+		publish: publishWireState,
+	});
+}
+
 const IDLE_TICK_MS = 60_000;
 const ACTIVE_TICK_MS = 3_000;
 
@@ -308,21 +487,33 @@ export function setOrchestratorRuntimeDepsForTest(
 	deps = overrides
 		? { ...defaultOrchestratorRuntimeDeps, ...overrides }
 		: defaultOrchestratorRuntimeDeps;
+	startupReadiness.setReady(overrides !== null);
 }
 
 export function resetOrchestratorRuntimeForTest(): void {
 	if (tickTimer) clearTimeout(tickTimer);
 	tickTimer = undefined;
 	started = false;
+	startupReadiness.setReady(false);
+	startupFlight.resetForTest();
+	startupCadence.resetForTest();
+	resetRecoveredUpdateExitForTest();
+	pendingPackageSuccess.resetForTest();
 	state = initialOrchestratorState(Date.now());
 	deps = defaultOrchestratorRuntimeDeps;
 	osCandidate = undefined;
+	activeOsStage?.controller.abort();
+	activeOsStage = undefined;
 	osStageInProcess = false;
 	raucStreamAbortInProcess = false;
 	packageInstallStarting = false;
+	updateAdmissionProbe = undefined;
 	osForceActivated = false;
 	slotSyncUndecidedReason = null;
 	slotIdentityUnknownWarned = false;
+	legacyOsFailureWarned = false;
+	recoveryPersistenceValid = true;
+	osSettlementPersistence.resetForTest();
 	pendingCellularApproval = undefined;
 	stateGeneration = 0;
 	deferredDownloadGeneration = null;
@@ -411,7 +602,43 @@ export type ManualCheckOutcome =
 	| { readonly started: true }
 	| { readonly started: false; readonly reason: "busy" };
 
+function updateAdmissionReady(): Promise<boolean> {
+	if (osSettlementPersistence.pending)
+		return maybeSettleOsUnlaunchedWitness().then(() =>
+			osSettlementPersistence.pending ? false : updateAdmissionReady(),
+		);
+	if (updateAdmissionProbe) return updateAdmissionProbe;
+	// Join only the in-flight read: independent filesystem completions must not
+	// reorder callers, and a settled verdict must never become cached permission.
+	const read = deps.isUpdateAdmissionReady?.() ?? Promise.resolve(true);
+	const deadline = Promise.withResolvers<boolean>();
+	const cancelDeadline = armUpdateAdmissionDeadline(() =>
+		deadline.resolve(false),
+	);
+	const probe = Promise.race([read, deadline.promise])
+		.then((ready) => ready && !osSettlementPersistence.pending)
+		.finally(() => {
+			cancelDeadline();
+			if (updateAdmissionProbe === probe) updateAdmissionProbe = undefined;
+		});
+	updateAdmissionProbe = probe;
+	return probe;
+}
+
 export async function checkUpdatesNow(): Promise<ManualCheckOutcome> {
+	startupReadiness.assertReady(
+		!osSettlementPersistence.replayPending &&
+			!publishingIntentPending(deps.osAttemptIntentStore),
+	);
+	if (!(await updateAdmissionReady()))
+		return { started: false, reason: "busy" };
+	await maybeSettleOsUnlaunchedWitness();
+	if (osSettlementPersistence.pending)
+		return { started: false, reason: "busy" };
+	if (state.phase === "failed") {
+		await maybeMigrateLegacyOsFailure();
+		await maybeConfirmOsStageRecovery();
+	}
 	if (!canStartManualCheck(state.phase))
 		return { started: false, reason: "busy" };
 	await runPackageCheckCycle();
@@ -446,6 +673,15 @@ const PACKAGE_PIPELINE_BUSY_PHASES: readonly OrchestratorState["phase"][] = [
 ];
 
 export async function installUpdatesNow(): Promise<ManualInstallOutcome> {
+	startupReadiness.assertReady(
+		!osSettlementPersistence.replayPending &&
+			!publishingIntentPending(deps.osAttemptIntentStore),
+	);
+	if (!(await updateAdmissionReady()))
+		return { started: false, reason: "busy" };
+	await maybeSettleOsUnlaunchedWitness();
+	if (osSettlementPersistence.pending)
+		return { started: false, reason: "busy" };
 	if (
 		state.phase === "idle" &&
 		state.failureReason === "booted_version_unknown"
@@ -499,6 +735,7 @@ export async function installUpdatesNow(): Promise<ManualInstallOutcome> {
 }
 
 export function allowCellularOnce(id: string): void {
+	startupReadiness.assertReady(!osSettlementPersistence.pending);
 	dispatch({ type: "CELLULAR_OVERRIDE_GRANTED", now: deps.now(), id });
 }
 
@@ -540,6 +777,15 @@ async function commitStageRunning(): Promise<boolean> {
 }
 
 export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdmission> {
+	if (publishingIntentPending(deps.osAttemptIntentStore))
+		await awaitPublishingIntentForStream({
+			...(deps.osAttemptIntentStore
+				? { store: deps.osAttemptIntentStore }
+				: {}),
+			recover: maybeSettleOsUnlaunchedWitness,
+			readJob: deps.readOsStageJob ?? readOsStageJob,
+		});
+	if (pendingPackageSuccess.pending) return COMMIT_STAGE_REFUSAL;
 	const cached = admitStreamStart(state);
 	if (!cached.allowed) return cached;
 
@@ -563,7 +809,9 @@ export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdm
 			// quarantining COMMIT_FAILED. The next start probes again.
 			return COMMIT_STAGE_REFUSAL;
 		}
+		if (pendingPackageSuccess.pending) return COMMIT_STAGE_REFUSAL;
 		await deps.stopPackageInstallUnit();
+		if (pendingPackageSuccess.pending) return COMMIT_STAGE_REFUSAL;
 		dispatch({ type: "DOWNLOAD_ABORTED_FOR_STREAM", now: deps.now() });
 		return { allowed: true };
 	}
@@ -572,6 +820,7 @@ export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdm
 		// RAUC targets the inactive slot, unlike apt's live-root transaction.
 		// Leave os-staging BEFORE the kill: the SIGTERM fails the in-flight
 		// install at once, and its catch must see the abort, not a failure.
+		activeOsStage?.controller.abort();
 		dispatch({ type: "OS_STAGING_ABORTED_FOR_STREAM", now: deps.now() });
 		raucStreamAbortInProcess = true;
 		try {
@@ -588,6 +837,7 @@ export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdm
 // ─── package check cycle ───────────────────────────────────────────────────
 
 async function runPackageCheckCycle(): Promise<void> {
+	if (osSettlementPersistence.pending) return;
 	const now = deps.now();
 	dispatch({ type: "PACKAGE_CHECK_STARTED", now });
 	const error = await deps.runPackageCheck();
@@ -771,25 +1021,6 @@ async function pollPackageInstallProgress(): Promise<void> {
 			});
 		}
 	}
-}
-
-function progressFromWire(progress: {
-	readonly total: number;
-	readonly downloading: number;
-	readonly unpacking: number;
-	readonly setting_up: number;
-}): { readonly percent: number; readonly etaSeconds: number } {
-	const { total, downloading, unpacking, setting_up: settingUp } = progress;
-	const percent =
-		total > 0
-			? Math.min(
-					100,
-					Math.round(
-						((downloading + unpacking + settingUp) / (3 * total)) * 100,
-					),
-				)
-			: 0;
-	return { percent, etaSeconds: 0 };
 }
 
 // ─── slot-sync (sync-eligible -> syncing -> synced) ────────────────────────
@@ -1166,20 +1397,32 @@ const OS_FORCE_ACTIVATION_MS = 7 * 24 * 60 * 60_000;
 // both, and the old stage's catch would fail the new one.
 function osStageBlocked(): boolean {
 	return (
+		osSettlementPersistence.pending ||
 		state.phase !== "os-available" ||
 		deps.isStreamLive() ||
+		currentLifecycleHolder() === "streaming" ||
 		osStageInProcess ||
 		raucStreamAbortInProcess
 	);
 }
 
 async function maybeStartOsStage(bypassIdle: boolean): Promise<void> {
+	if (osSettlementPersistence.pending) return;
 	if (osStageBlocked()) return;
 	if (!osCandidate) {
 		await runOsCheckAfterCellularGate(await deps.loadSettings());
 		if (state.phase !== "os-available" || !osCandidate) return;
 	}
 	const candidate = osCandidate;
+	const candidateKey = osStageCandidateKey(candidate);
+	const recovery = state.osStageRecovery;
+	const permission = osStagePermission(
+		recovery,
+		candidateKey,
+		deps.now(),
+		bypassIdle,
+	);
+	if (permission === "wait" || permission === "paused") return;
 	const capabilities = await deps.loadCapabilities();
 	if (
 		capabilities.mode !== "capable" ||
@@ -1192,6 +1435,12 @@ async function maybeStartOsStage(bypassIdle: boolean): Promise<void> {
 		(!settings.systemAuto || !(await deps.isIdle(settings.schedule)))
 	)
 		return;
+	// A due automatic restage first re-admits the signed candidate; the round
+	// itself starts on a later tick from the refreshed offer.
+	if (permission === "retry" && !bypassIdle && osRetryNeedsReadmission()) {
+		await runOsCheckAfterCellularGate(settings);
+		return;
+	}
 	const gate = decideCellularGate({
 		onlyMeteredCandidateExists: await deps.onlyMeteredCandidateExists(),
 		kind: "os",
@@ -1201,10 +1450,25 @@ async function maybeStartOsStage(bypassIdle: boolean): Promise<void> {
 		cellularOverrideId: state.cellularOverrideId,
 		candidateId: candidate.version,
 	});
+	if (deps.isOsStageReady && !(await deps.isOsStageReady())) return;
+	await using controlLease = await acquireRuntimeOsStageControl();
+	if (!controlLease.held()) return;
+	const persisted = await (deps.readPersistedState ?? loadOrchestratorState)();
+	if (
+		!sameOsRecoveryIdentity(state, persisted) &&
+		!(persisted === null && !state.osStageRecovery)
+	)
+		return;
 	// Every await above can let a manual install, a stream abort or a new
 	// check run; the entry fences are only true again if re-read here, and
 	// nothing may await between this re-read and taking the stage.
-	if (osStageBlocked() || osCandidate !== candidate) return;
+	if (
+		osStageBlocked() ||
+		!controlLease.held() ||
+		osCandidate !== candidate ||
+		state.osStageRecovery !== recovery
+	)
+		return;
 	if (!gate.allowed) {
 		if (gate.needsOverride) {
 			pendingCellularApproval = {
@@ -1221,37 +1485,229 @@ async function maybeStartOsStage(bypassIdle: boolean): Promise<void> {
 	}
 	pendingCellularApproval = undefined;
 	const manifest = candidate;
-	dispatch({ type: "OS_STAGING_STARTED", now: deps.now() });
+	// The new attempt replaces the persisted identity, so no earlier witness can
+	// match again; a leftover one would only block the guard's next write.
+	const staleWitness = (
+		deps.readOsUnlaunchedWitness ?? readOsUnlaunchedWitness
+	)();
+	if (staleWitness)
+		(deps.consumeOsUnlaunchedWitness ?? consumeOsUnlaunchedWitness)(
+			staleWitness.attemptId,
+		);
+	const token = {
+		attemptId: deps.newOsAttemptId(),
+		controller: new AbortController(),
+	};
+	const attemptId = token.attemptId;
+	activeOsStage = token;
+	const control: OsStageControl = {
+		controlLease,
+		attemptId: token.attemptId,
+		signal: token.controller.signal,
+		cellularApproved: state.cellularOverrideId === candidate.version,
+		canCommit: () =>
+			activeOsStage === token &&
+			getOrchestratorState().phase === "os-staging" &&
+			state.osStageRecovery?.activeAttemptId === attemptId,
+		commit: () => {
+			if (
+				token.controller.signal.aborted ||
+				activeOsStage !== token ||
+				getOrchestratorState().phase !== "os-staging" ||
+				state.osStageRecovery?.activeAttemptId !== attemptId
+			)
+				throw new OsStageError("os_stage_cancelled_for_stream");
+			dispatch({ type: "OS_STAGED", now: deps.now(), attemptId });
+		},
+	};
 	osStageInProcess = true;
 	scheduleNextTick();
 	try {
-		await deps.stageOs(manifest, (percent) => {
-			if (state.phase === "os-staging")
-				dispatch({
-					type: "OS_STAGING_PROGRESS",
-					now: deps.now(),
-					progress: { percent, etaSeconds: 0 },
-				});
-		});
-		if (getOrchestratorState().phase !== "os-staging") return; // D8 stream admission aborted RAUC meanwhile
-		dispatch({ type: "OS_STAGED", now: deps.now() });
+		publishOsAttempt(
+			{
+				manifest,
+				lease: controlLease,
+				...(deps.osAttemptIntentStore
+					? { intentStore: deps.osAttemptIntentStore }
+					: {}),
+				snapshot: () => state,
+				dispatch,
+				adopt: adoptState,
+				persist: deps.persist,
+			},
+			{
+				type: "OS_STAGING_STARTED",
+				now: deps.now(),
+				attempt: { candidateKey, attemptId },
+			},
+			osSettlementPersistence,
+		);
+		await deps.stageOs(
+			manifest,
+			(percent) => {
+				if (
+					activeOsStage === token &&
+					!token.controller.signal.aborted &&
+					state.phase === "os-staging" &&
+					state.osStageRecovery?.activeAttemptId === attemptId
+				)
+					dispatch({
+						type: "OS_STAGING_PROGRESS",
+						now: deps.now(),
+						progress: { percent, etaSeconds: 0 },
+					});
+			},
+			control,
+		);
+		if (activeOsStage !== token || token.controller.signal.aborted) return;
+		if (getOrchestratorState().phase === "os-staging")
+			dispatch({ type: "OS_STAGED", now: deps.now() });
+		if (getOrchestratorState().phase !== "os-staged") return;
+		dispatch({ type: "OS_STAGE_SETTLED", now: deps.now(), attemptId });
 		osCandidate = undefined;
+		clearOsStageNotices(osStageNoticeId(candidateKey));
 		notifyUpdate({
 			kind: "os-staged",
 			id: manifest.version,
 			version: manifest.version,
 		});
 	} catch (error) {
+		if (error instanceof OsAttemptPublicationError) {
+			logger.warn(
+				"update-orchestrator: pre-effect publication reverted; no OS stage launched",
+				{ error },
+			);
+			return;
+		}
+		if (activeOsStage !== token || token.controller.signal.aborted) return;
+		if (
+			getOrchestratorState().phase === "os-staged" &&
+			state.osStageRecovery?.activeAttemptId === attemptId
+		) {
+			// Publication is not safe release: even a non-unsafe late error cannot retry a receipt.
+			settleOsStageFailure(
+				isOsStageError(error) && error.mode === "unsafe"
+					? error
+					: new OsStageError("rauc_recovery_unproven", { cause: error }),
+				manifest,
+				attemptId,
+			);
+			return;
+		}
 		if (getOrchestratorState().phase !== "os-staging") return;
-		const reason = error instanceof Error ? error.message : "rauc_stage_failed";
-		dispatch({ type: "OS_STAGING_FAILED", now: deps.now(), reason });
-		notifyUpdate({ kind: "refused", id: `os:${manifest.version}`, reason });
+		settleOsStageFailure(error, manifest, attemptId);
 	} finally {
-		osStageInProcess = false;
+		try {
+			if (activeOsStage === token)
+				await finishOsAttemptIntent(
+					{ ...osRecoverySettlementPort(), lease: controlLease, attemptId },
+					osSettlementPersistence,
+					deps.osAttemptIntentStore,
+				);
+		} finally {
+			if (activeOsStage === token) {
+				activeOsStage = undefined;
+				osStageInProcess = false;
+			}
+		}
 	}
 }
 
+// An automatic restage is preceded by a fresh signed check unless the offer
+// was already re-admitted after the retry fell due.
+function osRetryNeedsReadmission(): boolean {
+	const retryAt = state.osStageRecovery?.nextRetryAt;
+	if (retryAt === null || retryAt === undefined) return false;
+	return (state.osCheck.lastSuccessAt ?? Number.NEGATIVE_INFINITY) < retryAt;
+}
+
+// Only exact pre-write admission markers invalidate an offer; typed OsStageError
+// controls recovery. Other errors stay terminal; no staging error writes quarantine, which stays
+// reserved for C1's activation-verification evidence.
+function settleOsStageFailure(
+	error: unknown,
+	manifest: OsChannelManifest,
+	attemptId: string,
+): void {
+	const now = deps.now();
+	const admissionError =
+		error instanceof OsAgentError
+			? error
+			: isOsStageError(error) &&
+					error.reason === "rauc_install_failed" &&
+					error.mode === "operator" &&
+					error.cause instanceof OsAgentError
+				? error.cause
+				: undefined;
+	if (
+		admissionError &&
+		[
+			"manifest_changed_before_stage",
+			"expired",
+			"serial_replayed",
+			"version_quarantined",
+			"downgrade_or_same",
+		].includes(admissionError.reason)
+	) {
+		dispatch({ type: "OS_STAGE_OFFER_INVALIDATED", now, attemptId });
+		osCandidate = undefined;
+		pendingCellularApproval = undefined;
+		clearOsStageNotices(osStageNoticeId(osStageCandidateKey(manifest)));
+		return;
+	}
+	if (!isOsStageError(error)) {
+		const reason = error instanceof Error ? error.message : "rauc_stage_failed";
+		dispatch({ type: "OS_STAGING_FAILED", now, reason });
+		clearOsStageNotices(osStageNoticeId(osStageCandidateKey(manifest)));
+		notifyUpdate({ kind: "refused", id: `os:${manifest.version}`, reason });
+		return;
+	}
+	logger.warn("update-orchestrator: OS staging attempt settled", {
+		attemptId,
+		reason: error.reason,
+		mode: error.mode,
+		diagnostics: error.diagnostics,
+		error: error.cause,
+	});
+	if (error.mode === "cancelled") {
+		dispatch({ type: "OS_STAGING_ABORTED_FOR_STREAM", now });
+		return;
+	}
+	dispatch({
+		type: "OS_STAGING_FAILED",
+		now,
+		reason: error.reason,
+		recovery: { attemptId, mode: error.mode },
+	});
+	replaceOsStageRecoveryNotice(state);
+}
+
+// A failed stage waiting for its retry or the operator must not stop the
+// package path, so a due package check leaves the OS offer.
+async function maybeCheckPackagesWhileOsWaits(): Promise<void> {
+	if (state.phase !== "os-available" || !state.osStageRecovery) return;
+	const settings = await deps.loadSettings();
+	if (state.phase !== "os-available") return;
+	if (
+		!scheduledCheckDue({
+			now: deps.now(),
+			clock: state.packageCheck,
+			kind: "packages",
+			settings,
+		})
+	)
+		return;
+	await runPackageCheckAfterCellularGate(settings);
+}
+
 async function reconcileOsActivation(): Promise<void> {
+	// OS_STAGED is published under the job lock; arming must wait for settlement.
+	if (osStageInProcess) return;
+	if (state.phase === "os-staged" && state.osStageRecovery?.activeAttemptId) {
+		await settleInterruptedOsStage();
+		return;
+	}
+	if (state.phase === "os-staged" && !(await updateAdmissionReady())) return;
 	if (state.phase === "os-staged") {
 		try {
 			await deps.armOs(false);
@@ -1380,6 +1836,168 @@ async function thisBootPassedHealthcheck(): Promise<boolean> {
 	}
 }
 
+// ─── OS staging recovery after a restart or a manual check ─────────────────
+
+// An attempt the backend did not survive is observed, never replayed. Once
+// RAUC is idle nothing proves the outcome either way, so it settles unsafe.
+// An unreadable probe throws and the tick retries it later.
+async function settleInterruptedOsStage(): Promise<void> {
+	const generation = stateGeneration;
+	const phase = state.phase;
+	const record = state.osStageRecovery;
+	const attemptId = record?.activeAttemptId;
+	if (await maybeSettleOsUnlaunchedWitness()) return;
+	if (stateGeneration !== generation) return;
+	await using settlement = await beginOsRecoverySettlement(
+		osRecoverySettlementPort(),
+	);
+	const operation = await deps.inspectOsOperation();
+	if (operation !== "idle") return;
+	if (!(await deps.proveOsWriterQuiescent(settlement.lease))) return;
+	if (!(await settlement.matches())) return;
+	if (
+		stateGeneration !== generation ||
+		state.phase !== phase ||
+		osStageInProcess ||
+		state.osStageRecovery !== record ||
+		state.osStageRecovery?.activeAttemptId !== attemptId
+	)
+		return;
+	dispatchOsSettlement({
+		type: "OS_STAGING_FAILED",
+		now: deps.now(),
+		reason: "os_stage_outcome_unknown_after_restart",
+		...(attemptId ? { recovery: { attemptId, mode: "unsafe" as const } } : {}),
+	});
+	if (record && attemptId) replaceOsStageRecoveryNotice(state);
+}
+
+async function readOsStageSettlementEvidence(
+	lease?: OsStageControlLease,
+): Promise<OsStageSettlementEvidence | undefined> {
+	return readRuntimeOsSettlementEvidence(deps, lease);
+}
+
+async function maybeSettleOsUnlaunchedWitness(): Promise<boolean> {
+	if (
+		!recoveryPersistenceValid ||
+		osStageInProcess ||
+		osSettlementPersistence.replayPending
+	)
+		return false;
+	const restoredIntent = await recoverOsAttemptLifecycle(
+		{
+			...osRecoverySettlementPort(),
+			...(deps.osAttemptIntentStore
+				? { store: deps.osAttemptIntentStore }
+				: {}),
+			readJob: deps.readOsStageJob ?? readOsStageJob,
+			readWitness: deps.readOsUnlaunchedWitness ?? readOsUnlaunchedWitness,
+			...(deps.osStageStartupDeps?.run
+				? { run: deps.osStageStartupDeps.run }
+				: {}),
+			readEvidence: readOsStageSettlementEvidence,
+			adopt: adoptState,
+		},
+		osSettlementPersistence,
+	);
+	if (
+		restoredIntent ||
+		osSettlementPersistence.intentCleanup.pending ||
+		publishingIntentPending(deps.osAttemptIntentStore)
+	)
+		return true;
+	return settleOsUnlaunchedWitness({
+		snapshot: () => ({
+			state,
+			generation: stateGeneration,
+			candidate: osCandidate,
+			producer: activeOsStage,
+		}),
+		readWitness: deps.readOsUnlaunchedWitness ?? readOsUnlaunchedWitness,
+		readEvidence: readOsStageSettlementEvidence,
+		acquireControl: acquireRuntimeOsStageControl,
+		readPersisted: deps.readPersistedState ?? loadOrchestratorState,
+		dispatch: (event) => {
+			const settled = dispatch(event);
+			replaceOsStageRecoveryNotice(settled);
+			return settled;
+		},
+		persist: deps.persist,
+		persistSettlement: (write) => osSettlementPersistence.persist(write),
+		consume: deps.consumeOsUnlaunchedWitness ?? consumeOsUnlaunchedWitness,
+		now: deps.now,
+	});
+}
+
+// Only the exact pre-metadata RAUC failure, and only once the device proves
+// the failed stage left nothing behind. It returns through fresh discovery,
+// delayed like a first automatic retry.
+async function maybeMigrateLegacyOsFailure(): Promise<void> {
+	if (
+		!recoveryPersistenceValid ||
+		state.phase !== "failed" ||
+		state.failureReason !== "rauc_install_failed" ||
+		state.osStageRecovery
+	)
+		return;
+	await using settlement = await beginOsRecoverySettlement(
+		osRecoverySettlementPort(),
+	);
+	const generation = stateGeneration;
+	const evidence = await readOsStageSettlementEvidence(settlement.lease);
+	if (stateGeneration !== generation) return;
+	if (!evidence || !osStageFailureSettledSafely(evidence)) {
+		if (!legacyOsFailureWarned)
+			logger.warn(
+				"update-orchestrator: earlier OS staging failure not proven settled; staying failed",
+			);
+		legacyOsFailureWarned = true;
+		return;
+	}
+	if (!(await settlement.matches())) return;
+	const now = deps.now();
+	dispatchOsSettlement({
+		type: "OS_STAGE_LEGACY_FAILURE_MIGRATED",
+		now,
+		retryAt: now + OS_STAGE_FIRST_RETRY_DELAY_MS,
+	});
+}
+
+async function maybeConfirmOsStageRecovery(): Promise<void> {
+	const record = state.osStageRecovery;
+	if (
+		state.phase !== "failed" ||
+		record?.mode !== "unsafe" ||
+		record.activeAttemptId !== null ||
+		!OS_STAGE_CONFIRMABLE_UNSAFE_REASONS.some(
+			(reason) => reason === record.reason,
+		) ||
+		state.failureReason !== record.reason
+	)
+		return;
+	await using settlement = await beginOsRecoverySettlement(
+		osRecoverySettlementPort(),
+	);
+	const generation = stateGeneration;
+	const evidence = await readOsStageSettlementEvidence(settlement.lease);
+	if (
+		stateGeneration !== generation ||
+		!evidence ||
+		!osStageFailureSettledSafely(evidence)
+	)
+		return;
+	if (!(await settlement.matches())) return;
+	const beforeConfirmation = state;
+	dispatchOsSettlement({
+		type: "OS_STAGE_RECOVERY_CONFIRMED",
+		now: deps.now(),
+		candidateKey: record.candidateKey,
+	});
+	if (state !== beforeConfirmation)
+		clearOsStageNotices(osStageNoticeId(record.candidateKey));
+}
+
 // ─── interrupted download (resume, then deferred re-adjudication) ──────────
 
 function resumeDeps(): OrchestratorResumeDeps {
@@ -1459,6 +2077,37 @@ function acknowledgeTerminalRestPhases(): void {
 // ─── the scheduler tick ─────────────────────────────────────────────────────
 
 export async function runOrchestratorTick(): Promise<void> {
+	if (pendingPackageSuccess.pending) {
+		await replayPendingOsSettlement();
+		await maybeSettleOsUnlaunchedWitness();
+		await pendingPackageSuccess.retry();
+		scheduleNextTick();
+		return;
+	}
+	if (
+		osSettlementPersistence.replayPending &&
+		(await replayPendingOsSettlement())
+	) {
+		await maybeSettleOsUnlaunchedWitness();
+		scheduleNextTick();
+		return;
+	}
+	if (!(await updateAdmissionReady())) {
+		scheduleNextTick();
+		return;
+	}
+	if (pendingPackageSuccess.pending) {
+		scheduleNextTick();
+		return;
+	}
+	if (await maybeSettleOsUnlaunchedWitness()) {
+		scheduleNextTick();
+		return;
+	}
+	if (osSettlementPersistence.pending) {
+		scheduleNextTick();
+		return;
+	}
 	acknowledgeTerminalRestPhases();
 
 	if (state.phase === "idle") {
@@ -1471,6 +2120,22 @@ export async function runOrchestratorTick(): Promise<void> {
 		const settings = await deps.loadSettings();
 		const capabilities = await deps.loadCapabilities();
 		const now = deps.now();
+		const retryAt =
+			state.osStageRecovery?.mode === "automatic"
+				? state.osStageRecovery.nextRetryAt
+				: null;
+		const osClock =
+			retryAt !== null &&
+			retryAt !== undefined &&
+			state.osCheck.consecutiveFailures === 0
+				? {
+						...state.osCheck,
+						nextAttemptAt: Math.min(
+							state.osCheck.nextAttemptAt ?? retryAt,
+							retryAt,
+						),
+					}
+				: state.osCheck;
 		if (
 			shouldAttemptScheduledCheck({
 				now,
@@ -1487,7 +2152,7 @@ export async function runOrchestratorTick(): Promise<void> {
 			shouldAttemptScheduledCheck({
 				now,
 				phase: state.phase,
-				clock: state.osCheck,
+				clock: osClock,
 				kind: "os",
 				settings,
 			})
@@ -1503,9 +2168,11 @@ export async function runOrchestratorTick(): Promise<void> {
 		await maybeStartPackageInstall({ bypassIdle: false });
 	} else if (state.phase === "downloading" || state.phase === "committing") {
 		await readjudicateDeferredDownload();
+		pendingPackageSuccess.assertEffectsAllowed();
 		await pollPackageInstallProgress();
 	} else if (state.phase === "restarting-services") {
 		const settings = await deps.loadSettings();
+		pendingPackageSuccess.assertEffectsAllowed();
 		const done = await deps.restartStale(
 			() => deps.isIdle(settings.schedule),
 			() =>
@@ -1513,6 +2180,7 @@ export async function runOrchestratorTick(): Promise<void> {
 					deps.getPackageInstallWireState().kind,
 				),
 		);
+		pendingPackageSuccess.assertEffectsAllowed();
 		if (done) {
 			const pending = await deps.quarantine.readPending();
 			notifyUpdate({
@@ -1525,13 +2193,11 @@ export async function runOrchestratorTick(): Promise<void> {
 		}
 	} else if (state.phase === "os-available") {
 		await maybeStartOsStage(false);
+		await maybeCheckPackagesWhileOsWaits();
 	} else if (state.phase === "os-staging" && !osStageInProcess) {
-		if ((await deps.inspectOsOperation()) === "idle")
-			dispatch({
-				type: "OS_STAGING_FAILED",
-				now: deps.now(),
-				reason: "os_stage_outcome_unknown_after_restart",
-			});
+		await settleInterruptedOsStage();
+	} else if (state.phase === "failed") {
+		await maybeMigrateLegacyOsFailure();
 	} else if (
 		state.phase === "os-staged" ||
 		state.phase === "os-activation-armed"
@@ -1556,6 +2222,7 @@ async function runPackageCheckAfterCellularGate(
 	settings: UpdateSettings,
 ): Promise<void> {
 	const onlyMetered = await deps.onlyMeteredCandidateExists();
+	if (osSettlementPersistence.pending) return;
 	const gate = decideCellularGate({
 		onlyMeteredCandidateExists: onlyMetered,
 		kind: "packages",
@@ -1573,6 +2240,7 @@ async function runOsCheckAfterCellularGate(
 	settings: UpdateSettings,
 ): Promise<void> {
 	const onlyMetered = await deps.onlyMeteredCandidateExists();
+	if (osSettlementPersistence.pending) return;
 	const gate = decideCellularGate({
 		onlyMeteredCandidateExists: onlyMetered,
 		kind: "os",
@@ -1628,9 +2296,17 @@ async function runOsCheckAfterCellularGate(
 			kind: "updates-available",
 			id: `os:${result.manifest.version}`,
 		});
+	const previousRecovery = state.osStageRecovery;
 	dispatch(
 		result.available
-			? { type: "CHECK_SUCCEEDED_OS", now: outcomeNow, nextAttemptAt }
+			? {
+					type: "CHECK_SUCCEEDED_OS",
+					now: outcomeNow,
+					nextAttemptAt,
+					...(osCandidate
+						? { candidateKey: osStageCandidateKey(osCandidate) }
+						: {}),
+				}
 			: {
 					type: "CHECK_SUCCEEDED_NONE",
 					now: outcomeNow,
@@ -1638,6 +2314,8 @@ async function runOsCheckAfterCellularGate(
 					nextAttemptAt,
 				},
 	);
+	if (previousRecovery && !state.osStageRecovery)
+		clearOsStageNotices(osStageNoticeId(previousRecovery.candidateKey));
 }
 
 function isActivePhase(phase: OrchestratorState["phase"]): boolean {
@@ -1665,13 +2343,72 @@ function scheduleNextTick(): void {
 
 // ─── boot ───────────────────────────────────────────────────────────────────
 
-export async function startUpdateOrchestrator(
+export function startUpdateOrchestrator(
 	runtimeDeps: OrchestratorRuntimeDeps = defaultOrchestratorRuntimeDeps,
 ): Promise<void> {
-	deps = runtimeDeps;
+	if (started) return Promise.resolve();
+	return startupFlight.run(async () => {
+		await awaitUpdatePhysicalReconciliation();
+		await startupCadence.start(
+			() => startOrchestratorRuntime(runtimeDeps),
+			runtimeDeps.startupRetryClock,
+		);
+	});
+}
+
+/** A refusal settles the boot chain but never authorizes standalone APT cleanup. */
+export async function awaitUpdateStartupAdjudication(): Promise<boolean> {
+	return (
+		(await startupCadence.waitForAdjudication()) && recoveryPersistenceValid
+	);
+}
+
+async function startOrchestratorRuntime(
+	runtimeDeps: OrchestratorRuntimeDeps,
+): Promise<void> {
+	startupReadiness.setReady(false);
+	deps = fencePackageSuccessEffects(runtimeDeps);
+	await replayPendingOsSettlement();
 	const now = deps.now();
-	const persisted = await loadOrchestratorState();
+	let persisted: OrchestratorState | null;
+	try {
+		persisted = await loadOrchestratorState();
+		recoveryPersistenceValid = true;
+	} catch (error) {
+		if (!(error instanceof OrchestratorRecoveryLoadError)) throw error;
+		recoveryPersistenceValid = false;
+		adoptState(error.terminalState);
+		started = true;
+		scheduleNextTick();
+		return;
+	}
 	const baseline = persisted ?? initialOrchestratorState(now);
+	pendingPackageSuccess.configure(
+		osRecoverySettlementPort(),
+		(success) => {
+			adoptState(success);
+			publishWireState();
+		},
+		deps.now,
+	);
+	if (baseline.phase === "committing" || baseline.phase === "downloading") {
+		pendingPackageSuccess.trackStartup(baseline);
+		reserveRecoveredUpdateExit(async (signal) => {
+			if (!(await awaitUpdateStartupAdjudication())) return false;
+			if (signal.aborted) return false;
+			return persistRecoveredCommitSuccess(
+				{ ...osRecoverySettlementPort(), signal },
+				(success) => {
+					adoptState(success);
+					publishWireState();
+				},
+				deps.now(),
+			).catch((error: unknown) => {
+				if (signal.aborted) return false;
+				throw error;
+			});
+		});
+	}
 	if (baseline.phase === "downloading") {
 		// Visible to D8 while the probe awaits, so a stream start meanwhile
 		// still reaches the commit-stage probe; its abort then wins.
@@ -1685,9 +2422,13 @@ export async function startUpdateOrchestrator(
 	} else {
 		adoptState(await resumeOrchestratorState(baseline, resumeDeps()));
 	}
+	adoptState(normalizeStartupDiscovery(state, deps.now()));
+	await maybeSettleOsUnlaunchedWitness();
+	osSettlementPersistence.intentCleanup.assertAcknowledged();
 	if (state.phase === "os-activation-armed" || state.phase === "os-verifying")
 		await reconcileOsActivation();
 	if (state.phase === "os-verifying") await verifyOsBoot();
+	if (state.phase === "failed") await maybeMigrateLegacyOsFailure();
 	if (state.phase === "idle") await maybeFindSlotSyncCandidate();
 	if (state.phase === "sync-eligible") await maybeStartSlotSync();
 	if (state.phase === "quarantined" && baseline.phase === "committing") {
@@ -1701,7 +2442,11 @@ export async function startUpdateOrchestrator(
 		);
 		await deps.quarantine.clearPending();
 	}
-	deps.persist(state);
+	await saveAuthoritativeStartupState(osRecoverySettlementPort(), persisted);
+	pendingPackageSuccess.acknowledge(state);
+	pendingPackageSuccess.trackStartup(undefined);
 	started = true;
+	startupReadiness.setReady(true);
+	hydrateOsStageRecoveryNotice(state);
 	scheduleNextTick();
 }

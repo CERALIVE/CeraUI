@@ -226,6 +226,7 @@ export function scheduleDraftDirty(
 // ─── operator actions ──────────────────────────────────────────────────────
 
 const ACTION_REFUSAL_KEYS: Readonly<Record<string, string>> = {
+	UPDATE_ORCHESTRATOR_INITIALIZING: "settings.updates.refusal.initializing",
 	busy: "settings.updates.refusal.busy",
 	not_available: "settings.updates.refusal.notAvailable",
 	stream_active: "settings.updates.refusal.streamActive",

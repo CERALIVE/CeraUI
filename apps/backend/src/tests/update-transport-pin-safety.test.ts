@@ -4,6 +4,7 @@ import { rankTransports } from "../modules/system/update-transport/core.ts";
 import {
 	createUpdatePinController,
 	UPDATE_TRANSPORT_TABLE_BASE,
+	UpdateTransferError,
 } from "../modules/system/update-transport/pin.ts";
 
 const capabilities = updateCapabilityFileSchema.parse({
@@ -11,6 +12,71 @@ const capabilities = updateCapabilityFileSchema.parse({
 	features: ["apt-all-packages", "transport-uidrange"],
 	apt_uid: 42042,
 	ota_uid: 42043,
+});
+
+test("teardown failure prevents hold, refreshed selection and re-pin", async () => {
+	// Given teardown cannot remove an installed rule.
+	let refreshes = 0;
+	const controller = createUpdatePinController({
+		readCapabilities: async () => capabilities,
+		run: async (_bin, args) => {
+			if (args.includes("del")) throw new Error("teardown failed");
+			return args.join(" ") === "route show default"
+				? "default dev eth0\n"
+				: "";
+		},
+	});
+	await controller.sweep();
+	// When the transfer also fails.
+	const outcome = controller.run(
+		"os",
+		selection,
+		async () => {
+			throw new UpdateTransferError("blocked");
+		},
+		{
+			refreshSelection: async () => {
+				refreshes++;
+				return selection;
+			},
+		},
+	);
+	// Then AggregateError remains fail-closed and no retry attribution is made.
+	await expect(outcome).rejects.toBeInstanceOf(AggregateError);
+	expect(refreshes).toBe(0);
+	expect(controller.unhealthyUntil("eth0", 4)).toBeUndefined();
+});
+
+test("unapproved metered pairs never run after unmetered failure", async () => {
+	// Given only an unapproved metered link remains after Wi-Fi loss.
+	const metered = rankTransports([
+		{
+			candidate: { ifname: "wwan0", kind: "cellular", metered: true },
+			family: 4,
+			hosts: [{ host: "fixture", state: "clear", latencyMs: 1 }],
+		},
+	]);
+	const controller = createUpdatePinController({
+		readCapabilities: async () => capabilities,
+		run: async (_bin, args) =>
+			args.join(" ") === "route show default" ? "default dev eth0\n" : "",
+	});
+	await controller.sweep();
+	const attempts: string[] = [];
+	// When the selector offers that cellular pair.
+	const outcome = controller.run(
+		"os",
+		selection,
+		async ({ candidate }) => {
+			attempts.push(candidate.ifname);
+			throw new UpdateTransferError("blocked");
+		},
+		{ refreshSelection: async () => metered, approveMetered: () => false },
+	);
+	// Then the pair is neither invoked nor held as unhealthy.
+	await expect(outcome).rejects.toBeInstanceOf(UpdateTransferError);
+	expect(attempts).toEqual(["eth0"]);
+	expect(controller.unhealthyUntil("wwan0", 4)).toBeUndefined();
 });
 const selection = rankTransports([
 	{

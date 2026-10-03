@@ -1,6 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
 import { notifyUpdate } from "./notifications.ts";
+import { pendingPackageSuccess } from "./pending-success-fence.ts";
 
 const UNIT_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.@-]*\.service$/;
 const STALE_SYSTEM_MAPPING = /\s(\/(?:usr|lib)\/[^\n]*?) \(deleted\)$/m;
@@ -78,6 +79,7 @@ export interface StaleServiceDeps {
 export async function reconcileStaleUnits(
 	deps: StaleServiceDeps,
 ): Promise<boolean> {
+	if (pendingPackageSuccess.pending) return false;
 	const units = deps.units ?? (await scanStaleUnits(deps.procRoot));
 	let pending = false;
 	for (const unit of units) {
@@ -90,6 +92,7 @@ export async function reconcileStaleUnits(
 			pending = true;
 			continue;
 		}
+		if (pendingPackageSuccess.pending) return false;
 		await deps.restart(unit);
 	}
 	return !pending;

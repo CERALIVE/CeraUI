@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { chown, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -5,15 +6,17 @@ import { z } from "zod";
 import { writeFileAtomicSync } from "../../../helpers/config-loader.ts";
 import { logger } from "../../../helpers/logger.ts";
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
-import { getIsStreaming } from "../../streaming/streaming.ts";
 import { readUpdateCapabilityFile } from "../update-capabilities.ts";
 import { loadUpdateSettings } from "../update-settings.ts";
 import { selectUpdateTransport } from "../update-transport/executor.ts";
 import { updatePinController } from "../update-transport/pin.ts";
-import { SOFTWARE_UPDATE_LOCK } from "./lock.ts";
+import { clearUpdateNotice } from "./notifications.ts";
 import { OsAgentError, readBoardIdentity, readBootId } from "./os-identity.ts";
 import {
 	defaultOsChannelDeps,
+	discoverSignedOsManifest,
+	type ManifestContext,
+	type ManifestVerificationDeps,
 	OS_UPDATE_STATE_DIR,
 	type OsChannel,
 	type OsChannelManifest,
@@ -22,7 +25,17 @@ import {
 	resolveOsChannel,
 	validateSignedOsManifest,
 } from "./os-manifest.ts";
+import { OsStageError } from "./os-stage-error.ts";
+import {
+	assertOsStageToken,
+	defaultOsStageRunEffects,
+	type OsStageRunControl,
+	type OsStageRunDeps,
+	runOsStageJob,
+} from "./os-stage-run.ts";
 import { UpdateQuarantine } from "./quarantine.ts";
+
+// allow: SIZE_OK — This discovery-only repair must leave the remaining OS lifecycle in place.
 
 const KEYRING = "/etc/rauc/ceralive-keyring.pem";
 
@@ -41,6 +54,9 @@ const receiptSchema = z
 	})
 	.strict();
 export type OsStageReceipt = z.infer<typeof receiptSchema>;
+export type OsStageBundleControl = OsStageRunControl & {
+	readonly commit?: (receipt: OsStageReceipt) => void;
+};
 
 export function parseManifestSignerDetails(
 	subject: string,
@@ -107,6 +123,14 @@ export async function saveStagedManifest(
 		stagedAt: now,
 	});
 	await mkdir(dir, { recursive: true, mode: 0o750 });
+	return commitStagedManifest(manifest, receipt, dir);
+}
+
+export function commitStagedManifest(
+	manifest: OsChannelManifest,
+	receipt: OsStageReceipt,
+	dir = OS_UPDATE_STATE_DIR,
+): OsStageReceipt {
 	writeFileAtomicSync(join(dir, "os-staged.json"), JSON.stringify(receipt));
 	// This MUST follow confirmed RAUC success; mere signature verification never advances replay protection.
 	writeFileAtomicSync(
@@ -286,10 +310,48 @@ export async function fetchAsOta(
 	return true;
 }
 
+type SignedOsChannel = {
+	readonly data: Uint8Array;
+	readonly signature: Uint8Array;
+	readonly context: ManifestContext;
+	readonly verification: ManifestVerificationDeps;
+};
+
 export async function checkOsChannel(
 	settingsChannel: "stable" | "beta",
 	quarantine: UpdateQuarantine,
+	read: typeof readSignedOsChannel = readSignedOsChannel,
 ): Promise<OsChannelManifest | undefined> {
+	const signed = await read(settingsChannel, quarantine);
+	if (!signed) return undefined;
+	const result = await discoverSignedOsManifest(
+		signed.data,
+		signed.signature,
+		signed.context,
+		signed.verification,
+	);
+	switch (result.kind) {
+		case "candidate":
+			return result.manifest;
+		case "none":
+			if (result.classification === "current") {
+				clearUpdateNotice("refused", "os-check:downgrade_or_same");
+				clearUpdateNotice("refused", "os-check:serial_replayed");
+			}
+			return undefined;
+		case "refused":
+			throw new OsAgentError(result.reason);
+		default: {
+			const exhaustive: never = result;
+			return exhaustive;
+		}
+	}
+}
+
+async function readSignedOsChannel(
+	settingsChannel: "stable" | "beta",
+	quarantine: UpdateQuarantine,
+): Promise<SignedOsChannel | undefined> {
 	const bootedVersion = await readBootedOsReleaseVersion();
 	if (!bootedVersion) throw new OsAgentError("booted_version_unknown");
 	const { board, compatible } = await readBoardIdentity();
@@ -329,10 +391,10 @@ export async function checkOsChannel(
 					"ceralive-device",
 				])
 			).trim();
-			const result = await validateSignedOsManifest(
-				new Uint8Array(await Bun.file(json).arrayBuffer()),
-				new Uint8Array(await Bun.file(sig).arrayBuffer()),
-				{
+			return {
+				data: new Uint8Array(await Bun.file(json).arrayBuffer()),
+				signature: new Uint8Array(await Bun.file(sig).arrayBuffer()),
+				context: {
 					board,
 					compatible,
 					channel,
@@ -341,120 +403,195 @@ export async function checkOsChannel(
 					installedVersion: installed,
 					now: Date.now(),
 				},
-				{
+				verification: {
 					verifyCms: cmsSigner,
 					compare: compareVersions,
 					isQuarantined: (version) =>
 						quarantine.isOsVersionQuarantined(version),
 				},
-			);
-			if (!result.ok) throw new OsAgentError(result.reason);
-			return result.manifest;
+			};
 		} finally {
 			await rm(dir, { recursive: true, force: true });
 		}
 	});
 }
 
+type OsStageEntryDeps = {
+	readonly settings: typeof loadUpdateSettings;
+	readonly readSigned: typeof readSignedOsChannel;
+	readonly board: typeof readBoardIdentity;
+	readonly booted: typeof readBootedOsReleaseVersion;
+	readonly compare: typeof compareVersions;
+	readonly runJob: (
+		manifest: OsChannelManifest,
+		control: OsStageRunControl,
+		deps: OsStageRunDeps<OsStageReceipt>,
+	) => Promise<OsStageReceipt>;
+};
+const defaultStageEntry: OsStageEntryDeps = {
+	settings: loadUpdateSettings,
+	readSigned: readSignedOsChannel,
+	board: readBoardIdentity,
+	booted: readBootedOsReleaseVersion,
+	compare: compareVersions,
+	runJob: runOsStageJob,
+};
+let stageEntry = defaultStageEntry;
+export function setOsStageEntryDepsForTest(
+	overrides: Partial<OsStageEntryDeps> | null,
+): void {
+	stageEntry = overrides
+		? { ...defaultStageEntry, ...overrides }
+		: defaultStageEntry;
+}
+
 export async function stageOsBundle(
 	manifest: OsChannelManifest,
 	onProgress: (percent: number) => void,
+	control: OsStageBundleControl = {
+		attemptId: randomUUID(),
+		signal: new AbortController().signal,
+	},
 ): Promise<OsStageReceipt> {
-	const verified = osChannelManifestSchema.parse(manifest);
-	if (getIsStreaming()) throw new OsAgentError("stream_active");
-	const settings = await loadUpdateSettings();
-	const fresh = await checkOsChannel(settings.channel, new UpdateQuarantine());
-	if (
-		!fresh ||
-		fresh.version !== verified.version ||
-		fresh.channel !== verified.channel ||
-		fresh.serial !== verified.serial ||
-		fresh.bundle.url !== verified.bundle.url ||
-		fresh.bundle.sha256 !== verified.bundle.sha256
-	)
-		throw new OsAgentError("manifest_changed_before_stage");
-	const { board, compatible } = await readBoardIdentity();
-	if (verified.board !== board || verified.compatible !== compatible)
-		throw new OsAgentError("manifest_identity_changed");
-	const booted = await readBootedOsReleaseVersion();
-	if (!booted) throw new OsAgentError("booted_version_unknown");
-	if (!(await compareVersions(verified.version, booted)))
-		throw new OsAgentError("downgrade_or_same");
-	const selection = await selectUpdateTransport({
-		profile: "os",
-		board,
-		channel: verified.channel,
-	});
-	return updatePinController.run("os", selection, async () => {
-		// Pin is held until RAUC CLI confirms the whole daemon-owned streaming install finished.
+	try {
+		const verified = osChannelManifestSchema.parse(manifest);
+		assertOsStageToken(control);
+		const settings = await stageEntry.settings();
+		const signed = await stageEntry.readSigned(
+			settings.channel,
+			new UpdateQuarantine(),
+		);
+		if (!signed) throw new OsAgentError("manifest_changed_before_stage");
+		const admitted = await validateSignedOsManifest(
+			signed.data,
+			signed.signature,
+			signed.context,
+			signed.verification,
+		);
+		if (!admitted.ok) throw new OsAgentError(admitted.reason);
+		const fresh = admitted.manifest;
 		if (
-			getIsStreaming() ||
-			(await Bun.file("/run/ceralive/streaming").exists())
+			fresh.version !== verified.version ||
+			fresh.channel !== verified.channel ||
+			fresh.serial !== verified.serial ||
+			fresh.bundle.url !== verified.bundle.url ||
+			fresh.bundle.sha256 !== verified.bundle.sha256
 		)
-			throw new OsAgentError("stream_active");
-		let polling = false;
-		const timer = setInterval(() => {
-			if (polling) return;
-			polling = true;
-			void Promise.all([
-				spawnWithTimeout(
-					[
-						"busctl",
-						"get-property",
-						"de.pengutronix.rauc",
-						"/",
-						"de.pengutronix.rauc.Installer",
-						"Operation",
-					],
-					{ timeoutMs: 5_000 },
-				),
-				spawnWithTimeout(
-					[
-						"busctl",
-						"get-property",
-						"de.pengutronix.rauc",
-						"/",
-						"de.pengutronix.rauc.Installer",
-						"Progress",
-					],
-					{ timeoutMs: 5_000 },
-				),
-			])
-				.then(([operation, progress]) => {
-					if (operation.exitCode !== 0 || progress.exitCode !== 0) return;
-					if (/^s "idle"/.test(operation.stdout.trim())) return;
-					const match = progress.stdout.match(/^\(isi\)\s+([0-9]{1,3})\b/);
-					if (match) onProgress(Math.min(100, Number(match[1])));
-				})
-				.catch((error) =>
-					logger.warn("update-orchestrator: RAUC progress unavailable", {
-						error,
-					}),
-				)
-				.finally(() => {
-					polling = false;
+			throw new OsAgentError("manifest_changed_before_stage");
+		const { board, compatible } = await stageEntry.board();
+		if (verified.board !== board || verified.compatible !== compatible)
+			throw new OsAgentError("manifest_identity_changed");
+		const booted = await stageEntry.booted();
+		if (!booted) throw new OsAgentError("booted_version_unknown");
+		if (!(await stageEntry.compare(verified.version, booted)))
+			throw new OsAgentError("downgrade_or_same");
+		return await stageEntry.runJob(verified, control, {
+			...defaultOsStageRunEffects,
+			selection: () =>
+				selectUpdateTransport({
+					profile: "os",
+					board,
+					channel: verified.channel,
+				}),
+			revalidate: () => revalidatePinnedStage(verified),
+			progress: onProgress,
+			readProgress: async () => {
+				try {
+					const progress = await spawnWithTimeout(
+						[
+							"busctl",
+							"get-property",
+							"de.pengutronix.rauc",
+							"/",
+							"de.pengutronix.rauc.Installer",
+							"Progress",
+						],
+						{ timeoutMs: 2_000 },
+					);
+					const value = /^\(isi\)\s+([0-9]{1,3})\b/.exec(progress.stdout)?.[1];
+					return progress.exitCode === 0 && value !== undefined
+						? Math.min(100, Number(value))
+						: null;
+				} catch {
+					return null;
+				}
+			},
+			prepareReceipt: async () => {
+				const bootId = await readBootId();
+				await mkdir(OS_UPDATE_STATE_DIR, { recursive: true, mode: 0o750 });
+				const receipt = receiptSchema.parse({
+					schema: 1,
+					version: verified.version,
+					channel: verified.channel,
+					bootId,
+					stagedAt: Date.now(),
 				});
-		}, 3_000);
-		timer.unref?.();
-		try {
-			const result = await spawnWithTimeout(
-				[
-					"flock",
-					"-n",
-					"-x",
-					SOFTWARE_UPDATE_LOCK,
-					"rauc",
-					"install",
-					verified.bundle.url,
-				],
-				{ timeoutMs: 2 * 60 * 60_000 },
+				return () => {
+					const committed = commitStagedManifest(verified, receipt);
+					control.commit?.(committed);
+					return committed;
+				};
+			},
+		});
+	} catch (cause) {
+		if (cause instanceof OsStageError) throw cause;
+		assertOsStageToken(control);
+		throw new OsStageError("rauc_install_failed", { cause });
+	}
+}
+
+async function revalidatePinnedStage(
+	manifest: OsChannelManifest,
+): Promise<void> {
+	const file = await readUpdateCapabilityFile();
+	if (!file) throw new OsAgentError("os_agent_disabled");
+	const dir = await mkdtemp(join(tmpdir(), "ceraui-stage-manifest-"));
+	try {
+		await chown(dir, file.ota_uid, 0);
+		const json = join(dir, "manifest.json");
+		const sig = join(dir, "manifest.sig");
+		const base = `https://images.ceralive.tv/channels/${manifest.channel}/${manifest.board}.json`;
+		if (
+			!(await fetchAsOta(base, json, file.ota_uid)) ||
+			!(await fetchAsOta(`${base}.sig`, sig, file.ota_uid))
+		)
+			throw new OsAgentError("manifest_changed_before_stage");
+		const identity = await readBoardIdentity();
+		const result = await validateSignedOsManifest(
+			new Uint8Array(await Bun.file(json).arrayBuffer()),
+			new Uint8Array(await Bun.file(sig).arrayBuffer()),
+			{
+				...identity,
+				channel: manifest.channel,
+				serial: await readManifestSerial(manifest.channel),
+				bootedVersion: (await readBootedOsReleaseVersion()) ?? "",
+				installedVersion: (
+					await command([
+						"dpkg-query",
+						"-W",
+						"-f=$" + "{Version}",
+						"ceralive-device",
+					])
+				).trim(),
+				now: Date.now(),
+			},
+			{
+				verifyCms: cmsSigner,
+				compare: compareVersions,
+				isQuarantined: (version) =>
+					new UpdateQuarantine().isOsVersionQuarantined(version),
+			},
+		);
+		if (
+			!result.ok ||
+			JSON.stringify(result.manifest) !== JSON.stringify(manifest)
+		)
+			throw new OsAgentError(
+				result.ok ? "manifest_changed_before_stage" : result.reason,
 			);
-			if (result.exitCode !== 0) throw new OsAgentError("rauc_install_failed");
-		} finally {
-			clearInterval(timer);
-		}
-		return saveStagedManifest(verified, await readBootId(), Date.now());
-	});
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
 }
 
 export async function armOsActivation(now = false): Promise<void> {

@@ -131,7 +131,7 @@ import { getRpcSocketUrl } from "../env";
 import { nextBackoffDelay } from "./backoff";
 import { parseServerPing, shouldForceCloseHalfOpen } from "./half-open";
 import { createHeartbeatTracker, HEARTBEAT_THRESHOLD_MS } from "./heartbeat";
-import { RpcError } from "./rpc-error";
+import { RpcError, type RpcErrorEnvelope } from "./rpc-error";
 
 export class ConnectionResetError extends Error {
 	override readonly name = "ConnectionResetError";
@@ -158,11 +158,7 @@ interface RPCRequest {
 interface RPCResponse {
 	id: string;
 	result?: unknown;
-	error?: {
-		message: string;
-		code: string;
-		fields?: string[];
-	};
+	error?: RpcErrorEnvelope;
 }
 
 /**

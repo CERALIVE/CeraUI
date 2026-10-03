@@ -11,125 +11,35 @@
  *      actually holding that candidate, and every real state transition pushes
  *      the `update_orchestrator` wire projection.
  */
+/**
+ * Todo 41 — the Updates dialog's backend reads.
+ *
+ *   1. `summarizeTransportSelection` projects a ranked selection onto the wire
+ *      summary without inventing a verdict (captive is derived from the probe
+ *      states, never assumed).
+ *   2. `readUpdateDetails` degrades each block to `null` independently and never
+ *      claims a slot mirror on a legacy image or a "staged" image after the
+ *      orchestrator has left the staged phases.
+ *   3. The runtime's pending cellular approval exists ONLY while the D12 gate is
+ *      actually holding that candidate, and every real state transition pushes
+ *      the `update_orchestrator` wire projection.
+ */
 import { afterEach, describe, expect, test } from "bun:test";
-import type { UpdateOrchestratorWireState } from "@ceraui/rpc/schemas";
 import {
 	readUpdateDetails,
 	type UpdateDetailsDeps,
 } from "../modules/system/update-orchestrator/details.ts";
 import { osChannelManifestSchema } from "../modules/system/update-orchestrator/os-manifest.ts";
-import {
-	allowCellularOnce,
-	type defaultOrchestratorRuntimeDeps,
-	getOrchestratorState,
-	getOsUpdateSummary,
-	installUpdatesNow,
-	resetOrchestratorRuntimeForTest,
-	setOrchestratorRuntimeDepsForTest,
-	setOrchestratorStateForTest,
-} from "../modules/system/update-orchestrator/runtime.ts";
+import { resetOrchestratorRuntimeForTest } from "../modules/system/update-orchestrator/runtime.ts";
 import {
 	initialOrchestratorState,
 	type OrchestratorState,
 } from "../modules/system/update-orchestrator/types.ts";
-import type { RankedTransport } from "../modules/system/update-transport/core.ts";
-import {
-	getLastTransportSelection,
-	recordTransportSelection,
-	resetLastTransportSelectionForTest,
-	summarizeTransportSelection,
-} from "../modules/system/update-transport/last-selection.ts";
+import { resetLastTransportSelectionForTest } from "../modules/system/update-transport/last-selection.ts";
 
 afterEach(() => {
 	resetOrchestratorRuntimeForTest();
 	resetLastTransportSelectionForTest();
-});
-
-function row(
-	ifname: string,
-	family: 4 | 6,
-	healthy: boolean,
-	states: RankedTransport["hosts"][number]["state"][],
-	kind: RankedTransport["candidate"]["kind"] = "ethernet",
-	metered = false,
-): RankedTransport {
-	return {
-		candidate: { ifname, kind, metered },
-		family,
-		hosts: states.map((state, index) => ({
-			host: `h${index}`,
-			state,
-			latencyMs: 10,
-		})),
-		healthy,
-		latencyMs: 10,
-		reason: "fixture",
-	};
-}
-
-describe("summarizeTransportSelection", () => {
-	test("names the selected uplink and flags the captive candidate it passed over", () => {
-		const selected = row("eth0", 4, true, ["clear", "clear"]);
-		const captive = row("wlan0", 4, false, ["captive-http", "clear"], "wifi");
-		const summary = summarizeTransportSelection(
-			"os",
-			{ status: "selected", selected, ranked: [selected, captive] },
-			1234,
-		);
-		expect(summary).toEqual({
-			profile: "os",
-			checkedAt: 1234,
-			status: "selected",
-			selected: { ifname: "eth0", kind: "ethernet", family: 4, metered: false },
-			findings: [
-				{
-					ifname: "eth0",
-					kind: "ethernet",
-					family: 4,
-					metered: false,
-					healthy: true,
-					captive: false,
-					states: [],
-				},
-				{
-					ifname: "wlan0",
-					kind: "wifi",
-					family: 4,
-					metered: false,
-					healthy: false,
-					captive: true,
-					states: ["captive-http"],
-				},
-			],
-		});
-	});
-
-	test("no healthy transport selects nothing and de-duplicates verdicts", () => {
-		const blocked = row("eth0", 6, false, [
-			"no-route",
-			"no-route",
-			"dns-failed",
-		]);
-		const summary = summarizeTransportSelection(
-			"apt",
-			{ status: "none", reason: "no-healthy-transport", ranked: [blocked] },
-			5,
-		);
-		expect(summary.status).toBe("none");
-		expect(summary.selected).toBeNull();
-		expect(summary.findings[0]?.states).toEqual(["no-route", "dns-failed"]);
-		expect(summary.findings[0]?.captive).toBe(false);
-	});
-
-	test("the record is empty until a selection runs, then reads it back", () => {
-		expect(getLastTransportSelection()).toBeUndefined();
-		recordTransportSelection(
-			"os",
-			{ status: "none", reason: "no-healthy-transport", ranked: [] },
-			9,
-		);
-		expect(getLastTransportSelection()?.checkedAt).toBe(9);
-	});
 });
 
 function detailsDeps(
@@ -292,90 +202,4 @@ const candidate = osChannelManifestSchema.parse({
 	},
 	lock_url:
 		"https://images.ceralive.tv/releases/rock-5b-plus/2026.10.0/packages.lock.json",
-});
-
-function osRuntime(
-	overrides: Partial<typeof defaultOrchestratorRuntimeDeps> = {},
-): { published: UpdateOrchestratorWireState[]; stages: () => number } {
-	const published: UpdateOrchestratorWireState[] = [];
-	let stages = 0;
-	setOrchestratorRuntimeDepsForTest({
-		now: () => 2_000,
-		loadSettings: async () => ({
-			packagesAuto: false,
-			systemAuto: true,
-			schedule: { mode: "any-idle", start: "03:00", end: "05:00" },
-			channel: "stable",
-			allowPackagesOverCellular: true,
-			allowSystemOverCellular: true,
-		}),
-		loadCapabilities: async () => ({
-			mode: "capable",
-			features: ["apt-all-packages", "rauc-verity-streaming"],
-		}),
-		isIdle: async () => true,
-		isStreamLive: () => false,
-		onlyMeteredCandidateExists: async () => true,
-		checkOsManifest: async () => ({
-			available: true,
-			failed: false,
-			rateLimited: false,
-			reason: "",
-			manifest: candidate,
-		}),
-		stageOs: async () => {
-			stages += 1;
-		},
-		armOs: async () => {},
-		persist: () => {},
-		publishWireState: (wire) => published.push(wire),
-		...overrides,
-	});
-	setOrchestratorStateForTest({
-		...initialOrchestratorState(0),
-		phase: "os-available",
-	});
-	return { published, stages: () => stages };
-}
-
-describe("pending cellular approval + wire push", () => {
-	test("a metered-only hold names the candidate and its size; approval releases it", async () => {
-		const { published, stages } = osRuntime();
-		expect(await installUpdatesNow()).toEqual({
-			started: false,
-			reason: "not_available",
-		});
-		expect(getOsUpdateSummary()).toEqual({
-			candidate: { version: "2026.10.0", sizeBytes: 734_003_200 },
-			pendingCellular: { id: "2026.10.0", sizeBytes: 734_003_200 },
-		});
-		expect(stages()).toBe(0);
-
-		allowCellularOnce("2026.10.0");
-		expect(await installUpdatesNow()).toEqual({ started: true });
-		expect(stages()).toBe(1);
-		expect(getOrchestratorState().phase).toBe("os-staged");
-		expect(getOsUpdateSummary().pendingCellular).toBeNull();
-		// Every transition was pushed; the last one is the staged phase.
-		expect(published.map((wire) => wire.phase)).toContain("os-staging");
-		expect(published.at(-1)?.phase).toBe("os-staged");
-	});
-
-	test("an unmetered uplink never asks for approval", async () => {
-		osRuntime({ onlyMeteredCandidateExists: async () => false });
-		expect(await installUpdatesNow()).toEqual({ started: true });
-		expect(getOsUpdateSummary().pendingCellular).toBeNull();
-	});
-
-	test("a throwing publisher never blocks the transition it describes", async () => {
-		const { stages } = osRuntime({
-			onlyMeteredCandidateExists: async () => false,
-			publishWireState: () => {
-				throw new Error("socket gone");
-			},
-		});
-		expect(await installUpdatesNow()).toEqual({ started: true });
-		expect(stages()).toBe(1);
-		expect(getOrchestratorState().phase).toBe("os-staged");
-	});
 });

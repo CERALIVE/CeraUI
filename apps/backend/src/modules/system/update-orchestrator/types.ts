@@ -13,6 +13,12 @@
  * without mocking the OS.
  */
 
+import type {
+	OsStageRecovery,
+	UpdateOrchestratorPersistedState,
+} from "@ceraui/rpc/schemas";
+import type { OsUnlaunchedStageSettlement } from "./os-unlaunched-state.ts";
+
 // This phase models the orchestrator's workflow, not independent legacy launches
 // (root AGENTS.md, "D8 stream/update admission: what it does NOT cover").
 export const ORCHESTRATOR_PHASES = [
@@ -76,6 +82,9 @@ export interface OrchestratorState {
 	readonly osCheck: OrchestratorScheduleClock;
 	// One-time approval is spent on an attempt, not on success.
 	readonly cellularOverrideId: string | null;
+	// Absent unless an OS candidate's staging has been attempted.
+	readonly osStageRecovery?: OsStageRecovery;
+	readonly osStageDiscoveryRetryAt?: UpdateOrchestratorPersistedState["osStageDiscoveryRetryAt"];
 }
 
 export function initialOrchestratorState(now: number): OrchestratorState {
@@ -95,6 +104,7 @@ export function initialOrchestratorState(now: number): OrchestratorState {
 export type CheckKind = "packages" | "os";
 
 export type OrchestratorEvent =
+	| OsUnlaunchedStageSettlement
 	| { readonly type: "PACKAGE_CHECK_STARTED"; readonly now: number }
 	| { readonly type: "OS_CHECK_STARTED"; readonly now: number }
 	| {
@@ -112,6 +122,8 @@ export type OrchestratorEvent =
 			readonly type: "CHECK_SUCCEEDED_OS";
 			readonly now: number;
 			readonly nextAttemptAt: number;
+			// A different candidate supersedes the previous one's recovery budget.
+			readonly candidateKey?: string;
 	  }
 	| {
 			readonly type: "CHECK_FAILED";
@@ -162,17 +174,43 @@ export type OrchestratorEvent =
 	  }
 	| { readonly type: "SERVICES_RESTARTED"; readonly now: number }
 	| { readonly type: "SETTLE_ACKNOWLEDGED"; readonly now: number }
-	| { readonly type: "OS_STAGING_STARTED"; readonly now: number }
+	| {
+			readonly type: "OS_STAGING_STARTED";
+			readonly now: number;
+			readonly attempt?: {
+				readonly candidateKey: string;
+				readonly attemptId: string;
+			};
+	  }
 	| {
 			readonly type: "OS_STAGING_PROGRESS";
 			readonly now: number;
 			readonly progress: OrchestratorProgress;
 	  }
-	| { readonly type: "OS_STAGED"; readonly now: number }
+	| {
+			readonly type: "OS_STAGED";
+			readonly now: number;
+			readonly attemptId?: string;
+	  }
+	| {
+			readonly type: "OS_STAGE_SETTLED";
+			readonly now: number;
+			readonly attemptId: string;
+	  }
+	| {
+			readonly type: "OS_STAGE_OFFER_INVALIDATED";
+			readonly now: number;
+			readonly attemptId: string;
+	  }
+	// Without `recovery` the failure is unclassified and stays terminal.
 	| {
 			readonly type: "OS_STAGING_FAILED";
 			readonly now: number;
 			readonly reason: string;
+			readonly recovery?: {
+				readonly attemptId: string;
+				readonly mode: OsStageRecovery["mode"];
+			};
 	  }
 	| { readonly type: "OS_STAGING_ABORTED_FOR_STREAM"; readonly now: number }
 	| { readonly type: "OS_ACTIVATION_ARMED"; readonly now: number }
@@ -203,6 +241,18 @@ export type OrchestratorEvent =
 			readonly now: number;
 			readonly decision: "historical_outcome_unresolved_current_slot_unapplied";
 			readonly receiptId: string;
+	  }
+	// Manual recovery check of an `unsafe` OS record after positive evidence.
+	| {
+			readonly type: "OS_STAGE_RECOVERY_CONFIRMED";
+			readonly now: number;
+			readonly candidateKey: string;
+	  }
+	// An OS failure persisted before recovery metadata existed, proven settled.
+	| {
+			readonly type: "OS_STAGE_LEGACY_FAILURE_MIGRATED";
+			readonly now: number;
+			readonly retryAt: number;
 	  }
 	| { readonly type: "RESET"; readonly now: number };
 
