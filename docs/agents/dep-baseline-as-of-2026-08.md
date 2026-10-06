@@ -141,5 +141,5 @@ Never invoke a bare `tsc`; every typecheck goes through
 invoking package's dependency graph. `bun tsc` remains banned: only the wrapper
 guarantees package-local compiler selection (oven-sh/bun#37152).
 
-Fast-reload development loop (dev-sync / dev-push): [`image-building-pipeline/v2/docs/fast-reload.md`](https://github.com/CERALIVE/CeraUI/blob/main/image-building-pipeline/v2/docs/fast-reload.md)
+Fast-reload development loop (dev-sync / dev-push): [`image-building-pipeline/v2/docs/fast-reload.md`](https://github.com/CERALIVE/image-building-pipeline/blob/master/docs/fast-reload.md)
 

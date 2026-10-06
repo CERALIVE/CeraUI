@@ -4,7 +4,7 @@
 
 CeraUI is the **producer** of the version-federation dialog bundles consumed by
 `ceralive-platform`'s web dashboard. The full contract lives in root
-[`AGENTS.md`](https://github.com/CERALIVE/CeraUI/blob/main/AGENTS.md) → "Version-federation hosting/signing contract". This
+[`AGENTS.md`](https://github.com/CERALIVE/ceralive/blob/master/docs/governance/critical-constraints.md) → "Version-federation hosting/signing contract". This
 section documents the build, sign, and upload steps that CeraUI owns.
 
 ### What gets built
@@ -98,7 +98,7 @@ reuse the already-published bytes.
 
 The `apt-worker` serves these files at
 `https://apt.ceralive.tv/ui-bundle/<ceraui-version>/<file>`. See
-[`../apt-worker/AGENTS.md`](https://github.com/CERALIVE/CeraUI/blob/main/apt-worker/AGENTS.md) for the serving contract.
+[`../apt-worker/AGENTS.md`](https://github.com/CERALIVE/apt-worker/blob/main/AGENTS.md) for the serving contract.
 
 ### Support window
 
@@ -118,5 +118,5 @@ platform checks `ceraui-version` at session start; out-of-window devices get
 | Bundle output (gitignored) | `dist/federation/<version>/` |
 | ABI harness (mounts the BUILT bundles) | `apps/frontend/tests/federation/federation-abi.test.ts` via `bun run test:federation-abi` |
 | Full hosting/signing contract | root `AGENTS.md` → "Version-federation hosting/signing contract" |
-| Serving route (apt-worker) | [`../apt-worker/AGENTS.md`](https://github.com/CERALIVE/CeraUI/blob/main/apt-worker/AGENTS.md) |
+| Serving route (apt-worker) | [`../apt-worker/AGENTS.md`](https://github.com/CERALIVE/apt-worker/blob/main/AGENTS.md) |
 
