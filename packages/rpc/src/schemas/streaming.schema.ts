@@ -2,7 +2,7 @@
  * Streaming configuration and status Zod schemas
  */
 // The composition object is producer-owned wire data, so it is IMPORTED rather
-// than redeclared (root AGENTS.md → BINDING-SCHEMA DRIFT). The DEEP path is
+// than redeclared (`docs/agents/a-registry-pin-is-a-version-boundary-and-the-gate-is-the.md`). The DEEP path is
 // deliberate and must not be "cleaned up" to the root barrel: that barrel
 // re-exports the UDS client (`node:fs`, `node:child_process`), which this
 // browser-safe package cannot pull into the frontend graph. `types.js` imports

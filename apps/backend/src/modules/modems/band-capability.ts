@@ -32,8 +32,9 @@
  * hardware behind a paperwork gate. Here the paperwork IS the safety argument: a
  * band the SIM's network does not operate on registers nowhere, and a modem that
  * does not honour a reset leaves the operator with no way back short of a replug
- * they may not be able to reach. The deviation is recorded in both repos'
- * AGENTS.md so it reads as a decision rather than as drift.
+ * they may not be able to reach. The deviation is recorded in
+ * `apps/backend/docs/agents/the-capability-feature-gate-framework.md`
+ * so it reads as a decision rather than as drift.
  *
  * THE CATALOG IS IMPORTED STATICALLY. The band API landed in
  * `@ceralive/modem-control` after the `0.2.0` floor `package.json` used to pin,

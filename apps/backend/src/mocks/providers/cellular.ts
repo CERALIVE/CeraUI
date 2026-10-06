@@ -6,7 +6,7 @@
 	on the wire), the netns router-dongle rows, and the D-Bus observation view
 	with its additive detail block.
 
-	Two conventions from `AGENTS.md` → DEV MOCK SEAMS are followed deliberately:
+	Two conventions from `apps/backend/docs/agents/dev-mock-seams.md` are followed deliberately:
 
 	  - **Fixtures go through the REAL reader, not around it.** The dongle rows
 	    are served as file CONTENT to `dongle-metadata.ts`'s own deps seam, so dev

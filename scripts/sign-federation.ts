@@ -4,8 +4,8 @@
 //
 // Post-build step for the Vite lib-mode federation bundles (Task 39). For every
 // dialog bundle emitted under dist/federation/<ceraui-version>/ it produces the
-// two artifacts the version-federation hosting/signing contract requires (root
-// AGENTS.md → version-federation):
+// two artifacts the version-federation hosting/signing contract requires
+// (`docs/agents/federation-producer-pipeline.md`):
 //
 //   <file>.js.sri  — the `sha384-…` Subresource-Integrity hash (base64)
 //   <file>.js.sig  — a DETACHED GPG signature (cert-work/gpg keyring)

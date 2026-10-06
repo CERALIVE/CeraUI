@@ -18,7 +18,7 @@
     // incompatible with the bits-ui v2 / shadcn-svelte UI layer, which emits
     // unfixable "union type too complex to represent" errors on its own prop
     // spreads in CLI-managed components. It IS enabled in every other tsconfig
-    // (root, backend, rpc, node, e2e). See AGENTS.md "Linting".
+    // (root, backend, rpc, node, e2e). See docs/agents/conventions.md "Linting".
     "noImplicitOverride": true,
     // Enhanced source map configuration for better debugging
     "sourceMap": true,

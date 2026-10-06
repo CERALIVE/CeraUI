@@ -76,7 +76,7 @@ export type RouterSignalUnknownReason = Extract<
  *
  * There is deliberately NO `no-sim` variant. An empty slot is a fact about the
  * CARD, not about the radio, and it is owned end-to-end by one component —
- * `NoSimBadge`, which every modem class draws (see `CeraUI/AGENTS.md` → "…AND
+ * `NoSimBadge`, which every modem class draws (see `apps/frontend/docs/agents/a-sim-less-link-cannot-be-toggled-into-the-bond-on-either.md` → "…AND
  * THE 'No SIM' TAG IS ONE COMPONENT"). This module used to carry a third
  * spelling of it, and no surface has rendered that spelling since the tag was
  * unified: the row guards its chip on `isSimlessModem`, and the section set

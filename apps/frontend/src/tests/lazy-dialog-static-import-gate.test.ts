@@ -15,7 +15,7 @@
  *  - `src/main/dialogs/**` — a dialog composing its own sub-components.
  *  - `src/lib/federation/*-entry.ts` — a hosted bundle is fetched as ONE module
  *    against a signed manifest pinning an exact chunk graph, so its import graph
- *    must stay statically complete (`apps/frontend/AGENTS.md` → federation).
+ *    must stay statically complete (`apps/frontend/docs/agents/federation-lib-build-task-39.md`).
  *
  * A TYPE-only import is always fine: it is erased at compile time and creates no
  * runtime edge, which is the documented split for a dialog that also exports a

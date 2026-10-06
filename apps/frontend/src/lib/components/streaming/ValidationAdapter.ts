@@ -398,7 +398,7 @@ export function resolveDeviceModes(
 // The open follow-up is NOT whether that negotiation happens — it does. It is that
 // changing a UVC mode requires tearing the capture down and rebuilding it (libuvc
 // refuses a mode change on a running stream), so a mid-session change needs restart
-// UX plus real-camera validation. See `apps/frontend/AGENTS.md` → "Known follow-up".
+// UX plus real-camera validation. See `apps/frontend/docs/agents/conventions.md` → "Known follow-up".
 
 // `singleModeSourceCeiling` + `SourceModeCeiling` now live in `@ceraui/rpc`
 // (`capabilities/device-mode-truth`) because the backend save path applies the

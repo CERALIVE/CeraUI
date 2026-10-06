@@ -19,7 +19,7 @@
  *  - `row` — the Network panel's row: ordinal, glyph, name, and the kind /
  *    disambiguation line beneath it;
  *  - `compact` — the persistent HUD strip: ordinal and glyph only. The strip's
- *    four-fact scope is deliberate (root AGENTS.md → HUD 4-fact scope), so this
+ *    four-fact scope is deliberate (`docs/agents/device-first-source-model-go-live-card.md` → HUD 4-fact scope), so this
  *    variant must NOT grow a name or a kind label.
  *
  * Typography stays per-variant for the same reason — the strip sets its ordinal

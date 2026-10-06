@@ -11,7 +11,7 @@
  *
  * The gateway-availability decision is ALWAYS routed through
  * {@link pipelineAvailability} — never re-derived inline as `!service_active` /
- * `url === null`. That is the repo anti-pattern rule (root AGENTS.md → "Don't
+ * `url === null`. That is the repo anti-pattern rule (`docs/agents/anti-patterns.md` → "Don't
  * re-derive the gateway-inactive disabled-with-reason rule inline").
  *
  * Pure + rune-free: unit-testable without mounting Svelte.

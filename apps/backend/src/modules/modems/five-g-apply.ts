@@ -31,7 +31,7 @@
  *    mmcli did not print its confirmation and `undefined` when the spawn threw,
  *    and both were once dropped on the floor while the configure-echo parroted
  *    the REQUEST back — so a mode the modem rejected reached the operator as a
- *    success toast with the rejected value selected (see `apps/backend/AGENTS.md`
+ *    success toast with the rejected value selected (see `apps/backend/docs/agents/the-radio-mode-an-operator-reads-must-be-a-live-read.md`
  *    → THE RADIO MODE AN OPERATOR READS MUST BE A LIVE READ). Here the echo is a
  *    READBACK: `applied` is the posture the radio was re-read on, and a radio
  *    that clamped the request reports `readback_mismatch` rather than success.

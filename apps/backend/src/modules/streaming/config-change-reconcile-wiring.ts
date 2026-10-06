@@ -20,7 +20,7 @@
  *
  * `config-change-persistence.ts` shipped `reconcileInflightConfigChange` with the
  * whole marker-only judgement behind it, and NOTHING in production called it —
- * its only importer was its own unit test. `apps/backend/AGENTS.md` described
+ * its only importer was its own unit test. `apps/backend/docs/agents/apply-now-config-change-transaction-staged-persistence.md` described
  * marker-only crash reconciliation as live behaviour the entire time, so a
  * `config.inflight.json` left by a process that died mid-transaction was never
  * judged: the staged candidate was silently lost and the marker file leaked. A
