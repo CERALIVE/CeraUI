@@ -2,7 +2,7 @@
 # check-t18-doc-coverage.sh
 #
 # Verifies that every symbol and prose anchor introduced by T1-T17
-# (dev-parity-ux pass) is documented in the relevant AGENTS.md / README files.
+# (dev-parity-ux pass) is documented in AGENTS.md, docs/agents/ or README files.
 # Exits non-zero if any anchor is missing or if the tech-debt gate is red.
 #
 # Usage: bash scripts/check-t18-doc-coverage.sh
@@ -25,8 +25,13 @@ check() {
   local label="$1"
   local file="$2"
   local pattern="$3"
+  local files=("${file}")
 
-  if grep -qF -- "${pattern}" "${file}"; then
+  if [[ "${file}" == */AGENTS.md ]]; then
+    files+=("$(dirname "${file}")"/docs/agents/*.md)
+  fi
+
+  if grep -qF -- "${pattern}" "${files[@]}"; then
     echo "  OK  [${label}] '${pattern}' in $(basename "${file}")"
   else
     echo "MISS  [${label}] '${pattern}' NOT FOUND in $(basename "${file}")"
@@ -145,7 +150,7 @@ echo ""
 
 if [ "${FAIL}" -gt 0 ]; then
   echo "FAIL: ${FAIL} required symbol(s)/anchor(s) not found in docs."
-  echo "      Update the relevant AGENTS.md / README.md files and re-run."
+  echo "      Update the relevant AGENTS.md, docs/agents/*.md or README.md files and re-run."
   exit 1
 fi
 

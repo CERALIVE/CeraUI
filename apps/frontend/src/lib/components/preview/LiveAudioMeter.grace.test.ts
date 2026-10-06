@@ -117,7 +117,7 @@ afterEach(() => {
 
 describe("LiveAudioMeter — the grace window is the documented one", () => {
 	it("is exactly 1200 ms", () => {
-		// A later docs todo and CeraUI's own AGENTS.md grep for this exact name,
+		// `apps/backend/docs/agents/idle-audio-meter-device-preference.md` cites this exact name,
 		// and the value is the reviewed one — not a knob to tune in place.
 		expect(METER_UNAVAILABLE_DISPLAY_GRACE_MS).toBe(1_200);
 	});

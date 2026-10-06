@@ -28,7 +28,7 @@
   than deleted because it is not a separable branch — it shares this dialog's
   title, icon, open-edge reseed, single keyed op, submit guard and footer with
   the blocking PIN/PUK flow, which must not be disturbed. Excising it is its own
-  change; see `apps/frontend/AGENTS.md` → "A SIM LOCK IS REACHED FROM ITS OWN
+  change; see `apps/frontend/docs/agents/a-sim-lock-is-reached-from-its-own-row-never-by-intercept.md` → "A SIM LOCK IS REACHED FROM ITS OWN
   ROW". The wire is unaffected — ModemManager still reports `sim-pin2` and the
   `modems.unlockSimPin2` RPC still exists.
 

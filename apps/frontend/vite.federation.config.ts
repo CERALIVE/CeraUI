@@ -23,7 +23,7 @@ import { PERSIST_RUNTIME_ALIAS } from "./vite.persist.ts";
 // the main SPA build (vite.config.ts → dist/public): it never touches that output,
 // never runs the PWA/service-worker plugin, and never emits an index.html.
 //
-// Hosting/signing contract (root AGENTS.md → version-federation): the bundles are
+// Hosting/signing contract (`docs/agents/federation-producer-pipeline.md`): the bundles are
 // served at https://apt.ceralive.tv/ui-bundle/<ceraui-version>/<filename>.js, so the
 // build output is versioned by the CeraUI workspace version (CalVer).
 

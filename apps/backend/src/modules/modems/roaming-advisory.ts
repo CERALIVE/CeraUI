@@ -42,7 +42,7 @@
  *
  * `notificationRemaining()` returns `NOTIFICATION_LIVES_FOREVER` for EVERY
  * persistent notification, so a raise site with no matching retraction latches
- * for the whole session (see `apps/backend/AGENTS.md` → "A PERSISTENT
+ * for the whole session (see `apps/backend/docs/agents/a-persistent-notification-must-be-retractable.md` → "A PERSISTENT
  * NOTIFICATION MUST BE RETRACTABLE"). This advisory's retraction evidence is the
  * modem's OWN NEXT REGISTRATION STATE, never a timer:
  *

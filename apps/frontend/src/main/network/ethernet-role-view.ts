@@ -2,7 +2,7 @@
  * ethernet-role-view.ts — the ONE derivation behind the wired-port role control
  * and the honest `shared-lan` row (todo 15).
  *
- * The backend's contract (todo 8, `apps/backend/AGENTS.md` → THE ETHERNET PORT
+ * The backend's contract (todo 8, `apps/backend/docs/agents/the-ethernet-port-role-uplink-or-shared-lan.md` → THE ETHERNET PORT
  * ROLE) is that `netifEntry.ethRole` is published EXPLICITLY on every ethernet
  * row, `uplink` included — so ABSENT means "not an ethernet port, or an older
  * backend", and is never read as `uplink`. That asymmetry is why `supported`

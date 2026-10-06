@@ -17,7 +17,7 @@
     "noUncheckedIndexedAccess": true,
     // exactOptionalPropertyTypes is intentionally NOT enabled here: the
     // vite-plugin-pwa option types are incompatible with it. It IS enabled in
-    // root/backend/rpc. See AGENTS.md "Linting".
+    // root/backend/rpc. See docs/agents/conventions.md "Linting".
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,

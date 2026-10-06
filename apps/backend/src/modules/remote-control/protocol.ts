@@ -20,7 +20,8 @@
  * `tolerantParse*` helpers are re-exported alongside so new call sites can use the
  * named device-posture parser directly.
  *
- * Registry-dependency consumption stays Rule-D-compatible (root `AGENTS.md`):
+ * Registry-dependency consumption stays Rule-D-compatible (workspace rules:
+ * https://github.com/CERALIVE/ceralive/blob/master/docs/governance/workspace-reference.md#rule-d--repos-are-self-contained-never-reference-the-workspace-from-inside-a-repo):
  * `@ceralive/control-protocol` resolves through the package registry identically
  * whether or not the sibling repo is checked out — it is a CalVer registry dep like
  * `@ceralive/cerastream` / `@ceraui/srtla-send`, NOT a sibling `link:` or a `../`

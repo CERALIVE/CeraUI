@@ -2,7 +2,7 @@
 /**
  * SourceSection — applied-state acknowledgement contract (F2 field-lock fix).
  *
- * The repo-wide rule (apps/frontend/AGENTS.md → "Applied-state acknowledgement"):
+ * The repo-wide rule (`apps/frontend/docs/agents/connection-reliability.md` → "Applied-state acknowledgement"):
  * after an RPC setter resolves, the frontend releases the field lock to
  * `result.applied` — the value the BACKEND actually wrote after clamp/validation —
  * NEVER the optimistic value the client sent. A setter that fails

@@ -13,7 +13,7 @@
  * families do not answer every question the same way and must not be forced to:
  * a dongle's lifecycle badge reports the USB-Ethernet LINK it presents to the
  * board, an MM radio's reports a bearer, and collapsing those two was an
- * explicitly-rejected change (`apps/frontend/AGENTS.md` → "…AND THE BADGE BESIDE
+ * explicitly-rejected change (`apps/frontend/docs/agents/a-sim-less-link-cannot-be-toggled-into-the-bond-on-either.md` → "…AND THE BADGE BESIDE
  * IT REPORTS A LINK, NOT A CONNECTION"). What the two DO share is every state
  * that is a fact about the CARD or the RADIO rather than about the transport —
  * an empty slot, an outstanding PIN, a signal tier, a diagnostics table — and in

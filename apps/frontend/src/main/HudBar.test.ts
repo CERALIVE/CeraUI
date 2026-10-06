@@ -131,7 +131,7 @@ function compactStrip(): HTMLElement {
 /**
  * Every `hud-`-prefixed testid the COMPACT strip is allowed to carry.
  *
- * `AGENTS.md` → "HUD 4-fact scope": the strip states exactly FOUR facts — the
+ * `docs/agents/device-first-source-model-go-live-card.md` → "HUD 4-fact scope": the strip states exactly FOUR facts — the
  * lifecycle badge, the health verdict, the bitrate, and ONE temperature chip.
  * Only the bitrate fact is `hud-`-keyed, and these three ids are all of it (the
  * headline plus its two qualifiers). Growing this list is a documented UX
