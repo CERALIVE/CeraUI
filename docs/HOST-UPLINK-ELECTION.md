@@ -154,8 +154,11 @@ configuration is copied into curl. No redirects are followed.
 ## Applying the election and admitting apt
 
 `gateways.ts` remains the host election coordinator. Its serialized route
-transaction is in `default-route.ts`, re-exported through the existing API;
-`default-route-model.ts` owns the parsed route model. It first uses the
+entrypoint is in `default-route.ts`, re-exported through the existing API.
+`default-route-inventory.ts` separates cleanup from candidate parsing,
+`default-route-acquisition.ts` chooses the preference and checks IPv4 floor
+ordering, and `default-route-transaction.ts` applies and unwinds mutations.
+`default-route-model.ts` owns parsed attributes and mutation serialization. It uses the
 candidate's lowest-metric **foreign** main-table default, with the existing
 named-table path as a fallback. An owned preference is never evidence that the
 NIC still has a default. No policy-routing table or rule is created.
@@ -167,25 +170,53 @@ local `rt_protos` aliases. A foreign route is never deleted, replaced, demoted,
 or re-added: NetworkManager/DHCP/RA remains its owner, and every NIC retains its
 own baseline route for the next bound probe. No NM profile is written.
 
+**Exclusive protocol reservation is a deployment prerequisite, not independent
+ownership proof.** No NetworkManager profile, DHCP hook, administrator or other
+service may install a main-table default with protocol 242. A collision is treated
+as CeraUI-owned: startup/release removes that row and reconciliation may replace
+or retain it. There is no provenance discriminator beyond this reservation and
+no safe automatic way to identify its actual author. Audit both families for
+foreign use of 242 before deployment; resolve a collision through its real owner
+before enabling this controller. Non-main defaults and the UID-pin tables are
+outside this inventory.
+
 When the elected NIC is already strictly lower-metric than every competitor,
 no preference is needed. Otherwise the backend adds **one** marked default for
 the winner at `lowest competing metric - 1`. The copy carries the observed
 gateway, device, source address and onlink requirement, not the foreign protocol,
 metric or RA expiry. A named-table import is marked too. Range validation occurs
-before mutation; ambiguous named-table replies, multipath/source-specific defaults
+before mutation; ambiguous named-table replies, multipath/source-specific competitors
+in the elected family
 and a link-down selected route refuse rather than inventing a routable copy.
 
-There is a real representability limit: IPv4 cannot beat a metric-0 competitor;
-IPv6 cannot beat metric 1 because Linux normalizes metric 0 to 1024. Those cases
-return typed `GatewayRouteError(reason: "metric-exhausted")` with no mutations,
-not a falsely successful election. They require an owner-directed baseline or
-policy decision; this path never edits a competitor to create room. The bench
-baselines (Rock Ethernet 50, OPI Ethernet 100, Wi-Fi 600) have room. No kernel
-qualification of those limits or the new preference is claimed by host tests.
+Cleanup does not depend on that candidate gate. The inventory preserves multiline
+multipath records and parses only marked defaults for release/startup sweep, so a
+foreign source-specific or multipath default cannot strand an owned route. Delete
+and rollback-add argv carry only parsed gateway, device, source, protocol, metric
+and required `onlink`; kernel display flags such as `linkdown` and `dead`, RA
+expiry and preference text are never replayed as mutation arguments.
+
+**IPv4 metric floor.** A competing metric-0 default (including a DHCP default
+with no metric) is beaten by a metric-0 owned `ip route prepend ... proto 242`.
+This changes equal-metric ordering without touching foreign rows. Acquisition
+must prove that `ip -N route get 203.0.113.254 fibmatch` selects the exact owned
+gateway/device/source/metric/onlink identity; an acknowledged prepend is not
+proof. No packet is sent. The documentation-range destination tests the default
+FIB path; an overriding more-specific/policy route or unreadable FIB refuses,
+never grants success. A matching existing floor preference is retained only if
+that same FIB check still chooses it. A foreign equal-metric prepend can therefore
+trigger delete/re-prepend on re-election rather than silently retain a losing row.
+
+**IPv6 limitation (explicit).** A metric-1 competitor still returns typed
+`GatewayRouteError(reason: "metric-exhausted")` before mutation: Linux normalizes
+metric 0 to 1024, and equal-metric IPv6 prepend can merge a nexthop into a foreign
+multipath default. IPv6 never uses prepend. Resolve this limit through an
+owner-directed baseline/policy decision, not competitor edits by this path.
 
 Reconciliation removes only marked obsolete defaults, including an old-family
 preference when the winning family changes, then installs the new one. An
-unchanged winner performs zero mutations. The metric depends only on current
+unchanged winner performs zero mutations while its preference still wins (the
+IPv4 metric-floor check above accounts for ordering changes). The metric depends only on current
 foreign routes, never earlier preferences, so election flaps cannot ratchet it.
 An apply/release failure undoes completed commands in reverse order across both
 families and still rejects; rollback failures survive in the typed aggregate
@@ -227,19 +258,39 @@ apt transaction remains a PID-1-owned transient service.
 
 Regression suites: `repository-uplink-election`, `gateway-repository-policy`,
 `gateway-route-repair`, `gateways-migration`, `default-route-ownership`,
-`default-route-lifecycle`, `default-route-edge`, `gateway-route-lifecycle`,
+`default-route-lifecycle`, `default-route-edge`, `default-route-oracle`,
+`default-route-kernel`, `gateway-route-lifecycle`,
 `apt-gateway-precondition`, and `repository-probe-socket`
 under `apps/backend/src/tests/`. The socket test runs real curl against private,
 ephemeral loopback HTTP/TLS listeners with an ephemeral trusted certificate. The
 socket suite also reproduces a peer that accepts TCP and resets immediately after
 ClientHello without sending a certificate, while serving HTTP successfully. The
-route unit tests drive an exact-token mutable route-table fake through the OS
+route unit tests drive a mutable route-table fake through the OS
 runner seam and never mutate the workstation network. They cover foreign-route
 preservation, minimum-metric selection, repeated elections, family changes,
 crash sweep, removal/release, shutdown races, rollback failures and 512 seeded
-random winner/family/release transitions. This is injection proof, not execution
-of the kernel's route-selection algorithm. Existing opt-in privileged netns
-suites are unchanged; no new sudo or namespace privilege is required.
+random winner/family/release transitions. Every transition asserts the intended
+winner and exact preference presence/family/metric independently of the route
+builder, as well as preservation and metric bounds.
+
+`default-route-kernel.test.ts` probes `unshare -Urn` availability and launches
+the Bun test process itself in a fresh user/network namespace for each scenario.
+The injected runner executes plain `ip` commands inside that namespace; the real
+`setDefaultRoute` and lifecycle code run over dummy/veth links. Tests prove the
+metric-zero FIB winner, unchanged re-election, equal-metric foreign reorder,
+failback/re-acquisition/release, and carrier-loss cleanup at all three lifecycle
+boundaries. Source-specific and real multiline multipath IPv6 dumps do not block
+startup/release. On a host refusing user/network namespaces these NEW cases skip
+with the probe's stated stderr reason; fixture tests remain mandatory. All six
+kernel scenarios passed on Linux 7.2.9 / iproute2 7.2.0 using Bun 1.4.2 on
+2026-10-06, without sudo. This proves kernel mechanics, not RK3588/NM/DHCP
+behaviour. Existing opt-in privileged netns suites are unchanged.
+
+Board re-drills remain owed on BOTH Rock 5B+ and Orange Pi 5+, from an
+owner-established clean foreign-route baseline: C2a failback/C9 restoration,
+flapping elections, carrier loss, shutdown/restart sweep, IPv4/IPv6 selection,
+HiLink no-metric recovery, APT admission, UID-pinned OS transport coexistence
+and Wi-Fi second-uplink arms. No board was contacted for this correction.
 
 Non-vacuity was checked by temporary behavioral mutations: removing HTTPS caused
 the resetting peer to pass; returning the first HTTP success elected the impaired

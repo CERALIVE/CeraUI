@@ -25,7 +25,9 @@ describe("host route application", () => {
 		const runner = async (_bin: string, args: string[]) => {
 			calls.push(args);
 			if (args.includes("table")) throw new Error("table id value is invalid");
-			return args.includes("show") ? `${OLD}\n${GOOD}\n` : "";
+			return args[args.indexOf("route") + 1] === "show" && !args.includes("-6")
+				? `${OLD}\n${GOOD}\n`
+				: "";
 		};
 		// When: the HTTPS-working NIC is installed using the existing ip mechanism.
 		await setDefaultRoute("uplink-b", { runner });
@@ -61,7 +63,9 @@ describe("host route application", () => {
 			}),
 		).rejects.toThrow();
 		// Then: the current uplink has not been removed.
-		expect(calls.every((args) => args.includes("show"))).toBe(true);
+		expect(
+			calls.every((args) => args[args.indexOf("route") + 1] === "show"),
+		).toBe(true);
 	});
 
 	test("a failed preference change restores previous defaults and still rejects", async () => {
@@ -92,15 +96,23 @@ describe("host route application", () => {
 			family: 6,
 			runner: async (_bin, args) => {
 				calls.push(args);
-				return args.includes("show") ? `${route}\n${selected}` : "";
+				return args[args.indexOf("route") + 1] === "show" && args.includes("-6")
+					? `${route}\n${selected}`
+					: "";
 			},
 		});
 		// Then: every route operation is explicitly IPv6.
 		expect(
 			calls
-				.filter((args) => !args.includes("show"))
+				.filter((args) => args[args.indexOf("route") + 1] !== "show")
 				.every((args) => args[0] === "-6"),
 		).toBe(true);
+		expect(
+			calls.filter((args) => args[args.indexOf("route") + 1] === "show"),
+		).toEqual([
+			["-N", "route", "show", "default"],
+			["-6", "-N", "route", "show", "default"],
+		]);
 		expect(calls).toContainEqual([
 			"-6",
 			"route",

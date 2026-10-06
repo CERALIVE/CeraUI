@@ -18,20 +18,50 @@ export class DefaultRouteTable {
 		const start = args.indexOf("route");
 		const verb = args[start + 1];
 		if (verb === "show") {
-			if (args.includes("table")) throw new Error("no named table");
+			if (args.includes("table") && !args.includes("main"))
+				throw new Error("no named table");
 			return [...table].join("\n");
+		}
+		if (verb === "get") {
+			const metric = (row: string) =>
+				Number(/\bmetric (\d+)/.exec(row)?.[1] ?? (family === 6 ? 1024 : 0));
+			return [...table].sort((a, b) => metric(a) - metric(b))[0] ?? "";
 		}
 		this.mutations.push(args);
 		if (this.mutations.length === this.failMutation)
 			throw new Error("injected mutation failure");
 		const row = args.slice(start + 2).join(" ");
+		if (/\b(linkdown|dead)\b/.test(row))
+			throw new Error("display flag is garbage");
 		switch (verb) {
+			case "prepend": {
+				if (table.has(row)) throw new Error("route exists");
+				const previous = [...table];
+				table.clear();
+				table.add(row);
+				for (const existing of previous) table.add(existing);
+				break;
+			}
 			case "add":
 				if (table.has(row)) throw new Error("route exists");
 				table.add(row);
 				break;
 			case "del":
-				if (!table.delete(row)) throw new Error("route absent");
+				{
+					const identity = (value: string) =>
+						["via", "dev", "src", "proto", "metric"]
+							.map(
+								(key) =>
+									new RegExp(`\\b${key} (\\S+)`).exec(value)?.[1] ??
+									(key === "metric" ? "0" : ""),
+							)
+							.join("|") + String(value.split(" ").includes("onlink"));
+					const existing = [...table].find(
+						(value) => identity(value) === identity(row),
+					);
+					if (existing === undefined) throw new Error("route absent");
+					table.delete(existing);
+				}
 				break;
 			default:
 				throw new Error(`unsupported fixture operation: ${verb}`);

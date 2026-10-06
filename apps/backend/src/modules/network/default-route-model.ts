@@ -21,6 +21,11 @@ export type DefaultRoute = {
 	readonly ifname: string;
 	readonly metric: number;
 	readonly owned: boolean;
+	readonly gateway: string | undefined;
+	readonly source: string | undefined;
+	readonly onlink: boolean;
+	readonly usable: boolean;
+	readonly prepend: boolean;
 };
 
 export function readDefaultRoutes(
@@ -51,12 +56,27 @@ export function readDefaultRoutes(
 					: Number(tokens[metricIndex + 1]);
 			if (!Number.isInteger(metric) || metric < 0 || metric > 0xffff_ffff)
 				throw new GatewayRouteError(ifname, "invalid-route");
+			const address = (key: "via" | "src") => {
+				const index = tokens.indexOf(key);
+				if (index < 0) return undefined;
+				const value = tokens[index + 1];
+				if (!value || isIP(value) !== family)
+					throw new GatewayRouteError(ifname, "invalid-route");
+				return value;
+			};
 			return {
 				family,
 				tokens,
 				ifname,
 				metric,
 				owned: tokens[tokens.indexOf("proto") + 1] === HOST_ROUTE_PROTOCOL,
+				gateway: address("via"),
+				source: address("src"),
+				onlink: tokens.includes("onlink"),
+				usable: !tokens.some(
+					(token) => token === "linkdown" || token === "dead",
+				),
+				prepend: family === 4 && metric === 0,
 			};
 		});
 }
@@ -65,18 +85,23 @@ export function preferenceRoute(
 	source: DefaultRoute,
 	metric: number,
 ): DefaultRoute {
-	const tokens = ["default"];
-	for (const key of ["via", "dev", "src"] as const) {
-		const index = source.tokens.indexOf(key);
-		if (index < 0) continue;
-		const value = source.tokens[index + 1];
-		if (!value || (key !== "dev" && isIP(value) !== source.family))
-			throw new GatewayRouteError(source.ifname, "invalid-route");
-		tokens.push(key, value);
-	}
-	if (source.tokens.includes("onlink")) tokens.push("onlink");
-	tokens.push("proto", HOST_ROUTE_PROTOCOL, "metric", String(metric));
-	return { ...source, tokens, metric, owned: true };
+	const route = { ...source, metric, owned: true };
+	return { ...route, tokens: ownedRouteTokens(route) };
+}
+
+export function ownedRouteTokens(route: DefaultRoute): string[] {
+	return [
+		"default",
+		...(route.gateway ? ["via", route.gateway] : []),
+		"dev",
+		route.ifname,
+		...(route.source ? ["src", route.source] : []),
+		...(route.onlink ? ["onlink"] : []),
+		"proto",
+		HOST_ROUTE_PROTOCOL,
+		"metric",
+		String(route.metric),
+	];
 }
 
 export function samePreference(a: DefaultRoute, b: DefaultRoute): boolean {
@@ -84,11 +109,8 @@ export function samePreference(a: DefaultRoute, b: DefaultRoute): boolean {
 		a.family === b.family &&
 		a.ifname === b.ifname &&
 		a.metric === b.metric &&
-		["via", "src"].every(
-			(key) =>
-				a.tokens[a.tokens.indexOf(key) + 1] ===
-				b.tokens[b.tokens.indexOf(key) + 1],
-		) &&
-		a.tokens.includes("onlink") === b.tokens.includes("onlink")
+		a.gateway === b.gateway &&
+		a.source === b.source &&
+		a.onlink === b.onlink
 	);
 }

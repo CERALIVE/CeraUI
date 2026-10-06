@@ -166,6 +166,24 @@ describe("owned host preference lifecycle", () => {
 						.map((route) => route.tokens.join(" ")),
 				).toEqual([...(current === 4 ? BASELINE : V6)].sort());
 				expect(routes.every((route) => route.metric <= 83)).toBe(true);
+				const expectedPreference = current === family && winner === "uplink-b";
+				expect(
+					routes
+						.filter((route) => route.owned)
+						.map((route) => ({
+							ifname: route.ifname,
+							family: route.family,
+							metric: route.metric,
+						})),
+				).toEqual(
+					expectedPreference
+						? [{ ifname: "uplink-b", family, metric: 36 }]
+						: [],
+				);
+				if (current === family && winner !== undefined)
+					expect(
+						[...routes].sort((a, b) => a.metric - b.metric)[0]?.ifname,
+					).toBe(winner);
 			}
 			expect(
 				[...table.rows(), ...table.rows(6)].filter((row) =>
@@ -182,7 +200,7 @@ describe("owned host preference lifecycle", () => {
 	});
 
 	for (const family of [4, 6] as const)
-		test(`IPv${family} refuses when no lower representable metric exists`, async () => {
+		test(`IPv${family} handles the competitor metric floor without editing foreign routes`, async () => {
 			// Given: a competitor already at the kernel metric floor.
 			const routes =
 				family === 4
@@ -193,10 +211,40 @@ describe("owned host preference lifecycle", () => {
 				family === 6 ? routes : [],
 			);
 			// When: the otherwise losing uplink is elected.
-			await expect(
-				setDefaultRoute("uplink-b", { runner: table.runner, family }),
-			).rejects.toMatchObject({ reason: "metric-exhausted" });
+			if (family === 6) {
+				await expect(
+					setDefaultRoute("uplink-b", { runner: table.runner, family }),
+				).rejects.toMatchObject({ reason: "metric-exhausted" });
+				expect(table.mutations).toEqual([]);
+			} else {
+				await setDefaultRoute("uplink-b", { runner: table.runner, family });
+				expect(table.mutations).toEqual([
+					[
+						"route",
+						"prepend",
+						"default",
+						"via",
+						"198.51.100.1",
+						"dev",
+						"uplink-b",
+						"src",
+						"198.51.100.2",
+						"proto",
+						"242",
+						"metric",
+						"0",
+					],
+				]);
+				expect(
+					await table.runner("ip", [
+						"route",
+						"get",
+						"203.0.113.254",
+						"fibmatch",
+					]),
+				).toMatch(/dev uplink-b\b.*proto 242\b/);
+			}
 			// Then: no competitor or prior preference is touched to fabricate success.
-			expect(table.mutations).toEqual([]);
+			for (const route of routes) expect(table.rows(family)).toContain(route);
 		});
 });
