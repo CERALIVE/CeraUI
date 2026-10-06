@@ -37,8 +37,8 @@ import {
 	electConnectivityCandidate,
 	raceConnectivityAddresses,
 } from "./connectivity-election.ts";
-import { setDefaultRoute } from "./default-route.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
+import { gatewayRoutePreference } from "./gateway-route-lifecycle.ts";
 import { CONNECTIVITY_CHECK_DOMAIN, checkConnectivity } from "./internet.ts";
 import { getNetworkInterfaces } from "./network-interfaces.ts";
 import { isUplinkClientSteeringEligible } from "./uplink-health/state.ts";
@@ -96,6 +96,7 @@ export type GatewayElectionDeps = {
 	readonly eligible: (ifname: string) => boolean;
 	readonly defaultInterface: typeof resolveDefaultRouteInterface;
 	readonly installRoute: (ifname: string, family: 4 | 6) => Promise<void>;
+	readonly releaseRoutes?: () => Promise<void>;
 	readonly probes: ConnectivityProbes;
 };
 
@@ -110,7 +111,9 @@ function defaultGatewayElectionDeps(): GatewayElectionDeps {
 		interfaces: getNetworkInterfaces,
 		eligible: isUplinkClientSteeringEligible,
 		defaultInterface: resolveDefaultRouteInterface,
-		installRoute: (ifname, family) => setDefaultRoute(ifname, { family }),
+		installRoute: (ifname, family) =>
+			gatewayRoutePreference.apply(ifname, family),
+		releaseRoutes: () => gatewayRoutePreference.apply(undefined),
 		probes: defaultConnectivityProbes,
 	};
 }
@@ -216,9 +219,7 @@ export async function updateGw(
 
 		try {
 			const family = election.family ?? 4;
-			const activeIf =
-				family === 4 ? defaultIf : await deps.defaultInterface(family);
-			if (activeIf !== goodIf) await deps.installRoute(goodIf, family);
+			await deps.installRoute(goodIf, family);
 		} catch (err) {
 			logger.warn("Default-route application failed", {
 				ifname: goodIf,
@@ -240,6 +241,12 @@ export async function updateGw(
 		);
 	}
 
+	try {
+		await deps.releaseRoutes?.();
+	} catch (error) {
+		logger.warn("Default-route release failed", { error });
+		return false;
+	}
 	return defaultReachable;
 }
 

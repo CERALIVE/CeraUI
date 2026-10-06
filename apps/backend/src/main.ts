@@ -35,6 +35,7 @@ import {
 import { checkExecPath } from "./helpers/exec.ts";
 import killall from "./helpers/killall.ts";
 import { logger } from "./helpers/logger.ts";
+// allow: SIZE_OK — Sequential boot composition root; ordering and signal wiring are pinned by boot contract tests.
 import { handleTerminationSignal } from "./helpers/shutdown.ts";
 import { notifyServiceReady } from "./helpers/systemd-ready.ts";
 import { isDevelopment } from "./mocks/mock-config.ts";
@@ -68,6 +69,10 @@ import { initModemUpdateLoop } from "./modules/modems/modem-update-loop.ts";
 import { setMockDbusModemViews } from "./modules/modems/modem-wire-producer.ts";
 import { initMutationRecovery } from "./modules/modems/mutation-replay.ts";
 import { reconcileEthernetRoles } from "./modules/network/ethernet-role-transition.ts";
+import {
+	initGatewayRoutes,
+	stopGatewayRoutes,
+} from "./modules/network/gateway-route-lifecycle.ts";
 import { UPDATE_GW_INT, updateGwWrapper } from "./modules/network/gateways.ts";
 import { createMonitorManager } from "./modules/network/monitor/monitor-manager.ts";
 import {
@@ -430,6 +435,7 @@ await guardNonCritical("hardware-identity-drift", async () => {
 });
 logger.info(bootTimer.phase("🖥️", "hardware"));
 
+await guardNonCritical("host-route-preference", initGatewayRoutes);
 void updateGwWrapper();
 setInterval(updateGwWrapper, UPDATE_GW_INT);
 
@@ -648,6 +654,7 @@ process.on("SIGTERM", () =>
 		stopSrtIngest: stopSRTIngest,
 		stopDmesgWatchers,
 		stopUplinkShaper,
+		stopGatewayRoutes,
 		exit: process.exit,
 	}),
 );
@@ -657,6 +664,7 @@ process.on("SIGINT", () =>
 		stopSrtIngest: stopSRTIngest,
 		stopDmesgWatchers,
 		stopUplinkShaper,
+		stopGatewayRoutes,
 		exit: process.exit,
 	}),
 );

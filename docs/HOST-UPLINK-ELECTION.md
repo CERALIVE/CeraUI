@@ -153,20 +153,59 @@ configuration is copied into curl. No redirects are followed.
 
 ## Applying the election and admitting apt
 
-`gateways.ts` remains the host election coordinator. Its route transaction is in
-`default-route.ts`, re-exported through the existing API. It first uses the
-candidate's observed main-table DHCP default, with the existing named-table path
-as a fallback; it never creates policy-routing tables. The complete route,
-including its device and observed metric, is validated before defaults are
-changed. The selected default stays in place; competing defaults that would win
-or tie are moved above the largest observed metric. Each demoted default is added
-before its old preference is removed, retaining every NIC's route for subsequent
-device-bound probes and failback. Metrics are range-checked before mutation.
-An apply failure undoes completed operations in reverse order and still fails;
-rollback failures are retained in the typed error's cause. The other address
-family's defaults are untouched. This is live kernel route ranking, not a
-persistent NetworkManager profile rewrite; DHCP can restore its own metrics, so
-each apt operation re-elects rather than trusting a previous repair.
+`gateways.ts` remains the host election coordinator. Its serialized route
+transaction is in `default-route.ts`, re-exported through the existing API;
+`default-route-model.ts` owns the parsed route model. It first uses the
+candidate's lowest-metric **foreign** main-table default, with the existing
+named-table path as a fallback. An owned preference is never evidence that the
+NIC still has a default. No policy-routing table or rule is created.
+
+**F-ROUTE-1 ownership correction.** Protocol **242** is reserved exclusively for
+CeraUI's host default preferences in the main table. Inventory uses `ip -N route
+show default` for IPv4 and IPv6, so protocol ownership is numeric regardless of
+local `rt_protos` aliases. A foreign route is never deleted, replaced, demoted,
+or re-added: NetworkManager/DHCP/RA remains its owner, and every NIC retains its
+own baseline route for the next bound probe. No NM profile is written.
+
+When the elected NIC is already strictly lower-metric than every competitor,
+no preference is needed. Otherwise the backend adds **one** marked default for
+the winner at `lowest competing metric - 1`. The copy carries the observed
+gateway, device, source address and onlink requirement, not the foreign protocol,
+metric or RA expiry. A named-table import is marked too. Range validation occurs
+before mutation; ambiguous named-table replies, multipath/source-specific defaults
+and a link-down selected route refuse rather than inventing a routable copy.
+
+There is a real representability limit: IPv4 cannot beat a metric-0 competitor;
+IPv6 cannot beat metric 1 because Linux normalizes metric 0 to 1024. Those cases
+return typed `GatewayRouteError(reason: "metric-exhausted")` with no mutations,
+not a falsely successful election. They require an owner-directed baseline or
+policy decision; this path never edits a competitor to create room. The bench
+baselines (Rock Ethernet 50, OPI Ethernet 100, Wi-Fi 600) have room. No kernel
+qualification of those limits or the new preference is claimed by host tests.
+
+Reconciliation removes only marked obsolete defaults, including an old-family
+preference when the winning family changes, then installs the new one. An
+unchanged winner performs zero mutations. The metric depends only on current
+foreign routes, never earlier preferences, so election flaps cannot ratchet it.
+An apply/release failure undoes completed commands in reverse order across both
+families and still rejects; rollback failures survive in the typed aggregate
+cause. The command sequence is not a crash-atomic netlink transaction, and a
+switch has a short baseline-routing interval between delete and add.
+
+`gateway-route-lifecycle.ts` sweeps marked crash residue before its first
+election (also wired as the noncritical `host-route-preference` boot step), joins
+startup callers and retries a failed sweep on the next apply. Every election
+reconciles even if the observed default already names the winner. An empty
+election releases the preference, including after interface removal. SIGTERM /
+SIGINT cleanup closes admission, drains submitted route writes and releases
+owned defaults before backend exit; a late election cannot recreate them.
+Abrupt death is handled by the next startup sweep, not by an exit-time promise.
+Foreign defaults in either family remain byte-identical to the observed baseline.
+
+**Legacy residue cannot be safely auto-repaired.** The prior demotion code left
+unmarked `proto dhcp` metric copies, indistinguishable from routes owned by NM.
+The protocol sweep deliberately leaves them alone. Re-drills must start from an
+owner-established clean baseline rather than treat startup as legacy cleanup.
 
 The updater returns false on failed application and re-arms maintenance. Concurrent
 callers join one in-flight promise, which releases on every outcome. Apt's explicit
@@ -187,12 +226,20 @@ apt transaction remains a PID-1-owned transient service.
 ## Evidence and limits
 
 Regression suites: `repository-uplink-election`, `gateway-repository-policy`,
-`gateway-route-repair`, `apt-gateway-precondition`, and `repository-probe-socket`
+`gateway-route-repair`, `gateways-migration`, `default-route-ownership`,
+`default-route-lifecycle`, `default-route-edge`, `gateway-route-lifecycle`,
+`apt-gateway-precondition`, and `repository-probe-socket`
 under `apps/backend/src/tests/`. The socket test runs real curl against private,
 ephemeral loopback HTTP/TLS listeners with an ephemeral trusted certificate. The
 socket suite also reproduces a peer that accepts TCP and resets immediately after
 ClientHello without sending a certificate, while serving HTTP successfully. The
-route unit tests inject the OS runner and never mutate the workstation network.
+route unit tests drive an exact-token mutable route-table fake through the OS
+runner seam and never mutate the workstation network. They cover foreign-route
+preservation, minimum-metric selection, repeated elections, family changes,
+crash sweep, removal/release, shutdown races, rollback failures and 512 seeded
+random winner/family/release transitions. This is injection proof, not execution
+of the kernel's route-selection algorithm. Existing opt-in privileged netns
+suites are unchanged; no new sudo or namespace privilege is required.
 
 Non-vacuity was checked by temporary behavioral mutations: removing HTTPS caused
 the resetting peer to pass; returning the first HTTP success elected the impaired

@@ -6,7 +6,18 @@ import {
 	parseFail,
 	parseOk,
 } from "../system/cli-parse.ts";
-import { parseDefaultRouteInterface } from "./connectivity-candidates.ts";
+import {
+	type DefaultRoute,
+	GatewayRouteError,
+	preferenceRoute,
+	readDefaultRoutes,
+	samePreference,
+} from "./default-route-model.ts";
+
+export {
+	GatewayRouteError,
+	HOST_ROUTE_PROTOCOL,
+} from "./default-route-model.ts";
 
 export function buildRouteAddArgv(gw: string): string[] {
 	const tokens = gw
@@ -43,116 +54,162 @@ export type GwDeps = {
 	readonly family: 4 | 6;
 };
 
-export class GatewayRouteError extends Error {
-	override readonly name = "GatewayRouteError";
-	constructor(
-		readonly ifname: string,
-		readonly reason: "invalid-route" | "apply-failed",
-		cause?: unknown,
-	) {
-		super(`setDefaultRoute: ${reason} via ${ifname}`, { cause });
-	}
-}
+const pending = new WeakMap<typeof run, Promise<void>>();
 
-function routeMetric(route: readonly string[], ifname: string): number {
-	const index = route.indexOf("metric");
-	const value = index < 0 ? 0 : Number(route[index + 1]);
-	if (!Number.isInteger(value) || value < 0 || value > 0xffff_ffff) {
-		throw new GatewayRouteError(ifname, "invalid-route");
+async function readRoutes(
+	args: string[],
+	deps: GwDeps,
+): Promise<DefaultRoute[]> {
+	const output = await deps.runner("ip", args);
+	try {
+		return readDefaultRoutes(output, deps.family);
+	} catch (error) {
+		if (error instanceof GatewayRouteError)
+			logParseError(
+				parseFail(
+					"parseDefaultRouteLine",
+					"invalid default-route output",
+					output,
+				),
+			);
+		throw error;
 	}
-	return value;
 }
 
 export async function setDefaultRoute(
-	goodIf: string,
+	goodIf: string | undefined,
 	deps: Partial<GwDeps> = {},
 ): Promise<void> {
 	const runner = deps.runner ?? run;
-	const ifname = argMatch(ID_RE, goodIf);
-	const familyArgs = deps.family === 6 ? ["-6"] : [];
-	const previous = (
-		await runner("ip", [...familyArgs, "route", "show", "default"])
-	)
-		.split("\n")
-		.map((line) => line.trim())
-		.filter(Boolean);
-	// DHCP main-table defaults exist even when the legacy named table does not.
-	const existing = previous.find(
-		(line) => parseDefaultRouteInterface(line) === ifname,
+	const ifname = goodIf === undefined ? undefined : argMatch(ID_RE, goodIf);
+	const flight = (pending.get(runner) ?? Promise.resolve()).then(() =>
+		reconcilePreference(ifname, { runner, family: deps.family ?? 4 }),
 	);
-	const gw =
-		existing ??
-		(await runner("ip", [
-			...familyArgs,
-			"route",
-			"show",
-			"table",
-			ifname,
-			"default",
-		]));
-	const parsed = parseDefaultRouteLine(gw);
-	if (!parsed.ok) {
-		logParseError(parsed);
-		throw new GatewayRouteError(ifname, "invalid-route", parsed.reason);
-	}
-	if (gw.trim().includes("\n") || parseDefaultRouteInterface(gw) !== ifname) {
-		throw new GatewayRouteError(ifname, "invalid-route");
-	}
-	const priorRoutes = previous.map((line) => {
-		const prior = parseDefaultRouteLine(line);
-		if (!prior.ok)
-			throw new GatewayRouteError(ifname, "invalid-route", prior.reason);
-		return prior.value.slice(2);
-	});
-	const selected = parsed.value.slice(2);
-	const selectedMetric = routeMetric(selected, ifname);
-	const metrics = priorRoutes.map((route) => routeMetric(route, ifname));
-	const ceiling = Math.max(selectedMetric, ...metrics);
-	const competitors = priorRoutes.filter(
-		(route) =>
-			route.join(" ") !== selected.join(" ") &&
-			routeMetric(route, ifname) <= selectedMetric,
+	// Failed transactions do not poison the serialization tail; callers keep the error.
+	pending.set(
+		runner,
+		flight.catch(() => undefined),
 	);
-	if (ceiling + competitors.length > 0xffff_ffff) {
-		throw new GatewayRouteError(ifname, "invalid-route");
-	}
-	const undo: string[][] = [];
-	try {
-		if (existing === undefined) {
-			await runner("ip", [...familyArgs, ...parsed.value]);
-			undo.push(["route", "del", ...selected]);
-		}
-		for (const [index, route] of competitors.entries()) {
-			const metricIndex = route.indexOf("metric");
-			const demoted = route.filter(
-				(_, i) =>
-					metricIndex < 0 || (i !== metricIndex && i !== metricIndex + 1),
+	return flight;
+}
+
+async function desiredPreference(
+	ifname: string,
+	baseline: readonly DefaultRoute[],
+	deps: GwDeps,
+): Promise<DefaultRoute | undefined> {
+	const familyRoutes = baseline.filter((route) => route.family === deps.family);
+	const existing = familyRoutes
+		.filter((route) => route.ifname === ifname)
+		.sort((a, b) => a.metric - b.metric)[0];
+	const fallback = existing
+		? []
+		: await readRoutes(
+				[
+					...(deps.family === 6 ? ["-6"] : []),
+					"-N",
+					"route",
+					"show",
+					"table",
+					ifname,
+					"default",
+				],
+				deps,
 			);
-			demoted.push("metric", String(ceiling + index + 1));
-			// Keep every NIC routable for its next bound probe. Add before removing.
-			await runner("ip", [...familyArgs, "route", "add", ...demoted]);
-			undo.push(["route", "del", ...demoted]);
-			await runner("ip", [...familyArgs, "route", "del", ...route]);
-			undo.push(["route", "add", ...route]);
+	if (fallback.length > 1) throw new GatewayRouteError(ifname, "invalid-route");
+	const selected = existing ?? fallback[0];
+	if (!selected) {
+		logParseError(
+			parseFail(
+				"parseDefaultRouteLine",
+				"candidate has no usable default route",
+				"",
+			),
+		);
+		throw new GatewayRouteError(ifname, "invalid-route");
+	}
+	if (
+		selected.ifname !== ifname ||
+		selected.owned ||
+		selected.tokens.includes("linkdown")
+	)
+		throw new GatewayRouteError(ifname, "invalid-route");
+	const lowest = Math.min(
+		...familyRoutes
+			.filter((route) => route.ifname !== ifname)
+			.map((route) => route.metric),
+	);
+	if (existing && selected.metric < lowest) return undefined;
+	const metric = Number.isFinite(lowest) ? lowest - 1 : selected.metric;
+	// IPv6 normalizes metric zero to 1024; it cannot represent a lower preference.
+	if (metric < (deps.family === 6 ? 1 : 0))
+		throw new GatewayRouteError(ifname, "metric-exhausted");
+	return preferenceRoute(selected, metric);
+}
+
+async function reconcilePreference(
+	ifname: string | undefined,
+	deps: GwDeps,
+): Promise<void> {
+	const previous: DefaultRoute[] = [];
+	for (const family of [4, 6] as const)
+		previous.push(
+			...(await readRoutes(
+				[...(family === 6 ? ["-6"] : []), "-N", "route", "show", "default"],
+				{ ...deps, family },
+			)),
+		);
+	const owned = previous.filter((route) => route.owned);
+	const desired =
+		ifname === undefined
+			? undefined
+			: await desiredPreference(
+					ifname,
+					previous.filter((route) => !route.owned),
+					deps,
+				);
+	const retained = desired
+		? owned.find((route) => samePreference(route, desired))
+		: undefined;
+	const undo: { readonly verb: "add" | "del"; readonly route: DefaultRoute }[] =
+		[];
+	const mutate = (verb: "add" | "del", route: DefaultRoute) =>
+		deps.runner("ip", [
+			...(route.family === 6 ? ["-6"] : []),
+			"route",
+			verb,
+			...route.tokens,
+		]);
+	try {
+		for (const route of owned) {
+			if (route === retained) continue;
+			await mutate("del", route);
+			undo.push({ verb: "add", route });
+		}
+		if (desired && !retained) {
+			await mutate("add", desired);
+			undo.push({ verb: "del", route: desired });
 		}
 	} catch (error) {
 		const failures: unknown[] = [error];
-		for (const args of undo.reverse()) {
+		for (const { verb, route } of undo.reverse()) {
 			try {
-				await runner("ip", [...familyArgs, ...args]);
+				await mutate(verb, route);
 			} catch (rollbackError) {
 				failures.push(rollbackError);
 			}
 		}
 		throw new GatewayRouteError(
-			ifname,
+			ifname ?? "",
 			"apply-failed",
 			new AggregateError(failures),
 		);
 	}
-	logger.info("Host default-route preference applied", {
-		ifname,
-		family: deps.family ?? 4,
-		demoted: competitors.length,
-	});
+	if (undo.length > 0)
+		logger.info("Host default-route preference reconciled", {
+			ifname,
+			family: deps.family,
+			metric: desired?.metric,
+			removed: owned.length - Number(Boolean(retained)),
+		});
 }

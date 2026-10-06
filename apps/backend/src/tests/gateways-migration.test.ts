@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, mock, test } from "bun:test";
-
+import { HOST_ROUTE_PROTOCOL } from "../modules/network/default-route.ts";
 import {
 	buildRouteAddArgv,
 	setDefaultRoute,
@@ -55,7 +55,7 @@ describe("setDefaultRoute — argv-only add path", () => {
 		const calls: Array<[string, string[]]> = [];
 		const runner = mock(async (bin: string, args: string[]) => {
 			calls.push([bin, args]);
-			if (args[0] === "route" && args[1] === "show") {
+			if (args.includes("show")) {
 				return args.includes("table") ? "default via 10.0.0.1 dev wwan0\n" : "";
 			}
 			return "";
@@ -66,7 +66,7 @@ describe("setDefaultRoute — argv-only add path", () => {
 		});
 
 		expect(calls[0]?.[0]).toBe("ip");
-		expect(calls[0]?.[1]).toEqual(["route", "show", "default"]);
+		expect(calls[0]?.[1]).toEqual(["-N", "route", "show", "default"]);
 
 		const add = calls.find((c) => c[1][0] === "route" && c[1][1] === "add");
 		expect(add?.[0]).toBe("ip");
@@ -78,17 +78,21 @@ describe("setDefaultRoute — argv-only add path", () => {
 			"10.0.0.1",
 			"dev",
 			"wwan0",
+			"proto",
+			HOST_ROUTE_PROTOCOL,
+			"metric",
+			"0",
 		]);
 		// The gateway never reaches the runner as a single shell string.
 		expect(add?.[1]).not.toContain("default via 10.0.0.1 dev wwan0");
 	});
 
-	test("adds a demoted route before removing the competing preference", async () => {
+	test("adds an owned preference without removing the competing default", async () => {
 		const order: string[] = [];
 		const runner = mock(async (_bin: string, args: string[]) => {
 			if (args[1] === "add") order.push("add");
 			if (args[1] === "del") order.push("del");
-			return args[0] === "route" && args[1] === "show"
+			return args.includes("show") && !args.includes("-6")
 				? "default via 192.0.2.1 dev uplink-a metric 7\ndefault via 10.0.0.1 dev wwan0 metric 19\n"
 				: "";
 		});
@@ -97,7 +101,7 @@ describe("setDefaultRoute — argv-only add path", () => {
 			runner,
 		});
 
-		expect(order).toEqual(["add", "del"]);
+		expect(order).toEqual(["add"]);
 	});
 
 	test("rejects an interface name outside the ifname charset", async () => {

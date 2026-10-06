@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { HOST_ROUTE_PROTOCOL } from "../modules/network/default-route.ts";
 import { setDefaultRoute } from "../modules/network/gateways.ts";
+import { DefaultRouteTable } from "./helpers/default-route-table.ts";
 
 const OLD = "default via 192.0.2.1 dev uplink-a metric 37";
 const GOOD = "default via 198.51.100.1 dev uplink-b metric 83";
@@ -7,26 +9,14 @@ const GOOD = "default via 198.51.100.1 dev uplink-b metric 83";
 describe("host route application", () => {
 	test("a successful repair retains other NIC defaults for a later failback", async () => {
 		// Given: no legacy tables, and a runner modelling the main-table route set.
-		const routes = new Set([OLD, GOOD]);
-		const runner = async (_bin: string, args: string[]) => {
-			if (args.includes("table")) throw new Error("no named table");
-			if (args[1] === "show") return [...routes].join("\n");
-			const route = args.slice(2).join(" ");
-			if (args[1] === "del") routes.delete(route);
-			else routes.add(route);
-			return "";
-		};
+		const table = new DefaultRouteTable([OLD, GOOD]);
+		const runner = table.runner;
 		// When: the preferred path changes in both directions.
 		await setDefaultRoute("uplink-b", { runner });
-		expect([...routes].some((route) => route.includes("dev uplink-a"))).toBe(
-			true,
-		);
+		expect(table.rows()).toContain(OLD);
 		await setDefaultRoute("uplink-a", { runner });
 		// Then: neither NIC loses the route needed by its next bound probe.
-		expect([...routes].some((route) => route.includes("dev uplink-b"))).toBe(
-			true,
-		);
-		expect(routes.size).toBe(2);
+		expect(table.rows()).toEqual([OLD, GOOD].sort());
 	});
 
 	test("uses a candidate's main-table default without requiring a retired named table", async () => {
@@ -40,7 +30,20 @@ describe("host route application", () => {
 		// When: the HTTPS-working NIC is installed using the existing ip mechanism.
 		await setDefaultRoute("uplink-b", { runner });
 		// Then: its observed gateway/device/metric, not a fabricated route, is applied.
-		expect(calls).toContainEqual(["route", "del", ...OLD.split(" ")]);
+		expect(calls.filter((args) => args.includes("del"))).toEqual([]);
+		expect(calls).toContainEqual([
+			"route",
+			"add",
+			"default",
+			"via",
+			"198.51.100.1",
+			"dev",
+			"uplink-b",
+			"proto",
+			HOST_ROUTE_PROTOCOL,
+			"metric",
+			"36",
+		]);
 		expect(calls).not.toContainEqual(["route", "del", ...GOOD.split(" ")]);
 		expect(calls.some((args) => args.includes("table"))).toBe(false);
 	});
@@ -58,35 +61,25 @@ describe("host route application", () => {
 			}),
 		).rejects.toThrow();
 		// Then: the current uplink has not been removed.
-		expect(calls.every((args) => args[1] === "show")).toBe(true);
+		expect(calls.every((args) => args.includes("show"))).toBe(true);
 	});
 
-	test("a failed demotion restores previous defaults and still rejects", async () => {
-		// Given: a later delete fails after the first competing route was demoted.
-		const other = "default via 203.0.113.1 dev uplink-c metric 51";
-		const calls: string[][] = [];
-		const runner = async (_bin: string, args: string[]) => {
-			calls.push(args);
-			if (args.includes("show")) return `${OLD}\n${other}\n${GOOD}\n`;
-			if (args[1] === "del" && args[args.length - 1] === "51")
-				throw new Error("injected route delete failure");
-			return "";
-		};
+	test("a failed preference change restores previous defaults and still rejects", async () => {
+		// Given: an owned preference must be removed before the replacement is added.
+		const owned = `default via 203.0.113.1 dev uplink-c proto ${HOST_ROUTE_PROTOCOL} metric 36`;
+		const table = new DefaultRouteTable([OLD, GOOD, owned]);
+		table.failMutation = 2;
 		// When: route application fails.
-		await expect(setDefaultRoute("uplink-b", { runner })).rejects.toThrow();
+		await expect(
+			setDefaultRoute("uplink-b", { runner: table.runner }),
+		).rejects.toThrow();
 		// Then: the failure stays visible and both prior defaults are restored.
-		expect(calls).toContainEqual(["route", "add", ...OLD.split(" ")]);
-		expect(calls).toContainEqual([
+		expect(table.rows()).toEqual([OLD, GOOD, owned].sort());
+		expect(table.mutations).not.toContainEqual([
 			"route",
 			"del",
-			...OLD.replace("37", "84").split(" "),
+			...GOOD.split(" "),
 		]);
-		expect(calls).toContainEqual([
-			"route",
-			"del",
-			...other.replace("51", "85").split(" "),
-		]);
-		expect(calls).not.toContainEqual(["route", "del", ...GOOD.split(" ")]);
 	});
 
 	test("IPv6 repository success installs the IPv6 default, not an IPv4 route", async () => {
@@ -103,12 +96,24 @@ describe("host route application", () => {
 			},
 		});
 		// Then: every route operation is explicitly IPv6.
-		expect(calls.every((args) => args[0] === "-6")).toBe(true);
+		expect(
+			calls
+				.filter((args) => !args.includes("show"))
+				.every((args) => args[0] === "-6"),
+		).toBe(true);
 		expect(calls).toContainEqual([
 			"-6",
 			"route",
 			"add",
-			...route.replace("37", "84").split(" "),
+			"default",
+			"via",
+			"fe80::2",
+			"dev",
+			"uplink-b",
+			"proto",
+			HOST_ROUTE_PROTOCOL,
+			"metric",
+			"36",
 		]);
 	});
 });
