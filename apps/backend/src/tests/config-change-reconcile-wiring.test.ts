@@ -3,7 +3,7 @@
  * todo 14).
  *
  * Wave 3 todo 12 shipped `reconcileInflightConfigChange` and nothing called it.
- * `apps/backend/AGENTS.md` documented marker-only crash reconciliation as live
+ * `apps/backend/docs/agents/apply-now-config-change-transaction-staged-persistence.md` documented marker-only crash reconciliation as live
  * behaviour while the only importer was its own unit test, so a
  * `config.inflight.json` left by a process that died mid-transaction was never
  * judged: the staged candidate was lost and the marker file leaked forever.

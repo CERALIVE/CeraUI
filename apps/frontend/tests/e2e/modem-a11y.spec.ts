@@ -683,7 +683,7 @@ test.describe("modem UX a11y gate (modem-stack Phase B)", () => {
 			// A bonded link's NAME is how an operator tells one link from another, and
 			// at 375px it used to measure 0: every instrument beside it is `shrink-0`,
 			// so the zero-basis identity column absorbed the entire squeeze. It was a
-			// KNOWN gap carried in `apps/frontend/AGENTS.md` as "a responsive change to
+			// KNOWN gap carried in `apps/frontend/docs/agents/conventions.md` as "a responsive change to
 			// the shared row, with its own visual QA" — which is this pass. Asserted as
 			// a WIDTH, because the column kept rendering its text the whole time.
 			const labelWidths = await page.evaluate(() =>

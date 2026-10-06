@@ -1,138 +1,53 @@
 # @ceraui/i18n — Agent Knowledge Base
 
-Parent: [`../../AGENTS.md`](../../AGENTS.md)
-Operator/contributor guide: [`README.md`](README.md) — export map, add-a-key/add-a-locale workflow, generated-code contract.
+Parent: [Workspace rules](https://github.com/CERALIVE/ceralive/blob/master/AGENTS.md).
 
-## OVERVIEW
+## ROLE
 
-Ten locales, full RTL. **Paraglide is the sole i18n runtime** — the legacy
-generator, its Svelte 5 adapter, its plural resolver, and the TypeScript locale
-dictionaries are all deleted. `messages/*.json` are the canonical, hand-editable
-catalogs; `generated/` and `src/paraglide/` are build outputs. Never hand-edit a
-generated file, and never install an install-time hook here: everything is built
-by `generate:i18n`, which runs ahead of every consumer.
+Ten-locale Paraglide catalogs, generated registry, Svelte facade and runtime-free formatters.
 
 ## STRUCTURE
 
-```
-messages/{locale}.json      # inlang catalogs — 1472 verbatim dotted keys per locale
-project.inlang/             # inlang project (settings.json committed; cache gitignored)
-generated/                  # GENERATED, GITIGNORED — per-namespace barrels + message registry
-src/paraglide/              # GENERATED, GITIGNORED — Paraglide runtime, one module per message
-src/
-├── locale-lifecycle.ts     # LOCALES / RTL_LANGUAGES / startup priority — pure, rune-free
-├── svelte.svelte.ts        # `/svelte` — Paraglide runes store + the `m` facade
-├── formatters.ts           # standalone Intl formatters — imports NO i18n runtime
-└── branding.ts             # brand names — not translated, kept separate
-tests/fixtures/             # IMMUTABLE rendered oracle — not generated, not free-form copy
-scripts/
-├── compile-messages.ts     # paraglide compile (outputStructure: "message-modules")
-├── generate-registry.ts    # post-compile barrels + registry generator
-└── module-id.ts            # paraglide safe-module-id mirror + collision pre-flight
+```text
+messages/ — hand-edited catalogs
+project.inlang/ — compiler settings
+src/ — runtime and formatters
+generated/ — generated registry
+scripts/ — generation
+tests/ — parity and frozen oracles
+docs/ — routed contracts
 ```
 
-## IMPORT PATHS
+## COMMANDS
 
-```typescript
-import { m, setLocale, getLocale } from '@ceraui/i18n/svelte';    // frontend — the facade
-import { formatBytes } from '@ceraui/i18n/formatters';             // anywhere
-import { LOCALES, RTL_LANGUAGES } from '@ceraui/i18n';             // locale constants
-import { registerAllNamespaces } from '@ceraui/i18n/eager';        // standalone builds ONLY
-```
-
-`m` is keyed on the **verbatim dotted key**: `m["live.setup.title"]()`. There is no
-`/node` subpath and no legacy adapter subpath.
-
-`/eager` is the fourth entry and is NOT for the app. Every namespace is lazy (see
-below), and the SPA resolves them in two phases — `ensureBootNamespaces()` before
-mount, then `ensureNamespace()`/`ensureNamespaces()` at each destination's
-activation point (`apps/frontend/src/lib/i18n/namespace-activation.ts`).
-`/eager` registers the whole catalog from STATIC imports instead,
-for a build that cannot fetch a sibling chunk: the federation dialog bundles (one
-hosted module, strict CSP, signed manifest pinning an exact chunk graph) and the
-test harnesses — `packages/i18n/tests/setup.ts` here, and
-`apps/frontend/vitest.components.setup.ts` there.
-
-**The frontend now has TWO setup files, and only one of them touches this
-package.** `apps/frontend/vitest.storage.setup.ts` installs a fresh `Storage` per
-file and is loaded by BOTH Vitest projects; `apps/frontend/vitest.components.setup.ts`
-is loaded by the jsdom `components` project alone and is the ONLY one of the pair
-that imports `/eager`. So a test in the rune-free `pure` project runs with an
-unregistered catalog by construction — the import-graph classifier
-(`scripts/ci/vitest-classify.mjs` at the CeraUI root) already routes anything reaching
-Svelte or the DOM into `components`, so a spec that renders copy belongs there.
-`apps/frontend/vitest.federation.config.ts` loads both, storage first.
-
-Importing `/eager` from app code re-fuses the ten-locale catalog into the entry
-chunk — a measured ~400 KB gzip regression.
-
-`registerAllNamespaces()` is idempotent per eager-module/registry instance. The
-three federation entries may initialize the same static graph, so only the first
-successful call writes the catalog. The memo is module-local, not process-global:
-a fresh isolated registry must still be populated. A failed registration is not
-memoized. `tests/eager-registration.test.ts` pins all three properties.
-
-## GENERATE
+Run from the CeraUI checkout root:
 
 ```bash
-bun run --filter @ceraui/i18n generate:i18n   # paraglide compile + registry generation
-bun run --filter @ceraui/i18n test            # runs generate:i18n first, then bun test
+bun run --filter @ceraui/i18n generate:i18n
+bun run --filter @ceraui/i18n check
+bun run --filter @ceraui/i18n test
+bunx biome check packages/i18n
 ```
 
-Runs as the first step of this package's own `check` / `test` and of the frontend
-`check` / `test` / `build` / `build:federation` chains, so a clean worktree never
-fails on the gitignored generated modules. There is no install-time generation:
-each gate is independently runnable from `bun install` alone.
+## WHERE TO LOOK
 
-## CONVENTIONS + ANTI-PATTERNS
+| Task / code scope | Contract |
+|---|---|
+| Before changing anything else here, open docs/agents/README.md and read the contract for the subsystem you touch | [Contract index](docs/agents/README.md) |
+| Preamble | [Contract 1](docs/agents/overview.md) |
+| OVERVIEW | [Contract 2](docs/agents/overview-2.md) |
+| STRUCTURE | [Contract 3](docs/agents/structure.md) |
+| IMPORT PATHS | [Contract 4](docs/agents/import-paths.md) |
+| GENERATE | [Contract 5](docs/agents/generate.md) |
+| CONVENTIONS + ANTI-PATTERNS | [Contract 6](docs/agents/conventions-anti-patterns.md) |
 
-- New keys go into `messages/en.json` first — it is the base locale and the SOURCE
-  OF TRUTH, edited by hand. Other locales follow; the parity gate fails on a
-  differing key set.
-- **The test suite reads `messages/*.json` and the frozen fixtures, and imports no
-  message runtime.** Shared readers live in `tests/helpers/catalog.ts`.
-- **Nothing may write `tests/fixtures/*.rendered.json`.** It is the immutable
-  pre-migration oracle; the generator that captured it retired with the runtime it
-  rendered through, and regenerating it from paraglide would overwrite the oracle
-  with the very thing it exists to falsify. A deliberate copy change re-freezes it
-  in its own separately-reviewed PR.
-- `branding.ts` holds brand names that don't get translated — import from there.
-- Svelte 5 store uses runes — don't convert to stores.
-- Don't hand-edit anything under `generated/` or `src/paraglide/`.
-- Namespace barrels import each compiled message by its verbatim dotted export
-  name and place the function directly in the registry object. Do not spread
-  module namespace objects: that forces an export-getter wrapper per message into
-  the bundle. Direct bindings preserve every key, locale and message function
-  while keeping the SPA and precache within their unchanged budgets.
-- **Every namespace is LAZY, and `EAGER_NAMESPACES` (in `scripts/generate-registry.ts`)
-  is empty on purpose.** A compiled Paraglide message inlines all ten locales, so an
-  all-eager catalog is one indivisible blob; under rolldown a statically-reachable
-  chunk cannot be split by naming it, so a dynamic import is the only lever. Measured:
-  entry chunk 842 892 -> 438 997 B gzip, total SPA JS+CSS 909 347 -> 866 755 B gzip.
-  Flipping one back to eager is a regression on both axes —
-  `tests/message-registry.test.ts` fails if any namespace stops being lazy.
-- **`EAGER_NAMESPACES` is NOT the boot set, and must not be used as one.** Which
-  namespaces the SPA awaits before mount is an APP concern, owned by
-  `apps/frontend/src/lib/i18n/namespace-activation.ts`: the boot set is every
-  namespace first paint can read (shell + the DEFAULT `live` destination), and the
-  remainder is claimed by the destination that reads it. Moving a namespace into
-  `EAGER_NAMESPACES` to make it load at boot would fuse it into the entry chunk —
-  the measured regression above — where adding it to the boot set costs nothing
-  extra in bytes, only one more parallel chunk fetch.
-- **`ensureAllNamespaces()` is not a boot path.** It stays for harnesses and
-  full-catalog consumers; calling it before mount re-serialises first paint behind
-  all 31 namespaces, which is exactly what the boot/destination split removed.
-- **Don't import Paraglide's umbrella `paraglide/messages.js`** — it re-exports every
-  message eagerly, which collapses the whole catalog into one chunk and makes
-  `ensureNamespace()` structurally incapable of splitting anything. Import the facade.
-  A test gate fails the build if anything reaches past it.
-- Don't switch `<html dir>` to Paraglide's `getTextDirection()` — `RTL_LANGUAGES` is
-  the direction source the e2e locale-parity spec is written against.
-- Don't add locale persistence here — the app's `$persist` store owns it, under an
-  unchanged key; `initLocale()` takes the saved code as an argument.
-- Don't import a compiled message module directly — use `m`.
-- Don't import the svelte store in backend code; `@ceraui/i18n/formatters` and the
-  root locale constants are the two runtime-free surfaces that are safe there.
-- **`src/svelte.svelte.ts` is a rune module under a plain `tsc` gate**, so
-  `tsconfig.json` carries `"types": ["svelte"]` for the ambient `$state` declaration.
-  Drop it and every rune reads as TS2304 `Cannot find name '$state'`.
+## HARD RULES
+
+- Spanish strings are neutral LATAM (tú); docs.ceralive.tv quotes es.json verbatim, so a label change needs a docs update (Rule G)
+- messages/en.json is the hand-edited base locale; maintain identical key sets across all locales.
+- Never hand-edit generated/ or src/paraglide/; generate:i18n runs before consumers, never as an install-time hook.
+- Never write tests/fixtures/*.rendered.json; deliberate copy changes re-freeze the immutable oracle in a separately reviewed PR.
+- Use the m facade, never compiled messages or the Paraglide umbrella; backend imports only runtime-free formatters/constants.
+- Keep every namespace lazy and EAGER_NAMESPACES empty; /eager is for federation/harnesses, never app code.
+- App namespace activation owns the boot set; ensureAllNamespaces() is not a boot path.
+- RTL_LANGUAGES owns direction; app persistence owns locale storage; keep Svelte ambient types for the rune module.

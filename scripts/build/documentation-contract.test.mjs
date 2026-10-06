@@ -99,7 +99,7 @@ describe("documentation contracts", () => {
 				backendManifest.dependencies[name],
 			]),
 		);
-		const rootPins = documentedDependencyPins(readRepoFile("AGENTS.md"));
+		const rootPins = documentedDependencyPins(readRepoFile("docs/agents/role-in-the-group.md"));
 		const readmePins = documentedDependencyPins(
 			markdownSection(readRepoFile("apps/frontend/README.md"), /^Registry Dependencies$/i),
 		);
@@ -114,11 +114,11 @@ describe("documentation contracts", () => {
 	it("documents every federation entry emitted by the build contract", () => {
 		const expected = ["audio-entry.ts", "encoder-entry.ts", "server-entry.ts"];
 		const rootEntries = documentedEntryNames(
-			markdownSection(readRepoFile("AGENTS.md"), /^What gets built$/i),
+			markdownSection(readRepoFile("docs/agents/federation-producer-pipeline.md"), /^What gets built$/i),
 		);
 		const frontendEntries = documentedEntryNames(
 			markdownSection(
-				readRepoFile("apps/frontend/AGENTS.md"),
+				readRepoFile("apps/frontend/docs/agents/federation-lib-build-task-39.md"),
 				/^FEDERATION LIB BUILD\b/i,
 			),
 		);
@@ -128,7 +128,10 @@ describe("documentation contracts", () => {
 	});
 
 	it("documents the signed manifest fields and current producer version", () => {
-		const frontendAgents = readRepoFile("apps/frontend/AGENTS.md");
+		const frontendAgents = [
+			readRepoFile("apps/frontend/docs/agents/federation-lib-build-task-39.md"),
+			readRepoFile("apps/frontend/docs/agents/federation-signing-task-40.md"),
+		].join("\n");
 		const buildSection = markdownSection(frontendAgents, /^FEDERATION LIB BUILD\b/i);
 		const signingSection = markdownSection(frontendAgents, /^FEDERATION SIGNING\b/i);
 		const fields = documentedManifestFields(signingSection);

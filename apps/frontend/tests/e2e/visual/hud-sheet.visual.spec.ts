@@ -154,7 +154,7 @@ const DESIGN_PASS_26_DIR = path.resolve(
 const SM_BREAKPOINT_PX = 640;
 
 /**
- * Every `hud-`-prefixed testid the compact strip may carry (AGENTS.md → "HUD
+ * Every `hud-`-prefixed testid the compact strip may carry (`docs/agents/device-first-source-model-go-live-card.md` → "HUD
  * 4-fact scope"). The unit twin of this list is `STRIP_HUD_TESTIDS` in
  * `src/main/HudBar.test.ts`; both must move together or the budget has a hole.
  */

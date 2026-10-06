@@ -67,7 +67,7 @@ describe("LinkBadge", () => {
 
 	it("compact variant stays at TWO facts — the HUD strip's scope is deliberate", () => {
 		// The persistent strip carries exactly four facts by product decision
-		// (root AGENTS.md → HUD 4-fact scope). A name or a kind label here would
+		// (`docs/agents/device-first-source-model-go-live-card.md` → HUD 4-fact scope). A name or a kind label here would
 		// smuggle a fifth in, so their absence is a contract, not an oversight.
 		const { queryByTestId, container } = render(LinkBadge, {
 			props: { link: link(), variant: "compact", typeLabel: "LTE" },

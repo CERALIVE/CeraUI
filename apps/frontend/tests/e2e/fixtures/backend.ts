@@ -9,7 +9,7 @@ import { leaseBackendPort } from "./backend-port.js";
  *
  * Each acquisition spawns its OWN backend on a leased port with its OWN
  * working directory, so the backend's CWD-relative state files (`config.json`,
- * `auth_tokens.json`, `setup.json` — see apps/backend AGENTS.md "Config files …
+ * `auth_tokens.json`, `setup.json` — see `apps/backend/docs/agents/conventions.md` "Config files …
  * read/written from working dir") are isolated per worker. This removes both
  * shared-`config.json` clobbering AND `dev.emit` broadcast bleed across workers,
  * which is what previously forced `workers: 2` and the broad `serial` cordon.

@@ -11,7 +11,7 @@ import { describe, expect, test } from "bun:test";
 // warning, and a PASSING typecheck whenever the consumer declared its own local
 // shape for the same wire data. It is a runtime-only, silent data loss.
 //
-// The motivating case is recorded verbatim in the workspace root AGENTS.md:
+// The motivating case is recorded in `docs/agents/a-registry-pin-is-a-version-boundary-and-the-gate-is-the.md`:
 // cerastream PR #126 added `device_address` to `captureDeviceSchema`, and CeraUI
 // PR #303 merged the same day shipping BT-mic code reading `node.device_address`
 // while still pinned to `@ceralive/cerastream@2026.8.0`, whose gitHead predates

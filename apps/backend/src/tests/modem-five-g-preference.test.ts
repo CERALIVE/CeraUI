@@ -11,7 +11,7 @@
  *   2. THE GATE — off by default, capability-gated on top of that, and the read
  *      block ABSENT from the wire until the claim is surfaceable.
  *   3. A REFUSED WRITE IS NEVER A SUCCESS. This is the exact defect class
- *      `apps/backend/AGENTS.md` records for the sibling network-type selector: a
+ *      `apps/backend/docs/agents/the-radio-mode-an-operator-reads-must-be-a-live-read.md` records for the sibling network-type selector: a
  *      `mmSetNetworkTypes` answering `false`/`undefined` was dropped on the floor
  *      while the configure-echo parroted the REQUEST, so a rejected mode reached
  *      the operator as "Saved" with the rejected value selected. Every failure arm

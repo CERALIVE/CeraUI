@@ -23,7 +23,7 @@
  * `REASON_COPY_KEY` is `satisfies Record<UpdateCheckFailureReason, string>`, so
  * a fifth reason added to the wire removes a required key and fails `tsc`
  * BEFORE this gate even runs. It is a TABLE rather than an interpolated
- * namespace for the reason `apps/frontend/AGENTS.md` gives: interpolation is
+ * namespace for the reason `apps/frontend/docs/agents/every-refusal-an-operator-can-trigger-has-its-own-message.md` gives: interpolation is
  * what renders a raw dotted key the moment a wire enum grows, and the four
  * reasons genuinely live in two namespaces (the two pre-existing ones keep the
  * `general.*` copy that already ships).

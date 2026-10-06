@@ -273,7 +273,7 @@ describe("the dongle names itself when it can", () => {
  * renders it. It is worth its own block because the failure mode is SILENT:
  * `modem-wire-producer.ts` casts the backend reading `as RouterAdmin`, so a
  * field the schema does not carry is Zod-stripped with no error and no warning
- * — the same class of defect `apps/backend/AGENTS.md` records for
+ * — the same class of defect `apps/backend/docs/agents/anti-patterns.md` records for
  * `captureDeviceSchema.modes[]`.
  *
  * The second half of the block is the honest floor: the signal reaching the
