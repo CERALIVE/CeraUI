@@ -19,7 +19,7 @@ PASSING typecheck whenever the consumer declared its own local shape for the
 same wire data. Runtime-only, silent data loss.
 
 The motivating case is recorded in full in the workspace root
-[`AGENTS.md`](https://github.com/CERALIVE/CeraUI/blob/main/AGENTS.md) → BINDING-SCHEMA DRIFT: cerastream PR #126 added
+[`AGENTS.md`](https://github.com/CERALIVE/ceralive/blob/master/docs/governance/critical-constraints.md) → BINDING-SCHEMA DRIFT: cerastream PR #126 added
 `device_address` to `captureDeviceSchema`, and CeraUI PR #303 merged the same day
 shipping BT-mic code reading `node.device_address` while still pinned to
 `@ceralive/cerastream@2026.8.0`, whose gitHead predates PR #126 entirely.

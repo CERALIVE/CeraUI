@@ -2,5 +2,5 @@
 
 # CeraUI — Agent Knowledge Base
 
-Parent: [`../AGENTS.md`](https://github.com/CERALIVE/CeraUI/blob/main/AGENTS.md)
+Parent: [`../AGENTS.md`](https://github.com/CERALIVE/ceralive/blob/master/AGENTS.md)
 
