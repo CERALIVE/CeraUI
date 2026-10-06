@@ -20,7 +20,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 // parses it into the typed snapshot the `linkTelemetry` flow depends on.
 //
 // The contract being skew-tested (sender PARITY CONTRACT):
-// https://github.com/CERALIVE/srtla-send-rs/blob/main/docs/agents/parity-contract-ceraui-depends-on-every-bullet-change-only-w.md
+// https://github.com/CERALIVE/srtla-send-rs/blob/aae1a6dd1962d6d58b520753f48e81253edb9abb/AGENTS.md#L84-L98
 //   {"schema_version":1,"last_updated_ms":<ms>,"connections":[
 //     {"conn_id","rtt_ms","nak_count","weight_percent","window","in_flight","bitrate_bps"}]}
 //   - schema_version is the literal 1 (Rust adds it; the reader validates it).
