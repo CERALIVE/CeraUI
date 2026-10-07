@@ -102,10 +102,7 @@ describe("a dup-IP twin reaches the health round, bound to its device", () => {
 		);
 		expect(bindings.get(TWIN_A)).toEqual({ kind: "device", ifname: TWIN_A });
 		expect(bindings.get(TWIN_B)).toEqual({ kind: "device", ifname: TWIN_B });
-		// Non-vacuity: an ordinary uplink is still steered by its address, so the
-		// `device` answers above are a property of the collision and not of the
-		// function always saying `device`.
-		expect(bindings.get(LAN_IF)).toEqual({ kind: "source-ip", ip: LAN_IP });
+		expect(bindings.get(LAN_IF)).toEqual({ kind: "device", ifname: LAN_IF });
 	});
 });
 

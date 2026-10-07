@@ -145,6 +145,26 @@ cache. Curl ignores `.curlrc` and proxy environment routing for repository probe
 (`-q`, `--noproxy '*'`), so those cannot bypass the requested path or TLS checks.
 There is no new probe implementation or new process runner.
 
+**Probe attribution correction (F-R8-2).** Generic HTTP candidate probes now also
+use `--interface if!<name>` for every eligible NIC, not only duplicate-address
+twins. `localAddress` selected eth0's source address but did not constrain its
+egress: the real kernel routes `from 192.168.78.131` through an owned WLAN 242/49
+or foreign metric-zero winner. Unique addresses and simultaneous link-local/global
+addresses do not require source-only binding. Repository probes already used
+device binding; the old `from …` log described the generic probe, not repository
+curl's binding. Both device-probe paths ignore `.curlrc` and proxy routing.
+Probes never add routes/rules or change sysctls. Namespace packet-counter tests
+prove actual eth0 egress with both competing route protocols and the dual-address
+and duplicate-address fixtures, with route/rule dumps unchanged.
+
+The raw Rock repository `ipv4 blocked` result is **not explained** by the generic
+source-binding defect: it is an independently device-bound timeout. No raw packet
+capture, curl argv/exit timing or `rp_filter` reading was retained on that board.
+The host did not reproduce link-local source selection with device binding; strict
+reverse-path filtering, DNS and concurrent arm changes remain unqualified causes.
+This correction proves probe egress attribution, not that every timeout disappears
+on the board. Re-drill the isolated impaired-WLAN and HiLink windows.
+
 The existing probe semantics remain deliberately narrow: any HTTP response after
 verified TLS (including 403/404/5xx) proves transport reachability, not package
 availability. The first-party endpoint remains its public origin root rather than

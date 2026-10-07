@@ -209,9 +209,7 @@ function recordingProbes(
 
 /** The twins only, so the election has to separate them by device alone. */
 function twinCandidates(): ProbeCandidate[] {
-	return eligibleProbeCandidates(TWIN_NETIF).filter(
-		(c) => c.binding.kind === "device",
-	);
+	return eligibleProbeCandidates(TWIN_NETIF).filter((c) => c.name !== "eth0");
 }
 
 describe("electConnectivityCandidate — twin fixtures", () => {
@@ -301,9 +299,9 @@ describe("admin reachability is NOT a WAN claim", () => {
 	});
 });
 
-describe("electConnectivityCandidate — ordinary roster is unchanged", () => {
-	test("a normally-addressed interface is still probed by source address", async () => {
-		const probes = recordingProbes(new Set(), new Set(["192.168.78.132"]));
+describe("electConnectivityCandidate — ordinary roster names its device", () => {
+	test("a normally-addressed interface is probed by device too", async () => {
+		const probes = recordingProbes(new Set(["eth0"]));
 		const election = await electConnectivityCandidate(
 			EXTERNAL_ADDRS,
 			eligibleProbeCandidates({ eth0: iface({ ip: "192.168.78.132" }) }),
@@ -311,10 +309,10 @@ describe("electConnectivityCandidate — ordinary roster is unchanged", () => {
 		);
 
 		expect(election.elected?.name).toBe("eth0");
-		expect(probes.calls.sourceIp).toEqual([
-			{ addr: EXTERNAL_ADDRS[0] as string, ip: "192.168.78.132" },
+		expect(probes.calls.device).toEqual([
+			{ addr: EXTERNAL_ADDRS[0] as string, ifname: "eth0" },
 		]);
-		expect(probes.calls.device).toEqual([]);
+		expect(probes.calls.sourceIp).toEqual([]);
 	});
 
 	test("only the first resolved address from a family is tried before giving up", async () => {
@@ -326,8 +324,6 @@ describe("electConnectivityCandidate — ordinary roster is unchanged", () => {
 		);
 
 		expect(election.elected).toBeUndefined();
-		expect(probes.calls.sourceIp.map((c) => c.addr)).toEqual([
-			"142.251.133.99",
-		]);
+		expect(probes.calls.device.map((c) => c.addr)).toEqual(["142.251.133.99"]);
 	});
 });

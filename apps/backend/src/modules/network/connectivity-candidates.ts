@@ -122,8 +122,8 @@ export function deviceBoundProbeExclusionReason(
 
 /**
  * How this interface must be probed, or `undefined` when it may not be probed
- * at all. A duplicate-IP interface is bound BY DEVICE; everything else keeps
- * the unchanged source-address binding.
+ * at all. Every candidate binds the device: a unique source address does not
+ * constrain egress when another main-table default wins the lookup.
  */
 export function probeBindingFor(
 	name: string,
@@ -132,10 +132,7 @@ export function probeBindingFor(
 	if (deviceBoundProbeExclusionReason(entry) !== undefined) return undefined;
 	if (!entry?.ip) return undefined;
 
-	if ((entry.error & NETIF_ERR_DUPIPV4) !== 0) {
-		return { kind: "device", ifname: name };
-	}
-	return { kind: "source-ip", ip: entry.ip };
+	return { kind: "device", ifname: name };
 }
 
 /**
