@@ -250,8 +250,11 @@ foreign routes, never earlier preferences, so election flaps cannot ratchet it.
 An acquisition failure undoes completed commands in reverse order across both
 families and still rejects; rollback failures survive in the typed aggregate
 cause. Restoration is derived from the **ordered snapshot**, never from metric 0
-alone: an untied metric uses add; a sole owned IPv4 peer at the first/last position
-uses prepend/append. The protocol-pair stage leaves an interior old row untouched
+alone: a sole IPv4 snapshot peer uses **prepend**, not add, because the staged
+replacement may still occupy that priority at undo time. A sole IPv6 peer uses
+add only after reverse-order undo removes its same-family staged replacement.
+With foreign equal-metric peers, the sole owned IPv4 first/last endpoint uses
+prepend/append. The protocol-pair stage leaves an interior old row untouched
 on verification rejection. IPv6 tied or multiple-owned peer groups have no
 assumed restoration operation. At
 most one unrestoreable row may be removed as the final command, after all verification

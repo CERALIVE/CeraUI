@@ -1,6 +1,10 @@
+/// <reference lib="es2022" />
 import { expect } from "bun:test";
+import type { run } from "../../helpers/run.ts";
 import { setDefaultRoute } from "../../modules/network/default-route.ts";
+import { GatewayRouteError } from "../../modules/network/default-route-model.ts";
 import { kernelRouteRunner as runner } from "./default-route-kernel.ts";
+import { runTestCommand } from "./run-test-command.ts";
 
 const FOREIGN = "default via 192.0.2.1 dev routea proto 16";
 
@@ -22,6 +26,65 @@ async function renewForeign(): Promise<void> {
 export const rollbackKernelScenarios: Readonly<
 	Record<string, () => Promise<void>>
 > = {
+	"RT4-M1 untied IPv4 undo preserves ordered tables after real IPv6 EPERM":
+		async () => {
+			// Given: the old preference is sole at priority 49 before a third NIC is elected.
+			await runner("ip", ["link", "add", "routec", "type", "dummy"]);
+			await runner("ip", ["link", "set", "routec", "up"]);
+			await runner("ip", ["addr", "add", "198.18.0.2/24", "dev", "routec"]);
+			for (const row of [
+				"default via 192.0.2.1 dev routea proto 16 metric 50",
+				"default via 198.51.100.1 dev routeb proto 16 metric 702",
+				"default via 198.18.0.1 dev routec proto 16 metric 703",
+			])
+				await runner("ip", ["route", "add", ...row.split(" ")]);
+			await setDefaultRoute("routeb", { runner });
+			await runner("ip", [
+				"-6",
+				"route",
+				"add",
+				..."default via fe80::2 dev routeb proto 242 metric 7".split(" "),
+			]);
+			const dump = (family: 4 | 6) =>
+				runner("ip", [`-${family}`, "-N", "route", "show", "table", "all"]);
+			const fib = () =>
+				runner("ip", ["-N", "route", "get", "8.8.8.8", "fibmatch"]);
+			const before = [await dump(4), await dump(6)];
+			const beforeFib = await fib();
+			expect(beforeFib).toMatch(/dev routeb proto 242 metric 49\b/);
+			const fault: typeof run = async (bin, args, opts) => {
+				if (args.includes("-6") && args.includes("del")) {
+					expect(await fib()).toMatch(/dev routec proto 242 metric 49\b/);
+					expect(await dump(4)).not.toMatch(/dev routeb proto 242 metric 49\b/);
+					const result = await runTestCommand(["unshare", "-Ur", bin, ...args]);
+					expect(result.code).toBe(2);
+					expect(result.stderr).toMatch(
+						/^RTNETLINK answers: Operation not permitted/,
+					);
+					throw new Error(result.stderr);
+				}
+				return runner(bin, args, opts);
+			};
+			// When: the unchanged IPv6 delete argv runs without privilege in its owning namespace.
+			const error: unknown = await setDefaultRoute("routec", {
+				runner: fault,
+			}).catch((cause: unknown) => cause);
+			// Then: only the injected EPERM remains; undo preserves full ordered tables and winner.
+			expect(error).toBeInstanceOf(GatewayRouteError);
+			if (
+				!(error instanceof GatewayRouteError) ||
+				!(error.cause instanceof AggregateError)
+			)
+				throw new Error("aggregate missing");
+			expect(error.cause.errors).toHaveLength(1);
+			expect(error.cause.errors[0]).toMatchObject({
+				message: expect.stringContaining(
+					"RTNETLINK answers: Operation not permitted",
+				),
+			});
+			expect([await dump(4), await dump(6)]).toEqual(before);
+			expect(await fib()).toBe(beforeFib);
+		},
 	"RT2-M1 rejected election preserves ordered FIB": async () => {
 		// Given: renewal overtook the old preference before a third NIC is elected.
 		await acquireFloor();

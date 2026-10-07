@@ -88,7 +88,9 @@ export async function readOwnedInventory(runner: typeof run): Promise<{
 				const restore = metrics.some((metric) => !Number.isInteger(metric))
 					? undefined
 					: peers.length === 1
-						? "add"
+						? family === 4
+							? "prepend"
+							: "add"
 						: family === 6 || peers.filter(isOwned).length !== 1
 							? undefined
 							: position === 0
