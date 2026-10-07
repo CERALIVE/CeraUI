@@ -56,7 +56,10 @@ export async function desiredPreference(
 	if (deps.family === 6 && metric < 1)
 		throw new GatewayRouteError(ifname, "metric-exhausted");
 	return {
-		...preferenceRoute(selected, Math.max(0, metric)),
+		...preferenceRoute(
+			{ ...selected, realm: deps.family === 4 && lowest === 0 ? 1 : 0 },
+			Math.max(0, metric),
+		),
 		prepend: deps.family === 4 && lowest === 0,
 	};
 }
@@ -73,7 +76,11 @@ export async function fibChoosesPreference(
 		"fibmatch",
 	]);
 	const [chosen] = parseRouteInventory(output, 4);
+	const table = chosen?.tokens.indexOf("table") ?? -1;
 	return (
-		chosen?.owned === true && chosen.usable && samePreference(chosen, route)
+		chosen?.owned === true &&
+		(table < 0 || chosen.tokens[table + 1] === "254") &&
+		chosen.usable &&
+		samePreference(chosen, route)
 	);
 }

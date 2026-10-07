@@ -23,9 +23,7 @@ export class DefaultRouteTable {
 			return [...table].join("\n");
 		}
 		if (verb === "get") {
-			const metric = (row: string) =>
-				Number(/\bmetric (\d+)/.exec(row)?.[1] ?? (family === 6 ? 1024 : 0));
-			return [...table].sort((a, b) => metric(a) - metric(b))[0] ?? "";
+			return this.orderedRows(family)[0] ?? "";
 		}
 		this.mutations.push(args);
 		if (this.mutations.length === this.failMutation)
@@ -43,17 +41,18 @@ export class DefaultRouteTable {
 				break;
 			}
 			case "add":
+			case "append":
 				if (table.has(row)) throw new Error("route exists");
 				table.add(row);
 				break;
 			case "del":
 				{
 					const identity = (value: string) =>
-						["via", "dev", "src", "proto", "metric"]
+						["via", "dev", "src", "proto", "metric", "realm"]
 							.map(
 								(key) =>
 									new RegExp(`\\b${key} (\\S+)`).exec(value)?.[1] ??
-									(key === "metric" ? "0" : ""),
+									(key === "metric" || key === "realm" ? "0" : ""),
 							)
 							.join("|") + String(value.split(" ").includes("onlink"));
 					const existing = [...table].find(
@@ -71,5 +70,13 @@ export class DefaultRouteTable {
 
 	rows(family: 4 | 6 = 4): string[] {
 		return [...(this.routes.get(family) ?? [])].sort();
+	}
+
+	orderedRows(family: 4 | 6 = 4): string[] {
+		const metric = (row: string) =>
+			Number(/\bmetric (\d+)/.exec(row)?.[1] ?? (family === 6 ? 1024 : 0));
+		return [...(this.routes.get(family) ?? [])].sort(
+			(a, b) => metric(a) - metric(b),
+		);
 	}
 }

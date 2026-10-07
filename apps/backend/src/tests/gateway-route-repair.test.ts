@@ -69,9 +69,10 @@ describe("host route application", () => {
 	});
 
 	test("a failed preference change restores previous defaults and still rejects", async () => {
-		// Given: an owned preference must be removed before the replacement is added.
+		// Given: retirement will fail after the distinct replacement is staged.
 		const owned = `default via 203.0.113.1 dev uplink-c proto ${HOST_ROUTE_PROTOCOL} metric 36`;
 		const table = new DefaultRouteTable([OLD, GOOD, owned]);
+		const before = table.orderedRows();
 		table.failMutation = 2;
 		// When: route application fails.
 		await expect(
@@ -79,6 +80,7 @@ describe("host route application", () => {
 		).rejects.toThrow();
 		// Then: the failure stays visible and both prior defaults are restored.
 		expect(table.rows()).toEqual([OLD, GOOD, owned].sort());
+		expect(table.orderedRows()).toEqual(before);
 		expect(table.mutations).not.toContainEqual([
 			"route",
 			"del",

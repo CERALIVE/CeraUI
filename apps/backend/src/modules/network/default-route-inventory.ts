@@ -12,6 +12,10 @@ export type GwDeps = {
 	readonly family: 4 | 6;
 };
 
+export type OwnedDefaultRoute = DefaultRoute & {
+	readonly restore: "add" | "prepend" | "append" | undefined;
+};
+
 export function parseRouteInventory(
 	output: string,
 	family: 4 | 6,
@@ -32,10 +36,10 @@ export function parseRouteInventory(
 }
 
 export async function readOwnedInventory(runner: typeof run): Promise<{
-	readonly owned: readonly DefaultRoute[];
+	readonly owned: readonly OwnedDefaultRoute[];
 	readonly foreign: ReadonlyMap<4 | 6, string>;
 }> {
-	const owned: DefaultRoute[] = [];
+	const owned: OwnedDefaultRoute[] = [];
 	const foreign = new Map<4 | 6, string>();
 	for (const family of [4, 6] as const) {
 		const output = await runner("ip", [
@@ -51,9 +55,35 @@ export async function readOwnedInventory(runner: typeof run): Promise<{
 			new RegExp(`^default\\b.*\\bproto ${HOST_ROUTE_PROTOCOL}(?:\\s|$)`).test(
 				record.split("\n")[0] ?? "",
 			);
-		owned.push(
-			...parseRouteInventory(records.filter(isOwned).join("\n"), family),
-		);
+		const metrics = records.map((record) => {
+			const tokens = record.split("\n")[0]?.split(/\s+/) ?? [];
+			const index = tokens.indexOf("metric");
+			return index < 0 ? (family === 6 ? 1024 : 0) : Number(tokens[index + 1]);
+		});
+		for (const [index, record] of records.entries()) {
+			if (!isOwned(record)) continue;
+			for (const route of parseRouteInventory(record, family)) {
+				const peers = records.filter(
+					(_, peer) => metrics[peer] === route.metric,
+				);
+				const position = records
+					.slice(0, index)
+					.filter((_, peer) => metrics[peer] === route.metric).length;
+				// Endpoints can be restored without rewriting foreign equal-metric anchors.
+				const restore = metrics.some((metric) => !Number.isInteger(metric))
+					? undefined
+					: peers.length === 1
+						? "add"
+						: family === 6 || peers.filter(isOwned).length !== 1
+							? undefined
+							: position === 0
+								? "prepend"
+								: position === peers.length - 1
+									? "append"
+									: undefined;
+				owned.push({ ...route, restore });
+			}
+		}
 		foreign.set(
 			family,
 			records.filter((record) => !isOwned(record)).join("\n"),

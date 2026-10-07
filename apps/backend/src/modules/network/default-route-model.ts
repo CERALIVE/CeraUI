@@ -8,7 +8,11 @@ export class GatewayRouteError extends Error {
 	override readonly name = "GatewayRouteError";
 	constructor(
 		readonly ifname: string,
-		readonly reason: "invalid-route" | "apply-failed" | "metric-exhausted",
+		readonly reason:
+			| "invalid-route"
+			| "apply-failed"
+			| "metric-exhausted"
+			| "rollback-order-unavailable",
 		cause?: unknown,
 	) {
 		super(`setDefaultRoute: ${reason} via ${ifname}`, { cause });
@@ -20,6 +24,7 @@ export type DefaultRoute = {
 	readonly tokens: readonly string[];
 	readonly ifname: string;
 	readonly metric: number;
+	readonly realm: number;
 	readonly owned: boolean;
 	readonly gateway: string | undefined;
 	readonly source: string | undefined;
@@ -56,6 +61,10 @@ export function readDefaultRoutes(
 					: Number(tokens[metricIndex + 1]);
 			if (!Number.isInteger(metric) || metric < 0 || metric > 0xffff_ffff)
 				throw new GatewayRouteError(ifname, "invalid-route");
+			const realmIndex = tokens.indexOf("realm");
+			const realm = realmIndex < 0 ? 0 : Number(tokens[realmIndex + 1]);
+			if (!Number.isInteger(realm) || realm < 0 || realm > 0xffff)
+				throw new GatewayRouteError(ifname, "invalid-route");
 			const address = (key: "via" | "src") => {
 				const index = tokens.indexOf(key);
 				if (index < 0) return undefined;
@@ -69,6 +78,7 @@ export function readDefaultRoutes(
 				tokens,
 				ifname,
 				metric,
+				realm,
 				owned: tokens[tokens.indexOf("proto") + 1] === HOST_ROUTE_PROTOCOL,
 				gateway: address("via"),
 				source: address("src"),
@@ -101,6 +111,7 @@ export function ownedRouteTokens(route: DefaultRoute): string[] {
 		HOST_ROUTE_PROTOCOL,
 		"metric",
 		String(route.metric),
+		...(route.realm ? ["realm", String(route.realm)] : []),
 	];
 }
 
@@ -109,6 +120,7 @@ export function samePreference(a: DefaultRoute, b: DefaultRoute): boolean {
 		a.family === b.family &&
 		a.ifname === b.ifname &&
 		a.metric === b.metric &&
+		a.realm === b.realm &&
 		a.gateway === b.gateway &&
 		a.source === b.source &&
 		a.onlink === b.onlink

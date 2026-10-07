@@ -5,6 +5,7 @@ import {
 	kernelRouteRunner as runner,
 	setupKernelRoutes,
 } from "./helpers/default-route-kernel.ts";
+import { rollbackKernelScenarios } from "./helpers/default-route-kernel-rollback.ts";
 import { runTestCommand } from "./helpers/run-test-command.ts";
 
 const child = process.env.CERALIVE_ROUTE_KERNEL_CHILD === "1";
@@ -22,6 +23,7 @@ async function fib(): Promise<string> {
 }
 
 const scenarios: Readonly<Record<string, () => Promise<void>>> = {
+	...rollbackKernelScenarios,
 	"metric-zero FIB elections": async () => {
 		// Given: two foreign defaults, one at the floor.
 		await runner("ip", [

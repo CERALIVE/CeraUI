@@ -192,20 +192,37 @@ and a link-down selected route refuse rather than inventing a routable copy.
 Cleanup does not depend on that candidate gate. The inventory preserves multiline
 multipath records and parses only marked defaults for release/startup sweep, so a
 foreign source-specific or multipath default cannot strand an owned route. Delete
-and rollback-add argv carry only parsed gateway, device, source, protocol, metric
+and rollback-add argv carry only parsed gateway, device, source, protocol, metric, realm
 and required `onlink`; kernel display flags such as `linkdown` and `dead`, RA
 expiry and preference text are never replayed as mutation arguments.
 
 **IPv4 metric floor.** A competing metric-0 default (including a DHCP default
 with no metric) is beaten by a metric-0 owned `ip route prepend ... proto 242`.
 This changes equal-metric ordering without touching foreign rows. Acquisition
-must prove that `ip -N route get 203.0.113.254 fibmatch` selects the exact owned
-gateway/device/source/metric/onlink identity; an acknowledged prepend is not
+must prove that `ip -N route get 203.0.113.254 fibmatch` selects a **main-table default**
+with the exact owned gateway/device/source/metric/onlink/realm identity; omitted
+table notation or numeric `table 254` is accepted, never another table's matching
+copy. An acknowledged prepend is not
 proof. No packet is sent. The documentation-range destination tests the default
 FIB path; an overriding more-specific/policy route or unreadable FIB refuses,
 never grants success. A matching existing floor preference is retained only if
 that same FIB check still chooses it. A foreign equal-metric prepend can therefore
-trigger delete/re-prepend on re-election rather than silently retain a losing row.
+trigger a staged generation replacement on re-election rather than silently retain
+a losing row.
+
+**Same-winner floor repair needs distinct kernel identities.** New IPv4 floor
+preferences carry nonzero `realm 1`; a repair stages the alternate `realm 1`/`realm 2`
+generation at metric 0 while leaving the old generation in its original position.
+Verification includes the staged realm, then deletion names the old realm explicitly.
+On rejection, only the staged generation is removed: an old preference between two
+foreign equal-metric rows has not moved. Real-kernel experiments found exact duplicate
+prepend refused, and `ip route replace` overwrote the first foreign alias rather than
+targeting the old owned row; neither is used as a shortcut.
+
+Realm is route metadata, not a fwmark, routing table, route protocol or higher metric.
+It does not change the copied gateway/source/onlink requirements. Deployment must not
+apply independent realm-based traffic classification to these owned rows. Ownership
+still comes only from the exclusive main-table protocol-242 reservation, not the realm.
 
 **IPv6 limitation (explicit).** A metric-1 competitor still returns typed
 `GatewayRouteError(reason: "metric-exhausted")` before mutation: Linux normalizes
@@ -213,15 +230,28 @@ metric 0 to 1024, and equal-metric IPv6 prepend can merge a nexthop into a forei
 multipath default. IPv6 never uses prepend. Resolve this limit through an
 owner-directed baseline/policy decision, not competitor edits by this path.
 
-Reconciliation removes only marked obsolete defaults, including an old-family
-preference when the winning family changes, then installs the new one. An
+Reconciliation stages and verifies a distinct replacement **before** removing marked
+obsolete defaults, including an old-family preference when the winning family changes. An
 unchanged winner performs zero mutations while its preference still wins (the
 IPv4 metric-floor check above accounts for ordering changes). The metric depends only on current
 foreign routes, never earlier preferences, so election flaps cannot ratchet it.
 An apply/release failure undoes completed commands in reverse order across both
 families and still rejects; rollback failures survive in the typed aggregate
-cause. The command sequence is not a crash-atomic netlink transaction, and a
-switch has a short baseline-routing interval between delete and add.
+cause. Restoration is derived from the **ordered snapshot**, never from metric 0
+alone: an untied metric uses add; a sole owned IPv4 peer at the first/last position
+uses prepend/append. An untagged legacy preference still needs delete/re-prepend for
+same-winner repair; an interior position refuses with typed
+`GatewayRouteError(reason: "rollback-order-unavailable")` before mutation. IPv6 tied
+or multiple-owned peer groups likewise have no assumed restoration operation. At
+most one unrestoreable row may be removed as the final command, after all verification
+and reversible deletions; more than one, or a later acquisition, refuses before mutation.
+This permits startup/release of one interior crash row without pretending it can be
+reinserted on failure. No foreign anchor is edited to make rollback possible.
+
+The sequence is not crash-atomic or locked against NetworkManager. Exact ordered
+rollback assumes successful undo commands and no concurrent foreign/topology change;
+failed undo reports uncertainty, not success. Untagged same-identity repair has a short
+baseline-routing interval, while distinct/generation staging retains the old preference.
 
 `gateway-route-lifecycle.ts` sweeps marked crash residue before its first
 election (also wired as the noncritical `host-route-preference` boot step), joins
@@ -271,7 +301,10 @@ preservation, minimum-metric selection, repeated elections, family changes,
 crash sweep, removal/release, shutdown races, rollback failures and 512 seeded
 random winner/family/release transitions. Every transition asserts the intended
 winner and exact preference presence/family/metric independently of the route
-builder, as well as preservation and metric bounds.
+builder, as well as preservation and metric bounds. `default-route-rollback` covers
+ordered fake/FIB observations, rejected staging with and without prior ownership,
+legacy endpoint undo, interior generation repair, nested rollback failures, final-command
+retirement failure, pre-mutation refusals and main-table-only verification.
 
 `default-route-kernel.test.ts` probes `unshare -Urn` availability and launches
 the Bun test process itself in a fresh user/network namespace for each scenario.
@@ -280,10 +313,19 @@ The injected runner executes plain `ip` commands inside that namespace; the real
 metric-zero FIB winner, unchanged re-election, equal-metric foreign reorder,
 failback/re-acquisition/release, and carrier-loss cleanup at all three lifecycle
 boundaries. Source-specific and real multiline multipath IPv6 dumps do not block
-startup/release. On a host refusing user/network namespaces these NEW cases skip
-with the probe's stated stderr reason; fixture tests remain mandatory. All six
+startup/release. Two additional regressions reject a third-uplink election behind a
+more-specific verification route with the full ordered `ip -4 route show table all`
+dump and unrelated `ip route get 8.8.8.8 fibmatch` byte-identical, and refuse a
+destination-rule-selected matching protocol-242 copy in table 100001. On a host
+refusing user/network namespaces these NEW cases skip
+with the probe's stated stderr reason; fixture tests remain mandatory. The original six
 kernel scenarios passed on Linux 7.2.9 / iproute2 7.2.0 using Bun 1.4.2 on
-2026-10-06, without sudo. This proves kernel mechanics, not RK3588/NM/DHCP
+2026-10-06, without sudo; the new counterexamples were reproduced against that source
+before correction. All eight scenarios passed after correction on the same host on
+2026-10-07, including exact ordered rollback and non-main-table refusal. An additional
+kernel control confirmed one mutation across 100 unchanged elections, protocol-qualified
+release with equal gateway/device/metric, and DHCP delete/re-prepend recovery on the
+next election. This proves kernel mechanics, not RK3588/NM/DHCP
 behaviour. Existing opt-in privileged netns suites are unchanged.
 
 Board re-drills remain owed on BOTH Rock 5B+ and Orange Pi 5+, from an

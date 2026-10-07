@@ -1,3 +1,4 @@
+/// <reference lib="es2022" />
 import { describe, expect, test } from "bun:test";
 import type { run } from "../helpers/run.ts";
 import {
@@ -74,6 +75,7 @@ describe("host preference boundary and transaction edges", () => {
 			`default dev absent-b proto ${HOST_ROUTE_PROTOCOL} metric 11`,
 		];
 		const table = new DefaultRouteTable(rows);
+		const before = table.orderedRows();
 		table.failMutation = 2;
 		// When: startup cleanup cannot finish.
 		await expect(
@@ -81,17 +83,16 @@ describe("host preference boundary and transaction edges", () => {
 		).rejects.toBeInstanceOf(GatewayRouteError);
 		// Then: even cleanup retains an exact, replayable pre-state.
 		expect(table.rows()).toEqual([...rows].sort());
+		expect(table.orderedRows()).toEqual(before);
 	});
 
 	test("rollback failure remains in the typed cause rather than reporting success", async () => {
-		// Given: deleting the old preference succeeds, but replacement and rollback fail.
-		const table = new DefaultRouteTable([
-			...BASELINE,
-			`default dev absent proto ${HOST_ROUTE_PROTOCOL} metric 10`,
-		]);
+		// Given: staging succeeds, but old-route retirement and staged-route rollback fail.
+		const owned = `default dev absent proto ${HOST_ROUTE_PROTOCOL} metric 10`;
+		const table = new DefaultRouteTable([...BASELINE, owned]);
 		const runner: typeof run = (bin, args, opts) =>
-			args.includes("add")
-				? Promise.reject(new Error("add refused"))
+			args.includes("del")
+				? Promise.reject(new Error("delete refused"))
 				: table.runner(bin, args, opts);
 		// When: election fails with an unsuccessful rollback.
 		const result = await setDefaultRoute("uplink-b", { runner }).catch(
@@ -105,7 +106,13 @@ describe("host preference boundary and transaction edges", () => {
 		)
 			throw new Error("typed transaction error missing");
 		expect(result.cause.errors).toHaveLength(2);
-		expect(table.rows()).toEqual([...BASELINE].sort());
+		expect(table.rows()).toEqual(
+			[
+				...BASELINE,
+				owned,
+				`default dev uplink-b proto ${HOST_ROUTE_PROTOCOL} metric 36`,
+			].sort(),
+		);
 	});
 
 	test("shutdown drains an apply already reading the kernel snapshot", async () => {
