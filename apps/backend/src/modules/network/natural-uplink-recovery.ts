@@ -46,10 +46,20 @@ async function readNaturalDefaults(
 	if (families.size !== 1) return undefined;
 	const family = inventory.owned[0]?.family;
 	if (family === undefined) return undefined;
-	const foreign = parseRouteInventory(
-		inventory.foreign.get(family) ?? "",
-		family,
-	);
+	let foreignByFamily: ReadonlyMap<4 | 6, readonly DefaultRoute[]>;
+	try {
+		foreignByFamily = new Map(
+			[...inventory.foreign].map(([family, output]) => [
+				family,
+				parseRouteInventory(output, family),
+			]),
+		);
+	} catch (error) {
+		if (error instanceof GatewayRouteError && error.reason === "invalid-route")
+			return undefined;
+		throw error;
+	}
+	const foreign = foreignByFamily.get(family) ?? [];
 	const metric = Math.min(...foreign.map((route) => route.metric));
 	const winners = foreign.filter((route) => route.metric === metric);
 	if (winners.length === 0 || winners.some((route) => !route.usable))
@@ -57,9 +67,10 @@ async function readNaturalDefaults(
 	return {
 		key: JSON.stringify([
 			inventory.owned.map(routeIdentity),
-			[...inventory.foreign].map(([family, output]) =>
-				parseRouteInventory(output, family).map(routeIdentity),
-			),
+			[...foreignByFamily].map(([family, routes]) => [
+				family,
+				routes.map(routeIdentity),
+			]),
 		]),
 		family,
 		ifnames: [...new Set(winners.map((route) => route.ifname))],

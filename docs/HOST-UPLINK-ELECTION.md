@@ -341,7 +341,10 @@ HTTP-only natural path does not count as recovered while repository HTTPS remain
 unusable; the existing connectivity fallback remains available if the elected
 path fails. With no continuing sweeps, failback latency has no wall-clock guarantee.
 Both-family residue, unsupported foreign shapes and topology churn refuse automatic
-failback rather than guessing the post-release path. The streak is process memory
+failback rather than guessing the post-release path. An unsupported foreign shape
+withholds recovery only: it does not refuse ordinary healthy-route election or APT
+admission. Unreadable inventories and invalid owned selectors still fail closed.
+The streak is process memory
 only; crash cleanup is still the existing 242/243 startup sweep.
 Recovery's snapshot key uses routing path/protocol/metric identity, never legacy
 realm/classid display metadata; the target kernel drops those attributes. Legacy
