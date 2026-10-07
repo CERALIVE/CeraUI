@@ -8,6 +8,20 @@ export const kernelRouteRunner: typeof run = async (bin, args) => {
 	return result.stdout;
 };
 
+export async function waitForKernelLinkdown(
+	readRoutes: () => Promise<string>,
+): Promise<string> {
+	const deadline = performance.now() + 2_000;
+	let routes = await readRoutes();
+	while (!/proto 242.*linkdown/.test(routes)) {
+		const remaining = deadline - performance.now();
+		if (remaining <= 0) break;
+		await Bun.sleep(Math.min(50, remaining));
+		routes = await readRoutes();
+	}
+	return routes;
+}
+
 export async function setupKernelRoutes(): Promise<void> {
 	await kernelRouteRunner("ip", ["link", "set", "lo", "up"]);
 	await kernelRouteRunner("ip", ["link", "add", "routea", "type", "dummy"]);

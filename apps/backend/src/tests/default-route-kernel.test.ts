@@ -4,6 +4,7 @@ import { GatewayRoutePreference } from "../modules/network/gateway-route-lifecyc
 import {
 	kernelRouteRunner as runner,
 	setupKernelRoutes,
+	waitForKernelLinkdown,
 } from "./helpers/default-route-kernel.ts";
 import { cleanupKernelScenarios } from "./helpers/default-route-kernel-cleanup.ts";
 import { oracle4KernelScenarios } from "./helpers/default-route-kernel-oracle4.ts";
@@ -122,7 +123,9 @@ const scenarios: Readonly<Record<string, () => Promise<void>>> = {
 				await controller.start();
 				await controller.apply("routeb");
 				await runner("ip", ["link", "set", "peerb", "down"]);
-				expect(await defaults()).toMatch(/proto 242.*linkdown/);
+				expect(await waitForKernelLinkdown(defaults)).toMatch(
+					/proto 242.*linkdown/,
+				);
 				const foreign = (await defaults())
 					.split("\n")
 					.filter((row) => !row.includes("proto 242"))
