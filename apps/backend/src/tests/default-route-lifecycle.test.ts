@@ -65,7 +65,7 @@ describe("owned host preference lifecycle", () => {
 		});
 
 		test(`IPv${family} partial failure restores the exact pre-state`, async () => {
-			// Given: both families have stale owned rows; replacement fails after deletion.
+			// Given: both families have stale owned rows; a later retirement will fail.
 			const table = new DefaultRouteTable(
 				[...BASELINE, STALE],
 				[
@@ -74,13 +74,15 @@ describe("owned host preference lifecycle", () => {
 				],
 			);
 			const before = [table.rows(), table.rows(6)];
+			const ordered = [table.orderedRows(), table.orderedRows(6)];
 			table.failMutation = 3;
-			// When: a new preference cannot be added.
+			// When: the staged preference cannot finish retiring the old rows.
 			await expect(
 				setDefaultRoute("uplink-b", { runner: table.runner, family }),
 			).rejects.toBeInstanceOf(GatewayRouteError);
 			// Then: successful earlier operations are undone across both families.
 			expect([table.rows(), table.rows(6)]).toEqual(before);
+			expect([table.orderedRows(), table.orderedRows(6)]).toEqual(ordered);
 		});
 	}
 

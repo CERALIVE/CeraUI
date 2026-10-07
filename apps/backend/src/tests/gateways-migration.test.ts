@@ -13,6 +13,7 @@ import {
 	buildRouteAddArgv,
 	setDefaultRoute,
 } from "../modules/network/gateways.ts";
+import { DefaultRouteTable } from "./helpers/default-route-table.ts";
 
 describe("buildRouteAddArgv — gateway line tokenization", () => {
 	test("splits a default-route line into separate argv elements", () => {
@@ -53,12 +54,13 @@ describe("buildRouteAddArgv — gateway line tokenization", () => {
 describe("setDefaultRoute — argv-only add path", () => {
 	test("passes tokenized argv to run() for both show and add, in order", async () => {
 		const calls: Array<[string, string[]]> = [];
+		const table = new DefaultRouteTable([]);
 		const runner = mock(async (bin: string, args: string[]) => {
 			calls.push([bin, args]);
 			if (args.includes("show")) {
 				return args.includes("table") ? "default via 10.0.0.1 dev wwan0\n" : "";
 			}
-			return "";
+			return table.runner(bin, args);
 		});
 
 		await setDefaultRoute("wwan0", {
@@ -68,11 +70,11 @@ describe("setDefaultRoute — argv-only add path", () => {
 		expect(calls[0]?.[0]).toBe("ip");
 		expect(calls[0]?.[1]).toEqual(["-N", "route", "show", "default"]);
 
-		const add = calls.find((c) => c[1][0] === "route" && c[1][1] === "add");
+		const add = calls.find((c) => c[1][0] === "route" && c[1][1] === "prepend");
 		expect(add?.[0]).toBe("ip");
 		expect(add?.[1]).toEqual([
 			"route",
-			"add",
+			"prepend",
 			"default",
 			"via",
 			"10.0.0.1",
@@ -89,19 +91,21 @@ describe("setDefaultRoute — argv-only add path", () => {
 
 	test("adds an owned preference without removing the competing default", async () => {
 		const order: string[] = [];
+		const table = new DefaultRouteTable([
+			"default via 192.0.2.1 dev uplink-a metric 7",
+			"default via 10.0.0.1 dev wwan0 metric 19",
+		]);
 		const runner = mock(async (_bin: string, args: string[]) => {
-			if (args[1] === "add") order.push("add");
+			if (args[1] === "prepend") order.push("prepend");
 			if (args[1] === "del") order.push("del");
-			return args.includes("show") && !args.includes("-6")
-				? "default via 192.0.2.1 dev uplink-a metric 7\ndefault via 10.0.0.1 dev wwan0 metric 19\n"
-				: "";
+			return table.runner(_bin, args);
 		});
 
 		await setDefaultRoute("wwan0", {
 			runner,
 		});
 
-		expect(order).toEqual(["add"]);
+		expect(order).toEqual(["prepend"]);
 	});
 
 	test("rejects an interface name outside the ifname charset", async () => {

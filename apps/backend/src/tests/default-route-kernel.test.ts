@@ -5,6 +5,9 @@ import {
 	kernelRouteRunner as runner,
 	setupKernelRoutes,
 } from "./helpers/default-route-kernel.ts";
+import { cleanupKernelScenarios } from "./helpers/default-route-kernel-cleanup.ts";
+import { oracle4KernelScenarios } from "./helpers/default-route-kernel-oracle4.ts";
+import { rollbackKernelScenarios } from "./helpers/default-route-kernel-rollback.ts";
 import { runTestCommand } from "./helpers/run-test-command.ts";
 
 const child = process.env.CERALIVE_ROUTE_KERNEL_CHILD === "1";
@@ -22,6 +25,9 @@ async function fib(): Promise<string> {
 }
 
 const scenarios: Readonly<Record<string, () => Promise<void>>> = {
+	...rollbackKernelScenarios,
+	...oracle4KernelScenarios,
+	...cleanupKernelScenarios,
 	"metric-zero FIB elections": async () => {
 		// Given: two foreign defaults, one at the floor.
 		await runner("ip", [
@@ -53,7 +59,7 @@ const scenarios: Readonly<Record<string, () => Promise<void>>> = {
 		await controller.start();
 		// When: acquire, re-elect, reorder with a foreign prepend, fail back, and release.
 		await controller.apply("routeb");
-		expect(await fib()).toMatch(/dev routeb proto 242\b/);
+		expect(await fib()).toMatch(/dev routeb proto 24[23]\b/);
 		const applied = await defaults();
 		await controller.apply("routeb");
 		expect(await defaults()).toBe(applied);
@@ -68,7 +74,7 @@ const scenarios: Readonly<Record<string, () => Promise<void>>> = {
 		]);
 		expect(await fib()).toMatch(/dev routea proto 17\b/);
 		await controller.apply("routeb");
-		expect(await fib()).toMatch(/dev routeb proto 242\b/);
+		expect(await fib()).toMatch(/dev routeb proto 24[23]\b/);
 		await controller.apply("routea");
 		expect(await fib()).toMatch(/dev routea proto 17\b/);
 		expect(await defaults()).not.toContain("proto 242");

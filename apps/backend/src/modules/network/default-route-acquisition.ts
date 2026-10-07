@@ -57,7 +57,7 @@ export async function desiredPreference(
 		throw new GatewayRouteError(ifname, "metric-exhausted");
 	return {
 		...preferenceRoute(selected, Math.max(0, metric)),
-		prepend: deps.family === 4 && lowest === 0,
+		prepend: deps.family === 4,
 	};
 }
 
@@ -66,14 +66,19 @@ export async function fibChoosesPreference(
 	deps: GwDeps,
 ): Promise<boolean> {
 	const output = await deps.runner("ip", [
+		...(route.family === 6 ? ["-6"] : []),
 		"-N",
 		"route",
 		"get",
-		"203.0.113.254",
+		route.family === 6 ? "2001:db8::ffff" : "203.0.113.254",
 		"fibmatch",
 	]);
-	const [chosen] = parseRouteInventory(output, 4);
+	const [chosen] = parseRouteInventory(output, route.family);
+	const table = chosen?.tokens.indexOf("table") ?? -1;
 	return (
-		chosen?.owned === true && chosen.usable && samePreference(chosen, route)
+		chosen?.owned === true &&
+		(table < 0 || chosen.tokens[table + 1] === "254") &&
+		chosen.usable &&
+		samePreference(chosen, route)
 	);
 }

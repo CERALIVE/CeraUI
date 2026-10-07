@@ -156,14 +156,14 @@ configuration is copied into curl. No redirects are followed.
 `gateways.ts` remains the host election coordinator. Its serialized route
 entrypoint is in `default-route.ts`, re-exported through the existing API.
 `default-route-inventory.ts` separates cleanup from candidate parsing,
-`default-route-acquisition.ts` chooses the preference and checks IPv4 floor
+`default-route-acquisition.ts` chooses the preference and checks main-table FIB
 ordering, and `default-route-transaction.ts` applies and unwinds mutations.
 `default-route-model.ts` owns parsed attributes and mutation serialization. It uses the
 candidate's lowest-metric **foreign** main-table default, with the existing
 named-table path as a fallback. An owned preference is never evidence that the
 NIC still has a default. No policy-routing table or rule is created.
 
-**F-ROUTE-1 ownership correction.** Protocol **242** is reserved exclusively for
+**F-ROUTE-1 ownership correction.** Protocols **242 and 243** are reserved exclusively for
 CeraUI's host default preferences in the main table. Inventory uses `ip -N route
 show default` for IPv4 and IPv6, so protocol ownership is numeric regardless of
 local `rt_protos` aliases. A foreign route is never deleted, replaced, demoted,
@@ -172,11 +172,11 @@ own baseline route for the next bound probe. No NM profile is written.
 
 **Exclusive protocol reservation is a deployment prerequisite, not independent
 ownership proof.** No NetworkManager profile, DHCP hook, administrator or other
-service may install a main-table default with protocol 242. A collision is treated
+service may install a main-table default with either reserved protocol. A collision is treated
 as CeraUI-owned: startup/release removes that row and reconciliation may replace
 or retain it. There is no provenance discriminator beyond this reservation and
 no safe automatic way to identify its actual author. Audit both families for
-foreign use of 242 before deployment; resolve a collision through its real owner
+foreign use of 242/243 before deployment; resolve a collision through its real owner
 before enabling this controller. Non-main defaults and the UID-pin tables are
 outside this inventory.
 
@@ -194,18 +194,43 @@ multipath records and parses only marked defaults for release/startup sweep, so 
 foreign source-specific or multipath default cannot strand an owned route. Delete
 and rollback-add argv carry only parsed gateway, device, source, protocol, metric
 and required `onlink`; kernel display flags such as `linkdown` and `dead`, RA
-expiry and preference text are never replayed as mutation arguments.
+expiry and preference text are never replayed as mutation arguments. New rows
+carry **no realm or classid**: the shipped RK3588 kernel has no
+`CONFIG_IP_ROUTE_CLASSID` and erases those attributes. A legacy observed
+`realm`/`realms` is range-parsed and retained only in its exact cleanup/undo
+selector; it is never a generation mechanism. Unknown/duplicate owned attributes
+refuse acquisition rather than being projected into a broader delete. Cleanup
+records that row's error but still attempts other valid owned rows and families.
 
-**IPv4 metric floor.** A competing metric-0 default (including a DHCP default
-with no metric) is beaten by a metric-0 owned `ip route prepend ... proto 242`.
+**IPv4 aliases, including the metric floor.** IPv4 always uses `prepend`, at
+**any** metric: ordinary `add` fails EEXIST when another default occupies that
+priority, even for another device/protocol. A competing metric-0 default
+(including a DHCP default with no metric) is beaten by a metric-0 owned alias.
 This changes equal-metric ordering without touching foreign rows. Acquisition
-must prove that `ip -N route get 203.0.113.254 fibmatch` selects the exact owned
-gateway/device/source/metric/onlink identity; an acknowledged prepend is not
+must prove that `ip -N route get 203.0.113.254 fibmatch` selects a **main-table default**
+with the exact owned gateway/device/source/metric/onlink/protocol identity; omitted
+table notation or numeric `table 254` is accepted, never another table's matching
+copy. An acknowledged prepend is not
 proof. No packet is sent. The documentation-range destination tests the default
 FIB path; an overriding more-specific/policy route or unreadable FIB refuses,
-never grants success. A matching existing floor preference is retained only if
+never grants success. Every matching existing preference is retained only if
 that same FIB check still chooses it. A foreign equal-metric prepend can therefore
-trigger delete/re-prepend on re-election rather than silently retain a losing row.
+trigger a staged generation replacement on re-election rather than silently retain
+a losing row.
+
+**Same-winner repair needs distinct kernel identities.** New preferences normally
+use protocol 242. A same-identity IPv4 repair stages protocol 243 when an old
+242 alias exists, or 242 when only 243 exists. Protocol is part of the kernel's
+route identity and delete selector without an optional classid configuration.
+Verification includes the staged protocol; deletion names the old protocol.
+On rejection, only the staged generation is removed: an old preference between two
+foreign equal-metric rows has not moved. Real-kernel experiments found exact duplicate
+prepend refused, and `ip route replace` overwrote the first foreign alias rather than
+targeting the old owned row; neither is used as a shortcut.
+
+If several generations match the desired identity, the proven FIB winner stays
+in place and the other rows are swept. An identical-tuple same-protocol prepend
+is still EEXIST; the fake models this, along with ordinary duplicate-priority add.
 
 **IPv6 limitation (explicit).** A metric-1 competitor still returns typed
 `GatewayRouteError(reason: "metric-exhausted")` before mutation: Linux normalizes
@@ -213,15 +238,46 @@ metric 0 to 1024, and equal-metric IPv6 prepend can merge a nexthop into a forei
 multipath default. IPv6 never uses prepend. Resolve this limit through an
 owner-directed baseline/policy decision, not competitor edits by this path.
 
-Reconciliation removes only marked obsolete defaults, including an old-family
-preference when the winning family changes, then installs the new one. An
-unchanged winner performs zero mutations while its preference still wins (the
-IPv4 metric-floor check above accounts for ordering changes). The metric depends only on current
+IPv4 stages and verifies a distinct replacement **before** removing equal-priority
+obsolete defaults. A stale owned route at a **lower** priority would mask that
+proof; it is retired first only when the snapshot supplies a safe restoration
+operation. IPv6 retires same-family owned rows **before ordinary add**, because its prepend
+merges nexthops instead of staging an independent alias. IPv6 also requires a
+main-table default FIB proof (`2001:db8::ffff`, no packet sent).
+An unchanged winner performs zero mutations while its preference still wins.
+The metric depends only on current
 foreign routes, never earlier preferences, so election flaps cannot ratchet it.
-An apply/release failure undoes completed commands in reverse order across both
+An acquisition failure undoes completed commands in reverse order across both
 families and still rejects; rollback failures survive in the typed aggregate
-cause. The command sequence is not a crash-atomic netlink transaction, and a
-switch has a short baseline-routing interval between delete and add.
+cause. Restoration is derived from the **ordered snapshot**, never from metric 0
+alone: a sole IPv4 snapshot peer uses **prepend**, not add, because the staged
+replacement may still occupy that priority at undo time. A sole IPv6 peer uses
+add only after reverse-order undo removes its same-family staged replacement.
+With foreign equal-metric peers, the sole owned IPv4 first/last endpoint uses
+prepend/append. The protocol-pair stage leaves an interior old row untouched
+on verification rejection. IPv6 tied or multiple-owned peer groups have no
+assumed restoration operation. At
+most one unrestoreable row may be removed as the final command, after all verification
+and reversible deletions; more than one, or a later acquisition, refuses before mutation.
+Acquisition refuses unsupported rollback shapes before mutation with typed
+`rollback-order-unavailable`; this gate never applies to release. No foreign
+anchor is edited to make rollback possible.
+
+**Release is forward-only, never rollback-admitted.** Empty election, natural
+failback, startup and shutdown attempt every safe owned selector in both families,
+even with several interior crash rows. Successful deletions are not resurrected.
+Read, parse and delete failures are aggregated and reported; the next sweep
+retries remaining residue. Legacy tagged selectors precede realm-zero wildcards;
+if a tagged deletion fails (or that tagged row is retained), a matching wildcard
+is withheld with an error so it cannot delete a different legacy generation.
+New protocol generations do not have this ambiguity.
+
+The sequence is not crash-atomic or locked against NetworkManager. Exact ordered
+rollback assumes successful undo commands and no concurrent foreign/topology change;
+failed undo reports uncertainty, not success. IPv6 and stale-lower-priority
+retirement have a short foreign-baseline interval; normal IPv4 generation
+staging retains the old preference. A renewal after proof may overtake the owned
+alias until the next election; no multi-command lock against NM is claimed.
 
 `gateway-route-lifecycle.ts` sweeps marked crash residue before its first
 election (also wired as the noncritical `host-route-preference` boot step), joins
@@ -259,7 +315,7 @@ apt transaction remains a PID-1-owned transient service.
 Regression suites: `repository-uplink-election`, `gateway-repository-policy`,
 `gateway-route-repair`, `gateways-migration`, `default-route-ownership`,
 `default-route-lifecycle`, `default-route-edge`, `default-route-oracle`,
-`default-route-kernel`, `gateway-route-lifecycle`,
+`default-route-kernel`, `default-route-board`, `default-route-parser`, `gateway-route-lifecycle`,
 `apt-gateway-precondition`, and `repository-probe-socket`
 under `apps/backend/src/tests/`. The socket test runs real curl against private,
 ephemeral loopback HTTP/TLS listeners with an ephemeral trusted certificate. The
@@ -271,7 +327,17 @@ preservation, minimum-metric selection, repeated elections, family changes,
 crash sweep, removal/release, shutdown races, rollback failures and 512 seeded
 random winner/family/release transitions. Every transition asserts the intended
 winner and exact preference presence/family/metric independently of the route
-builder, as well as preservation and metric bounds.
+builder, as well as preservation and metric bounds. `default-route-rollback` covers
+ordered fake/FIB observations, rejected staging with and without prior ownership,
+endpoint undo, interior protocol-generation repair, nested rollback failures,
+final-command retirement failure and main-table-only verification. The private
+table fixture copies an owned row from the **unfiltered** numeric dump, because
+`show default proto 242` suppresses the protocol token and would make this proof
+vacuous. Strict board-mode fakes erase realms/classid and reproduce EEXIST and
+ESRCH with nonzero exit codes. Kernel regressions include Rock-shaped and
+Wi-Fi/modem A→B→A switches in both families, 100 unchanged floor elections,
+carrier loss, and real product children SIGKILLed at each ordinary transaction
+mutation boundary. Recovery drives start/apply/release/stop through the same API.
 
 `default-route-kernel.test.ts` probes `unshare -Urn` availability and launches
 the Bun test process itself in a fresh user/network namespace for each scenario.
@@ -280,10 +346,19 @@ The injected runner executes plain `ip` commands inside that namespace; the real
 metric-zero FIB winner, unchanged re-election, equal-metric foreign reorder,
 failback/re-acquisition/release, and carrier-loss cleanup at all three lifecycle
 boundaries. Source-specific and real multiline multipath IPv6 dumps do not block
-startup/release. On a host refusing user/network namespaces these NEW cases skip
-with the probe's stated stderr reason; fixture tests remain mandatory. All six
+startup/release. Two additional regressions reject a third-uplink election behind a
+more-specific verification route with the full ordered `ip -4 route show table all`
+dump and unrelated `ip route get 8.8.8.8 fibmatch` byte-identical, and refuse a
+destination-rule-selected matching protocol-242 copy in table 100001. On a host
+refusing user/network namespaces these NEW cases skip
+with the probe's stated stderr reason; fixture tests remain mandatory. The original six
 kernel scenarios passed on Linux 7.2.9 / iproute2 7.2.0 using Bun 1.4.2 on
-2026-10-06, without sudo. This proves kernel mechanics, not RK3588/NM/DHCP
+2026-10-06, without sudo; the new counterexamples were reproduced against that source
+before correction. All eight scenarios passed after correction on the same host on
+2026-10-07, including exact ordered rollback and non-main-table refusal. An additional
+kernel control confirmed one mutation across 100 unchanged elections, protocol-qualified
+release with equal gateway/device/metric, and DHCP delete/re-prepend recovery on the
+next election. This proves kernel mechanics, not RK3588/NM/DHCP
 behaviour. Existing opt-in privileged netns suites are unchanged.
 
 Board re-drills remain owed on BOTH Rock 5B+ and Orange Pi 5+, from an

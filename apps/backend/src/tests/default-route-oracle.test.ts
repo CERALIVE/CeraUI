@@ -40,10 +40,13 @@ describe("oracle owned-route regressions", () => {
 	}
 
 	test("rollback re-adds supported attributes without runtime display flags", async () => {
-		// Given: replacement will fail after removing a carrier-lost preference.
+		// Given: a later retirement fails after removing a carrier-lost preference.
 		const stale = OWNED.replace("36", "35");
-		const table = new DefaultRouteTable([...BASE, `${stale} linkdown`]);
-		table.failMutation = 2;
+		const table = new DefaultRouteTable(
+			[...BASE, `${stale} linkdown`],
+			["default dev stale6 proto 242 metric 35"],
+		);
+		table.failMutation = 3;
 		// When: the transaction unwinds.
 		await expect(
 			setDefaultRoute("routeb", { runner: table.runner }),
@@ -115,7 +118,10 @@ describe("oracle owned-route regressions", () => {
 		rows?.add("default dev renewed proto 16 metric 0");
 		for (const row of previous) rows?.add(row);
 		await setDefaultRoute("routeb", { runner: table.runner });
-		expect(table.mutations.map((args) => args[1])).toEqual(["del", "prepend"]);
+		expect(table.mutations.map((args) => args[1])).toEqual(["prepend", "del"]);
+		expect(
+			await table.runner("ip", ["route", "get", "203.0.113.254", "fibmatch"]),
+		).toContain("proto 243");
 		expect(
 			await table.runner("ip", ["route", "get", "203.0.113.254", "fibmatch"]),
 		).toContain("dev routeb");

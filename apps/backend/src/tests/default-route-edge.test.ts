@@ -1,3 +1,4 @@
+/// <reference lib="es2022" />
 import { describe, expect, test } from "bun:test";
 import type { run } from "../helpers/run.ts";
 import {
@@ -66,7 +67,7 @@ describe("host preference boundary and transaction edges", () => {
 		expect(table.rows()).toEqual([...BASELINE].sort());
 	});
 
-	test("failure deleting a later owned row restores every earlier deletion", async () => {
+	test("release attempts every owned row without resurrecting successful deletions", async () => {
 		// Given: two owned rows from a crash and an injected second-delete failure.
 		const rows = [
 			...BASELINE,
@@ -79,19 +80,20 @@ describe("host preference boundary and transaction edges", () => {
 		await expect(
 			setDefaultRoute(undefined, { runner: table.runner }),
 		).rejects.toBeInstanceOf(GatewayRouteError);
-		// Then: even cleanup retains an exact, replayable pre-state.
-		expect(table.rows()).toEqual([...rows].sort());
+		// Then: only the failed row survives for the next sweep.
+		expect(table.rows()).toEqual([...BASELINE, rows[3]].sort());
+		expect(table.mutations).toHaveLength(2);
+		await setDefaultRoute(undefined, { runner: table.runner });
+		expect(table.rows()).toEqual([...BASELINE].sort());
 	});
 
 	test("rollback failure remains in the typed cause rather than reporting success", async () => {
-		// Given: deleting the old preference succeeds, but replacement and rollback fail.
-		const table = new DefaultRouteTable([
-			...BASELINE,
-			`default dev absent proto ${HOST_ROUTE_PROTOCOL} metric 10`,
-		]);
+		// Given: staging succeeds, but old-route retirement and staged-route rollback fail.
+		const owned = `default dev absent proto ${HOST_ROUTE_PROTOCOL} metric 36`;
+		const table = new DefaultRouteTable([...BASELINE, owned]);
 		const runner: typeof run = (bin, args, opts) =>
-			args.includes("add")
-				? Promise.reject(new Error("add refused"))
+			args.includes("del")
+				? Promise.reject(new Error("delete refused"))
 				: table.runner(bin, args, opts);
 		// When: election fails with an unsuccessful rollback.
 		const result = await setDefaultRoute("uplink-b", { runner }).catch(
@@ -105,7 +107,13 @@ describe("host preference boundary and transaction edges", () => {
 		)
 			throw new Error("typed transaction error missing");
 		expect(result.cause.errors).toHaveLength(2);
-		expect(table.rows()).toEqual([...BASELINE].sort());
+		expect(table.rows()).toEqual(
+			[
+				...BASELINE,
+				owned,
+				`default dev uplink-b proto ${HOST_ROUTE_PROTOCOL} metric 36`,
+			].sort(),
+		);
 	});
 
 	test("shutdown drains an apply already reading the kernel snapshot", async () => {
@@ -132,7 +140,7 @@ describe("host preference boundary and transaction edges", () => {
 		resume.resolve();
 		await Promise.all([apply, stop]);
 		// Then: the applied preference was drained and removed before stop returned.
-		expect(table.mutations.map((args) => args[1])).toEqual(["add", "del"]);
+		expect(table.mutations.map((args) => args[1])).toEqual(["prepend", "del"]);
 		expect(table.rows()).toEqual([...BASELINE].sort());
 	});
 });
