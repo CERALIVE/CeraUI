@@ -30,6 +30,12 @@ USB enumeration cannot spend the NM-timeout case's budget through host schedulin
 delay. Only the unresolved NM reader advances time, including the failure-path
 re-probe; teardown restores the real clock. Production polling is unchanged.
 
+The software-update scheduler fixture preserves its real `process.hrtime()`
+origin when enabling fake timers, then advances that clock with the retry timer.
+Bun resets fake hrtime to zero while the imported scheduler retains its deadline;
+a file loaded after 60 seconds in a parallel worker otherwise never reaches its
+skip runner. Teardown restores the clock spy and real timers; production is unchanged.
+
 The add-on shell/GPG suite and historical source-routing Git guard use
 `tests/helpers/run-test-command.ts`: asynchronous spawn, concurrent stdout/stderr
 drains and exit observation, with scoped disposal. Bun 1.4.2's synchronous spawn
@@ -339,4 +345,3 @@ persisted — it NEVER regenerates an existing credential (that stays
 `applyPassword` / `persist` / `refreshStatus`) is injected via
 `SshPasswordProvisionDeps` so `tests/ssh-password-provision.test.ts` drives it
 without a real `passwd`/`/etc/shadow` (and without persisting to disk).
-
