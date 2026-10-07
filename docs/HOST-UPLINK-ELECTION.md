@@ -127,8 +127,36 @@ The policy is now a **two-tier ranking**, not an eligibility filter:
 
 Ranking rather than filtering matters when a repository is unavailable, the clock
 or trust store is wrong, or the only uplink is impaired: none is permission to
-strand the board by refusing every path. The scan stops on a top-tier success;
+strand the board by refusing every path. Ranking stops on a top-tier success;
 otherwise it examines the whole eligible set before accepting the HTTP fallback.
+
+**Bounded parallel sweep (F-R8-4).** Candidate observations run concurrently and
+are all awaited before deterministic record-order ranking. Completion speed cannot
+change the winner or attach one NIC's result to another. Production repository
+children retain their 4-second outer cap; generic device children retain a 4-second
+curl cap and 5-second outer cap, with at most one target per family and a 250-ms
+stagger. The candidate-transfer budget is therefore approximately **9.25 seconds**,
+not five times that on the Rock roster. A held preference adds one concurrent
+natural-winner repository pass (about 4 seconds); the existing unbound connectivity
+probe adds about 4.25 seconds. Source/source-address-only generic candidate sockets
+are no longer used in production, so their socket-event timeout cannot amplify a
+misattributed failed connection into the hardware's 138–145-second sweep.
+
+This is a network-transfer bound, **not** a hard UI Check deadline: local source
+reads, DNS resolution before the sweep, route inventory/repair, process scheduling
+and APT commands retain their own budgets. No new global timer returns while work
+continues unseen. Existing dual-family generic races can still have a bounded losing
+read-only child finishing after first success. Probing all candidates costs more
+short-lived DNS/TLS work on a healthy default than early-exit probing, in exchange
+for avoiding per-uplink timeout multiplication and preserving exact attribution.
+Measure end-to-end Check on both boards; no replacement-build latency is claimed.
+
+The five-blackholed-uplink regression uses real curl/subprocess timers and real
+`ip` routes in `unshare -Urn`, with no repository-response or FIB fake. On Linux
+7.2.9 / iproute2 7.2.0 / Bun 1.4.2, the exact b7895619 serialization took
+**30,103 ms** and failed its 15-second transfer-budget assertion; concurrent
+observation took **6,028 ms** with route/rule inventories unchanged. These are
+host namespace measurements, not board latency or CI timing.
 
 ## One signal, one binding primitive
 

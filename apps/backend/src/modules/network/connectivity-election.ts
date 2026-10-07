@@ -157,32 +157,55 @@ export async function electConnectivityCandidate(
 		| { readonly candidate: ProbeCandidate; readonly family: 4 | 6 }
 		| undefined;
 
-	for (const candidate of candidates) {
-		const repository = await probes.probeRepository(candidate.name);
-		const family =
-			repository.ipv4 === "ok" ? 4 : repository.ipv6 === "ok" ? 6 : undefined;
-		if (family !== undefined) {
-			results.push({ candidate, reachable: true, repository });
+	const observations = await Promise.all(
+		candidates.map(
+			async (
+				candidate,
+			): Promise<
+				CandidateProbeResult & { readonly family: 4 | 6 | undefined }
+			> => {
+				const repository = await probes.probeRepository(candidate.name);
+				const family =
+					repository.ipv4 === "ok"
+						? 4
+						: repository.ipv6 === "ok"
+							? 6
+							: undefined;
+				if (family !== undefined) {
+					return { candidate, reachable: true, repository, family };
+				}
+				const localAddress =
+					candidate.binding.kind === "source-ip"
+						? candidate.binding.ip
+						: undefined;
+				let reachableFamily: 4 | 6 | undefined;
+				const reachable = await raceConnectivityAddresses(
+					addrs,
+					async (addr) => {
+						const success =
+							candidate.binding.kind === "device"
+								? await probes.probeViaDevice(addr, candidate.binding.ifname)
+								: await probes.probeViaSourceIp(addr, candidate.binding.ip);
+						if (success) reachableFamily ??= isIP(addr) === 6 ? 6 : 4;
+						return success;
+					},
+					localAddress,
+				);
+				return { candidate, reachable, repository, family: reachableFamily };
+			},
+		),
+	);
+
+	for (const { candidate, reachable, repository, family } of observations) {
+		results.push({ candidate, reachable, repository });
+		if (
+			family !== undefined &&
+			(repository.ipv4 === "ok" || repository.ipv6 === "ok")
+		) {
 			return { elected: candidate, results, family };
 		}
-		const localAddress =
-			candidate.binding.kind === "source-ip" ? candidate.binding.ip : undefined;
-		let reachableFamily: 4 | 6 | undefined;
-		const reachable = await raceConnectivityAddresses(
-			addrs,
-			async (addr) => {
-				const success =
-					candidate.binding.kind === "device"
-						? await probes.probeViaDevice(addr, candidate.binding.ifname)
-						: await probes.probeViaSourceIp(addr, candidate.binding.ip);
-				if (success) reachableFamily ??= isIP(addr) === 6 ? 6 : 4;
-				return success;
-			},
-			localAddress,
-		);
-		results.push({ candidate, reachable, repository });
-		if (reachableFamily !== undefined && fallback === undefined) {
-			fallback = { candidate, family: reachableFamily };
+		if (family !== undefined && fallback === undefined) {
+			fallback = { candidate, family };
 		}
 	}
 
