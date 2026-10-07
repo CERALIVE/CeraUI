@@ -292,6 +292,41 @@ if a tagged deletion fails (or that tagged row is retained), a matching wildcard
 is withheld with an error so it cannot delete a different legacy generation.
 New protocol generations do not have this ambiguity.
 
+**Natural failback hysteresis (F-R8-1).** While an owned preference is held,
+each serialized gateway sweep also device-probes repository HTTPS on the lowest
+metric **foreign** defaults in the held family. Every tied foreign winner must
+be eligible and healthy in that family: probing only the current owned winner
+could never discover recovery, and releasing onto an unprobed tied peer is unsafe.
+Three consecutive completed healthy sweeps spanning at least **10 seconds** are
+required. A failed/unknown result, changed owned/foreign inventory, missing candidate,
+backwards clock or observation gap exceeding **30 seconds** resets the streak.
+Use the monotonic completion clock; immediately before release re-read both
+families' inventories and evaluate the final clock again. The wrapper keeps
+maintenance queued while a preference remains, including while the natural path
+is still impaired, so recovery does not depend on another operator Check.
+
+The trade-off is a short, bounded recovery dwell rather than immediate failback:
+three observations and ten seconds prevent a one-off success or rapid Check clicks
+from bouncing the route, at the cost of briefly retaining a Wi-Fi/metered winner.
+There is no bandwidth/cost ranking or persistent preference state. An ordinary
+HTTP-only natural path does not count as recovered while repository HTTPS remains
+unusable; the existing connectivity fallback remains available if the elected
+path fails. With no continuing sweeps, failback latency has no wall-clock guarantee.
+Both-family residue, unsupported foreign shapes and topology churn refuse automatic
+failback rather than guessing the post-release path. The streak is process memory
+only; crash cleanup is still the existing 242/243 startup sweep.
+Recovery's snapshot key uses routing path/protocol/metric identity, never legacy
+realm/classid display metadata; the target kernel drops those attributes. Legacy
+metadata stays confined to the existing exact cleanup selectors. A real-kernel
+host test changes only a retained foreign realm and proves recovery does not reset.
+
+Recovery invokes **release**, not acquisition of the natural NIC: all safe owned
+selectors in both families are retired forward-only with no rollback resurrection,
+metric ratchet, foreign-route mutation or new rule/table. It does not claim atomicity
+against a NetworkManager renewal after the final inventory check. Real-kernel
+gateway regressions prove the recovered FIB and unchanged foreign defaults/rules,
+as well as reset on impairment, topology drift, a stale gap and rapid Checks.
+
 The sequence is not crash-atomic or locked against NetworkManager. Exact ordered
 rollback assumes successful undo commands and no concurrent foreign/topology change;
 failed undo reports uncertainty, not success. IPv6 and stale-lower-priority

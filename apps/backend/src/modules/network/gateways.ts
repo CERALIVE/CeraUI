@@ -40,6 +40,7 @@ import {
 import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
 import { gatewayRoutePreference } from "./gateway-route-lifecycle.ts";
 import { CONNECTIVITY_CHECK_DOMAIN, checkConnectivity } from "./internet.ts";
+import { naturalUplinkRecovery } from "./natural-uplink-recovery.ts";
 import { getNetworkInterfaces } from "./network-interfaces.ts";
 import { isUplinkClientSteeringEligible } from "./uplink-health/state.ts";
 
@@ -98,6 +99,8 @@ export type GatewayElectionDeps = {
 	readonly installRoute: (ifname: string, family: 4 | 6) => Promise<void>;
 	readonly releaseRoutes?: () => Promise<void>;
 	readonly probes: ConnectivityProbes;
+	readonly routeRunner?: typeof run;
+	readonly now?: () => number;
 };
 
 function defaultGatewayElectionDeps(): GatewayElectionDeps {
@@ -115,6 +118,7 @@ function defaultGatewayElectionDeps(): GatewayElectionDeps {
 			gatewayRoutePreference.apply(ifname, family),
 		releaseRoutes: () => gatewayRoutePreference.apply(undefined),
 		probes: defaultConnectivityProbes,
+		routeRunner: run,
 	};
 }
 
@@ -149,6 +153,25 @@ export async function updateGw(
 	);
 
 	const defaultIf = await deps.defaultInterface(4);
+	if (deps.routeRunner && deps.releaseRoutes) {
+		try {
+			if (
+				await naturalUplinkRecovery(deps.routeRunner).ready(
+					candidates,
+					deps.probes,
+					deps.now ?? getms,
+				)
+			) {
+				await deps.releaseRoutes();
+				logger.info("Natural host uplink recovered; released owned preference");
+				notificationRemove(NO_INTERNET_NOTIFICATION);
+				return true;
+			}
+		} catch (error) {
+			logger.warn("Natural host uplink recovery failed", { error });
+			return false;
+		}
+	}
 	// Keep the current default ahead of equal-ranked peers to avoid route churn.
 	candidates.sort(
 		(a, b) => Number(b.name === defaultIf) - Number(a.name === defaultIf),
@@ -220,6 +243,8 @@ export async function updateGw(
 		try {
 			const family = election.family ?? 4;
 			await deps.installRoute(goodIf, family);
+			if (deps.routeRunner)
+				await naturalUplinkRecovery(deps.routeRunner).observeOwnership();
 		} catch (err) {
 			logger.warn("Default-route application failed", {
 				ifname: goodIf,
@@ -273,7 +298,11 @@ export function updateGwWrapper(
 			return false;
 		})
 		.then((result) => {
-			if (!result) updateGwQueue = true;
+			if (
+				!result ||
+				(deps.routeRunner && naturalUplinkRecovery(deps.routeRunner).pending)
+			)
+				updateGwQueue = true;
 			return result;
 		})
 		.finally(() => {
