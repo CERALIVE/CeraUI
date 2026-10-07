@@ -22,12 +22,11 @@ describe("host route application", () => {
 	test("uses a candidate's main-table default without requiring a retired named table", async () => {
 		// Given: DHCP provided both defaults, but no named routing tables.
 		const calls: string[][] = [];
+		const table = new DefaultRouteTable([OLD, GOOD]);
 		const runner = async (_bin: string, args: string[]) => {
 			calls.push(args);
 			if (args.includes("table")) throw new Error("table id value is invalid");
-			return args[args.indexOf("route") + 1] === "show" && !args.includes("-6")
-				? `${OLD}\n${GOOD}\n`
-				: "";
+			return table.runner(_bin, args);
 		};
 		// When: the HTTPS-working NIC is installed using the existing ip mechanism.
 		await setDefaultRoute("uplink-b", { runner });
@@ -35,7 +34,7 @@ describe("host route application", () => {
 		expect(calls.filter((args) => args.includes("del"))).toEqual([]);
 		expect(calls).toContainEqual([
 			"route",
-			"add",
+			"prepend",
 			"default",
 			"via",
 			"198.51.100.1",
@@ -93,14 +92,13 @@ describe("host route application", () => {
 		const route = "default via fe80::1 dev uplink-a metric 37";
 		const selected = "default via fe80::2 dev uplink-b metric 83";
 		const calls: string[][] = [];
+		const table = new DefaultRouteTable([], [route, selected]);
 		// When: applying the election's chosen family.
 		await setDefaultRoute("uplink-b", {
 			family: 6,
 			runner: async (_bin, args) => {
 				calls.push(args);
-				return args[args.indexOf("route") + 1] === "show" && args.includes("-6")
-					? `${route}\n${selected}`
-					: "";
+				return table.runner(_bin, args);
 			},
 		});
 		// Then: every route operation is explicitly IPv6.

@@ -67,11 +67,13 @@ describe("ordered host preference rollback", () => {
 			await expect(setDefaultRoute("routeb", { runner })).rejects.toMatchObject(
 				{ reason: "apply-failed" },
 			);
-			// Then: restoration uses the snapshot's position, not its metric alone.
+			// Then: proof rejection removes the staged protocol without ever retiring the old row.
 			expect(table.orderedRows()).toEqual(before);
-			expect(table.mutations.at(-1)?.[1]).toBe(
-				position === "first" ? "prepend" : "append",
-			);
+			expect(table.mutations.map((args) => args[1])).toEqual([
+				"prepend",
+				"del",
+			]);
+			expect(table.mutations.every((args) => args.includes("243"))).toBe(true);
 		});
 
 	test("verification rejection with no prior preference leaves no ownership behind", async () => {
@@ -90,12 +92,12 @@ describe("ordered host preference rollback", () => {
 		expect(table.orderedRows()).toEqual(before);
 	});
 
-	for (const realm of [1, 2] as const)
-		test(`generation ${realm} preserves an interior old row after rejected same-winner repair`, async () => {
+	for (const protocol of ["242", "243"] as const)
+		test(`generation ${protocol} preserves an interior old row after rejected same-winner repair`, async () => {
 			// Given: tagged ownership is between two foreign equal-metric anchors.
 			const table = new DefaultRouteTable([
 				FOREIGN,
-				`${OWNED} realm ${realm}`,
+				OWNED.replace("242", protocol),
 				"default dev tail proto 17 metric 0",
 				SECOND,
 			]);
@@ -116,7 +118,7 @@ describe("ordered host preference rollback", () => {
 			]);
 		});
 
-	test("a last irreversible deletion failure unwinds earlier deletions in order", async () => {
+	test("a release deletion failure leaves successes removed and retries the failed residue", async () => {
 		// Given: release puts the interior row last because no insertion can restore it.
 		const table = new DefaultRouteTable(
 			[
@@ -126,15 +128,20 @@ describe("ordered host preference rollback", () => {
 				SECOND,
 			],
 			[STALE6],
+			"host",
 		);
-		const before = [table.orderedRows(), table.orderedRows(6)];
 		table.failMutation = 2;
 		// When: the final deletion fails atomically after the IPv6 row was removed.
 		await expect(
 			setDefaultRoute(undefined, { runner: table.runner }),
 		).rejects.toMatchObject({ reason: "apply-failed" });
-		// Then: the interior row never moved and the earlier IPv6 deletion was undone.
-		expect([table.orderedRows(), table.orderedRows(6)]).toEqual(before);
+		// Then: IPv4 succeeded; the failed IPv6 row is retried, never restored over success.
+		expect(table.rows()).toEqual(
+			[FOREIGN, "default dev tail proto 17 metric 0", SECOND].sort(),
+		);
+		expect(table.rows(6)).toEqual([STALE6]);
+		await setDefaultRoute(undefined, { runner: table.runner });
+		expect(table.rows(6)).toEqual([]);
 	});
 
 	test("a later retirement failure restores the old endpoint across families", async () => {
@@ -157,9 +164,17 @@ describe("ordered host preference rollback", () => {
 	for (const failure of ["staged-delete", "old-append"] as const)
 		test(`${failure} rollback failure retains both causes without claiming restoration`, async () => {
 			// Given: verification fails, and its undo operation will also be refused.
-			const table = new DefaultRouteTable([FOREIGN, OWNED, SECOND, THIRD]);
+			const table = new DefaultRouteTable(
+				[FOREIGN, OWNED, SECOND, THIRD],
+				failure === "old-append" ? [STALE6] : [],
+			);
+			let proof = 0;
 			const runner: typeof run = (bin, args, opts) => {
-				if (args.includes("get")) return Promise.resolve(FOREIGN);
+				if (
+					args.includes("get") &&
+					(failure === "staged-delete" || proof++ === 0)
+				)
+					return Promise.resolve(FOREIGN);
 				if (
 					(failure === "old-append" && args.includes("append")) ||
 					(failure === "staged-delete" &&
@@ -170,6 +185,7 @@ describe("ordered host preference rollback", () => {
 				return table.runner(bin, args, opts);
 			};
 			// When: acquisition rejects and rollback fails inside that failure.
+			if (failure === "old-append") table.failMutation = 3;
 			const error: unknown = await setDefaultRoute(
 				failure === "old-append" ? "routeb" : "routec",
 				{ runner },
@@ -182,13 +198,13 @@ describe("ordered host preference rollback", () => {
 			)
 				throw new Error("aggregate missing");
 			expect(error.cause.errors).toHaveLength(2);
-			expect(table.rows().filter((row) => !row.includes("proto 242"))).toEqual(
+			expect(table.rows().filter((row) => !/proto 24[23]\b/.test(row))).toEqual(
 				[FOREIGN, SECOND, THIRD].sort(),
 			);
 		});
 
 	for (const topology of ["interior", "multiple-owned", "IPv6-tie"] as const)
-		test(`${topology} refuses before mutation when exact restoration is unavailable`, async () => {
+		test(`${topology} release converges without rollback-order admission`, async () => {
 			// Given: this snapshot has no safe supported insertion operation for an owned row.
 			const tail = "default dev tail proto 17 metric 0";
 			const table =
@@ -207,16 +223,13 @@ describe("ordered host preference rollback", () => {
 							SECOND,
 							topology === "interior" ? tail : tail.replace("17", "242"),
 						]);
-			const before = [table.orderedRows(), table.orderedRows(6)];
-			// When: release would need an unprovable rollback on a later failure.
-			await expect(
-				setDefaultRoute(topology === "interior" ? "routeb" : undefined, {
-					runner: table.runner,
-				}),
-			).rejects.toMatchObject({ reason: "rollback-order-unavailable" });
-			// Then: the refusal leaves the entire ordered snapshot unmodified.
-			expect(table.mutations).toEqual([]);
-			expect([table.orderedRows(), table.orderedRows(6)]).toEqual(before);
+			const foreign = [table.orderedRows(), table.orderedRows(6)].map((rows) =>
+				rows.filter((row) => !row.includes("proto 242")),
+			);
+			// When: release sweeps even rows whose interior position cannot be recreated.
+			await setDefaultRoute(undefined, { runner: table.runner });
+			// Then: all owned rows are gone and foreign order is exact.
+			expect([table.orderedRows(), table.orderedRows(6)]).toEqual(foreign);
 		});
 
 	for (const tableName of [undefined, "254", "100001", "main"] as const)

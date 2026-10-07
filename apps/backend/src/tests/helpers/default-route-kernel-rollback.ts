@@ -26,6 +26,17 @@ export const rollbackKernelScenarios: Readonly<
 		// Given: renewal overtook the old preference before a third NIC is elected.
 		await acquireFloor();
 		await renewForeign();
+		await runner("ip", [
+			"route",
+			"append",
+			"default",
+			"dev",
+			"routea",
+			"proto",
+			"17",
+			"metric",
+			"0",
+		]);
 		await runner("ip", ["link", "add", "routec", "type", "dummy"]);
 		await runner("ip", ["link", "set", "routec", "up"]);
 		await runner("ip", ["addr", "add", "203.0.113.2/24", "dev", "routec"]);
@@ -61,11 +72,12 @@ export const rollbackKernelScenarios: Readonly<
 	"RT2-M2 policy table cannot prove main preference": async () => {
 		// Given: an owned-looking copy outside main intercepts only the proof destination.
 		await acquireFloor();
-		const copy = (
-			await runner("ip", ["-N", "route", "show", "default", "proto", "242"])
-		)
+		const row = (await runner("ip", ["-N", "route", "show", "default"]))
 			.trim()
-			.split(/\s+/);
+			.split("\n")
+			.find((line) => /\bproto 242\b/.test(line));
+		if (!row) throw new Error("owned copy missing");
+		const copy = row.trim().split(/\s+/);
 		await runner("ip", ["route", "add", ...copy, "table", "100001"]);
 		await runner("ip", [
 			"rule",

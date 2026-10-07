@@ -235,8 +235,6 @@ describe("owned host preference lifecycle", () => {
 						"242",
 						"metric",
 						"0",
-						"realm",
-						"1",
 					],
 				]);
 				expect(

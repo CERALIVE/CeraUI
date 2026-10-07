@@ -6,6 +6,7 @@ import {
 	parseRouteInventory,
 	readOwnedInventory,
 } from "./default-route-inventory.ts";
+import { GatewayRouteError } from "./default-route-model.ts";
 import { applyPreference } from "./default-route-transaction.ts";
 
 export type { GwDeps } from "./default-route-inventory.ts";
@@ -68,7 +69,13 @@ async function reconcilePreference(
 	ifname: string | undefined,
 	deps: GwDeps,
 ): Promise<void> {
-	const { owned, foreign } = await readOwnedInventory(deps.runner);
+	const { owned, foreign, failures } = await readOwnedInventory(deps.runner);
+	if (ifname !== undefined && failures.length > 0)
+		throw new GatewayRouteError(
+			ifname,
+			"invalid-route",
+			new AggregateError(failures),
+		);
 	const desired =
 		ifname === undefined
 			? undefined
@@ -77,5 +84,26 @@ async function reconcilePreference(
 					parseRouteInventory(foreign.get(deps.family) ?? "", deps.family),
 					deps,
 				);
-	await applyPreference(owned, desired, deps);
+	try {
+		await applyPreference(owned, desired, deps);
+	} catch (error) {
+		if (failures.length === 0) throw error;
+		throw new GatewayRouteError(
+			ifname ?? "",
+			"apply-failed",
+			new AggregateError([
+				...failures,
+				...(error instanceof GatewayRouteError &&
+				error.cause instanceof AggregateError
+					? error.cause.errors
+					: [error]),
+			]),
+		);
+	}
+	if (failures.length > 0)
+		throw new GatewayRouteError(
+			ifname ?? "",
+			"apply-failed",
+			new AggregateError(failures),
+		);
 }

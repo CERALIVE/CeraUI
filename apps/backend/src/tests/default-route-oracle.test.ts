@@ -108,7 +108,7 @@ describe("oracle owned-route regressions", () => {
 				"203.0.113.254",
 				"fibmatch",
 			]),
-		).toContain("dev routeb proto 242 metric 0 realm 1");
+		).toContain("dev routeb proto 242 metric 0");
 		table.mutations.length = 0;
 		await setDefaultRoute("routeb", { runner: table.runner });
 		expect(table.mutations).toEqual([]);
@@ -121,7 +121,7 @@ describe("oracle owned-route regressions", () => {
 		expect(table.mutations.map((args) => args[1])).toEqual(["prepend", "del"]);
 		expect(
 			await table.runner("ip", ["route", "get", "203.0.113.254", "fibmatch"]),
-		).toContain("realm 2");
+		).toContain("proto 243");
 		expect(
 			await table.runner("ip", ["route", "get", "203.0.113.254", "fibmatch"]),
 		).toContain("dev routeb");

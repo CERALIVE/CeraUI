@@ -67,7 +67,7 @@ describe("host preference boundary and transaction edges", () => {
 		expect(table.rows()).toEqual([...BASELINE].sort());
 	});
 
-	test("failure deleting a later owned row restores every earlier deletion", async () => {
+	test("release attempts every owned row without resurrecting successful deletions", async () => {
 		// Given: two owned rows from a crash and an injected second-delete failure.
 		const rows = [
 			...BASELINE,
@@ -75,20 +75,21 @@ describe("host preference boundary and transaction edges", () => {
 			`default dev absent-b proto ${HOST_ROUTE_PROTOCOL} metric 11`,
 		];
 		const table = new DefaultRouteTable(rows);
-		const before = table.orderedRows();
 		table.failMutation = 2;
 		// When: startup cleanup cannot finish.
 		await expect(
 			setDefaultRoute(undefined, { runner: table.runner }),
 		).rejects.toBeInstanceOf(GatewayRouteError);
-		// Then: even cleanup retains an exact, replayable pre-state.
-		expect(table.rows()).toEqual([...rows].sort());
-		expect(table.orderedRows()).toEqual(before);
+		// Then: only the failed row survives for the next sweep.
+		expect(table.rows()).toEqual([...BASELINE, rows[3]].sort());
+		expect(table.mutations).toHaveLength(2);
+		await setDefaultRoute(undefined, { runner: table.runner });
+		expect(table.rows()).toEqual([...BASELINE].sort());
 	});
 
 	test("rollback failure remains in the typed cause rather than reporting success", async () => {
 		// Given: staging succeeds, but old-route retirement and staged-route rollback fail.
-		const owned = `default dev absent proto ${HOST_ROUTE_PROTOCOL} metric 10`;
+		const owned = `default dev absent proto ${HOST_ROUTE_PROTOCOL} metric 36`;
 		const table = new DefaultRouteTable([...BASELINE, owned]);
 		const runner: typeof run = (bin, args, opts) =>
 			args.includes("del")
@@ -139,7 +140,7 @@ describe("host preference boundary and transaction edges", () => {
 		resume.resolve();
 		await Promise.all([apply, stop]);
 		// Then: the applied preference was drained and removed before stop returned.
-		expect(table.mutations.map((args) => args[1])).toEqual(["add", "del"]);
+		expect(table.mutations.map((args) => args[1])).toEqual(["prepend", "del"]);
 		expect(table.rows()).toEqual([...BASELINE].sort());
 	});
 });
