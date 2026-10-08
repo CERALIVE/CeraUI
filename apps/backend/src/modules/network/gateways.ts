@@ -27,18 +27,19 @@ import {
 	decideConnectivityClaim,
 	deviceBoundProbeExclusionReason,
 	eligibleProbeCandidates,
-	parseDefaultRouteInterface,
 	probeExclusionReason,
 } from "./connectivity-candidates.ts";
 import {
 	type ConnectivityProbes,
 	defaultConnectivityProbes,
-	describeBinding,
 	electConnectivityCandidate,
+	logConnectivityElection,
 	raceConnectivityAddresses,
 } from "./connectivity-election.ts";
 import type { DefaultRouteReleaseCondition } from "./default-route.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
+import { resolveDefaultRouteInterface } from "./gateway-default-interface.ts";
+import { recoverNaturalGateway } from "./gateway-natural-recovery.ts";
 import { gatewayRoutePreference } from "./gateway-route-lifecycle.ts";
 import { CONNECTIVITY_CHECK_DOMAIN, checkConnectivity } from "./internet.ts";
 import { naturalUplinkRecovery } from "./natural-uplink-recovery.ts";
@@ -64,29 +65,6 @@ let updateGwQueue = true;
 export function queueUpdateGw() {
 	updateGwQueue = true;
 	void updateGwWrapper();
-}
-
-/**
- * Which interface the kernel's active default route egresses through, or
- * `undefined` when it cannot be determined. Never throws: an unreadable routing
- * table must not be mistaken for an excluded interface.
- */
-async function resolveDefaultRouteInterface(
-	family: 4 | 6,
-): Promise<string | undefined> {
-	try {
-		return parseDefaultRouteInterface(
-			await run("ip", [
-				...(family === 6 ? ["-6"] : []),
-				"route",
-				"show",
-				"default",
-			]),
-		);
-	} catch (err) {
-		logger.debug(`Could not read the default route: ${err}`);
-		return undefined;
-	}
 }
 
 export type GatewayElectionDeps = {
@@ -166,28 +144,10 @@ export async function updateGw(
 	);
 
 	const defaultIf = await deps.defaultInterface(4);
-	if (deps.routeRunner && deps.releaseRoutes) {
-		try {
-			if (
-				await naturalUplinkRecovery(deps.routeRunner).ready(
-					candidates,
-					deps.probes,
-					deps.now ?? getms,
-				)
-			) {
-				const condition = naturalUplinkRecovery(
-					deps.routeRunner,
-				).releaseCondition;
-				if (!condition) return false;
-				await deps.releaseRoutes(condition);
-				logger.info("Natural host uplink recovered; released owned preference");
-				notificationRemove(NO_INTERNET_NOTIFICATION);
-				return true;
-			}
-		} catch (error) {
-			logger.warn("Natural host uplink recovery failed", { error });
-			return false;
-		}
+	const recovery = await recoverNaturalGateway(deps, candidates);
+	if (recovery !== undefined) {
+		if (recovery) notificationRemove(NO_INTERNET_NOTIFICATION);
+		return recovery;
 	}
 	// Keep the current default ahead of equal-ranked peers to avoid route churn.
 	candidates.sort(
@@ -230,16 +190,7 @@ export async function updateGw(
 		candidates,
 		deps.probes,
 	);
-	for (const { candidate, reachable, repository } of election.results) {
-		logger.info(
-			`Internet ${reachable ? "reachable" : "unreachable"} via ${candidate.name} (${describeBinding(candidate)})`,
-			{
-				repository: repository.verdict,
-				ipv4: repository.ipv4,
-				ipv6: repository.ipv6,
-			},
-		);
-	}
+	logConnectivityElection(election);
 
 	const goodIf = election.elected?.name;
 	if (goodIf && !fromCache && addrs.length > 0) deps.validateDns();

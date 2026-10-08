@@ -250,3 +250,16 @@ export function describeBinding(candidate: ProbeCandidate): string {
 		? `bound to device ${candidate.binding.ifname}`
 		: `from ${candidate.binding.ip}`;
 }
+
+export function logConnectivityElection(election: ConnectivityElection): void {
+	for (const { candidate, reachable, repository } of election.results) {
+		logger.info(
+			`Internet ${reachable ? "reachable" : "unreachable"} via ${candidate.name} (${describeBinding(candidate)})`,
+			{
+				repository: repository.verdict,
+				ipv4: repository.ipv4,
+				ipv6: repository.ipv6,
+			},
+		);
+	}
+}

@@ -494,6 +494,8 @@ held preferences independently observe natural winners through that same ceiling
 Natural recovery carries its proven path identity into the serialized route
 writer. A changed/unusable natural winner or expired proof withholds deletion,
 resets recovery, and keeps maintenance armed; release remains forward-only.
+The coordinator delegates default-interface observation and natural-recovery
+coordination to small network modules; route serialization stays in the writer.
 The retained-realm kernel regression explicitly probes kernel support and prints
 a skip reason when realms are erased. A mandatory target-shape regression covers
 the same recovery identity without realm/classid support.

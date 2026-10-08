@@ -257,7 +257,12 @@ configuration is copied into curl. No redirects are followed.
 
 ## Applying the election and admitting apt
 
-`gateways.ts` remains the host election coordinator. Its serialized route
+`gateways.ts` remains the host election coordinator. The
+helpers `gateway-default-interface.ts` and `gateway-natural-recovery.ts` own
+default-interface observation and the recovery handoff respectively; election
+result logging lives beside election. These splits keep each source module
+within the review-size ceiling without moving route-write serialization.
+The serialized route
 entrypoint is in `default-route.ts`, re-exported through the existing API.
 `default-route-inventory.ts` separates cleanup from candidate parsing,
 `default-route-acquisition.ts` chooses the preference and checks main-table FIB
