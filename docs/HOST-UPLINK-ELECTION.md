@@ -418,6 +418,12 @@ Recovery's snapshot key uses routing path/protocol/metric identity, never legacy
 realm/classid display metadata; the target kernel drops those attributes. Legacy
 metadata stays confined to the existing exact cleanup selectors. A real-kernel
 host test changes only a retained foreign realm and proves recovery does not reset.
+That host-capability case first tests whether `ip -N route show` retains a written
+realm; kernels dropping it skip WITH a printed reason, rather than silently pass
+or require `CONFIG_IP_ROUTE_CLASSID`. A separate mandatory target-shape case
+erases realm/classid using the strict board-mode table and proves the identical
+path continues its recovery streak. Neither production identity nor new routes
+depend on realm support.
 
 Recovery invokes **release**, not acquisition of the natural NIC: all safe owned
 selectors in both families are retired forward-only with no rollback resurrection,

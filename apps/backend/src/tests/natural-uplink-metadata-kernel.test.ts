@@ -16,10 +16,48 @@ const probe = child
 	: await runTestCommand(["unshare", "-Urn", "true"]);
 const unavailable = probe !== undefined && probe.code !== 0;
 
-(unavailable ? test.skip : test)(
+let realmSupported = true;
+if (child) {
+	await setupKernelRoutes();
+	await run("ip", [
+		"route",
+		"add",
+		"default",
+		"dev",
+		"routea",
+		"proto",
+		"16",
+		"metric",
+		"50",
+		"realm",
+		"7",
+	]);
+	realmSupported = (
+		await run("ip", ["-N", "route", "show", "default"])
+	).includes("realm 7");
+	await run("ip", [
+		"route",
+		"del",
+		"default",
+		"dev",
+		"routea",
+		"proto",
+		"16",
+		"metric",
+		"50",
+	]);
+	if (!realmSupported)
+		console.warn(
+			"SKIP legacy realm capability: kernel erased realm 7 (CONFIG_IP_ROUTE_CLASSID unsupported)",
+		);
+}
+
+(unavailable || !realmSupported ? test.skip : test)(
 	unavailable
 		? `legacy route metadata: ${probe?.stderr}`
-		: "legacy realm metadata cannot identify a recovered natural uplink",
+		: !realmSupported
+			? "legacy realm capability: kernel erases realm/classid"
+			: "legacy realm metadata cannot identify a recovered natural uplink",
 	async () => {
 		if (!child) {
 			const result = await runTestCommand(
@@ -33,10 +71,10 @@ const unavailable = probe !== undefined && probe.code !== 0;
 				{ env: { CERALIVE_METADATA_CHILD: "1" } },
 			);
 			expect(result.code, result.stdout + result.stderr).toBe(0);
+			console.info(result.stdout + result.stderr);
 			return;
 		}
 		// Given: the same natural path across three healthy completed observations.
-		await setupKernelRoutes();
 		await run("ip", [
 			"route",
 			"add",

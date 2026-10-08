@@ -494,6 +494,9 @@ held preferences independently observe natural winners through that same ceiling
 Natural recovery carries its proven path identity into the serialized route
 writer. A changed/unusable natural winner or expired proof withholds deletion,
 resets recovery, and keeps maintenance armed; release remains forward-only.
+The retained-realm kernel regression explicitly probes kernel support and prints
+a skip reason when realms are erased. A mandatory target-shape regression covers
+the same recovery identity without realm/classid support.
 
 - **Runtime**: Bun only. No Node-specific APIs (`node:path`, `node:os`, `node:fs/promises` are fine).
 - **Process spawning**: `Bun.spawn()` / `Bun.$` shell — not `node:child_process`.
