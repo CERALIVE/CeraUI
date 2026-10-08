@@ -1,81 +1,23 @@
 import type { run } from "../../helpers/run.ts";
 import type { ProbeCandidate } from "./connectivity-candidates.ts";
 import type { ConnectivityProbes } from "./connectivity-election.ts";
+import type { DefaultRouteReleaseCondition } from "./default-route.ts";
+import { readOwnedInventory } from "./default-route-inventory.ts";
+import { GatewayRouteError } from "./default-route-model.ts";
 import {
-	parseRouteInventory,
-	readOwnedInventory,
-} from "./default-route-inventory.ts";
-import { type DefaultRoute, GatewayRouteError } from "./default-route-model.ts";
+	type NaturalDefaults,
+	naturalDefaults,
+} from "./natural-uplink-identity.ts";
 import { observeRepository, observeUplinkPool } from "./uplink-observation.ts";
 
 const HEALTHY_SWEEPS = 3;
 const RECOVERY_DWELL_MS = 10_000;
 const OBSERVATION_GAP_MS = 30_000;
 
-type NaturalDefaults = {
-	readonly key: string;
-	readonly family: 4 | 6;
-	readonly ifnames: readonly string[];
-};
-
-function routeIdentity(
-	route: DefaultRoute,
-): readonly (string | number | boolean | undefined)[] {
-	return [
-		route.family,
-		route.ifname,
-		route.gateway,
-		route.source,
-		route.metric,
-		route.protocol,
-		route.onlink,
-		route.usable,
-	];
-}
-
 async function readNaturalDefaults(
 	runner: typeof run,
 ): Promise<NaturalDefaults | undefined> {
-	const inventory = await readOwnedInventory(runner);
-	if (inventory.failures.length > 0)
-		throw new GatewayRouteError(
-			"",
-			"invalid-route",
-			new AggregateError(inventory.failures),
-		);
-	const families = new Set(inventory.owned.map((route) => route.family));
-	if (families.size !== 1) return undefined;
-	const family = inventory.owned[0]?.family;
-	if (family === undefined) return undefined;
-	let foreignByFamily: ReadonlyMap<4 | 6, readonly DefaultRoute[]>;
-	try {
-		foreignByFamily = new Map(
-			[...inventory.foreign].map(([family, output]) => [
-				family,
-				parseRouteInventory(output, family),
-			]),
-		);
-	} catch (error) {
-		if (error instanceof GatewayRouteError && error.reason === "invalid-route")
-			return undefined;
-		throw error;
-	}
-	const foreign = foreignByFamily.get(family) ?? [];
-	const metric = Math.min(...foreign.map((route) => route.metric));
-	const winners = foreign.filter((route) => route.metric === metric);
-	if (winners.length === 0 || winners.some((route) => !route.usable))
-		return undefined;
-	return {
-		key: JSON.stringify([
-			inventory.owned.map(routeIdentity),
-			[...foreignByFamily].map(([family, routes]) => [
-				family,
-				routes.map(routeIdentity),
-			]),
-		]),
-		family,
-		ifnames: [...new Set(winners.map((route) => route.ifname))],
-	};
+	return naturalDefaults(await readOwnedInventory(runner));
 }
 
 export class NaturalUplinkRecovery {
@@ -88,11 +30,16 @@ export class NaturalUplinkRecovery {
 		  }
 		| undefined;
 	#pending = false;
+	#releaseCondition: DefaultRouteReleaseCondition | undefined;
 
 	constructor(private readonly runner: typeof run) {}
 
 	get pending(): boolean {
 		return this.#pending;
+	}
+
+	get releaseCondition(): DefaultRouteReleaseCondition | undefined {
+		return this.#releaseCondition;
 	}
 
 	async observeOwnership(): Promise<void> {
@@ -112,6 +59,7 @@ export class NaturalUplinkRecovery {
 		now: () => number,
 	): Promise<boolean> {
 		this.#pending = false;
+		this.#releaseCondition = undefined;
 		try {
 			const natural = await readNaturalDefaults(this.runner);
 			if (!natural) {
@@ -159,7 +107,22 @@ export class NaturalUplinkRecovery {
 				this.#streak = undefined;
 				return false;
 			}
-			return finalAt - this.#streak.first >= RECOVERY_DWELL_MS;
+			if (finalAt - this.#streak.first < RECOVERY_DWELL_MS) return false;
+			this.#releaseCondition = (inventory) => {
+				this.#streak = undefined;
+				this.#pending = true;
+				const current = naturalDefaults(inventory);
+				const releaseAt = now();
+				if (
+					current?.key !== natural.key ||
+					releaseAt < finalAt ||
+					releaseAt - finalAt > OBSERVATION_GAP_MS
+				)
+					return false;
+				this.#pending = false;
+				return true;
+			};
+			return true;
 		} catch (error) {
 			this.#streak = undefined;
 			throw error;

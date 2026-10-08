@@ -1,6 +1,9 @@
 import { run } from "../../helpers/run.ts";
 import { isRealDevice } from "../system/device-detection.ts";
-import { setDefaultRoute } from "./default-route.ts";
+import {
+	type DefaultRouteReleaseCondition,
+	setDefaultRoute,
+} from "./default-route.ts";
 import { GatewayRouteError } from "./default-route-model.ts";
 
 export class GatewayRoutePreference {
@@ -32,6 +35,15 @@ export class GatewayRoutePreference {
 		this.#stopped = true;
 		// The shared runner queue drains already-submitted writes before this release.
 		await setDefaultRoute(undefined, { runner: this.runner });
+	}
+
+	async release(condition: DefaultRouteReleaseCondition): Promise<void> {
+		await this.start();
+		if (this.#stopped) throw new GatewayRouteError("", "apply-failed");
+		await setDefaultRoute(undefined, {
+			runner: this.runner,
+			releaseCondition: condition,
+		});
 	}
 }
 

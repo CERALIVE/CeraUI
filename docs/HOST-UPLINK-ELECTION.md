@@ -389,6 +389,18 @@ families' inventories and evaluate the final clock again. The wrapper keeps
 maintenance queued while a preference remains, including while the natural path
 is still impaired, so recovery does not depend on another operator Check.
 
+**Conditional writer release (Q2).** Readiness carries the exact realm-free
+owned/foreign identity and final observation clock as a release condition through
+`GatewayRoutePreference.release()` into the existing runner-serialized writer.
+Inside that queue, the writer reads its current inventory and evaluates the
+condition synchronously immediately before the first deletion, with no awaited
+operation between the predicate and release submission. A vanished/changed
+winner, `linkdown`/unusable natural default, inventory failure, backwards clock
+or proof age over 30 seconds withholds ALL release writes, resets the streak and
+keeps maintenance armed. The typed withheld result is not successful failback.
+Startup, stop and empty proven-failed elections retain unconditional forward-only
+release; the condition does not admit rollback or acquire the natural path.
+
 The trade-off is a short, bounded recovery dwell rather than immediate failback:
 three observations and ten seconds prevent a one-off success or rapid Check clicks
 from bouncing the route, at the cost of briefly retaining a Wi-Fi/metered winner.

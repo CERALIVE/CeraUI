@@ -37,6 +37,7 @@ import {
 	electConnectivityCandidate,
 	raceConnectivityAddresses,
 } from "./connectivity-election.ts";
+import type { DefaultRouteReleaseCondition } from "./default-route.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
 import { gatewayRoutePreference } from "./gateway-route-lifecycle.ts";
 import { CONNECTIVITY_CHECK_DOMAIN, checkConnectivity } from "./internet.ts";
@@ -97,7 +98,9 @@ export type GatewayElectionDeps = {
 	readonly eligible: (ifname: string) => boolean;
 	readonly defaultInterface: typeof resolveDefaultRouteInterface;
 	readonly installRoute: (ifname: string, family: 4 | 6) => Promise<void>;
-	readonly releaseRoutes?: () => Promise<void>;
+	readonly releaseRoutes?: (
+		condition?: DefaultRouteReleaseCondition,
+	) => Promise<void>;
 	readonly probes: ConnectivityProbes;
 	readonly routeRunner?: typeof run;
 	readonly now?: () => number;
@@ -116,7 +119,10 @@ function defaultGatewayElectionDeps(): GatewayElectionDeps {
 		defaultInterface: resolveDefaultRouteInterface,
 		installRoute: (ifname, family) =>
 			gatewayRoutePreference.apply(ifname, family),
-		releaseRoutes: () => gatewayRoutePreference.apply(undefined),
+		releaseRoutes: (condition) =>
+			condition
+				? gatewayRoutePreference.release(condition)
+				: gatewayRoutePreference.apply(undefined),
 		probes: defaultConnectivityProbes,
 		routeRunner: run,
 	};
@@ -169,7 +175,11 @@ export async function updateGw(
 					deps.now ?? getms,
 				)
 			) {
-				await deps.releaseRoutes();
+				const condition = naturalUplinkRecovery(
+					deps.routeRunner,
+				).releaseCondition;
+				if (!condition) return false;
+				await deps.releaseRoutes(condition);
 				logger.info("Natural host uplink recovered; released owned preference");
 				notificationRemove(NO_INTERNET_NOTIFICATION);
 				return true;

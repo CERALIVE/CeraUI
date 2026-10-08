@@ -491,6 +491,9 @@ generic connectivity still supplies the existing fallback. See
 Repository success on the first/default candidate stops speculative sibling
 probes. Only a failed first candidate opens a four-worker, input-ordered pool;
 held preferences independently observe natural winners through that same ceiling.
+Natural recovery carries its proven path identity into the serialized route
+writer. A changed/unusable natural winner or expired proof withholds deletion,
+resets recovery, and keeps maintenance armed; release remains forward-only.
 
 - **Runtime**: Bun only. No Node-specific APIs (`node:path`, `node:os`, `node:fs/promises` are fine).
 - **Process spawning**: `Bun.spawn()` / `Bun.$` shell — not `node:child_process`.

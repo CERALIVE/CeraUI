@@ -48,14 +48,31 @@ export function parseDefaultRouteLine(gw: string): ParseResult<string[]> {
 
 const pending = new WeakMap<typeof run, Promise<void>>();
 
+export type DefaultRouteReleaseCondition = (
+	inventory: Awaited<ReturnType<typeof readOwnedInventory>>,
+) => boolean;
+
+export class GatewayReleaseWithheldError extends Error {
+	override readonly name = "GatewayReleaseWithheldError";
+	constructor() {
+		super("Natural recovery changed before owned-route release");
+	}
+}
+
 export async function setDefaultRoute(
 	goodIf: string | undefined,
-	deps: Partial<GwDeps> = {},
+	deps: Partial<GwDeps> & {
+		readonly releaseCondition?: DefaultRouteReleaseCondition;
+	} = {},
 ): Promise<void> {
 	const runner = deps.runner ?? run;
 	const ifname = goodIf === undefined ? undefined : argMatch(ID_RE, goodIf);
 	const flight = (pending.get(runner) ?? Promise.resolve()).then(() =>
-		reconcilePreference(ifname, { runner, family: deps.family ?? 4 }),
+		reconcilePreference(
+			ifname,
+			{ runner, family: deps.family ?? 4 },
+			deps.releaseCondition,
+		),
 	);
 	// Failed transactions do not poison the serialization tail; callers keep the error.
 	pending.set(
@@ -68,8 +85,12 @@ export async function setDefaultRoute(
 async function reconcilePreference(
 	ifname: string | undefined,
 	deps: GwDeps,
+	releaseCondition?: DefaultRouteReleaseCondition,
 ): Promise<void> {
-	const { owned, foreign, failures } = await readOwnedInventory(deps.runner);
+	const inventory = await readOwnedInventory(deps.runner);
+	if (ifname === undefined && releaseCondition && !releaseCondition(inventory))
+		throw new GatewayReleaseWithheldError();
+	const { owned, foreign, failures } = inventory;
 	if (ifname !== undefined && failures.length > 0)
 		throw new GatewayRouteError(
 			ifname,

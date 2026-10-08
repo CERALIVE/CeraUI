@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { parseDefaultRouteInterface } from "../modules/network/connectivity-candidates.ts";
+import type { DefaultRouteReleaseCondition } from "../modules/network/default-route.ts";
 import { GatewayRoutePreference } from "../modules/network/gateway-route-lifecycle.ts";
 import {
 	type GatewayElectionDeps,
@@ -109,7 +110,10 @@ for (const scenario of [
 					),
 				installRoute: (name: string, family: 4 | 6) =>
 					controller.apply(name, family),
-				releaseRoutes: () => controller.apply(undefined),
+				releaseRoutes: (condition?: DefaultRouteReleaseCondition) =>
+					condition
+						? controller.release(condition)
+						: controller.apply(undefined),
 				routeRunner: run,
 				now: () => {
 					clockReads++;
