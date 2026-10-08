@@ -6,6 +6,7 @@ import {
 	readOwnedInventory,
 } from "./default-route-inventory.ts";
 import { type DefaultRoute, GatewayRouteError } from "./default-route-model.ts";
+import { observeRepository } from "./uplink-observation.ts";
 
 const HEALTHY_SWEEPS = 3;
 const RECOVERY_DWELL_MS = 10_000;
@@ -124,7 +125,7 @@ export class NaturalUplinkRecovery {
 				return false;
 			}
 			const results = await Promise.all(
-				natural.ifnames.map((name) => probes.probeRepository(name)),
+				natural.ifnames.map((name) => observeRepository(name, probes)),
 			);
 			if (
 				results.some(

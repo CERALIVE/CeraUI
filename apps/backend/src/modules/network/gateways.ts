@@ -136,10 +136,17 @@ export async function updateGw(
 		logger.warn(`Failed to resolve ${CONNECTIVITY_CHECK_DOMAIN}: ${err}`);
 	}
 
-	const defaultReachable = await raceConnectivityAddresses(
+	const defaultObservation = await raceConnectivityAddresses(
 		addrs,
 		deps.checkConnectivity,
-	);
+	).catch((error: unknown) => {
+		if (!(error instanceof AggregateError)) throw error;
+		logger.warn("Default-route connectivity observation unavailable", {
+			error,
+		});
+		return "unknown" as const;
+	});
+	const defaultReachable = defaultObservation === true;
 	if (defaultReachable) {
 		if (!fromCache) deps.validateDns();
 
@@ -266,6 +273,15 @@ export async function updateGw(
 		);
 	}
 
+	if (
+		defaultObservation === "unknown" ||
+		election.results.some(
+			({ repository }) =>
+				repository.ipv4 === "unknown" || repository.ipv6 === "unknown",
+		)
+	) {
+		return false;
+	}
 	try {
 		await deps.releaseRoutes?.();
 	} catch (error) {

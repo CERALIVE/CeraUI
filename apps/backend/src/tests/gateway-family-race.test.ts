@@ -33,7 +33,7 @@ async function settleWithFakeTime<T>(pending: Promise<T>): Promise<{
 	});
 
 	for (let elapsedMs = 0; elapsedMs <= 10_000; elapsedMs += 250) {
-		await Promise.resolve();
+		for (let turn = 0; turn < 16; turn++) await Promise.resolve();
 		if (settled) return { elapsedMs, value: settled.value };
 		jest.advanceTimersByTime(250);
 	}

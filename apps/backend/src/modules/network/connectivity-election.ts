@@ -26,15 +26,18 @@
 */
 
 import { isIP } from "node:net";
+import { logger } from "../../helpers/logger.ts";
 
 import {
 	type AptReachability,
 	defaultAptReachabilityDeps,
+	deriveVerdict,
 	probeAptReachability,
 } from "../system/apt-reachability.ts";
 import type { ProbeCandidate } from "./connectivity-candidates.ts";
 import { checkConnectivityViaDevice } from "./device-bound-probe.ts";
 import { checkConnectivity } from "./internet.ts";
+import { observeRepository } from "./uplink-observation.ts";
 
 /** The two ways a probe can be steered, injected so the binding is provable. */
 export type ConnectivityProbes = {
@@ -102,23 +105,31 @@ export function raceConnectivityAddresses(
 
 	if (targets.length === 0) return Promise.resolve(false);
 
-	return new Promise((resolve) => {
+	return new Promise((resolve, reject) => {
 		let remaining = targets.length;
+		let active = 0;
 		let settled = false;
+		const errors: unknown[] = [];
 		let staggerTimer: ReturnType<typeof setTimeout> | undefined;
 
 		const runProbe = async (addr: string): Promise<void> => {
 			if (settled) return;
-			const reachable = await probe(addr);
-			if (settled) return;
-			if (reachable) {
-				settled = true;
-				if (staggerTimer) clearTimeout(staggerTimer);
-				resolve(true);
-				return;
+			active++;
+			try {
+				if (await probe(addr)) {
+					settled = true;
+					if (staggerTimer) clearTimeout(staggerTimer);
+				}
+			} catch (error) {
+				errors.push(error);
+			} finally {
+				active--;
+				remaining--;
+				if (active === 0 && (settled || remaining === 0)) {
+					if (!settled && errors.length > 0) reject(new AggregateError(errors));
+					else resolve(settled);
+				}
 			}
-			remaining -= 1;
-			if (remaining === 0) resolve(false);
 		};
 
 		for (const target of targets) {
@@ -164,7 +175,7 @@ export async function electConnectivityCandidate(
 			): Promise<
 				CandidateProbeResult & { readonly family: 4 | 6 | undefined }
 			> => {
-				const repository = await probes.probeRepository(candidate.name);
+				const repository = await observeRepository(candidate.name, probes);
 				const family =
 					repository.ipv4 === "ok"
 						? 4
@@ -179,6 +190,7 @@ export async function electConnectivityCandidate(
 						? candidate.binding.ip
 						: undefined;
 				let reachableFamily: 4 | 6 | undefined;
+				let observationFailed = false;
 				const reachable = await raceConnectivityAddresses(
 					addrs,
 					async (addr) => {
@@ -190,7 +202,22 @@ export async function electConnectivityCandidate(
 						return success;
 					},
 					localAddress,
-				);
+				).catch((error: unknown) => {
+					if (!(error instanceof AggregateError)) throw error;
+					logger.warn("Generic uplink observation unavailable", {
+						ifname: candidate.name,
+						error,
+					});
+					observationFailed = true;
+					return false;
+				});
+				if (observationFailed)
+					return {
+						candidate,
+						reachable: false,
+						repository: deriveVerdict([]),
+						family: undefined,
+					};
 				return { candidate, reachable, repository, family: reachableFamily };
 			},
 		),

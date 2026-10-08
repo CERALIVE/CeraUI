@@ -480,6 +480,15 @@ Ownership, AIMD behavior, failure reporting, and real netns classification proof
 
 ## Conventions
 
+Confirmed generic family success survives a joined sibling observation exception.
+An unsuccessful unbound observation exception stays UNKNOWN while repository
+candidates are still observed; UNKNOWN alone never authorizes route release.
+Host-uplink observers isolate repository exceptions as typed UNKNOWN and drain
+submitted siblings before releasing the election flight. UNKNOWN is never
+repository success or permission to release an owned preference. Independent
+generic connectivity still supplies the existing fallback. See
+[`HOST-UPLINK-ELECTION.md`](../../docs/HOST-UPLINK-ELECTION.md).
+
 - **Runtime**: Bun only. No Node-specific APIs (`node:path`, `node:os`, `node:fs/promises` are fine).
 - **Process spawning**: `Bun.spawn()` / `Bun.$` shell — not `node:child_process`.
 - **File I/O**: `Bun.file().text()` / `Bun.write()` — not `fs.readFileSync`.

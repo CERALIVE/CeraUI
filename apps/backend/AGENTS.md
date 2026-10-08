@@ -49,6 +49,7 @@ Full PR gate: `bun run test`, `bun run test:e2e`, `bun run check:tech-debt`,
 - Flow-sticky shared-client steering affects only forwarded client-zone traffic; preserve physical-identity marks and established flows.
 - Streaming-first uplink shaping caps only shared clients; local stream egress stays uncapped. Foreign roots fail closed.
 - The two NAT layers are watched, never arbitrated: diagnostics are read-only, tri-state, and never gate streaming or mutate either layer.
+- Host-uplink family success survives joined sibling faults; unsuccessful unbound faults stay UNKNOWN and cannot abort candidate election or authorize release. See `../../docs/HOST-UPLINK-ELECTION.md`.
 - Modem roster: exact triplets; RNDIS e0/01/03 admits; e0/01/01, e0/01/04 veto; ID_MM_DEVICE_IGNORE=1 excludes; weak retires, strong stays undriveable.
 - Update roster uses exact package names, never prefixes; unknown names default to platform. Install only actionable entries.
 - Every modem mutation uses the identity-resolved lifecycle lease; connectivity mutations arm the durable journal before writing; retain rollback.

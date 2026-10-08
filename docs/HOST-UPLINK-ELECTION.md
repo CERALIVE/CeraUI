@@ -130,6 +130,20 @@ or trust store is wrong, or the only uplink is impaired: none is permission to
 strand the board by refusing every path. Ranking stops on a top-tier success;
 otherwise it examines the whole eligible set before accepting the HTTP fallback.
 
+Confirmed generic success wins over an already-submitted sibling's observation
+exception, without turning that HTTP success into repository health. With no
+success, the candidate boundary records typed UNKNOWN; the unbound boundary also
+records UNKNOWN and continues repository-aware candidate election. Unknown unbound
+evidence cannot authorize an empty-election release.
+
+**Observer failures (Q3).** Unexpected repository exceptions become typed
+`unknown` in both families, not a healthy observation or a release signal. The
+independent ordinary-connectivity fallback remains available. Candidate and tied
+natural-winner batches drain every submitted observation before the gateway
+flight ends; one observer fault cannot abort maintenance of a healthy sibling.
+An election without a winner retains ownership when evidence is UNKNOWN.
+Generic family races also join already-started losing probes before returning.
+
 **Bounded parallel sweep (F-R8-4).** Candidate observations run concurrently and
 are all awaited before deterministic record-order ranking. Completion speed cannot
 change the winner or attach one NIC's result to another. Production repository
