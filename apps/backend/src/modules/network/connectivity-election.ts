@@ -37,7 +37,7 @@ import {
 import type { ProbeCandidate } from "./connectivity-candidates.ts";
 import { checkConnectivityViaDevice } from "./device-bound-probe.ts";
 import { checkConnectivity } from "./internet.ts";
-import { observeRepository } from "./uplink-observation.ts";
+import { observeRepository, observeUplinkPool } from "./uplink-observation.ts";
 
 /** The two ways a probe can be steered, injected so the binding is provable. */
 export type ConnectivityProbes = {
@@ -168,60 +168,62 @@ export async function electConnectivityCandidate(
 		| { readonly candidate: ProbeCandidate; readonly family: 4 | 6 }
 		| undefined;
 
-	const observations = await Promise.all(
-		candidates.map(
-			async (
-				candidate,
-			): Promise<
-				CandidateProbeResult & { readonly family: 4 | 6 | undefined }
-			> => {
-				const repository = await observeRepository(candidate.name, probes);
-				const family =
-					repository.ipv4 === "ok"
-						? 4
-						: repository.ipv6 === "ok"
-							? 6
-							: undefined;
-				if (family !== undefined) {
-					return { candidate, reachable: true, repository, family };
-				}
-				const localAddress =
-					candidate.binding.kind === "source-ip"
-						? candidate.binding.ip
-						: undefined;
-				let reachableFamily: 4 | 6 | undefined;
-				let observationFailed = false;
-				const reachable = await raceConnectivityAddresses(
-					addrs,
-					async (addr) => {
-						const success =
-							candidate.binding.kind === "device"
-								? await probes.probeViaDevice(addr, candidate.binding.ifname)
-								: await probes.probeViaSourceIp(addr, candidate.binding.ip);
-						if (success) reachableFamily ??= isIP(addr) === 6 ? 6 : 4;
-						return success;
-					},
-					localAddress,
-				).catch((error: unknown) => {
-					if (!(error instanceof AggregateError)) throw error;
-					logger.warn("Generic uplink observation unavailable", {
-						ifname: candidate.name,
-						error,
-					});
-					observationFailed = true;
-					return false;
-				});
-				if (observationFailed)
-					return {
-						candidate,
-						reachable: false,
-						repository: deriveVerdict([]),
-						family: undefined,
-					};
-				return { candidate, reachable, repository, family: reachableFamily };
+	const observe = async (
+		candidate: ProbeCandidate,
+	): Promise<CandidateProbeResult & { readonly family: 4 | 6 | undefined }> => {
+		const repository = await observeRepository(candidate.name, probes);
+		const family =
+			repository.ipv4 === "ok" ? 4 : repository.ipv6 === "ok" ? 6 : undefined;
+		if (family !== undefined) {
+			return { candidate, reachable: true, repository, family };
+		}
+		const localAddress =
+			candidate.binding.kind === "source-ip" ? candidate.binding.ip : undefined;
+		let reachableFamily: 4 | 6 | undefined;
+		let observationFailed = false;
+		const reachable = await raceConnectivityAddresses(
+			addrs,
+			async (addr) => {
+				const success =
+					candidate.binding.kind === "device"
+						? await probes.probeViaDevice(addr, candidate.binding.ifname)
+						: await probes.probeViaSourceIp(addr, candidate.binding.ip);
+				if (success) reachableFamily ??= isIP(addr) === 6 ? 6 : 4;
+				return success;
 			},
-		),
-	);
+			localAddress,
+		).catch((error: unknown) => {
+			if (!(error instanceof AggregateError)) throw error;
+			logger.warn("Generic uplink observation unavailable", {
+				ifname: candidate.name,
+				error,
+			});
+			observationFailed = true;
+			return false;
+		});
+		if (observationFailed)
+			return {
+				candidate,
+				reachable: false,
+				repository: deriveVerdict([]),
+				family: undefined,
+			};
+		return { candidate, reachable, repository, family: reachableFamily };
+	};
+	const firstCandidate = candidates[0];
+	if (!firstCandidate) return { elected: undefined, results };
+	const first = await observe(firstCandidate);
+	if (first.repository.ipv4 === "ok" || first.repository.ipv6 === "ok") {
+		return {
+			elected: first.candidate,
+			results: [first],
+			family: first.repository.ipv4 === "ok" ? 4 : 6,
+		};
+	}
+	const observations = [
+		first,
+		...(await observeUplinkPool(candidates.slice(1), observe)),
+	];
 
 	for (const { candidate, reachable, repository, family } of observations) {
 		results.push({ candidate, reachable, repository });

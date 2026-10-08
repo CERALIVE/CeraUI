@@ -144,33 +144,75 @@ flight ends; one observer fault cannot abort maintenance of a healthy sibling.
 An election without a winner retains ownership when evidence is UNKNOWN.
 Generic family races also join already-started losing probes before returning.
 
-**Bounded parallel sweep (F-R8-4).** Candidate observations run concurrently and
-are all awaited before deterministic record-order ranking. Completion speed cannot
-change the winner or attach one NIC's result to another. Production repository
-children retain their 4-second outer cap; generic device children retain a 4-second
-curl cap and 5-second outer cap, with at most one target per family and a 250-ms
-stagger. The candidate-transfer budget is therefore approximately **9.25 seconds**,
-not five times that on the Rock roster. A held preference adds one concurrent
-natural-winner repository pass (about 4 seconds); the existing unbound connectivity
-probe adds about 4.25 seconds. Source/source-address-only generic candidate sockets
-are no longer used in production, so their socket-event timeout cannot amplify a
-misattributed failed connection into the hardware's 138–145-second sweep.
+**Healthy-first bounded sweep (Q5 / F-R8-4).** Observe the current default / first
+ranked candidate alone and stop on repository success, exactly as before the
+fan-out change. Only failure of that top-tier check opens a **four-worker** pool
+for all remaining candidates. Await the pool, then rank in input order; response
+speed never breaks ties. Four is fixed, not roster-sized: two workers would need
+three roughly six-second waves on the five-blackhole fixture and miss its existing
+15-second regression bound. The independent natural-winner pass while ownership
+is held uses the same four-worker ceiling, even when the held winner is healthy.
+Repository children retain their 4-second cap; generic children retain a 4-second
+curl / 5-second outer cap and 250-ms family stagger. A conservative candidate
+transfer bound is `9.25 * (1 + ceil((N-1)/4))` seconds for N failed candidates;
+held ownership adds `4 * ceil(K/4)` for K tied natural winners, and the unbound
+connectivity check adds about 4.25 seconds. Real fixture timing remains separate.
 
 This is a network-transfer bound, **not** a hard UI Check deadline: local source
 reads, DNS resolution before the sweep, route inventory/repair, process scheduling
 and APT commands retain their own budgets. No new global timer returns while work
-continues unseen. Existing dual-family generic races can still have a bounded losing
-read-only child finishing after first success. Probing all candidates costs more
-short-lived DNS/TLS work on a healthy default than early-exit probing, in exchange
-for avoiding per-uplink timeout multiplication and preserving exact attribution.
+continues unseen. Already-started generic family probes are joined; a not-yet-started
+staggered peer is cancelled on success. Healthy-first avoids speculative DNS/TLS
+work on every other candidate, including metered HiLink and FM350 interfaces.
 Measure end-to-end Check on both boards; no replacement-build latency is claimed.
 
 The five-blackholed-uplink regression uses real curl/subprocess timers and real
 `ip` routes in `unshare -Urn`, with no repository-response or FIB fake. On Linux
 7.2.9 / iproute2 7.2.0 / Bun 1.4.2, the exact b7895619 serialization took
-**30,103 ms** and failed its 15-second transfer-budget assertion; concurrent
-observation took **6,028 ms** with route/rule inventories unchanged. These are
+**30,103 ms** and failed its 15-second transfer-budget assertion; the historical
+all-candidate fan-out took **6,028 ms**. The corrected healthy-first/four-worker
+version retains the same 15-second assertion with route/rule inventories unchanged. These are
 host namespace measurements, not board latency or CI timing.
+
+### Probe budget and cellular cost
+
+Let R be the configured origin/suite probe entries, N eligible candidates, K
+tied natural winners (zero without held ownership), and G the generic targets
+(at most two, one per family). Counts are attempted transfers, not a bandwidth
+cap; resolver traffic and actual TLS/header sizes are separate.
+
+| Sweep | Repository curl attempts | Generic device curl attempts |
+|---|---|---|
+| First candidate repository-healthy | `2R` | `0` |
+| First fails; full candidate set observed | `2RN` | at most `GN` |
+| Additional held-ownership natural observation | `2RK` | `0` |
+
+The existing unbound generic check adds up to G HTTP attempts on the default.
+Repository peak concurrency is at most `8R` curl children within either pool;
+the first attempt, candidate pool and natural pool are sequential. R itself is
+configuration-sized, not a new global subprocess cap.
+
+At continuously queued two-second sweeps, the conservative hourly ceiling is
+1,800 sweeps: healthy candidate `3,600R`, failed-set `3,600RN` plus at most
+`1,800GN` generic curl attempts, held natural observation `3,600RK`, and
+`1,800G` existing unbound attempts. Long sweeps lower that rate; successful
+unowned maintenance disarms the queue, so this is not a permanent healthy timer.
+For five candidates, healthy-first removes the previous **8R extra attempts per
+sweep / 14,400R per hour**. Metered non-winners have **zero candidate probe
+traffic** on that fast path, proven with real nft counters on both modem shapes.
+
+Metered elected paths and metered natural winners still pay for their required
+observations. A single repeatedly observed modem spends at most `3,600R`
+repository attempts/hour (twice that if it participates independently in both
+passes), plus generic attempts only after candidate repository failure. The
+oracle's blackholed fixture measured four IPv4 packets / **240 bytes per modem
+per R=1 sweep**: at 1,800 sweeps that is **432,000 bytes/hour per modem**, before
+DNS, generic traffic, IPv6 or successful TLS exchanges. This is an observed
+failure-fixture cost, not a successful-transfer or carrier-billing estimate.
+If a transfer consumes C billed bytes, repository cost is at most
+`3,600R * C` bytes/hour per continuously observed modem/pass; C and real modem
+DNS/TLS byte costs are **unmeasured on boards**. No claim of free cellular health
+checks, no new metering policy and no cost-based rank is introduced.
 
 ## One signal, one binding primitive
 
