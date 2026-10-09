@@ -65,7 +65,10 @@ NBD device cannot lose its recorded ownership merely because its creator PID was
 reused. These safety repairs likewise remain hardware-unqualified.
 An admission refusal now names its first failing predicate and, when observation
 itself stopped, the bounded and redacted boundary and error class, without
-changing what is admitted. See [OS staging recovery](docs/UPDATE-RECOVERY.md#os-staging-recovery-partial--fixture-proven-board-re-drill-owed).
+changing what is admitted. The staged receipt of an OS version that is already
+the healthy booted system is retired as `os-staged.consumed.json`, so it no
+longer blocks every settlement proof; a both-slots-good unsafe failure still
+stays failed. See [OS staging recovery](docs/UPDATE-RECOVERY.md#os-staging-recovery-partial--fixture-proven-board-re-drill-owed).
 
 State-side unlaunched OS settlement requires a private completed witness matching
 the persisted attempt, signed candidate and current boot, plus fresh readiness.

@@ -121,6 +121,10 @@ import {
 	consumeOsUnlaunchedWitness,
 	readOsUnlaunchedWitness,
 } from "./os-stage-unlaunched-witness.ts";
+import {
+	retireConsumedStagedReceipt,
+	retireStagedReceipt,
+} from "./os-staged-receipt-retirement.ts";
 import { settleOsUnlaunchedWitness } from "./os-unlaunched-adapter.ts";
 import { progressFromWire } from "./package-progress.ts";
 import { pendingPackageSuccess } from "./pending-success-fence.ts";
@@ -227,6 +231,7 @@ export interface OrchestratorRuntimeDeps {
 	readonly readPersistedState?: typeof loadOrchestratorState;
 	readonly osAttemptIntentStore?: OsAttemptIntentStore;
 	readonly readOsUnlaunchedWitness?: typeof readOsUnlaunchedWitness;
+	readonly retireOsReceipt?: typeof retireStagedReceipt;
 	readonly consumeOsUnlaunchedWitness?: typeof consumeOsUnlaunchedWitness;
 	/**
 	 * Positive proof that no RAUC writer or attempt-owned resource survives a
@@ -426,6 +431,7 @@ let osForceActivated = false;
 let slotSyncUndecidedReason: string | null = null;
 let slotIdentityUnknownWarned = false;
 let legacyOsFailureWarned = false;
+let consumedReceiptWarned = false;
 let recoveryPersistenceValid = true;
 const osSettlementPersistence = new OsSettlementPersistence(() =>
 	publishingIntentPending(deps.osAttemptIntentStore),
@@ -632,6 +638,7 @@ export async function checkUpdatesNow(): Promise<ManualCheckOutcome> {
 	);
 	if (!(await updateAdmissionReady()))
 		return { started: false, reason: "busy" };
+	await maybeRetireConsumedOsReceipt();
 	await maybeSettleOsUnlaunchedWitness();
 	if (osSettlementPersistence.pending)
 		return { started: false, reason: "busy" };
@@ -679,6 +686,7 @@ export async function installUpdatesNow(): Promise<ManualInstallOutcome> {
 	);
 	if (!(await updateAdmissionReady()))
 		return { started: false, reason: "busy" };
+	await maybeRetireConsumedOsReceipt();
 	await maybeSettleOsUnlaunchedWitness();
 	if (osSettlementPersistence.pending)
 		return { started: false, reason: "busy" };
@@ -1878,6 +1886,37 @@ async function readOsStageSettlementEvidence(
 	return readRuntimeOsSettlementEvidence(deps, lease);
 }
 
+// The receipt of an already-running version blocks every settlement proof.
+async function maybeRetireConsumedOsReceipt(): Promise<void> {
+	if (!recoveryPersistenceValid) return;
+	try {
+		await retireConsumedStagedReceipt({
+			snapshot: () => ({
+				phase: state.phase,
+				activeAttemptId: state.osStageRecovery?.activeAttemptId ?? null,
+				generation: stateGeneration,
+				producing: osStageInProcess || activeOsStage !== undefined,
+			}),
+			acquireControl: acquireRuntimeOsStageControl,
+			readReceipt: deps.readOsReceipt,
+			readBootedVersion: () => deps.readBootedVersion(),
+			readBootId: () => deps.readBootId(),
+			readHealthyBootId: async () =>
+				(await deps.readHealthyState())?.boot_id ?? null,
+			readActivationArmed: deps.readActivationArmed,
+			inspectOperation: deps.inspectOsOperation,
+			retire: (receipt) =>
+				(deps.retireOsReceipt ?? retireStagedReceipt)(receipt),
+		});
+	} catch (error) {
+		if (!consumedReceiptWarned)
+			logger.warn("update-orchestrator: consumed staged receipt kept", {
+				error,
+			});
+		consumedReceiptWarned = true;
+	}
+}
+
 async function maybeSettleOsUnlaunchedWitness(): Promise<boolean> {
 	if (
 		!recoveryPersistenceValid ||
@@ -2100,6 +2139,7 @@ export async function runOrchestratorTick(): Promise<void> {
 		scheduleNextTick();
 		return;
 	}
+	await maybeRetireConsumedOsReceipt();
 	if (await maybeSettleOsUnlaunchedWitness()) {
 		scheduleNextTick();
 		return;
@@ -2423,6 +2463,7 @@ async function startOrchestratorRuntime(
 		adoptState(await resumeOrchestratorState(baseline, resumeDeps()));
 	}
 	adoptState(normalizeStartupDiscovery(state, deps.now()));
+	await maybeRetireConsumedOsReceipt();
 	await maybeSettleOsUnlaunchedWitness();
 	osSettlementPersistence.intentCleanup.assertAcknowledged();
 	if (state.phase === "os-activation-armed" || state.phase === "os-verifying")

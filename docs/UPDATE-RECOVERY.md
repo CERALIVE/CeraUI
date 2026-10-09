@@ -839,6 +839,34 @@ be a stage nobody recorded. Any unreadable input is "not proven".
   confirmed. Rejection retains the unresolved notice; only an accepted transition
   clears it. A retained staged receipt prevents confirmation even with writer proof.
 
+**A consumed staged receipt is retired [PARTIAL — host-proven, board re-drill owed].**
+`os-staged.json` records version, channel, `stagedAt` and the boot it was written
+on; it records no target slot, so consumption is judged only from those fields.
+A receipt is consumed when ALL of the following hold, read under CONTROL with the
+orchestrator state re-checked after every read:
+
+- its version equals the booted OS version (`/etc/ceralive/os-release-version`);
+- its boot id differs from the current boot, and this boot carries its own
+  `healthy-state.json`;
+- the phase is not `os-staging`, `os-staged`, `os-activation-armed` or
+  `os-verifying`, no attempt is active and no producer runs;
+- `activation-armed` is absent and RAUC's `Operation` is idle.
+
+A candidate that is staged but not yet activated always names a newer version
+than the booted one (admission refuses `downgrade_or_same`), and a crash reboot
+that keeps the arming rebinds its receipt to the new boot, so neither can match.
+The exact receipt that was judged is renamed to `os-staged.consumed.json` (kept as
+evidence) and the directory is synced. A different, unreadable or already-retired
+receipt is left alone; a crash before or after the rename converges on the next
+pass. Retirement runs at startup, on each tick and before Check now or Install
+now, ahead of witness settlement and unsafe-record confirmation.
+
+This removes only the receipt blocker. **Both slots `good` still refuses
+confirmation**, by the rule above: the Rock's failed `.68` record with a retained
+`.64` receipt therefore keeps `failed / unsafe` after the receipt is retired, and
+still needs the owner-approved bench reset. A rollback leaves its receipt in place;
+that case is not judged consumed here.
+
 **Admission refusals name their predicate [PARTIAL — host-proven].** The thrown
 `rauc_recovery_unproven` error keeps `refusal: "stage-admission-unproven"` and
 its unsafe mode. Its diagnostics add `predicate`, the first failing check in

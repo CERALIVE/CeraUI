@@ -238,6 +238,11 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
   `failed`, replacing the retry notice without deleting the receipt or writing
   quarantine. Pending publication cannot arm activation; after backend loss it
   is observed and settled unsafe, never promoted to completed release.
+  A receipt whose version is the healthy booted OS, written on an earlier boot,
+  with no OS lifecycle phase, attempt, producer, arming or RAUC operation, is
+  consumed: `os-staged-receipt-retirement.ts` renames exactly that receipt to
+  `os-staged.consumed.json` under CONTROL (startup, tick, Check/Install now).
+  Never widen that predicate to infer a target slot the receipt does not record.
   Stage-admission refusals keep `rauc_recovery_unproven`/unsafe and add the
   log-only `predicate` and bounded, redacted `observation` diagnostics
   (`os-stage-admission-diagnostics.ts`); see `docs/UPDATE-RECOVERY.md`.

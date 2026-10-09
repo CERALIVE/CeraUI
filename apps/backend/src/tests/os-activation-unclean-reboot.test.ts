@@ -58,11 +58,13 @@ function otherSlot(document: CrashDocument): {
 function armedAt(version: string): {
 	readonly rollbacks: string[];
 	readonly rebinds: string[];
+	readonly retired: string[];
 	readonly persisted: OrchestratorState[];
 	readonly deps: Deps;
 } {
 	const rollbacks: string[] = [];
 	const rebinds: string[] = [];
+	const retired: string[] = [];
 	const persisted: OrchestratorState[] = [];
 	class RecordingQuarantine extends UpdateQuarantine {
 		override async recordOsRollback(expected: string): Promise<void> {
@@ -86,6 +88,10 @@ function armedAt(version: string): {
 		rebindOsReceipt: async (_receipt, bootId) => {
 			rebinds.push(bootId);
 		},
+		retireOsReceipt: (staged) => {
+			retired.push(staged.version);
+			return true;
+		},
 		quarantine: new RecordingQuarantine(),
 		persist: (state) => {
 			persisted.push(state);
@@ -95,7 +101,7 @@ function armedAt(version: string): {
 		...initialOrchestratorState(0),
 		phase: "os-activation-armed",
 	});
-	return { rollbacks, rebinds, persisted, deps };
+	return { rollbacks, rebinds, retired, persisted, deps };
 }
 
 function rollbackNotices(version: string): number {
@@ -120,6 +126,8 @@ describe("boot-id change while os-activation-armed", () => {
 		expect(rollbackNotices("2026.10.31")).toBe(0);
 		expect(run.persisted).toEqual([]);
 		expect(run.rebinds).toEqual([POST_CRASH_BOOT]);
+		// The still-staged candidate's receipt survives the crash reboot.
+		expect(run.retired).toEqual([]);
 	});
 
 	test("unreadable RAUC status reaches no verdict and retries next tick", async () => {
@@ -232,6 +240,8 @@ describe("boot-id change while os-activation-armed", () => {
 		expect(run.persisted.map((state) => state.phase)).toEqual(["os-verifying"]);
 		expect(run.rollbacks).toEqual([]);
 		expect(raucReads).toBe(0);
+		// Verification still owns the receipt of the version it is judging.
+		expect(run.retired).toEqual([]);
 	});
 
 	test("booting the staged version with this boot's healthcheck verdict verifies, without consulting RAUC", async () => {
