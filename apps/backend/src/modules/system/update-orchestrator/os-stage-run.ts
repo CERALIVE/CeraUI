@@ -10,7 +10,11 @@ import {
 	updatePinController,
 } from "../update-transport/pin.ts";
 import type { OsChannelManifest } from "./os-manifest.ts";
-import { requireAdmissionSnapshot } from "./os-stage-admission-snapshot.ts";
+import type { ObservationReport } from "./os-stage-admission-diagnostics.ts";
+import {
+	observeAdmission,
+	UNTRACKED_OBSERVATION,
+} from "./os-stage-admission-snapshot.ts";
 import {
 	beginOsStageAttempt,
 	type OsStageControl,
@@ -71,8 +75,8 @@ async function runLeasedOsStageJob<T>(
 	deps: OsStageRunDeps<T> & { readonly lease: OsStageControlLease },
 ): Promise<T> {
 	assertOsStageToken(control);
-	const baseline = requireAdmissionSnapshot(
-		await deps.observe({ processes: new Set(), resources: new Set() }),
+	const baseline = await observeAdmission((report) =>
+		deps.observe(UNTRACKED_OBSERVATION, undefined, report),
 	);
 	assertOsStageToken(control);
 	const owner = deps.owner({
@@ -104,13 +108,14 @@ async function runLeasedOsStageJob<T>(
 			throw new OsStageError("os_stage_cancelled_for_stream");
 		assertOsStageToken(control);
 	};
-	const capture = async () => {
+	const capture = async (report?: ObservationReport) => {
 		const generation = observationGeneration;
-		const record = owner.record();
-		const snapshot = await deps.observe({
-			processes: new Set(record.processes),
-			resources: new Set(record.resources),
-		});
+		const { processes, resources } = owner.record();
+		const tracked = {
+			processes: new Set(processes),
+			resources: new Set(resources),
+		};
+		const snapshot = await deps.observe(tracked, undefined, report);
 		if (generation !== observationGeneration) return null;
 		const latest = owner.record();
 		if (snapshot)
@@ -139,7 +144,7 @@ async function runLeasedOsStageJob<T>(
 					throw new OsStageError("rauc_install_failed", { cause });
 				}
 				await admit();
-				const before = requireAdmissionSnapshot(await capture(), baseline);
+				const before = await observeAdmission(capture, baseline);
 				await admit();
 				if (!(await owner.held()))
 					throw new OsStageError("rauc_recovery_unproven");
@@ -193,7 +198,7 @@ async function runLeasedOsStageJob<T>(
 		await admit();
 		const commit = await deps.prepareReceipt();
 		await admit();
-		proof = requireAdmissionSnapshot(await capture(), baseline);
+		proof = await observeAdmission(capture, baseline);
 		await admit();
 		if (!proof) throw new OsStageError("rauc_recovery_unproven");
 		let result: T | undefined;

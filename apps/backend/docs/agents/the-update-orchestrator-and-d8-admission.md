@@ -238,6 +238,9 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
   `failed`, replacing the retry notice without deleting the receipt or writing
   quarantine. Pending publication cannot arm activation; after backend loss it
   is observed and settled unsafe, never promoted to completed release.
+  Stage-admission refusals keep `rauc_recovery_unproven`/unsafe and add the
+  log-only `predicate` and bounded, redacted `observation` diagnostics
+  (`os-stage-admission-diagnostics.ts`); see `docs/UPDATE-RECOVERY.md`.
   Invalid present recovery metadata raises a typed load error; startup preserves
   the file and the legacy terminal reason rather than defaulting to idle. That
   runtime stays closed to OS migration and confirmation until maintenance fixes

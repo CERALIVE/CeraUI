@@ -53,7 +53,11 @@ export class OsStageError extends Error {
 		super(reason, { cause: options?.cause });
 		this.reason = reason;
 		this.mode = OS_STAGE_FAILURE_MODE[reason];
-		this.diagnostics = options?.diagnostics ?? {};
+		// A wrapper without its own context keeps the cause's, so a refusal's
+		// predicate survives the runner's unsafe re-classification.
+		this.diagnostics =
+			options?.diagnostics ??
+			(options?.cause instanceof OsStageError ? options.cause.diagnostics : {});
 	}
 }
 

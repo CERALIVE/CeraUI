@@ -63,6 +63,9 @@ Admission observation is bounded to a fail-closed 10-second refusal, not a write
 deadline. Orphan settlement parses systemd absence by property, and a configured
 NBD device cannot lose its recorded ownership merely because its creator PID was
 reused. These safety repairs likewise remain hardware-unqualified.
+An admission refusal now names its first failing predicate and, when observation
+itself stopped, the bounded and redacted boundary and error class, without
+changing what is admitted. See [OS staging recovery](docs/UPDATE-RECOVERY.md#os-staging-recovery-partial--fixture-proven-board-re-drill-owed).
 
 State-side unlaunched OS settlement requires a private completed witness matching
 the persisted attempt, signed candidate and current boot, plus fresh readiness.

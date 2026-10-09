@@ -839,6 +839,19 @@ be a stage nobody recorded. Any unreadable input is "not proven".
   confirmed. Rejection retains the unresolved notice; only an accepted transition
   clears it. A retained staged receipt prevents confirmation even with writer proof.
 
+**Admission refusals name their predicate [PARTIAL — host-proven].** The thrown
+`rauc_recovery_unproven` error keeps `refusal: "stage-admission-unproven"` and
+its unsafe mode. Its diagnostics add `predicate`, the first failing check in
+evaluation order (`observation-unknown`, `daemon-inactive`, `operation-not-idle`,
+`resources-present`, `extra-process`, `booted-unhealthy`, `target-not-inactive`,
+`boot-primary-unknown`, `boot-primary-not-booted`, `boot-primary-is-target`,
+`activation-armed`, `baseline-changed:<field>`) and, when the observation itself
+stopped, `observation`: the boundary name plus the error class and a redacted
+message bounded to 200 characters, or `<boundary>: unproven` for a reply that
+proved nothing. The refusal is logged once as
+`update-orchestrator: OS stage admission refused`. Diagnostics are log-only; no
+persisted schema changed, and the set of admitted snapshots is unchanged.
+
 **Invalid recovery metadata is not first boot.** Schema 1 still makes the fields
 optional, but present recovery must agree with phase, active identity and retry
 deadline. Invalid or contradictory metadata raises a typed load error. Startup

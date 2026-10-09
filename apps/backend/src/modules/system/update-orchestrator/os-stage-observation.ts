@@ -2,6 +2,12 @@ import { readdir, stat } from "node:fs/promises";
 import { z } from "zod";
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
 import { readBootId } from "./os-identity.ts";
+import {
+	describeObservationFailure,
+	notifyObservation,
+	type ObservationReport,
+} from "./os-stage-admission-diagnostics.ts";
+import { observeStageResources } from "./os-stage-observation-resources.ts";
 import type { RaucStageSnapshot } from "./os-stage-recovery.ts";
 import { parseOsStageSystemdProperties } from "./os-stage-systemd.ts";
 import { readHealthyState } from "./slot-sync-state.ts";
@@ -71,7 +77,16 @@ export async function observeRaucStage(
 		readonly resources: ReadonlySet<string>;
 	},
 	deps: RaucObservationDeps = defaults,
+	report?: ObservationReport,
 ): Promise<RaucStageSnapshot | null> {
+	let stage = "service-command";
+	const at = (next: string) => {
+		stage = next;
+	};
+	const refuse = (): null => {
+		notifyObservation(report, `${stage}: unproven`);
+		return null;
+	};
 	try {
 		const service = await deps.run(
 			[
@@ -82,8 +97,9 @@ export async function observeRaucStage(
 			],
 			{ timeoutMs: 2_000 },
 		);
+		at("service-properties");
 		const properties = parseOsStageSystemdProperties(service.stdout);
-		if (!properties) return null;
+		if (!properties) return refuse();
 		const group = properties.get("ControlGroup");
 		const pid = properties.get("MainPID") ?? "";
 		if (
@@ -91,9 +107,11 @@ export async function observeRaucStage(
 			!group ||
 			!/^\/system.slice\/rauc.service$/.test(group)
 		)
-			return null;
+			return refuse();
+		at("daemon-process");
 		const instance = await readProcess(pid, deps);
-		if (!instance) return null;
+		if (!instance) return refuse();
+		at("cgroup-processes");
 		const pids = (await deps.read(`/sys/fs/cgroup${group}/cgroup.procs`))
 			.trim()
 			.split(/\s+/);
@@ -109,74 +127,16 @@ export async function observeRaucStage(
 			)
 				processIds.add(identity);
 		}
-		const resources = new Set<string>();
-		const blocks = await deps.list("/sys/block");
-		const ownedNbd = new Set<string>();
-		const foreignNbd = new Set<string>();
-		for (const name of blocks.filter((name) => /^nbd[0-9]+$/.test(name))) {
-			let nbdPid: string;
-			try {
-				nbdPid = (await deps.read(`/sys/block/${name}/pid`)).trim();
-			} catch (error) {
-				if (absent(error)) continue;
-				throw error;
-			}
-			// Sysfs caches a numeric creator PID, not a connection generation. A
-			// recycled proc identity cannot prove a previously owned device retired.
-			const priorConnections = [...tracked.resources].filter((id) =>
-				id.startsWith(`nbd:${name}:`),
-			);
-			if (priorConnections.length) {
-				ownedNbd.add(name);
-				for (const id of priorConnections) resources.add(id);
-				continue;
-			}
-			const identity = await readProcess(nbdPid, deps);
-			if (!identity) return null;
-			const id = `nbd:${name}:${identity}`;
-			const cgroup = await deps.read(`/proc/${nbdPid}/cgroup`);
-			if (!/^0::\/[^\n]*\n?$/.test(cgroup)) return null;
-			if (
-				cgroup.trim() === `0::${group}` ||
-				processIds.has(identity) ||
-				tracked.resources.has(id)
-			) {
-				ownedNbd.add(name);
-				resources.add(id);
-			} else foreignNbd.add(name);
-		}
-		const ownedDevices = new Set<string>();
-		for (const name of blocks.filter((name) => /^dm-[0-9]+$/.test(name))) {
-			const dev = (await deps.read(`/sys/block/${name}/dev`)).trim();
-			const uuid = (await deps.read(`/sys/block/${name}/dm/uuid`)).trim();
-			const id = `dm:${dev}:${uuid}`;
-			const slaves = await deps.list(`/sys/block/${name}/slaves`);
-			if (
-				slaves.some((name) => ownedNbd.has(name)) ||
-				tracked.resources.has(id)
-			) {
-				if (!uuid) return null;
-				ownedDevices.add(dev);
-				resources.add(id);
-			} else if (
-				slaves.some((name) => /^nbd[0-9]+$/.test(name) && !foreignNbd.has(name))
-			)
-				resources.add(`unowned-${id}`);
-		}
-		for (const line of (await deps.read("/proc/self/mountinfo"))
-			.trim()
-			.split("\n")) {
-			const fields = line.split(" ");
-			const point = fields[4] ?? "";
-			const id = `mount:${fields[0]}:${fields[2]}:${point}`;
-			if (
-				point === "/run/rauc" ||
-				point.startsWith("/run/rauc/") ||
-				ownedDevices.has(fields[2] ?? "") ||
-				tracked.resources.has(id)
-			)
-				resources.add(id);
-		}
+		const resources = await observeStageResources({
+			deps,
+			tracked,
+			group,
+			processIds,
+			readProcess: (current) => readProcess(current, deps),
+			at,
+		});
+		if (!resources) return refuse();
+		at("operation-command");
 		const operation = await deps.run(
 			[
 				"busctl",
@@ -188,26 +148,34 @@ export async function observeRaucStage(
 			],
 			{ timeoutMs: 2_000 },
 		);
+		at("status-command");
 		const status = await deps.run(
 			["rauc", "status", "--detailed", "--output-format=json"],
 			{ timeoutMs: 2_000 },
 		);
-		if (status.exitCode !== 0) return null;
+		if (status.exitCode !== 0) return refuse();
+		at("status-parse");
 		const parsed = slotsSchema.parse(JSON.parse(status.stdout));
+		at("slot-cardinality");
 		const rootfs = parsed.slots
 			.flatMap((row) => Object.entries(row))
 			.filter(([, slot]) => slot.class === "rootfs");
 		const booted = rootfs.filter(([, slot]) => slot.state === "booted");
 		const target = rootfs.filter(([, slot]) => slot.state === "inactive");
 		if (rootfs.length !== 2 || booted.length !== 1 || target.length !== 1)
-			return null;
+			return refuse();
 		const boot = booted[0];
 		const other = target[0];
-		if (!boot || !other) return null;
+		if (!boot || !other) return refuse();
+		at("boot-id");
 		const bootId = await deps.bootId();
+		at("healthy-state");
 		const healthy = await deps.healthy();
+		at("booted-device");
 		const bootedDevice = await deps.device(boot[1].device);
+		at("root-device");
 		const rootDevice = await deps.rootDevice();
+		at("activation-marker");
 		let activationArmed = true;
 		try {
 			await deps.read("/data/ceralive/update-state/activation-armed");
@@ -215,6 +183,8 @@ export async function observeRaucStage(
 			if (!absent(error)) throw error;
 			activationArmed = false;
 		}
+		at("target-device");
+		const targetDevice = await deps.device(other[1].device);
 		return {
 			instance,
 			active: properties.get("ActiveState") === "active",
@@ -237,12 +207,14 @@ export async function observeRaucStage(
 				healthy?.boot_id === bootId &&
 				(healthy.slot === boot[0] || healthy.slot === boot[1].bootname),
 			targetSlot: other[0],
-			targetDevice: await deps.device(other[1].device),
+			targetDevice,
 			targetInactive: other[1].state === "inactive",
 			activationArmed,
 		};
-	} catch {
-		// Observation failure never authorizes cancellation, cleanup or another writer.
+	} catch (error) {
+		// Observation failure never authorizes cancellation, cleanup or another
+		// writer; the bounded diagnostic only names where it stopped.
+		notifyObservation(report, describeObservationFailure(stage, error));
 		return null;
 	}
 }

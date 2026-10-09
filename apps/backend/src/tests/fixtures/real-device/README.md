@@ -174,3 +174,15 @@ boot ID, credential secret or personal path is selected. The parser test removes
 only the provenance envelope. This is kernel grammar evidence, not a board or
 non-dumpable attack receipt. The Orange Pi replay's status credentials remain
 explicitly injected, just like its executable metadata.
+
+## Rock stage-admission inputs, 2026-10-09 [PARTIAL]
+
+`rock-admission-20261009.json` holds every input the RAUC stage observer reached
+on an idle Rock 5B+ at 13:00Z, read-only, about three hours after an unexplained
+`stage-admission-unproven` refusal at 10:09:51Z: the three probe replies, the
+proc/sysfs/cgroup reads, the block inventory, numeric device identities, boot ID
+and healthy-state record. `helpers/os-admission-recorded.ts` replays it; an
+uncaptured read throws instead of inventing absence, and only the listed paths
+answer ENOENT. The production observer admits these inputs. The admission and
+observation diagnostic tests inject one fault at a time on top of them. This is a
+later capture, not the refusal-time observation, whose cause remains unknown.

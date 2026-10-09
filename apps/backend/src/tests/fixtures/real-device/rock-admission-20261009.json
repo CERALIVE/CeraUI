@@ -1,0 +1,64 @@
+{
+	"label": "Rock idle read-only capture 13:00Z (after refusal, complete reached inputs)",
+	"reads": {
+		"/proc/650/stat": "650 (rauc) S 1 650 650 0 -1 4194560 4636025 91287829 13 1361 6367 7548 90678 72011 20 0 5 0 985 338104320 3317 18446744073709551615 187650670329856 187650670849360 281474450766176 0 0 0 0 4096 16384 0 0 0 17 2 0 0 0 0 0 187650670910208 187650670924344 187650781786112 281474450767604 281474450767648 281474450767648 281474450767850 0\n",
+		"/sys/fs/cgroup/system.slice/rauc.service/cgroup.procs": "650\n",
+		"/proc/self/mountinfo": "27 1 179:98 / / rw,relatime shared:1 - ext4 /dev/root rw\n28 27 0:7 / /dev rw,relatime shared:2 - devtmpfs devtmpfs rw,size=3965260k,nr_inodes=991315,mode=755\n29 27 0:25 / /proc rw,nosuid,nodev,noexec,relatime shared:5 - proc proc rw\n30 27 0:26 / /sys rw,nosuid,nodev,noexec,relatime shared:6 - sysfs sysfs rw\n31 30 0:8 / /sys/kernel/security rw,nosuid,nodev,noexec,relatime shared:7 - securityfs securityfs rw\n32 28 0:27 / /dev/shm rw,nosuid,nodev shared:3 - tmpfs tmpfs rw\n33 28 0:28 / /dev/pts rw,nosuid,noexec,relatime shared:4 - devpts devpts rw,gid=5,mode=600,ptmxmode=000\n34 27 0:29 / /run rw,nosuid,nodev shared:11 - tmpfs tmpfs rw,size=1593172k,nr_inodes=819200,mode=755\n35 30 0:30 / /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime shared:8 - cgroup2 cgroup2 rw,nsdelegate,memory_recursiveprot\n36 30 0:31 / /sys/fs/pstore rw,nosuid,nodev,noexec,relatime shared:9 - pstore none rw\n37 30 0:32 / /sys/fs/bpf rw,nosuid,nodev,noexec,relatime shared:10 - bpf bpf rw,mode=700\n39 28 0:23 / /dev/mqueue rw,nosuid,nodev,noexec,relatime shared:13 - mqueue mqueue rw\n40 30 0:9 / /sys/kernel/debug rw,nosuid,nodev,noexec,relatime shared:12 - debugfs debugfs rw\n41 34 0:33 / /run/lock rw,nosuid,nodev,noexec,relatime shared:14 - tmpfs tmpfs rw,size=5120k\n42 28 0:34 / /dev/hugepages rw,nosuid,nodev,relatime shared:15 - hugetlbfs hugetlbfs rw,pagesize=2M\n43 30 0:13 / /sys/kernel/tracing rw,nosuid,nodev,noexec,relatime shared:16 - tracefs tracefs rw\n44 30 0:24 / /sys/kernel/config rw,nosuid,nodev,noexec,relatime shared:17 - configfs configfs rw\n45 30 0:35 / /sys/fs/fuse/connections rw,nosuid,nodev,noexec,relatime shared:18 - fusectl fusectl rw\n93 34 0:38 / /run/credentials/systemd-resolved.service ro,nosuid,nodev,noexec,relatime,nosymfollow shared:20 - tmpfs tmpfs rw,size=1024k,nr_inodes=1024,mode=700,noswap\n47 27 0:37 / /tmp rw,noatime shared:34 - tmpfs tmpfs rw,size=1048576k\n51 27 179:97 / /boot rw,nosuid,nodev,noexec,relatime shared:78 - vfat /dev/mmcblk1p1 rw,fmask=0077,dmask=0077,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro\n55 27 179:100 / /data rw,noatime shared:83 - ext4 /dev/mmcblk1p4 rw\n58 27 179:100 /log /var/log rw,noatime shared:83 - ext4 /dev/mmcblk1p4 rw\n61 27 179:100 /ceralive /opt/ceralive rw,noatime shared:83 - ext4 /dev/mmcblk1p4 rw\n64 27 179:100 /nm/system-connections /etc/NetworkManager/system-connections rw,noatime shared:83 - ext4 /dev/mmcblk1p4 rw\n151 34 0:36 / /run/credentials/systemd-journald.service ro,nosuid,nodev,noexec,relatime,nosymfollow shared:36 - tmpfs tmpfs rw,size=1024k,nr_inodes=1024,mode=700,noswap\n611 34 0:59 / /run/credentials/getty@tty1.service ro,nosuid,nodev,noexec,relatime,nosymfollow shared:256 - tmpfs tmpfs rw,size=1024k,nr_inodes=1024,mode=700,noswap\n627 34 0:60 / /run/credentials/serial-getty@ttyS2.service ro,nosuid,nodev,noexec,relatime,nosymfollow shared:512 - tmpfs tmpfs rw,size=1024k,nr_inodes=1024,mode=700,noswap\n150 40 0:13 / /sys/kernel/debug/tracing rw,nosuid,nodev,noexec,relatime shared:462 - tracefs tracefs rw\n92 34 0:56 / /run/user/1000 rw,nosuid,nodev,relatime shared:112 - tmpfs tmpfs rw,size=796584k,nr_inodes=199146,mode=700,uid=1000,gid=1000\n"
+	},
+	"lists": {
+		"/sys/block": [
+			"loop0",
+			"loop1",
+			"loop2",
+			"loop3",
+			"loop4",
+			"loop5",
+			"loop6",
+			"loop7",
+			"mmcblk0",
+			"mmcblk0boot0",
+			"mmcblk0boot1",
+			"mmcblk1",
+			"mtdblock0",
+			"sda",
+			"sdb"
+		]
+	},
+	"commands": {
+		"systemctl show rauc.service --property=ActiveState,MainPID,ControlGroup": {
+			"exitCode": 0,
+			"stdout": "MainPID=650\nControlGroup=/system.slice/rauc.service\nActiveState=active\n",
+			"stderr": ""
+		},
+		"busctl get-property de.pengutronix.rauc / de.pengutronix.rauc.Installer Operation": {
+			"exitCode": 0,
+			"stdout": "s \"idle\"\n",
+			"stderr": ""
+		},
+		"rauc status --detailed --output-format=json": {
+			"exitCode": 0,
+			"stdout": "{\"compatible\":\"ceralive-rock-5b-plus\",\"variant\":\"\",\"booted\":\"A\",\"boot_primary\":\"rootfs.0\",\"slots\":[{\"rootfs.1\":{\"class\":\"rootfs\",\"device\":\"/dev/disk/by-partlabel/rootfs_b\",\"type\":\"ext4\",\"bootname\":\"B\",\"state\":\"inactive\",\"parent\":null,\"mountpoint\":null,\"boot_status\":\"good\",\"slot_status\":{\"bundle\":{\"compatible\":\"ceralive-rock-5b-plus\",\"version\":\"36d8131\",\"hash\":\"42bc3406650aa4dd4ce81cbb80a1da3b28cbe7957e762d998cb3de103ce5e6ec\"},\"checksum\":{\"sha256\":\"1dd71f29b26ac3a7b64ae030b26fb862da6c935d09329f59f69f7975660f6d73\",\"size\":4294967296},\"installed\":{\"timestamp\":\"2026-10-04T21:00:20Z\",\"count\":7},\"activated\":{\"timestamp\":\"2026-10-05T08:28:18Z\",\"count\":5},\"status\":\"ok\"}}},{\"rootfs.0\":{\"class\":\"rootfs\",\"device\":\"/dev/disk/by-partlabel/rootfs_a\",\"type\":\"ext4\",\"bootname\":\"A\",\"state\":\"booted\",\"parent\":null,\"mountpoint\":null,\"boot_status\":\"good\",\"slot_status\":{\"bundle\":{\"compatible\":\"ceralive-rock-5b-plus\",\"version\":\"36d8131\",\"hash\":\"1a60254de15c639431b3038e3050597e70b629e1db2e8b2b5ae642927c83d4a8\"},\"checksum\":{\"sha256\":\"c00130526707daf2c71c13a5cc97019d5be5e828588a44b8f4d95b680b1ce11e\",\"size\":4294967296},\"installed\":{\"timestamp\":\"2026-10-08T12:54:01Z\",\"count\":7},\"activated\":{\"timestamp\":\"2026-10-08T14:42:30Z\",\"count\":7},\"status\":\"ok\"}}},{\"certs.0\":{\"class\":\"certs\",\"device\":\"/data/ceralive/certs/.rauc-certs-slot\",\"type\":\"raw\",\"bootname\":null,\"state\":\"inactive\",\"parent\":null,\"mountpoint\":null,\"boot_status\":null,\"slot_status\":{\"bundle\":{\"compatible\":null}}}}],\"artifact-repositories\":[]}\n",
+			"stderr": ""
+		}
+	},
+	"devices": {
+		"/dev/disk/by-partlabel/rootfs_a": "45922",
+		"/dev/disk/by-partlabel/rootfs_b": "45923"
+	},
+	"rootDevice": "45922",
+	"bootId": "29dd9a67-91db-412a-8729-accdb5825369",
+	"healthy": {
+		"boot_id": "29dd9a67-91db-412a-8729-accdb5825369",
+		"slot": "A",
+		"build_id": "36d8131819aa4eb0b46666b76c702db0afada938",
+		"dpkg_status_sha256": "bbd7db886c76d64efd12208cc5da57c8b353cf495af0e6445d28f98524806750",
+		"recorded_at": "2026-10-08T14:44:31Z"
+	},
+	"absent": ["/data/ceralive/update-state/activation-armed"],
+	"limitations": [
+		"Current capture cannot reconstruct 10:09:51Z values",
+		"Sequential commands, not an atomic snapshot",
+		"Target commands ran as root; Bun filesystem I/O itself replayed on host, not target",
+		"Captured sys/block has no NBD or DM rows, so those branches are not reached"
+	]
+}
