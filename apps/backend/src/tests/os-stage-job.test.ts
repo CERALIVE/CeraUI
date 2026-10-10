@@ -233,7 +233,7 @@ test.each([
 	[
 		"wrong token",
 		(text: string) =>
-			text.replaceAll(token, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
+			text.split(token).join("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
 	],
 	[
 		"foreign fragment",
