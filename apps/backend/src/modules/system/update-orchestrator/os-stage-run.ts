@@ -375,7 +375,7 @@ async function runLeasedOsStageJob<T>(
 			invalidate: () => {
 				++observationGeneration;
 			},
-			assert: () => {
+			fence: () => {
 				if (generation !== observationGeneration || !deps.lease.held())
 					throw new OsStageError("rauc_recovery_unproven");
 			},
@@ -425,7 +425,7 @@ async function runLeasedOsStageJob<T>(
 			invalidate: () => {
 				++observationGeneration;
 			},
-			assert: () => {
+			fence: () => {
 				if (generation !== observationGeneration)
 					throw new OsStageError("rauc_recovery_unproven");
 			},

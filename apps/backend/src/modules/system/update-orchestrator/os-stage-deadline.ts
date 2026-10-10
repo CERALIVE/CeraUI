@@ -4,12 +4,12 @@ export type StageDeadline = {
 	readonly deadline: number;
 	readonly now: () => number;
 	readonly invalidate?: () => void;
-	readonly assert?: () => void;
+	readonly fence?: () => void;
 };
 
 export function createStageDeadline(
 	input: StageDeadline,
-): StageDeadline & Required<Pick<StageDeadline, "assert" | "invalidate">> {
+): StageDeadline & Required<Pick<StageDeadline, "fence" | "invalidate">> {
 	let active = true;
 	return {
 		...input,
@@ -17,15 +17,15 @@ export function createStageDeadline(
 			active = false;
 			input.invalidate?.();
 		},
-		assert: () => {
+		fence: () => {
 			if (!active) throw new OsStageError("rauc_recovery_unproven");
-			input.assert?.();
+			input.fence?.();
 		},
 	};
 }
 
 export function assertStageDeadline(budget: StageDeadline): void {
-	budget.assert?.();
+	budget.fence?.();
 	if (budget.now() >= budget.deadline) {
 		budget.invalidate?.();
 		throw new OsStageError("rauc_recovery_unproven", {
