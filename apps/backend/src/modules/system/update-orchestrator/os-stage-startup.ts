@@ -5,6 +5,11 @@ import {
 	acquireOsStageControlLease,
 	type OsStageControlLease,
 } from "./os-stage-control-lease.ts";
+import {
+	assertStageDeadline,
+	createStageDeadline,
+	withinStageDeadline,
+} from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import { osInstallClientsGone } from "./os-stage-install-clients.ts";
 import { createOsStageJobOwner } from "./os-stage-job.ts";
@@ -140,7 +145,19 @@ export function reconcileOsStageStartup(
 				throw new OsStageError("rauc_recovery_unproven", {
 					diagnostics: { refusal: "foreign-or-unrecorded-guardian" },
 				});
-			if (!(await orphan(null, control))) await deps.sweep();
+			const budget = createStageDeadline({
+				deadline: deps.now() + 10_000,
+				now: deps.now,
+				fence: () => {
+					if (!control.held() || (deps.liveProducer ?? liveProducer)() !== null)
+						throw new OsStageError("rauc_recovery_unproven");
+				},
+			});
+			const read = <T>(work: () => Promise<T>) =>
+				withinStageDeadline(budget, work);
+			if (!(await read(() => orphan(null, control))))
+				await read(() => deps.sweep(read));
+			assertStageDeadline(budget);
 			admissionReady = true;
 			return { kind: "none" };
 		}
