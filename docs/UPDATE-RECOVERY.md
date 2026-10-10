@@ -560,7 +560,19 @@ Awaited authority, guardian and admission preparation precede the final observat
 only synchronous token, lease, candidate-expiry and clock checks follow it before
 dispatch. Optional process diagnostics run before the observer's final unit and
 process/resource safety fence. Changed final unit, process or resource evidence
-is rejected rather than returning the earlier census. There is **no intervening
+is rejected rather than returning the earlier census. Process/resource drift
+between the two successful censuses returns null with the closed diagnostic
+`census-drift: unproven`. Admission and post-cleanup quiescence retry that outcome
+only inside their existing absolute deadline, retaining lease/ownership checks
+on every attempt. They never dispatch or release from a drifted observation.
+Every observation owns its diagnostic, including a final read after awaited
+quiescence; an earlier drift cannot make a later unknown retryable. Command
+failure, nonzero exit, malformed/duplicate properties, timeout, thrown errors
+and changed ActiveState/MainPID/ControlGroup/InvocationID remain non-retryable
+unknown. Only an identical clean pair reaches the unchanged strict validators.
+Persistent drift settles unsafe at the original deadline. No stored format,
+recovery budget, process whitelist or structural admission predicate changes.
+There is **no intervening
 awaited preparation between the last safety observation and the dispatch; this
 is NOT an atomic census-and-dispatch guarantee**. The synchronous `beginAttempt`
 persistence and external process changes still separate observation from action;
@@ -600,6 +612,7 @@ allowlisted read-helper operation (otherwise null), current/previous instances,
 resource summary and remaining deadline. Recovery entry/deadline, refusal changes
 and completion are logged too. Optional diagnostic reads and throwing diagnostic
 sinks never change a safety result; missing reads do not become identity proof.
+Drift-only episodes emit one proven/final decision, not a line on every retry.
 Arbitrary cmdline text and exception messages are not emitted by these diagnostics.
 The historical R14 veto PID remains unknown; later captured helpers are evidence
 of the mechanism, not identification of that historical member.
@@ -618,10 +631,38 @@ lifetime/state-machine exceptions. `spawn-policy.ts` (1,350 pure LOC) and
 `reducer.ts` (667) are inherited size debt, not newly compliant modules. Accounting
 excludes blank lines and comment-prefixed lines (including embedded shell comments).
 Orphan inspection is separated from the settlement lifetime without changing its
-predicates. New FIX7/FIX8 modules stay below 250 pure LOC. The four
+predicates. New FIX7/FIX8/FIX9 modules stay below 250 pure LOC. The four
 fix-6 test files and fix-7 regressions require an explicit TypeScript program:
 the normal backend tsconfig excludes tests and did not catch the fix-6 runtime
 fixture's receipt-returning stage port or synchronous job-reader mismatch.
+
+### Standalone real-RAUC helper-census proof [PARTIAL — host only]
+
+`scripts/tests/real-rauc-private-bus.integration.ts` is an explicit host integration
+proof, **not part of `bun test`, the backend suite or CI**. It requires host
+RAUC **1.15.2**, `dbus-daemon`, `gdbus`, `busctl`, Bash, `timeout`, and a working
+user systemd manager with readable cgroups. Supply the unmodified image
+`ceralive-rauc-boot-adapter.sh`, `ceralive-boot-state.sh` and `boot-state-core.sh`.
+The first two belong in `CERALIVE_BOOT_HELPERS`; the core path can be supplied
+separately. From `apps/backend`, with an existing private scratch directory:
+
+```bash
+TMPDIR=/var/tmp/your-private-scratch BUN_RUNTIME_TRANSPILER_CACHE_PATH=0 \
+  CERALIVE_BOOT_HELPERS=/absolute/path/to/boot-helpers \
+  CERALIVE_BOOT_STATE_CORE=/absolute/path/to/boot-state-core.sh \
+  CERALIVE_RAUC_PROOF_OUTPUT=/absolute/path/to/receipt.json \
+  bun test ../../scripts/tests/real-rauc-private-bus.integration.ts
+```
+
+The test creates a disposable private bus, uniquely named user RAUC unit and
+file-backed slots, exercises real read helpers, and cleans them up in `finally`.
+Its barrier releases the helper **between** census reads. Holding it through
+both reads blocks the real daemon's GetPrimary/status request and times out at
+10 seconds: that is a harness artefact, not justification to relax the guard.
+The result requires observed helper identity, a refused drift observation, then
+exactly one replacement after fresh clean proof. Install/guardian, boot-health
+and resource/slot identity ports are synthetic. Five repeated host passes do
+not qualify a real installation, either board, power loss or kernel routing.
 
 ### Unlaunched guardian settlement [PARTIAL — hermetic and real-fixture proven, board rehearsal owed]
 

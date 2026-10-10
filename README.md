@@ -111,7 +111,10 @@ Positive CLI exit is retained independently of cancellation/output drainage;
 the matching runtime attempt settles unpublished success unsafe even after D8
 returns to the offer. Final safety observation follows awaited preparation, and
 proof I/O shares the remaining deadline with expired captures invalidated.
-Optional diagnostics precede a final unit/process/resource fence; drift refuses.
+Optional diagnostics precede a final unit/process/resource fence; census drift
+returns no snapshot and permits only bounded fresh re-observation. Command,
+parsing, timeout and unit-identity failures remain terminal unknown; only an
+identical clean census pair can authorize dispatch. Persisted formats are unchanged.
 Positive CLI success dominates transfer failure, with a runner-level replay veto.
 Outer recovery, publication and release ports spend the same remaining deadline;
 late callbacks cannot grant publication or release. No awaited preparation remains
