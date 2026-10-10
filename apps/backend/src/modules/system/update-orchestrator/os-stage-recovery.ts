@@ -1,4 +1,5 @@
 import { OsStageError } from "./os-stage-error.ts";
+import { reportStageProofDecision } from "./os-stage-proof-wait.ts";
 
 export const RAUC_RECOVERY_POLL_MS = 1_000;
 export const RAUC_RECOVERY_DEADLINE_MS = 360_000;
@@ -88,6 +89,7 @@ export type RaucRecoveryDeps = {
 	readonly observe: () => Promise<RaucStageSnapshot | null>;
 	readonly cliSettled: () => boolean;
 	readonly lockHeld: () => Promise<boolean>;
+	readonly deadline?: number;
 };
 
 export async function recoverRaucStage(
@@ -95,22 +97,77 @@ export async function recoverRaucStage(
 	deps: RaucRecoveryDeps,
 	requireNewInstance: boolean,
 ): Promise<RaucStageSnapshot> {
-	const deadline = deps.now() + RAUC_RECOVERY_DEADLINE_MS;
+	const deadline = deps.deadline ?? deps.now() + RAUC_RECOVERY_DEADLINE_MS;
 	let refusal = "observation-unknown";
+	const wait = {
+		deadline,
+		now: deps.now,
+		previousInstance: ownership.baseline.instance,
+	};
+	let previousReason: string | undefined;
+	let lastCurrent: RaucStageSnapshot | null = null;
 	do {
 		const current = await deps.observe();
+		lastCurrent = current;
+		const lockHeld = await deps.lockHeld();
+		const structural =
+			current &&
+			raucQuiescenceRefusal({
+				ownership,
+				current: {
+					...current,
+					active: true,
+					operation: "idle",
+					processes: [current.instance],
+					resources: [],
+				},
+				cliSettled: true,
+				lockHeld,
+				requireNewInstance: false,
+			});
 		const reason = raucQuiescenceRefusal({
 			ownership,
 			current,
 			cliSettled: deps.cliSettled(),
-			lockHeld: await deps.lockHeld(),
+			lockHeld,
 			requireNewInstance,
 		});
-		if (reason === null && current) return current;
+		if (reason === null && current && deps.now() < deadline) {
+			reportStageProofDecision({
+				snapshot: current,
+				wait,
+				reason: "recovery-proven",
+				disposition: "proven",
+			});
+			return current;
+		}
+		if (!lockHeld || structural) {
+			refusal = structural ?? "lock-owner-unproven";
+			break;
+		}
+		if (reason === null) {
+			refusal = "deadline-expired";
+			break;
+		}
 		refusal = reason ?? "observation-unknown";
+		if (refusal !== previousReason) {
+			previousReason = refusal;
+			reportStageProofDecision({
+				snapshot: current,
+				wait,
+				reason: refusal,
+				disposition: deps.now() >= deadline ? "final" : "defer",
+			});
+		}
 		if (deps.now() >= deadline) break;
 		await deps.sleep(Math.min(RAUC_RECOVERY_POLL_MS, deadline - deps.now()));
 	} while (deps.now() <= deadline);
+	reportStageProofDecision({
+		snapshot: lastCurrent,
+		wait,
+		reason: refusal,
+		disposition: "final",
+	});
 	throw new OsStageError("rauc_recovery_unproven", {
 		diagnostics: { refusal, oldInstance: ownership.baseline.instance },
 	});
