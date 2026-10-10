@@ -27,19 +27,22 @@ import {
 	decideConnectivityClaim,
 	deviceBoundProbeExclusionReason,
 	eligibleProbeCandidates,
-	parseDefaultRouteInterface,
 	probeExclusionReason,
 } from "./connectivity-candidates.ts";
 import {
 	type ConnectivityProbes,
 	defaultConnectivityProbes,
-	describeBinding,
 	electConnectivityCandidate,
+	logConnectivityElection,
 	raceConnectivityAddresses,
 } from "./connectivity-election.ts";
-import { setDefaultRoute } from "./default-route.ts";
+import type { DefaultRouteReleaseCondition } from "./default-route.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
+import { resolveDefaultRouteInterface } from "./gateway-default-interface.ts";
+import { recoverNaturalGateway } from "./gateway-natural-recovery.ts";
+import { gatewayRoutePreference } from "./gateway-route-lifecycle.ts";
 import { CONNECTIVITY_CHECK_DOMAIN, checkConnectivity } from "./internet.ts";
+import { naturalUplinkRecovery } from "./natural-uplink-recovery.ts";
 import { getNetworkInterfaces } from "./network-interfaces.ts";
 import { isUplinkClientSteeringEligible } from "./uplink-health/state.ts";
 
@@ -64,29 +67,6 @@ export function queueUpdateGw() {
 	void updateGwWrapper();
 }
 
-/**
- * Which interface the kernel's active default route egresses through, or
- * `undefined` when it cannot be determined. Never throws: an unreadable routing
- * table must not be mistaken for an excluded interface.
- */
-async function resolveDefaultRouteInterface(
-	family: 4 | 6,
-): Promise<string | undefined> {
-	try {
-		return parseDefaultRouteInterface(
-			await run("ip", [
-				...(family === 6 ? ["-6"] : []),
-				"route",
-				"show",
-				"default",
-			]),
-		);
-	} catch (err) {
-		logger.debug(`Could not read the default route: ${err}`);
-		return undefined;
-	}
-}
-
 export type GatewayElectionDeps = {
 	readonly isRealDevice: () => Promise<boolean>;
 	readonly resolve: () => ReturnType<typeof dnsCacheResolve>;
@@ -96,7 +76,12 @@ export type GatewayElectionDeps = {
 	readonly eligible: (ifname: string) => boolean;
 	readonly defaultInterface: typeof resolveDefaultRouteInterface;
 	readonly installRoute: (ifname: string, family: 4 | 6) => Promise<void>;
+	readonly releaseRoutes?: (
+		condition?: DefaultRouteReleaseCondition,
+	) => Promise<void>;
 	readonly probes: ConnectivityProbes;
+	readonly routeRunner?: typeof run;
+	readonly now?: () => number;
 };
 
 function defaultGatewayElectionDeps(): GatewayElectionDeps {
@@ -110,8 +95,14 @@ function defaultGatewayElectionDeps(): GatewayElectionDeps {
 		interfaces: getNetworkInterfaces,
 		eligible: isUplinkClientSteeringEligible,
 		defaultInterface: resolveDefaultRouteInterface,
-		installRoute: (ifname, family) => setDefaultRoute(ifname, { family }),
+		installRoute: (ifname, family) =>
+			gatewayRoutePreference.apply(ifname, family),
+		releaseRoutes: (condition) =>
+			condition
+				? gatewayRoutePreference.release(condition)
+				: gatewayRoutePreference.apply(undefined),
 		probes: defaultConnectivityProbes,
+		routeRunner: run,
 	};
 }
 
@@ -129,10 +120,17 @@ export async function updateGw(
 		logger.warn(`Failed to resolve ${CONNECTIVITY_CHECK_DOMAIN}: ${err}`);
 	}
 
-	const defaultReachable = await raceConnectivityAddresses(
+	const defaultObservation = await raceConnectivityAddresses(
 		addrs,
 		deps.checkConnectivity,
-	);
+	).catch((error: unknown) => {
+		if (!(error instanceof AggregateError)) throw error;
+		logger.warn("Default-route connectivity observation unavailable", {
+			error,
+		});
+		return "unknown" as const;
+	});
+	const defaultReachable = defaultObservation === true;
 	if (defaultReachable) {
 		if (!fromCache) deps.validateDns();
 
@@ -146,6 +144,11 @@ export async function updateGw(
 	);
 
 	const defaultIf = await deps.defaultInterface(4);
+	const recovery = await recoverNaturalGateway(deps, candidates);
+	if (recovery !== undefined) {
+		if (recovery) notificationRemove(NO_INTERNET_NOTIFICATION);
+		return recovery;
+	}
 	// Keep the current default ahead of equal-ranked peers to avoid route churn.
 	candidates.sort(
 		(a, b) => Number(b.name === defaultIf) - Number(a.name === defaultIf),
@@ -187,16 +190,7 @@ export async function updateGw(
 		candidates,
 		deps.probes,
 	);
-	for (const { candidate, reachable, repository } of election.results) {
-		logger.info(
-			`Internet ${reachable ? "reachable" : "unreachable"} via ${candidate.name} (${describeBinding(candidate)})`,
-			{
-				repository: repository.verdict,
-				ipv4: repository.ipv4,
-				ipv6: repository.ipv6,
-			},
-		);
-	}
+	logConnectivityElection(election);
 
 	const goodIf = election.elected?.name;
 	if (goodIf && !fromCache && addrs.length > 0) deps.validateDns();
@@ -216,9 +210,9 @@ export async function updateGw(
 
 		try {
 			const family = election.family ?? 4;
-			const activeIf =
-				family === 4 ? defaultIf : await deps.defaultInterface(family);
-			if (activeIf !== goodIf) await deps.installRoute(goodIf, family);
+			await deps.installRoute(goodIf, family);
+			if (deps.routeRunner)
+				await naturalUplinkRecovery(deps.routeRunner).observeOwnership();
 		} catch (err) {
 			logger.warn("Default-route application failed", {
 				ifname: goodIf,
@@ -240,6 +234,21 @@ export async function updateGw(
 		);
 	}
 
+	if (
+		defaultObservation === "unknown" ||
+		election.results.some(
+			({ repository }) =>
+				repository.ipv4 === "unknown" || repository.ipv6 === "unknown",
+		)
+	) {
+		return false;
+	}
+	try {
+		await deps.releaseRoutes?.();
+	} catch (error) {
+		logger.warn("Default-route release failed", { error });
+		return false;
+	}
 	return defaultReachable;
 }
 
@@ -266,7 +275,11 @@ export function updateGwWrapper(
 			return false;
 		})
 		.then((result) => {
-			if (!result) updateGwQueue = true;
+			if (
+				!result ||
+				(deps.routeRunner && naturalUplinkRecovery(deps.routeRunner).pending)
+			)
+				updateGwQueue = true;
 			return result;
 		})
 		.finally(() => {

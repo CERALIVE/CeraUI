@@ -4,6 +4,7 @@
  */
 
 import {
+	allowCellularOnceInputSchema,
 	autostartInputSchema,
 	autostartOutputSchema,
 	cloudProviderEndpointSchema,
@@ -21,6 +22,10 @@ import {
 	sensorsStatusSchema,
 	sshPersistentInputSchema,
 	successResponseSchema,
+	updateCapabilitiesSchema,
+	updateDetailsSchema,
+	updateSettingsInputSchema,
+	updateSettingsSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
 import { z } from "zod";
@@ -61,6 +66,18 @@ import {
 	setSshPersistent,
 	startStopSsh,
 } from "../../modules/system/ssh.ts";
+import { reconcileAptChannel } from "../../modules/system/update-apt-channel.ts";
+import { readUpdateCapabilities } from "../../modules/system/update-capabilities.ts";
+import { readUpdateDetails } from "../../modules/system/update-orchestrator/details.ts";
+import {
+	allowCellularOnce,
+	checkUpdatesNow,
+	installUpdatesNow,
+} from "../../modules/system/update-orchestrator/runtime.ts";
+import {
+	loadUpdateSettings,
+	saveUpdateSettings,
+} from "../../modules/system/update-settings.ts";
 import { mintPreviewToken } from "../../modules/ui/preview-token.ts";
 import { simulateDevReboot } from "../events.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
@@ -71,6 +88,23 @@ const baseProcedure = os.$context<RPCContext>();
 
 // Authenticated procedure
 const authedProcedure = baseProcedure.use(authMiddleware);
+
+export const getUpdateSettingsProcedure = authedProcedure
+	.output(updateSettingsSchema)
+	.handler(() => loadUpdateSettings());
+
+export const setUpdateSettingsProcedure = authedProcedure
+	.input(updateSettingsInputSchema)
+	.output(updateSettingsSchema)
+	.handler(async ({ input }) => {
+		const mode = (await readUpdateCapabilities()).mode;
+		if (mode === "capable") await reconcileAptChannel(mode, input.channel);
+		return saveUpdateSettings(input);
+	});
+
+export const getUpdateCapabilitiesProcedure = authedProcedure
+	.output(updateCapabilitiesSchema)
+	.handler(() => readUpdateCapabilities());
 
 /**
  * Get revisions procedure
@@ -193,10 +227,7 @@ export const rebootProcedure = authedProcedure
 /**
  * Start update procedure
  */
-// startSoftwareUpdate() owns every refusal so there is exactly ONE place that
-// decides whether an update may run, and it always names the reason. Duplicating
-// the guards here is what let a refusal answer `{success:true}` while nothing
-// happened, parking the dialog on "Applying…" until it silently timed out.
+// Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
 export const startUpdateProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(() => {
@@ -208,6 +239,61 @@ export const startUpdateProcedure = authedProcedure
 		logger.info("System: software update started");
 		return { success: true };
 	});
+
+/**
+ * Both actions bypass idle. `checkUpdatesNow` has no stream check;
+ * `installUpdatesNow` checks for a live stream, not a starting one (root
+ * AGENTS.md D8 Known gaps (f)).
+ */
+export const checkUpdatesNowProcedure = authedProcedure
+	.output(successResponseSchema)
+	.handler(async () => {
+		const outcome = await checkUpdatesNow();
+		if (!outcome.started) {
+			logger.info(`System: manual update check refused (${outcome.reason})`);
+			return { success: false, error: outcome.reason };
+		}
+		logger.info("System: manual update check started (orchestrator)");
+		return { success: true };
+	});
+
+export const installUpdatesNowProcedure = authedProcedure
+	.output(successResponseSchema)
+	.handler(async () => {
+		const outcome = await installUpdatesNow();
+		if (!outcome.started) {
+			logger.info(`System: manual update install refused (${outcome.reason})`);
+			return { success: false, error: outcome.reason };
+		}
+		logger.info("System: manual update install started (orchestrator)");
+		return { success: true };
+	});
+
+// Re-exported from its `@ceraui/rpc` home (Todo 41 moved it there so the
+// contract and the frontend share one definition); the name stays exported here
+// for existing importers.
+export { allowCellularOnceInputSchema };
+
+// All agent.json mutations enter the runtime's validated-startup barrier:
+// checkUpdatesNow, installUpdatesNow and this synchronous cellular grant.
+// There is no pause or confirmation RPC; confirmation runs inside manual Check.
+
+export const allowCellularOnceProcedure = authedProcedure
+	.input(allowCellularOnceInputSchema)
+	.output(successResponseSchema)
+	.handler(({ input }) => {
+		allowCellularOnce(input.id);
+		logger.info(`System: one-time cellular override granted (${input.id})`);
+		return { success: true };
+	});
+
+/**
+ * The Updates dialog's pull — see
+ * `update-orchestrator/details.ts` for the per-block honest-absence rules.
+ */
+export const getUpdateDetailsProcedure = authedProcedure
+	.output(updateDetailsSchema)
+	.handler(() => readUpdateDetails());
 
 /**
  * Manual "check for updates now". Runs the same discovery the periodic loop

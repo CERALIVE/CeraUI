@@ -8,50 +8,31 @@ boards do: the Orange Pi 5+ carries only default IPv6 routes it cannot use, so
 about a repository that was reachable the entire time over IPv4. The fix is a
 verdict, taken fresh, spent on ONE run.
 
-- **The verdict is per-origin and per-family, and it is derived, never guessed.**
-  `parseAptSourceOrigins` reads the deb822 stanzas under `/etc/apt/sources.list.d`
-  (the ONLY `/etc/apt` path this module touches), `buildProbeArgv` builds an
-  argv-only `curl` probe per origin×family, and `classifyProbe` folds curl's exit
-  code and status line into the wire enum `AptFamilyProbe`
-  (`ok`/`blocked`/`no_route`/`dns_failed`/`captive`/`unknown`). A 4xx is `ok` — it
-  proves the path, which is the question being asked. `deriveVerdict` then answers
-  `any` / `force_ipv4` / `force_ipv6` / `unreachable` / `captive_portal`, and a
-  family only wins by reaching **every** origin: successes split across origins
-  complete no refresh, so that folds to `unreachable`, not to a family.
+- A family must reach the configured origins together; split-origin successes
+  do not establish a usable refresh path. Probe vocabulary: `docs/DEVICE-UPDATES.md`.
 - **The choice is spent as a COMMAND-LINE OPTION and is NEVER persistent.** Refresh,
   discovery and the detached install append at most one
   `-o Acquire::ForceIPv4=true` / `-o Acquire::ForceIPv6=true` pair. Nothing here
   writes `/etc/apt/apt.conf`, `gai.conf`, a sysctl, `disable_ipv6`, or an interface
   binding — a device whose IPv6 comes back must not still be pinned to IPv4 by a
-  file some earlier check wrote. `tests/apt-reachability.test.ts` carries a STATIC
-  guard that scans the module's own source for every one of those literals, and the
-  guard was proven falsifiable against a temporary copy outside the repo with a
-  `writeFile` appended.
+  file some earlier check wrote.
 - **The argv allow-list had to ADMIT the option before it could be sent.**
   `validateDetachedAptServiceIdentity` tokenizes the transient unit's `ExecStart`
   and matches the exact flags-first prefix; it now admits zero or one pair from the
   CLOSED Force set and keeps the exact operation-tail checks. It is still exact
   matching — no substring test, no `arrayContaining` — because the predicate is what
   stops a foreign same-named unit being adopted as ours.
-- **Neither-family and captive verdicts stop BEFORE apt.** They publish
-  `check_failed` with `repos_unreachable` or `captive_portal`, and the block itself
-  rides `update_state`'s `idle`/`checking`/`check_failed`/`available` arms. Both
-  families are ALWAYS stated inside that block — a present-only-when-true family
-  cannot be lowered by a merging consumer (the `policy_route_missing` latch,
-  exactly), and an operator reading "no route on v6" is being told something the
-  absence of a key cannot say.
 - **The result is cached for `APT_REACHABILITY_TTL_MS` (60 s), and the install path
   deliberately opts out.** A manual check pressed twice must not re-probe every
   origin, but a transaction that is about to run for minutes takes a fresh verdict
   (`maxAgeMs: 0`) rather than a stale one about a link that may have moved.
-- **Mock/dev execution never launches curl.** The default probe is
-  `isRealDevice()`-gated and `MOCK_SCENARIO` keeps its existing simulation path.
 
 The family probe now also supplies uncached device-bound HTTPS observations to
 host election as a ranking input. A repository outage does not erase the ordinary
 connectivity fallback or change shared-client health. Apt still consumes a separate
 fresh UNBOUND verdict after awaited route repair; a bound success cannot stand in
 for that reading. See `docs/HOST-UPLINK-ELECTION.md` from the repo root.
+
 
 Board evidence: the Orange Pi 5+ drill observed the real `apt-get` argv from
 `/proc` carrying `-o Acquire::ForceIPv4=true` on BOTH the refresh and the discovery

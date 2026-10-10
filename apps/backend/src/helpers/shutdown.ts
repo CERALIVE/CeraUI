@@ -5,6 +5,7 @@ export interface BackendShutdownDeps {
 	readonly stopSrtIngest: () => Promise<void>;
 	readonly stopDmesgWatchers: () => void;
 	readonly stopUplinkShaper?: () => Promise<void>;
+	readonly stopGatewayRoutes?: () => Promise<void>;
 	readonly exit: (code: number) => void;
 }
 
@@ -33,6 +34,8 @@ export function handleTerminationSignal(
 	shuttingDown = true;
 	logger.info(`received ${signal}; shutting down streaming processes`);
 	void (async () => {
+		if (deps.stopGatewayRoutes)
+			await settleCleanup("host route preference", deps.stopGatewayRoutes);
 		await settleCleanup("SRT ingest", deps.stopSrtIngest);
 		await settleCleanup("dmesg watchers", deps.stopDmesgWatchers);
 		if (deps.stopUplinkShaper)

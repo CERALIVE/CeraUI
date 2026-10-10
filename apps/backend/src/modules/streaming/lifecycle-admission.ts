@@ -42,6 +42,7 @@
 import type { ModemMutationRefusal } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
+import { noteStartLeaseEnded } from "../system/idle-state.ts";
 
 import { isRecoveryPending } from "./recovery-barrier.ts";
 
@@ -161,6 +162,7 @@ export function tryAcquireLifecycle(who: LifecycleHolder): LifecycleAdmission {
  */
 function releaseToken(token: number): void {
 	if (held?.token !== token) return;
+	if (held.holder === "streaming") noteStartLeaseEnded();
 	held = undefined;
 }
 

@@ -59,10 +59,17 @@ describe("periodicCheckForSoftwareUpdates() — reschedule after a skip", () => 
 	it("still schedules the next check when the current one is skipped", () => {
 		// Force the skip path: the runner declines (streaming/updating/apt busy)
 		// and, like the real code, never invokes the reschedule callback.
-		setSoftwareUpdateCheckRunner(() => false);
+		const runner = jest.fn(() => false);
+		setSoftwareUpdateCheckRunner(runner);
+		const [seconds, nanoseconds] = process.hrtime();
 		jest.useFakeTimers();
+		// Fake timers reset hrtime, but the imported scheduler retains its deadline.
+		const clock = jest
+			.spyOn(process, "hrtime")
+			.mockReturnValue([seconds, nanoseconds]);
 		const schedule = jest.spyOn(globalThis, "setTimeout");
 		periodicCheckForSoftwareUpdates();
+		clock.mockReturnValue([seconds + SKIP_RETRY_DELAY_MS / 1000, nanoseconds]);
 		jest.advanceTimersByTime(SKIP_RETRY_DELAY_MS);
 
 		// Pre-fix the skip path scheduled nothing, so the loop was dead until the
@@ -71,6 +78,7 @@ describe("periodicCheckForSoftwareUpdates() — reschedule after a skip", () => 
 			expect.any(Function),
 			SKIP_RETRY_DELAY_MS,
 		);
+		expect(runner).toHaveBeenCalledTimes(2);
 	});
 });
 

@@ -111,6 +111,238 @@ export interface SpawnSite {
  * are excluded by design. `cerastream` is excluded: it is IPC-driven, not spawned.
  */
 export const SPAWN_POLICY: readonly SpawnSite[] = [
+	...(
+		[
+			[
+				"osStage.guardSubmit",
+				"acquire",
+				"[systemd-run, fixed exec service properties, /usr/bin/flock, -n, -E, 75, -x, shared-update-lock, fixed guardian helper, attempt UUID]",
+				"bounded-command",
+			],
+			[
+				"osStage.guardInspect",
+				"inspect / acquire",
+				"[systemctl, show, ceralive-os-stage-guard.service, fixed property list]",
+				"bounded-probe",
+			],
+			[
+				"osStage.guardRetire",
+				"release / acquire",
+				"[systemctl, stop|reset-failed, ceralive-os-stage-guard.service]",
+				"bounded-command",
+			],
+		] as const
+	).map(([id, symbol, command, kind]) => ({
+		id,
+		symbol,
+		command,
+		file: "modules/system/update-orchestrator/os-stage-job.ts",
+		class: kind,
+		status: "enforced" as const,
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		mechanism:
+			"Bounded PID-1 submission/probes; guardian has no pipe or backend lifetime; retirement requires exact transient identity/token and positive quiescence",
+	})),
+	...(
+		[
+			[
+				"osStage.pathObservation",
+				"os-stage-path.ts",
+				"readPinnedTopology",
+				"[ip, -j, link|address|route, show, fixed OS private-table/interface]",
+				"bounded-probe",
+			],
+			[
+				"osStage.bundleHead",
+				"os-stage-path.ts",
+				"probePinnedBundle",
+				"[runuser, -u, ceralive-ota, --, curl, -q, -4|-6, --head, fixed immutable bundle URL]",
+				"bounded-probe",
+			],
+			[
+				"osStage.installAttempt",
+				"os-stage-attempt.ts",
+				"beginOsStageAttempt",
+				"[rauc, install, verified immutable bundle URL]",
+				"bounded-command",
+			],
+		] as const
+	).map(([id, file, symbol, command, kind]) => ({
+		id,
+		file: `modules/system/update-orchestrator/${file}`,
+		symbol,
+		command,
+		class: kind,
+		status: "enforced" as const,
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		mechanism:
+			"argv-only bounded probes and 2-hour CLI supervision; attempt AbortSignal cancels observation/CLI, not daemon-proof recovery",
+	})),
+	...(
+		[
+			[
+				"osStage.serviceObservation",
+				"[systemctl, show, rauc.service, --property=ActiveState,MainPID,ControlGroup,InvocationID]",
+			],
+			[
+				"osStage.operationObservation",
+				"[busctl, get-property, de.pengutronix.rauc, /, de.pengutronix.rauc.Installer, Operation]",
+			],
+			[
+				"osStage.slotObservation",
+				"[rauc, status, --detailed, --output-format=json]",
+			],
+		] as const
+	).map(([id, command]) => ({
+		id,
+		command,
+		file: "modules/system/update-orchestrator/os-stage-observation.ts",
+		symbol: "observeRaucStage",
+		class: "bounded-probe" as const,
+		status: "enforced" as const,
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		mechanism:
+			"Read-only argv probes bounded at 2 seconds; missing evidence withholds RAUC quiescence",
+	})),
+	...(
+		[
+			[
+				"osManifest.cmsAndMetadata",
+				"command / cmsSigner",
+				"[openssl|dpkg-query|id, validated fixed argv]",
+				"bounded-probe",
+			],
+			[
+				"osManifest.fetch",
+				"fetchAsOta",
+				"[runuser, -u, ceralive-ota, --, curl, fixed HTTPS URL]",
+				"bounded-probe",
+			],
+			[
+				"osManifest.compare",
+				"compareVersions",
+				"[dpkg, --compare-versions, CalVer, gt, CalVer]",
+				"bounded-probe",
+			],
+			[
+				"osManifest.raucProgress",
+				"stageOsBundle",
+				"[busctl, get-property, RAUC, Progress]",
+				"bounded-probe",
+			],
+			[
+				"osManifest.activate",
+				"armOsActivation",
+				"[systemctl, start, ceralive-rauc-arm@arm|now.service]",
+				"bounded-command",
+			],
+		] as const
+	).map(([id, symbol, command, kind]) => ({
+		id,
+		file: "modules/system/update-orchestrator/os-agent.ts",
+		symbol,
+		command,
+		class: kind,
+		status: "enforced" as const,
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		mechanism:
+			"argv-only spawnWithTimeout; RAUC install stays inside the UID pin through confirmed completion",
+	})),
+	{
+		id: "osStage.orphanLock",
+		file: "modules/system/update-orchestrator/os-stage-orphan-lock.ts",
+		symbol: "acquireOsOrphanLock",
+		command:
+			"[/usr/bin/flock, -n, -E, 75, -x, shared-update-lock, fixed guardian helper, --orphan-lock]",
+		class: "supervised-worker",
+		status: "enforced",
+		contract: {
+			timed: false,
+			startupTimeout: true,
+			shutdownCleanup: true,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: true,
+		},
+		mechanism:
+			"Readiness acknowledges flock acquisition; scoped async disposal ends reconciliation-only stdin; no writer is owned or restarted",
+	},
+	{
+		id: "backend.singleton",
+		file: "helpers/backend-singleton.ts",
+		symbol: "acquireBackendSingleton",
+		command:
+			"[/usr/bin/flock, -n, -E, 75, -x, fixed backend lock, fixed guardian helper, --orphan-lock]",
+		class: "supervised-worker",
+		status: "enforced",
+		contract: {
+			timed: false,
+			startupTimeout: true,
+			shutdownCleanup: true,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: true,
+		},
+		mechanism:
+			"Readiness proves acquisition; observer EOF releases on backend death; unexpected helper exit terminates the backend; startup failure joins cleanup",
+	},
+	{
+		id: "osStage.orphanSettlement",
+		file: "modules/system/update-orchestrator/os-stage-orphan.ts",
+		symbol: "settleOsStageOrphan",
+		command: "[systemctl, show|stop, exact OS guardian unit]",
+		class: "bounded-command",
+		status: "enforced",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		mechanism:
+			"Bounded inspection and retirement only under shared lock and fresh orphan/writer/slot proof",
+	},
+	{
+		id: "osStage.startupGuardianProbe",
+		file: "modules/system/update-orchestrator/os-stage-startup.ts",
+		symbol: "reconcileOsStageStartup",
+		command:
+			"[systemctl, show, ceralive-os-stage-guard.service, --property=LoadState]",
+		class: "bounded-probe",
+		status: "enforced",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		mechanism:
+			"Read-only 2-second unit-presence probe before exact owned-guardian adoption; missing or unreadable identity blocks update admission, never control readiness",
+	},
 	{
 		id: "boot.systemdReady",
 		file: "helpers/systemd-ready.ts",
@@ -397,7 +629,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		},
 		status: "enforced",
 		mechanism:
-			"Direct spawnWithTimeout with a 30-second bound before admission and after transaction completion",
+			"Direct spawnWithTimeout with a 30-second bound before admission, after transaction completion, and after slot-sync success",
 	},
 	{
 		id: "softwareUpdates.aptArchiveConfig",
@@ -487,6 +719,194 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			"spawnWithTimeout bounds terminal service cleanup after stdout/stderr and ExecMainStatus have been consumed; cleanup failure remains an explicit failed update outcome rather than being reported as success",
 	},
 	{
+		id: "updateOrchestrator.startSlotSync",
+		file: "modules/system/update-orchestrator/lock.ts",
+		symbol: "startSlotSync",
+		command: "[systemctl, start, --no-block, ceralive-slot-sync.service]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"spawnWithTimeout bounds only the local systemd queue submission; --no-block returns before the unit's own internal flock/gate evaluation runs, so the lock/refusal outcome is read back later via inspectSlotSync, never inferred from this call",
+	},
+	{
+		id: "updateOrchestrator.inspectSlotSync",
+		file: "modules/system/update-orchestrator/lock.ts",
+		symbol: "inspectSlotSync",
+		command: "[systemctl, show, ceralive-slot-sync.service, ...properties]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"spawnWithTimeout bounds each local state read; exit code 75 (the script's own EX_REFUSE convention) is distinguished from an operational failure so a lock-contention refusal is never reported as a mirror defect",
+	},
+	{
+		id: "updateOrchestrator.resetSlotSyncFailure",
+		file: "modules/system/update-orchestrator/lock.ts",
+		symbol: "resetSlotSyncFailure",
+		command: "[systemctl, reset-failed, ceralive-slot-sync.service]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"spawnWithTimeout bounds terminal cleanup after a failed/refused probe has been consumed, mirroring softwareUpdates.cleanupTransient so the next attempt does not inherit a stuck ActiveState=failed",
+	},
+	{
+		id: "updateOrchestrator.installQuarantinePin",
+		file: "modules/system/update-orchestrator/quarantine.ts",
+		symbol: "writeQuarantinePins",
+		command:
+			"[systemd-run, --wait, --collect, --quiet, --, /usr/bin/install, -m, 0644, private-source, fixed-apt-preference]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"Bounded PID-1-owned argv-only install to the fixed apt preference path; no shell or arbitrary destination",
+	},
+	{
+		id: "updateOrchestrator.compareQuarantineCandidate",
+		file: "modules/system/update-orchestrator/quarantine.ts",
+		symbol: "UpdateQuarantine.reconcileCandidates",
+		command: "[dpkg, --compare-versions, candidate, gt, quarantined-version]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism: "Bounded Debian-version comparison, no update mutation",
+	},
+	{
+		id: "updateOrchestrator.restartStaleService",
+		file: "modules/system/update-orchestrator/stale-services.ts",
+		symbol: "defaultStaleServiceDeps.restart",
+		command: "[systemctl, restart, --no-block, exact-eligible-service]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"Exact cgroup service with deleted system mapping, idle window and protected-service guard",
+	},
+	{
+		id: "updateOrchestrator.readBothSlots",
+		file: "modules/system/update-orchestrator/slot-status.ts",
+		symbol: "readRaucStatusDetailed",
+		command: "[rauc, status, --detailed, --output-format=json]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"Bounded read of both RAUC rootfs slots, for the mirror view and for whether an armed activation ran; no mutation or wire change",
+	},
+	{
+		id: "updateOrchestrator.stopPackageInstallForStream",
+		file: "modules/system/update-orchestrator/stream-abort.ts",
+		symbol: "stopPackageInstallUnitForStream",
+		command: "[systemctl, stop, ceralive-software-update.service]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"D8 package-unit stop after the fresh wire read and commit-stage probe permit it; nonzero exits are logged, spawn failures/timeouts throw, and the later isUpdating() guard can still refuse launch",
+	},
+	{
+		id: "updateOrchestrator.probeCommitStage",
+		file: "modules/system/update-orchestrator/commit-stage-probe.ts",
+		symbol: "defaultCommitStageProbeDeps.showUnit",
+		command:
+			"[systemctl, show, ceralive-software-update.service, --property=LoadState,ActiveState,SubState,ControlGroup, --no-pager]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"D8 commit-stage probe: bounded read of the unit's ControlGroup before its cgroup.procs + /proc comm/cmdline are inspected; a process list that cannot be read while the unit is running fails CLOSED (refuse the stream start, never stop the unit)",
+	},
+	{
+		id: "updateOrchestrator.killRaucForStream",
+		file: "modules/system/update-orchestrator/stream-abort.ts",
+		symbol: "killAndRestartRaucForStream",
+		command: "[systemctl, kill, --signal=SIGTERM, rauc.service]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"D8 abort-network for os-staging (Todo 37): RAUC 1.13-class has no clean cancel, so the in-flight install is killed; the target (inactive) slot stays marked bad and the next staging attempt reuses already-downloaded blocks via Todo 22's adaptive verity bundles",
+	},
+	{
+		id: "updateOrchestrator.restartRaucForStream",
+		file: "modules/system/update-orchestrator/stream-abort.ts",
+		symbol: "killAndRestartRaucForStream",
+		command: "[systemctl, restart, --no-block, rauc.service]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"Queues restart after SIGTERM; stream admission awaits submission only, while OS staging requires independently proved RAUC quiescence",
+	},
+	{
 		id: "addons.runValidateCmd",
 		file: "modules/addons/manager.ts",
 		symbol: "runValidateCmd",
@@ -570,6 +990,23 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		status: "enforced",
 		mechanism:
 			"curl's own 3 s transfer cap inside spawnWithTimeout(4 s); failures fold into a typed per-family result, and the complete dual-family verdict is cached for 60 s",
+	},
+	{
+		id: "updates.transportProbe",
+		file: "modules/system/update-transport/executor.ts",
+		symbol: "defaultUpdateTransportDeps.run",
+		command: "[nmcli|resolvectl|curl|openssl|gpgv, ...validated argv]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"argv-only spawnWithTimeout at 4.5s, curl transfer bounded at 3s; individual device/family/host verdicts remain typed",
 	},
 	{
 		id: "connectivity.deviceBoundProbe",
@@ -821,6 +1258,7 @@ export async function spawnWithTimeout(
 		timeoutMs?: number;
 		signal?: AbortSignal;
 		env?: Readonly<Record<string, string | undefined>>;
+		onExit?: (exitCode: number) => void;
 	},
 ): Promise<SpawnWithTimeoutResult> {
 	const timeoutMs = opts?.timeoutMs ?? DEFAULT_SPAWN_TIMEOUT_MS;
@@ -863,7 +1301,10 @@ export async function spawnWithTimeout(
 	try {
 		const outcome = await new Promise<"exit" | "timeout" | "abort">(
 			(resolve) => {
-				void child.exited.then(() => resolve("exit"));
+				void child.exited.then((exitCode) => {
+					opts?.onExit?.(exitCode);
+					resolve("exit");
+				});
 				timer = setTimeout(() => resolve("timeout"), timeoutMs);
 				if (opts?.signal) {
 					onAbort = () => resolve("abort");
@@ -875,6 +1316,8 @@ export async function spawnWithTimeout(
 		if (outcome !== "exit") {
 			kill();
 			await Promise.allSettled([stdoutDone, stderrDone, child.exited]);
+			if (child.exitCode === 0)
+				return { exitCode: 0, stdout: acc.stdout, stderr: acc.stderr };
 			throw new SpawnTimeoutError(command, acc.stdout, acc.stderr);
 		}
 

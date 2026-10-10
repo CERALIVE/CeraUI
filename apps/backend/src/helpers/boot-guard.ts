@@ -40,6 +40,19 @@
 import { markBootDegraded } from "../modules/system/readiness.ts";
 import { logger } from "./logger.ts";
 
+let updatePhysicalReconciliation: Promise<boolean> = Promise.resolve(true);
+
+export function retainUpdatePhysicalReconciliation(
+	result: Promise<boolean>,
+): void {
+	updatePhysicalReconciliation = result;
+}
+
+/** Completion orders CONTROL ownership; a false verdict grants no safety proof. */
+export function awaitUpdatePhysicalReconciliation(): Promise<boolean> {
+	return updatePhysicalReconciliation;
+}
+
 export interface BootGuardLogger {
 	info: (message: string, meta?: unknown) => void;
 	error: (message: string, meta?: unknown) => void;
@@ -59,7 +72,18 @@ function defaultDeps(): BootGuardDeps {
  * the subsystem degraded on the readiness surface, and return `false` so boot
  * continues to the critical WS-server bind. Returns `true` on success.
  */
-export async function guardNonCritical(
+export function guardNonCritical(
+	subsystem: string,
+	run: () => Promise<void> | void,
+	overrides: Partial<BootGuardDeps> = {},
+): Promise<boolean> {
+	const result = runNonCritical(subsystem, run, overrides);
+	if (subsystem === "update-route-sweep")
+		retainUpdatePhysicalReconciliation(result);
+	return result;
+}
+
+async function runNonCritical(
 	subsystem: string,
 	run: () => Promise<void> | void,
 	overrides: Partial<BootGuardDeps> = {},

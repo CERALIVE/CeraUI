@@ -2,6 +2,14 @@
 
 ## CONNECTION RELIABILITY
 
+**Visible operator heartbeat [PARTIAL, Todo 32].** `Layout.svelte` sends the
+authenticated `ui.heartbeat` every 30 seconds only while the page is visible
+AND has focus, and sends on focus/visibility return. Unmount or authentication
+loss clears the timer/listeners. The backend stamps receipt; an unfocused kiosk
+preview is still a separate preview blocker, never inferred idle from the lack
+of a UI heartbeat. This is a detector signal only; no update scheduling UI or
+automatic commit path ships with it.
+
 ### Connection-ready gate
 
 `BootShell.svelte` holds the app in a loading state until the first full snapshot arrives from the backend. The gate flips once `subscriptions.svelte.ts` processes the post-login initial-state push. No destination view renders before this flip — prevents flash-of-stale-data on startup.

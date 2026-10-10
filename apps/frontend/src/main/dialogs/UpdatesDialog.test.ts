@@ -49,6 +49,7 @@ vi.mock("svelte-sonner", () => ({
 let mockState: UpdateState | undefined;
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getUpdateState: () => mockState,
+	getUpdateOrchestratorState: () => undefined,
 }));
 
 // A faithful minimal osCommand: it awaits the raw rpc and hands the result back,

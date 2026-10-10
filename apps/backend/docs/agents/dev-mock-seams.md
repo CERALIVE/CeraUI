@@ -30,6 +30,12 @@ USB enumeration cannot spend the NM-timeout case's budget through host schedulin
 delay. Only the unresolved NM reader advances time, including the failure-path
 re-probe; teardown restores the real clock. Production polling is unchanged.
 
+The software-update scheduler fixture preserves its real `process.hrtime()`
+origin when enabling fake timers, then advances that clock with the retry timer.
+Bun resets fake hrtime to zero while the imported scheduler retains its deadline;
+a file loaded after 60 seconds in a parallel worker otherwise never reaches its
+skip runner. Teardown restores the clock spy and real timers; production is unchanged.
+
 The add-on shell/GPG suite and historical source-routing Git guard use
 `tests/helpers/run-test-command.ts`: asynchronous spawn, concurrent stdout/stderr
 drains and exit observation, with scoped disposal. Bun 1.4.2's synchronous spawn
@@ -53,6 +59,10 @@ The optional-audio-codec start fixture also owns a `mkdtemp` config root through
 restore a shared cwd `config.json`: a fresh checkout has none, and another file
 creating it is not a test prerequisite. Teardown restores the path and removes
 only this fixture's directory.
+
+Witness fixtures also allocate under the test run's temporary root, outside the
+source tree. Repository-wide source inventory must never race their short-lived
+JSON files; the inventory still includes every new non-ignored source file.
 
 Backend tests inject procedure launch/source dependencies through
 `setStreamingProcedureDepsForTest()` and stream-start process/telemetry/engine
@@ -335,4 +345,3 @@ persisted — it NEVER regenerates an existing credential (that stays
 `applyPassword` / `persist` / `refreshStatus`) is injected via
 `SshPasswordProvisionDeps` so `tests/ssh-password-provision.test.ts` drives it
 without a real `passwd`/`/etc/shadow` (and without persisting to disk).
-

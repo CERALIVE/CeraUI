@@ -1,0 +1,7 @@
+{
+  "state_sha256": "22adcb906eb42e57e1337e2c0e7487131397c6d4e33dce4ceb38b9eef9aee6af",
+  "build_id": "36d8131819aa4eb0b46666b76c702db0afada938",
+  "image_version": "36d8131",
+  "target_slot": "rootfs.0",
+  "completed_at": "2026-09-30T06:22:00Z"
+}

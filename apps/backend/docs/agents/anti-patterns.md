@@ -210,9 +210,10 @@
 - Don't read config files with raw `fs` — use `helpers/config-loader.ts`.
 - Don't drive the engine directly — route through `getStreamingBackend()`, never
   the `cerastreamBackend` singleton.
-- Don't refuse a software update with a bare `return`, and don't re-check the
-  update guards at a call site — `startSoftwareUpdate()` owns every refusal and
-  always names it (see SOFTWARE-UPDATE START CONTRACT).
+- Don't add another bare return to an update path, and don't re-check
+  `startSoftwareUpdate()`'s synchronous guards at a call site. Its later
+  `doSoftwareUpdate()` early return is already silent; see root AGENTS.md D8
+  Known gaps (c).
 - Don't let an update CHECK end without publishing something: route every cycle
   through `runUpdateDiscoveryAndReport()`, and don't derive a check failure from
   apt's stderr (benign warnings) or clear one on a stale-list discovery success —

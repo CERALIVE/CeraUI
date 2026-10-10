@@ -67,6 +67,7 @@ bun run test:release-package-contracts
 | THE WI-FI OFFERING IS DERIVED FROM THE RADIO / THE BLUETOOTH FOUNDATION | [Contract 33](docs/agents/the-wi-fi-offering-is-derived-from-the-radio.md); [Contract 34](docs/agents/the-bluetooth-foundation.md) |
 | THE BT MICROPHONE IS A SOURCE, NOT A SPECIAL CASE / ANTI-PATTERNS | [Contract 35](docs/agents/the-bt-microphone-is-a-source-not-a-special-case.md); [Contract 36](docs/agents/anti-patterns.md) |
 | UVC package identity | [Contract 37](docs/agents/uvc-package-identity.md) |
+| Device updates, D8 admission and known gaps | [Update-system contract](docs/agents/the-device-update-system.md) |
 
 ## HARD RULES
 

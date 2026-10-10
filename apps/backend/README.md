@@ -152,6 +152,41 @@ records the installed/candidate versions, per-port timing, separately observed
 MM details, and unexercised portal-credential cases. These are observations for
 regression tests, not a device-support certification.
 
+OS-stage command receipts live in [`src/tests/fixtures/real-device/`](src/tests/fixtures/real-device/README.md).
+Systemd 257 omits empty exec-list properties: guardian ownership permits missing
+`ExecStartPre`, `ExecStartPost`, `ExecStop` and `ExecStopPost` only. A present
+nonempty hook, duplicate property, changed identity or noncanonical ExecStart
+is still refused. Guardian, orphan and RAUC observation share the orphan lane's
+strict key parser. Real idle-board fixtures prove output parsing, not successful
+staging, resource retirement or lock release on hardware; those need the re-drill.
+The isolated Rock guardian receipts additionally cover loaded failed and active
+exited units through the existing ownership and orphan parsers, with explicit
+test-only identity aliases. They are not product-unit recovery qualification.
+Every never-launched runner failure now uses the shared private/kernel/client/
+outcome/pin settlement proof before releasing the guardian. Successful proof
+preserves typed cancellation/admission reasons; failed or thrown proof stays
+unsafe with its cause retained. Kernel lock rows correlate filesystem device
+and inode through validated fd/mount metadata. Helper-child churn is rescanned
+within a fixed budget; persistent unexpected membership refuses. Exit-75 cleanup
+retires provenance only after checked stop/reset replies and positive absence.
+Further read-only Rock receipts exercise the transport selector's real DNS and
+curl marker framing, failed versus empty route-table reads, and idle RAUC
+observation. Their coverage matrix states the live-install branches still owed.
+
+The second isolated Rock receipt ran the capture-base product helper with historical
+test-directory overrides. The shipped helper now has fixed root-owned paths;
+guardian tests use a generated copy differing only in two constants, while singleton
+tests execute the unmodified shipped helper's independent observer mode. Historical
+environment names in the receipt are inert capture aliases documented in its README.
+Individual flock/bash/sleep cmdlines and inherited fds,
+whole kernel lock tables, exact combined observation replies and a live
+ACK-pending window now feed production parser tests. Starting-before-ready,
+transient stat children and different-filesystem/same-inode golden coverage were
+attempted but not captured; live-install resource branches remain owed. See the
+fixture README for normalization and scope. The replay adapter derives the
+kernel device from the captured lock fdinfo and mountinfo before supplying
+device-plus-inode inputs to the guard parser; no capture or assertion is changed.
+
 ## Build
 
 The backend compiles to a single self-contained binary. Architecture is controlled by `BUILD_ARCH`:
@@ -181,6 +216,100 @@ exists and therefore cannot repair a unit the old `prerm` disabled. Both are pin
 `scripts/build/release-package-contracts.sh`.
 
 ## RPC Architecture
+
+Singleton acquisition reads kernel status real/effective UID before exact argv,
+executable identity and the held-fd grant. A running deleted-flock wrapper still
+counts across a package upgrade; other granted executable identities fail unproven.
+Restricted-proc reads follow an explicit fail-closed policy. The path monitor's
+2 s cadence is not a termination deadline, and separate proc reads have no
+pidfd/start-time fence. Full contract: [singleton recovery](../../docs/UPDATE-RECOVERY.md).
+
+Update startup awaits the retained physical-reconciliation completion off the
+control-server boot path. One startup flight retries transient acquisition and
+durability failures six times, with 250/500/1000/2000/4000 ms waits; transient
+exhaustion keeps the retryable mutation gate closed while one unreferenced timer
+retries every 30 seconds until success. Operator calls do not rearm it.
+Authoritative safety refusals and invalid recovery metadata remain closed without
+automatic repair. See [startup recovery](../../docs/UPDATE-RECOVERY.md).
+
+One detached bootstrap orders orchestrator adjudication before standalone APT
+recovery and periodic checks, without blocking unrelated boot work. Transient
+exhaustion parks the handoff until a later startup succeeds; invalid metadata or
+terminal safety refusal skips legacy cleanup so it cannot consume plan evidence.
+It logs an error and flags `update-orchestrator-maintenance` on `/api/health`, but
+does not observe an untracked unit or initialize the bootstrap's hourly refresh.
+Stream-stop/coordinator callers may still resume discovery, and legacy Check/Install
+RPCs remain callable. Preserve unit/state evidence and arrange local repair before
+restarting; a wider legacy admission gate remains an OWNER DECISION in the recovery
+contract, not behavior this bootstrap enforces.
+
+Recovered tracked commits and downloads use an explicit persist-before-exit handshake, not
+microtask ordering. Both already-finished and initially-running units await valid
+startup and authoritative durable success under CONTROL before deliberate exit.
+A failure withholds exit and leaves the process alive/degraded; standalone unit
+recovery keeps its legacy restart/reboot behavior. Host proofs do not qualify
+systemd restart or power loss on a board.
+
+Owned package wire `success` is published before restart permission is checked;
+it does not prove the new backend is running. If success persistence fails, new
+packages remain installed with the old backend alive. The error log and latched
+`update-orchestrator-maintenance` health flag report this maintenance condition.
+An explicit pending-success fence blocks new scheduler/discovery/install/OS-stage/
+mirror/cleanup/stale-restart submissions and legacy callers while the existing tick
+retries authoritative success under CONTROL. Admitted legacy continuations recheck
+at shared command/preflight ports and the post-read channel-write boundary; their
+refusal releases in-flight latches. Already-submitted effects are not cancelled.
+Manual readiness requires validated startup and independent OS/package durability;
+D8 rechecks pending success after publishing recovery and around its awaited
+probe/stop boundaries. A pending package tick services the independent snapshot
+and intent/witness recovery owners before its package retry; startup-tail snapshot
+failure and package completion are host-tested in both observation orders without
+opening unfinished startup or discarding the original withheld exit.
+A renamed-but-unacknowledged success must be re-persisted; readable equality alone
+cannot clear the fence. Five consecutive disk mismatches, or an unrelated persisted
+phase, escalate to local maintenance once per completion, with same-signature retry
+logs limited to once per minute. Durable success clears the fence
+and restores normal restart authority; no operator clear API is added.
+Repair storage/ownership while alive and preserve agent/plan/unit/output evidence.
+Avoid Check as well as Install: an accepted legacy Check clears `lastUpdateSucceeded`
+outside the pending fence, so wire success is not immutable maintenance evidence.
+Terminal startup refusal alone still leaves legacy RPC/periodic callers active.
+Restart only after a positive safe baseline; an early restart or power loss can
+lose consumed outcome evidence. See the owner-decision inventory in the recovery
+contract above.
+
+Interrupted OS settlement, generic confirmation and legacy migration preserve
+exact-snapshot durability intent after I/O failure. The tick replays it under
+CONTROL without repeating the event or failed-round count; manual mutations are
+retryably closed meanwhile, and authoritative disk drift remains fail-closed.
+
+Initial OS-attempt publication is inside its cleanup lifetime. A pre-effect write
+failure restores the pre-state, clears the attempt token, and durably rolls back
+even a renamed staging record; pending rollback uses the same snapshot replay.
+The strict private `os-attempt-intent.json` additionally makes that authority
+restart-recoverable: `publishing` precedes agent publication, and `launching`
+precedes producer creation under CONTROL. Only exact publishing authority plus
+fresh physical no-producer proof restores the baseline without a round or unsafe
+notice. Launching/missing-intent staging retains existing uncertainty policy.
+Invalid authority is preserved with mutations closed.
+D8 also preserves unreadable intent/job authority and returns the existing
+retryable initializing refusal when recovery or guardian observation cannot
+establish evidence. Only a valid matching launched job permits its existing
+producer cancellation; repaired evidence is re-probed on a retried start.
+The `os-attempt-intent-stream-{evidence,producer}.test.ts` suites exercise actual
+session admission and the real adapter over disposable loopback WebSockets.
+Valid stale launching authority over an absent/superseding attempt is retired
+under fresh CONTROL-protected ownership absence, never restored. Retirement
+failures are logged and retain a separate cleanup-pending admission latch without
+replacing the stage outcome or escaping its tick; repair includes parent fsync
+even when unlink already succeeded. Snapshot persistence remains independent.
+See the
+[intent recovery table](../../docs/UPDATE-RECOVERY.md#durable-os-attempt-intent-partial--host-crash-point-proof-board-power-loss-proof-owed).
+
+Persisted `checking` is an interrupted discovery, not a live transaction. Startup
+returns it to idle with both discovery clocks due while retaining all history and
+recovery metadata. All other phases keep their existing owners; see the complete
+[restart table](../../docs/UPDATE-STARTUP-PHASES.md).
 
 All device control goes through oRPC over WebSocket. There are no HTTP REST endpoints for device state.
 
@@ -255,6 +384,42 @@ configuration remain unchanged, and status still reports the modem's live state.
 
 ### Software update admission
 
+On images declaring `apt-all-packages`, APT discovery simulates an upgrade,
+refuses removal plans or held first-party packages, and admits only candidates
+from the permitted Debian Trixie suites or apt.ceralive.tv. Commit installs the
+discovered packages by exact version inside one detached flock-protected service;
+the backend can restart without releasing the lock. Stable APT sources remain
+enabled when beta is selected. Older images keep the original 15-name path.
+No capable device image has been released. The candidate-origin fix was
+bench-tested with the capability enabled on a Rock 5B+: it identified and
+installed `ceralive-apt-credentials` 1.0.0→1.0.1 through authenticated update
+RPCs. On 2026-09-28 the Rock 5B+ completed apt at 18:06:04Z, yet the backend
+still reported `installing` / `committing` 84+ minutes later until a restart.
+The detached-unit identity checker rejected systemd's real flock-wrapped
+`ExecStart` rendering (`flock wrapper does not match`), repeatedly blocking
+observation of the successful exit. The repaired identity check was exercised on
+both benches; both installs then reached the next bug: the backend exited before
+the orchestrator persisted `COMMIT_SUCCEEDED`, and resumed to sticky
+`failed / commit_unit_absent_on_resume` with the pending plan intact. The capable,
+orchestrator-owned path now persists `restarting-services` before its deliberate
+exit; legacy images retain their old restart/reboot behaviour, and a genuinely
+uncertain commit still fails closed. The new build has not yet been board-proven.
+See [`DEVICE-UPDATES.md`](../../docs/DEVICE-UPDATES.md).
+
+Candidate provenance joins two APT readings: `apt-cache policy <name>` supplies
+the version's package-file line, while one unscoped `apt-cache policy` reading
+supplies that complete line's Release Origin/Label and suite for the whole batch.
+Missing or conflicting metadata leaves the package informational. The test
+fixture captures both command forms from the Rock 5B+ on 2026-09-27.
+
+The separate packaged `/usr/sbin/ceralive-update-recover` is a root-only local
+maintenance tool for one cross-slot failed reason. It requires the backend to
+be inactive and effectively masked, reads exact expected current-slot evidence,
+and durably archives the old plan before a narrow failed-to-idle transition.
+It has no RPC/remote/sudoers entry. Its injected-probe decision tree is tested
+without root; real systemd/APT board proof is still owed. See
+[`UPDATE-RECOVERY.md`](../../docs/UPDATE-RECOVERY.md).
+
 `startSoftwareUpdate()` acknowledges dispatch synchronously. Its asynchronous
 update-check continuation clears cached downloads and checks space before stamping
 planned shutdown, immediately before the detached package transaction launches.
@@ -314,6 +479,26 @@ Ownership, AIMD behavior, failure reporting, and real netns classification proof
 [`docs/UPLINK_SHAPING.md`](../../docs/UPLINK_SHAPING.md).
 
 ## Conventions
+
+Confirmed generic family success survives a joined sibling observation exception.
+An unsuccessful unbound observation exception stays UNKNOWN while repository
+candidates are still observed; UNKNOWN alone never authorizes route release.
+Host-uplink observers isolate repository exceptions as typed UNKNOWN and drain
+submitted siblings before releasing the election flight. UNKNOWN is never
+repository success or permission to release an owned preference. Independent
+generic connectivity still supplies the existing fallback. See
+[`HOST-UPLINK-ELECTION.md`](../../docs/HOST-UPLINK-ELECTION.md).
+Repository success on the first/default candidate stops speculative sibling
+probes. Only a failed first candidate opens a four-worker, input-ordered pool;
+held preferences independently observe natural winners through that same ceiling.
+Natural recovery carries its proven path identity into the serialized route
+writer. A changed/unusable natural winner or expired proof withholds deletion,
+resets recovery, and keeps maintenance armed; release remains forward-only.
+The coordinator delegates default-interface observation and natural-recovery
+coordination to small network modules; route serialization stays in the writer.
+The retained-realm kernel regression explicitly probes kernel support and prints
+a skip reason when realms are erased. A mandatory target-shape regression covers
+the same recovery identity without realm/classid support.
 
 - **Runtime**: Bun only. No Node-specific APIs (`node:path`, `node:os`, `node:fs/promises` are fine).
 - **Process spawning**: `Bun.spawn()` / `Bun.$` shell — not `node:child_process`.

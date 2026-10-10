@@ -1,5 +1,174 @@
 # CeraUI
 
+**Device updates [EXISTS].** The update orchestrator checks for package and
+system updates on a schedule alongside the older package-update RPC path. It
+automatically installs while idle, and
+allows operator actions to bypass that idle wait. Stream/update admission:
+[D8 detail](docs/DEVICE-UPDATES.md#d8-stream-admission) and
+[D8 Known gaps](docs/agents/the-device-update-system.md).
+Settings → Software Updates shows packages,
+system image, slots, automation (auto toggles, schedule window, channel),
+cellular allowances with per-candidate approval, and the update connection. A
+busy update shows an app-wide badge, and the Live cockpit warns before Go Live;
+Start stays enabled because the device decides admission. Implementation
+reference: [device updates](docs/DEVICE-UPDATES.md).
+
+**What today's images can use [PARTIAL].** Every image shipping today is a
+legacy image: it keeps the 15-package update roster, and the dialog states which
+sections it cannot back instead of hiding them. Updating every package by origin,
+signed system-image updates and the slot mirror are implemented but need image
+capabilities no released image declares yet. System-image updates additionally
+need an `/etc/ceralive/os-release-version` stamp, so current boards refuse them.
+The origin-classification and detached-unit identity fixes were exercised on
+bench-enabled Rock 5B+ and Orange Pi 5+ boards; packages installed, but both
+successful installs left sticky `failed / commit_unit_absent_on_resume` because
+the backend exited before recording the orchestrator's success transition.
+This branch now persists `restarting-services` before exiting after an
+orchestrator-owned capable install, without guessing success on an uncertain
+resume or changing legacy-image behaviour. The fixed build has **not** been
+re-proven on a board; the OS/slot flows are not qualified by these installs.
+See also [update recovery](docs/UPDATE-RECOVERY.md).
+
+Tracked package recovery reserves exit authority for both committing and
+downloading snapshots. Owned wire `success` precedes restart-permission checking,
+so it does not prove a new backend is running. If durable success cannot be written,
+new packages stay installed while the old backend runs; the error log and latched
+`update-orchestrator-maintenance` health flag identify that condition. A separate
+pending-success fence blocks new scheduler and legacy command/channel submissions,
+including admitted continuations at their post-await boundaries, while ticks
+retry the successful snapshot under CONTROL. Already-submitted work is not cancelled.
+Ticks service independent snapshot and intent/witness recovery before package replay,
+so package priority cannot starve the recovery it needs. Both startup-tail snapshot/
+package-completion observation orders are host-tested, not board-qualified.
+Manual readiness requires valid startup and both OS/package durability; D8 uses its
+existing update-in-progress refusal. A readable renamed success after failed directory
+sync still requires successful re-persistence. Persistent drift escalates to local
+maintenance without clearing the fence. Only authoritative success persistence
+restores normal restart authority; no maintenance clear API is added.
+Avoid Check AND Install, preserve agent/plan/unit/output evidence and repair
+storage/ownership while alive. An accepted legacy Check clears retained wire success
+outside the fence. Terminal startup refusal by itself still leaves legacy RPCs and
+independent periodic callers active. Restart only after a positive safe baseline;
+hardware, power-loss and rendered maintenance feedback remain unqualified. Full
+[owner-decision inventory](docs/UPDATE-RECOVERY.md#owner-decision-pending-package-success-and-the-old-running-backend).
+
+OS receipt publication is not final release success: pending producers cannot
+arm activation, and a matching unsafe release failure stays terminal without
+deleting the receipt. Invalid recovery metadata also stays terminal on startup
+instead of clearing an earlier failure. Manual confirmation is limited to settled,
+typed unsafe OS outcomes with positive proof. These repairs are hermetically
+tested; the updated candidate still needs independent review and a board re-drill.
+
+Admission observation is bounded to a fail-closed 10-second refusal, not a writer
+deadline. Orphan settlement parses systemd absence by property, and a configured
+NBD device cannot lose its recorded ownership merely because its creator PID was
+reused. These safety repairs likewise remain hardware-unqualified.
+An admission refusal now names its first failing predicate and, when observation
+itself stopped, bounded boundary/class/code diagnostics without arbitrary exception
+messages or changing admission. Receipt retirement requires persisted CONTROL
+authority and a new receipt's installed-image binding to the healthy booted rootfs,
+in addition to version equality. Legacy receipts (including HISTORICAL Rock `.64` and
+the CURRENT prior-boot `.70` from bench build `1f6a990e`) stay
+intact. A renamed receipt with failed directory fsync is reported as durability
+pending and its acknowledgement retries. A successful tombstone acknowledgement
+is cached by full file identity for this process only; unchanged ticks avoid
+CONTROL/fsync, changes/failures retry, and a new process acknowledges again.
+Marker read errors never imply absence.
+Judgment carries the read-time inode/metadata/hash identity, while cooperative
+publication, arming and rebinding share CONTROL. Rename is not compare-and-swap
+against privileged writers ignoring that lease. Production publication uses
+`commitStagedManifest` through the leased stage callback, rebinding uses
+`rebindStagedReceipt` through leased runtime reconciliation, and retry uses the
+same leased stage entry. Low-level `saveStagedManifest` itself requires no lease.
+The image's `ceralive-rauc-activate.sh --arm/--stop` takes its own activation
+flock, not CONTROL; privileged/manual or surviving helper effects can bypass
+cooperative exclusion. ExecStop deliberately stays CONTROL-independent.
+New never-launched jobs/witnesses
+record the pre-existing receipt baseline: an unchanged stale receipt is preserved
+without obstructing safe retry, but new/changed receipts still veto. Legacy records
+retain their presence veto; a both-slots-good unsafe failure without a matching
+completed never-launched witness still stays failed (HISTORICAL failed `.68`, not
+the current Rock state). The supplied CURRENT Rock state is booted `2026.10.70`,
+both slots good, agent idle: the unbound legacy receipt is inert and the next
+Check → stage → install → staged → armed flow is unobstructed in the oracle's
+host repro. Accepted D154 residuals are privileged arming bypass and forward-only
+strict schema-1 compatibility: older unreleased intermediates reject
+`receiptBaseline`; bench rollback requires clearing stage job/witness records.
+`2026.9.5` is the first orchestrator release. These are host proofs, not
+board qualification. See [OS staging recovery](docs/UPDATE-RECOVERY.md#os-staging-recovery-partial--fixture-proven-board-re-drill-owed).
+
+Idle RAUC status helpers no longer make a single extra-member census a terminal
+stage refusal: admission waits for fresh strict proof within a short prelaunch
+bound or the settled pair's remaining recovery budget. Recovery starts that one
+360-second monotonic budget before restart submission; retry and release cannot
+renew it. No process role is whitelisted, and successful-but-unpublished installs
+cannot restage. Ownership, cancellation, candidate/transport freshness and final
+clocks remain fenced. Startup/orphan post-cleanup proofs use the same bounded
+seam. Captured-stat and killed-process host tests are not a qualification of the
+shipped guardian or either board; both-board failover/status-pressure re-drills
+remain owed. Persisted formats and the D154 residuals above are unchanged.
+Positive CLI exit is retained independently of cancellation/output drainage;
+the matching runtime attempt settles unpublished success unsafe even after D8
+returns to the offer. Final safety observation follows awaited preparation, and
+proof I/O shares the remaining deadline with expired captures invalidated.
+Optional diagnostics precede a final unit/process/resource fence; census drift
+returns no snapshot and permits only bounded fresh re-observation. Command,
+parsing, timeout and unit-identity failures remain terminal unknown; only an
+identical clean census pair can authorize dispatch. Persisted formats are unchanged.
+Simultaneous census drift cannot mask failed/malformed Operation or unavailable
+health/boot/slot evidence: the drift retry marker requires valid non-census
+predicates, and the changed pair still returns no snapshot.
+Positive CLI success dominates transfer failure, with a runner-level replay veto.
+Outer recovery, publication and release ports spend the same remaining deadline;
+late callbacks cannot grant publication or release. No awaited preparation remains
+between final safety observation and dispatch, but synchronous persistence and
+external process changes still leave a non-atomic gap. These are host-tested
+safety repairs, not a new board qualification or a change to D154.
+Retained-pin drainage now uses the reconciler's active budget and CONTROL lease,
+with read-only capture after ownership preparation. OS routing teardown and sweep
+check that lifetime before every new command and bound each wait by its remainder;
+already-submitted I/O cannot be revoked. Ordinary routing policy is unchanged.
+Quiet startup with no job, guardian or private directory uses a single 10-second
+CONTROL-fenced reconciliation budget for orphan inspection and stale-rule sweep.
+The same lifetime is checked immediately before opening admission; timeout or
+lease loss stays unsafe. Real-flock host regressions preserve normal cleanup,
+but do not qualify board routing or a real OS installation.
+
+State-side unlaunched OS settlement requires a private completed witness matching
+the persisted attempt, signed candidate and current boot, plus fresh readiness.
+It returns to operator retry without counting an already-counted failure twice.
+Legacy D8 records without attempt provenance remain unsafe. A strict private
+two-phase attempt intent additionally covers pre-effect publication
+rollback: exact publishing authority plus positive no-producer proof restores the
+pre-state across a restart without inventing a failed round. Launching/missing-intent
+staging keeps the existing unsafe policy. See the [intent recovery table](docs/UPDATE-RECOVERY.md#durable-os-attempt-intent-partial--host-crash-point-proof-board-power-loss-proof-owed).
+Guard/state integration
+is implemented and fixture-tested; board qualification is owed.
+Valid stale launching intent cannot hold a cleared or superseding attempt hostage:
+it is retired only under ownership absence. A failed retirement leaves admission
+closed behind logged cleanup retry, without replacing the producer's outcome.
+Settlement and
+new-attempt admission share the control lease and recheck authoritative state;
+that lease is acquired regardless of device detection or development/mock settings;
+pending durability keeps admission closed. Startup restores missing recovery
+notices without replay churn. See [witness recovery](docs/UPDATE-RECOVERY.md#unlaunched-settlement-witness-partial).
+
+A root-only, local `.deb` maintenance executable now implements the narrow
+cross-slot unresolved-commit adjudication. It cannot be invoked through the UI
+or remote control and requires the backend inactive/effectively masked; its plan-
+bearing receipt is durable before clearance. The unprivileged test suite covers
+the decision/crash path; real root/systemd/APT board proof remains owed. See
+[the recovery contract](docs/UPDATE-RECOVERY.md) before any maintenance window.
+
+The OS channel reader now selects the Orange Pi product channel from its exact
+physical RAUC compatible without changing the compatible used for signed-pointer
+validation. The currently published Orange Pi drill pointer still needs its
+publisher-side correction, and the fixed CeraUI binary has not been deployed;
+this is not permission to stage that image. See [device updates](docs/DEVICE-UPDATES.md).
+An unpublished stable/beta channel no longer makes a healthy, TLS-verified link
+look captive or offline: the OS check reports no candidate instead. This
+correction is not yet board-proven on the fixed build.
+
 Generic raw capture inputs now have an honest, non-streamable **Raw video** row
 rather than a false Cam Link identity. Both consumers now pin published bindings
 2026.9.11; see [publication and rollout](docs/RAW-CAPTURE-CLASSIFICATION.md).
@@ -39,7 +208,7 @@ The app is organized into three primary destinations:
 
 - **Live** — a unified device-first source list leads the destination: every capture device, built-in pipeline, test pattern, and LAN network-ingest (RTMP/SRT) slot renders as one picker, with a single "Codec & delay" affordance owning all audio configuration. Below it, a "Stream setup" card shows three always-visible readiness rows (Encoder, Destination, Network — no collapse, no ready bar) each fusing a state dot with its config summary and a one-tap edit/fix affordance, plus the Start control. Pick a source, adjust encoder/server settings, and go live. While streaming, the view switches to a live cockpit: telemetry strip, bitrate hot-adjust, per-link ingest stats, and Stop. A persistent HUD bar shows four at-a-glance facts (live/idle/offline state, health verdict, bitrate, SoC temperature) across all destinations, with per-link signal detail and full telemetry available in an expanded sheet.
 - **Network** — connectivity overview. Bonded link status, WiFi networks (connect/disconnect/forget), cellular modems (APN, roaming, network type), Ethernet interfaces, hotspot configuration, and provider-aware Bluetooth controls. PipeWire images never try to start the retired BlueALSA unit, and a connected Bluetooth microphone is offered only when the installed provider agrees with the selected audio backend. Newly attached cellular hardware remains visible while modem services probe it. After two authoritative misses, only strong cellular evidence retains a non-actionable “Not controllable” row; descriptor-only guesses disappear and stay retired while attached, including across monitor restarts. Bluetooth descriptors never qualify by shape alone: wireless admission requires the full RNDIS triplet `e00103`, and `ID_MM_DEVICE_IGNORE=1` always excludes the device. Successful SIM PIN, PUK, and PIN2 unlocks update the affected modem row immediately over the existing push channel, without a page reload. Calm info/warning bands surface interface-topology issues without ever blocking a connection: a same-subnet notice when two bonded links deliberately share a subnet (normal for policy-routed bonding), and a policy-route warning if a bonded WiFi/modem link is missing its expected routing table.
-- **Settings** — system and device configuration. All actions open focused dialogs: cloud remote, LAN password, SSH, logs, software updates, power, version info, and per-protocol network-ingest (RTMP/SRT) enable/disable. The software-update dialog now answers rather than going quiet: a check that could not reach the repositories, or that landed on a captive portal, says so instead of reporting "up to date"; the result names which address family worked when only one did; a package that ships with the next OS image or that apt kept back is listed as such rather than offered for install; and an update refused before it starts — most often for insufficient free space — reports its own reason and clears the progress overlay instead of leaving "Applying…" on screen.
+- **Settings** — system and device configuration. All actions open focused dialogs: cloud remote, LAN password, SSH, logs, software updates, power, version info, and per-protocol network-ingest (RTMP/SRT) enable/disable. Software-update preflight refusals report their reason and clear the progress overlay. The post-acceptance silent-return gap is recorded in [D8 Known gaps](docs/agents/the-device-update-system.md), item (c). Update-state details: [device updates](docs/DEVICE-UPDATES.md).
 
 A dev-only DevTools destination is available in development builds.
 
@@ -111,6 +280,9 @@ A dev-only DevTools destination is available in development builds.
   stagger instead of walking every DNS answer serially, while active SRTLA links
   use passive RTT/NAK telemetry instead of competing probes. Captive portals
   remain visible as degraded links.
+  An update-specific, stateless selector also has fixture-proven APT/OS host
+  checks per uplink and address family. Live first-party deployment validation
+  awaits the update infrastructure; see `docs/HOST-UPLINK-ELECTION.md`.
 - **Flow-sticky client sharing**: the backend assigns new hotspot/shared-LAN flows
   across healthy uplinks while preserving established-flow affinity and keeping
   locally-originated SRTLA traffic outside its NAT path. The image carrier is the

@@ -5,6 +5,7 @@
 | Task | Location |
 |------|----------|
 | Live destination (stream control) | `apps/frontend/src/main/LiveView.svelte` |
+| **Device updates (orchestrator, D8 admission, OS agent, slot mirror, update transport)** | backend `apps/backend/src/modules/system/update-orchestrator/` + `update-transport/`; frontend `apps/frontend/src/lib/updates/` + `main/dialogs/UpdatesDialog.svelte`; reference [`docs/DEVICE-UPDATES.md`](../DEVICE-UPDATES.md) |
 | Network destination (links/WiFi/modems) | `apps/frontend/src/main/NetworkView.svelte` |
 | Settings destination (config entry points) | `apps/frontend/src/main/SettingsView.svelte` |
 | Persistent HUD bar | `apps/frontend/src/main/HudBar.svelte` + `apps/frontend/src/lib/stores/hud.svelte.ts` |

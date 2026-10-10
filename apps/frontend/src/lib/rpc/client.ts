@@ -7,6 +7,7 @@
 import type {
 	AddonDescriptor,
 	AddonState,
+	AllowCellularOnceInput,
 	AutostartOutput,
 	BitrateInput,
 	BitrateOutput,
@@ -109,6 +110,9 @@ import type {
 	SwitchAudioOutput,
 	SwitchInputInput,
 	SwitchInputOutput,
+	UpdateCapabilities,
+	UpdateDetails,
+	UpdateSettings,
 	UsbModeOptionsInput,
 	UsbModeOptionsOutput,
 	UssdCancelInput,
@@ -127,7 +131,7 @@ import { getRpcSocketUrl } from "../env";
 import { nextBackoffDelay } from "./backoff";
 import { parseServerPing, shouldForceCloseHalfOpen } from "./half-open";
 import { createHeartbeatTracker, HEARTBEAT_THRESHOLD_MS } from "./heartbeat";
-import { RpcError } from "./rpc-error";
+import { RpcError, type RpcErrorEnvelope } from "./rpc-error";
 
 export class ConnectionResetError extends Error {
 	override readonly name = "ConnectionResetError";
@@ -154,11 +158,7 @@ interface RPCRequest {
 interface RPCResponse {
 	id: string;
 	result?: unknown;
-	error?: {
-		message: string;
-		code: string;
-		fields?: string[];
-	};
+	error?: RpcErrorEnvelope;
 }
 
 /**
@@ -881,6 +881,18 @@ export interface TypedRPC {
 		) => Promise<KioskConfigureOutput>;
 		kioskOsk: (input: KioskOskInput) => Promise<SuccessResponse>;
 		mintPreviewToken: () => Promise<PreviewTokenOutput>;
+		getUpdateSettings: () => Promise<UpdateSettings>;
+		setUpdateSettings: (input: UpdateSettings) => Promise<UpdateSettings>;
+		getUpdateCapabilities: () => Promise<UpdateCapabilities>;
+		getUpdateDetails: () => Promise<UpdateDetails>;
+		checkUpdatesNow: () => Promise<SuccessResponse>;
+		installUpdatesNow: () => Promise<SuccessResponse>;
+		allowCellularOnce: (
+			input: AllowCellularOnceInput,
+		) => Promise<SuccessResponse>;
+	};
+	ui: {
+		heartbeat: () => Promise<SuccessResponse>;
 	};
 	status: {
 		getStatus: () => Promise<unknown>;
