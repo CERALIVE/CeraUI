@@ -128,6 +128,13 @@ async function runLeasedOsStageJob<T>(
 	let recoveryDeadline: number | undefined;
 	let proofDeadline = deps.now() + 10_000;
 	let cliSucceeded = false;
+	const assertDispatch = () => {
+		if (cliSucceeded)
+			throw new OsStageUnpublishedSuccessError(
+				new OsStageError("rauc_recovery_unproven"),
+			);
+		assertOsStageToken(control);
+	};
 	const unsafe = Promise.withResolvers<never>();
 	const drainage = Promise.withResolvers<{ readonly error?: unknown }>();
 	const admit = async () => {
@@ -258,6 +265,7 @@ async function runLeasedOsStageJob<T>(
 			"os",
 			initial,
 			async (transport: RankedTransport) => {
+				assertDispatch();
 				await admit();
 				try {
 					await deps.revalidate();
@@ -268,7 +276,7 @@ async function runLeasedOsStageJob<T>(
 				}
 				await admit();
 				const before = await freshProof(transport);
-				assertOsStageToken(control);
+				assertDispatch();
 				if (!deps.lease.held())
 					throw new OsStageError("rauc_recovery_unproven");
 				if (deps.now() >= proofDeadline)
@@ -310,7 +318,7 @@ async function runLeasedOsStageJob<T>(
 				});
 			},
 			{
-				checkCancelled: () => assertOsStageToken(control),
+				checkCancelled: assertDispatch,
 				approveMetered: (transport) => {
 					const allowed =
 						!transport.candidate.metered || control.cellularApproved === true;

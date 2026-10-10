@@ -168,6 +168,8 @@ export async function settlePinnedOsAttempt(
 				cause: observationError,
 			});
 		if (outcome.kind === "failed") {
+			if (attempt.cliSucceeded?.())
+				throw new OsStageUnpublishedSuccessError(outcome.error);
 			if (outcome.transfer) throw outcome.transfer;
 			throw outcome.error;
 		}
