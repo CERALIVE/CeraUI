@@ -569,12 +569,17 @@ Every proof observation, authority read and evaluation, post-recovery admission,
 replacement selection/revalidation, receipt preparation and release-proof read is
 raced against the same remaining absolute deadline. Startup restart, retained-pin
 drain, sweep and release spend that startup deadline; orphan baseline, sweep,
-inspection and retirement spend its single short deadline. Timeout invalidates
-in-flight captures and release continuations before unsafe settlement, so late
-completion cannot remember evidence, publish a receipt, dispatch or begin release.
-The release callback and each subsequent mutation boundary recheck the clock and
-the in-memory lifetime. Already-submitted commands/filesystem operations cannot be
-revoked; uncertain or expired settlement retains provenance, never force-cleans.
+inspection and retirement spend its single short deadline. Producer capture checks
+generation and the final recovery clock before remembering evidence; receipt and
+guardian-release callbacks check their owning lifetime before submitting effects.
+OS routing teardown bounds each command wait by that same remaining budget and
+checks generation/CONTROL before every newly submitted deletion or table flush.
+Reconciliation sweeps likewise fence each query, deletion and flush with the
+reconciler's active budget and lease. A held query that resolves after timeout may
+return data, but cannot initiate another command. Ordinary routing callers retain
+their existing teardown and 30-second per-command default. These fences cannot
+revoke already-submitted commands or filesystem I/O; their late completion is not
+a new grant, and uncertain or expired settlement retains guardian/job provenance.
 The intentional unsafe retained-pin gate still parks after notifying unsafe.
 The reconciler's later drain of that parked pin observes after the expired job
 deadline by design, under its own active budget and CONTROL lease. Its capture is

@@ -2,7 +2,10 @@ import { logger } from "../../../helpers/logger.ts";
 import { SpawnTimeoutError } from "../../../helpers/spawn-policy.ts";
 import type { RankedTransport } from "../update-transport/core.ts";
 import type { OsStageControl } from "./os-stage-attempt.ts";
-import { withinStageDeadline } from "./os-stage-deadline.ts";
+import {
+	type StageDeadline,
+	withinStageDeadline,
+} from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import type { createOsStageJobOwner } from "./os-stage-job.ts";
 import { OsStageUnpublishedSuccessError } from "./os-stage-outcome-error.ts";
@@ -34,7 +37,8 @@ type AttemptSettlement = {
 	readonly unsafe: (error: OsStageError) => void;
 	readonly successful?: () => void;
 	readonly recovering?: (deadline: number) => void;
-	readonly drain: Promise<void>;
+	readonly drain: () => Promise<void>;
+	readonly prepareCleanup: (budget: StageDeadline) => void;
 };
 
 export async function settlePinnedOsAttempt(
@@ -211,6 +215,7 @@ export async function settlePinnedOsAttempt(
 			requireNewInstance,
 			notify: input.unsafe,
 			drain: input.drain,
+			prepareCleanup: input.prepareCleanup,
 		});
 	} finally {
 		input.invalidate();

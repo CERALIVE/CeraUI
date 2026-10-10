@@ -1,6 +1,7 @@
 import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
+import type { RoutingCleanup } from "../update-transport/pin-rules.ts";
 import {
 	acquireOsStageControlLease,
 	type OsStageControlLease,
@@ -48,7 +49,7 @@ export type OsOrphanDeps = {
 	readonly run: typeof spawnWithTimeout;
 	readonly observe: typeof observeRaucStage;
 	readonly cliGone: () => Promise<boolean>;
-	readonly sweep: () => Promise<void>;
+	readonly sweep: (cleanup?: RoutingCleanup) => Promise<void>;
 	readonly liveProducer: () => string | null;
 	readonly kernel?: typeof proveOsGuardKernelOwnership;
 	readonly now?: () => number;
@@ -181,7 +182,14 @@ export async function settleOsStageOrphan(
 	const now = deps.now ?? (() => performance.now());
 	const sleep = deps.sleep ?? ((ms: number) => Bun.sleep(ms));
 	const deadline = now() + 10_000;
-	const budget = createStageDeadline({ deadline, now });
+	const budget = createStageDeadline({
+		deadline,
+		now,
+		fence: () => {
+			if (!control.held() || !lock.held() || deps.liveProducer() !== null)
+				throw new OsStageError("rauc_recovery_unproven");
+		},
+	});
 	const read = <T>(work: () => Promise<T>) => withinStageDeadline(budget, work);
 	await read(assertOwner);
 	await read(inspect);
@@ -210,7 +218,7 @@ export async function settleOsStageOrphan(
 		});
 	};
 	await read(prove);
-	await read(deps.sweep);
+	await read(() => deps.sweep(read));
 	await read(prove);
 	await read(inspect);
 	await read(assertOwner);

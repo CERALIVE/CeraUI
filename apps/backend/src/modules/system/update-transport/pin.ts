@@ -2,6 +2,7 @@ import { RunAbortError, RunTimeoutError, run } from "../../../helpers/run.ts";
 import { readUpdateCapabilityFile } from "../update-capabilities.ts";
 import type { Family, RankedTransport, TransportSelection } from "./core.ts";
 import {
+	type RoutingCleanup,
 	runPinnedStep,
 	sweepUpdateRules,
 	type UpdateJob,
@@ -84,6 +85,7 @@ type Step<T> = (
 ) => Promise<T>;
 
 export type UpdateStepControl = {
+	readonly cleanup?: () => RoutingCleanup;
 	readonly refreshSelection?: () => Promise<TransportSelection>;
 	readonly checkCancelled?: () => void;
 	readonly approveMetered?: (transport: RankedTransport) => boolean;
@@ -152,6 +154,9 @@ export function createUpdatePinController(overrides: Partial<PinDeps> = {}) {
 							return step(transport, flags);
 						},
 						runner: deps.run,
+						...(job === "os" && control.cleanup
+							? { cleanup: control.cleanup }
+							: {}),
 					});
 				} catch (error) {
 					const transfer = classifyUpdateTransferError(error);
@@ -177,10 +182,10 @@ export function createUpdatePinController(overrides: Partial<PinDeps> = {}) {
 		}
 	}
 
-	async function sweep(): Promise<void> {
+	async function sweep(cleanup?: RoutingCleanup): Promise<void> {
 		if (active.size) throw new UpdatePinError("busy");
 		swept = false;
-		await sweepUpdateRules(deps.run);
+		await sweepUpdateRules(deps.run, cleanup);
 		swept = true;
 	}
 

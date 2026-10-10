@@ -58,7 +58,7 @@ export type OsStartupDeps = {
 	readonly observe: typeof observeRaucStage;
 	readonly cliGone: (url?: string) => Promise<boolean>;
 	readonly restart: () => Promise<void>;
-	readonly sweep: () => Promise<void>;
+	readonly sweep: typeof updatePinController.sweep;
 	readonly drain: typeof drainRetainedOsStagePin;
 	readonly now: () => number;
 	readonly sleep: (ms: number) => Promise<void>;
@@ -79,7 +79,7 @@ const defaults: OsStartupDeps = {
 	observe: observeRaucStage,
 	cliGone: osInstallClientsGone,
 	restart: killAndRestartRaucForStream,
-	sweep: () => updatePinController.sweep(),
+	sweep: (cleanup) => updatePinController.sweep(cleanup),
 	drain: drainRetainedOsStagePin,
 	now: () => performance.now(),
 	sleep: (ms) => Bun.sleep(ms),

@@ -69,7 +69,7 @@ export async function recoverOwnedOsStageAtStartup(
 		record.launched || record.requireNewInstance,
 	);
 	await read(() => deps.drain(record.attemptId, budget));
-	await read(deps.sweep);
+	await read(() => deps.sweep(read));
 	const settled = owner.record();
 	const ownership = {
 		baseline: settled.baseline,

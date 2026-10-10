@@ -118,6 +118,10 @@ late callbacks cannot grant publication or release. No awaited preparation remai
 between final safety observation and dispatch, but synchronous persistence and
 external process changes still leave a non-atomic gap. These are host-tested
 safety repairs, not a new board qualification or a change to D154.
+Retained-pin drainage now uses the reconciler's active budget and CONTROL lease,
+with read-only capture after ownership preparation. OS routing teardown and sweep
+check that lifetime before every new command and bound each wait by its remainder;
+already-submitted I/O cannot be revoked. Ordinary routing policy is unchanged.
 
 State-side unlaunched OS settlement requires a private completed witness matching
 the persisted attempt, signed candidate and current boot, plus fresh readiness.

@@ -4,6 +4,7 @@ import { run } from "../../../helpers/run.ts";
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
 import { updatePinController } from "../update-transport/pin.ts";
 import {
+	type RoutingCleanup,
 	UPDATE_TRANSPORT_RULE_PRIORITY,
 	UPDATE_TRANSPORT_TABLE_BASE,
 } from "../update-transport/pin-rules.ts";
@@ -80,7 +81,7 @@ export const defaultOsUnlaunchedEffects = {
 	observe: observeRaucStage,
 	cliGone: () => osInstallClientsGone(),
 	drain: drainRetainedOsStagePin,
-	sweep: () => updatePinController.sweep(),
+	sweep: (cleanup?: RoutingCleanup) => updatePinController.sweep(cleanup),
 	pinClean: () => updatePinsClean(run),
 	outcomesAbsent,
 	lock: acquireOsOrphanLock,

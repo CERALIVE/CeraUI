@@ -30,6 +30,7 @@ import {
 } from "./os-stage-control-lease.ts";
 import {
 	assertStageDeadline,
+	type StageDeadline,
 	withinStageDeadline,
 } from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
@@ -122,7 +123,7 @@ async function runLeasedOsStageJob<T>(
 	const failure = {
 		owner,
 		lease: deps.lease,
-		effects: { observe: deps.observe, sweep: () => deps.pin.sweep() },
+		effects: { observe: deps.observe, sweep: deps.pin.sweep },
 	};
 	await acquireOrSettleOsStage(failure);
 	let proof: RaucStageSnapshot | null = baseline;
@@ -131,6 +132,7 @@ async function runLeasedOsStageJob<T>(
 	let recoveryDeadline: number | undefined;
 	let proofDeadline = deps.now() + 10_000;
 	let cliSucceeded = false;
+	let drainBudget: StageDeadline | undefined;
 	const assertDispatch = () => {
 		if (cliSucceeded)
 			throw new OsStageUnpublishedSuccessError(
@@ -323,6 +325,9 @@ async function runLeasedOsStageJob<T>(
 					admit,
 					capture,
 					drainCapture: () => capture(undefined, false),
+					prepareCleanup: (budget) => {
+						drainBudget = budget;
+					},
 					generation: () => observationGeneration,
 					invalidate: () => ++observationGeneration,
 					confirmed: (snapshot, deadline) => {
@@ -336,12 +341,28 @@ async function runLeasedOsStageJob<T>(
 					recovering: (deadline) => {
 						recoveryDeadline = deadline;
 					},
-					drain: drainage.promise.then(({ error }) => {
-						if (error instanceof AggregateError) throw error;
-					}),
+					drain: () =>
+						drainage.promise.then(({ error }) => {
+							if (error instanceof AggregateError) throw error;
+						}),
 				});
 			},
 			{
+				cleanup: () => {
+					const generation = observationGeneration;
+					const budget = drainBudget ?? {
+						deadline: recoveryDeadline ?? proofDeadline,
+						now: deps.now,
+						invalidate: () => {
+							++observationGeneration;
+						},
+						fence: () => {
+							if (generation !== observationGeneration || !deps.lease.held())
+								throw new OsStageError("rauc_recovery_unproven");
+						},
+					};
+					return (work) => withinStageDeadline(budget, work);
+				},
 				checkCancelled: assertDispatch,
 				approveMetered: (transport) => {
 					const allowed =

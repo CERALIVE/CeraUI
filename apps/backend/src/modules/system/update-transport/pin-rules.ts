@@ -7,6 +7,7 @@ import type { Family, RankedTransport } from "./core.ts";
 export const UPDATE_TRANSPORT_TABLE_BASE = 100_000 as const;
 export const UPDATE_TRANSPORT_RULE_PRIORITY = 120 as const;
 export type UpdateJob = "apt" | "os";
+export type RoutingCleanup = <T>(work: () => Promise<T>) => Promise<T>;
 
 export class UpdatePinError extends Error {
 	constructor(
@@ -128,6 +129,7 @@ export async function runPinnedStep<T>(input: {
 		aptFlags: readonly string[],
 	) => Promise<T>;
 	readonly runner: typeof run;
+	readonly cleanup?: () => RoutingCleanup;
 }): Promise<T> {
 	const { job, uid, transport, step, runner } = input;
 	const table = tableFor(job);
@@ -180,16 +182,19 @@ export async function runPinnedStep<T>(input: {
 	} catch (error) {
 		outcome = { ok: false, error };
 	} finally {
+		const cleanup = input.cleanup?.();
+		const cleanupRunner: typeof run = (...args) =>
+			cleanup ? cleanup(() => runner(...args)) : runner(...args);
 		for (const args of installed.reverse()) {
 			try {
-				await deleteRule(runner, args);
+				await deleteRule(cleanupRunner, args);
 			} catch (error) {
 				failures.push(error);
 			}
 		}
 		for (const family of [4, 6] as const) {
 			try {
-				await flushTable(runner, family, table);
+				await flushTable(cleanupRunner, family, table);
 			} catch (error) {
 				failures.push(error);
 			}
@@ -204,11 +209,16 @@ export async function runPinnedStep<T>(input: {
 	return outcome.value;
 }
 
-export async function sweepUpdateRules(runner: typeof run): Promise<void> {
+export async function sweepUpdateRules(
+	runner: typeof run,
+	cleanup?: RoutingCleanup,
+): Promise<void> {
+	const submitted: typeof run = (...args) =>
+		cleanup ? cleanup(() => runner(...args)) : runner(...args);
 	// Priority 120 is reserved; reject another owner's rule rather than delete it.
 	for (const family of [4, 6] as const) {
 		const prefix = familyArgs(family);
-		const output = await runner("ip", [...prefix, "rule", "show"]);
+		const output = await submitted("ip", [...prefix, "rule", "show"]);
 		for (const line of output.split("\n")) {
 			if (!/^\s*120:/.test(line)) continue;
 			const match = line.match(
@@ -220,7 +230,7 @@ export async function sweepUpdateRules(runner: typeof run): Promise<void> {
 					![tableFor("apt"), tableFor("os")].includes(Number(match[2])))
 			)
 				throw new UpdatePinError("foreign-rule");
-			await runner("ip", [
+			await submitted("ip", [
 				...prefix,
 				...ruleArgs(
 					"del",
@@ -232,5 +242,5 @@ export async function sweepUpdateRules(runner: typeof run): Promise<void> {
 	}
 	for (const family of [4, 6] as const)
 		for (const job of ["apt", "os"] as const)
-			await flushTable(runner, family, tableFor(job));
+			await flushTable(submitted, family, tableFor(job));
 }

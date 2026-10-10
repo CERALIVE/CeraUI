@@ -16,7 +16,8 @@ type RetainedPin = {
 	readonly lockHeld: () => Promise<boolean>;
 	readonly cliSettled: () => boolean;
 	readonly requireNewInstance: boolean;
-	readonly drain: Promise<unknown>;
+	readonly drain: () => Promise<unknown>;
+	readonly prepareCleanup?: (budget: StageDeadline) => void;
 	readonly release: () => void;
 };
 const retained = new Map<string, RetainedPin>();
@@ -56,7 +57,8 @@ export async function drainRetainedOsStagePin(
 		throw new OsStageError("rauc_recovery_unproven", {
 			diagnostics: { refusal },
 		});
+	pin.prepareCleanup?.(budget);
 	pin.release();
-	await withinStageDeadline(budget, () => pin.drain);
+	await withinStageDeadline(budget, pin.drain);
 	retained.delete(attemptId);
 }

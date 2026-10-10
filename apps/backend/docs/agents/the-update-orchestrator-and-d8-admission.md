@@ -553,8 +553,13 @@ and deactivating units, and empty `systemctl show` output).
    Outer admission, selection, revalidation, receipt preparation and release
    proof spend the same remaining deadline. Startup restart/drain/sweep/release
    and orphan baseline/sweep/inspection/retirement are bounded too. An expired
-   lifetime fences late publication/release callbacks and mutation boundaries;
-   already-submitted I/O cannot be revoked and unknown ownership stays retained.
+    lifetime fences late publication/guardian-release callbacks. OS routing
+    teardown and sweep fence and bound each newly submitted command under the
+    remaining generation/CONTROL budget; late query data cannot start deletions
+    or flushes. Ordinary routing command bounds stay unchanged. Retained drainage
+    uses the reconciler's active lifetime, with read-only capture after awaited
+    ownership preparation and synchronous lease/quiescence checks before release.
+    Already-submitted I/O cannot be revoked and unknown ownership stays retained.
    The unsafe retained-pin gate intentionally parks after notifying unsafe.
   The attempt watcher reads fresh pinned-path topology every 3 s (2 s read
   bound), independent of RAUC progress/RX. TLS-verified bundle HEAD runs as the

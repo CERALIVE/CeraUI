@@ -1,4 +1,5 @@
 import type { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
+import type { RoutingCleanup } from "../update-transport/pin-rules.ts";
 import type { OsStageControlLease } from "./os-stage-control-lease.ts";
 import {
 	createStageDeadline,
@@ -34,7 +35,7 @@ export type OsUnlaunchedDeps = {
 	readonly cliGone: () => Promise<boolean>;
 	readonly outcomesAbsent: (record: OsStageJobRecord) => Promise<boolean>;
 	readonly drain: typeof drainRetainedOsStagePin;
-	readonly sweep: () => Promise<void>;
+	readonly sweep: (cleanup?: RoutingCleanup) => Promise<void>;
 	readonly pinClean: () => Promise<boolean>;
 	readonly jobIdle: () => Promise<boolean>;
 	readonly run: typeof spawnWithTimeout;
@@ -143,7 +144,9 @@ async function settleUnlaunched(
 	await withinStageDeadline(cleanupBudget, () =>
 		deps.drain(record.attemptId, cleanupBudget),
 	);
-	await deps.sweep();
+	await withinStageDeadline(cleanupBudget, () =>
+		deps.sweep((work) => withinStageDeadline(cleanupBudget, work)),
+	);
 	const settled = await proof();
 	if (!(await deps.pinClean()))
 		throw new OsStageError("rauc_recovery_unproven");
