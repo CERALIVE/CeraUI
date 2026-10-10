@@ -534,6 +534,12 @@ attempt and candidate even after D8 has aborted its controller and returned to
 cancelled attempt to terminal unsafe, once; it grants neither manual nor automatic
 restage. Ordinary cancellation before positive exit retains the existing behavior.
 This marker is an in-process error type, not a persisted field or new wire reason.
+Positive CLI success also dominates a failed transfer outcome. If topology loss
+wins while a zero-exit client's descendant still holds output open, settlement
+must not forward a retry-classifiable transfer error. That successful but
+unpublished install settles terminal unsafe; the runner independently vetoes any
+next-pair dispatch once success is known. Transfer failure without positive exit
+retains the ordinary next-pair retry path.
 
 Every rescan retains CONTROL, private ownership and the guardian. Admission and
 recovery reassert the captured private-directory provenance separately from the
@@ -552,9 +558,24 @@ before and after sweep. Release predicates are unchanged and neither path guesse
 install success after backend loss.
 Awaited authority, guardian and admission preparation precede the final observation;
 only synchronous token, lease, candidate-expiry and clock checks follow it before
-dispatch. Every proof observation, authority read and evaluation is raced against
-the same remaining absolute deadline. Timeout invalidates in-flight captures before
-unsafe settlement so their late completion cannot remember evidence or dispatch.
+dispatch. Optional process diagnostics run before the observer's final unit and
+process/resource safety fence. Changed final unit, process or resource evidence
+is rejected rather than returning the earlier census. There is **no intervening
+awaited preparation between the last safety observation and the dispatch; this
+is NOT an atomic census-and-dispatch guarantee**. The synchronous `beginAttempt`
+persistence and external process changes still separate observation from action;
+the census itself consists of separate reads. This does not reopen D154.
+Every proof observation, authority read and evaluation, post-recovery admission,
+replacement selection/revalidation, receipt preparation and release-proof read is
+raced against the same remaining absolute deadline. Startup restart, retained-pin
+drain, sweep and release spend that startup deadline; orphan baseline, sweep,
+inspection and retirement spend its single short deadline. Timeout invalidates
+in-flight captures and release continuations before unsafe settlement, so late
+completion cannot remember evidence, publish a receipt, dispatch or begin release.
+The release callback and each subsequent mutation boundary recheck the clock and
+the in-memory lifetime. Already-submitted commands/filesystem operations cannot be
+revoked; uncertain or expired settlement retains provenance, never force-cleans.
+The intentional unsafe retained-pin gate still parks after notifying unsafe.
 
 The decision seam logs one deferral and its proven/final disposition, with bounded
 episode logging (at most 16 defer/proven entries per runner proof, plus the final
@@ -576,6 +597,14 @@ inject RAUC/systemd observation authority; they are not the shipped PID-1 guardi
 or board power-loss qualification. Existing D154 privileged-bypass and forward-only
 schema residuals below remain unchanged. Fresh Rock and Orange Pi failover/status-
 pressure, cancellation and unknown-success crash drills are still required.
+
+Module-size accounting is not a claim of uniform compliance: `os-stage-run.ts`
+and `runtime.ts` carry explicit `SIZE_OK` lifetime/state-machine exceptions.
+`spawn-policy.ts` (1,338 pure LOC) and `reducer.ts` (661) are inherited size debt,
+not newly compliant modules. New FIX7 modules stay below 250 pure LOC. The four
+fix-6 test files and fix-7 regressions require an explicit TypeScript program:
+the normal backend tsconfig excludes tests and did not catch the fix-6 runtime
+fixture's receipt-returning stage port or synchronous job-reader mismatch.
 
 ### Unlaunched guardian settlement [PARTIAL — hermetic and real-fixture proven, board rehearsal owed]
 

@@ -541,7 +541,21 @@ and deactivating units, and empty `systemctl show` output).
   synchronous token/lease/expiry/clock checks. Proof reads, authority and evaluation
   share the remaining absolute-deadline timeout; expired captures are invalidated
   before unsafe settlement and cannot later remember evidence or authorize effects.
-  expiry is unsafe, never permission to release a writer's lock or force-clean.
+   expiry is unsafe, never permission to release a writer's lock or force-clean.
+   Optional diagnostic collection precedes the observer's final unit and
+   process/resource fence; changed final evidence is refused. There is no
+   intervening awaited preparation between the last safety observation and the
+   dispatch; this is NOT an atomic census-and-dispatch guarantee. Synchronous
+   `beginAttempt` persistence and external process changes still separate them;
+   D154 is unchanged. Positive CLI success dominates transfer failure as well as
+   cancellation: never forward a retry-classifiable transfer error or dispatch
+   another pair after known success. Ordinary failed transfers still retry.
+   Outer admission, selection, revalidation, receipt preparation and release
+   proof spend the same remaining deadline. Startup restart/drain/sweep/release
+   and orphan baseline/sweep/inspection/retirement are bounded too. An expired
+   lifetime fences late publication/release callbacks and mutation boundaries;
+   already-submitted I/O cannot be revoked and unknown ownership stays retained.
+   The unsafe retained-pin gate intentionally parks after notifying unsafe.
   The attempt watcher reads fresh pinned-path topology every 3 s (2 s read
   bound), independent of RAUC progress/RX. TLS-verified bundle HEAD runs as the
   OTA UID/family every 10 s with a 5 s cap. Two consecutive attributable curl
