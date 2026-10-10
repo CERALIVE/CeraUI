@@ -115,6 +115,9 @@ Optional diagnostics precede a final unit/process/resource fence; census drift
 returns no snapshot and permits only bounded fresh re-observation. Command,
 parsing, timeout and unit-identity failures remain terminal unknown; only an
 identical clean census pair can authorize dispatch. Persisted formats are unchanged.
+Simultaneous census drift cannot mask failed/malformed Operation or unavailable
+health/boot/slot evidence: the drift retry marker requires valid non-census
+predicates, and the changed pair still returns no snapshot.
 Positive CLI success dominates transfer failure, with a runner-level replay veto.
 Outer recovery, publication and release ports spend the same remaining deadline;
 late callbacks cannot grant publication or release. No awaited preparation remains
@@ -125,6 +128,11 @@ Retained-pin drainage now uses the reconciler's active budget and CONTROL lease,
 with read-only capture after ownership preparation. OS routing teardown and sweep
 check that lifetime before every new command and bound each wait by its remainder;
 already-submitted I/O cannot be revoked. Ordinary routing policy is unchanged.
+Quiet startup with no job, guardian or private directory uses a single 10-second
+CONTROL-fenced reconciliation budget for orphan inspection and stale-rule sweep.
+The same lifetime is checked immediately before opening admission; timeout or
+lease loss stays unsafe. Real-flock host regressions preserve normal cleanup,
+but do not qualify board routing or a real OS installation.
 
 State-side unlaunched OS settlement requires a private completed witness matching
 the persisted attempt, signed candidate and current boot, plus fresh readiness.
