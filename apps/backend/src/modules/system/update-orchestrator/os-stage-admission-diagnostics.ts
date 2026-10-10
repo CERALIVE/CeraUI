@@ -59,28 +59,43 @@ export function failedAdmissionPredicate(
 
 const MAX_DETAIL = 200;
 
-// Error text can carry device paths, URLs with credentials or key=value secrets.
-function redact(text: string): string {
-	return text
-		.replace(/[a-z][a-z0-9+.-]*:\/\/\S+/gi, "<url>")
-		.replace(/(?:\/[^\s'"`,:;)]+)+/g, "<path>")
-		.replace(
-			/\b(password|passwd|secret|token|key|auth[a-z]*)=\S+/gi,
-			"$1=<redacted>",
-		);
-}
+const ERROR_CLASSES = new Set([
+	"Error",
+	"TypeError",
+	"SyntaxError",
+	"RangeError",
+	"ZodError",
+	"SpawnTimeoutError",
+]);
+const ERROR_CODES = new Set([
+	"ENOENT",
+	"EACCES",
+	"EPERM",
+	"EIO",
+	"ENOTDIR",
+	"ELOOP",
+	"ETIMEDOUT",
+	"EROFS",
+]);
 
 export function describeObservationFailure(
 	stage: string,
 	error: unknown,
 ): string {
-	if (!(error instanceof Error)) return `${stage}: thrown ${typeof error}`;
-	const code =
-		"code" in error && typeof error.code === "string" ? `(${error.code})` : "";
-	return `${stage}: ${error.name}${code}: ${redact(error.message)}`.slice(
-		0,
-		MAX_DETAIL,
-	);
+	try {
+		if (!(error instanceof Error)) return `${stage}: thrown ${typeof error}`;
+		const name = ERROR_CLASSES.has(error.name) ? error.name : "Error";
+		const rawCode = "code" in error ? error.code : undefined;
+		const code =
+			typeof rawCode === "string" && ERROR_CODES.has(rawCode)
+				? `(${rawCode})`
+				: "";
+		// Messages and arbitrary class/code strings can contain credentials.
+		return `${stage}: ${name}${code}:`.slice(0, MAX_DETAIL);
+	} catch {
+		// Exception properties may themselves throw; diagnostics remain optional.
+		return `${stage}: unknown-error`.slice(0, MAX_DETAIL);
+	}
 }
 
 /** A diagnostic sink can never change the observation's safety result. */
@@ -91,6 +106,7 @@ export function notifyObservation(
 	try {
 		report?.(detail.slice(0, MAX_DETAIL));
 	} catch {
-		// Diagnostics are best-effort; the refusal itself is the safety outcome.
+		// The sink boundary cannot replace the observer's refusal.
+		return;
 	}
 }
