@@ -5,6 +5,8 @@ import type { RaucStageSnapshot } from "./os-stage-recovery.ts";
 /** Receives at most one bounded, redacted line naming where observation stopped. */
 export type ObservationReport = (detail: string) => void;
 
+export const STAGE_CENSUS_DRIFT = "census-drift: unproven" as const;
+
 const BASELINE_FIELDS = [
 	"bootId",
 	"bootPrimary",

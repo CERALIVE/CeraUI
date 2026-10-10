@@ -6,6 +6,7 @@ import {
 	describeObservationFailure,
 	notifyObservation,
 	type ObservationReport,
+	STAGE_CENSUS_DRIFT,
 } from "./os-stage-admission-diagnostics.ts";
 import {
 	observeStageCensus,
@@ -220,12 +221,14 @@ export async function observeRaucStage(
 		)
 			return refuse();
 		const finalCensus = await observeStageCensus({ deps, tracked, group, at });
+		if (!finalCensus) return refuse();
 		if (
-			!finalCensus ||
 			!sameStageSet(processIds, finalCensus.processIds) ||
 			!sameStageSet(resources, finalCensus.resources)
-		)
-			return refuse();
+		) {
+			notifyObservation(report, STAGE_CENSUS_DRIFT);
+			return null;
+		}
 		rememberStageEvidence(snapshot, {
 			started,
 			finished: performance.now(),
