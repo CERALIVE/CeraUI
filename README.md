@@ -111,6 +111,13 @@ Positive CLI exit is retained independently of cancellation/output drainage;
 the matching runtime attempt settles unpublished success unsafe even after D8
 returns to the offer. Final safety observation follows awaited preparation, and
 proof I/O shares the remaining deadline with expired captures invalidated.
+Optional diagnostics precede a final unit/process/resource fence; drift refuses.
+Positive CLI success dominates transfer failure, with a runner-level replay veto.
+Outer recovery, publication and release ports spend the same remaining deadline;
+late callbacks cannot grant publication or release. No awaited preparation remains
+between final safety observation and dispatch, but synchronous persistence and
+external process changes still leave a non-atomic gap. These are host-tested
+safety repairs, not a new board qualification or a change to D154.
 
 State-side unlaunched OS settlement requires a private completed witness matching
 the persisted attempt, signed candidate and current boot, plus fresh readiness.
