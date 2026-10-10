@@ -1,3 +1,8 @@
+import {
+	assertStageDeadline,
+	createStageDeadline,
+	withinStageDeadline,
+} from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import type { OsStageJobRecord } from "./os-stage-job-files.ts";
 import type { OsStageJobOwner } from "./os-stage-job-owner.ts";
@@ -15,7 +20,9 @@ export async function recoverOwnedOsStageAtStartup(
 	deps: OsStartupDeps,
 ): Promise<void> {
 	const deadline = deps.now() + RAUC_RECOVERY_DEADLINE_MS;
-	if (record.launched) await deps.restart();
+	const budget = createStageDeadline({ deadline, now: deps.now });
+	const read = <T>(work: () => Promise<T>) => withinStageDeadline(budget, work);
+	if (record.launched) await read(deps.restart);
 	let cliGone = !record.launched;
 	const proof = await recoverRaucStage(
 		{
@@ -31,13 +38,19 @@ export async function recoverOwnedOsStageAtStartup(
 				return owner.held();
 			},
 			deadline,
+			invalidate: budget.invalidate,
 			cliSettled: () => cliGone,
 			observe: async () => {
-				cliGone = await deps.cliGone();
-				return await deps.observe({
-					processes: new Set(record.processes),
-					resources: new Set(record.resources),
-				});
+				const gone = await read(deps.cliGone);
+				const snapshot = await read(() =>
+					deps.observe({
+						processes: new Set(record.processes),
+						resources: new Set(record.resources),
+					}),
+				);
+				assertStageDeadline(budget);
+				cliGone = gone;
+				return snapshot;
 			},
 		},
 		record.launched || record.requireNewInstance,
@@ -48,8 +61,8 @@ export async function recoverOwnedOsStageAtStartup(
 		true,
 		record.launched || record.requireNewInstance,
 	);
-	await deps.drain(record.attemptId);
-	await deps.sweep();
+	await read(() => deps.drain(record.attemptId));
+	await read(deps.sweep);
 	const settled = owner.record();
 	const ownership = {
 		baseline: settled.baseline,
@@ -65,6 +78,7 @@ export async function recoverOwnedOsStageAtStartup(
 		wait: {
 			...deps,
 			deadline,
+			invalidate: budget.invalidate,
 			assert: async () => {
 				await owner.assertAuthority?.();
 				if (deps.controlHeld?.() === false || !(await owner.held()))
@@ -72,8 +86,16 @@ export async function recoverOwnedOsStageAtStartup(
 			},
 		},
 	});
-	await owner.release(finalProof, true, () => {
-		if (deps.controlHeld?.() === false || deps.now() >= deadline)
-			throw new OsStageError("rauc_recovery_unproven");
-	});
+	await read(() =>
+		owner.release(
+			finalProof,
+			true,
+			() => {
+				assertStageDeadline(budget);
+				if (deps.controlHeld?.() === false || deps.now() >= deadline)
+					throw new OsStageError("rauc_recovery_unproven");
+			},
+			budget,
+		),
+	);
 }
