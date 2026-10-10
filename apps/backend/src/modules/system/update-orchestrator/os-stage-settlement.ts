@@ -31,6 +31,7 @@ type AttemptSettlement = {
 	readonly confirmed: (snapshot: RaucStageSnapshot, deadline: number) => void;
 	readonly unsafe: (error: OsStageError) => void;
 	readonly successful?: () => void;
+	readonly recovering?: (deadline: number) => void;
 	readonly drain: Promise<void>;
 };
 
@@ -93,6 +94,14 @@ export async function settlePinnedOsAttempt(
 	try {
 		const outcome = await attempt.outcome;
 		const deadline = deps.now() + RAUC_RECOVERY_DEADLINE_MS;
+		input.recovering?.(deadline);
+		const budget = {
+			deadline,
+			now: deps.now,
+			invalidate: () => {
+				input.invalidate();
+			},
+		};
 		clearInterval(timer);
 		input.invalidate();
 		requireNewInstance = outcome.kind === "failed";
@@ -107,7 +116,8 @@ export async function settlePinnedOsAttempt(
 				diagnostics: outcome.error.diagnostics,
 			});
 		owner.remember(before, true, attempt.cliSettled(), requireNewInstance);
-		if (requireNewInstance && !control.signal.aborted) await deps.restart();
+		if (requireNewInstance && !control.signal.aborted)
+			await withinStageDeadline(budget, deps.restart);
 		const cliResult = await withinStageDeadline(
 			{
 				deadline,
@@ -162,7 +172,7 @@ export async function settlePinnedOsAttempt(
 			deadlineRemainingMs: Math.max(0, deadline - deps.now()),
 			outcome: outcome.kind,
 		});
-		await input.admit();
+		await withinStageDeadline(budget, input.admit);
 		if (observationError)
 			throw new OsStageError("rauc_recovery_unproven", {
 				cause: observationError,
