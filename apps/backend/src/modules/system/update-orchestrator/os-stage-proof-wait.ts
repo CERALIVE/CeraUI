@@ -3,6 +3,7 @@ import {
 	describeObservationFailure,
 	type ObservationReport,
 } from "./os-stage-admission-diagnostics.ts";
+import { withinStageDeadline } from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import { stageEvidence } from "./os-stage-process-evidence.ts";
 import type { RaucStageSnapshot } from "./os-stage-recovery.ts";
@@ -16,6 +17,9 @@ export type StageProofWait = StageProofClock & {
 	readonly assert: () => Promise<void>;
 	readonly previousInstance?: string;
 	readonly deferred?: () => void;
+	readonly invalidate?: () => void;
+	readonly finalAssert?: () => void;
+	readonly logEpisode?: () => boolean;
 };
 
 export function reportStageProofDecision(input: {
@@ -56,6 +60,8 @@ export async function waitForStageProof(input: {
 		snapshot: RaucStageSnapshot | null,
 	) => Promise<string | null>;
 	readonly retryable: (reason: string) => boolean;
+	readonly finalRefusal?: (snapshot: RaucStageSnapshot) => string | null;
+	readonly requiresFinalRead?: boolean;
 	readonly wait: StageProofWait;
 	readonly failure?: (
 		snapshot: RaucStageSnapshot | null,
@@ -74,8 +80,14 @@ export async function waitForStageProof(input: {
 		work: () => Promise<T>,
 	): Promise<T> => {
 		try {
-			return await work();
+			return await withinStageDeadline(wait, work);
 		} catch (error) {
+			if (
+				error instanceof OsStageError &&
+				error.diagnostics.refusal === "deadline-expired" &&
+				input.failure
+			)
+				throw input.failure(snapshot, "deadline-expired", observation);
 			reportStageProofDecision({
 				snapshot,
 				wait,
@@ -88,8 +100,14 @@ export async function waitForStageProof(input: {
 	};
 	const assertAuthority = async () => {
 		try {
-			await wait.assert();
+			await withinStageDeadline(wait, wait.assert);
 		} catch (error) {
+			if (
+				error instanceof OsStageError &&
+				error.diagnostics.refusal === "deadline-expired" &&
+				input.failure
+			)
+				throw input.failure(snapshot, "deadline-expired", observation);
 			reportStageProofDecision({
 				snapshot,
 				wait,
@@ -101,29 +119,25 @@ export async function waitForStageProof(input: {
 	};
 	while (wait.now() < wait.deadline) {
 		await assertAuthority();
+		if (input.finalRefusal && !input.requiresFinalRead) await assertAuthority();
 		if (wait.now() >= wait.deadline) break;
 		observation = undefined;
-		let timer: ReturnType<typeof setTimeout> | undefined;
-		try {
-			snapshot = await guarded("observation", () =>
-				Promise.race([
-					input.observe((detail) => {
-						observation ??= detail;
-					}),
-					new Promise<null>((resolve) => {
-						timer = setTimeout(
-							() => resolve(null),
-							Math.max(0, wait.deadline - wait.now()),
-						);
-					}),
-				]),
-			);
-		} finally {
-			clearTimeout(timer);
+		snapshot = await guarded("observation", () =>
+			input.observe((detail) => {
+				observation ??= detail;
+			}),
+		);
+		if (input.finalRefusal && !input.requiresFinalRead) {
+			wait.finalAssert?.();
+			reason = snapshot
+				? (input.finalRefusal(snapshot) ?? "proven")
+				: "observation-unknown";
+		} else {
+			await assertAuthority();
+			reason =
+				(await guarded("quiescence", () => input.refusal(snapshot))) ??
+				"proven";
 		}
-		await assertAuthority();
-		reason =
-			(await guarded("quiescence", () => input.refusal(snapshot))) ?? "proven";
 		if (
 			first &&
 			snapshot &&
@@ -137,29 +151,55 @@ export async function waitForStageProof(input: {
 			break;
 		}
 		if (snapshot && reason === "proven") {
-			if (deferred)
-				reportStageProofDecision({
-					snapshot,
-					wait,
-					reason,
-					disposition: "proven",
-				});
-			return snapshot;
+			if (input.finalRefusal && input.requiresFinalRead) {
+				snapshot = await guarded("observation", () =>
+					input.observe(() => undefined),
+				);
+				wait.finalAssert?.();
+				reason = snapshot
+					? (input.finalRefusal(snapshot) ?? "proven")
+					: "observation-unknown";
+				if (
+					first &&
+					snapshot &&
+					(first.instance !== snapshot.instance ||
+						stageEvidence(first)?.invocationId !==
+							stageEvidence(snapshot)?.invocationId)
+				)
+					reason = "daemon-identity-changed";
+				if (wait.now() >= wait.deadline) reason = "deadline-expired";
+				if (!snapshot || reason !== "proven") {
+					if (!input.retryable(reason)) break;
+				}
+			}
+			if (snapshot && reason === "proven") {
+				if (deferred && wait.logEpisode?.() !== false)
+					reportStageProofDecision({
+						snapshot,
+						wait,
+						reason,
+						disposition: "proven",
+					});
+				return snapshot;
+			}
 		}
 		if (!input.retryable(reason)) break;
 		first ??= snapshot;
 		if (!deferred) {
 			deferred = true;
 			wait.deferred?.();
-			reportStageProofDecision({
-				snapshot,
-				wait,
-				reason,
-				disposition: "defer",
-				...(observation ? { observation } : {}),
-			});
+			if (wait.logEpisode?.() !== false)
+				reportStageProofDecision({
+					snapshot,
+					wait,
+					reason,
+					disposition: "defer",
+					...(observation ? { observation } : {}),
+				});
 		}
-		await wait.sleep(Math.min(100, Math.max(0, wait.deadline - wait.now())));
+		await guarded("quiescence", () =>
+			wait.sleep(Math.min(100, Math.max(0, wait.deadline - wait.now()))),
+		);
 	}
 	reportStageProofDecision({
 		snapshot,

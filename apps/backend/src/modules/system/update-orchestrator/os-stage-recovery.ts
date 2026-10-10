@@ -1,3 +1,4 @@
+import { withinStageDeadline } from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import { reportStageProofDecision } from "./os-stage-proof-wait.ts";
 
@@ -90,6 +91,7 @@ export type RaucRecoveryDeps = {
 	readonly cliSettled: () => boolean;
 	readonly lockHeld: () => Promise<boolean>;
 	readonly deadline?: number;
+	readonly invalidate?: () => void;
 };
 
 export async function recoverRaucStage(
@@ -103,13 +105,14 @@ export async function recoverRaucStage(
 		deadline,
 		now: deps.now,
 		previousInstance: ownership.baseline.instance,
+		...(deps.invalidate ? { invalidate: deps.invalidate } : {}),
 	};
 	let previousReason: string | undefined;
 	let lastCurrent: RaucStageSnapshot | null = null;
 	do {
-		const current = await deps.observe();
+		const lockHeld = await withinStageDeadline(wait, deps.lockHeld);
+		const current = await withinStageDeadline(wait, deps.observe);
 		lastCurrent = current;
-		const lockHeld = await deps.lockHeld();
 		const structural =
 			current &&
 			raucQuiescenceRefusal({
@@ -160,7 +163,9 @@ export async function recoverRaucStage(
 			});
 		}
 		if (deps.now() >= deadline) break;
-		await deps.sleep(Math.min(RAUC_RECOVERY_POLL_MS, deadline - deps.now()));
+		await withinStageDeadline(wait, () =>
+			deps.sleep(Math.min(RAUC_RECOVERY_POLL_MS, deadline - deps.now())),
+		);
 	} while (deps.now() <= deadline);
 	reportStageProofDecision({
 		snapshot: lastCurrent,

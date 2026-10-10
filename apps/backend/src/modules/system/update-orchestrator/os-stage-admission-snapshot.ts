@@ -52,12 +52,25 @@ export async function observeAdmission(
 		readonly quiescence?: (
 			snapshot: RaucStageSnapshot,
 		) => Promise<string | null>;
+		readonly finalQuiescence?: (snapshot: RaucStageSnapshot) => string | null;
 	},
 ): Promise<RaucStageSnapshot> {
 	if (wait) {
 		const snapshot = await waitForStageProof({
 			observe,
 			wait,
+			requiresFinalRead: wait.quiescence !== undefined,
+			finalRefusal: (current) => {
+				const predicate = failedAdmissionPredicate(current, baseline);
+				if (predicate === "extra-process") {
+					const structural = failedAdmissionPredicate(
+						{ ...current, processes: [current.instance] },
+						baseline,
+					);
+					if (structural) return structural;
+				}
+				return predicate ?? wait.finalQuiescence?.(current) ?? null;
+			},
 			failure: (current, reason, observation) =>
 				new OsStageError("rauc_recovery_unproven", {
 					diagnostics: {
