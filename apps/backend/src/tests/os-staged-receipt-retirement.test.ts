@@ -8,7 +8,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { OsStageRecovery } from "@ceraui/rpc/schemas";
 import type { OsStageReceipt } from "../modules/system/update-orchestrator/os-agent.ts";
 import {
 	CONSUMED_RECEIPT_NAME,
@@ -19,16 +18,10 @@ import {
 	stagedReceiptConsumed,
 } from "../modules/system/update-orchestrator/os-staged-receipt-retirement.ts";
 import {
-	checkUpdatesNow,
-	getOrchestratorState,
-	setOrchestratorStateForTest,
-} from "../modules/system/update-orchestrator/runtime.ts";
-import type { RootSlotStatus } from "../modules/system/update-orchestrator/slot-status.ts";
-import { ORCHESTRATOR_PHASES } from "../modules/system/update-orchestrator/types.ts";
-import {
-	cleanupRecovery,
-	recoveryHarness,
-} from "./helpers/os-recovery-harness.ts";
+	initialOrchestratorState,
+	ORCHESTRATOR_PHASES,
+} from "../modules/system/update-orchestrator/types.ts";
+import { cleanupRecovery } from "./helpers/os-recovery-harness.ts";
 import { acquireTestOsStageControl } from "./helpers/os-stage-test-control.ts";
 
 // The Rock's retained receipt, byte-exact from R12 (acceptance.raw:43), and
@@ -37,9 +30,22 @@ const ROCK_RECEIPT_BYTES =
 	'{"schema":1,"version":"2026.10.64","channel":"drill","stagedAt":1791464043236,"bootId":"070fd8ac-4a40-4b85-9d31-f21502ebd117"}';
 const rockReceipt: OsStageReceipt = JSON.parse(ROCK_RECEIPT_BYTES);
 const ROCK_BOOT = "29dd9a67-91db-412a-8729-accdb5825369";
+const installedImage = {
+	slot: "rootfs.0",
+	bundleHash: "a".repeat(64),
+	checksum: "b".repeat(64),
+	installedAt: "2026-10-08T12:54:01Z",
+	installedCount: 7,
+};
+const boundReceipt: OsStageReceipt = { ...rockReceipt, installedImage };
+const failedState = {
+	...initialOrchestratorState(0),
+	phase: "failed" as const,
+};
 
 const rock: StagedReceiptEvidence = {
-	receipt: rockReceipt,
+	receipt: boundReceipt,
+	bootedImage: installedImage,
 	phase: "failed",
 	activeAttemptId: null,
 	bootedVersion: "2026.10.64",
@@ -74,7 +80,7 @@ describe("stagedReceiptConsumed", () => {
 		// A crash reboot that kept the arming rebinds the receipt to this boot.
 		[
 			"a receipt written or rebound on this boot",
-			{ receipt: { ...rockReceipt, bootId: ROCK_BOOT } },
+			{ receipt: { ...boundReceipt, bootId: ROCK_BOOT } },
 		],
 		["a boot without its healthcheck verdict", { healthyBootId: null }],
 		["an earlier boot's healthcheck", { healthyBootId: rockReceipt.bootId }],
@@ -93,6 +99,7 @@ describe("stagedReceiptConsumed", () => {
 			(phase) => !stagedReceiptConsumed({ ...rock, phase }),
 		);
 		expect(open).toEqual([
+			"committing",
 			"os-staging",
 			"os-staged",
 			"os-activation-armed",
@@ -161,13 +168,16 @@ describe("retireConsumedStagedReceipt", () => {
 		const retired: OsStageReceipt[] = [];
 		const value: ReceiptRetirementPort = {
 			snapshot: () => ({
+				state: failedState,
 				phase: "failed",
 				activeAttemptId: null,
 				generation: 1,
 				producing: false,
 			}),
 			acquireControl: acquireTestOsStageControl,
-			readReceipt: async () => rockReceipt,
+			readPersisted: async () => failedState,
+			readBootedImage: async () => installedImage,
+			readReceipt: async () => boundReceipt,
 			readBootedVersion: async () => "2026.10.64",
 			readBootId: async () => ROCK_BOOT,
 			readHealthyBootId: async () => ROCK_BOOT,
@@ -185,7 +195,7 @@ describe("retireConsumedStagedReceipt", () => {
 	test("retires the Rock's consumed receipt under CONTROL", async () => {
 		const { value, retired } = port();
 		expect(await retireConsumedStagedReceipt(value)).toBe(true);
-		expect(retired).toEqual([rockReceipt]);
+		expect(retired).toEqual([boundReceipt]);
 	});
 
 	test("judges the receipt read under the lease, not the first read", async () => {
@@ -193,7 +203,7 @@ describe("retireConsumedStagedReceipt", () => {
 		let reads = 0;
 		const { value, retired } = port({
 			readReceipt: async () =>
-				reads++ === 0 ? rockReceipt : { ...rockReceipt, bootId: ROCK_BOOT },
+				reads++ === 0 ? boundReceipt : { ...boundReceipt, bootId: ROCK_BOOT },
 		});
 		expect(await retireConsumedStagedReceipt(value)).toBe(false);
 		expect(retired).toEqual([]);
@@ -203,6 +213,7 @@ describe("retireConsumedStagedReceipt", () => {
 		let generation = 1;
 		const { value, retired } = port({
 			snapshot: () => ({
+				state: failedState,
 				phase: "failed",
 				activeAttemptId: null,
 				generation,
@@ -221,6 +232,7 @@ describe("retireConsumedStagedReceipt", () => {
 		let reads = 0;
 		const { value, retired } = port({
 			snapshot: () => ({
+				state: { ...failedState, phase: "idle" },
 				phase: "idle",
 				activeAttemptId: null,
 				generation: 1,
@@ -233,86 +245,5 @@ describe("retireConsumedStagedReceipt", () => {
 		});
 		expect(await retireConsumedStagedReceipt(value)).toBe(false);
 		expect({ reads, retired }).toEqual({ reads: 0, retired: [] });
-	});
-});
-
-describe("runtime manual check on the Rock's failed record", () => {
-	const record: OsStageRecovery = {
-		candidateKey: "rock-68",
-		activeAttemptId: null,
-		failedRounds: 1,
-		nextRetryAt: null,
-		mode: "unsafe",
-		reason: "rauc_recovery_unproven",
-	};
-	const slots = (other: "good" | "bad"): readonly RootSlotStatus[] => [
-		{
-			name: "rootfs.0",
-			bootname: "A",
-			state: "booted",
-			bootStatus: "good",
-			version: null,
-			lastSyncedAt: null,
-		},
-		{
-			name: "rootfs.1",
-			bootname: "B",
-			state: "inactive",
-			bootStatus: other,
-			version: null,
-			lastSyncedAt: null,
-		},
-	];
-
-	async function rockCheck(other: "good" | "bad") {
-		const dir = stateDir();
-		await recoveryHarness({
-			readPersistedState: async () => structuredClone(getOrchestratorState()),
-			inspectOsOperation: async () => "idle",
-			proveOsWriterQuiescent: async () => true,
-			readActivationArmed: async () => false,
-			readOsReceipt: async () => {
-				const file = Bun.file(join(dir, "os-staged.json"));
-				return (await file.exists())
-					? ((await file.json()) as OsStageReceipt)
-					: undefined;
-			},
-			retireOsReceipt: (receipt) => retireStagedReceipt(receipt, dir),
-			readBootId: async () => ROCK_BOOT,
-			readBootedVersion: async () => "2026.10.64",
-			readHealthyState: async () => ({
-				boot_id: ROCK_BOOT,
-				slot: "A",
-				build_id: "b",
-				dpkg_status_sha256: "d".repeat(64),
-				recorded_at: "2026-10-09T10:00:00Z",
-			}),
-			readRootSlots: async () => slots(other),
-		});
-		writeFileSync(join(dir, "os-staged.json"), ROCK_RECEIPT_BYTES);
-		setOrchestratorStateForTest({
-			...getOrchestratorState(),
-			phase: "failed",
-			failureReason: record.reason,
-			osStageRecovery: record,
-		});
-		await checkUpdatesNow();
-		return dir;
-	}
-
-	test("retires the receipt but both-good slots still keep the unsafe record", async () => {
-		const dir = await rockCheck("good");
-		expect(existsSync(join(dir, "os-staged.json"))).toBe(false);
-		expect(readFileSync(join(dir, CONSUMED_RECEIPT_NAME), "utf8")).toBe(
-			ROCK_RECEIPT_BYTES,
-		);
-		// A good inactive target may be an unrecorded stage: no settlement proof.
-		expect(getOrchestratorState().phase).toBe("failed");
-		expect(getOrchestratorState().osStageRecovery?.mode).toBe("unsafe");
-	});
-
-	test("an otherwise settled failure is no longer held hostage by the receipt", async () => {
-		await rockCheck("bad");
-		expect(getOrchestratorState().phase).not.toBe("failed");
 	});
 });

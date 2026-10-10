@@ -1,18 +1,18 @@
-// A staged receipt outlives its purpose once the version it names is the
-// healthy running OS. Left in place it reads as "a stage may exist", which
-// blocks every OS-failure settlement proof forever. The receipt records no
-// target slot, so consumption is judged only from what it does record.
-import { readFileSync, renameSync } from "node:fs";
-import { join } from "node:path";
+// Legacy version-only receipts cannot prove consumption. Destructive cleanup
+// requires independent installed-image identity and persisted CONTROL authority.
 import { isDeepStrictEqual } from "node:util";
 import { logger } from "../../../helpers/logger.ts";
-import { syncOrchestratorDirectory } from "./orchestrator-directory-sync.ts";
 import type { OsStageReceipt } from "./os-agent.ts";
-import { OS_UPDATE_STATE_DIR } from "./os-manifest.ts";
+import type { InstalledImageIdentity } from "./os-installed-image.ts";
+import { sameOsRecoveryIdentity } from "./os-recovery-identity.ts";
 import type { OsStageControlLease } from "./os-stage-control-lease.ts";
-import type { OrchestratorPhase } from "./types.ts";
+import type { loadOrchestratorState } from "./persistence.ts";
+import type { OrchestratorPhase, OrchestratorState } from "./types.ts";
 
-export const CONSUMED_RECEIPT_NAME = "os-staged.consumed.json";
+export {
+	CONSUMED_RECEIPT_NAME,
+	retireStagedReceipt,
+} from "./os-receipt-retirement-store.ts";
 
 export type StagedReceiptEvidence = {
 	readonly receipt: OsStageReceipt;
@@ -23,22 +23,23 @@ export type StagedReceiptEvidence = {
 	readonly healthyBootId: string | null;
 	readonly activationArmed: boolean;
 	readonly raucOperation: "idle" | "running";
+	readonly bootedImage?: InstalledImageIdentity | null;
 };
 
-/** Phases that still own the receipt: staging, staged, armed or verifying. */
+/** Open OS lifecycles and package commit withhold receipt cleanup. */
 export function receiptLifecycleOpen(phase: OrchestratorPhase): boolean {
 	switch (phase) {
 		case "os-staging":
 		case "os-staged":
 		case "os-activation-armed":
 		case "os-verifying":
+		case "committing":
 			return true;
 		case "idle":
 		case "checking":
 		case "available":
 		case "downloading":
 		case "awaiting-idle":
-		case "committing":
 		case "restarting-services":
 		case "settled":
 		case "os-available":
@@ -55,17 +56,16 @@ export function receiptLifecycleOpen(phase: OrchestratorPhase): boolean {
 	}
 }
 
-/**
- * Consumed means: its version is the booted OS, this boot passed its
- * healthcheck, it was written on an earlier boot, and nothing is staging,
- * armed or verifying. A receipt for any other version is never consumed,
- * and a pending activation keeps its receipt rebound to the current boot.
- */
+/** Stamp equality never substitutes for the receipt's installed-image binding. */
 export function stagedReceiptConsumed(
 	evidence: StagedReceiptEvidence,
 ): boolean {
 	return (
 		!receiptLifecycleOpen(evidence.phase) &&
+		evidence.receipt.installedImage !== undefined &&
+		evidence.bootedImage !== undefined &&
+		evidence.bootedImage !== null &&
+		isDeepStrictEqual(evidence.receipt.installedImage, evidence.bootedImage) &&
 		evidence.activeAttemptId === null &&
 		evidence.bootedVersion !== undefined &&
 		evidence.receipt.version === evidence.bootedVersion &&
@@ -76,46 +76,26 @@ export function stagedReceiptConsumed(
 	);
 }
 
-/**
- * Renames exactly the receipt that was judged, keeping it as evidence. A
- * different, unreadable or already-retired receipt is left alone. The rename
- * is atomic; a crash before the directory sync re-runs to the same result.
- */
-export function retireStagedReceipt(
-	judged: OsStageReceipt,
-	dir = OS_UPDATE_STATE_DIR,
-): boolean {
-	const live = join(dir, "os-staged.json");
-	let current: unknown;
-	try {
-		current = JSON.parse(readFileSync(live, "utf8"));
-	} catch (error) {
-		if (error instanceof SyntaxError) return false;
-		if (error instanceof Error && "code" in error && error.code === "ENOENT")
-			return false;
-		throw error;
-	}
-	if (!isDeepStrictEqual(current, judged)) return false;
-	renameSync(live, join(dir, CONSUMED_RECEIPT_NAME));
-	syncOrchestratorDirectory(live);
-	return true;
-}
-
 export type ReceiptRetirementPort = {
 	readonly snapshot: () => {
+		readonly state: OrchestratorState;
 		readonly phase: OrchestratorPhase;
 		readonly activeAttemptId: string | null;
 		readonly generation: number;
 		readonly producing: boolean;
 	};
 	readonly acquireControl: () => Promise<OsStageControlLease>;
+	readonly readPersisted: typeof loadOrchestratorState;
 	readonly readReceipt: () => Promise<OsStageReceipt | undefined>;
 	readonly readBootedVersion: () => Promise<string | undefined>;
 	readonly readBootId: () => Promise<string>;
 	readonly readHealthyBootId: () => Promise<string | null>;
+	readonly readBootedImage: () => Promise<InstalledImageIdentity | null>;
 	readonly readActivationArmed: () => Promise<boolean>;
 	readonly inspectOperation: () => Promise<"idle" | "running">;
 	readonly retire: (receipt: OsStageReceipt) => boolean;
+	readonly acknowledge?: () => void;
+	readonly acknowledgementPending?: () => boolean;
 };
 
 /**
@@ -127,23 +107,45 @@ export async function retireConsumedStagedReceipt(
 ): Promise<boolean> {
 	const before = port.snapshot();
 	if (before.producing || receiptLifecycleOpen(before.phase)) return false;
-	if (!(await port.readReceipt())) return false;
+	const prior = await port.readReceipt();
+	if (!prior && !port.acknowledgementPending?.()) return false;
 	await using lease = await port.acquireControl();
-	const [receipt, bootedVersion, bootId, healthyBootId, armed, operation] =
-		await Promise.all([
-			port.readReceipt(),
-			port.readBootedVersion(),
-			port.readBootId(),
-			port.readHealthyBootId(),
-			port.readActivationArmed(),
-			port.inspectOperation(),
-		]);
+	if (!lease.held()) return false;
+	const authority = await port.readPersisted();
+	if (
+		!sameOsRecoveryIdentity(before.state, authority) ||
+		!authority ||
+		receiptLifecycleOpen(authority.phase) ||
+		authority.osStageRecovery?.activeAttemptId
+	)
+		return false;
+	port.acknowledge?.();
+	if (!prior) return false;
+	const [
+		receipt,
+		bootedVersion,
+		bootId,
+		healthyBootId,
+		armed,
+		operation,
+		bootedImage,
+	] = await Promise.all([
+		port.readReceipt(),
+		port.readBootedVersion(),
+		port.readBootId(),
+		port.readHealthyBootId(),
+		port.readActivationArmed(),
+		port.inspectOperation(),
+		port.readBootedImage(),
+	]);
+	const persisted = await port.readPersisted();
 	const current = port.snapshot();
 	if (
 		!receipt ||
 		!lease.held() ||
 		current.producing ||
 		current.generation !== before.generation ||
+		!sameOsRecoveryIdentity(current.state, persisted) ||
 		!stagedReceiptConsumed({
 			receipt,
 			phase: current.phase,
@@ -153,6 +155,7 @@ export async function retireConsumedStagedReceipt(
 			healthyBootId,
 			activationArmed: armed,
 			raucOperation: operation,
+			bootedImage,
 		}) ||
 		!port.retire(receipt)
 	)

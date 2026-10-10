@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { readBootId } from "./os-agent.ts";
+import { readBootId } from "./os-identity.ts";
 import type {
 	HealthySlotState,
 	ReceiptTarget,

@@ -12,6 +12,7 @@
  * Update effects and scheduler. Admission detail lives in docs/DEVICE-UPDATES.md.
  */
 
+// allow: SIZE_OK — Existing process-global scheduler composition root; this repair preserves its shared admission/state owners and changes only receipt wiring.
 import { randomUUID } from "node:crypto";
 import type {
 	UpdateCapabilities,
@@ -52,6 +53,7 @@ import {
 	startSlotSync,
 } from "./lock.ts";
 import { clearOsStageNotices, notifyUpdate } from "./notifications.ts";
+import { readActivationArmed } from "./os-activation-marker.ts";
 import {
 	armOsActivation,
 	checkOsChannel,
@@ -81,11 +83,14 @@ import {
 	beginOsRecoverySettlement,
 	saveAuthoritativeStartupState,
 } from "./os-authoritative-settlement.ts";
+import { readInstalledImage } from "./os-installed-image.ts";
 import type { OsChannelManifest } from "./os-manifest.ts";
+import { readBootedOsReleaseVersion } from "./os-manifest.ts";
 import {
-	OS_UPDATE_STATE_DIR,
-	readBootedOsReleaseVersion,
-} from "./os-manifest.ts";
+	acknowledgeRetiredReceipt,
+	ReceiptRetirementDurabilityError,
+	retiredReceiptPresent,
+} from "./os-receipt-retirement-store.ts";
 import { sameOsRecoveryIdentity } from "./os-recovery-identity.ts";
 import {
 	hydrateOsStageRecoveryNotice,
@@ -232,6 +237,9 @@ export interface OrchestratorRuntimeDeps {
 	readonly osAttemptIntentStore?: OsAttemptIntentStore;
 	readonly readOsUnlaunchedWitness?: typeof readOsUnlaunchedWitness;
 	readonly retireOsReceipt?: typeof retireStagedReceipt;
+	readonly readBootedImage?: () => ReturnType<typeof readInstalledImage>;
+	readonly acknowledgeOsReceipt?: () => void;
+	readonly isReceiptAckPending?: () => boolean;
 	readonly consumeOsUnlaunchedWitness?: typeof consumeOsUnlaunchedWitness;
 	/**
 	 * Positive proof that no RAUC writer or attempt-owned resource survives a
@@ -353,8 +361,7 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	stageOs: async (manifest, onProgress, control) => {
 		await stageOsBundle(manifest, onProgress, control);
 	},
-	readActivationArmed: () =>
-		Bun.file(`${OS_UPDATE_STATE_DIR}/activation-armed`).exists(),
+	readActivationArmed,
 	isOsStageReady: async () =>
 		!(await isRealDevice()) || (await isOsStageReady()),
 	isUpdateAdmissionReady: async () => {
@@ -1892,13 +1899,19 @@ async function maybeRetireConsumedOsReceipt(): Promise<void> {
 	try {
 		await retireConsumedStagedReceipt({
 			snapshot: () => ({
+				state,
 				phase: state.phase,
 				activeAttemptId: state.osStageRecovery?.activeAttemptId ?? null,
 				generation: stateGeneration,
 				producing: osStageInProcess || activeOsStage !== undefined,
 			}),
 			acquireControl: acquireRuntimeOsStageControl,
+			readPersisted: deps.readPersistedState ?? loadOrchestratorState,
+			readBootedImage:
+				deps.readBootedImage ?? (() => readInstalledImage("booted")),
 			readReceipt: deps.readOsReceipt,
+			acknowledge: deps.acknowledgeOsReceipt ?? acknowledgeRetiredReceipt,
+			acknowledgementPending: deps.isReceiptAckPending ?? retiredReceiptPresent,
 			readBootedVersion: () => deps.readBootedVersion(),
 			readBootId: () => deps.readBootId(),
 			readHealthyBootId: async () =>
@@ -1909,10 +1922,17 @@ async function maybeRetireConsumedOsReceipt(): Promise<void> {
 				(deps.retireOsReceipt ?? retireStagedReceipt)(receipt),
 		});
 	} catch (error) {
-		if (!consumedReceiptWarned)
-			logger.warn("update-orchestrator: consumed staged receipt kept", {
-				error,
-			});
+		if (!consumedReceiptWarned) {
+			if (error instanceof ReceiptRetirementDurabilityError)
+				logger.warn(
+					"update-orchestrator: staged receipt retirement durability pending",
+					{ renamed: error.renamed },
+				);
+			else
+				logger.warn("update-orchestrator: consumed staged receipt kept", {
+					error,
+				});
+		}
 		consumedReceiptWarned = true;
 	}
 }

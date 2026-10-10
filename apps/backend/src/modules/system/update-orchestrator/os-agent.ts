@@ -13,6 +13,10 @@ import { updatePinController } from "../update-transport/pin.ts";
 import { clearUpdateNotice } from "./notifications.ts";
 import { OsAgentError, readBoardIdentity, readBootId } from "./os-identity.ts";
 import {
+	installedImageSchema,
+	readInstalledImage,
+} from "./os-installed-image.ts";
+import {
 	defaultOsChannelDeps,
 	discoverSignedOsManifest,
 	type ManifestContext,
@@ -51,6 +55,7 @@ const receiptSchema = z
 		channel: z.enum(["stable", "beta", "drill"]),
 		stagedAt: z.number().int().nonnegative(),
 		bootId: z.uuid(),
+		installedImage: installedImageSchema.optional(),
 	})
 	.strict();
 export type OsStageReceipt = z.infer<typeof receiptSchema>;
@@ -518,6 +523,7 @@ export async function stageOsBundle(
 			},
 			prepareReceipt: async () => {
 				const bootId = await readBootId();
+				const installedImage = await readInstalledImage("inactive");
 				await mkdir(OS_UPDATE_STATE_DIR, { recursive: true, mode: 0o750 });
 				const receipt = receiptSchema.parse({
 					schema: 1,
@@ -525,6 +531,7 @@ export async function stageOsBundle(
 					channel: verified.channel,
 					bootId,
 					stagedAt: Date.now(),
+					...(installedImage ? { installedImage } : {}),
 				});
 				return () => {
 					const committed = commitStagedManifest(verified, receipt);
