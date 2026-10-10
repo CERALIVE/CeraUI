@@ -7,7 +7,11 @@ import {
 	notifyObservation,
 	type ObservationReport,
 } from "./os-stage-admission-diagnostics.ts";
-import { observeStageResources } from "./os-stage-observation-resources.ts";
+import {
+	observeStageCensus,
+	readStageProcess,
+	sameStageSet,
+} from "./os-stage-census.ts";
 import {
 	collectStageMembers,
 	rememberStageEvidence,
@@ -63,21 +67,6 @@ export function processIdentity(pid: string, raw: string): string {
 	return `${pid}:${ticks}`;
 }
 
-async function readProcess(
-	pid: string,
-	deps: RaucObservationDeps,
-	rawEvidence?: Map<string, string>,
-): Promise<string | null> {
-	try {
-		const raw = await deps.read(`/proc/${pid}/stat`);
-		rawEvidence?.set(pid, raw);
-		return processIdentity(pid, raw);
-	} catch (error) {
-		if (absent(error)) return null;
-		throw error;
-	}
-}
-
 export async function observeRaucStage(
 	tracked: {
 		readonly processes: ReadonlySet<string>;
@@ -118,33 +107,17 @@ export async function observeRaucStage(
 		)
 			return refuse();
 		at("daemon-process");
-		const instance = await readProcess(pid, deps);
+		const instance = await readStageProcess(pid, deps);
 		if (!instance) return refuse();
-		at("cgroup-processes");
-		const pids = (await deps.read(`/sys/fs/cgroup${group}/cgroup.procs`))
-			.trim()
-			.split(/\s+/);
-		const processIds = new Set<string>();
-		for (const currentPid of new Set([
-			...pids,
-			...[...tracked.processes].map((id) => id.split(":")[0] ?? ""),
-		])) {
-			const identity = await readProcess(currentPid, deps, rawEvidence);
-			if (
-				identity &&
-				(pids.includes(currentPid) || tracked.processes.has(identity))
-			)
-				processIds.add(identity);
-		}
-		const resources = await observeStageResources({
+		const census = await observeStageCensus({
 			deps,
 			tracked,
 			group,
-			processIds,
-			readProcess: (current) => readProcess(current, deps),
+			raw: rawEvidence,
 			at,
 		});
-		if (!resources) return refuse();
+		if (!census) return refuse();
+		const { pids, processIds, resources } = census;
 		at("operation-command");
 		const operation = await deps.run(
 			[
@@ -227,6 +200,32 @@ export async function observeRaucStage(
 			raw: rawEvidence,
 			read: deps.read,
 		});
+		at("final-service-command");
+		const finalService = await deps.run(
+			[
+				"systemctl",
+				"show",
+				"rauc.service",
+				"--property=ActiveState,MainPID,ControlGroup,InvocationID",
+			],
+			{ timeoutMs: 2_000 },
+		);
+		const finalProperties = parseOsStageSystemdProperties(finalService.stdout);
+		if (
+			finalService.exitCode !== 0 ||
+			!finalProperties ||
+			["ActiveState", "MainPID", "ControlGroup", "InvocationID"].some(
+				(key) => finalProperties.get(key) !== properties.get(key),
+			)
+		)
+			return refuse();
+		const finalCensus = await observeStageCensus({ deps, tracked, group, at });
+		if (
+			!finalCensus ||
+			!sameStageSet(processIds, finalCensus.processIds) ||
+			!sameStageSet(resources, finalCensus.resources)
+		)
+			return refuse();
 		rememberStageEvidence(snapshot, {
 			started,
 			finished: performance.now(),
