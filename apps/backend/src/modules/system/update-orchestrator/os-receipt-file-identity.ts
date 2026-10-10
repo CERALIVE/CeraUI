@@ -75,8 +75,11 @@ export function receiptEntryPath(
 	return `/proc/self/fd/${parent}/${name}`;
 }
 
-export function readReceiptEntry(parent: number): ReceiptFileEvidence | null {
-	const path = receiptEntryPath(parent, "os-staged.json");
+export function readReceiptEntry(
+	parent: number,
+	name: "os-staged.json" | "os-staged.consumed.json" = "os-staged.json",
+): ReceiptFileEvidence | null {
+	const path = receiptEntryPath(parent, name);
 	let fd: number;
 	try {
 		fd = openSync(
