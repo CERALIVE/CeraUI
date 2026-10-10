@@ -4,6 +4,10 @@ import {
 	type ObservationReport,
 } from "./os-stage-admission-diagnostics.ts";
 import { OsStageError } from "./os-stage-error.ts";
+import {
+	type StageProofWait,
+	waitForStageProof,
+} from "./os-stage-proof-wait.ts";
 import type { RaucStageSnapshot } from "./os-stage-recovery.ts";
 
 /**
@@ -40,11 +44,57 @@ export const UNTRACKED_OBSERVATION: {
 	resources: new Set<string>(),
 });
 
-/** Observes once and admits it, carrying the observer's own stop reason. */
+/** Re-observation never authorizes the extra-member snapshot itself. */
 export async function observeAdmission(
 	observe: (report: ObservationReport) => Promise<RaucStageSnapshot | null>,
 	baseline?: RaucStageSnapshot,
+	wait?: StageProofWait & {
+		readonly quiescence?: (
+			snapshot: RaucStageSnapshot,
+		) => Promise<string | null>;
+	},
 ): Promise<RaucStageSnapshot> {
+	if (wait) {
+		const snapshot = await waitForStageProof({
+			observe,
+			wait,
+			failure: (current, reason, observation) =>
+				new OsStageError("rauc_recovery_unproven", {
+					diagnostics: {
+						refusal: "stage-admission-unproven",
+						predicate:
+							reason === "deadline-expired" ||
+							reason === "daemon-identity-changed"
+								? reason
+								: (failedAdmissionPredicate(current, baseline) ?? reason),
+						...(observation === undefined ? {} : { observation }),
+					},
+				}),
+			refusal: async (current) => {
+				const predicate = failedAdmissionPredicate(current, baseline);
+				if (!current) return predicate;
+				// Check predicates masked by extras; this projection is NEVER returned.
+				if (predicate === "extra-process") {
+					const structural = failedAdmissionPredicate(
+						{ ...current, processes: [current.instance] },
+						baseline,
+					);
+					if (structural) return structural;
+				}
+				const quiescence = await wait.quiescence?.(current);
+				if (
+					quiescence &&
+					!["old-installer-survives", "installer-ownership-unproven"].includes(
+						quiescence,
+					)
+				)
+					return quiescence;
+				return predicate ?? quiescence ?? null;
+			},
+			retryable: (reason) => reason === "extra-process",
+		});
+		return requireAdmissionSnapshot(snapshot, baseline);
+	}
 	let observation: string | undefined;
 	const snapshot = await observe((detail) => {
 		observation ??= detail;
