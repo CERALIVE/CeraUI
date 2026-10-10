@@ -1,7 +1,12 @@
 import { expect, test } from "bun:test";
+import { spawnWithTimeout } from "../helpers/spawn-policy.ts";
 import { observeAdmission } from "../modules/system/update-orchestrator/os-stage-admission-snapshot.ts";
+import { beginOsStageAttempt } from "../modules/system/update-orchestrator/os-stage-attempt.ts";
 import { observeRaucStage } from "../modules/system/update-orchestrator/os-stage-observation.ts";
+import { runOsStageJob } from "../modules/system/update-orchestrator/os-stage-run.ts";
 import { rockHelperFixture } from "./helpers/os-stage-rock-helper-fixture.ts";
+import { harness } from "./helpers/os-stage-run-harness.ts";
+import { manifest } from "./helpers/os-stage-run-inputs.ts";
 
 test("refuses a live child created during diagnostic status collection", async () => {
 	// Given real proc identity reads with synthetic RAUC/slot context.
@@ -38,6 +43,79 @@ test("refuses a live child created during diagnostic status collection", async (
 			"reason",
 			"rauc_recovery_unproven",
 		);
+	} finally {
+		if (child) {
+			child.kill();
+			await child.exited;
+		}
+	}
+});
+
+test("runner refuses a replacement when a live child appears inside its final diagnostic await", async () => {
+	// Given a real failed CLI with synthetic RAUC/slot ports and real live child proc reads.
+	const h = await harness();
+	const fixture = rockHelperFixture([]);
+	let child: ReturnType<typeof Bun.spawn> | undefined;
+	let restarted = false;
+	let revalidations = 0;
+	let replacementSamples = 0;
+	let dispatches = 0;
+	const deps = {
+		...fixture.deps,
+		read: async (path: string) => {
+			if (
+				path === "/proc/729106/status" &&
+				revalidations === 2 &&
+				++replacementSamples === 2
+			) {
+				child = Bun.spawn(["bash", "-c", "read -r line"], {
+					stdin: "pipe",
+					stdout: "ignore",
+					stderr: "ignore",
+				});
+				return "Name:\trauc\n";
+			}
+			if (path.endsWith("cgroup.procs") && child)
+				return `729106\n${child.pid}\n`;
+			if (child && path.startsWith(`/proc/${child.pid}/`))
+				return Bun.file(path).text();
+			const raw = await fixture.deps.read(path);
+			return restarted && path === "/proc/729106/stat"
+				? raw.replace("2374530", "2374531")
+				: raw;
+		},
+	};
+	try {
+		// When the runner takes the final replacement observation after revalidation.
+		await expect(
+			runOsStageJob(manifest, h.control, {
+				...h.deps,
+				revalidate: async () => {
+					revalidations++;
+				},
+				restart: async () => {
+					restarted = true;
+				},
+				observe: (tracked, _deps, report) =>
+					observeRaucStage(tracked, deps, report),
+				attempt: (input) =>
+					beginOsStageAttempt(input, {
+						run: (_argv, options) => {
+							dispatches++;
+							return spawnWithTimeout(["false"], options);
+						},
+						topology: async () => ({ kind: "lost", reason: "admin-down" }),
+						https: async () => ({ kind: "unavailable" }),
+						every: (ms, action) => {
+							if (ms === 3_000) queueMicrotask(action);
+							return () => {};
+						},
+					}),
+			}),
+		).rejects.toHaveProperty("mode", "unsafe");
+		// Then only the original writer ran, with the introduced child still alive.
+		expect(dispatches).toBe(1);
+		expect(child?.exitCode).toBeNull();
 	} finally {
 		if (child) {
 			child.kill();
