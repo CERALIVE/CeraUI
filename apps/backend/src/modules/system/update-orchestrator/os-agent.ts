@@ -35,6 +35,7 @@ import {
 } from "./os-receipt-file-identity.ts";
 import type { OsStageControlLease } from "./os-stage-control-lease.ts";
 import { OsStageError } from "./os-stage-error.ts";
+import { OsStageUnpublishedSuccessError } from "./os-stage-outcome-error.ts";
 import {
 	assertOsStageToken,
 	defaultOsStageRunEffects,
@@ -562,6 +563,8 @@ export async function stageOsBundle(
 			},
 		});
 	} catch (cause) {
+		if (cause instanceof OsStageUnpublishedSuccessError)
+			throw new OsStageError("rauc_recovery_unproven", { cause });
 		if (cause instanceof OsStageError) throw cause;
 		assertOsStageToken(control);
 		throw new OsStageError("rauc_install_failed", { cause });

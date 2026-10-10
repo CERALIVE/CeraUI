@@ -31,6 +31,7 @@ import {
 import { OsStageError } from "./os-stage-error.ts";
 import { createOsStageJobOwner } from "./os-stage-job.ts";
 import { observeRaucStage } from "./os-stage-observation.ts";
+import { OsStageUnpublishedSuccessError } from "./os-stage-outcome-error.ts";
 import {
 	type RaucStageSnapshot,
 	raucQuiescenceRefusal,
@@ -154,14 +155,17 @@ async function runLeasedOsStageJob<T>(
 			);
 		return snapshot;
 	};
-	const freshProof = async (transport?: RankedTransport) => {
+	const freshProof = async (
+		transport?: RankedTransport,
+		checkDispatch = true,
+	) => {
 		const deadline = recoveryDeadline ?? deps.now() + 10_000;
 		proofDeadline = deadline;
 		const assert = async () => {
 			await owner.assertAuthority?.();
 			if (!deps.lease.held() || !(await owner.held()))
 				throw new OsStageError("rauc_recovery_unproven");
-			await admit();
+			if (checkDispatch) await admit();
 		};
 		let deferred = false;
 		let current: RaucStageSnapshot;
@@ -318,10 +322,16 @@ async function runLeasedOsStageJob<T>(
 			(cause instanceof OsStageError && cause.mode === "unsafe")
 		)
 			throw new OsStageError("rauc_recovery_unproven", { cause });
+		const settled = owner.record();
+		const unpublishedSuccess =
+			settled.launched && settled.cliSettled && !settled.requireNewInstance;
 		if (!proof) throw new OsStageError("rauc_recovery_unproven", { cause });
-		const fresh = await capture();
-		if (!fresh) throw new OsStageError("rauc_recovery_unproven", { cause });
-		await owner.release(fresh, true);
+		const fresh = await freshProof(undefined, false);
+		await owner.release(fresh, true, () => {
+			if (!deps.lease.held() || deps.now() >= proofDeadline)
+				throw new OsStageError("rauc_recovery_unproven");
+		});
+		if (unpublishedSuccess) throw new OsStageUnpublishedSuccessError(cause);
 		assertOsStageToken(control);
 		if (cause instanceof OsStageError) throw cause;
 		if (
