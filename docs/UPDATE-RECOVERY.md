@@ -527,6 +527,12 @@ while the sole production `stageOsBundle` entry normalizes it to the existing
 cleanup may release the guardian while logical unsafe stays terminal; uncertain or
 expired cleanup retains guardian/private provenance. No manual/automatic restage
 grant is published.
+Positive exit is captured independently of cancellation and output drainage,
+including zero observed after cancellation. Runtime adjudicates the exact token,
+attempt and candidate even after D8 has aborted its controller and returned to
+`os-available`. Only that matching unpublished-success settlement can upgrade the
+cancelled attempt to terminal unsafe, once; it grants neither manual nor automatic
+restage. Ordinary cancellation before positive exit retains the existing behavior.
 This marker is an in-process error type, not a persisted field or new wire reason.
 
 Every rescan retains CONTROL, private ownership and the guardian. Admission and
@@ -544,8 +550,15 @@ same clock at its synchronous callback. Startup's final post-sweep proof shares
 its original recovery deadline; acknowledged orphan proofs share one short bound
 before and after sweep. Release predicates are unchanged and neither path guesses
 install success after backend loss.
+Awaited authority, guardian and admission preparation precede the final observation;
+only synchronous token, lease, candidate-expiry and clock checks follow it before
+dispatch. Every proof observation, authority read and evaluation is raced against
+the same remaining absolute deadline. Timeout invalidates in-flight captures before
+unsafe settlement so their late completion cannot remember evidence or dispatch.
 
 The decision seam logs one deferral and its proven/final disposition, with bounded
+episode logging (at most 16 defer/proven entries per runner proof, plus the final
+refusal); saturated helper churn cannot reset this logging allowance. It retains
 process evidence: observation start/end monotonic times, unit MainPID/InvocationID,
 cgroup versus tracked-only members, PID:start-ticks, comm/state/PPID/Tgid, the
 allowlisted read-helper operation (otherwise null), current/previous instances,
