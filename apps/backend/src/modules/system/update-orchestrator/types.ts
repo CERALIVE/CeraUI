@@ -210,6 +210,7 @@ export type OrchestratorEvent =
 			readonly recovery?: {
 				readonly attemptId: string;
 				readonly mode: OsStageRecovery["mode"];
+				readonly unpublishedSuccess?: boolean;
 			};
 	  }
 	| { readonly type: "OS_STAGING_ABORTED_FOR_STREAM"; readonly now: number }

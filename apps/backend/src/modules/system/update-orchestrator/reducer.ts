@@ -85,6 +85,29 @@ export function reduceOrchestrator(
 ): OrchestratorState {
 	if (event.type === "OS_UNLAUNCHED_STAGE_SETTLED")
 		return reduceOsUnlaunchedSettlement(state, event);
+	if (
+		event.type === "OS_STAGING_FAILED" &&
+		event.recovery?.unpublishedSuccess
+	) {
+		const record = state.osStageRecovery;
+		if (
+			!record ||
+			record.attemptId !== event.recovery.attemptId ||
+			record.mode === "unsafe" ||
+			event.recovery.mode !== "unsafe"
+		)
+			return state;
+		return reduceOsStagingFailed(
+			{
+				...state,
+				osStageRecovery: {
+					...record,
+					activeAttemptId: event.recovery.attemptId,
+				},
+			},
+			event,
+		);
+	}
 	switch (state.phase) {
 		case "idle":
 			return reduceIdle(state, event);

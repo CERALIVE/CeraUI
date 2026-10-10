@@ -110,6 +110,7 @@ import type {
 } from "./os-stage-control-lease.ts";
 import { isOsStageError, OsStageError } from "./os-stage-error.ts";
 import { readOsStageJob } from "./os-stage-job-files.ts";
+import { OsStageUnpublishedSuccessError } from "./os-stage-outcome-error.ts";
 import {
 	OS_STAGE_FIRST_RETRY_DELAY_MS,
 	type OsStageSettlementEvidence,
@@ -1596,6 +1597,22 @@ async function maybeStartOsStage(bypassIdle: boolean): Promise<void> {
 				"update-orchestrator: pre-effect publication reverted; no OS stage launched",
 				{ error },
 			);
+			return;
+		}
+		if (
+			activeOsStage === token &&
+			error instanceof OsStageError &&
+			error.cause instanceof OsStageUnpublishedSuccessError &&
+			state.osStageRecovery?.attemptId === attemptId &&
+			state.osStageRecovery.candidateKey === candidateKey
+		) {
+			dispatch({
+				type: "OS_STAGING_FAILED",
+				now: deps.now(),
+				reason: error.reason,
+				recovery: { attemptId, mode: "unsafe", unpublishedSuccess: true },
+			});
+			replaceOsStageRecoveryNotice(state);
 			return;
 		}
 		if (activeOsStage !== token || token.controller.signal.aborted) return;
