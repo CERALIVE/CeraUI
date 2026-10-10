@@ -2,6 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import * as fs from "node:fs";
 import { join } from "node:path";
 import { retireStagedReceipt } from "../modules/system/update-orchestrator/os-staged-receipt-retirement.ts";
+import { receiptJudgment } from "./helpers/os-receipt-judgment.ts";
 
 test("replays the native directory fsync after real rename survives EIO", () => {
 	// Given actual inodes and a fault at the native fsync boundary, not a new API argument.
@@ -15,6 +16,7 @@ test("replays the native directory fsync after real rename survives EIO", () => 
 	};
 	const bytes = JSON.stringify(receipt);
 	fs.writeFileSync(join(dir, "os-staged.json"), bytes);
+	const judged = receiptJudgment(receipt, dir);
 	const nativeSync = fs.fsyncSync;
 	let syncs = 0;
 	const sync = spyOn(fs, "fsyncSync").mockImplementation((fd) => {
@@ -25,12 +27,12 @@ test("replays the native directory fsync after real rename survives EIO", () => 
 	});
 	try {
 		// When the actual directory syscall fails after rename, then retirement retries.
-		expect(() => retireStagedReceipt(receipt, dir)).toThrow();
+		expect(() => retireStagedReceipt(judged, dir)).toThrow();
 		expect(fs.existsSync(join(dir, "os-staged.json"))).toBe(false);
 		expect(fs.readFileSync(join(dir, "os-staged.consumed.json"), "utf8")).toBe(
 			bytes,
 		);
-		expect(retireStagedReceipt(receipt, dir)).toBe(false);
+		expect(retireStagedReceipt(judged, dir)).toBe(false);
 		// Then the same production syscall acknowledges the completed rename on retry.
 		expect(syncs).toBe(2);
 	} finally {

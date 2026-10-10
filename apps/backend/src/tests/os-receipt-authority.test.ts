@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { JudgedOsReceipt } from "../modules/system/update-orchestrator/os-agent.ts";
 import {
 	retireConsumedStagedReceipt,
 	retireStagedReceipt,
@@ -9,6 +10,7 @@ import {
 	initialOrchestratorState,
 	type OrchestratorState,
 } from "../modules/system/update-orchestrator/types.ts";
+import { receiptJudgment } from "./helpers/os-receipt-judgment.ts";
 import { acquireTestOsStageControl } from "./helpers/os-stage-test-control.ts";
 
 const installedImage = {
@@ -68,14 +70,14 @@ test.each([
 			}),
 			acquireControl: acquireTestOsStageControl,
 			readPersisted: async () => authoritative,
-			readReceipt: async () => receipt,
+			readReceipt: async () => receiptJudgment(receipt, dir),
 			readBootedVersion: async () => receipt.version,
 			readBootId: async () => bootId,
 			readHealthyBootId: async () => bootId,
 			readBootedImage: async () => installedImage,
 			readActivationArmed: async () => false,
 			inspectOperation: async () => "idle" as const,
-			retire: () => retireStagedReceipt(receipt, dir),
+			retire: (judged: JudgedOsReceipt) => retireStagedReceipt(judged, dir),
 		};
 		// When the production retirement controller acquires CONTROL.
 		const retired = await retireConsumedStagedReceipt(port);

@@ -21,6 +21,7 @@ import {
 	initialOrchestratorState,
 	ORCHESTRATOR_PHASES,
 } from "../modules/system/update-orchestrator/types.ts";
+import { receiptJudgment } from "./helpers/os-receipt-judgment.ts";
 import { cleanupRecovery } from "./helpers/os-recovery-harness.ts";
 import { acquireTestOsStageControl } from "./helpers/os-stage-test-control.ts";
 
@@ -111,7 +112,9 @@ describe("stagedReceiptConsumed", () => {
 describe("retireStagedReceipt", () => {
 	test("renames exactly the judged receipt, keeping its bytes", () => {
 		const dir = stateDir(ROCK_RECEIPT_BYTES);
-		expect(retireStagedReceipt(rockReceipt, dir)).toBe(true);
+		expect(retireStagedReceipt(receiptJudgment(rockReceipt, dir), dir)).toBe(
+			true,
+		);
 		expect(existsSync(join(dir, "os-staged.json"))).toBe(false);
 		expect(readFileSync(join(dir, CONSUMED_RECEIPT_NAME), "utf8")).toBe(
 			ROCK_RECEIPT_BYTES,
@@ -127,14 +130,18 @@ describe("retireStagedReceipt", () => {
 		});
 		const dir = stateDir(fresh);
 		// Then the new receipt is never retired by the old judgement.
-		expect(retireStagedReceipt(rockReceipt, dir)).toBe(false);
+		expect(retireStagedReceipt(receiptJudgment(rockReceipt, dir), dir)).toBe(
+			false,
+		);
 		expect(readFileSync(join(dir, "os-staged.json"), "utf8")).toBe(fresh);
 		expect(existsSync(join(dir, CONSUMED_RECEIPT_NAME))).toBe(false);
 	});
 
 	test("leaves an unreadable receipt for the strict reader to refuse", () => {
 		const dir = stateDir("{");
-		expect(retireStagedReceipt(rockReceipt, dir)).toBe(false);
+		expect(retireStagedReceipt(receiptJudgment(rockReceipt, dir), dir)).toBe(
+			false,
+		);
 		expect(readFileSync(join(dir, "os-staged.json"), "utf8")).toBe("{");
 	});
 
@@ -152,8 +159,9 @@ describe("retireStagedReceipt", () => {
 				liveSurvived ? "older" : ROCK_RECEIPT_BYTES,
 			);
 			// When retirement runs again, twice.
-			retireStagedReceipt(rockReceipt, dir);
-			expect(retireStagedReceipt(rockReceipt, dir)).toBe(false);
+			const judged = receiptJudgment(rockReceipt, dir);
+			retireStagedReceipt(judged, dir);
+			expect(retireStagedReceipt(judged, dir)).toBe(false);
 			// Then exactly one state remains: no live receipt, the judged tombstone.
 			expect(existsSync(join(dir, "os-staged.json"))).toBe(false);
 			expect(readFileSync(join(dir, CONSUMED_RECEIPT_NAME), "utf8")).toBe(
@@ -177,14 +185,14 @@ describe("retireConsumedStagedReceipt", () => {
 			acquireControl: acquireTestOsStageControl,
 			readPersisted: async () => failedState,
 			readBootedImage: async () => installedImage,
-			readReceipt: async () => boundReceipt,
+			readReceipt: async () => receiptJudgment(boundReceipt),
 			readBootedVersion: async () => "2026.10.64",
 			readBootId: async () => ROCK_BOOT,
 			readHealthyBootId: async () => ROCK_BOOT,
 			readActivationArmed: async () => false,
 			inspectOperation: async () => "idle",
 			retire: (receipt) => {
-				retired.push(receipt);
+				retired.push(receipt.receipt);
 				return true;
 			},
 			...overrides,
@@ -203,7 +211,9 @@ describe("retireConsumedStagedReceipt", () => {
 		let reads = 0;
 		const { value, retired } = port({
 			readReceipt: async () =>
-				reads++ === 0 ? boundReceipt : { ...boundReceipt, bootId: ROCK_BOOT },
+				receiptJudgment(
+					reads++ === 0 ? boundReceipt : { ...boundReceipt, bootId: ROCK_BOOT },
+				),
 		});
 		expect(await retireConsumedStagedReceipt(value)).toBe(false);
 		expect(retired).toEqual([]);
@@ -240,7 +250,7 @@ describe("retireConsumedStagedReceipt", () => {
 			}),
 			readReceipt: async () => {
 				reads++;
-				return rockReceipt;
+				return receiptJudgment(rockReceipt);
 			},
 		});
 		expect(await retireConsumedStagedReceipt(value)).toBe(false);

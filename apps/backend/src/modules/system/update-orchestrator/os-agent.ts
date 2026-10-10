@@ -29,6 +29,11 @@ import {
 	resolveOsChannel,
 	validateSignedOsManifest,
 } from "./os-manifest.ts";
+import {
+	type ReceiptFileIdentity,
+	readReceiptFile,
+} from "./os-receipt-file-identity.ts";
+import type { OsStageControlLease } from "./os-stage-control-lease.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import {
 	assertOsStageToken,
@@ -59,6 +64,10 @@ const receiptSchema = z
 	})
 	.strict();
 export type OsStageReceipt = z.infer<typeof receiptSchema>;
+export type JudgedOsReceipt = {
+	readonly receipt: OsStageReceipt;
+	readonly identity: ReceiptFileIdentity;
+};
 export type OsStageBundleControl = OsStageRunControl & {
 	readonly commit?: (receipt: OsStageReceipt) => void;
 };
@@ -164,6 +173,18 @@ export async function readStagedReceipt(): Promise<OsStageReceipt | undefined> {
 	const parsed = receiptSchema.safeParse(await Bun.file(RECEIPT).json());
 	if (!parsed.success) throw new OsAgentError("staged_receipt_invalid");
 	return parsed.data;
+}
+
+export async function readStagedReceiptEvidence(
+	dir = OS_UPDATE_STATE_DIR,
+): Promise<JudgedOsReceipt | undefined> {
+	const file = readReceiptFile(dir);
+	if (!file) return undefined;
+	const parsed = receiptSchema.safeParse(
+		JSON.parse(file.bytes.toString("utf8")),
+	);
+	if (!parsed.success) throw new OsAgentError("staged_receipt_invalid");
+	return { receipt: parsed.data, identity: file.identity };
 }
 
 async function command(argv: string[], timeoutMs = 10_000): Promise<string> {
@@ -601,7 +622,11 @@ async function revalidatePinnedStage(
 	}
 }
 
-export async function armOsActivation(now = false): Promise<void> {
+export async function armOsActivation(
+	now: boolean,
+	control: OsStageControlLease,
+): Promise<void> {
+	if (!control.held()) throw new OsStageError("rauc_recovery_unproven");
 	const result = await spawnWithTimeout(
 		["systemctl", "start", `ceralive-rauc-arm@${now ? "now" : "arm"}.service`],
 		{ timeoutMs: 30_000 },

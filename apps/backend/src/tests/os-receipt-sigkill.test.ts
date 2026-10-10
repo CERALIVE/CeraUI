@@ -8,6 +8,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { retireStagedReceipt } from "../modules/system/update-orchestrator/os-receipt-retirement-store.ts";
+import { receiptJudgment } from "./helpers/os-receipt-judgment.ts";
 
 const receipt = {
 	schema: 1 as const,
@@ -31,6 +32,7 @@ test.each(["read", "before-rename", "after-rename", "after-fsync"] as const)(
 		dirs.push(dir);
 		writeFileSync(join(dir, "os-staged.json"), bytes);
 		writeFileSync(join(dir, "os-staged.consumed.json"), "older");
+		const judged = receiptJudgment(receipt, dir);
 		const store = new URL(
 			"../modules/system/update-orchestrator/os-receipt-retirement-store.ts",
 			import.meta.url,
@@ -51,7 +53,7 @@ if (boundary === "read") {
 }
 if (boundary === "before-rename") spyOn(fs, "renameSync").mockImplementation(kill);
 const { retireStagedReceipt } = await import(${JSON.stringify(store)});
-retireStagedReceipt(${bytes}, ${JSON.stringify(dir)}, (path) => {
+retireStagedReceipt(${JSON.stringify(judged)}, ${JSON.stringify(dir)}, (path) => {
   if (boundary === "after-rename") kill();
   syncOrchestratorDirectory(path);
   if (boundary === "after-fsync") kill();
@@ -64,8 +66,8 @@ retireStagedReceipt(${bytes}, ${JSON.stringify(dir)}, (path) => {
 		const stderr = await new Response(child.stderr).text();
 		expect(await child.exited, stderr).toBe(137);
 		// When the surviving controller retries real retirement.
-		retireStagedReceipt(receipt, dir);
-		const repeated = retireStagedReceipt(receipt, dir);
+		retireStagedReceipt(judged, dir);
+		const repeated = retireStagedReceipt(judged, dir);
 		// Then the judged evidence survives exactly once and no live receipt remains.
 		expect(repeated).toBe(false);
 		expect(existsSync(join(dir, "os-staged.json"))).toBe(false);

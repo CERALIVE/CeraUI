@@ -8,6 +8,7 @@
  * quarantined a version that had never booted. Only a reboot that followed a
  * real activation may be judged against the staged version.
  */
+// allow: SIZE_OK — Retain the historical crash-reboot matrix and its shared RAUC fixture unchanged; this repair only injects its CONTROL port.
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -28,6 +29,7 @@ import {
 	type OrchestratorState,
 } from "../modules/system/update-orchestrator/types.ts";
 import { getPersistentNotifications } from "../modules/ui/notifications.ts";
+import { acquireTestOsStageControl } from "./helpers/os-stage-test-control.ts";
 
 const FIXTURE_DIR = `${import.meta.dir}/fixtures/rauc`;
 // JSON form of the post-crash `rauc status --detailed` in e-37-postcrash.txt.
@@ -79,6 +81,7 @@ function armedAt(version: string): {
 		bootId: PRE_CRASH_BOOT,
 	};
 	const deps: Deps = {
+		acquireOsStageControl: acquireTestOsStageControl,
 		now: () => 1_790_757_790_225,
 		isStreamLive: () => false,
 		armOs: async () => {},
@@ -89,7 +92,7 @@ function armedAt(version: string): {
 			rebinds.push(bootId);
 		},
 		retireOsReceipt: (staged) => {
-			retired.push(staged.version);
+			retired.push(staged.receipt.version);
 			return true;
 		},
 		quarantine: new RecordingQuarantine(),

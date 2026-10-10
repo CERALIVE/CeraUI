@@ -8,7 +8,10 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import type { OsStageRecovery } from "@ceraui/rpc/schemas";
-import type { OsStageReceipt } from "../modules/system/update-orchestrator/os-agent.ts";
+import {
+	type OsStageReceipt,
+	readStagedReceiptEvidence,
+} from "../modules/system/update-orchestrator/os-agent.ts";
 import {
 	CONSUMED_RECEIPT_NAME,
 	retireStagedReceipt,
@@ -91,6 +94,7 @@ describe("runtime manual check on the Rock's failed record", () => {
 				return boundReceipt;
 			},
 			retireOsReceipt: (receipt) => retireStagedReceipt(receipt, dir),
+			readOsReceiptEvidence: () => readStagedReceiptEvidence(dir),
 			readBootId: async () => ROCK_BOOT,
 			readBootedVersion: async () => "2026.10.64",
 			readBootedImage: async () => installedImage,

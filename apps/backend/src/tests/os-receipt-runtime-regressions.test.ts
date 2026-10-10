@@ -7,7 +7,10 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import type { OsStageReceipt } from "../modules/system/update-orchestrator/os-agent.ts";
+import {
+	type OsStageReceipt,
+	readStagedReceiptEvidence,
+} from "../modules/system/update-orchestrator/os-agent.ts";
 import { retireStagedReceipt } from "../modules/system/update-orchestrator/os-staged-receipt-retirement.ts";
 import {
 	loadOrchestratorState,
@@ -59,6 +62,7 @@ test("Check keeps the receipt when local failed memory trails authoritative os-v
 				: structuredClone(getOrchestratorState()),
 		readOsReceipt: async () =>
 			existsSync(join(dir, "os-staged.json")) ? receipt : undefined,
+		readOsReceiptEvidence: () => readStagedReceiptEvidence(dir),
 		readBootedVersion: async () => receipt.version,
 		readBootId: async () => bootId,
 		readBootedImage: async () => installedImage,

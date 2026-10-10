@@ -2,7 +2,7 @@
 // requires independent installed-image identity and persisted CONTROL authority.
 import { isDeepStrictEqual } from "node:util";
 import { logger } from "../../../helpers/logger.ts";
-import type { OsStageReceipt } from "./os-agent.ts";
+import type { JudgedOsReceipt, OsStageReceipt } from "./os-agent.ts";
 import type { InstalledImageIdentity } from "./os-installed-image.ts";
 import { sameOsRecoveryIdentity } from "./os-recovery-identity.ts";
 import type { OsStageControlLease } from "./os-stage-control-lease.ts";
@@ -86,14 +86,14 @@ export type ReceiptRetirementPort = {
 	};
 	readonly acquireControl: () => Promise<OsStageControlLease>;
 	readonly readPersisted: typeof loadOrchestratorState;
-	readonly readReceipt: () => Promise<OsStageReceipt | undefined>;
+	readonly readReceipt: () => Promise<JudgedOsReceipt | undefined>;
 	readonly readBootedVersion: () => Promise<string | undefined>;
 	readonly readBootId: () => Promise<string>;
 	readonly readHealthyBootId: () => Promise<string | null>;
 	readonly readBootedImage: () => Promise<InstalledImageIdentity | null>;
 	readonly readActivationArmed: () => Promise<boolean>;
 	readonly inspectOperation: () => Promise<"idle" | "running">;
-	readonly retire: (receipt: OsStageReceipt) => boolean;
+	readonly retire: (receipt: JudgedOsReceipt) => boolean;
 	readonly acknowledge?: () => void;
 	readonly acknowledgementPending?: () => boolean;
 };
@@ -139,6 +139,7 @@ export async function retireConsumedStagedReceipt(
 		port.readBootedImage(),
 	]);
 	const persisted = await port.readPersisted();
+	const finalArmed = await port.readActivationArmed();
 	const current = port.snapshot();
 	if (
 		!receipt ||
@@ -147,13 +148,13 @@ export async function retireConsumedStagedReceipt(
 		current.generation !== before.generation ||
 		!sameOsRecoveryIdentity(current.state, persisted) ||
 		!stagedReceiptConsumed({
-			receipt,
+			receipt: receipt.receipt,
 			phase: current.phase,
 			activeAttemptId: current.activeAttemptId,
 			bootedVersion,
 			bootId,
 			healthyBootId,
-			activationArmed: armed,
+			activationArmed: armed || finalArmed,
 			raucOperation: operation,
 			bootedImage,
 		}) ||
@@ -161,8 +162,8 @@ export async function retireConsumedStagedReceipt(
 	)
 		return false;
 	logger.info("update-orchestrator: consumed staged receipt retired", {
-		version: receipt.version,
-		stagedBootId: receipt.bootId,
+		version: receipt.receipt.version,
+		stagedBootId: receipt.receipt.bootId,
 	});
 	return true;
 }

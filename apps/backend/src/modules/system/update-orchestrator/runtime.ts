@@ -63,6 +63,7 @@ import {
 	type OsStageReceipt,
 	readBootId,
 	readStagedReceipt,
+	readStagedReceiptEvidence,
 	rebindStagedReceipt,
 	stageOsBundle,
 } from "./os-agent.ts";
@@ -86,6 +87,7 @@ import {
 import { readInstalledImage } from "./os-installed-image.ts";
 import type { OsChannelManifest } from "./os-manifest.ts";
 import { readBootedOsReleaseVersion } from "./os-manifest.ts";
+import type { ReceiptFileIdentity } from "./os-receipt-file-identity.ts";
 import {
 	acknowledgeRetiredReceipt,
 	ReceiptRetirementDurabilityError,
@@ -253,8 +255,10 @@ export interface OrchestratorRuntimeDeps {
 	readonly isUpdateAdmissionReady?: () => Promise<boolean>;
 	readonly readOsStageJob?: typeof readOsStageJob;
 	readonly osStageStartupDeps?: Partial<OsStartupDeps>;
-	readonly armOs: (now: boolean) => Promise<void>;
+	readonly armOs: (now: boolean, control: OsStageControlLease) => Promise<void>;
 	readonly readOsReceipt: typeof readStagedReceipt;
+	readonly readOsReceiptEvidence?: typeof readStagedReceiptEvidence;
+	readonly readOsReceiptIdentity?: () => ReceiptFileIdentity | null;
 	readonly rebindOsReceipt: (
 		receipt: OsStageReceipt,
 		bootId: string,
@@ -1723,9 +1727,20 @@ async function reconcileOsActivation(): Promise<void> {
 		return;
 	}
 	if (state.phase === "os-staged" && !(await updateAdmissionReady())) return;
+	if (state.phase !== "os-staged" && state.phase !== "os-activation-armed")
+		return;
+	await using control = await acquireRuntimeOsStageControl();
+	if (
+		!control.held() ||
+		osStageInProcess ||
+		(state.phase !== "os-staged" && state.phase !== "os-activation-armed") ||
+		state.osStageRecovery?.activeAttemptId
+	)
+		return;
 	if (state.phase === "os-staged") {
 		try {
-			await deps.armOs(false);
+			await deps.armOs(false, control);
+			if (!control.held()) return;
 			dispatch({ type: "OS_ACTIVATION_ARMED", now: deps.now() });
 		} catch (error) {
 			logger.warn("update-orchestrator: activation arming deferred", { error });
@@ -1736,7 +1751,7 @@ async function reconcileOsActivation(): Promise<void> {
 	if (!receipt) return;
 	const bootId = await deps.readBootId();
 	if (receipt.bootId !== bootId) {
-		if (!(await rebootFollowedActivation(receipt, bootId))) return;
+		if (!(await rebootFollowedActivation(receipt, bootId, control))) return;
 		dispatch({ type: "OS_REBOOT_OBSERVED", now: deps.now() });
 		await verifyOsBoot();
 		return;
@@ -1746,7 +1761,9 @@ async function reconcileOsActivation(): Promise<void> {
 		deps.now() - receipt.stagedAt >= OS_FORCE_ACTIVATION_MS &&
 		!deps.isStreamLive()
 	) {
-		await deps.armOs(true);
+		if (!control.held()) return;
+		await deps.armOs(true, control);
+		if (!control.held()) return;
 		osForceActivated = true;
 		notifyUpdate({
 			kind: "os-activated",
@@ -1763,6 +1780,7 @@ async function reconcileOsActivation(): Promise<void> {
 async function rebootFollowedActivation(
 	receipt: OsStageReceipt,
 	bootId: string,
+	control: OsStageControlLease,
 ): Promise<boolean> {
 	if ((await deps.readBootedVersion()) === receipt.version) return true;
 	let activation: StagedActivation;
@@ -1783,6 +1801,7 @@ async function rebootFollowedActivation(
 				{ version: receipt.version },
 			);
 			try {
+				if (!control.held()) return false;
 				await deps.rebindOsReceipt(receipt, bootId);
 			} catch (error) {
 				logger.warn("update-orchestrator: staged receipt rebind deferred", {
@@ -1909,7 +1928,7 @@ async function maybeRetireConsumedOsReceipt(): Promise<void> {
 			readPersisted: deps.readPersistedState ?? loadOrchestratorState,
 			readBootedImage:
 				deps.readBootedImage ?? (() => readInstalledImage("booted")),
-			readReceipt: deps.readOsReceipt,
+			readReceipt: deps.readOsReceiptEvidence ?? readStagedReceiptEvidence,
 			acknowledge: deps.acknowledgeOsReceipt ?? acknowledgeRetiredReceipt,
 			acknowledgementPending: deps.isReceiptAckPending ?? retiredReceiptPresent,
 			readBootedVersion: () => deps.readBootedVersion(),
@@ -1984,6 +2003,9 @@ async function maybeSettleOsUnlaunchedWitness(): Promise<boolean> {
 		},
 		persist: deps.persist,
 		persistSettlement: (write) => osSettlementPersistence.persist(write),
+		...(deps.readOsReceiptIdentity
+			? { readReceiptIdentity: deps.readOsReceiptIdentity }
+			: {}),
 		consume: deps.consumeOsUnlaunchedWitness ?? consumeOsUnlaunchedWitness,
 		now: deps.now,
 	});

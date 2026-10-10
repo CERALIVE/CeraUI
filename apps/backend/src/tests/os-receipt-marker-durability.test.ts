@@ -15,6 +15,7 @@ import {
 } from "../modules/system/update-orchestrator/os-staged-receipt-retirement.ts";
 import { defaultOrchestratorRuntimeDeps } from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
+import { receiptJudgment } from "./helpers/os-receipt-judgment.ts";
 import { acquireTestOsStageControl } from "./helpers/os-stage-test-control.ts";
 
 const dirs: string[] = [];
@@ -71,6 +72,7 @@ test("retries directory acknowledgement after a completed rename and failed fsyn
 	const dir = directory();
 	const bytes = JSON.stringify(receipt);
 	writeFileSync(join(dir, "os-staged.json"), bytes);
+	const judged = receiptJudgment(receipt, dir);
 	let syncs = 0;
 	const sync = () => {
 		syncs++;
@@ -79,14 +81,14 @@ test("retries directory acknowledgement after a completed rename and failed fsyn
 	};
 	// When rename completes but acknowledgement fails, then the same operation retries.
 	expect(() =>
-		Reflect.apply(retireStagedReceipt, undefined, [receipt, dir, sync]),
+		Reflect.apply(retireStagedReceipt, undefined, [judged, dir, sync]),
 	).toThrow();
 	expect(existsSync(join(dir, "os-staged.json"))).toBe(false);
 	expect(readFileSync(join(dir, "os-staged.consumed.json"), "utf8")).toBe(
 		bytes,
 	);
 	expect(
-		Reflect.apply(retireStagedReceipt, undefined, [receipt, dir, sync]),
+		Reflect.apply(retireStagedReceipt, undefined, [judged, dir, sync]),
 	).toBe(false);
 	// Then the missing live name does not suppress the durability retry.
 	expect(syncs).toBe(2);
