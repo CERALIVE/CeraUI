@@ -859,13 +859,29 @@ automatically**. A receipt is consumed only when ALL of these hold under CONTROL
   evidence gathering and again at the final rename boundary. Drift, missing
   authority, open persisted lifecycle or an active attempt means KEEP;
 - `activation-armed` is absent by **lstat ENOENT only**, and RAUC's `Operation` is
-  idle. EACCES, ENOTDIR and other errors remain unknown; dangling symlinks are present.
+  idle. The marker is probed again after the final awaited authority read, before
+  synchronous retirement. EACCES, ENOTDIR and other errors remain unknown;
+  dangling symlinks are present.
 
 A syntactically valid but incorrect version stamp is not identity proof: a settled,
-unarmed installation can still boot the previous image. The exact judged receipt
-is read through a no-follow regular-file descriptor; device/inode/birth identity
-is rechecked synchronously before rename to `os-staged.consumed.json`. Its bytes
-remain evidence. Symlink/hardlink/non-file receipts are never retired.
+unarmed installation can still boot the previous image. Reading the receipt as
+judgment evidence captures device, inode, size, nanosecond mtime/birthtime and a
+SHA-256 of its bytes through a no-follow regular-file descriptor. Retirement
+re-reads and compares that captured identity, not merely parsed JSON equality;
+an identical-JSON replacement inode is kept. Path operations use a validated
+directory descriptor, and the last synchronous lstat checks device/inode/size/mtime
+before rename to `os-staged.consumed.json`. Its bytes remain evidence.
+Symlink/hardlink/non-file receipts are never retired.
+
+**The final rename is not a filesystem compare-and-swap.** A writer bypassing
+CONTROL can replace the entry after the last lstat and before rename(2), or mutate
+bytes after the final hash read. That privileged/noncooperative window is not
+closed by another pathname check. Cooperative staging holds CONTROL from receipt
+baseline capture through the final publication callback and producer release;
+activation arming and receipt rebinding now hold that same lease. The runner's
+commit-token check includes lease liveness, and arming refuses an unheld lease.
+Real-flock tests prove competing cooperative writers cannot enter these lifetimes;
+they do not claim resistance to a privileged writer ignoring the lock.
 A directory-fsync failure after rename reports **retirement durability pending**,
 not “receipt kept”. Subsequent CONTROL passes acknowledge the directory even when
 the live receipt is absent; that acknowledgement does not mutate agent state.
@@ -880,6 +896,26 @@ image binding and now stays intact; close install/publication timestamps do not
 prove identity. Its failed `.68` record remains `failed / unsafe` independently.
 A new, positively bound receipt can retire without clearing a both-good failure.
 No owner-approved bench reset or activation is performed by this change.
+
+**A pre-existing receipt is not necessarily this attempt's outcome [PARTIAL —
+host-proven].** New private job records capture strict optional `receiptBaseline`
+under CONTROL before guardian acquisition: `null` records positive absence; an
+identity records the existing receipt without restamping it. Completed private
+never-launched witnesses carry that baseline. Physical settlement still requires
+`launched=false`, unchanged daemon/boot/slot/process/resource evidence, retired
+clients and pins, and no activation marker. An unchanged baseline receipt is inert
+for that proof and is neither deleted nor consumed. A created, replaced or changed
+receipt vetoes settlement, even if its JSON is identical. State-side recovery
+rechecks the baseline after its final awaited authority read before permitting
+operator retry. Legacy job/witness records without `receiptBaseline` retain the
+old presence veto. Unreadable identity is uncertainty, never positive absence.
+
+Thus a stale legacy `.64` receipt on booted `.64` no longer obstructs a positively
+proved never-launched next attempt. It does **not** make an unrecorded successful
+installation safe: launched provenance cannot produce this witness, and the
+Rock's both-good failed/unsafe `.68` case without a matching completed witness
+remains failed/unsafe. Host regression and mutation evidence do not qualify these
+paths on either board or under power loss.
 
 **Admission refusals name their predicate [PARTIAL — host-proven].** The thrown
 `rauc_recovery_unproven` error keeps `refusal: "stage-admission-unproven"` and

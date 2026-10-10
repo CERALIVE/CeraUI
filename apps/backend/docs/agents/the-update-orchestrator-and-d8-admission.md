@@ -242,10 +242,13 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
    actual booted rootfs, not stamp equality alone. Legacy receipts, including the
    real Rock `.64`, KEEP. Under CONTROL, persisted recovery identity is reread
    before evidence and at the final rename boundary; drift/open lifecycle/active
-   attempts KEEP. `os-receipt-retirement-store.ts` binds rename to the judged
-   descriptor inode and retries parent fsync after rename, including absent-live
-   crash residue. Its typed durability-pending result is not “receipt kept”.
-   Activation-marker absence is lstat ENOENT only; unknown never authorizes cleanup.
+   attempts KEEP. Judgment captures file device/inode/size/mtime/birthtime/hash;
+   `os-receipt-retirement-store.ts` compares it again through a validated parent
+   descriptor before rename. Rename is not compare-and-swap: CONTROL excludes
+   cooperative stage/arm/rebind writers, not privileged writers ignoring it.
+   Parent fsync retries after rename, including absent-live crash residue; typed
+   durability-pending is not “receipt kept”. Activation-marker absence is lstat
+   ENOENT only and is re-probed after final authority; unknown never authorizes cleanup.
   Stage-admission refusals keep `rauc_recovery_unproven`/unsafe and add the
    log-only `predicate` and bounded, message-free class/code `observation` diagnostics
   (`os-stage-admission-diagnostics.ts`); see `docs/UPDATE-RECOVERY.md`.
@@ -543,8 +546,15 @@ and deactivating units, and empty `systemctl show` output).
   Exit-75 cleanup checks stop/reset replies and positive owned-terminal absence
   before retirement; failed cleanup retains provenance for the next startup.
   Every controller
-  holds the cross-process control lease first; see `docs/UPDATE-RECOVERY.md`
-  → "Unlaunched guardian settlement".
+   holds the cross-process control lease first; see `docs/UPDATE-RECOVERY.md`
+   → "Unlaunched guardian settlement".
+   New jobs capture strict optional `receiptBaseline` under that lease before
+   acquisition, and completed never-launched witnesses preserve it. Only the
+   unchanged pre-existing receipt is inert for physical/state settlement; it is
+   never deleted or consumed. New/changed receipts and launched provenance veto;
+   legacy records without the baseline retain the presence veto. State recovery
+   rechecks identity after final authority. A successful unrecorded installation
+   or the Rock both-good unsafe case without a completed witness stays unsafe.
   Orphan absence uses the parsed `LoadState` field with duplicate-key rejection,
   independent of property order. Previously owned configured NBD devices retain
   their original resource identity across creator PID reuse until independent

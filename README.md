@@ -70,7 +70,14 @@ authority and a new receipt's installed-image binding to the healthy booted root
 in addition to version equality. Legacy receipts (including the Rock's `.64`) stay
 intact. A renamed receipt with failed directory fsync is reported as durability
 pending and its acknowledgement retries; marker read errors never imply absence.
-A both-slots-good unsafe failure still stays failed. See [OS staging recovery](docs/UPDATE-RECOVERY.md#os-staging-recovery-partial--fixture-proven-board-re-drill-owed).
+Judgment carries the read-time inode/metadata/hash identity, while cooperative
+publication, arming and rebinding share CONTROL. Rename is not compare-and-swap
+against privileged writers ignoring that lease. New never-launched jobs/witnesses
+record the pre-existing receipt baseline: an unchanged stale receipt is preserved
+without obstructing safe retry, but new/changed receipts still veto. Legacy records
+retain their presence veto; a both-slots-good unsafe failure without a matching
+completed never-launched witness still stays failed. These are host proofs, not
+board qualification. See [OS staging recovery](docs/UPDATE-RECOVERY.md#os-staging-recovery-partial--fixture-proven-board-re-drill-owed).
 
 State-side unlaunched OS settlement requires a private completed witness matching
 the persisted attempt, signed candidate and current boot, plus fresh readiness.
