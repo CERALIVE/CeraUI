@@ -7,10 +7,14 @@ test.each(["restart", "drain", "sweep", "release"])(
 	async (boundary) => {
 		// Given a startup owner with a held outer port at 40 ms remaining.
 		const h = harness();
+		const started = performance.now();
 		let offset = 0;
+		let entered = false;
 		const gate = Promise.withResolvers<void>();
 		const reached = Promise.withResolvers<void>();
 		const hold = async () => {
+			offset = started + 359_960 - performance.now();
+			entered = true;
 			reached.resolve();
 			await gate.promise;
 		};
@@ -25,9 +29,8 @@ test.each(["restart", "drain", "sweep", "release"])(
 		};
 		const work = recoverOwnedOsStageAtStartup(record, owner, {
 			...h.deps,
-			now: () => performance.now() + offset,
+			now: () => (entered ? performance.now() + offset : started),
 			restart: async () => {
-				offset = 359_960;
 				if (boundary === "restart") await hold();
 			},
 			observe: async () => ({
@@ -46,18 +49,23 @@ test.each(["restart", "drain", "sweep", "release"])(
 			() => "released",
 			(error: unknown) => error,
 		);
-		await reached.promise;
-		// When the outer port stays held past the original startup recovery deadline.
-		const result = await Promise.race([
-			work,
-			Bun.sleep(160).then(() => "pending"),
-		]);
 		try {
+			expect(
+				await Promise.race([
+					reached.promise.then(() => "boundary-entered"),
+					work.then(() => `startup-settled-before-${boundary}`),
+				]),
+			).toBe("boundary-entered");
+			// When the outer port stays held past the original startup recovery deadline.
+			const result = await Promise.race([
+				work,
+				Bun.sleep(160).then(() => "pending"),
+			]);
 			expect(result).toHaveProperty("mode", "unsafe");
 		} finally {
 			gate.resolve();
+			await work;
 		}
-		await work;
 		await Bun.sleep(0);
 		// Then no late continuation retires the owner or opens startup admission.
 		expect(h.calls).not.toContain("release");
