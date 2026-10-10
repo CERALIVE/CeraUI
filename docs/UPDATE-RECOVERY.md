@@ -613,9 +613,12 @@ schema residuals below remain unchanged. Fresh Rock and Orange Pi failover/statu
 pressure, cancellation and unknown-success crash drills are still required.
 
 Module-size accounting is not a claim of uniform compliance: `os-stage-run.ts`
-and `runtime.ts` carry explicit `SIZE_OK` lifetime/state-machine exceptions.
-`spawn-policy.ts` (1,338 pure LOC) and `reducer.ts` (661) are inherited size debt,
-not newly compliant modules. New FIX7 modules stay below 250 pure LOC. The four
+(493 pure LOC) and `runtime.ts` (2,292) carry explicit `SIZE_OK`
+lifetime/state-machine exceptions. `spawn-policy.ts` (1,350 pure LOC) and
+`reducer.ts` (667) are inherited size debt, not newly compliant modules. Accounting
+excludes blank lines and comment-prefixed lines (including embedded shell comments).
+Orphan inspection is separated from the settlement lifetime without changing its
+predicates. New FIX7/FIX8 modules stay below 250 pure LOC. The four
 fix-6 test files and fix-7 regressions require an explicit TypeScript program:
 the normal backend tsconfig excludes tests and did not catch the fix-6 runtime
 fixture's receipt-returning stage port or synchronous job-reader mismatch.
