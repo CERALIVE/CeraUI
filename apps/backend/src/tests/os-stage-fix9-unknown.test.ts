@@ -13,8 +13,8 @@ for (const drift of [
 	"appearing-process",
 	"resource",
 ] as const) {
-	test.each(nonCensusFaults)(
-		"%s stays terminal when censuses have " + drift,
+	test.each([...nonCensusFaults])(
+		`%s stays terminal when censuses have ${drift}`,
 		async (fault) => {
 			// Given independent invalid evidence in a drifted pair, then clean responses.
 			const census = censusDriftFixture(drift);
