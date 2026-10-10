@@ -52,6 +52,7 @@ Full PR gate: `bun run test`, `bun run test:e2e`, `bun run check:tech-debt`,
 - Host-uplink family success survives joined sibling faults; unsuccessful unbound faults stay UNKNOWN and cannot abort candidate election or authorize release. See `../../docs/HOST-UPLINK-ELECTION.md`.
 - Modem roster: exact triplets; RNDIS e0/01/03 admits; e0/01/01, e0/01/04 veto; ID_MM_DEVICE_IGNORE=1 excludes; weak retires, strong stays undriveable.
 - Update roster uses exact package names, never prefixes; unknown names default to platform. Install only actionable entries.
+- OS receipt cleanup requires persisted CONTROL authority and positive installed-image binding; legacy/unknown evidence KEEP. Marker absence is ENOENT-only; renamed durability failures retry directory acknowledgement. See the update-orchestrator contract.
 - Every modem mutation uses the identity-resolved lifecycle lease; connectivity mutations arm the durable journal before writing; retain rollback.
 - Capability feature gates are default-absent; absent/false is inert. Mutations use the shared gate helper and modem safety contract.
 - Live capture and audio devices are never silently dropped: emit honest unavailable entries when a pipeline or route cannot honor them.

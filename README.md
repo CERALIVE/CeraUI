@@ -64,11 +64,13 @@ deadline. Orphan settlement parses systemd absence by property, and a configured
 NBD device cannot lose its recorded ownership merely because its creator PID was
 reused. These safety repairs likewise remain hardware-unqualified.
 An admission refusal now names its first failing predicate and, when observation
-itself stopped, the bounded and redacted boundary and error class, without
-changing what is admitted. The staged receipt of an OS version that is already
-the healthy booted system is retired as `os-staged.consumed.json`, so it no
-longer blocks every settlement proof; a both-slots-good unsafe failure still
-stays failed. See [OS staging recovery](docs/UPDATE-RECOVERY.md#os-staging-recovery-partial--fixture-proven-board-re-drill-owed).
+itself stopped, bounded boundary/class/code diagnostics without arbitrary exception
+messages or changing admission. Receipt retirement requires persisted CONTROL
+authority and a new receipt's installed-image binding to the healthy booted rootfs,
+in addition to version equality. Legacy receipts (including the Rock's `.64`) stay
+intact. A renamed receipt with failed directory fsync is reported as durability
+pending and its acknowledgement retries; marker read errors never imply absence.
+A both-slots-good unsafe failure still stays failed. See [OS staging recovery](docs/UPDATE-RECOVERY.md#os-staging-recovery-partial--fixture-proven-board-re-drill-owed).
 
 State-side unlaunched OS settlement requires a private completed witness matching
 the persisted attempt, signed candidate and current boot, plus fresh readiness.

@@ -840,32 +840,46 @@ be a stage nobody recorded. Any unreadable input is "not proven".
   clears it. A retained staged receipt prevents confirmation even with writer proof.
 
 **A consumed staged receipt is retired [PARTIAL — host-proven, board re-drill owed].**
-`os-staged.json` records version, channel, `stagedAt` and the boot it was written
-on; it records no target slot, so consumption is judged only from those fields.
-A receipt is consumed when ALL of the following hold, read under CONTROL with the
-orchestrator state re-checked after every read:
+`os-staged.json` records version, channel, `stagedAt` and the producer boot.
+New writes optionally record strict `installedImage` evidence read after successful
+installation: rootfs slot name, RAUC bundle hash, rootfs checksum and install
+timestamp/count. Missing or malformed optional observations leave that field absent;
+they cannot mint identity. Old receipts remain readable but **cannot be retired
+automatically**. A receipt is consumed only when ALL of these hold under CONTROL:
 
 - its version equals the booted OS version (`/etc/ceralive/os-release-version`);
+- its recorded `installedImage` exactly matches fresh RAUC booted-slot identity;
+  the slot is good, names the actual root device and has this boot's matching
+  healthy-slot verdict. RAUC bundle versions are not CalVer and are never equated;
 - its boot id differs from the current boot, and this boot carries its own
   `healthy-state.json`;
 - the phase is not `os-staging`, `os-staged`, `os-activation-armed` or
-  `os-verifying`, no attempt is active and no producer runs;
-- `activation-armed` is absent and RAUC's `Operation` is idle.
+  `os-verifying` or package `committing`, no attempt is active and no producer runs;
+- persisted agent recovery identity agrees with memory, read under CONTROL before
+  evidence gathering and again at the final rename boundary. Drift, missing
+  authority, open persisted lifecycle or an active attempt means KEEP;
+- `activation-armed` is absent by **lstat ENOENT only**, and RAUC's `Operation` is
+  idle. EACCES, ENOTDIR and other errors remain unknown; dangling symlinks are present.
 
-A candidate that is staged but not yet activated always names a newer version
-than the booted one (admission refuses `downgrade_or_same`), and a crash reboot
-that keeps the arming rebinds its receipt to the new boot, so neither can match.
-The exact receipt that was judged is renamed to `os-staged.consumed.json` (kept as
-evidence) and the directory is synced. A different, unreadable or already-retired
-receipt is left alone; a crash before or after the rename converges on the next
-pass. Retirement runs at startup, on each tick and before Check now or Install
+A syntactically valid but incorrect version stamp is not identity proof: a settled,
+unarmed installation can still boot the previous image. The exact judged receipt
+is read through a no-follow regular-file descriptor; device/inode/birth identity
+is rechecked synchronously before rename to `os-staged.consumed.json`. Its bytes
+remain evidence. Symlink/hardlink/non-file receipts are never retired.
+A directory-fsync failure after rename reports **retirement durability pending**,
+not “receipt kept”. Subsequent CONTROL passes acknowledge the directory even when
+the live receipt is absent; that acknowledgement does not mutate agent state.
+Crash residue converges without replaying an installation. This is host process-
+crash proof, not board power-loss qualification. Retirement runs at startup, on
+each tick and before Check now or Install
 now, ahead of witness settlement and unsafe-record confirmation.
 
 This removes only the receipt blocker. **Both slots `good` still refuses
-confirmation**, by the rule above: the Rock's failed `.68` record with a retained
-`.64` receipt therefore keeps `failed / unsafe` after the receipt is retired, and
-still needs the owner-approved bench reset. A rollback leaves its receipt in place;
-that case is not judged consumed here.
+confirmation**, by the rule above. The real Rock's legacy `.64` receipt has no
+image binding and now stays intact; close install/publication timestamps do not
+prove identity. Its failed `.68` record remains `failed / unsafe` independently.
+A new, positively bound receipt can retire without clearing a both-good failure.
+No owner-approved bench reset or activation is performed by this change.
 
 **Admission refusals name their predicate [PARTIAL — host-proven].** The thrown
 `rauc_recovery_unproven` error keeps `refusal: "stage-admission-unproven"` and
@@ -874,11 +888,14 @@ evaluation order (`observation-unknown`, `daemon-inactive`, `operation-not-idle`
 `resources-present`, `extra-process`, `booted-unhealthy`, `target-not-inactive`,
 `boot-primary-unknown`, `boot-primary-not-booted`, `boot-primary-is-target`,
 `activation-armed`, `baseline-changed:<field>`) and, when the observation itself
-stopped, `observation`: the boundary name plus the error class and a redacted
-message bounded to 200 characters, or `<boundary>: unproven` for a reply that
+stopped, `observation`: the boundary name plus allowlisted class/code, bounded to
+200 characters, or `<boundary>: unproven` for a reply that
 proved nothing. The refusal is logged once as
 `update-orchestrator: OS stage admission refused`. Diagnostics are log-only; no
-persisted schema changed, and the set of admitted snapshots is unchanged.
+RPC schema changed, and the set of admitted snapshots is unchanged. Arbitrary
+exception messages, class names and codes are omitted rather than sanitized.
+Throwing exception getters use a safe fallback; formatting and reporting cannot
+replace the observer's null refusal, even with no sink.
 
 **Invalid recovery metadata is not first boot.** Schema 1 still makes the fields
 optional, but present recovery must agree with phase, active identity and retry

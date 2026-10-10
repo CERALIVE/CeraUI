@@ -238,13 +238,16 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
   `failed`, replacing the retry notice without deleting the receipt or writing
   quarantine. Pending publication cannot arm activation; after backend loss it
   is observed and settled unsafe, never promoted to completed release.
-  A receipt whose version is the healthy booted OS, written on an earlier boot,
-  with no OS lifecycle phase, attempt, producer, arming or RAUC operation, is
-  consumed: `os-staged-receipt-retirement.ts` renames exactly that receipt to
-  `os-staged.consumed.json` under CONTROL (startup, tick, Check/Install now).
-  Never widen that predicate to infer a target slot the receipt does not record.
+   Receipt retirement requires exact new `installedImage` binding to the healthy
+   actual booted rootfs, not stamp equality alone. Legacy receipts, including the
+   real Rock `.64`, KEEP. Under CONTROL, persisted recovery identity is reread
+   before evidence and at the final rename boundary; drift/open lifecycle/active
+   attempts KEEP. `os-receipt-retirement-store.ts` binds rename to the judged
+   descriptor inode and retries parent fsync after rename, including absent-live
+   crash residue. Its typed durability-pending result is not “receipt kept”.
+   Activation-marker absence is lstat ENOENT only; unknown never authorizes cleanup.
   Stage-admission refusals keep `rauc_recovery_unproven`/unsafe and add the
-  log-only `predicate` and bounded, redacted `observation` diagnostics
+   log-only `predicate` and bounded, message-free class/code `observation` diagnostics
   (`os-stage-admission-diagnostics.ts`); see `docs/UPDATE-RECOVERY.md`.
   Invalid present recovery metadata raises a typed load error; startup preserves
   the file and the legacy terminal reason rather than defaulting to idle. That
@@ -589,4 +592,3 @@ Coverage: `tests/update-orchestrator-{reducer,admission,schedule,persistence,res
 `update-transport*` (incl. `update-transport-pin-netns.test.ts`), `idle-detector`,
 plus the frontend `src/lib/updates/*.test.ts` and `tests/e2e/update-system.spec.ts`.
 All fixture, netns or Playwright proof; no board receipt.
-
