@@ -2,8 +2,10 @@ import { logger } from "../../../helpers/logger.ts";
 import { SpawnTimeoutError } from "../../../helpers/spawn-policy.ts";
 import type { RankedTransport } from "../update-transport/core.ts";
 import type { OsStageControl } from "./os-stage-attempt.ts";
+import { withinStageDeadline } from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import type { createOsStageJobOwner } from "./os-stage-job.ts";
+import { OsStageUnpublishedSuccessError } from "./os-stage-outcome-error.ts";
 import { retainUnsafeOsStagePin } from "./os-stage-pin-retention.ts";
 import {
 	RAUC_RECOVERY_DEADLINE_MS,
@@ -28,6 +30,7 @@ type AttemptSettlement = {
 	readonly invalidate: () => number;
 	readonly confirmed: (snapshot: RaucStageSnapshot, deadline: number) => void;
 	readonly unsafe: (error: OsStageError) => void;
+	readonly successful?: () => void;
 	readonly drain: Promise<void>;
 };
 
@@ -105,6 +108,25 @@ export async function settlePinnedOsAttempt(
 			});
 		owner.remember(before, true, attempt.cliSettled(), requireNewInstance);
 		if (requireNewInstance && !control.signal.aborted) await deps.restart();
+		const cliResult = await withinStageDeadline(
+			{
+				deadline,
+				now: deps.now,
+				invalidate: () => {
+					input.invalidate();
+				},
+			},
+			() => attempt.cli,
+		);
+		if (
+			!(cliResult instanceof Error) &&
+			cliResult.exitCode === 0 &&
+			(outcome.kind === "succeeded" || attempt.cliSucceeded?.())
+		) {
+			requireNewInstance = false;
+			input.successful?.();
+			owner.remember(before, true, true, false);
+		}
 		const record = owner.record();
 		quiescent = await recoverRaucStage(
 			{
@@ -122,6 +144,9 @@ export async function settlePinnedOsAttempt(
 					return owner.held();
 				},
 				deadline,
+				invalidate: () => {
+					input.invalidate();
+				},
 			},
 			requireNewInstance,
 		);
@@ -147,6 +172,7 @@ export async function settlePinnedOsAttempt(
 			throw outcome.error;
 		}
 	} catch (cause) {
+		if (attempt.cliSucceeded?.()) input.successful?.();
 		if (quiescent) throw cause;
 		const record = owner.record();
 		const error =
@@ -155,7 +181,11 @@ export async function settlePinnedOsAttempt(
 				: new OsStageError("rauc_recovery_unproven", { cause });
 		return await retainUnsafeOsStagePin({
 			attemptId: control.attemptId,
-			error,
+			error: attempt.cliSucceeded?.()
+				? new OsStageError("rauc_recovery_unproven", {
+						cause: new OsStageUnpublishedSuccessError(error),
+					})
+				: error,
 			ownership: {
 				baseline: before,
 				processes: new Set(record.processes),
