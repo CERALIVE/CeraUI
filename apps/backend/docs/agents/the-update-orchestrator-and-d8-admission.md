@@ -543,7 +543,12 @@ and deactivating units, and empty `systemctl show` output).
   before unsafe settlement and cannot later remember evidence or authorize effects.
    expiry is unsafe, never permission to release a writer's lock or force-clean.
    Optional diagnostic collection precedes the observer's final unit and
-   process/resource fence; changed final evidence is refused. There is no
+   process/resource fence; changed final evidence is refused. Process/resource
+   drift reports only the closed `census-drift: unproven` detail and returns null;
+   admission and post-cleanup quiescence may re-observe within the same deadline
+   and authority. Every read resets that detail, including the final read after
+   awaited ownership. Command/parsing/timeout/unit-identity unknowns stay terminal.
+   Only identical clean census pairs reach unchanged strict validators. There is no
    intervening awaited preparation between the last safety observation and the
    dispatch; this is NOT an atomic census-and-dispatch guarantee. Synchronous
    `beginAttempt` persistence and external process changes still separate them;
