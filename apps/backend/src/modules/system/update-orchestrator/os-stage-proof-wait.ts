@@ -1,5 +1,8 @@
 import { logger } from "../../../helpers/logger.ts";
-import type { ObservationReport } from "./os-stage-admission-diagnostics.ts";
+import {
+	describeObservationFailure,
+	type ObservationReport,
+} from "./os-stage-admission-diagnostics.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import { stageEvidence } from "./os-stage-process-evidence.ts";
 import type { RaucStageSnapshot } from "./os-stage-recovery.ts";
@@ -66,6 +69,23 @@ export async function waitForStageProof(input: {
 	let snapshot: RaucStageSnapshot | null = null;
 	let reason = "deadline-expired";
 	let observation: string | undefined;
+	const guarded = async <T>(
+		boundary: "observation" | "quiescence",
+		work: () => Promise<T>,
+	): Promise<T> => {
+		try {
+			return await work();
+		} catch (error) {
+			reportStageProofDecision({
+				snapshot,
+				wait,
+				reason: `${boundary}-thrown`,
+				disposition: "final",
+				observation: describeObservationFailure(boundary, error),
+			});
+			throw error;
+		}
+	};
 	const assertAuthority = async () => {
 		try {
 			await wait.assert();
@@ -85,22 +105,25 @@ export async function waitForStageProof(input: {
 		observation = undefined;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		try {
-			snapshot = await Promise.race([
-				input.observe((detail) => {
-					observation ??= detail;
-				}),
-				new Promise<null>((resolve) => {
-					timer = setTimeout(
-						() => resolve(null),
-						Math.max(0, wait.deadline - wait.now()),
-					);
-				}),
-			]);
+			snapshot = await guarded("observation", () =>
+				Promise.race([
+					input.observe((detail) => {
+						observation ??= detail;
+					}),
+					new Promise<null>((resolve) => {
+						timer = setTimeout(
+							() => resolve(null),
+							Math.max(0, wait.deadline - wait.now()),
+						);
+					}),
+				]),
+			);
 		} finally {
 			clearTimeout(timer);
 		}
 		await assertAuthority();
-		reason = (await input.refusal(snapshot)) ?? "proven";
+		reason =
+			(await guarded("quiescence", () => input.refusal(snapshot))) ?? "proven";
 		if (
 			first &&
 			snapshot &&

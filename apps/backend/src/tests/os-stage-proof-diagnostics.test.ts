@@ -49,7 +49,9 @@ test("a deferral episode logs once before its final refusal and never logs arbit
 	).rejects.toHaveProperty("reason", "rauc_recovery_unproven");
 	// Then both decisions carry bounded evidence, not arbitrary argument strings.
 	expect(warn).toHaveBeenCalledTimes(2);
-	expect(warn.mock.calls.map((call) => call[1])).toEqual([
+	expect(warn).toHaveBeenNthCalledWith(
+		1,
+		"update-orchestrator: OS stage proof decision",
 		expect.objectContaining({
 			disposition: "defer",
 			started: 1,
@@ -62,8 +64,12 @@ test("a deferral episode logs once before its final refusal and never logs arbit
 				}),
 			],
 		}),
+	);
+	expect(warn).toHaveBeenNthCalledWith(
+		2,
+		"update-orchestrator: OS stage proof decision",
 		expect.objectContaining({ disposition: "final", deadlineRemainingMs: 0 }),
-	]);
+	);
 });
 
 test("throwing diagnostic sinks cannot turn a helper deferral into refusal or admission", async () => {
@@ -93,3 +99,48 @@ test("throwing diagnostic sinks cannot turn a helper deferral into refusal or ad
 	expect(result).toBe(baseline);
 	expect(reads).toBe(2);
 });
+
+test.each(["observation", "quiescence"] as const)(
+	"a rejected %s promise logs final bounded evidence without changing the thrown object",
+	async (boundary) => {
+		// Given a boundary rejection whose exception getter and message are hostile.
+		warn = spyOn(logger, "warn").mockImplementation(() => logger);
+		const failure = new Error("credential-bearing message must not escape");
+		Object.defineProperty(failure, "name", {
+			get: () => {
+				throw new Error("hostile getter");
+			},
+		});
+		// When either observer I/O or later ownership evaluation rejects.
+		await expect(
+			observeAdmission(
+				async () => {
+					if (boundary === "observation") throw failure;
+					return baseline;
+				},
+				baseline,
+				{
+					now: () => 0,
+					deadline: 10_000,
+					sleep: async () => undefined,
+					assert: async () => undefined,
+					quiescence: async () => {
+						if (boundary === "quiescence") throw failure;
+						return null;
+					},
+				},
+			),
+		).rejects.toBe(failure);
+		// Then diagnostics do not swallow the failure or manufacture an absent identity.
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn).toHaveBeenCalledWith(
+			"update-orchestrator: OS stage proof decision",
+			expect.objectContaining({
+				disposition: "final",
+				reason: `${boundary}-thrown`,
+				observation: `${boundary}: unknown-error`,
+				currentInstance: boundary === "observation" ? null : baseline.instance,
+			}),
+		);
+	},
+);
