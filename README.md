@@ -107,6 +107,10 @@ clocks remain fenced. Startup/orphan post-cleanup proofs use the same bounded
 seam. Captured-stat and killed-process host tests are not a qualification of the
 shipped guardian or either board; both-board failover/status-pressure re-drills
 remain owed. Persisted formats and the D154 residuals above are unchanged.
+Positive CLI exit is retained independently of cancellation/output drainage;
+the matching runtime attempt settles unpublished success unsafe even after D8
+returns to the offer. Final safety observation follows awaited preparation, and
+proof I/O shares the remaining deadline with expired captures invalidated.
 
 State-side unlaunched OS settlement requires a private completed witness matching
 the persisted attempt, signed candidate and current boot, plus fresh readiness.

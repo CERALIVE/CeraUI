@@ -533,6 +533,14 @@ and deactivating units, and empty `systemctl show` output).
   Terminal failed-pair cleanup also rescans under that budget. Raw post-success
   cancellation carries a local unpublished-success error, normalized by the sole
   production stage entry to existing unsafe before the agent can grant restage.
+  Positive exit remains independent of cancellation and inherited-open output.
+  Runtime settles that exact unpublished-success token/attempt/candidate even
+  after D8 moved to os-available; the reducer retains terminal unsafe once,
+  without manual/automatic restage. Pre-success cancellation remains ordinary.
+  Final dispatch proof follows all awaited preparation and is followed only by
+  synchronous token/lease/expiry/clock checks. Proof reads, authority and evaluation
+  share the remaining absolute-deadline timeout; expired captures are invalidated
+  before unsafe settlement and cannot later remember evidence or authorize effects.
   expiry is unsafe, never permission to release a writer's lock or force-clean.
   The attempt watcher reads fresh pinned-path topology every 3 s (2 s read
   bound), independent of RAUC progress/RX. TLS-verified bundle HEAD runs as the
