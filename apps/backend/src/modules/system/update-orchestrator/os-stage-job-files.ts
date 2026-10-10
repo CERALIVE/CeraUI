@@ -10,6 +10,7 @@ import {
 import { chmod, lstat, mkdir, open, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { receiptFileIdentitySchema } from "./os-receipt-file-identity.ts";
 import { OsStageError } from "./os-stage-error.ts";
 
 export const OS_STAGE_JOB_DIR = "/run/ceralive/os-stage";
@@ -41,6 +42,7 @@ export const osStageJobSchema = z
 		candidateKey: z.string().min(1),
 		bundleUrl: z.url(),
 		baseline: snapshotSchema,
+		receiptBaseline: receiptFileIdentitySchema.nullable().optional(),
 		processes: z.array(z.string()),
 		resources: z.array(z.string()),
 		launched: z.boolean(),

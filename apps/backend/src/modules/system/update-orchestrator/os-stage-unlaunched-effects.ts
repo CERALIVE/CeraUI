@@ -1,4 +1,3 @@
-import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { run } from "../../../helpers/run.ts";
@@ -8,31 +7,36 @@ import {
 	UPDATE_TRANSPORT_RULE_PRIORITY,
 	UPDATE_TRANSPORT_TABLE_BASE,
 } from "../update-transport/pin-rules.ts";
+import { readActivationArmed } from "./os-activation-marker.ts";
 import { OS_UPDATE_STATE_DIR } from "./os-manifest.ts";
+import {
+	readReceiptFile,
+	sameReceiptFile,
+} from "./os-receipt-file-identity.ts";
 import { proveOsGuardKernelOwnership } from "./os-stage-guard-lock.ts";
 import {
 	isOsStageGuardJobIdle,
 	observeOsStageGuard,
 } from "./os-stage-guard-observation.ts";
 import { osInstallClientsGone } from "./os-stage-install-clients.ts";
+import type { OsStageJobRecord } from "./os-stage-job-files.ts";
 import { observeRaucStage } from "./os-stage-observation.ts";
 import { acquireOsOrphanLock } from "./os-stage-orphan-lock.ts";
 import { drainRetainedOsStagePin } from "./os-stage-pin-retention.ts";
 import { writeOsUnlaunchedWitness } from "./os-stage-unlaunched-witness.ts";
 
-async function outcomesAbsent(): Promise<boolean> {
-	for (const name of ["os-staged.json", "activation-armed"]) {
-		try {
-			await lstat(join(OS_UPDATE_STATE_DIR, name));
-			return false;
-		} catch (cause) {
-			if (
-				!(cause instanceof Error && "code" in cause && cause.code === "ENOENT")
-			)
-				throw cause;
-		}
-	}
-	return true;
+export async function outcomesAbsent(
+	record: OsStageJobRecord,
+	dir = OS_UPDATE_STATE_DIR,
+): Promise<boolean> {
+	const current = readReceiptFile(dir)?.identity ?? null;
+	if (
+		record.receiptBaseline === undefined
+			? current !== null
+			: !sameReceiptFile(record.receiptBaseline, current)
+	)
+		return false;
+	return !(await readActivationArmed(join(dir, "activation-armed")));
 }
 
 /** Real boards answer a never-created pin table with exit 2, not an empty list. */

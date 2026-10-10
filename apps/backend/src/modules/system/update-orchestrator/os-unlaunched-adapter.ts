@@ -1,4 +1,9 @@
 import type { OsChannelManifest } from "./os-manifest.ts";
+import {
+	type ReceiptFileIdentity,
+	readReceiptFile,
+	sameReceiptFile,
+} from "./os-receipt-file-identity.ts";
 import { sameOsRecoveryIdentity } from "./os-recovery-identity.ts";
 import {
 	acquireOsStageControlLease,
@@ -34,6 +39,7 @@ export type OsUnlaunchedSettlementPort = {
 	readonly acquireControl?: typeof acquireOsStageControlLease;
 	readonly readPersisted?: typeof loadOrchestratorState;
 	readonly persistSettlement?: (write: () => void) => void;
+	readonly readReceiptIdentity?: () => ReceiptFileIdentity | null;
 };
 
 export async function settleOsUnlaunchedWitness(
@@ -61,6 +67,18 @@ export async function settleOsUnlaunchedWitness(
 		return false;
 	const evidence = await port.readEvidence(lease);
 	const persisted = await (port.readPersisted ?? loadOrchestratorState)();
+	const currentReceipt =
+		witness.receiptBaseline === undefined
+			? undefined
+			: (
+					port.readReceiptIdentity ??
+					(() => readReceiptFile()?.identity ?? null)
+				)();
+	const receiptOutcomeAbsent =
+		witness.receiptBaseline === undefined
+			? evidence?.stagedReceiptPresent === false
+			: evidence?.stagedReceiptPresent === (currentReceipt !== null) &&
+				sameReceiptFile(witness.receiptBaseline, currentReceipt);
 	const current = port.snapshot();
 	if (
 		current.generation !== before.generation ||
@@ -75,7 +93,7 @@ export async function settleOsUnlaunchedWitness(
 		evidence.healthyBootId !== evidence.bootId ||
 		evidence.raucOperation !== "idle" ||
 		!evidence.writerQuiescent ||
-		evidence.stagedReceiptPresent ||
+		!receiptOutcomeAbsent ||
 		evidence.activationArmed
 	)
 		return false;

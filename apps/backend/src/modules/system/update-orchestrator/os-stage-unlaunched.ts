@@ -27,7 +27,7 @@ export type OsUnlaunchedDeps = {
 	readonly lock: typeof acquireOsOrphanLock;
 	readonly observe: typeof observeRaucStage;
 	readonly cliGone: () => Promise<boolean>;
-	readonly outcomesAbsent: () => Promise<boolean>;
+	readonly outcomesAbsent: (record: OsStageJobRecord) => Promise<boolean>;
 	readonly drain: (attemptId: string) => Promise<void>;
 	readonly sweep: () => Promise<void>;
 	readonly pinClean: () => Promise<boolean>;
@@ -105,7 +105,7 @@ async function settleUnlaunched(
 				resources: new Set(current.resources),
 			}),
 			clientsGone: await deps.cliGone(),
-			outcomeAbsent: await deps.outcomesAbsent(),
+			outcomeAbsent: await deps.outcomesAbsent(current),
 			lockHeld: held,
 		});
 		await assertOwner();
@@ -197,6 +197,9 @@ async function settleUnlaunched(
 		manifestJson: record.candidateKey,
 		bootId: settled.bootId,
 		baselineInstance: record.baseline.instance,
+		...(record.receiptBaseline !== undefined
+			? { receiptBaseline: record.receiptBaseline }
+			: {}),
 	});
 	await assertOwner();
 	await retireOsStageJob(deps.directory);

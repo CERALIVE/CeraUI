@@ -1,3 +1,4 @@
+// allow: SIZE_OK — One leased stage lifetime shares cancellation, pin drainage and release authority across this coordinated loop.
 import { currentLifecycleHolder } from "../../streaming/lifecycle-admission.ts";
 import { getIsStreaming } from "../../streaming/streaming.ts";
 import type {
@@ -10,6 +11,10 @@ import {
 	updatePinController,
 } from "../update-transport/pin.ts";
 import type { OsChannelManifest } from "./os-manifest.ts";
+import {
+	type ReceiptFileIdentity,
+	readReceiptFile,
+} from "./os-receipt-file-identity.ts";
 import type { ObservationReport } from "./os-stage-admission-diagnostics.ts";
 import {
 	observeAdmission,
@@ -42,6 +47,7 @@ export type OsStageRunControl = OsStageControl & {
 };
 export type OsStageRunDeps<T> = {
 	readonly acquireControl?: typeof acquireOsStageControlLease;
+	readonly readReceiptBaseline?: () => ReceiptFileIdentity | null;
 	readonly selection: () => Promise<TransportSelection>;
 	readonly revalidate: () => Promise<void>;
 	readonly pin: typeof updatePinController;
@@ -79,12 +85,16 @@ async function runLeasedOsStageJob<T>(
 		deps.observe(UNTRACKED_OBSERVATION, undefined, report),
 	);
 	assertOsStageToken(control);
+	const receiptBaseline = (
+		deps.readReceiptBaseline ?? (() => readReceiptFile()?.identity ?? null)
+	)();
 	const owner = deps.owner({
 		schema: 1,
 		attemptId: control.attemptId,
 		candidateKey: JSON.stringify(manifest),
 		bundleUrl: manifest.bundle.url,
 		baseline,
+		receiptBaseline,
 		processes: [...baseline.processes],
 		resources: [],
 		launched: false,

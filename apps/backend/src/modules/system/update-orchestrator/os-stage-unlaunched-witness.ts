@@ -13,6 +13,10 @@ import {
 import { basename, dirname } from "node:path";
 import { z } from "zod";
 import { osChannelManifestSchema } from "./os-manifest.ts";
+import {
+	type ReceiptFileIdentity,
+	receiptFileIdentitySchema,
+} from "./os-receipt-file-identity.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import { osStageCandidateKey } from "./os-stage-retry.ts";
 
@@ -23,6 +27,7 @@ export type OsUnlaunchedWitnessInput = {
 	readonly manifestJson: string;
 	readonly bootId: string;
 	readonly baselineInstance: string;
+	readonly receiptBaseline?: ReceiptFileIdentity | null;
 };
 export type OsUnlaunchedWitnessDeps = {
 	readonly path: string;
@@ -41,6 +46,7 @@ const witnessSchema = z
 		candidateKey: z.string().min(1),
 		bootId: z.uuid(),
 		baselineInstance: z.string().regex(/^[1-9][0-9]*:[0-9]+$/),
+		receiptBaseline: receiptFileIdentitySchema.nullable().optional(),
 		disposition: z.literal("unlaunched-unchanged"),
 		completion: z.literal("physically-settled"),
 	})
@@ -48,7 +54,12 @@ const witnessSchema = z
 type Witness = Readonly<z.infer<typeof witnessSchema>>;
 type Settlement = Pick<
 	Witness,
-	"attemptId" | "candidateKey" | "bootId" | "baselineInstance" | "disposition"
+	| "attemptId"
+	| "candidateKey"
+	| "bootId"
+	| "baselineInstance"
+	| "disposition"
+	| "receiptBaseline"
 >;
 
 function missing(error: unknown): boolean {
@@ -146,6 +157,9 @@ function writeWitness(
 			candidateKey: osStageCandidateKey(manifest),
 			bootId: input.bootId,
 			baselineInstance: input.baselineInstance,
+			...(input.receiptBaseline !== undefined
+				? { receiptBaseline: input.receiptBaseline }
+				: {}),
 			disposition: "unlaunched-unchanged",
 			completion: "physically-settled",
 		});
@@ -198,9 +212,22 @@ export function readOsUnlaunchedWitness(
 		parent = openParent(deps);
 		const witness = readWitness(parent, deps);
 		if (!witness) return null;
-		const { attemptId, candidateKey, bootId, baselineInstance, disposition } =
-			witness;
-		return { attemptId, candidateKey, bootId, baselineInstance, disposition };
+		const {
+			attemptId,
+			candidateKey,
+			bootId,
+			baselineInstance,
+			disposition,
+			receiptBaseline,
+		} = witness;
+		return {
+			attemptId,
+			candidateKey,
+			bootId,
+			baselineInstance,
+			disposition,
+			...(receiptBaseline !== undefined ? { receiptBaseline } : {}),
+		};
 	} catch (error) {
 		if (parent === undefined && missing(error)) return null;
 		throw new OsStageError("rauc_recovery_unproven", { cause: error });
