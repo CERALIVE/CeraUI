@@ -544,7 +544,10 @@ and deactivating units, and empty `systemctl show` output).
    expiry is unsafe, never permission to release a writer's lock or force-clean.
    Optional diagnostic collection precedes the observer's final unit and
    process/resource fence; changed final evidence is refused. Process/resource
-   drift reports only the closed `census-drift: unproven` detail and returns null;
+   drift returns null and reports the closed `census-drift: unproven` detail only
+   when the existing admission predicates, excluding process/resource census,
+   are valid. Failed/malformed Operation, unavailable health or invalid boot/slot
+   evidence retains a non-drift terminal refusal even during simultaneous drift;
    admission and post-cleanup quiescence may re-observe within the same deadline
    and authority. Every read resets that detail, including the final read after
    awaited ownership. Command/parsing/timeout/unit-identity unknowns stay terminal.
@@ -564,7 +567,12 @@ and deactivating units, and empty `systemctl show` output).
     or flushes. Ordinary routing command bounds stay unchanged. Retained drainage
     uses the reconciler's active lifetime, with read-only capture after awaited
     ownership preparation and synchronous lease/quiescence checks before release.
-    Already-submitted I/O cannot be revoked and unknown ownership stays retained.
+     Already-submitted I/O cannot be revoked and unknown ownership stays retained.
+     The no-job/absent-guardian/absent-private-directory fallback also forwards
+     its executor through every sweep command. One 10-second budget starts before
+     orphan inspection and fences CONTROL/producer absence; its final synchronous
+     lifetime check precedes opening admission. Normal quiet cleanup remains live,
+     while expiry or lost CONTROL stays unsafe with admission closed.
    The unsafe retained-pin gate intentionally parks after notifying unsafe.
   The attempt watcher reads fresh pinned-path topology every 3 s (2 s read
   bound), independent of RAUC progress/RX. TLS-verified bundle HEAD runs as the

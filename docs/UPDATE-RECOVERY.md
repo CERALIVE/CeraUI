@@ -570,6 +570,12 @@ quiescence; an earlier drift cannot make a later unknown retryable. Command
 failure, nonzero exit, malformed/duplicate properties, timeout, thrown errors
 and changed ActiveState/MainPID/ControlGroup/InvocationID remain non-retryable
 unknown. Only an identical clean pair reaches the unchanged strict validators.
+Simultaneous drift never masks independently invalid non-census evidence. The
+observer checks the existing admission predicates on a non-authorizing projection
+without process/resource membership; only valid remaining predicates permit the
+closed drift detail. A failed or malformed Operation read, unavailable health,
+invalid boot/slot evidence or activation marker retains a non-drift terminal
+refusal. The drifted pair still returns null and cannot itself authorize action.
 Persistent drift settles unsafe at the original deadline. No stored format,
 recovery budget, process whitelist or structural admission predicate changes.
 There is **no intervening
@@ -593,6 +599,16 @@ their existing teardown and 30-second per-command default. These fences cannot
 revoke already-submitted commands or filesystem I/O; their late completion is not
 a new grant, and uncertain or expired settlement retains guardian/job provenance.
 The intentional unsafe retained-pin gate still parks after notifying unsafe.
+The quiet-startup fallback (no recorded job, absent guardian and genuinely absent
+private directory) starts a single short 10-second budget before orphan inspection.
+It forwards that executor through the whole stale-rule sweep and checks the same
+active lifetime, CONTROL lease and producer absence immediately before opening
+admission. A resumed query under surrendered CONTROL submits no deletion, query
+or flush; expiry settles unsafe and leaves admission closed. Normal quiet startup
+still sweeps stale UID rules and both families' tables before opening promptly.
+`os-stage-fix10-startup.test.ts` exercises the actual absent-directory orphan path
+and unmodified real flock helper; routing execution and guardian absence are
+injected, so this is host sequencing proof, not board/kernel-routing qualification.
 The reconciler's later drain of that parked pin observes after the expired job
 deadline by design, under its own active budget and CONTROL lease. Its capture is
 read-only: awaited ownership preparation precedes a final physical observation,
@@ -631,7 +647,7 @@ lifetime/state-machine exceptions. `spawn-policy.ts` (1,350 pure LOC) and
 `reducer.ts` (667) are inherited size debt, not newly compliant modules. Accounting
 excludes blank lines and comment-prefixed lines (including embedded shell comments).
 Orphan inspection is separated from the settlement lifetime without changing its
-predicates. New FIX7/FIX8/FIX9 modules stay below 250 pure LOC. The four
+predicates. New FIX7/FIX8/FIX9/FIX10 modules stay below 250 pure LOC. The four
 fix-6 test files and fix-7 regressions require an explicit TypeScript program:
 the normal backend tsconfig excludes tests and did not catch the fix-6 runtime
 fixture's receipt-returning stage port or synchronous job-reader mismatch.
