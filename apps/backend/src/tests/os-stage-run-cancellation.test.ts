@@ -78,6 +78,9 @@ test("six-minute unproven recovery retains lock and writes no receipt", async ()
 	expect(h.attempts()).toBe(1);
 	await expect(h.deps.pin.sweep()).rejects.toHaveProperty("reason", "busy");
 	h.makeReady();
-	await drainRetainedOsStagePin(h.control.attemptId);
+	await drainRetainedOsStagePin(h.control.attemptId, {
+		deadline: h.now() + 10_000,
+		now: h.now,
+	});
 	await h.deps.pin.sweep();
 });

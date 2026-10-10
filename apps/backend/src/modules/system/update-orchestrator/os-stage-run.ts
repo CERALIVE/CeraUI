@@ -175,7 +175,7 @@ async function runLeasedOsStageJob<T>(
 		)
 			return null;
 		const latest = owner.record();
-		if (snapshot)
+		if (snapshot && bounded)
 			owner.remember(
 				snapshot,
 				latest.launched,

@@ -1,3 +1,8 @@
+import {
+	assertStageDeadline,
+	type StageDeadline,
+	withinStageDeadline,
+} from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import {
 	type RaucAttemptOwnership,
@@ -33,14 +38,17 @@ export async function retainUnsafeOsStagePin(
 
 export async function drainRetainedOsStagePin(
 	attemptId: string,
+	budget: StageDeadline,
 ): Promise<void> {
 	const pin = retained.get(attemptId);
 	if (!pin) return;
-	const current = await pin.observe();
+	const lockHeld = await withinStageDeadline(budget, pin.lockHeld);
+	const current = await withinStageDeadline(budget, pin.observe);
+	assertStageDeadline(budget);
 	const refusal = raucQuiescenceRefusal({
 		ownership: pin.ownership,
 		current,
-		lockHeld: await pin.lockHeld(),
+		lockHeld,
 		cliSettled: pin.cliSettled(),
 		requireNewInstance: pin.requireNewInstance,
 	});
@@ -49,6 +57,6 @@ export async function drainRetainedOsStagePin(
 			diagnostics: { refusal },
 		});
 	pin.release();
-	await pin.drain;
+	await withinStageDeadline(budget, () => pin.drain);
 	retained.delete(attemptId);
 }

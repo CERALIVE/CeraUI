@@ -20,7 +20,14 @@ export async function recoverOwnedOsStageAtStartup(
 	deps: OsStartupDeps,
 ): Promise<void> {
 	const deadline = deps.now() + RAUC_RECOVERY_DEADLINE_MS;
-	const budget = createStageDeadline({ deadline, now: deps.now });
+	const budget = createStageDeadline({
+		deadline,
+		now: deps.now,
+		fence: () => {
+			if (deps.controlHeld?.() === false)
+				throw new OsStageError("rauc_recovery_unproven");
+		},
+	});
 	const read = <T>(work: () => Promise<T>) => withinStageDeadline(budget, work);
 	if (record.launched) await read(deps.restart);
 	let cliGone = !record.launched;
@@ -61,7 +68,7 @@ export async function recoverOwnedOsStageAtStartup(
 		true,
 		record.launched || record.requireNewInstance,
 	);
-	await read(() => deps.drain(record.attemptId));
+	await read(() => deps.drain(record.attemptId, budget));
 	await read(deps.sweep);
 	const settled = owner.record();
 	const ownership = {

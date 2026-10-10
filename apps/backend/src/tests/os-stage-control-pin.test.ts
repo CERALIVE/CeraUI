@@ -158,7 +158,14 @@ test("an unsafe producer fences dispatch, surrenders the lease, and its parked p
 				instance: "retired:100",
 				processes: ["retired:100"],
 			};
-			await drainRetainedOsStagePin(current.attemptId);
+			await drainRetainedOsStagePin(current.attemptId, {
+				deadline: performance.now() + 10_000,
+				now: () => performance.now(),
+				fence: () => {
+					if (!reconciler.held())
+						throw new OsStageError("rauc_recovery_unproven");
+				},
+			});
 			await pin.sweep();
 		}
 		expect(attempts).toBe(1);

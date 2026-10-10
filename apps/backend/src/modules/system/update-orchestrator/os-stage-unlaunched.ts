@@ -1,5 +1,9 @@
 import type { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
 import type { OsStageControlLease } from "./os-stage-control-lease.ts";
+import {
+	createStageDeadline,
+	withinStageDeadline,
+} from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import type { proveOsGuardKernelOwnership } from "./os-stage-guard-lock.ts";
 import type { OsStageGuardObservation } from "./os-stage-guard-observation.ts";
@@ -13,6 +17,7 @@ import {
 import type { observeRaucStage } from "./os-stage-observation.ts";
 import type { acquireOsOrphanLock } from "./os-stage-orphan-lock.ts";
 import { withOsPhysicalSettlement } from "./os-stage-physical-settlement.ts";
+import type { drainRetainedOsStagePin } from "./os-stage-pin-retention.ts";
 import { readOsStagePrivateOwner } from "./os-stage-private-owner.ts";
 import { proveOsStageUnlaunched } from "./os-stage-unlaunched-proof.ts";
 import type { writeOsUnlaunchedWitness } from "./os-stage-unlaunched-witness.ts";
@@ -28,7 +33,7 @@ export type OsUnlaunchedDeps = {
 	readonly observe: typeof observeRaucStage;
 	readonly cliGone: () => Promise<boolean>;
 	readonly outcomesAbsent: (record: OsStageJobRecord) => Promise<boolean>;
-	readonly drain: (attemptId: string) => Promise<void>;
+	readonly drain: typeof drainRetainedOsStagePin;
 	readonly sweep: () => Promise<void>;
 	readonly pinClean: () => Promise<boolean>;
 	readonly jobIdle: () => Promise<boolean>;
@@ -127,7 +132,17 @@ async function settleUnlaunched(
 	)
 		throw new OsStageError("rauc_recovery_unproven");
 	await proof();
-	await deps.drain(record.attemptId);
+	const cleanupBudget = createStageDeadline({
+		deadline,
+		now: deps.now,
+		fence: () => {
+			if (!deps.control.held() || deps.producerPresent())
+				throw new OsStageError("rauc_recovery_unproven");
+		},
+	});
+	await withinStageDeadline(cleanupBudget, () =>
+		deps.drain(record.attemptId, cleanupBudget),
+	);
 	await deps.sweep();
 	const settled = await proof();
 	if (!(await deps.pinClean()))

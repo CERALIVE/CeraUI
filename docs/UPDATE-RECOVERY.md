@@ -577,8 +577,11 @@ the in-memory lifetime. Already-submitted commands/filesystem operations cannot 
 revoked; uncertain or expired settlement retains provenance, never force-cleans.
 The intentional unsafe retained-pin gate still parks after notifying unsafe.
 The reconciler's later drain of that parked pin observes after the expired job
-deadline by design, under its own lease, and releases only on positive
-quiescence. The recovery loop's last diagnostic read at the deadline and the
+deadline by design, under its own active budget and CONTROL lease. Its capture is
+read-only: awaited ownership preparation precedes a final physical observation,
+then synchronous lifetime, lease and quiescence checks gate pin release. Expired
+or surrendered reconciliation cannot release using the earlier quiet snapshot.
+The recovery loop's last diagnostic read at the deadline and the
 proof wait's pacing pause are raced against the deadline without the start/finish
 clock refusal, so the final refusal keeps its precise reason; neither can
 authorize, because proof still requires the clock to be before the deadline.
