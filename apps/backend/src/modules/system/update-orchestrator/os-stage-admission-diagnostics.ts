@@ -84,7 +84,8 @@ export function describeObservationFailure(
 ): string {
 	try {
 		if (!(error instanceof Error)) return `${stage}: thrown ${typeof error}`;
-		const name = ERROR_CLASSES.has(error.name) ? error.name : "Error";
+		const observedName = error.name;
+		const name = ERROR_CLASSES.has(observedName) ? observedName : "Error";
 		const rawCode = "code" in error ? error.code : undefined;
 		const code =
 			typeof rawCode === "string" && ERROR_CODES.has(rawCode)

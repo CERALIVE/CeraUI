@@ -77,3 +77,28 @@ test.each(["name", "code"])(
 		expect(reports).toEqual(["healthy-state: unknown-error"]);
 	},
 );
+
+test("reads the error class once before allowlisting a hostile getter", async () => {
+	// Given successive getter values would bypass a check-then-read allowlist.
+	const error = new Error();
+	let reads = 0;
+	Object.defineProperty(error, "name", {
+		get: () =>
+			reads++ === 0 ? "Error" : "password: SAMPLE_PASSWORD_CREDENTIAL",
+	});
+	const reports: string[] = [];
+	// When the observer formats the caught failure.
+	const result = await observeRaucStage(
+		{ processes: new Set(), resources: new Set() },
+		{
+			...recordedAdmissionDeps,
+			healthy: async () => {
+				throw error;
+			},
+		},
+		(detail) => reports.push(detail),
+	);
+	// Then only the single observed and allowlisted class reaches the sink.
+	expect(result).toBeNull();
+	expect(reports).toEqual(["healthy-state: Error:"]);
+});
