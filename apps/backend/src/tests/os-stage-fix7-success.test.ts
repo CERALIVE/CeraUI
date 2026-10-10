@@ -65,8 +65,13 @@ test("never replays a positive CLI exit after same-tick topology loss", async ()
 					});
 				},
 				prepareReceipt: async () => () => {
-					control.commit?.(offer);
-					return offer;
+					return {
+						schema: 1 as const,
+						version: offer.version,
+						channel: offer.channel,
+						bootId: "boot-B",
+						stagedAt: 0,
+					};
 				},
 			});
 		},

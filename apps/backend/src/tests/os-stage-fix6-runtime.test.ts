@@ -205,9 +205,11 @@ test.each([
 				reason: "",
 				manifest,
 			}),
-			stageOs: stageOsBundle,
+			stageOs: async (...args) => {
+				await stageOsBundle(...args);
+			},
 			isOsStageReady: async () => true,
-			readOsStageJob: () => null,
+			readOsStageJob: async () => null,
 			killAndRestartRaucForStream: async () => {},
 			armOs: async () => {},
 		}),
