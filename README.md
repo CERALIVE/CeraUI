@@ -97,6 +97,17 @@ strict schema-1 compatibility: older unreleased intermediates reject
 `2026.9.5` is the first orchestrator release. These are host proofs, not
 board qualification. See [OS staging recovery](docs/UPDATE-RECOVERY.md#os-staging-recovery-partial--fixture-proven-board-re-drill-owed).
 
+Idle RAUC status helpers no longer make a single extra-member census a terminal
+stage refusal: admission waits for fresh strict proof within a short prelaunch
+bound or the settled pair's remaining recovery budget. Recovery starts that one
+360-second monotonic budget before restart submission; retry and release cannot
+renew it. No process role is whitelisted, and successful-but-unpublished installs
+cannot restage. Ownership, cancellation, candidate/transport freshness and final
+clocks remain fenced. Startup/orphan post-cleanup proofs use the same bounded
+seam. Captured-stat and killed-process host tests are not a qualification of the
+shipped guardian or either board; both-board failover/status-pressure re-drills
+remain owed. Persisted formats and the D154 residuals above are unchanged.
+
 State-side unlaunched OS settlement requires a private completed witness matching
 the persisted attempt, signed candidate and current boot, plus fresh readiness.
 It returns to operator retry without counting an already-counted failure twice.

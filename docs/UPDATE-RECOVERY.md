@@ -491,6 +491,79 @@ re-close admission and queue the same single-flight reconciler. Unreadable
 ownership or inconclusive retirement keeps admission closed and the lock held.
 The control server and stream-start admission do not wait for this recovery.
 
+### Fresh admission under read-helper churn [PARTIAL — host proven; both-board re-drill owed]
+
+RAUC's idle custom bootloader backend can spawn read-side children inside
+`rauc.service` during ordinary status reads, including the device-stats collector
+and the stage observer itself. A clean recovery census is not a cached grant for
+the later retry or publication census. `observeAdmission` now defers only
+`extra-process`, with no dispatch, while obtaining fresh observations at up to
+100 ms intervals. The final snapshot still passes the unchanged
+`requireAdmissionSnapshot` / `failedAdmissionPredicate` validators. No helper
+name, argv, ancestry, prior ownership, zombie state or role exempts a member.
+The observer retains exact tracked identities even after cgroup escape; positive
+ENOENT is still absence, while denied or malformed identity reads stay unknown.
+
+Before a launched pair's outcome is handled, one local monotonic 360-second
+deadline is established, before restart submission. Recovery's 1-second poll,
+later next-pair admission and subsequent revalidation use that same deadline;
+returning a recovery proof does not grant another six minutes. Initial prelaunch
+proofs have a short 10-second bound. A newly authorized install has its own
+outcome/retirement lifetime: the previous pair's retirement deadline is not a
+timeout on the replacement download. Successful CLI settlement starts its one
+bounded release/publication budget; helper expiry keeps that successful but
+unpublished outcome unsafe and cannot route it back to install. No wait resets
+the pin controller's three distinct unused pairs or the 15/30-minute three-round
+policy. The deadline is never persisted or interpreted across backend restart.
+
+The exhausted-pair/error cleanup branch also obtains a fresh bounded proof before
+physical release, rather than converting one transient helper into terminal unsafe.
+Cleanup may finish a proven FAILED pair after cancellation, without granting
+dispatch or publication; CONTROL/private/guardian and final-clock checks remain.
+Known CLI success followed by cancellation is different: its local typed
+`OsStageUnpublishedSuccessError` retains the raw runner's cancellation surface,
+while the sole production `stageOsBundle` entry normalizes it to the existing
+`rauc_recovery_unproven` / unsafe policy before any agent settlement. Proven physical
+cleanup may release the guardian while logical unsafe stays terminal; uncertain or
+expired cleanup retains guardian/private provenance. No manual/automatic restage
+grant is published.
+This marker is an in-process error type, not a persisted field or new wire reason.
+
+Every rescan retains CONTROL, private ownership and the guardian. Admission and
+recovery reassert the captured private-directory provenance separately from the
+guardian's physical `held()` reading. Structural
+slot/boot/primary/activation changes, lost authority, present admission resources
+and missing evidence refuse immediately, even when extras mask a later predicate.
+Recovery may still wait for the failed writer's existing resources to retire.
+A changed MainPID/start-ticks or observed InvocationID during an extra-member
+episode refuses rather than restarting the episode. Admission rechecks cancellation,
+Go Live, ownership and the final clock; after a deferral, candidate and transport
+are refreshed and a new strict snapshot is taken before `beginAttempt`. Signed
+candidate expiry is checked again at dispatch. Release/publication checks the
+same clock at its synchronous callback. Startup's final post-sweep proof shares
+its original recovery deadline; acknowledged orphan proofs share one short bound
+before and after sweep. Release predicates are unchanged and neither path guesses
+install success after backend loss.
+
+The decision seam logs one deferral and its proven/final disposition, with bounded
+process evidence: observation start/end monotonic times, unit MainPID/InvocationID,
+cgroup versus tracked-only members, PID:start-ticks, comm/state/PPID/Tgid, the
+allowlisted read-helper operation (otherwise null), current/previous instances,
+resource summary and remaining deadline. Recovery entry/deadline, refusal changes
+and completion are logged too. Optional diagnostic reads and throwing diagnostic
+sinks never change a safety result; missing reads do not become identity proof.
+Arbitrary cmdline text and exception messages are not emitted by these diagnostics.
+The historical R14 veto PID remains unknown; later captured helpers are evidence
+of the mechanism, not identification of that historical member.
+
+Host regression coverage includes captured-stat runner replay, shared-budget and
+final-clock negatives, cgroup escape/PID reuse/stale NBD, and four actual SIGKILL
+producer boundaries with a real independent flock/private job. The crash tests
+inject RAUC/systemd observation authority; they are not the shipped PID-1 guardian
+or board power-loss qualification. Existing D154 privileged-bypass and forward-only
+schema residuals below remain unchanged. Fresh Rock and Orange Pi failover/status-
+pressure, cancellation and unknown-success crash drills are still required.
+
 ### Unlaunched guardian settlement [PARTIAL — hermetic and real-fixture proven, board rehearsal owed]
 
 A guardian that started but never reached `beginAttempt` (`launched:false`) is no
@@ -531,7 +604,8 @@ Unknown/partial RAUC argv cannot prove installer absence, and supported global
 options before `install` cannot hide a client. Thrown timeouts and private/kernel
 I/O failures inside physical settlement are normalized to the same unsafe reason
 with the original cause. Startup's launched-writer recovery is isolated in
-`os-stage-startup-recovery.ts`; its recovery behavior is unchanged.
+`os-stage-startup-recovery.ts`; its post-cleanup proof uses the bounded fresh
+seam above without changing the unknown-outcome or release predicates.
 
 Real flagged installer argv, helper/sleep cmdline and inherited-fd metadata, the
 exact combined guardian observation request, pre-ready/ack-pending windows and

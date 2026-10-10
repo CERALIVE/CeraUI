@@ -524,7 +524,15 @@ and deactivating units, and empty `systemctl show` output).
   OS retry readiness is a separate positive proof (`os-stage-recovery.ts`):
   settled CLI, active idle RAUC, retired prior installer/failed daemon and
   captured mount/NBD/dm identities, unchanged healthy booted rootfs, inactive
-  target and no activation marker. Recovery polls at 1 s for at most 360 s;
+  target and no activation marker. Recovery polls at 1 s against one local 360 s
+  deadline established before restart submission; later extra-member admission
+  and final release proofs spend its remainder, never a new window. Fresh strict
+  proof defers extras only; no helper role is exempted. Candidate/transport and
+  final-clock checks follow waits before dispatch; successful unpublished installs
+  never restage. Startup/orphan post-cleanup proof uses the same bounded seam.
+  Terminal failed-pair cleanup also rescans under that budget. Raw post-success
+  cancellation carries a local unpublished-success error, normalized by the sole
+  production stage entry to existing unsafe before the agent can grant restage.
   expiry is unsafe, never permission to release a writer's lock or force-clean.
   The attempt watcher reads fresh pinned-path topology every 3 s (2 s read
   bound), independent of RAUC progress/RX. TLS-verified bundle HEAD runs as the
