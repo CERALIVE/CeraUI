@@ -2,7 +2,54 @@ import { expect, test } from "bun:test";
 import { observeAdmission } from "../modules/system/update-orchestrator/os-stage-admission-snapshot.ts";
 import { observeRaucStage } from "../modules/system/update-orchestrator/os-stage-observation.ts";
 import { censusDriftFixture } from "./helpers/os-stage-census-drift-fixture.ts";
+import {
+	nonCensusFaults,
+	unknownEvidenceFixture,
+} from "./helpers/os-stage-fix10-unknown-fixture.ts";
 import { rockHelperFixture } from "./helpers/os-stage-rock-helper-fixture.ts";
+
+for (const drift of [
+	"retiring-process",
+	"appearing-process",
+	"resource",
+] as const) {
+	test.each(nonCensusFaults)(
+		"%s stays terminal when censuses have " + drift,
+		async (fault) => {
+			// Given independent invalid evidence in a drifted pair, then clean responses.
+			const census = censusDriftFixture(drift);
+			const fixture = unknownEvidenceFixture(census.deps, fault);
+			let sleeps = 0;
+			let replacements = 0;
+			// When the real observer/admission seam sees the combined fault.
+			const work = observeAdmission(
+				(report) =>
+					observeRaucStage(
+						{ processes: new Set(), resources: new Set() },
+						fixture.deps,
+						report,
+					),
+				undefined,
+				{
+					now: () => 0,
+					deadline: 300,
+					sleep: async () => {
+						sleeps++;
+					},
+					assert: async () => undefined,
+				},
+			).then((proof) => {
+				replacements++;
+				return proof;
+			});
+			await expect(work).rejects.toHaveProperty("mode", "unsafe");
+			// Then invalid non-census evidence grants neither pacing nor replacement.
+			expect(sleeps).toBe(0);
+			expect(replacements).toBe(0);
+			expect(fixture.operations()).toBe(1);
+		},
+	);
+}
 
 test.each([
 	"command",

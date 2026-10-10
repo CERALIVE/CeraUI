@@ -4,6 +4,7 @@ import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
 import { readBootId } from "./os-identity.ts";
 import {
 	describeObservationFailure,
+	failedAdmissionPredicate,
 	notifyObservation,
 	type ObservationReport,
 	STAGE_CENSUS_DRIFT,
@@ -226,7 +227,16 @@ export async function observeRaucStage(
 			!sameStageSet(processIds, finalCensus.processIds) ||
 			!sameStageSet(resources, finalCensus.resources)
 		) {
-			notifyObservation(report, STAGE_CENSUS_DRIFT);
+			// This projection checks non-census evidence only; it is never returned.
+			const refusal = failedAdmissionPredicate({
+				...snapshot,
+				processes: [instance],
+				resources: [],
+			});
+			notifyObservation(
+				report,
+				refusal ? `${refusal}: unproven` : STAGE_CENSUS_DRIFT,
+			);
 			return null;
 		}
 		rememberStageEvidence(snapshot, {
