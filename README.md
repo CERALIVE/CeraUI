@@ -67,16 +67,34 @@ An admission refusal now names its first failing predicate and, when observation
 itself stopped, bounded boundary/class/code diagnostics without arbitrary exception
 messages or changing admission. Receipt retirement requires persisted CONTROL
 authority and a new receipt's installed-image binding to the healthy booted rootfs,
-in addition to version equality. Legacy receipts (including the Rock's `.64`) stay
+in addition to version equality. Legacy receipts (including HISTORICAL Rock `.64` and
+the CURRENT prior-boot `.70` from bench build `1f6a990e`) stay
 intact. A renamed receipt with failed directory fsync is reported as durability
-pending and its acknowledgement retries; marker read errors never imply absence.
+pending and its acknowledgement retries. A successful tombstone acknowledgement
+is cached by full file identity for this process only; unchanged ticks avoid
+CONTROL/fsync, changes/failures retry, and a new process acknowledges again.
+Marker read errors never imply absence.
 Judgment carries the read-time inode/metadata/hash identity, while cooperative
 publication, arming and rebinding share CONTROL. Rename is not compare-and-swap
-against privileged writers ignoring that lease. New never-launched jobs/witnesses
+against privileged writers ignoring that lease. Production publication uses
+`commitStagedManifest` through the leased stage callback, rebinding uses
+`rebindStagedReceipt` through leased runtime reconciliation, and retry uses the
+same leased stage entry. Low-level `saveStagedManifest` itself requires no lease.
+The image's `ceralive-rauc-activate.sh --arm/--stop` takes its own activation
+flock, not CONTROL; privileged/manual or surviving helper effects can bypass
+cooperative exclusion. ExecStop deliberately stays CONTROL-independent.
+New never-launched jobs/witnesses
 record the pre-existing receipt baseline: an unchanged stale receipt is preserved
 without obstructing safe retry, but new/changed receipts still veto. Legacy records
 retain their presence veto; a both-slots-good unsafe failure without a matching
-completed never-launched witness still stays failed. These are host proofs, not
+completed never-launched witness still stays failed (HISTORICAL failed `.68`, not
+the current Rock state). The supplied CURRENT Rock state is booted `2026.10.70`,
+both slots good, agent idle: the unbound legacy receipt is inert and the next
+Check → stage → install → staged → armed flow is unobstructed in the oracle's
+host repro. Accepted D154 residuals are privileged arming bypass and forward-only
+strict schema-1 compatibility: older unreleased intermediates reject
+`receiptBaseline`; bench rollback requires clearing stage job/witness records.
+`2026.9.5` is the first orchestrator release. These are host proofs, not
 board qualification. See [OS staging recovery](docs/UPDATE-RECOVERY.md#os-staging-recovery-partial--fixture-proven-board-re-drill-owed).
 
 State-side unlaunched OS settlement requires a private completed witness matching

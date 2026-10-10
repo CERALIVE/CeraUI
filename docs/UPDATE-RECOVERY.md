@@ -878,24 +878,60 @@ CONTROL can replace the entry after the last lstat and before rename(2), or muta
 bytes after the final hash read. That privileged/noncooperative window is not
 closed by another pathname check. Cooperative staging holds CONTROL from receipt
 baseline capture through the final publication callback and producer release;
-activation arming and receipt rebinding now hold that same lease. The runner's
+backend activation arming and receipt rebinding hold that same lease. The runner's
 commit-token check includes lease liveness, and arming refuses an unheld lease.
 Real-flock tests prove competing cooperative writers cannot enter these lifetimes;
 they do not claim resistance to a privileged writer ignoring the lock.
+
+**Cooperative writer census.** `commitStagedManifest()` in `os-agent.ts` publishes
+through the leased stage callback; `rebindStagedReceipt()` writes through runtime
+activation reconciliation under CONTROL. Retry enters the same leased stage path.
+`saveStagedManifest()` is a low-level export and does not itself require a lease;
+the exclusion claim applies to observed production callers, not every invocation.
+The retained first-lstat replacement test proves KEEP at the descriptor entry
+check. `os-receipt-final-lstat-residual.test.ts` separately pins that a pathname
+replaced immediately AFTER the final lstat and BEFORE rename is still consumed;
+it documents the residual rather than promising conditional rename.
+
+**Accepted residual D154: privileged/noncooperative arming.** A root process or
+the image systemd helper `ceralive-rauc-activate.sh --arm/--stop` takes the helper's
+activation flock, not CeraUI's CONTROL lease. A direct `--arm`, including a helper
+surviving caller death/timeout, can bypass CONTROL and race the last marker probe
+before rename. The final re-probe closes the cooperative backend path only.
+Retirement applies only to an ALREADY-BOOTED image's receipt; staging a new
+candidate publishes a NEW receipt under CONTROL, and the identity check refuses
+to consume that replacement. ExecStop activation deliberately stays CONTROL-
+independent, so holding CONTROL does not block shutdown activation. This accepted
+scope is not a claim of exclusion against privileged helper effects.
+
 A directory-fsync failure after rename reports **retirement durability pending**,
 not “receipt kept”. Subsequent CONTROL passes acknowledge the directory even when
 the live receipt is absent; that acknowledgement does not mutate agent state.
+After successful acknowledgement, the store remembers the tombstone's complete
+device/inode/size/nanosecond mtime/birthtime/hash identity for this process lifetime.
+Unchanged acknowledged tombstones no longer acquire CONTROL or fsync on every
+tick. Failure never grants cached acknowledgement; identity changes require a
+fresh sync, and a new process generation acknowledges again. No stored format
+changes or cross-process durability assumptions are introduced.
 Crash residue converges without replaying an installation. This is host process-
 crash proof, not board power-loss qualification. Retirement runs at startup, on
 each tick and before Check now or Install
 now, ahead of witness settlement and unsafe-record confirmation.
 
 This removes only the receipt blocker. **Both slots `good` still refuses
-confirmation**, by the rule above. The real Rock's legacy `.64` receipt has no
+confirmation**, by the rule above. **HISTORICAL Rock evidence:** the legacy `.64` receipt has no
 image binding and now stays intact; close install/publication timestamps do not
 prove identity. Its failed `.68` record remains `failed / unsafe` independently.
 A new, positively bound receipt can retire without clearing a both-good failure.
 No owner-approved bench reset or activation is performed by this change.
+
+**CURRENT Rock state supplied on 2026-10-10 (not a new board observation here):**
+the legacy `.70` receipt was written on the prior boot by the `1f6a990e` bench
+`.deb`; the board is booted on `2026.10.70`, both slots are good and the agent is
+idle. This head KEEPS the receipt because `installedImage` is absent. It is inert:
+the next Check → stage → install → staged → armed flow is unobstructed. The oracle's
+Q5 real-file/runtime repro exercised that flow with fixture RAUC/arming ports,
+not a board install. The historical failed/unsafe `.68` case is not this idle state.
 
 **A pre-existing receipt is not necessarily this attempt's outcome [PARTIAL —
 host-proven].** New private job records capture strict optional `receiptBaseline`
@@ -910,12 +946,26 @@ rechecks the baseline after its final awaited authority read before permitting
 operator retry. Legacy job/witness records without `receiptBaseline` retain the
 old presence veto. Unreadable identity is uncertainty, never positive absence.
 
-Thus a stale legacy `.64` receipt on booted `.64` no longer obstructs a positively
+Thus the HISTORICAL stale legacy `.64` receipt on booted `.64` no longer obstructs a positively
 proved never-launched next attempt. It does **not** make an unrecorded successful
 installation safe: launched provenance cannot produce this witness, and the
-Rock's both-good failed/unsafe `.68` case without a matching completed witness
+HISTORICAL Rock both-good failed/unsafe `.68` case without a matching completed witness
 remains failed/unsafe. Host regression and mutation evidence do not qualify these
 paths on either board or under power loss.
+
+**Accepted residual D154: schema-1 additive fields are forward-read compatible
+only.** `receiptBaseline` remains optional in strict schema-1 stage job/witness
+records: this head reads older records, but older unreleased bench intermediates
+`1f6a990e` and `d28fff27` reject records carrying it with `unrecognized_keys`.
+Persistence across reboot does not make those records readable by an older backend.
+`2026.9.5` is the FIRST release containing the orchestrator, so no released backend
+reads these records. The other strict records (sync receipt and staged receipt's
+`installedImage`) follow the same additive-forward-only discipline.
+Rolling a bench board back to an intermediate build requires clearing its stage
+job/witness records as a bench-only operation, only after positive no-writer proof
+and preservation of recovery evidence; this is not an operator recovery shortcut.
+Any future schema evolution must follow this same compatibility rule or bump the
+schema number. Stored job/witness/receipt formats are unchanged by this correction.
 
 **Admission refusals name their predicate [PARTIAL — host-proven].** The thrown
 `rauc_recovery_unproven` error keeps `refusal: "stage-admission-unproven"` and

@@ -240,15 +240,32 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
   is observed and settled unsafe, never promoted to completed release.
    Receipt retirement requires exact new `installedImage` binding to the healthy
    actual booted rootfs, not stamp equality alone. Legacy receipts, including the
-   real Rock `.64`, KEEP. Under CONTROL, persisted recovery identity is reread
+   HISTORICAL Rock `.64` and CURRENT prior-boot `.70`, KEEP. The supplied current
+   Rock is booted `2026.10.70`, both slots good, agent idle; its unbound `.70`
+   receipt from `1f6a990e` is inert and the next stage flow is unobstructed in the
+   oracle host repro. The failed `.68` case is HISTORICAL, not this idle state.
+   Under CONTROL, persisted recovery identity is reread
    before evidence and at the final rename boundary; drift/open lifecycle/active
    attempts KEEP. Judgment captures file device/inode/size/mtime/birthtime/hash;
    `os-receipt-retirement-store.ts` compares it again through a validated parent
    descriptor before rename. Rename is not compare-and-swap: CONTROL excludes
-   cooperative stage/arm/rebind writers, not privileged writers ignoring it.
+   cooperative production stage/arm/rebind callers, not privileged bypass.
+   `commitStagedManifest` publishes via the leased stage callback;
+   `rebindStagedReceipt` uses leased runtime reconciliation; retry uses leased
+   stage admission. Low-level `saveStagedManifest` itself requires no lease.
+   Image helper `ceralive-rauc-activate.sh --arm/--stop` uses its own activation
+   flock, not CONTROL; direct or surviving helper effects can bypass it, while
+   ExecStop deliberately remains CONTROL-independent (accepted residual D154).
    Parent fsync retries after rename, including absent-live crash residue; typed
    durability-pending is not “receipt kept”. Activation-marker absence is lstat
    ENOENT only and is re-probed after final authority; unknown never authorizes cleanup.
+   Successful tombstone acknowledgement is cached by full identity only for this
+   process; unchanged ticks avoid CONTROL/fsync, failure/change/restart retries.
+   The final-lstat residual test pins consumption after privileged pathname
+   replacement, not a conditional-rename guarantee. D154 also accepts forward-only
+   strict schema-1 additions: older unreleased bench intermediates reject
+   `receiptBaseline`; rollback requires bench-only stage job/witness clearance.
+   `2026.9.5` is the first orchestrator release. Details: `docs/UPDATE-RECOVERY.md`.
   Stage-admission refusals keep `rauc_recovery_unproven`/unsafe and add the
    log-only `predicate` and bounded, message-free class/code `observation` diagnostics
   (`os-stage-admission-diagnostics.ts`); see `docs/UPDATE-RECOVERY.md`.
