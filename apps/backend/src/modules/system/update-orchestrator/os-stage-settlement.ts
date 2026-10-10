@@ -6,6 +6,7 @@ import { OsStageError } from "./os-stage-error.ts";
 import type { createOsStageJobOwner } from "./os-stage-job.ts";
 import { retainUnsafeOsStagePin } from "./os-stage-pin-retention.ts";
 import {
+	RAUC_RECOVERY_DEADLINE_MS,
 	type RaucStageSnapshot,
 	recoverRaucStage,
 } from "./os-stage-recovery.ts";
@@ -25,7 +26,7 @@ type AttemptSettlement = {
 	readonly capture: () => Promise<RaucStageSnapshot | null>;
 	readonly generation: () => number;
 	readonly invalidate: () => number;
-	readonly confirmed: (snapshot: RaucStageSnapshot) => void;
+	readonly confirmed: (snapshot: RaucStageSnapshot, deadline: number) => void;
 	readonly unsafe: (error: OsStageError) => void;
 	readonly drain: Promise<void>;
 };
@@ -88,6 +89,7 @@ export async function settlePinnedOsAttempt(
 	timer.unref();
 	try {
 		const outcome = await attempt.outcome;
+		const deadline = deps.now() + RAUC_RECOVERY_DEADLINE_MS;
 		clearInterval(timer);
 		input.invalidate();
 		requireNewInstance = outcome.kind === "failed";
@@ -96,6 +98,8 @@ export async function settlePinnedOsAttempt(
 				attemptId: control.attemptId,
 				pair: `${input.transport.candidate.ifname}/${input.transport.family}`,
 				oldInstance: before.instance,
+				recoveryStartedMs: deps.now(),
+				recoveryDeadlineMs: deadline,
 				reason: outcome.error.reason,
 				diagnostics: outcome.error.diagnostics,
 			});
@@ -113,11 +117,15 @@ export async function settlePinnedOsAttempt(
 				sleep: deps.sleep,
 				observe: input.capture,
 				cliSettled: attempt.cliSettled,
-				lockHeld: owner.held,
+				lockHeld: async () => {
+					await owner.assertAuthority?.();
+					return owner.held();
+				},
+				deadline,
 			},
 			requireNewInstance,
 		);
-		input.confirmed(quiescent);
+		input.confirmed(quiescent, deadline);
 		owner.remember(quiescent, true, true, requireNewInstance);
 		await attempt.cli;
 		logger.info("update-orchestrator: OS attempt settled", {
@@ -125,6 +133,8 @@ export async function settlePinnedOsAttempt(
 			pair: `${input.transport.candidate.ifname}/${input.transport.family}`,
 			oldInstance: before.instance,
 			currentInstance: quiescent.instance,
+			recoveryDeadlineMs: deadline,
+			deadlineRemainingMs: Math.max(0, deadline - deps.now()),
 			outcome: outcome.kind,
 		});
 		await input.admit();

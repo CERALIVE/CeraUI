@@ -31,7 +31,10 @@ import {
 import { OsStageError } from "./os-stage-error.ts";
 import { createOsStageJobOwner } from "./os-stage-job.ts";
 import { observeRaucStage } from "./os-stage-observation.ts";
-import type { RaucStageSnapshot } from "./os-stage-recovery.ts";
+import {
+	type RaucStageSnapshot,
+	raucQuiescenceRefusal,
+} from "./os-stage-recovery.ts";
 import {
 	acquireOrSettleOsStage,
 	assertOsStageToken,
@@ -81,8 +84,18 @@ async function runLeasedOsStageJob<T>(
 	deps: OsStageRunDeps<T> & { readonly lease: OsStageControlLease },
 ): Promise<T> {
 	assertOsStageToken(control);
-	const baseline = await observeAdmission((report) =>
-		deps.observe(UNTRACKED_OBSERVATION, undefined, report),
+	const baseline = await observeAdmission(
+		(report) => deps.observe(UNTRACKED_OBSERVATION, undefined, report),
+		undefined,
+		{
+			...deps,
+			deadline: deps.now() + 10_000,
+			assert: async () => {
+				if (!deps.lease.held())
+					throw new OsStageError("rauc_recovery_unproven");
+				assertOsStageToken(control);
+			},
+		},
 	);
 	assertOsStageToken(control);
 	const receiptBaseline = (
@@ -110,6 +123,8 @@ async function runLeasedOsStageJob<T>(
 	let proof: RaucStageSnapshot | null = baseline;
 	let approvalRequired = false;
 	let observationGeneration = 0;
+	let recoveryDeadline: number | undefined;
+	let proofDeadline = deps.now() + 10_000;
 	const unsafe = Promise.withResolvers<never>();
 	const drainage = Promise.withResolvers<{ readonly error?: unknown }>();
 	const admit = async () => {
@@ -127,6 +142,8 @@ async function runLeasedOsStageJob<T>(
 		};
 		const snapshot = await deps.observe(tracked, undefined, report);
 		if (generation !== observationGeneration) return null;
+		await owner.assertAuthority?.();
+		if (generation !== observationGeneration) return null;
 		const latest = owner.record();
 		if (snapshot)
 			owner.remember(
@@ -136,6 +153,63 @@ async function runLeasedOsStageJob<T>(
 				latest.requireNewInstance,
 			);
 		return snapshot;
+	};
+	const freshProof = async (transport?: RankedTransport) => {
+		const deadline = recoveryDeadline ?? deps.now() + 10_000;
+		proofDeadline = deadline;
+		const assert = async () => {
+			await owner.assertAuthority?.();
+			if (!deps.lease.held() || !(await owner.held()))
+				throw new OsStageError("rauc_recovery_unproven");
+			await admit();
+		};
+		let deferred = false;
+		let current: RaucStageSnapshot;
+		do {
+			deferred = false;
+			current = await observeAdmission(capture, baseline, {
+				...deps,
+				deadline,
+				assert,
+				previousInstance: owner.record().baseline.instance,
+				deferred: () => {
+					deferred = true;
+				},
+				quiescence: async (snapshot) => {
+					const record = owner.record();
+					return raucQuiescenceRefusal({
+						ownership: {
+							baseline: record.baseline,
+							processes: new Set(record.processes),
+							resources: new Set(record.resources),
+						},
+						current: snapshot,
+						cliSettled: record.cliSettled,
+						lockHeld: await owner.held(),
+						requireNewInstance: record.requireNewInstance,
+					});
+				},
+			});
+			if (deferred && transport) {
+				await deps.revalidate();
+				const selection = await deps.selection();
+				if (
+					!selection.ranked.some(
+						(row) =>
+							row.healthy &&
+							row.candidate.ifname === transport.candidate.ifname &&
+							row.family === transport.family,
+					)
+				)
+					throw new OsStageError("os_transport_failed");
+				await assert();
+			}
+		} while (deferred && transport);
+		if (deps.now() >= deadline)
+			throw new OsStageError("rauc_recovery_unproven", {
+				diagnostics: { refusal: "deadline-expired" },
+			});
+		return current;
 	};
 	try {
 		await admit();
@@ -154,16 +228,25 @@ async function runLeasedOsStageJob<T>(
 					throw new OsStageError("rauc_install_failed", { cause });
 				}
 				await admit();
-				const before = await observeAdmission(capture, baseline);
+				const before = await freshProof(transport);
 				await admit();
 				if (!(await owner.held()))
 					throw new OsStageError("rauc_recovery_unproven");
 				await admit();
+				if (deps.now() >= proofDeadline)
+					throw new OsStageError("rauc_recovery_unproven", {
+						diagnostics: { refusal: "deadline-expired" },
+					});
+				if (Date.now() >= Date.parse(manifest.expires_at))
+					throw new OsStageError("rauc_install_failed", {
+						diagnostics: { refusal: "signed-candidate-expired" },
+					});
 				owner.beginAttempt(
 					before,
 					`${transport.candidate.ifname}/${transport.family}`,
 				);
 				proof = null;
+				recoveryDeadline = undefined;
 				await settlePinnedOsAttempt({
 					url: manifest.bundle.url,
 					transport,
@@ -175,8 +258,9 @@ async function runLeasedOsStageJob<T>(
 					capture,
 					generation: () => observationGeneration,
 					invalidate: () => ++observationGeneration,
-					confirmed: (snapshot) => {
+					confirmed: (snapshot, deadline) => {
 						proof = snapshot;
+						recoveryDeadline = deadline;
 					},
 					unsafe: (error) => unsafe.reject(error),
 					drain: drainage.promise.then(({ error }) => {
@@ -208,12 +292,16 @@ async function runLeasedOsStageJob<T>(
 		await admit();
 		const commit = await deps.prepareReceipt();
 		await admit();
-		proof = await observeAdmission(capture, baseline);
+		proof = await freshProof();
 		await admit();
 		if (!proof) throw new OsStageError("rauc_recovery_unproven");
 		let result: T | undefined;
 		await owner.release(proof, true, () => {
 			assertOsStageToken(control);
+			if (recoveryDeadline !== undefined && deps.now() >= recoveryDeadline)
+				throw new OsStageError("rauc_recovery_unproven", {
+					diagnostics: { refusal: "deadline-expired" },
+				});
 			try {
 				result = commit();
 			} catch (cause) {
@@ -223,6 +311,7 @@ async function runLeasedOsStageJob<T>(
 		if (result === undefined) throw new OsStageError("rauc_recovery_unproven");
 		return result;
 	} catch (cause) {
+		++observationGeneration;
 		await settleUnlaunchedOsStageFailure(failure, cause);
 		if (
 			cause instanceof AggregateError ||
