@@ -26,6 +26,8 @@ type AttemptSettlement = {
 	>;
 	readonly admit: () => Promise<void>;
 	readonly capture: () => Promise<RaucStageSnapshot | null>;
+	/** The reconciler drains a parked pin after the job's deadline has passed. */
+	readonly drainCapture: () => Promise<RaucStageSnapshot | null>;
 	readonly generation: () => number;
 	readonly invalidate: () => number;
 	readonly confirmed: (snapshot: RaucStageSnapshot, deadline: number) => void;
@@ -203,7 +205,7 @@ export async function settlePinnedOsAttempt(
 				processes: new Set(record.processes),
 				resources: new Set(record.resources),
 			},
-			observe: input.capture,
+			observe: input.drainCapture,
 			cliSettled: attempt.cliSettled,
 			lockHeld: owner.held,
 			requireNewInstance,

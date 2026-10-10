@@ -38,6 +38,20 @@ export async function withinStageDeadline<T>(
 	budget: StageDeadline,
 	work: () => Promise<T>,
 ): Promise<T> {
+	assertStageDeadline(budget);
+	const value = await raceStageDeadline(budget, work);
+	assertStageDeadline(budget);
+	return value;
+}
+
+/**
+ * Races work against the deadline without the start/finish clock checks, for
+ * diagnostic reads whose caller re-checks the clock before any authorization.
+ */
+export async function raceStageDeadline<T>(
+	budget: StageDeadline,
+	work: () => Promise<T>,
+): Promise<T> {
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	const expired = () => {
 		budget.invalidate?.();
@@ -46,8 +60,7 @@ export async function withinStageDeadline<T>(
 		});
 	};
 	try {
-		assertStageDeadline(budget);
-		const value = await Promise.race([
+		return await Promise.race([
 			work(),
 			new Promise<never>((_resolve, reject) => {
 				timer = setTimeout(
@@ -56,8 +69,6 @@ export async function withinStageDeadline<T>(
 				);
 			}),
 		]);
-		assertStageDeadline(budget);
-		return value;
 	} finally {
 		clearTimeout(timer);
 	}

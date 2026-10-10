@@ -3,7 +3,7 @@ import {
 	describeObservationFailure,
 	type ObservationReport,
 } from "./os-stage-admission-diagnostics.ts";
-import { withinStageDeadline } from "./os-stage-deadline.ts";
+import { raceStageDeadline, withinStageDeadline } from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import { stageEvidence } from "./os-stage-process-evidence.ts";
 import type { RaucStageSnapshot } from "./os-stage-recovery.ts";
@@ -78,9 +78,10 @@ export async function waitForStageProof(input: {
 	const guarded = async <T>(
 		boundary: "observation" | "quiescence",
 		work: () => Promise<T>,
+		settle: typeof withinStageDeadline = withinStageDeadline,
 	): Promise<T> => {
 		try {
-			return await withinStageDeadline(wait, work);
+			return await settle(wait, work);
 		} catch (error) {
 			if (
 				error instanceof OsStageError &&
@@ -197,8 +198,11 @@ export async function waitForStageProof(input: {
 					...(observation ? { observation } : {}),
 				});
 		}
-		await guarded("quiescence", () =>
-			wait.sleep(Math.min(100, Math.max(0, wait.deadline - wait.now()))),
+		// A pause ending at the deadline is the loop's normal, reported exit.
+		await guarded(
+			"quiescence",
+			() => wait.sleep(Math.min(100, Math.max(0, wait.deadline - wait.now()))),
+			raceStageDeadline,
 		);
 	}
 	reportStageProofDecision({

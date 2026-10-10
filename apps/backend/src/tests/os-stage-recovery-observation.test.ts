@@ -101,6 +101,7 @@ test("captures arbitrary RAUC resource identities while leaving foreign block de
 		["systemctl", "show"],
 		["busctl", "get-property"],
 		["rauc", "status"],
+		["systemctl", "show"],
 	]);
 	reads.delete("/proc/659/stat");
 	expect(

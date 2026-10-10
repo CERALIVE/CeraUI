@@ -1,4 +1,4 @@
-import { withinStageDeadline } from "./os-stage-deadline.ts";
+import { raceStageDeadline } from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import { reportStageProofDecision } from "./os-stage-proof-wait.ts";
 
@@ -110,8 +110,8 @@ export async function recoverRaucStage(
 	let previousReason: string | undefined;
 	let lastCurrent: RaucStageSnapshot | null = null;
 	do {
-		const lockHeld = await withinStageDeadline(wait, deps.lockHeld);
-		const current = await withinStageDeadline(wait, deps.observe);
+		const lockHeld = await raceStageDeadline(wait, deps.lockHeld);
+		const current = await raceStageDeadline(wait, deps.observe);
 		lastCurrent = current;
 		const structural =
 			current &&
@@ -163,7 +163,7 @@ export async function recoverRaucStage(
 			});
 		}
 		if (deps.now() >= deadline) break;
-		await withinStageDeadline(wait, () =>
+		await raceStageDeadline(wait, () =>
 			deps.sleep(Math.min(RAUC_RECOVERY_POLL_MS, deadline - deps.now())),
 		);
 	} while (deps.now() <= deadline);

@@ -157,7 +157,7 @@ async function runLeasedOsStageJob<T>(
 			throw new OsStageError("os_stage_cancelled_for_stream");
 		assertOsStageToken(control);
 	};
-	const capture = async (report?: ObservationReport) => {
+	const capture = async (report?: ObservationReport, bounded = true) => {
 		const generation = observationGeneration;
 		await owner.assertAuthority?.();
 		if (generation !== observationGeneration) return null;
@@ -169,7 +169,9 @@ async function runLeasedOsStageJob<T>(
 		const snapshot = await deps.observe(tracked, undefined, report);
 		if (
 			generation !== observationGeneration ||
-			(recoveryDeadline !== undefined && deps.now() >= recoveryDeadline)
+			(bounded &&
+				recoveryDeadline !== undefined &&
+				deps.now() >= recoveryDeadline)
 		)
 			return null;
 		const latest = owner.record();
@@ -320,6 +322,7 @@ async function runLeasedOsStageJob<T>(
 					deps,
 					admit,
 					capture,
+					drainCapture: () => capture(undefined, false),
 					generation: () => observationGeneration,
 					invalidate: () => ++observationGeneration,
 					confirmed: (snapshot, deadline) => {
