@@ -4,7 +4,35 @@ export type StageDeadline = {
 	readonly deadline: number;
 	readonly now: () => number;
 	readonly invalidate?: () => void;
+	readonly assert?: () => void;
 };
+
+export function createStageDeadline(
+	input: StageDeadline,
+): StageDeadline & Required<Pick<StageDeadline, "assert" | "invalidate">> {
+	let active = true;
+	return {
+		...input,
+		invalidate: () => {
+			active = false;
+			input.invalidate?.();
+		},
+		assert: () => {
+			if (!active) throw new OsStageError("rauc_recovery_unproven");
+			input.assert?.();
+		},
+	};
+}
+
+export function assertStageDeadline(budget: StageDeadline): void {
+	budget.assert?.();
+	if (budget.now() >= budget.deadline) {
+		budget.invalidate?.();
+		throw new OsStageError("rauc_recovery_unproven", {
+			diagnostics: { refusal: "deadline-expired" },
+		});
+	}
+}
 
 export async function withinStageDeadline<T>(
 	budget: StageDeadline,
@@ -18,6 +46,7 @@ export async function withinStageDeadline<T>(
 		});
 	};
 	try {
+		assertStageDeadline(budget);
 		const value = await Promise.race([
 			work(),
 			new Promise<never>((_resolve, reject) => {
@@ -27,6 +56,7 @@ export async function withinStageDeadline<T>(
 				);
 			}),
 		]);
+		assertStageDeadline(budget);
 		return value;
 	} finally {
 		clearTimeout(timer);
