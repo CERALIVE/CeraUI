@@ -12,6 +12,7 @@ import { defaultOsUnlaunchedEffects } from "./os-stage-unlaunched-effects.ts";
 export type OsStageJobOwner = {
 	acquire(): Promise<void>;
 	held(): Promise<boolean>;
+	assertAuthority?(): Promise<void>;
 	remember(
 		snapshot: RaucStageSnapshot,
 		launched?: boolean,

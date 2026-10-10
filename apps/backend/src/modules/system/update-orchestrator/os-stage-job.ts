@@ -203,6 +203,8 @@ export function createOsStageJobOwner(
 	return {
 		acquire,
 		held,
+		assertAuthority: () =>
+			withOsPhysicalSettlement(() => provenance.assert(current, false)),
 		remember,
 		beginAttempt,
 		release,

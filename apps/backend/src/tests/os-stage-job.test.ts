@@ -167,6 +167,27 @@ guardTest(
 );
 
 guardTest(
+	"admission authority refuses private token drift while physical guardian ownership remains held",
+	record,
+	async (h) => {
+		// Given a live independently held guardian and its captured private directory.
+		await h.owner.acquire();
+		writePrivateOsJobFile("release", "different-attempt\n", h.directory);
+		const assertAuthority = h.owner.assertAuthority;
+		if (!assertAuthority)
+			throw new Error("production owner authority assertion missing");
+		// When admission reasserts persisted authority rather than just the kernel lock.
+		await expect(assertAuthority()).rejects.toMatchObject({
+			reason: "rauc_recovery_unproven",
+			diagnostics: { refusal: "private-provenance-mismatch" },
+		});
+		// Then lock ownership is not falsely erased or released by the authority refusal.
+		expect(await h.owner.held()).toBe(true);
+		expect(await h.contender()).toBe(75);
+	},
+);
+
+guardTest(
 	"unproven quiescence and pin teardown never acknowledge release",
 	record,
 	async (h) => {
