@@ -194,7 +194,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		[
 			[
 				"osStage.serviceObservation",
-				"[systemctl, show, rauc.service, --property=ActiveState,MainPID,ControlGroup]",
+				"[systemctl, show, rauc.service, --property=ActiveState,MainPID,ControlGroup,InvocationID]",
 			],
 			[
 				"osStage.operationObservation",

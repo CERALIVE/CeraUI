@@ -48,7 +48,15 @@ export const recordedAdmissionDeps: RaucObservationDeps = {
 		return value;
 	},
 	run: async (argv) => {
-		const value = recorded.commands[argv.join(" ")];
+		// The historical command did not request InvocationID; keep it UNKNOWN.
+		const key = argv
+			.map((arg) =>
+				arg === "--property=ActiveState,MainPID,ControlGroup,InvocationID"
+					? "--property=ActiveState,MainPID,ControlGroup"
+					: arg,
+			)
+			.join(" ");
+		const value = recorded.commands[key];
 		if (value === undefined) throw new Error("Uncaptured command");
 		return value;
 	},

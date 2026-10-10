@@ -8,6 +8,10 @@ import {
 	type ObservationReport,
 } from "./os-stage-admission-diagnostics.ts";
 import { observeStageResources } from "./os-stage-observation-resources.ts";
+import {
+	collectStageMembers,
+	rememberStageEvidence,
+} from "./os-stage-process-evidence.ts";
 import type { RaucStageSnapshot } from "./os-stage-recovery.ts";
 import { parseOsStageSystemdProperties } from "./os-stage-systemd.ts";
 import { readHealthyState } from "./slot-sync-state.ts";
@@ -62,9 +66,12 @@ export function processIdentity(pid: string, raw: string): string {
 async function readProcess(
 	pid: string,
 	deps: RaucObservationDeps,
+	rawEvidence?: Map<string, string>,
 ): Promise<string | null> {
 	try {
-		return processIdentity(pid, await deps.read(`/proc/${pid}/stat`));
+		const raw = await deps.read(`/proc/${pid}/stat`);
+		rawEvidence?.set(pid, raw);
+		return processIdentity(pid, raw);
 	} catch (error) {
 		if (absent(error)) return null;
 		throw error;
@@ -79,6 +86,8 @@ export async function observeRaucStage(
 	deps: RaucObservationDeps = defaults,
 	report?: ObservationReport,
 ): Promise<RaucStageSnapshot | null> {
+	const started = performance.now();
+	const rawEvidence = new Map<string, string>();
 	let stage = "service-command";
 	const at = (next: string) => {
 		stage = next;
@@ -93,7 +102,7 @@ export async function observeRaucStage(
 				"systemctl",
 				"show",
 				"rauc.service",
-				"--property=ActiveState,MainPID,ControlGroup",
+				"--property=ActiveState,MainPID,ControlGroup,InvocationID",
 			],
 			{ timeoutMs: 2_000 },
 		);
@@ -120,7 +129,7 @@ export async function observeRaucStage(
 			...pids,
 			...[...tracked.processes].map((id) => id.split(":")[0] ?? ""),
 		])) {
-			const identity = await readProcess(currentPid, deps);
+			const identity = await readProcess(currentPid, deps, rawEvidence);
 			if (
 				identity &&
 				(pids.includes(currentPid) || tracked.processes.has(identity))
@@ -185,7 +194,7 @@ export async function observeRaucStage(
 		}
 		at("target-device");
 		const targetDevice = await deps.device(other[1].device);
-		return {
+		const snapshot: RaucStageSnapshot = {
 			instance,
 			active: properties.get("ActiveState") === "active",
 			operation:
@@ -211,6 +220,22 @@ export async function observeRaucStage(
 			targetInactive: other[1].state === "inactive",
 			activationArmed,
 		};
+		const invocation = properties.get("InvocationID");
+		const members = await collectStageMembers({
+			identities: processIds,
+			listed: pids,
+			raw: rawEvidence,
+			read: deps.read,
+		});
+		rememberStageEvidence(snapshot, {
+			started,
+			finished: performance.now(),
+			mainPid: pid,
+			invocationId:
+				invocation && /^[a-f0-9]{32}$/.test(invocation) ? invocation : null,
+			members,
+		});
+		return snapshot;
 	} catch (error) {
 		// Observation failure never authorizes cancellation, cleanup or another
 		// writer; the bounded diagnostic only names where it stopped.
