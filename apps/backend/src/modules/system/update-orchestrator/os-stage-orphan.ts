@@ -125,7 +125,7 @@ export async function settleOsStageOrphan(
 	const prove = async () => {
 		await observeQuiescence({
 			ownership: { ...tracked, baseline },
-			observe: () => deps.observe(tracked),
+			observe: (report) => deps.observe(tracked, undefined, report),
 			cliSettled: deps.cliGone,
 			lockHeld: async () => lock.held(),
 			requireNewInstance: record?.requireNewInstance ?? false,

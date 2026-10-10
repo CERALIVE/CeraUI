@@ -78,7 +78,7 @@ export async function recoverOwnedOsStageAtStartup(
 	};
 	const finalProof = await observeQuiescence({
 		ownership,
-		observe: () => deps.observe(ownership),
+		observe: (report) => deps.observe(ownership, undefined, report),
 		cliSettled: deps.cliGone,
 		lockHeld: owner.held,
 		requireNewInstance: record.launched || record.requireNewInstance,

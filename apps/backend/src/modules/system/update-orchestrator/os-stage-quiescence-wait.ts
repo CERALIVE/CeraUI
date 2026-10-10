@@ -1,4 +1,8 @@
 import {
+	type ObservationReport,
+	STAGE_CENSUS_DRIFT,
+} from "./os-stage-admission-diagnostics.ts";
+import {
 	type StageProofWait,
 	waitForStageProof,
 } from "./os-stage-proof-wait.ts";
@@ -10,7 +14,9 @@ import {
 
 export function observeQuiescence(input: {
 	readonly ownership: RaucAttemptOwnership;
-	readonly observe: () => Promise<RaucStageSnapshot | null>;
+	readonly observe: (
+		report: ObservationReport,
+	) => Promise<RaucStageSnapshot | null>;
 	readonly cliSettled: () => Promise<boolean>;
 	readonly lockHeld: () => Promise<boolean>;
 	readonly requireNewInstance: boolean;
@@ -36,7 +42,9 @@ export function observeQuiescence(input: {
 			}
 			return raucQuiescenceRefusal(state);
 		},
-		retryable: (reason) =>
+		retryable: (reason, observation) =>
+			(reason === "observation-unknown" &&
+				observation === STAGE_CENSUS_DRIFT) ||
 			["old-installer-survives", "installer-ownership-unproven"].includes(
 				reason,
 			),
