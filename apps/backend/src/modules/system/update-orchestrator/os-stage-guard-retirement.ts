@@ -1,4 +1,9 @@
 import type { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
+import {
+	assertStageDeadline,
+	type StageDeadline,
+	withinStageDeadline,
+} from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import type { proveOsGuardKernelOwnership } from "./os-stage-guard-lock.ts";
 import type { OsStageGuardObservation } from "./os-stage-guard-observation.ts";
@@ -12,49 +17,69 @@ export async function retireReleasedOsStageGuard(deps: {
 	readonly run: typeof spawnWithTimeout;
 	readonly now: () => number;
 	readonly sleep: (ms: number) => Promise<void>;
+	readonly budget?: StageDeadline;
 }): Promise<void> {
-	const deadline = deps.now() + 10_000;
+	const deadline = Math.min(
+		deps.now() + 10_000,
+		deps.budget?.deadline ?? Infinity,
+	);
+	const budget = deps.budget ?? { deadline, now: deps.now };
+	const read = <T>(work: () => Promise<T>) => withinStageDeadline(budget, work);
 	do {
-		const observation = await deps.inspect();
+		const observation = await read(deps.inspect);
 		if (observation.kind === "absent") {
-			if (!(await deps.kernel({ pid: null, attemptId: deps.attemptId })))
+			if (
+				!(await read(() =>
+					deps.kernel({ pid: null, attemptId: deps.attemptId }),
+				))
+			)
 				throw new OsStageError("rauc_recovery_unproven");
 			return;
 		}
 		if (observation.kind === "terminal" && observation.cleanExit) {
 			if (
-				!(await deps.kernel({ pid: null, attemptId: deps.attemptId })) ||
-				!(await deps.jobIdle())
+				!(await read(() =>
+					deps.kernel({ pid: null, attemptId: deps.attemptId }),
+				)) ||
+				!(await read(deps.jobIdle))
 			)
 				throw new OsStageError("rauc_recovery_unproven");
-			const stopped = await deps.run(
-				["systemctl", "stop", OS_STAGE_GUARD_UNIT],
-				{ timeoutMs: 10_000 },
+			assertStageDeadline(budget);
+			const stopped = await read(() =>
+				deps.run(["systemctl", "stop", OS_STAGE_GUARD_UNIT], {
+					timeoutMs: 10_000,
+				}),
 			);
 			if (stopped.exitCode !== 0)
 				throw new OsStageError("rauc_recovery_unproven", { cause: stopped });
-			const after = await deps.inspect();
+			const after = await read(deps.inspect);
 			if (
 				after.kind === "terminal" &&
 				after.invocationId === observation.invocationId &&
-				(await deps.kernel({ pid: null, attemptId: deps.attemptId })) &&
-				(await deps.jobIdle())
+				(await read(() =>
+					deps.kernel({ pid: null, attemptId: deps.attemptId }),
+				)) &&
+				(await read(deps.jobIdle))
 			) {
-				const reset = await deps.run(
-					["systemctl", "reset-failed", OS_STAGE_GUARD_UNIT],
-					{ timeoutMs: 10_000 },
+				assertStageDeadline(budget);
+				const reset = await read(() =>
+					deps.run(["systemctl", "reset-failed", OS_STAGE_GUARD_UNIT], {
+						timeoutMs: 10_000,
+					}),
 				);
 				if (reset.exitCode !== 0)
 					throw new OsStageError("rauc_recovery_unproven", { cause: reset });
 			}
 			if (
-				(await deps.inspect()).kind !== "absent" ||
-				!(await deps.kernel({ pid: null, attemptId: deps.attemptId }))
+				(await read(deps.inspect)).kind !== "absent" ||
+				!(await read(() =>
+					deps.kernel({ pid: null, attemptId: deps.attemptId }),
+				))
 			)
 				throw new OsStageError("rauc_recovery_unproven");
 			return;
 		}
-		await deps.sleep(100);
+		await read(() => deps.sleep(Math.min(100, deadline - deps.now())));
 	} while (deps.now() < deadline);
 	throw new OsStageError("rauc_recovery_unproven");
 }

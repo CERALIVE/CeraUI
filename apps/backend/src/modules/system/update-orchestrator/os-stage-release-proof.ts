@@ -1,3 +1,7 @@
+import {
+	type StageDeadline,
+	withinStageDeadline,
+} from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import { osInstallClientsGone } from "./os-stage-install-clients.ts";
 import type { OsStageJobRecord } from "./os-stage-job-files.ts";
@@ -15,7 +19,10 @@ export function proveOsStageRelease(input: {
 	readonly cliGone?: () => Promise<boolean>;
 	/** Current private-directory provenance; throws on any drift. */
 	readonly provenance: () => Promise<void>;
+	readonly budget?: StageDeadline;
 }): Promise<void> {
+	const read = <T>(work: () => Promise<T>) =>
+		input.budget ? withinStageDeadline(input.budget, work) : work();
 	return withOsPhysicalSettlement(async () => {
 		const refusal = raucQuiescenceRefusal({
 			ownership: {
@@ -25,13 +32,13 @@ export function proveOsStageRelease(input: {
 			},
 			current: input.snapshot,
 			cliSettled: input.record.cliSettled,
-			lockHeld: await input.held(),
+			lockHeld: await read(input.held),
 			requireNewInstance: input.record.requireNewInstance,
 		});
 		if (
 			refusal ||
 			!input.pinClean ||
-			!(await (input.cliGone ?? osInstallClientsGone)())
+			!(await read(input.cliGone ?? osInstallClientsGone))
 		)
 			throw new OsStageError("rauc_recovery_unproven", {
 				diagnostics: {
@@ -42,6 +49,6 @@ export function proveOsStageRelease(input: {
 							: "pin-teardown-unproven"),
 				},
 			});
-		await input.provenance();
+		await read(input.provenance);
 	});
 }

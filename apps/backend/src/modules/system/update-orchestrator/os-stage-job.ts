@@ -1,6 +1,11 @@
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
 import { SOFTWARE_UPDATE_LOCK } from "./lock.ts";
 import { retireContendedOsStageGuard } from "./os-stage-contention-cleanup.ts";
+import {
+	assertStageDeadline,
+	type StageDeadline,
+	withinStageDeadline,
+} from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import { proveOsGuardKernelOwnership } from "./os-stage-guard-lock.ts";
 import {
@@ -173,7 +178,13 @@ export function createOsStageJobOwner(
 		snapshot: RaucStageSnapshot,
 		pinClean: boolean,
 		settle?: () => void,
+		budget?: StageDeadline,
 	): Promise<void> {
+		const read = <T>(work: () => Promise<T>) =>
+			budget ? withinStageDeadline(budget, work) : work();
+		const assert = () => {
+			if (budget) assertStageDeadline(budget);
+		};
 		await proveOsStageRelease({
 			record: current,
 			snapshot,
@@ -181,24 +192,35 @@ export function createOsStageJobOwner(
 			held,
 			...(deps.cliGone ? { cliGone: deps.cliGone } : {}),
 			provenance: () => provenance.assert(current, false),
+			...(budget ? { budget } : {}),
 		});
+		assert();
 		settle?.();
-		await withOsPhysicalSettlement(async () => {
-			await provenance.assert(current, false);
-			current = { ...current, lifecycle: "releasing" };
-			writeOsStageJob(current, deps.directory);
-			writePrivateOsJobFile("release", `${record.attemptId}\n`, deps.directory);
-			await provenance.assert(current, true);
-			await retireReleasedOsStageGuard({
-				...deps,
-				inspect,
-				kernel,
-				jobIdle,
-				attemptId: record.attemptId,
-			});
-			await provenance.assert(current, true);
-			await retireOsStageJob(deps.directory);
-		});
+		await read(() =>
+			withOsPhysicalSettlement(async () => {
+				await read(() => provenance.assert(current, false));
+				assert();
+				current = { ...current, lifecycle: "releasing" };
+				writeOsStageJob(current, deps.directory);
+				writePrivateOsJobFile(
+					"release",
+					`${record.attemptId}\n`,
+					deps.directory,
+				);
+				await read(() => provenance.assert(current, true));
+				await retireReleasedOsStageGuard({
+					...deps,
+					inspect,
+					kernel,
+					jobIdle,
+					attemptId: record.attemptId,
+					...(budget ? { budget } : {}),
+				});
+				await read(() => provenance.assert(current, true));
+				assert();
+				await read(() => retireOsStageJob(deps.directory));
+			}),
+		);
 	}
 	return {
 		acquire,

@@ -1,4 +1,5 @@
 import type { OsStageControlLease } from "./os-stage-control-lease.ts";
+import type { StageDeadline } from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import { type OsStageJobRecord, readOsStageJob } from "./os-stage-job-files.ts";
 import { withOsPhysicalSettlement } from "./os-stage-physical-settlement.ts";
@@ -24,6 +25,7 @@ export type OsStageJobOwner = {
 		snapshot: RaucStageSnapshot,
 		pinClean: boolean,
 		settle?: () => void,
+		budget?: StageDeadline,
 	): Promise<void>;
 	record(): OsStageJobRecord;
 	/** False when this owner created no private state; true once settled. */
