@@ -63,6 +63,7 @@ export type OsStartupDeps = {
 	readonly now: () => number;
 	readonly sleep: (ms: number) => Promise<void>;
 	readonly liveProducer?: () => string | null;
+	readonly controlHeld?: () => boolean;
 	readonly orphan?: (
 		record: Awaited<ReturnType<typeof readOsStageJob>>,
 		control?: OsStageControlLease,
@@ -163,7 +164,10 @@ export function reconcileOsStageStartup(
 			admissionReady = true;
 			return { kind: "none" };
 		}
-		await recoverOwnedOsStageAtStartup(record, owner, deps);
+		await recoverOwnedOsStageAtStartup(record, owner, {
+			...deps,
+			controlHeld: control.held,
+		});
 		admissionReady = true;
 		return {
 			kind: "reconciled",

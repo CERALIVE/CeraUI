@@ -25,7 +25,7 @@ import {
 } from "./os-stage-job-files.ts";
 import { observeRaucStage } from "./os-stage-observation.ts";
 import { acquireOsOrphanLock } from "./os-stage-orphan-lock.ts";
-import { raucQuiescenceRefusal } from "./os-stage-recovery.ts";
+import { observeQuiescence } from "./os-stage-quiescence-wait.ts";
 import { parseOsStageSystemdProperties } from "./os-stage-systemd.ts";
 import {
 	type OsUnlaunchedDeps,
@@ -46,6 +46,8 @@ export type OsOrphanDeps = {
 	readonly sweep: () => Promise<void>;
 	readonly liveProducer: () => string | null;
 	readonly kernel?: typeof proveOsGuardKernelOwnership;
+	readonly now?: () => number;
+	readonly sleep?: (ms: number) => Promise<void>;
 };
 
 export async function settleOsStageOrphan(
@@ -173,6 +175,9 @@ export async function settleOsStageOrphan(
 	};
 	await assertOwner();
 	await inspect();
+	const now = deps.now ?? (() => performance.now());
+	const sleep = deps.sleep ?? ((ms: number) => Bun.sleep(ms));
+	const deadline = now() + 10_000;
 	const tracked = {
 		processes: new Set(record?.processes ?? []),
 		resources: new Set(record?.resources ?? []),
@@ -180,26 +185,27 @@ export async function settleOsStageOrphan(
 	const baseline = record?.baseline ?? (await deps.observe(tracked));
 	if (!baseline) throw new OsStageError("rauc_recovery_unproven");
 	const prove = async () => {
-		const current = await deps.observe(tracked);
-		const cliSettled = await deps.cliGone();
-		await assertOwner();
-		const refusal = raucQuiescenceRefusal({
+		await observeQuiescence({
 			ownership: { ...tracked, baseline },
-			current,
-			cliSettled,
-			lockHeld: lock.held(),
+			observe: () => deps.observe(tracked),
+			cliSettled: deps.cliGone,
+			lockHeld: async () => lock.held(),
 			requireNewInstance: record?.requireNewInstance ?? false,
+			wait: {
+				now,
+				sleep,
+				deadline,
+				assert: assertOwner,
+				previousInstance: baseline.instance,
+			},
 		});
-		if (refusal)
-			throw new OsStageError("rauc_recovery_unproven", {
-				diagnostics: { refusal },
-			});
 	};
 	await prove();
 	await deps.sweep();
 	await prove();
 	await inspect();
 	await assertOwner();
+	if (now() >= deadline) throw new OsStageError("rauc_recovery_unproven");
 	if (record) {
 		const kernel = deps.kernel ?? proveOsGuardKernelOwnership;
 		await retireReleasedOsStageGuard({
