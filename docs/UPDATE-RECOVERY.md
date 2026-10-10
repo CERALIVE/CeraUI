@@ -576,6 +576,12 @@ The release callback and each subsequent mutation boundary recheck the clock and
 the in-memory lifetime. Already-submitted commands/filesystem operations cannot be
 revoked; uncertain or expired settlement retains provenance, never force-cleans.
 The intentional unsafe retained-pin gate still parks after notifying unsafe.
+The reconciler's later drain of that parked pin observes after the expired job
+deadline by design, under its own lease, and releases only on positive
+quiescence. The recovery loop's last diagnostic read at the deadline and the
+proof wait's pacing pause are raced against the deadline without the start/finish
+clock refusal, so the final refusal keeps its precise reason; neither can
+authorize, because proof still requires the clock to be before the deadline.
 
 The decision seam logs one deferral and its proven/final disposition, with bounded
 episode logging (at most 16 defer/proven entries per runner proof, plus the final
