@@ -2,6 +2,7 @@ import { logger } from "../../../helpers/logger.ts";
 import {
 	describeObservationFailure,
 	type ObservationReport,
+	STAGE_CENSUS_DRIFT,
 } from "./os-stage-admission-diagnostics.ts";
 import { raceStageDeadline, withinStageDeadline } from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
@@ -59,7 +60,10 @@ export async function waitForStageProof(input: {
 	readonly refusal: (
 		snapshot: RaucStageSnapshot | null,
 	) => Promise<string | null>;
-	readonly retryable: (reason: string) => boolean;
+	readonly retryable: (
+		reason: string,
+		observation: string | undefined,
+	) => boolean;
 	readonly finalRefusal?: (snapshot: RaucStageSnapshot) => string | null;
 	readonly requiresFinalRead?: boolean;
 	readonly wait: StageProofWait;
@@ -153,8 +157,11 @@ export async function waitForStageProof(input: {
 		}
 		if (snapshot && reason === "proven") {
 			if (input.finalRefusal && input.requiresFinalRead) {
+				observation = undefined;
 				snapshot = await guarded("observation", () =>
-					input.observe(() => undefined),
+					input.observe((detail) => {
+						observation ??= detail;
+					}),
 				);
 				wait.finalAssert?.();
 				reason = snapshot
@@ -170,7 +177,7 @@ export async function waitForStageProof(input: {
 					reason = "daemon-identity-changed";
 				if (wait.now() >= wait.deadline) reason = "deadline-expired";
 				if (!snapshot || reason !== "proven") {
-					if (!input.retryable(reason)) break;
+					if (!input.retryable(reason, observation)) break;
 				}
 			}
 			if (snapshot && reason === "proven") {
@@ -184,12 +191,12 @@ export async function waitForStageProof(input: {
 				return snapshot;
 			}
 		}
-		if (!input.retryable(reason)) break;
+		if (!input.retryable(reason, observation)) break;
 		first ??= snapshot;
 		if (!deferred) {
 			deferred = true;
 			wait.deferred?.();
-			if (wait.logEpisode?.() !== false)
+			if (observation !== STAGE_CENSUS_DRIFT && wait.logEpisode?.() !== false)
 				reportStageProofDecision({
 					snapshot,
 					wait,

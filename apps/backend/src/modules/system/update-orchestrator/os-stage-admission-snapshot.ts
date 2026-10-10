@@ -2,6 +2,7 @@ import { logger } from "../../../helpers/logger.ts";
 import {
 	failedAdmissionPredicate,
 	type ObservationReport,
+	STAGE_CENSUS_DRIFT,
 } from "./os-stage-admission-diagnostics.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import {
@@ -104,7 +105,10 @@ export async function observeAdmission(
 					return quiescence;
 				return predicate ?? quiescence ?? null;
 			},
-			retryable: (reason) => reason === "extra-process",
+			retryable: (reason, observation) =>
+				reason === "extra-process" ||
+				(reason === "observation-unknown" &&
+					observation === STAGE_CENSUS_DRIFT),
 		});
 		return requireAdmissionSnapshot(snapshot, baseline);
 	}
