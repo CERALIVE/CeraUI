@@ -48,7 +48,13 @@ export function beginOsStageAttempt(
 		readonly control: OsStageControl;
 	},
 	overrides: Partial<OsAttemptDeps> = {},
-) {
+): {
+	readonly outcome: Promise<OsAttemptOutcome>;
+	readonly cli: Promise<SpawnWithTimeoutResult | Error>;
+	readonly cliSettled: () => boolean;
+	readonly cliSucceeded?: () => boolean;
+	readonly dispose: () => void;
+} {
 	const deps: OsAttemptDeps = {
 		run: spawnWithTimeout,
 		topology: () => readPinnedTopology(input.transport),
@@ -58,6 +64,7 @@ export function beginOsStageAttempt(
 	};
 	const local = new AbortController();
 	let settled = false;
+	let succeeded = false;
 	let ended = false;
 	let topologyReading = false;
 	let httpsReading = false;
@@ -98,10 +105,15 @@ export function beginOsStageAttempt(
 				.run(["rauc", "install", input.url], {
 					timeoutMs: OS_INSTALL_TIMEOUT_MS,
 					signal: local.signal,
+					onExit: (exitCode) => {
+						settled = true;
+						succeeded ||= exitCode === 0;
+					},
 				})
 				.then(
 					(result) => {
 						settled = true;
+						succeeded ||= result.exitCode === 0;
 						finish(
 							result.exitCode === 0
 								? { kind: "succeeded", result }
@@ -219,5 +231,11 @@ export function beginOsStageAttempt(
 			}),
 		);
 	}
-	return { outcome, cli, cliSettled: () => settled, dispose };
+	return {
+		outcome,
+		cli,
+		cliSettled: () => settled,
+		cliSucceeded: () => succeeded,
+		dispose,
+	};
 }

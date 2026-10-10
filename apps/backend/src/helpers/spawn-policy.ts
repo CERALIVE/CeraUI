@@ -1258,6 +1258,7 @@ export async function spawnWithTimeout(
 		timeoutMs?: number;
 		signal?: AbortSignal;
 		env?: Readonly<Record<string, string | undefined>>;
+		onExit?: (exitCode: number) => void;
 	},
 ): Promise<SpawnWithTimeoutResult> {
 	const timeoutMs = opts?.timeoutMs ?? DEFAULT_SPAWN_TIMEOUT_MS;
@@ -1300,7 +1301,10 @@ export async function spawnWithTimeout(
 	try {
 		const outcome = await new Promise<"exit" | "timeout" | "abort">(
 			(resolve) => {
-				void child.exited.then(() => resolve("exit"));
+				void child.exited.then((exitCode) => {
+					opts?.onExit?.(exitCode);
+					resolve("exit");
+				});
 				timer = setTimeout(() => resolve("timeout"), timeoutMs);
 				if (opts?.signal) {
 					onAbort = () => resolve("abort");
@@ -1312,6 +1316,8 @@ export async function spawnWithTimeout(
 		if (outcome !== "exit") {
 			kill();
 			await Promise.allSettled([stdoutDone, stderrDone, child.exited]);
+			if (child.exitCode === 0)
+				return { exitCode: 0, stdout: acc.stdout, stderr: acc.stderr };
 			throw new SpawnTimeoutError(command, acc.stdout, acc.stderr);
 		}
 
