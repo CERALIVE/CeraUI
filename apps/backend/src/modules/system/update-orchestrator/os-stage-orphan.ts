@@ -5,6 +5,11 @@ import {
 	acquireOsStageControlLease,
 	type OsStageControlLease,
 } from "./os-stage-control-lease.ts";
+import {
+	assertStageDeadline,
+	createStageDeadline,
+	withinStageDeadline,
+} from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import { proveOsGuardKernelOwnership } from "./os-stage-guard-lock.ts";
 import {
@@ -173,16 +178,19 @@ export async function settleOsStageOrphan(
 		}
 		return absent;
 	};
-	await assertOwner();
-	await inspect();
 	const now = deps.now ?? (() => performance.now());
 	const sleep = deps.sleep ?? ((ms: number) => Bun.sleep(ms));
 	const deadline = now() + 10_000;
+	const budget = createStageDeadline({ deadline, now });
+	const read = <T>(work: () => Promise<T>) => withinStageDeadline(budget, work);
+	await read(assertOwner);
+	await read(inspect);
 	const tracked = {
 		processes: new Set(record?.processes ?? []),
 		resources: new Set(record?.resources ?? []),
 	};
-	const baseline = record?.baseline ?? (await deps.observe(tracked));
+	const baseline =
+		record?.baseline ?? (await read(() => deps.observe(tracked)));
 	if (!baseline) throw new OsStageError("rauc_recovery_unproven");
 	const prove = async () => {
 		await observeQuiescence({
@@ -195,35 +203,39 @@ export async function settleOsStageOrphan(
 				now,
 				sleep,
 				deadline,
+				invalidate: budget.invalidate,
 				assert: assertOwner,
 				previousInstance: baseline.instance,
 			},
 		});
 	};
-	await prove();
-	await deps.sweep();
-	await prove();
-	await inspect();
-	await assertOwner();
-	if (now() >= deadline) throw new OsStageError("rauc_recovery_unproven");
+	await read(prove);
+	await read(deps.sweep);
+	await read(prove);
+	await read(inspect);
+	await read(assertOwner);
 	if (record) {
 		const kernel = deps.kernel ?? proveOsGuardKernelOwnership;
-		await retireReleasedOsStageGuard({
-			attemptId: record.attemptId,
-			run: deps.run,
-			inspect: async () => {
-				await assertOwner();
-				return observeOsStageGuard(deps.run, record.attemptId);
-			},
-			kernel: (input) =>
-				kernel({ ...input, ...(lock.pid ? { temporaryPid: lock.pid } : {}) }),
-			jobIdle: () => isOsStageGuardJobIdle(deps.run),
-			now: () => performance.now(),
-			sleep: (ms) => Bun.sleep(ms),
-		});
+		await read(() =>
+			retireReleasedOsStageGuard({
+				attemptId: record.attemptId,
+				run: deps.run,
+				inspect: async () => {
+					await read(assertOwner);
+					return observeOsStageGuard(deps.run, record.attemptId);
+				},
+				kernel: (input) =>
+					kernel({ ...input, ...(lock.pid ? { temporaryPid: lock.pid } : {}) }),
+				jobIdle: () => isOsStageGuardJobIdle(deps.run),
+				now,
+				sleep,
+				budget,
+			}),
+		);
 	}
-	await assertOwner();
-	await retireOsStageJob(directory);
+	await read(assertOwner);
+	assertStageDeadline(budget);
+	await read(() => retireOsStageJob(directory));
 	return true;
 }
 
