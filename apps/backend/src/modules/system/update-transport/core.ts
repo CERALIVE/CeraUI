@@ -2,7 +2,7 @@ export type UplinkKind = "ethernet" | "wifi" | "dongle" | "cellular" | "other";
 export type UplinkCandidate = {
 	readonly ifname: string;
 	readonly kind: UplinkKind;
-	readonly metered: boolean;
+	readonly metered: boolean | null;
 };
 export type Family = 4 | 6;
 export type ProbeState =
@@ -104,13 +104,14 @@ export function rankTransports(
 				...sample,
 				healthy,
 				latencyMs,
-				reason: `${sample.candidate.metered ? "metered" : "unmetered"} ${sample.candidate.kind} ${sample.family === 4 ? "IPv4" : "IPv6"}: ${healthy ? "all hosts clear" : sample.hosts.map(({ host, state }) => `${host} ${state}`).join(", ")}`,
+				reason: `${sample.candidate.metered === null ? "unknown-cost" : sample.candidate.metered ? "metered" : "unmetered"} ${sample.candidate.kind} ${sample.family === 4 ? "IPv4" : "IPv6"}: ${healthy ? "all hosts clear" : sample.hosts.map(({ host, state }) => `${host} ${state}`).join(", ")}`,
 			};
 		})
 		.sort(
 			(a, b) =>
 				Number(b.healthy) - Number(a.healthy) ||
-				Number(a.candidate.metered) - Number(b.candidate.metered) ||
+				Number(a.candidate.metered !== false) -
+					Number(b.candidate.metered !== false) ||
 				kindRank[a.candidate.kind] - kindRank[b.candidate.kind] ||
 				a.latencyMs - b.latencyMs ||
 				a.candidate.ifname.localeCompare(b.candidate.ifname) ||
@@ -122,60 +123,7 @@ export function rankTransports(
 		: { status: "none", reason: "no-healthy-transport", ranked };
 }
 
-export function discoverCandidates(
-	ifnames: readonly string[],
-	nmcli: string,
-	mmIfnames: readonly string[],
-	routerIfnames: readonly string[],
-	dongleIfnames: readonly string[] = [],
-): UplinkCandidate[] {
-	const lines = new Map<
-		string,
-		{ type: string; state: string; metered: string }
-	>();
-	for (const block of nmcli.split(/\r?\n\s*\r?\n/)) {
-		const fields = new Map(
-			block.split(/\r?\n/).map((line) => {
-				const at = line.indexOf(":");
-				return [line.slice(0, at), line.slice(at + 1)] as const;
-			}),
-		);
-		const ifname = fields.get("GENERAL.DEVICE");
-		if (ifname)
-			lines.set(ifname, {
-				type: fields.get("GENERAL.TYPE") ?? "",
-				state: fields.get("GENERAL.STATE") ?? "",
-				metered: fields.get("GENERAL.METERED") ?? "unknown",
-			});
-	}
-	for (const line of nmcli.split(/\r?\n/)) {
-		const [ifname, type, state, ...rest] = line.split(":");
-		if (ifname && type && state && !ifname.startsWith("GENERAL."))
-			lines.set(ifname, { type, state, metered: rest.at(-1) ?? "unknown" });
-	}
-	return ifnames
-		.filter((ifname) =>
-			/^(?:100\s*\(connected|connected)/.test(lines.get(ifname)?.state ?? ""),
-		)
-		.map((ifname) => {
-			const row = lines.get(ifname);
-			const metered =
-				/^(?:yes|guess-yes|yes \(guessed\))$/i.test(row?.metered ?? "") ||
-				mmIfnames.includes(ifname) ||
-				routerIfnames.includes(ifname);
-			const kind: UplinkKind =
-				mmIfnames.includes(ifname) || routerIfnames.includes(ifname) || metered
-					? "cellular"
-					: dongleIfnames.includes(ifname)
-						? "dongle"
-						: row?.type === "wifi"
-							? "wifi"
-							: row?.type === "ethernet"
-								? "ethernet"
-								: "other";
-			return { ifname, kind, metered };
-		});
-}
+export { discoverCandidates } from "./candidate-inventory.ts";
 
 function sourceUrl(uri: string, suite: string): string | undefined {
 	try {

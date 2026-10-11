@@ -4,6 +4,7 @@ import { SOFTWARE_UPDATE_UNIT } from "../software-update-service-contract.ts";
 import { readBoardIdentity, readBootId } from "./os-identity.ts";
 import { readBootedOsReleaseVersion } from "./os-manifest.ts";
 import { observationAbsent } from "./os-stage-read-errors.ts";
+import { parseOsStageSystemdProperties } from "./os-stage-systemd.ts";
 import type { RecoveryIdentity } from "./recovery-store.ts";
 
 const statusSchema = z.object({
@@ -67,7 +68,7 @@ export class RecoveryProbeError extends Error {
 async function unitProperties(
 	io: RecoveryProbeIo,
 	name: string,
-): Promise<Map<string, string>> {
+): Promise<ReadonlyMap<string, string>> {
 	const result = await io.run([
 		"systemctl",
 		"show",
@@ -76,15 +77,10 @@ async function unitProperties(
 		"--no-pager",
 	]);
 	if (result.code !== 0) throw new RecoveryProbeError("unit_unreadable");
-	const pairs = result.stdout
-		.trim()
-		.split("\n")
-		.map((line) => line.split("="));
-	return new Map(
-		pairs
-			.filter((pair) => pair.length === 2)
-			.map((pair) => [pair[0] ?? "", pair[1] ?? ""]),
-	);
+	// Duplicate or malformed rows are contradictory evidence, never last-wins.
+	const properties = parseOsStageSystemdProperties(result.stdout);
+	if (!properties) throw new RecoveryProbeError("unit_unreadable");
+	return properties;
 }
 
 export function createRecoveryProbes(

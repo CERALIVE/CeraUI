@@ -366,7 +366,9 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
   change, never `enteredAt`): an answer is applied only if nothing moved while
   the probe was awaited, with no `await` between that check and the dispatch.
   Absence itself is `LoadState=not-found` for the fixed unit name, not an
-  identity check. Never extend this to `committing`.
+  identity check. The `systemctl show` rows go through the strict
+  `parseOsStageSystemdProperties()` first: a duplicated key or a malformed row
+  is unreadable (fail closed, commit treated as running), never last-wins. Never extend this to `committing`.
 - **The package step reuses `startSoftwareUpdate()`.** Post-acceptance limits:
   root D8 Known gaps (b), (c), (g). Classify availability by `actionable_count`,
   not the inclusive `package_count`, to avoid launching an empty install.
@@ -484,7 +486,10 @@ repeat, the probe-false abort, the fail-closed throw followed by a
 probe-false admit, and a probe-only refusal whose later wire `failed` stays
 `DOWNLOAD_FAILED`) and `update-orchestrator-commit-stage-probe.test.ts` (a real
 fake cgroup/proc tree, incl. not-found, inactive, failed, exited, activating
-and deactivating units, and empty `systemctl show` output).
+and deactivating units, and empty `systemctl show` output);
+`update-systemd-evidence.test.ts` pins refusal with zero stop calls for
+duplicate `LoadState`/`ActiveState`/`ControlGroup` rows and the same strict
+rule in the maintenance probes.
 
 ### THE OS AGENT, THE SLOT MIRROR AND THE TRANSPORT PIN [PARTIAL]
 

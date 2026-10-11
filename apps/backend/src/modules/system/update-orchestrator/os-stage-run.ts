@@ -366,7 +366,8 @@ async function runLeasedOsStageJob<T>(
 				checkCancelled: assertDispatch,
 				approveMetered: (transport) => {
 					const allowed =
-						!transport.candidate.metered || control.cellularApproved === true;
+						transport.candidate.metered === false ||
+						control.cellularApproved === true;
 					if (!allowed) approvalRequired = true;
 					return allowed;
 				},

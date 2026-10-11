@@ -37,6 +37,7 @@ import {
 	spawnWithTimeout,
 } from "../../../helpers/spawn-policy.ts";
 import { SOFTWARE_UPDATE_UNIT } from "../software-update-service-contract.ts";
+import { parseOsStageSystemdProperties } from "./os-stage-systemd.ts";
 
 const SYSTEMCTL_SHOW_TIMEOUT_MS = 5_000;
 const MAX_CGROUP_DEPTH = 4;
@@ -83,12 +84,11 @@ class CommitStageUnreadableError extends Error {
 }
 
 function parseUnitView(result: SpawnWithTimeoutResult): UnitView {
-	const properties = new Map<string, string>();
-	for (const line of result.stdout.split("\n")) {
-		const separator = line.indexOf("=");
-		if (separator > 0)
-			properties.set(line.slice(0, separator), line.slice(separator + 1));
-	}
+	// Strict before interpretation: a duplicated or malformed row must never
+	// let a later `LoadState=not-found` overwrite evidence of a running unit.
+	const properties = parseOsStageSystemdProperties(result.stdout);
+	if (!properties)
+		throw new CommitStageUnreadableError("unit properties contradictory");
 	if (properties.get("LoadState") === "not-found") return { kind: "idle" };
 	if (result.exitCode !== 0)
 		throw new CommitStageUnreadableError(

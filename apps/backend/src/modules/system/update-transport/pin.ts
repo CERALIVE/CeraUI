@@ -137,7 +137,7 @@ export function createUpdatePinController(overrides: Partial<PinDeps> = {}) {
 						row.healthy &&
 						!attempted.has(key(row.candidate.ifname, row.family)) &&
 						!unhealthyUntil(row.candidate.ifname, row.family) &&
-						(!row.candidate.metered ||
+						(row.candidate.metered === false ||
 							!control.approveMetered ||
 							control.approveMetered(row)),
 				);

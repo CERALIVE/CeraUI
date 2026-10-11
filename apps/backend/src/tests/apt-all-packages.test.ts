@@ -613,11 +613,14 @@ describe("apt-all-packages admission", () => {
 	});
 
 	it("a real wrapper process keeps its flock after a simulated backend exits and restarts", async () => {
+		// Given a real flock holder that only finishes when the test releases it,
+		// so no observer delay can let the worker outrun the contention probes.
 		const directory = await mkdtemp(
 			path.join(tmpdir(), "ceralive-flock-restart-"),
 		);
 		const lock = path.join(directory, "transaction.lock");
 		const started = path.join(directory, "download-started");
+		const releaseBarrier = path.join(directory, "release");
 		const committed = path.join(directory, "committed");
 		const worker = Bun.spawn(
 			[
@@ -626,27 +629,33 @@ describe("apt-all-packages admission", () => {
 				lock,
 				"/bin/sh",
 				"-ec",
-				`touch ${started}; sleep 0.4 && touch ${committed}`,
+				`touch ${started}; while [ ! -e ${releaseBarrier} ]; do sleep 0.01; done; touch ${committed}`,
 			],
 			{ stdout: "ignore", stderr: "pipe" },
 		);
 		const probe = async () =>
 			Bun.spawnSync(["/usr/bin/flock", "-n", lock, "/bin/true"]).exitCode;
 		try {
-			for (let i = 0; i < 30 && !(await Bun.file(started).exists()); i++)
+			for (let i = 0; i < 500 && !(await Bun.file(started).exists()); i++)
 				await Bun.sleep(10);
 			expect(await Bun.file(started).exists()).toBe(true);
+			// When the backend observer exits and a restarted one exits again.
 			const backend = Bun.spawn(["/bin/sh", "-ec", "exit 0"]);
 			expect(await backend.exited).toBe(0);
 			expect(await probe()).not.toBe(0);
 			const restartedBackend = Bun.spawn(["/bin/sh", "-ec", "exit 0"]);
 			expect(await restartedBackend.exited).toBe(0);
 			expect(await probe()).not.toBe(0);
+			expect(await Bun.file(committed).exists()).toBe(false);
+			// Then the worker still owns the lock until it is released and completes.
+			await writeFile(releaseBarrier, "");
 			expect(await worker.exited).toBe(0);
 			expect(await Bun.file(committed).exists()).toBe(true);
 			expect(await probe()).toBe(0);
 		} finally {
+			await writeFile(releaseBarrier, "").catch(() => {});
 			worker.kill();
+			await worker.exited;
 			await rm(directory, { recursive: true, force: true });
 		}
 	});

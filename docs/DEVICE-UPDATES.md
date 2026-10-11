@@ -644,14 +644,27 @@ kernel-blocked installer. Lock/startup details: [UPDATE-RECOVERY.md](./UPDATE-RE
 
 ## Cellular policy (D12)
 
-`decideCellularGate()` in `schedule.ts` applies only when every reachable uplink
-candidate is metered.
+`decideCellularGate()` in `schedule.ts` applies unless at least one connected
+uplink is positively known to be unmetered (NetworkManager `GENERAL.METERED` of
+`no`/`guess-no`, with no ModemManager or router marker). Unknown cost is never
+treated as unmetered: a failed or malformed `nmcli` inventory, an empty one, or a
+link reporting `unknown` metering all count as metered-only. Unknown cost stays
+internal (`metered: null` on the transport candidate); the stored and wire
+transport summaries still carry a boolean and report it as metered, so the OS
+stage pin requires candidate approval for it exactly as for a metered link.
 
 | Kind and stage | Metered-only uplink |
 |---|---|
 | packages, check or install | allowed when `allowPackagesOverCellular` |
 | OS check (small manifest) | allowed when `allowSystemOverCellular` |
 | OS install (the bundle) | **always held**, whatever the toggle says |
+
+The package install gate is evaluated again immediately before the install unit
+is launched, not only at check time: an offer discovered over Ethernet does not
+install over a metered-only uplink while `allowPackagesOverCellular` is off. The
+refusal uses the existing vocabulary (manual install answers `busy`), clears the
+pending quarantine record and launches nothing; the phase stays `awaiting-idle`
+and the next tick re-evaluates.
 
 A held OS install sets a pending approval, raises the `cellular-approval`
 notification with the bundle size, and appears in `readUpdateDetails()` as

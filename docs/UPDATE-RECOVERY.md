@@ -896,7 +896,8 @@ Invoke as root with the six independently captured, exact expected readings:
 RAUC first. The six values are assertions about THIS boot/current slot, never
 about the old slot. The actual tool re-reads them under the lock and refuses on
 any mismatch. It requires an explicit `LoadState=not-found` apt detached unit
-(an unreadable probe is not absence), no live apt/dpkg process or other active
+(an unreadable probe is not absence; a duplicated or malformed `systemctl show`
+row is unreadable, never last-wins), no live apt/dpkg process or other active
 update unit, RAUC `Operation=idle`, empty `dpkg --audit` output and an empty
 `/var/lib/dpkg/updates/` directory. It parses the persisted failed state and
 the exact pending plan, checks `commit_unit_absent_on_resume` and confirms each

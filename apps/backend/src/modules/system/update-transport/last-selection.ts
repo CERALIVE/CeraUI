@@ -47,7 +47,7 @@ export function summarizeTransportSelection(
 			ifname: row.candidate.ifname,
 			kind: row.candidate.kind,
 			family: row.family,
-			metered: row.candidate.metered,
+			metered: row.candidate.metered !== false,
 			healthy: row.healthy,
 			captive: states.some((state) => CAPTIVE_STATES.has(state)),
 			states,
@@ -63,7 +63,7 @@ export function summarizeTransportSelection(
 						ifname: selection.selected.candidate.ifname,
 						kind: selection.selected.candidate.kind,
 						family: selection.selected.family,
-						metered: selection.selected.candidate.metered,
+						metered: selection.selected.candidate.metered !== false,
 					}
 				: null,
 		findings,

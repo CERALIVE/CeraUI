@@ -311,9 +311,9 @@ async function defaultOnlyMeteredCandidateExists(): Promise<boolean> {
 			"show",
 		]);
 	} catch {
-		return false;
+		return true;
 	}
-	if (nmcli.exitCode !== 0) return false;
+	if (nmcli.exitCode !== 0) return true;
 	const candidates = discoverCandidates(
 		deps.listIfnames(),
 		nmcli.stdout,
@@ -321,7 +321,7 @@ async function defaultOnlyMeteredCandidateExists(): Promise<boolean> {
 		deps.routerIfnames(),
 		deps.dongleIfnames(),
 	);
-	return candidates.length > 0 && candidates.every((c) => c.metered);
+	return !candidates.some((c) => c.metered === false);
 }
 
 export async function checkOsManifestResult(
@@ -981,6 +981,20 @@ async function maybeStartPackageInstall(opts: {
 						...(item.version ? { version: item.version } : {}),
 					})) ?? available.identity.packages.map((name) => ({ name })),
 			);
+		}
+		const settings = await deps.loadSettings();
+		const gate = decideCellularGate({
+			onlyMeteredCandidateExists: await deps.onlyMeteredCandidateExists(),
+			kind: "packages",
+			stage: "install",
+			allowPackagesOverCellular: settings.allowPackagesOverCellular,
+			allowSystemOverCellular: settings.allowSystemOverCellular,
+			cellularOverrideId: state.cellularOverrideId,
+			candidateId: "",
+		});
+		if (!gate.allowed || state.phase !== "awaiting-idle") {
+			await deps.quarantine.clearPending();
+			return { started: false, reason: "updates_disabled" };
 		}
 		const result = deps.startPackageInstall();
 		if (!result.started) {
