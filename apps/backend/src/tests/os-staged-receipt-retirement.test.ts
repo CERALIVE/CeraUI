@@ -30,7 +30,7 @@ import { acquireTestOsStageControl } from "./helpers/os-stage-test-control.ts";
 const ROCK_RECEIPT_BYTES =
 	'{"schema":1,"version":"2026.10.64","channel":"drill","stagedAt":1791464043236,"bootId":"070fd8ac-4a40-4b85-9d31-f21502ebd117"}';
 const rockReceipt: OsStageReceipt = JSON.parse(ROCK_RECEIPT_BYTES);
-const ROCK_BOOT = "29dd9a67-91db-412a-8729-accdb5825369";
+const ROCK_BOOT = "11111111-1111-4111-8111-111111111111";
 const installedImage = {
 	slot: "rootfs.0",
 	bundleHash: "a".repeat(64),

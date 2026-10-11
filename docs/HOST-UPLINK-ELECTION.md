@@ -547,8 +547,8 @@ Not covered or claimed:
   family probe; this fix ships forward from released-source baseline `7b53288`.
 - No proof of mTLS authorization, authenticated index/payload fetches, repository
   signatures or contents. Apt remains responsible for those checks.
-- The existing reader covers deb822 `.sources`, not legacy `.list` files, custom
-  apt proxy transports, or per-source trust configuration. DNS uses the system
+- The existing reader covers deb822 `.sources` and legacy `.list` files, but not
+  custom apt proxy transports, or per-source trust configuration. DNS uses the system
   resolver; `--interface` binds transfer sockets, not resolver traffic.
 - No new candidate inventory: addressless NICs remain excluded, including an
   IPv6-only NIC absent from the existing netif IPv4 inventory.

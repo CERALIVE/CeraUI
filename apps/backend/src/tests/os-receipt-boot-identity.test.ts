@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { stagedReceiptConsumed } from "../modules/system/update-orchestrator/os-staged-receipt-retirement.ts";
 
-const bootId = "29dd9a67-91db-412a-8729-accdb5825369";
+const bootId = "11111111-1111-4111-8111-111111111111";
 const installedImage = {
 	slot: "rootfs.0",
 	bundleHash: "a".repeat(64),

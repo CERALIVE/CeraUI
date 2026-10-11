@@ -186,3 +186,6 @@ uncaptured read throws instead of inventing absence, and only the listed paths
 answer ENOENT. The production observer admits these inputs. The admission and
 observation diagnostic tests inject one fault at a time on top of them. This is a
 later capture, not the refusal-time observation, whose cause remains unknown.
+The captured boot ID (in `bootId` and `healthy.boot_id`) is normalized to the
+111 placeholder `11111111-1111-4111-8111-111111111111`, and the tests that name it
+use the same value; nothing else in the capture was substituted.

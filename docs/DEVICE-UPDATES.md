@@ -6,8 +6,9 @@ by file, and says plainly where a path is implemented but not released on any
 image today.
 
 **Status in one paragraph.** The orchestrator, its D8 stream admission, the
-package pipeline, the Updates dialog and its global surfaces are implemented and
-run on every device ([EXISTS]). The APT all-package scope, the OS agent, the
+package pipeline, the Updates dialog and its global surfaces are implemented in
+this candidate and apply to legacy and capable images when installed; fleet
+rollout is not established ([PARTIAL]). The APT all-package scope, the OS agent, the
 lagged slot mirror and the UID-pinned transport are implemented and
 fixture-tested, but each is gated on an image capability that no shipped image
 declares yet ([PARTIAL]). The one exception to fixture-only evidence is the
@@ -839,9 +840,10 @@ Playwright spec `tests/e2e/update-system.spec.ts`.
 
 Not proven, and not claimed:
 
-- no board has run the orchestrator's automatic pipeline, an OS stage, a slot
-  mirror or a pinned transfer from this branch;
-- no image declares `apt-all-packages`, `rauc-verity-streaming`, `slot-sync` or
+- earlier branch builds were exercised on the benches and exposed the recorded
+  failures; those runs do not qualify the corrected exact head, and integrated
+  both-board re-drills remain owed;
+- no RELEASED image declares `apt-all-packages`, `rauc-verity-streaming`, `slot-sync` or
   `transport-uidrange`, so every capable path is inert in the field;
 - no live signed channel manifest, hosted bundle or live `apt.ceralive.tv` mTLS
   verification has been exercised;

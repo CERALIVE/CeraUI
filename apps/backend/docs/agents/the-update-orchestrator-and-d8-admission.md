@@ -265,7 +265,7 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
    replacement, not a conditional-rename guarantee. D154 also accepts forward-only
    strict schema-1 additions: older unreleased bench intermediates reject
    `receiptBaseline`; rollback requires bench-only stage job/witness clearance.
-   `2026.9.5` is the first orchestrator release. Details: `docs/UPDATE-RECOVERY.md`.
+   `2026.9.5` is the PLANNED first orchestrator release, pending the release gate. Details: `docs/UPDATE-RECOVERY.md`.
   Stage-admission refusals keep `rauc_recovery_unproven`/unsafe and add the
    log-only `predicate` and bounded, message-free class/code `observation` diagnostics
    (`os-stage-admission-diagnostics.ts`); see `docs/UPDATE-RECOVERY.md`.

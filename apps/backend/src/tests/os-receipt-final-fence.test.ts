@@ -16,7 +16,7 @@ import {
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
 import { acquireTestOsStageControl } from "./helpers/os-stage-test-control.ts";
 
-const bootId = "29dd9a67-91db-412a-8729-accdb5825369";
+const bootId = "11111111-1111-4111-8111-111111111111";
 const image = {
 	slot: "rootfs.0",
 	bundleHash: "a".repeat(64),

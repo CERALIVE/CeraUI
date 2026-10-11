@@ -28,7 +28,7 @@ const receipt = {
 	bootId: "070fd8ac-4a40-4b85-9d31-f21502ebd117",
 	installedImage,
 };
-const bootId = "29dd9a67-91db-412a-8729-accdb5825369";
+const bootId = "11111111-1111-4111-8111-111111111111";
 const local: OrchestratorState = {
 	...initialOrchestratorState(0),
 	phase: "failed",

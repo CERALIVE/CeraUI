@@ -695,10 +695,20 @@ schema residuals below remain unchanged. Fresh Rock and Orange Pi failover/statu
 pressure, cancellation and unknown-success crash drills are still required.
 
 Module-size accounting is not a claim of uniform compliance: `os-stage-run.ts`
-(493 pure LOC) and `runtime.ts` (2,292) carry explicit `SIZE_OK`
-lifetime/state-machine exceptions. `spawn-policy.ts` (1,350 pure LOC) and
-`reducer.ts` (667) are inherited size debt, not newly compliant modules. Accounting
-excludes blank lines and comment-prefixed lines (including embedded shell comments).
+(494 pure LOC) and `runtime.ts` (2,310) carry explicit `SIZE_OK`
+lifetime/state-machine exceptions. `spawn-policy.ts` (1,355 pure LOC) and
+`reducer.ts` (667) are size debt, not newly compliant modules. Accounting
+excludes blank lines and lines starting with `//`, `#`, `--`, `*` or `/*`
+(including embedded shell comments); a rule that keeps `*`/`/*` lines counts
+`runtime.ts` 2,336 and `reducer.ts` 673. Backend source files this PR adds or
+changes that exceed 250 under this rule without an inline `SIZE_OK` (base
+23bcf379 → this head): `spawn-policy.ts` 907→1,355,
+`stream-session-orchestrator.ts` 765→826, `reducer.ts` new 667,
+`update-transport/executor.ts` new 439, `addons/manager.ts` 489→490,
+`ui/preview-proxy.ts` 390→392, `system.procedure.ts` 295→360, `rpc/router.ts`
+290→306, `addons/reconciler.ts` 300→302, `apt-reachability.ts` 225→272,
+`streaming/streaming.ts` 257→265, `helpers/run.ts` 260→264. None is split here;
+each is an owner decision pending (split or record `SIZE_OK`).
 Orphan inspection is separated from the settlement lifetime without changing its
 predicates. New FIX7/FIX8/FIX9/FIX10 modules stay below 250 pure LOC. The four
 fix-6 test files and fix-7 regressions require an explicit TypeScript program:
@@ -1212,8 +1222,8 @@ only.** `receiptBaseline` remains optional in strict schema-1 stage job/witness
 records: this head reads older records, but older unreleased bench intermediates
 `1f6a990e` and `d28fff27` reject records carrying it with `unrecognized_keys`.
 Persistence across reboot does not make those records readable by an older backend.
-`2026.9.5` is the FIRST release containing the orchestrator, so no released backend
-reads these records. The other strict records (sync receipt and staged receipt's
+`2026.9.5` is the PLANNED first orchestrator release, pending the release gate; no
+released backend reads these records. The other strict records (sync receipt and staged receipt's
 `installedImage`) follow the same additive-forward-only discipline.
 Rolling a bench board back to an intermediate build requires clearing its stage
 job/witness records as a bench-only operation, only after positive no-writer proof
@@ -1343,7 +1353,7 @@ Notifications use stable `update:<event-kind>:<identity>` names and the existing
 persistent-notification store, dismissal store, and allowlisted `updates-dialog`
 action. Notification producers and their current limits are listed in [DEVICE-UPDATES.md](./DEVICE-UPDATES.md#notifications).
 
-## Lagged slot mirror [PARTIAL — fixture-tested, no CeraUI board drill]
+## Lagged slot mirror [PARTIAL — fixture-tested, exact-head board re-drill owed]
 
 `slot-sync-gate.ts` is the pure, I/O-free pre-dispatch predicate. The image must
 explicitly advertise `slot-sync`. The healthcheck's

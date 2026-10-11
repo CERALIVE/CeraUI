@@ -33,7 +33,7 @@ const installedImage = {
 	installedAt: "2026-10-08T12:54:01Z",
 	installedCount: 7,
 };
-const bootId = "29dd9a67-91db-412a-8729-accdb5825369";
+const bootId = "11111111-1111-4111-8111-111111111111";
 const receipt: OsStageReceipt = {
 	schema: 1,
 	version: "2026.10.64",
