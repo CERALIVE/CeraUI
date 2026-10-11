@@ -1,12 +1,14 @@
 import { logger } from "../../../helpers/logger.ts";
 import { SpawnTimeoutError } from "../../../helpers/spawn-policy.ts";
 import type { RankedTransport } from "../update-transport/core.ts";
+import type { ObservationReport } from "./os-stage-admission-diagnostics.ts";
 import type { OsStageControl } from "./os-stage-attempt.ts";
 import {
 	type StageDeadline,
 	withinStageDeadline,
 } from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
+import { recordStageFailure } from "./os-stage-failure-context.ts";
 import type { createOsStageJobOwner } from "./os-stage-job.ts";
 import { OsStageUnpublishedSuccessError } from "./os-stage-outcome-error.ts";
 import { retainUnsafeOsStagePin } from "./os-stage-pin-retention.ts";
@@ -28,7 +30,9 @@ type AttemptSettlement = {
 		"attempt" | "now" | "sleep" | "restart" | "readProgress" | "progress"
 	>;
 	readonly admit: () => Promise<void>;
-	readonly capture: () => Promise<RaucStageSnapshot | null>;
+	readonly capture: (
+		report?: ObservationReport,
+	) => Promise<RaucStageSnapshot | null>;
 	/** The reconciler drains a parked pin after the job's deadline has passed. */
 	readonly drainCapture: () => Promise<RaucStageSnapshot | null>;
 	readonly generation: () => number;
@@ -75,6 +79,7 @@ export async function settlePinnedOsAttempt(
 	let observationError: unknown;
 	let quiescent: RaucStageSnapshot | null = null;
 	let requireNewInstance = true;
+	let firstFailure: OsStageError | undefined;
 	const timer = setInterval(() => {
 		if (observing) return;
 		observing = true;
@@ -99,6 +104,10 @@ export async function settlePinnedOsAttempt(
 	timer.unref();
 	try {
 		const outcome = await attempt.outcome;
+		if (outcome.kind === "failed") {
+			firstFailure = outcome.error;
+			recordStageFailure(firstFailure, "runner");
+		}
 		const deadline = deps.now() + RAUC_RECOVERY_DEADLINE_MS;
 		input.recovering?.(deadline);
 		const budget = {
@@ -190,6 +199,8 @@ export async function settlePinnedOsAttempt(
 			throw outcome.error;
 		}
 	} catch (cause) {
+		if (!quiescent)
+			recordStageFailure(cause, "settlement-proof", { first: firstFailure });
 		if (attempt.cliSucceeded?.()) input.successful?.();
 		if (quiescent) throw cause;
 		const record = owner.record();

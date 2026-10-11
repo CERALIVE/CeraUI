@@ -1,5 +1,10 @@
+import {
+	describeObservationFailure,
+	type ObservationReport,
+} from "./os-stage-admission-diagnostics.ts";
 import { raceStageDeadline } from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
+import { recordStageFailure } from "./os-stage-failure-context.ts";
 import { reportStageProofDecision } from "./os-stage-proof-wait.ts";
 
 export const RAUC_RECOVERY_POLL_MS = 1_000;
@@ -87,7 +92,9 @@ export function raucQuiescenceRefusal(input: {
 export type RaucRecoveryDeps = {
 	readonly now: () => number;
 	readonly sleep: (ms: number) => Promise<void>;
-	readonly observe: () => Promise<RaucStageSnapshot | null>;
+	readonly observe: (
+		report?: ObservationReport,
+	) => Promise<RaucStageSnapshot | null>;
 	readonly cliSettled: () => boolean;
 	readonly lockHeld: () => Promise<boolean>;
 	readonly deadline?: number;
@@ -101,79 +108,111 @@ export async function recoverRaucStage(
 ): Promise<RaucStageSnapshot> {
 	const deadline = deps.deadline ?? deps.now() + RAUC_RECOVERY_DEADLINE_MS;
 	let refusal = "observation-unknown";
+	let started: number | undefined;
 	const wait = {
 		deadline,
-		now: deps.now,
+		now: () => {
+			const now = deps.now();
+			started ??= now;
+			return now;
+		},
 		previousInstance: ownership.baseline.instance,
 		...(deps.invalidate ? { invalidate: deps.invalidate } : {}),
 	};
 	let previousReason: string | undefined;
 	let lastCurrent: RaucStageSnapshot | null = null;
-	do {
-		const lockHeld = await raceStageDeadline(wait, deps.lockHeld);
-		const current = await raceStageDeadline(wait, deps.observe);
-		lastCurrent = current;
-		const structural =
-			current &&
-			raucQuiescenceRefusal({
+	let attempts = 0;
+	let observation: string | undefined;
+	try {
+		do {
+			const lockHeld = await raceStageDeadline(wait, deps.lockHeld);
+			observation = undefined;
+			++attempts;
+			const current = await raceStageDeadline(wait, () =>
+				deps.observe((detail) => {
+					observation ??= detail;
+				}),
+			);
+			lastCurrent = current;
+			const structural =
+				current &&
+				raucQuiescenceRefusal({
+					ownership,
+					current: {
+						...current,
+						active: true,
+						operation: "idle",
+						processes: [current.instance],
+						resources: [],
+					},
+					cliSettled: true,
+					lockHeld,
+					requireNewInstance: false,
+				});
+			const reason = raucQuiescenceRefusal({
 				ownership,
-				current: {
-					...current,
-					active: true,
-					operation: "idle",
-					processes: [current.instance],
-					resources: [],
-				},
-				cliSettled: true,
+				current,
+				cliSettled: deps.cliSettled(),
 				lockHeld,
-				requireNewInstance: false,
+				requireNewInstance,
 			});
-		const reason = raucQuiescenceRefusal({
-			ownership,
-			current,
-			cliSettled: deps.cliSettled(),
-			lockHeld,
-			requireNewInstance,
+			if (reason === null && current && deps.now() < deadline) {
+				reportStageProofDecision({
+					snapshot: current,
+					wait,
+					reason: "recovery-proven",
+					disposition: "proven",
+				});
+				return current;
+			}
+			if (!lockHeld || structural) {
+				refusal = structural ?? "lock-owner-unproven";
+				break;
+			}
+			if (reason === null) {
+				refusal = "deadline-expired";
+				break;
+			}
+			refusal = reason ?? "observation-unknown";
+			if (refusal !== previousReason) {
+				previousReason = refusal;
+				reportStageProofDecision({
+					snapshot: current,
+					wait,
+					reason: refusal,
+					disposition: deps.now() >= deadline ? "final" : "defer",
+				});
+			}
+			if (deps.now() >= deadline) break;
+			await raceStageDeadline(wait, () =>
+				deps.sleep(Math.min(RAUC_RECOVERY_POLL_MS, deadline - deps.now())),
+			);
+		} while (deps.now() <= deadline);
+		reportStageProofDecision({
+			snapshot: lastCurrent,
+			wait,
+			reason: refusal,
+			disposition: "final",
 		});
-		if (reason === null && current && deps.now() < deadline) {
-			reportStageProofDecision({
-				snapshot: current,
-				wait,
-				reason: "recovery-proven",
-				disposition: "proven",
-			});
-			return current;
-		}
-		if (!lockHeld || structural) {
-			refusal = structural ?? "lock-owner-unproven";
-			break;
-		}
-		if (reason === null) {
-			refusal = "deadline-expired";
-			break;
-		}
-		refusal = reason ?? "observation-unknown";
-		if (refusal !== previousReason) {
-			previousReason = refusal;
-			reportStageProofDecision({
-				snapshot: current,
-				wait,
-				reason: refusal,
-				disposition: deps.now() >= deadline ? "final" : "defer",
-			});
-		}
-		if (deps.now() >= deadline) break;
-		await raceStageDeadline(wait, () =>
-			deps.sleep(Math.min(RAUC_RECOVERY_POLL_MS, deadline - deps.now())),
-		);
-	} while (deps.now() <= deadline);
-	reportStageProofDecision({
-		snapshot: lastCurrent,
-		wait,
-		reason: refusal,
-		disposition: "final",
-	});
-	throw new OsStageError("rauc_recovery_unproven", {
-		diagnostics: { refusal, oldInstance: ownership.baseline.instance },
-	});
+		throw new OsStageError("rauc_recovery_unproven", {
+			diagnostics: {
+				refusal,
+				oldInstance: ownership.baseline.instance,
+				...(observation ? { observation } : {}),
+			},
+		});
+	} catch (error) {
+		recordStageFailure(error, "settlement-proof", {
+			attempts,
+			...(started === undefined
+				? {}
+				: { elapsedMs: Math.max(0, deps.now() - started) }),
+			...(observation
+				? { observation }
+				: error instanceof OsStageError
+					? {}
+					: { observation: describeObservationFailure("observation", error) }),
+		});
+		throw error;
+	}
 }

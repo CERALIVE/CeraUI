@@ -109,6 +109,10 @@ import type {
 	OsStageControlLease,
 } from "./os-stage-control-lease.ts";
 import { isOsStageError, OsStageError } from "./os-stage-error.ts";
+import {
+	recordStageFailure,
+	stageFailureContext,
+} from "./os-stage-failure-context.ts";
 import { readOsStageJob } from "./os-stage-job-files.ts";
 import { OsStageUnpublishedSuccessError } from "./os-stage-outcome-error.ts";
 import {
@@ -1698,12 +1702,12 @@ function settleOsStageFailure(
 		notifyUpdate({ kind: "refused", id: `os:${manifest.version}`, reason });
 		return;
 	}
+	if (!stageFailureContext(error)) recordStageFailure(error, "runner");
 	logger.warn("update-orchestrator: OS staging attempt settled", {
 		attemptId,
 		reason: error.reason,
 		mode: error.mode,
 		diagnostics: error.diagnostics,
-		error: error.cause,
 	});
 	if (error.mode === "cancelled") {
 		dispatch({ type: "OS_STAGING_ABORTED_FOR_STREAM", now });

@@ -12,6 +12,7 @@ export function proveOsStageUnlaunched(input: {
 	readonly clientsGone: boolean;
 	readonly lockHeld: boolean;
 	readonly outcomeAbsent: boolean;
+	readonly observation?: string;
 }): RaucStageSnapshot {
 	const { record } = input;
 	requireAdmissionSnapshot(record.baseline);
@@ -42,7 +43,10 @@ export function proveOsStageUnlaunched(input: {
 		record.processes.some((id) => id !== record.baseline.instance)
 	)
 		throw new OsStageError("rauc_recovery_unproven", {
-			diagnostics: { refusal: refusal ?? "unlaunched-provenance-unproven" },
+			diagnostics: {
+				refusal: refusal ?? "unlaunched-provenance-unproven",
+				...(input.observation ? { observation: input.observation } : {}),
+			},
 		});
 	return input.current;
 }

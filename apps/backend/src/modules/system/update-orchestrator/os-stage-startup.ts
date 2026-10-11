@@ -11,6 +11,10 @@ import {
 	withinStageDeadline,
 } from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
+import {
+	recordStageFailure,
+	stageFailureContext,
+} from "./os-stage-failure-context.ts";
 import { osInstallClientsGone } from "./os-stage-install-clients.ts";
 import { createOsStageJobOwner } from "./os-stage-job.ts";
 import { OS_STAGE_GUARD_UNIT, readOsStageJob } from "./os-stage-job-files.ts";
@@ -41,7 +45,13 @@ export function ensureOsUpdateAdmissionReady(
 		void reconcileOsStageStartup(overrides).catch((error: unknown) => {
 			logger.warn(
 				"update-orchestrator: startup writer recovery remains unresolved",
-				{ error },
+				{
+					reason: error instanceof OsStageError ? error.reason : "untyped",
+					diagnostics:
+						error instanceof OsStageError
+							? error.diagnostics
+							: stageFailureContext(error),
+				},
 			);
 		});
 	}
@@ -194,6 +204,7 @@ export function reconcileOsStageStartup(
 	};
 	inFlight = work()
 		.catch((cause: unknown) => {
+			recordStageFailure(cause, "startup-recovery");
 			if (cause instanceof OsStageError) throw cause;
 			throw new OsStageError("rauc_recovery_unproven", { cause });
 		})

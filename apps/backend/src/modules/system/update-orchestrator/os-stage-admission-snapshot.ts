@@ -5,6 +5,7 @@ import {
 	STAGE_CENSUS_DRIFT,
 } from "./os-stage-admission-diagnostics.ts";
 import { OsStageError } from "./os-stage-error.ts";
+import { recordStageFailure } from "./os-stage-failure-context.ts";
 import {
 	type StageProofWait,
 	waitForStageProof,
@@ -60,6 +61,7 @@ export async function observeAdmission(
 		const snapshot = await waitForStageProof({
 			observe,
 			wait,
+			failureStep: "admission",
 			requiresFinalRead: wait.quiescence !== undefined,
 			finalRefusal: (current) => {
 				const predicate = failedAdmissionPredicate(current, baseline);
@@ -113,8 +115,13 @@ export async function observeAdmission(
 		return requireAdmissionSnapshot(snapshot, baseline);
 	}
 	let observation: string | undefined;
-	const snapshot = await observe((detail) => {
-		observation ??= detail;
-	});
-	return requireAdmissionSnapshot(snapshot, baseline, observation);
+	try {
+		const snapshot = await observe((detail) => {
+			observation ??= detail;
+		});
+		return requireAdmissionSnapshot(snapshot, baseline, observation);
+	} catch (error) {
+		recordStageFailure(error, "admission");
+		throw error;
+	}
 }

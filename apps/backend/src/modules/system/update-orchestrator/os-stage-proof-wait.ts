@@ -1,4 +1,3 @@
-import { logger } from "../../../helpers/logger.ts";
 import {
 	describeObservationFailure,
 	type ObservationReport,
@@ -6,7 +5,12 @@ import {
 } from "./os-stage-admission-diagnostics.ts";
 import { raceStageDeadline, withinStageDeadline } from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
+import {
+	type OsStageFailureStep,
+	recordStageFailure,
+} from "./os-stage-failure-context.ts";
 import { stageEvidence } from "./os-stage-process-evidence.ts";
+import { reportStageProofDecision } from "./os-stage-proof-report.ts";
 import type { RaucStageSnapshot } from "./os-stage-recovery.ts";
 
 export type StageProofClock = {
@@ -23,35 +27,7 @@ export type StageProofWait = StageProofClock & {
 	readonly logEpisode?: () => boolean;
 };
 
-export function reportStageProofDecision(input: {
-	readonly snapshot: RaucStageSnapshot | null;
-	readonly wait: Pick<StageProofWait, "deadline" | "now" | "previousInstance">;
-	readonly reason: string;
-	readonly disposition: "defer" | "final" | "proven";
-	readonly observation?: string;
-}): void {
-	try {
-		const detail = stageEvidence(input.snapshot);
-		logger.warn("update-orchestrator: OS stage proof decision", {
-			...detail,
-			members: detail?.members.slice(0, 16),
-			extraMembers: detail?.members
-				.filter((member) => member.identity !== input.snapshot?.instance)
-				.slice(0, 16),
-			resources: input.snapshot?.resources
-				.slice(0, 16)
-				.map((id) => id.slice(0, 160)),
-			currentInstance: input.snapshot?.instance ?? null,
-			previousInstance: input.wait.previousInstance ?? null,
-			deadlineRemainingMs: Math.max(0, input.wait.deadline - input.wait.now()),
-			reason: input.reason,
-			disposition: input.disposition,
-			observation: input.observation,
-		});
-	} catch {
-		return;
-	}
-}
+export { reportStageProofDecision } from "./os-stage-proof-report.ts";
 
 export async function waitForStageProof(input: {
 	readonly observe: (
@@ -67,6 +43,7 @@ export async function waitForStageProof(input: {
 	readonly finalRefusal?: (snapshot: RaucStageSnapshot) => string | null;
 	readonly requiresFinalRead?: boolean;
 	readonly wait: StageProofWait;
+	readonly failureStep?: OsStageFailureStep;
 	readonly failure?: (
 		snapshot: RaucStageSnapshot | null,
 		reason: string,
@@ -79,6 +56,28 @@ export async function waitForStageProof(input: {
 	let snapshot: RaucStageSnapshot | null = null;
 	let reason = "deadline-expired";
 	let observation: string | undefined;
+	let attempts = 0;
+	let started: number | undefined;
+	const clock = () => {
+		const now = wait.now();
+		started ??= now;
+		return now;
+	};
+	const contextual = (
+		error: unknown,
+		predicate = reason,
+		detail = observation,
+	) => {
+		recordStageFailure(error, input.failureStep ?? "settlement-proof", {
+			predicate,
+			...(detail ? { observation: detail } : {}),
+			attempts,
+			...(started === undefined
+				? {}
+				: { elapsedMs: Math.max(0, wait.now() - started) }),
+		});
+		return error;
+	};
 	const guarded = async <T>(
 		boundary: "observation" | "quiescence",
 		work: () => Promise<T>,
@@ -92,7 +91,10 @@ export async function waitForStageProof(input: {
 				error.diagnostics.refusal === "deadline-expired" &&
 				input.failure
 			)
-				throw input.failure(snapshot, "deadline-expired", observation);
+				throw contextual(
+					input.failure(snapshot, "deadline-expired", observation),
+					"deadline-expired",
+				);
 			reportStageProofDecision({
 				snapshot,
 				wait,
@@ -100,7 +102,11 @@ export async function waitForStageProof(input: {
 				disposition: "final",
 				observation: describeObservationFailure(boundary, error),
 			});
-			throw error;
+			throw contextual(
+				error,
+				`${boundary}-thrown`,
+				describeObservationFailure(boundary, error),
+			);
 		}
 	};
 	const assertAuthority = async () => {
@@ -112,21 +118,25 @@ export async function waitForStageProof(input: {
 				error.diagnostics.refusal === "deadline-expired" &&
 				input.failure
 			)
-				throw input.failure(snapshot, "deadline-expired", observation);
+				throw contextual(
+					input.failure(snapshot, "deadline-expired", observation),
+					"deadline-expired",
+				);
 			reportStageProofDecision({
 				snapshot,
 				wait,
 				reason: "authority-refused",
 				disposition: "final",
 			});
-			throw error;
+			throw contextual(error, "authority-refused");
 		}
 	};
-	while (wait.now() < wait.deadline) {
+	while (clock() < wait.deadline) {
 		await assertAuthority();
 		if (input.finalRefusal && !input.requiresFinalRead) await assertAuthority();
 		if (wait.now() >= wait.deadline) break;
 		observation = undefined;
+		++attempts;
 		snapshot = await guarded("observation", () =>
 			input.observe((detail) => {
 				observation ??= detail;
@@ -158,6 +168,7 @@ export async function waitForStageProof(input: {
 		if (snapshot && reason === "proven") {
 			if (input.finalRefusal && input.requiresFinalRead) {
 				observation = undefined;
+				++attempts;
 				snapshot = await guarded("observation", () =>
 					input.observe((detail) => {
 						observation ??= detail;
@@ -219,10 +230,13 @@ export async function waitForStageProof(input: {
 		disposition: "final",
 		...(observation ? { observation } : {}),
 	});
-	throw (
+	throw contextual(
 		input.failure?.(snapshot, reason, observation) ??
-		new OsStageError("rauc_recovery_unproven", {
-			diagnostics: { refusal: reason, ...(observation ? { observation } : {}) },
-		})
+			new OsStageError("rauc_recovery_unproven", {
+				diagnostics: {
+					refusal: reason,
+					...(observation ? { observation } : {}),
+				},
+			}),
 	);
 }

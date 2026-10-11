@@ -7,6 +7,10 @@ import {
 	type OsStageControlLease,
 } from "./os-stage-control-lease.ts";
 import { OsStageError } from "./os-stage-error.ts";
+import {
+	recordStageFailure,
+	stageFailureContext,
+} from "./os-stage-failure-context.ts";
 import type { OsStageJobOwner } from "./os-stage-job-owner.ts";
 import { withOsPhysicalSettlement } from "./os-stage-physical-settlement.ts";
 import type { OsStageRunControl } from "./os-stage-run.ts";
@@ -62,13 +66,19 @@ export async function acquireOrSettleOsStage(
 	try {
 		await input.owner.acquire();
 	} catch (cause) {
+		if (!stageFailureContext(cause)) recordStageFailure(cause, "runner");
 		if (cause instanceof OsContentionCleanupError) throw cause;
 		if (cause instanceof OsStageError && cause.reason === "os_update_lock_held")
 			throw cause;
-		await withOsPhysicalSettlement(async () => {
-			if (!(await input.owner.settleUnlaunched?.(input.lease, input.effects)))
-				throw cause;
-		});
+		try {
+			await withOsPhysicalSettlement(async () => {
+				if (!(await input.owner.settleUnlaunched?.(input.lease, input.effects)))
+					throw cause;
+			});
+		} catch (error) {
+			recordStageFailure(error, "settlement-proof", { first: cause });
+			throw error;
+		}
 		throw new OsStageError("rauc_install_failed", { cause });
 	}
 }
@@ -79,11 +89,17 @@ export async function settleUnlaunchedOsStageFailure(
 	cause: unknown,
 ): Promise<void> {
 	const settle = input.owner.settleUnlaunched;
+	if (!stageFailureContext(cause)) recordStageFailure(cause, "runner");
 	if (input.owner.record().launched || !settle) return;
-	await withOsPhysicalSettlement(async () => {
-		if (!(await settle(input.lease, input.effects)))
-			throw new OsStageError("rauc_recovery_unproven", { cause });
-	});
+	try {
+		await withOsPhysicalSettlement(async () => {
+			if (!(await settle(input.lease, input.effects)))
+				throw new OsStageError("rauc_recovery_unproven", { cause });
+		});
+	} catch (error) {
+		recordStageFailure(error, "settlement-proof", { first: cause });
+		throw error;
+	}
 	if (cause instanceof OsStageError && cause.mode !== "unsafe") throw cause;
 	throw new OsStageError("rauc_install_failed", { cause });
 }

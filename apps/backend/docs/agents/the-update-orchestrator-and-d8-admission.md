@@ -303,7 +303,25 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
    recounting failure. It does not assert that RAUC launched; timestamps alone
    cannot prove which witness admitted that historical transition. Mapping stays
    unchanged; see UPDATE-RECOVERY.md for the full provenance/residual contract.
-  Invalid present recovery metadata raises a typed load error; startup preserves
+   Stage summary events and unlaunched refusal diagnostics use log-only
+   provenance in `os-stage-failure-context.ts`; unchanged proof-decision
+   logging is in `os-stage-proof-report.ts`, re-exported from the wait seam.
+   They preserve a closed
+   `firstFailureStep` (`admission` / `runner` / `settlement-proof` /
+   `startup-recovery`), original typed reason or `untyped`, and closed predicate.
+   Final `failureStep`/predicate/refusal remain separate from that first failure.
+   Existing message-free stage/class/errno formatting stays bounded to 200 chars;
+   proof waits add actual observer-submission counts and elapsed milliseconds
+   where known. The settled event and unresolved-startup warn omit arbitrary
+   error causes. Raw thrown-object identity and explicit own diagnostic precedence
+   stay intact. This context lives only in memory/log meta, never in stored
+   recovery/receipt/job/witness/intent formats or wire schemas. It is not a cause
+   proof and not board qualification; startup cannot reconstruct prior-process
+   history, and boundary-only exceptions do not identify an unobserved lower scan.
+   Never-launched proof still observes directly rather than entering drift wait.
+   Admission, retries, authority, policy numbers and D154 are unchanged. Detail:
+   UPDATE-RECOVERY.md → Self-describing stage refusals.
+   Invalid present recovery metadata raises a typed load error; startup preserves
   the file and the legacy terminal reason rather than defaulting to idle. That
   runtime stays closed to OS migration and confirmation until maintenance fixes
   the file and restarts it; records without OS metadata keep existing resume.

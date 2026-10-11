@@ -1236,6 +1236,40 @@ exception messages, class names and codes are omitted rather than sanitized.
 Throwing exception getters use a safe fallback; formatting and reporting cannot
 replace the observer's null refusal, even with no sink.
 
+**Self-describing stage refusals [PARTIAL — host-tested, not board-qualified].**
+`OS staging attempt settled`, `startup writer recovery remains unresolved`, and
+the in-memory unlaunched-settlement error carry diagnostic context independently
+of the final recovery disposition. `firstFailureStep` is closed to `admission`,
+`runner`, `settlement-proof`, or `startup-recovery`; `firstFailureReason` is the
+original typed stage reason or `untyped`. `firstFailurePredicate` names the first
+closed refusal predicate (explicit `observation-unknown` when none is known).
+`failureStep`, `predicate` and existing `refusal` describe the final refusal, so a
+failed settlement proof cannot erase the earlier admission or runner failure.
+`firstFailureObservation` and `observation`, when available, retain the existing
+formatter's stage + allowlisted class/errno or stage/unproven line, at most 200
+characters. They contain no exception messages, paths, PIDs, argv or cmdline.
+The two summary events no longer serialize arbitrary error causes.
+
+Bounded proof waits additionally report observation `attempts` and `elapsedMs`;
+their first-failure counterparts survive later settlement. Counts measure actual
+observer submissions, including final reads, not RAUC install attempts or retry
+rounds. Direct proofs without a bounded wait omit those measurements. Diagnostics
+are in memory and log meta only: `osStageRecovery`, receipt, job, intent and witness
+formats and every wire schema stay unchanged. The direct strict validator's
+legacy diagnostic shape and explicit constructor-context precedence also remain.
+Observation sinks are forwarded through recovery and never-launched proof without
+changing null/error handling, retryability, bounds or authority checks. A raw
+thrown object retains its identity; redacted context follows existing wrappers.
+An unknown guardian/fd/lock exception may name only the settlement boundary,
+not an unobserved lower substep. Startup cannot recover an earlier process's
+first failure from disk because no diagnostic history is persisted.
+
+This is **not a cause proof** for Rock R16/R17c and **not board qualification**.
+Churn, terminal read uncertainty, and runner failure followed by a failed
+settlement proof remain historical alternatives. The never-launched proof still
+uses its direct observation, not the bounded drift-wait loop; no helper whitelist,
+new retry, deadline, admission relaxation, policy number or D154 change is added.
+
 **Invalid recovery metadata is not first boot.** Schema 1 still makes the fields
 optional, but present recovery must agree with phase, active identity and retry
 deadline. Invalid or contradictory metadata raises a typed load error. Startup

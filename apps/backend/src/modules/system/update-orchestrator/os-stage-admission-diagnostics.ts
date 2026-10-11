@@ -59,7 +59,7 @@ export function failedAdmissionPredicate(
 	return changed ? `baseline-changed:${changed}` : null;
 }
 
-const MAX_DETAIL = 200;
+export const MAX_DETAIL = 200;
 
 const ERROR_CLASSES = new Set([
 	"Error",

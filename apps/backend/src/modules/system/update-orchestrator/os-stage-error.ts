@@ -1,5 +1,10 @@
 // Typed vocabulary for an OS staging (RAUC) failure: the reason, the recovery
 // disposition the orchestrator must apply, and the diagnostic context.
+import {
+	inheritStageFailure,
+	type OsStageFailureStep,
+	stageFailureContext,
+} from "./os-stage-failure-context.ts";
 
 export const OS_STAGE_FAILURE_REASONS = [
 	"os_transport_failed",
@@ -35,13 +40,20 @@ export const OS_STAGE_FAILURE_MODE: Readonly<
 
 export type OsStageDiagnostics = Readonly<
 	Record<string, string | number | boolean | null>
->;
+> & {
+	readonly firstFailureStep?: OsStageFailureStep;
+	readonly failureStep?: OsStageFailureStep;
+};
 
 export class OsStageError extends Error {
 	override readonly name = "OsStageError";
 	readonly reason: OsStageFailureReason;
 	readonly mode: OsStageRecoveryMode;
-	readonly diagnostics: OsStageDiagnostics;
+	private readonly context: OsStageDiagnostics;
+	get diagnostics(): OsStageDiagnostics {
+		const failure = stageFailureContext(this);
+		return failure ? { ...this.context, ...failure } : this.context;
+	}
 
 	constructor(
 		reason: OsStageFailureReason,
@@ -55,9 +67,11 @@ export class OsStageError extends Error {
 		this.mode = OS_STAGE_FAILURE_MODE[reason];
 		// A wrapper without its own context keeps the cause's, so a refusal's
 		// predicate survives the runner's unsafe re-classification.
-		this.diagnostics =
+		this.context =
 			options?.diagnostics ??
 			(options?.cause instanceof OsStageError ? options.cause.diagnostics : {});
+		if (options?.diagnostics === undefined)
+			inheritStageFailure(this, options?.cause);
 	}
 }
 

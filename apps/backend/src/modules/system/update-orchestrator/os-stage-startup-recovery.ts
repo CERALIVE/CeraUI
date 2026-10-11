@@ -47,13 +47,17 @@ export async function recoverOwnedOsStageAtStartup(
 			deadline,
 			invalidate: budget.invalidate,
 			cliSettled: () => cliGone,
-			observe: async () => {
+			observe: async (report) => {
 				const gone = await read(deps.cliGone);
 				const snapshot = await read(() =>
-					deps.observe({
-						processes: new Set(record.processes),
-						resources: new Set(record.resources),
-					}),
+					deps.observe(
+						{
+							processes: new Set(record.processes),
+							resources: new Set(record.resources),
+						},
+						undefined,
+						report,
+					),
 				);
 				assertStageDeadline(budget);
 				cliGone = gone;

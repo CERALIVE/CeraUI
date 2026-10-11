@@ -6,6 +6,7 @@ import {
 	withinStageDeadline,
 } from "./os-stage-deadline.ts";
 import { OsStageError } from "./os-stage-error.ts";
+import { recordStageFailure } from "./os-stage-failure-context.ts";
 import type { proveOsGuardKernelOwnership } from "./os-stage-guard-lock.ts";
 import type { OsStageGuardObservation } from "./os-stage-guard-observation.ts";
 import {
@@ -48,7 +49,12 @@ export async function settleOsStageUnlaunched(
 	record: OsStageJobRecord,
 	deps: OsUnlaunchedDeps,
 ): Promise<void> {
-	return withOsPhysicalSettlement(() => settleUnlaunched(record, deps));
+	try {
+		return await withOsPhysicalSettlement(() => settleUnlaunched(record, deps));
+	} catch (error) {
+		recordStageFailure(error, "settlement-proof");
+		throw error;
+	}
 }
 
 async function settleUnlaunched(
@@ -87,6 +93,7 @@ async function settleUnlaunched(
 			...(lock?.pid ? { temporaryPid: lock.pid } : {}),
 		});
 	const proof = async () => {
+		let observation: string | undefined;
 		await assertOwner();
 		const latest = await deps.inspect(record.attemptId);
 		if (
@@ -106,13 +113,20 @@ async function settleUnlaunched(
 				: lock?.held() === true;
 		const snapshot = proveOsStageUnlaunched({
 			record: current,
-			current: await deps.observe({
-				processes: new Set(current.processes),
-				resources: new Set(current.resources),
-			}),
+			current: await deps.observe(
+				{
+					processes: new Set(current.processes),
+					resources: new Set(current.resources),
+				},
+				undefined,
+				(detail) => {
+					observation ??= detail;
+				},
+			),
 			clientsGone: await deps.cliGone(),
 			outcomeAbsent: await deps.outcomesAbsent(current),
 			lockHeld: held,
+			...(observation ? { observation } : {}),
 		});
 		await assertOwner();
 		return snapshot;

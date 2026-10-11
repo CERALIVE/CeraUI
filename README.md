@@ -134,6 +134,12 @@ The same lifetime is checked immediately before opening admission; timeout or
 lease loss stays unsafe. Real-flock host regressions preserve normal cleanup,
 but do not qualify board routing or a real OS installation.
 
+Stage-refusal summary logs now distinguish the first admission,
+runner or settlement/startup proof failure, retaining bounded stage/errno detail
+and wait counts where known. This is diagnostic context, not a cause proof or
+board qualification; stored formats, wire schemas and safety policy are unchanged.
+See [self-describing refusals](docs/UPDATE-RECOVERY.md#os-staging-recovery-partial--fixture-proven-board-re-drill-owed).
+
 OS-stage reads treat ENOENT/ESRCH on vanished enumerated tasks as absence, never
 cached identity. Other errno and malformed-identity failures remain unknown;
 non-process paths gain no ESRCH exemption. Held-open real-kernel and default-reader
