@@ -45,9 +45,9 @@ export function setOtaStreamingMarker(): void {
 	}
 }
 
-/** Cleared on stream end (Todo 37 MUST DO) — on a failed launch that never
- * went live, and on every `stop()` call regardless of prior lifecycle state
- * (idempotent: removing an already-absent file is a no-op). */
+/** Cleared after confirmed idle/cleanup or a failed launch that never went live.
+ * Stop intent disarms restoration separately; parked/failed/unknown media stops
+ * retain this OTA guard. Removing an already-absent file is a no-op. */
 export function clearOtaStreamingMarker(): void {
 	try {
 		fs.rmSync(otaStreamingMarkerPath(), { force: true });

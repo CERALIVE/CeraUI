@@ -7,6 +7,13 @@ UI, autostart, remote control, and set-profile restarts enter the same synchrono
 admission boundary; only one launch can move `idle → starting`, and stop during
 start cancels that generation before a later launch can be admitted. The legacy
 `is_streaming` flag changes only after the awaited engine start confirms success.
+The cancellable generation exists before the awaited D8 check. A Stop during
+admission fences the later answer before OTA marking or launch; cancellation,
+refusal and throws release the lifecycle lease. Restoration disarms on Stop
+intent, while the OTA sentinel follows physical liveness: retain through parked,
+failed or unknown stops and clear only on confirmed idle/cleanup. Reconciliation
+sets/clears that sentinel on authoritative streaming/idle and retains it on unknown.
+Host regression coverage does not qualify image activation on either board.
 At boot and after an engine reconnect, `reconcileRuntimeState()` subscribes to the
 engine's actual status and adopts an engine-held session. Only concordant
 `streaming` or `idle` status is authoritative. A successful subscription that sees
@@ -58,4 +65,3 @@ Contract coverage: `tests/streaming-backend-contract.test.ts` runs the
 structural contract over the production singleton + the cerastream behavioural
 contract, error-mapping, status-bridge, passthroughs, engine-crash, and engine
 selection.
-

@@ -231,8 +231,9 @@ export type StreamSessionOrchestratorDeps = {
 	 * Sets/clears `/run/ceralive/streaming` — the same sentinel the image-side
 	 * `ceralive-rauc-activate.sh` (Todo 28) checks before staging an OTA
 	 * activation. Set once this launch is genuinely proceeding (past every
-	 * admission gate); cleared on every path back to "no stream in flight"
-	 * (a failed launch that never went live, and every `stop()` call).
+	 * admission gate); retained through parked, failed and unknown stops.
+	 * Cleared only after confirmed idle/cleanup or a failed launch that never
+	 * went live; reconciliation synchronizes it with authoritative engine truth.
 	 */
 	readonly markStreamingForOta?: () => void;
 	readonly unmarkStreamingForOta?: () => void;
@@ -251,6 +252,7 @@ type ActiveAttempt = {
 	readonly attemptId: string;
 	readonly generation: number;
 	cancelled: boolean;
+	launchAdmitted: boolean;
 	cancelRetryWait?: () => void;
 };
 
@@ -364,6 +366,7 @@ export function createStreamSessionOrchestrator(
 			transition("idle");
 			active = undefined;
 			deps.setStreamingStatus(false);
+			deps.unmarkStreamingForOta?.();
 		}
 		return { result: "cancelled", attemptId: attempt.attemptId };
 	};
@@ -460,29 +463,37 @@ export function createStreamSessionOrchestrator(
 		attemptId: string,
 		request: StreamStartRequest,
 	): Promise<StartResult> => {
-		// Keep D8 after earlier gates to avoid stopping an update for a refused
-		// attempt. Later launch limits: root AGENTS.md D8 Known gaps (h).
-		const admitUpdate = deps.admitUpdate;
-		if (admitUpdate !== undefined) {
-			const updateAdmission = await admitUpdate();
-			if (!updateAdmission.allowed) {
+		generation += 1;
+		const attempt: ActiveAttempt = {
+			attemptId,
+			generation,
+			cancelled: false,
+			launchAdmitted: false,
+		};
+		active = attempt;
+		transition("starting");
+		// D8 may yield even on an idle device. Stop must own this generation
+		// before that await, and a cancelled admission must never mark or launch.
+		try {
+			const updateAdmission =
+				deps.admitUpdate === undefined ? undefined : await deps.admitUpdate();
+			if (attempt.cancelled || active !== attempt)
+				return { result: "cancelled", attemptId };
+			if (updateAdmission !== undefined && !updateAdmission.allowed) {
 				return {
 					result: "failed",
 					attemptId,
 					failure: typedUpdateInProgressFailure(attemptId, updateAdmission),
 				};
 			}
+			attempt.launchAdmitted = true;
+		} finally {
+			if (!attempt.launchAdmitted && active === attempt) {
+				active = undefined;
+				transition("idle");
+			}
 		}
 		deps.markStreamingForOta?.();
-
-		generation += 1;
-		const attempt: ActiveAttempt = {
-			attemptId,
-			generation,
-			cancelled: false,
-		};
-		active = attempt;
-		transition("starting");
 		const deadlineCancelledLaunches = new Set<number>();
 
 		const launchResult = await runStartWithRetry({
@@ -649,6 +660,7 @@ export function createStreamSessionOrchestrator(
 				transition("idle");
 				active = undefined;
 				deps.setStreamingStatus(false);
+				deps.unmarkStreamingForOta?.();
 			}
 			clearEngineTransition();
 			return;
@@ -697,12 +709,6 @@ export function createStreamSessionOrchestrator(
 		// that parks behind a transaction must not leave the marker armed for the
 		// minute it waits.
 		deps.onStreamStopped?.(cause);
-		// Clear the OTA-activation sentinel on EVERY stop() call, unconditionally
-		// (idempotent — clearing an already-absent marker is a no-op). This is
-		// deliberately over-inclusive rather than state-gated: it is the one
-		// call every real stream-end path (operator stop, engine-loss retire,
-		// reconfigure-triggered stop) already goes through.
-		deps.unmarkStreamingForOta?.();
 		// A change transaction already owns the engine's lifecycle mutex and the
 		// capture hardware. Racing a 12 s stop deadline against it would report a
 		// healthy 65 s transaction as `stop_failed`, so the stop WAITS and is then
@@ -716,11 +722,23 @@ export function createStreamSessionOrchestrator(
 				engineQueuedStop = parkEngineStop(cause);
 			return engineQueuedStop.promise;
 		}
-		if (state === "idle") return { result: "stopped" };
+		if (state === "idle") {
+			deps.unmarkStreamingForOta?.();
+			return { result: "stopped" };
+		}
 		if (state === "reconciling") {
 			reconciliationEpoch += 1;
+			try {
+				await stopWithinDeadline(active?.generation ?? generation);
+			} catch (error) {
+				const reason = error instanceof Error ? error.message : "stop_failed";
+				logger.error("stream stop failed during reconciliation", { reason });
+				return { result: "stop_failed", reason };
+			}
 			transition("idle");
+			active = undefined;
 			deps.setStreamingStatus(false);
+			deps.unmarkStreamingForOta?.();
 			return { result: "stopped" };
 		}
 
@@ -729,6 +747,11 @@ export function createStreamSessionOrchestrator(
 		if (cancellingStart && active !== undefined) {
 			active.cancelled = true;
 			active.cancelRetryWait?.();
+			if (!active.launchAdmitted) {
+				active = undefined;
+				transition("idle");
+				return { result: "stopped" };
+			}
 		}
 		if (!transition("stopping")) {
 			return {
@@ -743,6 +766,7 @@ export function createStreamSessionOrchestrator(
 				active = undefined;
 				transition("idle");
 				deps.setStreamingStatus(false);
+				deps.unmarkStreamingForOta?.();
 			}
 			return { result: "stopped" };
 		} catch (error) {
@@ -781,6 +805,8 @@ export function createStreamSessionOrchestrator(
 		if (runtimeState === "unknown") return state;
 		transition(runtimeState);
 		deps.setStreamingStatus(runtimeState === "streaming");
+		if (runtimeState === "streaming") deps.markStreamingForOta?.();
+		else deps.unmarkStreamingForOta?.();
 		return state;
 	};
 

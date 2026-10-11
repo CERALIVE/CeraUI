@@ -46,6 +46,7 @@ Full PR gate: `bun run test`, `bun run test:e2e`, `bun run check:tech-debt`,
 
 ## HARD RULES
 - OS-stage refusal logs retain closed first-failure provenance separately from final settlement/startup proof. Context is bounded, message/path/PID/argv-free and in-memory/log-only; never persist it or use it as authority. Contract: UPDATE-RECOVERY.md → Self-describing stage refusals.
+- Stream admission is cancellable before the D8 await. Stop disarms restoration intent immediately; OTA physical-liveness protection survives parked/failed/unknown stops until confirmed idle/cleanup, including reconciliation. Subprocess termination-induced zero exits never become success or positive CLI evidence.
 - OS-stage enumerated process reads share scope-explicit ENOENT/ESRCH absence; never invent identity or keep a cached vanished member. Other errors/malformed identity stay unknown. ESRCH never proves cgroup, marker or block-resource absence; guardian disappearance requires fresh proof. Successful empty content is not a disappearance errno; preserve and report its content-classification limits in UPDATE-RECOVERY.md.
 - The projection is what reaches the wire: preserve producer identity and schema; internal evidence must not invent operator-facing claims.
 - Flow-sticky shared-client steering affects only forwarded client-zone traffic; preserve physical-identity marks and established flows.

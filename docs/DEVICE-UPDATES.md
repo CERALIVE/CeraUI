@@ -415,9 +415,13 @@ spawn. The boot-time `ceralive-dpkg-recover.service` (`dpkg --configure -a`)
 remains a backstop for interruptions such as power loss, and does not repair a
 package left half-installed. For other windows see "D8 stream/update
 admission: what it does NOT cover" under Known gaps in the root
-[`AGENTS.md`](../AGENTS.md). An admitted start sets `/run/ceralive/streaming`,
-which the image's activation script checks before arming an OS slot, and every
-stream-end path clears it. The typed failure is documented in
+[`AGENTS.md`](../AGENTS.md). An admitted, uncancelled start sets
+`/run/ceralive/streaming`, which the image's activation script checks before
+arming an OS slot. Stop intent disarms restoration but does not remove this
+physical-liveness guard: parked, rejected, timed-out and unknown stops retain it.
+Confirmed idle/cleanup clears it; reconciliation to streaming sets it and
+reconciliation to idle clears it. The host regressions do not qualify image
+activation or either board. The typed failure is documented in
 [START-LIFECYCLE.md](./START-LIFECYCLE.md).
 
 ## Package pipeline

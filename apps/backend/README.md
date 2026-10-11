@@ -363,6 +363,14 @@ reconciliation adopts a stream that survived a backend process restart. A timeou
 query error, or contradictory engine status stays `reconciling`; the reconnect-heal
 path retries instead of publishing a false idle state.
 
+Stop also cancels a generation waiting for D8 update admission, including the
+idle no-update case, before any launch or OTA marking. The restoration marker
+disarms on intent, while the separate OTA sentinel stays through parked or failed
+stops and unknown engine state until confirmed idle/cleanup. Reconciliation
+adopts both media truth and the OTA guard. Real-child subprocess regressions
+reject termination-induced zero exits without losing genuine completed CLI
+success during output drainage. These host proofs do not qualify either board.
+
 Stop uses a fresh, short-lived cerastream control connection. The engine processes
 one request at a time per connection, so sending stop on the session connection and
 then closing it can discard an unread stop behind another RPC. The backend dispatches

@@ -1298,11 +1298,12 @@ export async function spawnWithTimeout(
 
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let onAbort: (() => void) | undefined;
+	let terminationIssued = false;
 	try {
 		const outcome = await new Promise<"exit" | "timeout" | "abort">(
 			(resolve) => {
 				void child.exited.then((exitCode) => {
-					opts?.onExit?.(exitCode);
+					if (!terminationIssued) opts?.onExit?.(exitCode);
 					resolve("exit");
 				});
 				timer = setTimeout(() => resolve("timeout"), timeoutMs);
@@ -1314,9 +1315,15 @@ export async function spawnWithTimeout(
 		);
 
 		if (outcome !== "exit") {
-			kill();
+			// A zero exit observed BEFORE our signal is completion evidence; a
+			// child exiting zero because of that signal is still timeout/abort.
+			const completedSuccessfully = child.exitCode === 0;
+			if (!completedSuccessfully) {
+				terminationIssued = true;
+				kill();
+			}
 			await Promise.allSettled([stdoutDone, stderrDone, child.exited]);
-			if (child.exitCode === 0)
+			if (completedSuccessfully)
 				return { exitCode: 0, stdout: acc.stdout, stderr: acc.stderr };
 			throw new SpawnTimeoutError(command, acc.stdout, acc.stderr);
 		}

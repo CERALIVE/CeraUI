@@ -127,6 +127,20 @@ A stop that cancels an in-flight start produces a first-class **`cancelled`
 StartResult** for that attempt (above); the stop call itself returns a
 `StopResult`. Todo 27 makes stop return a bounded `stopping → stopped | stop_failed`.
 
+The generation is registered as `starting` before awaiting D8 admission, including
+on an idle update runtime. Stop invalidates that pending generation before any
+sender/engine launch or OTA marking. An allowed admission arriving afterward
+returns `cancelled`, never resurrects the start, and releases its lifecycle lease.
+Refusal or observer failure unwinds the pending generation; refusal payloads
+(`update_in_progress`, phase, percent and ETA) are unchanged.
+
+Restoration intent and physical OTA liveness are separate. Stop disarms
+restoration immediately, but `/run/ceralive/streaming` remains while a stop is
+parked, rejected, timed out or unknown. Confirmed stop/cleanup or authoritative
+idle reconciliation removes it; authoritative streaming reconciliation sets it
+for a session surviving a backend restart. Unknown reconciliation preserves it.
+These cancellation and marker transitions are host-tested, not board-qualified.
+
 ---
 
 ## The failure-site mapping table (cross-check)

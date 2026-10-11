@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 
 // Edge-case hardening for the boot-time autostart path (streamloop/autostart.ts).
 //
@@ -15,6 +15,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 // re-arms itself) and assert different invariants (single-shot scheduling, the
 // invalid-config no-retry contract, and the status-lock release).
 
+import { logger } from "../../helpers/logger.ts";
 import { AUTOSTART_RETRY_DELAY } from "../../helpers/timing-constants.ts";
 import { getConfig } from "../../modules/config.ts";
 import { getNetworkInterfaces } from "../../modules/network/network-interfaces.ts";
@@ -203,6 +204,7 @@ describe("autostart: refused by the update orchestrator during a package commit 
 			phase: "committing",
 			progress: { percent: 55, etaSeconds: 40 },
 		});
+		const errors = spyOn(logger, "error");
 		try {
 			// Pre-condition: a link IS available and the assembled config is
 			// valid, so execution reaches startStreamSession — the ONLY thing
@@ -210,7 +212,18 @@ describe("autostart: refused by the update orchestrator during a package commit 
 			// check we just armed.
 			expect(genSrtlaIpList().length).toBeGreaterThanOrEqual(1);
 			await autoStartStream();
+			expect(getIsStreaming()).toBe(false);
+			expect(timers.scheduled.length).toBe(0);
+			expect(errors).toHaveBeenCalledWith(
+				"autostart failed",
+				expect.objectContaining({
+					class: "update_in_progress",
+					phase: "params",
+					retryState: "not_retriable",
+				}),
+			);
 		} finally {
+			errors.mockRestore();
 			timers.restore();
 			restoreLinks();
 			resetOrchestratorRuntimeForTest();
@@ -220,15 +233,5 @@ describe("autostart: refused by the update orchestrator during a package commit 
 			Object.assign(config, configSnapshot);
 			if (getIsStreaming()) updateStatus(false);
 		}
-
-		// autoStartStream() never retries on ANY typed "failed" StartResult
-		// (see its `if (result.result === "failed") { logger.error(...); return; }`
-		// branch) — so the same "does not retry" invariant the invalid-config
-		// test above proves for start_invalid also holds for update_in_progress:
-		// no backoff timer is armed, and the refusal stands until something
-		// OTHER than autostart's own retry loop changes the phase (the
-		// orchestrator reaching `settled`), never an automatic re-attempt here.
-		expect(timers.scheduled.length).toBe(0);
-		expect(getIsStreaming()).toBe(false);
 	});
 });

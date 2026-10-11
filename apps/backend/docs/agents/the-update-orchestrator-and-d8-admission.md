@@ -443,6 +443,20 @@ The detailed table and probe semantics are in
 Keep D8 after earlier session gates so an update stop is not issued for an
 attempt they already refused. Later launch limits: root AGENTS.md D8 Known gaps (h).
 
+The session registers its cancellable starting generation before awaiting D8,
+even when updates are idle. Stop fences that generation before later admission
+can mark or launch; refused/throwing admissions unwind and release the lifecycle
+lease without changing refusal fields. Restoration intent disarms immediately,
+but the OTA physical-liveness sentinel remains through parked, failed and unknown
+stops until confirmed idle/cleanup. Reconciliation synchronizes it with confirmed
+streaming/idle and preserves it on unknown. These are host proofs, not board proofs.
+
+The shared subprocess runner accepts zero-exit evidence only before it issues
+termination. A live child exiting zero in response to SIGTERM still rejects
+timeout/abort and cannot publish positive `onExit` evidence to OS staging.
+Genuine completed zero exits keep their evidence during cancellation/output
+drainage; the existing FIX-6 regression remains the owning proof.
+
 **THE STOP MUST NOT REACH DPKG: read before touching the abort-network path.**
 Cached download progress can lag dpkg. Keep the fresh read and probe ahead of
 the stop to reduce the risk of a half-installed package. A probe-only refusal
