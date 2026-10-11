@@ -48,8 +48,8 @@ import { syncOrchestratorDirectory } from ${JSON.stringify(sync)};
 const kill = () => process.kill(process.pid, "SIGKILL");
 const boundary = ${JSON.stringify(boundary)};
 if (boundary === "read") {
-  const original = fs.readFileSync;
-  spyOn(fs, "readFileSync").mockImplementation((...args) => { const result = original(...args); kill(); return result; });
+  const original = fs.readSync;
+  spyOn(fs, "readSync").mockImplementation((...args) => { const result = original(...args); kill(); return result; });
 }
 if (boundary === "before-rename") spyOn(fs, "renameSync").mockImplementation(kill);
 const { retireStagedReceipt } = await import(${JSON.stringify(store)});

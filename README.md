@@ -140,6 +140,13 @@ and wait counts where known. This is diagnostic context, not a cause proof or
 board qualification; stored formats, wire schemas and safety policy are unchanged.
 See [self-describing refusals](docs/UPDATE-RECOVERY.md#os-staging-recovery-partial--fixture-proven-board-re-drill-owed).
 
+Stored update authority now refuses symlink ancestors, invalid encoding,
+oversize records and duplicate JSON members without replacing the evidence.
+Contradictory unit rows cannot authorize download clearance or D8 stop, and
+optional diagnostic getter faults cannot replace the original refusal. These
+are host boundary proofs, not board qualification; see
+[strict stored authority](docs/UPDATE-RECOVERY.md#strict-stored-authority).
+
 OS-stage reads treat ENOENT/ESRCH on vanished enumerated tasks as absence, never
 cached identity. Other errno and malformed-identity failures remain unknown;
 non-process paths gain no ESRCH exemption. Held-open real-kernel and default-reader

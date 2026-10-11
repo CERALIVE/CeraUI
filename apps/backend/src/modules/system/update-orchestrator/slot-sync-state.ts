@@ -6,6 +6,12 @@ import type {
 	ReceiptTarget,
 	SlotSyncEvidence,
 } from "./slot-sync-gate.ts";
+import {
+	readStoredStateBytes,
+	readStoredStateFile,
+	readStoredStateJson,
+	STORED_STATE_LIMITS,
+} from "./stored-state-file.ts";
 
 export const SYNC_RECEIPT_FILE =
 	"/data/ceralive/update-state/sync-receipt.json";
@@ -50,6 +56,10 @@ const ANY_SECTION = /^\[.*\]$/;
 const BOOTNAME_KEY = /^bootname\s*=\s*(.*)$/;
 const NAMED_SLOT = /^[A-Za-z0-9_-]+\.\d+$/;
 
+export class SlotIdentityReadError extends Error {
+	override readonly name = "SlotIdentityReadError";
+}
+
 /** RAUC rootfs slot name -> bootname, from `[slot.rootfs.<n>]` `bootname`. */
 export function parseRaucSlotBootnames(
 	systemConf: string,
@@ -64,7 +74,11 @@ export function parseRaucSlotBootnames(
 			continue;
 		}
 		const bootname = BOOTNAME_KEY.exec(line)?.[1]?.trim();
-		if (slot && bootname) bootnames.set(slot, bootname);
+		if (slot && bootname) {
+			if (bootnames.has(slot))
+				throw new SlotIdentityReadError("duplicate slot bootname");
+			bootnames.set(slot, bootname);
+		}
 	}
 	return bootnames;
 }
@@ -115,32 +129,34 @@ export function classifyReceiptTarget(input: {
 
 /** The healthcheck's record, written after a passing check and `mark-good`;
  * null when absent. A garbled file throws: callers treat that as no verdict. */
-export async function readHealthyState(): Promise<HealthySlotState | null> {
-	const healthyFile = Bun.file(HEALTHY_STATE_FILE);
-	return (await healthyFile.exists())
-		? healthyStateSchema.parse(await healthyFile.json())
-		: null;
+export async function readHealthyState(
+	path = HEALTHY_STATE_FILE,
+): Promise<HealthySlotState | null> {
+	const value = await readStoredStateJson(path, STORED_STATE_LIMITS.receipt);
+	return value === undefined ? null : healthyStateSchema.parse(value);
 }
 
 export async function readSlotSyncEvidence(): Promise<SlotSyncEvidence> {
-	const receiptFile = Bun.file(SYNC_RECEIPT_FILE);
 	const [bootId, bytes, osRelease, healthyState, receipt, systemConf] =
 		await Promise.all([
 			readBootId(),
-			Bun.file("/var/lib/dpkg/status").arrayBuffer(),
-			Bun.file("/etc/os-release")
-				.text()
-				.catch(() => ""),
+			readStoredStateBytes(
+				"/var/lib/dpkg/status",
+				STORED_STATE_LIMITS.quarantine,
+			),
+			readStoredStateFile("/etc/os-release", STORED_STATE_LIMITS.settings).then(
+				(value) => value ?? "",
+			),
 			readHealthyState(),
-			receiptFile
-				.exists()
-				.then(async (exists) =>
-					exists ? syncReceiptSchema.parse(await receiptFile.json()) : null,
-				),
-			Bun.file(RAUC_SYSTEM_CONF)
-				.text()
-				.catch(() => ""),
+			readStoredStateJson(SYNC_RECEIPT_FILE, STORED_STATE_LIMITS.receipt).then(
+				(value) =>
+					value === undefined ? null : syncReceiptSchema.parse(value),
+			),
+			readStoredStateFile(RAUC_SYSTEM_CONF, STORED_STATE_LIMITS.settings).then(
+				(value) => value ?? "",
+			),
 		]);
+	if (bytes === null) throw new Error("dpkg status absent");
 	// SHA-256 of the exact dpkg status bytes, like the image's sha256sum.
 	const statusSha256 = createHash("sha256")
 		.update(new Uint8Array(bytes))
@@ -150,10 +166,12 @@ export async function readSlotSyncEvidence(): Promise<SlotSyncEvidence> {
 	const fromRelease = buildIdFromOsRelease(osRelease, "");
 	const fallback = fromRelease
 		? ""
-		: await Bun.file("/etc/ceralive/image-build-commit")
-				.text()
-				.then((value) => value.replaceAll("\n", ""))
-				.catch(() => "");
+		: (
+				(await readStoredStateFile(
+					"/etc/ceralive/image-build-commit",
+					STORED_STATE_LIMITS.scalar,
+				)) ?? ""
+			).replaceAll("\n", "");
 	return {
 		healthyState,
 		bootId,

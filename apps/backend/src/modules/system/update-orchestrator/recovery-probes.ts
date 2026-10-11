@@ -6,6 +6,7 @@ import { readBootedOsReleaseVersion } from "./os-manifest.ts";
 import { observationAbsent } from "./os-stage-read-errors.ts";
 import { parseOsStageSystemdProperties } from "./os-stage-systemd.ts";
 import type { RecoveryIdentity } from "./recovery-store.ts";
+import { parseAuthorityJson } from "./strict-authority-json.ts";
 
 const statusSchema = z.object({
 	slots: z.array(
@@ -76,10 +77,11 @@ async function unitProperties(
 		"--property=LoadState,ActiveState,SubState,MainPID,ControlPID,Job",
 		"--no-pager",
 	]);
-	if (result.code !== 0) throw new RecoveryProbeError("unit_unreadable");
 	// Duplicate or malformed rows are contradictory evidence, never last-wins.
 	const properties = parseOsStageSystemdProperties(result.stdout);
 	if (!properties) throw new RecoveryProbeError("unit_unreadable");
+	if (result.code !== 0 && properties.get("LoadState") !== "not-found")
+		throw new RecoveryProbeError("unit_unreadable");
 	return properties;
 }
 
@@ -139,7 +141,7 @@ export function createRecoveryProbes(
 		},
 		identity: async () => {
 			const status = statusSchema.parse(
-				JSON.parse(
+				parseAuthorityJson(
 					await runChecked(io, [
 						"rauc",
 						"status",

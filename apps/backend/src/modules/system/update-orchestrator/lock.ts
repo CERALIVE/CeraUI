@@ -16,6 +16,7 @@
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
 import { SOFTWARE_UPDATE_LOCK } from "../software-update-service-contract.ts";
 import { processExitCode } from "../software-update-service-state.ts";
+import { parseOsStageSystemdProperties } from "./os-stage-systemd.ts";
 
 export { SOFTWARE_UPDATE_LOCK };
 
@@ -38,13 +39,13 @@ export type SlotSyncProbeState =
 	| { readonly kind: "refused"; readonly exitCode: number }
 	| { readonly kind: "failed"; readonly exitCode: number };
 
-function parseProperties(output: string): Map<string, string> {
-	const properties = new Map<string, string>();
-	for (const line of output.split("\n")) {
-		const separator = line.indexOf("=");
-		if (separator <= 0) continue;
-		properties.set(line.slice(0, separator), line.slice(separator + 1));
-	}
+export class SlotSyncProbeError extends Error {
+	override readonly name = "SlotSyncProbeError";
+}
+
+function parseProperties(output: string): ReadonlyMap<string, string> {
+	const properties = parseOsStageSystemdProperties(output);
+	if (!properties) throw new SlotSyncProbeError("unit properties unreadable");
 	return properties;
 }
 
@@ -114,8 +115,6 @@ export function classifySlotSyncProbe(result: {
 	if (parsed.kind !== "absent" && parsed.kind !== "succeeded") return parsed;
 	const properties = parseProperties(result.stdout);
 	const lines = result.stdout.split("\n");
-	// parseProperties keeps the last duplicate, so a repeated key could hide a
-	// contradicting value; count raw lines instead of trusting the map.
 	const readable =
 		result.exitCode === 0 &&
 		PROBE_PROPERTIES.every(

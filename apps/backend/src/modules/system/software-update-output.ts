@@ -129,7 +129,7 @@ export async function readSoftwareUpdateOutput(
 	}
 	const handle = await fs.open(
 		filePath,
-		constants.O_RDONLY | constants.O_NOFOLLOW,
+		constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
 	);
 	try {
 		const stat = await handle.stat();

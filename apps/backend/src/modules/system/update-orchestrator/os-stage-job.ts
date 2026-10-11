@@ -34,6 +34,7 @@ import { trackOsStagePrivateProvenance } from "./os-stage-launched-provenance.ts
 import { withOsPhysicalSettlement } from "./os-stage-physical-settlement.ts";
 import type { RaucStageSnapshot } from "./os-stage-recovery.ts";
 import { proveOsStageRelease } from "./os-stage-release-proof.ts";
+import { parseOsStageSystemdProperties } from "./os-stage-systemd.ts";
 import type { OsUnlaunchedDeps } from "./os-stage-unlaunched.ts";
 
 export {
@@ -93,7 +94,8 @@ export function createOsStageJobOwner(
 		);
 		if (
 			existing.exitCode !== 0 ||
-			existing.stdout.trim() !== "LoadState=not-found"
+			parseOsStageSystemdProperties(existing.stdout)?.get("LoadState") !==
+				"not-found"
 		)
 			throw new OsStageError("os_update_lock_held", { cause: existing });
 		current = { ...record, lifecycle: "acquiring" };

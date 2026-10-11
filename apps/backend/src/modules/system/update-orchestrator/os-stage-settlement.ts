@@ -7,7 +7,7 @@ import {
 	type StageDeadline,
 	withinStageDeadline,
 } from "./os-stage-deadline.ts";
-import { OsStageError } from "./os-stage-error.ts";
+import { OsStageError, readStageDiagnostics } from "./os-stage-error.ts";
 import { recordStageFailure } from "./os-stage-failure-context.ts";
 import type { createOsStageJobOwner } from "./os-stage-job.ts";
 import { OsStageUnpublishedSuccessError } from "./os-stage-outcome-error.ts";
@@ -128,7 +128,7 @@ export async function settlePinnedOsAttempt(
 				recoveryStartedMs: deps.now(),
 				recoveryDeadlineMs: deadline,
 				reason: outcome.error.reason,
-				diagnostics: outcome.error.diagnostics,
+				diagnostics: readStageDiagnostics(outcome.error),
 			});
 		owner.remember(before, true, attempt.cliSettled(), requireNewInstance);
 		if (requireNewInstance && !control.signal.aborted)

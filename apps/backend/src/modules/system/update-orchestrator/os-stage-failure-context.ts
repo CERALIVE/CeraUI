@@ -129,58 +129,73 @@ export function recordStageFailure(
 	} = {},
 ): void {
 	if (typeof error !== "object" || error === null) return;
-	const diagnostics = error instanceof OsStageError ? error.diagnostics : {};
-	const rawPredicate =
-		detail.predicate ?? diagnostics.predicate ?? diagnostics.refusal;
-	const predicate =
-		predicates.find((value) => value === rawPredicate) ?? "observation-unknown";
-	const observation = boundedObservation(
-		detail.observation ??
-			diagnostics.observation ??
-			(error instanceof OsStageError
-				? error.cause instanceof Error
-					? describeObservationFailure(step, error.cause)
-					: undefined
-				: describeObservationFailure(step, error)),
-	);
-	const previous =
-		stageFailureContext(detail.first) ?? stageFailureContext(error);
-	const first: FirstFailure = previous
-		? {
-				firstFailureStep: previous.firstFailureStep,
-				firstFailureReason: previous.firstFailureReason,
-				firstFailurePredicate: previous.firstFailurePredicate,
-				...(previous.firstFailureObservation
-					? { firstFailureObservation: previous.firstFailureObservation }
-					: {}),
-				...(previous.firstFailureAttempts === undefined
-					? {}
-					: { firstFailureAttempts: previous.firstFailureAttempts }),
-				...(previous.firstFailureElapsedMs === undefined
-					? {}
-					: { firstFailureElapsedMs: previous.firstFailureElapsedMs }),
-			}
-		: {
-				firstFailureStep: step,
-				firstFailureReason:
-					error instanceof OsStageError ? error.reason : "untyped",
-				firstFailurePredicate: predicate,
-				...(observation ? { firstFailureObservation: observation } : {}),
-				...(detail.attempts === undefined
-					? {}
-					: { firstFailureAttempts: detail.attempts }),
-				...(detail.elapsedMs === undefined
-					? {}
-					: { firstFailureElapsedMs: detail.elapsedMs }),
-			};
-	contexts.set(error, {
-		...first,
-		failureStep: step,
-		predicate,
-		...(observation ? { observation } : {}),
-		...(detail.attempts === undefined ? {} : { attempts: detail.attempts }),
-		...(detail.elapsedMs === undefined ? {} : { elapsedMs: detail.elapsedMs }),
-	});
+	try {
+		const diagnostics = error instanceof OsStageError ? error.diagnostics : {};
+		const rawPredicate =
+			detail.predicate ?? diagnostics.predicate ?? diagnostics.refusal;
+		const predicate =
+			predicates.find((value) => value === rawPredicate) ??
+			"observation-unknown";
+		const observation = boundedObservation(
+			detail.observation ??
+				diagnostics.observation ??
+				(error instanceof OsStageError
+					? error.cause instanceof Error
+						? describeObservationFailure(step, error.cause)
+						: undefined
+					: describeObservationFailure(step, error)),
+		);
+		const previous =
+			stageFailureContext(detail.first) ?? stageFailureContext(error);
+		const first: FirstFailure = previous
+			? {
+					firstFailureStep: previous.firstFailureStep,
+					firstFailureReason: previous.firstFailureReason,
+					firstFailurePredicate: previous.firstFailurePredicate,
+					...(previous.firstFailureObservation
+						? { firstFailureObservation: previous.firstFailureObservation }
+						: {}),
+					...(previous.firstFailureAttempts === undefined
+						? {}
+						: { firstFailureAttempts: previous.firstFailureAttempts }),
+					...(previous.firstFailureElapsedMs === undefined
+						? {}
+						: { firstFailureElapsedMs: previous.firstFailureElapsedMs }),
+				}
+			: {
+					firstFailureStep: step,
+					firstFailureReason:
+						error instanceof OsStageError ? error.reason : "untyped",
+					firstFailurePredicate: predicate,
+					...(observation ? { firstFailureObservation: observation } : {}),
+					...(detail.attempts === undefined
+						? {}
+						: { firstFailureAttempts: detail.attempts }),
+					...(detail.elapsedMs === undefined
+						? {}
+						: { firstFailureElapsedMs: detail.elapsedMs }),
+				};
+		contexts.set(error, {
+			...first,
+			failureStep: step,
+			predicate,
+			...(observation ? { observation } : {}),
+			...(detail.attempts === undefined ? {} : { attempts: detail.attempts }),
+			...(detail.elapsedMs === undefined
+				? {}
+				: { elapsedMs: detail.elapsedMs }),
+		});
+	} catch {
+		// Optional annotation must not read more exception properties after a getter fault.
+		contexts.set(error, {
+			firstFailureStep: step,
+			firstFailureReason: "untyped",
+			firstFailurePredicate: "observation-unknown",
+			failureStep: step,
+			predicate: "observation-unknown",
+			observation: `${step}: unknown-error`,
+		});
+	}
 }
 
 export function inheritStageFailure(error: object, cause: unknown): void {

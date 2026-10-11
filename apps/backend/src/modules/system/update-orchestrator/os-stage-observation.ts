@@ -22,6 +22,7 @@ import {
 import type { RaucStageSnapshot } from "./os-stage-recovery.ts";
 import { parseOsStageSystemdProperties } from "./os-stage-systemd.ts";
 import { readHealthyState } from "./slot-sync-state.ts";
+import { parseAuthorityJson } from "./strict-authority-json.ts";
 
 const slotsSchema = z.object({
 	boot_primary: z.string().nullish(),
@@ -140,7 +141,7 @@ export async function observeRaucStage(
 		);
 		if (status.exitCode !== 0) return refuse();
 		at("status-parse");
-		const parsed = slotsSchema.parse(JSON.parse(status.stdout));
+		const parsed = slotsSchema.parse(parseAuthorityJson(status.stdout));
 		at("slot-cardinality");
 		const rootfs = parsed.slots
 			.flatMap((row) => Object.entries(row))

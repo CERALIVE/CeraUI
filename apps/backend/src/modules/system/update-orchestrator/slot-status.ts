@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
 import { SYNC_RECEIPT_FILE, syncReceiptSchema } from "./slot-sync-state.ts";
+import {
+	readStoredStateJson,
+	STORED_STATE_LIMITS,
+} from "./stored-state-file.ts";
+import { parseAuthorityJson } from "./strict-authority-json.ts";
 
 const slotContentSchema = {
 	bundle: z.object({ version: z.string().nullish() }).nullish(),
@@ -37,7 +42,7 @@ export function parseBothSlotStatus(
 	stdout: string,
 	receipt: unknown,
 ): RootSlotStatus[] {
-	const parsed = raucStatusSchema.parse(JSON.parse(stdout));
+	const parsed = raucStatusSchema.parse(parseAuthorityJson(stdout));
 	const validReceipt = syncReceiptSchema.safeParse(receipt);
 	return parsed.slots.flatMap((item) =>
 		Object.entries(item).flatMap(([name, slot]) => {
@@ -104,7 +109,7 @@ function readStamp(value: string | null | undefined): Stamp {
 export function parseStagedActivation(stdout: string): StagedActivation {
 	let document: unknown;
 	try {
-		document = JSON.parse(stdout);
+		document = parseAuthorityJson(stdout);
 	} catch {
 		return "unknown";
 	}
@@ -151,8 +156,10 @@ export async function readBothSlotStatus(
 	run: typeof spawnWithTimeout = spawnWithTimeout,
 ): Promise<RootSlotStatus[]> {
 	const stdout = await readRaucStatusDetailed(run);
-	const file = Bun.file(SYNC_RECEIPT_FILE);
-	const receipt = (await file.exists()) ? await file.json() : null;
+	const receipt = await readStoredStateJson(
+		SYNC_RECEIPT_FILE,
+		STORED_STATE_LIMITS.receipt,
+	);
 	return parseBothSlotStatus(stdout, receipt);
 }
 

@@ -4,7 +4,7 @@ import {
 	STAGE_CENSUS_DRIFT,
 } from "./os-stage-admission-diagnostics.ts";
 import { raceStageDeadline, withinStageDeadline } from "./os-stage-deadline.ts";
-import { OsStageError } from "./os-stage-error.ts";
+import { OsStageError, readStageDiagnostics } from "./os-stage-error.ts";
 import {
 	type OsStageFailureStep,
 	recordStageFailure,
@@ -68,14 +68,18 @@ export async function waitForStageProof(input: {
 		predicate = reason,
 		detail = observation,
 	) => {
-		recordStageFailure(error, input.failureStep ?? "settlement-proof", {
-			predicate,
-			...(detail ? { observation: detail } : {}),
-			attempts,
-			...(started === undefined
-				? {}
-				: { elapsedMs: Math.max(0, wait.now() - started) }),
-		});
+		try {
+			recordStageFailure(error, input.failureStep ?? "settlement-proof", {
+				predicate,
+				...(detail ? { observation: detail } : {}),
+				attempts,
+				...(started === undefined
+					? {}
+					: { elapsedMs: Math.max(0, wait.now() - started) }),
+			});
+		} catch {
+			recordStageFailure(error, "settlement-proof");
+		}
 		return error;
 	};
 	const guarded = async <T>(
@@ -88,7 +92,7 @@ export async function waitForStageProof(input: {
 		} catch (error) {
 			if (
 				error instanceof OsStageError &&
-				error.diagnostics.refusal === "deadline-expired" &&
+				readStageDiagnostics(error).refusal === "deadline-expired" &&
 				input.failure
 			)
 				throw contextual(
@@ -115,7 +119,7 @@ export async function waitForStageProof(input: {
 		} catch (error) {
 			if (
 				error instanceof OsStageError &&
-				error.diagnostics.refusal === "deadline-expired" &&
+				readStageDiagnostics(error).refusal === "deadline-expired" &&
 				input.failure
 			)
 				throw contextual(

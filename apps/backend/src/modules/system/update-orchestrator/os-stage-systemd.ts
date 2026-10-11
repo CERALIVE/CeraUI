@@ -9,5 +9,20 @@ export function parseOsStageSystemdProperties(
 			return null;
 		properties.set(key, line.slice(at + 1));
 	}
+	if (properties.get("LoadState") === "not-found") {
+		const inactive = (key: string, allowed: readonly string[]) => {
+			const value = properties.get(key);
+			return value === undefined || allowed.includes(value);
+		};
+		if (
+			!inactive("ActiveState", ["", "inactive"]) ||
+			!inactive("SubState", ["", "dead"]) ||
+			!inactive("ControlGroup", [""]) ||
+			!inactive("MainPID", ["", "0"]) ||
+			!inactive("ControlPID", ["", "0"]) ||
+			!inactive("Job", ["", "0"])
+		)
+			return null;
+	}
 	return properties;
 }

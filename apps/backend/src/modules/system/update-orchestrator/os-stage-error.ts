@@ -51,8 +51,12 @@ export class OsStageError extends Error {
 	readonly mode: OsStageRecoveryMode;
 	private readonly context: OsStageDiagnostics;
 	get diagnostics(): OsStageDiagnostics {
-		const failure = stageFailureContext(this);
-		return failure ? { ...this.context, ...failure } : this.context;
+		try {
+			const failure = stageFailureContext(this);
+			return failure ? { ...this.context, ...failure } : this.context;
+		} catch {
+			return {};
+		}
 	}
 
 	constructor(
@@ -67,14 +71,48 @@ export class OsStageError extends Error {
 		this.mode = OS_STAGE_FAILURE_MODE[reason];
 		// A wrapper without its own context keeps the cause's, so a refusal's
 		// predicate survives the runner's unsafe re-classification.
-		this.context =
-			options?.diagnostics ??
-			(options?.cause instanceof OsStageError ? options.cause.diagnostics : {});
+		this.context = safeDiagnostics(options);
 		if (options?.diagnostics === undefined)
 			inheritStageFailure(this, options?.cause);
 	}
 }
 
+function safeDiagnostics(
+	options:
+		| { readonly cause?: unknown; readonly diagnostics?: OsStageDiagnostics }
+		| undefined,
+): OsStageDiagnostics {
+	try {
+		return (
+			options?.diagnostics ??
+			(options?.cause instanceof OsStageError ? options.cause.diagnostics : {})
+		);
+	} catch {
+		return {};
+	}
+}
+
 export function isOsStageError(error: unknown): error is OsStageError {
 	return error instanceof OsStageError;
+}
+
+export function readStageDiagnostics(error: OsStageError): OsStageDiagnostics {
+	try {
+		return { ...error.diagnostics };
+	} catch {
+		return {};
+	}
+}
+
+export function diagnosticFailureReason(
+	error: unknown,
+): OsStageFailureReason | "untyped" {
+	try {
+		return error instanceof OsStageError &&
+			OS_STAGE_FAILURE_REASONS.includes(error.reason)
+			? error.reason
+			: "untyped";
+	} catch {
+		return "untyped";
+	}
 }

@@ -3,7 +3,11 @@ import { dirname } from "node:path";
 import { z } from "zod";
 import { writeFileAtomicSync } from "../../../helpers/config-loader.ts";
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
-import { readStoredStateFile } from "./stored-state-file.ts";
+import {
+	readStoredStateFile,
+	STORED_STATE_LIMITS,
+} from "./stored-state-file.ts";
+import { parseAuthorityJson } from "./strict-authority-json.ts";
 
 export const QUARANTINE_FILE = "/data/ceralive/update-state/quarantine.json";
 export const QUARANTINE_PIN_FILE = "/etc/apt/preferences.d/ceralive-quarantine";
@@ -80,8 +84,13 @@ export class UpdateQuarantine {
 	) {}
 
 	async read(): Promise<QuarantineDocument> {
-		const value = await readStoredStateFile(this.path);
-		return value === null ? EMPTY : quarantineSchema.parse(JSON.parse(value));
+		const value = await readStoredStateFile(
+			this.path,
+			STORED_STATE_LIMITS.quarantine,
+		);
+		return value === null
+			? EMPTY
+			: quarantineSchema.parse(parseAuthorityJson(value));
 	}
 
 	private async persist(doc: QuarantineDocument): Promise<void> {
@@ -110,8 +119,8 @@ export class UpdateQuarantine {
 
 	async readPending(): Promise<PendingPackage[]> {
 		const path = this.pendingPath();
-		const value = await readStoredStateFile(path);
-		return value === null ? [] : pendingSchema.parse(JSON.parse(value));
+		const value = await readStoredStateFile(path, STORED_STATE_LIMITS.packages);
+		return value === null ? [] : pendingSchema.parse(parseAuthorityJson(value));
 	}
 
 	async clearPending(): Promise<void> {

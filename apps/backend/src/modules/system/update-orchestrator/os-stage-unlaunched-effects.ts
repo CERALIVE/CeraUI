@@ -25,6 +25,7 @@ import { observeRaucStage } from "./os-stage-observation.ts";
 import { acquireOsOrphanLock } from "./os-stage-orphan-lock.ts";
 import { drainRetainedOsStagePin } from "./os-stage-pin-retention.ts";
 import { writeOsUnlaunchedWitness } from "./os-stage-unlaunched-witness.ts";
+import { parseAuthorityJson } from "./strict-authority-json.ts";
 
 export async function outcomesAbsent(
 	record: OsStageJobRecord,
@@ -70,7 +71,8 @@ export async function updatePinsClean(runner: typeof run): Promise<boolean> {
 					continue;
 				throw cause;
 			}
-			if (z.array(z.unknown()).parse(JSON.parse(routes)).length) return false;
+			if (z.array(z.unknown()).parse(parseAuthorityJson(routes)).length)
+				return false;
 		}
 	}
 	return true;

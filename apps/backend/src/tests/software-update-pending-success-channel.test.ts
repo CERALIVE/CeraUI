@@ -2,6 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { join } from "node:path";
 import { reconcileAptChannel } from "../modules/system/update-apt-channel.ts";
 import { pendingPackageSuccess } from "../modules/system/update-orchestrator/pending-success-fence.ts";
+import * as stored from "../modules/system/update-orchestrator/stored-state-file.ts";
 import { pendingSuccessFixture } from "./helpers/pending-success-fixture.ts";
 
 test("APT channel reconciliation rechecks pending success after reading its source file", async () => {
@@ -11,23 +12,17 @@ test("APT channel reconciliation rechecks pending success after reading its sour
 	await Bun.write(file, "original sources");
 	const read = Promise.withResolvers<void>();
 	const release = Promise.withResolvers<void>();
-	const originalFile = Bun.file;
-	const reader = spyOn(Bun, "file").mockImplementation((path, options) => {
-		const opened =
-			typeof path === "number"
-				? originalFile(path, options)
-				: typeof path === "string" || path instanceof URL
-					? originalFile(path, options)
-					: originalFile(path, options);
-		if (path !== file) return opened;
-		return Object.assign(opened, {
-			text: async () => {
+	const originalRead = stored.readStoredStateFile;
+	const reader = spyOn(stored, "readStoredStateFile").mockImplementation(
+		async (path, limit) => {
+			const value = await originalRead(path, limit);
+			if (path === file) {
 				read.resolve();
 				await release.promise;
-				return "original sources";
-			},
-		});
-	});
+			}
+			return value;
+		},
+	);
 	try {
 		const channel = reconcileAptChannel("capable", "beta", file, "arm64");
 		await read.promise;

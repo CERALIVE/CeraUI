@@ -3,6 +3,7 @@ import { z } from "zod";
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
 import { readBootId } from "./os-identity.ts";
 import { readHealthyState } from "./slot-sync-state.ts";
+import { parseAuthorityJson } from "./strict-authority-json.ts";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 export const installedImageSchema = z
@@ -55,7 +56,7 @@ export function parseInstalledImage(
 	stdout: string,
 	role: "booted" | "inactive",
 ): InstalledRootfs | null {
-	const parsed = documentSchema.parse(JSON.parse(stdout));
+	const parsed = documentSchema.parse(parseAuthorityJson(stdout));
 	const rootfs = parsed.slots
 		.flatMap((row) => Object.entries(row))
 		.filter(([, slot]) => slot.class === "rootfs");

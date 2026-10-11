@@ -99,6 +99,8 @@ describe("the shipped local probe boundary", () => {
 		expect(await probes.unitAbsent()).toBe(false);
 		detachedOutput = "LoadState=not-found\nActiveState=inactive\n";
 		detachedCode = 4;
+		expect(await probes.unitAbsent()).toBe(true);
+		detachedOutput = "LoadState=not-found\nActiveState=active\n";
 		await expect(probes.unitAbsent()).rejects.toThrow("unit_unreadable");
 	});
 	test("dpkg audit and updates entries each refuse, RAUC or apt activity refuses", async () => {

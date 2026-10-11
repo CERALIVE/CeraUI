@@ -14,6 +14,7 @@ import {
 	DetachedAptServiceIdentityError,
 	validateDetachedAptServiceIdentity,
 } from "./software-update-service-contract.ts";
+import { parseOsStageSystemdProperties } from "./update-orchestrator/os-stage-systemd.ts";
 
 export type DetachedAptServiceState =
 	| { readonly kind: "absent" }
@@ -41,13 +42,10 @@ export class DetachedAptServiceStateError extends Error {
 	}
 }
 
-function parseProperties(output: string): Map<string, string> {
-	const properties = new Map<string, string>();
-	for (const line of output.split("\n")) {
-		const separator = line.indexOf("=");
-		if (separator <= 0) continue;
-		properties.set(line.slice(0, separator), line.slice(separator + 1));
-	}
+function parseProperties(output: string): ReadonlyMap<string, string> {
+	const properties = parseOsStageSystemdProperties(output);
+	if (!properties)
+		throw new DetachedAptServiceIdentityError("unit properties contradictory");
 	return properties;
 }
 
@@ -65,7 +63,9 @@ export function parseDetachedAptServiceState(
 	output: string,
 ): DetachedAptServiceState {
 	const properties = parseProperties(output);
-	if (properties.get("LoadState") !== "loaded") return { kind: "absent" };
+	if (properties.get("LoadState") === "not-found") return { kind: "absent" };
+	if (properties.get("LoadState") !== "loaded")
+		throw new DetachedAptServiceIdentityError("unit state was not readable");
 
 	const activeState = properties.get("ActiveState") ?? "inactive";
 	const subState = properties.get("SubState") ?? "dead";
@@ -102,10 +102,7 @@ export function parseDetachedAptServiceProbe(
 ): DetachedAptServiceState {
 	const state = parseDetachedAptServiceState(result.stdout);
 	if (result.exitCode !== 0) {
-		if (
-			state.kind === "absent" &&
-			result.stdout.includes("LoadState=not-found")
-		) {
+		if (state.kind === "absent") {
 			return state;
 		}
 		throw new DetachedAptServiceCommandError(
@@ -115,8 +112,7 @@ export function parseDetachedAptServiceProbe(
 		);
 	}
 	if (state.kind === "absent") {
-		if (result.stdout.includes("LoadState=not-found")) return state;
-		throw new DetachedAptServiceIdentityError("unit state was not readable");
+		return state;
 	}
 	validateDetachedAptServiceIdentity(result.stdout);
 	return state;

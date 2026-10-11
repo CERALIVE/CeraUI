@@ -12,6 +12,14 @@ import { join } from "node:path";
 import { z } from "zod";
 import { receiptFileIdentitySchema } from "./os-receipt-file-identity.ts";
 import { OsStageError } from "./os-stage-error.ts";
+import {
+	openStoredStateDirectory,
+	readStoredStateDescriptor,
+} from "./stored-state-file.ts";
+import {
+	decodeAuthorityUtf8,
+	parseAuthorityJson,
+} from "./strict-authority-json.ts";
 
 export const OS_STAGE_JOB_DIR = "/run/ceralive/os-stage";
 export const OS_STAGE_GUARD_UNIT = "ceralive-os-stage-guard.service";
@@ -63,41 +71,48 @@ export async function readOsJobFile(
 	directory = OS_STAGE_JOB_DIR,
 	uid = 0,
 ): Promise<string | null> {
-	const dir = await lstat(directory).catch((error: unknown) => {
-		if (missing(error)) return null;
-		throw error;
-	});
-	if (!dir) return null;
-	if (
-		!dir.isDirectory() ||
-		dir.isSymbolicLink() ||
-		dir.uid !== uid ||
-		(dir.mode & 0o777) !== 0o700
-	)
-		throw new OsStageError("rauc_recovery_unproven");
-	let handle: Awaited<ReturnType<typeof open>>;
+	let parent: number;
 	try {
-		handle = await open(
-			join(directory, name),
-			constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-		);
-	} catch (error) {
-		if (missing(error)) return null;
-		throw error;
+		parent = openStoredStateDirectory(directory);
+	} catch (cause) {
+		if (missing(cause)) return null;
+		throw new OsStageError("rauc_recovery_unproven", { cause });
 	}
 	try {
-		const file = await handle.stat();
+		const dir = await lstat(`/proc/self/fd/${parent}/.`);
 		if (
-			!file.isFile() ||
-			file.uid !== uid ||
-			file.nlink !== 1 ||
-			(file.mode & 0o777) !== 0o600 ||
-			file.size > 262144
+			!dir.isDirectory() ||
+			dir.isSymbolicLink() ||
+			dir.uid !== uid ||
+			(dir.mode & 0o777) !== 0o700
 		)
 			throw new OsStageError("rauc_recovery_unproven");
-		return await handle.readFile("utf8");
+		let handle: Awaited<ReturnType<typeof open>>;
+		try {
+			handle = await open(
+				`/proc/self/fd/${parent}/${name}`,
+				constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+			);
+		} catch (error) {
+			if (missing(error)) return null;
+			throw error;
+		}
+		try {
+			const file = await handle.stat();
+			if (
+				!file.isFile() ||
+				file.uid !== uid ||
+				file.nlink !== 1 ||
+				(file.mode & 0o777) !== 0o600 ||
+				file.size > 262144
+			)
+				throw new OsStageError("rauc_recovery_unproven");
+			return decodeAuthorityUtf8(readStoredStateDescriptor(handle.fd, 262144));
+		} finally {
+			await handle.close();
+		}
 	} finally {
-		await handle.close();
+		closeSync(parent);
 	}
 }
 
@@ -177,7 +192,7 @@ export async function readOsStageJob(
 ): Promise<OsStageJobRecord | null> {
 	const raw = await readOsJobFile("job.json", directory, uid);
 	if (raw === null) return null;
-	const record = osStageJobSchema.parse(JSON.parse(raw));
+	const record = osStageJobSchema.parse(parseAuthorityJson(raw));
 	if (
 		(await readOsJobFile("token", directory, uid)) !== `${record.attemptId}\n`
 	)

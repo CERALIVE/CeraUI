@@ -50,7 +50,10 @@ test("preserves unknown activation evidence when lstat returns real EACCES", asy
 		[join(dir, "activation-armed")],
 	);
 	// Then it rejects rather than supplying false absence to retirement.
-	await expect(result).rejects.toMatchObject({ code: "EACCES" });
+	await expect(result).rejects.toMatchObject({
+		name: "StoredStateReadError",
+		cause: { code: "EACCES" },
+	});
 });
 
 test("counts a dangling activation symlink as present", async () => {

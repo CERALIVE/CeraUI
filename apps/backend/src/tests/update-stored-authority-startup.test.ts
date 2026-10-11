@@ -64,7 +64,11 @@ test.each([
 			return blob;
 		});
 		const open = spyOn(fs, "open").mockImplementation((path, flags, mode) => {
-			if (path === file && (fault === "EIO" || fault === "EACCES"))
+			if (
+				typeof path === "string" &&
+				(path === file || path.endsWith("/agent.json")) &&
+				(fault === "EIO" || fault === "EACCES")
+			)
 				return Promise.reject(Object.assign(new Error(fault), { code: fault }));
 			return native(path, flags, mode);
 		});

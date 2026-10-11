@@ -44,7 +44,14 @@ import {
 	runOsStageJob,
 } from "./os-stage-run.ts";
 import { UpdateQuarantine } from "./quarantine.ts";
-import { readStoredStateFile } from "./stored-state-file.ts";
+import {
+	readStoredStateFile,
+	STORED_STATE_LIMITS,
+} from "./stored-state-file.ts";
+import {
+	decodeAuthorityUtf8,
+	parseAuthorityJson,
+} from "./strict-authority-json.ts";
 
 // allow: SIZE_OK — This discovery-only repair must leave the remaining OS lifecycle in place.
 
@@ -115,7 +122,7 @@ export async function readManifestSerial(
 	dir = OS_UPDATE_STATE_DIR,
 ): Promise<number> {
 	const path = join(dir, `manifest-serial.${channel}`);
-	const value = await readStoredStateFile(path);
+	const value = await readStoredStateFile(path, STORED_STATE_LIMITS.scalar);
 	if (value === null) return 0;
 	if (!/^(?:0|[1-9][0-9]*)\n$/.test(value))
 		throw new OsAgentError("serial_invalid");
@@ -172,9 +179,12 @@ export async function rebindStagedReceipt(
 export async function readStagedReceipt(
 	dir = OS_UPDATE_STATE_DIR,
 ): Promise<OsStageReceipt | undefined> {
-	const value = await readStoredStateFile(join(dir, "os-staged.json"));
+	const value = await readStoredStateFile(
+		join(dir, "os-staged.json"),
+		STORED_STATE_LIMITS.receipt,
+	);
 	if (value === null) return undefined;
-	const parsed = receiptSchema.safeParse(JSON.parse(value));
+	const parsed = receiptSchema.safeParse(parseAuthorityJson(value));
 	if (!parsed.success) throw new OsAgentError("staged_receipt_invalid");
 	return parsed.data;
 }
@@ -185,7 +195,7 @@ export async function readStagedReceiptEvidence(
 	const file = readReceiptFile(dir);
 	if (!file) return undefined;
 	const parsed = receiptSchema.safeParse(
-		JSON.parse(file.bytes.toString("utf8")),
+		parseAuthorityJson(decodeAuthorityUtf8(file.bytes)),
 	);
 	if (!parsed.success) throw new OsAgentError("staged_receipt_invalid");
 	return { receipt: parsed.data, identity: file.identity };

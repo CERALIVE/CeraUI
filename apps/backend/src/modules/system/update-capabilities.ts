@@ -3,6 +3,10 @@ import {
 	updateCapabilityFileSchema,
 } from "@ceraui/rpc/schemas";
 import type { z } from "zod";
+import {
+	readStoredStateJson,
+	STORED_STATE_LIMITS,
+} from "./update-orchestrator/stored-state-file.ts";
 
 export const UPDATE_CAPABILITIES_FILE =
 	"/usr/lib/ceralive/update-capabilities.json";
@@ -17,7 +21,7 @@ export async function readUpdateCapabilityFile(
 ): Promise<z.infer<typeof updateCapabilityFileSchema> | undefined> {
 	let raw: unknown;
 	try {
-		raw = JSON.parse(await Bun.file(filePath).text());
+		raw = await readStoredStateJson(filePath, STORED_STATE_LIMITS.settings);
 	} catch {
 		return undefined;
 	}

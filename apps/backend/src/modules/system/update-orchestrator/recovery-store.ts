@@ -3,6 +3,14 @@ import { constants } from "node:fs";
 import { mkdir, open, readdir, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { z } from "zod";
+import {
+	readStoredStateBytes,
+	STORED_STATE_LIMITS,
+} from "./stored-state-file.ts";
+import {
+	decodeAuthorityUtf8,
+	parseAuthorityJson,
+} from "./strict-authority-json.ts";
 
 export const RECOVERY_DIR = "/data/ceralive/update-state";
 export const AGENT_FILE = join(RECOVERY_DIR, "agent.json");
@@ -47,23 +55,16 @@ export interface RecoveryStore {
 }
 
 async function readOptional(path: string): Promise<Buffer | null> {
-	let handle: Awaited<ReturnType<typeof open>>;
 	try {
-		handle = await open(
-			path,
-			constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-		);
-	} catch (error) {
-		if (error instanceof Error && "code" in error && error.code === "ENOENT")
-			return null;
-		throw error;
-	}
-	try {
-		if (!(await handle.stat()).isFile())
-			throw new RecoveryStoreError("not_regular_file");
-		return await handle.readFile();
-	} finally {
-		await handle.close();
+		const limit =
+			basename(path) === "agent.json"
+				? STORED_STATE_LIMITS.agent
+				: basename(path) === "pending-packages.json"
+					? STORED_STATE_LIMITS.packages
+					: STORED_STATE_LIMITS.recoveryReceipt;
+		return await readStoredStateBytes(path, limit);
+	} catch (cause) {
+		throw new RecoveryStoreError("read_failed", { cause });
 	}
 }
 
@@ -100,8 +101,11 @@ async function durableReplace(path: string, bytes: Buffer): Promise<void> {
 
 export class RecoveryStoreError extends Error {
 	override readonly name = "RecoveryStoreError";
-	constructor(readonly reason: string) {
-		super(reason);
+	constructor(
+		readonly reason: string,
+		options?: ErrorOptions,
+	) {
+		super(reason, options);
 	}
 }
 
@@ -115,7 +119,9 @@ export function fileRecoveryStore(dir = RECOVERY_DIR): RecoveryStore {
 			const bytes = await readOptional(receiptPath(id));
 			if (bytes) await syncDirectory(dir);
 			return bytes
-				? recoveryReceiptSchema.parse(JSON.parse(bytes.toString("utf8")))
+				? recoveryReceiptSchema.parse(
+						parseAuthorityJson(decodeAuthorityUtf8(bytes)),
+					)
 				: null;
 		},
 		writeReceipt: async (receipt) => {

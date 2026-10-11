@@ -12,6 +12,10 @@ import {
 	sha256,
 } from "./recovery-store.ts";
 import { reduceOrchestrator } from "./reducer.ts";
+import {
+	decodeAuthorityUtf8,
+	parseAuthorityJson,
+} from "./strict-authority-json.ts";
 
 const planSchema = z
 	.array(
@@ -107,9 +111,11 @@ async function recoverLocked(
 		sha256(planBytes) === identity.planSha256,
 		"pending_plan_hash_mismatch",
 	);
-	const plan = planSchema.parse(JSON.parse(planBytes.toString("utf8")));
+	const plan = planSchema.parse(
+		parseAuthorityJson(decodeAuthorityUtf8(planBytes)),
+	);
 	const state = updateOrchestratorPersistedStateSchema.parse(
-		JSON.parse(agent.toString("utf8")),
+		parseAuthorityJson(decodeAuthorityUtf8(agent)),
 	);
 	if (receipt && state.phase === "idle" && !planOnDisk) {
 		requireEvidence(

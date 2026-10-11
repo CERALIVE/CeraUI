@@ -20,6 +20,7 @@ import {
 } from "./software-update-output.ts";
 import {
 	DetachedAptServiceCommandError,
+	DetachedAptServiceIdentityError,
 	expectedAptAllScript,
 	InvalidDetachedAptUpgradeArgumentsError,
 	isExpectedAptUpgradeArgv,
@@ -34,6 +35,10 @@ import {
 	type FinishedDetachedAptServiceState,
 	parseDetachedAptServiceProbe,
 } from "./software-update-service-state.ts";
+import {
+	readStoredStateFile,
+	STORED_STATE_LIMITS,
+} from "./update-orchestrator/stored-state-file.ts";
 
 const SYSTEMD_COMMAND_TIMEOUT_MS = 10_000;
 
@@ -182,9 +187,13 @@ async function inspectService(): Promise<DetachedAptServiceState> {
 	});
 	const state = parseDetachedAptServiceProbe(result, command);
 	if (state.kind !== "absent") {
-		validateDetachedAptServiceFragment(
-			await Bun.file(SOFTWARE_UPDATE_FRAGMENT_PATH).text(),
+		const fragment = await readStoredStateFile(
+			SOFTWARE_UPDATE_FRAGMENT_PATH,
+			STORED_STATE_LIMITS.intent,
 		);
+		if (fragment === null)
+			throw new DetachedAptServiceIdentityError("unit fragment absent");
+		validateDetachedAptServiceFragment(fragment);
 	}
 	return state;
 }

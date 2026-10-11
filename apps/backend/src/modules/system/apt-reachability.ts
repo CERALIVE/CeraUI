@@ -9,12 +9,10 @@
 */
 
 import { readdir } from "node:fs/promises";
-
 import type {
 	AptFamilyProbe,
 	AptReachability as AptReachabilityWire,
 } from "@ceraui/rpc";
-
 import {
 	type SpawnWithTimeoutResult,
 	spawnWithTimeout,
@@ -25,6 +23,7 @@ import {
 } from "../addons/apt-client-tls.ts";
 import { deviceBindingArgs } from "../network/device-bound-probe.ts";
 import { type AptOrigin, parseAptSourceOrigins } from "./apt-source-origins.ts";
+import { parseAuthorityJson } from "./update-orchestrator/strict-authority-json.ts";
 
 export { type AptOrigin, parseAptSourceOrigins } from "./apt-source-origins.ts";
 
@@ -109,7 +108,7 @@ export function classifyProbe(outcome: {
 			const [body, status] = outcome.stdout.split("\n<<<apt-probe>>>");
 			if (Number.parseInt(status ?? "", 10) !== 200) return "unknown";
 			try {
-				const parsed: unknown = JSON.parse(body ?? "");
+				const parsed: unknown = parseAuthorityJson(body ?? "");
 				return typeof parsed === "object" &&
 					parsed !== null &&
 					"certVerified" in parsed &&

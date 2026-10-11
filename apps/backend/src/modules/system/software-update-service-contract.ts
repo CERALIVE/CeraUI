@@ -10,6 +10,7 @@
 
 import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
 import { softwareUpdateOutputPaths } from "./software-update-output.ts";
+import { parseOsStageSystemdProperties } from "./update-orchestrator/os-stage-systemd.ts";
 
 export const SOFTWARE_UPDATE_UNIT = "ceralive-software-update.service";
 export const SOFTWARE_UPDATE_DESCRIPTION = "CeraLive software update";
@@ -141,16 +142,6 @@ export function expectedAptAllScript(
 	return `/usr/bin/apt-get -d -y upgrade --with-new-pkgs${family.length ? ` ${family.join(" ")}` : ""} && /usr/bin/apt-get ${install.join(" ")}`;
 }
 
-function parseProperties(output: string): Map<string, string> {
-	const properties = new Map<string, string>();
-	for (const line of output.split("\n")) {
-		const separator = line.indexOf("=");
-		if (separator <= 0) continue;
-		properties.set(line.slice(0, separator), line.slice(separator + 1));
-	}
-	return properties;
-}
-
 export function validateDetachedAptServiceIdentity(output: string): void {
 	if (
 		output.split("\n").filter((line) => line.startsWith("ExecStart="))
@@ -160,7 +151,9 @@ export function validateDetachedAptServiceIdentity(output: string): void {
 			"expected exactly one ExecStart property",
 		);
 	}
-	const properties = parseProperties(output);
+	const properties = parseOsStageSystemdProperties(output);
+	if (!properties)
+		throw new DetachedAptServiceIdentityError("unit properties contradictory");
 	const expected = new Map([
 		["Id", SOFTWARE_UPDATE_UNIT],
 		["FragmentPath", SOFTWARE_UPDATE_FRAGMENT_PATH],

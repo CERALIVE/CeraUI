@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as spawnPolicy from "../../helpers/spawn-policy.ts";
 import type { OsChannelManifest } from "../../modules/system/update-orchestrator/os-manifest.ts";
+import * as stored from "../../modules/system/update-orchestrator/stored-state-file.ts";
 
 export async function strictStageIo(offered: OsChannelManifest) {
 	const root = await fs.mkdtemp(join(tmpdir(), "os-pair-strict-"));
@@ -36,6 +37,18 @@ export async function strictStageIo(offered: OsChannelManifest) {
 		}),
 	);
 	const file = Bun.file;
+	const readState = stored.readStoredStateFile;
+	const readJson = stored.readStoredStateJson;
+	const mappedState = (path: string) => {
+		const mapped = stateFiles.get(path);
+		return mapped ? join(root, mapped) : path;
+	};
+	spyOn(stored, "readStoredStateFile").mockImplementation((path, limit) =>
+		readState(mappedState(path), limit),
+	);
+	spyOn(stored, "readStoredStateJson").mockImplementation((path, limit) =>
+		readJson(mappedState(path), limit),
+	);
 	spyOn(Bun, "file").mockImplementation((path, options) => {
 		if (typeof path === "string") {
 			const mapped = stateFiles.get(path);

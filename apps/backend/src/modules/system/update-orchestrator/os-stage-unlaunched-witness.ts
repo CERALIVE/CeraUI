@@ -5,7 +5,6 @@ import {
 	fstatSync,
 	fsyncSync,
 	openSync,
-	readSync,
 	renameSync,
 	unlinkSync,
 	writeFileSync,
@@ -19,6 +18,14 @@ import {
 } from "./os-receipt-file-identity.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import { osStageCandidateKey } from "./os-stage-retry.ts";
+import {
+	openStoredStateDirectory,
+	readStoredStateDescriptor,
+} from "./stored-state-file.ts";
+import {
+	decodeAuthorityUtf8,
+	parseAuthorityJson,
+} from "./strict-authority-json.ts";
 
 export const OS_UNLAUNCHED_WITNESS_PATH =
 	"/data/ceralive/update-state/os-unlaunched-settlement.json";
@@ -67,10 +74,7 @@ function missing(error: unknown): boolean {
 }
 
 function openParent(deps: OsUnlaunchedWitnessDeps): number {
-	const fd = openSync(
-		dirname(deps.path),
-		constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
-	);
+	const fd = openStoredStateDirectory(dirname(deps.path));
 	try {
 		const info = fstatSync(fd);
 		if (info.uid !== deps.uid || (info.mode & 0o022) !== 0)
@@ -111,13 +115,8 @@ function readWitness(
 			info.size > MAX_BYTES
 		)
 			throw new OsStageError("rauc_recovery_unproven");
-		const bytes = Buffer.alloc(MAX_BYTES + 1);
-		const length = readSync(fd, bytes, 0, bytes.length, 0);
-		if (length !== info.size) throw new OsStageError("rauc_recovery_unproven");
-		const raw = new TextDecoder("utf-8", { fatal: true }).decode(
-			bytes.subarray(0, length),
-		);
-		const witness = witnessSchema.parse(JSON.parse(raw));
+		const raw = decodeAuthorityUtf8(readStoredStateDescriptor(fd, MAX_BYTES));
+		const witness = witnessSchema.parse(parseAuthorityJson(raw));
 		if (
 			witness.candidateKey !== osStageCandidateKey(witness.manifest) ||
 			raw !== JSON.stringify(witness)
@@ -148,7 +147,7 @@ function writeWitness(
 	let temporary: string | undefined;
 	try {
 		const manifest = osChannelManifestSchema.parse(
-			JSON.parse(input.manifestJson),
+			parseAuthorityJson(input.manifestJson),
 		);
 		const witness = witnessSchema.parse({
 			schema: 1,

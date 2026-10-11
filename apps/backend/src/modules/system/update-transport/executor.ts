@@ -22,6 +22,7 @@ import {
 	getModemNetMarker,
 	getRouterCellularMarker,
 } from "../../network/router-cellular-scan.ts";
+import { parseAuthorityJson } from "../update-orchestrator/strict-authority-json.ts";
 import {
 	classifyHttp,
 	classifyTransfer,
@@ -314,7 +315,7 @@ async function endpoint(
 	if (secure.state === "tls-error") state = classifyTransfer("tls", captive);
 	else if (secure.state === "clear" && host === "apt.ceralive.tv") {
 		try {
-			const body: unknown = JSON.parse(secure.body);
+			const body: unknown = parseAuthorityJson(secure.body);
 			state =
 				typeof body === "object" &&
 				body !== null &&

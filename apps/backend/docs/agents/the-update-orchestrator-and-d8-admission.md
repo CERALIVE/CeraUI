@@ -325,7 +325,13 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
   the file and the legacy terminal reason rather than defaulting to idle. That
   runtime stays closed to OS migration and confirmation until maintenance fixes
   the file and restarts it; valid records without OS metadata keep existing resume.
-  Only a genuinely absent `agent.json` (ENOENT of the entry) is first boot.
+   Only a genuinely absent `agent.json` (ENOENT of the entry or a real missing
+   ancestor directory) is first boot. Parent descriptors are walked with
+   no-follow/directory flags; dangling/symlink ancestors refuse. Fatal UTF-8,
+   per-record byte bounds and raw decoded JSON-member uniqueness precede schema
+   parsing, including nested objects. Ambiguous agent records latch maintenance
+   with zero writes and refuse Check/Install/D8; ambiguous quarantine throws,
+   never an empty protection set. Oversize quarantine is retained, never truncated.
   Truncated or non-object JSON and any schema-invalid record take the same
   typed latch; a read failure (EIO, EACCES) or a non-regular entry (directory,
   symlink, FIFO) fails startup with the bytes untouched and mutation readiness
@@ -333,7 +339,8 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
   `quarantine.json` and its `.pending` sibling) use the same no-follow,
   non-blocking, regular-file read (`stored-state-file.ts`), so a non-file entry
   refuses instead of reading as watermark 0, an empty quarantine or no receipt.
-  Stage-job files and the maintenance store open with `O_NONBLOCK` so a FIFO is
+   Stage-job files, kernel-lock/package-output readers and the maintenance store
+   open with `O_NONBLOCK` so a FIFO is
   rejected before it can wedge startup CONTROL, and stage observation reads
   `activation-armed` by entry presence (`readActivationArmed()`), so a dangling
   marker symlink still counts as armed. Host-proven only; stored formats unchanged.
@@ -367,8 +374,10 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
   the probe was awaited, with no `await` between that check and the dispatch.
   Absence itself is `LoadState=not-found` for the fixed unit name, not an
   identity check. The `systemctl show` rows go through the strict
-  `parseOsStageSystemdProperties()` first: a duplicated key or a malformed row
-  is unreadable (fail closed, commit treated as running), never last-wins. Never extend this to `committing`.
+   `parseOsStageSystemdProperties()` first in package recovery, D8 and maintenance:
+   a duplicated key, malformed row or not-found contradicted by lifecycle/cgroup/
+   PID/job evidence is unreadable (fail closed, commit treated as running), never
+   last-wins or absence. Never extend download absence clearance to `committing`.
 - **The package step reuses `startSoftwareUpdate()`.** Post-acceptance limits:
   root D8 Known gaps (b), (c), (g). Classify availability by `actionable_count`,
   not the inclusive `package_count`, to avoid launching an empty install.
@@ -735,13 +744,11 @@ rule in the maintenance probes.
 ### SETTINGS AND IMAGE CAPABILITIES [EXISTS]
 
 `update-settings.ts` reads/writes `update-settings.json` (CWD-relative like
-`config.json`) through `loadJsonConfig` / `writeFileAtomicSync`; absent gets the
-`@ceraui/rpc` defaults without touching the loader, logged once per path at info
-(settings are re-read every orchestrator tick, so the loader's missing-file warn
-would repeat every 3 s). Absent means `ENOENT` only: any other non-file path
-state, such as a directory, still goes through the loader, which warns and
-yields the defaults as before. Malformed PRESENT content still warns and throws
-`UpdateSettingsValidationError` instead of partial salvage. `channel` is
+`config.json`) through the strict stored-authority reader / `writeFileAtomicSync`;
+genuine absence gets the `@ceraui/rpc` defaults, logged once per path at info.
+Non-files, symlink ancestors, invalid UTF-8, oversize or ambiguous JSON throw
+`UpdateSettingsValidationError` instead of defaults or partial salvage. Valid
+schema-defaulted optional settings retain their defaults. `channel` is
 stable/beta. Capability and launcher gates: `docs/DEVICE-UPDATES.md`.
 
 Coverage: `tests/update-orchestrator-{reducer,admission,schedule,persistence,resume,runtime,lock,os-recovery-resume}.test.ts`, `os-stage-retry`, `update-notifications`,

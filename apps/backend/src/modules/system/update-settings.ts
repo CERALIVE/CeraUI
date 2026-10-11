@@ -1,17 +1,17 @@
-import { stat } from "node:fs/promises";
 import {
 	type UpdateSettings,
 	updateSettingsInputSchema,
 	updateSettingsSchema,
 } from "@ceraui/rpc/schemas";
-import {
-	loadJsonConfig,
-	writeFileAtomicSync,
-} from "../../helpers/config-loader.ts";
+import { writeFileAtomicSync } from "../../helpers/config-loader.ts";
 import { logger } from "../../helpers/logger.ts";
+import {
+	readStoredStateFile,
+	STORED_STATE_LIMITS,
+} from "./update-orchestrator/stored-state-file.ts";
+import { parseAuthorityJson } from "./update-orchestrator/strict-authority-json.ts";
 
 export const UPDATE_SETTINGS_FILE = "update-settings.json";
-const DEFAULTS = updateSettingsSchema.parse({});
 
 export class UpdateSettingsValidationError extends Error {
 	override readonly name = "UpdateSettingsValidationError";
@@ -31,40 +31,37 @@ export function setUpdateSettingsFilePathForTest(
 // 3 s for the life of the process. Say it once per path, at info.
 const reportedAbsent = new Set<string>();
 
-// Bun.file().exists() is also false for a directory, so only ENOENT counts as
-// the factory state; any other path state keeps the shared loader's warning.
-async function isAbsent(filePath: string): Promise<boolean> {
-	try {
-		await stat(filePath);
-		return false;
-	} catch (error) {
-		return error instanceof Error && "code" in error && error.code === "ENOENT";
-	}
-}
-
 export async function loadUpdateSettings(
 	filePath = updateSettingsFilePath,
 ): Promise<UpdateSettings> {
-	const present = await Bun.file(filePath).exists();
-	if (!present && (await isAbsent(filePath))) {
+	let raw: string | null;
+	try {
+		raw = await readStoredStateFile(filePath, STORED_STATE_LIMITS.settings);
+	} catch (cause) {
+		logger.warn(`Failed to read config file: ${filePath}`);
+		throw new UpdateSettingsValidationError(
+			"Unreadable persisted update settings",
+			{ cause },
+		);
+	}
+	if (raw === null) {
 		if (!reportedAbsent.has(filePath)) {
 			reportedAbsent.add(filePath);
 			logger.info(`Update settings not saved yet: ${filePath}, using defaults`);
 		}
 		return updateSettingsSchema.parse({});
 	}
-	const result = await loadJsonConfig(filePath, updateSettingsSchema, DEFAULTS);
-	if (
-		present &&
-		(!result.loaded ||
-			result.invalidFields.length > 0 ||
-			(result.modified && result.defaultedFields.length === 0))
-	) {
+	let value: unknown;
+	try {
+		value = parseAuthorityJson(raw);
+	} catch (cause) {
+		logger.warn(`Invalid JSON in config file: ${filePath}`);
 		throw new UpdateSettingsValidationError(
 			"Invalid persisted update settings",
+			{ cause },
 		);
 	}
-	const parsed = updateSettingsSchema.safeParse(result.data);
+	const parsed = updateSettingsSchema.safeParse(value);
 	if (!parsed.success) {
 		throw new UpdateSettingsValidationError(
 			"Invalid persisted update settings",

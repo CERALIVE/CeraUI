@@ -1,5 +1,9 @@
 import { writeFileAtomicSync } from "../../helpers/config-loader.ts";
 import { pendingPackageSuccess } from "./update-orchestrator/pending-success-fence.ts";
+import {
+	readStoredStateFile,
+	STORED_STATE_LIMITS,
+} from "./update-orchestrator/stored-state-file.ts";
 
 export const CERALIVE_SOURCES_FILE = "/etc/apt/sources.list.d/ceralive.sources";
 let sourcesPath = CERALIVE_SOURCES_FILE;
@@ -30,12 +34,7 @@ export async function reconcileAptChannel(
 	if (pendingPackageSuccess.pending) return false;
 	if (mode !== "capable") return false;
 	const desired = buildCeraliveSources(channel, arch);
-	let current: string | undefined;
-	try {
-		current = await Bun.file(file).text();
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-	}
+	const current = await readStoredStateFile(file, STORED_STATE_LIMITS.settings);
 	if (current === desired) return false;
 	if (pendingPackageSuccess.pending) return false;
 	writeFileAtomicSync(file, desired);

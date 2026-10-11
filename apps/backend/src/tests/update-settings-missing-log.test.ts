@@ -56,8 +56,8 @@ describe("update settings missing-file logging", () => {
 	test("a directory at the settings path is not absence: it still warns", async () => {
 		const path = join(dir, "directory-update-settings.json");
 		mkdirSync(path);
-		expect(await loadUpdateSettings(path)).toEqual(
-			updateSettingsSchema.parse({}),
+		await expect(loadUpdateSettings(path)).rejects.toBeInstanceOf(
+			UpdateSettingsValidationError,
 		);
 		expect(
 			warn.mock.calls.filter((args) =>

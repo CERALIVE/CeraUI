@@ -93,12 +93,19 @@ describe("B3: each requested property must appear exactly once before the receip
 
 	for (const [label, result] of duplicated) {
 		test(`${label}: never classified as a receipt-consulting shape and never settles`, async () => {
-			const verdict = classifySlotSyncProbe(result);
-			expect(verdict.kind).not.toBe("succeeded");
-			expect(verdict.kind).not.toBe("inactive-clean");
-			const { state, cleanup } = await settleThroughRuntime(result);
-			expect(state.phase).not.toBe("synced");
-			expect(cleanup).toEqual([]);
+			expect(() => classifySlotSyncProbe(result)).toThrow(
+				"unit properties unreadable",
+			);
+			const h = deps({
+				inspectSlotSync: async () => classifySlotSyncProbe(result),
+			});
+			setOrchestratorRuntimeDepsForTest(h.value);
+			syncing();
+			await expect(runOrchestratorTick()).rejects.toThrow(
+				"unit properties unreadable",
+			);
+			expect(getOrchestratorState().phase).toBe("syncing");
+			expect(h.cleanup).toEqual([]);
 		});
 	}
 

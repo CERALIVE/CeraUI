@@ -10,7 +10,11 @@ import {
 	createStageDeadline,
 	withinStageDeadline,
 } from "./os-stage-deadline.ts";
-import { OsStageError } from "./os-stage-error.ts";
+import {
+	diagnosticFailureReason,
+	OsStageError,
+	readStageDiagnostics,
+} from "./os-stage-error.ts";
 import {
 	recordStageFailure,
 	stageFailureContext,
@@ -25,6 +29,7 @@ import {
 } from "./os-stage-orphan.ts";
 import { drainRetainedOsStagePin } from "./os-stage-pin-retention.ts";
 import { recoverOwnedOsStageAtStartup } from "./os-stage-startup-recovery.ts";
+import { parseOsStageSystemdProperties } from "./os-stage-systemd.ts";
 import { killAndRestartRaucForStream } from "./stream-abort.ts";
 
 let admissionReady = false;
@@ -46,10 +51,10 @@ export function ensureOsUpdateAdmissionReady(
 			logger.warn(
 				"update-orchestrator: startup writer recovery remains unresolved",
 				{
-					reason: error instanceof OsStageError ? error.reason : "untyped",
+					reason: diagnosticFailureReason(error),
 					diagnostics:
 						error instanceof OsStageError
-							? error.diagnostics
+							? readStageDiagnostics(error)
 							: stageFailureContext(error),
 				},
 			);
@@ -141,6 +146,8 @@ export function reconcileOsStageStartup(
 		);
 		if (unit.exitCode !== 0)
 			throw new OsStageError("rauc_recovery_unproven", { cause: unit });
+		const unitProperties = parseOsStageSystemdProperties(unit.stdout);
+		if (!unitProperties) throw new OsStageError("rauc_recovery_unproven");
 		const liveAttempt = (deps.liveProducer ?? liveProducer)();
 		if (liveAttempt !== null) {
 			if (record && record.attemptId !== liveAttempt)
@@ -151,7 +158,7 @@ export function reconcileOsStageStartup(
 			return { kind: "none" };
 		}
 		if (!record) {
-			if (unit.stdout.trim() !== "LoadState=not-found")
+			if (unitProperties.get("LoadState") !== "not-found")
 				throw new OsStageError("rauc_recovery_unproven", {
 					diagnostics: { refusal: "foreign-or-unrecorded-guardian" },
 				});
@@ -172,7 +179,10 @@ export function reconcileOsStageStartup(
 			return { kind: "none" };
 		}
 		const owner = deps.owner(record);
-		if (unit.stdout.trim() === "LoadState=not-found" || !(await owner.held())) {
+		if (
+			unitProperties.get("LoadState") === "not-found" ||
+			!(await owner.held())
+		) {
 			if (!(await orphan(record, control)))
 				throw new OsStageError("rauc_recovery_unproven");
 			admissionReady = true;

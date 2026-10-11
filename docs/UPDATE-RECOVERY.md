@@ -1,5 +1,42 @@
 # Update recovery contract [PARTIAL — local recovery implemented, board proof owed]
 
+## Strict stored authority
+
+The system readers share `stored-state-file.ts` and `strict-authority-json.ts`.
+Every parent component is opened relative to the previous directory descriptor
+with no-follow/directory flags. A real missing ancestor directory or leaf keeps
+first-boot absence; a symlink (including a dangling parent), non-file, unreadable
+entry or other read fault refuses and preserves evidence. Opens are nonblocking
+before regular-file validation, including kernel-lock and package-output readers.
+Fatal UTF-8 retains BOMs for JSON to reject. Decoded duplicate member names,
+including nested and Unicode-escaped names, refuse before schema validation;
+valid whitespace and pretty printing remain accepted. JSON `null` is not absence.
+
+Per-record read ceilings are scalar 4 KiB, settings/capabilities/receipts 16 KiB,
+intent 64 KiB, agent/job 256 KiB, pending packages 8 MiB and archived recovery
+receipt 16 MiB. Quarantine and dpkg-status reads have a 64 MiB envelope.
+Quarantine schemas have no finite maximum history length: this ceiling is a
+resource refusal, **not truncation, pruning or permission to replace history**.
+Oversize history remains untouched and requires local maintenance. The host
+matrix measures a large valid history inside the envelope; it is not a claim
+that every possible schema-valid history fits. Formats and writer bytes remain
+unchanged, including existing canonical private intent/witness requirements.
+
+All property-bearing unit readers share `parseOsStageSystemdProperties`.
+Malformed/duplicate rows and `LoadState=not-found` contradicted by active,
+transitioning, cgroup, PID or job evidence are unreadable, never unit absence.
+Package recovery cannot clear downloading on that evidence; D8 submits no stop;
+maintenance cannot clear authority. Clean not-found replies retain systemctl's
+legitimate nonzero-exit convention. Slot-sync unknown properties throw rather
+than manufacturing an absent unit.
+
+Stage diagnostic annotation is guarded across all property access and context
+construction. Unreadable getters produce only closed fallback metadata and the
+original thrown object is rethrown; optional diagnostics cannot replace its
+typed reason or disposition. Host tests inject getter faults at admission,
+settlement and startup. Neither these tests nor the reader sweep qualifies
+boards, helper churn, power loss or filesystem/kernel I/O timing on a device.
+
 ## OS staging lock and startup reconciliation
 
 Physical startup reconciliation and orchestrator startup are ordered by a shared
@@ -695,18 +732,18 @@ schema residuals below remain unchanged. Fresh Rock and Orange Pi failover/statu
 pressure, cancellation and unknown-success crash drills are still required.
 
 Module-size accounting is not a claim of uniform compliance: `os-stage-run.ts`
-(494 pure LOC) and `runtime.ts` (2,310) carry explicit `SIZE_OK`
+(494 pure LOC) and `runtime.ts` (2,315) carry explicit `SIZE_OK`
 lifetime/state-machine exceptions. `spawn-policy.ts` (1,355 pure LOC) and
 `reducer.ts` (667) are size debt, not newly compliant modules. Accounting
 excludes blank lines and lines starting with `//`, `#`, `--`, `*` or `/*`
 (including embedded shell comments); a rule that keeps `*`/`/*` lines counts
-`runtime.ts` 2,336 and `reducer.ts` 673. Backend source files this PR adds or
+`runtime.ts` 2,341 and `reducer.ts` 673. Backend source files this PR adds or
 changes that exceed 250 under this rule without an inline `SIZE_OK` (base
 23bcf379 → this head): `spawn-policy.ts` 907→1,355,
 `stream-session-orchestrator.ts` 765→826, `reducer.ts` new 667,
-`update-transport/executor.ts` new 439, `addons/manager.ts` 489→490,
+`update-transport/executor.ts` new 440, `addons/manager.ts` 489→490,
 `ui/preview-proxy.ts` 390→392, `system.procedure.ts` 295→360, `rpc/router.ts`
-290→306, `addons/reconciler.ts` 300→302, `apt-reachability.ts` 225→272,
+290→306, `addons/reconciler.ts` 300→302, `apt-reachability.ts` 225→273,
 `streaming/streaming.ts` 257→265, `helpers/run.ts` 260→264. None is split here;
 each is an owner decision pending (split or record `SIZE_OK`).
 Orphan inspection is separated from the settlement lifetime without changing its

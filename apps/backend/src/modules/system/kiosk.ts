@@ -15,10 +15,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-/* Kiosk toggle state machine (DC-2 — docs/KIOSK_STATE_MACHINE.md) */
-import { readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
-
 import {
 	type AddonDescriptor,
 	AddonDescriptorSchema,
@@ -28,7 +25,6 @@ import {
 	type KioskState,
 	type KioskStatus,
 } from "@ceraui/rpc/schemas";
-
 import { type ExecResult, execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
@@ -43,6 +39,13 @@ import {
 } from "../addons/manager.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import { parseOsStageSystemdProperties } from "./update-orchestrator/os-stage-systemd.ts";
+/* Kiosk toggle state machine (DC-2 — docs/KIOSK_STATE_MACHINE.md) */
+import {
+	readStoredStateFileSync,
+	STORED_STATE_LIMITS,
+} from "./update-orchestrator/stored-state-file.ts";
+import { parseAuthorityJson } from "./update-orchestrator/strict-authority-json.ts";
 
 // Real-device detection (T4). Re-exported here so kiosk callers (and T13's RPC
 // gate) get the detector from the kiosk module surface. Detection only — the
@@ -117,7 +120,12 @@ export type KioskDeps = {
 // missing/malformed descriptor degrades the toggle rather than crashing it.
 function loadCogDescriptorFromDisk(): AddonDescriptor | null {
 	try {
-		const raw = JSON.parse(readFileSync(COG_DISPLAY_DESCRIPTOR_PATH, "utf8"));
+		const text = readStoredStateFileSync(
+			COG_DISPLAY_DESCRIPTOR_PATH,
+			STORED_STATE_LIMITS.agent,
+		);
+		if (text === null) return null;
+		const raw = parseAuthorityJson(text);
 		const descriptor = AddonDescriptorSchema.parse(raw);
 		if (descriptor.id !== COG_DISPLAY_ADDON_ID) {
 			logger.error(
@@ -168,8 +176,8 @@ async function probeNRestarts(): Promise<number> {
 			KIOSK_SERVICE,
 			"--property=NRestarts",
 		]);
-		const match = stdout.match(/NRestarts=(\d+)/);
-		return match?.[1] ? Number.parseInt(match[1], 10) : 0;
+		const value = parseOsStageSystemdProperties(stdout)?.get("NRestarts");
+		return value && /^[0-9]+$/.test(value) ? Number(value) : 0;
 	} catch {
 		return 0;
 	}

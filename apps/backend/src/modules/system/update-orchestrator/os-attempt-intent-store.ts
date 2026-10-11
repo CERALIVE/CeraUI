@@ -6,7 +6,6 @@ import {
 	fsyncSync,
 	mkdirSync,
 	openSync,
-	readSync,
 	renameSync,
 	unlinkSync,
 	writeFileSync,
@@ -20,6 +19,14 @@ import {
 } from "./os-attempt-intent.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import { orchestratorStateFilePath } from "./persistence.ts";
+import {
+	openStoredStateDirectory,
+	readStoredStateDescriptor,
+} from "./stored-state-file.ts";
+import {
+	decodeAuthorityUtf8,
+	parseAuthorityJson,
+} from "./strict-authority-json.ts";
 
 const MAX_BYTES = 65_536;
 export const OS_ATTEMPT_INTENT_NAME = "os-attempt-intent.json";
@@ -37,10 +44,7 @@ export class OsAttemptIntentStore {
 	constructor(readonly storage: OsAttemptIntentStorage) {}
 
 	#parent(): number {
-		const fd = openSync(
-			dirname(this.storage.path),
-			constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
-		);
+		const fd = openStoredStateDirectory(dirname(this.storage.path));
 		try {
 			const info = fstatSync(fd);
 			if (info.uid !== this.storage.uid || (info.mode & 0o022) !== 0)
@@ -77,14 +81,8 @@ export class OsAttemptIntentStore {
 				info.size > MAX_BYTES
 			)
 				throw new OsStageError("rauc_recovery_unproven");
-			const bytes = Buffer.alloc(MAX_BYTES + 1);
-			const length = readSync(fd, bytes, 0, bytes.length, 0);
-			if (length !== info.size)
-				throw new OsStageError("rauc_recovery_unproven");
-			const raw = new TextDecoder("utf-8", { fatal: true }).decode(
-				bytes.subarray(0, length),
-			);
-			const intent = osAttemptIntentSchema.parse(JSON.parse(raw));
+			const raw = decodeAuthorityUtf8(readStoredStateDescriptor(fd, MAX_BYTES));
+			const intent = osAttemptIntentSchema.parse(parseAuthorityJson(raw));
 			if (raw !== JSON.stringify(intent))
 				throw new OsStageError("rauc_recovery_unproven");
 			return intent;

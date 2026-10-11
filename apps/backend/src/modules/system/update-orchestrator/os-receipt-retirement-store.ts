@@ -11,6 +11,10 @@ import {
 	receiptEntryPath,
 	sameReceiptFile,
 } from "./os-receipt-file-identity.ts";
+import {
+	decodeAuthorityUtf8,
+	parseAuthorityJson,
+} from "./strict-authority-json.ts";
 
 export const CONSUMED_RECEIPT_NAME = "os-staged.consumed.json";
 
@@ -100,7 +104,7 @@ export function retireStagedReceipt(
 		if (!sameReceiptFile(judged.identity, file.identity)) return false;
 		let current: unknown;
 		try {
-			current = JSON.parse(file.bytes.toString("utf8"));
+			current = parseAuthorityJson(decodeAuthorityUtf8(file.bytes));
 		} catch (error) {
 			if (error instanceof SyntaxError) return false;
 			throw error;

@@ -3,6 +3,7 @@ import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
 import type { RankedTransport } from "../update-transport/core.ts";
 import { UpdateTransferError } from "../update-transport/pin.ts";
 import { UPDATE_TRANSPORT_TABLE_BASE } from "../update-transport/pin-rules.ts";
+import { parseAuthorityJson } from "./strict-authority-json.ts";
 
 export const OS_PIN_HEALTH_POLL_MS = 3_000;
 export const OS_PIN_HEALTH_READ_TIMEOUT_MS = 2_000;
@@ -62,7 +63,7 @@ export function classifyPinnedTopology(input: {
 	try {
 		const { transport } = input;
 		const link = linkSchema
-			.parse(JSON.parse(input.links))
+			.parse(parseAuthorityJson(input.links))
 			.find((row) => row.ifname === transport.candidate.ifname);
 		if (!link) return { kind: "lost", reason: "interface-removed" };
 		if (!link.flags.includes("UP"))
@@ -70,7 +71,7 @@ export function classifyPinnedTopology(input: {
 		if (input.carrier?.trim() === "0")
 			return { kind: "lost", reason: "carrier-down" };
 		const addresses = addressSchema
-			.parse(JSON.parse(input.addresses))
+			.parse(parseAuthorityJson(input.addresses))
 			.flatMap((row) => row.addr_info);
 		if (
 			!addresses.some(
@@ -85,7 +86,7 @@ export function classifyPinnedTopology(input: {
 			return { kind: "lost", reason: "family-address-lost" };
 		if (
 			!routeSchema
-				.parse(JSON.parse(input.routes))
+				.parse(parseAuthorityJson(input.routes))
 				.some(
 					(row) =>
 						row.dst === "default" &&
@@ -133,7 +134,7 @@ export async function readPinnedTopology(
 		]);
 		if (links.exitCode !== 0) return { kind: "unknown" };
 		// A complete link inventory can prove removal even if the address read races it.
-		const parsed = linkSchema.parse(JSON.parse(links.stdout));
+		const parsed = linkSchema.parse(parseAuthorityJson(links.stdout));
 		if (!parsed.some((row) => row.ifname === transport.candidate.ifname))
 			return { kind: "lost", reason: "interface-removed" };
 		if (addresses.exitCode !== 0 || routes.exitCode !== 0)

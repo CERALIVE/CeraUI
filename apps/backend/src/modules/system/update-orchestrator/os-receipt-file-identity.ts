@@ -1,17 +1,14 @@
 import { createHash } from "node:crypto";
-import {
-	closeSync,
-	constants,
-	fstatSync,
-	lstatSync,
-	openSync,
-	readFileSync,
-} from "node:fs";
-import { resolve } from "node:path";
+import { closeSync, constants, fstatSync, lstatSync, openSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { OS_UPDATE_STATE_DIR } from "./os-manifest.ts";
 import { OsStageError } from "./os-stage-error.ts";
+import {
+	openStoredStateDirectory,
+	readStoredStateDescriptor,
+	STORED_STATE_LIMITS,
+} from "./stored-state-file.ts";
 
 const decimal = z.string().regex(/^(?:0|[1-9][0-9]*)$/);
 export const receiptFileIdentitySchema = z
@@ -36,28 +33,9 @@ export function receiptFileAbsent(error: unknown): boolean {
 }
 
 export function openReceiptDirectory(dir: string): number {
-	const flags =
-		constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
 	const uid = process.getuid?.() ?? 0;
-	let fd = openSync("/", flags);
+	const fd = openStoredStateDirectory(dir, true);
 	try {
-		for (const component of resolve(dir).split("/").filter(Boolean)) {
-			const child = openSync(`/proc/self/fd/${fd}/${component}`, flags);
-			try {
-				const info = fstatSync(child);
-				const stickyRoot = info.uid === 0 && (info.mode & 0o1000) !== 0;
-				if (
-					(info.uid !== 0 && info.uid !== uid) ||
-					((info.mode & 0o022) !== 0 && !stickyRoot)
-				)
-					throw new OsStageError("rauc_recovery_unproven");
-			} catch (error) {
-				closeSync(child);
-				throw error;
-			}
-			closeSync(fd);
-			fd = child;
-		}
 		const info = fstatSync(fd);
 		if (info.uid !== uid || (info.mode & 0o022) !== 0)
 			throw new OsStageError("rauc_recovery_unproven");
@@ -100,7 +78,7 @@ export function readReceiptEntry(
 			info.size > 16_384n
 		)
 			throw new OsStageError("rauc_recovery_unproven");
-		const bytes = readFileSync(fd);
+		const bytes = readStoredStateDescriptor(fd, STORED_STATE_LIMITS.receipt);
 		const after = fstatSync(fd, { bigint: true });
 		const entry = lstatSync(path, { bigint: true });
 		if (

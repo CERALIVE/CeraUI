@@ -1,5 +1,13 @@
 import { lstat } from "node:fs/promises";
 import { z } from "zod";
+import {
+	readStoredStateFile,
+	STORED_STATE_LIMITS,
+} from "./stored-state-file.ts";
+import {
+	decodeAuthorityUtf8,
+	parseAuthorityJson,
+} from "./strict-authority-json.ts";
 
 // allow: SIZE_OK — Keep trust, admission and discovery colocated for the frozen-tree security comparison.
 
@@ -113,7 +121,9 @@ export async function verifySignedOsManifestTrust(
 		return { ok: false, reason: "signer_issuer_invalid" };
 	let raw: unknown;
 	try {
-		raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(data));
+		if (data.byteLength > STORED_STATE_LIMITS.intent)
+			return { ok: false, reason: "schema_invalid" };
+		raw = parseAuthorityJson(decodeAuthorityUtf8(data));
 	} catch {
 		return { ok: false, reason: "schema_invalid" };
 	}
@@ -233,7 +243,8 @@ export async function readBootedOsReleaseVersion(
 	path = BOOTED_OS_RELEASE_VERSION,
 ): Promise<string | undefined> {
 	try {
-		const value = await Bun.file(path).text();
+		const value = await readStoredStateFile(path, STORED_STATE_LIMITS.scalar);
+		if (value === null) return undefined;
 		if (!/^[0-9]{4}\.[0-9]+\.[0-9]+\n$/.test(value)) return undefined;
 		return value.slice(0, -1);
 	} catch {
@@ -263,7 +274,11 @@ export const defaultOsChannelDeps: ChannelDeps = {
 					regular: false,
 				};
 			return {
-				content: await Bun.file(OS_CHANNEL_OVERRIDE).text(),
+				content:
+					(await readStoredStateFile(
+						OS_CHANNEL_OVERRIDE,
+						STORED_STATE_LIMITS.scalar,
+					)) ?? "",
 				uid: info.uid,
 				mode: info.mode & 0o777,
 				regular: true,

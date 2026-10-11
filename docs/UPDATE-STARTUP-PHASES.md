@@ -10,6 +10,15 @@ maintenance-blocked independently of this table. Only a genuinely absent
 maintenance, and unreadable or non-regular entries fail startup with the bytes
 preserved and readiness closed (host-proven).
 
+Stored authority shares a descriptor-anchored, no-follow directory walk and
+nonblocking regular-file reads. Missing real directories on a fresh device and
+a missing leaf are absence; dangling/symlink ancestors, non-files and other I/O
+faults are refusals. Fatal UTF-8, explicit record-byte limits and raw decoded
+JSON-member uniqueness precede schema validation. Duplicate members at any
+depth latch invalid agent maintenance without a write; Check, Install and D8
+cannot clear that ambiguity. Valid pretty-printed JSON remains valid. No stored
+format or wire schema changed. See [strict stored authority](UPDATE-RECOVERY.md#strict-stored-authority).
+
 | Phase | H8 startup action | Restart wedge? | H9 action |
 |---|---|---|---|
 | idle | Resume unchanged; inspect mirror eligibility | No unowned wedge | Unchanged |

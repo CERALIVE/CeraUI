@@ -209,7 +209,7 @@ describe("classifySlotSyncProbe — only a positively read clean unit may consul
 		).toEqual({ kind: "inactive-clean" });
 	});
 
-	test("a failed read stays absent: nonzero exit, empty or incomplete output, unit not loaded", () => {
+	test("failed or incomplete reads cannot consult a receipt; empty properties refuse", () => {
 		const unreadable: ReadonlyArray<{ exitCode: number; stdout: string }> = [
 			{ exitCode: 1, stdout: opiAfterSuccess },
 			{ exitCode: 0, stdout: "" },
@@ -234,7 +234,11 @@ describe("classifySlotSyncProbe — only a positively read clean unit may consul
 			},
 		];
 		for (const result of unreadable) {
-			expect(classifySlotSyncProbe(result)).toEqual({ kind: "absent" });
+			if (result.stdout === "")
+				expect(() => classifySlotSyncProbe(result)).toThrow(
+					"unit properties unreadable",
+				);
+			else expect(classifySlotSyncProbe(result)).toEqual({ kind: "absent" });
 		}
 	});
 

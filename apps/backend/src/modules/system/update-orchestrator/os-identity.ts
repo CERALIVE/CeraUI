@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+	readStoredStateFile,
+	STORED_STATE_LIMITS,
+} from "./stored-state-file.ts";
 
 const RAUC_CONFIG = "/etc/rauc/system.conf";
 const BOOT_ID = "/proc/sys/kernel/random/boot_id";
@@ -24,7 +28,8 @@ export async function readBoardIdentity(path = RAUC_CONFIG): Promise<{
 	readonly board: string;
 	readonly compatible: string;
 }> {
-	const conf = await Bun.file(path).text();
+	const conf = await readStoredStateFile(path, STORED_STATE_LIMITS.settings);
+	if (conf === null) throw new OsAgentError("rauc_compatible_unknown");
 	const section = conf.split(/^\[system\]\s*$/m)[1]?.split(/^\[.*\]\s*$/m)[0];
 	const matches = section?.match(/^compatible\s*=\s*(\S+)\s*$/gm) ?? [];
 	if (matches.length !== 1) throw new OsAgentError("rauc_compatible_unknown");

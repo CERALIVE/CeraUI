@@ -108,7 +108,11 @@ import type {
 	acquireOsStageControlLease,
 	OsStageControlLease,
 } from "./os-stage-control-lease.ts";
-import { isOsStageError, OsStageError } from "./os-stage-error.ts";
+import {
+	isOsStageError,
+	OsStageError,
+	readStageDiagnostics,
+} from "./os-stage-error.ts";
 import {
 	recordStageFailure,
 	stageFailureContext,
@@ -801,6 +805,7 @@ async function commitStageRunning(): Promise<boolean> {
 }
 
 export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdmission> {
+	if (!recoveryPersistenceValid) startupReadiness.assertReady(false);
 	if (publishingIntentPending(deps.osAttemptIntentStore))
 		await awaitPublishingIntentForStream({
 			...(deps.osAttemptIntentStore
@@ -1721,7 +1726,7 @@ function settleOsStageFailure(
 		attemptId,
 		reason: error.reason,
 		mode: error.mode,
-		diagnostics: error.diagnostics,
+		diagnostics: readStageDiagnostics(error),
 	});
 	if (error.mode === "cancelled") {
 		dispatch({ type: "OS_STAGING_ABORTED_FOR_STREAM", now });

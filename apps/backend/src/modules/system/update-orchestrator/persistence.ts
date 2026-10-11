@@ -26,6 +26,7 @@ import { z } from "zod";
 import { writeFileAtomicSync } from "../../../helpers/config-loader.ts";
 import { syncOrchestratorDirectory } from "./orchestrator-directory-sync.ts";
 import { readStoredStateFile } from "./stored-state-file.ts";
+import { parseAuthorityJson } from "./strict-authority-json.ts";
 import { initialOrchestratorState, type OrchestratorState } from "./types.ts";
 
 export const ORCHESTRATOR_STATE_FILE = "/data/ceralive/update-state/agent.json";
@@ -98,11 +99,11 @@ export function fromPersisted(
 export async function loadOrchestratorState(
 	filePath = statePath,
 ): Promise<OrchestratorState | null> {
-	const bytes = await readStoredStateFile(filePath);
-	if (bytes === null) return null;
 	let data: unknown;
 	try {
-		data = JSON.parse(bytes);
+		const bytes = await readStoredStateFile(filePath);
+		if (bytes === null) return null;
+		data = parseAuthorityJson(bytes);
 	} catch (error) {
 		if (!(error instanceof SyntaxError)) throw error;
 		throw new OrchestratorRecoveryLoadError(
