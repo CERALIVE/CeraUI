@@ -744,8 +744,15 @@ changes that exceed 250 under this rule without an inline `SIZE_OK` (base
 `update-transport/executor.ts` new 440, `addons/manager.ts` 489→490,
 `ui/preview-proxy.ts` 390→392, `system.procedure.ts` 295→360, `rpc/router.ts`
 290→306, `addons/reconciler.ts` 300→302, `apt-reachability.ts` 225→273,
-`streaming/streaming.ts` 257→265, `helpers/run.ts` 260→264. None is split here;
-each is an owner decision pending (split or record `SIZE_OK`).
+`streaming/streaming.ts` 257→265, `helpers/run.ts` 260→264. Outside the
+backend, over the whole PR file list: `apps/frontend/src/lib/rpc/subscriptions.svelte.ts`
+832→848 (grew 16), `apps/frontend/src/lib/rpc/client.ts` 625→642 (grew 17),
+`packages/rpc/src/schemas/system.schema.ts` 339→343 (grew 4),
+`scripts/build/build-debian-package.sh` 274→282 (grew 8) and
+`apps/frontend/src/main/LiveView.svelte` 807→800 (inherited, shrank 7).
+`UpdatesDialog.svelte` (671), `software-updates.ts`, `main.ts`, `os-agent.ts`
+and `os-manifest.ts` carry `SIZE_OK`. None is split here; every listed file
+without `SIZE_OK` is an owner decision pending (split or record `SIZE_OK`).
 Orphan inspection is separated from the settlement lifetime without changing its
 predicates. New FIX7/FIX8/FIX9/FIX10 modules stay below 250 pure LOC. The four
 fix-6 test files and fix-7 regressions require an explicit TypeScript program:

@@ -854,8 +854,13 @@ Not proven, and not claimed:
   both-board re-drills remain owed;
 - no RELEASED image declares `apt-all-packages`, `rauc-verity-streaming`, `slot-sync` or
   `transport-uidrange`, so every capable path is inert in the field;
-- no live signed channel manifest, hosted bundle or live `apt.ceralive.tv` mTLS
-  verification has been exercised;
+- historical bench runs do not qualify signed-manifest, hosted-bundle or APT
+  mTLS behavior on this corrected exact head; the applicable exact-head
+  re-drills remain owed;
+- `apt.ceralive.tv` mTLS enforcement itself is an infrastructure fact, not a
+  CeraUI proof: the 2026-09-26 post-enforcement matrix (todo 50) recorded 403
+  without and 200 with the fleet certificate on `dists/*/InRelease`. It says
+  nothing about this head's update agent;
 - No production caller dispatches `RESET`: `quarantined` and most `failed`
   states remain sticky. The narrow exceptions are root-only
   `commit_unit_absent_on_resume` adjudication through the local recovery CLI
