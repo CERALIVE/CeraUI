@@ -262,6 +262,66 @@ test.describe('device update surfaces (Todo 41)', { tag: '@functional' }, () => 
 		await expect(dialog.getByTestId('updates-packages')).toBeVisible();
 	});
 
+	test('the schedule and channel choices are keyboard radio groups with touch-sized targets', async ({
+		page,
+		backendRpc,
+	}) => {
+		await installUpdateWire(page, {
+			fakes: {
+				'system.getUpdateCapabilities': CAPABLE_CAPABILITIES,
+				'system.getUpdateDetails': capableDetails({ pendingCellular: null }),
+			},
+		});
+		// Touch mode must be on before first paint, or the pre-lift geometry is measured.
+		await page.goto('/?mode=touch');
+		await ensureAuthenticated(page);
+		await expect(page.locator('html')).toHaveAttribute('data-layout-mode', 'touch');
+		const dialog = await openUpdatesDialog(page);
+
+		// One tab stop per group; an arrow key moves focus AND selects (WAI-ARIA radio).
+		const anyIdle = dialog.getByTestId('update-schedule-mode-any-idle');
+		const windowMode = dialog.getByTestId('update-schedule-mode-window');
+		await expect(anyIdle).toHaveAttribute('aria-checked', 'true');
+		await expect(anyIdle).toHaveAttribute('tabindex', '0');
+		await expect(windowMode).toHaveAttribute('tabindex', '-1');
+		await anyIdle.focus();
+		await page.keyboard.press('ArrowDown');
+		await expect(windowMode).toBeFocused();
+		await expect(windowMode).toHaveAttribute('aria-checked', 'true');
+		await expect(dialog.getByTestId('update-schedule-start')).toBeVisible();
+
+		// The channel is a device write: the selection follows the device's echo.
+		const stable = dialog.getByTestId('update-channel-stable');
+		const beta = dialog.getByTestId('update-channel-beta');
+		await stable.focus();
+		await page.keyboard.press('ArrowDown');
+		await expect(beta).toBeFocused();
+		await expect(beta).toHaveAttribute('aria-checked', 'true');
+		await expect
+			.poll(async () => (await backendRpc.call<UpdateSettings>(['system', 'getUpdateSettings'])).channel)
+			.toBe('beta');
+
+		// Touch targets: the time inputs reach 44 px; the midnight checkbox reaches
+		// it through its hit area while its painted box stays small.
+		for (const id of ['update-schedule-start', 'update-schedule-end']) {
+			const box = await dialog.getByTestId(id).boundingBox();
+			expect(box?.height ?? 0, `${id} is shorter than the touch target`).toBeGreaterThanOrEqual(43.5);
+		}
+		const midnight = await dialog.getByTestId('update-schedule-midnight').evaluate((node) => {
+			const rect = node.getBoundingClientRect();
+			const after = getComputedStyle(node, '::after');
+			const inset = (value: string) => Number.parseFloat(value) || 0;
+			return {
+				box: Math.max(rect.width, rect.height),
+				hitWidth: rect.width - inset(after.insetInlineStart) - inset(after.insetInlineEnd),
+				hitHeight: rect.height - inset(after.insetBlockStart) - inset(after.insetBlockEnd),
+			};
+		});
+		expect(midnight.hitWidth).toBeGreaterThanOrEqual(43.5);
+		expect(midnight.hitHeight).toBeGreaterThanOrEqual(43.5);
+		expect(midnight.box).toBeLessThan(43.5);
+	});
+
 	test('a capable image renders every section and no legacy notice', async ({ page }) => {
 		await installUpdateWire(page, {
 			fakes: {

@@ -815,7 +815,12 @@ wire field carrying the expiry date.
 - **Updates dialog** (`UpdatesDialog.svelte`): Packages, System image, Slots,
   Automation (auto toggles, schedule window, channel), Over cellular, and Update
   connection. It pulls capabilities, settings and `system.getUpdateDetails` when
-  opened (`createUpdateSurface()`).
+  opened (`createUpdateSurface()`). One latest-read counter owns the details and
+  a save echo outranks an older settings read; closing the dialog fences every
+  late write. An action whose reply never arrived reads "Outcome not confirmed"
+  until the device's phase or a fresh details read settles it; only a device
+  answer reads "Not started". Unread details, an unestablished running version
+  and a never-successful OS check render as unknown, never as facts.
 - **Global badge** (`UpdateOrchestratorBadge.svelte`): shown while
   `isUpdateBusy()` holds, with phase and percent, and opens the dialog.
 - **Go Live band** (`UpdateRefusalBand.svelte`): `goLiveUpdateRefusal()` prefers

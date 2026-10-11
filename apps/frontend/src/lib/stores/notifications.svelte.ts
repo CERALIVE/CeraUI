@@ -39,6 +39,11 @@ import type {
 	NotificationType,
 } from "@ceraui/rpc/schemas";
 
+import {
+	UPDATE_REFUSED_NOTICE_KEY,
+	updateRefusalReasonKey,
+} from "../updates/update-refusal-notice";
+
 // ============================================
 // Types
 // ============================================
@@ -134,6 +139,24 @@ function toInterpolationParams(
 }
 
 /**
+ * The params a notification is interpolated with. A refusal's `reason` is a
+ * device token, so it is replaced by its localized sentence first
+ * (`update-refusal-notice.ts`); every other notification's params pass through.
+ */
+function displayParams(
+	notification: Pick<Notification, "key" | "params">,
+	translations: unknown,
+): Record<string, unknown> | undefined {
+	if (notification.key !== UPDATE_REFUSED_NOTICE_KEY)
+		return notification.params;
+	const reasonKey = updateRefusalReasonKey(notification.params?.reason);
+	return {
+		...notification.params,
+		reason: lookupTranslation(translations, reasonKey)?.() ?? "",
+	};
+}
+
+/**
  * Resolve the display text for a notification: prefer the localized `key`
  * (interpolated with `params`), falling back to the raw `msg` when `key` is
  * absent or not present in the `translations` tree.
@@ -144,7 +167,10 @@ export function resolveNotificationText(
 ): string {
 	if (notification.key) {
 		const translate = lookupTranslation(translations, notification.key);
-		if (translate) return translate(toInterpolationParams(notification.params));
+		if (translate)
+			return translate(
+				toInterpolationParams(displayParams(notification, translations)),
+			);
 	}
 	return notification.msg;
 }

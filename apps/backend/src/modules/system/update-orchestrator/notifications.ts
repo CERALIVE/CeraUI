@@ -1,3 +1,4 @@
+import { logger } from "../../../helpers/logger.ts";
 import {
 	notificationExists,
 	notificationRemove,
@@ -118,6 +119,12 @@ export function notifyUpdate(event: UpdateNotice): boolean {
 			params.packages = event.packages.join(", ");
 			break;
 		case "refused":
+			// The frontend shows a known token as its own sentence and anything
+			// else as generic copy, so the raw diagnostic lives here.
+			logger.warn("update-orchestrator: update refused", {
+				id: event.id,
+				reason: event.reason,
+			});
 			params.reason = event.reason;
 			break;
 		case "os-staged":

@@ -247,11 +247,16 @@ Known gaps, recorded rather than smoothed over:
   `system.installUpdatesNow` (`rpc/procedures/system.procedure.ts` l.260-270)
   answers. The frontend has no per-procedure override for it
   (`PROCEDURE_TIMEOUT_MS`, `apps/frontend/src/lib/rpc/client.ts` l.560-562), so
-  the 30 s default of `RPCClient.call` (l.463) rejects with `Request timeout`
-  (l.472-475); `osCommand` turns that rejection into a failed operation and
-  `undefined` (`rpc/async-operation.svelte.ts` l.593-606), and the update
-  surface records the Install action as refused (`update-surface.svelte.ts` l.146), while the stage keeps running server-side
-  and succeeds. On the Rock bench the uninterrupted adaptive stage of the
+  the 30 s default of `RPCClient.call` (`RPC_CALL_TIMEOUT_MS`,
+  `lib/rpc/rpc-timeouts.ts`) rejects with `Request timeout` while the stage
+  keeps running server-side and succeeds. The Updates dialog no longer calls
+  that a refusal (review 49-C, C-M1): `update-actions.svelte.ts` classifies any
+  non-RPC rejection as `unconfirmed`, keeps the action busy until the client's
+  own timeout, and shows "Outcome not confirmed" until the device settles it
+  through a pushed phase or a details read sent after the request
+  (`update-action-outcome.ts`). Only a `{ success: false }` answer or a typed
+  RPC envelope renders "Not started". The backend still answers only after the
+  stage. On the Rock bench the uninterrupted adaptive stage of the
   1.4 GB bundle took 101 s. The awaiting semantics are pinned by `os-agent-runtime.test.ts`:
   "manual install bypasses idle, stages once and arms without immediate
   activation" (expects `os-staged` when the call returns) and "a stage failure

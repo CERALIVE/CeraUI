@@ -189,8 +189,10 @@ src/
 
 - **Update startup refusal**: the RPC envelope preserves optional retryability;
   Updates shows translated initialising/retry-shortly copy for the distinct
-  startup code, while unknown faults retain generic refusal feedback. No raw
-  backend message or new OS-stage reason is rendered.
+  startup code, while unknown error codes retain generic refusal feedback. A
+  reply that never arrived (timeout, dropped socket) is not a refusal: it reads
+  "Outcome not confirmed" until the device's phase or a fresh details read
+  settles it. No raw backend message or new OS-stage reason is rendered.
 
 - **Dongle login**: a submission makes one verify-before-save RPC. A failed
   password remains only in the mounted dialog, is never written to Web Storage,

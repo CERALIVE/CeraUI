@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { logger } from "../helpers/logger.ts";
 import {
 	announceOsStageSettlement,
 	clearOsStageNotices,
@@ -122,5 +123,40 @@ describe("OS staging settlement notices", () => {
 			"notifications.updateSystemStageOperator",
 			"notifications.updateSystemStageUnresolved",
 		]);
+	});
+});
+
+describe("refused-update notices (C-m1)", () => {
+	test("keep the wire shape and leave the raw reason in the device log", () => {
+		// Given the OS check refusing because the running version is unknown.
+		const warn = spyOn(logger, "warn").mockImplementation(
+			(() => logger) as never,
+		);
+		try {
+			// When the notice is raised.
+			const sent = notifyUpdate({
+				kind: "refused",
+				id: "os-check:booted_version_unknown",
+				reason: "booted_version_unknown",
+			});
+
+			// Then the wire is unchanged: the same key and the token as `reason`,
+			// which the frontend resolves to localized copy.
+			expect(sent).toBe(true);
+			expect(updateNotices()).toEqual([
+				{
+					name: "update:refused:os-check:booted_version_unknown",
+					key: "notifications.updateRefused",
+					params: { reason: "booted_version_unknown" },
+				},
+			]);
+			// And the raw reason stays in the device log.
+			expect(warn).toHaveBeenCalledWith("update-orchestrator: update refused", {
+				id: "os-check:booted_version_unknown",
+				reason: "booted_version_unknown",
+			});
+		} finally {
+			warn.mockRestore();
+		}
 	});
 });

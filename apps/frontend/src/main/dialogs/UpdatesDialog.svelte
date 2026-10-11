@@ -59,7 +59,6 @@ import { transportCredentialsRejected } from '$lib/updates/update-bands';
 import { actionablePackageOrigins, dialogActivityPhase } from '$lib/updates/update-dialog-view';
 import { createUpdateSurface } from '$lib/updates/update-surface.svelte';
 import {
-	actionRefusalKey,
 	etaMinutes,
 	formatUpdateTime,
 	phaseLabelKey,
@@ -67,6 +66,7 @@ import {
 	updateCapabilityView,
 } from '$lib/updates/update-view';
 
+import ActionOutcomeBand from './updates/ActionOutcomeBand.svelte';
 import AutomationSection from './updates/AutomationSection.svelte';
 import ConnectionSection from './updates/ConnectionSection.svelte';
 import SlotsSection from './updates/SlotsSection.svelte';
@@ -370,7 +370,8 @@ $effect(() => {
 
 // The pushed phase moves on every real orchestrator transition; the details
 // that phase implies (a staged receipt, a held cellular candidate, a new
-// transport selection) are pulled again rather than left as of the open.
+// transport selection) are pulled again rather than left as of the open, and
+// the phase itself is evidence for an action whose reply never arrived.
 let observedPhase: UpdateOrchestratorPhase | undefined;
 $effect(() => {
 	const phase = orchestrator?.phase;
@@ -379,7 +380,7 @@ $effect(() => {
 		return;
 	}
 	observedPhase = phase;
-	untrack(() => void surface.reloadDetails());
+	untrack(() => void surface.observePhase(phase));
 });
 
 // "Legacy" is only claimed once the device has ANSWERED with its capabilities;
@@ -394,7 +395,6 @@ const activityPercent = $derived(activityPhase ? progressPercent(orchestrator) :
 const activityEta = $derived(activityPhase ? etaMinutes(orchestrator?.progress?.etaSeconds) : undefined);
 const packageOrigins = $derived(actionablePackageOrigins(classified));
 const nextPackageCheck = $derived(formatUpdateTime(details?.checks.packages.nextAttemptAt, locale));
-const refusal = $derived(surface.refusal);
 </script>
 
 <AppDialog
@@ -447,20 +447,7 @@ const refusal = $derived(surface.refusal);
 			</div>
 		{/if}
 
-		{#if refusal}
-			<div
-				class="border-status-warning/60 bg-status-warning/10 flex items-start gap-2 rounded-lg border p-3"
-				data-action={refusal.action}
-				data-testid="update-action-refused"
-				role="status"
-			>
-				<AlertTriangle aria-hidden="true" class="text-status-warning mt-0.5 size-4 shrink-0" />
-				<div class="min-w-0 space-y-0.5">
-					<p class="text-sm font-medium">{m['settings.updates.refusal.title']()}</p>
-					<p class="text-muted-foreground text-sm">{resolveMessageKey(actionRefusalKey(refusal.reason))}</p>
-				</div>
-			</div>
-		{/if}
+		<ActionOutcomeBand refusal={surface.refusal} unconfirmed={surface.unconfirmed} />
 
 		{#if activityPhase}
 			<div class="space-y-2" aria-live="polite" data-phase={activityPhase} data-testid="update-activity">

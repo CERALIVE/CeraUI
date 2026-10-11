@@ -2,36 +2,47 @@
  * The Updates dialog's device reads and writes (Todo 41), owned by ONE dialog
  * mount at a time.
  *
- * Three reads — capabilities, settings, details — are pulled together on the
- * open edge and generation-fenced, so a reply from a closed or superseded open
- * can never overwrite the current one. Every write goes through `osCommand`
- * and is PESSIMISTIC: the rendered value moves only to what the device echoed
- * back (`setUpdateSettings` answers with the complete applied settings), never
- * to what was clicked.
+ * Reads. Capabilities, settings and details are pulled together on the open
+ * edge, and details again on every pushed phase change. ONE latest-read counter
+ * owns `details`, whichever path started the read, and settings have their own
+ * that a save echo also advances: an answer lands only if nothing newer was
+ * started after it, so a slow opening snapshot can never overwrite a newer read
+ * or an echoed save (C-M2).
+ *
+ * Sessions. `reset()` (the dialog closing) starts a new session. Every write
+ * still in flight (a read, a save echo, an action's result and the read it
+ * would start) belongs to the session it began in and lands nowhere once that
+ * session has ended.
+ *
+ * Writes go through `osCommand` and are PESSIMISTIC: the rendered value moves
+ * only to what the device echoed back, never to what was clicked. The three
+ * operator actions and their outcomes live in `update-actions.svelte.ts`.
  */
 import type {
 	UpdateCapabilities,
 	UpdateDetails,
+	UpdateOrchestratorPhase,
 	UpdateSettings,
 } from "@ceraui/rpc/schemas";
 
 import { getOperationPhase, osCommand } from "$lib/rpc/async-operation.svelte";
 import { rpc } from "$lib/rpc/client";
-import { UpdateActionFailure } from "./update-action-failure";
+import {
+	type ActionRefusal,
+	createUpdateActions,
+	type UpdateActionKind,
+} from "./update-actions.svelte";
 import { withSettings } from "./update-view";
 
+export {
+	type ActionRefusal,
+	UPDATE_CELLULAR_OP,
+	UPDATE_CHECK_NOW_OP,
+	UPDATE_INSTALL_NOW_OP,
+	type UpdateActionKind,
+} from "./update-actions.svelte";
+
 export const UPDATE_SETTINGS_OP = "update-settings";
-export const UPDATE_CHECK_NOW_OP = "update-check-now";
-export const UPDATE_INSTALL_NOW_OP = "update-install-now";
-export const UPDATE_CELLULAR_OP = "update-cellular-approve";
-
-type ActionKind = "check" | "install" | "cellular";
-
-export interface ActionRefusal {
-	readonly action: ActionKind;
-	readonly reason: string | undefined;
-	readonly retryable?: boolean;
-}
 
 export interface UpdateSurface {
 	readonly capabilities: UpdateCapabilities | undefined;
@@ -44,10 +55,14 @@ export interface UpdateSurface {
 	/** The last settings write the device did not confirm. */
 	readonly saveFailed: boolean;
 	readonly refusal: ActionRefusal | undefined;
+	/** An action whose reply never arrived and that the device has not settled yet. */
+	readonly unconfirmed: UpdateActionKind | undefined;
 	readonly saving: boolean;
-	pending(action: ActionKind): boolean;
+	pending(action: UpdateActionKind): boolean;
 	load(): Promise<void>;
 	reloadDetails(): Promise<void>;
+	/** The pushed phase moved: keep it as evidence, then re-read the details. */
+	observePhase(phase: UpdateOrchestratorPhase | undefined): Promise<void>;
 	save(patch: Partial<UpdateSettings>): Promise<boolean>;
 	checkNow(): Promise<void>;
 	installNow(): Promise<void>;
@@ -61,51 +76,66 @@ async function settle<T>(call: () => Promise<T>): Promise<T> {
 	return call();
 }
 
-const ACTION_OPS: Readonly<Record<ActionKind, string>> = {
-	check: UPDATE_CHECK_NOW_OP,
-	install: UPDATE_INSTALL_NOW_OP,
-	cellular: UPDATE_CELLULAR_OP,
-};
-
 export function createUpdateSurface(): UpdateSurface {
 	let capabilities = $state.raw<UpdateCapabilities | undefined>();
 	let settings = $state.raw<UpdateSettings | undefined>();
 	let details = $state.raw<UpdateDetails | undefined>();
 	let loaded = $state(false);
 	let settingsFailed = $state(false);
-	let detailsFailed = $state(false);
+	let capabilitiesFailed = $state(false);
+	let detailsReadFailed = $state(false);
 	let saveFailed = $state(false);
-	let refusal = $state.raw<ActionRefusal | undefined>();
-	let generation = 0;
-	let detailsGeneration = 0;
+	let session = 0;
+	let loadSeq = 0;
+	let settingsSeq = 0;
+	let detailsSeq = 0;
+	let detailsRead = 0;
+
+	const actions = createUpdateActions({
+		evidence: () => ({ details, detailsRead }),
+		latestRead: () => detailsSeq,
+		reloadDetails,
+	});
 
 	async function load(): Promise<void> {
-		const gen = ++generation;
+		const gen = ++loadSeq;
+		const settingsGen = ++settingsSeq;
+		const detailsGen = ++detailsSeq;
 		const [caps, applied, read] = await Promise.allSettled([
 			settle(() => rpc.system.getUpdateCapabilities()),
 			settle(() => rpc.system.getUpdateSettings()),
 			settle(() => rpc.system.getUpdateDetails()),
 		]);
-		if (gen !== generation) return;
-		capabilities = caps.status === "fulfilled" ? caps.value : undefined;
-		settings = applied.status === "fulfilled" ? applied.value : undefined;
-		settingsFailed = applied.status === "rejected";
-		details = read.status === "fulfilled" ? read.value : undefined;
-		detailsFailed = read.status === "rejected" || caps.status === "rejected";
-		loaded = true;
+		if (gen === loadSeq) {
+			capabilities = caps.status === "fulfilled" ? caps.value : undefined;
+			capabilitiesFailed = caps.status === "rejected";
+			loaded = true;
+		}
+		if (settingsGen === settingsSeq) {
+			settings = applied.status === "fulfilled" ? applied.value : undefined;
+			settingsFailed = applied.status === "rejected";
+		}
+		if (detailsGen === detailsSeq) {
+			details = read.status === "fulfilled" ? read.value : undefined;
+			detailsRead = detailsGen;
+			detailsReadFailed = read.status === "rejected";
+			actions.settle();
+		}
 	}
 
 	async function reloadDetails(): Promise<void> {
-		const gen = ++detailsGeneration;
+		const gen = ++detailsSeq;
 		try {
 			const next = await settle(() => rpc.system.getUpdateDetails());
-			if (gen !== detailsGeneration) return;
+			if (gen !== detailsSeq) return;
 			details = next;
-			detailsFailed = false;
+			detailsRead = gen;
+			detailsReadFailed = false;
 		} catch {
-			if (gen !== detailsGeneration) return;
-			detailsFailed = true;
+			if (gen !== detailsSeq) return;
+			detailsReadFailed = true;
 		}
+		actions.settle();
 	}
 
 	async function save(patch: Partial<UpdateSettings>): Promise<boolean> {
@@ -118,6 +148,7 @@ export function createUpdateSurface(): UpdateSurface {
 		) {
 			return false;
 		}
+		const opened = session;
 		saveFailed = false;
 		const result = await osCommand({
 			key: UPDATE_SETTINGS_OP,
@@ -125,35 +156,15 @@ export function createUpdateSurface(): UpdateSurface {
 			confirmOnResolve: true,
 			silent: true,
 		});
+		if (opened !== session) return false;
 		if (result === undefined) {
 			saveFailed = true;
 			return false;
 		}
+		// The echo is newer than any settings read still in flight.
+		settingsSeq += 1;
 		settings = result;
 		return true;
-	}
-
-	async function runAction(
-		action: ActionKind,
-		call: () => Promise<{ success: boolean; error?: string }>,
-	): Promise<void> {
-		refusal = undefined;
-		const failure = new UpdateActionFailure();
-		const result = await osCommand({
-			key: ACTION_OPS[action],
-			rpc: () => failure.run(call),
-			confirmOnResolve: true,
-			silent: true,
-		});
-		if (!result?.success)
-			refusal = {
-				action,
-				reason: result?.error ?? failure.envelope?.code,
-				...(failure.envelope?.retryable !== undefined
-					? { retryable: failure.envelope.retryable }
-					: {}),
-			};
-		await reloadDetails();
 	}
 
 	return {
@@ -173,37 +184,46 @@ export function createUpdateSurface(): UpdateSurface {
 			return settingsFailed;
 		},
 		get detailsFailed() {
-			return detailsFailed;
+			return capabilitiesFailed || detailsReadFailed;
 		},
 		get saveFailed() {
 			return saveFailed;
 		},
 		get refusal() {
-			return refusal;
+			return actions.refusal;
+		},
+		get unconfirmed() {
+			return actions.unconfirmed;
 		},
 		get saving() {
 			return getOperationPhase(UPDATE_SETTINGS_OP) === "pending";
 		},
-		pending: (action) => getOperationPhase(ACTION_OPS[action]) === "pending",
+		pending: actions.pending,
 		load,
 		reloadDetails,
+		observePhase(phase) {
+			if (phase !== undefined) actions.observe(phase);
+			return reloadDetails();
+		},
 		save,
-		checkNow: () => runAction("check", () => rpc.system.checkUpdatesNow()),
+		checkNow: () => actions.run("check", () => rpc.system.checkUpdatesNow()),
 		installNow: () =>
-			runAction("install", () => rpc.system.installUpdatesNow()),
+			actions.run("install", () => rpc.system.installUpdatesNow()),
 		// The approval is for exactly ONE candidate and is spent by the install
 		// that follows it; granting it without starting the download would leave
 		// "Download now" meaning "download some time later".
 		approveCellular: (id) =>
-			runAction("cellular", async () => {
+			actions.run("cellular", async () => {
 				const granted = await rpc.system.allowCellularOnce({ id });
 				if (!granted.success) return granted;
 				return rpc.system.installUpdatesNow();
 			}),
 		reset() {
-			generation += 1;
-			detailsGeneration += 1;
-			refusal = undefined;
+			session += 1;
+			loadSeq += 1;
+			settingsSeq += 1;
+			detailsSeq += 1;
+			actions.reset();
 			saveFailed = false;
 		},
 	};

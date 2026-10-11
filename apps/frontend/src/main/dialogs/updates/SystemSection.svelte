@@ -7,11 +7,17 @@
   says why it is absent instead.
 
   Three facts are kept apart on purpose: what the board is RUNNING (the stamped
-  release version, or an honest sentence when the image carries none), what is
-  STAGED for the next restart, and what the channel OFFERS but has not been
-  staged yet. "Applies after restart" is a property of the orchestrator's live
-  phase, never inferred from a staged receipt alone — a receipt also exists
-  while the new slot is being verified after the restart it waited for.
+  release version), what is STAGED for the next restart, and what the channel
+  OFFERS but has not been staged yet. "Applies after restart" is a property of
+  the orchestrator's live phase, never inferred from a staged receipt alone — a
+  receipt also exists while the new slot is being verified after the restart it
+  waited for.
+
+  Unknown is never rendered as a fact (C-M3). Details the device could not
+  answer (`details` undefined) are "unavailable"; a `null` running version means
+  the device could not ESTABLISH it, which is not proof the image carries none;
+  and "no newer image" is said only after an OS check has succeeded at least
+  once. Before that, whether a newer image exists is an open question.
 -->
 <script lang="ts">
 import { formatBytes, formatPercent } from '@ceraui/i18n/formatters';
@@ -58,6 +64,7 @@ const nextCheck = $derived(formatUpdateTime(details?.checks.os.nextAttemptAt, lo
 // Only a candidate the channel offered and the orchestrator is holding can be
 // installed by hand; anywhere else the device would refuse the request.
 const installable = $derived(activation === 'os-available' && os?.candidate != null);
+const candidateKnown = $derived(details !== undefined && details.checks.os.lastSuccessAt !== null);
 </script>
 
 <section aria-labelledby="updates-system-heading" class="space-y-2.5" data-testid="updates-system">
@@ -69,6 +76,10 @@ const installable = $derived(activation === 'os-available' && os?.candidate != n
 			<dd class="min-w-0 text-end">
 				{#if os?.bootedVersion}
 					<span class="font-mono text-xs" dir="ltr">{os.bootedVersion}</span>
+				{:else if details === undefined}
+					<span class="text-muted-foreground text-xs" data-testid="update-system-version-unavailable">
+						{m['settings.updates.system.versionUnavailable']()}
+					</span>
 				{:else}
 					<span class="text-muted-foreground text-xs" data-testid="update-system-version-unknown">
 						{m['settings.updates.system.versionUnknown']()}
@@ -129,9 +140,13 @@ const installable = $derived(activation === 'os-available' && os?.candidate != n
 					size: formatBytes(locale)(os.candidate.sizeBytes),
 				})}
 			</p>
-		{:else if !os?.staged}
+		{:else if !os?.staged && candidateKnown}
 			<p class="text-muted-foreground" data-testid="update-system-no-candidate">
 				{m['settings.updates.system.noCandidate']()}
+			</p>
+		{:else if !os?.staged}
+			<p class="text-muted-foreground" data-testid="update-system-candidate-unknown">
+				{m['settings.updates.system.candidateUnknown']()}
 			</p>
 		{/if}
 		{#if lastChecked}
