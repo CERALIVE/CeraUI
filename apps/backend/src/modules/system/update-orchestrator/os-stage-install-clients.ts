@@ -1,4 +1,5 @@
 import { readdir } from "node:fs/promises";
+import { observationAbsent } from "./os-stage-read-errors.ts";
 
 function installationExcluded(argv: readonly string[], url?: string): boolean {
 	if (argv[0]?.split("/").at(-1) !== "rauc") return true;
@@ -56,12 +57,7 @@ export async function osInstallClientsGone(
 			try {
 				raw = await deps.read(`/proc/${pid}/cmdline`);
 			} catch (error) {
-				if (
-					error instanceof Error &&
-					"code" in error &&
-					error.code === "ENOENT"
-				)
-					continue;
+				if (observationAbsent(error, "process")) continue;
 				return false;
 			}
 			const argv = raw.split("\0").filter(Boolean);

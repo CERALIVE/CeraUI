@@ -45,6 +45,7 @@ Full PR gate: `bun run test`, `bun run test:e2e`, `bun run check:tech-debt`,
 | Start failures and operator diagnostics | [start-failure-diagnostics.md](docs/agents/start-failure-diagnostics.md) |
 
 ## HARD RULES
+- OS-stage enumerated process reads share scope-explicit ENOENT/ESRCH absence; never invent identity or keep a cached vanished member. Other errors/malformed identity stay unknown. ESRCH never proves cgroup, marker or block-resource absence; guardian disappearance requires fresh proof. Successful empty content is not a disappearance errno; preserve and report its content-classification limits in UPDATE-RECOVERY.md.
 - The projection is what reaches the wire: preserve producer identity and schema; internal evidence must not invent operator-facing claims.
 - Flow-sticky shared-client steering affects only forwarded client-zone traffic; preserve physical-identity marks and established flows.
 - Streaming-first uplink shaping caps only shared clients; local stream egress stays uncapped. Foreign roots fail closed.

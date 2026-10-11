@@ -3,6 +3,7 @@ import { z } from "zod";
 import { SOFTWARE_UPDATE_UNIT } from "../software-update-service-contract.ts";
 import { readBoardIdentity, readBootId } from "./os-identity.ts";
 import { readBootedOsReleaseVersion } from "./os-manifest.ts";
+import { observationAbsent } from "./os-stage-read-errors.ts";
 import type { RecoveryIdentity } from "./recovery-store.ts";
 
 const statusSchema = z.object({
@@ -114,12 +115,7 @@ export function createRecoveryProbes(
 				try {
 					comm = (await io.read(`/proc/${entry}/comm`)).trim();
 				} catch (error) {
-					if (
-						error instanceof Error &&
-						"code" in error &&
-						error.code === "ENOENT"
-					)
-						continue;
+					if (observationAbsent(error, "process")) continue;
 					throw error;
 				}
 				if (BUSY_NAMES.has(comm)) return false;

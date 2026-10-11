@@ -9,10 +9,9 @@ import {
 	OS_STAGE_GUARD_UNIT,
 } from "./os-stage-job-files.ts";
 import { processIdentity } from "./os-stage-observation.ts";
+import { observationAbsent } from "./os-stage-read-errors.ts";
 
 const GROUP = `/system.slice/${OS_STAGE_GUARD_UNIT}`;
-const missing = (cause: unknown) =>
-	cause instanceof Error && "code" in cause && cause.code === "ENOENT";
 export class GuardTreeChanged extends Error {}
 
 export async function guardianMembers(
@@ -23,7 +22,7 @@ export async function guardianMembers(
 	try {
 		raw = await deps.read(`/sys/fs/cgroup${GROUP}/cgroup.procs`);
 	} catch (cause) {
-		if (!missing(cause)) throw cause;
+		if (!observationAbsent(cause, "path")) throw cause;
 		return input.pid === null ? [] : null;
 	}
 	const members = raw.trim().split(/\s+/).filter(Boolean);
@@ -86,7 +85,7 @@ export async function readGuardProc(
 	try {
 		return await deps.read(`/proc/${pid}/${file}`);
 	} catch (cause) {
-		if (missing(cause)) throw new GuardTreeChanged();
+		if (observationAbsent(cause, "process")) throw new GuardTreeChanged();
 		throw cause;
 	}
 }

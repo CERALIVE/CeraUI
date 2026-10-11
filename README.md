@@ -134,6 +134,12 @@ The same lifetime is checked immediately before opening admission; timeout or
 lease loss stays unsafe. Real-flock host regressions preserve normal cleanup,
 but do not qualify board routing or a real OS installation.
 
+OS-stage reads treat ENOENT/ESRCH on vanished enumerated tasks as absence, never
+cached identity. Other errno and malformed-identity failures remain unknown;
+non-process paths gain no ESRCH exemption. Held-open real-kernel and default-reader
+host tests cover that errno class, not every helper-churn refusal or either board.
+See [unchanged residuals](docs/UPDATE-RECOVERY.md#vanished-task-errno-residuals).
+
 State-side unlaunched OS settlement requires a private completed witness matching
 the persisted attempt, signed candidate and current boot, plus fresh readiness.
 It returns to operator retry without counting an already-counted failure twice.

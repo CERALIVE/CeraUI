@@ -3,6 +3,7 @@ import {
 	type RaucObservationDeps,
 } from "./os-stage-observation.ts";
 import { observeStageResources } from "./os-stage-observation-resources.ts";
+import { observationAbsent } from "./os-stage-read-errors.ts";
 
 export async function readStageProcess(
 	pid: string,
@@ -14,8 +15,7 @@ export async function readStageProcess(
 		raw?.set(pid, value);
 		return processIdentity(pid, value);
 	} catch (error) {
-		if (error instanceof Error && "code" in error && error.code === "ENOENT")
-			return null;
+		if (observationAbsent(error, "process")) return null;
 		throw error;
 	}
 }
@@ -34,7 +34,9 @@ export async function observeStageCensus(input: {
 	at("cgroup-processes");
 	const pids = (await deps.read(`/sys/fs/cgroup${group}/cgroup.procs`))
 		.trim()
-		.split(/\s+/);
+		.split(/\s+/)
+		.filter(Boolean);
+	if (pids.some((pid) => !/^[1-9][0-9]*$/.test(pid))) return null;
 	const processIds = new Set<string>();
 	for (const pid of new Set([
 		...pids,

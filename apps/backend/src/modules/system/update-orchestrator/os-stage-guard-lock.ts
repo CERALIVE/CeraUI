@@ -19,6 +19,7 @@ import {
 import { OS_STAGE_GUARD_HELPER } from "./os-stage-job-files.ts";
 import { readOsLockKernelDevice } from "./os-stage-lock-device.ts";
 import { processIdentity } from "./os-stage-observation.ts";
+import { observationAbsent } from "./os-stage-read-errors.ts";
 
 export type OsGuardKernelDeps = {
 	readonly read: (path: string) => Promise<string>;
@@ -45,8 +46,6 @@ export type OsGuardKernelInput = {
 type Holders = { readonly granted: Set<string>; readonly mainFd: boolean };
 
 const ATTEMPTS = 3;
-const missing = (cause: unknown) =>
-	cause instanceof Error && "code" in cause && cause.code === "ENOENT";
 const same = (a: Identity, b: Identity) => a.dev === b.dev && a.ino === b.ino;
 
 /** Positive kernel proof that the update lock is held exactly as expected. */
@@ -121,7 +120,7 @@ async function lockHolders(
 			try {
 				info = await deps.read(`/proc/${pid}/fdinfo/${fd}`);
 			} catch (cause) {
-				if (missing(cause)) continue;
+				if (observationAbsent(cause, "process")) continue;
 				throw cause;
 			}
 			for (const row of info.split("\n")) {
@@ -145,7 +144,7 @@ async function openLockFds(
 	try {
 		fds = await deps.list(`/proc/${pid}/fd`);
 	} catch (cause) {
-		if (missing(cause)) return [];
+		if (observationAbsent(cause, "process")) return [];
 		throw cause;
 	}
 	const matching: string[] = [];
@@ -154,7 +153,7 @@ async function openLockFds(
 			if (same(lock, await deps.identity(`/proc/${pid}/fd/${fd}`)))
 				matching.push(fd);
 		} catch (cause) {
-			if (!missing(cause)) throw cause;
+			if (!observationAbsent(cause, "process")) throw cause;
 		}
 	}
 	return matching;
@@ -175,7 +174,7 @@ async function temporaryHolder(
 			sameArgv(argv, ["/bin/bash", OS_STAGE_GUARD_HELPER, "--orphan-lock"])
 		);
 	} catch (cause) {
-		if (missing(cause)) return false;
+		if (observationAbsent(cause, "process")) return false;
 		throw cause;
 	}
 }

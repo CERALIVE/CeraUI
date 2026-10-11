@@ -268,7 +268,41 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
    `2026.9.5` is the first orchestrator release. Details: `docs/UPDATE-RECOVERY.md`.
   Stage-admission refusals keep `rauc_recovery_unproven`/unsafe and add the
    log-only `predicate` and bounded, message-free class/code `observation` diagnostics
-  (`os-stage-admission-diagnostics.ts`); see `docs/UPDATE-RECOVERY.md`.
+   (`os-stage-admission-diagnostics.ts`); see `docs/UPDATE-RECOVERY.md`.
+   Vanished enumerated PID reads (ENOENT or ESRCH) are absence, never invented
+   identity or retained cached membership. Census, guardian fd/tree reads,
+   install-client exclusion and maintenance recovery reuse one scope-explicit
+   predicate. Everything else remains unknown; non-process paths keep their
+   ENOENT-only rules, and a configured NBD cannot disappear with its creator.
+   Guardian tree loss requires fresh bounded proof. Optional diagnostics cannot
+   authorize; final census still follows them. Empty/malformed identity content
+   rejected by the existing parser stays unknown, not gone; full stat completeness
+   and raw PID equality are not newly validated. Held-open kernel ESRCH and default-reader
+   stress are host-proven, not a board qualification or
+   identification of Rock R16's historical failing PID/errno. Persisted formats,
+   budgets and the accepted D154 residuals are unchanged.
+
+   **Vanished-task errno residuals.** This closes ENOENT/ESRCH disappearance of
+   previously enumerated tasks only, not every helper-churn refusal. Other errno,
+   malformed-identity failures and sysfs/cgroup/storage errors stay unknown under
+   their unchanged scoped rules. Successful empty/nonmatching cmdline/comm still
+   means “not an installer / not busy / not a commit process” in install-clients,
+   recovery-probes and commit-stage-probe (pre-existing behavior; audit E1 measured
+   roughly 10% empty exiting-task cmdline reads, not a universal rate). A vanished
+   temporary guardian holder still returns false without full-proof rescan. NBD
+   creator loss keeps configured resources unproven, never resource-free. Churn
+   EACCES stays unknown; guardian retries remain three immediate attempts without
+   a quiet interval. No pidfd/start-time fence spans stat→cmdline/cgroup or
+   census→dispatch. Blank RAUC roster tokens are filtered, nonnumeric tokens refuse,
+   and a missing daemon still cannot yield a snapshot. No empty-content policy or
+   proof/recovery deadline is changed.
+
+   R16's later `rauc_install_failed / operator / os-available` is the existing
+   `reduceOsUnlaunchedSettlement` mapping: exact attempt/candidate/current-boot
+   completed unlaunched witness plus fresh readiness permits operator retry without
+   recounting failure. It does not assert that RAUC launched; timestamps alone
+   cannot prove which witness admitted that historical transition. Mapping stays
+   unchanged; see UPDATE-RECOVERY.md for the full provenance/residual contract.
   Invalid present recovery metadata raises a typed load error; startup preserves
   the file and the legacy terminal reason rather than defaulting to idle. That
   runtime stays closed to OS migration and confirmation until maintenance fixes

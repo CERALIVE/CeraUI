@@ -122,24 +122,27 @@ test("helper stat EACCES cannot be converted into an absent member", async () =>
 	expect(detail).toBe("cgroup-processes: Error(EACCES):");
 });
 
-test("positive helper ENOENT does not invent an identity or keep a cached earlier member", async () => {
-	// Given a helper PID disappeared between cgroup enumeration and stat reading.
-	const fixture = rockHelperFixture(["877184"]);
-	fixture.showHelpers();
-	const deps = {
-		...fixture.deps,
-		read: async (path: string) => {
-			if (path === "/proc/877184/stat")
-				throw Object.assign(new Error("gone"), { code: "ENOENT" });
-			return fixture.deps.read(path);
-		},
-	};
-	// When production observation applies its existing positive-absence rule.
-	const snapshot = await observeRaucStage(
-		{ processes: new Set(["877184:2852694"]), resources: new Set() },
-		deps,
-	);
-	// Then only the freshly read daemon identity is present; no helper identity is fabricated.
-	expect(snapshot?.processes).toEqual(["729106:2374530"]);
-	expect(stageEvidence(snapshot)?.members).toHaveLength(1);
-});
+test.each(["ENOENT", "ESRCH"])(
+	"positive helper %s does not invent an identity or keep a cached earlier member",
+	async (code) => {
+		// Given a helper PID disappeared between cgroup enumeration and stat reading.
+		const fixture = rockHelperFixture(["877184"]);
+		fixture.showHelpers();
+		const deps = {
+			...fixture.deps,
+			read: async (path: string) => {
+				if (path === "/proc/877184/stat")
+					throw Object.assign(new Error("gone"), { code });
+				return fixture.deps.read(path);
+			},
+		};
+		// When production observation applies its existing positive-absence rule.
+		const snapshot = await observeRaucStage(
+			{ processes: new Set(["877184:2852694"]), resources: new Set() },
+			deps,
+		);
+		// Then only the freshly read daemon identity is present; no helper identity is fabricated.
+		expect(snapshot?.processes).toEqual(["729106:2374530"]);
+		expect(stageEvidence(snapshot)?.members).toHaveLength(1);
+	},
+);

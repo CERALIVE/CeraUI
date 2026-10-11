@@ -71,6 +71,7 @@ const ERROR_CLASSES = new Set([
 ]);
 const ERROR_CODES = new Set([
 	"ENOENT",
+	"ESRCH",
 	"EACCES",
 	"EPERM",
 	"EIO",

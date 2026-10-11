@@ -1,6 +1,7 @@
 // Attempt-owned block devices and mounts for one RAUC observation. Split from
 // the observer so every probe argv stays in `observeRaucStage` (exec guard).
 import type { RaucObservationDeps } from "./os-stage-observation.ts";
+import { observationAbsent } from "./os-stage-read-errors.ts";
 
 export type ObservationResourceInput = {
 	readonly deps: RaucObservationDeps;
@@ -11,10 +12,6 @@ export type ObservationResourceInput = {
 	/** Labels the boundary about to be crossed, for the caller's diagnostics. */
 	readonly at: (stage: string) => void;
 };
-
-function absent(error: unknown): boolean {
-	return error instanceof Error && "code" in error && error.code === "ENOENT";
-}
 
 /** Null means ownership is unproven at the stage last passed to `at`. */
 export async function observeStageResources(
@@ -32,7 +29,7 @@ export async function observeStageResources(
 		try {
 			nbdPid = (await deps.read(`/sys/block/${name}/pid`)).trim();
 		} catch (error) {
-			if (absent(error)) continue;
+			if (observationAbsent(error, "path")) continue;
 			throw error;
 		}
 		// Sysfs caches a numeric creator PID, not a connection generation. A

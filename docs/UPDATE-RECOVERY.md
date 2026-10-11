@@ -502,7 +502,60 @@ the later retry or publication census. `observeAdmission` now defers only
 `requireAdmissionSnapshot` / `failedAdmissionPredicate` validators. No helper
 name, argv, ancestry, prior ownership, zombie state or role exempts a member.
 The observer retains exact tracked identities even after cgroup escape; positive
-ENOENT is still absence, while denied or malformed identity reads stay unknown.
+ENOENT or ESRCH on an enumerated `/proc/<pid>` read is process absence, never
+a fabricated identity or permission to retain a cached member. One shared,
+scope-explicit errno predicate serves the census, guardian fd/tree checks,
+install-client exclusion and maintenance recovery scan. Guardian tree disappearance
+requires a fresh bounded tree proof; it is not a grant to drop a required holder.
+All other read errors remain unknown. ESRCH diagnostics retain the bounded code
+(`Error(ESRCH):`) without exception messages. Non-process paths retain ENOENT-only
+absence: ESRCH on `cgroup.procs`, activation markers or NBD sysfs cannot certify
+absence. An unowned configured NBD whose creator disappeared stays unproven;
+previously recorded connections remain resources until actual retirement.
+
+Successful empty or malformed identity content that fails the existing parser
+stays unknown, not process absence. The parser still checks PID argument and
+startticks only: a stat prefix containing startticks or mismatched raw PID can
+pass. No natural empty/truncated stat was observed by the independent host audit;
+strict complete-row parsing is not part of this errno correction.
+Optional status/cmdline diagnostics remain unavailable on any error and never
+authorize a snapshot; the final safety census still follows them.
+Blank `cgroup.procs` tokens are filtered before PID lookup, never `/proc//stat`;
+nonblank nonnumeric tokens refuse. A missing daemon still gives no snapshot.
+
+#### Vanished-task errno residuals
+
+This closes the **vanished-task errno class**: ENOENT or ESRCH on a previously
+enumerated PID is absence at sites that already tolerated process disappearance.
+Every other errno and malformed-identity parsing failure remains unknown; sysfs,
+cgroup and storage errors retain their original scoped rules, not a new ESRCH
+absence exemption. It does **not** guarantee that a helper-churn drill cannot
+refuse for other reasons. These residuals are unchanged:
+
+1. Successful empty/nonmatching cmdline or comm still classifies “not an installer”,
+   “not busy” or “not a commit process” in install-clients, recovery-probes and
+   commit-stage-probe. The independent host audit measured empty cmdline on roughly
+   10% of exiting-task reads in its E1 experiment; this is not a universal rate or
+   proof of task absence. Empty cmdline also legitimately describes some zombies
+   and kernel threads. Successful-content policy is unchanged.
+2. A disappearing guardian temporary holder returns false and does not trigger
+   a full-proof rescan, matching the existing ENOENT behavior. It grants no holder.
+3. A configured NBD whose creator disappears remains ownership-unproven, never
+   resource-free; recorded connections remain resources until retirement.
+4. EACCES observed under ordinary same-user host churn remains unknown, not gone.
+5. Guardian tree rescans remain three immediate attempts with no quiet interval;
+   other lock/table mismatches can still return false without a rescan.
+6. No pidfd/start-time fence spans stat→cmdline/cgroup or census→dispatch.
+   The observation-to-dispatch gap remains non-atomic; raw one-shot readiness and
+   orphan-baseline observations do not all use the bounded drift loop.
+
+R16's later `os-available / operator / rauc_install_failed` is the documented
+unlaunched-settlement mapping in `reduceOsUnlaunchedSettlement`, not evidence that
+a RAUC install ran. A matching current-boot, attempt/candidate-bound completed
+`unlaunched-unchanged` witness plus fresh readiness can replace an already-counted
+unsafe refusal without counting twice. The original stage refusal stays in the
+diagnostic history. R16's timestamps alone do not establish which witness admitted
+its later transition; no reason mapping is changed here.
 
 Before a launched pair's outcome is handled, one local monotonic 360-second
 deadline is established, before restart submission. Recovery's 1-second poll,
@@ -679,6 +732,16 @@ The result requires observed helper identity, a refused drift observation, then
 exactly one replacement after fresh clean proof. Install/guardian, boot-health
 and resource/slot identity ports are synthetic. Five repeated host passes do
 not qualify a real installation, either board, power loss or kernel routing.
+
+`os-stage-fix11-real-proc.test.ts` opens a real child's stat while alive, kills and
+reaps it, then reads the held handle through the production census reader. The
+kernel's ESRCH must produce no identity or retained cached member. A separate
+bounded stress test uses the unchanged default `Bun.file().text()` adapter and
+requires no thrown census error; errno counts are recorded, not required to occur
+on every CI kernel. Injected tests distinguish tolerated process-race sites from
+EACCES/EPERM/EIO/ENOMEM and non-process ESRCH. This proves the vanished-task
+mechanism, not the exact offending PID/errno in the historical Rock R16 refusal
+or board qualification of the correction.
 
 ### Unlaunched guardian settlement [PARTIAL — hermetic and real-fixture proven, board rehearsal owed]
 

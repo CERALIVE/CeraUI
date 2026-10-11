@@ -18,6 +18,7 @@ import {
 	collectStageMembers,
 	rememberStageEvidence,
 } from "./os-stage-process-evidence.ts";
+import { observationAbsent } from "./os-stage-read-errors.ts";
 import type { RaucStageSnapshot } from "./os-stage-recovery.ts";
 import { parseOsStageSystemdProperties } from "./os-stage-systemd.ts";
 import { readHealthyState } from "./slot-sync-state.ts";
@@ -57,9 +58,7 @@ const defaults: RaucObservationDeps = {
 	healthy: readHealthyState,
 };
 
-function absent(error: unknown): boolean {
-	return error instanceof Error && "code" in error && error.code === "ENOENT";
-}
+export { defaults as defaultRaucObservationDeps };
 
 export function processIdentity(pid: string, raw: string): string {
 	const tail = raw.slice(raw.lastIndexOf(")") + 2).split(" ");
@@ -164,7 +163,7 @@ export async function observeRaucStage(
 		try {
 			await deps.read("/data/ceralive/update-state/activation-armed");
 		} catch (error) {
-			if (!absent(error)) throw error;
+			if (!observationAbsent(error, "path")) throw error;
 			activationArmed = false;
 		}
 		at("target-device");
