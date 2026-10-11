@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { z } from "zod";
 import { writeFileAtomicSync } from "../../../helpers/config-loader.ts";
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
+import { readStoredStateFile } from "./stored-state-file.ts";
 
 export const QUARANTINE_FILE = "/data/ceralive/update-state/quarantine.json";
 export const QUARANTINE_PIN_FILE = "/etc/apt/preferences.d/ceralive-quarantine";
@@ -79,8 +80,8 @@ export class UpdateQuarantine {
 	) {}
 
 	async read(): Promise<QuarantineDocument> {
-		if (!(await Bun.file(this.path).exists())) return EMPTY;
-		return quarantineSchema.parse(await Bun.file(this.path).json());
+		const value = await readStoredStateFile(this.path);
+		return value === null ? EMPTY : quarantineSchema.parse(JSON.parse(value));
 	}
 
 	private async persist(doc: QuarantineDocument): Promise<void> {
@@ -109,8 +110,8 @@ export class UpdateQuarantine {
 
 	async readPending(): Promise<PendingPackage[]> {
 		const path = this.pendingPath();
-		if (!(await Bun.file(path).exists())) return [];
-		return pendingSchema.parse(await Bun.file(path).json());
+		const value = await readStoredStateFile(path);
+		return value === null ? [] : pendingSchema.parse(JSON.parse(value));
 	}
 
 	async clearPending(): Promise<void> {

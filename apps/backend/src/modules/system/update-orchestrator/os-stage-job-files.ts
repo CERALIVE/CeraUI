@@ -79,7 +79,7 @@ export async function readOsJobFile(
 	try {
 		handle = await open(
 			join(directory, name),
-			constants.O_RDONLY | constants.O_NOFOLLOW,
+			constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
 		);
 	} catch (error) {
 		if (missing(error)) return null;

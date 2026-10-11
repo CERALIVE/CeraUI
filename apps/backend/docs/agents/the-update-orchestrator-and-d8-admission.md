@@ -324,7 +324,19 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
    Invalid present recovery metadata raises a typed load error; startup preserves
   the file and the legacy terminal reason rather than defaulting to idle. That
   runtime stays closed to OS migration and confirmation until maintenance fixes
-  the file and restarts it; records without OS metadata keep existing resume.
+  the file and restarts it; valid records without OS metadata keep existing resume.
+  Only a genuinely absent `agent.json` (ENOENT of the entry) is first boot.
+  Truncated or non-object JSON and any schema-invalid record take the same
+  typed latch; a read failure (EIO, EACCES) or a non-regular entry (directory,
+  symlink, FIFO) fails startup with the bytes untouched and mutation readiness
+  closed. The policy readers (`manifest-serial.<channel>`, `os-staged.json`,
+  `quarantine.json` and its `.pending` sibling) use the same no-follow,
+  non-blocking, regular-file read (`stored-state-file.ts`), so a non-file entry
+  refuses instead of reading as watermark 0, an empty quarantine or no receipt.
+  Stage-job files and the maintenance store open with `O_NONBLOCK` so a FIFO is
+  rejected before it can wedge startup CONTROL, and stage observation reads
+  `activation-armed` by entry presence (`readActivationArmed()`), so a dangling
+  marker symlink still counts as armed. Host-proven only; stored formats unchanged.
   Progress belongs to the captured active attempt, not merely the staging
   phase. Untyped terminal settlement removes that candidate's stage-policy
   notices before raising the refusal; other candidates and `os-check:*` notices

@@ -5,7 +5,10 @@ orchestrator startup flight: a six-attempt burst, then one unreferenced 30-secon
 retry at a time for transient failures only, with mutation readiness closed.
 The CONTROL-protected tail commits its
 result before mutation readiness opens. Invalid present metadata remains
-maintenance-blocked independently of this table.
+maintenance-blocked independently of this table. Only a genuinely absent
+`agent.json` (ENOENT) starts from idle; corrupt or schema-invalid bytes latch
+maintenance, and unreadable or non-regular entries fail startup with the bytes
+preserved and readiness closed (host-proven).
 
 | Phase | H8 startup action | Restart wedge? | H9 action |
 |---|---|---|---|

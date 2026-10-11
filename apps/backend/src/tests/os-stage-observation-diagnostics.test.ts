@@ -119,7 +119,11 @@ const faults: Fault[] = [
 	},
 	{
 		stage: "activation-marker",
-		deps: readFault("/data/ceralive/update-state/activation-armed"),
+		deps: {
+			activationArmed: async () => {
+				throw denied;
+			},
+		},
 	},
 	{
 		stage: "target-device",

@@ -9,7 +9,7 @@
 */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -32,6 +32,18 @@ afterEach(() => {
 	setOrchestratorStateFilePathForTest(null);
 	rmSync(file, { force: true });
 });
+
+async function expectMaintenanceLatch(): Promise<void> {
+	const before = readFileSync(file);
+	await expect(loadOrchestratorState()).rejects.toMatchObject({
+		name: "OrchestratorRecoveryLoadError",
+		terminalState: {
+			phase: "failed",
+			failureReason: "os_stage_recovery_invalid",
+		},
+	});
+	expect(readFileSync(file)).toEqual(before);
+}
 
 describe("update-orchestrator persistence", () => {
 	test("loadOrchestratorState returns null when the file does not exist", async () => {
@@ -64,13 +76,13 @@ describe("update-orchestrator persistence", () => {
 		expect(fromPersisted(toPersisted(state))).toEqual(state);
 	});
 
-	test("corrupt JSON on disk resolves to null, never throws", async () => {
+	test("corrupt JSON on disk is a typed maintenance latch, never first boot", async () => {
 		setOrchestratorStateFilePathForTest(file);
 		writeFileSync(file, "{ not json", "utf8");
-		expect(await loadOrchestratorState()).toBeNull();
+		await expectMaintenanceLatch();
 	});
 
-	test("well-formed JSON that fails schema validation (missing required field) resolves to null", async () => {
+	test("well-formed JSON that fails schema validation (missing required field) latches maintenance", async () => {
 		setOrchestratorStateFilePathForTest(file);
 		writeFileSync(
 			file,
@@ -86,10 +98,10 @@ describe("update-orchestrator persistence", () => {
 			}),
 			"utf8",
 		);
-		expect(await loadOrchestratorState()).toBeNull();
+		await expectMaintenanceLatch();
 	});
 
-	test("an unknown extra key (strict violation) resolves to null rather than being silently accepted", async () => {
+	test("an unknown extra key (strict violation) latches maintenance rather than being silently accepted", async () => {
 		setOrchestratorStateFilePathForTest(file);
 		writeFileSync(
 			file,
@@ -99,10 +111,10 @@ describe("update-orchestrator persistence", () => {
 			}),
 			"utf8",
 		);
-		expect(await loadOrchestratorState()).toBeNull();
+		await expectMaintenanceLatch();
 	});
 
-	test("an invalid phase value resolves to null", async () => {
+	test("an invalid phase value latches maintenance", async () => {
 		setOrchestratorStateFilePathForTest(file);
 		writeFileSync(
 			file,
@@ -112,7 +124,7 @@ describe("update-orchestrator persistence", () => {
 			}),
 			"utf8",
 		);
-		expect(await loadOrchestratorState()).toBeNull();
+		await expectMaintenanceLatch();
 	});
 
 	test("saveOrchestratorState creates the parent directory if missing (mkdir -p)", async () => {

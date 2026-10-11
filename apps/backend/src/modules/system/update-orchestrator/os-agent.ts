@@ -44,6 +44,7 @@ import {
 	runOsStageJob,
 } from "./os-stage-run.ts";
 import { UpdateQuarantine } from "./quarantine.ts";
+import { readStoredStateFile } from "./stored-state-file.ts";
 
 // allow: SIZE_OK — This discovery-only repair must leave the remaining OS lifecycle in place.
 
@@ -51,7 +52,6 @@ const KEYRING = "/etc/rauc/ceralive-keyring.pem";
 
 export { OsAgentError, readBoardIdentity, readBootId };
 
-const RECEIPT = join(OS_UPDATE_STATE_DIR, "os-staged.json");
 const CALVER = /^[0-9]{4}\.[0-9]+\.[0-9]+$/;
 const SERIAL = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const receiptSchema = z
@@ -115,8 +115,8 @@ export async function readManifestSerial(
 	dir = OS_UPDATE_STATE_DIR,
 ): Promise<number> {
 	const path = join(dir, `manifest-serial.${channel}`);
-	if (!(await Bun.file(path).exists())) return 0;
-	const value = await Bun.file(path).text();
+	const value = await readStoredStateFile(path);
+	if (value === null) return 0;
 	if (!/^(?:0|[1-9][0-9]*)\n$/.test(value))
 		throw new OsAgentError("serial_invalid");
 	const parsed = SERIAL.safeParse(Number(value.trim()));
@@ -169,9 +169,12 @@ export async function rebindStagedReceipt(
 	writeFileAtomicSync(join(dir, "os-staged.json"), JSON.stringify(rebound));
 }
 
-export async function readStagedReceipt(): Promise<OsStageReceipt | undefined> {
-	if (!(await Bun.file(RECEIPT).exists())) return undefined;
-	const parsed = receiptSchema.safeParse(await Bun.file(RECEIPT).json());
+export async function readStagedReceipt(
+	dir = OS_UPDATE_STATE_DIR,
+): Promise<OsStageReceipt | undefined> {
+	const value = await readStoredStateFile(join(dir, "os-staged.json"));
+	if (value === null) return undefined;
+	const parsed = receiptSchema.safeParse(JSON.parse(value));
 	if (!parsed.success) throw new OsAgentError("staged_receipt_invalid");
 	return parsed.data;
 }

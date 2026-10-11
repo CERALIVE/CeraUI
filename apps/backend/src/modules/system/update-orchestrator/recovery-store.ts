@@ -49,7 +49,10 @@ export interface RecoveryStore {
 async function readOptional(path: string): Promise<Buffer | null> {
 	let handle: Awaited<ReturnType<typeof open>>;
 	try {
-		handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+		handle = await open(
+			path,
+			constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+		);
 	} catch (error) {
 		if (error instanceof Error && "code" in error && error.code === "ENOENT")
 			return null;

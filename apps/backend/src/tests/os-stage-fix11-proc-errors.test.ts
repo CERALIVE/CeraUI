@@ -119,6 +119,11 @@ test.each([
 				throw Object.assign(new Error("secret"), { code: "ESRCH" });
 			return fixture.deps.read(current);
 		},
+		activationArmed: async () => {
+			if (path.endsWith("/activation-armed"))
+				throw Object.assign(new Error("secret"), { code: "ESRCH" });
+			return false;
+		},
 	};
 	// When the observer sees ESRCH outside /proc/<pid>.
 	const result = await observeRaucStage(

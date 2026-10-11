@@ -1,6 +1,7 @@
 import { readdir, stat } from "node:fs/promises";
 import { z } from "zod";
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
+import { readActivationArmed } from "./os-activation-marker.ts";
 import { readBootId } from "./os-identity.ts";
 import {
 	describeObservationFailure,
@@ -18,7 +19,6 @@ import {
 	collectStageMembers,
 	rememberStageEvidence,
 } from "./os-stage-process-evidence.ts";
-import { observationAbsent } from "./os-stage-read-errors.ts";
 import type { RaucStageSnapshot } from "./os-stage-recovery.ts";
 import { parseOsStageSystemdProperties } from "./os-stage-systemd.ts";
 import { readHealthyState } from "./slot-sync-state.ts";
@@ -47,6 +47,7 @@ export type RaucObservationDeps = {
 	readonly rootDevice: () => Promise<string>;
 	readonly bootId: () => Promise<string>;
 	readonly healthy: typeof readHealthyState;
+	readonly activationArmed?: () => Promise<boolean>;
 };
 const defaults: RaucObservationDeps = {
 	read: (path) => Bun.file(path).text(),
@@ -56,6 +57,7 @@ const defaults: RaucObservationDeps = {
 	rootDevice: async () => String((await stat("/")).dev),
 	bootId: readBootId,
 	healthy: readHealthyState,
+	activationArmed: readActivationArmed,
 };
 
 export { defaults as defaultRaucObservationDeps };
@@ -159,13 +161,9 @@ export async function observeRaucStage(
 		at("root-device");
 		const rootDevice = await deps.rootDevice();
 		at("activation-marker");
-		let activationArmed = true;
-		try {
-			await deps.read("/data/ceralive/update-state/activation-armed");
-		} catch (error) {
-			if (!observationAbsent(error, "path")) throw error;
-			activationArmed = false;
-		}
+		const activationArmed = await (
+			deps.activationArmed ?? readActivationArmed
+		)();
 		at("target-device");
 		const targetDevice = await deps.device(other[1].device);
 		const snapshot: RaucStageSnapshot = {

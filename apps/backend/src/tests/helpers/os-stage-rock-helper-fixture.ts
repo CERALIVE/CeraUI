@@ -24,6 +24,7 @@ export const rockStats = new Map([
 export function rockHelperFixture(helperPids: readonly string[]) {
 	let extras = false;
 	const deps: RaucObservationDeps = {
+		activationArmed: async () => false,
 		read: async (path) => {
 			if (path.endsWith("cgroup.procs"))
 				return ["729106", ...(extras ? helperPids : [])].join("\n");

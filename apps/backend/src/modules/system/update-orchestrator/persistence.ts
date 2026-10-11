@@ -23,11 +23,9 @@ import {
 	updateOrchestratorPersistedStateSchema,
 } from "@ceraui/rpc/schemas";
 import { z } from "zod";
-import {
-	loadJsonConfig,
-	writeFileAtomicSync,
-} from "../../../helpers/config-loader.ts";
+import { writeFileAtomicSync } from "../../../helpers/config-loader.ts";
 import { syncOrchestratorDirectory } from "./orchestrator-directory-sync.ts";
+import { readStoredStateFile } from "./stored-state-file.ts";
 import { initialOrchestratorState, type OrchestratorState } from "./types.ts";
 
 export const ORCHESTRATOR_STATE_FILE = "/data/ceralive/update-state/agent.json";
@@ -36,10 +34,11 @@ let statePath = ORCHESTRATOR_STATE_FILE;
 
 export class OrchestratorRecoveryLoadError extends Error {
 	override readonly name = "OrchestratorRecoveryLoadError";
-	constructor(readonly terminalState: OrchestratorState) {
-		super(
-			"Invalid OS recovery metadata; persisted update state requires maintenance",
-		);
+	constructor(
+		readonly terminalState: OrchestratorState,
+		options?: ErrorOptions,
+	) {
+		super("Invalid persisted update authority; maintenance required", options);
 	}
 }
 
@@ -93,43 +92,48 @@ export function fromPersisted(
 }
 
 /**
- * Returns `null` when no valid persisted state exists (first boot, missing
- * file, or a corrupt/foreign file that fails schema validation) — the caller
- * (resume.ts) treats that as "start fresh from idle", never as a reason to
- * throw or to guess a state. Invalid present OS recovery metadata is different:
- * it throws a typed terminal snapshot so startup cannot erase a prior failure.
+ * Only ENOENT grants first-boot absence. Present authority is never salvaged or
+ * replaced with defaults; invalid recovery retains its legacy terminal reason.
  */
 export async function loadOrchestratorState(
 	filePath = statePath,
 ): Promise<OrchestratorState | null> {
-	const present = await Bun.file(filePath).exists();
-	if (!present) return null;
-	const result = await loadJsonConfig(
-		filePath,
-		z.record(z.string(), z.unknown()),
-	);
-	if (!result.loaded || result.invalidFields.length > 0) return null;
-	const parsed = updateOrchestratorPersistedStateSchema.safeParse(result.data);
+	const bytes = await readStoredStateFile(filePath);
+	if (bytes === null) return null;
+	let data: unknown;
+	try {
+		data = JSON.parse(bytes);
+	} catch (error) {
+		if (!(error instanceof SyntaxError)) throw error;
+		throw new OrchestratorRecoveryLoadError(
+			{
+				...initialOrchestratorState(0),
+				phase: "failed",
+				failureReason: "os_stage_recovery_invalid",
+			},
+			{ cause: error },
+		);
+	}
+	const parsed = updateOrchestratorPersistedStateSchema.safeParse(data);
 	if (!parsed.success) {
-		if (
-			!Object.hasOwn(result.data, "osStageRecovery") &&
-			!Object.hasOwn(result.data, "osStageDiscoveryRetryAt")
-		)
-			return null;
+		const record = z.record(z.string(), z.unknown()).safeParse(data);
 		const legacy = updateOrchestratorPersistedStateSchema.safeParse({
-			...result.data,
+			...(record.success ? record.data : {}),
 			osStageRecovery: undefined,
 			osStageDiscoveryRetryAt: undefined,
 		});
 		const terminal = legacy.success
 			? fromPersisted(legacy.data)
 			: initialOrchestratorState(0);
-		throw new OrchestratorRecoveryLoadError({
-			...terminal,
-			phase: terminal.phase === "quarantined" ? "quarantined" : "failed",
-			progress: null,
-			failureReason: terminal.failureReason ?? "os_stage_recovery_invalid",
-		});
+		throw new OrchestratorRecoveryLoadError(
+			{
+				...terminal,
+				phase: terminal.phase === "quarantined" ? "quarantined" : "failed",
+				progress: null,
+				failureReason: terminal.failureReason ?? "os_stage_recovery_invalid",
+			},
+			{ cause: parsed.error },
+		);
 	}
 	return fromPersisted(parsed.data);
 }

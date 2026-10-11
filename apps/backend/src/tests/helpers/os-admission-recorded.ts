@@ -35,6 +35,8 @@ const recorded = z
 	);
 
 export const recordedAdmissionDeps: RaucObservationDeps = {
+	activationArmed: async () =>
+		!recorded.absent.includes("/data/ceralive/update-state/activation-armed"),
 	read: async (path) => {
 		if (recorded.absent.includes(path))
 			throw Object.assign(new Error("absent"), { code: "ENOENT" });

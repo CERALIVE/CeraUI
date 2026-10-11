@@ -1277,6 +1277,14 @@ retains any valid legacy terminal failure (including package/X6), keeps the
 original file untouched, and closes migration/check/install until maintenance
 repairs the record and restarts the backend. An absent recovery field leaves
 legacy package/X1 resume unchanged; this adds no general clearance path.
+First boot means the `agent.json` entry is genuinely absent (ENOENT) and
+nothing else: truncated or non-object JSON and schema-invalid records take the
+same typed latch, while a read failure or a non-regular entry (directory,
+symlink, FIFO) fails startup without writing and with mutations closed. The
+manifest serial, staged receipt and quarantine readers share that no-follow,
+non-blocking regular-file rule, so a malformed entry refuses admission rather
+than reading as serial 0, an empty quarantine or no receipt. These are host
+proofs, not board proofs; no stored format changed.
 
 The production writer-quiescence proof is supplied by the guarded RAUC
 recovery adapter. Uncertain ownership or resource retirement keeps both exits
