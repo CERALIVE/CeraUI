@@ -28,6 +28,10 @@ import {
 	runtimeConfigSchema,
 } from "../helpers/config-schemas.ts";
 import { logger } from "../helpers/logger.ts";
+import {
+	RuntimeConfigAuthorityError,
+	readRuntimeConfigAuthority,
+} from "../helpers/runtime-config-authority.ts";
 import { MOCK_CONFIG_PAIRING_DEFAULTS } from "../mocks/mock-config.ts";
 import { shouldUseMocks } from "../mocks/mock-service.ts";
 import { getPasswordHash, setPasswordHash } from "../rpc/state/password.ts";
@@ -55,8 +59,17 @@ export function setConfigFilePath(filePath: string): void {
 }
 
 let config: RuntimeConfig = {};
+let authorityFailure: RuntimeConfigAuthorityError | undefined;
 
 export async function loadConfig() {
+	authorityFailure = new RuntimeConfigAuthorityError();
+	let raw: unknown;
+	try {
+		raw = await readRuntimeConfigAuthority(configFile);
+	} catch (error) {
+		if (error instanceof RuntimeConfigAuthorityError) authorityFailure = error;
+		throw error;
+	}
 	// The default audio source is the "Auto" sentinel (RUNTIME_CONFIG_DEFAULTS):
 	// the audio follows the video source, resolved at start/idle-preview. This
 	// subsumes the former static per-board asrc guess.
@@ -64,8 +77,10 @@ export async function loadConfig() {
 		configFile,
 		runtimeConfigSchema,
 		RUNTIME_CONFIG_DEFAULTS,
+		{ parsed: raw },
 	);
 	config = coerceLegacySource(result.data);
+	authorityFailure = undefined;
 
 	// Apply mock pairing AFTER file load so it overrides any absent/undefined remote_key in config.json
 	// shouldUseMocks() is false on real devices.
@@ -91,6 +106,7 @@ export async function loadConfig() {
 }
 
 export function saveConfig() {
+	if (authorityFailure) throw authorityFailure;
 	const dataToSave: RuntimeConfig = {
 		...config,
 		password_hash: getPasswordHash(),
@@ -103,11 +119,12 @@ export function saveConfig() {
 }
 
 export function getConfig(): RuntimeConfig {
+	if (authorityFailure) throw authorityFailure;
 	return config;
 }
 
 export function getAddons(): AddonConfig {
-	return config.addons ?? {};
+	return getConfig().addons ?? {};
 }
 
 export function setAddonState(id: string, state: AddonState): void {

@@ -15,21 +15,24 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { loadJsonConfigSync } from "../helpers/config-loader.ts";
 import {
 	SETUP_CONFIG_DEFAULTS,
 	type SetupConfig,
 	setupConfigSchema,
 } from "../helpers/config-schemas.ts";
 import { logger } from "../helpers/logger.ts";
+import {
+	readStoredStateJson,
+	STORED_STATE_LIMITS,
+} from "./system/update-orchestrator/stored-state-file.ts";
 
 const SETUP_FILE = "setup.json";
 
 /* Read the config and setup files */
-export const setup: SetupConfig = await loadJsonConfigSync(
-	SETUP_FILE,
-	setupConfigSchema,
-	SETUP_CONFIG_DEFAULTS,
-	true, // required - fail if setup.json doesn't exist
-);
+export const setup: SetupConfig = {
+	...SETUP_CONFIG_DEFAULTS,
+	...setupConfigSchema.parse(
+		await readStoredStateJson(SETUP_FILE, STORED_STATE_LIMITS.settings),
+	),
+};
 logger.debug("Setup", setup);

@@ -7,7 +7,11 @@ import { currentLifecycleHolder } from "../streaming/lifecycle-admission.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
 import { getActivePreviewProxyCount } from "../ui/preview-proxy.ts";
 import { evaluateIdle, type IdleEvaluation } from "./idle-detector.ts";
-import { getIdleMemory, loadIdleState } from "./idle-state.ts";
+import {
+	getIdleMemory,
+	IdleStateReadError,
+	loadIdleState,
+} from "./idle-state.ts";
 
 export { noteUiHeartbeat, setIdleStateFilePathForTest } from "./idle-state.ts";
 
@@ -15,7 +19,13 @@ export async function getIdleStatus(input: {
 	readonly now: number;
 	readonly schedule: UpdateSettings["schedule"];
 }): Promise<IdleEvaluation> {
-	const lastStreamEndedAt = await loadIdleState();
+	let lastStreamEndedAt: number | null;
+	try {
+		lastStreamEndedAt = await loadIdleState();
+	} catch (error) {
+		if (!(error instanceof IdleStateReadError)) throw error;
+		return { idle: false, since: null, blockers: [error.reason] };
+	}
 	const memory = getIdleMemory();
 	return evaluateIdle({
 		now: input.now,

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { readBootId } from "./os-identity.ts";
+import { readOsReleaseMetadata } from "./os-release-metadata.ts";
 import type {
 	HealthySlotState,
 	ReceiptTarget,
@@ -144,9 +145,7 @@ export async function readSlotSyncEvidence(): Promise<SlotSyncEvidence> {
 				"/var/lib/dpkg/status",
 				STORED_STATE_LIMITS.quarantine,
 			),
-			readStoredStateFile("/etc/os-release", STORED_STATE_LIMITS.settings).then(
-				(value) => value ?? "",
-			),
+			readOsReleaseMetadata().then((value) => value ?? ""),
 			readHealthyState(),
 			readStoredStateJson(SYNC_RECEIPT_FILE, STORED_STATE_LIMITS.receipt).then(
 				(value) =>

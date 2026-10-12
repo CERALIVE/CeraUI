@@ -401,6 +401,13 @@ configuration remain unchanged, and status still reports the modem's live state.
 
 ### Software update admission
 
+Scheduled installs require readable idle authority. A present invalid `idle.json`
+keeps `awaiting-idle` and yields the existing `activity-unknown` blocker; it is
+not replaced or cached as a default. Genuine absence retains the boot-time idle
+baseline. Slot-mirror metadata accepts both a regular `/etc/os-release` and its
+standard exact link to `/usr/lib/os-release`, without relaxing generic authority
+reads. These boundaries are host-tested, not installed-board qualification.
+
 On images declaring `apt-all-packages`, APT discovery simulates an upgrade,
 refuses removal plans or held first-party packages, and admits only candidates
 from the permitted Debian Trixie suites or apt.ceralive.tv. Commit installs the
@@ -520,7 +527,9 @@ the same recovery identity without realm/classid support.
 - **Runtime**: Bun only. No Node-specific APIs (`node:path`, `node:os`, `node:fs/promises` are fine).
 - **Process spawning**: `Bun.spawn()` / `Bun.$` shell — not `node:child_process`.
 - **File I/O**: `Bun.file().text()` / `Bun.write()` — not `fs.readFileSync`.
-- **Config files**: read/written via `helpers/config-loader.ts` — not raw `fs`.
+- **Preference files**: read/written via `helpers/config-loader.ts`; mixed runtime config validates safety-bearing fields through strict authority first, then salvages ordinary preferences from those same parsed bytes. Invalid authority closes config access/saves until a valid reload; it cannot silently erase a bond opt-out or enable modem/add-on admission.
+- **Authority files**: use the shared bounded stored-state/strict JSON reader, not the permissive preference loader. Setup opt-outs, idle, auth-token membership, modem recovery/FCC opt-in, add-on descriptors and qdisc ownership are authority, not caches.
+- Bluetooth preference is service intent, not cosmetic: unreadable/ambiguous presence refuses the boot reconcile with no enable/disable/stop effects, while genuine absence leaves the image's state alone. Runtime dongle metadata rejects duplicate state members instead of projecting a last-wins `up` row. Stored formats are unchanged; neither repair claims hardware qualification.
 - **Error handling**: `invariant` from `helpers/invariant.ts` — not `process.exit`.
 - **All device control**: oRPC over WebSocket — no new HTTP REST endpoints.
 

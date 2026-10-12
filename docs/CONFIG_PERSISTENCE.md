@@ -16,6 +16,21 @@ and write down — rather than re-litigate it the next time someone notices
 
 ## 1. Per-file placement map
 
+### Read authority versus preferences
+
+The atomic-write contract does not make corrupted reads authoritative. Idle,
+setup update opt-outs, persistent auth-token membership and modem recovery/FCC
+opt-in use bounded anchored regular-file reads and duplicate-strict JSON.
+Present invalid idle evidence withholds automatic idle permission without caching
+or replacing a default. Mixed `config.json` checks safety-bearing fields first
+(autostart, bond exclusions, port/radio roles, ingest/add-on intent and modem gates),
+then keeps the existing tolerant salvage for ordinary preferences from the same
+parsed bytes. Invalid safety authority closes config getters/saves until valid
+reload, preventing a later incidental save from erasing evidence. Genuine absent
+files and valid legacy optional fields retain their existing defaults. Formats
+are unchanged. Host proof and recovery implications:
+[`strict authority`](UPDATE-RECOVERY.md#metadata-and-idle-boundaries).
+
 Every file CeraUI's backend writes at runtime, grouped by durability
 category. "Atomic" means the write goes through `writeFileAtomicSync`
 (`apps/backend/src/helpers/config-loader.ts:278`): write to a sibling temp

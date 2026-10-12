@@ -345,6 +345,14 @@ presence is a five-minute command-recency heuristic
 (`hasActiveRemoteSession()`), not hub connectivity, so a connected but quiet
 remote operator can be missed.
 
+Present unreadable or ambiguous stored idle evidence is not quiet activity:
+`getIdleStatus()` returns the existing `activity-unknown` blocker, and a package
+attempt stays `awaiting-idle` without submitting an install. Genuine absence
+keeps the conservative boot-time baseline. Read errors do not cache defaults or
+repair the file; after storage repair the next evaluation retries it. Metadata
+link support and host-proof limits are in
+[`UPDATE-RECOVERY.md`](UPDATE-RECOVERY.md#metadata-and-idle-boundaries).
+
 ### Operator actions
 
 | RPC | Runtime function | Behaviour |

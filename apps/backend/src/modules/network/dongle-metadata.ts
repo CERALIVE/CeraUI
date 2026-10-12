@@ -42,6 +42,11 @@ import { z } from "zod";
 
 import { logger } from "../../helpers/logger.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
+import {
+	readStoredStateFile,
+	STORED_STATE_LIMITS,
+} from "../system/update-orchestrator/stored-state-file.ts";
+import { parseAuthorityJson } from "../system/update-orchestrator/strict-authority-json.ts";
 
 /** Directory the netns manager writes its per-slot metadata into. */
 export const DONGLE_METADATA_DIR = "/run/ceralive/dongles";
@@ -134,7 +139,10 @@ async function defaultReadFile(path: string): Promise<string | undefined> {
 		return readMockDongleFile(path);
 	}
 	try {
-		return await Bun.file(path).text();
+		return (
+			(await readStoredStateFile(path, STORED_STATE_LIMITS.settings)) ??
+			undefined
+		);
 	} catch {
 		return undefined;
 	}
@@ -171,7 +179,7 @@ function parseRecord(
 ): DongleMetadata | undefined {
 	let json: unknown;
 	try {
-		json = JSON.parse(raw);
+		json = parseAuthorityJson(raw);
 	} catch (err) {
 		reportRejection(path, "malformed-json", String(err));
 		return undefined;

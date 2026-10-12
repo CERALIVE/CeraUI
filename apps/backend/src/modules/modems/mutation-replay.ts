@@ -163,6 +163,7 @@ export async function runMutationReplay(): Promise<ReplaySummary> {
 		}
 		await refreshMutationBlocks();
 	} catch (err) {
+		unreadable += 1;
 		logger.error("modem mutation replay did not complete", {
 			module: "modems",
 			err,
@@ -177,15 +178,13 @@ export async function runMutationReplay(): Promise<ReplaySummary> {
 }
 
 /**
- * Raise the admission barrier and replay, lowering it on EVERY exit. The barrier
+ * Raise the admission barrier and replay, lowering it only with readable authority. The barrier
  * is raised synchronously so it is already up before the WS server starts
  * accepting the RPCs it gates.
  */
 export async function initMutationRecovery(): Promise<ReplaySummary> {
 	beginRecoveryBarrier();
-	try {
-		return await runMutationReplay();
-	} finally {
-		completeRecoveryBarrier();
-	}
+	const summary = await runMutationReplay();
+	if (summary.unreadable === 0) completeRecoveryBarrier();
+	return summary;
 }

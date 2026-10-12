@@ -17,6 +17,13 @@ pure projection (the Bluetooth twin of `modem-wire-projection.ts`).
 
 Seven decisions carry weight:
 
+Persisted `bluetooth.json` service intent uses the bounded anchored synchronous
+strict reader and raw duplicate rejection before its unchanged version/boolean
+schema. Genuine absence still leaves image state alone; present unreadable or
+invalid intent throws into the existing nonfatal reconciliation refusal, with
+zero unit effects rather than a positive applied outcome. Bytes are retained.
+Host effect-port tests cover this boundary, not either board's provider/radio.
+
 - **"The operator switched it off" is checked BEFORE the stack's own
   unavailability.** The stack records an operator-disabled device as
   `bt_unavailable{bluez_unavailable}` — correct from its own point of view (it is
@@ -162,4 +169,3 @@ tests, neutering the re-assert floor reddens 2.
 
 **Honest status:** no claim here has been exercised against a real Bluetooth
 microphone — every fixture models the BlueZ registry contract.
-

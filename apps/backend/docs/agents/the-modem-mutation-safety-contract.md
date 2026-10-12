@@ -64,6 +64,14 @@ each of the four steps independently against a REAL temp directory. An unparseab
 or wrong-version slot is reported and LEFT IN PLACE — a mutation record that
 cannot be read is exactly what fail-closed exists for.
 
+Journal reads are bounded, anchored, no-follow/nonblocking and duplicate-strict.
+A present unreadable slot or directory inspection fault raises/retains the existing
+recovery barrier; replay lowers it only with zero unreadable authority. Invalid
+records are not pruned, and direct failed reads cannot become admission permission.
+Repair storage and rerun recovery/restart; no operator clear API is added. FCC
+opt-in also uses strict reads and enables no model on ambiguity, preserving bytes.
+These are host boundary proofs, not board recovery qualification.
+
 **On a dev host there is no `/data`.** `resolveJournalDir()` reads
 `CERALIVE_MODEM_MUTATION_DIR` (the `CERALIVE_RUN_DIR` precedent) and otherwise
 falls back to a cwd-relative directory in development/mock mode. A real device
@@ -193,4 +201,3 @@ transport).
 
 **Honest status:** none of this has been exercised against a real modem. Every
 fixture models the contract; the board drill is a separate, still-owed step.
-

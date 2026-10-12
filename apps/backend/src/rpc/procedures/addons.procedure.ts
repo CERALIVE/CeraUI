@@ -25,6 +25,7 @@ import { os } from "@orpc/server";
 import { z } from "zod";
 
 import { logger } from "../../helpers/logger.ts";
+import { readAddonDescriptor } from "../../modules/addons/descriptor-authority.ts";
 import {
 	ADDON_MANAGER_PHASES,
 	ADDON_UNAVAILABLE_ERROR,
@@ -106,8 +107,9 @@ async function readBakedDescriptors(): Promise<AddonDescriptor[]> {
 	for (const entry of entries) {
 		if (!entry.endsWith(".json")) continue;
 		try {
-			const raw = await Bun.file(`${ADDON_DESCRIPTOR_DIR}/${entry}`).json();
-			descriptors.push(AddonDescriptorSchema.parse(raw));
+			descriptors.push(
+				await readAddonDescriptor(`${ADDON_DESCRIPTOR_DIR}/${entry}`),
+			);
 		} catch (err) {
 			logger.error(`addon descriptor ${entry} failed to parse: ${err}`);
 		}

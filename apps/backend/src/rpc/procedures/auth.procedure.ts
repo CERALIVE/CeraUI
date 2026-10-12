@@ -13,10 +13,7 @@ import {
 	successResponseSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
-import {
-	loadCacheFile,
-	writeFileAtomicSync,
-} from "../../helpers/config-loader.ts";
+import { writeFileAtomicSync } from "../../helpers/config-loader.ts";
 import {
 	type AuthTokens,
 	authTokensSchema,
@@ -24,6 +21,10 @@ import {
 import { randomBase64 } from "../../helpers/crypto.ts";
 import { logger } from "../../helpers/logger.ts";
 import { isDevelopment } from "../../mocks/mock-config.ts";
+import {
+	readStoredStateJson,
+	STORED_STATE_LIMITS,
+} from "../../modules/system/update-orchestrator/stored-state-file.ts";
 import { getPasswordHash, setPasswordHash } from "../state/password.ts";
 import type { RPCContext } from "../types.ts";
 
@@ -34,10 +35,25 @@ const TOKEN_RECORD_RE = /^[0-9a-f]{64}$/;
 
 // Token storage
 const tempTokens: Record<string, true> = {};
-const persistentTokens: AuthTokens = await loadCacheFile(
-	AUTH_TOKENS_FILE,
-	authTokensSchema,
-);
+const persistentTokens: AuthTokens = await loadPersistentTokens();
+
+async function loadPersistentTokens(): Promise<AuthTokens> {
+	try {
+		const value = await readStoredStateJson(
+			AUTH_TOKENS_FILE,
+			STORED_STATE_LIMITS.packages,
+		);
+		if (value === undefined) return {};
+		return authTokensSchema.parse(value);
+	} catch (error) {
+		if (!(error instanceof Error)) throw error;
+		logger.warn(
+			"Auth: stored token authority unreadable; token login withheld",
+			{ reason: error.name },
+		);
+		return {};
+	}
+}
 
 // Re-export for backward compatibility
 export { getPasswordHash, setPasswordHash };

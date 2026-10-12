@@ -6,8 +6,9 @@ import { isRealDevice } from "../../system/device-detection.ts";
 import { applyTrafficControl } from "../uplink-sharing.ts";
 import { readDesiredSteeringState } from "../uplink-steering/state-builder.ts";
 import { type RootQdisc, UplinkShaperApplier } from "./applier.ts";
-import { SHAPER_OWNERSHIP_PATH, ShaperUnavailableError } from "./contracts.ts";
+import { SHAPER_OWNERSHIP_PATH } from "./contracts.ts";
 import { UplinkShaperCoordinator } from "./coordinator.ts";
+import { readShaperOwnership } from "./ownership-authority.ts";
 import { publishShaperAvailable, publishShaperUnavailable } from "./status.ts";
 import { readClientBacklog, readRootQdisc } from "./tc-runtime.ts";
 
@@ -76,26 +77,7 @@ export function getUplinkShaperMode(): "idle" | "streaming" {
 }
 
 async function readRecordedRoots(): Promise<Record<string, RootQdisc>> {
-	const file = Bun.file(SHAPER_OWNERSHIP_PATH);
-	if (!(await file.exists())) return {};
-	const value: unknown = await file.json();
-	if (typeof value !== "object" || value === null || Array.isArray(value)) {
-		throw new ShaperUnavailableError(
-			"qdisc_inventory_failed",
-			"invalid shaper ownership record",
-		);
-	}
-	const roots: Record<string, RootQdisc> = {};
-	for (const [ifname, root] of Object.entries(value)) {
-		if (typeof root !== "object" || root === null || Array.isArray(root))
-			continue;
-		const kind = Reflect.get(root, "kind");
-		const handle = Reflect.get(root, "handle");
-		if (typeof kind === "string" && typeof handle === "string") {
-			roots[ifname] = { kind, handle };
-		}
-	}
-	return roots;
+	return readShaperOwnership(SHAPER_OWNERSHIP_PATH);
 }
 
 async function writeRecordedRoots(

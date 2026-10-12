@@ -34,6 +34,10 @@ export function evaluateIdle(input: {
 	readonly idleMinutes: number;
 }): IdleEvaluation {
 	const { now, lastActivity, schedule, idleMinutes } = input;
+	const unprovenActivity = ACTIVITY_KEYS.some((key) => {
+		const at = lastActivity[key];
+		return at !== null && (!Number.isFinite(at) || at > now);
+	});
 	const observations = ACTIVITY_KEYS.flatMap((key) => {
 		const at = lastActivity[key];
 		return at !== null && Number.isFinite(at) && at <= now ? [{ key, at }] : [];
@@ -45,7 +49,7 @@ export function evaluateIdle(input: {
 	const blockers: IdleBlocker[] = observations
 		.filter(({ at }) => now - at < idleMinutes * 60_000)
 		.map(({ key }) => key);
-	if (since === null) blockers.push("activity-unknown");
+	if (since === null || unprovenActivity) blockers.push("activity-unknown");
 	if (schedule.mode === "window") {
 		const minute = new Date(now).getHours() * 60 + new Date(now).getMinutes();
 		const [startHour, startMinute] = schedule.start.split(":").map(Number);
@@ -58,5 +62,9 @@ export function evaluateIdle(input: {
 				: start > end && (minute >= start || minute < end);
 		if (!inside) blockers.push("schedule");
 	}
-	return { idle: blockers.length === 0, since, blockers };
+	return {
+		idle: blockers.length === 0,
+		since: unprovenActivity ? null : since,
+		blockers,
+	};
 }

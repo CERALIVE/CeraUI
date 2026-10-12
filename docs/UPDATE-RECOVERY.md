@@ -39,6 +39,48 @@ boards, helper churn, power loss or filesystem/kernel I/O timing on a device.
 
 ## OS staging lock and startup reconciliation
 
+### Metadata and idle boundaries
+
+The generic reader still refuses every symlink. The OS-metadata-specific reader
+alone accepts a regular `/etc/os-release`, or a link whose bytes are exactly
+`../usr/lib/os-release` or `/usr/lib/os-release`. It never follows that link:
+the fixed `/usr/lib/os-release` target is independently anchored and read with
+the same byte bound, no-follow/nonblocking flags, regular-file validation and
+fatal UTF-8 decoder. A present link with a missing, linked, directory or FIFO
+target refuses. Other targets, loops and near-spelled paths refuse. Evidence
+assembly tests remap the root descriptor only and run the real production reads.
+No claim is made about either board's current entry type or populated rootfs.
+
+`idle.json` is bounded to 16 KiB and duplicate-strict before its unchanged schema.
+Only genuine absence obtains the boot-time default. Invalid present evidence
+throws `IdleStateReadError`; `getIdleStatus()` returns `idle=false`, `since=null`
+and the existing typed `activity-unknown` blocker. `awaiting-idle` remains visible
+and no automatic install is submitted; idle-dependent OS staging and stale-service
+restart also receive false. Reads preserve evidence and do not cache defaults,
+so a repaired file is retried. A future stream-end timestamp likewise cannot
+prove quiet time. Manual install retains its explicitly documented idle bypass.
+Future/nonfinite recency from any of the five activity sources withholds idle;
+an older valid sibling cannot mask it. There is no new persisted field, RPC
+schema or localized string.
+
+The reader sweep also closes mixed `config.json` safety fields while retaining
+ordinary preference salvage from the **same** strictly read/parsed bytes. Invalid
+authority closes getters and saves until valid reload, rather than publishing
+stale/default permission. Packaged `setup.json` validates the whole record before
+its absent-field defaults, so a corrupt update opt-out cannot enable APT.
+Auth-token ambiguity denies token login; FCC ambiguity enables no model. Present
+unreadable modem journals retain the existing recovery barrier (external
+`recovery_pending`; internal boot starts remain parked), including read/list faults,
+instead of pruning ambiguous completed records. Local storage repair and recovery
+rerun/restart are required; no new clearing API is added. Add-on descriptors and
+shaper ownership use the same strict JSON boundary. Failed qdisc ownership reads
+are never cached as loaded, so later apply/teardown cannot skip the refusal.
+Bluetooth service intent likewise refuses invalid presence before reconciliation
+can enable/disable units or claim a positive applied outcome. Dongle runtime
+metadata rejects duplicate state members before projecting an up marker.
+All of this is host-only boundary/effect-port proof, not board, power-loss or
+privileged-helper qualification; other lanes still own the streaming markers.
+
 Physical startup reconciliation and orchestrator startup are ordered by a shared
 completion promise. Both run off the control-server boot path; completion is not
 a positive safety verdict. The orchestrator retries acquisition/persistence/cleanup

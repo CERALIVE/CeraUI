@@ -39,12 +39,11 @@
  */
 
 import fs from "node:fs";
-import {
-	type AddonConfig,
-	type AddonDescriptor,
-	AddonDescriptorSchema,
-	type AddonPhase,
-	type AddonState,
+import type {
+	AddonConfig,
+	AddonDescriptor,
+	AddonPhase,
+	AddonState,
 } from "@ceraui/rpc/schemas";
 import { addonRefresh } from "../../helpers/addon-helper.ts";
 import { execFileP } from "../../helpers/exec.ts";
@@ -57,6 +56,7 @@ import {
 import { isRealDevice } from "../system/device-detection.ts";
 import { getHardwareKindCached } from "../system/hardware-kind.ts";
 import { aptClientTlsFor } from "./apt-client-tls.ts";
+import { readAddonDescriptor } from "./descriptor-authority.ts";
 
 /** Persisted on `lastError` when no compatible artifact exists for the live OS. */
 export const ADDON_NOT_AVAILABLE_FOR_OS_VERSION =
@@ -365,8 +365,7 @@ async function readOsVersionId(): Promise<string> {
 }
 
 async function readBakedDescriptor(id: string): Promise<AddonDescriptor> {
-	const raw = await Bun.file(`${REGISTRY_DIR}/${id}.json`).json();
-	return AddonDescriptorSchema.parse(raw);
+	return readAddonDescriptor(`${REGISTRY_DIR}/${id}.json`);
 }
 
 // `{os_version}` / `{board}` are bare tokens (OS_VERSION_RE / hw enum), so

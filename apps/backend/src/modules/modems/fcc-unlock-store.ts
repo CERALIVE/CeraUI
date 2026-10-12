@@ -39,13 +39,18 @@
  * agree on what a damaged file means.
  */
 
-import { chmod, mkdir, readFile } from "node:fs/promises";
+import { chmod, mkdir } from "node:fs/promises";
 import path from "node:path";
 
 import { FCC_UNLOCK_KEY_RE } from "@ceraui/rpc/schemas";
 
 import { writeFileAtomicSync } from "../../helpers/config-loader.ts";
 import { logger } from "../../helpers/logger.ts";
+import {
+	readStoredStateFile,
+	STORED_STATE_LIMITS,
+} from "../system/update-orchestrator/stored-state-file.ts";
+import { parseAuthorityJson } from "../system/update-orchestrator/strict-authority-json.ts";
 
 export const FCC_UNLOCK_SCHEMA_VERSION = 1;
 
@@ -66,7 +71,7 @@ type PersistedPolicy = {
 function parsePolicy(raw: string): Record<string, boolean> | undefined {
 	let doc: unknown;
 	try {
-		doc = JSON.parse(raw);
+		doc = parseAuthorityJson(raw);
 	} catch {
 		return undefined;
 	}
@@ -92,7 +97,12 @@ function parsePolicy(raw: string): Record<string, boolean> | undefined {
 export async function loadFccUnlockPolicy(): Promise<Record<string, boolean>> {
 	let raw: string;
 	try {
-		raw = await readFile(FCC_UNLOCK_POLICY_PATH, "utf8");
+		const value = await readStoredStateFile(
+			FCC_UNLOCK_POLICY_PATH,
+			STORED_STATE_LIMITS.settings,
+		);
+		if (value === null) return {};
+		raw = value;
 	} catch {
 		// Absent is the state on every device that never opted in, and it is the
 		// safe default: nothing enabled.

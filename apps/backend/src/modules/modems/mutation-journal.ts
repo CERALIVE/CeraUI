@@ -47,15 +47,8 @@
  */
 
 import { createHash } from "node:crypto";
-import { constants as fsConstants } from "node:fs";
-import {
-	mkdir,
-	open,
-	readdir,
-	readFile,
-	rename,
-	unlink,
-} from "node:fs/promises";
+import { closeSync, constants as fsConstants } from "node:fs";
+import { mkdir, open, readdir, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
@@ -67,6 +60,13 @@ import {
 } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
+import { beginRecoveryBarrier } from "../streaming/recovery-barrier.ts";
+import {
+	openStoredStateDirectory,
+	readStoredStateFile,
+	STORED_STATE_LIMITS,
+} from "../system/update-orchestrator/stored-state-file.ts";
+import { parseAuthorityJson } from "../system/update-orchestrator/strict-authority-json.ts";
 
 /**
  * The PINNED device location. `/data` is the device-persistent partition, so a
@@ -140,19 +140,32 @@ export const defaultMutationJournalFs: MutationJournalFs = {
 	fsyncDir: (dir) => fsyncPath(dir, fsConstants.O_RDONLY),
 	readText: async (path) => {
 		try {
-			return await readFile(path, "utf8");
-		} catch {
-			return undefined;
+			return (
+				(await readStoredStateFile(path, STORED_STATE_LIMITS.agent)) ??
+				undefined
+			);
+		} catch (error) {
+			beginRecoveryBarrier();
+			throw error;
 		}
 	},
 	unlink: async (path) => {
 		await unlink(path);
 	},
 	listDir: async (dir) => {
+		let fd: number;
 		try {
-			return await readdir(dir);
-		} catch {
-			return [];
+			fd = openStoredStateDirectory(dir);
+		} catch (error) {
+			if (error instanceof Error && "code" in error && error.code === "ENOENT")
+				return [];
+			beginRecoveryBarrier();
+			throw error;
+		}
+		try {
+			return await readdir(`/proc/self/fd/${fd}`);
+		} finally {
+			closeSync(fd);
 		}
 	},
 };
@@ -242,14 +255,16 @@ function parseEntry(
 	slotHint: string,
 ): ModemMutationEntry | undefined {
 	try {
-		const parsed = modemMutationEntrySchema.safeParse(JSON.parse(raw));
+		const parsed = modemMutationEntrySchema.safeParse(parseAuthorityJson(raw));
 		if (parsed.success) return parsed.data;
+		beginRecoveryBarrier();
 		logger.warn("modem mutation journal entry did not validate", {
 			module: "modems",
 			slot: slotHint,
 			version: MODEM_MUTATION_JOURNAL_VERSION,
 		});
 	} catch {
+		beginRecoveryBarrier();
 		logger.warn("modem mutation journal entry is unparseable", {
 			module: "modems",
 			slot: slotHint,
