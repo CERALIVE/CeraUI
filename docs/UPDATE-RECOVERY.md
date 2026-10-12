@@ -733,24 +733,26 @@ pressure, cancellation and unknown-success crash drills are still required.
 
 Module-size accounting is not a claim of uniform compliance: `os-stage-run.ts`
 (494 pure LOC) and `runtime.ts` (2,315) carry explicit `SIZE_OK`
-lifetime/state-machine exceptions. `spawn-policy.ts` (1,355 pure LOC) and
+lifetime/state-machine exceptions. `spawn-policy.ts` (1,286 pure LOC) and
 `reducer.ts` (667) are size debt, not newly compliant modules. Accounting
 excludes blank lines and lines starting with `//`, `#`, `--`, `*` or `/*`
 (including embedded shell comments); a rule that keeps `*`/`/*` lines counts
 `runtime.ts` 2,341 and `reducer.ts` 673. Backend source files this PR adds or
 changes that exceed 250 under this rule without an inline `SIZE_OK` (base
-23bcf379 → this head): `spawn-policy.ts` 907→1,355,
-`stream-session-orchestrator.ts` 765→826, `reducer.ts` new 667,
+23bcf379 → this integrated head): `cerastream-backend.ts` 1,315→1,315,
+`spawn-policy.ts` 907→1,286, `stream-session-orchestrator.ts` 765→818,
+`reducer.ts` new 667,
 `update-transport/executor.ts` new 440, `addons/manager.ts` 489→490,
 `ui/preview-proxy.ts` 390→392, `system.procedure.ts` 295→360, `rpc/router.ts`
 290→306, `addons/reconciler.ts` 300→302, `apt-reachability.ts` 225→273,
-`streaming/streaming.ts` 257→265, `helpers/run.ts` 260→264. Outside the
+`streaming/streaming.ts` 257→265, `helpers/run.ts` 260→264,
+`kiosk.ts` 338→348 and `os-stage-job.ts` new 251. Outside the
 backend, over the whole PR file list: `apps/frontend/src/lib/rpc/subscriptions.svelte.ts`
-832→848 (grew 16), `apps/frontend/src/lib/rpc/client.ts` 625→642 (grew 17),
+832→850 (grew 18), `apps/frontend/src/lib/rpc/client.ts` 625→642 (grew 17),
 `packages/rpc/src/schemas/system.schema.ts` 339→343 (grew 4),
 `scripts/build/build-debian-package.sh` 274→282 (grew 8) and
 `apps/frontend/src/main/LiveView.svelte` 807→800 (inherited, shrank 7).
-`UpdatesDialog.svelte` (671), `software-updates.ts`, `main.ts`, `os-agent.ts`
+`UpdatesDialog.svelte` (659), `software-updates.ts`, `main.ts`, `os-agent.ts`
 and `os-manifest.ts` carry `SIZE_OK`. None is split here; every listed file
 without `SIZE_OK` is an owner decision pending (split or record `SIZE_OK`).
 Orphan inspection is separated from the settlement lifetime without changing its
