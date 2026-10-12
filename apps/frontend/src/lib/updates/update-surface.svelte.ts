@@ -16,7 +16,8 @@
  *
  * Writes go through `osCommand` and are PESSIMISTIC: the rendered value moves
  * only to what the device echoed back, never to what was clicked. The three
- * operator actions and their outcomes live in `update-actions.svelte.ts`.
+ * operator actions and their outcomes live in `update-actions.svelte.ts`; this
+ * surface feeds them every pushed phase and every details read that lands.
  */
 import type {
 	UpdateCapabilities,
@@ -27,6 +28,7 @@ import type {
 
 import { getOperationPhase, osCommand } from "$lib/rpc/async-operation.svelte";
 import { rpc } from "$lib/rpc/client";
+import type { ActionBand } from "./update-action-outcome";
 import {
 	type ActionRefusal,
 	createUpdateActions,
@@ -54,8 +56,10 @@ export interface UpdateSurface {
 	readonly detailsFailed: boolean;
 	/** The last settings write the device did not confirm. */
 	readonly saveFailed: boolean;
+	/** Every action outcome on screen, oldest dispatch first. */
+	readonly bands: readonly ActionBand[];
 	readonly refusal: ActionRefusal | undefined;
-	/** An action whose reply never arrived and that the device has not settled yet. */
+	/** An action nobody can confirm yet: no answer proved it, no device report settled it. */
 	readonly unconfirmed: UpdateActionKind | undefined;
 	readonly saving: boolean;
 	pending(action: UpdateActionKind): boolean;
@@ -89,11 +93,13 @@ export function createUpdateSurface(): UpdateSurface {
 	let loadSeq = 0;
 	let settingsSeq = 0;
 	let detailsSeq = 0;
-	let detailsRead = 0;
 
 	const actions = createUpdateActions({
-		evidence: () => ({ details, detailsRead }),
-		latestRead: () => detailsSeq,
+		dispatchContext: () => ({
+			afterRead: detailsSeq,
+			clocks: details?.checks,
+			staged: details === undefined ? undefined : details.os.staged,
+		}),
 		reloadDetails,
 	});
 
@@ -117,9 +123,9 @@ export function createUpdateSurface(): UpdateSurface {
 		}
 		if (detailsGen === detailsSeq) {
 			details = read.status === "fulfilled" ? read.value : undefined;
-			detailsRead = detailsGen;
 			detailsReadFailed = read.status === "rejected";
-			actions.settle();
+			if (read.status === "fulfilled")
+				actions.observeRead(detailsGen, read.value);
 		}
 	}
 
@@ -129,13 +135,12 @@ export function createUpdateSurface(): UpdateSurface {
 			const next = await settle(() => rpc.system.getUpdateDetails());
 			if (gen !== detailsSeq) return;
 			details = next;
-			detailsRead = gen;
 			detailsReadFailed = false;
+			actions.observeRead(gen, next);
 		} catch {
 			if (gen !== detailsSeq) return;
 			detailsReadFailed = true;
 		}
-		actions.settle();
 	}
 
 	async function save(patch: Partial<UpdateSettings>): Promise<boolean> {
@@ -189,6 +194,9 @@ export function createUpdateSurface(): UpdateSurface {
 		get saveFailed() {
 			return saveFailed;
 		},
+		get bands() {
+			return actions.bands;
+		},
 		get refusal() {
 			return actions.refusal;
 		},
@@ -202,22 +210,22 @@ export function createUpdateSurface(): UpdateSurface {
 		load,
 		reloadDetails,
 		observePhase(phase) {
-			if (phase !== undefined) actions.observe(phase);
+			if (phase !== undefined) actions.observePhase(phase);
 			return reloadDetails();
 		},
 		save,
-		checkNow: () => actions.run("check", () => rpc.system.checkUpdatesNow()),
+		checkNow: () => actions.run("check", [() => rpc.system.checkUpdatesNow()]),
 		installNow: () =>
-			actions.run("install", () => rpc.system.installUpdatesNow()),
+			actions.run("install", [() => rpc.system.installUpdatesNow()]),
 		// The approval is for exactly ONE candidate and is spent by the install
 		// that follows it; granting it without starting the download would leave
-		// "Download now" meaning "download some time later".
+		// "Download now" meaning "download some time later". Both requests are
+		// one action: it stays busy until the second one settles.
 		approveCellular: (id) =>
-			actions.run("cellular", async () => {
-				const granted = await rpc.system.allowCellularOnce({ id });
-				if (!granted.success) return granted;
-				return rpc.system.installUpdatesNow();
-			}),
+			actions.run("cellular", [
+				() => rpc.system.allowCellularOnce({ id }),
+				() => rpc.system.installUpdatesNow(),
+			]),
 		reset() {
 			session += 1;
 			loadSeq += 1;

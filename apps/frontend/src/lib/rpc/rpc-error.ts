@@ -45,6 +45,20 @@ export class RpcError extends Error {
 	}
 }
 
+/**
+ * A call the client refused to put on the wire because the socket was not
+ * open. Unlike a timeout or a reset, it is POSITIVE evidence that the device
+ * never received the request. Same message as before, so existing
+ * `.message` readers are unaffected.
+ */
+export class NotSentError extends Error {
+	override readonly name = "NotSentError";
+
+	constructor() {
+		super("WebSocket not connected");
+	}
+}
+
 export interface RpcErrorDescriptor {
 	/** Dotted i18n key resolved at the toast host. */
 	key: string;

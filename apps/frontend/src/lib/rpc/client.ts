@@ -131,7 +131,7 @@ import { getRpcSocketUrl } from "../env";
 import { nextBackoffDelay } from "./backoff";
 import { parseServerPing, shouldForceCloseHalfOpen } from "./half-open";
 import { createHeartbeatTracker, HEARTBEAT_THRESHOLD_MS } from "./heartbeat";
-import { RpcError, type RpcErrorEnvelope } from "./rpc-error";
+import { NotSentError, RpcError, type RpcErrorEnvelope } from "./rpc-error";
 import { RPC_CALL_TIMEOUT_MS } from "./rpc-timeouts";
 
 export class ConnectionResetError extends Error {
@@ -463,7 +463,7 @@ class RPCClient {
 		timeout = RPC_CALL_TIMEOUT_MS,
 	): Promise<T> {
 		if (this.socket?.readyState !== WebSocket.OPEN) {
-			throw new Error("WebSocket not connected");
+			throw new NotSentError();
 		}
 
 		const id = this.generateId();

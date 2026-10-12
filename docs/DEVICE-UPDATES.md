@@ -818,10 +818,19 @@ wire field carrying the expiry date.
   connection. It pulls capabilities, settings and `system.getUpdateDetails` when
   opened (`createUpdateSurface()`). One latest-read counter owns the details and
   a save echo outranks an older settings read; closing the dialog fences every
-  late write. An action whose reply never arrived reads "Outcome not confirmed"
-  until the device's phase or a fresh details read settles it; only a device
-  answer reads "Not started". Unread details, an unestablished running version
-  and a never-successful OS check render as unknown, never as facts.
+  late write. An action's outcome is decided by evidence, not by its reply
+  alone: "Not started" only for `{ success: false }`, the pre-effect
+  `UPDATE_ORCHESTRATOR_INITIALIZING` envelope, or a request never sent while
+  disconnected. A lost reply, or an `INTERNAL_ERROR`/`VALIDATION_ERROR` raised
+  while handling the request, reads "Outcome not confirmed" until a changed
+  phase or a details read made after the request settles it; a session restored
+  after a dropped link re-reads the details even when the phase is unchanged.
+  Each action keeps its own band, a declined duplicate click touches nothing,
+  and an action stays busy until its whole chain of requests settles. Unread
+  details and an unestablished running version render as unknown; "No newer
+  system image" needs the latest OS check to have succeeded and a known phase
+  that could show a held offer. Contract and exhaustive proofs:
+  `apps/frontend/docs/agents/an-update-action-outcome-is-decided-by-evidence.md`.
 - **Global badge** (`UpdateOrchestratorBadge.svelte`): shown while
   `isUpdateBusy()` holds, with phase and percent, and opens the dialog.
 - **Go Live band** (`UpdateRefusalBand.svelte`): `goLiveUpdateRefusal()` prefers

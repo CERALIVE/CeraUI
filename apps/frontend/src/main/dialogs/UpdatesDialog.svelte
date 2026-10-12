@@ -28,11 +28,7 @@
 // allow: SIZE_OK — this legacy dialog couples dispatch confirmation to its rendered update state; keep the lifecycle fix local.
 import { formatPercent } from '@ceraui/i18n/formatters';
 import { getLocale, m, resolveMessageKey } from '@ceraui/i18n/svelte';
-import type {
-	UpdateOrchestratorPhase,
-	UpdatePackage,
-	UpdatePreflightReason,
-} from '@ceraui/rpc/schemas';
+import type { UpdatePackage, UpdatePreflightReason } from '@ceraui/rpc/schemas';
 import {
 	AlertTriangle,
 	CheckCircle2,
@@ -56,6 +52,7 @@ import {
 import { rpc } from '$lib/rpc/client';
 import { getUpdateOrchestratorState, getUpdateState } from '$lib/rpc/subscriptions.svelte';
 import { transportCredentialsRejected } from '$lib/updates/update-bands';
+import { followDeviceState } from '$lib/updates/update-device-follow.svelte';
 import { actionablePackageOrigins, dialogActivityPhase } from '$lib/updates/update-dialog-view';
 import { createUpdateSurface } from '$lib/updates/update-surface.svelte';
 import {
@@ -66,7 +63,7 @@ import {
 	updateCapabilityView,
 } from '$lib/updates/update-view';
 
-import ActionOutcomeBand from './updates/ActionOutcomeBand.svelte';
+import ActionOutcomeList from './updates/ActionOutcomeList.svelte';
 import AutomationSection from './updates/AutomationSection.svelte';
 import ConnectionSection from './updates/ConnectionSection.svelte';
 import SlotsSection from './updates/SlotsSection.svelte';
@@ -368,20 +365,9 @@ $effect(() => {
 	else untrack(() => surface.reset());
 });
 
-// The pushed phase moves on every real orchestrator transition; the details
-// that phase implies (a staged receipt, a held cellular candidate, a new
-// transport selection) are pulled again rather than left as of the open, and
-// the phase itself is evidence for an action whose reply never arrived.
-let observedPhase: UpdateOrchestratorPhase | undefined;
-$effect(() => {
-	const phase = orchestrator?.phase;
-	if (!open || phase === observedPhase) {
-		observedPhase = phase;
-		return;
-	}
-	observedPhase = phase;
-	untrack(() => void surface.observePhase(phase));
-});
+// A moved phase, or a session restored after a dropped link, re-pulls the
+// details an open dialog shows (`update-device-follow.svelte.ts`).
+followDeviceState(surface, () => ({ open, phase: orchestrator?.phase }));
 
 // "Legacy" is only claimed once the device has ANSWERED with its capabilities;
 // a read that failed is the details band's to report, not a statement about
@@ -447,7 +433,7 @@ const nextPackageCheck = $derived(formatUpdateTime(details?.checks.packages.next
 			</div>
 		{/if}
 
-		<ActionOutcomeBand refusal={surface.refusal} unconfirmed={surface.unconfirmed} />
+		<ActionOutcomeList bands={surface.bands} />
 
 		{#if activityPhase}
 			<div class="space-y-2" aria-live="polite" data-phase={activityPhase} data-testid="update-activity">

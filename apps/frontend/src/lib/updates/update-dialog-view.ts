@@ -3,6 +3,7 @@
  * `update-view.ts` does not already answer. Pure and rune-free.
  */
 import type {
+	UpdateDetails,
 	UpdateOrchestratorPhase,
 	UpdateOrchestratorWireState,
 	UpdatePackage,
@@ -29,6 +30,39 @@ export function systemImagePhase(
 ): UpdateOrchestratorPhase | undefined {
 	if (wire === undefined || wire === null) return undefined;
 	return SYSTEM_IMAGE_PHASES.includes(wire.phase) ? wire.phase : undefined;
+}
+
+/**
+ * Phases in which a details read cannot show that nothing newer exists: a
+ * resumed `os-available` keeps its phase while the candidate itself lived only
+ * in the old process's memory, a running check has not answered, and a
+ * failure, a set-aside version or an image in flight is not "nothing newer".
+ */
+const OFFER_UNSETTLED_PHASES: readonly UpdateOrchestratorPhase[] = [
+	"checking",
+	"failed",
+	"quarantined",
+	...SYSTEM_IMAGE_PHASES,
+];
+
+/**
+ * "No newer system image has been found" is a CONCLUSION, and it needs all of:
+ * details that were read, an OS check whose LATEST attempt completed
+ * successfully (a newer failed attempt keeps the old success clock), and a
+ * known phase in which a held offer would be visible (round-2 review C, M3).
+ */
+export function osCheckFoundNothing(
+	details: UpdateDetails | undefined,
+	phase: UpdateOrchestratorPhase | undefined,
+): boolean {
+	if (details === undefined || phase === undefined) return false;
+	if (OFFER_UNSETTLED_PHASES.includes(phase)) return false;
+	const { lastAttemptAt, lastSuccessAt } = details.checks.os;
+	return (
+		lastAttemptAt !== null &&
+		lastSuccessAt !== null &&
+		lastSuccessAt >= lastAttemptAt
+	);
 }
 
 const WAITING_PHASES: readonly UpdateOrchestratorPhase[] = [

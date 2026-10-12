@@ -1,0 +1,259 @@
+/**
+ * A reference world for the Updates dialog's action/outcome flow: one action
+ * kind, one device, one link, one dialog. It drives the PRODUCTION machine
+ * (`reduceActions`) and binder step (`followStep`), and keeps the ground truth
+ * beside them: what the device really did with each request, which evidence
+ * really reached the dialog, and which details read is the latest. The
+ * surface's read fences and the shell's post-action read are modelled here, so
+ * the real-stack test can check the real code against this model.
+ */
+import type {
+	UpdateDetails,
+	UpdateOrchestratorPhase,
+} from "@ceraui/rpc/schemas";
+
+import type { ActionVerdict } from "../../lib/updates/update-action-failure";
+import {
+	type ActionEvent,
+	type ActionMachine,
+	INITIAL_ACTIONS,
+	reduceActions,
+} from "../../lib/updates/update-action-outcome";
+import {
+	type DeviceFrame,
+	followStep,
+} from "../../lib/updates/update-device-follow.svelte";
+import { deviceDetails, OFFERED_VERSION } from "./update-device";
+
+export type WorldAction = "check" | "install";
+
+export interface Shown {
+	readonly checkedAt: number;
+	readonly staged: boolean;
+}
+
+export interface Device extends Shown {
+	readonly phase: UpdateOrchestratorPhase;
+}
+
+export type WorldVerdict =
+	| "pending"
+	| "accepted"
+	| "refused"
+	| "uncertain-lost"
+	| "uncertain-error";
+
+export interface WorldCall {
+	readonly id: number;
+	readonly session: number;
+	readonly order: number;
+	readonly delivered: boolean;
+	readonly started: boolean;
+	/** `abandoned`: the client timed out, the device may still act on it. */
+	readonly transport: "flight" | "abandoned" | "done";
+	readonly verdict: WorldVerdict;
+	readonly baseline: Shown | undefined;
+	readonly afterRead: number;
+	/** Ground truth: evidence that settles it has reached the dialog. */
+	readonly evidence: boolean;
+}
+
+export interface WorldRead {
+	readonly seq: number;
+	readonly order: number;
+	/** The open's `load()`: its capabilities land with it, if still current. */
+	readonly load: boolean;
+	readonly session: number;
+	/** The capabilities read beside it was answered (the link was up). */
+	readonly capsOk: boolean;
+}
+
+export interface World {
+	readonly action: WorldAction;
+	readonly machine: ActionMachine;
+	readonly device: Device;
+	readonly link: boolean;
+	readonly open: boolean;
+	readonly session: number;
+	readonly seen: DeviceFrame;
+	readonly seq: number;
+	readonly order: number;
+	readonly reads: readonly WorldRead[];
+	readonly shown: Shown | undefined;
+	readonly detailsFailed: boolean;
+	/** The open's capabilities read failed; only the next `load()` clears it. */
+	readonly capsFailed: boolean;
+	readonly calls: readonly WorldCall[];
+	readonly sent: number;
+}
+
+const STAGED_IMAGE = { version: OFFERED_VERSION, stagedAt: 5_000 };
+
+export function detailsOf(shown: Shown): UpdateDetails {
+	return deviceDetails({
+		checkedAt: shown.checkedAt,
+		...(shown.staged ? { staged: STAGED_IMAGE, candidate: null } : {}),
+	});
+}
+
+export function initialWorld(action: WorldAction): World {
+	return {
+		action,
+		machine: INITIAL_ACTIONS,
+		device: { phase: "idle", checkedAt: 1_000, staged: false },
+		link: true,
+		open: true,
+		session: 0,
+		seen: { open: true, phase: "idle", restored: 0 },
+		seq: 1,
+		order: 1,
+		reads: [],
+		shown: { checkedAt: 1_000, staged: false },
+		detailsFailed: false,
+		capsFailed: false,
+		calls: [],
+		sent: 0,
+	};
+}
+
+export function apply(w: World, event: ActionEvent): World {
+	return { ...w, machine: reduceActions(w.machine, event) };
+}
+
+export function patchCall(
+	w: World,
+	id: number,
+	patch: Partial<WorldCall>,
+): World {
+	return {
+		...w,
+		calls: w.calls.map((call) =>
+			call.id === id ? { ...call, ...patch } : call,
+		),
+	};
+}
+
+function markEvidence(w: World, settles: (call: WorldCall) => boolean): World {
+	return {
+		...w,
+		calls: w.calls.map((call) =>
+			call.session === w.session &&
+			(call.verdict === "pending" || call.verdict.startsWith("uncertain")) &&
+			settles(call)
+				? { ...call, evidence: true }
+				: call,
+		),
+	};
+}
+
+function changed(action: WorldAction, before: Shown, after: Shown): boolean {
+	return action === "check"
+		? after.checkedAt !== before.checkedAt
+		: after.staged && !before.staged;
+}
+
+function settleLoad(w: World, read: WorldRead): World {
+	return read.load && read.session === w.session
+		? { ...w, capsFailed: !read.capsOk }
+		: w;
+}
+
+export function failRead(w: World, read: WorldRead): World {
+	const reads = w.reads.filter((entry) => entry.seq !== read.seq);
+	const settled = settleLoad({ ...w, reads }, read);
+	if (read.seq !== w.seq) return settled;
+	return {
+		...settled,
+		detailsFailed: true,
+		shown: read.load ? undefined : w.shown,
+	};
+}
+
+export function landRead(w: World, read: WorldRead): World {
+	const reads = w.reads.filter((entry) => entry.seq !== read.seq);
+	if (read.seq !== w.seq) return settleLoad({ ...w, reads }, read);
+	const shown = { checkedAt: w.device.checkedAt, staged: w.device.staged };
+	const landed = markEvidence(
+		settleLoad({ ...w, reads, shown, detailsFailed: false }, read),
+		(call) =>
+			call.afterRead < read.seq &&
+			call.baseline !== undefined &&
+			changed(w.action, call.baseline, shown),
+	);
+	return apply(landed, {
+		type: "read",
+		seq: read.seq,
+		details: detailsOf(shown),
+	});
+}
+
+export function startRead(w: World, load: boolean): World {
+	const read = {
+		seq: w.seq + 1,
+		order: w.order + 1,
+		load,
+		session: w.session,
+		capsOk: w.link,
+	};
+	const started = { ...w, seq: read.seq, order: read.order };
+	if (!w.link) return failRead(started, read);
+	return { ...started, reads: [...w.reads, read] };
+}
+
+export function frame(w: World, patch: Partial<DeviceFrame>): World {
+	const next = { ...w.seen, ...patch };
+	const move = followStep(w.seen, next);
+	const seen = { ...w, seen: next };
+	switch (move.kind) {
+		case "none":
+			return seen;
+		case "reread":
+			return startRead(seen, false);
+		case "phase": {
+			const { phase } = move;
+			if (phase === undefined) return startRead(seen, false);
+			const started =
+				phase === (w.action === "check" ? "checking" : "os-staging");
+			const marked = markEvidence(seen, () => started);
+			return startRead(apply(marked, { type: "phase", phase }), false);
+		}
+		default: {
+			const unreachable: never = move;
+			return unreachable;
+		}
+	}
+}
+
+export function push(w: World, phase: UpdateOrchestratorPhase): World {
+	return w.link ? frame(w, { phase }) : w;
+}
+
+export function conclude(
+	w: World,
+	call: WorldCall,
+	verdict: ActionVerdict,
+	transport: WorldCall["transport"],
+): World {
+	const kind: WorldVerdict =
+		verdict.kind === "uncertain" ? `uncertain-${verdict.cause}` : verdict.kind;
+	const concluded = apply(patchCall(w, call.id, { transport, verdict: kind }), {
+		type: "conclude",
+		call: call.id,
+		verdict,
+	});
+	return call.session === concluded.session
+		? startRead(concluded, false)
+		: concluded;
+}
+
+export const LOST: ActionVerdict = { kind: "uncertain", cause: "lost" };
+
+export function inFlight(w: World): WorldCall | undefined {
+	return w.calls.find((call) => call.transport === "flight");
+}
+
+export function startable(w: World): WorldCall | undefined {
+	return w.calls.find(
+		(call) => call.delivered && !call.started && call.verdict !== "refused",
+	);
+}

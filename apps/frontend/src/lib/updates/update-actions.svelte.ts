@@ -1,29 +1,32 @@
 /**
  * The Updates dialog's three operator actions (check, install, cellular
- * approval) and what became of the last one (Todo 41, C-M1).
+ * approval): a thin rune shell around the pure machine in
+ * `update-action-outcome.ts`, which decides every outcome.
  *
- * A device answer that declines is a refusal ("Not started"). A reply that
- * never arrived is NOT: the backend answers an OS install only after the stage
- * finishes, long after the browser stops waiting. That outcome stays
- * `unconfirmed` until the device itself settles it, by a pushed phase or by a
- * details read sent after the request (`update-action-outcome.ts`); the
- * surface that owns the reads calls `settle()` after every one of them.
- *
- * `reset()` ends the session: a result that lands afterwards writes nothing
- * and starts no read, so a closed dialog carries nothing into the next open.
+ * The shell owns only what is asynchronous: it gives each dispatched request a
+ * call id, turns the awaited chain into a `conclude`, and starts the details
+ * read that follows a concluded call of the current session. A click made
+ * while the action's chain is still on the wire is dropped before anything is
+ * touched, so a duplicate never owns, clears or concludes another call's
+ * outcome (round-2 review C, m1).
  */
 
-import type { UpdateOrchestratorPhase } from "@ceraui/rpc/schemas";
-import { getOperationPhase, osCommand } from "$lib/rpc/async-operation.svelte";
+import type {
+	UpdateDetails,
+	UpdateOrchestratorPhase,
+} from "@ceraui/rpc/schemas";
+import { osCommand } from "$lib/rpc/async-operation.svelte";
 import { RPC_CALL_TIMEOUT_MS } from "$lib/rpc/rpc-timeouts";
-import { UpdateActionFailure } from "./update-action-failure";
+import { type ActionStep, runSteps } from "./update-action-failure";
 import {
-	type ActionEvidence,
-	type ActionWatch,
-	actionSettled,
+	type ActionBand,
+	type ActionEvent,
+	actionBands,
+	type DispatchContext,
+	INITIAL_ACTIONS,
+	isBusy,
+	reduceActions,
 	type UpdateActionKind,
-	watchAction,
-	withPhase,
 } from "./update-action-outcome";
 
 export type { UpdateActionKind } from "./update-action-outcome";
@@ -39,11 +42,11 @@ const ACTION_OPS: Readonly<Record<UpdateActionKind, string>> = {
 };
 
 /**
- * An action stays busy for as long as the browser still waits for its reply
- * (the default 15 s valve would hand the control back mid-request and invite a
- * second dispatch) and no longer: the client's own timeout always ends it.
+ * The store's own pending valve, sized to the whole chain: every step can wait
+ * one client timeout, and the client always ends each wait, so the busy state
+ * can never outlive the chain (m2).
  */
-const ACTION_PENDING_TTL_MS = RPC_CALL_TIMEOUT_MS + 5_000;
+const PENDING_MARGIN_MS = 5_000;
 
 export interface ActionRefusal {
 	readonly action: UpdateActionKind;
@@ -53,115 +56,93 @@ export interface ActionRefusal {
 
 /** What the actions read from the surface that owns the device reads. */
 export interface ActionEvidenceSource {
-	evidence(): ActionEvidence;
-	/** The latest details read STARTED; a request sent now is newer than it. */
-	latestRead(): number;
+	dispatchContext(): DispatchContext;
 	reloadDetails(): Promise<void>;
 }
 
 export interface UpdateActions {
+	readonly bands: readonly ActionBand[];
+	/** The newest device refusal on screen. */
 	readonly refusal: ActionRefusal | undefined;
-	/** An action whose reply never arrived and that the device has not settled yet. */
+	/** The newest action whose outcome is on screen as not confirmed. */
 	readonly unconfirmed: UpdateActionKind | undefined;
 	pending(action: UpdateActionKind): boolean;
-	run(
-		action: UpdateActionKind,
-		call: () => Promise<{ success: boolean; error?: string }>,
-	): Promise<void>;
-	/** A phase the device pushed: evidence for every action awaiting an outcome. */
-	observe(phase: UpdateOrchestratorPhase): void;
-	/** Re-judge the unconfirmed action against the surface's current reads. */
-	settle(): void;
+	run(action: UpdateActionKind, steps: readonly ActionStep[]): Promise<void>;
+	observePhase(phase: UpdateOrchestratorPhase): void;
+	/** A details read that landed; `seq` orders it against each dispatch. */
+	observeRead(seq: number, details: UpdateDetails): void;
 	reset(): void;
 }
 
 export function createUpdateActions(
 	source: ActionEvidenceSource,
 ): UpdateActions {
-	let refusal = $state.raw<ActionRefusal | undefined>();
-	let unconfirmed = $state.raw<ActionWatch | undefined>();
-	let session = 0;
-	const inFlight = new Map<UpdateActionKind, ActionWatch>();
-
-	function settle(): void {
-		if (
-			unconfirmed !== undefined &&
-			actionSettled(unconfirmed, source.evidence())
-		)
-			unconfirmed = undefined;
-	}
+	let machine = $state.raw(INITIAL_ACTIONS);
+	let calls = 0;
+	const apply = (event: ActionEvent): void => {
+		machine = reduceActions(machine, event);
+	};
 
 	async function run(
 		action: UpdateActionKind,
-		call: () => Promise<{ success: boolean; error?: string }>,
+		steps: readonly ActionStep[],
 	): Promise<void> {
-		const opened = session;
-		refusal = undefined;
-		unconfirmed = undefined;
-		const failure = new UpdateActionFailure();
-		const result = await osCommand({
+		if (isBusy(machine, action)) return;
+		const call = ++calls;
+		let session: number | undefined;
+		const verdict = await osCommand({
 			key: ACTION_OPS[action],
-			pendingTtlMs: ACTION_PENDING_TTL_MS,
+			pendingTtlMs: steps.length * RPC_CALL_TIMEOUT_MS + PENDING_MARGIN_MS,
 			rpc: () => {
-				const { details } = source.evidence();
-				inFlight.set(action, watchAction(action, source.latestRead(), details));
-				return failure.run(call);
+				session = machine.session;
+				apply({
+					type: "dispatch",
+					action,
+					call,
+					context: source.dispatchContext(),
+				});
+				return runSteps(steps);
 			},
+			classify: (result) => ({
+				ok: result.kind === "accepted",
+				reason: result.kind,
+			}),
 			confirmOnResolve: true,
 			silent: true,
 		});
-		if (opened !== session) return;
-		const watch = inFlight.get(action);
-		inFlight.delete(action);
-		const verdict = failure.verdict(result);
-		switch (verdict.kind) {
-			case "started":
-				break;
-			case "refused":
-				refusal = {
-					action,
-					reason: verdict.reason,
-					...(verdict.retryable !== undefined
-						? { retryable: verdict.retryable }
-						: {}),
-				};
-				break;
-			case "unconfirmed":
-				if (watch !== undefined && !actionSettled(watch, source.evidence()))
-					unconfirmed = watch;
-				break;
-			case "not-sent":
-				return;
-			default: {
-				const unreachable: never = verdict;
-				return unreachable;
-			}
-		}
-		await source.reloadDetails();
+		if (session === undefined) return;
+		apply({
+			type: "conclude",
+			call,
+			verdict: verdict ?? { kind: "uncertain", cause: "lost" },
+		});
+		if (session === machine.session) await source.reloadDetails();
 	}
 
 	return {
+		get bands() {
+			return actionBands(machine);
+		},
 		get refusal() {
-			return refusal;
+			const band = actionBands(machine).findLast(
+				(entry) => entry.state === "refused",
+			);
+			if (band?.state !== "refused") return undefined;
+			return {
+				action: band.action,
+				reason: band.reason,
+				...(band.retryable !== undefined ? { retryable: band.retryable } : {}),
+			};
 		},
 		get unconfirmed() {
-			return unconfirmed?.action;
+			return actionBands(machine).findLast(
+				(entry) => entry.state === "unconfirmed",
+			)?.action;
 		},
-		pending: (action) => getOperationPhase(ACTION_OPS[action]) === "pending",
+		pending: (action) => isBusy(machine, action),
 		run,
-		observe(phase) {
-			for (const [action, watch] of inFlight)
-				inFlight.set(action, withPhase(watch, phase));
-			if (unconfirmed !== undefined)
-				unconfirmed = withPhase(unconfirmed, phase);
-			settle();
-		},
-		settle,
-		reset() {
-			session += 1;
-			inFlight.clear();
-			refusal = undefined;
-			unconfirmed = undefined;
-		},
+		observePhase: (phase) => apply({ type: "phase", phase }),
+		observeRead: (seq, details) => apply({ type: "read", seq, details }),
+		reset: () => apply({ type: "reset" }),
 	};
 }

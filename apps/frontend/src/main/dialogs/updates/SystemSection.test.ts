@@ -8,7 +8,10 @@
  * altogether. Neither is evidence that the image carries no version or that no
  * newer image exists, so neither may be worded as one.
  */
-import type { UpdateDetails } from "@ceraui/rpc/schemas";
+import type {
+	UpdateDetails,
+	UpdateOrchestratorPhase,
+} from "@ceraui/rpc/schemas";
 import { cleanup, render, screen } from "@testing-library/svelte";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -47,11 +50,14 @@ function details(
 	};
 }
 
-function renderSection(value: UpdateDetails | undefined) {
+function renderSection(
+	value: UpdateDetails | undefined,
+	phase: UpdateOrchestratorPhase = "os-available",
+) {
 	return render(SystemSection, {
 		wire: {
 			schema: 1,
-			phase: "os-available",
+			phase,
 			progress: null,
 			failure_reason: null,
 			cellular_override_id: null,
@@ -118,8 +124,9 @@ describe("SystemSection — unknown is never a fact (C-M3)", () => {
 	});
 
 	it("still reports a successful check that found nothing newer", () => {
-		// Given an answer with no candidate after a successful OS check.
-		renderSection(details());
+		// Given an answer with no candidate after a successful OS check, from the
+		// idle device that check leaves behind (`CHECK_SUCCEEDED_NONE` → idle).
+		renderSection(details(), "idle");
 
 		// Then that verdict is shown, and nothing is called unknown.
 		expect(

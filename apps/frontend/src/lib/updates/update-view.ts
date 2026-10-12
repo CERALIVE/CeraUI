@@ -225,18 +225,19 @@ export function scheduleDraftDirty(
 
 // ─── operator actions ──────────────────────────────────────────────────────
 
-const ACTION_REFUSAL_KEYS: Readonly<Record<string, string>> = {
-	UPDATE_ORCHESTRATOR_INITIALIZING: "settings.updates.refusal.initializing",
-	busy: "settings.updates.refusal.busy",
-	not_available: "settings.updates.refusal.notAvailable",
-	stream_active: "settings.updates.refusal.streamActive",
-	booted_version_unknown: "settings.updates.refusal.bootedVersionUnknown",
-};
+const ACTION_REFUSAL_KEYS: ReadonlyMap<string, string> = new Map([
+	["UPDATE_ORCHESTRATOR_INITIALIZING", "settings.updates.refusal.initializing"],
+	["busy", "settings.updates.refusal.busy"],
+	["not_available", "settings.updates.refusal.notAvailable"],
+	["stream_active", "settings.updates.refusal.streamActive"],
+	["booted_version_unknown", "settings.updates.refusal.bootedVersionUnknown"],
+	["not_connected", "settings.updates.refusal.notConnected"],
+]);
 
 /** A known refusal token resolves to its own sentence; anything else is generic. */
 export function actionRefusalKey(reason: string | undefined): string {
 	return (
-		(reason !== undefined ? ACTION_REFUSAL_KEYS[reason] : undefined) ??
+		(reason !== undefined ? ACTION_REFUSAL_KEYS.get(reason) : undefined) ??
 		"settings.updates.refusal.generic"
 	);
 }

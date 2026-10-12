@@ -250,13 +250,15 @@ Known gaps, recorded rather than smoothed over:
   the 30 s default of `RPCClient.call` (`RPC_CALL_TIMEOUT_MS`,
   `lib/rpc/rpc-timeouts.ts`) rejects with `Request timeout` while the stage
   keeps running server-side and succeeds. The Updates dialog no longer calls
-  that a refusal (review 49-C, C-M1): `update-actions.svelte.ts` classifies any
-  non-RPC rejection as `unconfirmed`, keeps the action busy until the client's
-  own timeout, and shows "Outcome not confirmed" until the device settles it
-  through a pushed phase or a details read sent after the request
-  (`update-action-outcome.ts`). Only a `{ success: false }` answer or a typed
-  RPC envelope renders "Not started". The backend still answers only after the
-  stage. On the Rock bench the uninterrupted adaptive stage of the
+  that a refusal (review 49-C, C-M1; round 2 M1): a lost reply and an error the
+  handler raised (`INTERNAL_ERROR`, `VALIDATION_ERROR`) are uncertain, the action
+  stays busy until its awaited chain settles, and "Outcome not confirmed" shows
+  until a pushed phase or a details read sent after the request settles it
+  (`update-action-outcome.ts`). Only a `{ success: false }` answer, the
+  pre-effect `UPDATE_ORCHESTRATOR_INITIALIZING` envelope or a request never
+  sent renders "Not started"
+  (`apps/frontend/docs/agents/an-update-action-outcome-is-decided-by-evidence.md`).
+  The backend still answers only after the stage. On the Rock bench the uninterrupted adaptive stage of the
   1.4 GB bundle took 101 s. The awaiting semantics are pinned by `os-agent-runtime.test.ts`:
   "manual install bypasses idle, stages once and arms without immediate
   activation" (expects `os-staged` when the call returns) and "a stage failure

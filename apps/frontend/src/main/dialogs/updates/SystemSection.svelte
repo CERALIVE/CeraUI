@@ -16,8 +16,10 @@
   Unknown is never rendered as a fact (C-M3). Details the device could not
   answer (`details` undefined) are "unavailable"; a `null` running version means
   the device could not ESTABLISH it, which is not proof the image carries none;
-  and "no newer image" is said only after an OS check has succeeded at least
-  once. Before that, whether a newer image exists is an open question.
+  and "no newer image" is said only when the LATEST OS check completed
+  successfully and the live phase could show a held offer
+  (`osCheckFoundNothing`). Otherwise whether a newer image exists is an open
+  question.
 -->
 <script lang="ts">
 import { formatBytes, formatPercent } from '@ceraui/i18n/formatters';
@@ -32,7 +34,7 @@ import { RefreshCw } from '@lucide/svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Progress } from '$lib/components/ui/progress';
-import { systemImagePhase } from '$lib/updates/update-dialog-view';
+import { osCheckFoundNothing, systemImagePhase } from '$lib/updates/update-dialog-view';
 import {
 	appliesAfterRestart,
 	etaMinutes,
@@ -64,7 +66,7 @@ const nextCheck = $derived(formatUpdateTime(details?.checks.os.nextAttemptAt, lo
 // Only a candidate the channel offered and the orchestrator is holding can be
 // installed by hand; anywhere else the device would refuse the request.
 const installable = $derived(activation === 'os-available' && os?.candidate != null);
-const candidateKnown = $derived(details !== undefined && details.checks.os.lastSuccessAt !== null);
+const nothingNewer = $derived(osCheckFoundNothing(details, wire?.phase));
 </script>
 
 <section aria-labelledby="updates-system-heading" class="space-y-2.5" data-testid="updates-system">
@@ -140,7 +142,7 @@ const candidateKnown = $derived(details !== undefined && details.checks.os.lastS
 					size: formatBytes(locale)(os.candidate.sizeBytes),
 				})}
 			</p>
-		{:else if !os?.staged && candidateKnown}
+		{:else if !os?.staged && nothingNewer}
 			<p class="text-muted-foreground" data-testid="update-system-no-candidate">
 				{m['settings.updates.system.noCandidate']()}
 			</p>

@@ -5,9 +5,13 @@
 Update actions retain the RPC envelope's optional `retryable` and distinct
 `UPDATE_ORCHESTRATOR_INITIALIZING` code before `osCommand` consumes a rejection.
 The existing Updates refusal band resolves that code to translated initialising/
-retry-shortly copy in all ten catalogs; unknown codes stay generic. A transport
-failure (timeout, dropped socket) is not a refusal: it renders "Outcome not
-confirmed" until the device's own state settles it (`update-actions.svelte.ts`).
+retry-shortly copy in all ten catalogs; unknown codes stay generic. Only that
+pre-effect envelope, a `{ success: false }` answer, or a call the client never
+sent (`NotSentError`, `lib/rpc/rpc-error.ts`) is "Not started". A lost
+reply and an `INTERNAL_ERROR`/`VALIDATION_ERROR` the handler raised render
+"Outcome not confirmed" until the device's own state settles it; the machine
+and its evidence rules are
+[the update-action outcome contract](an-update-action-outcome-is-decided-by-evidence.md).
 This changes neither persisted recovery data nor OS-stage reasons.
 
 `LiveSourceSwitch` uses `active_encode.switch_targets` when present, including

@@ -88,6 +88,7 @@ import {
 import { mergeModemList } from "./modem-list-merge";
 import { reauthenticateAndHydrate } from "./reconnect";
 import { createSeqTracker } from "./seq-guard";
+import { noteSessionRestored } from "./session-epoch.svelte";
 import {
 	refreshWifiAdapterModes,
 	resetWifiAdapterModes,
@@ -1080,7 +1081,7 @@ async function runReconnectReauth(): Promise<void> {
 	if (reauthInFlight) return;
 	reauthInFlight = true;
 	try {
-		await reauthenticateAndHydrate({
+		const outcome = await reauthenticateAndHydrate({
 			getStoredToken: readStoredToken,
 			clearStoredToken,
 			// A REVOCABLE device-issued token, so it authenticates through
@@ -1093,6 +1094,7 @@ async function runReconnectReauth(): Promise<void> {
 			routeToLogin,
 			onError: (error) => console.error("Reconnect re-auth failed:", error),
 		});
+		if (outcome === "hydrated") noteSessionRestored();
 	} finally {
 		reauthInFlight = false;
 	}

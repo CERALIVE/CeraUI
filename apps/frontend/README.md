@@ -189,10 +189,14 @@ src/
 
 - **Update startup refusal**: the RPC envelope preserves optional retryability;
   Updates shows translated initialising/retry-shortly copy for the distinct
-  startup code, while unknown error codes retain generic refusal feedback. A
-  reply that never arrived (timeout, dropped socket) is not a refusal: it reads
-  "Outcome not confirmed" until the device's phase or a fresh details read
-  settles it. No raw backend message or new OS-stage reason is rendered.
+  startup code. "Not started" needs positive pre-dispatch evidence (that
+  envelope, `{ success: false }`, or a request never sent while disconnected).
+  A lost reply or an error the device raised while handling the request reads
+  "Outcome not confirmed" until a changed phase or a fresh details read settles
+  it, including the read made when a dropped session is restored on the same
+  phase. Each action keeps its own band and stays busy until its whole chain of
+  requests settles ([contract](docs/agents/an-update-action-outcome-is-decided-by-evidence.md)).
+  No raw backend message or new OS-stage reason is rendered.
 
 - **Dongle login**: a submission makes one verify-before-save RPC. A failed
   password remains only in the mounted dialog, is never written to Web Storage,

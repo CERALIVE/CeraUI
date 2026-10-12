@@ -1,117 +1,229 @@
 /**
- * What may settle an update action whose reply never arrived (C-M1). Pure.
+ * The Updates dialog's action/outcome machine. Pure; the contract is
+ * `docs/agents/an-update-action-outcome-is-decided-by-evidence.md`.
  *
- * The browser stops waiting for a reply after the RPC timeout, but the device
- * does not stop working: `installUpdatesNow` answers only once the OS stage has
- * finished, minutes later. A lost reply is therefore an UNKNOWN outcome, never a
- * refusal, and only the device's own later reports may settle it: a phase it
- * pushed after the request was sent, or a details read STARTED after it. A read
- * that was already in flight describes the device before the request, so it
- * proves nothing either way.
+ * Every dispatched request is ONE call with its own id. A call is `dispatched`
+ * until its awaited chain settles, then `accepted`, `refused` ("Not started"),
+ * or `unconfirmed`; device evidence observed AFTER the dispatch (a changed
+ * phase, a details read that started later and landed) folds into its watch
+ * and turns `unconfirmed` into `reconciled`. Only the call that owns an
+ * outcome may conclude it; a closed dialog (`reset`) keeps nothing but the
+ * busy marks of chains still on the wire.
  */
 import type {
 	UpdateDetails,
 	UpdateOrchestratorPhase,
 } from "@ceraui/rpc/schemas";
 
-export type UpdateActionKind = "check" | "install" | "cellular";
+import type { ActionVerdict, UncertainCause } from "./update-action-failure";
+import {
+	type DispatchContext,
+	phaseSettles,
+	readSettles,
+	type UpdateActionKind,
+} from "./update-action-settlement";
 
-type CheckClocks = UpdateDetails["checks"];
+export type {
+	DispatchContext,
+	UpdateActionKind,
+} from "./update-action-settlement";
 
-/** Everything known about one action from the moment it was sent. */
-export interface ActionWatch {
+export interface ActionWatch extends DispatchContext {
+	/** Sticky: the device has shown what became of the request. */
+	readonly settled: boolean;
+}
+
+interface Owned {
 	readonly action: UpdateActionKind;
-	/** The latest details read started before the request; only later reads count. */
-	readonly afterRead: number;
-	/** The check clocks when the request was sent, if the dialog had read them. */
-	readonly clocks: CheckClocks | undefined;
-	/** Every phase the device pushed after the request was sent. */
-	readonly phasesSeen: readonly UpdateOrchestratorPhase[];
+	readonly call: number;
 }
 
-/** What the dialog currently holds from the device. */
-export interface ActionEvidence {
-	readonly details: UpdateDetails | undefined;
-	/** The read sequence number `details` came from. */
-	readonly detailsRead: number;
+export type ActionOutcome =
+	| (Owned & { readonly state: "dispatched"; readonly watch: ActionWatch })
+	| (Owned & { readonly state: "accepted" | "reconciled" })
+	| (Owned & {
+			readonly state: "refused";
+			readonly reason: string | undefined;
+			readonly retryable?: boolean;
+	  })
+	| (Owned & {
+			readonly state: "unconfirmed";
+			readonly cause: UncertainCause;
+			readonly watch: ActionWatch;
+	  });
+
+interface InFlight extends Owned {
+	readonly session: number;
 }
 
-const INSTALL_STARTED: readonly UpdateOrchestratorPhase[] = [
-	"awaiting-idle",
-	"downloading",
-	"committing",
-	"restarting-services",
-	"settled",
-	"os-staging",
-	"os-staged",
-	"os-activation-armed",
-	"os-verifying",
-];
+export interface ActionMachine {
+	readonly session: number;
+	/** This session's outcomes: at most one per action, in dispatch order. */
+	readonly outcomes: readonly ActionOutcome[];
+	/** Calls whose chain has not settled, from ANY session: the busy state. */
+	readonly inFlight: readonly InFlight[];
+}
 
-const STARTED_BY: Readonly<
-	Record<UpdateActionKind, readonly UpdateOrchestratorPhase[]>
-> = {
-	check: ["checking"],
-	install: INSTALL_STARTED,
-	cellular: INSTALL_STARTED,
+export type ActionEvent =
+	| {
+			readonly type: "dispatch";
+			readonly action: UpdateActionKind;
+			readonly call: number;
+			readonly context: DispatchContext;
+	  }
+	| {
+			readonly type: "conclude";
+			readonly call: number;
+			readonly verdict: ActionVerdict;
+	  }
+	| { readonly type: "phase"; readonly phase: UpdateOrchestratorPhase }
+	| {
+			readonly type: "read";
+			readonly seq: number;
+			readonly details: UpdateDetails;
+	  }
+	| { readonly type: "reset" };
+
+export const INITIAL_ACTIONS: ActionMachine = {
+	session: 0,
+	outcomes: [],
+	inFlight: [],
 };
 
-/** A failed or set-aside update is an outcome the dialog already states. */
-const OUTCOME_PHASES: readonly UpdateOrchestratorPhase[] = [
-	"failed",
-	"quarantined",
-];
-
-export function watchAction(
+export function isBusy(
+	machine: ActionMachine,
 	action: UpdateActionKind,
-	afterRead: number,
-	details: UpdateDetails | undefined,
-): ActionWatch {
-	return { action, afterRead, clocks: details?.checks, phasesSeen: [] };
+): boolean {
+	return machine.inFlight.some((call) => call.action === action);
 }
 
-export function withPhase(
+function evidenceSettles(
+	outcome: Owned,
 	watch: ActionWatch,
-	phase: UpdateOrchestratorPhase,
-): ActionWatch {
-	if (watch.phasesSeen.includes(phase)) return watch;
-	return { ...watch, phasesSeen: [...watch.phasesSeen, phase] };
-}
-
-function checkClocksMoved(before: CheckClocks, after: CheckClocks): boolean {
+	event: Extract<ActionEvent, { type: "phase" | "read" }>,
+): boolean {
+	if (event.type === "phase") return phaseSettles(outcome.action, event.phase);
 	return (
-		before.os.lastAttemptAt !== after.os.lastAttemptAt ||
-		before.packages.lastAttemptAt !== after.packages.lastAttemptAt
+		event.seq > watch.afterRead &&
+		readSettles(outcome.action, watch, event.details)
 	);
 }
 
-/** `true` once the device itself has shown what became of the action. */
-export function actionSettled(
-	watch: ActionWatch,
-	evidence: ActionEvidence,
-): boolean {
-	const started = STARTED_BY[watch.action];
-	if (
-		watch.phasesSeen.some(
-			(phase) => started.includes(phase) || OUTCOME_PHASES.includes(phase),
-		)
-	)
-		return true;
-	const { details } = evidence;
-	if (details === undefined || evidence.detailsRead <= watch.afterRead)
-		return false;
-	switch (watch.action) {
-		case "check":
-			return (
-				watch.clocks !== undefined &&
-				checkClocksMoved(watch.clocks, details.checks)
-			);
-		case "install":
-		case "cellular":
-			return details.os.staged !== null;
+function fold(
+	outcome: ActionOutcome,
+	event: Extract<ActionEvent, { type: "phase" | "read" }>,
+): ActionOutcome {
+	if (outcome.state !== "dispatched" && outcome.state !== "unconfirmed")
+		return outcome;
+	if (outcome.watch.settled || !evidenceSettles(outcome, outcome.watch, event))
+		return outcome;
+	if (outcome.state === "unconfirmed")
+		return { action: outcome.action, call: outcome.call, state: "reconciled" };
+	return { ...outcome, watch: { ...outcome.watch, settled: true } };
+}
+
+function concluded(
+	outcome: Extract<ActionOutcome, { state: "dispatched" }>,
+	verdict: ActionVerdict,
+): ActionOutcome {
+	const owner = { action: outcome.action, call: outcome.call };
+	switch (verdict.kind) {
+		case "accepted":
+			return { ...owner, state: "accepted" };
+		case "refused":
+			return {
+				...owner,
+				state: "refused",
+				reason: verdict.reason,
+				...(verdict.retryable !== undefined
+					? { retryable: verdict.retryable }
+					: {}),
+			};
+		case "uncertain":
+			return outcome.watch.settled
+				? { ...owner, state: "reconciled" }
+				: {
+						...owner,
+						state: "unconfirmed",
+						cause: verdict.cause,
+						watch: outcome.watch,
+					};
 		default: {
-			const unreachable: never = watch.action;
+			const unreachable: never = verdict;
 			return unreachable;
 		}
 	}
+}
+
+function conclude(
+	machine: ActionMachine,
+	call: number,
+	verdict: ActionVerdict,
+): ActionMachine {
+	const flight = machine.inFlight.find((entry) => entry.call === call);
+	if (flight === undefined) return machine;
+	const inFlight = machine.inFlight.filter((entry) => entry !== flight);
+	if (flight.session !== machine.session) return { ...machine, inFlight };
+	return {
+		...machine,
+		inFlight,
+		outcomes: machine.outcomes.map((outcome) =>
+			outcome.call === call && outcome.state === "dispatched"
+				? concluded(outcome, verdict)
+				: outcome,
+		),
+	};
+}
+
+export function reduceActions(
+	machine: ActionMachine,
+	event: ActionEvent,
+): ActionMachine {
+	switch (event.type) {
+		case "dispatch": {
+			if (isBusy(machine, event.action)) return machine;
+			const owner = { action: event.action, call: event.call };
+			return {
+				...machine,
+				inFlight: [...machine.inFlight, { ...owner, session: machine.session }],
+				outcomes: [
+					...machine.outcomes.filter(
+						(outcome) => outcome.action !== event.action,
+					),
+					{
+						...owner,
+						state: "dispatched",
+						watch: { ...event.context, settled: false },
+					},
+				],
+			};
+		}
+		case "conclude":
+			return conclude(machine, event.call, event.verdict);
+		case "phase":
+		case "read":
+			return {
+				...machine,
+				outcomes: machine.outcomes.map((outcome) => fold(outcome, event)),
+			};
+		case "reset":
+			return { ...machine, session: machine.session + 1, outcomes: [] };
+		default: {
+			const unreachable: never = event;
+			return unreachable;
+		}
+	}
+}
+
+/** The bands an operator sees: a device refusal, or an outcome nobody knows. */
+export type ActionBand = Extract<
+	ActionOutcome,
+	{ state: "refused" | "unconfirmed" }
+>;
+
+export function actionBands(machine: ActionMachine): readonly ActionBand[] {
+	return machine.outcomes.filter(
+		(outcome): outcome is ActionBand =>
+			outcome.state === "refused" || outcome.state === "unconfirmed",
+	);
 }

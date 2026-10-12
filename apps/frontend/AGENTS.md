@@ -48,7 +48,7 @@ bun run test:federation-abi
 | SSH PERSISTENCE IS A SECOND, INDEPENDENT CONTROL / A PERSISTENT NOTICE IS NOT A TOAST | [Contract 25](docs/agents/ssh-persistence-is-a-second-independent-control.md); [Contract 26](docs/agents/a-persistent-notice-is-not-a-toast.md) |
 | CONNECTION RELIABILITY / ANTI-PATTERNS | [Contract 27](docs/agents/connection-reliability.md); [Contract 28](docs/agents/anti-patterns.md) |
 | EVERY REFUSAL AN OPERATOR CAN TRIGGER HAS ITS OWN… / A CLIPPED DISCLOSURE MUST BE HIDDEN, NOT MERELY… | [Contract 29](docs/agents/every-refusal-an-operator-can-trigger-has-its-own-message.md); [Contract 30](docs/agents/a-clipped-disclosure-must-be-hidden-not-merely-unpainted.md) |
-| AN UNCHANGED TICK MUST BE A NO-OP | [Contract 31](docs/agents/an-unchanged-tick-must-be-a-no-op.md) |
+| AN UNCHANGED TICK MUST BE A NO-OP / AN UPDATE ACTION'S OUTCOME IS DECIDED BY EVIDENCE | [Contract 31](docs/agents/an-unchanged-tick-must-be-a-no-op.md); [Contract 32](docs/agents/an-update-action-outcome-is-decided-by-evidence.md) |
 
 ## HARD RULES
 
