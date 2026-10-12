@@ -136,6 +136,10 @@ import { deviceRegistry } from "./devices.ts";
 import { isEmbeddedAudioPipeline } from "./embedded-audio.ts";
 import { validateBitrate } from "./encoder.ts";
 import {
+	classifyRuntimeState,
+	currentRuntimeObservationOwner,
+} from "./engine-runtime-observation.ts";
+import {
 	createLaunchTransaction,
 	type LaunchTransaction,
 } from "./launch-transaction.ts";
@@ -144,6 +148,7 @@ import {
 	ENGINE_CLOSE_DEADLINE_MS,
 	ENGINE_STOP_REQUEST_DEADLINE_MS,
 } from "./start-lifecycle-timing.ts";
+import { currentStreamLaunchOwner } from "./stream-launch-ownership.ts";
 import type {
 	BackendErrorListener,
 	BitrateParams,
@@ -606,15 +611,6 @@ function defaultCerastreamBackendDeps(): CerastreamBackendDeps {
 	};
 }
 
-function classifyRuntimeState(
-	state: unknown,
-	streaming: unknown,
-): EngineRuntimeState {
-	if (state === "streaming" && streaming) return "streaming";
-	if (state === "idle" && !streaming) return "idle";
-	return "unknown";
-}
-
 /**
  * Outcome of a startup `hello` handshake against the engine. The protocol MAJOR
  * is the hard compatibility contract (the engine rejects a mismatched major and
@@ -763,6 +759,7 @@ export class CerastreamBackend implements StreamingBackend {
 		this.active = true;
 		this.clearRecoveredEngineError();
 		const params = this.buildStartParams(config, opts);
+		const ownsLaunch = currentStreamLaunchOwner();
 		const launchTransaction =
 			transaction ?? createLaunchTransaction("backend-start");
 		try {
@@ -782,6 +779,7 @@ export class CerastreamBackend implements StreamingBackend {
 					"subscribe",
 					() =>
 						client.subscribeEvents({}, (event) => {
+							if (this.client !== client || !ownsLaunch()) return;
 							this.handleEvent(event);
 							if (
 								event.type === "status" &&
@@ -1021,6 +1019,7 @@ export class CerastreamBackend implements StreamingBackend {
 		let subscription: Subscription | undefined;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		let acceptingEvents = true;
+		const ownsQuery = currentRuntimeObservationOwner();
 		try {
 			client = await this.deps.connect({
 				...this.deps.connectOptions,
@@ -1036,7 +1035,7 @@ export class CerastreamBackend implements StreamingBackend {
 			subscription = await client.subscribeEvents(
 				{ topics: ["status"] },
 				(event) => {
-					if (!acceptingEvents) return;
+					if (!acceptingEvents || !ownsQuery()) return;
 					this.handleEvent(event);
 					if (event.type === "status") {
 						resolveRuntimeState?.(
@@ -1051,7 +1050,7 @@ export class CerastreamBackend implements StreamingBackend {
 			);
 			const runtimeState = await runtimeStateEvent;
 			acceptingEvents = false;
-			if (runtimeState === "streaming") {
+			if (ownsQuery() && runtimeState === "streaming") {
 				this.client = client;
 				this.subscription = subscription;
 				this.active = true;
@@ -1059,7 +1058,7 @@ export class CerastreamBackend implements StreamingBackend {
 			}
 			subscription?.close();
 			await client.close();
-			return runtimeState;
+			return ownsQuery() ? runtimeState : "unknown";
 		} catch (error) {
 			acceptingEvents = false;
 			subscription?.close();

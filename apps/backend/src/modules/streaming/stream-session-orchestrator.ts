@@ -7,7 +7,6 @@ import {
 	type ConfigChangePhase,
 	type ConfigChangeResult,
 	type InputMode,
-	isLegalLifecycleTransition,
 	isTerminalConfigChangePhase,
 	type LifecycleState,
 	type StartFailureClass,
@@ -16,37 +15,17 @@ import {
 } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
-import {
-	admitAndPrepareStreamStart,
-	type StreamStartUpdateAdmission,
-} from "../system/update-orchestrator/runtime.ts";
-import { notificationBroadcast } from "../ui/notifications.ts";
-import {
-	noteStreamStopped,
-	type StreamStopCause,
-} from "./armed-stream-marker.ts";
-import { asrcProbeRemainingMs } from "./audio.ts";
-import {
-	broadcastConfigChangePhase,
-	changeEngineRuntimeConfig,
-	classifyConfigChangeDispatchError as classifyDispatchError,
-} from "./config-change-bridge.ts";
-import { queryEngineRuntimeStreaming } from "./engine-runtime-state.ts";
+import type { StreamStartUpdateAdmission } from "../system/update-orchestrator/runtime.ts";
+import type { StreamStopCause } from "./armed-stream-marker.ts";
+import { classifyConfigChangeDispatchError as classifyDispatchError } from "./config-change-bridge.ts";
+import { withRuntimeObservationOwner } from "./engine-runtime-observation.ts";
 import {
 	type LifecycleAdmission,
 	type LifecycleLease,
 	MODEM_TRANSITION_ACTIVE,
-	streamingBlockingMutation,
-	tryAcquireLifecycle,
 } from "./lifecycle-admission.ts";
 import {
-	clearOtaStreamingMarker,
-	setOtaStreamingMarker,
-} from "./ota-streaming-marker.ts";
-import { awaitRecoveryBarrier, isRecoveryPending } from "./recovery-barrier.ts";
-import {
 	classifyStartFailure,
-	newAttemptId,
 	type RetryPolicy,
 	type SuppressionContext,
 	typedStartFailure,
@@ -57,30 +36,27 @@ import {
 	RECONFIGURE_DEADLINE_MS,
 	STOP_DEADLINE_MS,
 } from "./start-lifecycle-timing.ts";
-import { updateStreamLifecycleState } from "./stream-lifecycle-status.ts";
+import { withStreamLaunchOwnership } from "./stream-launch-ownership.ts";
+import { createSessionCleanup } from "./stream-session-cleanup.ts";
+import { createSessionOwnership } from "./stream-session-ownership.ts";
+import { streamSessionProductionDeps } from "./stream-session-production.ts";
 import {
 	runStartWithRetry,
 	type StartRetryDiagnostic,
 } from "./stream-start-retry.ts";
-import {
-	getStartSuppressionContext,
-	reportStartRetry,
-	reportStartTerminalFailure,
-} from "./stream-start-retry-reporting.ts";
-import { getIsStreaming, updateStatus } from "./streaming.ts";
 import type { EngineRuntimeState } from "./streaming-backend.ts";
-import { stopGeneration } from "./streamloop/session.ts";
 
-export const STREAM_LAUNCH_ORIGINS = [
-	"ui",
-	"autostart",
-	"set-profile",
-	"remote-control",
-	// Its own origin so the one-shot engine-death restoration is admitted through
-	// the SAME mutex every other origin uses, never a private path around it.
-	"restoration",
-] as const;
-export type StreamLaunchOrigin = (typeof STREAM_LAUNCH_ORIGINS)[number];
+export {
+	RECONFIGURE_STOP_TIMEOUT_REASON,
+	STREAM_LAUNCH_ORIGINS,
+	type StreamLaunchOrigin,
+} from "./stream-session-contract.ts";
+
+import {
+	INTERNAL_LAUNCH_ORIGINS,
+	RECONFIGURE_STOP_TIMEOUT_REASON,
+	type StreamLaunchOrigin,
+} from "./stream-session-contract.ts";
 
 export type StreamLaunchContext = {
 	readonly attemptId: string;
@@ -176,7 +152,7 @@ export type StreamSessionOrchestratorDeps = {
 	 * deliberately NOT called from `reconcile()`: adopting a session the engine
 	 * was already running is not a new commitment to anything.
 	 */
-	readonly onStreamCommitted?: () => void;
+	readonly onStreamCommitted?: (current: () => boolean) => void;
 	/**
 	 * Called at that same commit point to ARM the restoration marker. It is a
 	 * second hook rather than more work inside `onStreamCommitted` because the
@@ -184,7 +160,7 @@ export type StreamSessionOrchestratorDeps = {
 	 * other remembers that a stream WAS live — and each has to be provable on its
 	 * own.
 	 */
-	readonly onStreamArmed?: () => void;
+	readonly onStreamArmed?: (current: () => boolean) => void;
 	/**
 	 * Called with the operator-or-machine CAUSE of every stop, before the stop
 	 * itself runs. The engine-loss path and an operator Stop reach the identical
@@ -239,15 +215,6 @@ export type StreamSessionOrchestratorDeps = {
 	readonly unmarkStreamingForOta?: () => void;
 };
 
-/**
- * Origins that AWAIT recovery rather than being refused by it. Both are
- * boot-time and one-shot: neither has a caller who can retry.
- */
-const INTERNAL_LAUNCH_ORIGINS: ReadonlySet<StreamLaunchOrigin> = new Set([
-	"autostart",
-	"restoration",
-]);
-
 type ActiveAttempt = {
 	readonly attemptId: string;
 	readonly generation: number;
@@ -268,13 +235,6 @@ type QueuedStop = {
 	readonly release: (result: StopResult | Promise<StopResult>) => void;
 	readonly cancelDeadline: () => void;
 };
-
-/**
- * A stop that waited out the whole transaction budget and still had nothing to
- * answer it. Distinct from `stop_timeout`, which means the engine was asked and
- * did not finish.
- */
-export const RECONFIGURE_STOP_TIMEOUT_REASON = "reconfigure_stop_timeout";
 
 export type StreamSessionOrchestrator = {
 	readonly start: (request: StreamStartRequest) => Promise<StartResult>;
@@ -300,8 +260,7 @@ export type StreamSessionOrchestrator = {
 export function createStreamSessionOrchestrator(
 	deps: StreamSessionOrchestratorDeps,
 ): StreamSessionOrchestrator {
-	let state: LifecycleState = "idle";
-	let generation = 0;
+	const ownership = createSessionOwnership(deps);
 	let active: ActiveAttempt | undefined;
 	let reconciliationEpoch = 0;
 	let activeChange: ActiveConfigChange | undefined;
@@ -312,6 +271,7 @@ export function createStreamSessionOrchestrator(
 		| number
 		| undefined;
 	let engineQueuedStop: QueuedStop | undefined;
+	let stopFlight: Promise<StopResult> | undefined;
 	const stopDeadlineMs = deps.stopDeadlineMs ?? STOP_DEADLINE_MS;
 	const reconfigureDeadlineMs =
 		deps.reconfigureDeadlineMs ?? RECONFIGURE_DEADLINE_MS;
@@ -332,41 +292,33 @@ export function createStreamSessionOrchestrator(
 		((timer: ReturnType<typeof globalThis.setTimeout> | number) =>
 			globalThis.clearTimeout(timer));
 
-	const stopWithinDeadline = (generationToStop: number): Promise<void> => {
-		let timer: ReturnType<typeof globalThis.setTimeout> | number | undefined;
-		const timeout = new Promise<never>((_resolve, reject) => {
-			timer = scheduleTimeout(
-				() => reject(new Error("stop_timeout")),
-				stopDeadlineMs,
-			);
-		});
-		return Promise.race([deps.stopRuntime(generationToStop), timeout]).finally(
-			() => {
-				if (timer !== undefined) cancelTimeout(timer);
-			},
-		);
-	};
-
-	const transition = (next: LifecycleState): boolean => {
-		if (state === next) return true;
-		if (!isLegalLifecycleTransition(state, next)) {
-			deps.invariantViolation?.(state, next);
-			return false;
-		}
-		state = next;
-		deps.setLifecycleState?.(state);
-		return true;
-	};
+	const cleanup = createSessionCleanup(deps, {
+		schedule: scheduleTimeout,
+		cancel: cancelTimeout,
+		deadlineMs: stopDeadlineMs,
+	});
+	const stopWithinDeadline = cleanup.run;
+	const transition = ownership.transition;
 
 	const finishCancelled = async (
 		attempt: ActiveAttempt,
 	): Promise<StartResult> => {
-		await stopWithinDeadline(attempt.generation);
-		if (active === attempt) {
-			transition("idle");
-			active = undefined;
-			deps.setStreamingStatus(false);
-			deps.unmarkStreamingForOta?.();
+		if (active !== attempt)
+			return { result: "cancelled", attemptId: attempt.attemptId };
+		const owner = ownership.capture();
+		try {
+			await stopWithinDeadline(attempt.generation);
+			if (active === attempt && ownership.commit(owner, "idle", "idle"))
+				active = undefined;
+		} catch (error) {
+			if (ownership.owns(owner)) {
+				if (ownership.state === "stopping") transition("stop_failed");
+				ownership.commit(owner, "reconciling", "unknown");
+			}
+			logger.warn("cancelled stream cleanup remains unknown", {
+				attemptId: attempt.attemptId,
+				error,
+			});
 		}
 		return { result: "cancelled", attemptId: attempt.attemptId };
 	};
@@ -398,16 +350,22 @@ export function createStreamSessionOrchestrator(
 		if (blocked !== undefined) {
 			return refuseStart(attemptId, "mutation_blocked", blocked.stableKey);
 		}
+		if (
+			!cleanup.pending &&
+			stopFlight === undefined &&
+			!ownership.launchPending &&
+			ownership.state === "streaming" &&
+			deps.getStreamingStatus?.() === false
+		)
+			await reconcile();
 
 		if (
-			(state === "streaming" || state === "stop_failed") &&
-			deps.getStreamingStatus?.() === false
-		) {
-			state = "idle";
-			active = undefined;
-			deps.setLifecycleState?.(state);
-		}
-		if (state !== "idle") return { result: "busy", attemptId };
+			ownership.state !== "idle" ||
+			cleanup.pending ||
+			stopFlight !== undefined ||
+			ownership.launchPending
+		)
+			return { result: "busy", attemptId };
 
 		// The interlock is consulted HERE and nowhere else: after the
 		// duplicate-start rejection above (so a genuine duplicate keeps its own
@@ -463,10 +421,10 @@ export function createStreamSessionOrchestrator(
 		attemptId: string,
 		request: StreamStartRequest,
 	): Promise<StartResult> => {
-		generation += 1;
+		const owner = ownership.begin();
 		const attempt: ActiveAttempt = {
 			attemptId,
-			generation,
+			generation: owner.generation,
 			cancelled: false,
 			launchAdmitted: false,
 		};
@@ -477,7 +435,7 @@ export function createStreamSessionOrchestrator(
 		try {
 			const updateAdmission =
 				deps.admitUpdate === undefined ? undefined : await deps.admitUpdate();
-			if (attempt.cancelled || active !== attempt)
+			if (attempt.cancelled || active !== attempt || !ownership.owns(owner))
 				return { result: "cancelled", attemptId };
 			if (updateAdmission !== undefined && !updateAdmission.allowed) {
 				return {
@@ -488,24 +446,33 @@ export function createStreamSessionOrchestrator(
 			}
 			attempt.launchAdmitted = true;
 		} finally {
-			if (!attempt.launchAdmitted && active === attempt) {
-				active = undefined;
-				transition("idle");
+			if (
+				!attempt.launchAdmitted &&
+				active === attempt &&
+				ownership.owns(owner)
+			) {
+				if (transition("idle")) active = undefined;
 			}
 		}
-		deps.markStreamingForOta?.();
+		ownership.protect();
 		const deadlineCancelledLaunches = new Set<number>();
 
 		const launchResult = await runStartWithRetry({
 			attemptId,
-			launch: (launchNumber) =>
-				request.launch({
+			launch: (launchNumber) => {
+				const context: StreamLaunchContext = {
 					attemptId,
 					generation: attempt.generation,
 					origin: request.origin,
 					cancelled: () =>
-						attempt.cancelled || deadlineCancelledLaunches.has(launchNumber),
-				}),
+						attempt.cancelled ||
+						active !== attempt ||
+						deadlineCancelledLaunches.has(launchNumber),
+				};
+				return ownership.trackLaunch(
+					withStreamLaunchOwnership(context, () => request.launch(context)),
+				);
+			},
 			classifyUnknown: (error) =>
 				classifyStartFailure("start-rpc", error, attemptId, {
 					warn: (message, meta) => logger.warn(message, meta),
@@ -513,6 +480,7 @@ export function createStreamSessionOrchestrator(
 			cancelled: () => attempt.cancelled || active !== attempt,
 			onLaunchTimeout: async (launchNumber) => {
 				deadlineCancelledLaunches.add(launchNumber);
+				if (active !== attempt) return;
 				try {
 					await stopWithinDeadline(attempt.generation);
 				} catch (error) {
@@ -555,27 +523,33 @@ export function createStreamSessionOrchestrator(
 			return await finishCancelled(attempt);
 		}
 		if (launchResult.result === "failed") {
-			transition("idle");
-			active = undefined;
-			deps.setStreamingStatus(false);
-			deps.unmarkStreamingForOta?.();
+			if (active !== attempt || !ownership.owns(owner))
+				return { result: "cancelled", attemptId };
+			if (launchResult.failure.code === "start_cleanup_timeout") {
+				ownership.commit(owner, "reconciling", "unknown");
+			} else if (ownership.commit(owner, "idle", "idle")) active = undefined;
 			return {
 				result: "failed",
 				attemptId,
 				failure: launchResult.failure,
 			};
 		}
-		transition("streaming");
-		deps.setStreamingStatus(true);
+		if (
+			active !== attempt ||
+			!ownership.commit(owner, "streaming", "streaming")
+		)
+			return { result: "cancelled", attemptId };
 		// Never let a bookkeeping failure turn a stream that IS live into a
 		// reported start failure.
 		try {
-			deps.onStreamCommitted?.();
+			deps.onStreamCommitted?.(
+				() => active === attempt && ownership.owns(owner),
+			);
 		} catch (error) {
 			logger.warn("stream commit bookkeeping failed", { attemptId, error });
 		}
 		try {
-			deps.onStreamArmed?.();
+			deps.onStreamArmed?.(() => active === attempt && ownership.owns(owner));
 		} catch (error) {
 			logger.warn("stream restoration arming failed", { attemptId, error });
 		}
@@ -601,22 +575,23 @@ export function createStreamSessionOrchestrator(
 			release = resolve;
 		});
 		const attemptId = activeChange?.attemptId;
+		const owner = ownership.capture();
 		const budgetMs = reconfigureDeadlineMs + stopDeadlineMs;
 
 		const timer = scheduleTimeout(() => {
-			if (queuedStop?.promise !== promise) return;
+			if (queuedStop?.promise !== promise || !ownership.owns(owner)) return;
 			queuedStop = undefined;
 			logger.error(
 				"stream stop parked behind a config change was never released",
 				{
 					attemptId,
 					budgetMs,
-					state,
+					state: ownership.state,
 				},
 			);
 			// The transaction outlived every bound it declared, so the engine's
 			// real state is unknown to us — adopt its truth rather than assert one.
-			if (transition("reconciling")) void reconcile();
+			if (ownership.commit(owner, "reconciling", "unknown")) void reconcile();
 			release({
 				result: "stop_failed",
 				reason: RECONFIGURE_STOP_TIMEOUT_REASON,
@@ -655,12 +630,18 @@ export function createStreamSessionOrchestrator(
 		event: Extract<EventParams, { type: "status" }>,
 	): void => {
 		if (event.state === "idle") {
-			if (engineTransitionLatched && state === "streaming") {
-				transition("reconciling");
-				transition("idle");
-				active = undefined;
-				deps.setStreamingStatus(false);
-				deps.unmarkStreamingForOta?.();
+			if (
+				(ownership.state === "streaming" ||
+					ownership.state === "stop_failed") &&
+				!cleanup.pending &&
+				!ownership.launchPending
+			) {
+				const owner = ownership.invalidate();
+				if (
+					transition("reconciling") &&
+					ownership.commit(owner, "idle", "idle")
+				)
+					active = undefined;
 			}
 			clearEngineTransition();
 			return;
@@ -668,10 +649,10 @@ export function createStreamSessionOrchestrator(
 		if (event.active_encode?.capture?.transition !== undefined) {
 			if (!engineTransitionLatched) {
 				engineTransitionLatched = true;
-				engineTransitionTimer = scheduleTimeout(
-					clearEngineTransition,
-					INTERNAL_TRANSITION_WORST_CASE_BOUND_MS,
-				);
+				const timer = scheduleTimeout(() => {
+					if (engineTransitionTimer === timer) clearEngineTransition();
+				}, INTERNAL_TRANSITION_WORST_CASE_BOUND_MS);
+				engineTransitionTimer = timer;
 			}
 		} else if (event.streaming && event.active_encode !== undefined) {
 			clearEngineTransition();
@@ -685,10 +666,9 @@ export function createStreamSessionOrchestrator(
 		const promise = new Promise<StopResult>((resolve) => {
 			resolveStop = resolve;
 		});
-		const timer = scheduleTimeout(
-			clearEngineTransition,
-			ENGINE_TRANSITION_STOP_DEADLINE_MS,
-		);
+		const timer = scheduleTimeout(() => {
+			if (engineQueuedStop?.promise === promise) clearEngineTransition();
+		}, ENGINE_TRANSITION_STOP_DEADLINE_MS);
 		logger.warn("stream stop parked behind an engine capture transition", {
 			budgetMs: ENGINE_TRANSITION_STOP_DEADLINE_MS,
 		});
@@ -700,10 +680,30 @@ export function createStreamSessionOrchestrator(
 		};
 	};
 
-	const stop = async (cause: StreamStopCause): Promise<StopResult> => {
-		void import("./capture-resilience.ts").then(({ noteCaptureStatus }) =>
-			noteCaptureStatus(undefined, false),
+	const stop = (cause: StreamStopCause): Promise<StopResult> => {
+		if (stopFlight !== undefined) return stopFlight;
+		const reserved = Promise.withResolvers<StopResult>();
+		stopFlight = reserved.promise;
+		const retire = () => {
+			if (stopFlight === reserved.promise) stopFlight = undefined;
+		};
+		void runStop(cause).then(
+			(result) => {
+				retire();
+				reserved.resolve(result);
+			},
+			(error: unknown) => {
+				retire();
+				reserved.reject(error);
+			},
 		);
+		return reserved.promise;
+	};
+	const runStop = async (cause: StreamStopCause): Promise<StopResult> => {
+		const intentOwner = ownership.capture();
+		void import("./capture-resilience.ts").then(({ noteCaptureStatus }) => {
+			if (ownership.owns(intentOwner)) noteCaptureStatus(undefined, false);
+		});
 		// The cause is reported from the INTENT, ahead of the outcome. An operator
 		// who pressed Stop meant it whether or not the engine answered, and a stop
 		// that parks behind a transaction must not leave the marker armed for the
@@ -713,43 +713,44 @@ export function createStreamSessionOrchestrator(
 		// capture hardware. Racing a 12 s stop deadline against it would report a
 		// healthy 65 s transaction as `stop_failed`, so the stop WAITS and is then
 		// answered against whatever state the transaction actually settled into.
-		if (state === "reconfiguring") {
+		if (ownership.state === "reconfiguring") {
+			stopFlight = undefined;
 			if (queuedStop === undefined) queuedStop = parkStop(cause);
 			return queuedStop.promise;
 		}
 		if (engineTransitionLatched) {
+			stopFlight = undefined;
 			if (engineQueuedStop === undefined)
 				engineQueuedStop = parkEngineStop(cause);
 			return engineQueuedStop.promise;
 		}
-		if (state === "idle") {
-			deps.unmarkStreamingForOta?.();
+		if (ownership.state === "idle") {
+			ownership.commit(ownership.capture(), "idle", "idle");
 			return { result: "stopped" };
 		}
-		if (state === "reconciling") {
+		if (ownership.state === "reconciling") {
 			reconciliationEpoch += 1;
+			const owner = ownership.invalidate();
 			try {
-				await stopWithinDeadline(active?.generation ?? generation);
+				await stopWithinDeadline(active?.generation ?? ownership.generation);
 			} catch (error) {
 				const reason = error instanceof Error ? error.message : "stop_failed";
 				logger.error("stream stop failed during reconciliation", { reason });
 				return { result: "stop_failed", reason };
 			}
-			transition("idle");
-			active = undefined;
-			deps.setStreamingStatus(false);
-			deps.unmarkStreamingForOta?.();
+			if (!ownership.launchPending && ownership.commit(owner, "idle", "idle"))
+				active = undefined;
 			return { result: "stopped" };
 		}
 
-		const stoppedGeneration = active?.generation ?? generation;
-		const cancellingStart = state === "starting";
+		const stoppedGeneration = active?.generation ?? ownership.generation;
+		const cancellingStart = ownership.state === "starting";
 		if (cancellingStart && active !== undefined) {
 			active.cancelled = true;
 			active.cancelRetryWait?.();
 			if (!active.launchAdmitted) {
-				active = undefined;
-				transition("idle");
+				ownership.invalidate();
+				if (transition("idle")) active = undefined;
 				return { result: "stopped" };
 			}
 		}
@@ -759,18 +760,15 @@ export function createStreamSessionOrchestrator(
 				reason: "illegal_lifecycle_transition",
 			};
 		}
+		const owner = ownership.invalidate();
 
 		try {
 			await stopWithinDeadline(stoppedGeneration);
-			if (!cancellingStart) {
+			if (!cancellingStart && ownership.commit(owner, "idle", "idle"))
 				active = undefined;
-				transition("idle");
-				deps.setStreamingStatus(false);
-				deps.unmarkStreamingForOta?.();
-			}
 			return { result: "stopped" };
 		} catch (error) {
-			transition("stop_failed");
+			ownership.commit(owner, "stop_failed", "unknown");
 			const reason = error instanceof Error ? error.message : "stop_failed";
 			logger.error(
 				reason === "stop_timeout"
@@ -787,27 +785,41 @@ export function createStreamSessionOrchestrator(
 	};
 
 	const reconcile = async (): Promise<LifecycleState> => {
+		if (stopFlight !== undefined || cleanup.pending || ownership.launchPending)
+			return ownership.state;
 		// `stop_failed` is included deliberately: a stop we could not confirm
 		// leaves the engine's real state UNKNOWN to us, and adopting its truth is
 		// the only way out. Without this the state latches — `start` refuses while
 		// the stale streaming status stands, and every later cycle is lost.
 		if (
-			state !== "idle" &&
-			state !== "streaming" &&
-			state !== "reconciling" &&
-			state !== "stop_failed"
+			ownership.state !== "idle" &&
+			ownership.state !== "streaming" &&
+			ownership.state !== "reconciling" &&
+			ownership.state !== "stop_failed"
 		)
-			return state;
-		if (state !== "reconciling") transition("reconciling");
+			return ownership.state;
+		const owner = ownership.invalidate();
+		if (!ownership.commit(owner, "reconciling", "unknown"))
+			return ownership.state;
 		const epoch = ++reconciliationEpoch;
-		const runtimeState = await deps.queryRuntime();
-		if (epoch !== reconciliationEpoch) return state;
-		if (runtimeState === "unknown") return state;
-		transition(runtimeState);
-		deps.setStreamingStatus(runtimeState === "streaming");
-		if (runtimeState === "streaming") deps.markStreamingForOta?.();
-		else deps.unmarkStreamingForOta?.();
-		return state;
+		const runtimeState = await withRuntimeObservationOwner(
+			() => ownership.owns(owner),
+			deps.queryRuntime,
+		).catch(() => "unknown" as const);
+		if (
+			epoch !== reconciliationEpoch ||
+			!ownership.owns(owner) ||
+			cleanup.pending ||
+			stopFlight !== undefined
+		)
+			return ownership.state;
+		if (
+			runtimeState !== "unknown" &&
+			ownership.commit(owner, runtimeState, runtimeState) &&
+			runtimeState === "idle"
+		)
+			active = undefined;
+		return ownership.state;
 	};
 
 	const releaseQueuedStop = (): boolean => {
@@ -836,25 +848,25 @@ export function createStreamSessionOrchestrator(
 		outcome: EngineConfigChangeOutcome,
 	): LifecycleState => {
 		if (outcome.phase === "applied" || outcome.phase === "reverted") {
-			transition("streaming");
-			deps.setStreamingStatus(true);
-			return "streaming";
+			ownership.commit(ownership.capture(), "streaming", "streaming");
+			return ownership.state;
 		}
-		if (outcome.reason === CONFIG_CHANGE_REASON_DEADLINE) {
+		if (
+			outcome.reason === CONFIG_CHANGE_REASON_DEADLINE ||
+			outcome.reason === "engine_connection_lost"
+		) {
 			// The transaction outlived its own declared bound, so the engine's state
 			// is genuinely unknown to us — adopt its truth rather than assert one.
-			transition("reconciling");
-			return "reconciling";
+			ownership.commit(ownership.capture(), "reconciling", "unknown");
+			return ownership.state;
 		}
 		// Every other rollback_failed is the engine telling us it gave up and went
 		// Idle (the `teardown_timeout` escalation is the canonical case). This is
 		// a genuine stream-end that never routes through stop() — clear the OTA
 		// sentinel here too.
-		transition("idle");
-		active = undefined;
-		deps.setStreamingStatus(false);
-		deps.unmarkStreamingForOta?.();
-		return "idle";
+		if (ownership.commit(ownership.capture(), "idle", "idle"))
+			active = undefined;
+		return ownership.state;
 	};
 
 	const changeConfig = async (
@@ -863,11 +875,17 @@ export function createStreamSessionOrchestrator(
 		const runChange = deps.changeRuntimeConfig;
 		if (runChange === undefined)
 			return { result: "rejected", reason: "change_config_unsupported" };
-		if (state !== "streaming" || activeChange !== undefined)
+		if (
+			ownership.state !== "streaming" ||
+			activeChange !== undefined ||
+			cleanup.pending ||
+			stopFlight !== undefined
+		)
 			return { result: "busy" };
 
 		const attemptId = deps.createAttemptId();
 		if (!transition("reconfiguring")) return { result: "busy" };
+		const owner = ownership.invalidate();
 
 		let settleObserved!: (outcome: EngineConfigChangeOutcome) => void;
 		const observed = new Promise<EngineConfigChangeOutcome>((resolve) => {
@@ -877,7 +895,8 @@ export function createStreamSessionOrchestrator(
 			attemptId,
 			settled: false,
 			settle: (outcome) => {
-				if (change.settled) return;
+				if (change.settled || activeChange !== change || !ownership.owns(owner))
+					return;
 				change.settled = true;
 				settleObserved(outcome);
 			},
@@ -897,7 +916,7 @@ export function createStreamSessionOrchestrator(
 			);
 		});
 
-		const dispatched = runChange(delta, attemptId).then(
+		const dispatched = (async () => runChange(delta, attemptId))().then(
 			(outcome) => outcome,
 			(error: unknown): EngineConfigChangeOutcome => {
 				// A dead control socket rejects every in-flight call, so a rejection
@@ -913,8 +932,9 @@ export function createStreamSessionOrchestrator(
 			outcome = await Promise.race([observed, dispatched, deadline]);
 		} finally {
 			if (timer !== undefined) cancelTimeout(timer);
-			activeChange = undefined;
+			if (activeChange === change) activeChange = undefined;
 		}
+		if (!ownership.owns(owner)) return { result: "busy" };
 
 		const settled = settleConfigChangeState(outcome);
 		deps.publishConfigChangePhase?.({
@@ -924,7 +944,7 @@ export function createStreamSessionOrchestrator(
 		});
 
 		const hadQueuedStop = releaseQueuedStop();
-		if (!hadQueuedStop && settled === "reconciling") void reconcile();
+		if (!hadQueuedStop && settled === "reconciling") await reconcile();
 
 		if (outcome.phase === "applied") return { result: "applied", attemptId };
 		return {
@@ -938,77 +958,19 @@ export function createStreamSessionOrchestrator(
 		start,
 		stop,
 		reconcile,
-		snapshot: () => ({ state, generation }),
+		snapshot: () => ({
+			state: ownership.state,
+			generation: ownership.generation,
+		}),
 		changeConfig,
 		noteConfigChangePhase,
 		noteEngineStatus,
 	};
 }
 
-const productionOrchestrator = createStreamSessionOrchestrator({
-	createAttemptId: newAttemptId,
-	setStreamingStatus: updateStatus,
-	getStreamingStatus: getIsStreaming,
-	stopRuntime: stopGeneration,
-	queryRuntime: queryEngineRuntimeStreaming,
-	setLifecycleState: updateStreamLifecycleState,
-	invariantViolation: (from, to) => {
-		logger.error("stream-session illegal lifecycle transition", { from, to });
-		notificationBroadcast(
-			"stream_session_recovered",
-			"warning",
-			"The stream session entered an invalid lifecycle state and was recovered.",
-			10,
-			false,
-			true,
-		);
-	},
-	// The audio-source probe deliberately waits longer than one attempt deadline;
-	// without this the generic timeout preempts it and reports a missing audio
-	// device as an unanswered engine.
-	pendingGateRemainingMs: () => asrcProbeRemainingMs(),
-	suppressionContext: getStartSuppressionContext,
-	reportRetry: reportStartRetry,
-	reportTerminalFailure: reportStartTerminalFailure,
-	changeRuntimeConfig: changeEngineRuntimeConfig,
-	publishConfigChangePhase: broadcastConfigChangePhase,
-	// Lazily imported for the reason `sources.ts` states about its own audio
-	// handler: this module is already reachable FROM the source graph, so a
-	// static edge back into it reorders module initialisation and leaves the
-	// boot-time source build reading a half-initialised module.
-	onStreamCommitted: () => {
-		void import("./sources.ts")
-			.then(({ noteStreamedSourceCommitted }) => noteStreamedSourceCommitted())
-			.catch((error) =>
-				logger.warn("stream commit bookkeeping failed", { error }),
-			);
-	},
-	// Lazily imported for the same module-ordering reason as the hook above:
-	// `stream-restoration.ts` reaches the streamloop and the source graph, both
-	// of which already point back at this module.
-	onStreamArmed: () => {
-		void import("./stream-restoration.ts")
-			.then(({ armStreamRestoration }) => armStreamRestoration())
-			.catch((error) =>
-				logger.warn("stream restoration arming failed", { error }),
-			);
-	},
-	// Acquired at the orchestrator rather than in `streaming.procedure.ts`: every
-	// launch origin (ui / autostart / remote-control / set-profile / restoration)
-	// enters through this ONE mutex, so the UI procedure is not the only one held.
-	admitLifecycle: () => tryAcquireLifecycle("streaming"),
-	awaitRecovery: awaitRecoveryBarrier,
-	recoveryPending: isRecoveryPending,
-	blockingMutation: streamingBlockingMutation,
-	admitUpdate: admitAndPrepareStreamStart,
-	markStreamingForOta: setOtaStreamingMarker,
-	unmarkStreamingForOta: clearOtaStreamingMarker,
-	// Statically imported, unlike the arming hook: `armed-stream-marker.ts` holds
-	// no streaming-graph edges, and a SYNCHRONOUS clear is what guarantees an
-	// operator Stop has disarmed restoration before anything else can read the
-	// marker.
-	onStreamStopped: noteStreamStopped,
-});
+const productionOrchestrator = createStreamSessionOrchestrator(
+	streamSessionProductionDeps,
+);
 
 export function startStreamSession(
 	request: StreamStartRequest,

@@ -24,7 +24,6 @@ import type WebSocket from "ws";
 import { logger } from "../../../helpers/logger.ts";
 import { onNetworkInterfacesChange } from "../../network/network-interfaces.ts";
 import { isUpdating } from "../../system/software-updates.ts";
-import { notificationBroadcast } from "../../ui/notifications.ts";
 import { sendStatus } from "../../ui/status.ts";
 import { getSocketSenderId } from "../../ui/websocket-server.ts";
 import { clearAsrcProbeReject, isAsrcProbeRejectResolved } from "../audio.ts";
@@ -39,6 +38,10 @@ import {
 	StreamStartFailure,
 } from "../start-failure-taxonomy.ts";
 import {
+	assertStreamLaunchOwnership,
+	currentStreamLaunchOwner,
+} from "../stream-launch-ownership.ts";
+import {
 	type ConfigParameters,
 	getIsStreaming,
 	startError,
@@ -47,8 +50,10 @@ import {
 } from "../streaming.ts";
 import { getStreamingBackend } from "../streaming-engine.ts";
 import { getStreamingProcesses, stopProcessAndWait } from "./process-runner.ts";
+import { reportSessionInvariant } from "./resource-invariant.ts";
 import { prepareSrtlaIpAddresses } from "./srtla-ip-preparation.ts";
 import { type StartStreamResult, startStream } from "./start-stream.ts";
+import { confirmUnownedEngineStop } from "./stop-evidence.ts";
 
 export {
 	prepareSrtlaIpAddresses,
@@ -68,6 +73,8 @@ export async function start(
 	generation = 0,
 	attemptId = "legacy-start",
 ): Promise<StartStreamResult> {
+	assertStreamLaunchOwnership();
+	const ownsLaunch = currentStreamLaunchOwner();
 	if (getIsStreaming()) {
 		sendStatus(conn);
 		return {
@@ -98,6 +105,7 @@ export async function start(
 	};
 	try {
 		c = await updateConfig(params);
+		assertStreamLaunchOwnership();
 	} catch (err) {
 		if (typeof err === "string") {
 			startError(conn, err, senderId);
@@ -123,6 +131,7 @@ export async function start(
 
 	try {
 		await prepareSrtlaIpAddresses(c.srtlaAddr);
+		assertStreamLaunchOwnership();
 	} catch (error) {
 		throw new StreamStartFailure(
 			classifyStartFailure("params", error, attemptId, {
@@ -131,12 +140,14 @@ export async function start(
 		);
 	}
 	const refreshSrtlaIpAddresses = async () => {
+		if (sessionResources?.generation !== generation || !ownsLaunch()) return;
 		try {
 			// `changed` is true for a MAPPING-ONLY republication too — moving a link
 			// from one interface to another leaves the IP bytes byte-identical, so a
 			// SIGHUP keyed on the list alone would skip the very reload that carries
 			// the new mapping.
 			const publication = await prepareSrtlaIpAddresses(c.srtlaAddr);
+			if (sessionResources?.generation !== generation || !ownsLaunch()) return;
 			if (publication.changed && getIsStreaming()) restartSrtla();
 		} catch (error) {
 			logger.warn("Failed to refresh SRTLA IP addresses", { error });
@@ -184,18 +195,6 @@ export async function start(
 		sessionResources = undefined;
 	}
 	return result;
-}
-
-function reportSessionInvariant(generation: number, reason: string): void {
-	logger.error("stream-session invariant violation", { generation, reason });
-	notificationBroadcast(
-		"stream_session_recovered",
-		"warning",
-		"The stream session had inconsistent resource ownership and was recovered.",
-		10,
-		false,
-		true,
-	);
 }
 
 export function stopGeneration(generation: number): Promise<void> {
@@ -266,7 +265,7 @@ export function stopGeneration(generation: number): Promise<void> {
 					"engine session missing while generation-owned resources remained",
 				);
 			}
-			void finish();
+			confirmUnownedEngineStop(finish);
 		}
 	});
 }

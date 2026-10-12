@@ -141,6 +141,99 @@ idle reconciliation removes it; authoritative streaming reconciliation sets it
 for a session surviving a backend restart. Unknown reconciliation preserves it.
 These cancellation and marker transitions are host-tested, not board-qualified.
 
+### Session ownership state machine [EXISTS; host proof, board qualification owed]
+
+`stream-session-ownership.ts` owns state, generation, an operation epoch and the
+OTA projection. `stream-session-cleanup.ts` owns submitted cleanup. The factory
+retains admission, retry and configuration orchestration; wire/stored schemas,
+D8 origins, refusal payloads and timing policy are unchanged.
+
+| State | Admitted operation / transition | Liveness evidence |
+|---|---|---|
+| `idle` | Start → `starting`; query → `reconciling` | Positive idle, or never-launched initial state |
+| `starting` | confirmed launch → `streaming`; rolled-back failure/refusal → `idle`; Stop → `stopping`; unknown cleanup → `reconciling` | Unknown once launch is submitted |
+| `streaming` | Stop → `stopping`; query → `reconciling`; config → `reconfiguring` | Last confirmed live |
+| `reconfiguring` | applied/reverted → `streaming`; engine-confirmed rollback idle → `idle`; deadline/socket loss → `reconciling` | Live until positive contrary evidence |
+| `stopping` | acknowledged cleanup → `idle`; timeout/rejection → `stop_failed` | Unknown; last confirmed status retained |
+| `stop_failed` | retry → `stopping`; authoritative query → `reconciling` | Unknown |
+| `reconciling` | authoritative idle/live → `idle`/`streaming`; unknown → remain | Unknown; last confirmed status retained |
+
+Every async continuation captures a generation/flight token and rechecks it before
+changing **any** session state: lifecycle, active attempt, status, marker or lease.
+The transition guard and its projection are one operation: rejection runs no
+setters. Lease release uses the interlock's own token in the admission `finally`;
+an old release cannot release a later holder. Unknown is never normalized to idle
+from the legacy boolean status flag.
+An externally cleared legacy flag may request authoritative reconciliation of an
+otherwise settled streaming session; it is never itself idle evidence. Mock-mode
+reconciliation reads the independent fake engine model, not that legacy flag.
+
+`stream-launch-ownership.ts` carries that same factory cancellation predicate
+through asynchronous launch setup using a per-async-context binding. Session setup
+and sender-launch boundaries check it after awaits; a network-refresh callback
+also checks its captured resource generation before restarting the sender.
+Deferred source-commit/restoration-arm imports receive a current-owner predicate.
+Runtime probes carry their observation owner to the engine event callback and
+client-adoption boundary, so an obsolete probe cannot publish status before the
+factory discards its answer. Session event listeners also check their client and
+launch owner. No locally owned client is **not** idle evidence: `stop-evidence.ts`
+queries state, stops an adopted live engine, and refuses unknown rather than
+clearing protection. A positive idle event may settle an otherwise unowned running
+session, but never runs through outstanding launch/cleanup ownership.
+No new producer or wire field is needed. Launch config and resource-invariant
+reporting have small, separately routed streamloop modules.
+
+Stop reserves one flight **synchronously, before any await**. Duplicate Stops join
+its answer; a configuration/capture-parked Stop joins the existing parked answer.
+Reconciliation cannot adopt idle/live while cleanup owns the engine. A timeout
+ends the caller's wait, not submitted cleanup's ownership: no new launch can enter
+until that raw cleanup settles. Late acknowledgement retires only its own flight;
+it cannot publish idle. A cancelled launch remains fenced until its continuation
+settles and final cleanup establishes idle; an outstanding old launch also blocks
+new admission even if an idle observation arrives.
+
+**OTA invariant:** `/run/ceralive/streaming` is present whenever engine liveness is
+true **or UNKNOWN**. It is cleared only by positive idle/cleanup evidence (including
+transactional failed launch rollback), never Stop intent, `start_cleanup_timeout`,
+deadline expiry, or synthesized `rollback_failed / engine_connection_lost`.
+Unknown reconciliation sets protection even on a fresh backend. Unknown outcomes
+keep the generation and last confirmed live status, and block a fresh Start.
+Restoration intent remains a separate marker, disarmed immediately on Stop.
+
+The real-factory interleaving harness uses boundary gates and the real lifecycle
+lease, enumerating enabled event orderings to depth five, plus the six-event
+reconciliation/old-stop regression. It checks launch exclusion, conservative OTA
+projection, stale completion rejection, lease release at quiescence, side-effect-free
+rejection and Stop joining. This is bounded host model coverage, not proof of every
+unbounded history, real engine scheduling, filesystem writes or board media.
+
+### Bounded subprocess completion [EXISTS; host tested]
+
+`bounded-spawn.ts` separates process completion from output drainage. The command
+deadline also bounds inherited-open pipes. A live child gets TERM, a 100 ms
+grace timer, KILL if still live, a 100 ms reap timer and 50 ms drainage timer. The existing
+30-second default command budget and supervised-worker shutdown policy do not change.
+Output collected before the bound is retained; further reads are cancelled without
+an unbounded join. A zero exit established **before** termination remains independent
+positive CLI evidence even when drainage is cut short; a TERM-induced zero never
+becomes success or invokes positive `onExit`. Kernel-uninterruptible retirement is
+not proven by the runnable real-child tests. Timeout fixture clocks fire only after
+explicit readiness, so delayed child scheduling is not mistaken for lost output.
+The deterministic hard-bound proof manually advances the injected clock and
+requires deadline → TERM → 100 ms grace → KILL → 100 ms reap → 50 ms drain →
+timeout rejection with neither exit nor pipe drainage available. A separate real
+TERM-ignoring child has no natural exit; after rejection it must be SIGKILLed,
+joined through `child.exited`, and absent from `/proc`. Its 10-second safety
+deadline detects a stuck fixture/reaper, not a retirement-latency guarantee.
+Signal-exit classification fixtures also control cleanup clocks. The inherited-pipe
+fixture establishes actual zero exit while a test-owned descendant holds output
+open indefinitely, then fires its deadline and joins cleanup. No child startup
+must complete within a sub-second wall-clock window. Host oversubscription can
+delay real timer delivery/reaping; real-time retirement latency under that load
+and kernel-uninterruptible children remain unqualified. The original PID-visible
+failure has no captured process state; later observed Z state supports a zombie
+explanation only as an inference, not a retrospective hardware/process receipt.
+
 ---
 
 ## The failure-site mapping table (cross-check)

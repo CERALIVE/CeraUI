@@ -144,8 +144,8 @@ describe("a stop that never settles must not poison the session", () => {
 	});
 
 	test("a stop that missed its deadline is recoverable, not terminal", async () => {
-		// Given a runtime stop that never settles (defect 1 above), so the
-		// orchestrator's own 12 s bound is what answers the RPC.
+		// Given a runtime stop held past the caller's 12 s deadline.
+		const cleanup = Promise.withResolvers<void>();
 		let streamingStatus = false;
 		let deadlineCallback: (() => void) | undefined;
 		const orchestrator = createStreamSessionOrchestrator({
@@ -157,7 +157,7 @@ describe("a stop that never settles must not poison the session", () => {
 				streamingStatus = value;
 			},
 			getStreamingStatus: () => streamingStatus,
-			stopRuntime: () => new Promise<void>(() => {}),
+			stopRuntime: () => cleanup.promise,
 			// The engine, asked directly, reports it is NOT streaming.
 			queryRuntime: async () => "idle",
 			stopDeadlineMs: 12_000,
@@ -177,6 +177,12 @@ describe("a stop that never settles must not poison the session", () => {
 			reason: "stop_timeout",
 		});
 		expect(orchestrator.snapshot().state).toBe("stop_failed");
+		expect(await orchestrator.reconcile()).toBe("stop_failed");
+		expect(
+			await orchestrator.start({ origin: "ui", launch: async () => {} }),
+		).toMatchObject({ result: "busy" });
+		cleanup.resolve();
+		for (let i = 0; i < 10; i++) await Promise.resolve();
 
 		// When the session reconciles against the engine's actual truth.
 		const reconciled = await orchestrator.reconcile();

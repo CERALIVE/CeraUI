@@ -366,10 +366,19 @@ path retries instead of publishing a false idle state.
 Stop also cancels a generation waiting for D8 update admission, including the
 idle no-update case, before any launch or OTA marking. The restoration marker
 disarms on intent, while the separate OTA sentinel stays through parked or failed
-stops and unknown engine state until confirmed idle/cleanup. Reconciliation
-adopts both media truth and the OTA guard. Real-child subprocess regressions
+stops and unknown engine state until confirmed idle/cleanup. Submitted cleanup
+owns one flight even after its caller times out; reconciliation cannot admit a
+new launch while that cleanup is pending. Socket loss and incomplete launch cleanup
+retain the generation and last confirmed live status. Guard rejection executes no
+projection setters. Reconciliation adopts both media truth and the OTA guard.
+See [the ownership state machine](../../docs/START-LIFECYCLE.md).
+Real-child subprocess regressions
 reject termination-induced zero exits without losing genuine completed CLI
-success during output drainage. These host proofs do not qualify either board.
+success during output drainage, with exact injected-clock TERM/KILL/reap/drain
+budgets and independent real-child SIGKILL/reap proof. The real-child 10-second
+safety detector is not an oversubscribed-host latency claim. Readiness-driven
+fixture clocks tolerate delayed child scheduling. These host proofs do not qualify
+kernel-uninterruptible children or either board.
 
 Stop uses a fresh, short-lived cerastream control connection. The engine processes
 one request at a time per connection, so sending stop on the session connection and

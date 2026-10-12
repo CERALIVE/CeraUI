@@ -59,9 +59,9 @@ describe("streaming.start — structured failure error code (Task 16)", () => {
 		getConfig().pipeline = priorPipeline;
 		// The success-path start flips the streaming module's global on; clear it
 		// so getIsStreaming() does not leak `true` into later files' prod tests.
-		setStreamingState(false);
 		updateStatus(false);
 		resetMockState();
+		setStreamingState(false);
 	});
 	afterAll(() => {
 		stopMockService();

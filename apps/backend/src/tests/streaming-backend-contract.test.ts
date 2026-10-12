@@ -199,6 +199,15 @@ function makeFakeClient(options: FakeClientOptions = {}): FakeClientHarness {
 				},
 			};
 		},
+		requestKeyframe: async () => {
+			throw new Error("fixture requestKeyframe is not exercised");
+		},
+		setEdidProfile: async () => {
+			throw new Error("fixture setEdidProfile is not exercised");
+		},
+		listSwitchTargets: async () => {
+			throw new Error("fixture listSwitchTargets is not exercised");
+		},
 		close: async () => {
 			calls.push({ op: "close" });
 			const closed = new Error("client_closed");
@@ -478,8 +487,8 @@ describe("CerastreamBackend behavioural contract", () => {
 			},
 			getStreamingStatus: () => streaming,
 			stopRuntime: (generation) =>
-				new Promise<void>((resolve) => {
-					if (!backend.stop(resolve)) resolve();
+				new Promise<void>((resolve, reject) => {
+					if (!backend.stop(resolve, reject)) resolve();
 					expect(generation).toBeGreaterThan(0);
 				}),
 			queryRuntime: async () => "idle",
@@ -512,6 +521,9 @@ describe("CerastreamBackend behavioural contract", () => {
 		stopTimers.shift()?.();
 		expect(await first).toMatchObject({ result: "failed" });
 		expect(streaming).toBe(false);
+		expect(orchestrator.snapshot().state).toBe("reconciling");
+		await backend.settle();
+		expect(await orchestrator.reconcile()).toBe("idle");
 		expect(orchestrator.snapshot()).toEqual({
 			state: "idle",
 			generation: 1,
@@ -553,6 +565,50 @@ describe("CerastreamBackend behavioural contract", () => {
 		await backend.settle();
 		expect(stopped).toBe(true);
 		expect(fake.calls.map((call) => call.op)).toContain("stop");
+	});
+
+	test("an obsolete runtime probe cannot publish status into a newer factory generation", async () => {
+		// Given a real backend probe held while a real factory Stop/new Start supersedes it.
+		let fireDeadline: (() => void) | undefined;
+		const { backend, fake, bridgeH } = makeBackend({
+			scheduleTimeout: (callback) => {
+				fireDeadline = callback;
+				const token = setTimeout(() => undefined, 60_000);
+				token.unref();
+				return token;
+			},
+			cancelTimeout: (token) => clearTimeout(token),
+		});
+		let marked = false;
+		let live = false;
+		const session = createStreamSessionOrchestrator({
+			createAttemptId: () => "probe-owner",
+			setStreamingStatus: (value) => {
+				live = value;
+			},
+			markStreamingForOta: () => {
+				marked = true;
+			},
+			unmarkStreamingForOta: () => {
+				marked = false;
+			},
+			stopRuntime: async () => {},
+			queryRuntime: () => backend.reconcileRuntimeState(),
+		});
+		const probing = session.reconcile();
+		await fake.subscribed;
+		for (let i = 0; i < 30; i++) await Promise.resolve();
+		await session.stop("operator");
+		await session.start({ origin: "ui", launch: async () => {} });
+		// When the obsolete engine connection sends its delayed idle status.
+		fake.emit({ type: "status", seq: 1, state: "idle", streaming: false });
+		expect(bridgeH.broadcasts.count).toBe(0);
+		fireDeadline?.();
+		await probing;
+		// Then neither the dependency's publication nor the factory adoption can clobber it.
+		expect(session.snapshot()).toEqual({ state: "streaming", generation: 1 });
+		expect(marked).toBe(true);
+		expect(live).toBe(true);
 	});
 
 	// A crashed or already-disconnected engine sends no final idle status, so the

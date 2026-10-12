@@ -1220,17 +1220,17 @@ export const DEFAULT_STARTUP_TIMEOUT_MS = 15_000;
 /** Default grace before SIGKILL escalates after SIGTERM at shutdown: 5 s. */
 export const DEFAULT_KILL_GRACE_MS = 5_000;
 
-/** Rejection raised when a {@link spawnWithTimeout} child exceeds its budget. */
-export class SpawnTimeoutError extends Error {
-	constructor(
-		public readonly command: string,
-		public readonly partialStdout: string = "",
-		public readonly partialStderr: string = "",
-	) {
-		super(`Spawn timed out: ${command}`);
-		this.name = "SpawnTimeoutError";
-	}
-}
+export {
+	SpawnTimeoutError,
+	type SpawnWithTimeoutResult,
+} from "./bounded-spawn.ts";
+
+import {
+	type BoundedSpawnOptions,
+	collectBoundedChild,
+	SpawnTimeoutError,
+	type SpawnWithTimeoutResult,
+} from "./bounded-spawn.ts";
 
 /** Rejection raised when a supervised worker fails to become ready in time. */
 export class StartupTimeoutError extends Error {
@@ -1238,12 +1238,6 @@ export class StartupTimeoutError extends Error {
 		super(`Worker did not become ready in time: ${command}`);
 		this.name = "StartupTimeoutError";
 	}
-}
-
-export interface SpawnWithTimeoutResult {
-	readonly exitCode: number;
-	readonly stdout: string;
-	readonly stderr: string;
 }
 
 /**
@@ -1254,12 +1248,7 @@ export interface SpawnWithTimeoutResult {
  */
 export async function spawnWithTimeout(
 	argv: string[],
-	opts?: {
-		timeoutMs?: number;
-		signal?: AbortSignal;
-		env?: Readonly<Record<string, string | undefined>>;
-		onExit?: (exitCode: number) => void;
-	},
+	opts?: BoundedSpawnOptions,
 ): Promise<SpawnWithTimeoutResult> {
 	const timeoutMs = opts?.timeoutMs ?? DEFAULT_SPAWN_TIMEOUT_MS;
 	const command = argv.join(" ");
@@ -1273,73 +1262,7 @@ export async function spawnWithTimeout(
 		stderr: "pipe",
 		...(opts?.env === undefined ? {} : { env: opts.env }),
 	});
-	const kill = () => {
-		try {
-			child.kill();
-		} catch {
-			// best-effort: the process may have already exited
-		}
-	};
-
-	const acc = { stdout: "", stderr: "" };
-	const drain = async (
-		stream: ReadableStream<Uint8Array> | undefined,
-		key: "stdout" | "stderr",
-	): Promise<void> => {
-		if (!stream) return;
-		const decoder = new TextDecoder();
-		for await (const chunk of stream) {
-			acc[key] += decoder.decode(chunk, { stream: true });
-		}
-		acc[key] += decoder.decode();
-	};
-	const stdoutDone = drain(child.stdout, "stdout");
-	const stderrDone = drain(child.stderr, "stderr");
-
-	let timer: ReturnType<typeof setTimeout> | undefined;
-	let onAbort: (() => void) | undefined;
-	let terminationIssued = false;
-	try {
-		const outcome = await new Promise<"exit" | "timeout" | "abort">(
-			(resolve) => {
-				void child.exited.then((exitCode) => {
-					if (!terminationIssued) opts?.onExit?.(exitCode);
-					resolve("exit");
-				});
-				timer = setTimeout(() => resolve("timeout"), timeoutMs);
-				if (opts?.signal) {
-					onAbort = () => resolve("abort");
-					opts.signal.addEventListener("abort", onAbort, { once: true });
-				}
-			},
-		);
-
-		if (outcome !== "exit") {
-			// A zero exit observed BEFORE our signal is completion evidence; a
-			// child exiting zero because of that signal is still timeout/abort.
-			const completedSuccessfully = child.exitCode === 0;
-			if (!completedSuccessfully) {
-				terminationIssued = true;
-				kill();
-			}
-			await Promise.allSettled([stdoutDone, stderrDone, child.exited]);
-			if (completedSuccessfully)
-				return { exitCode: 0, stdout: acc.stdout, stderr: acc.stderr };
-			throw new SpawnTimeoutError(command, acc.stdout, acc.stderr);
-		}
-
-		await Promise.allSettled([stdoutDone, stderrDone]);
-		return {
-			exitCode: child.exitCode ?? 0,
-			stdout: acc.stdout,
-			stderr: acc.stderr,
-		};
-	} finally {
-		if (timer) clearTimeout(timer);
-		if (opts?.signal && onAbort) {
-			opts.signal.removeEventListener("abort", onAbort);
-		}
-	}
+	return collectBoundedChild(child, command, { ...opts, timeoutMs });
 }
 
 /** Minimal Subprocess shape a supervised worker / watcher depends on. */
