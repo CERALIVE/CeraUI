@@ -293,7 +293,7 @@
 	"general.updateConfirmation": "소프트웨어 업데이트를 시작하시겠습니까? 이 작업은 몇 분이 소요될 수 있습니다. 업데이트가 완료될 때까지 스트림을 시작할 수 없습니다. 업그레이드가 성공적으로 완료되면 인코더는 잠시 연결이 끊어집니다. 업데이트 중에는 절대로 전원을 제거하거나 인코더를 재설정하지 마십시오. 인코더가 배터리로 전원을 공급받는 경우 완전히 충전되어 있는지 확인하십시오.",
 	"general.updateFailed": "업데이트 실패",
 	"general.updateLastChecked": "마지막 확인 <time>",
-	"general.updateNoProgress": "기기가 업데이트를 수락했지만 지금까지 진행 상황을 보고하지 않았습니다. 보고되는 즉시 이 내용이 갱신됩니다.",
+	"general.updateNoProgress": "기기가 업데이트를 수락했지만 진행 상황을 전혀 보고하지 않았습니다. 아무것도 설치되지 않았습니다.",
 	"general.updateReasonAlreadyUpdating": "이미 업데이트가 진행 중입니다.",
 	"general.updateReasonCheckUnavailable": "패키지 목록을 새로 고치지 못했습니다. 기기의 인터넷 연결을 확인한 뒤 다시 시도하세요.",
 	"general.updateReasonDisabled": "이 기기에서는 소프트웨어 업데이트가 꺼져 있습니다. CeraUI 외부에서 관리됩니다.",

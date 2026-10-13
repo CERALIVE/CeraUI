@@ -325,7 +325,7 @@
 	"general.updateConfirmation": "Are you sure you want to start a software update? This may take several minutes. You won't be able to start a stream until it's completed. The encoder will briefly disconnect after a successful upgrade. Never remove power or reset the encoder while updating. If the encoder is powered from a battery, ensure it's fully charged.",
 	"general.updateFailed": "Update failed",
 	"general.updateLastChecked": "Last checked at {time}",
-	"general.updateNoProgress": "The device accepted the update but has never reported any progress so far. This updates as soon as it does.",
+	"general.updateNoProgress": "The device accepted the update but never reported any progress. Nothing was installed.",
 	"general.updateReasonAlreadyUpdating": "An update is already running.",
 	"general.updateReasonCheckUnavailable": "The package list couldn't be refreshed. Check the device's internet connection, then try again.",
 	"general.updateReasonDisabled": "Software updates are turned off on this device. They're managed outside CeraUI.",
@@ -2667,5 +2667,10 @@
 	"live.updateInProgress.title": "An update is being installed",
 	"live.updateInProgress.body": "Streaming can start as soon as it finishes; this step cannot be interrupted safely.",
 	"live.startFailure.class.update_in_progress": "The device is installing an update and cannot start a stream until it finishes.",
-	"notifications.disruptiveActionRefused": "This action was not run. The device must confirm that no stream is live and that no update is in progress first."
+	"notifications.disruptiveActionRefused": "This action was not run. The device must confirm that no stream is live and that no update is in progress first.",
+	"general.updateAcceptedNoProgress": "The device accepted the update but has never reported any progress so far. This updates as soon as it does.",
+	"settings.updates.connection.unusable": "Not usable for updates",
+	"settings.updates.cellular.pendingBodyMetered": "No connection known to be unmetered is available. Downloading {version} transfers about {size} over a metered connection or one whose cost is unknown.",
+	"settings.updates.layer.withheldBand": "Not included in this update",
+	"settings.updates.credentials.unusableTitle": "The device's update certificate could not be used"
 }

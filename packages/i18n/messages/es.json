@@ -325,7 +325,7 @@
 	"general.updateConfirmation": "¿Estás seguro de que deseas iniciar una actualización de software? Esto puede tomar varios minutos. No podrás iniciar un stream hasta que se haya completado la actualización. El codificador se desconectará brevemente después de una actualización exitosa. Nunca elimines la potencia o resetees el encoder mientras se realiza la actualización. Si el codificador es alimentado por batería, asegúrate de que esté completamente cargado.",
 	"general.updateFailed": "Error en la actualización",
 	"general.updateLastChecked": "Última comprobación a las {time}",
-	"general.updateNoProgress": "El dispositivo aceptó la actualización, pero hasta ahora no ha informado ningún avance. Esto se actualizará en cuanto lo haga.",
+	"general.updateNoProgress": "El dispositivo aceptó la actualización pero nunca informó ningún progreso. No se instaló nada.",
 	"general.updateReasonAlreadyUpdating": "Ya hay una actualización en curso.",
 	"general.updateReasonCheckUnavailable": "No se pudo actualizar la lista de paquetes. Comprueba la conexión a internet del dispositivo e inténtalo de nuevo.",
 	"general.updateReasonDisabled": "Las actualizaciones de software están desactivadas en este dispositivo. Se gestionan fuera de CeraUI.",
@@ -2670,5 +2670,10 @@
 	"live.updateInProgress.title": "Se está instalando una actualización",
 	"live.updateInProgress.body": "La transmisión podrá empezar en cuanto termine; este paso no se puede interrumpir con seguridad.",
 	"live.startFailure.class.update_in_progress": "El dispositivo está instalando una actualización y no puede iniciar una transmisión hasta que termine.",
-	"notifications.disruptiveActionRefused": "No se ejecutó esta acción. Primero el equipo tiene que confirmar que no hay ninguna transmisión en vivo ni una actualización en curso."
+	"notifications.disruptiveActionRefused": "No se ejecutó esta acción. Primero el equipo tiene que confirmar que no hay ninguna transmisión en vivo ni una actualización en curso.",
+	"general.updateAcceptedNoProgress": "El dispositivo aceptó la actualización, pero hasta ahora no ha informado ningún avance. Esto se actualizará en cuanto lo haga.",
+	"settings.updates.connection.unusable": "No se puede usar para actualizaciones",
+	"settings.updates.cellular.pendingBodyMetered": "No hay ninguna conexión disponible que se sepa sin límite de datos. Descargar {version} transfiere unos {size} por una conexión con límite de datos o cuyo costo se desconoce.",
+	"settings.updates.layer.withheldBand": "No se incluyen en esta actualización",
+	"settings.updates.credentials.unusableTitle": "No se pudo usar el certificado de actualización del dispositivo"
 }

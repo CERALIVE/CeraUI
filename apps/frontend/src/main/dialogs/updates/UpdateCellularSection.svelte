@@ -9,6 +9,11 @@
   surface grants it and starts the download in one step, so the button never
   means "some time later".
 
+  The device asks whenever no connection is KNOWN to be unmetered: a
+  cellular-only link, a connected link of unknown cost, or an inventory it could
+  not read (early oracle F5). The pending band therefore says "metered or of
+  unknown cost", never that only a cellular connection exists.
+
   The system image toggle allows CHECKS only. A system image is never downloaded
   over cellular without this explicit per-candidate approval, whatever the
   toggle says — the hint states that plainly rather than letting the switch read
@@ -53,7 +58,7 @@ const locale = $derived(getLocale());
 				<div class="min-w-0 space-y-1">
 					<p class="text-sm font-medium">{m['settings.updates.cellular.pendingTitle']()}</p>
 					<p class="text-muted-foreground text-sm" data-testid="update-cellular-pending-body">
-						{m['settings.updates.cellular.pendingBody']({
+						{m['settings.updates.cellular.pendingBodyMetered']({
 							version: pending.id,
 							size: formatBytes(locale)(pending.sizeBytes),
 						})}

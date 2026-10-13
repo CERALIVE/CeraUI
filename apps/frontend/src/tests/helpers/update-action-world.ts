@@ -204,13 +204,15 @@ export function startRead(w: World, load: boolean): World {
 /**
  * The contract (`an-update-action-outcome-is-decided-by-evidence.md`): an OPEN
  * dialog reads again when the pushed phase CHANGES, and when a session is
- * restored even though the phase did not change.
+ * restored even though the phase did not change. A frame that does both
+ * forwards the phase once and still re-reads the settings (early oracle F6).
  */
 type ContractMove =
 	| { readonly kind: "none" }
 	| {
 			readonly kind: "phase";
 			readonly phase: UpdateOrchestratorPhase | undefined;
+			readonly reread?: true;
 	  }
 	| { readonly kind: "reread" };
 
@@ -219,10 +221,12 @@ export function contractMove(
 	next: DeviceFrame,
 ): ContractMove {
 	if (!next.open) return { kind: "none" };
-	if (next.phase !== seen.phase) return { kind: "phase", phase: next.phase };
-	return next.restored === seen.restored
-		? { kind: "none" }
-		: { kind: "reread" };
+	const restored = next.restored !== seen.restored;
+	if (next.phase !== seen.phase)
+		return restored
+			? { kind: "phase", phase: next.phase, reread: true }
+			: { kind: "phase", phase: next.phase };
+	return restored ? { kind: "reread" } : { kind: "none" };
 }
 
 export function frame(w: World, patch: Partial<DeviceFrame>): World {

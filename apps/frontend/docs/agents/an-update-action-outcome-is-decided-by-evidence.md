@@ -113,12 +113,51 @@ its fixtures or weakening its assertions.
 Connection details are a timestamped selection observation, not live use or
 durable download history. A null record is **not known in this session**, including
 after a backend restart. `healthy: false` alone means the selector did not prove
-usability: `Not reachable` additionally requires a positive failed probe state;
-an empty/unavailable-only state stays unconfirmed. The no-selection band says
+usability: `Not reachable` additionally requires a positive failed probe state,
+and only `no-route`, `dns-failed` and `blocked` count as one. A
+`credentials-invalid`, `tampered`, `tls-error` or captive state is produced after
+the link REACHED a server, so any of them makes the row **Not usable for
+updates** instead (`connection-evidence.ts`, early oracle F4); an
+empty/unavailable-only state stays unconfirmed. The same producer token also
+covers a LOCAL client certificate curl could not use, so the credentials band
+says the device's update certificate **could not be used**, never that the
+server rejected it. The no-selection band says
 no connection was **confirmed usable** by that check. The chosen row is labeled
 **Selected by this check**, never **In use**. Inventory `metered: null` remains
 null through the shared RPC schema and renders **Cost unknown**; conservative
-transport admission still treats that cost as requiring approval.
+transport admission still treats that cost as requiring approval. The pending
+approval band therefore says no connection is **known** to be unmetered and the
+download goes over a metered link or one of unknown cost; `pendingCellular`
+carries a candidate and a size, never the link's identity, so the band never
+says only a cellular connection exists (early oracle F5).
+
+The withheld-packages band is headed **Not included in this update**. A row
+says "Ships with the next OS image" only for `layer: platform` (the wire
+schema's documented meaning of that layer) and "Held back by the system" only
+for `kept_back`; `actionable: false` alone adds nothing. A progress frame whose
+total is unknown renders an indeterminate bar, never 100 % (early oracle F7).
+
+### A terminal install releases the takeover [EXISTS]
+
+The legacy `status.updating` push has ONE reading, `legacy-install.ts`:
+running (an object without `result`, or `true`), succeeded (`result: 0`),
+failed (any other `result`; only a string carries the device's words), none.
+The device publishes the terminal object, then clears its own latch and
+publishes only `update_state`; the store keeps the omitted field on purpose, so
+the terminal object is the last `updating` frame the page holds. Layout mounts
+the non-dismissible takeover only while the install RUNS, so a failure or a
+success releases it in the same frame, with no reload. The UpdateBanner, the
+power dialog's "Update in progress" gate and the HUD flag ask the same
+predicate (`legacyInstallRunning`). The terminal outcome has one announcer,
+`legacy-install-notice.ts`, called from Layout (which receives the terminal
+frame) and from the overlay rendered on its own; it toasts once per terminal
+object, so a repeated frame, a re-mounted Layout or a second caller stays
+quiet and a new run's result is announced. Failure stays visible: the error
+toast with the device's text (one honest sentence when it sent none), the
+device's persistent `ceralive_update_failed` notice and the dialog's "Update
+failed" summary. Pinned through the real store and Layout by
+`Layout.update-terminal.test.ts` (refresh failure, transaction failure,
+result 0) and by `PowerDialog.update-terminal.test.ts`.
 
 ### Settings saves
 
@@ -182,7 +221,11 @@ carries no process identity. The only positive evidence is the dialog's own:
 `os-offer-witness.ts` records, per link (`getLinkEpoch()`, bumped on every
 drop; a restart always drops the link), the OS success clock of the link's
 first read as a baseline, and the verdict of every success clock it later sees
-APPEAR. The sentence needs that witnessed empty verdict for the CURRENT clock
+APPEAR. A read is attributed to the link it STARTED on, never to the link that
+is current when it lands, and the link count is reactive state, so the
+rendered sentence leaves the screen at the drop itself and a failed read over
+the restored link cannot bring it back (early oracle F2,
+`UpdatesDialog.live-link.test.ts`). The sentence needs that witnessed empty verdict for the CURRENT clock
 on the CURRENT link, AND `osCheckFoundNothing()` (the latest attempt succeeded,
 the phase is known and could show a held offer). Every other combination,
 including an ordinary restart in a package phase, renders "It is not known yet

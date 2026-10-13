@@ -293,7 +293,7 @@
 	"general.updateConfirmation": "Êtes-vous sûr de vouloir démarrer une mise à jour logicielle ? Cela peut prendre plusieurs minutes. Vous ne pourrez pas démarrer un flux jusqu'à ce qu'il n'ait pas été terminé. Le encodeur se déconnectera brièvement après une mise à jour réussie. N'éliminez jamais la puissance ou réinitialisez l'encodeur pendant la mise à jour. Si l'encodeur est alimenté par une batterie, assurez-vous qu'il est complètement chargé.",
 	"general.updateFailed": "Échec de la mise à jour",
 	"general.updateLastChecked": "Dernière vérification à <time>",
-	"general.updateNoProgress": "L'appareil a accepté la mise à jour mais n'a signalé aucune progression jusqu'à présent. Cet affichage se mettra à jour dès qu'il le fera.",
+	"general.updateNoProgress": "L'appareil a accepté la mise à jour mais n'a signalé aucune progression. Rien n'a été installé.",
 	"general.updateReasonAlreadyUpdating": "Une mise à jour est déjà en cours.",
 	"general.updateReasonCheckUnavailable": "La liste des paquets n'a pas pu être actualisée. Vérifiez la connexion internet de l'appareil, puis réessayez.",
 	"general.updateReasonDisabled": "Les mises à jour logicielles sont désactivées sur cet appareil. Elles sont gérées en dehors de CeraUI.",

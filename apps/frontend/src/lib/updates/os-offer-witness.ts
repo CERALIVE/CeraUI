@@ -21,7 +21,7 @@ import type {
 import { SYSTEM_IMAGE_PHASES } from "./update-dialog-view";
 
 export interface OsCheckWitness {
-	/** The link the reads came over (`getLinkEpoch()` when they landed). */
+	/** The link the reads were STARTED on (`getLinkEpoch()` at dispatch). */
 	readonly link: number | undefined;
 	/** The newest OS success clock read on this link. */
 	readonly latest: number | null;

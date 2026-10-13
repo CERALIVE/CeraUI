@@ -325,7 +325,7 @@
 	"general.updateConfirmation": "您确定要开始软件更新吗？这可能需要几分钟时间。更新完成前，您将无法开始直播。升级成功后，编码器将短暂断开连接。更新时切勿断电或重置编码器。如果编码器由电池供电，请确保电池充满电。",
 	"general.updateFailed": "更新失败",
 	"general.updateLastChecked": "上次检查时间 {time}",
-	"general.updateNoProgress": "设备已接受更新，但目前尚未报告任何进度。设备一报告，此处就会更新。",
+	"general.updateNoProgress": "设备接受了更新，但从未报告任何进度。没有安装任何内容。",
 	"general.updateReasonAlreadyUpdating": "已有更新正在进行。",
 	"general.updateReasonCheckUnavailable": "无法刷新软件包列表。请检查设备的网络连接后重试。",
 	"general.updateReasonDisabled": "此设备已关闭软件更新，更新由 CeraUI 之外的方式管理。",
@@ -2622,5 +2622,10 @@
 	"live.updateInProgress.title": "正在安装更新",
 	"live.updateInProgress.body": "完成后即可开始推流；此步骤无法安全中断。",
 	"live.startFailure.class.update_in_progress": "设备正在安装更新，完成前无法开始推流。",
-	"notifications.disruptiveActionRefused": "此操作未执行。设备必须先确认当前没有直播且没有正在进行的更新。"
+	"notifications.disruptiveActionRefused": "此操作未执行。设备必须先确认当前没有直播且没有正在进行的更新。",
+	"general.updateAcceptedNoProgress": "设备已接受更新，但到目前为止从未报告任何进度。一旦报告，此处会立即更新。",
+	"settings.updates.connection.unusable": "无法用于更新",
+	"settings.updates.cellular.pendingBodyMetered": "没有已知不按流量计费的可用连接。下载 {version} 将通过按流量计费或费用未知的连接传输约 {size}。",
+	"settings.updates.layer.withheldBand": "未包含在此更新中",
+	"settings.updates.credentials.unusableTitle": "无法使用设备的更新证书"
 }

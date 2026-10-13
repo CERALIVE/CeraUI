@@ -1,6 +1,5 @@
 <script lang="ts">
 import { directionFor, getLocale, m } from '@ceraui/i18n/svelte';
-import type { StatusMessage } from '@ceraui/rpc/schemas';
 import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
 
 import { OfflinePage, PWAStatus } from '$lib/components/custom/pwa';
@@ -22,6 +21,8 @@ import {
 	markAuthenticated,
 } from '$lib/stores/connection-ux.svelte';
 import { getShouldShowOfflinePage } from '$lib/stores/offline-state.svelte';
+import { legacyInstall } from '$lib/updates/legacy-install';
+import { announceLegacyInstallOutcome } from '$lib/updates/legacy-install-notice';
 
 import Auth from './Auth.svelte';
 import DisconnectedBanner from './DisconnectedBanner.svelte';
@@ -55,13 +56,17 @@ const showOfflinePage = $derived(getShouldShowOfflinePage());
 // after the render that read it, so a re-mount or a reconnect renders the idle
 // layout first and pops the overlay in afterwards. Reading the getter directly
 // makes the mount trigger-agnostic AND flash-free by construction — see
-// `Layout.updating-overlay.test.ts`.
-const updatingStatus: StatusMessage['updating'] = $derived.by(() => {
-	const updating = getStatus()?.updating;
-	if (updating && typeof updating !== 'boolean' && updating.result !== 0) {
-		return updating;
-	}
-	return false;
+// `Layout.updating-overlay.test.ts`. Only a RUNNING install takes over: the
+// device's terminal object (success or failure) is the last `updating` frame the
+// store keeps, so mounting on it would leave a takeover nobody can dismiss.
+const updatingStatus = $derived.by(() => {
+	const install = legacyInstall(getStatus()?.updating);
+	return install.kind === 'running' ? install.details : undefined;
+});
+// This tree receives the terminal frame, so it owns the announcement, once per
+// outcome (`Layout.update-terminal.test.ts`).
+$effect(() => {
+	announceLegacyInstallOutcome(getStatus()?.updating);
 });
 // Environment probes computed once (used to size the auth-check timeout).
 const isMobile = /iphone|ipad|ipod|android/i.test(navigator.userAgent);
@@ -217,7 +222,7 @@ $effect(() => {
 	{#if showOfflinePage}
 		<OfflinePage />
 	{:else if authStatus}
-		{#if updatingStatus && typeof updatingStatus !== 'boolean'}
+		{#if updatingStatus}
 			<UpdatingOverlay details={updatingStatus}></UpdatingOverlay>
 		{/if}
 		<UpdateBanner />

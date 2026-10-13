@@ -101,7 +101,9 @@ const nextPackageCheck = $derived(formatUpdateTime(details?.checks.packages.next
 			>
 				<ShieldAlert aria-hidden="true" class="text-status-warning mt-0.5 size-4 shrink-0" />
 				<div class="min-w-0 space-y-0.5">
-					<p class="text-sm font-medium">{m['settings.updates.credentials.rejectedTitle']()}</p>
+					<!-- `credentials-invalid` is also a LOCAL certificate curl could not use,
+					     so the title never says the server rejected it. -->
+					<p class="text-sm font-medium">{m['settings.updates.credentials.unusableTitle']()}</p>
 					<p class="text-muted-foreground text-sm">{m['settings.updates.credentials.rejectedBody']()}</p>
 				</div>
 			</div>

@@ -88,6 +88,8 @@ export interface UpdateSurface {
 	reloadDetails(): Promise<void>;
 	/** A restored session: the device may have changed anything, read it all. */
 	reread(): Promise<void>;
+	/** A restored session whose phase change already re-reads the details. */
+	rereadSettings(): Promise<void>;
 	/** The pushed phase moved: keep it as evidence, then re-read the details. */
 	observePhase(phase: UpdateOrchestratorPhase | undefined): Promise<void>;
 	observeLegacy(kind: UpdateState["kind"] | undefined): void;
@@ -128,10 +130,12 @@ export function createUpdateSurface(): UpdateSurface {
 		reloadDetails,
 	});
 
-	function landDetails(gen: number, next: UpdateDetails): void {
+	// `link` is the link the read STARTED on: an answer can only testify about
+	// the process it was asked of, whenever it lands (early oracle F2).
+	function landDetails(gen: number, next: UpdateDetails, link: number): void {
 		details = next;
 		detailsReadFailed = false;
-		witness = witnessRead(witness, getLinkEpoch(), next);
+		witness = witnessRead(witness, link, next);
 		actions.observeRead(gen, next);
 	}
 
@@ -139,6 +143,7 @@ export function createUpdateSurface(): UpdateSurface {
 		const gen = ++loadSeq;
 		const settingsGen = owner.beginRead();
 		const detailsGen = ++detailsSeq;
+		const link = getLinkEpoch();
 		const [caps, applied, read] = await Promise.allSettled([
 			settle(() => rpc.system.getUpdateCapabilities()),
 			settle(() => rpc.system.getUpdateSettings()),
@@ -153,7 +158,8 @@ export function createUpdateSurface(): UpdateSurface {
 			owner.landRead(settingsGen, applied.value);
 		else owner.failRead(settingsGen);
 		if (detailsGen === detailsSeq) {
-			if (read.status === "fulfilled") landDetails(detailsGen, read.value);
+			if (read.status === "fulfilled")
+				landDetails(detailsGen, read.value, link);
 			else {
 				details = undefined;
 				detailsReadFailed = true;
@@ -163,9 +169,10 @@ export function createUpdateSurface(): UpdateSurface {
 
 	async function reloadDetails(): Promise<void> {
 		const gen = ++detailsSeq;
+		const link = getLinkEpoch();
 		try {
 			const next = await settle(() => rpc.system.getUpdateDetails());
-			if (gen === detailsSeq) landDetails(gen, next);
+			if (gen === detailsSeq) landDetails(gen, next, link);
 		} catch {
 			if (gen !== detailsSeq) return;
 			detailsReadFailed = true;
@@ -223,6 +230,7 @@ export function createUpdateSurface(): UpdateSurface {
 		reread: async () => {
 			await Promise.all([reloadDetails(), owner.reread()]);
 		},
+		rereadSettings: owner.reread,
 		observePhase(phase) {
 			if (phase !== undefined) {
 				actions.observePhase(phase);

@@ -4,13 +4,11 @@ import ArrowUpToLineIcon from '@lucide/svelte/icons/arrow-up-to-line';
 import XIcon from '@lucide/svelte/icons/x';
 
 import { getUpdating } from '$lib/rpc/subscriptions.svelte';
+import { legacyInstallRunning } from '$lib/updates/legacy-install';
 
-// Persistent update-in-progress banner: true while an apt update runs
-const isUpdating = $derived.by(() => {
-	const updating = getUpdating();
-	if (updating === true) return true;
-	return typeof updating === 'object' && updating !== null && updating.result !== 0;
-});
+// Persistent update-in-progress banner: only while the device reports an
+// install it has not finished. A retained failure object is a finished install.
+const isUpdating = $derived(legacyInstallRunning(getUpdating()));
 let updateBannerDismissed = $state(false);
 
 $effect(() => {

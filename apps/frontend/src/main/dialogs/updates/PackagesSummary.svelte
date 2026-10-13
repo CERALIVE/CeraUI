@@ -217,14 +217,20 @@ const checkFailureMessage = $derived.by(() => {
 	{/if}
 </div>
 
-<!-- Platform-layer and kept-back packages: stated, never offered. -->
+<!-- Packages the device will not install: stated, never offered. Each row
+     claims only its own evidence: `layer: platform` is the producer's "ships
+     with the next OS image", `kept_back` is "held back"; `actionable: false`
+     alone says nothing more than "not included". -->
 {#if withheld.length > 0}
 	<div class="bg-muted/20 rounded-lg border border-dashed p-3" data-testid="update-platform-band" role="status">
-		<p class="text-sm font-medium">{m["settings.updates.layer.platformBand"]()}</p>
+		<p class="text-sm font-medium">{m["settings.updates.layer.withheldBand"]()}</p>
 		<ul class="mt-1.5 space-y-1">
 			{#each withheld as pkg (pkg.name)}
 				<li class="text-muted-foreground text-xs break-words">
 					<span class="text-foreground/80 font-mono">{pkg.name}</span>
+					{#if pkg.layer === 'platform'}
+						<span>— {m["settings.updates.layer.platformBand"]()}</span>
+					{/if}
 					{#if pkg.kept_back}
 						<span>— {m["settings.updates.layer.keptBack"]()}</span>
 					{/if}

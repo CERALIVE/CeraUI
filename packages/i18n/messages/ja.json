@@ -325,7 +325,7 @@
 	"general.updateConfirmation": "ソフトウェアの更新を開始しますか？これには数分かかることがあります。完了するまでストリームを開始することはできません。アップグレードが成功すると、エンコーダは一時的に切断されます。更新中は絶対に電源を切ったり、エンコーダをリセットしたりしないでください。エンコーダがバッテリーで動作している場合は、充電が完了していることを確認してください。",
 	"general.updateFailed": "更新に失敗しました",
 	"general.updateLastChecked": "最終確認: {time}",
-	"general.updateNoProgress": "デバイスは更新を受け付けましたが、これまで進捗を報告していません。報告があり次第、この表示は更新されます。",
+	"general.updateNoProgress": "デバイスは更新を受け付けましたが、進捗を一切報告しませんでした。何もインストールされていません。",
 	"general.updateReasonAlreadyUpdating": "更新はすでに実行中です。",
 	"general.updateReasonCheckUnavailable": "パッケージ一覧を更新できませんでした。デバイスのインターネット接続を確認して、もう一度お試しください。",
 	"general.updateReasonDisabled": "このデバイスではソフトウェア更新が無効です。CeraUI の外部で管理されています。",
@@ -2622,5 +2622,10 @@
 	"live.updateInProgress.title": "更新をインストールしています",
 	"live.updateInProgress.body": "完了するとすぐに配信を開始できます。この処理は安全に中断できません。",
 	"live.startFailure.class.update_in_progress": "デバイスは更新をインストール中のため、完了するまで配信を開始できません。",
-	"notifications.disruptiveActionRefused": "この操作は実行されませんでした。先に、ライブ配信中でないことと更新が進行中でないことをデバイスが確認する必要があります。"
+	"notifications.disruptiveActionRefused": "この操作は実行されませんでした。先に、ライブ配信中でないことと更新が進行中でないことをデバイスが確認する必要があります。",
+	"general.updateAcceptedNoProgress": "デバイスは更新を受け付けましたが、これまで進捗を報告していません。報告があり次第、この表示は更新されます。",
+	"settings.updates.connection.unusable": "アップデートには使用できません",
+	"settings.updates.cellular.pendingBodyMetered": "従量制でないと確認できている接続はありません。{version} をダウンロードすると、従量制またはコスト不明の接続で約 {size} を転送します。",
+	"settings.updates.layer.withheldBand": "このアップデートには含まれません",
+	"settings.updates.credentials.unusableTitle": "デバイスのアップデート証明書を使用できませんでした"
 }

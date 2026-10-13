@@ -325,7 +325,7 @@
 	"general.updateConfirmation": "Sind Sie sicher, dass Sie ein Software-Update starten möchten? Dies kann mehrere Minuten dauern. Sie können keinen Stream starten, bis das Update abgeschlossen ist. Der Encoder wird nach einem erfolgreichen Upgrade kurzzeitig getrennt. Entfernen Sie während der Aktualisierung niemals die Stromversorgung und setzen Sie den Encoder nicht zurück. Wenn der Encoder mit einer Batterie betrieben wird, stellen Sie sicher, dass diese vollständig geladen ist.",
 	"general.updateFailed": "Update fehlgeschlagen",
 	"general.updateLastChecked": "Zuletzt geprüft um {time}",
-	"general.updateNoProgress": "Das Gerät hat das Update angenommen, aber bisher keinerlei Fortschritt gemeldet. Diese Anzeige aktualisiert sich, sobald es das tut.",
+	"general.updateNoProgress": "Das Gerät hat das Update angenommen, aber keinerlei Fortschritt gemeldet. Es wurde nichts installiert.",
 	"general.updateReasonAlreadyUpdating": "Es läuft bereits ein Update.",
 	"general.updateReasonCheckUnavailable": "Die Paketliste konnte nicht aktualisiert werden. Prüfe die Internetverbindung des Geräts und versuche es erneut.",
 	"general.updateReasonDisabled": "Software-Updates sind auf diesem Gerät deaktiviert. Sie werden außerhalb von CeraUI verwaltet.",
@@ -2667,5 +2667,10 @@
 	"live.updateInProgress.title": "Ein Update wird installiert",
 	"live.updateInProgress.body": "Streaming ist möglich, sobald es abgeschlossen ist; dieser Schritt lässt sich nicht sicher unterbrechen.",
 	"live.startFailure.class.update_in_progress": "Das Gerät installiert ein Update und kann erst danach einen Stream starten.",
-	"notifications.disruptiveActionRefused": "Diese Aktion wurde nicht ausgeführt. Das Gerät muss zuerst bestätigen, dass kein Stream live ist und kein Update läuft."
+	"notifications.disruptiveActionRefused": "Diese Aktion wurde nicht ausgeführt. Das Gerät muss zuerst bestätigen, dass kein Stream live ist und kein Update läuft.",
+	"general.updateAcceptedNoProgress": "Das Gerät hat das Update angenommen, aber bisher keinerlei Fortschritt gemeldet. Diese Anzeige aktualisiert sich, sobald es das tut.",
+	"settings.updates.connection.unusable": "Für Updates nicht nutzbar",
+	"settings.updates.cellular.pendingBodyMetered": "Es ist keine Verbindung verfügbar, die bekanntermaßen kein Datenlimit hat. Das Herunterladen von {version} überträgt etwa {size} über eine getaktete Verbindung oder eine mit unbekannten Kosten.",
+	"settings.updates.layer.withheldBand": "Nicht in diesem Update enthalten",
+	"settings.updates.credentials.unusableTitle": "Das Update-Zertifikat des Geräts konnte nicht verwendet werden"
 }

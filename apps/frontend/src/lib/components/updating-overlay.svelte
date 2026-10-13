@@ -15,18 +15,15 @@ import { m } from '@ceraui/i18n/svelte';
 import type { StatusMessage } from '@ceraui/rpc/schemas';
 import { CheckCircle2, Cog, Download, Package, RotateCw, XCircle } from '@lucide/svelte';
 import { onMount } from 'svelte';
-import { toast } from 'svelte-sonner';
 
 import * as Drawer from '$lib/components/ui/drawer/index.js';
 import { Progress } from '$lib/components/ui/progress';
+import { announceLegacyInstallOutcome } from '$lib/updates/legacy-install-notice';
 
 const { details }: { details: Exclude<StatusMessage['updating'], boolean | null> } = $props();
 
 // Enhanced state management
 let isVisible = $state(false);
-// One latch for BOTH terminal outcomes — once a success OR a failure toast has
-// fired we never fire a second terminal toast for the same overlay.
-let hasShownResult = $state(false);
 let animationPhase = $state<'downloading' | 'unpacking' | 'installing' | 'complete' | 'failed'>(
 	'downloading',
 );
@@ -87,23 +84,11 @@ $effect(() => {
 	}
 });
 
+// Terminal outcomes have ONE announcer, once per outcome. In the app Layout
+// never mounts this takeover for a terminal frame: it releases the takeover and
+// announces there; this call covers the overlay rendered on its own.
 $effect(() => {
-	if (hasShownResult) return;
-	if (isFailure) {
-		hasShownResult = true;
-		setTimeout(() => {
-			toast.error(m["updatingOverlay.failedMessage"](), {
-				description: failureReason ?? m["updatingOverlay.failedDescription"](),
-			});
-		}, 500);
-	} else if (isSuccess) {
-		hasShownResult = true;
-		setTimeout(() => {
-			toast.success(m["updatingOverlay.successMessage"](), {
-				description: m["updatingOverlay.installedDescription"](),
-			});
-		}, 500);
-	}
+	announceLegacyInstallOutcome(details);
 });
 
 // Entrance animation

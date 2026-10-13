@@ -325,7 +325,7 @@
 	"general.updateConfirmation": "هل أنت متأكد من رغبتك في بدء تحديث البرنامج؟ قد يستغرق هذا عدة دقائق. لن تتمكن من بدء البث حتى يكتمل. سيتم قطع اتصال جهاز الترميز لفترة وجيزة بعد الترقية الناجحة. لا تقم أبداً بإزالة الطاقة أو إعادة ضبط جهاز الترميز أثناء التحديث. إذا كان جهاز الترميز يعمل بالبطارية، فتأكد من شحنها بالكامل.",
 	"general.updateFailed": "فشل التحديث",
 	"general.updateLastChecked": "آخر فحص في {time}",
-	"general.updateNoProgress": "قبل الجهاز التحديث لكنه لم يُبلّغ عن أي تقدّم حتى الآن. سيتحدّث هذا فور أن يفعل.",
+	"general.updateNoProgress": "قبل الجهاز التحديث لكنه لم يُبلّغ عن أي تقدّم. لم يتم تثبيت أي شيء.",
 	"general.updateReasonAlreadyUpdating": "هناك تحديث قيد التشغيل بالفعل.",
 	"general.updateReasonCheckUnavailable": "تعذّر تحديث قائمة الحزم. تحقّق من اتصال الجهاز بالإنترنت ثم أعد المحاولة.",
 	"general.updateReasonDisabled": "تحديثات البرامج معطّلة على هذا الجهاز. تتم إدارتها خارج CeraUI.",
@@ -2679,5 +2679,10 @@
 	"live.updateInProgress.title": "يجري تثبيت تحديث",
 	"live.updateInProgress.body": "يمكن بدء البث فور انتهائه؛ لا يمكن مقاطعة هذه الخطوة بأمان.",
 	"live.startFailure.class.update_in_progress": "يثبّت الجهاز تحديثًا ولا يمكنه بدء بث حتى ينتهي.",
-	"notifications.disruptiveActionRefused": "لم يتم تنفيذ هذا الإجراء. يجب أن يتأكد الجهاز أولاً من عدم وجود بث مباشر أو تحديث قيد التنفيذ."
+	"notifications.disruptiveActionRefused": "لم يتم تنفيذ هذا الإجراء. يجب أن يتأكد الجهاز أولاً من عدم وجود بث مباشر أو تحديث قيد التنفيذ.",
+	"general.updateAcceptedNoProgress": "قبل الجهاز التحديث لكنه لم يُبلّغ عن أي تقدّم حتى الآن. سيتحدّث هذا فور أن يفعل.",
+	"settings.updates.connection.unusable": "غير صالح للتحديثات",
+	"settings.updates.cellular.pendingBodyMetered": "لا يتوفر أي اتصال معروف بأنه غير محدود البيانات. يؤدي تنزيل {version} إلى نقل نحو {size} عبر اتصال محدود البيانات أو غير معروف التكلفة.",
+	"settings.updates.layer.withheldBand": "غير مشمولة في هذا التحديث",
+	"settings.updates.credentials.unusableTitle": "تعذّر استخدام شهادة التحديث الخاصة بالجهاز"
 }

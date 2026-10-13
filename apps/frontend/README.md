@@ -198,7 +198,9 @@ src/
   and stays busy until its whole chain of requests settles. The legacy Packages
   Update runs through the same machine; settings saves own their controls until
   they settle and a lost save reply is "not confirmed"; "No newer system image"
-  needs a check the dialog saw complete on its current link; a failed add-on
+  needs a check the dialog saw complete on its current link (and leaves the
+  screen when that link drops); a terminal install result releases the update
+  takeover at once and is announced once; a failed add-on
   list read says so with a retry ([contract](docs/agents/an-update-action-outcome-is-decided-by-evidence.md)).
   No raw backend message or new OS-stage reason is rendered.
 

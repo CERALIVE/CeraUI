@@ -28,20 +28,30 @@ export type FollowStep =
 	| {
 			readonly kind: "phase";
 			readonly phase: UpdateOrchestratorPhase | undefined;
+			/** The same frame restored the session: the settings are read too. */
+			readonly reread?: true;
 	  }
 	| { readonly kind: "reread" };
 
-/** What one new frame asks of the dialog, given the last frame it saw. */
+/**
+ * What one new frame asks of the dialog, given the last frame it saw. A frame
+ * that moves the phase AND restores the session forwards the phase once (its
+ * details read) and still re-reads the settings (early oracle F6).
+ */
 export function followStep(seen: DeviceFrame, next: DeviceFrame): FollowStep {
 	if (!next.open) return { kind: "none" };
-	if (next.phase !== seen.phase) return { kind: "phase", phase: next.phase };
-	if (next.restored !== seen.restored) return { kind: "reread" };
+	const restored = next.restored !== seen.restored;
+	if (next.phase !== seen.phase)
+		return restored
+			? { kind: "phase", phase: next.phase, reread: true }
+			: { kind: "phase", phase: next.phase };
+	if (restored) return { kind: "reread" };
 	return { kind: "none" };
 }
 
 /** Registers the follower; call during the dialog component's initialisation. */
 export function followDeviceState(
-	surface: Pick<UpdateSurface, "observePhase" | "reread">,
+	surface: Pick<UpdateSurface, "observePhase" | "reread" | "rereadSettings">,
 	frame: () => Omit<DeviceFrame, "restored">,
 ): void {
 	let seen: DeviceFrame = {
@@ -59,6 +69,7 @@ export function followDeviceState(
 					return;
 				case "phase":
 					void surface.observePhase(step.phase);
+					if (step.reread) void surface.rereadSettings();
 					return;
 				case "reread":
 					void surface.reread();

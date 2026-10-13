@@ -325,7 +325,7 @@
 	"general.updateConfirmation": "Êtes-vous sûr de vouloir démarrer une mise à jour logicielle ? Cela peut prendre plusieurs minutes. Vous ne pourrez pas démarrer un flux jusqu'à ce qu'il n'ait pas été terminé. Le encodeur se déconnectera brièvement après une mise à jour réussie. N'éliminez jamais la puissance ou réinitialisez l'encodeur pendant la mise à jour. Si l'encodeur est alimenté par une batterie, assurez-vous qu'il est complètement chargé.",
 	"general.updateFailed": "Échec de la mise à jour",
 	"general.updateLastChecked": "Dernière vérification à {time}",
-	"general.updateNoProgress": "L'appareil a accepté la mise à jour mais n'a signalé aucune progression jusqu'à présent. Cet affichage se mettra à jour dès qu'il le fera.",
+	"general.updateNoProgress": "L'appareil a accepté la mise à jour mais n'a signalé aucune progression. Rien n'a été installé.",
 	"general.updateReasonAlreadyUpdating": "Une mise à jour est déjà en cours.",
 	"general.updateReasonCheckUnavailable": "La liste des paquets n'a pas pu être actualisée. Vérifiez la connexion internet de l'appareil, puis réessayez.",
 	"general.updateReasonDisabled": "Les mises à jour logicielles sont désactivées sur cet appareil. Elles sont gérées en dehors de CeraUI.",
@@ -2670,5 +2670,10 @@
 	"live.updateInProgress.title": "Une mise à jour est en cours d'installation",
 	"live.updateInProgress.body": "La diffusion pourra démarrer dès la fin ; cette étape ne peut pas être interrompue sans risque.",
 	"live.startFailure.class.update_in_progress": "L'appareil installe une mise à jour et ne peut pas démarrer de diffusion avant la fin.",
-	"notifications.disruptiveActionRefused": "Cette action n'a pas été exécutée. L'appareil doit d'abord confirmer qu'aucun direct n'est en cours et qu'aucune mise à jour n'est en cours."
+	"notifications.disruptiveActionRefused": "Cette action n'a pas été exécutée. L'appareil doit d'abord confirmer qu'aucun direct n'est en cours et qu'aucune mise à jour n'est en cours.",
+	"general.updateAcceptedNoProgress": "L'appareil a accepté la mise à jour mais n'a signalé aucune progression jusqu'à présent. Cet affichage se mettra à jour dès qu'il le fera.",
+	"settings.updates.connection.unusable": "Inutilisable pour les mises à jour",
+	"settings.updates.cellular.pendingBodyMetered": "Aucune connexion connue comme non limitée n'est disponible. Le téléchargement de {version} transfère environ {size} sur une connexion limitée ou dont le coût est inconnu.",
+	"settings.updates.layer.withheldBand": "Non inclus dans cette mise à jour",
+	"settings.updates.credentials.unusableTitle": "Le certificat de mise à jour de l'appareil n'a pas pu être utilisé"
 }

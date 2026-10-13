@@ -14,6 +14,7 @@ import type {
 	UpdatingStatus,
 } from "@ceraui/rpc/schemas";
 import type { HudSources, HudState, HudTimestamps } from "$lib/types/hud";
+import { legacyInstallRunning } from "$lib/updates/legacy-install";
 import { STALE_THRESHOLD_MS } from "./constants";
 import { buildBond } from "./link-status";
 import {
@@ -23,14 +24,11 @@ import {
 } from "./soc-telemetry";
 import { isTimestampStale } from "./staleness";
 
-/** Whether an update is currently in progress (boolean flag or progress object). */
+/** Whether an update is currently in progress: an install not yet finished. */
 export function isUpdateInProgress(
 	updating: UpdatingStatus | undefined,
 ): boolean {
-	if (updating == null || updating === false) return false;
-	if (updating === true) return true;
-	// Progress object: a finished update reports result === 0.
-	return typeof updating === "object" && updating.result !== 0;
+	return legacyInstallRunning(updating);
 }
 
 /**

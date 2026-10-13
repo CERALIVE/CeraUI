@@ -24,8 +24,9 @@ describe("followStep", () => {
 		// Given an open dialog at idle; When a restore brings a new phase.
 		const move = followStep(IDLE, { ...IDLE, phase: "available", restored: 4 });
 
-		// Then the phase is the one step (it re-reads too).
-		expect(move).toEqual({ kind: "phase", phase: "available" });
+		// Then the phase is the one step (it re-reads the details), and the
+		// restored session still re-reads the settings (early oracle F6).
+		expect(move).toEqual({ kind: "phase", phase: "available", reread: true });
 	});
 
 	it("does nothing for an unchanged frame", () => {

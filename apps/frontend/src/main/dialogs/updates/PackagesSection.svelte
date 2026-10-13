@@ -180,7 +180,8 @@ $effect(() => () => clearTimeout(checkTimeout));
 				<RefreshCw class="text-primary size-4 motion-safe:animate-spin" />
 				{m["settings.dialogs.updating"]()}
 			</div>
-			<Progress value={progressValue ?? 100} />
+			<!-- An unknown total is indeterminate progress, never a finished bar. -->
+			<Progress value={progressValue ?? null} />
 		</div>
 	{:else if starting}
 		<div class="flex items-center gap-2 text-sm font-medium" aria-live="polite">
@@ -199,7 +200,7 @@ $effect(() => () => clearTimeout(checkTimeout));
 				<AlertTriangle class="text-status-warning mt-0.5 size-4 shrink-0" />
 				<div class="min-w-0 space-y-0.5">
 					<p class="text-sm font-medium break-words">
-						{stalled ? m["general.updateNoProgress"]() : m["general.updateStartRefused"]()}
+						{stalled ? m["general.updateAcceptedNoProgress"]() : m["general.updateStartRefused"]()}
 					</p>
 					{#if refused}
 						<p class="text-muted-foreground text-sm break-words" data-testid="update-start-refused-reason">

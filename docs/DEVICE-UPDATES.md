@@ -890,9 +890,17 @@ wire field carrying the expiry date.
   version render as unknown; "No newer system image" needs a check the dialog
   saw complete with nothing offered on the link it reads over (the candidate is
   memory-only, so a backend restart cannot be told from "nothing found"), plus
-  a succeeded latest attempt and a phase that could show a held offer. The
-  install overlay reports success only from the device's result, never from
-  full progress counters. Contract and exhaustive proofs:
+  a succeeded latest attempt and a phase that could show a held offer; the
+  sentence belongs to the link that witnessed it, and leaves the screen when
+  that link drops. A frame that moves the phase and restores the session
+  re-reads the settings as well. A row whose probes reached a server but got a
+  certificate, signature, TLS or portal answer is "Not usable for updates",
+  not "Not reachable"; a pending cellular approval names a metered or
+  unknown-cost link, never "only cellular". The install overlay reports
+  success only from the device's result, never from full progress counters,
+  and a terminal result (success or failure) releases the takeover at once:
+  Layout announces the outcome once and the page's controls are back without a
+  reload. Contract and exhaustive proofs:
   `apps/frontend/docs/agents/an-update-action-outcome-is-decided-by-evidence.md`.
 - **Global badge** (`UpdateOrchestratorBadge.svelte`): shown while
   `isUpdateBusy()` holds, with phase and percent, and opens the dialog.
