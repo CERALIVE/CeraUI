@@ -23,7 +23,7 @@ import {
 	type AddonState,
 	AddonStateSchema,
 } from "@ceraui/rpc/schemas";
-
+import { setSysextEvidenceForTest } from "../modules/addons/disruptive-sysext-step.ts";
 import {
 	ADDON_CONFLICT_ERROR,
 	ADDON_CRASH_LOOP_RESTART_THRESHOLD,
@@ -55,6 +55,7 @@ import {
 	tmpArtifactPath,
 	toAddonState,
 } from "../modules/addons/manager.ts";
+import { resetDisruptiveActionReservationForTest } from "../modules/system/disruptive-action-reservation.ts";
 
 // ─── fixtures ────────────────────────────────────────────────────────────────
 
@@ -221,10 +222,15 @@ beforeEach(() => {
 	resetAddonManagerDeps();
 	// Clears the module-level live-phase map (config is empty in tests).
 	initAddonManager();
+	// In-process fakes leave no helper, sysext or unit job behind them.
+	resetDisruptiveActionReservationForTest();
+	setSysextEvidenceForTest({ probe: async () => "completed" });
 });
 
 afterEach(() => {
 	resetAddonManagerDeps();
+	resetDisruptiveActionReservationForTest();
+	setSysextEvidenceForTest();
 });
 
 // ─── pure layer ──────────────────────────────────────────────────────────────
