@@ -19,7 +19,10 @@ import {
 } from "./ota-streaming-marker.ts";
 import { awaitRecoveryBarrier, isRecoveryPending } from "./recovery-barrier.ts";
 import { newAttemptId } from "./start-failure-taxonomy.ts";
-import { updateStreamLifecycleState } from "./stream-lifecycle-status.ts";
+import {
+	seedStreamLifecycleState,
+	updateStreamLifecycleState,
+} from "./stream-lifecycle-status.ts";
 import type { StreamSessionOrchestratorDeps } from "./stream-session-orchestrator.ts";
 import {
 	getStartSuppressionContext,
@@ -36,6 +39,7 @@ export const streamSessionProductionDeps: StreamSessionOrchestratorDeps = {
 	getStreamingStatus: getIsStreaming,
 	stopRuntime: stopGeneration,
 	queryRuntime: queryEngineRuntimeStreaming,
+	seedLifecycleState: seedStreamLifecycleState,
 	setLifecycleState: updateStreamLifecycleState,
 	invariantViolation: (from, to) => {
 		logger.error("stream-session illegal lifecycle transition", { from, to });

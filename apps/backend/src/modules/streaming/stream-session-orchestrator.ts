@@ -123,6 +123,7 @@ export type StreamSessionOrchestratorDeps = {
 		confirmUnknown?: boolean,
 	) => Promise<void>;
 	readonly queryRuntime: () => Promise<EngineRuntimeState>;
+	readonly seedLifecycleState?: (state: LifecycleState) => void;
 	readonly setLifecycleState?: (state: LifecycleState) => void;
 	readonly invariantViolation?: (
 		from: LifecycleState,
@@ -319,9 +320,18 @@ export function createStreamSessionOrchestrator(
 	): Promise<StartResult> => {
 		if (active !== attempt)
 			return { result: "cancelled", attemptId: attempt.attemptId };
+		// Cancellation must not race the engine mutex that parked the operator Stop.
+		const parked = engineQueuedStop ?? queuedStop;
+		const parkedResult =
+			parked === undefined ? undefined : await parked.promise;
+		if (active !== attempt)
+			return { result: "cancelled", attemptId: attempt.attemptId };
 		const owner = ownership.capture();
 		try {
-			if (liveness !== "idle" || (await attempt.cancelStop) !== true)
+			if (
+				parkedResult?.result !== "stopped" &&
+				(liveness !== "idle" || (await attempt.cancelStop) !== true)
+			)
 				await stopWithinDeadline(
 					attempt.generation,
 					attempt.cancelCause === "operator",
@@ -405,7 +415,7 @@ export function createStreamSessionOrchestrator(
 		// from under a launch that has already spawned the sender.
 		const admitLifecycle = deps.admitLifecycle;
 		if (admitLifecycle === undefined)
-			return await admittedStart(attemptId, request);
+			return await admittedStart(attemptId, request, currentIntent);
 
 		const admission = admitLifecycle();
 		if (!admission.admitted) {
@@ -427,7 +437,7 @@ export function createStreamSessionOrchestrator(
 			};
 		}
 		return await releasingLease(admission.lease, () =>
-			admittedStart(attemptId, request),
+			admittedStart(attemptId, request, currentIntent),
 		);
 	};
 
@@ -450,6 +460,7 @@ export function createStreamSessionOrchestrator(
 	const admittedStart = async (
 		attemptId: string,
 		request: StreamStartRequest,
+		currentIntent: () => boolean,
 	): Promise<StartResult> => {
 		const owner = ownership.begin();
 		const attempt: ActiveAttempt = {
@@ -549,8 +560,11 @@ export function createStreamSessionOrchestrator(
 				? { reportTerminalFailure: deps.reportTerminalFailure }
 				: {}),
 		});
-		if (launchResult.result === "cancelled") {
-			return await finishCancelled(attempt, launchResult.liveness);
+		if (!currentIntent() || launchResult.result === "cancelled") {
+			return await finishCancelled(
+				attempt,
+				launchResult.result === "cancelled" ? launchResult.liveness : "unknown",
+			);
 		}
 		if (launchResult.result === "failed") {
 			if (active !== attempt || !ownership.owns(owner))
@@ -573,13 +587,15 @@ export function createStreamSessionOrchestrator(
 		// reported start failure.
 		try {
 			deps.onStreamCommitted?.(
-				() => active === attempt && ownership.owns(owner),
+				() => currentIntent() && active === attempt && ownership.owns(owner),
 			);
 		} catch (error) {
 			logger.warn("stream commit bookkeeping failed", { attemptId, error });
 		}
 		try {
-			deps.onStreamArmed?.(() => active === attempt && ownership.owns(owner));
+			deps.onStreamArmed?.(
+				() => currentIntent() && active === attempt && ownership.owns(owner),
+			);
 		} catch (error) {
 			logger.warn("stream restoration arming failed", { attemptId, error });
 		}

@@ -18,6 +18,7 @@ export function createSessionOwnership(deps: StreamSessionOrchestratorDeps) {
 			: (deps.initialLiveness ?? "idle");
 	let state: LifecycleState =
 		initialLiveness === "unknown" ? "reconciling" : "idle";
+	deps.seedLifecycleState?.(state);
 	let generation = 0;
 	let epoch = 0;
 	let protectedForOta = false;

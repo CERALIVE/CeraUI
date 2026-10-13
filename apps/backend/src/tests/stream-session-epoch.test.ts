@@ -59,8 +59,8 @@ test("oracle protected boot publishes reconciling for Stop escape", async () => 
 		setLifecycleState: updateStreamLifecycleState,
 	});
 	h = harness;
-	expect(getStreamLifecycleState()).toBe("idle");
-	// When reconciliation starts (not construction), publish the protected state.
+	expect(getStreamLifecycleState()).toBe("reconciling");
+	// When reconciliation starts, publish the already-seeded protected state.
 	const observing = harness.session.reconcile();
 	await harness.expireProbe();
 	await observing;

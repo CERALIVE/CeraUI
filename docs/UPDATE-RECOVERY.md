@@ -28,15 +28,23 @@ operator Stop may confirm an unowned unknown engine, never automatic reconciliat
 Cancelled starts retain rollback certainty and the cancelling Stop acknowledgement.
 Runtime evidence is bound to the producing client/epoch and invalidated at new
 Start, acquisition and acknowledgement. Old idle never clears a new session's
-protection. Initial retained-sentinel reconciliation reaches the existing
-`stream_lifecycle` projection at the first safe transition, not construction.
-Each joining Stop reports intent immediately; only operator intent disarms
-restoration, while engine-loss/reconfigure retain it. Its cause survives cancelled
+protection. Composition seeds `stream_lifecycle` from the owner before hydration:
+retained protection is `reconciling`; absent/unprotected boot is `idle`. No
+constructor broadcast or engine-query wait precedes server bind; the first safe
+transition still broadcasts, including same-state reconciliation.
+Each joining/parked Stop reports intent immediately. Operator intent requests
+marker disarm and revokes pending commitment/delayed arming, while machine intent
+retains restoration. Successful marker removal prevents fresh-factory restoration;
+marker I/O/corruption remains separate recovery debt. Its cause survives cancelled
 launch settlement and parked release. The restoration runner re-reads intent
 after runtime observation; removed intent cannot authorize a later launch.
 The process-local operator-intent token also invalidates default preparation,
-pre-generation Start waits and stale restoration publication. It is independent
+pre-generation waits, Start commitment/hooks and stale restoration publication.
+Cancelled launch settlement waits for parked cleanup rather than racing the
+engine mutex; current subscription events can still release the latch. It is independent
 of sentinel/engine evidence and cannot grant idle or force automatic Stop.
+Profile reconnect captures intent across its Stop await, preventing an operator
+join from being followed by a newly authorized replacement Start.
 These are production-path host regressions, not qualification of real engine/media,
 cross-connection Stop/Start ordering, reboot or RAUC activation on either board.
 

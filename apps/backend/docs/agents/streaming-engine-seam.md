@@ -10,16 +10,25 @@ start cancels that generation before a later launch can be admitted. The legacy
 The cancellable generation exists before the awaited D8 check. A Stop during
 admission fences the later answer before OTA marking or launch; cancellation,
 refusal and throws release the lifecycle lease. Every Stop caller reports its
-intent before joining shared cleanup. Only operator intent disarms restoration;
-engine-loss/reconfigure intent retains it. Joining operator cause is preserved
+intent before joining or parking cleanup. Operator intent requests marker disarm
+and immediately revokes pending commitment and delayed arming authority;
+engine-loss/reconfigure intent retains it. Cancellation settlement waits for the
+parked Stop, rather than racing the engine mutex. Current subscription events
+remain eligible to release the latch until the deferred Stop runs. Successful
+marker removal prevents restoration across a fresh factory; marker I/O/corruption
+is a separate recovery limitation. Joining operator cause is preserved
 for cancelled launches and parked release. Restoration reads its marker after the
 awaited runtime observation, not from a pre-await intent snapshot.
 `operator-stop-intent.ts` provides a process-local monotonic intent token, not
 engine evidence. Every operator Stop invalidates it even when joining cleanup.
 Default restoration preparation checks it after imports, validation and IP
 preparation; stale settlement publishes no recovered/failed outcome. Internal
-Start checks the token after recovery and reconciliation waits before registering
-a generation, closing the otherwise unowned cancellation window.
+Start checks the token after recovery/reconciliation waits, at commitment, and
+through the final predicate given to both delayed bookkeeping/arming hooks.
+Intent is cancellation authority, not evidence that the physical stream stopped.
+The profile reconnect flight captures that intent before its machine Stop await
+and checks it before submitting replacement Start; a joining operator cancels
+the restart, not just the old session's marker.
 The OTA sentinel follows physical liveness: retain through parked,
 failed or unknown stops and clear only on confirmed idle/cleanup. Reconciliation
 sets/clears that sentinel on authoritative streaming/idle and retains it on unknown.
@@ -37,8 +46,10 @@ an adopted subscription instead follows current client/session identity and keep
 receiving subsequent status even when its original probe epoch expires. The additive
 `status.stream_lifecycle` field exposes `idle | starting | streaming | stopping |
 stop_failed | reconciling`; `is_streaming` remains backward compatible.
-The first safe reconciliation transition publishes initial retained-sentinel
-`reconciling` through that projection, without broadcasting from construction.
+State-only composition seeds that projection from the owner before hydration:
+retained protection is `reconciling`; absent/unprotected boot is `idle`. It does
+not broadcast or wait for an engine query before server bind. The first safe
+transition still broadcasts, including a same-state reconciliation.
 
 The launch transaction owns rollback and phase deadlines. Rollback completion is
 not idle proof: internal failure liveness is confirmed only before Start dispatch

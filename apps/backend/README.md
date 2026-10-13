@@ -363,9 +363,11 @@ reconciliation adopts a stream that survived a backend process restart. A timeou
 query error, or contradictory engine status stays `reconciling`; the reconnect-heal
 path retries instead of publishing a false idle state.
 
-The first reconciliation publishes retained-sentinel `reconciling` through the
-existing lifecycle projection, even if the engine remains silent. Construction
-does not broadcast. Runtime status evidence retains its producing client/epoch
+Composition seeds the existing lifecycle projection from its owner before first
+hydration: retained protection is `reconciling`; absent/unprotected boot is `idle`.
+This state-only initialization neither broadcasts nor awaits an engine query
+before the server binds. The first safe transition still publishes, including
+same-state reconciliation. Runtime status evidence retains its producing client/epoch
 predicate and is invalidated at new Start, client acquisition and Start commitment;
 neither old-session idle nor pre-Start subscription replay establishes current idle.
 
@@ -393,13 +395,19 @@ must adopt the leaf in B3 integration; this branch alone does not migrate them.
 
 Stop also cancels a generation waiting for D8 update admission, including the
 idle no-update case, before any launch or OTA marking. Each caller's Stop intent
-is processed before joining shared cleanup. Only operator intent disarms the
-restoration marker; engine-loss and reconfigure retain it. Joining operator cause
+is processed before joining or parking shared cleanup. Operator intent requests
+marker disarm and immediately revokes pending commitment and delayed arming
+authority; engine-loss and reconfigure retain intent. Cancellation settlement
+waits for parked Stop before cleanup, preserving engine-mutex ordering and the
+physical sentinel. Successful marker removal prevents fresh-factory restoration;
+marker I/O/corruption remains a separate recovery limitation. Joining operator cause
 survives cancellation and parked release. Restoration re-reads the marker after
 its awaited runtime observation, so removed intent cannot authorize a new launch.
 An import-free operator-intent token also fences default launch preparation and
 internal Start waits before a generation exists; stale restoration settlement
 cannot publish a recovery after Stop. The token is not idle evidence.
+Profile reconnect likewise captures intent before its machine Stop await and
+checks before replacement Start, so a joining operator cancels the restart.
 The separate OTA sentinel stays through parked or failed
 stops and unknown engine state until confirmed idle/cleanup. Submitted cleanup
 owns one flight even after its caller times out; reconciliation cannot admit a

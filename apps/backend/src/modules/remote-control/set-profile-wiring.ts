@@ -35,6 +35,7 @@ import { RUNTIME_CONFIG_DEFAULTS } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { getLastCapabilities } from "../streaming/capabilities.ts";
+import { captureOperatorStopIntent } from "../streaming/operator-stop-intent.ts";
 import {
 	classifyStartFailure,
 	StreamStartFailure,
@@ -62,6 +63,7 @@ function projectCaps(): SetProfileCaps {
 }
 
 async function reconnect(): Promise<void> {
+	const currentIntent = captureOperatorStopIntent();
 	if (!getIsStreaming()) return;
 	// `reconfigure`, not `operator`: this stop is the first half of a restart the
 	// platform asked for, so the armed-stream marker must survive it. Clearing it
@@ -73,6 +75,7 @@ async function reconnect(): Promise<void> {
 		);
 		return;
 	}
+	if (!currentIntent()) return;
 	// The control channel has no UI socket; a no-op stub satisfies the session's
 	// status/error sends. Empty params → the start reads the just-persisted config.
 	const stubConn = {

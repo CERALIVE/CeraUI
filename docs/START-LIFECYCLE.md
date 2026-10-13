@@ -135,14 +135,20 @@ Refusal or observer failure unwinds the pending generation; refusal payloads
 (`update_in_progress`, phase, percent and ETA) are unchanged.
 
 Restoration intent and physical OTA liveness are separate. Every Stop caller
-reports intent before joining shared work; only operator intent disarms
-restoration immediately. Engine-loss/reconfigure intent retains it. Joining
+reports intent before joining/parking shared work. Operator intent requests
+marker removal and immediately revokes pending commitment and delayed arming
+authority, even while Stop is parked. Cancellation settlement waits for that
+parked Stop before cleanup, retaining engine-mutex ordering and physical protection.
+Successful marker removal prevents fresh-factory restoration; marker I/O and
+corruption are separate recovery limitations. Engine-loss/reconfigure retains intent. Joining
 operator cause is preserved for cancelled launch settlement and parked Stop
 release. Restoration reads intent after its runtime observation, so an operator
 disarm during that await cannot resurrect the stream.
 An import-free operator-intent token fences default restoration preparation and
-settlement as well as internal Start waits before a generation is registered.
+settlement, Start commitment and delayed hooks, as well as pre-generation waits.
 It never supplies positive engine evidence or removes physical protection.
+Profile reconnect captures intent before its machine Stop await and checks it
+before replacement Start; a joining operator cancels that restart flight.
 `/run/ceralive/streaming` remains while a stop is
 parked, rejected, timed out or unknown. Confirmed stop/cleanup or authoritative
 idle reconciliation removes it; authoritative streaming reconciliation sets it
@@ -156,9 +162,10 @@ OTA projection. `stream-session-cleanup.ts` owns submitted cleanup. The factory
 retains admission, retry and configuration orchestration; wire/stored schemas,
 D8 origins, refusal payloads and timing policy are unchanged.
 
-The initial protected state is published through the existing lifecycle setter
-at the first reconciliation transition, including a same-state transition, not
-during construction. Runtime-status evidence carries its producing client/epoch
+The owner seeds the lifecycle projection at composition before hydration, without
+broadcast or an engine-query wait before server bind. Retained protection seeds
+`reconciling`; absent/unprotected boot seeds `idle`. The first safe transition
+still broadcasts, including same-state reconciliation. Runtime evidence carries its producing client/epoch
 predicate separately from presentation telemetry. New Start, client acquisition
 and Start acknowledgement invalidate it; previous idle or subscription replay
 from before Start cannot establish current idle. No fresh evidence is UNKNOWN.
@@ -220,7 +227,9 @@ Failed clearance remains UNKNOWN and retries on the next affirmative idle status
 or acknowledged operator Stop. The leaf cannot report idle beside present/unreadable
 sentinel evidence. Protected unknown outcomes
 keep the generation and last confirmed live status, and block a fresh Start.
-Restoration intent remains a separate marker, disarmed immediately on Stop.
+Restoration intent remains separate: operator Stop requests marker disarm and
+revokes pending commitment/arming; machine Stop retains it. Marker I/O is not
+proof of removal, and Stop intent itself never proves engine idle.
 
 The internal `StreamStartFailure.liveness` carries rollback certainty without a
 wire/schema change or replacing the original failure class/code. A possibly-effectful
