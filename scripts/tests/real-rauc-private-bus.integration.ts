@@ -7,10 +7,10 @@ import { STAGE_CENSUS_DRIFT } from '../../apps/backend/src/modules/system/update
 import { observeRaucStage } from '../../apps/backend/src/modules/system/update-orchestrator/os-stage-observation.ts';
 import { stageEvidence } from '../../apps/backend/src/modules/system/update-orchestrator/os-stage-process-evidence.ts';
 import { runOsStageJob } from '../../apps/backend/src/modules/system/update-orchestrator/os-stage-run.ts';
+import { useSessionOwnerForFile } from '../../apps/backend/src/tests/helpers/bind-session-owner.ts';
 import { rockHelperFixture } from '../../apps/backend/src/tests/helpers/os-stage-rock-helper-fixture.ts';
 import { harness } from '../../apps/backend/src/tests/helpers/os-stage-run-harness.ts';
 import { manifest } from '../../apps/backend/src/tests/helpers/os-stage-run-inputs.ts';
-import { useSessionOwnerForFile } from '../../apps/backend/src/tests/helpers/bind-session-owner.ts';
 
 useSessionOwnerForFile();
 
