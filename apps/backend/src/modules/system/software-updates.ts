@@ -36,7 +36,6 @@ import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { updateGwWrapper } from "../network/gateways.ts";
 import { setup } from "../setup.ts";
 import { notePlannedShutdown } from "../streaming/armed-stream-marker.ts";
-import { getIsStreaming } from "../streaming/streaming.ts";
 import {
 	notificationBroadcast,
 	notificationRemove,
@@ -92,6 +91,7 @@ import {
 	type CommitExitHook,
 	finishSoftwareUpdateRestart,
 } from "./software-update-restart.ts";
+import { isStreamConfirmedIdle } from "./stream-liveness-source.ts";
 import { reconcileAptChannel } from "./update-apt-channel.ts";
 import { readUpdateCapabilities } from "./update-capabilities.ts";
 import {
@@ -759,7 +759,7 @@ export function reportUpdateCheckFailure(upgrade: {
 
 async function getSoftwareUpdateSize(reachability: AptReachability) {
 	if (!aptUpdatesEnabled()) return null;
-	if (getIsStreaming() || isUpdating() || aptGetUpdating) return "busy";
+	if (!isStreamConfirmedIdle() || isUpdating() || aptGetUpdating) return "busy";
 	const capabilities = await readUpdateCapabilities();
 	pendingPackageSuccess.assertEffectsAllowed();
 	if (capabilities.mode === "capable")
@@ -919,7 +919,7 @@ function checkForSoftwareUpdates(
 	if (pendingPackageSuccess.pending) return false;
 	if (!aptUpdatesEnabled()) return false;
 	if (
-		getIsStreaming() ||
+		!isStreamConfirmedIdle() ||
 		isUpdating() ||
 		aptGetUpdating ||
 		aptDiscoveryRunning
@@ -1137,7 +1137,7 @@ export function triggerManualUpdateCheck(): boolean {
 	if (isSoftwareUpdateRecoveryInconclusive()) return false;
 	if (shouldUseMocks()) {
 		if (
-			getIsStreaming() ||
+			!isStreamConfirmedIdle() ||
 			isUpdating() ||
 			aptGetUpdating ||
 			aptDiscoveryRunning
@@ -1307,7 +1307,7 @@ export function startSoftwareUpdate(
 	if (pendingPackageSuccess.pending)
 		return refuseUpdateStart("check_unavailable");
 	if (!aptUpdatesEnabled()) return refuseUpdateStart("updates_disabled");
-	if (getIsStreaming()) return refuseUpdateStart("streaming");
+	if (!isStreamConfirmedIdle()) return refuseUpdateStart("streaming");
 	if (isUpdating()) return refuseUpdateStart("already_updating");
 	if (isSoftwareUpdateRecoveryInconclusive()) {
 		return refuseUpdateStart("check_unavailable");
@@ -1571,7 +1571,7 @@ async function prepareSoftwareUpdate(
 	onCommitSucceeded?: () => void,
 ): Promise<void> {
 	pendingPackageSuccess.assertEffectsAllowed();
-	if (!aptUpdatesEnabled() || getIsStreaming()) return;
+	if (!aptUpdatesEnabled() || !isStreamConfirmedIdle()) return;
 
 	const reachability = await prepareAptNetwork({ maxAgeMs: 0 });
 	pendingPackageSuccess.assertEffectsAllowed();

@@ -2659,5 +2659,6 @@
 	"settings.updates.loading": "Lecture des détails de mise à jour…",
 	"live.updateInProgress.title": "Une mise à jour est en cours d'installation",
 	"live.updateInProgress.body": "La diffusion pourra démarrer dès la fin ; cette étape ne peut pas être interrompue sans risque.",
-	"live.startFailure.class.update_in_progress": "L'appareil installe une mise à jour et ne peut pas démarrer de diffusion avant la fin."
+	"live.startFailure.class.update_in_progress": "L'appareil installe une mise à jour et ne peut pas démarrer de diffusion avant la fin.",
+	"notifications.disruptiveActionRefused": "Cette action n'a pas été exécutée. L'appareil doit d'abord confirmer qu'aucun direct n'est en cours et qu'aucune mise à jour n'est en cours."
 }

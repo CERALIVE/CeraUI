@@ -4,7 +4,6 @@ import {
 	hasActiveRemoteSession,
 } from "../remote-control/command-router.ts";
 import { currentLifecycleHolder } from "../streaming/lifecycle-admission.ts";
-import { getIsStreaming } from "../streaming/streaming.ts";
 import { getActivePreviewProxyCount } from "../ui/preview-proxy.ts";
 import { evaluateIdle, type IdleEvaluation } from "./idle-detector.ts";
 import {
@@ -12,6 +11,7 @@ import {
 	IdleStateReadError,
 	loadIdleState,
 } from "./idle-state.ts";
+import { isStreamConfirmedIdle } from "./stream-liveness-source.ts";
 
 export { noteUiHeartbeat, setIdleStateFilePathForTest } from "./idle-state.ts";
 
@@ -32,7 +32,8 @@ export async function getIdleStatus(input: {
 		idleMinutes: 30,
 		schedule: input.schedule,
 		lastActivity: {
-			stream: getIsStreaming()
+			// Unknown liveness is current activity: only confirmed idle ages it.
+			stream: !isStreamConfirmedIdle()
 				? input.now
 				: Math.max(lastStreamEndedAt ?? 0, memory.bootAt),
 			preview: getActivePreviewProxyCount() > 0 ? input.now : memory.preview,

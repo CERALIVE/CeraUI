@@ -2611,5 +2611,6 @@
 	"settings.updates.loading": "正在读取更新详情…",
 	"live.updateInProgress.title": "正在安装更新",
 	"live.updateInProgress.body": "完成后即可开始推流；此步骤无法安全中断。",
-	"live.startFailure.class.update_in_progress": "设备正在安装更新，完成前无法开始推流。"
+	"live.startFailure.class.update_in_progress": "设备正在安装更新，完成前无法开始推流。",
+	"notifications.disruptiveActionRefused": "此操作未执行。设备必须先确认当前没有直播且没有正在进行的更新。"
 }

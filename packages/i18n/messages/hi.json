@@ -2656,5 +2656,6 @@
 	"settings.updates.loading": "अपडेट विवरण पढ़े जा रहे हैं…",
 	"live.updateInProgress.title": "एक अपडेट इंस्टॉल हो रहा है",
 	"live.updateInProgress.body": "इसके पूरा होते ही स्ट्रीमिंग शुरू हो सकती है; इस चरण को सुरक्षित रूप से रोका नहीं जा सकता।",
-	"live.startFailure.class.update_in_progress": "डिवाइस एक अपडेट इंस्टॉल कर रहा है और इसके पूरा होने तक स्ट्रीम शुरू नहीं कर सकता।"
+	"live.startFailure.class.update_in_progress": "डिवाइस एक अपडेट इंस्टॉल कर रहा है और इसके पूरा होने तक स्ट्रीम शुरू नहीं कर सकता।",
+	"notifications.disruptiveActionRefused": "यह कार्रवाई नहीं चलाई गई। पहले डिवाइस को पुष्टि करनी होगी कि कोई लाइव स्ट्रीम या चल रहा अपडेट नहीं है।"
 }

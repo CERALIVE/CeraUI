@@ -2659,5 +2659,6 @@
 	"settings.updates.loading": "Lendo os detalhes da atualização…",
 	"live.updateInProgress.title": "Uma atualização está sendo instalada",
 	"live.updateInProgress.body": "A transmissão pode começar assim que terminar; esta etapa não pode ser interrompida com segurança.",
-	"live.startFailure.class.update_in_progress": "O dispositivo está instalando uma atualização e não pode iniciar uma transmissão até terminar."
+	"live.startFailure.class.update_in_progress": "O dispositivo está instalando uma atualização e não pode iniciar uma transmissão até terminar.",
+	"notifications.disruptiveActionRefused": "Esta ação não foi executada. Primeiro o dispositivo precisa confirmar que não há transmissão ao vivo nem atualização em andamento."
 }

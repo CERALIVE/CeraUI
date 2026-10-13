@@ -2656,5 +2656,6 @@
 	"settings.updates.loading": "Update-Details werden gelesen …",
 	"live.updateInProgress.title": "Ein Update wird installiert",
 	"live.updateInProgress.body": "Streaming ist möglich, sobald es abgeschlossen ist; dieser Schritt lässt sich nicht sicher unterbrechen.",
-	"live.startFailure.class.update_in_progress": "Das Gerät installiert ein Update und kann erst danach einen Stream starten."
+	"live.startFailure.class.update_in_progress": "Das Gerät installiert ein Update und kann erst danach einen Stream starten.",
+	"notifications.disruptiveActionRefused": "Diese Aktion wurde nicht ausgeführt. Das Gerät muss zuerst bestätigen, dass kein Stream live ist und kein Update läuft."
 }

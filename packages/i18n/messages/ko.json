@@ -2611,5 +2611,6 @@
 	"settings.updates.loading": "업데이트 세부 정보를 읽는 중…",
 	"live.updateInProgress.title": "업데이트를 설치하는 중입니다",
 	"live.updateInProgress.body": "완료되면 바로 스트리밍을 시작할 수 있습니다. 이 단계는 안전하게 중단할 수 없습니다.",
-	"live.startFailure.class.update_in_progress": "기기가 업데이트를 설치 중이라 완료될 때까지 스트림을 시작할 수 없습니다."
+	"live.startFailure.class.update_in_progress": "기기가 업데이트를 설치 중이라 완료될 때까지 스트림을 시작할 수 없습니다.",
+	"notifications.disruptiveActionRefused": "이 작업은 실행되지 않았습니다. 먼저 장치가 라이브 스트림과 진행 중인 업데이트가 없음을 확인해야 합니다."
 }

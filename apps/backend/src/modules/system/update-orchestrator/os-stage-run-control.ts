@@ -1,5 +1,5 @@
 import { currentLifecycleHolder } from "../../streaming/lifecycle-admission.ts";
-import { getIsStreaming } from "../../streaming/streaming.ts";
+import { isStreamConfirmedIdle } from "../stream-liveness-source.ts";
 import { OsContentionCleanupError } from "./os-stage-contention-cleanup.ts";
 import {
 	acquireOsStageControlLease,
@@ -20,7 +20,7 @@ export function assertOsStageToken(control: OsStageRunControl): void {
 	if (
 		control.signal.aborted ||
 		control.canCommit?.() === false ||
-		getIsStreaming() ||
+		!isStreamConfirmedIdle() ||
 		currentLifecycleHolder() === "streaming"
 	)
 		throw new OsStageError("os_stage_cancelled_for_stream");

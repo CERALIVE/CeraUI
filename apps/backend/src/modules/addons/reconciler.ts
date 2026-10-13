@@ -204,7 +204,9 @@ async function reconcileOne(
 	// (Re)materialisation is needed and is disruptive (a sysext refresh re-merges
 	// /usr). Defer while a stream is live; retry on the next boot.
 	if (deps.getIsStreaming()) {
-		deps.log(`addon reconciler: ${id} deferred (stream live); retry next boot`);
+		deps.log(
+			`addon reconciler: ${id} deferred (stream live or unconfirmed); retry next boot`,
+		);
 		deps.setState(
 			id,
 			buildState(prev, {
@@ -333,14 +335,15 @@ async function buildDefaultDeps(): Promise<ReconcilerDeps> {
 	// Dynamic import keeps the heavy streaming/config graph (and setup.json's
 	// required top-level load) out of the module's static import set, so tests
 	// that inject their own deps never trigger it.
-	const [streaming, config] = await Promise.all([
-		import("../streaming/streaming.ts"),
+	const [liveness, config] = await Promise.all([
+		import("../system/stream-liveness-source.ts"),
 		import("../config.ts"),
 	]);
 
 	return {
 		isRealDevice: () => isRealDevice(),
-		getIsStreaming: () => streaming.getIsStreaming(),
+		// A refresh re-merges /usr: unknown liveness defers it like a live stream.
+		getIsStreaming: () => !liveness.isStreamConfirmedIdle(),
 		getOsVersionId: readOsVersionId,
 		// `{board}` artifact targeting follows the live-resolved kind (not static
 		// setup.hw), so a mismatched image fetches the correct board's sysext.

@@ -2656,5 +2656,6 @@
 	"settings.updates.loading": "Reading update details…",
 	"live.updateInProgress.title": "An update is being installed",
 	"live.updateInProgress.body": "Streaming can start as soon as it finishes; this step cannot be interrupted safely.",
-	"live.startFailure.class.update_in_progress": "The device is installing an update and cannot start a stream until it finishes."
+	"live.startFailure.class.update_in_progress": "The device is installing an update and cannot start a stream until it finishes.",
+	"notifications.disruptiveActionRefused": "This action was not run. The device must confirm that no stream is live and that no update is in progress first."
 }

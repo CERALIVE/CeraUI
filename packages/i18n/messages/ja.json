@@ -2611,5 +2611,6 @@
 	"settings.updates.loading": "アップデートの詳細を読み込んでいます…",
 	"live.updateInProgress.title": "更新をインストールしています",
 	"live.updateInProgress.body": "完了するとすぐに配信を開始できます。この処理は安全に中断できません。",
-	"live.startFailure.class.update_in_progress": "デバイスは更新をインストール中のため、完了するまで配信を開始できません。"
+	"live.startFailure.class.update_in_progress": "デバイスは更新をインストール中のため、完了するまで配信を開始できません。",
+	"notifications.disruptiveActionRefused": "この操作は実行されませんでした。先に、ライブ配信中でないことと更新が進行中でないことをデバイスが確認する必要があります。"
 }

@@ -202,6 +202,17 @@ phase when package success is pending, including after awaited publishing-intent
 recovery. Download abortion rechecks after the awaited
 commit probe, immediately before stop submission, and after stop before dispatch.
 
+Power is fenced for the same window. Local reboot/power-off, the SSH mutations and
+the remote `system.reboot`/`device.factoryReset` commands consult one
+disruptive-action gate that refuses with `update_in_progress` while package success
+is retained, OS settlement durability or replay is pending, an OS stage or `armOs`
+call is in flight, the orchestrator is in `downloading`/`committing`/
+`restarting-services`/`os-staging`/`syncing`, or the maintenance latch is set. It
+also refuses `stream_liveness_unknown` before boot stream reconciliation returns.
+The former `isUpdating()` (package progress only) guard missed OS staging and the
+cleared-progress, not-yet-durable success window. Physical shutdown effects are
+inferred, not board-proven. Full list: `START-LIFECYCLE.md` → Disruptive-action gate.
+
 The tick entrypoint suppresses phase overwrites, discovery, package launch, OS
 stage/activation, mirror start/poll/cleanup and quarantine retirement. Dependency
 entrypoints fence system effects and recheck awaited settings/capability/idle/

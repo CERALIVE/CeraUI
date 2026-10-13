@@ -25,10 +25,13 @@ import { awaitUpdatePhysicalReconciliation } from "../../../helpers/boot-guard.t
 import { logger } from "../../../helpers/logger.ts";
 import { shouldUseMocks } from "../../../mocks/mock-service.ts";
 import { currentLifecycleHolder } from "../../streaming/lifecycle-admission.ts";
-import { getIsStreaming } from "../../streaming/streaming.ts";
 import { broadcastMsg } from "../../ui/websocket-server.ts";
 import { cleanAptCache } from "../apt-cache-clean.ts";
 import { isRealDevice } from "../device-detection.ts";
+import {
+	type UpdateBusyReason,
+	updatePhaseBusyReasons,
+} from "../disruptive-action-gate.ts";
 import { getIdleStatus } from "../idle-activity.ts";
 import {
 	getLastInstallUnitVerdict,
@@ -40,6 +43,7 @@ import {
 	startSoftwareUpdate,
 	type UpdateStartOutcome,
 } from "../software-updates.ts";
+import { isStreamConfirmedIdle } from "../stream-liveness-source.ts";
 import { readUpdateCapabilities } from "../update-capabilities.ts";
 import { loadUpdateSettings } from "../update-settings.ts";
 import { discoverCandidates } from "../update-transport/core.ts";
@@ -360,7 +364,7 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	loadCapabilities: () => readUpdateCapabilities(),
 	isIdle: async (schedule) =>
 		(await getIdleStatus({ now: Date.now(), schedule })).idle,
-	isStreamLive: getIsStreaming,
+	isStreamLive: () => !isStreamConfirmedIdle(),
 	onlyMeteredCandidateExists: defaultOnlyMeteredCandidateExists,
 	runPackageCheck: runUpdateDiscoveryAndReport,
 	startPackageInstall: () => startSoftwareUpdate(notePackageCommitSucceeded),
@@ -448,6 +452,7 @@ let raucStreamAbortInProcess = false;
 let packageInstallStarting = false;
 let updateAdmissionProbe: Promise<boolean> | undefined;
 let osForceActivated = false;
+let osActivationInFlight = false;
 let slotSyncUndecidedReason: string | null = null;
 let slotIdentityUnknownWarned = false;
 let legacyOsFailureWarned = false;
@@ -535,6 +540,7 @@ export function resetOrchestratorRuntimeForTest(): void {
 	packageInstallStarting = false;
 	updateAdmissionProbe = undefined;
 	osForceActivated = false;
+	osActivationInFlight = false;
 	slotSyncUndecidedReason = null;
 	slotIdentityUnknownWarned = false;
 	legacyOsFailureWarned = false;
@@ -547,6 +553,18 @@ export function resetOrchestratorRuntimeForTest(): void {
 
 export function getOrchestratorState(): OrchestratorState {
 	return state;
+}
+
+/** Every orchestrator-owned state in which a power or restart action loses work. */
+export function getOrchestratorDisruptionBusyReasons(): readonly UpdateBusyReason[] {
+	const reasons: UpdateBusyReason[] = [...updatePhaseBusyReasons(state.phase)];
+	if (packageInstallStarting) reasons.push("package-install");
+	if (osStageInProcess || activeOsStage) reasons.push("os-staging");
+	if (osActivationInFlight) reasons.push("os-activation");
+	if (pendingPackageSuccess.pending) reasons.push("pending-success");
+	if (osSettlementPersistence.pending || osSettlementPersistence.replayPending)
+		reasons.push("pending-durability");
+	return reasons;
 }
 
 export function setOrchestratorStateForTest(next: OrchestratorState): void {
@@ -1779,7 +1797,12 @@ async function reconcileOsActivation(): Promise<void> {
 		return;
 	if (state.phase === "os-staged") {
 		try {
-			await deps.armOs(false, control);
+			osActivationInFlight = true;
+			try {
+				await deps.armOs(false, control);
+			} finally {
+				osActivationInFlight = false;
+			}
 			if (!control.held()) return;
 			dispatch({ type: "OS_ACTIVATION_ARMED", now: deps.now() });
 		} catch (error) {
@@ -1802,7 +1825,12 @@ async function reconcileOsActivation(): Promise<void> {
 		!deps.isStreamLive()
 	) {
 		if (!control.held()) return;
-		await deps.armOs(true, control);
+		osActivationInFlight = true;
+		try {
+			await deps.armOs(true, control);
+		} finally {
+			osActivationInFlight = false;
+		}
 		if (!control.held()) return;
 		osForceActivated = true;
 		notifyUpdate({

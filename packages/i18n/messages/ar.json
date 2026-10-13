@@ -2668,5 +2668,6 @@
 	"settings.updates.loading": "جارٍ قراءة تفاصيل التحديث…",
 	"live.updateInProgress.title": "يجري تثبيت تحديث",
 	"live.updateInProgress.body": "يمكن بدء البث فور انتهائه؛ لا يمكن مقاطعة هذه الخطوة بأمان.",
-	"live.startFailure.class.update_in_progress": "يثبّت الجهاز تحديثًا ولا يمكنه بدء بث حتى ينتهي."
+	"live.startFailure.class.update_in_progress": "يثبّت الجهاز تحديثًا ولا يمكنه بدء بث حتى ينتهي.",
+	"notifications.disruptiveActionRefused": "لم يتم تنفيذ هذا الإجراء. يجب أن يتأكد الجهاز أولاً من عدم وجود بث مباشر أو تحديث قيد التنفيذ."
 }

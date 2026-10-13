@@ -130,6 +130,14 @@ export interface SelfFencingDeps {
 	) => Promise<
 		{ ok: true; lease?: { release(): void } } | { ok: false; refusal: string }
 	>;
+	/**
+	 * The device-wide disruptive-action gate (stream liveness + update work),
+	 * consulted on receipt AND again at confirm, since 30 s can start a stream.
+	 * A confirm is the owner's intent, never evidence that the device is idle.
+	 */
+	admitDisruptiveAction: (
+		type: SelfFencingType,
+	) => Promise<{ ok: true } | { ok: false; refusal: string }>;
 }
 
 /**
@@ -214,14 +222,26 @@ function configSnapshotOp(): RevertibleOp {
 	};
 }
 
-/** A non-revertible op whose execution is a single privileged spawn (e.g. reboot). */
+/**
+ * A non-revertible op whose execution is a single privileged spawn (e.g. reboot).
+ * A nonzero exit means nothing was done, so it throws into the negative result.
+ */
 function spawnOp(argv: string[]): NonRevertibleOp {
 	return {
 		revertible: false,
 		execute: async () => {
-			Bun.spawnSync(argv);
+			const { exitCode } = Bun.spawnSync(argv);
+			if (exitCode !== 0)
+				throw new Error(`${argv[0]} exited with status ${String(exitCode)}`);
 		},
 	};
+}
+
+async function defaultAdmitDisruptiveAction(
+	type: SelfFencingType,
+): Promise<{ ok: true } | { ok: false; refusal: string }> {
+	const gate = await import("../system/disruptive-action-runtime.ts");
+	return gate.admitRemoteDisruptiveAction(type);
 }
 
 function defaultDeps(): SelfFencingDeps {
@@ -234,6 +254,7 @@ function defaultDeps(): SelfFencingDeps {
 		clearTimer: (timer) => clearTimeout(timer),
 		logger,
 		acquireMutationLease: defaultAcquireMutationLease,
+		admitDisruptiveAction: defaultAdmitDisruptiveAction,
 	};
 }
 
@@ -403,6 +424,19 @@ export async function handleSelfFencingOp(
 		return;
 	}
 
+	const admitted = await deps.admitDisruptiveAction(
+		frame.type as SelfFencingType,
+	);
+	if (!admitted.ok) {
+		deps.logger.warn(
+			`self_fencing: ${frame.type} (${frame.cid}) refused: ${admitted.refusal}`,
+		);
+		deps.sendResult(
+			resultFrame(frame, { ok: false, applied: null, error: admitted.refusal }),
+		);
+		return;
+	}
+
 	// The mutation lease is taken BEFORE the snapshot and is NOT released when this
 	// handler returns — it is held through confirm, auto-revert, or an acknowledged
 	// terminal failure, because that whole window is one transaction against one
@@ -516,7 +550,23 @@ export async function handleSelfFencingConfirm(cid: string): Promise<void> {
 		}
 
 		// Non-revertible: the confirm authorizes execution. There is no rollback
-		// once run.
+		// once run, so the gate is re-read at the moment of execution.
+		const admitted = await deps.admitDisruptiveAction(
+			frame.type as SelfFencingType,
+		);
+		if (!admitted.ok) {
+			deps.logger.warn(
+				`self_fencing: ${frame.type} (${cid}) confirmed but refused: ${admitted.refusal}`,
+			);
+			deps.sendResult(
+				resultFrame(frame, {
+					ok: false,
+					applied: null,
+					error: admitted.refusal,
+				}),
+			);
+			return;
+		}
 		try {
 			await op.execute(frame.payload);
 			deps.logger.info(

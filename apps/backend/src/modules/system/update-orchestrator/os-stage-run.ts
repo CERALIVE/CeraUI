@@ -1,6 +1,6 @@
 // allow: SIZE_OK — One leased stage lifetime shares cancellation, pin drainage and release authority across this coordinated loop.
 import { currentLifecycleHolder } from "../../streaming/lifecycle-admission.ts";
-import { getIsStreaming } from "../../streaming/streaming.ts";
+import { isStreamConfirmedIdle } from "../stream-liveness-source.ts";
 import type {
 	RankedTransport,
 	TransportSelection,
@@ -491,10 +491,9 @@ export const defaultOsStageRunEffects = {
 	attempt: beginOsStageAttempt,
 	observe: observeRaucStage,
 	restart: killAndRestartRaucForStream,
+	// The liveness source reads the sentinel itself; an unreadable one is unknown.
 	blocked: async () =>
-		getIsStreaming() ||
-		currentLifecycleHolder() === "streaming" ||
-		(await Bun.file("/run/ceralive/streaming").exists()),
+		!isStreamConfirmedIdle() || currentLifecycleHolder() === "streaming",
 	now: () => performance.now(),
 	sleep: (ms: number) => Bun.sleep(ms),
 };

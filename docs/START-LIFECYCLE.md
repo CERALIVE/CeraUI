@@ -525,3 +525,47 @@ leave it waiting for an acknowledgement that cannot arrive. Restoration must
 reconcile the lifecycle through the same owner that admits starts; querying engine
 idle alone does not clear `stop_failed`. See
 [the traced failures, fixes and hardware evidence](COMPOSITION-LIFECYCLE.md).
+
+## Disruptive-action gate [PARTIAL — host-tested, board re-drill owed]
+
+Reboot, power-off, the SSH start/stop/persist mutations and the remote
+`system.reboot` / `device.factoryReset` commands share one gate:
+`apps/backend/src/modules/system/disruptive-action-gate.ts`. It runs only on
+confirmed idle stream evidence with no interruptible update work. Anything else is
+refused with a typed reason (`streaming`, `stream_liveness_unknown` or
+`update_in_progress`): the RPC answers `{success:false, error}`, the local power
+handlers broadcast `notifications.disruptiveActionRefused`, and the remote path
+answers `ok:false` with the reason. A remote confirm is the owner's intent, not
+idle evidence, so the gate is read on receipt and again at confirm. A remote
+reboot/factory-reset command that exits nonzero answers `ok:false` with its status.
+
+Stream liveness is tri-state. `stream-liveness-source.ts` is the single
+composition that consumers read (lane B-core's factory accessor replaces this file
+only). Until then it reports `streaming` when the live flag is set, and `idle` only
+when boot reconciliation has returned (`stream-reconciliation-latch.ts`, closed
+until `main.ts` sees `reconcileStreamSession()` return, so the control server's
+early window is unknown), the session owner's lifecycle projection is `idle`, and the OTA
+sentinel is positively absent (ENOENT). A present sentinel beside an idle
+projection, an unreadable sentinel, or any other lifecycle state is `unknown`.
+
+The same `isStreamConfirmedIdle()` reading replaces the false-default live flag in
+the update orchestrator's `isStreamLive` default (package install, OS staging
+admission, timed activation), idle-schedule detection, the legacy package
+start/check/size paths, the OS-stage token and runner block check, and the add-on
+sysext refresh deferral. Unknown liveness therefore defers those effects; their
+existing refusal reasons (`streaming`/`stream_active`, add-on
+`stream`-deferral) cover "not confirmed idle" without a wire change.
+
+Update work that refuses power: orchestrator phases `downloading`, `committing`,
+`restarting-services`, `os-staging` and `syncing`; an OS stage in process; an
+in-flight `armOs` activation call; a package success retained before its durable
+acknowledgement; pending OS settlement durability or replay; legacy package
+progress; an inconclusive legacy recovery; and the `update-orchestrator-maintenance`
+latch. A settled `os-staged` / `os-activation-armed` receipt is NOT a refusal: a
+clean idle shutdown is its activation path. Consequence to know: while the
+maintenance latch holds, reboot, power-off and SSH changes stay refused from the
+UI and remote control; local console or physical power remains the escape.
+
+These are host proofs on the real handler bodies (local procedures and the remote
+router's confirm flow); the physical effects on a board are inferred, not
+exercised.

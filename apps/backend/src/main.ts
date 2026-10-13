@@ -161,6 +161,7 @@ import {
 	ensureSshPasswordSynced,
 	getSshStatus,
 } from "./modules/system/ssh.ts";
+import { noteStreamReconciliationCompleted } from "./modules/system/stream-reconciliation-latch.ts";
 import { reconcileAptChannel } from "./modules/system/update-apt-channel.ts";
 import { runUpdateBootstrap } from "./modules/system/update-bootstrap.ts";
 import { readUpdateCapabilities } from "./modules/system/update-capabilities.ts";
@@ -336,8 +337,11 @@ await guardNonCritical("pipelines", () =>
 	),
 );
 if (!shouldUseMocks()) {
+	// Only a returned reconciliation turns the factory's initial idle projection
+	// into evidence; until then (or after a throw) disruptive actions see unknown.
 	await guardNonCritical("stream-session-reconcile", async () => {
 		await reconcileStreamSession();
+		noteStreamReconciliationCompleted();
 	});
 	// The first point at which the persisted config and the engine's own session
 	// are both known — so it is where a `config.inflight.json` left by a process
@@ -351,6 +355,8 @@ if (!shouldUseMocks()) {
 	// run sees `streaming` and correctly declines — a backend-only restart can
 	// never produce a second session.
 	void runStreamRestoration();
+} else {
+	noteStreamReconciliationCompleted(); // mock mode has no engine to adopt
 }
 
 // Resolve the runtime hardware kind (engine → device-tree → setup.hw → generic)

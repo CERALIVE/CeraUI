@@ -38,8 +38,9 @@ import {
 	setRemoteConfig,
 } from "../../modules/remote/remote.ts";
 import { notePlannedShutdown } from "../../modules/streaming/armed-stream-marker.ts";
-import { getIsStreaming } from "../../modules/streaming/streaming.ts";
 import { setAutostart } from "../../modules/streaming/streamloop.ts";
+import { notifyDisruptiveActionRefused } from "../../modules/system/disruptive-action-refusal.ts";
+import { getDisruptiveActionDecision } from "../../modules/system/disruptive-action-runtime.ts";
 import {
 	getKioskStatus,
 	isRealDevice,
@@ -57,7 +58,6 @@ import {
 import { getSensors } from "../../modules/system/sensors.ts";
 import {
 	aptUpdatesEnabled,
-	isUpdating,
 	startSoftwareUpdate,
 	triggerManualUpdateCheck,
 } from "../../modules/system/software-updates.ts";
@@ -191,8 +191,10 @@ export const poweroffProcedure = authedProcedure
 			simulateDevReboot(); // close authed sockets → frontend reconnect banner
 			return { success: true };
 		}
-		if (getIsStreaming() || isUpdating()) {
-			return { success: false };
+		const decision = getDisruptiveActionDecision();
+		if (!decision.allowed) {
+			notifyDisruptiveActionRefused();
+			return { success: false, error: decision.reason };
 		}
 		logger.info("System: poweroff requested");
 		notePlannedShutdown("poweroff");
@@ -212,8 +214,10 @@ export const rebootProcedure = authedProcedure
 			simulateDevReboot(); // close authed sockets → frontend reconnect banner
 			return { success: true };
 		}
-		if (getIsStreaming() || isUpdating()) {
-			return { success: false };
+		const decision = getDisruptiveActionDecision();
+		if (!decision.allowed) {
+			notifyDisruptiveActionRefused();
+			return { success: false, error: decision.reason };
 		}
 		logger.info("System: reboot requested");
 		// Belt and braces: a reboot changes the boot id, which already blocks
@@ -320,8 +324,9 @@ export const checkForUpdatesProcedure = authedProcedure
 export const sshStartProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(async ({ context }) => {
-		if (getIsStreaming() || isUpdating()) {
-			return { success: false };
+		const decision = getDisruptiveActionDecision();
+		if (!decision.allowed) {
+			return { success: false, error: decision.reason };
 		}
 		const success = await startStopSsh(context.ws, "start_ssh");
 		return { success };
@@ -333,8 +338,9 @@ export const sshStartProcedure = authedProcedure
 export const sshStopProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(async ({ context }) => {
-		if (getIsStreaming() || isUpdating()) {
-			return { success: false };
+		const decision = getDisruptiveActionDecision();
+		if (!decision.allowed) {
+			return { success: false, error: decision.reason };
 		}
 		const success = await startStopSsh(context.ws, "stop_ssh");
 		return { success };
@@ -351,8 +357,9 @@ export const sshSetPersistentProcedure = authedProcedure
 	.input(sshPersistentInputSchema)
 	.output(successResponseSchema)
 	.handler(async ({ input }) => {
-		if (getIsStreaming() || isUpdating()) {
-			return { success: false };
+		const decision = getDisruptiveActionDecision();
+		if (!decision.allowed) {
+			return { success: false, error: decision.reason };
 		}
 		const success = await setSshPersistent(input.enabled);
 		return { success };
