@@ -239,6 +239,84 @@ describe("sweep: a certificate verdict is not a server rejection", () => {
 	});
 });
 
+// FIX-16-FRONT3 R5: the image's capability declaration is a conclusion about the
+// image, and an OS replacement changes the image behind a dropped link.
+describe("R5: a restored dialog re-reads the image capabilities", () => {
+	const LEGACY = { mode: "legacy", features: [] } as const;
+	const LEGACY_TITLE = "Limited update features on this system image";
+
+	function systemSection(): Element | null {
+		return document.querySelector('[data-testid="updates-system"]');
+	}
+
+	async function openOnLegacyImage(): Promise<void> {
+		render(UpdatesDialog, { props: { open: true } });
+		await settle();
+		answer("system.getUpdateCapabilities", LEGACY);
+		answer("system.getUpdateSettings", SETTINGS);
+		await answerDetails(nothingFound(1_000));
+		expect(text()).toContain(LEGACY_TITLE);
+		expect(systemSection()).toBeNull();
+	}
+
+	async function restoreAfterReplacement(): Promise<void> {
+		dropLink();
+		noteLinkState("disconnected");
+		await restoreLink();
+		noteLinkState("connected");
+		noteSessionRestored();
+		await settle();
+	}
+
+	it("a restored dialog rereads image capabilities", async () => {
+		await openOnLegacyImage();
+		expect(sentCount("system.getUpdateCapabilities")).toBe(1);
+
+		await restoreAfterReplacement();
+		expect(sentCount("system.getUpdateCapabilities")).toBe(2);
+		answer("system.getUpdateCapabilities", CAPABLE);
+		answer("system.getUpdateSettings", SETTINGS);
+		await answerDetails(nothingFound(2_000));
+
+		expect(text()).not.toContain(LEGACY_TITLE);
+		expect(systemSection()).not.toBeNull();
+	});
+
+	it("a failed capability read stays unknown, never legacy", async () => {
+		await openOnLegacyImage();
+
+		await restoreAfterReplacement();
+		reject("system.getUpdateCapabilities", "INTERNAL_ERROR");
+		answer("system.getUpdateSettings", SETTINGS);
+		await answerDetails(nothingFound(2_000));
+
+		expect(text()).not.toContain(LEGACY_TITLE);
+		expect(systemSection()).toBeNull();
+		expect(
+			document.querySelector('[data-testid="update-details-failed"]'),
+		).not.toBeNull();
+	});
+
+	it("a frame that also moves the phase rereads them too", async () => {
+		await openOnLegacyImage();
+		dropLink();
+		noteLinkState("disconnected");
+		await restoreLink();
+		noteLinkState("connected");
+
+		noteSessionRestored();
+		reactiveOrchestrator.value = orchestratorAt("checking");
+		await settle();
+
+		expect(sentCount("system.getUpdateCapabilities")).toBe(2);
+		answer("system.getUpdateCapabilities", CAPABLE);
+		answer("system.getUpdateSettings", SETTINGS);
+		await answerDetails(nothingFound(2_000));
+		expect(text()).not.toContain(LEGACY_TITLE);
+		expect(systemSection()).not.toBeNull();
+	});
+});
+
 describe("F6: a frame that moves the phase AND restores the session", () => {
 	it("re-reads the settings as well as the details", async () => {
 		// Given an open dialog on a link that then dropped and came back.

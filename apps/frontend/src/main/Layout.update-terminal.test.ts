@@ -333,3 +333,50 @@ describe("a terminal update outcome releases the takeover (through the real stor
 		expect(toastError).not.toHaveBeenCalled();
 	});
 });
+
+// FIX-16-FRONT3 R3: the announcement is keyed on the object whose identity the
+// store preserves for an unchanged `updating`, not on the aggregate status,
+// which is a new object whenever ANY sibling field changes.
+describe("a terminal outcome is announced once per outcome, whatever else the frame carries", () => {
+	const DONE = { downloading: 1, unpacking: 1, setting_up: 1, total: 1 };
+
+	it("a repeated terminal outcome with a changed sibling announces once", async () => {
+		await startInstall();
+		push({
+			updating: { ...DONE, result: 0 },
+			update_state: { kind: "success", identity: IDENTITY },
+		});
+		await settle();
+		expect(toastSuccess).toHaveBeenCalledTimes(1);
+
+		// The same outcome repeated, each time beside a sibling field that moved.
+		push({ updating: { ...DONE, result: 0 }, stream_lifecycle: "idle" });
+		push({
+			updating: { ...DONE, result: 0 },
+			is_streaming: false,
+			stream_lifecycle: "starting",
+		});
+		push({ updating: { ...DONE, result: 0 }, is_streaming: false });
+		await settle();
+
+		expect(toastSuccess).toHaveBeenCalledTimes(1);
+		expect(toastError).not.toHaveBeenCalled();
+	});
+
+	it("a genuinely new run right after the first is still announced", async () => {
+		await startInstall();
+		push({ updating: { ...DONE, result: 0 } });
+		await settle();
+		expect(toastSuccess).toHaveBeenCalledTimes(1);
+
+		// The reconnect push clears the field, then a second run starts and succeeds.
+		push({ updating: null, stream_lifecycle: "idle" });
+		push({ updating: STARTED });
+		await settle();
+		push({ updating: { ...DONE, result: 0 }, stream_lifecycle: "idle" });
+		await settle();
+
+		expect(toastSuccess).toHaveBeenCalledTimes(2);
+		expect(takeover()).toBeNull();
+	});
+});

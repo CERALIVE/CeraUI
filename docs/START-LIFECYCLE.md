@@ -539,8 +539,9 @@ follows an engine-loss stop. It renders an amber band and a Stop exactly when
 |---|---|---|---|
 | `reconciling` or `stop_failed` | `false` | any | yes, whatever the local optimism |
 | `stopping` | `false` | pending | yes, as one continuous "Stopping..." |
+| any, including `stopping` retained after a lost reply, or absent | `false` | unresolved (pressed, not settled by the device) | yes: failure or "not confirmed yet" copy and an enabled Stop (FIX-16-FRONT3) |
 | `reconciling` or `stop_failed` | `true` | any | no: the live cockpit's Stop is on screen |
-| `idle`, `starting`, `streaming`, `reconfiguring`, absent; `stopping` with no pending Stop | any | any | no: unchanged |
+| `idle`, `starting`, `streaming`, `reconfiguring`, absent; `stopping` with no pending Stop | any | none unresolved | no: unchanged |
 
 Local optimism never hides it (FIX-16-C3). The optimistic live cockpit that a
 local `starting` keeps on screen shows a DISABLED "Starting...", not a Stop, and a
@@ -550,12 +551,27 @@ settles that stale `starting` (generation-fenced, no failure reason, start
 watchdog cleared) the moment the device's own lifecycle supersedes it
 (`startOptimismSuperseded`): at once on `reconciling`/`stop_failed` with
 `is_streaming` false (the backend refuses a start there and its own start can only
-have ended there), and, after a lost start reply, on the `idle` lifecycle of the
-post-reconnect hydrate (a session restore counted by `session-epoch` since the
-loss, so the stale pre-reset status cannot settle it). A hydrate that says
-`starting` keeps it, and an absent lifecycle (older backend) keeps today's
-watchdog-bounded behaviour. The Live header withholds its "Not streaming" chip
-while the state is unconfirmed, because the band below it says the opposite.
+have ended there), and, after a lost start reply, on an `idle` lifecycle
+DELIVERED after the loss over the link that is current now
+(`session-epoch` `lifecycleDeliveredSince`, FIX-16-FRONT3 R1). A restored
+session is not that evidence: re-authentication can succeed while the status
+hydrate fails, and the store then still holds the pre-reset snapshot. Nor is a
+status push that does not carry the field, because the merge keeps the old
+value. The subscription store stamps a delivery only when a frame carries
+`stream_lifecycle` or a full snapshot establishes its absence. A failed
+hydrate, a hydrate that says `starting` and an absent lifecycle (older backend)
+keep `starting` with today's watchdog bound. The lost-reply record lives in
+`lib/streaming/unresolved-stream-actions.svelte.ts`, not in LiveView, because
+NavigationRenderer replaces the destination on navigation while the optimism it
+qualifies is app-wide.
+
+A full pulled status (`ingestPulledStatus`: the reconnect hydrate and the stop
+watchdog's pull) is a SNAPSHOT: a lifecycle it omits is absent now, so it
+replaces the held value. A partial push that omits the field merges as before
+(R4).
+
+The Live header withholds its "Not streaming" chip whenever the band shows,
+because the band below it says the device cannot confirm.
 
 The band says the device cannot confirm whether a stream is running and that
 Start and updates are paused until it can; it never says the stream is or is not
@@ -574,6 +590,17 @@ async-operation TTL turns a silent device into "not confirmed yet" with Stop
 enabled again. It does not drive the optimism overlay and does not clear
 notifications.
 
+The operator's Stop is a CLAIM, separate from the shared operation's phase
+(FIX-16-FRONT3 R2; the registry itself is unchanged). A reset after `stopping`
+fails the operation while the store keeps `stopping`; C3 then hid the band and
+left only Start. The claim keeps the band, its copy and an enabled Stop until
+the device settles it: the idle commit while its Stop is pending, an idle
+commit delivered after the press over the current link, or an acknowledged
+`{ success: true, result: "stopped" }` (D207). A failure, a reconnect, a failed
+hydrate, a lapsed TTL, `stopping`, `starting` and an absent lifecycle do not
+end it, and it survives LiveView being mounted anew. Nothing is dispatched
+automatically.
+
 Not covered: `starting` and `stopping` seen from a client that did not start
 them have no Stop, but each is bounded and settles into `idle`, `streaming` or a
 row above. An `idle` lifecycle whose sentinel removal failed is invisible on the
@@ -581,7 +608,10 @@ wire; surfacing it needs a new field and an owner decision under D154. The HUD's
 state chip still reads "Idle" while unconfirmed (it hosts no Stop; a third chip
 state is a design change owed with rendered QA). No board or browser has
 exercised this path: the rows above are host-tested with the real cockpits,
-band, header and stores (`LiveView.unconfirmed-real-cockpit.test.ts`).
+band, header and stores (`LiveView.unconfirmed-real-stop.test.ts`,
+`LiveView.unconfirmed-real-reach.test.ts`), and over the REAL subscription
+store, reconnect hydrate and session epoch (`LiveView.real-store-start.test.ts`,
+including the real NavigationRenderer, and `LiveView.real-store-stop.test.ts`).
 ## Composition lifecycle follow-up (2026-09-17)
 
 Failed stop IPC must complete the session cleanup promise with its error, not

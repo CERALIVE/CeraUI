@@ -2,12 +2,14 @@
  * The ONE owner of the legacy install's terminal announcement (early oracle
  * F1/F3).
  *
- * Layout calls it with every `status.updating` value it receives; the overlay
- * calls it too when it is rendered on its own. Each terminal object is
- * announced once: the store keeps an unchanged frame's identity
- * (`preserveWireIdentity`), so a repeated frame, a re-mounted Layout or a
- * second caller sees the same object and stays quiet, while a new run's result
- * is a new object and is announced.
+ * Layout calls it with every `getUpdating()` value; the overlay calls it too
+ * when it is rendered on its own. Each terminal object is announced once: the
+ * store keeps an unchanged `updating` field's identity (`preserveWireIdentity`),
+ * so a repeated frame, a re-mounted Layout or a second caller sees the same
+ * object and stays quiet, while a new run's result is a new object and is
+ * announced. Callers must pass that field-level object, never the aggregate
+ * `getStatus().updating`: the aggregate is a new object whenever ANY sibling
+ * field changes, so the same outcome would be announced again (early oracle R3).
  */
 import { m } from "@ceraui/i18n/svelte";
 import type { StatusMessage } from "@ceraui/rpc/schemas";

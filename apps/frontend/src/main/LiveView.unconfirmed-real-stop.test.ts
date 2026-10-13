@@ -214,7 +214,13 @@ describe("Stop confirmation is device evidence, never the band disappearing (N3)
 		fx.lifecycle = undefined;
 		flushSync();
 		expect(getOperationPhase(KEY)).toBe("pending");
-		expect(band(container)).toBeNull();
+		// FIX-16-FRONT3 R2: an absent lifecycle is not settlement, so the
+		// operator's unresolved Stop keeps its band (C3 expected it to vanish).
+		expect(band(container)).not.toBeNull();
+		expect(controls(container)).toEqual([
+			{ label: "Stopping...", disabled: true },
+			{ label: "Start Stream", disabled: false },
+		]);
 
 		fx.lifecycle = "stop_failed";
 		reply.resolve({

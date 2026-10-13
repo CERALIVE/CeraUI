@@ -37,3 +37,33 @@ export function noteLinkState(state: string): void {
 	if (linkUp && !up) links += 1;
 	linkUp = up;
 }
+
+/**
+ * When the held `stream_lifecycle` was last DELIVERED: the link it arrived on
+ * and a sequence number (FIX-16-FRONT3, early oracle R1). Stamped only by a
+ * status frame that carries the field, or by a full snapshot that establishes
+ * its absence. A restored session is not this evidence (its hydrate can fail
+ * and still count as restored), and neither is a partial push without the
+ * field, because the status merge keeps the old value.
+ */
+export interface LifecycleDelivery {
+	readonly link: number;
+	readonly seq: number;
+}
+
+let deliveries = 0;
+let lifecycleDelivery = $state.raw<LifecycleDelivery>({ link: -1, seq: 0 });
+
+export function getLifecycleDelivery(): LifecycleDelivery {
+	return lifecycleDelivery;
+}
+
+export function noteLifecycleDelivered(): void {
+	deliveries += 1;
+	lifecycleDelivery = { link: links, seq: deliveries };
+}
+
+/** A lifecycle delivered after `mark` (a `seq`) over the link that is current now. */
+export function lifecycleDeliveredSince(mark: number): boolean {
+	return lifecycleDelivery.seq > mark && lifecycleDelivery.link === links;
+}

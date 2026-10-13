@@ -22,6 +22,7 @@ vi.mock("$lib/components/custom/pwa", async () => ({
 }));
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getStatus: () => undefined,
+	getUpdating: () => null,
 }));
 vi.mock("$lib/stores/offline-state.svelte", () => ({
 	getShouldShowOfflinePage: () => false,

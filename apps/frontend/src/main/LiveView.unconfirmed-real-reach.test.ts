@@ -191,7 +191,11 @@ describe("an unconfirmed backend state always has a reachable Stop (N4)", () => 
 		const { container } = render(LiveView);
 		await pressStartAndLoseReply(container);
 
+		// FIX-16-FRONT3 R1: the hydrate DELIVERS the idle lifecycle; a restored
+		// session alone (whose hydrate may have failed) is not that evidence
+		// (`LiveView.real-store-start.test.ts`).
 		noteSessionRestored();
+		fx.lifecycle = "idle";
 		flushSync();
 
 		expect(getStreamingOptimismState()).toBe("idle");

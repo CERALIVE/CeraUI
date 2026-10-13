@@ -7,8 +7,9 @@
  * and come back to the very phase it left, so an unchanged phase proves
  * nothing and only a fresh read can (round-2 review C, M2). That read covers
  * the settings as well as the details: a write whose reply the outage hid may
- * have been applied (round-3 review C, C3-3). The open edge itself is the
- * surface's `load()`, never a step here.
+ * have been applied (round-3 review C, C3-3). It covers the image capabilities
+ * too: an OS replacement changes the image behind the dropped link (FIX-16-FRONT3
+ * R5). The open edge itself is the surface's `load()`, never a step here.
  */
 import type { UpdateOrchestratorPhase } from "@ceraui/rpc/schemas";
 import { untrack } from "svelte";
@@ -28,7 +29,7 @@ export type FollowStep =
 	| {
 			readonly kind: "phase";
 			readonly phase: UpdateOrchestratorPhase | undefined;
-			/** The same frame restored the session: the settings are read too. */
+			/** The same frame restored the session: settings and capabilities are read too. */
 			readonly reread?: true;
 	  }
 	| { readonly kind: "reread" };
@@ -51,7 +52,7 @@ export function followStep(seen: DeviceFrame, next: DeviceFrame): FollowStep {
 
 /** Registers the follower; call during the dialog component's initialisation. */
 export function followDeviceState(
-	surface: Pick<UpdateSurface, "observePhase" | "reread" | "rereadSettings">,
+	surface: Pick<UpdateSurface, "observePhase" | "reread" | "rereadOnRestore">,
 	frame: () => Omit<DeviceFrame, "restored">,
 ): void {
 	let seen: DeviceFrame = {
@@ -69,7 +70,7 @@ export function followDeviceState(
 					return;
 				case "phase":
 					void surface.observePhase(step.phase);
-					if (step.reread) void surface.rereadSettings();
+					if (step.reread) void surface.rereadOnRestore();
 					return;
 				case "reread":
 					void surface.reread();

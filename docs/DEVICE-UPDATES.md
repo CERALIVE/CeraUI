@@ -878,7 +878,8 @@ wire field carrying the expiry date.
   `INTERNAL_ERROR`/`VALIDATION_ERROR` raised while handling the request, reads
   "Outcome not confirmed" until a changed phase or a details read made after
   the request settles it; a session restored after a dropped link re-reads the
-  details and the settings even when the phase is unchanged. Each action keeps
+  details, the settings and the image capabilities even when the phase is
+  unchanged (a failed capability read is unknown, never legacy). Each action keeps
   its own band, a declined duplicate click touches nothing, and an action stays
   busy until its whole chain of requests settles. The legacy Packages Update is
   the same machine's fourth action, settled by a legacy `update_state` change;
@@ -893,14 +894,15 @@ wire field carrying the expiry date.
   a succeeded latest attempt and a phase that could show a held offer; the
   sentence belongs to the link that witnessed it, and leaves the screen when
   that link drops. A frame that moves the phase and restores the session
-  re-reads the settings as well. A row whose probes reached a server but got a
+  re-reads the settings and capabilities as well. A row whose probes reached a server but got a
   certificate, signature, TLS or portal answer is "Not usable for updates",
   not "Not reachable"; a pending cellular approval names a metered or
   unknown-cost link, never "only cellular". The install overlay reports
   success only from the device's result, never from full progress counters,
   and a terminal result (success or failure) releases the takeover at once:
-  Layout announces the outcome once and the page's controls are back without a
-  reload. Contract and exhaustive proofs:
+  Layout announces the outcome once per outcome (keyed on the `updating` field
+  the store preserves, so a repeated outcome beside a changed sibling field
+  stays quiet) and the page's controls are back without a reload. Contract and exhaustive proofs:
   `apps/frontend/docs/agents/an-update-action-outcome-is-decided-by-evidence.md`.
 - **Global badge** (`UpdateOrchestratorBadge.svelte`): shown while
   `isUpdateBusy()` holds, with phase and percent, and opens the dialog.

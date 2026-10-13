@@ -88,7 +88,11 @@ import {
 import { mergeModemList } from "./modem-list-merge";
 import { reauthenticateAndHydrate } from "./reconnect";
 import { createSeqTracker } from "./seq-guard";
-import { noteLinkState, noteSessionRestored } from "./session-epoch.svelte";
+import {
+	noteLifecycleDelivered,
+	noteLinkState,
+	noteSessionRestored,
+} from "./session-epoch.svelte";
 import {
 	refreshWifiAdapterModes,
 	resetWifiAdapterModes,
@@ -591,6 +595,7 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 					: {}),
 			} as Exclude<typeof statusState, undefined>;
 			statusState = preserveWireIdentity(statusState, nextStatus);
+			if ("stream_lifecycle" in statusData) noteLifecycleDelivered();
 			break;
 		}
 
@@ -1048,10 +1053,18 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
  * Apply a PULLED status snapshot (`rpc.status.getStatus()`) seq-less, so it
  * bypasses the per-type drop-stale guard. INVARIANT: a pull is authoritative and
  * must never be gated by push seq bookkeeping. Recovery seam for the stopping
- * watchdog (mirrors the reconnect-hydrate dispatch).
+ * watchdog and the reconnect hydrate.
+ *
+ * A pull is a FULL snapshot, so an optional lifecycle it omits is absent now
+ * (an older backend), not unchanged: it replaces the held value instead of
+ * merging like a partial push (early oracle R4).
  */
 export function ingestPulledStatus(status: unknown): void {
-	handleMessage("status", status, undefined);
+	const snapshot =
+		typeof status === "object" && status !== null
+			? { stream_lifecycle: undefined, ...status }
+			: status;
+	handleMessage("status", snapshot, undefined);
 }
 
 const AUTH_STORAGE_KEY = "auth";
@@ -1090,7 +1103,10 @@ async function runReconnectReauth(): Promise<void> {
 			login: (token) => rpc.auth.login({ token, persistent_token: true }),
 			getConfig: () => rpc.streaming.getConfig(),
 			getStatus: () => rpc.status.getStatus(),
-			dispatch: handleMessage,
+			dispatch: (type, data) =>
+				type === "status"
+					? ingestPulledStatus(data)
+					: handleMessage(type, data),
 			routeToLogin,
 			onError: (error) => console.error("Reconnect re-auth failed:", error),
 		});

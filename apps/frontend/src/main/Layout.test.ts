@@ -79,6 +79,7 @@ const offlineState = vi.hoisted(() => ({ takeoverVisible: false }));
 
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getStatus: () => authState.status,
+	getUpdating: () => null,
 }));
 
 vi.mock("$lib/stores/offline-state.svelte", () => ({

@@ -187,6 +187,13 @@ async function perform(
 			await restoreLink();
 			frame(h, { phase: w.device.phase });
 			frame(h, { restored: h.seen.restored + 1 });
+			await flush();
+			// The restored session re-reads the image capabilities too (FIX-16-FRONT3
+			// R5). This world never replaces the image, so the device answers as at
+			// the open edge; a failed capability read is pinned in
+			// `UpdatesDialog.live-link.test.ts`.
+			if (outstanding("system.getUpdateCapabilities").length > 0)
+				answer("system.getUpdateCapabilities", CAPABLE, "newest");
 			break;
 		case "phase-unrelated":
 		case "phase-same":

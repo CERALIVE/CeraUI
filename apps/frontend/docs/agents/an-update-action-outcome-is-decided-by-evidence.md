@@ -27,7 +27,7 @@ says it proves; anything else renders the explicit unknown.
 | `main/dialogs/updates/PackagesSection.svelte` | the legacy Packages controls, through the same machine |
 | `main/dialogs/updates/SettingsSaveBand.svelte` | "not sent" vs "not confirmed" for a settings save |
 | `lib/updates/update-device-follow.svelte.ts` | when an OPEN dialog re-reads (phase moved, session restored) |
-| `lib/rpc/session-epoch.svelte.ts` | the count of sessions restored after a dropped link |
+| `lib/rpc/session-epoch.svelte.ts` | the count of sessions restored after a dropped link, the link epoch, and which link last DELIVERED `stream_lifecycle` |
 | `main/dialogs/updates/ActionOutcomeList.svelte` | one band per action, named after its control |
 
 ### States of one dispatched call
@@ -57,7 +57,7 @@ the watch of the call it duplicates.
 | a legacy `update_state` kind CHANGE pushed after the dispatch | settles the Packages Update when it is `downloading`, `installing`, `update_preflight_failed`, `failed` or `success` |
 | a details read STARTED after the dispatch that LANDS | settles a check when its clocks moved, an install when a different image is staged |
 | a failed or superseded read, a same-phase push | nothing |
-| a session restored after a dropped link | triggers a fresh read of the details AND the settings, even when the phase is unchanged |
+| a session restored after a dropped link | triggers a fresh read of the details, the settings AND the image capabilities, even when the phase is unchanged; it is NOT evidence about any pushed field itself (its status hydrate can fail and still count as restored) |
 
 Settling evidence is sticky: once seen it holds, so a later read that shows
 less cannot reopen the question. Evidence that arrives while the call is still
@@ -152,7 +152,13 @@ predicate (`legacyInstallRunning`). The terminal outcome has one announcer,
 `legacy-install-notice.ts`, called from Layout (which receives the terminal
 frame) and from the overlay rendered on its own; it toasts once per terminal
 object, so a repeated frame, a re-mounted Layout or a second caller stays
-quiet and a new run's result is announced. Failure stays visible: the error
+quiet and a new run's result is announced. Layout passes the dedicated
+`getUpdating()` object, whose identity the store keeps for an unchanged field;
+the aggregate `getStatus().updating` is a new object whenever ANY sibling field
+moves, so the same outcome beside a changed lifecycle was announced again
+(early oracle R3; `a repeated terminal outcome with a changed sibling announces
+once`, with `a genuinely new run right after the first is still announced` as
+the control). Failure stays visible: the error
 toast with the device's text (one honest sentence when it sent none), the
 device's persistent `ceralive_update_failed` notice and the dialog's "Update
 failed" summary. Pinned through the real store and Layout by
@@ -183,7 +189,12 @@ negative fact. Settings: S1 one write awaited at a time; S2 a write changes at
 most one, operator-set, field of the device's settings; S3 "not sent" only for
 a write the device never received, "not confirmed" only for one it did; S4 the
 controls are released only once no write is awaited; S5 a restored session
-re-reads the settings.
+re-reads the settings. Capabilities: a restored session re-reads the image's
+declaration (an OS replacement changes the image behind a dropped link), under
+its own latest-read counter; a failed read lands as UNKNOWN (no legacy notice,
+the failure band), never as the previous image's answer (early oracle R5;
+`UpdatesDialog.live-link.test.ts`). The reference world models that re-read
+(`capsRead`), answered with the unchanged image's declaration.
 
 - `update-action-interleavings.test.ts`: EVERY sequence of up to 8 events over
   18 kinds (dispatch, duplicate, device starts, refusal (also AFTER a start),

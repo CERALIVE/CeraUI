@@ -94,6 +94,38 @@ describe("the band stays through the operator's own pending Stop", () => {
 	}
 });
 
+describe("an unresolved operator Stop keeps the band until the device settles it", () => {
+	// Hand-written (FIX-16-FRONT3 R2): a Stop whose outcome is UNKNOWN (failed,
+	// timed out, reset) keeps its surface whatever the held lifecycle says, and
+	// only `is_streaming` true (the live cockpit's own Stop) hides it.
+	const SHOWN_WHILE_UNRESOLVED = new Set([
+		"idle|false",
+		"starting|false",
+		"streaming|false",
+		"stopping|false",
+		"reconfiguring|false",
+		"reconciling|false",
+		"stop_failed|false",
+		"undefined|false",
+	]);
+	for (const lifecycle of LIFECYCLES) {
+		for (const isStreaming of STREAMING) {
+			const cell = `${lifecycle}|${isStreaming}`;
+			const expected = SHOWN_WHILE_UNRESOLVED.has(cell);
+			it(`${cell} with an unresolved Stop -> ${expected ? "band" : "no band"}`, () => {
+				expect(
+					showUnconfirmedStreamStop({
+						lifecycle,
+						isStreaming,
+						optimismState: "idle",
+						stopUnresolved: true,
+					}),
+				).toBe(expected);
+			});
+		}
+	}
+});
+
 describe("stopConfirmedByDevice — only the device's idle commit confirms a Stop", () => {
 	for (const lifecycle of LIFECYCLES) {
 		for (const isStreaming of STREAMING) {
@@ -132,8 +164,8 @@ describe("startOptimismSuperseded — device evidence outranks a local starting"
 	]);
 	for (const lifecycle of LIFECYCLES) {
 		for (const isStreaming of STREAMING) {
-			for (const rehydrated of [false, true]) {
-				const cell = `${lifecycle}|${isStreaming}|${rehydrated}`;
+			for (const delivered of [false, true]) {
+				const cell = `${lifecycle}|${isStreaming}|${delivered}`;
 				const expected = SETTLE.has(cell);
 				it(`starting, ${cell} -> ${expected ? "settle" : "keep"}`, () => {
 					expect(
@@ -141,7 +173,7 @@ describe("startOptimismSuperseded — device evidence outranks a local starting"
 							optimismState: "starting",
 							isStreaming,
 							lifecycle,
-							rehydratedSinceLostReply: rehydrated,
+							lifecycleSinceLostReply: delivered,
 						}),
 					).toBe(expected);
 				});
@@ -156,7 +188,7 @@ describe("startOptimismSuperseded — device evidence outranks a local starting"
 					optimismState,
 					isStreaming: false,
 					lifecycle: "reconciling",
-					rehydratedSinceLostReply: true,
+					lifecycleSinceLostReply: true,
 				}),
 			).toBe(false);
 		}

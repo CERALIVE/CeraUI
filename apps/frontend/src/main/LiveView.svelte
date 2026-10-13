@@ -76,7 +76,6 @@ import {
 	getSources,
 	getStatus,
 } from '$lib/rpc/subscriptions.svelte';
-import { getRestoredSessions } from '$lib/rpc/session-epoch.svelte';
 import {
 	getStopStuckBannerVisible,
 	getStreamingAttemptGeneration,
@@ -105,7 +104,12 @@ import { canLiveSwitchInput, isAudioInputId } from '$lib/streaming/liveAudioSwit
 import { pipelinesFromSources } from '$lib/streaming/sources-view-model';
 import { buildStartConfig } from '$lib/streaming/startStreaming';
 import { startFailureMessage } from '$lib/streaming/start-failure-copy';
-import { startOptimismSuperseded, streamStateUnconfirmed } from '$lib/streaming/unconfirmed-stream';
+import { showUnconfirmedStreamStop, startOptimismSuperseded } from '$lib/streaming/unconfirmed-stream';
+import {
+	lifecycleSinceLostStartReply,
+	noteLostStartReply,
+	operatorStopUnresolved,
+} from '$lib/streaming/unresolved-stream-actions.svelte';
 import { goLiveUpdateRefusal } from '$lib/updates/update-bands';
 // The TYPES stay static — `import type` is erased at compile, so it creates no
 // runtime edge and cannot pull the dialog into the entry chunk. The COMPONENTS
@@ -175,26 +179,32 @@ $effect(() => {
 // whose reply a connection reset swallowed keeps `starting` (the start may have
 // worked) and `is_streaming:false` never clears it, so without this the cockpit
 // sat on a disabled "Starting..." for the 90 s start watchdog while the device
-// said `reconciling`, with no Stop anywhere. `lostStartReply` remembers which
-// attempt lost its reply and how many sessions had been restored then, so only
-// the post-reconnect hydrate (not the stale pre-reset status) can settle it.
+// said `reconciling`, with no Stop anywhere. Only a lifecycle DELIVERED over the
+// current link after the loss settles a lost reply: a restored session can hold
+// the pre-reset snapshot when its hydrate failed (FIX-16-FRONT3 R1). The record
+// lives outside this component, which navigation replaces.
 const streamLifecycle = $derived(getStatus()?.stream_lifecycle);
-let lostStartReply = $state<{ generation: number; restored: number } | undefined>(undefined);
 $effect(() => {
 	if (streamingOptimismState !== 'starting') return;
 	const generation = getStreamingAttemptGeneration();
-	const lost = lostStartReply;
 	const superseded = startOptimismSuperseded({
 		optimismState: streamingOptimismState,
 		isStreaming,
 		lifecycle: streamLifecycle,
-		rehydratedSinceLostReply:
-			lost !== undefined &&
-			lost.generation === generation &&
-			getRestoredSessions() > lost.restored,
+		lifecycleSinceLostReply: lifecycleSinceLostStartReply(generation),
 	});
 	if (superseded) supersedeStartingOptimism(generation);
 });
+// An unresolved operator Stop keeps the band, and keeps the header from saying
+// "Not streaming", until the device settles it (FIX-16-FRONT3 R2).
+const streamOutcomeUnknown = $derived(
+	showUnconfirmedStreamStop({
+		lifecycle: streamLifecycle,
+		isStreaming,
+		optimismState: streamingOptimismState,
+		stopUnresolved: operatorStopUnresolved(),
+	}),
+);
 
 // ── Post-stream summary window ─────────────────────────────────────────────
 // IngestStats' historical "Session ended · {duration}" summary lives inside
@@ -927,7 +937,7 @@ async function handleStart(overrides: { source?: string } = {}) {
 		}
 	} catch (error) {
 		if (error instanceof ConnectionResetError) {
-			lostStartReply = { generation: attempt, restored: getRestoredSessions() };
+			noteLostStartReply(attempt);
 			return;
 		}
 		// Transport/validation throw: revert to idle with the error message.
@@ -982,10 +992,7 @@ const configRows = $derived<ConfigRow[]>([
 </script>
 
 <div class="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-6">
-	<LiveHeader
-		{isStreaming}
-		unconfirmed={streamStateUnconfirmed({ lifecycle: streamLifecycle, isStreaming })}
-	/>
+	<LiveHeader {isStreaming} unconfirmed={streamOutcomeUnknown} />
 
 	<!-- Capability-tier state: calm banner when the engine is offline/starting or
 	     reports a schema mismatch. Renders nothing in the normal tier. -->

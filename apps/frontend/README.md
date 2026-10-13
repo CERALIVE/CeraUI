@@ -199,8 +199,10 @@ src/
   Update runs through the same machine; settings saves own their controls until
   they settle and a lost save reply is "not confirmed"; "No newer system image"
   needs a check the dialog saw complete on its current link (and leaves the
-  screen when that link drops); a terminal install result releases the update
-  takeover at once and is announced once; a failed add-on
+  screen when that link drops); a restored session re-reads the image's
+  capabilities (a failed read is unknown, never legacy); a terminal install
+  result releases the update takeover at once and is announced once per
+  outcome; a failed add-on
   list read says so with a retry ([contract](docs/agents/an-update-action-outcome-is-decided-by-evidence.md)).
   No raw backend message or new OS-stage reason is rendered.
 

@@ -17,7 +17,11 @@
   wipe the recovery notice that explains why the band is here.
 
   Always mounted by LiveView; it renders nothing outside the unconfirmed set,
-  except that it stays through the `stopping` its own pending Stop caused.
+  except that it stays while the operator's Stop is unresolved: from the press
+  until the device settles it (its idle commit delivered after the press over
+  the current link, or an acknowledged `stopped`). A lost reply, a failed
+  hydrate or a lapsed TTL is not settlement, so a `stopping` retained after a
+  reset keeps the band, its feedback and an enabled Stop (FIX-16-FRONT3 R2).
   Local start optimism never hides it: the optimistic live cockpit shows a
   disabled "Starting...", which is not a Stop.
 -->
@@ -35,6 +39,12 @@ import {
 	stopConfirmedByDevice,
 	UNCONFIRMED_STOP_OPERATION,
 } from '$lib/streaming/unconfirmed-stream';
+import {
+	claimOperatorStop,
+	lifecycleSinceStopClaim,
+	operatorStopUnresolved,
+	settleOperatorStop,
+} from '$lib/streaming/unresolved-stream-actions.svelte';
 
 interface Props {
 	lifecycle: LifecycleState | undefined;
@@ -46,8 +56,15 @@ let { lifecycle, isStreaming, optimismState }: Props = $props();
 
 const phase = $derived(getOperationPhase(UNCONFIRMED_STOP_OPERATION));
 const pending = $derived(phase === 'pending');
+const unresolved = $derived(operatorStopUnresolved());
 const visible = $derived(
-	showUnconfirmedStreamStop({ lifecycle, isStreaming, optimismState, stopPending: pending }),
+	showUnconfirmedStreamStop({
+		lifecycle,
+		isStreaming,
+		optimismState,
+		stopPending: pending,
+		stopUnresolved: unresolved,
+	}),
 );
 
 // Only the device's idle commit confirms the Stop. Not the band leaving the
@@ -55,19 +72,33 @@ const visible = $derived(
 // `stop_failed` if it never does, and a confirmed operation cannot fail. Not a
 // `stopped` reply either: the backend can answer it without committing idle.
 // Without that evidence the reply decides `failed`, or the shared TTL valve
-// flips the operation to `timed_out` and the band says so.
+// flips the operation to `timed_out` and the band says so. A pending operation
+// lives on one link (a reset fails it, a reconnect clears it), so the idle it
+// sees is that link's; once it is no longer pending, the claim needs an idle
+// delivered after the press over the current link.
 $effect(() => {
-	if (phase === 'pending' && stopConfirmedByDevice({ lifecycle, isStreaming })) {
+	if (!stopConfirmedByDevice({ lifecycle, isStreaming })) return;
+	if (phase === 'pending') {
 		confirmOperation(UNCONFIRMED_STOP_OPERATION);
+		settleOperatorStop();
+	} else if (unresolved && lifecycleSinceStopClaim()) {
+		settleOperatorStop();
 	}
 });
 
 function handleStop() {
+	claimOperatorStop();
 	void osCommand({
 		key: UNCONFIRMED_STOP_OPERATION,
 		rpc: () => rpc.streaming.stop(),
 		classify: (r) =>
 			r.result === 'stop_failed' ? { ok: false, reason: r.reason } : { ok: r.success },
+		// D207: an acknowledged Stop is positive idle evidence for the claim. It
+		// does not confirm the operation (the reconciling branch can answer it
+		// while the lifecycle stays protected, and the band then stays anyway).
+		onResult: (r) => {
+			if (r.success && r.result === 'stopped') settleOperatorStop();
+		},
 		// The band renders the failure inline and keeps it on screen; a toast would
 		// vanish while the device is still refusing Start.
 		silent: true,
@@ -95,6 +126,10 @@ function handleStop() {
 					</p>
 				{:else if phase === 'timed_out'}
 					<p class="text-sm font-medium" data-testid="unconfirmed-stream-timed-out">
+						{m['live.unconfirmedStream.stopNotConfirmed']()}
+					</p>
+				{:else if unresolved && !pending}
+					<p class="text-sm font-medium" data-testid="unconfirmed-stream-not-confirmed">
 						{m['live.unconfirmedStream.stopNotConfirmed']()}
 					</p>
 				{/if}

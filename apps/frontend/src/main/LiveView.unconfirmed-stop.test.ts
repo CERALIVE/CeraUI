@@ -182,7 +182,7 @@ describe("LiveView — unconfirmed stream state offers Stop", () => {
 	// The device's unconfirmed projection now shows the band AND settles the stale
 	// local start (this file's optimism store is a stub, so the settle is
 	// asserted as the call it makes; the real store is exercised in
-	// LiveView.unconfirmed-real-cockpit.test.ts).
+	// LiveView.unconfirmed-real-reach.test.ts).
 	it("reconciling with a stale local starting: band shown and the start optimism superseded", () => {
 		fx.lifecycle = "reconciling";
 		fx.optimism = "starting";

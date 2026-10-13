@@ -42,6 +42,11 @@ export interface UnconfirmedStreamInput extends DeviceStreamFacts {
 	optimismState: StreamingOptimismState;
 	/** The band's own Stop is in flight (its operation is `pending`). */
 	stopPending?: boolean;
+	/**
+	 * The operator's Stop has no device settlement yet (`unresolved-stream-actions`):
+	 * a failed, timed-out or reset Stop is still UNKNOWN, not over (FIX-16-FRONT3 R2).
+	 */
+	stopUnresolved?: boolean;
 }
 
 /** The device projects an unconfirmed lifecycle while its last confirmed `is_streaming` is false. */
@@ -54,21 +59,21 @@ export function streamStateUnconfirmed(facts: DeviceStreamFacts): boolean {
 }
 
 /**
- * Whether the Live view must offer the unconfirmed-state band and its Stop.
- * With `is_streaming` true the live cockpit's own Stop is used, so the band never
- * doubles it. While the band's own Stop is pending it also covers `stopping`,
- * which the backend enters before the engine answers: the operator keeps one
- * continuous "Stopping..." instead of the band blinking out and back.
+ * Whether the Live view must offer the unconfirmed-state band and its Stop, and
+ * so withhold "Not streaming". With `is_streaming` true the live cockpit's own
+ * Stop is used, so the band never doubles it. While the band's own Stop is
+ * pending it also covers `stopping`, which the backend enters before the engine
+ * answers. An unresolved operator Stop keeps it whatever the held lifecycle
+ * says (`stopping` retained after a lost reply, `starting`, absent): only the
+ * device's settlement ends that.
  */
 export function showUnconfirmedStreamStop(
 	input: UnconfirmedStreamInput,
 ): boolean {
 	if (streamStateUnconfirmed(input)) return true;
-	return (
-		input.stopPending === true &&
-		!input.isStreaming &&
-		input.lifecycle === "stopping"
-	);
+	if (input.isStreaming) return false;
+	if (input.stopUnresolved === true) return true;
+	return input.stopPending === true && input.lifecycle === "stopping";
 }
 
 /**
@@ -84,23 +89,25 @@ export function stopConfirmedByDevice(facts: DeviceStreamFacts): boolean {
 export interface StartSupersedeInput extends DeviceStreamFacts {
 	optimismState: StreamingOptimismState;
 	/**
-	 * This attempt's start reply was lost to a connection reset AND a session has
-	 * been restored since, so the status now held is the post-reconnect hydrate,
-	 * not the stale pre-reset view.
+	 * This attempt's start reply was lost to a connection reset AND the held
+	 * lifecycle was DELIVERED after that, over the link that is current now
+	 * (`lifecycleSinceLostStartReply`). A restored session is not enough: its
+	 * hydrate can fail and leave the pre-reset snapshot in the store (FIX-16-FRONT3 R1).
 	 */
-	rehydratedSinceLostReply: boolean;
+	lifecycleSinceLostReply: boolean;
 }
 
 /**
  * Whether device evidence has superseded a local `starting`. The backend refuses
  * a start in `reconciling`/`stop_failed` and its own start can only have ENDED
- * there, so those settle it at once. A lost start reply settles on the
- * current-epoch idle commit. A hydrate that says `starting` (still in progress),
- * an absent lifecycle (older backend: no evidence either way, the start watchdog
- * still bounds it) and `is_streaming` true (the ordinary reconcile) keep it.
+ * there, so those settle it at once. A lost start reply settles on an idle
+ * commit delivered over the current link after the loss. A failed hydrate, a
+ * retained pre-reset snapshot, a hydrate that says `starting` (still in
+ * progress), an absent lifecycle (older backend) and `is_streaming` true (the
+ * ordinary reconcile) keep it; the start watchdog still bounds it.
  */
 export function startOptimismSuperseded(input: StartSupersedeInput): boolean {
 	if (input.optimismState !== "starting" || input.isStreaming) return false;
 	if (streamStateUnconfirmed(input)) return true;
-	return input.rehydratedSinceLostReply && input.lifecycle === "idle";
+	return input.lifecycleSinceLostReply && input.lifecycle === "idle";
 }

@@ -7,7 +7,7 @@ import { Button } from '$lib/components/ui/button';
 import * as Tooltip from '$lib/components/ui/tooltip';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
 import { rpc } from '$lib/rpc';
-import { getStatus } from '$lib/rpc/subscriptions.svelte';
+import { getUpdating } from '$lib/rpc/subscriptions.svelte';
 import {
 	authenticateWithToken,
 	authStatusStore,
@@ -60,13 +60,15 @@ const showOfflinePage = $derived(getShouldShowOfflinePage());
 // device's terminal object (success or failure) is the last `updating` frame the
 // store keeps, so mounting on it would leave a takeover nobody can dismiss.
 const updatingStatus = $derived.by(() => {
-	const install = legacyInstall(getStatus()?.updating);
+	const install = legacyInstall(getUpdating());
 	return install.kind === 'running' ? install.details : undefined;
 });
 // This tree receives the terminal frame, so it owns the announcement, once per
-// outcome (`Layout.update-terminal.test.ts`).
+// outcome (`Layout.update-terminal.test.ts`). It reads the dedicated selector,
+// whose object the store keeps for an unchanged `updating`: the aggregate
+// status is a new object whenever any sibling field moves (FIX-16-FRONT3 R3).
 $effect(() => {
-	announceLegacyInstallOutcome(getStatus()?.updating);
+	announceLegacyInstallOutcome(getUpdating());
 });
 // Environment probes computed once (used to size the auth-check timeout).
 const isMobile = /iphone|ipad|ipod|android/i.test(navigator.userAgent);

@@ -19,6 +19,7 @@
 import type { StartFailure } from "@ceraui/rpc/schemas";
 
 import { stopStreaming as directStopStreaming } from "$lib/helpers/SystemHelper";
+import { resetUnresolvedStreamActions } from "$lib/streaming/unresolved-stream-actions.svelte";
 
 import { rpc } from "./client";
 import {
@@ -555,9 +556,11 @@ export function retryStopStreaming(): void {
 }
 
 /**
- * Tear down the reactive store (clearing the watchdog timer). For tests/HMR.
+ * Tear down the reactive store (clearing the watchdog timer) and the
+ * unresolved stream actions that qualify it. For tests/HMR.
  */
 export function destroyStreamingOptimism(): void {
 	singleton?.destroy();
 	singleton = null;
+	resetUnresolvedStreamActions();
 }

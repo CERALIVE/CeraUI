@@ -67,6 +67,8 @@ export interface WorldRead {
 	readonly session: number;
 	/** The capabilities read beside it was answered (the link was up). */
 	readonly capsOk: boolean;
+	/** `World.capsRead` when it started: a newer capabilities read supersedes it. */
+	readonly caps: number;
 }
 
 export interface World {
@@ -82,8 +84,13 @@ export interface World {
 	readonly reads: readonly WorldRead[];
 	readonly shown: Shown | undefined;
 	readonly detailsFailed: boolean;
-	/** The open's capabilities read failed; only the next `load()` clears it. */
+	/**
+	 * The latest capabilities read failed. A `load()` or a restored session
+	 * re-reads them (FIX-16-FRONT3 R5); this world never replaces the image.
+	 */
 	readonly capsFailed: boolean;
+	/** Capabilities reads started so far: only the latest one lands. */
+	readonly capsRead: number;
 	readonly calls: readonly WorldCall[];
 	readonly sent: number;
 }
@@ -112,6 +119,7 @@ export function initialWorld(action: WorldAction): World {
 		shown: { checkedAt: 1_000, staged: false },
 		detailsFailed: false,
 		capsFailed: false,
+		capsRead: 1,
 		calls: [],
 		sent: 0,
 	};
@@ -154,7 +162,7 @@ function changed(action: WorldAction, before: Shown, after: Shown): boolean {
 }
 
 function settleLoad(w: World, read: WorldRead): World {
-	return read.load && read.session === w.session
+	return read.load && read.session === w.session && read.caps === w.capsRead
 		? { ...w, capsFailed: !read.capsOk }
 		: w;
 }
@@ -189,14 +197,16 @@ export function landRead(w: World, read: WorldRead): World {
 }
 
 export function startRead(w: World, load: boolean): World {
+	const capsRead = load ? w.capsRead + 1 : w.capsRead;
 	const read = {
 		seq: w.seq + 1,
 		order: w.order + 1,
 		load,
 		session: w.session,
 		capsOk: w.link,
+		caps: capsRead,
 	};
-	const started = { ...w, seq: read.seq, order: read.order };
+	const started = { ...w, seq: read.seq, order: read.order, capsRead };
 	if (!w.link) return failRead(started, read);
 	return { ...started, reads: [...w.reads, read] };
 }
@@ -233,17 +243,23 @@ export function frame(w: World, patch: Partial<DeviceFrame>): World {
 	const next = { ...w.seen, ...patch };
 	const move = contractMove(w.seen, next);
 	const seen = { ...w, seen: next };
+	// A restored session re-reads the capabilities; the scripted device answers
+	// at once with the unchanged image's declaration.
+	const restored =
+		move.kind === "reread" || (move.kind === "phase" && move.reread === true)
+			? { ...seen, capsFailed: false, capsRead: w.capsRead + 1 }
+			: seen;
 	switch (move.kind) {
 		case "none":
 			return seen;
 		case "reread":
-			return startRead(seen, false);
+			return startRead(restored, false);
 		case "phase": {
 			const { phase } = move;
-			if (phase === undefined) return startRead(seen, false);
+			if (phase === undefined) return startRead(restored, false);
 			const started =
 				phase === (w.action === "check" ? "checking" : "os-staging");
-			const marked = markEvidence(seen, () => started);
+			const marked = markEvidence(restored, () => started);
 			return startRead(apply(marked, { type: "phase", phase }), false);
 		}
 		default: {

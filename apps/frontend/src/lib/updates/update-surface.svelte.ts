@@ -7,7 +7,9 @@
  * owns `details`, whichever path started the read, and settings have their own
  * that a save echo also advances: an answer lands only if nothing newer was
  * started after it, so a slow opening snapshot can never overwrite a newer read
- * or an echoed save (C-M2). A restored session re-reads both.
+ * or an echoed save (C-M2). Capabilities have their own counter too. A restored
+ * session re-reads all three: an OS replacement changes the image behind a
+ * dropped link (early oracle R5).
  *
  * Sessions. `reset()` (the dialog closing) starts a new session. Every write
  * still in flight (a read, a save echo, an action's result and the read it
@@ -86,10 +88,10 @@ export interface UpdateSurface {
 	osNothingNewer(phase: UpdateOrchestratorPhase | undefined): boolean;
 	load(): Promise<void>;
 	reloadDetails(): Promise<void>;
-	/** A restored session: the device may have changed anything, read it all. */
+	/** A restored session: the device (even its image) may have changed anything, read it all. */
 	reread(): Promise<void>;
-	/** A restored session whose phase change already re-reads the details. */
-	rereadSettings(): Promise<void>;
+	/** A restored session whose phase change already re-reads the details: settings and capabilities. */
+	rereadOnRestore(): Promise<void>;
 	/** The pushed phase moved: keep it as evidence, then re-read the details. */
 	observePhase(phase: UpdateOrchestratorPhase | undefined): Promise<void>;
 	observeLegacy(kind: UpdateState["kind"] | undefined): void;
@@ -119,6 +121,7 @@ export function createUpdateSurface(): UpdateSurface {
 	let detailsReadFailed = $state(false);
 	let loadSeq = 0;
 	let detailsSeq = 0;
+	let capsSeq = 0;
 	const owner = createSettingsOwner();
 
 	const actions = createUpdateActions({
@@ -139,8 +142,28 @@ export function createUpdateSurface(): UpdateSurface {
 		actions.observeRead(gen, next);
 	}
 
+	// The image's declaration. A failed read is UNKNOWN (no legacy claim, the
+	// failure band), never the previous image's answer kept (early oracle R5).
+	function landCapabilities(
+		gen: number,
+		caps: PromiseSettledResult<UpdateCapabilities>,
+	): void {
+		if (gen !== capsSeq) return;
+		capabilities = caps.status === "fulfilled" ? caps.value : undefined;
+		capabilitiesFailed = caps.status === "rejected";
+	}
+
+	async function reloadCapabilities(): Promise<void> {
+		const gen = ++capsSeq;
+		const [caps] = await Promise.allSettled([
+			settle(() => rpc.system.getUpdateCapabilities()),
+		]);
+		landCapabilities(gen, caps);
+	}
+
 	async function load(): Promise<void> {
 		const gen = ++loadSeq;
+		const capsGen = ++capsSeq;
 		const settingsGen = owner.beginRead();
 		const detailsGen = ++detailsSeq;
 		const link = getLinkEpoch();
@@ -149,11 +172,8 @@ export function createUpdateSurface(): UpdateSurface {
 			settle(() => rpc.system.getUpdateSettings()),
 			settle(() => rpc.system.getUpdateDetails()),
 		]);
-		if (gen === loadSeq) {
-			capabilities = caps.status === "fulfilled" ? caps.value : undefined;
-			capabilitiesFailed = caps.status === "rejected";
-			loaded = true;
-		}
+		landCapabilities(capsGen, caps);
+		if (gen === loadSeq) loaded = true;
 		if (applied.status === "fulfilled")
 			owner.landRead(settingsGen, applied.value);
 		else owner.failRead(settingsGen);
@@ -228,9 +248,15 @@ export function createUpdateSurface(): UpdateSurface {
 		load,
 		reloadDetails,
 		reread: async () => {
-			await Promise.all([reloadDetails(), owner.reread()]);
+			await Promise.all([
+				reloadDetails(),
+				owner.reread(),
+				reloadCapabilities(),
+			]);
 		},
-		rereadSettings: owner.reread,
+		rereadOnRestore: async () => {
+			await Promise.all([owner.reread(), reloadCapabilities()]);
+		},
 		observePhase(phase) {
 			if (phase !== undefined) {
 				actions.observePhase(phase);
@@ -257,6 +283,7 @@ export function createUpdateSurface(): UpdateSurface {
 		reset() {
 			loadSeq += 1;
 			detailsSeq += 1;
+			capsSeq += 1;
 			actions.reset();
 			owner.reset();
 		},
