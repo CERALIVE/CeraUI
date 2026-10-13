@@ -15,11 +15,14 @@ import {
 	setUpdateCapabilityPathForTest,
 } from "../modules/system/update-capabilities.ts";
 import * as storage from "../modules/system/update-orchestrator/stored-state-file.ts";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import {
 	validCapabilities as valid,
 	capabilityVariants as variants,
 } from "./helpers/capability-authority-inputs.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
+
+useSessionOwnerForFile();
 
 for (const action of ["discovery", "install", "refresh"] as const) {
 	test.each(variants)(

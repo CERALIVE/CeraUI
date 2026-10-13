@@ -14,7 +14,10 @@ import {
 	startSoftwareUpdate,
 	triggerManualUpdateCheck,
 } from "../modules/system/software-updates.ts";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
+
+useSessionOwnerForFile();
 
 afterEach(() => {
 	resetAptReachabilityProbeForTest();

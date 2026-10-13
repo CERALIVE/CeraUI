@@ -31,6 +31,9 @@ import {
 	readUpdateCapabilities,
 	setUpdateCapabilityPathForTest,
 } from "../modules/system/update-capabilities.ts";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
+
+useSessionOwnerForFile();
 
 // Captured on rock-5b-plus, 2026-09-27, LC_ALL=C apt-cache policy <name>
 // and apt-cache policy (unscoped). The foreign source below changes only the

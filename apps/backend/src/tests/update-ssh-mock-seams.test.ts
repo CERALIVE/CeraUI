@@ -38,6 +38,9 @@ import {
 } from "../modules/system/ssh.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
 import type { AppWebSocket } from "../rpc/types.ts";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
+
+useSessionOwnerForFile();
 
 // ── broadcast capture (mirrors dev-capability-profile.test.ts) ───────────────
 
