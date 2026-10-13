@@ -8,6 +8,7 @@ import { runOsStageJob } from "../modules/system/update-orchestrator/os-stage-ru
 import { reconcileOsStageStartup } from "../modules/system/update-orchestrator/os-stage-startup.ts";
 import { createUpdatePinController } from "../modules/system/update-transport/pin.ts";
 import { sweepUpdateRules } from "../modules/system/update-transport/pin-rules.ts";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { harness } from "./helpers/os-stage-run-harness.ts";
 import { manifest } from "./helpers/os-stage-run-inputs.ts";
 import {
@@ -15,6 +16,8 @@ import {
 	harness as startupHarness,
 } from "./helpers/os-stage-startup-harness.ts";
 import { acquireTestOsStageControl } from "./helpers/os-stage-test-control.ts";
+
+useSessionOwnerForFile();
 
 test("failed-pair routing teardown spends the remaining stage deadline and fences subsequent commands", async () => {
 	// Given the actual runner and routing controller with a held first rule deletion.

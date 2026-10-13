@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
 import { runOsStageJob } from "../modules/system/update-orchestrator/os-stage-run.ts";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { harness } from "./helpers/os-stage-run-harness.ts";
 import { manifest } from "./helpers/os-stage-run-inputs.ts";
+
+useSessionOwnerForFile();
 
 test.each(["admission", "revalidation", "selection", "receipt", "release"])(
 	"bounds outer %s and rejects its late continuation",

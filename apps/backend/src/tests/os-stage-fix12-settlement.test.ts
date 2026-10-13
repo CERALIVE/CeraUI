@@ -8,10 +8,13 @@ import {
 	ensureOsUpdateAdmissionReady,
 	reconcileOsStageStartup,
 } from "../modules/system/update-orchestrator/os-stage-startup.ts";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { rockHelperFixture } from "./helpers/os-stage-rock-helper-fixture.ts";
 import { harness } from "./helpers/os-stage-run-harness.ts";
 import { baseline, manifest } from "./helpers/os-stage-run-inputs.ts";
 import { unlaunchedHarness } from "./helpers/os-stage-unlaunched-harness.ts";
+
+useSessionOwnerForFile();
 
 function deniedObserver() {
 	const source = rockHelperFixture([]);

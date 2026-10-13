@@ -4,8 +4,11 @@ import {
 	writeOsStageJob,
 } from "../../modules/system/update-orchestrator/os-stage-job-files.ts";
 import { runOsStageJob } from "../../modules/system/update-orchestrator/os-stage-run.ts";
+import { useSessionOwnerForFile } from "./bind-session-owner.ts";
 import { harness } from "./os-stage-run-harness.ts";
 import { manifest } from "./os-stage-run-inputs.ts";
+
+useSessionOwnerForFile();
 
 test("isolated backend crash boundary", async () => {
 	const directory = process.env.OS_STAGE_CRASH_DIRECTORY;

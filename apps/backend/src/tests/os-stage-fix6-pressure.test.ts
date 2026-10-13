@@ -1,8 +1,11 @@
 import { expect, spyOn, test } from "bun:test";
 import { logger } from "../helpers/logger.ts";
 import { runOsStageJob } from "../modules/system/update-orchestrator/os-stage-run.ts";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { harness } from "./helpers/os-stage-run-harness.ts";
 import { manifest, ranking } from "./helpers/os-stage-run-inputs.ts";
+
+useSessionOwnerForFile();
 
 test("recurrent proof deferrals retain the deadline without flooding the decision log", async () => {
 	// Given a failed pair and repeated helper episodes after each refresh.

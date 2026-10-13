@@ -11,8 +11,11 @@ import {
 } from "../modules/system/update-orchestrator/os-stage-run.ts";
 import { reconcileOsStageStartup } from "../modules/system/update-orchestrator/os-stage-startup.ts";
 import { createUpdatePinController } from "../modules/system/update-transport/pin.ts";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { acquireTestOsStageControl } from "./helpers/os-stage-test-control.ts";
 import { unlaunchedHarness } from "./helpers/os-stage-unlaunched-harness.ts";
+
+useSessionOwnerForFile();
 
 const manifest = osChannelManifestSchema.parse({
 	schema: 1,

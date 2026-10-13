@@ -1,11 +1,14 @@
 import { expect, test } from "bun:test";
 import { observeRaucStage } from "../modules/system/update-orchestrator/os-stage-observation.ts";
 import { runOsStageJob } from "../modules/system/update-orchestrator/os-stage-run.ts";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { censusDriftFixture } from "./helpers/os-stage-census-drift-fixture.ts";
 import { unknownEvidenceFixture } from "./helpers/os-stage-fix10-unknown-fixture.ts";
 import { rockHelperFixture } from "./helpers/os-stage-rock-helper-fixture.ts";
 import { harness } from "./helpers/os-stage-run-harness.ts";
 import { manifest } from "./helpers/os-stage-run-inputs.ts";
+
+useSessionOwnerForFile();
 
 test.each([
 	"stable",

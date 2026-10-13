@@ -8,8 +8,11 @@ import {
 	retireOsStageJob,
 } from "../modules/system/update-orchestrator/os-stage-job-files.ts";
 import { reconcileOsStageStartup } from "../modules/system/update-orchestrator/os-stage-startup.ts";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { cleanupRecovery } from "./helpers/os-recovery-harness.ts";
 import { harness } from "./helpers/os-stage-startup-harness.ts";
+
+useSessionOwnerForFile();
 
 afterEach(cleanupRecovery);
 

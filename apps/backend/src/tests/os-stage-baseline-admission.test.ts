@@ -9,8 +9,11 @@ import {
 import type { OsStageControlLease } from "../modules/system/update-orchestrator/os-stage-control-lease.ts";
 import { acquireOsOrphanLock } from "../modules/system/update-orchestrator/os-stage-orphan-lock.ts";
 import { runOsStageJob } from "../modules/system/update-orchestrator/os-stage-run.ts";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { harness } from "./helpers/os-stage-run-harness.ts";
 import { manifest } from "./helpers/os-stage-run-inputs.ts";
+
+useSessionOwnerForFile();
 
 test("captures admission baseline under real CONTROL and publishes only while that lease remains held", async () => {
 	// Given a real receipt/CONTROL lease and fixture installer, RAUC and owner observations.

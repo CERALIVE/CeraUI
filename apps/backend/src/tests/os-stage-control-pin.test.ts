@@ -15,7 +15,10 @@ import {
 } from "../modules/system/update-orchestrator/os-stage-run.ts";
 import { rankTransports } from "../modules/system/update-transport/core.ts";
 import { createUpdatePinController } from "../modules/system/update-transport/pin.ts";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { record } from "./helpers/os-stage-orphan-record.ts";
+
+useSessionOwnerForFile();
 
 const manifest = osChannelManifestSchema.parse({
 	schema: 1,

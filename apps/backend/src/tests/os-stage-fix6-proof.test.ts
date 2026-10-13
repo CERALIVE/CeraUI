@@ -2,8 +2,11 @@ import { expect, test } from "bun:test";
 import { observeAdmission } from "../modules/system/update-orchestrator/os-stage-admission-snapshot.ts";
 import { recoverRaucStage } from "../modules/system/update-orchestrator/os-stage-recovery.ts";
 import { runOsStageJob } from "../modules/system/update-orchestrator/os-stage-run.ts";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { harness } from "./helpers/os-stage-run-harness.ts";
 import { baseline, manifest } from "./helpers/os-stage-run-inputs.ts";
+
+useSessionOwnerForFile();
 
 test.each(["authority", "quiescence"])(
 	"fresh proof rejects post-sample target change at %s",

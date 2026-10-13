@@ -6,9 +6,12 @@ import { readActivationArmed } from "../modules/system/update-orchestrator/os-ac
 import { failedAdmissionPredicate } from "../modules/system/update-orchestrator/os-stage-admission-diagnostics.ts";
 import { observeRaucStage } from "../modules/system/update-orchestrator/os-stage-observation.ts";
 import { runOsStageJob } from "../modules/system/update-orchestrator/os-stage-run.ts";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { rockHelperFixture } from "./helpers/os-stage-rock-helper-fixture.ts";
 import { harness } from "./helpers/os-stage-run-harness.ts";
 import { manifest } from "./helpers/os-stage-run-inputs.ts";
+
+useSessionOwnerForFile();
 
 test("dangling activation entry prevents an admissible snapshot and stage dispatch", async () => {
 	// Given a stable malformed marker entry, not a pathname race.

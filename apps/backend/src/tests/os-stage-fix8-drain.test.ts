@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { parkedDrain } from "./helpers/os-stage-fix8-drain.ts";
+
+useSessionOwnerForFile();
 
 test.each(["ownership", "final-show"] as const)(
 	"retained drainage refuses late %s without remembering or tearing down routes",
