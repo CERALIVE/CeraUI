@@ -648,13 +648,17 @@ async function startUnits(
 	deps: AddonManagerDeps,
 ): Promise<void> {
 	for (const unit of units?.unmask ?? []) {
-		await runDisruptiveSysextStep("unmask-addon-unit", () =>
-			deps.systemctl(["unmask", unit]),
+		await runDisruptiveSysextStep(
+			"unmask-addon-unit",
+			() => deps.systemctl(["unmask", unit]),
+			{ unit },
 		);
 	}
 	for (const unit of units?.start ?? []) {
-		await runDisruptiveSysextStep("start-addon-unit", () =>
-			deps.systemctl(["start", unit]),
+		await runDisruptiveSysextStep(
+			"start-addon-unit",
+			() => deps.systemctl(["start", unit]),
+			{ unit },
 		);
 	}
 }
@@ -886,11 +890,15 @@ async function disableAddonLocked(
 		// stop + mask every descriptor unit (no-ops if already down).
 		await runDisruptiveSysextStep(`disable:${id}`, async () => {
 			for (const unit of allUnits(descriptor.units)) {
-				await runDisruptiveSysextStep("stop-addon-unit", () =>
-					deps.systemctl(["stop", unit]),
+				await runDisruptiveSysextStep(
+					"stop-addon-unit",
+					() => deps.systemctl(["stop", unit]),
+					{ unit },
 				);
-				await runDisruptiveSysextStep("mask-addon-unit", () =>
-					deps.systemctl(["mask", unit]),
+				await runDisruptiveSysextStep(
+					"mask-addon-unit",
+					() => deps.systemctl(["mask", unit]),
+					{ unit },
 				);
 			}
 			await runDisruptiveSysextStep("disable-addon-helper", () =>

@@ -57,8 +57,8 @@ operation is active. Tokens retire on completion; the recurring 2 s interval is
 registered outside mutation, configuration-baseline and operation contexts and
 acquires fresh serialization on every poll. Thus an old timer also queues behind a
 new manager enable rather than auto-disabling under its released Start owner.
-These are host-tested lifetime rules; exclusion through
-real helper execution still awaits the system reservation integration.
+These are host-tested lifetime rules; the operation's reservation holds exclusion
+through nested helper/unit awaits, but real helper execution is not board-proven.
 The canonical inventory and non-atomic late-effect limits are in
 [Disruptive-action gate](START-LIFECYCLE.md#disruptive-action-gate-partial--host-tested-board-re-drill-owed).
 

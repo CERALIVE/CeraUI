@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddonDescriptor } from "@ceraui/rpc/schemas";
+import { setSysextEvidenceForTest } from "../modules/addons/disruptive-sysext-step.ts";
 import {
 	initAddonManager,
 	resetAddonManagerDeps,
@@ -16,6 +17,7 @@ import {
 } from "../modules/config.ts";
 import { updateStreamLifecycleState } from "../modules/streaming/stream-lifecycle-status.ts";
 import { updateStatus } from "../modules/streaming/streaming.ts";
+import { resetDisruptiveActionReservationForTest } from "../modules/system/disruptive-action-reservation.ts";
 import {
 	initKiosk,
 	resetKioskDeps,
@@ -67,6 +69,9 @@ export function sysextFixture() {
 	setConfigFilePath(join(dir, "config.json"));
 	resetOrchestratorRuntimeForTest();
 	resetBootReadiness();
+	resetDisruptiveActionReservationForTest();
+	// In-process fakes leave no helper, sysext or unit job behind them.
+	setSysextEvidenceForTest({ probe: async () => "completed" });
 	updateStatus(false);
 	updateStreamLifecycleState("idle");
 	setStreamReconciliationCompletedForTest(true);
@@ -149,6 +154,8 @@ export function sysextFixture() {
 			resetAddonProcedureDeps();
 			resetOrchestratorRuntimeForTest();
 			resetBootReadiness();
+			resetDisruptiveActionReservationForTest();
+			setSysextEvidenceForTest();
 			updateStatus(false);
 			updateStreamLifecycleState("idle");
 			setStreamReconciliationCompletedForTest(true);

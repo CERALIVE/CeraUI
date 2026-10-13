@@ -823,9 +823,10 @@ This is cooperative admission, not an atomic exclusion lease with stream launch.
 All add-on/kiosk disruptive steps pass through `addons/disruptive-sysext-step.ts`;
 nested awaited calls retain one active operation identity. Tokens are lifetime-
 scoped and retired in finally; recurring kiosk polling registers outside those
-contexts and must acquire a fresh same-ID owner. This local seam is deliberately
-snapshot-only: the system reservation integration must reenter by identity and
-hold exclusion through the outer operation until positive retirement is established.
+contexts and must acquire a fresh same-ID owner. The seam takes one service-lifetime
+reservation owned by the active operation; nested steps re-enter by identity and the
+outer hold lasts until positive completion/failure evidence (unit job/lifecycle for
+unit steps, an actor-free visible process table for helper/refresh steps).
 Work already submitted while idle cannot be revoked: earlier unit effects or a
 submitted helper's partial execution may survive refusal/failure. A stream or privileged actor can still change state
 after final observation/dispatch; the external root helper is not governed by a

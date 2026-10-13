@@ -88,10 +88,16 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
   awaited nested calls. Mutation, draft-baseline and operation tokens retire in
   `finally`; inherited context alone grants no authority after release. Recurring
   kiosk intervals are registered outside all three contexts, never under Start/Stop.
-  Today it checks the public gate immediately before each callback. System-side
-  integration must acquire/reenter by that identity, hold the outer lifetime through
-  submitted helper/unit awaits, and release only with positive retirement evidence.
-  The local seam implements no reservation and cannot prove uninterrupted exclusion.
+  The outer step takes ONE service-lifetime `withServiceReservation` hold owned by that
+  identity; nested steps re-enter it by depth through `getDisruptiveActionDecision({
+  heldBy })` and only the outermost release reopens admission. Other owners, a pending
+  reboot/poweroff and late descendants of a released operation are refused with
+  `update_in_progress`; a held step refuses reboot/poweroff the same way. Exit-status
+  failures and refusals release at once; a timeout or untyped error keeps the hold until
+  positive evidence: unit steps poll their own unit, helper/refresh steps require a
+  `/proc` table that visibly includes PID 1 and has no `ceralive-addon-helper` or
+  `systemd-sysext` process. Timer wakeups only re-observe. In-process only; the root
+  helper itself is not governed by this backend lease.
 - **Validation deadline**: `runValidateCmd` uses `spawnWithTimeout` and its shared
   termination classification. A TERM-induced zero after timeout throws typed
   `SpawnTimeoutError`; the enable pipeline maps it to `addon_validation_failed`
