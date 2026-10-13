@@ -39,21 +39,38 @@ time, and exposes a cancellable timer to the same generation. Reporting suppress
 transient toasts only during existing update/restart/boot windows; terminal
 failures are never suppressed and carry keyed 10-locale copy plus journal guidance.
 
-Consumers use `streamLiveness()` from the leaf `stream-liveness.ts`, not the
+After B3 integration, disruptive consumers must use `streamLiveness()` from the leaf `stream-liveness.ts`, not the
 legacy `getIsStreaming()` boolean, for disruptive/update admission. It returns
 `streaming | idle | unknown`; failed sentinel writes are unconfirmed, never latched
-as protection, and retry on the next protection call. Production initializes UNKNOWN
+as protection, and retry on the next current streaming status as well as protection calls. Production initializes UNKNOWN
 when the `/run` sentinel is present or unreadable. A fresh boot with positively absent
 sentinel and no surviving/adopted session admits Start and does not block package/OTA
 admission. This empty baseline is not a claim that a silent engine reported idle.
 An in-flight probe temporarily gates admission; its silent completion cannot create
-standing protection on that empty baseline. Once a launch, adoption or uncertain
+standing protection on that empty baseline. Confirmed cleanup restores the same
+baseline at any generation: engine-death restoration can relaunch after a silent
+reconnect rather than wait for an idle heartbeat the pinned engine never sends.
+Once a launch, adoption or uncertain
 rollback requires protection, only positive current idle evidence releases it.
+The remover reports clearance to the owner. Failed clearance retains UNKNOWN and
+retries on the next acknowledged operator Stop or current idle status; leaf idle
+also requires current sentinel absence. No Start may bypass that leaf veto.
+Operator-cancelled admitted starts carry settled launch liveness and the cancelling
+Stop's acknowledgement/cause. A settled pre-dispatch/acknowledged-rollback launch
+plus acknowledged cancellation needs no blind second Stop. Uncertain settlement
+retains protection; only an explicit operator cause permits unknown-engine Stop.
+Read-only probes have a separate token and advance client epoch only on adoption,
+so an unused probe cannot make a launched session deaf to later idle status.
 The orchestrator binds its live reader after initialization; the leaf imports no
 runtime orchestrator dependency, so system/update consumers cannot create a cycle.
 The existing update-refusal catalogs describe an active or unconfirmed stream and
 the Stop confirmation path. Reboot removes the `/run` tmpfs sentinel; it does not
 make a later silent IPC subscription an affirmative idle snapshot.
+The Start taxonomy has no honest existing engine-state-unconfirmed member. With
+wire changes forbidden, unknown still returns `busy`/`START_IN_PROGRESS`; a truthful
+typed refusal and rendered Stop availability are owner/integration decisions, not
+closed by this core correction. Production-path host tests cover these transitions;
+cross-connection Stop versus in-flight Start and real media remain unqualified.
 
 ### Follow-up: engine status snapshot [GREENFIELD; cross-repo, not done]
 

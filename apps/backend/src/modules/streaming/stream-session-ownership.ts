@@ -24,13 +24,12 @@ export function createSessionOwnership(deps: StreamSessionOrchestratorDeps) {
 	let launches = 0;
 	let protectionRequired = initialLiveness === "unknown";
 	let confirmedLiveness: SessionLiveness = initialLiveness;
-	// Absence is an admission baseline, never an engine-idle observation. Once any
-	// session/effect requires protection, silence cannot return to this baseline.
-	const unprotectedBoot = () =>
-		generation === 0 &&
-		!protectionRequired &&
-		typeof deps.initialLiveness === "function" &&
+	// Confirmed cleanup can restore the same absent-sentinel baseline as boot.
+	const sentinelAbsent = () =>
+		typeof deps.initialLiveness !== "function" ||
 		deps.initialLiveness() === "idle";
+	const unprotectedBaseline = () =>
+		!protectionRequired && launches === 0 && sentinelAbsent();
 	const capture = (): SessionOwner => ({ generation, epoch });
 	const owns = (owner: SessionOwner) =>
 		owner.generation === generation && owner.epoch === epoch;
@@ -66,17 +65,21 @@ export function createSessionOwnership(deps: StreamSessionOrchestratorDeps) {
 		confirmedLiveness = liveness;
 		switch (liveness) {
 			case "unknown":
-				if (!unprotectedBoot()) protect();
+				if (!unprotectedBaseline()) protect();
 				break;
 			case "streaming":
 				protect();
 				deps.setStreamingStatus(true);
 				break;
 			case "idle":
-				protectionRequired = false;
-				protectedForOta = false;
 				deps.setStreamingStatus(false);
-				deps.unmarkStreamingForOta?.();
+				try {
+					protectionRequired = deps.unmarkStreamingForOta?.() === false;
+				} catch {
+					protectionRequired = true;
+				}
+				if (protectionRequired) transition("reconciling");
+				else protectedForOta = false;
 				break;
 		}
 		return true;
@@ -89,9 +92,7 @@ export function createSessionOwnership(deps: StreamSessionOrchestratorDeps) {
 			return generation;
 		},
 		streamLiveness: (): SessionLiveness =>
-			(confirmedLiveness === "idle" || unprotectedBoot()) &&
-			launches === 0 &&
-			state === "idle"
+			unprotectedBaseline() && state === "idle"
 				? "idle"
 				: confirmedLiveness === "streaming" &&
 						protectedForOta &&
@@ -107,7 +108,7 @@ export function createSessionOwnership(deps: StreamSessionOrchestratorDeps) {
 		transition,
 		commit,
 		settleUnprotectedObservation: (owner: SessionOwner): boolean =>
-			owns(owner) && unprotectedBoot() && launches === 0 && transition("idle"),
+			owns(owner) && unprotectedBaseline() && transition("idle"),
 		protect,
 		begin: () => {
 			generation++;

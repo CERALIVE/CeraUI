@@ -1,5 +1,6 @@
 import { expect } from "bun:test";
 import type { StartResult, StopResult } from "@ceraui/rpc/schemas";
+import { currentRuntimeObservationUncertainty } from "../../modules/streaming/engine-runtime-observation.ts";
 import {
 	isLifecycleHeld,
 	tryAcquireLifecycle,
@@ -71,7 +72,10 @@ export function modelHarness(marker?: {
 				stopOutstanding--;
 			});
 		},
-		queryRuntime: async () => engine,
+		queryRuntime: async () => {
+			if (engine === "unknown") currentRuntimeObservationUncertainty()();
+			return engine;
+		},
 		changeRuntimeConfig: () => {
 			const gate = Promise.withResolvers<EngineConfigChangeOutcome>();
 			changes.push(gate);

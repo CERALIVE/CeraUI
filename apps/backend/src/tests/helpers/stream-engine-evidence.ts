@@ -22,17 +22,24 @@ const unused = async (): Promise<never> => {
 };
 
 /** Engine truth changes at effect submission/ack, never from a production guard. */
-export function evidenceHarness() {
+export function evidenceHarness(protectedAtBoot = false) {
 	let engine: "idle" | "streaming" = "idle";
 	let live = false;
-	let marked = false;
+	let marked = protectedAtBoot;
 	let id = 0;
 	let connection = 0;
 	let failedStart = false;
 	let failedStop = false;
 	let connectGate: Promise<void> | undefined;
+	let startGate: Promise<void> | undefined;
+	const started = Promise.withResolvers<void>();
 	let subscribeGate: Promise<void> | undefined;
 	let beforeDispatch: (() => void) | undefined;
+	let failNextConnect = false;
+	let statusSink:
+		| ((event: Extract<EventParams, { type: "status" }>) => void)
+		| undefined;
+	const connected = Promise.withResolvers<void>();
 	const clients: Array<{
 		client: CerastreamClient;
 		emit: (event: EventParams) => void;
@@ -50,6 +57,10 @@ export function evidenceHarness() {
 		clearTimeout(timer);
 	};
 	const connect = async () => {
+		if (failNextConnect) {
+			failNextConnect = false;
+			throw new Error("fake engine connect failed");
+		}
 		const index = connection++;
 		let listener: ((event: EventParams) => void) | undefined;
 		const calls: string[] = [];
@@ -62,6 +73,8 @@ export function evidenceHarness() {
 			start: async () => {
 				calls.push("start");
 				engine = "streaming";
+				started.resolve();
+				if (index === 0) await startGate;
 				if (failedStart) throw new CerastreamTimeoutError("start", 10_000);
 				return { state: "streaming", session_id: `session-${index}` };
 			},
@@ -97,6 +110,7 @@ export function evidenceHarness() {
 			previewSession: unused,
 		};
 		clients.push({ client, calls, emit: (event) => listener?.(event) });
+		connected.resolve();
 		if (index === 0) await connectGate;
 		return client;
 	};
@@ -119,7 +133,9 @@ export function evidenceHarness() {
 			broadcastBuffering: () => undefined,
 		},
 		onEngineStatus: (event: Extract<EventParams, { type: "status" }>) =>
-			session.noteEngineStatus(event),
+			statusSink === undefined
+				? session.noteEngineStatus(event)
+				: statusSink(event),
 		scheduleTimeout: schedule,
 		cancelTimeout: cancel,
 	};
@@ -132,6 +148,7 @@ export function evidenceHarness() {
 			}
 		});
 	const session = createStreamSessionOrchestrator({
+		initialLiveness: () => (marked ? "unknown" : "idle"),
 		createAttemptId: () => `evidence-${++id}`,
 		setStreamingStatus: (value) => {
 			live = value;
@@ -159,6 +176,8 @@ export function evidenceHarness() {
 	});
 	return {
 		backend,
+		connected: connected.promise,
+		started: started.promise,
 		session,
 		clients,
 		timers,
@@ -181,8 +200,15 @@ export function evidenceHarness() {
 		beforeStartDispatch: (action: () => void) => {
 			beforeDispatch = action;
 		},
+		setStatusSink: (sink: typeof statusSink) => {
+			statusSink = sink;
+		},
+		failNextConnect: () => {
+			failNextConnect = true;
+		},
 		setEngine: (value: typeof engine) => {
 			engine = value;
+			if (value === "streaming") marked = true;
 		},
 		failStart: () => {
 			failedStart = true;
@@ -192,6 +218,9 @@ export function evidenceHarness() {
 		},
 		holdConnect: (gate: Promise<void>) => {
 			connectGate = gate;
+		},
+		holdStart: (gate: Promise<void>) => {
+			startGate = gate;
 		},
 		holdSubscribe: (gate: Promise<void>) => {
 			subscribeGate = gate;

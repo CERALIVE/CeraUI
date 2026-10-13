@@ -663,6 +663,7 @@ describe("stream session orchestrator", () => {
 		];
 		const statusEdges: boolean[] = [];
 		const orchestrator = createStreamSessionOrchestrator({
+			initialLiveness: "unknown",
 			createAttemptId: attemptIds(),
 			setStreamingStatus: (streaming) => statusEdges.push(streaming),
 			stopRuntime: async () => {},
@@ -679,6 +680,7 @@ describe("stream session orchestrator", () => {
 		const runtimeStates: Array<"unknown" | "idle"> = ["unknown", "idle"];
 		const statusEdges: boolean[] = [];
 		const orchestrator = createStreamSessionOrchestrator({
+			initialLiveness: "unknown",
 			createAttemptId: attemptIds(),
 			setStreamingStatus: (streaming) => statusEdges.push(streaming),
 			stopRuntime: async () => {},

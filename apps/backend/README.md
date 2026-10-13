@@ -378,6 +378,12 @@ admission baseline: Start and update admission remain available even if the engi
 is silent. Observation gates while in flight, not forever after silent completion.
 A present/unreadable sentinel, adopted session or unconfirmed launch rollback retains
 UNKNOWN protection until current positive idle evidence; no automatic Stop is sent.
+Confirmed cleanup restores that absent-sentinel baseline at every generation, so a
+later silent reconcile does not block Start or engine-death restoration. Failed
+sentinel removal keeps the leaf UNKNOWN and retries on the next affirmative idle
+evidence. Cancellation preserves launch cleanup certainty and operator Stop
+acknowledgement; unused probes preserve the live subscription. Disruptive consumers
+must adopt the leaf in B3 integration; this branch alone does not migrate them.
 
 Stop also cancels a generation waiting for D8 update admission, including the
 idle no-update case, before any launch or OTA marking. The restoration marker

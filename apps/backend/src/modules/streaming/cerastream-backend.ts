@@ -138,6 +138,7 @@ import { validateBitrate } from "./encoder.ts";
 import {
 	classifyRuntimeState,
 	currentRuntimeObservationOwner,
+	currentRuntimeObservationUncertainty,
 } from "./engine-runtime-observation.ts";
 import {
 	createLaunchTransaction,
@@ -713,6 +714,7 @@ export class CerastreamBackend implements StreamingBackend {
 	private subscription: Subscription | undefined;
 	private active = false;
 	private clientEpoch = 0;
+	private probeEpoch = 0;
 	private telemetry: EngineTelemetry | null = null;
 	// The engine error currently occupying the shared `cerastream` notification
 	// slot. Tracked because that slot is shared by every non-srtla engine error,
@@ -1093,12 +1095,17 @@ export class CerastreamBackend implements StreamingBackend {
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		let acceptingEvents = true;
 		let adopted = false;
-		const clientEpoch = ++this.clientEpoch;
+		const clientEpoch = this.clientEpoch;
+		const probeEpoch = ++this.probeEpoch;
+		let adoptedEpoch = clientEpoch;
 		const ownsSession = () =>
 			client !== undefined &&
 			this.client === client &&
-			this.clientEpoch === clientEpoch;
-		const ownsQuery = currentRuntimeObservationOwner();
+			this.clientEpoch === adoptedEpoch;
+		const observationOwner = currentRuntimeObservationOwner();
+		const uncertainStatus = currentRuntimeObservationUncertainty();
+		const ownsQuery = () =>
+			observationOwner() && this.probeEpoch === probeEpoch;
 		try {
 			client = await this.deps.connect({
 				...this.deps.connectOptions,
@@ -1134,6 +1141,10 @@ export class CerastreamBackend implements StreamingBackend {
 								this.clientEpoch === clientEpoch,
 					);
 					if (event.type === "status") {
+						if (
+							classifyRuntimeState(event.state, event.streaming) === "unknown"
+						)
+							uncertainStatus();
 						resolveRuntimeState?.(
 							classifyRuntimeState(event.state, event.streaming),
 						);
@@ -1157,6 +1168,7 @@ export class CerastreamBackend implements StreamingBackend {
 				runtimeState === "streaming"
 			) {
 				this.client = client;
+				adoptedEpoch = ++this.clientEpoch;
 				this.subscription = subscription;
 				this.active = true;
 				adopted = true;

@@ -389,7 +389,7 @@ describe("engine selection", () => {
 // ---------------------------------------------------------------------------
 
 describe("CerastreamBackend behavioural contract", () => {
-	test("an engine reporting idle terminalizes reconciliation and admits start", async () => {
+	test("a silent idle engine terminalizes reconciliation and admits start", async () => {
 		// Given a connected, subscribed production backend awaiting engine truth.
 		let reconcileTimeout: (() => void) | undefined;
 		const { backend, fake } = makeBackend({
@@ -413,9 +413,10 @@ describe("CerastreamBackend behavioural contract", () => {
 		await fake.subscribed;
 		await waitFor(() => reconcileTimeout !== undefined);
 
-		// When the current engine explicitly reports idle.
-		fake.emit({ type: "status", seq: 1, state: "idle", streaming: false });
+		// When an unprotected baseline hears no status from the idle engine.
+		reconcileTimeout?.();
 		const reconciled = await reconciling;
+		expect(reconciled).toBe("idle");
 		const health = deriveStreamHealth({
 			isStreaming: streaming,
 			processAlive: null,
@@ -431,7 +432,7 @@ describe("CerastreamBackend behavioural contract", () => {
 			launch: async () => undefined,
 		});
 
-		// Then idle is authoritative, health agrees, and Start owns generation one.
+		// Then silence creates no protection, health agrees, and Start is admitted.
 		expect(reconciled).toBe("idle");
 		expect(health.state).toBe("idle");
 		expect(started).toEqual({

@@ -150,7 +150,7 @@ D8 origins, refusal payloads and timing policy are unchanged.
 
 | State | Admitted operation / transition | Liveness evidence |
 |---|---|---|
-| `idle` | Start → `starting`; query → `reconciling` | Positive idle or an unprotected fresh-boot admission baseline; production uses actual sentinel absence, not engine silence |
+| `idle` | Start → `starting`; query → `reconciling` | Positive idle or an unprotected admission baseline at any generation; production requires current sentinel absence, not new engine evidence from silence |
 | `starting` | confirmed launch → `streaming`; rolled-back failure/refusal → `idle`; Stop → `stopping`; unknown cleanup → `reconciling` | Unknown once launch is submitted |
 | `streaming` | Stop → `stopping`; query → `reconciling`; config → `reconfiguring` | Last confirmed live |
 | `reconfiguring` | applied/reverted → `streaming`; engine-confirmed rollback idle → `idle`; deadline/socket loss → `reconciling` | Live until positive contrary evidence |
@@ -194,13 +194,16 @@ it cannot publish idle. A cancelled launch remains fenced until its continuation
 settles and final cleanup establishes idle; an outstanding old launch also blocks
 new admission even if an idle observation arrives.
 
-**OTA invariant:** the owner requests `/run/ceralive/streaming` whenever liveness is
-true **or UNKNOWN**. A failed write cannot establish physical protection: the latch
-remains unconfirmed and the next protection call retries. It is cleared only by
+**OTA invariant:** the owner requests `/run/ceralive/streaming` whenever a live or
+possibly-effectful session requires protection, not for a silent observation of an
+unprotected baseline. A failed write cannot establish physical protection: the latch
+remains unconfirmed and the next current streaming status or protection call retries. It is cleared only by
 positive idle evidence (including acknowledged transactional rollback Stop), never
 local rollback completion, Stop intent, `start_cleanup_timeout`,
 deadline expiry, or synthesized `rollback_failed / engine_connection_lost`.
-Unknown reconciliation sets protection even on a fresh backend. Unknown outcomes
+Failed clearance remains UNKNOWN and retries on the next affirmative idle status
+or acknowledged operator Stop. The leaf cannot report idle beside present/unreadable
+sentinel evidence. Protected unknown outcomes
 keep the generation and last confirmed live status, and block a fresh Start.
 Restoration intent remains a separate marker, disarmed immediately on Stop.
 
@@ -217,8 +220,8 @@ Its leaf module is `apps/backend/src/modules/streaming/stream-liveness.ts`; the
 composition root binds the factory reader without a runtime import back-edge.
 It is UNKNOWN during pending launch/cleanup, unresolved engine truth or failed
 physical protection. UNKNOWN preserves generation, sentinel and last confirmed
-legacy status. A silent 2.5-second subscribed probe is deliberately UNKNOWN, replacing
-the old silence-to-idle contract. Affirmative paths are current concordant idle
+legacy status. A silent 2.5-second subscribed probe is UNKNOWN for protected sessions;
+its completion restores an unprotected baseline without creating a sentinel. Affirmative paths are current concordant idle
 status and operator Stop acknowledgement. Stop on an idle engine is harmless.
 
 Fresh boot with absent `/run` sentinel and no surviving/adopted session is an
@@ -228,6 +231,11 @@ create a standing block when nothing requires protection. The sentinel absence i
 rechecked after observation; unreadable or newly present evidence stays UNKNOWN.
 Launch, adoption and unconfirmed rollback irreversibly leave this empty baseline
 until a current affirmative idle outcome releases their protection.
+Confirmed Stop/rollback restores it regardless of generation. Cancellation retains
+the launch's settled rollback certainty and cancelling Stop's cause/acknowledgement;
+acknowledged operator cancellation plus a safely settled launch does not need a blind
+second Stop. A non-adopting probe has no authority to advance the live client's epoch.
+Contradictory/transitional current status is not silence: it retains UNKNOWN protection.
 Reboot clears the tmpfs sentinel and permits that empty admission baseline; it
 does not upgrade a silent probe to an affirmative engine-idle observation.
 The existing update reason/catalog keys now offer

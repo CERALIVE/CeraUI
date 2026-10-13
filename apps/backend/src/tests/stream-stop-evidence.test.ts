@@ -9,6 +9,7 @@ test.each(["idle", "unknown", "streaming"] as const)(
 		let marked = false;
 		let stops = 0;
 		const session = createStreamSessionOrchestrator({
+			initialLiveness: "unknown",
 			createAttemptId: () => "unowned",
 			setStreamingStatus: () => {},
 			queryRuntime: async () => "unknown",

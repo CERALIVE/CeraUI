@@ -58,10 +58,12 @@ export function setOtaStreamingMarker(): boolean {
 /** Cleared after confirmed idle/cleanup or a failed launch that never went live.
  * Stop intent disarms restoration separately; parked/failed/unknown media stops
  * retain this OTA guard. Removing an already-absent file is a no-op. */
-export function clearOtaStreamingMarker(): void {
+export function clearOtaStreamingMarker(): boolean {
 	try {
 		fs.rmSync(otaStreamingMarkerPath(), { force: true });
+		return true;
 	} catch (error) {
 		logger.warn("ota-streaming-marker: failed to clear", { error });
+		return false;
 	}
 }

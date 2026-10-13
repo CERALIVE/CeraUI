@@ -10,6 +10,25 @@ timeout remains a typed refusal. A ready real TERM-zero child locks this boundar
 in host tests. This proves command classification, not root/systemd/APT recovery
 on either board. Stored recovery formats and clearance policy are unchanged.
 
+## Stream idle and the activation sentinel
+
+After B3 integration, Check/Install and local/remote disruptive actions must consume
+the import-free `stream-liveness.ts` leaf rather than a false legacy live flag.
+Leaf idle requires no pending launch, no required protection, idle lifecycle and
+current sentinel absence. A present/unreadable sentinel remains UNKNOWN even after
+engine idle acknowledgement if clearance failed; the next affirmative idle status
+or acknowledged operator Stop retries clearance. Never remove a filesystem
+obstruction as part of an observation, or recursively erase a damaged sentinel.
+
+Absent sentinel plus no session/effect requiring protection is an unprotected
+baseline at boot and after confirmed cleanup at any generation. A silent probe
+temporarily closes admission but cannot create protection on that baseline.
+Protected/adopted/uncertain sessions remain closed through silence; only explicit
+operator Stop may confirm an unowned unknown engine, never automatic reconciliation.
+Cancelled starts retain rollback certainty and the cancelling Stop acknowledgement.
+These are production-path host regressions, not qualification of real engine/media,
+cross-connection Stop/Start ordering, reboot or RAUC activation on either board.
+
 ## Strict stored authority
 
 The system readers share `stored-state-file.ts` and `strict-authority-json.ts`.

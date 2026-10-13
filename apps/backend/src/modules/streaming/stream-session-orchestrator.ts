@@ -217,7 +217,7 @@ export type StreamSessionOrchestratorDeps = {
 	 * went live; reconciliation synchronizes it with authoritative engine truth.
 	 */
 	readonly markStreamingForOta?: (() => boolean) | (() => void);
-	readonly unmarkStreamingForOta?: () => void;
+	readonly unmarkStreamingForOta?: (() => boolean) | (() => void);
 };
 
 type ActiveAttempt = {
@@ -225,6 +225,8 @@ type ActiveAttempt = {
 	readonly generation: number;
 	cancelled: boolean;
 	launchAdmitted: boolean;
+	cancelCause?: StreamStopCause;
+	cancelStop?: Promise<boolean>;
 	cancelRetryWait?: () => void;
 };
 
@@ -309,12 +311,17 @@ export function createStreamSessionOrchestrator(
 
 	const finishCancelled = async (
 		attempt: ActiveAttempt,
+		liveness: "idle" | "unknown",
 	): Promise<StartResult> => {
 		if (active !== attempt)
 			return { result: "cancelled", attemptId: attempt.attemptId };
 		const owner = ownership.capture();
 		try {
-			await stopWithinDeadline(attempt.generation);
+			if (liveness !== "idle" || (await attempt.cancelStop) !== true)
+				await stopWithinDeadline(
+					attempt.generation,
+					attempt.cancelCause === "operator",
+				);
 			if (active === attempt && ownership.commit(owner, "idle", "idle"))
 				active = undefined;
 		} catch (error) {
@@ -376,6 +383,7 @@ export function createStreamSessionOrchestrator(
 
 		if (
 			ownership.state !== "idle" ||
+			ownership.streamLiveness() !== "idle" ||
 			cleanup.pending ||
 			stopFlight !== undefined ||
 			ownership.launchPending
@@ -535,7 +543,7 @@ export function createStreamSessionOrchestrator(
 				: {}),
 		});
 		if (launchResult.result === "cancelled") {
-			return await finishCancelled(attempt);
+			return await finishCancelled(attempt, launchResult.liveness);
 		}
 		if (launchResult.result === "failed") {
 			if (active !== attempt || !ownership.owns(owner))
@@ -648,6 +656,7 @@ export function createStreamSessionOrchestrator(
 			if (
 				(ownership.state === "streaming" ||
 					ownership.state === "stop_failed" ||
+					ownership.state === "idle" ||
 					ownership.state === "reconciling") &&
 				!cleanup.pending &&
 				!ownership.launchPending
@@ -662,6 +671,12 @@ export function createStreamSessionOrchestrator(
 			clearEngineTransition();
 			return;
 		}
+		if (
+			event.state === "streaming" &&
+			event.streaming &&
+			ownership.state === "streaming"
+		)
+			ownership.protect();
 		if (event.active_encode?.capture?.transition !== undefined) {
 			if (!engineTransitionLatched) {
 				engineTransitionLatched = true;
@@ -740,6 +755,8 @@ export function createStreamSessionOrchestrator(
 				engineQueuedStop = parkEngineStop(cause);
 			return engineQueuedStop.promise;
 		}
+		if (ownership.state === "idle" && ownership.streamLiveness() !== "idle")
+			ownership.commit(ownership.capture(), "reconciling", "unknown");
 		if (ownership.state === "idle") {
 			ownership.commit(ownership.capture(), "idle", "idle");
 			return { result: "stopped" };
@@ -766,6 +783,7 @@ export function createStreamSessionOrchestrator(
 		const cancellingStart = ownership.state === "starting";
 		if (cancellingStart && active !== undefined) {
 			active.cancelled = true;
+			active.cancelCause = cause;
 			active.cancelRetryWait?.();
 			if (!active.launchAdmitted) {
 				ownership.invalidate();
@@ -782,7 +800,16 @@ export function createStreamSessionOrchestrator(
 		const owner = ownership.invalidate();
 
 		try {
-			await stopWithinDeadline(stoppedGeneration, cause === "operator");
+			const stopping = stopWithinDeadline(
+				stoppedGeneration,
+				cause === "operator",
+			);
+			if (cancellingStart && active !== undefined)
+				active.cancelStop = stopping.then(
+					() => true,
+					() => false,
+				);
+			await stopping;
 			if (!cancellingStart && ownership.commit(owner, "idle", "idle"))
 				active = undefined;
 			return { result: "stopped" };
@@ -827,6 +854,7 @@ export function createStreamSessionOrchestrator(
 			runtimeState = await withRuntimeObservationOwner(
 				() => ownership.owns(owner),
 				deps.queryRuntime,
+				ownership.protect,
 			).catch(() => "unknown" as const);
 		} finally {
 			runtimeObservations--;

@@ -8,7 +8,7 @@ for (const engine of ["idle", "streaming"] as const) {
 	for (const delivery of ["idle", "streaming", "silence"] as const) {
 		test(`independent probe matrix engine=${engine} delivery=${delivery}`, async () => {
 			// Given independent engine truth and a current real factory/backend probe.
-			const h = evidenceHarness();
+			const h = evidenceHarness(true);
 			h.setEngine(engine);
 			try {
 				const query = h.session.reconcile();
