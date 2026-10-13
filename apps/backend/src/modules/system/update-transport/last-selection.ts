@@ -8,8 +8,8 @@
  * route. `selectUpdateTransport()` is the only writer, so the record is exactly
  * as fresh as the last real selection and carries its own `checkedAt`. Before
  * any selection has run it is `undefined`, which the RPC projects as `null` —
- * an absence the surface renders as "no transfer has been attempted yet", never
- * as a healthy default.
+ * an unknown history after a process restart, never proof of no past transfer
+ * or a healthy default.
  *
  * Scope, stated so it is not overread: today only the OS agent routes through
  * the selector (the package path still uses its legacy apt-reachability
@@ -47,7 +47,7 @@ export function summarizeTransportSelection(
 			ifname: row.candidate.ifname,
 			kind: row.candidate.kind,
 			family: row.family,
-			metered: row.candidate.metered !== false,
+			metered: row.candidate.metered,
 			healthy: row.healthy,
 			captive: states.some((state) => CAPTIVE_STATES.has(state)),
 			states,
@@ -63,7 +63,7 @@ export function summarizeTransportSelection(
 						ifname: selection.selected.candidate.ifname,
 						kind: selection.selected.candidate.kind,
 						family: selection.selected.family,
-						metered: selection.selected.candidate.metered !== false,
+						metered: selection.selected.candidate.metered,
 					}
 				: null,
 		findings,

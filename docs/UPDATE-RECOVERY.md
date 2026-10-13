@@ -1,5 +1,15 @@
 # Update recovery contract [PARTIAL — local recovery implemented, board proof owed]
 
+## Recovery command completion
+
+The maintenance recovery probes use the registered shared `spawnWithTimeout`
+runner with a ten-second command budget and bounded retirement. A child that
+traps a termination issued by this runner and exits zero is not command success
+or adjudication permission. Genuine completion retains its exit status/output;
+timeout remains a typed refusal. A ready real TERM-zero child locks this boundary
+in host tests. This proves command classification, not root/systemd/APT recovery
+on either board. Stored recovery formats and clearance policy are unchanged.
+
 ## Strict stored authority
 
 The system readers share `stored-state-file.ts` and `strict-authority-json.ts`.

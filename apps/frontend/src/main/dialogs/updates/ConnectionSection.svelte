@@ -13,6 +13,7 @@ import { getLocale, m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { UpdateTransportSummary } from '@ceraui/rpc/schemas';
 
 import Badge from '$lib/components/custom/Badge.svelte';
+import { connectionReachabilityKey } from '$lib/updates/connection-evidence';
 import {
 	familyLabel,
 	formatUpdateTime,
@@ -83,13 +84,13 @@ const checked = $derived(formatUpdateTime(transport?.checkedAt, locale));
 					</div>
 					<div class="flex flex-wrap items-center gap-1.5">
 						<Badge
-							label={finding.healthy
-								? m['settings.updates.connection.reachable']()
-								: m['settings.updates.connection.unreachable']()}
+							label={resolveMessageKey(connectionReachabilityKey(finding))}
 							size="micro"
 							variant={finding.healthy ? 'success' : 'warning'}
 						/>
-						{#if finding.metered}
+						{#if finding.metered === null}
+							<Badge label={m['settings.updates.connection.costUnknown']()} size="micro" variant="neutral" />
+						{:else if finding.metered}
 							<Badge label={m['settings.updates.connection.metered']()} size="micro" variant="neutral" />
 						{/if}
 						<!-- A captive verdict already names the sign-in page; the flag only

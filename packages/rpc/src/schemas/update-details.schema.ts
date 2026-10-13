@@ -60,7 +60,7 @@ export const updateTransportFindingSchema = z.object({
 	ifname: z.string(),
 	kind: updateTransportUplinkKindSchema,
 	family: updateTransportFamilySchema,
-	metered: z.boolean(),
+	metered: z.boolean().nullable(),
 	healthy: z.boolean(),
 	captive: z.boolean(),
 	/** Every non-`clear` verdict any host returned on this candidate, de-duplicated. */
@@ -78,7 +78,7 @@ export const updateTransportSummarySchema = z.object({
 			ifname: z.string(),
 			kind: updateTransportUplinkKindSchema,
 			family: updateTransportFamilySchema,
-			metered: z.boolean(),
+			metered: z.boolean().nullable(),
 		})
 		.nullable(),
 	findings: z.array(updateTransportFindingSchema),

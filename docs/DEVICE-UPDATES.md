@@ -478,6 +478,31 @@ repair described in [HOST-UPLINK-ELECTION.md](./HOST-UPLINK-ELECTION.md).
 
 ## OS agent
 
+### Outcome evidence [EXISTS; host-tested, board qualification owed]
+
+APT exit zero proves installation, not a completed service restart. Durable
+restart permission is separate and may be withheld while the old backend
+continues running. The dialog and overlay say installed; restart is not
+confirmed. Existing status/details expose no update-specific restart-completed
+or backend-start witness, so reconnect/new-boot observations alone cannot
+justify that claim. The frontend evidence machine's contract applies to this
+distinction too; no new restart wire field is introduced.
+
+Completing `armOs(true)` requests activation, and emits an informational
+`os-activation-requested` notice asking for a restart to apply it. It never
+emits **now active** on that same boot. Only the existing verified path can emit
+`os-activated`: the strictly read running OS version equals the staged target,
+and the healthy-state verdict names the current boot. Submission cannot stand
+in for either observation. The activation/reboot/health policy is unchanged.
+
+The transport summary is process-local, timestamped evidence. Missing history
+means not known, never no previous download. Selection is historical, not live
+use. Probe unavailability is not failed reachability; `Not reachable` requires
+a positive failed probe. Unknown cost stays null in the shared summary schema
+and displays **Cost unknown**. This is the narrow nullable-metering correction
+required for honest connection copy; booleans remain accepted, persisted formats
+are unchanged, and conservative transport admission is unchanged.
+
 Active only with `apt-all-packages` and `rauc-verity-streaming`.
 
 - `checkOsChannel()` fetches `channels/<channel>/<board>.json` and its `.sig`
@@ -603,6 +628,11 @@ Active only with `apt-all-packages` and `rauc-verity-streaming`.
   exactly `drill` switches the OS channel for bench work. APT always follows
   Settings. Only genuine override absence uses Settings' OS channel; invalid or
   unreadable presence refuses selection instead of silently changing channels.
+  Present unreadable authority or invalid bytes, type, owner or mode refuse with
+  the existing typed `discovery_failed` reason. EIO/EACCES, oversize,
+  invalid UTF-8, duplicate-key JSON or any content other than the exact scalar
+  cannot authorize a different channel. Discovery proposes no candidate or
+  transport and rewrites nothing. A later valid read recovers without a latch.
 
 ## Transport selection and pinning
 

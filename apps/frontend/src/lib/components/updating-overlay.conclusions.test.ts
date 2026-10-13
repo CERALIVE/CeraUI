@@ -67,5 +67,11 @@ describe("updating-overlay: success needs the device's result", () => {
 		flushSync();
 		await waitFor(() => expect(toastSuccess).toHaveBeenCalledTimes(1));
 		expect(toastError).not.toHaveBeenCalled();
+		expect(toastSuccess).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.objectContaining({
+				description: expect.stringContaining("not confirmed"),
+			}),
+		);
 	});
 });

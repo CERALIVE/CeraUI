@@ -20,6 +20,11 @@ export type UpdateNotice =
 			readonly version: string;
 	  }
 	| {
+			readonly kind: "os-activation-requested";
+			readonly id: string;
+			readonly version: string;
+	  }
+	| {
 			readonly kind: "os-activated";
 			readonly id: string;
 			readonly version: string;
@@ -72,6 +77,10 @@ const notices = {
 		tone: "info",
 	},
 	"os-staged": { key: "notifications.updateSystemStaged", tone: "info" },
+	"os-activation-requested": {
+		key: "notifications.updateSystemActivationRequested",
+		tone: "info",
+	},
 	"os-activated": {
 		key: "notifications.updateSystemActivated",
 		tone: "success",
@@ -128,6 +137,7 @@ export function notifyUpdate(event: UpdateNotice): boolean {
 			params.reason = event.reason;
 			break;
 		case "os-staged":
+		case "os-activation-requested":
 		case "os-activated":
 		case "os-rollback":
 		case "os-stage-retry":

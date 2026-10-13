@@ -13,7 +13,7 @@ import type { UpdateDetails, UpdateState } from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { rpc } from "$lib/rpc/client";
+import { rpc } from "../../lib/rpc/client";
 import { reactiveUpdateState } from "../../tests/fixtures/reactive-subscriptions.svelte";
 
 import UpdatesDialog from "./UpdatesDialog.svelte";

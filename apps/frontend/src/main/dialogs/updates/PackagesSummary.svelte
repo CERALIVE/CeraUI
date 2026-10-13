@@ -146,7 +146,7 @@ const checkFailureMessage = $derived.by(() => {
 			<CheckCircle2 class="text-status-success mt-0.5 size-5 shrink-0" />
 			<div class="min-w-0">
 				<p class="text-status-success text-lg font-semibold">{m["general.updateComplete"]()}</p>
-				<p class="text-muted-foreground mt-1 text-sm">{m["general.updateCompleteDetail"]()}</p>
+				<p class="text-muted-foreground mt-1 text-sm">{m["general.updateInstalledDetail"]()}</p>
 				{#if cleanupWarning}
 					<p class="text-muted-foreground mt-2 text-sm break-words" data-testid="update-cleanup-warning" role="status">
 						{m["settings.updates.cleanup_warning.post_clean_failed"]()}

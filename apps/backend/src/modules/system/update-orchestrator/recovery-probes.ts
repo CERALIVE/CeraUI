@@ -1,5 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { z } from "zod";
+import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
 import { SOFTWARE_UPDATE_UNIT } from "../software-update-service-contract.ts";
 import { readBoardIdentity, readBootId } from "./os-identity.ts";
 import { readBootedOsReleaseVersion } from "./os-manifest.ts";
@@ -191,18 +192,11 @@ export function createRecoveryProbes(
 
 export const defaultRecoveryProbeIo: RecoveryProbeIo = {
 	run: async (argv) => {
-		const child = Bun.spawn([...argv], {
-			stdout: "pipe",
-			stderr: "pipe",
-			signal: AbortSignal.timeout(10_000),
+		const result = await spawnWithTimeout([...argv], {
+			timeoutMs: 10_000,
 			env: { ...process.env, LC_ALL: "C" },
 		});
-		const [stdout, , code] = await Promise.all([
-			new Response(child.stdout).text(),
-			new Response(child.stderr).text(),
-			child.exited,
-		]);
-		return { code, stdout };
+		return { code: result.exitCode, stdout: result.stdout };
 	},
 	read: (path) => Bun.file(path).text(),
 	list: readdir,

@@ -94,6 +94,32 @@ installed. "System is up to date" needs `idle` with a `checked_at` stamp (a
 completed discovery found nothing); `checking` says checking, anything else
 says the device has not reported a completed check yet.
 
+### Installation, restart and connection conclusions [EXISTS]
+
+Package `update_state.kind: success` proves the package transaction completed,
+not that services restarted. The dialog and the app-wide overlay report
+installation with restart **not confirmed**. Neither the status nor the details
+contract exports an update-specific backend start/boot identity or completed
+restart witness. A reconnect, a new boot, a restart permission or the
+`restarting-services` phase cannot substitute for that missing evidence. This
+extends U6; it is not a second action machine. Host render tests cover the exact
+success state, including withheld/unknown restart authority. No board restart
+or future availability time is claimed.
+The installed-only copy uses additive `general.updateInstalledDetail` and
+`updatingOverlay.installedDescription` keys. The previous legacy keys remain
+unused in app code, preserving the immutable migration oracle without changing
+its fixtures or weakening its assertions.
+
+Connection details are a timestamped selection observation, not live use or
+durable download history. A null record is **not known in this session**, including
+after a backend restart. `healthy: false` alone means the selector did not prove
+usability: `Not reachable` additionally requires a positive failed probe state;
+an empty/unavailable-only state stays unconfirmed. The no-selection band says
+no connection was **confirmed usable** by that check. The chosen row is labeled
+**Selected by this check**, never **In use**. Inventory `metered: null` remains
+null through the shared RPC schema and renders **Cost unknown**; conservative
+transport admission still treats that cost as requiring approval.
+
 ### Settings saves
 
 `update-settings-owner.svelte.ts` owns the ONE write in flight. A save owns the

@@ -1858,7 +1858,7 @@ async function reconcileOsActivation(): Promise<void> {
 		if (!control.held()) return;
 		osForceActivated = true;
 		notifyUpdate({
-			kind: "os-activated",
+			kind: "os-activation-requested",
 			id: receipt.version,
 			version: receipt.version,
 		});

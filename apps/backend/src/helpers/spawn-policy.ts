@@ -738,6 +738,23 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			"spawnWithTimeout bounds only the local systemd queue submission; --no-block returns before the unit's own internal flock/gate evaluation runs, so the lock/refusal outcome is read back later via inspectSlotSync, never inferred from this call",
 	},
 	{
+		id: "updateRecovery.probe",
+		file: "modules/system/update-orchestrator/recovery-probes.ts",
+		symbol: "defaultRecoveryProbeIo.run",
+		command: "[systemctl|busctl|dpkg|dpkg-query|rauc, ...read-only-args]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"spawnWithTimeout bounds read-only recovery evidence to 10 seconds; issued termination never proves success",
+	},
+	{
 		id: "updateOrchestrator.inspectSlotSync",
 		file: "modules/system/update-orchestrator/lock.ts",
 		symbol: "inspectSlotSync",

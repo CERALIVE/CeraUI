@@ -28,10 +28,15 @@ const alive = (proc: ManagedProcess): boolean =>
 	proc.exitCode === null && proc.signalCode === null;
 
 describe("spawn-policy registry consistency", () => {
-	it("classifies all 64 production spawn sites with unique ids", () => {
-		expect(SPAWN_POLICY).toHaveLength(64);
+	it("classifies all 65 production spawn sites with unique ids", () => {
+		expect(SPAWN_POLICY).toHaveLength(65);
 		const ids = new Set(SPAWN_POLICY.map((s) => s.id));
-		expect(ids.size).toBe(64);
+		expect(ids.size).toBe(65);
+		expect(getSpawnSite("updateRecovery.probe")).toMatchObject({
+			file: "modules/system/update-orchestrator/recovery-probes.ts",
+			class: "bounded-probe",
+			contract: { timed: true, lifetimeTimeoutExempt: false },
+		});
 		// The reconciliation lock is a scoped owner, never a timed RAUC writer.
 		expect(getSpawnSite("osStage.orphanLock")).toMatchObject({
 			file: "modules/system/update-orchestrator/os-stage-orphan-lock.ts",

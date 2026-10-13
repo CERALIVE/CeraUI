@@ -25,6 +25,7 @@
  *      the `update_orchestrator` wire projection.
  */
 import { afterEach, describe, expect, test } from "bun:test";
+import { updateTransportSummarySchema } from "@ceraui/rpc/schemas";
 import { osChannelManifestSchema } from "../modules/system/update-orchestrator/os-manifest.ts";
 import { resetOrchestratorRuntimeForTest } from "../modules/system/update-orchestrator/runtime.ts";
 import type { RankedTransport } from "../modules/system/update-transport/core.ts";
@@ -63,6 +64,23 @@ function row(
 }
 
 describe("summarizeTransportSelection", () => {
+	test("preserves unknown cost rather than claiming a metered connection", () => {
+		// Given unknown inventory cost, when projected, then retain unknown on both wire rows.
+		const selected = {
+			...row("eth0", 4, true, ["clear"]),
+			candidate: { ifname: "eth0", kind: "ethernet" as const, metered: null },
+		};
+		const summary = summarizeTransportSelection(
+			"os",
+			{ status: "selected", selected, ranked: [selected] },
+			1234,
+		);
+		expect(summary.selected?.metered).toBeNull();
+		expect(summary.findings[0]?.metered).toBeNull();
+		expect(
+			updateTransportSummarySchema.parse(summary).selected?.metered,
+		).toBeNull();
+	});
 	test("names the selected uplink and flags the captive candidate it passed over", () => {
 		const selected = row("eth0", 4, true, ["clear", "clear"]);
 		const captive = row("wlan0", 4, false, ["captive-http", "clear"], "wifi");

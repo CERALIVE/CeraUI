@@ -55,6 +55,7 @@ bun run test:federation-abi
 - Call initSubscriptions() before mount; its handlers feed every subscription getter. Never create a second socket consumer.
 - Import wire contracts from @ceraui/rpc and producer exports; never shadow a wire type or fabricate an advertised mode.
 - Unknown, absent and explicit unsupported are distinct states; render typed refusals through keyed localized copy, never raw tokens.
+- Update installation, restart and activation are separate conclusions. Use the update evidence contract: no restart from package success, no historical connection absence from null, and no failed reachability or metered cost from unknown.
 - Preserve authentication ownership, lazy dialog loading and bounded persistent notifications; read the routed subsystem before editing.
 - Use the Paraglide facade; namespace activation owns boot/destination loading. Never import /eager in app code.
 - Never hand-edit CLI-managed shadcn primitives; retain accessibility, focus and clipped-disclosure behavior.

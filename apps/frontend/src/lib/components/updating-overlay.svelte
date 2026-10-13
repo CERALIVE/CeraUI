@@ -100,7 +100,7 @@ $effect(() => {
 		hasShownResult = true;
 		setTimeout(() => {
 			toast.success(m["updatingOverlay.successMessage"](), {
-				description: m["updatingOverlay.successDescription"](),
+				description: m["updatingOverlay.installedDescription"](),
 			});
 		}, 500);
 	}
