@@ -518,6 +518,45 @@ The authoritative `is_streaming=false` broadcast the Todo-27 rollback emits (on 
 terminal failure that HAD reached streaming) is consumed by `subscriptions.svelte`
 and drives `getIsStreaming()` — proven through the WS layer by
 `streaming-status-broadcast.integration.test.ts`.
+
+### Operator escape from an unconfirmed state [EXISTS; host-tested, board drill owed]
+
+`stop_failed` and `reconciling` commit UNKNOWN liveness: the backend keeps the OTA
+sentinel and refuses a fresh Start (and, through the update and disruptive-action
+gates, update Check/Install and reboot/power) until positive engine evidence or an
+acknowledged operator Stop. The operator's `streaming.stop` is the only Stop that
+may confirm an unknown engine. Neither state moves `is_streaming`, so a device
+whose last confirmed value was `false` showed the idle cockpit, which has no Stop.
+
+`apps/frontend/src/main/live/UnconfirmedStreamBand.svelte` closes that gap with
+the field already on the wire, `status.stream_lifecycle`; no RPC, wire field or
+schema changed. `LiveView` mounts it above both cockpits, because the post-stream
+summary window can still hold a Stop-less `LiveCockpit` when a silent reconcile
+follows an engine-loss stop. It renders an amber band and a Stop exactly when
+`showUnconfirmedStreamStop` holds:
+
+| `stream_lifecycle` | `is_streaming` | optimism | Band + Stop |
+|---|---|---|---|
+| `reconciling` or `stop_failed` | `false` | `idle` or `stopping` | yes |
+| `reconciling` or `stop_failed` | `true` | any | no: the live cockpit's Stop is on screen |
+| any | `false` | `starting` | no: the optimistic live cockpit is on screen |
+| `idle`, `starting`, `streaming`, `stopping`, `reconfiguring`, absent | any | any | no: unchanged |
+
+The band says the device cannot confirm whether a stream is running and that
+Start and updates are paused until it can; it never says the stream is or is not
+live. Its Stop calls `rpc.streaming.stop()` through `osCommand` under the key
+`stream-stop-unconfirmed`. A reply is not evidence (a `stopped` answer can
+precede the idle commit): the operation stays pending until the lifecycle push
+leaves the set, a `stop_failed` reply or a thrown call shows an inline failure,
+and the shared async-operation TTL turns a silent device into "not confirmed yet"
+with Stop enabled again. It does not drive the optimism overlay and does not
+clear notifications.
+
+Not covered: `starting` and `stopping` seen from a client that did not start
+them have no Stop, but each is bounded and settles into `idle`, `streaming` or a
+row above. An `idle` lifecycle whose sentinel removal failed is invisible on the
+wire; surfacing it needs a new field and an owner decision under D154. No board
+has exercised this path.
 ## Composition lifecycle follow-up (2026-09-17)
 
 Failed stop IPC must complete the session cleanup promise with its error, not

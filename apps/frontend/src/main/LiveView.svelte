@@ -113,6 +113,7 @@ import CapabilityTierBanner from '$main/live/CapabilityTierBanner.svelte';
 import IdleCockpit from '$main/live/IdleCockpit.svelte';
 import LiveCockpit from '$main/live/LiveCockpit.svelte';
 import LiveHeader from '$main/live/LiveHeader.svelte';
+import UnconfirmedStreamBand from '$main/live/UnconfirmedStreamBand.svelte';
 import UpdateRefusalBand from '$main/live/UpdateRefusalBand.svelte';
 import type { ConfigRow } from '$main/live/StreamSettingsCard.svelte';
 
@@ -991,6 +992,15 @@ const configRows = $derived<ConfigRow[]>([
 			</button>
 		</div>
 	{/if}
+
+	<!-- Above both cockpits on purpose: the post-stream summary window can still
+	     hold LiveCockpit (with no Stop) while the device falls into an
+	     unconfirmed state. -->
+	<UnconfirmedStreamBand
+		lifecycle={getStatus()?.stream_lifecycle}
+		{isStreaming}
+		optimismState={streamingOptimismState}
+	/>
 
 	{#if showLiveCockpit}
 		<!-- Live cockpit: telemetry strip + live bitrate hot-adjust + ingest stats
