@@ -283,9 +283,9 @@ export async function listMutationEntries(
 	for (const name of names) {
 		if (!name.endsWith(".json")) continue;
 		const raw = await deps.fs.readText(join(deps.dir, name));
-		const entry = raw === undefined ? undefined : parseEntry(raw, name);
+		if (raw === undefined) continue;
+		const entry = parseEntry(raw, name);
 		if (entry === undefined && requireComplete) {
-			beginRecoveryBarrier();
 			throw new MutationJournalInventoryError(name);
 		}
 		if (entry !== undefined) entries.push(entry);
@@ -309,8 +309,8 @@ export async function listUnreadableSlots(
 	for (const name of names) {
 		if (!name.endsWith(".json")) continue;
 		const raw = await deps.fs.readText(join(deps.dir, name));
-		if (raw === undefined || parseEntry(raw, name) === undefined)
-			bad.push(name);
+		if (raw === undefined) continue;
+		if (parseEntry(raw, name) === undefined) bad.push(name);
 	}
 	return bad;
 }

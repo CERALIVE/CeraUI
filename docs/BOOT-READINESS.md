@@ -10,9 +10,15 @@
    Unknown optional-record reads: no boot abort, no wedge, no write baseline).
    Required read-only `setup.json` is the exception: a transient leaf fault
    (EIO/EAGAIN, short or changed read) gets five in-process attempts over about
-   3 s, then the typed error ends the process and `Restart=always` in
-   `deployment/ceralive.service` is the outer retry; parsed-and-refused
-   `setup.json` bytes still abort boot. The SIGTERM/SIGINT handlers are
+   3 s, then the typed error ends the process. `Restart=always` in
+   `deployment/ceralive.service` requests a restart but is NOT an unbounded retry
+   owner: the unit sets neither `RestartSec` nor `StartLimit*`. With defaults of
+   100 ms, 5 starts and 10 s, fast non-EIO/EAGAIN errors or parsed-and-refused
+   `setup.json` can exhaust the limit and leave the unit failed (`start-limit-hit`)
+   until explicit intervention. The oracle observed this on a host user manager;
+   persistent EIO's >3 s cycles avoiding that limit on a board are only inferred.
+   Explicit pacing or disabling the start limit is an owner/image decision, not
+   implemented here. The SIGTERM/SIGINT handlers are
    installed late in `main.ts`, so a stop that arrives while boot waits for an
    unavailable `config.json` ends by default signal termination, not by the
    cancellation path.

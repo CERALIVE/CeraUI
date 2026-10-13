@@ -7,6 +7,10 @@ authority for which uplinks currently carry shared client traffic. Its explicit
 idle/streaming machine is lifecycle-edge driven: stream start installs a conservative
 bootstrap client cap before telemetry, stale telemetry holds, and stream stop removes
 ceilings without waiting for telemetry absence.
+The coordinator starts with one application pending: its first idle tick restores
+retained roots after a backend restart even without shared uplinks. Absent roots
+produce no tc command, ownership is read once, and later clean empty-idle ticks
+do not reapply. Failed application stays pending until success.
 
 The streaming hierarchy is root `prio`: tc band 1 is the design's zero-indexed
 local band 0 and carries only `fq_codel`; tc band 2 is selected by the steering
@@ -133,4 +137,3 @@ been produced against a real board's `nft list ruleset`. The image-side
 so on today's images the `firewallBackend` check is expected to read
 `firewall_backend_unpinned` — that is the tri-state tolerance working, not a
 finding.
-

@@ -22,7 +22,7 @@ export class UplinkShaperCoordinator {
 	readonly #deps: UplinkShaperCoordinatorDeps;
 	readonly #states = new Map<string, UplinkControllerState>();
 	#streaming = false;
-	#applicationPending = false;
+	#applicationPending = true;
 	#running: Promise<void> = Promise.resolve();
 
 	constructor(deps: UplinkShaperCoordinatorDeps) {

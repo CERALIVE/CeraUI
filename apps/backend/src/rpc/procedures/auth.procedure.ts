@@ -47,8 +47,6 @@ function tokenRecord(token: string): string {
 // Every write is revalidated against the file, so it also drops any inert
 // pre-digest record that reread brought back.
 function savePersistentTokens() {
-	for (const key of Object.keys(persistentTokens))
-		if (!TOKEN_RECORD_RE.test(key)) delete persistentTokens[key];
 	tokenStore.save();
 }
 
@@ -97,12 +95,14 @@ function scheduleLegacyPrune(delay: number, attempt: number): void {
 
 /** Shutdown: no further prune attempt may start. */
 export function stopLegacyTokenMigration(): void {
+	tokenStore.stop();
 	legacyPruneStopped = true;
 	clearTimeout(legacyPruneTimer);
 	legacyPruneTimer = undefined;
 }
 
-if (!isDevelopment()) scheduleLegacyPrune(0, 0);
+if (!isDevelopment() && process.env.NODE_ENV !== "test")
+	scheduleLegacyPrune(0, 0);
 
 function genAuthToken(isPersistent: boolean): string {
 	const token = randomBase64(32);
@@ -141,13 +141,7 @@ function invalidateToken(token: string): number {
 		delete tempTokens[token];
 		revoked += 1;
 	}
-	const record = tokenRecord(token);
-	// Revalidated against the file: the write starts from what it now holds.
-	if (tokenStore.prepareWrite() && persistentTokens[record]) {
-		delete persistentTokens[record];
-		savePersistentTokens();
-		revoked += 1;
-	}
+	revoked += tokenStore.revoke(tokenRecord(token));
 	return revoked;
 }
 
@@ -157,20 +151,7 @@ function invalidateAllTokens(): number {
 		delete tempTokens[token];
 		revoked += 1;
 	}
-	const records = Object.keys(persistentTokens);
-	for (const record of records) {
-		delete persistentTokens[record];
-		revoked += 1;
-	}
-	// Revoking everything does not depend on what the file held, so an
-	// unreadable store is still emptied (a damaged one is archived first): a
-	// password change must not leave old remembered browsers to come back once
-	// storage recovers.
-	if (tokenStore.prepareWrite(true) || tokenStore.unavailable) {
-		for (const record of Object.keys(persistentTokens))
-			delete persistentTokens[record];
-		savePersistentTokens();
-	}
+	revoked += tokenStore.revoke();
 	return revoked;
 }
 

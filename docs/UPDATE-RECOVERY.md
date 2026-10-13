@@ -188,15 +188,20 @@ retries cannot accumulate copies or temps.
   owner in read-only `verify` mode: it re-reads the slot inventory and the
   per-identity blocks and never rolls back, because an admitted mutation may still
   be running. Block publication reads the inventory strictly: a slot that became
-  malformed between passes raises the barrier and fails the attempt instead of
-  being skipped, so a verification can never lower the barrier over damage it
+   malformed between passes raises the barrier and fails the attempt instead of
+   being skipped. A file concurrently removed after listing is absent, not damaged,
+   and is skipped in both inventory passes without raising the barrier. Read
+   failures still throw. A verification can never lower the barrier over damage it
   just observed. Shutdown cancels the flight and disarms scheduling, so a late
   raise cannot start another owner. A slot that stays damaged keeps the barrier up
   (the slot may be an unrolled mutation); the existing `recovery_pending` text
   ("ask again shortly") is then not honest for that case, an owner-decision gap
   that would need a new reason on the wire.
 - **Shaper coordinator.** The serialization tail swallows a rejection after the
-  caller has received it. A pending-application flag is set by any update that
+  caller has received it. A pending-application flag starts true: the first idle
+  tick reconciles retained roots even when nothing is shared or streaming after a
+  backend restart. Absent roots produce no traffic-control command and are read
+  once. The flag is also set by any update that
   needs application and cleared only after `apply()` succeeds; the streaming mode
   is recorded only then too. So after a rejected ownership read even an empty
   idle update reruns the read and restores retained roots once storage recovers.
@@ -207,9 +212,18 @@ retries cannot accumulate copies or temps.
   revoke-all may replace a damaged file, and it archives the bytes it actually
   replaces; over an unavailable store those two still write `{}`, because that
   result does not depend on the old contents and a password change must not let
-  old remembered browsers return. The import-time pre-digest prune runs on a
+  old remembered browsers return. Logout and individual/all revocation register
+  process-local intent BEFORE rereading or writing. Every reread and save filters
+  revoked digests; only a successful save clears the intent. Failed explicit writes
+  still error, but the next auth operation retries once and denies revoked tokens
+  even when that retry fails. While revoke-all is pending, remembered issuance is
+  temporary. Shutdown disarms this per-operation retry through the existing auth
+  stop hook; there is no new timer. Intent is NOT restart-durable before a
+  successful save, so a restart after failed persistence can still reload the old
+  file. The import-time pre-digest prune runs on a
   timer that never throws: a write fault leaves the file as it was and retries
-  (1 s, 5 s, 30 s, then every 60 s) until it succeeds or shutdown stops it.
+  (1 s, 5 s, 30 s, then every 60 s) until it succeeds or shutdown stops it. Test
+  imports do not schedule that timer; child tests explicitly use production mode.
 - **FCC policy.** Display and enforcement keep treating anything but a valid
   document as "nothing enabled". A toggle or rollback takes its baseline from
   `loadFccUnlockPolicyBaseline()`: unavailable refuses (`write_failed`, before any
@@ -224,9 +238,15 @@ retries cannot accumulate copies or temps.
 `setup.json` (baked, seeded once, never written by CeraUI) is REQUIRED metadata
 and is never guessed or defaulted (D225). A transient leaf fault (EIO/EAGAIN,
 short or changed read) is retried in-process five times over about 3 s; after
-that the typed `StoredStateReadError` aborts module evaluation and systemd
-`Restart=always` is the outer retry owner. Parsed-and-refused bytes abort
-immediately (class C, owner decision).
+that the typed `StoredStateReadError` aborts module evaluation. Systemd's
+`Restart=always` requests a restart subject to its start limit, NOT endless retry.
+The packaged unit sets no `RestartSec` or `StartLimit*`; defaults of 100 ms,
+5 starts and 10 s can leave fast non-EIO/EAGAIN failures and parsed-and-refused
+bytes (class C) permanently failed with `start-limit-hit` until intervention.
+That default-policy failure was observed on the oracle's host user manager;
+persistent EIO cycles lasting >3 s staying below the board's start limit are
+inferred, not qualified. Explicit `RestartSec` pacing and/or
+`StartLimitIntervalSec=0` is an OWNER/IMAGE DECISION, not a change in this lane.
 
 Scope of these claims: host tests with injected faults only. A board drill must
 still prove a corrupt `config.json` on a real board and its ownership

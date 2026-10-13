@@ -31,6 +31,17 @@ files and valid legacy optional fields retain their existing defaults. Formats
 are unchanged. Host proof and recovery implications:
 [`strict authority`](UPDATE-RECOVERY.md#metadata-and-idle-boundaries).
 
+Explicit token revocation is process-local intent until its atomic save succeeds:
+logout/revoke/password-change failures cannot restore revoked memberships on the
+next reread, and the next auth operation retries persistence once. This intent
+is not restart-durable after a failed save; stored formats are unchanged.
+Required image-baked `setup.json` has five transient-read attempts over about 3 s,
+then aborts with its typed error; damaged metadata aborts immediately. Packaged
+`Restart=always` is rate-limited, not endless recovery: absent explicit
+`RestartSec`/`StartLimit*`, fast exits can hit systemd's start limit and stay
+failed. The oracle measured that default policy on a host user manager, not a
+board. Changing pacing/start-limit policy remains an owner/image decision.
+
 Every file CeraUI's backend writes at runtime, grouped by durability
 category. "Atomic" means the write goes through `writeFileAtomicSync`
 (`apps/backend/src/helpers/config-loader.ts:278`): write to a sibling temp
@@ -151,7 +162,7 @@ transient behavior.
 
 | File | Writer | Atomicity | Notes |
 |------|--------|-----------|-------|
-| `setup.json` | **none — read-only at runtime** | N/A | Loaded once at boot via `loadJsonConfigSync(..., required: true)` (`modules/setup.ts`). Hardware type, exec-path overrides, and the streaming-engine flag are written once at image-build / first-run time, never mutated by the running app. A legacy `engine` value is coerced to `"cerastream"` at parse time (with a warning), but that coercion happens in memory — it is never written back to disk. |
+| `setup.json` | **none — read-only at runtime** | N/A | Loaded once at boot through `readSetupJson()`'s strict authority reader (`modules/setup.ts`), with bounded transient retry and typed boot refusal. Hardware type, exec-path overrides, and the streaming-engine flag are written once at image-build / first-run time, never mutated by the running app. A legacy `engine` value is coerced to `"cerastream"` at parse time (with a warning), but that coercion happens in memory — it is never written back to disk. |
 
 ### Credentials
 

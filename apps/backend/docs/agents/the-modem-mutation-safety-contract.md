@@ -68,6 +68,9 @@ Journal reads are bounded, anchored, no-follow/nonblocking and duplicate-strict.
 A present unreadable slot or directory inspection fault raises/retains the existing
 recovery barrier; replay lowers it only with zero unreadable authority. Invalid
 records are not pruned, and direct failed reads cannot become admission permission.
+Strict block publication vetoes malformed/schema-invalid slots; an ENOENT after
+listing is a concurrent deletion and is skipped in both inventory passes, not
+raised as a recovery barrier. Read errors still throw and retain the barrier.
 Repair storage and rerun recovery/restart; no operator clear API is added. FCC
 opt-in also uses strict reads and enables no model on ambiguity, preserving bytes.
 These are host boundary proofs, not board recovery qualification.
@@ -119,10 +122,10 @@ source of "is this device blocked" is how a fail-closed guard drifts open.
 | `decommissioned` | re-check presence (present ⇒ `recommission-pending`; absent ⇒ no action) |
 | `recommission-pending` | remain awaiting the rebaseline |
 
-`mutation-replay.ts` is the table's executor and NEVER throws: a replay that
-cannot complete still LOWERS the barrier, because a barrier nobody will lower is
-worse than a device that honestly reports its blocks — the blocks are what keep it
-safe.
+`mutation-replay.ts` is the table's executor. Replay lowers the barrier only after
+complete readable authority and strict block publication; unknown/damaged journal
+authority keeps it raised behind the cancellable retry owner. Failed rollback's
+readable per-identity block is separate from an unreadable global inventory.
 
 ### THE REPLAY BARRIER AT THE ADMISSION CHOKEPOINT
 

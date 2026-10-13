@@ -1,12 +1,12 @@
 /**
  * The remembered-browser token file, with its read state kept.
  *
- * Only a `valid` or `absent` read may seed a whole-file token write. An
+ * Only a `valid` or `absent` read may seed a whole-file token write.
  * Damaged/unavailable membership is reread, never used for a remembered-login
  * replacement. Only explicit revoke-all/password change may reset it; damaged
  * bytes are revalidated and archived at that boundary. The records object is owned by
  * the caller's module instance, so each import of the auth procedures has its
- * own store.
+ * own store. Pending revocations filter every read until a successful save.
  */
 
 import { writeFileAtomicSync } from "../../helpers/config-loader.ts";
@@ -29,6 +29,9 @@ export class PersistentTokenStore {
 	#state: StoreState = "unavailable";
 	#damaged: Buffer | undefined;
 	#settling: Promise<void> | undefined;
+	#revokeAll = false;
+	readonly #revoked = new Set<string>();
+	#stopped = false;
 
 	private constructor(path: string) {
 		this.#path = path;
@@ -64,14 +67,51 @@ export class PersistentTokenStore {
 	 */
 	prepareWrite(explicitRevocation = false): boolean {
 		this.#read();
+		if (this.#revokeAll && !explicitRevocation) return false;
 		if (this.writable) return true;
 		return explicitRevocation && this.#state === "damaged" && this.#archive();
 	}
 
 	/** Replace the file with `records`; callers check {@link prepareWrite} first. */
 	save(): void {
+		this.#filterRevocations();
+		for (const key of Object.keys(this.records))
+			if (!/^[0-9a-f]{64}$/.test(key)) delete this.records[key];
 		writeFileAtomicSync(this.#path, JSON.stringify(this.records));
 		this.#state = "valid";
+		this.#revokeAll = false;
+		this.#revoked.clear();
+	}
+
+	/** Record intent before I/O; a failed write must not re-admit this credential. */
+	revoke(record?: string): number {
+		const count =
+			record === undefined
+				? Object.keys(this.records).length
+				: Number(this.records[record] === true);
+		if (record === undefined) this.#revokeAll = true;
+		else this.#revoked.add(record);
+		this.#filterRevocations();
+		this.#persistRevocations();
+		return count;
+	}
+
+	stop(): void {
+		this.#stopped = true;
+	}
+
+	#filterRevocations(): void {
+		for (const record of Object.keys(this.records))
+			if (this.#revokeAll || this.#revoked.has(record))
+				delete this.records[record];
+	}
+
+	#persistRevocations(): void {
+		if (
+			this.prepareWrite(this.#revokeAll) ||
+			(this.#revokeAll && this.unavailable)
+		)
+			this.save();
 	}
 
 	#read(): void {
@@ -85,10 +125,21 @@ export class PersistentTokenStore {
 		this.#damaged = undefined;
 		if (read.kind === "valid") Object.assign(this.records, read.value);
 		if (read.kind === "damaged") this.#damaged = read.bytes;
+		this.#filterRevocations();
 	}
 
 	async #settleOnce(): Promise<void> {
 		this.#read();
+		if (!this.#stopped && (this.#revokeAll || this.#revoked.size > 0)) {
+			try {
+				this.#persistRevocations();
+			} catch (error) {
+				logger.warn(
+					"Auth: revocation not persisted; retained for next operation",
+					{ error },
+				);
+			}
+		}
 		if (!this.writable)
 			logger.warn(
 				"Auth: stored token authority unreadable; token login withheld",
