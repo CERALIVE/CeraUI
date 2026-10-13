@@ -51,8 +51,10 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
   always parses even though the persisted `phase` enum is coarser.
 - **Enable pipeline** (ordered, each gated/atomic): `isRealDevice()` (G6) →
   free-space precheck (E1: `/data` free > `sizeInstalled × 2 + 512 MiB`) →
-  download → `/data/tmp/<id>.raw.tmp` → sha256 (+ helper GPG) verify → atomic
-  rename → `/data/extensions/<id>.raw` → `ceralive-addon-helper enable <id>` →
+  download → `/data/tmp/<id>.raw.tmp` → sha256 + bounded detached-signature fetch →
+  atomic preparation of raw/signature in `/var/cache/ceralive/addons` (not the scan
+  directory) → `ceralive-addon-helper enable <id>` (authoritative GPG/sha256
+  validation, scan publication and refresh) →
   unmask + start descriptor units → validation probe (auto-disable on failure).
 - **Disable pipeline**: reverse + idempotent — stop + mask units → helper
   `disable` → remove artifact → drop config state.
@@ -61,6 +63,25 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
   reason. The privileged wrapper checks again before submission. The sole gated
   action inventory, late-refusal limits and host-proof boundary live in
   [START-LIFECYCLE.md](../START-LIFECYCLE.md#disruptive-action-gate-partial--host-tested-board-re-drill-owed).
+- **Transaction settlement**: every published `installing`/`disabling` phase has
+  one terminal frame on success, ordinary failure or late refusal. A pre-helper
+  refusal restores prior intent, live phase and subscriber projection (including
+  explicit disabled state for a new absent add-on). Refusal after completed
+  activation but before the unit tail finishes records `pending` with the actual
+  new materialized version, not the old `active` receipt. RPC userConfig pre-seeding
+  carries the original rollback baseline through the same mutation context.
+- **Concurrency**: manager enable/disable, kiosk toggles/polls and reconciler final
+  publication share a reentrant per-ID lock. Manager/safety intent changes advance
+  an in-process revision; a held reconciler checks it and fresh enabled/autoDisabled
+  intent before refresh and every publication, including failure and raw fast paths.
+  Preparation remains outside the lock. These are in-process rules, not a new
+  persisted-format or cross-process authority.
+- **Reservation seam**: all disruptive publication/helper/unit calls route through
+  `disruptive-sysext-step.ts`, carrying one operation identity through nested calls.
+  Today it checks the public gate immediately before each callback. System-side
+  integration must acquire/reenter by that identity, hold the outer lifetime through
+  submitted helper/unit awaits, and release only with positive retirement evidence.
+  The local seam implements no reservation and cannot prove uninterrupted exclusion.
 - **Validation deadline**: `runValidateCmd` uses `spawnWithTimeout` and its shared
   termination classification. A TERM-induced zero after timeout throws typed
   `SpawnTimeoutError`; the enable pipeline maps it to `addon_validation_failed`
@@ -88,15 +109,22 @@ never throws and self-serialises (a concurrent call is a no-op).
 - Per enabled add-on: if the staged `.raw` is missing **or** its
   `osVersionMaterialized` ≠ the live `/etc/os-release` VERSION_ID (G1 exact
   match — never loosened), re-fetch `artifact.urlTemplate` (substituting
-  `{os_version}` + `{board}`) → sha256 + GPG verify → atomic stage → helper
-  `refresh`.
+  `{os_version}` + `{board}`) → sha256 + GPG verify in a private cache preparation
+  directory → revalidate current intent under the shared lock → admitted atomic
+  scan publication → helper `refresh`. A refusal before refresh rolls scan
+  publication back (absent for a new artifact; prior payload bytes for replacement).
+  Prepared/cache bytes are cleaned after refusal or supersession. Cache publication
+  supports different filesystems by copying into a non-raw sibling before rename.
 - **No compatible artifact** (404 / network / descriptor `compatibleOsVersions`
   excludes the live OS): set `phase: pending` + `lastError:
   addon_not_available_for_os_version`. Boot is unaffected.
 - **No shared admission**: a disruptive refresh is deferred — set `phase: pending` +
   `lastError: addon_refresh_deferred_streaming`; retried on the next boot.
   Unknown stream evidence and interruptible updates/maintenance also defer;
-  admission is re-read after awaited staging before refresh.
+  admission is re-read after awaited preparation and before refresh. A typed helper
+  refusal has the same pending/deferral classification, never OS unavailability.
+  An existing raw plus current-OS metadata cannot clear a pending/deferred-refresh
+  receipt without a successful refresh in that pass.
 - Triggered from `main.ts` at startup (non-blocking) and re-pokable via SIGUSR1
   from the `ceralive-addon-reconciler.service` oneshot (deployment/), which is
   deliberately NOT wired into any rollback/healthcheck target.
@@ -112,6 +140,15 @@ never throws and self-serialises (a concurrent call is a no-op).
 Test coverage: `apps/backend/src/tests/addon-reconciler.test.ts` — re-materialise
 (missing + VERSION_ID mismatch), idempotency, the pending/defer negative paths,
 and the boot-safety (never-throws) + emulated-mode no-op guarantees.
+
+Tail coverage: `sysext-tail-{settlement,reconcile,interleavings}.test.ts` and
+`sysext-artifact-publication.test.ts` exercise literal subscriber frames, config
+bytes, private physical scan files, superseded intent and refresh ledgers. Initial
+authenticated hydration emits explicit disabled entries for baked-but-absent IDs,
+because the frontend merges add-on frames by ID and an empty map cannot clear a
+retained busy entry. No frontend schema/merge or catalog change is needed.
+Real helper execution during stream start, hardware late-refusal settlement and
+uninstall during a held real reconciliation remain board drills, not host passes.
 
 **Packaging contract (#194).** `ceralive-addon-reconciler.service` is staged into
 the `.deb` **from `deployment/`**, not from `dist/`. `dist/` only ever held the

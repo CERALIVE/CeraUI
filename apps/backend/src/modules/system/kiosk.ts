@@ -32,11 +32,14 @@ import {
 	createMockKioskDeps,
 	type MockKioskHarness,
 } from "../../mocks/providers/kiosk.ts";
+import { runDisruptiveSysextStep } from "../addons/disruptive-sysext-step.ts";
 import {
 	type AddonOpResult,
 	disableAddon as managerDisableAddon,
 	enableAddon as managerEnableAddon,
+	recordAddonAutoDisabled,
 } from "../addons/manager.ts";
+import { withAddonMutation } from "../addons/mutation.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import {
@@ -328,6 +331,8 @@ async function autoDisableKiosk(deps: KioskDeps): Promise<void> {
 	kioskLiveState = "disabled";
 	config.kiosk_last_state = "disabled";
 	saveConfig();
+	if (config.addons?.[COG_DISPLAY_ADDON_ID])
+		recordAddonAutoDisabled(COG_DISPLAY_ADDON_ID);
 	try {
 		await deps.systemctl(["mask", KIOSK_SERVICE]);
 	} catch (err) {
@@ -347,6 +352,12 @@ async function autoDisableKiosk(deps: KioskDeps): Promise<void> {
 export async function pollKioskOnce(
 	deps: KioskDeps = activeDeps,
 ): Promise<KioskState> {
+	return withAddonMutation(COG_DISPLAY_ADDON_ID, () =>
+		pollKioskOnceLocked(deps),
+	);
+}
+
+async function pollKioskOnceLocked(deps: KioskDeps): Promise<KioskState> {
 	if (!getConfig().kiosk_enabled) {
 		return applyState("disabled", deps);
 	}
@@ -407,12 +418,12 @@ export function stopKioskPolling(): void {
 export async function kioskStart(
 	deps: KioskDeps = activeDeps,
 ): Promise<KioskStatus> {
-	const { getDisruptiveActionDecision } = await import(
-		"./disruptive-action-runtime.ts"
+	return withAddonMutation(COG_DISPLAY_ADDON_ID, () =>
+		runDisruptiveSysextStep("kiosk-start", () => kioskStartLocked(deps)),
 	);
-	const admission = getDisruptiveActionDecision();
-	if (!admission.allowed)
-		throw new DisruptiveActionRefusedError(admission.reason);
+}
+
+async function kioskStartLocked(deps: KioskDeps): Promise<KioskStatus> {
 	const previousIntent = {
 		enabled: getConfig().kiosk_enabled,
 		lastState: getConfig().kiosk_last_state,
@@ -452,12 +463,12 @@ export async function kioskStart(
 export async function kioskStop(
 	deps: KioskDeps = activeDeps,
 ): Promise<KioskStatus> {
-	const { getDisruptiveActionDecision } = await import(
-		"./disruptive-action-runtime.ts"
+	return withAddonMutation(COG_DISPLAY_ADDON_ID, () =>
+		runDisruptiveSysextStep("kiosk-stop", () => kioskStopLocked(deps)),
 	);
-	const admission = getDisruptiveActionDecision();
-	if (!admission.allowed)
-		throw new DisruptiveActionRefusedError(admission.reason);
+}
+
+async function kioskStopLocked(deps: KioskDeps): Promise<KioskStatus> {
 	const previousIntent = {
 		enabled: getConfig().kiosk_enabled,
 		lastState: getConfig().kiosk_last_state,

@@ -37,6 +37,7 @@
  *    bash-script integration test.
  */
 
+import { runDisruptiveSysextStep } from "../modules/addons/disruptive-sysext-step.ts";
 import { isRealDevice } from "../modules/system/device-detection.ts";
 import { type ExecResult, execFileP } from "./exec.ts";
 
@@ -97,15 +98,11 @@ async function invokeHelper(
 		throw new Error(ADDON_UNAVAILABLE_ERROR);
 	}
 	if (args[0] !== "status") {
-		const { getDisruptiveActionDecision } = await import(
-			"../modules/system/disruptive-action-runtime.ts"
+		const { stdout } = await runDisruptiveSysextStep(
+			`helper:${args.join(":")}`,
+			() => deps.exec(SUDO, [HELPER_BIN, ...args]),
 		);
-		const { DisruptiveActionRefusedError } = await import(
-			"../modules/system/disruptive-action-error.ts"
-		);
-		const admission = getDisruptiveActionDecision();
-		if (!admission.allowed)
-			throw new DisruptiveActionRefusedError(admission.reason);
+		return stdout;
 	}
 	const { stdout } = await deps.exec(SUDO, [HELPER_BIN, ...args]);
 	return stdout;

@@ -43,7 +43,7 @@
  * triple encodes the manager phase).
  */
 
-import { mkdir, rename, rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import type {
 	AddonDescriptor,
@@ -72,6 +72,19 @@ import { isRealDevice } from "../system/device-detection.ts";
 import { DisruptiveActionRefusedError } from "../system/disruptive-action-error.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import { aptClientTlsFor } from "./apt-client-tls.ts";
+import {
+	type ArtifactPublication,
+	cachePreparedArtifact,
+} from "./artifact-publication.ts";
+import {
+	getSysextActionDecision,
+	runDisruptiveSysextStep,
+} from "./disruptive-sysext-step.ts";
+import {
+	addonRefusalBaseline,
+	invalidateAddonIntent,
+	withAddonMutation,
+} from "./mutation.ts";
 
 // Re-export the helper's emulated-mode error so callers resolve the single
 // source from the manager surface (mirrors kiosk re-exporting isRealDevice).
@@ -104,6 +117,7 @@ const DATA_MOUNT = "/data";
 const DATA_TMP_DIR = "/data/tmp";
 /** systemd-sysext scan dir — where a materialised `.raw` is activated from. */
 const DATA_EXT_DIR = "/data/extensions";
+const HELPER_CACHE_DIR = "/var/cache/ceralive/addons";
 
 /** 512 MiB of slack kept free on /data beyond the materialised payload (E1). */
 export const ADDON_FREE_SPACE_HEADROOM_BYTES = 512 * 1024 * 1024;
@@ -172,7 +186,7 @@ type PhaseEncoding = {
  */
 const PHASE_ENCODING: Record<AddonManagerPhase, PhaseEncoding> = {
 	disabled: { enabled: false, phase: "idle", autoDisabled: false },
-	pending: { enabled: true, phase: "idle", autoDisabled: false },
+	pending: { enabled: true, phase: "pending", autoDisabled: false },
 	enabling: { enabled: true, phase: "installing", autoDisabled: false },
 	enabled: { enabled: true, phase: "active", autoDisabled: false },
 	disabling: { enabled: false, phase: "disabling", autoDisabled: false },
@@ -185,6 +199,7 @@ export function toAddonState(
 	phase: AddonManagerPhase,
 	extra: {
 		versionMaterialized?: string;
+		osVersionMaterialized?: string;
 		userConfig?: Record<string, unknown>;
 		lastError?: string;
 	} = {},
@@ -199,6 +214,8 @@ export function toAddonState(
 	if (extra.versionMaterialized !== undefined) {
 		state.versionMaterialized = extra.versionMaterialized;
 	}
+	if (extra.osVersionMaterialized !== undefined)
+		state.osVersionMaterialized = extra.osVersionMaterialized;
 	if (extra.userConfig !== undefined) state.userConfig = extra.userConfig;
 	if (extra.lastError !== undefined) state.lastError = extra.lastError;
 	return state;
@@ -290,6 +307,10 @@ export function extArtifactPath(id: string): string {
 	return `${DATA_EXT_DIR}/${id}.raw`;
 }
 
+export function cachedArtifactPath(id: string): string {
+	return `${HELPER_CACHE_DIR}/${id}.raw`;
+}
+
 /** Substitute the OS VERSION_ID into the descriptor's `{os_version}` template. */
 export function resolveArtifactUrl(
 	urlTemplate: string,
@@ -338,9 +359,16 @@ export type AddonManagerDeps = {
 	/** Download `url` → `destTmp` (an atomic temp under /data/tmp). */
 	download: (url: string, destTmp: string) => Promise<void>;
 	/** sha256 (+ GPG via the helper) verify the staged temp; reject on mismatch. */
-	verify: (descriptor: AddonDescriptor, tmpPath: string) => Promise<void>;
+	verify: (
+		descriptor: AddonDescriptor,
+		tmpPath: string,
+		osVersion?: string,
+	) => Promise<void>;
 	/** Atomic rename `tmpPath` → `destPath` in the sysext scan dir. */
-	stage: (tmpPath: string, destPath: string) => Promise<void>;
+	stage: (
+		tmpPath: string,
+		destPath: string,
+	) => Promise<ArtifactPublication> | Promise<void>;
 	/** Privileged `ceralive-addon-helper enable <id>` (re-verifies + refreshes). */
 	helperEnable: (id: string) => Promise<void>;
 	/** Privileged `ceralive-addon-helper disable <id>`. */
@@ -416,6 +444,7 @@ async function downloadArtifact(url: string, destTmp: string): Promise<void> {
 async function verifyArtifact(
 	descriptor: AddonDescriptor,
 	tmpPath: string,
+	osVersion: string = descriptor.versionId,
 ): Promise<void> {
 	const bytes = await Bun.file(tmpPath).bytes();
 	const digest = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
@@ -424,12 +453,17 @@ async function verifyArtifact(
 			`sha256 mismatch for ${descriptor.id}: expected ${descriptor.artifact.sha256}, got ${digest}`,
 		);
 	}
-}
-
-/** Atomic rename into the scan dir (parent created). */
-async function stageArtifact(tmpPath: string, destPath: string): Promise<void> {
-	await mkdir(dirname(destPath), { recursive: true });
-	await rename(tmpPath, destPath);
+	const sigUrl = resolveArtifactUrl(descriptor.artifact.gpgSigRef, osVersion);
+	const signature = await fetch(sigUrl, {
+		...(await aptClientTlsFor(sigUrl)),
+		signal: AbortSignal.timeout(60_000),
+	});
+	if (!signature.ok)
+		throw new Error(`signature download failed: HTTP ${signature.status}`);
+	const sigBytes = await signature.bytes();
+	if (sigBytes.byteLength > 64 * 1024)
+		throw new Error("add-on signature exceeds size limit");
+	await Bun.write(`${tmpPath}.sig`, sigBytes);
 }
 
 /**
@@ -460,7 +494,7 @@ const defaultAddonManagerDeps: AddonManagerDeps = {
 	getOsVersion: probeOsVersion,
 	download: downloadArtifact,
 	verify: verifyArtifact,
-	stage: stageArtifact,
+	stage: cachePreparedArtifact,
 	helperEnable: async (id) => {
 		await addonEnable(id);
 	},
@@ -472,6 +506,7 @@ const defaultAddonManagerDeps: AddonManagerDeps = {
 	runValidate: runValidateCmd,
 	removeArtifact: async (path) => {
 		await rm(path, { force: true });
+		await rm(`${path}.sig`, { force: true });
 	},
 	getState: (id) => getAddons()[id],
 	setState: (id, state) => setAddonState(id, state),
@@ -541,16 +576,23 @@ function transition(
 	id: string,
 	phase: AddonManagerPhase,
 	deps: AddonManagerDeps,
-	extra: { versionMaterialized?: string; lastError?: string } = {},
+	extra: {
+		versionMaterialized?: string;
+		osVersionMaterialized?: string;
+		lastError?: string;
+	} = {},
 ): AddonState {
 	const prev = deps.getState(id);
 	const meta: {
 		versionMaterialized?: string;
+		osVersionMaterialized?: string;
 		userConfig?: Record<string, unknown>;
 		lastError?: string;
 	} = {};
 	const version = extra.versionMaterialized ?? prev?.versionMaterialized;
 	if (version !== undefined) meta.versionMaterialized = version;
+	const osVersion = extra.osVersionMaterialized ?? prev?.osVersionMaterialized;
+	if (osVersion !== undefined) meta.osVersionMaterialized = osVersion;
 	if (prev?.userConfig !== undefined) meta.userConfig = prev.userConfig;
 	if (extra.lastError !== undefined) meta.lastError = extra.lastError;
 
@@ -569,10 +611,14 @@ async function startUnits(
 	deps: AddonManagerDeps,
 ): Promise<void> {
 	for (const unit of units?.unmask ?? []) {
-		await deps.systemctl(["unmask", unit]);
+		await runDisruptiveSysextStep("unmask-addon-unit", () =>
+			deps.systemctl(["unmask", unit]),
+		);
 	}
 	for (const unit of units?.start ?? []) {
-		await deps.systemctl(["start", unit]);
+		await runDisruptiveSysextStep("start-addon-unit", () =>
+			deps.systemctl(["start", unit]),
+		);
 	}
 }
 
@@ -595,7 +641,27 @@ async function autoDisableAddon(
 			);
 		}
 	}
-	transition(descriptor.id, "auto_disabled", deps, { lastError: reason });
+	recordAddonAutoDisabled(descriptor.id, deps, reason);
+}
+
+export function recordAddonAutoDisabled(
+	id: string,
+	deps: AddonManagerDeps = resolveActiveAddonManagerDeps(),
+	reason: string = ADDON_CRASH_LOOP_REASON,
+): void {
+	invalidateAddonIntent(id);
+	transition(id, "auto_disabled", deps, { lastError: reason });
+}
+
+function restoreRefusedState(
+	id: string,
+	previous: AddonState | undefined,
+	deps: AddonManagerDeps,
+): void {
+	livePhases.set(id, previous ? phaseFromState(previous) : "disabled");
+	if (previous) deps.setState(id, previous);
+	else deps.removeState(id);
+	deps.broadcast(id, previous ?? toAddonState("disabled"));
 }
 
 /**
@@ -612,16 +678,23 @@ export async function enableAddon(
 	descriptor: AddonDescriptor,
 	deps: AddonManagerDeps = resolveActiveAddonManagerDeps(),
 ): Promise<AddonOpResult> {
+	invalidateAddonIntent(descriptor.id);
+	return withAddonMutation(descriptor.id, () =>
+		enableAddonLocked(descriptor, deps),
+	);
+}
+
+async function enableAddonLocked(
+	descriptor: AddonDescriptor,
+	deps: AddonManagerDeps,
+): Promise<AddonOpResult> {
 	const id = descriptor.id;
 
 	// 1. G6 — never drive the host OS in dev/emulated mode.
 	if (!(await deps.isRealDevice())) {
 		return { success: false, error: ADDON_UNAVAILABLE_ERROR };
 	}
-	const { getDisruptiveActionDecision } = await import(
-		"../system/disruptive-action-runtime.ts"
-	);
-	const admission = getDisruptiveActionDecision();
+	const admission = await getSysextActionDecision();
 	if (!admission.allowed) return { success: false, error: admission.reason };
 
 	// 1b. T23 — hardware ∩ deps ∩ conflicts gate, before any state mutation.
@@ -639,37 +712,38 @@ export async function enableAddon(
 	if (!hasSufficientSpace(freeBytes, descriptor.artifact.sizeInstalled)) {
 		return { success: false, error: ADDON_INSUFFICIENT_SPACE_ERROR };
 	}
-	const finalAdmission = getDisruptiveActionDecision();
+	const finalAdmission = await getSysextActionDecision();
 	if (!finalAdmission.allowed) {
 		return { success: false, error: finalAdmission.reason };
 	}
 
-	const previousState = deps.getState(id);
+	const baseline = addonRefusalBaseline(id);
+	const previousState = baseline ? baseline.state : deps.getState(id);
 	transition(id, "enabling", deps);
 	const tmpPath = tmpArtifactPath(id);
+	const publication: { value?: ArtifactPublication } = {};
+	let activated = false;
+	let osVersion: string | undefined;
 	try {
 		// 3. download artifact → atomic temp under /data/tmp.
-		const osVersion = await deps.getOsVersion();
+		osVersion = await deps.getOsVersion();
 		const url = resolveArtifactUrl(descriptor.artifact.urlTemplate, osVersion);
 		await deps.download(url, tmpPath);
 
 		// 4. verify (local sha256 fast-fail; helper is the authoritative gate).
-		await deps.verify(descriptor, tmpPath);
-		const stagingAdmission = getDisruptiveActionDecision();
-		if (!stagingAdmission.allowed)
-			throw new DisruptiveActionRefusedError(stagingAdmission.reason);
-
-		// 5. atomic rename into the sysext scan dir.
-		await deps.stage(tmpPath, extArtifactPath(id));
-		const activationAdmission = getDisruptiveActionDecision();
-		if (!activationAdmission.allowed)
-			throw new DisruptiveActionRefusedError(activationAdmission.reason);
-
-		// 6. privileged activation — re-verifies sig + sha256, refreshes sysext.
-		await deps.helperEnable(id);
-
-		// 7. unmask + start the descriptor's units (idempotent).
-		await startUnits(descriptor.units, deps);
+		await deps.verify(descriptor, tmpPath, osVersion);
+		await runDisruptiveSysextStep(`enable:${id}`, async () => {
+			await runDisruptiveSysextStep("stage-addon", async () => {
+				const staged = await deps.stage(tmpPath, cachedArtifactPath(id));
+				if (staged !== undefined) publication.value = staged;
+			});
+			await runDisruptiveSysextStep("enable-addon-helper", () =>
+				deps.helperEnable(id),
+			);
+			activated = true;
+			await publication.value?.commit();
+			await startUnits(descriptor.units, deps);
+		});
 
 		// 8. validation probe — auto-disable a materialised-but-unhealthy add-on.
 		if (descriptor.validate) {
@@ -690,21 +764,38 @@ export async function enableAddon(
 
 		transition(id, "enabled", deps, {
 			versionMaterialized: descriptor.version,
+			osVersionMaterialized: osVersion,
 		});
 		return { success: true, phase: "enabled" };
 	} catch (err) {
 		if (err instanceof DisruptiveActionRefusedError) {
-			livePhases.set(
-				id,
-				previousState ? phaseFromState(previousState) : "disabled",
-			);
-			if (previousState) deps.setState(id, previousState);
-			else deps.removeState(id);
-			await deps.removeArtifact(tmpPath);
+			try {
+				if (!activated) await publication.value?.rollback();
+				await deps.removeArtifact(tmpPath);
+			} catch (cleanupError) {
+				transition(id, "failed", deps, { lastError: String(cleanupError) });
+				return { success: false, error: ADDON_ENABLE_FAILED_ERROR };
+			}
+			if (activated)
+				transition(id, "pending", deps, {
+					versionMaterialized: descriptor.version,
+					...(osVersion !== undefined
+						? { osVersionMaterialized: osVersion }
+						: {}),
+					lastError: "addon_refresh_deferred_streaming",
+				});
+			else restoreRefusedState(id, previousState, deps);
 			return { success: false, error: err.reason };
 		}
 		const message = err instanceof Error ? err.message : String(err);
 		logger.error(`addon ${id}: enable failed: ${message}`);
+		if (!activated)
+			await publication.value?.rollback().catch((cleanupErr) =>
+				logger.error("addon publication rollback failed", {
+					id,
+					err: cleanupErr,
+				}),
+			);
 		transition(id, "failed", deps, { lastError: message });
 		// Best-effort: drop the partial temp so a retry starts clean.
 		await deps.removeArtifact(tmpPath).catch((cleanupErr) => {
@@ -724,47 +815,52 @@ export async function disableAddon(
 	descriptor: AddonDescriptor,
 	deps: AddonManagerDeps = resolveActiveAddonManagerDeps(),
 ): Promise<AddonOpResult> {
+	invalidateAddonIntent(descriptor.id);
+	return withAddonMutation(descriptor.id, () =>
+		disableAddonLocked(descriptor, deps),
+	);
+}
+
+async function disableAddonLocked(
+	descriptor: AddonDescriptor,
+	deps: AddonManagerDeps,
+): Promise<AddonOpResult> {
 	const id = descriptor.id;
 
 	// G6 gate.
 	if (!(await deps.isRealDevice())) {
 		return { success: false, error: ADDON_UNAVAILABLE_ERROR };
 	}
-	const { getDisruptiveActionDecision } = await import(
-		"../system/disruptive-action-runtime.ts"
-	);
-	const admission = getDisruptiveActionDecision();
+	const admission = await getSysextActionDecision();
 	if (!admission.allowed) return { success: false, error: admission.reason };
 
 	const previousState = deps.getState(id);
 	transition(id, "disabling", deps);
 	try {
 		// stop + mask every descriptor unit (no-ops if already down).
-		for (const unit of allUnits(descriptor.units)) {
-			await deps.systemctl(["stop", unit]);
-			await deps.systemctl(["mask", unit]);
-		}
-		// privileged teardown: helper stops/masks/disables, removes .raw, refresh.
-		const teardownAdmission = getDisruptiveActionDecision();
-		if (!teardownAdmission.allowed)
-			throw new DisruptiveActionRefusedError(teardownAdmission.reason);
-		await deps.helperDisable(id);
-		// remove the staged artifact (idempotent best-effort).
-		await deps.removeArtifact(extArtifactPath(id));
+		await runDisruptiveSysextStep(`disable:${id}`, async () => {
+			for (const unit of allUnits(descriptor.units)) {
+				await runDisruptiveSysextStep("stop-addon-unit", () =>
+					deps.systemctl(["stop", unit]),
+				);
+				await runDisruptiveSysextStep("mask-addon-unit", () =>
+					deps.systemctl(["mask", unit]),
+				);
+			}
+			await runDisruptiveSysextStep("disable-addon-helper", () =>
+				deps.helperDisable(id),
+			);
+			await deps.removeArtifact(extArtifactPath(id));
+		});
 
 		// drop device-local state and announce the disabled add-on.
 		livePhases.set(id, "disabled");
-		deps.broadcast(id, toAddonState("disabled"));
 		deps.removeState(id);
+		deps.broadcast(id, toAddonState("disabled"));
 		return { success: true, phase: "disabled" };
 	} catch (err) {
 		if (err instanceof DisruptiveActionRefusedError) {
-			livePhases.set(
-				id,
-				previousState ? phaseFromState(previousState) : "disabled",
-			);
-			if (previousState) deps.setState(id, previousState);
-			else deps.removeState(id);
+			restoreRefusedState(id, previousState, deps);
 			return { success: false, error: err.reason };
 		}
 		const message = err instanceof Error ? err.message : String(err);
@@ -783,6 +879,15 @@ export async function disableAddon(
 export async function pollAddonCrashLoop(
 	descriptor: AddonDescriptor,
 	deps: AddonManagerDeps = resolveActiveAddonManagerDeps(),
+): Promise<AddonManagerPhase> {
+	return withAddonMutation(descriptor.id, () =>
+		pollAddonCrashLoopLocked(descriptor, deps),
+	);
+}
+
+async function pollAddonCrashLoopLocked(
+	descriptor: AddonDescriptor,
+	deps: AddonManagerDeps,
 ): Promise<AddonManagerPhase> {
 	const id = descriptor.id;
 

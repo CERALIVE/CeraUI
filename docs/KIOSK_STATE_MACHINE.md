@@ -49,6 +49,11 @@ Operator transitions require shared disruptive-action admission before the
 synchronous intent prelude. A refusal leaves the current toggle/state intact;
 an admission lost during awaited add-on work restores persisted intent and
 surfaces the same localized refusal, not an emulated-device or disabled claim.
+Start/stop and failure polls share the cog-display per-ID mutation lock with the
+add-on manager. A queued Stop cannot be overwritten by a late Start tail, and a
+held poll cannot publish old enabled evidence after Stop. Kiosk and nested manager/
+helper work share the local disruptive-step operation identity; exclusion through
+real helper execution still awaits the system reservation integration.
 The canonical inventory and non-atomic late-effect limits are in
 [Disruptive-action gate](START-LIFECYCLE.md#disruptive-action-gate-partial--host-tested-board-re-drill-owed).
 
@@ -117,6 +122,10 @@ Failure-Observation Channel) to confirm the service reached `active (running)`.
 1. Write `kiosk_enabled = false` to persisted config.
 2. `systemctl mask kiosk.service` (prevents accidental restart).
 3. Broadcast `kiosk` state event to all connected clients.
+
+When a persisted cog-display add-on exists, this safety path also records its
+auto-disabled intent and invalidates any held reconciliation. It masks only;
+it does not withdraw the sysext or refresh `/usr`, and needs no streaming bypass.
 
 **Rationale:** A crash-looping kiosk must not lock the operator out of the LAN browser UI. Auto-disabling the persisted toggle ensures the device is reachable from any browser on the LAN after a reboot, without requiring physical access.
 

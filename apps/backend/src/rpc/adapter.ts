@@ -27,6 +27,7 @@ import {
 	removeClient,
 	sendToClient,
 } from "./events.ts";
+import { sendAddonSnapshot } from "./procedures/addons.procedure.ts";
 import {
 	buildInitialNotifications,
 	buildInitialStatus,
@@ -196,6 +197,11 @@ function sendInitialStatusToClient(ws: AppWebSocket): void {
 	const initialStatus = buildInitialStatus();
 
 	sendToClient(ws, "config", initialStatus.config);
+	void sendAddonSnapshot((snapshot) =>
+		sendToClient(ws, "addons", snapshot),
+	).catch((error) =>
+		logger.error("addon initial hydration failed", { err: error }),
+	);
 	sendToClient(ws, "pipelines", initialStatus.pipelines);
 	if (initialStatus.relays) {
 		sendToClient(ws, "relays", initialStatus.relays);

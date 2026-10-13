@@ -784,22 +784,37 @@ Add-on install also checks before pre-seeding userConfig, and kiosk
 checks before its synchronous intent prelude. The manager re-reads after free-space
 observation and before staging/activation or teardown refresh; the privileged
 helper wrapper re-reads after device detection immediately before sudo submission.
-A late refusal restores persisted add-on/kiosk intent and is returned as the same
+A pre-activation late refusal restores persisted add-on/kiosk intent, live phase
+and a terminal add-on frame and is returned as the same
 typed refusal, not install failure or disabled success. Add-on and kiosk controls
 render the existing localized `notifications.disruptiveActionRefused` text and
 revert the toggle. No catalog, wire schema or stored format is changed.
 
-The reconciler uses this same gate before fetching and again after staging. It
-keeps its existing non-blocking pending/deferred receipt; boot never waits for idle.
+Manager preparation publishes into the helper cache, not the sysext scan directory;
+the unchanged privileged enable helper publishes verified bytes only after its
+admitted submission. The reconciler prepares in a private cache directory, then
+revalidates intent under the per-ID mutation lock before admitted scan publication
+and refresh. Refusal before refresh rolls that publication back. Pending/deferred
+raw presence is not proof of refresh. Typed helper refusals preserve deferral;
+boot never waits for idle. Every unit start/unmask/stop/mask is individually fenced.
+After completed activation, refusal in the unit tail records the actual new version
+as pending rather than restoring an obsolete active receipt.
+Kiosk/manager/reconciler share mutation serialization and an in-process intent
+revision. Removed, auto-disabled or superseded intent cannot be republished by a
+held pass. Initial authenticated hydration supplies disabled known-ID entries to
+correct retained busy frames under the existing partial-map subscription merge.
 Boot kiosk initialization only seeds/polls state and does not start or refresh an
 add-on. The closed remote-control registry contains no add-on/kiosk commands:
 unknown entries are rejected before dispatch, including a supplied dispatch port.
 Remote reboot continues to consume the same adapter as these local entries.
 
 This is cooperative admission, not an atomic exclusion lease with stream launch.
-Work already submitted while idle cannot be revoked: a late refusal may leave
-a downloaded/staged artifact or earlier unit effects, while preventing the new
-refresh and restoring intent. A stream or privileged actor can still change state
+All add-on/kiosk disruptive steps pass through `addons/disruptive-sysext-step.ts`;
+nested calls retain one operation identity. This local seam is deliberately
+snapshot-only: the system reservation integration must reenter by identity and
+hold exclusion through the outer operation until positive retirement is established.
+Work already submitted while idle cannot be revoked: earlier unit effects or a
+submitted helper's partial execution may survive refusal/failure. A stream or privileged actor can still change state
 after final observation/dispatch; the external root helper is not governed by a
 backend-only decision. No hardware or uninterrupted-transaction proof is claimed.
 

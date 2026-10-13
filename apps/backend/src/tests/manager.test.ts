@@ -38,6 +38,7 @@ import {
 	type AddonHardware,
 	type AddonManagerDeps,
 	type AddonManagerPhase,
+	cachedArtifactPath,
 	disableAddon,
 	enableAddon,
 	extArtifactPath,
@@ -320,14 +321,14 @@ describe("enableAddon — happy path", () => {
 		expect(h.store.get(d.id)?.versionMaterialized).toBe("1.2.3");
 		expect(h.store.get(d.id)?.enabled).toBe(true);
 
-		// Pipeline targets the atomic temp + scan-dir paths.
+		// Preparation targets the atomic temp + helper cache, never the scan dir.
 		expect(h.rec.download[0]?.dest).toBe(tmpArtifactPath(d.id));
 		expect(h.rec.download[0]?.url).toBe(
 			"https://apt.ceralive.tv/addons/debug-toolset/12/debug-toolset.raw",
 		);
 		expect(h.rec.stage[0]).toEqual({
 			tmp: tmpArtifactPath(d.id),
-			dest: extArtifactPath(d.id),
+			dest: cachedArtifactPath(d.id),
 		});
 		expect(h.rec.helperEnable).toEqual([d.id]);
 
