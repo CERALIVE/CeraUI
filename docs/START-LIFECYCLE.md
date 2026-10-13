@@ -780,7 +780,7 @@ Console/physical power remains the last resort if systemd cannot settle or shut 
 Add-on/kiosk entry admission precedes downloads, intent writes, unit operations
 and refresh. These paths resolve the runtime adapter lazily to avoid extending
 the modem/config/streaming initialization graph with an eager update-runtime edge.
-Add-on install also checks before pre-seeding userConfig, and kiosk
+Add-on install checks before accepting an operation-scoped userConfig draft, and kiosk
 checks before its synchronous intent prelude. The manager re-reads after free-space
 observation and before staging/activation or teardown refresh; the privileged
 helper wrapper re-reads after device detection immediately before sudo submission.
@@ -799,10 +799,21 @@ raw presence is not proof of refresh. Typed helper refusals preserve deferral;
 boot never waits for idle. Every unit start/unmask/stop/mask is individually fenced.
 After completed activation, refusal in the unit tail records the actual new version
 as pending rather than restoring an obsolete active receipt.
+RPC does not restore a second full baseline after manager settlement. Only settled,
+error-free active descriptor-version/current-OS metadata can skip refresh; a failed
+submitted helper leaves activation unknown even if scan bytes are present.
+Terminal persistence failure cannot prevent terminal wire publication: shared
+settlement emits an existing error token, retains its live unresolved snapshot,
+and retries persistence on the next mutation/startup/hydration. No new durable
+journal or successful filesystem/service claim is created.
 Kiosk/manager/reconciler share mutation serialization and an in-process intent
 revision. Removed, auto-disabled or superseded intent cannot be republished by a
 held pass. Initial authenticated hydration supplies disabled known-ID entries to
 correct retained busy frames under the existing partial-map subscription merge.
+Initial hydration and default boot reconciliation settle predecessor installing/
+disabling phases without live owners into non-busy unresolved pending/error;
+enabled intent must retry through fresh admitted refresh. A real live operation's
+transitional frame is retained rather than mistaken for crash residue.
 Boot kiosk initialization only seeds/polls state and does not start or refresh an
 add-on. The closed remote-control registry contains no add-on/kiosk commands:
 unknown entries are rejected before dispatch, including a supplied dispatch port.
@@ -810,7 +821,9 @@ Remote reboot continues to consume the same adapter as these local entries.
 
 This is cooperative admission, not an atomic exclusion lease with stream launch.
 All add-on/kiosk disruptive steps pass through `addons/disruptive-sysext-step.ts`;
-nested calls retain one operation identity. This local seam is deliberately
+nested awaited calls retain one active operation identity. Tokens are lifetime-
+scoped and retired in finally; recurring kiosk polling registers outside those
+contexts and must acquire a fresh same-ID owner. This local seam is deliberately
 snapshot-only: the system reservation integration must reenter by identity and
 hold exclusion through the outer operation until positive retirement is established.
 Work already submitted while idle cannot be revoked: earlier unit effects or a

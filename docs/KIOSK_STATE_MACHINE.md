@@ -52,7 +52,12 @@ surfaces the same localized refusal, not an emulated-device or disabled claim.
 Start/stop and failure polls share the cog-display per-ID mutation lock with the
 add-on manager. A queued Stop cannot be overwritten by a late Start tail, and a
 held poll cannot publish old enabled evidence after Stop. Kiosk and nested manager/
-helper work share the local disruptive-step operation identity; exclusion through
+helper work share the local disruptive-step identity only while the owning
+operation is active. Tokens retire on completion; the recurring 2 s interval is
+registered outside mutation, configuration-baseline and operation contexts and
+acquires fresh serialization on every poll. Thus an old timer also queues behind a
+new manager enable rather than auto-disabling under its released Start owner.
+These are host-tested lifetime rules; exclusion through
 real helper execution still awaits the system reservation integration.
 The canonical inventory and non-atomic late-effect limits are in
 [Disruptive-action gate](START-LIFECYCLE.md#disruptive-action-gate-partial--host-tested-board-re-drill-owed).
@@ -178,6 +183,12 @@ The backend detects `enabled-failed` and `failed-no-display` through three compl
 ### Signal 1: `systemctl is-failed kiosk.service`
 
 The backend polls `systemctl is-failed kiosk.service` on a 2-second interval whenever `kiosk_enabled = true`. The command exits `0` when the unit is in `failed` state.
+
+The production cadence is unchanged. The lifetime regressions inject the scheduler
+while retaining registration-time AsyncLocalStorage inheritance; they do not shorten
+a real timer or establish hardware behavior. Start/Stop while a real poll is running
+remains a board drill. Generic teardown-failure reporting remains the separate
+SW2-B4 backlog, not a success guarantee supplied by this serialization fix.
 
 ```
 systemctl is-failed kiosk.service

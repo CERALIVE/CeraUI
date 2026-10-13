@@ -66,7 +66,7 @@ import {
 	createMockAddonManagerDeps,
 	type MockAddonManagerHarness,
 } from "../../mocks/providers/addons.ts";
-import { getAddons, removeAddonState, setAddonState } from "../config.ts";
+import { removeAddonState, setAddonState } from "../config.ts";
 import { getEffectiveHardware as getEffectiveHardwareImpl } from "../streaming/pipelines.ts";
 import { isRealDevice } from "../system/device-detection.ts";
 import { DisruptiveActionRefusedError } from "../system/disruptive-action-error.ts";
@@ -82,9 +82,17 @@ import {
 } from "./disruptive-sysext-step.ts";
 import {
 	addonRefusalBaseline,
+	hasAddonMutation,
 	invalidateAddonIntent,
 	withAddonMutation,
 } from "./mutation.ts";
+import {
+	getLiveAddonState,
+	getLiveAddonStates,
+	publishAddonSettlement,
+	resetAddonSettlement,
+	retryAddonPersistence,
+} from "./state-settlement.ts";
 
 // Re-export the helper's emulated-mode error so callers resolve the single
 // source from the manager surface (mirrors kiosk re-exporting isRealDevice).
@@ -508,7 +516,7 @@ const defaultAddonManagerDeps: AddonManagerDeps = {
 		await rm(path, { force: true });
 		await rm(`${path}.sig`, { force: true });
 	},
-	getState: (id) => getAddons()[id],
+	getState: getLiveAddonState,
 	setState: (id, state) => setAddonState(id, state),
 	removeState: (id) => removeAddonState(id),
 	broadcast: (id, state) => broadcastMsg(ADDON_EVENT, { [id]: state }),
@@ -580,8 +588,9 @@ function transition(
 		versionMaterialized?: string;
 		osVersionMaterialized?: string;
 		lastError?: string;
+		clearMaterialization?: boolean;
 	} = {},
-): AddonState {
+): boolean {
 	const prev = deps.getState(id);
 	const meta: {
 		versionMaterialized?: string;
@@ -589,18 +598,46 @@ function transition(
 		userConfig?: Record<string, unknown>;
 		lastError?: string;
 	} = {};
-	const version = extra.versionMaterialized ?? prev?.versionMaterialized;
+	const version =
+		extra.versionMaterialized ??
+		(extra.clearMaterialization ? undefined : prev?.versionMaterialized);
 	if (version !== undefined) meta.versionMaterialized = version;
-	const osVersion = extra.osVersionMaterialized ?? prev?.osVersionMaterialized;
+	const osVersion =
+		extra.osVersionMaterialized ??
+		(extra.clearMaterialization ? undefined : prev?.osVersionMaterialized);
 	if (osVersion !== undefined) meta.osVersionMaterialized = osVersion;
-	if (prev?.userConfig !== undefined) meta.userConfig = prev.userConfig;
+	const userConfig = addonRefusalBaseline(id)?.userConfig ?? prev?.userConfig;
+	if (userConfig !== undefined) meta.userConfig = userConfig;
 	if (extra.lastError !== undefined) meta.lastError = extra.lastError;
 
 	const state = toAddonState(phase, meta);
-	livePhases.set(id, phase);
-	deps.setState(id, state);
-	deps.broadcast(id, state);
-	return state;
+	return settleAddonState(id, state, deps);
+}
+
+export function settleAddonState(
+	id: string,
+	state: AddonState | undefined,
+	deps: AddonManagerDeps = resolveActiveAddonManagerDeps(),
+): boolean {
+	const operation = livePhases.get(id);
+	const failure =
+		operation === "disabling"
+			? ADDON_DISABLE_FAILED_ERROR
+			: operation === "enabling"
+				? ADDON_ENABLE_FAILED_ERROR
+				: state?.enabled === false || state === undefined
+					? ADDON_DISABLE_FAILED_ERROR
+					: ADDON_ENABLE_FAILED_ERROR;
+	return publishAddonSettlement(
+		{ id, state, failure },
+		{
+			...deps,
+			broadcast: (id, frame) => {
+				livePhases.set(id, phaseFromState(frame));
+				deps.broadcast(id, frame);
+			},
+		},
+	);
 }
 
 // ─── lifecycle ops ───────────────────────────────────────────────────────────
@@ -657,11 +694,8 @@ function restoreRefusedState(
 	id: string,
 	previous: AddonState | undefined,
 	deps: AddonManagerDeps,
-): void {
-	livePhases.set(id, previous ? phaseFromState(previous) : "disabled");
-	if (previous) deps.setState(id, previous);
-	else deps.removeState(id);
-	deps.broadcast(id, previous ?? toAddonState("disabled"));
+): boolean {
+	return settleAddonState(id, previous, deps);
 }
 
 /**
@@ -689,6 +723,7 @@ async function enableAddonLocked(
 	deps: AddonManagerDeps,
 ): Promise<AddonOpResult> {
 	const id = descriptor.id;
+	retryAddonPersistence(id);
 
 	// 1. G6 — never drive the host OS in dev/emulated mode.
 	if (!(await deps.isRealDevice())) {
@@ -719,10 +754,12 @@ async function enableAddonLocked(
 
 	const baseline = addonRefusalBaseline(id);
 	const previousState = baseline ? baseline.state : deps.getState(id);
-	transition(id, "enabling", deps);
+	if (!transition(id, "enabling", deps))
+		return { success: false, error: ADDON_ENABLE_FAILED_ERROR };
 	const tmpPath = tmpArtifactPath(id);
 	const publication: { value?: ArtifactPublication } = {};
 	let activated = false;
+	let helperSubmitted = false;
 	let osVersion: string | undefined;
 	try {
 		// 3. download artifact → atomic temp under /data/tmp.
@@ -737,9 +774,10 @@ async function enableAddonLocked(
 				const staged = await deps.stage(tmpPath, cachedArtifactPath(id));
 				if (staged !== undefined) publication.value = staged;
 			});
-			await runDisruptiveSysextStep("enable-addon-helper", () =>
-				deps.helperEnable(id),
-			);
+			await runDisruptiveSysextStep("enable-addon-helper", () => {
+				helperSubmitted = true;
+				return deps.helperEnable(id);
+			});
 			activated = true;
 			await publication.value?.commit();
 			await startUnits(descriptor.units, deps);
@@ -762,10 +800,11 @@ async function enableAddonLocked(
 			}
 		}
 
-		transition(id, "enabled", deps, {
+		const persisted = transition(id, "enabled", deps, {
 			versionMaterialized: descriptor.version,
 			osVersionMaterialized: osVersion,
 		});
+		if (!persisted) return { success: false, error: ADDON_ENABLE_FAILED_ERROR };
 		return { success: true, phase: "enabled" };
 	} catch (err) {
 		if (err instanceof DisruptiveActionRefusedError) {
@@ -776,15 +815,17 @@ async function enableAddonLocked(
 				transition(id, "failed", deps, { lastError: String(cleanupError) });
 				return { success: false, error: ADDON_ENABLE_FAILED_ERROR };
 			}
-			if (activated)
-				transition(id, "pending", deps, {
-					versionMaterialized: descriptor.version,
-					...(osVersion !== undefined
-						? { osVersionMaterialized: osVersion }
-						: {}),
-					lastError: "addon_refresh_deferred_streaming",
-				});
-			else restoreRefusedState(id, previousState, deps);
+			const persisted = activated
+				? transition(id, "pending", deps, {
+						versionMaterialized: descriptor.version,
+						...(osVersion !== undefined
+							? { osVersionMaterialized: osVersion }
+							: {}),
+						lastError: "addon_refresh_deferred_streaming",
+					})
+				: restoreRefusedState(id, previousState, deps);
+			if (!persisted)
+				return { success: false, error: ADDON_ENABLE_FAILED_ERROR };
 			return { success: false, error: err.reason };
 		}
 		const message = err instanceof Error ? err.message : String(err);
@@ -796,7 +837,10 @@ async function enableAddonLocked(
 					err: cleanupErr,
 				}),
 			);
-		transition(id, "failed", deps, { lastError: message });
+		transition(id, "failed", deps, {
+			lastError: message,
+			clearMaterialization: helperSubmitted,
+		});
 		// Best-effort: drop the partial temp so a retry starts clean.
 		await deps.removeArtifact(tmpPath).catch((cleanupErr) => {
 			logger.debug(`addon ${id}: temp cleanup failed`, { err: cleanupErr });
@@ -826,6 +870,7 @@ async function disableAddonLocked(
 	deps: AddonManagerDeps,
 ): Promise<AddonOpResult> {
 	const id = descriptor.id;
+	retryAddonPersistence(id);
 
 	// G6 gate.
 	if (!(await deps.isRealDevice())) {
@@ -835,7 +880,8 @@ async function disableAddonLocked(
 	if (!admission.allowed) return { success: false, error: admission.reason };
 
 	const previousState = deps.getState(id);
-	transition(id, "disabling", deps);
+	if (!transition(id, "disabling", deps))
+		return { success: false, error: ADDON_DISABLE_FAILED_ERROR };
 	try {
 		// stop + mask every descriptor unit (no-ops if already down).
 		await runDisruptiveSysextStep(`disable:${id}`, async () => {
@@ -854,13 +900,13 @@ async function disableAddonLocked(
 		});
 
 		// drop device-local state and announce the disabled add-on.
-		livePhases.set(id, "disabled");
-		deps.removeState(id);
-		deps.broadcast(id, toAddonState("disabled"));
+		if (!settleAddonState(id, undefined, deps))
+			return { success: false, error: ADDON_DISABLE_FAILED_ERROR };
 		return { success: true, phase: "disabled" };
 	} catch (err) {
 		if (err instanceof DisruptiveActionRefusedError) {
-			restoreRefusedState(id, previousState, deps);
+			if (!restoreRefusedState(id, previousState, deps))
+				return { success: false, error: ADDON_DISABLE_FAILED_ERROR };
 			return { success: false, error: err.reason };
 		}
 		const message = err instanceof Error ? err.message : String(err);
@@ -915,7 +961,34 @@ async function pollAddonCrashLoopLocked(
  */
 export function initAddonManager(): void {
 	livePhases.clear();
-	for (const [id, state] of Object.entries(getAddons())) {
+	resetAddonSettlement();
+	settleInterruptedAddonStates();
+	for (const [id, state] of Object.entries(getLiveAddonStates())) {
 		livePhases.set(id, phaseFromState(state));
+	}
+}
+
+export function settleInterruptedAddonStates(): void {
+	const deps = resolveActiveAddonManagerDeps();
+	for (const [id, state] of Object.entries(getLiveAddonStates())) {
+		if (hasAddonMutation(id)) continue;
+		retryAddonPersistence(id);
+		if (state.phase !== "installing" && state.phase !== "disabling") continue;
+		const {
+			versionMaterialized: _version,
+			osVersionMaterialized: _os,
+			...intent
+		} = state;
+		settleAddonState(
+			id,
+			{
+				...intent,
+				phase: state.enabled ? "pending" : "error",
+				lastError: state.enabled
+					? ADDON_ENABLE_FAILED_ERROR
+					: ADDON_DISABLE_FAILED_ERROR,
+			},
+			deps,
+		);
 	}
 }

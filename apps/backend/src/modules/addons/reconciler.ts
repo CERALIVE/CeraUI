@@ -218,12 +218,10 @@ async function reconcileOne(
 	if (
 		rawPresent &&
 		prev.osVersionMaterialized === osVersion &&
-		prev.phase !== "pending" &&
-		prev.lastError !== ADDON_REFRESH_DEFERRED_STREAMING
+		prev.phase === "active" &&
+		prev.lastError === undefined &&
+		prev.versionMaterialized === descriptor.version
 	) {
-		if (prev.phase !== "active" || prev.lastError !== undefined) {
-			await publish({ phase: "active", lastError: null });
-		}
 		return;
 	}
 
@@ -385,11 +383,12 @@ async function buildDefaultDeps(): Promise<ReconcilerDeps> {
 	// Dynamic import keeps the heavy streaming/config graph (and setup.json's
 	// required top-level load) out of the module's static import set, so tests
 	// that inject their own deps never trigger it.
-	const [admission, config, websocket] = await Promise.all([
+	const [admission, manager, settlement] = await Promise.all([
 		import("../system/disruptive-action-runtime.ts"),
-		import("../config.ts"),
-		import("../ui/websocket-server.ts"),
+		import("./manager.ts"),
+		import("./state-settlement.ts"),
 	]);
+	manager.settleInterruptedAddonStates();
 	const prepared = new Map<string, string>();
 
 	return {
@@ -400,7 +399,7 @@ async function buildDefaultDeps(): Promise<ReconcilerDeps> {
 		// `{board}` artifact targeting follows the live-resolved kind (not static
 		// setup.hw), so a mismatched image fetches the correct board's sysext.
 		getBoard: () => getHardwareKindCached(),
-		getAddons: () => config.getAddons(),
+		getAddons: settlement.getLiveAddonStates,
 		readDescriptor: readBakedDescriptor,
 		rawExists: (id) => Bun.file(`${STAGE_DIR}/${id}.raw`).exists(),
 		fetchAndStage: async (args) => {
@@ -424,8 +423,7 @@ async function buildDefaultDeps(): Promise<ReconcilerDeps> {
 			await addonRefresh();
 		},
 		setState: (id, state) => {
-			config.setAddonState(id, state);
-			websocket.broadcastMsg("addons", { [id]: state });
+			manager.settleAddonState(id, state);
 		},
 		log: (msg) => logger.info(msg),
 	};

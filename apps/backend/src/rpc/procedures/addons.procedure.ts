@@ -27,6 +27,7 @@ import { z } from "zod";
 import { logger } from "../../helpers/logger.ts";
 import { readAddonDescriptor } from "../../modules/addons/descriptor-authority.ts";
 import {
+	ADDON_ENABLE_FAILED_ERROR,
 	ADDON_MANAGER_PHASES,
 	ADDON_UNAVAILABLE_ERROR,
 	type AddonHardware,
@@ -36,6 +37,8 @@ import {
 	disableAddon,
 	enableAddon,
 	getAddonPhase,
+	settleAddonState,
+	settleInterruptedAddonStates,
 	toAddonState,
 } from "../../modules/addons/manager.ts";
 import {
@@ -43,12 +46,11 @@ import {
 	withAddonRefusalBaseline,
 } from "../../modules/addons/mutation.ts";
 import {
-	getAddons,
-	removeAddonState,
-	setAddonState,
-} from "../../modules/config.ts";
+	getLiveAddonState,
+	getLiveAddonStates,
+} from "../../modules/addons/state-settlement.ts";
+import { removeAddonState } from "../../modules/config.ts";
 import { getEffectiveHardware as getEffectiveHardwareImpl } from "../../modules/streaming/pipelines.ts";
-import { isDisruptiveActionRefusalReason } from "../../modules/system/disruptive-action-error.ts";
 import { isRealDevice } from "../../modules/system/kiosk.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
@@ -102,7 +104,7 @@ export type AddonProcedureDeps = {
 	getAddonState: (id: string) => AddonState | undefined;
 	enableAddon: (descriptor: AddonDescriptor) => Promise<AddonOpResult>;
 	disableAddon: (descriptor: AddonDescriptor) => Promise<AddonOpResult>;
-	setAddonState: (id: string, state: AddonState) => void;
+	setAddonState: (id: string, state: AddonState) => void | boolean;
 	removeAddonState: (id: string) => void;
 };
 
@@ -132,10 +134,10 @@ const defaultAddonProcedureDeps: AddonProcedureDeps = {
 	isRealDevice: () => isRealDevice(),
 	getEffectiveHardware: () => getEffectiveHardwareImpl(),
 	getAddonPhase: (id) => getAddonPhase(id),
-	getAddonState: (id) => getAddons()[id],
+	getAddonState: getLiveAddonState,
 	enableAddon: (descriptor) => enableAddon(descriptor),
 	disableAddon: (descriptor) => disableAddon(descriptor),
-	setAddonState: (id, state) => setAddonState(id, state),
+	setAddonState: (id, state) => settleAddonState(id, state),
 	removeAddonState: (id) => removeAddonState(id),
 };
 
@@ -155,8 +157,9 @@ export async function sendAddonSnapshot(
 	emit: (state: Record<string, AddonState>) => void,
 ): Promise<void> {
 	const deps = activeDeps;
+	settleInterruptedAddonStates();
 	const descriptors = await deps.readDescriptors();
-	const snapshot = { ...getAddons() };
+	const snapshot = getLiveAddonStates();
 	for (const descriptor of descriptors)
 		snapshot[descriptor.id] =
 			deps.getAddonState(descriptor.id) ?? toAddonState("disabled");
@@ -227,22 +230,16 @@ export const installAddonProcedure = authedProcedure
 			if (!admission.allowed)
 				return { success: false, error: admission.reason };
 			const previousState = deps.getAddonState(input.id);
-			if (input.userConfig !== undefined) {
-				const base = previousState ?? toAddonState("disabled");
-				deps.setAddonState(input.id, { ...base, userConfig: input.userConfig });
-			}
 			const result = await withAddonRefusalBaseline(
-				{ id: input.id, state: previousState },
+				{
+					id: input.id,
+					state: previousState,
+					...(input.userConfig !== undefined
+						? { userConfig: input.userConfig }
+						: {}),
+				},
 				() => deps.enableAddon(descriptor),
 			);
-			if (
-				!result.success &&
-				input.userConfig !== undefined &&
-				isDisruptiveActionRefusalReason(result.error)
-			) {
-				if (previousState) deps.setAddonState(input.id, previousState);
-				else deps.removeAddonState(input.id);
-			}
 			return result;
 		});
 	});
@@ -282,7 +279,12 @@ export const configureAddonProcedure = authedProcedure
 			if (!state) {
 				return { success: false, error: ADDON_NOT_FOUND_ERROR };
 			}
-			deps.setAddonState(input.id, { ...state, userConfig: input.fields });
+			const persisted = deps.setAddonState(input.id, {
+				...state,
+				userConfig: input.fields,
+			});
+			if (persisted === false)
+				return { success: false, error: ADDON_ENABLE_FAILED_ERROR };
 			return { success: true, applied: input.fields };
 		});
 	});

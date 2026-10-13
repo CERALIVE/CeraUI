@@ -68,16 +68,26 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
   refusal restores prior intent, live phase and subscriber projection (including
   explicit disabled state for a new absent add-on). Refusal after completed
   activation but before the unit tail finishes records `pending` with the actual
-  new materialized version, not the old `active` receipt. RPC userConfig pre-seeding
-  carries the original rollback baseline through the same mutation context.
+  new materialized version, not the old `active` receipt. RPC carries userConfig as
+  an operation-scoped draft, not a separate pre-call write/rollback: the manager
+  applies it only when its admitted transition starts and owns all settlement.
+  Persistence failure is contained independently of publication: a terminal `error`
+  frame uses the existing enable/disable failure token, the live snapshot remains
+  authoritative for this process, and writes retry on the next mutation or boot/
+  hydration settlement. No durability or successful activation is inferred from that
+  frame. Configuration commits also supersede any older pending persistence.
 - **Concurrency**: manager enable/disable, kiosk toggles/polls and reconciler final
   publication share a reentrant per-ID lock. Manager/safety intent changes advance
   an in-process revision; a held reconciler checks it and fresh enabled/autoDisabled
   intent before refresh and every publication, including failure and raw fast paths.
-  Preparation remains outside the lock. These are in-process rules, not a new
+  Reconciler preparation remains outside the lock; manager preparation remains
+  inside it (a stalled download can delay a same-ID action). These are in-process rules, not a new
   persisted-format or cross-process authority.
 - **Reservation seam**: all disruptive publication/helper/unit calls route through
-  `disruptive-sysext-step.ts`, carrying one operation identity through nested calls.
+  `disruptive-sysext-step.ts`, carrying one still-active operation identity through
+  awaited nested calls. Mutation, draft-baseline and operation tokens retire in
+  `finally`; inherited context alone grants no authority after release. Recurring
+  kiosk intervals are registered outside all three contexts, never under Start/Stop.
   Today it checks the public gate immediately before each callback. System-side
   integration must acquire/reenter by that identity, hold the outer lifetime through
   submitted helper/unit awaits, and release only with positive retirement evidence.
@@ -90,6 +100,14 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
 - **Crash-loop auto-disable**: `pollAddonCrashLoop` reads `NRestarts` per unit;
   `>= ADDON_CRASH_LOOP_RESTART_THRESHOLD` (3) masks the units and parks the
   add-on in `auto_disabled` (same rule as kiosk T5).
+- **Interrupted startup**: only `installing` and `disabling` are stored transitional
+  phases in the existing schema. Startup, the default boot reconciler, and initial
+  authenticated hydration settle any such state without a live per-ID owner into
+  `pending` for enabled intent or `error` for disabled intent, with existing
+  `addon_enable_failed`/`addon_disable_failed` tokens and unknown materialization
+  omitted. They do not claim activation/teardown succeeded. Enabled unresolved
+  intent retries through admitted reconciliation; disabled intent stays actionable
+  and non-busy. Hydration preserves a phase that has a live owner in this process.
 - All privileged work is delegated to `ceralive-addon-helper` (G-trust); the
   manager never mutates the sysext scan dir or systemd directly on the trusted
   path — it drives the helper and argv-only `systemctl`.
@@ -123,8 +141,12 @@ never throws and self-serialises (a concurrent call is a no-op).
   Unknown stream evidence and interruptible updates/maintenance also defer;
   admission is re-read after awaited preparation and before refresh. A typed helper
   refusal has the same pending/deferral classification, never OS unavailability.
-  An existing raw plus current-OS metadata cannot clear a pending/deferred-refresh
-  receipt without a successful refresh in that pass.
+  Raw presence avoids refresh only for a settled `active` baseline with no
+  `lastError` and exact descriptor-version and current-OS metadata. Error,
+  interrupted installing, pending, missing-version and mismatched-version evidence
+  require admitted fetch/verification and refresh. The unchanged helper publishes
+  scan bytes before refresh; if submitted enable fails, the manager omits uncertain
+  materialization metadata instead of pairing replacement bytes with an old version.
 - Triggered from `main.ts` at startup (non-blocking) and re-pokable via SIGUSR1
   from the `ceralive-addon-reconciler.service` oneshot (deployment/), which is
   deliberately NOT wired into any rollback/healthcheck target.
@@ -149,6 +171,13 @@ because the frontend merges add-on frames by ID and an empty map cannot clear a
 retained busy entry. No frontend schema/merge or catalog change is needed.
 Real helper execution during stream start, hardware late-refusal settlement and
 uninstall during a held real reconciliation remain board drills, not host passes.
+`sysext-{owner-lifetime,outcome-settlement,activation-evidence}.test.ts` adds
+registration-time async-context preserving timer injection, real procedure and
+startup hydration, terminal EIO/retry, and unchanged Bash helper publication followed
+by exit 1 against private directories. Signature and systemctl tool sinks in that
+failure fixture do not qualify real signatures or device services. Board drills
+still owe Start/Stop while polling, reinstall with a mid-activation stream, backend
+kill during disable, and a refresh failure on the installed helper.
 
 **Packaging contract (#194).** `ceralive-addon-reconciler.service` is staged into
 the `.deb` **from `deployment/`**, not from `dist/`. `dist/` only ever held the

@@ -32,14 +32,17 @@ import {
 	createMockKioskDeps,
 	type MockKioskHarness,
 } from "../../mocks/providers/kiosk.ts";
-import { runDisruptiveSysextStep } from "../addons/disruptive-sysext-step.ts";
+import {
+	outsideSysextOperation,
+	runDisruptiveSysextStep,
+} from "../addons/disruptive-sysext-step.ts";
 import {
 	type AddonOpResult,
 	disableAddon as managerDisableAddon,
 	enableAddon as managerEnableAddon,
 	recordAddonAutoDisabled,
 } from "../addons/manager.ts";
-import { withAddonMutation } from "../addons/mutation.ts";
+import { outsideAddonMutation, withAddonMutation } from "../addons/mutation.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import {
@@ -389,15 +392,19 @@ async function pollKioskOnceLocked(deps: KioskDeps): Promise<KioskState> {
 /** Start the 2 s failure-observation poll loop (no-op if already running). */
 export function startKioskPolling(deps: KioskDeps = activeDeps): void {
 	stopKioskPolling();
-	pollTimer = setInterval(() => {
-		if (pollInFlight) return;
-		pollInFlight = true;
-		pollKioskOnce(deps)
-			.catch((err) => logger.error(`kiosk: poll iteration failed: ${err}`))
-			.finally(() => {
-				pollInFlight = false;
-			});
-	}, KIOSK_POLL_INTERVAL_MS);
+	pollTimer = outsideAddonMutation(() =>
+		outsideSysextOperation(() =>
+			setInterval(() => {
+				if (pollInFlight) return;
+				pollInFlight = true;
+				pollKioskOnce(deps)
+					.catch((err) => logger.error(`kiosk: poll iteration failed: ${err}`))
+					.finally(() => {
+						pollInFlight = false;
+					});
+			}, KIOSK_POLL_INTERVAL_MS),
+		),
+	);
 	pollTimer.unref?.();
 }
 

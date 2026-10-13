@@ -8,9 +8,17 @@ export type SysextOperation = {
 };
 
 const operations = new AsyncLocalStorage<SysextOperation>();
+const activeOperations = new Set<symbol>();
 
 export function currentSysextOperation(): SysextOperation | undefined {
-	return operations.getStore();
+	const operation = operations.getStore();
+	return operation && activeOperations.has(operation.id)
+		? operation
+		: undefined;
+}
+
+export function outsideSysextOperation<T>(callback: () => T): T {
+	return operations.exit(callback);
 }
 
 export async function getSysextActionDecision(): Promise<DisruptiveActionDecision> {
@@ -26,14 +34,20 @@ export async function runDisruptiveSysextStep<T>(
 	name: string,
 	effect: () => Promise<T>,
 ): Promise<T> {
-	const operation = operations.getStore() ?? { id: Symbol(name), name };
 	const { getDisruptiveActionDecision } = await import(
 		"../system/disruptive-action-runtime.ts"
 	);
-	return operations.run(operation, () => {
-		const admission = getDisruptiveActionDecision();
-		if (!admission.allowed)
-			throw new DisruptiveActionRefusedError(admission.reason);
-		return effect();
-	});
+	const inherited = currentSysextOperation();
+	const operation = inherited ?? { id: Symbol(name), name };
+	if (!inherited) activeOperations.add(operation.id);
+	try {
+		return await operations.run(operation, () => {
+			const admission = getDisruptiveActionDecision();
+			if (!admission.allowed)
+				throw new DisruptiveActionRefusedError(admission.reason);
+			return effect();
+		});
+	} finally {
+		if (!inherited) activeOperations.delete(operation.id);
+	}
 }
