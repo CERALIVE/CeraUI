@@ -1,3 +1,4 @@
+/// <reference lib="es2023.collection" />
 import { SpawnTimeoutError } from "../../helpers/bounded-spawn.ts";
 import type {
 	DisruptiveActionDecision,
@@ -29,20 +30,33 @@ export class PowerSubmissionError extends Error {
 export type DisruptiveReservation = {
 	readonly releaseAfterFailure: () => void;
 	readonly releaseAfterCompletion: () => void;
+	readonly active: () => boolean;
+	readonly retained: () => boolean;
+	readonly markUncertain: () => void;
 };
 export type DisruptiveReservationOutcome =
 	| { readonly allowed: true; readonly reservation: DisruptiveReservation }
 	| Extract<DisruptiveActionDecision, { allowed: false }>;
 
-let pending: symbol | undefined;
+export type PowerAction = "reboot" | "poweroff" | "factory-reset";
+type Holder = {
+	readonly owner: symbol;
+	readonly lifetime: "shutdown" | "service";
+	readonly tickets: Set<symbol>;
+	readonly uncertainTickets: Set<symbol>;
+	readonly powerAction?: PowerAction;
+	previous: Holder | undefined;
+};
+let pending: Holder | undefined;
+let retiredOwners = new WeakSet<symbol>();
 let readUpdateBusy: () => readonly UpdateBusyReason[] = () => [
 	"update-recovery",
 ];
 
 export function setDisruptiveUpdateBusySource(
-	read: () => readonly UpdateBusyReason[],
+	read?: () => readonly UpdateBusyReason[],
 ): void {
-	readUpdateBusy = read;
+	readUpdateBusy = read ?? (() => ["update-recovery"]);
 }
 export function readDisruptiveUpdateBusy(): readonly UpdateBusyReason[] {
 	return readUpdateBusy();
@@ -50,6 +64,20 @@ export function readDisruptiveUpdateBusy(): readonly UpdateBusyReason[] {
 
 export function isDisruptiveActionPending(): boolean {
 	return pending !== undefined;
+}
+
+export function isActiveDisruptiveOwner(owner: symbol): boolean {
+	return (
+		pending?.owner === owner &&
+		pending.uncertainTickets.size === 0 &&
+		pending.tickets.size > 0
+	);
+}
+
+export function pendingPowerOwner(action: PowerAction): symbol | undefined {
+	return pending?.lifetime === "shutdown" && pending.powerAction === action
+		? pending.owner
+		: undefined;
 }
 
 export function assertDisruptiveActionFree(): void {
@@ -72,21 +100,87 @@ export function isPositiveDisruptiveFailure(error: unknown): boolean {
 export function reserveDisruptiveAction(
 	decision: DisruptiveActionDecision,
 	lifetime: "shutdown" | "service" = "shutdown",
+	owner?: symbol,
 ): DisruptiveReservationOutcome {
 	if (!decision.allowed) return decision;
-	if (pending !== undefined)
+	if (owner !== undefined && retiredOwners.has(owner))
 		return { allowed: false, reason: "update_in_progress" };
-	const identity = Symbol("disruptive-action");
-	pending = identity;
+	if (pending !== undefined) {
+		if (
+			owner === undefined ||
+			!isActiveDisruptiveOwner(owner) ||
+			pending.lifetime !== lifetime
+		)
+			return { allowed: false, reason: "update_in_progress" };
+		return acquireTicket(pending);
+	}
+	pending = {
+		owner: owner ?? Symbol("disruptive-action"),
+		lifetime,
+		tickets: new Set(),
+		uncertainTickets: new Set(),
+		previous: undefined,
+	};
+	return acquireTicket(pending);
+}
+
+export function reservePowerAction(
+	decision: DisruptiveActionDecision,
+	action: PowerAction,
+): DisruptiveReservationOutcome {
+	if (!decision.allowed) return decision;
+	if (pending !== undefined && pendingPowerOwner(action) === undefined)
+		return { allowed: false, reason: "update_in_progress" };
+	pending = {
+		owner: Symbol(action),
+		lifetime: "shutdown",
+		powerAction: action,
+		tickets: new Set(),
+		uncertainTickets: new Set(),
+		previous: pending,
+	};
+	return acquireTicket(pending);
+}
+
+function acquireTicket(holder: Holder): DisruptiveReservationOutcome {
+	const ticket = Symbol("depth");
+	holder.tickets.add(ticket);
+	const active = () => pending === holder && holder.tickets.has(ticket);
+	const retained = () => {
+		for (let current = pending; current; current = current.previous) {
+			if (current === holder) return holder.tickets.has(ticket);
+		}
+		return false;
+	};
 	const release = () => {
-		if (pending === identity) pending = undefined;
+		if (!active()) return;
+		holder.tickets.delete(ticket);
+		holder.uncertainTickets.delete(ticket);
+		if (holder.tickets.size === 0) {
+			retiredOwners.add(holder.owner);
+			pending = holder.previous;
+		}
 	};
 	return {
 		allowed: true,
 		reservation: {
+			active,
+			retained,
+			markUncertain: () => {
+				if (active()) holder.uncertainTickets.add(ticket);
+			},
 			releaseAfterFailure: release,
 			releaseAfterCompletion: () => {
-				if (lifetime === "service") release();
+				if (holder.lifetime === "service") release();
+				else if (active()) {
+					for (
+						let previous = holder.previous;
+						previous;
+						previous = previous.previous
+					)
+						retiredOwners.add(previous.owner);
+					holder.previous = undefined;
+				}
 			},
 		},
 	};
@@ -94,4 +188,5 @@ export function reserveDisruptiveAction(
 
 export function resetDisruptiveActionReservationForTest(): void {
 	pending = undefined;
+	retiredOwners = new WeakSet<symbol>();
 }

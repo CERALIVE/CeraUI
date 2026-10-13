@@ -1,3 +1,4 @@
+import { cancelDisruptiveRetries } from "../modules/system/disruptive-retry.ts";
 import { logger } from "./logger.ts";
 
 export interface BackendShutdownDeps {
@@ -34,6 +35,7 @@ export function handleTerminationSignal(
 ): void {
 	if (shuttingDown) return;
 	shuttingDown = true;
+	cancelDisruptiveRetries();
 	logger.info(`received ${signal}; shutting down streaming processes`);
 	void (async () => {
 		if (deps.stopRecoveryRetries)

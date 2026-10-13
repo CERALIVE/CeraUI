@@ -70,16 +70,15 @@ import {
 	parseFail,
 	parseOk,
 } from "./cli-parse.ts";
+import {
+	requestCompletionReboot,
+	resetCompletionRebootForTest,
+} from "./deferred-completion-reboot.ts";
 import { isRealDevice } from "./device-detection.ts";
-import { decideDisruptiveAction } from "./disruptive-action-gate.ts";
-import { notifyDisruptiveActionRefused } from "./disruptive-action-refusal.ts";
 import {
 	assertDisruptiveActionFree,
 	DisruptiveActionRefusal,
 	isDisruptiveActionPending,
-	isPositiveDisruptiveFailure,
-	readDisruptiveUpdateBusy,
-	reserveDisruptiveAction,
 	resetDisruptiveActionReservationForTest,
 } from "./disruptive-action-reservation.ts";
 import { classifyPackageLayer } from "./package-layer.ts";
@@ -408,40 +407,15 @@ export function setRebootRunner(
 }
 
 export function resetRebootRunner(): void {
+	resetCompletionRebootForTest();
 	resetDisruptiveActionReservationForTest();
 	rebootRunner = defaultRebootRunner;
 }
 
 // Gate on isDevelopment() so a dev host is never rebooted after an update.
 export function rebootAfterUpdate(): void {
-	if (!isDevelopment()) {
-		const admission = reserveDisruptiveAction(
-			decideDisruptiveAction({
-				streamLiveness: isStreamConfirmedIdle() ? "idle" : "unknown",
-				updateBusy: [
-					...readDisruptiveUpdateBusy(),
-					...(isSoftwareUpdateRecoveryInconclusive()
-						? ["update-recovery" as const]
-						: []),
-				],
-			}),
-		);
-		if (!admission.allowed) {
-			notifyDisruptiveActionRefused();
-			return;
-		}
-		const failed = (error: unknown) => {
-			if (isPositiveDisruptiveFailure(error))
-				admission.reservation.releaseAfterFailure();
-			logger.error("Software update reboot submission failed", { error });
-		};
-		try {
-			const completion = rebootRunner("reboot", []);
-			if (completion) void completion.catch(failed);
-		} catch (error) {
-			failed(error);
-		}
-	}
+	if (!isDevelopment())
+		requestCompletionReboot(() => rebootRunner("reboot", []));
 }
 
 export type AptUpgradeSummary = {

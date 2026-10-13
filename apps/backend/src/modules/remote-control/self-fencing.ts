@@ -145,7 +145,7 @@ export interface SelfFencingDeps {
 		type: SelfFencingType,
 	) => Promise<{ ok: true } | { ok: false; refusal: string }>;
 	prepareDisruptiveReservation: () => Promise<
-		() => DisruptiveReservationOutcome
+		(type?: string) => DisruptiveReservationOutcome
 	>;
 }
 
@@ -265,12 +265,22 @@ function defaultDeps(): SelfFencingDeps {
 		acquireMutationLease: defaultAcquireMutationLease,
 		admitDisruptiveAction: defaultAdmitDisruptiveAction,
 		prepareDisruptiveReservation: async () => {
-			const [{ getDisruptiveActionDecision }, { reserveDisruptiveAction }] =
-				await Promise.all([
-					import("../system/disruptive-action-runtime.ts"),
-					import("../system/disruptive-action-reservation.ts"),
-				]);
-			return () => reserveDisruptiveAction(getDisruptiveActionDecision());
+			const [
+				{ getDisruptiveActionDecision },
+				{ reserveDisruptiveAction, reservePowerAction },
+			] = await Promise.all([
+				import("../system/disruptive-action-runtime.ts"),
+				import("../system/disruptive-action-reservation.ts"),
+			]);
+			return (type) => {
+				const action = type === "system.reboot" ? "reboot" : "factory-reset";
+				return type === "system.reboot" || type === "device.factoryReset"
+					? reservePowerAction(
+							getDisruptiveActionDecision({ powerAction: action }),
+							action,
+						)
+					: reserveDisruptiveAction(getDisruptiveActionDecision());
+			};
 		},
 	};
 }
@@ -585,7 +595,7 @@ export async function handleSelfFencingConfirm(cid: string): Promise<void> {
 			return;
 		}
 		const reserve = await deps.prepareDisruptiveReservation();
-		const admission = reserve();
+		const admission = reserve(frame.type);
 		if (!admission.allowed) {
 			deps.sendResult(
 				resultFrame(frame, {
@@ -598,6 +608,7 @@ export async function handleSelfFencingConfirm(cid: string): Promise<void> {
 		}
 		try {
 			await op.execute(frame.payload);
+			admission.reservation.releaseAfterCompletion();
 			deps.logger.info(
 				`self_fencing: ${frame.type} (${cid}) confirmed, executed`,
 			);

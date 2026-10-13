@@ -7,14 +7,14 @@ export async function sshDisruptiveResponse(
 ): Promise<{ success: boolean; error?: string }> {
 	const decision = getDisruptiveActionDecision();
 	if (!decision.allowed) {
-		notifyDisruptiveActionRefused();
+		notifyDisruptiveActionRefused(decision.reason);
 		return { success: false, error: decision.reason };
 	}
 	try {
 		return { success: await effect() };
 	} catch (error) {
 		if (!(error instanceof DisruptiveActionRefusal)) throw error;
-		notifyDisruptiveActionRefused();
+		notifyDisruptiveActionRefused(error.reason);
 		return { success: false, error: error.reason };
 	}
 }

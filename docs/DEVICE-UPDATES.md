@@ -7,7 +7,15 @@ from the final synchronous gate through pending shutdown, even after the submiss
 command exits zero. The shared stream-start admission returns its existing typed
 `update_in_progress` refusal, and package/OS stage/arm submission remains blocked.
 Only positive submission failure releases shutdown exclusion; no countdown or timer
-does. SSH and eligible stale-service restarts hold until blocking command completion.
+does. SSH and eligible stale-service restarts hold until blocking command completion
+or positive systemd settlement after an uncertain client outcome. A queued job,
+transitional lifecycle or unreadable systemd keeps exclusion and re-polls with
+capped, shutdown-cancellable backoff. Timed arm terminal success keeps shutdown
+exclusion; terminal failure releases. See the [state table and owner API](START-LIFECYCLE.md#reservation-state-table-and-owner-seam).
+An explicit retry of the SAME power action is allowed only after every current
+stream/update fence passes again; failed retry cannot clear an earlier shutdown.
+Legacy completion reboot is deferred rather than discarded while refused, without
+an unsolicited operator-refusal notification. Console/physical power is the last resort.
 Historical boot degradation is retained for diagnosis, not treated as current work
 after validated startup and current authority/durability settle. Unknown stays refused.
 
@@ -15,7 +23,9 @@ This is not a durable shutdown lease. Backend restart clears process-local state
 the board drill must prove that a queued installed shutdown still excludes new starts,
 restoration/autostart and update work across that restart. Also exercise accepted
 reboot followed by Go Live, remote confirm versus Go Live in both orders, and timed
-activation from arming through reboot. No hardware qualification is claimed here.
+activation from arming through reboot, a stale restart longer than its 10 s client
+bound and resolver settlement, and exit-zero-without-shutdown followed by explicit
+retry. No hardware qualification is claimed here.
 
 This is the engineering reference for how a CeraLive device discovers, downloads,
 installs and verifies its own updates. It describes the code on this branch, file

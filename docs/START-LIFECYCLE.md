@@ -717,14 +717,64 @@ pending shutdown. Successful command return does not prove shutdown completed.
 The shared D8 admission hook refuses every stream-start origin with its existing
 `update_in_progress` result while held, including after its awaited preparation;
 package launch, final legacy APT preflight, OS stage/arm and competing disruptive
-requests also refuse. No stream is automatically stopped.
+requests also refuse. The one escape is an explicit re-submission of the SAME
+pending power action: it supersedes that hold only after the final synchronous
+stream and current-update recheck. Live/unknown streams and OS/package fences
+still refuse. A failed retry restores the prior possibly accepted shutdown hold;
+it cannot disprove the first submission. No stream is automatically stopped.
 
 SSH service/persistence and eligible stale-service restarts hold a transient
 reservation until positive blocking command completion. Stale restarts no longer
 use `--no-block`; their own settled `restarting-services` owner is exempt from
 that one phase reason, not from stream/unknown/durability or other current work.
-Nonzero/spawn failure permits retry; timeout, ambiguous completion and null exit
-retain exclusion. No timer, notification expiry or browser countdown releases it.
+Positive nonzero/spawn failure permits retry. A timeout or ambiguous completion
+starts a bounded read-only systemd resolver: `Job`, `ActiveState` and `SubState`
+must show no queued/running job and a coherent settled lifecycle before service
+exclusion releases. Unreachable/malformed systemd stays unknown, with 2/4/8/16/30 s
+backoff capped at 30 s. Shutdown cancels observation and fences late replies;
+cancellation alone never releases. The original operation remains failed/uncertain,
+not retroactively successful. No timer, notification expiry or countdown releases it.
+
+Timed activation uses the same resolver on `ceralive-rauc-arm@now.service`, with
+terminal `ExecMainCode`, `ExecMainStatus` and `Result` evidence in addition. Positive
+arm failure releases; positive arm success retains shutdown exclusion and permits
+the same explicit reboot retry. Unknown terminal outcome keeps observation.
+
+### Reservation state table and owner seam
+
+| State/event | Transition and evidence |
+|---|---|
+| Set | Final synchronous allowed decision acquires before invoking the effect |
+| Held | Other owners/Go Live/update work refuse; same active service owner may nest |
+| Uncertain | Client timeout/untyped failure retains its depth and starts the resolver |
+| Resolved | No job + settled service state releases that depth; arm success retains shutdown; arm failure releases |
+| Released | Last service depth settles; repeated releases are inert and the old owner is retired |
+| Superseded | Same power action passes every safety fence; successful retry replaces the hold, positive retry failure restores it |
+| Restart | Process-local state resets; installed shutdown ordering is NOT proven by host tests |
+
+The add-on/kiosk integration calls `reserveDisruptiveAction(decision, "service",
+owner: symbol)` and `getDisruptiveActionDecision({ heldBy: owner })`. A fresh symbol
+belongs to ONE operation lifetime. Nested same-owner reserves count depth;
+`releaseAfterCompletion()`/`releaseAfterFailure()` release only their own depth,
+and only the last settlement opens admission. `heldBy` ignores only that active
+owner's hold, never liveness/update evidence. Released or uncertain owners refuse,
+including timer descendants whose symbols survived completion.
+
+`withServiceReservation(fn, scope, probe?)` is the shared exception/settlement seam.
+Scope carries `unit`, a synchronous `decision` callback and optional `owner`;
+the optional probe supports an arbitrary operation-owned unit/job description
+through its closure. The default probe must name the unit actually owning the
+effect, not an unrelated idle unit. A direct helper process requires its own
+positive settlement probe. Callbacks must have bounded command completion/error
+semantics; a never-settling arbitrary promise cannot prove completion.
+
+Legacy package completion retains one deferred reboot continuation when admission
+refuses. Each capped-backoff wakeup rechecks current evidence, never reboots while
+live/unknown, and is cancelled on shutdown. It emits no operator-refusal notice for
+this automatic action. Local pending-action broadcasts reuse `network.os.deviceBusy`;
+the unchanged wire `update_in_progress` still leaves update-specific Go Live/SSH
+reply copy as a presentation limitation, not proof that a package is installing.
+Console/physical power remains the last resort if systemd cannot settle or shut down.
 
 Stream liveness is tri-state. `stream-liveness-source.ts` is the single
 composition that consumers read (lane B-core's factory accessor replaces this file

@@ -33,10 +33,9 @@ import { broadcastMsg } from "../ui/websocket-server.ts";
 import { describeCliError } from "./cli-parse.ts";
 import {
 	DisruptiveActionRefusal,
-	isPositiveDisruptiveFailure,
-	reserveDisruptiveAction,
 	resetDisruptiveActionReservationForTest,
 } from "./disruptive-action-reservation.ts";
+import { withServiceReservation } from "./disruptive-service-reservation.ts";
 
 type SshStatus = {
 	user: string;
@@ -338,17 +337,13 @@ export async function startStopSsh(
 	const { getDisruptiveActionDecision } = await import(
 		"./disruptive-action-runtime.ts"
 	);
-	const admission = reserveDisruptiveAction(
-		getDisruptiveActionDecision(),
-		"service",
-	);
-	if (!admission.allowed) throw new DisruptiveActionRefusal(admission.reason);
 	try {
-		await sshServiceRunner(action);
-		admission.reservation.releaseAfterCompletion();
+		await withServiceReservation(() => sshServiceRunner(action), {
+			unit: "ssh.service",
+			decision: getDisruptiveActionDecision,
+		});
 	} catch (err) {
-		if (isPositiveDisruptiveFailure(err))
-			admission.reservation.releaseAfterFailure();
+		if (err instanceof DisruptiveActionRefusal) throw err;
 		logger.error(
 			`Error running systemctl ${action} ssh: ${describeCliError(err)}`,
 		);
@@ -395,17 +390,13 @@ export async function setSshPersistent(
 	const { getDisruptiveActionDecision } = await import(
 		"./disruptive-action-runtime.ts"
 	);
-	const admission = reserveDisruptiveAction(
-		getDisruptiveActionDecision(),
-		"service",
-	);
-	if (!admission.allowed) throw new DisruptiveActionRefusal(admission.reason);
 	try {
-		await sshPersistenceRunner(action);
-		admission.reservation.releaseAfterCompletion();
+		await withServiceReservation(() => sshPersistenceRunner(action), {
+			unit: "ssh.service",
+			decision: getDisruptiveActionDecision,
+		});
 	} catch (err) {
-		if (isPositiveDisruptiveFailure(err))
-			admission.reservation.releaseAfterFailure();
+		if (err instanceof DisruptiveActionRefusal) throw err;
 		logger.error(
 			`Error running systemctl ${action} ssh: ${describeCliError(err)}`,
 		);

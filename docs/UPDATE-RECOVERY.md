@@ -430,13 +430,34 @@ inferred, not board-proven. Full list: `START-LIFECYCLE.md` → Disruptive-actio
 Accepted disruptive effects also reserve the reciprocal lifetime: power/reset and
 timed activation retain in-process exclusion after exit zero, while SSH and
 blocking stale-service restarts release on positive command completion. Spawn/nonzero
-failure releases; uncertainty stays protected and is not cleared on a timer.
+positive failure releases; uncertainty stays protected and is not cleared on a timer.
+It now has an evidence resolver: no job and coherent settled unit state can release
+a service depth, while unreachable systemd re-polls at capped 2/4/8/16/30 s backoff.
+Shutdown cancels polling without clearing the hold or accepting late replies.
+Timed arming additionally needs terminal arm result/exit evidence: success retains
+shutdown exclusion, failure releases, unknown continues observation. The original
+operation result remains uncertain/failed even after safety exclusion resolves.
+An operator can explicitly retry the SAME pending power action, never a different
+action, after the final synchronous live/unknown and OS/package-fence recheck.
+A positively failed retry restores the earlier possibly accepted shutdown hold.
+Console/physical power remains the last resort. Legacy completion reboot now keeps
+one deferred, shutdown-cancellable continuation and rechecks safety on each wakeup;
+the automatic action produces no misleading operator-refusal notice.
 The existing D8 hook refuses new stream starts and package/OS submission boundaries
 refuse pending shutdown. This adds no persisted record, schema or RPC. Process restart
 clears the reservation, so installed shutdown/restart ordering remains a required
 board drill, not a durability claim. Terminal invalid-authority recovery still has
 no operator override: an owner policy for product-level maintenance repair/clearance
 is unresolved; history is not permission to bypass current unknown evidence.
+
+Owner identities are lifetime-scoped and depth-counted. The exact add-on integration
+API and set/held/uncertain/resolved/released/superseded/restart table live in
+[`START-LIFECYCLE.md`](START-LIFECYCLE.md#reservation-state-table-and-owner-seam).
+Default systemd probes are safe only for the unit actually owning the effect;
+direct sysext helper steps need an operation-owned positive settlement probe.
+Board drills still owe accepted reboot → Go Live during shutdown, stale restart
+past 10 s → actual resolver clearance, exit 0 without shutdown → fenced retry,
+and timed activation arm → reboot. None is physically proven by the host matrices.
 
 The tick entrypoint suppresses phase overwrites, discovery, package launch, OS
 stage/activation, mirror start/poll/cleanup and quarantine retirement. Dependency

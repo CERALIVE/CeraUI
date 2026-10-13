@@ -1,10 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
-import {
-	isPositiveDisruptiveFailure,
-	PowerSubmissionError,
-	reserveDisruptiveAction,
-} from "../disruptive-action-reservation.ts";
+import { PowerSubmissionError } from "../disruptive-action-reservation.ts";
+import { withServiceReservation } from "../disruptive-service-reservation.ts";
 import { notifyUpdate } from "./notifications.ts";
 import { pendingPackageSuccess } from "./pending-success-fence.ts";
 
@@ -101,22 +98,14 @@ export async function reconcileStaleUnits(
 		const { getDisruptiveActionDecision } = await import(
 			"../disruptive-action-runtime.ts"
 		);
-		const admission = reserveDisruptiveAction(
-			getDisruptiveActionDecision("stale-services"),
-			"service",
-		);
-		if (!admission.allowed) {
+		if (!getDisruptiveActionDecision({ scope: "stale-services" }).allowed) {
 			pending = true;
 			continue;
 		}
-		try {
-			await deps.restart(unit);
-		} catch (error) {
-			if (isPositiveDisruptiveFailure(error))
-				admission.reservation.releaseAfterFailure();
-			throw error;
-		}
-		admission.reservation.releaseAfterCompletion();
+		await withServiceReservation(() => deps.restart(unit), {
+			unit,
+			decision: () => getDisruptiveActionDecision({ scope: "stale-services" }),
+		});
 	}
 	return !pending;
 }

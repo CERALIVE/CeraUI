@@ -34,10 +34,10 @@ import {
 } from "../disruptive-action-gate.ts";
 import {
 	isDisruptiveActionPending,
-	reserveDisruptiveAction,
 	resetDisruptiveActionReservationForTest,
 	setDisruptiveUpdateBusySource,
 } from "../disruptive-action-reservation.ts";
+import { withServiceReservation } from "../disruptive-service-reservation.ts";
 import { getIdleStatus } from "../idle-activity.ts";
 import {
 	getLastInstallUnitVerdict,
@@ -1896,18 +1896,23 @@ async function reconcileOsActivation(): Promise<void> {
 			!(deps.now() - receipt.stagedAt >= OS_FORCE_ACTIVATION_MS)
 		)
 			return;
-		const admission = reserveDisruptiveAction(getDisruptiveActionDecision());
-		if (!admission.allowed) return;
-		osActivationInFlight = true;
+		if (!getDisruptiveActionDecision().allowed) return;
 		try {
-			await deps.armOs(true, control);
-		} catch (error) {
-			if (
-				error instanceof OsAgentError &&
-				error.reason === "activation_arm_failed"
-			)
-				admission.reservation.releaseAfterFailure();
-			throw error;
+			await withServiceReservation(
+				() => {
+					osActivationInFlight = true;
+					return deps.armOs(true, control);
+				},
+				{
+					unit: "ceralive-rauc-arm@now.service",
+					decision: () =>
+						getDisruptiveActionDecision({ powerAction: "reboot" }),
+					shutdownAction: "reboot",
+					positiveFailure: (error) =>
+						error instanceof OsAgentError &&
+						error.reason === "activation_arm_failed",
+				},
+			);
 		} finally {
 			osActivationInFlight = false;
 		}
