@@ -3,16 +3,24 @@ import { describe, expect, it } from "vitest";
 
 import {
 	showUnconfirmedStreamStop,
+	startOptimismSuperseded,
+	stopConfirmedByDevice,
+	streamStateUnconfirmed,
 	UNCONFIRMED_STOP_OPERATION,
 	UNCONFIRMED_STREAM_LIFECYCLES,
 } from "./unconfirmed-stream";
 
-// The four cells that MUST offer the band, written out by hand. Every other
-// combination of lifecycle x is_streaming x optimism must not.
+// The six cells that MUST offer the band, written out by hand. Every other
+// combination of lifecycle x is_streaming x optimism must not. Local optimism
+// never hides it: the optimistic live cockpit's control is a DISABLED
+// "Starting...", not a Stop (FIX-16-C3 moved the two `|false|starting` cells
+// here; C2 had encoded the opposite assumption).
 const SHOWN = new Set([
 	"reconciling|false|idle",
+	"reconciling|false|starting",
 	"reconciling|false|stopping",
 	"stop_failed|false|idle",
+	"stop_failed|false|starting",
 	"stop_failed|false|stopping",
 ]);
 
@@ -58,4 +66,99 @@ describe("unconfirmed-stream predicate", () => {
 			}
 		}
 	}
+});
+
+describe("the band stays through the operator's own pending Stop", () => {
+	// Hand-written: with its own Stop in flight, the band also covers the
+	// backend's `stopping` (entered before the engine answers). Nothing else.
+	const SHOWN_WHILE_PENDING = new Set([
+		"reconciling|false",
+		"stop_failed|false",
+		"stopping|false",
+	]);
+	for (const lifecycle of LIFECYCLES) {
+		for (const isStreaming of STREAMING) {
+			const cell = `${lifecycle}|${isStreaming}`;
+			const expected = SHOWN_WHILE_PENDING.has(cell);
+			it(`${cell} with a pending Stop -> ${expected ? "band" : "no band"}`, () => {
+				expect(
+					showUnconfirmedStreamStop({
+						lifecycle,
+						isStreaming,
+						optimismState: "idle",
+						stopPending: true,
+					}),
+				).toBe(expected);
+			});
+		}
+	}
+});
+
+describe("stopConfirmedByDevice — only the device's idle commit confirms a Stop", () => {
+	for (const lifecycle of LIFECYCLES) {
+		for (const isStreaming of STREAMING) {
+			const expected = lifecycle === "idle" && isStreaming === false;
+			it(`${lifecycle}|${isStreaming} -> ${expected ? "confirmed" : "not confirmed"}`, () => {
+				expect(stopConfirmedByDevice({ lifecycle, isStreaming })).toBe(
+					expected,
+				);
+			});
+		}
+	}
+});
+
+describe("streamStateUnconfirmed — the header's not-streaming claim is withheld", () => {
+	const UNCONFIRMED = new Set(["reconciling|false", "stop_failed|false"]);
+	for (const lifecycle of LIFECYCLES) {
+		for (const isStreaming of STREAMING) {
+			const cell = `${lifecycle}|${isStreaming}`;
+			it(`${cell} -> ${UNCONFIRMED.has(cell)}`, () => {
+				expect(streamStateUnconfirmed({ lifecycle, isStreaming })).toBe(
+					UNCONFIRMED.has(cell),
+				);
+			});
+		}
+	}
+});
+
+describe("startOptimismSuperseded — device evidence outranks a local starting", () => {
+	// Hand-written: the cells where a local `starting` must settle.
+	const SETTLE = new Set([
+		"reconciling|false|false",
+		"reconciling|false|true",
+		"stop_failed|false|false",
+		"stop_failed|false|true",
+		"idle|false|true",
+	]);
+	for (const lifecycle of LIFECYCLES) {
+		for (const isStreaming of STREAMING) {
+			for (const rehydrated of [false, true]) {
+				const cell = `${lifecycle}|${isStreaming}|${rehydrated}`;
+				const expected = SETTLE.has(cell);
+				it(`starting, ${cell} -> ${expected ? "settle" : "keep"}`, () => {
+					expect(
+						startOptimismSuperseded({
+							optimismState: "starting",
+							isStreaming,
+							lifecycle,
+							rehydratedSinceLostReply: rehydrated,
+						}),
+					).toBe(expected);
+				});
+			}
+		}
+	}
+
+	it("never settles an idle or stopping optimism", () => {
+		for (const optimismState of ["idle", "stopping"] as const) {
+			expect(
+				startOptimismSuperseded({
+					optimismState,
+					isStreaming: false,
+					lifecycle: "reconciling",
+					rehydratedSinceLostReply: true,
+				}),
+			).toBe(false);
+		}
+	});
 });

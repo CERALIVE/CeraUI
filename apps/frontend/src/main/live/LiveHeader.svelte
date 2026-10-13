@@ -3,9 +3,16 @@ import { m } from '@ceraui/i18n/svelte';
 
 interface Props {
 	isStreaming: boolean;
+	/**
+	 * The device cannot confirm whether a stream is running (an unconfirmed
+	 * lifecycle with `is_streaming` false). The "Not streaming" chip would claim
+	 * the opposite of the band below it, so it is withheld; the band is the
+	 * role=status statement of what the device knows.
+	 */
+	unconfirmed?: boolean;
 }
 
-const { isStreaming }: Props = $props();
+const { isStreaming, unconfirmed = false }: Props = $props();
 </script>
 
 <!-- Header: stream status + title only (T12 demotion). The server destination now
@@ -23,7 +30,7 @@ const { isStreaming }: Props = $props();
 			></span>
 			{m["live.streamingActive"]()}
 		</span>
-	{:else}
+	{:else if !unconfirmed}
 		<span
 			class="text-muted-foreground flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold tracking-wide uppercase"
 		>

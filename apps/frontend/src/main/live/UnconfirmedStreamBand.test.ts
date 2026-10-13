@@ -103,6 +103,21 @@ describe("UnconfirmedStreamBand — rendered in every protected lifecycle", () =
 		});
 	}
 
+	// FIX-16-C3: local `starting` optimism no longer hides the band. The
+	// optimistic live cockpit's control is a disabled "Starting...", so C2's
+	// assumption that it supplies a Stop was wrong (these two cells were in the
+	// negative matrix below).
+	for (const lifecycle of ["reconciling", "stop_failed"] as const) {
+		it(`${lifecycle}: still shown under a stale local starting optimism`, () => {
+			const { container } = render(UnconfirmedStreamBand, {
+				props: { lifecycle, isStreaming: false, optimismState: "starting" },
+			});
+			expect(band(container)).not.toBeNull();
+			expect(stopButton(container).disabled).toBe(false);
+			expect(stopButton(container).textContent?.trim()).toBe("Stop Stream");
+		});
+	}
+
 	it("stays visible through the cockpit's optimistic stopping overlay", () => {
 		const { container } = render(UnconfirmedStreamBand, {
 			props: {
@@ -127,8 +142,6 @@ describe("UnconfirmedStreamBand — renders nothing outside the unconfirmed set"
 		{ lifecycle: "reconfiguring", isStreaming: true, optimismState: "idle" },
 		{ lifecycle: "reconciling", isStreaming: true, optimismState: "idle" },
 		{ lifecycle: "stop_failed", isStreaming: true, optimismState: "idle" },
-		{ lifecycle: "reconciling", isStreaming: false, optimismState: "starting" },
-		{ lifecycle: "stop_failed", isStreaming: false, optimismState: "starting" },
 	] as const;
 	for (const props of cells) {
 		it(`${props.lifecycle}|${props.isStreaming}|${props.optimismState}: no band, no Stop`, () => {
@@ -269,5 +282,67 @@ describe("UnconfirmedStreamBand — the Stop it offers", () => {
 				?.textContent?.trim(),
 		).toBe(NOT_CONFIRMED);
 		expect(stopButton(container).disabled).toBe(false);
+	});
+});
+
+describe("UnconfirmedStreamBand — the band's disappearance is not a confirmation", () => {
+	it("stop_failed -> stopping keeps the Stop pending and on screen; the stop_failed reply fails it", async () => {
+		const reply = deferred<unknown>();
+		stop.mockReturnValueOnce(reply.promise as never);
+		const { container, rerender } = render(UnconfirmedStreamBand, {
+			props: {
+				lifecycle: "stop_failed",
+				isStreaming: false,
+				optimismState: "idle",
+			},
+		});
+		await fireEvent.click(stopButton(container));
+
+		await rerender({
+			lifecycle: "stopping",
+			isStreaming: false,
+			optimismState: "idle",
+		});
+		flushSync();
+		expect(getOperationPhase("stream-stop-unconfirmed")).toBe("pending");
+		expect(band(container)?.getAttribute("data-lifecycle")).toBe("stopping");
+		expect(stopButton(container).disabled).toBe(true);
+		expect(stopButton(container).textContent?.trim()).toBe("Stopping...");
+
+		await rerender({
+			lifecycle: "stop_failed",
+			isStreaming: false,
+			optimismState: "idle",
+		});
+		reply.resolve({
+			result: "stop_failed",
+			reason: "stop_timeout",
+			success: false,
+		});
+		await waitFor(() =>
+			expect(band(container)?.getAttribute("data-phase")).toBe("failed"),
+		);
+		expect(band(container)?.textContent).toContain(FAILED);
+		expect(stopButton(container).disabled).toBe(false);
+	});
+
+	it("is_streaming true while the Stop is pending hides the band but does not confirm", async () => {
+		stop.mockReturnValueOnce(new Promise(() => {}) as never);
+		const { container, rerender } = render(UnconfirmedStreamBand, {
+			props: {
+				lifecycle: "reconciling",
+				isStreaming: false,
+				optimismState: "idle",
+			},
+		});
+		await fireEvent.click(stopButton(container));
+		await rerender({
+			lifecycle: "streaming",
+			isStreaming: true,
+			optimismState: "idle",
+		});
+		flushSync();
+		expect(band(container)).toBeNull();
+		expect(getOperationPhase("stream-stop-unconfirmed")).toBe("pending");
 	});
 });

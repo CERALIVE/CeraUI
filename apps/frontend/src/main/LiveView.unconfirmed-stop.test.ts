@@ -65,6 +65,7 @@ vi.mock("$lib/rpc/streaming-optimism.svelte", async () => {
 		reconcileStreamingOptimism: vi.fn(),
 		revertStreamingOptimism: vi.fn(),
 		retryStopStreaming: vi.fn(),
+		supersedeStartingOptimism: vi.fn(),
 	};
 });
 
@@ -98,7 +99,10 @@ import {
 	initAsyncOperations,
 } from "$lib/rpc/async-operation.svelte";
 import { rpc } from "$lib/rpc/client";
-import { stopStreamingOptimism } from "$lib/rpc/streaming-optimism.svelte";
+import {
+	stopStreamingOptimism,
+	supersedeStartingOptimism,
+} from "$lib/rpc/streaming-optimism.svelte";
 
 import LiveView from "./LiveView.svelte";
 
@@ -171,6 +175,22 @@ describe("LiveView — unconfirmed stream state offers Stop", () => {
 			vi.useRealTimers();
 		}
 	});
+
+	// FIX-16-C3: this cell used to sit in the negative matrix below ("live
+	// cockpit, no band"). That encoded C2's mistaken assumption that the
+	// optimistic live cockpit carries a Stop; it shows a disabled "Starting...".
+	// The device's unconfirmed projection now shows the band AND settles the stale
+	// local start (this file's optimism store is a stub, so the settle is
+	// asserted as the call it makes; the real store is exercised in
+	// LiveView.unconfirmed-real-cockpit.test.ts).
+	it("reconciling with a stale local starting: band shown and the start optimism superseded", () => {
+		fx.lifecycle = "reconciling";
+		fx.optimism = "starting";
+		const { container } = render(LiveView);
+		expect(select(container, "unconfirmed-stream-band")).not.toBeNull();
+		expect(select(container, "unconfirmed-stream-stop")).not.toBeNull();
+		expect(supersedeStartingOptimism).toHaveBeenCalledWith(1);
+	});
 });
 
 describe("LiveView — every other state renders the cockpit it rendered before", () => {
@@ -233,12 +253,6 @@ describe("LiveView — every other state renders the cockpit it rendered before"
 			lifecycle: "stop_failed",
 			streaming: true,
 			optimism: "idle",
-			cockpit: "live-cockpit",
-		},
-		{
-			lifecycle: "reconciling",
-			streaming: false,
-			optimism: "starting",
 			cockpit: "live-cockpit",
 		},
 	] as const;

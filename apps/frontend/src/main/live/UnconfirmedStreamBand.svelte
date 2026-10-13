@@ -16,7 +16,10 @@
   wrapper is fire-and-forget, so it could not report a refusal, and it would
   wipe the recovery notice that explains why the band is here.
 
-  Always mounted by LiveView; it renders nothing outside the unconfirmed set.
+  Always mounted by LiveView; it renders nothing outside the unconfirmed set,
+  except that it stays through the `stopping` its own pending Stop caused.
+  Local start optimism never hides it: the optimistic live cockpit shows a
+  disabled "Starting...", which is not a Stop.
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
@@ -29,6 +32,7 @@ import { rpc } from '$lib/rpc/client';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
 import {
 	showUnconfirmedStreamStop,
+	stopConfirmedByDevice,
 	UNCONFIRMED_STOP_OPERATION,
 } from '$lib/streaming/unconfirmed-stream';
 
@@ -40,16 +44,22 @@ interface Props {
 
 let { lifecycle, isStreaming, optimismState }: Props = $props();
 
-const visible = $derived(showUnconfirmedStreamStop({ lifecycle, isStreaming, optimismState }));
 const phase = $derived(getOperationPhase(UNCONFIRMED_STOP_OPERATION));
 const pending = $derived(phase === 'pending');
+const visible = $derived(
+	showUnconfirmedStreamStop({ lifecycle, isStreaming, optimismState, stopPending: pending }),
+);
 
-// A `stopped` reply is not the evidence: the backend can answer it without
-// committing idle. The lifecycle push that takes the device out of the
-// unconfirmed set is, so that is what settles the operation. Without it the
-// shared TTL valve flips the operation to `timed_out` and the band says so.
+// Only the device's idle commit confirms the Stop. Not the band leaving the
+// screen: the backend publishes `stopping` BEFORE the engine answers and then
+// `stop_failed` if it never does, and a confirmed operation cannot fail. Not a
+// `stopped` reply either: the backend can answer it without committing idle.
+// Without that evidence the reply decides `failed`, or the shared TTL valve
+// flips the operation to `timed_out` and the band says so.
 $effect(() => {
-	if (!visible && phase === 'pending') confirmOperation(UNCONFIRMED_STOP_OPERATION);
+	if (phase === 'pending' && stopConfirmedByDevice({ lifecycle, isStreaming })) {
+		confirmOperation(UNCONFIRMED_STOP_OPERATION);
+	}
 });
 
 function handleStop() {

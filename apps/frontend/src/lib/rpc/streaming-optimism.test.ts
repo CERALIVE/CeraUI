@@ -14,6 +14,7 @@ import {
 	revertWithFailure,
 	revertWithReason,
 	type StreamingOptimismStore,
+	supersedeStarting,
 	transitionToStarting,
 	transitionToStopping,
 } from "./streaming-optimism.svelte";
@@ -379,5 +380,44 @@ describe("streaming-optimism", () => {
 			expect(store.state).toBe("idle");
 			expect(store.failure).toBeUndefined();
 		});
+	});
+});
+
+describe("supersedeStarting — device evidence settles a stale local start", () => {
+	it("settles the current attempt's starting to a plain idle, keeping the generation", () => {
+		const starting: StreamingOptimismStore = {
+			state: "starting",
+			generation: 4,
+			stopReason: undefined,
+			failure: undefined,
+		};
+		expect(supersedeStarting(starting, 4)).toEqual({
+			state: "idle",
+			generation: 4,
+			stopReason: undefined,
+			failure: undefined,
+		});
+	});
+
+	it("ignores an older attempt's generation (the store is returned untouched)", () => {
+		const starting: StreamingOptimismStore = {
+			state: "starting",
+			generation: 5,
+		};
+		expect(supersedeStarting(starting, 4)).toBe(starting);
+	});
+
+	it("never touches stopping or idle", () => {
+		const stopping: StreamingOptimismStore = {
+			state: "stopping",
+			generation: 2,
+		};
+		const idle: StreamingOptimismStore = {
+			state: "idle",
+			generation: 2,
+			stopReason: "srt_connect_failed",
+		};
+		expect(supersedeStarting(stopping, 2)).toBe(stopping);
+		expect(supersedeStarting(idle, 2)).toBe(idle);
 	});
 });

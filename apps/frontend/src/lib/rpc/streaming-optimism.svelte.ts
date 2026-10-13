@@ -185,6 +185,22 @@ export function revertWithFailure(
 }
 
 /**
+ * Settle the CURRENT attempt's `starting` to a plain `idle` because device
+ * evidence superseded it (see `startOptimismSuperseded`). No stop reason: the
+ * device's own state, not a failure this client observed, is what ended it.
+ * An older attempt's generation, or any state but `starting`, is a no-op.
+ */
+export function supersedeStarting(
+	store: StreamingOptimismStore,
+	generation: number,
+): StreamingOptimismStore {
+	if (store.state !== "starting" || generation !== store.generation) {
+		return store;
+	}
+	return { ...store, state: "idle", stopReason: undefined, failure: undefined };
+}
+
+/**
  * Clear the stop reason (e.g., when the user dismisses the error toast).
  */
 export function clearStopReason(
@@ -207,6 +223,7 @@ interface ReactiveOptimismStore {
 	reconcileToAuthority: (isStreaming: boolean) => void;
 	revertWithReason: (reason: string, generation?: number) => void;
 	revertWithFailure: (failure: StartFailure, generation?: number) => void;
+	supersedeStarting: (generation: number) => void;
 	clearStopReason: () => void;
 	retryStop: () => void;
 	destroy: () => void;
@@ -398,6 +415,12 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 			stopStuckBannerState = false;
 			store = next;
 		},
+		supersedeStarting: (generation: number) => {
+			const next = supersedeStarting(store, generation);
+			if (next === store) return;
+			clearStartWatchdogTimer();
+			store = next;
+		},
 		clearStopReason: () => {
 			store = clearStopReason(store);
 		},
@@ -496,6 +519,15 @@ export function revertStreamingOptimismFailure(
 	generation?: number,
 ): void {
 	store().revertWithFailure(failure, generation);
+}
+
+/**
+ * Settle the current attempt's `starting` because the device's own state
+ * superseded it (an unconfirmed lifecycle, or idle after a lost start reply).
+ * Pass the attempt `generation`; a stale one is ignored.
+ */
+export function supersedeStartingOptimism(generation: number): void {
+	store().supersedeStarting(generation);
 }
 
 /**
