@@ -236,10 +236,18 @@ export function validateDetachedAptServiceFragment(fragment: string): void {
 	]);
 	const observed = new Map<string, string>();
 	let section = "";
+	let serviceSeen = false;
 	for (const rawLine of fragment.split("\n")) {
 		const line = rawLine.trim();
 		if (line.startsWith("[") && line.endsWith("]")) {
 			section = line.slice(1, -1);
+			if (section === "Service") {
+				if (serviceSeen)
+					throw new DetachedAptServiceIdentityError(
+						"Service section is duplicated",
+					);
+				serviceSeen = true;
+			}
 			continue;
 		}
 		if (section !== "Service") continue;

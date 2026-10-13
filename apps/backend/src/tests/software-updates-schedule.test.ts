@@ -12,10 +12,12 @@ import {
 	computeNextCheckDelay,
 	periodicCheckForSoftwareUpdates,
 	RETRY_DELAY_SHORT_MS,
+	resetAptReachabilityProbeForTest,
 	resetSoftwareUpdateCheckRunner,
 	resetSoftwareUpdateSizeRunner,
 	SKIP_RETRY_DELAY_MS,
 	type SoftwareUpdateError,
+	setAptReachabilityProbeForTest,
 	setSoftwareUpdateCheckRunner,
 	setSoftwareUpdateSizeRunner,
 	triggerManualUpdateCheck,
@@ -95,9 +97,17 @@ describe("triggerManualUpdateCheck() — discovery survives an apt-get update fa
 	afterEach(() => {
 		resetSoftwareUpdateCheckRunner();
 		resetSoftwareUpdateSizeRunner();
+		resetAptReachabilityProbeForTest();
 	});
 
 	function captureManualCheck() {
+		setAptReachabilityProbeForTest(async () => ({
+			ipv4: "ok",
+			ipv6: "ok",
+			used: "any",
+			verdict: "any",
+			detail: [],
+		}));
 		let discoveryRuns = 0;
 		setSoftwareUpdateSizeRunner(async () => {
 			discoveryRuns++;

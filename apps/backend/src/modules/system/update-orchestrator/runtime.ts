@@ -44,7 +44,10 @@ import {
 	type UpdateStartOutcome,
 } from "../software-updates.ts";
 import { isStreamConfirmedIdle } from "../stream-liveness-source.ts";
-import { readUpdateCapabilities } from "../update-capabilities.ts";
+import {
+	readUpdateCapabilities,
+	UpdateCapabilityReadError,
+} from "../update-capabilities.ts";
 import { loadUpdateSettings } from "../update-settings.ts";
 import { discoverCandidates } from "../update-transport/core.ts";
 import { defaultUpdateTransportDeps } from "../update-transport/executor.ts";
@@ -676,6 +679,8 @@ export async function checkUpdatesNow(): Promise<ManualCheckOutcome> {
 	);
 	if (!(await updateAdmissionReady()))
 		return { started: false, reason: "busy" };
+	if ((await readCapabilityRegime()) === null)
+		return { started: false, reason: "busy" };
 	await maybeRetireConsumedOsReceipt();
 	await maybeSettleOsUnlaunchedWitness();
 	if (osSettlementPersistence.pending)
@@ -887,7 +892,10 @@ async function runPackageCheckCycle(): Promise<void> {
 	if (osSettlementPersistence.pending) return;
 	const now = deps.now();
 	dispatch({ type: "PACKAGE_CHECK_STARTED", now });
-	const error = await deps.runPackageCheck();
+	const error =
+		(await readCapabilityRegime()) !== null
+			? await deps.runPackageCheck()
+			: "discovery_failed";
 	const outcomeNow = deps.now();
 	if (error === null) {
 		const wire = deps.getPackageInstallWireState();
@@ -981,11 +989,27 @@ function isRateLimitedError(error: SoftwareUpdateError): boolean {
 
 // ─── package install (awaiting-idle -> downloading -> committing) ─────────
 
+async function readCapabilityRegime(): Promise<UpdateCapabilities | null> {
+	try {
+		return await deps.loadCapabilities();
+	} catch (error) {
+		if (!(error instanceof UpdateCapabilityReadError)) throw error;
+		notifyUpdate({
+			kind: "refused",
+			id: "package-capabilities",
+			reason: error.reason,
+		});
+		return null;
+	}
+}
+
 async function maybeStartPackageInstall(opts: {
 	readonly bypassIdle: boolean;
 }): Promise<UpdateStartOutcome | undefined> {
 	if (state.phase !== "awaiting-idle") return;
 	if (deps.isStreamLive()) return { started: false, reason: "streaming" };
+	if ((await readCapabilityRegime()) === null)
+		return { started: false, reason: "check_unavailable" };
 	if (!opts.bypassIdle) {
 		const settings = await deps.loadSettings();
 		const idle = await deps.isIdle(settings.schedule);
@@ -2268,7 +2292,11 @@ export async function runOrchestratorTick(): Promise<void> {
 			return;
 		}
 		const settings = await deps.loadSettings();
-		const capabilities = await deps.loadCapabilities();
+		const capabilities = await readCapabilityRegime();
+		if (capabilities === null) {
+			scheduleNextTick();
+			return;
+		}
 		const now = deps.now();
 		const retryAt =
 			state.osStageRecovery?.mode === "automatic"

@@ -1,5 +1,6 @@
 import { lstat } from "node:fs/promises";
 import { z } from "zod";
+import { OsAgentError } from "./os-identity.ts";
 import {
 	readStoredStateFile,
 	STORED_STATE_LIMITS,
@@ -264,30 +265,18 @@ type ChannelDeps = {
 };
 export const defaultOsChannelDeps: ChannelDeps = {
 	readOverride: async () => {
-		try {
-			const info = await lstat(OS_CHANNEL_OVERRIDE);
-			if (!info.isFile())
-				return {
-					content: "",
-					uid: info.uid,
-					mode: info.mode & 0o777,
-					regular: false,
-				};
-			return {
-				content:
-					(await readStoredStateFile(
-						OS_CHANNEL_OVERRIDE,
-						STORED_STATE_LIMITS.scalar,
-					)) ?? "",
-				uid: info.uid,
-				mode: info.mode & 0o777,
-				regular: true,
-			};
-		} catch (error) {
-			if (error instanceof Error && "code" in error && error.code === "ENOENT")
-				return undefined;
-			throw error;
-		}
+		const content = await readStoredStateFile(
+			OS_CHANNEL_OVERRIDE,
+			STORED_STATE_LIMITS.scalar,
+		);
+		if (content === null) return undefined;
+		const info = await lstat(OS_CHANNEL_OVERRIDE);
+		return {
+			content,
+			uid: info.uid,
+			mode: info.mode & 0o777,
+			regular: info.isFile(),
+		};
 	},
 	warn: () => {
 		/* The caller supplies the device logger when warnings are actionable. */
@@ -301,9 +290,9 @@ export async function resolveOsChannel(
 	let override: Override | undefined;
 	try {
 		override = await deps.readOverride();
-	} catch {
+	} catch (cause) {
 		deps.warn("os-channel-override-unreadable");
-		return settingsChannel;
+		throw new OsAgentError("discovery_failed", cause);
 	}
 	if (!override) return settingsChannel;
 	if (
@@ -314,5 +303,5 @@ export async function resolveOsChannel(
 	)
 		return "drill";
 	deps.warn("os-channel-override-invalid");
-	return settingsChannel;
+	throw new OsAgentError("discovery_failed");
 }

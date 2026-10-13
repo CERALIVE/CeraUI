@@ -35,7 +35,7 @@ describe("image update capabilities", () => {
 		});
 	});
 
-	test("invalid content is legacy without advertising unsupported features", async () => {
+	test("invalid present content refuses an unknown regime without advertising unsupported features", async () => {
 		// Given a malformed schema carrying a tempting feature, when read.
 		writeFileSync(
 			file,
@@ -45,14 +45,13 @@ describe("image update capabilities", () => {
 			}),
 		);
 		// Then neither feature may reach the operator.
-		expect(await readUpdateCapabilities(file)).toEqual({
-			mode: "legacy",
-			features: [],
+		await expect(readUpdateCapabilities(file)).rejects.toMatchObject({
+			reason: "discovery_failed",
 		});
 	});
 
 	test("an unknown feature token is invalid rather than silently advertised", async () => {
-		// Given an unrecognised feature beside apt-all-packages, when read, then legacy wins.
+		// Given an unrecognised feature beside apt-all-packages, when read, then neither regime is granted.
 		writeFileSync(
 			file,
 			JSON.stringify({
@@ -62,9 +61,8 @@ describe("image update capabilities", () => {
 				apt_uid: 42,
 			}),
 		);
-		expect(await readUpdateCapabilities(file)).toEqual({
-			mode: "legacy",
-			features: [],
+		await expect(readUpdateCapabilities(file)).rejects.toMatchObject({
+			reason: "discovery_failed",
 		});
 	});
 

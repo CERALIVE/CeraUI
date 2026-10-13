@@ -37,6 +37,58 @@ typed reason or disposition. Host tests inject getter faults at admission,
 settlement and startup. Neither these tests nor the reader sweep qualifies
 boards, helper churn, power loss or filesystem/kernel I/O timing on a device.
 
+### Capability regime and terminal package evidence
+
+Capability authority has three internal outcomes: genuine absence, a valid
+declaration, and UNKNOWN. Only absence or a valid declaration without
+`apt-all-packages` selects legacy; a valid declaration with that feature selects
+origin/pinned-plan admission. A present unreadable or ambiguous declaration
+(including EIO/EACCES/ELOOP, oversize, duplicate JSON members, invalid UTF-8 and
+schema failure) throws `UpdateCapabilityReadError` with the existing
+`discovery_failed` reason. No wire/schema field is added. Legacy refresh,
+discovery and install continuations refuse before package/network preparation;
+the cached actionable set is withdrawn, never reused under a guessed regime.
+Manual and scheduled orchestrator package admissions also read that authority
+before their effect ports. Manual admission returns its existing refusal and
+publishes the typed refused notice; idle scheduling retains its retry cadence.
+Bytes are preserved, nothing is rewritten, and a later valid read recovers.
+Recovery of an already-owned package unit is observation, not a new installation,
+and remains available rather than discarding its surviving outcome.
+
+An owned unit with `SubState=exited` is not completion by itself. Terminal package
+proof requires unique properties, a present whole-string decimal `ExecMainStatus`
+in 0–255 and an explicit bounded `ExecMainCode` (1–3), plus a coherent lifecycle.
+Active/exited requires code 1; failed/failed requires nonzero status. Missing,
+prefix-parsed, out-of-range or contradictory evidence stays in the existing
+running/unknown observation: no success, unit stop/reset or output-consuming
+cleanup. The observer retries; a later complete failure reports its actual code.
+Command failure and owned-identity validation remain independent requirements.
+The shared numeric exit-field parser also serves the slot-mirror reader: a
+failed/refused verdict cannot authorize outcome persistence/reset-failed from
+missing, malformed, impossible signal/status pairs or a failed systemctl reply.
+Its receipt-bearing inactive-clean convention remains separate and unchanged.
+
+Text identity metadata follows the same uniqueness rule: repeated `[system]`
+or rootfs slot sections and repeated `BUILD_ID=` lines refuse, including identical
+duplicates and empty second sections. The image-compatible build-stamp fallback
+applies only after unambiguous metadata, not after a conflicting first match.
+Host matrices cover production discovery/scheduler effects, real package
+probe/identity/observer composition and private metadata files. They are not
+installed-board, real APT, slot activation or power-loss qualification.
+
+The same boundary applies to neighbours of those readers. Present invalid or
+unreadable `os-channel-override` refuses with typed `discovery_failed`; only
+genuine absence uses Settings' stable/beta channel. The fixed-path reader is
+strict even for ancestor/link errors. First-party curl probe output needs one
+exact marker and status `200`, never a numeric prefix; generic status is a complete
+100–599 token and a malformed redirect remains unknown. Repeated deb822
+`URIs`, `Suites` or `Enabled` fields refuse before constructing a probe plan,
+and continuation lines belong only to their current field. These host parser
+proofs do not assert how a board's actual repository or image channel behaves.
+Production repository observation never selects emulated success merely because
+device-detection files are missing or unreadable. Only explicit mock mode chooses
+that fixture regime; production still needs a real repository probe result.
+
 ## OS staging lock and startup reconciliation
 
 ### Metadata and idle boundaries

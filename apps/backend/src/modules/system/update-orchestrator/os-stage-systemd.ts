@@ -26,3 +26,30 @@ export function parseOsStageSystemdProperties(
 	}
 	return properties;
 }
+
+export function parseSystemdExitFields(
+	properties: ReadonlyMap<string, string>,
+): {
+	readonly mainCode: number;
+	readonly mainStatus: number;
+} | null {
+	const code = properties.get("ExecMainCode");
+	const status = properties.get("ExecMainStatus");
+	if (
+		code === undefined ||
+		status === undefined ||
+		!/^\d+$/.test(code) ||
+		!/^\d+$/.test(status)
+	)
+		return null;
+	const mainCode = Number(code);
+	const mainStatus = Number(status);
+	if (
+		mainCode < 1 ||
+		mainCode > 3 ||
+		mainStatus > 255 ||
+		(mainCode !== 1 && mainStatus === 0)
+	)
+		return null;
+	return { mainCode, mainStatus };
+}

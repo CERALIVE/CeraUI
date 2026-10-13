@@ -30,7 +30,11 @@ export async function readBoardIdentity(path = RAUC_CONFIG): Promise<{
 }> {
 	const conf = await readStoredStateFile(path, STORED_STATE_LIMITS.settings);
 	if (conf === null) throw new OsAgentError("rauc_compatible_unknown");
-	const section = conf.split(/^\[system\]\s*$/m)[1]?.split(/^\[.*\]\s*$/m)[0];
+	const sections = conf.split(/^\s*\[system\]\s*$/m);
+	if (sections.length !== 2) throw new OsAgentError("rauc_compatible_unknown");
+	const section = sections[1]?.split(/^\s*\[.*\]\s*$/m)[0];
+	if ((section?.match(/^\s*compatible\s*=/gm)?.length ?? 0) !== 1)
+		throw new OsAgentError("rauc_compatible_unknown");
 	const matches = section?.match(/^compatible\s*=\s*(\S+)\s*$/gm) ?? [];
 	if (matches.length !== 1) throw new OsAgentError("rauc_compatible_unknown");
 	const compatible = matches[0]?.split("=")[1]?.trim();

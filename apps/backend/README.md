@@ -401,6 +401,14 @@ configuration remain unchanged, and status still reports the modem's live state.
 
 ### Software update admission
 
+An unreadable or ambiguous present capability declaration is an unknown regime,
+not a legacy image. Package refresh/discovery and manual/automatic installs refuse
+with the existing typed reason and retain the file until a valid later read.
+Owned systemd identity alone is not completion: missing/malformed terminal exit
+properties keep the observer running without success or cleanup. Duplicate
+board/build/slot identity declarations likewise refuse. Host proof and recovery
+limits: [capability and terminal evidence](../../docs/UPDATE-RECOVERY.md#capability-regime-and-terminal-package-evidence).
+
 Scheduled installs require readable idle authority. A present invalid `idle.json`
 keeps `awaiting-idle` and yields the existing `activity-unknown` blocker; it is
 not replaced or cached as a default. Genuine absence retains the boot-time idle

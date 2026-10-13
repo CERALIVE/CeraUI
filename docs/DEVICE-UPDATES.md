@@ -48,8 +48,17 @@ What the device may do is decided by the image, not by CeraUI.
 
 | File state | `mode` | `features` |
 |---|---|---|
-| absent, unparseable, or `features` lacks `apt-all-packages` | `legacy` | `[]` |
-| `features` includes `apt-all-packages` | `capable` | the file's list, verbatim |
+| genuinely absent, or valid declaration without `apt-all-packages` | `legacy` | `[]` |
+| valid declaration with `apt-all-packages` | `capable` | the file's list, verbatim |
+| present unreadable, ambiguous or invalid declaration | no mode granted; typed `discovery_failed` | no capability reply |
+
+UNKNOWN is an internal typed read refusal, not a third wire mode. It blocks
+legacy refresh/discovery as well as manual/scheduled package installation, and
+withdraws cached actionable entries rather than installing through a guessed
+regime. Bytes are retained; a valid later read recovers. Package completion also
+requires present whole-string bounded exit properties and a coherent owned unit;
+missing/malformed evidence stays under observation without success or cleanup.
+Host evidence and limits: [update recovery](./UPDATE-RECOVERY.md#capability-regime-and-terminal-package-evidence).
 
 The eight recognised feature tokens are `rauc-verity-streaming`,
 `rauc-activate-on-shutdown`, `slot-sync`, `origin-protection`,
@@ -592,7 +601,8 @@ Active only with `apt-all-packages` and `rauc-verity-streaming`.
   outcome `os_stage_outcome_unknown_after_restart`.
 - A root-owned `/data/ceralive/update-state/os-channel-override` containing
   exactly `drill` switches the OS channel for bench work. APT always follows
-  Settings.
+  Settings. Only genuine override absence uses Settings' OS channel; invalid or
+  unreadable presence refuses selection instead of silently changing channels.
 
 ## Transport selection and pinning
 
@@ -721,8 +731,10 @@ that could be the unmapped other rootfs slot). Completion timestamps are
 never used as identity: a clock can step and a time names no slot. With a
 matching SHA, `unknown` makes the gate skip this tick (`slot-identity-unknown`)
 and retry on the next one: dispatching blind could meet a wedged RAUC whose
-exit-75 refusal would leave a sticky failure. The build id is the first `BUILD_ID=` of `/etc/os-release`,
-falling back to `/etc/ceralive/image-build-commit`.
+exit-75 refusal would leave a sticky failure. The build id is the unique `BUILD_ID=` of `/etc/os-release`,
+falling back to `/etc/ceralive/image-build-commit` only when that unique value is
+empty or absent. Repeated build keys, `[system]` sections or rootfs slot sections
+refuse rather than selecting the first identity.
 
 Completion is confirmed by `sync-receipt.json` matching the current dpkg SHA
 followed by a fresh probe that again reads finished and clean, not by the unit's

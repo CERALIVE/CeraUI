@@ -30,10 +30,12 @@ import { call } from "@orpc/server";
 import { setup } from "../modules/setup.ts";
 import {
 	getUpdateState,
+	resetAptReachabilityProbeForTest,
 	resetSoftwareUpdateCheckRunner,
 	resetSoftwareUpdateSizeRunner,
 	resetSoftwareUpdateState,
 	type SoftwareUpdateError,
+	setAptReachabilityProbeForTest,
 	setSoftwareUpdateCheckRunner,
 	setSoftwareUpdateSizeRunner,
 	triggerManualUpdateCheck,
@@ -230,10 +232,18 @@ describe("triggerManualUpdateCheck() — the operator's click is accounted for",
 	beforeEach(() => {
 		savedAptEnabled = setup.apt_update_enabled;
 		resetSoftwareUpdateState();
+		setAptReachabilityProbeForTest(async () => ({
+			ipv4: "ok",
+			ipv6: "ok",
+			used: "any",
+			verdict: "any",
+			detail: [],
+		}));
 	});
 
 	afterEach(() => {
 		setup.apt_update_enabled = savedAptEnabled;
+		resetAptReachabilityProbeForTest();
 		resetSoftwareUpdateCheckRunner();
 		resetSoftwareUpdateSizeRunner();
 		resetSoftwareUpdateState();

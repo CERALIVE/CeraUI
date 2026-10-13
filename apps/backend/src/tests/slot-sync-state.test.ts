@@ -7,13 +7,19 @@ import {
 } from "../modules/system/update-orchestrator/slot-sync-state.ts";
 
 describe("image-owned slot-sync evidence", () => {
-	test("reads the first os-release BUILD_ID and falls back to image-build-commit only when empty", () => {
+	test("reads a unique os-release BUILD_ID and falls back to image-build-commit only when empty", () => {
 		expect(
 			buildIdFromOsRelease(
-				'NAME=CeraLive\nBUILD_ID="release-1"\nBUILD_ID="release-2"\n',
+				'NAME=CeraLive\nBUILD_ID="release-1"\n',
 				"fallback\n",
 			),
 		).toBe("release-1");
+		expect(() =>
+			buildIdFromOsRelease(
+				'BUILD_ID="release-1"\nBUILD_ID="release-2"\n',
+				"fallback\n",
+			),
+		).toThrow();
 		expect(buildIdFromOsRelease('BUILD_ID=""\n', "fallback\n")).toBe(
 			"fallback",
 		);

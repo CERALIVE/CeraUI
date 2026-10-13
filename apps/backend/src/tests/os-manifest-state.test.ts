@@ -77,7 +77,7 @@ test("drill override is accepted only for regular root-owned mode <=0644 and exa
 		{ content: "drill", uid: 0, mode: 0o666, regular: true, expected: "beta" },
 		{ content: "drill", uid: 0, mode: 0o644, regular: false, expected: "beta" },
 	] as const) {
-		const value = await resolveOsChannel("beta", {
+		const value = resolveOsChannel("beta", {
 			readOverride: async () => ({
 				content: entry.content,
 				uid: entry.uid,
@@ -86,7 +86,9 @@ test("drill override is accepted only for regular root-owned mode <=0644 and exa
 			}),
 			warn: () => {},
 		});
-		expect(value).toBe(entry.expected);
+		if (entry.expected === "drill") expect(await value).toBe("drill");
+		else
+			await expect(value).rejects.toMatchObject({ reason: "discovery_failed" });
 	}
 });
 

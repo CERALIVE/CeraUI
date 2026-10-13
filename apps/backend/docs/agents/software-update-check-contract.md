@@ -48,6 +48,9 @@ classification is origin-based (`apt-all-packages.ts`). See `docs/DEVICE-UPDATES
   discovery cycle. Do not "unify" the two readers.
 - Keep install argv and the Install control tied to actionability, rather than
   the inclusive discovered package count.
+- Capability-read ambiguity is not an ordinary failed refresh retaining a usable
+  offer: no install regime is known, so cached actionability is withdrawn. Only
+  genuine absence or a valid declaration may select legacy. See UPDATE-RECOVERY.md.
 
 Coverage: `tests/software-updates-apt.test.ts` — app-only, platform-only, mixed,
 kept-back-only, the app-package-kept-back case, the COMPLETE ModemManager closure
@@ -56,4 +59,3 @@ kept-back-only, the app-package-kept-back case, the COMPLETE ModemManager closur
 proving it is informational, `actionable: false`, absent from the install argv and
 `actionable_count: 0` when it is the sole entry. Rule-E proof in both directions:
 dropping the layer gate reddens 4 tests, dropping the kept-back gate reddens 2.
-

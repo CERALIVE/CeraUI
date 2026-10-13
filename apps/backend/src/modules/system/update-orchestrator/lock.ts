@@ -16,7 +16,10 @@
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
 import { SOFTWARE_UPDATE_LOCK } from "../software-update-service-contract.ts";
 import { processExitCode } from "../software-update-service-state.ts";
-import { parseOsStageSystemdProperties } from "./os-stage-systemd.ts";
+import {
+	parseOsStageSystemdProperties,
+	parseSystemdExitFields,
+} from "./os-stage-systemd.ts";
 
 export { SOFTWARE_UPDATE_LOCK };
 
@@ -56,7 +59,6 @@ export function parseSlotSyncProbe(output: string): SlotSyncProbeState {
 	const activeState = properties.get("ActiveState") ?? "inactive";
 	const subState = properties.get("SubState") ?? "dead";
 	const mainCodeRaw = properties.get("ExecMainCode") ?? "";
-	const mainStatusRaw = properties.get("ExecMainStatus") ?? "";
 
 	if (
 		activeState === "activating" ||
@@ -67,20 +69,26 @@ export function parseSlotSyncProbe(output: string): SlotSyncProbeState {
 		return { kind: "running" };
 	}
 
-	if (activeState === "failed" || subState === "failed")
-		return unsuccessfulExit(exitCodeOf(mainCodeRaw || "0", mainStatusRaw));
+	if (activeState === "failed" || subState === "failed") {
+		if (activeState !== "failed" || subState !== "failed")
+			throw new SlotSyncProbeError("unit lifecycle contradictory");
+		const exit = exitCodeOf(properties);
+		if (exit === null || exit === 0)
+			throw new SlotSyncProbeError("failed unit exit evidence unknown");
+		return unsuccessfulExit(exit);
+	}
 
 	// Inactive alone does not distinguish a fresh unit from a completed run.
 	if (mainCodeRaw === "" || mainCodeRaw === "0") return { kind: "absent" };
-	const exitCode = exitCodeOf(mainCodeRaw, mainStatusRaw);
+	const exitCode = exitCodeOf(properties);
+	if (exitCode === null) return { kind: "absent" };
 	return exitCode === 0 ? { kind: "succeeded" } : unsuccessfulExit(exitCode);
 }
 
-const exitCodeOf = (mainCodeRaw: string, mainStatusRaw: string): number =>
-	processExitCode(
-		Number.parseInt(mainCodeRaw, 10),
-		Number.parseInt(mainStatusRaw || "0", 10),
-	);
+function exitCodeOf(properties: ReadonlyMap<string, string>): number | null {
+	const exit = parseSystemdExitFields(properties);
+	return exit ? processExitCode(exit.mainCode, exit.mainStatus) : null;
+}
 
 // The script's refusal code means the same whichever lifecycle systemd leaves
 // behind: a unit with SuccessExitStatus=75 would read inactive/dead, not failed.
@@ -103,8 +111,8 @@ const isUnset = (value: string | undefined): boolean =>
 
 // The unit writes its receipt before `rauc status mark-good other`, which can
 // still fail, so both shapes that consult the receipt must be read positively:
-// systemctl exit 0, every property present (the parser defaults missing ones
-// into success), and a loaded, inactive/dead unit whose exit record is either
+// systemctl exit 0, every property present, and a loaded, inactive/dead unit
+// whose exit record is either
 // a clean CLD_EXITED 0 or wholly unset. Anything else is `absent`, which fails.
 // Running/failed/refused keep the parser's verdict: none of them settles.
 export function classifySlotSyncProbe(result: {
@@ -112,6 +120,11 @@ export function classifySlotSyncProbe(result: {
 	readonly stdout: string;
 }): SlotSyncProbeState {
 	const parsed = parseSlotSyncProbe(result.stdout);
+	if (
+		(parsed.kind === "failed" || parsed.kind === "refused") &&
+		result.exitCode !== 0
+	)
+		throw new SlotSyncProbeError("terminal unit probe failed");
 	if (parsed.kind !== "absent" && parsed.kind !== "succeeded") return parsed;
 	const properties = parseProperties(result.stdout);
 	const lines = result.stdout.split("\n");

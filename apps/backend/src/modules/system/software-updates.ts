@@ -23,6 +23,7 @@ import {
 	type UpdatePackage,
 	type UpdatePreflightReason,
 } from "@ceraui/rpc";
+import type { UpdateCapabilities } from "@ceraui/rpc/schemas";
 import { invariant } from "../../helpers/invariant.ts";
 import { logger } from "../../helpers/logger.ts";
 import { run } from "../../helpers/run.ts";
@@ -93,7 +94,10 @@ import {
 } from "./software-update-restart.ts";
 import { isStreamConfirmedIdle } from "./stream-liveness-source.ts";
 import { reconcileAptChannel } from "./update-apt-channel.ts";
-import { readUpdateCapabilities } from "./update-capabilities.ts";
+import {
+	readUpdateCapabilities,
+	UpdateCapabilityReadError,
+} from "./update-capabilities.ts";
 import {
 	PendingPackageSuccessError,
 	pendingPackageSuccess,
@@ -154,9 +158,9 @@ const EMULATED_APT_REACHABILITY: AptReachability = {
 };
 
 const defaultAptReachabilityProbe: AptReachabilityProbe = async (options) =>
-	(await isRealDevice())
-		? probeAptReachability({ ...defaultAptReachabilityDeps, ...options })
-		: EMULATED_APT_REACHABILITY;
+	shouldUseMocks()
+		? EMULATED_APT_REACHABILITY
+		: probeAptReachability({ ...defaultAptReachabilityDeps, ...options });
 
 let aptReachabilityProbe: AptReachabilityProbe = defaultAptReachabilityProbe;
 
@@ -760,7 +764,8 @@ export function reportUpdateCheckFailure(upgrade: {
 async function getSoftwareUpdateSize(reachability: AptReachability) {
 	if (!aptUpdatesEnabled()) return null;
 	if (!isStreamConfirmedIdle() || isUpdating() || aptGetUpdating) return "busy";
-	const capabilities = await readUpdateCapabilities();
+	const capabilities = await readPackageCapabilities();
+	if (capabilities === null) return "discovery_failed";
 	pendingPackageSuccess.assertEffectsAllowed();
 	if (capabilities.mode === "capable")
 		return getCapableUpdateSize(reachability);
@@ -869,6 +874,26 @@ async function getSoftwareUpdateSize(reachability: AptReachability) {
 	return null;
 }
 
+async function readPackageCapabilities(): Promise<UpdateCapabilities | null> {
+	try {
+		return await readUpdateCapabilities();
+	} catch (error) {
+		if (!(error instanceof UpdateCapabilityReadError)) throw error;
+		pendingPackageSuccess.assertEffectsAllowed();
+		actionableAppPackages = [];
+		actionableAllPackages = [];
+		discoveredPackages = [];
+		availableUpdates = null;
+		availableIdentity = null;
+		lastUpdateSucceeded = false;
+		failCurrentCheck(error.reason);
+		logger.warn("Software update capability regime unknown", {
+			reason: error.reason,
+		});
+		return null;
+	}
+}
+
 // Node's ExecException, reproduced structurally so callers keep the same
 // error-classification surface (code/stdout/stderr) without the Node import.
 type ExecException = Error & {
@@ -934,6 +959,10 @@ function checkForSoftwareUpdates(
 
 	void runLegacyPackageEffects(
 		async () => {
+			if ((await readPackageCapabilities()) === null) {
+				callback("discovery_failed", aptGetUpdateFailures);
+				return;
+			}
 			const reachability = await prepareAptNetwork();
 			pendingPackageSuccess.assertEffectsAllowed();
 			lastAptReachability = aptReachabilityWire(reachability);
@@ -1052,6 +1081,7 @@ export async function runUpdateDiscoveryAndReport(): Promise<SoftwareUpdateError
 	aptDiscoveryRunning = true;
 	lastCheckedAt = Date.now();
 	try {
+		if ((await readPackageCapabilities()) === null) return "discovery_failed";
 		const reachability = await prepareAptNetwork();
 		pendingPackageSuccess.assertEffectsAllowed();
 		lastAptReachability = aptReachabilityWire(reachability);
@@ -1198,7 +1228,9 @@ const defaultSoftwareUpdateRunner: SoftwareUpdateRunner = (
 			await doSoftwareUpdate(onCommitSucceeded);
 		} else if (softUpdateStatus) {
 			const reason =
-				"Failed to fetch the updated package list; aborting the update.";
+				err === "discovery_failed"
+					? "discovery_failed"
+					: "Failed to fetch the updated package list; aborting the update.";
 			lastUpdateSucceeded = false;
 			lastUpdateFailure = {
 				reason,
@@ -1573,9 +1605,19 @@ async function prepareSoftwareUpdate(
 	pendingPackageSuccess.assertEffectsAllowed();
 	if (!aptUpdatesEnabled() || !isStreamConfirmedIdle()) return;
 
+	const capabilities = await readPackageCapabilities();
+	if (capabilities === null) {
+		refuseUnknownPackageInstall();
+		return;
+	}
 	const reachability = await prepareAptNetwork({ maxAgeMs: 0 });
 	pendingPackageSuccess.assertEffectsAllowed();
-	const capable = (await readUpdateCapabilities()).mode === "capable";
+	const freshCapabilities = await readPackageCapabilities();
+	if (freshCapabilities === null) {
+		refuseUnknownPackageInstall();
+		return;
+	}
+	const capable = freshCapabilities.mode === "capable";
 	pendingPackageSuccess.assertEffectsAllowed();
 	if (capable) {
 		const discovery = await getCapableUpdateSize(reachability);
@@ -1707,6 +1749,12 @@ async function prepareSoftwareUpdate(
 			: runDetachedAptUpgrade(args, monitor.handlers),
 		capable ? onCommitSucceeded : undefined,
 	);
+}
+
+function refuseUnknownPackageInstall(): void {
+	lastUpdateFailure = { reason: "discovery_failed" };
+	softUpdateStatus = null;
+	broadcastMsg("status", { updating: null, update_state: getUpdateState() });
 }
 
 /**

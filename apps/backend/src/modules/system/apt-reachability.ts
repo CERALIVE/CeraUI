@@ -105,8 +105,9 @@ export function classifyProbe(outcome: {
 }): AptFamilyProbe {
 	if (outcome.exitCode === 0) {
 		if (outcome.originHost === "apt.ceralive.tv") {
-			const [body, status] = outcome.stdout.split("\n<<<apt-probe>>>");
-			if (Number.parseInt(status ?? "", 10) !== 200) return "unknown";
+			const parts = outcome.stdout.split("\n<<<apt-probe>>>");
+			const [body, status] = parts;
+			if (parts.length !== 2 || status !== "200") return "unknown";
 			try {
 				const parsed: unknown = parseAuthorityJson(body ?? "");
 				return typeof parsed === "object" &&
@@ -120,8 +121,11 @@ export function classifyProbe(outcome: {
 			}
 		}
 		const [rawCode, ...redirectParts] = outcome.stdout.trim().split(/\s+/);
-		const code = Number.parseInt(rawCode ?? "", 10);
-		if (code >= 100) {
+		const code =
+			rawCode !== undefined && /^[1-5]\d{2}$/.test(rawCode)
+				? Number(rawCode)
+				: Number.NaN;
+		if (Number.isFinite(code)) {
 			const redirectUrl = redirectParts.join(" ");
 			if (outcome.scheme === "http" && code >= 300 && code < 400) {
 				try {
@@ -133,7 +137,7 @@ export function classifyProbe(outcome: {
 						return "captive";
 					}
 				} catch {
-					return "ok";
+					return "unknown";
 				}
 			}
 			return "ok";

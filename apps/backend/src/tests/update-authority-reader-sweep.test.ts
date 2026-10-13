@@ -48,9 +48,8 @@ test.each([
 				await expect(loadUpdateSettings(path)).rejects.toThrow();
 				break;
 			case "capabilities":
-				expect(await readUpdateCapabilities(path)).toEqual({
-					mode: "legacy",
-					features: [],
+				await expect(readUpdateCapabilities(path)).rejects.toMatchObject({
+					reason: "discovery_failed",
 				});
 				break;
 			case "health":

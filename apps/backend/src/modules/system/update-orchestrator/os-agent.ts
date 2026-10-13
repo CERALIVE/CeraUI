@@ -398,7 +398,7 @@ async function readSignedOsChannel(
 	const channel = await resolveOsChannel(settingsChannel, {
 		...defaultOsChannelDeps,
 		warn: (reason) =>
-			logger.warn("update-orchestrator: ignored OS channel override", {
+			logger.warn("update-orchestrator: refused OS channel override", {
 				reason,
 			}),
 	});

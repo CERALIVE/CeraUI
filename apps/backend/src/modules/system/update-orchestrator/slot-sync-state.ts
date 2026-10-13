@@ -40,12 +40,13 @@ export function buildIdFromOsRelease(
 	osRelease: string,
 	fallback: string,
 ): string {
+	const buildIds = osRelease
+		.split("\n")
+		.filter((line) => line.trim().startsWith("BUILD_ID="));
+	if (buildIds.length > 1)
+		throw new SlotIdentityReadError("duplicate BUILD_ID");
 	const buildId =
-		osRelease
-			.split("\n")
-			.find((line) => line.startsWith("BUILD_ID="))
-			?.slice("BUILD_ID=".length)
-			.replaceAll('"', "") ?? "";
+		buildIds[0]?.trim()?.slice("BUILD_ID=".length).replaceAll('"', "") ?? "";
 	return buildId || fallback.replaceAll("\n", "");
 }
 
@@ -66,18 +67,26 @@ export function parseRaucSlotBootnames(
 	systemConf: string,
 ): ReadonlyMap<string, string> {
 	const bootnames = new Map<string, string>();
+	const sections = new Set<string>();
 	let slot: string | null = null;
 	for (const raw of systemConf.split(/\r?\n/)) {
 		const line = raw.trim();
 		if (line.startsWith("#") || line.startsWith(";")) continue;
 		if (ANY_SECTION.test(line)) {
 			slot = ROOTFS_SECTION.exec(line)?.[1] ?? null;
+			if (slot) {
+				if (sections.has(slot))
+					throw new SlotIdentityReadError("duplicate slot section");
+				sections.add(slot);
+			}
 			continue;
 		}
 		const bootname = BOOTNAME_KEY.exec(line)?.[1]?.trim();
-		if (slot && bootname) {
+		if (slot && bootname !== undefined) {
 			if (bootnames.has(slot))
 				throw new SlotIdentityReadError("duplicate slot bootname");
+			if (bootname.length === 0)
+				throw new SlotIdentityReadError("empty slot bootname");
 			bootnames.set(slot, bootname);
 		}
 	}
@@ -160,8 +169,7 @@ export async function readSlotSyncEvidence(): Promise<SlotSyncEvidence> {
 	const statusSha256 = createHash("sha256")
 		.update(new Uint8Array(bytes))
 		.digest("hex");
-	// Mirror the image script: first BUILD_ID= line, remove quotes; only if empty
-	// fall back to image-build-commit with newlines removed.
+	// Image-compatible fallback is valid only after unique BUILD_ID evidence.
 	const fromRelease = buildIdFromOsRelease(osRelease, "");
 	const fallback = fromRelease
 		? ""

@@ -7,18 +7,29 @@ export type AptOrigin = {
 
 const FIRST_PARTY_APT_HOST = "apt.ceralive.tv";
 
+export class AptSourceReadError extends Error {
+	override readonly name = "AptSourceReadError";
+	constructor(readonly field: string) {
+		super(`duplicate APT source field: ${field}`);
+	}
+}
+
 function fieldValue(stanza: string, field: string): string | undefined {
 	const lines = stanza.split(/\r?\n/);
 	const prefix = `${field.toLowerCase()}:`;
 	let value: string | undefined;
+	let continuing = false;
 	for (const line of lines) {
-		if (/^\s/.test(line) && value !== undefined) {
+		if (/^\s/.test(line) && continuing && value !== undefined) {
 			value += ` ${line.trim()}`;
 			continue;
 		}
 		const colon = line.indexOf(":");
+		continuing =
+			colon >= 0 && line.slice(0, colon + 1).toLowerCase() === prefix;
 		if (colon < 0 || line.slice(0, colon + 1).toLowerCase() !== prefix)
 			continue;
+		if (value !== undefined) throw new AptSourceReadError(field);
 		value = line.slice(colon + 1).trim();
 	}
 	return value;

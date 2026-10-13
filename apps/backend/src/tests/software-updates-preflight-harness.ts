@@ -43,6 +43,7 @@ export async function updateHarness() {
 			if (type !== "status") return;
 			const frame = statusResponseSchema.parse(data);
 			frames.push(frame);
+			h.onFrame?.(frame);
 			switch (frame.update_state?.kind) {
 				case "failed":
 				case "success":
@@ -66,6 +67,7 @@ export async function updateHarness() {
 		completion: Promise<number>;
 		markerBefore: string;
 		frames: StatusResponse[];
+		onFrame: ((frame: StatusResponse) => void) | undefined;
 	} = {
 		failure: undefined,
 		verdict: "any",
@@ -81,6 +83,7 @@ export async function updateHarness() {
 		completion: Promise.resolve(100),
 		markerBefore: markerFixture.before,
 		frames,
+		onFrame: undefined,
 	};
 	const run = spyOn(defaultAptSpaceDeps, "run").mockImplementation(
 		async (argv) => {

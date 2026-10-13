@@ -14,7 +14,10 @@ import {
 	DetachedAptServiceIdentityError,
 	validateDetachedAptServiceIdentity,
 } from "./software-update-service-contract.ts";
-import { parseOsStageSystemdProperties } from "./update-orchestrator/os-stage-systemd.ts";
+import {
+	parseOsStageSystemdProperties,
+	parseSystemdExitFields,
+} from "./update-orchestrator/os-stage-systemd.ts";
 
 export type DetachedAptServiceState =
 	| { readonly kind: "absent" }
@@ -69,21 +72,26 @@ export function parseDetachedAptServiceState(
 
 	const activeState = properties.get("ActiveState") ?? "inactive";
 	const subState = properties.get("SubState") ?? "dead";
-	const mainCode = Number.parseInt(properties.get("ExecMainCode") ?? "0", 10);
-	const mainStatus = Number.parseInt(
-		properties.get("ExecMainStatus") ?? "0",
-		10,
-	);
+	const exit = parseSystemdExitFields(properties);
 
 	if (activeState === "failed" || subState === "failed") {
+		if (
+			!exit ||
+			activeState !== "failed" ||
+			subState !== "failed" ||
+			exit.mainStatus === 0
+		)
+			return { kind: "running" };
 		return {
 			kind: "finished",
-			exitCode: processExitCode(mainCode, mainStatus),
+			exitCode: processExitCode(exit.mainCode, exit.mainStatus),
 			cleanup: "reset-failed",
 		};
 	}
 	if (subState === "exited") {
-		return { kind: "finished", exitCode: mainStatus, cleanup: "stop" };
+		if (!exit || activeState !== "active" || exit.mainCode !== 1)
+			return { kind: "running" };
+		return { kind: "finished", exitCode: exit.mainStatus, cleanup: "stop" };
 	}
 	if (
 		activeState === "active" ||

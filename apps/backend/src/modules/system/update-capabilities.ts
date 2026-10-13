@@ -12,6 +12,14 @@ export const UPDATE_CAPABILITIES_FILE =
 	"/usr/lib/ceralive/update-capabilities.json";
 let capabilityPath = UPDATE_CAPABILITIES_FILE;
 
+export class UpdateCapabilityReadError extends Error {
+	override readonly name = "UpdateCapabilityReadError";
+	readonly reason = "discovery_failed";
+	constructor(cause: unknown) {
+		super("update capability regime unknown", { cause });
+	}
+}
+
 export function setUpdateCapabilityPathForTest(path: string | null): void {
 	capabilityPath = path ?? UPDATE_CAPABILITIES_FILE;
 }
@@ -22,11 +30,13 @@ export async function readUpdateCapabilityFile(
 	let raw: unknown;
 	try {
 		raw = await readStoredStateJson(filePath, STORED_STATE_LIMITS.settings);
-	} catch {
-		return undefined;
+	} catch (cause) {
+		throw new UpdateCapabilityReadError(cause);
 	}
+	if (raw === undefined) return undefined;
 	const parsed = updateCapabilityFileSchema.safeParse(raw);
-	return parsed.success ? parsed.data : undefined;
+	if (!parsed.success) throw new UpdateCapabilityReadError(parsed.error);
+	return parsed.data;
 }
 
 export async function readUpdateCapabilities(

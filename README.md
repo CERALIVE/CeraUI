@@ -155,6 +155,11 @@ permission. The config, modem, token, add-on and shaper authority sweep is
 host-tested; installed layouts on both boards remain unknown in this fix.
 See [metadata and idle boundaries](docs/UPDATE-RECOVERY.md#metadata-and-idle-boundaries).
 
+A present unreadable capability declaration is an unknown install regime, never
+legacy permission. Package exit status and text identity also require complete,
+unambiguous evidence before success or cleanup; see
+[capability and terminal evidence](docs/UPDATE-RECOVERY.md#capability-regime-and-terminal-package-evidence).
+
 OS-stage reads treat ENOENT/ESRCH on vanished enumerated tasks as absence, never
 cached identity. Other errno and malformed-identity failures remain unknown;
 non-process paths gain no ESRCH exemption. Held-open real-kernel and default-reader
