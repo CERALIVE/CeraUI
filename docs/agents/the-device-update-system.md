@@ -173,13 +173,15 @@ Known gaps, recorded rather than smoothed over:
   (`reducer.ts` l.250-251). D8's abort does not cancel the timer (its only
   `clearTimeout` is the test reset, `software-updates.ts` l.261). When it
   fires, the re-entered `startSoftwareUpdate()`'s one stream check is
-  `getIsStreaming()` (l.1263, and `doSoftwareUpdate()` again at l.1505 before
-  awaited preparation), which is true only once a stream is live, so the
-  timer can launch an install while a stream is still starting, and the
+  now `isStreamConfirmedIdle()` (l.1366, and `doSoftwareUpdate()`'s
+  `prepareSoftwareUpdate()` again at l.1630 before awaited preparation), which withholds idle while the stream
+  owner's published lifecycle is not idle; a starting stream therefore no
+  longer reads as idle, but that synchronous check is not an atomic lease
+  against a Start admitted after it, and the
   orchestrator does not track that install (except through the adoption in
   (d)). (c) If a stream is live or updates are disabled when
-  `doSoftwareUpdate()` runs, its silent early return at `software-updates.ts`
-  l.1505 leaves `softUpdateStatus` set, so `isUpdating()` stays true and
+  `doSoftwareUpdate()` runs, the silent early return in
+  `prepareSoftwareUpdate()` at `software-updates.ts` l.1630 leaves `softUpdateStatus` set, so `isUpdating()` stays true and
   later stream starts are refused by `session.ts` l.80 until the backend
   restarts. (d) Adoption race: `startSoftwareUpdate()` has no
   orchestrator-phase guard, and the orchestrator learns that its own install

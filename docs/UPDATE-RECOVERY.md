@@ -1034,30 +1034,41 @@ or board power-loss qualification. Existing D154 privileged-bypass and forward-o
 schema residuals below remain unchanged. Fresh Rock and Orange Pi failover/status-
 pressure, cancellation and unknown-success crash drills are still required.
 
-Module-size accounting is not a claim of uniform compliance: `os-stage-run.ts`
-(494 pure LOC) and `runtime.ts` (2,315) carry explicit `SIZE_OK`
-lifetime/state-machine exceptions. `spawn-policy.ts` (1,286 pure LOC) and
-`reducer.ts` (667) are size debt, not newly compliant modules. Accounting
-excludes blank lines and lines starting with `//`, `#`, `--`, `*` or `/*`
+Module-size accounting is not a claim of uniform compliance. Counts are pure LOC:
+blank lines and lines starting with `//`, `#`, `--`, `*` or `/*` are excluded
 (including embedded shell comments); a rule that keeps `*`/`/*` lines counts
-`runtime.ts` 2,341 and `reducer.ts` 673. Backend source files this PR adds or
-changes that exceed 250 under this rule without an inline `SIZE_OK` (base
-23bcf379 → this integrated head): `cerastream-backend.ts` 1,315→1,315,
-`spawn-policy.ts` 907→1,286, `stream-session-orchestrator.ts` 765→818,
-`reducer.ts` new 667,
-`update-transport/executor.ts` new 440, `addons/manager.ts` 489→490,
-`ui/preview-proxy.ts` 390→392, `system.procedure.ts` 295→360, `rpc/router.ts`
-290→306, `addons/reconciler.ts` 300→302, `apt-reachability.ts` 225→273,
-`streaming/streaming.ts` 257→265, `helpers/run.ts` 260→264,
-`kiosk.ts` 338→348 and `os-stage-job.ts` new 251. Outside the
-backend, over the whole PR file list: `apps/frontend/src/lib/rpc/subscriptions.svelte.ts`
-832→850 (grew 18), `apps/frontend/src/lib/rpc/client.ts` 625→642 (grew 17),
-`packages/rpc/src/schemas/system.schema.ts` 339→343 (grew 4),
-`scripts/build/build-debian-package.sh` 274→282 (grew 8) and
-`apps/frontend/src/main/LiveView.svelte` 807→800 (inherited, shrank 7).
-`UpdatesDialog.svelte` (659), `software-updates.ts`, `main.ts`, `os-agent.ts`
-and `os-manifest.ts` carry `SIZE_OK`. None is split here; every listed file
-without `SIZE_OK` is an owner decision pending (split or record `SIZE_OK`).
+`runtime.ts` 2,454 and `reducer.ts` 673. Files carrying an inline `SIZE_OK`
+lifetime/state-machine exception: `update-orchestrator/runtime.ts` (new, 2,427),
+`software-updates.ts` (1,216→1,634), `os-agent.ts` (new, 637), `os-stage-run.ts`
+(new, 492), `main.ts` (360→436) and `os-manifest.ts` (new, 288). Every PR-touched
+non-test source file over 250 without `SIZE_OK` (base 23bcf379 → this integrated
+head, base→head): backend `cerastream-backend.ts` 1,315→1,465,
+`spawn-policy.ts` 907→1,303, `streaming.procedure.ts` 1,112→1,117,
+`stream-session-orchestrator.ts` 765→907, `addons/manager.ts` 489→721,
+`update-orchestrator/reducer.ts` new 667, `update-transport/executor.ts` new 440,
+`remote-control/self-fencing.ts` 353→436, `kiosk.ts` 338→406,
+`ui/preview-proxy.ts` 390→392, `stream-restoration.ts` 377→388, `ssh.ts` 362→383,
+`addons/reconciler.ts` 300→377, `system.procedure.ts` 295→357, `rpc/router.ts`
+290→306, `stream-start-retry.ts` 265→285, `apt-reachability.ts` 225→277,
+`streaming/streaming.ts` 257→263, `rpc/adapter.ts` 237→252,
+`software-update-service-contract.ts` 149→252 and `os-stage-job.ts` new 251;
+frontend `subscriptions.svelte.ts` 832→863, `LiveView.svelte` 807→840,
+`rpc/client.ts` 625→642, `AddonsSection.svelte` 382→416,
+`OnDeviceDisplaySection.svelte` 353→360, `streaming-optimism.svelte.ts` 335→356,
+`SshDialog.svelte` 264→284, `updating-overlay.svelte` 332→314 (shrank) and
+`PowerDialog.svelte` 269→266 (shrank); shared `system.schema.ts` 339→343; and
+`scripts/build/build-debian-package.sh` 274→282 (`UpdatesDialog.svelte`, earlier
+listed at 659, is now 193). The `SIZE_OK` files above are the only recorded
+exceptions. None is split here; every
+listed file without `SIZE_OK` is an owner decision pending (split or record
+`SIZE_OK`). Every non-test module added since PR head ff3b509e is at most 236
+pure LOC; the new disruptive-action modules are `disruptive-action-reservation.ts`
+176, `disruptive-service-reservation.ts` 131, `addons/disruptive-sysext-step.ts`
+122, `disruptive-action-gate.ts` 84, `disruptive-action-runtime.ts` 68,
+`disruptive-retry.ts` 62 and `power-submission.ts` 37, and the liveness leaf
+`streaming/stream-liveness.ts` is 8 beside its 38-line system adapter. The
+inventory script is reproducible from the PR base and covers every touched
+non-test source file, not only the backend.
 Orphan inspection is separated from the settlement lifetime without changing its
 predicates. New FIX7/FIX8/FIX9/FIX10 modules stay below 250 pure LOC. The four
 fix-6 test files and fix-7 regressions require an explicit TypeScript program:
