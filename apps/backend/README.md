@@ -390,8 +390,12 @@ Confirmed cleanup restores that absent-sentinel baseline at every generation, so
 later silent reconcile does not block Start or engine-death restoration. Failed
 sentinel removal keeps the leaf UNKNOWN and retries on the next affirmative idle
 evidence. Cancellation preserves launch cleanup certainty and operator Stop
-acknowledgement; unused probes preserve the live subscription. Disruptive consumers
-must adopt the leaf in B3 integration; this branch alone does not migrate them.
+acknowledgement; unused probes preserve the live subscription. Update and disruptive
+consumers now read the import-free `stream-liveness.ts` leaf through the synchronous
+system adapter. The initial-reconciliation latch, positive legacy live evidence
+and the owner's own lifecycle projection can only withhold idle. The leaf owns
+physical sentinel absence; the adapter adds no independent sentinel read or
+more-permissive fallback.
 
 Stop also cancels a generation waiting for D8 update admission, including the
 idle no-update case, before any launch or OTA marking. Each caller's Stop intent

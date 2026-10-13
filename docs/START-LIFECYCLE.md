@@ -831,14 +831,17 @@ submitted helper's partial execution may survive refusal/failure. A stream or pr
 after final observation/dispatch; the external root helper is not governed by a
 backend-only decision. No hardware or uninterrupted-transaction proof is claimed.
 
-Stream liveness is tri-state. `stream-liveness-source.ts` is the single
-composition that consumers read (lane B-core's factory accessor replaces this file
-only). Until then it reports `streaming` when the live flag is set, and `idle` only
-when boot reconciliation has returned (`stream-reconciliation-latch.ts`, closed
-until `main.ts` sees `reconcileStreamSession()` return, so the control server's
-early window is unknown), the session owner's lifecycle projection is `idle`, and the OTA
-sentinel is positively absent (ENOENT). A present sentinel beside an idle
-projection, an unreadable sentinel, or any other lifecycle state is `unknown`.
+Stream liveness is tri-state. `stream-liveness-source.ts` is the synchronous,
+side-effect-free composition consumers read. It imports only the
+`stream-liveness.ts` leaf, never the heavy orchestrator re-export. The leaf owns
+current physical sentinel evidence; the adapter performs no independent `lstat`.
+Idle requires that the leaf reports idle, boot reconciliation has returned
+(`stream-reconciliation-latch.ts`, closed until `main.ts` sees
+`reconcileStreamSession()` return), no positive legacy live flag, and the owner's
+published lifecycle is idle. The publication is seeded/written by that same
+session owner, not another source of permission; disagreement only withholds
+idle. Leaf streaming or positive legacy live reports streaming; unknown leaf,
+unfinished reconciliation, or a non-idle publication cannot grant idle.
 
 The same `isStreamConfirmedIdle()` reading replaces the false-default live flag in
 the update orchestrator's `isStreamLive` default (package install, OS staging

@@ -12,8 +12,12 @@ on either board. Stored recovery formats and clearance policy are unchanged.
 
 ## Stream idle and the activation sentinel
 
-After B3 integration, Check/Install and local/remote disruptive actions must consume
-the import-free `stream-liveness.ts` leaf rather than a false legacy live flag.
+Check/Install and local/remote disruptive actions consume the import-free
+`stream-liveness.ts` leaf through the synchronous system adapter, rather than a
+false legacy live flag. The adapter retains B3's restrictive composition: first
+reconciliation completed, no positive legacy live flag, and the owner's published
+lifecycle idle are required alongside leaf idle. Those inputs can only withhold
+idle; the adapter has no independent physical sentinel reader.
 Leaf idle requires no pending launch, no required protection, idle lifecycle and
 current sentinel absence. A present/unreadable sentinel remains UNKNOWN even after
 engine idle acknowledgement if clearance failed; the next affirmative idle status
