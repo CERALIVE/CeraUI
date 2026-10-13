@@ -716,6 +716,12 @@ export class CerastreamBackend implements StreamingBackend {
 	private clientEpoch = 0;
 	private probeEpoch = 0;
 	private telemetry: EngineTelemetry | null = null;
+	private runtimeEvidence:
+		| {
+				readonly state: EngineRuntimeState;
+				readonly current: () => boolean;
+		  }
+		| undefined;
 	// The engine error currently occupying the shared `cerastream` notification
 	// slot. Tracked because that slot is shared by every non-srtla engine error,
 	// so a blind remove-by-name would retract whichever error happens to be
@@ -779,6 +785,7 @@ export class CerastreamBackend implements StreamingBackend {
 		opts: StreamRunOptions,
 		transaction?: LaunchTransaction,
 	): Promise<void> {
+		this.runtimeEvidence = undefined;
 		this.active = true;
 		this.clearRecoveredEngineError();
 		const ownsLaunch = currentStreamLaunchOwner();
@@ -806,6 +813,9 @@ export class CerastreamBackend implements StreamingBackend {
 				assertStreamLaunchOwnership();
 				this.client = client;
 				const clientEpoch = ++this.clientEpoch;
+				this.runtimeEvidence = undefined;
+				this.telemetry = {};
+				this.lastPolicyReloadRequested = undefined;
 				const subscription = await launchTransaction.acquirePhase(
 					"subscribe",
 					() =>
@@ -859,6 +869,9 @@ export class CerastreamBackend implements StreamingBackend {
 					const parsed = startResultSchema.parse(result);
 					if (parsed.state !== "streaming") await streamingStatus;
 				});
+				// Subscription replay predates this Start acknowledgement.
+				if (this.client === client && this.clientEpoch === clientEpoch)
+					this.runtimeEvidence = undefined;
 			}, "start");
 		} catch (error) {
 			await launchTransaction.rollback();
@@ -1029,6 +1042,7 @@ export class CerastreamBackend implements StreamingBackend {
 				void this.enqueue(
 					() => client.setBitrate({ max_bitrate: maxBr }).then(() => undefined),
 					"set-bitrate",
+					client,
 				);
 			}
 			return maxBr;
@@ -1049,6 +1063,7 @@ export class CerastreamBackend implements StreamingBackend {
 		void this.enqueue(
 			() => client.reloadConfig(params).then(() => undefined),
 			"reload-config",
+			client,
 		);
 	}
 
@@ -1068,6 +1083,7 @@ export class CerastreamBackend implements StreamingBackend {
 	// and a retained realized pair leaves a fallback reason on screen explaining a
 	// stream that is no longer running.
 	private clearSessionScopedTelemetry(): void {
+		this.runtimeEvidence = undefined;
 		const previous = this.telemetry;
 		if (previous === null) return;
 		if (
@@ -1085,9 +1101,13 @@ export class CerastreamBackend implements StreamingBackend {
 	}
 
 	async reconcileRuntimeState(): Promise<EngineRuntimeState> {
-		const existing = this.telemetry;
-		if (existing !== null && this.client !== undefined) {
-			return classifyRuntimeState(existing.state, existing.streaming);
+		const existing = this.runtimeEvidence;
+		if (
+			existing !== undefined &&
+			this.client !== undefined &&
+			existing.current()
+		) {
+			return existing.state;
 		}
 
 		let client: CerastreamClient | undefined;
@@ -1355,6 +1375,10 @@ export class CerastreamBackend implements StreamingBackend {
 				this.deps.bridge.broadcastStatus();
 				break;
 			case "status": {
+				this.runtimeEvidence = {
+					state: classifyRuntimeState(event.state, event.streaming),
+					current,
+				};
 				this.deps.onEngineStatus?.(event, current);
 				const capture = event.active_encode?.capture;
 				if (engineAdvertises("capture-standby")) {
@@ -1573,13 +1597,23 @@ export class CerastreamBackend implements StreamingBackend {
 		});
 	}
 
-	private enqueue(op: () => Promise<void>, label: string): Promise<void> {
+	private enqueue(
+		op: () => Promise<void>,
+		label: string,
+		client?: CerastreamClient,
+	): Promise<void> {
 		const operation = this.queue.then(op);
-		this.queue = operation.catch((err) => this.handleOpFailure(label, err));
+		this.queue = operation.catch((err) =>
+			this.handleOpFailure(label, err, client),
+		);
 		return operation;
 	}
 
-	private handleOpFailure(label: string, err: unknown): void {
+	private handleOpFailure(
+		label: string,
+		err: unknown,
+		client: CerastreamClient | undefined = this.client,
+	): void {
 		this.deps.logger.error(`cerastream: ${label} failed`, { err });
 		if (label === "start") {
 			this.active = false;
@@ -1587,7 +1621,7 @@ export class CerastreamBackend implements StreamingBackend {
 			this.subscription = undefined;
 			return;
 		}
-		this.noteConnectionLoss(this.client, err, label);
+		this.noteConnectionLoss(client, err, label);
 	}
 
 	/**
@@ -1646,6 +1680,7 @@ export class CerastreamBackend implements StreamingBackend {
 		}
 		this.subscription = undefined;
 		this.client = undefined;
+		this.runtimeEvidence = undefined;
 		this.telemetry = null;
 		this.deps.bridge.broadcastStatus();
 		this.deps.onSessionConnectionLost(site);

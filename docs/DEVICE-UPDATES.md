@@ -435,8 +435,12 @@ package left half-installed. For other windows see "D8 stream/update
 admission: what it does NOT cover" under Known gaps in the root
 [`AGENTS.md`](../AGENTS.md). An admitted, uncancelled start sets
 `/run/ceralive/streaming`, which the image's activation script checks before
-arming an OS slot. Stop intent disarms restoration but does not remove this
+arming an OS slot. Each Stop caller reports intent before joining cleanup; only
+operator intent disarms restoration (engine-loss/reconfigure retain it), and
+restoration re-reads intent after runtime observation. This does not remove the
 physical-liveness guard: parked, rejected, timed-out and unknown stops retain it.
+The internal operator-intent token fences restoration preparation and Start's
+pre-generation waits; it is never engine-idle or update-admission evidence.
 Confirmed idle/cleanup clears it; reconciliation to streaming sets it and
 reconciliation to idle clears it. The host regressions do not qualify image
 activation or either board. The typed failure is documented in

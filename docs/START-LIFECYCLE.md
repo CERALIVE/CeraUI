@@ -134,8 +134,16 @@ returns `cancelled`, never resurrects the start, and releases its lifecycle leas
 Refusal or observer failure unwinds the pending generation; refusal payloads
 (`update_in_progress`, phase, percent and ETA) are unchanged.
 
-Restoration intent and physical OTA liveness are separate. Stop disarms
-restoration immediately, but `/run/ceralive/streaming` remains while a stop is
+Restoration intent and physical OTA liveness are separate. Every Stop caller
+reports intent before joining shared work; only operator intent disarms
+restoration immediately. Engine-loss/reconfigure intent retains it. Joining
+operator cause is preserved for cancelled launch settlement and parked Stop
+release. Restoration reads intent after its runtime observation, so an operator
+disarm during that await cannot resurrect the stream.
+An import-free operator-intent token fences default restoration preparation and
+settlement as well as internal Start waits before a generation is registered.
+It never supplies positive engine evidence or removes physical protection.
+`/run/ceralive/streaming` remains while a stop is
 parked, rejected, timed out or unknown. Confirmed stop/cleanup or authoritative
 idle reconciliation removes it; authoritative streaming reconciliation sets it
 for a session surviving a backend restart. Unknown reconciliation preserves it.
@@ -147,6 +155,13 @@ These cancellation and marker transitions are host-tested, not board-qualified.
 OTA projection. `stream-session-cleanup.ts` owns submitted cleanup. The factory
 retains admission, retry and configuration orchestration; wire/stored schemas,
 D8 origins, refusal payloads and timing policy are unchanged.
+
+The initial protected state is published through the existing lifecycle setter
+at the first reconciliation transition, including a same-state transition, not
+during construction. Runtime-status evidence carries its producing client/epoch
+predicate separately from presentation telemetry. New Start, client acquisition
+and Start acknowledgement invalidate it; previous idle or subscription replay
+from before Start cannot establish current idle. No fresh evidence is UNKNOWN.
 
 | State | Admitted operation / transition | Liveness evidence |
 |---|---|---|

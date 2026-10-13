@@ -9,8 +9,18 @@ start cancels that generation before a later launch can be admitted. The legacy
 `is_streaming` flag changes only after the awaited engine start confirms success.
 The cancellable generation exists before the awaited D8 check. A Stop during
 admission fences the later answer before OTA marking or launch; cancellation,
-refusal and throws release the lifecycle lease. Restoration disarms on Stop
-intent, while the OTA sentinel follows physical liveness: retain through parked,
+refusal and throws release the lifecycle lease. Every Stop caller reports its
+intent before joining shared cleanup. Only operator intent disarms restoration;
+engine-loss/reconfigure intent retains it. Joining operator cause is preserved
+for cancelled launches and parked release. Restoration reads its marker after the
+awaited runtime observation, not from a pre-await intent snapshot.
+`operator-stop-intent.ts` provides a process-local monotonic intent token, not
+engine evidence. Every operator Stop invalidates it even when joining cleanup.
+Default restoration preparation checks it after imports, validation and IP
+preparation; stale settlement publishes no recovered/failed outcome. Internal
+Start checks the token after recovery and reconciliation waits before registering
+a generation, closing the otherwise unowned cancellation window.
+The OTA sentinel follows physical liveness: retain through parked,
 failed or unknown stops and clear only on confirmed idle/cleanup. Reconciliation
 sets/clears that sentinel on authoritative streaming/idle and retains it on unknown.
 Host regression coverage does not qualify image activation on either board.
@@ -27,6 +37,8 @@ an adopted subscription instead follows current client/session identity and keep
 receiving subsequent status even when its original probe epoch expires. The additive
 `status.stream_lifecycle` field exposes `idle | starting | streaming | stopping |
 stop_failed | reconciling`; `is_streaming` remains backward compatible.
+The first safe reconciliation transition publishes initial retained-sentinel
+`reconciling` through that projection, without broadcasting from construction.
 
 The launch transaction owns rollback and phase deadlines. Rollback completion is
 not idle proof: internal failure liveness is confirmed only before Start dispatch
@@ -61,6 +73,12 @@ plus acknowledged cancellation needs no blind second Stop. Uncertain settlement
 retains protection; only an explicit operator cause permits unknown-engine Stop.
 Read-only probes have a separate token and advance client epoch only on adoption,
 so an unused probe cannot make a launched session deaf to later idle status.
+Cached runtime evidence has the producing subscription's client/epoch predicate;
+it is separate from display telemetry and invalidated at new Start, acquisition
+and Start acknowledgement. Old-session idle and pre-Start replay cannot release
+new-session protection. Missing current evidence stays UNKNOWN.
+Queued bitrate/reload failures retain their submitting client identity; an old
+connection rejection cannot retire a newly adopted subscription.
 The orchestrator binds its live reader after initialization; the leaf imports no
 runtime orchestrator dependency, so system/update consumers cannot create a cycle.
 The existing update-refusal catalogs describe an active or unconfirmed stream and

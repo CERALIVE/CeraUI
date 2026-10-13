@@ -24,6 +24,7 @@ export function createSessionOwnership(deps: StreamSessionOrchestratorDeps) {
 	let launches = 0;
 	let protectionRequired = initialLiveness === "unknown";
 	let confirmedLiveness: SessionLiveness = initialLiveness;
+	let published = false;
 	// Confirmed cleanup can restore the same absent-sentinel baseline as boot.
 	const sentinelAbsent = () =>
 		typeof deps.initialLiveness !== "function" ||
@@ -38,13 +39,14 @@ export function createSessionOwnership(deps: StreamSessionOrchestratorDeps) {
 		return capture();
 	};
 	const transition = (next: LifecycleState): boolean => {
-		if (state === next) return true;
-		if (!isLegalLifecycleTransition(state, next)) {
+		if (state === next && published) return true;
+		if (state !== next && !isLegalLifecycleTransition(state, next)) {
 			deps.invariantViolation?.(state, next);
 			return false;
 		}
 		state = next;
 		deps.setLifecycleState?.(state);
+		published = true;
 		return true;
 	};
 	const protect = () => {

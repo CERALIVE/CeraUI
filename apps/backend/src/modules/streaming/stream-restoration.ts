@@ -66,6 +66,7 @@ import {
 	readArmedStreamMarker,
 	writeArmedStreamMarker,
 } from "./armed-stream-marker.ts";
+import { captureOperatorStopIntent } from "./operator-stop-intent.ts";
 import { awaitRecoveryBarrier } from "./recovery-barrier.ts";
 import {
 	getStreamSessionSnapshot,
@@ -182,6 +183,7 @@ export interface StreamRestorationDeps {
 	readonly lifecycleState: () => LifecycleState;
 	readonly launch: (
 		config: ArmedStreamConfig,
+		current: () => boolean,
 	) => Promise<RestorationLaunchOutcome>;
 	readonly publish: (outcome: RestorationRunOutcome) => void;
 	readonly wait: (ms: number) => Promise<void>;
@@ -208,6 +210,7 @@ export interface StreamRestorationDeps {
  */
 async function defaultLaunch(
 	config: ArmedStreamConfig,
+	current: () => boolean,
 ): Promise<RestorationLaunchOutcome> {
 	const [
 		{ validateConfig },
@@ -225,9 +228,11 @@ async function defaultLaunch(
 		import("./start-failure-taxonomy.ts"),
 	]);
 
+	if (!current()) return { ok: false, reason: "start_cancelled" };
 	let resolved: Awaited<ReturnType<typeof validateConfig>>;
 	try {
 		resolved = await validateConfig({ ...config });
+		if (!current()) return { ok: false, reason: "start_cancelled" };
 		await prepareSrtlaIpAddresses(resolved.srtlaAddr);
 	} catch (error) {
 		defaultLogger.warn("stream restoration: the saved config is not usable", {
@@ -236,6 +241,7 @@ async function defaultLaunch(
 		return { ok: false, reason: "config_invalid" };
 	}
 
+	if (!current()) return { ok: false, reason: "start_cancelled" };
 	const result = await startStreamSession({
 		origin: "restoration",
 		launch: async ({ attemptId }) => {
@@ -364,13 +370,17 @@ let inflight: Promise<RestorationRunOutcome> | undefined;
 async function runOnce(
 	deps: StreamRestorationDeps,
 ): Promise<RestorationRunOutcome> {
+	const current = captureOperatorStopIntent();
 	await deps.awaitRecovery();
 	const startedAt = deps.now();
 	for (;;) {
+		const runtimeState = await deps.runtimeState();
 		const marker = readArmedStreamMarker(deps.marker);
+		if (marker !== undefined && !current())
+			return { result: "blocked", reason: "start_cancelled" };
 		const decision = decideStreamRestoration({
 			marker,
-			runtimeState: await deps.runtimeState(),
+			runtimeState,
 			lifecycleState: deps.lifecycleState(),
 			currentBootId: deps.marker.readBootId(),
 			elapsedMs: deps.now() - startedAt,
@@ -424,7 +434,8 @@ async function runOnce(
 
 		if (marker === undefined) return { result: "blocked", reason: "no_marker" };
 
-		const launched = await deps.launch(marker.config);
+		const launched = await deps.launch(marker.config, current);
+		if (!current()) return { result: "blocked", reason: "start_cancelled" };
 		const attemptElapsedMs = deps.now() - startedAt;
 		if (launched.ok) {
 			recordAttempt(deps, marker, "recovered", attemptElapsedMs);

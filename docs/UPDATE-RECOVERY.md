@@ -26,6 +26,17 @@ temporarily closes admission but cannot create protection on that baseline.
 Protected/adopted/uncertain sessions remain closed through silence; only explicit
 operator Stop may confirm an unowned unknown engine, never automatic reconciliation.
 Cancelled starts retain rollback certainty and the cancelling Stop acknowledgement.
+Runtime evidence is bound to the producing client/epoch and invalidated at new
+Start, acquisition and acknowledgement. Old idle never clears a new session's
+protection. Initial retained-sentinel reconciliation reaches the existing
+`stream_lifecycle` projection at the first safe transition, not construction.
+Each joining Stop reports intent immediately; only operator intent disarms
+restoration, while engine-loss/reconfigure retain it. Its cause survives cancelled
+launch settlement and parked release. The restoration runner re-reads intent
+after runtime observation; removed intent cannot authorize a later launch.
+The process-local operator-intent token also invalidates default preparation,
+pre-generation Start waits and stale restoration publication. It is independent
+of sentinel/engine evidence and cannot grant idle or force automatic Stop.
 These are production-path host regressions, not qualification of real engine/media,
 cross-connection Stop/Start ordering, reboot or RAUC activation on either board.
 

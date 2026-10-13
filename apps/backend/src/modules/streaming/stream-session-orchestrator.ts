@@ -25,6 +25,10 @@ import {
 	MODEM_TRANSITION_ACTIVE,
 } from "./lifecycle-admission.ts";
 import {
+	captureOperatorStopIntent,
+	noteOperatorStopIntent,
+} from "./operator-stop-intent.ts";
+import {
 	classifyStartFailure,
 	type RetryPolicy,
 	type SuppressionContext,
@@ -348,6 +352,7 @@ export function createStreamSessionOrchestrator(
 	});
 
 	const start = async (request: StreamStartRequest): Promise<StartResult> => {
+		const currentIntent = captureOperatorStopIntent();
 		const attemptId = deps.createAttemptId();
 
 		// The barrier is consulted BEFORE the duplicate-start check, because it is
@@ -360,6 +365,7 @@ export function createStreamSessionOrchestrator(
 			return refuseStart(attemptId, "recovery_pending", "recovery_pending");
 		}
 
+		if (!currentIntent()) return { result: "cancelled", attemptId };
 		const blocked = deps.blockingMutation?.();
 		if (blocked !== undefined) {
 			return refuseStart(attemptId, "mutation_blocked", blocked.stableKey);
@@ -381,6 +387,7 @@ export function createStreamSessionOrchestrator(
 		)
 			await reconcile();
 
+		if (!currentIntent()) return { result: "cancelled", attemptId };
 		if (
 			ownership.state !== "idle" ||
 			ownership.streamLiveness() !== "idle" ||
@@ -712,6 +719,14 @@ export function createStreamSessionOrchestrator(
 	};
 
 	const stop = (cause: StreamStopCause): Promise<StopResult> => {
+		if (cause === "operator") noteOperatorStopIntent();
+		deps.onStreamStopped?.(cause);
+		if (cause === "operator") {
+			if (active?.cancelled) active.cancelCause = cause;
+			if (queuedStop !== undefined) queuedStop = { ...queuedStop, cause };
+			if (engineQueuedStop !== undefined)
+				engineQueuedStop = { ...engineQueuedStop, cause };
+		}
 		if (stopFlight !== undefined) return stopFlight;
 		const reserved = Promise.withResolvers<StopResult>();
 		stopFlight = reserved.promise;
@@ -735,11 +750,6 @@ export function createStreamSessionOrchestrator(
 		void import("./capture-resilience.ts").then(({ noteCaptureStatus }) => {
 			if (ownership.owns(intentOwner)) noteCaptureStatus(undefined, false);
 		});
-		// The cause is reported from the INTENT, ahead of the outcome. An operator
-		// who pressed Stop meant it whether or not the engine answered, and a stop
-		// that parks behind a transaction must not leave the marker armed for the
-		// minute it waits.
-		deps.onStreamStopped?.(cause);
 		// A change transaction already owns the engine's lifecycle mutex and the
 		// capture hardware. Racing a 12 s stop deadline against it would report a
 		// healthy 65 s transaction as `stop_failed`, so the stop WAITS and is then

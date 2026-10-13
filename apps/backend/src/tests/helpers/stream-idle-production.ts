@@ -9,7 +9,10 @@ import {
 	classifyStartFailure,
 	StreamStartFailure,
 } from "../../modules/streaming/start-failure-taxonomy.ts";
-import { createStreamSessionOrchestrator } from "../../modules/streaming/stream-session-orchestrator.ts";
+import {
+	createStreamSessionOrchestrator,
+	type StreamSessionOrchestratorDeps,
+} from "../../modules/streaming/stream-session-orchestrator.ts";
 import { streamSessionProductionDeps } from "../../modules/streaming/stream-session-production.ts";
 import * as registry from "../../modules/streaming/streaming-engine.ts";
 import {
@@ -20,7 +23,10 @@ import { evidenceHarness, flushEvidence } from "./stream-engine-evidence.ts";
 
 /** Real factory, ownership, filesystem sentinel, startStream and stopGeneration.
  * Only the engine wire and sender process/telemetry are host ports. */
-export function idleProductionHarness(directory: string) {
+export function idleProductionHarness(
+	directory: string,
+	ports: Partial<StreamSessionOrchestratorDeps> = {},
+) {
 	const engine = evidenceHarness();
 	const selector = spyOn(registry, "getStreamingBackend").mockReturnValue(
 		engine.backend,
@@ -72,6 +78,7 @@ export function idleProductionHarness(directory: string) {
 		onStreamCommitted: () => undefined,
 		onStreamArmed: () => undefined,
 		onStreamStopped: () => undefined,
+		...ports,
 	});
 	engine.setStatusSink(session.noteEngineStatus);
 	const start = () =>

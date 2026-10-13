@@ -363,6 +363,12 @@ reconciliation adopts a stream that survived a backend process restart. A timeou
 query error, or contradictory engine status stays `reconciling`; the reconnect-heal
 path retries instead of publishing a false idle state.
 
+The first reconciliation publishes retained-sentinel `reconciling` through the
+existing lifecycle projection, even if the engine remains silent. Construction
+does not broadcast. Runtime status evidence retains its producing client/epoch
+predicate and is invalidated at new Start, client acquisition and Start commitment;
+neither old-session idle nor pre-Start subscription replay establishes current idle.
+
 Silence after a successful subscription is UNKNOWN, never idle. The factory's
 `streamLiveness()` is the tri-state admission accessor; a failed sentinel write
 also keeps protection unconfirmed and retries rather than latching success.
@@ -386,8 +392,15 @@ acknowledgement; unused probes preserve the live subscription. Disruptive consum
 must adopt the leaf in B3 integration; this branch alone does not migrate them.
 
 Stop also cancels a generation waiting for D8 update admission, including the
-idle no-update case, before any launch or OTA marking. The restoration marker
-disarms on intent, while the separate OTA sentinel stays through parked or failed
+idle no-update case, before any launch or OTA marking. Each caller's Stop intent
+is processed before joining shared cleanup. Only operator intent disarms the
+restoration marker; engine-loss and reconfigure retain it. Joining operator cause
+survives cancellation and parked release. Restoration re-reads the marker after
+its awaited runtime observation, so removed intent cannot authorize a new launch.
+An import-free operator-intent token also fences default launch preparation and
+internal Start waits before a generation exists; stale restoration settlement
+cannot publish a recovery after Stop. The token is not idle evidence.
+The separate OTA sentinel stays through parked or failed
 stops and unknown engine state until confirmed idle/cleanup. Submitted cleanup
 owns one flight even after its caller times out; reconciliation cannot admit a
 new launch while that cleanup is pending. Socket loss and incomplete launch cleanup
