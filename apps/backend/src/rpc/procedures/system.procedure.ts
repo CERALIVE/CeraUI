@@ -38,13 +38,11 @@ import {
 	setRemoteConfig,
 } from "../../modules/remote/remote.ts";
 import { setAutostart } from "../../modules/streaming/streamloop.ts";
+import { DisruptiveActionRefusedError } from "../../modules/system/disruptive-action-error.ts";
 import {
 	PowerSubmissionError,
 	resetDisruptiveActionReservationForTest,
 } from "../../modules/system/disruptive-action-reservation.ts";
-import { DisruptiveActionRefusedError } from "../../modules/system/disruptive-action-error.ts";
-import { notifyDisruptiveActionRefused } from "../../modules/system/disruptive-action-refusal.ts";
-import { getDisruptiveActionDecision } from "../../modules/system/disruptive-action-runtime.ts";
 import {
 	getKioskStatus,
 	isRealDevice,
