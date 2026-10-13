@@ -293,7 +293,7 @@
 	"general.updateConfirmation": "Are you sure you want to start a software update? This may take several minutes. You won't be able to start a stream until it's completed. The encoder will briefly disconnect after a successful upgrade. Never remove power or reset the encoder while updating. If the encoder is powered from a battery, ensure it's fully charged.",
 	"general.updateFailed": "Update failed",
 	"general.updateLastChecked": "Last checked at <time>",
-	"general.updateNoProgress": "The device accepted the update but never reported any progress. Nothing was installed.",
+	"general.updateNoProgress": "The device accepted the update but has never reported any progress so far. This updates as soon as it does.",
 	"general.updateReasonAlreadyUpdating": "An update is already running.",
 	"general.updateReasonCheckUnavailable": "The package list couldn't be refreshed. Check the device's internet connection, then try again.",
 	"general.updateReasonDisabled": "Software updates are turned off on this device. They're managed outside CeraUI.",

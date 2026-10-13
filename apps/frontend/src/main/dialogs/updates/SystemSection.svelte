@@ -16,10 +16,11 @@
   Unknown is never rendered as a fact (C-M3). Details the device could not
   answer (`details` undefined) are "unavailable"; a `null` running version means
   the device could not ESTABLISH it, which is not proof the image carries none;
-  and "no newer image" is said only when the LATEST OS check completed
-  successfully and the live phase could show a held offer
-  (`osCheckFoundNothing`). Otherwise whether a newer image exists is an open
-  question.
+  and "no newer image" is said only when the dialog saw that check complete
+  with nothing offered on the link it is reading over (`nothingNewer`, from
+  the surface's `osNothingNewer`): the candidate lives in the device's memory
+  and a restart loses it while the clock survives (round-3 review C, C3-2).
+  Otherwise whether a newer image exists is an open question.
 -->
 <script lang="ts">
 import { formatBytes, formatPercent } from '@ceraui/i18n/formatters';
@@ -34,7 +35,7 @@ import { RefreshCw } from '@lucide/svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Progress } from '$lib/components/ui/progress';
-import { osCheckFoundNothing, systemImagePhase } from '$lib/updates/update-dialog-view';
+import { systemImagePhase } from '$lib/updates/update-dialog-view';
 import {
 	appliesAfterRestart,
 	etaMinutes,
@@ -49,11 +50,22 @@ interface Props {
 	channel: UpdateSettings['channel'] | undefined;
 	checking: boolean;
 	installing: boolean;
+	/** Positive evidence that the latest OS check found no newer image. */
+	nothingNewer?: boolean;
 	onCheck: () => void;
 	onInstall: () => void;
 }
 
-let { wire, details, channel, checking, installing, onCheck, onInstall }: Props = $props();
+let {
+	wire,
+	details,
+	channel,
+	checking,
+	installing,
+	nothingNewer = false,
+	onCheck,
+	onInstall,
+}: Props = $props();
 
 const locale = $derived(getLocale());
 const os = $derived(details?.os);
@@ -66,7 +78,6 @@ const nextCheck = $derived(formatUpdateTime(details?.checks.os.nextAttemptAt, lo
 // Only a candidate the channel offered and the orchestrator is holding can be
 // installed by hand; anywhere else the device would refuse the request.
 const installable = $derived(activation === 'os-available' && os?.candidate != null);
-const nothingNewer = $derived(osCheckFoundNothing(details, wire?.phase));
 </script>
 
 <section aria-labelledby="updates-system-heading" class="space-y-2.5" data-testid="updates-system">

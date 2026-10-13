@@ -3,11 +3,15 @@
  *
  * Every sequence of up to BOUND events from the alphabet below is applied to a
  * reference world (`tests/helpers/update-action-world.ts`) that drives the
- * PRODUCTION machine and binder step and keeps its own ground truth. After
- * every event the machine's bands and busy state must match that truth:
+ * PRODUCTION machine and keeps its own ground truth: what the device did with
+ * each request and which evidence reached the dialog. The oracle below states
+ * the CONTRACT from those device-side facts, never from the machine; when the
+ * dialog reads is the contract's own `contractMove`, and the production binder
+ * is checked against it over every frame pair. After every event:
  *
- *   U1 "Not started" only for a positive pre-dispatch refusal, never for a
- *      request the device started;
+ *   U1 "Not started" only for a positive pre-effect refusal, or a
+ *      `{ success: false }` reply that no start evidence preceded; never for a
+ *      request the device started (round-3 review C, C3-1);
  *   U2 an unconfirmed outcome clears once ANY later evidence settles it,
  *      including a read made because a session was restored on the same phase;
  *   U3 nothing from a closed dialog's session reaches the reopened one;
@@ -19,6 +23,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+	contractMove,
 	initialWorld,
 	type World,
 	type WorldAction,
@@ -31,6 +36,7 @@ import {
 	type WorldEvent,
 } from "../../tests/helpers/update-action-world-events";
 import { actionBands, isBusy, reduceActions } from "./update-action-outcome";
+import { type DeviceFrame, followStep } from "./update-device-follow.svelte";
 
 const BOUND = 8;
 
@@ -50,8 +56,12 @@ function expectedBand(w: World): ExpectedBand | undefined {
 		case "pending":
 		case "accepted":
 			return undefined;
-		case "refused":
+		case "refused-pre":
 			return { state: "refused" };
+		// The producer publishes a start before it replies, so a negative reply
+		// after start evidence reached the dialog is settled, not refused.
+		case "refused":
+			return owner.evidence ? undefined : { state: "refused" };
 		case "uncertain-lost":
 			return owner.evidence
 				? undefined
@@ -143,7 +153,46 @@ function run(action: WorldAction, events: readonly WorldEvent[]): World {
 	}, initialWorld(action));
 }
 
+describe("the production binder reads exactly when the contract says", () => {
+	it("agrees with contractMove on every frame pair", () => {
+		// Given every pair of frames over open/closed, three phases and a
+		// restored-session count that moved or not.
+		const phases = [undefined, "idle", "checking"] as const;
+		const frames: DeviceFrame[] = [];
+		for (const open of [true, false])
+			for (const phase of phases)
+				for (const restored of [0, 1]) frames.push({ open, phase, restored });
+
+		// Then the production step is the contract's move, pair by pair.
+		const disagreements = frames.flatMap((seen) =>
+			frames
+				.filter(
+					(next) =>
+						JSON.stringify(followStep(seen, next)) !==
+						JSON.stringify(contractMove(seen, next)),
+				)
+				.map((next) => `${JSON.stringify(seen)} -> ${JSON.stringify(next)}`),
+		);
+		expect(disagreements).toEqual([]);
+	});
+});
+
 describe("the reviewer's sequences are paths of the world", () => {
+	it("C3-1: start observed -> {success:false} is not 'Not started'", () => {
+		// Given an install the device starts, then answers negatively.
+		const world = run("install", ["dispatch", "device-starts", "refuse"]);
+
+		// Then no band claims it did not start.
+		expect(actionBands(world.machine)).toEqual([]);
+		expect(violation(world)).toBeUndefined();
+	});
+
+	it("C3-1: the startup envelope stays 'Not started'", () => {
+		const world = run("install", ["dispatch", "initializing"]);
+		expect(actionBands(world.machine)[0]?.state).toBe("refused");
+		expect(violation(world)).toBeUndefined();
+	});
+
 	it("M1: an internal error after the device showed the image staged leaves no band", () => {
 		// Given an install the device stages, which a fresh read then shows.
 		// When the awaited request finally fails with an internal error.
@@ -193,8 +242,8 @@ describe("the reviewer's sequences are paths of the world", () => {
 
 /** The explored space, pinned: a shrinking alphabet must not pass silently. */
 const SPACE = {
-	check: { sequences: 1_686_842, fullLength: 1_434_585 },
-	install: { sequences: 1_136_319, fullLength: 948_702 },
+	check: { sequences: 2_126_403, fullLength: 1_817_900 },
+	install: { sequences: 1_384_886, fullLength: 1_159_550 },
 } as const;
 
 describe.each(["check", "install"] as const)(

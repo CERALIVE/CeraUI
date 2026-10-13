@@ -6,9 +6,12 @@
  * until its awaited chain settles, then `accepted`, `refused` ("Not started"),
  * or `unconfirmed`; device evidence observed AFTER the dispatch (a changed
  * phase, a details read that started later and landed) folds into its watch
- * and turns `unconfirmed` into `reconciled`. Only the call that owns an
- * outcome may conclude it; a closed dialog (`reset`) keeps nothing but the
- * busy marks of chains still on the wire.
+ * and turns `unconfirmed` into `reconciled`. A `{ success: false }` REPLY
+ * whose call already holds such evidence is `reconciled` too: the producer
+ * published that start before it replied, so the reply cannot mean "never
+ * started" (round-3 review C, C3-1). Pre-effect refusals stay `refused`. Only
+ * the call that owns an outcome may conclude it; a closed dialog (`reset`)
+ * keeps nothing but the busy marks of chains still on the wire.
  */
 import type {
 	UpdateDetails,
@@ -18,6 +21,8 @@ import type {
 import type { ActionVerdict, UncertainCause } from "./update-action-failure";
 import {
 	type DispatchContext,
+	type LegacyKind,
+	legacySettles,
 	phaseSettles,
 	readSettles,
 	type UpdateActionKind,
@@ -25,6 +30,7 @@ import {
 
 export type {
 	DispatchContext,
+	LegacyKind,
 	UpdateActionKind,
 } from "./update-action-settlement";
 
@@ -77,6 +83,7 @@ export type ActionEvent =
 			readonly verdict: ActionVerdict;
 	  }
 	| { readonly type: "phase"; readonly phase: UpdateOrchestratorPhase }
+	| { readonly type: "legacy"; readonly kind: LegacyKind }
 	| {
 			readonly type: "read";
 			readonly seq: number;
@@ -97,22 +104,31 @@ export function isBusy(
 	return machine.inFlight.some((call) => call.action === action);
 }
 
+type Evidence = Extract<ActionEvent, { type: "phase" | "legacy" | "read" }>;
+
 function evidenceSettles(
 	outcome: Owned,
 	watch: ActionWatch,
-	event: Extract<ActionEvent, { type: "phase" | "read" }>,
+	event: Evidence,
 ): boolean {
-	if (event.type === "phase") return phaseSettles(outcome.action, event.phase);
-	return (
-		event.seq > watch.afterRead &&
-		readSettles(outcome.action, watch, event.details)
-	);
+	switch (event.type) {
+		case "phase":
+			return phaseSettles(outcome.action, event.phase);
+		case "legacy":
+			return legacySettles(outcome.action, event.kind);
+		case "read":
+			return (
+				event.seq > watch.afterRead &&
+				readSettles(outcome.action, watch, event.details)
+			);
+		default: {
+			const unreachable: never = event;
+			return unreachable;
+		}
+	}
 }
 
-function fold(
-	outcome: ActionOutcome,
-	event: Extract<ActionEvent, { type: "phase" | "read" }>,
-): ActionOutcome {
+function fold(outcome: ActionOutcome, event: Evidence): ActionOutcome {
 	if (outcome.state !== "dispatched" && outcome.state !== "unconfirmed")
 		return outcome;
 	if (outcome.watch.settled || !evidenceSettles(outcome, outcome.watch, event))
@@ -131,6 +147,8 @@ function concluded(
 		case "accepted":
 			return { ...owner, state: "accepted" };
 		case "refused":
+			if (!verdict.preEffect && outcome.watch.settled)
+				return { ...owner, state: "reconciled" };
 			return {
 				...owner,
 				state: "refused",
@@ -201,6 +219,7 @@ export function reduceActions(
 		case "conclude":
 			return conclude(machine, event.call, event.verdict);
 		case "phase":
+		case "legacy":
 		case "read":
 			return {
 				...machine,

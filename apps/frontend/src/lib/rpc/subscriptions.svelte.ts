@@ -88,7 +88,7 @@ import {
 import { mergeModemList } from "./modem-list-merge";
 import { reauthenticateAndHydrate } from "./reconnect";
 import { createSeqTracker } from "./seq-guard";
-import { noteSessionRestored } from "./session-epoch.svelte";
+import { noteLinkState, noteSessionRestored } from "./session-epoch.svelte";
 import {
 	refreshWifiAdapterModes,
 	resetWifiAdapterModes,
@@ -1109,9 +1109,9 @@ function handleConnectionChange(state: ConnectionState): void {
 	isConnectedState = state === "connected";
 
 	// On the reconnect edge drop every still-pending OS-operation latch: the
-	// post-reconnect getStatus hydrate (kicked async by runReconnectReauth below)
-	// is the authoritative snapshot, so a stale pending must not linger. Steady
-	// connected→connected ticks reconcile nothing.
+	// post-reconnect getStatus hydrate (kicked by runReconnectReauth below) is
+	// authoritative. Steady connected→connected ticks reconcile nothing.
+	noteLinkState(state);
 	reconcileOperationsOnReconnect(previous, state);
 
 	if (state === "connected") {

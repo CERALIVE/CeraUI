@@ -26,6 +26,7 @@ export const WORLD_EVENTS = [
 	"duplicate",
 	"device-starts",
 	"refuse",
+	"initializing",
 	"internal",
 	"success",
 	"timeout",
@@ -91,7 +92,7 @@ function dispatch(w: World): World {
 	return conclude(
 		sent,
 		call,
-		{ kind: "refused", reason: "not_connected" },
+		{ kind: "refused", reason: "not_connected", preEffect: true },
 		"done",
 	);
 }
@@ -131,7 +132,12 @@ export function applicable(w: World, event: WorldEvent): boolean {
 			return w.open && isBusy(w.machine, w.action);
 		case "device-starts":
 			return startable(w) !== undefined;
+		// A `{ success: false }` reply may follow a start the device already
+		// ran (the OS-install producer answers from the END phase): round-3
+		// review C, C3-1. The startup envelope is pre-effect by construction.
 		case "refuse":
+			return inFlight(w) !== undefined;
+		case "initializing":
 			return inFlight(w)?.started === false;
 		case "internal":
 		case "success":
@@ -177,7 +183,24 @@ export function step(w: World, event: WorldEvent): World {
 		case "device-starts":
 			return deviceStarts(w, must(startable(w), "startable request").id);
 		case "refuse":
-			return conclude(w, flight(), { kind: "refused", reason: "busy" }, "done");
+			return conclude(
+				w,
+				flight(),
+				{ kind: "refused", reason: "busy", preEffect: false },
+				"done",
+			);
+		case "initializing":
+			return conclude(
+				w,
+				flight(),
+				{
+					kind: "refused",
+					reason: "UPDATE_ORCHESTRATOR_INITIALIZING",
+					retryable: true,
+					preEffect: true,
+				},
+				"done",
+			);
 		case "internal":
 			return conclude(
 				w,

@@ -409,8 +409,11 @@ describe("one latest read owns the details (C-M2)", () => {
 		const retry = surface.load();
 		await settle();
 
-		// When the operator's save is echoed before the older read returns.
+		// When the operator's save is echoed before the older read returns. (The
+		// save first reads the device's current settings, FIX-16-C.)
 		const saved = surface.save({ packagesAuto: false });
+		await settle();
+		answer("system.getUpdateSettings", SETTINGS, "newest");
 		await settle();
 		answer("system.setUpdateSettings", { ...SETTINGS, packagesAuto: false });
 		await saved;
@@ -469,6 +472,10 @@ describe("one latest read owns the details (C-M2)", () => {
 		// Given a save in flight when the dialog closes.
 		const surface = await openSurface();
 		const saved = surface.save({ channel: "beta" });
+		await settle();
+		// The save's basis read answers before the close (FIX-16-C), so the
+		// write itself is in flight when the dialog closes.
+		answer("system.getUpdateSettings", SETTINGS);
 		await settle();
 		surface.reset();
 

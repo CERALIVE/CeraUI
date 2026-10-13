@@ -1,11 +1,12 @@
 /**
  * A reference world for the Updates dialog's action/outcome flow: one action
  * kind, one device, one link, one dialog. It drives the PRODUCTION machine
- * (`reduceActions`) and binder step (`followStep`), and keeps the ground truth
- * beside them: what the device really did with each request, which evidence
- * really reached the dialog, and which details read is the latest. The
- * surface's read fences and the shell's post-action read are modelled here, so
- * the real-stack test can check the real code against this model.
+ * (`reduceActions`) and keeps the ground truth beside it: what the device
+ * really did with each request, which evidence really reached the dialog, and
+ * which details read is the latest. WHEN the dialog must read is the
+ * CONTRACT's (`contractMove`), written here from the contract document and
+ * never imported from the production binder: a binder that stops re-reading
+ * on a restored session diverges from this world (round-3 review C).
  */
 import type {
 	UpdateDetails,
@@ -19,10 +20,7 @@ import {
 	INITIAL_ACTIONS,
 	reduceActions,
 } from "../../lib/updates/update-action-outcome";
-import {
-	type DeviceFrame,
-	followStep,
-} from "../../lib/updates/update-device-follow.svelte";
+import type { DeviceFrame } from "../../lib/updates/update-device-follow.svelte";
 import { deviceDetails, OFFERED_VERSION } from "./update-device";
 
 export type WorldAction = "check" | "install";
@@ -39,7 +37,10 @@ export interface Device extends Shown {
 export type WorldVerdict =
 	| "pending"
 	| "accepted"
+	/** A `{ success: false }` reply. */
 	| "refused"
+	/** The startup envelope, or a request never sent. */
+	| "refused-pre"
 	| "uncertain-lost"
 	| "uncertain-error";
 
@@ -200,9 +201,33 @@ export function startRead(w: World, load: boolean): World {
 	return { ...started, reads: [...w.reads, read] };
 }
 
+/**
+ * The contract (`an-update-action-outcome-is-decided-by-evidence.md`): an OPEN
+ * dialog reads again when the pushed phase CHANGES, and when a session is
+ * restored even though the phase did not change.
+ */
+type ContractMove =
+	| { readonly kind: "none" }
+	| {
+			readonly kind: "phase";
+			readonly phase: UpdateOrchestratorPhase | undefined;
+	  }
+	| { readonly kind: "reread" };
+
+export function contractMove(
+	seen: DeviceFrame,
+	next: DeviceFrame,
+): ContractMove {
+	if (!next.open) return { kind: "none" };
+	if (next.phase !== seen.phase) return { kind: "phase", phase: next.phase };
+	return next.restored === seen.restored
+		? { kind: "none" }
+		: { kind: "reread" };
+}
+
 export function frame(w: World, patch: Partial<DeviceFrame>): World {
 	const next = { ...w.seen, ...patch };
-	const move = followStep(w.seen, next);
+	const move = contractMove(w.seen, next);
 	const seen = { ...w, seen: next };
 	switch (move.kind) {
 		case "none":
@@ -235,7 +260,11 @@ export function conclude(
 	transport: WorldCall["transport"],
 ): World {
 	const kind: WorldVerdict =
-		verdict.kind === "uncertain" ? `uncertain-${verdict.cause}` : verdict.kind;
+		verdict.kind === "uncertain"
+			? `uncertain-${verdict.cause}`
+			: verdict.kind === "refused" && verdict.preEffect
+				? "refused-pre"
+				: verdict.kind;
 	const concluded = apply(patchCall(w, call.id, { transport, verdict: kind }), {
 		type: "conclude",
 		call: call.id,
@@ -252,8 +281,17 @@ export function inFlight(w: World): WorldCall | undefined {
 	return w.calls.find((call) => call.transport === "flight");
 }
 
+/**
+ * A request the device can still start. An image already staged cannot be
+ * staged again: the producer refuses a second install before any effect.
+ */
 export function startable(w: World): WorldCall | undefined {
+	if (w.action === "install" && w.device.staged) return undefined;
 	return w.calls.find(
-		(call) => call.delivered && !call.started && call.verdict !== "refused",
+		(call) =>
+			call.delivered &&
+			!call.started &&
+			call.verdict !== "refused" &&
+			call.verdict !== "refused-pre",
 	);
 }

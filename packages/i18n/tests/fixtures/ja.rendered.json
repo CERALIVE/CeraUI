@@ -293,7 +293,7 @@
 	"general.updateConfirmation": "ソフトウェアの更新を開始しますか？これには数分かかることがあります。完了するまでストリームを開始することはできません。アップグレードが成功すると、エンコーダは一時的に切断されます。更新中は絶対に電源を切ったり、エンコーダをリセットしたりしないでください。エンコーダがバッテリーで動作している場合は、充電が完了していることを確認してください。",
 	"general.updateFailed": "更新に失敗しました",
 	"general.updateLastChecked": "最終確認: <time>",
-	"general.updateNoProgress": "デバイスは更新を受け付けましたが、進捗を一切報告しませんでした。何もインストールされていません。",
+	"general.updateNoProgress": "デバイスは更新を受け付けましたが、これまで進捗を報告していません。報告があり次第、この表示は更新されます。",
 	"general.updateReasonAlreadyUpdating": "更新はすでに実行中です。",
 	"general.updateReasonCheckUnavailable": "パッケージ一覧を更新できませんでした。デバイスのインターネット接続を確認して、もう一度お試しください。",
 	"general.updateReasonDisabled": "このデバイスではソフトウェア更新が無効です。CeraUI の外部で管理されています。",

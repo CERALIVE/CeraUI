@@ -17,3 +17,22 @@ export function getRestoredSessions(): number {
 export function noteSessionRestored(): void {
 	restored += 1;
 }
+
+/**
+ * How many times the link has DROPPED: a change marks a different socket, and
+ * after a backend restart a different process. Bumped synchronously on the
+ * edge, before anything can be read over the next socket, so a read that
+ * lands is attributed to the socket it travelled on (round-3 review C, C3-2).
+ */
+let links = 0;
+let linkUp = false;
+
+export function getLinkEpoch(): number {
+	return links;
+}
+
+export function noteLinkState(state: string): void {
+	const up = state === "connected";
+	if (linkUp && !up) links += 1;
+	linkUp = up;
+}

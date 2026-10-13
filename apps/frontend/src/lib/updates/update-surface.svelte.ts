@@ -7,34 +7,48 @@
  * owns `details`, whichever path started the read, and settings have their own
  * that a save echo also advances: an answer lands only if nothing newer was
  * started after it, so a slow opening snapshot can never overwrite a newer read
- * or an echoed save (C-M2).
+ * or an echoed save (C-M2). A restored session re-reads both.
  *
  * Sessions. `reset()` (the dialog closing) starts a new session. Every write
  * still in flight (a read, a save echo, an action's result and the read it
  * would start) belongs to the session it began in and lands nowhere once that
  * session has ended.
  *
- * Writes go through `osCommand` and are PESSIMISTIC: the rendered value moves
- * only to what the device echoed back, never to what was clicked. The three
- * operator actions and their outcomes live in `update-actions.svelte.ts`; this
- * surface feeds them every pushed phase and every details read that lands.
+ * Writes are PESSIMISTIC: the rendered value moves only to what the device
+ * echoed back, never to what was clicked. Settings writes and their verdicts
+ * live in `update-settings-owner.svelte.ts`; the operator actions and their
+ * outcomes in `update-actions.svelte.ts`, which this surface feeds every pushed
+ * phase, every legacy state kind and every details read that lands. Every
+ * landed read also feeds the OS-check witness (`os-offer-witness.ts`), the only
+ * evidence for "no newer system image".
  */
 import type {
 	UpdateCapabilities,
 	UpdateDetails,
 	UpdateOrchestratorPhase,
 	UpdateSettings,
+	UpdateState,
 } from "@ceraui/rpc/schemas";
 
-import { getOperationPhase, osCommand } from "$lib/rpc/async-operation.svelte";
 import { rpc } from "$lib/rpc/client";
-import type { ActionBand } from "./update-action-outcome";
+import { getLinkEpoch } from "$lib/rpc/session-epoch.svelte";
+import {
+	NO_WITNESS,
+	witnessedNothingNewer,
+	witnessPhase,
+	witnessRead,
+} from "./os-offer-witness";
+import type { ActionBand, ActionOutcome } from "./update-action-outcome";
 import {
 	type ActionRefusal,
 	createUpdateActions,
 	type UpdateActionKind,
 } from "./update-actions.svelte";
-import { withSettings } from "./update-view";
+import { osCheckFoundNothing } from "./update-dialog-view";
+import {
+	createSettingsOwner,
+	type SaveOutcome,
+} from "./update-settings-owner.svelte";
 
 export {
 	type ActionRefusal,
@@ -43,8 +57,10 @@ export {
 	UPDATE_INSTALL_NOW_OP,
 	type UpdateActionKind,
 } from "./update-actions.svelte";
-
-export const UPDATE_SETTINGS_OP = "update-settings";
+export {
+	type SaveOutcome,
+	UPDATE_SETTINGS_OP,
+} from "./update-settings-owner.svelte";
 
 export interface UpdateSurface {
 	readonly capabilities: UpdateCapabilities | undefined;
@@ -54,22 +70,31 @@ export interface UpdateSurface {
 	readonly loaded: boolean;
 	readonly settingsFailed: boolean;
 	readonly detailsFailed: boolean;
-	/** The last settings write the device did not confirm. */
+	/** The last settings write was not sent, or the device did not confirm it. */
 	readonly saveFailed: boolean;
-	/** Every action outcome on screen, oldest dispatch first. */
+	readonly saveOutcome: SaveOutcome | undefined;
+	/** Every orchestrator action outcome on screen, oldest dispatch first. */
 	readonly bands: readonly ActionBand[];
 	readonly refusal: ActionRefusal | undefined;
 	/** An action nobody can confirm yet: no answer proved it, no device report settled it. */
 	readonly unconfirmed: UpdateActionKind | undefined;
+	/** The legacy Packages Update's outcome in this session. */
+	readonly packagesOutcome: ActionOutcome | undefined;
 	readonly saving: boolean;
 	pending(action: UpdateActionKind): boolean;
+	/** "No newer system image": a check this dialog saw complete found nothing. */
+	osNothingNewer(phase: UpdateOrchestratorPhase | undefined): boolean;
 	load(): Promise<void>;
 	reloadDetails(): Promise<void>;
+	/** A restored session: the device may have changed anything, read it all. */
+	reread(): Promise<void>;
 	/** The pushed phase moved: keep it as evidence, then re-read the details. */
 	observePhase(phase: UpdateOrchestratorPhase | undefined): Promise<void>;
+	observeLegacy(kind: UpdateState["kind"] | undefined): void;
 	save(patch: Partial<UpdateSettings>): Promise<boolean>;
 	checkNow(): Promise<void>;
 	installNow(): Promise<void>;
+	installPackages(): Promise<void>;
 	approveCellular(id: string): Promise<void>;
 	reset(): void;
 }
@@ -80,19 +105,19 @@ async function settle<T>(call: () => Promise<T>): Promise<T> {
 	return call();
 }
 
+const orchestratorBand = (band: ActionBand): boolean =>
+	band.action !== "packages";
+
 export function createUpdateSurface(): UpdateSurface {
 	let capabilities = $state.raw<UpdateCapabilities | undefined>();
-	let settings = $state.raw<UpdateSettings | undefined>();
 	let details = $state.raw<UpdateDetails | undefined>();
+	let witness = $state.raw(NO_WITNESS);
 	let loaded = $state(false);
-	let settingsFailed = $state(false);
 	let capabilitiesFailed = $state(false);
 	let detailsReadFailed = $state(false);
-	let saveFailed = $state(false);
-	let session = 0;
 	let loadSeq = 0;
-	let settingsSeq = 0;
 	let detailsSeq = 0;
+	const owner = createSettingsOwner();
 
 	const actions = createUpdateActions({
 		dispatchContext: () => ({
@@ -103,9 +128,16 @@ export function createUpdateSurface(): UpdateSurface {
 		reloadDetails,
 	});
 
+	function landDetails(gen: number, next: UpdateDetails): void {
+		details = next;
+		detailsReadFailed = false;
+		witness = witnessRead(witness, getLinkEpoch(), next);
+		actions.observeRead(gen, next);
+	}
+
 	async function load(): Promise<void> {
 		const gen = ++loadSeq;
-		const settingsGen = ++settingsSeq;
+		const settingsGen = owner.beginRead();
 		const detailsGen = ++detailsSeq;
 		const [caps, applied, read] = await Promise.allSettled([
 			settle(() => rpc.system.getUpdateCapabilities()),
@@ -117,15 +149,15 @@ export function createUpdateSurface(): UpdateSurface {
 			capabilitiesFailed = caps.status === "rejected";
 			loaded = true;
 		}
-		if (settingsGen === settingsSeq) {
-			settings = applied.status === "fulfilled" ? applied.value : undefined;
-			settingsFailed = applied.status === "rejected";
-		}
+		if (applied.status === "fulfilled")
+			owner.landRead(settingsGen, applied.value);
+		else owner.failRead(settingsGen);
 		if (detailsGen === detailsSeq) {
-			details = read.status === "fulfilled" ? read.value : undefined;
-			detailsReadFailed = read.status === "rejected";
-			if (read.status === "fulfilled")
-				actions.observeRead(detailsGen, read.value);
+			if (read.status === "fulfilled") landDetails(detailsGen, read.value);
+			else {
+				details = undefined;
+				detailsReadFailed = true;
+			}
 		}
 	}
 
@@ -133,43 +165,11 @@ export function createUpdateSurface(): UpdateSurface {
 		const gen = ++detailsSeq;
 		try {
 			const next = await settle(() => rpc.system.getUpdateDetails());
-			if (gen !== detailsSeq) return;
-			details = next;
-			detailsReadFailed = false;
-			actions.observeRead(gen, next);
+			if (gen === detailsSeq) landDetails(gen, next);
 		} catch {
 			if (gen !== detailsSeq) return;
 			detailsReadFailed = true;
 		}
-	}
-
-	async function save(patch: Partial<UpdateSettings>): Promise<boolean> {
-		const current = settings;
-		// A write already in flight owns the control; this click is not a
-		// failure, it simply did not happen.
-		if (
-			current === undefined ||
-			getOperationPhase(UPDATE_SETTINGS_OP) === "pending"
-		) {
-			return false;
-		}
-		const opened = session;
-		saveFailed = false;
-		const result = await osCommand({
-			key: UPDATE_SETTINGS_OP,
-			rpc: () => rpc.system.setUpdateSettings(withSettings(current, patch)),
-			confirmOnResolve: true,
-			silent: true,
-		});
-		if (opened !== session) return false;
-		if (result === undefined) {
-			saveFailed = true;
-			return false;
-		}
-		// The echo is newer than any settings read still in flight.
-		settingsSeq += 1;
-		settings = result;
-		return true;
 	}
 
 	return {
@@ -177,7 +177,7 @@ export function createUpdateSurface(): UpdateSurface {
 			return capabilities;
 		},
 		get settings() {
-			return settings;
+			return owner.settings;
 		},
 		get details() {
 			return details;
@@ -186,37 +186,57 @@ export function createUpdateSurface(): UpdateSurface {
 			return loaded;
 		},
 		get settingsFailed() {
-			return settingsFailed;
+			return owner.failed;
 		},
 		get detailsFailed() {
 			return capabilitiesFailed || detailsReadFailed;
 		},
 		get saveFailed() {
-			return saveFailed;
+			return owner.outcome !== undefined;
+		},
+		get saveOutcome() {
+			return owner.outcome;
 		},
 		get bands() {
-			return actions.bands;
+			return actions.bands.filter(orchestratorBand);
 		},
 		get refusal() {
-			return actions.refusal;
+			const refusal = actions.refusal;
+			return refusal?.action === "packages" ? undefined : refusal;
 		},
 		get unconfirmed() {
-			return actions.unconfirmed;
+			const action = actions.unconfirmed;
+			return action === "packages" ? undefined : action;
+		},
+		get packagesOutcome() {
+			return actions.outcomeOf("packages");
 		},
 		get saving() {
-			return getOperationPhase(UPDATE_SETTINGS_OP) === "pending";
+			return owner.saving;
 		},
 		pending: actions.pending,
+		osNothingNewer: (phase) =>
+			witnessedNothingNewer(witness, getLinkEpoch(), details) &&
+			osCheckFoundNothing(details, phase),
 		load,
 		reloadDetails,
+		reread: async () => {
+			await Promise.all([reloadDetails(), owner.reread()]);
+		},
 		observePhase(phase) {
-			if (phase !== undefined) actions.observePhase(phase);
+			if (phase !== undefined) {
+				actions.observePhase(phase);
+				witness = witnessPhase(witness, phase);
+			}
 			return reloadDetails();
 		},
-		save,
+		observeLegacy: actions.observeLegacy,
+		save: owner.save,
 		checkNow: () => actions.run("check", [() => rpc.system.checkUpdatesNow()]),
 		installNow: () =>
 			actions.run("install", [() => rpc.system.installUpdatesNow()]),
+		installPackages: () =>
+			actions.run("packages", [() => rpc.system.startUpdate()]),
 		// The approval is for exactly ONE candidate and is spent by the install
 		// that follows it; granting it without starting the download would leave
 		// "Download now" meaning "download some time later". Both requests are
@@ -227,12 +247,10 @@ export function createUpdateSurface(): UpdateSurface {
 				() => rpc.system.installUpdatesNow(),
 			]),
 		reset() {
-			session += 1;
 			loadSeq += 1;
-			settingsSeq += 1;
 			detailsSeq += 1;
 			actions.reset();
-			saveFailed = false;
+			owner.reset();
 		},
 	};
 }

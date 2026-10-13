@@ -23,6 +23,7 @@ const ACTION_LABEL = {
 	check: () => m['settings.updates.system.checkNow'](),
 	install: () => m['settings.updates.system.installNow'](),
 	cellular: () => m['settings.updates.cellular.approve'](),
+	packages: () => m['general.updateButton'](),
 } satisfies Readonly<Record<UpdateActionKind, () => string>>;
 </script>
 

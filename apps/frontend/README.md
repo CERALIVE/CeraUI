@@ -190,12 +190,16 @@ src/
 - **Update startup refusal**: the RPC envelope preserves optional retryability;
   Updates shows translated initialising/retry-shortly copy for the distinct
   startup code. "Not started" needs positive pre-dispatch evidence (that
-  envelope, `{ success: false }`, or a request never sent while disconnected).
-  A lost reply or an error the device raised while handling the request reads
-  "Outcome not confirmed" until a changed phase or a fresh details read settles
-  it, including the read made when a dropped session is restored on the same
-  phase. Each action keeps its own band and stays busy until its whole chain of
-  requests settles ([contract](docs/agents/an-update-action-outcome-is-decided-by-evidence.md)).
+  envelope, a request never sent while disconnected, or a `{ success: false }`
+  reply no start evidence preceded). A lost reply or an error the device raised
+  while handling the request reads "Outcome not confirmed" until a changed
+  phase or a fresh details read settles it, including the read made when a
+  dropped session is restored on the same phase. Each action keeps its own band
+  and stays busy until its whole chain of requests settles. The legacy Packages
+  Update runs through the same machine; settings saves own their controls until
+  they settle and a lost save reply is "not confirmed"; "No newer system image"
+  needs a check the dialog saw complete on its current link; a failed add-on
+  list read says so with a retry ([contract](docs/agents/an-update-action-outcome-is-decided-by-evidence.md)).
   No raw backend message or new OS-stage reason is rendered.
 
 - **Dongle login**: a submission makes one verify-before-save RPC. A failed

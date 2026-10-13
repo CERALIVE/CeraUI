@@ -15,6 +15,12 @@ import {
  * raised while HANDLING the request. `INTERNAL_ERROR` is any handler fault and
  * `VALIDATION_ERROR` also covers the reply schema, which runs after the
  * handler, so neither says the action did not start (round-2 review C, M1).
+ *
+ * `preEffect` separates the two kinds of refusal. The envelope and a request
+ * never sent are pre-effect by construction. A `{ success: false }` REPLY is
+ * not: the OS-install producer answers from the END phase of a stage it may
+ * already have run, so start evidence observed before that reply overrides it
+ * (round-3 review C, C3-1; `update-action-outcome.ts`).
  */
 export interface ActionReply {
 	readonly success: boolean;
@@ -32,6 +38,7 @@ export type ActionVerdict =
 			readonly kind: "refused";
 			readonly reason: string | undefined;
 			readonly retryable?: boolean;
+			readonly preEffect: boolean;
 	  }
 	| { readonly kind: "uncertain"; readonly cause: UncertainCause };
 
@@ -44,13 +51,14 @@ export const NOT_CONNECTED_REASON = "not_connected";
 
 export function verdictOfError(error: unknown): ActionVerdict {
 	if (error instanceof NotSentError)
-		return { kind: "refused", reason: NOT_CONNECTED_REASON };
+		return { kind: "refused", reason: NOT_CONNECTED_REASON, preEffect: true };
 	if (!(error instanceof RpcError)) return { kind: "uncertain", cause: "lost" };
 	if (!PRE_EFFECT_CODES.has(error.code))
 		return { kind: "uncertain", cause: "error" };
 	return {
 		kind: "refused",
 		reason: error.code,
+		preEffect: true,
 		...(error.retryable !== undefined ? { retryable: error.retryable } : {}),
 	};
 }
@@ -85,7 +93,7 @@ export class UpdateActionFailure {
 		if (this.#failed) return verdictOfError(this.#error);
 		return reply.success
 			? { kind: "accepted" }
-			: { kind: "refused", reason: reply.error };
+			: { kind: "refused", reason: reply.error, preEffect: false };
 	}
 }
 

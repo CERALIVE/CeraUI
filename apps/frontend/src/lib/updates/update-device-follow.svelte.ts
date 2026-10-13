@@ -5,8 +5,10 @@
  * pulled again, and the phase itself is evidence for an action. Or the link
  * dropped and the session was restored: the device may have run a whole cycle
  * and come back to the very phase it left, so an unchanged phase proves
- * nothing and only a fresh read can (round-2 review C, M2). The open edge
- * itself is the surface's `load()`, never a step here.
+ * nothing and only a fresh read can (round-2 review C, M2). That read covers
+ * the settings as well as the details: a write whose reply the outage hid may
+ * have been applied (round-3 review C, C3-3). The open edge itself is the
+ * surface's `load()`, never a step here.
  */
 import type { UpdateOrchestratorPhase } from "@ceraui/rpc/schemas";
 import { untrack } from "svelte";
@@ -39,7 +41,7 @@ export function followStep(seen: DeviceFrame, next: DeviceFrame): FollowStep {
 
 /** Registers the follower; call during the dialog component's initialisation. */
 export function followDeviceState(
-	surface: Pick<UpdateSurface, "observePhase" | "reloadDetails">,
+	surface: Pick<UpdateSurface, "observePhase" | "reread">,
 	frame: () => Omit<DeviceFrame, "restored">,
 ): void {
 	let seen: DeviceFrame = {
@@ -59,7 +61,7 @@ export function followDeviceState(
 					void surface.observePhase(step.phase);
 					return;
 				case "reread":
-					void surface.reloadDetails();
+					void surface.reread();
 					return;
 				default: {
 					const unreachable: never = step;

@@ -1,12 +1,19 @@
 ## AN UPDATE ACTION'S OUTCOME IS DECIDED BY EVIDENCE, NOT BY THE REPLY ALONE [EXISTS]
 
-The Updates dialog's three operator actions (Check now, Install now, Download
-over cellular now) are one small state machine. Two review rounds found the
-same defect class at neighbouring seams: a lost reply read as a refusal, a
-stale read overwrote a newer one, an unknown was rendered as a fact. Each was
-fixed where it was found and the next round found it one seam over. The cure
-is the machine below, not another guard: every seam feeds the same machine,
-and the machine alone decides what the operator sees.
+The Updates dialog's operator actions (Check now, Install now, Download over
+cellular now, and the legacy Packages Update) are one small state machine.
+Three review rounds found the same defect class at neighbouring seams: a lost
+reply read as a refusal, a stale read overwrote a newer one, an unknown was
+rendered as a fact. Each was fixed where it was found and the next round found
+it one seam over. The cure is the rule and the machine below, not another
+guard: every seam feeds the same machine, and the machine alone decides what
+the operator sees.
+
+**The rule.** A sentence about what the device did or holds ("Not started",
+"not saved", "no newer image", "up to date", "no add-ons") is a conclusion. It
+is rendered only when device evidence its PRODUCER guarantees establishes it.
+A reply, a timeout, a clock or an absent value proves only what its producer
+says it proves; anything else renders the explicit unknown.
 
 | Code | Owns |
 |---|---|
@@ -15,6 +22,10 @@ and the machine alone decides what the operator sees.
 | `lib/updates/update-action-settlement.ts` | which phase or read settles which action (pure) |
 | `lib/updates/update-actions.svelte.ts` | the rune shell: call ids, `osCommand`, the post-action read |
 | `lib/updates/update-surface.svelte.ts` | the details reads and their fences; feeds the machine |
+| `lib/updates/update-settings-owner.svelte.ts` | the settings reads, the ONE write in flight, its verdict |
+| `lib/updates/os-offer-witness.ts` | the only evidence for "no newer system image" (pure) |
+| `main/dialogs/updates/PackagesSection.svelte` | the legacy Packages controls, through the same machine |
+| `main/dialogs/updates/SettingsSaveBand.svelte` | "not sent" vs "not confirmed" for a settings save |
 | `lib/updates/update-device-follow.svelte.ts` | when an OPEN dialog re-reads (phase moved, session restored) |
 | `lib/rpc/session-epoch.svelte.ts` | the count of sessions restored after a dropped link |
 | `main/dialogs/updates/ActionOutcomeList.svelte` | one band per action, named after its control |
@@ -25,9 +36,9 @@ and the machine alone decides what the operator sees.
 |---|---|---|
 | `dispatched` | the request left (inside `osCommand`'s `rpc`) | none; the action is busy |
 | `accepted` | `{ success: true }` from the step that starts the action | none |
-| `refused` | positive pre-dispatch evidence (below) | "Not started" + the reason |
+| `refused` | positive pre-effect evidence, or a `{ success: false }` reply no start evidence preceded (below) | "Not started" + the reason |
 | `unconfirmed` | a lost reply or a handler error, nothing has settled it | "Outcome not confirmed" |
-| `reconciled` | settling evidence, before or after the verdict | none |
+| `reconciled` | settling evidence, before or after the verdict; also a `{ success: false }` reply after start evidence | none: the device's phase states what happened |
 
 A click while the action's chain is still awaited is dropped BEFORE anything is
 touched: it gets no call id, owns nothing, and cannot clear, conclude or steal
@@ -37,15 +48,16 @@ the watch of the call it duplicates.
 
 | Evidence | Proves |
 |---|---|
-| `{ success: false }` | not started (`refused`, the device's reason) |
+| `{ success: false }` | not started (`refused`, the device's reason), UNLESS start or outcome evidence for the action reached the dialog between the dispatch and that reply: then `reconciled`. The OS-install producer answers `not_available` from the END phase of a stage it already ran (`runtime.ts` `installUpdatesNow`), and it publishes every phase transition before it returns, over the same ordered socket, so a start the request caused is always seen before its reply (round-3 review C, C3-1) |
 | `UPDATE_ORCHESTRATOR_INITIALIZING` envelope | not started: `startupReadiness.assertReady` runs before any effect |
 | `NotSentError` (the client never sent it: the socket was not open) | not started (`not_connected`) |
 | `INTERNAL_ERROR` / `VALIDATION_ERROR` envelope | NOTHING about the start: any handler fault, and the reply schema runs after the handler (`unconfirmed`, cause `error`) |
 | timeout, socket reset, anything else | nothing (`unconfirmed`, cause `lost`) |
 | a phase CHANGE pushed after the dispatch | settles it when it is the action's start phase, `failed` or `quarantined` |
+| a legacy `update_state` kind CHANGE pushed after the dispatch | settles the Packages Update when it is `downloading`, `installing`, `update_preflight_failed`, `failed` or `success` |
 | a details read STARTED after the dispatch that LANDS | settles a check when its clocks moved, an install when a different image is staged |
 | a failed or superseded read, a same-phase push | nothing |
-| a session restored after a dropped link | triggers a fresh read, even when the phase is unchanged |
+| a session restored after a dropped link | triggers a fresh read of the details AND the settings, even when the phase is unchanged |
 
 Settling evidence is sticky: once seen it holds, so a later read that shows
 less cannot reopen the question. Evidence that arrives while the call is still
@@ -68,41 +80,90 @@ from it is fenced by the surface's latest-read counter. Busy marks are NOT
 dropped: a chain still on the wire keeps its control busy in the reopened
 dialog until it settles.
 
+### The legacy Packages Update
+
+`system.startUpdate` is the machine's fourth action (`packages`), on the
+historical `update` operation key that drives the section's spinner. A
+`{ success: false }` reply is "didn't start" with the device's reason ("refused
+without giving a reason" only for a real refusal envelope without one); a lost
+reply is "Outcome not confirmed" until a legacy state change settles it. The
+"accepted, no progress" band needs an ACCEPTED reply and only reports that the
+device "has never reported any progress so far": the valve also lapses while a
+reply is still on the wire, and missing progress never proves nothing was
+installed. "System is up to date" needs `idle` with a `checked_at` stamp (a
+completed discovery found nothing); `checking` says checking, anything else
+says the device has not reported a completed check yet.
+
+### Settings saves
+
+`update-settings-owner.svelte.ts` owns the ONE write in flight. A save owns the
+controls from the click until its whole request chain SETTLES; it never leans
+on the shared operation valve (15 s, shorter than the client's 30 s call
+timeout). Every write is built from a settings read STARTED after the click:
+the wire takes the whole object (no field patch, no compare-and-swap) and
+settings are not pushed. Only a write never sent (or whose basis read failed)
+is "not sent"; any other failure is "Change not confirmed", the shown settings
+being the last the device reported, re-read at once and cleared when a read
+shows the requested values.
+
 ### Invariants, and how they are pinned
 
-U1 "Not started" only for positive pre-dispatch evidence; U2 an unconfirmed
-outcome clears once ANY later evidence settles it, including the restored
-session's read on an unchanged phase; U3 nothing from a closed session reaches
-the reopened one; U4 a dropped duplicate changes nothing; U5 busy lasts exactly
-as long as the chain is awaited; U6 an outcome nothing has settled is shown as
-unconfirmed, never as a negative fact.
+U1 "Not started" only for positive pre-effect evidence or a negative reply no
+start evidence preceded; U2 an unconfirmed outcome clears once ANY later
+evidence settles it, including the restored session's read on an unchanged
+phase; U3 nothing from a closed session reaches the reopened one; U4 a dropped
+duplicate changes nothing; U5 busy lasts exactly as long as the chain is
+awaited; U6 an outcome nothing has settled is shown as unconfirmed, never as a
+negative fact. Settings: S1 one write awaited at a time; S2 a write changes at
+most one, operator-set, field of the device's settings; S3 "not sent" only for
+a write the device never received, "not confirmed" only for one it did; S4 the
+controls are released only once no write is awaited; S5 a restored session
+re-reads the settings.
 
 - `update-action-interleavings.test.ts`: EVERY sequence of up to 8 events over
-  17 kinds (dispatch, duplicate, device starts, refusal, internal error,
-  timeout, late success, link drop, reconnect, unrelated/same phase push, read
-  oldest/newest/failed, close, reopen) on a reference world that drives the
-  production machine and binder step: 1,686,842 sequences for Check and
-  1,136,319 for Install, U1–U6 after every event.
-- `update-surface.interleavings.test.ts`: every maximal path of up to 5 of those
-  events replayed against the REAL surface, shell, `osCommand` and `RPCClient`
-  on a scripted socket and fake clock (10,436 Check and 9,375 Install paths);
-  after every event the real bands, busy state, shown details, failure band and
-  requests on the wire equal the world's prediction.
-- The reviewer's sequences as named tests: `update-action-evidence.test.ts`
-  (internal error after staging, validation envelope, never-sent request,
-  declined duplicate then timeout, a 29 s approval followed by a hanging
-  download) and `main/dialogs/UpdatesDialog.reconnect.test.ts` (a whole check
-  hidden by an outage, through the real subscription layer's reconnect).
+  18 kinds (dispatch, duplicate, device starts, refusal (also AFTER a start),
+  startup envelope, internal error, timeout, late success, link drop,
+  reconnect, unrelated/same phase push, read oldest/newest/failed, close,
+  reopen) on a reference world that drives the production machine:
+  2,126,403 sequences for Check and 1,384,886 for Install. The oracle states
+  the contract from device-side facts; WHEN the dialog reads is the world's
+  own `contractMove`, and the production `followStep` is checked against it
+  over every frame pair.
+- `update-surface.interleavings.test.ts`: every maximal path of up to 5 of
+  those events replayed against the REAL surface, shell, `osCommand` and
+  `RPCClient` on a scripted socket and fake clock (11,894 Check and 10,706
+  Install paths); the binder there is the production `followStep`, so a binder
+  that stops re-reading on a restored session diverges from the world.
+- `update-settings.interleavings.test.ts`: every path of up to 6 save events
+  (clicks, basis read, applied or applied-but-lost write, 16 s, timeout, a
+  remote change, a restart) on the real stack, S1–S5 checked from what the
+  device received and what the screen says, with no model of the code.
+- `os-offer-witness.test.ts`: every sequence of up to 8 device and dialog
+  events against the producer's ground truth (below).
+- The reviewers' sequences as named tests: `update-action-evidence.test.ts`,
+  `update-conclusions.test.ts` (start observed then `{success:false}`, package
+  phase + lost candidate memory, save reply delayed > 15 s then second save,
+  lost reply after settings persisted), `main/dialogs/UpdatesDialog.reconnect.test.ts`
+  and `main/dialogs/UpdatesDialog.conclusions.test.ts`.
 
 ### "No newer system image" is a conclusion too
 
-`osCheckFoundNothing()` (`lib/updates/update-dialog-view.ts`) allows that
-sentence only with read details, an OS clock whose LATEST attempt succeeded
-(`lastSuccessAt >= lastAttemptAt`: a newer failed check keeps the old success
-clock) and a known phase that could show a held offer (not `checking`,
-`failed`, `quarantined` or a system-image phase: a resumed `os-available` keeps
-its phase while the candidate lived only in the old process's memory).
-Otherwise the System section says it is not known yet.
+The device keeps its OS candidate in MEMORY only, while the OS check clocks,
+the phase and a stage-recovery record survive a backend restart. A read with
+`candidate: null` beside a successful clock therefore proves nothing: the
+process that answered may not be the one that ran the check, and the schema
+carries no process identity. The only positive evidence is the dialog's own:
+`os-offer-witness.ts` records, per link (`getLinkEpoch()`, bumped on every
+drop; a restart always drops the link), the OS success clock of the link's
+first read as a baseline, and the verdict of every success clock it later sees
+APPEAR. The sentence needs that witnessed empty verdict for the CURRENT clock
+on the CURRENT link, AND `osCheckFoundNothing()` (the latest attempt succeeded,
+the phase is known and could show a held offer). Every other combination,
+including an ordinary restart in a package phase, renders "It is not known yet
+whether a newer system image is available." A witness survives closing the
+dialog on the same link. What it means exactly: the latest check this dialog
+saw complete left no offer, either nothing was found or the device's own
+admission rejected what was (expired, replayed, quarantined, not newer).
 
 ### Residuals
 
@@ -114,8 +175,9 @@ Otherwise the System section says it is not known yet.
 - The one-time cellular approval stays granted when the download step is
   refused or not sent; the device may download on its own schedule, which the
   dialog reports through the phase.
-- After a backend restart in a package phase that followed an OS offer held by
-  a stage-recovery record, the memory-only candidate is gone while the success
-  clock is not; that combination still reads "No newer system image" until the
-  next OS check. A backend-side "candidate unknown after restart" field is the
-  proper fix and is out of the frontend's reach.
+- "No newer system image" after a restart, or when the dialog opens after the
+  device's last check, stays "not known yet" until the dialog sees a check
+  complete (Check now does that). This is the honest cost of a memory-only
+  candidate, not a false sentence.
+- A settings write races another client's change only inside one round trip
+  (its basis read and the write): the wire has no compare-and-swap.

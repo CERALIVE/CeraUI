@@ -826,18 +826,31 @@ wire field carrying the expiry date.
   connection. It pulls capabilities, settings and `system.getUpdateDetails` when
   opened (`createUpdateSurface()`). One latest-read counter owns the details and
   a save echo outranks an older settings read; closing the dialog fences every
-  late write. An action's outcome is decided by evidence, not by its reply
-  alone: "Not started" only for `{ success: false }`, the pre-effect
-  `UPDATE_ORCHESTRATOR_INITIALIZING` envelope, or a request never sent while
-  disconnected. A lost reply, or an `INTERNAL_ERROR`/`VALIDATION_ERROR` raised
-  while handling the request, reads "Outcome not confirmed" until a changed
-  phase or a details read made after the request settles it; a session restored
-  after a dropped link re-reads the details even when the phase is unchanged.
-  Each action keeps its own band, a declined duplicate click touches nothing,
-  and an action stays busy until its whole chain of requests settles. Unread
-  details and an unestablished running version render as unknown; "No newer
-  system image" needs the latest OS check to have succeeded and a known phase
-  that could show a held offer. Contract and exhaustive proofs:
+  late write. Every conclusion is drawn from device evidence, never from a
+  reply's absence or a clock. "Not started" only for the pre-effect
+  `UPDATE_ORCHESTRATOR_INITIALIZING` envelope, a request never sent while
+  disconnected, or a `{ success: false }` reply that no start evidence
+  preceded: the OS install answers `not_available` from the END phase of a
+  stage it may have run, after publishing that start, so a negative reply after
+  the start was seen is settled by the phase instead. A lost reply, or an
+  `INTERNAL_ERROR`/`VALIDATION_ERROR` raised while handling the request, reads
+  "Outcome not confirmed" until a changed phase or a details read made after
+  the request settles it; a session restored after a dropped link re-reads the
+  details and the settings even when the phase is unchanged. Each action keeps
+  its own band, a declined duplicate click touches nothing, and an action stays
+  busy until its whole chain of requests settles. The legacy Packages Update is
+  the same machine's fourth action, settled by a legacy `update_state` change;
+  "accepted, no progress" needs an accepted reply and never claims nothing was
+  installed, and "System is up to date" needs a stamped, completed discovery. A
+  settings save owns its controls until its requests settle, is built from a
+  settings read made after the click, and a lost reply reads "Change not
+  confirmed", never "not saved". Unread details and an unestablished running
+  version render as unknown; "No newer system image" needs a check the dialog
+  saw complete with nothing offered on the link it reads over (the candidate is
+  memory-only, so a backend restart cannot be told from "nothing found"), plus
+  a succeeded latest attempt and a phase that could show a held offer. The
+  install overlay reports success only from the device's result, never from
+  full progress counters. Contract and exhaustive proofs:
   `apps/frontend/docs/agents/an-update-action-outcome-is-decided-by-evidence.md`.
 - **Global badge** (`UpdateOrchestratorBadge.svelte`): shown while
   `isUpdateBusy()` holds, with phase and percent, and opens the dialog.

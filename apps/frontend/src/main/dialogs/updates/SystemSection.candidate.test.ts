@@ -14,7 +14,7 @@ import type {
 } from "@ceraui/rpc/schemas";
 import { cleanup, render, screen } from "@testing-library/svelte";
 import { afterEach, describe, expect, it } from "vitest";
-
+import { osCheckFoundNothing } from "$lib/updates/update-dialog-view";
 import { en } from "../../../tests/helpers/catalog";
 
 import SystemSection from "./SystemSection.svelte";
@@ -60,6 +60,9 @@ function renderSection(
 		channel: "stable",
 		checking: false,
 		installing: false,
+		// The clock/phase half of the verdict; the same-link witness half is the
+		// surface's (`update-conclusions.test.ts`), granted here.
+		nothingNewer: osCheckFoundNothing(value, phase),
 		onCheck: () => undefined,
 		onInstall: () => undefined,
 	});

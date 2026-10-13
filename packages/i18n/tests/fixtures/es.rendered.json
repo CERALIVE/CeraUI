@@ -293,7 +293,7 @@
 	"general.updateConfirmation": "¿Estás seguro de que deseas iniciar una actualización de software? Esto puede tomar varios minutos. No podrás iniciar un stream hasta que se haya completado la actualización. El codificador se desconectará brevemente después de una actualización exitosa. Nunca elimines la potencia o resetees el encoder mientras se realiza la actualización. Si el codificador es alimentado por batería, asegúrate de que esté completamente cargado.",
 	"general.updateFailed": "Error en la actualización",
 	"general.updateLastChecked": "Última comprobación a las <time>",
-	"general.updateNoProgress": "El dispositivo aceptó la actualización pero nunca informó ningún progreso. No se instaló nada.",
+	"general.updateNoProgress": "El dispositivo aceptó la actualización, pero hasta ahora no ha informado ningún avance. Esto se actualizará en cuanto lo haga.",
 	"general.updateReasonAlreadyUpdating": "Ya hay una actualización en curso.",
 	"general.updateReasonCheckUnavailable": "No se pudo actualizar la lista de paquetes. Comprueba la conexión a internet del dispositivo e inténtalo de nuevo.",
 	"general.updateReasonDisabled": "Las actualizaciones de software están desactivadas en este dispositivo. Se gestionan fuera de CeraUI.",

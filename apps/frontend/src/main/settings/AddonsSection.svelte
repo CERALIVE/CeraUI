@@ -14,13 +14,26 @@
   the kiosk unavailable pattern) instead of an error toast.
 -->
 <script lang="ts">
+import { m } from '@ceraui/i18n/svelte';
 import type { AddonDescriptor, AddonState } from '@ceraui/rpc/schemas';
-import { Ban, Blocks, BookOpen, ChevronDown, ExternalLink, HardDrive, LoaderCircle, Package, TriangleAlert } from '@lucide/svelte';
+import {
+	Ban,
+	Blocks,
+	BookOpen,
+	ChevronDown,
+	ExternalLink,
+	HardDrive,
+	LoaderCircle,
+	Package,
+	RotateCw,
+	TriangleAlert,
+} from '@lucide/svelte';
 import { onMount } from 'svelte';
 import { toast } from 'svelte-sonner';
 
 import AsyncSwitch from '$lib/components/custom/async-switch.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
+import { Button } from '$lib/components/ui/button';
 import * as Tooltip from '$lib/components/ui/tooltip';
 import { clearOperation, osCommand } from '$lib/rpc/async-operation.svelte';
 import { type AddonManagerPhase, rpc } from '$lib/rpc/client';
@@ -45,6 +58,7 @@ const DEFAULT_STATE: AddonState = { enabled: false, phase: 'idle', autoDisabled:
 let descriptors = $state<AddonDescriptor[]>([]);
 let seedStates = $state<Record<string, AddonState>>({});
 let loaded = $state(false);
+let listFailed = $state(false);
 let unavailable = $state(false);
 
 // Detected board, resolved once on open. Drives the client-side compatibility
@@ -111,16 +125,23 @@ const cards = $derived.by(() => {
 	});
 });
 
-onMount(async () => {
+// A failed list read says nothing about the device's inventory: it renders
+// "could not be read" with a retry, never the empty-catalogue state.
+async function loadList(): Promise<void> {
+	listFailed = false;
 	try {
 		const result = await rpc.addons.list();
 		descriptors = result.addons.map((a) => a.descriptor);
 		seedStates = Object.fromEntries(result.addons.map((a) => [a.descriptor.id, a.state]));
+		loaded = true;
 	} catch (error) {
 		console.error('Failed to load add-ons:', error);
-	} finally {
-		loaded = true;
+		listFailed = true;
 	}
+}
+
+onMount(async () => {
+	await loadList();
 
 	// Resolve the detected board for the compatibility reflection. Best-effort:
 	// if it fails, `effectiveHardware` stays null and nothing is gated client-side
@@ -261,6 +282,20 @@ function toggleDocs(id: string) {
 			>
 				Add-ons can't be changed in this preview. Connect to a CeraLive device to install or
 				remove them.
+			</div>
+		{/if}
+
+		{#if listFailed}
+			<div
+				class="border-status-warning/40 bg-status-warning/10 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-sm"
+				data-testid="addons-list-failed"
+				role="status"
+			>
+				<span class="min-w-0 break-words">{m['settings.addons.listFailed']()}</span>
+				<Button onclick={() => void loadList()} size="sm" variant="outline">
+					<RotateCw aria-hidden="true" class="size-3.5" />
+					{m['settings.addons.retry']()}
+				</Button>
 			</div>
 		{/if}
 

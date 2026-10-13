@@ -197,6 +197,9 @@ describe("UpdatesDialog — a start attempt always ends somewhere visible", () =
 		mockState = AVAILABLE;
 		mockPhase = "timed_out";
 		render(UpdatesDialog, { open: true });
+		// FIX-16-C: "accepted" now needs the device's accepting reply, so the
+		// start is made; a lapsed valve alone no longer stands in for it.
+		await clickUpdateAndConfirm();
 
 		await waitFor(() => {
 			const band = document.querySelector(

@@ -63,8 +63,8 @@ afterAll(() => {
 
 /** Every maximal path replayed, pinned: a shrinking alphabet must not pass silently. */
 const MAXIMAL_PATHS: Readonly<Record<WorldAction, number>> = {
-	check: 10_436,
-	install: 9_375,
+	check: 11_894,
+	install: 10_706,
 };
 
 const ACTION_PATH: Readonly<Record<WorldAction, string>> = {
@@ -97,7 +97,7 @@ function frame(h: Harness, patch: Partial<DeviceFrame>): void {
 	const move = followStep(h.seen, next);
 	h.seen = next;
 	if (move.kind === "phase") void h.surface.observePhase(move.phase);
-	if (move.kind === "reread") void h.surface.reloadDetails();
+	if (move.kind === "reread") void h.surface.reread();
 }
 
 function deliver(
@@ -149,6 +149,16 @@ async function perform(
 			deliver(h, flight?.id ?? 0, (id) => ({
 				id,
 				result: { success: false, error: "busy" },
+			}));
+			break;
+		case "initializing":
+			deliver(h, flight?.id ?? 0, (id) => ({
+				id,
+				error: {
+					message: "x",
+					code: "UPDATE_ORCHESTRATOR_INITIALIZING",
+					retryable: true,
+				},
 			}));
 			break;
 		case "internal":

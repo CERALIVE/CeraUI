@@ -4,14 +4,18 @@
  * it is the action's start phase or an outcome the dialog already states; a
  * details read that STARTED after the request settles it when the action's own
  * facts changed from what the dialog showed when the request left: a check's
- * clocks moved, or a different image is staged.
+ * clocks moved, or a different image is staged. The legacy Packages control
+ * (`packages`, `system.startUpdate`) is settled by a CHANGE of the legacy
+ * `update_state` kind instead: the install running, or its outcome.
  */
 import type {
 	UpdateDetails,
 	UpdateOrchestratorPhase,
+	UpdateState,
 } from "@ceraui/rpc/schemas";
 
-export type UpdateActionKind = "check" | "install" | "cellular";
+export type UpdateActionKind = "check" | "install" | "cellular" | "packages";
+export type LegacyKind = UpdateState["kind"];
 
 type CheckClocks = UpdateDetails["checks"];
 type StagedImage = UpdateDetails["os"]["staged"];
@@ -43,7 +47,24 @@ const STARTED_BY: Readonly<
 	check: ["checking"],
 	install: INSTALL_STARTED,
 	cellular: INSTALL_STARTED,
+	packages: [],
 };
+
+const LEGACY_SETTLES: readonly LegacyKind[] = [
+	"downloading",
+	"installing",
+	"update_preflight_failed",
+	"failed",
+	"success",
+];
+
+/** A legacy `update_state` kind CHANGE pushed after the request. */
+export function legacySettles(
+	action: UpdateActionKind,
+	kind: LegacyKind,
+): boolean {
+	return action === "packages" && LEGACY_SETTLES.includes(kind);
+}
 
 /** A failed or set-aside update is an outcome the dialog already states. */
 const OUTCOME_PHASES: readonly UpdateOrchestratorPhase[] = [
@@ -55,6 +76,7 @@ export function phaseSettles(
 	action: UpdateActionKind,
 	phase: UpdateOrchestratorPhase,
 ): boolean {
+	if (action === "packages") return false;
 	return STARTED_BY[action].includes(phase) || OUTCOME_PHASES.includes(phase);
 }
 
@@ -90,6 +112,8 @@ export function readSettles(
 				watch.staged !== undefined &&
 				stagedChanged(watch.staged, details.os.staged)
 			);
+		case "packages":
+			return false;
 		default: {
 			const unreachable: never = action;
 			return unreachable;
