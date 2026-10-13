@@ -1,6 +1,8 @@
 import { logger } from "./logger.ts";
 
 export interface BackendShutdownDeps {
+	/** Cancels background retry owners so none starts work during teardown. */
+	readonly stopRecoveryRetries?: () => void;
 	readonly gracefulShutdown: () => Promise<void>;
 	readonly stopSrtIngest: () => Promise<void>;
 	readonly stopDmesgWatchers: () => void;
@@ -34,6 +36,8 @@ export function handleTerminationSignal(
 	shuttingDown = true;
 	logger.info(`received ${signal}; shutting down streaming processes`);
 	void (async () => {
+		if (deps.stopRecoveryRetries)
+			await settleCleanup("recovery retries", deps.stopRecoveryRetries);
 		if (deps.stopGatewayRoutes)
 			await settleCleanup("host route preference", deps.stopGatewayRoutes);
 		await settleCleanup("SRT ingest", deps.stopSrtIngest);

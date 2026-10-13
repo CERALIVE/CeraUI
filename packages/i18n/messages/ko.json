@@ -1884,6 +1884,7 @@
 	"notifications.streamHealthRecovered": "스트림 상태가 복구되었습니다",
 	"notifications.streamRecovered": "스트리밍 엔진이 다시 시작된 뒤 스트림이 자동으로 복구되었습니다.",
 	"notifications.streamRecoveryFailed": "스트리밍 엔진이 다시 시작된 뒤 스트림을 복구하지 못했습니다. 자세한 내용은 설정 → 시스템 로그를 열어 확인하세요.",
+	"notifications.configDamagedReset": "기기 설정 파일이 손상되어 읽을 수 없었습니다. CeraUI는 초기 설정으로 시작했으며 손상된 파일을 {copy}(으)로 보관했습니다. 설정을 다시 입력해야 합니다. 이는 스트리밍이나 업데이트가 정상이라는 뜻이 아닙니다.",
 	"notifications.streamStartAudioSourceUnavailableFailed": "스트림을 시작하지 못했습니다: 선택한 오디오 입력을 사용할 수 없습니다. 다시 연결하거나 다른 오디오 소스를 선택하세요.",
 	"notifications.streamStartCaptureDeviceBusyFailed": "스트림을 시작하지 못했습니다: {attempt}/{maxAttempts}번 시도했지만 영상 입력이 계속 사용 중이었습니다. 잠시 기다린 뒤 다시 시작하세요.",
 	"notifications.streamStartCaptureDeviceBusyRetrying": "영상 입력 사용 중 — 다시 시도하는 중 ({nextAttempt}/{maxAttempts})…",

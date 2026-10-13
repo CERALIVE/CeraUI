@@ -1941,6 +1941,7 @@
 	"notifications.streamHealthRecovered": "تمت استعادة حالة البث",
 	"notifications.streamRecovered": "تمت استعادة البث تلقائيًا بعد إعادة تشغيل محرك البث.",
 	"notifications.streamRecoveryFailed": "تعذّرت استعادة البث بعد إعادة تشغيل محرك البث. افتح الإعدادات ← سجلات النظام لمعرفة التفاصيل.",
+	"notifications.configDamagedReset": "كان ملف إعدادات الجهاز تالفًا وتعذّرت قراءته. بدأ CeraUI بإعدادات التشغيل الأول واحتفظ بالملف التالف باسم {copy}. يجب إدخال الإعدادات من جديد؛ ولا يعني هذا أن البث أو التحديثات تعمل.",
 	"notifications.streamStartAudioSourceUnavailableFailed": "فشل بدء البث: مدخل الصوت المحدد غير متوفر. أعد توصيله أو اختر مصدر صوت آخر.",
 	"notifications.streamStartCaptureDeviceBusyFailed": "تعذّر بدء البث: بقي مدخل الفيديو مشغولاً بعد {attempt}/{maxAttempts} محاولات. انتظر لحظة ثم ابدأ من جديد.",
 	"notifications.streamStartCaptureDeviceBusyRetrying": "مدخل الفيديو مشغول — إعادة المحاولة ({nextAttempt}/{maxAttempts})…",

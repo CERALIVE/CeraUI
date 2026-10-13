@@ -1,0 +1,116 @@
+/**
+ * The ONE retry owner of the modem-mutation admission barrier.
+ *
+ * The barrier may only be lowered by a COMPLETE, readable look at the journal.
+ * Before this owner existed nothing ever looked again: one EIO while startup
+ * listed the journal left every later modem mutation answering
+ * `recovery_pending` ("ask again shortly") forever, and kept stream restoration
+ * and autostart waiting on a barrier nobody would lower.
+ *
+ *   - `replay` mode is the startup replay retried. It is safe to repeat because
+ *     the barrier has been raised since boot, so no mutation was admitted that a
+ *     rollback could race.
+ *   - `verify` mode follows a RUNTIME raise (a journal read failed after replay
+ *     had completed). A mutation admitted before that raise may still be running,
+ *     so this mode never rolls anything back: it only re-reads the inventory and
+ *     the per-identity blocks, and lowers the barrier when both read completely.
+ *
+ * Backoff doubles from 1 s to a 60 s ceiling, and the loop runs until success or
+ * until shutdown cancels it.
+ */
+
+import { logger } from "../../helpers/logger.ts";
+import {
+	completeRecoveryBarrier,
+	isRecoveryPending,
+} from "../streaming/recovery-barrier.ts";
+
+export type MutationRecoveryMode = "replay" | "verify";
+
+export interface MutationRecoveryDeps {
+	/** Full startup replay; true when every slot was read. */
+	readonly replay: () => Promise<boolean>;
+	/** Read-only inventory; true when the journal and blocks read completely. */
+	readonly verify: () => Promise<boolean>;
+	/** Resolves after `ms`, or early once `signal` aborts. */
+	readonly sleep: (ms: number, signal: AbortSignal) => Promise<void>;
+}
+
+export const MUTATION_RECOVERY_BASE_MS = 1000;
+export const MUTATION_RECOVERY_CEILING_MS = 60_000;
+
+let running: AbortController | undefined;
+
+export function sleepUnlessAborted(
+	ms: number,
+	signal: AbortSignal,
+): Promise<void> {
+	return new Promise((resolve) => {
+		const timer = setTimeout(resolve, ms);
+		signal.addEventListener(
+			"abort",
+			() => {
+				clearTimeout(timer);
+				resolve();
+			},
+			{ once: true },
+		);
+	});
+}
+
+async function attempt(
+	deps: MutationRecoveryDeps,
+	mode: MutationRecoveryMode,
+): Promise<boolean> {
+	try {
+		return mode === "replay" ? await deps.replay() : await deps.verify();
+	} catch (err) {
+		logger.error("modem mutation recovery attempt failed", {
+			module: "modems",
+			mode,
+			err,
+		});
+		return false;
+	}
+}
+
+async function retry(
+	deps: MutationRecoveryDeps,
+	mode: MutationRecoveryMode,
+	own: AbortController,
+): Promise<void> {
+	try {
+		for (let delay = MUTATION_RECOVERY_BASE_MS; ; ) {
+			await deps.sleep(delay, own.signal);
+			if (own.signal.aborted || !isRecoveryPending()) return;
+			if (await attempt(deps, mode)) {
+				if (!own.signal.aborted) completeRecoveryBarrier();
+				return;
+			}
+			logger.warn("modem mutation journal still unreadable; retrying", {
+				module: "modems",
+				mode,
+				nextMs: Math.min(delay * 2, MUTATION_RECOVERY_CEILING_MS),
+			});
+			delay = Math.min(delay * 2, MUTATION_RECOVERY_CEILING_MS);
+		}
+	} finally {
+		if (running === own) running = undefined;
+	}
+}
+
+/** Start the owner unless one is already running; it never runs twice. */
+export function scheduleMutationRecovery(
+	deps: MutationRecoveryDeps,
+	mode: MutationRecoveryMode,
+): void {
+	if (running !== undefined) return;
+	const own = new AbortController();
+	running = own;
+	void retry(deps, mode, own);
+}
+
+export function stopMutationRecovery(): void {
+	running?.abort();
+	running = undefined;
+}

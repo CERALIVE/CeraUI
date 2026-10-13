@@ -54,7 +54,7 @@ any leftover from a prior crash, fail-soft, every boot.
 
 | File | Writer | Atomicity | Notes |
 |------|--------|-----------|-------|
-| `config.json` | `saveConfig` (`modules/config.ts:93`) | Atomic (`writeFileAtomicSync`) | The single runtime state file: relay target, audio/video settings, kiosk state, add-on state, and (see below) the password/SSH hashes. Pre-dates T6 (E3 guardrail); unchanged by this wave. |
+| `config.json` | `saveConfig` (`modules/config.ts:93`) | Atomic (`writeFileAtomicSync`) | The single runtime state file: relay target, audio/video settings, kiosk state, add-on state, and (see below) the password/SSH hashes. Pre-dates T6 (E3 guardrail). At boot a damaged file is archived to `config.json.damaged-<UTC>-<rand>` and replaced by first-run settings; an unreadable one is never written and is retried after the server binds (`modules/config-boot.ts`, see UPDATE-RECOVERY.md). |
 | `update-settings.json` | `saveUpdateSettings` (`modules/system/update-settings.ts`) | Atomic (`writeFileAtomicSync`) | Operator update preferences; CWD-relative beside `config.json`, survives package restarts. Absent defaults via the shared `@ceraui/rpc` schema. A present invalid document fails with a typed error rather than being partially salvaged. This is preference storage only: explicit `setup.json` `apt_update_enabled: false` still blocks both manual and automatic APT installs. |
 | `/data/ceralive/update-state/idle.json` | `noteStreamEnded` (`modules/system/idle-state.ts`) | Atomic (`writeFileAtomicSync`) | Last stream-end epoch milliseconds only; survives a backend restart and OTA slot swap. Preview, remote-command, start-lease and UI heartbeat timestamps are process-local. The boot-time baseline conservatively prevents a restarted backend from declaring an immediately idle device; `getIdleStatus()` reads it for scheduled update admission. |
 | `notification_dismissals.json` | `NotificationDismissalStore.recordDismissal` (`modules/ui/notification-dismissals.ts`) | Atomic (`writeFileAtomicSync`) | Durable record of which persistent notifications the operator dismissed, keyed by SEMANTIC identity so a dismissal survives a page reload AND a backend restart. LRU-bounded, corruption-quarantined. Path overridable via `CERALIVE_DISMISSALS_FILE` (tests). See the dedicated subsection below. |
@@ -194,7 +194,7 @@ claim-ladder correction are recorded in
 
 | File / field | Writer | Atomicity | Notes |
 |---|---|---|---|
-| `auth_tokens.json` | `savePersistentTokens` (`rpc/procedures/auth.procedure.ts:41`) | Atomic (`writeFileAtomicSync`, direct) | Persistent login tokens. Made atomic in T6 — previously routed through the non-atomic `writeTextFile`. |
+| `auth_tokens.json` | `savePersistentTokens` (`rpc/procedures/auth.procedure.ts:41`) | Atomic (`writeFileAtomicSync`, direct) | Persistent login tokens. Made atomic in T6 — previously routed through the non-atomic `writeTextFile`. Never rewritten from an unreadable read (logins stay temporary until a reread succeeds); a damaged file is archived to `auth_tokens.json.damaged-<UTC>-<rand>` at the first write that would replace it, before a fresh record; token login alone never rewrites it. |
 | `password_hash` / `ssh_pass_hash` | `saveConfig` (`modules/config.ts:84-93`) | Atomic (rides `config.json`'s write) | These are fields **inside** `config.json`, not separate files — `saveConfig` always re-serializes them alongside the rest of the runtime state, so they get the same crash-atomic guarantee as everything else in that file. |
 
 ### Regenerable caches

@@ -56,7 +56,9 @@ export async function loadIdleState(): Promise<number | null> {
 		}
 		if (!loaded) {
 			lastStreamEndedAt = endedAt;
-			loaded = true;
+			// A future end time cannot grant idle and may be a clock or file fault:
+			// it is not cached, so a repaired file or corrected clock is read again.
+			loaded = endedAt === null || endedAt <= Date.now();
 		}
 	}
 	return lastStreamEndedAt;

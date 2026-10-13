@@ -7,6 +7,7 @@ import { call, ORPCError } from "@orpc/server";
 import type { ServerWebSocket, WebSocketHandler } from "bun";
 
 import { logger, logRedact } from "../helpers/logger.ts";
+import { isRuntimeConfigAvailable } from "../modules/config.ts";
 import { SHARING_DIAG_EVENT } from "../modules/network/sharing-diag/status.ts";
 import {
 	getStreamHealth,
@@ -240,8 +241,10 @@ export function createWebSocketHandler(): WebSocketHandler<SocketData> {
 			logger.debug("WebSocket client connected");
 			addClient(ws);
 
-			// If no password is set, prompt for password setup
-			if (!getPasswordHash()) {
+			// Prompt for first-run password setup only when config was READ and holds
+			// none. While config.json is unreadable the stored password is unknown,
+			// not absent, so nobody may claim the device by setting one.
+			if (!getPasswordHash() && isRuntimeConfigAvailable()) {
 				sendToClient(ws, "status", { set_password: true });
 			}
 

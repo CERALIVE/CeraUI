@@ -59,7 +59,12 @@ import { initBluetooth } from "./modules/bluetooth/bluetooth-runtime.ts";
 import { initCellularStack } from "./modules/cellular/cellular-stack.ts";
 import { startModemShadowIfEnabled } from "./modules/cellular/shadow.ts";
 import { initUdevProvisionalMonitor } from "./modules/cellular/udev-monitor.ts";
-import { getConfig, loadConfig } from "./modules/config.ts";
+import { getConfig, isRuntimeConfigAvailable } from "./modules/config.ts";
+import {
+	awaitRuntimeConfig,
+	bootRuntimeConfig,
+	stopRuntimeConfigRecovery,
+} from "./modules/config-boot.ts";
 import { initIdentity } from "./modules/identity/index.ts";
 import { initRTMPIngestStats } from "./modules/ingest/rtmp.ts";
 import { initSRTIngest, stopSRTIngest } from "./modules/ingest/srt.ts";
@@ -67,6 +72,7 @@ import { initFccUnlockModule } from "./modules/modems/fcc-unlock.ts";
 import { initModemCredentials } from "./modules/modems/modem-credentials.ts";
 import { initModemUpdateLoop } from "./modules/modems/modem-update-loop.ts";
 import { setMockDbusModemViews } from "./modules/modems/modem-wire-producer.ts";
+import { stopMutationRecovery } from "./modules/modems/mutation-recovery-owner.ts";
 import { initMutationRecovery } from "./modules/modems/mutation-replay.ts";
 import { reconcileEthernetRoles } from "./modules/network/ethernet-role-transition.ts";
 import {
@@ -235,10 +241,14 @@ if (backendSingletonApplies()) {
 
 checkExecPath(srtlaSendExec);
 
-// CRITICAL boot phase. A failure here is genuinely fatal: the device cannot
-// serve correct state without its config, so runCritical() logs loudly and
-// re-throws to abort (systemd restarts cleanly) rather than limp along.
-await runCritical("config", loadConfig);
+// An unreadable or damaged config.json must not abort boot: the control server
+// is the only place the operator can see and repair it. A damaged file is
+// archived and replaced by first-run settings; an unreadable one leaves config
+// unavailable (getters and saves refuse) while a background owner retries, and
+// everything that needs config waits for it AFTER the bind below.
+await runCritical("config", async () => {
+	await bootRuntimeConfig();
+});
 logger.info(bootTimer.phase("🔧", "config"));
 
 // initMockService() seeds mockEncoderConfig (which getConfig() overlays over the
@@ -246,12 +256,15 @@ logger.info(bootTimer.phase("🔧", "config"));
 // `pipeline` shadows a config.json that already persisted one — getConfig() would
 // then report a stale pipeline on boot, and re-selecting the already-selected source
 // is a frontend no-op so it never self-corrects. Re-seed from the loaded config.
-if (shouldUseMocks()) {
+function reseedMockPipeline(): void {
+	if (!shouldUseMocks()) return;
 	const persistedPipeline = getConfig().pipeline;
 	if (persistedPipeline !== undefined) {
 		setMockEncoderConfig({ pipeline: persistedPipeline });
 	}
 }
+const configAvailableAtBind = isRuntimeConfigAvailable();
+if (configAvailableAtBind) reseedMockPipeline();
 
 // Raise the modem-mutation admission barrier BEFORE the WS server binds. The
 // server is the operator's lifeline and comes up first by design, so an RPC can
@@ -264,7 +277,7 @@ beginRecoveryBarrier();
 // This must run after config load so we know the config dir exists.
 cleanupOrphanedTempFiles(process.cwd());
 
-void initRemote();
+if (configAvailableAtBind) void initRemote();
 
 // CRITICAL: bind the WS control server FIRST — before any non-critical init that
 // could fail OR hang. It is the operator's only lifeline to the device, so it
@@ -277,6 +290,12 @@ logger.info(bootTimer.phase("🚀", "server"));
 // Type=notify holds the add-on poke until the guard exists, including the
 // native-runtime/import window before this module could install any handler.
 await runCritical("systemd-ready", notifyServiceReady);
+
+if (!configAvailableAtBind) {
+	await awaitRuntimeConfig();
+	reseedMockPipeline();
+	void initRemote();
+}
 
 // --- NON-CRITICAL boot phase. Each init is wrapped in guardNonCritical(): a
 //     failure is logged, flags the device readiness-reduced (surfaced on
@@ -544,8 +563,9 @@ void initModemUpdateLoop({ monitor: networkMonitor });
 // It runs after the modem roster has been started because a rollback that needs
 // the certified reverse transition has to find the device; the presence and
 // state-comparison paths read the USB bus directly and need no roster at all.
-// `initMutationRecovery` never throws and lowers the barrier on every exit — a
-// barrier nobody will lower is worse than a device that reports its blocks.
+// `initMutationRecovery` never throws. It lowers the barrier only after a
+// complete readable replay; otherwise its one retry owner keeps trying with
+// capped backoff, so the barrier is never left raised with nobody to lower it.
 // Every capability module that JOURNALS registers its rollback handler BEFORE
 // replay runs. A journaled entry whose kind has no handler replays into
 // `unavailable`, which leaves the device blocked for a mutation that could in
@@ -654,8 +674,13 @@ void reconcileIngestDesiredState();
 // masked bluetoothd all resolve to a typed `bt_unavailable` inside the stack.
 void guardNonCritical("bluetooth", initBluetooth);
 
+function stopRecoveryRetries(): void {
+	stopRuntimeConfigRecovery();
+	stopMutationRecovery();
+}
 process.on("SIGTERM", () =>
 	handleTerminationSignal("SIGTERM", {
+		stopRecoveryRetries,
 		gracefulShutdown,
 		stopSrtIngest: stopSRTIngest,
 		stopDmesgWatchers,
@@ -666,6 +691,7 @@ process.on("SIGTERM", () =>
 );
 process.on("SIGINT", () =>
 	handleTerminationSignal("SIGINT", {
+		stopRecoveryRetries,
 		gracefulShutdown,
 		stopSrtIngest: stopSRTIngest,
 		stopDmesgWatchers,

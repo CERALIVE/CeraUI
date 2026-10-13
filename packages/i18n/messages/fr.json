@@ -1932,6 +1932,7 @@
 	"notifications.streamHealthRecovered": "État du flux rétabli",
 	"notifications.streamRecovered": "Le flux a été rétabli automatiquement après le redémarrage du moteur de diffusion.",
 	"notifications.streamRecoveryFailed": "Le flux n'a pas pu être rétabli après le redémarrage du moteur de diffusion. Ouvrez Paramètres → Journaux système pour plus de détails.",
+	"notifications.configDamagedReset": "Le fichier de paramètres de l'appareil était endommagé et n'a pas pu être lu. CeraUI a démarré avec les paramètres initiaux et a conservé le fichier endommagé sous le nom {copy}. Les paramètres doivent être saisis à nouveau ; cela ne signifie pas que la diffusion ou les mises à jour fonctionnent.",
 	"notifications.streamStartAudioSourceUnavailableFailed": "Échec du démarrage : l'entrée audio sélectionnée n'est pas disponible. Rebranchez-la ou choisissez une autre source audio.",
 	"notifications.streamStartCaptureDeviceBusyFailed": "Échec du démarrage du flux : l'entrée vidéo est restée occupée après {attempt}/{maxAttempts} tentatives. Patientez un instant, puis relancez.",
 	"notifications.streamStartCaptureDeviceBusyRetrying": "Entrée vidéo occupée — nouvelle tentative ({nextAttempt}/{maxAttempts})…",

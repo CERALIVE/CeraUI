@@ -1932,6 +1932,7 @@
 	"notifications.streamHealthRecovered": "Estado del stream recuperado",
 	"notifications.streamRecovered": "La transmisión se restauró automáticamente tras reiniciarse el motor de streaming.",
 	"notifications.streamRecoveryFailed": "No se pudo restaurar la transmisión tras reiniciarse el motor de streaming. Abre Ajustes → Registros del sistema para ver los detalles.",
+	"notifications.configDamagedReset": "El archivo de ajustes del dispositivo estaba dañado y no se pudo leer. CeraUI arrancó con los ajustes iniciales y guardó el archivo dañado como {copy}. Hay que volver a introducir los ajustes; esto no significa que la transmisión o las actualizaciones funcionen.",
 	"notifications.streamStartAudioSourceUnavailableFailed": "No se pudo iniciar el stream: la entrada de audio seleccionada no está disponible. Vuelve a conectarla o elige otra fuente de audio.",
 	"notifications.streamStartCaptureDeviceBusyFailed": "No se pudo iniciar la transmisión: la entrada de vídeo siguió ocupada tras {attempt}/{maxAttempts} intentos. Espera un momento y vuelve a iniciar.",
 	"notifications.streamStartCaptureDeviceBusyRetrying": "La entrada de vídeo está ocupada: reintentando ({nextAttempt}/{maxAttempts})…",

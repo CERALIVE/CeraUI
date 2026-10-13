@@ -46,12 +46,30 @@ let pending = false;
 let settled: Promise<void> = Promise.resolve();
 let lower: (() => void) | undefined;
 
+/**
+ * Who retries a barrier raised AFTER startup replay (a journal read failing at
+ * runtime). Registered by `initMutationRecovery` once its first replay has run,
+ * so main's pre-bind raise and the startup replay's own raises are not retried
+ * before the replay they belong to.
+ */
+export interface RecoveryRetryOwner {
+	schedule(): void;
+	cancel(): void;
+}
+
+let retryOwner: RecoveryRetryOwner | undefined;
+
+export function setRecoveryRetryOwner(owner: RecoveryRetryOwner): void {
+	retryOwner = owner;
+}
+
 export function beginRecoveryBarrier(): void {
 	if (pending) return;
 	pending = true;
 	settled = new Promise<void>((resolve) => {
 		lower = resolve;
 	});
+	retryOwner?.schedule();
 }
 
 export function completeRecoveryBarrier(): void {
@@ -76,6 +94,8 @@ export function awaitRecoveryBarrier(): Promise<void> {
 
 /** Test-only: drop any raised barrier so a suite starts from a lowered state. */
 export function resetRecoveryBarrier(): void {
+	retryOwner?.cancel();
+	retryOwner = undefined;
 	pending = false;
 	lower?.();
 	lower = undefined;

@@ -22,14 +22,18 @@ export class RuntimeConfigAuthorityError extends Error {
 	}
 }
 
+/** The authority check alone, for a caller that already holds the parsed JSON. */
+export function parseRuntimeConfigAuthority(raw: unknown): unknown {
+	safetySchema.parse(raw);
+	return raw;
+}
+
 export async function readRuntimeConfigAuthority(
 	path: string,
 ): Promise<unknown> {
 	try {
 		const value = await readStoredStateJson(path, STORED_STATE_LIMITS.packages);
-		const raw = value === undefined ? {} : value;
-		safetySchema.parse(raw);
-		return raw;
+		return parseRuntimeConfigAuthority(value === undefined ? {} : value);
 	} catch (cause) {
 		throw new RuntimeConfigAuthorityError(cause);
 	}

@@ -1884,6 +1884,7 @@
 	"notifications.streamHealthRecovered": "推流状态已恢复",
 	"notifications.streamRecovered": "流媒体引擎重启后，直播流已自动恢复。",
 	"notifications.streamRecoveryFailed": "流媒体引擎重启后无法恢复直播流。打开 设置 → 系统日志 查看详情。",
+	"notifications.configDamagedReset": "设备设置文件已损坏，无法读取。CeraUI 已使用初始设置启动，并将损坏的文件保存为 {copy}。需要重新输入设置；这并不表示直播或更新工作正常。",
 	"notifications.streamStartAudioSourceUnavailableFailed": "流启动失败：所选音频输入不可用。请重新连接或选择其他音频源。",
 	"notifications.streamStartCaptureDeviceBusyFailed": "推流启动失败：尝试 {attempt}/{maxAttempts} 次后视频输入仍被占用。请稍等片刻，然后重新开始。",
 	"notifications.streamStartCaptureDeviceBusyRetrying": "视频输入被占用 — 正在重试（{nextAttempt}/{maxAttempts}）…",

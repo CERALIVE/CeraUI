@@ -133,15 +133,81 @@ its absent-field defaults, so a corrupt update opt-out cannot enable APT.
 Auth-token ambiguity denies token login; FCC ambiguity enables no model. Present
 unreadable modem journals retain the existing recovery barrier (external
 `recovery_pending`; internal boot starts remain parked), including read/list faults,
-instead of pruning ambiguous completed records. Local storage repair and recovery
-rerun/restart are required; no new clearing API is added. Add-on descriptors and
-shaper ownership use the same strict JSON boundary. Failed qdisc ownership reads
-are never cached as loaded, so later apply/teardown cannot skip the refusal.
+instead of pruning ambiguous completed records. The barrier's one retry owner (see
+below) lowers it once a complete readable replay succeeds; no new clearing API is
+added. Add-on descriptors and shaper ownership use the same strict JSON boundary.
+Failed qdisc ownership reads are never cached as loaded, so later apply/teardown
+cannot skip the refusal.
 Bluetooth service intent likewise refuses invalid presence before reconciliation
 can enable/disable units or claim a positive applied outcome. Dongle runtime
 metadata rejects duplicate state members before projecting an up marker.
 All of this is host-only boundary/effect-port proof, not board, power-loss or
 privileged-helper qualification; other lanes still own the streaming markers.
+
+### Unknown reads never abort boot, wedge, or become a write baseline
+
+A strict reader may REFUSE, but the code around it must not turn that refusal
+into a dead control plane, a latch nobody clears, or a whole-file overwrite.
+`helpers/persistent-record.ts` classifies an optional record as `absent`
+(ENOENT), `valid`, `damaged` (read completely, refused by UTF-8/JSON/duplicate
+member/schema) or `unavailable` (EIO/EAGAIN, short or changed read, non-regular,
+oversize). Only `absent` and `valid` may seed a whole-file write.
+`preserveDamagedRecord()` copies the exact bytes to `<file>.damaged-<UTC>-<rand>`
+(private temp, fsync, `link()` so an earlier copy is never replaced, directory
+fsync) before anything replaces a damaged record; if the copy fails the record
+stays unwritten.
+
+- **`config.json`** (`modules/config-boot.ts`). `loadConfig()` stays strict. Boot
+  calls `bootRuntimeConfig()`, which never aborts boot on an authority failure.
+  Damaged: archive, replace with the first-run record, load it through the same
+  `loadConfig()` a missing file uses, and raise the persistent
+  `config_damaged_reset` notification (`notifications.configDamagedReset`, naming
+  the copy and saying settings must be re-entered and that it does not mean
+  streaming or updates work). The only values carried over are a bcrypt-shaped
+  `password_hash`, a crypt-shaped `ssh_pass_hash` and `ssh_pass` from a
+  duplicate-free JSON object; each can only narrow access versus a first boot.
+  Unavailable: three attempts (waits 250 and 1000 ms), then the control server
+  binds anyway and one cancellable owner retries `loadConfig()` with doubling
+  waits from 1 s to a 60 s ceiling. Every config-dependent boot step waits for it
+  after the bind. Meanwhile getters and saves throw as before, the first-run
+  `set_password` prompt is withheld (the stored password is unknown, not absent),
+  `setPassword` reads config before touching the in-memory hash, and login
+  refuses for want of a hash.
+- **Modem-mutation barrier** (`modems/mutation-recovery-owner.ts`). When the
+  startup replay could not read every slot, one owner retries the full replay
+  (safe: the barrier has been up since boot, so nothing was admitted) until a
+  complete readable replay lowers it, with the same 1 s to 60 s backoff. After a
+  completed replay, a RUNTIME raise from a failed journal read schedules the same
+  owner in read-only `verify` mode: it re-reads the slot inventory and the
+  per-identity blocks and never rolls back, because an admitted mutation may still
+  be running. Shutdown cancels it. A slot that stays damaged keeps the barrier up
+  (the slot may be an unrolled mutation); the existing `recovery_pending` text
+  ("ask again shortly") is then not honest for that case, an owner-decision gap
+  that would need a new reason on the wire.
+- **Shaper coordinator.** The serialization tail swallows a rejection after the
+  caller has received it, so the next update reruns the strict ownership read.
+- **`auth_tokens.json`.** Unavailable: a correct password still signs in, for
+  this visit only; nothing is written; the next auth operation rereads.
+  Damaged: token login is denied and nothing is rewritten; the first write that
+  would replace the file (a remembered password login, revoke-all) archives it
+  and continues from a fresh record. Revoking everything (password change,
+  revoke-all) still writes `{}` over an unavailable store, because that result
+  does not depend on the old contents and a password change must not let old
+  remembered browsers return.
+- **FCC policy.** Display and enforcement keep treating anything but a valid
+  document as "nothing enabled". A toggle or rollback takes its baseline from
+  `loadFccUnlockPolicyBaseline()`: unavailable refuses (`write_failed`, before any
+  lease or journal entry); damaged is archived, then answers empty, which is the
+  state both readers already enforced, so the journaled pre-state is real.
+- **`idle.json`.** A schema-valid FUTURE end time is returned (it cannot grant
+  idle) but not cached, so a repaired file or corrected clock is read again. The
+  immutable `bootAt` baseline is unchanged: a backwards clock step after boot
+  withholds idle until the clock catches up or the process restarts; manual
+  install keeps its idle bypass.
+
+Not changed here: `setup.json` (baked, seeded once, never written by CeraUI)
+still aborts boot when present-but-damaged or unreadable; that is recorded as an
+owner decision, not fixed by guessing its required `hw` and APT opt-out.
 
 Physical startup reconciliation and orchestrator startup are ordered by a shared
 completion promise. Both run off the control-server boot path; completion is not

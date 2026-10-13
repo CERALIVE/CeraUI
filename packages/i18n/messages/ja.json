@@ -1884,6 +1884,7 @@
 	"notifications.streamHealthRecovered": "ストリーム状態が回復しました",
 	"notifications.streamRecovered": "配信エンジンの再起動後、配信が自動的に復旧しました。",
 	"notifications.streamRecoveryFailed": "配信エンジンの再起動後、配信を復旧できませんでした。詳細は 設定 → システムログ を開いてください。",
+	"notifications.configDamagedReset": "デバイスの設定ファイルが破損していて読み取れませんでした。CeraUI は初期設定で起動し、破損したファイルを {copy} として保存しました。設定を入力し直してください。これは配信やアップデートが正常に動作していることを意味しません。",
 	"notifications.streamStartAudioSourceUnavailableFailed": "配信を開始できませんでした：選択したオーディオ入力が利用できません。接続し直すか、別のオーディオソースを選んでください。",
 	"notifications.streamStartCaptureDeviceBusyFailed": "配信を開始できませんでした: {attempt}/{maxAttempts} 回試しても映像入力が使用中のままでした。少し待ってから、もう一度開始してください。",
 	"notifications.streamStartCaptureDeviceBusyRetrying": "映像入力が使用中です — 再試行しています ({nextAttempt}/{maxAttempts})…",

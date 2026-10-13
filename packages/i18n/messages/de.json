@@ -1929,6 +1929,7 @@
 	"notifications.streamHealthRecovered": "Stream-Zustand wiederhergestellt",
 	"notifications.streamRecovered": "Der Stream wurde nach dem Neustart der Streaming-Engine automatisch wiederhergestellt.",
 	"notifications.streamRecoveryFailed": "Der Stream konnte nach dem Neustart der Streaming-Engine nicht wiederhergestellt werden. Öffnen Sie Einstellungen → Systemprotokolle für Details.",
+	"notifications.configDamagedReset": "Die Einstellungsdatei des Geräts war beschädigt und konnte nicht gelesen werden. CeraUI wurde mit den Ersteinrichtungs-Einstellungen gestartet und hat die beschädigte Datei als {copy} aufbewahrt. Die Einstellungen müssen erneut eingegeben werden; das bedeutet nicht, dass Streaming oder Updates funktionieren.",
 	"notifications.streamStartAudioSourceUnavailableFailed": "Streamstart fehlgeschlagen: der ausgewählte Audioeingang ist nicht verfügbar. Schließe ihn wieder an oder wähle eine andere Audioquelle.",
 	"notifications.streamStartCaptureDeviceBusyFailed": "Stream konnte nicht gestartet werden: Der Videoeingang blieb nach {attempt}/{maxAttempts} Versuchen belegt. Warte einen Moment und starte erneut.",
 	"notifications.streamStartCaptureDeviceBusyRetrying": "Videoeingang belegt — neuer Versuch ({nextAttempt}/{maxAttempts})…",

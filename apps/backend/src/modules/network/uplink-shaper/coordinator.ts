@@ -29,8 +29,12 @@ export class UplinkShaperCoordinator {
 	}
 
 	update(update: ShaperUpdate): Promise<void> {
-		this.#running = this.#running.then(() => this.#applyUpdate(update));
-		return this.#running;
+		// The caller gets this update's own outcome, rejection included. The
+		// serialization tail only waits for it to SETTLE: one failed ownership
+		// read must not reject every later update before it can read again.
+		const result = this.#running.then(() => this.#applyUpdate(update));
+		this.#running = result.catch(() => undefined);
+		return result;
 	}
 
 	async #applyUpdate(update: ShaperUpdate): Promise<void> {

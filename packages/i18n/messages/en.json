@@ -1929,6 +1929,7 @@
 	"notifications.streamHealthRecovered": "Stream health recovered",
 	"notifications.streamRecovered": "The stream was restored automatically after the streaming engine restarted.",
 	"notifications.streamRecoveryFailed": "The stream could not be restored after the streaming engine restarted. Open Settings → System Logs for details.",
+	"notifications.configDamagedReset": "The device settings file was damaged and could not be read. CeraUI started with first-run settings and kept the damaged file as {copy}. Settings must be entered again; this does not mean streaming or updates are working.",
 	"notifications.streamStartAudioSourceUnavailableFailed": "Stream failed to start: the selected audio input is not available. Reconnect it or choose another audio source.",
 	"notifications.streamStartCaptureDeviceBusyFailed": "Stream failed to start: the video input stayed busy after {attempt}/{maxAttempts} attempts. Wait a moment, then start again.",
 	"notifications.streamStartCaptureDeviceBusyRetrying": "The video input is busy — retrying ({nextAttempt}/{maxAttempts})…",

@@ -3,9 +3,14 @@
 `ceralive.service` is `Type=notify`, not `Type=simple`. Its readiness boundary is:
 
 1. The JavaScript boot-signal guards are installed.
-2. Configuration loads and the HTTP/WebSocket control server binds successfully.
+2. Configuration is resolved and the HTTP/WebSocket control server binds
+   successfully. "Resolved" includes a damaged `config.json` archived and replaced
+   by first-run settings, and an unreadable one left unavailable: the server still
+   binds, and a background owner keeps retrying the load (UPDATE-RECOVERY.md →
+   Unknown reads never abort boot, wedge, or become a write baseline).
 3. The backend acknowledges readiness through `systemd-notify`.
-4. Optional subsystem initialization continues.
+4. Optional subsystem initialization continues; when config was unavailable it
+   first waits for that owner's successful load.
 
 Readiness means the control server is bound and the process can safely receive
 its boot notifications. It does **not** mean every engine, radio or add-on is

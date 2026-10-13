@@ -23,11 +23,11 @@
  * recovery behaviour is a change to a data table with a unit test rather than to
  * branchy startup code.
  *
- * It NEVER throws. A replay that cannot complete still lowers the barrier, because
- * a barrier nobody will ever lower is worse than a device that reports honestly
- * that some identities are blocked: the blocks themselves are what keep the device
- * safe, and holding the barrier as well would strand streaming permanently on a
- * transient filesystem fault.
+ * It NEVER throws. A replay that could not read every slot keeps the barrier
+ * raised — an unread slot may be a mutation that still needs its rollback — and
+ * hands it to the one retry owner (`mutation-recovery-owner.ts`), which retries
+ * with capped backoff until a complete readable replay lowers it. A barrier is
+ * never left raised without that owner.
  */
 
 import type { ModemMutationEntry } from "@ceraui/rpc/schemas";
@@ -36,6 +36,7 @@ import { logger } from "../../helpers/logger.ts";
 import {
 	beginRecoveryBarrier,
 	completeRecoveryBarrier,
+	setRecoveryRetryOwner,
 } from "../streaming/recovery-barrier.ts";
 
 import { refreshMutationBlocks } from "./mutation-blocks.ts";
@@ -51,6 +52,12 @@ import {
 	presenceRecheckTarget,
 	replayActionFor,
 } from "./mutation-journal-state.ts";
+import {
+	type MutationRecoveryDeps,
+	scheduleMutationRecovery,
+	sleepUnlessAborted,
+	stopMutationRecovery,
+} from "./mutation-recovery-owner.ts";
 import { captureModemState, rollbackMutation } from "./mutation-rollback.ts";
 // Side-effect imports: register each kind's rollback handler. Replay must not be
 // the first caller to discover a kind has no way back — that would report an
@@ -177,14 +184,40 @@ export async function runMutationReplay(): Promise<ReplaySummary> {
 	return summary;
 }
 
+/** Read-only: true when every slot reads and the per-identity blocks refresh. */
+async function journalReadsCompletely(): Promise<boolean> {
+	if ((await listUnreadableSlots()).length > 0) return false;
+	await refreshMutationBlocks();
+	return true;
+}
+
+export interface MutationRecoveryOptions {
+	/** Injected clock for the retry owner's backoff. */
+	readonly sleep?: MutationRecoveryDeps["sleep"];
+}
+
 /**
  * Raise the admission barrier and replay, lowering it only with readable authority. The barrier
  * is raised synchronously so it is already up before the WS server starts
- * accepting the RPCs it gates.
+ * accepting the RPCs it gates. When the replay could not read everything, the
+ * retry owner takes over; a later runtime raise is retried read-only.
  */
-export async function initMutationRecovery(): Promise<ReplaySummary> {
+export async function initMutationRecovery(
+	options: MutationRecoveryOptions = {},
+): Promise<ReplaySummary> {
 	beginRecoveryBarrier();
 	const summary = await runMutationReplay();
+	const deps: MutationRecoveryDeps = {
+		replay: async () => (await runMutationReplay()).unreadable === 0,
+		verify: journalReadsCompletely,
+		sleep: options.sleep ?? sleepUnlessAborted,
+	};
+	stopMutationRecovery();
+	setRecoveryRetryOwner({
+		schedule: () => scheduleMutationRecovery(deps, "verify"),
+		cancel: stopMutationRecovery,
+	});
 	if (summary.unreadable === 0) completeRecoveryBarrier();
+	else scheduleMutationRecovery(deps, "replay");
 	return summary;
 }

@@ -1929,6 +1929,7 @@
 	"notifications.streamHealthRecovered": "स्ट्रीम स्थिति बहाल हुई",
 	"notifications.streamRecovered": "स्ट्रीमिंग इंजन के पुनः आरंभ होने के बाद स्ट्रीम स्वचालित रूप से बहाल हो गई।",
 	"notifications.streamRecoveryFailed": "स्ट्रीमिंग इंजन के पुनः आरंभ होने के बाद स्ट्रीम बहाल नहीं हो सकी। विवरण के लिए सेटिंग्स → सिस्टम लॉग खोलें।",
+	"notifications.configDamagedReset": "डिवाइस की सेटिंग्स फ़ाइल खराब थी और पढ़ी नहीं जा सकी। CeraUI पहली बार की सेटिंग्स के साथ शुरू हुआ और खराब फ़ाइल को {copy} के रूप में रखा। सेटिंग्स फिर से दर्ज करनी होंगी; इसका मतलब यह नहीं है कि स्ट्रीमिंग या अपडेट काम कर रहे हैं।",
 	"notifications.streamStartAudioSourceUnavailableFailed": "स्ट्रीम शुरू नहीं हुई: चयनित ऑडियो इनपुट उपलब्ध नहीं है। इसे फिर से कनेक्ट करें या कोई दूसरा ऑडियो स्रोत चुनें।",
 	"notifications.streamStartCaptureDeviceBusyFailed": "स्ट्रीम शुरू नहीं हो सकी: {attempt}/{maxAttempts} प्रयासों के बाद भी वीडियो इनपुट व्यस्त रहा। एक क्षण प्रतीक्षा करें और फिर से शुरू करें।",
 	"notifications.streamStartCaptureDeviceBusyRetrying": "वीडियो इनपुट व्यस्त है — पुनः प्रयास ({nextAttempt}/{maxAttempts})…",

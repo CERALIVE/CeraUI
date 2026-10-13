@@ -118,6 +118,11 @@ export function saveConfig() {
 	writeFileAtomicSync(configFile, JSON.stringify(dataToSave));
 }
 
+/** False until a strict load has succeeded; the boot owner retries until it does. */
+export function isRuntimeConfigAvailable(): boolean {
+	return authorityFailure === undefined;
+}
+
 export function getConfig(): RuntimeConfig {
 	if (authorityFailure) throw authorityFailure;
 	return config;
