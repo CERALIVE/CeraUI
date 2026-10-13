@@ -10,6 +10,9 @@ import { runOsStageJob } from '../../apps/backend/src/modules/system/update-orch
 import { rockHelperFixture } from '../../apps/backend/src/tests/helpers/os-stage-rock-helper-fixture.ts';
 import { harness } from '../../apps/backend/src/tests/helpers/os-stage-run-harness.ts';
 import { manifest } from '../../apps/backend/src/tests/helpers/os-stage-run-inputs.ts';
+import { useSessionOwnerForFile } from '../../apps/backend/src/tests/helpers/bind-session-owner.ts';
+
+useSessionOwnerForFile();
 
 test('real private RAUC read helpers fence next-pair dispatch', async () => {
 	// Given unmodified boot helpers, real host RAUC/private bus/cgroup and synthetic install/slot authority.
