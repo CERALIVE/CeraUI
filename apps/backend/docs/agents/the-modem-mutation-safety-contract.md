@@ -71,7 +71,14 @@ records are not pruned, and direct failed reads cannot become admission permissi
 Strict block publication vetoes malformed/schema-invalid slots; an ENOENT after
 listing is a concurrent deletion and is skipped in both inventory passes, not
 raised as a recovery barrier. Read errors still throw and retain the barrier.
-Repair storage and rerun recovery/restart; no operator clear API is added. FCC
+Directory enumeration after a successful open is inside that same error boundary.
+After completed startup, any non-absence fault schedules the registered read-only
+verification owner (1 s doubling to a 60 s ceiling). If acknowledgement durably
+removed the slot before its refresh failed, that owner reads the empty journal,
+clears the obsolete stream/modem block and lowers the barrier automatically after
+repair. It never replays rollback against an already-admitted runtime mutation.
+Permanent enumeration faults keep admission closed with capped waits. Repair
+storage; no operator clear API is added. FCC
 opt-in also uses strict reads and enables no model on ambiguity, preserving bytes.
 These are host boundary proofs, not board recovery qualification.
 

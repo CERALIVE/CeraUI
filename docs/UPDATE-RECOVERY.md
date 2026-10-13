@@ -197,10 +197,18 @@ oversize). Only `absent` and `valid` may seed a whole-file write.
 `preserveDamagedRecord()` copies the exact bytes to `<file>.damaged-<sha256>`
 (private temp, fsync, `link()` so an earlier copy is never replaced, directory
 fsync) before anything replaces a damaged record; if the copy fails the record
-stays unwritten. The unpublished temp is removed on every failure path (write,
-temp fsync, link, directory fsync), and a retry after a published copy failed its
-directory fsync finds the same digest name, checks its bytes and reuses it, so
-retries cannot accumulate copies or temps.
+stays unwritten. Every attempt first strictly checks the published digest copy
+and reacknowledges its parent, before requiring writable temp storage. A new temp
+uses an exclusive UUID-bearing name. Its owner keeps the descriptor pinning that
+inode until cleanup succeeds; read/unlink faults retain ownership for the next
+attempt. An unpublished own temp must be cleaned before another is allocated.
+Cleanup compares inode/device/birth identity, never bytes or a PID name alone;
+an absent/replaced own entry relinquishes only that ownership. A published copy
+is never removed or overwritten. For unchanged bytes, write/temp-fsync/link/
+directory-fsync failures and repeated cleanup EIO retain at most one own temp and
+one published copy per record. A restart uses a fresh nonce, with the existing
+fail-soft boot orphan sweep owning old debris. Permanent I/O faults remain
+unavailable, not successful preservation.
 
 - **`config.json`** (`modules/config-boot.ts`). `loadConfig()` stays strict. Boot
   calls `bootRuntimeConfig()`, which never aborts boot on an authority failure.
@@ -233,7 +241,13 @@ retries cannot accumulate copies or temps.
    malformed between passes raises the barrier and fails the attempt instead of
    being skipped. A file concurrently removed after listing is absent, not damaged,
    and is skipped in both inventory passes without raising the barrier. Read
-   failures still throw. A verification can never lower the barrier over damage it
+   failures still throw and raise the barrier, including enumeration after the
+   directory opened successfully. If acknowledgement already durably removed a
+   slot, a failed refresh keeps its old projection temporarily; the registered
+   read-only owner retries the empty journal and clears that obsolete block before
+   lowering the barrier. The operator need not acknowledge the now-absent slot
+   again. A permanent enumeration failure keeps the barrier raised behind capped
+   waits, not a spinning loop. A verification can never lower the barrier over damage it
   just observed. Shutdown cancels the flight and disarms scheduling, so a late
   raise cannot start another owner. A slot that stays damaged keeps the barrier up
   (the slot may be an unrolled mutation); the existing `recovery_pending` text

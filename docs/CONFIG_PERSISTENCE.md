@@ -61,6 +61,20 @@ orphan matching that one pattern and nothing else. T7's boot sweep
 config load) matches that exact glob (`/^\.[^./][^/]*\.\d+\.tmp$/`) and unlinks
 any leftover from a prior crash, fail-soft, every boot.
 
+Damaged-record preservation is a separate immutable-copy writer. Its discoverable
+`<file>.damaged-<sha256>` name is unchanged. Before allocating any temp it strictly
+checks a published copy's bytes and fsyncs its parent again. A new temp is
+`.<copy-basename>.<UUID>.<pid>.tmp`, still matched by that boot sweep. Failed
+cleanup retains a process-local owner with the open descriptor pinning the inode;
+the next preservation attempt retries identity-checked unlink before allocating
+another temp. An EIO during cleanup therefore cannot become a permanent PID-name
+collision or accumulate new temps for the same record. Identity replacement is
+not cleanup permission, even for identical bytes. Published evidence is never
+deleted or overwritten. Process death releases the descriptor; the next lifetime
+uses a fresh nonce and the existing fail-soft boot sweep handles crash debris.
+Persistent cleanup failure still withholds reset until storage recovers. These
+are host fault-injection proofs, not board/power-loss qualification.
+
 ### Durable device config
 
 | File | Writer | Atomicity | Notes |

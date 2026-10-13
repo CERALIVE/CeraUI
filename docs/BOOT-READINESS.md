@@ -26,6 +26,15 @@
 4. Optional subsystem initialization continues; when config was unavailable it
    first waits for that owner's successful load.
 
+The config owner also owns preservation retries after binding. One archive-temp
+cleanup EIO retains its inode-bound cleanup responsibility; the next healthy
+attempt reuses/reacknowledges the immutable digest copy, removes its own temp and
+loads first-run config once. No second boot sweep is required for that runtime
+failure. Modem journal enumeration faults after a successful directory open
+raise the same barrier as open faults, triggering the registered read-only
+runtime owner. This is host-tested availability behavior; a real-board storage
+fault during damaged-config recovery remains an outstanding drill.
+
 Readiness means the control server is bound and the process can safely receive
 its boot notifications. It does **not** mean every engine, radio or add-on is
 available. Those failures retain their existing degraded-but-up behavior.

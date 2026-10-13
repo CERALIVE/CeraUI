@@ -9,17 +9,19 @@
  * grammar or schema: the exact bytes are archived before anything replaces them.
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
 	closeSync,
 	constants,
+	fstatSync,
 	fsyncSync,
 	linkSync,
+	lstatSync,
 	openSync,
 	unlinkSync,
 	writeSync,
 } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import {
 	openStoredStateDirectory,
 	readStoredStateBytes,
@@ -111,27 +113,77 @@ export function readPersistentRecordSync<T>(
 	}
 }
 
-/**
- * Durably copy damaged bytes beside their record and return the copy's path.
- * `link()` publishes the fully written copy under a name that must not exist,
- * so an earlier copy is never replaced. The digest name reuses a published copy
- * after a failed directory acknowledgement. Throws when the copy cannot be made;
- * the caller must then leave the record unwritten.
- */
+type ArchiveTemp = { readonly name: string; readonly fd: number };
+// Keep the inode pinned until cleanup succeeds; errno cannot erase ownership.
+const pendingArchiveTemps = new Map<string, ArchiveTemp>();
+
+function cleanupArchiveTemp(key: string, parent: number): void {
+	const own = pendingArchiveTemps.get(key);
+	if (own === undefined) return;
+	const temp = join(`/proc/self/fd/${parent}`, own.name);
+	try {
+		const current = lstatSync(temp);
+		const identity = fstatSync(own.fd);
+		if (
+			current.dev === identity.dev &&
+			current.ino === identity.ino &&
+			current.birthtimeMs === identity.birthtimeMs
+		)
+			unlinkSync(temp);
+	} catch (error) {
+		if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
+			throw error;
+	}
+	pendingArchiveTemps.delete(key);
+	closeSync(own.fd);
+}
+
+class DamagedCopyConflictError extends Error {
+	override readonly name = "DamagedCopyConflictError";
+	constructor() {
+		super("published damaged copy differs from the record");
+	}
+}
+
+function publishedCopyMatches(target: string, bytes: Uint8Array): boolean {
+	let fd: number;
+	try {
+		fd = openSync(
+			target,
+			constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+		);
+	} catch (error) {
+		if (error instanceof Error && "code" in error && error.code === "ENOENT")
+			return false;
+		throw error;
+	}
+	try {
+		if (!readStoredStateDescriptor(fd, bytes.length).equals(Buffer.from(bytes)))
+			throw new DamagedCopyConflictError();
+		return true;
+	} finally {
+		closeSync(fd);
+	}
+}
+
+/** Immutable digest evidence is checked and reacknowledged before any allocation. */
 export function preserveDamagedRecord(path: string, bytes: Uint8Array): string {
-	const directory = dirname(path);
+	const key = resolve(path);
 	const digest = createHash("sha256").update(bytes).digest("hex");
 	const copy = `${path}.damaged-${digest}`;
-	const parent = openStoredStateDirectory(directory);
+	const parent = openStoredStateDirectory(dirname(key));
 	const target = `/proc/self/fd/${parent}/${basename(copy)}`;
-	const temp = join(
-		`/proc/self/fd/${parent}`,
-		`.${basename(copy)}.${process.pid}.tmp`,
-	);
-	let created = false;
 	try {
+		if (publishedCopyMatches(target, bytes)) {
+			fsyncSync(parent);
+			cleanupArchiveTemp(key, parent);
+			return copy;
+		}
+		cleanupArchiveTemp(key, parent);
+		const name = `.${basename(copy)}.${randomUUID()}.${process.pid}.tmp`;
+		const temp = join(`/proc/self/fd/${parent}`, name);
 		const fd = openSync(temp, "wx", 0o600);
-		created = true;
+		pendingArchiveTemps.set(key, { name, fd });
 		try {
 			let written = 0;
 			while (written < bytes.length) {
@@ -143,38 +195,25 @@ export function preserveDamagedRecord(path: string, bytes: Uint8Array): string {
 				written += count;
 			}
 			fsyncSync(fd);
-		} finally {
-			closeSync(fd);
-		}
-		try {
-			linkSync(temp, target);
-		} catch (error) {
-			if (
-				!(error instanceof Error && "code" in error && error.code === "EEXIST")
-			)
-				throw error;
-			const existing = openSync(
-				target,
-				constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-			);
 			try {
+				linkSync(temp, target);
+			} catch (error) {
 				if (
-					!readStoredStateDescriptor(existing, bytes.length).equals(
-						Buffer.from(bytes),
+					!(
+						error instanceof Error &&
+						"code" in error &&
+						error.code === "EEXIST"
 					)
 				)
 					throw error;
-			} finally {
-				closeSync(existing);
+				if (!publishedCopyMatches(target, bytes)) throw error;
 			}
-		}
-		fsyncSync(parent);
-		return copy;
-	} finally {
-		try {
-			if (created) unlinkSync(temp);
+			fsyncSync(parent);
+			return copy;
 		} finally {
-			closeSync(parent);
+			cleanupArchiveTemp(key, parent);
 		}
+	} finally {
+		closeSync(parent);
 	}
 }

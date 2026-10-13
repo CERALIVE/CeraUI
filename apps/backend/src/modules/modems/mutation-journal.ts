@@ -153,19 +153,18 @@ export const defaultMutationJournalFs: MutationJournalFs = {
 		await unlink(path);
 	},
 	listDir: async (dir) => {
-		let fd: number;
 		try {
-			fd = openStoredStateDirectory(dir);
+			const fd = openStoredStateDirectory(dir);
+			try {
+				return await readdir(`/proc/self/fd/${fd}`);
+			} finally {
+				closeSync(fd);
+			}
 		} catch (error) {
 			if (error instanceof Error && "code" in error && error.code === "ENOENT")
 				return [];
 			beginRecoveryBarrier();
 			throw error;
-		}
-		try {
-			return await readdir(`/proc/self/fd/${fd}`);
-		} finally {
-			closeSync(fd);
 		}
 	},
 };
