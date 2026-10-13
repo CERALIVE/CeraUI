@@ -2,22 +2,34 @@ import {
 	type DisruptiveActionDecision,
 	decideDisruptiveAction,
 } from "./disruptive-action-gate.ts";
+import { isDisruptiveActionPending } from "./disruptive-action-reservation.ts";
 import { getBootReadiness } from "./readiness.ts";
 import { isSoftwareUpdateRecoveryInconclusive } from "./software-update-recovery.ts";
 import { isUpdating } from "./software-updates.ts";
 import { getStreamLiveness } from "./stream-liveness-source.ts";
-import { getOrchestratorDisruptionBusyReasons } from "./update-orchestrator/runtime.ts";
+import {
+	getOrchestratorDisruptionBusyReasons,
+	isDisruptiveUpdateAuthoritySettled,
+} from "./update-orchestrator/runtime.ts";
 
-export function getDisruptiveActionDecision(): DisruptiveActionDecision {
+export function getDisruptiveActionDecision(
+	owner?: "stale-services",
+): DisruptiveActionDecision {
+	if (isDisruptiveActionPending())
+		return { allowed: false, reason: "update_in_progress" };
 	return decideDisruptiveAction({
 		streamLiveness: getStreamLiveness(),
 		updateBusy: [
-			...getOrchestratorDisruptionBusyReasons(),
+			...getOrchestratorDisruptionBusyReasons().filter(
+				(reason) =>
+					owner !== "stale-services" || reason !== "restarting-services",
+			),
 			...(isUpdating() ? ["package-install" as const] : []),
 			...(isSoftwareUpdateRecoveryInconclusive()
 				? ["update-recovery" as const]
 				: []),
-			...(getBootReadiness().degradedSubsystems.includes(
+			...(!isDisruptiveUpdateAuthoritySettled() &&
+			getBootReadiness().degradedSubsystems.includes(
 				"update-orchestrator-maintenance",
 			)
 				? ["maintenance" as const]

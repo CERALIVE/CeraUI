@@ -37,10 +37,11 @@ import {
 	getCloudProviders,
 	setRemoteConfig,
 } from "../../modules/remote/remote.ts";
-import { notePlannedShutdown } from "../../modules/streaming/armed-stream-marker.ts";
 import { setAutostart } from "../../modules/streaming/streamloop.ts";
-import { notifyDisruptiveActionRefused } from "../../modules/system/disruptive-action-refusal.ts";
-import { getDisruptiveActionDecision } from "../../modules/system/disruptive-action-runtime.ts";
+import {
+	PowerSubmissionError,
+	resetDisruptiveActionReservationForTest,
+} from "../../modules/system/disruptive-action-reservation.ts";
 import {
 	getKioskStatus,
 	isRealDevice,
@@ -51,6 +52,7 @@ import {
 	resolveActiveKioskDeps,
 } from "../../modules/system/kiosk.ts";
 import { getLog } from "../../modules/system/logs.ts";
+import { submitPowerCommand } from "../../modules/system/power-submission.ts";
 import {
 	getRevisions,
 	refreshEngineRevision,
@@ -66,6 +68,7 @@ import {
 	setSshPersistent,
 	startStopSsh,
 } from "../../modules/system/ssh.ts";
+import { sshDisruptiveResponse } from "../../modules/system/ssh-disruptive-response.ts";
 import { reconcileAptChannel } from "../../modules/system/update-apt-channel.ts";
 import { readUpdateCapabilities } from "../../modules/system/update-capabilities.ts";
 import { readUpdateDetails } from "../../modules/system/update-orchestrator/details.ts";
@@ -164,7 +167,9 @@ type PowerCommand = "poweroff" | "reboot";
 type PowerCommandRunner = (command: PowerCommand) => void;
 
 const defaultPowerCommandRunner: PowerCommandRunner = (command) => {
-	Bun.spawnSync([command]);
+	const result = Bun.spawnSync([command]);
+	if (result.exitCode !== 0)
+		throw new PowerSubmissionError(command, result.exitCode);
 };
 
 let powerCommandRunner: PowerCommandRunner = defaultPowerCommandRunner;
@@ -174,6 +179,7 @@ export function setPowerCommandRunner(runner: PowerCommandRunner): void {
 }
 
 export function resetPowerCommandRunner(): void {
+	resetDisruptiveActionReservationForTest();
 	powerCommandRunner = defaultPowerCommandRunner;
 }
 
@@ -191,15 +197,7 @@ export const poweroffProcedure = authedProcedure
 			simulateDevReboot(); // close authed sockets → frontend reconnect banner
 			return { success: true };
 		}
-		const decision = getDisruptiveActionDecision();
-		if (!decision.allowed) {
-			notifyDisruptiveActionRefused();
-			return { success: false, error: decision.reason };
-		}
-		logger.info("System: poweroff requested");
-		notePlannedShutdown("poweroff");
-		powerCommandRunner("poweroff");
-		return { success: true };
+		return submitPowerCommand("poweroff", powerCommandRunner);
 	});
 
 export const rebootProcedure = authedProcedure
@@ -214,18 +212,7 @@ export const rebootProcedure = authedProcedure
 			simulateDevReboot(); // close authed sockets → frontend reconnect banner
 			return { success: true };
 		}
-		const decision = getDisruptiveActionDecision();
-		if (!decision.allowed) {
-			notifyDisruptiveActionRefused();
-			return { success: false, error: decision.reason };
-		}
-		logger.info("System: reboot requested");
-		// Belt and braces: a reboot changes the boot id, which already blocks
-		// restoration. This also covers the window between the request and the
-		// kernel actually going down, where the backend can still be restarted.
-		notePlannedShutdown("reboot");
-		powerCommandRunner("reboot");
-		return { success: true };
+		return submitPowerCommand("reboot", powerCommandRunner);
 	});
 
 /**
@@ -324,12 +311,7 @@ export const checkForUpdatesProcedure = authedProcedure
 export const sshStartProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(async ({ context }) => {
-		const decision = getDisruptiveActionDecision();
-		if (!decision.allowed) {
-			return { success: false, error: decision.reason };
-		}
-		const success = await startStopSsh(context.ws, "start_ssh");
-		return { success };
+		return sshDisruptiveResponse(() => startStopSsh(context.ws, "start_ssh"));
 	});
 
 /**
@@ -338,12 +320,7 @@ export const sshStartProcedure = authedProcedure
 export const sshStopProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(async ({ context }) => {
-		const decision = getDisruptiveActionDecision();
-		if (!decision.allowed) {
-			return { success: false, error: decision.reason };
-		}
-		const success = await startStopSsh(context.ws, "stop_ssh");
-		return { success };
+		return sshDisruptiveResponse(() => startStopSsh(context.ws, "stop_ssh"));
 	});
 
 /**
@@ -357,12 +334,7 @@ export const sshSetPersistentProcedure = authedProcedure
 	.input(sshPersistentInputSchema)
 	.output(successResponseSchema)
 	.handler(async ({ input }) => {
-		const decision = getDisruptiveActionDecision();
-		if (!decision.allowed) {
-			return { success: false, error: decision.reason };
-		}
-		const success = await setSshPersistent(input.enabled);
-		return { success };
+		return sshDisruptiveResponse(() => setSshPersistent(input.enabled));
 	});
 
 /**

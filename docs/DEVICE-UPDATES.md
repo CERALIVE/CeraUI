@@ -1,5 +1,22 @@
 # Device updates: the update orchestrator [PARTIAL]
 
+## Pending disruptive effects [PARTIAL — host proof, board drill owed]
+
+Accepted device power/reset and timed OS activation hold an in-process reservation
+from the final synchronous gate through pending shutdown, even after the submission
+command exits zero. The shared stream-start admission returns its existing typed
+`update_in_progress` refusal, and package/OS stage/arm submission remains blocked.
+Only positive submission failure releases shutdown exclusion; no countdown or timer
+does. SSH and eligible stale-service restarts hold until blocking command completion.
+Historical boot degradation is retained for diagnosis, not treated as current work
+after validated startup and current authority/durability settle. Unknown stays refused.
+
+This is not a durable shutdown lease. Backend restart clears process-local state;
+the board drill must prove that a queued installed shutdown still excludes new starts,
+restoration/autostart and update work across that restart. Also exercise accepted
+reboot followed by Go Live, remote confirm versus Go Live in both orders, and timed
+activation from arming through reboot. No hardware qualification is claimed here.
+
 This is the engineering reference for how a CeraLive device discovers, downloads,
 installs and verifies its own updates. It describes the code on this branch, file
 by file, and says plainly where a path is implemented but not released on any

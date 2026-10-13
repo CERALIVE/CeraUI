@@ -37,6 +37,12 @@
  */
 
 import { logger } from "../../helpers/logger.ts";
+import {
+	type DisruptiveReservationOutcome,
+	isPositiveDisruptiveFailure,
+	PowerSubmissionError,
+	resetDisruptiveActionReservationForTest,
+} from "../system/disruptive-action-reservation.ts";
 import { sendFrame } from "./channel.ts";
 import {
 	type Command,
@@ -138,6 +144,9 @@ export interface SelfFencingDeps {
 	admitDisruptiveAction: (
 		type: SelfFencingType,
 	) => Promise<{ ok: true } | { ok: false; refusal: string }>;
+	prepareDisruptiveReservation: () => Promise<
+		() => DisruptiveReservationOutcome
+	>;
 }
 
 /**
@@ -232,7 +241,7 @@ function spawnOp(argv: string[]): NonRevertibleOp {
 		execute: async () => {
 			const { exitCode } = Bun.spawnSync(argv);
 			if (exitCode !== 0)
-				throw new Error(`${argv[0]} exited with status ${String(exitCode)}`);
+				throw new PowerSubmissionError(argv[0] ?? "power", exitCode);
 		},
 	};
 }
@@ -255,6 +264,14 @@ function defaultDeps(): SelfFencingDeps {
 		logger,
 		acquireMutationLease: defaultAcquireMutationLease,
 		admitDisruptiveAction: defaultAdmitDisruptiveAction,
+		prepareDisruptiveReservation: async () => {
+			const [{ getDisruptiveActionDecision }, { reserveDisruptiveAction }] =
+				await Promise.all([
+					import("../system/disruptive-action-runtime.ts"),
+					import("../system/disruptive-action-reservation.ts"),
+				]);
+			return () => reserveDisruptiveAction(getDisruptiveActionDecision());
+		},
 	};
 }
 
@@ -567,6 +584,18 @@ export async function handleSelfFencingConfirm(cid: string): Promise<void> {
 			);
 			return;
 		}
+		const reserve = await deps.prepareDisruptiveReservation();
+		const admission = reserve();
+		if (!admission.allowed) {
+			deps.sendResult(
+				resultFrame(frame, {
+					ok: false,
+					applied: null,
+					error: admission.reason,
+				}),
+			);
+			return;
+		}
 		try {
 			await op.execute(frame.payload);
 			deps.logger.info(
@@ -574,6 +603,8 @@ export async function handleSelfFencingConfirm(cid: string): Promise<void> {
 			);
 			deps.sendResult(resultFrame(frame, { ok: true, applied: null }));
 		} catch (err) {
+			if (isPositiveDisruptiveFailure(err))
+				admission.reservation.releaseAfterFailure();
 			const message = errorMessage(err);
 			deps.logger.warn(
 				`self_fencing: ${frame.type} (${cid}) execute failed: ${message}`,
@@ -592,6 +623,7 @@ export async function handleSelfFencingConfirm(cid: string): Promise<void> {
  * (mirrors `resetMockState`); never call this from production code.
  */
 export function resetSelfFencingState(): void {
+	resetDisruptiveActionReservationForTest();
 	for (const entry of pending.values()) {
 		entry.deps.clearTimer(entry.timer);
 		releaseLease(entry);

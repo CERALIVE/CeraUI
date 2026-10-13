@@ -10,6 +10,10 @@ export class UpdateStartupReadiness {
 		this.ready = ready;
 	}
 
+	isReady(): boolean {
+		return this.ready && this.packageDurable();
+	}
+
 	assertReady(durable = true): void {
 		if (!this.ready || !durable || !this.packageDurable())
 			throw new ORPCError(UPDATE_STARTUP_PENDING, {

@@ -106,13 +106,18 @@ async function resetPassword() {
 }
 
 async function toggle() {
+	let refusal: string | undefined;
 	const target = !active;
 	toggleTarget = target;
 	await osCommand({
 		key: 'ssh',
 		target,
-		rpc: () => (target ? rpc.system.sshStart() : rpc.system.sshStop()),
-		failMessage: () => m["network.os.operationFailed"](),
+		rpc: async () => {
+			const result = await (target ? rpc.system.sshStart() : rpc.system.sshStop());
+			refusal = result.error;
+			return result;
+		},
+		failMessage: () => sshFailureMessage(refusal),
 		busyMessage: () => m["network.os.deviceBusy"](),
 	});
 }
@@ -126,12 +131,17 @@ $effect(() => {
 });
 
 async function togglePersist(next: boolean) {
+	let refusal: string | undefined;
 	persistTarget = next;
 	const result = await osCommand({
 		key: PERSIST_KEY,
 		target: next,
-		rpc: () => rpc.system.sshSetPersistent({ enabled: next }),
-		failMessage: () => m["network.os.operationFailed"](),
+		rpc: async () => {
+			const result = await rpc.system.sshSetPersistent({ enabled: next });
+			refusal = result.error;
+			return result;
+		},
+		failMessage: () => sshFailureMessage(refusal),
 		busyMessage: () => m["network.os.deviceBusy"](),
 	});
 	// undefined → re-entry no-op or a thrown RPC; success:false → already `failed`
@@ -143,6 +153,17 @@ async function togglePersist(next: boolean) {
 	// Success: stay `pending`. The confirm $effect below resolves it once the
 	// authoritative `ssh.enabled` broadcast reflects the target, so the switch's
 	// final position always waits for the device's own answer.
+}
+
+function sshFailureMessage(reason: string | undefined): string {
+	switch (reason) {
+		case 'streaming':
+		case 'stream_liveness_unknown':
+		case 'update_in_progress':
+			return m["notifications.disruptiveActionRefused"]();
+		default:
+			return m["network.os.operationFailed"]();
+	}
 }
 
 $effect(() => {

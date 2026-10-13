@@ -1,5 +1,10 @@
 import { readdir } from "node:fs/promises";
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
+import {
+	isPositiveDisruptiveFailure,
+	PowerSubmissionError,
+	reserveDisruptiveAction,
+} from "../disruptive-action-reservation.ts";
 import { notifyUpdate } from "./notifications.ts";
 import { pendingPackageSuccess } from "./pending-success-fence.ts";
 
@@ -93,7 +98,25 @@ export async function reconcileStaleUnits(
 			continue;
 		}
 		if (pendingPackageSuccess.pending) return false;
-		await deps.restart(unit);
+		const { getDisruptiveActionDecision } = await import(
+			"../disruptive-action-runtime.ts"
+		);
+		const admission = reserveDisruptiveAction(
+			getDisruptiveActionDecision("stale-services"),
+			"service",
+		);
+		if (!admission.allowed) {
+			pending = true;
+			continue;
+		}
+		try {
+			await deps.restart(unit);
+		} catch (error) {
+			if (isPositiveDisruptiveFailure(error))
+				admission.reservation.releaseAfterFailure();
+			throw error;
+		}
+		admission.reservation.releaseAfterCompletion();
 	}
 	return !pending;
 }
@@ -102,12 +125,11 @@ export const defaultStaleServiceDeps: StaleServiceDeps = {
 	isIdle: async () => false,
 	transactionRunning: () => true,
 	restart: async (unit) => {
-		const result = await spawnWithTimeout(
-			["systemctl", "restart", "--no-block", unit],
-			{ timeoutMs: 10_000 },
-		);
+		const result = await spawnWithTimeout(["systemctl", "restart", unit], {
+			timeoutMs: 10_000,
+		});
 		if (result.exitCode !== 0)
-			throw new Error(`Service restart refused: ${unit}`);
+			throw new PowerSubmissionError(unit, result.exitCode);
 	},
 	recommend: (unit) => {
 		notifyUpdate({ kind: "restart-recommended", id: unit, unit });

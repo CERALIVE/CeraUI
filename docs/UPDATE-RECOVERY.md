@@ -419,11 +419,24 @@ the remote `system.reboot`/`device.factoryReset` commands consult one
 disruptive-action gate that refuses with `update_in_progress` while package success
 is retained, OS settlement durability or replay is pending, an OS stage or `armOs`
 call is in flight, the orchestrator is in `downloading`/`committing`/
-`restarting-services`/`os-staging`/`syncing`, or the maintenance latch is set. It
+`restarting-services`/`os-staging`/`syncing`, or current maintenance authority remains
+unsettled. A historical boot-degradation entry alone no longer refuses after
+validated startup, current authority and settlement durability recover. It
 also refuses `stream_liveness_unknown` before boot stream reconciliation returns.
 The former `isUpdating()` (package progress only) guard missed OS staging and the
 cleared-progress, not-yet-durable success window. Physical shutdown effects are
 inferred, not board-proven. Full list: `START-LIFECYCLE.md` → Disruptive-action gate.
+
+Accepted disruptive effects also reserve the reciprocal lifetime: power/reset and
+timed activation retain in-process exclusion after exit zero, while SSH and
+blocking stale-service restarts release on positive command completion. Spawn/nonzero
+failure releases; uncertainty stays protected and is not cleared on a timer.
+The existing D8 hook refuses new stream starts and package/OS submission boundaries
+refuse pending shutdown. This adds no persisted record, schema or RPC. Process restart
+clears the reservation, so installed shutdown/restart ordering remains a required
+board drill, not a durability claim. Terminal invalid-authority recovery still has
+no operator override: an owner policy for product-level maintenance repair/clearance
+is unresolved; history is not permission to bypass current unknown evidence.
 
 The tick entrypoint suppresses phase overwrites, discovery, package launch, OS
 stage/activation, mirror start/poll/cleanup and quarantine retirement. Dependency

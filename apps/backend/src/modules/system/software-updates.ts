@@ -71,6 +71,17 @@ import {
 	parseOk,
 } from "./cli-parse.ts";
 import { isRealDevice } from "./device-detection.ts";
+import { decideDisruptiveAction } from "./disruptive-action-gate.ts";
+import { notifyDisruptiveActionRefused } from "./disruptive-action-refusal.ts";
+import {
+	assertDisruptiveActionFree,
+	DisruptiveActionRefusal,
+	isDisruptiveActionPending,
+	isPositiveDisruptiveFailure,
+	readDisruptiveUpdateBusy,
+	reserveDisruptiveAction,
+	resetDisruptiveActionReservationForTest,
+} from "./disruptive-action-reservation.ts";
 import { classifyPackageLayer } from "./package-layer.ts";
 import {
 	pendingAwareAptSpaceDeps,
@@ -209,13 +220,18 @@ async function runAptCommand(
 	argv: string[],
 	timeoutMs: number,
 ): Promise<SpawnWithTimeoutResult> {
+	assertDisruptiveActionFree();
 	pendingPackageSuccess.assertEffectsAllowed();
 	try {
 		const result = await aptCommandRunner(argv, { timeoutMs });
 		pendingPackageSuccess.assertEffectsAllowed();
 		return result;
 	} catch (error) {
-		if (error instanceof PendingPackageSuccessError) throw error;
+		if (
+			error instanceof PendingPackageSuccessError ||
+			error instanceof DisruptiveActionRefusal
+		)
+			throw error;
 		return {
 			exitCode: 1,
 			stdout: "",
@@ -372,26 +388,59 @@ function broadcastUpdateState() {
 }
 
 // Auto-reboot runner DI seam: default runs the real argv-only run(); tests spy it.
-type RebootRunner = (bin: string, args: string[]) => void;
+type RebootRunner = (bin: string, args: string[]) => void | Promise<void>;
 
-const defaultRebootRunner: RebootRunner = (bin, args) => {
-	void run(bin, args);
+const defaultRebootRunner: RebootRunner = async (bin, args) => {
+	await run(bin, args);
 };
 
 let rebootRunner: RebootRunner = defaultRebootRunner;
 
-export function setRebootRunner(runner: RebootRunner): void {
-	rebootRunner = runner;
+export function setRebootRunner(
+	runner: (bin: string, args: string[]) => void,
+): void {
+	rebootRunner = (bin, args) => {
+		const completion: unknown = runner(bin, args);
+		return completion instanceof Promise
+			? completion.then(() => undefined)
+			: undefined;
+	};
 }
 
 export function resetRebootRunner(): void {
+	resetDisruptiveActionReservationForTest();
 	rebootRunner = defaultRebootRunner;
 }
 
 // Gate on isDevelopment() so a dev host is never rebooted after an update.
 export function rebootAfterUpdate(): void {
 	if (!isDevelopment()) {
-		rebootRunner("reboot", []);
+		const admission = reserveDisruptiveAction(
+			decideDisruptiveAction({
+				streamLiveness: isStreamConfirmedIdle() ? "idle" : "unknown",
+				updateBusy: [
+					...readDisruptiveUpdateBusy(),
+					...(isSoftwareUpdateRecoveryInconclusive()
+						? ["update-recovery" as const]
+						: []),
+				],
+			}),
+		);
+		if (!admission.allowed) {
+			notifyDisruptiveActionRefused();
+			return;
+		}
+		const failed = (error: unknown) => {
+			if (isPositiveDisruptiveFailure(error))
+				admission.reservation.releaseAfterFailure();
+			logger.error("Software update reboot submission failed", { error });
+		};
+		try {
+			const completion = rebootRunner("reboot", []);
+			if (completion) void completion.catch(failed);
+		} catch (error) {
+			failed(error);
+		}
 	}
 }
 
@@ -1336,6 +1385,7 @@ async function simulateMockSoftwareUpdate(): Promise<void> {
 export function startSoftwareUpdate(
 	onCommitSucceeded?: () => void,
 ): UpdateStartOutcome {
+	if (isDisruptiveActionPending()) return refuseUpdateStart("already_updating");
 	if (pendingPackageSuccess.pending)
 		return refuseUpdateStart("check_unavailable");
 	if (!aptUpdatesEnabled()) return refuseUpdateStart("updates_disabled");
@@ -1727,6 +1777,13 @@ async function prepareSoftwareUpdate(
 		return;
 	}
 	// Stamp after preflight so a refusal does not suppress stream restoration.
+	assertDisruptiveActionFree();
+	if (!isStreamConfirmedIdle()) {
+		refuseUpdateStart("streaming");
+		softUpdateStatus = null;
+		broadcastUpdateState();
+		return;
+	}
 	pendingPackageSuccess.assertEffectsAllowed();
 	notePlannedShutdown("software_update");
 	const monitor = createSoftwareUpdateProcessMonitor();

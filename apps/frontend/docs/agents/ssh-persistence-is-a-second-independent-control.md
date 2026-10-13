@@ -10,10 +10,11 @@ active` beside `is-enabled: disabled` — SSH worked, looked healthy, and would
 vanish on the next reboot with nothing on screen saying so.
 
 - **SEPARATE async-operation keys** (`ssh` and `ssh-persist`), which is the whole
-  independence claim made mechanical: a pending Start/Stop can never refuse the
-  persistence switch or move it, and vice versa. Do NOT share one key "so they
-  cannot race" — `systemctl start` and `systemctl enable` are different verbs on
-  one unit and systemd serialises them itself.
+  independence claim at the client layer: a pending Start/Stop does not disable
+  or move the persistence switch, and vice versa. Do NOT share one client key.
+  The backend's device-wide disruptive reservation can temporarily refuse a
+  second command while an actual service effect is pending; that refusal does
+  not fuse the two state axes or make either control optimistic.
 - **PESSIMISTIC, the `NetworkIngestDialog` discipline.** The switch position is
   `sshIsPersistent(getSsh())` — the device's own `ssh.enabled` — and only the
   spinner is optimistic, so an RPC that resolved `{success:true}` cannot move it.
@@ -34,6 +35,15 @@ vanish on the next reboot with nothing on screen saying so.
   row and the band) so the relationship reads at a glance, while the momentary
   Start/Stop action stays the terminal full-width control.
 
+Disruptive start/stop/persist refusals map `streaming`, `stream_liveness_unknown`
+and `update_in_progress` to the existing translated
+`notifications.disruptiveActionRefused` explanation; unknown errors retain generic
+failure copy. Copy comes from the actual command reply, not the transient operation
+cache, so a late refusal remains explained after that cache expires. The device
+also broadcasts a dismissible notice. Browser timers do
+not release backend exclusion. This is component-host proof, not board/browser
+qualification; the cloud command-result consumer is a separate follow-up.
+
 Copy: `advanced.sshPersist{,Hint,Warning}` (10 locales). Coverage:
 `SshDialog.persist.test.ts` (rendered DOM over a rune-backed `ssh` feed — the two
 distinct controls, both drive-the-right-RPC directions, the never-disables-the-other
@@ -42,4 +52,3 @@ matrix) + `os-toggle-predicates.test.ts`. Rule-E proof: sharing one key reddens 
 making the switch optimistic reddens 1, dropping the band reddens 2. Device half:
 [`../backend/AGENTS.md`](../../../backend/AGENTS.md) → SSH BOOT PERSISTENCE IS A SECOND
 AXIS, NOT A SIDE EFFECT.
-

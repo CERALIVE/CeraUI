@@ -1,6 +1,10 @@
 export class OrchestratorStartupFlight {
 	#pending: Promise<void> | undefined;
 
+	get inFlight(): boolean {
+		return this.#pending !== undefined;
+	}
+
 	run(work: () => Promise<void>): Promise<void> {
 		if (this.#pending) return this.#pending;
 		const completion = Promise.withResolvers<void>();

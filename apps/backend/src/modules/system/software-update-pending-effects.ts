@@ -4,6 +4,10 @@ import {
 } from "./apt-space-admission.ts";
 import { AptPreflightError } from "./apt-space-parser.ts";
 import {
+	assertDisruptiveActionFree,
+	DisruptiveActionRefusal,
+} from "./disruptive-action-reservation.ts";
+import {
 	PendingPackageSuccessError,
 	pendingPackageSuccess,
 } from "./update-orchestrator/pending-success-fence.ts";
@@ -16,6 +20,7 @@ export async function runLegacyPackageEffects<Value>(
 		return await run();
 	} catch (error) {
 		if (
+			error instanceof DisruptiveActionRefusal ||
 			error instanceof PendingPackageSuccessError ||
 			(error instanceof AptPreflightError &&
 				error.cause instanceof PendingPackageSuccessError)
@@ -28,6 +33,7 @@ export async function runLegacyPackageEffects<Value>(
 export const pendingAwareAptSpaceDeps: AptSpaceDeps = {
 	...defaultAptSpaceDeps,
 	run: (argv, options) => {
+		assertDisruptiveActionFree();
 		pendingPackageSuccess.assertEffectsAllowed();
 		return defaultAptSpaceDeps.run(argv, options);
 	},

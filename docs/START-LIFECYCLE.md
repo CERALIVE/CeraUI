@@ -701,10 +701,30 @@ Reboot, power-off, the SSH start/stop/persist mutations and the remote
 confirmed idle stream evidence with no interruptible update work. Anything else is
 refused with a typed reason (`streaming`, `stream_liveness_unknown` or
 `update_in_progress`): the RPC answers `{success:false, error}`, the local power
-handlers broadcast `notifications.disruptiveActionRefused`, and the remote path
+and SSH handlers broadcast `notifications.disruptiveActionRefused`, and the remote path
 answers `ok:false` with the reason. A remote confirm is the owner's intent, not
 idle evidence, so the gate is read on receipt and again at confirm. A remote
 reboot/factory-reset command that exits nonzero answers `ok:false` with its status.
+Local power likewise reports a failed native submission instead of starting the
+browser's success countdown. SSH maps these machine refusals to that same translated
+explanation rather than generic operation-failed text.
+
+Admission is not a stored permission: after awaited preparation, final current
+evidence is checked and an in-process disruptive reservation is acquired in the
+same synchronous step as effect submission. Local/remote power, factory reset,
+legacy completion reboot and timed `armOs(true)` keep this reservation through
+pending shutdown. Successful command return does not prove shutdown completed.
+The shared D8 admission hook refuses every stream-start origin with its existing
+`update_in_progress` result while held, including after its awaited preparation;
+package launch, final legacy APT preflight, OS stage/arm and competing disruptive
+requests also refuse. No stream is automatically stopped.
+
+SSH service/persistence and eligible stale-service restarts hold a transient
+reservation until positive blocking command completion. Stale restarts no longer
+use `--no-block`; their own settled `restarting-services` owner is exempt from
+that one phase reason, not from stream/unknown/durability or other current work.
+Nonzero/spawn failure permits retry; timeout, ambiguous completion and null exit
+retain exclusion. No timer, notification expiry or browser countdown releases it.
 
 Stream liveness is tri-state. `stream-liveness-source.ts` is the single
 composition that consumers read (lane B-core's factory accessor replaces this file
@@ -727,11 +747,24 @@ Update work that refuses power: orchestrator phases `downloading`, `committing`,
 `restarting-services`, `os-staging` and `syncing`; an OS stage in process; an
 in-flight `armOs` activation call; a package success retained before its durable
 acknowledgement; pending OS settlement durability or replay; legacy package
-progress; an inconclusive legacy recovery; and the `update-orchestrator-maintenance`
-latch. A settled `os-staged` / `os-activation-armed` receipt is NOT a refusal: a
-clean idle shutdown is its activation path. Consequence to know: while the
-maintenance latch holds, reboot, power-off and SSH changes stay refused from the
-UI and remote control; local console or physical power remains the escape.
+progress; an inconclusive legacy recovery; invalid current recovery authority;
+and maintenance for which validated startup/settlement has not established a
+safe baseline. The historical `update-orchestrator-maintenance` health entry
+remains recorded, but no longer refuses power once current startup/authority and
+durability are positively settled. Unknown authority remains refused; there is
+no operator clear API and no deletion of the update fences. A settled
+`os-staged` / `os-activation-armed` receipt is not by itself a refusal: clean idle
+shutdown is its activation path. `armOs(false)` only arms that future path and
+does not reserve an immediate reboot lifetime.
+
+The reservation is deliberately process-local. A backend restart clears it;
+startup still requires reconciled stream evidence, but this is not durable
+proof against a previously queued shutdown. Board qualification must establish
+accepted reboot → attempted Go Live, remote confirm racing Go Live in both orders,
+timed activation's arm-to-reboot window, and backend restart during pending shutdown
+(no restored/autostart stream or new update reaching the installed shutdown job).
+If a restarted backend can admit work before that job completes, the image/systemd
+handover requires an owner decision rather than a claimed host-test pass.
 
 These are host proofs on the real handler bodies (local procedures and the remote
 router's confirm flow); the physical effects on a board are inferred, not

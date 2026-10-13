@@ -826,7 +826,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		id: "updateOrchestrator.restartStaleService",
 		file: "modules/system/update-orchestrator/stale-services.ts",
 		symbol: "defaultStaleServiceDeps.restart",
-		command: "[systemctl, restart, --no-block, exact-eligible-service]",
+		command: "[systemctl, restart, exact-eligible-service]",
 		class: "bounded-command",
 		contract: {
 			timed: true,
@@ -837,7 +837,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		},
 		status: "enforced",
 		mechanism:
-			"Exact cgroup service with deleted system mapping, idle window and protected-service guard",
+			"Exact eligible stale service; final disruptive gate and reciprocal exclusion through blocking restart completion; timeout keeps exclusion",
 	},
 	{
 		id: "updateOrchestrator.readBothSlots",

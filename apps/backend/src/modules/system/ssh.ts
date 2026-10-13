@@ -31,6 +31,12 @@ import {
 } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import { describeCliError } from "./cli-parse.ts";
+import {
+	DisruptiveActionRefusal,
+	isPositiveDisruptiveFailure,
+	reserveDisruptiveAction,
+	resetDisruptiveActionReservationForTest,
+} from "./disruptive-action-reservation.ts";
 
 type SshStatus = {
 	user: string;
@@ -254,6 +260,7 @@ export function setSshServiceRunner(runner: SshServiceRunner): void {
 }
 
 export function resetSshServiceRunner(): void {
+	resetDisruptiveActionReservationForTest();
 	sshServiceRunner = defaultSshServiceRunner;
 }
 
@@ -278,6 +285,7 @@ export function setSshPersistenceRunner(runner: SshPersistenceRunner): void {
 }
 
 export function resetSshPersistenceRunner(): void {
+	resetDisruptiveActionReservationForTest();
 	sshPersistenceRunner = defaultSshPersistenceRunner;
 }
 
@@ -327,9 +335,20 @@ export async function startStopSsh(
 		if (password === undefined) return false;
 	}
 
+	const { getDisruptiveActionDecision } = await import(
+		"./disruptive-action-runtime.ts"
+	);
+	const admission = reserveDisruptiveAction(
+		getDisruptiveActionDecision(),
+		"service",
+	);
+	if (!admission.allowed) throw new DisruptiveActionRefusal(admission.reason);
 	try {
 		await sshServiceRunner(action);
+		admission.reservation.releaseAfterCompletion();
 	} catch (err) {
+		if (isPositiveDisruptiveFailure(err))
+			admission.reservation.releaseAfterFailure();
 		logger.error(
 			`Error running systemctl ${action} ssh: ${describeCliError(err)}`,
 		);
@@ -373,9 +392,20 @@ export async function setSshPersistent(
 		return true;
 	}
 
+	const { getDisruptiveActionDecision } = await import(
+		"./disruptive-action-runtime.ts"
+	);
+	const admission = reserveDisruptiveAction(
+		getDisruptiveActionDecision(),
+		"service",
+	);
+	if (!admission.allowed) throw new DisruptiveActionRefusal(admission.reason);
 	try {
 		await sshPersistenceRunner(action);
+		admission.reservation.releaseAfterCompletion();
 	} catch (err) {
+		if (isPositiveDisruptiveFailure(err))
+			admission.reservation.releaseAfterFailure();
 		logger.error(
 			`Error running systemctl ${action} ssh: ${describeCliError(err)}`,
 		);

@@ -32,6 +32,12 @@ import {
 	type UpdateBusyReason,
 	updatePhaseBusyReasons,
 } from "../disruptive-action-gate.ts";
+import {
+	isDisruptiveActionPending,
+	reserveDisruptiveAction,
+	resetDisruptiveActionReservationForTest,
+	setDisruptiveUpdateBusySource,
+} from "../disruptive-action-reservation.ts";
 import { getIdleStatus } from "../idle-activity.ts";
 import {
 	getLastInstallUnitVerdict,
@@ -525,6 +531,7 @@ export function setOrchestratorRuntimeDepsForTest(
 }
 
 export function resetOrchestratorRuntimeForTest(): void {
+	resetDisruptiveActionReservationForTest();
 	if (tickTimer) clearTimeout(tickTimer);
 	tickTimer = undefined;
 	started = false;
@@ -565,10 +572,28 @@ export function getOrchestratorDisruptionBusyReasons(): readonly UpdateBusyReaso
 	if (osStageInProcess || activeOsStage) reasons.push("os-staging");
 	if (osActivationInFlight) reasons.push("os-activation");
 	if (pendingPackageSuccess.pending) reasons.push("pending-success");
+	if (!recoveryPersistenceValid) reasons.push("update-recovery");
+	if (startupFlight.inFlight) reasons.push("update-recovery");
+	if (
+		state.osStageRecovery?.mode === "unsafe" ||
+		state.osStageRecovery?.activeAttemptId
+	)
+		reasons.push("update-recovery");
 	if (osSettlementPersistence.pending || osSettlementPersistence.replayPending)
 		reasons.push("pending-durability");
 	return reasons;
 }
+
+export function isDisruptiveUpdateAuthoritySettled(): boolean {
+	return (
+		startupReadiness.isReady() &&
+		recoveryPersistenceValid &&
+		!osSettlementPersistence.pending &&
+		!osSettlementPersistence.replayPending
+	);
+}
+
+setDisruptiveUpdateBusySource(getOrchestratorDisruptionBusyReasons);
 
 export function setOrchestratorStateForTest(next: OrchestratorState): void {
 	adoptState(next);
@@ -723,6 +748,7 @@ const PACKAGE_PIPELINE_BUSY_PHASES: readonly OrchestratorState["phase"][] = [
 ];
 
 export async function installUpdatesNow(): Promise<ManualInstallOutcome> {
+	if (isDisruptiveActionPending()) return { started: false, reason: "busy" };
 	startupReadiness.assertReady(
 		!osSettlementPersistence.replayPending &&
 			!publishingIntentPending(deps.osAttemptIntentStore),
@@ -828,6 +854,7 @@ async function commitStageRunning(): Promise<boolean> {
 }
 
 export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdmission> {
+	if (isDisruptiveActionPending()) return COMMIT_STAGE_REFUSAL;
 	if (!recoveryPersistenceValid) startupReadiness.assertReady(false);
 	if (publishingIntentPending(deps.osAttemptIntentStore))
 		await awaitPublishingIntentForStream({
@@ -838,6 +865,7 @@ export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdm
 			readJob: deps.readOsStageJob ?? readOsStageJob,
 		});
 	if (pendingPackageSuccess.pending) return COMMIT_STAGE_REFUSAL;
+	if (isDisruptiveActionPending()) return COMMIT_STAGE_REFUSAL;
 	const cached = admitStreamStart(state);
 	if (!cached.allowed) return cached;
 
@@ -1007,6 +1035,8 @@ async function maybeStartPackageInstall(opts: {
 	readonly bypassIdle: boolean;
 }): Promise<UpdateStartOutcome | undefined> {
 	if (state.phase !== "awaiting-idle") return;
+	if (isDisruptiveActionPending())
+		return { started: false, reason: "already_updating" };
 	if (deps.isStreamLive()) return { started: false, reason: "streaming" };
 	if ((await readCapabilityRegime()) === null)
 		return { started: false, reason: "check_unavailable" };
@@ -1043,6 +1073,8 @@ async function maybeStartPackageInstall(opts: {
 			await deps.quarantine.clearPending();
 			return { started: false, reason: "updates_disabled" };
 		}
+		if (isDisruptiveActionPending())
+			return { started: false, reason: "already_updating" };
 		const result = deps.startPackageInstall();
 		if (!result.started) {
 			await deps.quarantine.clearPending();
@@ -1178,6 +1210,7 @@ async function maybeStartSlotSync(): Promise<void> {
 		dispatch({ type: "SYNC_SKIPPED", now: deps.now() });
 		return;
 	}
+	if (isDisruptiveActionPending()) return;
 	dispatch({ type: "SYNC_STARTED", now: deps.now() });
 	try {
 		await deps.startSlotSync();
@@ -1482,6 +1515,7 @@ const OS_FORCE_ACTIVATION_MS = 7 * 24 * 60 * 60_000;
 // both, and the old stage's catch would fail the new one.
 function osStageBlocked(): boolean {
 	return (
+		isDisruptiveActionPending() ||
 		osSettlementPersistence.pending ||
 		state.phase !== "os-available" ||
 		deps.isStreamLive() ||
@@ -1802,6 +1836,7 @@ async function maybeCheckPackagesWhileOsWaits(): Promise<void> {
 }
 
 async function reconcileOsActivation(): Promise<void> {
+	if (isDisruptiveActionPending()) return;
 	// OS_STAGED is published under the job lock; arming must wait for settlement.
 	if (osStageInProcess) return;
 	if (state.phase === "os-staged" && state.osStageRecovery?.activeAttemptId) {
@@ -1814,6 +1849,7 @@ async function reconcileOsActivation(): Promise<void> {
 	await using control = await acquireRuntimeOsStageControl();
 	if (
 		!control.held() ||
+		isDisruptiveActionPending() ||
 		osStageInProcess ||
 		(state.phase !== "os-staged" && state.phase !== "os-activation-armed") ||
 		state.osStageRecovery?.activeAttemptId
@@ -1849,9 +1885,29 @@ async function reconcileOsActivation(): Promise<void> {
 		!deps.isStreamLive()
 	) {
 		if (!control.held()) return;
+		const { getDisruptiveActionDecision } = await import(
+			"../disruptive-action-runtime.ts"
+		);
+		if (
+			!control.held() ||
+			deps.isStreamLive() ||
+			osForceActivated ||
+			state.phase !== "os-activation-armed" ||
+			!(deps.now() - receipt.stagedAt >= OS_FORCE_ACTIVATION_MS)
+		)
+			return;
+		const admission = reserveDisruptiveAction(getDisruptiveActionDecision());
+		if (!admission.allowed) return;
 		osActivationInFlight = true;
 		try {
 			await deps.armOs(true, control);
+		} catch (error) {
+			if (
+				error instanceof OsAgentError &&
+				error.reason === "activation_arm_failed"
+			)
+				admission.reservation.releaseAfterFailure();
+			throw error;
 		} finally {
 			osActivationInFlight = false;
 		}

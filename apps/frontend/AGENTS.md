@@ -55,6 +55,7 @@ bun run test:federation-abi
 - Call initSubscriptions() before mount; its handlers feed every subscription getter. Never create a second socket consumer.
 - Import wire contracts from @ceraui/rpc and producer exports; never shadow a wire type or fabricate an advertised mode.
 - Unknown, absent and explicit unsupported are distinct states; render typed refusals through keyed localized copy, never raw tokens.
+- SSH start/stop/persist maps streaming, unknown-liveness and update/pending-disruption refusal tokens to `notifications.disruptiveActionRefused`; preserve separate operation keys and pessimistic device state. No client timer grants backend permission.
 - Update installation, restart and activation are separate conclusions. Use the update evidence contract: no restart from package success, no historical connection absence from null, no failed reachability or metered cost from unknown, and a terminal install result releases the takeover.
 - Draw a device conclusion only from evidence delivered over the current link after the action: a restored session, a failed hydrate or a retained snapshot proves nothing. A full status snapshot replaces, a partial push merges; an unresolved operator Stop keeps its band until the device settles it; dedupe on the field-level object the store preserves (START-LIFECYCLE, Contract 32).
 - Preserve authentication ownership, lazy dialog loading and bounded persistent notifications; read the routed subsystem before editing.
