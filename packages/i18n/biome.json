@@ -4,6 +4,7 @@
 	"files": {
 		"includes": [
 			"scripts/generate-registry.ts",
+			"tests/catalog-duplicate-key-gate.test.ts",
 			"tests/eager-registration.test.ts",
 			"package.json",
 			"tsconfig.json",

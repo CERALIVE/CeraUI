@@ -69,7 +69,13 @@ export const OS_STAGE_NOTICE_KINDS = [
 export type OsStageNoticeKind = (typeof OS_STAGE_NOTICE_KINDS)[number];
 
 const notices = {
-	"updates-available": { key: "notifications.updateAvailable", tone: "info" },
+	// Own key, not the shared `notifications.updateAvailable` title: the banner
+	// sentence and the title were never the same string, and reusing one key
+	// duplicated it in the catalog, where last-key-wins dropped the other.
+	"updates-available": {
+		key: "notifications.updatesAvailableMessage",
+		tone: "info",
+	},
 	installed: { key: "notifications.updateInstalled", tone: "success" },
 	refused: { key: "notifications.updateRefused", tone: "warning" },
 	"download-paused": {

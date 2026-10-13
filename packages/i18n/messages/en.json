@@ -1891,7 +1891,7 @@
 	"notifications.linksRecovered": "Bonded links recovered.",
 	"notifications.modemRoaming": "{name} is roaming. It's registered on a partner network, so data may be billed at roaming rates. Streaming is unaffected.",
 	"notifications.openUpdates": "Open updates",
-	"notifications.updateAvailable": "Updates are available. Review them in Software Updates.",
+	"notifications.updatesAvailableMessage": "Updates are available. Review them in Software Updates.",
 	"notifications.updateInstalled": "Installed: {packages}.",
 	"notifications.updateRefused": "Update refused. {reason}",
 	"notifications.updateRefusedGeneric": "Check Settings → System Logs for details.",

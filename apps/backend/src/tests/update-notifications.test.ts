@@ -126,6 +126,25 @@ describe("OS staging settlement notices", () => {
 	});
 });
 
+describe("update-available notice", () => {
+	test("uses its own manifest key, not the shared short title", () => {
+		// Given a discovered package update (the durable event id is arbitrary).
+		expect(
+			notifyUpdate({ kind: "updates-available", id: "cerastream=2026.9.10" }),
+		).toBe(true);
+
+		// Then the notice carries the banner key; the short `updateAvailable`
+		// title is a different producer's string and made the catalog duplicate.
+		expect(updateNotices()).toEqual([
+			{
+				name: "update:updates-available:cerastream=2026.9.10",
+				key: "notifications.updatesAvailableMessage",
+				params: {},
+			},
+		]);
+	});
+});
+
 describe("refused-update notices (C-m1)", () => {
 	test("keep the wire shape and leave the raw reason in the device log", () => {
 		// Given the OS check refusing because the running version is unknown.

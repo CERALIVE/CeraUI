@@ -1894,7 +1894,7 @@
 	"notifications.linksRecovered": "Links agregados recuperados.",
 	"notifications.modemRoaming": "{name} está em roaming. Ele se registrou em uma rede parceira, então os dados podem ser cobrados com tarifas de roaming. A transmissão não é afetada.",
 	"notifications.openUpdates": "Abrir atualizações",
-	"notifications.updateAvailable": "Há atualizações disponíveis. Confira em Atualizações de software.",
+	"notifications.updatesAvailableMessage": "Há atualizações disponíveis. Confira em Atualizações de software.",
 	"notifications.updateInstalled": "Instalados: {packages}.",
 	"notifications.updateRefused": "Atualização recusada. {reason}",
 	"notifications.updateRefusedGeneric": "Veja Configurações → Registros do sistema para detalhes.",

@@ -1891,7 +1891,7 @@
 	"notifications.linksRecovered": "Gebündelte Verbindungen wiederhergestellt.",
 	"notifications.modemRoaming": "{name} befindet sich im Roaming. Das Modem ist in einem Partnernetz registriert, Daten können daher zu Roaming-Tarifen abgerechnet werden. Das Streaming ist davon nicht betroffen.",
 	"notifications.openUpdates": "Updates öffnen",
-	"notifications.updateAvailable": "Updates sind verfügbar. Prüfen Sie sie unter Software-Updates.",
+	"notifications.updatesAvailableMessage": "Updates sind verfügbar. Prüfen Sie sie unter Software-Updates.",
 	"notifications.updateInstalled": "Installiert: {packages}.",
 	"notifications.updateRefused": "Update abgelehnt. {reason}",
 	"notifications.updateRefusedGeneric": "Details findest du unter Einstellungen → Systemprotokolle.",

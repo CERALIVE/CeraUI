@@ -1894,7 +1894,7 @@
 	"notifications.linksRecovered": "Liens agrégés rétablis.",
 	"notifications.modemRoaming": "{name} est en itinérance. Il est enregistré sur un réseau partenaire, les données peuvent donc être facturées au tarif itinérance. Le streaming n'est pas affecté.",
 	"notifications.openUpdates": "Ouvrir les mises à jour",
-	"notifications.updateAvailable": "Des mises à jour sont disponibles. Consultez-les dans Mises à jour logicielles.",
+	"notifications.updatesAvailableMessage": "Des mises à jour sont disponibles. Consultez-les dans Mises à jour logicielles.",
 	"notifications.updateInstalled": "Installés : {packages}.",
 	"notifications.updateRefused": "Mise à jour refusée. {reason}",
 	"notifications.updateRefusedGeneric": "Consultez Paramètres → Journaux système pour plus de détails.",

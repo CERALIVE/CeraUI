@@ -1894,7 +1894,7 @@
 	"notifications.linksRecovered": "Enlaces combinados recuperados.",
 	"notifications.modemRoaming": "{name} está en itinerancia. Se ha registrado en una red asociada, por lo que los datos pueden facturarse con tarifas de itinerancia. La transmisión no se ve afectada.",
 	"notifications.openUpdates": "Abrir actualizaciones",
-	"notifications.updateAvailable": "Hay actualizaciones disponibles. Revísalas en Actualizaciones de software.",
+	"notifications.updatesAvailableMessage": "Hay actualizaciones disponibles. Revísalas en Actualizaciones de software.",
 	"notifications.updateInstalled": "Instalados: {packages}.",
 	"notifications.updateRefused": "Actualización rechazada. {reason}",
 	"notifications.updateRefusedGeneric": "Consulta Ajustes → Registros del sistema para más detalles.",

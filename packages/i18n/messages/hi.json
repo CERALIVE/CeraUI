@@ -1891,7 +1891,7 @@
 	"notifications.linksRecovered": "बॉन्डेड लिंक वापस आ गए।",
 	"notifications.modemRoaming": "{name} रोमिंग में है। यह एक पार्टनर नेटवर्क पर पंजीकृत है, इसलिए डेटा पर रोमिंग दरें लग सकती हैं। स्ट्रीमिंग प्रभावित नहीं होती।",
 	"notifications.openUpdates": "अपडेट खोलें",
-	"notifications.updateAvailable": "अपडेट उपलब्ध हैं। सॉफ़्टवेयर अपडेट में देखें।",
+	"notifications.updatesAvailableMessage": "अपडेट उपलब्ध हैं। सॉफ़्टवेयर अपडेट में देखें।",
 	"notifications.updateInstalled": "इंस्टॉल हुए: {packages}।",
 	"notifications.updateRefused": "अपडेट अस्वीकार हुआ। {reason}",
 	"notifications.updateRefusedGeneric": "विवरण के लिए सेटिंग्स → सिस्टम लॉग देखें।",

@@ -1846,7 +1846,7 @@
 	"notifications.linksRecovered": "본딩 링크가 복구되었습니다.",
 	"notifications.modemRoaming": "{name}이(가) 로밍 중입니다. 제휴 네트워크에 등록되어 데이터에 로밍 요금이 부과될 수 있습니다. 스트리밍에는 영향이 없습니다.",
 	"notifications.openUpdates": "업데이트 열기",
-	"notifications.updateAvailable": "업데이트가 있습니다. 소프트웨어 업데이트에서 확인하세요.",
+	"notifications.updatesAvailableMessage": "업데이트가 있습니다. 소프트웨어 업데이트에서 확인하세요.",
 	"notifications.updateInstalled": "설치됨: {packages}.",
 	"notifications.updateRefused": "업데이트가 거부되었습니다. {reason}",
 	"notifications.updateRefusedGeneric": "자세한 내용은 설정 → 시스템 로그를 확인하세요.",

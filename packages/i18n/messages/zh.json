@@ -1846,7 +1846,7 @@
 	"notifications.linksRecovered": "绑定链路已恢复。",
 	"notifications.modemRoaming": "{name} 正在漫游。它已注册到合作网络，数据可能按漫游资费计费。推流不受影响。",
 	"notifications.openUpdates": "打开更新",
-	"notifications.updateAvailable": "有可用更新。请在软件更新中查看。",
+	"notifications.updatesAvailableMessage": "有可用更新。请在软件更新中查看。",
 	"notifications.updateInstalled": "已安装：{packages}。",
 	"notifications.updateRefused": "更新被拒绝。{reason}",
 	"notifications.updateRefusedGeneric": "详情请查看 设置 → 系统日志。",

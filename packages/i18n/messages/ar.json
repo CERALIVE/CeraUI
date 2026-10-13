@@ -1903,7 +1903,7 @@
 	"notifications.linksRecovered": "تعافت الروابط المجمّعة.",
 	"notifications.modemRoaming": "{name} في وضع التجوال. تم تسجيله على شبكة شريكة، لذا قد تُحتسب البيانات بأسعار التجوال. البث غير متأثر.",
 	"notifications.openUpdates": "فتح التحديثات",
-	"notifications.updateAvailable": "تتوفر تحديثات. راجعها في تحديثات البرامج.",
+	"notifications.updatesAvailableMessage": "تتوفر تحديثات. راجعها في تحديثات البرامج.",
 	"notifications.updateInstalled": "تم تثبيت: {packages}.",
 	"notifications.updateRefused": "رُفض التحديث. {reason}",
 	"notifications.updateRefusedGeneric": "راجع الإعدادات ← سجلات النظام للحصول على التفاصيل.",
