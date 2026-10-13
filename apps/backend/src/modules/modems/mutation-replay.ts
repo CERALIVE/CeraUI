@@ -56,6 +56,7 @@ import {
 	type MutationRecoveryDeps,
 	scheduleMutationRecovery,
 	sleepUnlessAborted,
+	startMutationRecovery,
 	stopMutationRecovery,
 } from "./mutation-recovery-owner.ts";
 import { captureModemState, rollbackMutation } from "./mutation-rollback.ts";
@@ -155,6 +156,8 @@ export async function runMutationReplay(): Promise<ReplaySummary> {
 				slot: name,
 			});
 		}
+		// Readable entries still replay beside a damaged slot; the strict block
+		// publication below vetoes completion when the inventory changed meanwhile.
 		for (const entry of await listMutationEntries()) {
 			try {
 				await replayEntry(entry, tally);
@@ -205,6 +208,7 @@ export interface MutationRecoveryOptions {
 export async function initMutationRecovery(
 	options: MutationRecoveryOptions = {},
 ): Promise<ReplaySummary> {
+	stopMutationRecovery();
 	beginRecoveryBarrier();
 	const summary = await runMutationReplay();
 	const deps: MutationRecoveryDeps = {
@@ -212,7 +216,7 @@ export async function initMutationRecovery(
 		verify: journalReadsCompletely,
 		sleep: options.sleep ?? sleepUnlessAborted,
 	};
-	stopMutationRecovery();
+	startMutationRecovery();
 	setRecoveryRetryOwner({
 		schedule: () => scheduleMutationRecovery(deps, "verify"),
 		cancel: stopMutationRecovery,

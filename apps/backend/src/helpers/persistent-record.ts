@@ -9,9 +9,10 @@
  * grammar or schema: the exact bytes are archived before anything replaces them.
  */
 
-import { randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import {
 	closeSync,
+	constants,
 	fsyncSync,
 	linkSync,
 	openSync,
@@ -19,7 +20,11 @@ import {
 	writeSync,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { readStoredStateBytes } from "../modules/system/update-orchestrator/stored-state-file.ts";
+import {
+	openStoredStateDirectory,
+	readStoredStateBytes,
+	readStoredStateDescriptor,
+} from "../modules/system/update-orchestrator/stored-state-file.ts";
 import {
 	decodeAuthorityUtf8,
 	parseAuthorityJson,
@@ -53,51 +58,123 @@ export async function readPersistentRecord<T>(
 	}
 }
 
-function utcStamp(at: Date): string {
-	return at
-		.toISOString()
-		.replace(/[-:]/g, "")
-		.replace(/\.\d+Z$/, "Z");
+function readBytesSync(path: string, maxBytes: number): Buffer | null {
+	let directory: number;
+	try {
+		directory = openStoredStateDirectory(dirname(path));
+	} catch (error) {
+		if (error instanceof Error && "code" in error && error.code === "ENOENT")
+			return null;
+		throw error;
+	}
+	try {
+		let fd: number;
+		try {
+			fd = openSync(
+				`/proc/self/fd/${directory}/${basename(path)}`,
+				constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+			);
+		} catch (error) {
+			if (error instanceof Error && "code" in error && error.code === "ENOENT")
+				return null;
+			throw error;
+		}
+		try {
+			return readStoredStateDescriptor(fd, maxBytes);
+		} finally {
+			closeSync(fd);
+		}
+	} finally {
+		closeSync(directory);
+	}
 }
 
-function fsyncDirectory(directory: string): void {
-	const fd = openSync(directory, "r");
+export function readPersistentRecordSync<T>(
+	path: string,
+	maxBytes: number,
+	parse: (json: unknown) => T,
+): PersistentRecordRead<T> {
+	let bytes: Buffer | null;
 	try {
-		fsyncSync(fd);
-	} finally {
-		closeSync(fd);
+		bytes = readBytesSync(path, maxBytes);
+	} catch (cause) {
+		return { kind: "unavailable", cause };
+	}
+	if (bytes === null) return { kind: "absent" };
+	try {
+		return {
+			kind: "valid",
+			value: parse(parseAuthorityJson(decodeAuthorityUtf8(bytes))),
+		};
+	} catch {
+		return { kind: "damaged", bytes };
 	}
 }
 
 /**
  * Durably copy damaged bytes beside their record and return the copy's path.
  * `link()` publishes the fully written copy under a name that must not exist,
- * so an earlier copy is never replaced. Throws when the copy cannot be made;
+ * so an earlier copy is never replaced. The digest name reuses a published copy
+ * after a failed directory acknowledgement. Throws when the copy cannot be made;
  * the caller must then leave the record unwritten.
  */
-export function preserveDamagedRecord(
-	path: string,
-	bytes: Uint8Array,
-	at: Date = new Date(),
-): string {
+export function preserveDamagedRecord(path: string, bytes: Uint8Array): string {
 	const directory = dirname(path);
-	const copy = `${path}.damaged-${utcStamp(at)}-${randomBytes(4).toString("hex")}`;
-	// Boot cleanup recognizes this temp shape, so a crash leaves no residue.
-	const temp = join(directory, `.${basename(copy)}.${process.pid}.tmp`);
-	const fd = openSync(temp, "wx", 0o600);
+	const digest = createHash("sha256").update(bytes).digest("hex");
+	const copy = `${path}.damaged-${digest}`;
+	const parent = openStoredStateDirectory(directory);
+	const target = `/proc/self/fd/${parent}/${basename(copy)}`;
+	const temp = join(
+		`/proc/self/fd/${parent}`,
+		`.${basename(copy)}.${process.pid}.tmp`,
+	);
+	let created = false;
 	try {
-		let written = 0;
-		while (written < bytes.length)
-			written += writeSync(fd, bytes, written, bytes.length - written);
-		fsyncSync(fd);
+		const fd = openSync(temp, "wx", 0o600);
+		created = true;
+		try {
+			let written = 0;
+			while (written < bytes.length) {
+				const count = writeSync(fd, bytes, written, bytes.length - written);
+				if (count === 0)
+					throw Object.assign(new Error("short archive write"), {
+						code: "EIO",
+					});
+				written += count;
+			}
+			fsyncSync(fd);
+		} finally {
+			closeSync(fd);
+		}
+		try {
+			linkSync(temp, target);
+		} catch (error) {
+			if (
+				!(error instanceof Error && "code" in error && error.code === "EEXIST")
+			)
+				throw error;
+			const existing = openSync(
+				target,
+				constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+			);
+			try {
+				if (
+					!readStoredStateDescriptor(existing, bytes.length).equals(
+						Buffer.from(bytes),
+					)
+				)
+					throw error;
+			} finally {
+				closeSync(existing);
+			}
+		}
+		fsyncSync(parent);
+		return copy;
 	} finally {
-		closeSync(fd);
+		try {
+			if (created) unlinkSync(temp);
+		} finally {
+			closeSync(parent);
+		}
 	}
-	try {
-		linkSync(temp, copy);
-	} finally {
-		unlinkSync(temp);
-	}
-	fsyncDirectory(directory);
-	return copy;
 }

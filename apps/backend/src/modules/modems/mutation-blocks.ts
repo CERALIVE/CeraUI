@@ -88,7 +88,7 @@ async function enumeratePresentKeys(): Promise<ReadonlySet<string>> {
 }
 
 export const defaultMutationBlockDeps: MutationBlockDeps = {
-	listEntries: () => listMutationEntries(),
+	listEntries: () => listMutationEntries(undefined, true),
 	presentStableKeys: enumeratePresentKeys,
 };
 

@@ -22,6 +22,7 @@ export class UplinkShaperCoordinator {
 	readonly #deps: UplinkShaperCoordinatorDeps;
 	readonly #states = new Map<string, UplinkControllerState>();
 	#streaming = false;
+	#applicationPending = false;
 	#running: Promise<void> = Promise.resolve();
 
 	constructor(deps: UplinkShaperCoordinatorDeps) {
@@ -38,6 +39,9 @@ export class UplinkShaperCoordinator {
 	}
 
 	async #applyUpdate(update: ShaperUpdate): Promise<void> {
+		const edge = update.streaming !== this.#streaming;
+		this.#applicationPending ||=
+			edge || update.streaming || update.sharedUplinks.length > 0;
 		const mode = update.streaming ? "streaming" : "idle";
 		const enteringStreaming = update.streaming && !this.#streaming;
 		const telemetry = new Map(
@@ -69,10 +73,11 @@ export class UplinkShaperCoordinator {
 				capBps: state.capBps,
 			});
 		}
-		const edge = update.streaming !== this.#streaming;
-		this.#streaming = update.streaming;
-		if (edge || update.streaming || uplinks.length > 0)
+		if (this.#applicationPending) {
 			await this.#deps.apply({ mode, uplinks });
+			this.#applicationPending = false;
+			this.#streaming = update.streaming;
+		}
 	}
 
 	async #nextState(

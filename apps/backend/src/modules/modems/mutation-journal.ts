@@ -276,17 +276,28 @@ function parseEntry(
 /** Every readable entry on disk, for startup replay. */
 export async function listMutationEntries(
 	deps: MutationJournalDeps = activeDeps,
+	requireComplete = false,
 ): Promise<readonly ModemMutationEntry[]> {
 	const names = await deps.fs.listDir(deps.dir);
 	const entries: ModemMutationEntry[] = [];
 	for (const name of names) {
 		if (!name.endsWith(".json")) continue;
 		const raw = await deps.fs.readText(join(deps.dir, name));
-		if (raw === undefined) continue;
-		const entry = parseEntry(raw, name);
+		const entry = raw === undefined ? undefined : parseEntry(raw, name);
+		if (entry === undefined && requireComplete) {
+			beginRecoveryBarrier();
+			throw new MutationJournalInventoryError(name);
+		}
 		if (entry !== undefined) entries.push(entry);
 	}
 	return entries;
+}
+
+export class MutationJournalInventoryError extends Error {
+	override readonly name = "MutationJournalInventoryError";
+	constructor(readonly slot: string) {
+		super("unreadable mutation journal inventory");
+	}
 }
 
 /** Names of journal files that exist but could not be read back as an entry. */

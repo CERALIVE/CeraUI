@@ -144,7 +144,7 @@ metadata rejects duplicate state members before projecting an up marker.
 All of this is host-only boundary/effect-port proof, not board, power-loss or
 privileged-helper qualification; other lanes still own the streaming markers.
 
-### Unknown reads never abort boot, wedge, or become a write baseline
+### Unknown optional-record reads: no boot abort, no wedge, no write baseline
 
 A strict reader may REFUSE, but the code around it must not turn that refusal
 into a dead control plane, a latch nobody clears, or a whole-file overwrite.
@@ -152,10 +152,13 @@ into a dead control plane, a latch nobody clears, or a whole-file overwrite.
 (ENOENT), `valid`, `damaged` (read completely, refused by UTF-8/JSON/duplicate
 member/schema) or `unavailable` (EIO/EAGAIN, short or changed read, non-regular,
 oversize). Only `absent` and `valid` may seed a whole-file write.
-`preserveDamagedRecord()` copies the exact bytes to `<file>.damaged-<UTC>-<rand>`
+`preserveDamagedRecord()` copies the exact bytes to `<file>.damaged-<sha256>`
 (private temp, fsync, `link()` so an earlier copy is never replaced, directory
 fsync) before anything replaces a damaged record; if the copy fails the record
-stays unwritten.
+stays unwritten. The unpublished temp is removed on every failure path (write,
+temp fsync, link, directory fsync), and a retry after a published copy failed its
+directory fsync finds the same digest name, checks its bytes and reuses it, so
+retries cannot accumulate copies or temps.
 
 - **`config.json`** (`modules/config-boot.ts`). `loadConfig()` stays strict. Boot
   calls `bootRuntimeConfig()`, which never aborts boot on an authority failure.
@@ -165,7 +168,11 @@ stays unwritten.
   the copy and saying settings must be re-entered and that it does not mean
   streaming or updates work). The only values carried over are a bcrypt-shaped
   `password_hash`, a crypt-shaped `ssh_pass_hash` and `ssh_pass` from a
-  duplicate-free JSON object; each can only narrow access versus a first boot.
+  duplicate-free JSON object. When none survives (zero-byte, unparseable, hash
+  missing), the reset device is unclaimed and any LAN client can claim it with
+  `set_password`. That is PRE-EXISTING (merge-base 23bcf379 defaulted the same
+  file and prompted the same way), not narrowed here, and an owner decision:
+  accept it, or add a separate credential record (a new stored record, D154).
   Unavailable: three attempts (waits 250 and 1000 ms), then the control server
   binds anyway and one cancellable owner retries `loadConfig()` with doubling
   waits from 1 s to a 60 s ceiling. Every config-dependent boot step waits for it
@@ -180,20 +187,29 @@ stays unwritten.
   completed replay, a RUNTIME raise from a failed journal read schedules the same
   owner in read-only `verify` mode: it re-reads the slot inventory and the
   per-identity blocks and never rolls back, because an admitted mutation may still
-  be running. Shutdown cancels it. A slot that stays damaged keeps the barrier up
+  be running. Block publication reads the inventory strictly: a slot that became
+  malformed between passes raises the barrier and fails the attempt instead of
+  being skipped, so a verification can never lower the barrier over damage it
+  just observed. Shutdown cancels the flight and disarms scheduling, so a late
+  raise cannot start another owner. A slot that stays damaged keeps the barrier up
   (the slot may be an unrolled mutation); the existing `recovery_pending` text
   ("ask again shortly") is then not honest for that case, an owner-decision gap
   that would need a new reason on the wire.
 - **Shaper coordinator.** The serialization tail swallows a rejection after the
-  caller has received it, so the next update reruns the strict ownership read.
-- **`auth_tokens.json`.** Unavailable: a correct password still signs in, for
-  this visit only; nothing is written; the next auth operation rereads.
-  Damaged: token login is denied and nothing is rewritten; the first write that
-  would replace the file (a remembered password login, revoke-all) archives it
-  and continues from a fresh record. Revoking everything (password change,
-  revoke-all) still writes `{}` over an unavailable store, because that result
-  does not depend on the old contents and a password change must not let old
-  remembered browsers return.
+  caller has received it. A pending-application flag is set by any update that
+  needs application and cleared only after `apply()` succeeds; the streaming mode
+  is recorded only then too. So after a rejected ownership read even an empty
+  idle update reruns the read and restores retained roots once storage recovers.
+- **`auth_tokens.json`.** Every auth operation and every write rereads the file;
+  no classification is cached across a repair. Damaged or unavailable: a correct
+  password signs in for this visit only (temporary session), nothing is written,
+  and token login is denied (D209). Only an explicit password change or
+  revoke-all may replace a damaged file, and it archives the bytes it actually
+  replaces; over an unavailable store those two still write `{}`, because that
+  result does not depend on the old contents and a password change must not let
+  old remembered browsers return. The import-time pre-digest prune runs on a
+  timer that never throws: a write fault leaves the file as it was and retries
+  (1 s, 5 s, 30 s, then every 60 s) until it succeeds or shutdown stops it.
 - **FCC policy.** Display and enforcement keep treating anything but a valid
   document as "nothing enabled". A toggle or rollback takes its baseline from
   `loadFccUnlockPolicyBaseline()`: unavailable refuses (`write_failed`, before any
@@ -205,9 +221,19 @@ stays unwritten.
   withholds idle until the clock catches up or the process restarts; manual
   install keeps its idle bypass.
 
-Not changed here: `setup.json` (baked, seeded once, never written by CeraUI)
-still aborts boot when present-but-damaged or unreadable; that is recorded as an
-owner decision, not fixed by guessing its required `hw` and APT opt-out.
+`setup.json` (baked, seeded once, never written by CeraUI) is REQUIRED metadata
+and is never guessed or defaulted (D225). A transient leaf fault (EIO/EAGAIN,
+short or changed read) is retried in-process five times over about 3 s; after
+that the typed `StoredStateReadError` aborts module evaluation and systemd
+`Restart=always` is the outer retry owner. Parsed-and-refused bytes abort
+immediately (class C, owner decision).
+
+Scope of these claims: host tests with injected faults only. A board drill must
+still prove a corrupt `config.json` on a real board and its ownership
+consequence, a true config I/O failure, a journal fault followed by repair with
+restoration/autostart, damaged-token login, FCC reconciliation and shaper
+recovery on the final head. Shutdown during the unavailable-config wait relies
+on default signal termination because the signal handlers are installed late.
 
 Physical startup reconciliation and orchestrator startup are ordered by a shared
 completion promise. Both run off the control-server boot path; completion is not

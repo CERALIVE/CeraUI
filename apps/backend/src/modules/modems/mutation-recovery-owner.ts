@@ -40,6 +40,7 @@ export const MUTATION_RECOVERY_BASE_MS = 1000;
 export const MUTATION_RECOVERY_CEILING_MS = 60_000;
 
 let running: AbortController | undefined;
+let stopped = false;
 
 export function sleepUnlessAborted(
 	ms: number,
@@ -104,13 +105,18 @@ export function scheduleMutationRecovery(
 	deps: MutationRecoveryDeps,
 	mode: MutationRecoveryMode,
 ): void {
-	if (running !== undefined) return;
+	if (stopped || running !== undefined) return;
 	const own = new AbortController();
 	running = own;
 	void retry(deps, mode, own);
 }
 
 export function stopMutationRecovery(): void {
+	stopped = true;
 	running?.abort();
 	running = undefined;
+}
+
+export function startMutationRecovery(): void {
+	stopped = false;
 }

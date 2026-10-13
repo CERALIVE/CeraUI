@@ -184,6 +184,7 @@ import { wifiStateInit } from "./modules/wifi/wifi-connections.ts";
 import { handleWifiMonitorEvent as handleHotspotMonitorEvent } from "./modules/wifi/wifi-hotspot-monitor.ts";
 import { onHeartbeatTick, startHeartbeat } from "./rpc/heartbeat.ts";
 import { getServer, initServer } from "./rpc/index.ts";
+import { stopLegacyTokenMigration } from "./rpc/procedures/auth.procedure.ts";
 
 /* Disable localization for any CLI commands we run */
 process.env.LANG = "C.UTF-8";
@@ -677,6 +678,7 @@ void guardNonCritical("bluetooth", initBluetooth);
 function stopRecoveryRetries(): void {
 	stopRuntimeConfigRecovery();
 	stopMutationRecovery();
+	stopLegacyTokenMigration();
 }
 process.on("SIGTERM", () =>
 	handleTerminationSignal("SIGTERM", {

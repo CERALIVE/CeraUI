@@ -7,7 +7,15 @@
    successfully. "Resolved" includes a damaged `config.json` archived and replaced
    by first-run settings, and an unreadable one left unavailable: the server still
    binds, and a background owner keeps retrying the load (UPDATE-RECOVERY.md →
-   Unknown reads never abort boot, wedge, or become a write baseline).
+   Unknown optional-record reads: no boot abort, no wedge, no write baseline).
+   Required read-only `setup.json` is the exception: a transient leaf fault
+   (EIO/EAGAIN, short or changed read) gets five in-process attempts over about
+   3 s, then the typed error ends the process and `Restart=always` in
+   `deployment/ceralive.service` is the outer retry; parsed-and-refused
+   `setup.json` bytes still abort boot. The SIGTERM/SIGINT handlers are
+   installed late in `main.ts`, so a stop that arrives while boot waits for an
+   unavailable `config.json` ends by default signal termination, not by the
+   cancellation path.
 3. The backend acknowledges readiness through `systemd-notify`.
 4. Optional subsystem initialization continues; when config was unavailable it
    first waits for that owner's successful load.

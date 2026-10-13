@@ -60,7 +60,7 @@ function useRoot(): string {
 }
 
 test.each(["", "{", '{"other":"yes"}'])(
-	"a damaged token file %p is archived before a remembered login starts a fresh record",
+	"a damaged token file %p gives a temporary remembered login without rewriting",
 	async (bytes) => {
 		// Given damaged remembered memberships and a separately valid password.
 		const dir = useRoot();
@@ -73,17 +73,21 @@ test.each(["", "{", '{"other":"yes"}'])(
 			{ password: "correct-password", persistent_token: true },
 			{ context },
 		);
-		// Then the password still signs in and the damaged bytes survive as a copy.
+		// Then password auth works, but D209 forbids a damaged-membership replacement.
 		expect(result.success).toBe(true);
 		expect(authed()).toBe(true);
 		const copies = readdirSync(dir).filter((n) =>
 			n.startsWith("auth_tokens.json.damaged-"),
 		);
-		expect(copies).toHaveLength(1);
-		expect(readFileSync(join(dir, copies[0] ?? "-"), "utf8")).toBe(bytes);
+		expect(copies).toHaveLength(0);
+		expect(readFileSync(join(dir, "auth_tokens.json"), "utf8")).toBe(bytes);
 		expect(
-			JSON.parse(readFileSync(join(dir, "auth_tokens.json"), "utf8")),
-		).toEqual({ [digest(result.auth_token ?? "")]: true });
+			await call(
+				auth.loginProcedure,
+				{ token: result.auth_token, persistent_token: false },
+				{ context },
+			),
+		).toEqual({ success: true });
 	},
 );
 
