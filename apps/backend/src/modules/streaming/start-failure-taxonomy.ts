@@ -57,7 +57,16 @@ import type { OrchestratorPhase } from "../system/update-orchestrator/types.ts";
 export class StreamStartFailure extends Error {
 	override readonly name = "StreamStartFailure";
 
-	constructor(readonly failure: StartFailure) {
+	constructor(
+		readonly failure: StartFailure,
+		readonly liveness: "idle" | "unknown" = failure.phase === "params" ||
+		failure.phase === "spawn-sender" ||
+		failure.phase === "connect" ||
+		failure.phase === "hello" ||
+		failure.phase === "subscribe"
+			? "idle"
+			: "unknown",
+	) {
 		super(`${failure.phase}:${failure.class}`);
 	}
 }

@@ -150,7 +150,7 @@ D8 origins, refusal payloads and timing policy are unchanged.
 
 | State | Admitted operation / transition | Liveness evidence |
 |---|---|---|
-| `idle` | Start → `starting`; query → `reconciling` | Positive idle, or never-launched initial state |
+| `idle` | Start → `starting`; query → `reconciling` | Positive idle or an unprotected fresh-boot admission baseline; production uses actual sentinel absence, not engine silence |
 | `starting` | confirmed launch → `streaming`; rolled-back failure/refusal → `idle`; Stop → `stopping`; unknown cleanup → `reconciling` | Unknown once launch is submitted |
 | `streaming` | Stop → `stopping`; query → `reconciling`; config → `reconfiguring` | Last confirmed live |
 | `reconfiguring` | applied/reverted → `streaming`; engine-confirmed rollback idle → `idle`; deadline/socket loss → `reconciling` | Live until positive contrary evidence |
@@ -177,8 +177,10 @@ Runtime probes carry their observation owner to the engine event callback and
 client-adoption boundary, so an obsolete probe cannot publish status before the
 factory discards its answer. Session event listeners also check their client and
 launch owner. No locally owned client is **not** idle evidence: `stop-evidence.ts`
-queries state, stops an adopted live engine, and refuses unknown rather than
-clearing protection. A positive idle event may settle an otherwise unowned running
+queries state, stops an adopted live engine, and retains protection on unknown.
+An explicit operator Stop may additionally send a fresh Stop to confirm an unowned
+engine; automatic reconciliation cannot use that effectful path. A positive idle
+event may settle an otherwise unowned running
 session, but never runs through outstanding launch/cleanup ownership.
 No new producer or wire field is needed. Launch config and resource-invariant
 reporting have small, separately routed streamloop modules.
@@ -192,13 +194,52 @@ it cannot publish idle. A cancelled launch remains fenced until its continuation
 settles and final cleanup establishes idle; an outstanding old launch also blocks
 new admission even if an idle observation arrives.
 
-**OTA invariant:** `/run/ceralive/streaming` is present whenever engine liveness is
-true **or UNKNOWN**. It is cleared only by positive idle/cleanup evidence (including
-transactional failed launch rollback), never Stop intent, `start_cleanup_timeout`,
+**OTA invariant:** the owner requests `/run/ceralive/streaming` whenever liveness is
+true **or UNKNOWN**. A failed write cannot establish physical protection: the latch
+remains unconfirmed and the next protection call retries. It is cleared only by
+positive idle evidence (including acknowledged transactional rollback Stop), never
+local rollback completion, Stop intent, `start_cleanup_timeout`,
 deadline expiry, or synthesized `rollback_failed / engine_connection_lost`.
 Unknown reconciliation sets protection even on a fresh backend. Unknown outcomes
 keep the generation and last confirmed live status, and block a fresh Start.
 Restoration intent remains a separate marker, disarmed immediately on Stop.
+
+The internal `StreamStartFailure.liveness` carries rollback certainty without a
+wire/schema change or replacing the original failure class/code. A possibly-effectful
+Start whose rollback Stop is not acknowledged stays UNKNOWN; retries and replacement
+Starts are refused. Acquisition continuations recheck ownership after connect and
+subscribe, before assigning resources and immediately before dispatching Start.
+Temporary probe and adopted-session event authority are separate. Every deferred
+status-routing continuation checks its current client predicate before publication.
+
+`streamLiveness()` is the consumer admission accessor: `streaming | idle | unknown`.
+Its leaf module is `apps/backend/src/modules/streaming/stream-liveness.ts`; the
+composition root binds the factory reader without a runtime import back-edge.
+It is UNKNOWN during pending launch/cleanup, unresolved engine truth or failed
+physical protection. UNKNOWN preserves generation, sentinel and last confirmed
+legacy status. A silent 2.5-second subscribed probe is deliberately UNKNOWN, replacing
+the old silence-to-idle contract. Affirmative paths are current concordant idle
+status and operator Stop acknowledgement. Stop on an idle engine is harmless.
+
+Fresh boot with absent `/run` sentinel and no surviving/adopted session is an
+unprotected admission baseline, not an engine-idle observation. Start and package/OTA
+consumers remain admitted there. A probe gates only while in flight; silence cannot
+create a standing block when nothing requires protection. The sentinel absence is
+rechecked after observation; unreadable or newly present evidence stays UNKNOWN.
+Launch, adoption and unconfirmed rollback irreversibly leave this empty baseline
+until a current affirmative idle outcome releases their protection.
+Reboot clears the tmpfs sentinel and permits that empty admission baseline; it
+does not upgrade a silent probe to an affirmative engine-idle observation.
+The existing update reason/catalog keys now offer
+the honest Stop-confirmation hint; downstream disruptive consumers are migrated in
+the separately assigned consumer lane.
+
+**Follow-up — engine status snapshot [GREENFIELD; not done].** Passive idle proof
+needs an additive current-status subscribe reply/hydration or read-only `get_status`
+method, producer-owned exported types and a published/tagged binding before any
+consumer reference. The engine release is owner-gated, cross-repo and out of scope.
+Host fake-engine regressions and the independent delivered-evidence matrix do not
+qualify real engine scheduling, media, power loss, activation or either board.
 
 The real-factory interleaving harness uses boundary gates and the real lifecycle
 lease, enumerating enabled event orderings to depth five, plus the six-event
@@ -395,8 +436,8 @@ State set: `idle | starting | streaming | stopping | stop_failed | reconciling`.
 - `reconciling` is the boot/reconnect state where the backend queries the
   engine's actual runtime state and adopts it (the engine may be streaming while
   CeraUI restarted). A successfully subscribed probe observes status for 2.5
-  seconds: concordant streaming/idle is adopted immediately, silence resolves
-  idle because live sessions heartbeat every 2 seconds, and query failure or a
+  seconds: concordant streaming/idle is adopted immediately, silence remains
+  UNKNOWN even though live sessions heartbeat every 2 seconds, and query failure or a
   contradictory/transitional event remains unknown. Events arriving after the
   probe closes are fenced.
 - `stop_failed` is a terminal-until-retried state a stop can land in.

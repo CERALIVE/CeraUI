@@ -37,6 +37,7 @@ import {
 	STOP_DEADLINE_MS,
 } from "./start-lifecycle-timing.ts";
 import { withStreamLaunchOwnership } from "./stream-launch-ownership.ts";
+import { bindStreamLiveness } from "./stream-liveness.ts";
 import { createSessionCleanup } from "./stream-session-cleanup.ts";
 import { createSessionOwnership } from "./stream-session-ownership.ts";
 import { streamSessionProductionDeps } from "./stream-session-production.ts";
@@ -109,10 +110,14 @@ export type ConfigChangePhaseEvent = {
 export type { StartRetryDiagnostic } from "./stream-start-retry.ts";
 
 export type StreamSessionOrchestratorDeps = {
+	readonly initialLiveness?: "idle" | "unknown" | (() => "idle" | "unknown");
 	readonly createAttemptId: () => string;
 	readonly setStreamingStatus: (streaming: boolean) => void;
 	readonly getStreamingStatus?: () => boolean;
-	readonly stopRuntime: (generation: number) => Promise<void>;
+	readonly stopRuntime: (
+		generation: number,
+		confirmUnknown?: boolean,
+	) => Promise<void>;
 	readonly queryRuntime: () => Promise<EngineRuntimeState>;
 	readonly setLifecycleState?: (state: LifecycleState) => void;
 	readonly invariantViolation?: (
@@ -211,7 +216,7 @@ export type StreamSessionOrchestratorDeps = {
 	 * Cleared only after confirmed idle/cleanup or a failed launch that never
 	 * went live; reconciliation synchronizes it with authoritative engine truth.
 	 */
-	readonly markStreamingForOta?: () => void;
+	readonly markStreamingForOta?: (() => boolean) | (() => void);
 	readonly unmarkStreamingForOta?: () => void;
 };
 
@@ -237,6 +242,7 @@ type QueuedStop = {
 };
 
 export type StreamSessionOrchestrator = {
+	readonly streamLiveness: () => "streaming" | "idle" | "unknown";
 	readonly start: (request: StreamStartRequest) => Promise<StartResult>;
 	readonly stop: (cause: StreamStopCause) => Promise<StopResult>;
 	readonly reconcile: () => Promise<LifecycleState>;
@@ -263,6 +269,7 @@ export function createStreamSessionOrchestrator(
 	const ownership = createSessionOwnership(deps);
 	let active: ActiveAttempt | undefined;
 	let reconciliationEpoch = 0;
+	let runtimeObservations = 0;
 	let activeChange: ActiveConfigChange | undefined;
 	let queuedStop: QueuedStop | undefined;
 	let engineTransitionLatched = false;
@@ -350,6 +357,14 @@ export function createStreamSessionOrchestrator(
 		if (blocked !== undefined) {
 			return refuseStart(attemptId, "mutation_blocked", blocked.stableKey);
 		}
+		if (
+			ownership.generation === 0 &&
+			ownership.state === "reconciling" &&
+			runtimeObservations === 0 &&
+			!cleanup.pending &&
+			stopFlight === undefined
+		)
+			await reconcile();
 		if (
 			!cleanup.pending &&
 			stopFlight === undefined &&
@@ -525,7 +540,7 @@ export function createStreamSessionOrchestrator(
 		if (launchResult.result === "failed") {
 			if (active !== attempt || !ownership.owns(owner))
 				return { result: "cancelled", attemptId };
-			if (launchResult.failure.code === "start_cleanup_timeout") {
+			if (launchResult.liveness === "unknown") {
 				ownership.commit(owner, "reconciling", "unknown");
 			} else if (ownership.commit(owner, "idle", "idle")) active = undefined;
 			return {
@@ -629,10 +644,11 @@ export function createStreamSessionOrchestrator(
 	const noteEngineStatus = (
 		event: Extract<EventParams, { type: "status" }>,
 	): void => {
-		if (event.state === "idle") {
+		if (event.state === "idle" && event.streaming === false) {
 			if (
 				(ownership.state === "streaming" ||
-					ownership.state === "stop_failed") &&
+					ownership.state === "stop_failed" ||
+					ownership.state === "reconciling") &&
 				!cleanup.pending &&
 				!ownership.launchPending
 			) {
@@ -732,7 +748,10 @@ export function createStreamSessionOrchestrator(
 			reconciliationEpoch += 1;
 			const owner = ownership.invalidate();
 			try {
-				await stopWithinDeadline(active?.generation ?? ownership.generation);
+				await stopWithinDeadline(
+					active?.generation ?? ownership.generation,
+					cause === "operator",
+				);
 			} catch (error) {
 				const reason = error instanceof Error ? error.message : "stop_failed";
 				logger.error("stream stop failed during reconciliation", { reason });
@@ -763,7 +782,7 @@ export function createStreamSessionOrchestrator(
 		const owner = ownership.invalidate();
 
 		try {
-			await stopWithinDeadline(stoppedGeneration);
+			await stopWithinDeadline(stoppedGeneration, cause === "operator");
 			if (!cancellingStart && ownership.commit(owner, "idle", "idle"))
 				active = undefined;
 			return { result: "stopped" };
@@ -802,10 +821,16 @@ export function createStreamSessionOrchestrator(
 		if (!ownership.commit(owner, "reconciling", "unknown"))
 			return ownership.state;
 		const epoch = ++reconciliationEpoch;
-		const runtimeState = await withRuntimeObservationOwner(
-			() => ownership.owns(owner),
-			deps.queryRuntime,
-		).catch(() => "unknown" as const);
+		runtimeObservations++;
+		let runtimeState: EngineRuntimeState;
+		try {
+			runtimeState = await withRuntimeObservationOwner(
+				() => ownership.owns(owner),
+				deps.queryRuntime,
+			).catch(() => "unknown" as const);
+		} finally {
+			runtimeObservations--;
+		}
 		if (
 			epoch !== reconciliationEpoch ||
 			!ownership.owns(owner) ||
@@ -819,6 +844,8 @@ export function createStreamSessionOrchestrator(
 			runtimeState === "idle"
 		)
 			active = undefined;
+		if (runtimeState === "unknown")
+			ownership.settleUnprotectedObservation(owner);
 		return ownership.state;
 	};
 
@@ -955,6 +982,7 @@ export function createStreamSessionOrchestrator(
 	};
 
 	return {
+		streamLiveness: ownership.streamLiveness,
 		start,
 		stop,
 		reconcile,
@@ -971,6 +999,7 @@ export function createStreamSessionOrchestrator(
 const productionOrchestrator = createStreamSessionOrchestrator(
 	streamSessionProductionDeps,
 );
+bindStreamLiveness(productionOrchestrator.streamLiveness);
 
 export function startStreamSession(
 	request: StreamStartRequest,
@@ -988,6 +1017,10 @@ export function reconcileStreamSession(): Promise<LifecycleState> {
 
 export function getStreamSessionSnapshot(): StreamSessionSnapshot {
 	return productionOrchestrator.snapshot();
+}
+
+export function streamLiveness(): "streaming" | "idle" | "unknown" {
+	return productionOrchestrator.streamLiveness();
 }
 
 export function changeStreamSessionConfig(

@@ -32,16 +32,26 @@ export function otaStreamingMarkerPath(): string {
 	return process.env.CERALIVE_STREAMING_MARKER ?? "/run/ceralive/streaming";
 }
 
-/** Set on an admitted stream start (Todo 37 MUST DO). Best-effort: a failure
- * to write the marker must never block or fail the stream start it guards —
- * it only means OTA activation might not defer for this session, which the
- * image-side `--stop`/`--now` paths will simply attempt and, in the worst
- * case, fail their own `[[ ! -e "$STREAMING" ]]` check one step later. */
-export function setOtaStreamingMarker(): void {
+/** Only ENOENT proves an empty boot baseline; unreadable evidence stays protected. */
+export function initialOtaStreamLiveness(): "idle" | "unknown" {
+	try {
+		fs.lstatSync(otaStreamingMarkerPath());
+		return "unknown";
+	} catch (error) {
+		return error instanceof Error && "code" in error && error.code === "ENOENT"
+			? "idle"
+			: "unknown";
+	}
+}
+
+/** A failed write keeps protection unconfirmed and must be retried by the owner. */
+export function setOtaStreamingMarker(): boolean {
 	try {
 		fs.writeFileSync(otaStreamingMarkerPath(), "");
+		return true;
 	} catch (error) {
 		logger.warn("ota-streaming-marker: failed to set", { error });
+		return false;
 	}
 }
 

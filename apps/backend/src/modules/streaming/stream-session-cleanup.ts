@@ -21,7 +21,7 @@ export function createSessionCleanup(
 		get pending() {
 			return flight !== undefined;
 		},
-		run: (generation: number): Promise<void> => {
+		run: (generation: number, confirmUnknown = false): Promise<void> => {
 			if (flight !== undefined) return flight.result;
 			const answer = Promise.withResolvers<void>();
 			const current: CleanupFlight = {
@@ -36,7 +36,7 @@ export function createSessionCleanup(
 			);
 			let raw: Promise<void>;
 			try {
-				raw = deps.stopRuntime(generation);
+				raw = deps.stopRuntime(generation, confirmUnknown);
 			} catch (error) {
 				raw = Promise.reject(error);
 			}

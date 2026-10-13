@@ -197,7 +197,10 @@ export async function start(
 	return result;
 }
 
-export function stopGeneration(generation: number): Promise<void> {
+export function stopGeneration(
+	generation: number,
+	confirmUnknown = false,
+): Promise<void> {
 	// A deferred auto-audio follow (T7) only applies at the NEXT start; a stop
 	// cancels it so the picker never keeps a stale "follows on restart" hint.
 	setPendingAudioFollowAsrc(null);
@@ -265,7 +268,7 @@ export function stopGeneration(generation: number): Promise<void> {
 					"engine session missing while generation-owned resources remained",
 				);
 			}
-			confirmUnownedEngineStop(finish);
+			confirmUnownedEngineStop(finish, undefined, confirmUnknown);
 		}
 	});
 }

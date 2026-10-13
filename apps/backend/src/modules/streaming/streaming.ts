@@ -123,13 +123,11 @@ export function startError(conn: WebSocket, msg: string, id?: string) {
 		}
 	}
 
-	if (!updateStatus(false)) {
-		conn.send(
-			buildMsg("status", {
-				is_streaming: false,
-			} satisfies StatusResponseMessage),
-		);
-	}
+	conn.send(
+		buildMsg("status", {
+			is_streaming: getIsStreaming(),
+		} satisfies StatusResponseMessage),
+	);
 
 	return false;
 }

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { logger } from "../helpers/logger.ts";
 import { resetLifecycleInterlock } from "../modules/streaming/lifecycle-admission.ts";
+import { StreamStartFailure } from "../modules/streaming/start-failure-taxonomy.ts";
 import { createSessionOwnership } from "../modules/streaming/stream-session-ownership.ts";
 import { flush, modelHarness } from "./helpers/stream-session-model.ts";
 
@@ -46,6 +47,17 @@ async function event(
 		case "Start": {
 			const result = h.start();
 			if (
+				before.generation === 0 &&
+				before.state === "reconciling" &&
+				!before.stopOutstanding &&
+				!before.outstandingLaunches
+			) {
+				// Start may first observe independent engine truth and then park on
+				// admission. Awaiting that parked Start deadlocks its own next event.
+				await flush();
+				oracle.protected = before.engine !== "idle";
+				if (h.admissions.length === 0) await result;
+			} else if (
 				before.state !== "idle" ||
 				before.stopOutstanding ||
 				before.outstandingLaunches
@@ -101,7 +113,17 @@ async function event(
 			break;
 		case "launch-fail":
 			h.setEngine("idle");
-			h.launchGates.shift()?.reject(new Error("launch failed after rollback"));
+			h.launchGates.shift()?.reject(
+				new StreamStartFailure(
+					{
+						attemptId: "model",
+						phase: "start-rpc",
+						class: "engine_internal",
+						retriable: false,
+					},
+					"idle",
+				),
+			);
 			oracle.protected =
 				before.state === "stopping" ||
 				before.state === "stop_failed" ||
@@ -179,6 +201,7 @@ test("exhaustive enabled interleavings through five events preserve I1-I6", asyn
 	// Given the real factory, real lifecycle lease and dependency-boundary gates.
 	const queue: Event[][] = [[]];
 	let explored = 0;
+	const began = performance.now();
 	const previousSilent = logger.silent;
 	logger.silent = true;
 	try {
@@ -208,13 +231,36 @@ test("exhaustive enabled interleavings through five events preserve I1-I6", asyn
 		// Then every prefix and its quiescence satisfied the safety assertions.
 		expect(explored).toBeGreaterThan(3906);
 		process.stdout.write(
-			`F15-C interleavings=${explored} bound=5 invariants=I1-I6\n`,
+			`F15-C interleavings=${explored} bound=5 invariants=I1-I6 elapsedMs=${performance.now() - began} msPerTrace=${(performance.now() - began) / explored}\n`,
 		);
 	} finally {
 		logger.silent = previousSilent;
 		resetLifecycleInterlock();
 	}
 }, 120_000);
+
+test("Start after a late unowned Stop acknowledgement allows the next admission event", async () => {
+	// Given the five-event trace that parked the exhaustive event driver forever.
+	resetLifecycleInterlock();
+	const h = modelHarness();
+	const oracle = { protected: false, timedOut: false, launchExpired: false };
+	try {
+		// When the independent engine is idle after its late Stop acknowledgement.
+		for (const action of [
+			"unknown",
+			"Stop",
+			"stop-timeout",
+			"late-ack",
+			"Start",
+		] as const)
+			await event(h, action, oracle);
+		// Then Start is parked on admission, not awaited by the event producer.
+		expect(h.admissions).toHaveLength(1);
+		await quiesce(h);
+	} finally {
+		resetLifecycleInterlock();
+	}
+});
 
 test("illegal and stale state-machine commits execute no projection side effects", () => {
 	// Given a newer streaming owner and a saved older owner.

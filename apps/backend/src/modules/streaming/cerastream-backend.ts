@@ -145,10 +145,17 @@ import {
 } from "./launch-transaction.ts";
 import { asRawRequestClient } from "./raw-request.ts";
 import {
+	classifyStartFailure,
+	StreamStartFailure,
+} from "./start-failure-taxonomy.ts";
+import {
 	ENGINE_CLOSE_DEADLINE_MS,
 	ENGINE_STOP_REQUEST_DEADLINE_MS,
 } from "./start-lifecycle-timing.ts";
-import { currentStreamLaunchOwner } from "./stream-launch-ownership.ts";
+import {
+	assertStreamLaunchOwnership,
+	currentStreamLaunchOwner,
+} from "./stream-launch-ownership.ts";
 import type {
 	BackendErrorListener,
 	BitrateParams,
@@ -234,6 +241,10 @@ export interface CerastreamBackendDeps {
 		phase: ConfigChangePhase;
 		reason?: string;
 	}) => void;
+	onEngineStatus?: (
+		event: Extract<EventParams, { type: "status" }>,
+		current: () => boolean,
+	) => void;
 }
 
 function defaultBridge(): CerastreamBridge {
@@ -608,6 +619,15 @@ function defaultCerastreamBackendDeps(): CerastreamBackendDeps {
 		cancelTimeout: (timer) => clearTimeout(timer),
 		onSessionConnectionLost: defaultOnSessionConnectionLost,
 		onConfigChangePhase: defaultOnConfigChangePhase,
+		onEngineStatus: (event, current) => {
+			void import("./stream-session-orchestrator.ts")
+				.then(({ noteStreamSessionEngineStatus }) => {
+					if (current()) noteStreamSessionEngineStatus(event);
+				})
+				.catch((error) =>
+					defaultLogger.error("cerastream: could not route status", { error }),
+				);
+		},
 	};
 }
 
@@ -692,6 +712,7 @@ export class CerastreamBackend implements StreamingBackend {
 	private client: CerastreamClient | undefined;
 	private subscription: Subscription | undefined;
 	private active = false;
+	private clientEpoch = 0;
 	private telemetry: EngineTelemetry | null = null;
 	// The engine error currently occupying the shared `cerastream` notification
 	// slot. Tracked because that slot is shared by every non-srtla engine error,
@@ -758,12 +779,17 @@ export class CerastreamBackend implements StreamingBackend {
 	): Promise<void> {
 		this.active = true;
 		this.clearRecoveredEngineError();
-		const params = this.buildStartParams(config, opts);
 		const ownsLaunch = currentStreamLaunchOwner();
+		let dispatched = false;
+		let confirmedIdle = false;
+		let acquiredClient: CerastreamClient | undefined;
+		let acquiredSubscription: Subscription | undefined;
 		const launchTransaction =
 			transaction ?? createLaunchTransaction("backend-start");
 		try {
+			const params = this.buildStartParams(config, opts);
 			await this.enqueue(async () => {
+				assertStreamLaunchOwnership();
 				let confirmStreaming: (() => void) | undefined;
 				const streamingStatus = new Promise<void>((resolve) => {
 					confirmStreaming = resolve;
@@ -774,13 +800,27 @@ export class CerastreamBackend implements StreamingBackend {
 					(client) => client.close(),
 					classifyConnectHandshakePhase,
 				);
+				acquiredClient = client;
+				assertStreamLaunchOwnership();
 				this.client = client;
+				const clientEpoch = ++this.clientEpoch;
 				const subscription = await launchTransaction.acquirePhase(
 					"subscribe",
 					() =>
 						client.subscribeEvents({}, (event) => {
-							if (this.client !== client || !ownsLaunch()) return;
-							this.handleEvent(event);
+							if (
+								this.client !== client ||
+								this.clientEpoch !== clientEpoch ||
+								!ownsLaunch()
+							)
+								return;
+							this.handleEvent(
+								event,
+								() =>
+									this.client === client &&
+									this.clientEpoch === clientEpoch &&
+									ownsLaunch(),
+							);
 							if (
 								event.type === "status" &&
 								classifyRuntimeState(event.state, event.streaming) ===
@@ -791,10 +831,14 @@ export class CerastreamBackend implements StreamingBackend {
 						}),
 					(subscription) => subscription.close(),
 				);
+				acquiredSubscription = subscription;
+				assertStreamLaunchOwnership();
 				this.subscription = subscription;
 				launchTransaction.register(async () => {
+					if (!dispatched) return;
 					try {
-						await client.stop();
+						const reply = await client.stop();
+						confirmedIdle = reply.state === "idle";
 					} catch (error) {
 						this.deps.logger.debug(
 							"cerastream: rollback stop best-effort failed",
@@ -804,9 +848,11 @@ export class CerastreamBackend implements StreamingBackend {
 						);
 					}
 				});
-				const result = await launchTransaction.runPhase("start-rpc", () =>
-					this.dispatchStart(client, params),
-				);
+				const result = await launchTransaction.runPhase("start-rpc", () => {
+					assertStreamLaunchOwnership();
+					dispatched = true;
+					return this.dispatchStart(client, params);
+				});
 				await launchTransaction.runPhase("playing-wait", async () => {
 					const parsed = startResultSchema.parse(result);
 					if (parsed.state !== "streaming") await streamingStatus;
@@ -814,10 +860,24 @@ export class CerastreamBackend implements StreamingBackend {
 			}, "start");
 		} catch (error) {
 			await launchTransaction.rollback();
-			this.active = false;
-			this.client = undefined;
-			this.subscription = undefined;
-			throw error;
+			if (this.client === acquiredClient) {
+				this.active = false;
+				this.client = undefined;
+			}
+			if (this.subscription === acquiredSubscription)
+				this.subscription = undefined;
+			const failure =
+				error instanceof StreamStartFailure
+					? error.failure
+					: classifyStartFailure(
+							dispatched ? "start-rpc" : "params",
+							error,
+							"backend-start",
+						);
+			throw new StreamStartFailure(
+				failure,
+				!dispatched || confirmedIdle ? "idle" : "unknown",
+			);
 		}
 	}
 
@@ -940,6 +1000,19 @@ export class CerastreamBackend implements StreamingBackend {
 		return true;
 	}
 
+	async confirmStop(): Promise<void> {
+		const client = this.client;
+		const subscription = this.subscription;
+		await this.stopOnFreshConnection(client);
+		if (this.client === client) {
+			this.client = undefined;
+			this.active = false;
+		}
+		if (this.subscription === subscription) this.subscription = undefined;
+		subscription?.close();
+		this.clearSessionScopedTelemetry();
+	}
+
 	setBitrate(params: BitrateParams): number | undefined {
 		const maxBr = validateBitrate(params);
 		if (maxBr === undefined) return undefined;
@@ -1019,6 +1092,12 @@ export class CerastreamBackend implements StreamingBackend {
 		let subscription: Subscription | undefined;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		let acceptingEvents = true;
+		let adopted = false;
+		const clientEpoch = ++this.clientEpoch;
+		const ownsSession = () =>
+			client !== undefined &&
+			this.client === client &&
+			this.clientEpoch === clientEpoch;
 		const ownsQuery = currentRuntimeObservationOwner();
 		try {
 			client = await this.deps.connect({
@@ -1026,6 +1105,10 @@ export class CerastreamBackend implements StreamingBackend {
 				autoReconnect: false,
 				requestTimeoutMs: ENGINE_STATE_RECONCILE_TIMEOUT,
 			});
+			if (!ownsQuery() || this.clientEpoch !== clientEpoch) {
+				await client.close();
+				return "unknown";
+			}
 			let resolveRuntimeState:
 				| ((runtimeState: EngineRuntimeState) => void)
 				| undefined;
@@ -1035,8 +1118,21 @@ export class CerastreamBackend implements StreamingBackend {
 			subscription = await client.subscribeEvents(
 				{ topics: ["status"] },
 				(event) => {
-					if (!acceptingEvents || !ownsQuery()) return;
-					this.handleEvent(event);
+					if (
+						adopted
+							? !ownsSession()
+							: !acceptingEvents ||
+								!ownsQuery() ||
+								this.clientEpoch !== clientEpoch
+					)
+						return;
+					this.handleEvent(event, () =>
+						adopted
+							? ownsSession()
+							: acceptingEvents &&
+								ownsQuery() &&
+								this.clientEpoch === clientEpoch,
+					);
 					if (event.type === "status") {
 						resolveRuntimeState?.(
 							classifyRuntimeState(event.state, event.streaming),
@@ -1044,16 +1140,26 @@ export class CerastreamBackend implements StreamingBackend {
 					}
 				},
 			);
+			if (!ownsQuery() || this.clientEpoch !== clientEpoch) {
+				subscription.close();
+				await client.close();
+				return "unknown";
+			}
 			timer = this.deps.scheduleTimeout(
-				() => resolveRuntimeState?.("idle"),
+				() => resolveRuntimeState?.("unknown"),
 				ENGINE_STATE_RECONCILE_TIMEOUT,
 			);
 			const runtimeState = await runtimeStateEvent;
 			acceptingEvents = false;
-			if (ownsQuery() && runtimeState === "streaming") {
+			if (
+				ownsQuery() &&
+				this.clientEpoch === clientEpoch &&
+				runtimeState === "streaming"
+			) {
 				this.client = client;
 				this.subscription = subscription;
 				this.active = true;
+				adopted = true;
 				return runtimeState;
 			}
 			subscription?.close();
@@ -1213,7 +1319,7 @@ export class CerastreamBackend implements StreamingBackend {
 	}
 
 	/** Bridge one engine event onto notifications / telemetry / status. */
-	handleEvent(event: EventParams): void {
+	handleEvent(event: EventParams, current: () => boolean = () => true): void {
 		switch (event.type) {
 			case "error":
 				this.handleErrorEvent(event);
@@ -1237,14 +1343,13 @@ export class CerastreamBackend implements StreamingBackend {
 				this.deps.bridge.broadcastStatus();
 				break;
 			case "status": {
+				this.deps.onEngineStatus?.(event, current);
 				const capture = event.active_encode?.capture;
 				if (engineAdvertises("capture-standby")) {
-					void import("./capture-resilience.ts").then(({ noteCaptureStatus }) =>
-						noteCaptureStatus(capture, event.state !== "idle"),
-					);
-					void import("./stream-session-orchestrator.ts").then(
-						({ noteStreamSessionEngineStatus }) =>
-							noteStreamSessionEngineStatus(event),
+					void import("./capture-resilience.ts").then(
+						({ noteCaptureStatus }) => {
+							if (current()) noteCaptureStatus(capture, event.state !== "idle");
+						},
 					);
 				}
 				// setConfig persists the policy without a transaction. The next engine

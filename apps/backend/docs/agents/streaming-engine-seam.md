@@ -17,17 +17,51 @@ Host regression coverage does not qualify image activation on either board.
 At boot and after an engine reconnect, `reconcileRuntimeState()` subscribes to the
 engine's actual status and adopts an engine-held session. Only concordant
 `streaming` or `idle` status is authoritative. A successful subscription that sees
-no event for 2.5 seconds resolves idle because an active stream emits status every
-2 seconds; query/subscription failure, transitional state, or contradictory fields
-remain `reconciling`, and late events from a completed probe are fenced. The additive
+no event for 2.5 seconds remains UNKNOWN: the published 2026.9.11 client has no
+current-status snapshot and the engine heartbeat is streaming-only. Query failure,
+transitional state and contradictory fields also remain `reconciling`. An explicit
+operator Stop uses a fresh connection even without a locally owned session; only
+its acknowledged idle reply clears protection. Reconciliation never Stops an
+unknown engine automatically. Late events from a completed probe are fenced;
+an adopted subscription instead follows current client/session identity and keeps
+receiving subsequent status even when its original probe epoch expires. The additive
 `status.stream_lifecycle` field exposes `idle | starting | streaming | stopping |
 stop_failed | reconciling`; `is_streaming` remains backward compatible.
 
-The launch transaction owns rollback and phase deadlines. The retry runner starts
-the next connect attempt only after rollback resolves, caps attempts and elapsed
+The launch transaction owns rollback and phase deadlines. Rollback completion is
+not idle proof: internal failure liveness is confirmed only before Start dispatch
+or after the matching rollback Stop acknowledges idle. The original failure
+class/code is preserved when cleanup is unknown; no retry or replacement Start
+is admitted. Connect/subscribe acquisitions and Start submission recheck launch
+ownership. The retry runner starts the next connect attempt only after confirmed
+rollback, caps attempts and elapsed
 time, and exposes a cancellable timer to the same generation. Reporting suppresses
 transient toasts only during existing update/restart/boot windows; terminal
 failures are never suppressed and carry keyed 10-locale copy plus journal guidance.
+
+Consumers use `streamLiveness()` from the leaf `stream-liveness.ts`, not the
+legacy `getIsStreaming()` boolean, for disruptive/update admission. It returns
+`streaming | idle | unknown`; failed sentinel writes are unconfirmed, never latched
+as protection, and retry on the next protection call. Production initializes UNKNOWN
+when the `/run` sentinel is present or unreadable. A fresh boot with positively absent
+sentinel and no surviving/adopted session admits Start and does not block package/OTA
+admission. This empty baseline is not a claim that a silent engine reported idle.
+An in-flight probe temporarily gates admission; its silent completion cannot create
+standing protection on that empty baseline. Once a launch, adoption or uncertain
+rollback requires protection, only positive current idle evidence releases it.
+The orchestrator binds its live reader after initialization; the leaf imports no
+runtime orchestrator dependency, so system/update consumers cannot create a cycle.
+The existing update-refusal catalogs describe an active or unconfirmed stream and
+the Stop confirmation path. Reboot removes the `/run` tmpfs sentinel; it does not
+make a later silent IPC subscription an affirmative idle snapshot.
+
+### Follow-up: engine status snapshot [GREENFIELD; cross-repo, not done]
+
+The minimal producer addition is current status hydration on subscribe or a
+read-only `get_status` method with a producer-exported result and published binding.
+It must report idle honestly while Start/retirement is outstanding. Publish/tag the
+binding before consumer fields or methods are referenced (root publish-before-consume
+rule). Engine release/delivery is owner-gated and outside this consumer-only lane.
 
 The `StreamingBackend` interface (`modules/streaming/streaming-backend.ts`) has
 **one** implementation behind the seam (the legacy ceracoder engine is fully

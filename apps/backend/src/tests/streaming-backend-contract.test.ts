@@ -389,9 +389,8 @@ describe("engine selection", () => {
 // ---------------------------------------------------------------------------
 
 describe("CerastreamBackend behavioural contract", () => {
-	test("a silent idle engine terminalizes reconciliation and admits start", async () => {
-		// Given a connected, subscribed production backend whose idle engine emits
-		// no status heartbeat, matching the board's active-engine/idle-health state.
+	test("an engine reporting idle terminalizes reconciliation and admits start", async () => {
+		// Given a connected, subscribed production backend awaiting engine truth.
 		let reconcileTimeout: (() => void) | undefined;
 		const { backend, fake } = makeBackend({
 			scheduleTimeout: (callback) => {
@@ -414,8 +413,8 @@ describe("CerastreamBackend behavioural contract", () => {
 		await fake.subscribed;
 		await waitFor(() => reconcileTimeout !== undefined);
 
-		// When the bounded observation window expires without a status event.
-		reconcileTimeout?.();
+		// When the current engine explicitly reports idle.
+		fake.emit({ type: "status", seq: 1, state: "idle", streaming: false });
 		const reconciled = await reconciling;
 		const health = deriveStreamHealth({
 			isStreaming: streaming,
@@ -677,7 +676,7 @@ describe("CerastreamBackend behavioural contract", () => {
 		expect(await backend.reconcileRuntimeState()).toBe("unknown");
 	});
 
-	test("a silent subscribed reconciliation is bounded and resolves idle", async () => {
+	test("a silent subscribed reconciliation is bounded and remains unknown", async () => {
 		for (let repeat = 0; repeat < 5; repeat += 1) {
 			let timeoutCallback: (() => void) | undefined;
 			let scheduledDelay: number | undefined;
@@ -698,12 +697,12 @@ describe("CerastreamBackend behavioural contract", () => {
 
 			expect(scheduledDelay).toBe(2500);
 			timeoutCallback?.();
-			expect(await reconciliation).toBe("idle");
+			expect(await reconciliation).toBe("unknown");
 			expect(cancelled).toBe(1);
 		}
 	});
 
-	test("a status event arriving after idle reconciliation cannot become owned", async () => {
+	test("a status event arriving after unknown reconciliation cannot become owned", async () => {
 		let timeoutCallback: (() => void) | undefined;
 		const { backend, fake } = makeBackend({
 			scheduleTimeout: (callback) => {
@@ -717,7 +716,7 @@ describe("CerastreamBackend behavioural contract", () => {
 		await waitFor(() => timeoutCallback !== undefined);
 
 		timeoutCallback?.();
-		expect(await reconciliation).toBe("idle");
+		expect(await reconciliation).toBe("unknown");
 		fake.emit({ type: "status", seq: 2, state: "streaming", streaming: true });
 
 		expect(backend.getTelemetry()).toBeNull();

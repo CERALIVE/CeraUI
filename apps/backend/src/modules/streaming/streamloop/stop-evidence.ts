@@ -11,10 +11,18 @@ export function confirmUnownedEngineStop(
 	deps: {
 		readonly query: typeof queryEngineRuntimeStreaming;
 		readonly stop: StreamingBackend["stop"];
+		readonly confirmStop?: StreamingBackend["confirmStop"];
 	} = {
 		query: queryEngineRuntimeStreaming,
 		stop: (...args) => getStreamingBackend().stop(...args),
+		confirmStop: () => {
+			const backend = getStreamingBackend();
+			return backend.confirmStop === undefined
+				? Promise.reject(new Error("engine_stop_unknown"))
+				: backend.confirmStop();
+		},
 	},
+	confirmUnknown = false,
 ): void {
 	const fail = (error: unknown) => {
 		void finish({ ok: false, error });
@@ -33,7 +41,9 @@ export function confirmUnownedEngineStop(
 					fail(new Error("engine_stop_unknown"));
 				break;
 			case "unknown":
-				fail(new Error("engine_stop_unknown"));
+				if (!confirmUnknown || deps.confirmStop === undefined)
+					fail(new Error("engine_stop_unknown"));
+				else void deps.confirmStop().then(() => finish({ ok: true }), fail);
 				break;
 		}
 	}, fail);

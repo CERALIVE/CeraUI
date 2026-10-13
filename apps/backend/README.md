@@ -363,6 +363,22 @@ reconciliation adopts a stream that survived a backend process restart. A timeou
 query error, or contradictory engine status stays `reconciling`; the reconnect-heal
 path retries instead of publishing a false idle state.
 
+Silence after a successful subscription is UNKNOWN, never idle. The factory's
+`streamLiveness()` is the tri-state admission accessor; a failed sentinel write
+also keeps protection unconfirmed and retries rather than latching success.
+Possibly-effectful Start failure requires acknowledged rollback Stop before idle
+settlement or retry, independently of its original typed error. The operator's
+existing Stop RPC can affirm idle on an unowned engine; passive reconciliation
+must not Stop an unknown survived stream. Adopted-client status remains current
+after probe expiry. See the [engine seam](docs/agents/streaming-engine-seam.md),
+including the owner-gated, out-of-scope engine-status-snapshot follow-up.
+
+Fresh boot with an absent `/run` sentinel and no surviving session is an unprotected
+admission baseline: Start and update admission remain available even if the engine
+is silent. Observation gates while in flight, not forever after silent completion.
+A present/unreadable sentinel, adopted session or unconfirmed launch rollback retains
+UNKNOWN protection until current positive idle evidence; no automatic Stop is sent.
+
 Stop also cancels a generation waiting for D8 update admission, including the
 idle no-update case, before any launch or OTA marking. The restoration marker
 disarms on intent, while the separate OTA sentinel stays through parked or failed

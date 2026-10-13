@@ -44,7 +44,11 @@ export type StartRetryDiagnostic = {
 export type StartRetryRunResult =
 	| { readonly result: "started" }
 	| { readonly result: "cancelled" }
-	| { readonly result: "failed"; readonly failure: StartFailure };
+	| {
+			readonly result: "failed";
+			readonly failure: StartFailure;
+			readonly liveness: "idle" | "unknown";
+	  };
 
 export type StartRetryRunDeps = {
 	readonly attemptId: string;
@@ -244,6 +248,14 @@ export async function runStartWithRetry(
 				error instanceof StreamStartFailure
 					? error.failure
 					: deps.classifyUnknown(error);
+			const liveness =
+				launch.result === "timed_out"
+					? "idle"
+					: launch.result === "cleanup_failed"
+						? "unknown"
+						: error instanceof StreamStartFailure
+							? error.liveness
+							: "unknown";
 			const suppression = deps.suppressionContext?.() ?? NO_SUPPRESSION;
 			const failure: StartFailure =
 				suppression.engineRestartWindow &&
@@ -255,6 +267,7 @@ export async function runStartWithRetry(
 			const remainingMs = policy.totalBudgetMs - elapsedMs;
 
 			if (
+				liveness === "idle" &&
 				shouldRetryStart(failure, { attempts, elapsedMs }, policy) &&
 				delayMs < remainingMs
 			) {
@@ -282,7 +295,7 @@ export async function runStartWithRetry(
 					suppressed: false,
 				}),
 			);
-			return { result: "failed", failure };
+			return { result: "failed", failure, liveness };
 		}
 	}
 }
