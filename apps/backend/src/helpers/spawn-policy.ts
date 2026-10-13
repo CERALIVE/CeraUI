@@ -53,6 +53,8 @@
  *  - srtla_send + the streamloop are observe-and-notify ONLY: systemd is the SOLE
  *    restart authority (process-runner.ts). The app never respawns them.
  *  - supervised-workers must NEVER be given a process-lifetime timeout.
+ *  - bounded exits after our timeout/abort termination are never success, even
+ *    if TERM exits zero; execFileP/run/add-on validation share bounded-spawn.
  */
 
 import { logger } from "./logger.ts";
@@ -375,7 +377,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		},
 		status: "enforced",
 		mechanism:
-			"wall-clock timeout (DEFAULT_SPAWN_TIMEOUT_MS) kills the child + maxBuffer overflow kill",
+			"collectBoundedChild records issued termination before exit; capped output and bounded retirement preserve exec error fields",
 	},
 	{
 		id: "run.spawnCollect",
@@ -392,7 +394,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		},
 		status: "enforced",
 		mechanism:
-			"DEFAULT_TIMEOUT_MS + AbortSignal → RunTimeoutError/RunAbortError (T6)",
+			"run uses execFileP/collectBoundedChild termination provenance for RunTimeoutError/RunAbortError; spawnCollect races stdin exit/timeout/abort",
 	},
 	{
 		id: "killall.spawnSync",
@@ -921,7 +923,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		},
 		status: "enforced",
 		mechanism:
-			"setTimeout → proc.kill() hard wall-clock timeout → false (compliant exemplar)",
+			"spawnWithTimeout/collectBoundedChild rejects termination-induced zero; enable maps typed timeout to addon_validation_failed auto-disable",
 	},
 	{
 		id: "revisions.readRevision",

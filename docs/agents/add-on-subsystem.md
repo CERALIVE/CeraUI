@@ -56,6 +56,11 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
   unmask + start descriptor units → validation probe (auto-disable on failure).
 - **Disable pipeline**: reverse + idempotent — stop + mask units → helper
   `disable` → remove artifact → drop config state.
+- **Validation deadline**: `runValidateCmd` uses `spawnWithTimeout` and its shared
+  termination classification. A TERM-induced zero after timeout throws typed
+  `SpawnTimeoutError`; the enable pipeline maps it to `addon_validation_failed`
+  and auto-disables. Only a natural zero before termination is healthy. The
+  descriptor/dependency signatures and persisted schema are unchanged; proof is host-only.
 - **Crash-loop auto-disable**: `pollAddonCrashLoop` reads `NRestarts` per unit;
   `>= ADDON_CRASH_LOOP_RESTART_THRESHOLD` (3) masks the units and parks the
   add-on in `auto_disabled` (same rule as kiosk T5).
@@ -130,4 +135,3 @@ All add-on operations (install, enable, disable, refresh) MUST call
 `systemd-sysext` or `systemctl`. Read-only status queries are NOT gated. The
 manager's `enableAddon`/`disableAddon`/`pollAddonCrashLoop` all enforce this gate
 as their first step (`ADDON_UNAVAILABLE_ERROR`).
-

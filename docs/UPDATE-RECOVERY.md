@@ -1690,3 +1690,13 @@ the downloading-startup block is unchanged. Malformed present attempt UUIDs
 follow H2-R2's terminal-load path, while absent legacy identity stays valid.
 No guardian/systemd/orphan implementation, slot mutation or hardware qualification
 is introduced by this state-side change.
+# Bounded helper command outcomes [EXISTS — host-tested]
+
+`execFileP`, `run` and add-on validation use the shared bounded-child collector.
+A timeout/abort termination issued before exit cannot become successful CLI
+evidence, even when a TERM handler exits zero. Genuine zero observed before
+termination is retained during bounded output drainage. `run` keeps its existing
+`RunTimeoutError`/`RunAbortError`; exec errors retain output and code fields.
+Validation timeout maps to the existing `addon_validation_failed` auto-disable
+path. Stored formats, wire schemas and public runner parameters are unchanged.
+This boundary repair is host-tested, not an OS-install or board qualification.

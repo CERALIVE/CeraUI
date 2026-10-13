@@ -57,6 +57,10 @@ import {
 } from "../../helpers/addon-helper.ts";
 import { type ExecResult, execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
+import {
+	SpawnTimeoutError,
+	spawnWithTimeout,
+} from "../../helpers/spawn-policy.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import {
 	createMockAddonManagerDeps,
@@ -430,29 +434,20 @@ async function stageArtifact(tmpPath: string, destPath: string): Promise<void> {
 /**
  * Run the descriptor's validation command with a hard timeout. The command
  * string comes from the GPG-signed descriptor (G-trust root), so running it via
- * the device shell is sound; a hung probe is killed on the timeout → false.
+ * the device shell is sound; timeout rejects with typed termination evidence.
  */
 async function runValidateCmd(
 	cmd: string,
 	timeoutMs: number,
 ): Promise<boolean> {
 	try {
-		const proc = Bun.spawn(["sh", "-c", cmd], {
-			stdin: "ignore",
-			stdout: "ignore",
-			stderr: "ignore",
+		const result = await spawnWithTimeout(["sh", "-c", cmd], {
+			timeoutMs,
+			maxBuffer: 1024 * 1024,
 		});
-		const timer = setTimeout(() => {
-			try {
-				proc.kill();
-			} catch {
-				// best-effort: the process may have already exited
-			}
-		}, timeoutMs);
-		const code = await proc.exited;
-		clearTimeout(timer);
-		return code === 0;
-	} catch {
+		return result.exitCode === 0;
+	} catch (error) {
+		if (error instanceof SpawnTimeoutError) throw error;
 		return false;
 	}
 }
@@ -664,10 +659,12 @@ export async function enableAddon(
 			const timeoutMs = descriptor.validate.timeout
 				? descriptor.validate.timeout * 1000
 				: DEFAULT_VALIDATE_TIMEOUT_MS;
-			const healthy = await deps.runValidate(
-				descriptor.validate.cmd,
-				timeoutMs,
-			);
+			const healthy = await deps
+				.runValidate(descriptor.validate.cmd, timeoutMs)
+				.catch((error: unknown) => {
+					if (error instanceof SpawnTimeoutError) return false;
+					throw error;
+				});
 			if (!healthy) {
 				await autoDisableAddon(descriptor, deps, ADDON_VALIDATION_FAILED_ERROR);
 				return { success: false, error: ADDON_VALIDATION_FAILED_ERROR };

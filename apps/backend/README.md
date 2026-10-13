@@ -526,6 +526,7 @@ the same recovery identity without realm/classid support.
 
 - **Runtime**: Bun only. No Node-specific APIs (`node:path`, `node:os`, `node:fs/promises` are fine).
 - **Process spawning**: `Bun.spawn()` / `Bun.$` shell — not `node:child_process`.
+- **Bounded command outcomes**: `execFileP` and `run` reuse `bounded-spawn.ts`; a timeout/abort we issue is failure even if TERM exits zero. A genuine zero observed first survives later drainage cancellation. Partial output and the existing runner errors are retained. The add-on validator uses the same collector and maps timeout to validation failure/auto-disable. These are host-tested contracts, not board qualification.
 - **File I/O**: `Bun.file().text()` / `Bun.write()` — not `fs.readFileSync`.
 - **Preference files**: read/written via `helpers/config-loader.ts`; mixed runtime config validates safety-bearing fields through strict authority first, then salvages ordinary preferences from those same parsed bytes. Invalid authority closes config access/saves until a valid reload; it cannot silently erase a bond opt-out or enable modem/add-on admission.
 - **Authority files**: use the shared bounded stored-state/strict JSON reader, not the permissive preference loader. Setup opt-outs, idle, auth-token membership, modem recovery/FCC opt-in, add-on descriptors and qdisc ownership are authority, not caches.

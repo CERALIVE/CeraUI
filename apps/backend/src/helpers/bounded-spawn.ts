@@ -11,6 +11,8 @@ export class SpawnTimeoutError extends Error {
 	}
 }
 
+export class SpawnAbortError extends SpawnTimeoutError {}
+
 export interface SpawnWithTimeoutResult {
 	readonly exitCode: number;
 	readonly stdout: string;
@@ -22,6 +24,7 @@ export interface BoundedSpawnOptions {
 	readonly timeoutMs?: number;
 	readonly signal?: AbortSignal;
 	readonly env?: Readonly<Record<string, string | undefined>>;
+	readonly maxBuffer?: number;
 	readonly onExit?: (exitCode: number) => void;
 	readonly onSpawn?: (child: Subprocess<"ignore", "pipe", "pipe">) => void;
 	readonly scheduleTimeout?: (callback: () => void, delayMs: number) => Timer;
@@ -47,13 +50,20 @@ export async function collectBoundedChild(
 	const stderr = child.stderr.getReader();
 	const readers = [stdout, stderr];
 	let collecting = true;
+	const overflow = Promise.withResolvers<Error>();
 	const drain = async (reader: typeof stdout, key: "stdout" | "stderr") => {
 		const decoder = new TextDecoder();
+		let bytes = 0;
 		while (collecting) {
 			const chunk = await reader.read();
 			if (!collecting) break;
 			if (chunk.done) {
 				acc[key] += decoder.decode();
+				break;
+			}
+			bytes += chunk.value.byteLength;
+			if (opts.maxBuffer !== undefined && bytes > opts.maxBuffer) {
+				overflow.resolve(new Error(`${key} maxBuffer length exceeded`));
 				break;
 			}
 			acc[key] += decoder.decode(chunk.value, { stream: true });
@@ -111,17 +121,26 @@ export async function collectBoundedChild(
 				await Promise.race([drained, deadline.promise]);
 				return { kind: "exit", code } as const;
 			}),
-			deadline.promise.then(() => ({ kind: "deadline" }) as const),
+			deadline.promise.then(
+				(reason) => ({ kind: "deadline", reason }) as const,
+			),
+			overflow.promise.then((error) => ({ kind: "overflow", error }) as const),
 		]);
 		const successfulBeforeTermination = child.exitCode === 0;
-		if (outcome.kind === "deadline" && !successfulBeforeTermination) {
+		if (
+			outcome.kind === "overflow" ||
+			(outcome.kind === "deadline" && !successfulBeforeTermination)
+		) {
 			terminationIssued = true;
 			signal("SIGTERM");
 			await bounded(exited, BOUNDED_SPAWN_TERM_GRACE_MS);
 			signal("SIGKILL");
 			await bounded(exited, BOUNDED_SPAWN_REAP_MS);
 			await bounded(drained, BOUNDED_SPAWN_DRAIN_MS);
-			throw new SpawnTimeoutError(command, acc.stdout, acc.stderr);
+			if (outcome.kind === "overflow") throw outcome.error;
+			throw outcome.reason === "abort"
+				? new SpawnAbortError(command, acc.stdout, acc.stderr)
+				: new SpawnTimeoutError(command, acc.stdout, acc.stderr);
 		}
 		if (successfulBeforeTermination)
 			await bounded(drained, BOUNDED_SPAWN_DRAIN_MS);
