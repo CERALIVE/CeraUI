@@ -202,8 +202,11 @@ async function reconcileOne(
 	}
 
 	// (Re)materialisation is needed and is disruptive (a sysext refresh re-merges
-	// /usr). Defer while a stream is live; retry on the next boot.
-	if (deps.getIsStreaming()) {
+	// /usr). Defer without positive shared admission; retry on the next boot.
+	const { getDisruptiveActionDecision } = await import(
+		"../system/disruptive-action-runtime.ts"
+	);
+	if (deps.getIsStreaming() || !getDisruptiveActionDecision().allowed) {
 		deps.log(
 			`addon reconciler: ${id} deferred (stream live or unconfirmed); retry next boot`,
 		);
@@ -219,6 +222,16 @@ async function reconcileOne(
 
 	try {
 		await deps.fetchAndStage({ descriptor, osVersion, board });
+		if (deps.getIsStreaming() || !getDisruptiveActionDecision().allowed) {
+			deps.setState(
+				id,
+				buildState(prev, {
+					phase: "pending",
+					lastError: ADDON_REFRESH_DEFERRED_STREAMING,
+				}),
+			);
+			return;
+		}
 		await deps.refresh();
 	} catch (err) {
 		// 404 / network / verification failure: no usable artifact for this OS.
@@ -335,15 +348,15 @@ async function buildDefaultDeps(): Promise<ReconcilerDeps> {
 	// Dynamic import keeps the heavy streaming/config graph (and setup.json's
 	// required top-level load) out of the module's static import set, so tests
 	// that inject their own deps never trigger it.
-	const [liveness, config] = await Promise.all([
-		import("../system/stream-liveness-source.ts"),
+	const [admission, config] = await Promise.all([
+		import("../system/disruptive-action-runtime.ts"),
 		import("../config.ts"),
 	]);
 
 	return {
 		isRealDevice: () => isRealDevice(),
 		// A refresh re-merges /usr: unknown liveness defers it like a live stream.
-		getIsStreaming: () => !liveness.isStreamConfirmedIdle(),
+		getIsStreaming: () => !admission.getDisruptiveActionDecision().allowed,
 		getOsVersionId: readOsVersionId,
 		// `{board}` artifact targeting follows the live-resolved kind (not static
 		// setup.hw), so a mismatched image fetches the correct board's sysext.

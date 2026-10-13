@@ -69,6 +69,7 @@ import {
 import { getAddons, removeAddonState, setAddonState } from "../config.ts";
 import { getEffectiveHardware as getEffectiveHardwareImpl } from "../streaming/pipelines.ts";
 import { isRealDevice } from "../system/device-detection.ts";
+import { DisruptiveActionRefusedError } from "../system/disruptive-action-error.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import { aptClientTlsFor } from "./apt-client-tls.ts";
 
@@ -617,6 +618,11 @@ export async function enableAddon(
 	if (!(await deps.isRealDevice())) {
 		return { success: false, error: ADDON_UNAVAILABLE_ERROR };
 	}
+	const { getDisruptiveActionDecision } = await import(
+		"../system/disruptive-action-runtime.ts"
+	);
+	const admission = getDisruptiveActionDecision();
+	if (!admission.allowed) return { success: false, error: admission.reason };
 
 	// 1b. T23 — hardware ∩ deps ∩ conflicts gate, before any state mutation.
 	const compatError = addonCompatibilityError(
@@ -633,7 +639,12 @@ export async function enableAddon(
 	if (!hasSufficientSpace(freeBytes, descriptor.artifact.sizeInstalled)) {
 		return { success: false, error: ADDON_INSUFFICIENT_SPACE_ERROR };
 	}
+	const finalAdmission = getDisruptiveActionDecision();
+	if (!finalAdmission.allowed) {
+		return { success: false, error: finalAdmission.reason };
+	}
 
+	const previousState = deps.getState(id);
 	transition(id, "enabling", deps);
 	const tmpPath = tmpArtifactPath(id);
 	try {
@@ -644,9 +655,15 @@ export async function enableAddon(
 
 		// 4. verify (local sha256 fast-fail; helper is the authoritative gate).
 		await deps.verify(descriptor, tmpPath);
+		const stagingAdmission = getDisruptiveActionDecision();
+		if (!stagingAdmission.allowed)
+			throw new DisruptiveActionRefusedError(stagingAdmission.reason);
 
 		// 5. atomic rename into the sysext scan dir.
 		await deps.stage(tmpPath, extArtifactPath(id));
+		const activationAdmission = getDisruptiveActionDecision();
+		if (!activationAdmission.allowed)
+			throw new DisruptiveActionRefusedError(activationAdmission.reason);
 
 		// 6. privileged activation — re-verifies sig + sha256, refreshes sysext.
 		await deps.helperEnable(id);
@@ -676,6 +693,16 @@ export async function enableAddon(
 		});
 		return { success: true, phase: "enabled" };
 	} catch (err) {
+		if (err instanceof DisruptiveActionRefusedError) {
+			livePhases.set(
+				id,
+				previousState ? phaseFromState(previousState) : "disabled",
+			);
+			if (previousState) deps.setState(id, previousState);
+			else deps.removeState(id);
+			await deps.removeArtifact(tmpPath);
+			return { success: false, error: err.reason };
+		}
 		const message = err instanceof Error ? err.message : String(err);
 		logger.error(`addon ${id}: enable failed: ${message}`);
 		transition(id, "failed", deps, { lastError: message });
@@ -703,7 +730,13 @@ export async function disableAddon(
 	if (!(await deps.isRealDevice())) {
 		return { success: false, error: ADDON_UNAVAILABLE_ERROR };
 	}
+	const { getDisruptiveActionDecision } = await import(
+		"../system/disruptive-action-runtime.ts"
+	);
+	const admission = getDisruptiveActionDecision();
+	if (!admission.allowed) return { success: false, error: admission.reason };
 
+	const previousState = deps.getState(id);
 	transition(id, "disabling", deps);
 	try {
 		// stop + mask every descriptor unit (no-ops if already down).
@@ -712,6 +745,9 @@ export async function disableAddon(
 			await deps.systemctl(["mask", unit]);
 		}
 		// privileged teardown: helper stops/masks/disables, removes .raw, refresh.
+		const teardownAdmission = getDisruptiveActionDecision();
+		if (!teardownAdmission.allowed)
+			throw new DisruptiveActionRefusedError(teardownAdmission.reason);
 		await deps.helperDisable(id);
 		// remove the staged artifact (idempotent best-effort).
 		await deps.removeArtifact(extArtifactPath(id));
@@ -722,6 +758,15 @@ export async function disableAddon(
 		deps.removeState(id);
 		return { success: true, phase: "disabled" };
 	} catch (err) {
+		if (err instanceof DisruptiveActionRefusedError) {
+			livePhases.set(
+				id,
+				previousState ? phaseFromState(previousState) : "disabled",
+			);
+			if (previousState) deps.setState(id, previousState);
+			else deps.removeState(id);
+			return { success: false, error: err.reason };
+		}
 		const message = err instanceof Error ? err.message : String(err);
 		logger.error(`addon ${id}: disable failed: ${message}`);
 		transition(id, "failed", deps, { lastError: message });

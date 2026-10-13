@@ -58,6 +58,7 @@ bun run test:federation-abi
 - SSH start/stop/persist maps streaming, unknown-liveness and update/pending-disruption refusal tokens to `notifications.disruptiveActionRefused`; preserve separate operation keys and pessimistic device state. No client timer grants backend permission.
 - Update installation, restart and activation are separate conclusions. Use the update evidence contract: no restart from package success, no historical connection absence from null, no failed reachability or metered cost from unknown, and a terminal install result releases the takeover.
 - Draw a device conclusion only from evidence delivered over the current link after the action: a restored session, a failed hydrate or a retained snapshot proves nothing. A full status snapshot replaces, a partial push merges; an unresolved operator Stop keeps its band until the device settles it; dedupe on the field-level object the store preserves (START-LIFECYCLE, Contract 32).
+- Add-on/kiosk disruptive refusals reuse `notifications.disruptiveActionRefused`, revert controls and never claim emulated-mode unavailability. Admission inventory: `../../docs/START-LIFECYCLE.md` → Disruptive-action gate.
 - Preserve authentication ownership, lazy dialog loading and bounded persistent notifications; read the routed subsystem before editing.
 - Use the Paraglide facade; namespace activation owns boot/destination loading. Never import /eager in app code.
 - Never hand-edit CLI-managed shadcn primitives; retain accessibility, focus and clipped-disclosure behavior.

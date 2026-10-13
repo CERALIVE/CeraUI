@@ -696,7 +696,8 @@ idle alone does not clear `stop_failed`. See
 ## Disruptive-action gate [PARTIAL — host-tested, board re-drill owed]
 
 Reboot, power-off, the SSH start/stop/persist mutations and the remote
-`system.reboot` / `device.factoryReset` commands share one gate:
+`system.reboot` / `device.factoryReset` commands, add-on install/enable/update/remove,
+kiosk start/stop and post-boot/SIGUSR1 add-on refresh share one gate:
 `apps/backend/src/modules/system/disruptive-action-gate.ts`. It runs only on
 confirmed idle stream evidence with no interruptible update work. Anything else is
 refused with a typed reason (`streaming`, `stream_liveness_unknown` or
@@ -776,6 +777,32 @@ the unchanged wire `update_in_progress` still leaves update-specific Go Live/SSH
 reply copy as a presentation limitation, not proof that a package is installing.
 Console/physical power remains the last resort if systemd cannot settle or shut down.
 
+Add-on/kiosk entry admission precedes downloads, intent writes, unit operations
+and refresh. These paths resolve the runtime adapter lazily to avoid extending
+the modem/config/streaming initialization graph with an eager update-runtime edge.
+Add-on install also checks before pre-seeding userConfig, and kiosk
+checks before its synchronous intent prelude. The manager re-reads after free-space
+observation and before staging/activation or teardown refresh; the privileged
+helper wrapper re-reads after device detection immediately before sudo submission.
+A late refusal restores persisted add-on/kiosk intent and is returned as the same
+typed refusal, not install failure or disabled success. Add-on and kiosk controls
+render the existing localized `notifications.disruptiveActionRefused` text and
+revert the toggle. No catalog, wire schema or stored format is changed.
+
+The reconciler uses this same gate before fetching and again after staging. It
+keeps its existing non-blocking pending/deferred receipt; boot never waits for idle.
+Boot kiosk initialization only seeds/polls state and does not start or refresh an
+add-on. The closed remote-control registry contains no add-on/kiosk commands:
+unknown entries are rejected before dispatch, including a supplied dispatch port.
+Remote reboot continues to consume the same adapter as these local entries.
+
+This is cooperative admission, not an atomic exclusion lease with stream launch.
+Work already submitted while idle cannot be revoked: a late refusal may leave
+a downloaded/staged artifact or earlier unit effects, while preventing the new
+refresh and restoring intent. A stream or privileged actor can still change state
+after final observation/dispatch; the external root helper is not governed by a
+backend-only decision. No hardware or uninterrupted-transaction proof is claimed.
+
 Stream liveness is tri-state. `stream-liveness-source.ts` is the single
 composition that consumers read (lane B-core's factory accessor replaces this file
 only). Until then it reports `streaming` when the live flag is set, and `idle` only
@@ -788,8 +815,9 @@ projection, an unreadable sentinel, or any other lifecycle state is `unknown`.
 The same `isStreamConfirmedIdle()` reading replaces the false-default live flag in
 the update orchestrator's `isStreamLive` default (package install, OS staging
 admission, timed activation), idle-schedule detection, the legacy package
-start/check/size paths, the OS-stage token and runner block check, and the add-on
-sysext refresh deferral. Unknown liveness therefore defers those effects; their
+start/check/size paths, and the OS-stage token and runner block check.
+Add-on refresh additionally reads the whole disruptive-action gate above.
+Unknown liveness therefore defers those effects; their
 existing refusal reasons (`streaming`/`stream_active`, add-on
 `stream`-deferral) cover "not confirmed idle" without a wire change.
 

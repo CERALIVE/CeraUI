@@ -42,6 +42,9 @@ import {
 	PowerSubmissionError,
 	resetDisruptiveActionReservationForTest,
 } from "../../modules/system/disruptive-action-reservation.ts";
+import { DisruptiveActionRefusedError } from "../../modules/system/disruptive-action-error.ts";
+import { notifyDisruptiveActionRefused } from "../../modules/system/disruptive-action-refusal.ts";
+import { getDisruptiveActionDecision } from "../../modules/system/disruptive-action-runtime.ts";
 import {
 	getKioskStatus,
 	isRealDevice,
@@ -418,7 +421,13 @@ export const kioskStartProcedure = authedProcedure
 		if (!shouldUseMocks() && !(await isRealDevice())) {
 			return { success: false, error: KIOSK_UNAVAILABLE_ERROR };
 		}
-		const status = await kioskStart(resolveActiveKioskDeps());
+		let status: ReturnType<typeof getKioskStatus>;
+		try {
+			status = await kioskStart(resolveActiveKioskDeps());
+		} catch (error) {
+			if (!(error instanceof DisruptiveActionRefusedError)) throw error;
+			return { success: false, error: error.reason };
+		}
 		return {
 			success: true,
 			applied: { enabled: status.enabled, state: status.state },
@@ -435,7 +444,13 @@ export const kioskStopProcedure = authedProcedure
 		if (!shouldUseMocks() && !(await isRealDevice())) {
 			return { success: false, error: KIOSK_UNAVAILABLE_ERROR };
 		}
-		const status = await kioskStop(resolveActiveKioskDeps());
+		let status: ReturnType<typeof getKioskStatus>;
+		try {
+			status = await kioskStop(resolveActiveKioskDeps());
+		} catch (error) {
+			if (!(error instanceof DisruptiveActionRefusedError)) throw error;
+			return { success: false, error: error.reason };
+		}
 		return {
 			success: true,
 			applied: { enabled: status.enabled, state: status.state },

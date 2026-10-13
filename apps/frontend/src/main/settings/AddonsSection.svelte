@@ -176,6 +176,9 @@ const ERROR_COPY: Record<string, string> = {
 
 function humanError(code: string | undefined): string | undefined {
 	if (!code) return undefined;
+	if (['streaming', 'stream_liveness_unknown', 'update_in_progress'].includes(code)) {
+		return m["notifications.disruptiveActionRefused"]();
+	}
 	return ERROR_COPY[code] ?? code;
 }
 

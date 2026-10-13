@@ -39,6 +39,10 @@ import {
 } from "../addons/manager.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import {
+	DisruptiveActionRefusedError,
+	isDisruptiveActionRefusalReason,
+} from "./disruptive-action-error.ts";
 import { parseOsStageSystemdProperties } from "./update-orchestrator/os-stage-systemd.ts";
 /* Kiosk toggle state machine (DC-2 — docs/KIOSK_STATE_MACHINE.md) */
 import {
@@ -394,7 +398,7 @@ export function stopKioskPolling(): void {
 }
 
 /**
- * T1 — toggle-on. Synchronously (before the first await) persist
+ * T1 — toggle-on. After lazy admission resolves, synchronously persist
  * `kiosk_enabled = true` and snap to `enabled-stopped`, then enable the
  * cog-display add-on (manager owns the sysext + unit lifecycle) and begin
  * polling. The synchronous prelude lets RPC handlers read the committed state
@@ -403,6 +407,17 @@ export function stopKioskPolling(): void {
 export async function kioskStart(
 	deps: KioskDeps = activeDeps,
 ): Promise<KioskStatus> {
+	const { getDisruptiveActionDecision } = await import(
+		"./disruptive-action-runtime.ts"
+	);
+	const admission = getDisruptiveActionDecision();
+	if (!admission.allowed)
+		throw new DisruptiveActionRefusedError(admission.reason);
+	const previousIntent = {
+		enabled: getConfig().kiosk_enabled,
+		lastState: getConfig().kiosk_last_state,
+		liveState: kioskLiveState,
+	};
 	getConfig().kiosk_enabled = true;
 	applyState("enabled-stopped", deps);
 
@@ -410,6 +425,14 @@ export async function kioskStart(
 	if (descriptor) {
 		const result = await deps.enableAddon(descriptor);
 		if (!result.success) {
+			if (isDisruptiveActionRefusalReason(result.error)) {
+				getConfig().kiosk_enabled = previousIntent.enabled;
+				getConfig().kiosk_last_state = previousIntent.lastState;
+				kioskLiveState = previousIntent.liveState;
+				saveConfig();
+				deps.broadcast(getKioskStatus());
+				throw new DisruptiveActionRefusedError(result.error);
+			}
 			logger.error(`kiosk: cog-display enable failed: ${result.error}`);
 		}
 	} else {
@@ -429,6 +452,17 @@ export async function kioskStart(
 export async function kioskStop(
 	deps: KioskDeps = activeDeps,
 ): Promise<KioskStatus> {
+	const { getDisruptiveActionDecision } = await import(
+		"./disruptive-action-runtime.ts"
+	);
+	const admission = getDisruptiveActionDecision();
+	if (!admission.allowed)
+		throw new DisruptiveActionRefusedError(admission.reason);
+	const previousIntent = {
+		enabled: getConfig().kiosk_enabled,
+		lastState: getConfig().kiosk_last_state,
+		liveState: kioskLiveState,
+	};
 	getConfig().kiosk_enabled = false;
 	applyState("disabled", deps);
 	stopKioskPolling();
@@ -437,6 +471,15 @@ export async function kioskStop(
 	if (descriptor) {
 		const result = await deps.disableAddon(descriptor);
 		if (!result.success) {
+			if (isDisruptiveActionRefusalReason(result.error)) {
+				getConfig().kiosk_enabled = previousIntent.enabled;
+				getConfig().kiosk_last_state = previousIntent.lastState;
+				kioskLiveState = previousIntent.liveState;
+				saveConfig();
+				deps.broadcast(getKioskStatus());
+				if (previousIntent.enabled) startKioskPolling(deps);
+				throw new DisruptiveActionRefusedError(result.error);
+			}
 			logger.error(`kiosk: cog-display disable failed: ${result.error}`);
 		}
 	} else {

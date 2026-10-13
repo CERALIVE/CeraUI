@@ -96,6 +96,17 @@ async function invokeHelper(
 	if (!(await deps.isRealDevice())) {
 		throw new Error(ADDON_UNAVAILABLE_ERROR);
 	}
+	if (args[0] !== "status") {
+		const { getDisruptiveActionDecision } = await import(
+			"../modules/system/disruptive-action-runtime.ts"
+		);
+		const { DisruptiveActionRefusedError } = await import(
+			"../modules/system/disruptive-action-error.ts"
+		);
+		const admission = getDisruptiveActionDecision();
+		if (!admission.allowed)
+			throw new DisruptiveActionRefusedError(admission.reason);
+	}
 	const { stdout } = await deps.exec(SUDO, [HELPER_BIN, ...args]);
 	return stdout;
 }

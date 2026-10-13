@@ -56,6 +56,11 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
   unmask + start descriptor units → validation probe (auto-disable on failure).
 - **Disable pipeline**: reverse + idempotent — stop + mask units → helper
   `disable` → remove artifact → drop config state.
+- **Disruptive admission**: manager and operator prelude paths consume the
+  shared runtime adapter; refusal preserves intent and uses the existing typed
+  reason. The privileged wrapper checks again before submission. The sole gated
+  action inventory, late-refusal limits and host-proof boundary live in
+  [START-LIFECYCLE.md](../START-LIFECYCLE.md#disruptive-action-gate-partial--host-tested-board-re-drill-owed).
 - **Validation deadline**: `runValidateCmd` uses `spawnWithTimeout` and its shared
   termination classification. A TERM-induced zero after timeout throws typed
   `SpawnTimeoutError`; the enable pipeline maps it to `addon_validation_failed`
@@ -88,8 +93,10 @@ never throws and self-serialises (a concurrent call is a no-op).
 - **No compatible artifact** (404 / network / descriptor `compatibleOsVersions`
   excludes the live OS): set `phase: pending` + `lastError:
   addon_not_available_for_os_version`. Boot is unaffected.
-- **Live stream**: a disruptive refresh is deferred — set `phase: pending` +
+- **No shared admission**: a disruptive refresh is deferred — set `phase: pending` +
   `lastError: addon_refresh_deferred_streaming`; retried on the next boot.
+  Unknown stream evidence and interruptible updates/maintenance also defer;
+  admission is re-read after awaited staging before refresh.
 - Triggered from `main.ts` at startup (non-blocking) and re-pokable via SIGUSR1
   from the `ceralive-addon-reconciler.service` oneshot (deployment/), which is
   deliberately NOT wired into any rollback/healthcheck target.

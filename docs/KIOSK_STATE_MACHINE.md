@@ -45,6 +45,13 @@ stateDiagram-v2
 
 ## Transitions
 
+Operator transitions require shared disruptive-action admission before the
+synchronous intent prelude. A refusal leaves the current toggle/state intact;
+an admission lost during awaited add-on work restores persisted intent and
+surfaces the same localized refusal, not an emulated-device or disabled claim.
+The canonical inventory and non-atomic late-effect limits are in
+[Disruptive-action gate](START-LIFECYCLE.md#disruptive-action-gate-partial--host-tested-board-re-drill-owed).
+
 Six transitions. Each entry lists the trigger, the systemd actions the backend takes, and the resulting state.
 
 ### T1: `toggle-on`

@@ -127,6 +127,39 @@ afterEach(() => {
 });
 
 describe("OnDeviceDisplaySection — kiosk enable (kioskStart)", () => {
+	for (const error of [
+		"streaming",
+		"stream_liveness_unknown",
+		"update_in_progress",
+	]) {
+		for (const enabled of [false, true]) {
+			it(`renders disruptive refusal ${error} for kiosk ${enabled ? "stop" : "start"} without an unavailable claim`, async () => {
+				// Given a typed device refusal and the prior enabled state.
+				seedStatus({
+					enabled,
+					state: enabled ? "enabled-running" : "disabled",
+				});
+				(enabled ? rpcMocks.kioskStop : rpcMocks.kioskStart).mockResolvedValue({
+					success: false,
+					error,
+				});
+				render(OnDeviceDisplaySection, { props: { open: true } });
+				await waitFor(() => expect(enableSwitch().disabled).toBe(false));
+				// When the operator toggles.
+				await fireEvent.click(enableSwitch());
+				// Then the same refusal copy is shown and the prior intent survives.
+				await waitFor(() =>
+					expect(toastError).toHaveBeenCalledWith(
+						m["notifications.disruptiveActionRefused"](),
+					),
+				);
+				expect(enableSwitch().getAttribute("aria-checked")).toBe(
+					String(enabled),
+				);
+				expect(screen.queryByTestId("kiosk-unavailable")).toBeNull();
+			});
+		}
+	}
 	it("shows in-flight (switch disabled), blocks re-entry, then applies on success", async () => {
 		const d = deferred<{
 			success: boolean;
@@ -175,7 +208,7 @@ describe("OnDeviceDisplaySection — kiosk enable (kioskStart)", () => {
 
 		// Calm banner (NOT an error toast), and the switch reverts to off.
 		await screen.findByTestId("kiosk-unavailable");
-		expect(toastError).not.toHaveBeenCalled();
+		expect(toastError).toHaveBeenCalledTimes(0);
 		await waitFor(() =>
 			expect(enableSwitch().getAttribute("aria-checked")).toBe("false"),
 		);
@@ -248,7 +281,7 @@ describe("OnDeviceDisplaySection — kiosk configure (kioskConfigure)", () => {
 		await fireEvent.click(touch);
 
 		await screen.findByTestId("kiosk-unavailable");
-		expect(toastError).not.toHaveBeenCalled();
+		expect(toastError).toHaveBeenCalledTimes(0);
 	});
 });
 
@@ -299,7 +332,7 @@ describe("OnDeviceDisplaySection — on-screen keyboard (kioskOsk)", () => {
 
 		await fireEvent.click(showBtn);
 		await screen.findByTestId("kiosk-unavailable");
-		expect(toastError).not.toHaveBeenCalled();
+		expect(toastError).toHaveBeenCalledTimes(0);
 
 		// Re-entry released → a second signal dispatches again.
 		await waitFor(() => expect(showBtn.disabled).toBe(false));

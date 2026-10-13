@@ -38,8 +38,13 @@ import {
 	getAddonPhase,
 	toAddonState,
 } from "../../modules/addons/manager.ts";
-import { getAddons, setAddonState } from "../../modules/config.ts";
+import {
+	getAddons,
+	removeAddonState,
+	setAddonState,
+} from "../../modules/config.ts";
 import { getEffectiveHardware as getEffectiveHardwareImpl } from "../../modules/streaming/pipelines.ts";
+import { isDisruptiveActionRefusalReason } from "../../modules/system/disruptive-action-error.ts";
 import { isRealDevice } from "../../modules/system/kiosk.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
@@ -94,6 +99,7 @@ export type AddonProcedureDeps = {
 	enableAddon: (descriptor: AddonDescriptor) => Promise<AddonOpResult>;
 	disableAddon: (descriptor: AddonDescriptor) => Promise<AddonOpResult>;
 	setAddonState: (id: string, state: AddonState) => void;
+	removeAddonState: (id: string) => void;
 };
 
 async function readBakedDescriptors(): Promise<AddonDescriptor[]> {
@@ -126,6 +132,7 @@ const defaultAddonProcedureDeps: AddonProcedureDeps = {
 	enableAddon: (descriptor) => enableAddon(descriptor),
 	disableAddon: (descriptor) => disableAddon(descriptor),
 	setAddonState: (id, state) => setAddonState(id, state),
+	removeAddonState: (id) => removeAddonState(id),
 };
 
 let activeDeps: AddonProcedureDeps = defaultAddonProcedureDeps;
@@ -196,11 +203,26 @@ export const installAddonProcedure = authedProcedure
 		if (compatError) {
 			return { success: false, error: compatError };
 		}
+		const { getDisruptiveActionDecision } = await import(
+			"../../modules/system/disruptive-action-runtime.ts"
+		);
+		const admission = getDisruptiveActionDecision();
+		if (!admission.allowed) return { success: false, error: admission.reason };
+		const previousState = deps.getAddonState(input.id);
 		if (input.userConfig !== undefined) {
-			const base = deps.getAddonState(input.id) ?? toAddonState("disabled");
+			const base = previousState ?? toAddonState("disabled");
 			deps.setAddonState(input.id, { ...base, userConfig: input.userConfig });
 		}
-		return deps.enableAddon(descriptor);
+		const result = await deps.enableAddon(descriptor);
+		if (
+			!result.success &&
+			input.userConfig !== undefined &&
+			isDisruptiveActionRefusalReason(result.error)
+		) {
+			if (previousState) deps.setAddonState(input.id, previousState);
+			else deps.removeAddonState(input.id);
+		}
+		return result;
 	});
 
 /**
