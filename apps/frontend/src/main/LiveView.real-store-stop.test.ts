@@ -22,10 +22,12 @@ import {
 	vi,
 } from "vitest";
 
+import { recordOperationPhases } from "../tests/fixtures/operation-phase-log.svelte";
 import {
 	band,
 	button,
 	controls,
+	deferred,
 	FAILED,
 	header,
 	installJsdomShims,
@@ -119,6 +121,7 @@ import {
 	initSubscriptions,
 	resetState,
 } from "$lib/rpc/subscriptions.svelte";
+import { operatorStopUnresolved } from "$lib/streaming/unresolved-stream-actions.svelte";
 
 import LiveView from "./LiveView.svelte";
 
@@ -240,6 +243,163 @@ describe("R2: a lost Stop reply keeps the unresolved Stop reachable", () => {
 		expect(controls(container)).toEqual([
 			{ label: "Start Stream", disabled: false },
 		]);
+	});
+});
+
+const STOPPING_AND_START = [
+	{ label: "Stopping...", disabled: true },
+	{ label: "Start Stream", disabled: false },
+];
+
+/**
+ * PRE4-C C4-1: the Stop reply is lost after `stopping`, the operator navigates
+ * away, the reconnect hydrate delivers idle while LiveView is unmounted, the
+ * link drops again and the next hydrate FAILS, retaining that idle. Back on
+ * Live, the claim is unresolved and the held idle belongs to an older link.
+ */
+async function returnOverRetainedIdle(): Promise<HTMLElement> {
+	const first = render(LiveView);
+	await loseTheStopReplyAfterStopping(first.container);
+	first.unmount();
+	await restoreLink(transport, getStatusRpc, {
+		status: { is_streaming: false, stream_lifecycle: "idle" },
+	});
+	dropLink(transport);
+	await restoreLink(transport, getStatusRpc, { fails: true });
+	expect(getStatus()?.stream_lifecycle).toBe("idle");
+
+	const { container } = render(LiveView);
+	expect(band(container)).not.toBeNull();
+	expect(controls(container)).toEqual(STOP_AND_START);
+	expect(header(container)).not.toContain("Not streaming");
+	return container;
+}
+
+describe("F4 C4-1: a retry is confirmed only by idle delivered after it over the current link", () => {
+	it("a retained idle cannot confirm the retry or swallow its stop_failed", async () => {
+		const container = await returnOverRetainedIdle();
+		const log = recordOperationPhases(KEY);
+		const reply = deferred<unknown>();
+		stop.mockReturnValueOnce(reply.promise as never);
+
+		await fireEvent.click(button(container, "Stop Stream"));
+		flushSync();
+		expect(stop).toHaveBeenCalledTimes(2);
+		expect(getOperationPhase(KEY)).toBe("pending");
+		expect(band(container)).not.toBeNull();
+		expect(controls(container)).toEqual(STOPPING_AND_START);
+		expect(header(container)).not.toContain("Not streaming");
+
+		reply.resolve({
+			result: "stop_failed",
+			reason: "stop_timeout",
+			success: false,
+		});
+		await waitFor(() => expect(getOperationPhase(KEY)).toBe("failed"));
+		flushSync();
+		expect(band(container)?.textContent).toContain(FAILED);
+		expect(controls(container)).toEqual(STOP_AND_START);
+		expect(header(container)).not.toContain("Not streaming");
+		expect(log.phases).not.toContain("confirmed");
+		expect(log.phases.slice(-2)).toEqual(["pending", "failed"]);
+		expect(stop).toHaveBeenCalledTimes(2);
+		log.stop();
+	});
+
+	it("the retry is confirmed by an idle delivered after it on the current link", async () => {
+		const container = await returnOverRetainedIdle();
+		const log = recordOperationPhases(KEY);
+		const reply = deferred<unknown>();
+		stop.mockReturnValueOnce(reply.promise as never);
+
+		await fireEvent.click(button(container, "Stop Stream"));
+		flushSync();
+		expect(getOperationPhase(KEY)).toBe("pending");
+
+		push(transport, { is_streaming: false, stream_lifecycle: "idle" });
+		expect(getOperationPhase(KEY)).toBe("confirmed");
+		expect(band(container)).toBeNull();
+		expect(header(container)).toContain("Not streaming");
+		expect(controls(container)).toEqual([
+			{ label: "Start Stream", disabled: false },
+		]);
+
+		reply.resolve({ result: "stopped", success: true });
+		await reply.promise;
+		flushSync();
+		expect(getOperationPhase(KEY)).toBe("confirmed");
+		expect(log.phases.slice(-2)).toEqual(["pending", "confirmed"]);
+		expect(stop).toHaveBeenCalledTimes(2);
+		log.stop();
+	});
+
+	it("stop_failed -> Stop -> stopping -> ok -> idle: confirmed exactly once", async () => {
+		const { container } = render(LiveView);
+		push(transport, { is_streaming: false, stream_lifecycle: "stop_failed" });
+		const log = recordOperationPhases(KEY);
+		const reply = deferred<unknown>();
+		stop.mockReturnValueOnce(reply.promise as never);
+
+		await fireEvent.click(button(container, "Stop Stream"));
+		push(transport, { stream_lifecycle: "stopping" });
+		expect(operatorStopUnresolved()).toBe(true);
+		reply.resolve({ result: "stopped", success: true });
+		// The acknowledgement must have closed the claim BEFORE the idle arrives,
+		// or this cell only replays the idle-then-reply order.
+		await waitFor(() => expect(operatorStopUnresolved()).toBe(false));
+		flushSync();
+		// The acknowledgement ends the claim; only the idle commit confirms.
+		expect(getOperationPhase(KEY)).toBe("pending");
+		expect(controls(container)).toEqual(STOPPING_AND_START);
+
+		push(transport, { stream_lifecycle: "idle" });
+		expect(getOperationPhase(KEY)).toBe("confirmed");
+		expect(band(container)).toBeNull();
+		expect(header(container)).toContain("Not streaming");
+		expect(controls(container)).toEqual([
+			{ label: "Start Stream", disabled: false },
+		]);
+		sweepOperations(Date.now() + 4_001);
+		flushSync();
+		expect(log.phases).toEqual(["idle", "pending", "confirmed", "idle"]);
+		expect(stop).toHaveBeenCalledTimes(1);
+		log.stop();
+	});
+
+	it("is_streaming true after the press hides the band but confirms nothing", async () => {
+		const { container } = render(LiveView);
+		push(transport, { is_streaming: false, stream_lifecycle: "stop_failed" });
+		stop.mockReturnValueOnce(new Promise(() => {}) as never);
+
+		await fireEvent.click(button(container, "Stop Stream"));
+		push(transport, { is_streaming: true, stream_lifecycle: "streaming" });
+		expect(band(container)).toBeNull();
+		expect(getOperationPhase(KEY)).toBe("pending");
+		expect(stop).toHaveBeenCalledTimes(1);
+	});
+
+	it("a full snapshot without a lifecycle after the press does not confirm it", async () => {
+		const { container } = render(LiveView);
+		push(transport, { is_streaming: false, stream_lifecycle: "stop_failed" });
+		const reply = deferred<unknown>();
+		stop.mockReturnValueOnce(reply.promise as never);
+
+		await fireEvent.click(button(container, "Stop Stream"));
+		ingestPulledStatus({ is_streaming: false });
+		flushSync();
+		expect(getStatus()?.stream_lifecycle).toBeUndefined();
+		expect(getOperationPhase(KEY)).toBe("pending");
+		expect(controls(container)).toEqual(STOPPING_AND_START);
+
+		reply.resolve({
+			result: "stop_failed",
+			reason: "stop_timeout",
+			success: false,
+		});
+		await waitFor(() => expect(getOperationPhase(KEY)).toBe("failed"));
+		flushSync();
+		expect(band(container)?.textContent).toContain(FAILED);
+		expect(controls(container)).toEqual(STOP_AND_START);
 	});
 });
 

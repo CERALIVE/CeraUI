@@ -329,7 +329,7 @@
 	"general.updateReasonAlreadyUpdating": "An update is already running.",
 	"general.updateReasonCheckUnavailable": "The package list couldn't be refreshed. Check the device's internet connection, then try again.",
 	"general.updateReasonDisabled": "Software updates are turned off on this device. They're managed outside CeraUI.",
-	"general.updateReasonStreaming": "A stream is running or its state is unconfirmed. Press Stop to confirm the stream is stopped before installing an update.",
+	"general.updateReasonStreaming": "Stop the stream before installing an update.",
 	"general.updateReasonUnknown": "The device refused the update without giving a reason.",
 	"general.updateStartRefused": "The device didn't start the update",
 	"general.updates": "Updates",
@@ -2677,5 +2677,6 @@
 	"settings.updates.connection.unusable": "Not usable for updates",
 	"settings.updates.cellular.pendingBodyMetered": "No connection known to be unmetered is available. Downloading {version} transfers about {size} over a metered connection or one whose cost is unknown.",
 	"settings.updates.layer.withheldBand": "Not included in this update",
-	"settings.updates.credentials.unusableTitle": "The device's update certificate could not be used"
+	"settings.updates.credentials.unusableTitle": "The device's update certificate could not be used",
+	"general.updateReasonStreamingUnconfirmed": "A stream is running or its state is unconfirmed. Press Stop to confirm the stream is stopped before installing an update."
 }

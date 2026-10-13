@@ -329,7 +329,7 @@
 	"general.updateReasonAlreadyUpdating": "Es läuft bereits ein Update.",
 	"general.updateReasonCheckUnavailable": "Die Paketliste konnte nicht aktualisiert werden. Prüfe die Internetverbindung des Geräts und versuche es erneut.",
 	"general.updateReasonDisabled": "Software-Updates sind auf diesem Gerät deaktiviert. Sie werden außerhalb von CeraUI verwaltet.",
-	"general.updateReasonStreaming": "Ein Stream läuft oder sein Zustand ist unbestätigt. Drücke Stopp, um vor der Update-Installation zu bestätigen, dass der Stream beendet ist.",
+	"general.updateReasonStreaming": "Beende den Stream, bevor du ein Update installierst.",
 	"general.updateReasonUnknown": "Das Gerät hat das Update ohne Angabe eines Grundes abgelehnt.",
 	"general.updateStartRefused": "Das Gerät hat das Update nicht gestartet",
 	"general.updates": "Updates",
@@ -2677,5 +2677,6 @@
 	"settings.updates.connection.unusable": "Für Updates nicht nutzbar",
 	"settings.updates.cellular.pendingBodyMetered": "Es ist keine Verbindung verfügbar, die bekanntermaßen kein Datenlimit hat. Das Herunterladen von {version} überträgt etwa {size} über eine getaktete Verbindung oder eine mit unbekannten Kosten.",
 	"settings.updates.layer.withheldBand": "Nicht in diesem Update enthalten",
-	"settings.updates.credentials.unusableTitle": "Das Update-Zertifikat des Geräts konnte nicht verwendet werden"
+	"settings.updates.credentials.unusableTitle": "Das Update-Zertifikat des Geräts konnte nicht verwendet werden",
+	"general.updateReasonStreamingUnconfirmed": "Ein Stream läuft oder sein Zustand ist unbestätigt. Drücke Stopp, um vor der Update-Installation zu bestätigen, dass der Stream beendet ist."
 }

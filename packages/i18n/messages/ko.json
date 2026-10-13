@@ -329,7 +329,7 @@
 	"general.updateReasonAlreadyUpdating": "이미 업데이트가 진행 중입니다.",
 	"general.updateReasonCheckUnavailable": "패키지 목록을 새로 고치지 못했습니다. 기기의 인터넷 연결을 확인한 뒤 다시 시도하세요.",
 	"general.updateReasonDisabled": "이 기기에서는 소프트웨어 업데이트가 꺼져 있습니다. CeraUI 외부에서 관리됩니다.",
-	"general.updateReasonStreaming": "스트림이 실행 중이거나 상태가 확인되지 않았습니다. 업데이트를 설치하기 전에 중지를 눌러 스트림이 중지되었는지 확인하세요.",
+	"general.updateReasonStreaming": "업데이트를 설치하기 전에 스트림을 중지하세요.",
 	"general.updateReasonUnknown": "기기가 이유를 밝히지 않고 업데이트를 거부했습니다.",
 	"general.updateStartRefused": "기기가 업데이트를 시작하지 않았습니다",
 	"general.updates": "업데이트",
@@ -2632,5 +2632,6 @@
 	"settings.updates.connection.unusable": "업데이트에 사용할 수 없음",
 	"settings.updates.cellular.pendingBodyMetered": "데이터 무제한으로 확인된 연결이 없습니다. {version}을(를) 다운로드하면 데이터 제한이 있거나 비용을 알 수 없는 연결로 약 {size}를 전송합니다.",
 	"settings.updates.layer.withheldBand": "이번 업데이트에 포함되지 않음",
-	"settings.updates.credentials.unusableTitle": "기기의 업데이트 인증서를 사용할 수 없습니다"
+	"settings.updates.credentials.unusableTitle": "기기의 업데이트 인증서를 사용할 수 없습니다",
+	"general.updateReasonStreamingUnconfirmed": "스트림이 실행 중이거나 상태가 확인되지 않았습니다. 업데이트를 설치하기 전에 중지를 눌러 스트림이 중지되었는지 확인하세요."
 }

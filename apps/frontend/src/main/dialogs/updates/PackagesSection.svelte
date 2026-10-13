@@ -87,7 +87,7 @@ function startRefusalCopy(reason: string | undefined): string {
 		case 'updates_disabled':
 			return m["general.updateReasonDisabled"]();
 		case 'streaming':
-			return m["general.updateReasonStreaming"]();
+			return m["general.updateReasonStreamingUnconfirmed"]();
 		case 'already_updating':
 			return m["general.updateReasonAlreadyUpdating"]();
 		case 'check_unavailable':

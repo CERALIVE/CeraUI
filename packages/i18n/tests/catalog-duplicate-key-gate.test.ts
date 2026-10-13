@@ -30,12 +30,22 @@ import { ALL_LOCALES } from "./helpers/catalog.js";
 
 const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+/** The JSON `number` production and the three literals, anchored at a position. */
+const PRIMITIVE_RE =
+	/-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null/y;
+
 /**
  * Parse `raw` and return a dotted path for every key that appears more than once
  * IN THE SAME OBJECT. Throws on malformed input so a truncated or corrupt
  * catalog fails loudly rather than reporting an empty (passing) duplicate set.
+ *
+ * Strict on purpose: the whole document must be valid JSON (the standard parser
+ * accepts it before any duplicate is counted), every member name is decoded by
+ * the standard JSON string decoder, so `"\u0061"` IS `"a"`, and a primitive must
+ * match the JSON grammar exactly.
  */
 function duplicateKeysIn(raw: string, locale: string): string[] {
+	JSON.parse(raw);
 	const duplicates: string[] = [];
 	let i = 0;
 	const at = () => raw[i];
@@ -45,19 +55,26 @@ function duplicateKeysIn(raw: string, locale: string): string[] {
 		while (i < raw.length && isWs(raw[i])) i++;
 	};
 	function parseString(): string {
-		// Caller guarantees raw[i] === '"'.
-		i++;
-		let out = "";
+		if (at() !== '"') throw new Error(`${locale}: expected '"' at byte ${i}`);
+		const start = i++;
 		while (i < raw.length) {
 			const c = raw[i++];
-			if (c === '"') return out;
-			if (c === "\\") {
-				out += raw[i++];
-			} else {
-				out += c;
-			}
+			if (c === '"') return JSON.parse(raw.slice(start, i)) as string;
+			// Skip the escaped character; the decoder above validates the escape.
+			if (c === "\\") i++;
 		}
 		throw new Error(`${locale}: unterminated string at byte ${i}`);
+	}
+	function parsePrimitive(): void {
+		PRIMITIVE_RE.lastIndex = i;
+		const match = PRIMITIVE_RE.exec(raw);
+		const end = i + (match?.[0].length ?? 0);
+		if (
+			match === null ||
+			(end < raw.length && !/[\s,}\]]/.test(raw[end] ?? ""))
+		)
+			throw new Error(`${locale}: invalid value at byte ${i}`);
+		i = end;
 	}
 	function parseValue(path: string): void {
 		skipWs();
@@ -74,9 +91,8 @@ function duplicateKeysIn(raw: string, locale: string): string[] {
 			parseString();
 			return;
 		}
-		// number | true | false | null — consumed verbatim, no key semantics.
-		while (i < raw.length && !",}]".includes(raw[i] ?? "") && !isWs(raw[i]))
-			i++;
+		// number | true | false | null: no key semantics, grammar only.
+		parsePrimitive();
 	}
 	function parseObject(path: string): void {
 		i++; // consume {
@@ -145,6 +161,46 @@ describe("catalog duplicate-key gate", () => {
 		const doubled = '{"a":{"b":"x","b":"y"}}';
 		expect(Object.keys(JSON.parse(doubled))).toEqual(["a"]);
 		expect(duplicateKeysIn(doubled, "probe")).toEqual(["a.b"]);
+	});
+
+	it("decodes escaped member names before comparing them", () => {
+		// `\u0061` IS `a`: JSON.parse keeps one key, so the scan must see two.
+		const escaped = '{"a":1,"\\u0061":2}';
+		expect(Object.keys(JSON.parse(escaped))).toEqual(["a"]);
+		expect(duplicateKeysIn(escaped, "probe")).toEqual(["a"]);
+		expect(duplicateKeysIn('{"x":{"é":1,"\\u00e9":2}}', "probe")).toEqual([
+			"x.é",
+		]);
+		expect(duplicateKeysIn('{"a\\"b":1,"a\\u0022b":2}', "probe")).toEqual([
+			'a"b',
+		]);
+		// Different decoded names are not duplicates.
+		expect(duplicateKeysIn('{"a":1,"\\u0062":2}', "probe")).toEqual([]);
+	});
+
+	it("rejects a malformed document instead of reporting no duplicate", () => {
+		for (const malformed of [
+			'{"a":nonsense}',
+			'{"a":tru}',
+			'{"a":nullx}',
+			'{"a":01}',
+			'{"a":1.}',
+			'{"a":-}',
+			'{"a":"\\x"}',
+			'{"a":"\\u00g0"}',
+			'{"a":1,}',
+			'{"a":1}}',
+			"",
+		]) {
+			expect(() => duplicateKeysIn(malformed, "probe")).toThrow();
+		}
+		// Valid primitives still read.
+		expect(
+			duplicateKeysIn(
+				'{"t":true,"f":false,"n":null,"x":-1.5e+3,"z":0,"l":[1, 2]}',
+				"probe",
+			),
+		).toEqual([]);
 	});
 
 	for (const locale of ALL_LOCALES) {

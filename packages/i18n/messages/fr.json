@@ -329,7 +329,7 @@
 	"general.updateReasonAlreadyUpdating": "Une mise à jour est déjà en cours.",
 	"general.updateReasonCheckUnavailable": "La liste des paquets n'a pas pu être actualisée. Vérifiez la connexion internet de l'appareil, puis réessayez.",
 	"general.updateReasonDisabled": "Les mises à jour logicielles sont désactivées sur cet appareil. Elles sont gérées en dehors de CeraUI.",
-	"general.updateReasonStreaming": "Une diffusion est en cours ou son état n’est pas confirmé. Appuyez sur Arrêter pour confirmer son arrêt avant d’installer une mise à jour.",
+	"general.updateReasonStreaming": "Arrêtez le flux avant d'installer une mise à jour.",
 	"general.updateReasonUnknown": "L'appareil a refusé la mise à jour sans donner de raison.",
 	"general.updateStartRefused": "L'appareil n'a pas démarré la mise à jour",
 	"general.updates": "Mises à jour",
@@ -2680,5 +2680,6 @@
 	"settings.updates.connection.unusable": "Inutilisable pour les mises à jour",
 	"settings.updates.cellular.pendingBodyMetered": "Aucune connexion connue comme non limitée n'est disponible. Le téléchargement de {version} transfère environ {size} sur une connexion limitée ou dont le coût est inconnu.",
 	"settings.updates.layer.withheldBand": "Non inclus dans cette mise à jour",
-	"settings.updates.credentials.unusableTitle": "Le certificat de mise à jour de l'appareil n'a pas pu être utilisé"
+	"settings.updates.credentials.unusableTitle": "Le certificat de mise à jour de l'appareil n'a pas pu être utilisé",
+	"general.updateReasonStreamingUnconfirmed": "Une diffusion est en cours ou son état n’est pas confirmé. Appuyez sur Arrêter pour confirmer son arrêt avant d’installer une mise à jour."
 }

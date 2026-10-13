@@ -329,7 +329,7 @@
 	"general.updateReasonAlreadyUpdating": "Já há uma atualização em andamento.",
 	"general.updateReasonCheckUnavailable": "Não foi possível atualizar a lista de pacotes. Verifique a conexão de internet do dispositivo e tente novamente.",
 	"general.updateReasonDisabled": "As atualizações de software estão desativadas neste dispositivo. Elas são gerenciadas fora do CeraUI.",
-	"general.updateReasonStreaming": "Há uma transmissão ativa ou seu estado não foi confirmado. Pressione Parar para confirmar que ela terminou antes de instalar uma atualização.",
+	"general.updateReasonStreaming": "Pare a transmissão antes de instalar uma atualização.",
 	"general.updateReasonUnknown": "O dispositivo recusou a atualização sem informar um motivo.",
 	"general.updateStartRefused": "O dispositivo não iniciou a atualização",
 	"general.updates": "Atualizações",
@@ -2680,5 +2680,6 @@
 	"settings.updates.connection.unusable": "Não pode ser usada para atualizações",
 	"settings.updates.cellular.pendingBodyMetered": "Nenhuma conexão disponível é conhecida como ilimitada. Baixar {version} transfere cerca de {size} por uma conexão limitada ou de custo desconhecido.",
 	"settings.updates.layer.withheldBand": "Não incluídos nesta atualização",
-	"settings.updates.credentials.unusableTitle": "Não foi possível usar o certificado de atualização do dispositivo"
+	"settings.updates.credentials.unusableTitle": "Não foi possível usar o certificado de atualização do dispositivo",
+	"general.updateReasonStreamingUnconfirmed": "Há uma transmissão ativa ou seu estado não foi confirmado. Pressione Parar para confirmar que ela terminou antes de instalar uma atualização."
 }

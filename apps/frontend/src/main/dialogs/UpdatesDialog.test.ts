@@ -240,3 +240,42 @@ describe("UpdatesDialog — a start attempt always ends somewhere visible", () =
 		});
 	});
 });
+
+/*
+ * FIX-16-F4 C4-3: the stream refusal states the device's uncertainty through
+ * its own additive key. `general.updateReasonStreaming` is frozen by the
+ * rendered oracle and keeps its old sentence, which these surfaces no longer use.
+ */
+describe("UpdatesDialog — a stream refusal says the stream may be unconfirmed", () => {
+	const UNCONFIRMED =
+		"A stream is running or its state is unconfirmed. Press Stop to confirm the stream is stopped before installing an update.";
+	const FROZEN = "Stop the stream before installing an update.";
+
+	it("a start the device refused for a stream", async () => {
+		mockState = AVAILABLE;
+		startUpdate.mockResolvedValueOnce({ success: false, error: "streaming" });
+		render(UpdatesDialog, { open: true });
+
+		await clickUpdateAndConfirm();
+
+		await waitFor(() => {
+			expect(
+				document.querySelector('[data-testid="update-start-refused-reason"]')
+					?.textContent,
+			).toContain(UNCONFIRMED);
+		});
+		expect(document.body.textContent).not.toContain(FROZEN);
+	});
+
+	it("an update the device failed for a stream", async () => {
+		mockState = { kind: "failed", reason: "streaming" };
+		const { getByTestId } = render(UpdatesDialog, { open: true });
+
+		await waitFor(() => {
+			expect(getByTestId("update-failed-reason").textContent).toContain(
+				UNCONFIRMED,
+			);
+		});
+		expect(document.body.textContent).not.toContain(FROZEN);
+	});
+});

@@ -329,7 +329,7 @@
 	"general.updateReasonAlreadyUpdating": "هناك تحديث قيد التشغيل بالفعل.",
 	"general.updateReasonCheckUnavailable": "تعذّر تحديث قائمة الحزم. تحقّق من اتصال الجهاز بالإنترنت ثم أعد المحاولة.",
 	"general.updateReasonDisabled": "تحديثات البرامج معطّلة على هذا الجهاز. تتم إدارتها خارج CeraUI.",
-	"general.updateReasonStreaming": "البث جارٍ أو حالته غير مؤكدة. اضغط إيقاف لتأكيد توقف البث قبل تثبيت التحديث.",
+	"general.updateReasonStreaming": "أوقف البث قبل تثبيت التحديث.",
 	"general.updateReasonUnknown": "رفض الجهاز التحديث دون ذكر سبب.",
 	"general.updateStartRefused": "لم يبدأ الجهاز التحديث",
 	"general.updates": "التحديثات",
@@ -2689,5 +2689,6 @@
 	"settings.updates.connection.unusable": "غير صالح للتحديثات",
 	"settings.updates.cellular.pendingBodyMetered": "لا يتوفر أي اتصال معروف بأنه غير محدود البيانات. يؤدي تنزيل {version} إلى نقل نحو {size} عبر اتصال محدود البيانات أو غير معروف التكلفة.",
 	"settings.updates.layer.withheldBand": "غير مشمولة في هذا التحديث",
-	"settings.updates.credentials.unusableTitle": "تعذّر استخدام شهادة التحديث الخاصة بالجهاز"
+	"settings.updates.credentials.unusableTitle": "تعذّر استخدام شهادة التحديث الخاصة بالجهاز",
+	"general.updateReasonStreamingUnconfirmed": "البث جارٍ أو حالته غير مؤكدة. اضغط إيقاف لتأكيد توقف البث قبل تثبيت التحديث."
 }

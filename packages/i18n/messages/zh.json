@@ -329,7 +329,7 @@
 	"general.updateReasonAlreadyUpdating": "已有更新正在进行。",
 	"general.updateReasonCheckUnavailable": "无法刷新软件包列表。请检查设备的网络连接后重试。",
 	"general.updateReasonDisabled": "此设备已关闭软件更新，更新由 CeraUI 之外的方式管理。",
-	"general.updateReasonStreaming": "推流正在进行，或其状态尚未确认。安装更新前，请点击“停止”以确认推流已停止。",
+	"general.updateReasonStreaming": "请先停止推流，再安装更新。",
 	"general.updateReasonUnknown": "设备拒绝了更新，且未说明原因。",
 	"general.updateStartRefused": "设备未开始更新",
 	"general.updates": "更新",
@@ -2632,5 +2632,6 @@
 	"settings.updates.connection.unusable": "无法用于更新",
 	"settings.updates.cellular.pendingBodyMetered": "没有已知不按流量计费的可用连接。下载 {version} 将通过按流量计费或费用未知的连接传输约 {size}。",
 	"settings.updates.layer.withheldBand": "未包含在此更新中",
-	"settings.updates.credentials.unusableTitle": "无法使用设备的更新证书"
+	"settings.updates.credentials.unusableTitle": "无法使用设备的更新证书",
+	"general.updateReasonStreamingUnconfirmed": "推流正在进行，或其状态尚未确认。安装更新前，请点击“停止”以确认推流已停止。"
 }

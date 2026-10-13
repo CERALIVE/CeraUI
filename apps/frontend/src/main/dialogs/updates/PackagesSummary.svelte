@@ -84,7 +84,7 @@ const reachabilityMessage = $derived.by(() => {
 // in-app log viewer; the raw value goes to the console and nowhere else.
 const FAILED_REASON_COPY: Record<string, () => string> = {
 	updates_disabled: () => m["general.updateReasonDisabled"](),
-	streaming: () => m["general.updateReasonStreaming"](),
+	streaming: () => m["general.updateReasonStreamingUnconfirmed"](),
 	already_updating: () => m["general.updateReasonAlreadyUpdating"](),
 	check_unavailable: () => m["general.updateReasonCheckUnavailable"](),
 	refresh_failed: () => m["general.updateCheckReasonRefreshFailed"](),

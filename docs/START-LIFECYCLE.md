@@ -667,12 +667,25 @@ The operator's Stop is a CLAIM, separate from the shared operation's phase
 (FIX-16-FRONT3 R2; the registry itself is unchanged). A reset after `stopping`
 fails the operation while the store keeps `stopping`; C3 then hid the band and
 left only Start. The claim keeps the band, its copy and an enabled Stop until
-the device settles it: the idle commit while its Stop is pending, an idle
-commit delivered after the press over the current link, or an acknowledged
-`{ success: true, result: "stopped" }` (D207). A failure, a reconnect, a failed
-hydrate, a lapsed TTL, `stopping`, `starting` and an absent lifecycle do not
-end it, and it survives LiveView being mounted anew. Nothing is dispatched
-automatically.
+the device settles it: an idle commit delivered after the press over the
+current link, or an acknowledged `{ success: true, result: "stopped" }` for
+THAT press (D207). A failure, a reconnect, a failed hydrate, a lapsed TTL,
+`stopping`, `starting` and an absent lifecycle do not end it, and it survives
+LiveView being mounted anew. Nothing is dispatched automatically.
+
+Each press owns its claim (FIX-16-F4, PRE4-C C4-1/C4-2).
+`claimOperatorStop()` returns an owner token; the press's reply settles only
+the claim that token names, so the delayed `stopped` of a first Stop that
+outlived the 15 s valve cannot clear a retry's claim, in either reply order.
+An acknowledgement closes its claim but keeps its delivery mark, so the same
+press's pending operation is still confirmed by the idle commit that follows.
+And the PENDING operation is confirmed only by the same evidence as the claim:
+an idle delivered after the latest press over the current link. A retry
+pressed over an idle that a failed hydrate retained from an older link stays
+pending, and its `stop_failed` reply still fails it. The shared registry is
+unchanged; an older reply can still move a newer operation's phase through
+the shared key (the registry's documented backlog), which changes the copy but
+never the claim, so the band and its Stop stay.
 
 Not covered: `starting` and `stopping` seen from a client that did not start
 them have no Stop, but each is bounded and settles into `idle`, `streaming` or a
@@ -684,7 +697,9 @@ exercised this path: the rows above are host-tested with the real cockpits,
 band, header and stores (`LiveView.unconfirmed-real-stop.test.ts`,
 `LiveView.unconfirmed-real-reach.test.ts`), and over the REAL subscription
 store, reconnect hydrate and session epoch (`LiveView.real-store-start.test.ts`,
-including the real NavigationRenderer, and `LiveView.real-store-stop.test.ts`).
+including the real NavigationRenderer, and `LiveView.real-store-stop.test.ts`),
+and over the real `rpc` proxy and `RPCClient` on a scripted socket, each reply
+delivered by its own request id (`LiveView.real-socket-stop.test.ts`).
 ## Composition lifecycle follow-up (2026-09-17)
 
 Failed stop IPC must complete the session cleanup promise with its error, not

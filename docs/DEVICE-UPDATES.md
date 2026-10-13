@@ -142,6 +142,14 @@ already running,” is generic and does not literally describe the refusal. A
 dedicated disabled-updates reason requires a separate reviewed wire-and-copy
 change; this mapping does not add one.
 
+The legacy Packages section renders a `streaming` start refusal or failed
+reason with `general.updateReasonStreamingUnconfirmed` ("A stream is running
+or its state is unconfirmed. Press Stop to confirm..."), because the device
+refuses while liveness is UNKNOWN as well as while it is live. That sentence is
+an additive key: `general.updateReasonStreaming` is in the immutable rendered
+oracle and keeps its frozen text (FIX-16-F4, PRE4-C C4-3). The docs.ceralive.tv
+update page (English and es-419) still owes this sentence; it is not published.
+
 Starting-stream launch limits: root AGENTS.md D8 Known gaps (f).
 
 ## Settings

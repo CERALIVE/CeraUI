@@ -18,6 +18,7 @@ import {
 	sweepOperations,
 } from "$lib/rpc/async-operation.svelte";
 import { rpc } from "$lib/rpc/client";
+import { noteLifecycleDelivered } from "$lib/rpc/session-epoch.svelte";
 
 import UnconfirmedStreamBand from "./UnconfirmedStreamBand.svelte";
 
@@ -200,6 +201,10 @@ describe("UnconfirmedStreamBand — the Stop it offers", () => {
 		await waitFor(() => expect(stop).toHaveBeenCalledTimes(1));
 		expect(getOperationPhase("stream-stop-unconfirmed")).toBe("pending");
 
+		// In the app a lifecycle prop only changes because a status frame carrying
+		// it arrived; that frame stamps the delivery witness on the current link,
+		// which is what lets it confirm a pending Stop (FIX-16-F4 C4-1).
+		noteLifecycleDelivered();
 		await rerender({
 			lifecycle: "idle",
 			isStreaming: false,

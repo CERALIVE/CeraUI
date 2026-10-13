@@ -6,6 +6,7 @@
 			"scripts/generate-registry.ts",
 			"tests/catalog-duplicate-key-gate.test.ts",
 			"tests/eager-registration.test.ts",
+			"tests/streaming-refusal-copy.test.ts",
 			"package.json",
 			"tsconfig.json",
 			"src/**/*.ts",

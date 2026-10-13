@@ -19,9 +19,11 @@
   Always mounted by LiveView; it renders nothing outside the unconfirmed set,
   except that it stays while the operator's Stop is unresolved: from the press
   until the device settles it (its idle commit delivered after the press over
-  the current link, or an acknowledged `stopped`). A lost reply, a failed
-  hydrate or a lapsed TTL is not settlement, so a `stopping` retained after a
-  reset keeps the band, its feedback and an enabled Stop (FIX-16-FRONT3 R2).
+  the current link, or an acknowledged `stopped` for THAT press). A lost reply,
+  a failed hydrate or a lapsed TTL is not settlement, so a `stopping` retained
+  after a reset keeps the band, its feedback and an enabled Stop (FIX-16-FRONT3
+  R2). Each press owns its claim: a reply to an earlier press never settles a
+  retry's claim, and a retained idle never confirms a retry (FIX-16-F4).
   Local start optimism never hides it: the optimistic live cockpit shows a
   disabled "Starting...", which is not a Stop.
 -->
@@ -31,7 +33,12 @@ import type { LifecycleState } from '@ceraui/rpc/schemas';
 import { CircleHelp, Loader2, Square } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
-import { confirmOperation, getOperationPhase, osCommand } from '$lib/rpc/async-operation.svelte';
+import {
+	confirmOperation,
+	getOperationPhase,
+	isOperationPending,
+	osCommand,
+} from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
 import {
@@ -41,6 +48,7 @@ import {
 } from '$lib/streaming/unconfirmed-stream';
 import {
 	claimOperatorStop,
+	latestStopOwner,
 	lifecycleSinceStopClaim,
 	operatorStopUnresolved,
 	settleOperatorStop,
@@ -72,32 +80,35 @@ const visible = $derived(
 // `stop_failed` if it never does, and a confirmed operation cannot fail. Not a
 // `stopped` reply either: the backend can answer it without committing idle.
 // Without that evidence the reply decides `failed`, or the shared TTL valve
-// flips the operation to `timed_out` and the band says so. A pending operation
-// lives on one link (a reset fails it, a reconnect clears it), so the idle it
-// sees is that link's; once it is no longer pending, the claim needs an idle
-// delivered after the press over the current link.
+// flips the operation to `timed_out` and the band says so. Pending or not, the
+// idle must be DELIVERED after the latest press over the current link: a
+// pending retry pressed over an idle that a failed hydrate retained from an
+// older link would otherwise be confirmed before its own reply (FIX-16-F4 C4-1).
 $effect(() => {
 	if (!stopConfirmedByDevice({ lifecycle, isStreaming })) return;
-	if (phase === 'pending') {
-		confirmOperation(UNCONFIRMED_STOP_OPERATION);
-		settleOperatorStop();
-	} else if (unresolved && lifecycleSinceStopClaim()) {
-		settleOperatorStop();
-	}
+	if (!lifecycleSinceStopClaim()) return;
+	if (phase === 'pending') confirmOperation(UNCONFIRMED_STOP_OPERATION);
+	const owner = latestStopOwner();
+	if (owner !== undefined) settleOperatorStop(owner);
 });
 
 function handleStop() {
-	claimOperatorStop();
+	// The button is disabled while pending; osCommand would drop the dispatch,
+	// so a claim made here would own a request that was never sent.
+	if (isOperationPending(UNCONFIRMED_STOP_OPERATION)) return;
+	const owner = claimOperatorStop();
 	void osCommand({
 		key: UNCONFIRMED_STOP_OPERATION,
 		rpc: () => rpc.streaming.stop(),
 		classify: (r) =>
 			r.result === 'stop_failed' ? { ok: false, reason: r.reason } : { ok: r.success },
-		// D207: an acknowledged Stop is positive idle evidence for the claim. It
-		// does not confirm the operation (the reconciling branch can answer it
-		// while the lifecycle stays protected, and the band then stays anyway).
+		// D207: an acknowledged Stop is positive idle evidence for THIS press's
+		// claim. It does not confirm the operation (the reconciling branch can
+		// answer it while the lifecycle stays protected, and the band then stays
+		// anyway), and a reply that arrives after a retry settles nothing: the
+		// newer claim is not its own (FIX-16-F4 C4-2).
 		onResult: (r) => {
-			if (r.success && r.result === 'stopped') settleOperatorStop();
+			if (r.success && r.result === 'stopped') settleOperatorStop(owner);
 		},
 		// The band renders the failure inline and keeps it on screen; a toast would
 		// vanish while the device is still refusing Start.

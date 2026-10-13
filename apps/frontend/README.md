@@ -204,7 +204,15 @@ src/
   result releases the update takeover at once and is announced once per
   outcome; a failed add-on
   list read says so with a retry ([contract](docs/agents/an-update-action-outcome-is-decided-by-evidence.md)).
-  No raw backend message or new OS-stage reason is rendered.
+  No raw backend message or new OS-stage reason is rendered. A `streaming`
+  refusal says the stream is running OR its state is unconfirmed, through the
+  additive key `general.updateReasonStreamingUnconfirmed`; the frozen
+  `general.updateReasonStreaming` keeps the rendered oracle's text.
+
+- **Unresolved Live Stop**: each press of the unconfirmed-state Stop owns its
+  claim; a reply settles only its own press, and a pending retry is confirmed
+  only by an idle delivered after it over the current link
+  ([START-LIFECYCLE](../../docs/START-LIFECYCLE.md)).
 
 - **Dongle login**: a submission makes one verify-before-save RPC. A failed
   password remains only in the mounted dialog, is never written to Web Storage,
