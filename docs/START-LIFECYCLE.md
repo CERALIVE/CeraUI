@@ -825,8 +825,24 @@ nested awaited calls retain one active operation identity. Tokens are lifetime-
 scoped and retired in finally; recurring kiosk polling registers outside those
 contexts and must acquire a fresh same-ID owner. The seam takes one service-lifetime
 reservation owned by the active operation; nested steps re-enter by identity and the
-outer hold lasts until positive completion/failure evidence (unit job/lifecycle for
-unit steps, an actor-free visible process table for helper/refresh steps).
+outer hold lasts until positive completion/failure evidence (unit job plus the unit
+type's steady state for unit steps; for helper/refresh steps a complete process table
+with PID 1 visible, every enumerated row read or positively vanished with
+ENOENT/ESRCH, and no row whose executable identity is the helper or
+`systemd-sysext`). Any other read failure is unknown, never absence. A signal-derived
+client exit (status >= 128 or a signal name) is uncertain, never a failure verdict.
+
+**What a stuck hold means for the operator.** Service holds have no supersede path.
+Only an explicit re-submission of the SAME pending power action supersedes a shutdown
+hold, so a remote factory reset that exits 0 without rebooting leaves a shutdown hold
+that a LOCAL reboot cannot supersede (the actions differ). Natural causes (the 30 s
+helper timeout, a slow unit) hold longer than needed but resolve; a hold that lasts
+forever needs class C evidence loss (filtered `/proc`, a wedged helper or job). The
+escape for a stuck service hold is restarting `ceralive.service` or a power cycle,
+which clears this process-local state. No new override primitive exists (D249); any
+product-level clearance is an owner decision. The completion reboot after a legacy
+package update uses the same shared `getDisruptiveActionDecision()` gate (stream,
+orchestrator, package install, recovery, maintenance) and only retries while refused.
 Work already submitted while idle cannot be revoked: earlier unit effects or a
 submitted helper's partial execution may survive refusal/failure. A stream or privileged actor can still change state
 after final observation/dispatch; the external root helper is not governed by a

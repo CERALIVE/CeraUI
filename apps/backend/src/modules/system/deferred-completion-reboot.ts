@@ -1,5 +1,4 @@
 import { logger } from "../../helpers/logger.ts";
-import { decideDisruptiveAction } from "./disruptive-action-gate.ts";
 import {
 	isDisruptiveActionPending,
 	isPositiveDisruptiveFailure,
@@ -10,27 +9,32 @@ import {
 	disruptiveShutdownSignal,
 	retryDisruptiveEvidence,
 } from "./disruptive-retry.ts";
-import { isSoftwareUpdateRecoveryInconclusive } from "./software-update-recovery.ts";
-import { getStreamLiveness } from "./stream-liveness-source.ts";
 
 let cancelDeferred: (() => void) | undefined;
+// The ONE shared gate. It imports software-updates, which imports this module,
+// so it is bound after evaluation; until then a completion reboot defers.
+let sharedDecision:
+	| typeof import("./disruptive-action-runtime.ts").getDisruptiveActionDecision
+	| undefined;
+void import("./disruptive-action-runtime.ts").then(
+	(module) => {
+		sharedDecision = module.getDisruptiveActionDecision;
+	},
+	(error: unknown) => {
+		logger.error("Completion reboot gate failed to load", { error });
+	},
+);
 
 export function requestCompletionReboot(run: () => void | Promise<void>): void {
 	if (disruptiveShutdownSignal().aborted || cancelDeferred) return;
 	const submit = () => {
 		if (isDisruptiveActionPending()) return false;
-		const admission = reservePowerAction(
-			decideDisruptiveAction({
-				streamLiveness: getStreamLiveness(),
-				updateBusy: [
-					...readDisruptiveUpdateBusy(),
-					...(isSoftwareUpdateRecoveryInconclusive()
-						? ["update-recovery" as const]
-						: []),
-				],
-			}),
-			"reboot",
-		);
+		// The one shared gate: stream, orchestrator, package install, recovery and
+		// maintenance. Called without a power action so a pending hold is never
+		// superseded; the deferral below simply retries. Until the orchestrator
+		// has registered its busy source, the default reads as busy: refuse.
+		if (!sharedDecision || readDisruptiveUpdateBusy().length > 0) return false;
+		const admission = reservePowerAction(sharedDecision(), "reboot");
 		if (!admission.allowed) return false;
 		const failed = (error: unknown) => {
 			if (isPositiveDisruptiveFailure(error))

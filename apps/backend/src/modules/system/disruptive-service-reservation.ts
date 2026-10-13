@@ -34,6 +34,30 @@ export type ServiceCompletionProbe = (
 	signal: AbortSignal,
 ) => Promise<ServiceCompletion>;
 
+// The steady active sub-state of each unit type an add-on descriptor may name
+// (the descriptor schema admits exactly these six suffixes). A listening socket
+// or a waiting timer is settled, never "in flight forever"; an unrecognised
+// type settles only through inactive/dead or failed/failed.
+const SETTLED_ACTIVE_SUBSTATES: Readonly<Record<string, ReadonlySet<string>>> =
+	{
+		service: new Set(["running", "exited"]),
+		socket: new Set(["listening"]),
+		timer: new Set(["waiting", "elapsed"]),
+		path: new Set(["waiting"]),
+		target: new Set(["active"]),
+		mount: new Set(["mounted"]),
+	};
+const NO_SUBSTATES: ReadonlySet<string> = new Set();
+
+function settledActiveSubStates(unit: string): ReadonlySet<string> {
+	// systemctl reads a suffix-less name as a .service unit.
+	const dot = unit.lastIndexOf(".");
+	const suffix = dot < 0 ? "service" : unit.slice(dot + 1);
+	return Object.hasOwn(SETTLED_ACTIVE_SUBSTATES, suffix)
+		? (SETTLED_ACTIVE_SUBSTATES[suffix] ?? NO_SUBSTATES)
+		: NO_SUBSTATES;
+}
+
 export async function probeServiceCompletion(
 	scope: ServiceReservationScope,
 	signal: AbortSignal,
@@ -57,7 +81,8 @@ export async function probeServiceCompletion(
 	const active = rows.get("ActiveState");
 	const sub = rows.get("SubState");
 	const settled =
-		(active === "active" && ["running", "exited"].includes(sub ?? "")) ||
+		(active === "active" &&
+			settledActiveSubStates(scope.unit).has(sub ?? "")) ||
 		(active === "inactive" && sub === "dead") ||
 		(active === "failed" && sub === "failed");
 	if (!settled) return "in-flight";

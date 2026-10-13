@@ -85,13 +85,31 @@ export function assertDisruptiveActionFree(): void {
 		throw new DisruptiveActionRefusal("update_in_progress");
 }
 
+// Exit statuses at or above 128 are how shells and runtimes report a child
+// killed by a signal (137 = SIGKILL). A killed sudo says nothing about the
+// helper or systemd-sysext it may have left reparented, so a signal is not a
+// verdict: only ordinary small exits and pre-spawn errno prove nothing ran on.
+const SIGNAL_EXIT_FLOOR = 128;
+
+function isOrdinaryExit(status: number): boolean {
+	return status > 0 && status < SIGNAL_EXIT_FLOOR;
+}
+
+function carriesSignal(error: Error): boolean {
+	return ["signalCode", "signal"].some((field) => {
+		const value: unknown = Reflect.get(error, field);
+		return typeof value === "string" && value !== "";
+	});
+}
+
 export function isPositiveDisruptiveFailure(error: unknown): boolean {
 	if (error instanceof SpawnTimeoutError) return false;
-	if (error instanceof PowerSubmissionError) return error.exitCode !== null;
-	if (!(error instanceof Error)) return false;
+	if (error instanceof PowerSubmissionError)
+		return error.exitCode !== null && isOrdinaryExit(error.exitCode);
+	if (!(error instanceof Error) || carriesSignal(error)) return false;
 	const code: unknown = Reflect.get(error, "code");
 	return (
-		(typeof code === "number" && code > 0) ||
+		(typeof code === "number" && isOrdinaryExit(code)) ||
 		(typeof code === "string" &&
 			["ENOENT", "EACCES", "ENOEXEC", "E2BIG"].includes(code))
 	);

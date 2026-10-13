@@ -92,12 +92,33 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
   identity; nested steps re-enter it by depth through `getDisruptiveActionDecision({
   heldBy })` and only the outermost release reopens admission. Other owners, a pending
   reboot/poweroff and late descendants of a released operation are refused with
-  `update_in_progress`; a held step refuses reboot/poweroff the same way. Exit-status
-  failures and refusals release at once; a timeout or untyped error keeps the hold until
-  positive evidence: unit steps poll their own unit, helper/refresh steps require a
-  `/proc` table that visibly includes PID 1 and has no `ceralive-addon-helper` or
-  `systemd-sysext` process. Timer wakeups only re-observe. In-process only; the root
-  helper itself is not governed by this backend lease.
+  `update_in_progress`; a held step refuses reboot/poweroff the same way. Ordinary exit
+  statuses (1-127), pre-spawn errno (ENOENT/EACCES/ENOEXEC/E2BIG) and refusals release
+  at once. A timeout, an untyped error or a signal-derived exit (status >= 128, or a
+  `signal`/`signalCode`, e.g. an OOM-killed `sudo` reported as 137) keeps the hold until
+  positive evidence, because a killed `sudo` can leave the helper or `systemd-sysext`
+  reparented and running. Unit steps poll their own unit: no queued job plus that unit
+  type's steady state (`.service` running/exited, `.socket` listening, `.timer`
+  waiting/elapsed, `.path` waiting, `.target` active, `.mount` mounted, or any
+  inactive/dead or failed/failed). Helper/refresh steps require a complete actor-free
+  `/proc` table: PID 1 readable and non-empty, the directory listable, and every
+  enumerated row's `cmdline` either read or positively vanished (`ENOENT`/`ESRCH`); any
+  other read failure (EIO, EACCES, ...) is unknown and keeps the hold. A row is an actor
+  only by executable identity (argv[0], the target of `sudo`/`env`, or the script an
+  interpreter runs, e.g. `bash /usr/sbin/ceralive-addon-helper`), never by argument
+  text, so `journalctl -f -u systemd-sysext` is an observer. Timer wakeups only
+  re-observe. In-process only; the root helper itself is not governed by this backend
+  lease.
+- **Stuck service hold (operator meaning)**: a service hold has NO supersede path; only
+  re-submitting the SAME pending power action supersedes a SHUTDOWN hold. Natural causes
+  (the 30 s helper timeout, a slow unit, a transiently unreadable `/proc` row) hold
+  longer than needed but resolve on the next complete observation. A hold that never resolves needs class C evidence loss (a
+  filtered or unreadable `/proc`, a wedged helper or unit job). The operator escape is
+  restarting `ceralive.service` or a power cycle; there is deliberately no in-product
+  override (Atlas D249, owner decision). Kiosk Start holds its one reservation across
+  the whole start, including the add-on artifact download, so Go Live is refused with
+  the commit-stage `update_in_progress` copy during that download (documented residual,
+  N/MINOR).
 - **Validation deadline**: `runValidateCmd` uses `spawnWithTimeout` and its shared
   termination classification. A TERM-induced zero after timeout throws typed
   `SpawnTimeoutError`; the enable pipeline maps it to `addon_validation_failed`

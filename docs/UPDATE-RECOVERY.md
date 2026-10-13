@@ -472,7 +472,13 @@ Owner identities are lifetime-scoped and depth-counted. The exact add-on integra
 API and set/held/uncertain/resolved/released/superseded/restart table live in
 [`START-LIFECYCLE.md`](START-LIFECYCLE.md#reservation-state-table-and-owner-seam).
 Default systemd probes are safe only for the unit actually owning the effect;
-direct sysext helper steps need an operation-owned positive settlement probe.
+direct sysext helper steps need an operation-owned positive settlement probe, and
+that probe treats only a vanished row (ENOENT/ESRCH) as absent: an unreadable row,
+an empty/unreadable PID 1 or an unlistable table is unknown and keeps the hold. A
+signal-killed client (exit >= 128) is uncertain, not a failure. A stuck service hold
+has no supersede path and no in-product override (D249); the operator escape is
+restarting `ceralive.service` or a power cycle, and a remote factory reset that exits
+0 without rebooting leaves a shutdown hold only the same action can supersede.
 Board drills still owe accepted reboot → Go Live during shutdown, stale restart
 past 10 s → actual resolver clearance, exit 0 without shutdown → fenced retry,
 and timed activation arm → reboot. None is physically proven by the host matrices.
