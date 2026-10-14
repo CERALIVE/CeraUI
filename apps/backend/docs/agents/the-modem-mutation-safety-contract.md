@@ -180,7 +180,45 @@ a cadence bound, not a bound on hardware I/O or total recovery duration.
 Unlink failure is another incomplete pass: no restored/pruned count precedes
 durable removal. Shutdown is checked after incomplete as well as successful
 attempts; the default sleep resolves before creating a timer/listener when its
-signal is already aborted. Already-submitted capture/hardware is not revoked.
+signal is already aborted, and removes its abort listener when the timer completes
+as well as on abort. Already-submitted capture/hardware is not revoked.
+
+### SAME-KEY JOURNAL EXCLUSION
+
+Every cooperating operation that writes or removes a stable key's journal slot holds
+that key's existing mutation lease (`activeMutations` in `lifecycle-admission.ts`)
+for the write it authorizes, so a retirement can never outlive the authority it
+validated. A revision check before an unlink, or a readback after it, cannot do this:
+the pathname effect is awaited after the check.
+
+- **Operator acknowledge/rebaseline/decommission** (`mutation-retirement-key.ts`) read
+  eligibility first. A slot the action would refuse (armed/executing included) answers
+  today's `not_blocked` without waiting. An eligible slot takes the key nonblocking
+  (`tryAcquireModemJournalKey`, which bypasses recovery/published-block admission but
+  never the same-key exclusion) and holds it through read, transition, unlink/rename,
+  parent fsync and refresh, releasing in `finally`. If the key is held (a mutation's
+  journal-only tail, e.g. the arming-failure fallback refresh, or another retirement),
+  it waits for that holder's release, abortable by the RPC signal, then rereads from
+  scratch. Three acquisitions bound a holder chain; exhaustion or cancellation answers
+  the existing `state_mismatch` (owner note: here it means "not retired under this
+  observation", not a hardware disagreement). No wire or schema change.
+- **Ordinary mutation admission** keeps its frozen refusal order. A retirement-held
+  acknowledged slot refuses with `mutation_in_progress`; a quarantined slot keeps its
+  published block (`mutation_blocked`) ahead of the lease.
+- **Boot replay** holds no key during capture or rollback hardware (an operator may act
+  meanwhile), but takes it nonblocking around each revision check plus the write it
+  authorizes. A held key is an incomplete pass retried by the recovery owner.
+- **Failed-transition settlement** takes the key nonblocking for read, revision check and
+  commit; a held key keeps the bookkeeping retained and the pass incomplete.
+- Directory-fsync debt deletes nothing and needs no key.
+- A journal-only key holder (operator retirement, replay, settlement) is the same map
+  entry for same-key exclusion but is excluded from the stream interlock count:
+  acknowledging a modem never refuses Go Live, exactly as before this exclusion.
+
+Lock order: key → reads/revision/effects/refresh → `finally` release. No key holder
+waits on a barrier, recovery owner or another key; waiters hold no lease. A hung
+holder can leave an operator retirement waiting until its RPC is cancelled; nothing
+times out open. Other keys are independent. Host-tested only.
 
 ### THE REPLAY BARRIER AT THE ADMISSION CHOKEPOINT
 

@@ -309,6 +309,15 @@ unavailable, not successful preservation.
      Acknowledge and rebaseline return existing `journal_write_failed` when removal
      fails; the durable `acknowledged` decision and previous block projection remain.
      Explicit retry resumes that retirement without replacing the accepted baseline.
+     Every operator retirement, replay write and failed-transition settlement holds the
+     stable key's mutation lease through its awaited write/unlink, parent fsync and
+     refresh, so an old retry can never delete a newer armed/executing slot: the new
+     mutation refuses `mutation_in_progress` while a retirement holds the key, and a
+     retirement that finds armed/executing answers `not_blocked` without waiting. An
+     eligible slot under a held key waits (cancellable, at most three acquisitions) and
+     then rereads; exhaustion/cancellation answers existing `state_mismatch`. Replay and
+     settlement never wait: a held key is an incomplete pass. See the modem safety
+     contract → Same-key journal exclusion.
      An independent later reconciliation can project the already-proven acknowledged
      decision as nonblocking, consistent with the existing state contract. Decommission
      never removes its entry: its retained decision releases only the streaming block.
@@ -322,7 +331,8 @@ unavailable, not successful preservation.
      and transitions are process-local; a new process uses boot journal replay.
      Cancellation is checked after every attempt outcome, including incomplete/throw;
      no next sleep or completion follows shutdown. The default sleep creates no timer
-     or listener for an already-aborted signal. Submitted hardware I/O is not revoked.
+     or listener for an already-aborted signal, and a completed wait removes its abort
+     listener (config boot's default sleep likewise). Submitted hardware I/O is not revoked.
     A permanent enumeration failure keeps the barrier raised behind capped
    waits, not a spinning loop. A verification can never lower the barrier over damage it
   just observed. Shutdown cancels the flight and disarms scheduling, so a late

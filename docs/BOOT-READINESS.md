@@ -81,7 +81,10 @@ shortcut or a repeated deletion of newer authority. The existing owner also sett
 previously submitted failed-state bookkeeping by attempt identity/revision; runtime
 verification never repeats hardware. Confirmed lease work commits `completed` before
 retirement and always releases the lease. Cancellation after an incomplete attempt
-arms no next sleep, and an already-aborted default sleep creates no timer/listener.
+arms no next sleep, and an already-aborted default sleep creates no timer/listener;
+completed default sleeps (modem recovery and config boot) remove their abort listener.
+Boot replay writes under the stable key's mutation lease; a key held by an operator
+retirement (the control server binds before replay) is an incomplete pass, retried.
 Absent journal directories still complete boot normally. These are host regressions,
 not a SIGKILL, power-loss, board, installed shutdown or hardware-repeat qualification.
 

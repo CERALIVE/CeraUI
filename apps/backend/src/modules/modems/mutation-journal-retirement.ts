@@ -1,4 +1,5 @@
 import type { ModemMutationEntry } from "@ceraui/rpc/schemas";
+import { tryAcquireModemJournalKey } from "../streaming/lifecycle-admission.ts";
 import { beginRecoveryBarrier } from "../streaming/recovery-barrier.ts";
 import {
 	commitMutationEntry,
@@ -56,16 +57,33 @@ export async function settlePendingMutationRemovals(): Promise<void> {
 		await withMutationJournalChange(() => acknowledge(dir, own));
 	}
 	for (const [key, own] of failedTransitions) {
-		const revision = mutationJournalRevision();
-		const current = await readMutationEntry(key);
-		assertMutationJournalRevision(revision);
-		if (
-			current?.attemptId === own.attemptId &&
-			["armed", "executing", "completed", "failed"].includes(current.state)
-		) {
-			await commitMutationEntry(own);
-		}
-		if (failedTransitions.get(key) === own) failedTransitions.delete(key);
+		await withHeldJournalKey(key, async () => {
+			const revision = mutationJournalRevision();
+			const current = await readMutationEntry(key);
+			assertMutationJournalRevision(revision);
+			if (
+				current?.attemptId === own.attemptId &&
+				["armed", "executing", "completed", "failed"].includes(current.state)
+			) {
+				await commitMutationEntry(own);
+			}
+			if (failedTransitions.get(key) === own) failedTransitions.delete(key);
+		});
+	}
+}
+
+/** Recovery never waits for a key: a held key is an incomplete pass, retried later. */
+export async function withHeldJournalKey<T>(
+	stableKey: string,
+	work: () => Promise<T>,
+): Promise<T> {
+	const lease = tryAcquireModemJournalKey(stableKey);
+	if (lease === undefined)
+		throw new Error("modem mutation journal key is held; recovery retries");
+	try {
+		return await work();
+	} finally {
+		lease.release();
 	}
 }
 

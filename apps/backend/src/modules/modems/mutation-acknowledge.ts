@@ -64,6 +64,7 @@ import {
 	mutationJournalRevision,
 } from "./mutation-journal-revision.ts";
 import { isLegalMutationTransition } from "./mutation-journal-state.ts";
+import { withRetirementKey } from "./mutation-retirement-key.ts";
 import {
 	captureModemState,
 	isCoherentState,
@@ -129,7 +130,20 @@ async function quarantine(
 	return fail("device_absent");
 }
 
-export async function acknowledgeMutation(
+export function acknowledgeMutation(
+	stableKey: string,
+	mode: ModemMutationAckMode,
+	signal?: AbortSignal,
+): Promise<ModemMutationAckOutput> {
+	return withRetirementKey(
+		stableKey,
+		(entry) => entry.state === "acknowledged" || entry.state === "failed",
+		signal,
+		() => acknowledgeHeld(stableKey, mode),
+	);
+}
+
+async function acknowledgeHeld(
 	stableKey: string,
 	mode: ModemMutationAckMode,
 ): Promise<ModemMutationAckOutput> {
@@ -166,7 +180,19 @@ export async function acknowledgeMutation(
 	);
 }
 
-export async function decommissionMutation(
+export function decommissionMutation(
+	stableKey: string,
+	signal?: AbortSignal,
+): Promise<ModemMutationAckOutput> {
+	return withRetirementKey(
+		stableKey,
+		(entry) => entry.state === "device-absent-quarantine",
+		signal,
+		() => decommissionHeld(stableKey),
+	);
+}
+
+async function decommissionHeld(
 	stableKey: string,
 ): Promise<ModemMutationAckOutput> {
 	const revision = mutationJournalRevision();
@@ -192,7 +218,20 @@ export async function decommissionMutation(
 	return { success: true, state: "decommissioned" };
 }
 
-export async function rebaselineMutation(
+export function rebaselineMutation(
+	stableKey: string,
+	signal?: AbortSignal,
+): Promise<ModemMutationAckOutput> {
+	return withRetirementKey(
+		stableKey,
+		(entry) =>
+			entry.state === "acknowledged" || entry.state === "recommission-pending",
+		signal,
+		() => rebaselineHeld(stableKey),
+	);
+}
+
+async function rebaselineHeld(
 	stableKey: string,
 ): Promise<ModemMutationAckOutput> {
 	const revision = mutationJournalRevision();

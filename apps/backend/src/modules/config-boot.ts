@@ -54,16 +54,18 @@ const BCRYPT_HASH = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/;
 const SHADOW_HASH = /^\$[0-9a-z]+\$\S+$/;
 
 function sleepFor(ms: number, signal: AbortSignal): Promise<void> {
+	if (signal.aborted) return Promise.resolve();
 	return new Promise((resolve) => {
-		const timer = setTimeout(resolve, ms);
-		signal.addEventListener(
-			"abort",
-			() => {
-				clearTimeout(timer);
-				resolve();
-			},
-			{ once: true },
-		);
+		const onAbort = () => {
+			clearTimeout(timer);
+			signal.removeEventListener("abort", onAbort);
+			resolve();
+		};
+		const timer = setTimeout(() => {
+			signal.removeEventListener("abort", onAbort);
+			resolve();
+		}, ms);
+		signal.addEventListener("abort", onAbort, { once: true });
 	});
 }
 

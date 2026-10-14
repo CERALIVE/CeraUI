@@ -53,7 +53,10 @@ import {
 	readMutationEntry,
 	removeMutationEntry,
 } from "./mutation-journal.ts";
-import { settlePendingMutationRemovals } from "./mutation-journal-retirement.ts";
+import {
+	settlePendingMutationRemovals,
+	withHeldJournalKey,
+} from "./mutation-journal-retirement.ts";
 import {
 	assertMutationJournalRevision,
 	isMutationJournalRevisionCurrent,
@@ -93,6 +96,18 @@ async function advance(
 	await commitMutationEntry(nextEntry(entry, state, journalNow(), detail));
 }
 
+/** The revision check and the write it authorizes share one same-key exclusion. */
+function fenced(
+	entry: ModemMutationEntry,
+	revision: bigint,
+	write: () => Promise<void>,
+): Promise<void> {
+	return withHeldJournalKey(entry.stableKey, async () => {
+		assertMutationJournalRevision(revision);
+		await write();
+	});
+}
+
 async function replayEntry(
 	entry: ModemMutationEntry,
 	tally: {
@@ -107,7 +122,7 @@ async function replayEntry(
 	const action = replayActionFor(entry.state);
 
 	if (action === "prune" || action === "resume-archive") {
-		await removeMutationEntry(entry.stableKey);
+		await fenced(entry, revision, () => removeMutationEntry(entry.stableKey));
 		tally.pruned += 1;
 		return;
 	}
@@ -125,7 +140,9 @@ async function replayEntry(
 			tally.blocked += 1;
 			return;
 		}
-		await advance(entry, target, "device presence re-checked at replay");
+		await fenced(entry, revision, () =>
+			advance(entry, target, "device presence re-checked at replay"),
+		);
 		tally.blocked += 1;
 		return;
 	}
@@ -137,25 +154,29 @@ async function replayEntry(
 	);
 	assertMutationJournalRevision(revision);
 	if (outcome === "restored") {
-		await removeMutationEntry(entry.stableKey);
+		await fenced(entry, revision, () => removeMutationEntry(entry.stableKey));
 		tally.rolledBack += 1;
 		return;
 	}
 	if (outcome === "absent") {
-		await advance(
-			entry,
-			"device-absent-quarantine",
-			"device absent when replay tried to roll it back",
+		await fenced(entry, revision, () =>
+			advance(
+				entry,
+				"device-absent-quarantine",
+				"device absent when replay tried to roll it back",
+			),
 		);
 		tally.quarantined += 1;
 		return;
 	}
-	await advance(
-		entry,
-		"failed",
-		outcome === "unavailable"
-			? "no rollback is available for this mutation kind"
-			: "rollback did not restore the journaled pre-state",
+	await fenced(entry, revision, () =>
+		advance(
+			entry,
+			"failed",
+			outcome === "unavailable"
+				? "no rollback is available for this mutation kind"
+				: "rollback did not restore the journaled pre-state",
+		),
 	);
 	tally.blocked += 1;
 }
