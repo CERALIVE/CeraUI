@@ -37,6 +37,16 @@ Address-family and install-set rules are in `docs/DEVICE-UPDATES.md`.
 Legacy classification is exact-name (`package-layer.ts`); capable-image
 classification is origin-based (`apt-all-packages.ts`). See `docs/DEVICE-UPDATES.md`.
 
+Capable APT refusals log `reason`, a closed substep, process `exit` when known,
+and optional sanitized detail (500 UTF-16 units maximum) at the discovery or
+pinned-install catch. ANSI/control characters, URL contents, secret-like lines,
+PEM material and environment assignments are removed before truncation. The
+last diagnostic signature per step is deduplicated for the process lifetime,
+including across successful discovery; changed evidence at that step logs again.
+This context is internal/log-only: refusal state, notification and install
+admission are unchanged. Coverage: `tests/apt-all-diagnostics.test.ts` and
+`tests/apt-all-diagnostic-text.test.ts`; host proof, not board qualification.
+
 - Apt reports kept-back packages alongside real upgrades; retain both readings.
 - **Kept-back membership WINS over the upgradable list.** apt can name a package
   in both, and the honest answer for such an entry is that it is not installable —

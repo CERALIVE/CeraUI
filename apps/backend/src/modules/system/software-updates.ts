@@ -42,6 +42,7 @@ import {
 	notificationRemove,
 } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import type { AptAllDiagnosticStep } from "./apt-all-diagnostics.ts";
 import {
 	AptAllRefusalError,
 	assertPinnedInstallSimulation,
@@ -146,6 +147,16 @@ let aptHeldBackPackages: string | undefined;
 let actionableAppPackages: string[] = [];
 let actionableAllPackages: PinnedAptPackage[] = [];
 let aptAllRefusal: AptAllRefusalError | null = null;
+// One last signature per closed step bounds memory and suppresses periodic repeats.
+const aptAllDiagnosticSignatures = new Map<AptAllDiagnosticStep, string>();
+
+function logAptAllRefusal(error: AptAllRefusalError): void {
+	const { reason, step, exit, detail } = error;
+	const signature = JSON.stringify([reason, exit, detail]);
+	if (aptAllDiagnosticSignatures.get(step) === signature) return;
+	aptAllDiagnosticSignatures.set(step, signature);
+	logger.warn("Capable APT update refused", { reason, step, exit, detail });
+}
 let aptAllMode = false;
 let discoveredPackages: UpdatePackage[] = [];
 let lastAptReachability: AptReachabilityWire | undefined;
@@ -315,6 +326,7 @@ export function resetSoftwareUpdateState(): void {
 	actionableAppPackages = [];
 	actionableAllPackages = [];
 	aptAllRefusal = null;
+	aptAllDiagnosticSignatures.clear();
 	aptAllMode = false;
 	discoveredPackages = [];
 }
@@ -569,7 +581,10 @@ async function getCapableUpdateSize(
 			APT_DISCOVERY_TIMEOUT_MS,
 		);
 		if (sourcePolicy.exitCode !== 0)
-			throw new AptAllRefusalError("discovery_failed");
+			throw new AptAllRefusalError("discovery_failed", "source-policy", {
+				exit: sourcePolicy.exitCode,
+				detail: sourcePolicy.stderr,
+			});
 		const result = await discoverAptAllPackages(
 			simulation.stdout,
 			holds.stdout,
@@ -579,7 +594,10 @@ async function getCapableUpdateSize(
 					APT_DISCOVERY_TIMEOUT_MS,
 				);
 				if (policy.exitCode !== 0)
-					throw new AptAllRefusalError("discovery_failed");
+					throw new AptAllRefusalError("discovery_failed", "package-policy", {
+						exit: policy.exitCode,
+						detail: policy.stderr,
+					});
 				return policy.stdout;
 			},
 			sourcePolicy.stdout,
@@ -615,6 +633,7 @@ async function getCapableUpdateSize(
 		return null;
 	} catch (error) {
 		if (!(error instanceof AptAllRefusalError)) throw error;
+		logAptAllRefusal(error);
 		aptAllRefusal = error;
 		actionableAllPackages = [];
 		availableUpdates = null;
@@ -1703,10 +1722,14 @@ async function prepareSoftwareUpdate(
 				APT_DISCOVERY_TIMEOUT_MS,
 			);
 			if (probe.exitCode !== 0)
-				throw new AptAllRefusalError("discovery_failed");
+				throw new AptAllRefusalError("discovery_failed", "pinned-simulation", {
+					exit: probe.exitCode,
+					detail: probe.stderr,
+				});
 			assertPinnedInstallSimulation(probe.stdout, actionableAllPackages);
 		} catch (error) {
 			if (!(error instanceof AptAllRefusalError)) throw error;
+			logAptAllRefusal(error);
 			lastUpdateFailure = { reason: error.reason };
 			softUpdateStatus = null;
 			notificationBroadcast(

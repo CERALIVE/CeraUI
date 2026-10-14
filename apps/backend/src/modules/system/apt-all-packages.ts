@@ -1,4 +1,8 @@
 import type { UpdatePackage } from "@ceraui/rpc";
+import {
+	type AptAllDiagnosticStep,
+	sanitizeAptDiagnostic,
+} from "./apt-all-diagnostics.ts";
 import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
 
 export type PinnedAptPackage = {
@@ -11,9 +15,20 @@ export type AptAllRefusal =
 	| "discovery_failed";
 
 export class AptAllRefusalError extends Error {
-	constructor(readonly reason: AptAllRefusal) {
+	readonly exit: number | undefined;
+	readonly detail: string | undefined;
+	constructor(
+		readonly reason: AptAllRefusal,
+		readonly step: AptAllDiagnosticStep,
+		diagnostic?: { readonly exit?: number; readonly detail?: string },
+	) {
 		super(reason);
 		this.name = "AptAllRefusalError";
+		this.exit = diagnostic?.exit;
+		this.detail =
+			diagnostic?.detail === undefined
+				? undefined
+				: sanitizeAptDiagnostic(diagnostic.detail);
 	}
 }
 
@@ -23,7 +38,9 @@ const FIRST_PARTY =
 
 export function parseAptSimulation(text: string): PinnedAptPackage[] {
 	if (text.split("\n").some((line) => line.startsWith("Remv "))) {
-		throw new AptAllRefusalError("removals_required");
+		throw new AptAllRefusalError("removals_required", "parse-simulation", {
+			detail: "simulation requires removals",
+		});
 	}
 	const result: PinnedAptPackage[] = [];
 	const names = new Set<string>();
@@ -39,14 +56,18 @@ export function parseAptSimulation(text: string): PinnedAptPackage[] {
 			!VERSION_RE.test(match[2] ?? "") ||
 			names.has(match[1] ?? "")
 		) {
-			throw new AptAllRefusalError("discovery_failed");
+			throw new AptAllRefusalError("discovery_failed", "parse-simulation", {
+				detail: `invalid or duplicate Inst row: ${line}`,
+			});
 		}
 		const name = match[1] ?? "";
 		result.push({ name, version: match[2] ?? "" });
 		names.add(name);
 	}
 	if (!text.includes("0 upgraded") && result.length === 0)
-		throw new AptAllRefusalError("discovery_failed");
+		throw new AptAllRefusalError("discovery_failed", "parse-simulation", {
+			detail: "missing upgrade summary",
+		});
 	return result;
 }
 
@@ -142,7 +163,9 @@ export async function discoverAptAllPackages(
 }> {
 	const held = new Set(holds.trim().split(/\s+/).filter(Boolean));
 	if ([...held].some((name) => FIRST_PARTY.test(name)))
-		throw new AptAllRefusalError("first_party_held_back");
+		throw new AptAllRefusalError("first_party_held_back", "held-packages", {
+			detail: "first-party package held",
+		});
 	const simulated = parseAptSimulation(simulation);
 	const sources = policySources(sourcePolicy);
 	const packages: UpdatePackage[] = [];
@@ -194,7 +217,9 @@ export function buildAptAllInstallArgs(
 				!APT_PACKAGE_NAME_RE.test(name) || !VERSION_RE.test(version),
 		)
 	)
-		throw new AptAllRefusalError("discovery_failed");
+		throw new AptAllRefusalError("discovery_failed", "install-vector", {
+			detail: "empty or invalid package/version vector",
+		});
 	const family =
 		verdict === "any"
 			? []
@@ -225,6 +250,8 @@ export function assertPinnedInstallSimulation(
 				!pairs.some((pair) => pair.name === name && pair.version === version),
 		)
 	) {
-		throw new AptAllRefusalError("discovery_failed");
+		throw new AptAllRefusalError("discovery_failed", "pinned-recheck", {
+			detail: `pinned package/version mismatch: ${actual.map(({ name, version }) => `${name}=${version}`).join(", ")}`,
+		});
 	}
 }
