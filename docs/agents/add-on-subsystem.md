@@ -12,6 +12,21 @@ add-on operations are no-ops in dev/emulated mode.
 `image-building-pipeline/v2/manifests/schema/addon.schema.json`. It is the single
 TypeScript source of truth for the descriptor shape — never duplicate it in `apps/`.
 
+**Descriptor slot identity [EXISTS].** The shared strict descriptor reader also
+requires the exact filename `<descriptor.id>.json`. Reconciler reads bind this
+to the requested id's slot; RPC directory discovery binds it to the enumerated
+basename. A schema-valid misplaced descriptor is invalid authority, never a
+fallback for its embedded id. The existing handler logs the slot once per failed
+read/pass, preserves its bytes, and performs no fetch, preparation, publication,
+activation or removal from that descriptor. Reconciliation retains the requested
+add-on's intent and uses `error / addon_descriptor_unavailable`; discovery skips
+the invalid row and retains the existing `addon_not_found` mutation refusal.
+Correctly bound siblings remain discoverable and independently serviceable.
+Permanent mismatches terminate the pass; later passes re-read rather than repair
+or cache permission. The helper's explicit requested-id check and the kiosk's
+fixed `cog-display` check remain in place. Host real-file tests prove these
+boundaries, not image-registry or installed-board qualification.
+
 `AddonStateSchema` describes per-feature runtime state persisted under the `addons`
 key of `config.json`. Fields: `enabled`, `phase`, `versionMaterialized`,
 `osVersionMaterialized`, `userConfig`, `lastError`, `autoDisabled`.
