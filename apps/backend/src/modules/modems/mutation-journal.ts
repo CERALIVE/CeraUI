@@ -46,7 +46,6 @@
  * each of the four steps independently against a real temp directory.
  */
 
-import { createHash } from "node:crypto";
 import { closeSync, constants as fsConstants } from "node:fs";
 import { mkdir, open, readdir, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
@@ -63,7 +62,10 @@ import {
 	readStoredStateFile,
 	STORED_STATE_LIMITS,
 } from "../system/update-orchestrator/stored-state-file.ts";
-import { parseMutationJournalEntry as parseEntry } from "./mutation-journal-parse.ts";
+import {
+	mutationSlotName,
+	parseMutationJournalEntry as parseEntry,
+} from "./mutation-journal-parse.ts";
 import {
 	acknowledgeMutationRemoval,
 	resetPendingMutationRemovals,
@@ -201,12 +203,14 @@ export function resetMutationJournalDeps(): void {
 	resetPendingMutationRemovals();
 }
 
-export function mutationSlotName(stableKey: string): string {
-	return createHash("sha256").update(stableKey, "utf8").digest("hex");
+export { mutationSlotName };
+
+function slotFile(stableKey: string): string {
+	return `${mutationSlotName(stableKey)}.json`;
 }
 
 function entryPath(deps: MutationJournalDeps, stableKey: string): string {
-	return join(deps.dir, `${mutationSlotName(stableKey)}.json`);
+	return join(deps.dir, slotFile(stableKey));
 }
 
 /**
@@ -250,9 +254,10 @@ export async function removeMutationEntry(
 }
 
 /**
- * Read one entry. An unparseable or wrong-version document answers `undefined`
- * AND is reported, never silently repaired: the caller treats an unreadable
- * mutation record the same way it treats a failed rollback.
+ * Read one entry. An unparseable or wrong-version document, or one naming a key
+ * other than `stableKey`, answers `undefined` AND is reported (recovery barrier
+ * raised), never silently repaired: the caller treats an unreadable mutation
+ * record the same way it treats a failed rollback.
  */
 export async function readMutationEntry(
 	stableKey: string,
@@ -260,7 +265,7 @@ export async function readMutationEntry(
 ): Promise<ModemMutationEntry | undefined> {
 	const raw = await deps.fs.readText(entryPath(deps, stableKey));
 	if (raw === undefined) return undefined;
-	return parseEntry(raw, stableKey);
+	return parseEntry(raw, slotFile(stableKey));
 }
 
 /** Every readable entry on disk, for startup replay. */
@@ -290,7 +295,7 @@ export class MutationJournalInventoryError extends Error {
 	}
 }
 
-/** Names of journal files that exist but could not be read back as an entry. */
+/** Journal files that exist but do not read back as an entry bound to their own name. */
 export async function listUnreadableSlots(
 	deps: MutationJournalDeps = activeDeps,
 ): Promise<readonly string[]> {

@@ -23,6 +23,10 @@ const RETIREMENT_ACQUISITIONS = 3;
  * from scratch. Three acquisitions bound a holder chain; exhaustion or
  * cancellation answers `state_mismatch`, meaning the entry could not be retired
  * under this observation, never that hardware disagreed.
+ *
+ * The lease covers `stableKey` alone, so each `retire` rereads under it and
+ * refuses with `state_mismatch` a record naming any other key: no retirement
+ * writes or deletes a slot whose lease it does not hold.
  */
 export async function withRetirementKey(
 	stableKey: string,

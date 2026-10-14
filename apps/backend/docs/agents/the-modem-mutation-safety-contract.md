@@ -68,6 +68,25 @@ each of the four steps independently against a REAL temp directory. An unparseab
 or wrong-version slot is reported and LEFT IN PLACE — a mutation record that
 cannot be read is exactly what fail-closed exists for.
 
+**A record is valid only in its own slot.** Every writer files an entry at
+`sha256(entry.stableKey).json` (the only naming since the journal was created), so
+`parseMutationJournalEntry` binds each parsed record to the file it came from: a
+direct read of key K accepts only `sha256(K).json` content naming K, and both
+inventory passes accept a file only when its name is
+`sha256(record.stableKey).json`. A schema-valid record filed under any other name
+(hand edit, misfile, copy) is MISPLACED and is treated exactly like a torn slot:
+the read fault raises the recovery barrier, the direct read answers nothing,
+`listUnreadableSlots` names the file, the complete inventory throws
+`MutationJournalInventoryError`, and replay neither replays nor removes it. A
+misplaced record is never ordinary absence and never a deletion target: an
+acknowledgement retry for the slot's key answers the existing `no_entry` while the
+barrier stays up, and the named key's real slot is untouched. Defence in depth:
+acknowledge, decommission and rebaseline reread under their lease and refuse with
+`state_mismatch` any record whose key differs from the leased key, so no
+retirement writes or deletes a slot whose lease it does not hold. Repair is the
+same operator action as for any damaged slot: remove or refile the stray file;
+the retry owner then lowers the barrier on a fully readable journal.
+
 Journal reads are bounded, anchored, no-follow/nonblocking and duplicate-strict.
 A present unreadable slot or directory inspection fault raises/retains the existing
 recovery barrier; replay lowers it only with zero unreadable authority. Invalid

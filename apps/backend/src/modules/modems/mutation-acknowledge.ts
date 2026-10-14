@@ -150,6 +150,7 @@ async function acknowledgeHeld(
 	const revision = mutationJournalRevision();
 	const entry = await readMutationEntry(stableKey);
 	if (entry === undefined) return fail("no_entry");
+	if (entry.stableKey !== stableKey) return fail("state_mismatch");
 	if (entry.state === "acknowledged") {
 		if (!isMutationJournalRevisionCurrent(revision)) return fail("not_blocked");
 		return archiveAcknowledged(entry, mode, "resume acknowledged retirement");
@@ -198,6 +199,7 @@ async function decommissionHeld(
 	const revision = mutationJournalRevision();
 	const entry = await readMutationEntry(stableKey);
 	if (entry === undefined) return fail("no_entry");
+	if (entry.stableKey !== stableKey) return fail("state_mismatch");
 	if (entry.state !== "device-absent-quarantine") return fail("not_blocked");
 	if (!isMutationJournalRevisionCurrent(revision)) return fail("not_blocked");
 	try {
@@ -237,6 +239,7 @@ async function rebaselineHeld(
 	const revision = mutationJournalRevision();
 	const entry = await readMutationEntry(stableKey);
 	if (entry === undefined) return fail("no_entry");
+	if (entry.stableKey !== stableKey) return fail("state_mismatch");
 	if (entry.state === "acknowledged") {
 		if (!isMutationJournalRevisionCurrent(revision)) return fail("not_blocked");
 		return archiveAcknowledged(
