@@ -23,6 +23,20 @@ import { gzipSync } from 'node:zlib';
 const KIB = 1024;
 
 const SPA_BASELINE = {
+	// ACCEPTED, TRACKED REGRESSION — re-derived 2026-10-13 for the integrated
+	// update-system operator surface. Ten-locale refusal/recovery copy retains
+	// Paraglide's per-message x 10-locale expansion (TD-spa-i18n-catalog-size,
+	// open), alongside the current-link Updates/Live evidence controls.
+	// Measured lane deltas (total/precache): I18N +0.4/+0.3 KiB (rounded);
+	// FRONT2 first breaches the old budgets by 2,561/2,563 B; C2 adds
+	// 2,997/2,999 B, C3 120/118 B, FRONT3 369/372 B, A3 1,398/1,400 B,
+	// remaining picks 977/975 B, integration -41/-44 B. A6/P4 change no SPA
+	// source; F4's additive refusal key and Stop controls add 367/371 B.
+	// Final measurements: 1,213,588/1,354,486 B, over the previous budgets
+	// by exactly 8,748/8,754 B. The displaced 1,188,456/1,329,348 B baselines
+	// remain below: +25,132/+25,138 B accepted footprint, not resolved debt.
+	// Both 16 KiB absolute headrooms, initial-route, single-chunk and federation
+	// ceilings are unchanged; further growth remains bounded.
 	// ACCEPTED, TRACKED REGRESSION — re-derived 2026-09-25 for the Todo 41
 	// Updates dialog rebuild, app-wide orchestrator badge and Go Live refusal
 	// band. The dialog remains a lazy chunk (10.5 KiB gzip, off the initial route);
@@ -52,12 +66,12 @@ const SPA_BASELINE = {
 	// single-chunk ceilings are NOT widened. Both aggregates now carry a SECOND,
 	// absolute ceiling so a re-derivation cannot hand back a fresh 12% to spend
 	// silently — precache gained one here for the reason totalGzip already had.
-	totalGzip: 1_188_456,
+	totalGzip: 1_213_588,
 	initialRouteGzip: 497_196,
 	largestChunkGzip: 461_577,
 	// Keep the tighter experience-stability precache baseline on integration;
 	// the parallel media-island measurement is retained below, not added to it.
-	precacheGzip: 1_329_348,
+	precacheGzip: 1_354_486,
 };
 
 // The aggregate's binding constraint. A ratio applied to a freshly re-derived
@@ -85,6 +99,11 @@ const SPA_DISPLACED_BASELINES = {
 		{ bytes: 1_103_680, label: 'pre-composition', debt: 'TD-spa-i18n-catalog-size' },
 		{ bytes: 1_121_005, label: 'pre-capture-failover', debt: 'TD-spa-i18n-catalog-size' },
 		{ bytes: 1_146_314, label: 'pre-update-orchestrator', debt: 'TD-spa-i18n-catalog-size' },
+		{
+			bytes: 1_188_456,
+			label: 'pre-integrated-update-system',
+			debt: 'TD-spa-i18n-catalog-size',
+		},
 	],
 	precacheGzip: [
 		{ bytes: 903_286, label: 'pre-Phase-C', debt: 'TD-modem-phase-c-spa-size' },
@@ -106,6 +125,11 @@ const SPA_DISPLACED_BASELINES = {
 		{
 			bytes: 1_287_181,
 			label: 'pre-update-orchestrator',
+			debt: 'TD-spa-i18n-catalog-size',
+		},
+		{
+			bytes: 1_329_348,
+			label: 'pre-integrated-update-system',
 			debt: 'TD-spa-i18n-catalog-size',
 		},
 	],

@@ -186,6 +186,31 @@ the SPA splits the catalog into lazy namespace chunks where the federation bundl
 so the SPA pays the ten-locale tax per namespace rather than all at once. It is recorded
 separately because the remedies and the exit measurements differ.
 
+**2026-10-13 — the integrated update-system operator surface crosses the two
+aggregate ceilings again (accepted footprint, debt still open).** The final
+three-pick build measures **1,213,588 B total SPA gzip / 1,354,486 B precache**,
+up **25,132 B / 25,138 B** from the displaced 1,188,456 B / 1,329,348 B
+baselines. Its old-budget overruns are exactly **8,748 B / 8,754 B**. The
+operator refusal/recovery copy spans ten locales and retains Paraglide's
+per-message expansion; Updates and Live additionally keep current-link evidence
+controls rather than replacing unknown outcomes with success.
+
+The measured total/precache sequence is: I18N +0.4/+0.3 KiB (rounded; exact
+baseline/I18N bytes were not retained); FRONT2 first breaches the old budgets
+by 2,561/2,563 B; C2 adds 2,997/2,999 B; C3 120/118 B; FRONT3 369/372 B;
+A3 1,398/1,400 B; remaining picks 977/975 B; integration -41/-44 B. These
+exact increments subtract successive measurements against unchanged budgets,
+not rounded KiB. A6/P4 touch no SPA source; F4's additive refusal key and Stop
+controls add 367/371 B over the pre-pick endpoint of 1,213,221/1,354,115 B.
+
+Both displaced measurements remain visible in every bundle report. Baselines
+move only by the measured 25,132/25,138 B; the **16 KiB absolute headroom** on
+each aggregate is unchanged, as are initial-route, single-chunk and federation
+ceilings. This is not permission to widen another budget or remove operator
+copy. The reduction path remains a dedicated locale-module/per-locale precache
+effort that lowers the ten-locale per-key cost without dropping a language;
+the debt remains open until those aggregate baselines can be lowered.
+
 Two guardrails came with the re-derivation rather than after it. The aggregate total is
 now bounded by a 16 KiB **absolute** ceiling as well as the 12% ratio, so re-deriving the
 baseline released ~16 KiB rather than the ~118 KiB a ratio alone would have handed back;
