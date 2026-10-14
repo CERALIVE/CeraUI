@@ -34,7 +34,12 @@ configuration. Exhausted current Start recovery records generation-owned UNKNOWN
 in the existing unresolved-action store and renders the existing band/keys with
 an operator-reachable Stop. Later admissible live/idle facts after its mark or
 that Stop owner's acknowledgement clear only matching Start optimism; navigation,
-remount, reconnect and uncertain evidence do not. No automatic Stop or backend
+remount, reconnect and uncertain evidence do not. The latest explicit Stop owner's
+acknowledgement also settles its captured, still-current starting attempt before
+exhaustion, revoking the watchdog even when no recovery record exists. Stop-owner
+and Start-generation fences stay; a failed Stop settles nothing. The shared
+operation still requires post-press idle lifecycle for confirmation.
+No automatic Stop or backend
 lifecycle is fabricated. Browser scheduling and integrated backend/engine
 incidence of the complete lost-confirmation transcript remain UNKNOWN.
 

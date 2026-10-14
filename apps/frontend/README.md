@@ -228,7 +228,11 @@ src/
   unconfirmed band offers one explicit operator Stop; Start optimism and held
   lifecycle are not fabricated into idle. Navigation, remount and reconnect do
   not clear it. Later admissible live/idle evidence after its mark, or that Stop
-  owner's acknowledgement, settles only the matching attempt. Other fields are
+  owner's acknowledgement, settles only the matching attempt. The latest owner's
+  acknowledged Stop also settles its captured, still-current starting attempt
+  before exhaustion, revoking pending watchdog continuations without requiring a
+  recovery record. Retain both Stop-owner and Start-generation fences; operation
+  confirmation still requires post-press idle lifecycle evidence. Other fields are
   unrelated to **stream settlement**, not every decision: `updating` still gates
   power and `network_ingest` still gates Start configuration. Host tests prove
   scripted carrier behavior; browser scheduling, geometry and integrated

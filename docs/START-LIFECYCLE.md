@@ -654,8 +654,15 @@ subscription boundary owns settlement even while Live is unmounted; an old
 generation cannot write or clear a newer attempt's record. A positive live push
 settles Start even while away, so it cannot leave a disabled live control or a
 second Stop. The band's pending Stop remains intentionally disabled with its
-existing feedback/TTL behavior; acknowledgement clears this Start record but
-does not fabricate operation confirmation or rewrite held lifecycle.
+existing feedback/TTL behavior. **FIX-16-F9:** the latest explicit Stop owner's
+acknowledged `stopped` settles the still-current starting attempt captured at its
+press, whether before or after exhaustion. It clears any matching recovery record
+and revokes the Start lifetime, so late reads cannot create UNKNOWN or issue a
+replacement. Recovery-record presence is not a settlement prerequisite. Retain
+both the Stop-owner fence and Start-generation/state fence: an old reply cannot
+settle a retry or revoke a newer Start. A failed Stop revokes nothing. None of this
+fabricates operation confirmation or rewrites held lifecycle; the operation still
+needs post-press current-link idle lifecycle evidence.
 
 A full pulled status (`ingestPulledStatus`: the reconnect hydrate and the stop
 watchdog's pull) is a SNAPSHOT: a lifecycle it omits is absent now, so it

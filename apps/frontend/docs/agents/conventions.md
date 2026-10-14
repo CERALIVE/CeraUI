@@ -26,7 +26,12 @@ no admissible evidence remains. Render the existing unconfirmed band/keys and
 its operator Stop, never an automatic Stop or fabricated idle/lifecycle. Preserve
 the record through navigation/remount, reconnect and uncertainty; settle matching
 optimism only on admitted later live/idle stream facts or that Stop owner's
-acknowledgement. Old generations cannot write or clear newer records. The F7
+acknowledgement. **FIX-16-F9:** the latest Stop owner's acknowledged `stopped`
+settles its captured, still-current starting attempt before OR after exhaustion,
+revoking the pending watchdog without requiring a recovery record. Preserve
+Stop-owner and Start-generation fences; failed Stop revokes nothing and operation
+confirmation still requires post-press idle lifecycle evidence.
+Old generations cannot write or clear newer records. The F7
 allowlist means unrelated to **stream settlement**, not every decision:
 `updating` gates power; `network_ingest` gates Start configuration. The full
 lost-confirmation transcript's integrated backend/engine incidence and browser

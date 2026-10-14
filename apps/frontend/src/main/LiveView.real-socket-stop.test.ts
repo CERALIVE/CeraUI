@@ -269,6 +269,330 @@ async function exhaustStart(
 	}
 }
 
+describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
+	it("a same-attempt Stop ack before read exhaustion must not create recovery UNKNOWN", async () => {
+		// Given the reviewer's first exhausted Start and an independent failed Stop claim.
+		const { container } = render(LiveView);
+		await exhaustStart(container, { stream_lifecycle: "starting" });
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		deliverStatus(F8_MIXED_FALSE);
+		await settle();
+		expect(getStreamingOptimismState()).toBe("idle");
+		expect(startRecoveryUnknown(getStreamingAttemptGeneration())).toBe(false);
+		reject("streaming.stop", "INTERNAL_ERROR");
+		await settle();
+		expect(getOperationPhase(KEY)).toBe("failed");
+		expect(controls(container)).toEqual(STOP_AND_START);
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		answer("streaming.start", { success: true });
+		await settle();
+		const generation = getStreamingAttemptGeneration();
+		await elapse(90_000);
+		expect(outstanding("status.getStatus")).toHaveLength(1);
+		// When this generation's latest Stop acknowledges before the first recovery answer.
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		expect(getOperationPhase(KEY)).toBe("pending");
+		answer("streaming.stop", { success: true, result: "stopped" });
+		await settle();
+		expect(getOperationPhase(KEY)).toBe("pending");
+		await elapse(1_100);
+		deliverStatus(F8_MIXED_FALSE);
+		await settle();
+		answer("status.getStatus", {
+			is_streaming: false,
+			stream_lifecycle: "idle",
+		});
+		await settle();
+		if (outstanding("status.getStatus").length > 0) {
+			await elapse(1_100);
+			deliverStatus(F8_MIXED_FALSE);
+			await settle();
+			answer("status.getStatus", {
+				is_streaming: false,
+				stream_lifecycle: "idle",
+			});
+			await settle();
+		}
+		await elapse(180_000);
+		// Then the revoked cycle requests no replacement and cannot manufacture UNKNOWN.
+		expect(startRecoveryUnknown(generation)).toBe(false);
+		expect(getStreamingOptimismState()).toBe("idle");
+		expect(getStatus()?.stream_lifecycle).toBe("starting");
+		expect(getOperationPhase(KEY)).toBe("idle");
+		expect(band(container)).toBeNull();
+		expect(controls(container)).toEqual([
+			{ label: "Start Stream", disabled: false },
+		]);
+		expect(FakeWebSocket.log.map((r) => r.path)).toEqual([
+			"streaming.start",
+			"status.getStatus",
+			"status.getStatus",
+			"streaming.stop",
+			"streaming.start",
+			"status.getStatus",
+			"streaming.stop",
+		]);
+	});
+
+	it.each(["before", "after"] as const)(
+		"simple Stop acknowledgement %s exhaustion settles its attempt",
+		async (ack) => {
+			// Given a reachable band from an ordinary failed Stop, not a fabricated recovery record.
+			const { container } = render(LiveView);
+			deliverStatus({ stream_lifecycle: "stop_failed" });
+			await settle();
+			await fireEvent.click(button(container, "Stop Stream"));
+			await settle();
+			reject("streaming.stop", "INTERNAL_ERROR");
+			await settle();
+			deliverStatus({ stream_lifecycle: "starting" });
+			await settle();
+			await fireEvent.click(button(container, "Start Stream"));
+			await settle();
+			answer("streaming.start", { success: true });
+			await settle();
+			const generation = getStreamingAttemptGeneration();
+			await elapse(90_000);
+			await elapse(1_100);
+			deliverStatus(F8_MIXED_FALSE);
+			await settle();
+			answer("status.getStatus", {
+				is_streaming: false,
+				stream_lifecycle: "idle",
+			});
+			await settle();
+			expect(outstanding("status.getStatus")).toHaveLength(1);
+			// When Stop acknowledges on either side of the second read's exhaustion.
+			await fireEvent.click(button(container, "Stop Stream"));
+			await settle();
+			if (ack === "before") {
+				answer("streaming.stop", { success: true, result: "stopped" });
+				await settle();
+			}
+			await elapse(1_100);
+			deliverStatus(F8_MIXED_FALSE);
+			await settle();
+			answer("status.getStatus", {
+				is_streaming: false,
+				stream_lifecycle: "idle",
+			});
+			await settle();
+			if (ack === "after") {
+				expect(startRecoveryUnknown(generation)).toBe(true);
+				expect(band(container)?.textContent).toContain(
+					"Stream state not confirmed",
+				);
+				answer("streaming.stop", { success: true, result: "stopped" });
+				await settle();
+			}
+			// Then Stop settles the attempt, not the operation or held backend lifecycle.
+			expect(getOperationPhase(KEY)).toBe("pending");
+			expect(getStreamingOptimismState()).toBe("idle");
+			expect(getStatus()?.stream_lifecycle).toBe("starting");
+			expect(startRecoveryUnknown(generation)).toBe(false);
+			expect(band(container)).toBeNull();
+			expect(controls(container)).toEqual([
+				{ label: "Start Stream", disabled: false },
+			]);
+			await elapse(180_000);
+			expect(getOperationPhase(KEY)).toBe("idle");
+			expect(startRecoveryUnknown(generation)).toBe(false);
+			expect(sentCount("status.getStatus")).toBe(2);
+			expect(sentCount("streaming.stop")).toBe(2);
+		},
+	);
+
+	for (const exhaustion of ["before", "after"] as const) {
+		for (const outcome of ["ack", "error"] as const) {
+			for (const nextStart of [false, true]) {
+				it(`matrix exhaustion=${exhaustion} Stop=${outcome} nextStart=${nextStart}`, async () => {
+					// Given Start #1 exhaustion, failed Stop #1 and a naturally reachable Start #2 band.
+					const { container } = render(LiveView);
+					await exhaustStart(container, { stream_lifecycle: "starting" });
+					await fireEvent.click(button(container, "Stop Stream"));
+					await settle();
+					deliverStatus(F8_MIXED_FALSE);
+					await settle();
+					reject("streaming.stop", "INTERNAL_ERROR");
+					await settle();
+					await fireEvent.click(button(container, "Start Stream"));
+					await settle();
+					answer("streaming.start", { success: true });
+					await settle();
+					const generation = getStreamingAttemptGeneration();
+					await elapse(90_000);
+					await fireEvent.click(button(container, "Stop Stream"));
+					await settle();
+					const reply = async () => {
+						if (outcome === "ack")
+							answer("streaming.stop", { success: true, result: "stopped" });
+						else reject("streaming.stop", "INTERNAL_ERROR");
+						await settle();
+					};
+					// When the Stop result is before/after the current watchdog's exhausted budget.
+					if (exhaustion === "after") await reply();
+					const reads = exhaustion === "after" && outcome === "ack" ? 1 : 2;
+					for (let read = 0; read < reads; read += 1) {
+						await elapse(1_100);
+						deliverStatus(F8_MIXED_FALSE);
+						await settle();
+						answer("status.getStatus", {
+							is_streaming: false,
+							stream_lifecycle: "idle",
+						});
+						await settle();
+					}
+					if (exhaustion === "before") await reply();
+					// Then failure preserves UNKNOWN; acknowledgement revokes the captured cycle.
+					expect(getOperationPhase(KEY)).toBe(
+						outcome === "ack" ? "pending" : "failed",
+					);
+					expect(startRecoveryUnknown(generation)).toBe(outcome === "error");
+					expect(getStreamingOptimismState()).toBe(
+						outcome === "ack" ? "idle" : "starting",
+					);
+					expect(getStatus()?.stream_lifecycle).toBe("starting");
+					expect(controls(container)).toEqual(
+						outcome === "ack"
+							? [{ label: "Start Stream", disabled: false }]
+							: F8_RECOVERY_CONTROLS,
+					);
+					if (outcome === "error")
+						expect(band(container)?.textContent).toContain(
+							"Stream state not confirmed",
+						);
+					else expect(band(container)).toBeNull();
+					if (nextStart) {
+						// Failed Stop needs independent affirmative evidence before retry is possible.
+						if (outcome === "error") {
+							deliverStatus(F8_MIXED_FALSE);
+							await settle();
+						}
+						await fireEvent.click(button(container, "Start Stream"));
+						await settle();
+						answer("streaming.start", { success: true });
+						await settle();
+						expect(getStreamingAttemptGeneration()).toBe(generation + 1);
+						expect(startRecoveryUnknown(generation + 1)).toBe(false);
+						expect(getStreamingOptimismState()).toBe("starting");
+					}
+					expect(sentCount("status.getStatus")).toBe(2 + reads);
+					expect(sentCount("streaming.stop")).toBe(2);
+					expect(sentCount("streaming.start")).toBe(nextStart ? 3 : 2);
+				});
+			}
+		}
+	}
+
+	it("an old Stop owner's acknowledgement before exhaustion cannot revoke the retry's Start", async () => {
+		// Given an unresolved claim keeps Stop reachable for a new Start watchdog.
+		const { container } = render(LiveView);
+		await exhaustStart(container, { stream_lifecycle: "starting" });
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		deliverStatus(F8_MIXED_FALSE);
+		await settle();
+		reject("streaming.stop", "INTERNAL_ERROR");
+		await settle();
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		answer("streaming.start", { success: true });
+		await settle();
+		await elapse(90_000);
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		await elapse(16_100);
+		expect(getOperationPhase(KEY)).toBe("timed_out");
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		// When the earlier request still within its real 30 s client budget acknowledges.
+		answer("streaming.stop", { success: true, result: "stopped" }, "oldest");
+		await settle();
+		expect(getOperationPhase(KEY)).toBe("pending");
+		expect(getStreamingOptimismState()).toBe("starting");
+		expect(startRecoveryUnknown(getStreamingAttemptGeneration())).toBe(false);
+		expect(controls(container)).toEqual([
+			{ label: "Stopping...", disabled: true },
+			{ label: "Starting...", disabled: true },
+		]);
+		for (let read = 0; read < 2; read += 1) {
+			await elapse(1_100);
+			deliverStatus(F8_MIXED_FALSE);
+			await settle();
+			answer("status.getStatus", {
+				is_streaming: false,
+				stream_lifecycle: "idle",
+			});
+			await settle();
+		}
+		// Then only the latest explicit owner's acknowledgement settles the captured attempt.
+		expect(startRecoveryUnknown(getStreamingAttemptGeneration())).toBe(true);
+		expect(band(container)?.textContent).toContain(
+			"Stream state not confirmed",
+		);
+		answer("streaming.stop", { success: true, result: "stopped" }, "newest");
+		await settle();
+		expect(startRecoveryUnknown(getStreamingAttemptGeneration())).toBe(false);
+		expect(getStreamingOptimismState()).toBe("idle");
+		expect(getStatus()?.stream_lifecycle).toBe("starting");
+		expect(getOperationPhase(KEY)).toBe("pending");
+		expect(band(container)).toBeNull();
+		expect(controls(container)).toEqual([
+			{ label: "Start Stream", disabled: false },
+		]);
+		expect(sentCount("status.getStatus")).toBe(4);
+		expect(sentCount("streaming.stop")).toBe(3);
+	});
+
+	it("an old Stop generation acknowledgement cannot revoke a newer Start or its later record", async () => {
+		// Given an old Stop still awaiting its real request-id-selected reply.
+		const { container } = render(LiveView);
+		await exhaustStart(container, { stream_lifecycle: "starting" });
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		deliverStatus(F8_MIXED_FALSE);
+		await settle();
+		const oldGeneration = getStreamingAttemptGeneration();
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		answer("streaming.start", { success: true });
+		await settle();
+		const generation = getStreamingAttemptGeneration();
+		expect(generation).toBe(oldGeneration + 1);
+		// When the latest Stop owner's reply arrives, but its captured Start generation is old.
+		answer("streaming.stop", { success: true, result: "stopped" });
+		await settle();
+		expect(getOperationPhase(KEY)).toBe("pending");
+		expect(getStreamingOptimismState()).toBe("starting");
+		expect(getStatus()?.stream_lifecycle).toBe("starting");
+		expect(band(container)).toBeNull();
+		expect(controls(container)).toEqual([
+			{ label: "Starting...", disabled: true },
+		]);
+		await elapse(90_000);
+		for (let read = 0; read < 2; read += 1) {
+			await elapse(1_100);
+			deliverStatus(F8_MIXED_FALSE);
+			await settle();
+			answer("status.getStatus", {
+				is_streaming: false,
+				stream_lifecycle: "idle",
+			});
+			await settle();
+		}
+		// Then neither the old acknowledgement nor an old record clearer owns this newer record.
+		clearStartRecoveryUnknown(oldGeneration);
+		expect(startRecoveryUnknown(generation)).toBe(true);
+		expect(getStreamingOptimismState()).toBe("starting");
+		expect(controls(container)).toEqual(F8_RECOVERY_CONTROLS);
+		expect(sentCount("status.getStatus")).toBe(4);
+		expect(sentCount("streaming.stop")).toBe(1);
+	});
+});
+
 describe("F8 bounded Start recovery escape", () => {
 	it.each([false, true])(
 		"mixed false stream nudges retain Start escape %s",

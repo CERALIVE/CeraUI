@@ -14,7 +14,11 @@ If a current Start watchdog exhausts its bounded evidence, the existing
 unconfirmed-state band offers the operator's Stop instead of leaving only
 disabled “Starting…”. Its generation-owned unknown record survives navigation
 and reconnect; only later admissible live/idle facts or that owner's acknowledged
-Stop clear it and matching Start optimism. No automatic Stop or backend lifecycle
+Stop clear it and matching Start optimism. The latest Stop owner's acknowledgement
+also settles its captured, still-current starting attempt **before** recovery
+exhausts, revoking the pending watchdog; an old owner or Start generation cannot
+settle a newer attempt. Operation confirmation still needs a post-press idle
+lifecycle. No automatic Stop or backend lifecycle
 is invented. Fields classified unrelated here are **unrelated to stream
 settlement**, not every decision (`updating` still gates power; `network_ingest`
 still gates Start configuration). Browser scheduling and incidence of the complete

@@ -111,7 +111,7 @@ function handleStop() {
 		// anyway), and a reply that arrives after a retry settles nothing: the
 		// newer claim is not its own (FIX-16-F4 C4-2).
 		onResult: (r) => {
-			if (r.success && r.result === 'stopped' && settleOperatorStop(owner) && startRecoveryUnknown(generation))
+			if (r.success && r.result === 'stopped' && settleOperatorStop(owner))
 				supersedeStartingOptimism(generation);
 		},
 		// The band renders the failure inline and keeps it on screen; a toast would

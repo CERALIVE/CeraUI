@@ -23,7 +23,12 @@ Bounded Start exhaustion creates a generation-owned recovery-unknown entry in
 the existing unresolved-action store. The existing unconfirmed band retains an
 operator Stop across navigation/remount and reconnect, with no new read loop or
 automatic Stop. Only admitted later live/idle facts after its mark or the current
-Stop owner's acknowledgement clear matching optimism. Non-settling/failed/stale
+Stop owner's acknowledgement clear matching optimism. The latest explicit Stop
+owner's acknowledgement settles its captured, still-current starting attempt
+before OR after exhaustion, revoking pending watchdog effects without requiring a
+recovery record. Preserve Stop-owner and Start-generation fences; failed Stop
+revokes nothing and operation confirmation still needs post-press idle lifecycle.
+Non-settling/failed/stale
 evidence does not. “Unrelated” means unrelated to stream settlement, not every
 decision (`updating` gates power; `network_ingest` gates Start configuration).
 Browser scheduling and integrated backend/engine incidence of the complete
