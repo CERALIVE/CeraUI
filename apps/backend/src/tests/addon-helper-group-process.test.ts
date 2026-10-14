@@ -49,6 +49,10 @@ for (const action of ["enable", "disable"] as const) {
 					? addonEnable("cog-display", deps)
 					: addonDisable("cog-display", deps)
 			).catch((error: unknown) => error);
+			void p.watch(
+				work,
+				`${action} collector ${mode} preserves ${mode === "term" ? 143 : 137}, partial streams and the surviving group`,
+			);
 			try {
 				const worker = await p.worker();
 				const leader: unknown = JSON.parse(await p.wait("leader"));
@@ -91,6 +95,10 @@ test("TERM-induced zero stays a timeout failure and passes mandatory evidence", 
 		exec: () => p.step.run(),
 		createStep: () => p.step,
 	}).catch((error: unknown) => error);
+	void p.watch(
+		work,
+		"TERM-induced zero stays a timeout failure and passes mandatory evidence",
+	);
 	try {
 		await p.wait("leader");
 		p.fire(30000);
@@ -117,6 +125,10 @@ for (const mode of ["survivor", "double", "escape"] as const) {
 				exec: () => p.step.run(),
 				createStep: () => p.step,
 			}).catch((error: unknown) => error);
+			void p.watch(
+				work,
+				`real ${mode} descendant after helper exit ${code} pins the group boundary and its session-escape limit`,
+			);
 			try {
 				const worker = await p.worker();
 				const result = await work;
@@ -155,6 +167,10 @@ test("ordinary checked launcher preserves PID=PGID=SID and fixed environment wit
 	const p = await groupProcessFixture("plain");
 	try {
 		const work = p.step.run();
+		void p.watch(
+			work,
+			"ordinary checked launcher preserves PID=PGID=SID and fixed environment without detached or sudo",
+		);
 		const leader: unknown = JSON.parse(await p.wait("leader"));
 		expect(leader).toEqual({
 			pid: p.step.child()?.pid,

@@ -8,6 +8,12 @@ import {
 	createAddonHelperStep,
 } from "../../helpers/addon-helper-step.ts";
 import { createHelperLaunchFile } from "../../helpers/helper-launch-file.ts";
+import { currentSysextOperation } from "../../modules/addons/disruptive-sysext-step.ts";
+import {
+	isActiveDisruptiveOwner,
+	isDisruptiveActionPending,
+} from "../../modules/system/disruptive-action-reservation.ts";
+import { observePipeEof, watchGroupProcess } from "./group-process-snapshot.ts";
 import { prepareHelperScriptGroup } from "./helper-step-fixture.ts";
 
 const PROGRAM = `import os, sys, signal, json
@@ -42,6 +48,11 @@ os._exit(code)
 `;
 
 export async function groupProcessFixture(mode: string, code = 0) {
+	let phase = "fixture-setup";
+	let owner: symbol | undefined;
+	const pipes: Partial<
+		Record<"stdout" | "stderr", ReturnType<typeof observePipeEof>>
+	> = {};
 	const dir = await mkdtemp(join(tmpdir(), "helper-group-"));
 	const script = mode.startsWith("script:");
 	const [, action = "refresh", actor = ""] = mode.split(":");
@@ -51,6 +62,7 @@ export async function groupProcessFixture(mode: string, code = 0) {
 		for (const wake of [...waiters]) wake();
 	});
 	const wait = async (name: string): Promise<string> => {
+		phase = `readiness:${name}`;
 		const result = Promise.withResolvers<string>();
 		const check = () => {
 			void readFile(join(dir, name), "utf8").then(
@@ -96,6 +108,8 @@ export async function groupProcessFixture(mode: string, code = 0) {
 		euid: () => 0,
 		launchFile: createHelperLaunchFile(dir, process.getuid?.() ?? -1),
 		spawn: (argv, options) => {
+			phase = "spawn";
+			owner = currentSysextOperation()?.id;
 			launches.push({ argv: [...argv], options });
 			child = script
 				? Bun.spawn(
@@ -132,11 +146,15 @@ export async function groupProcessFixture(mode: string, code = 0) {
 						],
 						options,
 					);
+			for (const key of ["stdout", "stderr"] as const) {
+				pipes[key] = observePipeEof(child[key]);
+			}
 			return child;
 		},
 		kill: process.kill,
 		collect: {
 			scheduleTimeout: (run, ms) => {
+				phase = `collector-bound:${index + 1}:${ms}`;
 				timers.set(++index, { run, ms });
 				return index;
 			},
@@ -149,6 +167,20 @@ export async function groupProcessFixture(mode: string, code = 0) {
 	let workerPid: number | undefined;
 	return {
 		step,
+		watch: <T>(work: Promise<T>, testName: string) =>
+			watchGroupProcess(work, () => ({
+				testName,
+				phase,
+				pendingDelaysMs: [...timers.values()].map(({ ms }) => ms),
+				pid: child?.pid ?? null,
+				exitCode: child?.exitCode ?? null,
+				signalCode: child?.signalCode ?? null,
+				stdoutEof: pipes.stdout?.eof() ?? false,
+				stderrEof: pipes.stderr?.eof() ?? false,
+				ownerId: owner === undefined ? null : `${dir}:${String(owner)}`,
+				ownerActive: owner !== undefined && isActiveDisruptiveOwner(owner),
+				isDisruptiveActionPending: isDisruptiveActionPending(),
+			})),
 		launches,
 		wait,
 		worker: async () => {
@@ -164,6 +196,7 @@ export async function groupProcessFixture(mode: string, code = 0) {
 			return row;
 		},
 		fire: (ms: number) => {
+			phase = `fire:${ms}`;
 			const match = [...timers].find(([, entry]) => entry.ms === ms);
 			if (!match) throw new Error(`missing timer ${ms}`);
 			timers.delete(match[0]);
@@ -194,6 +227,7 @@ export async function groupProcessFixture(mode: string, code = 0) {
 			workerPid = undefined;
 		},
 		cleanup: async () => {
+			for (const pipe of Object.values(pipes)) pipe.restore();
 			watcher.close();
 			if (child && child.exitCode === null && child.signalCode === null)
 				child.kill("SIGKILL");

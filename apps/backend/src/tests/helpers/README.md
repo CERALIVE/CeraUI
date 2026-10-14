@@ -1,5 +1,14 @@
 # Update fixture ownership
 
+Group-process tests may attach `group-process-snapshot.ts` to their existing
+operation promise. One unreferenced 12-second timer prints current fixture phase,
+injected collector delays, child exit/signal/pipe-EOF evidence and the captured
+reservation owner identity/activity beside current pending state. Settlement clears
+the timer; observation returns the original promise and never fires collector
+bounds. Reader closure counts as EOF only before cancellation. The original
+15-second test watchdogs and outcome assertions remain unchanged. This is hosted
+stall diagnostic coverage, not a flake repair or a proven historical cause.
+
 Update tests exercise the production dependency ports explicitly. Runtime
 fixtures that reach startup, OS admission or recovery inject
 `acquireTestOsStageControl` through `acquireOsStageControl`; runner and startup
