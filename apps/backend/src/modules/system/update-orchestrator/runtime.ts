@@ -1908,9 +1908,6 @@ async function reconcileOsActivation(): Promise<void> {
 					decision: () =>
 						getDisruptiveActionDecision({ powerAction: "reboot" }),
 					shutdownAction: "reboot",
-					positiveFailure: (error) =>
-						error instanceof OsAgentError &&
-						error.reason === "activation_arm_failed",
 				},
 			);
 		} finally {

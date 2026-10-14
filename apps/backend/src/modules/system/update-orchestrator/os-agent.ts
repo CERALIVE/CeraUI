@@ -647,7 +647,10 @@ export async function armOsActivation(
 		["systemctl", "start", `ceralive-rauc-arm@${now ? "now" : "arm"}.service`],
 		{ timeoutMs: 30_000 },
 	);
-	if (result.exitCode !== 0) throw new OsAgentError("activation_arm_failed");
+	if (result.exitCode !== 0)
+		throw Object.assign(new OsAgentError("activation_arm_failed"), {
+			code: result.exitCode,
+		});
 }
 
 export async function inspectOsOperation(): Promise<"idle" | "running"> {

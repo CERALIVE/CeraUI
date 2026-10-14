@@ -841,18 +841,24 @@ scoped and retired in finally; recurring kiosk polling registers outside those
 contexts and must acquire a fresh same-ID owner. The seam takes one service-lifetime
 reservation owned by the active operation; nested steps re-enter by identity and the
 outer hold lasts until positive completion/failure evidence (unit job plus the unit
-type's steady state for unit steps; for helper/refresh steps a complete process table
-with PID 1 visible, every enumerated row read or positively vanished with
-ENOENT/ESRCH, and no row whose executable identity is the helper or
-`systemd-sysext`). Any other read failure is unknown, never absence. A signal-derived
+type's steady state for unit steps; for helper/refresh steps a consistent visible
+PID census with kernel exe identity for renamed sysext workers, explicit helper
+script ownership, and no unread new member). Vanished reads force a bounded fresh
+pass; persistent churn or unreadable evidence stays UNKNOWN and retries. Helper
+enable/disable also observes the baked descriptor's unit jobs after actors retire.
+Root in the packaged service makes ordinary exe visibility feasible; installed proc
+policy/overrides remain a board gate. This is scoped evidence, not atomic global
+absence. A signal-derived
 client exit (status >= 128 or a signal name) is uncertain, never a failure verdict.
 
 **What a stuck hold means for the operator.** Service holds have no supersede path.
 Only an explicit re-submission of the SAME pending power action supersedes a shutdown
 hold, so a remote factory reset that exits 0 without rebooting leaves a shutdown hold
 that a LOCAL reboot cannot supersede (the actions differ). Natural causes (the 30 s
-helper timeout, a slow unit) hold longer than needed but resolve; a hold that lasts
-forever needs class C evidence loss (filtered `/proc`, a wedged helper or job). The
+helper timeout, a slow unit) may resolve on positive observation, but there is no
+application-level total deadline on manager preparation/download; a stalled kiosk
+Start can naturally retain exclusion indefinitely. Unreadable proc evidence and
+unsettled helper/unit work also keep the hold. The
 escape for a stuck service hold is restarting `ceralive.service` or a power cycle,
 which clears this process-local state. No new override primitive exists (D249); any
 product-level clearance is an owner decision. The completion reboot after a legacy
@@ -861,7 +867,9 @@ orchestrator, package install, recovery, maintenance) and only retries while ref
 Work already submitted while idle cannot be revoked: earlier unit effects or a
 submitted helper's partial execution may survive refusal/failure. A stream or privileged actor can still change state
 after final observation/dispatch; the external root helper is not governed by a
-backend-only decision. No hardware or uninterrupted-transaction proof is claimed.
+backend-only decision. Signal exits, worker handoffs/renames, helper-owned jobs, unit
+settlement, real service-identity proc visibility and restart clearance need board
+drills. No hardware or uninterrupted-transaction proof is claimed.
 
 Stream liveness is tri-state. `stream-liveness-source.ts` is the synchronous,
 side-effect-free composition consumers read. It imports only the

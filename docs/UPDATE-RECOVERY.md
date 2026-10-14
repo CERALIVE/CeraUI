@@ -563,16 +563,30 @@ Owner identities are lifetime-scoped and depth-counted. The exact add-on integra
 API and set/held/uncertain/resolved/released/superseded/restart table live in
 [`START-LIFECYCLE.md`](START-LIFECYCLE.md#reservation-state-table-and-owner-seam).
 Default systemd probes are safe only for the unit actually owning the effect;
-direct sysext helper steps need an operation-owned positive settlement probe, and
-that probe treats only a vanished row (ENOENT/ESRCH) as absent: an unreadable row,
-an empty/unreadable PID 1 or an unlistable table is unknown and keeps the hold. A
-signal-killed client (exit >= 128) is uncertain, not a failure. A stuck service hold
+direct sysext helper steps need a consistent visible census plus their baked
+descriptor-unit jobs. Kernel exe links identify renamed `systemd-sysext` workers;
+explicit script operands identify the Bash helper. Vanished reads force fresh
+enumeration, not completion; unread new members, persistent churn, unreadable exe/
+cmdline, empty/unreadable PID 1 or an unlistable table stay UNKNOWN. Empty cmdlines
+with absent exe settle only with kernel zombie/thread stat proof. The packaged
+service runs as root with no proc/capability restriction; installed visibility and
+overrides are unqualified, and EACCES never means absent. These are non-atomic,
+scoped observations, not an absolute actor-free table claim. Forced arm errors
+retain original exit evidence; `activation_arm_failed` alone never releases, and
+uncertain outcomes observe the actual arm unit. A signal-killed client (exit >= 128)
+is uncertain, not a failure. A stuck service hold
 has no supersede path and no in-product override (D249); the operator escape is
 restarting `ceralive.service` or a power cycle, and a remote factory reset that exits
 0 without rebooting leaves a shutdown hold only the same action can supersede.
+Eventual settlement is not guaranteed: manager preparation/download has no
+application-level total deadline, so a natural stalled kiosk Start may retain its
+outer service hold indefinitely, without corruption or a systemd defect.
 Board drills still owe accepted reboot → Go Live during shutdown, stale restart
 past 10 s → actual resolver clearance, exit 0 without shutdown → fenced retry,
-and timed activation arm → reboot. None is physically proven by the host matrices.
+and timed activation arm → reboot. Additionally prove signal exits, sysext worker
+handoffs/renames, helper-owned unit jobs, unit settlement, restart clearance and
+actual proc visibility under the installed service identity. None is physically
+proven by the host matrices; restart clears local holds, not external-work evidence.
 
 The tick entrypoint suppresses phase overwrites, discovery, package launch, OS
 stage/activation, mirror start/poll/cleanup and quarantine retirement. Dependency

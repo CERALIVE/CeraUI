@@ -17,8 +17,8 @@
 
 /*
  * Argv-only wrapper around the privileged `ceralive-addon-helper` root binary
- * (T27). The backend is UNPRIVILEGED; every add-on lifecycle op is performed by
- * the helper, invoked here as:
+ * (T27). The packaged backend runs as root; add-on lifecycle authority remains
+ * in the helper, invoked here as:
  *
  *     sudo ceralive-addon-helper <enable|disable|refresh|status> [id]
  *
@@ -37,8 +37,14 @@
  *    bash-script integration test.
  */
 
-import { runDisruptiveSysextStep } from "../modules/addons/disruptive-sysext-step.ts";
+import type { AddonDescriptor } from "@ceraui/rpc/schemas";
+import { readAddonDescriptor } from "../modules/addons/descriptor-authority.ts";
+import {
+	getSysextActionDecision,
+	runDisruptiveSysextStep,
+} from "../modules/addons/disruptive-sysext-step.ts";
 import { isRealDevice } from "../modules/system/device-detection.ts";
+import { DisruptiveActionRefusedError } from "../modules/system/disruptive-action-error.ts";
 import { type ExecResult, execFileP } from "./exec.ts";
 
 /** The privileged helper binary (resolved on PATH at /usr/bin on the device). */
@@ -69,6 +75,7 @@ export type AddonHelperDeps = {
 	isRealDevice: () => Promise<boolean>;
 	/** Run a binary argv-only (NO shell); rejects on non-zero exit. */
 	exec: (file: string, args: readonly string[]) => Promise<ExecResult>;
+	readDescriptor?: (id: string) => Promise<AddonDescriptor>;
 };
 
 const defaultDeps: AddonHelperDeps = {
@@ -98,9 +105,33 @@ async function invokeHelper(
 		throw new Error(ADDON_UNAVAILABLE_ERROR);
 	}
 	if (args[0] !== "status") {
+		const decision = await getSysextActionDecision();
+		if (!decision.allowed)
+			throw new DisruptiveActionRefusedError(decision.reason);
+		const id = args[1];
+		const descriptor =
+			id === undefined
+				? undefined
+				: await (
+						deps.readDescriptor ??
+						((id: string) =>
+							readAddonDescriptor(`/usr/share/ceralive/addons/${id}.json`))
+					)(id);
+		if (descriptor && descriptor.id !== id)
+			throw new Error("add-on descriptor id mismatch");
+		const units = descriptor
+			? [
+					...new Set([
+						...(descriptor.units?.unmask ?? []),
+						...(descriptor.units?.enable ?? []),
+						...(descriptor.units?.start ?? []),
+					]),
+				]
+			: [];
 		const { stdout } = await runDisruptiveSysextStep(
 			`helper:${args.join(":")}`,
 			() => deps.exec(SUDO, [HELPER_BIN, ...args]),
+			{ units },
 		);
 		return stdout;
 	}

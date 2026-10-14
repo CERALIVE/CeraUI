@@ -143,6 +143,7 @@ test("a refused helper after device detection restores the scan payload", async 
 		},
 		helperEnable: async (id) => {
 			await addonEnable(id, {
+				readDescriptor: async () => sysextDescriptor,
 				isRealDevice: async () => {
 					updateStatus(true);
 					return true;
@@ -188,6 +189,7 @@ test("prepared bytes are not scan-visible during final helper admission", async 
 			),
 		helperEnable: async (id) => {
 			await addonEnable(id, {
+				readDescriptor: async () => sysextDescriptor,
 				isRealDevice: async () => {
 					scanVisible = await Bun.file(f.raw).exists();
 					updateStatus(true);

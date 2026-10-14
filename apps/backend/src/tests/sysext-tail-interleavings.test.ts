@@ -196,6 +196,7 @@ test("nested privileged submission retains one operation identity", async () => 
 		if (outer) identities.push(outer.id);
 		await addonEnable("cog-display", {
 			isRealDevice: async () => true,
+			readDescriptor: async () => sysextDescriptor,
 			exec: async () => {
 				const nested = currentSysextOperation();
 				if (nested) identities.push(nested.id);

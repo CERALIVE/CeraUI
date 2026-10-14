@@ -26,12 +26,23 @@ beforeEach(() => {
 		procIo: {
 			read: async (file) => {
 				const row = rows[file.split("/").at(-2) ?? ""];
-				if (row instanceof Error) throw row;
+				if (row instanceof Error) {
+					if ("code" in row && ["ENOENT", "ESRCH"].includes(String(row.code)))
+						entries = entries.filter((pid) => pid !== file.split("/").at(-2));
+					throw row;
+				}
 				if (row === undefined)
 					throw Object.assign(new Error("vanished"), { code: "ENOENT" });
 				return row;
 			},
 			list: async () => entries,
+			link: async (file) => {
+				const row = rows[file.split("/").at(-2) ?? ""];
+				if (row instanceof Error) throw row;
+				if (row === undefined)
+					throw Object.assign(new Error("vanished"), { code: "ENOENT" });
+				return row.split("\0")[0] ?? "";
+			},
 		},
 	});
 	setDisruptiveRetryClockForTest({

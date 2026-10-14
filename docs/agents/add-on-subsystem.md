@@ -100,25 +100,40 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
   reparented and running. Unit steps poll their own unit: no queued job plus that unit
   type's steady state (`.service` running/exited, `.socket` listening, `.timer`
   waiting/elapsed, `.path` waiting, `.target` active, `.mount` mounted, or any
-  inactive/dead or failed/failed). Helper/refresh steps require a complete actor-free
-  `/proc` table: PID 1 readable and non-empty, the directory listable, and every
-  enumerated row's `cmdline` either read or positively vanished (`ENOENT`/`ESRCH`); any
-  other read failure (EIO, EACCES, ...) is unknown and keeps the hold. A row is an actor
-  only by executable identity (argv[0], the target of `sudo`/`env`, or the script an
-  interpreter runs, e.g. `bash /usr/sbin/ceralive-addon-helper`), never by argument
-  text, so `journalctl -f -u systemd-sysext` is an observer. Timer wakeups only
-  re-observe. In-process only; the root helper itself is not governed by this backend
-  lease.
+   inactive/dead or failed/failed). Helper/refresh settlement requires a consistent
+   visible PID census: readable non-empty PID 1, readable cmdline/kernel executable
+   identity for enumerated tasks, and a final listing with no unread new member.
+   A vanished read (`ENOENT`/`ESRCH`) forces re-enumeration, not release; up to four
+   immediate passes precede capped retry. Positively identified unrelated tasks may
+   exit without obstructing completion. Persistent churn or EIO/EACCES stays UNKNOWN.
+   `/proc/<pid>/exe` identifies `systemd-sysext` even after ordinary worker argv
+   renaming or binary replacement; explicit script operands still identify the Bash
+   helper and sudo targets, never observer argument text. Empty cmdlines with absent
+   exe require kernel stat evidence of a zombie or kernel thread, otherwise UNKNOWN.
+   Enable/disable derives the baked descriptor's unit union before submission and
+   requires its jobs/units to settle AFTER actors retire. A descriptor read failure
+   prevents submission, rather than borrowing an empty unit set. Direct unit steps
+   continue to observe their own unit. Timers only re-observe, never clear a hold.
+   The packaged service runs as root without proc/capability restrictions; installed
+   proc mount policy and service overrides remain unqualified. A denied exe read is
+   UNKNOWN even with readable argv. This is a scoped observation, not an atomic global
+   absence guarantee; privileged noncooperative actors are not governed by the lease.
 - **Stuck service hold (operator meaning)**: a service hold has NO supersede path; only
   re-submitting the SAME pending power action supersedes a SHUTDOWN hold. Natural causes
-  (the 30 s helper timeout, a slow unit, a transiently unreadable `/proc` row) hold
-  longer than needed but resolve on the next complete observation. A hold that never resolves needs class C evidence loss (a
-  filtered or unreadable `/proc`, a wedged helper or unit job). The operator escape is
+   (the 30 s helper timeout, a slow unit, a transiently unreadable `/proc` row) can
+   settle on later positive evidence, but eventual settlement is not guaranteed.
+   In particular, manager preparation/download has no application-level total
+   deadline (`manager.ts`); a naturally stalled kiosk Start can retain its outer hold
+   indefinitely. Persistent unreadable evidence or unsettled work also retains it.
+   The operator escape is
   restarting `ceralive.service` or a power cycle; there is deliberately no in-product
   override (Atlas D249, owner decision). Kiosk Start holds its one reservation across
   the whole start, including the add-on artifact download, so Go Live is refused with
   the commit-stage `update_in_progress` copy during that download (documented residual,
-  N/MINOR).
+   N/MINOR).
+   Board drills must establish real service-identity `/proc` visibility, signal exits,
+   worker handoffs/renames, helper-owned jobs, unit settlement and restart clearance.
+   Host fixtures do not prove installed completion, shutdown or safe power loss.
 - **Validation deadline**: `runValidateCmd` uses `spawnWithTimeout` and its shared
   termination classification. A TERM-induced zero after timeout throws typed
   `SpawnTimeoutError`; the enable pipeline maps it to `addon_validation_failed`

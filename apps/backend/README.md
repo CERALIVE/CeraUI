@@ -559,6 +559,15 @@ Ownership, AIMD behavior, failure reporting, and real netns classification proof
 
 ## Conventions
 
+Disruptive helper settlement requires a consistent visible PID census, kernel
+executable evidence for renamed sysext workers, and the baked descriptor's
+submitted unit jobs. Signal-derived activation failures keep their original exit
+evidence and observe the actual arm unit instead of clearing by typed reason.
+Denied reads and persistent churn remain UNKNOWN; manager preparation has no
+total deadline. Packaged root identity makes ordinary observation feasible, not
+board-proven. See [update recovery](../../docs/UPDATE-RECOVERY.md) for the no-
+supersede service-hold policy and outstanding installed-visibility/shutdown drills.
+
 Confirmed generic family success survives a joined sibling observation exception.
 An unsuccessful unbound observation exception stays UNKNOWN while repository
 candidates are still observed; UNKNOWN alone never authorizes route release.

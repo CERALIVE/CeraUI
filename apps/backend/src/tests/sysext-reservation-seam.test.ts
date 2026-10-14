@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { AsyncResource } from "node:async_hooks";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	mkdirSync,
+	mkdtempSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { addonEnable, addonRefresh } from "../helpers/addon-helper.ts";
@@ -16,7 +22,7 @@ import { isDisruptiveActionPending } from "../modules/system/disruptive-action-r
 import { setDisruptiveRetryClockForTest } from "../modules/system/disruptive-retry.ts";
 import type { ServiceCompletion } from "../modules/system/disruptive-service-reservation.ts";
 import { submitPowerCommand } from "../modules/system/power-submission.ts";
-import { sysextFixture } from "./sysext-action-fixture.ts";
+import { sysextDescriptor, sysextFixture } from "./sysext-action-fixture.ts";
 import { heldBoundary } from "./sysext-tail-fixture.ts";
 
 let f: ReturnType<typeof sysextFixture>;
@@ -51,6 +57,7 @@ async function jobs(): Promise<void> {
 }
 const device = (exec: () => Promise<{ stdout: string; stderr: string }>) => ({
 	isRealDevice: async () => true,
+	readDescriptor: async () => sysextDescriptor,
 	exec,
 });
 async function refusal(work: Promise<unknown>): Promise<string> {
@@ -298,6 +305,7 @@ test("the default helper probe needs a visible process table free of sysext acto
 		for (const [pid, argv] of Object.entries(rows)) {
 			mkdirSync(join(dir, pid));
 			writeFileSync(join(dir, pid, "cmdline"), argv);
+			symlinkSync(argv.split("\0")[0] ?? "", join(dir, pid, "exe"));
 		}
 		return dir;
 	};

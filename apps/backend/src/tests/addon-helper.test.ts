@@ -18,6 +18,7 @@ import {
 	addonRefresh,
 	addonStatus,
 } from "../helpers/addon-helper.ts";
+import { sysextDescriptor } from "./sysext-action-fixture.ts";
 
 type Call = { file: string; args: readonly string[] };
 
@@ -29,6 +30,7 @@ function spyDeps(over: Partial<AddonHelperDeps> = {}): {
 	const calls: Call[] = [];
 	const deps: AddonHelperDeps = {
 		isRealDevice: () => Promise.resolve(true),
+		readDescriptor: async (id) => ({ ...sysextDescriptor, id }),
 		exec: (file, args) => {
 			calls.push({ file, args });
 			return Promise.resolve({ stdout: '{"ok":true}', stderr: "" });
