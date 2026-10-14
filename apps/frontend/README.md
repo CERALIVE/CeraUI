@@ -64,7 +64,11 @@ Starts the frontend (Vite, port 6173) and ordinary local development backend
 state cannot leak to the next test. The scenario remains worker-scoped.
 The Linux local runner leases available 31xx ports across processes and requires
 readiness from its own child; an unrelated listener is never a ready backend.
-Each acquisition keeps its own state directory and mock-preview listener. See
+Each acquisition keeps its own state directory and mock-preview listener. Its
+update orchestrator uses a private agent file and the explicit backend test CONTROL
+lease before server boot; IPC readiness follows that real startup completion.
+No production readiness flag or disruptive-action predicate is bypassed, and this
+fake lease is not installed OS-update qualification. See
 [`E2E backend isolation`](tests/e2e/PLAYBOOK.md#per-test-backend-state-exists)
 for lifecycle and deliberate shared-browser sequence rules. Run from the workspace root.
 
