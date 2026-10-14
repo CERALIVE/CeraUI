@@ -212,7 +212,11 @@ src/
 - **Unresolved Live Stop**: each press of the unconfirmed-state Stop owns its
   claim; a reply settles only its own press, and a pending retry is confirmed
   only by current-link idle evidence: a push received after the press, or a pull
-  DISPATCHED after it and after the newest status observation. Reconnect answers
+  DISPATCHED after it and after the newest stream-fact observation. Only
+  `is_streaming`, `stream_lifecycle` and unclassified field names advance that
+  atomic horizon; telemetry/Wi-Fi/modem/SSH-only pushes do not. Unrelated fields
+  from a successful snapshot merge independently, unless a newer push carried
+  that same field or a newer read already applied it. Reconnect answers
   are consumed independently, carrying dispatch and receipt (not computation or
   later ingestion time). Superseded pulls permit one fresh read, never a loop.
   Settled watchdogs cannot act on the next session; unknown never dispatches Stop

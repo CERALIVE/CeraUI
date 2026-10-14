@@ -5,8 +5,14 @@
 **2026-10-14 dispatch/lifetime amendment (FIX-16-F6).** The historical F5
 receipt-only settlement wording below is superseded: receipt orders arrival,
 not device computation or causality. A pull also needs dispatch after the claim
-and newest observed status. All real status producers use the shared reader,
-rejecting superseded pulls with at most one fresh read, never a loop. Ingestion
+and newest observed stream facts. **FIX-16-F7:** only `is_streaming`,
+`stream_lifecycle` and unclassified field names advance that atomic horizon;
+unknown names fail closed, explicitly unrelated pushes do not supersede stream
+evidence. All real status producers use the shared reader, withholding superseded
+stream facts with at most one fresh read, never a loop. Unrelated supplied fields
+merge independently unless an overlapping push arrived after dispatch or a newer
+receipt/read already applied the field. Full-snapshot lifecycle absence requires
+admissible stream evidence; partial omissions remain no-ops. Ingestion
 keeps both marks. Both watchdogs capture an action lifetime and check it after
 every await and before each effect; settlement/replacement/revert/teardown
 invalidate running cycles, not just their timers. Unknown never dispatches Stop

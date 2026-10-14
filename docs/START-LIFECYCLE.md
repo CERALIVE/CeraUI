@@ -689,8 +689,11 @@ never the claim, so the band and its Stop stay.
 
 "Delivered after the press" distinguishes pushes from replies (FIX-16-F6).
 A push needs current-link receipt after the claim. A reply additionally needs
-a request DISPATCHED after the claim, and after the newest applied status
-observation. Receipt orders browser arrival, not device computation or causal
+a request DISPATCHED after the claim, and after the newest applied STREAM-FACT
+observation. `is_streaming` and `stream_lifecycle` are one atomic evidence group;
+unclassified field names fail closed into that group. Telemetry, Wi-Fi, modems,
+SSH and other explicitly unrelated fields do not advance its horizon. Receipt
+orders browser arrival, not device computation or causal
 effect; ingestion is only consumption of that evidence. The status RPC exports
 no comparable producer revision, so a request sent before a newer observation
 cannot overwrite that observation even when its reply arrives afterward.
@@ -699,9 +702,16 @@ F5's independent config/status consumption and carried receipt remain: config
 failure cannot withhold successful status, and a buffered early answer cannot
 be restamped as new evidence. `pullStatusEvidence` carries dispatch and receipt
 on one monotonic evidence clock. Start/Stop intent and a lost Start reply mark
-that clock. A superseded pull is rejected; its caller may make ONE fresh read,
-never a recursive loop. If that read is superseded too, or fails, nothing
-settles. Restoration still waits for config and the bounded status path to
+that clock. A stream-superseded pull does NOT apply its stream facts or settle
+anything, but its unrelated supplied fields merge independently: a field is
+withheld only if a newer push carried that field after dispatch, or a newer
+receipt/read already applied it. Omitted fields in partial pushes remain no-ops;
+implicit stop-edge telemetry/encode/bond retractions use that same field ordering
+and require admissible stream evidence, rather than bypassing it as side effects;
+a full snapshot clears omitted lifecycle only when its stream evidence is
+admissible. The shared reader may make ONE fresh read, never a recursive loop.
+If that read is superseded too, or fails, nothing settles. Restoration still
+waits for config and the bounded status path to
 settle, then triggers the dialog's details/settings/capabilities rereads.
 
 Both watchdog cycles also belong to one optimism action lifetime. Confirmation,

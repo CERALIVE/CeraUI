@@ -5,6 +5,7 @@ import {
 	statusFrameIsCurrent,
 } from "./session-epoch.svelte";
 import {
+	ingestPulledStatus,
 	type ReceivedStatus,
 	receivePulledStatus,
 } from "./subscriptions.svelte";
@@ -19,6 +20,8 @@ export async function pullStatusEvidence(
 		const answer = receivePulledStatus(await rpc.status.getStatus(), dispatch);
 		if (!isCurrent() || dispatch.link !== getLinkEpoch()) return undefined;
 		if (statusFrameIsCurrent(answer.receipt)) return answer;
+		// Stream supersession withholds settlement, not disjoint hydration.
+		ingestPulledStatus(answer.status, answer.receipt);
 	}
 	return undefined;
 }

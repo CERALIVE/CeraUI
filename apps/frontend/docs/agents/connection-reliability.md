@@ -6,8 +6,14 @@
 
 Reconnect consumes config/status independently, while restoration still waits
 for both paths. A status pull carries request-dispatch and browser-receipt marks
-on the evidence clock; a newer intent/observation supersedes a pending read.
-Reject it with at most one fresh read, never a loop or an automatic Stop on
+on the evidence clock; a newer intent/STREAM-FACT observation supersedes stream
+evidence. Only `is_streaming`, `stream_lifecycle` and unclassified field names
+advance that atomic horizon (unknown fails closed). Explicitly unrelated pushes
+never advance it. Superseded stream fields are withheld, but unrelated supplied
+fields merge unless a push carrying that field arrived after dispatch or a newer
+receipt/read already applied it. Implicit stop-edge clears obey those same field
+fences and cannot run from superseded stream evidence. Permit at most one fresh
+read, never a loop or an automatic Stop on
 unknown. Receipt is arrival, not device computation; ingestion keeps provenance.
 Both watchdogs fence post-await effects to their originating action lifetime.
 Settlement or replacement invalidates running promises as well as timers.

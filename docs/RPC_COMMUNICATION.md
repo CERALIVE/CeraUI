@@ -512,7 +512,7 @@ When the socket reconnects after the operator has already authenticated this pag
 1. Reads the stored credential from `localStorage["auth"]`.
 2. Calls `rpc.auth.login({ password: storedToken, persistent_token: true })`.
 3. Dispatches the auth result through `handleMessage("auth", result)`.
-4. On success, fires a **safety hydrate**: config and status reads run in parallel and are consumed independently. Status carries request-dispatch plus browser-receipt marks, never a stamp minted at later ingestion. Reject a pull dispatched before an intervening stream intent or newer observation; allow at most one bounded fresh read. Failed or twice-superseded reads settle nothing. This is defense-in-depth on top of the server's post-login push.
+4. On success, fires a **safety hydrate**: config and status reads run in parallel and are consumed independently. Status carries request-dispatch plus browser-receipt marks, never a stamp minted at later ingestion. Withhold stream facts from a pull dispatched before an intervening stream intent or newer STREAM-FACT observation; merge its unrelated fields independently, then allow at most one bounded fresh read. Failed or twice-stream-superseded reads settle nothing. This is defense-in-depth on top of the server's post-login push.
 5. On credential rejection, clears the stored token and calls `routeToLogin()`.
 
 The `reauthInFlight` flag prevents concurrent re-auth attempts.
@@ -525,6 +525,16 @@ same bounded reader and fence continuations/effect ports to their originating
 action lifetime. Unknown evidence cannot dispatch Stop; a current operator
 Stop's positive-streaming redispatch remains unchanged. These orders are
 host-tested, not browser/board-qualified; no wire or RPC schema changes.
+
+The stream horizon is an atomic group: `is_streaming`, `stream_lifecycle`, and
+unclassified field names (fail closed). Explicitly unrelated status fields,
+including telemetry, bond mapping, Wi-Fi, modems and SSH, never advance it.
+`status-field-order.ts` separately merges supplied snapshot fields unless a push
+carrying that field arrived after dispatch, or a newer receipt/read already
+applied it. A superseded stream group is withheld as a whole; its unrelated
+fields are not discarded with it. Partial omissions remain no-ops. Current-link
+and action-lifetime fences still precede ingestion, and full-snapshot lifecycle
+absence is applied only with admissible stream evidence.
 
 **Source:** `apps/frontend/src/lib/rpc/reconnect.ts`; `apps/frontend/src/lib/rpc/subscriptions.svelte.ts:421-441, 446-468`
 

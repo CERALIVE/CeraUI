@@ -162,8 +162,13 @@ update page (English and es-419) still owes this sentence; it is not published.
 
 The frontend's Stop confirmation cannot come from an earlier status request
 whose reply merely arrived after the press. Pulled lifecycle evidence requires
-dispatch after the current claim/observation and receipt over the current link;
-receipt, device computation and ingestion are different events. Superseded reads
+dispatch after the current claim/STREAM-FACT observation and receipt over the
+current link. Only `is_streaming`, `stream_lifecycle` and unclassified field
+names advance that atomic horizon; unrelated telemetry/Wi-Fi/modem/SSH pushes
+do not. Successful snapshots merge unrelated fields independently, withholding
+only fields superseded by an overlapping newer push/read, not the whole payload.
+Stream-superseded facts never settle an action. Receipt, device computation and
+ingestion are different events. Superseded reads
 permit at most one fresh read, never automatic Stop on unknown. A settled
 watchdog cannot act on a later stream session. Restoration still triggers fresh
 details/settings/capabilities reads after both hydrate paths settle. This is a

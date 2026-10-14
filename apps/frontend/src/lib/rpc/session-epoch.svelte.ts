@@ -57,7 +57,7 @@ export interface RequestDispatch {
 }
 
 let clock = 0;
-let newestStatusFrame = 0;
+let newestStreamFrame = 0;
 let newestIntent = 0;
 
 export function dispatchEvidence(): RequestDispatch {
@@ -84,22 +84,23 @@ export function evidenceClock(): number {
 
 /**
  * Receipt order fences buffered frames; dispatch order also fences pending
- * pulls against intervening intents/observations. Neither dates computation.
+ * pulls against intervening intents/STREAM-FACT observations. Unrelated fields
+ * have independent ordering at ingestion. Neither dates computation.
  */
 export function statusFrameIsCurrent(receipt: Receipt): boolean {
 	return (
 		receipt.link === links &&
-		receipt.at >= newestStatusFrame &&
+		receipt.at >= newestStreamFrame &&
 		(receipt.dispatch === undefined ||
 			(receipt.dispatch.link === links &&
 				receipt.dispatch.at > newestIntent &&
-				receipt.dispatch.at >= newestStatusFrame))
+				receipt.dispatch.at >= newestStreamFrame))
 	);
 }
 
 export function admitStatusFrame(receipt: Receipt): boolean {
 	if (!statusFrameIsCurrent(receipt)) return false;
-	newestStatusFrame = receipt.at;
+	newestStreamFrame = receipt.at;
 	return true;
 }
 

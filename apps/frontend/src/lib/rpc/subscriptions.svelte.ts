@@ -90,7 +90,6 @@ import { pullStatusEvidence } from "./pulled-status";
 import { reauthenticateAndHydrate } from "./reconnect";
 import { createSeqTracker } from "./seq-guard";
 import {
-	admitStatusFrame,
 	noteLifecycleDelivered,
 	noteLinkState,
 	noteSessionRestored,
@@ -98,6 +97,7 @@ import {
 	type RequestDispatch,
 	receiveEvidence,
 } from "./session-epoch.svelte";
+import { selectStatusFields } from "./status-field-order";
 import {
 	refreshWifiAdapterModes,
 	resetWifiAdapterModes,
@@ -522,9 +522,12 @@ function handleMessage(
 			// fields in T14, so this merge is left untouched to avoid double-guarding.
 			// A push is received right here; a pulled answer carries its receipt.
 			const received = receipt ?? receiveEvidence();
-			if (!admitStatusFrame(received)) break;
-			const statusData = data as StatusResponse;
-			const wasStreaming = isStreamingState;
+			const statusData = selectStatusFields(
+				data as StatusResponse,
+				received,
+				isStreamingState,
+			);
+			if (statusData === undefined) break;
 
 			// Update individual states
 			if (statusData.is_streaming !== undefined) {
@@ -569,21 +572,7 @@ function handleMessage(
 					statusData.linkTelemetry,
 				);
 			}
-			// Belt-and-braces telemetry clear on a true→false streaming transition.
-			// The T5 backend contract already null-broadcasts linkTelemetry on the
-			// next heartbeat after stop, but a `{is_streaming:false}` frame that omits
-			// linkTelemetry would otherwise leave a stale bond on the HUD/IngestStats
-			// until that tick. Clearing here defensively closes that gap.
-			// The same edge clears `active_encode`, `engine_bitrate` and
-			// `preview_encoder_realized`: all three are engine truth about a LIVE
-			// session, and the merge below preserves an omitted field, so a stop frame
-			// that omits them would leave the stopped session labelled "Live" at the
-			// rate it was last encoding at, still explaining why its preview fell back
-			// to software.
-			const stoppedNow = wasStreaming && isStreamingState === false;
-			if (stoppedNow) {
-				linkTelemetryState = null;
-			}
+			// Stop-edge retractions are selected above, with the same field provenance.
 			// Store-and-forward buffering rides the engine `status` event bus (NOT
 			// device-stats). undefined = no buffering field this frame (no-op).
 			ingestBuffering(statusData.buffering);
@@ -595,17 +584,6 @@ function handleMessage(
 				is_streaming: isStreamingState,
 				wifi: wifiState ?? {},
 				modems: modemsState ?? {},
-				...(stoppedNow
-					? {
-							active_encode: null,
-							engine_bitrate: null,
-							preview_encoder_realized: null,
-							// A stopped session makes no claim about a bond, and the
-							// merge above preserves an omitted field — so a degradation
-							// band raised mid-stream would otherwise stand forever.
-							bond_mapping: null,
-						}
-					: {}),
 			} as Exclude<typeof statusState, undefined>;
 			statusState = preserveWireIdentity(statusState, nextStatus);
 			if ("stream_lifecycle" in statusData) noteLifecycleDelivered(received);

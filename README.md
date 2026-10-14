@@ -2,7 +2,10 @@
 
 Frontend stream recovery carries status request-dispatch and browser-receipt
 provenance separately. Earlier requests cannot confirm later Stop claims or
-overwrite newer observations; a superseded pull allows one bounded fresh read.
+overwrite newer stream-fact observations; a superseded pull allows one bounded
+fresh read. Only `is_streaming`, `stream_lifecycle` and unclassified field names
+advance that horizon. Unrelated snapshot fields merge independently, preserving
+newer pushes carrying the same field instead of discarding the whole answer.
 Both watchdogs are action-lifetime fenced, so a completed cycle cannot stop or
 revert a later session. These are host carrier proofs, not browser or board
 qualification. See [START-LIFECYCLE](docs/START-LIFECYCLE.md).

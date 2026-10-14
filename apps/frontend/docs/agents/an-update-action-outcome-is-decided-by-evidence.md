@@ -16,9 +16,14 @@ A reply, a timeout, a clock or an absent value proves only what its producer
 says it proves; anything else renders the explicit unknown.
 
 Stream pulls follow the same read-start horizon as update details (FIX-16-F6):
-dispatch after the action/newest observation is required, separately from
+dispatch after the action/newest STREAM-FACT observation is required, separately from
 browser receipt. Receipt is arrival, never device computation time; ingestion
-does not mint causality. Superseded lifecycle reads allow one fresh read, never
+does not mint causality. Only `is_streaming`, `stream_lifecycle` and unclassified
+names advance that atomic stream horizon; unknown names fail closed. Unrelated
+pushes do not supersede stream evidence. Successful snapshot fields merge
+independently unless a push carrying that field arrived after dispatch or a newer
+receipt/read already applied it; stream-superseded facts are never applied or
+used for settlement. Superseded lifecycle reads allow one fresh read, never
 a loop; failed or twice-superseded reads settle nothing. Stream watchdogs are
 also fenced to the originating action lifetime across every await/effect. This
 does not change update action settlement or the shared operation registry.

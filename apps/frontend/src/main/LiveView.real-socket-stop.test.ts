@@ -99,6 +99,7 @@ import {
 	initAsyncOperations,
 } from "../lib/rpc/async-operation.svelte";
 import { rpcClient } from "../lib/rpc/client";
+import { pullStatusEvidence } from "../lib/rpc/pulled-status";
 import { getRestoredSessions } from "../lib/rpc/session-epoch.svelte";
 import {
 	destroyStreamingOptimism,
@@ -118,6 +119,17 @@ const STOP_AND_START = [
 	{ label: "Stop Stream", disabled: false },
 	{ label: "Start Stream", disabled: false },
 ];
+
+const F7_WIFI = {
+	"0": { ifname: "wlan0", conn: "test-net", hw: "radio", saved: {} },
+};
+const F7_MODEMS = {
+	"0": {
+		ifname: "wwan0",
+		name: "Test modem",
+		network_type: { supported: ["4G"], active: "4G" },
+	},
+};
 const STOPPING_AND_START = [
 	{ label: "Stopping...", disabled: true },
 	{ label: "Start Stream", disabled: false },
@@ -180,6 +192,435 @@ afterEach(() => {
 	vi.useRealTimers();
 	localStorage.clear();
 	document.body.innerHTML = "";
+});
+
+describe("F7 independent stream evidence and field freshness", () => {
+	it("a stream-superseded idle pull cannot perform implicit live-field clears", async () => {
+		// Given live telemetry preceding a read that an actual stream push supersedes.
+		const real = await vi.importActual<
+			typeof import("../lib/rpc/subscriptions.svelte")
+		>("../lib/rpc/subscriptions.svelte");
+		const telemetry = { links: [], measured_bps: 0, lastReadMs: Date.now() };
+		deliverStatus({
+			is_streaming: true,
+			stream_lifecycle: "streaming",
+			linkTelemetry: telemetry,
+		});
+		const pending = pullStatusEvidence();
+		deliverStatus({ stream_lifecycle: "stopping" });
+		await settle();
+		// When an old idle reply arrives, its SSH field still hydrates, not its clears.
+		answer("status.getStatus", {
+			is_streaming: false,
+			stream_lifecycle: "idle",
+			ssh: true,
+		});
+		await settle();
+		expect(getStatus()?.ssh).toBe(true);
+		expect(getStatus()?.stream_lifecycle).toBe("stopping");
+		expect(getStatus()?.is_streaming).toBe(true);
+		expect(real.getLinkTelemetry()).toEqual(telemetry);
+		reject("status.getStatus", "INTERNAL_ERROR");
+		await expect(pending).rejects.toBeInstanceOf(Error);
+		expect(sentCount("status.getStatus")).toBe(2);
+		expect(sentCount("streaming.stop")).toBe(0);
+	});
+	it("a buffered old-link answer cannot merge unrelated fields on the replacement link", async () => {
+		// Given a successful actual-client answer held before a link replacement.
+		const pending = pullStatusEvidence();
+		answer("status.getStatus", {
+			is_streaming: false,
+			stream_lifecycle: "idle",
+			ssh: true,
+		});
+		const buffered = await pending;
+		if (buffered === undefined)
+			throw new Error("read must land before the drop");
+		await reconnectAwaitingHydrate();
+		answer("streaming.getConfig", {});
+		answer("status.getStatus", {
+			is_streaming: false,
+			stream_lifecycle: "idle",
+			ssh: false,
+		});
+		await settle();
+		// When the old receipt is ingested late, neither group has link authority.
+		ingestPulledStatus(buffered.status, buffered.receipt);
+		await settle();
+		expect(getStatus()?.ssh).toBe(false);
+		expect(getStatus()?.stream_lifecycle).toBe("idle");
+		expect(sentCount("streaming.stop")).toBe(0);
+	});
+
+	it("a buffered answer preserves a newer unrelated push and hydrates disjoint fields", async () => {
+		// Given an actual received answer held before a newer SSH push.
+		const pending = pullStatusEvidence();
+		answer("status.getStatus", {
+			is_streaming: false,
+			stream_lifecycle: "idle",
+			ssh: true,
+			wifi: F7_WIFI,
+		});
+		const buffered = await pending;
+		if (buffered === undefined) throw new Error("read must be received");
+		deliverStatus({ ssh: false });
+		await settle();
+		// When consumed later, receipt ordering protects SSH without losing Wi-Fi.
+		ingestPulledStatus(buffered.status, buffered.receipt);
+		await settle();
+		expect(getStatus()?.ssh).toBe(false);
+		expect(getStatus()?.wifi).toEqual(F7_WIFI);
+		expect(sentCount("status.getStatus")).toBe(1);
+		expect(sentCount("streaming.stop")).toBe(0);
+	});
+
+	it("a pulled Stop cannot clear newer telemetry through the derived stop edge", async () => {
+		// Given a live stream and a status read interrupted by newer telemetry.
+		const real = await vi.importActual<
+			typeof import("../lib/rpc/subscriptions.svelte")
+		>("../lib/rpc/subscriptions.svelte");
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		const pending = pullStatusEvidence();
+		const telemetry = { links: [], measured_bps: 0, lastReadMs: Date.now() };
+		deliverStatus({ linkTelemetry: telemetry });
+		await settle();
+		// When the admissible stream answer triggers implicit telemetry retraction.
+		answer("status.getStatus", {
+			is_streaming: false,
+			stream_lifecycle: "idle",
+		});
+		const result = await pending;
+		if (result === undefined)
+			throw new Error("telemetry cannot supersede stream facts");
+		ingestPulledStatus(result.status, result.receipt);
+		await settle();
+		expect(real.getLinkTelemetry()).toEqual(telemetry);
+		expect(getStatus()?.stream_lifecycle).toBe("idle");
+		expect(sentCount("status.getStatus")).toBe(1);
+		expect(sentCount("streaming.stop")).toBe(0);
+	});
+
+	it.each([
+		[true, "streaming", [{ label: "Stop Stream", disabled: false }]],
+		[false, "idle", [{ label: "Start Stream", disabled: false }]],
+	] as const)(
+		"unrelated telemetry must not eat positive Start evidence %s",
+		async (streaming, lifecycle, expectedControls) => {
+			// Given an acknowledged Start whose confirming push is missing.
+			const { container } = render(LiveView);
+			await fireEvent.click(button(container, "Start Stream"));
+			await settle();
+			answer("streaming.start", { success: true });
+			await settle();
+			await elapse(90_000);
+			expect(outstanding("status.getStatus")).toHaveLength(1);
+			// When telemetry arrives while the watchdog's real read is in flight.
+			await elapse(1_100);
+			deliverStatus({ linkTelemetry: null, bond_mapping: null });
+			await settle();
+			answer("status.getStatus", {
+				is_streaming: streaming,
+				stream_lifecycle: lifecycle,
+			});
+			await settle();
+			if (outstanding("status.getStatus").length > 0) {
+				await elapse(1_100);
+				deliverStatus({ linkTelemetry: null, bond_mapping: null });
+				await settle();
+				answer("status.getStatus", {
+					is_streaming: streaming,
+					stream_lifecycle: lifecycle,
+				});
+				await settle();
+			}
+			// Then one successful read reconciles; no replacement or automatic Stop.
+			expect(getStreamingOptimismState()).toBe("idle");
+			expect(getStatus()?.stream_lifecycle).toBe(lifecycle);
+			expect(getOperationPhase(KEY)).toBe("idle");
+			expect(band(container)).toBeNull();
+			expect(controls(container)).toEqual(expectedControls);
+			expect(sentCount("status.getStatus")).toBe(1);
+			await elapse(180_000);
+			expect(controls(container)).toEqual(expectedControls);
+			expect(FakeWebSocket.log.map((r) => r.path)).toEqual([
+				"streaming.start",
+				"status.getStatus",
+			]);
+		},
+	);
+
+	it.each([
+		{ linkTelemetry: null, bond_mapping: null },
+		{ wifi: {}, modems: {} },
+	])(
+		"disjoint partial pushes cannot discard SSH hydration %j",
+		async (push) => {
+			// Given no stream claim, SSH false, and a full reconnect read in flight.
+			const { container } = render(LiveView);
+			deliverStatus({ ssh: false });
+			await reconnectAwaitingHydrate();
+			answer("streaming.getConfig", {});
+			await settle();
+			await elapse(1_100);
+			deliverStatus(push);
+			await settle();
+			// When a successful read supplies an unchanged-by-push field.
+			answer("status.getStatus", {
+				is_streaming: false,
+				stream_lifecycle: "idle",
+				ssh: true,
+			});
+			await settle();
+			// Then the supplied value is not lost to disjoint activity.
+			expect(getStatus()?.ssh).toBe(true);
+			expect(getStatus()?.stream_lifecycle).toBe("idle");
+			expect(getOperationPhase(KEY)).toBe("idle");
+			expect(band(container)).toBeNull();
+			expect(controls(container)).toEqual([
+				{ label: "Start Stream", disabled: false },
+			]);
+			expect(sentCount("status.getStatus")).toBe(1);
+			expect(sentCount("streaming.stop")).toBe(0);
+		},
+	);
+
+	it.each([
+		[
+			"mixed stream fact",
+			{ linkTelemetry: null, stream_lifecycle: "stopping" },
+		],
+		["unknown field fails closed", { future_stream_fact: "stopping" }],
+	] as const)(
+		"%s supersedes stream facts but retains unrelated fields",
+		async (_, push) => {
+			// Given a pending operator Stop and a genuinely post-claim read.
+			const { container } = render(LiveView);
+			deliverStatus({
+				is_streaming: false,
+				stream_lifecycle: "stop_failed",
+				ssh: false,
+			});
+			await fireEvent.click(button(container, "Stop Stream"));
+			await settle();
+			deliverStatus({ stream_lifecycle: "stopping" });
+			const pulled = pullStatusEvidence().then((answer) => {
+				if (answer !== undefined)
+					ingestPulledStatus(answer.status, answer.receipt);
+				return answer;
+			});
+			await settle();
+			// When BOTH reads are superseded for stream facts, not SSH/Wi-Fi/modems.
+			deliverStatus(push);
+			await settle();
+			answer("status.getStatus", {
+				is_streaming: false,
+				stream_lifecycle: "idle",
+				ssh: true,
+				wifi: F7_WIFI,
+				modems: F7_MODEMS,
+			});
+			await settle();
+			expect(getStatus()?.ssh).toBe(true);
+			expect(getStatus()?.wifi).toEqual(F7_WIFI);
+			expect(getStatus()?.modems).toEqual(F7_MODEMS);
+			expect(getStatus()?.stream_lifecycle).toBe("stopping");
+			expect(getOperationPhase(KEY)).toBe("pending");
+			expect(band(container)).not.toBeNull();
+			expect(controls(container)).toEqual(STOPPING_AND_START);
+			expect(outstanding("status.getStatus")).toHaveLength(1);
+			deliverStatus({ stream_lifecycle: "stopping", wifi: {} });
+			await settle();
+			answer("status.getStatus", {
+				is_streaming: true,
+				stream_lifecycle: "streaming",
+				ssh: true,
+				wifi: F7_WIFI,
+				modems: F7_MODEMS,
+			});
+			await settle();
+			expect(await pulled).toBeUndefined();
+			expect(getStatus()?.is_streaming).toBe(false);
+			expect(getStatus()?.stream_lifecycle).toBe("stopping");
+			expect(getStatus()?.ssh).toBe(true);
+			expect(getStatus()?.wifi).toEqual({});
+			expect(getStatus()?.modems).toEqual(F7_MODEMS);
+			expect(getOperationPhase(KEY)).toBe("pending");
+			expect(sentCount("status.getStatus")).toBe(2);
+			expect(sentCount("streaming.stop")).toBe(1);
+			if ("future_stream_fact" in push) {
+				expect(
+					Object.entries(getStatus() ?? {}).find(
+						([k]) => k === "future_stream_fact",
+					),
+				).toEqual(["future_stream_fact", "stopping"]);
+			}
+			answer("streaming.stop", STOP_FAILED_REPLY);
+			await settle();
+			expect(getOperationPhase(KEY)).toBe("failed");
+			expect(band(container)?.textContent).toContain(FAILED);
+		},
+	);
+
+	it.each([
+		["ssh", false, true, "before dispatch"],
+		["ssh", false, true, "after dispatch"],
+		["ssh", false, true, "after answer"],
+		["wifi", {}, F7_WIFI, "before dispatch"],
+		["wifi", {}, F7_WIFI, "after dispatch"],
+		["wifi", {}, F7_WIFI, "after answer"],
+		["modems", {}, F7_MODEMS, "before dispatch"],
+		["modems", {}, F7_MODEMS, "after dispatch"],
+		["modems", {}, F7_MODEMS, "after answer"],
+	] as const)(
+		"%s push %s -> %s (%s) preserves per-field order",
+		async (field, pushed, read, order) => {
+			// Given an unrelated field update on either side of a real read.
+			render(LiveView);
+			if (order === "before dispatch") deliverStatus({ [field]: pushed });
+			const pulled = pullStatusEvidence();
+			await settle();
+			if (order === "after dispatch") deliverStatus({ [field]: pushed });
+			await settle();
+			// When the full answer is ingested through its actual dispatch/receipt.
+			answer("status.getStatus", {
+				is_streaming: false,
+				stream_lifecycle: "idle",
+				[field]: read,
+			});
+			const result = await pulled;
+			if (result === undefined)
+				throw new Error("unrelated push must not supersede stream evidence");
+			ingestPulledStatus(result.status, result.receipt);
+			await settle();
+			if (order === "after answer") deliverStatus({ [field]: pushed });
+			await settle();
+			// Then only a pre-dispatch push is replaced by this snapshot.
+			expect(getStatus()?.[field]).toEqual(
+				order === "before dispatch" ? read : pushed,
+			);
+			expect(getStatus()?.stream_lifecycle).toBe("idle");
+			expect(sentCount("status.getStatus")).toBe(1);
+			expect(sentCount("streaming.stop")).toBe(0);
+		},
+	);
+
+	it("overlapping pulls keep later fields and still merge disjoint older fields", async () => {
+		// Given two actual outstanding reads, with a partial push between them.
+		render(LiveView);
+		const older = pullStatusEvidence();
+		await settle();
+		deliverStatus({ linkTelemetry: null });
+		const newer = pullStatusEvidence();
+		await settle();
+		// When the later-dispatched answer lands first, the older one is stream-stale.
+		answer(
+			"status.getStatus",
+			{ is_streaming: false, stream_lifecycle: "idle", wifi: F7_WIFI },
+			"newest",
+		);
+		const latest = await newer;
+		if (latest === undefined) throw new Error("later read must be current");
+		ingestPulledStatus(latest.status, latest.receipt);
+		await settle();
+		answer("status.getStatus", {
+			is_streaming: true,
+			stream_lifecycle: "streaming",
+			ssh: true,
+			wifi: {},
+		});
+		await settle();
+		expect(getStatus()?.ssh).toBe(true);
+		expect(getStatus()?.wifi).toEqual(F7_WIFI);
+		expect(getStatus()?.stream_lifecycle).toBe("idle");
+		// A replacement, not a third read for this cycle; failed read grants nothing.
+		reject("status.getStatus", "INTERNAL_ERROR");
+		await expect(older).rejects.toBeInstanceOf(Error);
+		expect(sentCount("status.getStatus")).toBe(3);
+		expect(sentCount("streaming.stop")).toBe(0);
+	});
+
+	it("resetState keeps field ordering and a link replacement rejects the old pull", async () => {
+		// Given an in-flight read, then a store reset and a newer SSH push.
+		const pulled = pullStatusEvidence();
+		await settle();
+		resetState();
+		deliverStatus({ ssh: false });
+		// When the snapshot arrives on the same link.
+		answer("status.getStatus", {
+			is_streaming: false,
+			stream_lifecycle: "idle",
+			ssh: true,
+			modems: F7_MODEMS,
+		});
+		const result = await pulled;
+		if (result === undefined)
+			throw new Error("disjoint push is not stream supersession");
+		ingestPulledStatus(result.status, result.receipt);
+		await settle();
+		expect(getStatus()?.ssh).toBe(false);
+		expect(getStatus()?.modems).toEqual(F7_MODEMS);
+		// The next read cannot carry that authority across a replacement link.
+		const dropped = pullStatusEvidence();
+		const rejection = expect(dropped).rejects.toBeInstanceOf(Error);
+		dropLink();
+		await settle();
+		await rejection;
+		await restoreLink();
+		answer("auth.login", { success: true });
+		await settle();
+		answer("streaming.getConfig", {});
+		answer("status.getStatus", {
+			is_streaming: false,
+			stream_lifecycle: "idle",
+			ssh: true,
+		});
+		await settle();
+		expect(getStatus()?.ssh).toBe(true);
+		expect(sentCount("streaming.stop")).toBe(0);
+	});
+
+	it("lost Start and Stop replies reconcile only from the next link's stream evidence", async () => {
+		// Given a lost Start, then an affirmative Stop whose reply is also lost.
+		const { container } = render(LiveView);
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		await reconnectAwaitingHydrate();
+		answer("streaming.getConfig", {});
+		deliverStatus({ is_streaming: false, stream_lifecycle: "reconciling" });
+		await settle();
+		expect(getStreamingOptimismState()).toBe("idle");
+		expect(controls(container)).toEqual(STOP_AND_START);
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		deliverStatus({ stream_lifecycle: "stopping" });
+		await reconnectAwaitingHydrate();
+		answer("streaming.getConfig", {});
+		await settle();
+		// When unrelated telemetry interrupts the new link's post-claim hydrate.
+		deliverStatus({ linkTelemetry: null, bond_mapping: null, ssh: false });
+		await settle();
+		expect(getOperationPhase(KEY)).toBe("failed");
+		expect(band(container)).not.toBeNull();
+		answer("status.getStatus", {
+			is_streaming: false,
+			stream_lifecycle: "idle",
+			wifi: F7_WIFI,
+		});
+		await settle();
+		// Then positive stream evidence clears only the unresolved claims.
+		expect(getStreamingOptimismState()).toBe("idle");
+		expect(getStatus()?.stream_lifecycle).toBe("idle");
+		expect(getStatus()?.ssh).toBe(false);
+		expect(getStatus()?.wifi).toEqual(F7_WIFI);
+		expect(getOperationPhase(KEY)).toBe("failed");
+		expect(band(container)).toBeNull();
+		expect(controls(container)).toEqual([
+			{ label: "Start Stream", disabled: false },
+		]);
+		expect(sentCount("streaming.start")).toBe(1);
+		expect(sentCount("streaming.stop")).toBe(1);
+		expect(sentCount("status.getStatus")).toBe(2);
+	});
 });
 
 /**
