@@ -380,6 +380,23 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			"collectBoundedChild records issued termination before exit; capped output and bounded retirement preserve exec error fields",
 	},
 	{
+		id: "addonHelper.containedMutation",
+		file: "helpers/addon-helper-step.ts",
+		symbol: "createAddonHelperStep",
+		command: "/usr/bin/setsid -w -- /usr/bin/ceralive-addon-helper action [id]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"ordinary spawn, fixed environment, collectBoundedChild child-only termination; owned PGID retirement then descriptor jobs",
+	},
+	{
 		id: "run.spawnCollect",
 		file: "helpers/run.ts",
 		symbol: "spawnCollect (run / runWithStdin)",

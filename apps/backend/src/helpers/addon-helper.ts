@@ -20,21 +20,19 @@
  * (T27). The packaged backend runs as root; add-on lifecycle authority remains
  * in the helper, invoked here as:
  *
- *     sudo ceralive-addon-helper <enable|disable|refresh|status> [id]
+ *     /usr/bin/setsid -w -- /usr/bin/ceralive-addon-helper <enable|disable|refresh> [id]
+ *     sudo ceralive-addon-helper status
  *
  * Design rules (deliberate):
- *  - argv-only (NO shell): the call goes through execFileP, so the sudoers
- *    NOPASSWD grant is scoped to one binary and add-on ids can never be
- *    re-interpreted as shell syntax. Satisfies scripts/check-exec-guard.sh.
+ *  - argv-only, checked process-group establishment for mutations; read-only
+ *    status retains execFileP and the existing sudoers path.
  *  - isRealDevice() gates EVERY op (G6). The helper itself runs as root; the
  *    backend must never invoke it in dev/emulated mode where there is no real
  *    sysext/systemd to drive. The gate fires BEFORE sudo is ever spawned.
  *  - The id is re-validated against the same charset the helper enforces, as
  *    defense in depth — a malformed id is rejected before it reaches argv.
- *  - The probe surface (isRealDevice + exec) is injected via {@link AddonHelperDeps}
- *    so the wrapper is unit-testable without spawning sudo (mirrors ssh.ts /
- *    kiosk.ts). The helper's own security logic is exercised separately by the
- *    bash-script integration test.
+ *  - Device, descriptor, read-only exec and owned mutation-step ports are explicit
+ *    fixture inputs. Production never inherits the helper's test-tool overrides.
  */
 
 import type { AddonDescriptor } from "@ceraui/rpc/schemas";
@@ -45,6 +43,10 @@ import {
 } from "../modules/addons/disruptive-sysext-step.ts";
 import { isRealDevice } from "../modules/system/device-detection.ts";
 import { DisruptiveActionRefusedError } from "../modules/system/disruptive-action-error.ts";
+import {
+	type AddonHelperStep,
+	createAddonHelperStep,
+} from "./addon-helper-step.ts";
 import { type ExecResult, execFileP } from "./exec.ts";
 
 /** The privileged helper binary (resolved on PATH at /usr/bin on the device). */
@@ -67,8 +69,7 @@ const ADDON_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 export const ADDON_UNAVAILABLE_ERROR = "addon_unavailable_in_emulated_mode";
 
 /**
- * Injectable surface. Defaults talk to the real OS (real device detection +
- * argv-only sudo exec). Tests inject deterministic stand-ins and spies.
+ * Explicit OS ports; mutation evidence is allocated before admission, never spawned then.
  */
 export type AddonHelperDeps = {
 	/** Whether we are on a real RK3588 device (G6 gate). */
@@ -76,6 +77,7 @@ export type AddonHelperDeps = {
 	/** Run a binary argv-only (NO shell); rejects on non-zero exit. */
 	exec: (file: string, args: readonly string[]) => Promise<ExecResult>;
 	readDescriptor?: (id: string) => Promise<AddonDescriptor>;
+	createStep?: (args: readonly string[]) => AddonHelperStep;
 };
 
 const defaultDeps: AddonHelperDeps = {
@@ -92,10 +94,10 @@ function assertAddonId(id: string): string {
 }
 
 /**
- * Gate on the real device, then invoke the helper argv-only via sudo. Returns
+ * Gate on the real device, then invoke the helper argv-only. Returns
  * the helper's stdout (a JSON document the caller may parse). Throws
  * {@link ADDON_UNAVAILABLE_ERROR} when not on a real device, and rejects (via
- * execFileP) with the helper's stderr on a non-zero exit.
+ * the bounded runner) with the helper's stderr on a non-zero exit.
  */
 async function invokeHelper(
 	args: string[],
@@ -128,10 +130,11 @@ async function invokeHelper(
 					]),
 				]
 			: [];
+		const step = (deps.createStep ?? createAddonHelperStep)(args);
 		const { stdout } = await runDisruptiveSysextStep(
 			`helper:${args.join(":")}`,
-			() => deps.exec(SUDO, [HELPER_BIN, ...args]),
-			{ units },
+			step.run,
+			{ units, helper: step },
 		);
 		return stdout;
 	}

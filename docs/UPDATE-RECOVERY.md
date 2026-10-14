@@ -563,15 +563,26 @@ Owner identities are lifetime-scoped and depth-counted. The exact add-on integra
 API and set/held/uncertain/resolved/released/superseded/restart table live in
 [`START-LIFECYCLE.md`](START-LIFECYCLE.md#reservation-state-table-and-owner-seam).
 Default systemd probes are safe only for the unit actually owning the effect;
-direct sysext helper steps need a consistent visible census plus their baked
-descriptor-unit jobs. Kernel exe links identify renamed `systemd-sysext` workers;
-explicit script operands identify the Bash helper. Vanished reads force fresh
-enumeration, not completion; unread new members, persistent churn, unreadable exe/
-cmdline, empty/unreadable PID 1 or an unlistable table stay UNKNOWN. Empty cmdlines
-with absent exe settle only with kernel zombie/thread stat proof. The packaged
-service runs as root with no proc/capability restriction; installed visibility and
-overrides are unqualified, and EACCES never means absent. These are non-atomic,
-scoped observations, not an absolute actor-free table claim. Forced arm errors
+mutating helper steps need their request-owned process group retired BEFORE the baked
+descriptor-unit union's jobs/lifecycles settle. Ordinary Bun spawn invokes checked
+`/usr/bin/setsid -w -- /usr/bin/ceralive-addon-helper action [id]` without sudo, PTY,
+detached spawning or `-f`; the root/root service refuses non-root mutation, with fixed
+PATH/locale and no inherited BASH_ENV/SHELLOPTS/CERALIVE_* overrides. Status is unchanged.
+Even exit 0/1 requires actual direct-child exit, integer owned PGID > 1 and ESRCH from
+`kill(-PGID, 0)`. Success is presence and every other errno is UNKNOWN. Retirement is
+latched before polling descriptor units; no later numeric-group probe occurs. Timeout
+remains failure, retaining partial output and actual 137/143; collector signaling is
+child-only. Zero-spawn refusal needs no retirement probe. Fork/exec/reparenting and
+double-fork retain group membership; unreaped zombies conservatively hold, not disappear.
+No timer or zombie-skipping census grants clearance. Generic outer operations retain
+their separate census; that census does not enumerate contained helper descendants.
+
+Group containment excludes session/group-changing descendants, already-submitted PID-1
+jobs, PID-1 services/hooks or other-daemon work, manager Reload (enable/disable and sysext
+metadata), and unacknowledged requests from killed clients. A separate unit read is not
+a general drain barrier. Adding a daemonizing/session-changing helper tool triggers scope
+replacement. Manager's independent systemctl tails do not acquire group ownership.
+Installed launcher, init reaping and delegation remain unqualified. Forced arm errors
 retain original exit evidence; `activation_arm_failed` alone never releases, and
 uncertain outcomes observe the actual arm unit. A signal-killed client (exit >= 128)
 is uncertain, not a failure. A stuck service hold
@@ -581,11 +592,28 @@ restarting `ceralive.service` or a power cycle, and a remote factory reset that 
 Eventual settlement is not guaranteed: manager preparation/download has no
 application-level total deadline, so a natural stalled kiosk Start may retain its
 outer service hold indefinitely, without corruption or a systemd defect.
+Reservations and evidence handles are process-local. Restarting `ceralive.service` or
+power-cycling clears that local hold, not proof that surviving helper or delegated
+manager work completed. PGID isolation does not exempt descendants from the service
+cgroup's cleanup: `KillMode=mixed` reaches them in its final kill phase. No service-hold
+supersede or clear-hold operation exists (D249).
+
+**Timed arm pre-submission CONTROL refusal (owner decision, D257).** If the CONTROL
+holder dies between runtime's check and the producer's check, the producer can
+throw `rauc_recovery_unproven` BEFORE spawning systemctl. This positively
+pre-submission case still leaves a shutdown hold: the generic resolver rejects
+`ExecMainCode=0` on the never-executed arm unit and cannot auto-settle that unchanged
+evidence. The operator escape is an explicit SAME-action reboot submission after
+all current fences pass, or backend restart/device power cycle. The typed reason
+is NOT whitelisted: it also describes effectful failures. No typed pre-effect
+primitive or service-hold supersede path is introduced.
+
 Board drills still owe accepted reboot → Go Live during shutdown, stale restart
 past 10 s → actual resolver clearance, exit 0 without shutdown → fenced retry,
-and timed activation arm → reboot. Additionally prove signal exits, sysext worker
-handoffs/renames, helper-owned unit jobs, unit settlement, restart clearance and
-actual proc visibility under the installed service identity. None is physically
+and timed activation arm → reboot. Additionally prove installed setsid/environment,
+real helper descendants, orphan/zombie retirement under the installed init, signal
+exits and partial output, queued descriptor jobs and service restart on BOTH boards.
+None is physically
 proven by the host matrices; restart clears local holds, not external-work evidence.
 
 The tick entrypoint suppresses phase overwrites, discovery, package launch, OS

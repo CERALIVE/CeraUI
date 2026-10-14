@@ -27,6 +27,16 @@ activation from arming through reboot, a stale restart longer than its 10 s clie
 bound and resolver settlement, and exit-zero-without-shutdown followed by explicit
 retry. No hardware qualification is claimed here.
 
+Add-on helper mutations additionally require their checked request-owned process
+group to retire, then descriptor-unit jobs to settle, even after exit 0 or 1. A
+zero-spawn refusal is the only immediate helper clearance. The launcher, strict
+ESRCH predicate, zombie over-hold, session-escape and delegated-manager limits are
+documented in [the add-on contract](agents/add-on-subsystem.md). Restart clears
+local evidence, not external completion; `KillMode=mixed` still cleans the service
+cgroup. No service supersede/clear primitive exists. D257's pre-submission CONTROL
+refusal still needs the existing same-action reboot or restart escape. These are
+host-tested boundaries, not qualification of either board.
+
 This is the engineering reference for how a CeraLive device discovers, downloads,
 installs and verifies its own updates. It describes the code on this branch, file
 by file, and says plainly where a path is implemented but not released on any

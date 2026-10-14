@@ -4,6 +4,7 @@ import * as spawnPolicy from "../helpers/spawn-policy.ts";
 import { isDisruptiveActionPending } from "../modules/system/disruptive-action-reservation.ts";
 import { getDisruptiveActionDecision } from "../modules/system/disruptive-action-runtime.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
+import { helperExecFixture } from "./helpers/helper-step-fixture.ts";
 import {
 	completionFixture,
 	evidenceJobs,
@@ -41,11 +42,12 @@ for (const action of ["enable", "disable"] as const) {
 				throw new Error("uncertain helper client");
 			},
 		};
+		const contained = { ...deps, createStep: helperExecFixture(deps.exec) };
 		try {
 			// When the real wrapper, seam and resolver handle the failed client.
 			await (action === "enable"
-				? addonEnable("cog-display", deps)
-				: addonDisable("cog-display", deps)
+				? addonEnable("cog-display", contained)
+				: addonDisable("cog-display", contained)
 			).catch(() => undefined);
 			await evidenceJobs();
 			// Then actor absence alone cannot release; the actual job must settle.

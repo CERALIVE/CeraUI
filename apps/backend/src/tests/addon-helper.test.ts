@@ -8,7 +8,7 @@
  * exercised end-to-end against the real bash script in addon-helper-script.test.ts.
  */
 
-import { describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import {
 	ADDON_UNAVAILABLE_ERROR,
@@ -18,7 +18,16 @@ import {
 	addonRefresh,
 	addonStatus,
 } from "../helpers/addon-helper.ts";
-import { sysextDescriptor } from "./sysext-action-fixture.ts";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
+import { helperExecFixture } from "./helpers/helper-step-fixture.ts";
+import { sysextDescriptor, sysextFixture } from "./sysext-action-fixture.ts";
+
+useSessionOwnerForFile();
+let fixture: ReturnType<typeof sysextFixture>;
+beforeEach(() => {
+	fixture = sysextFixture();
+});
+afterEach(() => fixture.reset());
 
 type Call = { file: string; args: readonly string[] };
 
@@ -37,6 +46,7 @@ function spyDeps(over: Partial<AddonHelperDeps> = {}): {
 		},
 		...over,
 	};
+	deps.createStep = helperExecFixture(deps.exec);
 	return { deps, calls };
 }
 

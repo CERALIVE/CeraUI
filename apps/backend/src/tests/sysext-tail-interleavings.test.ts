@@ -197,11 +197,13 @@ test("nested privileged submission retains one operation identity", async () => 
 		await addonEnable("cog-display", {
 			isRealDevice: async () => true,
 			readDescriptor: async () => sysextDescriptor,
-			exec: async () => {
-				const nested = currentSysextOperation();
-				if (nested) identities.push(nested.id);
-				return { stdout: "{}", stderr: "" };
-			},
+			createStep: () =>
+				helperStepFixture(async () => {
+					const nested = currentSysextOperation();
+					if (nested) identities.push(nested.id);
+					return { stdout: "{}", stderr: "" };
+				}),
+			exec: async () => ({ stdout: "{}", stderr: "" }),
 		});
 	});
 	// Then integration can reenter by identity without creating a competing owner.
@@ -269,3 +271,8 @@ test("same-ID mutation queue cannot enter a held owner", async () => {
 	await queued;
 	expect(effects).toEqual(["queued"]);
 });
+
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
+import { helperStepFixture } from "./helpers/helper-step-fixture.ts";
+
+useSessionOwnerForFile();

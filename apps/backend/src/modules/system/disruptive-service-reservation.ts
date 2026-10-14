@@ -28,6 +28,7 @@ export type ServiceReservationScope = {
 	readonly owner?: symbol;
 	readonly shutdownAction?: PowerAction;
 	readonly positiveFailure?: (error: unknown) => boolean;
+	readonly settlement?: "evidence-required";
 };
 export type ServiceCompletionProbe = (
 	scope: ServiceReservationScope,
@@ -99,11 +100,11 @@ export async function probeServiceCompletion(
 	return "unknown";
 }
 
-function resolveUncertainService(
+async function resolveUncertainService(
 	reservation: DisruptiveReservation,
 	scope: ServiceReservationScope,
 	probe: ServiceCompletionProbe,
-): void {
+): Promise<void> {
 	reservation.markUncertain();
 	const observe = async (signal: AbortSignal) => {
 		if (!reservation.retained() || signal.aborted) return true;
@@ -127,14 +128,12 @@ function resolveUncertainService(
 			}
 		}
 	};
-	void observe(disruptiveShutdownSignal()).then(
-		(resolved) => {
-			if (!resolved && reservation.retained()) retryDisruptiveEvidence(observe);
-		},
-		() => {
-			if (reservation.retained()) retryDisruptiveEvidence(observe);
-		},
-	);
+	try {
+		if (!(await observe(disruptiveShutdownSignal())) && reservation.retained())
+			retryDisruptiveEvidence(observe);
+	} catch {
+		if (reservation.retained()) retryDisruptiveEvidence(observe);
+	}
 }
 
 export async function withServiceReservation<T>(
@@ -149,12 +148,20 @@ export async function withServiceReservation<T>(
 	if (!admission.allowed) throw new DisruptiveActionRefusal(admission.reason);
 	try {
 		const result = await fn();
-		admission.reservation.releaseAfterCompletion();
+		if (scope.settlement === "evidence-required")
+			await resolveUncertainService(admission.reservation, scope, probe);
+		else admission.reservation.releaseAfterCompletion();
 		return result;
 	} catch (error) {
-		if (isPositiveDisruptiveFailure(error) || scope.positiveFailure?.(error))
+		if (
+			scope.positiveFailure?.(error) ||
+			(scope.settlement !== "evidence-required" &&
+				isPositiveDisruptiveFailure(error))
+		)
 			admission.reservation.releaseAfterFailure();
-		else resolveUncertainService(admission.reservation, scope, probe);
+		else if (scope.settlement === "evidence-required")
+			await resolveUncertainService(admission.reservation, scope, probe);
+		else void resolveUncertainService(admission.reservation, scope, probe);
 		throw error;
 	}
 }

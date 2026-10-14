@@ -22,8 +22,12 @@ import { isDisruptiveActionPending } from "../modules/system/disruptive-action-r
 import { setDisruptiveRetryClockForTest } from "../modules/system/disruptive-retry.ts";
 import type { ServiceCompletion } from "../modules/system/disruptive-service-reservation.ts";
 import { submitPowerCommand } from "../modules/system/power-submission.ts";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
+import { helperStepFixture } from "./helpers/helper-step-fixture.ts";
 import { sysextDescriptor, sysextFixture } from "./sysext-action-fixture.ts";
 import { heldBoundary } from "./sysext-tail-fixture.ts";
+
+useSessionOwnerForFile();
 
 let f: ReturnType<typeof sysextFixture>;
 let wakeups: Array<() => Promise<void>>;
@@ -59,6 +63,31 @@ const device = (exec: () => Promise<{ stdout: string; stderr: string }>) => ({
 	isRealDevice: async () => true,
 	readDescriptor: async () => sysextDescriptor,
 	exec,
+	createStep: (args: readonly string[]) => {
+		let uncertain = false;
+		return helperStepFixture(
+			async () => {
+				try {
+					return await exec();
+				} catch (error) {
+					uncertain = !(
+						error instanceof Error &&
+						"code" in error &&
+						error.code === 1
+					);
+					throw error;
+				}
+			},
+			() => {
+				if (uncertain) probes.push(`sysext:helper:${args.join(":")}`);
+				if (probeAnswer === "completed")
+					throw Object.assign(new Error("retired"), { code: "ESRCH" });
+				if (probeAnswer === "unknown")
+					throw Object.assign(new Error("unknown"), { code: "EPERM" });
+				return true;
+			},
+		);
+	},
 });
 async function refusal(work: Promise<unknown>): Promise<string> {
 	const error = await work.then(

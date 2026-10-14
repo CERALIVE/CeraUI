@@ -840,15 +840,26 @@ nested awaited calls retain one active operation identity. Tokens are lifetime-
 scoped and retired in finally; recurring kiosk polling registers outside those
 contexts and must acquire a fresh same-ID owner. The seam takes one service-lifetime
 reservation owned by the active operation; nested steps re-enter by identity and the
-outer hold lasts until positive completion/failure evidence (unit job plus the unit
-type's steady state for unit steps; for helper/refresh steps a consistent visible
-PID census with kernel exe identity for renamed sysext workers, explicit helper
-script ownership, and no unread new member). Vanished reads force a bounded fresh
-pass; persistent churn or unreadable evidence stays UNKNOWN and retries. Helper
-enable/disable also observes the baked descriptor's unit jobs after actors retire.
-Root in the packaged service makes ordinary exe visibility feasible; installed proc
-policy/overrides remain a board gate. This is scoped evidence, not atomic global
-absence. A signal-derived
+outer hold lasts until positive completion/failure evidence. Direct unit steps keep
+their unit job/steady-state evidence. Helper enable/disable/refresh uses ordinary Bun
+spawn of checked `/usr/bin/setsid -w -- /usr/bin/ceralive-addon-helper action [id]`, no
+sudo, PTY, detached or `-f`: PID=PGID=SID. Root is required; fixed PATH/locale excludes
+BASH_ENV, SHELLOPTS and CERALIVE_* overrides. Status retains its existing sudo path.
+Success and every possibly-effectful failure (exit 1 included) require actual child
+exit plus ESRCH from `kill(-ownedPGID, 0)` with integer PGID > 1. A successful probe
+means present; all other errno, including EPERM, remain UNKNOWN. Retirement is latched;
+then enable/disable polls the baked descriptor's deduplicated unmask→enable→start union.
+Zero-spawn refusal releases without probing; child-only collector TERM/KILL, timeout
+failure and original partial output/137/143 are preserved. TERM-induced zero is failure.
+Fork/exec/double-fork/reparented descendants retain membership; zombies hold until reaped.
+The generic outer census remains separate, never ANDed with the helper boundary.
+
+Groups do not cover a descendant calling setsid/setpgid (adding one triggers scope
+replacement), already-submitted PID-1 jobs, PID-1/other-daemon work, manager Reload
+(enable/disable and sysext metadata), or unacknowledged requests from a killed client.
+Another connection's descriptor read does not prove all delegated work drained.
+Manager's independent systemctl tails keep their own unit evidence, not group ownership.
+Installed tools/init/delegation remain a board gate. A signal-derived
 client exit (status >= 128 or a signal name) is uncertain, never a failure verdict.
 
 **What a stuck hold means for the operator.** Service holds have no supersede path.
@@ -860,15 +871,29 @@ application-level total deadline on manager preparation/download; a stalled kios
 Start can naturally retain exclusion indefinitely. Unreadable proc evidence and
 unsettled helper/unit work also keep the hold. The
 escape for a stuck service hold is restarting `ceralive.service` or a power cycle,
-which clears this process-local state. No new override primitive exists (D249); any
-product-level clearance is an owner decision. The completion reboot after a legacy
+which clears this process-local state, not proof that surviving helper or delegated
+manager work completed. The group remains in the service cgroup and is subject to
+`KillMode=mixed`'s final kill phase. No new override primitive exists (D249); any
+product-level clearance is an owner decision.
+
+A timed arm can leave a SHUTDOWN hold despite a positively pre-submission CONTROL
+refusal: the holder dies between checks, the producer throws
+`rauc_recovery_unproven` before spawning systemctl, and the never-executed arm unit's
+`ExecMainCode=0` is not terminal exit proof for the generic resolver. That unchanged
+evidence cannot auto-settle. An explicit SAME-action reboot submission after current
+fences pass, or backend restart/device power cycle, is the existing escape. The reason
+also describes effectful failures, so it grants no generic clearance. D257 is docs-only;
+no typed pre-effect primitive is added.
+
+The completion reboot after a legacy
 package update uses the same shared `getDisruptiveActionDecision()` gate (stream,
 orchestrator, package install, recovery, maintenance) and only retries while refused.
 Work already submitted while idle cannot be revoked: earlier unit effects or a
 submitted helper's partial execution may survive refusal/failure. A stream or privileged actor can still change state
 after final observation/dispatch; the external root helper is not governed by a
-backend-only decision. Signal exits, worker handoffs/renames, helper-owned jobs, unit
-settlement, real service-identity proc visibility and restart clearance need board
+backend-only decision. Installed setsid/environment, real helper descendants,
+orphan retirement under the installed init, queued descriptor jobs, signal/output
+mapping and service restart on BOTH boards need board
 drills. No hardware or uninterrupted-transaction proof is claimed.
 
 Stream liveness is tri-state. `stream-liveness-source.ts` is the synchronous,

@@ -559,14 +559,16 @@ Ownership, AIMD behavior, failure reporting, and real netns classification proof
 
 ## Conventions
 
-Disruptive helper settlement requires a consistent visible PID census, kernel
-executable evidence for renamed sysext workers, and the baked descriptor's
-submitted unit jobs. Signal-derived activation failures keep their original exit
-evidence and observe the actual arm unit instead of clearing by typed reason.
-Denied reads and persistent churn remain UNKNOWN; manager preparation has no
-total deadline. Packaged root identity makes ordinary observation feasible, not
-board-proven. See [update recovery](../../docs/UPDATE-RECOVERY.md) for the no-
-supersede service-hold policy and outstanding installed-visibility/shutdown drills.
+Disruptive helper mutations use checked request-owned process groups, then the
+baked descriptor's submitted unit jobs. Success/exit 1 is not descendant retirement;
+only actual child exit plus ESRCH from the negative owned PGID settles that boundary.
+Fixed root-only spawning retains child-only timeout signaling and partial output.
+Zombies can over-hold; session-changing descendants and delegated daemon/manager
+work are outside group containment. Generic outer census and direct unit evidence
+remain separate. Restart clears process-local holds, not proof of external completion;
+the service cgroup's mixed kill policy still applies. D249/D257 and the missing total
+preparation deadline are unchanged. See [update recovery](../../docs/UPDATE-RECOVERY.md)
+for the exact limits and outstanding BOTH-board launcher/retirement/restart drills.
 
 Confirmed generic family success survives a joined sibling observation exception.
 An unsuccessful unbound observation exception stays UNKNOWN while repository

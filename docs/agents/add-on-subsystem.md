@@ -92,47 +92,57 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
   identity; nested steps re-enter it by depth through `getDisruptiveActionDecision({
   heldBy })` and only the outermost release reopens admission. Other owners, a pending
   reboot/poweroff and late descendants of a released operation are refused with
-  `update_in_progress`; a held step refuses reboot/poweroff the same way. Ordinary exit
-  statuses (1-127), pre-spawn errno (ENOENT/EACCES/ENOEXEC/E2BIG) and refusals release
-  at once. A timeout, an untyped error or a signal-derived exit (status >= 128, or a
-  `signal`/`signalCode`, e.g. an OOM-killed `sudo` reported as 137) keeps the hold until
-  positive evidence, because a killed `sudo` can leave the helper or `systemd-sysext`
-  reparented and running. Unit steps poll their own unit: no queued job plus that unit
+   `update_in_progress`; a held step refuses reboot/poweroff the same way. Direct unit
+   steps retain their existing ordinary-failure policy; uncertain outcomes poll their own
+   unit: no queued job plus that unit
   type's steady state (`.service` running/exited, `.socket` listening, `.timer`
   waiting/elapsed, `.path` waiting, `.target` active, `.mount` mounted, or any
-   inactive/dead or failed/failed). Helper/refresh settlement requires a consistent
-   visible PID census: readable non-empty PID 1, readable cmdline/kernel executable
-   identity for enumerated tasks, and a final listing with no unread new member.
-   A vanished read (`ENOENT`/`ESRCH`) forces re-enumeration, not release; up to four
-   immediate passes precede capped retry. Positively identified unrelated tasks may
-   exit without obstructing completion. Persistent churn or EIO/EACCES stays UNKNOWN.
-   `/proc/<pid>/exe` identifies `systemd-sysext` even after ordinary worker argv
-   renaming or binary replacement; explicit script operands still identify the Bash
-   helper and sudo targets, never observer argument text. Empty cmdlines with absent
-   exe require kernel stat evidence of a zombie or kernel thread, otherwise UNKNOWN.
-   Enable/disable derives the baked descriptor's unit union before submission and
-   requires its jobs/units to settle AFTER actors retire. A descriptor read failure
-   prevents submission, rather than borrowing an empty unit set. Direct unit steps
-   continue to observe their own unit. Timers only re-observe, never clear a hold.
-   The packaged service runs as root without proc/capability restrictions; installed
-   proc mount policy and service overrides remain unqualified. A denied exe read is
-   UNKNOWN even with readable argv. This is a scoped observation, not an atomic global
-   absence guarantee; privileged noncooperative actors are not governed by the lease.
+    inactive/dead or failed/failed). Mutating helper enable/disable/refresh instead uses
+    ordinary Bun spawn of `/usr/bin/setsid -w -- /usr/bin/ceralive-addon-helper action [id]`:
+    no sudo, PTY, detached spawning or `setsid -f`. The checked no-fork launcher makes
+    PID=PGID=SID; `-w` itself does NOT wait for all descendants. The packaged backend is
+    root/root and refuses non-root mutation. PATH and locale are fixed; BASH_ENV,
+    SHELLOPTS and CERALIVE_* tool/path overrides are not inherited. Status retains sudo.
+    Success AND every possibly-effectful failure, including exit 1, require actual
+    direct-child exit and literal ESRCH from `kill(-ownedPGID, 0)`, with integer PGID > 1.
+    A successful syscall means present; every other errno, including EPERM, is UNKNOWN.
+    First retirement is latched, so subsequent unit polling cannot probe a reused number.
+    The collector still signals only its direct child; timeout retains partial output,
+    its failure class and actual 137/143 evidence. TERM-induced zero is not success.
+    Zero-spawn refusal alone releases without a group probe. Enable/disable derives the
+    baked unmask→enable→start unit union (deduplicated) before submission, then observes
+    its jobs/lifecycles AFTER group retirement. Descriptor failure prevents submission.
+    Groups retain inherited clients, filesystem mutators, asynchronous jq substitution,
+    exec/fork/double-fork and reparented descendants regardless of names. A zombie holds
+    until reaped; there is no census-based zombie exemption or elapsed-time clearance.
+    A descendant changing its session/group escapes: adding such a tool triggers a
+    replacement with scope containment. Groups do NOT contain submitted PID-1 jobs,
+    services/hooks or other-daemon work, manager Reload (including enable/disable reload
+    and sysext metadata reload), or an unacknowledged request left by a killed client.
+    A descriptor observation on another connection is not a general request-drain barrier.
+    Manager's separate systemctl tails retain their own unit evidence, not group ownership.
+    The legacy census remains for generic outer operations, not as helper authority or an
+    additional AND-condition; its readable named observations are not a descendant inventory.
+    Timers only re-observe, never clear a hold. Installed behavior remains unqualified.
 - **Stuck service hold (operator meaning)**: a service hold has NO supersede path; only
   re-submitting the SAME pending power action supersedes a SHUTDOWN hold. Natural causes
-   (the 30 s helper timeout, a slow unit, a transiently unreadable `/proc` row) can
+    (the 30 s helper timeout, a slow unit, a denied group probe or an unreaped zombie) can
    settle on later positive evidence, but eventual settlement is not guaranteed.
    In particular, manager preparation/download has no application-level total
    deadline (`manager.ts`); a naturally stalled kiosk Start can retain its outer hold
    indefinitely. Persistent unreadable evidence or unsettled work also retains it.
    The operator escape is
   restarting `ceralive.service` or a power cycle; there is deliberately no in-product
-  override (Atlas D249, owner decision). Kiosk Start holds its one reservation across
+   override (Atlas D249, owner decision). Reservations/evidence are process-local;
+   restart clears the local hold, not proof that surviving helper or delegated manager
+   work completed. PGID isolation retains the service cgroup: `KillMode=mixed`'s final
+   kill phase still reaches its descendants. Kiosk Start holds its one reservation across
   the whole start, including the add-on artifact download, so Go Live is refused with
   the commit-stage `update_in_progress` copy during that download (documented residual,
    N/MINOR).
-   Board drills must establish real service-identity `/proc` visibility, signal exits,
-   worker handoffs/renames, helper-owned jobs, unit settlement and restart clearance.
+    Board drills must establish installed setsid/environment, real helper descendants,
+    orphan/zombie retirement under the installed init, signal/output mapping, queued
+    descriptor jobs and service restart on BOTH boards.
    Host fixtures do not prove installed completion, shutdown or safe power loss.
 - **Validation deadline**: `runValidateCmd` uses `spawnWithTimeout` and its shared
   termination classification. A TERM-induced zero after timeout throws typed
