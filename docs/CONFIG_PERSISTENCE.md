@@ -75,6 +75,13 @@ uses a fresh nonce and the existing fail-soft boot sweep handles crash debris.
 Persistent cleanup failure still withholds reset until storage recovers. These
 are host fault-injection proofs, not board/power-loss qualification.
 
+The config boot owner retains the reset archive's identity after writing first-run
+settings. A failed strict reload does not erase the pending notice: the first
+successful load in the same boot-recovery lifetime announces that identity exactly
+once, including after preservation retries and detached backoff. The intent is
+process-local; restart between replacement and announcement has no cross-process
+exactly-once guarantee. Neither retry overwrites or deletes the damaged copy.
+
 ### Durable device config
 
 | File | Writer | Atomicity | Notes |

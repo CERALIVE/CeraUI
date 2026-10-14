@@ -56,6 +56,15 @@ USB coldplug was concurrent, not the identified source of this SIGUSR1.
 
 ## Notification contract
 
+Config recovery and modem admission are independent of service readiness. Config
+reset notice intent survives failed post-write reloads until the first strict load
+in that boot-recovery lifetime announces it once. Modem journal reconciliation
+checks its process-local revision before publishing blocks and again before
+lowering admission; cooperating writes/removals/read faults invalidate older
+passes. Raises during a pass are remembered and retain one capped/cancellable
+retry owner. An absent journal still completes normally at boot. These are host
+regression guarantees, not a new board, power-loss or service-readiness receipt.
+
 `helpers/systemd-ready.ts` invokes `/usr/bin/systemd-notify` through the bounded,
 argv-only command runner. The service remains root-owned and
 `NotifyAccess=main`; `--pid=parent` attributes readiness to the backend rather

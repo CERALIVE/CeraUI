@@ -22,8 +22,14 @@
 import { logger } from "../../helpers/logger.ts";
 import {
 	completeRecoveryBarrier,
+	consumeRecoveryBarrierRaise,
 	isRecoveryPending,
 } from "../streaming/recovery-barrier.ts";
+import { reconciledMutationJournalRevision } from "./mutation-blocks.ts";
+import {
+	isMutationJournalRevisionCurrent,
+	mutationJournalRevision,
+} from "./mutation-journal-revision.ts";
 
 export type MutationRecoveryMode = "replay" | "verify";
 
@@ -84,15 +90,26 @@ async function retry(
 		for (let delay = MUTATION_RECOVERY_BASE_MS; ; ) {
 			await deps.sleep(delay, own.signal);
 			if (own.signal.aborted || !isRecoveryPending()) return;
+			consumeRecoveryBarrierRaise();
+			const revision = mutationJournalRevision();
 			if (await attempt(deps, mode)) {
-				if (!own.signal.aborted) completeRecoveryBarrier();
-				return;
+				const finalRevision =
+					mode === "replay" ? reconciledMutationJournalRevision() : revision;
+				if (own.signal.aborted) return;
+				if (
+					isMutationJournalRevisionCurrent(finalRevision) &&
+					completeRecoveryBarrier()
+				)
+					return;
 			}
-			logger.warn("modem mutation journal still unreadable; retrying", {
-				module: "modems",
-				mode,
-				nextMs: Math.min(delay * 2, MUTATION_RECOVERY_CEILING_MS),
-			});
+			logger.warn(
+				"modem mutation journal reconciliation incomplete; retrying",
+				{
+					module: "modems",
+					mode,
+					nextMs: Math.min(delay * 2, MUTATION_RECOVERY_CEILING_MS),
+				},
+			);
 			delay = Math.min(delay * 2, MUTATION_RECOVERY_CEILING_MS);
 		}
 	} finally {

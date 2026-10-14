@@ -77,6 +77,23 @@ verification owner (1 s doubling to a 60 s ceiling). If acknowledgement durably
 removed the slot before its refresh failed, that owner reads the empty journal,
 clears the obsolete stream/modem block and lowers the barrier automatically after
 repair. It never replays rollback against an already-admitted runtime mutation.
+Every reconciliation belongs to the process-local journal revision it read.
+Cooperating commits and removals invalidate before/after their awaited lifetime;
+read faults invalidate too. A writer in flight cannot prove settled authority.
+Both empty and nonempty block publication recheck immediately before replacing
+the projection. A revision change during inventory acquisition permits one fresh
+inventory read, not an unbounded loop or a damage classification for deletion.
+Acknowledgement/rebaseline recheck after hardware capture and refuse superseded
+authority with existing `not_blocked`; replay rereads each slot and fences its
+presence/rollback awaits before old authority can advance or retire that slot.
+The owner rechecks after awaited verification, before completing
+the barrier; startup uses the final strict publication's revision because replay
+can itself change disk. Acknowledgement can overlap verification, but an older
+presence census cannot republish its removed slot. A raise while pending is
+remembered and vetoes that pass's completion. Invalidation retains the existing
+single owner and capped backoff; no immediate-spin retry or second owner is added.
+The revision and trigger flag are not stored authority or a new wire field. After
+a process restart the retained journal is inventoried again under the boot barrier.
 Permanent enumeration faults keep admission closed with capped waits. Repair
 storage; no operator clear API is added. FCC
 opt-in also uses strict reads and enables no model on ambiguity, preserving bytes.

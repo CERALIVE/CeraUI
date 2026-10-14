@@ -43,6 +43,7 @@
 import { logger } from "../../helpers/logger.ts";
 
 let pending = false;
+let raisedAgain = false;
 let settled: Promise<void> = Promise.resolve();
 let lower: (() => void) | undefined;
 
@@ -64,7 +65,11 @@ export function setRecoveryRetryOwner(owner: RecoveryRetryOwner): void {
 }
 
 export function beginRecoveryBarrier(): void {
-	if (pending) return;
+	if (pending) {
+		raisedAgain = true;
+		retryOwner?.schedule();
+		return;
+	}
 	pending = true;
 	settled = new Promise<void>((resolve) => {
 		lower = resolve;
@@ -72,8 +77,16 @@ export function beginRecoveryBarrier(): void {
 	retryOwner?.schedule();
 }
 
-export function completeRecoveryBarrier(): void {
-	if (!pending) return;
+export function consumeRecoveryBarrierRaise(): void {
+	raisedAgain = false;
+}
+
+export function completeRecoveryBarrier(): boolean {
+	if (!pending) return true;
+	if (raisedAgain) {
+		raisedAgain = false;
+		return false;
+	}
 	pending = false;
 	const resolve = lower;
 	lower = undefined;
@@ -81,6 +94,7 @@ export function completeRecoveryBarrier(): void {
 	logger.info("modem-mutation replay complete; admission barrier lowered", {
 		module: "modems",
 	});
+	return true;
 }
 
 export function isRecoveryPending(): boolean {
@@ -97,6 +111,7 @@ export function resetRecoveryBarrier(): void {
 	retryOwner?.cancel();
 	retryOwner = undefined;
 	pending = false;
+	raisedAgain = false;
 	lower?.();
 	lower = undefined;
 	settled = Promise.resolve();

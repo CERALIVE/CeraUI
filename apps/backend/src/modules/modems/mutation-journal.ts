@@ -53,20 +53,21 @@ import { join } from "node:path";
 
 import {
 	MODEM_MUTATION_HISTORY_CAP,
-	MODEM_MUTATION_JOURNAL_VERSION,
 	type ModemMutationEntry,
 	type ModemMutationState,
 	modemMutationEntrySchema,
 } from "@ceraui/rpc/schemas";
 
-import { logger } from "../../helpers/logger.ts";
-import { beginRecoveryBarrier } from "../streaming/recovery-barrier.ts";
 import {
 	openStoredStateDirectory,
 	readStoredStateFile,
 	STORED_STATE_LIMITS,
 } from "../system/update-orchestrator/stored-state-file.ts";
-import { parseAuthorityJson } from "../system/update-orchestrator/strict-authority-json.ts";
+import { parseMutationJournalEntry as parseEntry } from "./mutation-journal-parse.ts";
+import {
+	noteMutationJournalReadFault,
+	withMutationJournalChange,
+} from "./mutation-journal-revision.ts";
 
 /**
  * The PINNED device location. `/data` is the device-persistent partition, so a
@@ -145,7 +146,7 @@ export const defaultMutationJournalFs: MutationJournalFs = {
 				undefined
 			);
 		} catch (error) {
-			beginRecoveryBarrier();
+			noteMutationJournalReadFault();
 			throw error;
 		}
 	},
@@ -163,7 +164,7 @@ export const defaultMutationJournalFs: MutationJournalFs = {
 		} catch (error) {
 			if (error instanceof Error && "code" in error && error.code === "ENOENT")
 				return [];
-			beginRecoveryBarrier();
+			noteMutationJournalReadFault();
 			throw error;
 		}
 	},
@@ -211,19 +212,21 @@ export async function commitMutationEntry(
 	entry: ModemMutationEntry,
 	deps: MutationJournalDeps = activeDeps,
 ): Promise<void> {
-	const target = entryPath(deps, entry.stableKey);
-	const temp = `${target}.${process.pid}.tmp`;
-	await deps.fs.ensureDir(deps.dir);
-	const payload = `${JSON.stringify(modemMutationEntrySchema.parse(entry))}\n`;
-	try {
-		await deps.fs.writeTemp(temp, payload);
-		await deps.fs.fsyncFile(temp);
-	} catch (err) {
-		await deps.fs.unlink(temp).catch(() => undefined);
-		throw err;
-	}
-	await deps.fs.rename(temp, target);
-	await deps.fs.fsyncDir(deps.dir);
+	return withMutationJournalChange(async () => {
+		const target = entryPath(deps, entry.stableKey);
+		const temp = `${target}.${process.pid}.tmp`;
+		await deps.fs.ensureDir(deps.dir);
+		const payload = `${JSON.stringify(modemMutationEntrySchema.parse(entry))}\n`;
+		try {
+			await deps.fs.writeTemp(temp, payload);
+			await deps.fs.fsyncFile(temp);
+		} catch (err) {
+			await deps.fs.unlink(temp).catch(() => undefined);
+			throw err;
+		}
+		await deps.fs.rename(temp, target);
+		await deps.fs.fsyncDir(deps.dir);
+	});
 }
 
 /** Durable deletion: `unlink()` then `fsync(parent)`. */
@@ -231,8 +234,10 @@ export async function removeMutationEntry(
 	stableKey: string,
 	deps: MutationJournalDeps = activeDeps,
 ): Promise<void> {
-	await deps.fs.unlink(entryPath(deps, stableKey)).catch(() => undefined);
-	await deps.fs.fsyncDir(deps.dir);
+	return withMutationJournalChange(async () => {
+		await deps.fs.unlink(entryPath(deps, stableKey)).catch(() => undefined);
+		await deps.fs.fsyncDir(deps.dir);
+	});
 }
 
 /**
@@ -247,29 +252,6 @@ export async function readMutationEntry(
 	const raw = await deps.fs.readText(entryPath(deps, stableKey));
 	if (raw === undefined) return undefined;
 	return parseEntry(raw, stableKey);
-}
-
-function parseEntry(
-	raw: string,
-	slotHint: string,
-): ModemMutationEntry | undefined {
-	try {
-		const parsed = modemMutationEntrySchema.safeParse(parseAuthorityJson(raw));
-		if (parsed.success) return parsed.data;
-		beginRecoveryBarrier();
-		logger.warn("modem mutation journal entry did not validate", {
-			module: "modems",
-			slot: slotHint,
-			version: MODEM_MUTATION_JOURNAL_VERSION,
-		});
-	} catch {
-		beginRecoveryBarrier();
-		logger.warn("modem mutation journal entry is unparseable", {
-			module: "modems",
-			slot: slotHint,
-		});
-	}
-	return undefined;
 }
 
 /** Every readable entry on disk, for startup replay. */

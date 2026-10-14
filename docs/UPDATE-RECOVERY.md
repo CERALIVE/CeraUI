@@ -216,7 +216,12 @@ unavailable, not successful preservation.
   `loadConfig()` a missing file uses, and raise the persistent
   `config_damaged_reset` notification (`notifications.configDamagedReset`, naming
   the copy and saying settings must be re-entered and that it does not mean
-  streaming or updates work). The only values carried over are a bcrypt-shaped
+   streaming or updates work). The archive identity remains pending across a failed
+   post-write strict reload and through bounded/background retry attempts. The first
+   successful strict load announces it once in that boot lifetime, then consumes the
+   notice intent. Preservation retries keep the same identity; no second replacement
+   is needed just because a reload failed. This is process-local intent, not
+   cross-process exactly-once delivery. The only values carried over are a bcrypt-shaped
   `password_hash`, a crypt-shaped `ssh_pass_hash` and `ssh_pass` from a
   duplicate-free JSON object. When none survives (zero-byte, unparseable, hash
   missing), the reset device is unclaimed and any LAN client can claim it with
@@ -245,7 +250,23 @@ unavailable, not successful preservation.
    directory opened successfully. If acknowledgement already durably removed a
    slot, a failed refresh keeps its old projection temporarily; the registered
    read-only owner retries the empty journal and clears that obsolete block before
-   lowering the barrier. The operator need not acknowledge the now-absent slot
+    lowering the barrier. Reconciliation is valid only for the journal revision it
+    read. One process-local monotonic revision changes before/after cooperating
+    commits and removals (including acknowledgement), and on read faults. Drift
+    during inventory acquisition permits exactly one fresh inventory read, preserving
+    benign concurrent-delete behavior without an unbounded recapture loop. A write
+    still in flight is not settled inventory. Both empty and nonempty publication
+    check that revision immediately before replacing blocks; completion checks again
+    after its await. An older USB enumeration cannot restore an acknowledged block
+    or overlook a new failed slot. A raise arriving while pending is remembered,
+    not discarded; a new trigger vetoes completion. Invalidated passes keep the same
+    owner and capped backoff until a fresh pass completes. Startup uses its final
+    strict reconciliation revision because replay itself can prune/write entries.
+    Acknowledgement/rebaseline recheck their captured revision after hardware reads;
+    superseded evidence refuses with the existing `not_blocked` result. Replay rereads
+    each slot before acting and fences presence/rollback awaits, so an old captured
+    entry cannot overwrite or retire a newer journal decision.
+    The operator need not acknowledge the now-absent slot
    again. A permanent enumeration failure keeps the barrier raised behind capped
    waits, not a spinning loop. A verification can never lower the barrier over damage it
   just observed. Shutdown cancels the flight and disarms scheduling, so a late

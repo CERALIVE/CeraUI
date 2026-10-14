@@ -124,8 +124,14 @@ async function strictLoad(): Promise<boolean> {
 
 async function attemptRuntimeConfig(
 	deps: RuntimeConfigBootDeps,
+	notice: { copy: string | undefined },
 ): Promise<RuntimeConfigBootOutcome> {
-	if (await strictLoad()) return "loaded";
+	if (await strictLoad()) {
+		if (notice.copy === undefined) return "loaded";
+		deps.onDamagedReset(notice.copy);
+		notice.copy = undefined;
+		return "first-run-after-damage";
+	}
 	const path = getConfigFilePath();
 	const read = await readPersistentRecord(
 		path,
@@ -138,12 +144,14 @@ async function attemptRuntimeConfig(
 	try {
 		copy = preserveDamagedRecord(path, read.bytes);
 		writeFileAtomicSync(path, firstRunRecord(read.bytes));
+		notice.copy = copy;
 	} catch (err) {
 		logger.error("config: damaged config.json could not be archived", { err });
 		return "unavailable";
 	}
 	if (!(await strictLoad())) return "unavailable";
 	deps.onDamagedReset(copy);
+	notice.copy = undefined;
 	return "first-run-after-damage";
 }
 
@@ -155,14 +163,17 @@ let ready: Promise<void> = Promise.resolve();
 async function retryUntilLoaded(
 	deps: RuntimeConfigBootDeps,
 	signal: AbortSignal,
+	notice: { copy: string | undefined },
 ): Promise<void> {
 	for (let delay = RETRY_BASE_MS; ; ) {
 		await deps.sleep(delay, signal);
 		if (signal.aborted) return;
-		const outcome = await attemptRuntimeConfig(deps).catch((err: unknown) => {
-			logger.error("config: background load failed", { err });
-			return "unavailable" as const;
-		});
+		const outcome = await attemptRuntimeConfig(deps, notice).catch(
+			(err: unknown) => {
+				logger.error("config: background load failed", { err });
+				return "unavailable" as const;
+			},
+		);
 		if (outcome !== "unavailable") {
 			logger.info("config: config.json readable again; boot continues");
 			markReady?.();
@@ -180,8 +191,9 @@ async function retryUntilLoaded(
 export async function bootRuntimeConfig(
 	deps: RuntimeConfigBootDeps = defaultRuntimeConfigBootDeps,
 ): Promise<RuntimeConfigBootOutcome> {
+	const notice: { copy: string | undefined } = { copy: undefined };
 	for (const delay of [...BOOT_RETRY_DELAYS_MS, undefined]) {
-		const outcome = await attemptRuntimeConfig(deps);
+		const outcome = await attemptRuntimeConfig(deps, notice);
 		if (outcome !== "unavailable") return outcome;
 		if (delay !== undefined) await deps.sleep(delay, never);
 	}
@@ -194,7 +206,7 @@ export async function bootRuntimeConfig(
 	logger.error("config: config.json unreadable; serving without it", {
 		path: getConfigFilePath(),
 	});
-	void retryUntilLoaded(deps, controller.signal);
+	void retryUntilLoaded(deps, controller.signal, notice);
 	return "unavailable";
 }
 

@@ -36,18 +36,28 @@ import { logger } from "../../helpers/logger.ts";
 import {
 	beginRecoveryBarrier,
 	completeRecoveryBarrier,
+	consumeRecoveryBarrierRaise,
 	setRecoveryRetryOwner,
 } from "../streaming/recovery-barrier.ts";
 
-import { refreshMutationBlocks } from "./mutation-blocks.ts";
+import {
+	reconciledMutationJournalRevision,
+	refreshMutationBlocks,
+} from "./mutation-blocks.ts";
 import {
 	commitMutationEntry,
 	journalNow,
 	listMutationEntries,
 	listUnreadableSlots,
 	nextEntry,
+	readMutationEntry,
 	removeMutationEntry,
 } from "./mutation-journal.ts";
+import {
+	assertMutationJournalRevision,
+	isMutationJournalRevisionCurrent,
+	mutationJournalRevision,
+} from "./mutation-journal-revision.ts";
 import {
 	presenceRecheckTarget,
 	replayActionFor,
@@ -90,7 +100,9 @@ async function replayEntry(
 		blocked: number;
 		quarantined: number;
 	},
+	revision: bigint,
 ): Promise<void> {
+	assertMutationJournalRevision(revision);
 	const action = replayActionFor(entry.state);
 
 	if (action === "prune" || action === "resume-archive") {
@@ -106,6 +118,7 @@ async function replayEntry(
 
 	if (action === "recheck-presence") {
 		const present = (await captureModemState(entry.stableKey)) !== undefined;
+		assertMutationJournalRevision(revision);
 		const target = presenceRecheckTarget(entry.state, present);
 		if (target === undefined) {
 			tally.blocked += 1;
@@ -121,6 +134,7 @@ async function replayEntry(
 		entry.stableKey,
 		entry.preState,
 	);
+	assertMutationJournalRevision(revision);
 	if (outcome === "restored") {
 		await removeMutationEntry(entry.stableKey);
 		tally.rolledBack += 1;
@@ -158,15 +172,18 @@ export async function runMutationReplay(): Promise<ReplaySummary> {
 		}
 		// Readable entries still replay beside a damaged slot; the strict block
 		// publication below vetoes completion when the inventory changed meanwhile.
-		for (const entry of await listMutationEntries()) {
+		for (const hint of await listMutationEntries()) {
 			try {
-				await replayEntry(entry, tally);
+				const revision = mutationJournalRevision();
+				const entry = await readMutationEntry(hint.stableKey);
+				if (entry === undefined) continue;
+				await replayEntry(entry, tally, revision);
 			} catch (err) {
 				tally.blocked += 1;
 				logger.error("modem mutation replay failed for one device", {
 					module: "modems",
-					stableKey: entry.stableKey,
-					state: entry.state,
+					stableKey: hint.stableKey,
+					state: hint.state,
 					err,
 				});
 			}
@@ -210,6 +227,7 @@ export async function initMutationRecovery(
 ): Promise<ReplaySummary> {
 	stopMutationRecovery();
 	beginRecoveryBarrier();
+	consumeRecoveryBarrierRaise();
 	const summary = await runMutationReplay();
 	const deps: MutationRecoveryDeps = {
 		replay: async () => (await runMutationReplay()).unreadable === 0,
@@ -221,7 +239,15 @@ export async function initMutationRecovery(
 		schedule: () => scheduleMutationRecovery(deps, "verify"),
 		cancel: stopMutationRecovery,
 	});
-	if (summary.unreadable === 0) completeRecoveryBarrier();
-	else scheduleMutationRecovery(deps, "replay");
+	if (
+		summary.unreadable === 0 &&
+		isMutationJournalRevisionCurrent(reconciledMutationJournalRevision()) &&
+		completeRecoveryBarrier()
+	)
+		return summary;
+	scheduleMutationRecovery(
+		deps,
+		summary.unreadable === 0 ? "verify" : "replay",
+	);
 	return summary;
 }

@@ -59,6 +59,10 @@ import {
 	readMutationEntry,
 	removeMutationEntry,
 } from "./mutation-journal.ts";
+import {
+	isMutationJournalRevisionCurrent,
+	mutationJournalRevision,
+} from "./mutation-journal-revision.ts";
 import { isLegalMutationTransition } from "./mutation-journal-state.ts";
 import {
 	captureModemState,
@@ -127,6 +131,7 @@ export async function acknowledgeMutation(
 	stableKey: string,
 	mode: ModemMutationAckMode,
 ): Promise<ModemMutationAckOutput> {
+	const revision = mutationJournalRevision();
 	const entry = await readMutationEntry(stableKey);
 	if (entry === undefined) return fail("no_entry");
 	if (entry.state !== "failed") return fail("not_blocked");
@@ -137,6 +142,7 @@ export async function acknowledgeMutation(
 	} catch {
 		return fail("read_failed");
 	}
+	if (!isMutationJournalRevisionCurrent(revision)) return fail("not_blocked");
 	if (current === undefined) return quarantine(entry);
 
 	if (mode === "verified-rollback") {
@@ -157,9 +163,11 @@ export async function acknowledgeMutation(
 export async function decommissionMutation(
 	stableKey: string,
 ): Promise<ModemMutationAckOutput> {
+	const revision = mutationJournalRevision();
 	const entry = await readMutationEntry(stableKey);
 	if (entry === undefined) return fail("no_entry");
 	if (entry.state !== "device-absent-quarantine") return fail("not_blocked");
+	if (!isMutationJournalRevisionCurrent(revision)) return fail("not_blocked");
 	try {
 		await advance(
 			entry,
@@ -181,6 +189,7 @@ export async function decommissionMutation(
 export async function rebaselineMutation(
 	stableKey: string,
 ): Promise<ModemMutationAckOutput> {
+	const revision = mutationJournalRevision();
 	const entry = await readMutationEntry(stableKey);
 	if (entry === undefined) return fail("no_entry");
 	if (entry.state !== "recommission-pending") return fail("not_blocked");
@@ -191,6 +200,7 @@ export async function rebaselineMutation(
 	} catch {
 		return fail("read_failed");
 	}
+	if (!isMutationJournalRevisionCurrent(revision)) return fail("not_blocked");
 	if (current === undefined) return fail("device_absent");
 	if (!isCoherentState(current)) return fail("read_failed");
 
