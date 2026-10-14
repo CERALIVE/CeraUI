@@ -1224,36 +1224,43 @@ schema residuals below remain unchanged. Fresh Rock and Orange Pi failover/statu
 pressure, cancellation and unknown-success crash drills are still required.
 
 Module-size accounting is not a claim of uniform compliance. Counts are pure LOC:
-blank lines and lines starting with `//`, `#`, `--`, `*` or `/*` are excluded
+blank lines and lines starting with `//`, `#`, `--`, `*` or `/*` after leading
+whitespace are excluded
 (including embedded shell comments); a rule that keeps `*`/`/*` lines counts
-`runtime.ts` 2,454 and `reducer.ts` 673. Files carrying an inline `SIZE_OK`
-lifetime/state-machine exception: `update-orchestrator/runtime.ts` (new, 2,427),
-`software-updates.ts` (1,216→1,634), `os-agent.ts` (new, 637), `os-stage-run.ts`
+`runtime.ts` 2,451 and `reducer.ts` 673. Files carrying an inline `SIZE_OK`
+lifetime/state-machine exception: `update-orchestrator/runtime.ts` (new, 2,424),
+`software-updates.ts` (1,216→1,655), `os-agent.ts` (new, 640), `os-stage-run.ts`
 (new, 492), `main.ts` (360→436) and `os-manifest.ts` (new, 288). Every PR-touched
-non-test source file over 250 without `SIZE_OK` (base 23bcf379 → this integrated
-head, base→head): backend `cerastream-backend.ts` 1,315→1,465,
-`spawn-policy.ts` 907→1,303, `streaming.procedure.ts` 1,112→1,117,
+non-test source file over 250 without `SIZE_OK` (base 23bcf379 → PR tree measured
+on 2026-10-14, including the capable APT diagnostics change; base→measured tree):
+backend `cerastream-backend.ts` 1,315→1,465,
+`spawn-policy.ts` 907→1,320, `streaming.procedure.ts` 1,112→1,117,
 `stream-session-orchestrator.ts` 765→907, `addons/manager.ts` 489→721,
 `update-orchestrator/reducer.ts` new 667, `update-transport/executor.ts` new 440,
 `remote-control/self-fencing.ts` 353→436, `kiosk.ts` 338→406,
 `ui/preview-proxy.ts` 390→392, `stream-restoration.ts` 377→388, `ssh.ts` 362→383,
-`addons/reconciler.ts` 300→377, `system.procedure.ts` 295→357, `rpc/router.ts`
+`addons/reconciler.ts` 300→377, `system.procedure.ts` 295→355,
+`modems.procedure.ts` 631→635, `rpc/router.ts`
 290→306, `stream-start-retry.ts` 265→285, `apt-reachability.ts` 225→277,
 `streaming/streaming.ts` 257→263, `rpc/adapter.ts` 237→252,
 `software-update-service-contract.ts` 149→252 and `os-stage-job.ts` new 251;
-frontend `subscriptions.svelte.ts` 832→863, `LiveView.svelte` 807→840,
+frontend `subscriptions.svelte.ts` 832→890, `LiveView.svelte` 807→844,
 `rpc/client.ts` 625→642, `AddonsSection.svelte` 382→416,
-`OnDeviceDisplaySection.svelte` 353→360, `streaming-optimism.svelte.ts` 335→356,
+`OnDeviceDisplaySection.svelte` 353→360, `streaming-optimism.svelte.ts` 335→404,
 `SshDialog.svelte` 264→284, `updating-overlay.svelte` 332→314 (shrank) and
-`PowerDialog.svelte` 269→266 (shrank); shared `system.schema.ts` 339→343; and
+`PowerDialog.svelte` 269→266 (shrank), `vite.config.ts` 260→260;
+shared `system.schema.ts` 339→343; and
 `scripts/build/build-debian-package.sh` 274→282 (`UpdatesDialog.svelte`, earlier
-listed at 659, is now 193). The `SIZE_OK` files above are the only recorded
+listed at 659, measures 468→193). `apt-all-packages.ts` measures new 246 after
+the capable APT diagnostics change and remains below 250. Raw `wc -l` counts
+were also measured for every listed file; the numbers here apply the prefix
+exclusion above, not raw physical-line counts. The `SIZE_OK` files above are the only recorded
 exceptions. None is split here; every
 listed file without `SIZE_OK` is an owner decision pending (split or record
 `SIZE_OK`). Every non-test module added since PR head ff3b509e is at most 236
 pure LOC; the new disruptive-action modules are `disruptive-action-reservation.ts`
-176, `disruptive-service-reservation.ts` 131, `addons/disruptive-sysext-step.ts`
-122, `disruptive-action-gate.ts` 84, `disruptive-action-runtime.ts` 68,
+187, `disruptive-service-reservation.ts` 158, `addons/disruptive-sysext-step.ts`
+120, `disruptive-action-gate.ts` 84, `disruptive-action-runtime.ts` 68,
 `disruptive-retry.ts` 62 and `power-submission.ts` 37, and the liveness leaf
 `streaming/stream-liveness.ts` is 8 beside its 38-line system adapter. The
 inventory script is reproducible from the PR base and covers every touched
