@@ -150,6 +150,13 @@ contract job both fetch full history; Git failures remain test failures, never a
 empty diff. Local stability runs do not establish PR readiness: every hosted check
 on the current PR revision must succeed before the change is handed off.
 
+The selector and UID-pin network-namespace clients share schema-valid setup
+preparation with an explicit RK3588 fixture identity. Plain `bun` children do not
+inherit the test preload's setup mock; partial setup defaults omit required `hw`.
+`update-transport-setup.test.ts` exercises that same preparation and the real
+setup/selector imports without root or network probes. Production setup validation
+and fail-closed completion-reboot admission are unchanged.
+
 Redacted, hardware-derived modem diagnosis inputs live in
 [`src/tests/fixtures/modems/`](src/tests/fixtures/modems/README.md). Their README
 records the installed/candidate versions, per-port timing, separately observed

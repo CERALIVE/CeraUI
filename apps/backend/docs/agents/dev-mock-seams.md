@@ -87,6 +87,14 @@ module mock. `stopWifiUpdateLoopForTest()` cancels every delayed Wi-Fi refresh
 scheduled through `scheduleWifiUpdate()` and resets the unavailable-device retry
 window. Tests that start that loop call the stop seam in `afterEach`.
 
+Plain Bun child fixtures do not inherit that module mock. Both update-transport
+netns clients use `fixtures/update-transport-setup.ts` to write a complete typed
+setup document with explicit `hw: "rk3588"` before changing cwd and importing
+runtime modules. `SETUP_CONFIG_DEFAULTS` is partial and cannot stand alone as a
+setup document. The unprivileged `update-transport-setup.test.ts` loads the real
+strict setup module and selector in a fresh child; it needs no network namespace
+or probe. The production required-metadata boundary is not relaxed for tests.
+
 The lifecycle-admission test reset remains `resetLifecycleInterlock()`. Any test
 that acquires a streaming or modem-transition lease installs it in `afterEach`,
 even when the test also releases its individual grant on the happy path.

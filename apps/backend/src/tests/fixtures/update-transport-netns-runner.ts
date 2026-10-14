@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { spawnWithTimeout } from "../../helpers/spawn-policy.ts";
+import { prepareUpdateTransportSetup } from "./update-transport-setup.ts";
 
 const [phase, root, address, index] = process.argv.slice(2);
 if (!root) throw new Error("fixture directory required");
@@ -136,14 +137,7 @@ if (phase === "prepare") {
 	}
 	await Bun.sleep(120_000);
 } else if (phase === "client") {
-	const { SETUP_CONFIG_DEFAULTS } = await import(
-		"../../helpers/config-schemas.ts"
-	);
-	await Bun.write(
-		join(root, "setup.json"),
-		JSON.stringify(SETUP_CONFIG_DEFAULTS),
-	);
-	process.chdir(root);
+	await prepareUpdateTransportSetup(root);
 	const { selectUpdateTransport } = await import(
 		"../../modules/system/update-transport/executor.ts"
 	);

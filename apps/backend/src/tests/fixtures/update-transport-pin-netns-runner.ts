@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { prepareUpdateTransportSetup } from "./update-transport-setup.ts";
 
 const [phase, root, address, index] = process.argv.slice(2);
 if (!root) throw new Error("fixture root missing");
@@ -35,14 +36,7 @@ if (phase === "server") {
 			ota_uid: 42043,
 		}),
 	);
-	const { SETUP_CONFIG_DEFAULTS } = await import(
-		"../../helpers/config-schemas.ts"
-	);
-	await Bun.write(
-		join(root, "setup.json"),
-		JSON.stringify(SETUP_CONFIG_DEFAULTS),
-	);
-	process.chdir(root);
+	await prepareUpdateTransportSetup(root);
 	const { spawnWithTimeout } = await import("../../helpers/spawn-policy.ts");
 	const { readUpdateCapabilityFile } = await import(
 		"../../modules/system/update-capabilities.ts"
