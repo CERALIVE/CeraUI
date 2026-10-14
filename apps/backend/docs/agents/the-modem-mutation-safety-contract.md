@@ -196,12 +196,35 @@ the pathname effect is awaited after the check.
   today's `not_blocked` without waiting. An eligible slot takes the key nonblocking
   (`tryAcquireModemJournalKey`, which bypasses recovery/published-block admission but
   never the same-key exclusion) and holds it through read, transition, unlink/rename,
-  parent fsync and refresh, releasing in `finally`. If the key is held (a mutation's
-  journal-only tail, e.g. the arming-failure fallback refresh, or another retirement),
-  it waits for that holder's release, abortable by the RPC signal, then rereads from
-  scratch. Three acquisitions bound a holder chain; exhaustion or cancellation answers
-  the existing `state_mismatch` (owner note: here it means "not retired under this
-  observation", not a hardware disagreement). No wire or schema change.
+  parent fsync and refresh, releasing in `finally`. If the key is held, it waits for
+  that holder's release, then rereads from scratch. An eligible slot with the lease
+  held is a mutation's journal-only tail (e.g. the arming-failure fallback refresh)
+  OR another holder: a stale eligible read can wait while disk already holds a newer
+  `executing` entry, and a nonjournaled network scan holds the lease without touching
+  the slot. The loop rereads after every wake, so neither case is retired. Three
+  acquisitions bound HANDOFFS, not elapsed time; exhaustion, or an abort of a signal
+  observed during a wait, answers the existing `state_mismatch` (owner note: here it
+  means "not retired under this observation", not a hardware disagreement). No wire or
+  schema change.
+- **Cancellation is not wired in production.** The handlers accept an optional signal
+  and the procedures forward oRPC's `signal`, but the WebSocket adapter invokes
+  `call(procedure, input, { context })` with none, and socket close only removes the
+  client. The frontend's 30 s request timeout rejects locally and sends nothing. So a
+  retirement waiting behind a holder is NOT cancelled by a disconnect or a client
+  timeout: it proceeds and retires when the holder releases, and repeated retries can
+  leave further pending requests behind the same holder. Even with a signal,
+  `withRetirementKey` checks it only inside the release wait, not before a free-key
+  acquisition nor after a wait resolves, so an already-aborted signal still acquires
+  and retires. Do not describe a cancelled request as doing nothing.
+- **Owner option, not planned.** The acknowledgement refusal enum
+  (`modemMutationAckRefusalSchema`) has no `mutation_in_progress`; the ordinary
+  `modemMutationRefusalSchema` does. Contention is therefore reported as the observed
+  state (`not_blocked`, `state_mismatch`, `no_entry`), and only a NEW mutation is
+  refused `mutation_in_progress`. An additive acknowledgement `mutation_in_progress`
+  member is available if the owner wants a distinct busy reason. In this repository the
+  same release's device UI is its only consumer. The enum is a `z.enum`, which rejects
+  an unknown value rather than stripping it, so a consumer validating against an older
+  schema would fail the parse.
 - **Ordinary mutation admission** keeps its frozen refusal order. A retirement-held
   acknowledged slot refuses with `mutation_in_progress`; a quarantined slot keeps its
   published block (`mutation_blocked`) ahead of the lease.
@@ -216,9 +239,12 @@ the pathname effect is awaited after the check.
   acknowledging a modem never refuses Go Live, exactly as before this exclusion.
 
 Lock order: key → reads/revision/effects/refresh → `finally` release. No key holder
-waits on a barrier, recovery owner or another key; waiters hold no lease. A hung
-holder can leave an operator retirement waiting until its RPC is cancelled; nothing
-times out open. Other keys are independent. Host-tested only.
+waits on a barrier, recovery owner or another key; waiters hold no lease. A holder
+that never releases (a never-settling filesystem, capture or presence await) keeps the
+exclusion by design, and an operator retirement waiting behind it stays pending with
+no production cancellation path. Cancelling a waiter must never release someone
+else's lease, and admission never times out open. Other keys are independent.
+Host-tested only.
 
 ### THE REPLAY BARRIER AT THE ADMISSION CHOKEPOINT
 

@@ -314,10 +314,14 @@ unavailable, not successful preservation.
      refresh, so an old retry can never delete a newer armed/executing slot: the new
      mutation refuses `mutation_in_progress` while a retirement holds the key, and a
      retirement that finds armed/executing answers `not_blocked` without waiting. An
-     eligible slot under a held key waits (cancellable, at most three acquisitions) and
-     then rereads; exhaustion/cancellation answers existing `state_mismatch`. Replay and
-     settlement never wait: a held key is an incomplete pass. See the modem safety
-     contract → Same-key journal exclusion.
+     eligible slot under a held key (a mutation tail OR another holder, such as a
+     network scan) waits and rereads after every wake; three acquisitions bound
+     handoffs, not elapsed time, and exhaustion answers existing `state_mismatch`.
+     The RPC transport supplies no abort signal, so a disconnected or timed-out client
+     does NOT cancel a waiting retirement: it retires when the holder releases, and a
+     holder that never releases keeps it pending. Replay and settlement never wait: a
+     held key is an incomplete pass. See the modem safety contract → Same-key journal
+     exclusion, including the acknowledgement busy-reason owner option.
      An independent later reconciliation can project the already-proven acknowledged
      decision as nonblocking, consistent with the existing state contract. Decommission
      never removes its entry: its retained decision releases only the streaming block.
