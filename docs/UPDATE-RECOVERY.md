@@ -243,7 +243,7 @@ unavailable, not successful preservation.
   (safe: the barrier has been up since boot, so nothing was admitted) until a
   complete readable replay lowers it, with the same 1 s to 60 s backoff. After a
   completed replay, a RUNTIME raise from a failed journal read schedules the same
-  owner in read-only `verify` mode: it re-reads the slot inventory and the
+  owner in `verify` mode: it settles already-submitted journal bookkeeping, re-reads the slot inventory and the
   per-identity blocks and never rolls back, because an admitted mutation may still
   be running. Block publication reads the inventory strictly: a slot that became
    malformed between passes raises the barrier and fails the attempt instead of
@@ -296,7 +296,33 @@ unavailable, not successful preservation.
     with one cancellable owner. A continuously committing writer can withhold a
     complete pass indefinitely; there is no unsafe timeout-open. Once churn stops,
     the next complete replay lowers recovery, without a restart. The bound is on
-    retry cadence, not hardware/read duration or total time under permanent faults.
+     retry cadence, not hardware/read duration or total time under permanent faults.
+     Retirement is successful only after unlink succeeds (or reports genuine
+     ENOENT) and parent fsync acknowledges it. EIO/EACCES/ENOSPC and other unlink
+     errors propagate as incomplete replay; `rolledBack`/`pruned` cannot advance
+     before retirement succeeds. A one-shot EIO retains REPLAY until a later pass
+     actually retires the slot, without restarting. Failed parent acknowledgement
+     after visible deletion remains process-local debt: the same owner retries
+     fsync, never the old pathname deletion, before publication/completion. An older
+     sync cannot discard a newer failed acknowledgement. Empty readback is not fsync.
+
+     Acknowledge and rebaseline return existing `journal_write_failed` when removal
+     fails; the durable `acknowledged` decision and previous block projection remain.
+     Explicit retry resumes that retirement without replacing the accepted baseline.
+     An independent later reconciliation can project the already-proven acknowledged
+     decision as nonblocking, consistent with the existing state contract. Decommission
+     never removes its entry: its retained decision releases only the streaming block.
+     Journaled lease confirmation commits existing `completed` before removal. Cleanup
+     failure returns a typed mutation refusal and always releases the lease; retained
+     completed authority is nonblocking, not ownerless executing residue. If an operation's
+     fallback failed-state write also fails, the same recovery owner retains that
+     attempt-bound transition and retries bookkeeping after a fresh slot/revision check,
+     without repeating hardware or overwriting acknowledged/newer-attempt authority.
+     Runtime verification performs no hardware rollback. These pending acknowledgements
+     and transitions are process-local; a new process uses boot journal replay.
+     Cancellation is checked after every attempt outcome, including incomplete/throw;
+     no next sleep or completion follows shutdown. The default sleep creates no timer
+     or listener for an already-aborted signal. Submitted hardware I/O is not revoked.
     A permanent enumeration failure keeps the barrier raised behind capped
    waits, not a spinning loop. A verification can never lower the barrier over damage it
   just observed. Shutdown cancels the flight and disarms scheduling, so a late

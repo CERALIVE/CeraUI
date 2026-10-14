@@ -70,9 +70,20 @@ the boot barrier until a complete pass, not read-only verification of a stranded
 `executing` slot. It rereads disk and already-restored hardware before another
 rollback effect. Continuous invalidation has doubled/capped waits, not an admission
 timeout; after churn stops the next complete pass clears recovery. Runtime faults
-after completed startup remain read-only verification. Config reset notice intent
+after completed startup remain verification without hardware rollback. Config reset notice intent
 does not survive process exit between replacement and successful strict loading;
 the next boot may send no notice while retaining the damaged copy.
+
+Journal retirement suppresses only unlink ENOENT; other failures retain incomplete
+REPLAY rather than counting a removed slot. Parent fsync is still the acknowledgement:
+after visible deletion its failure remains owned for fsync-only retry, not a readback
+shortcut or a repeated deletion of newer authority. The existing owner also settles
+previously submitted failed-state bookkeeping by attempt identity/revision; runtime
+verification never repeats hardware. Confirmed lease work commits `completed` before
+retirement and always releases the lease. Cancellation after an incomplete attempt
+arms no next sleep, and an already-aborted default sleep creates no timer/listener.
+Absent journal directories still complete boot normally. These are host regressions,
+not a SIGKILL, power-loss, board, installed shutdown or hardware-repeat qualification.
 
 `helpers/systemd-ready.ts` invokes `/usr/bin/systemd-notify` through the bounded,
 argv-only command runner. The service remains root-owned and

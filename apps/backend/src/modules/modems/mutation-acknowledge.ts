@@ -96,10 +96,13 @@ async function archiveAcknowledged(
 	baseline?: Readonly<Record<string, unknown>>,
 ): Promise<ModemMutationAckOutput> {
 	try {
-		await advance(entry, "acknowledged", detail, {
-			acknowledgedMode: mode,
-			...(baseline === undefined ? {} : { preState: { ...baseline } }),
-		});
+		if (entry.state !== "acknowledged") {
+			await advance(entry, "acknowledged", detail, {
+				acknowledgedMode: mode,
+				...(baseline === undefined ? {} : { preState: { ...baseline } }),
+			});
+		}
+		await removeMutationEntry(entry.stableKey);
 	} catch (err) {
 		logger.error("modem mutation acknowledgement did not commit", {
 			module: "modems",
@@ -108,7 +111,6 @@ async function archiveAcknowledged(
 		});
 		return fail("journal_write_failed");
 	}
-	await removeMutationEntry(entry.stableKey);
 	await refreshMutationBlocks();
 	return { success: true, state: "acknowledged" };
 }
@@ -134,6 +136,10 @@ export async function acknowledgeMutation(
 	const revision = mutationJournalRevision();
 	const entry = await readMutationEntry(stableKey);
 	if (entry === undefined) return fail("no_entry");
+	if (entry.state === "acknowledged") {
+		if (!isMutationJournalRevisionCurrent(revision)) return fail("not_blocked");
+		return archiveAcknowledged(entry, mode, "resume acknowledged retirement");
+	}
 	if (entry.state !== "failed") return fail("not_blocked");
 
 	let current: Readonly<Record<string, unknown>> | undefined;
@@ -192,6 +198,14 @@ export async function rebaselineMutation(
 	const revision = mutationJournalRevision();
 	const entry = await readMutationEntry(stableKey);
 	if (entry === undefined) return fail("no_entry");
+	if (entry.state === "acknowledged") {
+		if (!isMutationJournalRevisionCurrent(revision)) return fail("not_blocked");
+		return archiveAcknowledged(
+			entry,
+			"force-rebaseline",
+			"resume acknowledged retirement",
+		);
+	}
 	if (entry.state !== "recommission-pending") return fail("not_blocked");
 
 	let current: Readonly<Record<string, unknown>> | undefined;

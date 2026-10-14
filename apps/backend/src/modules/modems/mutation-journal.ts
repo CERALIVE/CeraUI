@@ -65,6 +65,10 @@ import {
 } from "../system/update-orchestrator/stored-state-file.ts";
 import { parseMutationJournalEntry as parseEntry } from "./mutation-journal-parse.ts";
 import {
+	acknowledgeMutationRemoval,
+	resetPendingMutationRemovals,
+} from "./mutation-journal-retirement.ts";
+import {
 	noteMutationJournalReadFault,
 	withMutationJournalChange,
 } from "./mutation-journal-revision.ts";
@@ -194,6 +198,7 @@ export function setMutationJournalDeps(
 
 export function resetMutationJournalDeps(): void {
 	activeDeps = defaultMutationJournalDeps;
+	resetPendingMutationRemovals();
 }
 
 export function mutationSlotName(stableKey: string): string {
@@ -235,8 +240,12 @@ export async function removeMutationEntry(
 	deps: MutationJournalDeps = activeDeps,
 ): Promise<void> {
 	return withMutationJournalChange(async () => {
-		await deps.fs.unlink(entryPath(deps, stableKey)).catch(() => undefined);
-		await deps.fs.fsyncDir(deps.dir);
+		await deps.fs.unlink(entryPath(deps, stableKey)).catch((error: unknown) => {
+			if (error instanceof Error && "code" in error && error.code === "ENOENT")
+				return;
+			throw error;
+		});
+		await acknowledgeMutationRemoval(deps);
 	});
 }
 

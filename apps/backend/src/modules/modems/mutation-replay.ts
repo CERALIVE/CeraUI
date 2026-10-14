@@ -53,6 +53,7 @@ import {
 	readMutationEntry,
 	removeMutationEntry,
 } from "./mutation-journal.ts";
+import { settlePendingMutationRemovals } from "./mutation-journal-retirement.ts";
 import {
 	assertMutationJournalRevision,
 	isMutationJournalRevisionCurrent,
@@ -163,6 +164,7 @@ export async function runMutationReplay(): Promise<ReplaySummary> {
 	const tally = { rolledBack: 0, pruned: 0, blocked: 0, quarantined: 0 };
 	let unreadable = 0;
 	try {
+		await settlePendingMutationRemovals();
 		for (const name of await listUnreadableSlots()) {
 			unreadable += 1;
 			logger.error("modem mutation journal slot is unreadable; left in place", {
@@ -206,8 +208,9 @@ export async function runMutationReplay(): Promise<ReplaySummary> {
 	return summary;
 }
 
-/** Read-only: true when every slot reads and the per-identity blocks refresh. */
+/** Settle submitted bookkeeping and read current blocks, without hardware rollback. */
 async function journalReadsCompletely(): Promise<boolean> {
+	await settlePendingMutationRemovals();
 	if ((await listUnreadableSlots()).length > 0) return false;
 	await refreshMutationBlocks();
 	return true;

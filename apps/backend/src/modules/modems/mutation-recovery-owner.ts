@@ -14,8 +14,8 @@
  *     already-restored guard avoids resubmitting a successful rollback.
  *   - `verify` mode follows a RUNTIME raise (a journal read failed after replay
  *     had completed). A mutation admitted before that raise may still be running,
- *     so this mode never rolls anything back: it only re-reads the inventory and
- *     the per-identity blocks, and lowers the barrier when both read completely.
+ *     so this mode never rolls hardware back. It settles submitted journal
+ *     bookkeeping, then re-reads inventory/blocks before lowering admission.
  *
  * Backoff doubles from 1 s to a 60 s ceiling, and the loop runs until success or
  * until shutdown cancels it.
@@ -38,7 +38,7 @@ export type MutationRecoveryMode = "replay" | "verify";
 export interface MutationRecoveryDeps {
 	/** Full startup replay; true when every slot settled without lost authority. */
 	readonly replay: () => Promise<boolean>;
-	/** Read-only inventory; true when the journal and blocks read completely. */
+	/** No hardware rollback; true when bookkeeping and journal/blocks settle. */
 	readonly verify: () => Promise<boolean>;
 	/** Resolves after `ms`, or early once `signal` aborts. */
 	readonly sleep: (ms: number, signal: AbortSignal) => Promise<void>;
@@ -54,6 +54,7 @@ export function sleepUnlessAborted(
 	ms: number,
 	signal: AbortSignal,
 ): Promise<void> {
+	if (signal.aborted) return Promise.resolve();
 	return new Promise((resolve) => {
 		const timer = setTimeout(resolve, ms);
 		signal.addEventListener(
@@ -94,10 +95,11 @@ async function retry(
 			if (own.signal.aborted || !isRecoveryPending()) return;
 			consumeRecoveryBarrierRaise();
 			const revision = mutationJournalRevision();
-			if (await attempt(deps, mode)) {
+			const complete = await attempt(deps, mode);
+			if (own.signal.aborted) return;
+			if (complete) {
 				const finalRevision =
 					mode === "replay" ? reconciledMutationJournalRevision() : revision;
-				if (own.signal.aborted) return;
 				if (
 					isMutationJournalRevisionCurrent(finalRevision) &&
 					completeRecoveryBarrier()

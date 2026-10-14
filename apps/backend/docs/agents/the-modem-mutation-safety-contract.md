@@ -50,7 +50,11 @@ file per physical device because two devices' mutations are independent. Mode
 write temp -> fsync(temp) -> rename() over the journal path -> fsync(parent dir)
 ```
 
-and a durable deletion is `unlink()` + `fsync(parent)`. `rename` over an existing
+and a durable deletion is `unlink()` + `fsync(parent)`. Only genuine unlink ENOENT
+is an already-absent success; all other unlink errors propagate, with no readback
+substitute. Failed parent fsync after visible removal remains owned for fsync-only
+retry before recovery completes, never repeated deletion from obsolete authority.
+An older acknowledgement cannot clear a newer failed one. `rename` over an existing
 path is atomic on every filesystem the device ships, so NO injection point can
 leave a torn document. A failure anywhere REJECTS and the caller must not proceed:
 the parent-directory fsync is INSIDE the boundary rather than best-effort after
@@ -73,7 +77,9 @@ listing is a concurrent deletion and is skipped in both inventory passes, not
 raised as a recovery barrier. Read errors still throw and retain the barrier.
 Directory enumeration after a successful open is inside that same error boundary.
 After completed startup, any non-absence fault schedules the registered read-only
-verification owner (1 s doubling to a 60 s ceiling). If acknowledgement durably
+verification owner (1 s doubling to a 60 s ceiling). It also settles previously
+submitted attempt-bound failed-state bookkeeping and directory acknowledgements,
+but never repeats runtime hardware. If acknowledgement durably
 removed the slot before its refresh failed, that owner reads the empty journal,
 clears the obsolete stream/modem block and lowers the barrier automatically after
 repair. It never replays rollback against an already-admitted runtime mutation.
@@ -171,6 +177,10 @@ shutdown cancels; infinite writer churn or permanent I/O can retain recovery
 indefinitely, without spinning or unsafe timeout-open. When authority stabilizes,
 the next complete pass clears the barrier without requiring a restart. This is
 a cadence bound, not a bound on hardware I/O or total recovery duration.
+Unlink failure is another incomplete pass: no restored/pruned count precedes
+durable removal. Shutdown is checked after incomplete as well as successful
+attempts; the default sleep resolves before creating a timer/listener when its
+signal is already aborted. Already-submitted capture/hardware is not revoked.
 
 ### THE REPLAY BARRIER AT THE ADMISSION CHOKEPOINT
 
@@ -211,6 +221,17 @@ those two writes is replayable rather than a lost operator decision. `ifname` is
 excluded from the state comparison on purpose: a predictable name is derived from
 a MAC this fleet has proven can collide, and it legitimately changes across a
 re-enumeration that restored the correct mode.
+Retirement failure returns existing `journal_write_failed`, retains the durable
+decision and previous projection, and an explicit acknowledged/rebaseline retry
+resumes removal without capturing a new baseline. A later independent publication
+can project acknowledged as nonblocking under the existing state contract.
+Decommission retains its slot and never calls removal. Confirmed journaled lease
+work commits existing `completed` before retirement: a cleanup error returns a
+typed refusal and releases the lease while confirmed authority remains nonblocking.
+If an operation's failed-state fallback also cannot commit, its attempt-bound
+transition stays owned by recovery. Settlement rereads/fences the current slot,
+does not overwrite acknowledged/decommissioned/newer-attempt authority, and does
+not repeat hardware. These queues are process-local; boot replay owns crash residue.
 
 ### LEASE LIFETIME spans the TRANSACTION, not the entrypoint call
 
