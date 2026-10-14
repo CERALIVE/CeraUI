@@ -563,6 +563,10 @@ Disruptive helper mutations use checked request-owned process groups, then the
 baked descriptor's submitted unit jobs. Success/exit 1 is not descendant retirement;
 only actual child exit plus ESRCH from the negative owned PGID settles that boundary.
 Fixed root-only spawning retains child-only timeout signaling and partial output.
+Proved no-dispatch launch/resource failure releases immediately without probes/retries,
+preserving the original error. Started/unknown dispatch still requires group and unit
+evidence; first-observation cancellation/owner retirement schedules no late retry.
+This inference is specific to the fixed Bun 1.4.2 spawn options, not an errno whitelist.
 Zombies can over-hold; session-changing descendants and delegated daemon/manager
 work are outside group containment. Generic outer census and direct unit evidence
 remain separate. Restart clears process-local holds, not proof of external completion;

@@ -50,8 +50,8 @@ function spyDeps(over: Partial<AddonHelperDeps> = {}): {
 	return { deps, calls };
 }
 
-describe("addon-helper wrapper — argv-only invocation", () => {
-	it("enable spawns `sudo ceralive-addon-helper enable <id>` argv-only and returns stdout", async () => {
+describe("addon-helper wrapper — action/id forwarding through the legacy exec fixture", () => {
+	it("enable forwards action/id to the synthetic sudo ledger and returns stdout", async () => {
 		const { deps, calls } = spyDeps();
 
 		const out = await addonEnable("debug-toolset", deps);
@@ -59,7 +59,7 @@ describe("addon-helper wrapper — argv-only invocation", () => {
 		expect(out).toBe('{"ok":true}');
 		expect(calls).toHaveLength(1);
 		const call = calls[0];
-		// argv-only: (file, args) — no shell, no command string.
+		// This fixture manufactures the legacy ledger, not the production launcher argv.
 		expect(call?.file).toBe("sudo");
 		expect(call?.args).toEqual([
 			"ceralive-addon-helper",
@@ -68,7 +68,7 @@ describe("addon-helper wrapper — argv-only invocation", () => {
 		]);
 	});
 
-	it("disable, refresh, status build the expected argv", async () => {
+	it("disable/refresh forward into the legacy ledger while status retains its sudo path", async () => {
 		const { deps, calls } = spyDeps();
 
 		await addonDisable("debug-toolset", deps);
@@ -80,13 +80,13 @@ describe("addon-helper wrapper — argv-only invocation", () => {
 			["ceralive-addon-helper", "refresh"],
 			["ceralive-addon-helper", "status"],
 		]);
-		// Every op goes through sudo, never a raw helper exec.
+		// Mutation entries are synthetic; only status actually uses the injected exec path.
 		expect(calls.every((c) => c.file === "sudo")).toBe(true);
 	});
 });
 
 describe("addon-helper wrapper — isRealDevice gate (G6)", () => {
-	it("refuses every op in emulated mode and never spawns sudo", async () => {
+	it("refuses every op in emulated mode without reaching the fixture exec ledger", async () => {
 		let spawned = false;
 		const { deps } = spyDeps({
 			isRealDevice: () => Promise.resolve(false),

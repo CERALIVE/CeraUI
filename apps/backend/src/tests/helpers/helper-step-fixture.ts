@@ -15,6 +15,7 @@ export function helperStepFixture(
 	let exitCode: number | undefined;
 	return {
 		spawned: () => spawned,
+		dispatch: () => (spawned ? "started" : "unknown"),
 		child: () => undefined,
 		exitCode: () => exitCode,
 		probe: helperGroupRetirement(
@@ -35,6 +36,7 @@ export function helperStepFixture(
 export function helperExecFixture(
 	exec: (file: string, args: readonly string[]) => Promise<ExecResult>,
 ): (args: readonly string[]) => AddonHelperStep {
+	// Preserve old action/output assertions; actual launcher argv lives in the real-runner suite.
 	return (args) =>
 		helperStepFixture(() => exec("sudo", ["ceralive-addon-helper", ...args]));
 }

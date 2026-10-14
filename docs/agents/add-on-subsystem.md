@@ -109,7 +109,14 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
     First retirement is latched, so subsequent unit polling cannot probe a reused number.
     The collector still signals only its direct child; timeout retains partial output,
     its failure class and actual 137/143 evidence. TERM-induced zero is not success.
-    Zero-spawn refusal alone releases without a group probe. Enable/disable derives the
+    The runner's typed dispatch fact is none/started/unknown, independent of error spelling.
+    A proved prelaunch failure (root/launcher/options check, pre-spawn abort or synchronous
+    spawn failure with no child handle) releases immediately with the original error and
+    no group/unit probe or retry. A returned handle is irrevocably started, including an
+    abort racing its assignment; allocated-but-unexecuted evidence stays unknown. This
+    no-dispatch inference depends on the fixed Bun 1.4.2 spawn shape, not generic errno
+    clearance. Other callers' ordinary-failure policy and manager failure tokens are unchanged.
+    Enable/disable derives the
     baked unmask→enable→start unit union (deduplicated) before submission, then observes
     its jobs/lifecycles AFTER group retirement. Descriptor failure prevents submission.
     Groups retain inherited clients, filesystem mutators, asynchronous jq substitution,
@@ -123,7 +130,8 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
     Manager's separate systemctl tails retain their own unit evidence, not group ownership.
     The legacy census remains for generic outer operations, not as helper authority or an
     additional AND-condition; its readable named observations are not a descendant inventory.
-    Timers only re-observe, never clear a hold. Installed behavior remains unqualified.
+    Timers only re-observe, never clear a hold. Cancellation/retired tickets schedule no
+    retry, including rejection of the first observation. Installed behavior remains unqualified.
 - **Stuck service hold (operator meaning)**: a service hold has NO supersede path; only
   re-submitting the SAME pending power action supersedes a SHUTDOWN hold. Natural causes
     (the 30 s helper timeout, a slow unit, a denied group probe or an unreaped zombie) can
@@ -142,7 +150,7 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
    N/MINOR).
     Board drills must establish installed setsid/environment, real helper descendants,
     orphan/zombie retirement under the installed init, signal/output mapping, queued
-    descriptor jobs and service restart on BOTH boards.
+    descriptor jobs and service restart on BOTH boards, plus a real launcher failure leaving no hold.
    Host fixtures do not prove installed completion, shutdown or safe power loss.
 - **Validation deadline**: `runValidateCmd` uses `spawnWithTimeout` and its shared
   termination classification. A TERM-induced zero after timeout throws typed

@@ -32,6 +32,7 @@ useSessionOwnerForFile();
 let f: ReturnType<typeof sysextFixture>;
 let wakeups: Array<() => Promise<void>>;
 let probeAnswer: ServiceCompletion;
+// Legacy observation ledger omits successful/code-1 group calls; not a syscall-count oracle.
 let probes: string[];
 beforeEach(() => {
 	f = sysextFixture();
@@ -237,7 +238,7 @@ test("a reboot requested during an add-on refresh is refused and accepted after 
 	expect(runs).toEqual(["reboot"]);
 });
 
-test("a positive helper failure releases its hold immediately", async () => {
+test("a helper exit-1 fixture releases after synthetic group retirement without a legacy ledger entry", async () => {
 	// Given a helper that exits non-zero.
 	const failure = Object.assign(new Error("Command failed"), { code: 1 });
 	// When the refresh rejects.
@@ -246,7 +247,7 @@ test("a positive helper failure releases its hold immediately", async () => {
 			throw failure;
 		}),
 	).catch((caught: unknown) => caught);
-	// Then the original error surfaces and no completion probe was needed.
+	// Then the error surfaces and the legacy ledger is empty (group retirement is not recorded).
 	expect(error).toBe(failure);
 	expect(probes).toEqual([]);
 	expect(isDisruptiveActionPending()).toBe(false);
@@ -325,7 +326,7 @@ test("a unit step settles through its own unit, not the helper process table", a
 	expect(isDisruptiveActionPending()).toBe(false);
 });
 
-test("the default helper probe needs a visible process table free of sysext actors", async () => {
+test("the generic outer census needs visible process evidence free of recognised sysext actors", async () => {
 	// Given private process tables in four shapes.
 	const root = mkdtempSync(join(tmpdir(), "sysext-proc-"));
 	const table = (name: string, rows: Record<string, string>) => {
@@ -367,7 +368,7 @@ test("the default helper probe needs a visible process table free of sysext acto
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}
-	// Then only a visible, actor-free table proves completion.
+	// Then only readable evidence free of recognised actors settles this generic census.
 	expect(results).toEqual({
 		filtered: "unknown",
 		idle: "completed",

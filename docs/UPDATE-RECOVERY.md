@@ -572,7 +572,14 @@ Even exit 0/1 requires actual direct-child exit, integer owned PGID > 1 and ESRC
 `kill(-PGID, 0)`. Success is presence and every other errno is UNKNOWN. Retirement is
 latched before polling descriptor units; no later numeric-group probe occurs. Timeout
 remains failure, retaining partial output and actual 137/143; collector signaling is
-child-only. Zero-spawn refusal needs no retirement probe. Fork/exec/reparenting and
+child-only. The runner separately records none/started/unknown dispatch evidence: a
+proved failure before a child handle exists (including synchronous resource/launcher
+failure or pre-spawn abort) releases immediately with the original error, zero
+retirement probes and no retry. A returned handle or unknown dispatch retains group
+and unit evidence regardless of error spelling; abort racing assignment cannot clear it.
+The no-dispatch inference is specific to this fixed Bun 1.4.2 spawn shape, not a global
+errno whitelist. Cancelled/retired first observations cannot schedule a late retry,
+even on rejection. Fork/exec/reparenting and
 double-fork retain group membership; unreaped zombies conservatively hold, not disappear.
 No timer or zombie-skipping census grants clearance. Generic outer operations retain
 their separate census; that census does not enumerate contained helper descendants.
@@ -612,7 +619,8 @@ Board drills still owe accepted reboot → Go Live during shutdown, stale restar
 past 10 s → actual resolver clearance, exit 0 without shutdown → fenced retry,
 and timed activation arm → reboot. Additionally prove installed setsid/environment,
 real helper descendants, orphan/zombie retirement under the installed init, signal
-exits and partial output, queued descriptor jobs and service restart on BOTH boards.
+exits and partial output, queued descriptor jobs and service restart on BOTH boards,
+plus a real launcher failure leaving no hold.
 None is physically
 proven by the host matrices; restart clears local holds, not external-work evidence.
 

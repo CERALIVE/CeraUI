@@ -2,10 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { AddonHelperStep } from "../../helpers/addon-helper-step.ts";
 import { DisruptiveActionRefusedError } from "../system/disruptive-action-error.ts";
 import type { DisruptiveActionDecision } from "../system/disruptive-action-gate.ts";
-import {
-	DisruptiveActionRefusal,
-	isPositiveDisruptiveFailure,
-} from "../system/disruptive-action-reservation.ts";
+import { DisruptiveActionRefusal } from "../system/disruptive-action-reservation.ts";
 import type { ServiceCompletionProbe } from "../system/disruptive-service-reservation.ts";
 import {
 	type ProcIo,
@@ -105,9 +102,7 @@ export async function runDisruptiveSysextStep<T>(
 						),
 					...(helper ? { settlement: "evidence-required" as const } : {}),
 					positiveFailure: helper
-						? (error) =>
-								!helper.spawned() &&
-								(isRefusal(error) || isPositiveDisruptiveFailure(error))
+						? () => helper.dispatch() === "none"
 						: isRefusal,
 				},
 				(helper ? undefined : probeOverride) ??

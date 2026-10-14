@@ -128,11 +128,13 @@ async function resolveUncertainService(
 			}
 		}
 	};
+	const signal = disruptiveShutdownSignal();
 	try {
-		if (!(await observe(disruptiveShutdownSignal())) && reservation.retained())
+		if (!(await observe(signal)) && reservation.retained() && !signal.aborted)
 			retryDisruptiveEvidence(observe);
 	} catch {
-		if (reservation.retained()) retryDisruptiveEvidence(observe);
+		if (reservation.retained() && !signal.aborted)
+			retryDisruptiveEvidence(observe);
 	}
 }
 

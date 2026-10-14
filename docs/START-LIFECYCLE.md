@@ -849,7 +849,14 @@ Success and every possibly-effectful failure (exit 1 included) require actual ch
 exit plus ESRCH from `kill(-ownedPGID, 0)` with integer PGID > 1. A successful probe
 means present; all other errno, including EPERM, remain UNKNOWN. Retirement is latched;
 then enable/disable polls the baked descriptor's deduplicated unmask→enable→start union.
-Zero-spawn refusal releases without probing; child-only collector TERM/KILL, timeout
+Typed none/started/unknown dispatch evidence, not errno spelling, governs the helper's
+pre-effect exception: proved prelaunch/synchronous-spawn failure with no handle or
+pre-spawn abort releases immediately with the original error, no group/unit probes
+and no wakeup. Once a handle exists, even abort racing assignment is started; unknown
+dispatch retains evidence. This inference depends on the fixed Bun 1.4.2 spawn shape
+and does not change other callers' default policy or enable/disable failure tokens.
+Cancellation/retirement fences retry scheduling even when the first observation rejects.
+Child-only collector TERM/KILL, timeout
 failure and original partial output/137/143 are preserved. TERM-induced zero is failure.
 Fork/exec/double-fork/reparented descendants retain membership; zombies hold until reaped.
 The generic outer census remains separate, never ANDed with the helper boundary.
@@ -893,7 +900,7 @@ submitted helper's partial execution may survive refusal/failure. A stream or pr
 after final observation/dispatch; the external root helper is not governed by a
 backend-only decision. Installed setsid/environment, real helper descendants,
 orphan retirement under the installed init, queued descriptor jobs, signal/output
-mapping and service restart on BOTH boards need board
+mapping, service restart and a real launcher failure leaving no hold on BOTH boards need board
 drills. No hardware or uninterrupted-transaction proof is claimed.
 
 Stream liveness is tri-state. `stream-liveness-source.ts` is the synchronous,
