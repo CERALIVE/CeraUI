@@ -512,10 +512,19 @@ When the socket reconnects after the operator has already authenticated this pag
 1. Reads the stored credential from `localStorage["auth"]`.
 2. Calls `rpc.auth.login({ password: storedToken, persistent_token: true })`.
 3. Dispatches the auth result through `handleMessage("auth", result)`.
-4. On success, fires a **safety hydrate**: calls `rpc.streaming.getConfig()` and `rpc.status.getStatus()` in parallel and dispatches each result through `handleMessage` as soon as THAT result arrives (the status answer carries its receipt stamp), never after the other. This is defense-in-depth on top of the server's post-login push.
+4. On success, fires a **safety hydrate**: config and status reads run in parallel and are consumed independently. Status carries request-dispatch plus browser-receipt marks, never a stamp minted at later ingestion. Reject a pull dispatched before an intervening stream intent or newer observation; allow at most one bounded fresh read. Failed or twice-superseded reads settle nothing. This is defense-in-depth on top of the server's post-login push.
 5. On credential rejection, clears the stored token and calls `routeToLogin()`.
 
 The `reauthInFlight` flag prevents concurrent re-auth attempts.
+
+Receipt order establishes arrival, not computation order or causality. A pull
+can settle a stream claim only if dispatched after that claim on the current
+link; a push uses its current-link receipt. Restoration remains a separate
+reread trigger after both hydrate paths settle. Both stream watchdogs use the
+same bounded reader and fence continuations/effect ports to their originating
+action lifetime. Unknown evidence cannot dispatch Stop; a current operator
+Stop's positive-streaming redispatch remains unchanged. These orders are
+host-tested, not browser/board-qualified; no wire or RPC schema changes.
 
 **Source:** `apps/frontend/src/lib/rpc/reconnect.ts`; `apps/frontend/src/lib/rpc/subscriptions.svelte.ts:421-441, 446-468`
 

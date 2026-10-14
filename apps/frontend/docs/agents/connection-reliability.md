@@ -2,6 +2,17 @@
 
 ## CONNECTION RELIABILITY
 
+### Stream-read ordering and watchdog ownership [EXISTS; host-tested]
+
+Reconnect consumes config/status independently, while restoration still waits
+for both paths. A status pull carries request-dispatch and browser-receipt marks
+on the evidence clock; a newer intent/observation supersedes a pending read.
+Reject it with at most one fresh read, never a loop or an automatic Stop on
+unknown. Receipt is arrival, not device computation; ingestion keeps provenance.
+Both watchdogs fence post-await effects to their originating action lifetime.
+Settlement or replacement invalidates running promises as well as timers.
+Real-socket Vitest transcripts cover this contract; browser/board proof is owed.
+
 **Visible operator heartbeat [PARTIAL, Todo 32].** `Layout.svelte` sends the
 authenticated `ui.heartbeat` every 30 seconds only while the page is visible
 AND has focus, and sends on focus/visibility return. Unmount or authentication
@@ -71,4 +82,3 @@ the scan-specific 270 s unknown-outcome bound. A second client receives the
 typed `already_scanning` refusal; it is never silently dropped.
 
 See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../../../docs/FRONTEND_CONNECTION_PATTERNS.md) for the full connection-pattern reference.
-

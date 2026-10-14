@@ -56,7 +56,9 @@ export interface StartWatchdogDeps {
 	 * drop-stale path entirely) and apply the full pulled snapshot to the reactive
 	 * store before resolving with the pulled `is_streaming`.
 	 */
-	pullStatus: () => Promise<boolean>;
+	pullStatus: () => Promise<boolean | undefined>;
+	/** The originating attempt still owns this cycle. */
+	isCurrent?: () => boolean;
 	/** Reconcile the optimism overlay from a pulled `is_streaming` value. */
 	reconcile: (isStreaming: boolean) => void;
 	/**
@@ -80,8 +82,11 @@ export const START_WATCHDOG_REVERT_REASON = "start_timeout";
  *   push), so revert explicitly to `idle` with a timeout reason.
  */
 export async function runStartWatchdog(deps: StartWatchdogDeps): Promise<void> {
+	const current = deps.isCurrent ?? (() => true);
+	if (!current()) return;
 	const streaming = await deps.pullStatus();
+	if (!current() || streaming === undefined) return;
 	deps.reconcile(streaming);
-	if (streaming) return;
+	if (!current() || streaming) return;
 	deps.revert(START_WATCHDOG_REVERT_REASON);
 }

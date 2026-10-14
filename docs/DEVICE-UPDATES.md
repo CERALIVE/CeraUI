@@ -160,6 +160,16 @@ an additive key: `general.updateReasonStreaming` is in the immutable rendered
 oracle and keeps its frozen text (FIX-16-F4, PRE4-C C4-3). The docs.ceralive.tv
 update page (English and es-419) still owes this sentence; it is not published.
 
+The frontend's Stop confirmation cannot come from an earlier status request
+whose reply merely arrived after the press. Pulled lifecycle evidence requires
+dispatch after the current claim/observation and receipt over the current link;
+receipt, device computation and ingestion are different events. Superseded reads
+permit at most one fresh read, never automatic Stop on unknown. A settled
+watchdog cannot act on a later stream session. Restoration still triggers fresh
+details/settings/capabilities reads after both hydrate paths settle. This is a
+host-proven frontend evidence rule, not backend install permission or browser/
+board qualification; see [START-LIFECYCLE](START-LIFECYCLE.md).
+
 Starting-stream launch limits: root AGENTS.md D8 Known gaps (f).
 
 ## Settings

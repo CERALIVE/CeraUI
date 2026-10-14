@@ -153,7 +153,7 @@ When the WebSocket reconnects after the operator has already authenticated, the 
 1. Reads the device-issued, revocable token from `localStorage["auth"]`; the password is never persisted.
 2. Calls `deps.login(token)` — wired to `rpc.auth.login({ token, persistent_token: true })`.
 3. Dispatches the auth result through `handleMessage` (the canonical path).
-4. On success: fires a safety hydrate — `rpc.streaming.getConfig()` and `rpc.status.getStatus()` in parallel, dispatching EACH result through `handleMessage` when that result arrives, never held back for the other (a held status answer once replaced newer pushes; see START-LIFECYCLE, FIX-16-F5). The status answer is stamped at its receipt (`receivePulledStatus`) and ingested with that stamp. This repopulates the HUD and destination views even if the backend's post-login push is incomplete. The outcome is decided after both settle; a failed answer is reported and dispatches nothing.
+4. On success: fires config and status safety reads in parallel, consuming each independently. Status carries BOTH request dispatch and browser receipt provenance. An intervening intent or newer status observation supersedes an already-dispatched pull: reject it and allow at most one fresh read. A twice-superseded or failed read supplies no status evidence. Config failure never withholds successful status. The outcome/restoration is decided after both paths settle, not after the first answer (see START-LIFECYCLE, FIX-16-F6).
 5. On explicit server rejection: clears the stored credential (loop break — the next reconnect finds no token and short-circuits) and routes to the login screen.
 6. On a socket reset, timeout, or other transport failure: returns `unreachable`, retaining the credential and auth state for a later reconnect. A failed safety hydrate likewise retains the authenticated session.
 
@@ -182,6 +182,16 @@ The function is dependency-injected and rune-free, so it runs under the plain vi
 `runReconnectReauth()` is called from `handleConnectionChange` when `state === "connected"` and `wasAuthenticated()` is true. A `reauthInFlight` flag prevents concurrent re-auth attempts across rapid reconnect cycles.
 
 The seq tracker is reset on every reconnect (`seqTracker.resetOnReconnect()`) so a restarted server whose sequence numbers reset to 0 is accepted cleanly.
+
+Receipt is arrival at the browser; it is not device computation time. Ingestion
+uses the carried receipt rather than minting a new delivery. For pulled stream
+evidence, dispatch after a claim/observation is additionally required: ordinary
+FIFO reply arrival after a press cannot prove a request sent before the press
+took effect. The shared bounded reader is also used by both stream watchdogs;
+their captured action lifetime is checked after awaits and before every effect.
+A settled or superseded cycle never dispatches/reconciles/reverts a later action.
+Silence is unknown, never automatic Stop permission. Scripted-socket host tests
+cover these orders; real browser and board qualification remain owed.
 
 ---
 

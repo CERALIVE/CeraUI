@@ -1,5 +1,12 @@
 # CeraUI
 
+Frontend stream recovery carries status request-dispatch and browser-receipt
+provenance separately. Earlier requests cannot confirm later Stop claims or
+overwrite newer observations; a superseded pull allows one bounded fresh read.
+Both watchdogs are action-lifetime fenced, so a completed cycle cannot stop or
+revert a later session. These are host carrier proofs, not browser or board
+qualification. See [START-LIFECYCLE](docs/START-LIFECYCLE.md).
+
 **Device updates [EXISTS].** The update orchestrator checks for package and
 system updates on a schedule alongside the older package-update RPC path. It
 automatically installs while idle, and

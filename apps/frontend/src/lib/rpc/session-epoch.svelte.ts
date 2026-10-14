@@ -42,33 +42,63 @@ export function noteLinkState(state: string): void {
  * When a status frame REACHED this page: the link it arrived on and a tick of
  * one monotonic evidence clock (FIX-16-F5, F4-R1). Taken at receipt (a push in
  * the socket's message handler, a pulled answer in the continuation of its own
- * request) and carried to ingestion, so an answer consumed late still names the
- * moment the device answered, never the moment a consumer got to it.
+ * request) and carried to ingestion. Receipt is browser arrival, NOT device
+ * computation time. A pull also names the request's earlier dispatch.
  */
 export interface Receipt {
+	readonly link: number;
+	readonly at: number;
+	readonly dispatch?: RequestDispatch;
+}
+
+export interface RequestDispatch {
 	readonly link: number;
 	readonly at: number;
 }
 
 let clock = 0;
 let newestStatusFrame = 0;
+let newestIntent = 0;
 
-export function receiveEvidence(): Receipt {
+export function dispatchEvidence(): RequestDispatch {
 	clock += 1;
 	return { link: links, at: clock };
 }
 
-/** The newest receipt so far, consumed or not: a claim's "after this moment". */
+/** An intent supersedes every read already on the wire. */
+export function markStreamIntent(): number {
+	clock += 1;
+	newestIntent = clock;
+	return clock;
+}
+
+export function receiveEvidence(dispatch?: RequestDispatch): Receipt {
+	clock += 1;
+	return { link: links, at: clock, dispatch };
+}
+
+/** Page-local ordering horizon: dispatches, receipts and stream intents. */
 export function evidenceClock(): number {
 	return clock;
 }
 
 /**
- * Admit a status frame unless one received AFTER it was already applied: the
- * newer frame wins, so a late older snapshot never regresses it.
+ * Receipt order fences buffered frames; dispatch order also fences pending
+ * pulls against intervening intents/observations. Neither dates computation.
  */
+export function statusFrameIsCurrent(receipt: Receipt): boolean {
+	return (
+		receipt.link === links &&
+		receipt.at >= newestStatusFrame &&
+		(receipt.dispatch === undefined ||
+			(receipt.dispatch.link === links &&
+				receipt.dispatch.at > newestIntent &&
+				receipt.dispatch.at >= newestStatusFrame))
+	);
+}
+
 export function admitStatusFrame(receipt: Receipt): boolean {
-	if (receipt.at < newestStatusFrame) return false;
+	if (!statusFrameIsCurrent(receipt)) return false;
 	newestStatusFrame = receipt.at;
 	return true;
 }
@@ -84,6 +114,7 @@ export function admitStatusFrame(receipt: Receipt): boolean {
 export interface LifecycleDelivery {
 	readonly link: number;
 	readonly seq: number;
+	readonly dispatchedAt?: number;
 }
 
 let lifecycleDelivery = $state.raw<LifecycleDelivery>({ link: -1, seq: 0 });
@@ -95,10 +126,17 @@ export function getLifecycleDelivery(): LifecycleDelivery {
 export function noteLifecycleDelivered(
 	receipt: Receipt = receiveEvidence(),
 ): void {
-	lifecycleDelivery = { link: receipt.link, seq: receipt.at };
+	lifecycleDelivery = {
+		link: receipt.link,
+		seq: receipt.at,
+		dispatchedAt: receipt.dispatch?.at,
+	};
 }
 
-/** A lifecycle delivered after `mark` (a `seq`) over the link that is current now. */
+/** Post-horizon current-link evidence: pull dispatch, or push receipt. */
 export function lifecycleDeliveredSince(mark: number): boolean {
-	return lifecycleDelivery.seq > mark && lifecycleDelivery.link === links;
+	return (
+		(lifecycleDelivery.dispatchedAt ?? lifecycleDelivery.seq) > mark &&
+		lifecycleDelivery.link === links
+	);
 }

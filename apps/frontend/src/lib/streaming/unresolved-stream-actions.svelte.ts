@@ -6,7 +6,7 @@
  * so a record kept in LiveView's own state was lost on navigation while the
  * optimism and the async operation it qualifies are app-wide. Each record keeps
  * the evidence-clock mark (`session-epoch`) taken when it was made: only a
- * lifecycle RECEIVED after that mark, over the link that is current now, can
+ * push RECEIVED, or pull DISPATCHED, after that mark on the current link can
  * settle it. A restored session, a retained snapshot, a failed hydrate, a
  * transport failure and a lapsed TTL settle nothing.
  *
@@ -17,6 +17,7 @@
 import {
 	evidenceClock,
 	lifecycleDeliveredSince,
+	markStreamIntent,
 } from "$lib/rpc/session-epoch.svelte";
 
 interface LostStartReply {
@@ -46,7 +47,7 @@ let stopOwners = 0;
 
 /** Attempt `generation`'s start reply was lost to a connection reset. */
 export function noteLostStartReply(generation: number): void {
-	lostStart = { generation, mark: evidenceClock() };
+	lostStart = { generation, mark: markStreamIntent() };
 }
 
 /** A lifecycle reached this page over the current link since `generation`'s reply was lost. */
@@ -65,6 +66,7 @@ export function lifecycleSinceLostStartReply(generation: number): boolean {
  * Returns the owner token that press's reply must present to settle it.
  */
 export function claimOperatorStop(): number {
+	markStreamIntent();
 	stopOwners += 1;
 	stopClaim = {
 		owner: stopOwners,

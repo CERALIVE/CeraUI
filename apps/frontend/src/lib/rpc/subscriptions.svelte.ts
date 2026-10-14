@@ -86,6 +86,7 @@ import {
 	shouldIgnoreEchoReactive,
 } from "./dirty-registry.svelte";
 import { mergeModemList } from "./modem-list-merge";
+import { pullStatusEvidence } from "./pulled-status";
 import { reauthenticateAndHydrate } from "./reconnect";
 import { createSeqTracker } from "./seq-guard";
 import {
@@ -94,6 +95,7 @@ import {
 	noteLinkState,
 	noteSessionRestored,
 	type Receipt,
+	type RequestDispatch,
 	receiveEvidence,
 } from "./session-epoch.svelte";
 import {
@@ -1070,9 +1072,9 @@ function handleMessage(
  * (an older backend), not unchanged: it replaces the held value instead of
  * merging like a partial push (early oracle R4).
  *
- * `receipt` is when the answer reached the page ({@link receivePulledStatus});
- * omitted, the answer is taken as received now, which is only true for a
- * caller that ingests in the continuation of its own request.
+ * Real RPC producers carry dispatch and receipt through `pullStatusEvidence`.
+ * Omitting provenance is only the synchronous snapshot/test ingestion seam;
+ * it must never be used to ingest an awaited RPC answer.
  */
 export function ingestPulledStatus(status: unknown, receipt?: Receipt): void {
 	const snapshot =
@@ -1082,14 +1084,17 @@ export function ingestPulledStatus(status: unknown, receipt?: Receipt): void {
 	handleMessage("status", snapshot, undefined, receipt);
 }
 
-export interface ReceivedStatus {
-	readonly status: unknown;
+export interface ReceivedStatus<T = unknown> {
+	readonly status: T;
 	readonly receipt: Receipt;
 }
 
 /** Stamp a pulled status answer at its receipt, before anyone holds it. */
-export function receivePulledStatus(status: unknown): ReceivedStatus {
-	return { status, receipt: receiveEvidence() };
+export function receivePulledStatus<T>(
+	status: T,
+	dispatch?: RequestDispatch,
+): ReceivedStatus<T> {
+	return { status, receipt: receiveEvidence(dispatch) };
 }
 
 const AUTH_STORAGE_KEY = "auth";
@@ -1127,11 +1132,12 @@ async function runReconnectReauth(): Promise<void> {
 			// the password hash and every reconnect fails.
 			login: (token) => rpc.auth.login({ token, persistent_token: true }),
 			getConfig: () => rpc.streaming.getConfig(),
-			getStatus: async () => receivePulledStatus(await rpc.status.getStatus()),
+			getStatus: () => pullStatusEvidence(),
 			dispatch: (type, data) => {
 				if (type === "status") {
-					const answer = data as ReceivedStatus;
-					ingestPulledStatus(answer.status, answer.receipt);
+					const answer = data as ReceivedStatus | undefined;
+					if (answer !== undefined)
+						ingestPulledStatus(answer.status, answer.receipt);
 				} else {
 					handleMessage(type, data);
 				}

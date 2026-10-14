@@ -687,21 +687,35 @@ unchanged; an older reply can still move a newer operation's phase through
 the shared key (the registry's documented backlog), which changes the copy but
 never the claim, so the band and its Stop stay.
 
-"Delivered after the press" means RECEIVED after it (FIX-16-F5, DELTA-F4
-F4-R1). The reconnect hydrate used to hold an early `status.getStatus` answer
-until the `streaming.getConfig` reply arrived, then stamp it as a new delivery:
-an idle the device reported before a newer `stop_failed` push and before the
-press confirmed that press, and its `stop_failed` reply was swallowed. Now each
-hydrate answer is consumed when it arrives, every status frame is stamped
-`{link, at}` from one evidence clock at its receipt (a push in the socket's
-message handler, a pulled answer in the continuation of its own request,
-`receivePulledStatus`), ingestion uses that carried stamp, and a claim marks the
-clock itself, i.e. the newest receipt whether consumed or not. A status frame
-received before one already applied is stale and is not applied, so a late
-older snapshot never replaces a newer push. `status.getStatus` carries no device
-sequence, so receipt order on the link is the order. Restoration is still
-counted after both hydrate answers settle and stays the separate reread trigger;
-a failed answer dispatches nothing and settles nothing.
+"Delivered after the press" distinguishes pushes from replies (FIX-16-F6).
+A push needs current-link receipt after the claim. A reply additionally needs
+a request DISPATCHED after the claim, and after the newest applied status
+observation. Receipt orders browser arrival, not device computation or causal
+effect; ingestion is only consumption of that evidence. The status RPC exports
+no comparable producer revision, so a request sent before a newer observation
+cannot overwrite that observation even when its reply arrives afterward.
+
+F5's independent config/status consumption and carried receipt remain: config
+failure cannot withhold successful status, and a buffered early answer cannot
+be restamped as new evidence. `pullStatusEvidence` carries dispatch and receipt
+on one monotonic evidence clock. Start/Stop intent and a lost Start reply mark
+that clock. A superseded pull is rejected; its caller may make ONE fresh read,
+never a recursive loop. If that read is superseded too, or fails, nothing
+settles. Restoration still waits for config and the bounded status path to
+settle, then triggers the dialog's details/settings/capabilities rereads.
+
+Both watchdog cycles also belong to one optimism action lifetime. Confirmation,
+replacement, revert, supersession and teardown invalidate it even while a read
+is awaited. Every continuation and effect port checks that captured lifetime:
+an old Stop cycle cannot dispatch Stop against the next session, and an old
+Start cycle cannot reconcile or revert the next attempt. An unknown current
+Stop read offers the existing retry banner without redispatching; only positive
+streaming evidence for the still-current operator Stop permits its one existing
+redispatch. Unknown Start evidence does not fake idle or timeout failure.
+Acknowledging the band's claim and confirming the cockpit optimism are distinct:
+the former accepts its own `stopped` reply; the latter waits for authoritative
+status so the lost-stop-push recovery remains possible. These are host carrier
+proofs, not integrated-backend, browser-scheduling or hardware qualification.
 
 Not covered: `starting` and `stopping` seen from a client that did not start
 them have no Stop, but each is bounded and settles into `idle`, `streaming` or a

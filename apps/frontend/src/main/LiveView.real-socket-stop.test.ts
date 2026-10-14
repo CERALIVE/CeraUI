@@ -37,6 +37,8 @@ import {
 } from "../tests/fixtures/real-cockpit-harness";
 import {
 	answer,
+	CAPABLE,
+	deviceDetails,
 	dropLink,
 	elapse,
 	FakeWebSocket,
@@ -44,6 +46,7 @@ import {
 	outstanding,
 	reject,
 	restoreLink,
+	SETTINGS,
 	type SentRequest,
 	sentCount,
 	socket,
@@ -94,21 +97,21 @@ import {
 	destroyAsyncOperations,
 	getOperationPhase,
 	initAsyncOperations,
-} from "$lib/rpc/async-operation.svelte";
-import { rpcClient } from "$lib/rpc/client";
-import { getRestoredSessions } from "$lib/rpc/session-epoch.svelte";
+} from "../lib/rpc/async-operation.svelte";
+import { rpcClient } from "../lib/rpc/client";
+import { getRestoredSessions } from "../lib/rpc/session-epoch.svelte";
 import {
 	destroyStreamingOptimism,
 	getStreamingOptimismState,
-} from "$lib/rpc/streaming-optimism.svelte";
+} from "../lib/rpc/streaming-optimism.svelte";
 import {
 	getStatus,
 	ingestPulledStatus,
 	initSubscriptions,
 	receivePulledStatus,
 	resetState,
-} from "$lib/rpc/subscriptions.svelte";
-
+} from "../lib/rpc/subscriptions.svelte";
+import UpdatesDialog from "./dialogs/UpdatesDialog.svelte";
 import LiveView from "./LiveView.svelte";
 
 const STOP_AND_START = [
@@ -396,6 +399,24 @@ describe("F5 F4-R1: a status answer is evidence at its own receipt", () => {
 			stream_lifecycle: "idle",
 		});
 		await settle();
+		// F6 contract correction: the first request preceded the claim. Only the
+		// bounded replacement read, SENT after it, can confirm this Stop.
+		expect(getOperationPhase(KEY)).toBe("pending");
+		expect(getStatus()?.stream_lifecycle).toBe("stopping");
+		expect(controls(container)).toEqual(STOPPING_AND_START);
+		expect(outstanding("status.getStatus")).toHaveLength(1);
+		const [fresh] = outstanding("status.getStatus");
+		const [stop] = outstanding("streaming.stop");
+		if (fresh === undefined || stop === undefined)
+			throw new Error("requests missing");
+		expect(
+			FakeWebSocket.log.findIndex((r) => r.id === fresh.id),
+		).toBeGreaterThan(FakeWebSocket.log.findIndex((r) => r.id === stop.id));
+		answer("status.getStatus", {
+			is_streaming: false,
+			stream_lifecycle: "idle",
+		});
+		await settle();
 		expect(getRestoredSessions()).toBe(restored + 1);
 		expect(getOperationPhase(KEY)).toBe("confirmed");
 		expect(band(container)).toBeNull();
@@ -534,6 +555,15 @@ describe("F5 sweep: the stop watchdog's pull keeps receipt order", () => {
 			stream_lifecycle: "idle",
 		});
 		await settle();
+		// Preserve the recovery expectation, but require a fresh dispatch AFTER
+		// the observation rather than certify the superseded read as newer.
+		expect(getStatus()?.stream_lifecycle).toBe("stopping");
+		expect(outstanding("status.getStatus")).toHaveLength(1);
+		answer("status.getStatus", {
+			is_streaming: false,
+			stream_lifecycle: "idle",
+		});
+		await settle();
 		expect(getStatus()?.stream_lifecycle).toBe("idle");
 		expect(header(container)).toContain("Not streaming");
 		expect(sentCount("streaming.stop")).toBe(1);
@@ -553,5 +583,391 @@ describe("F5 sweep: the stop watchdog's pull keeps receipt order", () => {
 		expect(band(container)).not.toBeNull();
 		expect(header(container)).not.toContain("Not streaming");
 		expect(sentCount("streaming.stop")).toBe(1);
+	});
+});
+
+describe("F6 request causality and action lifetime over the real socket", () => {
+	it.each([
+		[true, true, true, "pending", 2],
+		[true, true, false, "pending", 2],
+		[true, false, true, "pending", 2],
+		[true, false, false, "pending", 2],
+		[false, true, true, "pending", 2],
+		[false, true, false, "pending", 2],
+		[false, false, true, "confirmed", 1],
+		[false, false, false, "confirmed", 1],
+	] as const)(
+		"ordering matrix preclaim=%s push-first=%s config-first=%s",
+		async (preclaim, pushFirst, configFirst, phase, reads) => {
+			const { container } = render(LiveView);
+			deliverStatus({ is_streaming: false, stream_lifecycle: "stop_failed" });
+			dropLink();
+			await settle();
+			await restoreLink();
+			const log = recordOperationPhases(KEY);
+			if (preclaim) {
+				answer("auth.login", { success: true });
+				await settle();
+			}
+			await fireEvent.click(button(container, "Stop Stream"));
+			await settle();
+			if (!preclaim) {
+				answer("auth.login", { success: true });
+				await settle();
+			}
+			const [read] = outstanding("status.getStatus");
+			const [stop] = outstanding("streaming.stop");
+			if (read === undefined || stop === undefined)
+				throw new Error("requests missing");
+			const readIndex = FakeWebSocket.log.findIndex((r) => r.id === read.id);
+			const stopIndex = FakeWebSocket.log.findIndex((r) => r.id === stop.id);
+			if (preclaim) expect(readIndex).toBeLessThan(stopIndex);
+			else expect(readIndex).toBeGreaterThan(stopIndex);
+			if (configFirst) {
+				answer("streaming.getConfig", {});
+				await settle();
+			}
+			if (pushFirst) deliverStatus({ stream_lifecycle: "stopping" });
+			answer("status.getStatus", {
+				is_streaming: false,
+				stream_lifecycle: "idle",
+			});
+			await settle();
+			expect(getOperationPhase(KEY)).toBe(phase);
+			expect(sentCount("status.getStatus")).toBe(reads);
+			if (phase === "pending") {
+				expect(band(container)).not.toBeNull();
+				expect(controls(container)).toEqual(STOPPING_AND_START);
+			} else {
+				expect(band(container)).toBeNull();
+				expect(controls(container)).toEqual(START_ONLY);
+			}
+			if (!pushFirst) deliverStatus({ stream_lifecycle: "stopping" });
+			deliverStatus({ is_streaming: false, stream_lifecycle: "idle" });
+			if (outstanding("status.getStatus").length)
+				answer("status.getStatus", {
+					is_streaming: false,
+					stream_lifecycle: "idle",
+				});
+			if (!configFirst) answer("streaming.getConfig", {});
+			await settle();
+			answer("streaming.stop", { result: "stopped", success: true });
+			await settle();
+			expect(log.phases).toEqual(["idle", "pending", "confirmed"]);
+			log.stop();
+			expect(sentCount("streaming.stop")).toBe(1);
+			expect(sentCount("status.getStatus")).toBe(reads);
+			expect(getStatus()?.stream_lifecycle).toBe("idle");
+			expect(controls(container)).toEqual(START_ONLY);
+		},
+	);
+
+	it("a new Stop watchdog is not blocked or released by an older awaited cycle", async () => {
+		const { container } = render(LiveView);
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		await elapse(15_000);
+		expect(outstanding("status.getStatus")).toHaveLength(1);
+		answer("streaming.stop", { result: "stopped", success: true });
+		deliverStatus({ is_streaming: false, stream_lifecycle: "idle" });
+		await settle();
+		await fireEvent.click(button(container, "Done"));
+		await settle();
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		answer("streaming.start", { success: true });
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		await settle();
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		await elapse(15_000);
+		expect(outstanding("status.getStatus")).toHaveLength(2);
+		answer(
+			"status.getStatus",
+			{ is_streaming: true, stream_lifecycle: "streaming" },
+			"oldest",
+		);
+		await settle();
+		expect(sentCount("streaming.stop")).toBe(2);
+		expect(getStreamingOptimismState()).toBe("stopping");
+		answer(
+			"status.getStatus",
+			{ is_streaming: false, stream_lifecycle: "idle" },
+			"newest",
+		);
+		await settle();
+		expect(getStreamingOptimismState()).toBe("idle");
+		expect(sentCount("streaming.stop")).toBe(2);
+	});
+
+	it("a Stop settled during repull delay never reads or stops the next session", async () => {
+		const { container } = render(LiveView);
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		await elapse(15_000);
+		answer("status.getStatus", {
+			is_streaming: true,
+			stream_lifecycle: "streaming",
+		});
+		await settle();
+		expect(sentCount("streaming.stop")).toBe(2);
+		answer("streaming.stop", { result: "stopped", success: true }, "oldest");
+		answer("streaming.stop", { result: "stopped", success: true }, "newest");
+		deliverStatus({ is_streaming: false, stream_lifecycle: "idle" });
+		await settle();
+		await fireEvent.click(button(container, "Done"));
+		await settle();
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		answer("streaming.start", { success: true });
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		await settle();
+		await elapse(2_000);
+		expect(sentCount("status.getStatus")).toBe(1);
+		expect(sentCount("streaming.stop")).toBe(2);
+		expect(controls(container)).toEqual([
+			{ label: "Stop Stream", disabled: false },
+		]);
+	});
+
+	for (const statusFails of [false, true]) {
+		it(`restoration rereads real dialog details/settings/capabilities (status fails=${statusFails})`, async () => {
+			deliverStatus({
+				update_orchestrator: {
+					schema: 1,
+					phase: "idle",
+					progress: null,
+					failure_reason: null,
+					cellular_override_id: null,
+				},
+			});
+			render(UpdatesDialog, { open: true });
+			await settle();
+			const reads = [
+				"system.getUpdateCapabilities",
+				"system.getUpdateSettings",
+				"system.getUpdateDetails",
+			];
+			for (const [path, value] of [
+				[reads[0], CAPABLE],
+				[reads[1], SETTINGS],
+				[reads[2], deviceDetails()],
+			] as const) {
+				if (path === undefined) throw new Error("missing path");
+				while (outstanding(path).length) answer(path, value);
+			}
+			await settle();
+			const before = reads.map(sentCount);
+			const restored = getRestoredSessions();
+			await reconnectAwaitingHydrate();
+			if (statusFails) reject("status.getStatus", "INTERNAL_ERROR");
+			else
+				answer("status.getStatus", {
+					is_streaming: false,
+					stream_lifecycle: "idle",
+				});
+			await settle();
+			expect(getRestoredSessions()).toBe(restored);
+			expect(reads.map(sentCount)).toEqual(before);
+			answer("streaming.getConfig", {});
+			await settle();
+			expect(getRestoredSessions()).toBe(restored + 1);
+			expect(reads.map(sentCount)).toEqual(before.map((n) => n + 1));
+		});
+	}
+
+	it("a drop during the bounded reread never settles Stop and a new hydrate owns the next link", async () => {
+		const { container } = render(LiveView);
+		deliverStatus({ is_streaming: false, stream_lifecycle: "stop_failed" });
+		await reconnectAwaitingHydrate();
+		answer("streaming.getConfig", {});
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		answer("status.getStatus", {
+			is_streaming: false,
+			stream_lifecycle: "idle",
+		});
+		await settle();
+		expect(sentCount("status.getStatus")).toBe(2);
+		dropLink();
+		await settle();
+		expect(getOperationPhase(KEY)).toBe("failed");
+		expect(band(container)?.textContent).toContain(FAILED);
+		await restoreLink();
+		answer("auth.login", { success: true });
+		await settle();
+		expect(sentCount("status.getStatus")).toBe(3);
+		expect(outstanding("status.getStatus")).toHaveLength(1);
+		answer("streaming.getConfig", {});
+		answer("status.getStatus", {
+			is_streaming: false,
+			stream_lifecycle: "idle",
+		});
+		await settle();
+		expect(band(container)).toBeNull();
+		expect(controls(container)).toEqual(START_ONLY);
+		expect(sentCount("streaming.stop")).toBe(1);
+	});
+
+	for (const pushed of [false, true]) {
+		it(`a preclaim request cannot swallow Stop failure (newer push=${pushed})`, async () => {
+			const { container } = render(LiveView);
+			deliverStatus({ is_streaming: false, stream_lifecycle: "stop_failed" });
+			await reconnectAwaitingHydrate();
+			const [read] = outstanding("status.getStatus");
+			answer("streaming.getConfig", {});
+			await settle();
+			await fireEvent.click(button(container, "Stop Stream"));
+			await settle();
+			const [stop] = outstanding("streaming.stop");
+			if (read === undefined || stop === undefined)
+				throw new Error("requests missing");
+			expect(FakeWebSocket.log.findIndex((r) => r.id === read.id)).toBeLessThan(
+				FakeWebSocket.log.findIndex((r) => r.id === stop.id),
+			);
+			if (pushed) deliverStatus({ stream_lifecycle: "stopping" });
+			answer("status.getStatus", {
+				is_streaming: false,
+				stream_lifecycle: "idle",
+			});
+			await settle();
+			expect(getOperationPhase(KEY)).toBe("pending");
+			expect(getStatus()?.stream_lifecycle).toBe(
+				pushed ? "stopping" : "stop_failed",
+			);
+			expect(band(container)).not.toBeNull();
+			expect(controls(container)).toEqual(STOPPING_AND_START);
+			answer("streaming.stop", STOP_FAILED_REPLY);
+			await settle();
+			expect(getOperationPhase(KEY)).toBe("failed");
+			expect(band(container)?.textContent).toContain(FAILED);
+			expect(header(container)).not.toContain("Not streaming");
+			expect(controls(container)).toEqual(STOP_AND_START);
+			expect(sentCount("streaming.stop")).toBe(1);
+		});
+	}
+
+	it("a twice-superseded hydrate issues only one fresh read and settles nothing", async () => {
+		const { container } = render(LiveView);
+		deliverStatus({ is_streaming: false, stream_lifecycle: "stop_failed" });
+		await reconnectAwaitingHydrate();
+		answer("streaming.getConfig", {});
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		answer("status.getStatus", {
+			is_streaming: false,
+			stream_lifecycle: "idle",
+		});
+		await settle();
+		expect(sentCount("status.getStatus")).toBe(2);
+		deliverStatus({ stream_lifecycle: "stopping" });
+		answer("status.getStatus", {
+			is_streaming: false,
+			stream_lifecycle: "idle",
+		});
+		await settle();
+		expect(sentCount("status.getStatus")).toBe(2);
+		expect(outstanding("status.getStatus")).toHaveLength(0);
+		expect(getStatus()?.stream_lifecycle).toBe("stopping");
+		expect(getOperationPhase(KEY)).toBe("pending");
+		expect(controls(container)).toEqual(STOPPING_AND_START);
+		expect(sentCount("streaming.stop")).toBe(1);
+	});
+
+	it("a completed Stop watchdog never stops the next live session", async () => {
+		const { container } = render(LiveView);
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		await elapse(15_000);
+		expect(outstanding("status.getStatus")).toHaveLength(1);
+		answer("streaming.stop", { result: "stopped", success: true });
+		deliverStatus({ is_streaming: false, stream_lifecycle: "idle" });
+		await settle();
+		await fireEvent.click(button(container, "Done"));
+		await settle();
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		answer("streaming.start", { success: true });
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		await settle();
+		answer("status.getStatus", {
+			is_streaming: true,
+			stream_lifecycle: "streaming",
+		});
+		await settle();
+		expect(
+			FakeWebSocket.log
+				.filter((r) =>
+					["streaming.stop", "status.getStatus", "streaming.start"].includes(
+						r.path,
+					),
+				)
+				.map((r) => r.path),
+		).toEqual(["streaming.stop", "status.getStatus", "streaming.start"]);
+		expect(getStreamingOptimismState()).toBe("idle");
+		expect(controls(container)).toEqual([
+			{ label: "Stop Stream", disabled: false },
+		]);
+		expect(band(container)).toBeNull();
+	});
+
+	it("a completed Start watchdog never reverts the next starting attempt", async () => {
+		const { container } = render(LiveView);
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		answer("streaming.start", { success: true });
+		await settle();
+		await elapse(90_000);
+		expect(outstanding("status.getStatus")).toHaveLength(1);
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		answer("streaming.stop", { result: "stopped", success: true });
+		deliverStatus({ is_streaming: false, stream_lifecycle: "idle" });
+		await settle();
+		await fireEvent.click(button(container, "Done"));
+		await settle();
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		expect(getStreamingOptimismState()).toBe("starting");
+		answer("status.getStatus", {
+			is_streaming: false,
+			stream_lifecycle: "idle",
+		});
+		await settle();
+		expect(getStreamingOptimismState()).toBe("starting");
+		expect(controls(container)).toEqual([
+			{ label: "Starting...", disabled: true },
+		]);
+		expect(sentCount("streaming.start")).toBe(2);
+		expect(sentCount("streaming.stop")).toBe(1);
+		expect(sentCount("status.getStatus")).toBe(1);
+	});
+
+	it("a still-current operator Stop watchdog redispatches exactly once", async () => {
+		const { container } = render(LiveView);
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		await elapse(15_000);
+		answer("status.getStatus", {
+			is_streaming: true,
+			stream_lifecycle: "streaming",
+		});
+		await settle();
+		expect(sentCount("streaming.stop")).toBe(2);
+		answer("streaming.stop", { result: "stopped", success: true }, "newest");
+		await elapse(2_000);
+		answer("status.getStatus", {
+			is_streaming: false,
+			stream_lifecycle: "idle",
+		});
+		await settle();
+		expect(sentCount("streaming.stop")).toBe(2);
+		expect(getStreamingOptimismState()).toBe("idle");
+		expect(header(container)).toContain("Not streaming");
 	});
 });
