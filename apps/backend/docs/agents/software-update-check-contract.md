@@ -39,13 +39,17 @@ classification is origin-based (`apt-all-packages.ts`). See `docs/DEVICE-UPDATES
 
 Capable APT refusals log `reason`, a closed substep, process `exit` when known,
 and optional sanitized detail (500 UTF-16 units maximum) at the discovery or
-pinned-install catch. ANSI/control characters, URL contents, secret-like lines,
-PEM material and environment assignments are removed before truncation. The
-last diagnostic signature per step is deduplicated for the process lifetime,
-including across successful discovery; changed evidence at that step logs again.
+pinned-install catch. Normalize the whole text (including CR/LF and Unicode line
+separators) before detecting secrets. A secret-bearing record, URL or PEM marker
+suppresses every remaining continuation; only independent benign prefixes survive.
+Redaction precedes truncation. The internal SHA256 fingerprint uses the FULL
+sanitized text, never raw secrets or the truncated display. The last reason/exit/
+fingerprint signature per step is deduplicated for the process lifetime, including
+across successful discovery; safe evidence changed beyond the display cap logs again.
 This context is internal/log-only: refusal state, notification and install
 admission are unchanged. Coverage: `tests/apt-all-diagnostics.test.ts` and
-`tests/apt-all-diagnostic-text.test.ts`; host proof, not board qualification.
+`tests/apt-all-diagnostic-text.test.ts`, `tests/apt-all-diagnostic-folding.test.ts`
+and `tests/apt-all-diagnostic-dedupe.test.ts`; host proof, not board qualification.
 
 - Apt reports kept-back packages alongside real upgrades; retain both readings.
 - **Kept-back membership WINS over the upgradable list.** apt can name a package

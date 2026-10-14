@@ -151,8 +151,8 @@ let aptAllRefusal: AptAllRefusalError | null = null;
 const aptAllDiagnosticSignatures = new Map<AptAllDiagnosticStep, string>();
 
 function logAptAllRefusal(error: AptAllRefusalError): void {
-	const { reason, step, exit, detail } = error;
-	const signature = JSON.stringify([reason, exit, detail]);
+	const { reason, step, exit, detail, fingerprint } = error;
+	const signature = JSON.stringify([reason, exit, fingerprint]);
 	if (aptAllDiagnosticSignatures.get(step) === signature) return;
 	aptAllDiagnosticSignatures.set(step, signature);
 	logger.warn("Capable APT update refused", { reason, step, exit, detail });

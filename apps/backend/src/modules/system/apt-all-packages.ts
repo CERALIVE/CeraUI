@@ -1,7 +1,7 @@
 import type { UpdatePackage } from "@ceraui/rpc";
 import {
 	type AptAllDiagnosticStep,
-	sanitizeAptDiagnostic,
+	prepareAptDiagnostic,
 } from "./apt-all-diagnostics.ts";
 import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
 
@@ -17,6 +17,7 @@ export type AptAllRefusal =
 export class AptAllRefusalError extends Error {
 	readonly exit: number | undefined;
 	readonly detail: string | undefined;
+	readonly fingerprint: string | undefined;
 	constructor(
 		readonly reason: AptAllRefusal,
 		readonly step: AptAllDiagnosticStep,
@@ -25,10 +26,12 @@ export class AptAllRefusalError extends Error {
 		super(reason);
 		this.name = "AptAllRefusalError";
 		this.exit = diagnostic?.exit;
-		this.detail =
+		const sanitized =
 			diagnostic?.detail === undefined
 				? undefined
-				: sanitizeAptDiagnostic(diagnostic.detail);
+				: prepareAptDiagnostic(diagnostic.detail);
+		this.detail = sanitized?.detail;
+		this.fingerprint = sanitized?.fingerprint;
 	}
 }
 
