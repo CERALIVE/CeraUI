@@ -9,7 +9,9 @@
  *
  *   - `replay` mode is the startup replay retried. It is safe to repeat because
  *     the barrier has been raised since boot, so no mutation was admitted that a
- *     rollback could race.
+ *     rollback could race. A lost replay fence is incomplete, not a blocked
+ *     entry: retry rereads the slot and recaptures the hardware pre-state. The
+ *     already-restored guard avoids resubmitting a successful rollback.
  *   - `verify` mode follows a RUNTIME raise (a journal read failed after replay
  *     had completed). A mutation admitted before that raise may still be running,
  *     so this mode never rolls anything back: it only re-reads the inventory and
@@ -34,7 +36,7 @@ import {
 export type MutationRecoveryMode = "replay" | "verify";
 
 export interface MutationRecoveryDeps {
-	/** Full startup replay; true when every slot was read. */
+	/** Full startup replay; true when every slot settled without lost authority. */
 	readonly replay: () => Promise<boolean>;
 	/** Read-only inventory; true when the journal and blocks read completely. */
 	readonly verify: () => Promise<boolean>;

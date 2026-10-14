@@ -221,7 +221,10 @@ unavailable, not successful preservation.
    successful strict load announces it once in that boot lifetime, then consumes the
    notice intent. Preservation retries keep the same identity; no second replacement
    is needed just because a reload failed. This is process-local intent, not
-   cross-process exactly-once delivery. The only values carried over are a bcrypt-shaped
+    cross-process exactly-once delivery. If the process exits after the first-run
+    replacement is written but before strict loading succeeds, the notice can be
+    lost entirely: the next boot loads the valid first-run file, sends no reset
+    notice, and leaves the damaged copy on disk. The only values carried over are a bcrypt-shaped
   `password_hash`, a crypt-shaped `ssh_pass_hash` and `ssh_pass` from a
   duplicate-free JSON object. When none survives (zero-byte, unparseable, hash
   missing), the reset device is unclaimed and any LAN client can claim it with
@@ -236,7 +239,7 @@ unavailable, not successful preservation.
   `setPassword` reads config before touching the in-memory hash, and login
   refuses for want of a hash.
 - **Modem-mutation barrier** (`modems/mutation-recovery-owner.ts`). When the
-  startup replay could not read every slot, one owner retries the full replay
+  startup replay could not read or settle every slot, one owner retries the full replay
   (safe: the barrier has been up since boot, so nothing was admitted) until a
   complete readable replay lowers it, with the same 1 s to 60 s backoff. After a
   completed replay, a RUNTIME raise from a failed journal read schedules the same
@@ -262,12 +265,39 @@ unavailable, not successful preservation.
     not discarded; a new trigger vetoes completion. Invalidated passes keep the same
     owner and capped backoff until a fresh pass completes. Startup uses its final
     strict reconciliation revision because replay itself can prune/write entries.
-    Acknowledgement/rebaseline recheck their captured revision after hardware reads;
-    superseded evidence refuses with the existing `not_blocked` result. Replay rereads
+    Acknowledgement/decommission/rebaseline recheck their global captured revision
+    after their entry read or hardware capture. An unrelated modem's commit or a
+    journal read fault during that await can therefore return `not_blocked` even
+    when the requested entry is still blocked, not just when its own authority was
+    superseded. Replay rereads
     each slot before acting and fences presence/rollback awaits, so an old captured
     entry cannot overwrite or retire a newer journal decision.
     The operator need not acknowledge the now-absent slot
-   again. A permanent enumeration failure keeps the barrier raised behind capped
+    again. `archiveAcknowledged` can reject after its removal was already durable
+    if both bounded refresh acquisitions lose the fence; the registered owner still
+    owns block reconciliation, but the RPC rejection does not undo removal.
+    Benign overlapping modem writes can also raise recovery on healthy storage:
+    one lease's refresh during another modem's in-flight commit rejects settled
+    authority, and Start answers `recovery_pending` until a read-only verification
+    pass completes (its first wait is 1 s).
+
+    A replay fence failure is an INCOMPLETE pass, never a blocked-entry verdict.
+    The existing summary's `unreadable` count includes such lost authority and other
+    thrown entry failures; no new stored/wire field is added. A successful final
+    block refresh cannot erase that count. Initial recovery schedules replay, and
+    an invalidated replay-mode retry stays replay under the raised boot barrier.
+    Each attempt rereads the slot, including fencing before an absent read is
+    skipped. A retained `executing` slot is ordinary interrupted-mutation residue.
+    Fresh hardware capture short-circuits an already-restored pre-state; the USB
+    mode and band handlers also check their own already-restored state before
+    writes. Operator acknowledgement of that same slot invalidates older captured
+    authority; a removed slot is not resurrected on retry.
+    Repeated invalidation never spins: waits double 1/2/4/8/16/32 s and cap at 60 s,
+    with one cancellable owner. A continuously committing writer can withhold a
+    complete pass indefinitely; there is no unsafe timeout-open. Once churn stops,
+    the next complete replay lowers recovery, without a restart. The bound is on
+    retry cadence, not hardware/read duration or total time under permanent faults.
+    A permanent enumeration failure keeps the barrier raised behind capped
    waits, not a spinning loop. A verification can never lower the barrier over damage it
   just observed. Shutdown cancels the flight and disarms scheduling, so a late
   raise cannot start another owner. A slot that stays damaged keeps the barrier up

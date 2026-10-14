@@ -83,8 +83,10 @@ read faults invalidate too. A writer in flight cannot prove settled authority.
 Both empty and nonempty block publication recheck immediately before replacing
 the projection. A revision change during inventory acquisition permits one fresh
 inventory read, not an unbounded loop or a damage classification for deletion.
-Acknowledgement/rebaseline recheck after hardware capture and refuse superseded
-authority with existing `not_blocked`; replay rereads each slot and fences its
+Acknowledgement/decommission/rebaseline recheck the global revision after their
+entry read or hardware capture. An unrelated modem's commit or a read fault during
+that await can return existing `not_blocked` while the requested entry is still
+blocked, not just after its own authority was superseded. Replay rereads each slot and fences its
 presence/rollback awaits before old authority can advance or retire that slot.
 The owner rechecks after awaited verification, before completing
 the barrier; startup uses the final strict publication's revision because replay
@@ -92,6 +94,12 @@ can itself change disk. Acknowledgement can overlap verification, but an older
 presence census cannot republish its removed slot. A raise while pending is
 remembered and vetoes that pass's completion. Invalidation retains the existing
 single owner and capped backoff; no immediate-spin retry or second owner is added.
+Benign concurrent leases can raise that barrier on a healthy device: a final
+refresh during another modem's commit refuses publication, and Start answers
+`recovery_pending` until a read-only pass succeeds after its first 1 s wait.
+`archiveAcknowledged` can reject after durable removal if its refresh loses both
+bounded acquisition fences; rejection does not undo removal, and the recovery
+owner clears the obsolete projection after a complete pass.
 The revision and trigger flag are not stored authority or a new wire field. After
 a process restart the retained journal is inventoried again under the boot barrier.
 Permanent enumeration faults keep admission closed with capped waits. Repair
@@ -150,6 +158,19 @@ source of "is this device blocked" is how a fail-closed guard drifts open.
 complete readable authority and strict block publication; unknown/damaged journal
 authority keeps it raised behind the cancellable retry owner. Failed rollback's
 readable per-identity block is separate from an unreadable global inventory.
+A lost replay fence or another thrown entry failure counts as incomplete in the
+existing `unreadable` summary, never as an entry verdict. Even if final block
+publication succeeds, startup schedules REPLAY and each invalidated retry retains
+that mode, rather than verifying a stranded `executing` slot. Every retry rereads
+the real slot and fences even an absent action read before skipping it. Retained
+`executing` is the same interrupted mutation boot already handles. A fresh
+already-restored capture avoids a second rollback effect; band and USB handlers
+also have their own pre-state no-op guards. A same-entry operator acknowledgement
+cannot be overwritten by a retry's old capture. Waits double to a 60 s cap and
+shutdown cancels; infinite writer churn or permanent I/O can retain recovery
+indefinitely, without spinning or unsafe timeout-open. When authority stabilizes,
+the next complete pass clears the barrier without requiring a restart. This is
+a cadence bound, not a bound on hardware I/O or total recovery duration.
 
 ### THE REPLAY BARRIER AT THE ADMISSION CHOKEPOINT
 

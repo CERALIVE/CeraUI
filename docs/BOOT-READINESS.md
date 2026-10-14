@@ -64,6 +64,15 @@ lowering admission; cooperating writes/removals/read faults invalidate older
 passes. Raises during a pass are remembered and retain one capped/cancellable
 retry owner. An absent journal still completes normally at boot. These are host
 regression guarantees, not a new board, power-loss or service-readiness receipt.
+Replay entry fences and fresh-read faults leave an incomplete pass, including a
+fence before skipping a captured absent slot. The same owner retries REPLAY under
+the boot barrier until a complete pass, not read-only verification of a stranded
+`executing` slot. It rereads disk and already-restored hardware before another
+rollback effect. Continuous invalidation has doubled/capped waits, not an admission
+timeout; after churn stops the next complete pass clears recovery. Runtime faults
+after completed startup remain read-only verification. Config reset notice intent
+does not survive process exit between replacement and successful strict loading;
+the next boot may send no notice while retaining the damaged copy.
 
 `helpers/systemd-ready.ts` invokes `/usr/bin/systemd-notify` through the bounded,
 argv-only command runner. The service remains root-owned and

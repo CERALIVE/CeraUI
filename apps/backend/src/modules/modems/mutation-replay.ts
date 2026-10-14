@@ -23,8 +23,8 @@
  * recovery behaviour is a change to a data table with a unit test rather than to
  * branchy startup code.
  *
- * It NEVER throws. A replay that could not read every slot keeps the barrier
- * raised — an unread slot may be a mutation that still needs its rollback — and
+ * It NEVER throws. A replay that could not settle every slot keeps the barrier
+ * raised — unread or invalidated authority may still need its rollback — and
  * hands it to the one retry owner (`mutation-recovery-owner.ts`), which retries
  * with capped backoff until a complete readable replay lowers it. A barrier is
  * never left raised without that owner.
@@ -176,10 +176,12 @@ export async function runMutationReplay(): Promise<ReplaySummary> {
 			try {
 				const revision = mutationJournalRevision();
 				const entry = await readMutationEntry(hint.stableKey);
+				assertMutationJournalRevision(revision);
 				if (entry === undefined) continue;
 				await replayEntry(entry, tally, revision);
 			} catch (err) {
-				tally.blocked += 1;
+				// Lost authority is an incomplete pass, never a verdict about the slot.
+				unreadable += 1;
 				logger.error("modem mutation replay failed for one device", {
 					module: "modems",
 					stableKey: hint.stableKey,

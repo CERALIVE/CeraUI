@@ -79,8 +79,11 @@ The config boot owner retains the reset archive's identity after writing first-r
 settings. A failed strict reload does not erase the pending notice: the first
 successful load in the same boot-recovery lifetime announces that identity exactly
 once, including after preservation retries and detached backoff. The intent is
-process-local; restart between replacement and announcement has no cross-process
-exactly-once guarantee. Neither retry overwrites or deletes the damaged copy.
+process-local. If the process exits after the first-run replacement is written but
+before a strict load succeeds, the notice can be lost entirely: the next boot loads
+the valid first-run file, emits no reset notice, and leaves the damaged copy on disk.
+Neither retry overwrites or deletes the damaged copy; there is no restart-durable
+notification obligation or cross-process exactly-once guarantee.
 
 ### Durable device config
 
