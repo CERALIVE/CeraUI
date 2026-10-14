@@ -563,7 +563,7 @@ Owner identities are lifetime-scoped and depth-counted. The exact add-on integra
 API and set/held/uncertain/resolved/released/superseded/restart table live in
 [`START-LIFECYCLE.md`](START-LIFECYCLE.md#reservation-state-table-and-owner-seam).
 Default systemd probes are safe only for the unit actually owning the effect;
-mutating helper steps need their request-owned process group retired BEFORE the baked
+mutating helper steps with returned handles need their request-owned process group retired BEFORE the baked
 descriptor-unit union's jobs/lifecycles settle. Ordinary Bun spawn invokes checked
 `/usr/bin/setsid -w -- /usr/bin/ceralive-addon-helper action [id]` without sudo, PTY,
 detached spawning or `-f`; the root/root service refuses non-root mutation, with fixed
@@ -573,16 +573,25 @@ Even exit 0/1 requires actual direct-child exit, integer owned PGID > 1 and ESRC
 latched before polling descriptor units; no later numeric-group probe occurs. Timeout
 remains failure, retaining partial output and actual 137/143; collector signaling is
 child-only. The runner separately records none/started/unknown dispatch evidence: a
-proved failure before a child handle exists (including synchronous resource/launcher
-failure or pre-spawn abort) releases immediately with the original error, zero
-retirement probes and no retry. A returned handle or unknown dispatch retains group
-and unit evidence regardless of error spelling; abort racing assignment cannot clear it.
-The no-dispatch inference is specific to this fixed Bun 1.4.2 spawn shape, not a global
+failure in its own pre-spawn checks/preparation/abort, or a Bun Error tagged `socketpair`,
+`fcntl` or `posix_spawn`, proves no dispatch and releases immediately with the original
+error, zero retirement probes and no retry. A returned handle retains group and unit
+evidence regardless of error spelling; abort racing assignment cannot clear it.
+Bun 1.4.2 can exec, fail `pidfd_open`, block in `wait4` until the leader exits, reap it,
+then throw without returning a handle. This and absent/unknown tags or non-Error throws
+stay unknown. Handle-less unknown observes the consistent kernel-backed helper/sysext
+census then descriptor units, with capped cancellable backoff. The fallback cannot
+enumerate arbitrary unrecognized orphan install/rm/jq/systemctl descendants or recover
+their lost group; empty recognized evidence is not absolute descendant retirement.
+Unreadable rows and persistent unrelated churn can over-hold; an empty readable census
+with settled units can clear harmless untagged pre-exec failures without a permanent wedge.
+Only source-proven pre-exec tags for these fixed options bypass evidence, not a global
 errno whitelist. Cancelled/retired first observations cannot schedule a late retry,
 even on rejection. Fork/exec/reparenting and
 double-fork retain group membership; unreaped zombies conservatively hold, not disappear.
-No timer or zombie-skipping census grants clearance. Generic outer operations retain
-their separate census; that census does not enumerate contained helper descendants.
+No timer or zombie-skipping census grants clearance for owned groups. Generic outer
+operations retain their separate census; it is also the weaker handle-less unknown
+fallback, never an AND-condition for normal owned-group completion.
 
 Group containment excludes session/group-changing descendants, already-submitted PID-1
 jobs, PID-1 services/hooks or other-daemon work, manager Reload (enable/disable and sysext
@@ -620,7 +629,9 @@ past 10 s → actual resolver clearance, exit 0 without shutdown → fenced retr
 and timed activation arm → reboot. Additionally prove installed setsid/environment,
 real helper descendants, orphan/zombie retirement under the installed init, signal
 exits and partial output, queued descriptor jobs and service restart on BOTH boards,
-plus a real launcher failure leaving no hold.
+plus a real launcher failure leaving no hold and post-exec pidfd failure retaining exclusion.
+Forcing the latter on an installed image requires privileged instrumentation; host-only
+unprivileged seccomp evidence does not qualify the board.
 None is physically
 proven by the host matrices; restart clears local holds, not external-work evidence.
 

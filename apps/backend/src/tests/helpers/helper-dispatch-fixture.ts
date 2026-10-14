@@ -40,6 +40,15 @@ export function helperDispatchFixture() {
 		},
 	});
 	setSysextEvidenceForTest({
+		procIo: {
+			read: async () => {
+				throw launchErrno("EACCES");
+			},
+			list: async () => [],
+			link: async () => {
+				throw launchErrno("EACCES");
+			},
+		},
 		probe: async (scope) => {
 			units.push(scope.unit);
 			return "completed";

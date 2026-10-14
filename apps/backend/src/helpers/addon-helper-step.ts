@@ -73,6 +73,7 @@ export function createAddonHelperStep(
 		exitCode: () => exitCode,
 		probe,
 		run: async () => {
+			let spawnAttempted = false;
 			try {
 				if (ports.euid() !== 0) throw new AddonHelperLaunchError();
 				(
@@ -88,12 +89,14 @@ export function createAddonHelperStep(
 				];
 				const command = argv.join(" ");
 				if (ports.collect?.signal?.aborted) throw new SpawnAbortError(command);
-				child = ports.spawn(argv, {
+				const options: HelperSpawnOptions = {
 					stdin: "ignore",
 					stdout: "pipe",
 					stderr: "pipe",
 					env: ADDON_HELPER_ENV,
-				});
+				};
+				spawnAttempted = true;
+				child = ports.spawn(argv, options);
 				// Observe actual exit even when collector timeout suppresses its onExit hook.
 				void child.exited.then(
 					(code) => {
@@ -124,9 +127,18 @@ export function createAddonHelperStep(
 					throw error;
 				}
 			} catch (error) {
-				// With these fixed Bun options, caught launch errors precede helper exec.
-				// A returned handle can never be converted back to no-dispatch evidence.
-				if (child === undefined) dispatch = "none";
+				// Bun 1.4.2 can exec, reap on pidfd_open failure, then throw without a handle.
+				// Only these source-proven pre-exec tags or our own preparation prove none.
+				if (
+					child === undefined &&
+					(!spawnAttempted ||
+						(error instanceof Error &&
+							"syscall" in error &&
+							(error.syscall === "socketpair" ||
+								error.syscall === "fcntl" ||
+								error.syscall === "posix_spawn")))
+				)
+					dispatch = "none";
 				throw error;
 			}
 		},

@@ -563,16 +563,25 @@ Disruptive helper mutations use checked request-owned process groups, then the
 baked descriptor's submitted unit jobs. Success/exit 1 is not descendant retirement;
 only actual child exit plus ESRCH from the negative owned PGID settles that boundary.
 Fixed root-only spawning retains child-only timeout signaling and partial output.
-Proved no-dispatch launch/resource failure releases immediately without probes/retries,
-preserving the original error. Started/unknown dispatch still requires group and unit
-evidence; first-observation cancellation/owner retirement schedules no late retry.
-This inference is specific to the fixed Bun 1.4.2 spawn options, not an errno whitelist.
+Only the runner's own pre-spawn checks/preparation/abort or Bun Error tags
+`socketpair`/`fcntl`/`posix_spawn` prove no dispatch and release without probes/retries,
+preserving the original error. Bun 1.4.2 can exec, fail `pidfd_open`, block/reap in
+`wait4`, then throw without a handle. This, absent/unknown tags and non-Error throws
+stay unknown. Started requires group-plus-unit evidence; handle-less unknown uses the
+consistent kernel-backed helper/sysext census plus descriptor units. That weaker fallback
+cannot enumerate arbitrary unrecognized orphan descendants or recover their lost group;
+empty recognized evidence is not absolute descendant retirement. Unreadable rows/churn
+may over-hold; empty readable census and settled units can clear harmless unknown launch
+failures. First-observation cancellation/retirement schedules no late retry.
+The tag proof is specific to the fixed Bun 1.4.2 options, not a generic errno whitelist.
 Zombies can over-hold; session-changing descendants and delegated daemon/manager
 work are outside group containment. Generic outer census and direct unit evidence
-remain separate. Restart clears process-local holds, not proof of external completion;
+remain separate from normal group authority. Restart clears process-local holds, not proof of external completion;
 the service cgroup's mixed kill policy still applies. D249/D257 and the missing total
 preparation deadline are unchanged. See [update recovery](../../docs/UPDATE-RECOVERY.md)
-for the exact limits and outstanding BOTH-board launcher/retirement/restart drills.
+for the exact limits and outstanding BOTH-board launcher/retirement/restart/pidfd drills.
+Forcing post-exec pidfd failure on an installed image needs privileged instrumentation;
+unprivileged host seccomp evidence does not qualify it.
 
 Confirmed generic family success survives a joined sibling observation exception.
 An unsuccessful unbound observation exception stays UNKNOWN while repository

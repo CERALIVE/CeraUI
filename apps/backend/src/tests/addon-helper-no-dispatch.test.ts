@@ -55,6 +55,8 @@ for (const action of ["enable", "disable", "refresh"] as const) {
 									? "EIO"
 									: (fault.split(" ")[1] ?? "ENOENT"),
 						);
+			if (fault.startsWith("spawn"))
+				Object.assign(original, { syscall: "posix_spawn" });
 			const abort = new AbortController();
 			if (fault === "abort before spawn") abort.abort();
 			let attempts = 0,

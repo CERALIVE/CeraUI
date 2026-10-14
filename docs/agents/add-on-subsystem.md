@@ -103,19 +103,27 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
     PID=PGID=SID; `-w` itself does NOT wait for all descendants. The packaged backend is
     root/root and refuses non-root mutation. PATH and locale are fixed; BASH_ENV,
     SHELLOPTS and CERALIVE_* tool/path overrides are not inherited. Status retains sudo.
-    Success AND every possibly-effectful failure, including exit 1, require actual
+    With a returned handle, success AND every possibly-effectful failure, including exit 1, require actual
     direct-child exit and literal ESRCH from `kill(-ownedPGID, 0)`, with integer PGID > 1.
     A successful syscall means present; every other errno, including EPERM, is UNKNOWN.
     First retirement is latched, so subsequent unit polling cannot probe a reused number.
     The collector still signals only its direct child; timeout retains partial output,
     its failure class and actual 137/143 evidence. TERM-induced zero is not success.
     The runner's typed dispatch fact is none/started/unknown, independent of error spelling.
-    A proved prelaunch failure (root/launcher/options check, pre-spawn abort or synchronous
-    spawn failure with no child handle) releases immediately with the original error and
+    A proved prelaunch failure (the runner's root/launcher/options checks or pre-spawn abort),
+    or a Bun Error tagged `socketpair`, `fcntl` or `posix_spawn`, releases immediately with the original error and
     no group/unit probe or retry. A returned handle is irrevocably started, including an
     abort racing its assignment; allocated-but-unexecuted evidence stays unknown. This
-    no-dispatch inference depends on the fixed Bun 1.4.2 spawn shape, not generic errno
-    clearance. Other callers' ordinary-failure policy and manager failure tokens are unchanged.
+    pre-exec tag proof depends on the fixed Bun 1.4.2 spawn shape, not generic errno
+    clearance. Bun can exec successfully, fail `pidfd_open`, block in `wait4` until the
+    leader exits, then throw with no handle. That error, absent/unknown tags and non-Error
+    throws stay unknown. Handle-less unknown uses the existing consistent kernel-backed
+    helper/sysext census followed by descriptor units, never a nonexistent leader/PGID.
+    This rare fallback cannot enumerate arbitrary unrecognized orphan install/rm/jq/systemctl
+    descendants or recover their lost group; empty recognized evidence is not absolute
+    descendant retirement. Unreadable rows or persistent unrelated churn may over-hold.
+    It uses capped cancellable retries, not a total deadline. Other callers' ordinary-failure
+    policy and manager failure tokens are unchanged.
     Enable/disable derives the
     baked unmask→enable→start unit union (deduplicated) before submission, then observes
     its jobs/lifecycles AFTER group retirement. Descriptor failure prevents submission.
@@ -128,8 +136,9 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
     and sysext metadata reload), or an unacknowledged request left by a killed client.
     A descriptor observation on another connection is not a general request-drain barrier.
     Manager's separate systemctl tails retain their own unit evidence, not group ownership.
-    The legacy census remains for generic outer operations, not as helper authority or an
-    additional AND-condition; its readable named observations are not a descendant inventory.
+    The legacy census remains for generic outer operations and the rare handle-less unknown
+    fallback, never as an additional AND-condition for a returned helper handle; its readable
+    named observations are not a descendant inventory.
     Timers only re-observe, never clear a hold. Cancellation/retired tickets schedule no
     retry, including rejection of the first observation. Installed behavior remains unqualified.
 - **Stuck service hold (operator meaning)**: a service hold has NO supersede path; only
@@ -150,7 +159,9 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
    N/MINOR).
     Board drills must establish installed setsid/environment, real helper descendants,
     orphan/zombie retirement under the installed init, signal/output mapping, queued
-    descriptor jobs and service restart on BOTH boards, plus a real launcher failure leaving no hold.
+    descriptor jobs and service restart on BOTH boards, plus a real launcher failure leaving no hold
+    and a post-exec pidfd failure retaining exclusion. Forcing that pidfd fault on an installed
+    image requires privileged instrumentation; the unprivileged host control is not board proof.
    Host fixtures do not prove installed completion, shutdown or safe power loss.
 - **Validation deadline**: `runValidateCmd` uses `spawnWithTimeout` and its shared
   termination classification. A TERM-induced zero after timeout throws typed

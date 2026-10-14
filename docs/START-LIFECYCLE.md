@@ -845,21 +845,30 @@ their unit job/steady-state evidence. Helper enable/disable/refresh uses ordinar
 spawn of checked `/usr/bin/setsid -w -- /usr/bin/ceralive-addon-helper action [id]`, no
 sudo, PTY, detached or `-f`: PID=PGID=SID. Root is required; fixed PATH/locale excludes
 BASH_ENV, SHELLOPTS and CERALIVE_* overrides. Status retains its existing sudo path.
-Success and every possibly-effectful failure (exit 1 included) require actual child
+With a returned handle, success and every possibly-effectful failure (exit 1 included) require actual child
 exit plus ESRCH from `kill(-ownedPGID, 0)` with integer PGID > 1. A successful probe
 means present; all other errno, including EPERM, remain UNKNOWN. Retirement is latched;
 then enable/disable polls the baked descriptor's deduplicated unmask→enable→start union.
 Typed none/started/unknown dispatch evidence, not errno spelling, governs the helper's
-pre-effect exception: proved prelaunch/synchronous-spawn failure with no handle or
-pre-spawn abort releases immediately with the original error, no group/unit probes
+pre-effect exception: the runner's own pre-spawn checks/preparation/abort, or a Bun Error
+tagged `socketpair`, `fcntl` or `posix_spawn`, proves no dispatch and releases immediately
+with the original error, no group/unit probes
 and no wakeup. Once a handle exists, even abort racing assignment is started; unknown
-dispatch retains evidence. This inference depends on the fixed Bun 1.4.2 spawn shape
+dispatch retains evidence. Bun 1.4.2 can exec, fail `pidfd_open`, block in `wait4`, reap the
+leader and throw without a handle. This, absent/unknown tags and non-Error throws stay
+unknown. Handle-less unknown uses consistent kernel-backed helper/sysext census followed
+by descriptor units, with capped cancellable backoff. The fallback cannot enumerate
+arbitrary unrecognized orphan install/rm/jq/systemctl descendants or recover their lost
+group; empty recognized evidence is not absolute descendant retirement. Unreadable rows
+and persistent unrelated churn may over-hold, but an empty readable census plus settled
+units can settle harmless untagged pre-exec failure. The tag proof depends on the fixed Bun 1.4.2 spawn shape
 and does not change other callers' default policy or enable/disable failure tokens.
 Cancellation/retirement fences retry scheduling even when the first observation rejects.
 Child-only collector TERM/KILL, timeout
 failure and original partial output/137/143 are preserved. TERM-induced zero is failure.
 Fork/exec/double-fork/reparented descendants retain membership; zombies hold until reaped.
-The generic outer census remains separate, never ANDed with the helper boundary.
+The generic outer census remains separate and also serves the rare handle-less unknown
+fallback, never ANDed with normal owned-group completion.
 
 Groups do not cover a descendant calling setsid/setpgid (adding one triggers scope
 replacement), already-submitted PID-1 jobs, PID-1/other-daemon work, manager Reload
@@ -901,7 +910,9 @@ after final observation/dispatch; the external root helper is not governed by a
 backend-only decision. Installed setsid/environment, real helper descendants,
 orphan retirement under the installed init, queued descriptor jobs, signal/output
 mapping, service restart and a real launcher failure leaving no hold on BOTH boards need board
-drills. No hardware or uninterrupted-transaction proof is claimed.
+drills, plus post-exec pidfd failure retaining exclusion. Forcing that installed-image fault
+requires privileged instrumentation; unprivileged host seccomp is not board proof.
+No hardware or uninterrupted-transaction proof is claimed.
 
 Stream liveness is tri-state. `stream-liveness-source.ts` is the synchronous,
 side-effect-free composition consumers read. It imports only the

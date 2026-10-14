@@ -109,7 +109,7 @@ export async function runDisruptiveSysextStep<T>(
 					(evidence && "unit" in evidence
 						? probeServiceCompletion
 						: async (scope, signal) => {
-								const actors = helper
+								const actors = helper?.spawned()
 									? await helper.probe(signal)
 									: await probeSysextActors(scope, signal);
 								if (actors !== "completed") return actors;
