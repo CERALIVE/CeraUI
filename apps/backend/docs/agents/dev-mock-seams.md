@@ -19,6 +19,17 @@ The transient `stream.armed.json` is ignored beside the other backend runtime
 files. Source copy/read failures remain fatal; only snapshot teardown tolerates
 `ENOENT`.
 
+The preload allocates a per-file private `CERALIVE_STREAMING_MARKER` before the
+production session owner initializes. Worker-global isolation does not isolate
+the filesystem: on runners with writable `/run/ceralive`, an engine-lifecycle
+fixture can otherwise leave another file's initial owner UNKNOWN. The temporary
+marker is removed with its own directory; inherited/foreign markers are untouched.
+Retained, unreadable and failed-clearance tests still explicitly arrange those
+conditions. `test-runtime-isolation.test.ts` runs the unchanged mock-Stop assertion
+against an inherited populated sentinel and requires success plus preservation
+of that foreign marker. This changes neither production liveness nor test
+parallelism; the existing one-broadcast assertion is unchanged.
+
 The initial 2026-09-07 adoption batches finished 19/20 and 18/20: both original
 isolation repairs passed, but add-on helper, modem-transition and source-routing
 tests exposed two more failure modes. The clock and child-command fixes below

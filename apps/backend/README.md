@@ -131,7 +131,11 @@ The package's `test` script runs `bun test --parallel` on Bun 1.4.2, adopted
 after five smoke runs and twenty consecutive clean full-suite runs. Files run
 in isolated worker globals across worker processes, but filesystem paths are still shared. Tests that
 persist fixtures must use per-file `mkdtemp` roots and the existing path setters
-(runtime config: `setConfigFilePath`). The USB-tether source fence scans its own
+(runtime config: `setConfigFilePath`). Before production ownership initializes,
+the test preload gives every file a private OTA streaming sentinel: a parallel
+file cannot supply another session's initial liveness through `/run`, and the
+inherited marker is never removed. Tests of retained/unknown sentinel evidence
+still create explicit fixtures. The USB-tether source fence scans its own
 temporary snapshot of tracked and new non-ignored source, excluding runtime
 markers; missing source remains an error. The modem-transition fixture controls
 its polling clock. Real add-on/GPG and source-routing Git checks use an async
