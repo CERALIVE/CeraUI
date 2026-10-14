@@ -250,6 +250,14 @@ src/
   zero automatic Stops. The 36-cell `LiveView.real-socket-stop.test.ts` permutation
   matrix owns this contract.
 
+- **Start reply timeout**: a dispatched Start whose 75-second client deadline
+  expires stays owned by the same generation and existing 90-second watchdog.
+  Only proven non-dispatch or a negative Start result permits direct retry;
+  silence cannot erase recovery. Fresh facts or the latest owner's acknowledged
+  Stop settle it, and exhausted evidence exposes the existing UNKNOWN band and
+  explicit Stop. The additional 36 timeout cells retain the acknowledged-Start
+  matrix unchanged; host proof does not qualify browser or engine incidence.
+
 - **Dongle login**: a submission makes one verify-before-save RPC. A failed
   password remains only in the mounted dialog, is never written to Web Storage,
   and disappears on close or device change. Portal unreachability and rejected

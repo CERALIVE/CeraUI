@@ -16,7 +16,8 @@ import { toast } from 'svelte-sonner';
 
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
 import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
-import { ConnectionResetError, rpc } from '$lib/rpc';
+import { rpc } from '$lib/rpc';
+import { NotSentError } from '$lib/rpc/rpc-error';
 import {
 	confirmOperation,
 	failOperation,
@@ -939,11 +940,12 @@ async function handleStart(overrides: { source?: string } = {}) {
 			}
 		}
 	} catch (error) {
-		if (error instanceof ConnectionResetError) {
+		// Only proven non-dispatch permits a retry; losing a reply proves no idle.
+		if (!(error instanceof NotSentError)) {
 			noteLostStartReply(attempt);
 			return;
 		}
-		// Transport/validation throw: revert to idle with the error message.
+		// The socket refused dispatch, so this attempt cannot have started.
 		const reason =
 			error instanceof Error ? error.message : 'unknown_error';
 		revertStreamingOptimism(reason, attempt);

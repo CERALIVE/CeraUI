@@ -589,6 +589,20 @@ The frontend closes the loop with three pieces, all in `apps/frontend/src/lib/rp
   primary signal and the watchdog is only the lost-signal backstop. Every other
   procedure keeps the 30s default.
 
+**Start reply timeout (FIX-17-F11) [EXISTS; host-tested].** The 75-second client
+deadline is not proof that a dispatched Start failed. Like a connection reset,
+it records the lost reply for that generation and leaves the existing 90-second
+watchdog armed. Fresh current-link idle after the loss can settle the lost
+attempt; live facts confirm it. If the watchdog's bounded evidence also fails,
+the existing recovery UNKNOWN band offers the operator's Stop. Only the existing
+`NotSentError` proves non-dispatch in the thrown-error path; typed negative Start
+results retain their own failure handling. This changes neither C1/C3/C4/C5'
+for acknowledged Start nor the owner/generation fences, and never dispatches an
+automatic Stop. The retained 36-cell matrix is extended with the timeout
+dimension; six lost-reply idle-before-exhaustion/error outcomes and two SER/ack
+read counts follow the existing lost-reply settlement rule. Browser and
+integrated backend/engine incidence remain unqualified.
+
 The authoritative `is_streaming=false` broadcast the Todo-27 rollback emits (on a
 terminal failure that HAD reached streaming) is consumed by `subscriptions.svelte`
 and drives `getIsStreaming()` — proven through the WS layer by

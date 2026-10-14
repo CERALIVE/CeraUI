@@ -11,6 +11,14 @@ in `LiveView.real-socket-stop.test.ts` owns this contract, retaining owner/gener
 fences, no replacement after revocation and zero automatic Stops. Host proof is
 not browser/board qualification.
 
+A dispatched Start whose 75-second reply deadline expires retains its generation
+and the existing 90-second watchdog, just as a connection reset does. Timeout or
+a handler error is not idle proof; only proven non-dispatch (`NotSentError`) or
+the existing negative Start result reverts directly. Later admissible live/idle
+facts settle the lost attempt, while exhausted evidence retains UNKNOWN and the
+operator's explicit Stop. The timeout dimension adds 36 real-carrier cells without
+altering the acknowledged-Start S/R/E cells or their C5' conservative outcome.
+
 For the backend broadcast enumeration (which message types the server pushes and when), see [RPC_COMMUNICATION.md](RPC_COMMUNICATION.md).
 
 ---

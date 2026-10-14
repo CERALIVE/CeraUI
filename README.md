@@ -32,6 +32,13 @@ do not revoke it; post-record admissible facts still settle UNKNOWN. The band's
 Stop remains the escape. The 36-cell real-socket permutation matrix in
 `LiveView.real-socket-stop.test.ts` owns this contract, with no automatic Stops.
 
+A dispatched Start's 75-second reply timeout no longer grants a blind retry or
+cancels its 90-second recovery watchdog. It follows the existing lost-reply path:
+fresh facts settle the same generation, otherwise bounded recovery exposes UNKNOWN
+with the operator's Stop. Proven non-dispatch and typed negative Start results
+still revert. The real-carrier matrix adds the timeout dimension without changing
+its acknowledged-Start contract; browser/engine incidence remains unqualified.
+
 **Device updates [EXISTS].** The update orchestrator checks for package and
 system updates on a schedule alongside the older package-update RPC path. It
 automatically installs while idle, and

@@ -130,6 +130,7 @@ import {
 	destroyStreamingOptimism,
 	getStreamingAttemptGeneration,
 	getStreamingOptimismState,
+	getStreamingStopReason,
 } from "../lib/rpc/streaming-optimism.svelte";
 import {
 	getStatus,
@@ -140,8 +141,10 @@ import {
 } from "../lib/rpc/subscriptions.svelte";
 import {
 	clearStartRecoveryUnknown,
+	latestStopOwner,
 	noteLostStartReply,
 	noteStartRecoveryUnknown,
+	operatorStopUnresolved,
 	startRecoveryUnknown,
 } from "../lib/streaming/unresolved-stream-actions.svelte";
 import Noop from "../tests/fixtures/Noop.svelte";
@@ -270,6 +273,241 @@ async function exhaustStart(
 }
 
 const F10_IDLE = [{ label: "Start Stream", disabled: false }] as const;
+
+describe("F11 real-socket Start timeout probe", () => {
+	it.each(["later-live", "later-idle", "silent"] as const)(
+		"retains uncertainty when the Start reply times out: %s",
+		async (outcome) => {
+			// Given an open, heartbeat-warm link with no Start reply or stream facts.
+			const { container } = render(LiveView);
+			await fireEvent.click(button(container, "Start Stream"));
+			await settle();
+			const generation = getStreamingAttemptGeneration();
+			await elapse(75_000);
+			await settle();
+			const atTimeout = {
+				controls: controls(container),
+				band: band(container) !== null,
+				optimism: getStreamingOptimismState(),
+				reason: getStreamingStopReason() ?? null,
+				unknown: startRecoveryUnknown(generation),
+				claim: operatorStopUnresolved(),
+				owner: latestStopOwner() ?? null,
+				starts: sentCount("streaming.start"),
+				stops: sentCount("streaming.stop"),
+				reads: sentCount("status.getStatus"),
+				header: header(container).replace(/\s+/g, " ").trim(),
+				live: [
+					...container.querySelectorAll('[aria-live], [role="status"]'),
+				].map((region) => region.textContent?.replace(/\s+/g, " ").trim()),
+			};
+			// When the device later establishes live, establishes idle, or stays silent.
+			await elapse(1_000);
+			switch (outcome) {
+				case "later-live":
+					deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+					break;
+				case "later-idle":
+					deliverStatus({ is_streaming: false, stream_lifecycle: "idle" });
+					break;
+				case "silent":
+					break;
+				default: {
+					const unreachable: never = outcome;
+					throw new Error(`unexpected outcome ${unreachable}`);
+				}
+			}
+			await elapse(44_000);
+			await settle();
+			console.info(
+				"F11-PROBE",
+				JSON.stringify({
+					outcome,
+					atTimeout,
+					after: {
+						controls: controls(container),
+						band: band(container) !== null,
+						optimism: getStreamingOptimismState(),
+						unknown: startRecoveryUnknown(generation),
+						claim: operatorStopUnresolved(),
+						owner: latestStopOwner() ?? null,
+						starts: sentCount("streaming.start"),
+						stops: sentCount("streaming.stop"),
+						reads: sentCount("status.getStatus"),
+						header: header(container).replace(/\s+/g, " ").trim(),
+						live: [
+							...container.querySelectorAll('[aria-live], [role="status"]'),
+						].map((region) => region.textContent?.replace(/\s+/g, " ").trim()),
+					},
+				}),
+			);
+			// Then timeout alone must not enable a second Start or erase its backstop.
+			expect(atTimeout.controls).toEqual([
+				{ label: "Starting...", disabled: true },
+			]);
+			expect(atTimeout.optimism).toBe("starting");
+			expect(atTimeout.reason).toBeNull();
+			expect(atTimeout.starts).toBe(1);
+			expect(atTimeout.stops).toBe(0);
+			expect(outstanding("streaming.start")).toHaveLength(0);
+			switch (outcome) {
+				case "later-live":
+					expect(controls(container)).toEqual([
+						{ label: "Stop Stream", disabled: false },
+					]);
+					expect(getStreamingOptimismState()).toBe("idle");
+					expect(band(container)).toBeNull();
+					expect(sentCount("status.getStatus")).toBe(0);
+					break;
+				case "later-idle":
+					expect(controls(container)).toEqual([
+						{ label: "Start Stream", disabled: false },
+					]);
+					expect(getStreamingOptimismState()).toBe("idle");
+					expect(band(container)).toBeNull();
+					expect(sentCount("status.getStatus")).toBe(0);
+					break;
+				case "silent":
+					expect(controls(container)).toEqual(F8_RECOVERY_CONTROLS);
+					expect(getStreamingOptimismState()).toBe("starting");
+					expect(startRecoveryUnknown(generation)).toBe(true);
+					expect(band(container)?.getAttribute("role")).toBe("status");
+					expect(band(container)?.getAttribute("aria-live")).toBe("polite");
+					expect(band(container)?.textContent).toContain(
+						"The device can't confirm whether a stream is still running",
+					);
+					expect(header(container)).not.toContain("Not streaming");
+					expect(sentCount("status.getStatus")).toBe(1);
+					break;
+				default: {
+					const unreachable: never = outcome;
+					throw new Error(`unexpected outcome ${unreachable}`);
+				}
+			}
+			expect(sentCount("streaming.start")).toBe(1);
+			expect(sentCount("streaming.stop")).toBe(0);
+		},
+	);
+});
+
+describe("F11 timeout recovery lifetime seams", () => {
+	it("a latest Stop ack revokes a timed-out Start and its outstanding watchdog", async () => {
+		// Given an unresolved failed Stop and a new timed-out Start's pending pull.
+		const { container } = render(LiveView);
+		await exhaustStart(container, { stream_lifecycle: "starting" });
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		deliverStatus(F8_MIXED_FALSE);
+		await settle();
+		reject("streaming.stop", "INTERNAL_ERROR");
+		await settle();
+		await fireEvent.click(button(container, "Start Stream"));
+		await elapse(75_000);
+		await settle();
+		const generation = getStreamingAttemptGeneration();
+		await elapse(15_000);
+		await settle();
+		expect(outstanding("status.getStatus")).toHaveLength(1);
+		// When the operator's Stop acknowledges and the old pull later answers.
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		answer("streaming.stop", { success: true, result: "stopped" });
+		await settle();
+		answer("status.getStatus", {
+			is_streaming: true,
+			stream_lifecycle: "streaming",
+		});
+		await elapse(180_000);
+		await settle();
+		// Then revoked recovery cannot ingest, replace, or publish UNKNOWN.
+		expect(getStreamingOptimismState()).toBe("idle");
+		expect(startRecoveryUnknown(generation)).toBe(false);
+		expect(getStatus()?.stream_lifecycle).toBe("starting");
+		expect(getStatus()?.is_streaming).toBe(false);
+		expect(sentCount("status.getStatus")).toBe(3);
+		expect(sentCount("streaming.stop")).toBe(2);
+	});
+
+	it("a timeout from an older Start cannot mark the newer acknowledged Start lost", async () => {
+		// Given a Start superseded by explicit Stop before its reply times out.
+		const { container } = render(LiveView);
+		await fireEvent.click(button(container, "Start Stream"));
+		await elapse(10_000);
+		deliverStatus({ stream_lifecycle: "reconciling" });
+		await settle();
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		answer("streaming.stop", { success: true, result: "stopped" });
+		deliverStatus({ is_streaming: false, stream_lifecycle: "idle" });
+		await settle();
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		answer("streaming.start", { success: true }, "newest");
+		await settle();
+		const generation = getStreamingAttemptGeneration();
+		// When the first Start's timeout precedes a fresh idle about this new attempt.
+		await elapse(65_000);
+		deliverStatus({ is_streaming: false, stream_lifecycle: "idle" });
+		await settle();
+		// Then the acknowledged newer attempt is not treated as a lost reply.
+		expect(generation).toBe(2);
+		expect(getStreamingOptimismState()).toBe("starting");
+		expect(startRecoveryUnknown(generation)).toBe(false);
+		expect(controls(container)).toEqual([
+			{ label: "Starting...", disabled: true },
+		]);
+		expect(getStreamingStopReason()).toBeUndefined();
+	});
+
+	it("a proven not-sent Start still reverts without scheduling recovery", async () => {
+		// Given a rendered Start-ready device whose transport is no longer open.
+		const { container } = render(LiveView);
+		socket().readyState = FakeWebSocket.CLOSED;
+		// When Start is pressed without dispatch.
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		await elapse(120_000);
+		await settle();
+		// Then positive non-dispatch proof still permits retry, not UNKNOWN.
+		expect(getStreamingOptimismState()).toBe("idle");
+		expect(controls(container)).toEqual([
+			{ label: "Start Stream", disabled: false },
+		]);
+		expect(getStreamingStopReason()).toBe("WebSocket not connected");
+		expect(band(container)).toBeNull();
+		expect(sentCount("streaming.start")).toBe(0);
+		expect(sentCount("status.getStatus")).toBe(0);
+	});
+
+	it("a timed-out Start survives failed reconnect hydration and has an explicit Stop escape", async () => {
+		// Given a real Start timeout and a replaced authenticated link.
+		const { container } = render(LiveView);
+		await fireEvent.click(button(container, "Start Stream"));
+		await elapse(75_000);
+		await settle();
+		const generation = getStreamingAttemptGeneration();
+		dropLink();
+		await restoreLink();
+		answer("auth.login", { success: true });
+		await settle();
+		// When both safety reads fail and the watchdog gets no answer.
+		reject("streaming.getConfig", "INTERNAL_ERROR");
+		reject("status.getStatus", "INTERNAL_ERROR");
+		await elapse(45_000);
+		await settle();
+		// Then the retained attempt owns UNKNOWN, and only an explicit Stop dispatches.
+		expect(startRecoveryUnknown(generation)).toBe(true);
+		expect(controls(container)).toEqual(F8_RECOVERY_CONTROLS);
+		expect(sentCount("streaming.stop")).toBe(0);
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		answer("streaming.stop", { success: true, result: "stopped" });
+		await settle();
+		expect(startRecoveryUnknown(generation)).toBe(false);
+		expect(getStreamingOptimismState()).toBe("idle");
+		expect(sentCount("streaming.stop")).toBe(1);
+	});
+});
 const F10_STARTING = [{ label: "Starting...", disabled: true }] as const;
 const F10_RETRY_STARTING = [
 	{ label: "Stop Stream", disabled: false },
@@ -890,6 +1128,114 @@ describe("F10 exhaustive Stop settlement/result/exhaustion permutations", () => 
 			expect(controls(container)).toEqual(cell[10]);
 			expect(sentCount("streaming.stop")).toBe(2);
 			expect(sentCount("status.getStatus")).toBe(cell[8]);
+		},
+	);
+});
+
+// A lost (not acknowledged) Start can be settled by fresh idle after the loss.
+// Six error/S-before-E rows and two SER ack read counts differ from D284.
+const F11_LOST_IDLE = [
+	["SRE", "idle-push", "error", 3],
+	["SER", "idle-push", "error", 3],
+	["RSE", "idle-push", "error", 3],
+	["SRE", "idle-pull", "error", 4],
+	["SER", "idle-pull", "error", 4],
+	["RSE", "idle-pull", "error", 4],
+	["SER", "idle-push", "ack", 3],
+	["SER", "idle-pull", "ack", 4],
+] as const;
+
+describe("F11 Start-reply timeout dimension of the 36-cell Stop matrix", () => {
+	it.each(
+		F10_MATRIX.map((cell) => ({
+			order: cell[0],
+			settlement: cell[1],
+			outcome: cell[2],
+			cell,
+		})),
+	)(
+		"timeout order=$order settlement=$settlement Stop=$outcome",
+		async ({ cell }) => {
+			// Given the retained two-attempt transcript, but Start #2 loses its reply.
+			const { container } = render(LiveView);
+			await exhaustStart(container, { stream_lifecycle: "starting" });
+			await fireEvent.click(button(container, "Stop Stream"));
+			await settle();
+			deliverStatus(F8_MIXED_FALSE);
+			await settle();
+			reject("streaming.stop", "INTERNAL_ERROR");
+			await settle();
+			await fireEvent.click(button(container, "Start Stream"));
+			await settle();
+			const generation = getStreamingAttemptGeneration();
+			await elapse(75_000);
+			await settle();
+			expect(outstanding("streaming.start")).toHaveLength(0);
+			expect(getStreamingOptimismState()).toBe("starting");
+			await elapse(15_000);
+			await fireEvent.click(button(container, "Stop Stream"));
+			await settle();
+			// When the same literal S/R/E permutation is delivered after the timeout.
+			await playF10Interleaving(cell);
+			await elapse(180_000);
+			await settle();
+			const lostIdle = F11_LOST_IDLE.find(
+				(row) => row[0] === cell[0] && row[1] === cell[1] && row[2] === cell[2],
+			);
+			const expected =
+				lostIdle === undefined
+					? {
+							unknown: cell[3],
+							optimism: cell[4],
+							controls: cell[6],
+							band: cell[7],
+							reads: cell[8],
+							next: cell[9],
+							nextControls: cell[10],
+						}
+					: {
+							unknown: false,
+							optimism: "idle",
+							controls: F10_IDLE,
+							band: false,
+							reads: lostIdle[3],
+							next: true,
+							nextControls: F10_STARTING,
+						};
+			// Then the paper table, not the production reducer, owns the outcome.
+			expect({
+				unknown: startRecoveryUnknown(generation),
+				optimism: getStreamingOptimismState(),
+				lifecycle: getStatus()?.stream_lifecycle,
+				phase: getOperationPhase(KEY),
+				controls: controls(container),
+				band: band(container) !== null,
+				reads: sentCount("status.getStatus"),
+				stops: sentCount("streaming.stop"),
+				starts: sentCount("streaming.start"),
+			}).toEqual({
+				unknown: expected.unknown,
+				optimism: expected.optimism,
+				lifecycle: cell[5],
+				phase: "idle",
+				controls: expected.controls,
+				band: expected.band,
+				reads: expected.reads,
+				stops: 2,
+				starts: 2,
+			});
+			expect(outstanding("status.getStatus")).toHaveLength(0);
+			if (expected.next) {
+				await fireEvent.click(button(container, "Start Stream"));
+				await settle();
+				answer("streaming.start", { success: true });
+				await settle();
+				expect(getStreamingAttemptGeneration()).toBe(generation + 1);
+				expect(getStreamingOptimismState()).toBe("starting");
+			}
+			expect(controls(container)).toEqual(expected.nextControls);
+			expect(sentCount("streaming.stop")).toBe(2);
+			expect(sentCount("status.getStatus")).toBe(expected.reads);
 		},
 	);
 });
