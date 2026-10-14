@@ -211,7 +211,9 @@ src/
 
 - **Unresolved Live Stop**: each press of the unconfirmed-state Stop owns its
   claim; a reply settles only its own press, and a pending retry is confirmed
-  only by an idle delivered after it over the current link
+  only by an idle received after it over the current link. Each reconnect
+  hydrate answer is consumed when it arrives and keeps its receipt stamp, so a
+  status answered before a newer push or a press never replaces or settles it
   ([START-LIFECYCLE](../../docs/START-LIFECYCLE.md)).
 
 - **Dongle login**: a submission makes one verify-before-save RPC. A failed

@@ -39,28 +39,63 @@ export function noteLinkState(state: string): void {
 }
 
 /**
- * When the held `stream_lifecycle` was last DELIVERED: the link it arrived on
- * and a sequence number (FIX-16-FRONT3, early oracle R1). Stamped only by a
- * status frame that carries the field, or by a full snapshot that establishes
- * its absence. A restored session is not this evidence (its hydrate can fail
- * and still count as restored), and neither is a partial push without the
- * field, because the status merge keeps the old value.
+ * When a status frame REACHED this page: the link it arrived on and a tick of
+ * one monotonic evidence clock (FIX-16-F5, F4-R1). Taken at receipt (a push in
+ * the socket's message handler, a pulled answer in the continuation of its own
+ * request) and carried to ingestion, so an answer consumed late still names the
+ * moment the device answered, never the moment a consumer got to it.
+ */
+export interface Receipt {
+	readonly link: number;
+	readonly at: number;
+}
+
+let clock = 0;
+let newestStatusFrame = 0;
+
+export function receiveEvidence(): Receipt {
+	clock += 1;
+	return { link: links, at: clock };
+}
+
+/** The newest receipt so far, consumed or not: a claim's "after this moment". */
+export function evidenceClock(): number {
+	return clock;
+}
+
+/**
+ * Admit a status frame unless one received AFTER it was already applied: the
+ * newer frame wins, so a late older snapshot never regresses it.
+ */
+export function admitStatusFrame(receipt: Receipt): boolean {
+	if (receipt.at < newestStatusFrame) return false;
+	newestStatusFrame = receipt.at;
+	return true;
+}
+
+/**
+ * When the held `stream_lifecycle` was DELIVERED: the receipt of the frame that
+ * carried it (FIX-16-FRONT3, early oracle R1; `seq` is the receipt's clock
+ * tick). Stamped only by a status frame that carries the field, or by a full
+ * snapshot that establishes its absence. A restored session is not this
+ * evidence (its hydrate can fail and still count as restored), and neither is a
+ * partial push without the field, because the status merge keeps the old value.
  */
 export interface LifecycleDelivery {
 	readonly link: number;
 	readonly seq: number;
 }
 
-let deliveries = 0;
 let lifecycleDelivery = $state.raw<LifecycleDelivery>({ link: -1, seq: 0 });
 
 export function getLifecycleDelivery(): LifecycleDelivery {
 	return lifecycleDelivery;
 }
 
-export function noteLifecycleDelivered(): void {
-	deliveries += 1;
-	lifecycleDelivery = { link: links, seq: deliveries };
+export function noteLifecycleDelivered(
+	receipt: Receipt = receiveEvidence(),
+): void {
+	lifecycleDelivery = { link: receipt.link, seq: receipt.at };
 }
 
 /** A lifecycle delivered after `mark` (a `seq`) over the link that is current now. */

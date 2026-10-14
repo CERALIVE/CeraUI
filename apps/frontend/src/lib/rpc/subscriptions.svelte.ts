@@ -89,9 +89,12 @@ import { mergeModemList } from "./modem-list-merge";
 import { reauthenticateAndHydrate } from "./reconnect";
 import { createSeqTracker } from "./seq-guard";
 import {
+	admitStatusFrame,
 	noteLifecycleDelivered,
 	noteLinkState,
 	noteSessionRestored,
+	type Receipt,
+	receiveEvidence,
 } from "./session-epoch.svelte";
 import {
 	refreshWifiAdapterModes,
@@ -471,7 +474,12 @@ const seqTracker = createSeqTracker();
 /**
  * Handle incoming messages and update state
  */
-function handleMessage(type: string, data: unknown, seq?: number): void {
+function handleMessage(
+	type: string,
+	data: unknown,
+	seq?: number,
+	receipt?: Receipt,
+): void {
 	// Drop out-of-order/duplicate broadcasts for this type before applying.
 	// Messages without `seq` (local/legacy, or reconnect safety-hydrate
 	// dispatches) bypass the guard.
@@ -510,6 +518,9 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			// registry only covers ConfigMessage fields (see the "config" case).
 			// Status-owned toggles (BondToggle / AsyncSwitch) register their own
 			// fields in T14, so this merge is left untouched to avoid double-guarding.
+			// A push is received right here; a pulled answer carries its receipt.
+			const received = receipt ?? receiveEvidence();
+			if (!admitStatusFrame(received)) break;
 			const statusData = data as StatusResponse;
 			const wasStreaming = isStreamingState;
 
@@ -595,7 +606,7 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 					: {}),
 			} as Exclude<typeof statusState, undefined>;
 			statusState = preserveWireIdentity(statusState, nextStatus);
-			if ("stream_lifecycle" in statusData) noteLifecycleDelivered();
+			if ("stream_lifecycle" in statusData) noteLifecycleDelivered(received);
 			break;
 		}
 
@@ -1058,13 +1069,27 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
  * A pull is a FULL snapshot, so an optional lifecycle it omits is absent now
  * (an older backend), not unchanged: it replaces the held value instead of
  * merging like a partial push (early oracle R4).
+ *
+ * `receipt` is when the answer reached the page ({@link receivePulledStatus});
+ * omitted, the answer is taken as received now, which is only true for a
+ * caller that ingests in the continuation of its own request.
  */
-export function ingestPulledStatus(status: unknown): void {
+export function ingestPulledStatus(status: unknown, receipt?: Receipt): void {
 	const snapshot =
 		typeof status === "object" && status !== null
 			? { stream_lifecycle: undefined, ...status }
 			: status;
-	handleMessage("status", snapshot, undefined);
+	handleMessage("status", snapshot, undefined, receipt);
+}
+
+export interface ReceivedStatus {
+	readonly status: unknown;
+	readonly receipt: Receipt;
+}
+
+/** Stamp a pulled status answer at its receipt, before anyone holds it. */
+export function receivePulledStatus(status: unknown): ReceivedStatus {
+	return { status, receipt: receiveEvidence() };
 }
 
 const AUTH_STORAGE_KEY = "auth";
@@ -1102,11 +1127,15 @@ async function runReconnectReauth(): Promise<void> {
 			// the password hash and every reconnect fails.
 			login: (token) => rpc.auth.login({ token, persistent_token: true }),
 			getConfig: () => rpc.streaming.getConfig(),
-			getStatus: () => rpc.status.getStatus(),
-			dispatch: (type, data) =>
-				type === "status"
-					? ingestPulledStatus(data)
-					: handleMessage(type, data),
+			getStatus: async () => receivePulledStatus(await rpc.status.getStatus()),
+			dispatch: (type, data) => {
+				if (type === "status") {
+					const answer = data as ReceivedStatus;
+					ingestPulledStatus(answer.status, answer.receipt);
+				} else {
+					handleMessage(type, data);
+				}
+			},
 			routeToLogin,
 			onError: (error) => console.error("Reconnect re-auth failed:", error),
 		});

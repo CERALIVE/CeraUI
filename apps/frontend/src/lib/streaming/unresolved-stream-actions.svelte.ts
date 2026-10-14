@@ -5,8 +5,8 @@
  * Singletons on purpose. NavigationRenderer replaces the destination component,
  * so a record kept in LiveView's own state was lost on navigation while the
  * optimism and the async operation it qualifies are app-wide. Each record keeps
- * the lifecycle-delivery mark (`session-epoch`) taken when it was made: only a
- * lifecycle DELIVERED after that mark, over the link that is current now, can
+ * the evidence-clock mark (`session-epoch`) taken when it was made: only a
+ * lifecycle RECEIVED after that mark, over the link that is current now, can
  * settle it. A restored session, a retained snapshot, a failed hydrate, a
  * transport failure and a lapsed TTL settle nothing.
  *
@@ -15,7 +15,7 @@
  * settles only the claim it was made for (FIX-16-F4, C4-2).
  */
 import {
-	getLifecycleDelivery,
+	evidenceClock,
 	lifecycleDeliveredSince,
 } from "$lib/rpc/session-epoch.svelte";
 
@@ -27,7 +27,10 @@ interface LostStartReply {
 interface StopClaim {
 	/** The token `claimOperatorStop()` returned for this press. */
 	readonly owner: number;
-	/** The lifecycle-delivery `seq` when the operator pressed Stop. */
+	/**
+	 * The evidence clock when the operator pressed Stop: every status frame
+	 * RECEIVED before the press is at or below it, consumed or not (FIX-16-F5).
+	 */
 	readonly mark: number;
 	/**
 	 * No positive settlement yet. An acknowledged Stop closes the claim but keeps
@@ -43,7 +46,7 @@ let stopOwners = 0;
 
 /** Attempt `generation`'s start reply was lost to a connection reset. */
 export function noteLostStartReply(generation: number): void {
-	lostStart = { generation, mark: getLifecycleDelivery().seq };
+	lostStart = { generation, mark: evidenceClock() };
 }
 
 /** A lifecycle reached this page over the current link since `generation`'s reply was lost. */
@@ -65,7 +68,7 @@ export function claimOperatorStop(): number {
 	stopOwners += 1;
 	stopClaim = {
 		owner: stopOwners,
-		mark: getLifecycleDelivery().seq,
+		mark: evidenceClock(),
 		open: true,
 	};
 	return stopOwners;

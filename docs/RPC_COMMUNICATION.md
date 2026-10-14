@@ -512,7 +512,7 @@ When the socket reconnects after the operator has already authenticated this pag
 1. Reads the stored credential from `localStorage["auth"]`.
 2. Calls `rpc.auth.login({ password: storedToken, persistent_token: true })`.
 3. Dispatches the auth result through `handleMessage("auth", result)`.
-4. On success, fires a **safety hydrate**: calls `rpc.streaming.getConfig()` and `rpc.status.getStatus()` in parallel, then dispatches both results through `handleMessage`. This is defense-in-depth on top of the server's post-login push.
+4. On success, fires a **safety hydrate**: calls `rpc.streaming.getConfig()` and `rpc.status.getStatus()` in parallel and dispatches each result through `handleMessage` as soon as THAT result arrives (the status answer carries its receipt stamp), never after the other. This is defense-in-depth on top of the server's post-login push.
 5. On credential rejection, clears the stored token and calls `routeToLogin()`.
 
 The `reauthInFlight` flag prevents concurrent re-auth attempts.
@@ -630,10 +630,9 @@ Client                                    Server
   |-------- streaming.getConfig() -------->|
   |-------- status.getStatus() ----------->|
   |<------- config result ------------------|
-  |<------- status result ------------------|
-  |                                          |
   |  dispatch("config", config)              |
-  |  dispatch("status", status)              |
+  |<------- status result ------------------|
+  |  dispatch("status", status @ receipt)    |
   |                                          |
   |  [normal broadcast stream resumes]       |
   |<------- sensors (seq 1) ----------------|  ← seq reset accepted (lastSeen cleared)

@@ -687,6 +687,22 @@ unchanged; an older reply can still move a newer operation's phase through
 the shared key (the registry's documented backlog), which changes the copy but
 never the claim, so the band and its Stop stay.
 
+"Delivered after the press" means RECEIVED after it (FIX-16-F5, DELTA-F4
+F4-R1). The reconnect hydrate used to hold an early `status.getStatus` answer
+until the `streaming.getConfig` reply arrived, then stamp it as a new delivery:
+an idle the device reported before a newer `stop_failed` push and before the
+press confirmed that press, and its `stop_failed` reply was swallowed. Now each
+hydrate answer is consumed when it arrives, every status frame is stamped
+`{link, at}` from one evidence clock at its receipt (a push in the socket's
+message handler, a pulled answer in the continuation of its own request,
+`receivePulledStatus`), ingestion uses that carried stamp, and a claim marks the
+clock itself, i.e. the newest receipt whether consumed or not. A status frame
+received before one already applied is stale and is not applied, so a late
+older snapshot never replaces a newer push. `status.getStatus` carries no device
+sequence, so receipt order on the link is the order. Restoration is still
+counted after both hydrate answers settle and stays the separate reread trigger;
+a failed answer dispatches nothing and settles nothing.
+
 Not covered: `starting` and `stopping` seen from a client that did not start
 them have no Stop, but each is bounded and settles into `idle`, `streaming` or a
 row above. An `idle` lifecycle whose sentinel removal failed is invisible on the
@@ -699,7 +715,10 @@ band, header and stores (`LiveView.unconfirmed-real-stop.test.ts`,
 store, reconnect hydrate and session epoch (`LiveView.real-store-start.test.ts`,
 including the real NavigationRenderer, and `LiveView.real-store-stop.test.ts`),
 and over the real `rpc` proxy and `RPCClient` on a scripted socket, each reply
-delivered by its own request id (`LiveView.real-socket-stop.test.ts`).
+delivered by its own request id (`LiveView.real-socket-stop.test.ts`, which
+also replays both hydrate reply orders, a push between them, a failed status
+answer, a late-consumed pulled answer and the stop watchdog's pull against a
+push in both orders; the pure hydrate ordering is in `lib/rpc/reconnect.test.ts`).
 ## Composition lifecycle follow-up (2026-09-17)
 
 Failed stop IPC must complete the session cleanup promise with its error, not

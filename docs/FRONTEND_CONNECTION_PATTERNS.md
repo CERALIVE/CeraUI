@@ -153,7 +153,7 @@ When the WebSocket reconnects after the operator has already authenticated, the 
 1. Reads the device-issued, revocable token from `localStorage["auth"]`; the password is never persisted.
 2. Calls `deps.login(token)` — wired to `rpc.auth.login({ token, persistent_token: true })`.
 3. Dispatches the auth result through `handleMessage` (the canonical path).
-4. On success: fires a safety hydrate — `rpc.streaming.getConfig()` and `rpc.status.getStatus()` in parallel, dispatching both results through `handleMessage`. This repopulates the HUD and destination views even if the backend's post-login push is incomplete.
+4. On success: fires a safety hydrate — `rpc.streaming.getConfig()` and `rpc.status.getStatus()` in parallel, dispatching EACH result through `handleMessage` when that result arrives, never held back for the other (a held status answer once replaced newer pushes; see START-LIFECYCLE, FIX-16-F5). The status answer is stamped at its receipt (`receivePulledStatus`) and ingested with that stamp. This repopulates the HUD and destination views even if the backend's post-login push is incomplete. The outcome is decided after both settle; a failed answer is reported and dispatches nothing.
 5. On explicit server rejection: clears the stored credential (loop break — the next reconnect finds no token and short-circuits) and routes to the login screen.
 6. On a socket reset, timeout, or other transport failure: returns `unreachable`, retaining the credential and auth state for a later reconnect. A failed safety hydrate likewise retains the authenticated session.
 
