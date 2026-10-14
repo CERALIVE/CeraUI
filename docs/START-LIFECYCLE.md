@@ -902,7 +902,7 @@ the modem/config/streaming initialization graph with an eager update-runtime edg
 Add-on install checks before accepting an operation-scoped userConfig draft, and kiosk
 checks before its synchronous intent prelude. The manager re-reads after free-space
 observation and before staging/activation or teardown refresh; the privileged
-helper wrapper re-reads after device detection immediately before sudo submission.
+helper wrapper re-reads after device detection immediately before helper submission.
 A pre-activation late refusal restores persisted add-on/kiosk intent, live phase
 and a terminal add-on frame and is returned as the same
 typed refusal, not install failure or disabled success. Add-on and kiosk controls
