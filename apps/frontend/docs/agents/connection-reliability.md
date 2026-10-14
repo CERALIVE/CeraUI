@@ -28,6 +28,12 @@ owner's acknowledgement settles its captured, still-current starting attempt
 before OR after exhaustion, revoking pending watchdog effects without requiring a
 recovery record. Preserve Stop-owner and Start-generation fences; failed Stop
 revokes nothing and operation confirmation still needs post-press idle lifecycle.
+Acknowledgement keeps this authority whether or not admissible settlement already
+closed the Stop claim. Idle confirms the operation but does not end acknowledged
+Start before recovery; failed Stop and pre-record boolean false do not revoke it.
+F8 post-record settlement remains unchanged, and the band's explicit Stop is the
+escape. The 36-cell real-socket S/R/E permutation matrix in
+`LiveView.real-socket-stop.test.ts` owns this contract, with no automatic Stops.
 Non-settling/failed/stale
 evidence does not. “Unrelated” means unrelated to stream settlement, not every
 decision (`updating` gates power; `network_ingest` gates Start configuration).

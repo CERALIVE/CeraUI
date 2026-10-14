@@ -269,6 +269,631 @@ async function exhaustStart(
 	}
 }
 
+const F10_IDLE = [{ label: "Start Stream", disabled: false }] as const;
+const F10_STARTING = [{ label: "Starting...", disabled: true }] as const;
+const F10_RETRY_STARTING = [
+	{ label: "Stop Stream", disabled: false },
+	{ label: "Starting...", disabled: true },
+] as const;
+
+// D284 paper oracle: S/R/E permutations × three settlements × two RPC outcomes.
+// Each expected field is literal data, not a reducer reproducing production logic.
+const F10_MATRIX = [
+	[
+		"SRE",
+		"idle-push",
+		"ack",
+		false,
+		"idle",
+		"idle",
+		F10_IDLE,
+		false,
+		3,
+		true,
+		F10_STARTING,
+	],
+	[
+		"SER",
+		"idle-push",
+		"ack",
+		false,
+		"idle",
+		"idle",
+		F10_IDLE,
+		false,
+		4,
+		true,
+		F10_STARTING,
+	],
+	[
+		"RSE",
+		"idle-push",
+		"ack",
+		false,
+		"idle",
+		"idle",
+		F10_IDLE,
+		false,
+		3,
+		true,
+		F10_STARTING,
+	],
+	[
+		"RES",
+		"idle-push",
+		"ack",
+		false,
+		"idle",
+		"idle",
+		F10_IDLE,
+		false,
+		3,
+		true,
+		F10_STARTING,
+	],
+	[
+		"ESR",
+		"idle-push",
+		"ack",
+		false,
+		"idle",
+		"idle",
+		F10_IDLE,
+		false,
+		4,
+		true,
+		F10_STARTING,
+	],
+	[
+		"ERS",
+		"idle-push",
+		"ack",
+		false,
+		"idle",
+		"idle",
+		F10_IDLE,
+		false,
+		4,
+		true,
+		F10_STARTING,
+	],
+	[
+		"SRE",
+		"idle-push",
+		"error",
+		true,
+		"starting",
+		"idle",
+		F8_RECOVERY_CONTROLS,
+		true,
+		4,
+		false,
+		F8_RECOVERY_CONTROLS,
+	],
+	[
+		"SER",
+		"idle-push",
+		"error",
+		true,
+		"starting",
+		"idle",
+		F8_RECOVERY_CONTROLS,
+		true,
+		4,
+		false,
+		F8_RECOVERY_CONTROLS,
+	],
+	[
+		"RSE",
+		"idle-push",
+		"error",
+		true,
+		"starting",
+		"idle",
+		F8_RECOVERY_CONTROLS,
+		true,
+		4,
+		false,
+		F8_RECOVERY_CONTROLS,
+	],
+	[
+		"RES",
+		"idle-push",
+		"error",
+		false,
+		"idle",
+		"idle",
+		F10_IDLE,
+		false,
+		4,
+		true,
+		F10_STARTING,
+	],
+	[
+		"ESR",
+		"idle-push",
+		"error",
+		false,
+		"idle",
+		"idle",
+		F10_IDLE,
+		false,
+		4,
+		true,
+		F10_STARTING,
+	],
+	[
+		"ERS",
+		"idle-push",
+		"error",
+		false,
+		"idle",
+		"idle",
+		F10_IDLE,
+		false,
+		4,
+		true,
+		F10_STARTING,
+	],
+	[
+		"SRE",
+		"boolean-push",
+		"ack",
+		false,
+		"idle",
+		"starting",
+		F10_IDLE,
+		false,
+		3,
+		true,
+		F10_STARTING,
+	],
+	[
+		"SER",
+		"boolean-push",
+		"ack",
+		false,
+		"idle",
+		"starting",
+		F10_IDLE,
+		false,
+		4,
+		true,
+		F10_STARTING,
+	],
+	[
+		"RSE",
+		"boolean-push",
+		"ack",
+		false,
+		"idle",
+		"starting",
+		F10_IDLE,
+		false,
+		3,
+		true,
+		F10_STARTING,
+	],
+	[
+		"RES",
+		"boolean-push",
+		"ack",
+		false,
+		"idle",
+		"starting",
+		F10_IDLE,
+		false,
+		3,
+		true,
+		F10_STARTING,
+	],
+	[
+		"ESR",
+		"boolean-push",
+		"ack",
+		false,
+		"idle",
+		"starting",
+		F10_IDLE,
+		false,
+		4,
+		true,
+		F10_STARTING,
+	],
+	[
+		"ERS",
+		"boolean-push",
+		"ack",
+		false,
+		"idle",
+		"starting",
+		F10_IDLE,
+		false,
+		4,
+		true,
+		F10_STARTING,
+	],
+	[
+		"SRE",
+		"boolean-push",
+		"error",
+		true,
+		"starting",
+		"starting",
+		F8_RECOVERY_CONTROLS,
+		true,
+		4,
+		false,
+		F8_RECOVERY_CONTROLS,
+	],
+	[
+		"SER",
+		"boolean-push",
+		"error",
+		true,
+		"starting",
+		"starting",
+		F8_RECOVERY_CONTROLS,
+		true,
+		4,
+		false,
+		F8_RECOVERY_CONTROLS,
+	],
+	[
+		"RSE",
+		"boolean-push",
+		"error",
+		true,
+		"starting",
+		"starting",
+		F8_RECOVERY_CONTROLS,
+		true,
+		4,
+		false,
+		F8_RECOVERY_CONTROLS,
+	],
+	[
+		"RES",
+		"boolean-push",
+		"error",
+		false,
+		"idle",
+		"starting",
+		STOP_AND_START,
+		true,
+		4,
+		true,
+		F10_RETRY_STARTING,
+	],
+	[
+		"ESR",
+		"boolean-push",
+		"error",
+		false,
+		"idle",
+		"starting",
+		STOP_AND_START,
+		true,
+		4,
+		true,
+		F10_RETRY_STARTING,
+	],
+	[
+		"ERS",
+		"boolean-push",
+		"error",
+		false,
+		"idle",
+		"starting",
+		STOP_AND_START,
+		true,
+		4,
+		true,
+		F10_RETRY_STARTING,
+	],
+	[
+		"SRE",
+		"idle-pull",
+		"ack",
+		false,
+		"idle",
+		"idle",
+		F10_IDLE,
+		false,
+		4,
+		true,
+		F10_STARTING,
+	],
+	[
+		"SER",
+		"idle-pull",
+		"ack",
+		false,
+		"idle",
+		"idle",
+		F10_IDLE,
+		false,
+		5,
+		true,
+		F10_STARTING,
+	],
+	[
+		"RSE",
+		"idle-pull",
+		"ack",
+		false,
+		"idle",
+		"idle",
+		F10_IDLE,
+		false,
+		4,
+		true,
+		F10_STARTING,
+	],
+	[
+		"RES",
+		"idle-pull",
+		"ack",
+		false,
+		"idle",
+		"idle",
+		F10_IDLE,
+		false,
+		4,
+		true,
+		F10_STARTING,
+	],
+	[
+		"ESR",
+		"idle-pull",
+		"ack",
+		false,
+		"idle",
+		"idle",
+		F10_IDLE,
+		false,
+		5,
+		true,
+		F10_STARTING,
+	],
+	[
+		"ERS",
+		"idle-pull",
+		"ack",
+		false,
+		"idle",
+		"idle",
+		F10_IDLE,
+		false,
+		5,
+		true,
+		F10_STARTING,
+	],
+	[
+		"SRE",
+		"idle-pull",
+		"error",
+		true,
+		"starting",
+		"idle",
+		F8_RECOVERY_CONTROLS,
+		true,
+		5,
+		false,
+		F8_RECOVERY_CONTROLS,
+	],
+	[
+		"SER",
+		"idle-pull",
+		"error",
+		true,
+		"starting",
+		"idle",
+		F8_RECOVERY_CONTROLS,
+		true,
+		5,
+		false,
+		F8_RECOVERY_CONTROLS,
+	],
+	[
+		"RSE",
+		"idle-pull",
+		"error",
+		true,
+		"starting",
+		"idle",
+		F8_RECOVERY_CONTROLS,
+		true,
+		5,
+		false,
+		F8_RECOVERY_CONTROLS,
+	],
+	[
+		"RES",
+		"idle-pull",
+		"error",
+		false,
+		"idle",
+		"idle",
+		F10_IDLE,
+		false,
+		5,
+		true,
+		F10_STARTING,
+	],
+	[
+		"ESR",
+		"idle-pull",
+		"error",
+		false,
+		"idle",
+		"idle",
+		F10_IDLE,
+		false,
+		5,
+		true,
+		F10_STARTING,
+	],
+	[
+		"ERS",
+		"idle-pull",
+		"error",
+		false,
+		"idle",
+		"idle",
+		F10_IDLE,
+		false,
+		5,
+		true,
+		F10_STARTING,
+	],
+] as const;
+
+type F10Cell = (typeof F10_MATRIX)[number];
+
+async function playF10Interleaving(cell: F10Cell): Promise<void> {
+	for (const event of cell[0]) {
+		switch (event) {
+			case "S":
+				switch (cell[1]) {
+					case "idle-push":
+						deliverStatus({ is_streaming: false, stream_lifecycle: "idle" });
+						break;
+					case "boolean-push":
+						deliverStatus({ is_streaming: false });
+						break;
+					case "idle-pull": {
+						const pending = pullStatusEvidence();
+						await settle();
+						answer(
+							"status.getStatus",
+							{ is_streaming: false, stream_lifecycle: "idle" },
+							"newest",
+						);
+						await settle();
+						const received = await pending;
+						if (received === undefined)
+							throw new Error("missing post-press idle pull");
+						ingestPulledStatus(received.status, received.receipt);
+						break;
+					}
+					default: {
+						const unreachable: never = cell[1];
+						throw new Error(`unexpected settlement ${unreachable}`);
+					}
+				}
+				break;
+			case "R":
+				switch (cell[2]) {
+					case "ack":
+						answer("streaming.stop", { success: true, result: "stopped" });
+						break;
+					case "error":
+						reject("streaming.stop", "INTERNAL_ERROR");
+						break;
+					default: {
+						const unreachable: never = cell[2];
+						throw new Error(`unexpected Stop outcome ${unreachable}`);
+					}
+				}
+				break;
+			case "E":
+				for (
+					let read = 0;
+					read < 2 && outstanding("status.getStatus").length > 0;
+					read += 1
+				) {
+					await elapse(1_100);
+					deliverStatus(F8_MIXED_FALSE);
+					await settle();
+					answer("status.getStatus", {
+						is_streaming: false,
+						stream_lifecycle: "idle",
+					});
+					await settle();
+				}
+				break;
+			default:
+				throw new Error(`unexpected interleaving event ${event}`);
+		}
+		await settle();
+	}
+}
+
+describe("F10 exhaustive Stop settlement/result/exhaustion permutations", () => {
+	it.each(
+		F10_MATRIX.map((cell) => ({
+			order: cell[0],
+			settlement: cell[1],
+			outcome: cell[2],
+			cell,
+		})),
+	)(
+		"D284 order=$order settlement=$settlement Stop=$outcome",
+		async ({ cell }) => {
+			// Given the original two-attempt transcript and the second Start's first read.
+			const { container } = render(LiveView);
+			await exhaustStart(container, { stream_lifecycle: "starting" });
+			await fireEvent.click(button(container, "Stop Stream"));
+			await settle();
+			deliverStatus(F8_MIXED_FALSE);
+			await settle();
+			reject("streaming.stop", "INTERNAL_ERROR");
+			await settle();
+			await fireEvent.click(button(container, "Start Stream"));
+			await settle();
+			answer("streaming.start", { success: true });
+			await settle();
+			const generation = getStreamingAttemptGeneration();
+			await elapse(90_000);
+			await fireEvent.click(button(container, "Stop Stream"));
+			await settle();
+			// When S, R and E are delivered in this literal permutation.
+			await playF10Interleaving(cell);
+			await elapse(180_000);
+			await settle();
+			// Then the paper oracle owns state, held facts, controls and the whole ledger.
+			expect({
+				unknown: startRecoveryUnknown(generation),
+				optimism: getStreamingOptimismState(),
+				lifecycle: getStatus()?.stream_lifecycle,
+				phase: getOperationPhase(KEY),
+				controls: controls(container),
+				band: band(container) !== null,
+				reads: sentCount("status.getStatus"),
+				stops: sentCount("streaming.stop"),
+				starts: sentCount("streaming.start"),
+			}).toEqual({
+				unknown: cell[3],
+				optimism: cell[4],
+				lifecycle: cell[5],
+				phase: "idle",
+				controls: cell[6],
+				band: cell[7],
+				reads: cell[8],
+				stops: 2,
+				starts: 2,
+			});
+			expect(outstanding("status.getStatus")).toHaveLength(0);
+			expect(FakeWebSocket.log).toHaveLength(cell[8] + 4);
+			if (cell[9]) {
+				await fireEvent.click(button(container, "Start Stream"));
+				await settle();
+				answer("streaming.start", { success: true });
+				await settle();
+				expect(getStreamingAttemptGeneration()).toBe(generation + 1);
+				expect(startRecoveryUnknown(generation)).toBe(false);
+				expect(startRecoveryUnknown(generation + 1)).toBe(false);
+				expect(getStreamingOptimismState()).toBe("starting");
+				expect(sentCount("streaming.start")).toBe(3);
+			}
+			expect(controls(container)).toEqual(cell[10]);
+			expect(sentCount("streaming.stop")).toBe(2);
+			expect(sentCount("status.getStatus")).toBe(cell[8]);
+		},
+	);
+});
+
 describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 	it("a same-attempt Stop ack before read exhaustion must not create recovery UNKNOWN", async () => {
 		// Given the reviewer's first exhausted Start and an independent failed Stop claim.

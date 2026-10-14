@@ -2,6 +2,15 @@
 
 This document covers the frontend-specific connection layer: how the WebSocket client initialises, how reactive state is fed, how optimistic writes are protected from stale echoes, and how the transport self-heals after any outage.
 
+Latest-owner Stop acknowledgement revokes its captured Start whether or not an
+admissible settlement already closed the Stop claim. Idle confirms the operation,
+not an acknowledged Start's termination before recovery; failed Stop and
+pre-record boolean false do not revoke it. Post-record facts still settle UNKNOWN,
+and the band's explicit Stop is the escape. The 36-cell real-socket S/R/E matrix
+in `LiveView.real-socket-stop.test.ts` owns this contract, retaining owner/generation
+fences, no replacement after revocation and zero automatic Stops. Host proof is
+not browser/board qualification.
+
 For the backend broadcast enumeration (which message types the server pushes and when), see [RPC_COMMUNICATION.md](RPC_COMMUNICATION.md).
 
 ---

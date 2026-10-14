@@ -39,6 +39,12 @@ acknowledgement also settles its captured, still-current starting attempt before
 exhaustion, revoking the watchdog even when no recovery record exists. Stop-owner
 and Start-generation fences stay; a failed Stop settles nothing. The shared
 operation still requires post-press idle lifecycle for confirmation.
+That acknowledgement revokes its captured Start whether or not admissible
+settlement already closed the Stop claim. Idle confirms the Stop operation but
+does not end acknowledged Start before recovery; failed Stop and pre-record
+boolean false do not revoke it. Post-record F8 facts still clear UNKNOWN, and
+the band's explicit Stop remains the escape. The 36-cell real-socket S/R/E
+permutation matrix in `LiveView.real-socket-stop.test.ts` owns this contract.
 No automatic Stop or backend
 lifecycle is fabricated. Browser scheduling and integrated backend/engine
 incidence of the complete lost-confirmation transcript remain UNKNOWN.

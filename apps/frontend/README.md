@@ -238,6 +238,14 @@ src/
   scripted carrier behavior; browser scheduling, geometry and integrated
   backend/engine incidence of the lost-confirmation transcript remain UNKNOWN.
 
+- **Stop settlement ordering**: acknowledgement by the latest owner revokes its
+  captured Start whether or not admissible settlement already closed the Stop
+  claim. Idle confirms the operation but does not end acknowledged Start before
+  recovery; failed Stop and pre-record boolean false also do not revoke it.
+  Post-record facts still clear UNKNOWN, with the band's Stop as the escape and
+  zero automatic Stops. The 36-cell `LiveView.real-socket-stop.test.ts` permutation
+  matrix owns this contract.
+
 - **Dongle login**: a submission makes one verify-before-save RPC. A failed
   password remains only in the mounted dialog, is never written to Web Storage,
   and disappears on close or device change. Portal unreachability and rejected

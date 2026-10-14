@@ -24,6 +24,14 @@ settlement**, not every decision (`updating` still gates power; `network_ingest`
 still gates Start configuration). Browser scheduling and incidence of the complete
 lost-confirmation transcript against the integrated backend/engine remain UNKNOWN.
 
+The latest Stop owner's acknowledgement revokes its captured Start whether or not
+an admissible settlement already closed the Stop claim. An idle that confirms the
+Stop operation does not by itself end the acknowledged Start before recovery;
+the explicit acknowledgement does. Failed Stop and pre-record boolean-only false
+do not revoke it; post-record admissible facts still settle UNKNOWN. The band's
+Stop remains the escape. The 36-cell real-socket permutation matrix in
+`LiveView.real-socket-stop.test.ts` owns this contract, with no automatic Stops.
+
 **Device updates [EXISTS].** The update orchestrator checks for package and
 system updates on a schedule alongside the older package-update RPC path. It
 automatically installs while idle, and

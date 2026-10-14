@@ -664,6 +664,19 @@ settle a retry or revoke a newer Start. A failed Stop revokes nothing. None of t
 fabricates operation confirmation or rewrites held lifecycle; the operation still
 needs post-press current-link idle lifecycle evidence.
 
+**FIX-16-F10 / D284:** the acknowledgement retains that authority whether or not
+an admissible settlement already closed the Stop claim. Check latest-owner
+identity independently of the claim mutation, then retain the captured
+Start-generation/state fence. An idle that confirms the Stop operation does not
+by itself end the acknowledged Start attempt before recovery; the explicit Stop
+acknowledgement does. Boolean-only false before recovery and failed Stop do not
+revoke it. After exhaustion, admitted post-record facts still clear UNKNOWN under
+F8; otherwise the band's explicit Stop remains the escape. No automatic Stop or
+extra replacement read is introduced. The 36-cell S/R/E permutation matrix in
+`apps/frontend/src/main/LiveView.real-socket-stop.test.ts`, with subsequent Start
+where enabled, is the test owner of this ordering contract. Browser/board proof
+remains owed.
+
 A full pulled status (`ingestPulledStatus`: the reconnect hydrate and the stop
 watchdog's pull) is a SNAPSHOT: a lifecycle it omits is absent now, so it
 replaces the held value. A partial push that omits the field merges as before

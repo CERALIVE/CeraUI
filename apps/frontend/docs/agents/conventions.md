@@ -31,6 +31,13 @@ settles its captured, still-current starting attempt before OR after exhaustion,
 revoking the pending watchdog without requiring a recovery record. Preserve
 Stop-owner and Start-generation fences; failed Stop revokes nothing and operation
 confirmation still requires post-press idle lifecycle evidence.
+**FIX-16-F10 / D284:** that acknowledgement revokes the captured Start whether or
+not admissible settlement already closed the Stop claim; permission is latest
+owner plus captured generation/state, not claim mutation. Idle confirms Stop but
+does not end acknowledged Start before recovery; failed Stop and pre-record
+boolean false do not revoke it. Post-record F8 facts still clear UNKNOWN, with
+the band's explicit Stop as the escape. The 36-cell real-socket S/R/E permutation
+matrix in `LiveView.real-socket-stop.test.ts` owns this contract; no automatic Stops.
 Old generations cannot write or clear newer records. The F7
 allowlist means unrelated to **stream settlement**, not every decision:
 `updating` gates power; `network_ingest` gates Start configuration. The full
