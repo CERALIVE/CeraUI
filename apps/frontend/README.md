@@ -222,6 +222,18 @@ src/
   Settled watchdogs cannot act on the next session; unknown never dispatches Stop
   ([START-LIFECYCLE](../../docs/START-LIFECYCLE.md)).
 
+- **Exhausted Start recovery**: after the current watchdog's bounded evidence
+  is exhausted (failed or twice stream-superseded reads), retain a generation-owned
+  recovery-unknown entry in the existing unresolved-action store. The existing
+  unconfirmed band offers one explicit operator Stop; Start optimism and held
+  lifecycle are not fabricated into idle. Navigation, remount and reconnect do
+  not clear it. Later admissible live/idle evidence after its mark, or that Stop
+  owner's acknowledgement, settles only the matching attempt. Other fields are
+  unrelated to **stream settlement**, not every decision: `updating` still gates
+  power and `network_ingest` still gates Start configuration. Host tests prove
+  scripted carrier behavior; browser scheduling, geometry and integrated
+  backend/engine incidence of the lost-confirmation transcript remain UNKNOWN.
+
 - **Dongle login**: a submission makes one verify-before-save RPC. A failed
   password remains only in the mounted dialog, is never written to Web Storage,
   and disappears on close or device change. Portal unreachability and rejected

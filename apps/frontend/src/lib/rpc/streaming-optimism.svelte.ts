@@ -19,7 +19,12 @@
 import type { StartFailure } from "@ceraui/rpc/schemas";
 
 import { stopStreaming as directStopStreaming } from "$lib/helpers/SystemHelper";
-import { resetUnresolvedStreamActions } from "$lib/streaming/unresolved-stream-actions.svelte";
+import {
+	clearStartRecoveryUnknown,
+	noteStartRecoveryUnknown,
+	ownStartAttempt,
+	resetUnresolvedStreamActions,
+} from "$lib/streaming/unresolved-stream-actions.svelte";
 
 import { pullStatusEvidence } from "./pulled-status";
 import { markStreamIntent } from "./session-epoch.svelte";
@@ -340,6 +345,7 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 		}
 		if (prev === "starting" && store.state === "idle") {
 			clearStartWatchdogTimer();
+			clearStartRecoveryUnknown(store.generation);
 		}
 	}
 
@@ -372,6 +378,14 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 		return {
 			isCurrent,
 			pullStatus: () => pullWatchdogStatus(isCurrent),
+			unknown: () => {
+				if (
+					isCurrent() &&
+					store.state === "starting" &&
+					store.generation === generation
+				)
+					noteStartRecoveryUnknown(generation);
+			},
 			reconcile: (isStreaming: boolean) => {
 				if (isCurrent()) applyReconcile(isStreaming);
 			},
@@ -416,6 +430,7 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 			clearWatchdogTimer();
 			stopStuckBannerState = false;
 			store = transitionToStarting(store);
+			ownStartAttempt(store.generation);
 			armStartWatchdog();
 		},
 		transitionToStopping: () => {
@@ -453,6 +468,7 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 			lifetime += 1;
 			clearStartWatchdogTimer();
 			store = next;
+			clearStartRecoveryUnknown(generation);
 		},
 		clearStopReason: () => {
 			store = clearStopReason(store);

@@ -47,6 +47,8 @@ export interface UnconfirmedStreamInput extends DeviceStreamFacts {
 	 * a failed, timed-out or reset Stop is still UNKNOWN, not over (FIX-16-FRONT3 R2).
 	 */
 	stopUnresolved?: boolean;
+	/** The current Start exhausted its bounded recovery evidence, not its lifetime. */
+	startRecoveryUnknown?: boolean;
 }
 
 /** The device projects an unconfirmed lifecycle while its last confirmed `is_streaming` is false. */
@@ -72,6 +74,7 @@ export function showUnconfirmedStreamStop(
 ): boolean {
 	if (streamStateUnconfirmed(input)) return true;
 	if (input.isStreaming) return false;
+	if (input.startRecoveryUnknown === true) return true;
 	if (input.stopUnresolved === true) return true;
 	return input.stopPending === true && input.lifecycle === "stopping";
 }

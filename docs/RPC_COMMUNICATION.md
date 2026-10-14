@@ -536,6 +536,17 @@ fields are not discarded with it. Partial omissions remain no-ops. Current-link
 and action-lifetime fences still precede ingestion, and full-snapshot lifecycle
 absence is applied only with admissible stream evidence.
 
+These fields are unrelated to **stream settlement**, not every decision:
+`updating` still gates reboot/power, `network_ingest` still gates Start
+configuration, and other metadata gates eligibility/presentation. When the
+current Start watchdog exhausts its bounded evidence, a generation-owned
+recovery-unknown entry in the existing unresolved-action store renders the
+existing band's operator Stop. Only later admissible live/idle facts after the
+record or that Stop owner's acknowledgement clear the matching Start optimism;
+navigation, remount, reconnect and uncertain evidence preserve it. No automatic
+Stop, wire/schema change or fabricated backend lifecycle is added. Browser
+scheduling and integrated backend/engine incidence of the full transcript remain UNKNOWN.
+
 **Source:** `apps/frontend/src/lib/rpc/reconnect.ts`; `apps/frontend/src/lib/rpc/subscriptions.svelte.ts:421-441, 446-468`
 
 ---

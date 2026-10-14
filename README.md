@@ -10,6 +10,16 @@ Both watchdogs are action-lifetime fenced, so a completed cycle cannot stop or
 revert a later session. These are host carrier proofs, not browser or board
 qualification. See [START-LIFECYCLE](docs/START-LIFECYCLE.md).
 
+If a current Start watchdog exhausts its bounded evidence, the existing
+unconfirmed-state band offers the operator's Stop instead of leaving only
+disabled “Starting…”. Its generation-owned unknown record survives navigation
+and reconnect; only later admissible live/idle facts or that owner's acknowledged
+Stop clear it and matching Start optimism. No automatic Stop or backend lifecycle
+is invented. Fields classified unrelated here are **unrelated to stream
+settlement**, not every decision (`updating` still gates power; `network_ingest`
+still gates Start configuration). Browser scheduling and incidence of the complete
+lost-confirmation transcript against the integrated backend/engine remain UNKNOWN.
+
 **Device updates [EXISTS].** The update orchestrator checks for package and
 system updates on a schedule alongside the older package-update RPC path. It
 automatically installs while idle, and

@@ -175,6 +175,17 @@ details/settings/capabilities reads after both hydrate paths settle. This is a
 host-proven frontend evidence rule, not backend install permission or browser/
 board qualification; see [START-LIFECYCLE](START-LIFECYCLE.md).
 
+A current Start watchdog whose bounded evidence is exhausted now retains an
+attempt-generation-owned UNKNOWN record and renders the existing unconfirmed
+band's operator Stop. It survives navigation and reconnect and clears only on
+later admissible live/idle evidence or that Stop owner's acknowledgement. It
+never grants backend update permission or automatically stops media. Other
+fields are unrelated to **stream settlement**, not every decision: `updating`
+still gates reboot/power and `network_ingest` still gates Start configuration.
+Browser scheduling and integrated backend/engine incidence of the full
+lost-confirmation transcript remain UNKNOWN. This recovery wording likewise
+still owes coordinated English/es-419 user-doc publication.
+
 Starting-stream launch limits: root AGENTS.md D8 Known gaps (f).
 
 ## Settings

@@ -109,6 +109,7 @@ import {
 	lifecycleSinceLostStartReply,
 	noteLostStartReply,
 	operatorStopUnresolved,
+	startRecoveryUnknown,
 } from '$lib/streaming/unresolved-stream-actions.svelte';
 import { goLiveUpdateRefusal } from '$lib/updates/update-bands';
 // The TYPES stay static — `import type` is erased at compile, so it creates no
@@ -187,6 +188,7 @@ const streamLifecycle = $derived(getStatus()?.stream_lifecycle);
 $effect(() => {
 	if (streamingOptimismState !== 'starting') return;
 	const generation = getStreamingAttemptGeneration();
+	if (startRecoveryUnknown(generation)) return;
 	const superseded = startOptimismSuperseded({
 		optimismState: streamingOptimismState,
 		isStreaming,
@@ -203,6 +205,7 @@ const streamOutcomeUnknown = $derived(
 		isStreaming,
 		optimismState: streamingOptimismState,
 		stopUnresolved: operatorStopUnresolved(),
+		startRecoveryUnknown: startRecoveryUnknown(getStreamingAttemptGeneration()),
 	}),
 );
 

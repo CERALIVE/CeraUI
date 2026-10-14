@@ -14,15 +14,19 @@
  * still be on the wire. So every Stop claim carries an owner token, and a reply
  * settles only the claim it was made for (FIX-16-F4, C4-2).
  */
+import type { StatusResponse } from "@ceraui/rpc/schemas";
 import {
 	evidenceClock,
+	getLinkEpoch,
 	lifecycleDeliveredSince,
 	markStreamIntent,
+	type Receipt,
 } from "$lib/rpc/session-epoch.svelte";
 
 interface LostStartReply {
 	readonly generation: number;
 	readonly mark: number;
+	readonly recoveryUnknown?: boolean;
 }
 
 interface StopClaim {
@@ -44,9 +48,57 @@ interface StopClaim {
 let lostStart = $state.raw<LostStartReply | undefined>(undefined);
 let stopClaim = $state.raw<StopClaim | undefined>(undefined);
 let stopOwners = 0;
+let startGeneration = 0;
+
+export function ownStartAttempt(generation: number): void {
+	startGeneration = generation;
+	lostStart = undefined;
+}
+
+/** The bounded reader exhausted evidence, not the originating attempt's ownership. */
+export function noteStartRecoveryUnknown(generation: number): void {
+	if (generation !== startGeneration) return;
+	lostStart = { generation, mark: markStreamIntent(), recoveryUnknown: true };
+}
+
+export function startRecoveryUnknown(generation: number): boolean {
+	return (
+		lostStart?.generation === generation && lostStart.recoveryUnknown === true
+	);
+}
+
+export function clearStartRecoveryUnknown(generation: number): void {
+	if (generation === startGeneration && startRecoveryUnknown(generation))
+		lostStart = undefined;
+}
+
+/** Called with selected fields only: a superseded stream group supplies no facts. */
+export function settleStartRecoveryEvidence(
+	status: Pick<Partial<StatusResponse>, "is_streaming" | "stream_lifecycle">,
+	receipt: Receipt,
+): number | undefined {
+	const lost = lostStart;
+	if (
+		lost?.recoveryUnknown !== true ||
+		lost.generation !== startGeneration ||
+		receipt.link !== getLinkEpoch() ||
+		(receipt.dispatch?.at ?? receipt.at) <= lost.mark
+	)
+		return undefined;
+	const settled =
+		status.stream_lifecycle === "idle" ||
+		status.stream_lifecycle === "streaming" ||
+		(status.stream_lifecycle === undefined &&
+			typeof status.is_streaming === "boolean");
+	if (!settled) return undefined;
+	lostStart = undefined;
+	return lost.generation;
+}
 
 /** Attempt `generation`'s start reply was lost to a connection reset. */
 export function noteLostStartReply(generation: number): void {
+	if (generation !== startGeneration || startRecoveryUnknown(generation))
+		return;
 	lostStart = { generation, mark: markStreamIntent() };
 }
 
@@ -109,4 +161,5 @@ export function settleOperatorStop(owner: number): boolean {
 export function resetUnresolvedStreamActions(): void {
 	lostStart = undefined;
 	stopClaim = undefined;
+	startGeneration = 0;
 }

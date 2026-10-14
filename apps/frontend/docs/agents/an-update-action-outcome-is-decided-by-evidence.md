@@ -28,6 +28,16 @@ a loop; failed or twice-superseded reads settle nothing. Stream watchdogs are
 also fenced to the originating action lifetime across every await/effect. This
 does not change update action settlement or the shared operation registry.
 
+The stream allowlist classifies fields as unrelated to **stream settlement**,
+not every decision: `updating` gates reboot/power and `network_ingest` gates Start
+configuration. Exhausted current Start recovery records generation-owned UNKNOWN
+in the existing unresolved-action store and renders the existing band/keys with
+an operator-reachable Stop. Later admissible live/idle facts after its mark or
+that Stop owner's acknowledgement clear only matching Start optimism; navigation,
+remount, reconnect and uncertain evidence do not. No automatic Stop or backend
+lifecycle is fabricated. Browser scheduling and integrated backend/engine
+incidence of the complete lost-confirmation transcript remain UNKNOWN.
+
 | Code | Owns |
 |---|---|
 | `lib/updates/update-action-failure.ts` | what a finished request PROVES (the verdict) |

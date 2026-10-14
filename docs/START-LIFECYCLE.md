@@ -569,7 +569,9 @@ The frontend closes the loop with three pieces, all in `apps/frontend/src/lib/rp
   status via `rpc.status.getStatus` and reconciles: streaming → confirm
   `starting`→`idle` (a lost success push), NOT streaming → revert with
   `start_timeout` (a lost failure reply / wedged attempt). This is the "no infinite
-  spinner" guarantee.
+  spinner" guarantee when the pull is admissible. Failed or twice-superseded
+  evidence instead records generation-owned recovery UNKNOWN and offers the
+  existing band's explicit operator Stop; it does not fake timeout failure or idle.
 
 - **Typed failure rendering** (`LiveView.svelte`). The `failed` RPC result echoes
   the typed `StartFailure` (phase + class + retriable + attemptId, exposed on
@@ -613,8 +615,9 @@ follows an engine-loss stop. It renders an amber band and a Stop exactly when
 | `reconciling` or `stop_failed` | `false` | any | yes, whatever the local optimism |
 | `stopping` | `false` | pending | yes, as one continuous "Stopping..." |
 | any, including `stopping` retained after a lost reply, or absent | `false` | unresolved (pressed, not settled by the device) | yes: failure or "not confirmed yet" copy and an enabled Stop (FIX-16-FRONT3) |
+| any, including held `idle`, `starting`, or absent | `false` | none pending; current Start's recovery evidence exhausted | yes: existing unconfirmed copy and enabled operator Stop (FIX-16-F8) |
 | `reconciling` or `stop_failed` | `true` | any | no: the live cockpit's Stop is on screen |
-| `idle`, `starting`, `streaming`, `reconfiguring`, absent; `stopping` with no pending Stop | any | none unresolved | no: unchanged |
+| `idle`, `starting`, `streaming`, `reconfiguring`, absent; `stopping` with no pending Stop | any | none unresolved and no exhausted Start | no: unchanged |
 
 Local optimism never hides it (FIX-16-C3). The optimistic live cockpit that a
 local `starting` keeps on screen shows a DISABLED "Starting...", not a Stop, and a
@@ -637,6 +640,22 @@ keep `starting` with today's watchdog bound. The lost-reply record lives in
 `lib/streaming/unresolved-stream-actions.svelte.ts`, not in LiveView, because
 NavigationRenderer replaces the destination on navigation while the optimism it
 qualifies is app-wide.
+
+**Exhausted Start recovery (FIX-16-F8).** The bounded reader's undefined result
+does not end the current Start's ownership. The watchdog records recovery UNKNOWN
+in that same unresolved Start record, with its captured generation and a new
+evidence mark. It reuses `live.unconfirmedStream.title/body` and the band's Stop,
+without changing held backend lifecycle or inferring that media stopped. Matching
+Start optimism stays `starting` until positive settlement: an admitted current-link
+live/idle stream-fact delivery after the record (pull dispatch must follow its
+mark), or the current Stop owner's acknowledged `stopped`. Non-settling lifecycle
+pushes, failed/superseded reads, navigation/remount and reconnect retain it. The
+subscription boundary owns settlement even while Live is unmounted; an old
+generation cannot write or clear a newer attempt's record. A positive live push
+settles Start even while away, so it cannot leave a disabled live control or a
+second Stop. The band's pending Stop remains intentionally disabled with its
+existing feedback/TTL behavior; acknowledgement clears this Start record but
+does not fabricate operation confirmation or rewrite held lifecycle.
 
 A full pulled status (`ingestPulledStatus`: the reconnect hydrate and the stop
 watchdog's pull) is a SNAPSHOT: a lifecycle it omits is absent now, so it
@@ -692,7 +711,10 @@ A push needs current-link receipt after the claim. A reply additionally needs
 a request DISPATCHED after the claim, and after the newest applied STREAM-FACT
 observation. `is_streaming` and `stream_lifecycle` are one atomic evidence group;
 unclassified field names fail closed into that group. Telemetry, Wi-Fi, modems,
-SSH and other explicitly unrelated fields do not advance its horizon. Receipt
+SSH and other explicitly unrelated fields do not advance its horizon. This
+classifies them as **unrelated to stream settlement**, not unrelated to every
+decision: `updating` gates reboot/power, `network_ingest` gates Start configuration,
+and other metadata affects presentation/eligibility. Receipt
 orders browser arrival, not device computation or causal
 effect; ingestion is only consumption of that evidence. The status RPC exports
 no comparable producer revision, so a request sent before a newer observation
@@ -710,7 +732,8 @@ implicit stop-edge telemetry/encode/bond retractions use that same field orderin
 and require admissible stream evidence, rather than bypassing it as side effects;
 a full snapshot clears omitted lifecycle only when its stream evidence is
 admissible. The shared reader may make ONE fresh read, never a recursive loop.
-If that read is superseded too, or fails, nothing settles. Restoration still
+If that read is superseded too, or fails, nothing settles; a current Start's
+watchdog publishes its operator-actionable recovery UNKNOWN. Restoration still
 waits for config and the bounded status path to
 settle, then triggers the dialog's details/settings/capabilities rereads.
 
@@ -721,11 +744,15 @@ an old Stop cycle cannot dispatch Stop against the next session, and an old
 Start cycle cannot reconcile or revert the next attempt. An unknown current
 Stop read offers the existing retry banner without redispatching; only positive
 streaming evidence for the still-current operator Stop permits its one existing
-redispatch. Unknown Start evidence does not fake idle or timeout failure.
+redispatch. Unknown Start evidence does not fake idle or timeout failure, and
+bounded exhaustion no longer leaves only a disabled transient control.
 Acknowledging the band's claim and confirming the cockpit optimism are distinct:
 the former accepts its own `stopped` reply; the latter waits for authoritative
 status so the lost-stop-push recovery remains possible. These are host carrier
 proofs, not integrated-backend, browser-scheduling or hardware qualification.
+The full lost-confirmation transcript's incidence against the integrated
+backend/engine, actual media behavior and browser task scheduling remain UNKNOWN;
+phone/RTL touch markup is host-tested, not geometry or hit-testing qualification.
 
 Not covered: `starting` and `stopping` seen from a client that did not start
 them have no Stop, but each is bounded and settles into `idle`, `streaming` or a

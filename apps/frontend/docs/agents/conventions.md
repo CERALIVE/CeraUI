@@ -20,6 +20,18 @@ or proves idle. The start timeout-revert guarantee below requires positive idle
 evidence, not a failed/superseded read. Scripted-socket host tests cover these
 orders; browser/backend scheduling and board qualification remain owed.
 
+**FIX-16-F8 bounded-exhaustion amendment.** The current Start watchdog records
+generation-owned recovery UNKNOWN in the existing unresolved-action store when
+no admissible evidence remains. Render the existing unconfirmed band/keys and
+its operator Stop, never an automatic Stop or fabricated idle/lifecycle. Preserve
+the record through navigation/remount, reconnect and uncertainty; settle matching
+optimism only on admitted later live/idle stream facts or that Stop owner's
+acknowledgement. Old generations cannot write or clear newer records. The F7
+allowlist means unrelated to **stream settlement**, not every decision:
+`updating` gates power; `network_ingest` gates Start configuration. The full
+lost-confirmation transcript's integrated backend/engine incidence and browser
+scheduling remain UNKNOWN; host markup is not phone/RTL geometry proof.
+
 - Stores: Svelte 5 runes only (`$state`, `$derived`, `$effect`) — files named `*.svelte.ts`.
 - **REMEMBER-ME STORES A TOKEN, NEVER THE PASSWORD [EXISTS]:** `localStorage.auth` holds the device-issued, individually revocable `auth_token` from a persistent login. `authenticateWithToken()` and reconnect use `auth.login`'s `input.token` branch, never `input.password`. The auth store persists the issued token before publishing successful auth; an unchecked successful login removes a previous credential, and successful token reauthentication without a replacement retains the existing one. `SystemHelper.savePassword` delegates to `createPassword()`, which clears the remembered credential only after the device confirms the password change that revokes all outstanding tokens. `Layout.svelte`'s explicit clear-saved-session action also best-effort calls `revokePersistentToken`, without delaying the local clear. Extend `src/tests/auth-no-plaintext-password.test.ts` for any new credential writer. Device half: [`../backend/AGENTS.md`](../../../backend/AGENTS.md) → A REMEMBER-ME CREDENTIAL IS A REVOCABLE TOKEN; policy: root charter **G3**.
   **THE TAXONOMY IS THE CONTRACT, and it is board-proven.** `rejected` is the ONLY verdict that may delete `localStorage.auth`; `unreachable` — socket-not-ready, RPC error, timeout — must PRESERVE it, because a device that cannot be reached has said nothing about whether the credential is still valid, and deleting it there is how a backend restart turns into a password prompt the operator did not earn. Drill C2 exercised exactly that on a Rock 5B+: a remembered login survived a reload, then a REAL `systemctl restart ceralive` with two reloads inside the outage, `localStorage.auth` unchanged throughout, no password screen, and the session re-authenticated 1972 ms after HTTP returned; the unchecked-remember control ran in the same session and correctly landed on the password screen with the key absent. One browser-observation trap worth knowing before writing a similar test: a reload while HTTP is down moves Chromium to an error document, and CDP `DOMStorage.getDOMStorageItems` then fails `Frame not found for the given storage id` even though origin storage survives — assert through an in-memory `BrowserContext.storageState()` across that window and never persist that credential-bearing state to disk.

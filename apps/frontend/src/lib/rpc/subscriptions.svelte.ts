@@ -70,7 +70,7 @@ import {
 	type ManagedIngestAccount,
 	parseIngestSlots,
 } from "$lib/streaming/receiver-experience";
-
+import { settleStartRecoveryEvidence } from "$lib/streaming/unresolved-stream-actions.svelte";
 import {
 	beginOperation,
 	confirmOperation,
@@ -98,6 +98,10 @@ import {
 	receiveEvidence,
 } from "./session-epoch.svelte";
 import { selectStatusFields } from "./status-field-order";
+import {
+	reconcileStreamingOptimism,
+	supersedeStartingOptimism,
+} from "./streaming-optimism.svelte";
 import {
 	refreshWifiAdapterModes,
 	resetWifiAdapterModes,
@@ -587,6 +591,10 @@ function handleMessage(
 			} as Exclude<typeof statusState, undefined>;
 			statusState = preserveWireIdentity(statusState, nextStatus);
 			if ("stream_lifecycle" in statusData) noteLifecycleDelivered(received);
+			const recoveredStart = settleStartRecoveryEvidence(statusData, received);
+			if (recoveredStart !== undefined)
+				supersedeStartingOptimism(recoveredStart);
+			if (statusData.is_streaming === true) reconcileStreamingOptimism(true);
 			break;
 		}
 

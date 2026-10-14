@@ -19,6 +19,16 @@ Both watchdogs fence post-await effects to their originating action lifetime.
 Settlement or replacement invalidates running promises as well as timers.
 Real-socket Vitest transcripts cover this contract; browser/board proof is owed.
 
+Bounded Start exhaustion creates a generation-owned recovery-unknown entry in
+the existing unresolved-action store. The existing unconfirmed band retains an
+operator Stop across navigation/remount and reconnect, with no new read loop or
+automatic Stop. Only admitted later live/idle facts after its mark or the current
+Stop owner's acknowledgement clear matching optimism. Non-settling/failed/stale
+evidence does not. “Unrelated” means unrelated to stream settlement, not every
+decision (`updating` gates power; `network_ingest` gates Start configuration).
+Browser scheduling and integrated backend/engine incidence of the complete
+lost-confirmation transcript remain UNKNOWN.
+
 **Visible operator heartbeat [PARTIAL, Todo 32].** `Layout.svelte` sends the
 authenticated `ui.heartbeat` every 30 seconds only while the page is visible
 AND has focus, and sends on focus/visibility return. Unmount or authentication

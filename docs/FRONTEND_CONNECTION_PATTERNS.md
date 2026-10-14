@@ -193,6 +193,16 @@ A settled or superseded cycle never dispatches/reconciles/reverts a later action
 Silence is unknown, never automatic Stop permission. Scripted-socket host tests
 cover these orders; real browser and board qualification remain owed.
 
+Exhausting a current Start watchdog's bounded evidence creates generation-owned
+recovery UNKNOWN in the existing unresolved-action store, not idle. The existing
+unconfirmed band offers the operator's explicit Stop across navigation/remount
+and reconnect. Only later admissible live/idle facts after its mark or the current
+Stop owner's acknowledgement settle that attempt; superseded/failed reads and
+non-settling lifecycle pushes do not. Fields described as unrelated are unrelated
+to **stream settlement**, not every decision (`updating` gates reboot/power;
+`network_ingest` gates Start configuration). Browser scheduling and integrated
+backend/engine incidence of the complete lost-confirmation transcript remain UNKNOWN.
+
 ---
 
 ## Infinite-retry with jittered capped backoff

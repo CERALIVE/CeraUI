@@ -40,7 +40,7 @@ import {
 	osCommand,
 } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
-import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
+import { getStreamingAttemptGeneration, supersedeStartingOptimism, type StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
 import {
 	showUnconfirmedStreamStop,
 	stopConfirmedByDevice,
@@ -52,6 +52,7 @@ import {
 	lifecycleSinceStopClaim,
 	operatorStopUnresolved,
 	settleOperatorStop,
+	startRecoveryUnknown,
 } from '$lib/streaming/unresolved-stream-actions.svelte';
 
 interface Props {
@@ -72,6 +73,7 @@ const visible = $derived(
 		optimismState,
 		stopPending: pending,
 		stopUnresolved: unresolved,
+		startRecoveryUnknown: startRecoveryUnknown(getStreamingAttemptGeneration()),
 	}),
 );
 
@@ -97,6 +99,7 @@ function handleStop() {
 	// so a claim made here would own a request that was never sent.
 	if (isOperationPending(UNCONFIRMED_STOP_OPERATION)) return;
 	const owner = claimOperatorStop();
+	const generation = getStreamingAttemptGeneration();
 	void osCommand({
 		key: UNCONFIRMED_STOP_OPERATION,
 		rpc: () => rpc.streaming.stop(),
@@ -108,7 +111,8 @@ function handleStop() {
 		// anyway), and a reply that arrives after a retry settles nothing: the
 		// newer claim is not its own (FIX-16-F4 C4-2).
 		onResult: (r) => {
-			if (r.success && r.result === 'stopped') settleOperatorStop(owner);
+			if (r.success && r.result === 'stopped' && settleOperatorStop(owner) && startRecoveryUnknown(generation))
+				supersedeStartingOptimism(generation);
 		},
 		// The band renders the failure inline and keeps it on screen; a toast would
 		// vanish while the device is still refusing Start.
