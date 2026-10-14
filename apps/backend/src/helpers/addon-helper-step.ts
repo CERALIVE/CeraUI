@@ -1,5 +1,6 @@
 import { accessSync, constants } from "node:fs";
 import type { Subprocess } from "bun";
+import { disruptiveShutdownSignal } from "../modules/system/disruptive-retry.ts";
 import type { ServiceCompletion } from "../modules/system/disruptive-service-reservation.ts";
 import {
 	type BoundedSpawnOptions,
@@ -12,6 +13,15 @@ import {
 	helperGroupRetirement,
 	type SignalZero,
 } from "./helper-group-retirement.ts";
+import {
+	ADDON_HELPER_LAUNCHER,
+	createHelperLaunchFile,
+	type HelperLaunchFile,
+} from "./helper-launch-file.ts";
+import {
+	helperLaunchRecovery,
+	type LaunchRecoverySleep,
+} from "./helper-launch-recovery.ts";
 import { DEFAULT_SPAWN_TIMEOUT_MS } from "./spawn-policy.ts";
 
 type HelperChild = Subprocess<"ignore", "pipe", "pipe">;
@@ -32,6 +42,8 @@ export type AddonHelperRunnerPorts = {
 	readonly kill: SignalZero;
 	readonly checkLauncher?: () => void;
 	readonly collect?: BoundedSpawnOptions;
+	readonly launchFile?: HelperLaunchFile;
+	readonly sleep?: LaunchRecoverySleep;
 };
 export type AddonHelperDispatch = "none" | "started" | "unknown";
 export type AddonHelperStep = {
@@ -62,10 +74,33 @@ export function createAddonHelperStep(
 	let child: HelperChild | undefined;
 	let exitCode: number | undefined;
 	let dispatch: AddonHelperDispatch = "unknown";
-	const probe = helperGroupRetirement(
-		() => (child ? { pgid: child.pid, exitCode } : undefined),
-		ports.kill,
-	);
+	let lostHandle = false,
+		cleaned = false;
+	const launchFile = ports.launchFile ?? createHelperLaunchFile();
+	const recovery = helperLaunchRecovery(launchFile, ports.sleep);
+	const cleanup = () => {
+		if (cleaned) return;
+		cleaned = true;
+		try {
+			launchFile.cleanup();
+		} catch (cause) {
+			if (!(cause instanceof Error)) throw cause;
+		}
+	};
+	const groupProbe = helperGroupRetirement(() => {
+		if (child) return { pgid: child.pid, exitCode };
+		const pgid = recovery.pgid();
+		return pgid === undefined
+			? undefined
+			: { pgid, exitCode: undefined, reaped: true };
+	}, ports.kill);
+	const probe = async (signal: AbortSignal): Promise<ServiceCompletion> => {
+		if (lostHandle && recovery.pgid() === undefined)
+			await recovery.read(signal);
+		const result = await groupProbe(signal);
+		if (result === "completed") cleanup();
+		return result;
+	};
 	return {
 		spawned: () => child !== undefined,
 		dispatch: () => (child === undefined ? dispatch : "started"),
@@ -80,10 +115,16 @@ export function createAddonHelperStep(
 					ports.checkLauncher ??
 					(() => accessSync("/usr/bin/setsid", constants.X_OK))
 				)();
+				const pidfile = launchFile.prepare();
 				const argv = [
 					"/usr/bin/setsid",
 					"-w",
 					"--",
+					"/usr/bin/bash",
+					"-c",
+					ADDON_HELPER_LAUNCHER,
+					"ceralive-addon-launch",
+					pidfile,
 					"/usr/bin/ceralive-addon-helper",
 					...args,
 				];
@@ -139,6 +180,19 @@ export function createAddonHelperStep(
 								error.syscall === "posix_spawn")))
 				)
 					dispatch = "none";
+				else if (child === undefined) {
+					lostHandle = true;
+					const signal = ports.collect?.signal ?? disruptiveShutdownSignal();
+					// Fixed Bun 1.4.2 post-exec throws wait/reap first; absence is not a census.
+					const identity = await recovery.settle(
+						signal,
+						error instanceof Error &&
+							"syscall" in error &&
+							error.syscall === "pidfd_open",
+					);
+					if (identity === "absent" && !signal.aborted) dispatch = "none";
+				}
+				if (dispatch === "none") cleanup();
 				throw error;
 			}
 		},

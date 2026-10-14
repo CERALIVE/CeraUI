@@ -13,6 +13,7 @@ import {
 	invokeHelperAction,
 	launchErrno,
 } from "./helpers/helper-dispatch-fixture.ts";
+import { helperLaunchFixture } from "./helpers/helper-launch-fixture.ts";
 import { sysextDescriptor } from "./sysext-action-fixture.ts";
 
 useSessionOwnerForFile();
@@ -65,6 +66,7 @@ for (const action of ["enable", "disable", "refresh"] as const) {
 				action === "refresh" ? [action] : [action, "cog-display"],
 				{
 					euid: () => (fault === "non-root" ? 1000 : 0),
+					launchFile: helperLaunchFixture(),
 					checkLauncher: () => {
 						if (fault.startsWith("launcher") || fault === "missing launcher")
 							throw original;
@@ -105,6 +107,7 @@ for (const action of ["enable", "disable", "refresh"] as const) {
 			expect(isDisruptiveActionPending()).toBe(false);
 			expect(getDisruptiveActionDecision()).toEqual({ allowed: true });
 			const repaired = createAddonHelperStep(["refresh"], {
+				launchFile: helperLaunchFixture(),
 				euid: () => 0,
 				checkLauncher: () => undefined,
 				spawn: (_argv, options) => Bun.spawn(["/usr/bin/true"], options),

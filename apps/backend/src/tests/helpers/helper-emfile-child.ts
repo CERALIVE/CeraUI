@@ -11,6 +11,7 @@ import {
 	invokeHelperAction,
 	launchErrno,
 } from "./helper-dispatch-fixture.ts";
+import { helperLaunchFixture } from "./helper-launch-fixture.ts";
 
 useSessionOwnerForFile();
 for (const action of ["enable", "disable", "refresh"] as const) {
@@ -22,6 +23,7 @@ for (const action of ["enable", "disable", "refresh"] as const) {
 			signals = 0,
 			opened = 0;
 		const step = createAddonHelperStep([action, "cog-display"], {
+			launchFile: helperLaunchFixture(),
 			euid: () => 0,
 			checkLauncher: () => undefined,
 			spawn: (_argv, options) => {
@@ -81,6 +83,7 @@ for (const action of ["enable", "disable", "refresh"] as const) {
 			expect(isDisruptiveActionPending()).toBe(false);
 			expect(getDisruptiveActionDecision()).toEqual({ allowed: true });
 			const repaired = createAddonHelperStep(["refresh"], {
+				launchFile: helperLaunchFixture(),
 				euid: () => 0,
 				checkLauncher: () => undefined,
 				spawn: (_argv, options) => Bun.spawn(["/usr/bin/true"], options),

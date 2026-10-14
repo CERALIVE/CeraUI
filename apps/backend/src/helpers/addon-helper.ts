@@ -20,7 +20,7 @@
  * (T27). The packaged backend runs as root; add-on lifecycle authority remains
  * in the helper, invoked here as:
  *
- *     /usr/bin/setsid -w -- /usr/bin/ceralive-addon-helper <enable|disable|refresh> [id]
+ *     checked setsid → write-before-exec Bash launcher → helper <enable|disable|refresh> [id]
  *     sudo ceralive-addon-helper status
  *
  * Design rules (deliberate):

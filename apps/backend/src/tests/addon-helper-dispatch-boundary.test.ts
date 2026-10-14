@@ -11,6 +11,7 @@ import {
 	invokeHelperAction,
 	launchErrno,
 } from "./helpers/helper-dispatch-fixture.ts";
+import { helperLaunchFixture } from "./helpers/helper-launch-fixture.ts";
 
 useSessionOwnerForFile();
 let f: ReturnType<typeof helperDispatchFixture>;
@@ -24,6 +25,7 @@ test("a child handle exists when collector rejects EIO, so the helper stays held
 	// Given a real returned child whose collector throws the same errno as prelaunch.
 	const original = launchErrno("EIO");
 	const step = createAddonHelperStep(["refresh"], {
+		launchFile: helperLaunchFixture(),
 		euid: () => 0,
 		checkLauncher: () => undefined,
 		spawn: (_argv, options) => Bun.spawn(["/usr/bin/true"], options),
@@ -81,6 +83,7 @@ for (const moment of [
 		// Given a real pipe-producing child with its exit controlled by collector termination.
 		const abort = new AbortController();
 		const step = createAddonHelperStep(["refresh"], {
+			launchFile: helperLaunchFixture(),
 			euid: () => 0,
 			checkLauncher: () => undefined,
 			spawn: (_argv, options) => {

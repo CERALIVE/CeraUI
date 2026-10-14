@@ -842,7 +842,8 @@ contexts and must acquire a fresh same-ID owner. The seam takes one service-life
 reservation owned by the active operation; nested steps re-enter by identity and the
 outer hold lasts until positive completion/failure evidence. Direct unit steps keep
 their unit job/steady-state evidence. Helper enable/disable/refresh uses ordinary Bun
-spawn of checked `/usr/bin/setsid -w -- /usr/bin/ceralive-addon-helper action [id]`, no
+spawn of checked `/usr/bin/setsid -w -- /usr/bin/bash -c '<launcher>' ceralive-addon-launch
+<pidfile> /usr/bin/ceralive-addon-helper action [id]`, no
 sudo, PTY, detached or `-f`: PID=PGID=SID. Root is required; fixed PATH/locale excludes
 BASH_ENV, SHELLOPTS and CERALIVE_* overrides. Status retains its existing sudo path.
 With a returned handle, success and every possibly-effectful failure (exit 1 included) require actual child
@@ -855,27 +856,36 @@ tagged `socketpair`, `fcntl` or `posix_spawn`, proves no dispatch and releases i
 with the original error, no group/unit probes
 and no wakeup. Once a handle exists, even abort racing assignment is started; unknown
 dispatch retains evidence. Bun 1.4.2 can exec, fail `pidfd_open`, block in `wait4`, reap the
-leader and throw without a handle. This, absent/unknown tags and non-Error throws stay
-unknown. Handle-less unknown uses consistent kernel-backed helper/sysext census followed
-by descriptor units, with capped cancellable backoff. The fallback cannot enumerate
-arbitrary unrecognized orphan install/rm/jq/systemctl descendants or recover their lost
-group; empty recognized evidence is not absolute descendant retirement. Unreadable rows
-and persistent unrelated churn may over-hold, but an empty readable census plus settled
-units can settle harmless untagged pre-exec failure. The tag proof depends on the fixed Bun 1.4.2 spawn shape
+leader and throw without a handle. The launcher writes `$$` with builtin printf BEFORE
+exec and exits125 on write failure, so the helper cannot run without recorded identity.
+One UUID file is exclusively precreated under root-owned0700 `/run/ceralive/addon-launch/`;
+its FD remains until no-dispatch or group retirement. Only handle-less recovery reads
+its bounded bytes; whole integer2..2147483647 feeds the same negative-group predicate
+and latch before descriptor units. Early unlink cannot erase the retained inode.
+Invalid/unreadable identity stays UNKNOWN; invalid nonempty bytes never become absence
+clearance. Empty pidfd identity proves no helper exec under the fixed-Bun1.4.2 assumption
+that every naturally reachable post-exec throw reaps first (spawn_process.rs:552–568,
+991–1002 at bun-v1.4.2; ordinary ECHILD means already gone). Untagged/future/non-Error
+absence gets cancellable100/200/400ms re-reads (700ms total), still relying on that
+assumption, never on elapsed-time death. Reaudit before changing options/runtime.
+Cleanup is best-effort, inode-checked, and never completion authority. First-use sweep
+precedes this backend's active files; crash residue is not adopted, cannot affect another
+UUID request, and reboot clears tmpfs. The tag proof depends on the fixed Bun 1.4.2 spawn shape
 and does not change other callers' default policy or enable/disable failure tokens.
 Cancellation/retirement fences retry scheduling even when the first observation rejects.
 Child-only collector TERM/KILL, timeout
 failure and original partial output/137/143 are preserved. TERM-induced zero is failure.
 Fork/exec/double-fork/reparented descendants retain membership; zombies hold until reaped.
-The generic outer census remains separate and also serves the rare handle-less unknown
-fallback, never ANDed with normal owned-group completion.
+The generic outer census remains separate, never helper completion authority.
 
 Groups do not cover a descendant calling setsid/setpgid (adding one triggers scope
 replacement), already-submitted PID-1 jobs, PID-1/other-daemon work, manager Reload
 (enable/disable and sysext metadata), or unacknowledged requests from a killed client.
 Another connection's descriptor read does not prove all delegated work drained.
 Manager's independent systemctl tails keep their own unit evidence, not group ownership.
-Installed tools/init/delegation remain a board gate. A signal-derived
+Installed tools/init/delegation remain a board gate, including `/usr/bin/bash`, private
+`/run` creation under the unit sandbox, and pid-file write/removal per step. Forcing
+post-exec pidfd failure there requires privilege; host seccomp is not board proof. A signal-derived
 client exit (status >= 128 or a signal name) is uncertain, never a failure verdict.
 
 **What a stuck hold means for the operator.** Service holds have no supersede path.

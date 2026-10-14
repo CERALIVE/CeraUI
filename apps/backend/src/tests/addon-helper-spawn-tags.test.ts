@@ -8,6 +8,7 @@ import {
 	helperDispatchFixture,
 	invokeHelperAction,
 } from "./helpers/helper-dispatch-fixture.ts";
+import { helperLaunchFixture } from "./helpers/helper-launch-fixture.ts";
 import { sysextDescriptor } from "./sysext-action-fixture.ts";
 
 useSessionOwnerForFile();
@@ -50,6 +51,7 @@ for (const action of ["enable", "disable", "refresh"] as const) {
 					},
 				});
 				const step = createAddonHelperStep([action], {
+					launchFile: helperLaunchFixture(),
 					euid: () => 0,
 					checkLauncher: () => undefined,
 					spawn: () => {
@@ -83,7 +85,7 @@ for (const action of ["enable", "disable", "refresh"] as const) {
 		"non-Error",
 		"abort in catch",
 	] as const) {
-		test(`${action} handle-less ${kind} with empty census settles promptly but cannot bypass units`, async () => {
+		test(`${action} handle-less ${kind} with retired recorded group settles promptly but cannot bypass units`, async () => {
 			// Given no live actors, but no source-proven no-dispatch error either.
 			const original =
 				kind === "non-Error"
@@ -111,10 +113,17 @@ for (const action of ["enable", "disable", "refresh"] as const) {
 				},
 			});
 			const step = createAddonHelperStep([action], {
+				launchFile: {
+					...helperLaunchFixture(),
+					read: async () => {
+						reads++;
+						return "42\n";
+					},
+				},
 				euid: () => 0,
 				checkLauncher: () => undefined,
 				kill: () => {
-					throw new Error("no PGID");
+					throw Object.assign(new Error("retired group"), { code: "ESRCH" });
 				},
 				spawn: () => {
 					if (kind === "abort in catch") cancelDisruptiveRetries();
@@ -128,7 +137,7 @@ for (const action of ["enable", "disable", "refresh"] as const) {
 				readDescriptor: async () => sysextDescriptor,
 				createStep: () => step,
 			}).catch((error: unknown) => error);
-			// Then unknown is retained as evidence; only positive census plus units clear it.
+			// Then unknown is retained as evidence; only recorded group retirement plus units clear it.
 			expect(result).toBe(original);
 			expect(step.dispatch()).toBe("unknown");
 			if (kind === "abort in catch") {

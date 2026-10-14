@@ -11,6 +11,7 @@ import { isDisruptiveActionPending } from "../modules/system/disruptive-action-r
 import { getDisruptiveActionDecision } from "../modules/system/disruptive-action-runtime.ts";
 import { cancelDisruptiveRetries } from "../modules/system/disruptive-retry.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
+import { helperLaunchFixture } from "./helpers/helper-launch-fixture.ts";
 import { helperStepFixture } from "./helpers/helper-step-fixture.ts";
 import {
 	completionFixture,
@@ -213,6 +214,7 @@ for (const euid of [1000, 0]) {
 		let spawns = 0;
 		let probes = 0;
 		const step = createAddonHelperStep(["refresh"], {
+			launchFile: helperLaunchFixture(),
 			euid: () => euid,
 			checkLauncher: () => {
 				throw errno("ENOENT");

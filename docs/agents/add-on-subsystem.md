@@ -98,7 +98,8 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
   type's steady state (`.service` running/exited, `.socket` listening, `.timer`
   waiting/elapsed, `.path` waiting, `.target` active, `.mount` mounted, or any
     inactive/dead or failed/failed). Mutating helper enable/disable/refresh instead uses
-    ordinary Bun spawn of `/usr/bin/setsid -w -- /usr/bin/ceralive-addon-helper action [id]`:
+    ordinary Bun spawn of `/usr/bin/setsid -w -- /usr/bin/bash -c '<launcher>'
+    ceralive-addon-launch <pidfile> /usr/bin/ceralive-addon-helper action [id]`:
     no sudo, PTY, detached spawning or `setsid -f`. The checked no-fork launcher makes
     PID=PGID=SID; `-w` itself does NOT wait for all descendants. The packaged backend is
     root/root and refuses non-root mutation. PATH and locale are fixed; BASH_ENV,
@@ -116,13 +117,27 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
     abort racing its assignment; allocated-but-unexecuted evidence stays unknown. This
     pre-exec tag proof depends on the fixed Bun 1.4.2 spawn shape, not generic errno
     clearance. Bun can exec successfully, fail `pidfd_open`, block in `wait4` until the
-    leader exits, then throw with no handle. That error, absent/unknown tags and non-Error
-    throws stay unknown. Handle-less unknown uses the existing consistent kernel-backed
-    helper/sysext census followed by descriptor units, never a nonexistent leader/PGID.
-    This rare fallback cannot enumerate arbitrary unrecognized orphan install/rm/jq/systemctl
-    descendants or recover their lost group; empty recognized evidence is not absolute
-    descendant retirement. Unreadable rows or persistent unrelated churn may over-hold.
-    It uses capped cancellable retries, not a total deadline. Other callers' ordinary-failure
+    leader exits, then throw with no handle. A minimal Bash launcher records `$$` with
+    builtin `printf` BEFORE `exec "$@"`, exiting 125 if the write fails. Exec preserves
+    PID=PGID=SID. The backend exclusively precreates one UUID `.pid` file in root-owned
+    0700 `/run/ceralive/addon-launch/` and retains its FD until no-dispatch/group retirement;
+    the packaged unit has no read-only `/run` restriction. Normal handles never read it.
+    Handle-less recovery reads bounded bytes from that inode (even after unlink), parses
+    a whole integer 2..2147483647, caches it, and uses the SAME negative-group ESRCH latch
+    and descriptor-unit proof; a name census is never helper retirement authority.
+    Invalid/nonempty/unreadable identity remains UNKNOWN, including a later empty read.
+    Empty identity after a `pidfd_open` throw proves no helper exec under the fixed Bun
+    1.4.2 assumption that every naturally reachable post-exec throw reaps the child first
+    (spawn_process.rs:552–568,991–1002 at tag bun-v1.4.2); the wait loop retries EINTR,
+    and ordinary ECHILD means already gone. Untagged/future/non-Error absence gets
+    cancellable 100/200/400 ms re-reads (700 ms total) before the same absence decision.
+    That delay alone cannot prove death for an unsupported future non-reaping runtime:
+    any option/runtime change MUST reopen the audit. Original throws are preserved.
+    Cleanup is best-effort and inode-checked only after no dispatch or group retirement;
+    it never grants completion. First-use sweep removes old UUID files before this
+    backend creates any; crash residue is never adopted and reboot clears tmpfs. Files
+    bind only their own request, so stale bytes cannot over-hold another request.
+    Valid recovered groups use capped cancellable retries, not a total deadline. Other callers' ordinary-failure
     policy and manager failure tokens are unchanged.
     Enable/disable derives the
     baked unmask→enable→start unit union (deduplicated) before submission, then observes
@@ -136,8 +151,8 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
     and sysext metadata reload), or an unacknowledged request left by a killed client.
     A descriptor observation on another connection is not a general request-drain barrier.
     Manager's separate systemctl tails retain their own unit evidence, not group ownership.
-    The legacy census remains for generic outer operations and the rare handle-less unknown
-    fallback, never as an additional AND-condition for a returned helper handle; its readable
+    The legacy census remains ONLY for generic outer operations,
+    never as an additional AND-condition or alternative helper proof; its readable
     named observations are not a descendant inventory.
     Timers only re-observe, never clear a hold. Cancellation/retired tickets schedule no
     retry, including rejection of the first observation. Installed behavior remains unqualified.
@@ -160,7 +175,9 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
     Board drills must establish installed setsid/environment, real helper descendants,
     orphan/zombie retirement under the installed init, signal/output mapping, queued
     descriptor jobs and service restart on BOTH boards, plus a real launcher failure leaving no hold
-    and a post-exec pidfd failure retaining exclusion. Forcing that pidfd fault on an installed
+    and a post-exec pidfd failure retaining exclusion. Verify installed `/usr/bin/bash`,
+    `/run` directory permissions under the service sandbox and file write/removal per step.
+    Forcing that pidfd fault on an installed
     image requires privileged instrumentation; the unprivileged host control is not board proof.
    Host fixtures do not prove installed completion, shutdown or safe power loss.
 - **Validation deadline**: `runValidateCmd` uses `spawnWithTimeout` and its shared

@@ -31,7 +31,7 @@ const faults = [
 
 for (const action of ["enable", "disable", "refresh"] as const) {
 	for (const [index, original] of faults.entries()) {
-		test(`${action} post-exec fault ${index} retains its real survivor then settles census and descriptor jobs`, async () => {
+		test(`${action} post-exec fault ${index} retains its real survivor then settles group and descriptor jobs`, async () => {
 			// Given a ready real survivor, with the leader reaped before the spawn port throws.
 			const f = await helperPostExecFixture(original);
 			const step = f.createStep(
@@ -51,8 +51,8 @@ for (const action of ["enable", "disable", "refresh"] as const) {
 				expect(step.dispatch()).toBe("unknown");
 				expect(f.alive()).toBe(true);
 				expect(f.pgid()).toBeGreaterThan(1);
-				expect(f.signals()).toBe(0);
-				expect(f.reads()).toBeGreaterThan(0);
+				expect(f.signals()).toBeGreaterThan(0);
+				expect(f.reads()).toBe(0);
 				expect(f.units).toEqual([]);
 				expect(isDisruptiveActionPending()).toBe(true);
 				expect(getDisruptiveActionDecision()).toEqual({

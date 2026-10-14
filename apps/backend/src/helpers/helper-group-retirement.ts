@@ -3,6 +3,7 @@ import type { ServiceCompletion } from "../modules/system/disruptive-service-res
 export type HelperGroupObservation = {
 	readonly pgid: number;
 	readonly exitCode: number | undefined;
+	readonly reaped?: true;
 };
 export type SignalZero = (pid: number, signal: 0) => unknown;
 
@@ -15,10 +16,18 @@ export function helperGroupRetirement(
 		if (signal.aborted) return "unknown";
 		if (retired) return "completed";
 		const owned = read();
-		if (!owned || !Number.isSafeInteger(owned.pgid) || owned.pgid <= 1)
+		if (
+			!owned ||
+			!Number.isSafeInteger(owned.pgid) ||
+			owned.pgid <= 1 ||
+			owned.pgid > 2147483647
+		)
 			return "unknown";
-		if (owned.exitCode === undefined) return "in-flight";
-		if (!Number.isInteger(owned.exitCode) || owned.exitCode < 0)
+		if (owned.exitCode === undefined && !owned.reaped) return "in-flight";
+		if (
+			owned.exitCode !== undefined &&
+			(!Number.isInteger(owned.exitCode) || owned.exitCode < 0)
+		)
 			return "unknown";
 		try {
 			kill(-owned.pgid, 0);

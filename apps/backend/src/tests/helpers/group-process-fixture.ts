@@ -7,6 +7,7 @@ import {
 	type AddonHelperRunnerPorts,
 	createAddonHelperStep,
 } from "../../helpers/addon-helper-step.ts";
+import { createHelperLaunchFile } from "../../helpers/helper-launch-file.ts";
 import { prepareHelperScriptGroup } from "./helper-step-fixture.ts";
 
 const PROGRAM = `import os, sys, signal, json
@@ -93,12 +94,13 @@ export async function groupProcessFixture(mode: string, code = 0) {
 	}> = [];
 	const ports: AddonHelperRunnerPorts = {
 		euid: () => 0,
+		launchFile: createHelperLaunchFile(dir, process.getuid?.() ?? -1),
 		spawn: (argv, options) => {
 			launches.push({ argv: [...argv], options });
 			child = script
 				? Bun.spawn(
 						[
-							...argv.slice(0, 3),
+							...argv.slice(0, 8),
 							new URL("../../../ceralive-addon-helper", import.meta.url)
 								.pathname,
 							action,
@@ -120,7 +122,7 @@ export async function groupProcessFixture(mode: string, code = 0) {
 					)
 				: Bun.spawn(
 						[
-							...argv.slice(0, 3),
+							...argv.slice(0, 8),
 							"/usr/bin/python3",
 							"-c",
 							PROGRAM,

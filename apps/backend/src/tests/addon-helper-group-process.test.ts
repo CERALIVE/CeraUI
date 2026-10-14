@@ -7,6 +7,7 @@ import {
 } from "../helpers/addon-helper.ts";
 import { ADDON_HELPER_ENV } from "../helpers/addon-helper-step.ts";
 import { SpawnTimeoutError } from "../helpers/bounded-spawn.ts";
+import { ADDON_HELPER_LAUNCHER } from "../helpers/helper-launch-file.ts";
 import * as spawnPolicy from "../helpers/spawn-policy.ts";
 import { isDisruptiveActionPending } from "../modules/system/disruptive-action-reservation.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
@@ -170,6 +171,11 @@ test("ordinary checked launcher preserves PID=PGID=SID and fixed environment wit
 					"/usr/bin/setsid",
 					"-w",
 					"--",
+					"/usr/bin/bash",
+					"-c",
+					ADDON_HELPER_LAUNCHER,
+					"ceralive-addon-launch",
+					expect.stringMatching(/\/helper-group-[^/]+\/[a-f0-9-]+\.pid$/),
 					"/usr/bin/ceralive-addon-helper",
 					"refresh",
 				],

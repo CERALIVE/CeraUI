@@ -29,6 +29,12 @@ resume or changing legacy-image behaviour. The fixed build has **not** been
 re-proven on a board; the OS/slot flows are not qualified by these installs.
 See also [update recovery](docs/UPDATE-RECOVERY.md).
 
+Add-on mutations preserve request-owned process-group evidence even when Bun loses
+the spawn handle: a checked Bash launcher records its identity before helper exec,
+and recovery probes that group before descriptor jobs. Normal handles never read
+the per-request `/run` file; unreadable/invalid identity remains unknown. This is
+host-tested, not installed qualification. See [launcher contract and limits](docs/agents/add-on-subsystem.md).
+
 Tracked package recovery reserves exit authority for both committing and
 downloading snapshots. Owned wire `success` precedes restart-permission checking,
 so it does not prove a new backend is running. If durable success cannot be written,

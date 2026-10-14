@@ -13,6 +13,7 @@ import {
 	helperDispatchFixture,
 	launchErrno,
 } from "./helpers/helper-dispatch-fixture.ts";
+import { helperLaunchFixture } from "./helpers/helper-launch-fixture.ts";
 import { sysextDescriptor } from "./sysext-action-fixture.ts";
 
 useSessionOwnerForFile();
@@ -36,6 +37,7 @@ for (const retired of [false, true]) {
 				},
 			});
 			const step = createAddonHelperStep(["enable", "cog-display"], {
+				launchFile: helperLaunchFixture(),
 				euid: () => 0,
 				checkLauncher: () => undefined,
 				spawn: (_argv, options) => Bun.spawn(["/usr/bin/true"], options),
