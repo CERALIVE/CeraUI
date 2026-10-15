@@ -1307,7 +1307,7 @@ export interface ManagedProcess {
 	readonly stderr?: ReadableStream<Uint8Array> | null;
 	readonly exited: Promise<number>;
 	exitCode: number | null;
-	signalCode: NodeJS.Signals | null;
+	signalCode: Bun.Subprocess["signalCode"];
 	kill(signal?: NodeJS.Signals | number): void;
 }
 
