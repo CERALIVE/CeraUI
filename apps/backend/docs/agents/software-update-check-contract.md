@@ -37,6 +37,8 @@ Address-family and install-set rules are in `docs/DEVICE-UPDATES.md`.
 Legacy classification is exact-name (`package-layer.ts`); capable-image
 classification is origin-based (`apt-all-packages.ts`). See `docs/DEVICE-UPDATES.md`.
 
+Simulated `Inst` rows accept one optional terminal ` []` or ` [name name]` broken-package annotation (single spaces, each name matching `APT_PACKAGE_NAME_RE`); these names are context only, never install authority, in discovery and the pinned recheck.
+
 Capable APT refusals log `reason`, a closed substep, process `exit` when known,
 and optional sanitized detail (500 UTF-16 units maximum) at the discovery or
 pinned-install catch. Normalize the whole text (including CR/LF and Unicode line

@@ -1,0 +1,17 @@
+NOTE: This is only a simulation!
+      apt-get needs root privileges for real execution.
+      Keep also in mind that locking is deactivated,
+      so don't depend on the relevance to the real current situation!
+Reading package lists...
+Building dependency tree...
+Reading state information...
+Calculating upgrade...
+The following packages will be upgraded:
+  curl libcurl3t64-gnutls libcurl4t64
+3 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+Inst curl [8.14.1-2+deb13u5] (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64]) []
+Inst libcurl4t64 [8.14.1-2+deb13u5] (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Inst libcurl3t64-gnutls [8.14.1-2+deb13u5] (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Conf curl (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Conf libcurl4t64 (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Conf libcurl3t64-gnutls (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])

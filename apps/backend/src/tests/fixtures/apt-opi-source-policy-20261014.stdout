@@ -1,0 +1,19 @@
+Package files:
+ 100 /var/lib/dpkg/status
+     release a=now
+ 500 https://deb.debian.org/debian trixie-updates/main arm64 Packages
+     release v=13-updates,o=Debian,a=stable-updates,n=trixie-updates,l=Debian,c=main,b=arm64
+     origin deb.debian.org
+ 500 https://deb.debian.org/debian-security trixie-security/main arm64 Packages
+     release v=13,o=Debian,a=stable-security,n=trixie-security,l=Debian-Security,c=main,b=arm64
+     origin deb.debian.org
+ 500 https://deb.debian.org/debian trixie/non-free-firmware arm64 Packages
+     release v=13.7,o=Debian,a=stable,n=trixie,l=Debian,c=non-free-firmware,b=arm64
+     origin deb.debian.org
+ 500 https://deb.debian.org/debian trixie/main arm64 Packages
+     release v=13.7,o=Debian,a=stable,n=trixie,l=Debian,c=main,b=arm64
+     origin deb.debian.org
+ 500 https://apt.ceralive.tv/dists/stable/binary-arm64 ./ Packages
+     release o=CeraLive,a=stable,n=stable,l=CeraLive,c=
+     origin apt.ceralive.tv
+Pinned packages:

@@ -50,13 +50,15 @@ export function parseAptSimulation(text: string): PinnedAptPackage[] {
 	for (const line of text.split("\n")) {
 		if (!line.startsWith("Inst ")) continue;
 		const match =
-			/^Inst (\S+) (?:\[[0-9][A-Za-z0-9.+:~-]*\] )?\(([0-9][A-Za-z0-9.+:~-]*) [A-Za-z0-9][A-Za-z0-9.+:/_-]*(?:(?:, *| +)[A-Za-z0-9][A-Za-z0-9.+:/_-]*)* \[[a-z0-9][a-z0-9-]*\]\)$/.exec(
+			/^Inst (\S+) (?:\[[0-9][A-Za-z0-9.+:~-]*\] )?\(([0-9][A-Za-z0-9.+:~-]*) [A-Za-z0-9][A-Za-z0-9.+:/_-]*(?:(?:, *| +)[A-Za-z0-9][A-Za-z0-9.+:/_-]*)* \[[a-z0-9][a-z0-9-]*\]\)(?: \[([^[\]]*)\])?$/.exec(
 				line,
 			);
 		if (
 			!match ||
 			!APT_PACKAGE_NAME_RE.test(match[1] ?? "") ||
 			!VERSION_RE.test(match[2] ?? "") ||
+			(Boolean(match[3]) &&
+				match[3]?.split(" ").some((name) => !APT_PACKAGE_NAME_RE.test(name))) ||
 			names.has(match[1] ?? "")
 		) {
 			throw new AptAllRefusalError("discovery_failed", "parse-simulation", {
