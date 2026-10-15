@@ -127,8 +127,9 @@ bun run check
 bun run test
 ```
 
-The package's `test` script runs `bun test --parallel` on Bun 1.4.2, adopted
-after five smoke runs and twenty consecutive clean full-suite runs. Files run
+The package's `test` script runs `bun test --parallel` on the pinned Bun 1.4.3.
+Parallel execution was adopted on 1.4.2 after five smoke runs and twenty consecutive
+clean full-suite runs. Files run
 in isolated worker globals across worker processes, but filesystem paths are still shared. Tests that
 persist fixtures must use per-file `mkdtemp` roots and the existing path setters
 (runtime config: `setConfigFilePath`). Before production ownership initializes,
