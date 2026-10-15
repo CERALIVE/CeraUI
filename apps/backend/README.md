@@ -117,6 +117,10 @@ address-matched `list-devices` node; BlueALSA retains its capture-PCM oracle.
 
 ### Type-check
 
+The managed subprocess signal field derives from Bun's `Subprocess` type.
+Numeric signals remain terminal under the existing strict-null liveness checks;
+no signal conversion or process-lifecycle behavior changes with the 1.4.3 typings.
+
 ```bash
 bun run check
 ```
