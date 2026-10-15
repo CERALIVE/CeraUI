@@ -48,10 +48,16 @@ Redaction precedes truncation. The internal SHA256 fingerprint uses the FULL
 sanitized text, never raw secrets or the truncated display. The last reason/exit/
 fingerprint signature per step is deduplicated for the process lifetime, including
 across successful discovery; safe evidence changed beyond the display cap logs again.
+URL/JWT recognition consumes disjoint maximal tokens rather than retrying their
+suffix at every internal boundary. No input prefix cap hides late markers or safe
+identity. Valid Unicode retains its UTF-8 SHA256; lone-surrogate text uses a 0xff
+domain byte followed by its full UTF-16LE representation, avoiding UTF-8 replacement
+collisions without hashing suppressed credentials.
 This context is internal/log-only: refusal state, notification and install
 admission are unchanged. Coverage: `tests/apt-all-diagnostics.test.ts` and
 `tests/apt-all-diagnostic-text.test.ts`, `tests/apt-all-diagnostic-folding.test.ts`
-and `tests/apt-all-diagnostic-dedupe.test.ts`; host proof, not board qualification.
+and `tests/apt-all-diagnostic-dedupe.test.ts`, `tests/apt-all-diagnostic-linear.test.ts`;
+host proof, not board qualification.
 
 - Apt reports kept-back packages alongside real upgrades; retain both readings.
 - **Kept-back membership WINS over the upgradable list.** apt can name a package
