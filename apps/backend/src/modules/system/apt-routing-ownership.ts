@@ -14,6 +14,7 @@ export class AptRoutingRefusal extends Error {
 			| "busy"
 			| "cleanup-pending"
 			| "unjournaled-state"
+			| "operation-failed"
 			| "journal-unavailable",
 		cause?: unknown,
 	) {
@@ -35,9 +36,12 @@ const absent = (error: unknown): boolean =>
 	error instanceof Error &&
 	"stderr" in error &&
 	typeof error.stderr === "string" &&
-	/^(?:RTNETLINK answers: )?(?:No such file or directory|No such process|FIB table does not exist)\s*$/.test(
-		error.stderr,
-	);
+	(/^(?:RTNETLINK answers: )?(?:No such file or directory|No such process)$/.test(
+		error.stderr.trim(),
+	) ||
+		/^(?:(?:RTNETLINK answers: |Error: )?(?:ipv[46]: )?)?FIB table does not exist\.?(?:\nDump terminated)?$/.test(
+			error.stderr.trim(),
+		));
 
 export function createAptRoutingOwnership(
 	store: AptRoutingStore = aptRoutingFileStore(),
@@ -129,7 +133,7 @@ export function createAptRoutingOwnership(
 				}
 				return bounded(...args);
 			};
-			const runner: typeof run = async (bin, args, options) => {
+			const execute: typeof run = async (bin, args, options) => {
 				const family = args[0] === "-6" ? 6 : 4;
 				const tokens = args.filter((arg) => arg !== "-6");
 				if (bin !== "ip") throw new AptRoutingRefusal("unjournaled-state");
@@ -166,7 +170,14 @@ export function createAptRoutingOwnership(
 				return raw(bin, args, options);
 			};
 			return {
-				runner,
+				runner: async (...args) => {
+					try {
+						return await execute(...args);
+					} catch (error) {
+						if (error instanceof AptRoutingRefusal) throw error;
+						throw new AptRoutingRefusal("operation-failed", error);
+					}
+				},
 				release() {
 					busy = false;
 					if (entries.length || dirty)

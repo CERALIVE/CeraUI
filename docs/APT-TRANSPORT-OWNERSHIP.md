@@ -13,6 +13,14 @@ command after its ten-second monotonic budget expires. Each command timeout is
 bounded by the remaining budget. A missing already-deleted entry is reconciled.
 Uncertain journal reads, malformed authority and failed persistence refuse.
 
+Absent-table admission and already-absent deletion accept only complete known
+iproute2 replies: the legacy RTNETLINK absence strings and the `Error:` FIB-table
+forms, with IPv4/IPv6, optional period and the exact `Dump terminated` continuation.
+An additional or unknown line still refuses. Command or intent-write failure
+inside the APT-owned runner becomes `operation-failed`; existing simulation or
+download settlement clears the busy state rather than leaving `downloading`.
+Work-callback errors are not reclassified as routing errors.
+
 The APT owner never adopts or sweeps unjournaled reserved state. Matching UID
 rules or nonempty APT tables without journal authority refuse; the existing OS
 startup/settlement sweep handles those. Foreign UID rules and nonjournaled routes
@@ -32,6 +40,15 @@ Coverage: `d13-fix-cleanup.test.ts`, `d13-routing-journal.test.ts` and
 `d13-routing-restart.test.ts`. The latter kills real Bun children before and after
 all four installs and at transfer entry, then reloads the journal against a durable
 stateful fake of Linux routing. It is not privileged kernel or board evidence.
+`apt-routing-kernel.test.ts` additionally runs K0 (shared-pin control), K1 (fresh
+tables), K2 (created/emptied tables) and K3 (reboot-surviving intents) in separate
+unprivileged user/network namespaces with dummy uplinks. It never modifies host
+routing. It requires Linux, iproute2, Bash and enabled unprivileged namespaces;
+unsupported hosts fail explicitly rather than silently skipping kernel coverage.
+The `iproute2-7.2-absent.json` fixture preserves both family dump replies and the
+delete reply from Linux 7.2 / iproute2 7.2.0. Closed-reply and install-settlement
+regressions live in `apt-routing-absence.test.ts` and
+`apt-routing-install-failure.test.ts`.
 
 ## Cancellation and timeout provenance
 

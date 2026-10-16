@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { AptRoutingRefusal } from "../modules/system/apt-routing-ownership.ts";
 import { withRoutingScenario } from "./helpers/d13-routing-scenario.ts";
 
 test("journals every intent before its routing effect", async () => {
@@ -18,7 +19,13 @@ test("cleans an applied rule whose add acknowledgement was lost", async () => {
 	await withRoutingScenario(async (h) => {
 		h.fault.lostAck = true;
 		// When the attempt fails before transfer entry.
-		await expect(h.run()).rejects.toThrow("add acknowledgement lost");
+		const failed = h.run();
+		await expect(failed).rejects.toBeInstanceOf(AptRoutingRefusal);
+		await expect(failed).rejects.toHaveProperty("reason", "operation-failed");
+		await expect(failed).rejects.toHaveProperty(
+			"cause.message",
+			"add acknowledgement lost",
+		);
 		// Then the journal still authorized exact cleanup.
 		expect(h.fake.state).toEqual({ rules: [], tables: [] });
 		expect(await h.disk.read()).toEqual([]);

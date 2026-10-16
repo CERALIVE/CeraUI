@@ -45,7 +45,7 @@ Full PR gate: `bun run test`, `bun run test:e2e`, `bun run check:tech-debt`,
 | Start failures and operator diagnostics | [start-failure-diagnostics.md](docs/agents/start-failure-diagnostics.md) |
 
 ## HARD RULES
-- Pinned APT uses exact write-ahead ownership and recovery-only refusal after retained cleanup; do not widen the shared OS sweep. D336 contract and coexistence residual: `../../docs/APT-TRANSPORT-OWNERSHIP.md`.
+- Pinned APT uses exact write-ahead ownership and recovery-only refusal after retained cleanup; only closed, complete kernel absence replies mean empty. Owned command/persistence faults are typed refusals. Do not widen the shared OS sweep. D336 contract and coexistence residual: `../../docs/APT-TRANSPORT-OWNERSHIP.md`.
 - The backend preload owns a per-file OTA streaming sentinel before production imports; never share `/run/ceralive/streaming` between test files. Retained/unknown evidence tests must arrange it explicitly; inherited markers are not test cleanup targets. Contract: `docs/agents/dev-mock-seams.md`.
 - Capable APT diagnostics scan whole normalized text in linear passes before redaction/truncation; marked records own every subsequent continuation. Dedupe uses full sanitized SHA256 identity (including distinct lone surrogates), not the 500-unit display or raw credentials. Contract: `docs/agents/software-update-check-contract.md`.
 - Plain Bun transport fixture children require schema-valid setup metadata, including explicit hardware; partial setup defaults are not a complete document. Both netns clients share fixture preparation, tested without privileges. Contract: `docs/agents/dev-mock-seams.md`.
