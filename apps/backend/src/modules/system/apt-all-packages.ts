@@ -211,6 +211,18 @@ export function buildAptAllDiscoveryArgs(family: readonly string[]): string[] {
 	];
 }
 
+// The detached unit's first stage, run earlier so the unit's own fetch finds every archive cached.
+export function buildAptAllDownloadArgs(family: readonly string[]): string[] {
+	return [
+		"/usr/bin/apt-get",
+		"-d",
+		"-y",
+		"upgrade",
+		"--with-new-pkgs",
+		...family,
+	];
+}
+
 export function buildAptAllInstallArgs(
 	pairs: readonly PinnedAptPackage[],
 	verdict: "any" | "force_ipv4" | "force_ipv6",

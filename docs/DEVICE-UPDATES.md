@@ -733,8 +733,20 @@ with no candidate (`idle`, no failure notification), not `no-transport`; a
 different fetch or signature failure still refuses. This fix is fixture-tested,
 **not yet board-proven on the fixed build**.
 
-**Only the OS agent uses this today.** The `apt` job and table exist and are
-tested, but no package transaction calls the controller.
+**Package transactions use the `apt` job on an image declaring
+`transport-uidrange`** (with `apt-all-packages`, on a real device). The refresh,
+the discovery simulations and the install's pinned simulation each run under the
+selected pair's rule for `apt_uid`, the sandbox user apt's fetch methods run as.
+The refresh and a new archive pre-fetch (`apt-get -d -y upgrade --with-new-pkgs`,
+the detached unit's own first stage) fail over to the next clear pair when apt
+reports a fetch failure; any other apt failure is returned unchanged. The pre-fetch
+is awaited under the pin, so the detached unit's download stage then finds every
+archive cached and the unit itself is launched after the rule is released. A
+stream start in `downloading` aborts the in-flight pre-fetch and tears its rule
+down. No healthy pair folds into the existing `repos_unreachable` /
+`captive_portal` / `discovery_failed` refusals. Images without
+`transport-uidrange` keep the unbound reachability preflight unchanged. This is
+fixture-tested, **not board-proven**.
 
 Do not remove the prohibit rule or pin global DNS to work around the DNS scope
 limit documented in [HOST-UPLINK-ELECTION.md](./HOST-UPLINK-ELECTION.md).
@@ -938,11 +950,10 @@ or curl exit 58 (client certificate problem) is recorded as the probe state
 selection's findings contain that state (`transportCredentialsRejected()` in
 `apps/frontend/src/lib/updates/update-bands.ts`).
 
-Because only the OS agent calls the selector today, and it uses the `os` profile,
-which never presents the fleet certificate, no production code path currently
-produces an APT-profile selection. In practice the band cannot appear on a
-device yet. A useful expiry warning needs a producer for the `apt` profile and a
-wire field carrying the expiry date.
+Package transactions on an image declaring `transport-uidrange` now produce
+APT-profile selections, so the band can appear on such a device when the fleet
+certificate is refused (not yet board-proven). A useful expiry warning still
+needs a wire field carrying the expiry date.
 
 ## Frontend surfaces
 

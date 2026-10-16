@@ -47,6 +47,7 @@ import {
 	AptAllRefusalError,
 	assertPinnedInstallSimulation,
 	buildAptAllDiscoveryArgs,
+	buildAptAllDownloadArgs,
 	buildAptAllInstallArgs,
 	discoverAptAllPackages,
 	type PinnedAptPackage,
@@ -65,6 +66,11 @@ import {
 	preflightAptSpace,
 } from "./apt-space-admission.ts";
 import { AptPreflightError } from "./apt-space-parser.ts";
+import {
+	type AptTransaction,
+	legacyAptTransaction,
+	openPinnedAptTransaction,
+} from "./apt-transport.ts";
 import {
 	logParseError,
 	type ParseResult,
@@ -165,6 +171,8 @@ let softwareUpdateRecoveryRetryTimer: ReturnType<typeof setTimeout> | undefined;
 const SOFTWARE_UPDATE_RECOVERY_RETRY_MS = 3_000;
 const APT_REFRESH_TIMEOUT_MS = 5 * oneMinute;
 const APT_DISCOVERY_TIMEOUT_MS = 2 * oneMinute;
+// A backstop only: apt's own per-connection timeouts end a stalled fetch first.
+const APT_DOWNLOAD_TIMEOUT_MS = 60 * oneMinute;
 
 type AptReachabilityProbe = (options?: {
 	readonly maxAgeMs?: number;
@@ -207,6 +215,18 @@ async function prepareAptNetwork(options?: {
 	return aptReachabilityProbe({ maxAgeMs: 0 });
 }
 
+// An image that routes `apt_uid` gets the OS transfers' per-transaction selector and pin.
+async function openAptNetwork(
+	capabilities: UpdateCapabilities,
+	options?: { readonly maxAgeMs?: number },
+): Promise<AptTransaction> {
+	return (await isRealDevice()) &&
+		capabilities.mode === "capable" &&
+		capabilities.features.includes("transport-uidrange")
+		? openPinnedAptTransaction()
+		: legacyAptTransaction(await prepareAptNetwork(options));
+}
+
 function aptReachabilityWire(
 	reachability: AptReachability,
 ): AptReachabilityWire {
@@ -229,11 +249,15 @@ export function setAptCommandRunnerForTest(
 async function runAptCommand(
 	argv: string[],
 	timeoutMs: number,
+	signal?: AbortSignal,
 ): Promise<SpawnWithTimeoutResult> {
 	assertDisruptiveActionFree();
 	pendingPackageSuccess.assertEffectsAllowed();
 	try {
-		const result = await aptCommandRunner(argv, { timeoutMs });
+		const result = await aptCommandRunner(argv, {
+			timeoutMs,
+			...(signal ? { signal } : {}),
+		});
 		pendingPackageSuccess.assertEffectsAllowed();
 		return result;
 	} catch (error) {
@@ -1001,11 +1025,13 @@ function checkForSoftwareUpdates(
 
 	void runLegacyPackageEffects(
 		async () => {
-			if ((await readPackageCapabilities()) === null) {
+			const capabilities = await readPackageCapabilities();
+			if (capabilities === null) {
 				callback("discovery_failed", aptGetUpdateFailures);
 				return;
 			}
-			const reachability = await prepareAptNetwork();
+			const network = await openAptNetwork(capabilities);
+			const reachability = network.reachability;
 			pendingPackageSuccess.assertEffectsAllowed();
 			lastAptReachability = aptReachabilityWire(reachability);
 			broadcastUpdateState();
@@ -1027,9 +1053,12 @@ function checkForSoftwareUpdates(
 				callback(reason, aptGetUpdateFailures);
 				return;
 			}
-			const res = await runAptCommand(
-				buildAptRefreshArgs(reachability.verdict),
-				APT_REFRESH_TIMEOUT_MS,
+			// Each attempt's reachability carries the family it is pinned to.
+			const res = await network.transfer((reachability) =>
+				runAptCommand(
+					buildAptRefreshArgs(reachability.verdict),
+					APT_REFRESH_TIMEOUT_MS,
+				),
 			);
 			const stdout = res.stdout;
 			const stderr = res.stderr;
@@ -1123,8 +1152,10 @@ export async function runUpdateDiscoveryAndReport(): Promise<SoftwareUpdateError
 	aptDiscoveryRunning = true;
 	lastCheckedAt = Date.now();
 	try {
-		if ((await readPackageCapabilities()) === null) return "discovery_failed";
-		const reachability = await prepareAptNetwork();
+		const capabilities = await readPackageCapabilities();
+		if (capabilities === null) return "discovery_failed";
+		const network = await openAptNetwork(capabilities);
+		const reachability = network.reachability;
 		pendingPackageSuccess.assertEffectsAllowed();
 		lastAptReachability = aptReachabilityWire(reachability);
 		if (
@@ -1142,9 +1173,16 @@ export async function runUpdateDiscoveryAndReport(): Promise<SoftwareUpdateError
 			failCurrentCheck("captive_portal");
 			return "captive_portal";
 		}
-		return await runLegacyPackageEffects(
-			() => softwareUpdateSizeRunner(reachability),
-			() => "discovery_failed" as const,
+		return await network.within(
+			() =>
+				runLegacyPackageEffects(
+					() => softwareUpdateSizeRunner(reachability),
+					() => "discovery_failed" as const,
+				),
+			() => {
+				failCurrentCheck("discovery_failed");
+				return "discovery_failed";
+			},
 		);
 	} catch (error) {
 		if (error instanceof PendingPackageSuccessError) return "discovery_failed";
@@ -1653,7 +1691,8 @@ async function prepareSoftwareUpdate(
 		refuseUnknownPackageInstall();
 		return;
 	}
-	const reachability = await prepareAptNetwork({ maxAgeMs: 0 });
+	const network = await openAptNetwork(capabilities, { maxAgeMs: 0 });
+	const reachability = network.reachability;
 	pendingPackageSuccess.assertEffectsAllowed();
 	const freshCapabilities = await readPackageCapabilities();
 	if (freshCapabilities === null) {
@@ -1663,7 +1702,13 @@ async function prepareSoftwareUpdate(
 	const capable = freshCapabilities.mode === "capable";
 	pendingPackageSuccess.assertEffectsAllowed();
 	if (capable) {
-		const discovery = await getCapableUpdateSize(reachability);
+		const discovery = await network.within(
+			() => getCapableUpdateSize(reachability),
+			(): SoftwareUpdateError => {
+				failCurrentCheck("discovery_failed");
+				return "discovery_failed";
+			},
+		);
 		if (discovery !== null) {
 			if (softUpdateStatus)
 				softUpdateStatus.result = aptAllRefusal?.reason ?? "discovery_failed";
@@ -1711,15 +1756,19 @@ async function prepareSoftwareUpdate(
 		: buildAptUpgradeArgs(actionableAppPackages, reachability.verdict);
 	if (capable) {
 		try {
-			const probe = await runAptCommand(
-				[
-					"/usr/bin/apt-get",
-					"-s",
-					"-o",
-					"Debug::NoLocking=1",
-					...args.filter((arg) => arg !== "-y" && arg !== "--no-download"),
-				],
-				APT_DISCOVERY_TIMEOUT_MS,
+			const probe = await network.within(
+				() =>
+					runAptCommand(
+						[
+							"/usr/bin/apt-get",
+							"-s",
+							"-o",
+							"Debug::NoLocking=1",
+							...args.filter((arg) => arg !== "-y" && arg !== "--no-download"),
+						],
+						APT_DISCOVERY_TIMEOUT_MS,
+					),
+				() => ({ exitCode: 1, stdout: "", stderr: "update routing refused" }),
 			);
 			if (probe.exitCode !== 0)
 				throw new AptAllRefusalError("discovery_failed", "pinned-simulation", {
@@ -1773,9 +1822,30 @@ async function prepareSoftwareUpdate(
 		broadcastMsg("status", { updating: null, update_state: getUpdateState() });
 		return;
 	}
+	// Fetch under the pin so the unit's own download stage is a cache hit.
+	let prefetched = "";
+	if (capable && network.pinned) {
+		const fetched = await network.transfer(
+			(attempt, signal) =>
+				runAptCommand(
+					buildAptAllDownloadArgs(aptFamilyArgs(attempt.verdict)),
+					APT_DOWNLOAD_TIMEOUT_MS,
+					signal,
+				),
+			{ abortable: true },
+		);
+		if (fetched.exitCode !== 0 && !network.aborted()) {
+			const failed = createSoftwareUpdateProcessMonitor();
+			failed.handlers.onStdout(fetched.stdout);
+			failed.handlers.onStderr(fetched.stderr);
+			await failed.finish(Promise.resolve(fetched.exitCode));
+			return;
+		}
+		prefetched = fetched.stdout;
+	}
 	// Stamp after preflight so a refusal does not suppress stream restoration.
 	assertDisruptiveActionFree();
-	if (!isStreamConfirmedIdle()) {
+	if (network.aborted() || !isStreamConfirmedIdle()) {
 		refuseUpdateStart("streaming");
 		softUpdateStatus = null;
 		broadcastUpdateState();
@@ -1784,6 +1854,7 @@ async function prepareSoftwareUpdate(
 	pendingPackageSuccess.assertEffectsAllowed();
 	notePlannedShutdown("software_update");
 	const monitor = createSoftwareUpdateProcessMonitor();
+	if (prefetched) monitor.handlers.onStdout(prefetched);
 
 	// 2026-08-29: apt can restart ceralive.service from a package script;
 	// running it in this unit's cgroup then lets that restart kill the package

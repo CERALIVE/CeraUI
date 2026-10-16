@@ -16,6 +16,7 @@
 
 import { logger } from "../../../helpers/logger.ts";
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
+import { abortAptTransferForStream } from "../apt-transfer-abort.ts";
 import { SOFTWARE_UPDATE_UNIT } from "../software-update-service-contract.ts";
 import { OsStageError } from "./os-stage-error.ts";
 
@@ -28,6 +29,7 @@ export const RAUC_SERVICE_UNIT = "rauc.service";
  * half-installed package.
  */
 export async function stopPackageInstallUnitForStream(): Promise<void> {
+	abortAptTransferForStream();
 	const result = await spawnWithTimeout(
 		["systemctl", "stop", SOFTWARE_UPDATE_UNIT],
 		{ timeoutMs: SYSTEMD_COMMAND_TIMEOUT_MS },

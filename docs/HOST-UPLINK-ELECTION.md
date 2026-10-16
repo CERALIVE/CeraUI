@@ -66,12 +66,16 @@ a detached process, before the pin is released.
 | Job | Caller | Pinned? |
 |---|---|---|
 | `os` (UID `ota_uid`, table 100001) | `checkOsChannel()` fetches the channel manifest and `.sig`; `stageOsBundle()` runs `rauc install` to completion | yes, both through `updatePinController.run("os", ...)` |
-| `apt` (UID `apt_uid`, table 100000) | none | implemented and netns-tested, no production caller |
+| `apt` (UID `apt_uid`, table 100000) | on an image declaring `transport-uidrange`: the refresh and the install's archive pre-fetch through `transfer()`, discovery and the pinned install simulation through `within()` (`modules/system/apt-transport.ts`) | yes, through `updatePinController.run("apt", ...)`; fixture-tested, not board-proven |
 
-So the selector and the pin cover only OS transfers. A package check or install,
-from the orchestrator or the Settings button, reaches the repository through the
-host's default route after the awaited election and fresh family reading in
-"Applying the election and admitting apt" below. The selector's last answer is
+On such an image the selector and the pin cover package transactions as well as
+OS transfers: each transaction selects once, local apt work runs under the
+winner's rule, and only a networked run fails over. The detached install unit is
+launched after the awaited pre-fetch released the rule, so its own download stage
+is a cache hit. On every other image a package check or install, from the
+orchestrator or the Settings button, reaches the repository through the host's
+default route after the awaited election and fresh family reading in "Applying
+the election and admitting apt" below. The selector's last answer is
 recorded by `recordTransportSelection()` for the Updates dialog's Connection
 section. Stream admission (D8) and cellular policy are documented in
 [DEVICE-UPDATES.md](./DEVICE-UPDATES.md).
@@ -463,7 +467,8 @@ The updater returns false on failed application and re-arms maintenance. Concurr
 callers join one in-flight promise, which releases on every outcome. Apt's explicit
 request bypasses the queued scheduler's rate/no-work shortcuts, not its serialization.
 
-Refresh, read-only discovery, and detached installation all await the same
+On an image without `transport-uidrange` (see "Who uses the pin" above),
+refresh, read-only discovery, and detached installation all await the same
 `prepareAptNetwork` precondition: await election/application, then take a **fresh
 unbound** repository/family reading. Failed repair refuses apt with the existing
 `repos_unreachable` result. The stderr fire-and-forget trigger is removed; stderr

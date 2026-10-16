@@ -33,6 +33,16 @@ connectivity fallback or change shared-client health. Apt still consumes a separ
 fresh UNBOUND verdict after awaited route repair; a bound success cannot stand in
 for that reading. See `docs/HOST-UPLINK-ELECTION.md` from the repo root.
 
+That unbound verdict is the LEGACY path. On a real device whose image declares
+`transport-uidrange` (with `apt-all-packages`), `openAptNetwork()` instead opens a
+pinned transaction (`modules/system/apt-transport.ts`): `selectUpdateTransport({
+profile: "apt" })` ranks every (uplink, family), `reachabilityFromSelection()`
+folds the ranking into the same verdict the gates above read, and each apt run's
+family option comes from the pinned pair rather than the fold. Only a networked
+run (`transfer()`: refresh, archive pre-fetch) fails over, and only on apt's own
+fetch-failure lines; local work (`within()`) never does. Coverage:
+`tests/apt-transport-pin.test.ts`, `tests/apt-transport-entry.test.ts`.
+
 
 Board evidence: the Orange Pi 5+ drill observed the real `apt-get` argv from
 `/proc` carrying `-o Acquire::ForceIPv4=true` on BOTH the refresh and the discovery

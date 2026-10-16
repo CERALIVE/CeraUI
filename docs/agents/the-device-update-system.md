@@ -75,8 +75,10 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
 - **[PARTIAL] Lagged slot mirror.** `slotSyncGate()` with eight typed refusals,
   then the image's `ceralive-slot-sync.service`. Needs `slot-sync`.
 - **[PARTIAL] Update transport.** `selectUpdateTransport()` plus
-  `updatePinController` (UID-scoped route, 15-minute failover hold). Used only by
-  the OS agent; package transactions still use the apt reachability preflight.
+  `updatePinController` (UID-scoped route, 15-minute failover hold). The OS agent
+  and, on an image declaring `transport-uidrange`, every package transaction
+  (refresh, discovery and install) use it; other images keep the unbound apt
+  reachability preflight. Pinned APT is fixture-tested, not board-proven.
   DNS is not pinned. A verified-TLS 404/410 on the expected OS channel signature
   proves the uplink while the pinned manifest fetch reports no publication; it
   cannot become a captive-portal or `no-transport` verdict. The corrected build
