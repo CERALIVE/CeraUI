@@ -70,9 +70,14 @@ a detached process, before the pin is released.
 
 On such an image the selector and the pin cover package transactions as well as
 OS transfers: each transaction selects once, local apt work runs under the
-winner's rule, and only a networked run fails over. The detached install unit is
-launched after the awaited pre-fetch released the rule, so its own download stage
-is a cache hit. On every other image a package check or install, from the
+winner's rule (including URI estimation), and only a networked run fails over.
+The detached install unit is launched after the awaited pre-fetch releases the
+rule. Its unchanged network-capable stage can fetch **unpinned** if lists/cache
+drift; a cache hit is not guaranteed. The successful family's flag is propagated,
+but this interval remains outside complete D13 coverage. Exact APT write-ahead
+ownership, retained-cleanup fencing and the D336 OS-sweep residual are documented
+in [APT transport ownership](APT-TRANSPORT-OWNERSHIP.md).
+On every other image a package check or install, from the
 orchestrator or the Settings button, reaches the repository through the host's
 default route after the awaited election and fresh family reading in "Applying
 the election and admitting apt" below. The selector's last answer is

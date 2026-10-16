@@ -1,4 +1,8 @@
 import { RunAbortError, RunTimeoutError, run } from "../../../helpers/run.ts";
+import type {
+	AptRoutingLease,
+	AptRoutingOwnership,
+} from "../apt-routing-ownership.ts";
 import { readUpdateCapabilityFile } from "../update-capabilities.ts";
 import type { Family, RankedTransport, TransportSelection } from "./core.ts";
 import {
@@ -85,6 +89,7 @@ type Step<T> = (
 ) => Promise<T>;
 
 export type UpdateStepControl = {
+	readonly aptOwnership?: AptRoutingOwnership;
 	readonly cleanup?: () => RoutingCleanup;
 	readonly refreshSelection?: () => Promise<TransportSelection>;
 	readonly checkCancelled?: () => void;
@@ -119,10 +124,13 @@ export function createUpdatePinController(overrides: Partial<PinDeps> = {}) {
 		if (!swept) throw new UpdatePinError("sweep-required");
 		if (active.has(job)) throw new UpdatePinError("busy");
 		active.add(job);
+		let aptLease: AptRoutingLease | undefined;
 		try {
 			const file = await deps.readCapabilities();
 			if (!file) throw new UpdatePinError("capabilities-unavailable");
 			const uid = uidFor(job, file);
+			if (job === "apt")
+				aptLease = await control.aptOwnership?.acquire(deps.run, uid);
 			const attempted = new Set<string>();
 			let ranking = selection;
 			let lastFailure: UpdateTransferError | undefined;
@@ -153,7 +161,7 @@ export function createUpdatePinController(overrides: Partial<PinDeps> = {}) {
 							control.checkCancelled?.();
 							return step(transport, flags);
 						},
-						runner: deps.run,
+						runner: aptLease?.runner ?? deps.run,
 						...(job === "os" && control.cleanup
 							? { cleanup: control.cleanup }
 							: {}),
@@ -179,6 +187,7 @@ export function createUpdatePinController(overrides: Partial<PinDeps> = {}) {
 			throw new UpdatePinError("no-transport");
 		} finally {
 			active.delete(job);
+			aptLease?.release();
 		}
 	}
 

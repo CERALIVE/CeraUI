@@ -36,6 +36,8 @@ async function open(samples: readonly TransportSample[], swept = true) {
 	setAptTransportDepsForTest({
 		select: async () => rankTransports(samples),
 		pin: fixture.pin,
+		ownership: fixture.ownership,
+		isIdle: () => true,
 	});
 	return { ...fixture, tx: await openPinnedAptTransaction() };
 }

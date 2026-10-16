@@ -110,6 +110,7 @@ export function aptEntryHarness() {
 		setAptTransportDepsForTest({
 			select: async () => rankTransports(samples),
 			pin: pins.pin,
+			ownership: pins.ownership,
 		});
 		return pins;
 	}

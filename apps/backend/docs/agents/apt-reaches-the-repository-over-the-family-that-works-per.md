@@ -37,10 +37,12 @@ That unbound verdict is the LEGACY path. On a real device whose image declares
 `transport-uidrange` (with `apt-all-packages`), `openAptNetwork()` instead opens a
 pinned transaction (`modules/system/apt-transport.ts`): `selectUpdateTransport({
 profile: "apt" })` ranks every (uplink, family), `reachabilityFromSelection()`
-folds the ranking into the same verdict the gates above read, and each apt run's
-family option comes from the pinned pair rather than the fold. Only a networked
-run (`transfer()`: refresh, archive pre-fetch) fails over, and only on apt's own
-fetch-failure lines; local work (`within()`) never does. Coverage:
+folds the ranking into the same verdict the gates above read. Local callbacks
+(including URI estimation) and transfer options use the actual pinned pair.
+Only a networked run (`transfer()`: refresh, archive pre-fetch) fails over on
+apt fetch failures or typed runner timeouts; local work (`within()`) never does.
+APT-local write-ahead ownership and the conditional unpinned detached-download
+gap are explicit in `docs/APT-TRANSPORT-OWNERSHIP.md` from the repo root. Coverage:
 `tests/apt-transport-pin.test.ts`, `tests/apt-transport-entry.test.ts`.
 
 
@@ -144,4 +146,3 @@ Coverage: `scripts/build/deb-maintainer-scripts.test.sh` (invoked from
 `scripts/build/release-package-contracts.sh`), including the retained-helper
 regression that reproduces the silent no-op, and
 `tests/software-updates-initial-push.test.ts`.
-

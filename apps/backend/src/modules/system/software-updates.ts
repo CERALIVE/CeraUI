@@ -67,10 +67,18 @@ import {
 } from "./apt-space-admission.ts";
 import { AptPreflightError } from "./apt-space-parser.ts";
 import {
+	type AptTransferAdmission,
+	captureAptTransferAdmission,
+} from "./apt-transfer-abort.ts";
+import {
 	type AptTransaction,
 	legacyAptTransaction,
 	openPinnedAptTransaction,
 } from "./apt-transport.ts";
+import {
+	installFamily,
+	normalizeAptCommandFailure,
+} from "./apt-transport-result.ts";
 import {
 	logParseError,
 	type ParseResult,
@@ -219,11 +227,12 @@ async function prepareAptNetwork(options?: {
 async function openAptNetwork(
 	capabilities: UpdateCapabilities,
 	options?: { readonly maxAgeMs?: number },
+	admission?: AptTransferAdmission,
 ): Promise<AptTransaction> {
 	return (await isRealDevice()) &&
 		capabilities.mode === "capable" &&
 		capabilities.features.includes("transport-uidrange")
-		? openPinnedAptTransaction()
+		? openPinnedAptTransaction(admission)
 		: legacyAptTransaction(await prepareAptNetwork(options));
 }
 
@@ -266,11 +275,7 @@ async function runAptCommand(
 			error instanceof DisruptiveActionRefusal
 		)
 			throw error;
-		return {
-			exitCode: 1,
-			stdout: "",
-			stderr: error instanceof Error ? error.message : String(error),
-		};
+		return normalizeAptCommandFailure(error);
 	}
 }
 
@@ -1174,9 +1179,12 @@ export async function runUpdateDiscoveryAndReport(): Promise<SoftwareUpdateError
 			return "captive_portal";
 		}
 		return await network.within(
-			() =>
+			(attempt) =>
 				runLegacyPackageEffects(
-					() => softwareUpdateSizeRunner(reachability),
+					() => {
+						lastAptReachability = aptReachabilityWire(attempt);
+						return softwareUpdateSizeRunner(attempt);
+					},
 					() => "discovery_failed" as const,
 				),
 			() => {
@@ -1303,9 +1311,10 @@ type SoftwareUpdateRunner = (
 const defaultSoftwareUpdateRunner: SoftwareUpdateRunner = (
 	onCommitSucceeded,
 ) => {
+	const admission = captureAptTransferAdmission();
 	const checkStarted = softwareUpdateCheckRunner(async (err) => {
 		if (err === null) {
-			await doSoftwareUpdate(onCommitSucceeded);
+			await doSoftwareUpdate(onCommitSucceeded, admission);
 		} else if (softUpdateStatus) {
 			const reason =
 				err === "discovery_failed"
@@ -1667,9 +1676,12 @@ export function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonit
 	return { handlers, finish };
 }
 
-async function doSoftwareUpdate(onCommitSucceeded?: () => void): Promise<void> {
+async function doSoftwareUpdate(
+	onCommitSucceeded?: () => void,
+	admission?: AptTransferAdmission,
+): Promise<void> {
 	return runLegacyPackageEffects(
-		() => prepareSoftwareUpdate(onCommitSucceeded),
+		() => prepareSoftwareUpdate(onCommitSucceeded, admission),
 		() => {
 			softUpdateStatus = null;
 			broadcastMsg("status", {
@@ -1682,6 +1694,7 @@ async function doSoftwareUpdate(onCommitSucceeded?: () => void): Promise<void> {
 
 async function prepareSoftwareUpdate(
 	onCommitSucceeded?: () => void,
+	admission?: AptTransferAdmission,
 ): Promise<void> {
 	pendingPackageSuccess.assertEffectsAllowed();
 	if (!aptUpdatesEnabled() || !isStreamConfirmedIdle()) return;
@@ -1691,7 +1704,11 @@ async function prepareSoftwareUpdate(
 		refuseUnknownPackageInstall();
 		return;
 	}
-	const network = await openAptNetwork(capabilities, { maxAgeMs: 0 });
+	const network = await openAptNetwork(
+		capabilities,
+		{ maxAgeMs: 0 },
+		admission,
+	);
 	const reachability = network.reachability;
 	pendingPackageSuccess.assertEffectsAllowed();
 	const freshCapabilities = await readPackageCapabilities();
@@ -1703,7 +1720,7 @@ async function prepareSoftwareUpdate(
 	pendingPackageSuccess.assertEffectsAllowed();
 	if (capable) {
 		const discovery = await network.within(
-			() => getCapableUpdateSize(reachability),
+			(attempt) => getCapableUpdateSize(attempt),
 			(): SoftwareUpdateError => {
 				failCurrentCheck("discovery_failed");
 				return "discovery_failed";
@@ -1752,19 +1769,25 @@ async function prepareSoftwareUpdate(
 		return;
 	}
 	const args = capable
-		? buildAptAllInstallArgs(actionableAllPackages, reachability.verdict)
+		? buildAptAllInstallArgs(
+				actionableAllPackages,
+				installFamily(network.reachability.verdict),
+			)
 		: buildAptUpgradeArgs(actionableAppPackages, reachability.verdict);
 	if (capable) {
 		try {
 			const probe = await network.within(
-				() =>
+				(attempt) =>
 					runAptCommand(
 						[
 							"/usr/bin/apt-get",
 							"-s",
 							"-o",
 							"Debug::NoLocking=1",
-							...args.filter((arg) => arg !== "-y" && arg !== "--no-download"),
+							...buildAptAllInstallArgs(
+								actionableAllPackages,
+								installFamily(attempt.verdict),
+							).filter((arg) => arg !== "-y" && arg !== "--no-download"),
 						],
 						APT_DISCOVERY_TIMEOUT_MS,
 					),
@@ -1803,7 +1826,21 @@ async function prepareSoftwareUpdate(
 		return;
 	}
 	try {
-		await preflightAptSpace(args, pendingAwareAptSpaceDeps);
+		await network.within(
+			(attempt) =>
+				preflightAptSpace(
+					capable && network.pinned
+						? buildAptAllInstallArgs(
+								actionableAllPackages,
+								installFamily(attempt.verdict),
+							)
+						: args,
+					pendingAwareAptSpaceDeps,
+				),
+			() => {
+				throw new AptPreflightError("probe_failed");
+			},
+		);
 	} catch (error) {
 		if (pendingPackageSuccess.pending)
 			throw new PendingPackageSuccessError(
@@ -1855,6 +1892,12 @@ async function prepareSoftwareUpdate(
 	notePlannedShutdown("software_update");
 	const monitor = createSoftwareUpdateProcessMonitor();
 	if (prefetched) monitor.handlers.onStdout(prefetched);
+	const finalFamily = installFamily(network.reachability.verdict);
+	const detachedArgs =
+		capable && network.pinned
+			? buildAptAllInstallArgs(actionableAllPackages, finalFamily)
+			: args;
+	lastAptReachability = aptReachabilityWire(network.reachability);
 
 	// 2026-08-29: apt can restart ceralive.service from a package script;
 	// running it in this unit's cgroup then lets that restart kill the package
@@ -1862,15 +1905,7 @@ async function prepareSoftwareUpdate(
 	// reattaches to its durable output instead of relaunching apt.
 	void monitor.finish(
 		capable
-			? runDetachedAptAll(
-					args,
-					reachability.verdict === "force_ipv4"
-						? "force_ipv4"
-						: reachability.verdict === "force_ipv6"
-							? "force_ipv6"
-							: "any",
-					monitor.handlers,
-				)
+			? runDetachedAptAll(detachedArgs, finalFamily, monitor.handlers)
 			: runDetachedAptUpgrade(args, monitor.handlers),
 		capable ? onCommitSucceeded : undefined,
 	);

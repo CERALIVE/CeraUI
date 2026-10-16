@@ -1,4 +1,6 @@
 import { updateCapabilityFileSchema } from "@ceraui/rpc/schemas";
+import type { AptRoutingEntry } from "../../modules/system/apt-routing-journal.ts";
+import { createAptRoutingOwnership } from "../../modules/system/apt-routing-ownership.ts";
 import type {
 	ProbeState,
 	TransportSample,
@@ -36,6 +38,13 @@ export const FETCH_FAILURE = {
 
 /** A swept pin controller over a recorded `ip` runner; `active()` reads the apt rule. */
 export async function pinFixture(swept = true) {
+	let entries: readonly AptRoutingEntry[] = [];
+	const ownership = createAptRoutingOwnership({
+		read: async () => entries,
+		save: (next) => {
+			entries = next;
+		},
+	});
 	const calls: string[] = [];
 	const pin = createUpdatePinController({
 		readCapabilities: async () =>
@@ -64,5 +73,5 @@ export async function pinFixture(swept = true) {
 							: depth,
 			0,
 		) > 0;
-	return { pin, calls, active };
+	return { pin, calls, active, ownership };
 }

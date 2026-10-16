@@ -739,11 +739,14 @@ the discovery simulations and the install's pinned simulation each run under the
 selected pair's rule for `apt_uid`, the sandbox user apt's fetch methods run as.
 The refresh and a new archive pre-fetch (`apt-get -d -y upgrade --with-new-pkgs`,
 the detached unit's own first stage) fail over to the next clear pair when apt
-reports a fetch failure; any other apt failure is returned unchanged. The pre-fetch
-is awaited under the pin, so the detached unit's download stage then finds every
-archive cached and the unit itself is launched after the rule is released. A
-stream start in `downloading` aborts the in-flight pre-fetch and tears its rule
-down. No healthy pair folds into the existing `repos_unreachable` /
+reports a fetch failure or the bounded runner times out; local apt failures do not
+fail over. The pre-fetch is awaited under the pin, but cache/list drift before
+the detached unit can still cause an **unpinned** download in its unchanged first
+stage. Complete D13 coverage is not claimed for that interval. A
+stream start in `downloading` latches cancellation from admission and aborts the
+in-flight pre-fetch; teardown failure retains journaled ownership rather than
+admitting another APT job. See [APT ownership and residuals](APT-TRANSPORT-OWNERSHIP.md).
+Successful teardown removes its rule. No healthy pair folds into the existing `repos_unreachable` /
 `captive_portal` / `discovery_failed` refusals. Images without
 `transport-uidrange` keep the unbound reachability preflight unchanged. This is
 fixture-tested, **not board-proven**.

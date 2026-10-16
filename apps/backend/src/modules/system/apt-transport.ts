@@ -1,13 +1,36 @@
-import type { AptFamilyProbe } from "@ceraui/rpc";
+import {
+	SpawnAbortError,
+	SpawnTimeoutError,
+} from "../../helpers/bounded-spawn.ts";
 import { logger } from "../../helpers/logger.ts";
 import type { SpawnWithTimeoutResult } from "../../helpers/spawn-policy.ts";
 import type { AptReachability } from "./apt-reachability.ts";
-import { trackAptTransfer } from "./apt-transfer-abort.ts";
-import type {
-	Family,
-	ProbeState,
-	TransportSelection,
-} from "./update-transport/core.ts";
+import {
+	type AptRoutingOwnership,
+	AptRoutingRefusal,
+	aptRoutingOwnership,
+} from "./apt-routing-ownership.ts";
+import {
+	type AptTransferAdmission,
+	captureAptTransferAdmission,
+	trackAptTransfer,
+} from "./apt-transfer-abort.ts";
+import {
+	aptCommandFailure,
+	classifyAptFetchFailure,
+	familyName,
+	forced,
+	normalizeAptCommandFailure,
+	reachabilityFromSelection,
+} from "./apt-transport-result.ts";
+import { isStreamConfirmedIdle } from "./stream-liveness-source.ts";
+import type { TransportSelection } from "./update-transport/core.ts";
+
+export {
+	classifyAptFetchFailure,
+	reachabilityFromSelection,
+} from "./apt-transport-result.ts";
+
 import { selectUpdateTransport } from "./update-transport/executor.ts";
 import {
 	UpdatePinError,
@@ -15,7 +38,6 @@ import {
 	updatePinController,
 } from "./update-transport/pin.ts";
 
-type Verdict = AptReachability["verdict"];
 /** One networked apt run; `reachability.verdict` is this attempt's pinned family. */
 export type AptStep = (
 	reachability: AptReachability,
@@ -31,7 +53,10 @@ export type AptTransaction = {
 	readonly pinned: boolean;
 	readonly reachability: AptReachability;
 	/** Local apt work under the winner's rule; `refused` answers a routing refusal. */
-	readonly within: <T>(work: () => Promise<T>, refused: () => T) => Promise<T>;
+	readonly within: <T>(
+		work: (attempt: AptReachability) => Promise<T>,
+		refused: () => T,
+	) => Promise<T>;
 	/** A networked apt run; an apt fetch failure fails over to the next pair. */
 	readonly transfer: (
 		step: AptStep,
@@ -48,6 +73,8 @@ class AptTransferAborted extends Error {
 }
 
 export type AptTransportDeps = {
+	readonly isIdle: () => boolean;
+	readonly ownership: AptRoutingOwnership;
 	readonly select: () => Promise<TransportSelection>;
 	readonly pin: Pick<typeof updatePinController, "run">;
 };
@@ -67,101 +94,6 @@ const select = () =>
 	// The APT profile never names an images.ceralive.tv object, so board and channel are inert.
 	selectUpdateTransport({ profile: "apt", board: "apt", channel: "stable" });
 
-const FAMILY_PROBE: Record<ProbeState, AptFamilyProbe> = {
-	clear: "ok",
-	"captive-http": "captive",
-	"captive-tls": "captive",
-	"tls-error": "blocked",
-	tampered: "unknown",
-	blocked: "blocked",
-	"no-route": "no_route",
-	"dns-failed": "dns_failed",
-	"credentials-invalid": "credentials_invalid",
-	"probe-unavailable": "probe_unavailable",
-};
-const PRECEDENCE = [
-	"probe_unavailable",
-	"credentials_invalid",
-	"captive",
-] as const;
-const REFUSAL: Record<(typeof PRECEDENCE)[number], Verdict> = {
-	probe_unavailable: "probe_unavailable",
-	credentials_invalid: "credentials_invalid",
-	captive: "captive_portal",
-};
-const familyName = (family: Family) => (family === 4 ? "ipv4" : "ipv6");
-const forced = (family: Family): Verdict =>
-	family === 4 ? "force_ipv4" : "force_ipv6";
-
-function foldFamily(
-	selection: TransportSelection,
-	family: Family,
-): AptFamilyProbe {
-	const rows = selection.ranked.filter((row) => row.family === family);
-	if (rows.some((row) => row.healthy)) return "ok";
-	const states = rows.flatMap((row) =>
-		row.hosts.map(({ state }) => FAMILY_PROBE[state]).filter((s) => s !== "ok"),
-	);
-	return PRECEDENCE.find((s) => states.includes(s)) ?? states[0] ?? "unknown";
-}
-
-/** Fold a ranked selection into the verdict the existing APT gates read. */
-export function reachabilityFromSelection(
-	selection: TransportSelection,
-): AptReachability {
-	const ipv4 = foldFamily(selection, 4);
-	const ipv6 = foldFamily(selection, 6);
-	const winner =
-		selection.status === "selected" ? selection.selected.family : undefined;
-	const refusal = PRECEDENCE.find((s) => ipv4 === s || ipv6 === s);
-	return {
-		ipv4,
-		ipv6,
-		used: winner === undefined ? "none" : familyName(winner),
-		verdict:
-			winner !== undefined
-				? forced(winner)
-				: refusal
-					? REFUSAL[refusal]
-					: "unreachable",
-		detail: selection.ranked.flatMap((row) =>
-			row.hosts
-				.filter(({ state }) => state !== "clear")
-				.map(({ host, state }) => ({
-					origin: host,
-					family: familyName(row.family),
-					result: FAMILY_PROBE[state],
-				})),
-		),
-	};
-}
-
-const FETCH_FAILURES: readonly [RegExp, UpdateTransferError["reason"]][] = [
-	[/Temporary failure resolving|Could not resolve/, "dns-failed"],
-	[/Certificate verification failed|Could not handshake|TLS/, "tls-error"],
-	[
-		/timed out|Connection failed|does the network require authentication/,
-		"blocked",
-	],
-	[
-		/Could not connect|Unable to connect|unreachable|No route to host/,
-		"no-route",
-	],
-];
-
-/** Only apt's own fetch failure on this pair may move the transaction to the next one. */
-export function classifyAptFetchFailure(
-	result: SpawnWithTimeoutResult,
-): UpdateTransferError["reason"] | undefined {
-	if (
-		!/(?:^|\n)[EW]: (?:Failed to fetch|Some index files failed)/.test(
-			result.stderr,
-		)
-	)
-		return undefined;
-	return FETCH_FAILURES.find(([pattern]) => pattern.test(result.stderr))?.[1];
-}
-
 const refusedRun = (error: Error): SpawnWithTimeoutResult => ({
 	exitCode: 1,
 	stdout: "",
@@ -171,6 +103,7 @@ const refusedRun = (error: Error): SpawnWithTimeoutResult => ({
 function isRoutingRefusal(error: unknown): error is Error {
 	return (
 		error instanceof UpdatePinError ||
+		error instanceof AptRoutingRefusal ||
 		error instanceof AggregateError ||
 		error instanceof AptTransferAborted
 	);
@@ -182,14 +115,16 @@ export function legacyAptTransaction(
 	return {
 		pinned: false,
 		reachability,
-		within: (work) => work(),
+		within: (work) => work(reachability),
 		transfer: (step) => step(reachability),
 		aborted: () => false,
 	};
 }
 
 /** Probe every (uplink, family), then pin each apt run to the ranked winner. */
-export async function openPinnedAptTransaction(): Promise<AptTransaction> {
+export async function openPinnedAptTransaction(
+	admission: AptTransferAdmission = captureAptTransferAdmission(),
+): Promise<AptTransaction> {
 	let selection: TransportSelection;
 	try {
 		selection = await select();
@@ -205,25 +140,38 @@ export async function openPinnedAptTransaction(): Promise<AptTransaction> {
 	}
 	const controller = new AbortController();
 	const cancelled = () => {
+		if (admission.cancelled()) controller.abort();
 		if (controller.signal.aborted) throw new AptTransferAborted();
 	};
-	const reachability = reachabilityFromSelection(selection);
+	let reachability = reachabilityFromSelection(selection);
 	return {
 		pinned: true,
-		reachability,
-		aborted: () => controller.signal.aborted,
+		get reachability() {
+			return reachability;
+		},
+		aborted: () => controller.signal.aborted || admission.cancelled(),
 		async within(work, refused) {
 			// With no winner the verdict already refuses every networked step; local work stays local.
-			if (selection.status === "none") return work();
+			if (selection.status === "none") return work(reachability);
 			try {
 				// Box the outcome so an arbitrary coded error is never mistaken for a transfer failure.
-				const boxed = await pinController().run("apt", selection, async () => {
-					try {
-						return { ok: true as const, value: await work() };
-					} catch (error) {
-						return { ok: false as const, error };
-					}
-				});
+				const boxed = await pinController().run(
+					"apt",
+					selection,
+					async ({ family }) => {
+						reachability = {
+							...reachability,
+							verdict: forced(family),
+							used: familyName(family),
+						};
+						try {
+							return { ok: true as const, value: await work(reachability) };
+						} catch (error) {
+							return { ok: false as const, error };
+						}
+					},
+					{ aptOwnership: overrides.ownership ?? aptRoutingOwnership },
+				);
 				if (!boxed.ok) throw boxed.error;
 				return boxed.value;
 			} catch (error) {
@@ -235,26 +183,54 @@ export async function openPinnedAptTransaction(): Promise<AptTransaction> {
 		async transfer(step, options = {}) {
 			let last: SpawnWithTimeoutResult | undefined;
 			const release = options.abortable
-				? trackAptTransfer(controller)
+				? trackAptTransfer(controller, admission)
 				: () => undefined;
 			try {
 				return await pinController().run(
 					"apt",
 					selection,
 					async ({ family }) => {
-						last = await step(
-							{
-								...reachability,
-								verdict: forced(family),
-								used: familyName(family),
-							},
-							options.abortable ? controller.signal : undefined,
-						);
+						reachability = {
+							...reachability,
+							verdict: forced(family),
+							used: familyName(family),
+						};
+						if (
+							options.abortable &&
+							!(overrides.isIdle ?? isStreamConfirmedIdle)()
+						)
+							controller.abort();
+						cancelled();
+						try {
+							last = await step(
+								{
+									...reachability,
+									verdict: forced(family),
+									used: familyName(family),
+								},
+								options.abortable ? controller.signal : undefined,
+							);
+						} catch (error) {
+							if (!(error instanceof SpawnTimeoutError)) throw error;
+							last = normalizeAptCommandFailure(error);
+						}
+						const failure = aptCommandFailure(last);
+						if (failure instanceof SpawnAbortError) controller.abort();
+						cancelled();
 						const reason = classifyAptFetchFailure(last);
+						if (failure)
+							last = {
+								exitCode: last.exitCode,
+								stdout: failure.partialStdout,
+								stderr: failure.partialStderr || failure.message,
+							};
 						if (reason) throw new UpdateTransferError(reason);
 						return last;
 					},
-					{ checkCancelled: cancelled },
+					{
+						checkCancelled: cancelled,
+						aptOwnership: overrides.ownership ?? aptRoutingOwnership,
+					},
 				);
 			} catch (error) {
 				if (error instanceof UpdateTransferError && last) return last;
