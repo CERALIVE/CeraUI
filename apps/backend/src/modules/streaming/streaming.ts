@@ -37,6 +37,7 @@ import {
 	convertManualToRemoteRelay,
 	getRelays,
 } from "../remote/remote-relays.ts";
+import { noteStreamEnded } from "../system/idle-state.ts";
 import { notificationSend } from "../ui/notifications.ts";
 import type { StatusResponseMessage } from "../ui/status.ts";
 import {
@@ -90,6 +91,13 @@ export function getIsStreaming() {
 
 export function updateStatus(status: boolean) {
 	if (status !== isStreaming) {
+		if (isStreaming && !status) {
+			try {
+				noteStreamEnded();
+			} catch (error) {
+				logger.warn("idle state stream-end persistence failed", { error });
+			}
+		}
 		isStreaming = status;
 		broadcastMsg("status", { is_streaming: isStreaming });
 
@@ -115,13 +123,11 @@ export function startError(conn: WebSocket, msg: string, id?: string) {
 		}
 	}
 
-	if (!updateStatus(false)) {
-		conn.send(
-			buildMsg("status", {
-				is_streaming: false,
-			} satisfies StatusResponseMessage),
-		);
-	}
+	conn.send(
+		buildMsg("status", {
+			is_streaming: getIsStreaming(),
+		} satisfies StatusResponseMessage),
+	);
 
 	return false;
 }

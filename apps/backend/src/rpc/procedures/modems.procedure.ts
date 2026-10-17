@@ -803,17 +803,21 @@ export const listMutationBlocksProcedure = modemProcedure
 export const acknowledgeMutationProcedure = modemProcedure
 	.input(modemMutationAckInputSchema)
 	.output(modemMutationAckOutputSchema)
-	.handler(({ input }) => acknowledgeMutation(input.stableKey, input.mode));
+	.handler(({ input, signal }) =>
+		acknowledgeMutation(input.stableKey, input.mode, signal),
+	);
 
 export const decommissionMutationProcedure = modemProcedure
 	.input(modemMutationDecommissionInputSchema)
 	.output(modemMutationAckOutputSchema)
-	.handler(({ input }) => decommissionMutation(input.stableKey));
+	.handler(({ input, signal }) =>
+		decommissionMutation(input.stableKey, signal),
+	);
 
 export const rebaselineMutationProcedure = modemProcedure
 	.input(modemMutationRebaselineInputSchema)
 	.output(modemMutationAckOutputSchema)
-	.handler(({ input }) => rebaselineMutation(input.stableKey));
+	.handler(({ input, signal }) => rebaselineMutation(input.stableKey, signal));
 
 /**
  * The device-wide capability-module gates — a pure READ of runtime config.

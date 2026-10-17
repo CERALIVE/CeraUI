@@ -47,6 +47,13 @@ persisted at `/run/ceralive/uplink-shaper-roots.json`, so backend restart and th
 future systemd ExecStop backstop share one restoration input rather than relying
 on process memory.
 
+Ownership JSON is read through the shared bounded anchored/nonblocking strict
+boundary. Duplicate members, malformed records and non-regular files refuse before
+tc effects. A failed read is not cached as a loaded inventory: a later apply or
+teardown must re-read it rather than use an empty/default ownership map. This is
+host effect-port proof; the image's independent ExecStop parser is not qualified
+or changed by these backend tests.
+
 The image's `ceralive-share.service` ExecStop script is the systemd-owned crash/power
 backstop and is intentionally not authored in this repository.
 

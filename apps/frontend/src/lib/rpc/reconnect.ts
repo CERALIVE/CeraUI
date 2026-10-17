@@ -91,18 +91,27 @@ export async function reauthenticateAndHydrate(
 	// Safety hydrate: pull config + status and route both through handleMessage so
 	// the HUD and destination views repopulate after the socket swap. This is
 	// defense-in-depth on top of the backend's post-login push.
-	try {
-		const [config, status] = await Promise.all([
-			deps.getConfig(),
-			deps.getStatus(),
-		]);
-		deps.dispatch("config", config);
-		deps.dispatch("status", status);
-	} catch (error) {
-		// A hydrate failure is non-fatal: the backend's post-login push still feeds
-		// the stores. Surface it for diagnostics but keep the authed session.
-		deps.onError?.(error);
+	//
+	// Each answer is consumed when IT arrives (FIX-16-F5, F4-R1). Held back for
+	// the other reply, an early status was applied after pushes and claims it
+	// predates, and replaced them. A failure is non-fatal: the backend's
+	// post-login push still feeds the stores, so it is surfaced for diagnostics
+	// and the authed session is kept.
+	const answers = await Promise.allSettled([
+		consume(deps, "config", deps.getConfig),
+		consume(deps, "status", deps.getStatus),
+	]);
+	for (const answer of answers) {
+		if (answer.status === "rejected") deps.onError?.(answer.reason);
 	}
 
 	return "hydrated";
+}
+
+async function consume(
+	deps: ReauthDeps,
+	type: "config" | "status",
+	read: () => Promise<unknown>,
+): Promise<void> {
+	deps.dispatch(type, await read());
 }

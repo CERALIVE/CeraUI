@@ -1,0 +1,55 @@
+# Board: Rock 5B+; OS: Debian 13.7; systemd: 257.13-1~deb13u1
+# Captured: 2026-10-02; read-only nmcli device classification for transport replay.
+# Normalisation: MAC-derived enx names -> per-file stable enx020000000020/21; eth0 and other names retained.
+# No hostname, machine-id, boot-id, UUID, MAC, LAN address, SSID or credential collected; whitespace retained.
+
+##### b2-nmcli
+GENERAL.DEVICE:eth0
+GENERAL.TYPE:ethernet
+GENERAL.STATE:100 (connected)
+GENERAL.METERED:no (guessed)
+
+GENERAL.DEVICE:enx020000000020
+GENERAL.TYPE:ethernet
+GENERAL.STATE:100 (connected)
+GENERAL.METERED:no (guessed)
+
+GENERAL.DEVICE:eth1
+GENERAL.TYPE:ethernet
+GENERAL.STATE:100 (connected)
+GENERAL.METERED:no (guessed)
+
+GENERAL.DEVICE:ttyUSB7
+GENERAL.TYPE:gsm
+GENERAL.STATE:100 (connected)
+GENERAL.METERED:yes (guessed)
+
+GENERAL.DEVICE:lo
+GENERAL.TYPE:loopback
+GENERAL.STATE:100 (connected (externally))
+GENERAL.METERED:no (guessed)
+
+GENERAL.DEVICE:cdc-wdm1
+GENERAL.TYPE:gsm
+GENERAL.STATE:30 (disconnected)
+GENERAL.METERED:unknown
+
+GENERAL.DEVICE:wlan0
+GENERAL.TYPE:wifi
+GENERAL.STATE:30 (disconnected)
+GENERAL.METERED:unknown
+
+GENERAL.DEVICE:p2p-dev-wlan0
+GENERAL.TYPE:wifi-p2p
+GENERAL.STATE:30 (disconnected)
+GENERAL.METERED:unknown
+
+GENERAL.DEVICE:clap-wlan0
+GENERAL.TYPE:wifi
+GENERAL.STATE:20 (unavailable)
+GENERAL.METERED:unknown
+
+##### b2-nmcli-stderr
+
+##### b2-nmcli-exit
+0

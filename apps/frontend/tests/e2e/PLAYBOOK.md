@@ -234,6 +234,15 @@ missing readiness, or a different bound RPC port fails startup with its log path
 Losing the parent IPC channel terminates the child rather than orphaning it.
 Test reports annotate the assigned `backend-port` without recording credentials.
 
+The child starts the update orchestrator through its explicit test CONTROL lease
+port and an `update-agent.json` inside that same private working directory before
+booting the server. It awaits actual startup completion, not a delay or a forced
+readiness flag. This avoids a missing installed `/run` helper or unwritable
+`/data` state keeping the mock backend's real disruptive-action gate busy forever.
+The disposable lease is the backend unit fixture's lifetime-tracking fake; these
+browser runs do not qualify kernel flock, OS recovery or installed updater startup.
+Production admission, startup retries and the SSH RPC remain unchanged.
+
 `backend-startup.spec.ts` holds a foreign listener open and requires startup
 rejection, then boots simultaneous backends and verifies distinct RPC/preview
 listeners and independent configuration. No login assertions, retries, timeouts,

@@ -26,6 +26,7 @@ import {
 } from '@ceraui/rpc/schemas';
 import { Keyboard, KeyboardOff, LoaderCircle, Monitor } from '@lucide/svelte';
 import { onMount } from 'svelte';
+import { toast } from 'svelte-sonner';
 
 import AsyncSwitch from '$lib/components/custom/async-switch.svelte';
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
@@ -119,6 +120,12 @@ async function handleEnableChange(next: boolean) {
 	});
 	// undefined → re-entry no-op or a thrown RPC (osCommand already toasted).
 	if (!result) throw new Error('kiosk_toggle_failed');
+	if (result.error && ['streaming', 'stream_liveness_unknown', 'update_in_progress'].includes(result.error)) {
+		unavailable = false;
+		clearOperation('kiosk');
+		toast.error(m["notifications.disruptiveActionRefused"]());
+		throw new Error(result.error);
+	}
 	if (result.error === KIOSK_UNAVAILABLE_ERROR || !result.applied) {
 		unavailable = true;
 		// The op did not actually apply — drop the (optimistically confirmed)

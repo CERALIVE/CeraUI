@@ -302,6 +302,9 @@ describe("lifecycle interlock — streaming admission (both race orders)", () =>
 
 		expect(failed.result).toBe("failed");
 		expect(isLifecycleHeld()).toBe(false);
+		// An unclassified post-admission failure leaves engine liveness UNKNOWN
+		// (D207); the engine's own idle reply is the evidence that re-admits Start.
+		await orchestrator.reconcile();
 
 		let launches = 0;
 		const next = await orchestrator.start({

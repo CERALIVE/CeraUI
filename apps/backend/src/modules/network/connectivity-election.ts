@@ -26,15 +26,18 @@
 */
 
 import { isIP } from "node:net";
+import { logger } from "../../helpers/logger.ts";
 
 import {
 	type AptReachability,
 	defaultAptReachabilityDeps,
+	deriveVerdict,
 	probeAptReachability,
 } from "../system/apt-reachability.ts";
 import type { ProbeCandidate } from "./connectivity-candidates.ts";
 import { checkConnectivityViaDevice } from "./device-bound-probe.ts";
 import { checkConnectivity } from "./internet.ts";
+import { observeRepository, observeUplinkPool } from "./uplink-observation.ts";
 
 /** The two ways a probe can be steered, injected so the binding is provable. */
 export type ConnectivityProbes = {
@@ -102,23 +105,31 @@ export function raceConnectivityAddresses(
 
 	if (targets.length === 0) return Promise.resolve(false);
 
-	return new Promise((resolve) => {
+	return new Promise((resolve, reject) => {
 		let remaining = targets.length;
+		let active = 0;
 		let settled = false;
+		const errors: unknown[] = [];
 		let staggerTimer: ReturnType<typeof setTimeout> | undefined;
 
 		const runProbe = async (addr: string): Promise<void> => {
 			if (settled) return;
-			const reachable = await probe(addr);
-			if (settled) return;
-			if (reachable) {
-				settled = true;
-				if (staggerTimer) clearTimeout(staggerTimer);
-				resolve(true);
-				return;
+			active++;
+			try {
+				if (await probe(addr)) {
+					settled = true;
+					if (staggerTimer) clearTimeout(staggerTimer);
+				}
+			} catch (error) {
+				errors.push(error);
+			} finally {
+				active--;
+				remaining--;
+				if (active === 0 && (settled || remaining === 0)) {
+					if (!settled && errors.length > 0) reject(new AggregateError(errors));
+					else resolve(settled);
+				}
 			}
-			remaining -= 1;
-			if (remaining === 0) resolve(false);
 		};
 
 		for (const target of targets) {
@@ -157,17 +168,19 @@ export async function electConnectivityCandidate(
 		| { readonly candidate: ProbeCandidate; readonly family: 4 | 6 }
 		| undefined;
 
-	for (const candidate of candidates) {
-		const repository = await probes.probeRepository(candidate.name);
+	const observe = async (
+		candidate: ProbeCandidate,
+	): Promise<CandidateProbeResult & { readonly family: 4 | 6 | undefined }> => {
+		const repository = await observeRepository(candidate.name, probes);
 		const family =
 			repository.ipv4 === "ok" ? 4 : repository.ipv6 === "ok" ? 6 : undefined;
 		if (family !== undefined) {
-			results.push({ candidate, reachable: true, repository });
-			return { elected: candidate, results, family };
+			return { candidate, reachable: true, repository, family };
 		}
 		const localAddress =
 			candidate.binding.kind === "source-ip" ? candidate.binding.ip : undefined;
 		let reachableFamily: 4 | 6 | undefined;
+		let observationFailed = false;
 		const reachable = await raceConnectivityAddresses(
 			addrs,
 			async (addr) => {
@@ -179,10 +192,49 @@ export async function electConnectivityCandidate(
 				return success;
 			},
 			localAddress,
-		);
+		).catch((error: unknown) => {
+			if (!(error instanceof AggregateError)) throw error;
+			logger.warn("Generic uplink observation unavailable", {
+				ifname: candidate.name,
+				error,
+			});
+			observationFailed = true;
+			return false;
+		});
+		if (observationFailed)
+			return {
+				candidate,
+				reachable: false,
+				repository: deriveVerdict([]),
+				family: undefined,
+			};
+		return { candidate, reachable, repository, family: reachableFamily };
+	};
+	const firstCandidate = candidates[0];
+	if (!firstCandidate) return { elected: undefined, results };
+	const first = await observe(firstCandidate);
+	if (first.repository.ipv4 === "ok" || first.repository.ipv6 === "ok") {
+		return {
+			elected: first.candidate,
+			results: [first],
+			family: first.repository.ipv4 === "ok" ? 4 : 6,
+		};
+	}
+	const observations = [
+		first,
+		...(await observeUplinkPool(candidates.slice(1), observe)),
+	];
+
+	for (const { candidate, reachable, repository, family } of observations) {
 		results.push({ candidate, reachable, repository });
-		if (reachableFamily !== undefined && fallback === undefined) {
-			fallback = { candidate, family: reachableFamily };
+		if (
+			family !== undefined &&
+			(repository.ipv4 === "ok" || repository.ipv6 === "ok")
+		) {
+			return { elected: candidate, results, family };
+		}
+		if (family !== undefined && fallback === undefined) {
+			fallback = { candidate, family };
 		}
 	}
 
@@ -197,4 +249,17 @@ export function describeBinding(candidate: ProbeCandidate): string {
 	return candidate.binding.kind === "device"
 		? `bound to device ${candidate.binding.ifname}`
 		: `from ${candidate.binding.ip}`;
+}
+
+export function logConnectivityElection(election: ConnectivityElection): void {
+	for (const { candidate, reachable, repository } of election.results) {
+		logger.info(
+			`Internet ${reachable ? "reachable" : "unreachable"} via ${candidate.name} (${describeBinding(candidate)})`,
+			{
+				repository: repository.verdict,
+				ipv4: repository.ipv4,
+				ipv6: repository.ipv6,
+			},
+		);
+	}
 }

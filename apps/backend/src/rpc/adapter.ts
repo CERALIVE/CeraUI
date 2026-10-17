@@ -3,10 +3,11 @@
  * Handles WebSocket connections and routes messages to ORPC procedures
  */
 
-import { call } from "@orpc/server";
+import { call, ORPCError } from "@orpc/server";
 import type { ServerWebSocket, WebSocketHandler } from "bun";
 
 import { logger, logRedact } from "../helpers/logger.ts";
+import { isRuntimeConfigAvailable } from "../modules/config.ts";
 import { SHARING_DIAG_EVENT } from "../modules/network/sharing-diag/status.ts";
 import {
 	getStreamHealth,
@@ -26,6 +27,7 @@ import {
 	removeClient,
 	sendToClient,
 } from "./events.ts";
+import { sendAddonSnapshot } from "./procedures/addons.procedure.ts";
 import {
 	buildInitialNotifications,
 	buildInitialStatus,
@@ -166,13 +168,21 @@ export async function handleORPCMessage(
 			: [];
 
 		const rawMessage = error instanceof Error ? error.message : "Unknown error";
+		const updateStartupPending =
+			error instanceof ORPCError &&
+			error.code === "UPDATE_ORCHESTRATOR_INITIALIZING";
 		ws.send(
 			JSON.stringify({
 				id: message.id,
 				error: {
 					// logRedact keeps a secret-shaped message from leaking to the client.
 					message: String(logRedact(rawMessage)),
-					code: isValidation ? "VALIDATION_ERROR" : "INTERNAL_ERROR",
+					code: updateStartupPending
+						? error.code
+						: isValidation
+							? "VALIDATION_ERROR"
+							: "INTERNAL_ERROR",
+					...(updateStartupPending ? { retryable: true } : {}),
 					...(fields.length > 0 ? { fields } : {}),
 				},
 			}),
@@ -187,6 +197,11 @@ function sendInitialStatusToClient(ws: AppWebSocket): void {
 	const initialStatus = buildInitialStatus();
 
 	sendToClient(ws, "config", initialStatus.config);
+	void sendAddonSnapshot((snapshot) =>
+		sendToClient(ws, "addons", snapshot),
+	).catch((error) =>
+		logger.error("addon initial hydration failed", { err: error }),
+	);
 	sendToClient(ws, "pipelines", initialStatus.pipelines);
 	if (initialStatus.relays) {
 		sendToClient(ws, "relays", initialStatus.relays);
@@ -232,8 +247,10 @@ export function createWebSocketHandler(): WebSocketHandler<SocketData> {
 			logger.debug("WebSocket client connected");
 			addClient(ws);
 
-			// If no password is set, prompt for password setup
-			if (!getPasswordHash()) {
+			// Prompt for first-run password setup only when config was READ and holds
+			// none. While config.json is unreadable the stored password is unknown,
+			// not absent, so nobody may claim the device by setting one.
+			if (!getPasswordHash() && isRuntimeConfigAvailable()) {
 				sendToClient(ws, "status", { set_password: true });
 			}
 

@@ -44,6 +44,11 @@ import {
 } from "../streaming/lifecycle-admission.ts";
 
 import { listMutationEntries } from "./mutation-journal.ts";
+import {
+	assertMutationJournalRevision,
+	isMutationJournalRevisionCurrent,
+	mutationJournalRevision,
+} from "./mutation-journal-revision.ts";
 import { blocksMutations, blocksStreaming } from "./mutation-journal-state.ts";
 
 const REFUSAL_BY_STATE: Readonly<
@@ -88,7 +93,7 @@ async function enumeratePresentKeys(): Promise<ReadonlySet<string>> {
 }
 
 export const defaultMutationBlockDeps: MutationBlockDeps = {
-	listEntries: () => listMutationEntries(),
+	listEntries: () => listMutationEntries(undefined, true),
 	presentStableKeys: enumeratePresentKeys,
 };
 
@@ -103,6 +108,11 @@ export function resetMutationBlockDeps(): void {
 }
 
 let lastBlocks: readonly ModemMutationBlock[] = [];
+let lastRevision = mutationJournalRevision();
+
+export function reconciledMutationJournalRevision(): bigint {
+	return lastRevision;
+}
 
 export function currentMutationBlocks(): readonly ModemMutationBlock[] {
 	return lastBlocks;
@@ -112,11 +122,18 @@ export function currentMutationBlocks(): readonly ModemMutationBlock[] {
 export async function refreshMutationBlocks(
 	deps: MutationBlockDeps = activeDeps,
 ): Promise<readonly ModemMutationBlock[]> {
-	const entries = await deps.listEntries();
+	let revision = mutationJournalRevision();
+	let entries = await deps.listEntries();
+	if (!isMutationJournalRevisionCurrent(revision)) {
+		revision = mutationJournalRevision();
+		entries = await deps.listEntries();
+	}
 	const blocking = entries.filter((entry) => blocksMutations(entry.state));
 	if (blocking.length === 0) {
+		assertMutationJournalRevision(revision);
 		setMutationBlocks([]);
 		lastBlocks = [];
+		lastRevision = revision;
 		return lastBlocks;
 	}
 
@@ -135,6 +152,7 @@ export async function refreshMutationBlocks(
 		...(entry.detail === undefined ? {} : { detail: entry.detail }),
 	}));
 
+	assertMutationJournalRevision(revision);
 	setMutationBlocks(
 		blocks.map(
 			(block): MutationBlock => ({
@@ -145,5 +163,6 @@ export async function refreshMutationBlocks(
 		),
 	);
 	lastBlocks = blocks;
+	lastRevision = revision;
 	return lastBlocks;
 }

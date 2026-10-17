@@ -1,10 +1,14 @@
+import { cancelDisruptiveRetries } from "../modules/system/disruptive-retry.ts";
 import { logger } from "./logger.ts";
 
 export interface BackendShutdownDeps {
+	/** Cancels background retry owners so none starts work during teardown. */
+	readonly stopRecoveryRetries?: () => void;
 	readonly gracefulShutdown: () => Promise<void>;
 	readonly stopSrtIngest: () => Promise<void>;
 	readonly stopDmesgWatchers: () => void;
 	readonly stopUplinkShaper?: () => Promise<void>;
+	readonly stopGatewayRoutes?: () => Promise<void>;
 	readonly exit: (code: number) => void;
 }
 
@@ -31,8 +35,13 @@ export function handleTerminationSignal(
 ): void {
 	if (shuttingDown) return;
 	shuttingDown = true;
+	cancelDisruptiveRetries();
 	logger.info(`received ${signal}; shutting down streaming processes`);
 	void (async () => {
+		if (deps.stopRecoveryRetries)
+			await settleCleanup("recovery retries", deps.stopRecoveryRetries);
+		if (deps.stopGatewayRoutes)
+			await settleCleanup("host route preference", deps.stopGatewayRoutes);
 		await settleCleanup("SRT ingest", deps.stopSrtIngest);
 		await settleCleanup("dmesg watchers", deps.stopDmesgWatchers);
 		if (deps.stopUplinkShaper)

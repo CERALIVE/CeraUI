@@ -59,6 +59,7 @@ import {
 	nextEntry,
 	removeMutationEntry,
 } from "./mutation-journal.ts";
+import { persistMutationFailure } from "./mutation-journal-retirement.ts";
 
 export type MutationOutcome<T> =
 	| { readonly ok: true; readonly value: T }
@@ -153,7 +154,14 @@ export async function withJournaledModemMutation<T>(
 	try {
 		await commitMutationEntry(entry);
 	} catch (err) {
-		acquired.lease.release();
+		try {
+			await persistMutationFailure(
+				nextEntry(entry, "failed", journalNow(), "mutation was not dispatched"),
+			);
+			await refreshMutationBlocks().catch(() => undefined);
+		} finally {
+			acquired.lease.release();
+		}
 		logger.error("refusing a modem mutation: its journal did not commit", {
 			module: "modems",
 			stableKey: key,
@@ -178,16 +186,30 @@ export async function withJournaledModemMutation<T>(
 			markFailed: (detail) => advance("failed", detail),
 		});
 		if (result.confirmed) {
-			await removeMutationEntry(key);
+			await advance("completed");
+			try {
+				await removeMutationEntry(key);
+			} catch (err) {
+				logger.error("modem mutation retirement did not commit", {
+					module: "modems",
+					stableKey: key,
+					err,
+				});
+				return refuse("mutation_blocked");
+			}
 			return { ok: true, value: result.value };
 		}
 		await advance("failed", result.detail ?? "mutation was not confirmed");
 		return { ok: true, value: result.value };
 	} catch (err) {
-		await advance(
-			"failed",
-			err instanceof Error ? err.message : String(err),
-		).catch(() => undefined);
+		await persistMutationFailure(
+			nextEntry(
+				entry,
+				"failed",
+				journalNow(),
+				err instanceof Error ? err.message : String(err),
+			),
+		);
 		throw err;
 	} finally {
 		acquired.lease.release();

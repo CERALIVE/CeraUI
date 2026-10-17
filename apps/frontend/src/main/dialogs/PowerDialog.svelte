@@ -17,7 +17,6 @@
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
-import type { UpdateProgress } from '@ceraui/rpc/schemas';
 import { AlertTriangle, Power, PowerOff, RotateCcw } from '@lucide/svelte';
 
 import { onDestroy } from 'svelte';
@@ -28,6 +27,7 @@ import { getOperationPhase, osCommand } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
 import { getIsConnected, getIsStreaming, getUpdating } from '$lib/rpc/subscriptions.svelte';
 import { clearRebooting, getIsRebooting, markRebooting } from '$lib/stores/connection-ux.svelte';
+import { legacyInstallRunning } from '$lib/updates/legacy-install';
 import { cn } from '$lib/utils';
 
 interface Props {
@@ -54,11 +54,9 @@ function resolveCountdownSeconds(): number {
 // --- Backend guard, reflected in the UI ------------------------------------
 const streaming = $derived(getIsStreaming());
 const updating = $derived(getUpdating());
-// In progress = literal true OR a progress object that hasn't resolved.
-const isUpdating = $derived(
-	updating === true ||
-		(typeof updating === 'object' && updating !== null && (updating as UpdateProgress).result !== 0),
-);
+// In progress = an install the device has not finished; its terminal object
+// (success or failure) is retained by the store and must release the gate.
+const isUpdating = $derived(legacyInstallRunning(updating));
 const blocked = $derived(streaming || isUpdating);
 const blockedReason = $derived(
 	streaming

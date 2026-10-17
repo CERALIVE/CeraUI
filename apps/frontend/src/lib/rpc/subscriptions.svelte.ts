@@ -30,6 +30,7 @@ import type {
 	SharingDiag,
 	SourcesMessage,
 	StatusResponse,
+	UpdateOrchestratorWireState,
 	UpdateState,
 	UplinkShaperStatus,
 	UplinkSteeringStatus,
@@ -69,7 +70,7 @@ import {
 	type ManagedIngestAccount,
 	parseIngestSlots,
 } from "$lib/streaming/receiver-experience";
-
+import { settleStartRecoveryEvidence } from "$lib/streaming/unresolved-stream-actions.svelte";
 import {
 	beginOperation,
 	confirmOperation,
@@ -85,8 +86,22 @@ import {
 	shouldIgnoreEchoReactive,
 } from "./dirty-registry.svelte";
 import { mergeModemList } from "./modem-list-merge";
+import { pullStatusEvidence } from "./pulled-status";
 import { reauthenticateAndHydrate } from "./reconnect";
 import { createSeqTracker } from "./seq-guard";
+import {
+	noteLifecycleDelivered,
+	noteLinkState,
+	noteSessionRestored,
+	type Receipt,
+	type RequestDispatch,
+	receiveEvidence,
+} from "./session-epoch.svelte";
+import { selectStatusFields } from "./status-field-order";
+import {
+	reconcileStreamingOptimism,
+	supersedeStartingOptimism,
+} from "./streaming-optimism.svelte";
 import {
 	refreshWifiAdapterModes,
 	resetWifiAdapterModes,
@@ -135,6 +150,11 @@ let availableUpdatesState = $state.raw<
 // Locked by `main/Layout.updating-overlay.test.ts`.
 let updatingState = $state.raw<StatusResponse["updating"]>(null);
 let updateStateState = $state.raw<UpdateState | undefined>(undefined);
+// `undefined` means no frame has carried the orchestrator block (an older
+// backend), which is NOT the same fact as `phase: 'idle'`.
+let updateOrchestratorState = $state.raw<
+	UpdateOrchestratorWireState | undefined
+>(undefined);
 
 // Network state
 let netifState = $state.raw<NetifMessage | undefined>(undefined);
@@ -304,6 +324,12 @@ export function getUpdateState() {
 	return updateStateState;
 }
 
+export function getUpdateOrchestratorState():
+	| UpdateOrchestratorWireState
+	| undefined {
+	return updateOrchestratorState;
+}
+
 export function getNetif() {
 	return netifState;
 }
@@ -454,7 +480,12 @@ const seqTracker = createSeqTracker();
 /**
  * Handle incoming messages and update state
  */
-function handleMessage(type: string, data: unknown, seq?: number): void {
+function handleMessage(
+	type: string,
+	data: unknown,
+	seq?: number,
+	receipt?: Receipt,
+): void {
 	// Drop out-of-order/duplicate broadcasts for this type before applying.
 	// Messages without `seq` (local/legacy, or reconnect safety-hydrate
 	// dispatches) bypass the guard.
@@ -493,8 +524,14 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			// registry only covers ConfigMessage fields (see the "config" case).
 			// Status-owned toggles (BondToggle / AsyncSwitch) register their own
 			// fields in T14, so this merge is left untouched to avoid double-guarding.
-			const statusData = data as StatusResponse;
-			const wasStreaming = isStreamingState;
+			// A push is received right here; a pulled answer carries its receipt.
+			const received = receipt ?? receiveEvidence();
+			const statusData = selectStatusFields(
+				data as StatusResponse,
+				received,
+				isStreamingState,
+			);
+			if (statusData === undefined) break;
 
 			// Update individual states
 			if (statusData.is_streaming !== undefined) {
@@ -521,6 +558,12 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 					statusData.update_state,
 				);
 			}
+			if (statusData.update_orchestrator !== undefined) {
+				updateOrchestratorState = preserveWireIdentity(
+					updateOrchestratorState,
+					statusData.update_orchestrator,
+				);
+			}
 			if (statusData.wifi !== undefined) {
 				wifiState = preserveWireIdentity(wifiState, statusData.wifi);
 			}
@@ -533,21 +576,7 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 					statusData.linkTelemetry,
 				);
 			}
-			// Belt-and-braces telemetry clear on a true→false streaming transition.
-			// The T5 backend contract already null-broadcasts linkTelemetry on the
-			// next heartbeat after stop, but a `{is_streaming:false}` frame that omits
-			// linkTelemetry would otherwise leave a stale bond on the HUD/IngestStats
-			// until that tick. Clearing here defensively closes that gap.
-			// The same edge clears `active_encode`, `engine_bitrate` and
-			// `preview_encoder_realized`: all three are engine truth about a LIVE
-			// session, and the merge below preserves an omitted field, so a stop frame
-			// that omits them would leave the stopped session labelled "Live" at the
-			// rate it was last encoding at, still explaining why its preview fell back
-			// to software.
-			const stoppedNow = wasStreaming && isStreamingState === false;
-			if (stoppedNow) {
-				linkTelemetryState = null;
-			}
+			// Stop-edge retractions are selected above, with the same field provenance.
 			// Store-and-forward buffering rides the engine `status` event bus (NOT
 			// device-stats). undefined = no buffering field this frame (no-op).
 			ingestBuffering(statusData.buffering);
@@ -559,19 +588,13 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 				is_streaming: isStreamingState,
 				wifi: wifiState ?? {},
 				modems: modemsState ?? {},
-				...(stoppedNow
-					? {
-							active_encode: null,
-							engine_bitrate: null,
-							preview_encoder_realized: null,
-							// A stopped session makes no claim about a bond, and the
-							// merge above preserves an omitted field — so a degradation
-							// band raised mid-stream would otherwise stand forever.
-							bond_mapping: null,
-						}
-					: {}),
 			} as Exclude<typeof statusState, undefined>;
 			statusState = preserveWireIdentity(statusState, nextStatus);
+			if ("stream_lifecycle" in statusData) noteLifecycleDelivered(received);
+			const recoveredStart = settleStartRecoveryEvidence(statusData, received);
+			if (recoveredStart !== undefined)
+				supersedeStartingOptimism(recoveredStart);
+			if (statusData.is_streaming === true) reconcileStreamingOptimism(true);
 			break;
 		}
 
@@ -1029,10 +1052,35 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
  * Apply a PULLED status snapshot (`rpc.status.getStatus()`) seq-less, so it
  * bypasses the per-type drop-stale guard. INVARIANT: a pull is authoritative and
  * must never be gated by push seq bookkeeping. Recovery seam for the stopping
- * watchdog (mirrors the reconnect-hydrate dispatch).
+ * watchdog and the reconnect hydrate.
+ *
+ * A pull is a FULL snapshot, so an optional lifecycle it omits is absent now
+ * (an older backend), not unchanged: it replaces the held value instead of
+ * merging like a partial push (early oracle R4).
+ *
+ * Real RPC producers carry dispatch and receipt through `pullStatusEvidence`.
+ * Omitting provenance is only the synchronous snapshot/test ingestion seam;
+ * it must never be used to ingest an awaited RPC answer.
  */
-export function ingestPulledStatus(status: unknown): void {
-	handleMessage("status", status, undefined);
+export function ingestPulledStatus(status: unknown, receipt?: Receipt): void {
+	const snapshot =
+		typeof status === "object" && status !== null
+			? { stream_lifecycle: undefined, ...status }
+			: status;
+	handleMessage("status", snapshot, undefined, receipt);
+}
+
+export interface ReceivedStatus<T = unknown> {
+	readonly status: T;
+	readonly receipt: Receipt;
+}
+
+/** Stamp a pulled status answer at its receipt, before anyone holds it. */
+export function receivePulledStatus<T>(
+	status: T,
+	dispatch?: RequestDispatch,
+): ReceivedStatus<T> {
+	return { status, receipt: receiveEvidence(dispatch) };
 }
 
 const AUTH_STORAGE_KEY = "auth";
@@ -1062,7 +1110,7 @@ async function runReconnectReauth(): Promise<void> {
 	if (reauthInFlight) return;
 	reauthInFlight = true;
 	try {
-		await reauthenticateAndHydrate({
+		const outcome = await reauthenticateAndHydrate({
 			getStoredToken: readStoredToken,
 			clearStoredToken,
 			// A REVOCABLE device-issued token, so it authenticates through
@@ -1070,11 +1118,20 @@ async function runReconnectReauth(): Promise<void> {
 			// the password hash and every reconnect fails.
 			login: (token) => rpc.auth.login({ token, persistent_token: true }),
 			getConfig: () => rpc.streaming.getConfig(),
-			getStatus: () => rpc.status.getStatus(),
-			dispatch: handleMessage,
+			getStatus: () => pullStatusEvidence(),
+			dispatch: (type, data) => {
+				if (type === "status") {
+					const answer = data as ReceivedStatus | undefined;
+					if (answer !== undefined)
+						ingestPulledStatus(answer.status, answer.receipt);
+				} else {
+					handleMessage(type, data);
+				}
+			},
 			routeToLogin,
 			onError: (error) => console.error("Reconnect re-auth failed:", error),
 		});
+		if (outcome === "hydrated") noteSessionRestored();
 	} finally {
 		reauthInFlight = false;
 	}
@@ -1089,9 +1146,9 @@ function handleConnectionChange(state: ConnectionState): void {
 	isConnectedState = state === "connected";
 
 	// On the reconnect edge drop every still-pending OS-operation latch: the
-	// post-reconnect getStatus hydrate (kicked async by runReconnectReauth below)
-	// is the authoritative snapshot, so a stale pending must not linger. Steady
-	// connected→connected ticks reconcile nothing.
+	// post-reconnect getStatus hydrate (kicked by runReconnectReauth below) is
+	// authoritative. Steady connected→connected ticks reconcile nothing.
+	noteLinkState(state);
 	reconcileOperationsOnReconnect(previous, state);
 
 	if (state === "connected") {
@@ -1163,6 +1220,7 @@ export function resetState(): void {
 	sshState = undefined;
 	availableUpdatesState = undefined;
 	updatingState = null;
+	updateOrchestratorState = undefined;
 	netifState = undefined;
 	uplinksState = undefined;
 	sharingDiagState = undefined;

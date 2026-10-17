@@ -285,7 +285,7 @@ describe('update-check failure reasons — additive growth', () => {
 });
 
 describe('aptReachabilitySchema — both families, always', () => {
-	test('carries the six probe results the device classifier emits', () => {
+	test('carries the eight probe results the device classifier emits', () => {
 		expect([...APT_FAMILY_PROBE_RESULTS]).toEqual([
 			'ok',
 			'blocked',
@@ -293,6 +293,8 @@ describe('aptReachabilitySchema — both families, always', () => {
 			'dns_failed',
 			'captive',
 			'unknown',
+			'probe_unavailable',
+			'credentials_invalid',
 		]);
 	});
 

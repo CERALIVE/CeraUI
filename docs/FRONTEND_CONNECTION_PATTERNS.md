@@ -2,6 +2,23 @@
 
 This document covers the frontend-specific connection layer: how the WebSocket client initialises, how reactive state is fed, how optimistic writes are protected from stale echoes, and how the transport self-heals after any outage.
 
+Latest-owner Stop acknowledgement revokes its captured Start whether or not an
+admissible settlement already closed the Stop claim. Idle confirms the operation,
+not an acknowledged Start's termination before recovery; failed Stop and
+pre-record boolean false do not revoke it. Post-record facts still settle UNKNOWN,
+and the band's explicit Stop is the escape. The 36-cell real-socket S/R/E matrix
+in `LiveView.real-socket-stop.test.ts` owns this contract, retaining owner/generation
+fences, no replacement after revocation and zero automatic Stops. Host proof is
+not browser/board qualification.
+
+A dispatched Start whose 75-second reply deadline expires retains its generation
+and the existing 90-second watchdog, just as a connection reset does. Timeout or
+a handler error is not idle proof; only proven non-dispatch (`NotSentError`) or
+the existing negative Start result reverts directly. Later admissible live/idle
+facts settle the lost attempt, while exhausted evidence retains UNKNOWN and the
+operator's explicit Stop. The timeout dimension adds 36 real-carrier cells without
+altering the acknowledged-Start S/R/E cells or their C5' conservative outcome.
+
 For the backend broadcast enumeration (which message types the server pushes and when), see [RPC_COMMUNICATION.md](RPC_COMMUNICATION.md).
 
 ---
@@ -153,7 +170,7 @@ When the WebSocket reconnects after the operator has already authenticated, the 
 1. Reads the device-issued, revocable token from `localStorage["auth"]`; the password is never persisted.
 2. Calls `deps.login(token)` — wired to `rpc.auth.login({ token, persistent_token: true })`.
 3. Dispatches the auth result through `handleMessage` (the canonical path).
-4. On success: fires a safety hydrate — `rpc.streaming.getConfig()` and `rpc.status.getStatus()` in parallel, dispatching both results through `handleMessage`. This repopulates the HUD and destination views even if the backend's post-login push is incomplete.
+4. On success: fires config and status safety reads in parallel, consuming each independently. Status carries BOTH request dispatch and browser receipt provenance. An intervening intent or newer STREAM-FACT observation supersedes a pull's stream evidence: withhold that group, merge unrelated supplied fields independently, and allow at most one fresh read. Only `is_streaming`, `stream_lifecycle` and unclassified names (fail closed) advance that atomic horizon; telemetry/Wi-Fi/modem/SSH-only pushes do not. Preserve a newer overlapping push after dispatch or a newer field receipt/read, not a blanket whole-answer rejection. A twice-stream-superseded or failed read supplies no stream settlement. Config failure never withholds successful status. Restoration is decided after both paths settle (see START-LIFECYCLE, FIX-16-F7).
 5. On explicit server rejection: clears the stored credential (loop break — the next reconnect finds no token and short-circuits) and routes to the login screen.
 6. On a socket reset, timeout, or other transport failure: returns `unreachable`, retaining the credential and auth state for a later reconnect. A failed safety hydrate likewise retains the authenticated session.
 
@@ -182,6 +199,31 @@ The function is dependency-injected and rune-free, so it runs under the plain vi
 `runReconnectReauth()` is called from `handleConnectionChange` when `state === "connected"` and `wasAuthenticated()` is true. A `reauthInFlight` flag prevents concurrent re-auth attempts across rapid reconnect cycles.
 
 The seq tracker is reset on every reconnect (`seqTracker.resetOnReconnect()`) so a restarted server whose sequence numbers reset to 0 is accepted cleanly.
+
+Receipt is arrival at the browser; it is not device computation time. Ingestion
+uses the carried receipt rather than minting a new delivery. For pulled stream
+evidence, dispatch after a claim/observation is additionally required: ordinary
+FIFO reply arrival after a press cannot prove a request sent before the press
+took effect. The shared bounded reader is also used by both stream watchdogs;
+their captured action lifetime is checked after awaits and before every effect.
+A settled or superseded cycle never dispatches/reconciles/reverts a later action.
+Silence is unknown, never automatic Stop permission. Scripted-socket host tests
+cover these orders; real browser and board qualification remain owed.
+
+Exhausting a current Start watchdog's bounded evidence creates generation-owned
+recovery UNKNOWN in the existing unresolved-action store, not idle. The existing
+unconfirmed band offers the operator's explicit Stop across navigation/remount
+and reconnect. Only later admissible live/idle facts after its mark or the current
+Stop owner's acknowledgement settle that attempt. The latest explicit owner's
+acknowledged Stop settles its captured, still-current starting attempt before OR
+after exhaustion, revoking its pending watchdog even if no recovery record exists
+yet. Old Stop owners and old Start generations cannot revoke a newer attempt;
+failed Stop revokes nothing. Operation confirmation still needs post-press idle
+lifecycle evidence. Superseded/failed reads and non-settling lifecycle pushes do
+not settle recovery. Fields described as unrelated are unrelated
+to **stream settlement**, not every decision (`updating` gates reboot/power;
+`network_ingest` gates Start configuration). Browser scheduling and integrated
+backend/engine incidence of the complete lost-confirmation transcript remain UNKNOWN.
 
 ---
 

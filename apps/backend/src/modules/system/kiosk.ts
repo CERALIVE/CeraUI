@@ -15,10 +15,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-/* Kiosk toggle state machine (DC-2 — docs/KIOSK_STATE_MACHINE.md) */
-import { readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
-
 import {
 	type AddonDescriptor,
 	AddonDescriptorSchema,
@@ -28,7 +25,6 @@ import {
 	type KioskState,
 	type KioskStatus,
 } from "@ceraui/rpc/schemas";
-
 import { type ExecResult, execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
@@ -37,12 +33,29 @@ import {
 	type MockKioskHarness,
 } from "../../mocks/providers/kiosk.ts";
 import {
+	outsideSysextOperation,
+	runDisruptiveSysextStep,
+} from "../addons/disruptive-sysext-step.ts";
+import {
 	type AddonOpResult,
 	disableAddon as managerDisableAddon,
 	enableAddon as managerEnableAddon,
+	recordAddonAutoDisabled,
 } from "../addons/manager.ts";
+import { outsideAddonMutation, withAddonMutation } from "../addons/mutation.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import {
+	DisruptiveActionRefusedError,
+	isDisruptiveActionRefusalReason,
+} from "./disruptive-action-error.ts";
+import { parseOsStageSystemdProperties } from "./update-orchestrator/os-stage-systemd.ts";
+/* Kiosk toggle state machine (DC-2 — docs/KIOSK_STATE_MACHINE.md) */
+import {
+	readStoredStateFileSync,
+	STORED_STATE_LIMITS,
+} from "./update-orchestrator/stored-state-file.ts";
+import { parseAuthorityJson } from "./update-orchestrator/strict-authority-json.ts";
 
 // Real-device detection (T4). Re-exported here so kiosk callers (and T13's RPC
 // gate) get the detector from the kiosk module surface. Detection only — the
@@ -117,7 +130,12 @@ export type KioskDeps = {
 // missing/malformed descriptor degrades the toggle rather than crashing it.
 function loadCogDescriptorFromDisk(): AddonDescriptor | null {
 	try {
-		const raw = JSON.parse(readFileSync(COG_DISPLAY_DESCRIPTOR_PATH, "utf8"));
+		const text = readStoredStateFileSync(
+			COG_DISPLAY_DESCRIPTOR_PATH,
+			STORED_STATE_LIMITS.agent,
+		);
+		if (text === null) return null;
+		const raw = parseAuthorityJson(text);
 		const descriptor = AddonDescriptorSchema.parse(raw);
 		if (descriptor.id !== COG_DISPLAY_ADDON_ID) {
 			logger.error(
@@ -168,8 +186,8 @@ async function probeNRestarts(): Promise<number> {
 			KIOSK_SERVICE,
 			"--property=NRestarts",
 		]);
-		const match = stdout.match(/NRestarts=(\d+)/);
-		return match?.[1] ? Number.parseInt(match[1], 10) : 0;
+		const value = parseOsStageSystemdProperties(stdout)?.get("NRestarts");
+		return value && /^[0-9]+$/.test(value) ? Number(value) : 0;
 	} catch {
 		return 0;
 	}
@@ -316,6 +334,8 @@ async function autoDisableKiosk(deps: KioskDeps): Promise<void> {
 	kioskLiveState = "disabled";
 	config.kiosk_last_state = "disabled";
 	saveConfig();
+	if (config.addons?.[COG_DISPLAY_ADDON_ID])
+		recordAddonAutoDisabled(COG_DISPLAY_ADDON_ID);
 	try {
 		await deps.systemctl(["mask", KIOSK_SERVICE]);
 	} catch (err) {
@@ -335,6 +355,12 @@ async function autoDisableKiosk(deps: KioskDeps): Promise<void> {
 export async function pollKioskOnce(
 	deps: KioskDeps = activeDeps,
 ): Promise<KioskState> {
+	return withAddonMutation(COG_DISPLAY_ADDON_ID, () =>
+		pollKioskOnceLocked(deps),
+	);
+}
+
+async function pollKioskOnceLocked(deps: KioskDeps): Promise<KioskState> {
 	if (!getConfig().kiosk_enabled) {
 		return applyState("disabled", deps);
 	}
@@ -366,15 +392,19 @@ export async function pollKioskOnce(
 /** Start the 2 s failure-observation poll loop (no-op if already running). */
 export function startKioskPolling(deps: KioskDeps = activeDeps): void {
 	stopKioskPolling();
-	pollTimer = setInterval(() => {
-		if (pollInFlight) return;
-		pollInFlight = true;
-		pollKioskOnce(deps)
-			.catch((err) => logger.error(`kiosk: poll iteration failed: ${err}`))
-			.finally(() => {
-				pollInFlight = false;
-			});
-	}, KIOSK_POLL_INTERVAL_MS);
+	pollTimer = outsideAddonMutation(() =>
+		outsideSysextOperation(() =>
+			setInterval(() => {
+				if (pollInFlight) return;
+				pollInFlight = true;
+				pollKioskOnce(deps)
+					.catch((err) => logger.error(`kiosk: poll iteration failed: ${err}`))
+					.finally(() => {
+						pollInFlight = false;
+					});
+			}, KIOSK_POLL_INTERVAL_MS),
+		),
+	);
 	pollTimer.unref?.();
 }
 
@@ -386,7 +416,7 @@ export function stopKioskPolling(): void {
 }
 
 /**
- * T1 — toggle-on. Synchronously (before the first await) persist
+ * T1 — toggle-on. After lazy admission resolves, synchronously persist
  * `kiosk_enabled = true` and snap to `enabled-stopped`, then enable the
  * cog-display add-on (manager owns the sysext + unit lifecycle) and begin
  * polling. The synchronous prelude lets RPC handlers read the committed state
@@ -395,6 +425,17 @@ export function stopKioskPolling(): void {
 export async function kioskStart(
 	deps: KioskDeps = activeDeps,
 ): Promise<KioskStatus> {
+	return withAddonMutation(COG_DISPLAY_ADDON_ID, () =>
+		runDisruptiveSysextStep("kiosk-start", () => kioskStartLocked(deps)),
+	);
+}
+
+async function kioskStartLocked(deps: KioskDeps): Promise<KioskStatus> {
+	const previousIntent = {
+		enabled: getConfig().kiosk_enabled,
+		lastState: getConfig().kiosk_last_state,
+		liveState: kioskLiveState,
+	};
 	getConfig().kiosk_enabled = true;
 	applyState("enabled-stopped", deps);
 
@@ -402,6 +443,14 @@ export async function kioskStart(
 	if (descriptor) {
 		const result = await deps.enableAddon(descriptor);
 		if (!result.success) {
+			if (isDisruptiveActionRefusalReason(result.error)) {
+				getConfig().kiosk_enabled = previousIntent.enabled;
+				getConfig().kiosk_last_state = previousIntent.lastState;
+				kioskLiveState = previousIntent.liveState;
+				saveConfig();
+				deps.broadcast(getKioskStatus());
+				throw new DisruptiveActionRefusedError(result.error);
+			}
 			logger.error(`kiosk: cog-display enable failed: ${result.error}`);
 		}
 	} else {
@@ -421,6 +470,17 @@ export async function kioskStart(
 export async function kioskStop(
 	deps: KioskDeps = activeDeps,
 ): Promise<KioskStatus> {
+	return withAddonMutation(COG_DISPLAY_ADDON_ID, () =>
+		runDisruptiveSysextStep("kiosk-stop", () => kioskStopLocked(deps)),
+	);
+}
+
+async function kioskStopLocked(deps: KioskDeps): Promise<KioskStatus> {
+	const previousIntent = {
+		enabled: getConfig().kiosk_enabled,
+		lastState: getConfig().kiosk_last_state,
+		liveState: kioskLiveState,
+	};
 	getConfig().kiosk_enabled = false;
 	applyState("disabled", deps);
 	stopKioskPolling();
@@ -429,6 +489,15 @@ export async function kioskStop(
 	if (descriptor) {
 		const result = await deps.disableAddon(descriptor);
 		if (!result.success) {
+			if (isDisruptiveActionRefusalReason(result.error)) {
+				getConfig().kiosk_enabled = previousIntent.enabled;
+				getConfig().kiosk_last_state = previousIntent.lastState;
+				kioskLiveState = previousIntent.liveState;
+				saveConfig();
+				deps.broadcast(getKioskStatus());
+				if (previousIntent.enabled) startKioskPolling(deps);
+				throw new DisruptiveActionRefusedError(result.error);
+			}
 			logger.error(`kiosk: cog-display disable failed: ${result.error}`);
 		}
 	} else {

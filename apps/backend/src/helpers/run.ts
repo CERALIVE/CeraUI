@@ -37,6 +37,7 @@
  *    child's stdin only.
  */
 
+import { SpawnAbortError, SpawnTimeoutError } from "./bounded-spawn.ts";
 import { execFileP } from "./exec.ts";
 import { logger } from "./logger.ts";
 
@@ -99,13 +100,6 @@ export class RunAbortError extends Error {
 	}
 }
 
-/** Error shape carried on a non-zero exit — parity with exec.ts execFileP. */
-type RunFailureError = Error & {
-	stdout: string;
-	stderr: string;
-	code: number;
-};
-
 /**
  * Binaries the backend is permitted to execute. This is the single source of
  * truth for every Wave 2 hardening task (network, modems, system, sensors,
@@ -145,6 +139,10 @@ export const ALLOWED: Set<string> = new Set<string>([
 	"sysctl",
 	// Future scoped conntrack flush on hard-down.
 	"conntrack",
+	"curl",
+	"gpgv",
+	"resolvectl",
+	"openssl",
 ]);
 
 /**
@@ -345,38 +343,20 @@ export async function run(
 		throw new RunAbortError(redacted);
 	}
 
-	// Timeout + cancellation are owned here and enforced through execFileP's
-	// `signal`: a fired timer or the caller's signal aborts the controller,
-	// execFileP kills the child, and the partial output on the rejection is
-	// reclassified into the typed timeout/abort error below.
-	const controller = new AbortController();
-	let timedOut = false;
-	const timer = setTimeout(() => {
-		timedOut = true;
-		controller.abort();
-	}, opts?.timeout ?? DEFAULT_TIMEOUT_MS);
-	const onCallerAbort = () => controller.abort();
-	opts?.signal?.addEventListener("abort", onCallerAbort, { once: true });
-
 	try {
 		const { stdout } = await execFileP(bin, [...args], {
 			maxBuffer: opts?.maxBuffer ?? DEFAULT_MAX_BUFFER,
-			signal: controller.signal,
+			timeout: opts?.timeout ?? DEFAULT_TIMEOUT_MS,
+			...(opts?.signal ? { signal: opts.signal } : {}),
 		});
 		return stdout;
 	} catch (err) {
-		if (controller.signal.aborted) {
-			const partial = err as Partial<RunFailureError>;
-			const partialStdout = partial.stdout ?? "";
-			const partialStderr = partial.stderr ?? "";
-			throw timedOut
-				? new RunTimeoutError(redacted, partialStdout, partialStderr)
-				: new RunAbortError(redacted, partialStdout, partialStderr);
+		if (err instanceof SpawnTimeoutError) {
+			throw err instanceof SpawnAbortError
+				? new RunAbortError(redacted, err.partialStdout, err.partialStderr)
+				: new RunTimeoutError(redacted, err.partialStdout, err.partialStderr);
 		}
 		throw err;
-	} finally {
-		clearTimeout(timer);
-		opts?.signal?.removeEventListener("abort", onCallerAbort);
 	}
 }
 

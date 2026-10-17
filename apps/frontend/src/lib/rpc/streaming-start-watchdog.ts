@@ -31,6 +31,8 @@
  *   - pull says NOT streaming → the start never confirmed within the budget
  *     (lost failure reply, or a wedged attempt); revert the stuck spinner to
  *     `idle` with a timeout reason so the operator can retry.
+ *   - no admissible evidence remains → preserve UNKNOWN and offer the
+ *     originating attempt's explicit operator Stop through the existing band.
  *
  * Pure core (rune-free, unit-testable): `runStartWatchdog(deps)` with every
  * effect injected. The reactive timer + wiring lives in
@@ -56,7 +58,11 @@ export interface StartWatchdogDeps {
 	 * drop-stale path entirely) and apply the full pulled snapshot to the reactive
 	 * store before resolving with the pulled `is_streaming`.
 	 */
-	pullStatus: () => Promise<boolean>;
+	pullStatus: () => Promise<boolean | undefined>;
+	/** The originating attempt still owns this cycle. */
+	isCurrent?: () => boolean;
+	/** No admissible evidence remains: retain UNKNOWN with an operator recovery path. */
+	unknown?: () => void;
 	/** Reconcile the optimism overlay from a pulled `is_streaming` value. */
 	reconcile: (isStreaming: boolean) => void;
 	/**
@@ -78,10 +84,18 @@ export const START_WATCHDOG_REVERT_REASON = "start_timeout";
  *   was lost; the pull recovered the view). No revert.
  * - pull says NOT streaming → reconcile is a no-op on `starting` (contradicting
  *   push), so revert explicitly to `idle` with a timeout reason.
+ * - undefined → publish current-attempt recovery UNKNOWN; never revert or Stop.
  */
 export async function runStartWatchdog(deps: StartWatchdogDeps): Promise<void> {
+	const current = deps.isCurrent ?? (() => true);
+	if (!current()) return;
 	const streaming = await deps.pullStatus();
+	if (!current()) return;
+	if (streaming === undefined) {
+		deps.unknown?.();
+		return;
+	}
 	deps.reconcile(streaming);
-	if (streaming) return;
+	if (!current() || streaming) return;
 	deps.revert(START_WATCHDOG_REVERT_REASON);
 }

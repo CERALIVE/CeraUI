@@ -13,18 +13,12 @@ import {
 	successResponseSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
-import {
-	loadCacheFile,
-	writeFileAtomicSync,
-} from "../../helpers/config-loader.ts";
-import {
-	type AuthTokens,
-	authTokensSchema,
-} from "../../helpers/config-schemas.ts";
+import type { AuthTokens } from "../../helpers/config-schemas.ts";
 import { randomBase64 } from "../../helpers/crypto.ts";
 import { logger } from "../../helpers/logger.ts";
 import { isDevelopment } from "../../mocks/mock-config.ts";
 import { getPasswordHash, setPasswordHash } from "../state/password.ts";
+import { PersistentTokenStore } from "../state/persistent-token-store.ts";
 import type { RPCContext } from "../types.ts";
 
 const AUTH_TOKENS_FILE = "auth_tokens.json";
@@ -34,10 +28,8 @@ const TOKEN_RECORD_RE = /^[0-9a-f]{64}$/;
 
 // Token storage
 const tempTokens: Record<string, true> = {};
-const persistentTokens: AuthTokens = await loadCacheFile(
-	AUTH_TOKENS_FILE,
-	authTokensSchema,
-);
+const tokenStore = await PersistentTokenStore.open(AUTH_TOKENS_FILE);
+const persistentTokens: AuthTokens = tokenStore.records;
 
 // Re-export for backward compatibility
 export { getPasswordHash, setPasswordHash };
@@ -52,40 +44,88 @@ function tokenRecord(token: string): string {
 	return new Bun.CryptoHasher("sha256").update(token).digest("hex");
 }
 
+// Every write is revalidated against the file, so it also drops any inert
+// pre-digest record that reread brought back.
 function savePersistentTokens() {
-	writeFileAtomicSync(AUTH_TOKENS_FILE, JSON.stringify(persistentTokens));
+	tokenStore.save();
 }
 
 // A pre-migration file holds raw tokens. They are already inert — lookup is
 // keyed on the digest, which a base64 token cannot match — but leaving them
 // keeps credential material on disk and makes "log out everywhere" count
-// entries nothing can use.
-function pruneLegacyTokenRecords(): void {
-	let pruned = 0;
-	for (const key of Object.keys(persistentTokens)) {
-		if (TOKEN_RECORD_RE.test(key)) continue;
-		delete persistentTokens[key];
-		pruned += 1;
-	}
-	if (pruned === 0) return;
+// entries nothing can use. Returns false while the migration is still owed.
+function pruneLegacyTokenRecords(): boolean {
+	if (!tokenStore.prepareWrite()) return false;
+	const legacy = Object.keys(persistentTokens).filter(
+		(key) => !TOKEN_RECORD_RE.test(key),
+	);
+	if (legacy.length === 0) return true;
+	for (const key of legacy) delete persistentTokens[key];
 	savePersistentTokens();
 	logger.info(
-		`Auth: pruned ${pruned} pre-digest persistent token record(s); affected browsers re-authenticate with the password once`,
+		`Auth: pruned ${legacy.length} pre-digest persistent token record(s); affected browsers re-authenticate with the password once`,
 	);
+	return true;
 }
 
-if (!isDevelopment()) {
-	setTimeout(pruneLegacyTokenRecords, 0).unref();
+// The prune runs off a timer, so a write fault (EIO, ENOSPC) must not escape it
+// and kill the backend; the file is left as it was and the prune is retried.
+const LEGACY_PRUNE_RETRY_MS = [1000, 5000, 30_000, 60_000] as const;
+let legacyPruneTimer: ReturnType<typeof setTimeout> | undefined;
+let legacyPruneStopped = false;
+
+function scheduleLegacyPrune(delay: number, attempt: number): void {
+	if (legacyPruneStopped) return;
+	legacyPruneTimer = setTimeout(() => {
+		legacyPruneTimer = undefined;
+		let done = false;
+		try {
+			done = pruneLegacyTokenRecords();
+		} catch (error) {
+			logger.warn("Auth: pre-digest token prune failed; retrying", { error });
+		}
+		const wait =
+			LEGACY_PRUNE_RETRY_MS[
+				Math.min(attempt, LEGACY_PRUNE_RETRY_MS.length - 1)
+			];
+		if (!done && wait !== undefined) scheduleLegacyPrune(wait, attempt + 1);
+	}, delay);
+	legacyPruneTimer.unref();
 }
+
+/** Shutdown: no further prune attempt may start. */
+export function stopLegacyTokenMigration(): void {
+	tokenStore.stop();
+	legacyPruneStopped = true;
+	clearTimeout(legacyPruneTimer);
+	legacyPruneTimer = undefined;
+}
+
+if (!isDevelopment() && process.env.NODE_ENV !== "test")
+	scheduleLegacyPrune(0, 0);
 
 function genAuthToken(isPersistent: boolean): string {
 	const token = randomBase64(32);
-	if (isPersistent) {
-		persistentTokens[tokenRecord(token)] = true;
-		savePersistentTokens();
-	} else {
-		tempTokens[token] = true;
+	// A store that could not be read yields a session that lasts this browser
+	// visit; persisting would replace remembered memberships nobody has read. A
+	// failed write does the same instead of failing the password login.
+	if (isPersistent && tokenStore.prepareWrite()) {
+		const record = tokenRecord(token);
+		persistentTokens[record] = true;
+		try {
+			savePersistentTokens();
+			return token;
+		} catch (error) {
+			delete persistentTokens[record];
+			logger.warn(
+				"Auth: remembered login not persisted; session is temporary",
+				{
+					error,
+				},
+			);
+		}
 	}
+	tempTokens[token] = true;
 	return token;
 }
 
@@ -101,12 +141,7 @@ function invalidateToken(token: string): number {
 		delete tempTokens[token];
 		revoked += 1;
 	}
-	const record = tokenRecord(token);
-	if (persistentTokens[record]) {
-		delete persistentTokens[record];
-		savePersistentTokens();
-		revoked += 1;
-	}
+	revoked += tokenStore.revoke(tokenRecord(token));
 	return revoked;
 }
 
@@ -116,12 +151,7 @@ function invalidateAllTokens(): number {
 		delete tempTokens[token];
 		revoked += 1;
 	}
-	const records = Object.keys(persistentTokens);
-	for (const record of records) {
-		delete persistentTokens[record];
-		revoked += 1;
-	}
-	if (records.length > 0) savePersistentTokens();
+	revoked += tokenStore.revoke();
 	return revoked;
 }
 
@@ -145,6 +175,7 @@ export const loginProcedure = baseProcedure
 	.input(loginInputSchema)
 	.output(loginOutputSchema)
 	.handler(async ({ input, context }) => {
+		await tokenStore.settle();
 		const passwordHash = getPasswordHash();
 		logger.debug(
 			`Login attempt: passwordHash=${passwordHash ? "set" : "not set"}, input.password=${input.password ? "provided" : "none"}, input.token=${input.token ? "provided" : "none"}`,
@@ -196,20 +227,22 @@ export const setPasswordProcedure = baseProcedure
 	.input(setPasswordInputSchema)
 	.output(successResponseSchema)
 	.handler(async ({ input, context }) => {
+		await tokenStore.settle();
 		const isAuthed = context.isAuthenticated();
 		const currentHash = getPasswordHash();
 
 		// Allow setting password if authenticated or if no password is set yet
 		if (isAuthed || !currentHash) {
+			// Lazy import to avoid circular dependency. Read config FIRST: while it
+			// is unavailable this throws before the in-memory hash changes, so an
+			// unknown stored password can never be replaced by a first-run claim.
+			const { getConfig, saveConfig } = await import("../../modules/config.ts");
+			const config = getConfig();
 			const newHash = Bun.password.hashSync(input.password, {
 				algorithm: "bcrypt",
 				cost: BCRYPT_ROUNDS,
 			});
 			setPasswordHash(newHash);
-
-			// Lazy import to avoid circular dependency
-			const { getConfig, saveConfig } = await import("../../modules/config.ts");
-			const config = getConfig();
 			config.password = undefined;
 			saveConfig();
 
@@ -234,7 +267,8 @@ export const setPasswordProcedure = baseProcedure
  */
 export const logoutProcedure = baseProcedure
 	.output(logoutOutputSchema)
-	.handler(({ context }) => {
+	.handler(async ({ context }) => {
+		await tokenStore.settle();
 		const token = context.ws.data.authToken;
 		if (token) {
 			invalidateToken(token);
@@ -249,7 +283,8 @@ export const logoutProcedure = baseProcedure
 export const revokeTokenProcedure = baseProcedure
 	.input(revokeTokenInputSchema)
 	.output(revokeTokenOutputSchema)
-	.handler(({ input, context }) => {
+	.handler(async ({ input, context }) => {
+		await tokenStore.settle();
 		if (!context.isAuthenticated()) {
 			logger.warn("Auth: revokeToken refused — socket is not authenticated");
 			return { success: false, revoked: 0 };

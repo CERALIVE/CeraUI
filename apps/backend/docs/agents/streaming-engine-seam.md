@@ -7,20 +7,107 @@ UI, autostart, remote control, and set-profile restarts enter the same synchrono
 admission boundary; only one launch can move `idle → starting`, and stop during
 start cancels that generation before a later launch can be admitted. The legacy
 `is_streaming` flag changes only after the awaited engine start confirms success.
+The cancellable generation exists before the awaited D8 check. A Stop during
+admission fences the later answer before OTA marking or launch; cancellation,
+refusal and throws release the lifecycle lease. Every Stop caller reports its
+intent before joining or parking cleanup. Operator intent requests marker disarm
+and immediately revokes pending commitment and delayed arming authority;
+engine-loss/reconfigure intent retains it. Cancellation settlement waits for the
+parked Stop, rather than racing the engine mutex. Current subscription events
+remain eligible to release the latch until the deferred Stop runs. Successful
+marker removal prevents restoration across a fresh factory; marker I/O/corruption
+is a separate recovery limitation. Joining operator cause is preserved
+for cancelled launches and parked release. Restoration reads its marker after the
+awaited runtime observation, not from a pre-await intent snapshot.
+`operator-stop-intent.ts` provides a process-local monotonic intent token, not
+engine evidence. Every operator Stop invalidates it even when joining cleanup.
+Default restoration preparation checks it after imports, validation and IP
+preparation; stale settlement publishes no recovered/failed outcome. Internal
+Start checks the token after recovery/reconciliation waits, at commitment, and
+through the final predicate given to both delayed bookkeeping/arming hooks.
+Intent is cancellation authority, not evidence that the physical stream stopped.
+The profile reconnect flight captures that intent before its machine Stop await
+and checks it before submitting replacement Start; a joining operator cancels
+the restart, not just the old session's marker.
+The OTA sentinel follows physical liveness: retain through parked,
+failed or unknown stops and clear only on confirmed idle/cleanup. Reconciliation
+sets/clears that sentinel on authoritative streaming/idle and retains it on unknown.
+Host regression coverage does not qualify image activation on either board.
 At boot and after an engine reconnect, `reconcileRuntimeState()` subscribes to the
 engine's actual status and adopts an engine-held session. Only concordant
 `streaming` or `idle` status is authoritative. A successful subscription that sees
-no event for 2.5 seconds resolves idle because an active stream emits status every
-2 seconds; query/subscription failure, transitional state, or contradictory fields
-remain `reconciling`, and late events from a completed probe are fenced. The additive
+no event for 2.5 seconds remains UNKNOWN: the published 2026.9.11 client has no
+current-status snapshot and the engine heartbeat is streaming-only. Query failure,
+transitional state and contradictory fields also remain `reconciling`. An explicit
+operator Stop uses a fresh connection even without a locally owned session; only
+its acknowledged idle reply clears protection. Reconciliation never Stops an
+unknown engine automatically. Late events from a completed probe are fenced;
+an adopted subscription instead follows current client/session identity and keeps
+receiving subsequent status even when its original probe epoch expires. The additive
 `status.stream_lifecycle` field exposes `idle | starting | streaming | stopping |
 stop_failed | reconciling`; `is_streaming` remains backward compatible.
+State-only composition seeds that projection from the owner before hydration:
+retained protection is `reconciling`; absent/unprotected boot is `idle`. It does
+not broadcast or wait for an engine query before server bind. The first safe
+transition still broadcasts, including a same-state reconciliation.
 
-The launch transaction owns rollback and phase deadlines. The retry runner starts
-the next connect attempt only after rollback resolves, caps attempts and elapsed
+The launch transaction owns rollback and phase deadlines. Rollback completion is
+not idle proof: internal failure liveness is confirmed only before Start dispatch
+or after the matching rollback Stop acknowledges idle. The original failure
+class/code is preserved when cleanup is unknown; no retry or replacement Start
+is admitted. Connect/subscribe acquisitions and Start submission recheck launch
+ownership. The retry runner starts the next connect attempt only after confirmed
+rollback, caps attempts and elapsed
 time, and exposes a cancellable timer to the same generation. Reporting suppresses
 transient toasts only during existing update/restart/boot windows; terminal
 failures are never suppressed and carry keyed 10-locale copy plus journal guidance.
+
+After B3 integration, disruptive consumers must use `streamLiveness()` from the leaf `stream-liveness.ts`, not the
+legacy `getIsStreaming()` boolean, for disruptive/update admission. It returns
+`streaming | idle | unknown`; failed sentinel writes are unconfirmed, never latched
+as protection, and retry on the next current streaming status as well as protection calls. Production initializes UNKNOWN
+when the `/run` sentinel is present or unreadable. A fresh boot with positively absent
+sentinel and no surviving/adopted session admits Start and does not block package/OTA
+admission. This empty baseline is not a claim that a silent engine reported idle.
+An in-flight probe temporarily gates admission; its silent completion cannot create
+standing protection on that empty baseline. Confirmed cleanup restores the same
+baseline at any generation: engine-death restoration can relaunch after a silent
+reconnect rather than wait for an idle heartbeat the pinned engine never sends.
+Once a launch, adoption or uncertain
+rollback requires protection, only positive current idle evidence releases it.
+The remover reports clearance to the owner. Failed clearance retains UNKNOWN and
+retries on the next acknowledged operator Stop or current idle status; leaf idle
+also requires current sentinel absence. No Start may bypass that leaf veto.
+Operator-cancelled admitted starts carry settled launch liveness and the cancelling
+Stop's acknowledgement/cause. A settled pre-dispatch/acknowledged-rollback launch
+plus acknowledged cancellation needs no blind second Stop. Uncertain settlement
+retains protection; only an explicit operator cause permits unknown-engine Stop.
+Read-only probes have a separate token and advance client epoch only on adoption,
+so an unused probe cannot make a launched session deaf to later idle status.
+Cached runtime evidence has the producing subscription's client/epoch predicate;
+it is separate from display telemetry and invalidated at new Start, acquisition
+and Start acknowledgement. Old-session idle and pre-Start replay cannot release
+new-session protection. Missing current evidence stays UNKNOWN.
+Queued bitrate/reload failures retain their submitting client identity; an old
+connection rejection cannot retire a newly adopted subscription.
+The orchestrator binds its live reader after initialization; the leaf imports no
+runtime orchestrator dependency, so system/update consumers cannot create a cycle.
+The existing update-refusal catalogs describe an active or unconfirmed stream and
+the Stop confirmation path. Reboot removes the `/run` tmpfs sentinel; it does not
+make a later silent IPC subscription an affirmative idle snapshot.
+The Start taxonomy has no honest existing engine-state-unconfirmed member. With
+wire changes forbidden, unknown still returns `busy`/`START_IN_PROGRESS`; a truthful
+typed refusal and rendered Stop availability are owner/integration decisions, not
+closed by this core correction. Production-path host tests cover these transitions;
+cross-connection Stop versus in-flight Start and real media remain unqualified.
+
+### Follow-up: engine status snapshot [GREENFIELD; cross-repo, not done]
+
+The minimal producer addition is current status hydration on subscribe or a
+read-only `get_status` method with a producer-exported result and published binding.
+It must report idle honestly while Start/retirement is outstanding. Publish/tag the
+binding before consumer fields or methods are referenced (root publish-before-consume
+rule). Engine release/delivery is owner-gated and outside this consumer-only lane.
 
 The `StreamingBackend` interface (`modules/streaming/streaming-backend.ts`) has
 **one** implementation behind the seam (the legacy ceracoder engine is fully
@@ -58,4 +145,3 @@ Contract coverage: `tests/streaming-backend-contract.test.ts` runs the
 structural contract over the production singleton + the cerastream behavioural
 contract, error-mapping, status-bridge, passthroughs, engine-crash, and engine
 selection.
-

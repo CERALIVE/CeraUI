@@ -28,7 +28,10 @@ vi.mock("$lib/rpc/subscriptions.svelte", async () => {
 	const { reactiveUpdateState: state } = await import(
 		"../../tests/fixtures/reactive-subscriptions.svelte"
 	);
-	return { getUpdateState: () => state.value };
+	return {
+		getUpdateState: () => state.value,
+		getUpdateOrchestratorState: () => undefined,
+	};
 });
 vi.mock("svelte-sonner", () => ({
 	toast: { success: vi.fn(), error: vi.fn() },

@@ -1,6 +1,6 @@
 # CeraLive add-on helper — narrow privilege escalation for add-on lifecycle.
 #
-# The CeraUI backend runs UNPRIVILEGED (user `ceraui`). Activating or tearing
+# The CeraUI backend runs as root (User=root/Group=root). Activating or tearing
 # down a systemd-sysext add-on needs root, so the backend shells out to the
 # single privileged helper below — argv-only, no shell — as:
 #

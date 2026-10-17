@@ -136,6 +136,105 @@ describe("reauthenticateAndHydrate", () => {
 		expect(deps.routeToLogin).not.toHaveBeenCalled();
 		expect(deps.clearStoredToken).not.toHaveBeenCalled();
 		expect(deps.onError).toHaveBeenCalledOnce();
-		expect(dispatched).toEqual([["auth", { success: true }]]);
+		// The status answer was received on the authenticated link; a failed
+		// config read does not withhold it (FIX-16-F5, F4-R1).
+		expect(dispatched).toEqual([
+			["auth", { success: true }],
+			["status", { is_streaming: true }],
+		]);
+	});
+});
+
+/** A reply the test answers when it chooses. */
+function reply<T>(): {
+	promise: Promise<T>;
+	resolve: (value: T) => void;
+	reject: (error: Error) => void;
+} {
+	let resolve!: (value: T) => void;
+	let reject!: (error: Error) => void;
+	const promise = new Promise<T>((res, rej) => {
+		resolve = res;
+		reject = rej;
+	});
+	return { promise, resolve, reject };
+}
+
+/** Let every queued continuation run (no timers involved). */
+async function drain(): Promise<void> {
+	for (let i = 0; i < 10; i += 1) await Promise.resolve();
+}
+
+describe("each hydrate answer is consumed at its own receipt (FIX-16-F5)", () => {
+	it("dispatches the status answer while the config reply is still awaited", async () => {
+		const config = reply<unknown>();
+		const status = reply<unknown>();
+		const { deps, dispatched } = makeDeps({
+			getConfig: vi.fn(() => config.promise),
+			getStatus: vi.fn(() => status.promise),
+		});
+		let outcome: string | undefined;
+		const run = reauthenticateAndHydrate(deps).then((o) => {
+			outcome = o;
+		});
+
+		await drain();
+		status.resolve({ stream_lifecycle: "idle" });
+		await drain();
+		expect(dispatched).toEqual([
+			["auth", { success: true }],
+			["status", { stream_lifecycle: "idle" }],
+		]);
+		expect(outcome).toBeUndefined();
+
+		config.resolve({ max_br: 6000 });
+		await run;
+		expect(dispatched).toEqual([
+			["auth", { success: true }],
+			["status", { stream_lifecycle: "idle" }],
+			["config", { max_br: 6000 }],
+		]);
+		expect(outcome).toBe("hydrated");
+	});
+
+	it("dispatches the config answer while the status reply is still awaited", async () => {
+		const status = reply<unknown>();
+		const { deps, dispatched } = makeDeps({
+			getStatus: vi.fn(() => status.promise),
+		});
+		const run = reauthenticateAndHydrate(deps);
+
+		await drain();
+		expect(dispatched).toEqual([
+			["auth", { success: true }],
+			["config", { max_br: 6000 }],
+		]);
+
+		status.resolve({ stream_lifecycle: "stopping" });
+		expect(await run).toBe("hydrated");
+		expect(dispatched).toEqual([
+			["auth", { success: true }],
+			["config", { max_br: 6000 }],
+			["status", { stream_lifecycle: "stopping" }],
+		]);
+	});
+
+	it("a failed status read dispatches no status, reports once and keeps the session", async () => {
+		const status = reply<unknown>();
+		const { deps, dispatched } = makeDeps({
+			getStatus: vi.fn(() => status.promise),
+		});
+		const run = reauthenticateAndHydrate(deps);
+		await drain();
+		status.reject(new Error("ConnectionResetError"));
+
+		expect(await run).toBe("hydrated");
+		expect(dispatched).toEqual([
+			["auth", { success: true }],
+			["config", { max_br: 6000 }],
+		]);
+		expect(deps.onError).toHaveBeenCalledOnce();
+		expect(deps.routeToLogin).not.toHaveBeenCalled();
+		expect(deps.clearStoredToken).not.toHaveBeenCalled();
 	});
 });

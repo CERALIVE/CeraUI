@@ -42,6 +42,7 @@
 import type { ModemMutationRefusal } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
+import { noteStartLeaseEnded } from "../system/idle-state.ts";
 
 import { isRecoveryPending } from "./recovery-barrier.ts";
 
@@ -115,11 +116,14 @@ export function tryAcquireLifecycle(who: LifecycleHolder): LifecycleAdmission {
 	// `"modem-transition"` holder, so it has to refuse a requester here too —
 	// otherwise a stream admission could slip past a mutation that took the
 	// generalized path.
-	if (activeMutations.size > 0) {
+	const devices = [...activeMutations.values()].filter(
+		(holder) => !holder.journalOnly,
+	).length;
+	if (devices > 0) {
 		logger.debug("lifecycle interlock refused: a modem mutation is held", {
 			module: "streaming",
 			requested: who,
-			devices: activeMutations.size,
+			devices,
 		});
 		return {
 			admitted: false,
@@ -161,6 +165,7 @@ export function tryAcquireLifecycle(who: LifecycleHolder): LifecycleAdmission {
  */
 function releaseToken(token: number): void {
 	if (held?.token !== token) return;
+	if (held.holder === "streaming") noteStartLeaseEnded();
 	held = undefined;
 }
 
@@ -204,6 +209,7 @@ export function resetLifecycleInterlock(): void {
 	held = undefined;
 	activeMutations.clear();
 	mutationBlocks.clear();
+	for (const key of [...releaseWaiters.keys()]) wakeReleaseWaiters(key);
 }
 
 /** A held per-physical-device mutation lease. `release()` is idempotent. */
@@ -224,7 +230,11 @@ export interface MutationBlock {
 	readonly blocksStreaming: boolean;
 }
 
-const activeMutations = new Map<string, number>();
+/** journalOnly: an operator/recovery journal owner, which never touches the stream. */
+const activeMutations = new Map<
+	string,
+	{ readonly token: number; readonly journalOnly: boolean }
+>();
 const mutationBlocks = new Map<string, MutationBlock>();
 let nextMutationToken = 0;
 
@@ -260,20 +270,77 @@ export function tryAcquireModemMutation(
 		};
 	}
 
+	return { admitted: true, lease: grantKeyLease(stableKey, false) };
+}
+
+function grantKeyLease(
+	stableKey: string,
+	journalOnly: boolean,
+): ModemMutationLease {
 	nextMutationToken += 1;
 	const token = nextMutationToken;
-	activeMutations.set(stableKey, token);
+	activeMutations.set(stableKey, { token, journalOnly });
 	return {
-		admitted: true,
-		lease: {
-			stableKey,
-			release: () => {
-				if (activeMutations.get(stableKey) === token) {
-					activeMutations.delete(stableKey);
-				}
-			},
+		stableKey,
+		release: () => {
+			if (activeMutations.get(stableKey)?.token !== token) return;
+			activeMutations.delete(stableKey);
+			wakeReleaseWaiters(stableKey);
 		},
 	};
+}
+
+const releaseWaiters = new Map<string, Set<() => void>>();
+
+function wakeReleaseWaiters(stableKey: string): void {
+	const waiters = releaseWaiters.get(stableKey);
+	releaseWaiters.delete(stableKey);
+	for (const wake of waiters ?? []) wake();
+}
+
+/**
+ * The same per-key lease, for journal owners that must not pass ordinary
+ * admission: an operator retirement, replay or failed-transition settlement
+ * exists precisely to act on a recovering or blocked identity. It excludes only
+ * the same key, so a retirement can never outlive the authority it validated
+ * while a new mutation arms that slot. Never awaits; undefined means held.
+ */
+export function tryAcquireModemJournalKey(
+	stableKey: string,
+): ModemMutationLease | undefined {
+	return activeMutations.has(stableKey)
+		? undefined
+		: grantKeyLease(stableKey, true);
+}
+
+/**
+ * Resolve true once the current holder of `stableKey` releases, false when the
+ * signal aborts first. The waiter holds nothing, so it cannot extend a lock
+ * order; it must reread and re-acquire after waking.
+ */
+export function awaitModemMutationRelease(
+	stableKey: string,
+	signal?: AbortSignal,
+): Promise<boolean> {
+	if (signal?.aborted) return Promise.resolve(false);
+	if (!activeMutations.has(stableKey)) return Promise.resolve(true);
+	return new Promise((resolve) => {
+		const waiters = releaseWaiters.get(stableKey) ?? new Set<() => void>();
+		releaseWaiters.set(stableKey, waiters);
+		const onAbort = () => {
+			signal?.removeEventListener("abort", onAbort);
+			waiters.delete(wake);
+			if (waiters.size === 0 && releaseWaiters.get(stableKey) === waiters)
+				releaseWaiters.delete(stableKey);
+			resolve(false);
+		};
+		const wake = () => {
+			signal?.removeEventListener("abort", onAbort);
+			resolve(true);
+		};
+		waiters.add(wake);
+		signal?.addEventListener("abort", onAbort, { once: true });
+	});
 }
 
 export function isModemMutationHeld(stableKey: string): boolean {

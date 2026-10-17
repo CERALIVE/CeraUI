@@ -26,6 +26,7 @@ import {
 	deriveEngineRouting,
 	resolveSourceRouting,
 } from "../modules/streaming/sources.ts";
+import { noteStreamSessionEngineStatus } from "../modules/streaming/stream-session-orchestrator.ts";
 import { updateStatus } from "../modules/streaming/streaming.ts";
 import {
 	setConfigProcedure,
@@ -433,6 +434,12 @@ describe("streaming procedures — device-first source resolution", () => {
 	});
 
 	afterEach(() => {
+		noteStreamSessionEngineStatus({
+			type: "status",
+			seq: 0,
+			state: "idle",
+			streaming: false,
+		});
 		updateStatus(false);
 		const config = getConfig();
 		config.source = undefined;

@@ -13,7 +13,10 @@ import { defaultAptSpaceDeps } from "../modules/system/apt-space-admission.ts";
 import * as transaction from "../modules/system/software-update-process.ts";
 import * as updates from "../modules/system/software-updates.ts";
 import * as compat from "../rpc/compat.ts";
+import { observeTestUpdateExit } from "./software-update-exit-harness.ts";
 import { armedMarkerFixture } from "./software-updates-marker-harness.ts";
+
+export { TestUpdateExit } from "./software-update-exit-harness.ts";
 
 export const SPACE_TRANSCRIPT = `After this operation, 2 kB of additional disk space will be used.
 'https://repo.invalid/a.deb' a.deb 4000 SHA256:abc
@@ -32,6 +35,7 @@ export async function updateHarness() {
 	updates.resetSoftwareUpdateState();
 	const frames: StatusResponse[] = [];
 	let terminal = Promise.withResolvers<void>();
+	const restarted = Promise.withResolvers<void>();
 	const originalBroadcast = compat.broadcastMsg;
 	const broadcast = spyOn(compat, "broadcastMsg").mockImplementation(
 		(type, data) => {
@@ -39,6 +43,7 @@ export async function updateHarness() {
 			if (type !== "status") return;
 			const frame = statusResponseSchema.parse(data);
 			frames.push(frame);
+			h.onFrame?.(frame);
 			switch (frame.update_state?.kind) {
 				case "failed":
 				case "success":
@@ -57,10 +62,12 @@ export async function updateHarness() {
 		launches: (readonly string[])[];
 		markerAtLaunch: boolean;
 		restarts: number;
+		restartExit: (() => never) | undefined;
 		beforeClean: (() => Promise<void>) | undefined;
 		completion: Promise<number>;
 		markerBefore: string;
 		frames: StatusResponse[];
+		onFrame: ((frame: StatusResponse) => void) | undefined;
 	} = {
 		failure: undefined,
 		verdict: "any",
@@ -71,10 +78,12 @@ export async function updateHarness() {
 		launches: [],
 		markerAtLaunch: false,
 		restarts: 0,
+		restartExit: undefined,
 		beforeClean: undefined,
 		completion: Promise.resolve(100),
 		markerBefore: markerFixture.before,
 		frames,
+		onFrame: undefined,
 	};
 	const run = spyOn(defaultAptSpaceDeps, "run").mockImplementation(
 		async (argv) => {
@@ -151,11 +160,14 @@ export async function updateHarness() {
 			if (condition) return;
 			if (message === "software update complete; exiting to restart CeraUI") {
 				h.restarts++;
+				restarted.resolve();
+				h.restartExit?.();
 				return;
 			}
 			throw new Error(message);
 		},
 	);
+	const restartTail = observeTestUpdateExit();
 	updates.setAptReachabilityProbeForTest(async () => ({
 		ipv4: "ok",
 		ipv6: "ok",
@@ -191,6 +203,9 @@ export async function updateHarness() {
 		settled() {
 			return terminal.promise;
 		},
+		restarted() {
+			return restarted.promise;
+		},
 		marker() {
 			return markerFixture.read();
 		},
@@ -214,7 +229,15 @@ export async function updateHarness() {
 			}
 			updates.resetSoftwareUpdateCheckRunner();
 			updates.resetAptReachabilityProbeForTest();
-			for (const spy of [broadcast, run, stat, statfs, launch, restart])
+			for (const spy of [
+				broadcast,
+				run,
+				stat,
+				statfs,
+				launch,
+				restart,
+				restartTail,
+			])
 				spy.mockRestore();
 			setup.apt_update_enabled = priorEnabled;
 			for (const [key, value] of Object.entries(priorEnv)) {

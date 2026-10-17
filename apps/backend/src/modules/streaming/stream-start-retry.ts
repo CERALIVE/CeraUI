@@ -43,8 +43,12 @@ export type StartRetryDiagnostic = {
 
 export type StartRetryRunResult =
 	| { readonly result: "started" }
-	| { readonly result: "cancelled" }
-	| { readonly result: "failed"; readonly failure: StartFailure };
+	| { readonly result: "cancelled"; readonly liveness: "idle" | "unknown" }
+	| {
+			readonly result: "failed";
+			readonly failure: StartFailure;
+			readonly liveness: "idle" | "unknown";
+	  };
 
 export type StartRetryRunDeps = {
 	readonly attemptId: string;
@@ -222,7 +226,14 @@ export async function runStartWithRetry(
 			),
 		);
 		if (launch.result === "cancelled" || deps.cancelled()) {
-			return { result: "cancelled" };
+			return {
+				result: "cancelled",
+				liveness:
+					launch.result === "failed" &&
+					launch.error instanceof StreamStartFailure
+						? launch.error.liveness
+						: "unknown",
+			};
 		}
 		if (launch.result === "started") return { result: "started" };
 		{
@@ -239,11 +250,19 @@ export async function runStartWithRetry(
 							retriable: launch.result === "timed_out",
 						})
 					: launch.error;
-			if (deps.cancelled()) return { result: "cancelled" };
+			if (deps.cancelled()) return { result: "cancelled", liveness: "unknown" };
 			const classified =
 				error instanceof StreamStartFailure
 					? error.failure
 					: deps.classifyUnknown(error);
+			const liveness =
+				launch.result === "timed_out"
+					? "idle"
+					: launch.result === "cleanup_failed"
+						? "unknown"
+						: error instanceof StreamStartFailure
+							? error.liveness
+							: "unknown";
 			const suppression = deps.suppressionContext?.() ?? NO_SUPPRESSION;
 			const failure: StartFailure =
 				suppression.engineRestartWindow &&
@@ -255,6 +274,7 @@ export async function runStartWithRetry(
 			const remainingMs = policy.totalBudgetMs - elapsedMs;
 
 			if (
+				liveness === "idle" &&
 				shouldRetryStart(failure, { attempts, elapsedMs }, policy) &&
 				delayMs < remainingMs
 			) {
@@ -269,7 +289,7 @@ export async function runStartWithRetry(
 					}),
 				);
 				if (!(await waitForRetry(deps, delayMs))) {
-					return { result: "cancelled" };
+					return { result: "cancelled", liveness };
 				}
 				continue;
 			}
@@ -282,7 +302,7 @@ export async function runStartWithRetry(
 					suppressed: false,
 				}),
 			);
-			return { result: "failed", failure };
+			return { result: "failed", failure, liveness };
 		}
 	}
 }

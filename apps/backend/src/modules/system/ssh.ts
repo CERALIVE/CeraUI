@@ -31,6 +31,11 @@ import {
 } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import { describeCliError } from "./cli-parse.ts";
+import {
+	DisruptiveActionRefusal,
+	resetDisruptiveActionReservationForTest,
+} from "./disruptive-action-reservation.ts";
+import { withServiceReservation } from "./disruptive-service-reservation.ts";
 
 type SshStatus = {
 	user: string;
@@ -254,6 +259,7 @@ export function setSshServiceRunner(runner: SshServiceRunner): void {
 }
 
 export function resetSshServiceRunner(): void {
+	resetDisruptiveActionReservationForTest();
 	sshServiceRunner = defaultSshServiceRunner;
 }
 
@@ -278,6 +284,7 @@ export function setSshPersistenceRunner(runner: SshPersistenceRunner): void {
 }
 
 export function resetSshPersistenceRunner(): void {
+	resetDisruptiveActionReservationForTest();
 	sshPersistenceRunner = defaultSshPersistenceRunner;
 }
 
@@ -327,9 +334,16 @@ export async function startStopSsh(
 		if (password === undefined) return false;
 	}
 
+	const { getDisruptiveActionDecision } = await import(
+		"./disruptive-action-runtime.ts"
+	);
 	try {
-		await sshServiceRunner(action);
+		await withServiceReservation(() => sshServiceRunner(action), {
+			unit: "ssh.service",
+			decision: getDisruptiveActionDecision,
+		});
 	} catch (err) {
+		if (err instanceof DisruptiveActionRefusal) throw err;
 		logger.error(
 			`Error running systemctl ${action} ssh: ${describeCliError(err)}`,
 		);
@@ -373,9 +387,16 @@ export async function setSshPersistent(
 		return true;
 	}
 
+	const { getDisruptiveActionDecision } = await import(
+		"./disruptive-action-runtime.ts"
+	);
 	try {
-		await sshPersistenceRunner(action);
+		await withServiceReservation(() => sshPersistenceRunner(action), {
+			unit: "ssh.service",
+			decision: getDisruptiveActionDecision,
+		});
 	} catch (err) {
+		if (err instanceof DisruptiveActionRefusal) throw err;
 		logger.error(
 			`Error running systemctl ${action} ssh: ${describeCliError(err)}`,
 		);

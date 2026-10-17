@@ -64,7 +64,11 @@ Starts the frontend (Vite, port 6173) and ordinary local development backend
 state cannot leak to the next test. The scenario remains worker-scoped.
 The Linux local runner leases available 31xx ports across processes and requires
 readiness from its own child; an unrelated listener is never a ready backend.
-Each acquisition keeps its own state directory and mock-preview listener. See
+Each acquisition keeps its own state directory and mock-preview listener. Its
+update orchestrator uses a private agent file and the explicit backend test CONTROL
+lease before server boot; IPC readiness follows that real startup completion.
+No production readiness flag or disruptive-action predicate is bypassed, and this
+fake lease is not installed OS-update qualification. See
 [`E2E backend isolation`](tests/e2e/PLAYBOOK.md#per-test-backend-state-exists)
 for lifecycle and deliberate shared-browser sequence rules. Run from the workspace root.
 
@@ -186,6 +190,73 @@ src/
 ```
 
 ## Key Conventions
+
+- **Update startup refusal**: the RPC envelope preserves optional retryability;
+  Updates shows translated initialising/retry-shortly copy for the distinct
+  startup code. "Not started" needs positive pre-dispatch evidence (that
+  envelope, a request never sent while disconnected, or a `{ success: false }`
+  reply no start evidence preceded). A lost reply or an error the device raised
+  while handling the request reads "Outcome not confirmed" until a changed
+  phase or a fresh details read settles it, including the read made when a
+  dropped session is restored on the same phase. Each action keeps its own band
+  and stays busy until its whole chain of requests settles. The legacy Packages
+  Update runs through the same machine; settings saves own their controls until
+  they settle and a lost save reply is "not confirmed"; "No newer system image"
+  needs a check the dialog saw complete on its current link (and leaves the
+  screen when that link drops); a restored session re-reads the image's
+  capabilities (a failed read is unknown, never legacy); a terminal install
+  result releases the update takeover at once and is announced once per
+  outcome; a failed add-on
+  list read says so with a retry ([contract](docs/agents/an-update-action-outcome-is-decided-by-evidence.md)).
+  No raw backend message or new OS-stage reason is rendered. A `streaming`
+  refusal says the stream is running OR its state is unconfirmed, through the
+  additive key `general.updateReasonStreamingUnconfirmed`; the frozen
+  `general.updateReasonStreaming` keeps the rendered oracle's text.
+
+- **Unresolved Live Stop**: each press of the unconfirmed-state Stop owns its
+  claim; a reply settles only its own press, and a pending retry is confirmed
+  only by current-link idle evidence: a push received after the press, or a pull
+  DISPATCHED after it and after the newest stream-fact observation. Only
+  `is_streaming`, `stream_lifecycle` and unclassified field names advance that
+  atomic horizon; telemetry/Wi-Fi/modem/SSH-only pushes do not. Unrelated fields
+  from a successful snapshot merge independently, unless a newer push carried
+  that same field or a newer read already applied it. Reconnect answers
+  are consumed independently, carrying dispatch and receipt (not computation or
+  later ingestion time). Superseded pulls permit one fresh read, never a loop.
+  Settled watchdogs cannot act on the next session; unknown never dispatches Stop
+  ([START-LIFECYCLE](../../docs/START-LIFECYCLE.md)).
+
+- **Exhausted Start recovery**: after the current watchdog's bounded evidence
+  is exhausted (failed or twice stream-superseded reads), retain a generation-owned
+  recovery-unknown entry in the existing unresolved-action store. The existing
+  unconfirmed band offers one explicit operator Stop; Start optimism and held
+  lifecycle are not fabricated into idle. Navigation, remount and reconnect do
+  not clear it. Later admissible live/idle evidence after its mark, or that Stop
+  owner's acknowledgement, settles only the matching attempt. The latest owner's
+  acknowledged Stop also settles its captured, still-current starting attempt
+  before exhaustion, revoking pending watchdog continuations without requiring a
+  recovery record. Retain both Stop-owner and Start-generation fences; operation
+  confirmation still requires post-press idle lifecycle evidence. Other fields are
+  unrelated to **stream settlement**, not every decision: `updating` still gates
+  power and `network_ingest` still gates Start configuration. Host tests prove
+  scripted carrier behavior; browser scheduling, geometry and integrated
+  backend/engine incidence of the lost-confirmation transcript remain UNKNOWN.
+
+- **Stop settlement ordering**: acknowledgement by the latest owner revokes its
+  captured Start whether or not admissible settlement already closed the Stop
+  claim. Idle confirms the operation but does not end acknowledged Start before
+  recovery; failed Stop and pre-record boolean false also do not revoke it.
+  Post-record facts still clear UNKNOWN, with the band's Stop as the escape and
+  zero automatic Stops. The 36-cell `LiveView.real-socket-stop.test.ts` permutation
+  matrix owns this contract.
+
+- **Start reply timeout**: a dispatched Start whose 75-second client deadline
+  expires stays owned by the same generation and existing 90-second watchdog.
+  Only proven non-dispatch or a negative Start result permits direct retry;
+  silence cannot erase recovery. Fresh facts or the latest owner's acknowledged
+  Stop settle it, and exhausted evidence exposes the existing UNKNOWN band and
+  explicit Stop. The additional 36 timeout cells retain the acknowledged-Start
+  matrix unchanged; host proof does not qualify browser or engine incidence.
 
 - **Dongle login**: a submission makes one verify-before-save RPC. A failed
   password remains only in the mounted dialog, is never written to Web Storage,

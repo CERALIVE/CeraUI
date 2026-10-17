@@ -28,6 +28,12 @@ dongle into its own network namespace and handing the host a unique
 `modules/network/dongle-metadata.ts` is CeraUI's INDEPENDENT reader of that
 layer's runtime metadata (`/run/ceralive/dongles/dongle<N>.json`, schema v1).
 
+Production file reads use the shared 16 KiB bounded anchored/nonblocking regular-
+file boundary. Raw duplicate members reject before the unchanged schema, so a
+contradictory `down`/`up` record cannot publish a last-wins up marker. Rejected
+records remain on disk and are omitted from projection, never repaired. This is
+host reader proof; the retired image producer is not reintroduced or qualified.
+
 - **The schema is a MIRROR, never an import.** Rule D forbids reaching into a
   sibling checkout, and the contract itself (§6.1 Rule-D note) states each repo
   carries its own reader and its own fixtures. `tests/dongle-metadata.test.ts` is
@@ -1285,4 +1291,3 @@ each twin keeps its own stats, the sender-echo precedence, both legacy rungs, an
 the disposition's trip to the wire). Rule-E proof: keying the registry so a
 reload is a no-op reddens the order-swap test; letting the file position outrank
 the sender's echo reddens the precedence test.
-

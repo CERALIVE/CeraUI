@@ -52,11 +52,21 @@ import {
 } from "@ceraui/rpc/schemas";
 
 import { randomBase64 } from "../../helpers/crypto.ts";
+import type { OrchestratorPhase } from "../system/update-orchestrator/types.ts";
 
 export class StreamStartFailure extends Error {
 	override readonly name = "StreamStartFailure";
 
-	constructor(readonly failure: StartFailure) {
+	constructor(
+		readonly failure: StartFailure,
+		readonly liveness: "idle" | "unknown" = failure.phase === "params" ||
+		failure.phase === "spawn-sender" ||
+		failure.phase === "connect" ||
+		failure.phase === "hello" ||
+		failure.phase === "subscribe"
+			? "idle"
+			: "unknown",
+	) {
 		super(`${failure.phase}:${failure.class}`);
 	}
 }
@@ -180,6 +190,29 @@ export function typedStartFailure(
 		class: cls,
 		...(code !== undefined ? { code } : {}),
 		retriable: isRetriableStartFailure(cls, phase),
+	};
+}
+
+/**
+ * D8 refusal payload; condition and probe-only semantics are in
+ * docs/DEVICE-UPDATES.md's D8 section.
+ */
+export function typedUpdateInProgressFailure(
+	attemptId: string,
+	update: {
+		readonly phase: OrchestratorPhase;
+		readonly percent: number;
+		readonly etaSeconds: number;
+	},
+): StartFailure {
+	return {
+		attemptId,
+		phase: "params",
+		class: "update_in_progress",
+		updatePhase: update.phase,
+		updatePercent: update.percent,
+		updateEtaSeconds: update.etaSeconds,
+		retriable: isRetriableStartFailure("update_in_progress", "params"),
 	};
 }
 

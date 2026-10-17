@@ -1,11 +1,14 @@
 import fs from "node:fs";
 
+import {
+	collectBoundedChild,
+	SpawnAbortError,
+	SpawnTimeoutError,
+} from "./bounded-spawn.ts";
 import { logger } from "./logger.ts";
 import { DEFAULT_SPAWN_TIMEOUT_MS } from "./spawn-policy.ts";
 
 export type ExecResult = { stdout: string; stderr: string };
-
-type ExecFileError = Error & { stdout: string; stderr: string; code: number };
 
 // util.promisify(exec) replacement: runs cmd through Bun's shell (string parsed
 // as written) and REJECTS on non-zero exit (Bun.$ throws ShellError).
@@ -27,96 +30,50 @@ export const execFileP = async (
 	const timeout = opts?.timeout ?? DEFAULT_SPAWN_TIMEOUT_MS;
 	const signal = opts?.signal;
 
+	const command = `${file} ${args.join(" ")}`;
+	if (signal?.aborted) {
+		throw Object.assign(new SpawnAbortError(command), {
+			stdout: "",
+			stderr: "",
+			code: 1,
+		});
+	}
 	const proc = Bun.spawn([file, ...args], {
 		stdin: "ignore",
 		stdout: "pipe",
 		stderr: "pipe",
 	});
 
-	const kill = () => {
-		try {
-			proc.kill();
-		} catch {
-			// best-effort: the process may have already exited
-		}
-	};
-
-	// bounded-command (spawn-policy): a hung one-shot is killed at the wall-clock
-	// budget so a stuck host binary can never wedge the call forever.
-	const timer = setTimeout(kill, timeout);
-
-	// An aborted signal kills the child (run()'s timeout/cancellation seam).
-	let onAbort: (() => void) | undefined;
-	if (signal) {
-		if (signal.aborted) {
-			kill();
-		} else {
-			onAbort = kill;
-			signal.addEventListener("abort", onAbort, { once: true });
-		}
-	}
-
 	let stdout: string;
 	let stderr: string;
-	let code: number;
+	let exitCode: number;
 	try {
-		[stdout, stderr, code] = await Promise.all([
-			readCapped(proc.stdout, maxBuffer, kill),
-			readCapped(proc.stderr, maxBuffer, kill),
-			proc.exited,
-		]);
-	} finally {
-		clearTimeout(timer);
-		if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+		({ stdout, stderr, exitCode } = await collectBoundedChild(proc, command, {
+			timeoutMs: timeout,
+			maxBuffer,
+			...(signal ? { signal } : {}),
+		}));
+	} catch (error) {
+		if (error instanceof SpawnTimeoutError) {
+			Object.assign(error, {
+				stdout: error.partialStdout,
+				stderr: error.partialStderr,
+				code: proc.exitCode || 1,
+			});
+		}
+		throw error;
 	}
 
-	if (code !== 0) {
-		const err = new Error(
-			`Command failed: ${file} ${args.join(" ")}`,
-		) as ExecFileError;
-		err.stdout = stdout;
-		err.stderr = stderr;
-		err.code = code;
-		throw err;
+	if (exitCode !== 0) {
+		throw Object.assign(new Error(`Command failed: ${command}`), {
+			stdout,
+			stderr,
+			code: exitCode,
+		});
 	}
 
 	return { stdout, stderr };
 };
-
-/**
- * Drain a piped child stream to a string, killing the child (via `onOverflow`)
- * and throwing once `maxBuffer` bytes are exceeded — preserving the Node
- * `execFile` "maxBuffer length exceeded" protection. Killing the child lets the
- * sibling stream + `proc.exited` settle so the surrounding `Promise.all` cannot
- * leak the subprocess.
- */
-async function readCapped(
-	stream: ReadableStream<Uint8Array> | undefined,
-	maxBuffer: number,
-	onOverflow: () => void,
-): Promise<string> {
-	if (!stream) return "";
-
-	const reader = stream.getReader();
-	const chunks: Uint8Array[] = [];
-	let total = 0;
-	try {
-		for (;;) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!value) continue;
-			total += value.byteLength;
-			if (total > maxBuffer) {
-				onOverflow();
-				throw new Error("stdout maxBuffer length exceeded");
-			}
-			chunks.push(value);
-		}
-	} finally {
-		reader.releaseLock();
-	}
-	return Buffer.concat(chunks).toString();
-}
 
 // Promise-based exec(), but without rejections
 export async function execPNR(cmd: string) {

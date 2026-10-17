@@ -6,6 +6,15 @@
 `sha256(token)`; `auth.revokeToken` retires one credential or all of them, and a
 password change revokes every outstanding one.
 
+Revocation is registered in `PersistentTokenStore` before I/O and filters every
+read and save until the write succeeds. Failed logout/revocation writes cannot
+re-admit a remembered browser on the next request. The next auth operation retries
+once; shutdown disarms retry through the existing auth stop hook. Damaged or
+unavailable membership still gives a temporary password session without rewriting
+the file. Intent is process-local, not durable across restart until persistence
+succeeds. Production legacy-prune timers remain retry-owned; test imports do not
+arm them. Fault coverage: `auth-revocation-intent.test.ts`.
+
 **What it replaced was two defects, not one.** The browser persisted the
 operator's PLAINTEXT PASSWORD under `localStorage.auth` and resent it as
 `input.password` on every reconnect — so the device's only remember-me credential
@@ -44,4 +53,3 @@ charter's **G3** gate. Coverage: `src/tests/auth-persistent-token.test.ts` (the
 digest-not-token file assertion, the token round-trip, individual revocation, the
 foreign-token and unauthenticated negatives, log-out-everywhere, logout's own
 scope, and the password-change sweep).
-

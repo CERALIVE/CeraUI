@@ -19,8 +19,15 @@
 import type { StartFailure } from "@ceraui/rpc/schemas";
 
 import { stopStreaming as directStopStreaming } from "$lib/helpers/SystemHelper";
+import {
+	clearStartRecoveryUnknown,
+	noteStartRecoveryUnknown,
+	ownStartAttempt,
+	resetUnresolvedStreamActions,
+} from "$lib/streaming/unresolved-stream-actions.svelte";
 
-import { rpc } from "./client";
+import { pullStatusEvidence } from "./pulled-status";
+import { markStreamIntent } from "./session-epoch.svelte";
 import {
 	runStartWatchdog,
 	START_WATCHDOG_TIMEOUT_MS,
@@ -185,6 +192,22 @@ export function revertWithFailure(
 }
 
 /**
+ * Settle the CURRENT attempt's `starting` to a plain `idle` because device
+ * evidence superseded it (see `startOptimismSuperseded`). No stop reason: the
+ * device's own state, not a failure this client observed, is what ended it.
+ * An older attempt's generation, or any state but `starting`, is a no-op.
+ */
+export function supersedeStarting(
+	store: StreamingOptimismStore,
+	generation: number,
+): StreamingOptimismStore {
+	if (store.state !== "starting" || generation !== store.generation) {
+		return store;
+	}
+	return { ...store, state: "idle", stopReason: undefined, failure: undefined };
+}
+
+/**
  * Clear the stop reason (e.g., when the user dismisses the error toast).
  */
 export function clearStopReason(
@@ -207,6 +230,7 @@ interface ReactiveOptimismStore {
 	reconcileToAuthority: (isStreaming: boolean) => void;
 	revertWithReason: (reason: string, generation?: number) => void;
 	revertWithFailure: (failure: StartFailure, generation?: number) => void;
+	supersedeStarting: (generation: number) => void;
 	clearStopReason: () => void;
 	retryStop: () => void;
 	destroy: () => void;
@@ -252,9 +276,10 @@ let stopStuckBannerState = $state(false);
 function createReactiveOptimismStore(): ReactiveOptimismStore {
 	let store = $state<StreamingOptimismStore>(createOptimismStore());
 	let watchdogTimer: ReturnType<typeof setTimeout> | undefined;
-	let watchdogRunning = false;
+	let lifetime = 0;
+	let watchdogRunning: number | undefined;
 	let startWatchdogTimer: ReturnType<typeof setTimeout> | undefined;
-	let startWatchdogRunning = false;
+	let startWatchdogRunning: number | undefined;
 
 	function clearWatchdogTimer(): void {
 		if (watchdogTimer !== undefined) {
@@ -287,22 +312,24 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 	}
 
 	async function runWatchdogOnce(): Promise<void> {
-		if (watchdogRunning) return;
-		watchdogRunning = true;
+		const action = lifetime;
+		if (store.state !== "stopping" || watchdogRunning === action) return;
+		watchdogRunning = action;
 		try {
-			await runStopWatchdog(buildWatchdogDeps());
+			await runStopWatchdog(buildWatchdogDeps(() => lifetime === action));
 		} finally {
-			watchdogRunning = false;
+			if (watchdogRunning === action) watchdogRunning = undefined;
 		}
 	}
 
 	async function runStartWatchdogOnce(): Promise<void> {
-		if (startWatchdogRunning) return;
-		startWatchdogRunning = true;
+		const action = lifetime;
+		if (store.state !== "starting" || startWatchdogRunning === action) return;
+		startWatchdogRunning = action;
 		try {
-			await runStartWatchdog(buildStartWatchdogDeps());
+			await runStartWatchdog(buildStartWatchdogDeps(() => lifetime === action));
 		} finally {
-			startWatchdogRunning = false;
+			if (startWatchdogRunning === action) startWatchdogRunning = undefined;
 		}
 	}
 
@@ -311,45 +338,75 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 	function applyReconcile(isStreaming: boolean): void {
 		const prev = store.state;
 		store = reconcileToAuthority(store, isStreaming);
+		if (prev !== store.state) lifetime += 1;
 		if (prev === "stopping" && store.state === "idle") {
 			clearWatchdogTimer();
 			stopStuckBannerState = false;
 		}
 		if (prev === "starting" && store.state === "idle") {
 			clearStartWatchdogTimer();
+			clearStartRecoveryUnknown(store.generation);
 		}
 	}
 
-	function buildStartWatchdogDeps(): StartWatchdogDeps {
+	async function pullWatchdogStatus(
+		isCurrent: () => boolean,
+	): Promise<boolean | undefined> {
+		try {
+			const answer = await pullStatusEvidence(isCurrent);
+			if (!isCurrent() || answer === undefined) return undefined;
+			ingestPulledStatus(answer.status, answer.receipt);
+			const status = answer.status;
+			if (
+				typeof status !== "object" ||
+				status === null ||
+				!("is_streaming" in status)
+			)
+				return undefined;
+			return typeof status.is_streaming === "boolean"
+				? status.is_streaming
+				: undefined;
+		} catch (error) {
+			if (!(error instanceof Error)) throw error;
+			console.error("Stream watchdog status read failed:", error);
+			return undefined;
+		}
+	}
+
+	function buildStartWatchdogDeps(isCurrent: () => boolean): StartWatchdogDeps {
+		const generation = store.generation;
 		return {
-			pullStatus: async () => {
-				const status = await rpc.status.getStatus();
-				ingestPulledStatus(status);
-				return Boolean(
-					(status as { is_streaming?: unknown } | null | undefined)
-						?.is_streaming,
-				);
+			isCurrent,
+			pullStatus: () => pullWatchdogStatus(isCurrent),
+			unknown: () => {
+				if (
+					isCurrent() &&
+					store.state === "starting" &&
+					store.generation === generation
+				)
+					noteStartRecoveryUnknown(generation);
 			},
-			reconcile: (isStreaming: boolean) => applyReconcile(isStreaming),
+			reconcile: (isStreaming: boolean) => {
+				if (isCurrent()) applyReconcile(isStreaming);
+			},
 			revert: (reason: string) => {
+				if (!isCurrent()) return;
 				clearStartWatchdogTimer();
-				store = revertWithReason(store, reason, store.generation);
+				lifetime += 1;
+				store = revertWithReason(store, reason, generation);
 			},
 		};
 	}
 
-	function buildWatchdogDeps(): StopWatchdogDeps {
+	function buildWatchdogDeps(isCurrent: () => boolean): StopWatchdogDeps {
 		return {
-			pullStatus: async () => {
-				const status = await rpc.status.getStatus();
-				ingestPulledStatus(status);
-				return Boolean(
-					(status as { is_streaming?: unknown } | null | undefined)
-						?.is_streaming,
-				);
+			isCurrent,
+			pullStatus: () => pullWatchdogStatus(isCurrent),
+			reconcile: (isStreaming: boolean) => {
+				if (isCurrent()) applyReconcile(isStreaming);
 			},
-			reconcile: (isStreaming: boolean) => applyReconcile(isStreaming),
 			redispatchStop: () => {
+				if (!isCurrent()) return;
 				void directStopStreaming();
 			},
 			delay: () =>
@@ -357,7 +414,7 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 					setTimeout(resolve, STOP_WATCHDOG_REPULL_DELAY_MS),
 				),
 			setBannerVisible: (visible: boolean) => {
-				stopStuckBannerState = visible;
+				if (isCurrent()) stopStuckBannerState = visible;
 			},
 		};
 	}
@@ -368,12 +425,17 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 		getFailure: () => store.failure,
 		getGeneration: () => store.generation,
 		transitionToStarting: () => {
+			lifetime += 1;
+			markStreamIntent();
 			clearWatchdogTimer();
 			stopStuckBannerState = false;
 			store = transitionToStarting(store);
+			ownStartAttempt(store.generation);
 			armStartWatchdog();
 		},
 		transitionToStopping: () => {
+			lifetime += 1;
+			markStreamIntent();
 			clearStartWatchdogTimer();
 			stopStuckBannerState = false;
 			store = transitionToStopping(store);
@@ -385,6 +447,7 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 		revertWithReason: (reason: string, generation?: number) => {
 			const next = revertWithReason(store, reason, generation);
 			if (next === store) return;
+			lifetime += 1;
 			clearStartWatchdogTimer();
 			clearWatchdogTimer();
 			stopStuckBannerState = false;
@@ -393,10 +456,19 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 		revertWithFailure: (failure: StartFailure, generation?: number) => {
 			const next = revertWithFailure(store, failure, generation);
 			if (next === store) return;
+			lifetime += 1;
 			clearStartWatchdogTimer();
 			clearWatchdogTimer();
 			stopStuckBannerState = false;
 			store = next;
+		},
+		supersedeStarting: (generation: number) => {
+			const next = supersedeStarting(store, generation);
+			if (next === store) return;
+			lifetime += 1;
+			clearStartWatchdogTimer();
+			store = next;
+			clearStartRecoveryUnknown(generation);
 		},
 		clearStopReason: () => {
 			store = clearStopReason(store);
@@ -405,6 +477,7 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 			void runWatchdogOnce();
 		},
 		destroy: () => {
+			lifetime += 1;
 			clearWatchdogTimer();
 			clearStartWatchdogTimer();
 			stopStuckBannerState = false;
@@ -499,6 +572,15 @@ export function revertStreamingOptimismFailure(
 }
 
 /**
+ * Settle the current attempt's `starting` because the device's own state
+ * superseded it (an unconfirmed lifecycle, or idle after a lost start reply).
+ * Pass the attempt `generation`; a stale one is ignored.
+ */
+export function supersedeStartingOptimism(generation: number): void {
+	store().supersedeStarting(generation);
+}
+
+/**
  * Clear the stop reason (e.g., when the user dismisses the error toast).
  */
 export function clearStreamingStopReason(): void {
@@ -523,9 +605,11 @@ export function retryStopStreaming(): void {
 }
 
 /**
- * Tear down the reactive store (clearing the watchdog timer). For tests/HMR.
+ * Tear down the reactive store (clearing the watchdog timer) and the
+ * unresolved stream actions that qualify it. For tests/HMR.
  */
 export function destroyStreamingOptimism(): void {
 	singleton?.destroy();
 	singleton = null;
+	resetUnresolvedStreamActions();
 }

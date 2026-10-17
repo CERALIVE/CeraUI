@@ -16,6 +16,32 @@ and write down — rather than re-litigate it the next time someone notices
 
 ## 1. Per-file placement map
 
+### Read authority versus preferences
+
+The atomic-write contract does not make corrupted reads authoritative. Idle,
+setup update opt-outs, persistent auth-token membership and modem recovery/FCC
+opt-in use bounded anchored regular-file reads and duplicate-strict JSON.
+Present invalid idle evidence withholds automatic idle permission without caching
+or replacing a default. Mixed `config.json` checks safety-bearing fields first
+(autostart, bond exclusions, port/radio roles, ingest/add-on intent and modem gates),
+then keeps the existing tolerant salvage for ordinary preferences from the same
+parsed bytes. Invalid safety authority closes config getters/saves until valid
+reload, preventing a later incidental save from erasing evidence. Genuine absent
+files and valid legacy optional fields retain their existing defaults. Formats
+are unchanged. Host proof and recovery implications:
+[`strict authority`](UPDATE-RECOVERY.md#metadata-and-idle-boundaries).
+
+Explicit token revocation is process-local intent until its atomic save succeeds:
+logout/revoke/password-change failures cannot restore revoked memberships on the
+next reread, and the next auth operation retries persistence once. This intent
+is not restart-durable after a failed save; stored formats are unchanged.
+Required image-baked `setup.json` has five transient-read attempts over about 3 s,
+then aborts with its typed error; damaged metadata aborts immediately. Packaged
+`Restart=always` is rate-limited, not endless recovery: absent explicit
+`RestartSec`/`StartLimit*`, fast exits can hit systemd's start limit and stay
+failed. The oracle measured that default policy on a host user manager, not a
+board. Changing pacing/start-limit policy remains an owner/image decision.
+
 Every file CeraUI's backend writes at runtime, grouped by durability
 category. "Atomic" means the write goes through `writeFileAtomicSync`
 (`apps/backend/src/helpers/config-loader.ts:278`): write to a sibling temp
@@ -35,11 +61,37 @@ orphan matching that one pattern and nothing else. T7's boot sweep
 config load) matches that exact glob (`/^\.[^./][^/]*\.\d+\.tmp$/`) and unlinks
 any leftover from a prior crash, fail-soft, every boot.
 
+Damaged-record preservation is a separate immutable-copy writer. Its discoverable
+`<file>.damaged-<sha256>` name is unchanged. Before allocating any temp it strictly
+checks a published copy's bytes and fsyncs its parent again. A new temp is
+`.<copy-basename>.<UUID>.<pid>.tmp`, still matched by that boot sweep. Failed
+cleanup retains a process-local owner with the open descriptor pinning the inode;
+the next preservation attempt retries identity-checked unlink before allocating
+another temp. An EIO during cleanup therefore cannot become a permanent PID-name
+collision or accumulate new temps for the same record. Identity replacement is
+not cleanup permission, even for identical bytes. Published evidence is never
+deleted or overwritten. Process death releases the descriptor; the next lifetime
+uses a fresh nonce and the existing fail-soft boot sweep handles crash debris.
+Persistent cleanup failure still withholds reset until storage recovers. These
+are host fault-injection proofs, not board/power-loss qualification.
+
+The config boot owner retains the reset archive's identity after writing first-run
+settings. A failed strict reload does not erase the pending notice: the first
+successful load in the same boot-recovery lifetime announces that identity exactly
+once, including after preservation retries and detached backoff. The intent is
+process-local. If the process exits after the first-run replacement is written but
+before a strict load succeeds, the notice can be lost entirely: the next boot loads
+the valid first-run file, emits no reset notice, and leaves the damaged copy on disk.
+Neither retry overwrites or deletes the damaged copy; there is no restart-durable
+notification obligation or cross-process exactly-once guarantee.
+
 ### Durable device config
 
 | File | Writer | Atomicity | Notes |
 |------|--------|-----------|-------|
-| `config.json` | `saveConfig` (`modules/config.ts:93`) | Atomic (`writeFileAtomicSync`) | The single runtime state file: relay target, audio/video settings, kiosk state, add-on state, and (see below) the password/SSH hashes. Pre-dates T6 (E3 guardrail); unchanged by this wave. |
+| `config.json` | `saveConfig` (`modules/config.ts:93`) | Atomic (`writeFileAtomicSync`) | The single runtime state file: relay target, audio/video settings, kiosk state, add-on state, and (see below) the password/SSH hashes. Pre-dates T6 (E3 guardrail). At boot a damaged file is archived to `config.json.damaged-<sha256>` and replaced by first-run settings; an unreadable one is never written and is retried after the server binds (`modules/config-boot.ts`, see UPDATE-RECOVERY.md). **Ownership consequence (pre-existing, owner decision):** when the damaged file holds no salvageable bcrypt `password_hash` (zero-byte, truncated before the hash, unparseable), the device is UNCLAIMED after the reset and any LAN client that connects first can set the password. That is identical to merge-base 23bcf379, whose permissive loader logged "Invalid JSON in config file ... using defaults" and showed the same prompt; this record does not narrow it. |
+| `update-settings.json` | `saveUpdateSettings` (`modules/system/update-settings.ts`) | Atomic (`writeFileAtomicSync`) | Operator update preferences; CWD-relative beside `config.json`, survives package restarts. Absent defaults via the shared `@ceraui/rpc` schema. A present invalid document fails with a typed error rather than being partially salvaged. This is preference storage only: explicit `setup.json` `apt_update_enabled: false` still blocks both manual and automatic APT installs. |
+| `/data/ceralive/update-state/idle.json` | `noteStreamEnded` (`modules/system/idle-state.ts`) | Atomic (`writeFileAtomicSync`) | Last stream-end epoch milliseconds only; survives a backend restart and OTA slot swap. Preview, remote-command, start-lease and UI heartbeat timestamps are process-local. The boot-time baseline conservatively prevents a restarted backend from declaring an immediately idle device; `getIdleStatus()` reads it for scheduled update admission. |
 | `notification_dismissals.json` | `NotificationDismissalStore.recordDismissal` (`modules/ui/notification-dismissals.ts`) | Atomic (`writeFileAtomicSync`) | Durable record of which persistent notifications the operator dismissed, keyed by SEMANTIC identity so a dismissal survives a page reload AND a backend restart. LRU-bounded, corruption-quarantined. Path overridable via `CERALIVE_DISMISSALS_FILE` (tests). See the dedicated subsection below. |
 | `hotspot_credentials.json` | `rememberHotspotCredentials` (`modules/wifi/hotspot-credentials.ts`) | Atomic (`writeFileAtomicSync`) | Per-adapter hotspot SSID/password, keyed by the radio's PERMANENT hardware address. A BACKSTOP behind NetworkManager's own `.nmconnection` files (which stay the source of truth) for the one case they cannot cover — a profile deleted outside CeraUI. Writes are inert until `initHotspotCredentials()` runs, so a test that never opts in writes nothing. See the dedicated subsection below. |
 
@@ -134,7 +186,7 @@ transient behavior.
 
 | File | Writer | Atomicity | Notes |
 |------|--------|-----------|-------|
-| `setup.json` | **none — read-only at runtime** | N/A | Loaded once at boot via `loadJsonConfigSync(..., required: true)` (`modules/setup.ts`). Hardware type, exec-path overrides, and the streaming-engine flag are written once at image-build / first-run time, never mutated by the running app. A legacy `engine` value is coerced to `"cerastream"` at parse time (with a warning), but that coercion happens in memory — it is never written back to disk. |
+| `setup.json` | **none — read-only at runtime** | N/A | Loaded once at boot through `readSetupJson()`'s strict authority reader (`modules/setup.ts`), with bounded transient retry and typed boot refusal. Hardware type, exec-path overrides, and the streaming-engine flag are written once at image-build / first-run time, never mutated by the running app. A legacy `engine` value is coerced to `"cerastream"` at parse time (with a warning), but that coercion happens in memory — it is never written back to disk. |
 
 ### Credentials
 
@@ -177,7 +229,7 @@ claim-ladder correction are recorded in
 
 | File / field | Writer | Atomicity | Notes |
 |---|---|---|---|
-| `auth_tokens.json` | `savePersistentTokens` (`rpc/procedures/auth.procedure.ts:41`) | Atomic (`writeFileAtomicSync`, direct) | Persistent login tokens. Made atomic in T6 — previously routed through the non-atomic `writeTextFile`. |
+| `auth_tokens.json` | `savePersistentTokens` (`rpc/procedures/auth.procedure.ts:41`) | Atomic (`writeFileAtomicSync`, direct) | Persistent login tokens. Made atomic in T6 — previously routed through the non-atomic `writeTextFile`. Every write rereads the file immediately before replacing it. A correct-password login on a damaged or unavailable file gets a temporary session and writes nothing (D209: auth fails closed on a damaged token file without rewriting it); token login against it is denied. Only an explicit password change or revoke-all may replace a damaged file, after archiving the bytes it actually replaces to `auth_tokens.json.damaged-<sha256>`; on an unavailable file those two still write `{}` (nothing to archive). A failed remembered-login write falls back to a temporary session. |
 | `password_hash` / `ssh_pass_hash` | `saveConfig` (`modules/config.ts:84-93`) | Atomic (rides `config.json`'s write) | These are fields **inside** `config.json`, not separate files — `saveConfig` always re-serializes them alongside the rest of the runtime state, so they get the same crash-atomic guarantee as everything else in that file. |
 
 ### Regenerable caches

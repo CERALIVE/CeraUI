@@ -59,7 +59,12 @@ import {
 	readMutationEntry,
 	removeMutationEntry,
 } from "./mutation-journal.ts";
+import {
+	isMutationJournalRevisionCurrent,
+	mutationJournalRevision,
+} from "./mutation-journal-revision.ts";
 import { isLegalMutationTransition } from "./mutation-journal-state.ts";
+import { withRetirementKey } from "./mutation-retirement-key.ts";
 import {
 	captureModemState,
 	isCoherentState,
@@ -92,10 +97,13 @@ async function archiveAcknowledged(
 	baseline?: Readonly<Record<string, unknown>>,
 ): Promise<ModemMutationAckOutput> {
 	try {
-		await advance(entry, "acknowledged", detail, {
-			acknowledgedMode: mode,
-			...(baseline === undefined ? {} : { preState: { ...baseline } }),
-		});
+		if (entry.state !== "acknowledged") {
+			await advance(entry, "acknowledged", detail, {
+				acknowledgedMode: mode,
+				...(baseline === undefined ? {} : { preState: { ...baseline } }),
+			});
+		}
+		await removeMutationEntry(entry.stableKey);
 	} catch (err) {
 		logger.error("modem mutation acknowledgement did not commit", {
 			module: "modems",
@@ -104,7 +112,6 @@ async function archiveAcknowledged(
 		});
 		return fail("journal_write_failed");
 	}
-	await removeMutationEntry(entry.stableKey);
 	await refreshMutationBlocks();
 	return { success: true, state: "acknowledged" };
 }
@@ -123,12 +130,31 @@ async function quarantine(
 	return fail("device_absent");
 }
 
-export async function acknowledgeMutation(
+export function acknowledgeMutation(
+	stableKey: string,
+	mode: ModemMutationAckMode,
+	signal?: AbortSignal,
+): Promise<ModemMutationAckOutput> {
+	return withRetirementKey(
+		stableKey,
+		(entry) => entry.state === "acknowledged" || entry.state === "failed",
+		signal,
+		() => acknowledgeHeld(stableKey, mode),
+	);
+}
+
+async function acknowledgeHeld(
 	stableKey: string,
 	mode: ModemMutationAckMode,
 ): Promise<ModemMutationAckOutput> {
+	const revision = mutationJournalRevision();
 	const entry = await readMutationEntry(stableKey);
 	if (entry === undefined) return fail("no_entry");
+	if (entry.stableKey !== stableKey) return fail("state_mismatch");
+	if (entry.state === "acknowledged") {
+		if (!isMutationJournalRevisionCurrent(revision)) return fail("not_blocked");
+		return archiveAcknowledged(entry, mode, "resume acknowledged retirement");
+	}
 	if (entry.state !== "failed") return fail("not_blocked");
 
 	let current: Readonly<Record<string, unknown>> | undefined;
@@ -137,6 +163,7 @@ export async function acknowledgeMutation(
 	} catch {
 		return fail("read_failed");
 	}
+	if (!isMutationJournalRevisionCurrent(revision)) return fail("not_blocked");
 	if (current === undefined) return quarantine(entry);
 
 	if (mode === "verified-rollback") {
@@ -154,12 +181,27 @@ export async function acknowledgeMutation(
 	);
 }
 
-export async function decommissionMutation(
+export function decommissionMutation(
+	stableKey: string,
+	signal?: AbortSignal,
+): Promise<ModemMutationAckOutput> {
+	return withRetirementKey(
+		stableKey,
+		(entry) => entry.state === "device-absent-quarantine",
+		signal,
+		() => decommissionHeld(stableKey),
+	);
+}
+
+async function decommissionHeld(
 	stableKey: string,
 ): Promise<ModemMutationAckOutput> {
+	const revision = mutationJournalRevision();
 	const entry = await readMutationEntry(stableKey);
 	if (entry === undefined) return fail("no_entry");
+	if (entry.stableKey !== stableKey) return fail("state_mismatch");
 	if (entry.state !== "device-absent-quarantine") return fail("not_blocked");
+	if (!isMutationJournalRevisionCurrent(revision)) return fail("not_blocked");
 	try {
 		await advance(
 			entry,
@@ -178,11 +220,34 @@ export async function decommissionMutation(
 	return { success: true, state: "decommissioned" };
 }
 
-export async function rebaselineMutation(
+export function rebaselineMutation(
+	stableKey: string,
+	signal?: AbortSignal,
+): Promise<ModemMutationAckOutput> {
+	return withRetirementKey(
+		stableKey,
+		(entry) =>
+			entry.state === "acknowledged" || entry.state === "recommission-pending",
+		signal,
+		() => rebaselineHeld(stableKey),
+	);
+}
+
+async function rebaselineHeld(
 	stableKey: string,
 ): Promise<ModemMutationAckOutput> {
+	const revision = mutationJournalRevision();
 	const entry = await readMutationEntry(stableKey);
 	if (entry === undefined) return fail("no_entry");
+	if (entry.stableKey !== stableKey) return fail("state_mismatch");
+	if (entry.state === "acknowledged") {
+		if (!isMutationJournalRevisionCurrent(revision)) return fail("not_blocked");
+		return archiveAcknowledged(
+			entry,
+			"force-rebaseline",
+			"resume acknowledged retirement",
+		);
+	}
 	if (entry.state !== "recommission-pending") return fail("not_blocked");
 
 	let current: Readonly<Record<string, unknown>> | undefined;
@@ -191,6 +256,7 @@ export async function rebaselineMutation(
 	} catch {
 		return fail("read_failed");
 	}
+	if (!isMutationJournalRevisionCurrent(revision)) return fail("not_blocked");
 	if (current === undefined) return fail("device_absent");
 	if (!isCoherentState(current)) return fail("read_failed");
 

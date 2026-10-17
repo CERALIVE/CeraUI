@@ -23,7 +23,7 @@ import {
 	type AddonState,
 	AddonStateSchema,
 } from "@ceraui/rpc/schemas";
-
+import { setSysextEvidenceForTest } from "../modules/addons/disruptive-sysext-step.ts";
 import {
 	ADDON_CONFLICT_ERROR,
 	ADDON_CRASH_LOOP_RESTART_THRESHOLD,
@@ -38,6 +38,7 @@ import {
 	type AddonHardware,
 	type AddonManagerDeps,
 	type AddonManagerPhase,
+	cachedArtifactPath,
 	disableAddon,
 	enableAddon,
 	extArtifactPath,
@@ -54,6 +55,7 @@ import {
 	tmpArtifactPath,
 	toAddonState,
 } from "../modules/addons/manager.ts";
+import { resetDisruptiveActionReservationForTest } from "../modules/system/disruptive-action-reservation.ts";
 
 // ─── fixtures ────────────────────────────────────────────────────────────────
 
@@ -220,10 +222,15 @@ beforeEach(() => {
 	resetAddonManagerDeps();
 	// Clears the module-level live-phase map (config is empty in tests).
 	initAddonManager();
+	// In-process fakes leave no helper, sysext or unit job behind them.
+	resetDisruptiveActionReservationForTest();
+	setSysextEvidenceForTest({ probe: async () => "completed" });
 });
 
 afterEach(() => {
 	resetAddonManagerDeps();
+	resetDisruptiveActionReservationForTest();
+	setSysextEvidenceForTest();
 });
 
 // ─── pure layer ──────────────────────────────────────────────────────────────
@@ -320,14 +327,14 @@ describe("enableAddon — happy path", () => {
 		expect(h.store.get(d.id)?.versionMaterialized).toBe("1.2.3");
 		expect(h.store.get(d.id)?.enabled).toBe(true);
 
-		// Pipeline targets the atomic temp + scan-dir paths.
+		// Preparation targets the atomic temp + helper cache, never the scan dir.
 		expect(h.rec.download[0]?.dest).toBe(tmpArtifactPath(d.id));
 		expect(h.rec.download[0]?.url).toBe(
 			"https://apt.ceralive.tv/addons/debug-toolset/12/debug-toolset.raw",
 		);
 		expect(h.rec.stage[0]).toEqual({
 			tmp: tmpArtifactPath(d.id),
-			dest: extArtifactPath(d.id),
+			dest: cachedArtifactPath(d.id),
 		});
 		expect(h.rec.helperEnable).toEqual([d.id]);
 

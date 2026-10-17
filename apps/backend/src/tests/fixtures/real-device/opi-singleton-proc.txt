@@ -1,0 +1,23 @@
+# Orange Pi 5+ / Debian 13 / Linux 7.2.0-ceralive-rk3588
+# H7 rehearsal A3, h7p2-opi-observe, live-manual, 2026-10-02.
+# /proc ABI; cmdline captured with base64, fdinfo with cat, mountinfo with cat.
+# Cmdline UTC 18:40:30.823Z; fdinfo UTC 18:40:30.842Z.
+# Sources: proc-2202416-cmdline-base64.stdout, proc-2202416-fdinfo-3.stdout,
+# mountinfo.stdout (complete row for mnt_id 39), lock-stat.stdout (backend row).
+# No normalization: selected bytes contain no LAN IP, MAC, boot ID, UUID or InvocationID.
+# Selection is not a new board run. exe/uid stat checks use injected host metadata in replay.
+
+##### cmdline-base64
+L3Vzci9iaW4vZmxvY2sALW4ALUUANzUALXgAL3J1bi9sb2NrL2NlcmFsaXZlLWJhY2tlbmQubG9j
+awAvdXNyL2xpYmV4ZWMvY2VyYWxpdmUvY2VyYWxpdmUtb3Mtc3RhZ2UtZ3VhcmQALS1vcnBoYW4t
+bG9jawA=
+##### fdinfo-3
+pos:	0
+flags:	0400000
+mnt_id:	39
+ino:	7
+lock:	1: FLOCK  ADVISORY  WRITE 2202416 00:21:7 0 EOF
+##### mountinfo-lock-row
+39 34 0:33 / /run/lock rw,nosuid,nodev,noexec,relatime shared:13 - tmpfs tmpfs rw,size=5120k
+##### lock-stat-backend-row
+21 33 7 /run/lock/ceralive-backend.lock

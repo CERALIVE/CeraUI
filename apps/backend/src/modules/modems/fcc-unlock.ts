@@ -70,6 +70,7 @@ import {
 import {
 	FCC_UNLOCK_POLICY_PATH,
 	loadFccUnlockPolicy,
+	loadFccUnlockPolicyBaseline,
 	saveFccUnlockPolicy,
 } from "./fcc-unlock-store.ts";
 import { mmReprobeModem } from "./mmcli.ts";
@@ -123,7 +124,10 @@ export function fccUnlockEvidence(
 }
 
 export type FccUnlockDeps = {
+	/** The enforced policy, for display: unknown reads enable nothing. */
 	readonly loadPolicy: () => Promise<Record<string, boolean>>;
+	/** The baseline a whole-policy write or rollback starts from; throws when unknown. */
+	readonly loadPolicyBaseline: () => Promise<Record<string, boolean>>;
 	readonly savePolicy: (unlock: Record<string, boolean>) => Promise<void>;
 	/** The re-probe an already-enumerated modem needs. Resolves false on refusal. */
 	readonly reprobe: (id: number) => Promise<boolean>;
@@ -132,6 +136,7 @@ export type FccUnlockDeps = {
 
 export const defaultFccUnlockDeps: FccUnlockDeps = {
 	loadPolicy: loadFccUnlockPolicy,
+	loadPolicyBaseline: loadFccUnlockPolicyBaseline,
 	savePolicy: saveFccUnlockPolicy,
 	reprobe: mmReprobeModem,
 	broadcast: (id) => broadcastModems({ [id]: true }),
@@ -204,7 +209,19 @@ export async function setFccUnlockEnabled(
 		return { success: false, error: "not_covered" };
 	}
 
-	const before = await deps.loadPolicy();
+	// The journaled pre-state and the replacement document both derive from
+	// this read, so it must be one the device actually knows. An unreadable
+	// policy is refused here, before any lease or journal entry exists.
+	let before: Record<string, boolean>;
+	try {
+		before = await deps.loadPolicyBaseline();
+	} catch (err) {
+		logger.error("fcc-unlock: policy unreadable; toggle refused", {
+			module: "modems",
+			err,
+		});
+		return { success: false, error: "write_failed" };
+	}
 	const wasEnabled = before[key] === true;
 
 	const outcome = await withCapabilityModuleMutation(
@@ -278,7 +295,7 @@ export function createFccUnlockRollbackHandler(
 				return "failed";
 			}
 			try {
-				const current = await deps.loadPolicy();
+				const current = await deps.loadPolicyBaseline();
 				await deps.savePolicy({ ...current, [key]: enabled });
 				return "restored";
 			} catch {

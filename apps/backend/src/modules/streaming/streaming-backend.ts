@@ -96,6 +96,8 @@ export interface StreamingBackend {
 	 * whether this adapter owned an active session to stop.
 	 */
 	stop(onStopped: () => void, onFailed?: (error: unknown) => void): boolean;
+	/** Explicit operator Stop for an unowned/unknown engine, never a passive probe. */
+	confirmStop?(): Promise<void>;
 	/**
 	 * Hot-adjust the max bitrate while streaming: persist it and signal a reload.
 	 * Returns the applied value, or `undefined` when the input fails validation.

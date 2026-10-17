@@ -1,0 +1,10 @@
+# Host: Linux workstation (not a board)
+# OS: Arch Linux; kernel 7.2.8-1-cachyos-bore
+# Source: /proc/self/status via filesystem Read tool, opencode process
+# Captured: 2026-10-03T00:51Z
+# Selection: Name, State, Uid, Gid only; no substitutions; tabs preserved
+##### status
+Name:	opencode
+State:	R (running)
+Uid:	1000	1000	1000	1000
+Gid:	1000	1000	1000	1000

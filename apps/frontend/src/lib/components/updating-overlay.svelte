@@ -15,18 +15,15 @@ import { m } from '@ceraui/i18n/svelte';
 import type { StatusMessage } from '@ceraui/rpc/schemas';
 import { CheckCircle2, Cog, Download, Package, RotateCw, XCircle } from '@lucide/svelte';
 import { onMount } from 'svelte';
-import { toast } from 'svelte-sonner';
 
 import * as Drawer from '$lib/components/ui/drawer/index.js';
 import { Progress } from '$lib/components/ui/progress';
+import { announceLegacyInstallOutcome } from '$lib/updates/legacy-install-notice';
 
 const { details }: { details: Exclude<StatusMessage['updating'], boolean | null> } = $props();
 
 // Enhanced state management
 let isVisible = $state(false);
-// One latch for BOTH terminal outcomes — once a success OR a failure toast has
-// fired we never fire a second terminal toast for the same overlay.
-let hasShownResult = $state(false);
 let animationPhase = $state<'downloading' | 'unpacking' | 'installing' | 'complete' | 'failed'>(
 	'downloading',
 );
@@ -58,19 +55,17 @@ const progressPercentage = $derived.by(() => {
 	return Number.isFinite(percentage) ? Math.min(percentage, 100) : 0;
 });
 
-// Truthful terminal-state detection. `details.result` is a NUMBER (`0` marks a
-// successful completion) or a STRING (the apt failure message the update loop
-// broadcasts before clearing state). Collapsing both into one `isComplete`
-// boolean made a FAILED update render the green success checkmark + toast — a
-// truthfulness bug. A string result is a failure; a numeric result (or a
-// progress-complete run with no result yet) is a success.
+// Truthful terminal-state detection. `details.result` is `0` (the device's
+// success result) or a STRING (the apt failure message the update loop
+// broadcasts before clearing state). Only the device's result decides: the
+// progress counters reach their totals before apt has exited, so a run that is
+// still finishing, or about to fail, must not be called a success, and a
+// premature success would latch and swallow the real failure (sweep C3).
 const failureReason = $derived(
 	typeof details?.result === 'string' ? details.result : undefined,
 );
 const isFailure = $derived(failureReason !== undefined);
-const isSuccess = $derived(
-	!isFailure && (details?.result !== undefined || (total > 1 && progress >= total)),
-);
+const isSuccess = $derived(details?.result === 0);
 
 // Determine current animation phase
 $effect(() => {
@@ -78,34 +73,22 @@ $effect(() => {
 
 	if (isFailure) {
 		animationPhase = 'failed';
+	} else if (isSuccess) {
+		animationPhase = 'complete';
 	} else if (details.downloading && details.downloading > 0) {
 		animationPhase = 'downloading';
 	} else if (details.unpacking && details.unpacking > 0) {
 		animationPhase = 'unpacking';
 	} else if (details.setting_up && details.setting_up > 0) {
 		animationPhase = 'installing';
-	} else if (isSuccess || (progress >= total && total > 0)) {
-		animationPhase = 'complete';
 	}
 });
 
+// Terminal outcomes have ONE announcer, once per outcome. In the app Layout
+// never mounts this takeover for a terminal frame: it releases the takeover and
+// announces there; this call covers the overlay rendered on its own.
 $effect(() => {
-	if (hasShownResult) return;
-	if (isFailure) {
-		hasShownResult = true;
-		setTimeout(() => {
-			toast.error(m["updatingOverlay.failedMessage"](), {
-				description: failureReason ?? m["updatingOverlay.failedDescription"](),
-			});
-		}, 500);
-	} else if (isSuccess) {
-		hasShownResult = true;
-		setTimeout(() => {
-			toast.success(m["updatingOverlay.successMessage"](), {
-				description: m["updatingOverlay.successDescription"](),
-			});
-		}, 500);
-	}
+	announceLegacyInstallOutcome(details);
 });
 
 // Entrance animation

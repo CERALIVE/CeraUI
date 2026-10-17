@@ -3,9 +3,37 @@
 `ceralive.service` is `Type=notify`, not `Type=simple`. Its readiness boundary is:
 
 1. The JavaScript boot-signal guards are installed.
-2. Configuration loads and the HTTP/WebSocket control server binds successfully.
+2. Configuration is resolved and the HTTP/WebSocket control server binds
+   successfully. "Resolved" includes a damaged `config.json` archived and replaced
+   by first-run settings, and an unreadable one left unavailable: the server still
+   binds, and a background owner keeps retrying the load (UPDATE-RECOVERY.md →
+   Unknown optional-record reads: no boot abort, no wedge, no write baseline).
+   Required read-only `setup.json` is the exception: a transient leaf fault
+   (EIO/EAGAIN, short or changed read) gets five in-process attempts over about
+   3 s, then the typed error ends the process. `Restart=always` in
+   `deployment/ceralive.service` requests a restart but is NOT an unbounded retry
+   owner: the unit sets neither `RestartSec` nor `StartLimit*`. With defaults of
+   100 ms, 5 starts and 10 s, fast non-EIO/EAGAIN errors or parsed-and-refused
+   `setup.json` can exhaust the limit and leave the unit failed (`start-limit-hit`)
+   until explicit intervention. The oracle observed this on a host user manager;
+   persistent EIO's >3 s cycles avoiding that limit on a board are only inferred.
+   Explicit pacing or disabling the start limit is an owner/image decision, not
+   implemented here. The SIGTERM/SIGINT handlers are
+   installed late in `main.ts`, so a stop that arrives while boot waits for an
+   unavailable `config.json` ends by default signal termination, not by the
+   cancellation path.
 3. The backend acknowledges readiness through `systemd-notify`.
-4. Optional subsystem initialization continues.
+4. Optional subsystem initialization continues; when config was unavailable it
+   first waits for that owner's successful load.
+
+The config owner also owns preservation retries after binding. One archive-temp
+cleanup EIO retains its inode-bound cleanup responsibility; the next healthy
+attempt reuses/reacknowledges the immutable digest copy, removes its own temp and
+loads first-run config once. No second boot sweep is required for that runtime
+failure. Modem journal enumeration faults after a successful directory open
+raise the same barrier as open faults, triggering the registered read-only
+runtime owner. This is host-tested availability behavior; a real-board storage
+fault during damaged-config recovery remains an outstanding drill.
 
 Readiness means the control server is bound and the process can safely receive
 its boot notifications. It does **not** mean every engine, radio or add-on is
@@ -27,6 +55,38 @@ used a private manager connection, so a system-bus monitor alone missed the call
 USB coldplug was concurrent, not the identified source of this SIGUSR1.
 
 ## Notification contract
+
+Config recovery and modem admission are independent of service readiness. Config
+reset notice intent survives failed post-write reloads until the first strict load
+in that boot-recovery lifetime announces it once. Modem journal reconciliation
+checks its process-local revision before publishing blocks and again before
+lowering admission; cooperating writes/removals/read faults invalidate older
+passes. Raises during a pass are remembered and retain one capped/cancellable
+retry owner. An absent journal still completes normally at boot. These are host
+regression guarantees, not a new board, power-loss or service-readiness receipt.
+Replay entry fences and fresh-read faults leave an incomplete pass, including a
+fence before skipping a captured absent slot. The same owner retries REPLAY under
+the boot barrier until a complete pass, not read-only verification of a stranded
+`executing` slot. It rereads disk and already-restored hardware before another
+rollback effect. Continuous invalidation has doubled/capped waits, not an admission
+timeout; after churn stops the next complete pass clears recovery. Runtime faults
+after completed startup remain verification without hardware rollback. Config reset notice intent
+does not survive process exit between replacement and successful strict loading;
+the next boot may send no notice while retaining the damaged copy.
+
+Journal retirement suppresses only unlink ENOENT; other failures retain incomplete
+REPLAY rather than counting a removed slot. Parent fsync is still the acknowledgement:
+after visible deletion its failure remains owned for fsync-only retry, not a readback
+shortcut or a repeated deletion of newer authority. The existing owner also settles
+previously submitted failed-state bookkeeping by attempt identity/revision; runtime
+verification never repeats hardware. Confirmed lease work commits `completed` before
+retirement and always releases the lease. Cancellation after an incomplete attempt
+arms no next sleep, and an already-aborted default sleep creates no timer/listener;
+completed default sleeps (modem recovery and config boot) remove their abort listener.
+Boot replay writes under the stable key's mutation lease; a key held by an operator
+retirement (the control server binds before replay) is an incomplete pass, retried.
+Absent journal directories still complete boot normally. These are host regressions,
+not a SIGKILL, power-loss, board, installed shutdown or hardware-repeat qualification.
 
 `helpers/systemd-ready.ts` invokes `/usr/bin/systemd-notify` through the bounded,
 argv-only command runner. The service remains root-owned and

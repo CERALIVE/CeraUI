@@ -1,0 +1,31 @@
+#!/bin/bash
+set -eu
+umask 077
+
+# This mode owns no writer: EOF on observer death safely ends orphan reconciliation.
+if [[ $# == 1 && $1 == --orphan-lock ]]; then
+    printf 'locked\n'
+    IFS= read -r release
+    [[ $release == release ]] || exit 65
+    exit 0
+fi
+
+token=${1:-}
+[[ $# == 1 && $token =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ]] || exit 64
+directory=/run/ceralive/os-stage
+owner=0
+[[ -d $directory && ! -L $directory && $(stat -c '%u:%a' "$directory") == "$owner:700" ]] || exit 65
+private_file() {
+    [[ -f $1 && ! -L $1 && $(stat -c '%u:%a:%h' "$1") == "$owner:600:1" ]]
+}
+private_file "$directory/token" && [[ $(<"$directory/token") == "$token" ]] || exit 65
+
+# PID 1 owns this process under flock; observer death is not a release request.
+trap '' HUP INT TERM
+printf '%s\n' "$token" > "$directory/ready"
+while :; do
+    if private_file "$directory/release" && [[ $(<"$directory/release") == "$token" ]]; then
+        exit 0
+    fi
+    sleep 1 || true
+done

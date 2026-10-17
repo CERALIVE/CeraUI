@@ -251,6 +251,28 @@ describe("LiveView typed start-failure rendering (Todo 29)", () => {
 		},
 	);
 
+	// An update in progress clears by itself: "this won't recover by retrying"
+	// would tell the operator the opposite of what to do (C-m2).
+	it("tells the operator to start again once an update finishes, never that retrying cannot help", async () => {
+		state.failure = {
+			class: "update_in_progress",
+			phase: "params",
+			retriable: false,
+			attemptId: "att_update",
+		};
+
+		render(LiveView);
+		await tick();
+
+		expect(toastError).toHaveBeenCalledTimes(1);
+		expect(toastError).toHaveBeenCalledWith(
+			`${startFailure.class.update_in_progress} ${startFailure.waitForUpdate}`,
+		);
+		const shown = String(toastError.mock.calls[0]?.[0] ?? "");
+		expect(shown).not.toContain(startFailure.notRetriable);
+		expect(shown).not.toContain(startFailure.retriedThenFailed);
+	});
+
 	it("names the signal format and the camera-side fix, never the operator's settings", () => {
 		const negotiation =
 			startFailure.class.capture_source_unavailable.negotiation_failed;

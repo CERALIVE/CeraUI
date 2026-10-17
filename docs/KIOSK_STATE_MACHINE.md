@@ -45,6 +45,23 @@ stateDiagram-v2
 
 ## Transitions
 
+Operator transitions require shared disruptive-action admission before the
+synchronous intent prelude. A refusal leaves the current toggle/state intact;
+an admission lost during awaited add-on work restores persisted intent and
+surfaces the same localized refusal, not an emulated-device or disabled claim.
+Start/stop and failure polls share the cog-display per-ID mutation lock with the
+add-on manager. A queued Stop cannot be overwritten by a late Start tail, and a
+held poll cannot publish old enabled evidence after Stop. Kiosk and nested manager/
+helper work share the local disruptive-step identity only while the owning
+operation is active. Tokens retire on completion; the recurring 2 s interval is
+registered outside mutation, configuration-baseline and operation contexts and
+acquires fresh serialization on every poll. Thus an old timer also queues behind a
+new manager enable rather than auto-disabling under its released Start owner.
+These are host-tested lifetime rules; the operation's reservation holds exclusion
+through nested helper/unit awaits, but real helper execution is not board-proven.
+The canonical inventory and non-atomic late-effect limits are in
+[Disruptive-action gate](START-LIFECYCLE.md#disruptive-action-gate-partial--host-tested-board-re-drill-owed).
+
 Six transitions. Each entry lists the trigger, the systemd actions the backend takes, and the resulting state.
 
 ### T1: `toggle-on`
@@ -111,6 +128,10 @@ Failure-Observation Channel) to confirm the service reached `active (running)`.
 2. `systemctl mask kiosk.service` (prevents accidental restart).
 3. Broadcast `kiosk` state event to all connected clients.
 
+When a persisted cog-display add-on exists, this safety path also records its
+auto-disabled intent and invalidates any held reconciliation. It masks only;
+it does not withdraw the sysext or refresh `/usr`, and needs no streaming bypass.
+
 **Rationale:** A crash-looping kiosk must not lock the operator out of the LAN browser UI. Auto-disabling the persisted toggle ensures the device is reachable from any browser on the LAN after a reboot, without requiring physical access.
 
 ---
@@ -162,6 +183,12 @@ The backend detects `enabled-failed` and `failed-no-display` through three compl
 ### Signal 1: `systemctl is-failed kiosk.service`
 
 The backend polls `systemctl is-failed kiosk.service` on a 2-second interval whenever `kiosk_enabled = true`. The command exits `0` when the unit is in `failed` state.
+
+The production cadence is unchanged. The lifetime regressions inject the scheduler
+while retaining registration-time AsyncLocalStorage inheritance; they do not shorten
+a real timer or establish hardware behavior. Start/Stop while a real poll is running
+remains a board drill. Generic teardown-failure reporting remains the separate
+SW2-B4 backlog, not a success guarantee supplied by this serialization fix.
 
 ```
 systemctl is-failed kiosk.service
