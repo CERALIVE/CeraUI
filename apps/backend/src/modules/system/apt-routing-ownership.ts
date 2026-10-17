@@ -77,7 +77,17 @@ export function createAptRoutingOwnership(
 				try {
 					await runner("ip", [...prefix(entry.family), ...args]);
 				} catch (error) {
-					if (!absent(error)) throw error;
+					// Netdev removal already deletes its routes; ip resolves dev before netlink.
+					const devIndex = entry.args.indexOf("dev");
+					const missingDevice =
+						entry.args[0] === "route" &&
+						devIndex >= 0 &&
+						error instanceof Error &&
+						"stderr" in error &&
+						typeof error.stderr === "string" &&
+						error.stderr.trim() ===
+							`Cannot find device "${entry.args[devIndex + 1]}"`;
+					if (!absent(error) && !missingDevice) throw error;
 				}
 				save(entries.filter((row) => entryKey(row) !== entryKey(entry)));
 			};

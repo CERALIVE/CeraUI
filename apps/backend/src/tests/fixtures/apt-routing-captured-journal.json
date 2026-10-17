@@ -1,0 +1,56 @@
+[
+	{
+		"family": 4,
+		"args": [
+			"route",
+			"add",
+			"unreachable",
+			"default",
+			"table",
+			"100000",
+			"metric",
+			"4278198272"
+		]
+	},
+	{
+		"family": 4,
+		"args": [
+			"route",
+			"add",
+			"default",
+			"via",
+			"192.0.2.1",
+			"dev",
+			"eth0",
+			"table",
+			"100000",
+			"metric",
+			"0"
+		]
+	},
+	{
+		"family": 6,
+		"args": [
+			"rule",
+			"add",
+			"priority",
+			"120",
+			"uidrange",
+			"42042-42042",
+			"prohibit"
+		]
+	},
+	{
+		"family": 4,
+		"args": [
+			"rule",
+			"add",
+			"priority",
+			"120",
+			"uidrange",
+			"42042-42042",
+			"lookup",
+			"100000"
+		]
+	}
+]

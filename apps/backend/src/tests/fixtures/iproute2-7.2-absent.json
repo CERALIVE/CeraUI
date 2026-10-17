@@ -1,5 +1,6 @@
 {
 	"ipv4": "Error: ipv4: FIB table does not exist.\nDump terminated\n",
 	"ipv6": "Error: ipv6: FIB table does not exist.\nDump terminated\n",
-	"delete": "Error: FIB table does not exist.\n"
+	"delete": "Error: FIB table does not exist.\n",
+	"device": "Cannot find device \"eth0\"\n"
 }

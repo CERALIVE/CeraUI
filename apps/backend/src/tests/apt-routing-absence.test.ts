@@ -28,6 +28,7 @@ const unknown = [
 	"Error: ipv5: FIB table does not exist.\nDump terminated\n",
 	"RTNETLINK answers: File exists\n",
 	"No such process\nDump terminated\n",
+	captured.device,
 ] as const;
 
 test.each([...accepted])(
@@ -51,6 +52,103 @@ test.each([...accepted])(
 		lease.release();
 		// Then both absent tables were accepted as empty.
 		expect(families).toEqual(["4", "6"]);
+	},
+);
+
+test.each([
+	[captured.device, true],
+	[captured.device.trim(), true],
+	[` \t${captured.device}\n`, true],
+	['Cannot find device "eth1"', false],
+	['Cannot find device "eth0"\nPermission denied', false],
+	['prefix Cannot find device "eth0"', false],
+	['Cannot find device "eth0" suffix', false],
+	["Cannot find device 'eth0'", false],
+	["Cannot find device eth0", false],
+])(
+	"reconciles only the route's own complete device reply %#",
+	async (stderr, retires) => {
+		// Given exact default-route intents in both families and a complete/near-miss reply.
+		for (const family of [4, 6] as const) {
+			let entries: readonly AptRoutingEntry[] = [
+				{
+					family,
+					args: [
+						"route",
+						"add",
+						"default",
+						"dev",
+						"eth0",
+						"table",
+						"100000",
+						"metric",
+						"0",
+					],
+				},
+			];
+			const owner = createAptRoutingOwnership({
+				read: async () => entries,
+				save: (next) => {
+					entries = next;
+				},
+			});
+			const runner: typeof run = async (_bin, args) => {
+				if (args.includes("del"))
+					throw Object.assign(new Error("kernel reply"), { stderr });
+				return "";
+			};
+			// When restart reconciliation deletes the journaled route.
+			await expect(owner.acquire(runner, 42042)).rejects.toHaveProperty(
+				"reason",
+				retires ? "cleanup-pending" : "journal-unavailable",
+			);
+			// Then only proven absence retires ownership; unknown replies keep the fence.
+			expect(entries).toHaveLength(retires ? 0 : 1);
+			if (retires) (await owner.acquire(runner, 42042)).release();
+		}
+	},
+);
+
+test.each(["rule", "device-free route"])(
+	"refuses missing-device reply for %s intent",
+	async (kind) => {
+		// Given an intent without route-device authority (even if a rule has dev tokens).
+		let entries: readonly AptRoutingEntry[] = [
+			{
+				family: 4,
+				args:
+					kind === "rule"
+						? ["rule", "add", "dev", "eth0"]
+						: [
+								"route",
+								"add",
+								"unreachable",
+								"default",
+								"table",
+								"100000",
+								"metric",
+								"4278198272",
+							],
+			},
+		];
+		const owner = createAptRoutingOwnership({
+			read: async () => entries,
+			save: (next) => {
+				entries = next;
+			},
+		});
+		const runner: typeof run = async () => {
+			throw Object.assign(new Error("kernel reply"), {
+				stderr: captured.device,
+			});
+		};
+		// When a missing-device error is returned for that unrelated intent.
+		await expect(owner.acquire(runner, 42042)).rejects.toHaveProperty(
+			"reason",
+			"journal-unavailable",
+		);
+		// Then no ownership is silently retired.
+		expect(entries).toHaveLength(1);
 	},
 );
 
