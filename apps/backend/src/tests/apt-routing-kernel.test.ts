@@ -1,5 +1,43 @@
 import { expect, test } from "bun:test";
 import { readlink } from "node:fs/promises";
+import { aptKernelTestAvailability } from "./helpers/apt-routing-kernel-probe.ts";
+import { runTestCommand } from "./helpers/run-test-command.ts";
+
+// Probe the id mapping too: plain -Urn support does not grant a subuid range.
+// Children already hold the required namespace and must not probe a nested one.
+const { available, suffix } = aptKernelTestAvailability(
+	process.env.APT_PIN_KERNEL_CHILD
+		? { code: 0, stderr: "" }
+		: await runTestCommand([
+				"unshare",
+				"--map-root-user",
+				"--map-users=1:100000:65536",
+				"-n",
+				"true",
+			]),
+);
+
+test("APT kernel cases skip with the probe reason when id mapping is refused", () => {
+	// Given an unavailable id-map namespace facility.
+	const probe = { code: 1, stderr: "  newuidmap: Operation not permitted\n" };
+	// When test registration interprets the failed probe.
+	const decision = aptKernelTestAvailability(probe);
+	// Then the cases are skipped with a visible, trimmed diagnostic.
+	expect(decision).toEqual({
+		available: false,
+		suffix:
+			" (SKIP: user/network namespace with id maps unavailable: newuidmap: Operation not permitted)",
+	});
+});
+
+test("APT kernel cases run when the exact id-map namespace probe succeeds", () => {
+	// Given a successful probe, even if the tool wrote a warning.
+	const probe = { code: 0, stderr: "namespace warning\n" };
+	// When test registration interprets that probe.
+	const decision = aptKernelTestAvailability(probe);
+	// Then all cases remain runnable under their unchanged titles.
+	expect(decision).toEqual({ available: true, suffix: "" });
+});
 
 const setup = `
 set -eu
@@ -22,8 +60,8 @@ fi
 exec "$@"
 `;
 
-test.each(["K0", "K1", "K2", "K3", "A1", "A2", "A3"])(
-	"kernel %s: APT routing lifetime",
+(available ? test : test.skip).each(["K0", "K1", "K2", "K3", "A1", "A2", "A3"])(
+	`kernel %s: APT routing lifetime${suffix}`,
 	async (name) => {
 		// Given one fresh unprivileged user/network namespace per kernel case.
 		if (process.env.APT_PIN_KERNEL_CHILD === name) {
