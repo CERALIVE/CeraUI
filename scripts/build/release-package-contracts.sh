@@ -9,6 +9,7 @@ bash scripts/build/shared-build-functions.test.sh
 bash scripts/build/deb-reconciler-staging.test.sh
 bash scripts/build/deb-os-stage-guard.test.sh
 bash scripts/build/deb-maintainer-scripts.test.sh
+bash scripts/build/deb-update-runtime-dependencies.test.sh
 bash scripts/build/deb-version-stamp.test.sh
 bash scripts/build/deb-sourcemap-policy.test.sh
 bash scripts/build/documentation-contract.test.sh

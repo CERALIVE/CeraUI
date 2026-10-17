@@ -305,6 +305,8 @@ fpm -s dir -t deb \
     --depends "adduser" \
     --depends "sudo" \
     --depends "util-linux" \
+    --depends "gpgv" \
+    --depends "debian-archive-keyring" \
     --depends "network-manager" \
     --depends "modemmanager" \
     --depends "cerastream" \
@@ -352,6 +354,8 @@ cat > "dist/debian/package-info-${ARCHITECTURE}.json" << EOF
     "udev",
     "adduser",
     "sudo",
+    "gpgv",
+    "debian-archive-keyring",
     "network-manager",
     "modemmanager",
     "cerastream",
@@ -363,7 +367,7 @@ cat > "dist/debian/package-info-${ARCHITECTURE}.json" << EOF
     "repositoryReady": true
   },
   "installation": {
-    "command": "sudo dpkg -i $PACKAGE_FILENAME",
+    "command": "sudo apt-get install ./$PACKAGE_FILENAME",
     "postInstall": "sudo systemctl enable --now ceralive.service"
   }
 }
@@ -393,7 +397,7 @@ cat > "dist/debian/INSTALL-${ARCHITECTURE}.md" << EOF
 
 ### 1. Install the package
 \`\`\`bash
-sudo dpkg -i $PACKAGE_FILENAME
+sudo apt-get install ./$PACKAGE_FILENAME
 \`\`\`
 
 ### 2. Fix any dependency issues (if needed)
