@@ -27,11 +27,11 @@
 	},
 	"dependencies": {
 		"@ceralive/cerastream": "2026.9.11",
-		"@orpc/contract": "2.0.0-beta.35",
+		"@orpc/contract": "2.0.0-beta.43",
 		"zod": "catalog:"
 	},
 	"devDependencies": {
-		"@types/bun": "1.4.2",
+		"@types/bun": "1.4.3",
 		"typescript": "catalog:"
 	},
 	"keywords": [
