@@ -79,6 +79,7 @@ describe("N4: the slot map tolerates key-file whitespace and keeps its scoping",
 		for (const bootId of ["boot-1", "boot-2", "boot-3", "boot-4"]) {
 			const healthyState = healthy(bootId);
 			const verdict = slotSyncGate({
+				mirrorTarget: "good",
 				healthyState,
 				bootId,
 				statusSha256: dpkgSha,

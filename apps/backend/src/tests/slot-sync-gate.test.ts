@@ -13,6 +13,7 @@ const healthy = {
 	recorded_at: "2026-09-24T00:00:00Z",
 };
 const eligible: SlotSyncGateInput = {
+	mirrorTarget: "good",
 	capabilities: {
 		mode: "capable",
 		features: ["apt-all-packages", "slot-sync"],

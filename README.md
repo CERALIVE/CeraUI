@@ -68,6 +68,12 @@ resume or changing legacy-image behaviour. The fixed build has **not** been
 re-proven on a board; the OS/slot flows are not qualified by these installs.
 See also [update recovery](docs/UPDATE-RECOVERY.md).
 
+A matching slot-mirror receipt proves a past copy, not that a later failed OS
+install left it intact. The idle gate now rechecks bounded RAUC target-health
+evidence and restores a bad inactive slot even when the running package hash is
+unchanged. Pending OS installs remain protected. This repair is host-tested;
+the exact-head hardware fallback/restoration drill remains owed.
+
 Add-on mutations preserve request-owned process-group evidence even when Bun loses
 the spawn handle: a checked Bash launcher records its identity before helper exec,
 and recovery probes that group before descriptor jobs. Normal handles never read

@@ -176,6 +176,7 @@ describe("a receipt target the bootname map cannot resolve is unknown", () => {
 		};
 		expect(
 			slotSyncGate({
+				mirrorTarget: "good",
 				...evidence,
 				capabilities: {
 					mode: "capable",

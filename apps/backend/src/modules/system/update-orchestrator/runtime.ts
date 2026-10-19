@@ -198,11 +198,13 @@ import {
 } from "./slot-sync-cleanup.ts";
 import {
 	judgeMirrorTarget,
+	receiptConfirmsMirror,
 	type SlotSyncEvidence,
 	type SlotSyncGate,
 	slotSyncGate,
 } from "./slot-sync-gate.ts";
 import { readHealthyState, readSlotSyncEvidence } from "./slot-sync-state.ts";
+import { SlotSyncTargetCache } from "./slot-sync-target-cache.ts";
 import {
 	defaultStaleServiceDeps,
 	reconcileStaleUnits,
@@ -465,6 +467,7 @@ let osForceActivated = false;
 let osActivationInFlight = false;
 let slotSyncUndecidedReason: string | null = null;
 let slotIdentityUnknownWarned = false;
+const slotSyncTargetCache = new SlotSyncTargetCache();
 let legacyOsFailureWarned = false;
 let consumedReceiptWarned = false;
 let recoveryPersistenceValid = true;
@@ -554,6 +557,7 @@ export function resetOrchestratorRuntimeForTest(): void {
 	osActivationInFlight = false;
 	slotSyncUndecidedReason = null;
 	slotIdentityUnknownWarned = false;
+	slotSyncTargetCache.reset();
 	legacyOsFailureWarned = false;
 	recoveryPersistenceValid = true;
 	osSettlementPersistence.resetForTest();
@@ -645,6 +649,8 @@ function publishWireState(): void {
 
 function adoptState(next: OrchestratorState): void {
 	if (next === state) return;
+	if (next.phase !== "idle" && next.phase !== "sync-eligible")
+		slotSyncTargetCache.reset();
 	state = next;
 	stateGeneration++;
 }
@@ -1144,6 +1150,7 @@ async function pollPackageInstallProgress(): Promise<void> {
 // ─── slot-sync (sync-eligible -> syncing -> synced) ────────────────────────
 
 async function checkSlotSyncGate() {
+	const generation = stateGeneration;
 	const capabilities = await deps.loadCapabilities();
 	// On a legacy image the capability refusal is already decisive; do not
 	// probe paths that image never installed on every idle scheduling tick.
@@ -1160,10 +1167,26 @@ async function checkSlotSyncGate() {
 					receiptTarget: "not-other",
 					receiptTargetSlot: null,
 				};
+	const preliminary = slotSyncGate({
+		...evidence,
+		capabilities,
+		phase: state.phase,
+		mirrorTarget: "undecidable",
+	});
+	if (
+		preliminary.allowed ||
+		preliminary.reason !== "slot-identity-unknown" ||
+		!receiptConfirmsMirror(evidence)
+	)
+		return preliminary;
+	const mirrorTarget = await slotSyncTargetCache.read(evidence, deps);
+	if (stateGeneration !== generation)
+		return { allowed: false, reason: "update-busy" } as const;
 	return slotSyncGate({
 		...evidence,
 		capabilities,
 		phase: state.phase,
+		mirrorTarget,
 	});
 }
 
@@ -1173,7 +1196,7 @@ function noteSlotIdentityGate(gate: SlotSyncGate): void {
 	const unknown = !gate.allowed && gate.reason === "slot-identity-unknown";
 	if (unknown && !slotIdentityUnknownWarned)
 		logger.warn(
-			"update-orchestrator: slot-sync skipped, receipt slot identity unknown",
+			"update-orchestrator: slot-sync skipped, receipt slot identity unknown or target health unproven",
 			{ reason: "slot-identity-unknown" },
 		);
 	slotIdentityUnknownWarned = unknown;

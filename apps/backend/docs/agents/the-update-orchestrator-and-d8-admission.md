@@ -609,7 +609,15 @@ rule in the maintenance probes.
   timestamps. The GATE never dispatches on `unknown`: with a matching SHA it
   skips the tick (`slot-identity-unknown`). The POLL rules out only
   `not-other`; an `unknown` receipt with this dpkg SHA stays a candidate and
-  RAUC decides. Contract:
+  RAUC decides. A matching receipt proves a past copy only: the gate suppresses
+  dispatch only while bounded RAUC target evidence is `good`. A positively bad
+  inactive target after fallback permits the existing idle mirror path despite
+  the matching hash; OS-pending and already-syncing refusals still win. The
+  gate-only cache shares `readRootSlots` for 60 seconds, caches read failures,
+  invalidates on boot/target changes and non-idle/non-eligible phases, and never
+  supplies completion authority. Unknown target health uses the same once-per-
+  change warning/refusal as unknown identity. Host-tested, board re-drill owed.
+  Contract:
   [`docs/UPDATE-RECOVERY.md`](../../../../docs/UPDATE-RECOVERY.md).
 - **Transport** (`update-transport/`). Routing scope and DNS limits:
   [`docs/HOST-UPLINK-ELECTION.md`](../../../../docs/HOST-UPLINK-ELECTION.md).

@@ -1955,7 +1955,10 @@ to `/etc/ceralive/image-build-commit` only when empty. The image's
 `sync-receipt.json` carries `state_sha256`, `build_id`, `image_version`,
 `target_slot`, `completed_at`; an absent receipt permits a first sync, while a
 matching status SHA whose `target_slot` names the slot that is not booted now
-means the state is already mirrored. An APT commit within
+is only evidence of a past mirror. Suppression additionally requires RAUC to
+confirm that target is still the single inactive rootfs slot and `good`, with
+the booted slot `good` and matching this boot's healthy-record slot identity.
+An APT commit within
 the current uptime has no matching boot-health record and cannot be mirrored.
 
 At startup and on every idle tick, a passing predicate dispatches
@@ -1974,6 +1977,31 @@ integrity probes before dispatch, because a pre-dispatch read cannot close that
 race. Exit 75 is a typed refusal, unlike an operational failure. A oneshot's
 stale previous exit-0 does not settle a newly queued run without its current
 SHA-256 receipt.
+
+**Failed-install fallback does not preserve a mirror receipt's authority.** An
+OS install may overwrite the other slot and leave it `bad` after the bootloader
+falls back, while the running slot's package hash and the old mirror receipt
+still match. In `idle`, positive RAUC evidence of that bad inactive target now
+permits `SYNC_ELIGIBILITY_CONFIRMED` and the existing unit start. A good target
+with a matching receipt remains `already-synced`; unreadable, ambiguous or
+contradictory boot/target evidence skips dispatch as `slot-identity-unknown`,
+logged once per unchanged refusal. OS staging, staged, armed and verifying phases
+are checked before any bad-target exception, so a pending installation is never
+overwritten. The receipt is not deleted or hand-rewritten by this decision.
+
+The gate-only target cache uses the existing `readRootSlots` port, not the
+receipt-overlaid version projection. It shares one observation across both
+preflights and refreshes at most every 60 seconds for unchanged idle evidence,
+including failed reads (each RAUC status command already has a 10-second bound).
+Idle ticks are 60 seconds; active ticks are 3 seconds. Startup has no cached
+answer. Changed boot/target identity, backward clock movement or adoption of any
+phase outside `idle`/`sync-eligible` invalidates it; OS writes and rollback
+recovery therefore cannot reuse a pre-install good result. A state-generation
+change across the awaited read refuses its stale dispatch authority. Completion
+still uses the separate fresh RAUC read described below, never this cache.
+These are host regression proofs, not a completed exact-head board re-drill.
+Persistently failing hardware still reaches the existing sticky `SYNC_FAILED`
+outcome; this change adds no automatic failure-clear or per-tick restart loop.
 
 Completion is confirmed by that receipt, not by the unit's exit status. The unit
 is `Type=oneshot` without `RemainAfterExit`, and systemd 257 (Trixie) unloads a
@@ -2039,10 +2067,10 @@ record only once the backend is up, so the first polls see an `unknown` slot
 identity; such a receipt stays a candidate and RAUC, which names this boot's
 booted and inactive slots itself, decides between `synced`,
 `slot-sync-incomplete` and no verdict. A matching receipt alone does not prove
-that this run finished cleanly. Within one boot the gate refuses
-(`already-synced`) to dispatch while a matching receipt already exists, so on
-that path a candidate was written by this run. On the resume path after a
-reboot the receipt can predate the reboot, and what proves the mirror is RAUC's
+that this run finished cleanly. A recovery run can start with a matching older
+receipt precisely because RAUC showed its target `bad`; receipt equality is
+therefore not proof that this run wrote it. On the resume path after a
+reboot the receipt can also predate the reboot, and what proves the mirror is RAUC's
 view of this boot's slots, not the receipt's age. Either way the unit writes
 the receipt before its last step, and the first probe can still be the previous run's
 finished record while this run's job was queued. A second probe that reads

@@ -861,7 +861,7 @@ cellular bundle failover.
 
 Active only with `slot-sync`. The mirror copies a proven running slot into the
 other slot. `slotSyncGate()` is the pure pre-dispatch check. It answers
-`{allowed: true}` or one of eight reasons, evaluated in this order:
+`{allowed: true}` or one of nine reasons, evaluated in this order:
 
 | Reason | Condition |
 |---|---|
@@ -869,11 +869,11 @@ other slot. `slotSyncGate()` is the pure pre-dispatch check. It answers
 | `not-yet-booted` | no healthcheck record, or its `boot_id` is not this boot |
 | `packages-changed` | the SHA-256 of `/var/lib/dpkg/status` differs from the record |
 | `build-changed` | the build id differs from the record |
-| `already-synced` | the sync receipt records this dpkg SHA AND names the slot that is not booted now (an OS activation swaps the booted slot without changing dpkg, so the SHA alone can describe the mirror into the slot now running) |
-| `slot-identity-unknown` | the sync receipt records this dpkg SHA but its slot identity cannot be resolved (unreadable or bootname-less `/etc/rauc/system.conf`, a booted-slot name it does not map, or a receipt target the map lacks while it does not name the other rootfs slot either), so the tick is skipped and retried rather than suppressing or dispatching the mirror; a warning is logged once per change, not every tick |
 | `os-install-pending` | phase is `os-staging`, `os-staged`, `os-activation-armed` or `os-verifying` |
 | `already-syncing` | phase is `syncing` |
 | `update-busy` | phase is `awaiting-idle`, `downloading`, `committing` or `restarting-services` |
+| `already-synced` | the sync receipt records this dpkg SHA, names the current inactive rootfs slot, AND the bounded RAUC observation reports that target `good`, with the healthy booted slot's identity confirmed |
+| `slot-identity-unknown` | the matching receipt's slot identity cannot be resolved, or RAUC is unreadable/undecidable or disagrees with the current healthy booted-slot identity; skip and retry, with one warning per change rather than per tick |
 
 `readSlotSyncEvidence()` reads the image-owned
 `/data/ceralive/update-state/healthy-state.json` and `sync-receipt.json`, and
@@ -885,7 +885,7 @@ hashes the dpkg status file with `node:crypto`, byte for byte as the image's
 while RAUC is wedged. It is read as a GLib key file: whitespace around `=`
 (`bootname = A`), CRLF line ends and `#`/`;` comment lines are accepted, and
 only `[slot.rootfs.<n>]` sections count. The answer is one of three: `other` (the receipt names the
-other rootfs slot, so with a matching SHA the gate says `already-synced`),
+other rootfs slot, so a matching SHA requires target-health observation),
 `not-other` (it names the booted slot, a slot of another class such as
 `certs.0`, or a name the map lacks while the map already names the other
 rootfs slot, so the mirror is allowed), or `unknown` (no current-boot healthy
@@ -898,6 +898,28 @@ exit-75 refusal would leave a sticky failure. The build id is the unique `BUILD_
 falling back to `/etc/ceralive/image-build-commit` only when that unique value is
 empty or absent. Repeated build keys, `[system]` sections or rootfs slot sections
 refuse rather than selecting the first identity.
+
+A receipt proves a **past mirror**, not that its target still contains that
+copy. A failed OS install can overwrite the inactive slot and leave it `bad`
+after bootloader fallback, without changing the running slot's dpkg SHA. In
+`idle` the gate dispatches the existing mirror path in this case, even with a
+matching receipt. A matching receipt into a positively `good` inactive slot
+still suppresses dispatch. Pending OS phases and an already running mirror
+remain refusals; no receipt is deleted or edited to force recovery.
+
+For this matching-receipt check, `SlotSyncTargetCache` reuses `deps.readRootSlots`
+with a 60,000 ms refresh bound, shared by eligibility and start preflights.
+Successes and unknown/read-failure results are cached equally. Startup begins
+uncached; a changed boot/target identity or adoption of any phase other than
+`idle`/`sync-eligible` invalidates it, including OS writes and rollback recovery.
+Ordinary idle scheduling is every 60,000 ms, active scheduling every 3,000 ms;
+unchanged idle evidence costs at most one extra RAUC status call per minute,
+with the existing 10,000 ms command timeout. A clock step backward expires the
+cache. State-generation changes during observation refuse that result. This is
+a cheap decision, not a lock or a replacement for the unit's safety checks.
+Recovery dispatch and its bounds are host-tested; the exact-head fallback and
+automatic restoration drill on hardware remains owed. A failed mirror retains
+the existing failure policy, rather than starting again on every idle tick.
 
 Completion is confirmed by `sync-receipt.json` matching the current dpkg SHA
 followed by a fresh probe that again reads finished and clean, not by the unit's

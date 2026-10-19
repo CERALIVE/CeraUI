@@ -188,6 +188,7 @@ describe("os-verifying keeps its other semantics while it waits", () => {
 		expect(getOrchestratorState().phase).toBe(phase);
 		expect(
 			slotSyncGate({
+				mirrorTarget: "good",
 				healthyState: healthyFor(V3_BOOTS[0]),
 				bootId: V3_BOOTS[0],
 				statusSha256: healthyFor(V3_BOOTS[0]).dpkg_status_sha256,

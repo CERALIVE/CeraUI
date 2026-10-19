@@ -82,6 +82,7 @@ const evidenceFor = (
 });
 const gate = (evidence: SlotSyncEvidence) =>
 	slotSyncGate({
+		mirrorTarget: "good",
 		...evidence,
 		capabilities: {
 			mode: "capable",
@@ -137,17 +138,19 @@ describe("OPI-D1: already-synced means the CURRENT other slot was mirrored", () 
 	// step and a timestamp names no slot, so an unmapped identity is unknown.
 	test("without a slot map the target is unknown whatever its timestamp, and only a literal booted name is decided", () => {
 		const unmapped = new Map<string, string>();
-		const decide = (completedAt: string, target = "rootfs.0") =>
-			classifyReceiptTarget({
-				receipt: {
-					...receiptBefore,
-					target_slot: target,
-					completed_at: completedAt,
-				},
+		const decide = (completedAt: string, target = "rootfs.0") => {
+			const receipt = {
+				...receiptBefore,
+				target_slot: target,
+				completed_at: completedAt,
+			};
+			return classifyReceiptTarget({
+				receipt,
 				healthyState: bootedB,
 				bootId: bootedB.boot_id,
 				bootnames: unmapped,
 			});
+		};
 		for (const completedAt of [
 			"2026-09-30T06:15:26Z",
 			"2026-09-30T11:40:00Z",

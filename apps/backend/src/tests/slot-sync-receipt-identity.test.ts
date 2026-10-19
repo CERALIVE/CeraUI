@@ -64,6 +64,7 @@ const evidenceFor = (input: {
 });
 const gate = (evidence: SlotSyncEvidence) =>
 	slotSyncGate({
+		mirrorTarget: "good",
 		...evidence,
 		capabilities: {
 			mode: "capable",

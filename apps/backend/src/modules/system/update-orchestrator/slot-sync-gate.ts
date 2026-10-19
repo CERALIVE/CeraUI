@@ -24,8 +24,8 @@ export type SlotSyncEvidence = {
 	readonly receiptTargetSlot: string | null;
 };
 
-/** The unit's receipt records a mirror of THIS dpkg state into the CURRENT
- * other slot. */
+/** The receipt records a past copy of this dpkg state into the current other
+ * slot, not proof that a later install left that copy intact. */
 export function receiptConfirmsMirror(evidence: SlotSyncEvidence): boolean {
 	return (
 		evidence.receiptStateSha256 === evidence.statusSha256 &&
@@ -75,6 +75,7 @@ export function judgeMirrorTarget(
 export type SlotSyncGateInput = SlotSyncEvidence & {
 	readonly capabilities: UpdateCapabilities;
 	readonly phase: OrchestratorPhase;
+	readonly mirrorTarget: MirrorTargetVerdict;
 };
 
 export type SlotSyncGate =
@@ -118,16 +119,6 @@ export function slotSyncGate(input: SlotSyncGateInput): SlotSyncGate {
 		return { allowed: false, reason: "packages-changed" };
 	if (!input.buildId || input.healthyState.build_id !== input.buildId)
 		return { allowed: false, reason: "build-changed" };
-	if (receiptConfirmsMirror(input))
-		return { allowed: false, reason: "already-synced" };
-	// Dispatching blind could meet a wedged RAUC, whose exit 75 refusal would
-	// leave a sticky failure; not dispatching could hide a stale fallback. A
-	// later tick retries once the identity resolves.
-	if (
-		input.receiptStateSha256 === input.statusSha256 &&
-		input.receiptTarget === "unknown"
-	)
-		return { allowed: false, reason: "slot-identity-unknown" };
 	if (
 		["os-staging", "os-staged", "os-activation-armed", "os-verifying"].includes(
 			input.phase,
@@ -145,5 +136,28 @@ export function slotSyncGate(input: SlotSyncGateInput): SlotSyncGate {
 		].includes(input.phase)
 	)
 		return { allowed: false, reason: "update-busy" };
+	if (receiptConfirmsMirror(input)) {
+		switch (input.mirrorTarget) {
+			case "good":
+				return { allowed: false, reason: "already-synced" };
+			case "bad":
+				return { allowed: true };
+			case "not-target":
+			case "undecidable":
+				return { allowed: false, reason: "slot-identity-unknown" };
+			default: {
+				const unreachable: never = input.mirrorTarget;
+				return unreachable;
+			}
+		}
+	}
+	// Dispatching blind could meet a wedged RAUC, whose exit 75 refusal would
+	// leave a sticky failure; not dispatching could hide a stale fallback. A
+	// later tick retries once the identity resolves.
+	if (
+		input.receiptStateSha256 === input.statusSha256 &&
+		input.receiptTarget === "unknown"
+	)
+		return { allowed: false, reason: "slot-identity-unknown" };
 	return { allowed: true };
 }
