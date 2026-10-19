@@ -1,0 +1,68 @@
+import { afterEach, expect, test } from "bun:test";
+import { rmSync } from "node:fs";
+import { OsStageError } from "../modules/system/update-orchestrator/os-stage-error.ts";
+import {
+	admitAndPrepareStreamStart,
+	getOrchestratorState,
+	installUpdatesNow,
+	resetOrchestratorRuntimeForTest,
+	runOrchestratorTick,
+} from "../modules/system/update-orchestrator/runtime.ts";
+import { quarantineDirs } from "./helpers/orchestrator-runtime-harness.ts";
+import { harness } from "./helpers/orchestrator-runtime-os-scheduler.ts";
+
+afterEach(() => {
+	resetOrchestratorRuntimeForTest();
+	for (const dir of quarantineDirs.splice(0)) rmSync(dir, { recursive: true });
+});
+
+test("Install reports busy while the aborted producer recovers, then restages without Check", async () => {
+	// Given a stage whose recovery continues after RAUC restart submission.
+	const entered = Promise.withResolvers<void>();
+	const retired = Promise.withResolvers<void>();
+	let stages = 0;
+	let live = false;
+	let readinessReads = 0;
+	harness([], {
+		isOsStageReady: async () => {
+			readinessReads++;
+			return true;
+		},
+		isUpdateAdmissionReady: async () => true,
+		isStreamLive: () => live,
+		killAndRestartRaucForStream: async () => {},
+		stageOs: async () => {
+			stages++;
+			if (stages === 1) {
+				entered.resolve();
+				await retired.promise;
+				throw new OsStageError("os_stage_cancelled_for_stream");
+			}
+		},
+	});
+	const staging = runOrchestratorTick();
+	await entered.promise;
+	expect(await admitAndPrepareStreamStart()).toEqual({ allowed: true });
+	live = true;
+	live = false; // operator Stop, while the cancelled producer still owns recovery
+	const checks = getOrchestratorState().osCheck.lastSuccessAt;
+	const priorReadinessReads = readinessReads;
+	try {
+		// When Install is pressed twice before the old producer retires.
+		const first = await installUpdatesNow();
+		const second = await installUpdatesNow();
+		// Then this is a busy recovery, not an absent offer.
+		expect([first, second]).toEqual([
+			{ started: false, reason: "busy" },
+			{ started: false, reason: "busy" },
+		]);
+		expect(stages).toBe(1);
+		expect(readinessReads).toBe(priorReadinessReads);
+	} finally {
+		retired.resolve();
+		await staging;
+	}
+	expect(await installUpdatesNow()).toEqual({ started: true });
+	expect(stages).toBe(2);
+	expect(getOrchestratorState().osCheck.lastSuccessAt).toBe(checks);
+});

@@ -15,6 +15,16 @@ Absent/unreadable/invalid or unrelated protection grants no clearance. No `RESET
 is dispatched. Package `COMMIT_FAILED` quarantine and unresolved-commit maintenance
 policy are unchanged; never delete state or protection to bypass them.
 
+## Install during stream-aborted stage recovery [PARTIAL — host-proven]
+
+D8 returns to `os-available` before the cancelled staging producer finishes its
+recovery/release. Until that producer retires, a second Install must not launch
+another writer. Runtime now returns the existing typed `busy` refusal for that
+retained-producer/restart window through `osStageBlocked()`, retaining the
+offer. A later Install can stage without a fresh Check. The controlled host replay
+reproduces two former `not_available` replies while producer recovery is held;
+it does not establish which fence was active during the historical Rock drill.
+
 ## Recovery command completion
 
 The maintenance recovery probes use the registered shared `spawnWithTimeout`

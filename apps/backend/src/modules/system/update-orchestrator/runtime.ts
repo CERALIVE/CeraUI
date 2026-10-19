@@ -772,12 +772,12 @@ export async function installUpdatesNow(): Promise<ManualInstallOutcome> {
 			!capabilities.features.includes("rauc-verity-streaming")
 		)
 			return { started: false, reason: "not_available" };
-		await maybeStartOsStage(true);
+		const refusal = await maybeStartOsStage(true);
 		return ["os-staging", "os-staged", "os-activation-armed"].includes(
 			getOrchestratorState().phase,
 		)
 			? { started: true }
-			: { started: false, reason: "not_available" };
+			: { started: false, reason: refusal ?? "not_available" };
 	}
 	if (packageInstallStarting) return { started: false, reason: "busy" };
 	if (!canStartManualInstall(state.phase, "packages")) {
@@ -1525,9 +1525,11 @@ function osStageBlocked(): boolean {
 	);
 }
 
-async function maybeStartOsStage(bypassIdle: boolean): Promise<void> {
+async function maybeStartOsStage(
+	bypassIdle: boolean,
+): Promise<"busy" | undefined> {
 	if (osSettlementPersistence.pending) return;
-	if (osStageBlocked()) return;
+	if (osStageBlocked()) return "busy";
 	if (!osCandidate) {
 		await runOsCheckAfterCellularGate(await deps.loadSettings());
 		if (state.phase !== "os-available" || !osCandidate) return;
@@ -1746,6 +1748,7 @@ async function maybeStartOsStage(bypassIdle: boolean): Promise<void> {
 			}
 		}
 	}
+	return undefined;
 }
 
 // An automatic restage is preceded by a fresh signed check unless the offer

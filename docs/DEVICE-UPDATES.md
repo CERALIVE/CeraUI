@@ -443,6 +443,16 @@ link support and host-proof limits are in
 | `system.allowCellularOnce` | `allowCellularOnce()` | Records a one-time cellular approval for the named OS candidate. |
 | `system.getUpdateDetails` | `readUpdateDetails()` | Dialog snapshot. |
 
+After a stream abort, `os-available` can precede retirement of the cancelled
+producer. Install now reports existing typed `busy` while that producer, RAUC
+restart submission, a stream/lifecycle holder, shutdown or pending settlement
+withholds a new attempt; it does not misreport an absent offer. Once those
+fences settle, Install can stage the retained candidate without a new Check.
+The host regression holds producer recovery across two presses, then releases it;
+which exact fence withheld the historical Rock presses remains unobserved.
+Readiness, CONTROL, cellular-policy and authoritative-state refusals retain
+their existing behavior; this correction does not bypass or reclassify them.
+
 Legacy-launch limits: "D8 stream/update admission: what it does NOT
 cover" under Known gaps in the root [`AGENTS.md`](../AGENTS.md).
 
