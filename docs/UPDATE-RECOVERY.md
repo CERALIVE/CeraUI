@@ -71,26 +71,53 @@ Installed systemd/APT, both-board crash/power-cut and rendered-notice proof rema
 ## Recorded OS rollback recovery [PARTIAL — host-proven, bench re-drill owed]
 
 An observed fallback records the staged version in `quarantine.json` `os[]` and
-publishes the process-local persistent `os-rollback` notification before returning the workflow
+publishes the persistent `os-rollback` notification before returning the workflow
 to `idle` with `failureReason:null`. This clears no version protection: signed
 manifest admission still refuses that version. Check and the existing healthy-boot
 lagged-mirror gate may run again; this is not manual slot marking or mirror success.
 
-Here “persistent” means retained in the running backend's notification map, not
-durable across process restarts. Once rollback has settled to idle, a backend
-restart loses that notice and does not rehydrate it from OS quarantine. The version
-protection remains durable and still refuses re-offers; update details do not expose
-that quarantine history. No restart-durable notice mechanism is implemented.
+Startup rehydrates one `update:os-rollback:<version>` notice per recorded OS
+quarantine entry, including after the workflow returned to idle and the staged
+receipt is gone. The existing semantic dismissal store
+(`notification_dismissals.json` in the backend working directory) remembers the
+operator's acknowledgement under that exact notice name. Rollback acknowledgement
+keys are exempt from ordinary dismissal eviction, so other notices cannot make an
+old rollback reappear. No agent/quarantine schema or protection is changed by
+dismissal. Without readable valid OS quarantine, no rollback notice is invented;
+read damage is logged and does not crash startup. Restarts clear only the in-memory
+map; valid history recreates the same undismissed notice, never a duplicate. This
+is host-tested restart/dismissal behavior, not a new board or power-loss proof.
+Lost/damaged acknowledgement storage can lose a dismissal, as with other stored
+preferences; update details still do not expose quarantine history.
 
 Startup and tick migrate the older exact `quarantined / os_version_mismatch`
 snapshot only when its staged receipt version has a matching OS quarantine entry.
-They restore the same process-local notice before explicit `OS_ROLLBACK_RECORDED`.
+They restore the same keyed notice before explicit `OS_ROLLBACK_RECORDED`.
 Unreadable/invalid receipt or quarantine reads are logged and defer clearance,
 leaving `quarantined` and its evidence intact while allowing startup to finish.
 Subsequent ticks retry the strict readers; Check remains busy in that phase.
 Absent/unreadable/invalid or unrelated protection grants no clearance. No `RESET`
 is dispatched. Package `COMMIT_FAILED` quarantine and unresolved-commit maintenance
 policy are unchanged; never delete state or protection to bypass them.
+
+An authenticated replay refusal for an exact OS-quarantined manifest version now
+clears `update:refused:os-check:serial_replayed` and logs at debug instead of
+raising another warning. It remains a failed check with the same `serial_replayed`
+reason/backoff and no candidate: neither staging nor installation is authorized.
+Only the CMS-verified, schema/board/compatible/channel-validated version may select
+this quiet path. A non-quarantined replay still warns; package-only or near-version
+protection does not qualify. Downgrade/same, expiry, signature and other refusals
+retain their existing behavior. These notice-only changes are host-proven; the
+supplied Rock rollback snapshot records the older noisy warning, not this repair.
+
+Combined host coverage in `update-orchestrator-combined-recovery.test.ts` keeps
+these independent owners together: a recorded rollback rehydrates its notice
+while its replay warning stays quiet and a bad target overrides an old matching
+mirror receipt. A proven interrupted package attempt first returns idle with its
+recovered notice; the next idle tick can still dispatch that mirror. Without
+attempt provenance, the same current consistency evidence leaves failure and the
+pending plan intact, with no mirror dispatch. These interactions do not qualify
+installed RAUC/APT or either board.
 
 ## Install during stream-aborted stage recovery [PARTIAL — host-proven]
 

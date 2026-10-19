@@ -54,7 +54,8 @@ test("a real kernel lock on an observed package lock file withholds idle proof",
 		// Then the kernel holder cannot be missed.
 		expect(idle).toBe(false);
 	} finally {
-		await child.stdin.end("release\n");
+		child.stdin.write("release\n");
+		await child.stdin.end();
 		await child.exited;
 		await rm(dir, { recursive: true });
 	}

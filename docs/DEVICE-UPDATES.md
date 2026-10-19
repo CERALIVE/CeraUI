@@ -711,6 +711,19 @@ Active only with `apt-all-packages` and `rauc-verity-streaming`.
    clear the older `quarantined / os_version_mismatch` state only after the
    staged receipt's version is found in OS quarantine; missing, invalid or
    unrelated protection never grants clearance. Package quarantine is unchanged.
+   Startup also restores the same version-keyed rollback notice from valid OS
+   quarantine, independent of the workflow phase or a retained receipt. It stays
+   visible until dismissed; the existing durable semantic dismissal store remembers
+   the exact version across restarts, exempt from ordinary notice eviction.
+   Corrupt/absent quarantine cannot invent a notice. Notice rehydration and dismissal
+   are host-tested, not board-qualified by the earlier rollback drill; see
+   [recorded rollback recovery](UPDATE-RECOVERY.md#recorded-os-rollback-recovery-partial--host-proven-bench-re-drill-owed).
+   A later Check against the same consumed pointer still refuses serial replay.
+   If its authenticated exact version is already OS-quarantined, only the redundant
+   OS-check replay warning is cleared/suppressed (debug log instead). Check failure,
+   backoff and strict staging admission remain unchanged; non-quarantined replay
+   and every other refusal still warn normally. This quiet-warning repair is
+   host-tested and has not been deployed or re-drilled on either board.
    The version check comes first, so a rollback never depends on
   the healthy record. Operator-visible consequence: after the reboot into a new
   OS the UI shows the verifying state until that boot's healthcheck passes,

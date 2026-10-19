@@ -260,6 +260,13 @@ An unpublished stable/beta channel no longer makes a healthy, TLS-verified link
 look captive or offline: the OS check reports no candidate instead. This
 correction is not yet board-proven on the fixed build.
 
+Recorded OS rollback notices now rehydrate from quarantine on backend startup.
+The existing dismissal store remembers the exact failed version across restarts,
+without ordinary notice churn evicting that acknowledgement. These host-tested
+notice repairs are not a new board qualification; see [update recovery](docs/UPDATE-RECOVERY.md).
+Replayed OS pointers already in exact-version quarantine keep their failed-check
+and installation refusal, but no longer repeat the redundant replay warning.
+
 Generic raw capture inputs now have an honest, non-streamable **Raw video** row
 rather than a false Cam Link identity. Both consumers now pin published bindings
 2026.9.11; see [publication and rollout](docs/RAW-CAPTURE-CLASSIFICATION.md).

@@ -67,7 +67,11 @@ import {
 	type SlotSyncProbeState,
 	startSlotSync,
 } from "./lock.ts";
-import { clearOsStageNotices, notifyUpdate } from "./notifications.ts";
+import {
+	clearOsStageNotices,
+	hydrateOsRollbackNotices,
+	notifyUpdate,
+} from "./notifications.ts";
 import { readActivationArmed } from "./os-activation-marker.ts";
 import {
 	armOsActivation,
@@ -76,6 +80,7 @@ import {
 	OsAgentError,
 	type OsStageBundleControl,
 	type OsStageReceipt,
+	QuarantinedOsReplayError,
 	readBootId,
 	readStagedReceipt,
 	readStagedReceiptEvidence,
@@ -257,6 +262,7 @@ export interface OrchestratorRuntimeDeps {
 		readonly rateLimited: boolean;
 		readonly failed: boolean;
 		readonly reason: string;
+		readonly suppressNotice?: boolean;
 		readonly manifest?: OsChannelManifest;
 	}>;
 	readonly stageOs: (
@@ -376,6 +382,9 @@ export async function checkOsManifestResult(
 			rateLimited: reason === "rate_limited",
 			failed: true,
 			reason,
+			...(error instanceof QuarantinedOsReplayError
+				? { suppressNotice: true }
+				: {}),
 		};
 	}
 }
@@ -2663,11 +2672,12 @@ async function runOsCheckAfterCellularGate(
 	const result = await deps.checkOsManifest(settings.channel);
 	const outcomeNow = deps.now();
 	if (result.failed) {
-		notifyUpdate({
-			kind: "refused",
-			id: `os-check:${result.reason}`,
-			reason: result.reason,
-		});
+		if (!result.suppressNotice)
+			notifyUpdate({
+				kind: "refused",
+				id: `os-check:${result.reason}`,
+				reason: result.reason,
+			});
 		const consecutiveFailuresAfter = state.osCheck.consecutiveFailures + 1;
 		const nextAttemptAt =
 			outcomeNow +
@@ -2867,5 +2877,6 @@ async function startOrchestratorRuntime(
 	startupReadiness.setReady(true);
 	hydrateOsStageRecoveryNotice(state);
 	if (state.recoveredNotice) notifyUpdate(state.recoveredNotice);
+	await hydrateOsRollbackNotices(deps.quarantine);
 	scheduleNextTick();
 }

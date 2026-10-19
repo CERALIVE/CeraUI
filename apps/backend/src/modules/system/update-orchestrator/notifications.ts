@@ -4,6 +4,7 @@ import {
 	notificationRemove,
 	notificationSend,
 } from "../../ui/notifications.ts";
+import type { UpdateQuarantine } from "./quarantine.ts";
 
 export type UpdateNotice =
 	| {
@@ -217,6 +218,19 @@ export function clearUpdateNotice(
 ): void {
 	const name = `update:${kind}:${id}`;
 	if (notificationExists(name)) notificationRemove(name);
+}
+
+export async function hydrateOsRollbackNotices(
+	quarantine: UpdateQuarantine,
+): Promise<void> {
+	try {
+		for (const { version } of (await quarantine.read()).os)
+			notifyUpdate({ kind: "os-rollback", id: version, version });
+	} catch (error: unknown) {
+		logger.warn("update-orchestrator: rollback notices deferred", {
+			error: error instanceof Error ? error : String(error),
+		});
+	}
 }
 
 /** Withdraws every staging-failure notice of one exact OS candidate. */

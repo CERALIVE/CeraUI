@@ -357,6 +357,12 @@ type SignedOsChannel = {
 	readonly verification: ManifestVerificationDeps;
 };
 
+export class QuarantinedOsReplayError extends OsAgentError {
+	constructor() {
+		super("serial_replayed");
+	}
+}
+
 export async function checkOsChannel(
 	settingsChannel: "stable" | "beta",
 	quarantine: UpdateQuarantine,
@@ -380,6 +386,18 @@ export async function checkOsChannel(
 			}
 			return undefined;
 		case "refused":
+			if (
+				result.reason === "serial_replayed" &&
+				result.version !== undefined &&
+				(await quarantine.isOsVersionQuarantined(result.version))
+			) {
+				clearUpdateNotice("refused", "os-check:serial_replayed");
+				logger.debug("update-orchestrator: quarantined OS replay refused", {
+					version: result.version,
+					reason: result.reason,
+				});
+				throw new QuarantinedOsReplayError();
+			}
 			throw new OsAgentError(result.reason);
 		default: {
 			const exhaustive: never = result;

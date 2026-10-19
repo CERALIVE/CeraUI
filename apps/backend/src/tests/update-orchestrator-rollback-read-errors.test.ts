@@ -77,7 +77,7 @@ test.each(["quarantine", "receipt"] as const)(
 		// Then startup is ready, but Check and historical clearance fail closed without evidence repair.
 		expect(await checkUpdatesNow()).toEqual({ started: false, reason: "busy" });
 		expect(getOrchestratorState()).toEqual(old);
-		expect(notices("os-rollback", version)).toBe(0);
+		expect(notices("os-rollback", version)).toBe(record === "receipt" ? 1 : 0);
 		expect(await Bun.file(damaged).text()).toBe(bytes);
 	},
 );

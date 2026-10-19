@@ -151,11 +151,16 @@ export class NotificationDismissalStore {
 	}
 
 	private evictOverflow(): void {
-		while (this.entries.size > this.maxEntries) {
-			const oldest = this.entries.keys().next().value;
-			if (oldest === undefined) break;
-			this.entries.delete(oldest);
-		}
+		// Rollback history is durable and unbounded; its acknowledgement must
+		// outlive ordinary notice churn or startup would resurrect old failures.
+		const ordinary = [...this.entries.keys()].filter(
+			(key) => !key.startsWith("update:os-rollback:"),
+		);
+		for (const key of ordinary.slice(
+			0,
+			Math.max(0, ordinary.length - this.maxEntries),
+		))
+			this.entries.delete(key);
 	}
 
 	private persist(): void {

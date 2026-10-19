@@ -69,7 +69,11 @@ export type OsManifestDiscovery =
 			readonly kind: "none";
 			readonly classification: "current" | "installed-serial";
 	  }
-	| { readonly kind: "refused"; readonly reason: ManifestRefusal };
+	| {
+			readonly kind: "refused";
+			readonly reason: ManifestRefusal;
+			readonly version?: string;
+	  };
 
 export type ManifestContext = {
 	readonly board: string;
@@ -230,7 +234,13 @@ export async function discoverSignedOsManifest(
 	const admitted = await admitTrustedOsManifest(manifest, context, deps);
 	switch (admitted.ok) {
 		case false:
-			return { kind: "refused", reason: admitted.reason };
+			return {
+				kind: "refused",
+				reason: admitted.reason,
+				...(admitted.reason === "serial_replayed"
+					? { version: manifest.version }
+					: {}),
+			};
 		case true:
 			return { kind: "candidate", manifest: admitted.manifest };
 		default: {

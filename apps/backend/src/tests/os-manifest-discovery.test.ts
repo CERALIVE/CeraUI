@@ -166,7 +166,11 @@ describe("signed OS manifest discovery", () => {
 				deps,
 			);
 			// Then serial replay remains a refusal.
-			expect(result).toEqual({ kind: "refused", reason: "serial_replayed" });
+			expect(result).toEqual({
+				kind: "refused",
+				reason: "serial_replayed",
+				version: manifest.version,
+			});
 		},
 	);
 
@@ -196,7 +200,11 @@ describe("signed OS manifest discovery", () => {
 			{ ...deps, isQuarantined: async () => true },
 		);
 		// Then strict replay precedence is preserved.
-		expect(result).toEqual({ kind: "refused", reason: "serial_replayed" });
+		expect(result).toEqual({
+			kind: "refused",
+			reason: "serial_replayed",
+			version: manifest.version,
+		});
 	});
 
 	test("offers a candidate when trust and strict admission pass", async () => {
