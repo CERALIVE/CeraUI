@@ -1910,6 +1910,8 @@
 	"notifications.updateSystemStageOperator": "No se pudo preparar la versión {version} del sistema. Los reintentos automáticos están en pausa; usa Instalar ahora para intentarlo de nuevo.",
 	"notifications.updateSystemStageUnresolved": "La preparación de la versión {version} del sistema terminó en un estado que el dispositivo no pudo verificar. Las actualizaciones del sistema están en pausa; usa Comprobar ahora para verificar de nuevo o contacta con soporte.",
 	"notifications.updateSlotsCurrent": "Ambas particiones del sistema están actualizadas.",
+	"notifications.updatePackagesRecovered": "Se interrumpió una actualización de paquetes y el sistema se recuperó. Vuelve a buscar actualizaciones.",
+	"notifications.updateSlotSyncRecovered": "Se interrumpió la sincronización de las particiones del sistema. Una sincronización posterior se completó y el sistema se recuperó.",
 	"notifications.updateRestartRecommended": "Se recomienda reiniciar {unit} después de actualizar. No se reiniciará automáticamente.",
 	"notifications.updateCellularApproval": "Esta descarga necesita autorización para usar datos móviles ({size}).",
 	"notifications.updateCredentialsExpiring": "Las credenciales de actualización vencen en {days} días. Renuévalas.",

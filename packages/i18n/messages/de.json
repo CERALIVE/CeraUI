@@ -1907,6 +1907,8 @@
 	"notifications.updateSystemStageOperator": "Systemversion {version} konnte nicht vorbereitet werden. Automatische Wiederholungen sind pausiert; verwende „Jetzt installieren“, um es erneut zu versuchen.",
 	"notifications.updateSystemStageUnresolved": "Die Vorbereitung von Systemversion {version} endete in einem Zustand, den das Gerät nicht überprüfen konnte. Systemupdates sind pausiert; verwende „Jetzt prüfen“, um erneut zu prüfen, oder wende dich an den Support.",
 	"notifications.updateSlotsCurrent": "Beide System-Slots sind aktuell.",
+	"notifications.updatePackagesRecovered": "Eine Paketaktualisierung wurde unterbrochen und das System hat sich erholt. Suche erneut nach Updates.",
+	"notifications.updateSlotSyncRecovered": "Die Synchronisierung der System-Slots wurde unterbrochen. Eine spätere Synchronisierung war erfolgreich; das System hat sich erholt.",
 	"notifications.updateRestartRecommended": "Neustart von {unit} nach dem Update empfohlen. Das Gerät startet diesen Dienst nicht automatisch neu.",
 	"notifications.updateCellularApproval": "Dieser Download benötigt eine Freigabe für Mobilfunkdaten ({size}).",
 	"notifications.updateCredentialsExpiring": "Die Update-Zugangsdaten laufen in {days} Tagen ab. Bitte erneuern.",

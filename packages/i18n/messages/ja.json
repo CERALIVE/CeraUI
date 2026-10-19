@@ -1862,6 +1862,8 @@
 	"notifications.updateSystemStageOperator": "システムバージョン {version} を準備できませんでした。自動再試行は一時停止しています。再試行するには「今すぐインストール」を使用してください。",
 	"notifications.updateSystemStageUnresolved": "システムバージョン {version} の準備は、デバイスが確認できない状態で終了しました。システム更新は一時停止しています。再確認するには「今すぐ確認」を使用するか、サポートに連絡してください。",
 	"notifications.updateSlotsCurrent": "両方のシステムスロットが最新です。",
+	"notifications.updatePackagesRecovered": "パッケージ更新が中断されましたが、システムは復旧しました。もう一度更新を確認してください。",
+	"notifications.updateSlotSyncRecovered": "システムスロットの同期が中断されました。その後の同期が成功し、システムは復旧しました。",
 	"notifications.updateRestartRecommended": "更新後に {unit} の再起動を推奨します。自動的には再起動しません。",
 	"notifications.updateCellularApproval": "このダウンロードにはモバイルデータ通信の承認が必要です（{size}）。",
 	"notifications.updateCredentialsExpiring": "更新用の認証情報は {days} 日後に期限切れになります。更新してください。",

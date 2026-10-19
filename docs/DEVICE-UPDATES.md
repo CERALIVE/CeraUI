@@ -263,6 +263,8 @@ gaps for overlap with the independent legacy launcher. Transition table from
 | `quarantined` with exact `os_version_mismatch` | `OS_ROLLBACK_RECORDED`, matching staged receipt version in `quarantine.json` `os[]` | `idle`, failure cleared; startup/tick migration only, protection retained |
 | `failed` | `RESET` | `idle` |
 | `failed` with exact `commit_unit_absent_on_resume` | root-only `HISTORICAL_COMMIT_ADJUDICATED` after durable receipt and plan archive | `idle` |
+| `failed` with exact `commit_unit_absent_on_resume` and recorded attempt boot/slot | `COMMIT_RESUME_SETTLED_CONSISTENT`, fresh absence/process/lock/dpkg and reboot-or-fallback proof | `idle`, old pending plan cleared, package check due immediately, recovered notice |
+| `failed` with a recorded slot-sync failure | `SYNC_FAILURE_SUPERSEDED`, later matching receipt, clean unit and both rootfs slots good | `idle`, recovered notice, no mirror/cleanup replay |
 | `failed` with a settled `unsafe` OS record (`activeAttemptId:null`), reason matching `failureReason` and exactly `rauc_recovery_unproven` or `os_stage_outcome_unknown_after_restart` | `OS_STAGE_RECOVERY_CONFIRMED` from a manual check, after positive OS evidence | `idle`, OS check due now, next round operator-only; notice cleared only on acceptance |
 | `failed` with exact `rauc_install_failed` and no recovery record (persisted by an older build) | `OS_STAGE_LEGACY_FAILURE_MIGRATED`, after positive OS evidence | `idle`, OS check due in 15 min |
 | `failed` with settled confirmable unsafe OS record and persisted attempt identity | `OS_UNLAUNCHED_STAGE_SETTLED`, exact current-boot/candidate/attempt witness plus fresh readiness | `os-available`, failed-round count unchanged, `rauc_install_failed` / operator-only; matching unresolved notice replaced |
@@ -402,6 +404,21 @@ Detail: [UPDATE-RECOVERY.md](./UPDATE-RECOVERY.md#resuming-an-interrupted-downlo
 Inferring success on resume from dpkg or the pending plan would turn an uncertain
 mid-commit crash into an unproved success. Preserve the output-drain and exact
 unit-identity checks before trusting the exit status.
+
+An absent commit unit has a separate, narrower consistency path at startup and
+on the periodic tick. New attempts retain optional persisted boot/slot provenance.
+Only a different current boot or running slot, a positively absent fixed unit,
+no APT/dpkg process or held package lock, empty successful `dpkg --audit`, and an
+empty dpkg updates directory permit idle with fresh package discovery due. The
+old pending plan is strictly read and cleared, not replayed; no package success
+or bad candidate is inferred. Same-boot/same-slot or missing/read-failed proof
+stays failed. Shipped files without provenance still load but remain operator-only
+through the local receipt tool. A recorded sync failure likewise clears only
+after a later matching successful mirror: clean unit probes around the receipt,
+current digest/build/version/slot identity and both slots good. A genuine current
+failure stays visible. These paths hold CONTROL and the shared update lock and
+persist keyed recovered-notice intent before publishing idle. See the complete
+[proof and crash limits](UPDATE-RECOVERY.md#interrupted-package-and-mirror-failure-recovery-partial--host-proven-board-re-drill-owed).
 
 ### Scheduling
 
@@ -561,7 +578,7 @@ The package check reads `update_state.available.actionable_count` rather than
 the inclusive `package_count`: a successful discovery listing only platform or
 kept-back packages returns to `idle`, leaving the OS check eligible on a capable
 image. This prevents a *new* sticky failure; an
-existing `failed` `agent.json` is not reclassified on restart or the next tick.
+existing `failed` `agent.json` is not generically reclassified on restart or the next tick.
 The root-only `ceralive-update-recover` tool admits only the exact
 `commit_unit_absent_on_resume` reason, not a no-actionable-packages failure;
 clearing another reason requires a separately reviewed recovery procedure.
@@ -1090,7 +1107,11 @@ Not proven, and not claimed:
   nothing about this head's update agent;
 - No production caller dispatches `RESET`: package `quarantined` and most `failed`
   states remain sticky. Recorded OS rollback instead returns to idle, including
-  the narrowly evidenced historical-state migration above. Other exceptions are root-only
+  the narrowly evidenced historical-state migration above. An interrupted package
+  commit with recorded boot/slot provenance, and a recorded slot-sync failure
+  superseded by a later proven mirror, now return to idle by themselves under the
+  proof rules in the transition table above; anything those rules cannot prove
+  stays failed. Other exceptions are root-only
   `commit_unit_absent_on_resume` adjudication through the local recovery CLI
   described above (it preserves a durable receipt and requires a fresh
   discovery) and the two OS staging exits above, which need positive OS

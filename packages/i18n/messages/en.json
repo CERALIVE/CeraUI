@@ -1907,6 +1907,8 @@
 	"notifications.updateSystemStageOperator": "System version {version} could not be staged. Automatic retries are paused; use Install now to try again.",
 	"notifications.updateSystemStageUnresolved": "Staging system version {version} ended in a state the device could not verify. System updates are paused; use Check now to re-verify, or contact support.",
 	"notifications.updateSlotsCurrent": "Both system slots are up to date.",
+	"notifications.updatePackagesRecovered": "A package update was interrupted and the system recovered. Run Check again.",
+	"notifications.updateSlotSyncRecovered": "System slot synchronization was interrupted. A later synchronization succeeded; the system recovered.",
 	"notifications.updateRestartRecommended": "Restart recommended for {unit} after this update. The device will not restart it automatically.",
 	"notifications.updateCellularApproval": "This system download needs one-time approval to use cellular data ({size}).",
 	"notifications.updateCredentialsExpiring": "Update credentials expire in {days} days. Renew them to keep updates working.",

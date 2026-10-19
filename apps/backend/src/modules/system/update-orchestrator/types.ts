@@ -82,6 +82,8 @@ export interface OrchestratorState {
 	readonly osCheck: OrchestratorScheduleClock;
 	// One-time approval is spent on an attempt, not on success.
 	readonly cellularOverrideId: string | null;
+	readonly packageAttempt?: UpdateOrchestratorPersistedState["packageAttempt"];
+	readonly recoveredNotice?: UpdateOrchestratorPersistedState["recoveredNotice"];
 	// Absent unless an OS candidate's staging has been attempted.
 	readonly osStageRecovery?: OsStageRecovery;
 	readonly osStageDiscoveryRetryAt?: UpdateOrchestratorPersistedState["osStageDiscoveryRetryAt"];
@@ -136,7 +138,11 @@ export type OrchestratorEvent =
 	| { readonly type: "AWAIT_IDLE_FOR_INSTALL"; readonly now: number }
 	// Records launch acceptance, not unit creation. See root
 	// AGENTS.md D8 Known gaps (b), (f), (g) for the uncovered windows.
-	| { readonly type: "INSTALL_UNIT_STARTED"; readonly now: number }
+	| {
+			readonly type: "INSTALL_UNIT_STARTED";
+			readonly now: number;
+			readonly packageAttempt?: OrchestratorState["packageAttempt"];
+	  }
 	| {
 			readonly type: "DOWNLOAD_PROGRESS";
 			readonly now: number;
@@ -160,13 +166,14 @@ export type OrchestratorEvent =
 			readonly progress: OrchestratorProgress;
 	  }
 	| { readonly type: "COMMIT_SUCCEEDED"; readonly now: number }
+	| { readonly type: "COMMIT_RESUME_SETTLED_CONSISTENT"; readonly now: number }
 	| {
 			readonly type: "COMMIT_FAILED";
 			readonly now: number;
 			readonly reason: string;
 	  }
-	// Uncertainty is not evidence of a bad candidate to quarantine. The missing-unit
-	// reason can be cleared by HISTORICAL_COMMIT_ADJUDICATED or RESET (reducer.ts).
+	// Uncertainty is not evidence of a bad candidate to quarantine. Only positive
+	// consistency recovery or the local receipt flow may settle a missing unit.
 	| {
 			readonly type: "COMMIT_RESUME_UNRESOLVED";
 			readonly now: number;
@@ -233,6 +240,7 @@ export type OrchestratorEvent =
 			readonly reason: string;
 	  }
 	| { readonly type: "SYNC_SETTLED"; readonly now: number }
+	| { readonly type: "SYNC_FAILURE_SUPERSEDED"; readonly now: number }
 	| {
 			readonly type: "CELLULAR_OVERRIDE_GRANTED";
 			readonly now: number;

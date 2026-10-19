@@ -6,6 +6,10 @@ import {
 } from "../../ui/notifications.ts";
 
 export type UpdateNotice =
+	| {
+			readonly kind: "packages-recovered" | "slot-sync-recovered";
+			readonly id: string;
+	  }
 	| { readonly kind: "updates-available"; readonly id: string }
 	| {
 			readonly kind: "installed";
@@ -69,6 +73,14 @@ export const OS_STAGE_NOTICE_KINDS = [
 export type OsStageNoticeKind = (typeof OS_STAGE_NOTICE_KINDS)[number];
 
 const notices = {
+	"packages-recovered": {
+		key: "notifications.updatePackagesRecovered",
+		tone: "info",
+	},
+	"slot-sync-recovered": {
+		key: "notifications.updateSlotSyncRecovered",
+		tone: "info",
+	},
 	// Own key, not the shared `notifications.updateAvailable` title: the banner
 	// sentence and the title were never the same string, and reusing one key
 	// duplicated it in the catalog, where last-key-wins dropped the other.
@@ -164,6 +176,8 @@ export function notifyUpdate(event: UpdateNotice): boolean {
 			params.reasons = event.reasons.join(", ");
 			break;
 		case "updates-available":
+		case "packages-recovered":
+		case "slot-sync-recovered":
 		case "download-paused":
 		case "slots-current":
 			break;

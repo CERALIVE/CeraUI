@@ -63,6 +63,10 @@ export function toPersisted(
 		packageCheck: state.packageCheck,
 		osCheck: state.osCheck,
 		cellularOverrideId: state.cellularOverrideId,
+		...(state.packageAttempt ? { packageAttempt: state.packageAttempt } : {}),
+		...(state.recoveredNotice
+			? { recoveredNotice: state.recoveredNotice }
+			: {}),
 		...(state.osStageDiscoveryRetryAt !== undefined
 			? { osStageDiscoveryRetryAt: state.osStageDiscoveryRetryAt }
 			: {}),
@@ -83,6 +87,12 @@ export function fromPersisted(
 		packageCheck: persisted.packageCheck,
 		osCheck: persisted.osCheck,
 		cellularOverrideId: persisted.cellularOverrideId,
+		...(persisted.packageAttempt
+			? { packageAttempt: persisted.packageAttempt }
+			: {}),
+		...(persisted.recoveredNotice
+			? { recoveredNotice: persisted.recoveredNotice }
+			: {}),
 		...(persisted.osStageDiscoveryRetryAt !== undefined
 			? { osStageDiscoveryRetryAt: persisted.osStageDiscoveryRetryAt }
 			: {}),

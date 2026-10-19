@@ -22,6 +22,9 @@ export type SlotSyncEvidence = {
 	// classifyReceiptTarget() for why the SHA alone is not enough.
 	readonly receiptTarget: ReceiptTarget;
 	readonly receiptTargetSlot: string | null;
+	readonly receiptCompletedAt?: string | null;
+	readonly receiptBuildId?: string | null;
+	readonly receiptImageVersion?: string | null;
 };
 
 /** The receipt records a past copy of this dpkg state into the current other

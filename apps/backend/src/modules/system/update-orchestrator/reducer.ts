@@ -20,6 +20,7 @@ import {
 	startOsStageAttempt,
 } from "./os-stage-retry.ts";
 import { reduceOsUnlaunchedSettlement } from "./os-unlaunched-state.ts";
+import { isRecordedSyncFailure } from "./sync-failure-recovery.ts";
 import type {
 	OrchestratorEvent,
 	OrchestratorScheduleClock,
@@ -297,6 +298,7 @@ function reduceAwaitingIdle(
 			return enter(state, event.now, {
 				phase: "downloading",
 				progress: { percent: 0, etaSeconds: 0 },
+				packageAttempt: event.packageAttempt,
 			});
 		default:
 			return state;
@@ -677,6 +679,31 @@ function reduceFailed(
 	event: OrchestratorEvent,
 ): OrchestratorState {
 	switch (event.type) {
+		case "SYNC_FAILURE_SUPERSEDED":
+			if (!isRecordedSyncFailure(state.failureReason)) return state;
+			return enter(state, event.now, {
+				phase: "idle",
+				progress: null,
+				failureReason: null,
+				recoveredNotice: {
+					kind: "slot-sync-recovered",
+					id: `sync:${state.enteredAt}`,
+				},
+			});
+		case "COMMIT_RESUME_SETTLED_CONSISTENT": {
+			if (state.failureReason !== "commit_unit_absent_on_resume") return state;
+			const { packageAttempt: _oldAttempt, ...rest } = state;
+			return enter(rest, event.now, {
+				phase: "idle",
+				progress: null,
+				failureReason: null,
+				packageCheck: { ...state.packageCheck, nextAttemptAt: event.now },
+				recoveredNotice: {
+					kind: "packages-recovered",
+					id: `commit:${state.enteredAt}`,
+				},
+			});
+		}
 		case "HISTORICAL_COMMIT_ADJUDICATED":
 			if (
 				state.failureReason !== "commit_unit_absent_on_resume" ||

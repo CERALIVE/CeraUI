@@ -99,6 +99,17 @@ export const updateOrchestratorPersistedStateSchema = z
 		packageCheck: updateOrchestratorScheduleClockSchema,
 		osCheck: updateOrchestratorScheduleClockSchema,
 		cellularOverrideId: z.string().nullable(),
+		packageAttempt: z
+			.object({ bootId: z.string().min(1), slot: z.string().min(1) })
+			.strict()
+			.optional(),
+		recoveredNotice: z
+			.object({
+				kind: z.enum(['packages-recovered', 'slot-sync-recovered']),
+				id: z.string().min(1),
+			})
+			.strict()
+			.optional(),
 		osStageRecovery: osStageRecoverySchema.optional(),
 		osStageDiscoveryRetryAt: z.number().optional(),
 	})

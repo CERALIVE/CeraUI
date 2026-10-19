@@ -40,6 +40,7 @@ export function fakeDeps(
 	return withMemoryPersistence({
 		...defaultOrchestratorRuntimeDeps,
 		acquireOsStageControl: acquireTestOsStageControl,
+		acquireUpdateRecoveryLock: acquireTestOsStageControl,
 		now: () => 1_000_000,
 		random: () => 0.5,
 		loadSettings: async () => ({
@@ -72,6 +73,8 @@ export function fakeDeps(
 			// The absent fixture unit has no host failure record to reset.
 		},
 		recoverSoftwareUpdateIfRunning: async () => false,
+		readPackageAttempt: async () => undefined,
+		readPackageRecoveryEvidence: undefined,
 		persist: () => {
 			// withMemoryPersistence owns authoritative fixture storage.
 		},

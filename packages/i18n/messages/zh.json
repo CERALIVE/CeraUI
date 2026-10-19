@@ -1862,6 +1862,8 @@
 	"notifications.updateSystemStageOperator": "无法准备系统版本 {version}。自动重试已暂停；请使用“立即安装”重试。",
 	"notifications.updateSystemStageUnresolved": "系统版本 {version} 的准备以设备无法验证的状态结束。系统更新已暂停；请使用“立即检查”重新验证，或联系支持人员。",
 	"notifications.updateSlotsCurrent": "两个系统分区都已是最新版本。",
+	"notifications.updatePackagesRecovered": "软件包更新曾中断，系统现已恢复。请重新检查更新。",
+	"notifications.updateSlotSyncRecovered": "系统分区同步曾中断。后续同步已成功，系统现已恢复。",
 	"notifications.updateRestartRecommended": "建议更新后重启 {unit}。设备不会自动重启该服务。",
 	"notifications.updateCellularApproval": "此下载需要移动数据使用许可（{size}）。",
 	"notifications.updateCredentialsExpiring": "更新凭据将在 {days} 天后过期。请及时续期。",

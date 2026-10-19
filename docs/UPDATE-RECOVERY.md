@@ -1,5 +1,73 @@
 # Update recovery contract [PARTIAL — local recovery implemented, board proof owed]
 
+## Interrupted package and mirror failure recovery [PARTIAL — host-proven, board re-drill owed]
+
+Startup and the periodic tick can now settle two narrowly identified failures
+without an operator reset. They hold CONTROL and the existing shared update flock,
+compare the complete persisted snapshot with the captured runtime state, and
+recheck the state generation and both leases before publishing a recovered state.
+No OS-stage failure, package quarantine, origin pin or stream-admission rule changes.
+
+**Interrupted package commit.** Only exact `failed / commit_unit_absent_on_resume`
+is eligible. A still-`committing` startup first records that unresolved outcome,
+then uses the same recovery path. Fresh reads must prove all of the following:
+
+- the fixed install unit is positively absent, not merely unobserved;
+- no APT/dpkg process or concurrent update operation is present, and none of the
+  dpkg/frontend/list/archive lock inodes appears in the kernel lock table;
+- `dpkg --audit` exits successfully with empty output and `/var/lib/dpkg/updates`
+  is empty;
+- the current boot ID differs from the attempt's recorded boot ID, **or** the
+  actual booted rootfs differs from the attempt's recorded slot. Both current
+  identity readings must be available.
+
+New attempts record optional persistence-only `packageAttempt` boot/slot provenance
+before the detached install can reach dpkg. The runtime reads boot ID and booted
+slot once at startup (retrying on pre-install ticks while unread) and reuses that
+value at launch, because neither can change within one process and an extra await
+in the launch path would reorder concurrent callers. An unreadable value only
+leaves that attempt without automatic recovery; it never blocks the install. Missing provenance is not guessed from
+wall-clock age, healthcheck success or unit absence. Old `agent.json` files still
+load unchanged; a legacy missing-unit failure without that history remains
+operator-only through the existing local receipt flow below. A same-boot,
+same-slot backend restart cannot use this automatic path.
+
+Positive proof permits `COMMIT_RESUME_SETTLED_CONSISTENT`: strictly read and clear
+the old pending plan through the existing quarantine port, persist idle, then
+publish it with the package check due immediately. No old plan is replayed, no
+installed success is asserted, no success clock is advanced, and no candidate is
+quarantined. Package discovery decides what remains to install under the ordinary
+automation and cellular gates. A crash before the idle write leaves a recoverable
+failed state, even if pending-plan clearance already completed. A crash after the
+write reloads idle and its notice intent; it does not reconstruct an old outcome.
+
+**Interrupted slot mirror.** Exact recorded `slot-sync failed/refused (exit N)`,
+`slot-sync-incomplete` and `slot-sync-unit-absent` failures can be superseded by a
+later proven mirror, never merely by resetting the unit. Fresh probes before and
+after the receipt/RAUC/version reads must both be positively clean
+(`succeeded` or `inactive-clean`). The receipt's completion must be strictly later
+than the recorded failure and no later than now. Its dpkg digest, build and OS
+version must match the running system; its target must be the actual inactive
+rootfs, this boot's healthy record must identify the actual running rootfs, and
+RAUC must report exactly those two rootfs slots good. Missing, older, malformed,
+wrong-slot/version receipts, a running or currently failed unit, or any uncertain
+read retain the original failure. No automatic mirror retry or mark-good is issued.
+Wall-clock ambiguity conservatively retains failure; timestamps alone never
+establish slot identity. `SYNC_FAILURE_SUPERSEDED` returns directly to idle without
+replaying mirror cleanup or removing quarantine.
+
+Both transitions persist a small optional `recoveredNotice` intent and use the
+existing persistent, dismissible update notification mechanism. Startup rehydrates
+the same keyed notice without duplicating it. Package copy asks the operator to run
+Check again, not to assume the interrupted install succeeded. All ten catalogs
+carry the new keys. Any failed probe, lock acquisition, pending-plan read/clear or
+state write withholds clearance; a later tick reads again. The local recovery tool
+is unchanged for unproven history. Root callers outside the cooperative flock/CONTROL
+protocol can still race observation; this is not a system-wide APT timer mask or an
+atomic snapshot of the kernel. Host tests include a real kernel flock, independent
+missing proofs, restart twice and a second crash at the state-write boundary.
+Installed systemd/APT, both-board crash/power-cut and rendered-notice proof remain owed.
+
 ## Recorded OS rollback recovery [PARTIAL — host-proven, bench re-drill owed]
 
 An observed fallback records the staged version in `quarantine.json` `os[]` and
@@ -1411,6 +1479,10 @@ real temporary-file flock contention; its device drill is still owed.
 
 ## Cross-slot missing-commit adjudication [EXISTS — root-only, fixture-proven]
 
+This remains the local, receipt-bearing path for missing-unit history that the
+automatic proof above cannot establish, including shipped records without
+commit boot/slot provenance. It is not the sole clearance path for new attempts.
+
 `/usr/sbin/ceralive-update-recover` is a root-only (0700, root-owned) local
 maintenance entrypoint in the CeraUI `.deb`. It is **not** a browser, RPC,
 remote-control or sudoers operation. The wrapper takes the shared
@@ -2113,7 +2185,8 @@ Known limitations of the grace, recorded rather than fixed:
   backend that dies between the two leaves a persisted `syncing` phase with no
   job ever queued, so after the grace the unit still reads its previous
   unloaded shape and the mirror fails as `slot-sync-unit-absent`. That failure
-  is sticky (nothing dispatches `RESET`) but honest: no mirror ran.
+  stays failed unless a later successful mirror supplies every proof in the
+  interrupted-failure recovery section above. No mirror is inferred to have run.
 
 On confirmed success the phase becomes `synced` *before* four independent,
 best-effort effects: reuse bounded `apt-get clean`, remove leftovers from

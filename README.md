@@ -74,6 +74,14 @@ evidence and restores a bad inactive slot even when the running package hash is
 unchanged. Pending OS installs remain protected. This repair is host-tested;
 the exact-head hardware fallback/restoration drill remains owed.
 
+Interrupted package failures can now return to idle after fresh unit/process/lock/
+dpkg evidence proves consistency and recorded attempt provenance proves a reboot
+or slot change. Missing historical provenance remains operator-only. A recorded
+mirror failure needs a later matching receipt, clean unit and both slots good.
+Neither path replays old work or calls an uncertain install successful; each
+persists a recovered-notice intent. These are host proofs, not both-board crash
+or power-loss qualification; see the same recovery contract.
+
 Add-on mutations preserve request-owned process-group evidence even when Bun loses
 the spawn handle: a checked Bash launcher records its identity before helper exec,
 and recovery probes that group before descriptor jobs. Normal handles never read

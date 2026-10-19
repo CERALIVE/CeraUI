@@ -192,5 +192,8 @@ export async function readSlotSyncEvidence(): Promise<SlotSyncEvidence> {
 			bootnames: parseRaucSlotBootnames(systemConf),
 		}),
 		receiptTargetSlot: receipt?.target_slot ?? null,
+		receiptCompletedAt: receipt?.completed_at ?? null,
+		receiptBuildId: receipt?.build_id ?? null,
+		receiptImageVersion: receipt?.image_version ?? null,
 	};
 }

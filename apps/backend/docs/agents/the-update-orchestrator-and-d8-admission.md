@@ -195,7 +195,11 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
   exit 0, and the legacy adoption race under root [`AGENTS.md`](../../../../AGENTS.md)
   D8 Known gaps (d) can misattribute another unit's failure.
   Unresolved outcomes are not evidence of a bad version to quarantine. Recovery
-  for `failed` with exact `commit_unit_absent_on_resume` is documented at
+  for `failed` with exact `commit_unit_absent_on_resume` now has a narrow automatic
+  consistency path for attempts with recorded boot/slot provenance; a later
+  successful mirror can separately supersede a recorded sync failure. Unknown
+  history remains operator-only. Both use fresh proof, CONTROL and the shared
+  update flock, never absence-only success or stale-plan replay. Full rules are at
   `docs/UPDATE-RECOVERY.md`:
   `/usr/sbin/ceralive-update-recover` is a separately packaged root-only local
   executable, with no RPC/remote/sudoers entry. It requires the backend inactive
@@ -381,7 +385,9 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
    `parseOsStageSystemdProperties()` first in package recovery, D8 and maintenance:
    a duplicated key, malformed row or not-found contradicted by lifecycle/cgroup/
    PID/job evidence is unreadable (fail closed, commit treated as running), never
-   last-wins or absence. Never extend download absence clearance to `committing`.
+   last-wins or absence. Never extend absence-only download clearance to
+   `committing`; the separate failed-commit consistency path needs every additional
+   proof documented in UPDATE-RECOVERY.md.
 - **The package step reuses `startSoftwareUpdate()`.** Post-acceptance limits:
   root D8 Known gaps (b), (c), (g). Classify availability by `actionable_count`,
   not the inclusive `package_count`, to avoid launching an empty install.

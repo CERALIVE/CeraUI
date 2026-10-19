@@ -1919,6 +1919,8 @@
 	"notifications.updateSystemStageOperator": "تعذر تجهيز إصدار النظام {version}. المحاولات التلقائية متوقفة مؤقتًا؛ استخدم «ثبّت الآن» للمحاولة مرة أخرى.",
 	"notifications.updateSystemStageUnresolved": "انتهى تجهيز إصدار النظام {version} بحالة لم يتمكن الجهاز من التحقق منها. تحديثات النظام متوقفة مؤقتًا؛ استخدم «افحص الآن» لإعادة التحقق، أو تواصل مع الدعم.",
 	"notifications.updateSlotsCurrent": "كلتا خانتي النظام محدثتان.",
+	"notifications.updatePackagesRecovered": "انقطع تحديث الحزم وتعافى النظام. تحقق من التحديثات مرة أخرى.",
+	"notifications.updateSlotSyncRecovered": "انقطعت مزامنة خانتي النظام. نجحت مزامنة لاحقة وتعافى النظام.",
 	"notifications.updateRestartRecommended": "يُنصح بإعادة تشغيل {unit} بعد التحديث. لن يعيد الجهاز تشغيله تلقائيًا.",
 	"notifications.updateCellularApproval": "يحتاج هذا التنزيل إلى موافقة لاستخدام البيانات الخلوية ({size}).",
 	"notifications.updateCredentialsExpiring": "تنتهي صلاحية بيانات اعتماد التحديث بعد {days} يومًا. جددها.",

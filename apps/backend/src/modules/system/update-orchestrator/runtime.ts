@@ -60,6 +60,7 @@ import { discoverCandidates } from "../update-transport/core.ts";
 import { defaultUpdateTransportDeps } from "../update-transport/executor.ts";
 import { admitStreamStart, onStreamStart } from "./admission.ts";
 import { isCommitStageRunning } from "./commit-stage-probe.ts";
+import { recoverFailedUpdate } from "./failed-recovery.ts";
 import {
 	inspectSlotSync,
 	resetSlotSyncFailure,
@@ -132,6 +133,7 @@ import {
 	stageFailureContext,
 } from "./os-stage-failure-context.ts";
 import { readOsStageJob } from "./os-stage-job-files.ts";
+import { acquireOsOrphanLock } from "./os-stage-orphan-lock.ts";
 import { OsStageUnpublishedSuccessError } from "./os-stage-outcome-error.ts";
 import {
 	OS_STAGE_FIRST_RETRY_DELAY_MS,
@@ -157,6 +159,10 @@ import {
 } from "./os-staged-receipt-retirement.ts";
 import { settleOsUnlaunchedWitness } from "./os-unlaunched-adapter.ts";
 import { progressFromWire } from "./package-progress.ts";
+import {
+	type PackageRecoveryEvidence,
+	readPackageConsistency,
+} from "./package-recovery-evidence.ts";
 import { pendingPackageSuccess } from "./pending-success-fence.ts";
 import { fencePackageSuccessEffects } from "./pending-success-runtime.ts";
 import {
@@ -306,6 +312,11 @@ export interface OrchestratorRuntimeDeps {
 	readonly refreshSlots: () => Promise<unknown>;
 	readonly recoverSoftwareUpdateIfRunning: () => Promise<boolean>;
 	readonly lastInstallUnitVerdict: () => InstallUnitVerdict;
+	readonly readPackageAttempt?: () => Promise<
+		OrchestratorState["packageAttempt"]
+	>;
+	readonly readPackageRecoveryEvidence?: () => Promise<PackageRecoveryEvidence>;
+	readonly acquireUpdateRecoveryLock?: () => Promise<OsStageControlLease>;
 	readonly persist: (state: OrchestratorState) => void;
 	readonly quarantine: UpdateQuarantine;
 	readonly restartStale: (
@@ -431,6 +442,26 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	refreshSlots: readBothSlotStatus,
 	recoverSoftwareUpdateIfRunning,
 	lastInstallUnitVerdict: getLastInstallUnitVerdict,
+	acquireUpdateRecoveryLock: acquireOsOrphanLock,
+	readPackageAttempt: async () => {
+		const bootId = await readBootId();
+		const slots = await readRootSlots();
+		const booted = slots.filter((slot) => slot.state === "booted");
+		return booted.length === 1 && booted[0] && bootId
+			? { bootId, slot: booted[0].name }
+			: undefined;
+	},
+	readPackageRecoveryEvidence: async () => {
+		const consistency = await readPackageConsistency();
+		const bootId = await readBootId();
+		const slots = await readRootSlots();
+		const booted = slots.filter((slot) => slot.state === "booted");
+		return {
+			...consistency,
+			bootId,
+			slot: booted.length === 1 ? (booted[0]?.name ?? "") : "",
+		};
+	},
 	persist: saveOrchestratorState,
 	quarantine: new UpdateQuarantine(),
 	restartStale: async (isIdle, transactionRunning) => {
@@ -486,6 +517,22 @@ let stateGeneration = 0;
 // later state change clears it: the download was left, or the poll path is
 // already reading its unit (DOWNLOAD_PROGRESS is the only in-phase change).
 let deferredDownloadGeneration: number | null = null;
+let failedRecoveryInFlight = false;
+// Boot id and booted slot cannot change while this process runs, so they are
+// read outside the install launch path: an await there would reorder callers.
+// Absent provenance only withholds automatic recovery of that attempt.
+let packageProvenance: OrchestratorState["packageAttempt"];
+
+async function ensurePackageProvenance(): Promise<void> {
+	if (packageProvenance) return;
+	try {
+		packageProvenance = await deps.readPackageAttempt?.();
+	} catch (error) {
+		logger.warn("update-orchestrator: package boot provenance unavailable", {
+			error,
+		});
+	}
+}
 
 function acquireRuntimeOsStageControl(): Promise<OsStageControlLease> {
 	return acquireRuntimeControl(deps.acquireOsStageControl);
@@ -564,6 +611,8 @@ export function resetOrchestratorRuntimeForTest(): void {
 	pendingCellularApproval = undefined;
 	stateGeneration = 0;
 	deferredDownloadGeneration = null;
+	failedRecoveryInFlight = false;
+	packageProvenance = undefined;
 }
 
 export function getOrchestratorState(): OrchestratorState {
@@ -579,6 +628,7 @@ export function getOrchestratorDisruptionBusyReasons(): readonly UpdateBusyReaso
 	if (pendingPackageSuccess.pending) reasons.push("pending-success");
 	if (!recoveryPersistenceValid) reasons.push("update-recovery");
 	if (startupFlight.inFlight) reasons.push("update-recovery");
+	if (failedRecoveryInFlight) reasons.push("update-recovery");
 	if (
 		state.osStageRecovery?.mode === "unsafe" ||
 		state.osStageRecovery?.activeAttemptId
@@ -1087,7 +1137,11 @@ async function maybeStartPackageInstall(opts: {
 			await deps.quarantine.clearPending();
 			return result; // stays awaiting-idle; retried next tick
 		}
-		dispatch({ type: "INSTALL_UNIT_STARTED", now: deps.now() });
+		dispatch({
+			type: "INSTALL_UNIT_STARTED",
+			now: deps.now(),
+			packageAttempt: packageProvenance,
+		});
 		return result;
 	} finally {
 		packageInstallStarting = false;
@@ -2360,6 +2414,57 @@ async function readjudicateDeferredDownload(): Promise<void> {
 
 // ─── settle/sync acknowledgement ───────────────────────────────────────────
 
+async function maybeRecoverFailedUpdate(): Promise<boolean> {
+	if (
+		!recoveryPersistenceValid ||
+		failedRecoveryInFlight ||
+		pendingPackageSuccess.pending ||
+		osSettlementPersistence.pending
+	)
+		return false;
+	if (state.phase !== "failed") return false;
+	failedRecoveryInFlight = true;
+	const generation = stateGeneration;
+	try {
+		return await recoverFailedUpdate({
+			snapshot: () => state,
+			current: () =>
+				stateGeneration === generation &&
+				!pendingPackageSuccess.pending &&
+				!osSettlementPersistence.pending,
+			acquireControl: acquireRuntimeOsStageControl,
+			readPersisted: deps.readPersistedState ?? loadOrchestratorState,
+			readPackageEvidence:
+				deps.readPackageRecoveryEvidence ??
+				(async () => {
+					throw new Error("package recovery proof unavailable");
+				}),
+			acquireUpdateLock: deps.acquireUpdateRecoveryLock ?? acquireOsOrphanLock,
+			inspectSync: deps.inspectSlotSync,
+			readSyncEvidence: deps.readSlotSyncEvidence,
+			readSlots: deps.readRootSlots,
+			readVersion: deps.readBootedVersion,
+			clearPending: async () => {
+				await deps.quarantine.readPending();
+				await deps.quarantine.clearPending();
+			},
+			persist: deps.persist,
+			adopt: (next) => {
+				adoptState(next);
+				publishWireState();
+			},
+			now: deps.now,
+		});
+	} catch (error) {
+		logger.warn("update-orchestrator: failed update recovery deferred", {
+			error,
+		});
+		return false;
+	} finally {
+		failedRecoveryInFlight = false;
+	}
+}
+
 function acknowledgeTerminalRestPhases(): void {
 	const now = deps.now();
 	if (state.phase === "settled") dispatch({ type: "SETTLE_ACKNOWLEDGED", now });
@@ -2403,6 +2508,8 @@ export async function runOrchestratorTick(): Promise<void> {
 	}
 	acknowledgeTerminalRestPhases();
 	await maybeSettleRecordedOsRollback();
+	if (state.phase === "available" || state.phase === "awaiting-idle")
+		await ensurePackageProvenance();
 
 	if (state.phase === "idle") {
 		await maybeFindSlotSyncCandidate();
@@ -2496,7 +2603,8 @@ export async function runOrchestratorTick(): Promise<void> {
 	} else if (state.phase === "os-staging" && !osStageInProcess) {
 		await settleInterruptedOsStage();
 	} else if (state.phase === "failed") {
-		await maybeMigrateLegacyOsFailure();
+		if (!(await maybeRecoverFailedUpdate()))
+			await maybeMigrateLegacyOsFailure();
 	} else if (
 		state.phase === "os-staged" ||
 		state.phase === "os-activation-armed"
@@ -2667,6 +2775,7 @@ async function startOrchestratorRuntime(
 ): Promise<void> {
 	startupReadiness.setReady(false);
 	deps = fencePackageSuccessEffects(runtimeDeps);
+	await ensurePackageProvenance();
 	await replayPendingOsSettlement();
 	const now = deps.now();
 	let persisted: OrchestratorState | null;
@@ -2722,6 +2831,12 @@ async function startOrchestratorRuntime(
 		adoptState(await resumeOrchestratorState(baseline, resumeDeps()));
 	}
 	adoptState(normalizeStartupDiscovery(state, deps.now()));
+	if (
+		baseline.phase === "committing" &&
+		state.phase === "failed" &&
+		state.failureReason === "commit_unit_absent_on_resume"
+	)
+		await saveAuthoritativeStartupState(osRecoverySettlementPort(), persisted);
 	await maybeRetireConsumedOsReceipt();
 	await maybeSettleOsUnlaunchedWitness();
 	osSettlementPersistence.intentCleanup.assertAcknowledged();
@@ -2730,7 +2845,9 @@ async function startOrchestratorRuntime(
 	if (state.phase === "os-verifying") await verifyOsBoot();
 	await maybeSettleRecordedOsRollback();
 	if (state.phase === "failed") await maybeMigrateLegacyOsFailure();
-	if (state.phase === "idle") await maybeFindSlotSyncCandidate();
+	const recoveredFailure = await maybeRecoverFailedUpdate();
+	if (state.phase === "idle" && !recoveredFailure)
+		await maybeFindSlotSyncCandidate();
 	if (state.phase === "sync-eligible") await maybeStartSlotSync();
 	if (state.phase === "quarantined" && baseline.phase === "committing") {
 		const pending = await deps.quarantine.readPending();
@@ -2749,5 +2866,6 @@ async function startOrchestratorRuntime(
 	started = true;
 	startupReadiness.setReady(true);
 	hydrateOsStageRecoveryNotice(state);
+	if (state.recoveredNotice) notifyUpdate(state.recoveredNotice);
 	scheduleNextTick();
 }

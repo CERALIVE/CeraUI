@@ -64,8 +64,8 @@ async function resumeCommitting(
 			reason: wire.reason,
 		});
 	}
-	// Absence proves neither success nor a bad candidate. Missing-unit clearance
-	// uses HISTORICAL_COMMIT_ADJUDICATED or RESET; see reducer.ts and UPDATE-RECOVERY.md.
+	// Absence proves neither success nor a bad candidate. Runtime separately proves
+	// current consistency before clearing this failure; no old plan is replayed.
 	if (!recovered) {
 		return reduceOrchestrator(persisted, {
 			type: "COMMIT_RESUME_UNRESOLVED",
