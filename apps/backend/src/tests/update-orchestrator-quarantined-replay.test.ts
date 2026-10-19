@@ -18,6 +18,7 @@ import {
 	setOrchestratorStateForTest,
 } from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
+import { resetDismissalStoreForTests } from "../modules/ui/notification-dismissals.ts";
 import {
 	getPersistentNotifications,
 	notificationRemove,
@@ -32,6 +33,7 @@ import {
 } from "./helpers/os-manifest-fixture.ts";
 
 const replayNotice = "update:refused:os-check:serial_replayed";
+const originalDismissalsPath = process.env.CERALIVE_DISMISSALS_FILE;
 let root: string | undefined;
 
 function clearNotices() {
@@ -43,10 +45,15 @@ function clearNotices() {
 beforeEach(() => {
 	resetOrchestratorRuntimeForTest();
 	clearNotices();
+	resetDismissalStoreForTests();
 });
 afterEach(async () => {
 	resetOrchestratorRuntimeForTest();
 	clearNotices();
+	resetDismissalStoreForTests();
+	if (originalDismissalsPath === undefined)
+		delete process.env.CERALIVE_DISMISSALS_FILE;
+	else process.env.CERALIVE_DISMISSALS_FILE = originalDismissalsPath;
 	if (root) await rm(root, { recursive: true, force: true });
 	root = undefined;
 });
@@ -54,6 +61,7 @@ afterEach(async () => {
 async function fixture() {
 	const dir = await mkdtemp(join(tmpdir(), "quarantined-replay-"));
 	root = dir;
+	process.env.CERALIVE_DISMISSALS_FILE = join(dir, "dismissals.json");
 	const path = join(dir, "quarantine.json");
 	const quarantine = new UpdateQuarantine(path, async () => {});
 	const signed = {
@@ -164,11 +172,12 @@ test.each([
 	},
 );
 
-test.each(["absent", "near-version", "package-only"] as const)(
+test.each(["absent", "near-version", "package-only", "corrupt"] as const)(
 	"replayed version with %s OS protection still warns",
 	async (kind) => {
 		// Given no exact OS quarantine match (package/name-prefix evidence cannot substitute).
 		const f = await fixture();
+		if (kind === "corrupt") await Bun.write(f.path, "{");
 		if (kind === "near-version")
 			await f.quarantine.recordOsRollback(
 				`${manifest.version}0`,
@@ -185,6 +194,8 @@ test.each(["absent", "near-version", "package-only"] as const)(
 			expect.objectContaining({ name: replayNotice, type: "warning" }),
 		);
 		expect(getOrchestratorState().failureReason).toBe("serial_replayed");
+		expect(getOrchestratorState().osCheck.consecutiveFailures).toBe(1);
+		expect(getOsUpdateSummary().candidate).toBeNull();
 		expect(f.stages()).toBe(0);
 	},
 );

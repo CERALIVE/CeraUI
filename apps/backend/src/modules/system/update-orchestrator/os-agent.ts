@@ -386,17 +386,23 @@ export async function checkOsChannel(
 			}
 			return undefined;
 		case "refused":
-			if (
-				result.reason === "serial_replayed" &&
-				result.version !== undefined &&
-				(await quarantine.isOsVersionQuarantined(result.version))
-			) {
-				clearUpdateNotice("refused", "os-check:serial_replayed");
-				logger.debug("update-orchestrator: quarantined OS replay refused", {
-					version: result.version,
-					reason: result.reason,
-				});
-				throw new QuarantinedOsReplayError();
+			if (result.reason === "serial_replayed" && result.version !== undefined) {
+				const quarantined = await quarantine
+					.isOsVersionQuarantined(result.version)
+					.catch((error: unknown) => {
+						logger.debug("update-orchestrator: replay notice probe failed", {
+							error: error instanceof Error ? error : String(error),
+						});
+						return false;
+					});
+				if (quarantined) {
+					clearUpdateNotice("refused", "os-check:serial_replayed");
+					logger.debug("update-orchestrator: quarantined OS replay refused", {
+						version: result.version,
+						reason: result.reason,
+					});
+					throw new QuarantinedOsReplayError();
+				}
 			}
 			throw new OsAgentError(result.reason);
 		default: {

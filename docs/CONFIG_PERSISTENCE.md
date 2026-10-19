@@ -92,7 +92,7 @@ notification obligation or cross-process exactly-once guarantee.
 | `config.json` | `saveConfig` (`modules/config.ts:93`) | Atomic (`writeFileAtomicSync`) | The single runtime state file: relay target, audio/video settings, kiosk state, add-on state, and (see below) the password/SSH hashes. Pre-dates T6 (E3 guardrail). At boot a damaged file is archived to `config.json.damaged-<sha256>` and replaced by first-run settings; an unreadable one is never written and is retried after the server binds (`modules/config-boot.ts`, see UPDATE-RECOVERY.md). **Ownership consequence (pre-existing, owner decision):** when the damaged file holds no salvageable bcrypt `password_hash` (zero-byte, truncated before the hash, unparseable), the device is UNCLAIMED after the reset and any LAN client that connects first can set the password. That is identical to merge-base 23bcf379, whose permissive loader logged "Invalid JSON in config file ... using defaults" and showed the same prompt; this record does not narrow it. |
 | `update-settings.json` | `saveUpdateSettings` (`modules/system/update-settings.ts`) | Atomic (`writeFileAtomicSync`) | Operator update preferences; CWD-relative beside `config.json`, survives package restarts. Absent defaults via the shared `@ceraui/rpc` schema. A present invalid document fails with a typed error rather than being partially salvaged. This is preference storage only: explicit `setup.json` `apt_update_enabled: false` still blocks both manual and automatic APT installs. |
 | `/data/ceralive/update-state/idle.json` | `noteStreamEnded` (`modules/system/idle-state.ts`) | Atomic (`writeFileAtomicSync`) | Last stream-end epoch milliseconds only; survives a backend restart and OTA slot swap. Preview, remote-command, start-lease and UI heartbeat timestamps are process-local. The boot-time baseline conservatively prevents a restarted backend from declaring an immediately idle device; `getIdleStatus()` reads it for scheduled update admission. |
-| `notification_dismissals.json` | `NotificationDismissalStore.recordDismissal` (`modules/ui/notification-dismissals.ts`) | Atomic (`writeFileAtomicSync`) | Durable record of which persistent notifications the operator dismissed, keyed by SEMANTIC identity so a dismissal survives a page reload AND a backend restart. LRU-bounded, corruption-quarantined. Path overridable via `CERALIVE_DISMISSALS_FILE` (tests). See the dedicated subsection below. |
+| `notification_dismissals.json` | `NotificationDismissalStore.recordDismissal` (`modules/ui/notification-dismissals.ts`) | Atomic (`writeFileAtomicSync`) | Durable record of which persistent notifications the operator dismissed, keyed by SEMANTIC identity so a dismissal survives a page reload AND a backend restart. Ordinary keys are LRU-capped at 256; `update:os-rollback:<version>` keys are exempt, growing by at most one per recorded OS rollback, matching `quarantine.json` `os[]`. Corruption-quarantined. Path overridable via `CERALIVE_DISMISSALS_FILE` (tests). See the dedicated subsection below. |
 | `hotspot_credentials.json` | `rememberHotspotCredentials` (`modules/wifi/hotspot-credentials.ts`) | Atomic (`writeFileAtomicSync`) | Per-adapter hotspot SSID/password, keyed by the radio's PERMANENT hardware address. A BACKSTOP behind NetworkManager's own `.nmconnection` files (which stay the source of truth) for the one case they cannot cover — a profile deleted outside CeraUI. Writes are inert until `initHotspotCredentials()` runs, so a test that never opts in writes nothing. See the dedicated subsection below. |
 
 #### Hotspot credentials store — why it exists alongside NetworkManager
@@ -171,9 +171,17 @@ transient behavior.
   it through `writeFileAtomicSync` (temp file → `fsync` → `rename`), so a crash
   mid-write leaves the previously-committed file intact; a torn write can never
   corrupt the committed dismissals.
-- **LRU bound** — the set is capped (`DEFAULT_MAX_DISMISSALS = 256`). Recording past
-  the cap evicts the oldest dismissal; re-recording an existing key refreshes its
-  recency. The cap is also enforced when loading an over-cap file off disk.
+- **Ordinary-key LRU bound** — ordinary keys are capped
+  (`DEFAULT_MAX_DISMISSALS = 256`). Recording past the cap evicts the oldest ordinary
+  dismissal; re-recording an existing key refreshes its recency. The same cap applies
+  on load. `update:os-rollback:<version>` keys are exempt from eviction and grow by
+  at most one per recorded OS rollback, matching `quarantine.json` `os[]` history.
+  The whole file can therefore exceed 256 entries.
+- **Read failures** — an I/O failure does not memoize an empty singleton. The next
+  access retries the load, preserving acknowledgements once storage is readable.
+  Startup independently guards recovered-update publication and rollback hydration;
+  an unreadable dismissal file defers those notices rather than failing startup or
+  treating missing acknowledgement evidence as permission to show them.
 - **Corruption quarantine** — on load, an unparseable file (or a well-formed JSON
   file whose shape fails the Zod schema) is renamed aside to
   `notification_dismissals.json.corrupt-<timestamp>`, the event is logged, and the

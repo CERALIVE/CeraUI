@@ -87,6 +87,15 @@ dismissal. Without readable valid OS quarantine, no rollback notice is invented;
 read damage is logged and does not crash startup. Restarts clear only the in-memory
 map; valid history recreates the same undismissed notice, never a duplicate. This
 is host-tested restart/dismissal behavior, not a new board or power-loss proof.
+Rollback hydration also runs on the typed invalid-`agent.json` startup path: it
+reads only quarantine and dismissals, never derives authority from the damaged
+agent. The terminal state, original bytes and closed mutation readiness remain
+unchanged. A dismissal-store I/O failure is not cached as an empty store; the next
+access retries loading it. Startup guards recovered-update notice publication
+independently of rollback hydration, so failure in either cannot skip the other or
+fail startup. Unreadable dismissals defer publication, not resurrect acknowledged
+rollbacks. Repair allows a later access/startup to load the acknowledgements again;
+this does not add an automatic notice-retry timer.
 Lost/damaged acknowledgement storage can lose a dismissal, as with other stored
 preferences; update details still do not expose quarantine history.
 
@@ -109,6 +118,9 @@ this quiet path. A non-quarantined replay still warns; package-only or near-vers
 protection does not qualify. Downgrade/same, expiry, signature and other refusals
 retain their existing behavior. These notice-only changes are host-proven; the
 supplied Rock rollback snapshot records the older noisy warning, not this repair.
+If the optional quiet-path quarantine probe throws, the ordinary `serial_replayed`
+refusal and warning remain: damaged quarantine cannot replace the established
+replay reason with its reader's error or turn the check into success.
 
 Combined host coverage in `update-orchestrator-combined-recovery.test.ts` keeps
 these independent owners together: a recorded rollback rehydrates its notice

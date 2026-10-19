@@ -2797,6 +2797,7 @@ async function startOrchestratorRuntime(
 		recoveryPersistenceValid = false;
 		adoptState(error.terminalState);
 		started = true;
+		await hydrateOsRollbackNotices(deps.quarantine);
 		scheduleNextTick();
 		return;
 	}
@@ -2876,7 +2877,13 @@ async function startOrchestratorRuntime(
 	started = true;
 	startupReadiness.setReady(true);
 	hydrateOsStageRecoveryNotice(state);
-	if (state.recoveredNotice) notifyUpdate(state.recoveredNotice);
+	try {
+		if (state.recoveredNotice) notifyUpdate(state.recoveredNotice);
+	} catch (error: unknown) {
+		logger.warn("update-orchestrator: recovered notice deferred", {
+			error: error instanceof Error ? error : String(error),
+		});
+	}
 	await hydrateOsRollbackNotices(deps.quarantine);
 	scheduleNextTick();
 }

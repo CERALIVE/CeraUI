@@ -1028,7 +1028,7 @@ raises exactly one, and successful staging or a superseding candidate clears it.
 | Kind | Produced by |
 |---|---|
 | `updates-available` | a package check that found candidates; an OS check that found a manifest |
-| `refused` | a failed package check, a failed commit, a failed OS check, an untyped OS stage failure |
+| `refused` | a failed package check, a failed commit, a failed OS check (except an exact quarantined replay; an unreadable quarantine probe retains the ordinary replay warning), an untyped OS stage failure |
 | `os-stage-retry` | a typed OS stage failure with an automatic retry scheduled |
 | `os-stage-operator` | a typed OS stage failure that needs the operator (operator mode or the third automatic round) |
 | `os-stage-unresolved` | an unsafe OS stage failure, including an attempt found idle after a restart |
@@ -1037,7 +1037,7 @@ raises exactly one, and successful staging or a superseding candidate clears it.
 | `cellular-approval` | an OS install held by D12 |
 | `os-staged` | a successful OS stage |
 | `os-activated` | a forced `@now` activation, and a boot of the staged version whose healthcheck passed (this boot's `healthy-state.json`) |
-| `os-rollback` | a booted version that differs from the staged one after the armed activation ran, including the bootloader fallback after the new slot kept failing its healthcheck before `mark-good` |
+| `os-rollback` | a booted version that differs from the staged one after the armed activation ran, including the bootloader fallback after the new slot kept failing its healthcheck before `mark-good`; startup also restores undismissed recorded OS quarantine history, independently of agent validity |
 | `slots-current` | a confirmed slot mirror |
 | `download-paused` | **no producer** |
 | `credentials-expiring` | **no producer** |
