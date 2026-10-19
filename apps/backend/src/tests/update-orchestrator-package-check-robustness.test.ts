@@ -16,7 +16,10 @@ import {
 } from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
 import { rankTransports } from "../modules/system/update-transport/core.ts";
-import { getPersistentNotifications } from "../modules/ui/notifications.ts";
+import {
+	getPersistentNotifications,
+	notificationRemove,
+} from "../modules/ui/notifications.ts";
 import { aptEntryHarness } from "./helpers/apt-transport-entry-harness.ts";
 import { sample } from "./helpers/apt-transport-fixture.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
@@ -81,9 +84,14 @@ test.each([
 	["scheduled", false],
 	["manual", true],
 ] as const)(
-	"%s OS checks remain eligible with APT disabled and packagesAuto=%s",
+	"%s OS checks remain eligible with APT disabled and packagesAuto=%p",
 	async (entry, packagesAuto) => {
 		// Given disabled APT on an OS-capable image with both clocks due.
+		for (const n of getPersistentNotifications(true).show) {
+			if (n.name.startsWith("update:refused:packages:")) {
+				notificationRemove(n.name);
+			}
+		}
 		await pinned([sample("eth0", "ethernet", 4)], ["apt-all-packages"]);
 		setup.apt_update_enabled = false;
 		let now = 1_000_000;
