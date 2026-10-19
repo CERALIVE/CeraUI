@@ -55,7 +55,7 @@ describe("update-orchestrator reducer — pure state machine", () => {
 		expect(state.phase).toBe("idle");
 	});
 
-	test("an OS rollback detected during verification quarantines, not fails", () => {
+	test("a recorded OS rollback returns verification to idle, not failed", () => {
 		let state: OrchestratorState = {
 			...initialOrchestratorState(0),
 			phase: "os-verifying",
@@ -65,8 +65,8 @@ describe("update-orchestrator reducer — pure state machine", () => {
 			now: 1,
 			reason: "booted slot != expected",
 		});
-		expect(state.phase).toBe("quarantined");
-		expect(state.failureReason).toBe("booted slot != expected");
+		expect(state.phase).toBe("idle");
+		expect(state.failureReason).toBeNull();
 	});
 
 	test("a slot-sync failure goes to failed (mirror failure, not a bad version)", () => {

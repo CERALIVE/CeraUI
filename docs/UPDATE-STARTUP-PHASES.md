@@ -37,7 +37,7 @@ format or wire schema changed. See [strict stored authority](UPDATE-RECOVERY.md#
 | sync-eligible | Start mirror if gate positive, otherwise skip to idle | No | Unchanged |
 | syncing | Resume unchanged; tick polls unit/receipt/target | Positive-evidence/queued-start boundary owns deferral or failure | Unchanged |
 | synced | Resume unchanged; next tick acknowledges to idle | No | Unchanged |
-| quarantined | Resume unchanged; no automatic clearance | Terminal policy, not an unowned transient | Unchanged |
+| quarantined | Resume unchanged; no automatic clearance | Package terminal policy remains sticky | Recorded OS rollback only: exact `os_version_mismatch` plus matching staged receipt version in OS quarantine returns idle; all other quarantines unchanged |
 | failed | Witness settlement/exact legacy migration only; otherwise retained | Terminal/unsafe evidence policy, not an unowned transient | Unchanged; durability replay cannot redispatch |
 
 Only `checking` is normalized. Its check kind is not persisted, so both clocks

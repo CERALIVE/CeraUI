@@ -185,7 +185,11 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
 - Keep decision inputs injectable so reducer/admission tests do not need OS mocks.
 - The transition table lives in `docs/DEVICE-UPDATES.md`; legacy overlap is in
   the root D8 Known gaps.
-- **`quarantined` ≠ `failed`, and both are sticky by default.** `COMMIT_FAILED`
+- **Package `quarantined` ≠ `failed`, and both are sticky by default.** OS rollback
+  records its bad version and persistent notice before returning idle. Startup/tick
+  may clear only exact historical `quarantined / os_version_mismatch` with a
+  matching staged receipt version in OS quarantine; protection is never removed.
+  `COMMIT_FAILED`
   moves tracked `committing` to `quarantined` on a wire failure; it does not
   prove dpkg itself failed. Detached-service cleanup can fail after transaction
   exit 0, and the legacy adoption race under root [`AGENTS.md`](../../../../AGENTS.md)

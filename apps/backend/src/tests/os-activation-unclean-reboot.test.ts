@@ -216,8 +216,8 @@ describe("boot-id change while os-activation-armed", () => {
 			readStagedActivation: async () => "consumed",
 		});
 		await runOrchestratorTick();
-		expect(getOrchestratorState().phase).toBe("quarantined");
-		expect(getOrchestratorState().failureReason).toBe("os_version_mismatch");
+		expect(getOrchestratorState().phase).toBe("idle");
+		expect(getOrchestratorState().failureReason).toBeNull();
 		expect(run.rollbacks).toEqual(["2026.10.43"]);
 		expect(rollbackNotices("2026.10.43")).toBe(1);
 		expect(run.rebinds).toEqual([]);

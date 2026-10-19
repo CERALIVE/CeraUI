@@ -153,7 +153,7 @@ describe("os-verifying waits for this boot's healthcheck verdict", () => {
 		setOrchestratorRuntimeDepsForTest(b.deps);
 		verifying();
 		await runOrchestratorTick();
-		expect(getOrchestratorState().phase).toBe("quarantined");
+		expect(getOrchestratorState().phase).toBe("idle");
 		expect(b.healthReads).toEqual([]);
 	});
 

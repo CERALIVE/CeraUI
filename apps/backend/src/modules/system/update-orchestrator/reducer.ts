@@ -13,6 +13,7 @@
  * persistence/publication and avoids applying stale events to an unrelated phase.
  */
 
+// allow: SIZE_OK — One phase transition table; keeping ignored event/phase pairs together makes package and OS clearance boundaries reviewable.
 import { OS_STAGE_CONFIRMABLE_UNSAFE_REASONS } from "@ceraui/rpc/schemas";
 import {
 	settleFailedOsStageRound,
@@ -595,8 +596,9 @@ function reduceOsVerifying(
 			return enter(state, event.now, { phase: "sync-eligible" });
 		case "OS_ROLLBACK_DETECTED":
 			return enter(state, event.now, {
-				phase: "quarantined",
-				failureReason: event.reason,
+				phase: "idle",
+				failureReason: null,
+				progress: null,
 			});
 		default:
 			return state;
@@ -656,6 +658,13 @@ function reduceQuarantined(
 	event: OrchestratorEvent,
 ): OrchestratorState {
 	switch (event.type) {
+		case "OS_ROLLBACK_RECORDED":
+			if (state.failureReason !== "os_version_mismatch") return state;
+			return enter(state, event.now, {
+				phase: "idle",
+				failureReason: null,
+				progress: null,
+			});
 		case "RESET":
 			return enter(state, event.now, { phase: "idle", failureReason: null });
 		default:

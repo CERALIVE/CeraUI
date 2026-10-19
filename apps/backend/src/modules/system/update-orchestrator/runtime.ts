@@ -1977,15 +1977,15 @@ async function verifyOsBoot(): Promise<void> {
 	if (!booted) return; // no evidence to declare a rollback
 	if (booted !== receipt.version) {
 		await deps.quarantine.recordOsRollback(receipt.version, booted);
-		dispatch({
-			type: "OS_ROLLBACK_DETECTED",
-			now: deps.now(),
-			reason: "os_version_mismatch",
-		});
 		notifyUpdate({
 			kind: "os-rollback",
 			id: receipt.version,
 			version: receipt.version,
+		});
+		dispatchOsSettlement({
+			type: "OS_ROLLBACK_DETECTED",
+			now: deps.now(),
+			reason: "os_version_mismatch",
 		});
 		return;
 	}
@@ -2000,6 +2000,29 @@ async function verifyOsBoot(): Promise<void> {
 		id: receipt.version,
 		version: receipt.version,
 	});
+}
+
+async function maybeSettleRecordedOsRollback(): Promise<void> {
+	if (
+		!recoveryPersistenceValid ||
+		state.phase !== "quarantined" ||
+		state.failureReason !== "os_version_mismatch"
+	)
+		return;
+	const generation = stateGeneration;
+	const receipt = await deps.readOsReceipt();
+	if (
+		!receipt ||
+		!(await deps.quarantine.isOsVersionQuarantined(receipt.version))
+	)
+		return;
+	if (stateGeneration !== generation) return;
+	notifyUpdate({
+		kind: "os-rollback",
+		id: receipt.version,
+		version: receipt.version,
+	});
+	dispatchOsSettlement({ type: "OS_ROLLBACK_RECORDED", now: deps.now() });
 }
 
 // The healthcheck writes its record with the boot id only after a passing check
@@ -2341,6 +2364,7 @@ export async function runOrchestratorTick(): Promise<void> {
 		return;
 	}
 	acknowledgeTerminalRestPhases();
+	await maybeSettleRecordedOsRollback();
 
 	if (state.phase === "idle") {
 		await maybeFindSlotSyncCandidate();
@@ -2665,6 +2689,7 @@ async function startOrchestratorRuntime(
 	if (state.phase === "os-activation-armed" || state.phase === "os-verifying")
 		await reconcileOsActivation();
 	if (state.phase === "os-verifying") await verifyOsBoot();
+	await maybeSettleRecordedOsRollback();
 	if (state.phase === "failed") await maybeMigrateLegacyOsFailure();
 	if (state.phase === "idle") await maybeFindSlotSyncCandidate();
 	if (state.phase === "sync-eligible") await maybeStartSlotSync();

@@ -253,13 +253,14 @@ gaps for overlap with the independent legacy launcher. Transition table from
 | `os-staged` without a pending active attempt | `OS_ACTIVATION_ARMED` | `os-activation-armed` |
 | `os-activation-armed` | `OS_REBOOT_OBSERVED` | `os-verifying` (only once RAUC shows the armed activation ran, or the staged version booted) |
 | `os-verifying` | `OS_VERIFIED` | `sync-eligible` (only once `healthy-state.json` carries this boot's id) |
-| `os-verifying` | `OS_ROLLBACK_DETECTED` | `quarantined` (a boot on a version other than the staged one) |
+| `os-verifying` | `OS_ROLLBACK_DETECTED` | `idle`, failure cleared (only after recording the staged version in OS quarantine and publishing `os-rollback`) |
 | `sync-eligible` | `SYNC_STARTED` | `syncing` |
 | `sync-eligible` | `SYNC_SKIPPED` | `idle` |
 | `syncing` | `SYNC_SUCCEEDED` | `synced` |
 | `syncing` | `SYNC_FAILED` | `failed` |
 | `synced` | `SYNC_SETTLED` | `idle` |
 | `quarantined` | `RESET` | `idle` |
+| `quarantined` with exact `os_version_mismatch` | `OS_ROLLBACK_RECORDED`, matching staged receipt version in `quarantine.json` `os[]` | `idle`, failure cleared; startup/tick migration only, protection retained |
 | `failed` | `RESET` | `idle` |
 | `failed` with exact `commit_unit_absent_on_resume` | root-only `HISTORICAL_COMMIT_ADJUDICATED` after durable receipt and plan archive | `idle` |
 | `failed` with a settled `unsafe` OS record (`activeAttemptId:null`), reason matching `failureReason` and exactly `rauc_recovery_unproven` or `os_stage_outcome_unknown_after_restart` | `OS_STAGE_RECOVERY_CONFIRMED` from a manual check, after positive OS evidence | `idle`, OS check due now, next round operator-only; notice cleared only on acceptance |
@@ -673,8 +674,13 @@ Active only with `apt-all-packages` and `rauc-verity-streaming`.
   A slot whose healthcheck fails **before** `rauc status mark-good` succeeds is
   booted again until its bootcount runs out; the bootloader then starts the old
   slot, whose CalVer differs, and that boot reaches the rollback path above
-  (`quarantine.json` `os[]`, the persistent `os-rollback` notice, sticky
-  `quarantined`). The version check comes first, so a rollback never depends on
+   (`quarantine.json` `os[]`, the persistent `os-rollback` notice, then
+   `idle` with no workflow failure). The version stays refused, but Check and
+   normal lagged-mirror scheduling are available again. Startup and tick also
+   clear the older `quarantined / os_version_mismatch` state only after the
+   staged receipt's version is found in OS quarantine; missing, invalid or
+   unrelated protection never grants clearance. Package quarantine is unchanged.
+   The version check comes first, so a rollback never depends on
   the healthy record. Operator-visible consequence: after the reboot into a new
   OS the UI shows the verifying state until that boot's healthcheck passes,
   typically within a couple of minutes, and for as long as the new slot keeps
@@ -1031,8 +1037,9 @@ Not proven, and not claimed:
   CeraUI proof: the 2026-09-26 post-enforcement matrix (todo 50) recorded 403
   without and 200 with the fleet certificate on `dists/*/InRelease`. It says
   nothing about this head's update agent;
-- No production caller dispatches `RESET`: `quarantined` and most `failed`
-  states remain sticky. The narrow exceptions are root-only
+- No production caller dispatches `RESET`: package `quarantined` and most `failed`
+  states remain sticky. Recorded OS rollback instead returns to idle, including
+  the narrowly evidenced historical-state migration above. Other exceptions are root-only
   `commit_unit_absent_on_resume` adjudication through the local recovery CLI
   described above (it preserves a durable receipt and requires a fresh
   discovery) and the two OS staging exits above, which need positive OS

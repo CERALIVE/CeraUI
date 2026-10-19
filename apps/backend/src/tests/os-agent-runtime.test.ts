@@ -217,7 +217,7 @@ describe("OS install dispatch", () => {
 		});
 		await runOrchestratorTick();
 		expect(recorded).toEqual(["2026.10.0"]);
-		expect(getOrchestratorState().phase).toBe("quarantined");
+		expect(getOrchestratorState().phase).toBe("idle");
 	});
 
 	test("a restarted backend never reissues an inconclusive RAUC install", async () => {

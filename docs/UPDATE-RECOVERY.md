@@ -1,5 +1,20 @@
 # Update recovery contract [PARTIAL — local recovery implemented, board proof owed]
 
+## Recorded OS rollback recovery [PARTIAL — host-proven, bench re-drill owed]
+
+An observed fallback records the staged version in `quarantine.json` `os[]` and
+publishes the persistent `os-rollback` notification before returning the workflow
+to `idle` with `failureReason:null`. This clears no version protection: signed
+manifest admission still refuses that version. Check and the existing healthy-boot
+lagged-mirror gate may run again; this is not manual slot marking or mirror success.
+
+Startup and tick migrate the older exact `quarantined / os_version_mismatch`
+snapshot only when its staged receipt version has a matching OS quarantine entry.
+They restore the same persistent notice before explicit `OS_ROLLBACK_RECORDED`.
+Absent/unreadable/invalid or unrelated protection grants no clearance. No `RESET`
+is dispatched. Package `COMMIT_FAILED` quarantine and unresolved-commit maintenance
+policy are unchanged; never delete state or protection to bypass them.
+
 ## Recovery command completion
 
 The maintenance recovery probes use the registered shared `spawnWithTimeout`

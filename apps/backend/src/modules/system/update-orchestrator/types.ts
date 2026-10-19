@@ -222,6 +222,7 @@ export type OrchestratorEvent =
 			readonly now: number;
 			readonly reason: string;
 	  }
+	| { readonly type: "OS_ROLLBACK_RECORDED"; readonly now: number }
 	| { readonly type: "SYNC_ELIGIBILITY_CONFIRMED"; readonly now: number }
 	| { readonly type: "SYNC_SKIPPED"; readonly now: number }
 	| { readonly type: "SYNC_STARTED"; readonly now: number }

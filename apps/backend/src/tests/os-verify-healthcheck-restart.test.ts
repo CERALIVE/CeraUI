@@ -111,15 +111,15 @@ describe("drill A2 replay: boots that fail their healthcheck, then the fallback"
 		b.now.healthy = healthyFor(FALLBACK_BOOT);
 		await startUpdateOrchestrator(deps);
 
-		expect(getOrchestratorState().phase).toBe("quarantined");
-		expect(getOrchestratorState().failureReason).toBe("os_version_mismatch");
+		expect(getOrchestratorState().phase).toBe("idle");
+		expect(getOrchestratorState().failureReason).toBeNull();
 		expect(await Bun.file(quarantinePath).json()).toMatchObject({
 			os: [{ version: v3, bootedVersion: V2 }],
 		});
 		expect(notices("os-rollback", v3)).toBe(1);
 		expect(notices("os-activated", v3)).toBe(0);
 		expect(await Bun.file(statePath).json()).toMatchObject({
-			phase: "quarantined",
+			phase: "idle",
 		});
 
 		// The OS check refuses the same candidate through the real quarantine.

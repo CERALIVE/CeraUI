@@ -93,6 +93,7 @@ describe("update-orchestrator reducer — pure state machine", () => {
 			{ type: "OS_REBOOT_OBSERVED", now },
 			{ type: "OS_VERIFIED", now },
 			{ type: "OS_ROLLBACK_DETECTED", now, reason: "x" },
+			{ type: "OS_ROLLBACK_RECORDED", now },
 			{ type: "SYNC_ELIGIBILITY_CONFIRMED", now },
 			{ type: "SYNC_SKIPPED", now },
 			{ type: "SYNC_STARTED", now },
