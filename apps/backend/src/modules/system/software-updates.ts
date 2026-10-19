@@ -1150,6 +1150,22 @@ export function resetSoftwareUpdateSizeRunner(): void {
 	softwareUpdateSizeRunner = getSoftwareUpdateSize;
 }
 
+// Orchestrator checks own a full cycle, not discovery against previously fetched lists.
+export function runSoftwareUpdateCheck(): Promise<SoftwareUpdateError> {
+	return new Promise((resolve, reject) => {
+		const started = softwareUpdateCheckRunner((refresh) => {
+			// Exit-zero warnings are benign; discovery must retain a real refresh failure.
+			const failure =
+				refresh === true && lastCheckFailure === null ? null : refresh;
+			void runUpdateDiscoveryAndReport().then(
+				(discovery) => resolve(failure ?? discovery),
+				reject,
+			);
+		});
+		if (!started) resolve("busy");
+	});
+}
+
 // Publish after discovery's early returns so an empty result is observable.
 export async function runUpdateDiscoveryAndReport(): Promise<SoftwareUpdateError> {
 	if (pendingPackageSuccess.pending) return "discovery_failed";

@@ -22,12 +22,18 @@ Install post-acceptance limits: D8 Known gaps (c). Check wire reference:
   the answer untrustworthy — that is exactly how the device came to answer
   "System is up to date" when it had reached no repository at all.
 - Publish the discovery outcome so its early returns do not leave a dead button.
+- Orchestrator manual and scheduled package checks call `runSoftwareUpdateCheck()`:
+  refresh starts a new failure lifetime, then discovery publishes the result. Calling
+  discovery alone replayed a prior captive failure alongside a fresh healthy probe.
+  Exit-zero warnings remain benign; a real failed refresh survives same-cycle
+  stale-list discovery. A skipped refresh returns `busy` without clearing evidence.
 - **A refused check restores what it did not replace.** `triggerManualUpdateCheck`
   save/restores `lastUpdateFailure`/`lastUpdateSucceeded` around dispatch, so a
   skipped check no longer wipes the failed-install state the operator was reading
   and then broadcasts nothing in its place.
 
-Coverage: `tests/software-updates-check-visibility.test.ts` + the frontend half in
+Coverage: `tests/software-updates-check-visibility.test.ts`,
+`tests/update-transport-captive-recovery.test.ts` + the frontend half in
 `apps/frontend/src/main/dialogs/UpdatesDialog.check.test.ts`.
 
 Address-family and install-set rules are in `docs/DEVICE-UPDATES.md`.

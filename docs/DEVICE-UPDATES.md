@@ -767,6 +767,15 @@ Successful teardown removes its rule. No healthy pair folds into the existing `r
 `transport-uidrange` keep the unbound reachability preflight unchanged. This is
 fixture-tested, **not board-proven**.
 
+Orchestrator package checks (manual and scheduled) now run a complete refresh →
+discovery cycle, just as the legacy Check does. This starts a new check-failure
+lifetime: after a captive portal clears, a healthy selected path and successful
+real refresh can return `idle` or `available` without restarting the backend.
+Discovery alone still cannot clear a failed refresh using stale lists. Captive
+probe and APT stderr classifications, pin failover and the 15-minute failed-pair
+hold are unchanged. This recovery correction is host-regression-tested, not yet
+board-re-drilled.
+
 Do not remove the prohibit rule or pin global DNS to work around the DNS scope
 limit documented in [HOST-UPLINK-ELECTION.md](./HOST-UPLINK-ELECTION.md).
 
