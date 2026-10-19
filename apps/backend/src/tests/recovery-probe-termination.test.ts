@@ -72,7 +72,11 @@ test("recovery preserves a genuine nonzero command result", async () => {
 	const result = await defaultRecoveryProbeIo.run([
 		process.execPath,
 		"-e",
-		'process.stdout.write("unavailable"); process.exit(7)',
+		'process.stdout.write("unavailable"); process.stderr.write("diagnostic"); process.exit(7)',
 	]);
-	expect(result).toEqual({ code: 7, stdout: "unavailable" });
+	expect(result).toEqual({
+		code: 7,
+		stdout: "unavailable",
+		stderr: "diagnostic",
+	});
 });

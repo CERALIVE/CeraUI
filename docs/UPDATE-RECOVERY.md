@@ -13,10 +13,16 @@ is eligible. A still-`committing` startup first records that unresolved outcome,
 then uses the same recovery path. Fresh reads must prove all of the following:
 
 - the fixed install unit is positively absent, not merely unobserved;
-- no APT/dpkg process or concurrent update operation is present, and none of the
-  dpkg/frontend/list/archive lock inodes appears in the kernel lock table;
-- `dpkg --audit` exits successfully with empty output and `/var/lib/dpkg/updates`
-  is empty;
+- no APT/dpkg process or concurrent update operation is present;
+- recovery holds nonblocking exclusive OFD (`flock --fcntl`) locks on
+  `/var/lib/dpkg/lock-frontend`, `/var/lib/dpkg/lock`, `/var/lib/apt/lists/lock`
+  and `/var/cache/apt/archives/lock` before the first persisted-state/evidence
+  read, through pending-plan clearance, durable state publication and wire/notice
+  publication. These conflict with the POSIX fcntl locks ordinary APT/dpkg writers
+  use, unlike a plain `flock()` on the same paths;
+- `dpkg --audit` exits zero, stdout is empty after trimming, stderr is exactly
+  empty, and `/var/lib/dpkg/updates` is empty. A zero exit with the real dirty-board
+  audit text, or even stderr-only diagnostics, is not clean;
 - the current boot ID differs from the attempt's recorded boot ID, **or** the
   actual booted rootfs differs from the attempt's recorded slot. Both current
   identity readings must be available.
@@ -62,10 +68,23 @@ the same keyed notice without duplicating it. Package copy asks the operator to 
 Check again, not to assume the interrupted install succeeded. All ten catalogs
 carry the new keys. Any failed probe, lock acquisition, pending-plan read/clear or
 state write withholds clearance; a later tick reads again. The local recovery tool
-is unchanged for unproven history. Root callers outside the cooperative flock/CONTROL
-protocol can still race observation; this is not a system-wide APT timer mask or an
-atomic snapshot of the kernel. Host tests include a real kernel flock, independent
-missing proofs, restart twice and a second crash at the state-write boundary.
+is unchanged for unproven history. A small supervised shell retains all four open
+descriptions and acknowledges readiness only after every lock succeeds. Readiness
+has a two-second bound; any spawn/open/lock/handshake failure retains failure for
+the next tick. Cleanup closes its private stdin and uses bounded TERM/KILL shutdown,
+awaiting exit in every acquired-lease finally, including collection or publication
+errors. Backend death closes that pipe, so a restart cannot inherit a stale holder.
+Final publication fences require the package lease still held. Its held proof,
+not an empty lock-table sample that would reject its own locks, supplies lock-idle
+authority during collection. Mirror recovery keeps its existing lock protocol.
+
+This excludes ordinary external writers, including APT timers, only while those
+fixed-inode fcntl locks are held; it neither masks timers nor promises continuing
+consistency after release. Privileged writers disabling locking, using alternative
+database/cache paths, replacing lock inodes or directly modifying files are not
+excluded. Host tests exercise both real-OFD race directions, every lock refusal,
+publication-boundary contention, collector/cleanup/write/lease failures, timeout,
+backend SIGKILL, raw audit derivation, restart twice and the state-write crash boundary.
 Installed systemd/APT, both-board crash/power-cut and rendered-notice proof remain owed.
 
 ## Recorded OS rollback recovery [PARTIAL — host-proven, bench re-drill owed]

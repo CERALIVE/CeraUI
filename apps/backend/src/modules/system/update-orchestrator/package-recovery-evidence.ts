@@ -66,7 +66,8 @@ export async function readPackageConsistency(
 		unitAbsent,
 		packagesIdle,
 		locksIdle: await locksIdle(),
-		auditClean: audit.code === 0 && audit.stdout.trim() === "",
+		auditClean:
+			audit.code === 0 && audit.stdout.trim() === "" && audit.stderr === "",
 		updatesEmpty: (await io.list("/var/lib/dpkg/updates")).length === 0,
 	};
 }

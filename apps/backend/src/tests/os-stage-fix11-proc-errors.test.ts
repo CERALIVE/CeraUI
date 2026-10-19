@@ -67,6 +67,7 @@ test.each(errnos)(
 			},
 			run: async (argv) => ({
 				code: 0,
+				stderr: "",
 				stdout: argv[0] === "busctl" ? 's "idle"' : "ActiveState=inactive",
 			}),
 		});

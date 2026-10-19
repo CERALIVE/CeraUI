@@ -14,6 +14,7 @@ function io(overrides: Partial<RecoveryProbeIo> = {}): RecoveryProbeIo {
 	return {
 		run: async (argv) => ({
 			code: 0,
+			stderr: "",
 			stdout:
 				argv[0] === "systemctl"
 					? absent

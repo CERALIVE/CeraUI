@@ -77,7 +77,7 @@ test.each(contradictions)(
 	"maintenance refuses contradictory absence %s",
 	async (stdout) => {
 		const probes = createRecoveryProbes({
-			run: async () => ({ stdout, code: 0 }),
+			run: async () => ({ stdout, code: 0, stderr: "" }),
 			read: async () => "",
 			list: async () => [],
 		});

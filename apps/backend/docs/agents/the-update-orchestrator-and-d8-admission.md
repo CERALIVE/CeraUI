@@ -199,7 +199,9 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
   consistency path for attempts with recorded boot/slot provenance; a later
   successful mirror can separately supersede a recorded sync failure. Unknown
   history remains operator-only. Both use fresh proof, CONTROL and the shared
-  update flock, never absence-only success or stale-plan replay. Full rules are at
+  update flock. Package recovery additionally holds the four standard APT/dpkg
+  OFD locks from first read through publication and refuses nonempty audit stderr,
+  never absence-only success or stale-plan replay. Full rules are at
   `docs/UPDATE-RECOVERY.md`:
   `/usr/sbin/ceralive-update-recover` is a separately packaged root-only local
   executable, with no RPC/remote/sudoers entry. It requires the backend inactive

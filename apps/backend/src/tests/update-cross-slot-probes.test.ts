@@ -21,19 +21,21 @@ describe("the shipped local probe boundary", () => {
 		run: async (argv) => {
 			if (argv[0] === "systemctl") {
 				if (argv[2] === "ceralive.service")
-					return { code: unitCode, stdout: unitOutput };
+					return { code: unitCode, stdout: unitOutput, stderr: "" };
 				if (argv[2] === "ceralive-software-update.service")
-					return { code: detachedCode, stdout: detachedOutput };
+					return { code: detachedCode, stdout: detachedOutput, stderr: "" };
 				return {
 					code: 0,
+					stderr: "",
 					stdout: "LoadState=not-found\nActiveState=inactive\n",
 				};
 			}
-			if (argv[0] === "dpkg") return { code: 0, stdout: audit };
-			if (argv[0] === "busctl") return { code: 0, stdout: operation };
+			if (argv[0] === "dpkg") return { code: 0, stdout: audit, stderr: "" };
+			if (argv[0] === "busctl")
+				return { code: 0, stdout: operation, stderr: "" };
 			if (argv[0] === "dpkg-query")
-				return { code: 0, stdout: "install ok installed\t1.0.0\n" };
-			return { code: 0, stdout: "" };
+				return { code: 0, stdout: "install ok installed\t1.0.0\n", stderr: "" };
+			return { code: 0, stdout: "", stderr: "" };
 		},
 		read: async () => processes[0] ?? "",
 		list: async (path) =>

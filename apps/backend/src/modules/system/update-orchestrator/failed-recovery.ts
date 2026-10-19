@@ -6,6 +6,7 @@ import {
 	type PackageRecoveryEvidence,
 	packageRecoveryProven,
 } from "./package-recovery-evidence.ts";
+import { acquirePackageRecoveryLocks } from "./package-recovery-lock.ts";
 import { toPersisted } from "./persistence.ts";
 import { reduceOrchestrator } from "./reducer.ts";
 import type { RootSlotStatus } from "./slot-status.ts";
@@ -22,8 +23,11 @@ export interface FailedRecoveryPort {
 	readonly current: () => boolean;
 	readonly acquireControl: () => Promise<OsStageControlLease>;
 	readonly acquireUpdateLock: () => Promise<OsStageControlLease>;
+	readonly acquirePackageLocks?: () => Promise<OsStageControlLease>;
 	readonly readPersisted: () => Promise<OrchestratorState | null>;
-	readonly readPackageEvidence: () => Promise<PackageRecoveryEvidence>;
+	readonly readPackageEvidence: (
+		locks: OsStageControlLease,
+	) => Promise<PackageRecoveryEvidence>;
 	readonly clearPending: () => Promise<void>;
 	readonly persist: (state: OrchestratorState) => void;
 	readonly adopt: (state: OrchestratorState) => void;
@@ -49,6 +53,10 @@ export async function recoverFailedUpdate(
 	if (packages && !before.packageAttempt) return false;
 	await using lease = await port.acquireControl();
 	await using updateLock = await port.acquireUpdateLock();
+	await using packageLocks = packages
+		? await (port.acquirePackageLocks ?? acquirePackageRecoveryLocks)()
+		: null;
+	if (packageLocks && !packageLocks.held()) return false;
 	const persisted = await port.readPersisted();
 	if (
 		!persisted ||
@@ -56,7 +64,13 @@ export async function recoverFailedUpdate(
 	)
 		return false;
 	if (packages) {
-		if (!packageRecoveryProven(before, await port.readPackageEvidence()))
+		if (
+			!packageLocks ||
+			!packageRecoveryProven(
+				before,
+				await port.readPackageEvidence(packageLocks),
+			)
+		)
 			return false;
 	} else {
 		if (!syncUnitClean(await port.inspectSync())) return false;
@@ -78,6 +92,7 @@ export async function recoverFailedUpdate(
 	if (
 		!lease.held() ||
 		!updateLock.held() ||
+		(packageLocks !== null && !packageLocks.held()) ||
 		!port.current() ||
 		port.snapshot() !== before
 	)
@@ -86,6 +101,7 @@ export async function recoverFailedUpdate(
 	if (
 		!lease.held() ||
 		!updateLock.held() ||
+		(packageLocks !== null && !packageLocks.held()) ||
 		!port.current() ||
 		port.snapshot() !== before
 	)

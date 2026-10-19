@@ -76,7 +76,10 @@ the exact-head hardware fallback/restoration drill remains owed.
 
 Interrupted package failures can now return to idle after fresh unit/process/lock/
 dpkg evidence proves consistency and recorded attempt provenance proves a reboot
-or slot change. Missing historical provenance remains operator-only. A recorded
+or slot change. Package recovery now holds the four standard APT/dpkg fcntl lock
+inodes through evidence collection and recovered-state publication, excluding
+ordinary external writers; any nonempty audit stderr also refuses recovery.
+Missing historical provenance remains operator-only. A recorded
 mirror failure needs a later matching receipt, clean unit and both slots good.
 Neither path replays old work or calls an uncertain install successful; each
 persists a recovered-notice intent. These are host proofs, not both-board crash

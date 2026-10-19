@@ -130,7 +130,7 @@ test.each(["LoadState", "ActiveState", "ControlGroup", "malformed"])(
 			"LoadState=not-found\nActiveState=inactive\nControlGroup=\n" +
 			(key === "malformed" ? "invalid" : `${key}=not-found`);
 		const probes = createRecoveryProbes({
-			run: async () => ({ code: 0, stdout: output }),
+			run: async () => ({ code: 0, stdout: output, stderr: "" }),
 			list: async () => [],
 			read: async () => "",
 		});
@@ -161,7 +161,7 @@ test("maintenance rejects overwritten backend masking evidence", async () => {
 	const output =
 		"LoadState=loaded\nLoadState=masked\nActiveState=inactive\nSubState=dead\nMainPID=0\nControlPID=0\nJob=0\n";
 	const probes = createRecoveryProbes({
-		run: async () => ({ code: 0, stdout: output }),
+		run: async () => ({ code: 0, stdout: output, stderr: "" }),
 		list: async () => [],
 		read: async () => "",
 	});
@@ -172,6 +172,7 @@ test("maintenance clean masked backend and absent commit unit remain admissible"
 	const probes = createRecoveryProbes({
 		run: async (argv) => ({
 			code: 0,
+			stderr: "",
 			stdout: argv.includes("ceralive.service")
 				? "LoadState=masked\nActiveState=inactive\nSubState=dead\nMainPID=0\nControlPID=0\nJob=0\n"
 				: "LoadState=not-found\n",

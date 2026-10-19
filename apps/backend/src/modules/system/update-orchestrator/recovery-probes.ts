@@ -44,6 +44,7 @@ export interface RecoveryProbes {
 export interface RecoveryCommandResult {
 	readonly code: number;
 	readonly stdout: string;
+	readonly stderr: string;
 }
 export interface RecoveryProbeIo {
 	run(argv: readonly string[]): Promise<RecoveryCommandResult>;
@@ -196,7 +197,11 @@ export const defaultRecoveryProbeIo: RecoveryProbeIo = {
 			timeoutMs: 10_000,
 			env: { ...process.env, LC_ALL: "C" },
 		});
-		return { code: result.exitCode, stdout: result.stdout };
+		return {
+			code: result.exitCode,
+			stdout: result.stdout,
+			stderr: result.stderr,
+		};
 	},
 	read: (path) => Bun.file(path).text(),
 	list: readdir,

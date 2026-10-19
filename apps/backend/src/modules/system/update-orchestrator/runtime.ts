@@ -321,7 +321,10 @@ export interface OrchestratorRuntimeDeps {
 	readonly readPackageAttempt?: () => Promise<
 		OrchestratorState["packageAttempt"]
 	>;
-	readonly readPackageRecoveryEvidence?: () => Promise<PackageRecoveryEvidence>;
+	readonly readPackageRecoveryEvidence?: (
+		locks: OsStageControlLease,
+	) => Promise<PackageRecoveryEvidence>;
+	readonly acquirePackageRecoveryLocks?: () => Promise<OsStageControlLease>;
 	readonly acquireUpdateRecoveryLock?: () => Promise<OsStageControlLease>;
 	readonly persist: (state: OrchestratorState) => void;
 	readonly quarantine: UpdateQuarantine;
@@ -460,8 +463,10 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 			? { bootId, slot: booted[0].name }
 			: undefined;
 	},
-	readPackageRecoveryEvidence: async () => {
-		const consistency = await readPackageConsistency();
+	readPackageRecoveryEvidence: async (locks) => {
+		const consistency = await readPackageConsistency(undefined, async () =>
+			locks.held(),
+		);
 		const bootId = await readBootId();
 		const slots = await readRootSlots();
 		const booted = slots.filter((slot) => slot.state === "booted");
@@ -2449,6 +2454,9 @@ async function maybeRecoverFailedUpdate(): Promise<boolean> {
 					throw new Error("package recovery proof unavailable");
 				}),
 			acquireUpdateLock: deps.acquireUpdateRecoveryLock ?? acquireOsOrphanLock,
+			...(deps.acquirePackageRecoveryLocks
+				? { acquirePackageLocks: deps.acquirePackageRecoveryLocks }
+				: {}),
 			inspectSync: deps.inspectSlotSync,
 			readSyncEvidence: deps.readSlotSyncEvidence,
 			readSlots: deps.readRootSlots,

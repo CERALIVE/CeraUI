@@ -41,6 +41,7 @@ export function fakeDeps(
 		...defaultOrchestratorRuntimeDeps,
 		acquireOsStageControl: acquireTestOsStageControl,
 		acquireUpdateRecoveryLock: acquireTestOsStageControl,
+		acquirePackageRecoveryLocks: acquireTestOsStageControl,
 		now: () => 1_000_000,
 		random: () => 0.5,
 		loadSettings: async () => ({

@@ -772,6 +772,24 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			"spawnWithTimeout bounds read-only recovery evidence to 10 seconds; issued termination never proves success",
 	},
 	{
+		id: "updateRecovery.packageLocks",
+		file: "modules/system/update-orchestrator/package-recovery-lock.ts",
+		symbol: "acquirePackageRecoveryLocks",
+		command:
+			"[bash, --noprofile, --norc, -c, fixed-OFD-holder, package-lock-paths...]",
+		class: "supervised-worker",
+		contract: {
+			timed: false,
+			startupTimeout: true,
+			shutdownCleanup: true,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: true,
+		},
+		status: "enforced",
+		mechanism:
+			"Readiness is bounded to 2 seconds; nonblocking OFD locks remain held through failed-state publication, then finally closes stdin, shuts down and reaps the holder; backend death closes the private pipe",
+	},
+	{
 		id: "updateOrchestrator.inspectSlotSync",
 		file: "modules/system/update-orchestrator/lock.ts",
 		symbol: "inspectSlotSync",
