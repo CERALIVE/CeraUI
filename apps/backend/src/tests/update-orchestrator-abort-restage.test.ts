@@ -66,3 +66,71 @@ test("Install reports busy while the aborted producer recovers, then restages wi
 	expect(stages).toBe(2);
 	expect(getOrchestratorState().osCheck.lastSuccessAt).toBe(checks);
 });
+
+test("Install remains busy after producer retirement while RAUC restart is pending", async () => {
+	// Given independent producer and restart lifetimes after a stream abort.
+	const entered = Promise.withResolvers<void>();
+	const retired = Promise.withResolvers<void>();
+	const restartEntered = Promise.withResolvers<void>();
+	const restartRelease = Promise.withResolvers<void>();
+	let stages = 0;
+	harness([], {
+		isUpdateAdmissionReady: async () => true,
+		killAndRestartRaucForStream: async () => {
+			restartEntered.resolve();
+			await restartRelease.promise;
+		},
+		stageOs: async () => {
+			stages++;
+			entered.resolve();
+			await retired.promise;
+			throw new OsStageError("os_stage_cancelled_for_stream");
+		},
+	});
+	const staging = runOrchestratorTick();
+	await entered.promise;
+	const admission = admitAndPrepareStreamStart();
+	await restartEntered.promise;
+	retired.resolve();
+	await staging;
+	try {
+		// When Install is pressed after producer retirement but before restart settles.
+		const reply = await installUpdatesNow();
+		// Then the remaining restart fence is busy, not an absent offer.
+		expect(reply).toEqual({ started: false, reason: "busy" });
+		expect(stages).toBe(1);
+	} finally {
+		restartRelease.resolve();
+		await admission;
+	}
+});
+
+test.each(["no-offer", "no-capability"] as const)(
+	"Install returns not_available when there is %s rather than a stage blocker",
+	async (kind) => {
+		// Given genuine absence, not a retained producer or RAUC restart.
+		const h = harness([], {
+			isUpdateAdmissionReady: async () => true,
+			...(kind === "no-offer"
+				? {
+						checkOsManifest: async () => ({
+							available: false,
+							rateLimited: false,
+							failed: false,
+							reason: "",
+						}),
+					}
+				: {
+						loadCapabilities: async () => ({
+							mode: "capable",
+							features: ["apt-all-packages"],
+						}),
+					}),
+		});
+		// When an operator asks to install.
+		const reply = await installUpdatesNow();
+		// Then busy must not substitute for not_available.
+		expect(reply).toEqual({ started: false, reason: "not_available" });
+		expect(h.calls.stages).toBe(0);
+	},
+);

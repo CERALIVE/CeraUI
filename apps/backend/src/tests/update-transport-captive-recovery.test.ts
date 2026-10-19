@@ -1,8 +1,10 @@
 import { beforeEach, expect, test } from "bun:test";
 import type { SpawnWithTimeoutResult } from "../helpers/spawn-policy.ts";
+import { setAptTransportDepsForTest } from "../modules/system/apt-transport.ts";
 import { withDeviceType } from "../modules/system/device-detection.ts";
 import * as updates from "../modules/system/software-updates.ts";
 import { defaultOrchestratorRuntimeDeps } from "../modules/system/update-orchestrator/runtime.ts";
+import { rankTransports } from "../modules/system/update-transport/core.ts";
 import { aptEntryHarness } from "./helpers/apt-transport-entry-harness.ts";
 import { sample } from "./helpers/apt-transport-fixture.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
@@ -136,5 +138,34 @@ test("failed refresh cannot become success through stale-list discovery", async 
 		expect(t.commands.filter(({ argv }) => argv[1] === "update")).toHaveLength(
 			1,
 		);
+	});
+});
+
+test("successful refresh preserves a captive discovery outcome", async () => {
+	// Given a clear refresh followed by captive evidence during discovery.
+	const pins = await pinned([sample("eth0", "ethernet", 4)]);
+	let selections = 0;
+	setAptTransportDepsForTest({
+		select: async () =>
+			rankTransports([
+				sample(
+					"eth0",
+					"ethernet",
+					4,
+					++selections === 1 ? "clear" : "captive-tls",
+				),
+			]),
+		pin: pins.pin,
+		ownership: pins.ownership,
+	});
+	await withDeviceType("real", async () => {
+		// When the real package-check port completes both legs.
+		const outcome = await defaultOrchestratorRuntimeDeps.runPackageCheck();
+		// Then refresh success cannot erase discovery's refusal.
+		expect(outcome).toBe("captive_portal");
+		expect(updates.getUpdateState()).toMatchObject({
+			kind: "check_failed",
+			reason: "captive_portal",
+		});
 	});
 });
