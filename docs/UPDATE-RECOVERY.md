@@ -1501,8 +1501,47 @@ Reconciliation returns `os_stage_outcome_unknown_after_restart`, never a
 successful install. An idle daemon, a partly written inactive slot or a retained
 receipt cannot manufacture `OS_STAGED`. No blanket dm removal, forced NBD
 disconnect, lazy unmount or manual slot marking is performed. This path is
-hermetically tested, including a captured 315-second retirement sequence and
-real temporary-file flock contention; its device drill is still owed.
+hermetically tested, including a historical captured 315-second retirement
+sequence and real temporary-file flock contention; its device drill is still
+owed. That historical timeout is not the cancellation policy of the current
+source, which now schedules the escalation below.
+
+### Detached RAUC termination escalation [PARTIAL]
+
+`killAndRestartRaucForStream()` still awaits only SIGTERM and
+`systemctl restart --no-block rauc.service`, in that order. A nonzero TERM
+warns; a nonzero restart warns and throws `rauc_recovery_unproven`; their spawn
+failures/timeouts still propagate. A detached, unreferenced timer reads the
+unit's `ActiveState`, `MainPID` and `InvocationID` at T+1 s after TERM returns.
+If it is `deactivating` with valid identity, a second read is scheduled for
+T+8 s from the same origin. SIGKILL of all processes in **rauc.service only**
+is submitted only if both identity fields still match and it is still
+`deactivating`. No active or newly observed replacement daemon is escalated.
+Malformed, duplicate or missing identity is not permission to kill.
+
+Repeated calls replace the pending timer and invalidate already-running reads.
+Every observation/kill has the existing ten-second command timeout; any detached
+failure is warning-only. Escalation adds **zero awaited Go Live delay**, and is
+also used by the runner/startup recovery restart effects. Those effects still
+wait for their own positive recovery proof, not the detached task's completion.
+The T+8 read is not an eight-second whole-operation or cleanup guarantee.
+Unit inspection and the subsequent unit-scoped kill are separate systemd
+requests, not an atomic conditional-kill operation.
+
+After SIGKILL the observer may see no readable daemon during restart and refuse
+the snapshot; a surviving non-active daemon likewise cannot establish readiness.
+Only fresh, stable active/idle daemon evidence plus the existing process,
+resource, slot, boot-health and ownership checks permits settlement. Neither a
+queued restart nor a successful kill acknowledgement clears the Install fence.
+Install remains `busy` while the interrupted stage retires.
+
+The historical board watcher observed zero NBD/dm residue when systemd's delayed
+SIGKILL finally retired the old daemon. That is an observation, not qualification
+of this earlier explicit escalation. Host fake-clock tests prove deadlines,
+identity protection, replacement and warning-only failures. Atlas must still
+re-prove late-stage stream cancellation, active RAUC with clean NBD/dm resources
+within seconds, and subsequent accepted Install on the fixed board build. No
+unit timeout, observer predicate, NBD disconnect or dm-removal policy changes.
 
 ## Cross-slot missing-commit adjudication [EXISTS — root-only, fixture-proven]
 

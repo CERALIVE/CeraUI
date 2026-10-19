@@ -487,9 +487,26 @@ throws if a phase is placed in more than one bucket.
 |---|---|---|
 | `committing`, `restarting-services` | **refused** (`update_in_progress`) | none |
 | `downloading` | **refused** on a fresh wire reading of `installing` or `success`, or a positive/fail-closed commit-stage probe; otherwise allowed once the stop call returns | best-effort `systemctl stop` of the detached apt unit, never issued on a refusal; a nonzero exit is logged, not proof of cancellation |
-| `os-staging` | allowed once termination/restart submission returns, not after daemon recovery | cancel the stable attempt signal and move to `os-available` before termination; queue `systemctl restart --no-block rauc.service`; propagate submission errors, but never wait for the daemon's delayed retirement here. The submission fence and interrupted-stage fence remain independent. New OS work requires positive readiness, and cancellation wins over simultaneous link failure or late producer callbacks. |
+| `os-staging` | allowed once termination/restart submission returns, not after daemon recovery | cancel the stable attempt signal and move to `os-available` before termination; queue `systemctl restart --no-block rauc.service`; propagate submission errors, but never await daemon recovery or the detached escalation below. The submission fence and interrupted-stage fence remain independent. New OS work requires positive readiness, and cancellation wins over simultaneous link failure or late producer callbacks. |
 | `syncing` | allowed | continue locally |
 | every other phase | allowed | none |
+
+RAUC cancellation keeps the awaited SIGTERM → nonblocking restart submission
+unchanged. A detached escalation first reads `ActiveState`, `MainPID` and
+`InvocationID` at T+1 s after the TERM reply. Only a `deactivating` unit with a
+valid process/invocation identity gets a second read, scheduled for T+8 s from
+that same origin (not eight more seconds after the first reply). Only the same
+PID **and** invocation still `deactivating` may receive
+`systemctl kill --signal=SIGKILL --kill-whom=all rauc.service`. An active or
+replacement daemon is left alone. Repeated cancellations replace the pending
+escalation and fence already-running reads. Timers are unreferenced; every new
+command uses the existing ten-second command timeout, and detached failures
+warn without changing the caller's result. The added awaited Go Live delay is
+**zero**. T+8 is the observation deadline, not a guarantee of resource cleanup
+by that instant: scheduling, command execution and kernel retirement can take
+longer. This is host-tested; the new build's earlier SIGKILL and residue-free
+NBD/dm cleanup still require the board drill described in
+[update recovery](./UPDATE-RECOVERY.md#detached-rauc-termination-escalation-partial).
 
 A refusal from the cached table carries the orchestrator's phase and progress;
 a refusal from the commit-stage probe alone (below) carries the fixed
