@@ -9,6 +9,7 @@ import {
 
 const term = ["systemctl", "kill", "--signal=SIGTERM", "rauc.service"];
 const restart = ["systemctl", "restart", "--no-block", "rauc.service"];
+const release = ["/usr/libexec/ceralive/ceralive-nbd-release"];
 const show = [
 	"systemctl",
 	"show",
@@ -65,21 +66,33 @@ test("recovery returns after the unchanged awaited TERM then restart with no clo
 	expect(f.pending()).toBe(1);
 });
 
-test("same stopping daemon is killed once at T+8, not at the T+1 first look", async () => {
+test("same stopping daemon gets NBD release at T+3 then one kill at T+8", async () => {
 	// Given a daemon retaining its PID and invocation.
 	const f = raucEscalationFixture();
 	await killAndRestartRaucForStream(f.run, f.scheduler);
-	// When both look deadlines arrive.
+	// When the three look deadlines arrive.
 	await f.advance(999);
 	expect(f.commands).toEqual([term, restart]);
 	await f.advance(1000);
 	expect(f.commands).toEqual([term, restart, show]);
-	await f.advance(7999);
+	await f.advance(2999);
 	expect(f.commands).toEqual([term, restart, show]);
+	await f.advance(3000);
+	expect(f.commands).toEqual([term, restart, show, show, release]);
+	await f.advance(7999);
+	expect(f.commands).toEqual([term, restart, show, show, release]);
 	await f.advance(8000);
 	await f.advance(16000);
 	// Then the one bounded kill is submitted and its identity is logged.
-	expect(f.commands).toEqual([term, restart, show, show, forceKill]);
+	expect(f.commands).toEqual([
+		term,
+		restart,
+		show,
+		show,
+		release,
+		show,
+		forceKill,
+	]);
 	expect(f.options.every((opts) => opts?.timeoutMs === 10000)).toBe(true);
 	expect(info).toHaveBeenCalledWith(
 		expect.any(String),
@@ -167,6 +180,8 @@ test("rapid calls replace the pending escalation instead of stacking timers", as
 		restart,
 		show,
 		show,
+		release,
+		show,
 		forceKill,
 	]);
 });
@@ -187,7 +202,7 @@ test("replacement fences a first look already waiting on systemctl", async () =>
 	f.setReply(async () => ({ ...okCommand, stdout: stoppingRauc }));
 	await f.advance(9000);
 	// Then the old response cannot schedule a duplicate second look or kill.
-	expect(f.commands.filter((argv) => argv.includes("show"))).toHaveLength(3);
+	expect(f.commands.filter((argv) => argv.includes("show"))).toHaveLength(4);
 	expect(
 		f.commands.filter((argv) => argv.includes("--signal=SIGKILL")),
 	).toHaveLength(1);

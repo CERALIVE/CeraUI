@@ -110,8 +110,8 @@ test("concurrent TERM completions cannot rearm a superseded lifetime", async () 
 	await first;
 	expect(f.pending()).toBe(1);
 	await f.advance(RAUC_ESCALATION_GRACE_MS);
-	// Then only the current call owns a first/second look and one kill.
-	expect(f.commands.filter((argv) => argv.includes("show"))).toHaveLength(2);
+	// Then only one lifetime owns the three looks and one kill.
+	expect(f.commands.filter((argv) => argv.includes("show"))).toHaveLength(3);
 	expect(
 		f.commands.filter((argv) => argv.includes("--signal=SIGKILL")),
 	).toHaveLength(1);

@@ -1,0 +1,36 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use Fcntl qw(O_RDONLY O_NOFOLLOW O_NONBLOCK);
+
+my $dev_glob = $ENV{CERALIVE_NBD_DEV_GLOB} // '/dev/nbd[0-9]*';
+my $sys_block = $ENV{CERALIVE_NBD_SYS_BLOCK} // '/sys/block';
+my $failed = 0;
+
+for my $device (glob $dev_glob) {
+    my ($name) = $device =~ m{\A/(?:[^/]+/)*(nbd[0-9]+)\z};
+    next unless defined $name;
+    open(my $size_file, '<', "$sys_block/$name/size") or do {
+        print "$device size read failed: $!\n";
+        $failed = 1;
+        next;
+    };
+    my $size = do { local $/; <$size_file> };
+    close $size_file;
+    next unless defined $size && $size =~ /\A[0-9]+\n?\z/ && $size =~ /[1-9]/;
+    # O_NOFOLLOW prevents an NBD-named symlink from redirecting the ioctl.
+    sysopen(my $handle, $device, O_RDONLY | O_NOFOLLOW | O_NONBLOCK) or do {
+        print "$device open failed: $!\n";
+        $failed = 1;
+        next;
+    };
+    my $result = ioctl($handle, 0xab04, 0); # NBD_CLEAR_SOCK, not NBD_DISCONNECT.
+    if (defined $result) {
+        print "$device NBD_CLEAR_SOCK ok\n";
+    } else {
+        print "$device NBD_CLEAR_SOCK failed: $!\n";
+        $failed = 1;
+    }
+    close $handle;
+}
+exit $failed;

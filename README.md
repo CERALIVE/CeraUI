@@ -68,6 +68,14 @@ resume or changing legacy-image behaviour. The fixed build has **not** been
 re-proven on a board; the OS/slot flows are not qualified by these installs.
 See also [update recovery](docs/UPDATE-RECOVERY.md).
 
+OS-download cancellation retains its nonblocking stream-start path and now
+confirms the same stopping RAUC process before detached NBD socket release at
+T+3 s, with SIGKILL only as a T+8 s last resort. SIGKILL alone did not shorten
+the measured kernel-NBD wedge; the manual socket-release experiments motivate
+this implementation, not qualify it. The packaged automatic path still needs
+the board re-drill; strict update settlement proof is unchanged. See
+[the escalation contract](docs/UPDATE-RECOVERY.md#detached-rauc-termination-escalation-partial).
+
 A matching slot-mirror receipt proves a past copy, not that a later failed OS
 install left it intact. The idle gate now rechecks bounded RAUC target-health
 evidence and restores a bad inactive slot even when the running package hash is

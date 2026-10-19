@@ -960,6 +960,41 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		mechanism:
 			"Queues restart after SIGTERM; stream admission awaits submission only, while OS staging requires independently proved RAUC quiescence",
 	},
+	...(
+		[
+			[
+				"updateOrchestrator.inspectRaucEscalation",
+				"[systemctl, show, -p, ActiveState, -p, MainPID, -p, InvocationID, rauc.service]",
+				"bounded-probe",
+			],
+			[
+				"updateOrchestrator.releaseRaucNbd",
+				"[/usr/libexec/ceralive/ceralive-nbd-release]",
+				"bounded-command",
+			],
+			[
+				"updateOrchestrator.escalateRaucTermination",
+				"[systemctl, kill, --signal=SIGKILL, --kill-whom=all, rauc.service]",
+				"bounded-command",
+			],
+		] as const
+	).map(([id, command, kind]) => ({
+		id,
+		command,
+		file: "modules/system/update-orchestrator/stream-abort.ts",
+		symbol: "scheduleRaucEscalation",
+		class: kind,
+		status: "enforced" as const,
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		mechanism:
+			"Detached argv-only 10-second commands; T+1 identity captured, T+3 NBD release and T+8 SIGKILL require the same deactivating PID/invocation; never settlement proof",
+	})),
 	{
 		id: "addons.runValidateCmd",
 		file: "modules/addons/manager.ts",

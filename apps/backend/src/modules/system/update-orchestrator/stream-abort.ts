@@ -25,6 +25,7 @@ const SYSTEMD_COMMAND_TIMEOUT_MS = 10_000;
 
 export const RAUC_SERVICE_UNIT = "rauc.service";
 export const RAUC_ESCALATION_FIRST_LOOK_MS = 1_000;
+export const RAUC_ESCALATION_RELEASE_MS = 3_000;
 export const RAUC_ESCALATION_GRACE_MS = 8_000;
 
 export interface RaucEscalationScheduler {
@@ -48,13 +49,13 @@ type RaucIdentity = {
 
 // One lifetime also fences replies from a replaced, already-running observation.
 let pendingEscalation: { cancel: () => void } | null = null;
+let latestEscalationRequest: symbol | null = null;
 
 function scheduleRaucEscalation(
 	run: typeof spawnWithTimeout,
 	scheduler: RaucEscalationScheduler,
-	lifetime: { cancel: () => void },
 ): void {
-	if (pendingEscalation !== lifetime) return;
+	const lifetime: { cancel: () => void } = { cancel: () => undefined };
 	const warn = (error: unknown) => {
 		logger.warn(
 			"update-orchestrator: detached RAUC termination escalation failed",
@@ -64,8 +65,13 @@ function scheduleRaucEscalation(
 		);
 	};
 	try {
+		pendingEscalation?.cancel();
+		pendingEscalation = lifetime;
 		const started = scheduler.now();
-		const look = async (remembered?: RaucIdentity): Promise<void> => {
+		const look = async (
+			remembered?: RaucIdentity,
+			releaseAttempted = false,
+		): Promise<void> => {
 			let nextLook = false;
 			try {
 				if (pendingEscalation !== lifetime) return;
@@ -100,7 +106,7 @@ function scheduleRaucEscalation(
 				if (!remembered) {
 					lifetime.cancel = scheduler.schedule(
 						() => look({ mainPid, invocationId }),
-						Math.max(0, started + RAUC_ESCALATION_GRACE_MS - scheduler.now()),
+						Math.max(0, started + RAUC_ESCALATION_RELEASE_MS - scheduler.now()),
 					);
 					nextLook = true;
 					return;
@@ -110,6 +116,26 @@ function scheduleRaucEscalation(
 					invocationId !== remembered.invocationId
 				)
 					return;
+				if (!releaseAttempted) {
+					lifetime.cancel = scheduler.schedule(
+						() => look(remembered, true),
+						Math.max(0, started + RAUC_ESCALATION_GRACE_MS - scheduler.now()),
+					);
+					nextLook = true;
+					const released = await run(
+						["/usr/libexec/ceralive/ceralive-nbd-release"],
+						{ timeoutMs: SYSTEMD_COMMAND_TIMEOUT_MS },
+					);
+					if (released.exitCode !== 0)
+						throw new OsStageError("rauc_recovery_unproven", {
+							cause: released,
+						});
+					logger.info("update-orchestrator: requested stuck RAUC NBD release", {
+						mainPid,
+						invocationId,
+					});
+					return;
+				}
 				const killed = await run(
 					[
 						"systemctl",
@@ -166,9 +192,8 @@ export async function killAndRestartRaucForStream(
 	run = spawnWithTimeout,
 	scheduler: RaucEscalationScheduler = escalationScheduler,
 ): Promise<void> {
-	pendingEscalation?.cancel();
-	const lifetime: { cancel: () => void } = { cancel: () => undefined };
-	pendingEscalation = lifetime;
+	const request = Symbol();
+	latestEscalationRequest = request;
 	const killResult = await run(
 		["systemctl", "kill", "--signal=SIGTERM", RAUC_SERVICE_UNIT],
 		{ timeoutMs: SYSTEMD_COMMAND_TIMEOUT_MS },
@@ -179,7 +204,8 @@ export async function killAndRestartRaucForStream(
 			{ exitCode: killResult.exitCode, stderr: killResult.stderr },
 		);
 	}
-	scheduleRaucEscalation(run, scheduler, lifetime);
+	if (latestEscalationRequest === request)
+		scheduleRaucEscalation(run, scheduler);
 	const restartResult = await run(
 		["systemctl", "restart", "--no-block", RAUC_SERVICE_UNIT],
 		{ timeoutMs: SYSTEMD_COMMAND_TIMEOUT_MS },

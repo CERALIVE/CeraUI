@@ -1530,8 +1530,9 @@ fixture builders inject it explicitly, without changing production lock paths.
 
 Reconciliation returns `os_stage_outcome_unknown_after_restart`, never a
 successful install. An idle daemon, a partly written inactive slot or a retained
-receipt cannot manufacture `OS_STAGED`. No blanket dm removal, forced NBD
-disconnect, lazy unmount or manual slot marking is performed. This path is
+receipt cannot manufacture `OS_STAGED`. No blanket dm removal, lazy unmount or
+manual slot marking is performed. The detached cancellation helper below may
+clear attached NBD sockets; this is not quiescence proof. This path is
 hermetically tested, including a historical captured 315-second retirement
 sequence and real temporary-file flock contention; its device drill is still
 owed. That historical timeout is not the cancellation policy of the current
@@ -1545,19 +1546,34 @@ warns; a nonzero restart warns and throws `rauc_recovery_unproven`; their spawn
 failures/timeouts still propagate. A detached, unreferenced timer reads the
 unit's `ActiveState`, `MainPID` and `InvocationID` at T+1 s after TERM returns.
 If it is `deactivating` with valid identity, a second read is scheduled for
-T+8 s from the same origin. SIGKILL of all processes in **rauc.service only**
-is submitted only if both identity fields still match and it is still
-`deactivating`. No active or newly observed replacement daemon is escalated.
-Malformed, duplicate or missing identity is not permission to kill.
+T+3 s from the same origin. Only the same PID **and** invocation still
+`deactivating` permits the packaged root-only Perl helper
+`/usr/libexec/ceralive/ceralive-nbd-release`. It opens only exact `nbd[0-9]+`
+device names, read-only and without following a final symlink, whose
+`/sys/block/nbdN/size` is a whole positive integer, and issues NBD_CLEAR_SOCK
+(`0xab04`). It reports each attempted device and fails nonzero if any ioctl
+fails; no attached devices is a successful no-op. `CERALIVE_NBD_DEV_GLOB` and
+`CERALIVE_NBD_SYS_BLOCK` exist only for private host fixtures, not deployment
+configuration. The device payload uses Debian's already-present perl-base.
 
-Repeated calls replace the pending timer and invalidate already-running reads.
-Every observation/kill has the existing ten-second command timeout; any detached
+A third read at T+8 s permits SIGKILL of all processes in **rauc.service only**
+only if the original PID and invocation still match and remain `deactivating`.
+That timer is armed before awaiting the helper, so helper failure or a slow
+reply cannot suppress the last resort. No observed active or replacement daemon
+is touched; malformed, duplicate or missing identity never permits a mutation.
+
+Repeated calls replace the pending timer and invalidate already-running reads
+only after the latest call's TERM reply. A later TERM spawn failure leaves the
+previous armed lifetime intact; an older late TERM reply cannot rearm it.
+Every observation/helper/kill has the existing ten-second command timeout; any detached
 failure is warning-only. Escalation adds **zero awaited Go Live delay**, and is
 also used by the runner/startup recovery restart effects. Those effects still
 wait for their own positive recovery proof, not the detached task's completion.
 The T+8 read is not an eight-second whole-operation or cleanup guarantee.
-Unit inspection and the subsequent unit-scoped kill are separate systemd
-requests, not an atomic conditional-kill operation.
+Unit inspection and the subsequent helper or unit-scoped kill are separate
+requests, not atomic conditional mutations. An external identity change between
+read and command remains a race; the helper enumerates all attached NBD devices,
+not per-attempt resource ownership. The recovery observer remains independent.
 
 After SIGKILL the observer may see no readable daemon during restart and refuse
 the snapshot; a surviving non-active daemon likewise cannot establish readiness.
@@ -1566,13 +1582,22 @@ resource, slot, boot-health and ownership checks permits settlement. Neither a
 queued restart nor a successful kill acknowledgement clears the Install fence.
 Install remains `busy` while the interrupted stage retires.
 
-The historical board watcher observed zero NBD/dm residue when systemd's delayed
-SIGKILL finally retired the old daemon. That is an observation, not qualification
-of this earlier explicit escalation. Host fake-clock tests prove deadlines,
-identity protection, replacement and warning-only failures. Atlas must still
-re-prove late-stage stream cancellation, active RAUC with clean NBD/dm resources
-within seconds, and subsequent accepted Install on the fixed board build. No
-unit timeout, observer predicate, NBD disconnect or dm-removal policy changes.
+Measured board journals show systemd's SIGKILL at +90 s and +270 s did **not**
+retire the installer ("Processes still around after SIGKILL"); it exited at the
+kernel NBD dead-connection timeout, about 300–315 s, leaving no NBD/dm residue.
+The Rock redrill likewise sent the product's T+8 s SIGKILL without shortening
+the wedge. Main-process-only TERM did not prevent it (one of two attempts stuck).
+One manual NBD_CLEAR_SOCK on attached nbd0 restored active RAUC and size zero
+within 12 s in each of two stuck cases. Those experiments motivate the helper;
+they do not qualify this packaged, automatically scheduled implementation.
+
+Host fake-clock tests prove deadlines, identity protection, timer replacement,
+unref and warning-only failure containment; private-file helper tests exercise
+selection and real ioctl refusal without touching host NBD devices. Atlas must
+still re-prove repeated late-stage stream cancellations, active RAUC with clean
+NBD/dm resources within about ten seconds, and a subsequent accepted Install on
+the fixed board build. Unit timeouts, strict settlement predicates and dm-removal
+policy are unchanged. SIGKILL remains a last resort, not a proven NBD-wedge fix.
 
 ## Cross-slot missing-commit adjudication [EXISTS — root-only, fixture-proven]
 

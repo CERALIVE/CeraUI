@@ -740,8 +740,9 @@ rule in the maintenance probes.
   cancellation, the captured one-job cellular grant and a synchronous receipt
   commit callback. No await separates its final token check, receipt/serial
   writes and `OS_STAGED`. Activation waits for complete producer settlement.
-  D8 cancels first and submits `systemctl restart --no-block rauc.service`;
-  submission failures propagate, but daemon retirement is not a stream wait.
+   D8 cancels first and submits `systemctl restart --no-block rauc.service`;
+   submission failures propagate, but daemon retirement is not a stream wait.
+   Detached T+1/T+3/T+8 reads fence NBD_CLEAR_SOCK and last-resort SIGKILL to the same stopping PID/invocation; neither grants settlement proof.
   Fixture/temporary-flock tests are not device qualification; see
   [`docs/UPDATE-RECOVERY.md`](../../../../docs/UPDATE-RECOVERY.md).
 

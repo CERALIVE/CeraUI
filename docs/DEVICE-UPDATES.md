@@ -501,18 +501,26 @@ throws if a phase is placed in more than one bucket.
 RAUC cancellation keeps the awaited SIGTERM → nonblocking restart submission
 unchanged. A detached escalation first reads `ActiveState`, `MainPID` and
 `InvocationID` at T+1 s after the TERM reply. Only a `deactivating` unit with a
-valid process/invocation identity gets a second read, scheduled for T+8 s from
-that same origin (not eight more seconds after the first reply). Only the same
-PID **and** invocation still `deactivating` may receive
-`systemctl kill --signal=SIGKILL --kill-whom=all rauc.service`. An active or
-replacement daemon is left alone. Repeated cancellations replace the pending
-escalation and fence already-running reads. Timers are unreferenced; every new
+valid process/invocation identity gets a second read at T+3 s from that same
+origin. Only the same PID **and** invocation still `deactivating` permits the
+packaged `ceralive-nbd-release` helper to issue NBD_CLEAR_SOCK on attached NBD
+devices. A third read at T+8 s permits
+`systemctl kill --signal=SIGKILL --kill-whom=all rauc.service` only for that same
+still-stopping identity. Helper failure warns without cancelling that final
+look. An observed active or replacement daemon is left alone. Repeated
+cancellations replace the pending escalation after the latest TERM reply and
+fence already-running reads; a later TERM spawn failure preserves the earlier
+armed lifetime. Timers are unreferenced; every new
 command uses the existing ten-second command timeout, and detached failures
 warn without changing the caller's result. The added awaited Go Live delay is
 **zero**. T+8 is the observation deadline, not a guarantee of resource cleanup
 by that instant: scheduling, command execution and kernel retirement can take
-longer. This is host-tested; the new build's earlier SIGKILL and residue-free
-NBD/dm cleanup still require the board drill described in
+longer. SIGKILL did not shorten the measured kernel-NBD wedge: recovery took
+about 300–315 s until the kernel timeout. A manual NBD_CLEAR_SOCK restored active
+RAUC and nbd0 size zero within 12 s in two of two stuck Rock cases; this is not
+qualification of the packaged automatic path. The timeline, identity fences and
+failure handling are host-tested. Automatic residue-free recovery and subsequent
+Install still require the board drill described in
 [update recovery](./UPDATE-RECOVERY.md#detached-rauc-termination-escalation-partial).
 
 A refusal from the cached table carries the orchestrator's phase and progress;
