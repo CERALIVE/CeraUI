@@ -22,11 +22,18 @@ Install post-acceptance limits: D8 Known gaps (c). Check wire reference:
   the answer untrustworthy — that is exactly how the device came to answer
   "System is up to date" when it had reached no repository at all.
 - Publish the discovery outcome so its early returns do not leave a dead button.
-- Orchestrator manual and scheduled package checks call `runSoftwareUpdateCheck()`:
+- Orchestrator manual and scheduled package checks skip the package cycle when
+  `apt_update_enabled:false`, without a failure notice or growing backoff. OS checks
+  remain independently eligible. Enabled checks call `runSoftwareUpdateCheck()`:
   refresh starts a new failure lifetime, then discovery publishes the result. Calling
   discovery alone replayed a prior captive failure alongside a fresh healthy probe.
-  Exit-zero warnings remain benign; a real failed refresh survives same-cycle
-  stale-list discovery. A skipped refresh returns `busy` without clearing evidence.
+  Exit-zero warnings remain benign; a real failed refresh settles the port without
+  running same-cycle stale-list discovery or publishing a new offer. An unexpected
+  refresh exception logs and settles the callback as `discovery_failed`, releasing
+  the refresh latch so Check answers and scheduled ticks can continue. Existing
+  offers retain the documented wire precedence above; the failure survives in
+  the port result and `lastCheckFailure`. A stream/concurrent-refresh refusal still
+  returns `busy` without clearing evidence.
 - **A refused check restores what it did not replace.** `triggerManualUpdateCheck`
   save/restores `lastUpdateFailure`/`lastUpdateSucceeded` around dispatch, so a
   skipped check no longer wipes the failed-install state the operator was reading

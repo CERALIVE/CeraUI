@@ -1095,10 +1095,19 @@ function checkForSoftwareUpdates(
 			if (callback) callback(errOrStderr, aptGetUpdateFailures);
 		},
 		() => callback("discovery_failed", aptGetUpdateFailures),
-	).finally(() => {
-		aptGetUpdating = false;
-		broadcastUpdateState();
-	});
+	)
+		.catch((error: unknown) => {
+			aptGetUpdating = false;
+			failCurrentCheck("discovery_failed");
+			logger.warn("Software update refresh failed unexpectedly", {
+				error: error instanceof Error ? error : String(error),
+			});
+			callback("discovery_failed", aptGetUpdateFailures);
+		})
+		.finally(() => {
+			aptGetUpdating = false;
+			broadcastUpdateState();
+		});
 	return true;
 }
 
@@ -1157,6 +1166,10 @@ export function runSoftwareUpdateCheck(): Promise<SoftwareUpdateError> {
 			// Exit-zero warnings are benign; discovery must retain a real refresh failure.
 			const failure =
 				refresh === true && lastCheckFailure === null ? null : refresh;
+			if (failure !== null) {
+				resolve(failure);
+				return;
+			}
 			void runUpdateDiscoveryAndReport().then(
 				(discovery) => resolve(failure ?? discovery),
 				reject,

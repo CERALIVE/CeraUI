@@ -134,3 +134,34 @@ test.each(["no-offer", "no-capability"] as const)(
 		expect(h.calls.stages).toBe(0);
 	},
 );
+
+test("Install returns busy when a stream starts during the final readiness await", async () => {
+	// Given an available offer and an initially idle stream.
+	let live = false;
+	const h = harness([], {
+		isUpdateAdmissionReady: async () => true,
+		isStreamLive: () => live,
+		isOsStageReady: async () => {
+			live = true;
+			return true;
+		},
+	});
+	// When stream ownership changes while Install awaits readiness.
+	const reply = await installUpdatesNow();
+	// Then the second fence reports busy without staging.
+	expect(reply).toEqual({ started: false, reason: "busy" });
+	expect(h.calls.stages).toBe(0);
+});
+
+test("Install keeps not_available for a readiness refusal with no stage blocker", async () => {
+	// Given no positive stage readiness but no stream or retained producer.
+	const h = harness([], {
+		isUpdateAdmissionReady: async () => true,
+		isOsStageReady: async () => false,
+	});
+	// When Install reaches readiness.
+	const reply = await installUpdatesNow();
+	// Then only actual stage blockers are reclassified busy.
+	expect(reply).toEqual({ started: false, reason: "not_available" });
+	expect(h.calls.stages).toBe(0);
+});

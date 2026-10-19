@@ -40,6 +40,7 @@ import {
 import { withServiceReservation } from "../disruptive-service-reservation.ts";
 import { getIdleStatus } from "../idle-activity.ts";
 import {
+	aptUpdatesEnabled,
 	getLastInstallUnitVerdict,
 	getUpdateState,
 	type InstallUnitVerdict,
@@ -917,7 +918,7 @@ export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdm
 // ─── package check cycle ───────────────────────────────────────────────────
 
 async function runPackageCheckCycle(): Promise<void> {
-	if (osSettlementPersistence.pending) return;
+	if (osSettlementPersistence.pending || !aptUpdatesEnabled()) return;
 	const now = deps.now();
 	dispatch({ type: "PACKAGE_CHECK_STARTED", now });
 	const error =
@@ -1528,7 +1529,7 @@ function osStageBlocked(): boolean {
 async function maybeStartOsStage(
 	bypassIdle: boolean,
 ): Promise<"busy" | undefined> {
-	if (osSettlementPersistence.pending) return;
+	if (osSettlementPersistence.pending) return "busy";
 	if (osStageBlocked()) return "busy";
 	if (!osCandidate) {
 		await runOsCheckAfterCellularGate(await deps.loadSettings());
@@ -1583,8 +1584,8 @@ async function maybeStartOsStage(
 	// Every await above can let a manual install, a stream abort or a new
 	// check run; the entry fences are only true again if re-read here, and
 	// nothing may await between this re-read and taking the stage.
+	if (osStageBlocked()) return "busy";
 	if (
-		osStageBlocked() ||
 		!controlLease.held() ||
 		osCandidate !== candidate ||
 		state.osStageRecovery !== recovery
@@ -2013,12 +2014,23 @@ async function maybeSettleRecordedOsRollback(): Promise<void> {
 	)
 		return;
 	const generation = stateGeneration;
-	const receipt = await deps.readOsReceipt();
-	if (
-		!receipt ||
-		!(await deps.quarantine.isOsVersionQuarantined(receipt.version))
-	)
+	let receipt: OsStageReceipt | undefined;
+	try {
+		receipt = await deps.readOsReceipt();
+		if (
+			!receipt ||
+			!(await deps.quarantine.isOsVersionQuarantined(receipt.version))
+		)
+			return;
+	} catch (error: unknown) {
+		logger.warn(
+			"update-orchestrator: rollback evidence unreadable, clearance deferred",
+			{
+				error: error instanceof Error ? error : String(error),
+			},
+		);
 		return;
+	}
 	if (stateGeneration !== generation) return;
 	notifyUpdate({
 		kind: "os-rollback",

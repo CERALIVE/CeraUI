@@ -448,6 +448,10 @@ producer. Install now reports existing typed `busy` while that producer, RAUC
 restart submission, a stream/lifecycle holder, shutdown or pending settlement
 withholds a new attempt; it does not misreport an absent offer. Once those
 fences settle, Install can stage the retained candidate without a new Check.
+The same busy classification is rechecked after awaited preparation, including
+settlement that became pending during capability loading. Only `osStageBlocked()`
+is mapped this way; no offer, absent capability and other readiness refusals still
+answer `not_available`.
 The host regression holds producer recovery across two presses, then releases it;
 which exact fence withheld the historical Rock presses remains unobserved.
 Readiness, CONTROL, cellular-policy and authoritative-state refusals retain
@@ -771,7 +775,13 @@ Orchestrator package checks (manual and scheduled) now run a complete refresh â†
 discovery cycle, just as the legacy Check does. This starts a new check-failure
 lifetime: after a captive portal clears, a healthy selected path and successful
 real refresh can return `idle` or `available` without restarting the backend.
-Discovery alone still cannot clear a failed refresh using stale lists. Captive
+Deliberately disabled APT (`apt_update_enabled:false`) skips the orchestrator's
+package cycle without a refusal notice or failure backoff; OS discovery remains
+independent. An unexpected refresh exception logs and settles `discovery_failed`
+instead of leaving Check and the tick chain pending. A failed refresh ends that
+cycle before discovery can publish a new stale-list offer. Its failure survives
+in the port result and `lastCheckFailure`; an already-published offer can still
+outrank it on the package wire under the existing precedence rule. Captive
 probe and APT stderr classifications, pin failover and the 15-minute failed-pair
 hold are unchanged. This recovery correction is host-regression-tested, not yet
 board-re-drilled.

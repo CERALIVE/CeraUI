@@ -11,6 +11,7 @@ import { UpdateQuarantine } from "../modules/system/update-orchestrator/quaranti
 import {
 	checkUpdatesNow,
 	getOrchestratorState,
+	installUpdatesNow,
 	resetOrchestratorRuntimeForTest,
 	runOrchestratorTick,
 	setOrchestratorRuntimeDepsForTest,
@@ -160,4 +161,41 @@ test("historical rollback cannot clear a replacement generation during the prote
 	// Then neither state nor notice from the stale generation is published.
 	expect(getOrchestratorState()).toEqual(replacement);
 	expect(notices("os-rollback", "2026.10.85")).toBe(0);
+});
+
+test("Install returns busy when rollback settlement becomes pending during capability loading", async () => {
+	// Given an Install paused before stage entry and independently failing rollback persistence.
+	const f = await fixture("2026.10.86");
+	await f.quarantine.recordOsRollback("2026.10.86", V2);
+	const entered = Promise.withResolvers<void>();
+	const release = Promise.withResolvers<void>();
+	const failure = new Error("agent.json write failed");
+	setOrchestratorRuntimeDepsForTest({
+		...f.deps,
+		loadCapabilities: async () => {
+			entered.resolve();
+			await release.promise;
+			return {
+				mode: "capable",
+				features: ["apt-all-packages", "rauc-verity-streaming"],
+			};
+		},
+		persist: (next) => {
+			if (next.phase === "idle") throw failure;
+			saveOrchestratorState(next);
+		},
+	});
+	setOrchestratorStateForTest({
+		...initialOrchestratorState(0),
+		phase: "os-available",
+	});
+	const install = installUpdatesNow();
+	await entered.promise;
+	setOrchestratorStateForTest(historical);
+	await expect(runOrchestratorTick()).rejects.toBe(failure);
+	// When Install resumes into the pending settlement fence.
+	release.resolve();
+	const reply = await install;
+	// Then pending settlement is busy, not an absent offer.
+	expect(reply).toEqual({ started: false, reason: "busy" });
 });
