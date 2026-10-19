@@ -37,6 +37,7 @@ export function fixture(
 	const deps = {
 		...defaultOrchestratorRuntimeDeps,
 		acquireOsStageControl: acquireTestOsStageControl,
+		acquireUpdateRecoveryLock: acquireTestOsStageControl,
 		startupRetryClock: { wait: () => Promise.resolve() },
 		now: () => 2_000,
 		loadCapabilities: async () => ({

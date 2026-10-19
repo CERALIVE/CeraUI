@@ -2150,6 +2150,13 @@ recovery therefore cannot reuse a pre-install good result. A state-generation
 change across the awaited read refuses its stale dispatch authority. Completion
 still uses the separate fresh RAUC read described below, never this cache.
 These are host regression proofs, not a completed exact-head board re-drill.
+`slot-sync-stale-receipt-cache.test.ts` drives backward clock movement, changed
+receipt-target identity inside the refresh bound, and a phase leaving idle and
+returning during the awaited RAUC read. Each rejects removal of its corresponding
+cache/fence rule. The shared slot-sync runtime harness injects the recovery lock,
+so sticky-failure tests do not acquire the host's update flock. A persistently good
+idle target still costs one extra `rauc status` per minute indefinitely; board
+load validation remains owed.
 Persistently failing hardware still reaches the existing sticky `SYNC_FAILED`
 outcome; this change adds no automatic failure-clear or per-tick restart loop.
 

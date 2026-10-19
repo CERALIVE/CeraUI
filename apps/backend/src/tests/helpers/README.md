@@ -14,6 +14,9 @@ fixtures that reach startup, OS admission or recovery inject
 `acquireTestOsStageControl` through `acquireOsStageControl`; runner and startup
 fixtures use `acquireControl`. The disposable lease tracks its own lifetime.
 No environment selector, preload default or production no-op chooses it.
+The slot-sync runtime helper also injects that disposable lease through
+`acquireUpdateRecoveryLock`, so failed-mirror polling never reaches the host's
+update flock. Its existing sticky-failure assertions remain unchanged.
 
 Every fixture that reaches orchestrator startup also injects an immediate
 `startupRetryClock`, including the download, recovery-resume, healthcheck and

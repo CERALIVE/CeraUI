@@ -1,0 +1,24 @@
+bun test v1.4.2 (744846f84)
+{"ts":"2026-10-19T22:34:26.395Z","level":"warn","msg":"Config file not found: relays_cache.json, using defaults"}
+
+src/tests/slot-sync-stale-receipt-cache.test.ts:
+40 |
+41 | 	// When the clock steps backwards before the next eligibility check.
+42 | 	await runOrchestratorTick();
+43 |
+44 | 	// Then fresh bad-target evidence permits one mirror, not the cached refusal.
+45 | 	expect(reads).toBe(2);
+                    ^
+error: expect(received).toBe(expected)
+
+Expected: 2
+Received: 1
+
+      at <anonymous> (apps/backend/src/tests/slot-sync-stale-receipt-cache.test.ts:45:16)
+(fail) a backward clock step re-reads cached target health before mirror dispatch [3.05ms]
+
+ 0 pass
+ 2 filtered out
+ 1 fail
+ 3 expect() calls
+Ran 1 test across 1 file. [394.00ms]
