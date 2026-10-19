@@ -2412,6 +2412,7 @@ export async function runOrchestratorTick(): Promise<void> {
 					}
 				: state.osCheck;
 		if (
+			aptUpdatesEnabled() &&
 			shouldAttemptScheduledCheck({
 				now,
 				phase: state.phase,

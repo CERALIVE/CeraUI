@@ -8,6 +8,7 @@ import {
 	checkUpdatesNow,
 	defaultOrchestratorRuntimeDeps,
 	getOrchestratorState,
+	type OrchestratorRuntimeDeps,
 	resetOrchestratorRuntimeForTest,
 	runOrchestratorTick,
 	setOrchestratorRuntimeDepsForTest,
@@ -36,12 +37,13 @@ afterEach(() => {
 	resetOrchestratorRuntimeForTest();
 });
 
-function realPackagePort() {
+function realPackagePort(overrides: Partial<OrchestratorRuntimeDeps> = {}) {
 	setOrchestratorRuntimeDepsForTest(
 		fakeDeps({
 			runPackageCheck: defaultOrchestratorRuntimeDeps.runPackageCheck,
 			getPackageInstallWireState: updates.getUpdateState,
 			isUpdateAdmissionReady: async () => true,
+			...overrides,
 		}),
 	);
 	setOrchestratorStateForTest(initialOrchestratorState(0));
@@ -71,6 +73,67 @@ test.each(["manual", "scheduled"] as const)(
 				),
 			).toBe(false);
 		});
+	},
+);
+
+test.each([
+	["scheduled", true],
+	["scheduled", false],
+	["manual", true],
+] as const)(
+	"%s OS checks remain eligible with APT disabled and packagesAuto=%s",
+	async (entry, packagesAuto) => {
+		// Given disabled APT on an OS-capable image with both clocks due.
+		await pinned([sample("eth0", "ethernet", 4)], ["apt-all-packages"]);
+		setup.apt_update_enabled = false;
+		let now = 1_000_000;
+		let osChecks = 0;
+		realPackagePort({
+			now: () => now,
+			loadCapabilities: async () => ({
+				mode: "capable",
+				features: ["apt-all-packages", "rauc-verity-streaming"],
+			}),
+			loadSettings: async () => ({
+				packagesAuto,
+				systemAuto: true,
+				schedule: { mode: "any-idle", start: "03:00", end: "05:00" },
+				channel: "stable",
+				allowPackagesOverCellular: true,
+				allowSystemOverCellular: true,
+			}),
+			checkOsManifest: async () => {
+				osChecks++;
+				return {
+					available: false,
+					rateLimited: false,
+					failed: false,
+					reason: "",
+				};
+			},
+		});
+		// When a manual Check runs, or 96 scheduled ticks span 48 simulated hours.
+		await withDeviceType("real", async () => {
+			if (entry === "manual") {
+				expect(await checkUpdatesNow()).toEqual({ started: true });
+			} else {
+				for (let tick = 0; tick < 96; tick++) {
+					await runOrchestratorTick();
+					now += 30 * 60_000;
+				}
+			}
+		});
+		// Then OS discovery keeps its cadence without APT commands or package failures.
+		expect(osChecks).toBe(entry === "manual" ? 1 : 4);
+		expect(t.commands).toEqual([]);
+		expect(getOrchestratorState().packageCheck).toEqual(
+			initialOrchestratorState(0).packageCheck,
+		);
+		expect(
+			getPersistentNotifications(true).show.some((n) =>
+				n.name.startsWith("update:refused:packages:"),
+			),
+		).toBe(false);
 	},
 );
 

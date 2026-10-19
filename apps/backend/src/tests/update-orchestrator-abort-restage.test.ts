@@ -165,3 +165,29 @@ test("Install keeps not_available for a readiness refusal with no stage blocker"
 	expect(reply).toEqual({ started: false, reason: "not_available" });
 	expect(h.calls.stages).toBe(0);
 });
+
+test("Install keeps not_available when CONTROL is lost during the persisted-state read", async () => {
+	// Given an available OS offer and a lease that is initially held.
+	let held = true;
+	let persistedReads = 0;
+	const h = harness([], {
+		isUpdateAdmissionReady: async () => true,
+		acquireOsStageControl: async () => ({
+			held: () => held,
+			[Symbol.asyncDispose]: async () => {
+				held = false;
+			},
+		}),
+		readPersistedState: async () => {
+			persistedReads++;
+			held = false;
+			return null;
+		},
+	});
+	// When Install loses CONTROL across its persisted-state await.
+	const reply = await installUpdatesNow();
+	// Then the non-blocker refusal remains not_available and no stage starts.
+	expect(persistedReads).toBe(1);
+	expect(reply).toEqual({ started: false, reason: "not_available" });
+	expect(h.calls.stages).toBe(0);
+});
