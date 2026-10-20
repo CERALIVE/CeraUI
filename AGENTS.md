@@ -33,6 +33,8 @@ docs/ — engineering contracts
 
 Run from the CeraUI checkout root:
 
+Use exact Bun 1.4.3 from `.bun-version`, `packageManager`, `mise.toml` and CI.
+
 ```bash
 bun install --frozen-lockfile
 bun run lint

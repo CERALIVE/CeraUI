@@ -18,7 +18,7 @@ documentation hat. Reference the root row here; let todo 49 write it there.
 | Package | Version |
 |---------|---------|
 | `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.32 — EXACT pin, see below |
-| Bun pin (`.bun-version`) | 1.4.2 — and so are `package.json` `packageManager`, every workflow's `bun-version`, and `scripts/tsc.mjs`'s resolution note. **`mise.toml` is the one surface still reading `1.4.0`**, recorded here rather than quietly bumped: `oven-sh/setup-bun` reads `packageManager`, so CI is on the canon regardless, and only a developer whose shell resolves Bun through `mise` gets the older runtime. It is a residual from the workspace-wide Bun canon sweep, whose verification grep matched `bun-version:` / `bun@` / `bun:` / a bare `1.4.2` line but not `mise.toml`'s `bun = "1.4.0"` form — the blind spot is worth knowing before trusting that grep again. |
+| Bun pin (`.bun-version`) | 1.4.3 — exact in `package.json` `packageManager`, `mise.toml` and every workflow's `bun-version`. The 2026-10-14 upgrade also corrects the residual `mise.toml` 1.4.0 pin; `@types/bun` follows 1.4.3 with each package's existing range style. Historical measurements below retain their original runtime versions. |
 | `svelte` | 5.56.10 |
 | `vitest` | 5.0.0 — EXACT stable pin (see the note below the table) |
 | `vite` | 8.2.2 |
@@ -103,7 +103,7 @@ documented operation genuinely exceeds the suite-wide budget.
 The same flip reaches `publish-release.yml`'s `frontend-tests` job for free, because it calls the
 same `bun run --filter frontend test` script — and that job never had a `setup-node` step, so
 before the flip it was running Vitest on whatever Node the runner shipped. It is now pinned to
-Bun 1.4.2 like every other command in it. That job's own step ORDER is a separate, documented
+Bun 1.4.3 like every other command in it. That job's own step ORDER is a separate, documented
 contract (vitest must stay immediately after `bun install`) and is untouched.
 
 **oRPC is pinned EXACT on a 2.0 beta.** `^2.0.0-beta.32` would range forward across betas and into stable
@@ -142,4 +142,3 @@ invoking package's dependency graph. `bun tsc` remains banned: only the wrapper
 guarantees package-local compiler selection (oven-sh/bun#37152).
 
 Fast-reload development loop (dev-sync / dev-push): [`image-building-pipeline/v2/docs/fast-reload.md`](https://github.com/CERALIVE/image-building-pipeline/blob/master/docs/fast-reload.md)
-
