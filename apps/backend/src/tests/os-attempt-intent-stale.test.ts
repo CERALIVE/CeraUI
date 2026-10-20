@@ -42,6 +42,7 @@ for (const state of ["cleared", "superseded"] as const) {
 	test(`startup retires stale launching intent when its record is ${state} without restoring baseline`, async () => {
 		// Given durable launching authority and an independently advanced disk record.
 		const f = intentCrashFixture("launching");
+		f.deps.readPackageAttempt = async () => undefined;
 		fixtures.push(f);
 		const current =
 			state === "cleared"
@@ -66,7 +67,7 @@ for (const state of ["cleared", "superseded"] as const) {
 
 test("manual Install retires a stale launching intent and publishes the new attempt in the same admission", async () => {
 	// Given a real discovered offer and a stale intent from another baseline.
-	const f = runtimeFixture();
+	const f = runtimeFixture({ readPackageAttempt: async () => undefined });
 	fixtures.push(f);
 	setOrchestratorRuntimeDepsForTest(f.deps);
 	await checkUpdatesNow();
@@ -101,6 +102,7 @@ for (const barrier of [
 	test(`stale launching intent remains closed with ${barrier} ownership`, async () => {
 		// Given a stale intent over a cleared record, but no conclusive ownership absence.
 		const f = intentCrashFixture("launching");
+		f.deps.readPackageAttempt = async () => undefined;
 		fixtures.push(f);
 		saveOrchestratorState(released(f.intent), f.file);
 		const deps = { ...f.deps };

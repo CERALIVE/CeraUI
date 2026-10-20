@@ -176,6 +176,12 @@ five seconds under amplified CPU contention even after bundling. Readiness moves
 that preparation outside the unchanged per-test hang detector; a blocked FIFO
 reader still fails. This is test scheduling evidence, not a product latency bound.
 
+OS-only stale-intent fixtures explicitly supply absent package-attempt provenance
+through the existing runtime dependency port. Overriding OS slot reads alone does
+not isolate the default package reader, which closes over real RAUC inspection.
+Unknown package provenance remains unknown; OS ownership and admission assertions
+still run against the real private intent and agent files.
+
 The serial, receipt and quarantine policy-reader matrix likewise awaits real
 child completion without the two-second startup kill timer.
 Genuine absence remains the only accepted default: separate negative controls
