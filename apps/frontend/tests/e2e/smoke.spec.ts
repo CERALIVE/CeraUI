@@ -10,6 +10,7 @@ test.describe('smoke', () => {
 		await shell.gotoAuthed();
 
 		await shell.assertAuthedShell();
+		await expect(page).toHaveTitle('CeraUI for CeraLive');
 		await expect(shell.header.getByTestId('brand-logo')).toBeVisible();
 		// First header control (theme or locale toggle) is reachable by role.
 		await expect(shell.header.getByRole('button').first()).toBeVisible();

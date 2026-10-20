@@ -7,6 +7,7 @@ import { persistPlugin } from "svelte-persistent-runes/plugins";
 import { defineConfig, loadEnv, type ProxyOptions } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
+import { BUILD_BRAND } from "./brand.config.ts";
 import { generateUniqueVersion, pwaConfig } from "./pwa.config.ts";
 import {
 	devOnlyI18nNamespacePlugin,
@@ -46,14 +47,6 @@ const SPA_MAP_DIR = path.resolve(
 	"../../dist",
 	SPA_SOURCEMAP_OUT_DIR,
 );
-
-// Brand configuration (CeraLive-only)
-const BRAND_CONFIG = {
-	siteName: "CeraUI for CERALIVE©",
-	description:
-		"A modern PWA for CERALIVE streaming encoder management and configuration",
-	deviceName: "CERALIVE",
-};
 
 // DEV-SYNC power-user mode (Task 14): env-gated proxy to a remote-device backend.
 // Exact WS paths prevent the CI worker cookie from becoming a root proxy.
@@ -195,7 +188,11 @@ export default defineConfig(({ mode }) => {
 		],
 		define: {
 			__APP_VERSION__: JSON.stringify(VERSION),
-			__BRAND_CONFIG__: JSON.stringify(BRAND_CONFIG),
+			__BRAND_CONFIG__: JSON.stringify({
+				siteName: BUILD_BRAND.siteName,
+				description: BUILD_BRAND.description,
+				deviceName: BUILD_BRAND.deviceName,
+			}),
 		},
 		publicDir: "./src/assets",
 		build: {

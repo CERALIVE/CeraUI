@@ -9,9 +9,27 @@ The branding is configured in the following files:
 | File | Purpose |
 |------|---------|
 | `apps/frontend/src/lib/config/branding.ts` | Frontend brand constants |
+| `apps/frontend/brand.config.ts` | Shared Vite, Vitest and PWA build-time strings; regression-tested against runtime branding |
 | `apps/frontend/vite.config.ts` | Build-time brand injection |
 | `apps/frontend/pwa.config.ts` | PWA manifest branding |
 | `packages/i18n/src/branding.ts` | i18n brand placeholders |
+
+### Name and casing
+
+The product name is "CeraUI for CeraLive", with no copyright symbol. The company
+name is "CeraLive". Display text never says "CERALIVE".
+
+Identity strings keep their spelling: the hotspot SSID prefix `CERALIVE_`, the
+revision wire key `'CERALIVE image'`, the `BrandName` literals and
+`CURRENT_BRAND` / `getCurrentBrand`, `VITE_BRAND=CERALIVE`, `CERALIVE_*`
+environment variables and `github.com/CERALIVE/...` URLs. Legacy tarball
+metadata in `scripts/build/build-ceraui-system.sh` is also unchanged. These
+identifiers and addresses are not display text.
+
+The pre-boot loading and offline screens [EXISTS] use the small light/dark
+marks and literal uppercase sRGB conversions of the Ground Control tokens.
+They use the system font stack because the app's fonts and CSS have not loaded.
+The asset-free JavaScript failure screen remains independent of the marks.
 
 ## Build Scripts
 
@@ -72,7 +90,7 @@ description: brandTranslation("CeraUI needs an internet connection to manage you
 |-------------|-------|
 | `{{deviceName}}` | CeraLive |
 | `{{deviceNameLower}}` | ceralive |
-| `{{siteName}}` | CeraUI for CeraLive© |
+| `{{siteName}}` | CeraUI for CeraLive |
 | `{{cloudService}}` | CeraLive Cloud |
 | `{{logName}}` | CeraLive Log |
 | `{{organizationName}}` | CeraLive |
@@ -87,7 +105,7 @@ import { BRAND_CONFIG, deviceName, siteName } from "$lib/config/branding";
 // Use in components
 console.log(BRAND_CONFIG.deviceName); // "CeraLive"
 console.log(deviceName);              // "CeraLive"
-console.log(siteName);                // "CeraUI for CeraLive©"
+console.log(siteName);                // "CeraUI for CeraLive"
 ```
 
 ## File Structure

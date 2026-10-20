@@ -10,7 +10,7 @@ export const CURRENT_BRAND: BrandName = "CERALIVE";
 export interface BrandConfig {
 	/** Device/hardware name */
 	deviceName: string;
-	/** Full site/app name with copyright */
+	/** Full site/app name */
 	siteName: string;
 	/** Short app name */
 	appName: string;
@@ -28,7 +28,7 @@ export interface BrandConfig {
 
 export const BRAND_CONFIG: BrandConfig = {
 	deviceName: "CeraLive",
-	siteName: "CeraUI for CeraLive©",
+	siteName: "CeraUI for CeraLive",
 	appName: "CeraUI",
 	description:
 		"A modern UI for CeraLive streaming encoder management and configuration",

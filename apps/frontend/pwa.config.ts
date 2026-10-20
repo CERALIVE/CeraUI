@@ -2,12 +2,7 @@ import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import type { VitePWAOptions } from "vite-plugin-pwa";
 
-// Brand configuration (CeraLive-only)
-const BRAND_CONFIG = {
-	name: "CeraUI for CERALIVE©",
-	description:
-		"A modern UI for CERALIVE streaming encoder management and configuration",
-};
+import { BUILD_BRAND } from "./brand.config.ts";
 
 // Generate version from git commit hash + deterministic build ID
 export function generateUniqueVersion(): string {
@@ -108,9 +103,9 @@ export const pwaConfig: VitePWAOptions = {
 		"brand/*.svg",
 	],
 	manifest: {
-		name: BRAND_CONFIG.name,
-		short_name: "CeraUI",
-		description: BRAND_CONFIG.description,
+		name: BUILD_BRAND.siteName,
+		short_name: BUILD_BRAND.appName,
+		description: BUILD_BRAND.description,
 		start_url: "/",
 		scope: "/",
 		display: "standalone",

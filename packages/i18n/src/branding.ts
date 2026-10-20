@@ -19,7 +19,7 @@ export interface BrandStrings {
 const brandStrings: BrandStrings = {
 	deviceName: "CeraLive",
 	deviceNameLower: "ceralive",
-	siteName: "CeraUI for CeraLive©",
+	siteName: "CeraUI for CeraLive",
 	cloudService: "CeraLive Cloud",
 	logName: "CeraLive Log",
 	organizationName: "CeraLive",

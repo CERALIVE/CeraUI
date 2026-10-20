@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
     <!-- Primary Meta Tags -->
-    <title id="page-title">CeraUI for CERALIVE©</title>
-    <meta name="title" content="CeraUI for CERALIVE©" id="meta-title" />
-    <meta name="description" content="A modern PWA for CERALIVE streaming encoder management and configuration" id="meta-description" />
+    <title id="page-title">CeraUI for CeraLive</title>
+    <meta name="title" content="CeraUI for CeraLive" id="meta-title" />
+    <meta name="description" content="A modern UI for CeraLive streaming encoder management and configuration" id="meta-description" />
 
     <!-- Favicon and Icons -->
     <link rel="icon" type="image/png" href="favicon-96x96.png" sizes="96x96" />
@@ -40,7 +40,7 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: #f5f7fa;
+        background: #F7F9F7;
         z-index: 9999;
         justify-content: center;
         align-items: center;
@@ -49,16 +49,16 @@
 
       @media (prefers-color-scheme: dark) {
         #pwa-preloader {
-          background: #0b0f1a;
-          color: #ebeef3;
+          background: #080D09;
+          color: #EBF0EC;
         }
       }
 
       .pwa-spinner {
         width: 32px;
         height: 32px;
-        border: 4px solid #dee2ea;
-        border-top: 4px solid #11C4D4;
+        border: 4px solid #D5D9D5;
+        border-top: 4px solid #295600;
         border-radius: 50%;
         animation: pwa-spin 1s linear infinite;
         margin-bottom: 16px;
@@ -66,8 +66,8 @@
 
       @media (prefers-color-scheme: dark) {
         .pwa-spinner {
-          border-color: #1a2030;
-          border-top-color: #1FE7F9;
+          border-color: #252B26;
+          border-top-color: #ABE841;
         }
       }
 
@@ -90,15 +90,15 @@
       }
 
       .pwa-text {
-        font-family: 'Plus Jakarta Sans Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
         font-size: 14px;
-        color: #6b7280;
+        color: #465048;
         text-align: center;
       }
 
       @media (prefers-color-scheme: dark) {
         .pwa-text {
-          color: #94a0b4;
+          color: #808981;
         }
       }
 
@@ -109,17 +109,17 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: #f5f7fa;
+        background: #F7F9F7;
         z-index: 10000;
         justify-content: center;
         align-items: center;
         flex-direction: column;
-        font-family: 'Plus Jakarta Sans Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
       }
 
       @media (prefers-color-scheme: dark) {
         #offline-fallback {
-          background: #0b0f1a;
+          background: #080D09;
         }
       }
 
@@ -131,8 +131,8 @@
       .offline-spinner {
         width: 48px;
         height: 48px;
-        border: 4px solid #dee2ea;
-        border-top: 4px solid #11C4D4;
+        border: 4px solid #D5D9D5;
+        border-top: 4px solid #295600;
         border-radius: 50%;
         animation: spin 1s linear infinite;
         margin: 0 auto 20px;
@@ -140,8 +140,8 @@
 
       @media (prefers-color-scheme: dark) {
         .offline-spinner {
-          border-color: #1a2030;
-          border-top-color: #1FE7F9;
+          border-color: #252B26;
+          border-top-color: #ABE841;
         }
       }
 
@@ -149,46 +149,61 @@
         font-size: 24px;
         font-weight: 600;
         margin: 0 0 10px;
-        color: #111827;
+        color: #070D08;
       }
 
       @media (prefers-color-scheme: dark) {
         .offline-title {
-          color: #ebeef3;
+          color: #EBF0EC;
         }
       }
 
       .offline-text {
-        color: #6b7280;
+        color: #465048;
         margin: 0 0 20px;
       }
 
       @media (prefers-color-scheme: dark) {
         .offline-text {
-          color: #94a0b4;
+          color: #808981;
         }
       }
 
       .offline-button {
-        background: #11C4D4;
-        color: white;
+        background: #295600;
+        color: #FAF8F8;
         border: none;
         padding: 12px 24px;
         border-radius: 8px;
         font-size: 16px;
         font-weight: 500;
         cursor: pointer;
-        transition: background 0.15s;
+        transition: opacity 0.15s;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .offline-button {
+          background: #ABE841;
+          color: #010502;
+        }
       }
 
       .offline-button:hover {
-        background: #0EA8B8;
+        opacity: 0.9;
+      }
+
+      .brand-mark {
+        width: 48px;
+        height: 48px;
+        margin: 0 auto 16px;
+        display: block;
       }
     </style>
   </head>
   <body>
     <!-- PWA Preloader (shown immediately for PWA launches) -->
     <div id="pwa-preloader">
+      <picture><source srcset="/brand/ceralive-mark-small-dark.svg" media="(prefers-color-scheme: dark)" /><img class="brand-mark" src="/brand/ceralive-mark-small-light.svg" alt="" width="48" height="48" /></picture>
       <div class="pwa-spinner"></div>
       <div class="pwa-text">Loading CeraUI...</div>
     </div>
@@ -196,9 +211,10 @@
     <!-- Immediate fallback for PWA offline launches -->
     <div id="offline-fallback">
       <div class="offline-content">
+        <picture><source srcset="/brand/ceralive-mark-small-dark.svg" media="(prefers-color-scheme: dark)" /><img class="brand-mark" src="/brand/ceralive-mark-small-light.svg" alt="" width="48" height="48" /></picture>
         <div class="offline-spinner"></div>
         <h1 class="offline-title">You're Offline</h1>
-        <p class="offline-text" id="offline-description">CeraUI needs an internet connection to manage your CERALIVE device.</p>
+        <p class="offline-text" id="offline-description">CeraUI needs an internet connection to manage your CeraLive device.</p>
         <button onclick="window.location.reload()" class="offline-button">Try Again</button>
       </div>
     </div>
@@ -398,9 +414,9 @@
       (function() {
         // Get brand configuration from Vite build-time variables
         const brandConfig = typeof __BRAND_CONFIG__ !== 'undefined' ? __BRAND_CONFIG__ : {
-          siteName: "CeraUI for CERALIVE©",
-          description: "A modern PWA for CERALIVE streaming encoder management and configuration",
-          deviceName: "CERALIVE"
+          siteName: "CeraUI for CeraLive",
+          description: "A modern UI for CeraLive streaming encoder management and configuration",
+          deviceName: "CeraLive"
         };
 
         // Update page title
