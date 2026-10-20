@@ -237,6 +237,12 @@ calling that host command spends the test guard on unrelated device observation.
 The real intent/agent files, fsync fault, restart refusal and repaired admission
 remain asserted with the unchanged test timeout.
 
+The scripted USB-transition suite injects its synthetic device's presence into
+mutation-block refresh as well as the transition engine. Failed transactions
+still read and retain the real private journal, but do not enumerate the host's
+USB bus through `udevadm`. The existing 5-second test guards and typed failure,
+postcondition and rollback assertions are unchanged.
+
 The held-deadline acquisition fixture spends its original 10,000 ms injected
 budget at the first polling sleep after a real inspection and failed ownership
 observation. It asserts that exact expenditure and one polling sleep instead of
