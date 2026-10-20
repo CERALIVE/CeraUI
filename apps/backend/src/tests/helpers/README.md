@@ -76,6 +76,13 @@ rearm an exhausted burst. The cellular-detail fixture uses `withMemoryPersistenc
 for the same real private intent-store port as the other memory-backed OS fixtures;
 its installed/staged assertions and synthetic observation boundaries are unchanged.
 
+The shared OS-unlaunched runtime fixture explicitly supplies unavailable package
+attempt provenance. Overriding its OS boot/slot ports does not replace the default
+package reader's closed-over real RAUC calls; leaving that port implicit made
+startup retirement retries enumerate host slots repeatedly under contention.
+Package-specific scenarios can still override the port. Real private intent/state
+files, unlink/fsync faults, startup cadence and unchanged hang guards remain tested.
+
 ## Responsibility groups
 
 | Test family | Fixture modules | Coverage in sibling test files |
