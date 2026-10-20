@@ -2,12 +2,7 @@ import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import type { VitePWAOptions } from "vite-plugin-pwa";
 
-// Brand configuration (CeraLive-only)
-const BRAND_CONFIG = {
-	name: "CeraUI for CERALIVE©",
-	description:
-		"A modern UI for CERALIVE streaming encoder management and configuration",
-};
+import { BUILD_BRAND } from "./brand.config.ts";
 
 // Generate version from git commit hash + deterministic build ID
 export function generateUniqueVersion(): string {
@@ -100,29 +95,47 @@ export const pwaConfig: VitePWAOptions = {
 		],
 	},
 	// Static assets to include in precache (icons and favicons)
-	includeAssets: ["favicon.ico", "apple-touch-icon.png", "favicon-96x96.png"],
+	includeAssets: [
+		"favicon.ico",
+		"favicon.svg",
+		"apple-touch-icon.png",
+		"favicon-96x96.png",
+		"brand/*.svg",
+	],
 	manifest: {
-		name: BRAND_CONFIG.name,
-		short_name: "CeraUI",
-		description: BRAND_CONFIG.description,
+		name: BUILD_BRAND.siteName,
+		short_name: BUILD_BRAND.appName,
+		description: BUILD_BRAND.description,
 		start_url: "/",
 		scope: "/",
 		display: "standalone",
-		theme_color: "#1c1e1c",
-		background_color: "#1c1e1c",
+		theme_color: "#080D09",
+		background_color: "#080D09",
 		orientation: "portrait-primary",
 		icons: [
 			{
 				src: "web-app-manifest-192x192.png",
 				sizes: "192x192",
 				type: "image/png",
-				purpose: "any maskable",
+				purpose: "any",
 			},
 			{
 				src: "web-app-manifest-512x512.png",
 				sizes: "512x512",
 				type: "image/png",
-				purpose: "any maskable",
+				purpose: "any",
+			},
+			{
+				src: "web-app-manifest-maskable-192x192.png",
+				sizes: "192x192",
+				type: "image/png",
+				purpose: "maskable",
+			},
+			{
+				src: "web-app-manifest-maskable-512x512.png",
+				sizes: "512x512",
+				type: "image/png",
+				purpose: "maskable",
 			},
 		],
 		categories: ["multimedia", "utilities"],

@@ -219,6 +219,11 @@ that captured it retired with the runtime it rendered through) and it is not
 hand-editable copy either — a deliberate translation change updates it in its own
 separately-reviewed PR, together with the catalog string it re-freezes.
 
+2026-10-20 — Recorded exception (brand-assets-rollout, root AGENTS.md): the
+casing-only re-freeze of notifications.ceraliveUpdateAvailable landed as a
+separately reviewed commit inside that effort's single CeraUI PR; regeneration
+stayed forbidden.
+
 ---
 
 ## Tests

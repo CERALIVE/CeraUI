@@ -1009,7 +1009,7 @@
 	"notifications.appUpdated": "App Updated",
 	"notifications.appUpdatedDescription": "Updated to version <version>",
 	"notifications.bootconfigUpdating": "Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
-	"notifications.ceraliveUpdateAvailable": "يتوفر تحديث CERALIVE. افتح الإعدادات ← تحديثات البرامج لتثبيته.",
+	"notifications.ceraliveUpdateAvailable": "يتوفر تحديث CeraLive. افتح الإعدادات ← تحديثات البرامج لتثبيته.",
 	"notifications.ceraliveUpdateFailed": "فشل تحديث البرنامج. افتح الإعدادات ← تحديثات البرامج لمعرفة السبب وإعادة المحاولة.",
 	"notifications.connectionLost": "Connection lost",
 	"notifications.connectionRecovered": "Connection restored",

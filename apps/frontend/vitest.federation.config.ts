@@ -3,6 +3,8 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { persistPlugin } from 'svelte-persistent-runes/plugins';
 import { defineConfig } from 'vitest/config';
 
+import { BUILD_BRAND } from './brand.config.ts';
+
 // Federation ABI harness — a SEPARATE config because its subject is the built
 // output under dist/federation, not the source tree the default suite compiles.
 // Keeping it out of vitest.config.ts's `include` is what stops `bun run test`
@@ -12,9 +14,9 @@ export default defineConfig({
 	define: {
 		__APP_VERSION__: JSON.stringify('0.0.0-test'),
 		__BRAND_CONFIG__: JSON.stringify({
-			siteName: 'CeraUI for CERALIVE©',
-			description: 'test',
-			deviceName: 'CERALIVE',
+			siteName: BUILD_BRAND.siteName,
+			description: BUILD_BRAND.description,
+			deviceName: BUILD_BRAND.deviceName,
 		}),
 	},
 	test: {

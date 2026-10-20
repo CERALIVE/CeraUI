@@ -1890,7 +1890,7 @@
 	"notifications.captureStandby": "فُقدت جميع الكاميرات — البث في وضع الاستعداد ويُستأنف تلقائيًا عند عودة أي كاميرا.",
 	"notifications.captureStandbyLong": "البث في وضع الاستعداد منذ أكثر من 10 دقائق. سيُستأنف عند عودة كاميرا.",
 	"notifications.bootconfigUpdating": "Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
-	"notifications.ceraliveUpdateAvailable": "يتوفر تحديث CERALIVE. افتح الإعدادات ← تحديثات البرامج لتثبيته.",
+	"notifications.ceraliveUpdateAvailable": "يتوفر تحديث CeraLive. افتح الإعدادات ← تحديثات البرامج لتثبيته.",
 	"notifications.ceraliveUpdateFailed": "فشل تحديث البرنامج. افتح الإعدادات ← تحديثات البرامج لمعرفة السبب وإعادة المحاولة.",
 	"notifications.connectionLost": "Connection lost",
 	"notifications.connectionRecovered": "Connection restored",

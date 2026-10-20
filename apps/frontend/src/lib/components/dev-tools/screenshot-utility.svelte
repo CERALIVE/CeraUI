@@ -174,7 +174,7 @@ async function captureScreenshotWithTheme(
 	}
 
 	// Theme-aware background color
-	const backgroundColor = theme === 'dark' ? '#0b0f1a' : '#f5f7fa';
+	const backgroundColor = theme === 'dark' ? '#080D09' : '#F7F9F7';
 
 	// Enhanced quality settings
 	const options = {

@@ -23,6 +23,12 @@ import { gzipSync } from 'node:zlib';
 const KIB = 1024;
 
 const SPA_BASELINE = {
+	// ACCEPTED, TRACKED REGRESSION — artwork-only rebaseline on 2026-10-20.
+	// v2026.10.0 replaces 4,192 B of precached artwork with 62,942 B:
+	// exactly +58,750 B, not the build's full precache delta. Preserve the
+	// displaced 1,354,486 B measurement below and the 16 KiB absolute headroom.
+	// TD-brand-assets-precache-size stays open. Total SPA, route, chunk,
+	// federation and Workbox per-file ceilings are unchanged.
 	// ACCEPTED, TRACKED REGRESSION — re-derived 2026-10-13 for the integrated
 	// update-system operator surface. Ten-locale refusal/recovery copy retains
 	// Paraglide's per-message x 10-locale expansion (TD-spa-i18n-catalog-size,
@@ -69,9 +75,8 @@ const SPA_BASELINE = {
 	totalGzip: 1_213_588,
 	initialRouteGzip: 497_196,
 	largestChunkGzip: 461_577,
-	// Keep the tighter experience-stability precache baseline on integration;
-	// the parallel media-island measurement is retained below, not added to it.
-	precacheGzip: 1_354_486,
+	// The previous baseline plus only the measured canonical artwork increment.
+	precacheGzip: 1_413_236,
 };
 
 // The aggregate's binding constraint. A ratio applied to a freshly re-derived
@@ -131,6 +136,11 @@ const SPA_DISPLACED_BASELINES = {
 			bytes: 1_329_348,
 			label: 'pre-integrated-update-system',
 			debt: 'TD-spa-i18n-catalog-size',
+		},
+		{
+			bytes: 1_354_486,
+			label: 'pre-brand-assets-v2026.10.0',
+			debt: 'TD-brand-assets-precache-size',
 		},
 	],
 };

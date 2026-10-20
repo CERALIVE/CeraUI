@@ -5,6 +5,7 @@ import { persistPlugin } from 'svelte-persistent-runes/plugins';
 import { defineConfig } from 'vitest/config';
 
 import { classifyVitestFiles } from '../../scripts/ci/vitest-classify.mjs';
+import { BUILD_BRAND } from './brand.config.ts';
 
 const { pure, components } = classifyVitestFiles();
 const availableCpus = availableParallelism();
@@ -24,9 +25,9 @@ export default defineConfig({
 	define: {
 		__APP_VERSION__: JSON.stringify('0.0.0-test'),
 		__BRAND_CONFIG__: JSON.stringify({
-			siteName: 'CeraUI for CERALIVE©',
-			description: 'test',
-			deviceName: 'CERALIVE',
+			siteName: BUILD_BRAND.siteName,
+			description: BUILD_BRAND.description,
+			deviceName: BUILD_BRAND.deviceName,
 		}),
 	},
 	test: {

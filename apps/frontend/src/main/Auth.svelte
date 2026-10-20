@@ -9,6 +9,7 @@ import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
 import ModeToggle from '$lib/components/custom/mode-toggle.svelte';
+import Logo from '$lib/components/icons/Logo.svelte';
 import { deviceName, siteName } from '$lib/config';
 import { getNotifications, getStatus } from '$lib/rpc/subscriptions.svelte';
 import {
@@ -175,20 +176,7 @@ async function onSubmit(event: SubmitEvent) {
 	>
 		<!-- Brand mark -->
 		<div class="flex flex-col items-center gap-3 text-center">
-			<svg
-				viewBox="0 0 24 24"
-				class="text-primary size-9"
-				aria-hidden="true"
-				fill="none"
-			>
-				<path
-					d="M12 2 21 7v10l-9 5-9-5V7z"
-					stroke="currentColor"
-					stroke-width="1.75"
-					stroke-linejoin="round"
-				/>
-				<circle cx="12" cy="12" r="2.75" fill="currentColor" />
-			</svg>
+			<Logo class="size-9" />
 			<div class="space-y-1">
 				<p class="text-foreground text-xl font-semibold tracking-tight">{deviceName}</p>
 				<p class="text-muted-foreground text-sm text-balance">

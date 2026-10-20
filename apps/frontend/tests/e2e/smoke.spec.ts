@@ -10,6 +10,8 @@ test.describe('smoke', () => {
 		await shell.gotoAuthed();
 
 		await shell.assertAuthedShell();
+		await expect(page).toHaveTitle('CeraUI for CeraLive');
+		await expect(shell.header.getByTestId('brand-logo')).toBeVisible();
 		// First header control (theme or locale toggle) is reachable by role.
 		await expect(shell.header.getByRole('button').first()).toBeVisible();
 
@@ -40,6 +42,12 @@ test.describe('smoke', () => {
 		const shell = new ShellPage(page);
 		await shell.gotoAuthed();
 
+		await shell.setTheme('light');
+		await page.reload();
+		await shell.gotoAuthed();
+		const brandImage = shell.header.getByTestId('brand-logo').locator('img:visible');
+		await expect(brandImage).toHaveAttribute('src', /ceralive-mark-small-light\.svg$/);
+
 		await shell.setTheme('dark');
 		await shell.setLocale('de');
 		await page.reload();
@@ -53,6 +61,19 @@ test.describe('smoke', () => {
 
 		// Re-auth after reload, then confirm navigation still works.
 		await shell.gotoAuthed();
+		await expect(brandImage).toHaveAttribute('src', /ceralive-mark-small-dark\.svg$/);
+		await page.evaluate(() => document.documentElement.setAttribute('data-display', 'eink'));
+		await expect(brandImage).toHaveAttribute('src', /ceralive-mark-small-mono-ink\.svg$/);
 		await navigateTo(page, 'network');
+	});
+
+	test('brand files are served', async ({ page }) => {
+		const ico = await page.request.get('/favicon.ico');
+		expect(ico.status()).toBe(200);
+		const svg = await page.request.get('/favicon.svg');
+		expect(svg.status()).toBe(200);
+		expect(await svg.text()).toContain('<title');
+		const mark = await page.request.get('/brand/ceralive-mark-small-dark.svg');
+		expect(mark.status()).toBe(200);
 	});
 });

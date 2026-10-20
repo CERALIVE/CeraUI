@@ -59,7 +59,7 @@ const rows = $derived(
 				{ label: 'SRTLA', value: revisions.srtla },
 				{ label: 'Bun Runtime', value: revisions.bun },
 				{ label: 'Kernel', value: revisions.kernel },
-				{ label: 'CERALIVE Image', value: revisions['CERALIVE image'] },
+				{ label: 'CeraLive image', value: revisions['CERALIVE image'] },
 			].flatMap(({ label, value }) =>
 				value ? [{ label, ...splitVersionValue(value) }] : [],
 			)
