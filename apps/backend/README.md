@@ -171,6 +171,11 @@ The serial, receipt and quarantine policy-reader matrix likewise awaits real
 child completion through that helper without the two-second startup kill timer.
 Genuine absence remains the only accepted default: separate negative controls
 must reject both invalid-presence-as-absence and absence-as-unknown regressions.
+The matrix bundles that real reader graph once before registering cases, then
+executes it in a fresh child for each private fixture. Contended source loading
+could consume the unchanged five-second read guard before any reader ran. Bundling
+removes repeated source resolution/parsing, not filesystem reads, process isolation
+or the no-writer FIFO refusal guard; no mocks or cached read answers are used.
 
 The setup transient-read matrix awaits dependency readiness in a fresh child for
 each fault before test execution. Closing its input starts the unchanged real
