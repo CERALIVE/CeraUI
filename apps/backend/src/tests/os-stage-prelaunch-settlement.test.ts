@@ -13,12 +13,12 @@ import {
 } from "../modules/system/update-orchestrator/os-stage-run.ts";
 import { rankTransports } from "../modules/system/update-transport/core.ts";
 import { createUpdatePinController } from "../modules/system/update-transport/pin.ts";
-import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
+import { useIdleStreamLivenessForFile } from "./helpers/bind-session-owner.ts";
 import { acquireTestOsStageControl } from "./helpers/os-stage-test-control.ts";
 import { manifest } from "./helpers/os-stage-unlaunched-fixture.ts";
 import { unlaunchedHarness } from "./helpers/os-stage-unlaunched-harness.ts";
 
-useSessionOwnerForFile();
+useIdleStreamLivenessForFile();
 
 type Fault = "clients" | "private" | "outcome" | "pin" | "none";
 type Failure = "cancel" | "operator" | "selector";

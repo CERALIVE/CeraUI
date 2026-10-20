@@ -93,8 +93,11 @@ import {
 	startUpdateOrchestrator,
 } from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
+import { useIdleStreamLivenessForFile } from "./helpers/bind-session-owner.ts";
 import { acquireTestOsStageControl } from "./helpers/os-stage-test-control.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
+
+useIdleStreamLivenessForFile();
 
 function persistedCommitting(percent: number) {
 	return {

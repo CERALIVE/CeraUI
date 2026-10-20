@@ -182,6 +182,11 @@ Held guardian/CLI/provenance release proofs use the same controlled 40 ms expiry
 The production-owner case still prepares and reads real private files and checks
 that a late guardian response writes neither publication nor a release marker.
 
+Acquisition, prelaunch settlement and package-resume fixtures inject idle through
+the existing liveness source seam and restore it after each case; ambient stream
+status cannot replace the fault or completion they intend to exercise. Sentinel
+and stream-admission suites retain their real liveness bindings and assertions.
+
 The selector and UID-pin network-namespace clients share schema-valid setup
 preparation with an explicit RK3588 fixture identity. Plain `bun` children do not
 inherit the test preload's setup mock; partial setup defaults omit required `hw`.
