@@ -178,6 +178,10 @@ port, then advance the original remaining 40 ms. Expiry must settle while that
 port is still held, and resuming it cannot publish or release. No real 160 ms
 completion race or product-deadline increase is involved.
 
+Held guardian/CLI/provenance release proofs use the same controlled 40 ms expiry.
+The production-owner case still prepares and reads real private files and checks
+that a late guardian response writes neither publication nor a release marker.
+
 The selector and UID-pin network-namespace clients share schema-valid setup
 preparation with an explicit RK3588 fixture identity. Plain `bun` children do not
 inherit the test preload's setup mock; partial setup defaults omit required `hw`.

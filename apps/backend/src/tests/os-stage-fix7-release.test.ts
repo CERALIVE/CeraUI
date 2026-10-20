@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, jest, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,10 +11,16 @@ import {
 import { proveOsStageRelease } from "../modules/system/update-orchestrator/os-stage-release-proof.ts";
 import { record } from "./helpers/os-stage-orphan-record.ts";
 
+afterEach(() => {
+	jest.useRealTimers();
+});
+
 test.each(["held", "cli", "provenance"])(
 	"release proof bounds held %s evidence",
 	async (boundary) => {
 		// Given a held evidence port and a non-renewable 40 ms budget.
+		jest.useFakeTimers();
+		let now = 0;
 		const gate = Promise.withResolvers<void>();
 		const reached = Promise.withResolvers<void>();
 		const hold = async () => {
@@ -23,8 +29,8 @@ test.each(["held", "cli", "provenance"])(
 			return true;
 		};
 		const budget = createStageDeadline({
-			deadline: performance.now() + 40,
-			now: () => performance.now(),
+			deadline: 40,
+			now: () => now,
 		});
 		const input = {
 			record,
@@ -43,10 +49,9 @@ test.each(["held", "cli", "provenance"])(
 		);
 		await reached.promise;
 		// When the evidence is not released by the deadline.
-		const result = await Promise.race([
-			work,
-			Bun.sleep(160).then(() => "pending"),
-		]);
+		now = 40;
+		jest.advanceTimersByTime(40);
+		const result = await work;
 		try {
 			expect(result).toHaveProperty("mode", "unsafe");
 		} finally {
@@ -65,6 +70,7 @@ test("production owner never publishes or writes release after a held read expir
 	const job = { ...record, launched: true, lifecycle: "held" as const };
 	let hold = false;
 	let published = false;
+	let now = 0;
 	const gate = Promise.withResolvers<void>();
 	const reached = Promise.withResolvers<void>();
 	try {
@@ -75,7 +81,7 @@ test("production owner never publishes or writes release after a held read expir
 		const owner = createOsStageJobOwner(job, {
 			directory,
 			uid,
-			now: () => performance.now(),
+			now: () => now,
 			sleep: (ms) => Bun.sleep(ms),
 			run: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
 			inspect: async () => {
@@ -91,9 +97,10 @@ test("production owner never publishes or writes release after a held read expir
 		});
 		expect(await owner.held()).toBe(true);
 		hold = true;
+		jest.useFakeTimers();
 		const budget = createStageDeadline({
-			deadline: performance.now() + 40,
-			now: () => performance.now(),
+			deadline: 40,
+			now: () => now,
 		});
 		const work = owner
 			.release(
@@ -110,16 +117,16 @@ test("production owner never publishes or writes release after a held read expir
 			);
 		await reached.promise;
 		// When the guardian read remains held past the remaining publication deadline.
-		const result = await Promise.race([
-			work,
-			Bun.sleep(160).then(() => "pending"),
-		]);
+		now = 40;
+		jest.advanceTimersByTime(40);
+		const result = await work;
 		try {
 			expect(result).toHaveProperty("mode", "unsafe");
 		} finally {
 			gate.resolve();
 		}
 		await work;
+		jest.useRealTimers();
 		await Bun.sleep(0);
 		// Then late read completion cannot publish or release the independently held owner.
 		expect(published).toBe(false);
