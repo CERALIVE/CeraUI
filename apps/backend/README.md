@@ -172,6 +172,12 @@ clock to the original recovery deadline only after a real child proc read has
 completed. It still observes the live child and refuses a replacement writer,
 without repeating hundreds of physical proc scans merely to spend fake time.
 
+The outer-port deadline regressions freeze the injected clock and test timers
+until admission/revalidation/selection/receipt/release actually reaches its held
+port, then advance the original remaining 40 ms. Expiry must settle while that
+port is still held, and resuming it cannot publish or release. No real 160 ms
+completion race or product-deadline increase is involved.
+
 The selector and UID-pin network-namespace clients share schema-valid setup
 preparation with an explicit RK3588 fixture identity. Plain `bun` children do not
 inherit the test preload's setup mock; partial setup defaults omit required `hw`.
