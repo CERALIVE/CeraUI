@@ -162,6 +162,11 @@ test hang guard, rather than killing a valid child after two seconds of import
 or scheduling delay. Removing nonblocking opens must still fail the tests; FIFO
 refusal, CONTROL disposal, closed admission and inode preservation remain required.
 
+The serial, receipt and quarantine policy-reader matrix likewise awaits real
+child completion through that helper without the two-second startup kill timer.
+Genuine absence remains the only accepted default: separate negative controls
+must reject both invalid-presence-as-absence and absence-as-unknown regressions.
+
 The selector and UID-pin network-namespace clients share schema-valid setup
 preparation with an explicit RK3588 fixture identity. Plain `bun` children do not
 inherit the test preload's setup mock; partial setup defaults omit required `hw`.
