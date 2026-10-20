@@ -37,6 +37,12 @@
  */
 
 import { logger } from "../../helpers/logger.ts";
+import {
+	type DisruptiveReservationOutcome,
+	isPositiveDisruptiveFailure,
+	PowerSubmissionError,
+	resetDisruptiveActionReservationForTest,
+} from "../system/disruptive-action-reservation.ts";
 import { sendFrame } from "./channel.ts";
 import {
 	type Command,
@@ -130,6 +136,17 @@ export interface SelfFencingDeps {
 	) => Promise<
 		{ ok: true; lease?: { release(): void } } | { ok: false; refusal: string }
 	>;
+	/**
+	 * The device-wide disruptive-action gate (stream liveness + update work),
+	 * consulted on receipt AND again at confirm, since 30 s can start a stream.
+	 * A confirm is the owner's intent, never evidence that the device is idle.
+	 */
+	admitDisruptiveAction: (
+		type: SelfFencingType,
+	) => Promise<{ ok: true } | { ok: false; refusal: string }>;
+	prepareDisruptiveReservation: () => Promise<
+		(type?: string) => DisruptiveReservationOutcome
+	>;
 }
 
 /**
@@ -214,14 +231,26 @@ function configSnapshotOp(): RevertibleOp {
 	};
 }
 
-/** A non-revertible op whose execution is a single privileged spawn (e.g. reboot). */
+/**
+ * A non-revertible op whose execution is a single privileged spawn (e.g. reboot).
+ * A nonzero exit means nothing was done, so it throws into the negative result.
+ */
 function spawnOp(argv: string[]): NonRevertibleOp {
 	return {
 		revertible: false,
 		execute: async () => {
-			Bun.spawnSync(argv);
+			const { exitCode } = Bun.spawnSync(argv);
+			if (exitCode !== 0)
+				throw new PowerSubmissionError(argv[0] ?? "power", exitCode);
 		},
 	};
+}
+
+async function defaultAdmitDisruptiveAction(
+	type: SelfFencingType,
+): Promise<{ ok: true } | { ok: false; refusal: string }> {
+	const gate = await import("../system/disruptive-action-runtime.ts");
+	return gate.admitRemoteDisruptiveAction(type);
 }
 
 function defaultDeps(): SelfFencingDeps {
@@ -234,6 +263,25 @@ function defaultDeps(): SelfFencingDeps {
 		clearTimer: (timer) => clearTimeout(timer),
 		logger,
 		acquireMutationLease: defaultAcquireMutationLease,
+		admitDisruptiveAction: defaultAdmitDisruptiveAction,
+		prepareDisruptiveReservation: async () => {
+			const [
+				{ getDisruptiveActionDecision },
+				{ reserveDisruptiveAction, reservePowerAction },
+			] = await Promise.all([
+				import("../system/disruptive-action-runtime.ts"),
+				import("../system/disruptive-action-reservation.ts"),
+			]);
+			return (type) => {
+				const action = type === "system.reboot" ? "reboot" : "factory-reset";
+				return type === "system.reboot" || type === "device.factoryReset"
+					? reservePowerAction(
+							getDisruptiveActionDecision({ powerAction: action }),
+							action,
+						)
+					: reserveDisruptiveAction(getDisruptiveActionDecision());
+			};
+		},
 	};
 }
 
@@ -403,6 +451,19 @@ export async function handleSelfFencingOp(
 		return;
 	}
 
+	const admitted = await deps.admitDisruptiveAction(
+		frame.type as SelfFencingType,
+	);
+	if (!admitted.ok) {
+		deps.logger.warn(
+			`self_fencing: ${frame.type} (${frame.cid}) refused: ${admitted.refusal}`,
+		);
+		deps.sendResult(
+			resultFrame(frame, { ok: false, applied: null, error: admitted.refusal }),
+		);
+		return;
+	}
+
 	// The mutation lease is taken BEFORE the snapshot and is NOT released when this
 	// handler returns — it is held through confirm, auto-revert, or an acknowledged
 	// terminal failure, because that whole window is one transaction against one
@@ -516,14 +577,45 @@ export async function handleSelfFencingConfirm(cid: string): Promise<void> {
 		}
 
 		// Non-revertible: the confirm authorizes execution. There is no rollback
-		// once run.
+		// once run, so the gate is re-read at the moment of execution.
+		const admitted = await deps.admitDisruptiveAction(
+			frame.type as SelfFencingType,
+		);
+		if (!admitted.ok) {
+			deps.logger.warn(
+				`self_fencing: ${frame.type} (${cid}) confirmed but refused: ${admitted.refusal}`,
+			);
+			deps.sendResult(
+				resultFrame(frame, {
+					ok: false,
+					applied: null,
+					error: admitted.refusal,
+				}),
+			);
+			return;
+		}
+		const reserve = await deps.prepareDisruptiveReservation();
+		const admission = reserve(frame.type);
+		if (!admission.allowed) {
+			deps.sendResult(
+				resultFrame(frame, {
+					ok: false,
+					applied: null,
+					error: admission.reason,
+				}),
+			);
+			return;
+		}
 		try {
 			await op.execute(frame.payload);
+			admission.reservation.releaseAfterCompletion();
 			deps.logger.info(
 				`self_fencing: ${frame.type} (${cid}) confirmed, executed`,
 			);
 			deps.sendResult(resultFrame(frame, { ok: true, applied: null }));
 		} catch (err) {
+			if (isPositiveDisruptiveFailure(err))
+				admission.reservation.releaseAfterFailure();
 			const message = errorMessage(err);
 			deps.logger.warn(
 				`self_fencing: ${frame.type} (${cid}) execute failed: ${message}`,
@@ -542,6 +634,7 @@ export async function handleSelfFencingConfirm(cid: string): Promise<void> {
  * (mirrors `resetMockState`); never call this from production code.
  */
 export function resetSelfFencingState(): void {
+	resetDisruptiveActionReservationForTest();
 	for (const entry of pending.values()) {
 		entry.deps.clearTimer(entry.timer);
 		releaseLease(entry);

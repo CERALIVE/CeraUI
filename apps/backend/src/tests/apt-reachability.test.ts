@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it, jest } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
 	APT_REACHABILITY_TTL_MS,
@@ -9,6 +12,7 @@ import {
 	deriveVerdict,
 	parseAptSourceOrigins,
 	probeAptReachability,
+	readAptSources,
 	resetAptReachabilityCacheForTest,
 } from "../modules/system/apt-reachability.ts";
 
@@ -54,6 +58,29 @@ afterEach(() => {
 });
 
 describe("apt source parsing and curl argv", () => {
+	it("reads legacy .list beside deb822 .sources from the same device directory", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "ceraui-sources-"));
+		try {
+			await writeFile(
+				join(dir, "debian.sources"),
+				"URIs: https://deb.debian.org/debian\nSuites: trixie\n",
+			);
+			await writeFile(
+				join(dir, "security.list"),
+				"deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://deb.debian.org/debian-security trixie-security main\n",
+			);
+			expect(
+				parseAptSourceOrigins(await readAptSources(dir)).map(
+					(source) => source.probeUrl,
+				),
+			).toEqual([
+				"https://deb.debian.org/debian/dists/trixie/InRelease",
+				"https://deb.debian.org/debian-security/dists/trixie-security/InRelease",
+			]);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
 	it("parses every captured deb822 source into its HTTP-level probe URL", async () => {
 		const text = await fixture("sources.list.d.rock.txt");
 
@@ -83,7 +110,7 @@ describe("apt source parsing and curl argv", () => {
 				url: "https://apt.ceralive.tv/dists/stable/binary-arm64",
 				host: "apt.ceralive.tv",
 				scheme: "https",
-				probeUrl: "https://apt.ceralive.tv/",
+				probeUrl: "https://apt.ceralive.tv/__tls-probe",
 			},
 		]);
 	});
@@ -112,7 +139,7 @@ describe("apt source parsing and curl argv", () => {
 });
 
 describe("classifyProbe", () => {
-	it("accepts every HTTP response, including the captured first-party 404", async () => {
+	it("requires the first-party endpoint contract rather than a root-path 404", async () => {
 		const debian = capturedCurl(await fixture("curl-debian-ipv4.txt"));
 		const ceralive = capturedCurl(await fixture("curl-ceralive-ipv4.txt"));
 
@@ -129,7 +156,40 @@ describe("classifyProbe", () => {
 				originHost: "apt.ceralive.tv",
 				scheme: "https",
 			}),
-		).toBe("ok");
+		).toBe("unknown");
+	});
+
+	it("a missing curl binary is a typed tooling gap, not a network failure", async () => {
+		const result = await probeAptReachability({
+			readSources: async () =>
+				"URIs: https://deb.debian.org/debian\nSuites: trixie",
+			runProbe: async () => {
+				throw new Error("Executable not found in $PATH: curl");
+			},
+		});
+		expect(result.ipv4).toBe("probe_unavailable");
+		expect(result.ipv6).toBe("probe_unavailable");
+		expect(result.verdict).toBe("probe_unavailable");
+	});
+	it("an explicitly rejected certificate is credentials_invalid even when TLS transport succeeds", () => {
+		expect(
+			classifyProbe({
+				exitCode: 0,
+				stdout:
+					'{"certPresented":true,"certVerified":false}\n<<<apt-probe>>>200',
+				originHost: "apt.ceralive.tv",
+				scheme: "https",
+			}),
+		).toBe("credentials_invalid");
+		expect(
+			deriveVerdict([
+				probe(
+					origin("apt.ceralive.tv"),
+					"credentials_invalid",
+					"credentials_invalid",
+				),
+			]).verdict,
+		).toBe("credentials_invalid");
 	});
 
 	it("classifies a captured foreign HTTP redirect as captive", async () => {
@@ -149,7 +209,7 @@ describe("classifyProbe", () => {
 		).toBe("captive");
 	});
 
-	it("keeps same-host HTTP redirects and all HTTPS redirects usable", () => {
+	it("keeps same-host Debian redirects but refuses first-party HTTPS redirects", () => {
 		expect(
 			classifyProbe({
 				exitCode: 0,
@@ -165,7 +225,7 @@ describe("classifyProbe", () => {
 				originHost: "apt.ceralive.tv",
 				scheme: "https",
 			}),
-		).toBe("ok");
+		).toBe("unknown");
 	});
 
 	it.each([
@@ -302,7 +362,15 @@ describe("probeAptReachability", () => {
 			readSources: async () => sources,
 			runProbe: async (argv) => {
 				calls += 1;
-				return argv.includes("-4") ? ipv4 : ipv6;
+				return argv.includes("-4") && argv.at(-1)?.includes("apt.ceralive.tv")
+					? {
+							exitCode: 0,
+							stdout:
+								'{"certPresented":true,"certVerified":true}\n<<<apt-probe>>>200',
+						}
+					: argv.includes("-4")
+						? ipv4
+						: ipv6;
 			},
 		});
 
@@ -325,7 +393,7 @@ describe("probeAptReachability", () => {
 				return { exitCode: 28, stdout: "000 " };
 			},
 		});
-		await Promise.resolve();
+		for (let i = 0; i < 8; i++) await Promise.resolve();
 
 		jest.advanceTimersByTime(3_000);
 		const result = await pending;

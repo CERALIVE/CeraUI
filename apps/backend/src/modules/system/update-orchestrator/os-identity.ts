@@ -1,0 +1,49 @@
+import { z } from "zod";
+import {
+	readStoredStateFile,
+	STORED_STATE_LIMITS,
+} from "./stored-state-file.ts";
+
+const RAUC_CONFIG = "/etc/rauc/system.conf";
+const BOOT_ID = "/proc/sys/kernel/random/boot_id";
+
+export class OsAgentError extends Error {
+	override readonly name = "OsAgentError";
+	constructor(
+		readonly reason: string,
+		cause?: unknown,
+	) {
+		super(reason, { cause });
+	}
+}
+
+export async function readBootId(): Promise<string> {
+	const id = (await Bun.file(BOOT_ID).text()).trim();
+	if (!z.uuid().safeParse(id).success)
+		throw new OsAgentError("boot_id_unknown");
+	return id;
+}
+
+export async function readBoardIdentity(path = RAUC_CONFIG): Promise<{
+	readonly board: string;
+	readonly compatible: string;
+}> {
+	const conf = await readStoredStateFile(path, STORED_STATE_LIMITS.settings);
+	if (conf === null) throw new OsAgentError("rauc_compatible_unknown");
+	const sections = conf.split(/^\s*\[system\]\s*$/m);
+	if (sections.length !== 2) throw new OsAgentError("rauc_compatible_unknown");
+	const section = sections[1]?.split(/^\s*\[.*\]\s*$/m)[0];
+	if ((section?.match(/^\s*compatible\s*=/gm)?.length ?? 0) !== 1)
+		throw new OsAgentError("rauc_compatible_unknown");
+	const matches = section?.match(/^compatible\s*=\s*(\S+)\s*$/gm) ?? [];
+	if (matches.length !== 1) throw new OsAgentError("rauc_compatible_unknown");
+	const compatible = matches[0]?.split("=")[1]?.trim();
+	switch (compatible) {
+		case "ceralive-rock-5b-plus":
+			return { board: "rock-5b-plus", compatible };
+		case "ceralive-orangepi5-plus":
+			return { board: "orange-pi-5-plus", compatible };
+		default:
+			throw new OsAgentError("rauc_compatible_unknown");
+	}
+}

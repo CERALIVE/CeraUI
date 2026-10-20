@@ -11,6 +11,7 @@
  *  3. an add-on that ships `docs` / `helpUrl` exposes an expandable help panel
  *     rendering exactly the descriptor text (no invented copy).
  */
+import { m } from "@ceraui/i18n/svelte";
 import type { AddonDescriptor, AddonState } from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import {
@@ -49,8 +50,9 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getAddons: () => ({}),
 }));
 
+const toastError = vi.hoisted(() => vi.fn());
 vi.mock("svelte-sonner", () => ({
-	toast: { success: vi.fn(), error: vi.fn() },
+	toast: { success: vi.fn(), error: toastError },
 }));
 
 beforeAll(() => {
@@ -122,6 +124,43 @@ afterEach(() => {
 });
 
 describe("AddonsSection — board gating", () => {
+	for (const error of [
+		"streaming",
+		"stream_liveness_unknown",
+		"update_in_progress",
+	]) {
+		for (const enabled of [false, true]) {
+			it(`renders disruptive refusal ${error} for ${enabled ? "remove" : "install"} and reverts the toggle`, async () => {
+				// Given a device refusal on the selected mutation.
+				seedList([makeDescriptor({})]);
+				if (enabled)
+					rpcMocks.list.mockResolvedValue({
+						addons: [
+							{
+								descriptor: makeDescriptor({}),
+								state: { ...IDLE, enabled: true, phase: "active" },
+								managerPhase: "enabled",
+							},
+						],
+					});
+				(enabled ? rpcMocks.uninstall : rpcMocks.install).mockResolvedValue({
+					success: false,
+					error,
+				});
+				render(AddonsSection, { props: { open: true } });
+				const toggle = await screen.findByTestId("addon-switch-sample");
+				// When the operator attempts the mutation.
+				await fireEvent.click(toggle);
+				// Then the existing localized refusal is shown, never a raw token.
+				await waitFor(() =>
+					expect(toastError).toHaveBeenCalledWith(
+						m["notifications.disruptiveActionRefused"](),
+					),
+				);
+				expect(toggle.getAttribute("aria-checked")).toBe(String(enabled));
+			});
+		}
+	}
 	it("disables an add-on whose compatibleHardware excludes the detected board and shows the reason", async () => {
 		const descriptor = makeDescriptor({
 			id: "rk-only",
@@ -249,7 +288,7 @@ describe("AddonsSection — async state (osCommand)", () => {
 		await Promise.resolve();
 		expect(rpcMocks.install).toHaveBeenCalledOnce();
 
-		d.resolve({ success: true } satisfies AddonOpResult);
+		d.resolve({ success: true, phase: "enabled" } satisfies AddonOpResult);
 		await waitFor(() => expect(sw.disabled).toBe(false));
 		expect(screen.queryByTestId("addons-unavailable")).toBeNull();
 	});

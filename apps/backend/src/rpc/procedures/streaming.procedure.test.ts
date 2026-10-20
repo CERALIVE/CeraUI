@@ -12,6 +12,7 @@ import {
 import { call } from "@orpc/server";
 
 import { getConfig } from "../../modules/config.ts";
+import { noteStreamSessionEngineStatus } from "../../modules/streaming/stream-session-orchestrator.ts";
 import { updateStatus } from "../../modules/streaming/streaming.ts";
 import type { AppWebSocket, RPCContext } from "../types.ts";
 import {
@@ -91,6 +92,12 @@ describe("streaming.start — in-flight re-entry guard (S5)", () => {
 		getConfig().pipeline = priorPipeline;
 		releaseStart();
 		await new Promise((resolve) => setTimeout(resolve, 0));
+		noteStreamSessionEngineStatus({
+			type: "status",
+			seq: 1,
+			state: "idle",
+			streaming: false,
+		});
 		await call(streamingStopProcedure, undefined, { context: makeContext() });
 		setStreamingProcedureDepsForTest(null);
 	});
@@ -131,6 +138,12 @@ describe("streaming.start — in-flight re-entry guard (S5)", () => {
 		releaseStart();
 		await first;
 		expect(spawnSpy).toHaveBeenCalledTimes(1);
+		noteStreamSessionEngineStatus({
+			type: "status",
+			seq: 1,
+			state: "idle",
+			streaming: false,
+		});
 		expect(
 			await call(streamingStopProcedure, undefined, { context }),
 		).toMatchObject({ result: "stopped" });

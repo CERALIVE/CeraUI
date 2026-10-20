@@ -199,6 +199,15 @@ function makeFakeClient(options: FakeClientOptions = {}): FakeClientHarness {
 				},
 			};
 		},
+		requestKeyframe: async () => {
+			throw new Error("fixture requestKeyframe is not exercised");
+		},
+		setEdidProfile: async () => {
+			throw new Error("fixture setEdidProfile is not exercised");
+		},
+		listSwitchTargets: async () => {
+			throw new Error("fixture listSwitchTargets is not exercised");
+		},
 		close: async () => {
 			calls.push({ op: "close" });
 			const closed = new Error("client_closed");
@@ -381,8 +390,7 @@ describe("engine selection", () => {
 
 describe("CerastreamBackend behavioural contract", () => {
 	test("a silent idle engine terminalizes reconciliation and admits start", async () => {
-		// Given a connected, subscribed production backend whose idle engine emits
-		// no status heartbeat, matching the board's active-engine/idle-health state.
+		// Given a connected, subscribed production backend awaiting engine truth.
 		let reconcileTimeout: (() => void) | undefined;
 		const { backend, fake } = makeBackend({
 			scheduleTimeout: (callback) => {
@@ -405,9 +413,10 @@ describe("CerastreamBackend behavioural contract", () => {
 		await fake.subscribed;
 		await waitFor(() => reconcileTimeout !== undefined);
 
-		// When the bounded observation window expires without a status event.
+		// When an unprotected baseline hears no status from the idle engine.
 		reconcileTimeout?.();
 		const reconciled = await reconciling;
+		expect(reconciled).toBe("idle");
 		const health = deriveStreamHealth({
 			isStreaming: streaming,
 			processAlive: null,
@@ -423,7 +432,7 @@ describe("CerastreamBackend behavioural contract", () => {
 			launch: async () => undefined,
 		});
 
-		// Then idle is authoritative, health agrees, and Start owns generation one.
+		// Then silence creates no protection, health agrees, and Start is admitted.
 		expect(reconciled).toBe("idle");
 		expect(health.state).toBe("idle");
 		expect(started).toEqual({
@@ -478,8 +487,8 @@ describe("CerastreamBackend behavioural contract", () => {
 			},
 			getStreamingStatus: () => streaming,
 			stopRuntime: (generation) =>
-				new Promise<void>((resolve) => {
-					if (!backend.stop(resolve)) resolve();
+				new Promise<void>((resolve, reject) => {
+					if (!backend.stop(resolve, reject)) resolve();
 					expect(generation).toBeGreaterThan(0);
 				}),
 			queryRuntime: async () => "idle",
@@ -512,6 +521,9 @@ describe("CerastreamBackend behavioural contract", () => {
 		stopTimers.shift()?.();
 		expect(await first).toMatchObject({ result: "failed" });
 		expect(streaming).toBe(false);
+		expect(orchestrator.snapshot().state).toBe("reconciling");
+		await backend.settle();
+		expect(await orchestrator.reconcile()).toBe("idle");
 		expect(orchestrator.snapshot()).toEqual({
 			state: "idle",
 			generation: 1,
@@ -553,6 +565,50 @@ describe("CerastreamBackend behavioural contract", () => {
 		await backend.settle();
 		expect(stopped).toBe(true);
 		expect(fake.calls.map((call) => call.op)).toContain("stop");
+	});
+
+	test("an obsolete runtime probe cannot publish status into a newer factory generation", async () => {
+		// Given a real backend probe held while a real factory Stop/new Start supersedes it.
+		let fireDeadline: (() => void) | undefined;
+		const { backend, fake, bridgeH } = makeBackend({
+			scheduleTimeout: (callback) => {
+				fireDeadline = callback;
+				const token = setTimeout(() => undefined, 60_000);
+				token.unref();
+				return token;
+			},
+			cancelTimeout: (token) => clearTimeout(token),
+		});
+		let marked = false;
+		let live = false;
+		const session = createStreamSessionOrchestrator({
+			createAttemptId: () => "probe-owner",
+			setStreamingStatus: (value) => {
+				live = value;
+			},
+			markStreamingForOta: () => {
+				marked = true;
+			},
+			unmarkStreamingForOta: () => {
+				marked = false;
+			},
+			stopRuntime: async () => {},
+			queryRuntime: () => backend.reconcileRuntimeState(),
+		});
+		const probing = session.reconcile();
+		await fake.subscribed;
+		for (let i = 0; i < 30; i++) await Promise.resolve();
+		await session.stop("operator");
+		await session.start({ origin: "ui", launch: async () => {} });
+		// When the obsolete engine connection sends its delayed idle status.
+		fake.emit({ type: "status", seq: 1, state: "idle", streaming: false });
+		expect(bridgeH.broadcasts.count).toBe(0);
+		fireDeadline?.();
+		await probing;
+		// Then neither the dependency's publication nor the factory adoption can clobber it.
+		expect(session.snapshot()).toEqual({ state: "streaming", generation: 1 });
+		expect(marked).toBe(true);
+		expect(live).toBe(true);
 	});
 
 	// A crashed or already-disconnected engine sends no final idle status, so the
@@ -621,7 +677,7 @@ describe("CerastreamBackend behavioural contract", () => {
 		expect(await backend.reconcileRuntimeState()).toBe("unknown");
 	});
 
-	test("a silent subscribed reconciliation is bounded and resolves idle", async () => {
+	test("a silent subscribed reconciliation is bounded and remains unknown", async () => {
 		for (let repeat = 0; repeat < 5; repeat += 1) {
 			let timeoutCallback: (() => void) | undefined;
 			let scheduledDelay: number | undefined;
@@ -642,12 +698,12 @@ describe("CerastreamBackend behavioural contract", () => {
 
 			expect(scheduledDelay).toBe(2500);
 			timeoutCallback?.();
-			expect(await reconciliation).toBe("idle");
+			expect(await reconciliation).toBe("unknown");
 			expect(cancelled).toBe(1);
 		}
 	});
 
-	test("a status event arriving after idle reconciliation cannot become owned", async () => {
+	test("a status event arriving after unknown reconciliation cannot become owned", async () => {
 		let timeoutCallback: (() => void) | undefined;
 		const { backend, fake } = makeBackend({
 			scheduleTimeout: (callback) => {
@@ -661,7 +717,7 @@ describe("CerastreamBackend behavioural contract", () => {
 		await waitFor(() => timeoutCallback !== undefined);
 
 		timeoutCallback?.();
-		expect(await reconciliation).toBe("idle");
+		expect(await reconciliation).toBe("unknown");
 		fake.emit({ type: "status", seq: 2, state: "streaming", streaming: true });
 
 		expect(backend.getTelemetry()).toBeNull();

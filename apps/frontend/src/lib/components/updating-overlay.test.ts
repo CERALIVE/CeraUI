@@ -79,17 +79,21 @@ describe("updating-overlay terminal state", () => {
 		expect(toastError).not.toHaveBeenCalled();
 	});
 
-	it("keeps the success toast for a progress-complete run with no result yet", async () => {
-		render(UpdatingOverlay, {
-			props: {
-				details: progress({
-					downloading: 1,
-					unpacking: 1,
-					setting_up: 1,
-					total: 1,
-				}),
-			},
+	// Ruling D208 (sweep C3): this case used to toast success on full counters
+	// with NO result. The counters reach their totals before apt exits, so the
+	// success now waits for the device's result; the toast itself still fires.
+	it("keeps the success toast for a progress-complete run once the result arrives", async () => {
+		const complete = progress({
+			downloading: 1,
+			unpacking: 1,
+			setting_up: 1,
+			total: 1,
 		});
+		const view = render(UpdatingOverlay, { props: { details: complete } });
+		await new Promise((resolve) => setTimeout(resolve, 600));
+		expect(toastSuccess).not.toHaveBeenCalled();
+
+		await view.rerender({ details: { ...complete, result: 0 } });
 
 		await waitFor(() => expect(toastSuccess).toHaveBeenCalledTimes(1));
 		expect(toastError).not.toHaveBeenCalled();

@@ -25,7 +25,9 @@ import { os } from "@orpc/server";
 import { z } from "zod";
 
 import { logger } from "../../helpers/logger.ts";
+import { readAddonDescriptor } from "../../modules/addons/descriptor-authority.ts";
 import {
+	ADDON_ENABLE_FAILED_ERROR,
 	ADDON_MANAGER_PHASES,
 	ADDON_UNAVAILABLE_ERROR,
 	type AddonHardware,
@@ -35,9 +37,19 @@ import {
 	disableAddon,
 	enableAddon,
 	getAddonPhase,
+	settleAddonState,
+	settleInterruptedAddonStates,
 	toAddonState,
 } from "../../modules/addons/manager.ts";
-import { getAddons, setAddonState } from "../../modules/config.ts";
+import {
+	withAddonMutation,
+	withAddonRefusalBaseline,
+} from "../../modules/addons/mutation.ts";
+import {
+	getLiveAddonState,
+	getLiveAddonStates,
+} from "../../modules/addons/state-settlement.ts";
+import { removeAddonState } from "../../modules/config.ts";
 import { getEffectiveHardware as getEffectiveHardwareImpl } from "../../modules/streaming/pipelines.ts";
 import { isRealDevice } from "../../modules/system/kiosk.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
@@ -92,7 +104,8 @@ export type AddonProcedureDeps = {
 	getAddonState: (id: string) => AddonState | undefined;
 	enableAddon: (descriptor: AddonDescriptor) => Promise<AddonOpResult>;
 	disableAddon: (descriptor: AddonDescriptor) => Promise<AddonOpResult>;
-	setAddonState: (id: string, state: AddonState) => void;
+	setAddonState: (id: string, state: AddonState) => void | boolean;
+	removeAddonState: (id: string) => void;
 };
 
 async function readBakedDescriptors(): Promise<AddonDescriptor[]> {
@@ -106,8 +119,9 @@ async function readBakedDescriptors(): Promise<AddonDescriptor[]> {
 	for (const entry of entries) {
 		if (!entry.endsWith(".json")) continue;
 		try {
-			const raw = await Bun.file(`${ADDON_DESCRIPTOR_DIR}/${entry}`).json();
-			descriptors.push(AddonDescriptorSchema.parse(raw));
+			descriptors.push(
+				await readAddonDescriptor(`${ADDON_DESCRIPTOR_DIR}/${entry}`),
+			);
 		} catch (err) {
 			logger.error(`addon descriptor ${entry} failed to parse: ${err}`);
 		}
@@ -120,10 +134,11 @@ const defaultAddonProcedureDeps: AddonProcedureDeps = {
 	isRealDevice: () => isRealDevice(),
 	getEffectiveHardware: () => getEffectiveHardwareImpl(),
 	getAddonPhase: (id) => getAddonPhase(id),
-	getAddonState: (id) => getAddons()[id],
+	getAddonState: getLiveAddonState,
 	enableAddon: (descriptor) => enableAddon(descriptor),
 	disableAddon: (descriptor) => disableAddon(descriptor),
-	setAddonState: (id, state) => setAddonState(id, state),
+	setAddonState: (id, state) => settleAddonState(id, state),
+	removeAddonState: (id) => removeAddonState(id),
 };
 
 let activeDeps: AddonProcedureDeps = defaultAddonProcedureDeps;
@@ -136,6 +151,19 @@ export function setAddonProcedureDeps(deps: Partial<AddonProcedureDeps>): void {
 /** Restore the real-device primitives. */
 export function resetAddonProcedureDeps(): void {
 	activeDeps = defaultAddonProcedureDeps;
+}
+
+export async function sendAddonSnapshot(
+	emit: (state: Record<string, AddonState>) => void,
+): Promise<void> {
+	const deps = activeDeps;
+	settleInterruptedAddonStates();
+	const descriptors = await deps.readDescriptors();
+	const snapshot = getLiveAddonStates();
+	for (const descriptor of descriptors)
+		snapshot[descriptor.id] =
+			deps.getAddonState(descriptor.id) ?? toAddonState("disabled");
+	emit(snapshot);
 }
 
 /** Merge a descriptor with its persisted state + live manager phase. */
@@ -177,28 +205,43 @@ export const installAddonProcedure = authedProcedure
 	)
 	.output(addonOpResultSchema)
 	.handler(async ({ input }) => {
-		const deps = activeDeps;
-		if (!(await deps.isRealDevice())) {
-			return { success: false, error: ADDON_UNAVAILABLE_ERROR };
-		}
-		const descriptor = await findDescriptor(input.id, deps);
-		if (!descriptor) {
-			return { success: false, error: ADDON_NOT_FOUND_ERROR };
-		}
-		// T23 — reject an incompatible install before persisting any userConfig.
-		const compatError = addonCompatibilityError(
-			descriptor,
-			deps.getEffectiveHardware(),
-			(id) => deps.getAddonState(id),
-		);
-		if (compatError) {
-			return { success: false, error: compatError };
-		}
-		if (input.userConfig !== undefined) {
-			const base = deps.getAddonState(input.id) ?? toAddonState("disabled");
-			deps.setAddonState(input.id, { ...base, userConfig: input.userConfig });
-		}
-		return deps.enableAddon(descriptor);
+		return withAddonMutation(input.id, async () => {
+			const deps = activeDeps;
+			if (!(await deps.isRealDevice())) {
+				return { success: false, error: ADDON_UNAVAILABLE_ERROR };
+			}
+			const descriptor = await findDescriptor(input.id, deps);
+			if (!descriptor) {
+				return { success: false, error: ADDON_NOT_FOUND_ERROR };
+			}
+			// T23 — reject an incompatible install before persisting any userConfig.
+			const compatError = addonCompatibilityError(
+				descriptor,
+				deps.getEffectiveHardware(),
+				(id) => deps.getAddonState(id),
+			);
+			if (compatError) {
+				return { success: false, error: compatError };
+			}
+			const { getDisruptiveActionDecision } = await import(
+				"../../modules/system/disruptive-action-runtime.ts"
+			);
+			const admission = getDisruptiveActionDecision();
+			if (!admission.allowed)
+				return { success: false, error: admission.reason };
+			const previousState = deps.getAddonState(input.id);
+			const result = await withAddonRefusalBaseline(
+				{
+					id: input.id,
+					state: previousState,
+					...(input.userConfig !== undefined
+						? { userConfig: input.userConfig }
+						: {}),
+				},
+				() => deps.enableAddon(descriptor),
+			);
+			return result;
+		});
 	});
 
 /**
@@ -227,16 +270,23 @@ export const configureAddonProcedure = authedProcedure
 	.input(z.object({ id: addonIdSchema, fields: userConfigSchema }))
 	.output(configureResultSchema)
 	.handler(async ({ input }) => {
-		const deps = activeDeps;
-		if (!(await deps.isRealDevice())) {
-			return { success: false, error: ADDON_UNAVAILABLE_ERROR };
-		}
-		const state = deps.getAddonState(input.id);
-		if (!state) {
-			return { success: false, error: ADDON_NOT_FOUND_ERROR };
-		}
-		deps.setAddonState(input.id, { ...state, userConfig: input.fields });
-		return { success: true, applied: input.fields };
+		return withAddonMutation(input.id, async () => {
+			const deps = activeDeps;
+			if (!(await deps.isRealDevice())) {
+				return { success: false, error: ADDON_UNAVAILABLE_ERROR };
+			}
+			const state = deps.getAddonState(input.id);
+			if (!state) {
+				return { success: false, error: ADDON_NOT_FOUND_ERROR };
+			}
+			const persisted = deps.setAddonState(input.id, {
+				...state,
+				userConfig: input.fields,
+			});
+			if (persisted === false)
+				return { success: false, error: ADDON_ENABLE_FAILED_ERROR };
+			return { success: true, applied: input.fields };
+		});
 	});
 
 /**

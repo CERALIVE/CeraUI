@@ -36,16 +36,24 @@
  * regulatory-unlock procedure is not something to infer from a file we could not
  * read, and replacing the evidence would make the next diagnosis impossible. The
  * shell reconciler makes the identical all-or-nothing judgement, so the two halves
- * agree on what a damaged file means.
+ * agree on what a damaged file means. A WRITE never starts from an unknown read:
+ * `loadFccUnlockPolicyBaseline` refuses an unreadable file and archives a damaged
+ * one before the operator's next toggle replaces it.
  */
 
-import { chmod, mkdir, readFile } from "node:fs/promises";
+import { chmod, mkdir } from "node:fs/promises";
 import path from "node:path";
 
 import { FCC_UNLOCK_KEY_RE } from "@ceraui/rpc/schemas";
 
 import { writeFileAtomicSync } from "../../helpers/config-loader.ts";
 import { logger } from "../../helpers/logger.ts";
+import {
+	type PersistentRecordRead,
+	preserveDamagedRecord,
+	readPersistentRecord,
+} from "../../helpers/persistent-record.ts";
+import { STORED_STATE_LIMITS } from "../system/update-orchestrator/stored-state-file.ts";
 
 export const FCC_UNLOCK_SCHEMA_VERSION = 1;
 
@@ -63,53 +71,82 @@ type PersistedPolicy = {
  * WHOLE-DOCUMENT validation, never per-key skipping: a half-applied
  * regulatory-unlock policy is a policy nobody wrote.
  */
-function parsePolicy(raw: string): Record<string, boolean> | undefined {
-	let doc: unknown;
-	try {
-		doc = JSON.parse(raw);
-	} catch {
-		return undefined;
-	}
-	if (typeof doc !== "object" || doc === null) return undefined;
+function parsePolicy(doc: unknown): Record<string, boolean> {
+	if (typeof doc !== "object" || doc === null) throw new Error("not an object");
 	const record = doc as Record<string, unknown>;
-	if (record.schemaVersion !== FCC_UNLOCK_SCHEMA_VERSION) return undefined;
+	if (record.schemaVersion !== FCC_UNLOCK_SCHEMA_VERSION)
+		throw new Error("unsupported schemaVersion");
 	const unlock = record.unlock;
-	if (typeof unlock !== "object" || unlock === null || Array.isArray(unlock)) {
-		return undefined;
-	}
+	if (typeof unlock !== "object" || unlock === null || Array.isArray(unlock))
+		throw new Error("unlock is not a map");
 	const parsed: Record<string, boolean> = {};
 	for (const [key, value] of Object.entries(
 		unlock as Record<string, unknown>,
 	)) {
-		if (!FCC_UNLOCK_KEY_RE.test(key) || typeof value !== "boolean") {
-			return undefined;
-		}
+		if (!FCC_UNLOCK_KEY_RE.test(key) || typeof value !== "boolean")
+			throw new Error("invalid unlock entry");
 		parsed[key] = value;
 	}
 	return parsed;
 }
 
+function readPolicy(): Promise<PersistentRecordRead<Record<string, boolean>>> {
+	return readPersistentRecord(
+		FCC_UNLOCK_POLICY_PATH,
+		STORED_STATE_LIMITS.settings,
+		parsePolicy,
+	);
+}
+
+/** What the device ENFORCES: anything but a valid document enables nothing. */
 export async function loadFccUnlockPolicy(): Promise<Record<string, boolean>> {
-	let raw: string;
-	try {
-		raw = await readFile(FCC_UNLOCK_POLICY_PATH, "utf8");
-	} catch {
-		// Absent is the state on every device that never opted in, and it is the
-		// safe default: nothing enabled.
-		return {};
-	}
-	const parsed = parsePolicy(raw);
-	if (parsed === undefined) {
+	const read = await readPolicy();
+	if (read.kind === "valid") return read.value;
+	// Absent is the state on every device that never opted in, and it is the
+	// safe default: nothing enabled.
+	if (read.kind !== "absent")
 		// Metadata only — the raw document is never logged. It may name hardware,
 		// and it is the operator's file, not ours to reprint.
 		logger.warn("fcc-unlock: policy is unreadable; treating as empty", {
 			module: "modems",
 			path: FCC_UNLOCK_POLICY_PATH,
-			bytes: Buffer.byteLength(raw, "utf8"),
+			state: read.kind,
 		});
-		return {};
+	return {};
+}
+
+export class FccUnlockPolicyUnavailableError extends Error {
+	override readonly name = "FccUnlockPolicyUnavailableError";
+}
+
+/**
+ * The baseline a whole-document WRITE may start from. An unreadable policy
+ * throws (the next operation reads again); a damaged one is archived first and
+ * then answers empty — exactly what both readers already enforce for it, so a
+ * journaled pre-state taken from it is the device's real state, not a guess.
+ */
+export async function loadFccUnlockPolicyBaseline(): Promise<
+	Record<string, boolean>
+> {
+	const read = await readPolicy();
+	switch (read.kind) {
+		case "valid":
+			return read.value;
+		case "absent":
+			return {};
+		case "unavailable":
+			throw new FccUnlockPolicyUnavailableError("fcc policy unreadable", {
+				cause: read.cause,
+			});
+		case "damaged": {
+			const copy = preserveDamagedRecord(FCC_UNLOCK_POLICY_PATH, read.bytes);
+			logger.warn("fcc-unlock: damaged policy archived before replacement", {
+				module: "modems",
+				copy,
+			});
+			return {};
+		}
 	}
-	return parsed;
 }
 
 export async function saveFccUnlockPolicy(

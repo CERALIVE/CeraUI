@@ -145,7 +145,7 @@ async function mkSandbox(): Promise<Sandbox> {
 	for (const [name, tag] of [
 		["systemctl", "systemctl"],
 		["systemd-sysext", "sysext"],
-	]) {
+	] as const) {
 		const stub = join(bin, name);
 		writeFileSync(
 			stub,

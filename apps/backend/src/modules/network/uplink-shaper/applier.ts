@@ -138,8 +138,8 @@ export class UplinkShaperApplier {
 
 	async #loadRecordedRoots(): Promise<void> {
 		if (this.#ownershipLoaded) return;
-		this.#ownershipLoaded = true;
 		const stored = await this.#deps.readRecordedRoots?.();
+		this.#ownershipLoaded = true;
 		if (stored === undefined) return;
 		for (const [ifname, root] of Object.entries(stored))
 			this.#recorded.set(ifname, root);

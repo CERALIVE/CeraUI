@@ -157,7 +157,7 @@ describe('AddonStateSchema / AddonConfigSchema', () => {
 describe('G5 — package-name pattern is reused, not copied', () => {
 	test('APT_PACKAGE_NAME_RE is the canonical imported regex', () => {
 		expect(APT_PACKAGE_NAME_RE).toBeInstanceOf(RegExp);
-		expect(APT_PACKAGE_NAME_RE.source).toBe('^[A-Za-z0-9.+:~-]+$');
+		expect(APT_PACKAGE_NAME_RE.source).toBe('^[A-Za-z0-9][A-Za-z0-9.+:~-]*$');
 	});
 
 	test('addons.schema.ts does not redefine the Debian package-name charset', () => {

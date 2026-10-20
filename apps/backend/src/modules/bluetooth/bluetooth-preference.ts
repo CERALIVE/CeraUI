@@ -40,13 +40,19 @@
  * working directory.
  */
 
-import { chmodSync, readFileSync } from "node:fs";
+import { chmodSync } from "node:fs";
 import path from "node:path";
+import { z } from "zod";
 
 import { writeFileAtomicSync } from "../../helpers/config-loader.ts";
 import { logger } from "../../helpers/logger.ts";
+import {
+	readStoredStateFileSync,
+	STORED_STATE_LIMITS,
+} from "../system/update-orchestrator/stored-state-file.ts";
+import { parseAuthorityJson } from "../system/update-orchestrator/strict-authority-json.ts";
 
-/** Bump when the on-disk shape changes; an unknown version is ignored, not guessed. */
+/** Bump when the on-disk shape changes; unknown versions cannot authorize service effects. */
 export const BLUETOOTH_PREFERENCE_VERSION = 1;
 
 export const BLUETOOTH_PREFERENCE_FILE = "bluetooth.json";
@@ -67,33 +73,15 @@ interface PersistedShape {
 	readonly enabled: boolean;
 }
 
-function parsePersisted(raw: string): BluetoothPreference | undefined {
-	let value: unknown;
-	try {
-		value = JSON.parse(raw);
-	} catch (err) {
-		logger.warn(
-			`bluetooth: preference file is not valid JSON; ignoring it: ${String(err)}`,
-		);
-		return undefined;
-	}
+const persistedPreferenceSchema = z.object({
+	version: z.literal(BLUETOOTH_PREFERENCE_VERSION),
+	enabled: z.boolean(),
+});
 
-	const record = value as Partial<PersistedShape> | null;
-	if (record === null || typeof record !== "object") {
-		logger.warn("bluetooth: preference file is not an object; ignoring it");
-		return undefined;
-	}
-	if (record.version !== BLUETOOTH_PREFERENCE_VERSION) {
-		logger.warn(
-			`bluetooth: preference file version ${String(record.version)} is not ${BLUETOOTH_PREFERENCE_VERSION}; ignoring it`,
-		);
-		return undefined;
-	}
-	if (typeof record.enabled !== "boolean") {
-		logger.warn("bluetooth: preference file carries no boolean `enabled`");
-		return undefined;
-	}
-	return { enabled: record.enabled };
+function parsePersisted(raw: string): BluetoothPreference {
+	return {
+		enabled: persistedPreferenceSchema.parse(parseAuthorityJson(raw)).enabled,
+	};
 }
 
 let storeDir: string | undefined;
@@ -125,19 +113,8 @@ export const defaultBluetoothPreferenceStore: BluetoothPreferenceStore = {
 	read(): BluetoothPreference | undefined {
 		const file = preferencePath();
 		if (file === undefined) return undefined;
-		try {
-			// Bun.file().text() is async; this read sits on the synchronous wire
-			// path, so it uses the same node:fs surface config-loader.ts does.
-			return parsePersisted(readFileSync(file, "utf8"));
-		} catch (err) {
-			const code = (err as { code?: string } | null)?.code;
-			if (code !== "ENOENT") {
-				logger.warn(
-					`bluetooth: could not read the preference file: ${String(err)}`,
-				);
-			}
-			return undefined;
-		}
+		const raw = readStoredStateFileSync(file, STORED_STATE_LIMITS.settings);
+		return raw === null ? undefined : parsePersisted(raw);
 	},
 
 	write(preference: BluetoothPreference): void {

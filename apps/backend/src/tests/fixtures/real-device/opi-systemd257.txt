@@ -1,0 +1,81 @@
+# Board: Orange Pi 5 Plus; OS: Debian 13 Trixie; systemd: 257.13-1~deb13u1
+# Captured: 2026-10-02 UTC, live guardian started 00:30:41 UTC, DEV e29eded3 rehearsal.
+# Source: real-systemd257-outputs.txt sections 2, 3, 4, 5, 6, 11, 12 and 13.
+# Normalisation: transient attempt UUID -> 22222222-2222-4222-8222-222222222222 at all three occurrences.
+# Complete command stdout sections retained byte-for-byte otherwise; rc annotations excluded.
+# No MAC, hostname, IP, SSID or credential occurs in these selected payloads.
+
+##### guardian
+Type=exec
+RemainAfterExit=yes
+MainPID=457024
+ExecMainStatus=0
+ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/lock/ceralive-update.lock /usr/libexec/ceralive/ceralive-os-stage-guard 22222222-2222-4222-8222-222222222222 ; ignore_errors=no ; start_time=[Fri 2026-10-02 00:30:41 UTC] ; stop_time=[n/a] ; pid=457024 ; code=(null) ; status=0/0 }
+User=
+Id=ceralive-os-stage-guard.service
+Description=CeraLive OS stage lock
+ActiveState=active
+FragmentPath=/run/systemd/transient/ceralive-os-stage-guard.service
+DropInPaths=
+Transient=yes
+
+##### orphan-live
+Type=exec
+RemainAfterExit=yes
+MainPID=457024
+ExecMainStatus=0
+ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -n -E 75 -x /run/lock/ceralive-update.lock /usr/libexec/ceralive/ceralive-os-stage-guard 22222222-2222-4222-8222-222222222222 ; ignore_errors=no ; start_time=[Fri 2026-10-02 00:30:41 UTC] ; stop_time=[n/a] ; pid=457024 ; code=(null) ; status=0/0 }
+User=
+Id=ceralive-os-stage-guard.service
+Description=CeraLive OS stage lock
+LoadState=loaded
+ActiveState=active
+FragmentPath=/run/systemd/transient/ceralive-os-stage-guard.service
+DropInPaths=
+Transient=yes
+
+##### live-load
+LoadState=loaded
+
+##### absent-load
+LoadState=not-found
+
+##### orphan-absent
+Type=
+RemainAfterExit=no
+MainPID=0
+ExecMainStatus=0
+User=
+Id=ceralive-os-stage-guard-absent-probe.service
+Description=ceralive-os-stage-guard-absent-probe.service
+LoadState=not-found
+ActiveState=inactive
+FragmentPath=
+DropInPaths=
+Transient=no
+
+##### guardian-cat
+# /run/systemd/transient/ceralive-os-stage-guard.service
+# This is a transient unit file, created programmatically via the systemd API. Do not edit.
+[Unit]
+Description=CeraLive OS stage lock
+
+[Service]
+RemainAfterExit=yes
+StandardOutput=null
+StandardError=journal
+Type=exec
+ExecStart=
+ExecStart="/usr/bin/flock" "-n" "-E" "75" "-x" "/run/lock/ceralive-update.lock" "/usr/libexec/ceralive/ceralive-os-stage-guard" "22222222-2222-4222-8222-222222222222"
+
+##### guardian-cgroup
+0::/system.slice/ceralive-os-stage-guard.service
+
+##### private-modes
+700 root:root /run/ceralive/os-stage
+600 root:root /run/ceralive/os-stage/job.json
+600 root:root /run/ceralive/os-stage/ready
+600 root:root /run/ceralive/os-stage/token
+
+##### flock-contender
+contender rc=75

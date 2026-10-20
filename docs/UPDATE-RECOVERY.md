@@ -1,0 +1,2469 @@
+# Update recovery contract [PARTIAL — local recovery implemented, board proof owed]
+
+## Interrupted package and mirror failure recovery [PARTIAL — host-proven, board re-drill owed]
+
+Startup and the periodic tick can now settle two narrowly identified failures
+without an operator reset. They hold CONTROL and the existing shared update flock,
+compare the complete persisted snapshot with the captured runtime state, and
+recheck the state generation and both leases before publishing a recovered state.
+No OS-stage failure, package quarantine, origin pin or stream-admission rule changes.
+
+**Interrupted package commit.** Only exact `failed / commit_unit_absent_on_resume`
+is eligible. A still-`committing` startup first records that unresolved outcome,
+then uses the same recovery path. Fresh reads must prove all of the following:
+
+- the fixed install unit is positively absent, not merely unobserved;
+- no APT/dpkg process or concurrent update operation is present;
+- recovery holds nonblocking exclusive OFD (`F_OFD_SETLK`) locks on
+  `/var/lib/dpkg/lock-frontend`, `/var/lib/dpkg/lock`, `/var/lib/apt/lists/lock`
+  and `/var/cache/apt/archives/lock` before the first persisted-state/evidence
+  read, through pending-plan clearance, durable state publication and wire/notice
+  publication. These conflict with the POSIX fcntl locks ordinary APT/dpkg writers
+  use, unlike a plain `flock()` on the same paths;
+- `dpkg --audit` exits zero, stdout is empty after trimming, stderr is exactly
+  empty, and `/var/lib/dpkg/updates` is empty. A zero exit with the real dirty-board
+  audit text, or even stderr-only diagnostics, is not clean;
+- the current boot ID differs from the attempt's recorded boot ID, **or** the
+  actual booted rootfs differs from the attempt's recorded slot. Both current
+  identity readings must be available.
+
+New attempts record optional persistence-only `packageAttempt` boot/slot provenance
+before the detached install can reach dpkg. The runtime reads boot ID and booted
+slot once at startup (retrying on pre-install ticks while unread) and reuses that
+value at launch, because neither can change within one process and an extra await
+in the launch path would reorder concurrent callers. An unreadable value only
+leaves that attempt without automatic recovery; it never blocks the install. Missing provenance is not guessed from
+wall-clock age, healthcheck success or unit absence. Old `agent.json` files still
+load unchanged; a legacy missing-unit failure without that history remains
+operator-only through the existing local receipt flow below. A same-boot,
+same-slot backend restart cannot use this automatic path.
+
+Positive proof permits `COMMIT_RESUME_SETTLED_CONSISTENT`: strictly read and clear
+the old pending plan through the existing quarantine port, persist idle, then
+publish it with the package check due immediately. No old plan is replayed, no
+installed success is asserted, no success clock is advanced, and no candidate is
+quarantined. Package discovery decides what remains to install under the ordinary
+automation and cellular gates. A crash before the idle write leaves a recoverable
+failed state, even if pending-plan clearance already completed. A crash after the
+write reloads idle and its notice intent; it does not reconstruct an old outcome.
+
+**Interrupted slot mirror.** Exact recorded `slot-sync failed/refused (exit N)`,
+`slot-sync-incomplete` and `slot-sync-unit-absent` failures can be superseded by a
+later proven mirror, never merely by resetting the unit. Fresh probes before and
+after the receipt/RAUC/version reads must both be positively clean
+(`succeeded` or `inactive-clean`). The receipt's completion must be strictly later
+than the recorded failure and no later than now. Its dpkg digest, build and OS
+version must match the running system; its target must be the actual inactive
+rootfs, this boot's healthy record must identify the actual running rootfs, and
+RAUC must report exactly those two rootfs slots good. Missing, older, malformed,
+wrong-slot/version receipts, a running or currently failed unit, or any uncertain
+read retain the original failure. No automatic mirror retry or mark-good is issued.
+Wall-clock ambiguity conservatively retains failure; timestamps alone never
+establish slot identity. `SYNC_FAILURE_SUPERSEDED` returns directly to idle without
+replaying mirror cleanup or removing quarantine.
+
+Both transitions persist a small optional `recoveredNotice` intent and use the
+existing persistent, dismissible update notification mechanism. Startup rehydrates
+the same keyed notice without duplicating it. Package copy asks the operator to run
+Check again, not to assume the interrupted install succeeded. All ten catalogs
+carry the new keys. Any failed probe, lock acquisition, pending-plan read/clear or
+state write withholds clearance; a later tick reads again. The local recovery tool
+is unchanged for unproven history. A supervised inline `/usr/bin/perl -e` program
+retains all four open descriptions and acknowledges readiness only after every
+lock succeeds. It calls fcntl directly, with no util-linux option dependency.
+Only Linux x86_64/aarch64 little-endian LP64 Perl builds are admitted; other
+platforms refuse. The explicit `s<s<x4q<q<l<x4` packing follows the 32-byte Linux
+UAPI layout (shorts at 0/2, signed 64-bit offsets at 8/16, signed PID at 24,
+zero padding). OFD command 37 uses `l_pid=0`, a whole-file write lock from
+`SEEK_SET`; open uses no-follow/nonblocking flags and requires a regular file.
+The program is bundled in the backend, not an additional installed helper.
+Readiness
+has a two-second bound; any spawn/open/lock/handshake failure retains failure for
+the next tick. Cleanup closes its private stdin and uses bounded TERM/KILL shutdown,
+awaiting exit in every acquired-lease finally, including collection or publication
+errors. Backend death closes that pipe, so a restart cannot inherit a stale holder.
+Final publication fences require the package lease still held, including after
+the awaited pending-plan cleanup. If the holder dies there, completed cleanup
+may remain completed but recovered-state persistence/adoption is refused. Its held proof,
+not an empty lock-table sample that would reject its own locks, supplies lock-idle
+authority during collection. Mirror recovery keeps its existing lock protocol.
+
+The package's read-only persisted-state and consistency collection share one
+30-second monotonic budget. Timeout aborts recovery before pending-plan cleanup;
+the acquired-lease finally then disposes/reaps the holder. A late read cannot
+publish recovery or begin the next collection step after expiry. Submitted
+read-only I/O is not forcibly revoked and may finish after abort. This timer
+never releases locks underneath an ongoing publication. Pending-plan cleanup and
+synchronous durable/wire publication are outside this collection budget and
+retain the locks until completion or refusal; stalled kernel I/O and synchronous
+fsync still prevent a hard bound on the whole lease lifetime.
+
+This excludes ordinary external writers, including APT timers, only while those
+fixed-inode fcntl locks are held; it neither masks timers nor promises continuing
+consistency after release. Privileged writers disabling locking, using alternative
+database/cache paths, replacing lock inodes or directly modifying files are not
+excluded. Host tests exercise real OFD/POSIX conflicts in both race directions, every lock refusal,
+publication-boundary contention, collector/cleanup/write/lease failures, timeout,
+backend SIGKILL, final-cleanup holder loss, collection expiry/late data, unsupported
+Perl build metadata, a clean environment without a usable lock CLI, raw audit
+derivation, restart twice and the state-write crash boundary.
+Installed systemd/APT, both-board crash/power-cut and rendered-notice proof remain owed.
+
+## Recorded OS rollback recovery [PARTIAL — host-proven, bench re-drill owed]
+
+An observed fallback records the staged version in `quarantine.json` `os[]` and
+publishes the persistent `os-rollback` notification before returning the workflow
+to `idle` with `failureReason:null`. This clears no version protection: signed
+manifest admission still refuses that version. Check and the existing healthy-boot
+lagged-mirror gate may run again; this is not manual slot marking or mirror success.
+
+Startup rehydrates one `update:os-rollback:<version>` notice per recorded OS
+quarantine entry, including after the workflow returned to idle and the staged
+receipt is gone. The existing semantic dismissal store
+(`notification_dismissals.json` in the backend working directory) remembers the
+operator's acknowledgement under that exact notice name. Rollback acknowledgement
+keys are exempt from ordinary dismissal eviction, so other notices cannot make an
+old rollback reappear. No agent/quarantine schema or protection is changed by
+dismissal. Without readable valid OS quarantine, no rollback notice is invented;
+read damage is logged and does not crash startup. Restarts clear only the in-memory
+map; valid history recreates the same undismissed notice, never a duplicate. This
+is host-tested restart/dismissal behavior, not a new board or power-loss proof.
+Rollback hydration also runs on the typed invalid-`agent.json` startup path: it
+reads only quarantine and dismissals, never derives authority from the damaged
+agent. The terminal state, original bytes and closed mutation readiness remain
+unchanged. A dismissal-store I/O failure is not cached as an empty store; the next
+access retries loading it. Startup guards recovered-update notice publication
+independently of rollback hydration, so failure in either cannot skip the other or
+fail startup. At the shared `notificationSend` boundary, a failed dismissal read
+warns and returns `false` before publication, without throwing into any producer.
+This includes runtime update transitions and `software-updates.ts`'s keyed
+`ceralive_update` broadcast. Keyless notices do not read the store. Unreadable
+dismissals defer publication, never resurrect acknowledged rollbacks or hold an
+update phase open. Repair allows a later access/startup to load acknowledgements again;
+this does not add an automatic notice-retry timer.
+Lost/damaged acknowledgement storage can lose a dismissal, as with other stored
+preferences; update details still do not expose quarantine history.
+
+Startup and tick migrate the older exact `quarantined / os_version_mismatch`
+snapshot only when its staged receipt version has a matching OS quarantine entry.
+They restore the same keyed notice before explicit `OS_ROLLBACK_RECORDED`.
+Unreadable/invalid receipt or quarantine reads are logged and defer clearance,
+leaving `quarantined` and its evidence intact while allowing startup to finish.
+Subsequent ticks retry the strict readers; Check remains busy in that phase.
+Absent/unreadable/invalid or unrelated protection grants no clearance. No `RESET`
+is dispatched. Package `COMMIT_FAILED` quarantine and unresolved-commit maintenance
+policy are unchanged; never delete state or protection to bypass them.
+
+An authenticated replay refusal for an exact OS-quarantined manifest version now
+clears `update:refused:os-check:serial_replayed` and logs at debug instead of
+raising another warning. It remains a failed check with the same `serial_replayed`
+reason/backoff and no candidate: neither staging nor installation is authorized.
+Only the CMS-verified, schema/board/compatible/channel-validated version may select
+this quiet path. A non-quarantined replay still warns; package-only or near-version
+protection does not qualify. Downgrade/same, expiry, signature and other refusals
+retain their existing behavior. These notice-only changes are host-proven; the
+supplied Rock rollback snapshot records the older noisy warning, not this repair.
+If the optional quiet-path quarantine probe throws, the ordinary `serial_replayed`
+refusal and warning remain: damaged quarantine cannot replace the established
+replay reason with its reader's error or turn the check into success.
+
+Combined host coverage in `update-orchestrator-combined-recovery.test.ts` keeps
+these independent owners together: a recorded rollback rehydrates its notice
+while its replay warning stays quiet and a bad target overrides an old matching
+mirror receipt. A proven interrupted package attempt first returns idle with its
+recovered notice; the next idle tick can still dispatch that mirror. Without
+attempt provenance, the same current consistency evidence leaves failure and the
+pending plan intact, with no mirror dispatch. These interactions do not qualify
+installed RAUC/APT or either board.
+
+## Install during stream-aborted stage recovery [PARTIAL — host-proven]
+
+D8 returns to `os-available` before the cancelled staging producer finishes its
+recovery/release. Until that producer retires, a second Install must not launch
+another writer. Runtime now returns the existing typed `busy` refusal for that
+retained-producer/restart window through `osStageBlocked()`, retaining the
+offer. A later Install can stage without a fresh Check. The controlled host replay
+reproduces two former `not_available` replies while producer recovery is held;
+it does not establish which fence was active during the historical Rock drill.
+
+## Recovery command completion
+
+The maintenance recovery probes use the registered shared `spawnWithTimeout`
+runner with a ten-second command budget and bounded retirement. A child that
+traps a termination issued by this runner and exits zero is not command success
+or adjudication permission. Genuine completion retains its exit status/output;
+timeout remains a typed refusal. A ready real TERM-zero child locks this boundary
+in host tests. This proves command classification, not root/systemd/APT recovery
+on either board. Stored recovery formats and clearance policy are unchanged.
+
+## Stream idle and the activation sentinel
+
+Check/Install and local/remote disruptive actions consume the import-free
+`stream-liveness.ts` leaf through the synchronous system adapter, rather than a
+false legacy live flag. The adapter retains B3's restrictive composition: first
+reconciliation completed, no positive legacy live flag, and the owner's published
+lifecycle idle are required alongside leaf idle. Those inputs can only withhold
+idle; the adapter has no independent physical sentinel reader.
+Leaf idle requires no pending launch, no required protection, idle lifecycle and
+current sentinel absence. A present/unreadable sentinel remains UNKNOWN even after
+engine idle acknowledgement if clearance failed; the next affirmative idle status
+or acknowledged operator Stop retries clearance. Never remove a filesystem
+obstruction as part of an observation, or recursively erase a damaged sentinel.
+
+Absent sentinel plus no session/effect requiring protection is an unprotected
+baseline at boot and after confirmed cleanup at any generation. A silent probe
+temporarily closes admission but cannot create protection on that baseline.
+Protected/adopted/uncertain sessions remain closed through silence; only explicit
+operator Stop may confirm an unowned unknown engine, never automatic reconciliation.
+Cancelled starts retain rollback certainty and the cancelling Stop acknowledgement.
+Runtime evidence is bound to the producing client/epoch and invalidated at new
+Start, acquisition and acknowledgement. Old idle never clears a new session's
+protection. Composition seeds `stream_lifecycle` from the owner before hydration:
+retained protection is `reconciling`; absent/unprotected boot is `idle`. No
+constructor broadcast or engine-query wait precedes server bind; the first safe
+transition still broadcasts, including same-state reconciliation.
+Each joining/parked Stop reports intent immediately. Operator intent requests
+marker disarm and revokes pending commitment/delayed arming, while machine intent
+retains restoration. Successful marker removal prevents fresh-factory restoration;
+marker I/O/corruption remains separate recovery debt. Its cause survives cancelled
+launch settlement and parked release. The restoration runner re-reads intent
+after runtime observation; removed intent cannot authorize a later launch.
+The process-local operator-intent token also invalidates default preparation,
+pre-generation waits, Start commitment/hooks and stale restoration publication.
+Cancelled launch settlement waits for parked cleanup rather than racing the
+engine mutex; current subscription events can still release the latch. It is independent
+of sentinel/engine evidence and cannot grant idle or force automatic Stop.
+Profile reconnect captures intent across its Stop await, preventing an operator
+join from being followed by a newly authorized replacement Start.
+These are production-path host regressions, not qualification of real engine/media,
+cross-connection Stop/Start ordering, reboot or RAUC activation on either board.
+
+## Strict stored authority
+
+The system readers share `stored-state-file.ts` and `strict-authority-json.ts`.
+Every parent component is opened relative to the previous directory descriptor
+with no-follow/directory flags. A real missing ancestor directory or leaf keeps
+first-boot absence; a symlink (including a dangling parent), non-file, unreadable
+entry or other read fault refuses and preserves evidence. Opens are nonblocking
+before regular-file validation, including kernel-lock and package-output readers.
+Fatal UTF-8 retains BOMs for JSON to reject. Decoded duplicate member names,
+including nested and Unicode-escaped names, refuse before schema validation;
+valid whitespace and pretty printing remain accepted. JSON `null` is not absence.
+
+Per-record read ceilings are scalar 4 KiB, settings/capabilities/receipts 16 KiB,
+intent 64 KiB, agent/job 256 KiB, pending packages 8 MiB and archived recovery
+receipt 16 MiB. Quarantine and dpkg-status reads have a 64 MiB envelope.
+Quarantine schemas have no finite maximum history length: this ceiling is a
+resource refusal, **not truncation, pruning or permission to replace history**.
+Oversize history remains untouched and requires local maintenance. The host
+matrix measures a large valid history inside the envelope; it is not a claim
+that every possible schema-valid history fits. Formats and writer bytes remain
+unchanged, including existing canonical private intent/witness requirements.
+
+All property-bearing unit readers share `parseOsStageSystemdProperties`.
+Malformed/duplicate rows and `LoadState=not-found` contradicted by active,
+transitioning, cgroup, PID or job evidence are unreadable, never unit absence.
+Package recovery cannot clear downloading on that evidence; D8 submits no stop;
+maintenance cannot clear authority. Clean not-found replies retain systemctl's
+legitimate nonzero-exit convention. Slot-sync unknown properties throw rather
+than manufacturing an absent unit.
+
+Stage diagnostic annotation is guarded across all property access and context
+construction. Unreadable getters produce only closed fallback metadata and the
+original thrown object is rethrown; optional diagnostics cannot replace its
+typed reason or disposition. Host tests inject getter faults at admission,
+settlement and startup. Neither these tests nor the reader sweep qualifies
+boards, helper churn, power loss or filesystem/kernel I/O timing on a device.
+
+### Capability regime and terminal package evidence
+
+Capability authority has three internal outcomes: genuine absence, a valid
+declaration, and UNKNOWN. Only absence or a valid declaration without
+`apt-all-packages` selects legacy; a valid declaration with that feature selects
+origin/pinned-plan admission. A present unreadable or ambiguous declaration
+(including EIO/EACCES/ELOOP, oversize, duplicate JSON members, invalid UTF-8 and
+schema failure) throws `UpdateCapabilityReadError` with the existing
+`discovery_failed` reason. No wire/schema field is added. Legacy refresh,
+discovery and install continuations refuse before package/network preparation;
+the cached actionable set is withdrawn, never reused under a guessed regime.
+Manual and scheduled orchestrator package admissions also read that authority
+before their effect ports. Manual admission returns its existing refusal and
+publishes the typed refused notice; idle scheduling retains its retry cadence.
+Bytes are preserved, nothing is rewritten, and a later valid read recovers.
+Recovery of an already-owned package unit is observation, not a new installation,
+and remains available rather than discarding its surviving outcome.
+
+An owned unit with `SubState=exited` is not completion by itself. Terminal package
+proof requires unique properties, a present whole-string decimal `ExecMainStatus`
+in 0–255 and an explicit bounded `ExecMainCode` (1–3), plus a coherent lifecycle.
+Active/exited requires code 1; failed/failed requires nonzero status. Missing,
+prefix-parsed, out-of-range or contradictory evidence stays in the existing
+running/unknown observation: no success, unit stop/reset or output-consuming
+cleanup. The observer retries; a later complete failure reports its actual code.
+Command failure and owned-identity validation remain independent requirements.
+The shared numeric exit-field parser also serves the slot-mirror reader: a
+failed/refused verdict cannot authorize outcome persistence/reset-failed from
+missing, malformed, impossible signal/status pairs or a failed systemctl reply.
+Its receipt-bearing inactive-clean convention remains separate and unchanged.
+
+Text identity metadata follows the same uniqueness rule: repeated `[system]`
+or rootfs slot sections and repeated `BUILD_ID=` lines refuse, including identical
+duplicates and empty second sections. The image-compatible build-stamp fallback
+applies only after unambiguous metadata, not after a conflicting first match.
+Host matrices cover production discovery/scheduler effects, real package
+probe/identity/observer composition and private metadata files. They are not
+installed-board, real APT, slot activation or power-loss qualification.
+
+The same boundary applies to neighbours of those readers. Present invalid or
+unreadable `os-channel-override` refuses with typed `discovery_failed`; only
+genuine absence uses Settings' stable/beta channel. The fixed-path reader is
+strict even for ancestor/link errors. First-party curl probe output needs one
+exact marker and status `200`, never a numeric prefix; generic status is a complete
+100–599 token and a malformed redirect remains unknown. Repeated deb822
+`URIs`, `Suites` or `Enabled` fields refuse before constructing a probe plan,
+and continuation lines belong only to their current field. These host parser
+proofs do not assert how a board's actual repository or image channel behaves.
+Production repository observation never selects emulated success merely because
+device-detection files are missing or unreadable. Only explicit mock mode chooses
+that fixture regime; production still needs a real repository probe result.
+
+## OS staging lock and startup reconciliation
+
+### Metadata and idle boundaries
+
+The generic reader still refuses every symlink. The OS-metadata-specific reader
+alone accepts a regular `/etc/os-release`, or a link whose bytes are exactly
+`../usr/lib/os-release` or `/usr/lib/os-release`. It never follows that link:
+the fixed `/usr/lib/os-release` target is independently anchored and read with
+the same byte bound, no-follow/nonblocking flags, regular-file validation and
+fatal UTF-8 decoder. A present link with a missing, linked, directory or FIFO
+target refuses. Other targets, loops and near-spelled paths refuse. Evidence
+assembly tests remap the root descriptor only and run the real production reads.
+No claim is made about either board's current entry type or populated rootfs.
+
+`idle.json` is bounded to 16 KiB and duplicate-strict before its unchanged schema.
+Only genuine absence obtains the boot-time default. Invalid present evidence
+throws `IdleStateReadError`; `getIdleStatus()` returns `idle=false`, `since=null`
+and the existing typed `activity-unknown` blocker. `awaiting-idle` remains visible
+and no automatic install is submitted; idle-dependent OS staging and stale-service
+restart also receive false. Reads preserve evidence and do not cache defaults,
+so a repaired file is retried. A future stream-end timestamp likewise cannot
+prove quiet time. Manual install retains its explicitly documented idle bypass.
+Future/nonfinite recency from any of the five activity sources withholds idle;
+an older valid sibling cannot mask it. There is no new persisted field, RPC
+schema or localized string.
+
+The reader sweep also closes mixed `config.json` safety fields while retaining
+ordinary preference salvage from the **same** strictly read/parsed bytes. Invalid
+authority closes getters and saves until valid reload, rather than publishing
+stale/default permission. Packaged `setup.json` validates the whole record before
+its absent-field defaults, so a corrupt update opt-out cannot enable APT.
+Auth-token ambiguity denies token login; FCC ambiguity enables no model. Present
+unreadable modem journals retain the existing recovery barrier (external
+`recovery_pending`; internal boot starts remain parked), including read/list faults,
+instead of pruning ambiguous completed records. The barrier's one retry owner (see
+below) lowers it once a complete readable replay succeeds; no new clearing API is
+added. Add-on descriptors and shaper ownership use the same strict JSON boundary.
+Failed qdisc ownership reads are never cached as loaded, so later apply/teardown
+cannot skip the refusal.
+Bluetooth service intent likewise refuses invalid presence before reconciliation
+can enable/disable units or claim a positive applied outcome. Dongle runtime
+metadata rejects duplicate state members before projecting an up marker.
+All of this is host-only boundary/effect-port proof, not board, power-loss or
+privileged-helper qualification; other lanes still own the streaming markers.
+
+### Unknown optional-record reads: no boot abort, no wedge, no write baseline
+
+A strict reader may REFUSE, but the code around it must not turn that refusal
+into a dead control plane, a latch nobody clears, or a whole-file overwrite.
+`helpers/persistent-record.ts` classifies an optional record as `absent`
+(ENOENT), `valid`, `damaged` (read completely, refused by UTF-8/JSON/duplicate
+member/schema) or `unavailable` (EIO/EAGAIN, short or changed read, non-regular,
+oversize). Only `absent` and `valid` may seed a whole-file write.
+`preserveDamagedRecord()` copies the exact bytes to `<file>.damaged-<sha256>`
+(private temp, fsync, `link()` so an earlier copy is never replaced, directory
+fsync) before anything replaces a damaged record; if the copy fails the record
+stays unwritten. Every attempt first strictly checks the published digest copy
+and reacknowledges its parent, before requiring writable temp storage. A new temp
+uses an exclusive UUID-bearing name. Its owner keeps the descriptor pinning that
+inode until cleanup succeeds; read/unlink faults retain ownership for the next
+attempt. An unpublished own temp must be cleaned before another is allocated.
+Cleanup compares inode/device/birth identity, never bytes or a PID name alone;
+an absent/replaced own entry relinquishes only that ownership. A published copy
+is never removed or overwritten. For unchanged bytes, write/temp-fsync/link/
+directory-fsync failures and repeated cleanup EIO retain at most one own temp and
+one published copy per record. A restart uses a fresh nonce, with the existing
+fail-soft boot orphan sweep owning old debris. Permanent I/O faults remain
+unavailable, not successful preservation.
+
+- **`config.json`** (`modules/config-boot.ts`). `loadConfig()` stays strict. Boot
+  calls `bootRuntimeConfig()`, which never aborts boot on an authority failure.
+  Damaged: archive, replace with the first-run record, load it through the same
+  `loadConfig()` a missing file uses, and raise the persistent
+  `config_damaged_reset` notification (`notifications.configDamagedReset`, naming
+  the copy and saying settings must be re-entered and that it does not mean
+   streaming or updates work). The archive identity remains pending across a failed
+   post-write strict reload and through bounded/background retry attempts. The first
+   successful strict load announces it once in that boot lifetime, then consumes the
+   notice intent. Preservation retries keep the same identity; no second replacement
+   is needed just because a reload failed. This is process-local intent, not
+    cross-process exactly-once delivery. If the process exits after the first-run
+    replacement is written but before strict loading succeeds, the notice can be
+    lost entirely: the next boot loads the valid first-run file, sends no reset
+    notice, and leaves the damaged copy on disk. The only values carried over are a bcrypt-shaped
+  `password_hash`, a crypt-shaped `ssh_pass_hash` and `ssh_pass` from a
+  duplicate-free JSON object. When none survives (zero-byte, unparseable, hash
+  missing), the reset device is unclaimed and any LAN client can claim it with
+  `set_password`. That is PRE-EXISTING (merge-base 23bcf379 defaulted the same
+  file and prompted the same way), not narrowed here, and an owner decision:
+  accept it, or add a separate credential record (a new stored record, D154).
+  Unavailable: three attempts (waits 250 and 1000 ms), then the control server
+  binds anyway and one cancellable owner retries `loadConfig()` with doubling
+  waits from 1 s to a 60 s ceiling. Every config-dependent boot step waits for it
+  after the bind. Meanwhile getters and saves throw as before, the first-run
+  `set_password` prompt is withheld (the stored password is unknown, not absent),
+  `setPassword` reads config before touching the in-memory hash, and login
+  refuses for want of a hash.
+- **Modem-mutation barrier** (`modems/mutation-recovery-owner.ts`). When the
+  startup replay could not read or settle every slot, one owner retries the full replay
+  (safe: the barrier has been up since boot, so nothing was admitted) until a
+  complete readable replay lowers it, with the same 1 s to 60 s backoff. After a
+  completed replay, a RUNTIME raise from a failed journal read schedules the same
+  owner in `verify` mode: it settles already-submitted journal bookkeeping, re-reads the slot inventory and the
+  per-identity blocks and never rolls back, because an admitted mutation may still
+  be running. Block publication reads the inventory strictly: a slot that became
+   malformed between passes raises the barrier and fails the attempt instead of
+   being skipped. A file concurrently removed after listing is absent, not damaged,
+   and is skipped in both inventory passes without raising the barrier. Read
+   failures still throw and raise the barrier, including enumeration after the
+   directory opened successfully. If acknowledgement already durably removed a
+   slot, a failed refresh keeps its old projection temporarily; the registered
+   read-only owner retries the empty journal and clears that obsolete block before
+    lowering the barrier. Reconciliation is valid only for the journal revision it
+    read. One process-local monotonic revision changes before/after cooperating
+    commits and removals (including acknowledgement), and on read faults. Drift
+    during inventory acquisition permits exactly one fresh inventory read, preserving
+    benign concurrent-delete behavior without an unbounded recapture loop. A write
+    still in flight is not settled inventory. Both empty and nonempty publication
+    check that revision immediately before replacing blocks; completion checks again
+    after its await. An older USB enumeration cannot restore an acknowledged block
+    or overlook a new failed slot. A raise arriving while pending is remembered,
+    not discarded; a new trigger vetoes completion. Invalidated passes keep the same
+    owner and capped backoff until a fresh pass completes. Startup uses its final
+    strict reconciliation revision because replay itself can prune/write entries.
+    Acknowledgement/decommission/rebaseline recheck their global captured revision
+    after their entry read or hardware capture. An unrelated modem's commit or a
+    journal read fault during that await can therefore return `not_blocked` even
+    when the requested entry is still blocked, not just when its own authority was
+    superseded. Replay rereads
+    each slot before acting and fences presence/rollback awaits, so an old captured
+    entry cannot overwrite or retire a newer journal decision.
+    The operator need not acknowledge the now-absent slot
+    again. `archiveAcknowledged` can reject after its removal was already durable
+    if both bounded refresh acquisitions lose the fence; the registered owner still
+    owns block reconciliation, but the RPC rejection does not undo removal.
+    Benign overlapping modem writes can also raise recovery on healthy storage:
+    one lease's refresh during another modem's in-flight commit rejects settled
+    authority, and Start answers `recovery_pending` until a read-only verification
+    pass completes (its first wait is 1 s).
+
+    A replay fence failure is an INCOMPLETE pass, never a blocked-entry verdict.
+    The existing summary's `unreadable` count includes such lost authority and other
+    thrown entry failures; no new stored/wire field is added. A successful final
+    block refresh cannot erase that count. Initial recovery schedules replay, and
+    an invalidated replay-mode retry stays replay under the raised boot barrier.
+    Each attempt rereads the slot, including fencing before an absent read is
+    skipped. A retained `executing` slot is ordinary interrupted-mutation residue.
+    Fresh hardware capture short-circuits an already-restored pre-state; the USB
+    mode and band handlers also check their own already-restored state before
+    writes. Operator acknowledgement of that same slot invalidates older captured
+    authority; a removed slot is not resurrected on retry.
+    Repeated invalidation never spins: waits double 1/2/4/8/16/32 s and cap at 60 s,
+    with one cancellable owner. A continuously committing writer can withhold a
+    complete pass indefinitely; there is no unsafe timeout-open. Once churn stops,
+    the next complete replay lowers recovery, without a restart. The bound is on
+     retry cadence, not hardware/read duration or total time under permanent faults.
+     Retirement is successful only after unlink succeeds (or reports genuine
+     ENOENT) and parent fsync acknowledges it. EIO/EACCES/ENOSPC and other unlink
+     errors propagate as incomplete replay; `rolledBack`/`pruned` cannot advance
+     before retirement succeeds. A one-shot EIO retains REPLAY until a later pass
+     actually retires the slot, without restarting. Failed parent acknowledgement
+     after visible deletion remains process-local debt: the same owner retries
+     fsync, never the old pathname deletion, before publication/completion. An older
+     sync cannot discard a newer failed acknowledgement. Empty readback is not fsync.
+
+     Acknowledge and rebaseline return existing `journal_write_failed` when removal
+     fails; the durable `acknowledged` decision and previous block projection remain.
+     Explicit retry resumes that retirement without replacing the accepted baseline.
+     Every operator retirement, replay write and failed-transition settlement holds the
+     stable key's mutation lease through its awaited write/unlink, parent fsync and
+     refresh, so an old retry can never delete a newer armed/executing slot: the new
+     mutation refuses `mutation_in_progress` while a retirement holds the key, and a
+     retirement that finds armed/executing answers `not_blocked` without waiting. An
+     eligible slot under a held key (a mutation tail OR another holder, such as a
+     network scan) waits and rereads after every wake; three acquisitions bound
+     handoffs, not elapsed time, and exhaustion answers existing `state_mismatch`.
+     The RPC transport supplies no abort signal, so a disconnected or timed-out client
+     does NOT cancel a waiting retirement: it retires when the holder releases, and a
+     holder that never releases keeps it pending. Replay and settlement never wait: a
+     held key is an incomplete pass. See the modem safety contract → Same-key journal
+     exclusion, including the acknowledgement busy-reason owner option.
+     An independent later reconciliation can project the already-proven acknowledged
+     decision as nonblocking, consistent with the existing state contract. Decommission
+     never removes its entry: its retained decision releases only the streaming block.
+     Journaled lease confirmation commits existing `completed` before removal. Cleanup
+     failure returns a typed mutation refusal and always releases the lease; retained
+     completed authority is nonblocking, not ownerless executing residue. If an operation's
+     fallback failed-state write also fails, the same recovery owner retains that
+     attempt-bound transition and retries bookkeeping after a fresh slot/revision check,
+     without repeating hardware or overwriting acknowledged/newer-attempt authority.
+     Runtime verification performs no hardware rollback. These pending acknowledgements
+     and transitions are process-local; a new process uses boot journal replay.
+     Cancellation is checked after every attempt outcome, including incomplete/throw;
+     no next sleep or completion follows shutdown. The default sleep creates no timer
+     or listener for an already-aborted signal, and a completed wait removes its abort
+     listener (config boot's default sleep likewise). Submitted hardware I/O is not revoked.
+    A permanent enumeration failure keeps the barrier raised behind capped
+   waits, not a spinning loop. A verification can never lower the barrier over damage it
+  just observed. Shutdown cancels the flight and disarms scheduling, so a late
+  raise cannot start another owner. A slot that stays damaged keeps the barrier up
+  (the slot may be an unrolled mutation); the existing `recovery_pending` text
+  ("ask again shortly") is then not honest for that case, an owner-decision gap
+  that would need a new reason on the wire.
+- **Shaper coordinator.** The serialization tail swallows a rejection after the
+  caller has received it. A pending-application flag starts true: the first idle
+  tick reconciles retained roots even when nothing is shared or streaming after a
+  backend restart. Absent roots produce no traffic-control command and are read
+  once. The flag is also set by any update that
+  needs application and cleared only after `apply()` succeeds; the streaming mode
+  is recorded only then too. So after a rejected ownership read even an empty
+  idle update reruns the read and restores retained roots once storage recovers.
+- **`auth_tokens.json`.** Every auth operation and every write rereads the file;
+  no classification is cached across a repair. Damaged or unavailable: a correct
+  password signs in for this visit only (temporary session), nothing is written,
+  and token login is denied (D209). Only an explicit password change or
+  revoke-all may replace a damaged file, and it archives the bytes it actually
+  replaces; over an unavailable store those two still write `{}`, because that
+  result does not depend on the old contents and a password change must not let
+  old remembered browsers return. Logout and individual/all revocation register
+  process-local intent BEFORE rereading or writing. Every reread and save filters
+  revoked digests; only a successful save clears the intent. Failed explicit writes
+  still error, but the next auth operation retries once and denies revoked tokens
+  even when that retry fails. While revoke-all is pending, remembered issuance is
+  temporary. Shutdown disarms this per-operation retry through the existing auth
+  stop hook; there is no new timer. Intent is NOT restart-durable before a
+  successful save, so a restart after failed persistence can still reload the old
+  file. The import-time pre-digest prune runs on a
+  timer that never throws: a write fault leaves the file as it was and retries
+  (1 s, 5 s, 30 s, then every 60 s) until it succeeds or shutdown stops it. Test
+  imports do not schedule that timer; child tests explicitly use production mode.
+- **FCC policy.** Display and enforcement keep treating anything but a valid
+  document as "nothing enabled". A toggle or rollback takes its baseline from
+  `loadFccUnlockPolicyBaseline()`: unavailable refuses (`write_failed`, before any
+  lease or journal entry); damaged is archived, then answers empty, which is the
+  state both readers already enforced, so the journaled pre-state is real.
+- **`idle.json`.** A schema-valid FUTURE end time is returned (it cannot grant
+  idle) but not cached, so a repaired file or corrected clock is read again. The
+  immutable `bootAt` baseline is unchanged: a backwards clock step after boot
+  withholds idle until the clock catches up or the process restarts; manual
+  install keeps its idle bypass.
+
+`setup.json` (baked, seeded once, never written by CeraUI) is REQUIRED metadata
+and is never guessed or defaulted (D225). A transient leaf fault (EIO/EAGAIN,
+short or changed read) is retried in-process five times over about 3 s; after
+that the typed `StoredStateReadError` aborts module evaluation. Systemd's
+`Restart=always` requests a restart subject to its start limit, NOT endless retry.
+The packaged unit sets no `RestartSec` or `StartLimit*`; defaults of 100 ms,
+5 starts and 10 s can leave fast non-EIO/EAGAIN failures and parsed-and-refused
+bytes (class C) permanently failed with `start-limit-hit` until intervention.
+That default-policy failure was observed on the oracle's host user manager;
+persistent EIO cycles lasting >3 s staying below the board's start limit are
+inferred, not qualified. Explicit `RestartSec` pacing and/or
+`StartLimitIntervalSec=0` is an OWNER/IMAGE DECISION, not a change in this lane.
+
+Scope of these claims: host tests with injected faults only. A board drill must
+still prove a corrupt `config.json` on a real board and its ownership
+consequence, a true config I/O failure, a journal fault followed by repair with
+restoration/autostart, damaged-token login, FCC reconciliation and shaper
+recovery on the final head. Shutdown during the unavailable-config wait relies
+on default signal termination because the signal handlers are installed late.
+
+Physical startup reconciliation and orchestrator startup are ordered by a shared
+completion promise. Both run off the control-server boot path; completion is not
+a positive safety verdict. The orchestrator retries acquisition/persistence/cleanup
+failures under one flight, with five waits (250, 500, 1000, 2000, 4000 ms) and six
+attempts total. After transient exhaustion, mutation readiness stays closed while
+one unreferenced timer retries a single startup attempt every 30 seconds until
+success. Operator calls cannot rearm the burst or the timer. Authoritative safety
+refusals without an I/O cause (except lock contention) are never retried; invalid
+present recovery metadata stays maintenance-blocked without automatic repair.
+
+Boot launches one detached update bootstrap: orchestrator startup, standalone
+APT recovery, then periodic package checks. Unrelated boot surfaces never await
+this chain. A failed transient burst flags `update-orchestrator` degraded through
+the boot guard, but the chain waits for the cadence's eventual startup adjudication
+before handing over any detached unit. Only successful, valid startup permits that
+handoff. A terminal safety refusal or invalid-present metadata settles the chain
+without bootstrap standalone recovery or hourly legacy refresh: preserving plan/unit evidence is
+safer than letting legacy cleanup become its first reader. No metadata is cleared.
+
+### OWNER DECISION: terminal startup refusal and legacy maintenance
+
+Invalid metadata or an authoritative safety refusal produces one bootstrap error
+and marks `update-orchestrator-maintenance` degraded on local `/api/health` through
+the existing boot-readiness surface. The flag is latched for this process, not a
+typed RPC refusal or a guarantee that every legacy path is blocked. The bootstrap
+does **not** initialize standalone unit recovery or hourly legacy refresh in that
+state. An untracked detached transaction, including its eventual terminal result,
+therefore remains unobserved by this bootstrap.
+
+Other callers remain independent: stream-stop (`process-runner.ts`) and a recovery
+coordinator retry succeeding can still call `periodicCheckForSoftwareUpdates()`
+and start/resume legacy discovery. `system.checkForUpdates` and `system.startUpdate`
+remain callable under their existing guards; they do not consult this adjudication.
+Install may acknowledge dispatch before its continuation refuses a retained unit.
+The degraded flag must not be interpreted as a process-wide legacy-admission fence.
+
+**Operator remedy:** avoid Check as well as repeated Install attempts; preserve `agent.json`, the
+pending plan, unit status and output. Have a local administrator diagnose and repair
+the invalid metadata or unsafe ownership using positive unit/package evidence;
+never delete the retained unit or state merely to clear the warning. Restart CeraUI
+only after that maintenance establishes a safe baseline. The narrow packaged
+missing-commit recovery tool below is not a general invalid-metadata repair tool.
+This choice keeps destructive recovery closed while leaving legacy RPC/discovery
+entrypoints unchanged. Whether to add a product-wide legacy maintenance/admission
+gate or separately safe discovery scheduling is an **OWNER DECISION**, not silently
+implemented here. No new typed RPC refusal or unconditional cleanup is added.
+An accepted legacy Check clears `lastUpdateSucceeded` before dispatch; only a
+refused Check restores it. Retained wire success is therefore not immutable
+evidence. This remains relevant to maintenance under terminal startup refusal,
+where the pending-success authority below may never have observed the unit.
+
+### Recovered package success: explicit exit authority [PARTIAL — host-proven]
+
+A persisted `committing` **or `downloading`** owner registers its recovery exit
+hook before attachment. Persisted downloading can lag a short commit.
+`finish()` exposes drain/cleanup settlement separately so resume can observe success
+without waiting on itself. Its deliberate restart tail consumes the hook, which
+waits for successful, valid startup adjudication. For an already-finished unit,
+startup durably reconciles the tracked snapshot under CONTROL first. The hook
+then confirms or persists success; downloading uses `COMMIT_PHASE_ENTERED` followed
+by `COMMIT_SUCCEEDED`, committing uses `COMMIT_SUCCEEDED`. The final successful
+snapshot is persisted before exit, including a unit running at boot that completes
+later without a scheduler tick. An already-durable `restarting-services` or `settled`
+snapshot still grants permission; any other phase withholds it.
+Overlapping standalone recovery joins the recovery coordinator; it gets no separate
+completion tail. A unit with no orchestrator owner keeps legacy exit/reboot behavior.
+
+**Failure decision:** no positive durable success means no deliberate exit. Terminal
+refusal marks `update-orchestrator-maintenance` degraded; a transient startup burst
+failure is marked degraded by the boot guard and keeps the tail parked for the
+30-second cadence. A later running-unit persistence failure closes mutation
+readiness, logs an error and marks maintenance degradation. The process stays alive
+with its observed outcome; it does not invent `commit_unit_absent_on_resume` by
+deliberately discarding that outcome. This is not a durable success journal: an
+external kill/power loss before persistence can still lose consumed unit evidence.
+Fix storage/ownership without restarting first. A failed completion write now
+retains explicit pending-success authority for the scheduler retry below. The
+completion tail waits for durable acknowledgement after its logged write failure;
+successful replay permits that original deliberate exit once, and normal stale-service
+reconciliation also regains restart authority. The narrow missing-unit tool applies only
+to its documented reason and is not general metadata repair. Host delayed-CONTROL
+tests use terminating exit seams; real systemd/APT and power-loss validation remain owed.
+
+### OWNER DECISION: pending package success and the old running backend
+
+Successful owned completion marks `pending-success-fence.ts` before publishing
+package wire `success`. That wire says the package transaction succeeded, **not**
+that restart permission passed or the new backend is running. A withheld restart
+leaves the new packages installed with the **old backend still running**. The
+operator's observable maintenance feedback is the error log and the latched
+`update-orchestrator-maintenance` flag on `/api/health`; no new rendered band or
+typed RPC refusal is claimed. The flag remains latched even if storage later heals.
+
+While durable success is unacknowledged, every orchestrator tick services the
+existing snapshot replay and intent/witness recovery owners before one
+single-flight CONTROL-protected package-success retry, then returns. It never
+enters ordinary scheduling while that package fence is present. The existing tick
+cadence (3 s in active package phases, otherwise 60 s) remains bounded: no hot-spin
+and no second retry timer. Replay accepts only the exact baseline, the reducer's
+download-to-commit intermediate, or exact success intent on disk. It persists the
+final intent, adopts/publishes it, then clears the fence. Disk drift or write failure
+retains it. Fresh synchronous callbacks receive authoritative disk acknowledgement
+too: memory ahead of disk, or a repeat no-op callback, cannot clear the authority.
+Startup-tail successful persistence is another authoritative acknowledgement.
+Readable equality is not durability: if rename succeeded but parent-directory fsync
+failed, a repeated completion must re-persist under CONTROL before acknowledging.
+Retention preserves the first baseline. Retention, acknowledgement and replay also
+compare all persisted non-phase fields, excluding `phase`, `enteredAt`, `progress`
+and `failureReason`; a changed plan, history or recovery record cannot borrow the
+observed completion. This schema has no package transaction UUID, so transactions
+identical in every compared field are not independently distinguishable.
+
+Manual Check, Install and synchronous cellular approval require **all three**:
+validated startup, no OS settlement durability pending, and no package success
+pending. Startup's final `setReady(true)` cannot override package pending, and
+package acknowledgement cannot authorize unfinished or invalid startup. D8 returns
+its existing `update_in_progress` refusal before reading or mutating its tracked
+phase when package success is pending, including after awaited publishing-intent
+recovery. Download abortion rechecks after the awaited
+commit probe, immediately before stop submission, and after stop before dispatch.
+
+Power is fenced for the same window. Local reboot/power-off, the SSH mutations and
+the remote `system.reboot`/`device.factoryReset` commands consult one
+disruptive-action gate that refuses with `update_in_progress` while package success
+is retained, OS settlement durability or replay is pending, an OS stage or `armOs`
+call is in flight, the orchestrator is in `downloading`/`committing`/
+`restarting-services`/`os-staging`/`syncing`, or current maintenance authority remains
+unsettled. A historical boot-degradation entry alone no longer refuses after
+validated startup, current authority and settlement durability recover. It
+also refuses `stream_liveness_unknown` before boot stream reconciliation returns.
+The former `isUpdating()` (package progress only) guard missed OS staging and the
+cleared-progress, not-yet-durable success window. Physical shutdown effects are
+inferred, not board-proven. Full list: `START-LIFECYCLE.md` → Disruptive-action gate.
+
+Accepted disruptive effects also reserve the reciprocal lifetime: power/reset and
+timed activation retain in-process exclusion after exit zero, while SSH and
+blocking stale-service restarts release on positive command completion. Spawn/nonzero
+positive failure releases; uncertainty stays protected and is not cleared on a timer.
+It now has an evidence resolver: no job and coherent settled unit state can release
+a service depth, while unreachable systemd re-polls at capped 2/4/8/16/30 s backoff.
+Shutdown cancels polling without clearing the hold or accepting late replies.
+Timed arming additionally needs terminal arm result/exit evidence: success retains
+shutdown exclusion, failure releases, unknown continues observation. The original
+operation result remains uncertain/failed even after safety exclusion resolves.
+An operator can explicitly retry the SAME pending power action, never a different
+action, after the final synchronous live/unknown and OS/package-fence recheck.
+A positively failed retry restores the earlier possibly accepted shutdown hold.
+Console/physical power remains the last resort. Legacy completion reboot now keeps
+one deferred, shutdown-cancellable continuation and rechecks safety on each wakeup;
+the automatic action produces no misleading operator-refusal notice.
+The existing D8 hook refuses new stream starts and package/OS submission boundaries
+refuse pending shutdown. This adds no persisted record, schema or RPC. Process restart
+clears the reservation, so installed shutdown/restart ordering remains a required
+board drill, not a durability claim. Terminal invalid-authority recovery still has
+no operator override: an owner policy for product-level maintenance repair/clearance
+is unresolved; history is not permission to bypass current unknown evidence.
+
+Owner identities are lifetime-scoped and depth-counted. The exact add-on integration
+API and set/held/uncertain/resolved/released/superseded/restart table live in
+[`START-LIFECYCLE.md`](START-LIFECYCLE.md#reservation-state-table-and-owner-seam).
+Default systemd probes are safe only for the unit actually owning the effect;
+mutating helper steps need their request-owned process group retired BEFORE the baked
+descriptor-unit union's jobs/lifecycles settle. Ordinary Bun spawn invokes checked
+`/usr/bin/setsid -w -- /usr/bin/bash -c '<launcher>' ceralive-addon-launch <pidfile>
+/usr/bin/ceralive-addon-helper action [id]` without sudo, PTY,
+detached spawning or `-f`; the root/root service refuses non-root mutation, with fixed
+PATH/locale and no inherited BASH_ENV/SHELLOPTS/CERALIVE_* overrides. Status is unchanged.
+Even exit 0/1 requires actual direct-child exit, integer owned PGID > 1 and ESRCH from
+`kill(-PGID, 0)`. Success is presence and every other errno is UNKNOWN. Retirement is
+latched before polling descriptor units; no later numeric-group probe occurs. Timeout
+remains failure, retaining partial output and actual 137/143; collector signaling is
+child-only. The runner separately records none/started/unknown dispatch evidence: a
+failure in its own pre-spawn checks/preparation/abort, or a Bun Error tagged `socketpair`,
+`fcntl` or `posix_spawn`, proves no dispatch and releases immediately with the original
+error, zero retirement probes and no retry. A returned handle retains group and unit
+evidence regardless of error spelling; abort racing assignment cannot clear it.
+Bun 1.4.2 can exec, fail `pidfd_open`, block in `wait4` until the leader exits, reap it,
+then throw without returning a handle. Before helper exec the launcher writes `$$`
+using builtin printf; write failure exits125 and cannot execute the helper. A per-step
+UUID file is exclusively created under root-owned0700 `/run/ceralive/addon-launch/`.
+Its retained FD recovers identity even after unlink; normal handles never read it.
+Handle-less recovery accepts only whole integer2..2147483647, then uses the same
+negative-group ESRCH latch before units, without any helper-name census. Invalid or
+unreadable bytes hold UNKNOWN; invalid nonempty evidence cannot later borrow absence.
+Empty identity releases a reaped pidfd failure immediately, with its original error.
+This relies on the fixed-options Bun1.4.2 assumption that every naturally reachable
+post-exec throw reaps first (spawn_process.rs:552–568,991–1002, bun-v1.4.2); ordinary
+ECHILD means already gone. Untagged/future/non-Error absence gets cancellable
+100/200/400ms re-reads (700ms total), not a death proof independent of that assumption.
+Reaudit before any runtime/option change. Valid recovered groups retain capped
+cancellable backoff; no elapsed-time group clearance exists. Inode-checked file cleanup
+is best-effort after no-dispatch or retirement, never on leader/collector exit alone.
+First-use sweep precedes this backend's first file; crash residue is not adopted, is
+request-unique, and reboot clears tmpfs. A stale file cannot affect another step.
+Only source-proven pre-exec tags for these fixed options bypass evidence, not a global
+errno whitelist. Cancelled/retired first observations cannot schedule a late retry,
+even on rejection. Fork/exec/reparenting and
+double-fork retain group membership; unreaped zombies conservatively hold, not disappear.
+No timer or zombie-skipping census grants clearance for owned groups. Generic outer
+operations retain their separate census; it is never helper completion authority.
+
+Group containment excludes session/group-changing descendants, already-submitted PID-1
+jobs, PID-1 services/hooks or other-daemon work, manager Reload (enable/disable and sysext
+metadata), and unacknowledged requests from killed clients. A separate unit read is not
+a general drain barrier. Adding a daemonizing/session-changing helper tool triggers scope
+replacement. Manager's independent systemctl tails do not acquire group ownership.
+Installed launcher, init reaping and delegation remain unqualified.
+
+Both-board drills additionally owe installed `/usr/bin/bash`, private `/run` directory
+creation under the service sandbox, and identity write/removal per mutating step.
+Forcing post-exec pidfd faults there requires privileged instrumentation; unprivileged
+host seccomp is not installed proof.
+
+Forced arm errors
+retain original exit evidence; `activation_arm_failed` alone never releases, and
+uncertain outcomes observe the actual arm unit. A signal-killed client (exit >= 128)
+is uncertain, not a failure. A stuck service hold
+has no supersede path and no in-product override (D249); the operator escape is
+restarting `ceralive.service` or a power cycle, and a remote factory reset that exits
+0 without rebooting leaves a shutdown hold only the same action can supersede.
+Eventual settlement is not guaranteed: manager preparation/download has no
+application-level total deadline, so a natural stalled kiosk Start may retain its
+outer service hold indefinitely, without corruption or a systemd defect.
+Reservations and evidence handles are process-local. Restarting `ceralive.service` or
+power-cycling clears that local hold, not proof that surviving helper or delegated
+manager work completed. PGID isolation does not exempt descendants from the service
+cgroup's cleanup: `KillMode=mixed` reaches them in its final kill phase. No service-hold
+supersede or clear-hold operation exists (D249).
+
+**Timed arm pre-submission CONTROL refusal (owner decision, D257).** If the CONTROL
+holder dies between runtime's check and the producer's check, the producer can
+throw `rauc_recovery_unproven` BEFORE spawning systemctl. This positively
+pre-submission case still leaves a shutdown hold: the generic resolver rejects
+`ExecMainCode=0` on the never-executed arm unit and cannot auto-settle that unchanged
+evidence. The operator escape is an explicit SAME-action reboot submission after
+all current fences pass, or backend restart/device power cycle. The typed reason
+is NOT whitelisted: it also describes effectful failures. No typed pre-effect
+primitive or service-hold supersede path is introduced.
+
+Board drills still owe accepted reboot → Go Live during shutdown, stale restart
+past 10 s → actual resolver clearance, exit 0 without shutdown → fenced retry,
+and timed activation arm → reboot. Additionally prove installed setsid/environment,
+real helper descendants, orphan/zombie retirement under the installed init, signal
+exits and partial output, queued descriptor jobs and service restart on BOTH boards,
+plus a real launcher failure leaving no hold and post-exec pidfd failure retaining exclusion.
+Forcing the latter on an installed image requires privileged instrumentation; host-only
+unprivileged seccomp evidence does not qualify the board.
+None is physically
+proven by the host matrices; restart clears local holds, not external-work evidence.
+
+The tick entrypoint suppresses phase overwrites, discovery, package launch, OS
+stage/activation, mirror start/poll/cleanup and quarantine retirement. Dependency
+entrypoints fence system effects and recheck awaited settings/capability/idle/
+discovery results. Stale-service reconciliation also rechecks immediately before
+each restart, after its idle await. Legacy periodic/stream-stop/coordinator discovery,
+Check, Install, deferred install and unit recovery are fenced only during this
+pending-success window, using their existing skip/refusal results. Terminal startup
+refusal alone does **not** activate that global legacy gate; the prior owner decision
+still applies. A legacy call admitted before observation also rechecks at the shared
+APT command funnel before each submission and after each awaited command result,
+after network/capability/settings preparation, and at the preflight command port
+(pre-clean, apt-config and print-uris). Refresh and discovery report the existing
+`discovery_failed` outcome and release their in-flight flags; a pending install
+continuation releases its updating latch without stamping shutdown or launching.
+Shared APT channel reconciliation rechecks after its source-file read immediately
+before the atomic write, including boot and settings callers. Already-submitted
+APT/RAUC/systemd work and network preparation cannot be undone by this fence;
+this is a submission-boundary guarantee, not cancellation of every internal effect.
+
+Five consecutive authoritative disk mismatches produce one maintenance escalation
+per retained completion, with reason `package_success_baseline_drift`. A persisted
+phase outside committing/downloading/restarting-services/settled escalates immediately
+as `package_success_phase_changed`. Neither verdict clears the fence or rewrites
+the replacement. An exact replay match resets the mismatch count. Repeated retry
+errors with the same name/message signature log at most once per 60 seconds;
+distinct signatures can still log separately. The escalation names the remedy:
+inspect `agent.json` and installed packages before restarting `ceralive.service`.
+
+**Remedy:** avoid Check and Install, preserve agent/plan/unit/output evidence, and
+repair storage or ownership while the backend stays alive. Storage recovery permits
+the next tick to durably record success and subsequent normal reconciliation to
+restart stale services. If replay reports authoritative drift, local administrative
+diagnosis and a positively established safe baseline are required before a service
+restart. Restarting early can discard the sole consumed outcome and recreate the
+missing-unit failure. No operator/maintenance fence-clear API is added: only a
+successful authoritative success persist/acknowledgement clears it in production.
+Test reset cancels the reserved exit hook and clears the fence; late CONTROL/read
+continuations cannot read/write/adopt into the next fixture. These are host proofs,
+not a power-loss journal or a board qualification.
+
+**Combined authority progress [PARTIAL — host-proven, independent review owed].**
+`OsSettlementPersistence` also owns the authoritative startup-tail snapshot, even
+for a package phase. A real parent-directory-sync failure after that tail's rename
+can therefore coexist with retained package success. The controlled host tests
+exercise package observation before the failed snapshot and running-unit completion
+after it. A healed-storage tick acknowledges the exact snapshot through its own
+owner; the original package exit remains withheld until valid startup reconciles
+success. Resumed commit progress is not silently accepted as the package's exact
+baseline: its replay may remain refused until the startup owner persists success.
+Snapshot replay, intent cleanup and publishing retain their separate closure checks;
+package acknowledgement does not open startup or another durability owner.
+
+Valid publishing restoration, by contrast, accepts only its exact `os-available`
+or `os-staging` snapshot. Neither phase attaches a tracked package owner or reduces
+to package success. `update-orchestrator-combined-publishing-invariant.test.ts`
+tests this production schema/startup invariant instead of fabricating a package-
+shaped publishing record and calling it reachable. This does not prove every legacy,
+trusted-uid or external writer obeys that invariant. Valid stale launching cleanup
+remains restoration-free, and unreadable authority remains closed. The combined
+tick still enters the existing recovery seam before package replay, so cleanup
+cannot be permanently bypassed by package priority.
+
+Host regression owners are `update-orchestrator-combined-snapshot-success.test.ts`
+and `update-orchestrator-combined-d8.test.ts`. The D8 statement-order proof uses the
+actual AST: publishing recovery, package refusal, then phase inspection; runtime
+tests cover the post-probe and post-stop fences. Ordinary live-producer cancellation
+and the original strict no-producer proofs are unchanged. Independent combined-head
+review, systemd/RAUC and board/power-loss qualification remain separate gates.
+
+The three non-witness recovery writers (interrupted settlement, generic
+confirmation, legacy migration) retain a baseline plus exact settled snapshot
+before dispatch. Write failure closes mutation admission; internal tick/startup
+replay re-persist that snapshot under CONTROL, without a second reducer event.
+Only the exact baseline or exact intent may be authoritative at replay. A changed
+disk record or a safety refusal without an I/O cause never becomes retry-to-clear.
+
+Initial attempt publication is inside the attempt lifetime, before any staging
+effect. If it throws (including parent-directory fsync after rename), memory
+returns to the pre-state and that pre-state is re-persisted under the held CONTROL
+lease. A second storage failure keeps exact rollback intent pending for replay;
+the active token still clears in `finally`. That rollback now also has durable
+pre-effect authority, described below; it is no longer recoverable only from
+the process's replay latch.
+
+### Durable OS attempt intent [PARTIAL — host crash-point proof, board power-loss proof owed]
+
+`os-attempt-intent.json`, beside `agent.json` under
+`/data/ceralive/update-state/`, bridges initial attempt publication and producer
+creation. It is additional authority, not a replacement for the guardian,
+unlaunched witness or positive writer-quiescence proofs. The strict schema-1
+record carries a UUID attempt ID, the complete already-verified signed manifest,
+the exact pre-state and proposed staging snapshots, and `publishing` or
+`launching`. Validation recomputes the staging transition from the baseline and
+candidate; recovery requires exact disk equality, not just phase or ID equality.
+No candidate version, cellular grant, clock or failed-round count is reconstructed
+from defaults. Staging still freshly verifies the signed candidate before effects.
+
+The uid-owned, mode-0600, single-link regular file is bounded to 65,536 bytes.
+Like the witness, operations are anchored to a validated, non-peer-writable
+directory fd, with no-follow reads and exclusive temporary creation. Every phase
+write is temp → file fsync → rename → parent fsync. Retirement is unlink → parent
+fsync. Production uses the backend's uid (root); tests own isolated temporary
+directories and inject the same real store, never a production environment bypass.
+
+Under the held CONTROL lease, `publishing` is durably written **before**
+`OS_STAGING_STARTED` replaces `agent.json`. Once that publication succeeds,
+`launching` is durably advanced immediately before calling `stageOs`, with no
+await between the advance and producer creation. Failure cannot invoke `stageOs`:
+memory returns to the baseline, durable rollback is attempted, and the existing
+exact-snapshot latch retains a failed rollback for same-process replay. The intent
+survives backend loss until the baseline has been durably restored or the launched
+path has durably settled. A superseded producer cannot retire another intent.
+
+Startup, ticks and manual admission enter intent recovery through the existing
+state-side witness seam. Every baseline restoration also requires no job record,
+no guardian (the existing strict systemd parser), no witness, and fresh positive
+writer/resource/healthy-boot/slot/receipt/activation evidence under CONTROL. Intent
+and complete disk state are read again after these awaits. Unreadable evidence
+never permits cleanup. A both-good-slot board is permitted here because the intent
+proves no producer was called, not because an absent job proves that fact.
+
+| Durable intent / disk | Recovery |
+|---|---|
+| `publishing` / exact staging snapshot | Prove absence and quiescence, durably restore the exact pre-state, retire intent; no failed round or unsafe notice |
+| `publishing` / exact pre-state | Same proof and durable baseline/cleanup; covers crash before agent publication and after rollback before retirement |
+| `launching` / staging or pending publication | Existing witness/unknown-after-restart path unchanged; never downgrade to never-launched merely because no job exists |
+| `launching` / exact pre-state already on disk | Proven rollback cleanup only, after the same absence/quiescence proof; this cannot restore a staging record |
+| `launching` / matching durably settled attempt | Retire intent without redispatching or counting another round |
+| `launching` / absent or superseding recovery record | Under CONTROL prove no job/witness/guardian, re-read disk and intent, retire and log the stale intent; never restore the old baseline or alter the new record |
+| Missing intent / `os-staging` | Legacy behavior unchanged, including unsafe unknown outcome after positive quiescence; the real D8 record stays unsafe |
+| Corrupt, foreign, wrong uid/candidate/attempt/baseline, drift, or unreadable physical evidence | Preserve records and keep mutation readiness closed; never infer clearance |
+
+If the launching rename succeeded but its parent fsync failed and rollback also
+failed before replacement, restart conservatively retains launching uncertainty.
+The no-effect fact available to the original caller cannot be guessed by its
+replacement. After a successful restoration a later automatic tick may legitimately
+start a **new** attempt through ordinary policy; restoration itself starts nothing.
+These are real-filesystem host fault-injection and fresh-runtime proofs, not
+systemd/RAUC board rehearsal or an executed power-cut test.
+
+Stale launching authority has no restoration permission. Its cleanup permits
+existing receipts and activation state: it writes no agent state and may not
+hold a verified activation or a replacement attempt hostage to an old intent.
+Unparseable/foreign/oversized/wrong-owner files still cannot be classified as
+stale and remain preserved with readiness closed. Same-attempt launching intent
+retains its current rule: an active identity remains pending; a settled one may
+be retired. Manual admission reaches this recovery seam before a new publishing
+intent is created, so proven stale cleanup does not require a scheduler tick.
+
+An unresolved publishing intent closes admission even when its first rename
+landed but parent fsync failed before publication was acknowledged. Deferred
+retirement is still pending cleanup, not a successful cleanup return. Synchronous
+cellular grants, Check and Install receive the existing retryable initializing
+refusal. Ticks resolve authority through recovery or remain closed before any
+snapshot mutation. D8 joins the same finite recovery flight before adjudicating
+the phase, without taking CONTROL itself. An exact-value startup re-adoption is
+permitted; a changed snapshot still refuses recovery. Unproven recovery with no
+positive live-producer evidence refuses D8 retryably rather than writing a third
+snapshot. A matching launched job still permits D8's existing cancellation;
+ordinary launching producers take no new recovery wait.
+The same retryable refusal covers corrupt, wrong-owner, wrong-mode, oversized
+or unreadable intent files, invalid/unreadable job files, and failed guardian
+observations. Neither recovery rejection nor the fallback read can turn these
+into an untyped RPC failure or proof of an absent producer. Unless a strictly
+read, launched job positively matches the valid intent's attempt, D8 writes
+nothing and issues no RAUC kill/restart. Repair does not require clearing a
+stream-admission latch: the next start re-probes and can restore the exact
+baseline before launch. Real-filesystem host regressions drive this contract
+through session admission and the real WebSocket adapter in
+`os-attempt-intent-stream-evidence.test.ts`; readable insufficient-job and live
+matching-producer controls are in `os-attempt-intent-stream-producer.test.ts`.
+
+The publishing-window writer census includes Check and Install RPCs, cellular
+grants, package/OS discovery and their completions, package scheduling/launch/
+progress/commit callbacks, terminal acknowledgements, stale-service completion,
+mirror eligibility/start/poll/settlement, OS scheduling/publication/progress/
+settlement, activation/reboot/verification, deferred-download re-adjudication,
+D8 package and OS aborts, interrupted/witness/legacy/confirmation reconciliation,
+snapshot replay/rollback/intent restoration and the startup tail. Manual and tick
+entry closes or awaits recovery; grants close synchronously; D8 OS abort awaits
+publishing recovery. Package, mirror, activation and deferred-download owners are
+phase-unreachable from valid publishing snapshots (`os-available`/`os-staging`),
+and reducer-inapplicable late completions cannot change those snapshots. Producer
+callbacks are unreachable before launching. Recovery and rollback are the
+coordinated authoritative writers, snapshot replay retains its own exact proof,
+and the startup tail refuses pending durability. Settings writes only
+`update-settings.json` and APT channel configuration; status/wire publication,
+notice hydration/replacement and quarantine cleanup never write `agent.json`.
+
+Retirement failure is not a different stage outcome. The finally logs a structured
+`intent-retirement-pending` event and retains a separate single-flight cleanup
+latch in settlement persistence; the original success/failure policy and durable
+agent state are preserved. Token/in-process cleanup still runs. While this latch
+is pending, manual mutations remain busy and ticks retry cleanup without throwing
+its error into the scheduler. Recovery borrows CONTROL, preserves snapshot-write
+pending state, rechecks current disk identity and synchronizes the validated
+parent directory before clearing the cleanup latch. Every intent retirement,
+including publication rollback and startup/tick restore, stale-launching and
+settled-launching recovery, arms the latch before unlink. The initial recovery
+failure propagates to its existing startup/scheduler error owner; subsequent
+cleanup passes contain errors and retain closure. If unlink succeeded but parent
+fsync failed, the next pass must synchronize even with no file left to read.
+Corrupt or inconclusive evidence remains closed; absence never launders a known
+failed acknowledgement. This is host-injected I/O proof, not an executed
+power-loss/resurrection or cross-process CONTROL qualification.
+
+The cleanup owner retains its last failure until acknowledgement. Startup checks
+that owner before its authoritative tail: a contained retirement I/O failure keeps
+its cause and therefore remains on the six-attempt/30-second startup cadence;
+it is not replaced by a cause-free tail safety refusal. A cause-free ownership
+refusal remains authoritative and schedules no retry. Successful cleanup clears
+only that owner's failure/pending state, not startup adjudication or snapshot
+durability. Reset generation-fences late failures as well as late success.
+`update-orchestrator-combined-cleanup-cadence.test.ts` tests both I/O windows and
+the unchanged cause-free refusal against real files and controlled timers. The
+retirement matrix advances the production background cadence after storage repair,
+rather than pretending another caller can rearm an exhausted startup burst.
+
+The frontend preserves the optional retryability and startup code in the existing
+RPC error envelope. Check, Install and cellular-grant refusals use the existing
+Updates band with translated initialising/retry-shortly copy in all ten locales;
+the backend's raw message is not shown. Persisted recovery output is unchanged.
+
+Production backend single-instance ownership is enforced before the control server binds:
+`/run/lock/ceralive-backend.lock` is held by a supervised flock/helper for the
+entire backend lifetime, independent of port fallback, flags, device detection
+or runtime mock overrides. Source-development boot skips enforcement only for
+exact `NODE_ENV === "development"`; the device unit sets production and production
+compilation inlines the direct environment read. Lock/proof primitives and the
+separate OS-stage CONTROL lease are unchanged. A second production backend exits
+nonzero. Observer-pipe EOF after backend
+death ends the helper; unexpected helper death terminates the backend rather
+than leave an unlocked writer. No stale PID file survives a restart.
+Only EACCES/EROFS/ENOENT proving that the lock directory cannot create the lock
+permits a warned fallback when enforcement applies; contention,
+invalid lock paths, helper absence and readiness failure remain fatal.
+Both pre-spawn and post-readiness censuses refuse only another granted singleton
+holder: first `/proc/<pid>/status` must report real AND effective `Uid:` equal
+to the backend's `process.getuid()`, then its full NUL-separated argv must equal
+`singletonArgv(paths)`, then `/proc/<pid>/exe` must match the current
+`/usr/bin/flock` by device/inode OR have the exact kernel link target
+`/usr/bin/flock (deleted)` after package replacement. Proc-directory ownership
+is not credential evidence: Linux
+can make a non-dumpable foreign process's directory root-owned. Saved/filesystem
+UIDs are parsed but are not additional gates; no setuid wrapper is used.
+The pending child is excluded.
+Only then is `singletonLockIdentity(pid)` read: it must prove one granted kernel
+`FLOCK` owned by that PID on a held fd for a regular file. A positively foreign
+real/effective uid stops examination before argv/exe/fd reads, even if those
+would fail. Readable nonmatching argv and proven nongranted contenders do not count.
+The census never compares that fd with the current lock pathname, so a holder
+whose file was unlinked or replaced still refuses a second backend, including
+a deleted-flock wrapper. Any other executable with exact argv, same uid and a
+granted lock refuses as `BackendSingletonError("unproven")`, not absence.
+Nongranted executable lookalikes are ignored only after their fd proof; an
+unreadable executable/link or grant remains fail-closed. ENOENT/ESRCH
+process races are ignored; other read failures propagate and fail startup closed,
+including unreadable argv/exe/fd proof after credentials matched. Status EACCES
+alone has a narrow exception: unreadable (EACCES) or readable nonmatching argv
+is non-qualifying, but readable exact argv refuses as `unproven`, with the status
+error retained. Other non-vanished status errors and malformed credentials fail
+closed. This is not an availability promise on restricted procfs.
+Failed uid/argv qualifiers are not read further. The census reads are non-atomic:
+there is no pidfd or start-time fence against PID reuse/TOCTOU.
+The granted helper fd's dev/inode is
+retained and re-checked against the lock path about every 2 s; a replaced,
+missing or unreadable path terminates the old backend nonzero through the same
+exit path as helper loss. The 2 s cadence is not a strict termination bound:
+scheduling and filesystem reads can delay detection. Root tampering with
+`/run/lock` beyond this detection
+(for example racing the census or forging all holder evidence) is outside the
+threat model. The separate OS-stage control lease remains defence in depth for recovery
+evidence and authoritative state rechecks. Host child-process tests are not
+systemd-on-board SIGKILL/restart or power-loss qualification.
+
+Startup's final save now holds CONTROL and compares the authoritative recovery
+identity even when a witness was missing, mismatched or inconclusive. A fully
+committed settlement is not written a second time. Generic unsafe confirmation,
+interrupted-stage settlement and legacy migration retain CONTROL from evidence
+through an authoritative re-read, dispatch and persistence; nested guard proof
+borrows the same lease. Attempt, candidate, active attempt, count, mode, reason,
+retry deadline, phase, terminal reason and legacy discovery delay must agree.
+Pending settlement durability is rechecked after admission/witness awaits and
+before discovery/staging transitions, including a previously admitted Check.
+
+RAUC's top-level `boot_primary` must unambiguously name the healthy booted rootfs,
+not the target, and remain identical across admission, recovery and final settlement.
+Missing activation identity fails closed; an inactive slot and absent marker alone
+do not exclude bootloader selection. Old job snapshots without this reading retain
+unknown identity and cannot authorize release.
+Live producer identity is checked synchronously after job and guardian inspection
+awaits. A probe begun before a manual stage cannot later classify its new job as
+abandoned or terminate its writer; genuinely abandoned jobs still close admission.
+
+An OS staging job acquires `/run/lock/ceralive-update.lock` once, across every
+candidate pair, daemon recovery and final settlement. The owner is a PID-1
+transient exec service, `ceralive-os-stage-guard.service`, running the packaged
+root-only `ceralive-os-stage-guard` helper under `flock -n -E 75 -x`.
+The install CLI takes no nested flock. A private 0700 directory and 0600
+token/ownership record identify the attempt, candidate, current pair, daemon
+baseline and observed process/resource identities before an install can launch.
+The service does not inherit a caller-owned pipe or scope.
+
+A CLI exit, backend death, missing heartbeat or six-minute recovery deadline
+never releases the guardian. The matching private token is acknowledged only
+after positive writer quiescence and successful pin teardown. Receipt/serial
+publication executes synchronously under the lock before that acknowledgement;
+activation is fenced until the producer has finished settling. A write or
+proof failure before acknowledgement retains the unreleased lock rather than
+reporting a safe handoff; a later cleanup failure cannot promise lock retention.
+The launched owner captures the private directory's device/inode at acquisition
+(or at its first proven `held()` when adopted at startup) and re-runs the
+authoritative private-owner assertion (`os-stage-private-owner.ts`: disk record
+equal to the normalised in-memory record, matching token/ready/release content,
+allowlisted single-link 0600 regular files, 0700 directory owned by the expected
+uid, same inode) before the success callback, before the release marker, before
+guardian retirement and before directory removal. Drift, including a foreign
+release marker, refuses with `rauc_recovery_unproven`. Before the success callback,
+that refusal publishes nothing and retains the directory and unreleased lock.
+After the callback has published, later drift refuses the next publication or
+cleanup step; it cannot retract the callback's publication. Once the release
+marker exists, the guardian may consume it and exit independently, so a later
+refusal cannot guarantee the lock remains held. Later failures retain the
+remaining provenance and refuse further cleanup, rather than undoing publication
+or claiming a safe handoff.
+Lock contention is exit 75, distinct from an ordinary RAUC install failure.
+
+Startup queues reconciliation after the control server's readiness barrier,
+without awaiting it on the boot critical path. Update admission remains closed
+while reconciliation runs. A loaded same-named unit without a matching private
+record is foreign, not adoptable. Adoption and retirement require the exact
+transient fragment, service properties, executable argv and attempt token.
+Preparation records carry `acquiring`, `held` and `releasing` lifecycle states.
+A never-launched record with an absent guardian, an acknowledged/exited guardian,
+or a private preparation directory without a record can settle under a separate
+reconciliation-only flock. Before retirement, fresh evidence must prove no install
+client, idle RAUC, retired resources and the unchanged healthy booted/activation
+identity. Proof is repeated after pin sweep. Only the exact exited transient unit
+may be stopped; live or foreign units and unreadable private files remain untouched.
+The temporary lock owns no writer and ends with its scoped reconciliation; it has
+no lifetime timeout. The PID-1 writer guardian and its no-expiry rule are unchanged.
+
+An absent unit is identified by the exact parsed `LoadState=not-found` property,
+regardless of property order or other requested fields. Malformed and duplicate
+properties refuse settlement. A previously owned configured NBD device keeps its
+original tracked resource identity even if the numeric creator PID now identifies
+an unrelated process; connection-attribute absence or device disappearance is the
+independent retirement evidence. PID reuse alone is not retirement.
+
+Concurrent admission callers share one observer with a 10-second fail-closed
+deadline. Expiry returns refusal and clears only that bounded observer; it cannot
+release a guardian, settle a job or prove writer quiescence. Late completion
+cannot alter expired callers or clear a replacement observer. A post-publication
+unsafe verdict and an invalid-load terminal latch remain closed across that boundary.
+
+The HTTPS watcher treats an outer launcher timeout as unavailable, never transport
+evidence. Curl's own 4-second deadline fits inside the 5-second supervision bound;
+its explicit exit 28 remains attributable and counts toward the two-failure gate.
+
+For an owned launched attempt, startup submits termination/restart, then proves
+the old exact install client is gone and independently observes daemon/resource
+retirement. Only after that proof may it drain a retained in-process pin, sweep
+stale routing and release the guardian; a fresh final observation prevents
+release on residue that appeared during cleanup. A later unresolved job can
+re-close admission and queue the same single-flight reconciler. Unreadable
+ownership or inconclusive retirement keeps admission closed and the lock held.
+The control server and stream-start admission do not wait for this recovery.
+
+### Fresh admission under read-helper churn [PARTIAL — host proven; both-board re-drill owed]
+
+RAUC's idle custom bootloader backend can spawn read-side children inside
+`rauc.service` during ordinary status reads, including the device-stats collector
+and the stage observer itself. A clean recovery census is not a cached grant for
+the later retry or publication census. `observeAdmission` now defers only
+`extra-process`, with no dispatch, while obtaining fresh observations at up to
+100 ms intervals. The final snapshot still passes the unchanged
+`requireAdmissionSnapshot` / `failedAdmissionPredicate` validators. No helper
+name, argv, ancestry, prior ownership, zombie state or role exempts a member.
+The observer retains exact tracked identities even after cgroup escape; positive
+ENOENT or ESRCH on an enumerated `/proc/<pid>` read is process absence, never
+a fabricated identity or permission to retain a cached member. One shared,
+scope-explicit errno predicate serves the census, guardian fd/tree checks,
+install-client exclusion and maintenance recovery scan. Guardian tree disappearance
+requires a fresh bounded tree proof; it is not a grant to drop a required holder.
+All other read errors remain unknown. ESRCH diagnostics retain the bounded code
+(`Error(ESRCH):`) without exception messages. Non-process paths retain ENOENT-only
+absence: ESRCH on `cgroup.procs`, activation markers or NBD sysfs cannot certify
+absence. An unowned configured NBD whose creator disappeared stays unproven;
+previously recorded connections remain resources until actual retirement.
+
+Successful empty or malformed identity content that fails the existing parser
+stays unknown, not process absence. The parser still checks PID argument and
+startticks only: a stat prefix containing startticks or mismatched raw PID can
+pass. No natural empty/truncated stat was observed by the independent host audit;
+strict complete-row parsing is not part of this errno correction.
+Optional status/cmdline diagnostics remain unavailable on any error and never
+authorize a snapshot; the final safety census still follows them.
+Blank `cgroup.procs` tokens are filtered before PID lookup, never `/proc//stat`;
+nonblank nonnumeric tokens refuse. A missing daemon still gives no snapshot.
+
+#### Vanished-task errno residuals
+
+This closes the **vanished-task errno class**: ENOENT or ESRCH on a previously
+enumerated PID is absence at sites that already tolerated process disappearance.
+Every other errno and malformed-identity parsing failure remains unknown; sysfs,
+cgroup and storage errors retain their original scoped rules, not a new ESRCH
+absence exemption. It does **not** guarantee that a helper-churn drill cannot
+refuse for other reasons. These residuals are unchanged:
+
+1. Successful empty/nonmatching cmdline or comm still classifies “not an installer”,
+   “not busy” or “not a commit process” in install-clients, recovery-probes and
+   commit-stage-probe. The independent host audit measured empty cmdline on roughly
+   10% of exiting-task reads in its E1 experiment; this is not a universal rate or
+   proof of task absence. Empty cmdline also legitimately describes some zombies
+   and kernel threads. Successful-content policy is unchanged.
+2. A disappearing guardian temporary holder returns false and does not trigger
+   a full-proof rescan, matching the existing ENOENT behavior. It grants no holder.
+3. A configured NBD whose creator disappears remains ownership-unproven, never
+   resource-free; recorded connections remain resources until retirement.
+4. EACCES observed under ordinary same-user host churn remains unknown, not gone.
+5. Guardian tree rescans remain three immediate attempts with no quiet interval;
+   other lock/table mismatches can still return false without a rescan.
+6. No pidfd/start-time fence spans stat→cmdline/cgroup or census→dispatch.
+   The observation-to-dispatch gap remains non-atomic; raw one-shot readiness and
+   orphan-baseline observations do not all use the bounded drift loop.
+
+R16's later `os-available / operator / rauc_install_failed` is the documented
+unlaunched-settlement mapping in `reduceOsUnlaunchedSettlement`, not evidence that
+a RAUC install ran. A matching current-boot, attempt/candidate-bound completed
+`unlaunched-unchanged` witness plus fresh readiness can replace an already-counted
+unsafe refusal without counting twice. The original stage refusal stays in the
+diagnostic history. R16's timestamps alone do not establish which witness admitted
+its later transition; no reason mapping is changed here.
+
+Before a launched pair's outcome is handled, one local monotonic 360-second
+deadline is established, before restart submission. Recovery's 1-second poll,
+later next-pair admission and subsequent revalidation use that same deadline;
+returning a recovery proof does not grant another six minutes. Initial prelaunch
+proofs have a short 10-second bound. A newly authorized install has its own
+outcome/retirement lifetime: the previous pair's retirement deadline is not a
+timeout on the replacement download. Successful CLI settlement starts its one
+bounded release/publication budget; helper expiry keeps that successful but
+unpublished outcome unsafe and cannot route it back to install. No wait resets
+the pin controller's three distinct unused pairs or the 15/30-minute three-round
+policy. The deadline is never persisted or interpreted across backend restart.
+
+The exhausted-pair/error cleanup branch also obtains a fresh bounded proof before
+physical release, rather than converting one transient helper into terminal unsafe.
+Cleanup may finish a proven FAILED pair after cancellation, without granting
+dispatch or publication; CONTROL/private/guardian and final-clock checks remain.
+Known CLI success followed by cancellation is different: its local typed
+`OsStageUnpublishedSuccessError` retains the raw runner's cancellation surface,
+while the sole production `stageOsBundle` entry normalizes it to the existing
+`rauc_recovery_unproven` / unsafe policy before any agent settlement. Proven physical
+cleanup may release the guardian while logical unsafe stays terminal; uncertain or
+expired cleanup retains guardian/private provenance. No manual/automatic restage
+grant is published.
+Positive exit is captured independently of cancellation and output drainage,
+including zero observed after cancellation. Runtime adjudicates the exact token,
+attempt and candidate even after D8 has aborted its controller and returned to
+`os-available`. Only that matching unpublished-success settlement can upgrade the
+cancelled attempt to terminal unsafe, once; it grants neither manual nor automatic
+restage. Ordinary cancellation before positive exit retains the existing behavior.
+This marker is an in-process error type, not a persisted field or new wire reason.
+Positive CLI success also dominates a failed transfer outcome. If topology loss
+wins while a zero-exit client's descendant still holds output open, settlement
+must not forward a retry-classifiable transfer error. That successful but
+unpublished install settles terminal unsafe; the runner independently vetoes any
+next-pair dispatch once success is known. Transfer failure without positive exit
+retains the ordinary next-pair retry path.
+
+Every rescan retains CONTROL, private ownership and the guardian. Admission and
+recovery reassert the captured private-directory provenance separately from the
+guardian's physical `held()` reading. Structural
+slot/boot/primary/activation changes, lost authority, present admission resources
+and missing evidence refuse immediately, even when extras mask a later predicate.
+Recovery may still wait for the failed writer's existing resources to retire.
+A changed MainPID/start-ticks or observed InvocationID during an extra-member
+episode refuses rather than restarting the episode. Admission rechecks cancellation,
+Go Live, ownership and the final clock; after a deferral, candidate and transport
+are refreshed and a new strict snapshot is taken before `beginAttempt`. Signed
+candidate expiry is checked again at dispatch. Release/publication checks the
+same clock at its synchronous callback. Startup's final post-sweep proof shares
+its original recovery deadline; acknowledged orphan proofs share one short bound
+before and after sweep. Release predicates are unchanged and neither path guesses
+install success after backend loss.
+Awaited authority, guardian and admission preparation precede the final observation;
+only synchronous token, lease, candidate-expiry and clock checks follow it before
+dispatch. Optional process diagnostics run before the observer's final unit and
+process/resource safety fence. Changed final unit, process or resource evidence
+is rejected rather than returning the earlier census. Process/resource drift
+between the two successful censuses returns null with the closed diagnostic
+`census-drift: unproven`. Admission and post-cleanup quiescence retry that outcome
+only inside their existing absolute deadline, retaining lease/ownership checks
+on every attempt. They never dispatch or release from a drifted observation.
+Every observation owns its diagnostic, including a final read after awaited
+quiescence; an earlier drift cannot make a later unknown retryable. Command
+failure, nonzero exit, malformed/duplicate properties, timeout, thrown errors
+and changed ActiveState/MainPID/ControlGroup/InvocationID remain non-retryable
+unknown. Only an identical clean pair reaches the unchanged strict validators.
+Simultaneous drift never masks independently invalid non-census evidence. The
+observer checks the existing admission predicates on a non-authorizing projection
+without process/resource membership; only valid remaining predicates permit the
+closed drift detail. A failed or malformed Operation read, unavailable health,
+invalid boot/slot evidence or activation marker retains a non-drift terminal
+refusal. The drifted pair still returns null and cannot itself authorize action.
+Persistent drift settles unsafe at the original deadline. No stored format,
+recovery budget, process whitelist or structural admission predicate changes.
+There is **no intervening
+awaited preparation between the last safety observation and the dispatch; this
+is NOT an atomic census-and-dispatch guarantee**. The synchronous `beginAttempt`
+persistence and external process changes still separate observation from action;
+the census itself consists of separate reads. This does not reopen D154.
+Every proof observation, authority read and evaluation, post-recovery admission,
+replacement selection/revalidation, receipt preparation and release-proof read is
+raced against the same remaining absolute deadline. Startup restart, retained-pin
+drain, sweep and release spend that startup deadline; orphan baseline, sweep,
+inspection and retirement spend its single short deadline. Producer capture checks
+generation and the final recovery clock before remembering evidence; receipt and
+guardian-release callbacks check their owning lifetime before submitting effects.
+OS routing teardown bounds each command wait by that same remaining budget and
+checks generation/CONTROL before every newly submitted deletion or table flush.
+Reconciliation sweeps likewise fence each query, deletion and flush with the
+reconciler's active budget and lease. A held query that resolves after timeout may
+return data, but cannot initiate another command. Ordinary routing callers retain
+their existing teardown and 30-second per-command default. These fences cannot
+revoke already-submitted commands or filesystem I/O; their late completion is not
+a new grant, and uncertain or expired settlement retains guardian/job provenance.
+The intentional unsafe retained-pin gate still parks after notifying unsafe.
+The quiet-startup fallback (no recorded job, absent guardian and genuinely absent
+private directory) starts a single short 10-second budget before orphan inspection.
+It forwards that executor through the whole stale-rule sweep and checks the same
+active lifetime, CONTROL lease and producer absence immediately before opening
+admission. A resumed query under surrendered CONTROL submits no deletion, query
+or flush; expiry settles unsafe and leaves admission closed. Normal quiet startup
+still sweeps stale UID rules and both families' tables before opening promptly.
+`os-stage-fix10-startup.test.ts` exercises the actual absent-directory orphan path
+and unmodified real flock helper; routing execution and guardian absence are
+injected, so this is host sequencing proof, not board/kernel-routing qualification.
+The reconciler's later drain of that parked pin observes after the expired job
+deadline by design, under its own active budget and CONTROL lease. Its capture is
+read-only: awaited ownership preparation precedes a final physical observation,
+then synchronous lifetime, lease and quiescence checks gate pin release. Expired
+or surrendered reconciliation cannot release using the earlier quiet snapshot.
+The recovery loop's last diagnostic read at the deadline and the
+proof wait's pacing pause are raced against the deadline without the start/finish
+clock refusal, so the final refusal keeps its precise reason; neither can
+authorize, because proof still requires the clock to be before the deadline.
+
+The decision seam logs one deferral and its proven/final disposition, with bounded
+episode logging (at most 16 defer/proven entries per runner proof, plus the final
+refusal); saturated helper churn cannot reset this logging allowance. It retains
+process evidence: observation start/end monotonic times, unit MainPID/InvocationID,
+cgroup versus tracked-only members, PID:start-ticks, comm/state/PPID/Tgid, the
+allowlisted read-helper operation (otherwise null), current/previous instances,
+resource summary and remaining deadline. Recovery entry/deadline, refusal changes
+and completion are logged too. Optional diagnostic reads and throwing diagnostic
+sinks never change a safety result; missing reads do not become identity proof.
+Drift-only episodes emit one proven/final decision, not a line on every retry.
+Arbitrary cmdline text and exception messages are not emitted by these diagnostics.
+The historical R14 veto PID remains unknown; later captured helpers are evidence
+of the mechanism, not identification of that historical member.
+
+Host regression coverage includes captured-stat runner replay, shared-budget and
+final-clock negatives, cgroup escape/PID reuse/stale NBD, and four actual SIGKILL
+producer boundaries with a real independent flock/private job. The crash tests
+inject RAUC/systemd observation authority; they are not the shipped PID-1 guardian
+or board power-loss qualification. Existing D154 privileged-bypass and forward-only
+schema residuals below remain unchanged. Fresh Rock and Orange Pi failover/status-
+pressure, cancellation and unknown-success crash drills are still required.
+
+Module-size accounting is not a claim of uniform compliance. Counts are pure LOC:
+blank lines and lines starting with `//`, `#`, `--`, `*` or `/*` after leading
+whitespace are excluded
+(including embedded shell comments); a rule that keeps `*`/`/*` lines counts
+`runtime.ts` 2,451 and `reducer.ts` 673. Files carrying an inline `SIZE_OK`
+lifetime/state-machine exception: `update-orchestrator/runtime.ts` (new, 2,424),
+`software-updates.ts` (1,216→1,655), `os-agent.ts` (new, 640), `os-stage-run.ts`
+(new, 492), `main.ts` (360→436) and `os-manifest.ts` (new, 288). Every PR-touched
+non-test source file over 250 without `SIZE_OK` (base 23bcf379 → PR tree measured
+on 2026-10-14, including the capable APT diagnostics change; base→measured tree):
+backend `cerastream-backend.ts` 1,315→1,465,
+`spawn-policy.ts` 907→1,320, `streaming.procedure.ts` 1,112→1,117,
+`stream-session-orchestrator.ts` 765→907, `addons/manager.ts` 489→721,
+`update-orchestrator/reducer.ts` new 667, `update-transport/executor.ts` new 440,
+`remote-control/self-fencing.ts` 353→436, `kiosk.ts` 338→406,
+`ui/preview-proxy.ts` 390→392, `stream-restoration.ts` 377→388, `ssh.ts` 362→383,
+`addons/reconciler.ts` 300→377, `system.procedure.ts` 295→355,
+`modems.procedure.ts` 631→635, `rpc/router.ts`
+290→306, `stream-start-retry.ts` 265→285, `apt-reachability.ts` 225→277,
+`streaming/streaming.ts` 257→263, `rpc/adapter.ts` 237→252,
+`software-update-service-contract.ts` 149→252 and `os-stage-job.ts` new 251;
+frontend `subscriptions.svelte.ts` 832→890, `LiveView.svelte` 807→844,
+`rpc/client.ts` 625→642, `AddonsSection.svelte` 382→416,
+`OnDeviceDisplaySection.svelte` 353→360, `streaming-optimism.svelte.ts` 335→404,
+`SshDialog.svelte` 264→284, `updating-overlay.svelte` 332→314 (shrank) and
+`PowerDialog.svelte` 269→266 (shrank), `vite.config.ts` 260→260;
+shared `system.schema.ts` 339→343; and
+`scripts/build/build-debian-package.sh` 274→282 (`UpdatesDialog.svelte`, earlier
+listed at 659, measures 468→193). `apt-all-packages.ts` measures new 246 after
+the capable APT diagnostics change and remains below 250. Raw `wc -l` counts
+were also measured for every listed file; the numbers here apply the prefix
+exclusion above, not raw physical-line counts. The `SIZE_OK` files above are the only recorded
+exceptions. None is split here; every
+listed file without `SIZE_OK` is an owner decision pending (split or record
+`SIZE_OK`). Every non-test module added since PR head ff3b509e is at most 236
+pure LOC; the new disruptive-action modules are `disruptive-action-reservation.ts`
+187, `disruptive-service-reservation.ts` 158, `addons/disruptive-sysext-step.ts`
+120, `disruptive-action-gate.ts` 84, `disruptive-action-runtime.ts` 68,
+`disruptive-retry.ts` 62 and `power-submission.ts` 37, and the liveness leaf
+`streaming/stream-liveness.ts` is 8 beside its 38-line system adapter. The
+inventory script is reproducible from the PR base and covers every touched
+non-test source file, not only the backend.
+Orphan inspection is separated from the settlement lifetime without changing its
+predicates. New FIX7/FIX8/FIX9/FIX10 modules stay below 250 pure LOC. The four
+fix-6 test files and fix-7 regressions require an explicit TypeScript program:
+the normal backend tsconfig excludes tests and did not catch the fix-6 runtime
+fixture's receipt-returning stage port or synchronous job-reader mismatch.
+
+### Standalone real-RAUC helper-census proof [PARTIAL — host only]
+
+`scripts/tests/real-rauc-private-bus.integration.ts` is an explicit host integration
+proof, **not part of `bun test`, the backend suite or CI**. It requires host
+RAUC **1.15.2**, `dbus-daemon`, `gdbus`, `busctl`, Bash, `timeout`, and a working
+user systemd manager with readable cgroups. Supply the unmodified image
+`ceralive-rauc-boot-adapter.sh`, `ceralive-boot-state.sh` and `boot-state-core.sh`.
+The first two belong in `CERALIVE_BOOT_HELPERS`; the core path can be supplied
+separately. From `apps/backend`, with an existing private scratch directory:
+
+```bash
+TMPDIR=/var/tmp/your-private-scratch BUN_RUNTIME_TRANSPILER_CACHE_PATH=0 \
+  CERALIVE_BOOT_HELPERS=/absolute/path/to/boot-helpers \
+  CERALIVE_BOOT_STATE_CORE=/absolute/path/to/boot-state-core.sh \
+  CERALIVE_RAUC_PROOF_OUTPUT=/absolute/path/to/receipt.json \
+  bun test ../../scripts/tests/real-rauc-private-bus.integration.ts
+```
+
+The test creates a disposable private bus, uniquely named user RAUC unit and
+file-backed slots, exercises real read helpers, and cleans them up in `finally`.
+Its barrier releases the helper **between** census reads. Holding it through
+both reads blocks the real daemon's GetPrimary/status request and times out at
+10 seconds: that is a harness artefact, not justification to relax the guard.
+The result requires observed helper identity, a refused drift observation, then
+exactly one replacement after fresh clean proof. Install/guardian, boot-health
+and resource/slot identity ports are synthetic. Five repeated host passes do
+not qualify a real installation, either board, power loss or kernel routing.
+
+`os-stage-fix11-real-proc.test.ts` opens a real child's stat while alive, kills and
+reaps it, then reads the held handle through the production census reader. The
+kernel's ESRCH must produce no identity or retained cached member. A separate
+bounded stress test uses the unchanged default `Bun.file().text()` adapter and
+requires no thrown census error; errno counts are recorded, not required to occur
+on every CI kernel. Injected tests distinguish tolerated process-race sites from
+EACCES/EPERM/EIO/ENOMEM and non-process ESRCH. This proves the vanished-task
+mechanism, not the exact offending PID/errno in the historical Rock R16 refusal
+or board qualification of the correction.
+
+### Unlaunched guardian settlement [PARTIAL — hermetic and real-fixture proven, board rehearsal owed]
+
+A guardian that started but never reached `beginAttempt` (`launched:false`) is no
+longer stranded. One shared settlement (`os-stage-unlaunched.ts`) serves three
+callers: an acquisition failure after this attempt created its private state, an
+failure caught before `beginAttempt` (including cancellation, revalidation and
+selector refusal), and startup, which routes validated
+unlaunched records here before the generic launched path. Pre-existing state,
+another attempt's directory and `EEXIST` are never adopted; flock contention
+(exit 75) becomes `os_update_lock_held` only after checked stop/reset replies,
+fresh owned-terminal/job/kernel proof and positive unit absence. Failed cleanup
+keeps the record and reports unsafe; acquisition does not silently retry that
+failed cleanup in the same invocation. Startup can later settle the retained
+terminal-unlaunched record. A competing kernel holder that prevents retirement
+proof also keeps this path closed.
+
+The settlement re-reads record and tokens from disk, parses the unit into a typed
+shape (absent, starting, live, terminal), proves kernel lock ownership (cgroup
+membership, process argv/ancestry/start ticks, one granted `FLOCK` on the lock
+device+inode, no foreign fd holder), then proves RAUC quiescence, install-client absence
+without a URL filter, unchanged slot/activation identity and clean pins (a
+never-created table answering exit 2 counts as empty). A live guardian receives a
+`releasing` record and the matching release token and must exit normally; expiry
+of that wait never stops a live helper. A dead or cleanly exited guardian is
+settled under the temporary update flock: `stop` only after a clean exit,
+`reset-failed` only for the owned terminal unit with no queued job, then positive
+absence. The witness is written before the job directory is retired, and the
+original typed safe failure is preserved; an untyped failure or recovered unsafe
+pre-launch failure becomes `rauc_install_failed`/`operator`. Every unproved step keeps the
+unit, job and admission closed as `rauc_recovery_unproven`.
+
+The device number comes from a validated open fd's `mnt_id` and the matching
+`/proc/self/mountinfo` row, not a guessed conversion of `st_dev`. A lock on another
+filesystem with the same inode is unrelated. Listed children that vanish or show
+an unexpected argv (including the helper's short-lived `stat`) trigger at most
+three complete scans; no extra process is accepted as steady guardian membership.
+Unknown/partial RAUC argv cannot prove installer absence, and supported global
+options before `install` cannot hide a client. Thrown timeouts and private/kernel
+I/O failures inside physical settlement are normalized to the same unsafe reason
+with the original cause. Startup's launched-writer recovery is isolated in
+`os-stage-startup-recovery.ts`; its post-cleanup proof uses the bounded fresh
+seam above without changing the unknown-outcome or release predicates.
+
+Real flagged installer argv, helper/sleep cmdline and inherited-fd metadata, the
+exact combined guardian observation request, pre-ready/ack-pending windows and
+positive live-install resource/pin/progress receipts remain separate capture
+gates. Synthetic negative/race fixtures are not replacement hardware evidence.
+
+Every stage and recovery controller also holds
+`/run/lock/ceralive-os-stage-control.lock` (the helper's `--orphan-lock` mode),
+because fallback control ports let a second backend run. Order is control lease,
+then guardian/update-lock proof; the producer's dispatch fence drops before its
+lease is released, and a retained unsafe pin drains only under the reconciler's
+lease. Lease contention is `os_update_lock_held`.
+Runtime acquisition always selects the real lease unless a caller explicitly
+injects the existing dependency port. Device type, `NODE_ENV` and `MOCK_MODE`
+never disable it. The hermetic disposable lease exists only in the test helpers;
+fixture builders inject it explicitly, without changing production lock paths.
+
+Reconciliation returns `os_stage_outcome_unknown_after_restart`, never a
+successful install. An idle daemon, a partly written inactive slot or a retained
+receipt cannot manufacture `OS_STAGED`. No blanket dm removal, lazy unmount or
+manual slot marking is performed. The detached cancellation helper below may
+clear attached NBD sockets; this is not quiescence proof. This path is
+hermetically tested, including a historical captured 315-second retirement
+sequence and real temporary-file flock contention; its device drill is still
+owed. That historical timeout is not the cancellation policy of the current
+source, which now schedules the escalation below.
+
+### Detached RAUC termination escalation [PARTIAL]
+
+`killAndRestartRaucForStream()` still awaits only SIGTERM and
+`systemctl restart --no-block rauc.service`, in that order. A nonzero TERM
+warns; a nonzero restart warns and throws `rauc_recovery_unproven`; their spawn
+failures/timeouts still propagate. A detached, unreferenced timer reads the
+unit's `ActiveState`, `MainPID` and `InvocationID` at T+1 s after TERM returns.
+If it is `deactivating` with valid identity, a second read is scheduled for
+T+3 s from the same origin. Only the same PID **and** invocation still
+`deactivating` permits the packaged root-only Perl helper
+`/usr/libexec/ceralive/ceralive-nbd-release`. It opens only exact `nbd[0-9]+`
+device names, read-only and without following a final symlink, whose
+`/sys/block/nbdN/size` is a whole positive integer, and issues NBD_CLEAR_SOCK
+(`0xab04`) only after the opened handle is proven a block device with NBD major
+43 and its device number matches `/sys/block/nbdN/dev`. Wrong node types,
+unreadable/mismatched identity, open/size-read faults and ioctl failures report
+failure and exit nonzero; no attached devices is a successful no-op. Device and
+sysfs paths are fixed constants, with no environment test selectors in the shipped
+helper. Host tests copy the script and rewrite those unique constants; identity
+and ioctl tests additionally emulate only the block predicate and fstat device
+number in that private copy. Directory/FIFO refusal uses the real block predicate.
+The release contract checks staging, root ownership, mode 0700, byte identity and
+absence of test selectors in a small helper-only `.deb`; it does not build the
+full device package. The device payload uses Debian's already-present perl-base.
+
+A third read at T+8 s permits SIGKILL of all processes in **rauc.service only**
+only if the original PID and invocation still match and remain `deactivating`.
+That timer is armed before awaiting the helper, so helper failure or a slow
+reply cannot suppress the last resort. No observed active or replacement daemon
+is touched; malformed, duplicate or missing identity never permits a mutation.
+
+Repeated calls replace the pending timer and invalidate already-running reads
+only after the latest call's TERM reply. A later TERM spawn failure leaves the
+previous armed lifetime intact; an older late TERM reply cannot rearm it.
+Every observation/helper/kill has the existing ten-second command timeout; any detached
+failure is warning-only. Escalation adds **zero awaited Go Live delay**, and is
+also used by the runner/startup recovery restart effects. Those effects still
+wait for their own positive recovery proof, not the detached task's completion.
+The T+8 read is not an eight-second whole-operation or cleanup guarantee.
+Unit inspection and the subsequent helper or unit-scoped kill are separate
+requests, not atomic conditional mutations. An external identity change between
+read and command remains a race; the helper enumerates all attached NBD devices,
+not per-attempt resource ownership. The recovery observer remains independent.
+
+After SIGKILL the observer may see no readable daemon during restart and refuse
+the snapshot; a surviving non-active daemon likewise cannot establish readiness.
+Only fresh, stable active/idle daemon evidence plus the existing process,
+resource, slot, boot-health and ownership checks permits settlement. Neither a
+queued restart nor a successful kill acknowledgement clears the Install fence.
+Install remains `busy` while the interrupted stage retires.
+
+Measured board journals show systemd's SIGKILL at +90 s and +270 s did **not**
+retire the installer ("Processes still around after SIGKILL"); it exited at the
+kernel NBD dead-connection timeout, about 300–315 s, leaving no NBD/dm residue.
+The Rock redrill likewise sent the product's T+8 s SIGKILL without shortening
+the wedge. Main-process-only TERM did not prevent it (one of two attempts stuck).
+One manual NBD_CLEAR_SOCK on attached nbd0 restored active RAUC and size zero
+within 12 s in each of two stuck cases. Those experiments motivate the helper;
+they do not qualify this packaged, automatically scheduled implementation.
+
+Host fake-clock tests prove deadlines, identity protection, timer replacement,
+unref and warning-only failure containment; private-file helper tests exercise
+selection and real ioctl refusal without touching host NBD devices. Atlas must
+still re-prove repeated late-stage stream cancellations, active RAUC with clean
+NBD/dm resources within about ten seconds, and a subsequent accepted Install on
+the fixed board build. Unit timeouts, strict settlement predicates and dm-removal
+policy are unchanged. SIGKILL remains a last resort, not a proven NBD-wedge fix.
+
+## Cross-slot missing-commit adjudication [EXISTS — root-only, fixture-proven]
+
+This remains the local, receipt-bearing path for missing-unit history that the
+automatic proof above cannot establish, including shipped records without
+commit boot/slot provenance. It is not the sole clearance path for new attempts.
+
+`/usr/sbin/ceralive-update-recover` is a root-only (0700, root-owned) local
+maintenance entrypoint in the CeraUI `.deb`. It is **not** a browser, RPC,
+remote-control or sudoers operation. The wrapper takes the shared
+`/run/lock/ceralive-update.lock` nonblockingly and executes the separately
+compiled root-only recovery binary under that lock. The standalone binary
+imports the shared, dependency-light RAUC identity readers
+from `os-identity.ts`; it never initializes the normal backend boot graph or
+loads `setup.json`. An unprivileged host build reaches its explicit `root_required`
+refusal after parsing valid arguments, without a device setup file.
+
+For a root-authorized maintenance window, stop the backend and make the mask
+**effective** before invoking the tool. The package installs a regular unit file
+at `/etc/systemd/system/ceralive.service`. A `systemctl --runtime mask
+ceralive.service` only adds a `/run/systemd/system/ceralive.service` symlink;
+systemd prefers the real `/etc` file over `/run`, so that mask leaves
+`LoadState=loaded` and the unit can still start. `systemctl mask --force` does
+not replace a regular `/etc` file either. Do not use either shortcut.
+
+With external APT initiators quiesced, and with a vacant, protected backup path
+that will survive until restoration, run as root:
+
+```sh
+systemctl stop ceralive.service
+mv /etc/systemd/system/ceralive.service /etc/systemd/system/ceralive.service.recovery-backup
+systemctl mask ceralive.service
+systemctl show ceralive.service --property=LoadState,ActiveState,SubState,MainPID,ControlPID,Job
+```
+
+Proceed only when systemd reports `LoadState=masked`, `ActiveState=inactive`,
+`SubState=dead`, both PIDs zero, and no pending job. The tool checks those same
+properties at each admission boundary; it does not stop or mask the service
+itself. This fences new legacy `system.startUpdate` requests, which bypass
+orchestrator phases: on a legacy image the detached unit does not take the
+shared lock; on a capable image it waits on the lock and could run after the
+tool releases it. Keep the backup and mask
+in place until the recovery tool has exited, even if it refuses or fails. Then
+restore the unit **before** starting the backend:
+
+```sh
+systemctl unmask ceralive.service
+mv /etc/systemd/system/ceralive.service.recovery-backup /etc/systemd/system/ceralive.service
+systemctl daemon-reload
+systemctl is-enabled ceralive.service
+systemctl enable ceralive.service   # only when the line above printed "disabled"
+systemctl start ceralive.service
+```
+
+**`unmask` strips the boot-time enablement symlink too, so re-enable before
+starting.** `systemctl unmask` removes every symlink that resolves to the mask
+target, directly or through another link. After the `/etc` unit is moved aside
+and masked, `multi-user.target.wants/ceralive.service` — the enablement symlink
+the package's `postinst` installs for the unit's `WantedBy=multi-user.target` —
+resolves through `/etc/systemd/system/ceralive.service`, which is itself the
+mask's `/dev/null` symlink; `unmask` therefore deletes both, and the restored
+unit comes back `disabled` even while it runs. Board-proven on a Rock 5B+
+(2026-09-28): after the unmask/restore/reload sequence,
+`systemctl show ceralive.service --property=UnitFileState` read `disabled` and
+the service would not have survived a reboot. Check
+`systemctl is-enabled ceralive.service`; a `disabled` reading means the next
+reboot silently drops the backend. `systemctl enable ceralive.service` recreates
+the `multi-user.target.wants` symlink and is safe to run against an
+already-started unit — it does not restart or otherwise disturb the running
+process.
+
+If any preparation step fails after the move, do not run recovery; restore the
+file using the same unmask/move/reload/enable/start sequence. Do not overwrite an
+existing backup or lose the real unit file across a reboot. A persistent mask
+left in place after maintenance prevents normal backend startup — this stripped
+enablement symlink is the same class of gap, a second way the backend fails to
+come back after a reboot.
+
+Invoke as root with the six independently captured, exact expected readings:
+
+```text
+/usr/sbin/ceralive-update-recover \
+  --agent-sha256 <64 lowercase hex of agent.json bytes> \
+  --plan-sha256 <64 lowercase hex of pending-packages.json bytes> \
+  --boot-id <current UUID> --slot rootfs.1 \
+  --compatible ceralive-rock-5b-plus --os-version <current CalVer>
+```
+
+`rootfs.1` is an **example**, not a default: read the booted rootfs name from
+RAUC first. The six values are assertions about THIS boot/current slot, never
+about the old slot. The actual tool re-reads them under the lock and refuses on
+any mismatch. It requires an explicit `LoadState=not-found` apt detached unit
+(an unreadable probe is not absence; a duplicated or malformed `systemctl show`
+row is unreadable, never last-wins), no live apt/dpkg process or other active
+update unit, RAUC `Operation=idle`, empty `dpkg --audit` output and an empty
+`/var/lib/dpkg/updates/` directory. It parses the persisted failed state and
+the exact pending plan, checks `commit_unit_absent_on_resume` and confirms each
+planned version differs from the installed version on the **current** slot.
+The prior slot's observed 1.0.1 is not a claim that B runs 1.0.1; B's observed
+1.0.0 must be checked afresh at execution time. Every probe that fails or
+cannot be read refuses. Ordinary Debian timers and unrelated root callers do
+not obey the CeraUI update lock; the tool checks their running units/processes
+before each irreversible boundary, but this is a snapshot, not a claim of a
+system-wide timer mask. The board maintenance run must additionally quiesce
+external APT initiators and prove the actual systemd/APT interaction.
+
+After admission, a unique `recovery-<sha256>.json` receipt records the decision
+`historical_outcome_unresolved_current_slot_unapplied` and the **original bytes**
+of both files (base64), the six identity readings, and the expected cleared-state
+digest. It is written to a private temp file, fsynced, renamed and parent-fsynced
+before the old plan is unlinked and directory-fsynced. Only then does the narrow
+`HISTORICAL_COMMIT_ADJUDICATED` reducer event move this exact failed reason to
+idle, durably writing the state. Its scheduling clocks are invalidated; the plan
+is gone and cannot be reused. A subsequent install requires new discovery. A
+receipt-first or archive-first crash replays from the receipt's byte-exact plan;
+an already-cleared repeat compares the final state digest and never creates a
+second receipt. No installed notice, quarantine entry or automatic replay is
+emitted. The broad `RESET` event is not exposed or used by this path.
+
+The decision table, injected systemd/dpkg/lock probes, byte-level receipt and
+crash windows run unprivileged in `update-cross-slot-recovery.test.ts`; the
+shipped entrypoint/packaging and RPC/remote isolation are statically checked.
+**Residual [PARTIAL]:** the ineffective runtime mask was reproduced on a Rock
+5B+ with a throwaway `/etc` unit; the corrected recovery tool has not been run
+against a genuinely masked `ceralive.service` there. A separately authorized
+maintenance-window board step must verify effective masking and legacy-launch
+exclusion, quiesce external apt timers, and run this exact packaged executable
+before any live clearance is claimed. No recovery invocation or release is
+inferred from the unit-level mask experiment.
+
+After a successful package commit, `update-orchestrator/stale-services.ts` scans
+`/proc/<pid>/maps` for deleted mappings under `/usr/` or `/lib/`, then reads
+`/proc/<pid>/cgroup` to identify the owning `.service` unit. A missing or
+unreadable mapping or unit is **not** restart evidence. A service may restart only
+after the existing idle detector approves. `systemd*`, `dbus*`,
+`NetworkManager*`, `ModemManager*`, `wpa_supplicant*`, `rauc*`, `pipewire*`,
+`wireplumber*`, `polkit` and `user@*` are never restarted automatically: a
+persistent, dismissible restart recommendation with a stable unit ID appears
+instead. `polkit` is listed because `ModemManager.service` has
+`Requires=polkit.service`, so restarting polkit restarted ModemManager on the
+Orange Pi 5+ drill (2026-09-30, X4). `user@*` is listed because a user-unit
+process reports its session manager as the owning service. The policy is a
+name list, not a dependency graph: any other unit that `Requires=` an
+auto-restarted unit can still restart with it. `ceralive.service`
+is deferred while the update transaction is actually running and can restart
+once the detached APT unit has settled; a stale mapping is never a reason to
+terminate a process by PID. This is fixture-proven, not board-proven.
+
+## Resuming an interrupted download [EXISTS — fixture-proven]
+
+The persisted phase can lag a short commit: the tick enters `committing` only
+after it sees the wire report `installing`, and dpkg can finish in a few
+seconds, so a power cut inside dpkg can leave `downloading` on disk. On the
+Orange Pi 5+ drill (2026-09-30, X1) that left the orchestrator in
+`downloading` after the reboot, with no unit, every check and install refused
+as `busy`, and the half-installed package never repaired.
+
+On resume, a persisted `downloading` is adjudicated against what the install
+unit probe actually established, never against a bare "nothing was recovered":
+
+- **Unit observed.** Recovery reattaches a unit, or the wire is `installing`,
+  `downloading`, `success` or `failed`: the phase is kept and the tick reads the
+  outcome as before.
+- **Absence proven.** The probe ran: `systemctl show` named the fixed transient
+  unit and answered `LoadState=not-found`. Absence is not identity-checked
+  (there is no unit to check); a loaded unit is, and an unreadable probe throws
+  instead. `DOWNLOAD_RESUME_UNIT_ABSENT` drops the interrupted attempt: the
+  phase returns to `idle` with the package check due immediately. The old plan
+  is not replayed and is not deleted either: `pending-packages.json` is only
+  read on the commit/settle path of an install, so it has no reader before the
+  next install start. From `idle` that start normally comes through discovery
+  (`available` → `awaiting-idle` → start), and a start from an `available`
+  wire rewrites the record with discovery's plan before its unit exists.
+  Discovery does not ensure the wire still reads `available` at launch,
+  though: if the wire is reset in between, or the backend restarts in
+  `awaiting-idle`, the start keeps the earlier record (the existing limitation
+  under "Still open" below). If discovery still finds actionable packages, the
+  normal `available` → `awaiting-idle` path installs them; if it finds none
+  (the transaction completed before the cut, or boot-time dpkg recovery
+  finished it), the device stays `idle`. Nothing is quarantined, no
+  `installed` notification is sent for the uncertain transaction, and no
+  `failed` phase is entered.
+- **Undecided.** The probe threw, or never ran (updates disabled with
+  `apt_update_enabled: false`, mock mode, or this process already observing a
+  transaction). Recovery answers `false` in those cases too, and that is not
+  proof of absence. The phase stays `downloading`, so a stream start still runs
+  the D8 commit-stage probe, and the orchestrator asks the same question again
+  on every tick for that resumed download only. It clears once a probe is
+  conclusive: a reattached unit goes to the normal poll path, a proven absence
+  to the recovery above. A download started later is never judged this way:
+  the deferral is tied to a state generation that every state change advances
+  (not to `enteredAt`, which two attempts can share), and a probe answer is
+  applied only if nothing changed while it was awaited, in the same synchronous
+  step as the transition. A stream start during the boot probe already sees the
+  persisted `downloading`; its abort wins over a late answer.
+
+With updates disabled the deferral lasts until they are re-enabled, and the
+phase keeps reporting `downloading`. The immediate package check honours the
+usual gates (`packagesAuto`, the cellular policy); with `packagesAuto` off it
+waits for a manual check. A restart at any of these points adjudicates again
+from the persisted phase. An uncertain `committing` is still never retried
+(see above).
+
+Still open:
+
+- The persisted phase still lags a short commit (B1); this change does not
+  alter how often `committing` is persisted.
+- Existing limitation, unchanged since before the interrupted-download work:
+  an install start overwrites `pending-packages.json` only when the wire reads
+  `available`. After a backend restart in `awaiting-idle` the wire is `idle` or
+  `checking` until rediscovery, and a manual install or the scheduled idle gate
+  started then keeps the record on disk as it was; the launcher rediscovers
+  the plan itself.   That record is the plan persisted before the restart, so it
+  names the packages actually installed only if discovery's plan did not change
+  in between. The same holds after a dropped interrupted download (above) when
+  the wire stops reading `available` between discovery and the launch: the
+  start keeps the dropped attempt's record, and its readers (the
+  commit-failure quarantine, the `restarting-services` installed notice, the
+  `committing` startup baseline) see that earlier plan, so a later commit
+  failure can quarantine the earlier plan's packages. Owner decision pending.
+- `ceralive-dpkg-recover` cannot repair a package interrupted during unpack
+  (`iHR`); only a later install of that package does, and that now depends on
+  discovery offering it again. Whether discovery and the install succeed while
+  dpkg reports an interrupted state is not board-proven.
+- A healthcheck that fails before `rauc status mark-good` marks nothing good
+  but does not reboot the board, so the bootloader fallback only happens on a
+  later reboot. One that fails after `mark-good` never falls back (see
+  [DEVICE-UPDATES.md](./DEVICE-UPDATES.md)).
+
+## OS staging recovery [PARTIAL — fixture-proven, board re-drill owed]
+
+A failed OS stage is no longer a sticky `failed` by default. The persisted
+`osStageRecovery` record (one exact signed candidate) decides what follows, and
+nothing here clears a package, X6 or quarantine failure.
+
+| Settled outcome | State | Automatic restage |
+|---|---|---|
+| typed `automatic` (transport, origin 429/5xx, lock held) | `os-available` | after 15 min, then 30 min; the third round becomes operator-only |
+| typed `operator` (cellular approval, RAUC failure after safe cleanup) | `os-available` | never; Install now runs one more round |
+| typed `unsafe` (recovery unproven, outcome unknown after restart) | `failed` | never |
+| untyped error | `failed` | never (fail-closed, unchanged) |
+| stream cancellation | `os-available` | as before; no round counted |
+| success | `os-staged` | record cleared |
+
+The synchronous receipt/publication callback precedes final producer settlement.
+While that producer is pending, `os-staged` retains its active attempt identity
+and cannot arm activation. A matching unsafe failure during release returns it
+to `failed` with an unresolved notice instead of a stale retry promise. Late
+untyped/non-unsafe errors are unsafe at this boundary too. The receipt and serial
+watermark remain intact; they grant no activation permission, and no quarantine
+is written. A stream start or the 60-second tick cannot turn pending release into
+success. On restart, a pending publication is observed under the same writer-proof
+rule as interrupted staging, never armed from the receipt alone.
+
+Packages keep their own schedule while an OS stage waits or is paused: a due
+package check leaves `os-available`, and the record rides through the package
+phases unchanged. No staging failure writes `quarantine.json`; quarantine stays
+reserved for activation-verification evidence.
+
+**Resume.** A persisted `os-staging` attempt is observed and never replayed.
+While RAUC's `Operation` reads running the phase waits; an unreadable read
+defers to the next tick; once RAUC is idle and the guarded adapter proves writer
+quiescence the attempt settles `unsafe` with
+`os_stage_outcome_unknown_after_restart`. The orchestrator never infers
+`OS_STAGED` from a good target slot, a matching version, an old staged receipt
+or a mirror receipt.
+
+**Leaving `failed`, two narrow ways, both on positive evidence only.** Every
+reading must positively agree: RAUC `Operation` idle, a writer-quiescence proof
+from the RAUC recovery adapter, exactly two rootfs slots with the booted one
+`good` and carrying this boot's `healthy-state.json`, the other `inactive` and
+`bad`, no `os-staged.json` receipt and no `activation-armed` marker. A good
+inactive target is refused: RAUC marks a completed install good, so it could
+be a stage nobody recorded. Any unreadable input is "not proven".
+
+- **Legacy migration.** Only the exact record an older build persisted,
+  `failed / rauc_install_failed` with no recovery record, migrates (at start
+  and on each tick) to `idle` with the OS check due 15 minutes later, so fresh
+  discovery re-admits the candidate. No other failed reason migrates, by prefix
+  or otherwise.
+- **Unsafe-record confirmation.** A manual check (Check now) on `failed` with an
+  `unsafe` record requires a settled attempt (`activeAttemptId === null`), its
+  reason equal to `failureReason`, and exactly `rauc_recovery_unproven` or
+  `os_stage_outcome_unknown_after_restart`. Only then, with all positive evidence
+  above, does it dispatch `OS_STAGE_RECOVERY_CONFIRMED` and run discovery; the
+  next round is operator-only. A generic untyped terminal record cannot be
+  confirmed. Rejection retains the unresolved notice; only an accepted transition
+  clears it. A retained staged receipt prevents confirmation even with writer proof.
+
+**A consumed staged receipt is retired [PARTIAL — host-proven, board re-drill owed].**
+`os-staged.json` records version, channel, `stagedAt` and the producer boot.
+New writes optionally record strict `installedImage` evidence read after successful
+installation: rootfs slot name, RAUC bundle hash, rootfs checksum and install
+timestamp/count. Missing or malformed optional observations leave that field absent;
+they cannot mint identity. Old receipts remain readable but **cannot be retired
+automatically**. A receipt is consumed only when ALL of these hold under CONTROL:
+
+- its version equals the booted OS version (`/etc/ceralive/os-release-version`);
+- its recorded `installedImage` exactly matches fresh RAUC booted-slot identity;
+  the slot is good, names the actual root device and has this boot's matching
+  healthy-slot verdict. RAUC bundle versions are not CalVer and are never equated;
+- its boot id differs from the current boot, and this boot carries its own
+  `healthy-state.json`;
+- the phase is not `os-staging`, `os-staged`, `os-activation-armed` or
+  `os-verifying` or package `committing`, no attempt is active and no producer runs;
+- persisted agent recovery identity agrees with memory, read under CONTROL before
+  evidence gathering and again at the final rename boundary. Drift, missing
+  authority, open persisted lifecycle or an active attempt means KEEP;
+- `activation-armed` is absent by **lstat ENOENT only**, and RAUC's `Operation` is
+  idle. The marker is probed again after the final awaited authority read, before
+  synchronous retirement. EACCES, ENOTDIR and other errors remain unknown;
+  dangling symlinks are present.
+
+A syntactically valid but incorrect version stamp is not identity proof: a settled,
+unarmed installation can still boot the previous image. Reading the receipt as
+judgment evidence captures device, inode, size, nanosecond mtime/birthtime and a
+SHA-256 of its bytes through a no-follow regular-file descriptor. Retirement
+re-reads and compares that captured identity, not merely parsed JSON equality;
+an identical-JSON replacement inode is kept. Path operations use a validated
+directory descriptor, and the last synchronous lstat checks device/inode/size/mtime
+before rename to `os-staged.consumed.json`. Its bytes remain evidence.
+Symlink/hardlink/non-file receipts are never retired.
+
+**The final rename is not a filesystem compare-and-swap.** A writer bypassing
+CONTROL can replace the entry after the last lstat and before rename(2), or mutate
+bytes after the final hash read. That privileged/noncooperative window is not
+closed by another pathname check. Cooperative staging holds CONTROL from receipt
+baseline capture through the final publication callback and producer release;
+backend activation arming and receipt rebinding hold that same lease. The runner's
+commit-token check includes lease liveness, and arming refuses an unheld lease.
+Real-flock tests prove competing cooperative writers cannot enter these lifetimes;
+they do not claim resistance to a privileged writer ignoring the lock.
+
+**Cooperative writer census.** `commitStagedManifest()` in `os-agent.ts` publishes
+through the leased stage callback; `rebindStagedReceipt()` writes through runtime
+activation reconciliation under CONTROL. Retry enters the same leased stage path.
+`saveStagedManifest()` is a low-level export and does not itself require a lease;
+the exclusion claim applies to observed production callers, not every invocation.
+The retained first-lstat replacement test proves KEEP at the descriptor entry
+check. `os-receipt-final-lstat-residual.test.ts` separately pins that a pathname
+replaced immediately AFTER the final lstat and BEFORE rename is still consumed;
+it documents the residual rather than promising conditional rename.
+
+**Accepted residual D154: privileged/noncooperative arming.** A root process or
+the image systemd helper `ceralive-rauc-activate.sh --arm/--stop` takes the helper's
+activation flock, not CeraUI's CONTROL lease. A direct `--arm`, including a helper
+surviving caller death/timeout, can bypass CONTROL and race the last marker probe
+before rename. The final re-probe closes the cooperative backend path only.
+Retirement applies only to an ALREADY-BOOTED image's receipt; staging a new
+candidate publishes a NEW receipt under CONTROL, and the identity check refuses
+to consume that replacement. ExecStop activation deliberately stays CONTROL-
+independent, so holding CONTROL does not block shutdown activation. This accepted
+scope is not a claim of exclusion against privileged helper effects.
+
+A directory-fsync failure after rename reports **retirement durability pending**,
+not “receipt kept”. Subsequent CONTROL passes acknowledge the directory even when
+the live receipt is absent; that acknowledgement does not mutate agent state.
+After successful acknowledgement, the store remembers the tombstone's complete
+device/inode/size/nanosecond mtime/birthtime/hash identity for this process lifetime.
+Unchanged acknowledged tombstones no longer acquire CONTROL or fsync on every
+tick. Failure never grants cached acknowledgement; identity changes require a
+fresh sync, and a new process generation acknowledges again. No stored format
+changes or cross-process durability assumptions are introduced.
+Crash residue converges without replaying an installation. This is host process-
+crash proof, not board power-loss qualification. Retirement runs at startup, on
+each tick and before Check now or Install
+now, ahead of witness settlement and unsafe-record confirmation.
+
+This removes only the receipt blocker. **Both slots `good` still refuses
+confirmation**, by the rule above. **HISTORICAL Rock evidence:** the legacy `.64` receipt has no
+image binding and now stays intact; close install/publication timestamps do not
+prove identity. Its failed `.68` record remains `failed / unsafe` independently.
+A new, positively bound receipt can retire without clearing a both-good failure.
+No owner-approved bench reset or activation is performed by this change.
+
+**CURRENT Rock state supplied on 2026-10-10 (not a new board observation here):**
+the legacy `.70` receipt was written on the prior boot by the `1f6a990e` bench
+`.deb`; the board is booted on `2026.10.70`, both slots are good and the agent is
+idle. This head KEEPS the receipt because `installedImage` is absent. It is inert:
+the next Check → stage → install → staged → armed flow is unobstructed. The oracle's
+Q5 real-file/runtime repro exercised that flow with fixture RAUC/arming ports,
+not a board install. The historical failed/unsafe `.68` case is not this idle state.
+
+**A pre-existing receipt is not necessarily this attempt's outcome [PARTIAL —
+host-proven].** New private job records capture strict optional `receiptBaseline`
+under CONTROL before guardian acquisition: `null` records positive absence; an
+identity records the existing receipt without restamping it. Completed private
+never-launched witnesses carry that baseline. Physical settlement still requires
+`launched=false`, unchanged daemon/boot/slot/process/resource evidence, retired
+clients and pins, and no activation marker. An unchanged baseline receipt is inert
+for that proof and is neither deleted nor consumed. A created, replaced or changed
+receipt vetoes settlement, even if its JSON is identical. State-side recovery
+rechecks the baseline after its final awaited authority read before permitting
+operator retry. Legacy job/witness records without `receiptBaseline` retain the
+old presence veto. Unreadable identity is uncertainty, never positive absence.
+
+Thus the HISTORICAL stale legacy `.64` receipt on booted `.64` no longer obstructs a positively
+proved never-launched next attempt. It does **not** make an unrecorded successful
+installation safe: launched provenance cannot produce this witness, and the
+HISTORICAL Rock both-good failed/unsafe `.68` case without a matching completed witness
+remains failed/unsafe. Host regression and mutation evidence do not qualify these
+paths on either board or under power loss.
+
+**Accepted residual D154: schema-1 additive fields are forward-read compatible
+only.** `receiptBaseline` remains optional in strict schema-1 stage job/witness
+records: this head reads older records, but older unreleased bench intermediates
+`1f6a990e` and `d28fff27` reject records carrying it with `unrecognized_keys`.
+Persistence across reboot does not make those records readable by an older backend.
+`2026.9.5` is the PLANNED first orchestrator release, pending the release gate; no
+released backend reads these records. The other strict records (sync receipt and staged receipt's
+`installedImage`) follow the same additive-forward-only discipline.
+Rolling a bench board back to an intermediate build requires clearing its stage
+job/witness records as a bench-only operation, only after positive no-writer proof
+and preservation of recovery evidence; this is not an operator recovery shortcut.
+Any future schema evolution must follow this same compatibility rule or bump the
+schema number. Stored job/witness/receipt formats are unchanged by this correction.
+
+**Admission refusals name their predicate [PARTIAL — host-proven].** The thrown
+`rauc_recovery_unproven` error keeps `refusal: "stage-admission-unproven"` and
+its unsafe mode. Its diagnostics add `predicate`, the first failing check in
+evaluation order (`observation-unknown`, `daemon-inactive`, `operation-not-idle`,
+`resources-present`, `extra-process`, `booted-unhealthy`, `target-not-inactive`,
+`boot-primary-unknown`, `boot-primary-not-booted`, `boot-primary-is-target`,
+`activation-armed`, `baseline-changed:<field>`) and, when the observation itself
+stopped, `observation`: the boundary name plus allowlisted class/code, bounded to
+200 characters, or `<boundary>: unproven` for a reply that
+proved nothing. The refusal is logged once as
+`update-orchestrator: OS stage admission refused`. Diagnostics are log-only; no
+RPC schema changed, and the set of admitted snapshots is unchanged. Arbitrary
+exception messages, class names and codes are omitted rather than sanitized.
+Throwing exception getters use a safe fallback; formatting and reporting cannot
+replace the observer's null refusal, even with no sink.
+
+**Self-describing stage refusals [PARTIAL — host-tested, not board-qualified].**
+`OS staging attempt settled`, `startup writer recovery remains unresolved`, and
+the in-memory unlaunched-settlement error carry diagnostic context independently
+of the final recovery disposition. `firstFailureStep` is closed to `admission`,
+`runner`, `settlement-proof`, or `startup-recovery`; `firstFailureReason` is the
+original typed stage reason or `untyped`. `firstFailurePredicate` names the first
+closed refusal predicate (explicit `observation-unknown` when none is known).
+`failureStep`, `predicate` and existing `refusal` describe the final refusal, so a
+failed settlement proof cannot erase the earlier admission or runner failure.
+`firstFailureObservation` and `observation`, when available, retain the existing
+formatter's stage + allowlisted class/errno or stage/unproven line, at most 200
+characters. They contain no exception messages, paths, PIDs, argv or cmdline.
+The two summary events no longer serialize arbitrary error causes.
+
+Bounded proof waits additionally report observation `attempts` and `elapsedMs`;
+their first-failure counterparts survive later settlement. Counts measure actual
+observer submissions, including final reads, not RAUC install attempts or retry
+rounds. Direct proofs without a bounded wait omit those measurements. Diagnostics
+are in memory and log meta only: `osStageRecovery`, receipt, job, intent and witness
+formats and every wire schema stay unchanged. The direct strict validator's
+legacy diagnostic shape and explicit constructor-context precedence also remain.
+Observation sinks are forwarded through recovery and never-launched proof without
+changing null/error handling, retryability, bounds or authority checks. A raw
+thrown object retains its identity; redacted context follows existing wrappers.
+An unknown guardian/fd/lock exception may name only the settlement boundary,
+not an unobserved lower substep. Startup cannot recover an earlier process's
+first failure from disk because no diagnostic history is persisted.
+
+This is **not a cause proof** for Rock R16/R17c and **not board qualification**.
+Churn, terminal read uncertainty, and runner failure followed by a failed
+settlement proof remain historical alternatives. The never-launched proof still
+uses its direct observation, not the bounded drift-wait loop; no helper whitelist,
+new retry, deadline, admission relaxation, policy number or D154 change is added.
+
+**Invalid recovery metadata is not first boot.** Schema 1 still makes the fields
+optional, but present recovery must agree with phase, active identity and retry
+deadline. Invalid or contradictory metadata raises a typed load error. Startup
+retains any valid legacy terminal failure (including package/X6), keeps the
+original file untouched, and closes migration/check/install until maintenance
+repairs the record and restarts the backend. An absent recovery field leaves
+legacy package/X1 resume unchanged; this adds no general clearance path.
+First boot means the `agent.json` entry is genuinely absent (ENOENT) and
+nothing else: truncated or non-object JSON and schema-invalid records take the
+same typed latch, while a read failure or a non-regular entry (directory,
+symlink, FIFO) fails startup without writing and with mutations closed. The
+manifest serial, staged receipt and quarantine readers share that no-follow,
+non-blocking regular-file rule, so a malformed entry refuses admission rather
+than reading as serial 0, an empty quarantine or no receipt. These are host
+proofs, not board proofs; no stored format changed.
+
+The production writer-quiescence proof is supplied by the guarded RAUC
+recovery adapter. Uncertain ownership or resource retirement keeps both exits
+closed; the record stays terminal and the notice tells the operator to
+re-verify or contact support. There is no general failure-clearance RPC, and
+deleting `agent.json` is still never a recovery step.
+
+## `quarantine.json` version 1
+
+Stored at `/data/ceralive/update-state/quarantine.json`, written by atomic
+rename and parsed strictly (unknown schema or invalid shape fails closed):
+
+```json
+{
+  "schema": 1,
+  "packages": [{ "name": "cerastream", "version": "2026.9.10" }],
+  "os": [{ "version": "2026.10.0", "bootedVersion": "2026.9.1" }],
+  "failedCommits": [{ "id": "transaction-id", "reason": "apt-exit-1" }]
+}
+```
+
+All three arrays are required, empty on a new device. `packages` contains
+**exact** bad `(name, version)` candidates, not installed versions, prefixes,
+or version ranges. `failedCommits` records a confirmed nonzero APT commit even
+if no exact package version is known; it is diagnostic and must never mint a
+guessed APT pin. The APT pin file is `/etc/apt/preferences.d/ceralive-quarantine`,
+one `Package: <name> / Pin: version <version> / Pin-Priority: -1` stanza per
+exact candidate. The backend writes a private source file and delegates its
+fixed-destination installation to `systemd-run`; no shell interpolation or
+general-purpose privileged writer is exposed. The failed plan survives backend
+restarts in the adjacent `pending-packages.json` file until success/failure is
+observed. On discovery of a **newer** candidate (Debian `dpkg --compare-versions
+candidate gt bad`), the exact old pin is removed and the store is rewritten.
+
+The lagged mirror also runs this same comparison against the *installed*
+package versions after successful sync. Rollback evidence and failed commit
+diagnostics remain untouched; neither is superseded by an installed package.
+
+For Todo 39, **read `os[].version` to reject a manifest version**. It is the
+expected *staged* version after activation; `bootedVersion` records the surviving
+version observed after a reboot/rollback and is diagnostic only. The writer
+`recordOsRollback(expectedVersion, bootedVersion)` must be called only after the
+booted slot's actual version differs from the expected staged version. Never
+quarantine the surviving version. A new slot that boots but fails its
+healthcheck is not verified: the orchestrator stays in `os-verifying` across
+its repeat boots. If those failures come before `rauc status mark-good`, the
+entry is written by the later boot on the old slot (the bootloader fallback),
+with `bootedVersion` naming that old version. If the slot was marked good but
+its healthy record could not be written, there is no fallback and no entry:
+the orchestrator waits in `os-verifying` indefinitely (see
+[DEVICE-UPDATES.md](./DEVICE-UPDATES.md)). `isOsVersionQuarantined(version)` is the query
+API; it does not mutate state or infer a rollback from a failed download.
+
+Notifications use stable `update:<event-kind>:<identity>` names and the existing
+persistent-notification store, dismissal store, and allowlisted `updates-dialog`
+action. Notification producers and their current limits are listed in [DEVICE-UPDATES.md](./DEVICE-UPDATES.md#notifications).
+
+## Lagged slot mirror [PARTIAL — fixture-tested, exact-head board re-drill owed]
+
+`slot-sync-gate.ts` is the pure, I/O-free pre-dispatch predicate. The image must
+explicitly advertise `slot-sync`. The healthcheck's
+`/data/ceralive/update-state/healthy-state.json` carries `boot_id`, `slot`,
+`build_id`, `dpkg_status_sha256`, `recorded_at`; its boot ID, SHA-256 of the
+current `/var/lib/dpkg/status` bytes and current build ID must agree. Build ID
+comes from `/etc/os-release`'s first `BUILD_ID=` (quotes removed), falling back
+to `/etc/ceralive/image-build-commit` only when empty. The image's
+`sync-receipt.json` carries `state_sha256`, `build_id`, `image_version`,
+`target_slot`, `completed_at`; an absent receipt permits a first sync, while a
+matching status SHA whose `target_slot` names the slot that is not booted now
+is only evidence of a past mirror. Suppression additionally requires RAUC to
+confirm that target is still the single inactive rootfs slot and `good`, with
+the booted slot `good` and matching this boot's healthy-record slot identity.
+An APT commit within
+the current uptime has no matching boot-health record and cannot be mirrored.
+
+At startup and on every idle tick, a passing predicate dispatches
+`SYNC_ELIGIBILITY_CONFIRMED` (`idle → sync-eligible`), then the same predicate is
+rechecked before `SYNC_STARTED` and `systemctl start --no-block
+ceralive-slot-sync.service`. `OS_VERIFIED` also reaches `sync-eligible` and
+attempts promptly; it is dispatched only once this boot's healthy record exists
+(see [DEVICE-UPDATES.md](./DEVICE-UPDATES.md)), so the gate's boot-health
+condition already holds for the first mirror attempt after an OS update. A failed precheck returns
+to idle with no unit start. A stream does not block this local-only operation;
+commits and OS staging do. CeraUI treats its own busy phases as the cheap lock
+precheck; the unit holds the shared update and dpkg locks nonblockingly. It also
+checks `dpkg --audit`, partlabel guard, RAUC Operation, pending installation and
+hawkBit under those locks. CeraUI deliberately does **not** duplicate the live
+integrity probes before dispatch, because a pre-dispatch read cannot close that
+race. Exit 75 is a typed refusal, unlike an operational failure. A oneshot's
+stale previous exit-0 does not settle a newly queued run without its current
+SHA-256 receipt.
+
+**Failed-install fallback does not preserve a mirror receipt's authority.** An
+OS install may overwrite the other slot and leave it `bad` after the bootloader
+falls back, while the running slot's package hash and the old mirror receipt
+still match. In `idle`, positive RAUC evidence of that bad inactive target now
+permits `SYNC_ELIGIBILITY_CONFIRMED` and the existing unit start. A good target
+with a matching receipt remains `already-synced`; unreadable, ambiguous or
+contradictory boot/target evidence skips dispatch as `slot-identity-unknown`,
+logged once per unchanged refusal. OS staging, staged, armed and verifying phases
+are checked before any bad-target exception, so a pending installation is never
+overwritten. The receipt is not deleted or hand-rewritten by this decision.
+
+The gate-only target cache uses the existing `readRootSlots` port, not the
+receipt-overlaid version projection. It shares one observation across both
+preflights and refreshes at most every 60 seconds for unchanged idle evidence,
+including failed reads (each RAUC status command already has a 10-second bound).
+Idle ticks are 60 seconds; active ticks are 3 seconds. Startup has no cached
+answer. Changed boot/target identity, backward clock movement or adoption of any
+phase outside `idle`/`sync-eligible` invalidates it; OS writes and rollback
+recovery therefore cannot reuse a pre-install good result. A state-generation
+change across the awaited read refuses its stale dispatch authority. Completion
+still uses the separate fresh RAUC read described below, never this cache.
+Host regression proof covers receipt-target identity (not changing boot id or
+healthy-record slot), backward clock movement and the state-generation fence;
+this is not a completed exact-head board re-drill.
+`slot-sync-stale-receipt-cache.test.ts` drives backward clock movement, changed
+receipt-target identity inside the refresh bound, and a phase leaving idle and
+returning during the awaited RAUC read. Each rejects removal of its corresponding
+cache/fence rule. The shared slot-sync runtime harness injects the recovery lock,
+so sticky-failure tests do not acquire the host's update flock. A persistently good
+idle target still costs one extra `rauc status` per minute indefinitely; board
+load validation remains owed.
+Persistently failing hardware still reaches the existing sticky `SYNC_FAILED`
+outcome; this change adds no automatic failure-clear or per-tick restart loop.
+
+Completion is confirmed by that receipt, not by the unit's exit status. The unit
+is `Type=oneshot` without `RemainAfterExit`, and systemd 257 (Trixie) unloads a
+finished oneshot within about a second, which resets `ExecMainCode`; the probe
+then reads `inactive-clean`, so an exit 0 (`succeeded`) is only seen if a poll
+lands inside that window. The receipt is consulted for exactly two positively
+validated shapes, and for no other (`classifySlotSyncProbe`, `lock.ts`). Both
+require `systemctl show` to have exited 0 and to have reported each of the five
+properties exactly once (a repeated key, even with an equal value, fails
+closed, because the last value would otherwise win) with `LoadState=loaded`,
+`ActiveState=inactive` and `SubState=dead`; `succeeded` additionally requires
+`ExecMainCode=1` (CLD_EXITED) with `ExecMainStatus=0`, and `inactive-clean`
+requires both `ExecMainCode` and `ExecMainStatus` to be empty or `0`. A read
+the parser would have taken for either of those shapes but that fails this
+validation (nonzero `systemctl` exit, empty or incomplete output, a repeated
+key, any other lifecycle, a killed process, a nonzero `ExecMainStatus` beside
+`ExecMainCode=0`) is classified `absent` and, once the queued-start grace
+below has passed, fails as `slot-sync-unit-absent` without consulting the
+receipt, because the unit writes the receipt before its
+last step, `rauc status mark-good other`, which can still fail. The restriction
+covers only those two receipt-consulting branches: the parser's `running`,
+`failed` and `refused` verdicts are kept as they are, and none of them settles.
+For example, `ActiveState=active` still reads `running` even if `systemctl`
+exited nonzero, and a complete inactive/dead record with `ExecMainCode=1` and
+an unparseable `ExecMainStatus` reads `failed`. A failed unit is not unloaded,
+so refused and failed runs are still detected from the unit; an exit status of
+75 is the typed refusal whether systemd records it as `failed/failed` or as
+`inactive/dead`.
+
+On either validated shape during `syncing`, `pollSlotSync` reads the receipt.
+Its slot identity (`classifyReceiptTarget`) is resolved from the
+`/etc/rauc/system.conf` bootname map and this boot's healthy record, never from
+a timestamp, and is one of `other` (it names the slot that is not booted now),
+`not-other` (it names a known slot that is not the other rootfs slot, such as
+the booted one) or `unknown` (that map and record cannot decide). The
+pre-dispatch gate and the poll treat `unknown` differently. The gate never
+dispatches on it: with a matching SHA it skips the tick
+(`slot-identity-unknown`). The poll keeps a receipt whose state SHA-256 equals
+the current dpkg status as a candidate unless its identity is `not-other`;
+only `not-other` rules a receipt out, and for an `unknown` one RAUC decides
+below. On a candidate it takes a
+second, fresh probe, and if that probe again reads one of the two shapes it
+reads RAUC (`rauc status --detailed`, rootfs slots only) before any verdict.
+It settles `synced` only when RAUC reports exactly one `booted` and one
+`inactive` rootfs slot, the receipt's `target_slot` names the inactive one (by
+slot name such as `rootfs.0` or by bootname), and that slot's `boot_status` is
+`good`. If that slot is `bad`, the mirror was interrupted between its receipt
+and `rauc status mark-good other` (for example a power loss; after the reboot
+the unit reads as never run this boot): the phase fails as
+`slot-sync-incomplete`, persisted before anything else, rather than claiming a
+mirror RAUC never confirmed. Before calling it incomplete the unit is probed once more: a
+re-run that has started meanwhile (it un-marks its target while copying) keeps
+the phase `syncing`, and a failed or refused re-run keeps its own verdict. If
+RAUC cannot be read or reports another shape or status, there is no verdict
+this poll: the phase stays `syncing`, a warning is logged once per change of
+reason, and the next poll asks again. If RAUC shows that the receipt names the
+booted slot, the receipt is not evidence for this run and is handled like a
+non-matching one (grace, re-probe, then `slot-sync-unit-absent`); re-reading
+that same receipt cannot defer the verdict again. The healthy record's slot
+identifies the booted slot only when its `boot_id` is this boot's. After a
+reboot with the phase still `syncing`, the new boot's healthcheck rewrites that
+record only once the backend is up, so the first polls see an `unknown` slot
+identity; such a receipt stays a candidate and RAUC, which names this boot's
+booted and inactive slots itself, decides between `synced`,
+`slot-sync-incomplete` and no verdict. A matching receipt alone does not prove
+that this run finished cleanly. A recovery run can start with a matching older
+receipt precisely because RAUC showed its target `bad`; receipt equality is
+therefore not proof that this run wrote it. On the resume path after a
+reboot the receipt can also predate the reboot, and what proves the mirror is RAUC's
+view of this boot's slots, not the receipt's age. Either way the unit writes
+the receipt before its last step, and the first probe can still be the previous run's
+finished record while this run's job was queued. A second probe that reads
+`running` waits; `failed` or `refused` fails with that verdict, persisted
+before `reset-failed` clears the unit's record; an `absent` second probe gives
+no verdict this poll (one unreadable `systemctl show` right after a clean read
+is more likely transient than a vanished unit), and the next poll's first probe
+fails a persistent `absent` as `slot-sync-unit-absent` once the queued-start
+grace below has passed. A mismatched, missing or unreadable receipt leaves
+`succeeded` waiting (the unit may be a queued re-run still showing the previous
+exit). For `inactive-clean` and `absent` it is not terminal at first:
+`systemctl start --no-block` queues the job behind
+`ceralive-healthcheck.service` (the unit has `Requires=`/`After=` on it), and
+until the job starts the unit still reads the previous run's unloaded shape.
+Such a read is only failed once `SLOT_SYNC_QUEUED_START_GRACE_MS` (90 s, 30
+polls at the 3 s active tick) has passed since the phase entered `syncing`
+(`enteredAt`); a clock that stepped behind that start counts as past the grace.
+On the shipped image that queue lasts milliseconds: the gate dispatches only
+after the healthcheck wrote this boot's healthy record as its last step, the
+healthcheck unit is `RemainAfterExit=yes`, and a re-run is a boot-id no-op
+(image-building-pipeline `mkosi/runtime/ceralive-healthcheck.sh` l.444-456 and
+l.474-476, `ceralive-healthcheck.service` l.22, at `36d8131`). The 90 s (the
+healthcheck's own 60 s `HEALTHCHECK_TIMEOUT` plus 5 s probe timeouts, with
+margin) is a defensive bound for any delayed start job, not a measured wait. Even then an `inactive-clean` read is re-probed first, because the
+job may have started or finished while the receipt was read: `running` waits,
+`failed`/`refused` keep their verdicts, and a clean re-probe re-reads the
+receipt and judges that fresh copy, leaving a now-matching receipt to the next
+poll. Only a clean re-probe with a still non-matching receipt fails as
+`slot-sync-unit-absent`.
+Hardware basis: both bench boards recorded `slot-sync-unit-absent` 1-3 s
+after a successful mirror had written its receipt and marked the other slot good.
+
+Known limitations of the grace, recorded rather than fixed:
+
+- The grace is measured on the wall clock (`deps.now()` against `enteredAt`).
+  An NTP step FORWARD while the phase is `syncing` makes the elapsed time jump
+  and can therefore shorten the grace; a step backwards counts as past the
+  grace, as above. Both fail closed, never towards a false `synced`.
+- `SYNC_STARTED` is persisted before `systemctl start --no-block` runs. A
+  backend that dies between the two leaves a persisted `syncing` phase with no
+  job ever queued, so after the grace the unit still reads its previous
+  unloaded shape and the mirror fails as `slot-sync-unit-absent`. That failure
+  stays failed unless a later successful mirror supplies every proof in the
+  interrupted-failure recovery section above. No mirror is inferred to have run.
+
+On confirmed success the phase becomes `synced` *before* four independent,
+best-effort effects: reuse bounded `apt-get clean`, remove leftovers from
+`/data/ceralive/rauc-downloads`, reconcile superseded failed package versions,
+and refresh both-slot status. Only afterwards does the existing `slots-current`
+notice say “Both system slots are up to date.” A cleanup failure warns but
+cannot reverse the mirror verdict. The internal `readBothSlotStatus` /
+`parseBothSlotStatus` seam reads RAUC's detailed rootfs slot records and overlays
+the target's receipt version (RAUC keeps an old bundle version after rsync);
+an OS install newer than the receipt supersedes it. Bundle version and install
+time are read from RAUC 1.15's nested `slot_status` (the flat shape is still
+accepted), and a non-rootfs slot such as `certs.0` with `null` bootname and
+boot status is tolerated and left out. Todo 41 exposes it through
+the additive `system.getUpdateDetails` RPC (`slots` is `null` unless the image
+declares `slot-sync` and `rauc status` answered), and the Updates dialog's Slots
+section renders A/B version, state, health and last mirror time from it.
+`device-stats.raucSlot` remains the S1-locked single bare string.
+
+## Unlaunched settlement witness [PARTIAL]
+
+Update mutations cannot run against module-initialized idle. Check, Install and
+the synchronous cellular grant require completed validated startup; arrivals
+during load/resume/recovery get the retryable WebSocket RPC error
+`UPDATE_ORCHESTRATOR_INITIALIZING`. An invalid-present terminal record never opens that barrier.
+Read-only status, unrelated RPCs and stream admission remain available. The
+runtime enforces the same rule for direct callers; explicit fixture dependency
+injection supplies an initialized test runtime, never a production bypass.
+
+`os-stage-unlaunched-witness.ts` exposes the internal guard/state handoff at
+`/data/ceralive/update-state/os-unlaunched-settlement.json`. The guard must call
+its writer only after physical settlement and before retiring the job directory.
+Writes use an exclusive no-follow mode-0600 temporary file, file fsync, atomic
+rename and parent-directory fsync. Consumption is matching-attempt-only unlink
+plus directory fsync. Reads require a trusted non-peer-writable directory, a
+regular single-link uid-owned mode-0600 file, strict canonical schema/UTF-8 and
+a 16 KiB limit. Candidate identity is derived from the parsed manifest using
+`osStageCandidateKey`, never by comparing the job's JSON string to a recovery key.
+
+Guard/state integration is implemented and fixture-tested; board qualification
+is owed. Future OS attempts persist optional UUID-validated `osStageRecovery.attemptId`
+before effects, alongside the active ID; all failed-round settlement retains it
+when active identity is cleared. Both IDs must agree while active. This record
+is persistence-only: no frontend/RPC output or binding schema gains a field.
+No record boot ID is persisted. Consumption requires the witness boot ID to
+equal the **current** boot, its attempt ID to equal the retained record ID, and
+its derived candidate key to equal that record's canonical key.
+
+`OS_UNLAUNCHED_STAGE_SETTLED` is an internal event, not a ninth failure reason.
+A matching interrupted `os-staging` counts one failed round; an already-counted
+`failed` record can qualify only with null active identity, unsafe mode, a reason
+matching the phase's failure and exactly `rauc_recovery_unproven` or
+`os_stage_outcome_unknown_after_restart`. It retains its round count. Both return
+to `os-available` with `rauc_install_failed` / `operator`, no automatic stage.
+A good inactive target is allowed only on this provenance-specific path.
+`osStageFailureSettledSafely` still demands a bad target for generic confirmation.
+The original bench D8 record lacks historical identity and **remains unsafe**:
+same-candidate witness evidence is never a wildcard. Its existing manual
+confirmation path is unchanged. A reboot without a completed current-boot
+witness also stays unsafe; no orphan-free reboot is treated as proof of outcome.
+
+The adapter requires fresh idle RAUC, writer quiescence, a healthy current-boot
+booted rootfs, exactly one inactive target, and no receipt or armed activation.
+Generation, phase, candidate object, recovery object, active attempt and live
+producer identity are fenced across the await. The cross-process control lease
+is held from witness read through readiness, authoritative `agent.json` re-read,
+dispatch/persistence and consumption. The disk phase, failure reason and complete
+recovery identity must still match the snapshot (or its same-attempt operator
+cleanup replay); drift throws `rauc_recovery_unproven`, preventing startup's
+final save from overwriting another backend's newer unsafe attempt. Local
+generation fences remain necessary but are not a cross-process proof.
+It runs on startup, scheduling
+ticks and both manual check/install admission paths. It consults the witness
+before interrupted-stage uncertainty is recorded; later guard proof can also
+settle an identified already-persisted unsafe failure. Invalid persisted recovery
+still latches terminal admission closure, never fresh idle (H2-R2).
+
+| Crash window | Restart behavior |
+|---|---|
+| Before completed witness publication | No state clearance; guard must retain/re-prove its job |
+| Witness exists, before agent.json persistence | Witness remains; the original attempt settles once on retry |
+| Persistence fails after dispatch adopts memory, including parent-directory fsync | Witness remains and a persistence-pending latch closes admission; inconclusive later readiness cannot retire the witness or grant a new attempt. Only successful settlement persistence clears the latch |
+| agent.json durably persisted, before witness consumption | Operator record replays matching cleanup only; no second round and no repeated notice remove/show |
+| Witness consumed, backend restarts with an empty notice store | No witness replay; startup hydrates the missing policy notice from the persisted record without touching an already-present or unrelated notice |
+| Another backend replaces the attempt across readiness | Authoritative identity mismatch refuses settlement and the startup tail; the newer record is not overwritten |
+| New attempt races a guard publishing its completed witness | One control lease serializes guard publication, leftover retirement and new identity persistence; the stage runner borrows that same lease rather than acquiring again |
+
+The unchanged `dispatch` persists before the consumer proceeds. State saves fsync
+the state file, rename it, and fsync its parent directory before witness unlink.
+The pending latch wraps that unchanged adoption/write boundary; a failed write
+cannot make operator-mode memory permission to install. Accepted
+settlement replaces only the candidate's unresolved notice with
+`os-stage-operator`, before matching witness retirement; other candidates and
+OS-check notices are untouched. No staged, activated or success notice is raised.
+Before any new attempt starts, the runtime acquires the control lease and
+rechecks its authoritative recovery identity. Any leftover witness (same or other candidate,
+including one a legacy record could never consume) is consumed synchronously:
+the new attempt replaces the persisted identity so no earlier witness can match,
+and a leftover file would make the guard refuse the new attempt's witness write.
+A failed read or consumption refuses that admission. The lease remains owned by
+the runtime through `OS_STAGING_STARTED` persistence, the borrowed stage runner
+and its terminal state write. A borrower never releases its owner's lease.
+Overlapping startup calls join one promise and already-started calls are inert;
+the downloading-startup block is unchanged. Malformed present attempt UUIDs
+follow H2-R2's terminal-load path, while absent legacy identity stays valid.
+No guardian/systemd/orphan implementation, slot mutation or hardware qualification
+is introduced by this state-side change.
+# Bounded helper command outcomes [EXISTS — host-tested]
+
+`execFileP`, `run` and add-on validation use the shared bounded-child collector.
+A timeout/abort termination issued before exit cannot become successful CLI
+evidence, even when a TERM handler exits zero. Genuine zero observed before
+termination is retained during bounded output drainage. `run` keeps its existing
+`RunTimeoutError`/`RunAbortError`; exec errors retain output and code fields.
+Validation timeout maps to the existing `addon_validation_failed` auto-disable
+path. Stored formats, wire schemas and public runner parameters are unchanged.
+This boundary repair is host-tested, not an OS-install or board qualification.

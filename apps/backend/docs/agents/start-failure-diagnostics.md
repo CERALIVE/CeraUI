@@ -16,7 +16,7 @@ message is the generic diagnostic surface.
 string (`invalid params: audio-device-unavailable: ALSA capture device
 'hw:CARD=rockchiphdmiin' is busy or unavailable`) verbatim to an operator with no
 console, stacked under a second toast telling them to run `journalctl`. Neither is
-actionable for the audience CeraLive targets. `LiveView.startFailureMessage()`
+actionable for the audience CeraLive targets. `startFailureMessage()` (`apps/frontend/src/lib/streaming/start-failure-copy.ts`, used by `LiveView`)
 therefore renders class + retry-state only, and every operator-facing string
 points at Settings → System Logs instead of a shell command or a unit name. The
 propagation above is UNCHANGED — do not weaken it to "fix" the toast, and do not
@@ -111,7 +111,7 @@ Six rules are load-bearing:
   (`notificationBroadcast(..., 0, false, ...)`), so a `no_signal` refusal adds no
   second band beside the standing `hdmi_error`.
 - **The frontend splits the causes by SURFACE, and the split is by cause, never by
-  class.** `LiveView.startFailureMessage` keys the toast
+  class.** `startFailureMessage` keys the toast
   `live.startFailure.class.<class>.<captureCause>` for every cause. `LiveView`
   also hands `failure.captureCause` down to `IdleCockpit` → `CompositionCard`,
   which renders an inline refusal ONLY for the two composition causes: that card

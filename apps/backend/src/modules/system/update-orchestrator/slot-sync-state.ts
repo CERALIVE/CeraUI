@@ -1,0 +1,199 @@
+import { createHash } from "node:crypto";
+import { z } from "zod";
+import { readBootId } from "./os-identity.ts";
+import { readOsReleaseMetadata } from "./os-release-metadata.ts";
+import type {
+	HealthySlotState,
+	ReceiptTarget,
+	SlotSyncEvidence,
+} from "./slot-sync-gate.ts";
+import {
+	readStoredStateBytes,
+	readStoredStateFile,
+	readStoredStateJson,
+	STORED_STATE_LIMITS,
+} from "./stored-state-file.ts";
+
+export const SYNC_RECEIPT_FILE =
+	"/data/ceralive/update-state/sync-receipt.json";
+const HEALTHY_STATE_FILE = "/data/ceralive/update-state/healthy-state.json";
+const healthyStateSchema = z
+	.object({
+		boot_id: z.string().min(1),
+		slot: z.string().min(1),
+		build_id: z.string().min(1),
+		dpkg_status_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+		recorded_at: z.string().min(1),
+	})
+	.strict();
+export const syncReceiptSchema = z
+	.object({
+		state_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+		build_id: z.string(),
+		image_version: z.string(),
+		target_slot: z.string(),
+		completed_at: z.string(),
+	})
+	.strict();
+
+export function buildIdFromOsRelease(
+	osRelease: string,
+	fallback: string,
+): string {
+	const buildIds = osRelease
+		.split("\n")
+		.filter((line) => line.trim().startsWith("BUILD_ID="));
+	if (buildIds.length > 1)
+		throw new SlotIdentityReadError("duplicate BUILD_ID");
+	const buildId =
+		buildIds[0]?.trim()?.slice("BUILD_ID=".length).replaceAll('"', "") ?? "";
+	return buildId || fallback.replaceAll("\n", "");
+}
+
+const RAUC_SYSTEM_CONF = "/etc/rauc/system.conf";
+
+const ROOTFS_SECTION = /^\[\s*slot\.(rootfs\.\d+)\s*\]$/;
+const ANY_SECTION = /^\[.*\]$/;
+// GLib key files allow whitespace around `=`, so `bootname = A` is valid.
+const BOOTNAME_KEY = /^bootname\s*=\s*(.*)$/;
+const NAMED_SLOT = /^[A-Za-z0-9_-]+\.\d+$/;
+
+export class SlotIdentityReadError extends Error {
+	override readonly name = "SlotIdentityReadError";
+}
+
+/** RAUC rootfs slot name -> bootname, from `[slot.rootfs.<n>]` `bootname`. */
+export function parseRaucSlotBootnames(
+	systemConf: string,
+): ReadonlyMap<string, string> {
+	const bootnames = new Map<string, string>();
+	const sections = new Set<string>();
+	let slot: string | null = null;
+	for (const raw of systemConf.split(/\r?\n/)) {
+		const line = raw.trim();
+		if (line.startsWith("#") || line.startsWith(";")) continue;
+		if (ANY_SECTION.test(line)) {
+			slot = ROOTFS_SECTION.exec(line)?.[1] ?? null;
+			if (slot) {
+				if (sections.has(slot))
+					throw new SlotIdentityReadError("duplicate slot section");
+				sections.add(slot);
+			}
+			continue;
+		}
+		const bootname = BOOTNAME_KEY.exec(line)?.[1]?.trim();
+		if (slot && bootname !== undefined) {
+			if (bootnames.has(slot))
+				throw new SlotIdentityReadError("duplicate slot bootname");
+			if (bootname.length === 0)
+				throw new SlotIdentityReadError("empty slot bootname");
+			bootnames.set(slot, bootname);
+		}
+	}
+	return bootnames;
+}
+
+type SyncReceipt = z.infer<typeof syncReceiptSchema>;
+
+/**
+ * Which slot the receipt records a mirror INTO, relative to the slot booted
+ * now. An OS activation swaps the booted slot without touching dpkg, so a
+ * receipt whose SHA still matches can describe the mirror into the slot we now
+ * run from (task-45d OPI D1). Identity comes only from this boot's healthy
+ * record and the static system.conf bootname map, never from timestamps: a
+ * clock can step, and a completion time says nothing about which slot was
+ * written. `unknown` means the booted slot cannot be resolved, or the target
+ * is a name the map lacks that could be the other rootfs slot; the gate then
+ * neither suppresses nor dispatches the mirror, and the poll lets RAUC decide.
+ */
+export function classifyReceiptTarget(input: {
+	readonly receipt: Pick<SyncReceipt, "target_slot"> | null;
+	readonly healthyState: HealthySlotState | null;
+	readonly bootId: string;
+	readonly bootnames: ReadonlyMap<string, string>;
+}): ReceiptTarget {
+	const { receipt, healthyState, bootId, bootnames } = input;
+	if (!receipt) return "not-other";
+	// A previous boot's record names the slot booted THEN, which an
+	// activation or fallback may since have swapped.
+	if (!healthyState || !bootId || healthyState.boot_id !== bootId)
+		return "unknown";
+	if (receipt.target_slot === healthyState.slot) return "not-other";
+	const known = new Set(bootnames.values());
+	const bootnameOf = (slot: string): string | null =>
+		bootnames.get(slot) ?? (known.has(slot) ? slot : null);
+	const booted = bootnameOf(healthyState.slot);
+	if (booted === null) return "unknown";
+	const target = bootnameOf(receipt.target_slot);
+	if (target !== null) return target !== booted ? "other" : "not-other";
+	// An unmapped name is ruled out only when it provably cannot be the other
+	// rootfs slot: the map already names that slot, or the name is a RAUC slot
+	// of another class (`certs.0`). Otherwise a partial map would turn a real
+	// mirror's own receipt into `not-other` and the mirror would fail.
+	const otherSlotMapped = [...known].some((name) => name !== booted);
+	const otherClassSlot =
+		NAMED_SLOT.test(receipt.target_slot) &&
+		!receipt.target_slot.startsWith("rootfs.");
+	return otherSlotMapped || otherClassSlot ? "not-other" : "unknown";
+}
+
+/** The healthcheck's record, written after a passing check and `mark-good`;
+ * null when absent. A garbled file throws: callers treat that as no verdict. */
+export async function readHealthyState(
+	path = HEALTHY_STATE_FILE,
+): Promise<HealthySlotState | null> {
+	const value = await readStoredStateJson(path, STORED_STATE_LIMITS.receipt);
+	return value === undefined ? null : healthyStateSchema.parse(value);
+}
+
+export async function readSlotSyncEvidence(): Promise<SlotSyncEvidence> {
+	const [bootId, bytes, osRelease, healthyState, receipt, systemConf] =
+		await Promise.all([
+			readBootId(),
+			readStoredStateBytes(
+				"/var/lib/dpkg/status",
+				STORED_STATE_LIMITS.quarantine,
+			),
+			readOsReleaseMetadata().then((value) => value ?? ""),
+			readHealthyState(),
+			readStoredStateJson(SYNC_RECEIPT_FILE, STORED_STATE_LIMITS.receipt).then(
+				(value) =>
+					value === undefined ? null : syncReceiptSchema.parse(value),
+			),
+			readStoredStateFile(RAUC_SYSTEM_CONF, STORED_STATE_LIMITS.settings).then(
+				(value) => value ?? "",
+			),
+		]);
+	if (bytes === null) throw new Error("dpkg status absent");
+	// SHA-256 of the exact dpkg status bytes, like the image's sha256sum.
+	const statusSha256 = createHash("sha256")
+		.update(new Uint8Array(bytes))
+		.digest("hex");
+	// Image-compatible fallback is valid only after unique BUILD_ID evidence.
+	const fromRelease = buildIdFromOsRelease(osRelease, "");
+	const fallback = fromRelease
+		? ""
+		: (
+				(await readStoredStateFile(
+					"/etc/ceralive/image-build-commit",
+					STORED_STATE_LIMITS.scalar,
+				)) ?? ""
+			).replaceAll("\n", "");
+	return {
+		healthyState,
+		bootId,
+		statusSha256,
+		buildId: buildIdFromOsRelease(osRelease, fallback),
+		receiptStateSha256: receipt?.state_sha256 ?? null,
+		receiptTarget: classifyReceiptTarget({
+			receipt,
+			healthyState,
+			bootId,
+			bootnames: parseRaucSlotBootnames(systemConf),
+		}),
+		receiptTargetSlot: receipt?.target_slot ?? null,
+		receiptCompletedAt: receipt?.completed_at ?? null,
+		receiptBuildId: receipt?.build_id ?? null,
+		receiptImageVersion: receipt?.image_version ?? null,
+	};
+}

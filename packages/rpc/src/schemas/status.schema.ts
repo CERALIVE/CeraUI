@@ -17,6 +17,7 @@ import {
 	updateStateSchema,
 	updatingStatusSchema,
 } from './system.schema';
+import { updateOrchestratorWireStateSchema } from './update-orchestrator.schema';
 import { wifiStatusSchema } from './wifi.schema';
 
 // Audio sources enum
@@ -70,6 +71,11 @@ export const statusMessageSchema = z.object({
 	available_updates: availableUpdatesFieldSchema,
 	updating: updatingStatusSchema,
 	update_state: updateStateSchema.optional(),
+	// Additive (Todo 36): the packages+OS+slot-sync orchestrator's own phase,
+	// a SEPARATE state machine from the legacy `update_state` above (which
+	// keeps meaning exactly what it always meant — apt discovery/install
+	// progress). Absent on a backend that has not started the orchestrator yet.
+	update_orchestrator: updateOrchestratorWireStateSchema.optional(),
 	ssh: sshStatusSchema,
 	wifi: wifiStatusSchema,
 	asrcs: z.array(z.string()),
@@ -440,6 +446,7 @@ export const statusResponseSchema = z.object({
 	available_updates: availableUpdatesFieldSchema.optional(),
 	updating: updatingStatusSchema.optional(),
 	update_state: updateStateSchema.optional(),
+	update_orchestrator: updateOrchestratorWireStateSchema.optional(),
 	ssh: sshStatusSchema.optional(),
 	wifi: wifiStatusSchema.optional(),
 	modems: modemListSchema.optional(),

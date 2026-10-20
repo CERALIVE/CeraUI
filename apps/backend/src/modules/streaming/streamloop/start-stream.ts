@@ -20,7 +20,7 @@
 // wires srtla per-uplink telemetry, then starts the engine session over the
 // StreamingBackend seam.
 
-import { AUDIO_SOURCE_AUTO, type StartFailureClass } from "@ceraui/rpc/schemas";
+import type { StartFailureClass } from "@ceraui/rpc/schemas";
 import {
 	buildSrtlaSendArgs,
 	controlSocketPath,
@@ -35,11 +35,6 @@ import {
 	resetActivePassthrough,
 } from "../active-passthrough.ts";
 import { asrcProbe, isPseudoAudioSource } from "../audio.ts";
-import {
-	buildAutoLaunchConfig,
-	resolveAutoAsrcFromLiveState,
-	setResolvedAsrcFromStart,
-} from "../auto-audio.ts";
 import {
 	defaultBindMapSpawnDeps,
 	resolveBindMapArgs,
@@ -57,8 +52,10 @@ import {
 import type { Pipeline } from "../pipelines.ts";
 import { replayPreviewEncodeMode } from "../preview-encode-replay.ts";
 import { getLastPublishedBond } from "../srtla.ts";
+import { assertStreamLaunchOwnership } from "../stream-launch-ownership.ts";
 import { getStreamingBackend } from "../streaming-engine.ts";
 import { srtlaSendExec } from "./exec-paths.ts";
+import { resolveLaunchConfig } from "./launch-config.ts";
 import { resolveProcessError } from "./process-error-patterns.ts";
 import { spawnStreamingLoop, stopProcessAndWait } from "./process-runner.ts";
 
@@ -149,21 +146,6 @@ export async function maybeProbeAudioSource(
 	}
 }
 
-// "Auto" resolves to a concrete card here, at launch, and NEVER touches the
-// persisted config: the resolved key rides a launch-only shallow copy while
-// config.json keeps the "Auto" sentinel. A pseudo resolution (embedded / pipeline
-// default) omits asrc so the probe is skipped and the engine takes its own path.
-function resolveLaunchConfig(config: RuntimeConfig): RuntimeConfig {
-	if (config.asrc !== AUDIO_SOURCE_AUTO) return config;
-	const resolution = resolveAutoAsrcFromLiveState();
-	setResolvedAsrcFromStart(
-		resolution.asrcKey,
-		resolution.reason,
-		resolution.candidates,
-	);
-	return buildAutoLaunchConfig(config, resolution);
-}
-
 /**
  * `configOverride` exists for ONE caller: the engine-death restoration, which
  * must relaunch the configuration the engine was actually RUNNING. `config.json`
@@ -181,6 +163,7 @@ export async function startStream(
 	attemptId = "legacy-start",
 	configOverride?: Partial<RuntimeConfig>,
 ): Promise<StartStreamResult> {
+	assertStreamLaunchOwnership();
 	// The preview-encoder fence, and the reason it lives HERE. The engine fixes
 	// the preview encoder when it builds the main graph, so the operator's mode
 	// has to be in the engine's config BEFORE the `start` below — not racing it.
@@ -194,6 +177,7 @@ export async function startStream(
 	// It runs before every other side effect on purpose: a refused mode must cost
 	// nothing — no sender spawned, no audio probed, no bitrate written.
 	const previewEncode = await replayPreviewEncodeMode();
+	assertStreamLaunchOwnership();
 	if (!previewEncode.ok) {
 		return {
 			success: false,
@@ -228,7 +212,13 @@ export async function startStream(
 	resetActiveEncodeLiveness();
 	resetActivePassthrough();
 
-	if (!(await maybeProbeAudioSource(pipeline, launchConfig, audioDeps))) {
+	const audioReady = await maybeProbeAudioSource(
+		pipeline,
+		launchConfig,
+		audioDeps,
+	);
+	assertStreamLaunchOwnership();
+	if (!audioReady) {
 		logger.warn("startStream: audio source probe failed; aborting start", {
 			asrc: launchConfig.asrc,
 		});
@@ -247,6 +237,7 @@ export async function startStream(
 	let ipsContent: string;
 	try {
 		ipsContent = await Bun.file(setup.ips_file ?? "").text();
+		assertStreamLaunchOwnership();
 	} catch (error) {
 		logger.warn("startStream: IP list read failed; aborting start", { error });
 		return {
@@ -262,6 +253,7 @@ export async function startStream(
 		srtlaSendExec,
 		defaultBindMapSpawnDeps(getLastPublishedBond),
 	);
+	assertStreamLaunchOwnership();
 	const transaction = createLaunchTransaction(attemptId, {
 		warn: (message, meta) => logger.warn(message, meta),
 	});

@@ -7,6 +7,10 @@ export function getStreamLifecycleState(): LifecycleState {
 	return lifecycleState;
 }
 
+export function seedStreamLifecycleState(state: LifecycleState): void {
+	lifecycleState = state;
+}
+
 export function updateStreamLifecycleState(state: LifecycleState): void {
 	lifecycleState = state;
 	broadcastMsg("status", { stream_lifecycle: state });

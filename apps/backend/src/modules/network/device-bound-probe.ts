@@ -103,6 +103,9 @@ export function buildDeviceBoundProbeArgv(
 	const seconds = Math.max(1, Math.round(timeoutMs / 1000));
 	return [
 		"curl",
+		"-q",
+		"--noproxy",
+		"*",
 		"--silent",
 		...deviceBindingArgs(ifname),
 		"--max-time",

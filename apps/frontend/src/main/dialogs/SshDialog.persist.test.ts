@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+/// <reference lib="es2024.promise" />
 /**
  * SshDialog — the boot-persistence toggle, and its independence from Start/Stop.
  *
@@ -18,6 +19,8 @@
  *   3. `active && !enabled` — the exact silent-outage state — renders a standing
  *      advisory band, and no other combination does.
  */
+
+import { m } from "@ceraui/i18n/svelte";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import {
 	afterEach,
@@ -32,7 +35,7 @@ import {
 import {
 	destroyAsyncOperations,
 	initAsyncOperations,
-} from "$lib/rpc/async-operation.svelte";
+} from "../../lib/rpc/async-operation.svelte.js";
 import {
 	publishSsh,
 	resetSshFeed,
@@ -142,6 +145,51 @@ function serviceButton(): HTMLElement {
 }
 
 describe("two controls, two axes", () => {
+	it("explains a delayed SSH refusal even after transient operation state is gone", async () => {
+		// Given a real command flow with its external reply held.
+		const response = {
+			success: false,
+			error: "stream_liveness_unknown",
+		} as const;
+		const reply = Promise.withResolvers<typeof response>();
+		const shown = Promise.withResolvers<void>();
+		toastError.mockImplementation(() => shown.resolve());
+		sshStart.mockReturnValue(reply.promise);
+		await open({ active: false });
+		await fireEvent.click(serviceButton());
+		destroyAsyncOperations();
+		// When the device's explicit refusal arrives without a retained UI entry.
+		reply.resolve(response);
+		await shown.promise;
+		// Then response evidence, not transient UI history, selects the explanation.
+		expect(toastError).toHaveBeenCalledWith(
+			m["notifications.disruptiveActionRefused"](),
+		);
+	});
+	for (const reason of [
+		"streaming",
+		"stream_liveness_unknown",
+		"update_in_progress",
+	]) {
+		for (const action of ["start", "stop", "persist"]) {
+			it(`explains ${reason} when SSH ${action} is refused`, async () => {
+				// Given an explicit refusal from the device, with unchanged status.
+				const result = { success: false, error: reason };
+				sshStart.mockResolvedValue(result);
+				sshStop.mockResolvedValue(result);
+				sshSetPersistent.mockResolvedValue(result);
+				await open({ active: action === "stop" });
+				// When the operator uses the real control.
+				await fireEvent.click(
+					action === "persist" ? persistToggle() : serviceButton(),
+				);
+				// Then the translated exclusion explanation replaces generic failure copy.
+				expect(toastError).toHaveBeenCalledWith(
+					m["notifications.disruptiveActionRefused"](),
+				);
+			});
+		}
+	}
 	it("renders a persistence switch SEPARATE from the Start/Stop button", async () => {
 		await open({ active: true, enabled: false });
 

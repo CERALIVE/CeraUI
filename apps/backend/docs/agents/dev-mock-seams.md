@@ -19,6 +19,17 @@ The transient `stream.armed.json` is ignored beside the other backend runtime
 files. Source copy/read failures remain fatal; only snapshot teardown tolerates
 `ENOENT`.
 
+The preload allocates a per-file private `CERALIVE_STREAMING_MARKER` before the
+production session owner initializes. Worker-global isolation does not isolate
+the filesystem: on runners with writable `/run/ceralive`, an engine-lifecycle
+fixture can otherwise leave another file's initial owner UNKNOWN. The temporary
+marker is removed with its own directory; inherited/foreign markers are untouched.
+Retained, unreadable and failed-clearance tests still explicitly arrange those
+conditions. `test-runtime-isolation.test.ts` runs the unchanged mock-Stop assertion
+against an inherited populated sentinel and requires success plus preservation
+of that foreign marker. This changes neither production liveness nor test
+parallelism; the existing one-broadcast assertion is unchanged.
+
 The initial 2026-09-07 adoption batches finished 19/20 and 18/20: both original
 isolation repairs passed, but add-on helper, modem-transition and source-routing
 tests exposed two more failure modes. The clock and child-command fixes below
@@ -29,6 +40,12 @@ The transition-engine fixture controls `Date.now()` with `setSystemTime`:
 USB enumeration cannot spend the NM-timeout case's budget through host scheduling
 delay. Only the unresolved NM reader advances time, including the failure-path
 re-probe; teardown restores the real clock. Production polling is unchanged.
+
+The software-update scheduler fixture preserves its real `process.hrtime()`
+origin when enabling fake timers, then advances that clock with the retry timer.
+Bun resets fake hrtime to zero while the imported scheduler retains its deadline;
+a file loaded after 60 seconds in a parallel worker otherwise never reaches its
+skip runner. Teardown restores the clock spy and real timers; production is unchanged.
 
 The add-on shell/GPG suite and historical source-routing Git guard use
 `tests/helpers/run-test-command.ts`: asynchronous spawn, concurrent stdout/stderr
@@ -54,6 +71,10 @@ restore a shared cwd `config.json`: a fresh checkout has none, and another file
 creating it is not a test prerequisite. Teardown restores the path and removes
 only this fixture's directory.
 
+Witness fixtures also allocate under the test run's temporary root, outside the
+source tree. Repository-wide source inventory must never race their short-lived
+JSON files; the inventory still includes every new non-ignored source file.
+
 Backend tests inject procedure launch/source dependencies through
 `setStreamingProcedureDepsForTest()` and stream-start process/telemetry/engine
 dependencies through `setStartStreamDepsForTest()`. Every test that overrides
@@ -65,6 +86,14 @@ Its `modules/setup.ts` mock is therefore the sole intentional process-global
 module mock. `stopWifiUpdateLoopForTest()` cancels every delayed Wi-Fi refresh
 scheduled through `scheduleWifiUpdate()` and resets the unavailable-device retry
 window. Tests that start that loop call the stop seam in `afterEach`.
+
+Plain Bun child fixtures do not inherit that module mock. Both update-transport
+netns clients use `fixtures/update-transport-setup.ts` to write a complete typed
+setup document with explicit `hw: "rk3588"` before changing cwd and importing
+runtime modules. `SETUP_CONFIG_DEFAULTS` is partial and cannot stand alone as a
+setup document. The unprivileged `update-transport-setup.test.ts` loads the real
+strict setup module and selector in a fresh child; it needs no network namespace
+or probe. The production required-metadata boundary is not relaxed for tests.
 
 The lifecycle-admission test reset remains `resetLifecycleInterlock()`. Any test
 that acquires a streaming or modem-transition lease installs it in `afterEach`,
@@ -335,4 +364,3 @@ persisted — it NEVER regenerates an existing credential (that stays
 `applyPassword` / `persist` / `refreshStatus`) is injected via
 `SshPasswordProvisionDeps` so `tests/ssh-password-provision.test.ts` drives it
 without a real `passwd`/`/etc/shadow` (and without persisting to disk).
-

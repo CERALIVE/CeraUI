@@ -15,21 +15,60 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { loadJsonConfigSync } from "../helpers/config-loader.ts";
 import {
 	SETUP_CONFIG_DEFAULTS,
 	type SetupConfig,
 	setupConfigSchema,
 } from "../helpers/config-schemas.ts";
 import { logger } from "../helpers/logger.ts";
+import {
+	readStoredStateJson,
+	STORED_STATE_LIMITS,
+	StoredStateReadError,
+} from "./system/update-orchestrator/stored-state-file.ts";
 
 const SETUP_FILE = "setup.json";
 
+// setup.json is image-baked, read-only required metadata: it is never guessed
+// and never defaulted. A transient leaf fault gets a bounded in-process retry
+// (about 3 s); after that the typed error escapes and systemd's Restart=always
+// is the outer retry owner. Parsed-and-refused bytes are not retried.
+const SETUP_RETRY_WAITS_MS = [250, 500, 1000, 1250] as const;
+const TRANSIENT_CODES = new Set(["EIO", "EAGAIN"]);
+
+function transient(error: unknown): boolean {
+	if (!(error instanceof StoredStateReadError)) return false;
+	if (error.reason === "changed") return true;
+	const cause = error.cause;
+	return (
+		error.reason === "read_failed" &&
+		cause instanceof Error &&
+		"code" in cause &&
+		TRANSIENT_CODES.has(String(cause.code))
+	);
+}
+
+async function readSetupJson(): Promise<unknown> {
+	for (const wait of SETUP_RETRY_WAITS_MS) {
+		try {
+			return await readStoredStateJson(
+				SETUP_FILE,
+				STORED_STATE_LIMITS.settings,
+			);
+		} catch (error) {
+			if (!transient(error)) throw error;
+			logger.warn("Setup: transient setup.json read fault; retrying", {
+				error,
+			});
+			await Bun.sleep(wait);
+		}
+	}
+	return readStoredStateJson(SETUP_FILE, STORED_STATE_LIMITS.settings);
+}
+
 /* Read the config and setup files */
-export const setup: SetupConfig = await loadJsonConfigSync(
-	SETUP_FILE,
-	setupConfigSchema,
-	SETUP_CONFIG_DEFAULTS,
-	true, // required - fail if setup.json doesn't exist
-);
+export const setup: SetupConfig = {
+	...SETUP_CONFIG_DEFAULTS,
+	...setupConfigSchema.parse(await readSetupJson()),
+};
 logger.debug("Setup", setup);

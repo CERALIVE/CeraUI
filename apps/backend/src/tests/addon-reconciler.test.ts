@@ -51,7 +51,13 @@ function descriptor(over: Partial<AddonDescriptor> = {}): AddonDescriptor {
 }
 
 function enabledState(over: Partial<AddonState> = {}): AddonState {
-	return { enabled: true, phase: "active", autoDisabled: false, ...over };
+	return {
+		enabled: true,
+		phase: "active",
+		autoDisabled: false,
+		versionMaterialized: "1.0.0",
+		...over,
+	};
 }
 
 type Recorded = { id: string; state: AddonState };

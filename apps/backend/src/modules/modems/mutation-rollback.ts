@@ -45,6 +45,10 @@ import {
 	deriveModemStableKey,
 	type ModemMutationKind,
 } from "@ceraui/rpc/schemas";
+import {
+	assertMutationJournalRevision,
+	mutationJournalRevision,
+} from "./mutation-journal-revision.ts";
 
 export type CapturedState = Readonly<Record<string, unknown>>;
 
@@ -144,7 +148,9 @@ export async function rollbackMutation(
 	stableKey: string,
 	preState: CapturedState,
 ): Promise<RollbackResult> {
+	const revision = mutationJournalRevision();
 	const current = await captureModemState(stableKey);
+	assertMutationJournalRevision(revision);
 	if (current === undefined) return "absent";
 	// Already back — nothing to undo. This is the common replay case: an `armed`
 	// entry means the mutation had not been dispatched at all.

@@ -2,6 +2,52 @@
 
 ## CONNECTION RELIABILITY
 
+### Stream-read ordering and watchdog ownership [EXISTS; host-tested]
+
+Reconnect consumes config/status independently, while restoration still waits
+for both paths. A status pull carries request-dispatch and browser-receipt marks
+on the evidence clock; a newer intent/STREAM-FACT observation supersedes stream
+evidence. Only `is_streaming`, `stream_lifecycle` and unclassified field names
+advance that atomic horizon (unknown fails closed). Explicitly unrelated pushes
+never advance it. Superseded stream fields are withheld, but unrelated supplied
+fields merge unless a push carrying that field arrived after dispatch or a newer
+receipt/read already applied it. Implicit stop-edge clears obey those same field
+fences and cannot run from superseded stream evidence. Permit at most one fresh
+read, never a loop or an automatic Stop on
+unknown. Receipt is arrival, not device computation; ingestion keeps provenance.
+Both watchdogs fence post-await effects to their originating action lifetime.
+Settlement or replacement invalidates running promises as well as timers.
+Real-socket Vitest transcripts cover this contract; browser/board proof is owed.
+
+Bounded Start exhaustion creates a generation-owned recovery-unknown entry in
+the existing unresolved-action store. The existing unconfirmed band retains an
+operator Stop across navigation/remount and reconnect, with no new read loop or
+automatic Stop. Only admitted later live/idle facts after its mark or the current
+Stop owner's acknowledgement clear matching optimism. The latest explicit Stop
+owner's acknowledgement settles its captured, still-current starting attempt
+before OR after exhaustion, revoking pending watchdog effects without requiring a
+recovery record. Preserve Stop-owner and Start-generation fences; failed Stop
+revokes nothing and operation confirmation still needs post-press idle lifecycle.
+Acknowledgement keeps this authority whether or not admissible settlement already
+closed the Stop claim. Idle confirms the operation but does not end acknowledged
+Start before recovery; failed Stop and pre-record boolean false do not revoke it.
+F8 post-record settlement remains unchanged, and the band's explicit Stop is the
+escape. The 36-cell real-socket S/R/E permutation matrix in
+`LiveView.real-socket-stop.test.ts` owns this contract, with no automatic Stops.
+Non-settling/failed/stale
+evidence does not. “Unrelated” means unrelated to stream settlement, not every
+decision (`updating` gates power; `network_ingest` gates Start configuration).
+Browser scheduling and integrated backend/engine incidence of the complete
+lost-confirmation transcript remain UNKNOWN.
+
+**Visible operator heartbeat [PARTIAL, Todo 32].** `Layout.svelte` sends the
+authenticated `ui.heartbeat` every 30 seconds only while the page is visible
+AND has focus, and sends on focus/visibility return. Unmount or authentication
+loss clears the timer/listeners. The backend stamps receipt; an unfocused kiosk
+preview is still a separate preview blocker, never inferred idle from the lack
+of a UI heartbeat. This is a detector signal only; no update scheduling UI or
+automatic commit path ships with it.
+
 ### Connection-ready gate
 
 `BootShell.svelte` holds the app in a loading state until the first full snapshot arrives from the backend. The gate flips once `subscriptions.svelte.ts` processes the post-login initial-state push. No destination view renders before this flip — prevents flash-of-stale-data on startup.
@@ -63,4 +109,3 @@ the scan-specific 270 s unknown-outcome bound. A second client receives the
 typed `already_scanning` refusal; it is never silently dropped.
 
 See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../../../docs/FRONTEND_CONNECTION_PATTERNS.md) for the full connection-pattern reference.
-

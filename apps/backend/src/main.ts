@@ -17,6 +17,10 @@
 
 import pkg from "../package.json" with { type: "json" };
 import {
+	backendSingletonApplies,
+	enforceBackendSingleton,
+} from "./helpers/backend-singleton.ts";
+import {
 	APP_NAME,
 	buildBootBanner,
 	createBootTimer,
@@ -31,6 +35,7 @@ import {
 import { checkExecPath } from "./helpers/exec.ts";
 import killall from "./helpers/killall.ts";
 import { logger } from "./helpers/logger.ts";
+// allow: SIZE_OK — Sequential boot composition root; ordering and signal wiring are pinned by boot contract tests.
 import { handleTerminationSignal } from "./helpers/shutdown.ts";
 import { notifyServiceReady } from "./helpers/systemd-ready.ts";
 import { isDevelopment } from "./mocks/mock-config.ts";
@@ -54,7 +59,12 @@ import { initBluetooth } from "./modules/bluetooth/bluetooth-runtime.ts";
 import { initCellularStack } from "./modules/cellular/cellular-stack.ts";
 import { startModemShadowIfEnabled } from "./modules/cellular/shadow.ts";
 import { initUdevProvisionalMonitor } from "./modules/cellular/udev-monitor.ts";
-import { getConfig, loadConfig } from "./modules/config.ts";
+import { getConfig, isRuntimeConfigAvailable } from "./modules/config.ts";
+import {
+	awaitRuntimeConfig,
+	bootRuntimeConfig,
+	stopRuntimeConfigRecovery,
+} from "./modules/config-boot.ts";
 import { initIdentity } from "./modules/identity/index.ts";
 import { initRTMPIngestStats } from "./modules/ingest/rtmp.ts";
 import { initSRTIngest, stopSRTIngest } from "./modules/ingest/srt.ts";
@@ -62,8 +72,13 @@ import { initFccUnlockModule } from "./modules/modems/fcc-unlock.ts";
 import { initModemCredentials } from "./modules/modems/modem-credentials.ts";
 import { initModemUpdateLoop } from "./modules/modems/modem-update-loop.ts";
 import { setMockDbusModemViews } from "./modules/modems/modem-wire-producer.ts";
+import { stopMutationRecovery } from "./modules/modems/mutation-recovery-owner.ts";
 import { initMutationRecovery } from "./modules/modems/mutation-replay.ts";
 import { reconcileEthernetRoles } from "./modules/network/ethernet-role-transition.ts";
+import {
+	initGatewayRoutes,
+	stopGatewayRoutes,
+} from "./modules/network/gateway-route-lifecycle.ts";
 import { UPDATE_GW_INT, updateGwWrapper } from "./modules/network/gateways.ts";
 import { createMonitorManager } from "./modules/network/monitor/monitor-manager.ts";
 import {
@@ -152,6 +167,16 @@ import {
 	ensureSshPasswordSynced,
 	getSshStatus,
 } from "./modules/system/ssh.ts";
+import { noteStreamReconciliationCompleted } from "./modules/system/stream-reconciliation-latch.ts";
+import { reconcileAptChannel } from "./modules/system/update-apt-channel.ts";
+import { runUpdateBootstrap } from "./modules/system/update-bootstrap.ts";
+import { readUpdateCapabilities } from "./modules/system/update-capabilities.ts";
+import { reconcileOsStageStartup } from "./modules/system/update-orchestrator/os-stage-startup.ts";
+import {
+	awaitUpdateStartupAdjudication,
+	startUpdateOrchestrator,
+} from "./modules/system/update-orchestrator/runtime.ts";
+import { loadUpdateSettings } from "./modules/system/update-settings.ts";
 import { initHotspotCredentials } from "./modules/wifi/hotspot-credentials.ts";
 import { applyPersistedCountry } from "./modules/wifi/regdomain.ts";
 import { reconcileWifiAdapterModes } from "./modules/wifi/wifi-adapter-mode-transition.ts";
@@ -159,6 +184,7 @@ import { wifiStateInit } from "./modules/wifi/wifi-connections.ts";
 import { handleWifiMonitorEvent as handleHotspotMonitorEvent } from "./modules/wifi/wifi-hotspot-monitor.ts";
 import { onHeartbeatTick, startHeartbeat } from "./rpc/heartbeat.ts";
 import { getServer, initServer } from "./rpc/index.ts";
+import { stopLegacyTokenMigration } from "./rpc/procedures/auth.procedure.ts";
 
 /* Disable localization for any CLI commands we run */
 process.env.LANG = "C.UTF-8";
@@ -206,12 +232,24 @@ if (isDevelopment()) {
 // `armBootSignalHandler`, which replays a poke that arrived in the meantime.
 installBootSignalGuards();
 
+if (backendSingletonApplies()) {
+	await runCritical("backend-singleton", enforceBackendSingleton);
+} else {
+	logger.warn(
+		"Backend singleton is not enforced for a source-development process; production services never take this path",
+	);
+}
+
 checkExecPath(srtlaSendExec);
 
-// CRITICAL boot phase. A failure here is genuinely fatal: the device cannot
-// serve correct state without its config, so runCritical() logs loudly and
-// re-throws to abort (systemd restarts cleanly) rather than limp along.
-await runCritical("config", loadConfig);
+// An unreadable or damaged config.json must not abort boot: the control server
+// is the only place the operator can see and repair it. A damaged file is
+// archived and replaced by first-run settings; an unreadable one leaves config
+// unavailable (getters and saves refuse) while a background owner retries, and
+// everything that needs config waits for it AFTER the bind below.
+await runCritical("config", async () => {
+	await bootRuntimeConfig();
+});
 logger.info(bootTimer.phase("🔧", "config"));
 
 // initMockService() seeds mockEncoderConfig (which getConfig() overlays over the
@@ -219,12 +257,15 @@ logger.info(bootTimer.phase("🔧", "config"));
 // `pipeline` shadows a config.json that already persisted one — getConfig() would
 // then report a stale pipeline on boot, and re-selecting the already-selected source
 // is a frontend no-op so it never self-corrects. Re-seed from the loaded config.
-if (shouldUseMocks()) {
+function reseedMockPipeline(): void {
+	if (!shouldUseMocks()) return;
 	const persistedPipeline = getConfig().pipeline;
 	if (persistedPipeline !== undefined) {
 		setMockEncoderConfig({ pipeline: persistedPipeline });
 	}
 }
+const configAvailableAtBind = isRuntimeConfigAvailable();
+if (configAvailableAtBind) reseedMockPipeline();
 
 // Raise the modem-mutation admission barrier BEFORE the WS server binds. The
 // server is the operator's lifeline and comes up first by design, so an RPC can
@@ -237,7 +278,7 @@ beginRecoveryBarrier();
 // This must run after config load so we know the config dir exists.
 cleanupOrphanedTempFiles(process.cwd());
 
-void initRemote();
+if (configAvailableAtBind) void initRemote();
 
 // CRITICAL: bind the WS control server FIRST — before any non-critical init that
 // could fail OR hang. It is the operator's only lifeline to the device, so it
@@ -251,10 +292,22 @@ logger.info(bootTimer.phase("🚀", "server"));
 // native-runtime/import window before this module could install any handler.
 await runCritical("systemd-ready", notifyServiceReady);
 
+if (!configAvailableAtBind) {
+	await awaitRuntimeConfig();
+	reseedMockPipeline();
+	void initRemote();
+}
+
 // --- NON-CRITICAL boot phase. Each init is wrapped in guardNonCritical(): a
 //     failure is logged, flags the device readiness-reduced (surfaced on
 //     /api/health via the boot-readiness rollup), and is swallowed so boot never
 //     crashes and the WS server (bound above) stays reachable. ---
+
+// Recovery must finish before an update may install any new UID routing rule.
+if (await isRealDevice())
+	void guardNonCritical("update-route-sweep", async () => {
+		await reconcileOsStageStartup();
+	});
 
 // Resolve device_id + paired state before anything that gates the control
 // channel (spec §9: it MUST NOT dial until identity is resolved).
@@ -304,8 +357,11 @@ await guardNonCritical("pipelines", () =>
 	),
 );
 if (!shouldUseMocks()) {
+	// Only a returned reconciliation turns the factory's initial idle projection
+	// into evidence; until then (or after a throw) disruptive actions see unknown.
 	await guardNonCritical("stream-session-reconcile", async () => {
 		await reconcileStreamSession();
+		noteStreamReconciliationCompleted();
 	});
 	// The first point at which the persisted config and the engine's own session
 	// are both known — so it is where a `config.inflight.json` left by a process
@@ -319,6 +375,8 @@ if (!shouldUseMocks()) {
 	// run sees `streaming` and correctly declines — a backend-only restart can
 	// never produce a second session.
 	void runStreamRestoration();
+} else {
+	noteStreamReconciliationCompleted(); // mock mode has no engine to adopt
 }
 
 // Resolve the runtime hardware kind (engine → device-tree → setup.hw → generic)
@@ -403,15 +461,46 @@ await guardNonCritical("hardware-identity-drift", async () => {
 });
 logger.info(bootTimer.phase("🖥️", "hardware"));
 
+await guardNonCritical("host-route-preference", initGatewayRoutes);
 void updateGwWrapper();
 setInterval(updateGwWrapper, UPDATE_GW_INT);
 
 // Self-gating: it no-ops when updates are disabled for this device or when the
 // host is a dev/mock box (a dev machine must never be handed to apt).
-await guardNonCritical("software-update-recovery", async () => {
-	await recoverSoftwareUpdateIfRunning();
+await guardNonCritical("apt-channel-reconcile", async () => {
+	const mode = (await readUpdateCapabilities()).mode;
+	if (mode === "capable")
+		await reconcileAptChannel(mode, (await loadUpdateSettings()).channel);
 });
-periodicCheckForSoftwareUpdates();
+// Todo 36: the packages+OS+slot-sync orchestrator. Its own resume path (G17)
+// is the ONLY thing that reattaches to a persisted `committing` phase's
+// detached apt unit on this boot — running it BEFORE the general standalone
+// recovery call below is what stops the two from racing over the SAME unit.
+// A recovered, already-finished unit's outcome is awaited (bounded: drain +
+// cleanup only, see software-updates.ts recoverSoftwareUpdate()) before
+// resume reads it. An explicit recovered-owner hook withholds deliberate exit
+// until startup adjudication and durable success under CONTROL, including a
+// unit still running at boot. Microtask ordering is not authority. The standalone call after it
+// is then a safe no-op whenever the orchestrator already handled the unit,
+// and remains the only recovery path for a detached transaction the
+// orchestrator itself never tracked (e.g. one started via
+// `system.startUpdate` directly).
+void guardNonCritical("update-bootstrap", () =>
+	runUpdateBootstrap({
+		start: async () => {
+			await guardNonCritical("update-orchestrator", startUpdateOrchestrator);
+			return awaitUpdateStartupAdjudication();
+		},
+		recover: async () => {
+			await guardNonCritical("software-update-recovery", async () => {
+				await recoverSoftwareUpdateIfRunning();
+			});
+		},
+		periodic: () => {
+			periodicCheckForSoftwareUpdates();
+		},
+	}),
+);
 
 initNetworkInterfaceMonitoring();
 initUplinkHealth();
@@ -475,8 +564,9 @@ void initModemUpdateLoop({ monitor: networkMonitor });
 // It runs after the modem roster has been started because a rollback that needs
 // the certified reverse transition has to find the device; the presence and
 // state-comparison paths read the USB bus directly and need no roster at all.
-// `initMutationRecovery` never throws and lowers the barrier on every exit — a
-// barrier nobody will lower is worse than a device that reports its blocks.
+// `initMutationRecovery` never throws. It lowers the barrier only after a
+// complete readable replay; otherwise its one retry owner keeps trying with
+// capped backoff, so the barrier is never left raised with nobody to lower it.
 // Every capability module that JOURNALS registers its rollback handler BEFORE
 // replay runs. A journaled entry whose kind has no handler replays into
 // `unavailable`, which leaves the device blocked for a mutation that could in
@@ -585,21 +675,30 @@ void reconcileIngestDesiredState();
 // masked bluetoothd all resolve to a typed `bt_unavailable` inside the stack.
 void guardNonCritical("bluetooth", initBluetooth);
 
+function stopRecoveryRetries(): void {
+	stopRuntimeConfigRecovery();
+	stopMutationRecovery();
+	stopLegacyTokenMigration();
+}
 process.on("SIGTERM", () =>
 	handleTerminationSignal("SIGTERM", {
+		stopRecoveryRetries,
 		gracefulShutdown,
 		stopSrtIngest: stopSRTIngest,
 		stopDmesgWatchers,
 		stopUplinkShaper,
+		stopGatewayRoutes,
 		exit: process.exit,
 	}),
 );
 process.on("SIGINT", () =>
 	handleTerminationSignal("SIGINT", {
+		stopRecoveryRetries,
 		gracefulShutdown,
 		stopSrtIngest: stopSRTIngest,
 		stopDmesgWatchers,
 		stopUplinkShaper,
+		stopGatewayRoutes,
 		exit: process.exit,
 	}),
 );

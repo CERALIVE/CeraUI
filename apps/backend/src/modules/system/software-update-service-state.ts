@@ -14,6 +14,10 @@ import {
 	DetachedAptServiceIdentityError,
 	validateDetachedAptServiceIdentity,
 } from "./software-update-service-contract.ts";
+import {
+	parseOsStageSystemdProperties,
+	parseSystemdExitFields,
+} from "./update-orchestrator/os-stage-systemd.ts";
 
 export type DetachedAptServiceState =
 	| { readonly kind: "absent" }
@@ -41,17 +45,19 @@ export class DetachedAptServiceStateError extends Error {
 	}
 }
 
-function parseProperties(output: string): Map<string, string> {
-	const properties = new Map<string, string>();
-	for (const line of output.split("\n")) {
-		const separator = line.indexOf("=");
-		if (separator <= 0) continue;
-		properties.set(line.slice(0, separator), line.slice(separator + 1));
-	}
+function parseProperties(output: string): ReadonlyMap<string, string> {
+	const properties = parseOsStageSystemdProperties(output);
+	if (!properties)
+		throw new DetachedAptServiceIdentityError("unit properties contradictory");
 	return properties;
 }
 
-function processExitCode(mainCode: number, mainStatus: number): number {
+// Exported for reuse by update-orchestrator/lock.ts: the same raw
+// ExecMainCode/ExecMainStatus -> shell-style exit code conversion applies to
+// ANY systemd unit's `systemctl show` probe, not just the apt transaction's —
+// reused rather than re-derived so the two probes can never silently disagree
+// on what a given (code, status) pair means.
+export function processExitCode(mainCode: number, mainStatus: number): number {
 	if (mainCode === 1) return mainStatus;
 	return mainStatus > 0 ? 128 + mainStatus : 1;
 }
@@ -60,25 +66,32 @@ export function parseDetachedAptServiceState(
 	output: string,
 ): DetachedAptServiceState {
 	const properties = parseProperties(output);
-	if (properties.get("LoadState") !== "loaded") return { kind: "absent" };
+	if (properties.get("LoadState") === "not-found") return { kind: "absent" };
+	if (properties.get("LoadState") !== "loaded")
+		throw new DetachedAptServiceIdentityError("unit state was not readable");
 
 	const activeState = properties.get("ActiveState") ?? "inactive";
 	const subState = properties.get("SubState") ?? "dead";
-	const mainCode = Number.parseInt(properties.get("ExecMainCode") ?? "0", 10);
-	const mainStatus = Number.parseInt(
-		properties.get("ExecMainStatus") ?? "0",
-		10,
-	);
+	const exit = parseSystemdExitFields(properties);
 
 	if (activeState === "failed" || subState === "failed") {
+		if (
+			!exit ||
+			activeState !== "failed" ||
+			subState !== "failed" ||
+			exit.mainStatus === 0
+		)
+			return { kind: "running" };
 		return {
 			kind: "finished",
-			exitCode: processExitCode(mainCode, mainStatus),
+			exitCode: processExitCode(exit.mainCode, exit.mainStatus),
 			cleanup: "reset-failed",
 		};
 	}
 	if (subState === "exited") {
-		return { kind: "finished", exitCode: mainStatus, cleanup: "stop" };
+		if (!exit || activeState !== "active" || exit.mainCode !== 1)
+			return { kind: "running" };
+		return { kind: "finished", exitCode: exit.mainStatus, cleanup: "stop" };
 	}
 	if (
 		activeState === "active" ||
@@ -97,10 +110,7 @@ export function parseDetachedAptServiceProbe(
 ): DetachedAptServiceState {
 	const state = parseDetachedAptServiceState(result.stdout);
 	if (result.exitCode !== 0) {
-		if (
-			state.kind === "absent" &&
-			result.stdout.includes("LoadState=not-found")
-		) {
+		if (state.kind === "absent") {
 			return state;
 		}
 		throw new DetachedAptServiceCommandError(
@@ -110,8 +120,7 @@ export function parseDetachedAptServiceProbe(
 		);
 	}
 	if (state.kind === "absent") {
-		if (result.stdout.includes("LoadState=not-found")) return state;
-		throw new DetachedAptServiceIdentityError("unit state was not readable");
+		return state;
 	}
 	validateDetachedAptServiceIdentity(result.stdout);
 	return state;

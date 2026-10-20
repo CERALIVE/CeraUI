@@ -50,11 +50,15 @@ export async function netnsPrivilegePrefix(
 		"sudo",
 		"-n",
 		"unshare",
-		"-rn",
+		"-n",
 		"cat",
 		probePath,
 	]);
 	if (elevated.ok) return ["sudo", "-n"];
 
 	throw new NetnsUnavailableError(probePath, direct, elevated);
+}
+
+export function netnsUnshareFlag(prefix: readonly string[]): "-n" | "-rn" {
+	return prefix.length > 0 ? "-n" : "-rn";
 }

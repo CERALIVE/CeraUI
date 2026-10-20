@@ -45,7 +45,9 @@ export interface StopWatchdogDeps {
 	 * push seq drop-stale path entirely) and apply the full pulled snapshot to the
 	 * reactive store before resolving with the pulled `is_streaming`.
 	 */
-	pullStatus: () => Promise<boolean>;
+	pullStatus: () => Promise<boolean | undefined>;
+	/** The originating action still owns this cycle. */
+	isCurrent?: () => boolean;
 	/** Reconcile the optimism overlay from a pulled `is_streaming` value. */
 	reconcile: (isStreaming: boolean) => void;
 	/** Re-dispatch stop ONCE via the DIRECT rpc path (NEVER the window global). */
@@ -68,8 +70,16 @@ export interface StopWatchdogDeps {
  *     - pull #2 streaming → banner stays (genuinely stuck; Retry re-runs this).
  */
 export async function runStopWatchdog(deps: StopWatchdogDeps): Promise<void> {
+	const current = deps.isCurrent ?? (() => true);
+	if (!current()) return;
 	const first = await deps.pullStatus();
+	if (!current()) return;
+	if (first === undefined) {
+		deps.setBannerVisible(true);
+		return;
+	}
 	deps.reconcile(first);
+	if (!current()) return;
 	if (!first) {
 		// The authoritative flag is already false: the view will leave live mode on
 		// this reconcile. No re-dispatch (nothing to stop), no banner.
@@ -79,12 +89,16 @@ export async function runStopWatchdog(deps: StopWatchdogDeps): Promise<void> {
 
 	// Still streaming per authority: surface the truthful banner while we retry.
 	deps.setBannerVisible(true);
+	if (!current()) return;
 	// Backend stop is idempotent; a second stop is safe even if the first landed.
 	deps.redispatchStop();
 	await deps.delay();
+	if (!current()) return;
 
 	const second = await deps.pullStatus();
+	if (!current() || second === undefined) return;
 	deps.reconcile(second);
+	if (!current()) return;
 	if (!second) {
 		// Recovered after the re-dispatch.
 		deps.setBannerVisible(false);

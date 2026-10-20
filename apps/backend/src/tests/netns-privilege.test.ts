@@ -4,6 +4,7 @@ import {
 	type NetnsProbe,
 	type NetnsProbeResult,
 	netnsPrivilegePrefix,
+	netnsUnshareFlag,
 } from "./helpers/netns-privilege.ts";
 
 const FIXTURE_PATH =
@@ -15,6 +16,7 @@ describe("network-namespace privilege resolution", () => {
 
 		expect(await netnsPrivilegePrefix(FIXTURE_PATH, harness.probe)).toEqual([]);
 		expect(harness.calls).toEqual([["unshare", "-rn", "cat", FIXTURE_PATH]]);
+		expect(netnsUnshareFlag([])).toBe("-rn");
 	});
 
 	test("falls back to passwordless sudo when plain unshare cannot read the fixture", async () => {
@@ -29,8 +31,9 @@ describe("network-namespace privilege resolution", () => {
 		]);
 		expect(harness.calls).toEqual([
 			["unshare", "-rn", "cat", FIXTURE_PATH],
-			["sudo", "-n", "unshare", "-rn", "cat", FIXTURE_PATH],
+			["sudo", "-n", "unshare", "-n", "cat", FIXTURE_PATH],
 		]);
+		expect(netnsUnshareFlag(["sudo", "-n"])).toBe("-n");
 	});
 
 	test("fails with both probe errors and actionable remedies when neither path works", async () => {

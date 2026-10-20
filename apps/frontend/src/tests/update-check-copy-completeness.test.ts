@@ -70,8 +70,10 @@ const NEW_KEYS: readonly string[] = REQUIRED_KEYS.filter((key) =>
 	key.startsWith("settings.updates."),
 );
 
+// The legacy Packages section moved out of UpdatesDialog (FIX-16-C); the
+// reason table travelled with it.
 const DIALOG_SOURCE = new URL(
-	"../main/dialogs/UpdatesDialog.svelte",
+	"../main/dialogs/updates/PackagesSummary.svelte",
 	import.meta.url,
 ).pathname;
 
@@ -147,7 +149,7 @@ describe("the check is falsifiable — it FAILS on a removed key", () => {
 });
 
 describe("the table is not dead copy — the dialog resolves every reason", () => {
-	it("names each mapped key in UpdatesDialog.svelte", () => {
+	it("names each mapped key in the Packages section", () => {
 		const source = readFileSync(DIALOG_SOURCE, "utf8");
 		for (const reason of UPDATE_CHECK_FAILURE_REASONS) {
 			expect(source).toContain(`"${REASON_COPY_KEY[reason]}"`);

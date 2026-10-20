@@ -85,6 +85,7 @@ export function createLaunchTransaction(
 		try {
 			return await Promise.race([operation(), timeout]);
 		} catch (error) {
+			if (error instanceof StreamStartFailure) throw error;
 			throw new StreamStartFailure(
 				classifyStartFailure(
 					deadlineExpired ? phase : errorPhase(error),

@@ -1,13 +1,13 @@
 <script lang="ts">
 import { directionFor, getLocale, m } from '@ceraui/i18n/svelte';
-import type { StatusMessage } from '@ceraui/rpc/schemas';
 import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
 
 import { OfflinePage, PWAStatus } from '$lib/components/custom/pwa';
 import { Button } from '$lib/components/ui/button';
 import * as Tooltip from '$lib/components/ui/tooltip';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
-import { getStatus } from '$lib/rpc/subscriptions.svelte';
+import { rpc } from '$lib/rpc';
+import { getUpdating } from '$lib/rpc/subscriptions.svelte';
 import {
 	authenticateWithToken,
 	authStatusStore,
@@ -21,11 +21,14 @@ import {
 	markAuthenticated,
 } from '$lib/stores/connection-ux.svelte';
 import { getShouldShowOfflinePage } from '$lib/stores/offline-state.svelte';
+import { legacyInstall } from '$lib/updates/legacy-install';
+import { announceLegacyInstallOutcome } from '$lib/updates/legacy-install-notice';
 
 import Auth from './Auth.svelte';
 import DisconnectedBanner from './DisconnectedBanner.svelte';
 import LayoutToastHost from './layout/LayoutToastHost.svelte';
 import UpdateBanner from './layout/UpdateBanner.svelte';
+import UpdateOrchestratorBadge from './layout/UpdateOrchestratorBadge.svelte';
 import Main from './MainView.svelte';
 
 let isCheckingAuthStatus = $state(true);
@@ -53,13 +56,19 @@ const showOfflinePage = $derived(getShouldShowOfflinePage());
 // after the render that read it, so a re-mount or a reconnect renders the idle
 // layout first and pops the overlay in afterwards. Reading the getter directly
 // makes the mount trigger-agnostic AND flash-free by construction — see
-// `Layout.updating-overlay.test.ts`.
-const updatingStatus: StatusMessage['updating'] = $derived.by(() => {
-	const updating = getStatus()?.updating;
-	if (updating && typeof updating !== 'boolean' && updating.result !== 0) {
-		return updating;
-	}
-	return false;
+// `Layout.updating-overlay.test.ts`. Only a RUNNING install takes over: the
+// device's terminal object (success or failure) is the last `updating` frame the
+// store keeps, so mounting on it would leave a takeover nobody can dismiss.
+const updatingStatus = $derived.by(() => {
+	const install = legacyInstall(getUpdating());
+	return install.kind === 'running' ? install.details : undefined;
+});
+// This tree receives the terminal frame, so it owns the announcement, once per
+// outcome (`Layout.update-terminal.test.ts`). It reads the dedicated selector,
+// whose object the store keeps for an unchanged `updating`: the aggregate
+// status is a new object whenever any sibling field moves (FIX-16-FRONT3 R3).
+$effect(() => {
+	announceLegacyInstallOutcome(getUpdating());
 });
 // Environment probes computed once (used to size the auth-check timeout).
 const isMobile = /iphone|ipad|ipod|android/i.test(navigator.userAgent);
@@ -158,6 +167,24 @@ $effect(() => {
 // store by one render, which is a flash of the pre-auth shell on every re-mount.
 const authStatus = $derived(authStatusStore.value);
 
+$effect(() => {
+	if (!authStatus) return;
+	const sendHeartbeat = () => {
+		if (document.visibilityState === 'visible' && document.hasFocus()) {
+			void rpc.ui.heartbeat().catch(() => undefined);
+		}
+	};
+	sendHeartbeat();
+	const interval = setInterval(sendHeartbeat, 30_000);
+	window.addEventListener('focus', sendHeartbeat);
+	document.addEventListener('visibilitychange', sendHeartbeat);
+	return () => {
+		clearInterval(interval);
+		window.removeEventListener('focus', sendHeartbeat);
+		document.removeEventListener('visibilitychange', sendHeartbeat);
+	};
+});
+
 // Aggressive fallback for mobile/PWA: if we're stuck in any loading state, assume offline with NaN safety
 const userAgent = navigator.userAgent || '';
 const isMobileDevice = /iphone|ipad|ipod|android/i.test(userAgent);
@@ -197,10 +224,11 @@ $effect(() => {
 	{#if showOfflinePage}
 		<OfflinePage />
 	{:else if authStatus}
-		{#if updatingStatus && typeof updatingStatus !== 'boolean'}
+		{#if updatingStatus}
 			<UpdatingOverlay details={updatingStatus}></UpdatingOverlay>
 		{/if}
 		<UpdateBanner />
+		<UpdateOrchestratorBadge />
 		<DisconnectedBanner />
 		<Main></Main>
 	{:else if connectionSurfaces.showAuthTimeout}

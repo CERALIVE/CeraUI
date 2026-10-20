@@ -22,6 +22,7 @@ export class UplinkShaperCoordinator {
 	readonly #deps: UplinkShaperCoordinatorDeps;
 	readonly #states = new Map<string, UplinkControllerState>();
 	#streaming = false;
+	#applicationPending = true;
 	#running: Promise<void> = Promise.resolve();
 
 	constructor(deps: UplinkShaperCoordinatorDeps) {
@@ -29,11 +30,18 @@ export class UplinkShaperCoordinator {
 	}
 
 	update(update: ShaperUpdate): Promise<void> {
-		this.#running = this.#running.then(() => this.#applyUpdate(update));
-		return this.#running;
+		// The caller gets this update's own outcome, rejection included. The
+		// serialization tail only waits for it to SETTLE: one failed ownership
+		// read must not reject every later update before it can read again.
+		const result = this.#running.then(() => this.#applyUpdate(update));
+		this.#running = result.catch(() => undefined);
+		return result;
 	}
 
 	async #applyUpdate(update: ShaperUpdate): Promise<void> {
+		const edge = update.streaming !== this.#streaming;
+		this.#applicationPending ||=
+			edge || update.streaming || update.sharedUplinks.length > 0;
 		const mode = update.streaming ? "streaming" : "idle";
 		const enteringStreaming = update.streaming && !this.#streaming;
 		const telemetry = new Map(
@@ -65,10 +73,11 @@ export class UplinkShaperCoordinator {
 				capBps: state.capBps,
 			});
 		}
-		const edge = update.streaming !== this.#streaming;
-		this.#streaming = update.streaming;
-		if (edge || update.streaming || uplinks.length > 0)
+		if (this.#applicationPending) {
 			await this.#deps.apply({ mode, uplinks });
+			this.#applicationPending = false;
+			this.#streaming = update.streaming;
+		}
 	}
 
 	async #nextState(

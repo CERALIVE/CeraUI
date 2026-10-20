@@ -7,25 +7,37 @@ export type AptOrigin = {
 
 const FIRST_PARTY_APT_HOST = "apt.ceralive.tv";
 
+export class AptSourceReadError extends Error {
+	override readonly name = "AptSourceReadError";
+	constructor(readonly field: string) {
+		super(`duplicate APT source field: ${field}`);
+	}
+}
+
 function fieldValue(stanza: string, field: string): string | undefined {
 	const lines = stanza.split(/\r?\n/);
 	const prefix = `${field.toLowerCase()}:`;
 	let value: string | undefined;
+	let continuing = false;
 	for (const line of lines) {
-		if (/^\s/.test(line) && value !== undefined) {
+		if (/^\s/.test(line) && continuing && value !== undefined) {
 			value += ` ${line.trim()}`;
 			continue;
 		}
 		const colon = line.indexOf(":");
+		continuing =
+			colon >= 0 && line.slice(0, colon + 1).toLowerCase() === prefix;
 		if (colon < 0 || line.slice(0, colon + 1).toLowerCase() !== prefix)
 			continue;
+		if (value !== undefined) throw new AptSourceReadError(field);
 		value = line.slice(colon + 1).trim();
 	}
 	return value;
 }
 
 function aptProbeUrl(uri: URL, suite: string): string {
-	if (uri.host.toLowerCase() === FIRST_PARTY_APT_HOST) return `${uri.origin}/`;
+	if (uri.host.toLowerCase() === FIRST_PARTY_APT_HOST)
+		return `${uri.origin}/__tls-probe`;
 	const base = uri.href.replace(/\/+$/, "");
 	return `${base}/dists/${suite.replace(/^\/+|\/+$/g, "")}/InRelease`;
 }
@@ -33,6 +45,22 @@ function aptProbeUrl(uri: URL, suite: string): string {
 export function parseAptSourceOrigins(text: string): AptOrigin[] {
 	const origins: AptOrigin[] = [];
 	for (const stanza of text.split(/\r?\n\s*\r?\n/)) {
+		for (const line of stanza.split(/\r?\n/)) {
+			const match = line
+				.trim()
+				.match(/^deb\s+(?:\[[^\]]*\]\s+)?(https?:\/\/\S+)\s+(\S+)\s+/);
+			if (!match) continue;
+			const rawUri = match[1] ?? "";
+			if (!URL.canParse(rawUri)) continue;
+			const uri = new URL(rawUri);
+			const suite = match[2] ?? "";
+			origins.push({
+				url: uri.href.replace(/\/+$/, ""),
+				host: uri.host,
+				scheme: uri.protocol === "http:" ? "http" : "https",
+				probeUrl: aptProbeUrl(uri, suite),
+			});
+		}
 		if (fieldValue(stanza, "Enabled")?.toLowerCase() === "no") continue;
 		const uris = fieldValue(stanza, "URIs")?.split(/\s+/).filter(Boolean) ?? [];
 		const suites =

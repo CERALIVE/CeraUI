@@ -25,8 +25,9 @@
  * Durability model (mirrors config.json — see docs/CONFIG_PERSISTENCE.md):
  *   - writes are atomic (temp file → fsync → rename), so a crash mid-write can
  *     never truncate the committed file.
- *   - the set is LRU-bounded; the oldest dismissal is evicted past the cap so a
- *     device that runs for years never grows the file without bound.
+ *   - ordinary keys are LRU-capped at 256, evicting the oldest ordinary key.
+ *     update:os-rollback:<version> keys are exempt: at most one per recorded OS
+ *     rollback, matching quarantine.json os[] history.
  *   - an unparseable/wrong-shape file is QUARANTINED (renamed aside), the store
  *     starts fresh, and the event is logged — a corrupt file never crashes boot.
  */
@@ -151,11 +152,16 @@ export class NotificationDismissalStore {
 	}
 
 	private evictOverflow(): void {
-		while (this.entries.size > this.maxEntries) {
-			const oldest = this.entries.keys().next().value;
-			if (oldest === undefined) break;
-			this.entries.delete(oldest);
-		}
+		// Rollback history is durable and unbounded; its acknowledgement must
+		// outlive ordinary notice churn or startup would resurrect old failures.
+		const ordinary = [...this.entries.keys()].filter(
+			(key) => !key.startsWith("update:os-rollback:"),
+		);
+		for (const key of ordinary.slice(
+			0,
+			Math.max(0, ordinary.length - this.maxEntries),
+		))
+			this.entries.delete(key);
 	}
 
 	private persist(): void {
@@ -193,8 +199,9 @@ let singleton: NotificationDismissalStore | undefined;
 
 export function getDismissalStore(): NotificationDismissalStore {
 	if (!singleton) {
-		singleton = new NotificationDismissalStore({ path: dismissalsPath() });
-		singleton.load();
+		const store = new NotificationDismissalStore({ path: dismissalsPath() });
+		store.load();
+		singleton = store;
 	}
 	return singleton;
 }

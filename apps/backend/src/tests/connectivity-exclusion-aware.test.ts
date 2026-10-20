@@ -123,17 +123,17 @@ describe("deviceBoundProbeExclusionReason", () => {
 });
 
 describe("eligibleProbeCandidates", () => {
-	test("the board roster probes all four, binding the twins BY DEVICE", () => {
+	test("the board roster probes all four, binding every candidate BY DEVICE", () => {
 		expect(eligibleProbeCandidates(BOARD_NETIF)).toEqual([
 			{
 				name: "eth0",
 				ip: "192.168.78.132",
-				binding: { kind: "source-ip", ip: "192.168.78.132" },
+				binding: { kind: "device", ifname: "eth0" },
 			},
 			{
 				name: "enx344b50000000",
 				ip: "192.168.0.169",
-				binding: { kind: "source-ip", ip: "192.168.0.169" },
+				binding: { kind: "device", ifname: "enx344b50000000" },
 			},
 			{
 				name: "enx0c5b8f279a64",
@@ -162,7 +162,12 @@ describe("eligibleProbeCandidates", () => {
 		const bound = eligibleProbeCandidates(BOARD_NETIF)
 			.map((c) => (c.binding.kind === "device" ? c.binding.ifname : undefined))
 			.filter((n): n is string => n !== undefined);
-		expect(bound).toEqual(["enx0c5b8f279a64", "eth1"]);
+		expect(bound).toEqual([
+			"eth0",
+			"enx344b50000000",
+			"enx0c5b8f279a64",
+			"eth1",
+		]);
 		expect(new Set(bound).size).toBe(bound.length);
 	});
 

@@ -216,7 +216,7 @@ function startResponse(
 			return {
 				...result,
 				success: false,
-				is_streaming: false,
+				is_streaming: getIsStreaming(),
 				error: "START_CANCELLED",
 			};
 		case "failed":
@@ -225,7 +225,7 @@ function startResponse(
 				attemptId: result.attemptId,
 				failure: result.failure,
 				success: false,
-				is_streaming: false,
+				is_streaming: getIsStreaming(),
 				error:
 					legacyError ??
 					(typeof result.failure.code === "string"
@@ -350,7 +350,13 @@ export const streamingStartProcedure = authedProcedure
 					if (injected) {
 						clearMockStreamError();
 						legacyError = mapCerastreamError(injected);
-						throwStartFailure("start-rpc", injected, attemptId);
+						// This fake refusal precedes setStreamingState: no Start effect left.
+						throw new StreamStartFailure(
+							classifyStartFailure("start-rpc", injected, attemptId, {
+								warn: (message, meta) => logger.warn(message, meta),
+							}),
+							"idle",
+						);
 					}
 					// Dev has no srtla_send/cerastream binaries: the real start() flips
 					// is_streaming on then immediately errors and flips it off. Simulate

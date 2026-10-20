@@ -63,6 +63,37 @@ const SELF_FENCING_TYPES_SET: ReadonlySet<string> = new Set(SELF_FENCING_TYPES);
 const COMMAND_REGISTRY_SET: ReadonlySet<string> = new Set(COMMAND_REGISTRY);
 const NEVER_REMOTE_SET: ReadonlySet<string> = new Set(NEVER_REMOTE);
 
+const REMOTE_ACTIVITY_WINDOW_MINUTES = 5;
+let lastRemoteCommandAt: number | null = null;
+let remoteCommandClock: () => number = Date.now;
+
+export function getLastRemoteCommandAt(): number | null {
+	return lastRemoteCommandAt;
+}
+
+/**
+ * Bounded command recency is not operator presence: a present but quiet operator
+ * can be missed. A real fix needs a future hub-to-device presence-broadcast
+ * protocol across ceralive-platform and CeraUI, outside this task.
+ */
+export function hasActiveRemoteSession(now = remoteCommandClock()): boolean {
+	return (
+		lastRemoteCommandAt !== null &&
+		now >= lastRemoteCommandAt &&
+		now - lastRemoteCommandAt <= REMOTE_ACTIVITY_WINDOW_MINUTES * 60_000
+	);
+}
+
+export function setRemoteCommandClockForTest(
+	clock: (() => number) | null,
+): void {
+	remoteCommandClock = clock ?? Date.now;
+}
+
+export function resetRemoteCommandActivityForTest(): void {
+	lastRemoteCommandAt = null;
+}
+
 /**
  * Injectable collaborators (same DI posture as `channel.ts`). Defaults wire the
  * live channel `sendFrame`, the real procedure dispatch, and a synthesized
@@ -166,6 +197,7 @@ export async function routeCommand(
 	frame: Command,
 	overrides: Partial<CommandRouterDeps> = {},
 ): Promise<void> {
+	lastRemoteCommandAt = remoteCommandClock();
 	const deps: CommandRouterDeps = { ...defaultDeps(), ...overrides };
 
 	// 1. Never-remote ops are rejected defensively (spec §5) — NEVER executed,

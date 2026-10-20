@@ -512,10 +512,40 @@ When the socket reconnects after the operator has already authenticated this pag
 1. Reads the stored credential from `localStorage["auth"]`.
 2. Calls `rpc.auth.login({ password: storedToken, persistent_token: true })`.
 3. Dispatches the auth result through `handleMessage("auth", result)`.
-4. On success, fires a **safety hydrate**: calls `rpc.streaming.getConfig()` and `rpc.status.getStatus()` in parallel, then dispatches both results through `handleMessage`. This is defense-in-depth on top of the server's post-login push.
+4. On success, fires a **safety hydrate**: config and status reads run in parallel and are consumed independently. Status carries request-dispatch plus browser-receipt marks, never a stamp minted at later ingestion. Withhold stream facts from a pull dispatched before an intervening stream intent or newer STREAM-FACT observation; merge its unrelated fields independently, then allow at most one bounded fresh read. Failed or twice-stream-superseded reads settle nothing. This is defense-in-depth on top of the server's post-login push.
 5. On credential rejection, clears the stored token and calls `routeToLogin()`.
 
 The `reauthInFlight` flag prevents concurrent re-auth attempts.
+
+Receipt order establishes arrival, not computation order or causality. A pull
+can settle a stream claim only if dispatched after that claim on the current
+link; a push uses its current-link receipt. Restoration remains a separate
+reread trigger after both hydrate paths settle. Both stream watchdogs use the
+same bounded reader and fence continuations/effect ports to their originating
+action lifetime. Unknown evidence cannot dispatch Stop; a current operator
+Stop's positive-streaming redispatch remains unchanged. These orders are
+host-tested, not browser/board-qualified; no wire or RPC schema changes.
+
+The stream horizon is an atomic group: `is_streaming`, `stream_lifecycle`, and
+unclassified field names (fail closed). Explicitly unrelated status fields,
+including telemetry, bond mapping, Wi-Fi, modems and SSH, never advance it.
+`status-field-order.ts` separately merges supplied snapshot fields unless a push
+carrying that field arrived after dispatch, or a newer receipt/read already
+applied it. A superseded stream group is withheld as a whole; its unrelated
+fields are not discarded with it. Partial omissions remain no-ops. Current-link
+and action-lifetime fences still precede ingestion, and full-snapshot lifecycle
+absence is applied only with admissible stream evidence.
+
+These fields are unrelated to **stream settlement**, not every decision:
+`updating` still gates reboot/power, `network_ingest` still gates Start
+configuration, and other metadata gates eligibility/presentation. When the
+current Start watchdog exhausts its bounded evidence, a generation-owned
+recovery-unknown entry in the existing unresolved-action store renders the
+existing band's operator Stop. Only later admissible live/idle facts after the
+record or that Stop owner's acknowledgement clear the matching Start optimism;
+navigation, remount, reconnect and uncertain evidence preserve it. No automatic
+Stop, wire/schema change or fabricated backend lifecycle is added. Browser
+scheduling and integrated backend/engine incidence of the full transcript remain UNKNOWN.
 
 **Source:** `apps/frontend/src/lib/rpc/reconnect.ts`; `apps/frontend/src/lib/rpc/subscriptions.svelte.ts:421-441, 446-468`
 
@@ -630,10 +660,9 @@ Client                                    Server
   |-------- streaming.getConfig() -------->|
   |-------- status.getStatus() ----------->|
   |<------- config result ------------------|
-  |<------- status result ------------------|
-  |                                          |
   |  dispatch("config", config)              |
-  |  dispatch("status", status)              |
+  |<------- status result ------------------|
+  |  dispatch("status", status @ receipt)    |
   |                                          |
   |  [normal broadcast stream resumes]       |
   |<------- sensors (seq 1) ----------------|  ← seq reset accepted (lastSeen cleared)

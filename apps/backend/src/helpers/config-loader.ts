@@ -108,6 +108,7 @@ export async function loadJsonConfig<T extends z.ZodTypeAny>(
 	filePath: string,
 	schema: T,
 	defaults: Partial<z.infer<T>> = {},
+	input?: { readonly parsed: unknown },
 ): Promise<ConfigLoadResult<z.infer<T>>> {
 	const result: ConfigLoadResult<z.infer<T>> = {
 		data: { ...defaults } as z.infer<T>,
@@ -120,8 +121,12 @@ export async function loadJsonConfig<T extends z.ZodTypeAny>(
 	// Try to read the file
 	let rawData: unknown;
 	try {
-		const fileContents = await Bun.file(filePath).text();
-		rawData = JSON.parse(fileContents);
+		if (input === undefined) {
+			const fileContents = await Bun.file(filePath).text();
+			rawData = JSON.parse(fileContents);
+		} else {
+			rawData = input.parsed;
+		}
 		result.loaded = true;
 	} catch (err) {
 		if ((err as NodeJS.ErrnoException).code === "ENOENT") {

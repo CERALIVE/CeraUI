@@ -4,6 +4,7 @@
  */
 
 import {
+	allowCellularOnceInputSchema,
 	autostartInputSchema,
 	autostartOutputSchema,
 	cloudProviderEndpointSchema,
@@ -21,6 +22,10 @@ import {
 	sensorsStatusSchema,
 	sshPersistentInputSchema,
 	successResponseSchema,
+	updateCapabilitiesSchema,
+	updateDetailsSchema,
+	updateSettingsInputSchema,
+	updateSettingsSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
 import { z } from "zod";
@@ -32,9 +37,12 @@ import {
 	getCloudProviders,
 	setRemoteConfig,
 } from "../../modules/remote/remote.ts";
-import { notePlannedShutdown } from "../../modules/streaming/armed-stream-marker.ts";
-import { getIsStreaming } from "../../modules/streaming/streaming.ts";
 import { setAutostart } from "../../modules/streaming/streamloop.ts";
+import { DisruptiveActionRefusedError } from "../../modules/system/disruptive-action-error.ts";
+import {
+	PowerSubmissionError,
+	resetDisruptiveActionReservationForTest,
+} from "../../modules/system/disruptive-action-reservation.ts";
 import {
 	getKioskStatus,
 	isRealDevice,
@@ -45,6 +53,7 @@ import {
 	resolveActiveKioskDeps,
 } from "../../modules/system/kiosk.ts";
 import { getLog } from "../../modules/system/logs.ts";
+import { submitPowerCommand } from "../../modules/system/power-submission.ts";
 import {
 	getRevisions,
 	refreshEngineRevision,
@@ -52,7 +61,6 @@ import {
 import { getSensors } from "../../modules/system/sensors.ts";
 import {
 	aptUpdatesEnabled,
-	isUpdating,
 	startSoftwareUpdate,
 	triggerManualUpdateCheck,
 } from "../../modules/system/software-updates.ts";
@@ -61,6 +69,19 @@ import {
 	setSshPersistent,
 	startStopSsh,
 } from "../../modules/system/ssh.ts";
+import { sshDisruptiveResponse } from "../../modules/system/ssh-disruptive-response.ts";
+import { reconcileAptChannel } from "../../modules/system/update-apt-channel.ts";
+import { readUpdateCapabilities } from "../../modules/system/update-capabilities.ts";
+import { readUpdateDetails } from "../../modules/system/update-orchestrator/details.ts";
+import {
+	allowCellularOnce,
+	checkUpdatesNow,
+	installUpdatesNow,
+} from "../../modules/system/update-orchestrator/runtime.ts";
+import {
+	loadUpdateSettings,
+	saveUpdateSettings,
+} from "../../modules/system/update-settings.ts";
 import { mintPreviewToken } from "../../modules/ui/preview-token.ts";
 import { simulateDevReboot } from "../events.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
@@ -71,6 +92,23 @@ const baseProcedure = os.$context<RPCContext>();
 
 // Authenticated procedure
 const authedProcedure = baseProcedure.use(authMiddleware);
+
+export const getUpdateSettingsProcedure = authedProcedure
+	.output(updateSettingsSchema)
+	.handler(() => loadUpdateSettings());
+
+export const setUpdateSettingsProcedure = authedProcedure
+	.input(updateSettingsInputSchema)
+	.output(updateSettingsSchema)
+	.handler(async ({ input }) => {
+		const mode = (await readUpdateCapabilities()).mode;
+		if (mode === "capable") await reconcileAptChannel(mode, input.channel);
+		return saveUpdateSettings(input);
+	});
+
+export const getUpdateCapabilitiesProcedure = authedProcedure
+	.output(updateCapabilitiesSchema)
+	.handler(() => readUpdateCapabilities());
 
 /**
  * Get revisions procedure
@@ -130,7 +168,9 @@ type PowerCommand = "poweroff" | "reboot";
 type PowerCommandRunner = (command: PowerCommand) => void;
 
 const defaultPowerCommandRunner: PowerCommandRunner = (command) => {
-	Bun.spawnSync([command]);
+	const result = Bun.spawnSync([command]);
+	if (result.exitCode !== 0)
+		throw new PowerSubmissionError(command, result.exitCode);
 };
 
 let powerCommandRunner: PowerCommandRunner = defaultPowerCommandRunner;
@@ -140,6 +180,7 @@ export function setPowerCommandRunner(runner: PowerCommandRunner): void {
 }
 
 export function resetPowerCommandRunner(): void {
+	resetDisruptiveActionReservationForTest();
 	powerCommandRunner = defaultPowerCommandRunner;
 }
 
@@ -157,13 +198,7 @@ export const poweroffProcedure = authedProcedure
 			simulateDevReboot(); // close authed sockets → frontend reconnect banner
 			return { success: true };
 		}
-		if (getIsStreaming() || isUpdating()) {
-			return { success: false };
-		}
-		logger.info("System: poweroff requested");
-		notePlannedShutdown("poweroff");
-		powerCommandRunner("poweroff");
-		return { success: true };
+		return submitPowerCommand("poweroff", powerCommandRunner);
 	});
 
 export const rebootProcedure = authedProcedure
@@ -178,25 +213,13 @@ export const rebootProcedure = authedProcedure
 			simulateDevReboot(); // close authed sockets → frontend reconnect banner
 			return { success: true };
 		}
-		if (getIsStreaming() || isUpdating()) {
-			return { success: false };
-		}
-		logger.info("System: reboot requested");
-		// Belt and braces: a reboot changes the boot id, which already blocks
-		// restoration. This also covers the window between the request and the
-		// kernel actually going down, where the backend can still be restarted.
-		notePlannedShutdown("reboot");
-		powerCommandRunner("reboot");
-		return { success: true };
+		return submitPowerCommand("reboot", powerCommandRunner);
 	});
 
 /**
  * Start update procedure
  */
-// startSoftwareUpdate() owns every refusal so there is exactly ONE place that
-// decides whether an update may run, and it always names the reason. Duplicating
-// the guards here is what let a refusal answer `{success:true}` while nothing
-// happened, parking the dialog on "Applying…" until it silently timed out.
+// Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
 export const startUpdateProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(() => {
@@ -208,6 +231,61 @@ export const startUpdateProcedure = authedProcedure
 		logger.info("System: software update started");
 		return { success: true };
 	});
+
+/**
+ * Both actions bypass idle. `checkUpdatesNow` has no stream check;
+ * `installUpdatesNow` checks for a live stream, not a starting one (root
+ * AGENTS.md D8 Known gaps (f)).
+ */
+export const checkUpdatesNowProcedure = authedProcedure
+	.output(successResponseSchema)
+	.handler(async () => {
+		const outcome = await checkUpdatesNow();
+		if (!outcome.started) {
+			logger.info(`System: manual update check refused (${outcome.reason})`);
+			return { success: false, error: outcome.reason };
+		}
+		logger.info("System: manual update check started (orchestrator)");
+		return { success: true };
+	});
+
+export const installUpdatesNowProcedure = authedProcedure
+	.output(successResponseSchema)
+	.handler(async () => {
+		const outcome = await installUpdatesNow();
+		if (!outcome.started) {
+			logger.info(`System: manual update install refused (${outcome.reason})`);
+			return { success: false, error: outcome.reason };
+		}
+		logger.info("System: manual update install started (orchestrator)");
+		return { success: true };
+	});
+
+// Re-exported from its `@ceraui/rpc` home (Todo 41 moved it there so the
+// contract and the frontend share one definition); the name stays exported here
+// for existing importers.
+export { allowCellularOnceInputSchema };
+
+// All agent.json mutations enter the runtime's validated-startup barrier:
+// checkUpdatesNow, installUpdatesNow and this synchronous cellular grant.
+// There is no pause or confirmation RPC; confirmation runs inside manual Check.
+
+export const allowCellularOnceProcedure = authedProcedure
+	.input(allowCellularOnceInputSchema)
+	.output(successResponseSchema)
+	.handler(({ input }) => {
+		allowCellularOnce(input.id);
+		logger.info(`System: one-time cellular override granted (${input.id})`);
+		return { success: true };
+	});
+
+/**
+ * The Updates dialog's pull — see
+ * `update-orchestrator/details.ts` for the per-block honest-absence rules.
+ */
+export const getUpdateDetailsProcedure = authedProcedure
+	.output(updateDetailsSchema)
+	.handler(() => readUpdateDetails());
 
 /**
  * Manual "check for updates now". Runs the same discovery the periodic loop
@@ -234,11 +312,7 @@ export const checkForUpdatesProcedure = authedProcedure
 export const sshStartProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(async ({ context }) => {
-		if (getIsStreaming() || isUpdating()) {
-			return { success: false };
-		}
-		const success = await startStopSsh(context.ws, "start_ssh");
-		return { success };
+		return sshDisruptiveResponse(() => startStopSsh(context.ws, "start_ssh"));
 	});
 
 /**
@@ -247,11 +321,7 @@ export const sshStartProcedure = authedProcedure
 export const sshStopProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(async ({ context }) => {
-		if (getIsStreaming() || isUpdating()) {
-			return { success: false };
-		}
-		const success = await startStopSsh(context.ws, "stop_ssh");
-		return { success };
+		return sshDisruptiveResponse(() => startStopSsh(context.ws, "stop_ssh"));
 	});
 
 /**
@@ -265,11 +335,7 @@ export const sshSetPersistentProcedure = authedProcedure
 	.input(sshPersistentInputSchema)
 	.output(successResponseSchema)
 	.handler(async ({ input }) => {
-		if (getIsStreaming() || isUpdating()) {
-			return { success: false };
-		}
-		const success = await setSshPersistent(input.enabled);
-		return { success };
+		return sshDisruptiveResponse(() => setSshPersistent(input.enabled));
 	});
 
 /**
@@ -353,7 +419,13 @@ export const kioskStartProcedure = authedProcedure
 		if (!shouldUseMocks() && !(await isRealDevice())) {
 			return { success: false, error: KIOSK_UNAVAILABLE_ERROR };
 		}
-		const status = await kioskStart(resolveActiveKioskDeps());
+		let status: ReturnType<typeof getKioskStatus>;
+		try {
+			status = await kioskStart(resolveActiveKioskDeps());
+		} catch (error) {
+			if (!(error instanceof DisruptiveActionRefusedError)) throw error;
+			return { success: false, error: error.reason };
+		}
 		return {
 			success: true,
 			applied: { enabled: status.enabled, state: status.state },
@@ -370,7 +442,13 @@ export const kioskStopProcedure = authedProcedure
 		if (!shouldUseMocks() && !(await isRealDevice())) {
 			return { success: false, error: KIOSK_UNAVAILABLE_ERROR };
 		}
-		const status = await kioskStop(resolveActiveKioskDeps());
+		let status: ReturnType<typeof getKioskStatus>;
+		try {
+			status = await kioskStop(resolveActiveKioskDeps());
+		} catch (error) {
+			if (!(error instanceof DisruptiveActionRefusedError)) throw error;
+			return { success: false, error: error.reason };
+		}
 		return {
 			success: true,
 			applied: { enabled: status.enabled, state: status.state },

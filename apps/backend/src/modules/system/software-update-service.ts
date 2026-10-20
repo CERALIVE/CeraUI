@@ -20,10 +20,13 @@ import {
 } from "./software-update-output.ts";
 import {
 	DetachedAptServiceCommandError,
+	DetachedAptServiceIdentityError,
+	expectedAptAllScript,
 	InvalidDetachedAptUpgradeArgumentsError,
 	isExpectedAptUpgradeArgv,
 	SOFTWARE_UPDATE_DESCRIPTION,
 	SOFTWARE_UPDATE_FRAGMENT_PATH,
+	SOFTWARE_UPDATE_LOCK,
 	SOFTWARE_UPDATE_UNIT,
 	validateDetachedAptServiceFragment,
 } from "./software-update-service-contract.ts";
@@ -32,6 +35,10 @@ import {
 	type FinishedDetachedAptServiceState,
 	parseDetachedAptServiceProbe,
 } from "./software-update-service-state.ts";
+import {
+	readStoredStateFile,
+	STORED_STATE_LIMITS,
+} from "./update-orchestrator/stored-state-file.ts";
 
 const SYSTEMD_COMMAND_TIMEOUT_MS = 10_000;
 
@@ -67,6 +74,7 @@ export type DetachedAptServiceDeps = {
 		offset: number,
 	) => Promise<SoftwareUpdateOutputRead>;
 	readonly sleep: (milliseconds: number) => Promise<void>;
+	readonly now?: () => number;
 };
 
 export function buildDetachedAptUpgradeCommand(
@@ -113,6 +121,45 @@ export function buildDetachedAptUpgradeCommand(
 	];
 }
 
+export function buildDetachedAptAllCommand(
+	installArgs: readonly string[],
+	verdict: "any" | "force_ipv4" | "force_ipv6",
+	outputPaths: SoftwareUpdateOutputPaths,
+): string[] {
+	const family =
+		verdict === "any"
+			? []
+			: ["-o", `Acquire::ForceIPv${verdict === "force_ipv4" ? "4" : "6"}=true`];
+	const script = expectedAptAllScript(installArgs, family);
+	const trusted = softwareUpdateOutputPaths();
+	if (
+		outputPaths.stdout !== trusted.stdout ||
+		outputPaths.stderr !== trusted.stderr
+	)
+		throw new UnsafeSoftwareUpdateOutputPathError(
+			outputPaths.stdout,
+			"runtime paths are fixed",
+		);
+	return [
+		"systemd-run",
+		`--unit=${SOFTWARE_UPDATE_UNIT}`,
+		`--description=${SOFTWARE_UPDATE_DESCRIPTION}`,
+		"--remain-after-exit",
+		"--quiet",
+		"--service-type=exec",
+		"--expand-environment=no",
+		`--property=StandardOutput=append:${outputPaths.stdout}`,
+		`--property=StandardError=append:${outputPaths.stderr}`,
+		"--",
+		"/usr/bin/flock",
+		"-x",
+		SOFTWARE_UPDATE_LOCK,
+		"/bin/sh",
+		"-ec",
+		script,
+	];
+}
+
 async function requireSuccessfulCommand(command: string[]): Promise<string> {
 	const result = await spawnWithTimeout(command, {
 		timeoutMs: SYSTEMD_COMMAND_TIMEOUT_MS,
@@ -140,9 +187,13 @@ async function inspectService(): Promise<DetachedAptServiceState> {
 	});
 	const state = parseDetachedAptServiceProbe(result, command);
 	if (state.kind !== "absent") {
-		validateDetachedAptServiceFragment(
-			await Bun.file(SOFTWARE_UPDATE_FRAGMENT_PATH).text(),
+		const fragment = await readStoredStateFile(
+			SOFTWARE_UPDATE_FRAGMENT_PATH,
+			STORED_STATE_LIMITS.intent,
 		);
+		if (fragment === null)
+			throw new DetachedAptServiceIdentityError("unit fragment absent");
+		validateDetachedAptServiceFragment(fragment);
 	}
 	return state;
 }

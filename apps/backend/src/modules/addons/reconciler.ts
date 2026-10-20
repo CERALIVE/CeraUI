@@ -39,15 +39,12 @@
  */
 
 import fs from "node:fs";
-
-import {
-	type AddonConfig,
-	type AddonDescriptor,
-	AddonDescriptorSchema,
-	type AddonPhase,
-	type AddonState,
+import type {
+	AddonConfig,
+	AddonDescriptor,
+	AddonPhase,
+	AddonState,
 } from "@ceraui/rpc/schemas";
-
 import { addonRefresh } from "../../helpers/addon-helper.ts";
 import { execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
@@ -57,7 +54,19 @@ import {
 	type MockReconcilerHarness,
 } from "../../mocks/providers/addons.ts";
 import { isRealDevice } from "../system/device-detection.ts";
+import { DisruptiveActionRefusedError } from "../system/disruptive-action-error.ts";
 import { getHardwareKindCached } from "../system/hardware-kind.ts";
+import { aptClientTlsFor } from "./apt-client-tls.ts";
+import {
+	type ArtifactPublication,
+	publishPreparedArtifact,
+} from "./artifact-publication.ts";
+import { readAddonDescriptor } from "./descriptor-authority.ts";
+import {
+	getSysextActionDecision,
+	runDisruptiveSysextStep,
+} from "./disruptive-sysext-step.ts";
+import { addonIntentRevision, withAddonMutation } from "./mutation.ts";
 
 /** Persisted on `lastError` when no compatible artifact exists for the live OS. */
 export const ADDON_NOT_AVAILABLE_FOR_OS_VERSION =
@@ -106,6 +115,8 @@ export type ReconcilerDeps = {
 	rawExists: (id: string) => Promise<boolean>;
 	/** Fetch, verify (sha256 + GPG), and atomically stage the artifact. */
 	fetchAndStage: (args: MaterialiseArgs) => Promise<void>;
+	publishPrepared?: (args: MaterialiseArgs) => Promise<ArtifactPublication>;
+	discardPrepared?: (id: string) => Promise<void>;
 	/** Run `systemd-sysext refresh` via the privileged helper. */
 	refresh: () => Promise<void>;
 	/** Persist an add-on's runtime state. */
@@ -162,18 +173,29 @@ async function reconcileOne(
 	board: string,
 	deps: ReconcilerDeps,
 ): Promise<void> {
+	const revision = addonIntentRevision(id);
+	const currentIntent = () => {
+		const current = deps.getAddons()[id];
+		return addonIntentRevision(id) === revision &&
+			current?.enabled &&
+			!current.autoDisabled
+			? current
+			: undefined;
+	};
+	const publish = async (patch: StatePatch) =>
+		withAddonMutation(id, async () => {
+			const current = currentIntent();
+			if (current) deps.setState(id, buildState(current, patch));
+		});
 	let descriptor: AddonDescriptor;
 	try {
 		descriptor = await deps.readDescriptor(id);
 	} catch (err) {
 		deps.log(`addon reconciler: ${id} descriptor unavailable: ${String(err)}`);
-		deps.setState(
-			id,
-			buildState(prev, {
-				phase: "error",
-				lastError: ADDON_DESCRIPTOR_UNAVAILABLE,
-			}),
-		);
+		await publish({
+			phase: "error",
+			lastError: ADDON_DESCRIPTOR_UNAVAILABLE,
+		});
 		return;
 	}
 
@@ -183,68 +205,93 @@ async function reconcileOne(
 		descriptor.compatibleOsVersions &&
 		!descriptor.compatibleOsVersions.includes(osVersion)
 	) {
-		deps.setState(
-			id,
-			buildState(prev, {
-				phase: "pending",
-				lastError: ADDON_NOT_AVAILABLE_FOR_OS_VERSION,
-			}),
-		);
+		await publish({
+			phase: "pending",
+			lastError: ADDON_NOT_AVAILABLE_FOR_OS_VERSION,
+		});
 		return;
 	}
 
 	// Already materialised for the live VERSION_ID (exact match) → nothing to do.
 	const rawPresent = await deps.rawExists(id);
-	if (rawPresent && prev.osVersionMaterialized === osVersion) {
-		if (prev.phase !== "active" || prev.lastError !== undefined) {
-			deps.setState(id, buildState(prev, { phase: "active", lastError: null }));
-		}
+	if (!currentIntent()) return;
+	if (
+		rawPresent &&
+		prev.osVersionMaterialized === osVersion &&
+		prev.phase === "active" &&
+		prev.lastError === undefined &&
+		prev.versionMaterialized === descriptor.version
+	) {
 		return;
 	}
 
 	// (Re)materialisation is needed and is disruptive (a sysext refresh re-merges
-	// /usr). Defer while a stream is live; retry on the next boot.
-	if (deps.getIsStreaming()) {
-		deps.log(`addon reconciler: ${id} deferred (stream live); retry next boot`);
-		deps.setState(
-			id,
-			buildState(prev, {
-				phase: "pending",
-				lastError: ADDON_REFRESH_DEFERRED_STREAMING,
-			}),
+	// /usr). Defer without positive shared admission; retry on the next boot.
+	if (deps.getIsStreaming() || !(await getSysextActionDecision()).allowed) {
+		deps.log(
+			`addon reconciler: ${id} deferred (stream live or unconfirmed); retry next boot`,
 		);
+		await publish({
+			phase: "pending",
+			lastError: ADDON_REFRESH_DEFERRED_STREAMING,
+		});
 		return;
 	}
 
 	try {
 		await deps.fetchAndStage({ descriptor, osVersion, board });
-		await deps.refresh();
+		await withAddonMutation(id, async () => {
+			if (!currentIntent()) return;
+			if (deps.getIsStreaming() || !(await getSysextActionDecision()).allowed) {
+				await publish({
+					phase: "pending",
+					lastError: ADDON_REFRESH_DEFERRED_STREAMING,
+				});
+				return;
+			}
+			await runDisruptiveSysextStep(`reconcile:${id}`, async () => {
+				if (!currentIntent()) return;
+				const publication = await deps.publishPrepared?.({
+					descriptor,
+					osVersion,
+					board,
+				});
+				try {
+					if (!currentIntent()) {
+						await publication?.rollback();
+						return;
+					}
+					await runDisruptiveSysextStep("refresh-addon", () => deps.refresh());
+				} catch (error) {
+					await publication?.rollback();
+					throw error;
+				}
+				await publication?.commit();
+				await publish({
+					phase: "active",
+					lastError: null,
+					osVersionMaterialized: osVersion,
+					versionMaterialized: descriptor.version,
+				});
+			});
+		});
 	} catch (err) {
 		// 404 / network / verification failure: no usable artifact for this OS.
 		// Set pending and move on — never block.
 		deps.log(
 			`addon reconciler: ${id} not available for os ${osVersion}: ${String(err)}`,
 		);
-		deps.setState(
-			id,
-			buildState(prev, {
-				phase: "pending",
-				lastError: ADDON_NOT_AVAILABLE_FOR_OS_VERSION,
-			}),
-		);
+		await publish({
+			phase: "pending",
+			lastError:
+				err instanceof DisruptiveActionRefusedError
+					? ADDON_REFRESH_DEFERRED_STREAMING
+					: ADDON_NOT_AVAILABLE_FOR_OS_VERSION,
+		});
 		return;
+	} finally {
+		await deps.discardPrepared?.(id);
 	}
-
-	deps.setState(
-		id,
-		buildState(prev, {
-			phase: "active",
-			lastError: null,
-			osVersionMaterialized: osVersion,
-			versionMaterialized: descriptor.version,
-		}),
-	);
-	deps.log(`addon reconciler: ${id} materialised for os ${osVersion}`);
 }
 
 let inFlight = false;
@@ -312,7 +359,9 @@ export async function runAddonReconciler(deps?: ReconcilerDeps): Promise<void> {
 			// Only desired (enabled) add-ons; respect a system auto-disable.
 			if (!state.enabled || state.autoDisabled) continue;
 			try {
-				await reconcileOne(id, state, osVersion, board, d);
+				const current = d.getAddons()[id];
+				if (current?.enabled && !current.autoDisabled)
+					await reconcileOne(id, current, osVersion, board, d);
 			} catch (err) {
 				// One add-on must never abort the loop or escape to the boot path.
 				d.log(`addon reconciler: ${id} unexpected error: ${String(err)}`);
@@ -334,26 +383,48 @@ async function buildDefaultDeps(): Promise<ReconcilerDeps> {
 	// Dynamic import keeps the heavy streaming/config graph (and setup.json's
 	// required top-level load) out of the module's static import set, so tests
 	// that inject their own deps never trigger it.
-	const [streaming, config] = await Promise.all([
-		import("../streaming/streaming.ts"),
-		import("../config.ts"),
+	const [admission, manager, settlement] = await Promise.all([
+		import("../system/disruptive-action-runtime.ts"),
+		import("./manager.ts"),
+		import("./state-settlement.ts"),
 	]);
+	manager.settleInterruptedAddonStates();
+	const prepared = new Map<string, string>();
 
 	return {
 		isRealDevice: () => isRealDevice(),
-		getIsStreaming: () => streaming.getIsStreaming(),
+		// A refresh re-merges /usr: unknown liveness defers it like a live stream.
+		getIsStreaming: () => !admission.getDisruptiveActionDecision().allowed,
 		getOsVersionId: readOsVersionId,
 		// `{board}` artifact targeting follows the live-resolved kind (not static
 		// setup.hw), so a mismatched image fetches the correct board's sysext.
 		getBoard: () => getHardwareKindCached(),
-		getAddons: () => config.getAddons(),
+		getAddons: settlement.getLiveAddonStates,
 		readDescriptor: readBakedDescriptor,
 		rawExists: (id) => Bun.file(`${STAGE_DIR}/${id}.raw`).exists(),
-		fetchAndStage: fetchAndStageArtifact,
+		fetchAndStage: async (args) => {
+			prepared.set(args.descriptor.id, await fetchAndStageArtifact(args));
+		},
+		publishPrepared: async (args) => {
+			const privateDir = prepared.get(args.descriptor.id);
+			if (!privateDir) throw new Error("missing add-on preparation");
+			return publishPreparedArtifact(
+				`${privateDir}/payload.raw`,
+				`${STAGE_DIR}/${args.descriptor.id}.raw`,
+			);
+		},
+		discardPrepared: async (id) => {
+			const privateDir = prepared.get(id);
+			if (privateDir)
+				await fs.promises.rm(privateDir, { recursive: true, force: true });
+			prepared.delete(id);
+		},
 		refresh: async () => {
 			await addonRefresh();
 		},
-		setState: (id, state) => config.setAddonState(id, state),
+		setState: (id, state) => {
+			manager.settleAddonState(id, state);
+		},
 		log: (msg) => logger.info(msg),
 	};
 }
@@ -366,8 +437,7 @@ async function readOsVersionId(): Promise<string> {
 }
 
 async function readBakedDescriptor(id: string): Promise<AddonDescriptor> {
-	const raw = await Bun.file(`${REGISTRY_DIR}/${id}.json`).json();
-	return AddonDescriptorSchema.parse(raw);
+	return readAddonDescriptor(`${REGISTRY_DIR}/${id}.json`);
 }
 
 // `{os_version}` / `{board}` are bare tokens (OS_VERSION_RE / hw enum), so
@@ -385,6 +455,7 @@ function substitutePlaceholders(
 async function fetchCapped(url: string, maxBytes: number): Promise<Uint8Array> {
 	const res = await fetch(url, {
 		signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+		...(await aptClientTlsFor(url)),
 	});
 	if (!res.ok) throw new Error(`fetch ${url} failed: HTTP ${res.status}`);
 	const buf = new Uint8Array(await res.arrayBuffer());
@@ -396,7 +467,7 @@ async function fetchCapped(url: string, maxBytes: number): Promise<Uint8Array> {
 	return buf;
 }
 
-async function fetchAndStageArtifact(args: MaterialiseArgs): Promise<void> {
+async function fetchAndStageArtifact(args: MaterialiseArgs): Promise<string> {
 	const { descriptor, osVersion, board } = args;
 	const id = descriptor.id;
 	const rawUrl = substitutePlaceholders(
@@ -418,20 +489,21 @@ async function fetchAndStageArtifact(args: MaterialiseArgs): Promise<void> {
 	const sigBytes = await fetchCapped(sigUrl, MAX_SIG_BYTES);
 
 	await fs.promises.mkdir(CACHE_DIR, { recursive: true });
-	const cacheRaw = `${CACHE_DIR}/${id}.raw`;
+	const privateDir = await fs.promises.mkdtemp(
+		`${CACHE_DIR}/.reconcile-${id}-`,
+	);
+	const cacheRaw = `${privateDir}/payload.raw`;
 	const cacheSig = `${cacheRaw}.sig`;
-	await Bun.write(cacheRaw, rawBytes);
-	await Bun.write(cacheSig, sigBytes);
+	try {
+		await Bun.write(cacheRaw, rawBytes);
+		await Bun.write(cacheSig, sigBytes);
 
-	// Detached-signature check against the image-baked add-on keyring (argv-only;
-	// rejects on non-zero exit). The privileged helper re-verifies on refresh.
-	await execFileP("gpgv", ["--keyring", KEYRING, cacheSig, cacheRaw]);
-
-	// Atomic publish into the persistent sysext store: temp + rename in-dir so a
-	// crash never leaves a half-written .raw for systemd-sysext to merge (E3).
-	await fs.promises.mkdir(STAGE_DIR, { recursive: true });
-	const stageRaw = `${STAGE_DIR}/${id}.raw`;
-	const stageTmp = `${STAGE_DIR}/.${id}.raw.${process.pid}.tmp`;
-	await Bun.write(stageTmp, rawBytes);
-	await fs.promises.rename(stageTmp, stageRaw);
+		// Detached-signature check against the image-baked add-on keyring (argv-only;
+		// rejects on non-zero exit). The privileged helper re-verifies on refresh.
+		await execFileP("gpgv", ["--keyring", KEYRING, cacheSig, cacheRaw]);
+		return privateDir;
+	} catch (error) {
+		await fs.promises.rm(privateDir, { recursive: true, force: true });
+		throw error;
+	}
 }

@@ -16,7 +16,8 @@ import { toast } from 'svelte-sonner';
 
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
 import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
-import { ConnectionResetError, rpc } from '$lib/rpc';
+import { rpc } from '$lib/rpc';
+import { NotSentError } from '$lib/rpc/rpc-error';
 import {
 	confirmOperation,
 	failOperation,
@@ -88,6 +89,7 @@ import {
 	reconcileStreamingOptimism,
 	revertStreamingOptimism,
 	revertStreamingOptimismFailure,
+	supersedeStartingOptimism,
 } from '$lib/rpc/streaming-optimism.svelte';
 import { getEncoderLoad } from '$lib/stores/device-health-history.svelte';
 import { deriveBitrateReading, deriveMeasuredBitrateKbps } from '$lib/stores/hud/derive';
@@ -102,6 +104,15 @@ import { encoderSaveErrorMessage } from '$lib/streaming/encoderSaveError';
 import { canLiveSwitchInput, isAudioInputId } from '$lib/streaming/liveAudioSwitch';
 import { pipelinesFromSources } from '$lib/streaming/sources-view-model';
 import { buildStartConfig } from '$lib/streaming/startStreaming';
+import { startFailureMessage } from '$lib/streaming/start-failure-copy';
+import { showUnconfirmedStreamStop, startOptimismSuperseded } from '$lib/streaming/unconfirmed-stream';
+import {
+	lifecycleSinceLostStartReply,
+	noteLostStartReply,
+	operatorStopUnresolved,
+	startRecoveryUnknown,
+} from '$lib/streaming/unresolved-stream-actions.svelte';
+import { goLiveUpdateRefusal } from '$lib/updates/update-bands';
 // The TYPES stay static — `import type` is erased at compile, so it creates no
 // runtime edge and cannot pull the dialog into the entry chunk. The COMPONENTS
 // load on first open. This split is a bundling change, not an API change.
@@ -111,6 +122,8 @@ import CapabilityTierBanner from '$main/live/CapabilityTierBanner.svelte';
 import IdleCockpit from '$main/live/IdleCockpit.svelte';
 import LiveCockpit from '$main/live/LiveCockpit.svelte';
 import LiveHeader from '$main/live/LiveHeader.svelte';
+import UnconfirmedStreamBand from '$main/live/UnconfirmedStreamBand.svelte';
+import UpdateRefusalBand from '$main/live/UpdateRefusalBand.svelte';
 import type { ConfigRow } from '$main/live/StreamSettingsCard.svelte';
 
 // Reactive state — non-deprecated subscriptions getters only.
@@ -139,6 +152,12 @@ const streamingStopReason = $derived(getStreamingStopReason());
 // carried one. Rendered class-first with retry state; the legacy string reason
 // is the fallback for code-only reverts.
 const streamingStartFailure = $derived(getStreamingStartFailure());
+// Todo 41: an update committing packages or restarting services refuses a
+// start (D8). Read off the same merged `status` every other Live fact comes
+// from, so the band retracts on the push that moves the phase on.
+const updateRefusal = $derived(
+	goLiveUpdateRefusal(getStatus()?.update_orchestrator, streamingStartFailure),
+);
 // Truthful stop-stuck banner (T0): shown only while the authoritative flag still
 // says streaming after the bounded stopping watchdog pulled + re-dispatched.
 const stopStuckBanner = $derived(getStopStuckBannerVisible());
@@ -157,6 +176,39 @@ const configChangeApplying = $derived(isConfigChangeInFlight(getConfigChange()))
 $effect(() => {
 	reconcileStreamingOptimism(isStreaming);
 });
+
+// The device's own lifecycle outranks a local `starting` (FIX-16-C3). A start
+// whose reply a connection reset swallowed keeps `starting` (the start may have
+// worked) and `is_streaming:false` never clears it, so without this the cockpit
+// sat on a disabled "Starting..." for the 90 s start watchdog while the device
+// said `reconciling`, with no Stop anywhere. Only a lifecycle DELIVERED over the
+// current link after the loss settles a lost reply: a restored session can hold
+// the pre-reset snapshot when its hydrate failed (FIX-16-FRONT3 R1). The record
+// lives outside this component, which navigation replaces.
+const streamLifecycle = $derived(getStatus()?.stream_lifecycle);
+$effect(() => {
+	if (streamingOptimismState !== 'starting') return;
+	const generation = getStreamingAttemptGeneration();
+	if (startRecoveryUnknown(generation)) return;
+	const superseded = startOptimismSuperseded({
+		optimismState: streamingOptimismState,
+		isStreaming,
+		lifecycle: streamLifecycle,
+		lifecycleSinceLostReply: lifecycleSinceLostStartReply(generation),
+	});
+	if (superseded) supersedeStartingOptimism(generation);
+});
+// An unresolved operator Stop keeps the band, and keeps the header from saying
+// "Not streaming", until the device settles it (FIX-16-FRONT3 R2).
+const streamOutcomeUnknown = $derived(
+	showUnconfirmedStreamStop({
+		lifecycle: streamLifecycle,
+		isStreaming,
+		optimismState: streamingOptimismState,
+		stopUnresolved: operatorStopUnresolved(),
+		startRecoveryUnknown: startRecoveryUnknown(getStreamingAttemptGeneration()),
+	}),
+);
 
 // ── Post-stream summary window ─────────────────────────────────────────────
 // IngestStats' historical "Session ended · {duration}" summary lives inside
@@ -247,33 +299,11 @@ function startFailedMessage(code: string): string {
 		: m["live.startFailed.generic"]();
 }
 
-// Todo-25 typed failure → localized message: the class names WHAT failed, and
-// `retriable` selects the retry-state suffix (exhausted-retries vs deterministic).
-// The engine's raw diagnostic (`failure.message`, e.g. "invalid params:
-// audio-device-unavailable: ALSA capture device 'hw:CARD=…' is busy") is
-// DELIBERATELY not concatenated here: operators have no console, so a verbatim
-// JSON-RPC/ALSA string is unactionable noise in the primary toast. It is still
-// captured verbatim by the backend logger and readable via Settings → System Logs.
-// `capture_source_unavailable` is the one class whose copy is selected by its
-// typed cause: the class names the subsystem, the cause names what the operator
-// can actually do about it (change the camera's output format, reconnect the
-// cable, wait for the input to free up).
-function startFailureMessage(failure: {
-	class: string;
-	retriable: boolean;
-	captureCause?: string;
-}): string {
-	const key =
-		failure.captureCause !== undefined
-			? `live.startFailure.class.${failure.class}.${failure.captureCause}`
-			: `live.startFailure.class.${failure.class}`;
-	const cls = m[key];
-	const reason = typeof cls === 'function' ? cls() : m["live.startFailed.generic"]();
-	const retryState = failure.retriable
-		? m["live.startFailure.retriedThenFailed"]()
-		: m["live.startFailure.notRetriable"]();
-	return `${reason} ${retryState}`;
-}
+// Todo-25 typed failure → localized message (`startFailureMessage`): the class
+// names WHAT failed and a suffix the retry state; the engine's raw diagnostic is
+// never concatenated (operators have no console; it stays in System Logs).
+// `capture_source_unavailable` is selected by its typed cause, and
+// `update_in_progress` says to start again once the update finishes.
 
 // Show error toast if start failed. Prefer the typed failure (class + retry
 // state); fall back to the legacy code-string reason. A terminal revert sets
@@ -910,8 +940,12 @@ async function handleStart(overrides: { source?: string } = {}) {
 			}
 		}
 	} catch (error) {
-		if (error instanceof ConnectionResetError) return;
-		// Transport/validation throw: revert to idle with the error message.
+		// Only proven non-dispatch permits a retry; losing a reply proves no idle.
+		if (!(error instanceof NotSentError)) {
+			noteLostStartReply(attempt);
+			return;
+		}
+		// The socket refused dispatch, so this attempt cannot have started.
 		const reason =
 			error instanceof Error ? error.message : 'unknown_error';
 		revertStreamingOptimism(reason, attempt);
@@ -963,7 +997,7 @@ const configRows = $derived<ConfigRow[]>([
 </script>
 
 <div class="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-6">
-	<LiveHeader {isStreaming} />
+	<LiveHeader {isStreaming} unconfirmed={streamOutcomeUnknown} />
 
 	<!-- Capability-tier state: calm banner when the engine is offline/starting or
 	     reports a schema mismatch. Renders nothing in the normal tier. -->
@@ -1004,6 +1038,16 @@ const configRows = $derived<ConfigRow[]>([
 			</button>
 		</div>
 	{/if}
+
+	<!-- Above both cockpits on purpose: the post-stream summary window can still
+	     hold LiveCockpit (with no Stop) while the device falls into an
+	     unconfirmed state, and the optimistic starting cockpit shows only a
+	     disabled "Starting...". -->
+	<UnconfirmedStreamBand
+		lifecycle={streamLifecycle}
+		{isStreaming}
+		optimismState={streamingOptimismState}
+	/>
 
 	{#if showLiveCockpit}
 		<!-- Live cockpit: telemetry strip + live bitrate hot-adjust + ingest stats
@@ -1066,6 +1110,9 @@ const configRows = $derived<ConfigRow[]>([
 		     (readiness rows + config edits + Start at its foot) → Preview + Roadmap
 		     disclosures. Absorbs the old onboarding checklist, no-server empty-state,
 		     ServerReadiness and StreamSettingsCard. -->
+		{#if updateRefusal}
+			<UpdateRefusalBand refusal={updateRefusal} />
+		{/if}
 		<IdleCockpit
 			{config}
 			caps={getCapabilities()}
