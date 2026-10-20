@@ -168,7 +168,7 @@ or scheduling delay. Removing nonblocking opens must still fail the tests; FIFO
 refusal, CONTROL disposal, closed admission and inode preservation remain required.
 
 The serial, receipt and quarantine policy-reader matrix likewise awaits real
-child completion through that helper without the two-second startup kill timer.
+child completion without the two-second startup kill timer.
 Genuine absence remains the only accepted default: separate negative controls
 must reject both invalid-presence-as-absence and absence-as-unknown regressions.
 The matrix bundles that real reader graph once before registering cases, then
@@ -176,6 +176,20 @@ executes it in a fresh child for each private fixture. Contended source loading
 could consume the unchanged five-second read guard before any reader ran. Bundling
 removes repeated source resolution/parsing, not filesystem reads, process isolation
 or the no-writer FIFO refusal guard; no mocks or cached read answers are used.
+Amplified contention still measured 18.64 seconds of bundled child startup and
+evaluation versus 37 milliseconds for the read. Each independent child now reports
+graph readiness before the matrix is registered and waits for its own test's stdin
+release. Invalid entries are created only in that test; real reads, exit and pipe
+drainage retain the unchanged five-second guard. Readiness never supplies a read
+result, and removing nonblocking opens must still fail the no-writer FIFO cases.
+
+The natural-uplink metadata kernel fixture also awaits child readiness before
+registering its parent assertion. A measured amplified run spent 31.24 seconds
+before the namespace child's module body and 5.69 seconds on namespace setup,
+versus 6.48 seconds executing the actual route/recovery assertions. Both parent
+and child retain their original 20-second guards after readiness. Real `unshare`,
+kernel capability checks, route commands and all five child assertions remain;
+no unsupported-capability skip was added or converted into a success.
 
 The setup transient-read matrix awaits dependency readiness in a fresh child for
 each fault before test execution. Closing its input starts the unchanged real
