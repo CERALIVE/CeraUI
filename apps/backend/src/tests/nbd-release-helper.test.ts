@@ -24,22 +24,41 @@ async function fixture() {
 	await mkdir(sys);
 	return {
 		dev,
+		sys,
 		add: async (name: string, size: string) => {
 			await mkdir(join(sys, name));
 			await Bun.write(join(sys, name, "size"), size);
+			await Bun.write(join(sys, name, "dev"), "43:0\n");
 			await Bun.write(join(dev, name), "fixture");
 		},
-		run: (glob = join(dev, "*")) =>
-			runTestCommand(["perl", helper], {
-				env: { CERALIVE_NBD_DEV_GLOB: glob, CERALIVE_NBD_SYS_BLOCK: sys },
-			}),
+		run: async (glob = join(dev, "*"), rdev?: number) => {
+			const lines = (await Bun.file(helper).text()).split("\n");
+			const devLine = "my $dev_glob = '/dev/nbd[0-9]*';";
+			const sysLine = "my $sys_block = '/sys/block';";
+			for (const constant of [devLine, sysLine])
+				if (lines.filter((line) => line === constant).length !== 1)
+					throw new Error("NBD helper production constants are not unique");
+			const copy = lines.map((line) => {
+				if (line === devLine) return `my $dev_glob = '${glob}';`;
+				if (line === sysLine) return `my $sys_block = '${sys}';`;
+				if (rdev !== undefined) {
+					if (line === "    unless (-b $handle) {") return "    unless (1) {";
+					if (line === "    my $rdev = (stat $handle)[6];")
+						return `    my $rdev = ${rdev};`;
+				}
+				return line;
+			});
+			const path = join(root, "test-nbd-release");
+			await Bun.write(path, copy.join("\n"));
+			return runTestCommand(["perl", path]);
+		},
 	};
 }
 
 test("no attached device is a successful no-op", async () => {
 	// Given an empty private device directory.
 	const f = await fixture();
-	// When the shipped helper executes.
+	// When the helper copy executes against the private paths.
 	const result = await f.run();
 	// Then nothing was attempted.
 	expect(result).toMatchObject({ code: 0, stdout: "", stderr: "" });
@@ -61,8 +80,8 @@ test("an attached regular-file stand-in reports ioctl failure and exits nonzero"
 	// Given a positive size, but a file that cannot accept NBD_CLEAR_SOCK.
 	const f = await fixture();
 	await f.add("nbd12", "2048\n");
-	// When the actual ioctl is attempted without root or kernel NBD access.
-	const result = await f.run();
+	// When only block identity is emulated to exercise the actual failing ioctl.
+	const result = await f.run(undefined, 43 * 256);
 	// Then failure is visible instead of a false release success.
 	expect(result.code).toBe(1);
 	expect(result.stdout).toMatch(/nbd12 NBD_CLEAR_SOCK failed:/);
@@ -106,3 +125,43 @@ test("an NBD-named symlink cannot redirect the ioctl to another path", async () 
 	expect(result.stdout).toMatch(/nbd0 open failed:/);
 	expect(result.stdout).not.toContain("NBD_CLEAR_SOCK");
 });
+
+test.each(["directory", "fifo"] as const)(
+	"a %s named nbdN is refused without ioctl",
+	async (kind) => {
+		// Given a positive sysfs size but a non-block device at the exact name.
+		const f = await fixture();
+		await f.add("nbd0", "2048\n");
+		const path = join(f.dev, "nbd0");
+		await rm(path);
+		if (kind === "directory") await mkdir(path);
+		else expect((await runTestCommand(["mkfifo", path])).code).toBe(0);
+		// When the helper opens that node without blocking.
+		const result = await f.run();
+		// Then it refuses the node type before issuing an ioctl.
+		expect(result.code).toBe(1);
+		expect(result.stdout).toContain("not a block device");
+		expect(result.stdout).not.toContain("NBD_CLEAR_SOCK");
+	},
+);
+
+test.each([
+	[8 * 256, "43:0\n"],
+	[43 * 256 + 1, "43:0\n"],
+	[43 * 256, "8:0\n"],
+	[43 * 256, "43:0\n43:0\n"],
+] as const)(
+	"device identity %i with sysfs %j is refused before ioctl",
+	async (rdev, identity) => {
+		// Given an emulated block node with wrong-major, mismatched or ambiguous identity.
+		const f = await fixture();
+		await f.add("nbd0", "2048\n");
+		await Bun.write(join(f.sys, "nbd0", "dev"), identity);
+		// When only the fstat result and block predicate are emulated in the private copy.
+		const result = await f.run(undefined, rdev);
+		// Then the identity guard refuses without attempting release.
+		expect(result.code).toBe(1);
+		expect(result.stdout).toContain("device identity mismatch");
+		expect(result.stdout).not.toContain("NBD_CLEAR_SOCK");
+	},
+);

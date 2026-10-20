@@ -24,6 +24,7 @@ import {
 	initialOrchestratorState,
 	type OrchestratorState,
 } from "../modules/system/update-orchestrator/types.ts";
+import { resetDismissalStoreForTests } from "../modules/ui/notification-dismissals.ts";
 import {
 	getPersistentNotifications,
 	notificationRemove,
@@ -39,6 +40,7 @@ import {
 import { raucSlots } from "./helpers/slot-sync-rauc.ts";
 import { evidence } from "./helpers/slot-sync-runtime-harness.ts";
 
+const originalDismissalsPath = process.env.CERALIVE_DISMISSALS_FILE;
 let root: string | undefined;
 
 function clearNotices() {
@@ -49,10 +51,15 @@ function clearNotices() {
 beforeEach(() => {
 	resetOrchestratorRuntimeForTest();
 	clearNotices();
+	resetDismissalStoreForTests();
 });
 afterEach(async () => {
 	resetOrchestratorRuntimeForTest();
 	clearNotices();
+	resetDismissalStoreForTests();
+	if (originalDismissalsPath === undefined)
+		delete process.env.CERALIVE_DISMISSALS_FILE;
+	else process.env.CERALIVE_DISMISSALS_FILE = originalDismissalsPath;
 	setOrchestratorStateFilePathForTest(null);
 	if (root) await rm(root, { recursive: true, force: true });
 	root = undefined;
@@ -61,6 +68,7 @@ afterEach(async () => {
 async function fixture(initial: OrchestratorState) {
 	const dir = await mkdtemp(join(tmpdir(), "combined-recovery-"));
 	root = dir;
+	process.env.CERALIVE_DISMISSALS_FILE = join(dir, "dismissals.json");
 	setOrchestratorStateFilePathForTest(join(dir, "agent.json"));
 	saveOrchestratorState(initial);
 	const quarantine = new UpdateQuarantine(join(dir, "quarantine.json"));

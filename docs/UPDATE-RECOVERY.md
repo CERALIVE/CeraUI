@@ -134,8 +134,12 @@ agent. The terminal state, original bytes and closed mutation readiness remain
 unchanged. A dismissal-store I/O failure is not cached as an empty store; the next
 access retries loading it. Startup guards recovered-update notice publication
 independently of rollback hydration, so failure in either cannot skip the other or
-fail startup. Unreadable dismissals defer publication, not resurrect acknowledged
-rollbacks. Repair allows a later access/startup to load the acknowledgements again;
+fail startup. At the shared `notificationSend` boundary, a failed dismissal read
+warns and returns `false` before publication, without throwing into any producer.
+This includes runtime update transitions and `software-updates.ts`'s keyed
+`ceralive_update` broadcast. Keyless notices do not read the store. Unreadable
+dismissals defer publication, never resurrect acknowledged rollbacks or hold an
+update phase open. Repair allows a later access/startup to load acknowledgements again;
 this does not add an automatic notice-retry timer.
 Lost/damaged acknowledgement storage can lose a dismissal, as with other stored
 preferences; update details still do not expose quarantine history.
@@ -1573,10 +1577,17 @@ T+3 s from the same origin. Only the same PID **and** invocation still
 `/usr/libexec/ceralive/ceralive-nbd-release`. It opens only exact `nbd[0-9]+`
 device names, read-only and without following a final symlink, whose
 `/sys/block/nbdN/size` is a whole positive integer, and issues NBD_CLEAR_SOCK
-(`0xab04`). It reports each attempted device and fails nonzero if any ioctl
-fails; no attached devices is a successful no-op. `CERALIVE_NBD_DEV_GLOB` and
-`CERALIVE_NBD_SYS_BLOCK` exist only for private host fixtures, not deployment
-configuration. The device payload uses Debian's already-present perl-base.
+(`0xab04`) only after the opened handle is proven a block device with NBD major
+43 and its device number matches `/sys/block/nbdN/dev`. Wrong node types,
+unreadable/mismatched identity, open/size-read faults and ioctl failures report
+failure and exit nonzero; no attached devices is a successful no-op. Device and
+sysfs paths are fixed constants, with no environment test selectors in the shipped
+helper. Host tests copy the script and rewrite those unique constants; identity
+and ioctl tests additionally emulate only the block predicate and fstat device
+number in that private copy. Directory/FIFO refusal uses the real block predicate.
+The release contract checks staging, root ownership, mode 0700, byte identity and
+absence of test selectors in a small helper-only `.deb`; it does not build the
+full device package. The device payload uses Debian's already-present perl-base.
 
 A third read at T+8 s permits SIGKILL of all processes in **rauc.service only**
 only if the original PID and invocation still match and remain `deactivating`.
@@ -2215,7 +2226,9 @@ phase outside `idle`/`sync-eligible` invalidates it; OS writes and rollback
 recovery therefore cannot reuse a pre-install good result. A state-generation
 change across the awaited read refuses its stale dispatch authority. Completion
 still uses the separate fresh RAUC read described below, never this cache.
-These are host regression proofs, not a completed exact-head board re-drill.
+Host regression proof covers receipt-target identity (not changing boot id or
+healthy-record slot), backward clock movement and the state-generation fence;
+this is not a completed exact-head board re-drill.
 `slot-sync-stale-receipt-cache.test.ts` drives backward clock movement, changed
 receipt-target identity inside the refresh bound, and a phase leaving idle and
 returning during the awaited RAUC read. Each rejects removal of its corresponding

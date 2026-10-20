@@ -8,6 +8,7 @@ bash scripts/build/build-provenance.test.sh
 bash scripts/build/shared-build-functions.test.sh
 bash scripts/build/deb-reconciler-staging.test.sh
 bash scripts/build/deb-os-stage-guard.test.sh
+bash scripts/build/deb-nbd-release.test.sh
 bash scripts/build/deb-maintainer-scripts.test.sh
 bash scripts/build/deb-update-runtime-dependencies.test.sh
 bash scripts/build/deb-version-stamp.test.sh

@@ -281,6 +281,11 @@ without ordinary notice churn evicting that acknowledgement. These host-tested
 notice repairs are not a new board qualification; see [update recovery](docs/UPDATE-RECOVERY.md).
 Replayed OS pointers already in exact-version quarantine keep their failed-check
 and installation refusal, but no longer repeat the redundant replay warning.
+Unreadable dismissal preferences now defer keyed notices at the shared publication
+boundary without aborting update transitions or stranding Go Live. The root NBD
+helper has fixed paths and checks the opened block-device identity before release;
+host refusal and helper-only packaging tests do not qualify the hardened bytes on
+a board. See the same recovery contract for scope and remaining drills.
 
 Generic raw capture inputs now have an honest, non-streamable **Raw video** row
 rather than a false Cam Link identity. Both consumers now pin published bindings

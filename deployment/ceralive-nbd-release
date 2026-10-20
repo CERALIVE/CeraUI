@@ -3,8 +3,8 @@ use strict;
 use warnings;
 use Fcntl qw(O_RDONLY O_NOFOLLOW O_NONBLOCK);
 
-my $dev_glob = $ENV{CERALIVE_NBD_DEV_GLOB} // '/dev/nbd[0-9]*';
-my $sys_block = $ENV{CERALIVE_NBD_SYS_BLOCK} // '/sys/block';
+my $dev_glob = '/dev/nbd[0-9]*';
+my $sys_block = '/sys/block';
 my $failed = 0;
 
 for my $device (glob $dev_glob) {
@@ -24,6 +24,36 @@ for my $device (glob $dev_glob) {
         $failed = 1;
         next;
     };
+    unless (-b $handle) {
+        print "$device not a block device\n";
+        $failed = 1;
+        close $handle;
+        next;
+    }
+    my $rdev = (stat $handle)[6];
+    unless (defined $rdev) {
+        print "$device stat failed: $!\n";
+        $failed = 1;
+        close $handle;
+        next;
+    }
+    # Linux dev_t encodes high major/minor bits separately from the low bytes.
+    my $major = (($rdev >> 8) & 0xfff) | (($rdev >> 32) & 0xfffff000);
+    my $minor = ($rdev & 0xff) | (($rdev >> 12) & 0xffffff00);
+    open(my $dev_file, '<', "$sys_block/$name/dev") or do {
+        print "$device identity read failed: $!\n";
+        $failed = 1;
+        close $handle;
+        next;
+    };
+    my $identity = do { local $/; <$dev_file> };
+    close $dev_file;
+    unless ($major == 43 && defined $identity && $identity =~ /\A43:$minor\n?\z/) {
+        print "$device device identity mismatch\n";
+        $failed = 1;
+        close $handle;
+        next;
+    }
     my $result = ioctl($handle, 0xab04, 0); # NBD_CLEAR_SOCK, not NBD_DISCONNECT.
     if (defined $result) {
         print "$device NBD_CLEAR_SOCK ok\n";

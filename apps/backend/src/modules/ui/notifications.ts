@@ -123,8 +123,16 @@ export function notificationSend(
 	// A persistent notification carrying a semantic dismissal key that the
 	// operator already dismissed stays suppressed across reloads and restarts.
 	const dismissalKey = opts?.dismissalKey;
-	if (isPersistent && dismissalKey && isNotificationDismissed(dismissalKey)) {
-		return false;
+	if (isPersistent && dismissalKey) {
+		try {
+			if (isNotificationDismissed(dismissalKey)) return false;
+		} catch (error) {
+			logger.warn("Notification deferred: dismissal store unavailable", {
+				name,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			return false;
+		}
 	}
 
 	const notification: Notification = {
