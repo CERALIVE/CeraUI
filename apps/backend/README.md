@@ -167,6 +167,15 @@ test hang guard, rather than killing a valid child after two seconds of import
 or scheduling delay. Removing nonblocking opens must still fail the tests; FIFO
 refusal, CONTROL disposal, closed admission and inode preservation remain required.
 
+The FIFO and transport-setup child graphs are bundled once per file. Fresh FIFO
+children signal import readiness before guarded reads; each case still sends its
+own real no-writer FIFO to an independent startup process. Transport fixture
+preparation and real setup/selector imports similarly precede readiness, with
+exit and strict metadata assertions retained. Cold graph initialization exceeded
+five seconds under amplified CPU contention even after bundling. Readiness moves
+that preparation outside the unchanged per-test hang detector; a blocked FIFO
+reader still fails. This is test scheduling evidence, not a product latency bound.
+
 The serial, receipt and quarantine policy-reader matrix likewise awaits real
 child completion without the two-second startup kill timer.
 Genuine absence remains the only accepted default: separate negative controls
