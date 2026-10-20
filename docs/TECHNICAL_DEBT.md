@@ -86,6 +86,35 @@ register is "empty" precisely when there are none.
 
 ## Open Debt
 
+### Released brand artwork precache footprint (2026-10-20)
+
+The lock-verified `v2026.10.0` artwork deliberately replaces five precached
+images with eleven: separate light/dark/ink header marks, a cached SVG favicon,
+and separate regular and maskable PWA icons. Bun level-9 gzip measures
+**4,192 B before / 62,942 B after**, an artwork-only increase of **58,750 B**.
+The measured build's aggregate precache is **1,415,096 B**.
+
+Following the accepted-footprint mechanism in `scripts/ci/bundle-report.mjs`,
+only the precache baseline moves from **1,354,486 B to 1,413,236 B**. The
+displaced baseline remains visible in every report. Its **16 KiB absolute
+headroom** stays unchanged, giving a **1,429,620 B ceiling** and **14,524 B**
+remaining in this build. The total SPA, route, chunk and federation budgets,
+Workbox globPatterns and Workbox's 2 MiB per-file limit are unchanged.
+Vendored images must retain their upstream release bytes; consumers cannot
+recompress them to hide the footprint.
+
+```debt
+id: TD-brand-assets-precache-size
+title: Canonical branded PWA icons and themed marks add 58750 B gzip to precache
+track: 1
+status: open
+exit_criteria: `bun run build:frontend && bun scripts/ci/bundle-report.mjs`
+owner: ceraui-team
+registered_at: 2026-10-20
+resolved_at: null
+unblock: Adopt a lock-verifiable upstream release with smaller canonical exports while retaining every required icon and theme variant; measure precache at or below the displaced 1370870 B ceiling and restore the old baseline without changing Workbox patterns or per-file size limits.
+```
+
 ### Frontend assertion-presence audit follow-ups (2026-09-08)
 
 The one-shot global `expect.hasAssertions()` probe found the following two

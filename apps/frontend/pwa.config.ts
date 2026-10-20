@@ -100,7 +100,13 @@ export const pwaConfig: VitePWAOptions = {
 		],
 	},
 	// Static assets to include in precache (icons and favicons)
-	includeAssets: ["favicon.ico", "apple-touch-icon.png", "favicon-96x96.png"],
+	includeAssets: [
+		"favicon.ico",
+		"favicon.svg",
+		"apple-touch-icon.png",
+		"favicon-96x96.png",
+		"brand/*.svg",
+	],
 	manifest: {
 		name: BRAND_CONFIG.name,
 		short_name: "CeraUI",
@@ -108,21 +114,33 @@ export const pwaConfig: VitePWAOptions = {
 		start_url: "/",
 		scope: "/",
 		display: "standalone",
-		theme_color: "#1c1e1c",
-		background_color: "#1c1e1c",
+		theme_color: "#080D09",
+		background_color: "#080D09",
 		orientation: "portrait-primary",
 		icons: [
 			{
 				src: "web-app-manifest-192x192.png",
 				sizes: "192x192",
 				type: "image/png",
-				purpose: "any maskable",
+				purpose: "any",
 			},
 			{
 				src: "web-app-manifest-512x512.png",
 				sizes: "512x512",
 				type: "image/png",
-				purpose: "any maskable",
+				purpose: "any",
+			},
+			{
+				src: "web-app-manifest-maskable-192x192.png",
+				sizes: "192x192",
+				type: "image/png",
+				purpose: "maskable",
+			},
+			{
+				src: "web-app-manifest-maskable-512x512.png",
+				sizes: "512x512",
+				type: "image/png",
+				purpose: "maskable",
 			},
 		],
 		categories: ["multimedia", "utilities"],

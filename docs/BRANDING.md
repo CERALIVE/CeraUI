@@ -25,6 +25,36 @@ bun run build:backend # Build backend only
 bun run build:frontend # Build frontend only
 ```
 
+## Logo and icon assets
+
+The shared logo, favicons and PWA icons [EXISTS] are vendored from the private
+`CERALIVE/ceralive-brand` release `v2026.10.0`. The repository-root
+`brand-assets.lock.json` records release provenance and SHA-256 hashes for every
+vendored file, including the standalone sync script and integrity verifier.
+CI checks the committed bytes offline; it never needs access to the brand repo.
+The integrity verifier keeps its upstream single-quote, 100-column formatting
+through a file-scoped Biome override; the sync script declares its Bun runtime
+global in the root Biome configuration. Both remain linted without rewriting
+the release bytes.
+
+Maintainers with access refresh the assets from this repository's root:
+
+```bash
+bun scripts/sync-brand-assets.ts --tag v2026.10.0
+```
+
+Do not hand-edit vendored files. `BRAND-ASSETS-NOTICE.md` lists them and records
+that the CeraLive brand assets are not covered by this repository's license;
+all rights are reserved.
+
+The shared `Logo.svelte` serves the small light mark by default, the small dark
+mark under `html.dark`, and the monochrome ink mark under
+`html[data-display='eink']`, overriding either color theme. Its images are
+decorative because the header button or sign-in heading already names the brand.
+The PWA manifest is generated only by VitePWA, with separate regular and
+maskable icons. `/favicon.ico` remains available at its stable path because the
+offline-state store uses it as its origin-recovery probe.
+
 ## i18n Integration
 
 The internationalization system supports dynamic branding through placeholder replacement:

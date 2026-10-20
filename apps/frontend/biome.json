@@ -32,6 +32,11 @@
 	},
 	"overrides": [
 		{
+			"includes": ["src/tests/brand-assets-integrity.ts"],
+			"formatter": { "lineWidth": 100 },
+			"javascript": { "formatter": { "quoteStyle": "single" } }
+		},
+		{
 			"includes": ["**/*.test.ts", "**/*.spec.ts"],
 			"linter": {
 				"rules": {
