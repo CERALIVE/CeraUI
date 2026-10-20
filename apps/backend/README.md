@@ -190,6 +190,8 @@ versus 6.48 seconds executing the actual route/recovery assertions. Both parent
 and child retain their original 20-second guards after readiness. Real `unshare`,
 kernel capability checks, route commands and all five child assertions remain;
 no unsupported-capability skip was added or converted into a success.
+The child had consumed only 497 milliseconds of CPU on reaching its module body;
+the measured elapsed time is not the recovery policy's injected dwell clock.
 
 The setup transient-read matrix awaits dependency readiness in a fresh child for
 each fault before test execution. Closing its input starts the unchanged real
