@@ -146,6 +146,7 @@ build_frontend_only() {
     if is_frontend_cache_valid; then
         echo "✅ Frontend cache valid - reusing existing build"
         cp -r "$FRONTEND_CACHE/public" dist/
+        bun "$BUILD_REPO_ROOT/scripts/ci/notification-bundle.ts" || return $?
         return 0
     fi
 
