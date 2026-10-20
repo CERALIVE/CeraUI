@@ -29,6 +29,11 @@ for (const restart of [false, true]) {
 				syncOrchestratorDirectory(path);
 			},
 		});
+		const restartDeps = {
+			osAttemptIntentStore: store,
+			// OS intent recovery has no package attempt; never query host RAUC for it.
+			readPackageAttempt: async () => undefined,
+		};
 		await f.offer({ osAttemptIntentStore: store });
 		const before = getOrchestratorState();
 		await installUpdatesNow();
@@ -38,7 +43,7 @@ for (const restart of [false, true]) {
 		if (restart) {
 			await expect(
 				f.restart({
-					osAttemptIntentStore: store,
+					...restartDeps,
 					proveOsWriterQuiescent: async () => false,
 				}),
 			).rejects.toThrow();
@@ -52,7 +57,7 @@ for (const restart of [false, true]) {
 		expect(f.effects.stages).toBe(0);
 		expect(store.read()?.phase).toBe("publishing");
 		fault = false;
-		if (restart) await f.restart({ osAttemptIntentStore: store });
+		if (restart) await f.restart(restartDeps);
 		else await runOrchestratorTick();
 		expect(store.read()).toBeNull();
 		allowCellularOnce("different-candidate");

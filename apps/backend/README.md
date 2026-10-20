@@ -230,6 +230,13 @@ cancelled earlier fixture's readiness promise. The config-boot backoff case
 followed by the one-reload preservation-retry case reproduces that ordering;
 archive bytes, notice count, write count and retry cadence stay asserted.
 
+The OS intent publication-admission restart fixture supplies its own absent
+package-attempt provenance through `readPackageAttempt`. Its synthetic OS slot
+readers do not override the default package reader's closed-over RAUC command;
+calling that host command spends the test guard on unrelated device observation.
+The real intent/agent files, fsync fault, restart refusal and repaired admission
+remain asserted with the unchanged test timeout.
+
 The held-deadline acquisition fixture spends its original 10,000 ms injected
 budget at the first polling sleep after a real inspection and failed ownership
 observation. It asserts that exact expenditure and one polling sleep instead of
