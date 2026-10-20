@@ -8,7 +8,7 @@
 	"license": "GPL-3.0",
 	"scripts": {
 		"dev": "vite",
-		"build": "bun run generate:i18n && bun ../../scripts/ci/build-warnings-gate.mjs",
+		"build": "bun run generate:i18n && bun ../../scripts/ci/build-warnings-gate.mjs && bun ../../scripts/ci/notification-bundle.ts",
 		"build:federation": "bun run generate:i18n && vite build --config vite.federation.config.ts",
 		"preview": "vite preview",
 		"check": "bun run generate:i18n && svelte-check --tsconfig ./tsconfig.app.json --fail-on-warnings",

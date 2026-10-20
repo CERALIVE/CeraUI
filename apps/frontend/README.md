@@ -92,6 +92,12 @@ bun run --filter frontend build
 
 Output goes to `dist/`.
 
+Production notification coverage [EXISTS]: every SPA build executes the emitted
+namespace functions for all backend notification keys in all ten locales. The
+notification resolver also has real-facade unit coverage, without an injected
+translation map. Cached packaging builds must pass the same artifact guard.
+See [the guard contract](../../scripts/ci/NOTIFICATION-BUNDLE.md).
+
 ### Other Commands
 
 The separately hosted Encoder/Audio/Server bundles are built with

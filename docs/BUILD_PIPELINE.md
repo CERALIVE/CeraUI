@@ -381,3 +381,18 @@ All builds include metadata in `build-info.json`:
   "architecture": "arm64"
 }
 ```
+# Notification bundle coverage [EXISTS]
+
+The frontend build runs `scripts/ci/notification-bundle.ts` on its real
+`dist/public/assets` output; the existing CI/release build gates inherit this
+check. Debian/system packaging also checks a restored frontend cache before
+accepting it, even when its input hash matches. The release-package contract
+suite runs the scanner tests and cache-path refusal/acceptance test.
+
+The guard derives complete notification keys from backend production source and
+executes the built message functions for every shipped locale, comparing against
+the catalogs with deterministic interpolation inputs. Missing keys or mismatched
+text fail the build; source-only registry tests are not a substitute. See the
+[guard's coverage and layout contract](../scripts/ci/NOTIFICATION-BUNDLE.md).
+This does not prove deployed static-file or browser-cache provenance. No labels
+or translations change, so EN/es-419 user documentation is unaffected.
