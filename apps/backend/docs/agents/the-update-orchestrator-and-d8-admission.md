@@ -200,7 +200,11 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
   successful mirror can separately supersede a recorded sync failure. Unknown
   history remains operator-only. Both use fresh proof, CONTROL and the shared
   update flock. Package recovery additionally holds the four standard APT/dpkg
-  OFD locks from first read through publication and refuses nonempty audit stderr,
+   OFD locks from first read through publication using inline Perl/direct fcntl,
+   restricted to Linux little-endian x86_64/aarch64 LP64. Its read-only collection
+   has one 30-second budget; expiry aborts without publishing, never unlocks
+   underneath cleanup/publication. Recheck holder ownership after awaited plan
+   cleanup. It refuses nonempty audit stderr,
   never absence-only success or stale-plan replay. Full rules are at
   `docs/UPDATE-RECOVERY.md`:
   `/usr/sbin/ceralive-update-recover` is a separately packaged root-only local

@@ -83,26 +83,37 @@ export async function lockFixture() {
 	};
 }
 
-// Independent contender: OFD locks conflict with dpkg's POSIX locks, not flock().
+// Independent dpkg-style POSIX contender, not the production OFD program.
+export function packageWriterArgv(path: string, mode = "probe"): string[] {
+	return [
+		"/usr/bin/perl",
+		"-e",
+		String.raw`
+use strict;
+use warnings;
+use Fcntl qw(O_RDWR F_SETLK F_SETLKW F_WRLCK SEEK_SET);
+my ($mode, $path) = @ARGV;
+sysopen(my $fd, $path, O_RDWR) or die "open: $!";
+my $lock = pack('s<s<x4q<q<l<x4', F_WRLCK, SEEK_SET, 0, 0, 0);
+fcntl($fd, $mode eq 'wait' ? F_SETLKW : F_SETLK, $lock) or exit 75;
+if ($mode eq 'hold') {
+  $| = 1;
+  print "ready\n";
+  while (sysread(STDIN, my $buffer, 4096)) {}
+}
+`,
+		mode,
+		path,
+	];
+}
+
 export function compete(path: string): number {
 	// Publication is synchronous; the bounded real child must finish inside it.
-	return Bun.spawnSync(
-		[
-			"/usr/bin/flock",
-			"--fcntl",
-			"-n",
-			"-E",
-			"75",
-			"-x",
-			path,
-			"/usr/bin/true",
-		],
-		{
-			timeout: 2_000,
-			stdout: "pipe",
-			stderr: "pipe",
-		},
-	).exitCode;
+	return Bun.spawnSync(packageWriterArgv(path), {
+		timeout: 2_000,
+		stdout: "pipe",
+		stderr: "pipe",
+	}).exitCode;
 }
 
 export async function recoverWith(port: FailedRecoveryPort) {

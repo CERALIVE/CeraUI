@@ -414,8 +414,14 @@ stdout and exactly empty stderr, and an empty dpkg updates directory permit idle
 with fresh package discovery due. The locks are nonblocking, acquired before the
 first state/evidence read and held through durable/wire/notice publication, so
 ordinary external fcntl writers cannot enter between proof and publication. Any
-refusal defers recovery; finally closes and reaps the pipe-owned holder, including
-on errors. Backend death closes its pipe. Writers bypassing these fixed-inode
+refusal defers recovery; finally closes and reaps the pipe-owned inline Perl
+holder, including on errors. Direct fcntl acquisition admits only little-endian
+Linux x86_64/aarch64 LP64; unsupported platforms refuse. The read-only state and
+consistency collection share a 30-second budget; late results never authorize
+recovery. Cleanup/publication retain their lease through completion or refusal,
+without a timer unlocking underneath them. Backend death closes its pipe.
+Holder loss during the final awaited plan cleanup also refuses publication,
+even if cleanup completed. Writers bypassing these fixed-inode
 locks remain outside the contract. The
 old pending plan is strictly read and cleared, not replayed; no package success
 or bad candidate is inferred. Same-boot/same-slot or missing/read-failed proof

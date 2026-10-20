@@ -3,9 +3,10 @@ import type { SlotSyncProbeState } from "./lock.ts";
 import { notifyUpdate } from "./notifications.ts";
 import type { OsStageControlLease } from "./os-stage-control-lease.ts";
 import {
-	type PackageRecoveryEvidence,
-	packageRecoveryProven,
-} from "./package-recovery-evidence.ts";
+	collectPackageRecovery,
+	type PackageCollectionClock,
+} from "./package-recovery-collection.ts";
+import type { PackageRecoveryEvidence } from "./package-recovery-evidence.ts";
 import { acquirePackageRecoveryLocks } from "./package-recovery-lock.ts";
 import { toPersisted } from "./persistence.ts";
 import { reduceOrchestrator } from "./reducer.ts";
@@ -24,6 +25,7 @@ export interface FailedRecoveryPort {
 	readonly acquireControl: () => Promise<OsStageControlLease>;
 	readonly acquireUpdateLock: () => Promise<OsStageControlLease>;
 	readonly acquirePackageLocks?: () => Promise<OsStageControlLease>;
+	readonly packageCollectionClock?: PackageCollectionClock;
 	readonly readPersisted: () => Promise<OrchestratorState | null>;
 	readonly readPackageEvidence: (
 		locks: OsStageControlLease,
@@ -57,22 +59,19 @@ export async function recoverFailedUpdate(
 		? await (port.acquirePackageLocks ?? acquirePackageRecoveryLocks)()
 		: null;
 	if (packageLocks && !packageLocks.held()) return false;
-	const persisted = await port.readPersisted();
-	if (
-		!persisted ||
-		!isDeepStrictEqual(toPersisted(before), toPersisted(persisted))
-	)
-		return false;
 	if (packages) {
 		if (
 			!packageLocks ||
-			!packageRecoveryProven(
-				before,
-				await port.readPackageEvidence(packageLocks),
-			)
+			!(await collectPackageRecovery(port, before, packageLocks))
 		)
 			return false;
 	} else {
+		const persisted = await port.readPersisted();
+		if (
+			!persisted ||
+			!isDeepStrictEqual(toPersisted(before), toPersisted(persisted))
+		)
+			return false;
 		if (!syncUnitClean(await port.inspectSync())) return false;
 		const evidence = await port.readSyncEvidence();
 		const slots = await port.readSlots();

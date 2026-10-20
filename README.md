@@ -87,6 +87,10 @@ dpkg evidence proves consistency and recorded attempt provenance proves a reboot
 or slot change. Package recovery now holds the four standard APT/dpkg fcntl lock
 inodes through evidence collection and recovered-state publication, excluding
 ordinary external writers; any nonempty audit stderr also refuses recovery.
+The pipe-owned holder calls fcntl through inline Perl on Linux little-endian
+x86_64/aarch64 LP64, independently of util-linux locking options. A 30-second
+read-only collection budget refuses late evidence without unlocking underneath
+cleanup/publication; holder loss after pending cleanup still refuses recovery.
 Missing historical provenance remains operator-only. A recorded
 mirror failure needs a later matching receipt, clean unit and both slots good.
 Neither path replays old work or calls an uncertain install successful; each

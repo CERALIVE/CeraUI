@@ -776,7 +776,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		file: "modules/system/update-orchestrator/package-recovery-lock.ts",
 		symbol: "acquirePackageRecoveryLocks",
 		command:
-			"[bash, --noprofile, --norc, -c, fixed-OFD-holder, package-lock-paths...]",
+			"[/usr/bin/perl, -e, fixed-Linux-LP64-OFD-holder, --, package-lock-paths...]",
 		class: "supervised-worker",
 		contract: {
 			timed: false,

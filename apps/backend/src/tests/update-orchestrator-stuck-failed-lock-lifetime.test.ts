@@ -4,6 +4,7 @@ import { acquirePackageRecoveryLocks } from "../modules/system/update-orchestrat
 import {
 	compete,
 	lockFixture,
+	packageWriterArgv,
 	recoverWith,
 } from "./helpers/package-recovery-lock-fixture.ts";
 
@@ -66,6 +67,61 @@ for (const boundary of [
 		}
 	});
 }
+
+test("holder loss during awaited pending cleanup cannot publish stale consistency", async () => {
+	// Given a real holder and clean evidence before the final pending-plan await.
+	const f = await lockFixture();
+	let holder: Subprocess<"pipe", "pipe", "pipe"> | undefined;
+	let writer: Subprocess<"pipe", "pipe", "pipe"> | undefined;
+	try {
+		// When that await loses the holder and a POSIX writer acknowledges ownership.
+		const recovered = await recoverWith({
+			...f.port,
+			acquirePackageLocks: () =>
+				acquirePackageRecoveryLocks(f.paths, {
+					spawn: (argv) => {
+						holder = Bun.spawn(argv, {
+							stdin: "pipe",
+							stdout: "pipe",
+							stderr: "pipe",
+						});
+						return holder;
+					},
+				}),
+			clearPending: async () => {
+				await f.port.clearPending();
+				if (!holder) throw new TypeError("missing recovery holder");
+				holder.kill("SIGKILL");
+				await holder.exited;
+				const path = f.paths[0];
+				if (!path) throw new TypeError("missing private lock inode");
+				writer = Bun.spawn(packageWriterArgv(path, "hold"), {
+					stdin: "pipe",
+					stdout: "pipe",
+					stderr: "pipe",
+					timeout: 5_000,
+				});
+				const reader = writer.stdout.getReader();
+				try {
+					expect(new TextDecoder().decode((await reader.read()).value)).toBe(
+						"ready\n",
+					);
+				} finally {
+					reader.releaseLock();
+				}
+			},
+		});
+		// Then completed cleanup may remain, but neither persistence nor adoption runs.
+		expect({ recovered, effects: f.effects }).toEqual({
+			recovered: false,
+			effects: ["clear"],
+		});
+	} finally {
+		await writer?.stdin.end();
+		await writer?.exited;
+		await f.close();
+	}
+});
 
 test("missing lock path refuses readiness and releases already acquired locks", async () => {
 	// Given valid predecessors followed by an unavailable lock file.
@@ -169,10 +225,11 @@ await new Response(Bun.stdin.stream()).text();
 		await backend.exited;
 		// Then an independent waiting taker acquires on EOF, without a timed sleep.
 		for (const path of f.paths) {
-			const taker = Bun.spawn(
-				["/usr/bin/flock", "--fcntl", "-w", "2", "-x", path, "/usr/bin/true"],
-				{ stdout: "pipe", stderr: "pipe", timeout: 3_000 },
-			);
+			const taker = Bun.spawn(packageWriterArgv(path, "wait"), {
+				stdout: "pipe",
+				stderr: "pipe",
+				timeout: 3_000,
+			});
 			expect(await taker.exited).toBe(0);
 		}
 	} finally {

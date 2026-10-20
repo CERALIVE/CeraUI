@@ -3,34 +3,23 @@ import { packageLocksIdle } from "../modules/system/update-orchestrator/package-
 import {
 	compete,
 	lockFixture,
+	packageWriterArgv,
 	recoverWith,
 } from "./helpers/package-recovery-lock-fixture.ts";
 
 for (const index of [0, 1, 2, 3])
-	test(`external OFD writer on lock ${index} acquired after idle observation leaves failure untouched`, async () => {
+	test(`external POSIX writer on lock ${index} acquired after idle observation leaves failure untouched`, async () => {
 		// Given an idle observation followed by a readiness-acknowledged external writer.
 		const f = await lockFixture();
 		const path = f.paths[index];
 		if (!path) throw new TypeError("missing fixture path");
 		expect(await packageLocksIdle(f.paths)).toBe(true);
-		const holder = Bun.spawn(
-			[
-				"/usr/bin/flock",
-				"--fcntl",
-				"-n",
-				"-x",
-				path,
-				"/bin/bash",
-				"-c",
-				"printf 'ready\\n'; read -r release",
-			],
-			{
-				stdin: "pipe",
-				stdout: "pipe",
-				stderr: "pipe",
-				timeout: 10_000,
-			},
-		);
+		const holder = Bun.spawn(packageWriterArgv(path, "hold"), {
+			stdin: "pipe",
+			stdout: "pipe",
+			stderr: "pipe",
+			timeout: 10_000,
+		});
 		try {
 			const reader = holder.stdout.getReader();
 			try {

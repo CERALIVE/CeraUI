@@ -14,7 +14,7 @@ then uses the same recovery path. Fresh reads must prove all of the following:
 
 - the fixed install unit is positively absent, not merely unobserved;
 - no APT/dpkg process or concurrent update operation is present;
-- recovery holds nonblocking exclusive OFD (`flock --fcntl`) locks on
+- recovery holds nonblocking exclusive OFD (`F_OFD_SETLK`) locks on
   `/var/lib/dpkg/lock-frontend`, `/var/lib/dpkg/lock`, `/var/lib/apt/lists/lock`
   and `/var/cache/apt/archives/lock` before the first persisted-state/evidence
   read, through pending-plan clearance, durable state publication and wire/notice
@@ -68,23 +68,45 @@ the same keyed notice without duplicating it. Package copy asks the operator to 
 Check again, not to assume the interrupted install succeeded. All ten catalogs
 carry the new keys. Any failed probe, lock acquisition, pending-plan read/clear or
 state write withholds clearance; a later tick reads again. The local recovery tool
-is unchanged for unproven history. A small supervised shell retains all four open
-descriptions and acknowledges readiness only after every lock succeeds. Readiness
+is unchanged for unproven history. A supervised inline `/usr/bin/perl -e` program
+retains all four open descriptions and acknowledges readiness only after every
+lock succeeds. It calls fcntl directly, with no util-linux option dependency.
+Only Linux x86_64/aarch64 little-endian LP64 Perl builds are admitted; other
+platforms refuse. The explicit `s<s<x4q<q<l<x4` packing follows the 32-byte Linux
+UAPI layout (shorts at 0/2, signed 64-bit offsets at 8/16, signed PID at 24,
+zero padding). OFD command 37 uses `l_pid=0`, a whole-file write lock from
+`SEEK_SET`; open uses no-follow/nonblocking flags and requires a regular file.
+The program is bundled in the backend, not an additional installed helper.
+Readiness
 has a two-second bound; any spawn/open/lock/handshake failure retains failure for
 the next tick. Cleanup closes its private stdin and uses bounded TERM/KILL shutdown,
 awaiting exit in every acquired-lease finally, including collection or publication
 errors. Backend death closes that pipe, so a restart cannot inherit a stale holder.
-Final publication fences require the package lease still held. Its held proof,
+Final publication fences require the package lease still held, including after
+the awaited pending-plan cleanup. If the holder dies there, completed cleanup
+may remain completed but recovered-state persistence/adoption is refused. Its held proof,
 not an empty lock-table sample that would reject its own locks, supplies lock-idle
 authority during collection. Mirror recovery keeps its existing lock protocol.
+
+The package's read-only persisted-state and consistency collection share one
+30-second monotonic budget. Timeout aborts recovery before pending-plan cleanup;
+the acquired-lease finally then disposes/reaps the holder. A late read cannot
+publish recovery or begin the next collection step after expiry. Submitted
+read-only I/O is not forcibly revoked and may finish after abort. This timer
+never releases locks underneath an ongoing publication. Pending-plan cleanup and
+synchronous durable/wire publication are outside this collection budget and
+retain the locks until completion or refusal; stalled kernel I/O and synchronous
+fsync still prevent a hard bound on the whole lease lifetime.
 
 This excludes ordinary external writers, including APT timers, only while those
 fixed-inode fcntl locks are held; it neither masks timers nor promises continuing
 consistency after release. Privileged writers disabling locking, using alternative
 database/cache paths, replacing lock inodes or directly modifying files are not
-excluded. Host tests exercise both real-OFD race directions, every lock refusal,
+excluded. Host tests exercise real OFD/POSIX conflicts in both race directions, every lock refusal,
 publication-boundary contention, collector/cleanup/write/lease failures, timeout,
-backend SIGKILL, raw audit derivation, restart twice and the state-write crash boundary.
+backend SIGKILL, final-cleanup holder loss, collection expiry/late data, unsupported
+Perl build metadata, a clean environment without a usable lock CLI, raw audit
+derivation, restart twice and the state-write crash boundary.
 Installed systemd/APT, both-board crash/power-cut and rendered-notice proof remain owed.
 
 ## Recorded OS rollback recovery [PARTIAL — host-proven, bench re-drill owed]

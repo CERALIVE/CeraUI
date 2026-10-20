@@ -9,16 +9,35 @@ export const PACKAGE_RECOVERY_LOCKS = [
 	"/var/cache/apt/archives/lock",
 ] as const;
 
-// The shell retains each open description after flock exits. EOF on the backend's
-// private stdin releases every lock even after SIGKILL; no detached holder survives.
-const HOLDER = `
-for path in "$@"; do
-  [[ -f "$path" && ! -L "$path" ]] || exit 74
-  exec {fd}<>"$path" || exit 74
-  /usr/bin/flock --fcntl --exclusive --nonblock "$fd" || exit 75
-done
-printf 'locked\\n'
-IFS= read -r release || :
+// Linux x86_64/aarch64 LP64 UAPI: short@0/2, off_t@8/16, pid_t@24, size32.
+// OFD ownership survives unrelated closes; it conflicts with dpkg's POSIX locks.
+const HOLDER = String.raw`
+use strict;
+use warnings;
+use Config;
+use Fcntl qw(O_RDWR O_NOFOLLOW O_NONBLOCK F_WRLCK SEEK_SET);
+exit 78 unless $^O eq 'linux'
+  && $Config{archname} =~ /\A(?:x86_64|aarch64)(?:-|$)/
+  && $Config{ptrsize} == 8 && $Config{longsize} == 8
+  && $Config{ivsize} == 8 && $Config{lseeksize} == 8
+  && $Config{shortsize} == 2 && $Config{intsize} == 4
+  && $Config{byteorder} eq '12345678';
+@ARGV or exit 74;
+my @locks;
+for my $path (@ARGV) {
+  sysopen(my $fd, $path, O_RDWR | O_NOFOLLOW | O_NONBLOCK) or exit 74;
+  -f $fd or exit 74;
+  my $lock = pack('s<s<x4q<q<l<x4', F_WRLCK, SEEK_SET, 0, 0, 0);
+  length($lock) == 32 or exit 78;
+  fcntl($fd, 37, $lock) or exit 75;
+  push @locks, $fd;
+}
+syswrite(STDOUT, "locked\n") == 7 or exit 74;
+while (1) {
+  my $count = sysread(STDIN, my $buffer, 4096);
+  defined($count) or exit 74;
+  last if $count == 0;
+}
 `;
 
 export class PackageRecoveryLockError extends Error {
@@ -36,15 +55,7 @@ export async function acquirePackageRecoveryLocks(
 ): Promise<OsStageControlLease> {
 	let child: Subprocess<"pipe", "pipe", "pipe"> | undefined;
 	const handle = superviseWorker(
-		[
-			"/bin/bash",
-			"--noprofile",
-			"--norc",
-			"-c",
-			HOLDER,
-			"package-recovery-lock",
-			...paths,
-		],
+		["/usr/bin/perl", "-e", HOLDER, "--", ...paths],
 		{
 			startupTimeoutMs: options.startupTimeoutMs ?? 2_000,
 			spawn: (argv) => {
