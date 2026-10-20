@@ -167,6 +167,11 @@ child completion through that helper without the two-second startup kill timer.
 Genuine absence remains the only accepted default: separate negative controls
 must reject both invalid-presence-as-absence and absence-as-unknown regressions.
 
+The final-diagnostic live-child regression advances its existing injected polling
+clock to the original recovery deadline only after a real child proc read has
+completed. It still observes the live child and refuses a replacement writer,
+without repeating hundreds of physical proc scans merely to spend fake time.
+
 The selector and UID-pin network-namespace clients share schema-valid setup
 preparation with an explicit RK3588 fixture identity. Plain `bun` children do not
 inherit the test preload's setup mock; partial setup defaults omit required `hw`.
