@@ -224,6 +224,12 @@ of settlement, then awaits the harness's actual restart event before checking
 persist-before-exit. Settlement alone does not join the detached restart tail;
 the existing test hang guard and real state-file assertions remain unchanged.
 
+The config-reset notice fixture awaits background readiness only when its own
+boot returns `unavailable`. A synchronously completed boot must not join a
+cancelled earlier fixture's readiness promise. The config-boot backoff case
+followed by the one-reload preservation-retry case reproduces that ordering;
+archive bytes, notice count, write count and retry cadence stay asserted.
+
 The held-deadline acquisition fixture spends its original 10,000 ms injected
 budget at the first polling sleep after a real inspection and failed ownership
 observation. It asserts that exact expenditure and one polling sleep instead of
