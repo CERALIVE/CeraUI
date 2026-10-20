@@ -172,6 +172,13 @@ child completion through that helper without the two-second startup kill timer.
 Genuine absence remains the only accepted default: separate negative controls
 must reject both invalid-presence-as-absence and absence-as-unknown regressions.
 
+The setup transient-read matrix awaits dependency readiness in a fresh child for
+each fault before test execution. Closing its input starts the unchanged real
+setup import under the original five-second guard; no metadata read or retry
+occurs before that trigger. A measured starved source import spent 10.57 seconds
+before its first read, and bundling alone did not remove that runtime cost.
+Retry counts, typed refusals, actual values and byte preservation remain asserted.
+
 The final-diagnostic live-child regression advances its existing injected polling
 clock to the original recovery deadline only after a real child proc read has
 completed. It still observes the live child and refuses a replacement writer,

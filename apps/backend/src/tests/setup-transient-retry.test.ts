@@ -1,20 +1,19 @@
-import { expect, test } from "bun:test";
+/// <reference types="bun" />
+import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runTestCommand } from "./helpers/run-test-command.ts";
 
-test.each([
+const faults = [
 	"one-eio",
 	"persistent-eio",
 	"eagain",
 	"short",
 	"damaged",
 	"damaged-json",
-] as const)(
-	"required setup module retains authority through %s",
-	async (fault) => {
-		// Given real image metadata and a leaf-read fault in a fresh module process.
+] as const;
+const fixtures = await Promise.all(
+	faults.map(async (fault) => {
 		const root = mkdtempSync(join(tmpdir(), "setup-retry-"));
 		const bytes =
 			fault === "damaged"
@@ -25,6 +24,16 @@ test.each([
 		writeFileSync(join(root, "setup.json"), bytes);
 		const module = new URL("../modules/setup.ts", import.meta.url).pathname;
 		const script = `
+await Promise.all(${JSON.stringify([
+			new URL("../helpers/config-schemas.ts", import.meta.url).pathname,
+			new URL("../helpers/logger.ts", import.meta.url).pathname,
+			new URL(
+				"../modules/system/update-orchestrator/stored-state-file.ts",
+				import.meta.url,
+			).pathname,
+		])}.map(path=>import(path)));
+process.stdout.write('ready'+String.fromCharCode(10));
+await Bun.stdin.text();
 const {mock,spyOn}=await import('bun:test');
 const fs=await import('node:fs/promises'); const realOpen=fs.open;
 const waits=[]; let reads=0;
@@ -41,15 +50,46 @@ mock.module('node:fs/promises',()=>({...fs,open:async(...args)=>{
 try { const {setup}=await import(${JSON.stringify(module)}); console.log(JSON.stringify({loaded:true,reads,waits,hw:setup.hw,apt:setup.apt_update_enabled,engine:setup.cerastream_path})); }
 catch(e) { console.log(JSON.stringify({loaded:false,reads,waits,name:e.name,reason:e.reason,code:e.cause?.code})); }
 `;
+		const proc = Bun.spawn([process.execPath, "-e", script], {
+			cwd: root,
+			stdin: "pipe",
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		const stderr = new Response(proc.stderr).text();
+		const reader = proc.stdout.getReader();
+		const ready = await reader.read();
+		if (ready.done || new TextDecoder().decode(ready.value) !== "ready\n") {
+			proc.kill();
+			throw new Error(`setup fixture did not become ready: ${await stderr}`);
+		}
+		return { fault, root, bytes, proc, stderr, reader };
+	}),
+);
+afterAll(() => {
+	for (const f of fixtures) {
+		f.proc.kill();
+		rmSync(f.root, { recursive: true, force: true });
+	}
+});
+
+for (const { fault, root, bytes, proc, stderr, reader } of fixtures) {
+	test(`required setup module retains authority through ${fault}`, async () => {
+		// Given a fresh child whose dependencies are ready, but setup has not been read.
 		try {
 			// When the unchanged module-evaluation export is imported (sleep is injected).
-			const result = await runTestCommand([process.execPath, "-e", script], {
-				cwd: root,
-			});
-			expect(result.code).toBe(0);
-			const observed = JSON.parse(
-				result.stdout.trim().split("\n").at(-1) ?? "null",
-			);
+			proc.stdin.end();
+			const decoder = new TextDecoder();
+			let output = "";
+			for (;;) {
+				const chunk = await reader.read();
+				if (chunk.done) break;
+				output += decoder.decode(chunk.value, { stream: true });
+			}
+			output += decoder.decode();
+			const code = await proc.exited;
+			expect(code, await stderr).toBe(0);
+			const observed = JSON.parse(output.trim().split("\n").at(-1) ?? "null");
 			// Then transient errors recover actual values, while exhaustion/damage stays typed.
 			if (fault === "persistent-eio")
 				expect(observed).toEqual({
@@ -86,7 +126,8 @@ catch(e) { console.log(JSON.stringify({loaded:false,reads,waits,name:e.name,reas
 				});
 			expect(readFileSync(join(root, "setup.json"), "utf8")).toBe(bytes);
 		} finally {
-			rmSync(root, { recursive: true, force: true });
+			reader.releaseLock();
+			proc.kill();
 		}
-	},
-);
+	});
+}
