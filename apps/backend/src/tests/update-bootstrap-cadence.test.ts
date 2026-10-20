@@ -20,6 +20,7 @@ test("transient burst exhaustion keeps standalone recovery parked until later st
 	const c = startupCadenceClock();
 	const effects: string[] = [];
 	const f = runtimeFixture({
+		readPackageAttempt: async () => undefined,
 		startupRetryClock: c.clock,
 		recoverSoftwareUpdateIfRunning: async () => {
 			effects.push("orchestrator-recovery");

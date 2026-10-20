@@ -186,6 +186,12 @@ The child and parent retain their 20-second guards and all counter, route and
 rule assertions; protocol 241 keeps its existing launch path. This does not cure
 the separate 200 ms curl-before-packet race observed on protocol 241.
 
+The bootstrap cadence fixture explicitly supplies unavailable package-attempt
+provenance. Its startup retries no longer call host boot/RAUC readers through an
+inherited default; recovery ordering and durable phase assertions stay real.
+This local isolation does not alter other launched-intent fixtures or establish
+their stability under arbitrary host pressure.
+
 The final-diagnostic live-child regression advances its existing injected polling
 clock to the original recovery deadline only after a real child proc read has
 completed. It still observes the live child and refuses a replacement writer,
