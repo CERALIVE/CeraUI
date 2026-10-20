@@ -117,6 +117,10 @@ address-matched `list-devices` node; BlueALSA retains its capture-PCM oracle.
 
 ### Type-check
 
+The managed subprocess signal field derives from Bun's `Subprocess` type.
+Numeric signals remain terminal under the existing strict-null liveness checks;
+no signal conversion or process-lifecycle behavior changes with the 1.4.3 typings.
+
 ```bash
 bun run check
 ```
@@ -127,8 +131,9 @@ bun run check
 bun run test
 ```
 
-The package's `test` script runs `bun test --parallel` on Bun 1.4.2, adopted
-after five smoke runs and twenty consecutive clean full-suite runs. Files run
+The package's `test` script runs `bun test --parallel` on the pinned Bun 1.4.3.
+Parallel execution was adopted on 1.4.2 after five smoke runs and twenty consecutive
+clean full-suite runs. Files run
 in isolated worker globals across worker processes, but filesystem paths are still shared. Tests that
 persist fixtures must use per-file `mkdtemp` roots and the existing path setters
 (runtime config: `setConfigFilePath`). Before production ownership initializes,
