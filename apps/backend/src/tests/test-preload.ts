@@ -1,8 +1,9 @@
-import { afterAll, mock } from "bun:test";
+import { afterAll, beforeEach, mock, spyOn } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as modemControl from "@ceralive/modem-control";
 import { loadJsonConfigSync } from "../helpers/config-loader.ts";
 import {
 	SETUP_CONFIG_DEFAULTS,
@@ -25,6 +26,19 @@ mock.module("../modules/setup.ts", () => ({ setup }));
 // A test process models a booted backend whose stream reconciliation returned;
 // suites that exercise the pre-reconciliation window close the latch themselves.
 setStreamReconciliationCompletedForTest(true);
+
+const createUsbEnumerator = modemControl.createUsbEnumerator;
+function isolateModemEnumeration(): void {
+	spyOn(modemControl, "createUsbEnumerator").mockImplementation((deps) =>
+		createUsbEnumerator({
+			...deps,
+			readUdevDatabase: deps?.readUdevDatabase ?? (async () => ""),
+		}),
+	);
+}
+// Isolate both implicit USB readers without replacing parsing or journal persistence.
+isolateModemEnumeration();
+beforeEach(isolateModemEnumeration);
 
 afterAll(async () => {
 	await Bun.sleep(0);

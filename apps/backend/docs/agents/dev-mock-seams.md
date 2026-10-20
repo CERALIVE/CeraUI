@@ -87,6 +87,17 @@ module mock. `stopWifiUpdateLoopForTest()` cancels every delayed Wi-Fi refresh
 scheduled through `scheduleWifiUpdate()` and resets the unavailable-device retry
 window. Tests that start that loop call the stop seam in `afterEach`.
 
+The preload also spies on the published `createUsbEnumerator` factory, supplying
+an empty `readUdevDatabase` only when the caller did not supply one. Both implicit
+USB-mode refresh and mutation-block presence reads stay off the host bus, even
+after their module-specific reader resets; parsing and journal persistence stay
+real. The spy is installed before imports and reinstalled in `beforeEach` after
+test-owned `mock.restore()` teardown. Explicit fixture readers take precedence.
+A live-enumeration test must deliberately restore the factory spy inside its
+body before calling it; ordinary fixtures must never inherit host USB identity.
+`modem-test-enumeration.test.ts` rejects unintended spawning and proves that an
+explicit database still produces its own parsed identity.
+
 Plain Bun child fixtures do not inherit that module mock. Both update-transport
 netns clients use `fixtures/update-transport-setup.ts` to write a complete typed
 setup document with explicit `hw: "rk3588"` before changing cwd and importing

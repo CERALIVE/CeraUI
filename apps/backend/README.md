@@ -313,6 +313,15 @@ observation. It asserts that exact expenditure and one polling sleep instead of
 performing 100 physical polling intervals; real private-file settlement remains
 required, so this does not bound arbitrary storage or host scheduling latency.
 
+The backend test preload isolates default modem USB enumeration through the
+published `createUsbEnumerator({ readUdevDatabase })` seam. Unspecified readers
+receive an empty fixture database, including implicit USB-mode refresh and mutation
+presence reads; explicit fixture readers retain precedence and use the real parser.
+The spy is reinstalled before each test after `mock.restore()` teardown. A test
+deliberately exercising live enumeration must restore that factory spy inside its
+body first. Journal persistence, lifecycle admission and test guards remain real
+and unchanged; this is host test isolation, not hardware qualification.
+
 The selector and UID-pin network-namespace clients share schema-valid setup
 preparation with an explicit RK3588 fixture identity. Plain `bun` children do not
 inherit the test preload's setup mock; partial setup defaults omit required `hw`.
