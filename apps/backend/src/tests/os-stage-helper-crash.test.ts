@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterAll, afterEach, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,7 +13,6 @@ import { cleanupRecovery } from "./helpers/os-recovery-harness.ts";
 import { harness } from "./helpers/os-stage-startup-harness.ts";
 
 useSessionOwnerForFile();
-
 afterEach(cleanupRecovery);
 
 async function ready(
@@ -34,13 +33,59 @@ async function ready(
 	}
 }
 
-test.each(["restart request", "after proof", "during wait", "successful CLI"])(
-	"SIGKILL at %s preserves guardian/private ownership and startup never guesses install success",
-	async (boundary) => {
-		// Given real independent flock ownership and a disk-backed producer record.
-		const root = await mkdtemp(join(tmpdir(), "os-helper-crash-"));
-		const directory = join(root, "job");
-		const lock = join(root, "lock");
+type CrashFixture = {
+	readonly boundary: string;
+	readonly root: string;
+	readonly directory: string;
+	readonly lock: string;
+	readonly child: Bun.Subprocess<"pipe", "pipe", "pipe">;
+};
+const fixtures: CrashFixture[] = [];
+afterAll(async () => {
+	for (const { child, root } of fixtures) {
+		child.kill();
+		await child.exited;
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+// Import each fresh VM before the crash guard; stdin still withholds all stage work.
+for (const boundary of [
+	"restart request",
+	"after proof",
+	"during wait",
+	"successful CLI",
+]) {
+	const root = await mkdtemp(join(tmpdir(), "os-helper-crash-"));
+	const directory = join(root, "job");
+	const child = Bun.spawn(
+		[
+			process.execPath,
+			"test",
+			fileURLToPath(
+				new URL("./helpers/os-stage-helper-crash-child.ts", import.meta.url),
+			),
+		],
+		{
+			cwd: fileURLToPath(new URL("../../", import.meta.url)),
+			env: {
+				...process.env,
+				OS_STAGE_CRASH_DIRECTORY: directory,
+				OS_STAGE_CRASH_BOUNDARY: boundary,
+			},
+			stdin: "pipe",
+			stdout: "pipe",
+			stderr: "pipe",
+		},
+	);
+	fixtures.push({ boundary, root, directory, lock: join(root, "lock"), child });
+	await ready(child.stdout, "OS_STAGE_CHILD_LOADED");
+}
+
+for (const { boundary, directory, lock, child } of fixtures) {
+	test(`SIGKILL at ${boundary} preserves guardian/private ownership and startup never guesses install success`, async () => {
+		// Given real independent flock ownership and a fresh, import-ready producer VM.
+		expect(await readOsStageJob(directory, process.getuid?.() ?? 0)).toBeNull();
 		const guardian = Bun.spawn(
 			[
 				"flock",
@@ -52,33 +97,9 @@ test.each(["restart request", "after proof", "during wait", "successful CLI"])(
 			],
 			{ stdin: "pipe", stdout: "pipe", stderr: "pipe" },
 		);
-		let child: ReturnType<typeof Bun.spawn> | undefined;
 		try {
 			await ready(guardian.stdout, "GUARD_READY");
-			child = Bun.spawn(
-				[
-					process.execPath,
-					"test",
-					fileURLToPath(
-						new URL(
-							"./helpers/os-stage-helper-crash-child.ts",
-							import.meta.url,
-						),
-					),
-				],
-				{
-					cwd: fileURLToPath(new URL("../../", import.meta.url)),
-					env: {
-						...process.env,
-						OS_STAGE_CRASH_DIRECTORY: directory,
-						OS_STAGE_CRASH_BOUNDARY: boundary,
-					},
-					stdout: "pipe",
-					stderr: "pipe",
-				},
-			);
-			if (!(child.stdout instanceof ReadableStream))
-				throw new Error("child stdout unavailable");
+			child.stdin.end();
 			await ready(child.stdout, "OS_STAGE_CRASH_READY");
 			// When the backend is killed, not gracefully disposed or freshly recreated in memory.
 			child.kill("SIGKILL");
@@ -125,11 +146,10 @@ test.each(["restart request", "after proof", "during wait", "successful CLI"])(
 				"release",
 			]);
 		} finally {
-			child?.kill();
+			child.kill();
+			await child.exited;
 			guardian.kill();
 			await guardian.exited;
-			await rm(root, { recursive: true, force: true });
 		}
-	},
-	15_000,
-);
+	}, 15_000);
+}

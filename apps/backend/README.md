@@ -258,6 +258,15 @@ deletion or flush escaped surrendered CONTROL. Scheduler delay cannot consume
 that fixture budget before the query starts; production deadlines and all other
 routing cases are unchanged. This is a test-clock repair, not board qualification.
 
+The crash-helper regressions [EXISTS] load each fresh source child VM during
+fixture construction and await its import-ready line. Stdin withholds all stage
+work until that test has acquired its independent flock guardian; no job may
+exist before that release. Actual stage readiness, SIGKILL/reap, lock contention,
+private-record and fresh-startup assertions retain the original 15-second parent
+guard and 60-second child guard. Import preparation is outside the per-test guard
+and depends on the campaign/job outer bound if loading hangs. This isolates the
+measured child-import cost without claiming installed-backend latency or success.
+
 Held guardian/CLI/provenance release proofs use the same controlled 40 ms expiry.
 The production-owner case still prepares and reads real private files and checks
 that a late guardian response writes neither publication nor a release marker.

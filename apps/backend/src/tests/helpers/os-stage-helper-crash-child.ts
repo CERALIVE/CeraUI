@@ -9,6 +9,8 @@ import { harness } from "./os-stage-run-harness.ts";
 import { manifest } from "./os-stage-run-inputs.ts";
 
 useSessionOwnerForFile();
+process.stdout.write("OS_STAGE_CHILD_LOADED\n");
+await Bun.stdin.text();
 
 test("isolated backend crash boundary", async () => {
 	const directory = process.env.OS_STAGE_CRASH_DIRECTORY;
