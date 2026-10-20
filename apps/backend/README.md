@@ -212,6 +212,13 @@ the existing liveness source seam and restore it after each case; ambient stream
 status cannot replace the fault or completion they intend to exercise. Sentinel
 and stream-admission suites retain their real liveness bindings and assertions.
 
+Pending-package-success continuation fixtures also own an explicit idle input.
+Their held network/capability/pre-clean ports exercise the pending-success fence,
+not stream admission. Ambient live or unbound state must not refuse the initial
+request before that boundary or strand a command-entry promise. The existing
+per-case binding restores the default after each test; command, latch, launch
+and armed-marker assertions and test hang guards are unchanged.
+
 The package-completion ordering regression holds its commit hook independently
 of settlement, then awaits the harness's actual restart event before checking
 persist-before-exit. Settlement alone does not join the detached restart tail;

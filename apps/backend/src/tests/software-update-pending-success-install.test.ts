@@ -2,8 +2,11 @@ import { expect, spyOn, test } from "bun:test";
 import * as updates from "../modules/system/software-updates.ts";
 import * as capabilities from "../modules/system/update-capabilities.ts";
 import { pendingPackageSuccess } from "../modules/system/update-orchestrator/pending-success-fence.ts";
+import { useIdleStreamLivenessForFile } from "./helpers/bind-session-owner.ts";
 import { pendingSuccessFixture } from "./helpers/pending-success-fixture.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
+
+useIdleStreamLivenessForFile();
 
 for (const boundary of ["capabilities", "pre-clean"] as const) {
 	test(`legacy install releases its latch without new commands when success arrives during ${boundary}`, async () => {
