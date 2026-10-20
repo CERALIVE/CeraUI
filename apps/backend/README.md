@@ -156,6 +156,12 @@ proof and single-dispatch assertions remain the contract; Bun's unchanged
 per-test timeout is only a hang detector. This test repair does not establish
 full-suite load stability or resolve Bun worker crashes.
 
+The private no-writer FIFO startup regressions use the shared async test-command
+helper to await child exit and drain both pipes. They retain the default Bun
+test hang guard, rather than killing a valid child after two seconds of import
+or scheduling delay. Removing nonblocking opens must still fail the tests; FIFO
+refusal, CONTROL disposal, closed admission and inode preservation remain required.
+
 The selector and UID-pin network-namespace clients share schema-valid setup
 preparation with an explicit RK3588 fixture identity. Plain `bun` children do not
 inherit the test preload's setup mock; partial setup defaults omit required `hw`.

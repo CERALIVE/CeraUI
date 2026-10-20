@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { lstatSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawn } from "bun";
+import { runTestCommand } from "./helpers/run-test-command.ts";
 
 test.each(["job.json", "token", "ready", "release", "maintenance"] as const)(
 	"rejects no-writer %s FIFO promptly and disposes startup CONTROL",
@@ -9,7 +11,7 @@ test.each(["job.json", "token", "ready", "release", "maintenance"] as const)(
 		// Given private provenance containing a real FIFO with no writer.
 		const dir = mkdtempSync(join(tmpdir(), "ceraui-private-fifo-"));
 		const path = join(dir, name === "maintenance" ? "agent.json" : name);
-		const fifo = Bun.spawn(["mkfifo", "-m", "600", path]);
+		const fifo = spawn(["mkfifo", "-m", "600", path]);
 		expect(await fifo.exited).toBe(0);
 		const before = lstatSync(path);
 		try {
@@ -24,15 +26,12 @@ test.each(["job.json", "token", "ready", "release", "maintenance"] as const)(
 				}); console.log(JSON.stringify({ refused: false, disposed })); }
 				catch (error) { console.log(JSON.stringify({ refused: true, disposed, ready: osUpdateAdmissionReady(), cause: error.cause?.name ?? error.name })); }
 			`;
-			// When the production reader runs inside actual startup, bounded by its parent.
-			const child = Bun.spawn([process.execPath, "--eval", source], {
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			const timer = setTimeout(() => child.kill(), 2000);
-			const output = await new Response(child.stdout).text();
-			const exit = await child.exited;
-			clearTimeout(timer);
+			// When the production reader runs inside actual startup.
+			const { stdout: output, code: exit } = await runTestCommand([
+				process.execPath,
+				"--eval",
+				source,
+			]);
 			// Then refusal disposes CONTROL, leaves admission closed and preserves provenance.
 			expect(exit).toBe(0);
 			expect(JSON.parse(output.trim().split("\n").at(-1) ?? "")).toMatchObject({
