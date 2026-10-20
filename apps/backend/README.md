@@ -161,6 +161,13 @@ proof and single-dispatch assertions remain the contract; Bun's unchanged
 per-test timeout is only a hang detector. This test repair does not establish
 full-suite load stability or resolve Bun worker crashes.
 
+The runtime fence matrix also supplies idle through the existing per-test liveness
+seam and restores it after each case. A previous file's surrendered session-owner
+binding must not cancel the attempt before the boundary being exercised. D8 still
+aborts the exact attempt through its real signal; terminal unsafe, single-dispatch,
+publication and stale-observation assertions remain unchanged. This is fixture
+isolation, not a change to production stream admission or a board qualification.
+
 The private no-writer FIFO startup regressions use the shared async test-command
 helper to await child exit and drain both pipes. They retain the default Bun
 test hang guard, rather than killing a valid child after two seconds of import
