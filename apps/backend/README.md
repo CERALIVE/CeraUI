@@ -150,6 +150,12 @@ contract job both fetch full history; Git failures remain test failures, never a
 empty diff. Local stability runs do not establish PR readiness: every hosted check
 on the current PR revision must succeed before the change is handed off.
 
+The real OS-stage runtime fence regression awaits its installation operation,
+not a competing 500 ms wall-clock timer. Its publication, cancellation, stale
+proof and single-dispatch assertions remain the contract; Bun's unchanged
+per-test timeout is only a hang detector. This test repair does not establish
+full-suite load stability or resolve Bun worker crashes.
+
 The selector and UID-pin network-namespace clients share schema-valid setup
 preparation with an explicit RK3588 fixture identity. Plain `bun` children do not
 inherit the test preload's setup mock; partial setup defaults omit required `hw`.

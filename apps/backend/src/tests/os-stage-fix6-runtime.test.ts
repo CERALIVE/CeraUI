@@ -222,11 +222,7 @@ test.each([
 		await admitAndPrepareStreamStart();
 		resume.resolve();
 	}
-	const completion = await Promise.race([
-		installing.then(() => "settled"),
-		Bun.sleep(500).then(() => "pending"),
-	]);
-	expect(completion).toBe("settled");
+	await installing;
 	if (boundary === "pending-proof") {
 		const before = remembers;
 		pendingRead.resolve(
