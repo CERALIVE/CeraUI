@@ -192,6 +192,11 @@ inherited default; recovery ordering and durable phase assertions stay real.
 This local isolation does not alter other launched-intent fixtures or establish
 their stability under arbitrary host pressure.
 
+The OS-agent dispatch file binds its own session owner for its lifetime. An earlier
+file restoring an unbound liveness leaf cannot turn the seven-day activation
+fixture into an unrelated unknown-stream refusal. Its live-stream veto and exact
+activation-time assertions remain unchanged; production admission stays fail-closed.
+
 The final-diagnostic live-child regression advances its existing injected polling
 clock to the original recovery deadline only after a real child proc read has
 completed. It still observes the live child and refuses a replacement writer,
