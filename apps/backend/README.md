@@ -251,6 +251,13 @@ port, then advance the original remaining 40 ms. Expiry must settle while that
 port is still held, and resuming it cannot publish or release. No real 160 ms
 completion race or product-deadline increase is involved.
 
+The startup routing-sweep regression [EXISTS] likewise freezes time until the
+actual rule query is held, then expires its original remaining 40 ms explicitly.
+It joins the abandoned sweep after releasing the query before asserting that no
+deletion or flush escaped surrendered CONTROL. Scheduler delay cannot consume
+that fixture budget before the query starts; production deadlines and all other
+routing cases are unchanged. This is a test-clock repair, not board qualification.
+
 Held guardian/CLI/provenance release proofs use the same controlled 40 ms expiry.
 The production-owner case still prepares and reads real private files and checks
 that a late guardian response writes neither publication nor a release marker.
