@@ -192,6 +192,12 @@ of settlement, then awaits the harness's actual restart event before checking
 persist-before-exit. Settlement alone does not join the detached restart tail;
 the existing test hang guard and real state-file assertions remain unchanged.
 
+The held-deadline acquisition fixture spends its original 10,000 ms injected
+budget at the first polling sleep after a real inspection and failed ownership
+observation. It asserts that exact expenditure and one polling sleep instead of
+performing 100 physical polling intervals; real private-file settlement remains
+required, so this does not bound arbitrary storage or host scheduling latency.
+
 The selector and UID-pin network-namespace clients share schema-valid setup
 preparation with an explicit RK3588 fixture identity. Plain `bun` children do not
 inherit the test preload's setup mock; partial setup defaults omit required `hw`.
