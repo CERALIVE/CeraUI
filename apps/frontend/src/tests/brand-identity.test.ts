@@ -23,6 +23,7 @@ describe("brand identity", () => {
 		);
 		expect(BUILD_BRAND.description).toBe(BRAND_CONFIG.description);
 		expect(BUILD_BRAND.deviceName).toBe(BRAND_CONFIG.deviceName);
+		expect(BUILD_BRAND.appName).toBe(BRAND_CONFIG.appName);
 	});
 
 	it.each([
