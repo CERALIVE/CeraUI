@@ -1878,7 +1878,7 @@
 	"notifications.captureStandby": "All cameras lost — the stream is on standby and resumes automatically when a camera returns.",
 	"notifications.captureStandbyLong": "The stream has been on standby for over 10 minutes. It will resume when a camera returns.",
 	"notifications.bootconfigUpdating": "Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
-	"notifications.ceraliveUpdateAvailable": "A CERALIVE update is available. Open Settings → Software Updates to install it.",
+	"notifications.ceraliveUpdateAvailable": "A CeraLive update is available. Open Settings → Software Updates to install it.",
 	"notifications.ceraliveUpdateFailed": "The software update failed. Open Settings → Software Updates to see the reason and retry.",
 	"notifications.connectionLost": "Connection lost",
 	"notifications.connectionRecovered": "Connection restored",

@@ -78,4 +78,16 @@ describe("brand identity", () => {
 		expect(config).not.toContain("CERALIVE©");
 		expect(config).not.toContain('"CERALIVE"');
 	});
+
+	it("uses CeraLive casing in the English update notification", () => {
+		const messages = JSON.parse(
+			readFileSync(resolve(repoRoot, "packages/i18n/messages/en.json"), "utf8"),
+		);
+		expect(messages["notifications.ceraliveUpdateAvailable"]).toContain(
+			"CeraLive",
+		);
+		expect(messages["notifications.ceraliveUpdateAvailable"]).not.toContain(
+			"CERALIVE",
+		);
+	});
 });

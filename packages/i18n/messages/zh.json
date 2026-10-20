@@ -1833,7 +1833,7 @@
 	"notifications.captureStandby": "所有摄像头均已断开 — 直播处于待机状态，摄像头恢复后会自动继续。",
 	"notifications.captureStandbyLong": "直播已待机超过10分钟。摄像头恢复后会继续。",
 	"notifications.bootconfigUpdating": "Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
-	"notifications.ceraliveUpdateAvailable": "有可用的 CERALIVE 更新。打开 设置 → 软件更新 进行安装。",
+	"notifications.ceraliveUpdateAvailable": "有可用的 CeraLive 更新。打开 设置 → 软件更新 进行安装。",
 	"notifications.ceraliveUpdateFailed": "软件更新失败。打开 设置 → 软件更新 查看原因并重试。",
 	"notifications.connectionLost": "Connection lost",
 	"notifications.connectionRecovered": "Connection restored",

@@ -649,7 +649,7 @@ async function getCapableUpdateSize(
 			notificationBroadcast(
 				"ceralive_update",
 				"warning",
-				"A CERALIVE update is available. Open Settings → Software Updates to install it.",
+				"A CeraLive update is available. Open Settings → Software Updates to install it.",
 				0,
 				true,
 				true,
@@ -912,7 +912,7 @@ async function getSoftwareUpdateSize(reachability: AptReachability) {
 		notificationBroadcast(
 			"ceralive_update",
 			"warning",
-			"A CERALIVE update is available. Open Settings → Software Updates to install it.",
+			"A CeraLive update is available. Open Settings → Software Updates to install it.",
 			0,
 			true,
 			true,

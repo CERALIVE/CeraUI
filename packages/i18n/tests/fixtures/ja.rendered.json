@@ -988,7 +988,7 @@
 	"notifications.appUpdated": "App Updated",
 	"notifications.appUpdatedDescription": "Updated to version <version>",
 	"notifications.bootconfigUpdating": "Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
-	"notifications.ceraliveUpdateAvailable": "CERALIVE のアップデートがあります。設定 → ソフトウェア更新 を開いてインストールしてください。",
+	"notifications.ceraliveUpdateAvailable": "CeraLive のアップデートがあります。設定 → ソフトウェア更新 を開いてインストールしてください。",
 	"notifications.ceraliveUpdateFailed": "ソフトウェア更新に失敗しました。設定 → ソフトウェア更新 を開いて理由を確認し、再試行してください。",
 	"notifications.connectionLost": "Connection lost",
 	"notifications.connectionRecovered": "Connection restored",

@@ -47,6 +47,7 @@ bunx biome check packages/i18n
 - messages/en.json is the hand-edited base locale; maintain identical key sets across all locales.
 - Never hand-edit generated/ or src/paraglide/; generate:i18n runs before consumers, never as an install-time hook.
 - Never write tests/fixtures/*.rendered.json; deliberate copy changes re-freeze the immutable oracle in a separately reviewed PR.
+- 2026-10-20 — Recorded exception (brand-assets-rollout, root AGENTS.md): the casing-only re-freeze of notifications.ceraliveUpdateAvailable landed as a separately reviewed commit inside that effort's single CeraUI PR; regeneration stayed forbidden.
 - Use the m facade, never compiled messages or the Paraglide umbrella; backend imports only runtime-free formatters/constants.
 - Keep every namespace lazy and EAGER_NAMESPACES empty; /eager is for federation/harnesses, never app code.
 - App namespace activation owns the boot set; ensureAllNamespaces() is not a boot path.
