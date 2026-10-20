@@ -187,6 +187,11 @@ the existing liveness source seam and restore it after each case; ambient stream
 status cannot replace the fault or completion they intend to exercise. Sentinel
 and stream-admission suites retain their real liveness bindings and assertions.
 
+The package-completion ordering regression holds its commit hook independently
+of settlement, then awaits the harness's actual restart event before checking
+persist-before-exit. Settlement alone does not join the detached restart tail;
+the existing test hang guard and real state-file assertions remain unchanged.
+
 The selector and UID-pin network-namespace clients share schema-valid setup
 preparation with an explicit RK3588 fixture identity. Plain `bun` children do not
 inherit the test preload's setup mock; partial setup defaults omit required `hw`.
