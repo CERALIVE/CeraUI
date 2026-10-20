@@ -322,6 +322,14 @@ deliberately exercising live enumeration must restore that factory spy inside it
 body first. Journal persistence, lifecycle admission and test guards remain real
 and unchanged; this is host test isolation, not hardware qualification.
 
+The config archive-resume regression keeps its existing injected retry events and
+real strict reads, archive preservation and atomic persistence. Its one explicit
+10-second test hang guard covers measured 5.87-second legitimate recovery under
+64 CPU burners; no product retry delay or deadline is changed. Storage-delay and
+lost-notice negative controls still distinguish slow completion from broken
+recovery, and all original byte, archive-count and exactly-one-notice assertions
+remain required.
+
 The selector and UID-pin network-namespace clients share schema-valid setup
 preparation with an explicit RK3588 fixture identity. Plain `bun` children do not
 inherit the test preload's setup mock; partial setup defaults omit required `hw`.

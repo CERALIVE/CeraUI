@@ -14,6 +14,7 @@ import {
 	stopRuntimeConfigRecovery,
 } from "../modules/config-boot.ts";
 
+// Real archive/reload work measured 5.87 s under 64 burners; retry waits already use fixture events.
 test("post-bind config recovery resumes on the next attempt after one archive cleanup EIO", async () => {
 	// Given unavailable config through all initial attempts (boot cleanup already passed).
 	const root = fs.mkdtempSync(join(tmpdir(), "config-archive-resume-"));
@@ -87,4 +88,4 @@ test("post-bind config recovery resumes on the next attempt after one archive cl
 		setConfigFilePath("config.json");
 		fs.rmSync(root, { recursive: true, force: true });
 	}
-});
+}, 10_000);
