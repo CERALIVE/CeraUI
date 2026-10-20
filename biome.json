@@ -23,6 +23,12 @@
 			"!packages/srtla-send/tests/fixtures"
 		]
 	},
+	"overrides": [
+		{
+			"includes": ["scripts/sync-brand-assets.ts"],
+			"javascript": { "globals": ["Bun"] }
+		}
+	],
 	"linter": {
 		"rules": {
 			"style": {

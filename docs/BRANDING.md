@@ -9,9 +9,27 @@ The branding is configured in the following files:
 | File | Purpose |
 |------|---------|
 | `apps/frontend/src/lib/config/branding.ts` | Frontend brand constants |
+| `apps/frontend/brand.config.ts` | Shared Vite, Vitest and PWA build-time strings; regression-tested against runtime branding |
 | `apps/frontend/vite.config.ts` | Build-time brand injection |
 | `apps/frontend/pwa.config.ts` | PWA manifest branding |
 | `packages/i18n/src/branding.ts` | i18n brand placeholders |
+
+### Name and casing
+
+The product name is "CeraUI for CeraLive", with no copyright symbol. The company
+name is "CeraLive". Display text never says "CERALIVE".
+
+Identity strings keep their spelling: the hotspot SSID prefix `CERALIVE_`, the
+revision wire key `'CERALIVE image'`, the `BrandName` literals and
+`CURRENT_BRAND` / `getCurrentBrand`, `VITE_BRAND=CERALIVE`, `CERALIVE_*`
+environment variables and `github.com/CERALIVE/...` URLs. Legacy tarball
+metadata in `scripts/build/build-ceraui-system.sh` is also unchanged. These
+identifiers and addresses are not display text.
+
+The pre-boot loading and offline screens [EXISTS] use the small light/dark
+marks and literal uppercase sRGB conversions of the Ground Control tokens.
+They use the system font stack because the app's fonts and CSS have not loaded.
+The asset-free JavaScript failure screen remains independent of the marks.
 
 ## Build Scripts
 
@@ -24,6 +42,36 @@ bun run build         # Build for production
 bun run build:backend # Build backend only
 bun run build:frontend # Build frontend only
 ```
+
+## Logo and icon assets
+
+The shared logo, favicons and PWA icons [EXISTS] are vendored from the private
+`CERALIVE/ceralive-brand` release `v2026.10.0`. The repository-root
+`brand-assets.lock.json` records release provenance and SHA-256 hashes for every
+vendored file, including the standalone sync script and integrity verifier.
+CI checks the committed bytes offline; it never needs access to the brand repo.
+The integrity verifier keeps its upstream single-quote, 100-column formatting
+through a file-scoped Biome override; the sync script declares its Bun runtime
+global in the root Biome configuration. Both remain linted without rewriting
+the release bytes.
+
+Maintainers with access refresh the assets from this repository's root:
+
+```bash
+bun scripts/sync-brand-assets.ts --tag v2026.10.0
+```
+
+Do not hand-edit vendored files. `BRAND-ASSETS-NOTICE.md` lists them and records
+that the CeraLive brand assets are not covered by this repository's license;
+all rights are reserved.
+
+The shared `Logo.svelte` serves the small light mark by default, the small dark
+mark under `html.dark`, and the monochrome ink mark under
+`html[data-display='eink']`, overriding either color theme. Its images are
+decorative because the header button or sign-in heading already names the brand.
+The PWA manifest is generated only by VitePWA, with separate regular and
+maskable icons. `/favicon.ico` remains available at its stable path because the
+offline-state store uses it as its origin-recovery probe.
 
 ## i18n Integration
 
@@ -42,7 +90,7 @@ description: brandTranslation("CeraUI needs an internet connection to manage you
 |-------------|-------|
 | `{{deviceName}}` | CeraLive |
 | `{{deviceNameLower}}` | ceralive |
-| `{{siteName}}` | CeraUI for CeraLive© |
+| `{{siteName}}` | CeraUI for CeraLive |
 | `{{cloudService}}` | CeraLive Cloud |
 | `{{logName}}` | CeraLive Log |
 | `{{organizationName}}` | CeraLive |
@@ -57,7 +105,7 @@ import { BRAND_CONFIG, deviceName, siteName } from "$lib/config/branding";
 // Use in components
 console.log(BRAND_CONFIG.deviceName); // "CeraLive"
 console.log(deviceName);              // "CeraLive"
-console.log(siteName);                // "CeraUI for CeraLive©"
+console.log(siteName);                // "CeraUI for CeraLive"
 ```
 
 ## File Structure

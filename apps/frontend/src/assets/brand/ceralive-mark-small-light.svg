@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="mark-title">
+<title id="mark-title">CeraLive mark</title>
+
+<g fill="none" stroke-linecap="round">
+<path d="M 175.983 70.017 A 82 82 0 1 0 175.983 185.983" stroke="#295600" stroke-width="21.6"/>
+<path d="M 157.598 88.402 A 56 56 0 1 0 157.598 167.598" stroke="#008994" stroke-width="16.8"/>
+<path d="M 139.920 106.080 A 31 31 0 1 0 139.920 149.920" stroke="#0069C1" stroke-width="13.2"/>
+<circle cx="199" cy="128" r="14" fill="#295600" stroke="none"/>
+
+</g>
+</svg>

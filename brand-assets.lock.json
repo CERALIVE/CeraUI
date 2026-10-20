@@ -1,0 +1,75 @@
+{
+	"schema": 1,
+	"source": "CERALIVE/ceralive-brand",
+	"tag": "v2026.10.0",
+	"commit": "ed4110a94f8220d19d118b161cbaa980323c96e8",
+	"tarball": "ceralive-brand-2026.10.0.tar.gz",
+	"tarballSha256": "7c4fd4a27d00428574e4c6b10012c653fe2713e2aab36c462993edbe0980ac24",
+	"files": [
+		{
+			"from": "exports/favicon/apple-touch-icon.png",
+			"to": "apps/frontend/src/assets/apple-touch-icon.png",
+			"sha256": "2af2c7612f723504bfb4ee57a8d414156d30211512885d02d9594a42e2d1396f"
+		},
+		{
+			"from": "exports/svg/ceralive-mark-small-dark.svg",
+			"to": "apps/frontend/src/assets/brand/ceralive-mark-small-dark.svg",
+			"sha256": "64464b84933cc042b5e7a08ae294ff6a9084b4922c013ba4a1d9828e06c07700"
+		},
+		{
+			"from": "exports/svg/ceralive-mark-small-light.svg",
+			"to": "apps/frontend/src/assets/brand/ceralive-mark-small-light.svg",
+			"sha256": "37f5d93be9de2c7b178de93ada4f0b1cad5f0ed893eba909a64b98d8e6b98322"
+		},
+		{
+			"from": "exports/svg/ceralive-mark-small-mono-ink.svg",
+			"to": "apps/frontend/src/assets/brand/ceralive-mark-small-mono-ink.svg",
+			"sha256": "b26ac7b30b92c7b960b611ed7e4aae8b0ed6437fc324b7f00107bb758161ebbd"
+		},
+		{
+			"from": "exports/favicon/favicon-96x96.png",
+			"to": "apps/frontend/src/assets/favicon-96x96.png",
+			"sha256": "5023d4f3ceae5f5ff90aa464060379811e969acf31b426f66cd16ece39f8ab4f"
+		},
+		{
+			"from": "exports/favicon/favicon.ico",
+			"to": "apps/frontend/src/assets/favicon.ico",
+			"sha256": "916e7fba1146273a1717a995b8ff6e82964f404094f77103dcae8d6508f0b912"
+		},
+		{
+			"from": "exports/favicon/favicon.svg",
+			"to": "apps/frontend/src/assets/favicon.svg",
+			"sha256": "40d4b2ccc641c6c7e4627769d64279ece040fd130fce8fdb46ce8adff6f9d8e0"
+		},
+		{
+			"from": "exports/app-icons/icon-192.png",
+			"to": "apps/frontend/src/assets/web-app-manifest-192x192.png",
+			"sha256": "d650a567dac4df9b3593ba3e4be83ddadcf642dcf29851ccb7db5926d13f9b69"
+		},
+		{
+			"from": "exports/app-icons/icon-512.png",
+			"to": "apps/frontend/src/assets/web-app-manifest-512x512.png",
+			"sha256": "fcb79dc8259ef9f39c8f0516123e9612ad4f7e4b1ccceeec172d0b28fed9f77b"
+		},
+		{
+			"from": "exports/app-icons/icon-maskable-192.png",
+			"to": "apps/frontend/src/assets/web-app-manifest-maskable-192x192.png",
+			"sha256": "12e1875e2b15f12edc532ebfc666ea6c0cf4007a3346f5e946f09b0896fe394e"
+		},
+		{
+			"from": "exports/app-icons/icon-maskable-512.png",
+			"to": "apps/frontend/src/assets/web-app-manifest-maskable-512x512.png",
+			"sha256": "3ef2d73820517a3662b8de112b0164efdcbdd41b4ba09ca621c85ce2d52b7afd"
+		},
+		{
+			"from": "consumer-kit/brand-assets-integrity.ts",
+			"to": "apps/frontend/src/tests/brand-assets-integrity.ts",
+			"sha256": "05c6c24c88e9388afe08f25913969135098971ac0e589dadfccefb43bf333a88"
+		},
+		{
+			"from": "consumer-kit/sync-brand-assets.ts",
+			"to": "scripts/sync-brand-assets.ts",
+			"sha256": "b87d95e565587e45f961762a522895b3ad30499398745b306981e421e612fc1b"
+		}
+	]
+}

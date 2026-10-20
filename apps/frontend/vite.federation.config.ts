@@ -7,6 +7,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { persistPlugin } from "svelte-persistent-runes/plugins";
 import { defineConfig } from "vite";
 
+import { BUILD_BRAND } from "./brand.config.ts";
 import {
 	FEDERATION_PARAGLIDE_OUTDIR,
 	federationI18nPlugin,
@@ -37,15 +38,6 @@ const ROOT_PKG = JSON.parse(
 	readFileSync(path.resolve(__dirname, "../../package.json"), "utf8"),
 ) as { version: string };
 const CERAUI_VERSION = ROOT_PKG.version;
-
-// Brand configuration (CeraLive-only) — mirrors vite.config.ts so any module reading
-// the __BRAND_CONFIG__ / __APP_VERSION__ defines resolves identically in lib mode.
-const BRAND_CONFIG = {
-	siteName: "CeraUI for CERALIVE©",
-	description:
-		"A modern PWA for CERALIVE streaming encoder management and configuration",
-	deviceName: "CERALIVE",
-};
 
 const DIALOG_ENTRIES = {
 	encoder: path.resolve(__dirname, "src/lib/federation/encoder-entry.ts"),
@@ -79,7 +71,11 @@ export default defineConfig({
 	],
 	define: {
 		__APP_VERSION__: JSON.stringify(`federation-${CERAUI_VERSION}`),
-		__BRAND_CONFIG__: JSON.stringify(BRAND_CONFIG),
+		__BRAND_CONFIG__: JSON.stringify({
+			siteName: BUILD_BRAND.siteName,
+			description: BUILD_BRAND.description,
+			deviceName: BUILD_BRAND.deviceName,
+		}),
 	},
 	build: {
 		// Versioned, isolated output — NEVER the SPA's dist/public.

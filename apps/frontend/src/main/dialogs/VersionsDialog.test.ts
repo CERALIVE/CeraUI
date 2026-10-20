@@ -156,12 +156,23 @@ describe("VersionsDialog", () => {
 		consoleError.mockRestore();
 	});
 
+	it("labels the image revision without changing its wire key", async () => {
+		vi.mocked(rpc.system.getRevisions).mockResolvedValueOnce({
+			...pushed,
+			"CERALIVE image": "2026.9.5",
+		});
+		render(VersionsDialog, { props: { open: true } });
+		await waitFor(() => {
+			expect(rowValue(document.body, "CeraLive image")).toEqual(["2026.9.5"]);
+		});
+	});
+
 	it("omits an optional row the device did not report", async () => {
 		render(VersionsDialog, { props: { open: true } });
 		const container = document.body;
 		await waitFor(() => {
 			expect(rowValue(container, "Kernel").length).toBeGreaterThan(0);
 		});
-		expect(rowValue(container, "CERALIVE Image")).toEqual([]);
+		expect(rowValue(container, "CeraLive image")).toEqual([]);
 	});
 });

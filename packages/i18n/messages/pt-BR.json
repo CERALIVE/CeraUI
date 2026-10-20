@@ -1881,7 +1881,7 @@
 	"notifications.captureStandby": "Todas as câmeras foram perdidas — a transmissão está em espera e recomeça automaticamente quando uma câmera voltar.",
 	"notifications.captureStandbyLong": "A transmissão está em espera há mais de 10 minutos. Ela recomeçará quando uma câmera voltar.",
 	"notifications.bootconfigUpdating": "Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
-	"notifications.ceraliveUpdateAvailable": "Há uma atualização do CERALIVE disponível. Abra Configurações → Atualizações de software para instalá-la.",
+	"notifications.ceraliveUpdateAvailable": "Há uma atualização do CeraLive disponível. Abra Configurações → Atualizações de software para instalá-la.",
 	"notifications.ceraliveUpdateFailed": "A atualização de software falhou. Abra Configurações → Atualizações de software para ver o motivo e tentar novamente.",
 	"notifications.connectionLost": "Connection lost",
 	"notifications.connectionRecovered": "Connection restored",

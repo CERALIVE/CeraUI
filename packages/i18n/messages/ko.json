@@ -1833,7 +1833,7 @@
 	"notifications.captureStandby": "모든 카메라가 끊겼습니다. 방송은 대기 상태로 유지되며 카메라가 돌아오면 자동으로 재개됩니다.",
 	"notifications.captureStandbyLong": "방송이 10분 넘게 대기 중입니다. 카메라가 돌아오면 재개됩니다.",
 	"notifications.bootconfigUpdating": "Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
-	"notifications.ceraliveUpdateAvailable": "CERALIVE 업데이트가 있습니다. 설정 → 소프트웨어 업데이트를 열어 설치하세요.",
+	"notifications.ceraliveUpdateAvailable": "CeraLive 업데이트가 있습니다. 설정 → 소프트웨어 업데이트를 열어 설치하세요.",
 	"notifications.ceraliveUpdateFailed": "소프트웨어 업데이트에 실패했습니다. 설정 → 소프트웨어 업데이트를 열어 이유를 확인하고 다시 시도하세요.",
 	"notifications.connectionLost": "Connection lost",
 	"notifications.connectionRecovered": "Connection restored",

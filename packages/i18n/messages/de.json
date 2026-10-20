@@ -1878,7 +1878,7 @@
 	"notifications.captureStandby": "Alle Kameras ausgefallen — der Stream ist im Bereitschaftsmodus und wird automatisch fortgesetzt, sobald eine Kamera zurückkehrt.",
 	"notifications.captureStandbyLong": "Der Stream ist seit über 10 Minuten im Bereitschaftsmodus. Er wird fortgesetzt, sobald eine Kamera zurückkehrt.",
 	"notifications.bootconfigUpdating": "Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
-	"notifications.ceraliveUpdateAvailable": "Ein CERALIVE-Update ist verfügbar. Öffnen Sie Einstellungen → Softwareupdates, um es zu installieren.",
+	"notifications.ceraliveUpdateAvailable": "Ein CeraLive-Update ist verfügbar. Öffnen Sie Einstellungen → Softwareupdates, um es zu installieren.",
 	"notifications.ceraliveUpdateFailed": "Das Softwareupdate ist fehlgeschlagen. Öffnen Sie Einstellungen → Softwareupdates, um den Grund zu sehen und es erneut zu versuchen.",
 	"notifications.connectionLost": "Connection lost",
 	"notifications.connectionRecovered": "Connection restored",

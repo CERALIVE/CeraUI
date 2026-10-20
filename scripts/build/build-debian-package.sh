@@ -39,7 +39,7 @@ fi
 ITERATION="${BUILD_DATE}.${COMMIT}"
 
 MAINTAINER="Andrés Cera <andres@ceralive.com>"
-DESCRIPTION="CERALIVE device software - live streaming hardware controller"
+DESCRIPTION="CeraLive device software - live streaming hardware controller"
 URL="https://github.com/CERALIVE/CeraUI"
 
 # Engine protocol-major coupling (engine ↔ UI version-skew guard). The cerastream
@@ -252,7 +252,7 @@ set -e
 # after a self-update — `Restart=always` is inert after an explicit stop.
 case "$1" in
     remove)
-        echo "🛑 Stopping CERALIVE service..."
+        echo "🛑 Stopping CeraLive service..."
 
         # Stop service if running
         systemctl stop ceralive.service 2>/dev/null || true
@@ -271,7 +271,7 @@ cat > dist/debian/postrm << 'EOF'
 set -e
 
 if [ "$1" = "purge" ]; then
-    echo "🗑️  Purging CERALIVE configuration..."
+    echo "🗑️  Purging CeraLive configuration..."
 
     # Remove user
     userdel ceralive 2>/dev/null || true
@@ -379,7 +379,7 @@ EOF
 
 # Create installation instructions
 cat > "dist/debian/INSTALL-${ARCHITECTURE}.md" << EOF
-# CERALIVE Debian Package Installation ($ARCHITECTURE) - MODERNIZED
+# CeraLive Debian Package Installation ($ARCHITECTURE) - MODERNIZED
 
 ## Package Information
 - Package: $PACKAGE_FILENAME
