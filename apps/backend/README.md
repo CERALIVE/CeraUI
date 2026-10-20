@@ -179,6 +179,13 @@ occurs before that trigger. A measured starved source import spent 10.57 seconds
 before its first read, and bundling alone did not remove that runtime cost.
 Retry counts, typed refusals, actual values and byte preservation remain asserted.
 
+The protocol-242 kernel attribution fixture starts its namespace child through
+an explicit readiness barrier before the parent test. Measured import/startup
+took 13.81 seconds under amplification, separately from real kernel commands.
+The child and parent retain their 20-second guards and all counter, route and
+rule assertions; protocol 241 keeps its existing launch path. This does not cure
+the separate 200 ms curl-before-packet race observed on protocol 241.
+
 The final-diagnostic live-child regression advances its existing injected polling
 clock to the original recovery deadline only after a real child proc read has
 completed. It still observes the live child and refuses a replacement writer,

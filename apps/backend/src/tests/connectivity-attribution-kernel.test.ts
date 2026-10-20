@@ -1,4 +1,5 @@
-import { expect, test } from "bun:test";
+/// <reference types="bun" />
+import { afterAll, expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { eligibleProbeCandidates } from "../modules/network/connectivity-candidates.ts";
 import { buildDeviceBoundProbeArgv } from "../modules/network/device-bound-probe.ts";
@@ -11,12 +12,82 @@ const probe = child
 	: await runTestCommand(["unshare", "-Urn", "true"]);
 const unavailable = probe !== undefined && probe.code !== 0;
 
+if (child && process.env.CERALIVE_ATTRIBUTION_PREPARED === "1") {
+	process.stdout.write("ATTRIBUTION_READY\n");
+	await Bun.stdin.text();
+}
+const prepared =
+	!child && !unavailable ? await prepareProtocol242() : undefined;
+afterAll(async () => {
+	if (prepared) {
+		prepared.proc.kill();
+		await prepared.proc.exited;
+	}
+});
+
+async function prepareProtocol242() {
+	const proc = Bun.spawn(
+		[
+			"unshare",
+			"-Urn",
+			process.execPath,
+			"test",
+			fileURLToPath(import.meta.url),
+			"-t",
+			"eth0 probe retains egress against protocol 242",
+		],
+		{
+			env: {
+				...process.env,
+				CERALIVE_ATTRIBUTION_CHILD: "1",
+				CERALIVE_ATTRIBUTION_PREPARED: "1",
+			},
+			stdin: "pipe",
+			stdout: "pipe",
+			stderr: "pipe",
+		},
+	);
+	const stderr = new Response(proc.stderr).text();
+	const reader = proc.stdout.getReader();
+	const decoder = new TextDecoder();
+	let output = "";
+	while (!output.includes("ATTRIBUTION_READY\n")) {
+		const chunk = await reader.read();
+		if (chunk.done)
+			throw new Error(
+				`kernel fixture exited before readiness: ${await stderr}`,
+			);
+		output += decoder.decode(chunk.value, { stream: true });
+	}
+	return { proc, stderr, reader, output };
+}
+
 for (const protocol of [241, 242]) {
 	const name = `eth0 probe retains egress against protocol ${protocol}`;
 	(unavailable ? test.skip : test)(
 		unavailable ? `${name}: ${probe?.stderr}` : name,
 		async () => {
 			if (!child) {
+				if (protocol === 242 && prepared) {
+					prepared.proc.stdin.end();
+					let output = prepared.output;
+					const decoder = new TextDecoder();
+					try {
+						for (;;) {
+							const chunk = await prepared.reader.read();
+							if (chunk.done) break;
+							output += decoder.decode(chunk.value, { stream: true });
+						}
+						expect(
+							await prepared.proc.exited,
+							output + (await prepared.stderr),
+						).toBe(0);
+					} finally {
+						prepared.reader.releaseLock();
+						prepared.proc.kill();
+					}
+					return;
+				}
 				const result = await runTestCommand(
 					[
 						"unshare",
