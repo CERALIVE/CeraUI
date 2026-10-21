@@ -1065,6 +1065,16 @@ raises exactly one, and successful staging or a superseding candidate clears it.
 | `credentials-expired` | the same observer when the public certificate expiry is reached |
 | `transport-unhealthy` | **no producer** |
 
+The credential and download-hold observers coexist independently: both are
+scheduled before tick early returns, with no new await on stream admission.
+Their notification names and dismissal keys use distinct kind prefixes even
+when opaque suffixes match. Each producer retains its own journal and durable
+acknowledgement policy; neither journal is update-admission authority. The
+combined host regression `update-notices-combined-runtime.test.ts` exercises
+simultaneously held/failing observers, unchanged reducer/effect ordering,
+separate dismissals and both notice families' keys across all ten catalogs.
+This is host isolation evidence, not a shared-event-loop latency guarantee.
+
 ### Download hold notice [EXISTS; host-tested, board qualification owed]
 
 `notifications.updatePausedForStream` says the update was **put on hold for a

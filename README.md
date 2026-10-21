@@ -52,6 +52,16 @@ busy update shows an app-wide badge, and the Live cockpit warns before Go Live;
 Start stays enabled because the device decides admission. Implementation
 reference: [device updates](docs/DEVICE-UPDATES.md).
 
+**Update notices [EXISTS; host-tested, board qualification owed].** Independent
+observers provide durable public-certificate expiry warnings (90/30/7 days and
+expired) and attempt-keyed download-hold notices for genuine D8 interruptions.
+Settings → Software Updates → Update connection shows the device's credential
+verdict and public expiry date when supplied; older backends omit the row.
+Neither notice family changes update or stream admission. Credential dates do
+not prove mTLS acceptance, and a hold does not prove a stream started or traffic
+stopped. Hold intents retain the documented pre-ledger crash-loss window, not
+exactly-once delivery. See [notice contracts and limits](docs/DEVICE-UPDATES.md#notifications).
+
 **What today's images can use [PARTIAL].** Every image shipping today is a
 legacy image: it keeps the 15-package update roster, and the dialog states which
 sections it cannot back instead of hiding them. Updating every package by origin,
