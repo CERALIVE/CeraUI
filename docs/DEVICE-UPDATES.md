@@ -1213,13 +1213,18 @@ successful transport probe.
   verdict as a worded badge (Valid, Expiring soon, Expired, Unknown, each with
   a shield glyph) and the certificate's expiry as a localized date and time.
   For `expiring` only, it adds "in about N days": the floor of whole days left
-  on the **browser's** clock, recounted by one timer at each day boundary while
-  the row is open, "in less than a day" under one day, and no phrase once that
-  clock has passed the date, so it never shows a negative count. The day count is an
+  on the **browser's** clock, recounted by one timer at each day boundary
+  (timed from the same clock reading as the count) while the row is open, "in
+  less than a day" under one day, and no phrase once that clock has passed the
+  date, so it never shows a negative count. The day count is an
   `Intl` unit phrase, because a new catalog plural message would need the
   frozen i18n oracle re-frozen. `unavailable`, an unrecognised verdict, or
   `valid` without a usable date reads as Unknown with "The expiry date could
-  not be read."; `expiring`/`expired` without a date keep their badge. The date
+  not be read."; `expiring`/`expired` without a date keep their badge. The
+  badge is always the device's own verdict, judged on the device's clock; with
+  an unsynchronised device or browser clock the date and the verdict can
+  disagree (for example Valid beside a date this browser has already passed),
+  and the row shows both rather than overriding the device. The date
   proves nothing about mTLS acceptance; a rejection remains the
   `transportCredentialsRejected()` band. Browser-tested against injected
   details, not against a device's real certificate.
