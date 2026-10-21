@@ -424,6 +424,14 @@ A dev-only DevTools destination is available in development builds.
 
 ## Development
 
+**Hardware-preflight tests [EXISTS].** `bun run --filter frontend test:hardware-preflight`
+checks prerequisite refusals and stale-artifact cleanup without contacting hardware.
+Each Playwright subprocess has a 60-second timeout, with a longer explicit test
+budget (including all five launches in the missing-prerequisite matrix). Spawn
+errors and terminating signals fail separately from prerequisite assertions, so
+CPU contention cannot turn Bun's default five-second deadline into an empty-output
+mismatch.
+
 ### Commands
 
 | Command | Description |

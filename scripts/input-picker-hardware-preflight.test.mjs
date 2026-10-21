@@ -7,6 +7,9 @@ import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const SUBPROCESS_TIMEOUT_MS = 60_000;
+// Let the helper report a killed subprocess before Bun kills the test itself.
+const TEST_TIMEOUT_MS = SUBPROCESS_TIMEOUT_MS + 10_000;
 const PASS_ARTIFACT = path.join(
 	REPO_ROOT,
 	'apps/frontend/test-results/input-picker-rock5b-hardware.json',
@@ -38,8 +41,10 @@ function runDedicatedHardwareConfig(reportPath, hardwareEnv = {}) {
 			'--config=tests/e2e/playwright.hardware.config.ts',
 			'--reporter=line,json',
 		],
-		{ cwd: REPO_ROOT, encoding: 'utf8', env },
+		{ cwd: REPO_ROOT, encoding: 'utf8', env, timeout: SUBPROCESS_TIMEOUT_MS },
 	);
+	assert.ifError(result.error);
+	assert.equal(result.signal, null, 'Hardware preflight subprocess terminated by signal');
 
 	return {
 		exitCode: result.status,
@@ -52,7 +57,7 @@ function runOrdinaryHardwareInventory(reportPath) {
 	for (const name of HARDWARE_ENV_NAMES) delete env[name];
 	env.CI = undefined;
 
-	return spawnSync(
+	const result = spawnSync(
 		'bun',
 		[
 			'run',
@@ -65,8 +70,11 @@ function runOrdinaryHardwareInventory(reportPath) {
 			'--list',
 			'--reporter=line',
 		],
-		{ cwd: REPO_ROOT, encoding: 'utf8', env },
+		{ cwd: REPO_ROOT, encoding: 'utf8', env, timeout: SUBPROCESS_TIMEOUT_MS },
 	);
+	assert.ifError(result.error);
+	assert.equal(result.signal, null, 'Hardware preflight subprocess terminated by signal');
+	return result;
 }
 
 before(() => {
@@ -87,7 +95,9 @@ after(() => {
 });
 
 describe('input-picker dedicated hardware preflight', () => {
-	it('exits nonzero when all hardware prerequisites are absent', () => {
+	it('exits nonzero when all hardware prerequisites are absent', {
+		timeout: TEST_TIMEOUT_MS,
+	}, () => {
 		const reportPath = path.join(tempDir, 'no-env-report.json');
 		const result = runDedicatedHardwareConfig(reportPath);
 
@@ -95,7 +105,9 @@ describe('input-picker dedicated hardware preflight', () => {
 		assert.match(result.output, /HardwareInputPrerequisiteError/);
 	});
 
-	it('exits nonzero when any one hardware prerequisite is absent', () => {
+	it('exits nonzero when any one hardware prerequisite is absent', {
+		timeout: HARDWARE_ENV_NAMES.length * SUBPROCESS_TIMEOUT_MS + 10_000,
+	}, () => {
 		const validEnv = {
 			CERAUI_INPUT_HARDWARE: '1',
 			CERAUI_INPUT_HARDWARE_PASSWORD: '12345678',
@@ -115,7 +127,9 @@ describe('input-picker dedicated hardware preflight', () => {
 		}
 	});
 
-	it('removes stale pass and report artifacts before prerequisite failure', () => {
+	it('removes stale pass and report artifacts before prerequisite failure', {
+		timeout: TEST_TIMEOUT_MS,
+	}, () => {
 		const reportPath = path.join(tempDir, 'stale-report.json');
 		fs.mkdirSync(path.dirname(PASS_ARTIFACT), { recursive: true });
 		fs.writeFileSync(PASS_ARTIFACT, '{"status":"stale"}\n', 'utf8');
@@ -128,7 +142,9 @@ describe('input-picker dedicated hardware preflight', () => {
 		assert.equal(fs.existsSync(reportPath), false);
 	});
 
-	it('ordinary inventory removes stale artifacts without requiring hardware', () => {
+	it('ordinary inventory removes stale artifacts without requiring hardware', {
+		timeout: TEST_TIMEOUT_MS,
+	}, () => {
 		const reportPath = path.join(tempDir, 'ordinary-stale-report.json');
 		fs.mkdirSync(path.dirname(PASS_ARTIFACT), { recursive: true });
 		fs.writeFileSync(PASS_ARTIFACT, '{"status":"stale"}\n', 'utf8');
