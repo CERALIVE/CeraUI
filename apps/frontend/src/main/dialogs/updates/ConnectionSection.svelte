@@ -6,11 +6,12 @@
   control: the transport selector runs per transfer, and this section shows the
   most recent run with its own timestamp. Every probe verdict is a keyed word
   (`probeStateKey`); a machine token never reaches the screen. `clear` is the
-  absence of a finding and is not listed.
+  absence of a finding and is not listed. The update-credentials row leads the
+  section, independent of whether any selection is known.
 -->
 <script lang="ts">
 import { getLocale, m, resolveMessageKey } from '@ceraui/i18n/svelte';
-import type { UpdateTransportSummary } from '@ceraui/rpc/schemas';
+import type { UpdateCredentials, UpdateTransportSummary } from '@ceraui/rpc/schemas';
 
 import Badge from '$lib/components/custom/Badge.svelte';
 import { connectionReachabilityKey } from '$lib/updates/connection-evidence';
@@ -21,11 +22,15 @@ import {
 	uplinkKindKey,
 } from '$lib/updates/update-view';
 
+import UpdateCredentialsRow from './UpdateCredentialsRow.svelte';
+
 interface Props {
 	transport: UpdateTransportSummary | null | undefined;
+	/** Absent on older backends, which renders no credentials row. */
+	credentials?: UpdateCredentials;
 }
 
-let { transport }: Props = $props();
+let { transport, credentials }: Props = $props();
 
 const locale = $derived(getLocale());
 const checked = $derived(formatUpdateTime(transport?.checkedAt, locale));
@@ -33,6 +38,8 @@ const checked = $derived(formatUpdateTime(transport?.checkedAt, locale));
 
 <section aria-labelledby="updates-connection-heading" class="space-y-2.5" data-testid="updates-connection">
 	<h3 class="text-sm font-semibold" id="updates-connection-heading">{m['settings.updates.connection.title']()}</h3>
+
+	<UpdateCredentialsRow {credentials} />
 
 	{#if !transport}
 		<p class="text-muted-foreground px-1 text-sm" data-testid="update-connection-none">

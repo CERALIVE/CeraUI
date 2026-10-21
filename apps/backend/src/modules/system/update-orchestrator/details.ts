@@ -25,6 +25,7 @@ import type { UpdateCapabilities, UpdateDetails } from "@ceraui/rpc/schemas";
 import { logger } from "../../../helpers/logger.ts";
 import { readUpdateCapabilities } from "../update-capabilities.ts";
 import { getLastTransportSelection } from "../update-transport/last-selection.ts";
+import { credentialDetails } from "./credential-notice-observer.ts";
 import { readStagedReceipt } from "./os-agent.ts";
 import { readBootedOsReleaseVersion } from "./os-manifest.ts";
 import { getOrchestratorState, getOsUpdateSummary } from "./runtime.ts";
@@ -47,6 +48,7 @@ export type UpdateDetailsDeps = {
 	readonly orchestratorState: () => OrchestratorState;
 	readonly osSummary: typeof getOsUpdateSummary;
 	readonly lastTransport: typeof getLastTransportSelection;
+	readonly credentials?: typeof credentialDetails;
 };
 
 export const defaultUpdateDetailsDeps: UpdateDetailsDeps = {
@@ -57,6 +59,7 @@ export const defaultUpdateDetailsDeps: UpdateDetailsDeps = {
 	orchestratorState: getOrchestratorState,
 	osSummary: getOsUpdateSummary,
 	lastTransport: getLastTransportSelection,
+	credentials: credentialDetails,
 };
 
 async function settle<T>(
@@ -68,6 +71,16 @@ async function settle<T>(
 	} catch (error) {
 		logger.debug("update-details: reader unavailable", { label, error });
 		return undefined;
+	}
+}
+
+function readCredentials(
+	deps: UpdateDetailsDeps,
+): NonNullable<UpdateDetails["credentials"]> {
+	try {
+		return deps.credentials?.() ?? { expiresAt: null, state: "unavailable" };
+	} catch {
+		return { expiresAt: null, state: "unavailable" };
 	}
 }
 
@@ -107,5 +120,6 @@ export async function readUpdateDetails(
 		},
 		pendingCellular: os.pendingCellular,
 		transport: deps.lastTransport() ?? null,
+		credentials: readCredentials(deps),
 	};
 }

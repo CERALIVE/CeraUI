@@ -3,6 +3,18 @@ import { killAndRestartRaucForStream } from "../modules/system/update-orchestrat
 
 const scheduler = { now: () => 0, schedule: () => () => undefined };
 
+test("a nonzero best-effort TERM still submits the original nonblocking restart", async () => {
+	const commands: string[][] = [];
+	await killAndRestartRaucForStream(async (argv) => {
+		commands.push(argv);
+		return { exitCode: argv.includes("kill") ? 1 : 0, stdout: "", stderr: "" };
+	}, scheduler);
+	expect(commands).toEqual([
+		["systemctl", "kill", "--signal=SIGTERM", "rauc.service"],
+		["systemctl", "restart", "--no-block", "rauc.service"],
+	]);
+});
+
 test("D8 waits only for restart submission, never for the captured five-minute daemon recovery", async () => {
 	// Given a daemon that cannot finish stopping promptly, when D8 submits restart.
 	const commands: string[][] = [];

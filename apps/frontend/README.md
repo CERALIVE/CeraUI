@@ -98,6 +98,14 @@ notification resolver also has real-facade unit coverage, without an injected
 translation map. Cached packaging builds must pass the same artifact guard.
 See [the guard contract](../../scripts/ci/NOTIFICATION-BUNDLE.md).
 
+The download-hold visual/functional matrix in
+`tests/e2e/visual/download-paused-notice.visual.spec.ts` exercises the actual
+notification panel, Updates action and dismissal with the keyed backend frame in
+all ten locales, light/dark themes and 390/1440 widths. It writes repo-local
+evidence, not regression baselines. This proves rendering over the host mock
+backend; real interruption, durable acknowledgement and replay are owned by the
+backend runtime/ledger tests, and installed-board qualification remains separate.
+
 ### Other Commands
 
 The separately hosted Encoder/Audio/Server bundles are built with

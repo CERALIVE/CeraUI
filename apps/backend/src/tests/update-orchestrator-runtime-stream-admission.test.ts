@@ -28,21 +28,40 @@
  * invariant the plan calls out explicitly: `installUpdatesNow` bypasses IDLE
  * but NEVER bypasses the D8 stream-admission block.
  */
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import type { UpdateState } from "@ceraui/rpc/schemas";
+import { setDownloadPausedNoticesForTest } from "../modules/system/update-orchestrator/download-paused-runtime-notices.ts";
+import { startOsStageAttempt } from "../modules/system/update-orchestrator/os-stage-retry.ts";
 import {
 	admitAndPrepareStreamStart,
 	getOrchestratorState,
+	type OrchestratorRuntimeDeps,
 	resetOrchestratorRuntimeForTest,
-	setOrchestratorRuntimeDepsForTest,
 	setOrchestratorStateForTest,
+	setOrchestratorRuntimeDepsForTest as setRuntimeDeps,
 } from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
+import { downloadNoticeFixture } from "./helpers/download-paused-fixture.ts";
 import { quarantineDirs } from "./helpers/orchestrator-runtime-harness.ts";
 import { abortSpyDeps } from "./helpers/orchestrator-runtime-stream-admission.ts";
 
-afterEach(() => {
+let notices: ReturnType<typeof downloadNoticeFixture>;
+let expectedNotices = 0;
+function setOrchestratorRuntimeDepsForTest(
+	deps: OrchestratorRuntimeDeps,
+): void {
+	setRuntimeDeps({ ...deps, downloadNotices: notices.worker });
+}
+beforeEach(() => {
+	notices = downloadNoticeFixture();
+	expectedNotices = 0;
+	setDownloadPausedNoticesForTest(notices.worker);
+});
+afterEach(async () => {
+	await notices.worker.settled();
+	expect(notices.publications).toHaveLength(expectedNotices);
+	setDownloadPausedNoticesForTest();
 	resetOrchestratorRuntimeForTest();
 	for (const dir of quarantineDirs.splice(0)) rmSync(dir, { recursive: true });
 });
@@ -107,7 +126,9 @@ describe("admitAndPrepareStreamStart — D8 wired to real abort I/O", () => {
 	});
 
 	test("genuinely downloading: forced-fresh read confirms still-downloading, aborts the unit", async () => {
+		expectedNotices = 1;
 		const { deps, calls } = abortSpyDeps({
+			downloadNotices: notices.worker,
 			getPackageInstallWireState: () =>
 				({
 					kind: "downloading",
@@ -185,11 +206,17 @@ describe("admitAndPrepareStreamStart — D8 wired to real abort I/O", () => {
 	});
 
 	test("genuinely os-staging: kills and restarts RAUC, never touches the apt unit", async () => {
+		expectedNotices = 1;
 		const { deps, calls } = abortSpyDeps();
 		setOrchestratorRuntimeDepsForTest(deps);
 		setOrchestratorStateForTest({
 			...initialOrchestratorState(0),
 			phase: "os-staging",
+			osStageRecovery: startOsStageAttempt(
+				undefined,
+				"candidate",
+				"11111111-1111-4111-8111-111111111111",
+			),
 			progress: { percent: 30, etaSeconds: 120 },
 		});
 		const result = await admitAndPrepareStreamStart();

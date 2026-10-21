@@ -1060,14 +1060,215 @@ raises exactly one, and successful staging or a superseding candidate clears it.
 | `os-activated` | a forced `@now` activation, and a boot of the staged version whose healthcheck passed (this boot's `healthy-state.json`) |
 | `os-rollback` | a booted version that differs from the staged one after the armed activation ran, including the bootloader fallback after the new slot kept failing its healthcheck before `mark-good`; startup also restores undismissed recorded OS quarantine history, independently of agent validity |
 | `slots-current` | a confirmed slot mirror |
-| `download-paused` | **no producer** |
-| `credentials-expiring` | **no producer** |
+| `download-paused` | a D8 admission that actually returns an in-flight package download or OS staging attempt to its offer state; detached intent persistence precedes publication |
+| `credentials-expiring` | independent cached public APT certificate observer, at 90/30/7-day thresholds |
+| `credentials-expired` | the same observer when the public certificate expiry is reached |
 | `transport-unhealthy` | **no producer** |
+
+The credential and download-hold observers coexist independently: both are
+scheduled before tick early returns, with no new await on stream admission.
+Their notification names and dismissal keys use distinct kind prefixes even
+when opaque suffixes match. Each producer retains its own journal and durable
+acknowledgement policy; neither journal is update-admission authority. The
+combined host regression `update-notices-combined-runtime.test.ts` exercises
+simultaneously held/failing observers, unchanged reducer/effect ordering,
+separate dismissals and both notice families' keys across all ten catalogs.
+This is host isolation evidence, not a shared-event-loop latency guarantee.
+
+### Download hold notice [EXISTS; host-tested, board qualification owed]
+
+`notifications.updatePausedForStream` says the update was **put on hold for a
+stream-start attempt** and will be offered again when the device is idle. It
+does not say that a stream started, all network activity stopped, RAUC recovered,
+or a suspended process will continue byte-for-byte. This is cancellation and
+later retry through the ordinary automation, idle/schedule, cellular and readiness
+rules; Install now retains its normal admission checks.
+
+The two producers are the package and OS interruption branches in `runtime.ts`,
+not the pure reducer or generic stop helper. Package capture precedes the commit
+probe/stop awaits, but emission requires the successful existing abort transition:
+a rejected stop, stale-wire commit/success or unknown/throwing commit probe emits
+nothing. OS capture precedes signal abort and the existing transition before
+TERM/restart; enqueueing happens in the original submission `finally`, so even
+slow submission cannot start notice I/O before admission settles. A failed restart
+submission still propagates its original error and may produce the truthful hold:
+the semantic transition already happened. Nonzero best-effort stop/TERM replies
+also permit this hold wording, never a physical-stop claim. Already-live holds,
+idle/syncing admission and unrelated producer cancellations produce no event.
+A later engine launch refusal does not erase a real earlier interruption.
+
+Package launch acceptance creates a process-local opaque attempt UUID; restarted
+downloads lazily acquire one before the first admission await. OS uses its existing
+`activeAttemptId`. IDs are `packages:<opaque>` / `os:<opaque>`, inside
+`update:download-paused:<id>`. Concurrent callers and repeat observations share one
+logical notice; a new attempt gets a new identity. No package UUID or notice field
+is added to `agent.json`, the persisted RPC schema or reducer state.
+
+`download-paused-ledger.ts` owns schema-1
+`/data/ceralive/update-state/download-paused-notices.json`: opaque ID, local
+candidate hash and `active` / `acknowledged` / `withdrawn`. It uses the shared
+bounded, anchored/no-follow, nonblocking strict JSON reader, a sibling atomic
+write with file fsync, rename and parent-directory fsync. Only genuine absence
+is empty; unknown/corrupt/unreadable data is preserved and defers publication,
+with bounded in-memory facts retried by the observer after repair. The worker
+commits intent before publishing; after a readable baseline, each interruption
+gets at most one intent write attempt. Write failure logs a closed reason and
+still publishes a best-effort in-memory notice, without per-tick write retries.
+Unknown reads retain the bounded fact for repair without writing.
+Startup independently rehydrates active
+intents even when agent authority is invalid. Ticks retry independently of update
+automation or recovery gates. Producer-owned acknowledgement runs before normal
+dismissal/removal and survives ordinary 256-key dismissal eviction; failed
+acknowledgement leaves the notice visible. Resume withdraws only the matching
+candidate. Accepted package replacement also retires the last interrupted package
+transaction from this single pipeline across restart, not an unrelated OS notice;
+OS discovery retires the exact superseded recovery candidate. Retirement carries
+the successor attempt as a cutoff: storage repair cannot let an old withdrawal
+erase a newer interruption of the same candidate.
+
+The notice is informational. Restart-safe dedup, rehydration and acknowledgement
+are guaranteed for every intent that reached the ledger. If the backend dies in
+the window after the transition and before the ledger commit, that one notice is
+lost; the update itself is already safely back in the offer state and is
+re-offered by the normal rules. This is an accepted, documented best-effort window
+(`V-DLP-PRECOMMIT-LOSS`), **not exactly-once delivery**.
+
+All notice I/O/publication starts on a detached zero-delay **macrotask**, never a
+microtask or an awaited admission continuation. The queue and retained facts are
+capped at 128, one worker flight runs at a time, and each queued action starts on
+its own macrotask turn. An interruption fact causes at most one intent write;
+duplicate delivery of an existing intent never rewrites it. Acknowledgement and
+withdrawal are independent obligations, not additional intent writes.
+The strict ledger retains up to 4096 records. At capacity, only `withdrawn`
+records are compacted, in the same atomic write that adds the new intent.
+Active notices and acknowledgements are never silently evicted. If no room can
+be made, one closed-reason `ledger-full` diagnostic drops that pending fact and
+publishes its in-memory notice best effort, without per-tick interruption retries.
+Ordinary hydration still reads once per observer tick. Neither capacity exhaustion
+nor write failure refuses a stream or overwrites protected history.
+The worker's one-second observation deadline fences later publication; it cannot
+preempt synchronous filesystem calls or cancel an already-submitted asynchronous
+port. A held port retains that single flight rather than overlapping writes.
+These are scheduling/isolation bounds, not a disk or stream-launch latency SLA.
+On the build host's `/mnt/development` filesystem, 100 one-intent atomic ledger
+writes measured p50 **17.39 ms**, p95 **18.33 ms**, max **20.77 ms**; the existing
+synchronous agent persist in `dispatch` measured p50 **17.42 ms**, p95 **17.81 ms**,
+max **26.11 ms** in the same run. The worker can still occupy the shared event loop
+after admission returns. These host samples are not board or power-loss proof.
+
+**Accepted tombstone residual (RR-1).** A duplicate informational notice requires
+two overlapping admissions (Start → Stop during D8 → Start), one stop of the same
+unit hanging within its 10-second timeout despite the other caller's stop having
+returned, and an operator relaunch plus a third Go Live before that hung stop
+returns. The first admission interrupts a download; the relaunch withdraws that
+hold; the third Go Live interrupts the new attempt. With the ledger at exactly
+4096 lifetime records, this last interruption compacts away the first hold's
+withdrawn tombstone. The older admission then resumes in the already-available
+phase: its transition is a no-op, but it can reannounce the original hold because
+the tombstone is gone. All those timing and capacity conditions are needed for
+this sequence. The repeated notice is truthful because the update really is held
+at that moment, and the next accepted relaunch retires it.
 
 ## Credentials and certificate expiry
 
-There is no expiry countdown. The wire carries no certificate expiry date, and
-`credentials-expiring` (90, 30 and 7 days) has no producer.
+The independent credential observer [EXISTS; host-tested, installed-board proof
+owed] reads the active public APT client certificate, never its private key.
+Selection reuses add-on TLS policy: a complete packaged pair under
+`/usr/share/ceralive/apt-credentials` takes priority over `/etc/apt/certs`. Key
+existence is checked without opening it, using the same symlink-following
+`Bun.file().exists()` policy as the TLS consumer. A dangling package entry can
+therefore select the complete legacy pair in both readers. A selected public
+certificate still uses strict no-follow reads. Malformed selected package credentials
+never fall back to a different legacy pair.
+
+PEM and DER parsing uses Bun's `node:crypto` X509Certificate. Reads are bounded,
+no-follow/nonblocking regular-file reads with trusted ancestry and ownership.
+The package's public UTC `not-after` metadata must match the parsed certificate
+expiry. A coherent recheck rejects replacement races. Missing, unreadable,
+oversized, unsafe, malformed or mismatched evidence is **unavailable**, never
+healthy or expired by default. Exceptions, certificate content/identity, paths
+and local digests never enter the notice or RPC payload.
+
+Warnings cross at `0 < expiresAt - now <= N * 86400000` milliseconds for
+N=90/30/7, with a separate expired variant when `expiresAt <= now`. Late first
+boot/offline/clock-forward observation durably records every newly crossed fact,
+supersedes weaker thresholds and surfaces only the most urgent current one.
+Copy says **within** the threshold, not an exact countdown; expired has no days.
+The current intent is the most urgent of eligible thresholds union already
+pending/active thresholds in the current generation. A backward clock step never
+retires an undismissed notice; only escalation to a more urgent recorded threshold
+or rotation does. Same-ID rehydration is continuity, not rearming an acknowledged
+threshold. An unreadable replacement is not renewal evidence and does not
+retire established warnings as if a new coherent generation had been observed.
+
+`credential-notices.json` under the existing update-state directory writes schema-2
+intents, stable random generation IDs and per-threshold pending/active/
+acknowledged/superseded lifecycle. Intent persistence and file+directory fsync
+precede publication. Startup reconstructs undismissed notices with the same ID;
+dismissal commits to this dedicated journal before removing the notice, not to
+the ordinary 256-entry LRU. Later thresholds remain eligible after earlier
+dismissals. Rotation retires older active notices and retains history across A/B
+rollback. At 1,024 generations or a 1-MiB read limit, history is preserved and
+new generation observation defers; acknowledgements are never evicted to make
+room. Corrupt/unknown journals defer rather than reset. Durable logical identity
+is not exactly-once physical frame/toast delivery across a crash.
+Strict schema-1 history remains readable with a conservative clock floor derived
+from recorded threshold crossings; its exact historical observation time cannot
+be recovered. The next semantic write upgrades it; future schemas still defer.
+Schema-1-only older binaries refuse schema 2 without clearing it.
+
+Startup forces a read; tick schedules an exception-isolated, single-flight
+observer **before** recovery/live/automation early returns without awaiting it.
+Observation is throttled to once per minute and public reads cached for fifteen
+minutes (forced refresh bypasses cache; a backward clock step refreshes too).
+No observer work joins stream admission or starts renewal/network operations.
+`system.getUpdateDetails.credentials` projects the same cached observation as
+`{ expiresAt: epochMilliseconds | null, state: valid | expiring | expired |
+unavailable }`. Absence denotes an older backend; GET never emits notices.
+Journal/read failure is unavailable and logs a bounded closed reason once per
+fault-state change. No new high-frequency status field is added. Details is also
+unavailable while now is earlier than the latest recorded observation checkpoint
+or this process's observation high-water mark. Checkpoints are persisted with
+semantic ledger changes, not unchanged minute observations; the latter neither
+rewrite the ledger nor resync its parent. Load acknowledges the parent once per
+ledger instance and retries after failed writes/syncs.
+
+Reading certificate dates proves **nothing** about private-key matching, chain
+trust, revocation, server acceptance or renewal completion. Notices and dates are
+computed from the device clock: without synchronization, they may appear early
+or late, including at boot before chrony convergence when RTC time was not retained.
+A retained notice is not proof the edge rejected the certificate, and a clock
+floor does not prove time synchronization. Changing local time cannot extend
+edge acceptance. Before expiry keep the device online and install available
+updates (Settings → Software Updates). After expiry check there for a system
+update; if unavailable, reflash or contact CeraLive support. A suitable newer
+system release is not guaranteed, and there is no operator renewal action.
+Device clocks and installed permissions remain
+both-board proof obligations. See the backend
+[journal contract](../apps/backend/docs/CREDENTIAL-NOTICES.md).
+
+The Updates dialog renders the optional block as the update-credentials row
+described under Frontend surfaces; an absent block renders nothing. See the
+[shared RPC contract](../packages/rpc/docs/update-credentials.md).
+
+**Known limits.** A wrong-forward clock step from an out-of-model time source
+can leave a persisted bogus clock floor. After the clock is corrected, details
+stays `unavailable` until real time passes that mark, and a false `expired` notice
+can remain. Dismissing it prevents the later true 30-day, 7-day and expired notices
+from reappearing for that certificate generation; the separate transport rejection
+band remains the evidence. Never step a production device's clock forward while
+its real ledger is in place. For owner-approved recovery, stop the backend, back
+up `/data/ceralive/update-state/credential-notices.json`, then delete that file
+(which re-initialises the history), or wait for real time to pass the bogus mark.
+
+If the process dies before rename, an orphan `.credential-notices-*.tmp` can
+remain. With the backend stopped, remove it with
+`rm /data/ceralive/update-state/.credential-notices-*.tmp`.
+
+Rolling back to an older certificate after rotation does not re-show that
+certificate's superseded 30-day warning; its 7-day and expired notices still arrive.
+Durability evidence is fresh-process reload after injected faults, not power-loss
+qualification.
 
 What does exist is a check for a certificate that has **already** expired or been
 refused, inside the APT transport profile. For the `apt.ceralive.tv` host the
@@ -1079,9 +1280,10 @@ selection's findings contain that state (`transportCredentialsRejected()` in
 `apps/frontend/src/lib/updates/update-bands.ts`).
 
 Package transactions on an image declaring `transport-uidrange` now produce
-APT-profile selections, so the band can appear on such a device when the fleet
-certificate is refused (not yet board-proven). A useful expiry warning still
-needs a wire field carrying the expiry date.
+APT-profile selections, so the separate rejection band can appear on such a
+device when the fleet certificate is refused (not yet board-proven). That probe
+and the public-date observer are distinct evidence; a known date is not a
+successful transport probe.
 
 ## Frontend surfaces
 
@@ -1126,6 +1328,28 @@ needs a wire field carrying the expiry date.
   the store preserves, so a repeated outcome beside a changed sibling field
   stays quiet) and the page's controls are back without a reload. Contract and exhaustive proofs:
   `apps/frontend/docs/agents/an-update-action-outcome-is-decided-by-evidence.md`.
+- **Update credentials row** (`UpdateCredentialsRow.svelte`, rules in
+  `src/lib/updates/credential-expiry.ts`): leads the Update connection section
+  when `system.getUpdateDetails` carries the optional `credentials` block, and
+  renders nothing when it is absent (an older backend). It shows the device's
+  verdict as a worded badge (Valid, Expiring soon, Expired, Unknown, each with
+  a shield glyph) and the certificate's expiry as a localized date and time.
+  For `expiring` only, it adds "in about N days": the floor of whole days left
+  on the **browser's** clock, recounted by one timer at each day boundary
+  (timed from the same clock reading as the count) while the row is open, "in
+  less than a day" under one day, and no phrase once that clock has passed the
+  date, so it never shows a negative count. The day count is an
+  `Intl` unit phrase, because a new catalog plural message would need the
+  frozen i18n oracle re-frozen. `unavailable`, an unrecognised verdict, or
+  `valid` without a usable date reads as Unknown with "The expiry date could
+  not be read."; `expiring`/`expired` without a date keep their badge. The
+  badge is always the device's own verdict, judged on the device's clock; with
+  an unsynchronised device or browser clock the date and the verdict can
+  disagree (for example Valid beside a date this browser has already passed),
+  and the row shows both rather than overriding the device. The date
+  proves nothing about mTLS acceptance; a rejection remains the
+  `transportCredentialsRejected()` band. Browser-tested against injected
+  details, not against a device's real certificate.
 - **Global badge** (`UpdateOrchestratorBadge.svelte`): shown while
   `isUpdateBusy()` holds, with phase and percent, and opens the dialog.
 - **Go Live band** (`UpdateRefusalBand.svelte`): `goLiveUpdateRefusal()` prefers

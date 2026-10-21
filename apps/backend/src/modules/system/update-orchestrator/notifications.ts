@@ -1,5 +1,6 @@
 import { logger } from "../../../helpers/logger.ts";
 import {
+	type NotificationOptions,
 	notificationExists,
 	notificationRemove,
 	notificationSend,
@@ -55,6 +56,7 @@ export type UpdateNotice =
 			readonly id: string;
 			readonly days: 90 | 30 | 7;
 	  }
+	| { readonly kind: "credentials-expired"; readonly id: string }
 	| {
 			readonly kind: "transport-unhealthy";
 			readonly id: string;
@@ -118,6 +120,10 @@ const notices = {
 		key: "notifications.updateCredentialsExpiring",
 		tone: "warning",
 	},
+	"credentials-expired": {
+		key: "notifications.updateCredentialsExpired",
+		tone: "error",
+	},
 	"transport-unhealthy": {
 		key: "notifications.updateTransportUnhealthy",
 		tone: "warning",
@@ -137,7 +143,10 @@ const notices = {
 } as const;
 
 /** Stable identity = event kind + exact transaction/version/unit; a retry is silent. */
-export function notifyUpdate(event: UpdateNotice): boolean {
+export function notifyUpdate(
+	event: UpdateNotice,
+	options: Pick<NotificationOptions, "beforeDismiss" | "onDismiss"> = {},
+): boolean {
 	const name = `update:${event.kind}:${event.id}`;
 	if (notificationExists(name)) return false;
 	const notice = notices[event.kind];
@@ -180,6 +189,7 @@ export function notifyUpdate(event: UpdateNotice): boolean {
 		case "packages-recovered":
 		case "slot-sync-recovered":
 		case "download-paused":
+		case "credentials-expired":
 		case "slots-current":
 			break;
 		default: {
@@ -200,6 +210,7 @@ export function notifyUpdate(event: UpdateNotice): boolean {
 			notice.key,
 			params,
 			{
+				...options,
 				action: {
 					schema: 1,
 					kind: "navigate",

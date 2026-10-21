@@ -1,7 +1,17 @@
 import type { Locator, Page } from '@playwright/test';
 
 import { expect, test } from '../fixtures/index.js';
-import { ensureAuthenticated, evidencePath, navigateTo } from '../helpers/index.js';
+import { runAxe } from '../helpers/axe.js';
+import type { UpdateCredentials } from '@ceraui/rpc/schemas';
+
+import {
+	ensureAuthenticated,
+	evidencePath,
+	navigateTo,
+	setLocale,
+	setTheme,
+	type ThemeMode,
+} from '../helpers/index.js';
 import {
 	CAPABLE_CAPABILITIES,
 	LEGACY_CAPABILITIES,
@@ -143,6 +153,72 @@ test.describe('device update surfaces @visual', () => {
 		await page.screenshot({
 			path: evidencePath(`todo-41-updates-legacy-${testInfo.project.name}.png`),
 		});
+	});
+
+	test('update-credentials row in every state, both themes, and Arabic @visual', { tag: '@visual' }, async ({
+		page,
+	}, testInfo) => {
+		// Nine audited captures and three reloads in one test: triple the default budget.
+		test.slow();
+		const day = 86_400_000;
+		const states: ReadonlyArray<[string, UpdateCredentials]> = [
+			['valid', { expiresAt: Date.now() + 400 * day, state: 'valid' }],
+			['expiring', { expiresAt: Date.now() + 12 * day + 3_600_000, state: 'expiring' }],
+			['expired', { expiresAt: Date.now() - 3 * day, state: 'expired' }],
+			['unavailable', { expiresAt: null, state: 'unavailable' }],
+		];
+		const wire = await installUpdateWire(page, {
+			fakes: {
+				'system.getUpdateCapabilities': CAPABLE_CAPABILITIES,
+				'system.getUpdateDetails': capableDetails({ pendingCellular: null }),
+			},
+		});
+		await page.goto('/');
+		await ensureAuthenticated(page);
+
+		const capture = async (name: string, dialogName = UPDATES_DIALOG): Promise<void> => {
+			await navigateTo(page, 'settings');
+			await page.getByTestId('settings-entry-updates').click();
+			const dialog = page.getByRole('dialog', { name: dialogName });
+			const row = dialog.getByTestId('update-credentials');
+			const heading = dialog.locator('#updates-connection-heading');
+			await expect(row).toBeVisible();
+			await centreRun(heading.or(row));
+			await expectInFrame(page, [heading, row]);
+			// The row never scrolls sideways or spills out of its section.
+			const fit = await row.evaluate((node) => {
+				const section = node.closest('section')?.getBoundingClientRect();
+				const box = node.getBoundingClientRect();
+				return {
+					overflowX: node.scrollWidth - node.clientWidth,
+					inside: section !== undefined && box.left >= section.left - 0.5 && box.right <= section.right + 0.5,
+				};
+			});
+			expect(fit.overflowX).toBeLessThanOrEqual(0);
+			expect(fit.inside).toBe(true);
+			// A new surface is held to zero critical/serious axe findings, colour contrast included.
+			expect(await runAxe(page, { include: ['[data-testid="update-credentials"]'] })).toEqual([]);
+			await page.screenshot({ path: evidencePath(`cred-ui-${name}-${testInfo.project.name}.png`) });
+			await page.keyboard.press('Escape');
+			await expect(dialog).toBeHidden();
+		};
+
+		for (const theme of ['light', 'dark'] as const satisfies readonly ThemeMode[]) {
+			await setTheme(page, theme);
+			await page.reload();
+			await ensureAuthenticated(page);
+			for (const [name, credentials] of states) {
+				wire.fake('system.getUpdateDetails', capableDetails({ pendingCellular: null, credentials }));
+				await capture(`${name}-${theme}`);
+			}
+		}
+
+		await setLocale(page, 'ar');
+		await page.reload();
+		await ensureAuthenticated(page);
+		await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+		wire.fake('system.getUpdateDetails', capableDetails({ pendingCellular: null, credentials: states[1][1] }));
+		await capture('expiring-dark-ar', 'تحديثات البرامج');
 	});
 
 	test('Live cockpit with the Go-Live band and the global badge @visual', { tag: '@visual' }, async ({

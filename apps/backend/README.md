@@ -649,6 +649,55 @@ configuration remain unchanged, and status still reports the modem's live state.
 
 ### Software update admission
 
+The credential-expiry reader [EXISTS] reads only the active public APT client
+certificate, using the same package-before-legacy pair selection as add-on TLS.
+It accepts PEM/DER, bounds and anchors no-follow regular-file reads, checks
+trusted ownership/ancestry, and refuses incoherent packaged `not-after` metadata.
+Only a local digest and UTC expiry leave the reader; errors become closed codes.
+It never opens the private key. Date observation is not key-match, chain,
+revocation or server-acceptance proof. An isolated tick/startup observer produces
+90/30/7-day and expired notices through a dedicated durable intent/acknowledgement
+journal, even while live, automation is off or recovery gates updates. Undismissed
+notices retain their identity across backward-clock boots; details stays
+unavailable below the recorded/process clock floor. Schema 2 reads old schema-1
+history without resetting it, and unchanged active ticks do not rewrite it.
+Reader/ledger faults emit only a closed reason once per fault-state change. Pair
+existence uses the TLS consumer's symlink-following probe; selected public reads
+remain no-follow. Details RPC reads its cached public projection only. Device
+clock dates are not synchronized-time or edge-rejection evidence. Host durability
+proof is fresh-process reload after injected faults, not power loss.
+See [device updates](../../docs/DEVICE-UPDATES.md)
+and the [journal contract](docs/CREDENTIAL-NOTICES.md). Both-board proof is owed.
+
+Genuine D8 interruptions now schedule an informational download-hold notice on a
+detached macrotask, after the unchanged package/OS interruption path. Its private
+versioned ledger, acknowledgement-before-dismissal callback and startup/tick
+observer are independent of `agent.json` and update admission. Intent is committed
+before publication; notice-write failure falls back to an in-memory notice, while
+unknown reads defer without replacing evidence. The accepted pre-commit crash-loss
+window and bounded-worker/host-latency limits are explicit in
+[`DEVICE-UPDATES.md`](../../docs/DEVICE-UPDATES.md#download-hold-notice-exists-host-tested-board-qualification-owed).
+This is cancel-and-retry, not proof that a stream launched or all traffic stopped.
+
+The notice is informational. Restart-safe dedup, rehydration and acknowledgement
+are guaranteed for every intent that reached the ledger. If the backend dies in
+the window after the transition and before the ledger commit, that one notice is
+lost; the update itself is already safely back in the offer state and is
+re-offered by the normal rules. This is an accepted, documented best-effort window
+(`V-DLP-PRECOMMIT-LOSS`), **not exactly-once delivery**.
+
+The strict ledger holds at most 4096 records. At capacity, only withdrawn history
+is compacted into the new intent's single atomic write; active notices and durable
+acknowledgements remain protected. If it cannot make room, the worker reports
+`ledger-full` once and drops the pending fact after best-effort in-memory
+publication. A readable baseline permits at most one intent write attempt per
+interruption, without failed-write retries on later ticks. Each queue action
+starts on a separate macrotask turn; synchronous filesystem calls can still occupy
+the shared event loop after admission returns. This is not a stream-launch latency
+SLA or board qualification.
+
+The accepted [download-hold tombstone residual](../../docs/DEVICE-UPDATES.md#download-hold-notice-exists-host-tested-board-qualification-owed) describes the rare overlapping-admission and exact-capacity sequence that can repeat a truthful notice until the next accepted relaunch retires it.
+
 An unreadable or ambiguous present capability declaration is an unknown regime,
 not a legacy image. Package refresh/discovery and manual/automatic installs refuse
 with the existing typed reason and retain the file until a valid later read.

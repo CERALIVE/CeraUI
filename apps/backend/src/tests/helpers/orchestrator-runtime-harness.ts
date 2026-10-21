@@ -37,12 +37,15 @@ export function testQuarantine(): UpdateQuarantine {
 export function fakeDeps(
 	overrides: Partial<OrchestratorRuntimeDeps> = {},
 ): OrchestratorRuntimeDeps {
+	const defaults = { ...defaultOrchestratorRuntimeDeps };
+	delete defaults.readPackageRecoveryEvidence;
 	return withMemoryPersistence({
-		...defaultOrchestratorRuntimeDeps,
+		...defaults,
 		acquireOsStageControl: acquireTestOsStageControl,
 		acquireUpdateRecoveryLock: acquireTestOsStageControl,
 		acquirePackageRecoveryLocks: acquireTestOsStageControl,
 		now: () => 1_000_000,
+		observeCredentials: () => Promise.resolve(),
 		random: () => 0.5,
 		loadSettings: async () => ({
 			packagesAuto: true,
@@ -75,7 +78,6 @@ export function fakeDeps(
 		},
 		recoverSoftwareUpdateIfRunning: async () => false,
 		readPackageAttempt: async () => undefined,
-		readPackageRecoveryEvidence: undefined,
 		persist: () => {
 			// withMemoryPersistence owns authoritative fixture storage.
 		},

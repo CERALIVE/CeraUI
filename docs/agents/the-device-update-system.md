@@ -34,6 +34,14 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
   (`quarantine.json`), idle-only restart of stale services with a protected-unit
   list, and keyed update notifications. Contract:
   [`docs/UPDATE-RECOVERY.md`](../UPDATE-RECOVERY.md).
+- **[EXISTS; host-tested] Download-hold notice.** Genuine D8 package/OS
+  interruption captures an opaque attempt before awaits and publishes through a
+  detached macrotask and separate strict ledger. Committed intents rehydrate and
+  retain acknowledgement; pre-ledger backend death can lose that informational
+  notice without losing the safe offer transition. Hold wording in all ten
+  locales does not prove media launch or physical network quiescence. See
+  [`durability and scheduling limits`](../DEVICE-UPDATES.md#download-hold-notice-exists-host-tested-board-qualification-owed);
+  installed both-board proof is still owed.
 - **[PARTIAL] APT all-package scope.** Origin-filtered, exact `name=version`
   installs under one flock. Active only on an image declaring `apt-all-packages`;
   every shipping image is legacy (`features: []`) and keeps the exact-name
@@ -324,10 +332,14 @@ Known gaps, recorded rather than smoothed over:
   ordering only instead of `Requires=` (or drop the healthcheck from the
   reconcile's restart list); in CeraUI, treat exit 143 as an interrupted run
   and probe again, with a bound, before persisting a verdict.
-- **No certificate-expiry countdown.** The wire carries no expiry date,
-  `credentials-expiring` has no producer, and the credentials band keys on an
-  `apt`-profile transport finding that no production path produces yet.
+- **Credential-date limits.** Independent public-certificate observation now
+  produces durable 90/30/7-day and expired notices and the optional details RPC
+  block. The Updates dialog renders that block's verdict and date, omitting the
+  row for older backends; browser time affects only its approximate day phrase,
+  not the device verdict. The observer never reads the private key or establishes key matching, chain trust,
+  revocation or mTLS acceptance. It runs independently of automation/live/recovery
+  gates. The separate transport-rejection band is probe evidence, not date truth.
+  Both-board installed/runtime qualification remains owed; see DEVICE-UPDATES.
 - **Board evidence is narrow.** The capable APT candidate/installation above was
   verified on a bench-enabled board, not a released capable image. OS staging,
   slot mirroring and UID-pinned transport are still not qualified by that run.
-

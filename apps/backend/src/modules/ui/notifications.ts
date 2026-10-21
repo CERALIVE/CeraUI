@@ -61,6 +61,8 @@ type Notification = {
 	authedOnly: boolean;
 	action?: NotificationAction;
 	dismissalKey?: string;
+	beforeDismiss?: () => void;
+	onDismiss?: () => void;
 };
 
 type PersistentNotification = Notification & {
@@ -73,6 +75,9 @@ type PersistentNotification = Notification & {
 export type NotificationOptions = {
 	action?: NotificationAction;
 	dismissalKey?: string;
+	beforeDismiss?: () => void;
+	/** A producer's durable acknowledgement must succeed before removal. */
+	onDismiss?: () => void;
 };
 
 const persistentNotifications = new Map<string, PersistentNotification>();
@@ -143,6 +148,8 @@ export function notificationSend(
 		...(params !== undefined ? { params } : {}),
 		...(opts?.action !== undefined ? { action: opts.action } : {}),
 		...(dismissalKey !== undefined ? { dismissalKey } : {}),
+		...(opts?.beforeDismiss ? { beforeDismiss: opts.beforeDismiss } : {}),
+		...(opts?.onDismiss ? { onDismiss: opts.onDismiss } : {}),
 		isDismissable,
 		isPersistent,
 		duration,
@@ -233,7 +240,10 @@ export function notificationRemove(name: string) {
 // carries a semantic dismissalKey; a keyless notification is merely removed.
 export function notificationDismiss(name: string) {
 	const pn = persistentNotifications.get(name);
-	if (pn?.dismissalKey) {
+	pn?.onDismiss?.();
+	if (pn?.beforeDismiss) {
+		pn.beforeDismiss();
+	} else if (pn?.dismissalKey) {
 		recordNotificationDismissal(pn.dismissalKey);
 	}
 	return notificationRemove(name);
