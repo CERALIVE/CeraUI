@@ -1071,7 +1071,10 @@ The independent credential observer [EXISTS; host-tested, installed-board proof
 owed] reads the active public APT client certificate, never its private key.
 Selection reuses add-on TLS policy: a complete packaged pair under
 `/usr/share/ceralive/apt-credentials` takes priority over `/etc/apt/certs`. Key
-existence is checked without opening it. Malformed selected package credentials
+existence is checked without opening it, using the same symlink-following
+`Bun.file().exists()` policy as the TLS consumer. A dangling package entry can
+therefore select the complete legacy pair in both readers. A selected public
+certificate still uses strict no-follow reads. Malformed selected package credentials
 never fall back to a different legacy pair.
 
 PEM and DER parsing uses Bun's `node:crypto` X509Certificate. Reads are bounded,
@@ -1087,11 +1090,14 @@ N=90/30/7, with a separate expired variant when `expiresAt <= now`. Late first
 boot/offline/clock-forward observation durably records every newly crossed fact,
 supersedes weaker thresholds and surfaces only the most urgent current one.
 Copy says **within** the threshold, not an exact countdown; expired has no days.
-Clock reversal never rearms a recorded threshold and retires claims that are no
-longer true. An unreadable replacement is not renewal evidence and does not
+The current intent is the most urgent of eligible thresholds union already
+pending/active thresholds in the current generation. A backward clock step never
+retires an undismissed notice; only escalation to a more urgent recorded threshold
+or rotation does. Same-ID rehydration is continuity, not rearming an acknowledged
+threshold. An unreadable replacement is not renewal evidence and does not
 retire established warnings as if a new coherent generation had been observed.
 
-`credential-notices.json` under the existing update-state directory owns schema-1
+`credential-notices.json` under the existing update-state directory writes schema-2
 intents, stable random generation IDs and per-threshold pending/active/
 acknowledged/superseded lifecycle. Intent persistence and file+directory fsync
 precede publication. Startup reconstructs undismissed notices with the same ID;
@@ -1102,6 +1108,10 @@ rollback. At 1,024 generations or a 1-MiB read limit, history is preserved and
 new generation observation defers; acknowledgements are never evicted to make
 room. Corrupt/unknown journals defer rather than reset. Durable logical identity
 is not exactly-once physical frame/toast delivery across a crash.
+Strict schema-1 history remains readable with a conservative clock floor derived
+from recorded threshold crossings; its exact historical observation time cannot
+be recovered. The next semantic write upgrades it; future schemas still defer.
+Schema-1-only older binaries refuse schema 2 without clearing it.
 
 Startup forces a read; tick schedules an exception-isolated, single-flight
 observer **before** recovery/live/automation early returns without awaiting it.
@@ -1111,11 +1121,27 @@ No observer work joins stream admission or starts renewal/network operations.
 `system.getUpdateDetails.credentials` projects the same cached observation as
 `{ expiresAt: epochMilliseconds | null, state: valid | expiring | expired |
 unavailable }`. Absence denotes an older backend; GET never emits notices.
-Journal/read failure is unavailable. No new high-frequency status field is added.
+Journal/read failure is unavailable and logs a bounded closed reason once per
+fault-state change. No new high-frequency status field is added. Details is also
+unavailable while now is earlier than the latest recorded observation checkpoint
+or this process's observation high-water mark. Checkpoints are persisted with
+semantic ledger changes, not unchanged minute observations; the latter neither
+rewrite the ledger nor resync its parent. Load acknowledges the parent once per
+ledger instance and retries after failed writes/syncs.
 
 Reading certificate dates proves **nothing** about private-key matching, chain
-trust, revocation, server acceptance or renewal completion. Device clocks and
-installed permissions remain both-board proof obligations. See the backend
+trust, revocation, server acceptance or renewal completion. Notices and dates are
+computed from the device clock: without synchronization, they may appear early
+or late, including at boot before chrony convergence when RTC time was not retained.
+A retained notice is not proof the edge rejected the certificate, and a clock
+floor does not prove time synchronization. Changing local time cannot extend
+edge acceptance. Before expiry keep the device online and install available
+updates (Settings → Software Updates). After expiry check there for a system
+update; if unavailable, reflash or contact CeraLive support. A suitable newer
+system release is not guaranteed, and there is no operator renewal action.
+Durability tests prove fresh-process reload after injected faults, not SIGKILL
+mid-write or power-loss behavior. Device clocks and installed permissions remain
+both-board proof obligations. See the backend
 [journal contract](../apps/backend/docs/CREDENTIAL-NOTICES.md).
 
 What does exist is a check for a certificate that has **already** expired or been
