@@ -333,7 +333,7 @@ Known gaps, recorded rather than smoothed over:
   reconcile's restart list); in CeraUI, treat exit 143 as an interrupted run
   and probe again, with a bound, before persisting a verdict.
 - **Credential-date limits.** Independent public-certificate observation now
-	produces durable 90/30/7-day and expired notices and the optional details RPC
+  produces durable 90/30/7-day and expired notices and the optional details RPC
   block. The Updates dialog renders that block's verdict and date, omitting the
   row for older backends; browser time affects only its approximate day phrase,
   not the device verdict. The observer never reads the private key or establishes key matching, chain trust,

@@ -1243,8 +1243,7 @@ edge acceptance. Before expiry keep the device online and install available
 updates (Settings → Software Updates). After expiry check there for a system
 update; if unavailable, reflash or contact CeraLive support. A suitable newer
 system release is not guaranteed, and there is no operator renewal action.
-Durability tests prove fresh-process reload after injected faults, not SIGKILL
-mid-write or power-loss behavior. Device clocks and installed permissions remain
+Device clocks and installed permissions remain
 both-board proof obligations. See the backend
 [journal contract](../apps/backend/docs/CREDENTIAL-NOTICES.md).
 
