@@ -170,8 +170,10 @@ SYSTEMD_RUN_DIR="${CERALIVE_SYSTEMD_RUN_DIR:-/run/systemd/system}"
 # Subshell scope keeps repair state out of postinst; every fallible command is
 # checked explicitly because the warning boundary disables errexit in functions.
 repair_public_link() (
+    export LC_ALL=C
     public_parent="$1/opt/ceralive"
     public_path="$public_parent/public"
+    stale_created=''
     if [ -L "$public_path" ]; then
         public_target=$(readlink -n -- "$public_path" && printf '.') || return 1
         [ "$public_target" != '/var/www/ceralive.' ] || return 0
@@ -181,13 +183,42 @@ repair_public_link() (
             stale_stamp=$(date -u +%Y%m%dT%H%M%SZ) || return 1
             stale_path="$public_path.stale-$stale_stamp"
             stale_suffix=0
+            suffix_pattern="^public\\.stale-$stale_stamp(-[0-9]+)?$"
+            collision_names=$(
+                for collision_path in "$stale_path"*; do
+                    [[ "${collision_path##*/}" =~ $suffix_pattern ]] || continue
+                    [ -e "$collision_path" ] || [ -L "$collision_path" ] || continue
+                    printf '%s\n' "${collision_path##*/}"
+                done | LC_ALL=C sort -rV
+            ) || return 1
+            IFS= read -r collision_name <<< "$collision_names" || return 1
+            if [ -n "$collision_name" ]; then
+                stale_path="$public_parent/$collision_name"
+                if [ "$stale_path" != "$public_path.stale-$stale_stamp" ]; then
+                    stale_suffix=${collision_name##*-}
+                fi
+            fi
             while [ -e "$stale_path" ] || [ -L "$stale_path" ]; do
-                stale_suffix=$((stale_suffix + 1))
+                # Decimal carry avoids overflow or octal interpretation of names.
+                while [[ "$stale_suffix" == 0* && ${#stale_suffix} -gt 1 ]]; do stale_suffix=${stale_suffix#0}; done
+                suffix_zeros=''
+                while [[ "$stale_suffix" == *9 ]]; do
+                    stale_suffix=${stale_suffix%9}
+                    suffix_zeros="0$suffix_zeros"
+                done
+                if [ -z "$stale_suffix" ]; then stale_suffix="1$suffix_zeros"
+                else stale_suffix="${stale_suffix%?}$((${stale_suffix: -1} + 1))$suffix_zeros"; fi
                 stale_path="$public_path.stale-$stale_stamp-$stale_suffix"
             done
             mv -T -- "$public_path" "$stale_path" || return 1
+            stale_created="$stale_path"
         fi
-        ln -s -- /var/www/ceralive "$public_path" || return 1
+        if ! ln -sT -- /var/www/ceralive "$public_path"; then
+            if [ -n "$stale_created" ]; then
+                mv -T -- "$stale_created" "$public_path" || return 1
+            fi
+            return 1
+        fi
     fi
 
     # Only generated timestamp names of immediate real directories are eligible.
@@ -195,6 +226,7 @@ repair_public_link() (
     stale_pattern='^public\.stale-[0-9]{8}T[0-9]{6}Z(-[0-9]+)?$'
     stale_names=$(
         for stale_path in "$public_parent"/public.stale-*; do
+            [ "$stale_path" != "$stale_created" ] || continue
             [ -d "$stale_path" ] || continue
             [ ! -L "$stale_path" ] || continue
             [[ "${stale_path##*/}" =~ $stale_pattern ]] || continue
@@ -209,7 +241,7 @@ repair_public_link() (
             stale_path="$public_parent/$stale_name"
             [ -d "$stale_path" ] || continue
             [ ! -L "$stale_path" ] || continue
-            rm -rf -- "$stale_path" || return 1
+            rm -rf --one-file-system -- "$stale_path" || return 1
         fi
     done <<< "$stale_names"
     return 0

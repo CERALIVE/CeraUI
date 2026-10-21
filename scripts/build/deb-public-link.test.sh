@@ -3,6 +3,9 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
+if [[ ${1:-} == hardening-* ]]; then
+    exec bash scripts/build/deb-public-link-hardening.test.sh "${1#hardening-}"
+fi
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 [[ $(id -u) -ne 0 ]] || fail 'must run unprivileged, including the permission test'
 work=$(mktemp -d)
@@ -77,10 +80,10 @@ run_case() (
                 touch -t "202001${day}0000" "$parent/public.stale-202601${day}T000000Z"
             done
             mkdir "$parent/public.stale-do-not-delete" "$parent/public.stale-20260101T000000Z-unsafe"
-            printf 'file backup\n' > "$parent/public.stale-20250101T000000Z"
+            printf 'file backup\n' > "$parent/public.stale-20350101T000000Z"
             mkdir "$root/outside"
             printf 'outside data\n' > "$root/outside/keep"
-            ln -s "$root/outside" "$parent/public.stale-20240101T000000Z"
+            ln -s "$root/outside" "$parent/public.stale-20340101T000000Z"
             ;;
         date-failure) mkdir "$public" ;;
     esac
@@ -138,9 +141,9 @@ run_case() (
             [[ -f $parent/public.stale-20261021T170000Z/keep && -L $parent/public.stale-20261021T170000Z-1 && -f $parent/public.stale-20261021T170000Z-2/index.html ]] || fail 'collision overwrote backup'
             ;;
         cap)
-            [[ ! -e $parent/public.stale-20260101T000000Z && ! -e $parent/public.stale-20260102T000000Z ]] || fail 'old backups retained'
-            [[ -d $parent/public.stale-20260103T000000Z && -d $parent/public.stale-20260104T000000Z && -f $parent/public.stale-20261021T170000Z/index.html ]] || fail 'newest three not retained'
-            [[ -d $parent/public.stale-do-not-delete && -d $parent/public.stale-20260101T000000Z-unsafe && -f $parent/public.stale-20250101T000000Z && -L $parent/public.stale-20240101T000000Z && -f $root/outside/keep ]] || fail 'pruning escaped exact real directories'
+            [[ ! -e $parent/public.stale-20260101T000000Z ]] || fail 'old backup retained'
+            [[ -d $parent/public.stale-20260102T000000Z && -d $parent/public.stale-20260103T000000Z && -d $parent/public.stale-20260104T000000Z && -f $parent/public.stale-20261021T170000Z/index.html ]] || fail 'three previous plus new not retained'
+            [[ -d $parent/public.stale-do-not-delete && -d $parent/public.stale-20260101T000000Z-unsafe && -f $parent/public.stale-20350101T000000Z && -L $parent/public.stale-20340101T000000Z && -f $root/outside/keep ]] || fail 'pruning escaped exact real directories'
             ;;
         fresh) ! grep -q 'restart ceralive.service' "$root/commands" || fail 'fresh install restarted' ;;
         twice)
@@ -161,4 +164,5 @@ else
     for name in directory nested-stale wrong-link newline-link dangling-link missing correct file fifo socket permission twice collision cap fresh other-action rename-failure link-failure date-failure prune-failure sort-failure; do
         run_case "$name"
     done
+    bash scripts/build/deb-public-link-hardening.test.sh
 fi
