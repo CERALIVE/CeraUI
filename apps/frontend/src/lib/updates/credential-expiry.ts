@@ -95,6 +95,20 @@ export function wholeDaysLeft(
 	return Math.floor(remaining / DAY_MS);
 }
 
+/**
+ * Milliseconds until `wholeDaysLeft(expiresAt, now)` next changes: the next
+ * whole-day boundary, or the expiry itself on the last day. `undefined` once
+ * nothing is left. Lets an open row advance its count with one timer per day.
+ */
+export function msUntilDaysLeftChanges(
+	expiresAt: number,
+	now: number,
+): number | undefined {
+	if (wholeDaysLeft(expiresAt, now) === undefined) return undefined;
+	const remaining = expiresAt - now;
+	return Math.min(remaining, (remaining % DAY_MS) + 1);
+}
+
 function knownState(state: unknown): CredentialExpiryState | undefined {
 	return typeof state === "string" && Object.hasOwn(STATE_TONE, state)
 		? (state as CredentialExpiryState)

@@ -2,6 +2,7 @@
 import { setLocale } from "@ceraui/i18n/svelte";
 import type { UpdateCredentials } from "@ceraui/rpc/schemas";
 import { cleanup, render, screen } from "@testing-library/svelte";
+import { tick } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DAY_MS } from "$lib/updates/credential-expiry";
@@ -13,7 +14,7 @@ import UpdateCredentialsRow from "./UpdateCredentialsRow.svelte";
 const NOW = Date.UTC(2026, 9, 20, 12);
 
 beforeEach(() => {
-	vi.useFakeTimers({ toFake: ["Date"] });
+	vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
 	vi.setSystemTime(NOW);
 });
 
@@ -123,6 +124,56 @@ describe("each device verdict", () => {
 	});
 });
 
+describe("an open row follows this browser's clock", () => {
+	function remainingText(): string | undefined {
+		return (
+			screen
+				.queryByTestId("update-credentials-remaining")
+				?.textContent?.trim() ?? undefined
+		);
+	}
+
+	it("recounts at each day boundary and drops the phrase at the expiry", async () => {
+		row({ expiresAt: NOW + 2 * DAY_MS + 1_000, state: "expiring" });
+		expect(remainingText()).toBe("in about 2 days");
+
+		await vi.advanceTimersByTimeAsync(999);
+		await tick();
+		expect(remainingText()).toBe("in about 2 days");
+
+		await vi.advanceTimersByTimeAsync(2);
+		await tick();
+		expect(remainingText()).toBe("in about 1 day");
+
+		await vi.advanceTimersByTimeAsync(DAY_MS);
+		await tick();
+		expect(remainingText()).toBe("in less than a day");
+
+		await vi.advanceTimersByTimeAsync(DAY_MS);
+		await tick();
+		expect(remainingText()).toBeUndefined();
+		// The device's verdict stands until the next read; only the client phrase goes.
+		expect(badge().textContent?.trim()).toBe("Expiring soon");
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it.each([
+		["valid", { expiresAt: NOW + 400 * DAY_MS, state: "valid" }],
+		["expired", { expiresAt: NOW - DAY_MS, state: "expired" }],
+		["unavailable", { expiresAt: null, state: "unavailable" }],
+	] as const)("%s keeps no timer running", (_, credentials) => {
+		row(credentials);
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("unmounting clears the pending timer", () => {
+		row({ expiresAt: NOW + 5 * DAY_MS, state: "expiring" });
+		expect(vi.getTimerCount()).toBe(1);
+		cleanup();
+		expect(vi.getTimerCount()).toBe(0);
+	});
+});
+
 describe("a null expiry date", () => {
 	it("a valid verdict without a date is shown as unknown, never as valid", () => {
 		const shown = row({ expiresAt: null, state: "valid" });
@@ -135,6 +186,41 @@ describe("a null expiry date", () => {
 		expect(badge().textContent?.trim()).toBe("Expired");
 		expect(screen.getByTestId("update-credentials-unreadable")).toBeTruthy();
 	});
+});
+
+describe("the badge pairs a glyph with a high-contrast word", () => {
+	it.each([
+		[
+			"valid",
+			{ expiresAt: NOW + 400 * DAY_MS, state: "valid" },
+			"lucide-shield-check",
+		],
+		[
+			"expiring",
+			{ expiresAt: NOW + 9 * DAY_MS, state: "expiring" },
+			"lucide-shield-alert",
+		],
+		[
+			"expired",
+			{ expiresAt: NOW - DAY_MS, state: "expired" },
+			"lucide-shield-x",
+		],
+		[
+			"unavailable",
+			{ expiresAt: null, state: "unavailable" },
+			"lucide-shield-question-mark",
+		],
+	] as const)(
+		"%s shows its own decorative shield and a foreground word",
+		(_, credentials, glyph) => {
+			row(credentials);
+			const icon = badge().querySelector("svg");
+			expect(icon?.getAttribute("aria-hidden")).toBe("true");
+			expect(icon?.getAttribute("class")).toContain(glyph);
+			const word = badge().querySelector("span.text-foreground");
+			expect(word?.textContent?.trim()).toBe(badge().textContent?.trim());
+		},
+	);
 });
 
 describe("structure and locale", () => {

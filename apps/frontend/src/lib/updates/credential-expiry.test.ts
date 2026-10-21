@@ -8,6 +8,7 @@ import {
 	credentialRemainingCopy,
 	DAY_MS,
 	formatDayCount,
+	msUntilDaysLeftChanges,
 	wholeDaysLeft,
 } from "./credential-expiry";
 
@@ -48,6 +49,48 @@ describe("wholeDaysLeft — floor of whole days, never negative", () => {
 		(value) => {
 			expect(wholeDaysLeft(value, NOW)).toBeUndefined();
 			expect(wholeDaysLeft(NOW + DAY_MS, value)).toBeUndefined();
+		},
+	);
+});
+
+describe("msUntilDaysLeftChanges — when an open row must recount", () => {
+	it.each([
+		["exactly on a day boundary", 30 * DAY_MS],
+		["an hour past a boundary", 30 * DAY_MS + 3_600_000],
+		["one millisecond before a boundary", 30 * DAY_MS - 1],
+		["two days and a second", 2 * DAY_MS + 1_000],
+	])(
+		"%s: the count is unchanged until the delay and changes at it",
+		(_, left) => {
+			const expiresAt = NOW + left;
+			const delay = msUntilDaysLeftChanges(expiresAt, NOW);
+			expect(delay).toBeGreaterThan(0);
+			const before = wholeDaysLeft(expiresAt, NOW);
+			expect(wholeDaysLeft(expiresAt, NOW + (delay as number) - 1)).toBe(
+				before,
+			);
+			expect(wholeDaysLeft(expiresAt, NOW + (delay as number))).toBe(
+				(before as number) - 1,
+			);
+		},
+	);
+
+	it("on the last day the next change is the expiry itself", () => {
+		const expiresAt = NOW + 3_600_000;
+		expect(msUntilDaysLeftChanges(expiresAt, NOW)).toBe(3_600_000);
+		expect(wholeDaysLeft(expiresAt, NOW + 3_600_000)).toBeUndefined();
+	});
+
+	it("never waits longer than one day", () => {
+		expect(msUntilDaysLeftChanges(NOW + 400 * DAY_MS, NOW)).toBeLessThanOrEqual(
+			DAY_MS,
+		);
+	});
+
+	it.each([0, -1, -3 * DAY_MS])(
+		"nothing left (%i ms) means no timer",
+		(left) => {
+			expect(msUntilDaysLeftChanges(NOW + left, NOW)).toBeUndefined();
 		},
 	);
 });

@@ -450,9 +450,13 @@ The Updates dialog's credentials row adds no tokens, motion or primitive. It is
 one bordered `rounded-lg` row with the Connection section's finding-row anatomy
 (`px-4 py-3`, a `text-sm` semibold label beside a status `Badge`, then a muted
 `text-xs` detail line with the `·` separator). The badge word carries the
-state; `success`/`warning`/`error`/`neutral` only reinforce it, and "unknown"
-is neutral, never an alarm. The remaining-days phrase is the only foreground
-text in the detail line. It is a labelled `role="group"`, wraps instead of
+state; the `success`/`warning`/`error`/`neutral` pill tint and a Lucide shield
+glyph (check, alert, x, question) in that tone only reinforce it, and "unknown"
+is neutral, never an alarm. The badge word itself uses `text-foreground`: the
+shared status-pill text tones measured below WCAG AA 4.5:1 for `error` (light
+and dark) and `neutral` (dark), and axe fails them on this surface; the glyph
+needs only the 3:1 non-text ratio. Other Badge call sites are unchanged. The
+remaining-days phrase is the only foreground text in the detail line. It is a labelled `role="group"`, wraps instead of
 overflowing in every locale, and is absent rather than empty for an older
 backend. Acceptance: 390/1280 px, light and dark, plus Arabic RTL, in
 `visual/update-system.visual.spec.ts`; a real device certificate is not part of

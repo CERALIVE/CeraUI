@@ -1144,6 +1144,10 @@ mid-write or power-loss behavior. Device clocks and installed permissions remain
 both-board proof obligations. See the backend
 [journal contract](../apps/backend/docs/CREDENTIAL-NOTICES.md).
 
+The Updates dialog renders the optional block as the update-credentials row
+described under Frontend surfaces; an absent block renders nothing. See the
+[shared RPC contract](../packages/rpc/docs/update-credentials.md).
+
 What does exist is a check for a certificate that has **already** expired or been
 refused, inside the APT transport profile. For the `apt.ceralive.tv` host the
 executor runs `openssl x509 -checkend 0` on the fleet certificate, then GETs the
@@ -1206,11 +1210,12 @@ successful transport probe.
   `src/lib/updates/credential-expiry.ts`): leads the Update connection section
   when `system.getUpdateDetails` carries the optional `credentials` block, and
   renders nothing when it is absent (an older backend). It shows the device's
-  verdict as a worded badge (Valid, Expiring soon, Expired, Unknown) and the
-  certificate's expiry as a localized date and time. For `expiring` only, it
-  adds "in about N days": the floor of whole days left on the **browser's**
-  clock, "in less than a day" under one day, and no phrase once that clock has
-  passed the date, so it never shows a negative count. The day count is an
+  verdict as a worded badge (Valid, Expiring soon, Expired, Unknown, each with
+  a shield glyph) and the certificate's expiry as a localized date and time.
+  For `expiring` only, it adds "in about N days": the floor of whole days left
+  on the **browser's** clock, recounted by one timer at each day boundary while
+  the row is open, "in less than a day" under one day, and no phrase once that
+  clock has passed the date, so it never shows a negative count. The day count is an
   `Intl` unit phrase, because a new catalog plural message would need the
   frozen i18n oracle re-frozen. `unavailable`, an unrecognised verdict, or
   `valid` without a usable date reads as Unknown with "The expiry date could
