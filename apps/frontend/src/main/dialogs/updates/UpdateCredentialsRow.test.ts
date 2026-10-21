@@ -112,6 +112,21 @@ describe("each device verdict", () => {
 		);
 	});
 
+	it("expired by the device but still ahead on this clock: 'Expired', no countdown", () => {
+		const expiresAt = NOW + 5 * DAY_MS;
+		row({ expiresAt, state: "expired" });
+		expect(badge().textContent?.trim()).toBe("Expired");
+		expect(badge().getAttribute("data-status-badge")).toBe("error");
+		expect(screen.getByTestId("update-credentials-date").textContent).toContain(
+			`Expired ${formatUpdateTime(expiresAt, "en")}`,
+		);
+		expect(screen.queryByTestId("update-credentials-remaining")).toBeNull();
+		expect(screen.getByTestId("update-credentials").textContent).not.toMatch(
+			/\bin (about|less)\b/,
+		);
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
 	it("unavailable: a neutral unknown, 'could not be read', never an alarm", () => {
 		row({ expiresAt: null, state: "unavailable" });
 		expect(badge().textContent?.trim()).toBe("Unknown");
@@ -121,6 +136,23 @@ describe("each device verdict", () => {
 		).toBe("The expiry date could not be read.");
 		expect(screen.queryByTestId("update-credentials-date")).toBeNull();
 		expect(screen.queryByRole("alert")).toBeNull();
+	});
+
+	it("unavailable with a date riding along (e.g. the device clock is behind its last reading) stays neutral and shows no date", () => {
+		const expiresAt = NOW + 20 * DAY_MS;
+		row({ expiresAt, state: "unavailable" });
+		expect(badge().textContent?.trim()).toBe("Unknown");
+		expect(badge().getAttribute("data-status-badge")).toBe("neutral");
+		expect(
+			screen.getByTestId("update-credentials-unreadable").textContent?.trim(),
+		).toBe("The expiry date could not be read.");
+		expect(screen.queryByTestId("update-credentials-date")).toBeNull();
+		expect(screen.queryByTestId("update-credentials-remaining")).toBeNull();
+		expect(screen.getByTestId("update-credentials").textContent).not.toContain(
+			formatUpdateTime(expiresAt, "en") as string,
+		);
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(vi.getTimerCount()).toBe(0);
 	});
 });
 
@@ -186,6 +218,29 @@ describe("a null expiry date", () => {
 		expect(badge().textContent?.trim()).toBe("Expired");
 		expect(screen.getByTestId("update-credentials-unreadable")).toBeTruthy();
 	});
+
+	it.each([
+		["valid", null, "Unknown"],
+		["valid", undefined, "Unknown"],
+		["expiring", null, "Expiring soon"],
+		["expiring", undefined, "Expiring soon"],
+		["expired", null, "Expired"],
+		["expired", undefined, "Expired"],
+		["unavailable", null, "Unknown"],
+		["unavailable", undefined, "Unknown"],
+	] as const)(
+		"%s with expiresAt %s never renders a date or a countdown",
+		(state, expiresAt, word) => {
+			row({ expiresAt, state } as unknown as UpdateCredentials);
+			expect(badge().textContent?.trim()).toBe(word);
+			expect(screen.queryByTestId("update-credentials-date")).toBeNull();
+			expect(screen.queryByTestId("update-credentials-remaining")).toBeNull();
+			expect(
+				screen.getByTestId("update-credentials-unreadable").textContent?.trim(),
+			).toBe("The expiry date could not be read.");
+			expect(vi.getTimerCount()).toBe(0);
+		},
+	);
 });
 
 describe("the badge pairs a glyph with a high-contrast word", () => {

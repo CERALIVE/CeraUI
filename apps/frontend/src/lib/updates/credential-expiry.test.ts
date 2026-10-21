@@ -138,6 +138,30 @@ describe("credentialExpiryView — what the row may say", () => {
 		});
 	});
 
+	it("an expired verdict whose date is still ahead on this clock never counts down", () => {
+		// Given the device (its clock ahead of this browser) says expired, while
+		// the date is still five days ahead here.
+		const expiresAt = NOW + 5 * DAY_MS;
+		const result = view({ expiresAt, state: "expired" });
+		// Then the device's verdict and its date stand, and no countdown appears.
+		expect(result?.state).toBe("expired");
+		expect(result?.tone).toBe("error");
+		expect(result?.expiresAt).toBe(expiresAt);
+		expect(result?.detailKey).toBe(CREDENTIAL_EXPIRY_COPY_KEYS.expiredOn);
+		expect(result?.daysLeft).toBeUndefined();
+	});
+
+	it("a valid verdict whose date this clock has passed keeps the device's verdict and date", () => {
+		// Accepted clock-skew display: the device verdict is authoritative and the
+		// date stays visible, so the operator can see the two disagree.
+		const expiresAt = NOW - 3 * DAY_MS;
+		const result = view({ expiresAt, state: "valid" });
+		expect(result?.state).toBe("valid");
+		expect(result?.expiresAt).toBe(expiresAt);
+		expect(result?.detailKey).toBe(CREDENTIAL_EXPIRY_COPY_KEYS.expiresOn);
+		expect(result?.daysLeft).toBeUndefined();
+	});
+
 	it("an expiring verdict whose date this clock has already passed shows no phrase", () => {
 		// Given the device (its clock) says expiring, but this browser is 3 days later.
 		const result = view({ expiresAt: NOW - 3 * DAY_MS, state: "expiring" });
