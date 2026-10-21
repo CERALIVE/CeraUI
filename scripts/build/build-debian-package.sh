@@ -1,4 +1,5 @@
 #!/bin/bash
+# allow: SIZE_OK — package assembly envelope embeds maintainer scripts and install-guide templates; contract tests extract these exact heredocs.
 set -e
 
 # Load shared build functions
@@ -166,6 +167,86 @@ set -e
 # point the check at a scratch directory instead of the host's real one.
 SYSTEMD_RUN_DIR="${CERALIVE_SYSTEMD_RUN_DIR:-/run/systemd/system}"
 
+# Subshell scope keeps repair state out of postinst; every fallible command is
+# checked explicitly because the warning boundary disables errexit in functions.
+repair_public_link() (
+    export LC_ALL=C
+    public_parent="$1/opt/ceralive"
+    public_path="$public_parent/public"
+    stale_created=''
+    if [ -L "$public_path" ]; then
+        public_target=$(readlink -n -- "$public_path" && printf '.') || return 1
+        [ "$public_target" != '/var/www/ceralive.' ] || return 0
+        ln -sfnT -- /var/www/ceralive "$public_path" || return 1
+    else
+        if [ -e "$public_path" ]; then
+            stale_stamp=$(date -u +%Y%m%dT%H%M%SZ) || return 1
+            stale_path="$public_path.stale-$stale_stamp"
+            stale_suffix=0
+            suffix_pattern="^public\\.stale-$stale_stamp(-[0-9]+)?$"
+            collision_names=$(
+                for collision_path in "$stale_path"*; do
+                    [[ "${collision_path##*/}" =~ $suffix_pattern ]] || continue
+                    [ -e "$collision_path" ] || [ -L "$collision_path" ] || continue
+                    printf '%s\n' "${collision_path##*/}"
+                done | LC_ALL=C sort -rV
+            ) || return 1
+            IFS= read -r collision_name <<< "$collision_names" || return 1
+            if [ -n "$collision_name" ]; then
+                stale_path="$public_parent/$collision_name"
+                if [ "$stale_path" != "$public_path.stale-$stale_stamp" ]; then
+                    stale_suffix=${collision_name##*-}
+                fi
+            fi
+            while [ -e "$stale_path" ] || [ -L "$stale_path" ]; do
+                # Decimal carry avoids overflow or octal interpretation of names.
+                while [[ "$stale_suffix" == 0* && ${#stale_suffix} -gt 1 ]]; do stale_suffix=${stale_suffix#0}; done
+                suffix_zeros=''
+                while [[ "$stale_suffix" == *9 ]]; do
+                    stale_suffix=${stale_suffix%9}
+                    suffix_zeros="0$suffix_zeros"
+                done
+                if [ -z "$stale_suffix" ]; then stale_suffix="1$suffix_zeros"
+                else stale_suffix="${stale_suffix%?}$((${stale_suffix: -1} + 1))$suffix_zeros"; fi
+                stale_path="$public_path.stale-$stale_stamp-$stale_suffix"
+            done
+            mv -T -- "$public_path" "$stale_path" || return 1
+            stale_created="$stale_path"
+        fi
+        if ! ln -sT -- /var/www/ceralive "$public_path"; then
+            if [ -n "$stale_created" ]; then
+                mv -T -- "$stale_created" "$public_path" || return 1
+            fi
+            return 1
+        fi
+    fi
+
+    # Only generated timestamp names of immediate real directories are eligible.
+    # Sort names, not directory mtimes (rename preserves the stale content's age).
+    stale_pattern='^public\.stale-[0-9]{8}T[0-9]{6}Z(-[0-9]+)?$'
+    stale_names=$(
+        for stale_path in "$public_parent"/public.stale-*; do
+            [ "$stale_path" != "$stale_created" ] || continue
+            [ -d "$stale_path" ] || continue
+            [ ! -L "$stale_path" ] || continue
+            [[ "${stale_path##*/}" =~ $stale_pattern ]] || continue
+            printf '%s\n' "${stale_path##*/}"
+        done | LC_ALL=C sort -rV
+    ) || return 1
+    stale_count=0
+    while IFS= read -r stale_name; do
+        [ -n "$stale_name" ] || continue
+        stale_count=$((stale_count + 1))
+        if [ "$stale_count" -gt 3 ]; then
+            stale_path="$public_parent/$stale_name"
+            [ -d "$stale_path" ] || continue
+            [ ! -L "$stale_path" ] || continue
+            rm -rf --one-file-system -- "$stale_path" || return 1
+        fi
+    done <<< "$stale_names"
+    return 0
+)
+
 # Non-sensitive observability marker: the dpkg action, and WHETHER a previously
 # configured version exists — never the version value itself.
 if [ -n "$2" ]; then
@@ -224,6 +305,10 @@ echo ""
 echo "Web interface will be available at: http://localhost:8080"
 
 if [ "$1" = "configure" ]; then
+    # Empty on devices; the prefix seam is only for the fake-root contract test.
+    repair_public_link "${CERALIVE_PUBLIC_LINK_TEST_ROOT:-}" 2>/dev/null || {
+        printf '%s\n' 'ceralive-postinst: warning: could not fully repair /opt/ceralive/public, check the link and public.stale-* backups' >&2 || true
+    }
     systemctl daemon-reload || true
 
     # The old prerm disables on upgrade. deb-systemd-helper enable is a no-op

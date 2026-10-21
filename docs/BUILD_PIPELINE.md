@@ -28,6 +28,57 @@ This document describes the automated build pipeline for creating CeraUI distrib
 
 **Use Case**: Professional deployment with package management integration.
 
+### Frontend link repair [EXISTS; host-tested, board proof owed]
+
+The generated Bash `postinst configure` repairs `/opt/ceralive/public` before
+the upgrade service-restart ladder. The exact link target is `/var/www/ceralive`,
+where the package installs its frontend. A persistent real directory can survive
+dpkg unpacking (and OS updates through the `/data/ceralive` bind) and otherwise
+leave a new backend serving old assets.
+
+- A correct symlink is a no-op, including its inode and timestamps. A missing
+  link is created; a wrong symlink is replaced without following its target.
+- A directory, regular file, socket or other non-link entry is renamed beside
+  it to `public.stale-YYYYMMDDTHHMMSSZ` using UTC, with a numeric suffix on
+  collision (including dangling symlinks at backup names), before linking. The
+  suffix is the highest existing numeric suffix for that second plus one, not
+  the first gap. Name matching uses the C locale, so digits are ASCII only.
+- After a successful repair, retain at most three previous real backup directories
+  plus the entry just displaced by this run (up to four directories). The new
+  backup never consumes a previous-backup slot or gets pruned in its creating run,
+  even if the clock moved backwards. Previous backups are ordered by timestamp
+  name and numeric suffix, not content mtime; only exact timestamp-shaped names
+  with optional numeric suffix qualify. Older eligible directories are removed.
+  Non-directory backups and backup symlinks neither consume slots nor get pruned;
+  nested, non-ASCII-digit, historic date-only and unrelated names are untouched.
+  A correct-link no-op does not prune. Back up anything needed longer separately.
+- Link creation uses `ln -sT`, so a concurrently appearing directory cannot receive
+  a nested `ceralive` symlink. If creation fails after a rename, the repair attempts
+  to move the displaced entry back before returning failure. Restoration can also
+  fail (for example, when another writer placed a nonempty directory at `public`);
+  in that case the displaced data stays in its backup.
+- Pruning uses `rm --one-file-system`: it refuses descent into a nested different-
+  filesystem mount and warns on incomplete deletion. This is **not** protection
+  against a same-filesystem bind mount. Do not mount anything below a backup;
+  privileged concurrent writers and power loss are not made transactional.
+- Every repair error becomes one warning on stderr and does not fail configure
+  or suppress its existing restart ladder, including when restoration also fails.
+  A failed restoration can still leave a missing or incorrect public path; the
+  warning asks for inspection, not a claim of repair success. Other existing
+  maintainer-script failures are unchanged.
+
+To check a device: `readlink /opt/ceralive/public` must print `/var/www/ceralive`.
+
+`deb-public-link.test.sh` exercises the generated configure path over private
+fake roots through the CI-run release/package contract harness; the optional
+`bash scripts/build/deb-public-link-mutations.test.sh` checks its negative controls.
+The hardening companion covers locale, rollback, race and retention cases plus
+an unprivileged user/mount-namespace fixture when supported; otherwise it prints
+an explicit mount-test skip and still checks the pruning command arguments.
+`CERALIVE_PUBLIC_LINK_TEST_ROOT` is only a test prefix and is unset on devices;
+it does not alter the absolute target. A real package upgrade and rollback on
+both board models remain separate Wave-2 qualification, not host-test claims.
+
 ### Smart-build cache inputs
 
 The package builders reuse `.build-cache` only while the complete production
