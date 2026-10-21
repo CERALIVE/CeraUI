@@ -2844,8 +2844,13 @@ function scheduleNextTick(): void {
 	const delay = isActivePhase(state.phase) ? ACTIVE_TICK_MS : IDLE_TICK_MS;
 	tickTimer = setTimeout(() => {
 		void runOrchestratorTick().catch((error) => {
-			logger.warn("update-orchestrator: tick failed", { error });
-			scheduleNextTick();
+			try {
+				reportNoticeSafely(() =>
+					logger.warn("update-orchestrator: tick failed", { error }),
+				);
+			} finally {
+				scheduleNextTick();
+			}
 		});
 	}, delay);
 	tickTimer.unref?.();
@@ -2975,9 +2980,11 @@ async function startOrchestratorRuntime(
 	try {
 		if (state.recoveredNotice) notifyUpdate(state.recoveredNotice);
 	} catch (error: unknown) {
-		logger.warn("update-orchestrator: recovered notice deferred", {
-			error: error instanceof Error ? error : String(error),
-		});
+		reportNoticeSafely(() =>
+			logger.warn("update-orchestrator: recovered notice deferred", {
+				error: error instanceof Error ? error : String(error),
+			}),
+		);
 	}
 	await hydrateOsRollbackNotices(deps.quarantine);
 	scheduleNextTick();

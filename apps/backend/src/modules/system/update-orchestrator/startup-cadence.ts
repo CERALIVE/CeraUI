@@ -1,4 +1,5 @@
 import { logger } from "../../../helpers/logger.ts";
+import { reportNoticeSafely } from "./download-paused-notices.ts";
 import {
 	defaultStartupRetryClock,
 	isTransientUpdateStartupFailure,
@@ -28,9 +29,11 @@ export class UpdateStartupCadence {
 			(error: unknown) => {
 				if (generation === this.#generation) {
 					if (isTransientUpdateStartupFailure(error)) {
-						logger.warn(
-							"update-orchestrator: startup retry burst exhausted; background cadence continues with mutations closed",
-							{ error, delayMs: UPDATE_STARTUP_BACKGROUND_RETRY_MS },
+						reportNoticeSafely(() =>
+							logger.warn(
+								"update-orchestrator: startup retry burst exhausted; background cadence continues with mutations closed",
+								{ error, delayMs: UPDATE_STARTUP_BACKGROUND_RETRY_MS },
+							),
 						);
 						this.#schedule(work, clock);
 					} else this.#adjudication.resolve(false);
@@ -56,18 +59,22 @@ export class UpdateStartupCadence {
 			} catch (error) {
 				if (generation !== this.#generation) return;
 				if (isTransientUpdateStartupFailure(error)) {
-					logger.warn(
-						"update-orchestrator: background startup retry deferred",
-						{
-							error,
-							delayMs: UPDATE_STARTUP_BACKGROUND_RETRY_MS,
-						},
+					reportNoticeSafely(() =>
+						logger.warn(
+							"update-orchestrator: background startup retry deferred",
+							{
+								error,
+								delayMs: UPDATE_STARTUP_BACKGROUND_RETRY_MS,
+							},
+						),
 					);
 					this.#schedule(work, clock);
 				} else {
-					logger.error("update-orchestrator: background startup refused", {
-						error,
-					});
+					reportNoticeSafely(() =>
+						logger.error("update-orchestrator: background startup refused", {
+							error,
+						}),
+					);
 					this.#adjudication.resolve(false);
 				}
 			}

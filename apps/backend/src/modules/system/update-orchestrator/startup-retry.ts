@@ -1,4 +1,5 @@
 import { logger } from "../../../helpers/logger.ts";
+import { reportNoticeSafely } from "./download-paused-notices.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import { OrchestratorRecoveryLoadError } from "./persistence.ts";
 
@@ -51,11 +52,13 @@ export async function retryUpdateStartup(
 			if (!isTransientUpdateStartupFailure(error)) throw error;
 			const delayMs = UPDATE_STARTUP_RETRY_DELAYS_MS[attempt];
 			if (delayMs === undefined) throw error;
-			logger.warn("update-orchestrator: startup deferred; retry scheduled", {
-				attempt: attempt + 1,
-				delayMs,
-				error,
-			});
+			reportNoticeSafely(() =>
+				logger.warn("update-orchestrator: startup deferred; retry scheduled", {
+					attempt: attempt + 1,
+					delayMs,
+					error,
+				}),
+			);
 			await retryClock.wait(delayMs);
 		}
 	}

@@ -418,6 +418,12 @@ exists and therefore cannot repair a unit the old `prerm` disabled. Both are pin
 
 ## RPC Architecture
 
+Tick and startup diagnostics [EXISTS; host-tested] use the shared synchronous
+safe-reporting boundary: a throwing logger cannot stop the next tick, startup
+retry or terminal adjudication. A failed tick still logs before scheduling once;
+recovered-notice logging cannot strand startup. Diagnostic faults add no state
+transition or admission change. Installed-board proof is not claimed.
+
 Singleton acquisition reads kernel status real/effective UID before exact argv,
 executable identity and the held-fd grant. A running deleted-flock wrapper still
 counts across a package upgrade; other granted executable identities fail unproven.

@@ -89,6 +89,18 @@ added. Status and stream admission remain live. There is no pause/confirmation
 RPC; manual Check owns confirmation. Existing test dependency injection denotes
 an initialized fixture runtime; production starts closed and has no selector.
 
+Tick/startup diagnostic transport faults [EXISTS; host-tested] are contained by
+`reportNoticeSafely`. The general failed-tick boundary logs the original error
+before scheduling exactly one retry in `finally`; recovered-notice startup
+reporting cannot suppress the first tick. Burst retry, exhaustion and background
+retry/refusal diagnostics preserve their existing waits and adjudication even if
+the logger throws. No admission, abort, persistence or retry-policy change is
+implied, and these host regressions are not installed-board qualification.
+Coverage: `update-orchestrator-tick-diagnostics.test.ts` and
+`update-orchestrator-startup-diagnostics.test.ts` exercise throwing transports,
+process-level fault listeners, exact scheduling and original failure identity;
+guard-removal and missing-schedule mutants must fail.
+
 Startup tail persistence and generic confirmation/interrupted/legacy settlement
 now hold CONTROL and recheck complete authoritative recovery identity. Nested
 guard proof borrows that lease; a missing/mismatched/inconclusive witness cannot
