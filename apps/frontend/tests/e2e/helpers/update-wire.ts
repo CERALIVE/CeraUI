@@ -1,10 +1,12 @@
 import type { Page, WebSocketRoute } from "@playwright/test";
 
 import type {
+	Notification,
 	UpdateCapabilities,
 	UpdateDetails,
 	UpdateOrchestratorPhase,
 	UpdateOrchestratorWireState,
+	UpdateState,
 } from "@ceraui/rpc/schemas";
 
 /**
@@ -150,9 +152,11 @@ export interface UpdateWireOptions {
 	fakes?: Record<string, unknown>;
 	/** Inject a pipeline, a source and a destination so Start is enabled. */
 	startable?: boolean;
+	packages?: UpdateState;
 }
 
 export interface UpdateWire {
+	pushNotification(notice: Notification): void;
 	/** Replace the orchestrator state and push it to the page now. */
 	setOrchestrator(next: UpdateOrchestratorWireState): void;
 	fake(path: string, result: unknown): void;
@@ -186,6 +190,7 @@ export async function installUpdateWire(
 
 	const patchInbound = (frame: Frame): boolean => {
 		const status = frame.status as Frame | undefined;
+		if (status && options.packages) status.update_state = options.packages;
 		if (status && "update_orchestrator" in status) {
 			if (orchestrator === null) delete status.update_orchestrator;
 			else status.update_orchestrator = orchestrator;
@@ -235,6 +240,9 @@ export async function installUpdateWire(
 	});
 
 	return {
+		pushNotification(notice) {
+			route?.send(JSON.stringify({ notification: { show: [notice] } }));
+		},
 		setOrchestrator(next) {
 			orchestrator = next;
 			pushOrchestrator();
