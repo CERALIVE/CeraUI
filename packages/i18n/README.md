@@ -2,6 +2,10 @@
 
 CeraUI's translation catalogs and runtime. Ten locales, full RTL support.
 
+Credential update notices use an upper-bound “within {days} days” warning and a
+separate expired message in all ten locales. Threshold numbers identify a warning
+window, not an exact countdown; the expired message takes no day parameter.
+
 **Paraglide is the sole i18n runtime.** The legacy generator, its Svelte 5
 adapter, its plural resolver, and the TypeScript locale dictionaries are gone —
 `messages/*.json` are now the canonical, hand-editable translation source (see
