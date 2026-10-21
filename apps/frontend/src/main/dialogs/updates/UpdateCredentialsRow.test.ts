@@ -20,6 +20,7 @@ beforeEach(() => {
 
 afterEach(() => {
 	cleanup();
+	vi.restoreAllMocks();
 	vi.useRealTimers();
 	setLocale("en");
 });
@@ -187,6 +188,30 @@ describe("an open row follows this browser's clock", () => {
 		// The device's verdict stands until the next read; only the client phrase goes.
 		expect(badge().textContent?.trim()).toBe("Expiring soon");
 		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("a mount that straddles a day boundary recounts at that boundary, not a day later", async () => {
+		// Given 2 days and 1 ms left: the count drops from 2 to 1 in 2 ms.
+		const expiresAt = NOW + 2 * DAY_MS + 1;
+		// And the wall clock moves on while the row mounts: every read after the
+		// first lands 2 ms later, already past that boundary.
+		const fakeNow = Date.now.bind(Date);
+		let reads = 0;
+		vi.spyOn(Date, "now").mockImplementation(
+			() => fakeNow() + (reads++ === 0 ? 0 : 2),
+		);
+		row({ expiresAt, state: "expiring" });
+		expect(remainingText()).toBe("in about 2 days");
+
+		// When the boundary passes, Then the shown count follows at once.
+		await vi.advanceTimersByTimeAsync(2);
+		await tick();
+		expect(remainingText()).toBe("in about 1 day");
+
+		// And the next recount is timed from the clock that view was built with.
+		await vi.advanceTimersByTimeAsync(DAY_MS - 2);
+		await tick();
+		expect(remainingText()).toBe("in less than a day");
 	});
 
 	it.each([

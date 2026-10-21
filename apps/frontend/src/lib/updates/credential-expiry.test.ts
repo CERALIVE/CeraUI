@@ -230,6 +230,58 @@ describe("credentialExpiryView — what the row may say", () => {
 	});
 });
 
+describe("credentialExpiryView — the recount delay shares the view's clock", () => {
+	it.each([
+		["exactly on a day boundary", 30 * DAY_MS],
+		["one millisecond before a boundary", 30 * DAY_MS - 1],
+		["one millisecond after a boundary", 2 * DAY_MS + 1],
+		["under a day", 3_600_000],
+	])(
+		"%s: the count holds until the delay and changes exactly at it",
+		(_, left) => {
+			const expiresAt = NOW + left;
+			const result = view({ expiresAt, state: "expiring" });
+			const delay = result?.recountInMs as number;
+			expect(delay).toBe(msUntilDaysLeftChanges(expiresAt, NOW));
+			expect(delay).toBeGreaterThan(0);
+			expect(
+				view({ expiresAt, state: "expiring" }, NOW + delay - 1)?.daysLeft,
+			).toBe(result?.daysLeft);
+			expect(
+				view({ expiresAt, state: "expiring" }, NOW + delay)?.daysLeft,
+			).not.toBe(result?.daysLeft);
+		},
+	);
+
+	it("follows the `now` it is given, not the machine's clock", () => {
+		// Given a view built for a moment 10 years away from the real clock.
+		const later = NOW + 3650 * DAY_MS;
+		const expiresAt = later + 2 * DAY_MS + 1;
+		// Then the delay is measured from that moment: 2 ms to the boundary.
+		expect(view({ expiresAt, state: "expiring" }, later)?.recountInMs).toBe(2);
+	});
+
+	it.each([
+		["valid", { expiresAt: NOW + 400 * DAY_MS, state: "valid" }],
+		[
+			"expired ahead on this clock",
+			{ expiresAt: NOW + 5 * DAY_MS, state: "expired" },
+		],
+		["expired", { expiresAt: NOW - DAY_MS, state: "expired" }],
+		[
+			"unavailable with a date",
+			{ expiresAt: NOW + DAY_MS, state: "unavailable" },
+		],
+		["expiring without a date", { expiresAt: null, state: "expiring" }],
+		["expiring already past here", { expiresAt: NOW - 1, state: "expiring" }],
+		["expiring at the instant", { expiresAt: NOW, state: "expiring" }],
+	] as const)("%s: no count, so no recount", (_, credentials) => {
+		const result = view(credentials);
+		expect(result?.daysLeft).toBeUndefined();
+		expect(result?.recountInMs).toBeUndefined();
+	});
+});
+
 describe("credentialRemainingCopy — the 'in about N days' phrase", () => {
 	it("no count, no phrase", () => {
 		expect(credentialRemainingCopy(undefined, "en")).toBeUndefined();

@@ -23,7 +23,6 @@ import {
 	type CredentialExpiryState,
 	credentialExpiryView,
 	credentialRemainingCopy,
-	msUntilDaysLeftChanges,
 } from '$lib/updates/credential-expiry';
 import { formatUpdateTime } from '$lib/updates/update-view';
 
@@ -52,8 +51,7 @@ const view = $derived.by(() => {
 });
 
 $effect(() => {
-	if (view?.daysLeft === undefined || view.expiresAt === undefined) return;
-	const delay = msUntilDaysLeftChanges(view.expiresAt, Date.now());
+	const delay = view?.recountInMs;
 	if (delay === undefined) return;
 	const timer = setTimeout(() => {
 		clockTick += 1;

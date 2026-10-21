@@ -68,6 +68,12 @@ export interface CredentialExpiryView {
 	readonly detailKey: string;
 	/** Whole days left on this clock; only for `expiring` with the expiry still ahead. */
 	readonly daysLeft: number | undefined;
+	/**
+	 * Milliseconds after the view's `now` until `daysLeft` changes, taken from
+	 * the same `now` so a recount timer never lags the count it refreshes;
+	 * `undefined` whenever `daysLeft` is.
+	 */
+	readonly recountInMs: number | undefined;
 }
 
 /** The ECMAScript time-value range; a number outside it is not a date. */
@@ -135,6 +141,10 @@ export function credentialExpiryView(
 			? "unavailable"
 			: reported;
 	const shownDate = state === "unavailable" ? undefined : expiresAt;
+	const daysLeft =
+		state === "expiring" && shownDate !== undefined
+			? wholeDaysLeft(shownDate, now)
+			: undefined;
 	return {
 		state,
 		tone: STATE_TONE[state],
@@ -146,10 +156,11 @@ export function credentialExpiryView(
 				: state === "expired"
 					? CREDENTIAL_EXPIRY_COPY_KEYS.expiredOn
 					: CREDENTIAL_EXPIRY_COPY_KEYS.expiresOn,
-		daysLeft:
-			state === "expiring" && shownDate !== undefined
-				? wholeDaysLeft(shownDate, now)
-				: undefined,
+		daysLeft,
+		recountInMs:
+			daysLeft === undefined || shownDate === undefined
+				? undefined
+				: msUntilDaysLeftChanges(shownDate, now),
 	};
 }
 
