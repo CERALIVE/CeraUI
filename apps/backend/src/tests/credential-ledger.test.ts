@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CredentialNoticeLedger } from "../modules/system/update-orchestrator/credential-ledger.ts";
+import { saveCredentialLedger } from "../modules/system/update-orchestrator/credential-ledger-io.ts";
 
 const DAY = 86_400_000;
 const thresholds = { 90: "90", 30: "30", 7: "7", 0: "expired" } as const;
@@ -136,9 +137,10 @@ test("failed save before publication retains stable retry and directory acknowle
 	// Given rename completed but parent sync failed; When a new instance retries; Then it reuses the renamed ID only after persistence succeeds.
 	const fail = new CredentialNoticeLedger({
 		path,
-		syncParent: () => {
-			throw new Error("fsync fault");
-		},
+		write: (target, contents) =>
+			saveCredentialLedger(target, contents, () => {
+				throw new Error("fsync fault");
+			}),
 	});
 	expect(() => fail.observe(known, known.expiresAt)).toThrow();
 	const recovered = new CredentialNoticeLedger({ path }).observe(

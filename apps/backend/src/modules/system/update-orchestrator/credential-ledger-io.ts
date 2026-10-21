@@ -12,7 +12,11 @@ import {
 import { basename, dirname } from "node:path";
 import { openStoredStateDirectory } from "./stored-state-file.ts";
 
-export function saveCredentialLedger(path: string, contents: string): void {
+export function saveCredentialLedger(
+	path: string,
+	contents: string,
+	syncDirectory: (fd: number) => void = fsyncSync,
+): void {
 	mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
 	const parent = openStoredStateDirectory(dirname(path), true);
 	const root = `/proc/self/fd/${parent}`;
@@ -35,7 +39,7 @@ export function saveCredentialLedger(path: string, contents: string): void {
 		}
 		renameSync(temp, `${root}/${basename(path)}`);
 		renamed = true;
-		fsyncSync(parent);
+		syncDirectory(parent);
 	} finally {
 		try {
 			if (!renamed) unlinkSync(temp);
