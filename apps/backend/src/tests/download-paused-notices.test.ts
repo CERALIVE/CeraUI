@@ -163,6 +163,45 @@ describe("detached download hold notices", () => {
 		expect(events).toEqual(["write-failed", `publish:${fact.id}`]);
 		expect(notificationExists(name(fact.id))).toBeDefined();
 	});
+	test("attempts one write when duplicate interruption facts meet a throwing ledger", async () => {
+		// Given a readable ledger whose writes always fail.
+		const disk = new DownloadPausedLedger(join(root, "ledger.json"));
+		let writes = 0;
+		const { worker } = fixture({
+			ledger: {
+				read: () => [],
+				write: () => {
+					writes++;
+					throw new Error("injected ledger failure");
+				},
+				acknowledge: (id) => disk.acknowledge(id),
+			},
+		});
+		// When the same fact arrives twice before the detached worker drains.
+		worker.interrupted(fact);
+		worker.interrupted(fact);
+		await worker.settled();
+		// Then the failed write is attempted only once.
+		expect(writes).toBe(1);
+	});
+	test("attempts one publication per fact when duplicate interruption facts meet a failing publisher", async () => {
+		// Given a durable ledger and a publisher that rejects every attempt.
+		const attempts: string[] = [];
+		const { worker } = fixture({
+			publish: async (value) => {
+				attempts.push(value.id);
+				throw new Error("injected publication failure");
+			},
+		});
+		// When each of two distinct facts arrives twice before the worker drains.
+		worker.interrupted(fact);
+		worker.interrupted(fact);
+		worker.interrupted(next);
+		worker.interrupted(next);
+		await worker.settled();
+		// Then failure does not multiply attempts or suppress the other fact.
+		expect(attempts).toEqual([fact.id, next.id]);
+	});
 	test("unknown ledger state defers without publishing or overwriting it", async () => {
 		writeFileSync(join(root, "ledger.json"), '{"schema":99}');
 		const { worker, events } = fixture();
