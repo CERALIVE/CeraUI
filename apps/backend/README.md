@@ -639,6 +639,15 @@ configuration remain unchanged, and status still reports the modem's live state.
 
 ### Software update admission
 
+The credential-expiry reader [EXISTS] reads only the active public APT client
+certificate, using the same package-before-legacy pair selection as add-on TLS.
+It accepts PEM/DER, bounds and anchors no-follow regular-file reads, checks
+trusted ownership/ancestry, and refuses incoherent packaged `not-after` metadata.
+Only a local digest and UTC expiry leave the reader; errors become closed codes.
+It never opens the private key. Date observation is not key-match, chain,
+revocation or server-acceptance proof. Notification production is a separate
+integration step; see [device updates](../../docs/DEVICE-UPDATES.md).
+
 An unreadable or ambiguous present capability declaration is an unknown regime,
 not a legacy image. Package refresh/discovery and manual/automatic installs refuse
 with the existing typed reason and retain the file until a valid later read.
