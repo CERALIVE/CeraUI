@@ -29,6 +29,31 @@ const downloading: UpdateState = {
 };
 
 describe("DLP admission isolation", () => {
+	test("no hold is published when a commit transition makes the package abort a no-op", async () => {
+		// Given: polling observes commit while the stop call is in flight.
+		const notices = downloadNoticeFixture();
+		const { deps } = abortSpyDeps({
+			downloadNotices: notices.worker,
+			getPackageInstallWireState: () => downloading,
+			stopPackageInstallUnit: async () => {
+				setOrchestratorStateForTest({
+					...getOrchestratorState(),
+					phase: "committing",
+				});
+			},
+		});
+		setOrchestratorRuntimeDepsForTest(deps);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "downloading",
+		});
+		// When: the original admission finishes its unchanged abort dispatch.
+		await admitAndPrepareStreamStart();
+		await notices.worker.settled();
+		// Then: no informational hold claims the rejected transition occurred.
+		expect(getOrchestratorState().phase).toBe("committing");
+		expect(notices.publications).toEqual([]);
+	});
 	test.each(["positive", "throws"])(
 		"%s commit probe produces no hold or stop",
 		async (fault) => {

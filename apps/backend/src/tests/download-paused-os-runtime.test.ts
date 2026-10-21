@@ -40,6 +40,38 @@ function stageFixture(kill: () => Promise<void> = async () => undefined) {
 }
 
 describe("OS download hold production-site mapping", () => {
+	test("no hold is published when synchronous abort settlement makes the OS transition a no-op", async () => {
+		// Given: the producer settles synchronously when its signal is aborted.
+		const entered = Promise.withResolvers<void>();
+		const finish = Promise.withResolvers<void>();
+		setup({
+			downloadNotices: notices.worker,
+			stageOs: async (_manifest, _progress, control) => {
+				control?.signal?.addEventListener("abort", () => {
+					setOrchestratorStateForTest({
+						...getOrchestratorState(),
+						phase: "failed",
+					});
+				});
+				entered.resolve();
+				await finish.promise;
+			},
+			killAndRestartRaucForStream: async () => undefined,
+		});
+		const install = installUpdatesNow();
+		await entered.promise;
+		try {
+			// When: D8 aborts that producer before its transition dispatch.
+			await admitAndPrepareStreamStart();
+			await notices.worker.settled();
+			// Then: a no-op dispatch cannot manufacture a hold notice.
+			expect(getOrchestratorState().phase).toBe("failed");
+			expect(notices.publications).toEqual([]);
+		} finally {
+			finish.resolve();
+			await install;
+		}
+	});
 	test("slow restart submission cannot run notice I/O before admission settles", async () => {
 		const held = Promise.withResolvers<void>();
 		const killing = Promise.withResolvers<void>();
