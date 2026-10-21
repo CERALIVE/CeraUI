@@ -506,6 +506,12 @@ BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
 Release assets are published through `publish-release.yml`; see
 [`docs/BUILD_PIPELINE.md`](docs/BUILD_PIPELINE.md) for the stable APT handoff.
 
+The package's frontend-link repair [EXISTS; host-tested, board proof owed] moves
+stale non-link entries aside before upgrade restart and restores the exact public
+symlink, retaining up to three timestamped backup directories. Repair errors warn
+without failing configure; see [retention and limits](docs/BUILD_PIPELINE.md#frontend-link-repair-exists-host-tested-board-proof-owed).
+To check a device: `readlink /opt/ceralive/public` must print `/var/www/ceralive`.
+
 CeraUI pins the published `@ceralive/cerastream@2026.9.11` in both
 the backend and shared RPC package, carrying schema 0.21.0's capture status,
 failover-rate policy, raw-input classifications, and source-mode session-switch fields.

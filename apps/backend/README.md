@@ -416,6 +416,12 @@ exists and therefore cannot repair a unit the old `prerm` disabled. Both are pin
 `scripts/build/deb-maintainer-scripts.test.sh`, run from
 `scripts/build/release-package-contracts.sh`.
 
+`postinst configure` also repairs the persistent frontend link before that
+restart ladder, moving non-link entries aside and warning rather than failing
+if repair is impossible. The fake-root package contract covers this path;
+[backup retention and remaining board proof](../../docs/BUILD_PIPELINE.md#frontend-link-repair-exists-host-tested-board-proof-owed)
+are separate from the backend unit tests.
+
 ## RPC Architecture
 
 Singleton acquisition reads kernel status real/effective UID before exact argv,

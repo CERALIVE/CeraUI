@@ -28,6 +28,39 @@ This document describes the automated build pipeline for creating CeraUI distrib
 
 **Use Case**: Professional deployment with package management integration.
 
+### Frontend link repair [EXISTS; host-tested, board proof owed]
+
+The generated Bash `postinst configure` repairs `/opt/ceralive/public` before
+the upgrade service-restart ladder. The exact link target is `/var/www/ceralive`,
+where the package installs its frontend. A persistent real directory can survive
+dpkg unpacking (and OS updates through the `/data/ceralive` bind) and otherwise
+leave a new backend serving old assets.
+
+- A correct symlink is a no-op, including its inode and timestamps. A missing
+  link is created; a wrong symlink is replaced without following its target.
+- A directory, regular file, socket or other non-link entry is renamed beside
+  it to `public.stale-YYYYMMDDTHHMMSSZ` using UTC, with a numeric suffix on
+  collision (including dangling symlinks at backup names), before linking.
+- After repair, only the newest three real backup directories with exactly that
+  timestamp shape and optional numeric suffix are retained, ordered by timestamp
+  name and numeric suffix, not content mtime. Older eligible directories are
+  removed. Non-directory backups, backup symlinks, nested names and other names
+  (including historic date-only backups) are untouched. A correct-link no-op
+  does not prune. Back up anything needed beyond that retention window separately.
+- Every repair error becomes one warning on stderr and does not fail configure
+  or suppress its existing restart ladder. A failure can leave the old entry,
+  or a backup with a missing link; the warning asks for inspection, not a claim
+  of repair success. Other existing maintainer-script failures are unchanged.
+
+To check a device: `readlink /opt/ceralive/public` must print `/var/www/ceralive`.
+
+`deb-public-link.test.sh` exercises the generated configure path over private
+fake roots through the CI-run release/package contract harness; the optional
+`bash scripts/build/deb-public-link-mutations.test.sh` checks its negative controls.
+`CERALIVE_PUBLIC_LINK_TEST_ROOT` is only a test prefix and is unset on devices;
+it does not alter the absolute target. A real package upgrade and rollback on
+both board models remain separate Wave-2 qualification, not host-test claims.
+
 ### Smart-build cache inputs
 
 The package builders reuse `.build-cache` only while the complete production
