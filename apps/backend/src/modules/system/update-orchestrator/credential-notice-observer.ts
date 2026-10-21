@@ -1,10 +1,15 @@
 import type { UpdateCredentials } from "@ceraui/rpc/schemas";
+import { logger } from "../../../helpers/logger.ts";
 import { isNotificationDismissed } from "../../ui/notification-dismissals.ts";
 import {
 	type CredentialExpiry,
+	type CredentialExpiryReason,
 	readCredentialExpiry,
 } from "./credential-expiry.ts";
-import { CredentialNoticeLedger } from "./credential-ledger.ts";
+import {
+	CredentialLedgerError,
+	CredentialNoticeLedger,
+} from "./credential-ledger.ts";
 import {
 	type CredentialIntent,
 	credentialIntentId,
@@ -18,6 +23,10 @@ import {
 
 const READ_INTERVAL_MS = 15 * 60_000;
 const OBSERVE_INTERVAL_MS = 60_000;
+type CredentialFaultReason =
+	| `reader-${CredentialExpiryReason}`
+	| `ledger-${CredentialLedgerError["reason"]}`
+	| "observation-failed";
 export type CredentialObserverDeps = {
 	readonly now: () => number;
 	readonly read: () => Promise<CredentialExpiry>;
@@ -31,12 +40,14 @@ export class CredentialNoticeObserver {
 	private flight: Promise<void> | undefined;
 	private readAt: number | undefined;
 	private observedAt: number | undefined;
+	private latestObservedAt: number | undefined;
 	private observation: CredentialExpiry = {
 		kind: "unavailable",
 		reason: "missing",
 	};
 	private available = false;
 	private stopped = false;
+	private fault: CredentialFaultReason | undefined;
 	constructor(private readonly deps: CredentialObserverDeps) {}
 
 	refresh(force = false): Promise<void> {
@@ -57,9 +68,14 @@ export class CredentialNoticeObserver {
 				this.observedAt = now;
 				await this.observe(now, force);
 			})
-			.catch(() => {
+			.catch((error: unknown) => {
 				// Never attach raw reader/ledger exceptions to logs or let an advisory reject a tick.
 				this.available = false;
+				this.reportFault(
+					error instanceof CredentialLedgerError
+						? `ledger-${error.reason}`
+						: "observation-failed",
+				);
 			})
 			.finally(() => {
 				if (this.flight === flight) this.flight = undefined;
@@ -72,13 +88,33 @@ export class CredentialNoticeObserver {
 		this.stopped = true;
 	}
 
+	private reportFault(reason: CredentialFaultReason | undefined): void {
+		if (reason === this.fault) return;
+		this.fault = reason;
+		if (reason === undefined) return;
+		try {
+			logger.warn("update-orchestrator: credential observation deferred", {
+				reason,
+			});
+		} catch {
+			// Diagnostic transport faults cannot escape this advisory boundary or expose raw errors.
+			this.available = false;
+		}
+	}
+
 	details(): UpdateCredentials {
 		if (!this.available) return { expiresAt: null, state: "unavailable" };
+		const now = this.deps.now();
+		if (
+			!Number.isSafeInteger(now) ||
+			(this.latestObservedAt !== undefined && now < this.latestObservedAt)
+		)
+			return { expiresAt: null, state: "unavailable" };
 		switch (this.observation.kind) {
 			case "unavailable":
 				return { expiresAt: null, state: "unavailable" };
 			case "known": {
-				const remaining = this.observation.expiresAt - this.deps.now();
+				const remaining = this.observation.expiresAt - now;
 				return {
 					expiresAt: this.observation.expiresAt,
 					state:
@@ -110,6 +146,7 @@ export class CredentialNoticeObserver {
 		switch (this.observation.kind) {
 			case "unavailable":
 				this.available = false;
+				this.reportFault(`reader-${this.observation.reason}`);
 				return;
 			case "known":
 				break;
@@ -119,15 +156,20 @@ export class CredentialNoticeObserver {
 			}
 		}
 		const plan = this.deps.ledger.observe(this.observation, this.deps.now());
+		this.latestObservedAt = plan.latestObservedAt;
 		this.available = true;
 		for (const retired of plan.retired) this.deps.clear(retired);
-		if (!plan.current) return;
+		if (!plan.current) {
+			this.reportFault(undefined);
+			return;
+		}
 		const intent = plan.current;
 		const kind = credentialIntentKind(intent);
 		const id = credentialIntentId(intent);
 		if (this.deps.dismissed(`update:${kind}:${id}`)) {
 			this.deps.ledger.acknowledge(intent);
 			this.deps.clear(intent);
+			this.reportFault(undefined);
 			return;
 		}
 		this.deps.ledger.activate(intent);
@@ -159,6 +201,7 @@ export class CredentialNoticeObserver {
 				return exhaustive;
 			}
 		}
+		this.reportFault(undefined);
 	}
 }
 

@@ -647,8 +647,16 @@ Only a local digest and UTC expiry leave the reader; errors become closed codes.
 It never opens the private key. Date observation is not key-match, chain,
 revocation or server-acceptance proof. An isolated tick/startup observer produces
 90/30/7-day and expired notices through a dedicated durable intent/acknowledgement
-journal, even while live, automation is off or recovery gates updates. Details
-RPC reads its cached public projection only. See [device updates](../../docs/DEVICE-UPDATES.md)
+journal, even while live, automation is off or recovery gates updates. Undismissed
+notices retain their identity across backward-clock boots; details stays
+unavailable below the recorded/process clock floor. Schema 2 reads old schema-1
+history without resetting it, and unchanged active ticks do not rewrite it.
+Reader/ledger faults emit only a closed reason once per fault-state change. Pair
+existence uses the TLS consumer's symlink-following probe; selected public reads
+remain no-follow. Details RPC reads its cached public projection only. Device
+clock dates are not synchronized-time or edge-rejection evidence. Host durability
+proof is fresh-process reload after injected faults, not power loss.
+See [device updates](../../docs/DEVICE-UPDATES.md)
 and the [journal contract](docs/CREDENTIAL-NOTICES.md). Both-board proof is owed.
 
 An unreadable or ambiguous present capability declaration is an unknown regime,
