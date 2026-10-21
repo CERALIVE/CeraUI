@@ -1,9 +1,9 @@
 <!--
-  PackagesSection.svelte — the legacy package update controls (Task 26),
+  PackagesSection.svelte — the package update controls (Task 26),
   extracted from UpdatesDialog; the summary is `PackagesSummary.svelte`.
 
   Install is destructive: it routes through a confirmation AppDialog before
-  calling `system.startUpdate`. While an update runs, a progress indicator
+  calling the surface's capability/phase-selected package action. While an update runs, a progress indicator
   replaces the install action; the full-screen overlay (Layout, off
   `status.updating`) carries the real percentage.
 
@@ -33,7 +33,7 @@ import ActionOutcomeBand from './ActionOutcomeBand.svelte';
 import PackagesSummary from './PackagesSummary.svelte';
 
 interface Props {
-	surface: Pick<UpdateSurface, 'packagesOutcome' | 'installPackages' | 'observeLegacy'>;
+	surface: Pick<UpdateSurface, 'packagesOutcome' | 'installPackages' | 'observeLegacy' | 'pending'>;
 	/** The next scheduled package check, already formatted. */
 	nextCheck: string | undefined;
 }
@@ -58,7 +58,7 @@ let confirmOpen = $state(false);
 
 // `update` covers the start-dispatch window: pending from the dispatch until the
 // first in-progress state confirms it, or the valve lapses.
-const starting = $derived(getOperationPhase('update') === 'pending');
+const starting = $derived(getOperationPhase('update') === 'pending' || surface.pending('install'));
 
 // Every legacy state the device pushes is evidence; only a CHANGE counts.
 $effect(() => {

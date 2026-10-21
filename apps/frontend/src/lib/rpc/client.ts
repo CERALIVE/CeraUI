@@ -27,6 +27,7 @@ import type {
 	GetEngineOutput,
 	HotspotConfigInput,
 	HotspotToggleInput,
+	InstallUpdatesNowInput,
 	KioskConfigureInput,
 	KioskConfigureOutput,
 	KioskOskInput,
@@ -891,7 +892,9 @@ export interface TypedRPC {
 		getUpdateCapabilities: () => Promise<UpdateCapabilities>;
 		getUpdateDetails: () => Promise<UpdateDetails>;
 		checkUpdatesNow: () => Promise<SuccessResponse>;
-		installUpdatesNow: () => Promise<SuccessResponse>;
+		installUpdatesNow: (
+			input?: InstallUpdatesNowInput,
+		) => Promise<SuccessResponse>;
 		allowCellularOnce: (
 			input: AllowCellularOnceInput,
 		) => Promise<SuccessResponse>;

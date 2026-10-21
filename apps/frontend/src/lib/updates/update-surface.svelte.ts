@@ -34,6 +34,7 @@ import type {
 
 import { rpc } from "$lib/rpc/client";
 import { getLinkEpoch } from "$lib/rpc/session-epoch.svelte";
+import { getUpdateOrchestratorState } from "$lib/rpc/subscriptions.svelte";
 import {
 	NO_WITNESS,
 	witnessedNothingNewer,
@@ -269,8 +270,18 @@ export function createUpdateSurface(): UpdateSurface {
 		checkNow: () => actions.run("check", [() => rpc.system.checkUpdatesNow()]),
 		installNow: () =>
 			actions.run("install", [() => rpc.system.installUpdatesNow()]),
-		installPackages: () =>
-			actions.run("packages", [() => rpc.system.startUpdate()]),
+		installPackages: () => {
+			const phase = getUpdateOrchestratorState()?.phase;
+			if (
+				capabilities?.mode === "capable" &&
+				capabilities.features.includes("apt-all-packages") &&
+				(phase === "available" || phase === "awaiting-idle")
+			)
+				return actions.run("install", [
+					() => rpc.system.installUpdatesNow({ scope: "packages" }),
+				]);
+			return actions.run("packages", [() => rpc.system.startUpdate()]);
+		},
 		// The approval is for exactly ONE candidate and is spent by the install
 		// that follows it; granting it without starting the download would leave
 		// "Download now" meaning "download some time later". Both requests are
