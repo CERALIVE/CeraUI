@@ -195,7 +195,8 @@ repair_public_link() (
     stale_pattern='^public\.stale-[0-9]{8}T[0-9]{6}Z(-[0-9]+)?$'
     stale_names=$(
         for stale_path in "$public_parent"/public.stale-*; do
-            [ -d "$stale_path" ] && [ ! -L "$stale_path" ] || continue
+            [ -d "$stale_path" ] || continue
+            [ ! -L "$stale_path" ] || continue
             [[ "${stale_path##*/}" =~ $stale_pattern ]] || continue
             printf '%s\n' "${stale_path##*/}"
         done | LC_ALL=C sort -rV
@@ -206,7 +207,8 @@ repair_public_link() (
         stale_count=$((stale_count + 1))
         if [ "$stale_count" -gt 3 ]; then
             stale_path="$public_parent/$stale_name"
-            [ -d "$stale_path" ] && [ ! -L "$stale_path" ] || continue
+            [ -d "$stale_path" ] || continue
+            [ ! -L "$stale_path" ] || continue
             rm -rf -- "$stale_path" || return 1
         fi
     done <<< "$stale_names"
