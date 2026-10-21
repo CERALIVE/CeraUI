@@ -5,6 +5,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CredentialNoticeLedger } from "../modules/system/update-orchestrator/credential-ledger.ts";
+import { saveCredentialLedger } from "../modules/system/update-orchestrator/credential-ledger-io.ts";
 import { MAX_CREDENTIAL_GENERATIONS } from "../modules/system/update-orchestrator/credential-ledger-state.ts";
 
 const observation = {
@@ -80,6 +81,25 @@ test("failed intent save cannot authorize publication", async () => {
 	});
 	expect(() => ledger.observe(observation, 100)).toThrow();
 	expect(await Bun.file(path).exists()).toBe(false);
+	expect((await freshProcess()).current.threshold).toBe("expired");
+});
+
+test("fresh process after rename-before-directory-fsync reuses the pending identity", async () => {
+	// Given an actual renamed intent with failed directory acknowledgement; When a new Bun process loads; Then it acknowledges and reuses that identity.
+	const ledger = new CredentialNoticeLedger({
+		path,
+		write: (target, contents) =>
+			saveCredentialLedger(target, contents, () => {
+				throw new Error("directory fsync fault");
+			}),
+	});
+	expect(() => ledger.observe(observation, 100)).toThrow();
+	const stored = JSON.parse(await readFile(path, "utf8"));
+	const replay = await freshProcess();
+	expect(replay.current).toEqual({
+		generation: stored.generations[0].id,
+		threshold: "expired",
+	});
 });
 
 test("saturated history refuses new generation without evicting rollback acknowledgements", async () => {
