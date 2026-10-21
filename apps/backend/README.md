@@ -322,6 +322,16 @@ deliberately exercising live enumeration must restore that factory spy inside it
 body first. Journal persistence, lifecycle admission and test guards remain real
 and unchanged; this is host test isolation, not hardware qualification.
 
+The add-on zero-TERM process fixture [EXISTS] blocks TERM before publishing
+readiness and consumes it synchronously with `sigwait`. A deferred Python signal
+callback could otherwise arrive inside native FIFO-open preparation, then remain
+unexecuted while the FIFO blocks; the controlled collector grace never advances
+itself. A pending-before-wait regression observes the real kernel signal before
+releasing the fixture. Timeout classification, zero exit, partial output, group
+retirement and the original 15-second guards remain asserted. Other fixture modes
+use default/ignored TERM or natural `_exit`, not the deferred callback. This is a
+host test repair, not a product timeout or process-group policy change.
+
 The config archive-resume regression keeps its existing injected retry events and
 real strict reads, archive preservation and atomic persistence. Its one explicit
 10-second test hang guard covers measured 5.87-second legitimate recovery under

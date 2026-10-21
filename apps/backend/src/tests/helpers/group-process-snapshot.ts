@@ -1,5 +1,6 @@
 import { spyOn } from "bun:test";
 import { clearTimeout, setTimeout } from "node:timers";
+import type { Subprocess } from "bun";
 
 export type GroupProcessSnapshot = {
 	readonly testName: string;
@@ -7,7 +8,7 @@ export type GroupProcessSnapshot = {
 	readonly pendingDelaysMs: readonly number[];
 	readonly pid: number | null;
 	readonly exitCode: number | null;
-	readonly signalCode: string | null;
+	readonly signalCode: Subprocess["signalCode"];
 	readonly stdoutEof: boolean;
 	readonly stderrEof: boolean;
 	readonly ownerId: string | null;

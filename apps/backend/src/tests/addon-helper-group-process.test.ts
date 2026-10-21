@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { readFile } from "node:fs/promises";
 import { setImmediate } from "node:timers/promises";
 import {
 	addonDisable,
@@ -103,6 +104,49 @@ test("TERM-induced zero stays a timeout failure and passes mandatory evidence", 
 		await p.wait("leader");
 		p.fire(30000);
 		const result = await work;
+		expect(result).toBeInstanceOf(SpawnTimeoutError);
+		expect(result).toMatchObject({
+			code: 0,
+			stdout: "partial-out\n",
+			stderr: "partial-err\n",
+		});
+		expect(p.step.exitCode()).toBe(0);
+		expect(isDisruptiveActionPending()).toBe(false);
+	} finally {
+		await p.cleanup();
+	}
+}, 15000);
+
+test("TERM queued before the fixture waits still yields zero timeout evidence", async () => {
+	// Given a child held before its synchronous TERM wait, with TERM already blocked.
+	const p = await groupProcessFixture("zero-term-pending");
+	const work = addonRefresh({
+		isRealDevice: async () => true,
+		exec: () => p.step.run(),
+		createStep: () => p.step,
+	}).catch((error: unknown) => error);
+	try {
+		await p.wait("leader");
+		const child = p.step.child();
+		if (child === undefined) throw new Error("missing ready child");
+		// When the real collector sends TERM before the fixture can enter sigwait.
+		p.fire(30000);
+		const pendingMasks = /^(?:SigPnd|ShdPnd):\s+([\da-f]+)$/gm;
+		for (;;) {
+			const status = await readFile(`/proc/${child.pid}/status`, "utf8");
+			if (
+				[...status.matchAll(pendingMasks)].some(([, mask]) => {
+					if (mask === undefined) throw new Error("missing signal mask");
+					return (BigInt(`0x${mask}`) & 0x4000n) !== 0n;
+				})
+			)
+				break;
+			await setImmediate();
+		}
+		expect(p.step.exitCode()).toBeUndefined();
+		await p.release();
+		const result = await work;
+		// Then pending TERM is consumed without a second signal or collector-clock advance.
 		expect(result).toBeInstanceOf(SpawnTimeoutError);
 		expect(result).toMatchObject({
 			code: 0,

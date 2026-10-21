@@ -20,11 +20,11 @@ const PROGRAM = `import os, sys, signal, json
 d, mode, code = sys.argv[1], sys.argv[2], int(sys.argv[3])
 signal.alarm(30)
 os.mkfifo(d + '/release')
-if mode == 'zero-term':
- signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+# A Python callback can stay deferred across native FIFO-open preparation.
+if mode.startswith('zero-term'): signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGTERM})
 elif mode == 'kill':
  signal.signal(signal.SIGTERM, signal.SIG_IGN)
-if mode not in ['plain', 'zero-term']:
+if mode not in ['plain', 'zero-term', 'zero-term-pending']:
  r, w = os.pipe()
  p = os.fork()
  if p == 0:
@@ -42,8 +42,9 @@ if mode not in ['plain', 'zero-term']:
 print('partial-out', flush=True)
 print('partial-err', file=sys.stderr, flush=True)
 with open(d + '/leader', 'w') as f: json.dump({'pid': os.getpid(), 'pgid': os.getpgrp(), 'sid': os.getsid(0)}, f)
-if mode in ['term', 'kill', 'zero-term']:
+if mode in ['term', 'kill', 'zero-term-pending']:
  with open(d + '/release') as f: f.read()
+if mode.startswith('zero-term'): signal.sigwait({signal.SIGTERM})
 os._exit(code)
 `;
 
