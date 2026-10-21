@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import type { UpdateSettings } from '@ceraui/rpc/schemas';
+import type { UpdateCredentials, UpdateSettings } from '@ceraui/rpc/schemas';
 
 import { expect, test } from './fixtures/index.js';
 import { ensureAuthenticated, navigateTo } from './helpers/index.js';
@@ -320,6 +320,91 @@ test.describe('device update surfaces (Todo 41)', { tag: '@functional' }, () => 
 		expect(midnight.hitWidth).toBeGreaterThanOrEqual(43.5);
 		expect(midnight.hitHeight).toBeGreaterThanOrEqual(43.5);
 		expect(midnight.box).toBeLessThan(43.5);
+	});
+
+	test('the update-credentials row states each device verdict and is absent on an older backend', async ({
+		page,
+	}) => {
+		const day = 86_400_000;
+		const wire = await installUpdateWire(page, {
+			fakes: {
+				'system.getUpdateCapabilities': CAPABLE_CAPABILITIES,
+				'system.getUpdateDetails': capableDetails({ pendingCellular: null }),
+			},
+		});
+		await boot(page);
+
+		// An older backend sends no credentials block: no row, no placeholder.
+		let dialog = await openUpdatesDialog(page);
+		await expect(dialog.getByTestId('updates-connection')).toBeVisible();
+		await expect(dialog.getByTestId('update-credentials')).toHaveCount(0);
+		await page.keyboard.press('Escape');
+		await expect(dialog).toBeHidden();
+
+		const cases: ReadonlyArray<{
+			credentials: UpdateCredentials;
+			state: string;
+			badge: string;
+			tone: string;
+			text: RegExp;
+			remaining: string | null;
+		}> = [
+			{
+				credentials: { expiresAt: Date.now() + 400 * day, state: 'valid' },
+				state: 'valid',
+				badge: 'Valid',
+				tone: 'success',
+				text: /^Expires /,
+				remaining: null,
+			},
+			{
+				credentials: { expiresAt: Date.now() + 30 * day + 3_600_000, state: 'expiring' },
+				state: 'expiring',
+				badge: 'Expiring soon',
+				tone: 'warning',
+				text: /^Expires /,
+				remaining: 'in about 30 days',
+			},
+			{
+				credentials: { expiresAt: Date.now() - 3 * day, state: 'expired' },
+				state: 'expired',
+				badge: 'Expired',
+				tone: 'error',
+				text: /^Expired /,
+				remaining: null,
+			},
+			{
+				credentials: { expiresAt: null, state: 'unavailable' },
+				state: 'unavailable',
+				badge: 'Unknown',
+				tone: 'neutral',
+				text: /^The expiry date could not be read\.$/,
+				remaining: null,
+			},
+		];
+
+		for (const expected of cases) {
+			wire.fake('system.getUpdateDetails', capableDetails({ pendingCellular: null, credentials: expected.credentials }));
+			// Every open re-reads the details, so the row follows the device's answer.
+			dialog = await openUpdatesDialog(page);
+			const row = dialog.getByRole('group', { name: 'Update credentials' });
+			await expect(row).toHaveAttribute('data-state', expected.state);
+			const badge = row.getByTestId('update-credentials-state');
+			await expect(badge).toHaveText(expected.badge);
+			await expect(badge).toHaveAttribute('data-status-badge', expected.tone);
+			const detail = row.getByTestId(
+				expected.state === 'unavailable' ? 'update-credentials-unreadable' : 'update-credentials-date',
+			);
+			await expect(detail).toHaveText(expected.text);
+			if (expected.remaining === null) {
+				await expect(row.getByTestId('update-credentials-remaining')).toHaveCount(0);
+			} else {
+				await expect(row.getByTestId('update-credentials-remaining')).toHaveText(expected.remaining);
+			}
+			await expect(row).not.toContainText(/-\s?\d+ day/);
+			await page.keyboard.press('Escape');
+			await expect(dialog).toBeHidden();
+		}
 	});
 
 	test('a capable image renders every section and no legacy notice', async ({ page }) => {
