@@ -1,5 +1,4 @@
 import { createHash, X509Certificate } from "node:crypto";
-import { lstat } from "node:fs/promises";
 import { aptClientPaths, type FileProbe } from "../../addons/apt-client-tls.ts";
 import {
 	CredentialPublicFileError,
@@ -34,19 +33,8 @@ export type CredentialExpiryDeps = {
 const PACKAGE_CERT = "/usr/share/ceralive/apt-credentials/client.crt";
 const CERT_LIMIT = 65_536;
 
-async function entryExists(path: string): Promise<boolean> {
-	try {
-		await lstat(path);
-		return true;
-	} catch (error) {
-		if (error instanceof Error && "code" in error && error.code === "ENOENT")
-			return false;
-		throw error;
-	}
-}
-
 export const defaultCredentialExpiryDeps: CredentialExpiryDeps = {
-	exists: entryExists,
+	exists: (path) => Bun.file(path).exists(),
 	readPublic: readPublicCredentialFile,
 };
 
