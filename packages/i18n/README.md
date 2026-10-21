@@ -5,6 +5,12 @@ CeraUI's translation catalogs and runtime. Ten locales, full RTL support.
 Credential update notices use an upper-bound “within {days} days” warning and a
 separate expired message in all ten locales. Threshold numbers identify a warning
 window, not an exact countdown; the expired message takes no day parameter.
+Before expiry, copy asks operators to keep the device online and install available
+updates through their localized Settings → Software Updates path. After expiry,
+it suggests checking for a system update, otherwise reflashing or contacting
+CeraLive support; no renewal button or guaranteed recovery release is implied.
+Arabic states the upper bound with a separate days-unit label and numeric value,
+avoiding number-dependent noun agreement at 7/30/90.
 
 **Paraglide is the sole i18n runtime.** The legacy generator, its Svelte 5
 adapter, its plural resolver, and the TypeScript locale dictionaries are gone —
