@@ -164,8 +164,12 @@ Known gaps, recorded rather than smoothed over:
   two-stage unit) or the gap before the dpkg spawn (non-capable image,
   single-stage unit). The cases below are outside that guarantee; they are
   launch/admission integration gaps, not fixed by the probe.
-  (a) The Packages section still calls `system.startUpdate` /
-  `system.checkForUpdates`, which dispatch nothing to the orchestrator. The
+  (a) The Packages section uses package-scoped `system.installUpdatesNow` on a
+  capable `apt-all-packages` image in `available`/`awaiting-idle`, with tracked
+  progress and the installed notice. It still calls `system.startUpdate` while
+  an OS update is on offer or the backend is legacy/incapable/orchestrator-absent;
+  `system.checkForUpdates` is unchanged. Those legacy calls dispatch nothing to
+  the orchestrator. A scoped refusal never falls back to them. The
   stop is issued only from the orchestrator's `downloading` phase
   (`runtime.ts` l.495-511), so in any other phase D8 does not stop such a
   unit, and admission does not consult it. `isUpdating()`

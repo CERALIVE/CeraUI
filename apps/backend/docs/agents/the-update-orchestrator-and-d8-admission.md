@@ -468,10 +468,14 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
   counting as quiescence proof; a late completion cannot clear a replacement
   observer. `tests/update-orchestrator-h2a-interaction.test.ts` combines expiry
   with unsafe publication and the invalid-load legacy-migration latch.
-- **The legacy RPCs bypass the orchestrator.** The Updates
-  dialog's Packages section still calls `system.checkForUpdates` /
-  `system.startUpdate`, which run `triggerManualUpdateCheck()` /
-  `startSoftwareUpdate()` directly and dispatch nothing to the orchestrator.
+- **The legacy RPCs bypass the orchestrator.** The Updates dialog's package
+  install uses optional `{scope: "packages"}` on `system.installUpdatesNow` for a
+  capable package-owned phase, with server-side rechecks through awaited package
+  preparation. Unscoped callers retain the existing behavior. The Packages
+  section keeps `system.startUpdate` for an OS offer or a legacy/incapable/absent
+  orchestrator, and `system.checkForUpdates` for discovery. These legacy RPCs run
+  `startSoftwareUpdate()` / `triggerManualUpdateCheck()` directly and dispatch
+  nothing to the orchestrator. A scoped refusal never retries via legacy.
   For launch and admission gaps see "D8 stream/update admission: what it does NOT
   cover" under Known gaps in the root [`AGENTS.md`](../../../../AGENTS.md).
 
