@@ -645,8 +645,11 @@ It accepts PEM/DER, bounds and anchors no-follow regular-file reads, checks
 trusted ownership/ancestry, and refuses incoherent packaged `not-after` metadata.
 Only a local digest and UTC expiry leave the reader; errors become closed codes.
 It never opens the private key. Date observation is not key-match, chain,
-revocation or server-acceptance proof. Notification production is a separate
-integration step; see [device updates](../../docs/DEVICE-UPDATES.md).
+revocation or server-acceptance proof. An isolated tick/startup observer produces
+90/30/7-day and expired notices through a dedicated durable intent/acknowledgement
+journal, even while live, automation is off or recovery gates updates. Details
+RPC reads its cached public projection only. See [device updates](../../docs/DEVICE-UPDATES.md)
+and the [journal contract](docs/CREDENTIAL-NOTICES.md). Both-board proof is owed.
 
 An unreadable or ambiguous present capability declaration is an unknown regime,
 not a legacy image. Package refresh/discovery and manual/automatic installs refuse

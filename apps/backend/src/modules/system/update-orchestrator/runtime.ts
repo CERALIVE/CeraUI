@@ -60,6 +60,7 @@ import { discoverCandidates } from "../update-transport/core.ts";
 import { defaultUpdateTransportDeps } from "../update-transport/executor.ts";
 import { admitStreamStart, onStreamStart } from "./admission.ts";
 import { isCommitStageRunning } from "./commit-stage-probe.ts";
+import { observeCredentialNotices } from "./credential-notice-observer.ts";
 import { recoverFailedUpdate } from "./failed-recovery.ts";
 import {
 	inspectSlotSync,
@@ -244,6 +245,7 @@ export type OsStageControl = OsStageBundleControl & {
 
 export interface OrchestratorRuntimeDeps {
 	readonly now: () => number;
+	readonly observeCredentials?: (force?: boolean) => Promise<void>;
 	readonly startupRetryClock?: StartupRetryClock;
 	readonly random: () => number;
 	readonly loadSettings: () => Promise<UpdateSettings>;
@@ -394,6 +396,7 @@ export async function checkOsManifestResult(
 
 export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	now: () => Date.now(),
+	observeCredentials: observeCredentialNotices,
 	random: () => Math.random(),
 	loadSettings: () => loadUpdateSettings(),
 	loadCapabilities: () => readUpdateCapabilities(),
@@ -2490,7 +2493,20 @@ function acknowledgeTerminalRestPhases(): void {
 
 // ─── the scheduler tick ─────────────────────────────────────────────────────
 
+function observeCredentialsSafely(
+	runtimeDeps: OrchestratorRuntimeDeps,
+	force = false,
+): void {
+	// Advisory work is detached before recovery/live/automation gates and never joins admission.
+	void Promise.resolve()
+		.then(() => runtimeDeps.observeCredentials?.(force))
+		.catch(() =>
+			logger.warn("update-orchestrator: credential observation deferred"),
+		);
+}
+
 export async function runOrchestratorTick(): Promise<void> {
+	observeCredentialsSafely(deps);
 	if (pendingPackageSuccess.pending) {
 		await replayPendingOsSettlement();
 		await maybeSettleOsUnlaunchedWitness();
@@ -2772,6 +2788,7 @@ export function startUpdateOrchestrator(
 	runtimeDeps: OrchestratorRuntimeDeps = defaultOrchestratorRuntimeDeps,
 ): Promise<void> {
 	if (started) return Promise.resolve();
+	observeCredentialsSafely(runtimeDeps, true);
 	return startupFlight.run(async () => {
 		await awaitUpdatePhysicalReconciliation();
 		await startupCadence.start(

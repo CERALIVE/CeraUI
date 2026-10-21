@@ -1,4 +1,4 @@
-# Credential notice journal [PARTIAL]
+# Credential notices [EXISTS; host-tested, board proof owed]
 
 The journal at `/data/ceralive/update-state/credential-notices.json` is schema 1.
 Strict bounded no-follow reads reject corrupt, duplicate-member, invalid-UTF-8,
@@ -23,4 +23,19 @@ maintenance and defers notice production, not update/stream admission.
 
 Physical exactly-once frame delivery is not promised: a crash can happen after
 broadcast. Durable logical intent/identity permits idempotent reconstruction.
-Producer and dismissal integration is a separate step from this journal.
+`CredentialNoticeObserver` persists intent and activation before calling
+`notifyUpdate`. Its callback commits acknowledgement in this journal instead of
+the ordinary shared LRU, avoiding a two-store atomicity assumption. Any existing
+shared dismissal is reconciled into the journal before re-publication. A failed
+acknowledgement leaves the visible notification intact. The callback is internal
+only; notification frames retain their existing keyed Updates navigation.
+
+Startup and ticks schedule one exception-isolated observation flight before
+recovery/automation gates, without awaiting it or touching D8 admission. The
+observer reads at startup/forced refresh and otherwise caches public evidence
+for 15 minutes; journal reconciliation is throttled to one minute. Unknown reader
+or journal evidence projects unavailable, does not warn and is not renewal.
+The details RPC reads the same cached state without creating intents. The
+public-date expiry does not prove private-key matching, chain trust, revocation
+or successful server authentication. Board permissions, installed frontend and
+real streaming latency require separate qualification.
