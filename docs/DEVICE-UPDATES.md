@@ -1061,13 +1061,62 @@ raises exactly one, and successful staging or a superseding candidate clears it.
 | `os-rollback` | a booted version that differs from the staged one after the armed activation ran, including the bootloader fallback after the new slot kept failing its healthcheck before `mark-good`; startup also restores undismissed recorded OS quarantine history, independently of agent validity |
 | `slots-current` | a confirmed slot mirror |
 | `download-paused` | **no producer** |
-| `credentials-expiring` | **no producer** |
+| `credentials-expiring` | independent cached public APT certificate observer, at 90/30/7-day thresholds |
+| `credentials-expired` | the same observer when the public certificate expiry is reached |
 | `transport-unhealthy` | **no producer** |
 
 ## Credentials and certificate expiry
 
-There is no expiry countdown. The wire carries no certificate expiry date, and
-`credentials-expiring` (90, 30 and 7 days) has no producer.
+The independent credential observer [EXISTS; host-tested, installed-board proof
+owed] reads the active public APT client certificate, never its private key.
+Selection reuses add-on TLS policy: a complete packaged pair under
+`/usr/share/ceralive/apt-credentials` takes priority over `/etc/apt/certs`. Key
+existence is checked without opening it. Malformed selected package credentials
+never fall back to a different legacy pair.
+
+PEM and DER parsing uses Bun's `node:crypto` X509Certificate. Reads are bounded,
+no-follow/nonblocking regular-file reads with trusted ancestry and ownership.
+The package's public UTC `not-after` metadata must match the parsed certificate
+expiry. A coherent recheck rejects replacement races. Missing, unreadable,
+oversized, unsafe, malformed or mismatched evidence is **unavailable**, never
+healthy or expired by default. Exceptions, certificate content/identity, paths
+and local digests never enter the notice or RPC payload.
+
+Warnings cross at `0 < expiresAt - now <= N * 86400000` milliseconds for
+N=90/30/7, with a separate expired variant when `expiresAt <= now`. Late first
+boot/offline/clock-forward observation durably records every newly crossed fact,
+supersedes weaker thresholds and surfaces only the most urgent current one.
+Copy says **within** the threshold, not an exact countdown; expired has no days.
+Clock reversal never rearms a recorded threshold and retires claims that are no
+longer true. An unreadable replacement is not renewal evidence and does not
+retire established warnings as if a new coherent generation had been observed.
+
+`credential-notices.json` under the existing update-state directory owns schema-1
+intents, stable random generation IDs and per-threshold pending/active/
+acknowledged/superseded lifecycle. Intent persistence and file+directory fsync
+precede publication. Startup reconstructs undismissed notices with the same ID;
+dismissal commits to this dedicated journal before removing the notice, not to
+the ordinary 256-entry LRU. Later thresholds remain eligible after earlier
+dismissals. Rotation retires older active notices and retains history across A/B
+rollback. At 1,024 generations or a 1-MiB read limit, history is preserved and
+new generation observation defers; acknowledgements are never evicted to make
+room. Corrupt/unknown journals defer rather than reset. Durable logical identity
+is not exactly-once physical frame/toast delivery across a crash.
+
+Startup forces a read; tick schedules an exception-isolated, single-flight
+observer **before** recovery/live/automation early returns without awaiting it.
+Observation is throttled to once per minute and public reads cached for fifteen
+minutes (forced refresh bypasses cache; a backward clock step refreshes too).
+No observer work joins stream admission or starts renewal/network operations.
+`system.getUpdateDetails.credentials` projects the same cached observation as
+`{ expiresAt: epochMilliseconds | null, state: valid | expiring | expired |
+unavailable }`. Absence denotes an older backend; GET never emits notices.
+Journal/read failure is unavailable. No new high-frequency status field is added.
+
+Reading certificate dates proves **nothing** about private-key matching, chain
+trust, revocation, server acceptance or renewal completion. Device clocks and
+installed permissions remain both-board proof obligations. See the backend
+[journal contract](../apps/backend/docs/CREDENTIAL-NOTICES.md).
 
 What does exist is a check for a certificate that has **already** expired or been
 refused, inside the APT transport profile. For the `apt.ceralive.tv` host the
@@ -1079,9 +1128,10 @@ selection's findings contain that state (`transportCredentialsRejected()` in
 `apps/frontend/src/lib/updates/update-bands.ts`).
 
 Package transactions on an image declaring `transport-uidrange` now produce
-APT-profile selections, so the band can appear on such a device when the fleet
-certificate is refused (not yet board-proven). A useful expiry warning still
-needs a wire field carrying the expiry date.
+APT-profile selections, so the separate rejection band can appear on such a
+device when the fleet certificate is refused (not yet board-proven). That probe
+and the public-date observer are distinct evidence; a known date is not a
+successful transport probe.
 
 ## Frontend surfaces
 

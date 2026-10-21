@@ -324,10 +324,12 @@ Known gaps, recorded rather than smoothed over:
   ordering only instead of `Requires=` (or drop the healthcheck from the
   reconcile's restart list); in CeraUI, treat exit 143 as an interrupted run
   and probe again, with a bound, before persisting a verdict.
-- **No certificate-expiry countdown.** The wire carries no expiry date,
-  `credentials-expiring` has no producer, and the credentials band keys on an
-  `apt`-profile transport finding that no production path produces yet.
+- **Credential-date limits.** Independent public-certificate observation now
+  produces durable 90/30/7-day and expired notices and the optional details RPC
+  block; it never reads the private key or establishes key matching, chain trust,
+  revocation or mTLS acceptance. It runs independently of automation/live/recovery
+  gates. The separate transport-rejection band is probe evidence, not date truth.
+  Both-board installed/runtime qualification remains owed; see DEVICE-UPDATES.
 - **Board evidence is narrow.** The capable APT candidate/installation above was
   verified on a bench-enabled board, not a released capable image. OS staging,
   slot mirroring and UID-pinned transport are still not qualified by that run.
-
