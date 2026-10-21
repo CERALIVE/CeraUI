@@ -9,6 +9,7 @@ import {
 	autostartInputSchema,
 	autostartOutputSchema,
 	cloudProviderEndpointSchema,
+	installUpdatesNowInputSchema,
 	kioskConfigureInputSchema,
 	kioskConfigureOutputSchema,
 	kioskOskInputSchema,
@@ -72,7 +73,7 @@ export const systemContract = oc.router({
 	 * `{success:false, error:<reason>}` and is never a silent no-op.
 	 */
 	checkUpdatesNow: oc.output(successResponseSchema),
-	installUpdatesNow: oc.output(successResponseSchema),
+	installUpdatesNow: oc.input(installUpdatesNowInputSchema).output(successResponseSchema),
 	allowCellularOnce: oc.input(allowCellularOnceInputSchema).output(successResponseSchema),
 
 	/**

@@ -118,3 +118,9 @@ export type UpdateDetails = z.infer<typeof updateDetailsSchema>;
 /** `system.allowCellularOnce` — grants exactly one pending OS download, by candidate id. */
 export const allowCellularOnceInputSchema = z.object({ id: z.string().min(1) });
 export type AllowCellularOnceInput = z.infer<typeof allowCellularOnceInputSchema>;
+
+export const installUpdatesNowInputSchema = z
+	.object({ scope: z.literal('packages').optional() })
+	.strict()
+	.optional();
+export type InstallUpdatesNowInput = z.infer<typeof installUpdatesNowInputSchema>;

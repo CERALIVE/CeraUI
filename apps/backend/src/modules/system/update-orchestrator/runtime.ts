@@ -15,6 +15,7 @@
 // allow: SIZE_OK — Existing process-global scheduler composition root; preserve its admission/state owners and keep new notice I/O in separate modules.
 import { randomUUID } from "node:crypto";
 import type {
+	InstallUpdatesNowInput,
 	UpdateCapabilities,
 	UpdateOrchestratorWireState,
 	UpdateSettings,
@@ -835,16 +836,59 @@ const PACKAGE_PIPELINE_BUSY_PHASES: readonly OrchestratorState["phase"][] = [
 	"settled",
 ];
 
-export async function installUpdatesNow(): Promise<ManualInstallOutcome> {
+export async function installUpdatesNow(
+	input?: InstallUpdatesNowInput,
+): Promise<ManualInstallOutcome> {
+	const scoped = input?.scope === "packages";
+	const packageRefusal = ():
+		| Extract<ManualInstallOutcome, { started: false }>
+		| undefined => {
+		if (
+			isDisruptiveActionPending() ||
+			osSettlementPersistence.pending ||
+			pendingPackageSuccess.pending
+		)
+			return { started: false, reason: "busy" };
+		if (
+			state.phase === "idle" &&
+			state.failureReason === "booted_version_unknown"
+		)
+			return { started: false, reason: "booted_version_unknown" };
+		if (!canStartManualInstall(state.phase, "packages"))
+			return {
+				started: false,
+				reason: PACKAGE_PIPELINE_BUSY_PHASES.includes(state.phase)
+					? "busy"
+					: "not_available",
+			};
+		if (deps.isStreamLive()) return { started: false, reason: "stream_active" };
+		return undefined;
+	};
 	if (isDisruptiveActionPending()) return { started: false, reason: "busy" };
 	startupReadiness.assertReady(
 		!osSettlementPersistence.replayPending &&
 			!publishingIntentPending(deps.osAttemptIntentStore),
 	);
+	if (scoped) {
+		const refusal = packageRefusal();
+		if (refusal) return refusal;
+	}
 	if (!(await updateAdmissionReady()))
 		return { started: false, reason: "busy" };
+	if (scoped) {
+		const refusal = packageRefusal();
+		if (refusal) return refusal;
+	}
 	await maybeRetireConsumedOsReceipt();
+	if (scoped) {
+		const refusal = packageRefusal();
+		if (refusal) return refusal;
+	}
 	await maybeSettleOsUnlaunchedWitness();
+	if (scoped) {
+		const refusal = packageRefusal();
+		if (refusal) return refusal;
+	}
 	if (osSettlementPersistence.pending)
 		return { started: false, reason: "busy" };
 	if (
@@ -880,8 +924,15 @@ export async function installUpdatesNow(): Promise<ManualInstallOutcome> {
 	if (deps.isStreamLive()) return { started: false, reason: "stream_active" };
 	if (state.phase === "available")
 		dispatch({ type: "AWAIT_IDLE_FOR_INSTALL", now: deps.now() });
-	const launch = await maybeStartPackageInstall({ bypassIdle: true });
+	const launch = await maybeStartPackageInstall({
+		bypassIdle: true,
+		...(scoped ? { isCurrent: () => packageRefusal() === undefined } : {}),
+	});
 	if (launch?.started) return { started: true };
+	if (scoped) {
+		const refusal = packageRefusal();
+		if (refusal) return refusal;
+	}
 	const reason = launch?.reason;
 	switch (reason) {
 		case "streaming":
@@ -1150,12 +1201,15 @@ async function readCapabilityRegime(): Promise<UpdateCapabilities | null> {
 
 async function maybeStartPackageInstall(opts: {
 	readonly bypassIdle: boolean;
+	readonly isCurrent?: () => boolean;
 }): Promise<UpdateStartOutcome | undefined> {
 	if (state.phase !== "awaiting-idle") return;
 	if (isDisruptiveActionPending())
 		return { started: false, reason: "already_updating" };
 	if (deps.isStreamLive()) return { started: false, reason: "streaming" };
 	if ((await readCapabilityRegime()) === null)
+		return { started: false, reason: "check_unavailable" };
+	if (opts.isCurrent && !opts.isCurrent())
 		return { started: false, reason: "check_unavailable" };
 	if (!opts.bypassIdle) {
 		const settings = await deps.loadSettings();
@@ -1176,7 +1230,15 @@ async function maybeStartPackageInstall(opts: {
 					})) ?? available.identity.packages.map((name) => ({ name })),
 			);
 		}
+		if (opts.isCurrent && !opts.isCurrent()) {
+			await deps.quarantine.clearPending();
+			return { started: false, reason: "check_unavailable" };
+		}
 		const settings = await deps.loadSettings();
+		if (opts.isCurrent && !opts.isCurrent()) {
+			await deps.quarantine.clearPending();
+			return { started: false, reason: "check_unavailable" };
+		}
 		const gate = decideCellularGate({
 			onlyMeteredCandidateExists: await deps.onlyMeteredCandidateExists(),
 			kind: "packages",
@@ -1186,7 +1248,11 @@ async function maybeStartPackageInstall(opts: {
 			cellularOverrideId: state.cellularOverrideId,
 			candidateId: "",
 		});
-		if (!gate.allowed || state.phase !== "awaiting-idle") {
+		if (
+			!gate.allowed ||
+			state.phase !== "awaiting-idle" ||
+			(opts.isCurrent && !opts.isCurrent())
+		) {
 			await deps.quarantine.clearPending();
 			return { started: false, reason: "updates_disabled" };
 		}
