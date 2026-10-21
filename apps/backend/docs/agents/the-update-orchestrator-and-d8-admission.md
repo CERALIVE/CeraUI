@@ -484,10 +484,28 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
   install uses optional `{scope: "packages"}` on `system.installUpdatesNow` for a
   capable package-owned phase, with server-side rechecks through awaited package
   preparation. Unscoped callers retain the existing behavior. The Packages
-  section keeps `system.startUpdate` for an OS offer or a legacy/incapable/absent
-  orchestrator, and `system.checkForUpdates` for discovery. These legacy RPCs run
+  section keeps `system.startUpdate` in every phase except
+  `available`/`awaiting-idle`: an OS offer, `idle` after its own legacy check,
+  `failed`, `quarantined`, `synced`, `os-staged`, `os-activation-armed` and all
+  other non-package phases. It also uses that route before a successful
+  capability read (including failed reads), on legacy/incapable images or without
+  an orchestrator snapshot, and keeps `system.checkForUpdates` for discovery.
+  These legacy RPCs run
   `startSoftwareUpdate()` / `triggerManualUpdateCheck()` directly and dispatch
   nothing to the orchestrator. A scoped refusal never retries via legacy.
+  An older backend already exposing the orchestrator ignores the unknown input
+  and runs the call unscoped, equivalent to Install now; it does not select the
+  legacy RPC. A stale newer cached tab against that backend is a mixed-version
+  window. Reload so the device serves its matching frontend; OS staging on the
+  unscoped route retains its existing admission fences.
+  A scoped refusal after the call's own `AWAIT_IDLE_FOR_INSTALL` leaves
+  `awaiting-idle` if authority has not moved elsewhere. The plan is empty and
+  the latch released, but the scheduler retries packages at the next eligible
+  idle, non-streaming window even with `packagesAuto=false`, subject to normal
+  capability, admission and cellular gates. This is intended **install when
+  idle** behavior: operators may retry Update when not streaming or let the
+  scheduled package install run. No cancellation control is claimed. Full
+  residuals: `docs/DEVICE-UPDATES.md` → Operator actions.
   For launch and admission gaps see "D8 stream/update admission: what it does NOT
   cover" under Known gaps in the root [`AGENTS.md`](../../../../AGENTS.md).
 
