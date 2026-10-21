@@ -66,7 +66,10 @@ import {
 	packageDownloadAttempt,
 } from "./download-paused-attempt.ts";
 import type { DownloadInterruption } from "./download-paused-ledger.ts";
-import type { DownloadPausedNotices } from "./download-paused-notices.ts";
+import {
+	type DownloadPausedNotices,
+	reportNoticeSafely,
+} from "./download-paused-notices.ts";
 import { downloadPausedNotices } from "./download-paused-runtime-notices.ts";
 import { recoverFailedUpdate } from "./failed-recovery.ts";
 import {
@@ -2560,7 +2563,9 @@ function observeCredentialsSafely(
 	void Promise.resolve()
 		.then(() => runtimeDeps.observeCredentials?.(force))
 		.catch(() =>
-			logger.warn("update-orchestrator: credential observation deferred"),
+			reportNoticeSafely(() =>
+				logger.warn("update-orchestrator: credential observation deferred"),
+			),
 		);
 }
 
