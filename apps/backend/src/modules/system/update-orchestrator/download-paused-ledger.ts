@@ -6,6 +6,8 @@ import { syncOrchestratorDirectory } from "./orchestrator-directory-sync.ts";
 import { readStoredStateFileSync } from "./stored-state-file.ts";
 import { parseAuthorityJson } from "./strict-authority-json.ts";
 
+export const DOWNLOAD_PAUSED_LEDGER_CAPACITY = 4096;
+
 const recordSchema = z.strictObject({
 	id: z.string().regex(/^(packages|os):[0-9a-f-]{36}$/),
 	candidate: z.string().regex(/^[0-9a-f]{64}$/),
@@ -14,7 +16,7 @@ const recordSchema = z.strictObject({
 const ledgerSchema = z
 	.strictObject({
 		schema: z.literal(1),
-		entries: z.array(recordSchema).max(4096),
+		entries: z.array(recordSchema).max(DOWNLOAD_PAUSED_LEDGER_CAPACITY),
 	})
 	.refine(
 		({ entries }) =>

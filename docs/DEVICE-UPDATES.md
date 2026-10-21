@@ -1101,8 +1101,11 @@ bounded, anchored/no-follow, nonblocking strict JSON reader, a sibling atomic
 write with file fsync, rename and parent-directory fsync. Only genuine absence
 is empty; unknown/corrupt/unreadable data is preserved and defers publication,
 with bounded in-memory facts retried by the observer after repair. The worker
-commits intent before publishing; write failure logs a closed reason and still
-publishes a best-effort in-memory notice. Startup independently rehydrates active
+commits intent before publishing; after a readable baseline, each interruption
+gets at most one intent write attempt. Write failure logs a closed reason and
+still publishes a best-effort in-memory notice, without per-tick write retries.
+Unknown reads retain the bounded fact for repair without writing.
+Startup independently rehydrates active
 intents even when agent authority is invalid. Ticks retry independently of update
 automation or recovery gates. Producer-owned acknowledgement runs before normal
 dismissal/removal and survives ordinary 256-key dismissal eviction; failed
@@ -1122,9 +1125,17 @@ re-offered by the normal rules. This is an accepted, documented best-effort wind
 
 All notice I/O/publication starts on a detached zero-delay **macrotask**, never a
 microtask or an awaited admission continuation. The queue and retained facts are
-capped at 128, one worker flight runs at a time, and the strict ledger retains up
-to 4096 records without evicting acknowledgements. Capacity exhaustion does not
-overwrite history or refuse a stream; new uncommitted notices are best effort.
+capped at 128, one worker flight runs at a time, and each queued action starts on
+its own macrotask turn. An interruption fact causes at most one intent write;
+duplicate delivery of an existing intent never rewrites it. Acknowledgement and
+withdrawal are independent obligations, not additional intent writes.
+The strict ledger retains up to 4096 records. At capacity, only `withdrawn`
+records are compacted, in the same atomic write that adds the new intent.
+Active notices and acknowledgements are never silently evicted. If no room can
+be made, one closed-reason `ledger-full` diagnostic drops that pending fact and
+publishes its in-memory notice best effort, without per-tick interruption retries.
+Ordinary hydration still reads once per observer tick. Neither capacity exhaustion
+nor write failure refuses a stream or overwrites protected history.
 The worker's one-second observation deadline fences later publication; it cannot
 preempt synchronous filesystem calls or cancel an already-submitted asynchronous
 port. A held port retains that single flight rather than overlapping writes.

@@ -1,23 +1,16 @@
 import { isNotificationDismissed } from "../../ui/notification-dismissals.ts";
-import type {
-	DownloadInterruption,
-	DownloadPausedRecord,
+import {
+	DOWNLOAD_PAUSED_LEDGER_CAPACITY,
+	type DownloadInterruption,
+	type DownloadPausedRecord,
+	precedingHoldEntries,
 } from "./download-paused-ledger.ts";
-import type { DownloadPausedNoticePorts } from "./download-paused-ports.ts";
+import type {
+	DownloadPausedNoticePorts,
+	NoticeAction,
+} from "./download-paused-ports.ts";
 
 export type { DownloadPausedNoticePorts } from "./download-paused-ports.ts";
-
-import { precedingHoldEntries } from "./download-paused-ledger.ts";
-
-type NoticeAction =
-	| { readonly kind: "interrupted"; readonly fact: DownloadInterruption }
-	| {
-			readonly kind: "withdraw";
-			readonly candidate: string;
-			readonly successorId?: string;
-	  }
-	| { readonly kind: "replace-packages"; readonly successorId: string }
-	| { readonly kind: "hydrate" };
 
 /** One bounded queue/flight. All I/O and publication start on a macrotask. */
 export class DownloadPausedNotices {
@@ -34,6 +27,7 @@ export class DownloadPausedNotices {
 	constructor(private readonly ports: DownloadPausedNoticePorts) {}
 
 	interrupted(fact: DownloadInterruption): void {
+		if (this.pending.has(fact.id) || this.announced.has(fact.id)) return;
 		if (this.pending.size < 128) this.pending.set(fact.id, fact);
 		this.enqueue({ kind: "interrupted", fact });
 	}
@@ -175,13 +169,21 @@ export class DownloadPausedNotices {
 					...action.fact,
 					status: "active" as const,
 				};
-				try {
-					await this.ports.ledger.write(
-						existing ? entries : [...entries, record],
-					);
-					this.pending.delete(action.fact.id);
-				} catch {
-					this.ports.report("write-failed");
+				this.pending.delete(action.fact.id);
+				if (!existing) {
+					const retained =
+						entries.length < DOWNLOAD_PAUSED_LEDGER_CAPACITY
+							? entries
+							: entries.filter((entry) => entry.status !== "withdrawn");
+					if (retained.length >= DOWNLOAD_PAUSED_LEDGER_CAPACITY)
+						this.ports.report("ledger-full");
+					else {
+						try {
+							await this.ports.ledger.write([...retained, record]);
+						} catch {
+							this.ports.report("write-failed");
+						}
+					}
 				}
 				if (active() && this.visible(record)) await this.publish(record);
 				return;
