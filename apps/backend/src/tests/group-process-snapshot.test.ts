@@ -69,6 +69,18 @@ test("prints exactly one current JSON snapshot when the operation never settles"
 	expect(JSON.stringify(expected).split("\n")).toHaveLength(1);
 });
 
+test("preserves numeric Bun signal evidence in diagnostic snapshots", () => {
+	const time = clock();
+	const state = { ...expected, signalCode: 9 } satisfies GroupProcessSnapshot;
+	void watchGroupProcess(
+		new Promise<never>(() => undefined),
+		() => state,
+		time.schedule,
+	);
+	time.advance(12);
+	expect(print.mock.calls).toEqual([[JSON.stringify(state)]]);
+});
+
 test("prints nothing and retires its timer when the operation resolves", async () => {
 	// Given a pending operation and diagnostic timer.
 	const time = clock();

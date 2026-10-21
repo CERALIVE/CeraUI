@@ -9,6 +9,11 @@ bounds. Reader closure counts as EOF only before cancellation. The original
 15-second test watchdogs and outcome assertions remain unchanged. This is hosted
 stall diagnostic coverage, not a flake repair or a proven historical cause.
 
+The diagnostic signal field derives from Bun's `Subprocess["signalCode"]` type,
+including numeric signals on Bun 1.4.3. Snapshots preserve that evidence as JSON
+numbers rather than converting or rejecting it; this does not change collection,
+termination or reservation settlement.
+
 Update tests exercise the production dependency ports explicitly. Runtime
 fixtures that reach startup, OS admission or recovery inject
 `acquireTestOsStageControl` through `acquireOsStageControl`; runner and startup
