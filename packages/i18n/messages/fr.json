@@ -2677,7 +2677,7 @@
 	"settings.updates.credentials.expiry.valid": "Valides",
 	"settings.updates.credentials.expiry.expiring": "Expirent bientôt",
 	"settings.updates.credentials.expiry.expired": "Expirés",
-	"settings.updates.credentials.expiry.unavailable": "Inconnu",
+	"settings.updates.credentials.expiry.unavailable": "État inconnu",
 	"settings.updates.credentials.expiry.expiresOn": "Expirent le {date}",
 	"settings.updates.credentials.expiry.expiredOn": "Expirés le {date}",
 	"settings.updates.credentials.expiry.inAbout": "dans environ {duration}",

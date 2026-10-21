@@ -135,6 +135,15 @@ describe("the copy is TRANSLATED, not the English value copy-pasted", () => {
 		}
 	});
 
+	it("the Romance 'unknown' label names the state instead of a bare adjective", () => {
+		// Sibling labels agree with the plural "credentials" (fr "Valides",
+		// pt-BR "Válidas"); a lone singular "Inconnu"/"Desconhecido" would not.
+		const key = CREDENTIAL_EXPIRY_STATE_KEYS.unavailable;
+		expect(lookup(CATALOGS.es, key)).toBe("Estado desconocido");
+		expect(lookup(CATALOGS.fr, key)).toBe("État inconnu");
+		expect(lookup(CATALOGS["pt-BR"], key)).toBe("Estado desconhecido");
+	});
+
 	it("the Spanish copy addresses the operator with tú, never usted or vosotros", () => {
 		for (const key of REQUIRED_KEYS) {
 			const text = String(lookup(CATALOGS.es, key)).toLowerCase();
