@@ -765,6 +765,14 @@ rule in the maintenance probes.
   polkit); the list is not a dependency graph.
 - **Notifications** (`notifyUpdate()`, `update:<kind>:<id>`, re-send suppressed).
   Producer and credential-band limits: `docs/DEVICE-UPDATES.md`.
+  Download-hold intent lives in a separate strict ledger, never agent/reducer
+  state. Capture attempt/cause before awaits; enqueue only after the existing
+  package transition or OS submission lifetime. No notice I/O or publication may
+  run on admission or on a microtask ahead of its result. Committed intents own
+  rehydration/acknowledgement; pre-commit process death may lose one informational
+  notice. The producer's optional `onDismiss` callback must persist before normal
+  removal, so ordinary dismissal eviction cannot resurrect it. All abort ordering,
+  signals, timeouts, refusal behavior and existing D8 limitations remain unchanged.
 
 ### SETTINGS AND IMAGE CAPABILITIES [EXISTS]
 
