@@ -85,6 +85,13 @@ export const updateTransportSummarySchema = z.object({
 });
 export type UpdateTransportSummary = z.infer<typeof updateTransportSummarySchema>;
 
+/** Public certificate date only; this is not proof of mTLS acceptance. */
+export const updateCredentialsSchema = z.object({
+	expiresAt: z.number().nullable(),
+	state: z.enum(['valid', 'expiring', 'expired', 'unavailable']),
+});
+export type UpdateCredentials = z.infer<typeof updateCredentialsSchema>;
+
 export const updateDetailsSchema = z.object({
 	/** `null` unless the image declares `slot-sync` AND `rauc status` answered. */
 	slots: z.array(updateSlotStatusSchema).nullable(),
@@ -103,6 +110,8 @@ export const updateDetailsSchema = z.object({
 	/** An OS download held behind the metered-only gate for one-time approval. */
 	pendingCellular: z.object({ id: z.string(), sizeBytes: z.number() }).nullable(),
 	transport: updateTransportSummarySchema.nullable(),
+	/** Absent on older backends; null expiry means not established. */
+	credentials: updateCredentialsSchema.optional(),
 });
 export type UpdateDetails = z.infer<typeof updateDetailsSchema>;
 
