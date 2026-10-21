@@ -669,6 +669,23 @@ window and bounded-worker/host-latency limits are explicit in
 [`DEVICE-UPDATES.md`](../../docs/DEVICE-UPDATES.md#download-hold-notice-exists-host-tested-board-qualification-owed).
 This is cancel-and-retry, not proof that a stream launched or all traffic stopped.
 
+The notice is informational. Restart-safe dedup, rehydration and acknowledgement
+are guaranteed for every intent that reached the ledger. If the backend dies in
+the window after the transition and before the ledger commit, that one notice is
+lost; the update itself is already safely back in the offer state and is
+re-offered by the normal rules. This is an accepted, documented best-effort window
+(`V-DLP-PRECOMMIT-LOSS`), **not exactly-once delivery**.
+
+The strict ledger holds at most 4096 records. At capacity, only withdrawn history
+is compacted into the new intent's single atomic write; active notices and durable
+acknowledgements remain protected. If it cannot make room, the worker reports
+`ledger-full` once and drops the pending fact after best-effort in-memory
+publication. A readable baseline permits at most one intent write attempt per
+interruption, without failed-write retries on later ticks. Each queue action
+starts on a separate macrotask turn; synchronous filesystem calls can still occupy
+the shared event loop after admission returns. This is not a stream-launch latency
+SLA or board qualification.
+
 An unreadable or ambiguous present capability declaration is an unknown regime,
 not a legacy image. Package refresh/discovery and manual/automatic installs refuse
 with the existing typed reason and retain the file until a valid later read.
