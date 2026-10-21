@@ -145,7 +145,7 @@ const notices = {
 /** Stable identity = event kind + exact transaction/version/unit; a retry is silent. */
 export function notifyUpdate(
 	event: UpdateNotice,
-	options: Pick<NotificationOptions, "beforeDismiss"> = {},
+	options: Pick<NotificationOptions, "beforeDismiss" | "onDismiss"> = {},
 ): boolean {
 	const name = `update:${event.kind}:${event.id}`;
 	if (notificationExists(name)) return false;
@@ -210,6 +210,7 @@ export function notifyUpdate(
 			notice.key,
 			params,
 			{
+				...options,
 				action: {
 					schema: 1,
 					kind: "navigate",
@@ -217,7 +218,6 @@ export function notifyUpdate(
 					labelKey: "notifications.openUpdates",
 				},
 				dismissalKey: name,
-				...options,
 			},
 		) === true
 	);
