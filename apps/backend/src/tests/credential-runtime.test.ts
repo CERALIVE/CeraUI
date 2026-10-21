@@ -1,5 +1,5 @@
 /// <reference types="bun" />
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
 	defaultUpdateDetailsDeps,
 	readUpdateDetails,
@@ -13,17 +13,15 @@ import {
 	setOrchestratorStateForTest,
 } from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
-import {
-	getPersistentNotifications,
-	notificationRemove,
-} from "../modules/ui/notifications.ts";
+import { getPersistentNotifications } from "../modules/ui/notifications.ts";
 import { credentialObserverFixture } from "./helpers/credential-observer-fixture.ts";
+import { resetNotificationState } from "./helpers/notification-state.ts";
 import { fakeDeps } from "./helpers/orchestrator-runtime-harness.ts";
 
+beforeEach(resetNotificationState);
 afterEach(() => {
 	resetOrchestratorRuntimeForTest();
-	for (const notice of getPersistentNotifications(true).show)
-		notificationRemove(notice.name);
+	resetNotificationState();
 });
 
 test.each(["live", "automation-off", "recovery-gated"] as const)(

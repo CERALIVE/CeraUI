@@ -19,11 +19,11 @@ import {
 	resetDismissalStoreForTests,
 } from "../modules/ui/notification-dismissals.ts";
 import {
-	getPersistentNotifications,
 	notificationDismiss,
 	notificationExists,
 	notificationRemove,
 } from "../modules/ui/notifications.ts";
+import { resetNotificationState } from "./helpers/notification-state.ts";
 
 const fact: DownloadInterruption = {
 	id: "packages:11111111-1111-4111-8111-111111111111",
@@ -38,6 +38,7 @@ let root: string;
 let oldDismissals: string | undefined;
 const workers: DownloadPausedNotices[] = [];
 beforeEach(() => {
+	resetNotificationState();
 	root = mkdtempSync(join(tmpdir(), "download-notices-"));
 	oldDismissals = process.env.CERALIVE_DISMISSALS_FILE;
 	process.env.CERALIVE_DISMISSALS_FILE = join(root, "dismissals.json");
@@ -45,9 +46,7 @@ beforeEach(() => {
 });
 afterEach(() => {
 	for (const worker of workers.splice(0)) worker.dispose();
-	for (const notice of getPersistentNotifications(true).show)
-		if (notice.name.startsWith("update:download-paused:"))
-			notificationRemove(notice.name);
+	resetNotificationState();
 	if (oldDismissals === undefined) delete process.env.CERALIVE_DISMISSALS_FILE;
 	else process.env.CERALIVE_DISMISSALS_FILE = oldDismissals;
 	resetDismissalStoreForTests();

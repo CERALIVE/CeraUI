@@ -1,16 +1,17 @@
 /// <reference types="bun" />
-import { expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import { saveOrchestratorState } from "../modules/system/update-orchestrator/persistence.ts";
 import { startUpdateOrchestrator } from "../modules/system/update-orchestrator/runtime.ts";
-import {
-	getPersistentNotifications,
-	notificationRemove,
-} from "../modules/ui/notifications.ts";
+import { getPersistentNotifications } from "../modules/ui/notifications.ts";
 import { credentialObserverFixture } from "./helpers/credential-observer-fixture.ts";
+import { resetNotificationState } from "./helpers/notification-state.ts";
 import {
 	identifiedState,
 	runtimeFixture,
 } from "./helpers/os-unlaunched-runtime-fixture.ts";
+
+beforeEach(resetNotificationState);
+afterEach(resetNotificationState);
 
 test("startup forces an independent observation while recovery is still held", async () => {
 	// Given startup held at real witness reconciliation; When bootstrap starts; Then forced credential observation is visible before recovery completes.
@@ -47,8 +48,6 @@ test("startup forces an independent observation while recovery is still held", a
 		await starting;
 		runtime.cleanup();
 		fixture.observer.stop();
-		for (const notice of getPersistentNotifications(true).show)
-			notificationRemove(notice.name);
 		await fixture.cleanup();
 	}
 });

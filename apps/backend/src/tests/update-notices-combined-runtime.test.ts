@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { Glob } from "bun";
@@ -19,22 +19,21 @@ import {
 	resetDismissalStoreForTests,
 } from "../modules/ui/notification-dismissals.ts";
 import {
-	getPersistentNotifications,
 	notificationDismiss,
 	notificationExists,
-	notificationRemove,
 } from "../modules/ui/notifications.ts";
 import { credentialObserverFixture } from "./helpers/credential-observer-fixture.ts";
 import { downloadNoticeFixture } from "./helpers/download-paused-fixture.ts";
+import { resetNotificationState } from "./helpers/notification-state.ts";
 import {
 	fakeDeps,
 	quarantineDirs,
 } from "./helpers/orchestrator-runtime-harness.ts";
 
+beforeEach(resetNotificationState);
 afterEach(() => {
 	resetOrchestratorRuntimeForTest();
-	for (const notice of getPersistentNotifications(true).show)
-		notificationRemove(notice.name);
+	resetNotificationState();
 	for (const root of quarantineDirs.splice(0))
 		rmSync(root, { recursive: true });
 });
