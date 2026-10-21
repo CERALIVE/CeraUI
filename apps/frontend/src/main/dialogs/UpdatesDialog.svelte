@@ -7,9 +7,10 @@
   Connection, read through ONE `createUpdateSurface()` on every open, plus the
   legacy notice, the credentials band and a current-activity line from the live
   `update_orchestrator` push. Which sections render is the image's capability
-  file's answer (`updateCapabilityView`), never a guess. There is no
-  certificate-expiry countdown, because nothing on the wire carries the
-  certificate's expiry date.
+  file's answer (`updateCapabilityView`), never a guess. The update
+  certificate's expiry date and the device's verdict about it are a row in the
+  Connection section (`UpdateCredentialsRow`), shown only when the details read
+  carries a `credentials` block.
 
   Every conclusion the dialog draws is the device's evidence, never a reply's
   absence or a clock (round-3 review C): action outcomes come from the action
@@ -216,7 +217,7 @@ const nextPackageCheck = $derived(formatUpdateTime(details?.checks.packages.next
 			{/if}
 
 			{#if details}
-				<ConnectionSection transport={details.transport} />
+				<ConnectionSection credentials={details.credentials} transport={details.transport} />
 			{/if}
 		{/if}
 	</div>

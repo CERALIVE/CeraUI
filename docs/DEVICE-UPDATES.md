@@ -1202,6 +1202,22 @@ successful transport probe.
   the store preserves, so a repeated outcome beside a changed sibling field
   stays quiet) and the page's controls are back without a reload. Contract and exhaustive proofs:
   `apps/frontend/docs/agents/an-update-action-outcome-is-decided-by-evidence.md`.
+- **Update credentials row** (`UpdateCredentialsRow.svelte`, rules in
+  `src/lib/updates/credential-expiry.ts`): leads the Update connection section
+  when `system.getUpdateDetails` carries the optional `credentials` block, and
+  renders nothing when it is absent (an older backend). It shows the device's
+  verdict as a worded badge (Valid, Expiring soon, Expired, Unknown) and the
+  certificate's expiry as a localized date and time. For `expiring` only, it
+  adds "in about N days": the floor of whole days left on the **browser's**
+  clock, "in less than a day" under one day, and no phrase once that clock has
+  passed the date, so it never shows a negative count. The day count is an
+  `Intl` unit phrase, because a new catalog plural message would need the
+  frozen i18n oracle re-frozen. `unavailable`, an unrecognised verdict, or
+  `valid` without a usable date reads as Unknown with "The expiry date could
+  not be read."; `expiring`/`expired` without a date keep their badge. The date
+  proves nothing about mTLS acceptance; a rejection remains the
+  `transportCredentialsRejected()` band. Browser-tested against injected
+  details, not against a device's real certificate.
 - **Global badge** (`UpdateOrchestratorBadge.svelte`): shown while
   `isUpdateBusy()` holds, with phase and percent, and opens the dialog.
 - **Go Live band** (`UpdateRefusalBand.svelte`): `goLiveUpdateRefusal()` prefers

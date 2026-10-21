@@ -443,3 +443,17 @@ identifier in both the selector and live summary. Labels never authorize a switc
 The existing two-source threshold remains; the active row is an affirmation, not a
 button. Browser acceptance covers 375/768/1280 px and both switch directions;
 hardware/color qualification remains separate and unclaimed.
+
+## 14. Update credentials row
+
+The Updates dialog's credentials row adds no tokens, motion or primitive. It is
+one bordered `rounded-lg` row with the Connection section's finding-row anatomy
+(`px-4 py-3`, a `text-sm` semibold label beside a status `Badge`, then a muted
+`text-xs` detail line with the `·` separator). The badge word carries the
+state; `success`/`warning`/`error`/`neutral` only reinforce it, and "unknown"
+is neutral, never an alarm. The remaining-days phrase is the only foreground
+text in the detail line. It is a labelled `role="group"`, wraps instead of
+overflowing in every locale, and is absent rather than empty for an older
+backend. Acceptance: 390/1280 px, light and dark, plus Arabic RTL, in
+`visual/update-system.visual.spec.ts`; a real device certificate is not part of
+that evidence.
