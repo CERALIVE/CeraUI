@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# These inventory assertions intentionally match literal shell variable names.
+# shellcheck disable=SC2016
 set -euo pipefail
 
 # Package-contract test: the ceralive-device maintainer scripts MUST honour dpkg's
@@ -65,10 +67,10 @@ done
 # builtin/keyword or be one of the commands we stub. A command outside that set
 # would run for real under the restricted PATH assertions below.
 
-APPROVED_COMMANDS="systemctl deb-systemd-helper deb-systemd-invoke udevadm id useradd userdel chown chmod rm"
+APPROVED_COMMANDS="systemctl deb-systemd-helper deb-systemd-invoke udevadm id useradd userdel chown chmod rm readlink ln date mv sort"
 SHELL_WORDS="if then else elif fi for while until do done case esac in function
              set unset export local readonly shift return exit eval exec trap
-             echo printf read test true false command builtin : time !"
+             echo printf read test true false command builtin : time ! continue repair_public_link { } )"
 
 inventory_external_commands() {
     awk -v allowed="$APPROVED_COMMANDS" -v shellwords="$SHELL_WORDS" '
@@ -82,6 +84,8 @@ inventory_external_commands() {
             sub(/[[:space:]]+$/, "", line)
             if (line == "" || line ~ /^#/) next
             if (line ~ /^[A-Za-z_][A-Za-z0-9_]*=/) next          # variable assignment
+            if (line ~ /^[A-Za-z_][A-Za-z0-9_]*\(\) \($/) next  # subshell function declaration
+            if (line ~ /^for [A-Za-z_][A-Za-z0-9_]* in /) next  # iteration declaration, not a command
             if (line ~ /^[A-Za-z0-9_*?|.\-]+\)$/) next           # case pattern
             if (line ~ /^;;$/) next
 
@@ -194,6 +198,7 @@ run_maintainer() {
         BASH_ENV="$preamble" \
         CERALIVE_STUB_LOG="$stub_log" \
         CERALIVE_STUB_MISS_LOG="$miss_log" \
+        CERALIVE_PUBLIC_LINK_TEST_ROOT="$work/public-link-root" \
         ${rundir:+CERALIVE_SYSTEMD_RUN_DIR="$rundir"} \
         /bin/bash "$ctl/$script" "$@" > "$work/out.txt" 2>&1 || rc=$?
     [[ $rc -eq 0 ]] || fail "$script $* exited $rc:$(printf '\n%s' "$(cat "$work/out.txt")")"
