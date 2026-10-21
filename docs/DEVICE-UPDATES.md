@@ -1156,6 +1156,19 @@ synchronous agent persist in `dispatch` measured p50 **17.42 ms**, p95 **17.81 m
 max **26.11 ms** in the same run. The worker can still occupy the shared event loop
 after admission returns. These host samples are not board or power-loss proof.
 
+**Accepted tombstone residual (RR-1).** A duplicate informational notice requires
+two overlapping admissions (Start → Stop during D8 → Start), one stop of the same
+unit hanging within its 10-second timeout despite the other caller's stop having
+returned, and an operator relaunch plus a third Go Live before that hung stop
+returns. The first admission interrupts a download; the relaunch withdraws that
+hold; the third Go Live interrupts the new attempt. With the ledger at exactly
+4096 lifetime records, this last interruption compacts away the first hold's
+withdrawn tombstone. The older admission then resumes in the already-available
+phase: its transition is a no-op, but it can reannounce the original hold because
+the tombstone is gone. All those timing and capacity conditions are needed for
+this sequence. The repeated notice is truthful because the update really is held
+at that moment, and the next accepted relaunch retires it.
+
 ## Credentials and certificate expiry
 
 The independent credential observer [EXISTS; host-tested, installed-board proof

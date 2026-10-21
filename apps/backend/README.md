@@ -686,6 +686,8 @@ starts on a separate macrotask turn; synchronous filesystem calls can still occu
 the shared event loop after admission returns. This is not a stream-launch latency
 SLA or board qualification.
 
+The accepted [download-hold tombstone residual](../../docs/DEVICE-UPDATES.md#download-hold-notice-exists-host-tested-board-qualification-owed) describes the rare overlapping-admission and exact-capacity sequence that can repeat a truthful notice until the next accepted relaunch retires it.
+
 An unreadable or ambiguous present capability declaration is an unknown regime,
 not a legacy image. Package refresh/discovery and manual/automatic installs refuse
 with the existing typed reason and retain the file until a valid later read.
