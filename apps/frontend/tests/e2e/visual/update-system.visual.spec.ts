@@ -1,6 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 
 import { expect, test } from '../fixtures/index.js';
+import { runAxe } from '../helpers/axe.js';
 import type { UpdateCredentials } from '@ceraui/rpc/schemas';
 
 import {
@@ -157,6 +158,8 @@ test.describe('device update surfaces @visual', () => {
 	test('update-credentials row in every state, both themes, and Arabic @visual', { tag: '@visual' }, async ({
 		page,
 	}, testInfo) => {
+		// Nine audited captures and three reloads in one test: triple the default budget.
+		test.slow();
 		const day = 86_400_000;
 		const states: ReadonlyArray<[string, UpdateCredentials]> = [
 			['valid', { expiresAt: Date.now() + 400 * day, state: 'valid' }],
@@ -193,6 +196,8 @@ test.describe('device update surfaces @visual', () => {
 			});
 			expect(fit.overflowX).toBeLessThanOrEqual(0);
 			expect(fit.inside).toBe(true);
+			// A new surface is held to zero critical/serious axe findings, colour contrast included.
+			expect(await runAxe(page, { include: ['[data-testid="update-credentials"]'] })).toEqual([]);
 			await page.screenshot({ path: evidencePath(`cred-ui-${name}-${testInfo.project.name}.png`) });
 			await page.keyboard.press('Escape');
 			await expect(dialog).toBeHidden();
