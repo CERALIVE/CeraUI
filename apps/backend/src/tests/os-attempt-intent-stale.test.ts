@@ -42,7 +42,6 @@ for (const state of ["cleared", "superseded"] as const) {
 	test(`startup retires stale launching intent when its record is ${state} without restoring baseline`, async () => {
 		// Given durable launching authority and an independently advanced disk record.
 		const f = intentCrashFixture("launching");
-		f.deps.readPackageAttempt = async () => undefined;
 		fixtures.push(f);
 		const current =
 			state === "cleared"
@@ -57,7 +56,10 @@ for (const state of ["cleared", "superseded"] as const) {
 					});
 		saveOrchestratorState(current, f.file);
 		// When a fresh runtime proves no old producer survives.
-		await startUpdateOrchestrator(f.deps);
+		await startUpdateOrchestrator({
+			...f.deps,
+			readPackageAttempt: async () => undefined,
+		});
 		// Then only intent cleanup occurs; the newer state remains authoritative.
 		expect(getOrchestratorState()).toEqual(current);
 		expect(await loadOrchestratorState(f.file)).toEqual(current);
@@ -102,10 +104,12 @@ for (const barrier of [
 	test(`stale launching intent remains closed with ${barrier} ownership`, async () => {
 		// Given a stale intent over a cleared record, but no conclusive ownership absence.
 		const f = intentCrashFixture("launching");
-		f.deps.readPackageAttempt = async () => undefined;
 		fixtures.push(f);
 		saveOrchestratorState(released(f.intent), f.file);
-		const deps = { ...f.deps };
+		const deps = {
+			...f.deps,
+			readPackageAttempt: async () => undefined,
+		};
 		switch (barrier) {
 			case "job":
 				deps.readOsStageJob = async () => record;
