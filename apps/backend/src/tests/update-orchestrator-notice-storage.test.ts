@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { DownloadPausedLedger } from "../modules/system/update-orchestrator/download-paused-ledger.ts";
 import {
 	loadOrchestratorState,
 	saveOrchestratorState,
@@ -23,6 +24,7 @@ import {
 	getPersistentNotifications,
 	notificationRemove,
 } from "../modules/ui/notifications.ts";
+import { downloadNoticeFixture } from "./helpers/download-paused-fixture.ts";
 import { fakeDeps } from "./helpers/orchestrator-runtime-harness.ts";
 
 const noticeName = "update:os-rollback:2026.10.91";
@@ -94,6 +96,26 @@ test("failed dismissal load retries from disk after storage is repaired", async 
 	// Then it reloads the acknowledgement instead of using an empty failed cache.
 	expect(recovered.isDismissed(noticeName)).toBe(true);
 });
+
+test.each([false, true])(
+	"startup independently rehydrates committed hold intents (invalid agent: %s)",
+	async (invalidAgent) => {
+		const f = await fixture();
+		const ledger = new DownloadPausedLedger(
+			join(dirname(f.agent), "download-paused-notices.json"),
+		);
+		const id = "os:11111111-1111-4111-8111-111111111111";
+		ledger.write([{ id, candidate: "a".repeat(64), status: "active" }]);
+		const notices = downloadNoticeFixture({ ledger });
+		if (invalidAgent) await Bun.write(f.agent, "{");
+		await startUpdateOrchestrator({
+			...f.deps,
+			downloadNotices: notices.worker,
+		});
+		await notices.worker.settled();
+		expect(notices.publications).toEqual([id]);
+	},
+);
 
 test("unreadable dismissals defer both startup notices without retry or resurrection", async () => {
 	// Given a recovered package notice and a dismissed rollback behind failed I/O.

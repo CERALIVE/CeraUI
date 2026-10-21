@@ -1060,10 +1060,80 @@ raises exactly one, and successful staging or a superseding candidate clears it.
 | `os-activated` | a forced `@now` activation, and a boot of the staged version whose healthcheck passed (this boot's `healthy-state.json`) |
 | `os-rollback` | a booted version that differs from the staged one after the armed activation ran, including the bootloader fallback after the new slot kept failing its healthcheck before `mark-good`; startup also restores undismissed recorded OS quarantine history, independently of agent validity |
 | `slots-current` | a confirmed slot mirror |
-| `download-paused` | **no producer** |
+| `download-paused` | a D8 admission that actually returns an in-flight package download or OS staging attempt to its offer state; detached intent persistence precedes publication |
 | `credentials-expiring` | independent cached public APT certificate observer, at 90/30/7-day thresholds |
 | `credentials-expired` | the same observer when the public certificate expiry is reached |
 | `transport-unhealthy` | **no producer** |
+
+### Download hold notice [EXISTS; host-tested, board qualification owed]
+
+`notifications.updatePausedForStream` says the update was **put on hold for a
+stream-start attempt** and will be offered again when the device is idle. It
+does not say that a stream started, all network activity stopped, RAUC recovered,
+or a suspended process will continue byte-for-byte. This is cancellation and
+later retry through the ordinary automation, idle/schedule, cellular and readiness
+rules; Install now retains its normal admission checks.
+
+The two producers are the package and OS interruption branches in `runtime.ts`,
+not the pure reducer or generic stop helper. Package capture precedes the commit
+probe/stop awaits, but emission requires the successful existing abort transition:
+a rejected stop, stale-wire commit/success or unknown/throwing commit probe emits
+nothing. OS capture precedes signal abort and the existing transition before
+TERM/restart; enqueueing happens in the original submission `finally`, so even
+slow submission cannot start notice I/O before admission settles. A failed restart
+submission still propagates its original error and may produce the truthful hold:
+the semantic transition already happened. Nonzero best-effort stop/TERM replies
+also permit this hold wording, never a physical-stop claim. Already-live holds,
+idle/syncing admission and unrelated producer cancellations produce no event.
+A later engine launch refusal does not erase a real earlier interruption.
+
+Package launch acceptance creates a process-local opaque attempt UUID; restarted
+downloads lazily acquire one before the first admission await. OS uses its existing
+`activeAttemptId`. IDs are `packages:<opaque>` / `os:<opaque>`, inside
+`update:download-paused:<id>`. Concurrent callers and repeat observations share one
+logical notice; a new attempt gets a new identity. No package UUID or notice field
+is added to `agent.json`, the persisted RPC schema or reducer state.
+
+`download-paused-ledger.ts` owns schema-1
+`/data/ceralive/update-state/download-paused-notices.json`: opaque ID, local
+candidate hash and `active` / `acknowledged` / `withdrawn`. It uses the shared
+bounded, anchored/no-follow, nonblocking strict JSON reader, a sibling atomic
+write with file fsync, rename and parent-directory fsync. Only genuine absence
+is empty; unknown/corrupt/unreadable data is preserved and defers publication,
+with bounded in-memory facts retried by the observer after repair. The worker
+commits intent before publishing; write failure logs a closed reason and still
+publishes a best-effort in-memory notice. Startup independently rehydrates active
+intents even when agent authority is invalid. Ticks retry independently of update
+automation or recovery gates. Producer-owned acknowledgement runs before normal
+dismissal/removal and survives ordinary 256-key dismissal eviction; failed
+acknowledgement leaves the notice visible. Resume withdraws only the matching
+candidate. Accepted package replacement also retires the last interrupted package
+transaction from this single pipeline across restart, not an unrelated OS notice;
+OS discovery retires the exact superseded recovery candidate. Retirement carries
+the successor attempt as a cutoff: storage repair cannot let an old withdrawal
+erase a newer interruption of the same candidate.
+
+The notice is informational. Restart-safe dedup, rehydration and acknowledgement
+are guaranteed for every intent that reached the ledger. If the backend dies in
+the window after the transition and before the ledger commit, that one notice is
+lost; the update itself is already safely back in the offer state and is
+re-offered by the normal rules. This is an accepted, documented best-effort window
+(`V-DLP-PRECOMMIT-LOSS`), **not exactly-once delivery**.
+
+All notice I/O/publication starts on a detached zero-delay **macrotask**, never a
+microtask or an awaited admission continuation. The queue and retained facts are
+capped at 128, one worker flight runs at a time, and the strict ledger retains up
+to 4096 records without evicting acknowledgements. Capacity exhaustion does not
+overwrite history or refuse a stream; new uncommitted notices are best effort.
+The worker's one-second observation deadline fences later publication; it cannot
+preempt synchronous filesystem calls or cancel an already-submitted asynchronous
+port. A held port retains that single flight rather than overlapping writes.
+These are scheduling/isolation bounds, not a disk or stream-launch latency SLA.
+On the build host's `/mnt/development` filesystem, 100 one-intent atomic ledger
+writes measured p50 **17.39 ms**, p95 **18.33 ms**, max **20.77 ms**; the existing
+synchronous agent persist in `dispatch` measured p50 **17.42 ms**, p95 **17.81 ms**,
+max **26.11 ms** in the same run. The worker can still occupy the shared event loop
+after admission returns. These host samples are not board or power-loss proof.
 
 ## Credentials and certificate expiry
 

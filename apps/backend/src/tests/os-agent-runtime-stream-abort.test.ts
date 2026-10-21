@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { setStreamLivenessSourceForTest } from "../modules/system/stream-liveness-source.ts";
 import {
 	admitAndPrepareStreamStart,
 	getOrchestratorState,
@@ -6,9 +7,25 @@ import {
 	resetOrchestratorRuntimeForTest,
 	runOrchestratorTick,
 } from "../modules/system/update-orchestrator/runtime.ts";
-import { settings, setup } from "./helpers/os-agent-runtime-harness.ts";
+import { downloadNoticeFixture } from "./helpers/download-paused-fixture.ts";
+import {
+	settings,
+	setup as setupRuntime,
+} from "./helpers/os-agent-runtime-harness.ts";
 
-afterEach(() => resetOrchestratorRuntimeForTest());
+let notices: ReturnType<typeof downloadNoticeFixture>;
+beforeEach(() => {
+	setStreamLivenessSourceForTest(() => "idle");
+	notices = downloadNoticeFixture();
+});
+function setup(overrides: Parameters<typeof setupRuntime>[0] = {}) {
+	return setupRuntime({ ...overrides, downloadNotices: notices.worker });
+}
+afterEach(async () => {
+	await notices.worker.settled();
+	resetOrchestratorRuntimeForTest();
+	setStreamLivenessSourceForTest(null);
+});
 
 describe("stream start during an in-flight OS stage", () => {
 	function inFlightStage(onAbortWindow: () => Promise<void> = async () => {}) {
@@ -39,6 +56,9 @@ describe("stream start during an in-flight OS stage", () => {
 		await install;
 		expect(getOrchestratorState().phase).toBe("os-available");
 		expect(getOrchestratorState().failureReason).toBeNull();
+		await notices.worker.settled();
+		expect(notices.publications).toHaveLength(1);
+		expect(notices.publications[0]).toMatch(/^os:[0-9a-f-]{36}$/);
 	});
 
 	test("no tick starts a second stage while the abort is still restarting RAUC", async () => {
@@ -169,6 +189,8 @@ describe("stream start during an in-flight OS stage", () => {
 			await install;
 			expect(getOrchestratorState().phase).toBe("os-available");
 			expect(getOrchestratorState().failureReason).toBeNull();
+			await notices.worker.settled();
+			expect(notices.entries()).toHaveLength(1);
 			await runOrchestratorTick();
 			expect(stages).toBe(2);
 			expect(getOrchestratorState().phase).toBe("os-staged");

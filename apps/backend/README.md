@@ -659,6 +659,16 @@ proof is fresh-process reload after injected faults, not power loss.
 See [device updates](../../docs/DEVICE-UPDATES.md)
 and the [journal contract](docs/CREDENTIAL-NOTICES.md). Both-board proof is owed.
 
+Genuine D8 interruptions now schedule an informational download-hold notice on a
+detached macrotask, after the unchanged package/OS interruption path. Its private
+versioned ledger, acknowledgement-before-dismissal callback and startup/tick
+observer are independent of `agent.json` and update admission. Intent is committed
+before publication; notice-write failure falls back to an in-memory notice, while
+unknown reads defer without replacing evidence. The accepted pre-commit crash-loss
+window and bounded-worker/host-latency limits are explicit in
+[`DEVICE-UPDATES.md`](../../docs/DEVICE-UPDATES.md#download-hold-notice-exists-host-tested-board-qualification-owed).
+This is cancel-and-retry, not proof that a stream launched or all traffic stopped.
+
 An unreadable or ambiguous present capability declaration is an unknown regime,
 not a legacy image. Package refresh/discovery and manual/automatic installs refuse
 with the existing typed reason and retain the file until a valid later read.

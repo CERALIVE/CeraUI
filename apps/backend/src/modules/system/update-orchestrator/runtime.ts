@@ -12,7 +12,7 @@
  * Update effects and scheduler. Admission detail lives in docs/DEVICE-UPDATES.md.
  */
 
-// allow: SIZE_OK — Existing process-global scheduler composition root; this repair preserves its shared admission/state owners and changes only receipt wiring.
+// allow: SIZE_OK — Existing process-global scheduler composition root; preserve its admission/state owners and keep new notice I/O in separate modules.
 import { randomUUID } from "node:crypto";
 import type {
 	UpdateCapabilities,
@@ -61,6 +61,13 @@ import { defaultUpdateTransportDeps } from "../update-transport/executor.ts";
 import { admitStreamStart, onStreamStart } from "./admission.ts";
 import { isCommitStageRunning } from "./commit-stage-probe.ts";
 import { observeCredentialNotices } from "./credential-notice-observer.ts";
+import {
+	holdCandidateKey,
+	packageDownloadAttempt,
+} from "./download-paused-attempt.ts";
+import type { DownloadInterruption } from "./download-paused-ledger.ts";
+import type { DownloadPausedNotices } from "./download-paused-notices.ts";
+import { downloadPausedNotices } from "./download-paused-runtime-notices.ts";
 import { recoverFailedUpdate } from "./failed-recovery.ts";
 import {
 	inspectSlotSync,
@@ -244,6 +251,7 @@ export type OsStageControl = OsStageBundleControl & {
 };
 
 export interface OrchestratorRuntimeDeps {
+	readonly downloadNotices?: DownloadPausedNotices;
 	readonly now: () => number;
 	readonly observeCredentials?: (force?: boolean) => Promise<void>;
 	readonly startupRetryClock?: StartupRetryClock;
@@ -510,6 +518,7 @@ let activeOsStage:
 setOsStageLiveProducerProbe(() => activeOsStage?.attemptId ?? null);
 let raucStreamAbortInProcess = false;
 let packageInstallStarting = false;
+let packageHoldAttempt: DownloadInterruption | undefined;
 let updateAdmissionProbe: Promise<boolean> | undefined;
 let osForceActivated = false;
 let osActivationInFlight = false;
@@ -599,6 +608,8 @@ export function setOrchestratorRuntimeDepsForTest(
 }
 
 export function resetOrchestratorRuntimeForTest(): void {
+	deps.downloadNotices?.dispose();
+	packageHoldAttempt = undefined;
 	resetDisruptiveActionReservationForTest();
 	if (tickTimer) clearTimeout(tickTimer);
 	tickTimer = undefined;
@@ -950,6 +961,8 @@ export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdm
 
 	if (state.phase === "downloading") {
 		const freshWire = deps.getPackageInstallWireState();
+		packageHoldAttempt ??= packageDownloadAttempt(freshWire);
+		const interruption = packageHoldAttempt;
 		if (freshWire.kind === "installing" || freshWire.kind === "success") {
 			dispatch({ type: "COMMIT_PHASE_ENTERED", now: deps.now() });
 			const refreshed = admitStreamStart(state);
@@ -967,20 +980,47 @@ export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdm
 		await deps.stopPackageInstallUnit();
 		if (pendingPackageSuccess.pending) return COMMIT_STAGE_REFUSAL;
 		dispatch({ type: "DOWNLOAD_ABORTED_FOR_STREAM", now: deps.now() });
+		// The notice is informational. Restart-safe dedup, rehydration and acknowledgement
+		// are guaranteed for every intent that reached the ledger. If the backend dies
+		// in the window after the transition and before the ledger commit, that one
+		// notice is lost; the update itself is already safely back in the offer state
+		// and is re-offered by the normal rules. Accepted best-effort window, not exactly-once delivery.
+		if (getOrchestratorState().phase === "available")
+			(deps.downloadNotices ?? downloadPausedNotices()).interrupted(
+				interruption,
+			);
 		return { allowed: true };
 	}
 
 	if (state.phase === "os-staging") {
+		const recovery = state.osStageRecovery;
+		const interruption = recovery?.activeAttemptId
+			? {
+					id: `os:${recovery.activeAttemptId}`,
+					candidate: holdCandidateKey(recovery.candidateKey),
+				}
+			: undefined;
 		// RAUC targets the inactive slot, unlike apt's live-root transaction.
 		// Leave os-staging BEFORE the kill: the SIGTERM fails the in-flight
 		// install at once, and its catch must see the abort, not a failure.
 		activeOsStage?.controller.abort();
 		dispatch({ type: "OS_STAGING_ABORTED_FOR_STREAM", now: deps.now() });
+		const interruptedForStream =
+			getOrchestratorState().phase === "os-available";
 		raucStreamAbortInProcess = true;
 		try {
 			await deps.killAndRestartRaucForStream();
 		} finally {
 			raucStreamAbortInProcess = false;
+			// The notice is informational. Restart-safe dedup, rehydration and acknowledgement
+			// are guaranteed for every intent that reached the ledger. If the backend dies
+			// in the window after the transition and before the ledger commit, that one
+			// notice is lost; the update itself is already safely back in the offer state
+			// and is re-offered by the normal rules. Accepted best-effort window, not exactly-once delivery.
+			if (interruption && interruptedForStream)
+				(deps.downloadNotices ?? downloadPausedNotices()).interrupted(
+					interruption,
+				);
 		}
 		return { allowed: true };
 	}
@@ -1154,11 +1194,25 @@ async function maybeStartPackageInstall(opts: {
 			await deps.quarantine.clearPending();
 			return result; // stays awaiting-idle; retried next tick
 		}
+		const previousHold = packageHoldAttempt;
+		packageHoldAttempt = packageDownloadAttempt(available);
 		dispatch({
 			type: "INSTALL_UNIT_STARTED",
 			now: deps.now(),
 			packageAttempt: packageProvenance,
 		});
+		(deps.downloadNotices ?? downloadPausedNotices()).replacePackages(
+			packageHoldAttempt.id,
+		);
+		(deps.downloadNotices ?? downloadPausedNotices()).withdraw(
+			packageHoldAttempt.candidate,
+			packageHoldAttempt.id,
+		);
+		if (previousHold && previousHold.candidate !== packageHoldAttempt.candidate)
+			(deps.downloadNotices ?? downloadPausedNotices()).withdraw(
+				previousHold.candidate,
+				packageHoldAttempt.id,
+			);
 		return result;
 	} finally {
 		packageInstallStarting = false;
@@ -1758,6 +1812,10 @@ async function maybeStartOsStage(
 			},
 			osSettlementPersistence,
 		);
+		(deps.downloadNotices ?? downloadPausedNotices()).withdraw(
+			holdCandidateKey(candidateKey),
+			`os:${attemptId}`,
+		);
 		await deps.stageOs(
 			manifest,
 			(percent) => {
@@ -1903,6 +1961,7 @@ function settleOsStageFailure(
 		diagnostics: readStageDiagnostics(error),
 	});
 	if (error.mode === "cancelled") {
+		// A producer cancellation token alone does not establish a D8 admission cause.
 		dispatch({ type: "OS_STAGING_ABORTED_FOR_STREAM", now });
 		return;
 	}
@@ -2507,6 +2566,7 @@ function observeCredentialsSafely(
 
 export async function runOrchestratorTick(): Promise<void> {
 	observeCredentialsSafely(deps);
+	(deps.downloadNotices ?? downloadPausedNotices()).hydrate();
 	if (pendingPackageSuccess.pending) {
 		await replayPendingOsSettlement();
 		await maybeSettleOsUnlaunchedWitness();
@@ -2755,8 +2815,12 @@ async function runOsCheckAfterCellularGate(
 					nextAttemptAt,
 				},
 	);
-	if (previousRecovery && !state.osStageRecovery)
+	if (previousRecovery && !state.osStageRecovery) {
 		clearOsStageNotices(osStageNoticeId(previousRecovery.candidateKey));
+		(deps.downloadNotices ?? downloadPausedNotices()).withdraw(
+			holdCandidateKey(previousRecovery.candidateKey),
+		);
+	}
 }
 
 function isActivePhase(phase: OrchestratorState["phase"]): boolean {
@@ -2810,6 +2874,7 @@ async function startOrchestratorRuntime(
 ): Promise<void> {
 	startupReadiness.setReady(false);
 	deps = fencePackageSuccessEffects(runtimeDeps);
+	(deps.downloadNotices ?? downloadPausedNotices()).hydrate();
 	await ensurePackageProvenance();
 	await replayPendingOsSettlement();
 	const now = deps.now();

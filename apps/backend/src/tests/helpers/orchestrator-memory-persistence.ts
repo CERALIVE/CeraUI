@@ -1,6 +1,12 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DownloadPausedLedger } from "../../modules/system/update-orchestrator/download-paused-ledger.ts";
+import { DownloadPausedNotices } from "../../modules/system/update-orchestrator/download-paused-notices.ts";
+import {
+	clearUpdateNotice,
+	notifyUpdate,
+} from "../../modules/system/update-orchestrator/notifications.ts";
 import { OsAttemptIntentStore } from "../../modules/system/update-orchestrator/os-attempt-intent-store.ts";
 import type { OrchestratorRuntimeDeps } from "../../modules/system/update-orchestrator/runtime.ts";
 import type { OrchestratorState } from "../../modules/system/update-orchestrator/types.ts";
@@ -25,6 +31,16 @@ export function withMemoryPersistence<
 	roots.push(root);
 	return {
 		...deps,
+		downloadNotices:
+			deps.downloadNotices ??
+			new DownloadPausedNotices({
+				ledger: new DownloadPausedLedger(join(root, "download-notices.json")),
+				publish: (fact, onDismiss) => {
+					notifyUpdate({ kind: "download-paused", id: fact.id }, { onDismiss });
+				},
+				clear: (id) => clearUpdateNotice("download-paused", id),
+				report: () => undefined,
+			}),
 		osAttemptIntentStore:
 			deps.osAttemptIntentStore ??
 			new OsAttemptIntentStore({
