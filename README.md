@@ -52,6 +52,14 @@ busy update shows an app-wide badge, and the Live cockpit warns before Go Live;
 Start stays enabled because the device decides admission. Implementation
 reference: [device updates](docs/DEVICE-UPDATES.md).
 
+The Packages **Update** button [EXISTS; host-tested] uses a package-only
+orchestrator scope on capable images in package-owned phases, sharing the badge,
+phase feedback and installed notice. A server refusal never falls back to the
+older RPC. While an OS update is on offer, or with a legacy/incapable/absent
+orchestrator, it still uses that older package path without informing the
+orchestrator. Unscoped **Install now** is unchanged; board proof of this routing
+remains owed. See the same update contract for the remaining D8 limits.
+
 **Update notices [EXISTS; host-tested, board qualification owed].** Independent
 observers provide durable public-certificate expiry warnings (90/30/7 days and
 expired) and attempt-keyed download-hold notices for genuine D8 interruptions.

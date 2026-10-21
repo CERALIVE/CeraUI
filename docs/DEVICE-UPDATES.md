@@ -138,7 +138,7 @@ a settled permission. Live OS ownership is still re-read after the job-file read
 and before startup reconciliation can be queued.
 
 Manual `installUpdatesNow` reports launch refusals using its existing reason
-vocabulary (no RPC schema change):
+vocabulary (no new refusal reasons):
 
 | `startSoftwareUpdate()` refusal | Manual reason |
 |---|---|
@@ -469,9 +469,33 @@ link support and host-proof limits are in
 | RPC | Runtime function | Behaviour |
 |---|---|---|
 | `system.checkUpdatesNow` | `checkUpdatesNow()` | Manual discovery; bypasses due time and D7. |
-| `system.installUpdatesNow` | `installUpdatesNow()` | Manual install; bypasses idle. Starting-stream limits: root AGENTS.md D8 Known gaps (f). |
+| `system.installUpdatesNow` | `installUpdatesNow(input?)` | Manual install; bypasses idle. Optional `{scope: "packages"}` restricts admission to package-owned phases. Starting-stream limits: root AGENTS.md D8 Known gaps (f). |
 | `system.allowCellularOnce` | `allowCellularOnce()` | Records a one-time cellular approval for the named OS candidate. |
 | `system.getUpdateDetails` | `readUpdateDetails()` | Dialog snapshot. |
+
+**Package-labelled manual install [EXISTS; host-tested, board qualification owed].**
+The optional input is a strict object with only `scope?: "packages"`. Absent input
+and `{}` preserve the existing Install now behavior, including OS staging in
+`os-available`; cellular approval still calls that unscoped path. A scoped request
+accepts only `available` or `awaiting-idle`, rechecking authoritative phase,
+streaming and pending durability after awaited preparation. It cannot stage an
+OS image or change automation settings. It uses the existing package launcher,
+metered gate, exact actionable pending plan, single-flight ownership and installed
+notice. Other phases refuse with the existing manual reasons (`not_available`
+without a package offer, `busy` for the existing package-pipeline exclusions;
+the existing boot-version diagnostic is retained). The scoped preparation fence
+also checks after capability, plan and settings reads, before further preparation
+or dispatch; a refused owned plan is cleared before the request settles.
+
+The Packages **Update** button selects this scope only after the image reports
+`mode: "capable"` with `apt-all-packages` and the observed orchestrator phase is
+package-owned. It reuses the Install action's busy state, phase settlement and
+localized refusal bands; a refusal never retries through legacy. **Residual:**
+while an OS update is on offer (`os-available`), the Packages button still uses
+the older `system.startUpdate` path and the orchestrator is not told. Older,
+incapable or orchestrator-absent backends likewise retain that path. Package
+discovery still uses `system.checkForUpdates`; the separate D8 launch, deferral,
+pre-unit and adoption limitations remain unchanged.
 
 After a stream abort, `os-available` can precede retirement of the cancelled
 producer. Install now reports existing typed `busy` while that producer, RAUC
@@ -1305,7 +1329,8 @@ successful transport probe.
   details, the settings and the image capabilities even when the phase is
   unchanged (a failed capability read is unknown, never legacy). Each action keeps
   its own band, a declined duplicate click touches nothing, and an action stays
-  busy until its whole chain of requests settles. The legacy Packages Update is
+  busy until its whole chain of requests settles. The scoped Packages Update uses
+  the Install action and phase evidence. The retained legacy Packages Update is
   the same machine's fourth action, settled by a legacy `update_state` change;
   "accepted, no progress" needs an accepted reply and never claims nothing was
   installed, and "System is up to date" needs a stamped, completed discovery. A

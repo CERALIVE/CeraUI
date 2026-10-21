@@ -8,6 +8,7 @@ import {
 	autostartInputSchema,
 	autostartOutputSchema,
 	cloudProviderEndpointSchema,
+	installUpdatesNowInputSchema,
 	KIOSK_UNAVAILABLE_ERROR,
 	kioskConfigureInputSchema,
 	kioskConfigureOutputSchema,
@@ -250,9 +251,10 @@ export const checkUpdatesNowProcedure = authedProcedure
 	});
 
 export const installUpdatesNowProcedure = authedProcedure
+	.input(installUpdatesNowInputSchema)
 	.output(successResponseSchema)
-	.handler(async () => {
-		const outcome = await installUpdatesNow();
+	.handler(async ({ input }) => {
+		const outcome = await installUpdatesNow(input);
 		if (!outcome.started) {
 			logger.info(`System: manual update install refused (${outcome.reason})`);
 			return { success: false, error: outcome.reason };
