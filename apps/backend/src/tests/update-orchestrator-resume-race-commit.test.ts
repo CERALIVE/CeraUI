@@ -72,6 +72,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { CommitExitHook } from "../modules/system/software-update-restart.ts";
 import {
 	createSoftwareUpdateProcessMonitor,
 	resetSoftwareUpdateRunner,
@@ -93,8 +94,14 @@ import {
 	startUpdateOrchestrator,
 } from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
+import { useIdleStreamLivenessForFile } from "./helpers/bind-session-owner.ts";
 import { acquireTestOsStageControl } from "./helpers/os-stage-test-control.ts";
-import { updateHarness } from "./software-updates-preflight-harness.ts";
+import {
+	TestUpdateExit,
+	updateHarness,
+} from "./software-updates-preflight-harness.ts";
+
+useIdleStreamLivenessForFile();
 
 function persistedCommitting(percent: number) {
 	return {
@@ -117,6 +124,9 @@ describe("boot double-recovery race — resume must not misread evidence a start
 
 	test("a completed unit persists restarting-services before its deliberate exit, even between ticks", async () => {
 		await using h = await updateHarness();
+		h.restartExit = () => {
+			throw new TestUpdateExit();
+		};
 		tempRoot = await mkdtemp(join(tmpdir(), "ceraui-complete-order-"));
 		setOrchestratorStateFilePathForTest(join(tempRoot, "agent.json"));
 		const pending = new UpdateQuarantine(join(tempRoot, "quarantine.json"));
@@ -128,7 +138,7 @@ describe("boot double-recovery race — resume must not misread evidence a start
 				saveOrchestratorState(state);
 			},
 		});
-		let onCommitSucceeded: (() => void) | undefined;
+		let onCommitSucceeded: CommitExitHook | undefined;
 		setSoftwareUpdateRunner((hook) => {
 			onCommitSucceeded = hook;
 			return { started: true };
@@ -139,7 +149,21 @@ describe("boot double-recovery race — resume must not misread evidence a start
 		setOrchestratorStateForTest(persistedCommitting(50));
 		const monitor = createSoftwareUpdateProcessMonitor();
 
-		await monitor.finish(Promise.resolve(0), onCommitSucceeded);
+		const commitEntered = Promise.withResolvers<void>();
+		const releaseCommit = Promise.withResolvers<void>();
+		await monitor.finish(Promise.resolve(0), async () => {
+			commitEntered.resolve();
+			await releaseCommit.promise;
+			return (await onCommitSucceeded?.()) ?? true;
+		});
+		await commitEntered.promise;
+		try {
+			expect(h.restarts).toBe(0);
+			expect(persistedBeforeExit).toEqual([]);
+		} finally {
+			releaseCommit.resolve();
+			await h.restarted();
+		}
 
 		expect(persistedBeforeExit).toEqual(["restarting-services:0"]);
 		expect(h.restarts).toBe(1);

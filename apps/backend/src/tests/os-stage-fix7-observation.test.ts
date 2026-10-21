@@ -3,6 +3,7 @@ import { spawnWithTimeout } from "../helpers/spawn-policy.ts";
 import { observeAdmission } from "../modules/system/update-orchestrator/os-stage-admission-snapshot.ts";
 import { beginOsStageAttempt } from "../modules/system/update-orchestrator/os-stage-attempt.ts";
 import { observeRaucStage } from "../modules/system/update-orchestrator/os-stage-observation.ts";
+import { RAUC_RECOVERY_DEADLINE_MS } from "../modules/system/update-orchestrator/os-stage-recovery.ts";
 import { runOsStageJob } from "../modules/system/update-orchestrator/os-stage-run.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { rockHelperFixture } from "./helpers/os-stage-rock-helper-fixture.ts";
@@ -57,8 +58,10 @@ test("refuses a live child created during diagnostic status collection", async (
 test("runner refuses a replacement when a live child appears inside its final diagnostic await", async () => {
 	// Given a real failed CLI with synthetic RAUC/slot ports and real live child proc reads.
 	const h = await harness();
+	const recoveryDeadline = h.now() + RAUC_RECOVERY_DEADLINE_MS;
 	const fixture = rockHelperFixture([]);
 	let child: ReturnType<typeof Bun.spawn> | undefined;
+	let childReads = 0;
 	let restarted = false;
 	let revalidations = 0;
 	let replacementSamples = 0;
@@ -80,8 +83,11 @@ test("runner refuses a replacement when a live child appears inside its final di
 			}
 			if (path.endsWith("cgroup.procs") && child)
 				return `729106\n${child.pid}\n`;
-			if (child && path.startsWith(`/proc/${child.pid}/`))
-				return Bun.file(path).text();
+			if (child && path.startsWith(`/proc/${child.pid}/`)) {
+				const raw = await Bun.file(path).text();
+				childReads++;
+				return raw;
+			}
 			const raw = await fixture.deps.read(path);
 			return restarted && path === "/proc/729106/stat"
 				? raw.replace("2374530", "2374531")
@@ -93,6 +99,8 @@ test("runner refuses a replacement when a live child appears inside its final di
 		await expect(
 			runOsStageJob(manifest, h.control, {
 				...h.deps,
+				sleep: (ms) =>
+					h.deps.sleep(childReads > 0 ? recoveryDeadline - h.now() : ms),
 				revalidate: async () => {
 					revalidations++;
 				},
@@ -119,6 +127,8 @@ test("runner refuses a replacement when a live child appears inside its final di
 		// Then only the original writer ran, with the introduced child still alive.
 		expect(dispatches).toBe(1);
 		expect(child?.exitCode).toBeNull();
+		expect(childReads).toBeGreaterThan(0);
+		expect(h.now()).toBe(recoveryDeadline);
 	} finally {
 		if (child) {
 			child.kill();

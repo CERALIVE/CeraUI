@@ -142,6 +142,8 @@ export function runtimeFixture(
 		onlyMeteredCandidateExists: async () => false,
 		runPackageCheck: async () => null,
 		getPackageInstallWireState: () => ({ kind: "idle" }),
+		// OS-only fixtures must not discover package provenance through host RAUC.
+		readPackageAttempt: async () => undefined,
 		recoverSoftwareUpdateIfRunning: async () => false,
 		checkOsManifest: async () => ({
 			available: true,

@@ -11,11 +11,14 @@ import {
 	setOrchestratorStateForTest,
 } from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import {
 	candidate,
 	receipt,
 	setup,
 } from "./helpers/os-agent-runtime-harness.ts";
+
+useSessionOwnerForFile();
 
 test("D8 cancels the stable stage signal and publishes abort before restart submission", async () => {
 	// Given a stage held at its injected producer boundary.

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, jest, test } from "bun:test";
 import { updateCapabilityFileSchema } from "@ceraui/rpc/schemas";
 import {
 	createStageDeadline,
@@ -18,6 +18,7 @@ import {
 import { acquireTestOsStageControl } from "./helpers/os-stage-test-control.ts";
 
 useSessionOwnerForFile();
+afterEach(() => jest.useRealTimers());
 
 test("failed-pair routing teardown spends the remaining stage deadline and fences subsequent commands", async () => {
 	// Given the actual runner and routing controller with a held first rule deletion.
@@ -86,11 +87,13 @@ test("failed-pair routing teardown spends the remaining stage deadline and fence
 
 test("startup sweep refuses new commands when its held query resumes under surrendered CONTROL", async () => {
 	// Given startup reconciliation using the actual rule sweep under a disposable lease.
+	jest.useFakeTimers();
 	const h = startupHarness();
-	let offset = 0;
+	let now = 0;
 	let held = false;
 	const gate = Promise.withResolvers<void>();
 	const entered = Promise.withResolvers<void>();
+	const swept = Promise.withResolvers<void>();
 	const commands: string[] = [];
 	const pin = createUpdatePinController({
 		run: async (_bin, args) => {
@@ -105,7 +108,7 @@ test("startup sweep refuses new commands when its held query resumes under surre
 	});
 	const work = reconcileOsStageStartup({
 		...h.deps,
-		now: () => performance.now() + offset,
+		now: () => now,
 		acquireControl: async () => {
 			const lease = await acquireTestOsStageControl();
 			held = true;
@@ -125,8 +128,12 @@ test("startup sweep refuses new commands when its held query resumes under surre
 		}),
 		cliGone: async () => true,
 		sweep: async (...args) => {
-			offset = 359_960;
-			await pin.sweep(...args);
+			now = 359_960;
+			try {
+				await pin.sweep(...args);
+			} finally {
+				swept.resolve();
+			}
 		},
 	}).then(
 		() => "reconciled",
@@ -140,12 +147,12 @@ test("startup sweep refuses new commands when its held query resumes under surre
 			]),
 		).toBe("entered");
 		// When startup times out and releases CONTROL before the query resolves.
-		expect(
-			await Promise.race([work, Bun.sleep(160).then(() => "pending")]),
-		).toHaveProperty("mode", "unsafe");
+		now = 360_000;
+		jest.advanceTimersByTime(40);
+		expect(await work).toHaveProperty("mode", "unsafe");
 		expect(held).toBe(false);
 		gate.resolve();
-		await Bun.sleep(0);
+		await swept.promise;
 		// Then no deletion or flush is submitted by the abandoned sweep.
 		expect(commands).toEqual(["true:rule show"]);
 		expect(h.calls).not.toContain("release");

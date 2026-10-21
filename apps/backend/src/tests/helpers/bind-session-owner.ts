@@ -1,6 +1,7 @@
-import { afterAll, beforeAll } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach } from "bun:test";
 import { initialOtaStreamLiveness } from "../../modules/streaming/ota-streaming-marker.ts";
 import { bindStreamLiveness } from "../../modules/streaming/stream-liveness.ts";
+import { setStreamLivenessSourceForTest } from "../../modules/system/stream-liveness-source.ts";
 
 // Production main.ts loads the session owner, which binds the liveness leaf.
 // Suites modelling an initialised backend without loading that owner bind the
@@ -17,4 +18,10 @@ export function useSessionOwnerForFile(): void {
 		restore = bindSessionOwnerForTest();
 	});
 	afterAll(() => restore?.());
+}
+
+/** Supplies idle only to fixtures whose subject is not stream admission. */
+export function useIdleStreamLivenessForFile(): void {
+	beforeEach(() => setStreamLivenessSourceForTest(() => "idle"));
+	afterEach(() => setStreamLivenessSourceForTest(null));
 }

@@ -28,6 +28,10 @@ import { call } from "@orpc/server";
 
 import { getConfig } from "../modules/config.ts";
 import {
+	resetMutationBlockDeps,
+	setMutationBlockDeps,
+} from "../modules/modems/mutation-blocks.ts";
+import {
 	defaultMutationJournalFs,
 	readMutationEntry,
 	resetMutationJournalDeps,
@@ -221,6 +225,7 @@ beforeEach(async () => {
 		now: () => 2_000,
 	});
 	setMutationCaptureDeps({ enumerate: () => Promise.resolve([]) });
+	setMutationBlockDeps({ presentStableKeys: async () => new Set([KEY]) });
 	clearMutationRollbacks();
 	resetLifecycleInterlock();
 	resetRecoveryBarrier();
@@ -228,6 +233,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+	resetMutationBlockDeps();
 	setSystemTime();
 	resetUsbModeDispatchDeps();
 	resetMutationJournalDeps();

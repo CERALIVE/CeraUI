@@ -155,6 +155,181 @@ contract job both fetch full history; Git failures remain test failures, never a
 empty diff. Local stability runs do not establish PR readiness: every hosted check
 on the current PR revision must succeed before the change is handed off.
 
+The real OS-stage runtime fence regression awaits its installation operation,
+not a competing 500 ms wall-clock timer. Its publication, cancellation, stale
+proof and single-dispatch assertions remain the contract; Bun's unchanged
+per-test timeout is only a hang detector. This test repair does not establish
+full-suite load stability or resolve Bun worker crashes.
+
+The runtime fence matrix also supplies idle through the existing per-test liveness
+seam and restores it after each case. A previous file's surrendered session-owner
+binding must not cancel the attempt before the boundary being exercised. D8 still
+aborts the exact attempt through its real signal; terminal unsafe, single-dispatch,
+publication and stale-observation assertions remain unchanged. This is fixture
+isolation, not a change to production stream admission or a board qualification.
+
+The private no-writer FIFO startup regressions use the shared async test-command
+helper to await child exit and drain both pipes. They retain the default Bun
+test hang guard, rather than killing a valid child after two seconds of import
+or scheduling delay. Removing nonblocking opens must still fail the tests; FIFO
+refusal, CONTROL disposal, closed admission and inode preservation remain required.
+
+The FIFO and transport-setup child graphs are bundled once per file. Fresh FIFO
+children signal import readiness before guarded reads; each case still sends its
+own real no-writer FIFO to an independent startup process. Transport fixture
+preparation and real setup/selector imports similarly precede readiness, with
+exit and strict metadata assertions retained. Cold graph initialization exceeded
+five seconds under amplified CPU contention even after bundling. Readiness moves
+that preparation outside the unchanged per-test hang detector; a blocked FIFO
+reader still fails. This is test scheduling evidence, not a product latency bound.
+
+OS-only stale-intent fixtures explicitly supply absent package-attempt provenance
+through the existing runtime dependency port. Overriding OS slot reads alone does
+not isolate the default package reader, which closes over real RAUC inspection.
+Unknown package provenance remains unknown; OS ownership and admission assertions
+still run against the real private intent and agent files.
+
+The serial, receipt and quarantine policy-reader matrix likewise awaits real
+child completion without the two-second startup kill timer.
+Genuine absence remains the only accepted default: separate negative controls
+must reject both invalid-presence-as-absence and absence-as-unknown regressions.
+The matrix bundles that real reader graph once before registering cases, then
+executes it in a fresh child for each private fixture. Contended source loading
+could consume the unchanged five-second read guard before any reader ran. Bundling
+removes repeated source resolution/parsing, not filesystem reads, process isolation
+or the no-writer FIFO refusal guard; no mocks or cached read answers are used.
+Amplified contention still measured 18.64 seconds of bundled child startup and
+evaluation versus 37 milliseconds for the read. Each independent child now reports
+graph readiness before the matrix is registered and waits for its own test's stdin
+release. Invalid entries are created only in that test; real reads, exit and pipe
+drainage retain the unchanged five-second guard. Readiness never supplies a read
+result, and removing nonblocking opens must still fail the no-writer FIFO cases.
+
+The natural-uplink metadata kernel fixture also awaits child readiness before
+registering its parent assertion. A measured amplified run spent 31.24 seconds
+before the namespace child's module body and 5.69 seconds on namespace setup,
+versus 6.48 seconds executing the actual route/recovery assertions. Both parent
+and child retain their original 20-second guards after readiness. Real `unshare`,
+kernel capability checks, route commands and all five child assertions remain;
+no unsupported-capability skip was added or converted into a success.
+The child had consumed only 497 milliseconds of CPU on reaching its module body;
+the measured elapsed time is not the recovery policy's injected dwell clock.
+
+The setup transient-read matrix awaits dependency readiness in a fresh child for
+each fault before test execution. Closing its input starts the unchanged real
+setup import under the original five-second guard; no metadata read or retry
+occurs before that trigger. A measured starved source import spent 10.57 seconds
+before its first read, and bundling alone did not remove that runtime cost.
+Retry counts, typed refusals, actual values and byte preservation remain asserted.
+
+The protocol-242 kernel attribution fixture starts its namespace child through
+an explicit readiness barrier before the parent test. Measured import/startup
+took 13.81 seconds under amplification, separately from real kernel commands.
+The child and parent retain their 20-second guards and all counter, route and
+rule assertions; protocol 241 keeps its existing launch path. This does not cure
+the separate 200 ms curl-before-packet race observed on protocol 241.
+
+The bootstrap cadence fixture explicitly supplies unavailable package-attempt
+provenance. Its startup retries no longer call host boot/RAUC readers through an
+inherited default; recovery ordering and durable phase assertions stay real.
+This local isolation does not alter other launched-intent fixtures or establish
+their stability under arbitrary host pressure.
+
+The OS-agent dispatch file binds its own session owner for its lifetime. An earlier
+file restoring an unbound liveness leaf cannot turn the seven-day activation
+fixture into an unrelated unknown-stream refusal. Its live-stream veto and exact
+activation-time assertions remain unchanged; production admission stays fail-closed.
+
+The final-diagnostic live-child regression advances its existing injected polling
+clock to the original recovery deadline only after a real child proc read has
+completed. It still observes the live child and refuses a replacement writer,
+without repeating hundreds of physical proc scans merely to spend fake time.
+
+The outer-port deadline regressions freeze the injected clock and test timers
+until admission/revalidation/selection/receipt/release actually reaches its held
+port, then advance the original remaining 40 ms. Expiry must settle while that
+port is still held, and resuming it cannot publish or release. No real 160 ms
+completion race or product-deadline increase is involved.
+
+The startup routing-sweep regression [EXISTS] likewise freezes time until the
+actual rule query is held, then expires its original remaining 40 ms explicitly.
+It joins the abandoned sweep after releasing the query before asserting that no
+deletion or flush escaped surrendered CONTROL. Scheduler delay cannot consume
+that fixture budget before the query starts; production deadlines and all other
+routing cases are unchanged. This is a test-clock repair, not board qualification.
+
+The crash-helper regressions [EXISTS] load each fresh source child VM during
+fixture construction and await its import-ready line. Stdin withholds all stage
+work until that test has acquired its independent flock guardian; no job may
+exist before that release. Actual stage readiness, SIGKILL/reap, lock contention,
+private-record and fresh-startup assertions retain the original 15-second parent
+guard and 60-second child guard. Import preparation is outside the per-test guard
+and depends on the campaign/job outer bound if loading hangs. This isolates the
+measured child-import cost without claiming installed-backend latency or success.
+
+Held guardian/CLI/provenance release proofs use the same controlled 40 ms expiry.
+The production-owner case still prepares and reads real private files and checks
+that a late guardian response writes neither publication nor a release marker.
+
+Acquisition, prelaunch settlement and package-resume fixtures inject idle through
+the existing liveness source seam and restore it after each case; ambient stream
+status cannot replace the fault or completion they intend to exercise. Sentinel
+and stream-admission suites retain their real liveness bindings and assertions.
+
+Pending-package-success continuation fixtures also own an explicit idle input.
+Their held network/capability/pre-clean ports exercise the pending-success fence,
+not stream admission. Ambient live or unbound state must not refuse the initial
+request before that boundary or strand a command-entry promise. The existing
+per-case binding restores the default after each test; command, latch, launch
+and armed-marker assertions and test hang guards are unchanged.
+
+The package-completion ordering regression holds its commit hook independently
+of settlement, then awaits the harness's actual restart event before checking
+persist-before-exit. Settlement alone does not join the detached restart tail;
+the existing test hang guard and real state-file assertions remain unchanged.
+
+The config-reset notice fixture awaits background readiness only when its own
+boot returns `unavailable`. A synchronously completed boot must not join a
+cancelled earlier fixture's readiness promise. The config-boot backoff case
+followed by the one-reload preservation-retry case reproduces that ordering;
+archive bytes, notice count, write count and retry cadence stay asserted.
+
+The OS intent publication-admission restart fixture supplies its own absent
+package-attempt provenance through `readPackageAttempt`. Its synthetic OS slot
+readers do not override the default package reader's closed-over RAUC command;
+calling that host command spends the test guard on unrelated device observation.
+The real intent/agent files, fsync fault, restart refusal and repaired admission
+remain asserted with the unchanged test timeout.
+
+The scripted USB-transition suite injects its synthetic device's presence into
+mutation-block refresh as well as the transition engine. Failed transactions
+still read and retain the real private journal, but do not enumerate the host's
+USB bus through `udevadm`. The existing 5-second test guards and typed failure,
+postcondition and rollback assertions are unchanged.
+
+The held-deadline acquisition fixture spends its original 10,000 ms injected
+budget at the first polling sleep after a real inspection and failed ownership
+observation. It asserts that exact expenditure and one polling sleep instead of
+performing 100 physical polling intervals; real private-file settlement remains
+required, so this does not bound arbitrary storage or host scheduling latency.
+
+The backend test preload isolates default modem USB enumeration through the
+published `createUsbEnumerator({ readUdevDatabase })` seam. Unspecified readers
+receive an empty fixture database, including implicit USB-mode refresh and mutation
+presence reads; explicit fixture readers retain precedence and use the real parser.
+The spy is reinstalled before each test after `mock.restore()` teardown. A test
+deliberately exercising live enumeration must restore that factory spy inside its
+body first. Journal persistence, lifecycle admission and test guards remain real
+and unchanged; this is host test isolation, not hardware qualification.
+
+The config archive-resume regression keeps its existing injected retry events and
+real strict reads, archive preservation and atomic persistence. Its one explicit
+10-second test hang guard covers measured 5.87-second legitimate recovery under
+64 CPU burners; no product retry delay or deadline is changed. Storage-delay and
+lost-notice negative controls still distinguish slow completion from broken
+recovery, and all original byte, archive-count and exactly-one-notice assertions
+remain required.
+
 The selector and UID-pin network-namespace clients share schema-valid setup
 preparation with an explicit RK3588 fixture identity. Plain `bun` children do not
 inherit the test preload's setup mock; partial setup defaults omit required `hw`.

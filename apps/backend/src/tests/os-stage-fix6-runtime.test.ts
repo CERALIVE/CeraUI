@@ -15,6 +15,7 @@ import {
 	resetOrchestratorRuntimeForTest,
 	setOrchestratorRuntimeDepsForTest,
 } from "../modules/system/update-orchestrator/runtime.ts";
+import { useIdleStreamLivenessForFile } from "./helpers/bind-session-owner.ts";
 import {
 	fakeDeps,
 	testQuarantine,
@@ -24,6 +25,7 @@ import { harness } from "./helpers/os-stage-run-harness.ts";
 import { manifest } from "./helpers/os-stage-run-inputs.ts";
 
 const foreignChildren: ReturnType<typeof Bun.spawn>[] = [];
+useIdleStreamLivenessForFile();
 afterEach(async () => {
 	resetOrchestratorRuntimeForTest();
 	setOsStageEntryDepsForTest(null);
@@ -222,11 +224,7 @@ test.each([
 		await admitAndPrepareStreamStart();
 		resume.resolve();
 	}
-	const completion = await Promise.race([
-		installing.then(() => "settled"),
-		Bun.sleep(500).then(() => "pending"),
-	]);
-	expect(completion).toBe("settled");
+	await installing;
 	if (boundary === "pending-proof") {
 		const before = remembers;
 		pendingRead.resolve(

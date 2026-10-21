@@ -61,7 +61,7 @@ for (const preservationRetry of [false, true]) {
 			});
 			try {
 				// When boot retries the failed reload (including the detached owner path).
-				await bootRuntimeConfig({
+				const outcome = await bootRuntimeConfig({
 					sleep: async (ms) => {
 						waits.push(ms);
 					},
@@ -69,7 +69,7 @@ for (const preservationRetry of [false, true]) {
 						notices.push(copy);
 					},
 				});
-				await awaitRuntimeConfig();
+				if (outcome === "unavailable") await awaitRuntimeConfig();
 				// Then the same archived identity is announced once, never zero or twice.
 				expect(isRuntimeConfigAvailable()).toBe(true);
 				expect(writes).toBe(1);

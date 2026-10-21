@@ -3,8 +3,11 @@ import type { AptReachability } from "../modules/system/apt-reachability.ts";
 import * as updates from "../modules/system/software-updates.ts";
 import * as capabilities from "../modules/system/update-capabilities.ts";
 import { pendingPackageSuccess } from "../modules/system/update-orchestrator/pending-success-fence.ts";
+import { useIdleStreamLivenessForFile } from "./helpers/bind-session-owner.ts";
 import { pendingSuccessFixture } from "./helpers/pending-success-fixture.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
+
+useIdleStreamLivenessForFile();
 
 const REACHABLE: AptReachability = {
 	ipv4: "ok",

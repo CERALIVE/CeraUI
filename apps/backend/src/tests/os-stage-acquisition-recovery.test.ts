@@ -11,11 +11,11 @@ import {
 } from "../modules/system/update-orchestrator/os-stage-run.ts";
 import { reconcileOsStageStartup } from "../modules/system/update-orchestrator/os-stage-startup.ts";
 import { createUpdatePinController } from "../modules/system/update-transport/pin.ts";
-import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
+import { useIdleStreamLivenessForFile } from "./helpers/bind-session-owner.ts";
 import { acquireTestOsStageControl } from "./helpers/os-stage-test-control.ts";
 import { unlaunchedHarness } from "./helpers/os-stage-unlaunched-harness.ts";
 
-useSessionOwnerForFile();
+useIdleStreamLivenessForFile();
 
 const manifest = osChannelManifestSchema.parse({
 	schema: 1,
@@ -51,6 +51,9 @@ test.each(["inspection", "submission", "held deadline"] as const)(
 		let now = 0;
 		let inspectFailed = false;
 		let installs = 0;
+		let inspections = 0;
+		let ownershipRefusals = 0;
+		let pollSleeps = 0;
 		const pin = createUpdatePinController({
 			readCapabilities: async () => undefined,
 		});
@@ -63,16 +66,26 @@ test.each(["inspection", "submission", "held deadline"] as const)(
 					uid: h.uid,
 					now: () => now,
 					sleep: async (ms) => {
-						now += ms;
+						pollSleeps++;
+						now +=
+							fault === "held deadline" && ownershipRefusals > 0
+								? Math.max(ms, 10_000 - now)
+								: ms;
 					},
 					unlaunched: { ...h.deps, sweep: h.deps.sweep },
-					kernel: async () => fault !== "held deadline",
+					kernel: async () => {
+						if (fault !== "held deadline") return true;
+						ownershipRefusals++;
+						return false;
+					},
 					inspect: async () => {
 						if (fault === "inspection" && !inspectFailed) {
 							inspectFailed = true;
 							throw new Error("accepted-unit inspection timed out");
 						}
-						return h.deps.inspect(record.attemptId);
+						const observation = await h.deps.inspect(record.attemptId);
+						inspections++;
+						return observation;
 					},
 					run: async (argv) => {
 						if (argv[0] === "systemd-run") {
@@ -126,6 +139,12 @@ test.each(["inspection", "submission", "held deadline"] as const)(
 		expect(h.effects).toContain("normal-exit");
 		expect(h.effects.at(-1)).toBe("witness");
 		expect(await readOsStageJob(h.directory, h.uid)).toBeNull();
+		if (fault === "held deadline") {
+			expect(inspections).toBeGreaterThan(0);
+			expect(ownershipRefusals).toBeGreaterThan(0);
+			expect(now).toBe(10_000);
+			expect(pollSleeps).toBe(1);
+		}
 	},
 );
 
