@@ -1,6 +1,6 @@
 <!--
   UpdateCredentialsRow.svelte — the public expiry date of the device's update
-  certificate and the device's verdict about it (lane CRED-UI).
+  certificate and the device's verdict about it.
 
   Rendered inside the Update connection section, because the certificate is
   what the update connection presents. An older backend sends no `credentials`

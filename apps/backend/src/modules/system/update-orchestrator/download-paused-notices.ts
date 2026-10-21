@@ -12,6 +12,15 @@ import type {
 
 export type { DownloadPausedNoticePorts } from "./download-paused-ports.ts";
 
+export function reportNoticeSafely(report: () => void): void {
+	try {
+		report();
+	} catch {
+		// Diagnostic transport faults must not escape detached advisory work.
+	}
+}
+
+// allow: SIZE_OK — bounded notice state machine; shared diagnostic boundary stays local.
 /** One bounded queue/flight. All I/O and publication start on a macrotask. */
 export class DownloadPausedNotices {
 	private readonly queue: NoticeAction[] = [];
@@ -111,19 +120,19 @@ export class DownloadPausedNotices {
 		try {
 			if (this.overflow) {
 				this.overflow = false;
-				this.ports.report("queue-full");
+				reportNoticeSafely(() => this.ports.report("queue-full"));
 			}
 			const action = this.queue.shift();
 			if (!action) return;
 			deadline = setTimeout(() => {
 				active = false;
-				this.ports.report("worker-timeout");
+				reportNoticeSafely(() => this.ports.report("worker-timeout"));
 			}, 1000);
 			deadline.unref();
 			await this.apply(action, () => active && !this.disposed);
 		} catch {
 			// Detached exception boundary: never propagate into admission/ticks.
-			this.ports.report("publication-failed");
+			reportNoticeSafely(() => this.ports.report("publication-failed"));
 		} finally {
 			active = false;
 			if (deadline) clearTimeout(deadline);
@@ -141,7 +150,7 @@ export class DownloadPausedNotices {
 		try {
 			entries = await this.ports.ledger.read();
 		} catch {
-			this.ports.report("read-unavailable");
+			reportNoticeSafely(() => this.ports.report("read-unavailable"));
 			return;
 		}
 		if (!active()) return;
@@ -176,12 +185,12 @@ export class DownloadPausedNotices {
 							? entries
 							: entries.filter((entry) => entry.status !== "withdrawn");
 					if (retained.length >= DOWNLOAD_PAUSED_LEDGER_CAPACITY)
-						this.ports.report("ledger-full");
+						reportNoticeSafely(() => this.ports.report("ledger-full"));
 					else {
 						try {
 							await this.ports.ledger.write([...retained, record]);
 						} catch {
-							this.ports.report("write-failed");
+							reportNoticeSafely(() => this.ports.report("write-failed"));
 						}
 					}
 				}
@@ -208,7 +217,7 @@ export class DownloadPausedNotices {
 						);
 						committed = true;
 					} catch {
-						this.ports.report("write-failed");
+						reportNoticeSafely(() => this.ports.report("write-failed"));
 					}
 					if (active())
 						for (const entry of matches) {

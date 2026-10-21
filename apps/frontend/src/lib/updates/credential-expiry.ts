@@ -1,5 +1,5 @@
 /**
- * The Updates dialog's "Update credentials" row (lane CRED-UI).
+ * The Updates dialog's "Update credentials" row.
  *
  * `system.getUpdateDetails` may carry `credentials` (`UpdateCredentials`): the
  * public expiry date of the device's update certificate, in epoch ms, and the
