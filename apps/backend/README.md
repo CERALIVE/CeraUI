@@ -418,7 +418,12 @@ exists and therefore cannot repair a unit the old `prerm` disabled. Both are pin
 
 `postinst configure` also repairs the persistent frontend link before that
 restart ladder, moving non-link entries aside and warning rather than failing
-if repair is impossible. The fake-root package contract covers this path;
+if repair is impossible. Failed link creation attempts to restore the displaced
+entry; a racing directory cannot silently receive a nested symlink. ASCII-only
+backup names qualify for retention: at most three previous real directories plus
+the just-displaced entry, with highest-plus-one collision suffixes. Pruning stays
+on one filesystem, but does not exclude same-filesystem bind mounts. The fake-root
+package contract covers this path;
 [backup retention and remaining board proof](../../docs/BUILD_PIPELINE.md#frontend-link-repair-exists-host-tested-board-proof-owed)
 are separate from the backend unit tests.
 
