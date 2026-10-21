@@ -1,5 +1,5 @@
 /// <reference types="bun" />
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import {
 	chmod,
 	mkdir,
@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readPublicCredentialFile } from "../modules/system/update-orchestrator/credential-public-file.ts";
+import * as storedState from "../modules/system/update-orchestrator/stored-state-file.ts";
 
 let root: string;
 beforeEach(async () => {
@@ -27,15 +28,33 @@ test("bounded regular public file is readable", async () => {
 	expect(readPublicCredentialFile(path, 64).bytes.toString()).toBe("public");
 });
 
+test("symlink refusal precedes any file-content read", async () => {
+	// Given a symlink to a readable regular file; When opened; Then no content reader can run before refusal.
+	const target = join(root, "target.crt");
+	const path = join(root, "linked.crt");
+	await writeFile(target, "synthetic public bytes");
+	await symlink(target, path);
+	const read = spyOn(storedState, "readStoredStateDescriptor");
+	try {
+		expect(() => readPublicCredentialFile(path, 64)).toThrow();
+		expect(read).not.toHaveBeenCalled();
+	} finally {
+		read.mockRestore();
+	}
+});
+
 test.each(["symlink", "fifo", "oversize", "writable", "ancestor"] as const)(
 	"refuses %s without following or blocking",
 	async (kind) => {
 		// Given an unsafe public-file boundary.
 		const path = join(root, "public.crt");
 		switch (kind) {
-			case "symlink":
-				await symlink("/dev/null", path);
+			case "symlink": {
+				const target = join(root, "target.crt");
+				await writeFile(target, "public");
+				await symlink(target, path);
 				break;
+			}
 			case "fifo": {
 				const command = Bun.spawn(["mkfifo", path], {
 					stdout: "ignore",
