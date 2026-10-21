@@ -32,6 +32,7 @@ export class CredentialLedgerError extends Error {
 export type CredentialNoticePlan = {
 	readonly current?: CredentialIntent;
 	readonly retired: readonly CredentialIntent[];
+	readonly latestObservedAt: number;
 };
 export type CredentialLedgerOptions = {
 	readonly path?: string;
@@ -43,6 +44,8 @@ export class CredentialNoticeLedger {
 	private readonly path: string;
 	private readonly write: (path: string, contents: string) => void;
 	private readonly syncParent: (path: string) => void;
+	private parentSynced = false;
+	private latestObservedAt: number | undefined;
 	constructor(options: CredentialLedgerOptions = {}) {
 		this.path = options.path ?? CREDENTIAL_NOTICES_FILE;
 		this.write = options.write ?? saveCredentialLedger;
@@ -55,20 +58,34 @@ export class CredentialNoticeLedger {
 			const state = credentialLedgerSchema.parse(
 				parseAuthorityJson(decodeAuthorityUtf8(bytes)),
 			);
-			// A readable rename after failed directory fsync is not yet a durable acknowledgement.
-			this.syncParent(this.path);
+			// A fresh process or failed write must acknowledge any readable rename before using it.
+			if (!this.parentSynced) {
+				this.syncParent(this.path);
+				this.parentSynced = true;
+			}
 			return state;
 		} catch (error) {
 			if (error instanceof Error && "code" in error && error.code === "ENOENT")
-				return { schema: 1, currentGeneration: null, generations: [] };
+				return {
+					schema: 2,
+					currentGeneration: null,
+					generations: [],
+					latestObservedAt: null,
+				};
 			throw new CredentialLedgerError("unavailable");
 		}
 	}
 
 	private save(state: CredentialLedgerState): void {
 		try {
+			this.parentSynced = false;
+			state.latestObservedAt = Math.max(
+				state.latestObservedAt ?? Number.MIN_SAFE_INTEGER,
+				this.latestObservedAt ?? Number.MIN_SAFE_INTEGER,
+			);
 			this.write(this.path, JSON.stringify(state));
 			this.syncParent(this.path);
+			this.parentSynced = true;
 		} catch {
 			throw new CredentialLedgerError("unavailable");
 		}
@@ -81,6 +98,11 @@ export class CredentialNoticeLedger {
 		if (!Number.isSafeInteger(now))
 			throw new CredentialLedgerError("unavailable");
 		const state = this.load();
+		this.latestObservedAt = Math.max(
+			now,
+			state.latestObservedAt ?? now,
+			this.latestObservedAt ?? now,
+		);
 		const previous = JSON.stringify(state);
 		let current = state.generations.find(
 			(entry) => entry.digest === known.digest,
@@ -100,7 +122,12 @@ export class CredentialNoticeLedger {
 			throw new CredentialLedgerError("identity-mismatch");
 		state.currentGeneration = current.id;
 		const eligible = credentialThresholdsAt(known.expiresAt, now);
-		const urgent = eligible.at(-1);
+		const urgent = CREDENTIAL_THRESHOLDS.filter(
+			(threshold) =>
+				eligible.includes(threshold) ||
+				current.notices[threshold] === "pending" ||
+				current.notices[threshold] === "active",
+		).at(-1);
 		for (const threshold of eligible) {
 			current.notices[threshold] ??=
 				threshold === urgent ? "pending" : "superseded";
@@ -129,7 +156,11 @@ export class CredentialNoticeLedger {
 			}
 		}
 		if (previous !== JSON.stringify(state)) this.save(state);
-		return { ...(intent ? { current: intent } : {}), retired };
+		return {
+			...(intent ? { current: intent } : {}),
+			retired,
+			latestObservedAt: this.latestObservedAt,
+		};
 	}
 
 	activate(intent: CredentialIntent): void {
@@ -150,6 +181,7 @@ export class CredentialNoticeLedger {
 		if (!generation || status === undefined)
 			throw new CredentialLedgerError("identity-mismatch");
 		if (status === "acknowledged" || status === "superseded") return;
+		if (status === next) return;
 		generation.notices[intent.threshold] = next;
 		this.save(state);
 	}

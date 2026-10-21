@@ -13,13 +13,38 @@ const generation = z
 	})
 	.strict();
 
-export const credentialLedgerSchema = z
+const ledgerFields = {
+	currentGeneration: z.uuid().nullable(),
+	generations: z.array(generation).max(MAX_CREDENTIAL_GENERATIONS),
+};
+const legacyLedger = z
+	.object({ schema: z.literal(1), ...ledgerFields })
+	.strict();
+const currentLedger = z
 	.object({
-		schema: z.literal(1),
-		currentGeneration: z.uuid().nullable(),
-		generations: z.array(generation).max(MAX_CREDENTIAL_GENERATIONS),
+		schema: z.literal(2),
+		...ledgerFields,
+		latestObservedAt: z.number().int().safe().nullable(),
 	})
-	.strict()
+	.strict();
+
+export const credentialLedgerSchema = z
+	.union([
+		currentLedger,
+		legacyLedger.transform((state) => {
+			let latestObservedAt: number | null = null;
+			for (const entry of state.generations) {
+				for (const threshold of CREDENTIAL_THRESHOLDS) {
+					if (entry.notices[threshold] === undefined) continue;
+					const crossedAt =
+						entry.expiresAt -
+						(threshold === "expired" ? 0 : Number(threshold) * 86_400_000);
+					latestObservedAt = Math.max(latestObservedAt ?? crossedAt, crossedAt);
+				}
+			}
+			return { ...state, schema: 2 as const, latestObservedAt };
+		}),
+	])
 	.refine((state) => {
 		const ids = new Set(state.generations.map((item) => item.id));
 		const digests = new Set(state.generations.map((item) => item.digest));

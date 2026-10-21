@@ -92,13 +92,15 @@ test("dismissed 90-day warning stays acknowledged while 30/7/expired remain elig
 	}
 });
 
-test("forward and backward clock jumps never re-arm crossed thresholds", () => {
-	// Given a late urgent crossing; When the clock jumps back then forward; Then superseded notices cannot reappear.
+test("backward clock preserves undismissed intent without rearming acknowledged thresholds", () => {
+	// Given a late urgent crossing; When the clock reverses; Then continuity keeps the same intent, not a new threshold event.
 	const store = new CredentialNoticeLedger({ path });
-	store.observe(known, known.expiresAt - 2 * DAY);
-	expect(
-		store.observe(known, known.expiresAt - 100 * DAY).current,
-	).toBeUndefined();
+	const intent = store.observe(known, known.expiresAt - 2 * DAY).current;
+	if (!intent) throw new Error("missing fixture intent");
+	expect(store.observe(known, known.expiresAt - 100 * DAY).current).toEqual(
+		intent,
+	);
+	store.acknowledge(intent);
 	expect(
 		store.observe(known, known.expiresAt - 2 * DAY).current,
 	).toBeUndefined();
