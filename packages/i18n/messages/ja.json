@@ -1854,7 +1854,7 @@
 	"notifications.updateInstalled": "インストール済み: {packages}。",
 	"notifications.updateRefused": "更新は拒否されました。{reason}",
 	"notifications.updateRefusedGeneric": "詳細は 設定 → システムログ を確認してください。",
-	"notifications.updatePausedForStream": "配信開始のためダウンロードを一時停止しました。",
+	"notifications.updatePausedForStream": "配信開始を試みるため、更新を保留にしました。デバイスがアイドル状態になると、更新が再び提示されます。",
 	"notifications.updateSystemStaged": "システムバージョン {version} を準備しました。次の通常の再起動後に適用されます。",
 	"notifications.updateSystemActivated": "システムバージョン {version} が有効になりました。",
 	"notifications.updateRollback": "システムバージョン {version} から以前のシステムに戻りました。",

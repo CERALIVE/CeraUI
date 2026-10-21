@@ -1902,7 +1902,7 @@
 	"notifications.updateInstalled": "Instalados: {packages}.",
 	"notifications.updateRefused": "Atualização recusada. {reason}",
 	"notifications.updateRefusedGeneric": "Veja Configurações → Registros do sistema para detalhes.",
-	"notifications.updatePausedForStream": "O download foi pausado para iniciar a transmissão.",
+	"notifications.updatePausedForStream": "A atualização foi colocada em espera para uma tentativa de iniciar a transmissão. Ela será oferecida novamente quando o dispositivo estiver ocioso.",
 	"notifications.updateSystemStaged": "A versão {version} do sistema está preparada. Será aplicada após a próxima reinicialização normal.",
 	"notifications.updateSystemActivated": "A versão {version} do sistema está ativa.",
 	"notifications.updateRollback": "O dispositivo reverteu a versão do sistema {version} e voltou à anterior.",

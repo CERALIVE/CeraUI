@@ -1854,7 +1854,7 @@
 	"notifications.updateInstalled": "설치됨: {packages}.",
 	"notifications.updateRefused": "업데이트가 거부되었습니다. {reason}",
 	"notifications.updateRefusedGeneric": "자세한 내용은 설정 → 시스템 로그를 확인하세요.",
-	"notifications.updatePausedForStream": "스트리밍을 시작하기 위해 다운로드를 일시 중지했습니다.",
+	"notifications.updatePausedForStream": "스트리밍 시작을 시도하기 위해 업데이트를 보류했습니다. 유휴 시 다시 제공됩니다.",
 	"notifications.updateSystemStaged": "시스템 버전 {version}이 준비되었습니다. 다음 정상적인 재시작 후 적용됩니다.",
 	"notifications.updateSystemActivated": "시스템 버전 {version}이 활성화되었습니다.",
 	"notifications.updateRollback": "시스템 버전 {version}에서 이전 시스템으로 되돌렸습니다.",

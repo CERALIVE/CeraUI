@@ -1899,7 +1899,7 @@
 	"notifications.updateInstalled": "इंस्टॉल हुए: {packages}।",
 	"notifications.updateRefused": "अपडेट अस्वीकार हुआ। {reason}",
 	"notifications.updateRefusedGeneric": "विवरण के लिए सेटिंग्स → सिस्टम लॉग देखें।",
-	"notifications.updatePausedForStream": "स्ट्रीम शुरू होने के लिए डाउनलोड रोक दिया गया है।",
+	"notifications.updatePausedForStream": "स्ट्रीम शुरू करने की कोशिश के लिए अपडेट को प्रतीक्षा में रखा गया है। डिवाइस निष्क्रिय होने पर यह फिर से उपलब्ध होगा।",
 	"notifications.updateSystemStaged": "सिस्टम संस्करण {version} तैयार है। अगली सामान्य रीस्टार्ट के बाद लागू होगा।",
 	"notifications.updateSystemActivated": "सिस्टम संस्करण {version} अब सक्रिय है।",
 	"notifications.updateRollback": "डिवाइस सिस्टम संस्करण {version} से पिछले संस्करण पर लौट गया।",

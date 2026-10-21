@@ -1911,7 +1911,7 @@
 	"notifications.updateInstalled": "تم تثبيت: {packages}.",
 	"notifications.updateRefused": "رُفض التحديث. {reason}",
 	"notifications.updateRefusedGeneric": "راجع الإعدادات ← سجلات النظام للحصول على التفاصيل.",
-	"notifications.updatePausedForStream": "توقف التنزيل مؤقتًا لبدء البث.",
+	"notifications.updatePausedForStream": "وُضع التحديث قيد الانتظار لمحاولة بدء البث. سيُعرض مجددًا عندما يكون الجهاز في وضع الخمول.",
 	"notifications.updateSystemStaged": "إصدار النظام {version} جاهز. سيُطبق بعد إعادة التشغيل العادية التالية.",
 	"notifications.updateSystemActivated": "إصدار النظام {version} نشط الآن.",
 	"notifications.updateRollback": "عاد الجهاز من إصدار النظام {version} إلى الإصدار السابق.",

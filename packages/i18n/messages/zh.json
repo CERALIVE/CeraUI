@@ -1854,7 +1854,7 @@
 	"notifications.updateInstalled": "已安装：{packages}。",
 	"notifications.updateRefused": "更新被拒绝。{reason}",
 	"notifications.updateRefusedGeneric": "详情请查看 设置 → 系统日志。",
-	"notifications.updatePausedForStream": "为开始直播，下载已暂停。",
+	"notifications.updatePausedForStream": "为尝试开始直播，更新已暂时搁置。设备空闲时将再次提供此更新。",
 	"notifications.updateSystemStaged": "系统版本 {version} 已准备就绪，将在下次正常重启后生效。",
 	"notifications.updateSystemActivated": "系统版本 {version} 已启用。",
 	"notifications.updateRollback": "设备已从系统版本 {version} 回滚。",

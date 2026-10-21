@@ -1899,7 +1899,7 @@
 	"notifications.updateInstalled": "Installed: {packages}.",
 	"notifications.updateRefused": "Update refused. {reason}",
 	"notifications.updateRefusedGeneric": "Check Settings → System Logs for details.",
-	"notifications.updatePausedForStream": "The download was paused so streaming could start.",
+	"notifications.updatePausedForStream": "The update was put on hold for a stream-start attempt. It will be offered again when the device is idle.",
 	"notifications.updateSystemStaged": "System version {version} is staged. It applies after the next clean restart.",
 	"notifications.updateSystemActivated": "System version {version} is now active.",
 	"notifications.updateRollback": "The device rolled back from system version {version}.",

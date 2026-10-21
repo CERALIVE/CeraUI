@@ -1899,7 +1899,7 @@
 	"notifications.updateInstalled": "Installiert: {packages}.",
 	"notifications.updateRefused": "Update abgelehnt. {reason}",
 	"notifications.updateRefusedGeneric": "Details findest du unter Einstellungen → Systemprotokolle.",
-	"notifications.updatePausedForStream": "Der Download wurde für den Streamstart unterbrochen.",
+	"notifications.updatePausedForStream": "Das Update wurde für einen Streamstartversuch zurückgestellt. Es wird erneut angeboten, wenn das Gerät nicht aktiv genutzt wird.",
 	"notifications.updateSystemStaged": "Systemversion {version} ist vorbereitet. Sie wird nach dem nächsten regulären Neustart aktiviert.",
 	"notifications.updateSystemActivated": "Systemversion {version} ist jetzt aktiv.",
 	"notifications.updateRollback": "Das Gerät ist von Systemversion {version} zur vorherigen Version zurückgekehrt.",
