@@ -18,6 +18,7 @@ import {
 	credentialObserverFixture,
 	CREDENTIAL_DAY as DAY,
 } from "./helpers/credential-observer-fixture.ts";
+import { DISMISSAL_CHURN_TIMEOUT_MS } from "./helpers/notification-churn-budget.ts";
 
 let fixture: Awaited<ReturnType<typeof credentialObserverFixture>>;
 let oldPath: string | undefined;
@@ -57,18 +58,22 @@ test("production notices are persistent/authed/deep-linked with opaque identity 
 	expect(fixture.state.reads).toBe(1);
 });
 
-test("dedicated durable acknowledgement outlives 300 ordinary dismissals and restart", async () => {
-	// Given an operator-dismissed warning; When ordinary LRU churn and observer restart happen; Then the warning cannot resurrect.
-	await fixture.observer.refresh(true);
-	const notice = getPersistentNotifications(true).show[0];
-	if (!notice) throw new Error("fixture notice missing");
-	notificationDismiss(notice.name);
-	for (let n = 0; n < 300; n++) recordNotificationDismissal(`ordinary-${n}`);
-	expect(isNotificationDismissed(notice.name)).toBe(false);
-	resetDismissalStoreForTests();
-	await new CredentialNoticeObserver(fixture.deps).refresh(true);
-	expect(getPersistentNotifications(true).show).toHaveLength(0);
-});
+test(
+	"dedicated durable acknowledgement outlives 300 ordinary dismissals and restart",
+	async () => {
+		// Given an operator-dismissed warning; When ordinary LRU churn and observer restart happen; Then the warning cannot resurrect.
+		await fixture.observer.refresh(true);
+		const notice = getPersistentNotifications(true).show[0];
+		if (!notice) throw new Error("fixture notice missing");
+		notificationDismiss(notice.name);
+		for (let n = 0; n < 300; n++) recordNotificationDismissal(`ordinary-${n}`);
+		expect(isNotificationDismissed(notice.name)).toBe(false);
+		resetDismissalStoreForTests();
+		await new CredentialNoticeObserver(fixture.deps).refresh(true);
+		expect(getPersistentNotifications(true).show).toHaveLength(0);
+	},
+	DISMISSAL_CHURN_TIMEOUT_MS,
+);
 
 test("failed acknowledgement leaves the notice visible and supports repaired retry", async () => {
 	// Given a corrupt ledger after publication; When dismissed; Then persistence refusal cannot hide the warning.
