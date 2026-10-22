@@ -42,7 +42,6 @@ import {
 	notificationRemove,
 } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
-import type { AptAllDiagnosticStep } from "./apt-all-diagnostics.ts";
 import {
 	AptAllRefusalError,
 	assertPinnedInstallSimulation,
@@ -52,6 +51,10 @@ import {
 	discoverAptAllPackages,
 	type PinnedAptPackage,
 } from "./apt-all-packages.ts";
+import {
+	logAptAllRefusal,
+	resetAptAllRefusalLogForTest,
+} from "./apt-all-refusal-log.ts";
 import { cleanAptCache } from "./apt-cache-clean.ts";
 /* Software updates */
 import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
@@ -161,16 +164,6 @@ let aptHeldBackPackages: string | undefined;
 let actionableAppPackages: string[] = [];
 let actionableAllPackages: PinnedAptPackage[] = [];
 let aptAllRefusal: AptAllRefusalError | null = null;
-// One last signature per closed step bounds memory and suppresses periodic repeats.
-const aptAllDiagnosticSignatures = new Map<AptAllDiagnosticStep, string>();
-
-function logAptAllRefusal(error: AptAllRefusalError): void {
-	const { reason, step, exit, detail, fingerprint } = error;
-	const signature = JSON.stringify([reason, exit, fingerprint]);
-	if (aptAllDiagnosticSignatures.get(step) === signature) return;
-	aptAllDiagnosticSignatures.set(step, signature);
-	logger.warn("Capable APT update refused", { reason, step, exit, detail });
-}
 let aptAllMode = false;
 let discoveredPackages: UpdatePackage[] = [];
 let lastAptReachability: AptReachabilityWire | undefined;
@@ -265,6 +258,7 @@ async function runAptCommand(
 	try {
 		const result = await aptCommandRunner(argv, {
 			timeoutMs,
+			env: { ...process.env, LC_ALL: "C", LANG: "C", LANGUAGE: undefined },
 			...(signal ? { signal } : {}),
 		});
 		pendingPackageSuccess.assertEffectsAllowed();
@@ -355,7 +349,7 @@ export function resetSoftwareUpdateState(): void {
 	actionableAppPackages = [];
 	actionableAllPackages = [];
 	aptAllRefusal = null;
-	aptAllDiagnosticSignatures.clear();
+	resetAptAllRefusalLogForTest();
 	aptAllMode = false;
 	discoveredPackages = [];
 }
@@ -593,6 +587,12 @@ async function getCapableUpdateSize(
 		APT_DISCOVERY_TIMEOUT_MS,
 	);
 	if (simulation.exitCode !== 0) {
+		logAptAllRefusal(
+			new AptAllRefusalError("discovery_failed", "simulation", {
+				exit: simulation.exitCode,
+				detail: simulation.stderr,
+			}),
+		);
 		failCurrentCheck("discovery_failed");
 		return "discovery_failed";
 	}
@@ -601,6 +601,12 @@ async function getCapableUpdateSize(
 		APT_DISCOVERY_TIMEOUT_MS,
 	);
 	if (holds.exitCode !== 0) {
+		logAptAllRefusal(
+			new AptAllRefusalError("discovery_failed", "held-packages", {
+				exit: holds.exitCode,
+				detail: holds.stderr,
+			}),
+		);
 		failCurrentCheck("discovery_failed");
 		return "discovery_failed";
 	}
@@ -755,6 +761,7 @@ export function parseAptPackageList(
 	heading: string,
 ): ParseResult<string | undefined> {
 	const section = stdout
+		.replaceAll("\r\n", "\n")
 		.split(heading)[1]
 		?.split(/\n\w+/)[0]
 		?.replace(/[\n ]+/g, " ")

@@ -767,6 +767,27 @@ exit; legacy images retain their old restart/reboot behaviour, and a genuinely
 uncertain commit still fails closed. The new build has not yet been board-proven.
 See [`DEVICE-UPDATES.md`](../../docs/DEVICE-UPDATES.md).
 
+APT simulation parsing [EXISTS; host-tested] now accepts the real temporary-break
+lists (including apt's final space) and repeated reverse-dependency notes without
+adding those names to the install set. Discovery and pinned preflight share the
+row parser; malformed rows, broken configure and every removal/purge still refuse.
+The unchanged 2026-10-22 Orange Pi nginx capture is the primary regression.
+Refusal journal records include reason, closed stage/substep and redacted detail
+bounded to 300 characters; full sanitized fingerprints still deduplicate repeats.
+Legacy package-list headings also accept CRLF. This is parser/journal host proof,
+not installed-board update qualification. Install rechecks also accept apt-get's
+weak-dependency/list prose without granting those names install authority.
+Discovery and detached argv checking use one code-unit comparator; APT children
+force the C locale. Discovery and pinned parse failures have distinct dedupe
+steps, and hold-command failures retain simulation provenance. This remains
+host proof. Successful fallback-solver `Solving dependencies...` progress also
+remains context in both paths; malformed rows after progress still refuse.
+The locale child regression additionally proves inherited environment preservation.
+The pinned grammar negatives compare against their valid `context=1` companion,
+so a mismatched expected package cannot mask a skipped malformed row. This is
+host proof, not installed-board update qualification. See the
+[discovery contract](docs/agents/software-update-check-contract.md).
+
 Candidate provenance joins two APT readings: `apt-cache policy <name>` supplies
 the version's package-file line, while one unscoped `apt-cache policy` reading
 supplies that complete line's Release Origin/Label and suite for the whole batch.

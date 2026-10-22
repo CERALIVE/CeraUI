@@ -30,7 +30,13 @@ it("accepts the captured annotation at the pinned install recheck", () => {
 	expect(() => assertPinnedInstallSimulation(captured, pairs)).not.toThrow();
 });
 
-it.each(["", "libcurl4t64", "libcurl4t64 g++ python3.13 libc6:arm64"])(
+it.each([
+	"",
+	"libcurl4t64",
+	"libcurl4t64 g++ python3.13 libc6:arm64",
+	"libcurl4t64 ",
+	"libcurl4t64:arm64 libc6:arm64 ",
+])(
 	"ignores valid annotation names %j instead of adding install authority",
 	(annotation) => {
 		// Given
@@ -39,6 +45,7 @@ it.each(["", "libcurl4t64", "libcurl4t64 g++ python3.13 libc6:arm64"])(
 		const actual = parseAptSimulation(text);
 		// Then
 		expect(actual).toEqual([{ name: "curl", version: "2" }]);
+		expect(() => assertPinnedInstallSimulation(text, actual)).not.toThrow();
 	},
 );
 
@@ -58,7 +65,6 @@ it.each([
 	" [libcurl4t64\tlibc6]",
 	" [libcurl4t64  libc6]",
 	" [ libcurl4t64]",
-	" [libcurl4t64 ]",
 	"\t[]",
 	"  []",
 	" []\t",
@@ -66,18 +72,21 @@ it.each([
 	// Given
 	const line = `${row}${suffix}`;
 	// When/Then
-	for (const parse of [
-		() => parseAptSimulation(`${line}\n`),
-		() =>
-			assertPinnedInstallSimulation(`${line}\n`, [
-				{ name: "curl", version: "2" },
-			]),
-	]) {
+	for (const [step, parse] of [
+		["parse-simulation", () => parseAptSimulation(`${line}\n`)],
+		[
+			"pinned-recheck",
+			() =>
+				assertPinnedInstallSimulation(`${line}\n`, [
+					{ name: "curl", version: "2" },
+				]),
+		],
+	] as const) {
 		expect(parse).toThrow(AptAllRefusalError);
 		expect(parse).toThrow(
 			expect.objectContaining({
 				reason: "discovery_failed",
-				step: "parse-simulation",
+				step,
 				detail: expect.stringContaining(line.replace(/\s+/g, " ").trim()),
 			}),
 		);
