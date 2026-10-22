@@ -519,7 +519,11 @@ non-streaming window even with `packagesAuto=false`; normal capability, admissio
 and cellular gates still apply. This is intended install-when-idle behavior, not
 an OS-stage request or an automation-setting change. Operator note: retry Update
 when not streaming or let the scheduled package install run. No cancellation
-control for `awaiting-idle` is claimed.
+control for `awaiting-idle` is claimed. Each step has its own host test
+(`update-orchestrator-runtime-install-pending.test.ts`: a refused scheduled launch
+stays pending for the next tick; `update-orchestrator-package-scope.test.ts`: a
+scoped metered refusal keeps `packagesAuto=false`). No single committed test runs
+the whole chain from scoped refusal to the idle-tick package install.
 
 Regression coverage: `update-orchestrator-package-scope-sweep.test.ts` combines
 macrotask and microtask phase/stream flips, including bare recovery-helper awaits,

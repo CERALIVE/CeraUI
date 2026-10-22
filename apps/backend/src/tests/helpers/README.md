@@ -47,9 +47,35 @@ remain worker-local under `bun test --parallel`, and every disk-backed fixture
 uses `mkdtemp`. A helper import does not acquire CONTROL or launch a subprocess.
 
 `withMemoryPersistence` keeps agent snapshots in memory but supplies a REAL
-private intent-file store per fixture invocation, rooted in `mkdtemp`. Those
-worker-local roots are removed at process exit; the helper registers no tests
-or test hooks. Disk-backed restart fixtures colocate intent, agent and witness
+private intent-file store per fixture invocation, rooted in `mkdtemp` under the
+`orchestrator-intent-memory-` prefix. It registers no tests, but it does register
+a cleanup hook.
+
+**Root lifetime [EXISTS; host-tested]: one test.** `bun test` never runs
+`process.once("exit")` handlers, so each root is recorded in a module-level
+registry, and the first registration after the registry empties arms
+`afterEach(disposeMemoryPersistenceRoots)`. The disposer empties the registry
+before it removes anything and deletes only roots the helper created. If a
+registered path was replaced by a symlink, only the link goes. A repeated call
+does nothing. A root created inside a test is gone when that test ends. A fixture built at module scope, in `beforeAll` or in a `describe` body loses
+its root after the first test, and a later intent read on it silently reads a
+missing directory. Build the fixture inside the test or in `beforeEach`. A
+fixture that must outlive one test passes its own `osAttemptIntentStore` and
+`downloadNotices` under a root it owns and removes itself. The helper still
+creates and disposes its own unused root in that case. Run `bun test` with an
+absolute `TMPDIR` (`export TMPDIR="$(realpath "$TMPDIR")"`): roots are
+registered as `mkdtemp` returns them, so a relative `TMPDIR` plus a `chdir`
+before disposal would resolve against the wrong directory. No test changes the
+working directory today.
+
+`orchestrator-memory-persistence-cleanup.test.ts` pins the disposer: it removes
+every created root and leaves a same-prefix directory it did not create, even
+when called twice. No committed test pins the per-test arming itself (create in
+test N, gone in test N+1). Runs before this change left empty roots behind;
+on a host with no suite running, remove them with
+`find /tmp -maxdepth 1 -type d -name 'orchestrator-intent-memory-*' -empty -delete`.
+
+Disk-backed restart fixtures colocate intent, agent and witness
 under their own temporary root and retain it across fresh runtime instances.
 New staged-attempt fixture IDs are UUIDs, matching the strict private-intent
 boundary; legacy absent-provenance records remain unchanged. Existing assertion
