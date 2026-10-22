@@ -760,6 +760,7 @@ export function parseAptPackageList(
 	heading: string,
 ): ParseResult<string | undefined> {
 	const section = stdout
+		.replaceAll("\r\n", "\n")
 		.split(heading)[1]
 		?.split(/\n\w+/)[0]
 		?.replace(/[\n ]+/g, " ")
