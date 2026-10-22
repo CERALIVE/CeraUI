@@ -155,6 +155,11 @@ contract job both fetch full history; Git failures remain test failures, never a
 empty diff. Local stability runs do not establish PR readiness: every hosted check
 on the current PR revision must succeed before the change is handed off.
 
+Backend hosted-CI stability [EXISTS; host-tested] keeps explicit child deadlines
+separate from test hang budgets, synchronizes transport namespace/listener setup,
+and bounds the package-scope timing sweep at completed calls without removing its
+live-call assertions. See [test boundaries and limitations](../../docs/BACKEND-CI-STABILITY.md).
+
 The real OS-stage runtime fence regression awaits its installation operation,
 not a competing 500 ms wall-clock timer. Its publication, cancellation, stale
 proof and single-dispatch assertions remain the contract; Bun's unchanged
