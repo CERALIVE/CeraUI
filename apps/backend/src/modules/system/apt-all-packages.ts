@@ -43,9 +43,12 @@ export class AptAllRefusalError extends Error {
 const FIRST_PARTY =
 	/^(?:ceralive-|cerastream$|srtla$|libsrt1\.5-ceralive$|gstreamer1\.0-(?:libuvcsrc|rockchip-ceralive)$|librga2-ceralive$|lib(?:mm-glib0|mbim-(?:glib4|proxy|utils)|qmi-(?:glib5|proxy|utils)|qrtr-glib0)$|modemmanager$)/;
 
-export function parseAptSimulation(text: string): PinnedAptPackage[] {
+export function parseAptSimulation(
+	text: string,
+	step: "parse-simulation" | "pinned-recheck" = "parse-simulation",
+): PinnedAptPackage[] {
 	if (text.split("\n").some((line) => /^(?:Remv|Purg)(?:\s|$)/.test(line))) {
-		throw new AptAllRefusalError("removals_required", "parse-simulation", {
+		throw new AptAllRefusalError("removals_required", step, {
 			detail: "simulation requires removals",
 		});
 	}
@@ -69,7 +72,7 @@ export function parseAptSimulation(text: string): PinnedAptPackage[] {
 			!row ||
 			(row.kind === "Inst" && (!row.version || names.has(row.name)))
 		) {
-			throw new AptAllRefusalError("discovery_failed", "parse-simulation", {
+			throw new AptAllRefusalError("discovery_failed", step, {
 				detail: `invalid or duplicate ${line.startsWith("Inst") ? "Inst" : "simulation"} row: ${line}`,
 			});
 		}
@@ -82,7 +85,7 @@ export function parseAptSimulation(text: string): PinnedAptPackage[] {
 				break;
 			case "Remv":
 			case "Purg":
-				throw new AptAllRefusalError("removals_required", "parse-simulation");
+				throw new AptAllRefusalError("removals_required", step);
 			default: {
 				const exhaustive: never = row;
 				return exhaustive;
@@ -90,7 +93,7 @@ export function parseAptSimulation(text: string): PinnedAptPackage[] {
 		}
 	}
 	if (!text.includes("0 upgraded") && result.length === 0)
-		throw new AptAllRefusalError("discovery_failed", "parse-simulation", {
+		throw new AptAllRefusalError("discovery_failed", step, {
 			detail: "missing upgrade summary",
 		});
 	return result;
@@ -228,7 +231,7 @@ export function assertPinnedInstallSimulation(
 	text: string,
 	pairs: readonly PinnedAptPackage[],
 ): void {
-	const actual = parseAptSimulation(text);
+	const actual = parseAptSimulation(text, "pinned-recheck");
 	if (
 		actual.length !== pairs.length ||
 		actual.some(

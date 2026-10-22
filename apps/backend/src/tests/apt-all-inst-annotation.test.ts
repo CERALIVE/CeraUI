@@ -72,18 +72,21 @@ it.each([
 	// Given
 	const line = `${row}${suffix}`;
 	// When/Then
-	for (const parse of [
-		() => parseAptSimulation(`${line}\n`),
-		() =>
-			assertPinnedInstallSimulation(`${line}\n`, [
-				{ name: "curl", version: "2" },
-			]),
-	]) {
+	for (const [step, parse] of [
+		["parse-simulation", () => parseAptSimulation(`${line}\n`)],
+		[
+			"pinned-recheck",
+			() =>
+				assertPinnedInstallSimulation(`${line}\n`, [
+					{ name: "curl", version: "2" },
+				]),
+		],
+	] as const) {
 		expect(parse).toThrow(AptAllRefusalError);
 		expect(parse).toThrow(
 			expect.objectContaining({
 				reason: "discovery_failed",
-				step: "parse-simulation",
+				step,
 				detail: expect.stringContaining(line.replace(/\s+/g, " ").trim()),
 			}),
 		);

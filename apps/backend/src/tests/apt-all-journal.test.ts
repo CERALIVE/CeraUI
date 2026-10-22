@@ -70,7 +70,7 @@ it.each([
 	["package", "package-policy"],
 	["parse", "parse"],
 	["simulation", "simulation"],
-	["holds", "parse"],
+	["holds", "simulation"],
 ] as const)(
 	"carries bounded safe context into production journal JSON for %s",
 	async (command, stage) => {

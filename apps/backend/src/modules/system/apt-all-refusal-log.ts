@@ -7,7 +7,7 @@ const STAGES = {
 	"source-policy": "source-policy",
 	"package-policy": "package-policy",
 	"parse-simulation": "parse",
-	"held-packages": "parse",
+	"held-packages": "simulation",
 	"install-vector": "parse",
 	"pinned-simulation": "simulation",
 	"pinned-recheck": "parse",
