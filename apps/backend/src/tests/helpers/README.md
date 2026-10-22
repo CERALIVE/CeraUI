@@ -57,16 +57,18 @@ registry, and the first registration after the registry empties arms
 `afterEach(disposeMemoryPersistenceRoots)`. The disposer empties the registry
 before it removes anything and deletes only roots the helper created. If a
 registered path was replaced by a symlink, only the link goes. A repeated call
-does nothing. A root created inside a test is gone when that test ends. A fixture built at module scope, in `beforeAll` or in a `describe` body loses
-its root after the first test, and a later intent read on it silently reads a
-missing directory. Build the fixture inside the test or in `beforeEach`. A
-fixture that must outlive one test passes its own `osAttemptIntentStore` and
-`downloadNotices` under a root it owns and removes itself. The helper still
+does nothing. A root created inside a test is gone when that test ends. A
+`beforeAll` fixture loses its root before the first test; module-scope and
+`describe`-body fixtures lose it after the first test. Either way a later
+intent read on it silently reads a missing directory. Build the fixture inside
+the test or in `beforeEach`. A fixture that must outlive one test passes its
+own `osAttemptIntentStore` and `downloadNotices` under a root it owns and
+removes itself. The helper still
 creates and disposes its own unused root in that case. Run `bun test` with an
 absolute `TMPDIR` (`export TMPDIR="$(realpath "$TMPDIR")"`): roots are
 registered as `mkdtemp` returns them, so a relative `TMPDIR` plus a `chdir`
-before disposal would resolve against the wrong directory. No test changes the
-working directory today.
+before disposal would resolve against the wrong directory. No consumer of this
+helper changes the working directory today.
 
 `orchestrator-memory-persistence-cleanup.test.ts` pins the disposer: it removes
 every created root and leaves a same-prefix directory it did not create, even

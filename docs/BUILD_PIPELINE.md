@@ -94,10 +94,11 @@ the link and public.stale-* backups`, run these as root:
 
    The newest `public.stale-*` holds the displaced entry.
 
-The user troubleshooting page gives the same commands with `sudo` and ends them
-with a reboot instead of the service restart; either way the backend serves the
-linked frontend again. `public.stale-manual` does not match the timestamp shape,
-so retention never prunes it.
+The user troubleshooting page (published with the same release, ceralive-docs
+PR) gives the same commands with `sudo` and ends them with a reboot instead of
+the service restart; either way the backend serves the linked frontend again.
+`public.stale-manual` does not match the timestamp shape, so retention never
+prunes it.
 
 **Before a drill or a manual upgrade:** `findmnt -R /opt/ceralive` must list only
 the `/opt/ceralive` bind itself. Don't mount anything under `/opt/ceralive` and
