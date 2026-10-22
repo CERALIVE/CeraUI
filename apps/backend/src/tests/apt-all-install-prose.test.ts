@@ -21,6 +21,18 @@ it("accepts the exact pinned set when install prints weak-dependency prose", () 
 	expect(parseAptSimulation(fixture)).toEqual(pairs);
 });
 
+it("accepts the pinned install when apt's successful fallback solver prints progress", () => {
+	// Given: the board's exact progress bytes in an otherwise successful install replay.
+	// apt 3.0.3 private-install.cc:983-1035 and edsp.cc:791-799 (45bebdfb).
+	const text = fixture.replace(
+		"The following additional packages will be installed:",
+		"Solving dependencies...\nThe following additional packages will be installed:",
+	);
+	// When/Then: the fallback's progress does not alter the pinned authority.
+	expect(() => assertPinnedInstallSimulation(text, pairs)).not.toThrow();
+	expect(parseAptSimulation(text)).toEqual(pairs);
+});
+
 // All 54 literals from the independent apt 3.0.3 source census. Action tokens
 // are not prose; they must still refuse even beside an otherwise valid plan.
 const actionTokens = [

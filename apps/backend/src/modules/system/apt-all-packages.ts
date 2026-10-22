@@ -59,7 +59,7 @@ export function parseAptSimulation(
 	const names = new Set<string>();
 	for (const line of text.split("\n")) {
 		if (
-			/^(?:(?:Reading (?:package lists|state information)|Building dependency tree|Calculating upgrade)\.\.\.|Done ordering|Candidate versions|Dependency generation|Broken packages|Remove packages|Calculating upgrade|Aborting install\.)$/.test(
+			/^(?:(?:Reading (?:package lists|state information)|Building dependency tree|Calculating upgrade|Solving dependencies)\.\.\.|Done ordering|Candidate versions|Dependency generation|Broken packages|Remove packages|Calculating upgrade|Aborting install\.)$/.test(
 				line,
 			)
 		)
