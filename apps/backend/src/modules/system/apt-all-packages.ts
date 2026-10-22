@@ -53,13 +53,13 @@ export function parseAptSimulation(text: string): PinnedAptPackage[] {
 	const names = new Set<string>();
 	for (const line of text.split("\n")) {
 		if (
-			/^(?:Reading (?:package lists|state information)|Building dependency tree|Calculating upgrade)\.\.\.$/.test(
+			/^(?:(?:Reading (?:package lists|state information)|Building dependency tree|Calculating upgrade)\.\.\.|Done ordering|Candidate versions|Dependency generation|Broken packages|Remove packages|Calculating upgrade|Aborting install\.)$/.test(
 				line,
 			)
 		)
 			continue;
 		if (
-			!/^(?:[A-Z][a-z]{3}(?:\s|$)|[A-Z][A-Za-z]* [a-z0-9][a-z0-9+.:~-]*(?:$| [[(]))/.test(
+			!/^(?:(?:Inst|Conf|Remv|Purg)(?:\s|$)|[A-Z][A-Za-z]* [a-z0-9][a-z0-9+.-]*(?::[a-z0-9][a-z0-9-]*)?(?:$| \[| \([0-9]))/.test(
 				line,
 			)
 		)

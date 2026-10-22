@@ -1,0 +1,20 @@
+NOTE: This is only a simulation!
+      apt-get needs root privileges for real execution.
+Reading package lists...
+Building dependency tree...
+Reading state information...
+The following additional packages will be installed:
+  libfoo2
+Suggested packages:
+  libfoo-doc fcgiwrap
+Recommended packages:
+  libfoo-data
+The following NEW packages will be installed:
+  libfoo2
+The following packages will be upgraded:
+  nginx
+1 upgraded, 1 newly installed, 0 to remove and 0 not upgraded.
+Inst libfoo2 (2.0-1 Debian:13.7/stable [arm64])
+Inst nginx [1.26.3-3+deb13u9] (1.26.3-3+deb13u10 Debian-Security:13/stable-security [arm64])
+Conf libfoo2 (2.0-1 Debian:13.7/stable [arm64])
+Conf nginx (1.26.3-3+deb13u10 Debian-Security:13/stable-security [arm64])
