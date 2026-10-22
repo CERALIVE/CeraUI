@@ -534,6 +534,13 @@ BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
 Release assets are published through `publish-release.yml`; see
 [`docs/BUILD_PIPELINE.md`](docs/BUILD_PIPELINE.md) for the stable APT handoff.
 
+**Release preparation [PARTIAL; not published].** The root `package.json` prepares
+`2026.10.0` for a dispatch in October 2026; re-predict immediately before dispatch.
+If dispatch slips into November, re-predict (`2026.11.0`) and update the manifest.
+The release workflow requires exact equality with its calculated version. Debian
+builds append `-<UTC stamp>.<checkout SHA>`; `deb-version-stamp.test.sh` executes
+that configuration host-side without qualifying a full package or device upgrade.
+
 The package's frontend-link repair [EXISTS; host-tested, board proof owed] moves
 stale non-link entries aside before upgrade restart and restores the exact public
 symlink, retaining up to three previous timestamped backup directories plus the

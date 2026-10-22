@@ -15,7 +15,7 @@ via `bun run build:federation` from the CeraUI root (delegates to the frontend
   the typed host adapter. Shared graph code is split into sibling chunks
   co-located at the same versioned path.
 - **`<ceraui-version>`** is read at build time from the workspace-root `package.json` `version`
-(CalVer, `2026.9.5` at time of writing) — the single source of truth, matching the platform's
+(CalVer, `2026.10.0` prepared for release) — the single source of truth, matching the platform's
   `ceraui-version` claim.
 - **The catalog is STATIC here, not lazy.** Each entry still calls
   `registerFederationMessages()` (`@ceraui/i18n/eager`) at module scope and
@@ -38,4 +38,3 @@ via `bun run build:federation` from the CeraUI root (delegates to the frontend
 - **CI ordering caveat**: the backend `build` script does `rm -rf ../../dist/`, so
   `build:federation` MUST run AFTER `bun run build` (the full SPA/backend build) — never before,
   or its output is wiped.
-

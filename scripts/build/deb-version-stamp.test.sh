@@ -61,4 +61,25 @@ printf '%s\n' "$stamped" > "$TEMP_DIR/opt/ceralive/version"
 [[ -s "$TEMP_DIR/opt/ceralive/revision" ]] \
   || fail "staged revision stamp is empty"
 
+# --- Part D: release builds use the manifest plus UTC stamp and checkout SHA ----
+# Given the same manifest input the release workflow exports, independent of tags.
+export BUILD_VERSION
+BUILD_VERSION="$(jq -er '.version' package.json)"
+export BUILD_ARCH=amd64
+
+# When the builder's actual configuration runs, without compiling the payload.
+VERSION=''
+# shellcheck source=/dev/null
+source <(awk '/^PACKAGE_NAME=/{copy=1} /^MAINTAINER=/{exit} copy' "$build_script")
+
+# Then both version identities agree and the Debian revision keeps its provenance.
+[[ "$VERSION" == "$declared" && "$CERAUI_VERSION" == "$declared" ]] \
+  || fail "release package version and runtime stamp must both use package.json"
+[[ "$BUILD_DATE" =~ ^[0-9]{8}T[0-9]{6}$ ]] \
+  || fail "build timestamp is not YYYYMMDDTHHMMSS: $BUILD_DATE"
+expected_commit="$(git -C "$repo_root" rev-parse --short HEAD)"
+[[ "$VERSION-$ITERATION" == "$declared-$BUILD_DATE.$expected_commit" ]] \
+  || fail "Debian version must be package.json-<UTC stamp>.<checkout SHA>"
+printf 'PASS: release Debian version %s\n' "$VERSION-$ITERATION"
+
 printf 'PASS: the .deb stamps package.json CalVer into opt/ceralive/version and keeps the commit in opt/ceralive/revision\n'
