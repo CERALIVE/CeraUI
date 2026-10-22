@@ -10,12 +10,16 @@ per case: publication, an early-clock restart, then a corrected-clock restart.
 The real ledger and notification owners reload private files; no in-process
 module cache stands in for a restart. Its clock is already injected.
 
-Each child now has a named 15-second deadline with forced termination and scoped
-disposal. The test has a derived 50-second hang budget for three children plus
+Each child now has a named 45-second deadline with forced termination and scoped
+disposal. The test has a derived 145-second hang budget for three children plus
 parent assertions/cleanup. This distinguishes slow source/import scheduling from
 broken continuity without changing a single notice identity or state assertion.
-The global default remains five seconds. These bounds are not an arbitrary-load
-latency promise.
+The cold-start headroom is measured, not assumed: in a fresh checkout under the
+reviewer's heavy-contention recipe (four same-core burners, test at nice 5), the
+first child took up to 20.2 s wall (1.1-1.2 s quiet, against about 0.3 s for later
+children), so the deadline clears that worst case by more than 2x. The global
+default remains five seconds. These bounds are not an arbitrary-load latency
+promise.
 
 ## Real transport namespace setup
 
