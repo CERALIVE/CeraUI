@@ -1,0 +1,149 @@
+@@SIM
+Reading package lists...
+Building dependency tree...
+Reading state information...
+Calculating upgrade...
+The following packages will be upgraded:
+  nginx nginx-common nginx-light
+3 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+Inst nginx-common [1.26.3-3+deb13u9] (1.26.3-3+deb13u10 Debian-Security:13/stable-security [all]) [nginx:arm64 ]
+Inst nginx [1.26.3-3+deb13u9] (1.26.3-3+deb13u10 Debian-Security:13/stable-security [arm64]) [nginx-light:arm64 ]
+Inst nginx-light [1.26.3-3+deb13u9] (1.26.3-3+deb13u10 Debian-Security:13/stable-security [all])
+Conf nginx-common (1.26.3-3+deb13u10 Debian-Security:13/stable-security [all])
+Conf nginx (1.26.3-3+deb13u10 Debian-Security:13/stable-security [arm64])
+Conf nginx-light (1.26.3-3+deb13u10 Debian-Security:13/stable-security [all])
+@@SIM-RC=0
+@@HOLDS
+armbian-firmware-full
+librockchip-mpp1
+libv4l-0
+linux-image-7.2.0-ceralive-rk3588
+linux-u-boot-orangepi5-plus-edge
+rauc
+rauc-service
+rockchip-multimedia-config
+@@HOLDS-RC=0
+@@POLICY
+Package files:
+ 100 /var/lib/dpkg/status
+     release a=now
+ 500 https://deb.debian.org/debian trixie-updates/main arm64 Packages
+     release v=13-updates,o=Debian,a=stable-updates,n=trixie-updates,l=Debian,c=main,b=arm64
+     origin deb.debian.org
+ 500 https://deb.debian.org/debian-security trixie-security/main arm64 Packages
+     release v=13,o=Debian,a=stable-security,n=trixie-security,l=Debian-Security,c=main,b=arm64
+     origin deb.debian.org
+ 500 https://deb.debian.org/debian trixie/non-free-firmware arm64 Packages
+     release v=13.7,o=Debian,a=stable,n=trixie,l=Debian,c=non-free-firmware,b=arm64
+     origin deb.debian.org
+ 500 https://deb.debian.org/debian trixie/main arm64 Packages
+     release v=13.7,o=Debian,a=stable,n=trixie,l=Debian,c=main,b=arm64
+     origin deb.debian.org
+ 500 https://apt.ceralive.tv/dists/stable/binary-arm64 ./ Packages
+     release o=CeraLive,a=stable,n=stable,l=CeraLive,c=
+     origin apt.ceralive.tv
+Pinned packages:
+     linux-image-7.2.0-ceralive-rk3588 -> 7.2.0-ceralive1 with priority 1001
+     libmm-glib0 -> 1.24.2-2~ceralive.3 with priority 990
+     libmm-glib0 -> 1.24.2-2~ceralive.2 with priority 990
+     libmm-glib0 -> 1.24.2-2~ceralive0.2.0 with priority 990
+     libmm-glib0 -> 1.24.0-1+deb13u1 with priority -1
+     libqrtr-glib0 -> 1.4.0-1~ceralive.3 with priority 990
+     libqrtr-glib0 -> 1.4.0-1~ceralive.2 with priority 990
+     libqrtr-glib0 -> 1.4.0-1~ceralive0.2.0 with priority 990
+     libqrtr-glib0 -> 1.2.2-1+b2 with priority -1
+     libmbim-utils -> 1.34.0-1~ceralive.3 with priority 990
+     libmbim-utils -> 1.34.0-1~ceralive.2 with priority 990
+     libmbim-utils -> 1.34.0-1~ceralive0.2.0 with priority 990
+     libmbim-utils -> 1.32.0-1 with priority -1
+     libqmi-proxy -> 1.38.0-1~ceralive.3 with priority 990
+     libqmi-proxy -> 1.38.0-1~ceralive.2 with priority 990
+     libqmi-proxy -> 1.38.0-1~ceralive0.2.0 with priority 990
+     libqmi-proxy -> 1.36.0-1 with priority -1
+     modemmanager -> 1.24.2-2~ceralive.3 with priority 990
+     modemmanager -> 1.24.2-2~ceralive.2 with priority 990
+     modemmanager -> 1.24.2-2~ceralive0.2.0 with priority 990
+     modemmanager -> 1.24.0-1+deb13u1 with priority -1
+     libmbim-glib4 -> 1.34.0-1~ceralive.3 with priority 990
+     libmbim-glib4 -> 1.34.0-1~ceralive.2 with priority 990
+     libmbim-glib4 -> 1.34.0-1~ceralive0.2.0 with priority 990
+     libmbim-glib4 -> 1.32.0-1 with priority -1
+     cerastream -> 2026.9.8 with priority 990
+     cerastream -> 2026.9.7 with priority 990
+     cerastream -> 2026.9.6 with priority 990
+     cerastream -> 2026.9.5 with priority 990
+     librockchip-mpp1 -> 1.5.0-1 with priority 1001
+     rockchip-multimedia-config -> 1.0.2-1 with priority 1001
+     srtla -> 4.1.0 with priority 990
+     rauc -> 1.15.2-1+ceralive.1 with priority 1001
+     gstreamer1.0-libuvcsrc -> 2026.9.0 with priority 990
+     libmbim-proxy -> 1.34.0-1~ceralive.3 with priority 990
+     libmbim-proxy -> 1.34.0-1~ceralive.2 with priority 990
+     libmbim-proxy -> 1.34.0-1~ceralive0.2.0 with priority 990
+     libmbim-proxy -> 1.32.0-1 with priority -1
+     libqmi-utils -> 1.38.0-1~ceralive.3 with priority 990
+     libqmi-utils -> 1.38.0-1~ceralive.2 with priority 990
+     libqmi-utils -> 1.38.0-1~ceralive0.2.0 with priority 990
+     libqmi-utils -> 1.36.0-1 with priority -1
+     libsrt1.5-ceralive -> 1.5.7+ceralive.2 with priority 990
+     libsrt1.5-ceralive -> 1.5.6+ceralive.1 with priority 990
+     libsrt1.5-ceralive -> 1.5.5+ceralive.3 with priority 990
+     linux-u-boot-orangepi5-plus-edge -> 26.8.3 with priority 1001
+     libqmi-glib5 -> 1.38.0-1~ceralive.3 with priority 990
+     libqmi-glib5 -> 1.38.0-1~ceralive.2 with priority 990
+     libqmi-glib5 -> 1.38.0-1~ceralive0.2.0 with priority 990
+     libqmi-glib5 -> 1.36.0-1 with priority -1
+     libv4l-0 -> 1.30.1-1+ceralive1 with priority 1001
+     rauc-service -> 1.15.2-1+ceralive.1 with priority 1001
+     gstreamer1.0-rockchip-ceralive -> 1.14.4+ceralive.7 with priority 990
+     gstreamer1.0-rockchip-ceralive -> 1.14.4+ceralive.6 with priority 990
+     gstreamer1.0-rockchip-ceralive -> 1.14.4+ceralive.5 with priority 990
+     gstreamer1.0-rockchip-ceralive -> 1.14.4+ceralive.3 with priority 990
+     ceralive-apt-credentials -> 1.0.1 with priority 990
+     ceralive-apt-credentials -> 1.0.0 with priority 990
+     ceralive-device -> 2026.9.5-20261020T030724.23ee67a with priority 990
+     ceralive-device -> 2026.9.4-20260923T212013.159f99b with priority 990
+     ceralive-device -> 2026.9.3-20260920T155654.ec522ad with priority 990
+     armbian-firmware-full -> 26.8.3 with priority 1001
+     librga2-ceralive -> 1.10.5+ceralive.1 with priority 990
+     librga2-ceralive -> 1.10.1+ceralive.1 with priority 990
+     ceralive-modem-support -> 1.4.0 with priority 990
+     ceralive-modem-support -> 1.3.0 with priority 990
+@@POLICY-RC=0
+@@PKG-nginx
+nginx:
+  Installed: 1.26.3-3+deb13u9
+  Candidate: 1.26.3-3+deb13u10
+  Version table:
+     1.26.3-3+deb13u10 500
+        500 https://deb.debian.org/debian-security trixie-security/main arm64 Packages
+ *** 1.26.3-3+deb13u9 100
+        100 /var/lib/dpkg/status
+     1.26.3-3+deb13u7 500
+        500 https://deb.debian.org/debian trixie/main arm64 Packages
+@@PKG-nginx-RC=0
+@@PKG-nginx-common
+nginx-common:
+  Installed: 1.26.3-3+deb13u9
+  Candidate: 1.26.3-3+deb13u10
+  Version table:
+     1.26.3-3+deb13u10 500
+        500 https://deb.debian.org/debian-security trixie-security/main arm64 Packages
+ *** 1.26.3-3+deb13u9 100
+        100 /var/lib/dpkg/status
+     1.26.3-3+deb13u7 500
+        500 https://deb.debian.org/debian trixie/main arm64 Packages
+@@PKG-nginx-common-RC=0
+@@PKG-nginx-light
+nginx-light:
+  Installed: 1.26.3-3+deb13u9
+  Candidate: 1.26.3-3+deb13u10
+  Version table:
+     1.26.3-3+deb13u10 500
+        500 https://deb.debian.org/debian-security trixie-security/main arm64 Packages
+ *** 1.26.3-3+deb13u9 100
+        100 /var/lib/dpkg/status
+     1.26.3-3+deb13u7 500
+        500 https://deb.debian.org/debian trixie/main arm64 Packages
+@@PKG-nginx-light-RC=0
+@@END
