@@ -69,11 +69,14 @@ it.each([
 	"Bork libc6 (2 Debian [arm64])",
 	"Bork libc6",
 	"UnknownVerb libc6 (2 Debian [arm64])",
+	"Unpack libc6 [nginx:arm64 ]",
+	"Instl libc6",
+	"Setup libc6:armhf",
 ])(
 	"refuses malformed or unpinnable row %j even beside a valid install",
 	(line) => {
 		// Given
-		const text = `${install}\n${line}\n`;
+		const text = `Inst context (1 Debian [arm64])\n${line}\n`;
 		// When/Then
 		expect(() => parseAptSimulation(text)).toThrow("discovery_failed");
 		expect(() => assertPinnedInstallSimulation(text, [pair])).toThrow(
@@ -107,3 +110,13 @@ it("refuses duplicate install names even when versions or annotations differ", (
 	// When/Then
 	expect(() => parseAptSimulation(text)).toThrow("discovery_failed");
 });
+
+it.each(["Purg\tfoo", "Purg"])(
+	"retains the removal reason for malformed %j",
+	(line) => {
+		// Given/When/Then
+		expect(() => parseAptSimulation(`${install}\n${line}\n`)).toThrow(
+			"removals_required",
+		);
+	},
+);
