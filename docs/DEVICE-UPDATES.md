@@ -489,13 +489,42 @@ or dispatch; a refused owned plan is cleared before the request settles.
 
 The Packages **Update** button selects this scope only after the image reports
 `mode: "capable"` with `apt-all-packages` and the observed orchestrator phase is
-package-owned. It reuses the Install action's busy state, phase settlement and
-localized refusal bands; a refusal never retries through legacy. **Residual:**
-while an OS update is on offer (`os-available`), the Packages button still uses
-the older `system.startUpdate` path and the orchestrator is not told. Older,
-incapable or orchestrator-absent backends likewise retain that path. Package
-discovery still uses `system.checkForUpdates`; the separate D8 launch, deferral,
-pre-unit and adoption limitations remain unchanged.
+`available` or `awaiting-idle`. It reuses the Install action's busy state, phase
+settlement and localized refusal bands; a refusal never retries through legacy.
+**Legacy-routing residual:** in every other phase the Packages button still uses
+`system.startUpdate`, without informing the orchestrator. This includes an OS
+offer (`os-available`), `idle` after the Packages section's own legacy check,
+`failed`, `quarantined`, `synced`, `os-staged` and `os-activation-armed`. The same
+legacy route applies before capabilities have been read successfully (including
+a failed read), on legacy/incapable images, or without an orchestrator snapshot.
+Package discovery still uses `system.checkForUpdates`, which dispatches nothing
+to the orchestrator. The separate D8 launch, deferral, pre-unit and adoption
+limitations remain unchanged.
+
+**Mixed-version window:** an older backend that already has the orchestrator
+ignores the unknown input and executes `installUpdatesNow()` unscoped, equivalent
+to **Install now**, rather than selecting the legacy RPC. A stale newer cached
+tab against that backend can therefore stage an OS image if the backend reaches
+`os-available` during the RPC window; existing OS admission fences still apply.
+Reload the page so the device serves its matching frontend, then use the normal
+OS-offer controls. Matching frontend/backend versions do not have this scope-skew
+window.
+
+**Install when idle [EXISTS; host-tested]:** if a scoped call first dispatches
+`AWAIT_IDLE_FOR_INSTALL` and then refuses while still in `awaiting-idle` (for
+example a stream becomes live, capabilities become unreadable, or the cellular
+gate refuses), that phase remains. A refused owned plan is empty and the launch
+latch is released, but the scheduler retries packages at the next eligible idle,
+non-streaming window even with `packagesAuto=false`; normal capability, admission
+and cellular gates still apply. This is intended install-when-idle behavior, not
+an OS-stage request or an automation-setting change. Operator note: retry Update
+when not streaming or let the scheduled package install run. No cancellation
+control for `awaiting-idle` is claimed.
+
+Regression coverage: `update-orchestrator-package-scope-sweep.test.ts` combines
+macrotask and microtask phase/stream flips, including bare recovery-helper awaits,
+with an unscoped OS-stage control and runtime absent-input/`{}` equivalence.
+These are host fixture proofs, not installed-board qualification.
 
 After a stream abort, `os-available` can precede retirement of the cancelled
 producer. Install now reports existing typed `busy` while that producer, RAUC

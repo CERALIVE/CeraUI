@@ -55,10 +55,22 @@ reference: [device updates](docs/DEVICE-UPDATES.md).
 The Packages **Update** button [EXISTS; host-tested] uses a package-only
 orchestrator scope on capable images in package-owned phases, sharing the badge,
 phase feedback and installed notice. A server refusal never falls back to the
-older RPC. While an OS update is on offer, or with a legacy/incapable/absent
-orchestrator, it still uses that older package path without informing the
-orchestrator. Unscoped **Install now** is unchanged; board proof of this routing
-remains owed. See the same update contract for the remaining D8 limits.
+older RPC. It uses legacy `system.startUpdate` in every phase other than
+`available`/`awaiting-idle` (including an OS offer, `idle` after the Packages
+section's own legacy check, `failed`, `quarantined`, `synced`, `os-staged` and
+`os-activation-armed`), before a successful capability read, or with a
+legacy/incapable/absent orchestrator. Those legacy calls do not inform the
+orchestrator. An older backend that already has the orchestrator instead ignores
+the scoped input and runs it unscoped, equivalent to **Install now**. A stale
+newer cached tab against that older backend is a mixed-version window; reload so
+the device serves its matching frontend. If a scoped refusal leaves the call's
+own `awaiting-idle` transition in place, intended **install when idle** behavior
+installs packages at the next eligible idle, non-streaming window even with
+`packagesAuto=false`, subject to the normal capability, admission and cellular gates.
+The operator can retry Update when not streaming or let that scheduled install
+run; no cancellation control is claimed. Unscoped **Install now** is unchanged;
+board proof of this routing remains owed. See the same update contract for the
+remaining D8 limits.
 
 **Update notices [EXISTS; host-tested, board qualification owed].** Independent
 observers provide durable public-certificate expiry warnings (90/30/7 days and
