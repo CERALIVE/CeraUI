@@ -8,8 +8,11 @@ import { z } from "zod";
 const DAY = 86_400_000;
 const EXPIRY = 180 * DAY;
 // Three real VM/import/journal reloads share this test's scheduling budget.
-const SESSION_TIMEOUT_MS = 15_000;
-const RESTART_TEST_TIMEOUT_MS = 3 * SESSION_TIMEOUT_MS + 5_000;
+// The first child of a fresh checkout under the documented contention recipe
+// measured up to 20.2 s wall (quiet: 1.1-1.2 s against 0.3 s warm), so the child
+// deadline carries more than twice that cold worst case.
+const SESSION_TIMEOUT_MS = 45_000;
+const RESTART_TEST_TIMEOUT_MS = 3 * SESSION_TIMEOUT_MS + 10_000;
 const resultSchema = z.object({
 	names: z.array(z.string()),
 	keys: z.array(z.string()),
