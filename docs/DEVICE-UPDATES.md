@@ -129,6 +129,12 @@ authority. Genuine malformed rows, broken configure output, duplicate installs
 and all removal/purge plans still refuse. Journal warnings include the closed
 reason, stage/substep and at most 300 characters of redacted parser/command detail;
 this context stays log-only. Legacy package-list headings also normalize CRLF.
+The pinned install recheck ignores apt-get's Suggested/Recommended and additional/
+NEW package-list prose without treating its names as install targets. Discovery
+and detached argv checking share code-unit package order (not locale collation),
+and APT command children use the C locale with `LANGUAGE` unset. Pinned parse
+warnings use their own `pinned-recheck` step, so discovery dedupe cannot hide
+them; failed hold-list commands are staged as simulation failures.
 These are host parser/formatter proofs, not a successful update on the fixed board
 build. Source grammar and coverage: the backend
 [discovery contract](../apps/backend/docs/agents/software-update-check-contract.md).
