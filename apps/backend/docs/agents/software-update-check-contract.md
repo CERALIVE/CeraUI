@@ -50,10 +50,39 @@ Address-family and install-set rules are in `docs/DEVICE-UPDATES.md`.
 Legacy classification is exact-name (`package-layer.ts`); capable-image
 classification is origin-based (`apt-all-packages.ts`). See `docs/DEVICE-UPDATES.md`.
 
-Simulated `Inst` rows accept one optional terminal ` []` or ` [name name]` broken-package annotation (single spaces, each name matching `APT_PACKAGE_NAME_RE`); these names are context only, never install authority, in discovery and the pinned recheck.
+Simulation row parsing follows [apt 3.0.3 `pkgSimulate`](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-pkg/algorithms.cc#L82-L269), shared by discovery and pinned recheck:
 
-Capable APT refusals log `reason`, a closed substep, process `exit` when known,
-and optional sanitized detail (500 UTF-16 units maximum) at the discovery or
+| Row | Description and suffixes | Installation authority |
+| --- | --- | --- |
+| `Inst NAME` | Optional ` [CURRENT]`, optional ` (CANDIDATE RELEASE [ARCH])`, zero or more ` [NAME:ARCH on NAME:ARCH]`, optional ShortBreaks | Exactly one valid candidate version is required for a pinned pair; duplicate names refuse. |
+| `Conf NAME` | Optional candidate description, optional ShortBreaks | Context only; malformed rows and the separate `Conf NAME broken ...` branch refuse. |
+| `Remv NAME` / `Purg NAME` | Optional current description and ShortBreaks | Always refuse the entire plan, before or after any install. |
+
+ShortBreaks is ` []` or a single-space-separated package list with apt's final
+space: ` [name:arch name:arch ]`. The historically accepted no-final-space form
+remains tolerated. Every token still matches `APT_PACKAGE_NAME_RE`; nested,
+unterminated, repeated or misplaced groups, invalid tokens and unknown action
+verbs refuse. Reverse-dependency notes require architecture-qualified full names.
+All annotation names are context only, never extra install candidates.
+[RelStr](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-pkg/pkgcache.cc#L909-L960)
+joins release displays with comma-space, can include spaces/punctuation in labels,
+and can have an empty display. Release text is not provenance; unsafe control,
+semicolon or ambiguous bracket-bearing displays retain refusal. An absent
+candidate is structurally valid producer output but cannot authorize a pin.
+The former negative assertion for ` [libcurl4t64 ]` was disproved by ShortBreaks
+and the unchanged Orange Pi nginx capture; it is now positive coverage in both
+paths, without deleting any genuinely malformed case.
+
+Coverage: `tests/apt-all-real-capture.test.ts`, `tests/apt-all-row-grammar.test.ts`,
+`tests/apt-all-inst-annotation.test.ts`. The separate legacy package-list reader
+normalizes CRLF before recognizing headings; its informational/argv distinction
+below is unchanged. Sweep coverage: `tests/apt-parser-sweep.test.ts` and
+`tests/apt-dpkg-version-sweep.test.ts`. Dpkg revision output remains display-only,
+not install authority; these are host parser proofs, not a new board install.
+
+Capable APT refusals log `reason`, a closed `stage` (`source-policy`,
+`package-policy`, `simulation` or `parse`), the more specific `step`, process
+`exit` when known, and optional sanitized detail (300 UTF-16 units maximum) at the discovery or
 pinned-install catch. Normalize the whole text (including CR/LF and Unicode line
 separators) before detecting secrets. A secret-bearing record, URL or PEM marker
 suppresses every remaining continuation; only independent benign prefixes survive.
