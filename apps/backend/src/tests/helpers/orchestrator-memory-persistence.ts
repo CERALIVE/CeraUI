@@ -1,3 +1,4 @@
+import { afterEach } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,10 +12,29 @@ import { OsAttemptIntentStore } from "../../modules/system/update-orchestrator/o
 import type { OrchestratorRuntimeDeps } from "../../modules/system/update-orchestrator/runtime.ts";
 import type { OrchestratorState } from "../../modules/system/update-orchestrator/types.ts";
 
-const roots: string[] = [];
-process.once("exit", () => {
-	for (const root of roots) rmSync(root, { recursive: true });
-});
+const roots = new Set<string>();
+
+/**
+ * Removes every fixture directory this helper created. Only registered roots
+ * are touched, and the registry is emptied first so a repeated call is a
+ * no-op and never re-deletes a path that was already removed.
+ *
+ * `bun test` does not run `process.once("exit")` handlers. A hook registered
+ * while a test executes belongs to the file running that test, and this module
+ * is shared by several files in a single-process run, so the hook is armed
+ * lazily whenever the registry goes from empty to non-empty.
+ */
+export function disposeMemoryPersistenceRoots(): void {
+	for (const root of roots) {
+		roots.delete(root);
+		try {
+			rmSync(root, { recursive: true, force: true });
+		} catch {
+			// A directory already gone, or one whose handles are still draining,
+			// must not turn a passing test into an environmental failure.
+		}
+	}
+}
 
 export function withMemoryPersistence<
 	T extends Partial<OrchestratorRuntimeDeps>,
@@ -28,7 +48,8 @@ export function withMemoryPersistence<
 	> {
 	let persisted: OrchestratorState | null = initial && structuredClone(initial);
 	const root = mkdtempSync(join(tmpdir(), "orchestrator-intent-memory-"));
-	roots.push(root);
+	if (roots.size === 0) afterEach(disposeMemoryPersistenceRoots);
+	roots.add(root);
 	return {
 		...deps,
 		downloadNotices:
