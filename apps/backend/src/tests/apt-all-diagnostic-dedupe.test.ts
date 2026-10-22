@@ -98,7 +98,7 @@ it("withholds folded-credential bytes when discovery logs its refusal", async ()
 });
 
 it("logs distinct truncated-detail-dedupe failures when their safe tails differ", async () => {
-	// Given: both failures have exactly the same displayed 500-unit prefix.
+	// Given: both failures have exactly the same displayed prefix.
 	const prefix = "e".repeat(520);
 	// When: a single failure sequence changes only beyond the display horizon.
 	for (const tail of [" alpha failure", " beta failure", " beta failure"]) {
@@ -115,7 +115,7 @@ it("logs distinct truncated-detail-dedupe failures when their safe tails differ"
 					reason: "discovery_failed",
 					step: "source-policy",
 					exit: 100,
-					detail: "e".repeat(500),
+					detail: "e".repeat(300),
 				},
 			]),
 		);
