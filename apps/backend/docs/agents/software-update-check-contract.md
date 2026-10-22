@@ -49,6 +49,8 @@ Address-family and install-set rules are in `docs/DEVICE-UPDATES.md`.
 
 Legacy classification is exact-name (`package-layer.ts`); capable-image
 classification is origin-based (`apt-all-packages.ts`). See `docs/DEVICE-UPDATES.md`.
+The unchanged global inventory/Release join lives in `apt-all-source-policy.ts`;
+row structure lives in `apt-simulation-row.ts`, independently of eligibility.
 
 Simulation row parsing follows [apt 3.0.3 `pkgSimulate`](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-pkg/algorithms.cc#L82-L269), shared by discovery and pinned recheck:
 
