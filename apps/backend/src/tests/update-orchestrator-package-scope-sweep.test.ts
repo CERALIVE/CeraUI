@@ -66,27 +66,34 @@ function sweepFixture() {
 async function flipAfter(
 	macro: number,
 	micro: number,
-	act: () => void,
+	control: { readonly done: () => boolean; readonly act: () => void },
 ): Promise<void> {
-	for (let i = 0; i < macro; i++)
+	for (let i = 0; i < macro; i++) {
+		// A settled call cannot be flipped; its remaining turns cover no interleaving.
+		if (control.done()) return;
 		await new Promise<void>((resolve) => setImmediate(resolve));
+	}
+	if (control.done()) return;
 	let chain = Promise.resolve();
 	for (let i = 0; i < micro; i++) chain = chain.then(() => undefined);
 	await chain;
-	act();
+	control.act();
 }
 
 for (const scoped of [true, false]) {
 	test(`${scoped ? "scoped install stays fenced" : "unscoped control can stage OS"} when phase or stream flips across macro/micro awaits`, async () => {
+		const startedAt = performance.now();
 		const violations: string[] = [];
 		let flippedCases = 0;
 		let stagedCases = 0;
+		let cases = 0;
 		for (const target of flips) {
 			for (let macro = 0; macro <= 40; macro++) {
 				let anyBefore = false;
 				for (let micro = 0; micro <= 40; micro++) {
 					// Given fresh package authority and the real OS-dispatch fixture.
 					const f = sweepFixture();
+					cases++;
 					let done = false;
 					let stateAtFlip: ReturnType<typeof getOrchestratorState> | undefined;
 					// When authority flips during the manual call at this turn offset.
@@ -96,8 +103,11 @@ for (const scoped of [true, false]) {
 						done = true;
 						return outcome;
 					});
-					const flipper = flipAfter(macro, micro, () => {
-						if (!done) stateAtFlip = f.flip(target);
+					const flipper = flipAfter(macro, micro, {
+						done: () => done,
+						act: () => {
+							if (!done) stateAtFlip = f.flip(target);
+						},
 					});
 					const outcome = await call;
 					await flipper;
@@ -126,11 +136,19 @@ for (const scoped of [true, false]) {
 						}
 					}
 					cleanScopedFixture();
+					// Increasing this offset after completion adds no live-call interleaving.
+					if (macro > 0 && !stateAtFlip) break;
 				}
 				if (!anyBefore) break;
 			}
 		}
-		console.info({ scoped, flippedCases, stagedCases });
+		console.info({
+			scoped,
+			cases,
+			flippedCases,
+			stagedCases,
+			elapsedMs: performance.now() - startedAt,
+		});
 		expect(flippedCases).toBeGreaterThan(0);
 		if (scoped) expect(violations).toEqual([]);
 		else expect(stagedCases).toBeGreaterThan(0);
