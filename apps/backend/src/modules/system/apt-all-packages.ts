@@ -4,6 +4,10 @@ import {
 	prepareAptDiagnostic,
 } from "./apt-all-diagnostics.ts";
 import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
+import {
+	parseAptSimulationRow,
+	APT_SIMULATION_VERSION_RE as VERSION_RE,
+} from "./apt-simulation-row.ts";
 
 export type PinnedAptPackage = {
 	readonly name: string;
@@ -35,12 +39,11 @@ export class AptAllRefusalError extends Error {
 	}
 }
 
-const VERSION_RE = /^[0-9][A-Za-z0-9.+:~-]*$/;
 const FIRST_PARTY =
 	/^(?:ceralive-|cerastream$|srtla$|libsrt1\.5-ceralive$|gstreamer1\.0-(?:libuvcsrc|rockchip-ceralive)$|librga2-ceralive$|lib(?:mm-glib0|mbim-(?:glib4|proxy|utils)|qmi-(?:glib5|proxy|utils)|qrtr-glib0)$|modemmanager$)/;
 
 export function parseAptSimulation(text: string): PinnedAptPackage[] {
-	if (text.split("\n").some((line) => line.startsWith("Remv "))) {
+	if (text.split("\n").some((line) => /^(?:Remv|Purg)(?:\s|$)/.test(line))) {
 		throw new AptAllRefusalError("removals_required", "parse-simulation", {
 			detail: "simulation requires removals",
 		});
@@ -48,26 +51,42 @@ export function parseAptSimulation(text: string): PinnedAptPackage[] {
 	const result: PinnedAptPackage[] = [];
 	const names = new Set<string>();
 	for (const line of text.split("\n")) {
-		if (!line.startsWith("Inst ")) continue;
-		const match =
-			/^Inst (\S+) (?:\[[0-9][A-Za-z0-9.+:~-]*\] )?\(([0-9][A-Za-z0-9.+:~-]*) [A-Za-z0-9][A-Za-z0-9.+:/_-]*(?:(?:, *| +)[A-Za-z0-9][A-Za-z0-9.+:/_-]*)* \[[a-z0-9][a-z0-9-]*\]\)(?: \[([^[\]]*)\])?$/.exec(
-				line,
-			);
 		if (
-			!match ||
-			!APT_PACKAGE_NAME_RE.test(match[1] ?? "") ||
-			!VERSION_RE.test(match[2] ?? "") ||
-			(Boolean(match[3]) &&
-				match[3]?.split(" ").some((name) => !APT_PACKAGE_NAME_RE.test(name))) ||
-			names.has(match[1] ?? "")
+			/^(?:Reading (?:package lists|state information)|Building dependency tree|Calculating upgrade)\.\.\.$/.test(
+				line,
+			)
+		)
+			continue;
+		if (
+			!/^(?:[A-Z][a-z]{3}(?:\s|$)|[A-Z][A-Za-z]* [a-z0-9][a-z0-9+.:~-]*(?:$| [[(]))/.test(
+				line,
+			)
+		)
+			continue;
+		const row = parseAptSimulationRow(line);
+		if (
+			!row ||
+			(row.kind === "Inst" && (!row.version || names.has(row.name)))
 		) {
 			throw new AptAllRefusalError("discovery_failed", "parse-simulation", {
-				detail: `invalid or duplicate Inst row: ${line}`,
+				detail: `invalid or duplicate ${line.startsWith("Inst") ? "Inst" : "simulation"} row: ${line}`,
 			});
 		}
-		const name = match[1] ?? "";
-		result.push({ name, version: match[2] ?? "" });
-		names.add(name);
+		switch (row.kind) {
+			case "Inst":
+				if (row.version) result.push({ name: row.name, version: row.version });
+				names.add(row.name);
+				break;
+			case "Conf":
+				break;
+			case "Remv":
+			case "Purg":
+				throw new AptAllRefusalError("removals_required", "parse-simulation");
+			default: {
+				const exhaustive: never = row;
+				return exhaustive;
+			}
+		}
 	}
 	if (!text.includes("0 upgraded") && result.length === 0)
 		throw new AptAllRefusalError("discovery_failed", "parse-simulation", {
