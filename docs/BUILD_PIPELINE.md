@@ -69,6 +69,45 @@ leave a new backend serving old assets.
 
 To check a device: `readlink /opt/ceralive/public` must print `/var/www/ceralive`.
 
+**Manual recovery after the warning.** If configure prints
+`ceralive-postinst: warning: could not fully repair /opt/ceralive/public, check
+the link and public.stale-* backups`, run these as root:
+
+1. Inspect:
+
+   ```sh
+   readlink /opt/ceralive/public; ls -ld /opt/ceralive/public /opt/ceralive/public.stale-*
+   ```
+
+2. If `public` is a real directory or file (the restored original, or a failed
+   rename):
+
+   ```sh
+   mv -T /opt/ceralive/public /opt/ceralive/public.stale-manual && ln -s /var/www/ceralive /opt/ceralive/public && systemctl restart ceralive.service
+   ```
+
+3. If `public` is missing (restoration failed too):
+
+   ```sh
+   ln -s /var/www/ceralive /opt/ceralive/public && systemctl restart ceralive.service
+   ```
+
+   The newest `public.stale-*` holds the displaced entry.
+
+The user troubleshooting page gives the same commands with `sudo` and ends them
+with a reboot instead of the service restart; either way the backend serves the
+linked frontend again. `public.stale-manual` does not match the timestamp shape,
+so retention never prunes it.
+
+**Before a drill or a manual upgrade:** `findmnt -R /opt/ceralive` must list only
+the `/opt/ceralive` bind itself. Don't mount anything under `/opt/ceralive` and
+don't create `public.stale-*` names by hand. Retention keeps only three previous
+backups plus the newest, so copy a displaced directory out if you need it
+(`cp -a /opt/ceralive/public.stale-<stamp> /data/<safe-name>`). Stray backup
+symlinks are safe to remove with
+`find /opt/ceralive -maxdepth 1 -name 'public.stale-*' -type l -delete`, which
+removes only links.
+
 `deb-public-link.test.sh` exercises the generated configure path over private
 fake roots through the CI-run release/package contract harness; the optional
 `bash scripts/build/deb-public-link-mutations.test.sh` checks its negative controls.

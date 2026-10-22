@@ -2039,8 +2039,9 @@ only.** `receiptBaseline` remains optional in strict schema-1 stage job/witness
 records: this head reads older records, but older unreleased bench intermediates
 `1f6a990e` and `d28fff27` reject records carrying it with `unrecognized_keys`.
 Persistence across reboot does not make those records readable by an older backend.
-`2026.9.5` is the PLANNED first orchestrator release, pending the release gate; no
-released backend reads these records. The other strict records (sync receipt and staged receipt's
+`2026.9.5`, published on 2026-10-20, is the first orchestrator release, and its
+backend already accepts the optional `receiptBaseline`; the readers that reject it
+are those unreleased bench intermediates only. The other strict records (sync receipt and staged receipt's
 `installedImage`) follow the same additive-forward-only discipline.
 Rolling a bench board back to an intermediate build requires clearing its stage
 job/witness records as a bench-only operation, only after positive no-writer proof
