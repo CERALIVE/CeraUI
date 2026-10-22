@@ -21,6 +21,7 @@ it("forces English child output in discovery and pinned recheck despite inherite
 		LC_ALL: process.env.LC_ALL,
 		LANG: process.env.LANG,
 		LANGUAGE: process.env.LANGUAGE,
+		CERALIVE_APT_ENV_SENTINEL: process.env.CERALIVE_APT_ENV_SENTINEL,
 	};
 	const observed: { command: string[]; locale: unknown }[] = [];
 	try {
@@ -28,6 +29,7 @@ it("forces English child output in discovery and pinned recheck despite inherite
 			LC_ALL: "es_MX.UTF-8",
 			LANG: "es_MX.UTF-8",
 			LANGUAGE: "es:fr",
+			CERALIVE_APT_ENV_SENTINEL: "inherited-by-apt-child",
 		});
 		await writeFile(
 			join(dir, "cap.json"),
@@ -54,7 +56,7 @@ it("forces English child output in discovery and pinned recheck despite inherite
 				[
 					process.execPath,
 					"-e",
-					"console.log(JSON.stringify({LC_ALL:process.env.LC_ALL,LANG:process.env.LANG,LANGUAGE:process.env.LANGUAGE??null}))",
+					"console.log(JSON.stringify({LC_ALL:process.env.LC_ALL,LANG:process.env.LANG,LANGUAGE:process.env.LANGUAGE??null,CERALIVE_APT_ENV_SENTINEL:process.env.CERALIVE_APT_ENV_SENTINEL}))",
 				],
 				{ env: options?.env ?? process.env, stdout: "pipe", stderr: "pipe" },
 			);
@@ -103,7 +105,12 @@ it("forces English child output in discovery and pinned recheck despite inherite
 			true,
 		);
 		for (const { locale } of observed)
-			expect(locale).toEqual({ LC_ALL: "C", LANG: "C", LANGUAGE: null });
+			expect(locale).toEqual({
+				LC_ALL: "C",
+				LANG: "C",
+				LANGUAGE: null,
+				CERALIVE_APT_ENV_SENTINEL: "inherited-by-apt-child",
+			});
 	} finally {
 		for (const [key, value] of Object.entries(previous)) {
 			if (value === undefined) delete process.env[key];

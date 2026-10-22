@@ -79,9 +79,9 @@ it.each([
 		const text = `Inst context (1 Debian [arm64])\n${line}\n`;
 		// When/Then
 		expect(() => parseAptSimulation(text)).toThrow("discovery_failed");
-		expect(() => assertPinnedInstallSimulation(text, [pair])).toThrow(
-			"discovery_failed",
-		);
+		expect(() =>
+			assertPinnedInstallSimulation(text, [{ name: "context", version: "1" }]),
+		).toThrow("discovery_failed");
 	},
 );
 
