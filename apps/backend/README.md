@@ -155,11 +155,26 @@ contract job both fetch full history; Git failures remain test failures, never a
 empty diff. Local stability runs do not establish PR readiness: every hosted check
 on the current PR revision must succeed before the change is handed off.
 
+Backend hosted-CI stability [EXISTS; host-tested] keeps explicit child deadlines
+separate from test hang budgets, synchronizes transport namespace/listener setup,
+and bounds the package-scope timing sweep at completed calls without removing its
+live-call assertions. See [test boundaries and limitations](../../docs/BACKEND-CI-STABILITY.md).
+
 The real OS-stage runtime fence regression awaits its installation operation,
 not a competing 500 ms wall-clock timer. Its publication, cancellation, stale
 proof and single-dispatch assertions remain the contract; Bun's unchanged
 per-test timeout is only a hang detector. This test repair does not establish
 full-suite load stability or resolve Bun worker crashes.
+
+The four credential, download-hold and rollback dismissal-churn regressions
+[EXISTS; host-tested] retain all 257–300 real ordinary dismissals, atomic writes,
+eviction and restart assertions. A shared named 30-second test hang guard covers
+that bounded persistence workload. Its wall time depends on the host: on a loaded
+development host 300 real writes alone can take longer than Bun's default five
+seconds, and the four cases exceeded it under same-core CPU contention. Write-port time accounted for over 99% of the measured churn cost;
+doubling capped ordinary churn doubled cost rather than squaring it. Only those
+four tests use this budget; no product deadline, retry or persistence policy is
+changed. This is not a storage-latency SLA or board qualification.
 
 The runtime fence matrix also supplies idle through the existing per-test liveness
 seam and restores it after each case. A previous file's surrendered session-owner
@@ -751,6 +766,27 @@ orchestrator-owned path now persists `restarting-services` before its deliberate
 exit; legacy images retain their old restart/reboot behaviour, and a genuinely
 uncertain commit still fails closed. The new build has not yet been board-proven.
 See [`DEVICE-UPDATES.md`](../../docs/DEVICE-UPDATES.md).
+
+APT simulation parsing [EXISTS; host-tested] now accepts the real temporary-break
+lists (including apt's final space) and repeated reverse-dependency notes without
+adding those names to the install set. Discovery and pinned preflight share the
+row parser; malformed rows, broken configure and every removal/purge still refuse.
+The unchanged 2026-10-22 Orange Pi nginx capture is the primary regression.
+Refusal journal records include reason, closed stage/substep and redacted detail
+bounded to 300 characters; full sanitized fingerprints still deduplicate repeats.
+Legacy package-list headings also accept CRLF. This is parser/journal host proof,
+not installed-board update qualification. Install rechecks also accept apt-get's
+weak-dependency/list prose without granting those names install authority.
+Discovery and detached argv checking use one code-unit comparator; APT children
+force the C locale. Discovery and pinned parse failures have distinct dedupe
+steps, and hold-command failures retain simulation provenance. This remains
+host proof. Successful fallback-solver `Solving dependencies...` progress also
+remains context in both paths; malformed rows after progress still refuse.
+The locale child regression additionally proves inherited environment preservation.
+The pinned grammar negatives compare against their valid `context=1` companion,
+so a mismatched expected package cannot mask a skipped malformed row. This is
+host proof, not installed-board update qualification. See the
+[discovery contract](docs/agents/software-update-check-contract.md).
 
 Candidate provenance joins two APT readings: `apt-cache policy <name>` supplies
 the version's package-file line, while one unscoped `apt-cache policy` reading

@@ -49,11 +49,84 @@ Address-family and install-set rules are in `docs/DEVICE-UPDATES.md`.
 
 Legacy classification is exact-name (`package-layer.ts`); capable-image
 classification is origin-based (`apt-all-packages.ts`). See `docs/DEVICE-UPDATES.md`.
+The unchanged global inventory/Release join lives in `apt-all-source-policy.ts`;
+row structure lives in `apt-simulation-row.ts`, independently of eligibility.
 
-Simulated `Inst` rows accept one optional terminal ` []` or ` [name name]` broken-package annotation (single spaces, each name matching `APT_PACKAGE_NAME_RE`); these names are context only, never install authority, in discovery and the pinned recheck.
+Simulation row parsing follows [apt 3.0.3 `pkgSimulate`](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-pkg/algorithms.cc#L82-L269), shared by discovery and pinned recheck:
 
-Capable APT refusals log `reason`, a closed substep, process `exit` when known,
-and optional sanitized detail (500 UTF-16 units maximum) at the discovery or
+| Row | Description and suffixes | Installation authority |
+| --- | --- | --- |
+| `Inst NAME` | Optional ` [CURRENT]`, optional ` (CANDIDATE RELEASE [ARCH])`, zero or more ` [NAME:ARCH on NAME:ARCH]`, optional ShortBreaks | Exactly one valid candidate version is required for a pinned pair; duplicate names refuse. |
+| `Conf NAME` | Optional candidate description, optional ShortBreaks | Context only; malformed rows and the separate `Conf NAME broken ...` branch refuse. |
+| `Remv NAME` / `Purg NAME` | Optional current description and ShortBreaks | Always refuse the entire plan, before or after any install. |
+
+ShortBreaks is ` []` or a single-space-separated package list with apt's final
+space: ` [name:arch name:arch ]`. The historically accepted no-final-space form
+remains tolerated. Every token still matches `APT_PACKAGE_NAME_RE`; nested,
+unterminated, repeated or misplaced groups, invalid tokens and unknown action
+verbs refuse. Reverse-dependency notes require architecture-qualified full names.
+All annotation names are context only, never extra install candidates.
+[RelStr](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-pkg/pkgcache.cc#L909-L960)
+joins release displays with comma-space, can include spaces/punctuation in labels,
+and can have an empty display. Release text is not provenance; unsafe control,
+semicolon or ambiguous bracket-bearing displays retain refusal. An absent
+candidate is structurally valid producer output but cannot authorize a pin.
+The former negative assertion for ` [libcurl4t64 ]` was disproved by ShortBreaks
+and the unchanged Orange Pi nginx capture; it is now positive coverage in both
+paths, without deleting any genuinely malformed case.
+
+Coverage: `tests/apt-all-real-capture.test.ts`, `tests/apt-all-row-grammar.test.ts`,
+`tests/apt-all-inst-annotation.test.ts`. The separate legacy package-list reader
+normalizes CRLF before recognizing headings; its informational/argv distinction
+below is unchanged. Sweep coverage: `tests/apt-parser-sweep.test.ts` and
+`tests/apt-dpkg-version-sweep.test.ts`. Dpkg revision output remains display-only,
+not install authority; these are host parser proofs, not a new board install.
+
+The row/prose boundary also accepts apt-get install's `Suggested packages:` and
+`Recommended packages:` headings, additional/NEW package lists and simulation
+banner. [ShowWeakDependencies / DoInstall](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-private/private-install.cc#L1169-L1299)
+prints these for newly installed packages; they are not action rows and cannot
+add installation authority. Known action verbs still require the exact row
+grammar (including refusal of tab-separated `Inst`), and unknown row-shaped
+verbs refuse. The source census includes debug literals and action tokens as
+well as prose; its action tokens are explicitly negative coverage.
+Coverage: `tests/apt-all-install-prose.test.ts` and `fixtures/apt/README.md`.
+
+Non-TTY stdout progress labels are context in both discovery and pinned recheck,
+including a successful install's 3.0 solver fallback. All references below use
+apt 3.0.3 commit `45bebdfb891535d15e66e860aab1ee7c7b2ecaab`:
+
+| Operation label | Producer |
+| --- | --- |
+| `Reading package lists` | [pkgcachegen.cc:1884–1886](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-pkg/pkgcachegen.cc#L1884-L1886) |
+| `Building dependency tree` | [depcache.cc:239–243](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-pkg/depcache.cc#L239-L243) |
+| `Reading state information` | [depcache.cc:289–293](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-pkg/depcache.cc#L289-L293) |
+| `Calculating upgrade` | [upgrade.cc:213–218](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-pkg/upgrade.cc#L213-L218), also EDSP's upgrade branch below |
+| `Solving dependencies` | [edsp.cc:791–799](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-pkg/edsp.cc#L791-L799), install fallback in [private-install.cc:983–1035](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-private/private-install.cc#L983-L1035) |
+
+[OpTextProgress:186–194](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-pkg/contrib/progress.cc#L186-L194)
+prints the operation followed by `...`; completion can append ` Done`. The source
+census found no other reachable stdout progress label for these commands.
+`Correcting dependencies...` requires FixBroken ([private-cachefile.cc:89–107](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-private/private-cachefile.cc#L89-L107)),
+which needs `-f`/`--fix-broken`; these product paths never pass either flag.
+`tests/apt-all-progress-labels.test.ts` checks every label before a valid row at
+both entry points and keeps a malformed `Inst` after progress negative.
+`tests/apt-all-solver-boundary.test.ts` drives exit-zero fallback output through
+`startSoftwareUpdate` to an independently refused space check, not installation.
+
+Discovery and detached pinned-argv validation share `compareAptPackageNames`:
+strict ascending JavaScript code-unit order, never locale collation. This keeps
+`+`, `-`, `.`, and architecture-qualified names launchable without allowing
+duplicates or accepting a noncanonical unit argv. Coverage includes the three
+reviewed library pairs and every ordered pair in a generated 20-name set in
+`tests/apt-all-install-order.test.ts`. The shared APT command runner supplies
+`LC_ALL=C`, `LANG=C` and an unset `LANGUAGE` to discovery, policy, holds and pinned
+recheck children; `tests/apt-all-command-locale.test.ts` observes a real child's
+environment at both simulation boundaries under an inherited non-English locale.
+
+Capable APT refusals log `reason`, a closed `stage` (`source-policy`,
+`package-policy`, `simulation` or `parse`), the more specific `step`, process
+`exit` when known, and optional sanitized detail (300 UTF-16 units maximum) at the discovery or
 pinned-install catch. Normalize the whole text (including CR/LF and Unicode line
 separators) before detecting secrets. A secret-bearing record, URL or PEM marker
 suppresses every remaining continuation; only independent benign prefixes survive.
@@ -61,6 +134,12 @@ Redaction precedes truncation. The internal SHA256 fingerprint uses the FULL
 sanitized text, never raw secrets or the truncated display. The last reason/exit/
 fingerprint signature per step is deduplicated for the process lifetime, including
 across successful discovery; safe evidence changed beyond the display cap logs again.
+Pinned parse refusals carry `step=pinned-recheck`, separate from discovery's
+`parse-simulation`, so identical details at these boundaries cannot suppress each
+other. An `apt-mark showhold` command failure has `step=held-packages` and
+`stage=simulation`, not a parse failure. The 300-unit cut removes a dangling high
+surrogate; production JSON coverage is in `tests/apt-all-journal-surrogate.test.ts`
+and step/dedupe coverage in `tests/apt-all-refusal-steps.test.ts`.
 URL/JWT recognition consumes disjoint maximal tokens rather than retrying their
 suffix at every internal boundary. No input prefix cap hides late markers or safe
 identity. Valid Unicode retains its UTF-8 SHA256; lone-surrogate text uses a 0xff

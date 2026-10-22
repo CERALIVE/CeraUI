@@ -3,7 +3,15 @@ import {
 	type AptAllDiagnosticStep,
 	prepareAptDiagnostic,
 } from "./apt-all-diagnostics.ts";
-import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
+import { policySources } from "./apt-all-source-policy.ts";
+import {
+	APT_PACKAGE_NAME_RE,
+	compareAptPackageNames,
+} from "./apt-package-name.ts";
+import {
+	parseAptSimulationRow,
+	APT_SIMULATION_VERSION_RE as VERSION_RE,
+} from "./apt-simulation-row.ts";
 
 export type PinnedAptPackage = {
 	readonly name: string;
@@ -35,96 +43,63 @@ export class AptAllRefusalError extends Error {
 	}
 }
 
-const VERSION_RE = /^[0-9][A-Za-z0-9.+:~-]*$/;
 const FIRST_PARTY =
 	/^(?:ceralive-|cerastream$|srtla$|libsrt1\.5-ceralive$|gstreamer1\.0-(?:libuvcsrc|rockchip-ceralive)$|librga2-ceralive$|lib(?:mm-glib0|mbim-(?:glib4|proxy|utils)|qmi-(?:glib5|proxy|utils)|qrtr-glib0)$|modemmanager$)/;
 
-export function parseAptSimulation(text: string): PinnedAptPackage[] {
-	if (text.split("\n").some((line) => line.startsWith("Remv "))) {
-		throw new AptAllRefusalError("removals_required", "parse-simulation", {
+export function parseAptSimulation(
+	text: string,
+	step: "parse-simulation" | "pinned-recheck" = "parse-simulation",
+): PinnedAptPackage[] {
+	if (text.split("\n").some((line) => /^(?:Remv|Purg)(?:\s|$)/.test(line))) {
+		throw new AptAllRefusalError("removals_required", step, {
 			detail: "simulation requires removals",
 		});
 	}
 	const result: PinnedAptPackage[] = [];
 	const names = new Set<string>();
 	for (const line of text.split("\n")) {
-		if (!line.startsWith("Inst ")) continue;
-		const match =
-			/^Inst (\S+) (?:\[[0-9][A-Za-z0-9.+:~-]*\] )?\(([0-9][A-Za-z0-9.+:~-]*) [A-Za-z0-9][A-Za-z0-9.+:/_-]*(?:(?:, *| +)[A-Za-z0-9][A-Za-z0-9.+:/_-]*)* \[[a-z0-9][a-z0-9-]*\]\)(?: \[([^[\]]*)\])?$/.exec(
-				line,
-			);
 		if (
-			!match ||
-			!APT_PACKAGE_NAME_RE.test(match[1] ?? "") ||
-			!VERSION_RE.test(match[2] ?? "") ||
-			(Boolean(match[3]) &&
-				match[3]?.split(" ").some((name) => !APT_PACKAGE_NAME_RE.test(name))) ||
-			names.has(match[1] ?? "")
+			/^(?:(?:Reading (?:package lists|state information)|Building dependency tree|Calculating upgrade|Solving dependencies)\.\.\.|Done ordering|Candidate versions|Dependency generation|Broken packages|Remove packages|Calculating upgrade|Aborting install\.)$/.test(
+				line,
+			)
+		)
+			continue;
+		if (
+			!/^(?:(?:Inst|Conf|Remv|Purg)(?:\s|$)|[A-Z][A-Za-z]* [a-z0-9][a-z0-9+.-]*(?::[a-z0-9][a-z0-9-]*)?(?:$| \[| \([0-9]))/.test(
+				line,
+			)
+		)
+			continue;
+		const row = parseAptSimulationRow(line);
+		if (
+			!row ||
+			(row.kind === "Inst" && (!row.version || names.has(row.name)))
 		) {
-			throw new AptAllRefusalError("discovery_failed", "parse-simulation", {
-				detail: `invalid or duplicate Inst row: ${line}`,
+			throw new AptAllRefusalError("discovery_failed", step, {
+				detail: `invalid or duplicate ${line.startsWith("Inst") ? "Inst" : "simulation"} row: ${line}`,
 			});
 		}
-		const name = match[1] ?? "";
-		result.push({ name, version: match[2] ?? "" });
-		names.add(name);
+		switch (row.kind) {
+			case "Inst":
+				if (row.version) result.push({ name: row.name, version: row.version });
+				names.add(row.name);
+				break;
+			case "Conf":
+				break;
+			case "Remv":
+			case "Purg":
+				throw new AptAllRefusalError("removals_required", step);
+			default: {
+				const exhaustive: never = row;
+				return exhaustive;
+			}
+		}
 	}
 	if (!text.includes("0 upgraded") && result.length === 0)
-		throw new AptAllRefusalError("discovery_failed", "parse-simulation", {
+		throw new AptAllRefusalError("discovery_failed", step, {
 			detail: "missing upgrade summary",
 		});
 	return result;
-}
-
-function sourceOrigin(
-	source: string,
-	release: string,
-	origin: string,
-): string | null {
-	const url = /^https:\/\/\S+/.exec(source)?.[0];
-	if (!url || !URL.canParse(url)) return null;
-	const host = new URL(url).hostname;
-	if (host !== origin) return null;
-	if (
-		host === "apt.ceralive.tv" &&
-		/(?:^|,)o=CeraLive(?:,|$)/.test(release) &&
-		/(?:^|,)l=CeraLive(?:,|$)/.test(release) &&
-		/(?:^|,)n=(?:stable|beta)(?:,|$)/.test(release)
-	)
-		return host;
-	const suite = /(?:^|,)n=(trixie(?:-updates|-security)?)(?:,|$)/.exec(
-		release,
-	)?.[1];
-	if (
-		(host === "deb.debian.org" || host === "security.debian.org") &&
-		/(?:^|,)o=Debian(?:,|$)/.test(release) &&
-		/(?:^|,)l=Debian(?:-Security)?(?:,|$)/.test(release) &&
-		suite
-	)
-		return `Debian ${suite}`;
-	return null;
-}
-
-function policySources(inventory: string): Map<string, string | null> {
-	const sources = new Map<string, string | null>();
-	const lines = inventory.split("\n");
-	if (lines[0] !== "Package files:") return sources;
-	for (let i = 1; i < lines.length && lines[i] !== "Pinned packages:"; i++) {
-		const source = /^\s*\d+\s+(https?:\/\/\S+\s+.+\s+Packages)\s*$/.exec(
-			lines[i] ?? "",
-		)?.[1];
-		if (!source) continue;
-		const release = /^\s+release\s+(.+)$/.exec(lines[i + 1] ?? "")?.[1];
-		const origin = /^\s+origin\s+(\S+)\s*$/.exec(lines[i + 2] ?? "")?.[1];
-		const allowed =
-			release && origin ? sourceOrigin(source, release, origin) : null;
-		if (sources.has(source) && sources.get(source) !== allowed) {
-			sources.set(source, null);
-		} else if (!sources.has(source)) {
-			sources.set(source, allowed);
-		}
-	}
-	return sources;
 }
 
 export function candidateOrigin(
@@ -195,7 +170,9 @@ export async function discoverAptAllPackages(
 	}
 	return {
 		packages,
-		actionable: actionable.sort((a, b) => a.name.localeCompare(b.name)),
+		actionable: actionable.sort((a, b) =>
+			compareAptPackageNames(a.name, b.name),
+		),
 	};
 }
 
@@ -259,7 +236,7 @@ export function assertPinnedInstallSimulation(
 	text: string,
 	pairs: readonly PinnedAptPackage[],
 ): void {
-	const actual = parseAptSimulation(text);
+	const actual = parseAptSimulation(text, "pinned-recheck");
 	if (
 		actual.length !== pairs.length ||
 		actual.some(

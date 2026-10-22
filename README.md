@@ -198,7 +198,7 @@ Check → stage → install → staged → armed flow is unobstructed in the ora
 host repro. Accepted D154 residuals are privileged arming bypass and forward-only
 strict schema-1 compatibility: older unreleased intermediates reject
 `receiptBaseline`; bench rollback requires clearing stage job/witness records.
-`2026.9.5` is the PLANNED first orchestrator release, pending the release gate. These are host proofs, not
+`2026.9.5`, published on 2026-10-20, is the first orchestrator release. These are host proofs, not
 board qualification. See [OS staging recovery](docs/UPDATE-RECOVERY.md#os-staging-recovery-partial--fixture-proven-board-re-drill-owed).
 
 Idle RAUC status helpers no longer make a single extra-member census a terminal

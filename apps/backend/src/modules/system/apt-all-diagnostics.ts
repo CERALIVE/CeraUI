@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { stripVTControlCharacters } from "node:util";
 
 export type AptAllDiagnosticStep =
+	| "simulation"
 	| "source-policy"
 	| "package-policy"
 	| "parse-simulation"

@@ -121,6 +121,23 @@ line is joined to the complete line in one unscoped `apt-cache policy` reading
 per discovery. The unscoped inventory carries Release Origin/Label and the
 Debian suite. Unknown or ambiguous joins remain informational, not installable;
 the Rock 5B+ capture of both APT forms is the regression fixture.
+The unchanged 2026-10-22 Orange Pi nginx capture additionally reproduces ordinary
+security upgrades with apt temporary-break lists such as ` [nginx:arm64 ]`.
+Discovery and pinned preflight now accept that producer grammar, empty lists and
+repeated reverse-dependency notes while keeping annotations out of installation
+authority. Genuine malformed rows, broken configure output, duplicate installs
+and all removal/purge plans still refuse. Journal warnings include the closed
+reason, stage/substep and at most 300 characters of redacted parser/command detail;
+this context stays log-only. Legacy package-list headings also normalize CRLF.
+The pinned install recheck ignores apt-get's Suggested/Recommended and additional/
+NEW package-list prose without treating its names as install targets. Discovery
+and detached argv checking share code-unit package order (not locale collation),
+and APT command children use the C locale with `LANGUAGE` unset. Pinned parse
+warnings use their own `pinned-recheck` step, so discovery dedupe cannot hide
+them; failed hold-list commands are staged as simulation failures.
+These are host parser/formatter proofs, not a successful update on the fixed board
+build. Source grammar and coverage: the backend
+[discovery contract](../apps/backend/docs/agents/software-update-check-contract.md).
 On 2026-09-27 a Rock 5B+ with bench-enabled capabilities classified and installed
 `ceralive-apt-credentials` 1.0.1. A later Rock capture showed apt success but
 `committing` stuck for 84+ minutes: the observer rejected systemd's flock-wrapped
@@ -519,7 +536,11 @@ non-streaming window even with `packagesAuto=false`; normal capability, admissio
 and cellular gates still apply. This is intended install-when-idle behavior, not
 an OS-stage request or an automation-setting change. Operator note: retry Update
 when not streaming or let the scheduled package install run. No cancellation
-control for `awaiting-idle` is claimed.
+control for `awaiting-idle` is claimed. Each step has its own host test
+(`update-orchestrator-runtime-install-pending.test.ts`: a refused scheduled launch
+stays pending for the next tick; `update-orchestrator-package-scope.test.ts`: a
+scoped metered refusal keeps `packagesAuto=false`). No single committed test runs
+the whole chain from scoped refusal to the idle-tick package install.
 
 Regression coverage: `update-orchestrator-package-scope-sweep.test.ts` combines
 macrotask and microtask phase/stream flips, including bare recovery-helper awaits,

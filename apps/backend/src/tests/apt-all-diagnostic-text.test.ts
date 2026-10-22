@@ -91,12 +91,12 @@ it("names the install vector step for an invalid argument vector", () => {
 	);
 });
 
-it("keeps removal refusals typed with the parse step", () => {
+it("keeps pinned removal refusals typed with the recheck step", () => {
 	// Given/When/Then
 	expect(() => assertPinnedInstallSimulation("Remv libc6 [1]\n", [])).toThrow(
 		expect.objectContaining({
 			reason: "removals_required",
-			step: "parse-simulation",
+			step: "pinned-recheck",
 		}),
 	);
 });
