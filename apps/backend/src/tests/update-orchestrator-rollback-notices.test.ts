@@ -27,6 +27,7 @@ import {
 	notificationDismiss,
 	notificationRemove,
 } from "../modules/ui/notifications.ts";
+import { DISMISSAL_CHURN_TIMEOUT_MS } from "./helpers/notification-churn-budget.ts";
 import { fakeDeps } from "./helpers/orchestrator-runtime-harness.ts";
 import {
 	board,
@@ -133,25 +134,29 @@ test("recorded rollback rehydrates exactly once across two backend restarts", as
 	]);
 });
 
-test("operator dismissal stays gone across restarts and ordinary dismissal churn", async () => {
-	// Given recorded rollback and its operator-dismissed notice.
-	const f = await fixture();
-	await f.quarantine.recordOsRollback(badVersion, bootedVersion);
-	await f.restart();
-	expect(rollbackNotices()).toHaveLength(1);
-	notificationDismiss(noticeName);
-	expect(rollbackNotices()).toHaveLength(0);
-	for (let i = 0; i <= DEFAULT_MAX_DISMISSALS; i++)
-		getDismissalStore().recordDismissal(`ordinary:${i}`);
-	// When the runtime and dismissal-store singleton are reloaded from disk.
-	await f.restart();
-	await f.restart();
-	await runOrchestratorTick();
-	// Then dismissal did not erase protection or resurrect the notice.
-	expect(rollbackNotices()).toHaveLength(0);
-	expect(getDismissalStore().isDismissed(noticeName)).toBe(true);
-	expect(await f.quarantine.isOsVersionQuarantined(badVersion)).toBe(true);
-});
+test(
+	"operator dismissal stays gone across restarts and ordinary dismissal churn",
+	async () => {
+		// Given recorded rollback and its operator-dismissed notice.
+		const f = await fixture();
+		await f.quarantine.recordOsRollback(badVersion, bootedVersion);
+		await f.restart();
+		expect(rollbackNotices()).toHaveLength(1);
+		notificationDismiss(noticeName);
+		expect(rollbackNotices()).toHaveLength(0);
+		for (let i = 0; i <= DEFAULT_MAX_DISMISSALS; i++)
+			getDismissalStore().recordDismissal(`ordinary:${i}`);
+		// When the runtime and dismissal-store singleton are reloaded from disk.
+		await f.restart();
+		await f.restart();
+		await runOrchestratorTick();
+		// Then dismissal did not erase protection or resurrect the notice.
+		expect(rollbackNotices()).toHaveLength(0);
+		expect(getDismissalStore().isDismissed(noticeName)).toBe(true);
+		expect(await f.quarantine.isOsVersionQuarantined(badVersion)).toBe(true);
+	},
+	DISMISSAL_CHURN_TIMEOUT_MS,
+);
 
 test("idle startup restores quarantine history even without a staged receipt", async () => {
 	// Given durable history, not a pending activation or historical workflow phase.
