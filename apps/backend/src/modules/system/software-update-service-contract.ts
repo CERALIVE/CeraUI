@@ -8,7 +8,10 @@
 	(at your option) any later version.
 */
 
-import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
+import {
+	APT_PACKAGE_NAME_RE,
+	compareAptPackageNames,
+} from "./apt-package-name.ts";
 import { softwareUpdateOutputPaths } from "./software-update-output.ts";
 import { parseOsStageSystemdProperties } from "./update-orchestrator/os-stage-systemd.ts";
 
@@ -112,7 +115,7 @@ export function isExpectedAptAllInstallArgv(argv: readonly string[]): boolean {
 			separator < 1 ||
 			!APT_PACKAGE_NAME_RE.test(name) ||
 			!/^[0-9][A-Za-z0-9.+:~-]*$/.test(version) ||
-			name <= previous
+			compareAptPackageNames(name, previous) <= 0
 		)
 			return false;
 		previous = name;

@@ -5,3 +5,7 @@
 // software-updates module graph (which loads config/network/streaming at
 // import time). Single source of truth — never copy this charset (G5).
 export const APT_PACKAGE_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9.+:~-]*$/;
+
+export function compareAptPackageNames(left: string, right: string): number {
+	return left < right ? -1 : left > right ? 1 : 0;
+}

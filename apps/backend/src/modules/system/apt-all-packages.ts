@@ -4,7 +4,10 @@ import {
 	prepareAptDiagnostic,
 } from "./apt-all-diagnostics.ts";
 import { policySources } from "./apt-all-source-policy.ts";
-import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
+import {
+	APT_PACKAGE_NAME_RE,
+	compareAptPackageNames,
+} from "./apt-package-name.ts";
 import {
 	parseAptSimulationRow,
 	APT_SIMULATION_VERSION_RE as VERSION_RE,
@@ -167,7 +170,9 @@ export async function discoverAptAllPackages(
 	}
 	return {
 		packages,
-		actionable: actionable.sort((a, b) => a.name.localeCompare(b.name)),
+		actionable: actionable.sort((a, b) =>
+			compareAptPackageNames(a.name, b.name),
+		),
 	};
 }
 
