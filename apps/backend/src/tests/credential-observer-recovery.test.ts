@@ -17,6 +17,7 @@ import {
 	credentialObserverFixture,
 	CREDENTIAL_DAY as DAY,
 } from "./helpers/credential-observer-fixture.ts";
+import { DISMISSAL_CHURN_TIMEOUT_MS } from "./helpers/notification-churn-budget.ts";
 
 let fixture: Awaited<ReturnType<typeof credentialObserverFixture>>;
 let previousPath: string | undefined;
@@ -50,23 +51,27 @@ test("startup rehydrates undismissed active notice with the same name", async ()
 	).toEqual([notice.name]);
 });
 
-test("shared durable dismissal is mirrored before rehydration", async () => {
-	// Given an older shared dismissal for an active intent; When a fresh observer sees it; Then persist a dedicated acknowledgement.
-	await fixture.observer.refresh(true);
-	const notice = getPersistentNotifications(true).show[0];
-	if (!notice) throw new Error("fixture notice missing");
-	recordNotificationDismissal(notice.name);
-	const observer = new CredentialNoticeObserver({
-		...fixture.deps,
-		dismissed: isNotificationDismissed,
-		clear: () => notificationRemove(notice.name),
-	});
-	await observer.refresh(true);
-	for (let index = 0; index < 300; index++)
-		recordNotificationDismissal(`ordinary-${index}`);
-	await new CredentialNoticeObserver(fixture.deps).refresh(true);
-	expect(getPersistentNotifications(true).show).toHaveLength(0);
-});
+test(
+	"shared durable dismissal is mirrored before rehydration",
+	async () => {
+		// Given an older shared dismissal for an active intent; When a fresh observer sees it; Then persist a dedicated acknowledgement.
+		await fixture.observer.refresh(true);
+		const notice = getPersistentNotifications(true).show[0];
+		if (!notice) throw new Error("fixture notice missing");
+		recordNotificationDismissal(notice.name);
+		const observer = new CredentialNoticeObserver({
+			...fixture.deps,
+			dismissed: isNotificationDismissed,
+			clear: () => notificationRemove(notice.name),
+		});
+		await observer.refresh(true);
+		for (let index = 0; index < 300; index++)
+			recordNotificationDismissal(`ordinary-${index}`);
+		await new CredentialNoticeObserver(fixture.deps).refresh(true);
+		expect(getPersistentNotifications(true).show).toHaveLength(0);
+	},
+	DISMISSAL_CHURN_TIMEOUT_MS,
+);
 
 test("unreadable replacement is unknown and never retires an established warning as renewed", async () => {
 	// Given an established warning; When a replacement cannot be read; Then retain the warning but project unknown.

@@ -7,6 +7,9 @@ import { z } from "zod";
 
 const DAY = 86_400_000;
 const EXPIRY = 180 * DAY;
+// Three real VM/import/journal reloads share this test's scheduling budget.
+const SESSION_TIMEOUT_MS = 15_000;
+const RESTART_TEST_TIMEOUT_MS = 3 * SESSION_TIMEOUT_MS + 5_000;
 const resultSchema = z.object({
 	names: z.array(z.string()),
 	keys: z.array(z.string()),
@@ -40,7 +43,9 @@ async function session(now: number) {
 		const notices = getPersistentNotifications(true).show;
 		console.log(JSON.stringify({names:notices.map(n=>n.name),keys:notices.map(n=>n.key),state:observer.details().state}));
 	`;
-	const child = Bun.spawn([process.execPath, "-e", source], {
+	await using child = Bun.spawn([process.execPath, "-e", source], {
+		timeout: SESSION_TIMEOUT_MS,
+		killSignal: "SIGKILL",
 		stdout: "pipe",
 		stderr: "pipe",
 		env: {
@@ -84,4 +89,5 @@ test.each([
 		expect(corrected.names).toEqual(first.names);
 		expect(corrected.state).toBe(state);
 	},
+	RESTART_TEST_TIMEOUT_MS,
 );
