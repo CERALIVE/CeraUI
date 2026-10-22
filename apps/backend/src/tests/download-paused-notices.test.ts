@@ -23,6 +23,7 @@ import {
 	notificationExists,
 	notificationRemove,
 } from "../modules/ui/notifications.ts";
+import { DISMISSAL_CHURN_TIMEOUT_MS } from "./helpers/notification-churn-budget.ts";
 import { resetNotificationState } from "./helpers/notification-state.ts";
 
 const fact: DownloadInterruption = {
@@ -100,21 +101,25 @@ describe("detached download hold notices", () => {
 			"notifications.updatePausedForStream",
 		);
 	});
-	test("durable dismissal survives restart and more than 256 ordinary dismissals", async () => {
-		const { worker, ledger } = fixture();
-		worker.interrupted(fact);
-		await worker.settled();
-		notificationDismiss(name(fact.id));
-		for (let index = 0; index < 260; index++)
-			recordNotificationDismissal(`ordinary:${index}`);
-		resetDismissalStoreForTests();
-		const restarted = fixture();
-		restarted.worker.hydrate();
-		restarted.worker.interrupted(fact);
-		await restarted.worker.settled();
-		expect(notificationExists(name(fact.id))).toBeUndefined();
-		expect(ledger.read()[0]?.status).toBe("acknowledged");
-	});
+	test(
+		"durable dismissal survives restart and more than 256 ordinary dismissals",
+		async () => {
+			const { worker, ledger } = fixture();
+			worker.interrupted(fact);
+			await worker.settled();
+			notificationDismiss(name(fact.id));
+			for (let index = 0; index < 260; index++)
+				recordNotificationDismissal(`ordinary:${index}`);
+			resetDismissalStoreForTests();
+			const restarted = fixture();
+			restarted.worker.hydrate();
+			restarted.worker.interrupted(fact);
+			await restarted.worker.settled();
+			expect(notificationExists(name(fact.id))).toBeUndefined();
+			expect(ledger.read()[0]?.status).toBe("acknowledged");
+		},
+		DISMISSAL_CHURN_TIMEOUT_MS,
+	);
 	test("withdraws only the matching candidate and preserves withdrawal across restart", async () => {
 		const { worker, ledger } = fixture();
 		worker.interrupted(fact);
