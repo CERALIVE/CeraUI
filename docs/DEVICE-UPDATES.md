@@ -121,6 +121,17 @@ line is joined to the complete line in one unscoped `apt-cache policy` reading
 per discovery. The unscoped inventory carries Release Origin/Label and the
 Debian suite. Unknown or ambiguous joins remain informational, not installable;
 the Rock 5B+ capture of both APT forms is the regression fixture.
+The unchanged 2026-10-22 Orange Pi nginx capture additionally reproduces ordinary
+security upgrades with apt temporary-break lists such as ` [nginx:arm64 ]`.
+Discovery and pinned preflight now accept that producer grammar, empty lists and
+repeated reverse-dependency notes while keeping annotations out of installation
+authority. Genuine malformed rows, broken configure output, duplicate installs
+and all removal/purge plans still refuse. Journal warnings include the closed
+reason, stage/substep and at most 300 characters of redacted parser/command detail;
+this context stays log-only. Legacy package-list headings also normalize CRLF.
+These are host parser/formatter proofs, not a successful update on the fixed board
+build. Source grammar and coverage: the backend
+[discovery contract](../apps/backend/docs/agents/software-update-check-contract.md).
 On 2026-09-27 a Rock 5B+ with bench-enabled capabilities classified and installed
 `ceralive-apt-credentials` 1.0.1. A later Rock capture showed apt success but
 `committing` stuck for 84+ minutes: the observer rejected systemd's flock-wrapped
