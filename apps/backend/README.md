@@ -775,7 +775,12 @@ The unchanged 2026-10-22 Orange Pi nginx capture is the primary regression.
 Refusal journal records include reason, closed stage/substep and redacted detail
 bounded to 300 characters; full sanitized fingerprints still deduplicate repeats.
 Legacy package-list headings also accept CRLF. This is parser/journal host proof,
-not installed-board update qualification. See the
+not installed-board update qualification. Install rechecks also accept apt-get's
+weak-dependency/list prose without granting those names install authority.
+Discovery and detached argv checking use one code-unit comparator; APT children
+force the C locale. Discovery and pinned parse failures have distinct dedupe
+steps, and hold-command failures retain simulation provenance. This remains
+host proof, not installed-board update qualification. See the
 [discovery contract](docs/agents/software-update-check-contract.md).
 
 Candidate provenance joins two APT readings: `apt-cache policy <name>` supplies

@@ -82,6 +82,26 @@ below is unchanged. Sweep coverage: `tests/apt-parser-sweep.test.ts` and
 `tests/apt-dpkg-version-sweep.test.ts`. Dpkg revision output remains display-only,
 not install authority; these are host parser proofs, not a new board install.
 
+The row/prose boundary also accepts apt-get install's `Suggested packages:` and
+`Recommended packages:` headings, additional/NEW package lists and simulation
+banner. [ShowWeakDependencies / DoInstall](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-private/private-install.cc#L1169-L1299)
+prints these for newly installed packages; they are not action rows and cannot
+add installation authority. Known action verbs still require the exact row
+grammar (including refusal of tab-separated `Inst`), and unknown row-shaped
+verbs refuse. The source census includes debug literals and action tokens as
+well as prose; its action tokens are explicitly negative coverage.
+Coverage: `tests/apt-all-install-prose.test.ts` and `fixtures/apt/README.md`.
+
+Discovery and detached pinned-argv validation share `compareAptPackageNames`:
+strict ascending JavaScript code-unit order, never locale collation. This keeps
+`+`, `-`, `.`, and architecture-qualified names launchable without allowing
+duplicates or accepting a noncanonical unit argv. Coverage includes the three
+reviewed library pairs and every ordered pair in a generated 20-name set in
+`tests/apt-all-install-order.test.ts`. The shared APT command runner supplies
+`LC_ALL=C`, `LANG=C` and an unset `LANGUAGE` to discovery, policy, holds and pinned
+recheck children; `tests/apt-all-command-locale.test.ts` observes a real child's
+environment at both simulation boundaries under an inherited non-English locale.
+
 Capable APT refusals log `reason`, a closed `stage` (`source-policy`,
 `package-policy`, `simulation` or `parse`), the more specific `step`, process
 `exit` when known, and optional sanitized detail (300 UTF-16 units maximum) at the discovery or
@@ -92,6 +112,12 @@ Redaction precedes truncation. The internal SHA256 fingerprint uses the FULL
 sanitized text, never raw secrets or the truncated display. The last reason/exit/
 fingerprint signature per step is deduplicated for the process lifetime, including
 across successful discovery; safe evidence changed beyond the display cap logs again.
+Pinned parse refusals carry `step=pinned-recheck`, separate from discovery's
+`parse-simulation`, so identical details at these boundaries cannot suppress each
+other. An `apt-mark showhold` command failure has `step=held-packages` and
+`stage=simulation`, not a parse failure. The 300-unit cut removes a dangling high
+surrogate; production JSON coverage is in `tests/apt-all-journal-surrogate.test.ts`
+and step/dedupe coverage in `tests/apt-all-refusal-steps.test.ts`.
 URL/JWT recognition consumes disjoint maximal tokens rather than retrying their
 suffix at every internal boundary. No input prefix cap hides late markers or safe
 identity. Valid Unicode retains its UTF-8 SHA256; lone-surrogate text uses a 0xff
