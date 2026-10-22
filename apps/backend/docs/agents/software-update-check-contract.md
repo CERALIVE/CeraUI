@@ -92,6 +92,28 @@ verbs refuse. The source census includes debug literals and action tokens as
 well as prose; its action tokens are explicitly negative coverage.
 Coverage: `tests/apt-all-install-prose.test.ts` and `fixtures/apt/README.md`.
 
+Non-TTY stdout progress labels are context in both discovery and pinned recheck,
+including a successful install's 3.0 solver fallback. All references below use
+apt 3.0.3 commit `45bebdfb891535d15e66e860aab1ee7c7b2ecaab`:
+
+| Operation label | Producer |
+| --- | --- |
+| `Reading package lists` | [pkgcachegen.cc:1884–1886](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-pkg/pkgcachegen.cc#L1884-L1886) |
+| `Building dependency tree` | [depcache.cc:239–243](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-pkg/depcache.cc#L239-L243) |
+| `Reading state information` | [depcache.cc:289–293](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-pkg/depcache.cc#L289-L293) |
+| `Calculating upgrade` | [upgrade.cc:213–218](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-pkg/upgrade.cc#L213-L218), also EDSP's upgrade branch below |
+| `Solving dependencies` | [edsp.cc:791–799](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-pkg/edsp.cc#L791-L799), install fallback in [private-install.cc:983–1035](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-private/private-install.cc#L983-L1035) |
+
+[OpTextProgress:186–194](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-pkg/contrib/progress.cc#L186-L194)
+prints the operation followed by `...`; completion can append ` Done`. The source
+census found no other reachable stdout progress label for these commands.
+`Correcting dependencies...` requires FixBroken ([private-cachefile.cc:89–107](https://github.com/Debian/apt/blob/45bebdfb891535d15e66e860aab1ee7c7b2ecaab/apt-private/private-cachefile.cc#L89-L107)),
+which needs `-f`/`--fix-broken`; these product paths never pass either flag.
+`tests/apt-all-progress-labels.test.ts` checks every label before a valid row at
+both entry points and keeps a malformed `Inst` after progress negative.
+`tests/apt-all-solver-boundary.test.ts` drives exit-zero fallback output through
+`startSoftwareUpdate` to an independently refused space check, not installation.
+
 Discovery and detached pinned-argv validation share `compareAptPackageNames`:
 strict ascending JavaScript code-unit order, never locale collation. This keeps
 `+`, `-`, `.`, and architecture-qualified names launchable without allowing
