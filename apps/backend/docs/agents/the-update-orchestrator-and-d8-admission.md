@@ -98,8 +98,9 @@ the logger throws. No admission, abort, persistence or retry-policy change is
 implied, and these host regressions are not installed-board qualification.
 Coverage: `update-orchestrator-tick-diagnostics.test.ts` and
 `update-orchestrator-startup-diagnostics.test.ts` exercise throwing transports,
-process-level fault listeners, exact scheduling and original failure identity;
-guard-removal and missing-schedule mutants must fail.
+exact scheduling and original failure identity; an escaped fault fails the test
+(Bun's runner catches it; the tests' process-level listeners are an auxiliary
+check, not the detector). Guard-removal and missing-schedule mutants must fail.
 
 Startup tail persistence and generic confirmation/interrupted/legacy settlement
 now hold CONTROL and recheck complete authoritative recovery identity. Nested
@@ -291,7 +292,7 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
    replacement, not a conditional-rename guarantee. D154 also accepts forward-only
    strict schema-1 additions: older unreleased bench intermediates reject
    `receiptBaseline`; rollback requires bench-only stage job/witness clearance.
-   `2026.9.5` is the PLANNED first orchestrator release, pending the release gate. Details: `docs/UPDATE-RECOVERY.md`.
+   `2026.9.5` (published 2026-10-20) is the first orchestrator release. Details: `docs/UPDATE-RECOVERY.md`.
   Stage-admission refusals keep `rauc_recovery_unproven`/unsafe and add the
    log-only `predicate` and bounded, message-free class/code `observation` diagnostics
    (`os-stage-admission-diagnostics.ts`); see `docs/UPDATE-RECOVERY.md`.

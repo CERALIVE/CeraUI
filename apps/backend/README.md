@@ -169,9 +169,9 @@ full-suite load stability or resolve Bun worker crashes.
 The four credential, download-hold and rollback dismissal-churn regressions
 [EXISTS; host-tested] retain all 257–300 real ordinary dismissals, atomic writes,
 eviction and restart assertions. A shared named 30-second test hang guard covers
-that bounded persistence workload: 300 real writes measured 2.78 seconds unpinned,
-and the four cases exceeded Bun's default five seconds under same-core CPU
-contention. Write-port time accounted for over 99% of the measured churn cost;
+that bounded persistence workload. Its wall time depends on the host: on a loaded
+development host 300 real writes alone can take longer than Bun's default five
+seconds, and the four cases exceeded it under same-core CPU contention. Write-port time accounted for over 99% of the measured churn cost;
 doubling capped ordinary churn doubled cost rather than squaring it. Only those
 four tests use this budget; no product deadline, retry or persistence policy is
 changed. This is not a storage-latency SLA or board qualification.
