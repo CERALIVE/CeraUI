@@ -258,6 +258,7 @@ async function runAptCommand(
 	try {
 		const result = await aptCommandRunner(argv, {
 			timeoutMs,
+			env: { ...process.env, LC_ALL: "C", LANG: "C", LANGUAGE: undefined },
 			...(signal ? { signal } : {}),
 		});
 		pendingPackageSuccess.assertEffectsAllowed();
