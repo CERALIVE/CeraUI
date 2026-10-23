@@ -34,6 +34,7 @@ import type {
 
 import { rpc } from "$lib/rpc/client";
 import { getLinkEpoch } from "$lib/rpc/session-epoch.svelte";
+import { getUpdateOrchestratorState } from "$lib/rpc/subscriptions.svelte";
 import {
 	NO_WITNESS,
 	witnessedNothingNewer,
@@ -113,6 +114,7 @@ async function settle<T>(call: () => Promise<T>): Promise<T> {
 const orchestratorBand = (band: ActionBand): boolean =>
 	band.action !== "packages";
 
+// allow: SIZE_OK — keep the dialog's link/read fences together for this narrow routing repair.
 export function createUpdateSurface(): UpdateSurface {
 	let capabilities = $state.raw<UpdateCapabilities | undefined>();
 	let details = $state.raw<UpdateDetails | undefined>();
@@ -123,7 +125,7 @@ export function createUpdateSurface(): UpdateSurface {
 	let loadSeq = 0;
 	let detailsSeq = 0;
 	let capsSeq = 0;
-	let capsLink = getLinkEpoch();
+	let capsLink = $state<number | undefined>();
 	const owner = createSettingsOwner();
 
 	const actions = createUpdateActions({
@@ -159,7 +161,7 @@ export function createUpdateSurface(): UpdateSurface {
 
 	async function reloadCapabilities(): Promise<void> {
 		const gen = ++capsSeq;
-		capabilities = undefined;
+		capsLink = undefined;
 		const link = getLinkEpoch();
 		const [caps] = await Promise.allSettled([
 			settle(() => rpc.system.getUpdateCapabilities()),
@@ -169,17 +171,14 @@ export function createUpdateSurface(): UpdateSurface {
 
 	async function load(): Promise<void> {
 		const gen = ++loadSeq;
-		const capsGen = ++capsSeq;
-		capabilities = undefined;
 		const settingsGen = owner.beginRead();
 		const detailsGen = ++detailsSeq;
 		const link = getLinkEpoch();
-		const [caps, applied, read] = await Promise.allSettled([
-			settle(() => rpc.system.getUpdateCapabilities()),
+		const [, applied, read] = await Promise.allSettled([
+			reloadCapabilities(),
 			settle(() => rpc.system.getUpdateSettings()),
 			settle(() => rpc.system.getUpdateDetails()),
 		]);
-		landCapabilities(capsGen, caps, link);
 		if (gen === loadSeq) loaded = true;
 		if (applied.status === "fulfilled")
 			owner.landRead(settingsGen, applied.value);
@@ -206,12 +205,21 @@ export function createUpdateSurface(): UpdateSurface {
 		}
 	}
 
+	function packagesReady(): boolean {
+		return (
+			capabilities !== undefined &&
+			capsLink === getLinkEpoch() &&
+			(capabilities.mode === "legacy" ||
+				getUpdateOrchestratorState()?.phase !== undefined)
+		);
+	}
+
 	return {
 		get capabilities() {
 			return capabilities;
 		},
 		get packagesReady() {
-			return capabilities !== undefined && capsLink === getLinkEpoch();
+			return packagesReady();
 		},
 		get settings() {
 			return owner.settings;
@@ -280,12 +288,17 @@ export function createUpdateSurface(): UpdateSurface {
 		installNow: () =>
 			actions.run("install", [() => rpc.system.installUpdatesNow()]),
 		installPackages: async () => {
-			if (capabilities === undefined || capsLink !== getLinkEpoch()) return;
-			if (capabilities.mode === "legacy")
-				return actions.run("packages", [() => rpc.system.startUpdate()]);
-			return actions.run("install", [
-				() => rpc.system.installUpdatesNow({ scope: "packages" }),
-			]);
+			if (!packagesReady()) return;
+			const phase = getUpdateOrchestratorState()?.phase;
+			if (
+				capabilities?.mode === "capable" &&
+				capabilities.features.includes("apt-all-packages") &&
+				(phase === "available" || phase === "awaiting-idle")
+			)
+				return actions.run("install", [
+					() => rpc.system.installUpdatesNow({ scope: "packages" }),
+				]);
+			return actions.run("packages", [() => rpc.system.startUpdate()]);
 		},
 		// The approval is for exactly ONE candidate and is spent by the install
 		// that follows it; granting it without starting the download would leave
@@ -300,7 +313,7 @@ export function createUpdateSurface(): UpdateSurface {
 			loadSeq += 1;
 			detailsSeq += 1;
 			capsSeq += 1;
-			capabilities = undefined;
+			capsLink = undefined;
 			actions.reset();
 			owner.reset();
 		},

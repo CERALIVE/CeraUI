@@ -53,14 +53,21 @@ Start stays enabled because the device decides admission. Implementation
 reference: [device updates](docs/DEVICE-UPDATES.md).
 
 The Packages **Update** button [EXISTS; host-tested, board proof owed] uses a
-package-only orchestrator scope on capable images, sharing the badge, phase
-feedback and installed notice. The backend, not the browser's cached phase,
-decides whether a package offer can install. A refusal never falls back to the
-older RPC. Installation and its confirmation stay disabled while capabilities
-are unknown or being re-read; a failed read uses the existing details Retry.
-Only a device that explicitly reports legacy mode on the current link uses
-`system.startUpdate`; reconnect cannot reuse the previous image's permission.
-Those legacy calls do not inform the orchestrator. An older backend that already has the orchestrator instead ignores
+package-only orchestrator scope when the current link confirms a capable image
+with `apt-all-packages` and the phase is `available` or `awaiting-idle`, sharing
+tracked feedback and the installed notice. A scoped refusal never retries the
+older RPC. Installation and its confirmation stay disabled until the current
+capability read answers, and on capable images until a phase is received; a
+failed read uses the existing details Retry. Settings/details reads do not hold
+that authority, and an in-flight re-read retains the section layout without
+retaining install permission. Close or link loss revokes that permission too.
+Explicit legacy mode, capable images in any other known phase (including
+`idle`, `os-available`, `failed` and `quarantined`), and capable declarations
+without the APT feature retain `system.startUpdate` exactly as before. This is
+the documented D8/D478 residual, not tracked admission: the Packages section's
+legacy Check → Update flow still works with automatic package updates off, but
+these legacy calls do not inform the orchestrator or apply its cellular gate.
+An older backend that already has the orchestrator instead ignores
 the scoped input and runs it unscoped, equivalent to **Install now**. A stale
 newer cached tab against that older backend is a mixed-version window; reload so
 the device serves its matching frontend. If a scoped refusal leaves the call's

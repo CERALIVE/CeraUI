@@ -129,38 +129,53 @@ it.each([
 	["synced", CAPABLE],
 	["os-staged", CAPABLE],
 	["os-activation-armed", CAPABLE],
+	["checking", CAPABLE],
+	["downloading", CAPABLE],
+	["committing", CAPABLE],
+	["restarting-services", CAPABLE],
+	["settled", CAPABLE],
+	["os-staging", CAPABLE],
+	["sync-eligible", CAPABLE],
+	["os-verifying", CAPABLE],
+	["syncing", CAPABLE],
 	["available", { mode: "capable", features: [] }],
-	[undefined, CAPABLE],
-] satisfies readonly [
-	UpdateOrchestratorPhase | undefined,
-	UpdateCapabilities,
-][])(
-	"%s on a capable image leaves package admission to the scoped route (%j)",
+] satisfies readonly [UpdateOrchestratorPhase, UpdateCapabilities][])(
+	"%s on a capable image keeps the base legacy route (D478 residual, %j)",
 	async (phase, capabilities) => {
-		// Given a capable image with an absent, stale or non-package browser phase.
+		// Given a confirmed capable image with a known non-package phase or no APT feature.
 		const surface = await surfaceAt(phase, capabilities);
 		// When packages are requested.
 		const action = surface.installPackages();
 		await flush();
-		// Then only package-scoped backend admission can decide whether to install.
-		expect(sentCount("system.startUpdate")).toBe(0);
-		expect(sentCount("system.installUpdatesNow")).toBe(1);
-		expect(
-			FakeWebSocket.log.find((call) => call.path === "system.installUpdatesNow")
-				?.input,
-		).toEqual({ scope: "packages" });
-		answer("system.installUpdatesNow", {
-			success: false,
-			error: "not_available",
-		});
+		// Then it retains base routing, rather than creating a scoped-admission dead end.
+		expect(sentCount("system.startUpdate")).toBe(1);
+		expect(sentCount("system.installUpdatesNow")).toBe(0);
+		answer("system.startUpdate", { success: true });
 		await finishRead();
 		await action;
 	},
 );
 
-it("keeps the legacy installer only for an explicit legacy declaration", async () => {
+it("blocks a capable image until the orchestrator phase has been received", async () => {
+	// Given a confirmed capable declaration with no status hydrate yet.
+	const surface = await surfaceAt(undefined);
+	// When a stale or programmatic confirmation tries to install.
+	const action = surface.installPackages();
+	await flush();
+	for (const path of ["system.startUpdate", "system.installUpdatesNow"])
+		if (outstanding(path).length)
+			answer(path, { success: false, error: "busy" });
+	await finishRead();
+	await action;
+	// Then neither route dispatches and the bound package controls stay disabled.
+	expect(sentCount("system.startUpdate")).toBe(0);
+	expect(sentCount("system.installUpdatesNow")).toBe(0);
+	expect(surface.packagesReady).toBe(false);
+});
+
+it("keeps the legacy installer for an explicit legacy declaration without a phase", async () => {
 	// Given a device that definitively reports the legacy regime.
-	const surface = await surfaceAt("available", {
+	const surface = await surfaceAt(undefined, {
 		mode: "legacy",
 		features: [],
 	});

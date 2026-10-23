@@ -504,25 +504,42 @@ the existing boot-version diagnostic is retained). The scoped preparation fence
 also checks after capability, plan and settings reads, before further preparation
 or dispatch; a refused owned plan is cleared before the request settles.
 
-The Packages **Update** button selects this scope after the image reports
-`mode: "capable"`, regardless of the browser's cached or absent orchestrator
-phase. Authoritative backend admission rejects non-package phases instead of
-downgrading the action to legacy. It reuses the Install action's busy state,
-phase settlement and localized refusal bands; a refusal never retries through
-legacy. The package button and its confirmation remain disabled while the
-capability declaration is unknown. Opening, retrying or restoring the dialog
-revokes the old declaration until the current read lands; closing revokes it too.
-A rejected read keeps installation disabled and offers the existing details
-Retry. The surface also refuses direct invocations without a declaration.
-Only an explicit `mode: "legacy"` declaration read on the current link permits
-`system.startUpdate`. The existing link epoch revokes install authority at the
-drop itself, even before restore hydration begins; a late old-link read cannot
-authorize the new connection.
-Package discovery still uses `system.checkForUpdates`, which dispatches nothing
-to the orchestrator: an offer discovered only there can receive `not_available`
-until orchestrator discovery establishes a package-owned phase. The separate D8
-launch, deferral, pre-unit and adoption limitations remain unchanged. This routing
-repair is host-tested, not a new board qualification.
+The Packages **Update** button first requires a successful capability declaration
+from the current link. Opening, retrying, restoring or closing revokes install
+authority; link loss revokes it immediately, before restore hydration, and late
+old-link or superseded replies cannot restore it. On a capable image, a received
+orchestrator phase is also required. Until then both the package button and its
+confirmation stay disabled, and direct surface invocations dispatch nothing.
+A failed/timed-out declaration keeps the existing details Retry. Install authority
+lands with the capability answer, without waiting for settings/details; the last
+declaration remains display-only during re-reads so capability-gated sections do
+not unmount. A failed answer still clears that displayed declaration to unknown.
+Successful initial and reconnect status snapshots from this backend always
+include `update_orchestrator.phase`, even before async startup finishes
+(`status.procedure.ts`, `getOrchestratorWireState()`); an undefined phase is not
+a normal capable-backend snapshot.
+
+Once ready, routing preserves the base contract:
+
+| Confirmed declaration / current phase | Package install route |
+|---|---|
+| `mode: "legacy"` (no phase required) | `system.startUpdate` |
+| Capable + `apt-all-packages` + `available` / `awaiting-idle` | `system.installUpdatesNow({scope: "packages"})` |
+| Capable + any other **known** phase, or without `apt-all-packages` | `system.startUpdate`, unchanged D8/D478 residual |
+
+The scoped route reuses the Install action's busy state, phase settlement and
+localized refusal bands; a scoped refusal never retries through legacy. The
+known-phase legacy route includes `idle`, `os-available`, `failed`, `quarantined`
+and busy phases, exactly as on base; it is not a new admission guarantee.
+Package discovery still uses legacy `system.checkForUpdates`, which dispatches
+nothing to the orchestrator. Its Check → offer → Update flow therefore still
+installs through the legacy route in `idle`, including with `packagesAuto=false`,
+instead of becoming a permanent `not_available` loop. Routing Packages Check
+through the orchestrator is a separate follow-up, not part of this repair.
+Legacy installation still lacks orchestrator admission/cellular gating, tracked
+pending-plan/completion and quarantine ownership. The separate D8 launch,
+deferral, pre-unit and adoption limitations remain unchanged. This routing repair
+is host-tested, not a new board qualification.
 
 **Mixed-version window:** an older backend that already has the orchestrator
 ignores the unknown input and executes `installUpdatesNow()` unscoped, equivalent

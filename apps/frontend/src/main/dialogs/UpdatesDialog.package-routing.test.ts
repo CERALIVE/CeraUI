@@ -13,14 +13,19 @@ import UpdatesDialog from "./UpdatesDialog.svelte";
 
 let phase: UpdateOrchestratorPhase | undefined;
 let capabilities: UpdateCapabilities;
+let packagesAuto: boolean;
 
 vi.mock("$lib/rpc/client", () => ({
 	rpc: {
 		system: {
 			startUpdate: vi.fn(async () => ({ success: true })),
 			installUpdatesNow: vi.fn(async () => ({ success: true })),
+			checkForUpdates: vi.fn(async () => ({ success: true })),
+			checkUpdatesNow: vi.fn(async () => ({ success: true })),
 			getUpdateCapabilities: vi.fn(async () => capabilities),
-			getUpdateSettings: vi.fn(async () => updateSettingsSchema.parse({})),
+			getUpdateSettings: vi.fn(async () =>
+				updateSettingsSchema.parse({ packagesAuto }),
+			),
 			getUpdateDetails: vi.fn(async () => ({
 				slots: null,
 				os: { bootedVersion: null, staged: null, candidate: null },
@@ -59,6 +64,7 @@ vi.mock("$lib/rpc/async-operation.svelte", () => ({
 
 beforeEach(() => {
 	phase = "available";
+	packagesAuto = true;
 	capabilities = { mode: "capable", features: ["apt-all-packages"] };
 	reactiveUpdateState.value = {
 		kind: "available",
@@ -112,28 +118,74 @@ it.each(["available", "awaiting-idle"] as const)(
 	},
 );
 
-it.each(["os-available", "legacy", "absent"] as const)(
-	"%s package confirmation uses legacy only for an explicit legacy device",
+it.each(["os-available", "idle", "failed", "quarantined", "legacy"] as const)(
+	"%s package confirmation preserves the base legacy route",
 	async (regime) => {
 		// Given known capabilities, independently of the browser's pushed phase.
-		if (regime === "os-available") phase = "os-available";
 		if (regime === "legacy") capabilities = { mode: "legacy", features: [] };
-		if (regime === "absent") phase = undefined;
+		else phase = regime;
 		render(UpdatesDialog, { open: true });
 		// When the package confirmation is accepted.
 		await clickPackageUpdate();
-		// Then missing or non-package phase cannot downgrade a capable device to legacy.
-		if (regime === "legacy") {
-			expect(rpc.system.startUpdate).toHaveBeenCalledOnce();
-			expect(rpc.system.installUpdatesNow).not.toHaveBeenCalled();
-		} else {
-			expect(rpc.system.startUpdate).not.toHaveBeenCalled();
-			expect(rpc.system.installUpdatesNow).toHaveBeenCalledExactlyOnceWith({
-				scope: "packages",
-			});
-		}
+		// Then known non-package phases retain the documented D478 residual, not a dead end.
+		expect(rpc.system.startUpdate).toHaveBeenCalledOnce();
+		expect(rpc.system.installUpdatesNow).not.toHaveBeenCalled();
 	},
 );
+
+it("disables capable package installation until a phase is received", async () => {
+	// Given a capable declaration without the orchestrator status hydrate.
+	phase = undefined;
+	render(UpdatesDialog, { open: true });
+	await waitFor(() =>
+		expect(screen.queryByTestId("update-details-loading")).toBeNull(),
+	);
+	// When the operator tries the package trigger.
+	const button = screen.getByTestId("update-install");
+	button.click();
+	// Then it stays disabled and neither installer nor confirmation opens.
+	expect(button.hasAttribute("disabled")).toBe(true);
+	expect(
+		screen.queryByRole("dialog", { name: m["general.areYouSure"]() }),
+	).toBeNull();
+	expect(rpc.system.startUpdate).not.toHaveBeenCalled();
+	expect(rpc.system.installUpdatesNow).not.toHaveBeenCalled();
+});
+
+it("installs after Packages Check on an idle capable device with automatic packages off", async () => {
+	// Given D523's idle capable device; scoped admission would refuse this phase.
+	phase = "idle";
+	packagesAuto = false;
+	reactiveUpdateState.value = { kind: "idle", checked_at: 1_000 };
+	vi.mocked(rpc.system.installUpdatesNow).mockResolvedValueOnce({
+		success: false,
+		error: "not_available",
+	});
+	render(UpdatesDialog, { open: true });
+	// When the operator follows the Packages section's Check -> offer -> Update flow.
+	await fireEvent.click(
+		screen.getByRole("button", { name: m["general.checkForUpdates"]() }),
+	);
+	expect(rpc.system.checkForUpdates).toHaveBeenCalledOnce();
+	reactiveUpdateState.value = {
+		kind: "available",
+		identity: {
+			version: "pkg",
+			packages: ["nginx", "nginx-common", "nginx-light"],
+		},
+		package_count: 3,
+		actionable_count: 3,
+		checked_at: 2_000,
+	};
+	await clickPackageUpdate();
+	// Then the known idle phase keeps the working legacy route with no nothing-to-install refusal.
+	expect(phase).toBe("idle");
+	expect(rpc.system.checkUpdatesNow).not.toHaveBeenCalled();
+	expect(rpc.system.startUpdate).toHaveBeenCalledOnce();
+	expect(rpc.system.installUpdatesNow).not.toHaveBeenCalled();
+	expect(screen.queryByTestId("update-action-refused")).toBeNull();
+	expect(screen.queryByTestId("update-start-refused")).toBeNull();
+});
 
 it("disables package installation until a delayed declaration lands", async () => {
 	// Given an offer whose capability read is still pending.

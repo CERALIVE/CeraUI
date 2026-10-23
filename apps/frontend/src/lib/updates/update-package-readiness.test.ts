@@ -59,30 +59,52 @@ function expectNoInstall(): void {
 	expect(sentCount("system.installUpdatesNow")).toBe(0);
 }
 
-it.each([
-	"system.getUpdateCapabilities",
-	"system.getUpdateSettings",
-	"system.getUpdateDetails",
-])("does not install before the opening %s settles", async (held) => {
+it("does not install before the opening capability read settles", async () => {
 	// Given a new dialog whose package offer arrived before its opening reads finished.
 	const surface = createUpdateSurface();
 	const load = surface.load();
-	if (held !== "system.getUpdateCapabilities")
-		answer("system.getUpdateCapabilities", CAPABLE);
-	if (held !== "system.getUpdateSettings")
-		answer("system.getUpdateSettings", SETTINGS);
-	if (held !== "system.getUpdateDetails")
-		answer("system.getUpdateDetails", deviceDetails());
+	answer("system.getUpdateSettings", SETTINGS);
+	answer("system.getUpdateDetails", deviceDetails());
 	await flush();
 	// When the surface is invoked before that read settles.
 	await click(surface);
 	// Then unknown authority dispatches neither installer.
 	expectNoInstall();
-	if (held === "system.getUpdateCapabilities") answer(held, CAPABLE);
-	if (held === "system.getUpdateSettings") answer(held, SETTINGS);
-	if (held === "system.getUpdateDetails") answer(held, deviceDetails());
+	expect(surface.packagesReady).toBe(false);
+	answer("system.getUpdateCapabilities", CAPABLE);
 	await load;
 });
+
+it.each(["system.getUpdateSettings", "system.getUpdateDetails"])(
+	"does not wait for the opening %s once capabilities and phase are known",
+	async (held) => {
+		// Given confirmed capabilities and phase, but an unrelated read still pending.
+		const surface = createUpdateSurface();
+		const load = surface.load();
+		answer("system.getUpdateCapabilities", CAPABLE);
+		if (held !== "system.getUpdateSettings")
+			answer("system.getUpdateSettings", SETTINGS);
+		if (held !== "system.getUpdateDetails")
+			answer("system.getUpdateDetails", deviceDetails());
+		await flush();
+		// When the operator installs without waiting for settings or details.
+		const action = surface.installPackages();
+		await flush();
+		// Then only the scoped route dispatches, without that ancillary dependency.
+		expect(sentCount("system.startUpdate")).toBe(0);
+		expect(sentCount("system.installUpdatesNow")).toBe(1);
+		expect(surface.packagesReady).toBe(true);
+		answer("system.installUpdatesNow", { success: false, error: "busy" });
+		await flush();
+		answer("system.getUpdateDetails", deviceDetails(), "newest");
+		await action;
+		answer(
+			held,
+			held === "system.getUpdateSettings" ? SETTINGS : deviceDetails(),
+		);
+		await load;
+	},
+);
 
 it.each(["rejected", "timed out"])(
 	"does not install after a %s capability read even though loading finished",
@@ -102,6 +124,7 @@ it.each(["rejected", "timed out"])(
 		await click(surface);
 		// Then failure is not permission to use the legacy installer.
 		expectNoInstall();
+		expect(surface.packagesReady).toBe(false);
 	},
 );
 
@@ -120,6 +143,8 @@ it.each(["load", "reread", "rereadOnRestore"] as const)(
 		await click(surface);
 		// Then the old legacy declaration grants no mutation authority.
 		expectNoInstall();
+		expect(surface.packagesReady).toBe(false);
+		expect(surface.capabilities).toEqual({ mode: "legacy", features: [] });
 		answer("system.getUpdateCapabilities", CAPABLE);
 		answer("system.getUpdateSettings", SETTINGS);
 		if (outstanding("system.getUpdateDetails").length)
@@ -141,6 +166,27 @@ it("revokes legacy authority when the dialog closes", async () => {
 	await click(surface);
 	// Then a closed session cannot authorize a legacy install.
 	expectNoInstall();
+	expect(surface.packagesReady).toBe(false);
+});
+
+it("does not let a superseded capability answer authorize an in-flight reread", async () => {
+	// Given overlapping reads that could answer for different images.
+	const surface = createUpdateSurface();
+	const load = surface.load();
+	const restore = surface.rereadOnRestore();
+	answer("system.getUpdateCapabilities", { mode: "legacy", features: [] });
+	await flush();
+	// When the older legacy answer arrives before the current declaration.
+	await click(surface);
+	// Then that stale generation grants neither installer authority.
+	expectNoInstall();
+	expect(surface.packagesReady).toBe(false);
+	answer("system.getUpdateCapabilities", CAPABLE);
+	answer("system.getUpdateSettings", SETTINGS, "newest");
+	answer("system.getUpdateSettings", SETTINGS);
+	answer("system.getUpdateDetails", deviceDetails());
+	await Promise.all([load, restore]);
+	expect(surface.packagesReady).toBe(true);
 });
 
 it("does not reuse legacy authority on a new link before the restore read begins", async () => {
@@ -158,6 +204,6 @@ it("does not reuse legacy authority on a new link before the restore read begins
 	// When a click precedes completion of the restored session's hydration.
 	await click(surface);
 	// Then the old image's declaration cannot authorize a legacy install.
-	expect(surface.packagesReady).toBe(false);
 	expectNoInstall();
+	expect(surface.packagesReady).toBe(false);
 });
