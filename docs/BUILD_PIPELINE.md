@@ -28,6 +28,21 @@ This document describes the automated build pipeline for creating CeraUI distrib
 
 **Use Case**: Professional deployment with package management integration.
 
+### Payload modes [EXISTS; host-tested]
+
+Before packaging, the staging tree's directories are normalized to `0755` and
+regular files to `0644`, regardless of builder umask or copied artifact modes.
+The existing exceptions are then reapplied: the backend, override/reset scripts
+and add-on helper are `0755`; the four privileged recovery/staging/NBD helpers
+are `0700`; the sudoers drop-in is `0440`. Symlinks are not followed or chmodded.
+FPM runs under umask `022` so its generated payload documentation has the same
+release modes too, without changing the caller's umask.
+This changes neither payload paths nor file contents, control fields or
+maintainer scripts. It does not repair modes on already-installed directories.
+`deb-file-modes.test.sh`, run by `test:release-package-contracts`, executes the
+real staging block and compares `.deb` per-path modes, mode histograms and
+payload hashes under umask `077` and `022`, including a copied executable asset.
+
 ### Frontend link repair [EXISTS; host-tested, board proof owed]
 
 The generated Bash `postinst configure` repairs `/opt/ceralive/public` before

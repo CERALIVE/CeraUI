@@ -10,6 +10,7 @@ bash scripts/build/frontend-cache-notifications.test.sh
 bun test scripts/ci/notification-bundle.test.ts
 bun scripts/tsc.mjs --project scripts/ci/tsconfig.json --noEmit
 bash scripts/build/deb-reconciler-staging.test.sh
+bash scripts/build/deb-file-modes.test.sh
 bash scripts/build/deb-os-stage-guard.test.sh
 bash scripts/build/deb-nbd-release.test.sh
 bash scripts/build/deb-maintainer-scripts.test.sh
