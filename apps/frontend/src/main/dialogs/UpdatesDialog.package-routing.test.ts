@@ -113,20 +113,66 @@ it.each(["available", "awaiting-idle"] as const)(
 );
 
 it.each(["os-available", "legacy", "absent"] as const)(
-	"%s package confirmation retains legacy RPC",
+	"%s package confirmation uses legacy only for an explicit legacy device",
 	async (regime) => {
-		// Given the explicit legacy routing cases.
+		// Given known capabilities, independently of the browser's pushed phase.
 		if (regime === "os-available") phase = "os-available";
 		if (regime === "legacy") capabilities = { mode: "legacy", features: [] };
 		if (regime === "absent") phase = undefined;
 		render(UpdatesDialog, { open: true });
 		// When the package confirmation is accepted.
 		await clickPackageUpdate();
-		// Then no broad install or scoped RPC was sent.
-		expect(rpc.system.startUpdate).toHaveBeenCalledOnce();
-		expect(rpc.system.installUpdatesNow).not.toHaveBeenCalled();
+		// Then missing or non-package phase cannot downgrade a capable device to legacy.
+		if (regime === "legacy") {
+			expect(rpc.system.startUpdate).toHaveBeenCalledOnce();
+			expect(rpc.system.installUpdatesNow).not.toHaveBeenCalled();
+		} else {
+			expect(rpc.system.startUpdate).not.toHaveBeenCalled();
+			expect(rpc.system.installUpdatesNow).toHaveBeenCalledExactlyOnceWith({
+				scope: "packages",
+			});
+		}
 	},
 );
+
+it("disables package installation until a delayed declaration lands", async () => {
+	// Given an offer whose capability read is still pending.
+	const read = Promise.withResolvers<UpdateCapabilities>();
+	vi.mocked(rpc.system.getUpdateCapabilities).mockReturnValueOnce(read.promise);
+	render(UpdatesDialog, { open: true });
+	const button = await screen.findByTestId("update-install");
+	await waitFor(() => expect(button.hasAttribute("disabled")).toBe(true));
+	// When the image declaration lands and the operator confirms.
+	read.resolve(capabilities);
+	await clickPackageUpdate();
+	// Then the capable route, never a legacy request, owns the action.
+	expect(rpc.system.startUpdate).not.toHaveBeenCalled();
+	expect(rpc.system.installUpdatesNow).toHaveBeenCalledExactlyOnceWith({
+		scope: "packages",
+	});
+});
+
+it("keeps package installation disabled after a failed declaration until Retry succeeds", async () => {
+	// Given a failed capability read despite a visible package offer.
+	vi.mocked(rpc.system.getUpdateCapabilities).mockRejectedValueOnce(
+		new Error("read failed"),
+	);
+	render(UpdatesDialog, { open: true });
+	await screen.findByTestId("update-details-failed");
+	expect(screen.getByTestId("update-install").hasAttribute("disabled")).toBe(
+		true,
+	);
+	// When the operator retries the existing details read and confirms the offer.
+	await fireEvent.click(
+		screen.getByRole("button", { name: m["settings.updates.retryDetails"]() }),
+	);
+	await clickPackageUpdate();
+	// Then only the now-confirmed capable route dispatches.
+	expect(rpc.system.startUpdate).not.toHaveBeenCalled();
+	expect(rpc.system.installUpdatesNow).toHaveBeenCalledExactlyOnceWith({
+		scope: "packages",
+	});
+});
 
 it.each(["busy", "not_available", "stream_active"])(
 	"scoped %s refusal uses existing localized feedback and re-enables",

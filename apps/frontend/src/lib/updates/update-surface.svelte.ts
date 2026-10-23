@@ -34,7 +34,6 @@ import type {
 
 import { rpc } from "$lib/rpc/client";
 import { getLinkEpoch } from "$lib/rpc/session-epoch.svelte";
-import { getUpdateOrchestratorState } from "$lib/rpc/subscriptions.svelte";
 import {
 	NO_WITNESS,
 	witnessedNothingNewer,
@@ -67,6 +66,7 @@ export {
 
 export interface UpdateSurface {
 	readonly capabilities: UpdateCapabilities | undefined;
+	readonly packagesReady: boolean;
 	readonly settings: UpdateSettings | undefined;
 	readonly details: UpdateDetails | undefined;
 	/** `true` once a load attempt finished, whatever it returned. */
@@ -123,6 +123,7 @@ export function createUpdateSurface(): UpdateSurface {
 	let loadSeq = 0;
 	let detailsSeq = 0;
 	let capsSeq = 0;
+	let capsLink = getLinkEpoch();
 	const owner = createSettingsOwner();
 
 	const actions = createUpdateActions({
@@ -148,23 +149,28 @@ export function createUpdateSurface(): UpdateSurface {
 	function landCapabilities(
 		gen: number,
 		caps: PromiseSettledResult<UpdateCapabilities>,
+		link: number,
 	): void {
-		if (gen !== capsSeq) return;
+		if (gen !== capsSeq || link !== getLinkEpoch()) return;
 		capabilities = caps.status === "fulfilled" ? caps.value : undefined;
+		capsLink = link;
 		capabilitiesFailed = caps.status === "rejected";
 	}
 
 	async function reloadCapabilities(): Promise<void> {
 		const gen = ++capsSeq;
+		capabilities = undefined;
+		const link = getLinkEpoch();
 		const [caps] = await Promise.allSettled([
 			settle(() => rpc.system.getUpdateCapabilities()),
 		]);
-		landCapabilities(gen, caps);
+		landCapabilities(gen, caps, link);
 	}
 
 	async function load(): Promise<void> {
 		const gen = ++loadSeq;
 		const capsGen = ++capsSeq;
+		capabilities = undefined;
 		const settingsGen = owner.beginRead();
 		const detailsGen = ++detailsSeq;
 		const link = getLinkEpoch();
@@ -173,7 +179,7 @@ export function createUpdateSurface(): UpdateSurface {
 			settle(() => rpc.system.getUpdateSettings()),
 			settle(() => rpc.system.getUpdateDetails()),
 		]);
-		landCapabilities(capsGen, caps);
+		landCapabilities(capsGen, caps, link);
 		if (gen === loadSeq) loaded = true;
 		if (applied.status === "fulfilled")
 			owner.landRead(settingsGen, applied.value);
@@ -203,6 +209,9 @@ export function createUpdateSurface(): UpdateSurface {
 	return {
 		get capabilities() {
 			return capabilities;
+		},
+		get packagesReady() {
+			return capabilities !== undefined && capsLink === getLinkEpoch();
 		},
 		get settings() {
 			return owner.settings;
@@ -270,17 +279,13 @@ export function createUpdateSurface(): UpdateSurface {
 		checkNow: () => actions.run("check", [() => rpc.system.checkUpdatesNow()]),
 		installNow: () =>
 			actions.run("install", [() => rpc.system.installUpdatesNow()]),
-		installPackages: () => {
-			const phase = getUpdateOrchestratorState()?.phase;
-			if (
-				capabilities?.mode === "capable" &&
-				capabilities.features.includes("apt-all-packages") &&
-				(phase === "available" || phase === "awaiting-idle")
-			)
-				return actions.run("install", [
-					() => rpc.system.installUpdatesNow({ scope: "packages" }),
-				]);
-			return actions.run("packages", [() => rpc.system.startUpdate()]);
+		installPackages: async () => {
+			if (capabilities === undefined || capsLink !== getLinkEpoch()) return;
+			if (capabilities.mode === "legacy")
+				return actions.run("packages", [() => rpc.system.startUpdate()]);
+			return actions.run("install", [
+				() => rpc.system.installUpdatesNow({ scope: "packages" }),
+			]);
 		},
 		// The approval is for exactly ONE candidate and is spent by the install
 		// that follows it; granting it without starting the download would leave
@@ -295,6 +300,7 @@ export function createUpdateSurface(): UpdateSurface {
 			loadSeq += 1;
 			detailsSeq += 1;
 			capsSeq += 1;
+			capabilities = undefined;
 			actions.reset();
 			owner.reset();
 		},

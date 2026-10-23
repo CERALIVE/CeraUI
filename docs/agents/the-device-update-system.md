@@ -165,12 +165,14 @@ Known gaps, recorded rather than smoothed over:
   single-stage unit). The cases below are outside that guarantee; they are
   launch/admission integration gaps, not fixed by the probe.
   (a) The Packages section uses package-scoped `system.installUpdatesNow` on a
-  capable `apt-all-packages` image in `available`/`awaiting-idle`, with tracked
-  progress and the installed notice. It still calls `system.startUpdate` in
-  **every other phase**, including an OS offer, `idle` after the Packages
-  section's own legacy check, `failed`, `quarantined`, `synced`, `os-staged` and
-  `os-activation-armed`; also before a successful capability read (or after a
-  failed read), on legacy/incapable images or without an orchestrator snapshot.
+  capable image, with tracked progress and the installed notice when backend
+  admission accepts a package phase. It still calls `system.startUpdate`
+  only after the device explicitly reports legacy mode. A capable declaration
+  always uses package-scoped admission, even with an absent or non-package
+  browser phase; the backend refuses rather than allowing an untracked install.
+  Unknown capabilities disable both package controls and refuse direct surface
+  calls; opening/restoring/retrying invalidates the previous declaration, and
+  a failed read uses the existing details Retry.
   `system.checkForUpdates` is unchanged. Those legacy calls dispatch nothing to
   the orchestrator. A scoped refusal never falls back to them. An older backend
   already exposing the orchestrator instead ignores the unknown scoped input

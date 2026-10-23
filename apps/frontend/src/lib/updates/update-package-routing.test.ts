@@ -51,7 +51,7 @@ async function surfaceAt(
 	return surface;
 }
 
-it("a reopened dialog selects the current push rather than its last observed open phase", async () => {
+it("a closed capable dialog cannot dispatch from its previous declaration", async () => {
 	// Given an earlier package phase, then an OS offer pushed while the dialog was closed.
 	const surface = await surfaceAt("available");
 	surface.reset();
@@ -59,11 +59,9 @@ it("a reopened dialog selects the current push rather than its last observed ope
 	// When reopened without another phase-change callback, package Update uses current state.
 	const action = surface.installPackages();
 	await flush();
-	// Then the explicit OS-offer residual still uses legacy, never the stale scope.
-	expect(sentCount("system.startUpdate")).toBe(1);
+	// Then the closed session grants neither installer authority.
+	expect(sentCount("system.startUpdate")).toBe(0);
 	expect(sentCount("system.installUpdatesNow")).toBe(0);
-	answer("system.startUpdate", { success: true });
-	await finishRead();
 	await action;
 });
 
@@ -71,6 +69,11 @@ it("a reopened dialog retains scoped routing when the package phase did not chan
 	// Given a capable dialog reopened on the same phase, without another observePhase callback.
 	const surface = await surfaceAt("available");
 	surface.reset();
+	const load = surface.load();
+	answer("system.getUpdateCapabilities", CAPABLE);
+	answer("system.getUpdateSettings", SETTINGS);
+	answer("system.getUpdateDetails", deviceDetails());
+	await load;
 	// When packages are requested, then the current push still authorizes the scoped route.
 	const action = surface.installPackages();
 	await flush();
@@ -120,28 +123,57 @@ it.each(["available", "awaiting-idle"] as const)(
 
 it.each([
 	["os-available", CAPABLE],
-	["available", { mode: "legacy", features: [] }],
+	["idle", CAPABLE],
+	["failed", CAPABLE],
+	["quarantined", CAPABLE],
+	["synced", CAPABLE],
+	["os-staged", CAPABLE],
+	["os-activation-armed", CAPABLE],
 	["available", { mode: "capable", features: [] }],
 	[undefined, CAPABLE],
 ] satisfies readonly [
 	UpdateOrchestratorPhase | undefined,
 	UpdateCapabilities,
 ][])(
-	"%s without package authority keeps the legacy action (%j)",
+	"%s on a capable image leaves package admission to the scoped route (%j)",
 	async (phase, capabilities) => {
-		// Given an OS offer, absent orchestrator or an incapable image.
+		// Given a capable image with an absent, stale or non-package browser phase.
 		const surface = await surfaceAt(phase, capabilities);
 		// When packages are requested.
 		const action = surface.installPackages();
 		await flush();
-		// Then the historical path is the only dispatched RPC.
-		expect(sentCount("system.startUpdate")).toBe(1);
-		expect(sentCount("system.installUpdatesNow")).toBe(0);
-		answer("system.startUpdate", { success: true });
+		// Then only package-scoped backend admission can decide whether to install.
+		expect(sentCount("system.startUpdate")).toBe(0);
+		expect(sentCount("system.installUpdatesNow")).toBe(1);
+		expect(
+			FakeWebSocket.log.find((call) => call.path === "system.installUpdatesNow")
+				?.input,
+		).toEqual({ scope: "packages" });
+		answer("system.installUpdatesNow", {
+			success: false,
+			error: "not_available",
+		});
 		await finishRead();
 		await action;
 	},
 );
+
+it("keeps the legacy installer only for an explicit legacy declaration", async () => {
+	// Given a device that definitively reports the legacy regime.
+	const surface = await surfaceAt("available", {
+		mode: "legacy",
+		features: [],
+	});
+	// When packages are requested.
+	const action = surface.installPackages();
+	await flush();
+	// Then it retains the legacy route and its existing settlement.
+	expect(sentCount("system.startUpdate")).toBe(1);
+	expect(sentCount("system.installUpdatesNow")).toBe(0);
+	answer("system.startUpdate", { success: true });
+	await finishRead();
+	await action;
+});
 
 it.each(["busy", "not_available", "stream_active"])(
 	"scoped %s refusal re-enables without legacy fallback",

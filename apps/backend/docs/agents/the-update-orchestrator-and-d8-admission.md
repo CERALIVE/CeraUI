@@ -483,14 +483,12 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
   with unsafe publication and the invalid-load legacy-migration latch.
 - **The legacy RPCs bypass the orchestrator.** The Updates dialog's package
   install uses optional `{scope: "packages"}` on `system.installUpdatesNow` for a
-  capable package-owned phase, with server-side rechecks through awaited package
+  capable image, with server-side phase rechecks through awaited package
   preparation. Unscoped callers retain the existing behavior. The Packages
-  section keeps `system.startUpdate` in every phase except
-  `available`/`awaiting-idle`: an OS offer, `idle` after its own legacy check,
-  `failed`, `quarantined`, `synced`, `os-staged`, `os-activation-armed` and all
-  other non-package phases. It also uses that route before a successful
-  capability read (including failed reads), on legacy/incapable images or without
-  an orchestrator snapshot, and keeps `system.checkForUpdates` for discovery.
+  section uses `system.startUpdate` only after an explicit legacy declaration;
+  unknown capabilities disable installation until a successful read. An absent
+  or non-package browser phase never downgrades a capable install to legacy.
+  It keeps `system.checkForUpdates` for discovery.
   These legacy RPCs run
   `startSoftwareUpdate()` / `triggerManualUpdateCheck()` directly and dispatch
   nothing to the orchestrator. A scoped refusal never retries via legacy.

@@ -12,7 +12,7 @@ import type { UpdateState } from "@ceraui/rpc/schemas";
 import { fireEvent, render, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { rpc } from "$lib/rpc/client";
+import { rpc } from "../../lib/rpc/client";
 
 import UpdatesDialog from "./UpdatesDialog.svelte";
 
@@ -36,6 +36,10 @@ beforeAll(() => {
 vi.mock("$lib/rpc/client", () => ({
 	rpc: {
 		system: {
+			getUpdateCapabilities: vi.fn(async () => ({
+				mode: "legacy",
+				features: [],
+			})),
 			startUpdate: vi.fn(async () => ({ success: true })),
 			checkForUpdates: vi.fn(async () => ({ success: true })),
 		},
@@ -79,6 +83,13 @@ afterEach(() => {
 
 /** Click "Update", then confirm in the destructive "Are you absolutely sure?" dialog. */
 async function clickUpdateAndConfirm(): Promise<void> {
+	await waitFor(() =>
+		expect(
+			document
+				.querySelector('[data-testid="update-install"]')
+				?.hasAttribute("disabled"),
+		).toBe(false),
+	);
 	const trigger = [...document.querySelectorAll("button")].find((b) =>
 		b.textContent?.includes("Update"),
 	);

@@ -40,8 +40,8 @@ vi.mock("$lib/rpc/client", () => ({
 			startUpdate: vi.fn(async () => ({ success: true })),
 			checkForUpdates: vi.fn(async () => ({ success: true })),
 			getUpdateCapabilities: vi.fn(async () => ({
-				mode: "capable",
-				features: ["apt-all-packages", "rauc-verity-streaming", "slot-sync"],
+				mode: "legacy",
+				features: [],
 			})),
 			getUpdateSettings: vi.fn(async () => ({
 				packagesAuto: true,
@@ -121,6 +121,7 @@ const AVAILABLE: UpdateState = {
 
 async function clickUpdateAndConfirm(): Promise<void> {
 	const trigger = await screen.findByTestId("update-install");
+	await waitFor(() => expect(trigger.hasAttribute("disabled")).toBe(false));
 	await fireEvent.click(trigger);
 	await waitFor(() => {
 		if (document.querySelectorAll("[data-app-dialog-footer]").length === 0)

@@ -52,15 +52,15 @@ busy update shows an app-wide badge, and the Live cockpit warns before Go Live;
 Start stays enabled because the device decides admission. Implementation
 reference: [device updates](docs/DEVICE-UPDATES.md).
 
-The Packages **Update** button [EXISTS; host-tested] uses a package-only
-orchestrator scope on capable images in package-owned phases, sharing the badge,
-phase feedback and installed notice. A server refusal never falls back to the
-older RPC. It uses legacy `system.startUpdate` in every phase other than
-`available`/`awaiting-idle` (including an OS offer, `idle` after the Packages
-section's own legacy check, `failed`, `quarantined`, `synced`, `os-staged` and
-`os-activation-armed`), before a successful capability read, or with a
-legacy/incapable/absent orchestrator. Those legacy calls do not inform the
-orchestrator. An older backend that already has the orchestrator instead ignores
+The Packages **Update** button [EXISTS; host-tested, board proof owed] uses a
+package-only orchestrator scope on capable images, sharing the badge, phase
+feedback and installed notice. The backend, not the browser's cached phase,
+decides whether a package offer can install. A refusal never falls back to the
+older RPC. Installation and its confirmation stay disabled while capabilities
+are unknown or being re-read; a failed read uses the existing details Retry.
+Only a device that explicitly reports legacy mode on the current link uses
+`system.startUpdate`; reconnect cannot reuse the previous image's permission.
+Those legacy calls do not inform the orchestrator. An older backend that already has the orchestrator instead ignores
 the scoped input and runs it unscoped, equivalent to **Install now**. A stale
 newer cached tab against that older backend is a mixed-version window; reload so
 the device serves its matching frontend. If a scoped refusal leaves the call's

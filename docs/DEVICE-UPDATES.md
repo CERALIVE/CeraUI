@@ -504,19 +504,25 @@ the existing boot-version diagnostic is retained). The scoped preparation fence
 also checks after capability, plan and settings reads, before further preparation
 or dispatch; a refused owned plan is cleared before the request settles.
 
-The Packages **Update** button selects this scope only after the image reports
-`mode: "capable"` with `apt-all-packages` and the observed orchestrator phase is
-`available` or `awaiting-idle`. It reuses the Install action's busy state, phase
-settlement and localized refusal bands; a refusal never retries through legacy.
-**Legacy-routing residual:** in every other phase the Packages button still uses
-`system.startUpdate`, without informing the orchestrator. This includes an OS
-offer (`os-available`), `idle` after the Packages section's own legacy check,
-`failed`, `quarantined`, `synced`, `os-staged` and `os-activation-armed`. The same
-legacy route applies before capabilities have been read successfully (including
-a failed read), on legacy/incapable images, or without an orchestrator snapshot.
+The Packages **Update** button selects this scope after the image reports
+`mode: "capable"`, regardless of the browser's cached or absent orchestrator
+phase. Authoritative backend admission rejects non-package phases instead of
+downgrading the action to legacy. It reuses the Install action's busy state,
+phase settlement and localized refusal bands; a refusal never retries through
+legacy. The package button and its confirmation remain disabled while the
+capability declaration is unknown. Opening, retrying or restoring the dialog
+revokes the old declaration until the current read lands; closing revokes it too.
+A rejected read keeps installation disabled and offers the existing details
+Retry. The surface also refuses direct invocations without a declaration.
+Only an explicit `mode: "legacy"` declaration read on the current link permits
+`system.startUpdate`. The existing link epoch revokes install authority at the
+drop itself, even before restore hydration begins; a late old-link read cannot
+authorize the new connection.
 Package discovery still uses `system.checkForUpdates`, which dispatches nothing
-to the orchestrator. The separate D8 launch, deferral, pre-unit and adoption
-limitations remain unchanged.
+to the orchestrator: an offer discovered only there can receive `not_available`
+until orchestrator discovery establishes a package-owned phase. The separate D8
+launch, deferral, pre-unit and adoption limitations remain unchanged. This routing
+repair is host-tested, not a new board qualification.
 
 **Mixed-version window:** an older backend that already has the orchestrator
 ignores the unknown input and executes `installUpdatesNow()` unscoped, equivalent
