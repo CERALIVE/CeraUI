@@ -67,6 +67,7 @@ export {
 
 export interface UpdateSurface {
 	readonly capabilities: UpdateCapabilities | undefined;
+	readonly packagesReady: boolean;
 	readonly settings: UpdateSettings | undefined;
 	readonly details: UpdateDetails | undefined;
 	/** `true` once a load attempt finished, whatever it returned. */
@@ -113,6 +114,7 @@ async function settle<T>(call: () => Promise<T>): Promise<T> {
 const orchestratorBand = (band: ActionBand): boolean =>
 	band.action !== "packages";
 
+// allow: SIZE_OK — keep the dialog's link/read fences together for this narrow routing repair.
 export function createUpdateSurface(): UpdateSurface {
 	let capabilities = $state.raw<UpdateCapabilities | undefined>();
 	let details = $state.raw<UpdateDetails | undefined>();
@@ -123,6 +125,7 @@ export function createUpdateSurface(): UpdateSurface {
 	let loadSeq = 0;
 	let detailsSeq = 0;
 	let capsSeq = 0;
+	let capsLink = $state<number | undefined>();
 	const owner = createSettingsOwner();
 
 	const actions = createUpdateActions({
@@ -148,32 +151,34 @@ export function createUpdateSurface(): UpdateSurface {
 	function landCapabilities(
 		gen: number,
 		caps: PromiseSettledResult<UpdateCapabilities>,
+		link: number,
 	): void {
-		if (gen !== capsSeq) return;
+		if (gen !== capsSeq || link !== getLinkEpoch()) return;
 		capabilities = caps.status === "fulfilled" ? caps.value : undefined;
+		capsLink = link;
 		capabilitiesFailed = caps.status === "rejected";
 	}
 
 	async function reloadCapabilities(): Promise<void> {
 		const gen = ++capsSeq;
+		capsLink = undefined;
+		const link = getLinkEpoch();
 		const [caps] = await Promise.allSettled([
 			settle(() => rpc.system.getUpdateCapabilities()),
 		]);
-		landCapabilities(gen, caps);
+		landCapabilities(gen, caps, link);
 	}
 
 	async function load(): Promise<void> {
 		const gen = ++loadSeq;
-		const capsGen = ++capsSeq;
 		const settingsGen = owner.beginRead();
 		const detailsGen = ++detailsSeq;
 		const link = getLinkEpoch();
-		const [caps, applied, read] = await Promise.allSettled([
-			settle(() => rpc.system.getUpdateCapabilities()),
+		const [, applied, read] = await Promise.allSettled([
+			reloadCapabilities(),
 			settle(() => rpc.system.getUpdateSettings()),
 			settle(() => rpc.system.getUpdateDetails()),
 		]);
-		landCapabilities(capsGen, caps);
 		if (gen === loadSeq) loaded = true;
 		if (applied.status === "fulfilled")
 			owner.landRead(settingsGen, applied.value);
@@ -200,9 +205,21 @@ export function createUpdateSurface(): UpdateSurface {
 		}
 	}
 
+	function packagesReady(): boolean {
+		return (
+			capabilities !== undefined &&
+			capsLink === getLinkEpoch() &&
+			(capabilities.mode === "legacy" ||
+				getUpdateOrchestratorState()?.phase !== undefined)
+		);
+	}
+
 	return {
 		get capabilities() {
 			return capabilities;
+		},
+		get packagesReady() {
+			return packagesReady();
 		},
 		get settings() {
 			return owner.settings;
@@ -270,7 +287,8 @@ export function createUpdateSurface(): UpdateSurface {
 		checkNow: () => actions.run("check", [() => rpc.system.checkUpdatesNow()]),
 		installNow: () =>
 			actions.run("install", [() => rpc.system.installUpdatesNow()]),
-		installPackages: () => {
+		installPackages: async () => {
+			if (!packagesReady()) return;
 			const phase = getUpdateOrchestratorState()?.phase;
 			if (
 				capabilities?.mode === "capable" &&
@@ -295,6 +313,7 @@ export function createUpdateSurface(): UpdateSurface {
 			loadSeq += 1;
 			detailsSeq += 1;
 			capsSeq += 1;
+			capsLink = undefined;
 			actions.reset();
 			owner.reset();
 		},

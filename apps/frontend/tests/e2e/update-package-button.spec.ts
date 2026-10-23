@@ -42,10 +42,10 @@ test('package button drives scoped progress, global badge, Go Live band and inst
 	await expect(page.getByTestId('notification-item').filter({ hasText: 'cerastream' })).toBeVisible();
 });
 
-for (const regime of ['os-available', 'legacy', 'absent'] as const) {
+for (const regime of ['os-available', 'legacy'] as const) {
 	test(`package button keeps legacy RPC with ${regime} @functional`, async ({ page }) => {
 		// Given a state for which the legacy package route is intentionally retained.
-		const wire = await installUpdateWire(page, { packages, orchestrator: regime === 'absent' ? null : orchestratorState(regime === 'os-available' ? 'os-available' : 'available'), fakes: {
+		const wire = await installUpdateWire(page, { packages, orchestrator: orchestratorState(regime === 'os-available' ? 'os-available' : 'available'), fakes: {
 			'system.getUpdateCapabilities': regime === 'legacy' ? LEGACY_CAPABILITIES : CAPABLE_CAPABILITIES,
 			'system.getUpdateDetails': capableDetails(),
 			'system.startUpdate': { success: true },
@@ -56,6 +56,33 @@ for (const regime of ['os-available', 'legacy', 'absent'] as const) {
 		expect(wire.calls('system.installUpdatesNow')).toEqual([]);
 	});
 }
+
+test('package button waits for a phase before scoped install @functional', async ({ page }) => {
+	// Given a capable declaration but no orchestrator phase in the initial hydrate.
+	const wire = await installUpdateWire(page, { packages, orchestrator: null, fakes: {
+		'system.getUpdateCapabilities': CAPABLE_CAPABILITIES,
+		'system.getUpdateDetails': capableDetails(),
+		'system.installUpdatesNow': { success: true },
+	} });
+	await page.goto('/');
+	await ensureAuthenticated(page);
+	await navigateTo(page, 'settings');
+	await page.getByTestId('settings-entry-updates').click();
+	await expect(page.getByRole('dialog', { name: 'Software Updates' })).toBeVisible();
+	await expect(page.getByTestId('update-details-loading')).toHaveCount(0);
+	const install = page.getByTestId('update-install');
+	await expect(install).toBeDisabled();
+	expect(wire.calls('system.startUpdate')).toEqual([]);
+	expect(wire.calls('system.installUpdatesNow')).toEqual([]);
+	// When the phase arrives, the same control enables and the operator confirms.
+	wire.setOrchestrator(orchestratorState('available'));
+	await expect(install).toBeEnabled();
+	await install.click();
+	await page.getByRole('dialog', { name: 'Are you absolutely sure?' }).getByRole('button', { name: 'Update', exact: true }).click();
+	// Then exactly one package-scoped request is sent, never a legacy request.
+	await expect.poll(() => wire.calls('system.installUpdatesNow')).toEqual([{ scope: 'packages' }]);
+	expect(wire.calls('system.startUpdate')).toEqual([]);
+});
 
 test('scoped server refusal re-enables package control without legacy fallback @functional', async ({ page }) => {
 	// Given a package phase at click time but refusal at server admission.

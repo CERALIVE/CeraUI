@@ -504,19 +504,42 @@ the existing boot-version diagnostic is retained). The scoped preparation fence
 also checks after capability, plan and settings reads, before further preparation
 or dispatch; a refused owned plan is cleared before the request settles.
 
-The Packages **Update** button selects this scope only after the image reports
-`mode: "capable"` with `apt-all-packages` and the observed orchestrator phase is
-`available` or `awaiting-idle`. It reuses the Install action's busy state, phase
-settlement and localized refusal bands; a refusal never retries through legacy.
-**Legacy-routing residual:** in every other phase the Packages button still uses
-`system.startUpdate`, without informing the orchestrator. This includes an OS
-offer (`os-available`), `idle` after the Packages section's own legacy check,
-`failed`, `quarantined`, `synced`, `os-staged` and `os-activation-armed`. The same
-legacy route applies before capabilities have been read successfully (including
-a failed read), on legacy/incapable images, or without an orchestrator snapshot.
-Package discovery still uses `system.checkForUpdates`, which dispatches nothing
-to the orchestrator. The separate D8 launch, deferral, pre-unit and adoption
-limitations remain unchanged.
+The Packages **Update** button first requires a successful capability declaration
+from the current link. Opening, retrying, restoring or closing revokes install
+authority; link loss revokes it immediately, before restore hydration, and late
+old-link or superseded replies cannot restore it. On a capable image, a received
+orchestrator phase is also required. Until then both the package button and its
+confirmation stay disabled, and direct surface invocations dispatch nothing.
+A failed/timed-out declaration keeps the existing details Retry. Install authority
+lands with the capability answer, without waiting for settings/details; the last
+declaration remains display-only during re-reads so capability-gated sections do
+not unmount. A failed answer still clears that displayed declaration to unknown.
+Successful initial and reconnect status snapshots from this backend always
+include `update_orchestrator.phase`, even before async startup finishes
+(`status.procedure.ts`, `getOrchestratorWireState()`); an undefined phase is not
+a normal capable-backend snapshot.
+
+Once ready, routing preserves the base contract:
+
+| Confirmed declaration / current phase | Package install route |
+|---|---|
+| `mode: "legacy"` (no phase required) | `system.startUpdate` |
+| Capable + `apt-all-packages` + `available` / `awaiting-idle` | `system.installUpdatesNow({scope: "packages"})` |
+| Capable + any other **known** phase, or without `apt-all-packages` | `system.startUpdate`, unchanged D8/D478 residual |
+
+The scoped route reuses the Install action's busy state, phase settlement and
+localized refusal bands; a scoped refusal never retries through legacy. The
+known-phase legacy route includes `idle`, `os-available`, `failed`, `quarantined`
+and busy phases, exactly as on base; it is not a new admission guarantee.
+Package discovery still uses legacy `system.checkForUpdates`, which dispatches
+nothing to the orchestrator. Its Check → offer → Update flow therefore still
+installs through the legacy route in `idle`, including with `packagesAuto=false`,
+instead of becoming a permanent `not_available` loop. Routing Packages Check
+through the orchestrator is a separate follow-up, not part of this repair.
+Legacy installation still lacks orchestrator admission/cellular gating, tracked
+pending-plan/completion and quarantine ownership. The separate D8 launch,
+deferral, pre-unit and adoption limitations remain unchanged. This routing repair
+is host-tested, not a new board qualification.
 
 **Mixed-version window:** an older backend that already has the orchestrator
 ignores the unknown input and executes `installUpdatesNow()` unscoped, equivalent

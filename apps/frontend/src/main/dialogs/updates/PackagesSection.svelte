@@ -3,7 +3,7 @@
   extracted from UpdatesDialog; the summary is `PackagesSummary.svelte`.
 
   Install is destructive: it routes through a confirmation AppDialog before
-  calling the surface's capability/phase-selected package action. While an update runs, a progress indicator
+  calling the surface's capability-selected package action. While an update runs, a progress indicator
   replaces the install action; the full-screen overlay (Layout, off
   `status.updating`) carries the real percentage.
 
@@ -33,7 +33,7 @@ import ActionOutcomeBand from './ActionOutcomeBand.svelte';
 import PackagesSummary from './PackagesSummary.svelte';
 
 interface Props {
-	surface: Pick<UpdateSurface, 'packagesOutcome' | 'installPackages' | 'observeLegacy' | 'pending'>;
+	surface: Pick<UpdateSurface, 'packagesReady' | 'packagesOutcome' | 'installPackages' | 'observeLegacy' | 'pending'>;
 	/** The next scheduled package check, already formatted. */
 	nextCheck: string | undefined;
 }
@@ -250,7 +250,7 @@ $effect(() => () => clearTimeout(checkTimeout));
 			</Button>
 		{:else}
 			{#if actionableCount > 0}
-				<Button class="w-full gap-2" data-testid="update-install" onclick={() => (confirmOpen = true)}>
+				<Button class="w-full gap-2" data-testid="update-install" disabled={!surface.packagesReady} onclick={() => (confirmOpen = true)} variant={surface.packagesReady ? 'default' : 'secondary'}>
 					<Download class="size-4" />
 					{m["general.updateButton"]()}
 					<span aria-hidden="true" class="opacity-50">·</span>
@@ -273,6 +273,7 @@ $effect(() => () => clearTimeout(checkTimeout));
 	bind:open={confirmOpen}
 	destructive
 	onPrimary={() => void surface.installPackages()}
+	primaryDisabled={!surface.packagesReady}
 	primaryLabel={m["general.updateButton"]()}
 	title={m["general.areYouSure"]()}
 >

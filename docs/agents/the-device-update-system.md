@@ -164,15 +164,26 @@ Known gaps, recorded rather than smoothed over:
   two-stage unit) or the gap before the dpkg spawn (non-capable image,
   single-stage unit). The cases below are outside that guarantee; they are
   launch/admission integration gaps, not fixed by the probe.
-  (a) The Packages section uses package-scoped `system.installUpdatesNow` on a
-  capable `apt-all-packages` image in `available`/`awaiting-idle`, with tracked
-  progress and the installed notice. It still calls `system.startUpdate` in
-  **every other phase**, including an OS offer, `idle` after the Packages
-  section's own legacy check, `failed`, `quarantined`, `synced`, `os-staged` and
-  `os-activation-armed`; also before a successful capability read (or after a
-  failed read), on legacy/incapable images or without an orchestrator snapshot.
-  `system.checkForUpdates` is unchanged. Those legacy calls dispatch nothing to
-  the orchestrator. A scoped refusal never falls back to them. An older backend
+  (a) The Packages section requires a current-link capability answer and, for
+  capable images, a received orchestrator phase. Unknown/failed/in-flight reads
+  disable the trigger and confirmation and direct surface calls dispatch nothing;
+  close/link loss revokes authority, old replies cannot restore it, and a failed
+  read uses the existing details Retry. The display declaration stays during a
+  re-read, separately from install permission; settings/details do not delay the
+  capability answer's authority. Capable + `apt-all-packages` + phase
+  `available`/`awaiting-idle` uses package-scoped `system.installUpdatesNow`, with
+  tracked feedback and the installed notice when backend admission accepts.
+  Explicit legacy mode, capable + every other **known** phase (including `idle`,
+  `os-available`, `failed`, `quarantined` and busy phases), or capable without
+  the APT feature retains `system.startUpdate` exactly as on base. This is the
+  documented D478 residual, not governed installation: those calls lack the
+  orchestrator's admission/cellular gate and tracked completion/quarantine
+  ownership. `system.checkForUpdates` is unchanged and dispatches nothing to the
+  orchestrator. Its Check → offer → Update flow in `idle` still uses legacy,
+  including with `packagesAuto=false`; it does not wait for orchestrator discovery
+  or become a permanent scoped `not_available` refusal. Routing Packages Check
+  through the orchestrator is an out-of-scope follow-up. A scoped refusal never
+  falls back to legacy. An older backend
   already exposing the orchestrator instead ignores the unknown scoped input
   and runs it unscoped, equivalent to Install now. A stale newer cached tab
   against that backend is a mixed-version window: reload so the device serves
