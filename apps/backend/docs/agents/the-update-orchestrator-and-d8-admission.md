@@ -482,13 +482,19 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
   observer. `tests/update-orchestrator-h2a-interaction.test.ts` combines expiry
   with unsafe publication and the invalid-load legacy-migration latch.
 - **The legacy RPCs bypass the orchestrator.** The Updates dialog's package
-  install uses optional `{scope: "packages"}` on `system.installUpdatesNow` for a
-  capable image, with server-side phase rechecks through awaited package
-  preparation. Unscoped callers retain the existing behavior. The Packages
-  section uses `system.startUpdate` only after an explicit legacy declaration;
-  unknown capabilities disable installation until a successful read. An absent
-  or non-package browser phase never downgrades a capable install to legacy.
-  It keeps `system.checkForUpdates` for discovery.
+  install requires a capability declaration confirmed on the current link and,
+  for a capable image, a received orchestrator phase. Unknown, failed or in-flight
+  declarations, and capable images without a phase, disable installation and
+  dispatch neither installer. Once ready, capable + `apt-all-packages` + phase
+  `available`/`awaiting-idle` uses `{scope: "packages"}` on
+  `system.installUpdatesNow`, with tracked feedback and server-side phase rechecks
+  through awaited package preparation. Explicit legacy mode, capable + every
+  other known phase (including `idle`, `os-available`, `failed`, `quarantined` and
+  busy phases), or capable without the APT feature retains `system.startUpdate`
+  exactly as on base: the documented D478/D547 residual, without orchestrator
+  admission, cellular gating or quarantine ownership. Unscoped callers retain
+  the existing behavior. The Packages section keeps `system.checkForUpdates`
+  for discovery.
   These legacy RPCs run
   `startSoftwareUpdate()` / `triggerManualUpdateCheck()` directly and dispatch
   nothing to the orchestrator. A scoped refusal never retries via legacy.
