@@ -117,3 +117,36 @@ it.each([
 		expect(rendered).not.toContain("x".repeat(301));
 	},
 );
+
+it("journals a first-party hold as policy rather than simulation failure", async () => {
+	// Given: all commands succeed, but apt-mark reports a held first-party package.
+	setAptCommandRunnerForTest(async (argv) => ({
+		exitCode: 0,
+		stdout:
+			argv[1] === "-s"
+				? "0 upgraded, 0 newly installed, 0 to remove and 1 not upgraded."
+				: argv[1] === "showhold"
+					? "cerastream\n"
+					: "",
+		stderr: "",
+	}));
+	clearRecentLogLines();
+	// When
+	await runUpdateDiscoveryAndReport();
+	// Then: inspect the production journal, retaining the existing reason and step.
+	const heldRefusal = refusal.extend({
+		meta: z.object({
+			reason: z.literal("first_party_held_back"),
+			stage: z.string(),
+			step: z.string(),
+		}),
+	});
+	const record = getRecentLogLines()
+		.map((line) => heldRefusal.safeParse(JSON.parse(line)))
+		.find((entry) => entry.success);
+	expect(record?.data?.meta).toEqual({
+		reason: "first_party_held_back",
+		stage: "held-policy",
+		step: "held-packages",
+	});
+});

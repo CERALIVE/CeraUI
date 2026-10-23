@@ -24,7 +24,9 @@ export function logAptAllRefusal(error: AptAllRefusalError): void {
 	const signature = JSON.stringify([reason, exit, fingerprint]);
 	if (signatures.get(step) === signature) return;
 	signatures.set(step, signature);
-	logger.child({ stage: STAGES[step] }).warn("Capable APT update refused", {
+	const stage =
+		reason === "first_party_held_back" ? "held-policy" : STAGES[step];
+	logger.child({ stage }).warn("Capable APT update refused", {
 		reason,
 		step,
 		exit,

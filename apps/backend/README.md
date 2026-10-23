@@ -779,8 +779,9 @@ not installed-board update qualification. Install rechecks also accept apt-get's
 weak-dependency/list prose without granting those names install authority.
 Discovery and detached argv checking use one code-unit comparator; APT children
 force the C locale. Discovery and pinned parse failures have distinct dedupe
-steps, and hold-command failures retain simulation provenance. This remains
-host proof. Successful fallback-solver `Solving dependencies...` progress also
+steps, and hold-command failures retain simulation provenance. First-party-held
+policy refusals instead carry `stage=held-policy`, with reason and step unchanged.
+This remains host proof. Successful fallback-solver `Solving dependencies...` progress also
 remains context in both paths; malformed rows after progress still refuse.
 The locale child regression additionally proves inherited environment preservation.
 The pinned grammar negatives compare against their valid `context=1` companion,
