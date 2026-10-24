@@ -125,8 +125,8 @@ recheck children; `tests/apt-all-command-locale.test.ts` observes a real child's
 environment at both simulation boundaries under an inherited non-English locale.
 
 Capable APT refusals log `reason`, a closed `stage` (`source-policy`,
-`package-policy`, `simulation` or `parse`), the more specific `step`, process
-`exit` when known, and optional sanitized detail (300 UTF-16 units maximum) at the discovery or
+`package-policy`, `held-policy`, `simulation` or `parse`), the more specific `step`,
+process `exit` when known, and optional sanitized detail (300 UTF-16 units maximum) at the discovery or
 pinned-install catch. Normalize the whole text (including CR/LF and Unicode line
 separators) before detecting secrets. A secret-bearing record, URL or PEM marker
 suppresses every remaining continuation; only independent benign prefixes survive.
@@ -137,8 +137,11 @@ across successful discovery; safe evidence changed beyond the display cap logs a
 Pinned parse refusals carry `step=pinned-recheck`, separate from discovery's
 `parse-simulation`, so identical details at these boundaries cannot suppress each
 other. An `apt-mark showhold` command failure has `step=held-packages` and
-`stage=simulation`, not a parse failure. The 300-unit cut removes a dangling high
-surrogate; production JSON coverage is in `tests/apt-all-journal-surrogate.test.ts`
+`stage=simulation`, not a parse failure. A successful hold read refusing a first-party
+package retains `reason=first_party_held_back` and `step=held-packages`, but uses
+`stage=held-policy` to distinguish policy refusal from command failure.
+The 300-unit cut removes a dangling high surrogate; production JSON coverage is
+in `tests/apt-all-journal-surrogate.test.ts`
 and step/dedupe coverage in `tests/apt-all-refusal-steps.test.ts`.
 URL/JWT recognition consumes disjoint maximal tokens rather than retrying their
 suffix at every internal boundary. No input prefix cap hides late markers or safe
