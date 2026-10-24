@@ -128,10 +128,14 @@ cp deployment/ceralive-os-stage-guard "$TEMP_DIR/usr/libexec/ceralive/ceralive-o
 cp deployment/ceralive-nbd-release "$TEMP_DIR/usr/libexec/ceralive/ceralive-nbd-release"
 bun build apps/backend/src/modules/system/update-orchestrator/recovery-cli.ts --compile --target="bun-linux-${ARCHITECTURE}" --outfile="$TEMP_DIR/usr/libexec/ceralive/ceralive-update-recover"
 
+# Normalize copied artifacts and builder umask before applying private/executable modes.
+find "$TEMP_DIR" -type d -exec chmod 0755 {} +
+find "$TEMP_DIR" -type f -exec chmod 0644 {} +
+
 # Make binaries executable
-chmod +x "$TEMP_DIR/usr/local/bin/ceralive"
-chmod +x "$TEMP_DIR/usr/local/bin/override-ceralive.sh"
-chmod +x "$TEMP_DIR/usr/local/bin/reset-to-default.sh"
+chmod 0755 "$TEMP_DIR/usr/local/bin/ceralive"
+chmod 0755 "$TEMP_DIR/usr/local/bin/override-ceralive.sh"
+chmod 0755 "$TEMP_DIR/usr/local/bin/reset-to-default.sh"
 chmod 0755 "$TEMP_DIR/usr/bin/ceralive-addon-helper"
 chmod 0700 "$TEMP_DIR/usr/sbin/ceralive-update-recover" "$TEMP_DIR/usr/libexec/ceralive/ceralive-update-recover"
 chmod 0700 "$TEMP_DIR/usr/libexec/ceralive/ceralive-os-stage-guard"
@@ -379,6 +383,9 @@ log_step "Building Debian package with FPM"
 
 # Build the package
 cd dist/debian
+(
+# FPM also generates payload documentation outside our staging tree.
+umask 022
 fpm -s dir -t deb \
     -n "$PACKAGE_NAME" \
     -v "$VERSION" \
@@ -409,6 +416,7 @@ fpm -s dir -t deb \
     --deb-no-default-config-files \
     -C temp \
     .
+)
 
 cd ../..
 

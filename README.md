@@ -548,6 +548,10 @@ The release workflow requires exact equality with its calculated version. Debian
 builds append `-<UTC stamp>.<checkout SHA>`; `deb-version-stamp.test.sh` executes
 that configuration host-side without qualifying a full package or device upgrade.
 
+Debian payload modes [EXISTS; host-tested] are independent of the builder's
+umask and copied artifact modes; packaging preserves the explicit executable,
+root-only helper and sudoers permissions. See [payload modes](docs/BUILD_PIPELINE.md#payload-modes-exists-host-tested).
+
 The package's frontend-link repair [EXISTS; host-tested, board proof owed] moves
 stale non-link entries aside before upgrade restart and restores the exact public
 symlink, retaining up to three previous timestamped backup directories plus the
