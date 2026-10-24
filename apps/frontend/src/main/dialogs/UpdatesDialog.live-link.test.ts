@@ -169,6 +169,7 @@ describe("F2: 'No newer system image' is withdrawn with the link that witnessed 
 		noteSessionRestored();
 		await settle();
 		reject("system.getUpdateDetails", "INTERNAL_ERROR");
+		answer("system.getUpdateCapabilities", CAPABLE);
 		while (outstanding("system.getUpdateSettings").length > 0)
 			answer("system.getUpdateSettings", SETTINGS);
 		await settle();

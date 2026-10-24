@@ -21,7 +21,7 @@ import { fireEvent, render, waitFor } from "@testing-library/svelte";
 import { flushSync } from "svelte";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { rpc } from "$lib/rpc/client";
+import { rpc } from "../../lib/rpc/client";
 import { reactiveUpdateState } from "../../tests/fixtures/reactive-subscriptions.svelte";
 
 import UpdatesDialog from "./UpdatesDialog.svelte";
@@ -44,6 +44,10 @@ beforeAll(() => {
 vi.mock("$lib/rpc/client", () => ({
 	rpc: {
 		system: {
+			getUpdateCapabilities: vi.fn(async () => ({
+				mode: "legacy",
+				features: [],
+			})),
 			startUpdate: vi.fn(async () => ({ success: true })),
 			checkForUpdates: vi.fn(async () => ({ success: true })),
 		},
@@ -351,7 +355,7 @@ describe("UpdatesDialog — Install is gated on the ACTIONABLE set", () => {
 			expect(queryByTestId("update-install")).not.toBeNull();
 		});
 		const install = getByTestId("update-install") as HTMLButtonElement;
-		expect(install.disabled).toBe(false);
+		await waitFor(() => expect(install.disabled).toBe(false));
 		expect(install.textContent).toContain("2");
 		expect(install.textContent).toContain("Packages");
 		// Nothing was withheld, so there is no informational band to render.
