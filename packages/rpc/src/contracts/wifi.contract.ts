@@ -5,6 +5,8 @@ import { oc } from '@orpc/contract';
 
 import {
 	hotspotConfigInputSchema,
+	hotspotPrepareInputSchema,
+	hotspotPrepareOutputSchema,
 	hotspotToggleInputSchema,
 	setWifiAdapterModeInputSchema,
 	setWifiAdapterModeOutputSchema,
@@ -61,6 +63,12 @@ export const wifiContract = oc.router({
 	 * Stop hotspot mode
 	 */
 	hotspotStop: oc.input(hotspotToggleInputSchema).output(successResponseSchema),
+
+	/**
+	 * Resolve (or store the operator's own) credentials the next start will
+	 * broadcast, without activating anything.
+	 */
+	hotspotPrepare: oc.input(hotspotPrepareInputSchema).output(hotspotPrepareOutputSchema),
 
 	/**
 	 * Configure hotspot settings

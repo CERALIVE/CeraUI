@@ -37,7 +37,10 @@ import {
 	addWifiInterface,
 	removeWifiInterface,
 } from "../modules/wifi/wifi-connections.ts";
-import { startHotspotForInterface } from "../modules/wifi/wifi-hotspot-activation.ts";
+import {
+	prepareHotspotForInterface,
+	startHotspotForInterface,
+} from "../modules/wifi/wifi-hotspot-activation.ts";
 import {
 	findHotspotConnForAdapter,
 	type HotspotProfileDeps,
@@ -352,6 +355,188 @@ describe("hotspot start — identity reuse", () => {
 });
 
 // ─── 3. multi-adapter isolation ──────────────────────────────────────────────
+
+// #413: the credentials an operator is shown BEFORE activation are the ones the
+// AP broadcasts, so enabling a hotspot can never strand them.
+describe("hotspot prepare — credentials before activation", () => {
+	test("first-ever prepare generates and persists, and the start broadcasts exactly that", async () => {
+		const rec = makeRecorder();
+		const iface = makeHotspotIface();
+
+		const shown = await prepareHotspotForInterface(
+			PERM_MAC,
+			iface,
+			{},
+			rec.deps,
+		);
+
+		expect(shown.success).toBe(true);
+		if (!shown.success) return;
+		expect(shown.name).toBe("CERALIVE_791c");
+		expect(shown.firstTime).toBe(true);
+		// Nothing was activated or created by merely looking.
+		expect(rec.created).toHaveLength(0);
+		expect(rec.activated).toHaveLength(0);
+		expect(rec.store.get(PERM_MAC)?.password).toBe(shown.password);
+
+		await startHotspotForInterface(PERM_MAC, iface, rec.deps);
+		expect(rec.created).toEqual([
+			{ ssid: shown.name, password: shown.password },
+		]);
+
+		// Once it has hosted, the saved pair is offered as-is, not as a first setup.
+		const again = await prepareHotspotForInterface(
+			PERM_MAC,
+			iface,
+			{},
+			rec.deps,
+		);
+		expect(again).toEqual({
+			success: true,
+			name: shown.name,
+			password: shown.password,
+		});
+	});
+
+	test("an existing profile is shown as-is, never a freshly generated pair", async () => {
+		const rec = makeRecorder({
+			findHotspotConn: async () => ({
+				uuid: "profile-uuid",
+				ssid: "MyRig",
+				password: "profile-secret",
+				channel: "auto",
+			}),
+		});
+		const shown = await prepareHotspotForInterface(
+			PERM_MAC,
+			makeHotspotIface(),
+			{},
+			rec.deps,
+		);
+		expect(shown).toEqual({
+			success: true,
+			name: "MyRig",
+			password: "profile-secret",
+		});
+		expect(rec.setFields).toHaveLength(0);
+	});
+
+	test("an operator-chosen pair is written to the profile and is what the start activates", async () => {
+		const rec = makeRecorder({
+			findHotspotConn: async () => ({
+				uuid: "profile-uuid",
+				ssid: "CERALIVE_791c",
+				password: "old-secret",
+				channel: "auto",
+			}),
+		});
+		const iface = makeHotspotIface();
+		const shown = await prepareHotspotForInterface(
+			PERM_MAC,
+			iface,
+			{ name: "Rig Cam", password: "my own pass" },
+			rec.deps,
+		);
+
+		expect(shown).toEqual({
+			success: true,
+			name: "Rig Cam",
+			password: "my own pass",
+		});
+		expect(rec.setFields).toEqual([
+			[
+				"profile-uuid",
+				{
+					"802-11-wireless.ssid": "Rig Cam",
+					"802-11-wireless-security.psk": "my own pass",
+				},
+			],
+		]);
+		expect(rec.store.get(PERM_MAC)).toMatchObject({
+			ssid: "Rig Cam",
+			password: "my own pass",
+			conn: "profile-uuid",
+		});
+
+		await startHotspotForInterface(PERM_MAC, iface, rec.deps);
+		expect(rec.created).toHaveLength(0);
+		expect(rec.activated).toEqual(["profile-uuid"]);
+		expect(iface.hotspot.password).toBe("my own pass");
+	});
+
+	test("a refused profile write keeps the old credentials everywhere", async () => {
+		const rec = makeRecorder({
+			findHotspotConn: async () => ({
+				uuid: "profile-uuid",
+				ssid: "CERALIVE_791c",
+				password: "old-secret",
+				channel: "auto",
+			}),
+			nmConnSetFields: async () => false,
+		});
+		const iface = makeHotspotIface();
+		const result = await prepareHotspotForInterface(
+			PERM_MAC,
+			iface,
+			{ name: "Rig Cam", password: "my own pass" },
+			rec.deps,
+		);
+
+		expect(result).toEqual({ success: false, error: "activation-failed" });
+		expect(iface.hotspot.password).toBe("old-secret");
+		expect(rec.store.get(PERM_MAC)?.password).not.toBe("my own pass");
+	});
+
+	test("a chosen pair for a never-hosted adapter is used to CREATE the profile", async () => {
+		const rec = makeRecorder();
+		const iface = makeHotspotIface();
+		await prepareHotspotForInterface(
+			PERM_MAC,
+			iface,
+			{ name: "Rig Cam", password: "my own pass" },
+			rec.deps,
+		);
+		await startHotspotForInterface(PERM_MAC, iface, rec.deps);
+		expect(rec.created).toEqual([{ ssid: "Rig Cam", password: "my own pass" }]);
+	});
+
+	test("a live AP answers with its credentials and accepts no change here", async () => {
+		const rec = makeRecorder();
+		const iface = makeHotspotIface({ hotspotConn: "live-uuid" });
+		iface.conn = "live-uuid";
+		iface.hotspot.name = "Live";
+		iface.hotspot.password = "live-secret";
+
+		const result = await prepareHotspotForInterface(
+			PERM_MAC,
+			iface,
+			{ name: "Other", password: "other-pass" },
+			rec.deps,
+		);
+
+		expect(result).toEqual({
+			success: true,
+			name: "Live",
+			password: "live-secret",
+		});
+		expect(rec.setFields).toHaveLength(0);
+	});
+
+	test("two concurrent first prepares settle on ONE identity", async () => {
+		const rec = makeRecorder();
+		const iface = makeHotspotIface();
+		const [a, b] = await Promise.all([
+			prepareHotspotForInterface(PERM_MAC, iface, {}, rec.deps),
+			prepareHotspotForInterface(PERM_MAC, iface, {}, rec.deps),
+		]);
+		// The adapter lock refuses the overlap rather than minting two passwords.
+		const ok = [a, b].filter((r) => r.success);
+		expect(ok.length).toBeGreaterThanOrEqual(1);
+		for (const r of ok) {
+			if (r.success) expect(rec.store.get(PERM_MAC)?.password).toBe(r.password);
+		}
+	});
+});
 
 describe("hotspot identity — multiple adapters", () => {
 	test("two adapters keep two independent, non-colliding identities", async () => {

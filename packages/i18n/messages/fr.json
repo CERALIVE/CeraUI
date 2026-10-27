@@ -2694,5 +2694,20 @@
 	"settings.updates.cellular.pendingBodyMetered": "Aucune connexion connue comme non limitée n'est disponible. Le téléchargement de {version} transfère environ {size} sur une connexion limitée ou dont le coût est inconnu.",
 	"settings.updates.layer.withheldBand": "Non inclus dans cette mise à jour",
 	"settings.updates.credentials.unusableTitle": "Le certificat de mise à jour de l'appareil n'a pas pu être utilisé",
-	"general.updateReasonStreamingUnconfirmed": "Une diffusion est en cours ou son état n’est pas confirmé. Appuyez sur Arrêter pour confirmer son arrêt avant d’installer une mise à jour."
+	"general.updateReasonStreamingUnconfirmed": "Une diffusion est en cours ou son état n’est pas confirmé. Appuyez sur Arrêter pour confirmer son arrêt avant d’installer une mise à jour.",
+	"hotspotConfirm.title": "Notez ces informations avant de l'activer",
+	"hotspotConfirm.body": "L'appareil peut perdre sa connexion Wi-Fi actuelle. Si vous accédez à CeraLive par ce Wi-Fi, vous aurez besoin de ce nom et de ce mot de passe pour revenir.",
+	"hotspotConfirm.bodyKeepsStation": "Les téléphones et ordinateurs se connectent avec ce nom et ce mot de passe. Conservez-les en lieu sûr.",
+	"hotspotConfirm.loading": "Récupération des informations du point d'accès…",
+	"hotspotConfirm.loadFailed": "Impossible de lire les informations du point d'accès ; il reste désactivé.",
+	"hotspotConfirm.retry": "Réessayer",
+	"hotspotConfirm.generate": "Nouveau mot de passe aléatoire",
+	"hotspotConfirm.acknowledge": "J'ai noté le nom et le mot de passe, et je comprends que ma connexion actuelle peut être coupée.",
+	"hotspotConfirm.activate": "Activer le point d'accès",
+	"hotspotConfirm.saveFailed": "Impossible d'enregistrer le nouveau nom et le nouveau mot de passe. Rien n'a changé et le point d'accès reste désactivé.",
+	"hotspotConfirm.passwordCharacters": "Utilisez uniquement des lettres, chiffres et symboles standard (sans accents ni emoji).",
+	"hotspotConfirm.inactiveHint": "Le nom du réseau et le mot de passe s'affichent, modifiables, lorsque vous activez le point d'accès.",
+	"network.wifiMode.confirm.switchTo": "Passer en {mode}",
+	"hotspotConfirm.firstTimeTitle": "Configurez votre point d'accès",
+	"hotspotConfirm.firstTimeBody": "Cette radio n'a encore jamais créé de point d'accès. Gardez le nom et le mot de passe proposés ou choisissez les vôtres."
 }

@@ -17,6 +17,11 @@
   • Save  → rpc.wifi.hotspotConfigure, Start → rpc.wifi.hotspotStart,
     Stop → rpc.wifi.hotspotStop — all dispatched through `osCommand` (the single
     OS-op feedback path: keyed spinner, DEVICE_BUSY + failure toasts).
+  • Start never dispatches directly (#413): it opens `HotspotActivationConfirm`,
+    which shows the exact credentials the AP will broadcast (or stores the
+    operator's own) and needs an explicit acknowledgement. While the hotspot is
+    off, the edit form is NOT rendered — `hotspotConfigure` only reconfigures a
+    live AP, so fields typed here used to be silently ignored by the start.
   • When the hotspot is active, ONE QR encoding the live credentials is rendered
     so phones can join by scan. Its `T:` token follows the LIVE security mode
     (`hotspotQrSecurity`): a WPA3-SAE AP advertised as `T:WPA` yields a code that
@@ -57,6 +62,7 @@ import {
 import { rpc } from '$lib/rpc/client';
 import { hotspotIsActive, hotspotToggleConfirmed } from '$lib/rpc/os-toggle-predicates';
 import { getWifiAdapterModeEntry } from '$lib/rpc/wifi-adapter-modes.svelte';
+import HotspotActivationConfirm from '$main/network/HotspotActivationConfirm.svelte';
 import WifiModeBadge from '$main/network/WifiModeBadge.svelte';
 import WifiModeSelector from '$main/network/WifiModeSelector.svelte';
 import {
@@ -113,6 +119,8 @@ const configuring = $derived(getOperationPhase(configKey) === 'pending');
 // Local intent for the pending start/stop: the confirm $effect flips the op to
 // `confirmed` the moment the authoritative snapshot reports the target mode.
 let toggleTarget = $state<'hotspot' | 'station' | null>(null);
+// The credential gate is open; the start is dispatched only from its confirm.
+let confirmingStart = $state(false);
 
 // ── Form state (synced once from props; user edits are never clobbered) ──
 let name = $state('');
@@ -129,8 +137,13 @@ const securityChoice = $derived(deriveHotspotSecurityChoice(iface?.hotspot));
 const radioTruth = $derived(deriveHotspotRadioTruth(iface?.hotspot, iface?.capabilities));
 
 let prevOpen = false;
+let prevActive = false;
 $effect.pre(() => {
-	if (open && !prevOpen) {
+	// The form is not rendered while off, so the moment the AP comes up is a
+	// second (and the first useful) sync point; no edit can be clobbered there.
+	const becameActive = isActive && !prevActive;
+	if (open && !prevOpen) confirmingStart = false;
+	if ((open && !prevOpen) || becameActive) {
 		name = iface?.hotspot?.name ?? '';
 		password = iface?.hotspot?.password ?? '';
 		channel = iface?.hotspot?.channel ?? 'auto';
@@ -140,6 +153,7 @@ $effect.pre(() => {
 		security = choice?.kind === 'select' ? choice.selected : undefined;
 	}
 	prevOpen = open;
+	prevActive = isActive;
 });
 
 const securityLabel = $derived(
@@ -178,7 +192,7 @@ const isFormValid = $derived(nameValid && passwordValid);
 const toggleDisabledReason = $derived(
 	toggling
 		? m["hotspotConfigurator.toggleReason.busy"]()
-		: !isActive && !isFormValid
+		: isActive && !isFormValid
 			? m["hotspotConfigurator.toggleReason.formInvalid"]()
 			: undefined,
 );
@@ -258,15 +272,20 @@ async function handleToggle() {
 			busyMessage: () => m["network.os.deviceBusy"](),
 		});
 	} else {
-		toggleTarget = 'hotspot';
-		await osCommand({
-			key: toggleKey,
-			target: 'hotspot',
-			rpc: () => rpc.wifi.hotspotStart({ device: deviceId }),
-			failMessage: () => m["network.os.operationFailed"](),
-			busyMessage: () => m["network.os.deviceBusy"](),
-		});
+		confirmingStart = true;
 	}
+}
+
+async function startConfirmed() {
+	confirmingStart = false;
+	toggleTarget = 'hotspot';
+	await osCommand({
+		key: toggleKey,
+		target: 'hotspot',
+		rpc: () => rpc.wifi.hotspotStart({ device: deviceId }),
+		failMessage: () => m["network.os.operationFailed"](),
+		busyMessage: () => m["network.os.deviceBusy"](),
+	});
 }
 
 // Confirm a pending start/stop as soon as the authoritative `wifi` snapshot
@@ -367,6 +386,21 @@ async function copyPassword() {
 			</div>
 		{/if}
 
+		{#if !isActive}
+			{#if confirmingStart}
+				<HotspotActivationConfirm
+					device={deviceId}
+					keepsStation={iface?.supports_ap_sta_concurrency === true &&
+						modeView?.desiredMode !== 'hotspot'}
+					onCancel={() => (confirmingStart = false)}
+					onConfirm={startConfirmed}
+				/>
+			{:else}
+				<p class="text-muted-foreground text-xs" data-testid="hotspot-inactive-hint">
+					{m["hotspotConfirm.inactiveHint"]()}
+				</p>
+			{/if}
+		{:else}
 		<!-- Name -->
 		<div class="space-y-1.5">
 			<Label class="text-sm font-medium" for="hotspot-name">{m["network.hotspot.name"]()}</Label>
@@ -540,6 +574,7 @@ async function copyPassword() {
 				{/each}
 			</div>
 		{/if}
+		{/if}
 
 		<!-- Live QR for the active hotspot credentials -->
 		{#if isActive && qrDataUrl}
@@ -564,9 +599,13 @@ async function copyPassword() {
 		<Button class="sm:min-w-24" onclick={() => (open = false)} variant="outline">
 			{m["network.dialog.close"]()}
 		</Button>
+		<!-- One action row at a time: while the credential gate is open, its own
+		     Cancel / Turn on are the only way forward, and Save exists only for a
+		     live AP (`hotspotConfigure` refuses anything else). -->
+		{#if !confirmingStart}
 		<Button
 			class="sm:min-w-28"
-			disabled={toggling || (!isActive && !isFormValid)}
+			disabled={toggling}
 			onclick={handleToggle}
 			title={toggleDisabledReason}
 			variant="outline"
@@ -578,6 +617,8 @@ async function copyPassword() {
 			{/if}
 			{isActive ? m["network.status.turnOff"]() : m["network.status.enableHotspot"]()}
 		</Button>
+		{/if}
+		{#if isActive}
 		<Button class="sm:min-w-24" disabled={!isFormValid || configuring} onclick={handleSave}>
 			{#if configuring}
 				<Loader2 class="size-4 animate-spin motion-reduce:animate-none" />
@@ -586,5 +627,6 @@ async function copyPassword() {
 			{/if}
 			{configuring ? m["hotspotConfigurator.dialog.saving"]() : m["hotspotConfigurator.dialog.save"]()}
 		</Button>
+		{/if}
 	{/snippet}
 </AppDialog>

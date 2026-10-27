@@ -26,6 +26,8 @@ import type {
 	FccUnlockOptionsOutput,
 	GetEngineOutput,
 	HotspotConfigInput,
+	HotspotPrepareInput,
+	HotspotPrepareOutput,
 	HotspotToggleInput,
 	InstallUpdatesNowInput,
 	KioskConfigureInput,
@@ -812,6 +814,9 @@ export interface TypedRPC {
 		scan: (input: WifiScanInput) => Promise<SuccessResponse>;
 		hotspotStart: (input: HotspotToggleInput) => Promise<SuccessResponse>;
 		hotspotStop: (input: HotspotToggleInput) => Promise<SuccessResponse>;
+		hotspotPrepare: (
+			input: HotspotPrepareInput,
+		) => Promise<HotspotPrepareOutput>;
 		hotspotConfigure: (input: HotspotConfigInput) => Promise<SuccessResponse>;
 		setCountry: (input: SetWifiCountryInput) => Promise<SetWifiCountryOutput>;
 		getAdapterModes: () => Promise<WifiAdapterModeStatus>;

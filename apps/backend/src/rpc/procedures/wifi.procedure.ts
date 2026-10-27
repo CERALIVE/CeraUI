@@ -41,8 +41,11 @@
  */
 
 import {
+	type HotspotPrepareOutput,
 	type HotspotToggleOutput,
 	hotspotConfigInputSchema,
+	hotspotPrepareInputSchema,
+	hotspotPrepareOutputSchema,
 	hotspotToggleInputSchema,
 	hotspotToggleOutputSchema,
 	type SetWifiAdapterModeOutput,
@@ -71,6 +74,7 @@ import {
 	shouldUseMocks,
 } from "../../mocks/mock-service.ts";
 import {
+	getMockHotspotConfig,
 	getMockWifiFaults,
 	setMockHotspotConfig,
 } from "../../mocks/providers/wifi.ts";
@@ -93,7 +97,10 @@ import {
 	persistWifiCountry,
 	setWifiCountry,
 } from "../../modules/wifi/wifi-country.ts";
-import { wifiHotspotStart } from "../../modules/wifi/wifi-hotspot-activation.ts";
+import {
+	wifiHotspotPrepare,
+	wifiHotspotStart,
+} from "../../modules/wifi/wifi-hotspot-activation.ts";
 import { wifiHotspotStop } from "../../modules/wifi/wifi-hotspot-config.ts";
 import { publishHotspotOutcome } from "../../modules/wifi/wifi-hotspot-outcome.ts";
 import { broadcast } from "../events.ts";
@@ -368,6 +375,29 @@ export const hotspotStartProcedure = authedProcedure
 		const result = await wifiHotspotStart({ device: Number(input.device) });
 		if (!result.success) return { success: false, error: result.error };
 		return { success: true, accepted: true };
+	});
+
+/**
+ * Prepare hotspot credentials procedure (#413): what the next start will
+ * broadcast, resolved - or set to the operator's own choice - before activating.
+ */
+export const hotspotPrepareProcedure = authedProcedure
+	.input(hotspotPrepareInputSchema)
+	.output(hotspotPrepareOutputSchema)
+	.handler(async ({ input }): Promise<HotspotPrepareOutput> => {
+		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
+		const chosen =
+			input.name !== undefined && input.password !== undefined
+				? { name: input.name, password: input.password }
+				: undefined;
+		if (shouldUseMocks()) {
+			const device = resolveMockWifiDevice(input.device);
+			if (!device) return { success: false, error: "no-device" };
+			if (chosen) setMockHotspotConfig(device, chosen);
+			const { name, password } = getMockHotspotConfig(device);
+			return { success: true, name, password };
+		}
+		return wifiHotspotPrepare({ device: Number(input.device), ...chosen });
 	});
 
 /**

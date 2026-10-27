@@ -2691,5 +2691,20 @@
 	"settings.updates.cellular.pendingBodyMetered": "ऐसा कोई कनेक्शन उपलब्ध नहीं है जिसके असीमित होने की जानकारी हो। {version} डाउनलोड करने पर लगभग {size} डेटा सीमित या अज्ञात लागत वाले कनेक्शन से ट्रांसफ़र होगा।",
 	"settings.updates.layer.withheldBand": "इस अपडेट में शामिल नहीं",
 	"settings.updates.credentials.unusableTitle": "डिवाइस का अपडेट प्रमाणपत्र उपयोग नहीं किया जा सका",
-	"general.updateReasonStreamingUnconfirmed": "स्ट्रीम चल रही है या उसकी स्थिति की पुष्टि नहीं हुई है। अपडेट इंस्टॉल करने से पहले रोकें दबाकर पुष्टि करें कि स्ट्रीम बंद है।"
+	"general.updateReasonStreamingUnconfirmed": "स्ट्रीम चल रही है या उसकी स्थिति की पुष्टि नहीं हुई है। अपडेट इंस्टॉल करने से पहले रोकें दबाकर पुष्टि करें कि स्ट्रीम बंद है।",
+	"hotspotConfirm.title": "चालू करने से पहले ये विवरण सहेज लें",
+	"hotspotConfirm.body": "डिवाइस का मौजूदा Wi-Fi कनेक्शन कट सकता है। अगर आप उसी Wi-Fi से CeraLive तक पहुँचते हैं, तो वापस जुड़ने के लिए आपको यह नाम और पासवर्ड चाहिए होगा।",
+	"hotspotConfirm.bodyKeepsStation": "फ़ोन और लैपटॉप इसी नाम और पासवर्ड से जुड़ते हैं। इन्हें सुरक्षित जगह रखें।",
+	"hotspotConfirm.loading": "हॉटस्पॉट का विवरण लाया जा रहा है…",
+	"hotspotConfirm.loadFailed": "हॉटस्पॉट का विवरण पढ़ा नहीं जा सका, इसलिए यह बंद रहेगा।",
+	"hotspotConfirm.retry": "फिर से कोशिश करें",
+	"hotspotConfirm.generate": "नया रैंडम पासवर्ड",
+	"hotspotConfirm.acknowledge": "मैंने नाम और पासवर्ड सहेज लिया है और समझता/समझती हूँ कि मेरा मौजूदा कनेक्शन कट सकता है।",
+	"hotspotConfirm.activate": "हॉटस्पॉट चालू करें",
+	"hotspotConfirm.saveFailed": "नया नाम और पासवर्ड सहेजा नहीं जा सका। कुछ नहीं बदला और हॉटस्पॉट बंद रहेगा।",
+	"hotspotConfirm.passwordCharacters": "केवल मानक अंग्रेज़ी अक्षर, अंक और चिह्न इस्तेमाल करें (बिना एक्सेंट या इमोजी)।",
+	"hotspotConfirm.inactiveHint": "हॉटस्पॉट चालू करते समय नेटवर्क का नाम और पासवर्ड दिखेगा और आप उसे बदल सकेंगे।",
+	"network.wifiMode.confirm.switchTo": "{mode} पर स्विच करें",
+	"hotspotConfirm.firstTimeTitle": "अपना हॉटस्पॉट सेट करें",
+	"hotspotConfirm.firstTimeBody": "इस रेडियो ने पहले कभी हॉटस्पॉट नहीं चलाया है। सुझाया गया नाम और पासवर्ड रखें या अपना चुनें।"
 }

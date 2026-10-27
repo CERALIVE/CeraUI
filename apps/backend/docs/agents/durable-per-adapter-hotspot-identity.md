@@ -18,6 +18,20 @@ it to this exact permanent address, and only as a last resort a profile matching
 the persisted SSID (for profiles written before the MAC binding was
 trustworthy).
 
+**The identity is resolved BEFORE any start can drop the link (#413).**
+`wifi.hotspotPrepare` runs the SAME resolution (`resolveHotspotIdentity`, shared
+with `startHotspotLocked`) under the adapter lock WITHOUT activating, persists a
+generated pair, and returns it, so the UI can show the exact name/password before
+a start that may disconnect the operator's Wi-Fi. A `name` + `password` pair
+stores the operator's own choice: the existing profile's `ssid`/`psk` is written
+FIRST, and a refused write leaves memory and the store unchanged. A live AP
+answers with its credentials and accepts no change (that is `hotspotConfigure`).
+`firstTime: true` marks an adapter that has never hosted (no profile, no stored
+`conn`): the UI frames the pair as a first setup; otherwise it is the saved pair.
+Every UI start path (`HotspotDialog` Enable, `WifiModeSelector` station -> AP)
+goes through `HotspotActivationConfirm`, which dispatches only after that read
+succeeds and the operator acknowledges the pair on screen.
+
 **The repair must land BEFORE the activation.** `hotspotProfileFields(permMac)`
 is re-asserted with `nmConnSetFields` and only then is the profile brought up —
 a profile carrying a randomized binding is one NetworkManager will refuse, so

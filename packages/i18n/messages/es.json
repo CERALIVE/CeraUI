@@ -2694,5 +2694,20 @@
 	"settings.updates.cellular.pendingBodyMetered": "No hay ninguna conexión disponible que se sepa sin límite de datos. Descargar {version} transfiere unos {size} por una conexión con límite de datos o cuyo costo se desconoce.",
 	"settings.updates.layer.withheldBand": "No se incluyen en esta actualización",
 	"settings.updates.credentials.unusableTitle": "No se pudo usar el certificado de actualización del dispositivo",
-	"general.updateReasonStreamingUnconfirmed": "La transmisión está activa o no se ha confirmado su estado. Presiona Detener para confirmar que terminó antes de instalar una actualización."
+	"general.updateReasonStreamingUnconfirmed": "La transmisión está activa o no se ha confirmado su estado. Presiona Detener para confirmar que terminó antes de instalar una actualización.",
+	"hotspotConfirm.title": "Guarda estos datos antes de activarlo",
+	"hotspotConfirm.body": "Es posible que el equipo pierda su conexión Wi-Fi actual. Si entras a CeraLive por ese Wi-Fi, necesitarás este nombre y esta contraseña para volver a entrar.",
+	"hotspotConfirm.bodyKeepsStation": "Los teléfonos y laptops se conectan con este nombre y esta contraseña. Guárdalos en un lugar seguro.",
+	"hotspotConfirm.loading": "Obteniendo los datos del punto de acceso…",
+	"hotspotConfirm.loadFailed": "No se pudieron leer los datos del punto de acceso, así que sigue apagado.",
+	"hotspotConfirm.retry": "Reintentar",
+	"hotspotConfirm.generate": "Nueva contraseña aleatoria",
+	"hotspotConfirm.acknowledge": "Guardé el nombre y la contraseña, y entiendo que mi conexión actual puede caerse.",
+	"hotspotConfirm.activate": "Activar punto de acceso",
+	"hotspotConfirm.saveFailed": "No se pudieron guardar el nuevo nombre y la nueva contraseña. No cambió nada y el punto de acceso sigue apagado.",
+	"hotspotConfirm.passwordCharacters": "Usa solo letras, números y símbolos estándar (sin acentos ni emojis).",
+	"hotspotConfirm.inactiveHint": "Al activar el punto de acceso verás el nombre de red y la contraseña, y podrás cambiarlos.",
+	"network.wifiMode.confirm.switchTo": "Cambiar a {mode}",
+	"hotspotConfirm.firstTimeTitle": "Configura tu punto de acceso",
+	"hotspotConfirm.firstTimeBody": "Este adaptador nunca creó un punto de acceso. Deja el nombre y la contraseña sugeridos o elige los tuyos."
 }

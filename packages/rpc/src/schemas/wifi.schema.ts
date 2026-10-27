@@ -543,6 +543,34 @@ export const hotspotToggleOutputSchema = z.object({
 });
 export type HotspotToggleOutput = z.infer<typeof hotspotToggleOutputSchema>;
 
+/*
+  `wifi.hotspotPrepare` (#413): resolve the credentials the next start will
+  broadcast WITHOUT activating, so an operator sees them before the station link
+  may drop. A `name` + `password` pair stores the operator's own choice instead
+  (only one of them changes nothing). WPA2/WPA3 passphrases are printable ASCII.
+*/
+export const hotspotPrepareInputSchema = z.object({
+	device: z.string(),
+	name: z.string().min(HOTSPOT_NAME_MIN).max(HOTSPOT_NAME_MAX).optional(),
+	password: z
+		.string()
+		.min(HOTSPOT_PASSWORD_MIN)
+		.max(HOTSPOT_PASSWORD_MAX)
+		.regex(/^[\x20-\x7E]+$/)
+		.optional(),
+});
+export type HotspotPrepareInput = z.infer<typeof hotspotPrepareInputSchema>;
+
+export const hotspotPrepareOutputSchema = z.object({
+	success: z.boolean(),
+	name: z.string().optional(),
+	password: z.string().optional(),
+	// The adapter has never hosted an AP: the pair is a suggestion, not a saved setup.
+	firstTime: z.literal(true).optional(),
+	error: hotspotToggleErrorSchema.optional(),
+});
+export type HotspotPrepareOutput = z.infer<typeof hotspotPrepareOutputSchema>;
+
 // Hotspot config input schema
 export const hotspotConfigInputSchema = z.object({
 	device: z.string(),

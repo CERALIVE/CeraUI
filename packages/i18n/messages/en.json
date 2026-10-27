@@ -2691,5 +2691,20 @@
 	"settings.updates.cellular.pendingBodyMetered": "No connection known to be unmetered is available. Downloading {version} transfers about {size} over a metered connection or one whose cost is unknown.",
 	"settings.updates.layer.withheldBand": "Not included in this update",
 	"settings.updates.credentials.unusableTitle": "The device's update certificate could not be used",
-	"general.updateReasonStreamingUnconfirmed": "A stream is running or its state is unconfirmed. Press Stop to confirm the stream is stopped before installing an update."
+	"general.updateReasonStreamingUnconfirmed": "A stream is running or its state is unconfirmed. Press Stop to confirm the stream is stopped before installing an update.",
+	"hotspotConfirm.title": "Save these details before you turn it on",
+	"hotspotConfirm.body": "The device may drop its current Wi-Fi connection. If you reach CeraLive over that Wi-Fi, you'll need this name and password to get back in.",
+	"hotspotConfirm.bodyKeepsStation": "Phones and laptops join with this name and password. Keep them somewhere safe.",
+	"hotspotConfirm.loading": "Getting the hotspot details…",
+	"hotspotConfirm.loadFailed": "Couldn't read the hotspot details, so it stays off.",
+	"hotspotConfirm.retry": "Try again",
+	"hotspotConfirm.generate": "New random password",
+	"hotspotConfirm.acknowledge": "I've saved the name and password, and I understand my current connection may drop.",
+	"hotspotConfirm.activate": "Turn on hotspot",
+	"hotspotConfirm.saveFailed": "Couldn't save the new name and password. Nothing changed and the hotspot stays off.",
+	"hotspotConfirm.passwordCharacters": "Use only standard letters, numbers and symbols (no accents or emoji).",
+	"hotspotConfirm.inactiveHint": "You'll see and can change the network name and password when you turn the hotspot on.",
+	"network.wifiMode.confirm.switchTo": "Switch to {mode}",
+	"hotspotConfirm.firstTimeTitle": "Set up your hotspot",
+	"hotspotConfirm.firstTimeBody": "This radio hasn't run a hotspot before. Keep the suggested name and password or choose your own."
 }

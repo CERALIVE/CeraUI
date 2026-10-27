@@ -15,6 +15,12 @@
  *   (c) it keeps the 44px touch-target min sizing token,
  *   (d) the in-flight state renders a spinner on the rung being switched to,
  *   (e) a PROVEN concurrent radio starts hybrid with no destructive confirm,
+ *
+ * #413 put a CREDENTIAL gate in front of every station -> AP transition: the
+ * radio may drop the link this page is served over, so nothing dispatches until
+ * the operator has seen the name/password and acknowledged them
+ * (`acknowledgeCredentials`). The destructive consequence now renders inside that
+ * gate instead of the separate band.
  *   (f) station controls stay visible while a concurrent hotspot is active.
  *
  * Todo 32 MOVED that selector behind the row's "Mode" popover, so every rung
@@ -46,6 +52,11 @@ vi.mock("$lib/rpc/client", () => ({
 		wifi: {
 			hotspotStart: vi.fn(),
 			hotspotStop: vi.fn(),
+			hotspotPrepare: vi.fn(async () => ({
+				success: true,
+				name: "CERALIVE_791c",
+				password: "correcthorse",
+			})),
 			getAdapterModes: vi.fn(async () => ({})),
 			setAdapterMode: vi.fn(async () => ({ success: true, accepted: true })),
 		},
@@ -115,6 +126,27 @@ async function openModeControl(device = "wifi0"): Promise<void> {
 	await tick();
 }
 
+/** Wait for the #413 credential gate, tick the acknowledgement, confirm. */
+async function acknowledgeCredentials(): Promise<void> {
+	const gate = await vi.waitFor(() => {
+		const el = document.querySelector<HTMLElement>(
+			'[data-testid="hotspot-activation-confirm"][data-phase="ready"]',
+		);
+		if (!el) throw new Error("the credential gate is not ready");
+		return el;
+	});
+	const ack = gate.querySelector<HTMLElement>('[role="checkbox"]');
+	if (!ack) throw new Error("no acknowledgement checkbox");
+	await fireEvent.click(ack);
+	await tick();
+	const activate = gate.querySelector<HTMLElement>(
+		'[data-testid="hotspot-confirm-activate"]',
+	);
+	if (!activate) throw new Error("no confirm button");
+	await fireEvent.click(activate);
+	await tick();
+}
+
 beforeEach(() => {
 	initAsyncOperations();
 	resetWifiAdapterModes();
@@ -180,9 +212,10 @@ describe("WifiSection — the adapter mode control", () => {
 		});
 		await openModeControl();
 
-		// Hybrid is additive (nothing is lost), so it dispatches without a confirm.
+		// Hybrid loses nothing, so only the credential gate stands in front of it.
 		await fireEvent.click(getByRole("radio", { name: HYBRID_RUNG }));
 		await tick();
+		await acknowledgeCredentials();
 		await tick();
 
 		expect(
@@ -205,6 +238,9 @@ describe("WifiSection — AP+STA concurrent mode", () => {
 		await tick();
 
 		expect(queryByTestId("wifi-mode-confirm-wifi0")).toBeNull();
+		// No destructive band, but no AP starts before its credentials are seen.
+		expect(rpc.wifi.setAdapterMode).not.toHaveBeenCalled();
+		await acknowledgeCredentials();
 		expect(rpc.wifi.setAdapterMode).toHaveBeenCalledWith({
 			device: "wifi0",
 			mode: "hybrid",
@@ -248,13 +284,11 @@ describe("WifiSection — a destructive transition is confirmed first", () => {
 		await fireEvent.click(getByRole("radio", { name: HOTSPOT_RUNG }));
 		await tick();
 
-		const band = getByTestId("wifi-mode-confirm-wifi0");
-		expect(band.getAttribute("data-consequence")).toBe("drops-uplink");
-		expect(band.textContent).toContain("leaves the bond");
+		const gate = getByTestId("hotspot-activation-confirm");
+		expect(gate.textContent).toContain("leaves the bond");
 		expect(rpc.wifi.setAdapterMode).not.toHaveBeenCalled();
 
-		await fireEvent.click(getByTestId("wifi-mode-confirm-apply-wifi0"));
-		await tick();
+		await acknowledgeCredentials();
 		expect(rpc.wifi.setAdapterMode).toHaveBeenCalledWith({
 			device: "wifi0",
 			mode: "hotspot",
@@ -271,10 +305,10 @@ describe("WifiSection — a destructive transition is confirmed first", () => {
 
 		await fireEvent.click(getByRole("radio", { name: HOTSPOT_RUNG }));
 		await tick();
-		await fireEvent.click(getByTestId("wifi-mode-confirm-cancel-wifi0"));
+		await fireEvent.click(getByTestId("hotspot-confirm-cancel"));
 		await tick();
 
-		expect(queryByTestId("wifi-mode-confirm-wifi0")).toBeNull();
+		expect(queryByTestId("hotspot-activation-confirm")).toBeNull();
 		expect(rpc.wifi.setAdapterMode).not.toHaveBeenCalled();
 		expect(getByTestId("wifi-mode-selector").getAttribute("data-mode")).toBe(
 			"station",

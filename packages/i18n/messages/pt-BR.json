@@ -2694,5 +2694,20 @@
 	"settings.updates.cellular.pendingBodyMetered": "Nenhuma conexão disponível é conhecida como ilimitada. Baixar {version} transfere cerca de {size} por uma conexão limitada ou de custo desconhecido.",
 	"settings.updates.layer.withheldBand": "Não incluídos nesta atualização",
 	"settings.updates.credentials.unusableTitle": "Não foi possível usar o certificado de atualização do dispositivo",
-	"general.updateReasonStreamingUnconfirmed": "Há uma transmissão ativa ou seu estado não foi confirmado. Pressione Parar para confirmar que ela terminou antes de instalar uma atualização."
+	"general.updateReasonStreamingUnconfirmed": "Há uma transmissão ativa ou seu estado não foi confirmado. Pressione Parar para confirmar que ela terminou antes de instalar uma atualização.",
+	"hotspotConfirm.title": "Salve estes dados antes de ativar",
+	"hotspotConfirm.body": "O dispositivo pode perder a conexão Wi-Fi atual. Se você acessa o CeraLive por esse Wi-Fi, vai precisar deste nome e desta senha para entrar de novo.",
+	"hotspotConfirm.bodyKeepsStation": "Celulares e notebooks se conectam com este nome e esta senha. Guarde-os em um lugar seguro.",
+	"hotspotConfirm.loading": "Obtendo os dados do ponto de acesso…",
+	"hotspotConfirm.loadFailed": "Não foi possível ler os dados do ponto de acesso, então ele continua desligado.",
+	"hotspotConfirm.retry": "Tentar novamente",
+	"hotspotConfirm.generate": "Nova senha aleatória",
+	"hotspotConfirm.acknowledge": "Salvei o nome e a senha e entendo que minha conexão atual pode cair.",
+	"hotspotConfirm.activate": "Ativar ponto de acesso",
+	"hotspotConfirm.saveFailed": "Não foi possível salvar o novo nome e a nova senha. Nada mudou e o ponto de acesso continua desligado.",
+	"hotspotConfirm.passwordCharacters": "Use apenas letras, números e símbolos padrão (sem acentos nem emojis).",
+	"hotspotConfirm.inactiveHint": "Ao ativar o ponto de acesso, você verá o nome da rede e a senha e poderá alterá-los.",
+	"network.wifiMode.confirm.switchTo": "Mudar para {mode}",
+	"hotspotConfirm.firstTimeTitle": "Configure seu ponto de acesso",
+	"hotspotConfirm.firstTimeBody": "Este rádio nunca criou um ponto de acesso. Mantenha o nome e a senha sugeridos ou escolha os seus."
 }

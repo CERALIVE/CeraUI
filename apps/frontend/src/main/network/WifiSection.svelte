@@ -292,7 +292,11 @@ $effect(() => {
 								<SlidersHorizontal aria-hidden="true" class="size-3.5 shrink-0" />
 								{m["network.wifiMode.open"]()}
 							</Popover.Trigger>
-							<Popover.Content align="end" class="w-80" data-testid="wifi-mode-popover-{id}">
+							<Popover.Content
+								align="end"
+								class="max-h-[var(--bits-popover-content-available-height)] w-80 overflow-y-auto"
+								data-testid="wifi-mode-popover-{id}"
+							>
 								<Popover.Header>
 									<Popover.Title>{m["network.wifiMode.label"]()}</Popover.Title>
 								</Popover.Header>
