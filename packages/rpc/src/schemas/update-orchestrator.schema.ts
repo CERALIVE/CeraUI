@@ -130,6 +130,19 @@ export const updateOrchestratorPersistedStateSchema = z
 			.optional(),
 		osStageRecovery: osStageRecoverySchema.optional(),
 		osStageDiscoveryRetryAt: z.number().optional(),
+		kernelAttempt: z
+			.object({
+				id: z.uuid(),
+				package: z.string().regex(/^linux-image-[0-9]+\.[0-9]+\.[0-9]+-ceralive-rk3588$/),
+				version: z.string().regex(/^[0-9]+\.[0-9]+\.[0-9]+-ceralive[1-9][0-9]*$/),
+				deb_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+				deb: z
+					.string()
+					.regex(/^\/[A-Za-z0-9_./+-]+\.deb$/)
+					.nullable(),
+			})
+			.strict()
+			.optional(),
 	})
 	.strict()
 	.superRefine((state, ctx) => {

@@ -1,0 +1,16 @@
+{
+	"schema": 1,
+	"attempt": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+	"package": "linux-image-7.2.0-ceralive-rk3588",
+	"version": "7.2.0-ceralive2",
+	"deb_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	"target_slot": "B",
+	"booted_slot_at_stage": "A",
+	"boot_id_at_activation": null,
+	"state": "failed",
+	"reason": "kernel_staging_failed",
+	"timestamps": {
+		"staging": "2026-10-20T00:00:00Z",
+		"failed": "2026-10-20T00:00:05Z"
+	}
+}

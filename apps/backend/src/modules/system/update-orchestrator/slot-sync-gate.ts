@@ -128,6 +128,15 @@ export function slotSyncGate(input: SlotSyncGateInput): SlotSyncGate {
 		)
 	)
 		return { allowed: false, reason: "os-install-pending" };
+	if (
+		[
+			"kernel-downloading",
+			"kernel-staging",
+			"kernel-staged",
+			"kernel-verifying",
+		].includes(input.phase)
+	)
+		return { allowed: false, reason: "update-busy" };
 	if (input.phase === "syncing")
 		return { allowed: false, reason: "already-syncing" };
 	if (

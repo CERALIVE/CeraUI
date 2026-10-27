@@ -28,7 +28,11 @@ import { getLastTransportSelection } from "../update-transport/last-selection.ts
 import { credentialDetails } from "./credential-notice-observer.ts";
 import { readStagedReceipt } from "./os-agent.ts";
 import { readBootedOsReleaseVersion } from "./os-manifest.ts";
-import { getOrchestratorState, getOsUpdateSummary } from "./runtime.ts";
+import {
+	getKernelUpdateSummary,
+	getOrchestratorState,
+	getOsUpdateSummary,
+} from "./runtime.ts";
 import { type RootSlotStatus, readBothSlotStatus } from "./slot-status.ts";
 import type { OrchestratorPhase, OrchestratorState } from "./types.ts";
 
@@ -49,6 +53,7 @@ export type UpdateDetailsDeps = {
 	readonly osSummary: typeof getOsUpdateSummary;
 	readonly lastTransport: typeof getLastTransportSelection;
 	readonly credentials?: typeof credentialDetails;
+	readonly kernelSummary?: typeof getKernelUpdateSummary;
 };
 
 export const defaultUpdateDetailsDeps: UpdateDetailsDeps = {
@@ -60,6 +65,7 @@ export const defaultUpdateDetailsDeps: UpdateDetailsDeps = {
 	osSummary: getOsUpdateSummary,
 	lastTransport: getLastTransportSelection,
 	credentials: credentialDetails,
+	kernelSummary: getKernelUpdateSummary,
 };
 
 async function settle<T>(
@@ -100,12 +106,17 @@ export async function readUpdateDetails(
 			: Promise.resolve(undefined),
 	]);
 	const os = deps.osSummary();
+	const kernel =
+		capabilities?.features.includes("kernel-apt-stage") && deps.kernelSummary
+			? await settle("kernel", deps.kernelSummary)
+			: undefined;
 	const clock = (c: OrchestratorState["packageCheck"]) => ({
 		lastAttemptAt: c.lastAttemptAt,
 		lastSuccessAt: c.lastSuccessAt,
 		nextAttemptAt: c.nextAttemptAt,
 	});
 	return {
+		...(kernel ? { kernel } : {}),
 		slots: slots ? slots.map((slot) => ({ ...slot })) : null,
 		os: {
 			bootedVersion: bootedVersion ?? null,

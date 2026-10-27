@@ -79,7 +79,7 @@ Boot wiring: `apps/backend/src/main.ts`. Recovery contract:
 
 ## Capability gating: legacy images and capable images
 
-### Kernel contract [PARTIAL -- shared contracts only]
+### Kernel contract [PARTIAL -- backend host proof]
 
 `kernel-apt-stage` is a recognized image feature. `hasKernelAptStage()` requires
 capable mode and that feature; absent declarations and valid legacy files stay
@@ -96,10 +96,72 @@ D8 allows stream starts in every kernel phase: downloading requests
 `none`. Every phase belongs to exactly one explicit D8 bucket. Power/reset and
 service restart actions refuse during kernel downloading or staging, through
 the same shared disruptive-action gate as OS staging. Startup preserves these
-states; open kernel phases withhold OS receipt retirement. This declares the
-contract only: kernel discovery, effects, reconciliation and the kernel update
-item/controls remain unbuilt. Phase labels exist in all ten locales solely for
-shared-contract compatibility with the frontend's exhaustive label table.
+states; open kernel phases withhold OS receipt retirement. The backend now
+implements discovery, guarded staging and state-file reconciliation. Phase labels
+exist in all ten locales; the kernel item and controls remain a separate UI task.
+
+`kernel-packages.ts` reads `apt-get indextargets` with only
+`/etc/apt/sources.list.d/ceralive.sources`, requires authenticated CeraLive
+Release identity and the exact HTTPS origin, then reads the existing Packages
+file through `apt-helper cat-file`. It records Package, Version, Filename,
+SHA256 and Size. Selection uses dpkg version order across package-name changes,
+ignores the freeze-selected 1001 candidate and skips quarantined package/version
+pairs. The running kernel's preferences and holds, and apt-all's held set, are
+not changed.
+
+Downloads run as the declared APT UID, with SourceList restricted to that same
+file and SourceParts disabled. Size, SHA256 and package control identity must
+all match before staging; foreign bytes yield `kernel_origin_mismatch`.
+The exact attempt and downloaded path are persisted before `systemd-run`
+creates `ceralive-kernel-stage-<UUID>.service`. Its exec command is
+`/usr/bin/flock -n -E 75 -x /run/lock/ceralive-update.lock
+/usr/lib/ceralive/ceralive-kernel-stage --attempt <UUID> --deb <path>
+--package <name> --version <version> --sha256 <digest>`. Submission is bounded
+at 10 seconds; the writer has `RuntimeMaxSec=1800`; download is bounded at
+300 seconds. CeraUI owns the only update-lock acquisition. OS staging, kernel
+staging and slot-sync exclude each other. D8 cancels the download only and
+continues an already-local stage.
+
+`kernel-state.json`, `kernel-quarantine.json` and `slot-overlay-A.json` /
+`slot-overlay-B.json` live in `/data/ceralive/update-state`. Startup observes
+an exact matching transient unit and the device records rather than rerunning
+an installer. Interrupted `staging` without a live writer stays closed until
+the device's recovery invalidates the target and records failure. Successful
+verification requires the expected booted package/version, target slot and a
+matching confirmed overlay, not equality of the unchanged OS version. Rollback
+uses the producer's terminal record and the original booted slot. Terminal
+acknowledgement retains every field and changes only `acknowledged`; it never
+deletes overlay or quarantine evidence. Other updates resume after settlement.
+Staged kernels use the OS lane's seven-day idle activation escalation.
+
+Both installed-image roles consult their overlay before retained RAUC bundle
+identity. Invalid or inconsistent pending records yield unknown (`null`);
+pending/confirmed records carry base byte identity plus `kernelOverlay`.
+Acknowledgement and backend restart cannot restore the retained plain bundle.
+Only verified mirror record replacement or a successful full RAUC install
+clears that invalidation.
+
+An OS stage verifies `releases/<board>/<OS-version>/kernel.json` and `.sig`
+with the channel signer's existing CMS key/issuer policy. A lower kernel
+refuses `os_kernel_downgrade`. Missing/invalid sidecars with a booted overlay
+refuse `os_kernel_identity_unknown`; without an overlay, legacy behavior stays.
+The strict channel manifest schema is unchanged. Optional `kernel` details
+provide booted/candidate identity and device outcome; `installUpdatesNow`
+accepts `{scope: "kernel"}` separately from the existing package scope.
+
+Producer interface encodings used here: slot fields are A/B bootnames;
+`timestamps` maps only state names to UTC ISO timestamps ending in `Z`.
+From `staged` through activation and its success/rollback outcome, the retained
+`timestamps.staged` is required and anchors escalation; later state timestamps
+never reset that clock. Legacy `started_at`/`updated_at` keys refuse rather than
+silently disabling escalation. Staging failures may have no staged timestamp.
+Reasons are null or machine tokens; invalid overlays require a token.
+Other encodings:
+the signed sidecar is `{schema:1,board,os_version,kernel:{package,version,deb_sha256}}`;
+overlay `base_bundle_identity` uses the existing
+`{slot,bundleHash,checksum,installedAt,installedCount}` RAUC byte identity.
+These encodings require producer conformance; host fixtures are not
+physical installation, rollback, power-loss or both-board qualification.
 
 ### Image declaration
 

@@ -73,6 +73,7 @@ export interface OrchestratorState {
 	// Absent unless an OS candidate's staging has been attempted.
 	readonly osStageRecovery?: OsStageRecovery;
 	readonly osStageDiscoveryRetryAt?: UpdateOrchestratorPersistedState["osStageDiscoveryRetryAt"];
+	readonly kernelAttempt?: UpdateOrchestratorPersistedState["kernelAttempt"];
 }
 
 export function initialOrchestratorState(now: number): OrchestratorState {

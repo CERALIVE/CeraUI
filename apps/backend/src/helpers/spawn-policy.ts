@@ -116,6 +116,47 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 	...(
 		[
 			[
+				"kernel.packages",
+				"kernel-packages.ts",
+				"readAuthenticatedKernelPackages / readBootedKernel / kernelVersionGreater / verifyKernelDownload",
+				"[apt-get indextargets, apt-helper cat-file, uname, dpkg-query, dpkg --compare-versions, dpkg-deb --field]",
+				"bounded-probe",
+			],
+			[
+				"kernel.download",
+				"kernel-packages.ts",
+				"downloadKernelPackage",
+				"[setpriv, declared apt UID, env --chdir, apt-get, CeraLive-only source options, download, package=version]",
+				"bounded-command",
+			],
+			[
+				"kernel.stage",
+				"kernel-stage-job.ts",
+				"launchKernelStage / inspectKernelStage / armKernelActivation",
+				"[systemd-run, flock -n -E 75 -x shared-update-lock, kernel stager] / [systemctl show|start]",
+				"bounded-command",
+			],
+		] as const
+	).map(([id, file, symbol, command, kind]) => ({
+		id,
+		file: `modules/system/update-orchestrator/${file}`,
+		symbol,
+		command,
+		class: kind,
+		status: "enforced" as const,
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		mechanism:
+			"Probes are bounded at 2-10 seconds; APT download at 300 seconds with cancellation; PID-1 submission at 10 seconds and stager RuntimeMaxSec=1800. Submission alone never proves stage success.",
+	})),
+	...(
+		[
+			[
 				"osStage.guardSubmit",
 				"acquire",
 				"[systemd-run, fixed exec service properties, /usr/bin/flock, -n, -E, 75, -x, shared-update-lock, fixed guardian helper, attempt UUID]",

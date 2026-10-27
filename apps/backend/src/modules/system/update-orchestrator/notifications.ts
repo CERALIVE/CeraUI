@@ -63,6 +63,14 @@ export type UpdateNotice =
 			readonly reasons: readonly string[];
 	  }
 	| {
+			readonly kind:
+				| "kernel-staged"
+				| "kernel-succeeded"
+				| "kernel-rolled-back";
+			readonly id: string;
+			readonly version: string;
+	  }
+	| {
 			readonly kind: OsStageNoticeKind;
 			readonly id: string;
 			readonly version: string;
@@ -76,6 +84,15 @@ export const OS_STAGE_NOTICE_KINDS = [
 export type OsStageNoticeKind = (typeof OS_STAGE_NOTICE_KINDS)[number];
 
 const notices = {
+	"kernel-staged": { key: "settings.updates.phase.kernelStaged", tone: "info" },
+	"kernel-succeeded": {
+		key: "settings.updates.phase.kernelSucceeded",
+		tone: "success",
+	},
+	"kernel-rolled-back": {
+		key: "settings.updates.phase.kernelRolledBack",
+		tone: "error",
+	},
 	"packages-recovered": {
 		key: "notifications.updatePackagesRecovered",
 		tone: "info",
@@ -165,6 +182,9 @@ export function notifyUpdate(
 			params.reason = event.reason;
 			break;
 		case "os-staged":
+		case "kernel-staged":
+		case "kernel-succeeded":
+		case "kernel-rolled-back":
 		case "os-activation-requested":
 		case "os-activated":
 		case "os-rollback":

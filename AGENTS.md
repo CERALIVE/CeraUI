@@ -72,6 +72,7 @@ bun run test:release-package-contracts
 | THE BT MICROPHONE IS A SOURCE, NOT A SPECIAL CASE / ANTI-PATTERNS | [Contract 35](docs/agents/the-bt-microphone-is-a-source-not-a-special-case.md); [Contract 36](docs/agents/anti-patterns.md) |
 | UVC package identity | [Contract 37](docs/agents/uvc-package-identity.md) |
 | Device updates, D8 admission and known gaps | [Update-system contract](docs/agents/the-device-update-system.md) |
+| Kernel discovery, guarded staging, state/overlay and OS kernel floor | [Kernel backend contract](docs/DEVICE-UPDATES.md#kernel-contract-partial----backend-host-proof) |
 
 ## HARD RULES
 

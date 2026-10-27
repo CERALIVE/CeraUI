@@ -111,8 +111,19 @@ for (const phase of ORCHESTRATOR_PHASES) {
 				? "idle"
 				: phase === "committing"
 					? "failed"
-					: phase;
+					: [
+								"kernel-downloading",
+								"kernel-staging",
+								"kernel-staged",
+								"kernel-verifying",
+							].includes(phase)
+						? "kernel-failed"
+						: phase.startsWith("kernel-")
+							? "idle"
+							: phase;
 		expect(getOrchestratorState().phase).toBe(expected);
+		if (expected === "kernel-failed")
+			expect(getOrchestratorState().failureReason).toBe("kernel_interrupted");
 		if (phase === "failed" || phase === "quarantined")
 			expect(getOrchestratorState().failureReason).toBe("terminal");
 	});

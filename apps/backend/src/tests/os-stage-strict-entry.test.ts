@@ -197,6 +197,8 @@ test("real job refuses an expired replacement pointer after entry admission befo
 		}),
 		booted: async () => "2026.10.50",
 		compare: async (left, right) => left > right,
+		// The separate kernel sidecar suite owns this newly added admission step.
+		admitKernel: async () => {},
 		runJob: (manifest, control, deps) => {
 			io.expire();
 			return runOsStageJob(manifest, control, {
