@@ -17,7 +17,7 @@
  * Controls covered (each previously silent — no reason where one already exists,
  * e.g. PowerDialog / Encoder / Transport are intentionally untouched):
  *   • WiFi scan button         — "Scanning in progress" while a scan is pending.
- *   • Hotspot start/stop        — "Enter a valid name and password…" when invalid.
+ *   • Hotspot start             — never form-gated; opens the credential gate (#413).
  *   • Audio codec select        — "Select an audio source first" with no source.
  *   • Stream start button       — reuses the existing cannot-start copy.
  *   • WiFi list                 — distinct "Searching for networks…" vs empty.
@@ -156,8 +156,11 @@ test.describe('disabled-reason hints + loading/empty distinction (T15)', () => {
 		await expect(codec).toHaveAttribute('title', 'Select an audio source first');
 	});
 
-	// ── A1. Hotspot start/stop — disabled reason when the form is invalid ───────
-	test('Hotspot toggle: disabled with an invalid form carries the "enter name/password" reason', async ({
+	// ── A1. Hotspot start — never blocked by a form it does not use (#413) ──────
+	// The start used to be gated on a name/password form whose values it then
+	// ignored. With the hotspot off there is no form: Enable carries no disabled
+	// reason and opens the credential gate, which is the only way forward.
+	test('Hotspot toggle: enabled while off and opens the credential gate instead of starting', async ({
 		page,
 	}) => {
 		await page.goto('/');
@@ -168,16 +171,15 @@ test.describe('disabled-reason hints + loading/empty distinction (T15)', () => {
 		const dialog = page.getByRole('dialog', { name: 'Configure Hotspot' });
 		await expect(dialog).toBeVisible();
 
-		// Force the form invalid deterministically (independent of any mock seed).
-		await page.locator('#hotspot-name').fill('');
-		await page.locator('#hotspot-password').fill('');
+		await expect(dialog.locator('#hotspot-name')).toHaveCount(0);
 
 		const toggle = dialog.getByRole('button', { name: 'Enable Hotspot', exact: true });
-		await expect(toggle).toBeDisabled();
-		await expect(toggle).toHaveAttribute(
-			'title',
-			'Enter a valid name and password to start the hotspot',
-		);
+		await expect(toggle).toBeEnabled();
+		await expect(toggle).not.toHaveAttribute('title', /.+/);
+		await toggle.click();
+		await expect(dialog.getByTestId('hotspot-activation-confirm')).toBeVisible();
+		// One action row at a time: the footer start stands down while the gate is open.
+		await expect(toggle).toHaveCount(0);
 	});
 
 	// ── A3. Stream start — disabled reason when the source is unusable ──────────

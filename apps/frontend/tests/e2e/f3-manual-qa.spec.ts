@@ -154,16 +154,17 @@ test.describe('F3 manual QA — modem toggles, hotspot gate, staleness', () => {
 		await trigger.scrollIntoViewIfNeeded();
 		await trigger.click();
 
-		// The confirm must appear (the gate) and name the consequence…
-		const confirm = page.getByTestId(`wifi-mode-confirm-${device}`);
+		// The gate must appear (#413: the credential confirm, which also names the
+		// uplink consequence)…
+		const confirm = page.getByTestId('hotspot-activation-confirm');
 		await expect(confirm).toBeVisible();
-		await expect(confirm).toHaveAttribute('data-consequence', 'drops-uplink');
-		await expect(confirm).toHaveAttribute('data-target', 'hotspot');
+		await expect(confirm).toHaveAttribute('data-device', device as string);
+		await expect(confirm).toContainText(/bond/i);
 		// …and NO RPC may have fired yet.
 		expect(hotspotStartCount(), 'no setAdapterMode RPC before confirm').toBe(0);
 
 		// Cancel → confirm closes, still no RPC, station mode intact.
-		await page.getByTestId(`wifi-mode-confirm-cancel-${device}`).click();
+		await page.getByTestId('hotspot-confirm-cancel').click();
 		await expect(confirm).toBeHidden();
 		expect(hotspotStartCount(), 'Cancel fires no setAdapterMode RPC').toBe(0);
 		await expect(selector).toHaveAttribute('data-mode', 'station');

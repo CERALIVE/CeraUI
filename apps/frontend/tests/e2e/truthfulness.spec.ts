@@ -2460,15 +2460,17 @@ test.describe("Capability truthfulness (functional)", () => {
 
 		// Exclusive hotspot drops the WiFi uplink, so it arms a confirm that NAMES
 		// the consequence — and dispatches nothing until it is accepted.
+		// #413: that confirm is the credential gate, which states the consequence
+		// beside the name/password the AP will broadcast.
 		await modeRung(page, "hotspot").click();
-		const confirm = page.getByTestId("wifi-mode-confirm-0");
+		const confirm = page.getByTestId("hotspot-activation-confirm");
 		await expect(confirm).toBeVisible();
-		await expect(confirm).toHaveAttribute("data-consequence", "drops-uplink");
+		await expect(confirm).toHaveAttribute("data-device", "0");
 		await expect(confirm).toContainText(/bond/i);
 		expect(setAdapterModeCalls).toHaveLength(0);
 
 		// Cancelling leaves the PRIOR mode selected — nothing moved.
-		await page.getByTestId("wifi-mode-confirm-cancel-0").click();
+		await page.getByTestId("hotspot-confirm-cancel").click();
 		await expect(confirm).toHaveCount(0);
 		expect(setAdapterModeCalls).toHaveLength(0);
 		await expect(selector).toHaveAttribute("data-mode", "station");
@@ -2476,7 +2478,10 @@ test.describe("Capability truthfulness (functional)", () => {
 		// Confirming dispatches. The RPC reply alone is only "admitted", so the
 		// control STAYS on the prior mode and shows the pending line instead.
 		await modeRung(page, "hotspot").click();
-		await page.getByTestId("wifi-mode-confirm-apply-0").click();
+		const ready = page.locator('[data-testid="hotspot-activation-confirm"][data-phase="ready"]');
+		await expect(ready).toBeVisible();
+		await ready.getByRole("checkbox").click();
+		await page.getByTestId("hotspot-confirm-activate").click();
 		await expect
 			.poll(() => setAdapterModeCalls.length, { timeout: 10_000 })
 			.toBe(1);

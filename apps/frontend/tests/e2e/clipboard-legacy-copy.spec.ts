@@ -62,10 +62,13 @@ test.describe('Clipboard legacy execCommand copy — focus-trap regression', () 
 		const network = new NetworkPage(page);
 		await network.open();
 		await network.openHotspot();
+		// #413: the copy buttons an operator uses before a start live in the
+		// credential gate, inside the same focus-trapped dialog.
+		await network.openHotspotGate();
 
 		const dialog = page.getByRole('dialog', { name: HOTSPOT_DIALOG });
-		await dialog.locator('#hotspot-name').fill(TEST_SSID);
-		await dialog.locator('#hotspot-password').fill(TEST_PASSWORD);
+		await dialog.getByTestId('hotspot-confirm-name').fill(TEST_SSID);
+		await dialog.getByTestId('hotspot-confirm-password').fill(TEST_PASSWORD);
 
 		// Click Copy password — the button lives inside the dialog's focus trap.
 		await dialog.getByRole('button', { name: 'Copy password' }).click();

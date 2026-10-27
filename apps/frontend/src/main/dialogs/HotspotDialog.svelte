@@ -190,11 +190,7 @@ const isFormValid = $derived(nameValid && passwordValid);
 // Reason surfaced on the start/stop control while it is disabled, so the operator
 // is never left guessing (busy op vs an incomplete form).
 const toggleDisabledReason = $derived(
-	toggling
-		? m["hotspotConfigurator.toggleReason.busy"]()
-		: isActive && !isFormValid
-			? m["hotspotConfigurator.toggleReason.formInvalid"]()
-			: undefined,
+	toggling ? m["hotspotConfigurator.toggleReason.busy"]() : undefined,
 );
 
 const nameError = $derived(

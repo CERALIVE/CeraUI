@@ -65,6 +65,26 @@ export class NetworkPage {
 		);
 	}
 
+	/**
+	 * #413: Enable Hotspot opens the credential gate instead of starting. Resolves
+	 * once the gate shows the device's own credentials.
+	 */
+	async openHotspotGate(): Promise<void> {
+		const dialog = this.page.getByRole('dialog', { name: 'Configure Hotspot' });
+		await dialog.getByRole('button', { name: 'Enable Hotspot', exact: true }).click();
+		await expect(
+			this.page.locator('[data-testid="hotspot-activation-confirm"][data-phase="ready"]'),
+		).toBeVisible();
+	}
+
+	/** Acknowledge the gate's credentials and start; waits for the live AP's form. */
+	async startHotspotThroughGate(): Promise<void> {
+		await this.openHotspotGate();
+		await this.page.getByTestId('hotspot-activation-confirm').getByRole('checkbox').click();
+		await this.page.getByTestId('hotspot-confirm-activate').click();
+		await expect(this.page.locator('#hotspot-password')).toBeVisible({ timeout: 15_000 });
+	}
+
 	async closeHotspot(): Promise<void> {
 		// HotspotDialog has BOTH a header X (aria-label "Close") and a footer
 		// text "Close" button, so the shared closeDialog fallback is ambiguous.

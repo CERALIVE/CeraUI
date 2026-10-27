@@ -15,6 +15,10 @@ import { NetworkPage } from './pages/network.js';
  *   - The SSID (name) and password copy buttons write the current field value
  *     to the clipboard and surface a confirmation toast.
  *
+ * #413: the reveal toggle belongs to the LIVE AP's edit form, so that test
+ * starts the hotspot through the credential gate first; the copy test drives
+ * the gate's own fields, which is where an operator copies them before a start.
+ *
  * Scoped to the desktop/chromium project so the evidence files are written once.
  * Clipboard reads require an explicit permission grant on the browser context.
  */
@@ -34,6 +38,7 @@ test.describe('Hotspot credentials — reveal toggle + copy', () => {
 		const network = new NetworkPage(page);
 		await network.open();
 		await network.openHotspot();
+		await network.startHotspotThroughGate();
 
 		const dialog = page.getByRole('dialog', { name: HOTSPOT_DIALOG });
 		const passwordInput = dialog.locator('#hotspot-password');
@@ -96,12 +101,13 @@ test.describe('Hotspot credentials — reveal toggle + copy', () => {
 		const network = new NetworkPage(page);
 		await network.open();
 		await network.openHotspot();
+		await network.openHotspotGate();
 
 		const dialog = page.getByRole('dialog', { name: HOTSPOT_DIALOG });
 
 		// Type deterministic credentials so the copy targets known values.
-		const nameInput = dialog.locator('#hotspot-name');
-		const passwordInput = dialog.locator('#hotspot-password');
+		const nameInput = dialog.getByTestId('hotspot-confirm-name');
+		const passwordInput = dialog.getByTestId('hotspot-confirm-password');
 		await nameInput.fill(TEST_SSID);
 		await passwordInput.fill(TEST_PASSWORD);
 
