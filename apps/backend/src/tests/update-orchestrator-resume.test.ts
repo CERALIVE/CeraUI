@@ -208,7 +208,7 @@ describe("resume — full-boot proof: dpkg is invoked at most once across a simu
 });
 
 describe("resume — phase enumeration completeness lock", () => {
-	test("the ORCHESTRATOR_PHASES list used by this suite has exactly 18 members, matching the plan", () => {
+	test("the ORCHESTRATOR_PHASES list used by this suite has exactly 25 members, including the kernel lane", () => {
 		const expected: OrchestratorPhase[] = [
 			"idle",
 			"checking",
@@ -223,6 +223,13 @@ describe("resume — phase enumeration completeness lock", () => {
 			"os-staged",
 			"os-activation-armed",
 			"os-verifying",
+			"kernel-downloading",
+			"kernel-staging",
+			"kernel-staged",
+			"kernel-verifying",
+			"kernel-succeeded",
+			"kernel-rolled-back",
+			"kernel-failed",
 			"sync-eligible",
 			"syncing",
 			"synced",
@@ -230,7 +237,7 @@ describe("resume — phase enumeration completeness lock", () => {
 			"failed",
 		];
 		expect([...ORCHESTRATOR_PHASES].sort()).toEqual([...expected].sort());
-		expect(ORCHESTRATOR_PHASES).toHaveLength(18);
+		expect(ORCHESTRATOR_PHASES).toHaveLength(25);
 	});
 });
 

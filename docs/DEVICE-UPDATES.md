@@ -79,6 +79,30 @@ Boot wiring: `apps/backend/src/main.ts`. Recovery contract:
 
 ## Capability gating: legacy images and capable images
 
+### Kernel contract [PARTIAL -- shared contracts only]
+
+`kernel-apt-stage` is a recognized image feature. `hasKernelAptStage()` requires
+capable mode and that feature; absent declarations and valid legacy files stay
+legacy, and unknown feature tokens still refuse with `discovery_failed`.
+The shared RPC/persistence phase vocabulary includes `kernel-downloading`,
+`kernel-staging`, `kernel-staged`, `kernel-verifying`, and terminal outcomes
+`kernel-succeeded`, `kernel-rolled-back`, `kernel-failed`. Failure reasons use
+the named `KernelUpdateFailureReason` vocabulary, carried by the existing
+`failureReason` / `failure_reason` fields. Existing phase values and the strict
+OS manifest are unchanged.
+
+D8 allows stream starts in every kernel phase: downloading requests
+`abort-network`, staging uses `continue-local`, and the remaining phases use
+`none`. Every phase belongs to exactly one explicit D8 bucket. Power/reset and
+service restart actions refuse during kernel downloading or staging, through
+the same shared disruptive-action gate as OS staging. Startup preserves these
+states; open kernel phases withhold OS receipt retirement. This declares the
+contract only: kernel discovery, effects, reconciliation and the kernel update
+item/controls remain unbuilt. Phase labels exist in all ten locales solely for
+shared-contract compatibility with the frontend's exhaustive label table.
+
+### Image declaration
+
 What the device may do is decided by the image, not by CeraUI.
 `readUpdateCapabilities()` reads `/usr/lib/ceralive/update-capabilities.json`
 (`{schema: 1, features, ota_uid, apt_uid}`, strict). The result has two modes:

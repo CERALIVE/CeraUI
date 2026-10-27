@@ -27,6 +27,13 @@ export function normalizeStartupDiscovery(
 		case "os-staged":
 		case "os-activation-armed":
 		case "os-verifying":
+		case "kernel-downloading":
+		case "kernel-staging":
+		case "kernel-staged":
+		case "kernel-verifying":
+		case "kernel-succeeded":
+		case "kernel-rolled-back":
+		case "kernel-failed":
 		case "sync-eligible":
 		case "syncing":
 		case "synced":

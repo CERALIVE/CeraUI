@@ -49,3 +49,7 @@ export async function readUpdateCapabilities(
 	}
 	return { mode: "capable", features: parsed.features };
 }
+
+export function hasKernelAptStage(caps: UpdateCapabilities): boolean {
+	return caps.mode === "capable" && caps.features.includes("kernel-apt-stage");
+}

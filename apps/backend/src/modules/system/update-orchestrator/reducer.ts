@@ -137,6 +137,14 @@ export function reduceOrchestrator(
 			return reduceOsActivationArmed(state, event);
 		case "os-verifying":
 			return reduceOsVerifying(state, event);
+		case "kernel-downloading":
+		case "kernel-staging":
+		case "kernel-staged":
+		case "kernel-verifying":
+		case "kernel-succeeded":
+		case "kernel-rolled-back":
+		case "kernel-failed":
+			return state;
 		case "sync-eligible":
 			return reduceSyncEligible(state, event);
 		case "syncing":

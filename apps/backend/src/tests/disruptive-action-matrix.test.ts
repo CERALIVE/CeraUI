@@ -48,6 +48,34 @@ const updates = {
 		apply: () => setPhase("restarting-services"),
 	},
 	"os-staging": { interruptible: true, apply: () => setPhase("os-staging") },
+	"kernel-downloading": {
+		interruptible: true,
+		apply: () => setPhase("kernel-downloading"),
+	},
+	"kernel-staging": {
+		interruptible: true,
+		apply: () => setPhase("kernel-staging"),
+	},
+	"kernel-staged": {
+		interruptible: false,
+		apply: () => setPhase("kernel-staged"),
+	},
+	"kernel-verifying": {
+		interruptible: false,
+		apply: () => setPhase("kernel-verifying"),
+	},
+	"kernel-succeeded": {
+		interruptible: false,
+		apply: () => setPhase("kernel-succeeded"),
+	},
+	"kernel-rolled-back": {
+		interruptible: false,
+		apply: () => setPhase("kernel-rolled-back"),
+	},
+	"kernel-failed": {
+		interruptible: false,
+		apply: () => setPhase("kernel-failed"),
+	},
 	syncing: { interruptible: true, apply: () => setPhase("syncing") },
 	"success awaiting durability": {
 		interruptible: true,

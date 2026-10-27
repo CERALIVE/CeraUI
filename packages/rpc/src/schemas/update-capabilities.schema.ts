@@ -9,6 +9,7 @@ export const updateCapabilityFeatureSchema = z.enum([
 	'reprune-hook',
 	'apt-credentials',
 	'transport-uidrange',
+	'kernel-apt-stage',
 ]);
 
 export const updateCapabilityFileSchema = z

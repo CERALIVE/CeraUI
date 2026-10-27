@@ -3,7 +3,10 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { call } from "@orpc/server";
-import { readUpdateCapabilities } from "../modules/system/update-capabilities.ts";
+import {
+	hasKernelAptStage,
+	readUpdateCapabilities,
+} from "../modules/system/update-capabilities.ts";
 import { getUpdateCapabilitiesProcedure } from "../rpc/procedures/system.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
@@ -118,5 +121,37 @@ describe("image update capabilities", () => {
 		expect(
 			await call(getUpdateCapabilitiesProcedure, undefined, { context }),
 		).toEqual({ mode: "legacy", features: [] });
+	});
+
+	test.each([
+		{
+			features: ["apt-all-packages", "kernel-apt-stage"],
+			mode: "capable",
+			kernel: true,
+		},
+		{ features: ["apt-all-packages"], mode: "capable", kernel: false },
+		{ features: [], mode: "legacy", kernel: false },
+		{ features: ["kernel-apt-stage"], mode: "legacy", kernel: false },
+	])(
+		"kernel feature gate for $features",
+		async ({ features, mode, kernel }) => {
+			// Given a valid image declaration with only the feature set varied.
+			writeFileSync(
+				file,
+				JSON.stringify({ schema: 1, features, ota_uid: 999, apt_uid: 42 }),
+			);
+			// When the real capability reader selects the regime.
+			const caps = await readUpdateCapabilities(file);
+			// Then only a capable image with kernel staging grants the kernel lane.
+			expect(caps.mode).toBe(mode);
+			expect(hasKernelAptStage(caps)).toBe(kernel);
+		},
+	);
+
+	test("a legacy RPC declaration cannot grant kernel staging", () => {
+		// Given legacy mode even with a known token, when gated, then mode still refuses.
+		expect(
+			hasKernelAptStage({ mode: "legacy", features: ["kernel-apt-stage"] }),
+		).toBe(false);
 	});
 });

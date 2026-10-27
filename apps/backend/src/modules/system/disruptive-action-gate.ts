@@ -7,6 +7,8 @@ export type UpdateBusyReason =
 	| "committing"
 	| "restarting-services"
 	| "os-staging"
+	| "kernel-downloading"
+	| "kernel-staging"
 	| "syncing"
 	| "os-activation"
 	| "pending-success"
@@ -60,6 +62,10 @@ export function updatePhaseBusyReasons(
 			return ["restarting-services"];
 		case "os-staging":
 			return ["os-staging"];
+		case "kernel-downloading":
+			return ["kernel-downloading"];
+		case "kernel-staging":
+			return ["kernel-staging"];
 		case "syncing":
 			return ["syncing"];
 		case "idle":
@@ -71,6 +77,11 @@ export function updatePhaseBusyReasons(
 		case "os-staged":
 		case "os-activation-armed":
 		case "os-verifying":
+		case "kernel-staged":
+		case "kernel-verifying":
+		case "kernel-succeeded":
+		case "kernel-rolled-back":
+		case "kernel-failed":
 		case "sync-eligible":
 		case "synced":
 		case "quarantined":

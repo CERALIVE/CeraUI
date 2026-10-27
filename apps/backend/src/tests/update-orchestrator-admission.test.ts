@@ -10,13 +10,16 @@
 
 /**
  * Exhaustive D8 admission table (Todo 36) — the single most safety-critical
- * property this task delivers. Every one of the 18 orchestrator phases is
+ * property this task delivers. Every one of the orchestrator phases is
  * covered explicitly, not just the plan's three named examples.
  */
 
 import { describe, expect, test } from "bun:test";
 import {
+	ABORT_NETWORK_PHASES,
 	admitStreamStart,
+	CONTINUE_LOCAL_PHASES,
+	NO_ACTION_PHASES,
 	onStreamStart,
 	STREAM_REFUSING_PHASES,
 } from "../modules/system/update-orchestrator/admission.ts";
@@ -36,8 +39,8 @@ function stateAt(
 
 // The exact D8 verdict per phase, per the plan text verbatim:
 //   committing / restarting-services -> refuse
-//   downloading / os-staging -> allowed + abort-network
-//   syncing -> allowed + continue-local
+//   downloading / os-staging / kernel-downloading -> allowed + abort-network
+//   syncing / kernel-staging -> allowed + continue-local
 //   every other phase -> allowed + none
 const EXPECTED: Record<
 	OrchestratorPhase,
@@ -56,6 +59,13 @@ const EXPECTED: Record<
 	"os-staged": { allowed: true, action: "none" },
 	"os-activation-armed": { allowed: true, action: "none" },
 	"os-verifying": { allowed: true, action: "none" },
+	"kernel-downloading": { allowed: true, action: "abort-network" },
+	"kernel-staging": { allowed: true, action: "continue-local" },
+	"kernel-staged": { allowed: true, action: "none" },
+	"kernel-verifying": { allowed: true, action: "none" },
+	"kernel-succeeded": { allowed: true, action: "none" },
+	"kernel-rolled-back": { allowed: true, action: "none" },
+	"kernel-failed": { allowed: true, action: "none" },
 	"sync-eligible": { allowed: true, action: "none" },
 	syncing: { allowed: true, action: "continue-local" },
 	synced: { allowed: true, action: "none" },
@@ -64,6 +74,16 @@ const EXPECTED: Record<
 };
 
 describe("D8 admission matrix — exhaustive over every phase", () => {
+	test("every phase has exactly one explicit classification, including no-action phases", () => {
+		// Given all production buckets, when flattened, then no phase is omitted or duplicated.
+		const classified = [
+			...STREAM_REFUSING_PHASES,
+			...ABORT_NETWORK_PHASES,
+			...CONTINUE_LOCAL_PHASES,
+			...NO_ACTION_PHASES,
+		];
+		expect(classified.sort()).toEqual([...ORCHESTRATOR_PHASES].sort());
+	});
 	// Sanity: the fixture table itself must cover every phase the reducer
 	// knows about, or this suite silently stops being exhaustive the moment a
 	// new phase is added to ORCHESTRATOR_PHASES.
@@ -109,9 +129,8 @@ describe("D8 admission matrix — exhaustive over every phase", () => {
 	});
 
 	test("STREAM_REFUSING_PHASES is exactly {committing, restarting-services} — no more, no less", () => {
-		expect([...STREAM_REFUSING_PHASES].sort()).toEqual(
-			["committing", "restarting-services"].sort(),
-		);
+		const refusing: OrchestratorPhase[] = ["committing", "restarting-services"];
+		expect([...STREAM_REFUSING_PHASES].sort()).toEqual(refusing.sort());
 	});
 
 	test("every refusing phase is refused and every non-refusing phase is allowed (cross-check against EXPECTED)", () => {

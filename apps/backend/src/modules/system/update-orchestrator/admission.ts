@@ -27,25 +27,49 @@ export const STREAM_REFUSING_PHASES: readonly OrchestratorPhase[] = [
 	"restarting-services",
 ];
 
-const ABORT_NETWORK_PHASES: readonly OrchestratorPhase[] = [
+export const ABORT_NETWORK_PHASES: readonly OrchestratorPhase[] = [
 	"downloading",
 	"os-staging",
+	"kernel-downloading",
 ];
 
-const CONTINUE_LOCAL_PHASES: readonly OrchestratorPhase[] = ["syncing"];
+export const CONTINUE_LOCAL_PHASES: readonly OrchestratorPhase[] = [
+	"syncing",
+	"kernel-staging",
+];
 
-// This checks overlapping buckets, not missing classifications. An unlisted
-// phase defaults to allowed/action "none"; classify new phases deliberately.
+export const NO_ACTION_PHASES: readonly OrchestratorPhase[] = [
+	"idle",
+	"checking",
+	"available",
+	"awaiting-idle",
+	"settled",
+	"os-available",
+	"os-staged",
+	"os-activation-armed",
+	"os-verifying",
+	"kernel-staged",
+	"kernel-verifying",
+	"kernel-succeeded",
+	"kernel-rolled-back",
+	"kernel-failed",
+	"sync-eligible",
+	"synced",
+	"quarantined",
+	"failed",
+];
+
 function assertExhaustivePhaseClassification(): void {
 	for (const phase of ORCHESTRATOR_PHASES) {
 		const buckets = [
 			STREAM_REFUSING_PHASES.includes(phase),
 			ABORT_NETWORK_PHASES.includes(phase),
 			CONTINUE_LOCAL_PHASES.includes(phase),
+			NO_ACTION_PHASES.includes(phase),
 		].filter(Boolean).length;
-		if (buckets > 1) {
+		if (buckets !== 1) {
 			throw new Error(
-				`update-orchestrator admission: phase "${phase}" is classified into more than one D8 bucket`,
+				`update-orchestrator admission: phase "${phase}" must be classified into exactly one D8 bucket (got ${buckets})`,
 			);
 		}
 	}
