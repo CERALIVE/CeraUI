@@ -2646,5 +2646,20 @@
 	"settings.updates.cellular.pendingBodyMetered": "従量制でないと確認できている接続はありません。{version} をダウンロードすると、従量制またはコスト不明の接続で約 {size} を転送します。",
 	"settings.updates.layer.withheldBand": "このアップデートには含まれません",
 	"settings.updates.credentials.unusableTitle": "デバイスのアップデート証明書を使用できませんでした",
-	"general.updateReasonStreamingUnconfirmed": "配信中、または配信の状態が未確認です。更新をインストールする前に「停止」を押して、配信が停止したことを確認してください。"
+	"general.updateReasonStreamingUnconfirmed": "配信中、または配信の状態が未確認です。更新をインストールする前に「停止」を押して、配信が停止したことを確認してください。",
+	"hotspotConfirm.title": "オンにする前にこの情報を保存してください",
+	"hotspotConfirm.body": "デバイスが現在の Wi-Fi 接続を失う可能性があります。その Wi-Fi 経由で CeraLive に接続している場合、再接続にはこの名前とパスワードが必要です。",
+	"hotspotConfirm.bodyKeepsStation": "スマートフォンやノート PC はこの名前とパスワードで接続します。安全な場所に保管してください。",
+	"hotspotConfirm.loading": "ホットスポットの情報を取得しています…",
+	"hotspotConfirm.loadFailed": "ホットスポットの情報を読み取れなかったため、オフのままです。",
+	"hotspotConfirm.retry": "再試行",
+	"hotspotConfirm.generate": "新しいランダムパスワード",
+	"hotspotConfirm.acknowledge": "名前とパスワードを保存しました。現在の接続が切断される可能性があることを理解しています。",
+	"hotspotConfirm.activate": "ホットスポットをオンにする",
+	"hotspotConfirm.saveFailed": "新しい名前とパスワードを保存できませんでした。何も変更されず、ホットスポットはオフのままです。",
+	"hotspotConfirm.passwordCharacters": "標準の英字・数字・記号のみを使用してください（アクセント記号や絵文字は不可）。",
+	"hotspotConfirm.inactiveHint": "ホットスポットをオンにするときに、ネットワーク名とパスワードが表示され、変更できます。",
+	"network.wifiMode.confirm.switchTo": "{mode} に切り替える",
+	"hotspotConfirm.firstTimeTitle": "ホットスポットを設定",
+	"hotspotConfirm.firstTimeBody": "この無線ではまだホットスポットを使ったことがありません。提案された名前とパスワードをそのまま使うか、独自に設定してください。"
 }

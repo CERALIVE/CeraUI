@@ -88,6 +88,179 @@ export const defaultHotspotDeps: HotspotActivationDeps = {
 	},
 };
 
+// ─── identity (resolved and persisted BEFORE any activation) ─────────────────
+
+/** The credentials the next start of an adapter will broadcast. */
+export type HotspotIdentity = {
+	conn?: string;
+	name: string;
+	password: string;
+};
+
+function rememberIdentity(
+	macAddress: string,
+	wifiInterface: WifiInterfaceWithHotspot,
+	deps: HotspotActivationDeps,
+	conn?: string,
+): void {
+	const { name, password, channel } = wifiInterface.hotspot;
+	if (!name || !password) return;
+	deps.credentials.remember(macAddress, {
+		ssid: name,
+		password,
+		...(conn !== undefined ? { conn } : {}),
+		...(channel !== undefined ? { channel } : {}),
+	});
+}
+
+/*
+  The ONE resolution order, shared by the start and by the pre-activation read
+  (#413): live profile -> discovered profile -> persisted identity -> generated.
+  Discovery runs BEFORE generation so a restart (which wipes `hotspot.conn`)
+  finds the adapter's profile rather than minting an identity no phone knows.
+  A generated identity is PERSISTED here, before anything is activated, so the
+  credentials an operator was shown are the ones the AP will broadcast.
+*/
+async function resolveHotspotIdentity(
+	macAddress: string,
+	wifiInterface: WifiInterfaceWithHotspot,
+	deps: HotspotActivationDeps,
+): Promise<HotspotIdentity> {
+	const stored = deps.credentials.get(macAddress);
+	const hotspot = wifiInterface.hotspot;
+	if (!hotspot.conn || !hotspot.name || !hotspot.password) {
+		const existing = await deps.findHotspotConn(macAddress, stored);
+		if (existing) {
+			hotspot.conn = existing.uuid;
+			hotspot.name = existing.ssid;
+			hotspot.password = existing.password;
+			hotspot.channel = existing.channel;
+		}
+	}
+	if (hotspot.conn && hotspot.name && hotspot.password) {
+		return {
+			conn: hotspot.conn,
+			name: hotspot.name,
+			password: hotspot.password,
+		};
+	}
+	const ms = macAddress.split(":");
+	const name = stored?.ssid ?? `CERALIVE_${ms[4]}${ms[5]}`;
+	const password = stored?.password ?? randomBase64(9);
+	hotspot.name = name;
+	hotspot.password = password;
+	hotspot.channel ??= stored?.channel ?? "auto";
+	// A live profile whose secrets could not be read back is made to match what
+	// is about to be shown, so the display can never disagree with the AP.
+	if (hotspot.conn) {
+		await deps.nmConnSetFields(hotspot.conn, {
+			"802-11-wireless.ssid": name,
+			"802-11-wireless-security.psk": password,
+		});
+	}
+	rememberIdentity(
+		macAddress,
+		wifiInterface,
+		deps,
+		hotspot.conn ?? stored?.conn,
+	);
+	return {
+		...(hotspot.conn !== undefined ? { conn: hotspot.conn } : {}),
+		name,
+		password,
+	};
+}
+
+export type HotspotPrepareResult =
+	| { success: true; name: string; password: string; firstTime?: true }
+	| {
+			success: false;
+			error: "DEVICE_BUSY" | "no-device" | "unsupported" | "activation-failed";
+	  };
+
+/**
+ * Resolve - and, when the operator chose their own, store - the credentials the
+ * next start will broadcast, WITHOUT activating anything (#413). An adapter whose
+ * AP is already up answers with its live credentials and accepts no change here:
+ * a live AP is reconfigured through `hotspotConfigure`.
+ */
+export async function wifiHotspotPrepare(
+	msg: { device: number; name?: string; password?: string },
+	deps: HotspotActivationDeps = defaultHotspotDeps,
+): Promise<HotspotPrepareResult> {
+	const macAddress = getMacAddressForWifiInterface(msg.device);
+	if (!macAddress) return { success: false, error: "no-device" };
+	const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
+	if (!wifiInterface) return { success: false, error: "no-device" };
+	if (!canHotspot(wifiInterface))
+		return { success: false, error: "unsupported" };
+	return prepareHotspotForInterface(macAddress, wifiInterface, msg, deps);
+}
+
+/** {@link wifiHotspotPrepare} for a resolved adapter, under its adapter lock. */
+export async function prepareHotspotForInterface(
+	macAddress: string,
+	wifiInterface: WifiInterfaceWithHotspot,
+	msg: { name?: string; password?: string },
+	deps: HotspotActivationDeps = defaultHotspotDeps,
+): Promise<HotspotPrepareResult> {
+	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
+		prepareHotspotLocked(macAddress, wifiInterface, msg, deps),
+	);
+	if (!lock.success) return { success: false, error: lock.error };
+	return lock.result;
+}
+
+async function prepareHotspotLocked(
+	macAddress: string,
+	wifiInterface: WifiInterfaceWithHotspot,
+	msg: { name?: string; password?: string },
+	deps: HotspotActivationDeps,
+): Promise<HotspotPrepareResult> {
+	const identity = await resolveHotspotIdentity(
+		macAddress,
+		wifiInterface,
+		deps,
+	);
+	// No profile, and the store has never recorded one: this adapter has never
+	// hosted an AP, so the shown pair is a suggestion rather than a saved setup.
+	const firstTime =
+		!identity.conn && !deps.credentials.get(macAddress)?.conn
+			? ({ firstTime: true } as const)
+			: {};
+	const chosen =
+		msg.name !== undefined && msg.password !== undefined
+			? { name: msg.name, password: msg.password }
+			: undefined;
+	if (
+		!chosen ||
+		isHotspotActive(wifiInterface) ||
+		(chosen.name === identity.name && chosen.password === identity.password)
+	) {
+		return {
+			success: true,
+			name: identity.name,
+			password: identity.password,
+			...firstTime,
+		};
+	}
+	// The profile is written FIRST: a store that ran ahead of a refused write
+	// would show the operator credentials the AP never broadcasts.
+	if (
+		identity.conn &&
+		!(await deps.nmConnSetFields(identity.conn, {
+			"802-11-wireless.ssid": chosen.name,
+			"802-11-wireless-security.psk": chosen.password,
+		}))
+	) {
+		return { success: false, error: "activation-failed" };
+	}
+	wifiInterface.hotspot.name = chosen.name;
+	wifiInterface.hotspot.password = chosen.password;
+	rememberIdentity(macAddress, wifiInterface, deps, identity.conn);
+	return { success: true, ...chosen, ...firstTime };
+}
+
 // ─── start (atomic, NM-confirmed, with rollback) ─────────────────────────────
 
 export async function wifiHotspotStart(
@@ -216,36 +389,17 @@ async function startHotspotLocked(
 		return { success: false, error: "activation-failed" };
 	};
 
-	const stored = deps.credentials.get(macAddress);
+	const remember = (conn?: string) =>
+		rememberIdentity(macAddress, wifiInterface, deps, conn);
 
-	const remember = (conn?: string) => {
-		const { name, password, channel } = wifiInterface.hotspot;
-		if (!name || !password) return;
-		deps.credentials.remember(macAddress, {
-			ssid: name,
-			password,
-			...(conn !== undefined ? { conn } : {}),
-			...(channel !== undefined ? { channel } : {}),
-		});
-	};
-
-	/*
-	  Discovery runs BEFORE generation, and it is what makes the SSID/password
-	  stable: an adapter that has ever hosted a hotspot already owns a profile, so
-	  a restart (which wipes `hotspot.conn`) must find it rather than mint a
-	  second identity the operator's phone has never been told about.
-	*/
-	let conn = wifiInterface.hotspot.conn;
-	if (!conn) {
-		const existing = await deps.findHotspotConn(macAddress, stored);
-		if (existing) {
-			conn = existing.uuid;
-			wifiInterface.hotspot.conn = existing.uuid;
-			wifiInterface.hotspot.name = existing.ssid;
-			wifiInterface.hotspot.password = existing.password;
-			wifiInterface.hotspot.channel = existing.channel;
-		}
-	}
+	// The SAME resolution `wifiHotspotPrepare` showed the operator, so the AP
+	// broadcasts exactly the credentials they acknowledged.
+	const identity = await resolveHotspotIdentity(
+		macAddress,
+		wifiInterface,
+		deps,
+	);
+	let conn = identity.conn;
 
 	// Cleanup is best-effort, runs off the critical path, and never fails a start.
 	const prune = (keepUuid: string) => {
@@ -264,17 +418,8 @@ async function startHotspotLocked(
 		remember(conn);
 	} else {
 		// First hotspot this adapter has ever hosted, or its profile was deleted
-		// outside CeraUI — reuse the persisted identity when there is one.
-		const ms = macAddress.split(":");
-		const name = stored?.ssid ?? `CERALIVE_${ms[4]}${ms[5]}`;
-		const password = stored?.password ?? randomBase64(9);
-
-		wifiInterface.hotspot.name = name;
-		wifiInterface.hotspot.password = password;
-		wifiInterface.hotspot.channel = stored?.channel ?? "auto";
-		// Persist before activating: a start that dies mid-flight must not strand
-		// credentials the UI has already shown the operator.
-		remember(stored?.conn);
+		// outside CeraUI: the identity resolved (and already persisted) above.
+		const { name, password } = identity;
 		deps.broadcastState();
 		syncWifiStateCache(macAddress, wifiInterface);
 

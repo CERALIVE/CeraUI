@@ -28,6 +28,11 @@
      card body and passes `errorPlacement="host"` to withhold the inline copy.
      Every always-visible mount keeps the default, and exactly one of the two
      ever renders the band: one fact announced twice reads as two failures.
+
+  5. NO ACCESS POINT STARTS UNSEEN (#413). Leaving `station` for `hotspot` or
+     `hybrid` opens `HotspotActivationConfirm` instead of the consequence band:
+     it states the same disconnect risk AND the exact credentials the AP will
+     broadcast, and dispatches only after the operator acknowledges them.
 -->
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
@@ -39,6 +44,7 @@ import { osCommand } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
 import { cn } from '$lib/utils';
 
+import HotspotActivationConfirm from './HotspotActivationConfirm.svelte';
 import WifiModeErrorBand from './WifiModeErrorBand.svelte';
 import {
 	deriveWifiModeConsequence,
@@ -93,6 +99,8 @@ const GLYPH: Record<WifiAdapterMode, typeof Wifi> = {
 
 /** The mode an inline confirm is armed for. Arming dispatches nothing. */
 let armed = $state<WifiAdapterMode | undefined>(undefined);
+/** The AP mode whose credential gate is open. Opening it dispatches nothing. */
+let gated = $state<WifiAdapterMode | undefined>(undefined);
 
 const armedConsequence = $derived(
 	armed === undefined
@@ -104,6 +112,7 @@ const unavailable = $derived(view.options.filter((option) => !option.available))
 
 async function apply(mode: WifiAdapterMode) {
 	armed = undefined;
+	gated = undefined;
 	await osCommand({
 		key: wifiModeOpKey(view.device),
 		target: mode,
@@ -116,6 +125,12 @@ async function apply(mode: WifiAdapterMode) {
 
 function request(mode: WifiAdapterMode) {
 	if (mode === view.displayMode) return;
+	if (view.displayMode === 'station' && mode !== 'station') {
+		armed = undefined;
+		gated = mode;
+		return;
+	}
+	gated = undefined;
 	if (deriveWifiModeConsequence(view.displayMode, mode, context) !== undefined) {
 		armed = mode;
 		return;
@@ -214,6 +229,22 @@ function request(mode: WifiAdapterMode) {
 				mode: resolveMessageKey(wifiModeLabelKey(view.pendingTarget)),
 			})}
 		</p>
+	{/if}
+
+	{#if gated}
+		{@const gateConsequence = deriveWifiModeConsequence(view.displayMode, gated, context)}
+		<HotspotActivationConfirm
+			detail={gateConsequence
+				? resolveMessageKey(wifiModeConsequenceKeys(gateConsequence).body)
+				: undefined}
+			confirmLabel={m["network.wifiMode.confirm.switchTo"]({
+				mode: resolveMessageKey(wifiModeLabelKey(gated)),
+			})}
+			device={view.device}
+			keepsStation={gated === 'hybrid'}
+			onCancel={() => (gated = undefined)}
+			onConfirm={() => gated && apply(gated)}
+		/>
 	{/if}
 
 	{#if armed && armedConsequence}

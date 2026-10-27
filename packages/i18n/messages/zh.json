@@ -2646,5 +2646,20 @@
 	"settings.updates.cellular.pendingBodyMetered": "没有已知不按流量计费的可用连接。下载 {version} 将通过按流量计费或费用未知的连接传输约 {size}。",
 	"settings.updates.layer.withheldBand": "未包含在此更新中",
 	"settings.updates.credentials.unusableTitle": "无法使用设备的更新证书",
-	"general.updateReasonStreamingUnconfirmed": "推流正在进行，或其状态尚未确认。安装更新前，请点击“停止”以确认推流已停止。"
+	"general.updateReasonStreamingUnconfirmed": "推流正在进行，或其状态尚未确认。安装更新前，请点击“停止”以确认推流已停止。",
+	"hotspotConfirm.title": "开启前请保存这些信息",
+	"hotspotConfirm.body": "设备可能会断开当前的 Wi-Fi 连接。如果你是通过该 Wi-Fi 访问 CeraLive，需要用这个名称和密码重新连接。",
+	"hotspotConfirm.bodyKeepsStation": "手机和电脑使用此名称和密码加入。请妥善保存。",
+	"hotspotConfirm.loading": "正在获取热点信息…",
+	"hotspotConfirm.loadFailed": "无法读取热点信息，热点保持关闭。",
+	"hotspotConfirm.retry": "重试",
+	"hotspotConfirm.generate": "生成新的随机密码",
+	"hotspotConfirm.acknowledge": "我已保存名称和密码，并了解当前连接可能会断开。",
+	"hotspotConfirm.activate": "开启热点",
+	"hotspotConfirm.saveFailed": "无法保存新的名称和密码。未做任何更改，热点保持关闭。",
+	"hotspotConfirm.passwordCharacters": "只能使用标准字母、数字和符号（不含重音字符或表情符号）。",
+	"hotspotConfirm.inactiveHint": "开启热点时会显示网络名称和密码，并可在那时修改。",
+	"network.wifiMode.confirm.switchTo": "切换到 {mode}",
+	"hotspotConfirm.firstTimeTitle": "设置你的热点",
+	"hotspotConfirm.firstTimeBody": "此无线设备从未开启过热点。可以保留建议的名称和密码，也可以自行设置。"
 }

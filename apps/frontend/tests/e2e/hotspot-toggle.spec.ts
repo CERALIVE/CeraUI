@@ -100,6 +100,7 @@ function installWsHarness(token: string): void {
 	};
 
 	const HOTSPOT_PATHS = new Set([
+		"wifi.hotspotPrepare",
 		"wifi.hotspotStart",
 		"wifi.hotspotStop",
 		"wifi.hotspotConfigure",
@@ -240,7 +241,38 @@ async function openHotspotDialog(page: Page): Promise<void> {
 	await expect(dialog(page)).toBeVisible();
 }
 
-/** Fill name + password so isFormValid is true (start / save are gated on it). */
+/**
+ * #413: a start goes through the credential gate. Waits for the device's own
+ * credentials, acknowledges them and confirms.
+ */
+async function startThroughGate(page: Page): Promise<void> {
+	await dialog(page)
+		.getByRole("button", { name: "Enable Hotspot", exact: true })
+		.click();
+	const gate = page.locator(
+		'[data-testid="hotspot-activation-confirm"][data-phase="ready"]',
+	);
+	await expect(gate).toBeVisible();
+	await gate.getByRole("checkbox").click();
+	await page.getByTestId("hotspot-confirm-activate").click();
+}
+
+/**
+ * The edit form exists only for a LIVE AP (#413), so configure scenarios first
+ * inject a snapshot where the dialog's adapter is broadcasting.
+ */
+async function makeHotspotActive(page: Page): Promise<string> {
+	await awaitWifiSnapshot(page);
+	const device = await page.evaluate(() => {
+		const wifi = (window as any).__cera.lastWifi as Record<string, { supports_hotspot?: boolean }>;
+		return Object.keys(wifi).find((k) => wifi[k]?.supports_hotspot) ?? Object.keys(wifi)[0];
+	});
+	await emitHotspotActive(page, device as string);
+	await expect(page.locator("#hotspot-name")).toBeVisible();
+	return device as string;
+}
+
+/** Fill name + password so isFormValid is true (save is gated on it). */
 async function fillValidForm(page: Page): Promise<void> {
 	await page.locator("#hotspot-name").fill(FORM_NAME);
 	await page.locator("#hotspot-password").fill(FORM_PASS);
@@ -295,7 +327,6 @@ test.describe(
 			page,
 		}) => {
 			record("── hotspot start: clobber-resist + confirm ──");
-			await fillValidForm(page);
 			await armFake(page, "wifi.hotspotStart", { success: true });
 
 			const enable = dialog(page).getByRole("button", {
@@ -303,7 +334,7 @@ test.describe(
 				exact: true,
 			});
 			await expect(enable).toBeEnabled();
-			await enable.click();
+			await startThroughGate(page);
 
 			// Op pending: the toggle disables and HOLDS its "Enable Hotspot" label.
 			await expect(enable).toBeDisabled();
@@ -340,6 +371,7 @@ test.describe(
 			page,
 		}) => {
 			record("── hotspot configure: deferred success ──");
+			await makeHotspotActive(page);
 			await fillValidForm(page);
 			await armFake(page, "wifi.hotspotConfigure", { success: true });
 
@@ -377,6 +409,7 @@ test.describe(
 			page,
 		}) => {
 			record("── hotspot configure: deferred error ──");
+			await makeHotspotActive(page);
 			await fillValidForm(page);
 			await armFake(page, "wifi.hotspotConfigure", { success: true });
 

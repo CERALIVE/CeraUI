@@ -2691,5 +2691,20 @@
 	"settings.updates.cellular.pendingBodyMetered": "Es ist keine Verbindung verfügbar, die bekanntermaßen kein Datenlimit hat. Das Herunterladen von {version} überträgt etwa {size} über eine getaktete Verbindung oder eine mit unbekannten Kosten.",
 	"settings.updates.layer.withheldBand": "Nicht in diesem Update enthalten",
 	"settings.updates.credentials.unusableTitle": "Das Update-Zertifikat des Geräts konnte nicht verwendet werden",
-	"general.updateReasonStreamingUnconfirmed": "Ein Stream läuft oder sein Zustand ist unbestätigt. Drücke Stopp, um vor der Update-Installation zu bestätigen, dass der Stream beendet ist."
+	"general.updateReasonStreamingUnconfirmed": "Ein Stream läuft oder sein Zustand ist unbestätigt. Drücke Stopp, um vor der Update-Installation zu bestätigen, dass der Stream beendet ist.",
+	"hotspotConfirm.title": "Speichere diese Daten, bevor du ihn einschaltest",
+	"hotspotConfirm.body": "Das Gerät kann seine aktuelle WLAN-Verbindung verlieren. Wenn du CeraLive über dieses WLAN erreichst, brauchst du diesen Namen und dieses Passwort, um wieder hineinzukommen.",
+	"hotspotConfirm.bodyKeepsStation": "Telefone und Laptops verbinden sich mit diesem Namen und Passwort. Bewahre sie sicher auf.",
+	"hotspotConfirm.loading": "Hotspot-Daten werden abgerufen…",
+	"hotspotConfirm.loadFailed": "Die Hotspot-Daten konnten nicht gelesen werden, daher bleibt er aus.",
+	"hotspotConfirm.retry": "Erneut versuchen",
+	"hotspotConfirm.generate": "Neues Zufallspasswort",
+	"hotspotConfirm.acknowledge": "Ich habe Namen und Passwort gespeichert und verstehe, dass meine aktuelle Verbindung abbrechen kann.",
+	"hotspotConfirm.activate": "Hotspot einschalten",
+	"hotspotConfirm.saveFailed": "Der neue Name und das neue Passwort konnten nicht gespeichert werden. Nichts wurde geändert, der Hotspot bleibt aus.",
+	"hotspotConfirm.passwordCharacters": "Nur Standardbuchstaben, Ziffern und Sonderzeichen verwenden (keine Umlaute oder Emoji).",
+	"hotspotConfirm.inactiveHint": "Netzwerkname und Passwort werden beim Einschalten des Hotspots angezeigt und lassen sich dort ändern.",
+	"network.wifiMode.confirm.switchTo": "Zu {mode} wechseln",
+	"hotspotConfirm.firstTimeTitle": "Richte deinen Hotspot ein",
+	"hotspotConfirm.firstTimeBody": "Dieses Funkmodul hatte noch nie einen Hotspot. Behalte den vorgeschlagenen Namen und das Passwort oder wähle eigene."
 }

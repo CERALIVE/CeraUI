@@ -2703,5 +2703,20 @@
 	"settings.updates.cellular.pendingBodyMetered": "لا يتوفر أي اتصال معروف بأنه غير محدود البيانات. يؤدي تنزيل {version} إلى نقل نحو {size} عبر اتصال محدود البيانات أو غير معروف التكلفة.",
 	"settings.updates.layer.withheldBand": "غير مشمولة في هذا التحديث",
 	"settings.updates.credentials.unusableTitle": "تعذّر استخدام شهادة التحديث الخاصة بالجهاز",
-	"general.updateReasonStreamingUnconfirmed": "البث جارٍ أو حالته غير مؤكدة. اضغط إيقاف لتأكيد توقف البث قبل تثبيت التحديث."
+	"general.updateReasonStreamingUnconfirmed": "البث جارٍ أو حالته غير مؤكدة. اضغط إيقاف لتأكيد توقف البث قبل تثبيت التحديث.",
+	"hotspotConfirm.title": "احفظ هذه البيانات قبل التشغيل",
+	"hotspotConfirm.body": "قد يفقد الجهاز اتصال Wi-Fi الحالي. إذا كنت تصل إلى CeraLive عبر هذه الشبكة، فستحتاج إلى هذا الاسم وكلمة المرور للعودة.",
+	"hotspotConfirm.bodyKeepsStation": "تتصل الهواتف والحواسيب بهذا الاسم وكلمة المرور. احفظهما في مكان آمن.",
+	"hotspotConfirm.loading": "جارٍ جلب بيانات نقطة الاتصال…",
+	"hotspotConfirm.loadFailed": "تعذّرت قراءة بيانات نقطة الاتصال، لذا تبقى متوقفة.",
+	"hotspotConfirm.retry": "إعادة المحاولة",
+	"hotspotConfirm.generate": "كلمة مرور عشوائية جديدة",
+	"hotspotConfirm.acknowledge": "حفظت الاسم وكلمة المرور، وأفهم أن اتصالي الحالي قد ينقطع.",
+	"hotspotConfirm.activate": "تشغيل نقطة الاتصال",
+	"hotspotConfirm.saveFailed": "تعذّر حفظ الاسم وكلمة المرور الجديدين. لم يتغير شيء وتبقى نقطة الاتصال متوقفة.",
+	"hotspotConfirm.passwordCharacters": "استخدم الأحرف اللاتينية والأرقام والرموز القياسية فقط (بدون حروف مشكّلة أو رموز تعبيرية).",
+	"hotspotConfirm.inactiveHint": "سيظهر اسم الشبكة وكلمة المرور ويمكنك تغييرهما عند تشغيل نقطة الاتصال.",
+	"network.wifiMode.confirm.switchTo": "التبديل إلى {mode}",
+	"hotspotConfirm.firstTimeTitle": "إعداد نقطة الاتصال",
+	"hotspotConfirm.firstTimeBody": "لم يشغّل هذا الراديو نقطة اتصال من قبل. احتفظ بالاسم وكلمة المرور المقترحين أو اختر ما تريد."
 }
