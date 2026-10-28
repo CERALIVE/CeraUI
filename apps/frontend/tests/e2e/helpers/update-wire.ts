@@ -51,6 +51,11 @@ export const CAPABLE_CAPABILITIES: UpdateCapabilities = {
 	features: ["apt-all-packages", "rauc-verity-streaming", "slot-sync"],
 };
 
+export const KERNEL_CAPABILITIES: UpdateCapabilities = {
+	...CAPABLE_CAPABILITIES,
+	features: [...CAPABLE_CAPABILITIES.features, "kernel-apt-stage"],
+};
+
 /** 700 MiB — `formatBytes('en')` renders it as exactly "700 MB". */
 export const CELLULAR_IMAGE_BYTES = 734_003_200;
 export const CELLULAR_IMAGE_ID = "2026.10.1";
@@ -115,6 +120,30 @@ export function capableDetails(
 		},
 		...overrides,
 	};
+}
+
+export function kernelDetails(
+	overrides: Partial<NonNullable<UpdateDetails["kernel"]>> = {},
+): UpdateDetails {
+	return capableDetails({
+		os: { bootedVersion: "2026.9.3", staged: null, candidate: null },
+		pendingCellular: null,
+		kernel: {
+			booted: {
+				package: "linux-image-7.2.0-ceralive-rk3588",
+				version: "7.2.0-ceralive1",
+			},
+			candidate: {
+				package: "linux-image-7.2.0-ceralive-rk3588",
+				version: "7.2.0-ceralive2",
+				sizeBytes: 52_428_800,
+			},
+			state: null,
+			version: null,
+			reason: null,
+			...overrides,
+		},
+	});
 }
 
 // ── start-able Live cockpit ──────────────────────────────────────────────────

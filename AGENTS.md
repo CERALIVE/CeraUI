@@ -73,6 +73,7 @@ bun run test:release-package-contracts
 | UVC package identity | [Contract 37](docs/agents/uvc-package-identity.md) |
 | Device updates, D8 admission and known gaps | [Update-system contract](docs/agents/the-device-update-system.md) |
 | Kernel discovery, guarded staging, state/overlay and OS kernel floor | [Kernel backend contract](docs/DEVICE-UPDATES.md#kernel-contract-partial----backend-host-proof) |
+| Capability-gated kernel dialog, actions and EN/es-419 labels | [Kernel UI contract](docs/DEVICE-UPDATES.md#kernel-update-dialog-exists--browser-tested) |
 
 ## HARD RULES
 

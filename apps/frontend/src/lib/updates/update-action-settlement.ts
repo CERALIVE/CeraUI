@@ -13,8 +13,14 @@ import type {
 	UpdateOrchestratorPhase,
 	UpdateState,
 } from "@ceraui/rpc/schemas";
+import { KERNEL_UPDATE_PHASES, kernelUpdatePhase } from "./kernel-update-view";
 
-export type UpdateActionKind = "check" | "install" | "cellular" | "packages";
+export type UpdateActionKind =
+	| "check"
+	| "install"
+	| "kernel"
+	| "cellular"
+	| "packages";
 export type LegacyKind = UpdateState["kind"];
 
 type CheckClocks = UpdateDetails["checks"];
@@ -27,6 +33,7 @@ export interface DispatchContext {
 	/** `undefined`: the dialog had no details, so no change can be measured. */
 	readonly clocks: CheckClocks | undefined;
 	readonly staged: StagedImage | undefined;
+	readonly kernel?: UpdateDetails["kernel"];
 }
 
 const INSTALL_STARTED: readonly UpdateOrchestratorPhase[] = [
@@ -46,6 +53,7 @@ const STARTED_BY: Readonly<
 > = {
 	check: ["checking"],
 	install: INSTALL_STARTED,
+	kernel: KERNEL_UPDATE_PHASES,
 	cellular: INSTALL_STARTED,
 	packages: [],
 };
@@ -77,6 +85,7 @@ export function phaseSettles(
 	phase: UpdateOrchestratorPhase,
 ): boolean {
 	if (action === "packages") return false;
+	if (action === "kernel") return KERNEL_UPDATE_PHASES.includes(phase);
 	return STARTED_BY[action].includes(phase) || OUTCOME_PHASES.includes(phase);
 }
 
@@ -102,6 +111,18 @@ export function readSettles(
 	details: UpdateDetails,
 ): boolean {
 	switch (action) {
+		case "kernel": {
+			const next = details.kernel;
+			const phase = kernelUpdatePhase(undefined, next);
+			return (
+				watch.kernel !== undefined &&
+				next !== undefined &&
+				phase !== undefined &&
+				KERNEL_UPDATE_PHASES.includes(phase) &&
+				(watch.kernel.state !== next.state ||
+					watch.kernel.version !== next.version)
+			);
+		}
 		case "check":
 			return (
 				watch.clocks !== undefined && clocksMoved(watch.clocks, details.checks)

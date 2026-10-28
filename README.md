@@ -57,7 +57,11 @@ reference: [device updates](docs/DEVICE-UPDATES.md).
 of the running kernel freeze, download exactly bound bytes, and stage through a
 PID-1-owned shared flock into the inactive slot. State files report success or
 rollback; signed OS kernel sidecars prevent a later OS update from downgrading
-the running kernel. The kernel item and controls are a separate UI deliverable.
+the running kernel. On capable images, Software Updates shows a Kernel section
+with versions, progress, idle-restart staging and success/rollback reasons.
+Its scoped install action uses the shared action feedback; devices without
+`kernel-apt-stage` show no kernel item. This UI is browser-tested with mocked
+RPC states, not qualified against device-side producers or physical rollback.
 See the [kernel contract](docs/DEVICE-UPDATES.md#kernel-contract-partial----backend-host-proof).
 
 The Packages **Update** button [EXISTS; host-tested, board proof owed] uses a

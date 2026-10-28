@@ -52,6 +52,7 @@ import {
 	createSettingsOwner,
 	type SaveOutcome,
 } from "./update-settings-owner.svelte";
+import { updateCapabilityView } from "./update-view";
 
 export {
 	type ActionRefusal,
@@ -68,6 +69,7 @@ export {
 export interface UpdateSurface {
 	readonly capabilities: UpdateCapabilities | undefined;
 	readonly packagesReady: boolean;
+	readonly kernelReady: boolean;
 	readonly settings: UpdateSettings | undefined;
 	readonly details: UpdateDetails | undefined;
 	/** `true` once a load attempt finished, whatever it returned. */
@@ -100,6 +102,7 @@ export interface UpdateSurface {
 	save(patch: Partial<UpdateSettings>): Promise<boolean>;
 	checkNow(): Promise<void>;
 	installNow(): Promise<void>;
+	installKernel(): Promise<void>;
 	installPackages(): Promise<void>;
 	approveCellular(id: string): Promise<void>;
 	reset(): void;
@@ -133,6 +136,7 @@ export function createUpdateSurface(): UpdateSurface {
 			afterRead: detailsSeq,
 			clocks: details?.checks,
 			staged: details === undefined ? undefined : details.os.staged,
+			kernel: details?.kernel,
 		}),
 		reloadDetails,
 	});
@@ -214,7 +218,16 @@ export function createUpdateSurface(): UpdateSurface {
 		);
 	}
 
+	function kernelReady(): boolean {
+		return (
+			capsLink === getLinkEpoch() && updateCapabilityView(capabilities).kernel
+		);
+	}
+
 	return {
+		get kernelReady() {
+			return kernelReady();
+		},
 		get capabilities() {
 			return capabilities;
 		},
@@ -287,6 +300,12 @@ export function createUpdateSurface(): UpdateSurface {
 		checkNow: () => actions.run("check", [() => rpc.system.checkUpdatesNow()]),
 		installNow: () =>
 			actions.run("install", [() => rpc.system.installUpdatesNow()]),
+		installKernel: async () => {
+			if (!kernelReady()) return;
+			await actions.run("kernel", [
+				() => rpc.system.installUpdatesNow({ scope: "kernel" }),
+			]);
+		},
 		installPackages: async () => {
 			if (!packagesReady()) return;
 			const phase = getUpdateOrchestratorState()?.phase;

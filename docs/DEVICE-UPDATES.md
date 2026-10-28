@@ -98,7 +98,8 @@ service restart actions refuse during kernel downloading or staging, through
 the same shared disruptive-action gate as OS staging. Startup preserves these
 states; open kernel phases withhold OS receipt retirement. The backend now
 implements discovery, guarded staging and state-file reconciliation. Phase labels
-exist in all ten locales; the kernel item and controls remain a separate UI task.
+and the capability-gated kernel dialog section exist in all ten locales; see
+[the browser-tested UI contract](#kernel-update-dialog-exists--browser-tested).
 
 `kernel-packages.ts` reads `apt-get indextargets` with only
 `/etc/apt/sources.list.d/ceralive.sources`, requires authenticated CeraLive
@@ -1470,7 +1471,7 @@ successful transport probe.
 
 ## Frontend surfaces
 
-- **Updates dialog** (`UpdatesDialog.svelte`): Packages, System image, Slots,
+- **Updates dialog** (`UpdatesDialog.svelte`): Packages, System image, Kernel, Slots,
   Automation (auto toggles, schedule window, channel), Over cellular, and Update
   connection. It pulls capabilities, settings and `system.getUpdateDetails` when
   opened (`createUpdateSurface()`). One latest-read counter owns the details and
@@ -1539,6 +1540,57 @@ successful transport probe.
 - **Go Live band** (`UpdateRefusalBand.svelte`): `goLiveUpdateRefusal()` prefers
   the live `update_orchestrator` push and falls back to a typed
   `update_in_progress` start failure. Admission stays on the device.
+
+### Kernel update dialog [EXISTS -- browser-tested]
+
+`KernelSection.svelte` renders only when the current capability declaration is
+`capable` and includes `kernel-apt-stage`; stale kernel details alone expose
+nothing. It uses the existing Updates dialog, Button, Progress, typography,
+spacing and semantic theme tokens. The running version, update version and an
+available candidate are separate facts. Live kernel phases take precedence over
+a retained record; after the public phase returns to idle, the retained device
+record still states success, rollback or failure. Unknown state/reason tokens
+resolve to localized unknown/diagnostic copy, never raw tokens or success.
+
+Downloading and preparing show a percentage and ETA only when the live wire
+phase matches that kernel step; another lane's progress cannot describe a
+retained kernel record. Staged/armed records state that activation waits for the next idle restart;
+verifying and terminal outcomes remove that sentence. Rollback retains the
+attempted version and the reason beside the still-running previous version.
+No UI action forces a reboot or activates a slot.
+
+**Install kernel now** sends only `installUpdatesNow({scope: "kernel"})` through
+the existing action machine, with a separate `kernel` owner. Its button is
+disabled without a candidate, during any kernel lifecycle phase, or without a
+current capability read. Eligible idle/package-offer/OS-offer phases match backend
+admission; pending or unknown retained records stay closed. **Check now** uses
+the same check action as the OS section and is disabled during active work or a
+pending kernel activation/verification. Start evidence and later changed kernel
+details settle an uncertain kernel request; unrelated OS evidence does not.
+Duplicate clicks, refusals, lost replies and closed sessions retain the existing
+shared action ownership rules. The device remains final admission authority.
+
+Verbatim label handoff for the coordinated English/es-419 user docs:
+
+| Key suffix | English | Spanish (es-419) |
+|---|---|---|
+| `kernel.title` | Kernel | Kernel |
+| `kernel.installNow` | Install kernel now | Instalar kernel ahora |
+| `kernel.appliesAfterRestart` | Applies on the next idle restart | Se aplica en el próximo reinicio con el dispositivo inactivo |
+| `phase.kernelDownloading` | Downloading kernel | Descargando kernel |
+| `phase.kernelStaging` | Preparing kernel | Preparando kernel |
+| `phase.kernelStaged` | Kernel ready | Kernel listo |
+| `phase.kernelVerifying` | Verifying new kernel | Verificando el nuevo kernel |
+| `phase.kernelSucceeded` | Kernel updated | Kernel actualizado |
+| `phase.kernelRolledBack` | Previous kernel restored | Kernel anterior restaurado |
+| `phase.kernelFailed` | Kernel update failed | Actualización del kernel fallida |
+
+All keys have the prefix `settings.updates.`. Existing OS and kernel phase copy
+is unchanged. `tests/e2e/visual/kernel-updates.visual.spec.ts` exercises mocked
+RPC states on the real frontend at 1280x800 and 390x844, light/dark, English and
+Spanish, including an open staged-to-succeeded transition and absent capability.
+This is browser/consumer proof only: device-side producer serialization and
+physical installation/rollback remain separate, unqualified release work.
 
 ## Evidence and limits
 

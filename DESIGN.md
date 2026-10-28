@@ -461,3 +461,26 @@ is a labelled `role="group"`, wraps instead of overflowing in every locale,
 and is absent rather than empty for an older backend. Acceptance: 390/1280 px,
 light and dark, plus Arabic RTL, in `visual/update-system.visual.spec.ts`; a
 real device certificate is not part of that evidence.
+
+## 15. Kernel update section
+
+The Kernel section extends the existing System image section without new tokens,
+primitives or motion. It uses the shared Button and Progress, `text-sm` labels,
+`text-xs` monospaced versions, semantic foreground/muted colors, `rounded-lg`
+definition rows and the existing spacing ramp. Status precedes running/update
+versions and the actions. Long translated state/reason text wraps; phone actions
+stack with the existing touch-size token layer. State is conveyed by words, not
+color alone. Routine changes use a persistent polite status region.
+
+Layout: a stacked definition list and action row inside AppDialog's existing
+body scroller, matching SystemSection; no new scroll owner, fixed panel or
+activation control. Desktop uses the existing centered dialog and mobile the
+existing sheet, with the close control pinned by AppDialog.
+
+The primary action installs the offered kernel; Check is secondary. No kernel
+capability means no section. Unknown state remains unknown, active/staged work
+disables conflicting actions, and rollback shows its reason beside the versions.
+Acceptance is the 1280x800/390x844, light/dark, English/es-419 state matrix in
+`visual/kernel-updates.visual.spec.ts`, with actions and the entire section
+required to be in frame for staged and rolled-back captures. Device producer
+integration and hardware rollback are separate qualification.

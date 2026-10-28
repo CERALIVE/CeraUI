@@ -44,6 +44,7 @@ import {
 import ActionOutcomeList from './updates/ActionOutcomeList.svelte';
 import AutomationSection from './updates/AutomationSection.svelte';
 import ConnectionSection from './updates/ConnectionSection.svelte';
+import KernelSection from './updates/KernelSection.svelte';
 import PackagesSection from './updates/PackagesSection.svelte';
 import SettingsSaveBand from './updates/SettingsSaveBand.svelte';
 import SlotsSection from './updates/SlotsSection.svelte';
@@ -80,7 +81,7 @@ followDeviceState(surface, () => ({ open, phase: orchestrator?.phase }));
 // the image.
 const legacyNotice = $derived(surface.loaded && surface.capabilities !== undefined && view.legacy);
 const credentialsRejected = $derived(transportCredentialsRejected(details));
-const activityPhase = $derived(dialogActivityPhase(orchestrator, view.system));
+const activityPhase = $derived(dialogActivityPhase(orchestrator, view.system, view.kernel));
 const activityPercent = $derived(activityPhase ? progressPercent(orchestrator) : undefined);
 const activityEta = $derived(activityPhase ? etaMinutes(orchestrator?.progress?.etaSeconds) : undefined);
 const nextPackageCheck = $derived(formatUpdateTime(details?.checks.packages.nextAttemptAt, locale));
@@ -177,6 +178,18 @@ const nextPackageCheck = $derived(formatUpdateTime(details?.checks.packages.next
 					onCheck={() => void surface.checkNow()}
 					onInstall={() => void surface.installNow()}
 					wire={orchestrator}
+				/>
+			{/if}
+
+			{#if view.kernel}
+				<KernelSection
+					wire={orchestrator}
+					kernel={details?.kernel}
+					ready={surface.kernelReady}
+					checking={surface.pending('check')}
+					installing={surface.pending('kernel')}
+					onCheck={() => void surface.checkNow()}
+					onInstall={() => void surface.installKernel()}
 				/>
 			{/if}
 

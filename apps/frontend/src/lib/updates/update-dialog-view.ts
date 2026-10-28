@@ -8,7 +8,7 @@ import type {
 	UpdateOrchestratorWireState,
 	UpdatePackage,
 } from "@ceraui/rpc/schemas";
-
+import { KERNEL_UPDATE_PHASES } from "./kernel-update-view";
 import { isUpdateBusy } from "./update-view";
 
 /** The orchestrator phases that describe the system image rather than packages. */
@@ -96,9 +96,12 @@ const ACTIVITY_OUTCOME_PHASES: readonly UpdateOrchestratorPhase[] = [
 export function dialogActivityPhase(
 	wire: UpdateOrchestratorWireState | undefined | null,
 	systemSectionShown: boolean,
+	kernelSectionShown = false,
 ): UpdateOrchestratorPhase | undefined {
 	if (wire === undefined || wire === null) return undefined;
 	if (systemSectionShown && SYSTEM_IMAGE_PHASES.includes(wire.phase))
+		return undefined;
+	if (kernelSectionShown && KERNEL_UPDATE_PHASES.includes(wire.phase))
 		return undefined;
 	if (isUpdateBusy(wire) || ACTIVITY_OUTCOME_PHASES.includes(wire.phase))
 		return wire.phase;

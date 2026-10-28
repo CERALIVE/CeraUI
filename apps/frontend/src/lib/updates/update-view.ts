@@ -20,6 +20,8 @@ export const UPDATE_BUSY_PHASES: readonly UpdateOrchestratorPhase[] = [
 	"restarting-services",
 	"os-staging",
 	"os-activation-armed",
+	"kernel-downloading",
+	"kernel-staging",
 	"syncing",
 ];
 
@@ -120,6 +122,7 @@ export function progressPercent(
 export interface UpdateCapabilityView {
 	readonly legacy: boolean;
 	readonly system: boolean;
+	readonly kernel: boolean;
 	readonly slots: boolean;
 }
 
@@ -127,13 +130,14 @@ export function updateCapabilityView(
 	caps: UpdateCapabilities | undefined,
 ): UpdateCapabilityView {
 	if (caps === undefined || caps.mode !== "capable") {
-		return { legacy: true, system: false, slots: false };
+		return { legacy: true, system: false, kernel: false, slots: false };
 	}
 	const has = (feature: UpdateCapabilities["features"][number]) =>
 		caps.features.includes(feature);
 	return {
 		legacy: false,
 		system: has("apt-all-packages") && has("rauc-verity-streaming"),
+		kernel: has("kernel-apt-stage"),
 		slots: has("slot-sync"),
 	};
 }

@@ -25,11 +25,14 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
   `installUpdatesNow`, `allowCellularOnce`, `getUpdateDetails`. Launch limits:
   D8 Known gaps (f) below.
 - **[EXISTS] Updates dialog and global surfaces.** Settings → Software Updates
-  shows Packages, System image, Slots, Automation, Over cellular and Update
+  shows Packages, System image, Kernel, Slots, Automation, Over cellular and Update
   connection, gated by `updateCapabilityView()`; a legacy image states the limit
   instead of hiding it. `UpdateOrchestratorBadge` shows a busy update app-wide;
   `live/UpdateRefusalBand` warns before Go Live (live push first, typed refusal
   as fallback).
+  The Kernel section requires capable mode plus `kernel-apt-stage`; mocked RPC
+  browser proof and the EN/es-419 label handoff are in the
+  [kernel UI contract](../DEVICE-UPDATES.md#kernel-update-dialog-exists--browser-tested).
 - **[EXISTS] Recovery.** Quarantine of exact failed candidates
   (`quarantine.json`), idle-only restart of stale services with a protected-unit
   list, and keyed update notifications. Contract:
