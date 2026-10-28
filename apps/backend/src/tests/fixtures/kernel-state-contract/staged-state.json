@@ -1,0 +1,16 @@
+{
+	"schema": 1,
+	"attempt": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+	"package": "linux-image-7.2.0-ceralive-rk3588",
+	"version": "7.2.0-ceralive2",
+	"deb_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	"target_slot": "B",
+	"booted_slot_at_stage": "A",
+	"boot_id_at_activation": null,
+	"state": "staged",
+	"reason": null,
+	"timestamps": {
+		"staging": "2026-10-20T00:00:00Z",
+		"staged": "2026-10-20T00:01:00Z"
+	}
+}

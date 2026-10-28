@@ -105,6 +105,10 @@ describe("stagedReceiptConsumed", () => {
 			"os-staged",
 			"os-activation-armed",
 			"os-verifying",
+			"kernel-downloading",
+			"kernel-staging",
+			"kernel-staged",
+			"kernel-verifying",
 		]);
 	});
 });

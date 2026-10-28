@@ -52,6 +52,18 @@ busy update shows an app-wide badge, and the Live cockpit warns before Go Live;
 Start stays enabled because the device decides admission. Implementation
 reference: [device updates](docs/DEVICE-UPDATES.md).
 
+**Kernel-only backend [PARTIAL; host-tested, device drill owed].** Images declaring
+`kernel-apt-stage` can discover authenticated CeraLive kernel records independently
+of the running kernel freeze, download exactly bound bytes, and stage through a
+PID-1-owned shared flock into the inactive slot. State files report success or
+rollback; signed OS kernel sidecars prevent a later OS update from downgrading
+the running kernel. On capable images, Software Updates shows a Kernel section
+with versions, progress, idle-restart staging and success/rollback reasons.
+Its scoped install action uses the shared action feedback; devices without
+`kernel-apt-stage` show no kernel item. This UI is browser-tested with mocked
+RPC states, not qualified against device-side producers or physical rollback.
+See the [kernel contract](docs/DEVICE-UPDATES.md#kernel-contract-partial----backend-host-proof).
+
 The Packages **Update** button [EXISTS; host-tested, board proof owed] uses a
 package-only orchestrator scope when the current link confirms a capable image
 with `apt-all-packages` and the phase is `available` or `awaiting-idle`, sharing

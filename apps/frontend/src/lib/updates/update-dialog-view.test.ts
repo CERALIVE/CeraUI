@@ -54,6 +54,19 @@ describe("dialogActivityPhase", () => {
 		expect(dialogActivityPhase(wire("os-staging"), true)).toBeUndefined();
 		expect(dialogActivityPhase(wire("os-staging"), false)).toBe("os-staging");
 	});
+
+	it("leaves kernel progress to its own section without hiding unrelated work", () => {
+		// Given a shown kernel section, when selecting activity, then it owns its progress.
+		expect(
+			dialogActivityPhase(wire("kernel-staging"), true, true),
+		).toBeUndefined();
+		expect(dialogActivityPhase(wire("kernel-staging"), true, false)).toBe(
+			"kernel-staging",
+		);
+		expect(dialogActivityPhase(wire("downloading"), true, true)).toBe(
+			"downloading",
+		);
+	});
 });
 
 describe("isUpdateWaiting", () => {

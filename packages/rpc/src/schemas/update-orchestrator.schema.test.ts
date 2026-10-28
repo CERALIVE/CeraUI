@@ -1,8 +1,11 @@
 /// <reference types="bun" />
 import { expect, test } from 'bun:test';
 import {
+	KERNEL_UPDATE_FAILURE_REASONS,
+	kernelUpdateFailureReasonSchema,
 	osStageRecoverySchema,
 	updateOrchestratorPersistedStateSchema,
+	updateOrchestratorWireStateSchema,
 } from './update-orchestrator.schema';
 
 test.each(['apt-exit-nonzero', 'commit_unit_absent_on_resume', 'commit_resume_inconclusive'])(
@@ -42,6 +45,49 @@ const clock = {
 	lastFailureWasRateLimited: false,
 	nextAttemptAt: null,
 };
+
+test.each([
+	['kernel-downloading', null],
+	['kernel-staging', null],
+	['kernel-staged', null],
+	['kernel-verifying', null],
+	['kernel-succeeded', null],
+	['kernel-rolled-back', 'kernel_boot_failed'],
+	['kernel-failed', 'kernel_origin_mismatch'],
+] as const)(
+	'preserves kernel phase %s and its outcome reason across both boundaries',
+	(phase, reason) => {
+		// Given an otherwise legacy persisted/wire state with a kernel phase.
+		const persisted = {
+			schema: 1,
+			phase,
+			enteredAt: 0,
+			progress: null,
+			failureReason: reason,
+			packageCheck: clock,
+			osCheck: clock,
+			cellularOverrideId: null,
+		} as const;
+		const wire = {
+			schema: 1,
+			phase,
+			progress: null,
+			failure_reason: reason,
+			cellular_override_id: null,
+		} as const;
+		// When parsed, then phase and named reason round-trip without a schema bump.
+		expect(updateOrchestratorPersistedStateSchema.parse(persisted)).toEqual(persisted);
+		expect(updateOrchestratorWireStateSchema.parse(wire)).toEqual(wire);
+	},
+);
+
+test('kernel failure reasons are named and unknown reasons are refused at their boundary', () => {
+	// Given the closed kernel reason vocabulary, when parsed, then only its members survive.
+	for (const reason of KERNEL_UPDATE_FAILURE_REASONS) {
+		expect(kernelUpdateFailureReasonSchema.parse(reason)).toBe(reason);
+	}
+	expect(kernelUpdateFailureReasonSchema.safeParse('future_reason').success).toBe(false);
+});
 const record = {
 	candidateKey: 'k',
 	activeAttemptId: null,

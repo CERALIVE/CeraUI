@@ -16,37 +16,23 @@
 import type {
 	OsStageRecovery,
 	UpdateOrchestratorPersistedState,
+	UpdateOrchestratorPhase,
 } from "@ceraui/rpc/schemas";
 import type { OsUnlaunchedStageSettlement } from "./os-unlaunched-state.ts";
 
 // This phase models the orchestrator's workflow, not independent legacy launches
 // (root AGENTS.md, "D8 stream/update admission: what it does NOT cover").
-export const ORCHESTRATOR_PHASES = [
-	"idle",
-	"checking",
-	"available",
-	"downloading",
-	"awaiting-idle",
-	"committing",
-	"restarting-services",
-	"settled",
-	"os-available",
-	"os-staging",
-	"os-staged",
-	"os-activation-armed",
-	"os-verifying",
-	"sync-eligible",
-	"syncing",
-	"synced",
-	"quarantined",
-	"failed",
-] as const;
-export type OrchestratorPhase = (typeof ORCHESTRATOR_PHASES)[number];
+export {
+	type KernelUpdateFailureReason,
+	ORCHESTRATOR_PHASES,
+} from "@ceraui/rpc/schemas";
+export type OrchestratorPhase = UpdateOrchestratorPhase;
 
 // Keep lock tests separate from D8's refusal-set tests.
 export const LOCK_HOLDING_PHASES: readonly OrchestratorPhase[] = [
 	"committing",
 	"os-staging",
+	"kernel-staging",
 	"syncing",
 ];
 
@@ -87,6 +73,7 @@ export interface OrchestratorState {
 	// Absent unless an OS candidate's staging has been attempted.
 	readonly osStageRecovery?: OsStageRecovery;
 	readonly osStageDiscoveryRetryAt?: UpdateOrchestratorPersistedState["osStageDiscoveryRetryAt"];
+	readonly kernelAttempt?: UpdateOrchestratorPersistedState["kernelAttempt"];
 }
 
 export function initialOrchestratorState(now: number): OrchestratorState {

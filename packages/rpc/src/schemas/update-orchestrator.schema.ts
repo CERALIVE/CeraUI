@@ -27,6 +27,13 @@ export const ORCHESTRATOR_PHASES = [
 	'os-staged',
 	'os-activation-armed',
 	'os-verifying',
+	'kernel-downloading',
+	'kernel-staging',
+	'kernel-staged',
+	'kernel-verifying',
+	'kernel-succeeded',
+	'kernel-rolled-back',
+	'kernel-failed',
 	'sync-eligible',
 	'syncing',
 	'synced',
@@ -35,6 +42,17 @@ export const ORCHESTRATOR_PHASES = [
 ] as const;
 export const updateOrchestratorPhaseSchema = z.enum(ORCHESTRATOR_PHASES);
 export type UpdateOrchestratorPhase = z.infer<typeof updateOrchestratorPhaseSchema>;
+
+export const KERNEL_UPDATE_FAILURE_REASONS = [
+	'kernel_origin_mismatch',
+	'kernel_download_failed',
+	'kernel_staging_failed',
+	'kernel_identity_mismatch',
+	'kernel_boot_failed',
+	'kernel_interrupted',
+] as const;
+export const kernelUpdateFailureReasonSchema = z.enum(KERNEL_UPDATE_FAILURE_REASONS);
+export type KernelUpdateFailureReason = z.infer<typeof kernelUpdateFailureReasonSchema>;
 
 export const updateOrchestratorProgressSchema = z.object({
 	percent: z.number().min(0).max(100),
@@ -112,6 +130,19 @@ export const updateOrchestratorPersistedStateSchema = z
 			.optional(),
 		osStageRecovery: osStageRecoverySchema.optional(),
 		osStageDiscoveryRetryAt: z.number().optional(),
+		kernelAttempt: z
+			.object({
+				id: z.uuid(),
+				package: z.string().regex(/^linux-image-[0-9]+\.[0-9]+\.[0-9]+-ceralive-rk3588$/),
+				version: z.string().regex(/^[0-9]+\.[0-9]+\.[0-9]+-ceralive[1-9][0-9]*$/),
+				deb_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+				deb: z
+					.string()
+					.regex(/^\/[A-Za-z0-9_./+-]+\.deb$/)
+					.nullable(),
+			})
+			.strict()
+			.optional(),
 	})
 	.strict()
 	.superRefine((state, ctx) => {

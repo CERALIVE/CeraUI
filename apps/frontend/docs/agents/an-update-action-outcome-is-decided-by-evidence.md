@@ -1,7 +1,7 @@
 ## AN UPDATE ACTION'S OUTCOME IS DECIDED BY EVIDENCE, NOT BY THE REPLY ALONE [EXISTS]
 
-The Updates dialog's operator actions (Check now, Install now, Download over
-cellular now, and the legacy Packages Update) are one small state machine.
+The Updates dialog's operator actions (Check now, Install now, Install kernel
+now, Download over cellular now, and the legacy Packages Update) are one small state machine.
 Three review rounds found the same defect class at neighbouring seams: a lost
 reply read as a refusal, a stale read overwrote a newer one, an unknown was
 rendered as a fact. Each was fixed where it was found and the next round found
@@ -116,7 +116,7 @@ dialog until it settles.
 
 ### The legacy Packages Update
 
-`system.startUpdate` is the machine's fourth action (`packages`), on the
+`system.startUpdate` is the machine's legacy action (`packages`), on the
 historical `update` operation key that drives the section's spinner. A
 `{ success: false }` reply is "didn't start" with the device's reason ("refused
 without giving a reason" only for a real refusal envelope without one); a lost
@@ -127,6 +127,19 @@ reply is still on the wire, and missing progress never proves nothing was
 installed. "System is up to date" needs `idle` with a `checked_at` stamp (a
 completed discovery found nothing); `checking` says checking, anything else
 says the device has not reported a completed check yet.
+
+### Kernel installation
+
+`installUpdatesNow({scope: "kernel"})` has its own `kernel` action owner and
+operation key in the same machine. Current-link capability permission is checked
+again at dispatch, so an old callback from a closed dialog sends nothing.
+Kernel phases settle this action; package/OS phases and their generic failure
+outcomes do not. A later details read settles it only when an established kernel
+state/version changed from its captured dispatch basis. Reply, duplicate, busy
+and session rules are otherwise identical. Named transport tests live in
+`kernel-update-actions.test.ts`; rendered state and action evidence is in
+`visual/kernel-updates.visual.spec.ts`. This is consumer proof, not an installed
+device staging or rollback drill.
 
 ### Installation, restart and connection conclusions [EXISTS]
 

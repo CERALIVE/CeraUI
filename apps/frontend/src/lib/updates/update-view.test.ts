@@ -126,11 +126,13 @@ describe("capability gating", () => {
 		expect(updateCapabilityView(undefined)).toEqual({
 			legacy: true,
 			system: false,
+			kernel: false,
 			slots: false,
 		});
 		expect(updateCapabilityView({ mode: "legacy", features: [] })).toEqual({
 			legacy: true,
 			system: false,
+			kernel: false,
 			slots: false,
 		});
 	});
@@ -138,13 +140,33 @@ describe("capability gating", () => {
 	it("each surface needs its own explicit feature", () => {
 		expect(
 			updateCapabilityView({ mode: "capable", features: ["apt-all-packages"] }),
-		).toEqual({ legacy: false, system: false, slots: false });
+		).toEqual({ legacy: false, system: false, kernel: false, slots: false });
 		expect(
 			updateCapabilityView({
 				mode: "capable",
 				features: ["apt-all-packages", "rauc-verity-streaming", "slot-sync"],
 			}),
-		).toEqual({ legacy: false, system: true, slots: true });
+		).toEqual({ legacy: false, system: true, kernel: false, slots: true });
+	});
+
+	it("requires capable mode and the explicit kernel feature", () => {
+		// Given a kernel-only declaration, when deriving surfaces, then only kernel is enabled.
+		expect(
+			updateCapabilityView({ mode: "capable", features: ["kernel-apt-stage"] }),
+		).toEqual({ legacy: false, system: false, kernel: true, slots: false });
+		// A stale token in a legacy declaration cannot expose the kernel section.
+		expect(
+			updateCapabilityView({ mode: "legacy", features: ["kernel-apt-stage"] })
+				.kernel,
+		).toBe(false);
+	});
+
+	it("shows kernel work as busy without making it a stream-start refusal", () => {
+		// Given either active kernel step, when rendering the global status, then it is busy only.
+		for (const phase of ["kernel-downloading", "kernel-staging"] as const) {
+			expect(isUpdateBusy(wire(phase))).toBe(true);
+			expect(isUpdateRefusingStart(wire(phase))).toBe(false);
+		}
 	});
 });
 

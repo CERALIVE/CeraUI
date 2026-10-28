@@ -33,6 +33,10 @@ export function receiptLifecycleOpen(phase: OrchestratorPhase): boolean {
 		case "os-staged":
 		case "os-activation-armed":
 		case "os-verifying":
+		case "kernel-downloading":
+		case "kernel-staging":
+		case "kernel-staged":
+		case "kernel-verifying":
 		case "committing":
 			return true;
 		case "idle":
@@ -43,6 +47,9 @@ export function receiptLifecycleOpen(phase: OrchestratorPhase): boolean {
 		case "restarting-services":
 		case "settled":
 		case "os-available":
+		case "kernel-succeeded":
+		case "kernel-rolled-back":
+		case "kernel-failed":
 		case "sync-eligible":
 		case "syncing":
 		case "synced":

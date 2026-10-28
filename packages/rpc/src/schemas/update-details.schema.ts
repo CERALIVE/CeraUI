@@ -112,6 +112,17 @@ export const updateDetailsSchema = z.object({
 	transport: updateTransportSummarySchema.nullable(),
 	/** Absent on older backends; null expiry means not established. */
 	credentials: updateCredentialsSchema.optional(),
+	kernel: z
+		.object({
+			booted: z.object({ package: z.string(), version: z.string() }).nullable(),
+			candidate: z
+				.object({ package: z.string(), version: z.string(), sizeBytes: z.number() })
+				.nullable(),
+			state: z.string().nullable(),
+			version: z.string().nullable(),
+			reason: z.string().nullable(),
+		})
+		.optional(),
 });
 export type UpdateDetails = z.infer<typeof updateDetailsSchema>;
 
@@ -120,7 +131,7 @@ export const allowCellularOnceInputSchema = z.object({ id: z.string().min(1) });
 export type AllowCellularOnceInput = z.infer<typeof allowCellularOnceInputSchema>;
 
 export const installUpdatesNowInputSchema = z
-	.object({ scope: z.literal('packages').optional() })
+	.object({ scope: z.enum(['packages', 'kernel']).optional() })
 	.strict()
 	.optional();
 export type InstallUpdatesNowInput = z.infer<typeof installUpdatesNowInputSchema>;

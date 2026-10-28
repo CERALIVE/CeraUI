@@ -42,6 +42,7 @@ export const UPDATE_PACKAGES_OP = "update";
 const ACTION_OPS: Readonly<Record<UpdateActionKind, string>> = {
 	check: UPDATE_CHECK_NOW_OP,
 	install: UPDATE_INSTALL_NOW_OP,
+	kernel: "update-kernel-install",
 	cellular: UPDATE_CELLULAR_OP,
 	packages: UPDATE_PACKAGES_OP,
 };

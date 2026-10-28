@@ -20,6 +20,8 @@ export const UPDATE_BUSY_PHASES: readonly UpdateOrchestratorPhase[] = [
 	"restarting-services",
 	"os-staging",
 	"os-activation-armed",
+	"kernel-downloading",
+	"kernel-staging",
 	"syncing",
 ];
 
@@ -66,6 +68,13 @@ const PHASE_LABEL_KEYS: Readonly<Record<UpdateOrchestratorPhase, string>> = {
 	"os-staged": "settings.updates.phase.osStaged",
 	"os-activation-armed": "settings.updates.phase.osActivationArmed",
 	"os-verifying": "settings.updates.phase.osVerifying",
+	"kernel-downloading": "settings.updates.phase.kernelDownloading",
+	"kernel-staging": "settings.updates.phase.kernelStaging",
+	"kernel-staged": "settings.updates.phase.kernelStaged",
+	"kernel-verifying": "settings.updates.phase.kernelVerifying",
+	"kernel-succeeded": "settings.updates.phase.kernelSucceeded",
+	"kernel-rolled-back": "settings.updates.phase.kernelRolledBack",
+	"kernel-failed": "settings.updates.phase.kernelFailed",
 	"sync-eligible": "settings.updates.phase.syncEligible",
 	syncing: "settings.updates.phase.syncing",
 	synced: "settings.updates.phase.synced",
@@ -113,6 +122,7 @@ export function progressPercent(
 export interface UpdateCapabilityView {
 	readonly legacy: boolean;
 	readonly system: boolean;
+	readonly kernel: boolean;
 	readonly slots: boolean;
 }
 
@@ -120,13 +130,14 @@ export function updateCapabilityView(
 	caps: UpdateCapabilities | undefined,
 ): UpdateCapabilityView {
 	if (caps === undefined || caps.mode !== "capable") {
-		return { legacy: true, system: false, slots: false };
+		return { legacy: true, system: false, kernel: false, slots: false };
 	}
 	const has = (feature: UpdateCapabilities["features"][number]) =>
 		caps.features.includes(feature);
 	return {
 		legacy: false,
 		system: has("apt-all-packages") && has("rauc-verity-streaming"),
+		kernel: has("kernel-apt-stage"),
 		slots: has("slot-sync"),
 	};
 }

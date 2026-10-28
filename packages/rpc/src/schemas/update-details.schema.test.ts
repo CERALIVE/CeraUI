@@ -1,6 +1,6 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test';
-import { updateDetailsSchema } from './update-details.schema';
+import { installUpdatesNowInputSchema, updateDetailsSchema } from './update-details.schema';
 
 const details = {
 	slots: null,
@@ -14,6 +14,12 @@ const details = {
 } as const;
 
 describe('update credential details contract', () => {
+	test('accepts the kernel scope without changing legacy request or details shapes', () => {
+		expect(installUpdatesNowInputSchema.parse({ scope: 'kernel' })).toEqual({ scope: 'kernel' });
+		expect(installUpdatesNowInputSchema.parse(undefined)).toBeUndefined();
+		expect(updateDetailsSchema.parse(details).kernel).toBeUndefined();
+		expect(installUpdatesNowInputSchema.safeParse({ scope: 'all-kernels' }).success).toBe(false);
+	});
 	test('accepts absent credentials when reading an older backend', () => {
 		// Given an old backend payload; When parsed; Then no observation is invented.
 		expect(updateDetailsSchema.parse(details).credentials).toBeUndefined();

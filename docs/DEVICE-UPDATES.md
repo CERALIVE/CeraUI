@@ -79,6 +79,93 @@ Boot wiring: `apps/backend/src/main.ts`. Recovery contract:
 
 ## Capability gating: legacy images and capable images
 
+### Kernel contract [PARTIAL -- backend host proof]
+
+`kernel-apt-stage` is a recognized image feature. `hasKernelAptStage()` requires
+capable mode and that feature; absent declarations and valid legacy files stay
+legacy, and unknown feature tokens still refuse with `discovery_failed`.
+The shared RPC/persistence phase vocabulary includes `kernel-downloading`,
+`kernel-staging`, `kernel-staged`, `kernel-verifying`, and terminal outcomes
+`kernel-succeeded`, `kernel-rolled-back`, `kernel-failed`. Failure reasons use
+the named `KernelUpdateFailureReason` vocabulary, carried by the existing
+`failureReason` / `failure_reason` fields. Existing phase values and the strict
+OS manifest are unchanged.
+
+D8 allows stream starts in every kernel phase: downloading requests
+`abort-network`, staging uses `continue-local`, and the remaining phases use
+`none`. Every phase belongs to exactly one explicit D8 bucket. Power/reset and
+service restart actions refuse during kernel downloading or staging, through
+the same shared disruptive-action gate as OS staging. Startup preserves these
+states; open kernel phases withhold OS receipt retirement. The backend now
+implements discovery, guarded staging and state-file reconciliation. Phase labels
+and the capability-gated kernel dialog section exist in all ten locales; see
+[the browser-tested UI contract](#kernel-update-dialog-exists--browser-tested).
+
+`kernel-packages.ts` reads `apt-get indextargets` with only
+`/etc/apt/sources.list.d/ceralive.sources`, requires authenticated CeraLive
+Release identity and the exact HTTPS origin, then reads the existing Packages
+file through `apt-helper cat-file`. It records Package, Version, Filename,
+SHA256 and Size. Selection uses dpkg version order across package-name changes,
+ignores the freeze-selected 1001 candidate and skips quarantined package/version
+pairs. The running kernel's preferences and holds, and apt-all's held set, are
+not changed.
+
+Downloads run as the declared APT UID, with SourceList restricted to that same
+file and SourceParts disabled. Size, SHA256 and package control identity must
+all match before staging; foreign bytes yield `kernel_origin_mismatch`.
+The exact attempt and downloaded path are persisted before `systemd-run`
+creates `ceralive-kernel-stage-<UUID>.service`. Its exec command is
+`/usr/bin/flock -n -E 75 -x /run/lock/ceralive-update.lock
+/usr/lib/ceralive/ceralive-kernel-stage --attempt <UUID> --deb <path>
+--package <name> --version <version> --sha256 <digest>`. Submission is bounded
+at 10 seconds; the writer has `RuntimeMaxSec=1800`; download is bounded at
+300 seconds. CeraUI owns the only update-lock acquisition. OS staging, kernel
+staging and slot-sync exclude each other. D8 cancels the download only and
+continues an already-local stage.
+
+`kernel-state.json`, `kernel-quarantine.json` and `slot-overlay-A.json` /
+`slot-overlay-B.json` live in `/data/ceralive/update-state`. Startup observes
+an exact matching transient unit and the device records rather than rerunning
+an installer. Interrupted `staging` without a live writer stays closed until
+the device's recovery invalidates the target and records failure. Successful
+verification requires the expected booted package/version, target slot and a
+matching confirmed overlay, not equality of the unchanged OS version. Rollback
+uses the producer's terminal record and the original booted slot. Terminal
+acknowledgement retains every field and changes only `acknowledged`; it never
+deletes overlay or quarantine evidence. Other updates resume after settlement.
+Staged kernels use the OS lane's seven-day idle activation escalation.
+
+Both installed-image roles consult their overlay before retained RAUC bundle
+identity. Invalid or inconsistent pending records yield unknown (`null`);
+pending/confirmed records carry base byte identity plus `kernelOverlay`.
+Acknowledgement and backend restart cannot restore the retained plain bundle.
+Only verified mirror record replacement or a successful full RAUC install
+clears that invalidation.
+
+An OS stage verifies `releases/<board>/<OS-version>/kernel.json` and `.sig`
+with the channel signer's existing CMS key/issuer policy. A lower kernel
+refuses `os_kernel_downgrade`. Missing/invalid sidecars with a booted overlay
+refuse `os_kernel_identity_unknown`; without an overlay, legacy behavior stays.
+The strict channel manifest schema is unchanged. Optional `kernel` details
+provide booted/candidate identity and device outcome; `installUpdatesNow`
+accepts `{scope: "kernel"}` separately from the existing package scope.
+
+Producer interface encodings used here: slot fields are A/B bootnames;
+`timestamps` maps only state names to UTC ISO timestamps ending in `Z`.
+From `staged` through activation and its success/rollback outcome, the retained
+`timestamps.staged` is required and anchors escalation; later state timestamps
+never reset that clock. Legacy `started_at`/`updated_at` keys refuse rather than
+silently disabling escalation. Staging failures may have no staged timestamp.
+Reasons are null or machine tokens; invalid overlays require a token.
+Other encodings:
+the signed sidecar is `{schema:1,board,os_version,kernel:{package,version,deb_sha256}}`;
+overlay `base_bundle_identity` uses the existing
+`{slot,bundleHash,checksum,installedAt,installedCount}` RAUC byte identity.
+These encodings require producer conformance; host fixtures are not
+physical installation, rollback, power-loss or both-board qualification.
+
+### Image declaration
+
 What the device may do is decided by the image, not by CeraUI.
 `readUpdateCapabilities()` reads `/usr/lib/ceralive/update-capabilities.json`
 (`{schema: 1, features, ota_uid, apt_uid}`, strict). The result has two modes:
@@ -1384,7 +1471,7 @@ successful transport probe.
 
 ## Frontend surfaces
 
-- **Updates dialog** (`UpdatesDialog.svelte`): Packages, System image, Slots,
+- **Updates dialog** (`UpdatesDialog.svelte`): Packages, System image, Kernel, Slots,
   Automation (auto toggles, schedule window, channel), Over cellular, and Update
   connection. It pulls capabilities, settings and `system.getUpdateDetails` when
   opened (`createUpdateSurface()`). One latest-read counter owns the details and
@@ -1453,6 +1540,57 @@ successful transport probe.
 - **Go Live band** (`UpdateRefusalBand.svelte`): `goLiveUpdateRefusal()` prefers
   the live `update_orchestrator` push and falls back to a typed
   `update_in_progress` start failure. Admission stays on the device.
+
+### Kernel update dialog [EXISTS -- browser-tested]
+
+`KernelSection.svelte` renders only when the current capability declaration is
+`capable` and includes `kernel-apt-stage`; stale kernel details alone expose
+nothing. It uses the existing Updates dialog, Button, Progress, typography,
+spacing and semantic theme tokens. The running version, update version and an
+available candidate are separate facts. Live kernel phases take precedence over
+a retained record; after the public phase returns to idle, the retained device
+record still states success, rollback or failure. Unknown state/reason tokens
+resolve to localized unknown/diagnostic copy, never raw tokens or success.
+
+Downloading and preparing show a percentage and ETA only when the live wire
+phase matches that kernel step; another lane's progress cannot describe a
+retained kernel record. Staged/armed records state that activation waits for the next idle restart;
+verifying and terminal outcomes remove that sentence. Rollback retains the
+attempted version and the reason beside the still-running previous version.
+No UI action forces a reboot or activates a slot.
+
+**Install kernel now** sends only `installUpdatesNow({scope: "kernel"})` through
+the existing action machine, with a separate `kernel` owner. Its button is
+disabled without a candidate, during any kernel lifecycle phase, or without a
+current capability read. Eligible idle/package-offer/OS-offer phases match backend
+admission; pending or unknown retained records stay closed. **Check now** uses
+the same check action as the OS section and is disabled during active work or a
+pending kernel activation/verification. Start evidence and later changed kernel
+details settle an uncertain kernel request; unrelated OS evidence does not.
+Duplicate clicks, refusals, lost replies and closed sessions retain the existing
+shared action ownership rules. The device remains final admission authority.
+
+Verbatim label handoff for the coordinated English/es-419 user docs:
+
+| Key suffix | English | Spanish (es-419) |
+|---|---|---|
+| `kernel.title` | Kernel | Kernel |
+| `kernel.installNow` | Install kernel now | Instalar kernel ahora |
+| `kernel.appliesAfterRestart` | Applies on the next idle restart | Se aplica en el próximo reinicio con el dispositivo inactivo |
+| `phase.kernelDownloading` | Downloading kernel | Descargando kernel |
+| `phase.kernelStaging` | Preparing kernel | Preparando kernel |
+| `phase.kernelStaged` | Kernel ready | Kernel listo |
+| `phase.kernelVerifying` | Verifying new kernel | Verificando el nuevo kernel |
+| `phase.kernelSucceeded` | Kernel updated | Kernel actualizado |
+| `phase.kernelRolledBack` | Previous kernel restored | Kernel anterior restaurado |
+| `phase.kernelFailed` | Kernel update failed | Actualización del kernel fallida |
+
+All keys have the prefix `settings.updates.`. Existing OS and kernel phase copy
+is unchanged. `tests/e2e/visual/kernel-updates.visual.spec.ts` exercises mocked
+RPC states on the real frontend at 1280x800 and 390x844, light/dark, English and
+Spanish, including an open staged-to-succeeded transition and absent capability.
+This is browser/consumer proof only: device-side producer serialization and
+physical installation/rollback remain separate, unqualified release work.
 
 ## Evidence and limits
 

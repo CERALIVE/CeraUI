@@ -1,0 +1,17 @@
+{
+	"status": "pending",
+	"reason": null,
+	"attempt": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+	"base_bundle_identity": {
+		"slot": "rootfs.0",
+		"bundleHash": "1a60254de15c639431b3038e3050597e70b629e1db2e8b2b5ae642927c83d4a8",
+		"checksum": "c00130526707daf2c71c13a5cc97019d5be5e828588a44b8f4d95b680b1ce11e",
+		"installedAt": "2026-10-08T12:54:01Z",
+		"installedCount": 7
+	},
+	"kernel": {
+		"package": "linux-image-7.2.0-ceralive-rk3588",
+		"version": "7.2.0-ceralive2",
+		"deb_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	}
+}

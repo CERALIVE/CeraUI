@@ -74,6 +74,12 @@ import {
 import { downloadPausedNotices } from "./download-paused-runtime-notices.ts";
 import { recoverFailedUpdate } from "./failed-recovery.ts";
 import {
+	createKernelRuntime,
+	defaultKernelEffects,
+	type KernelEffects,
+} from "./kernel-runtime.ts";
+import { KernelUpdateError } from "./kernel-state.ts";
+import {
 	inspectSlotSync,
 	resetSlotSyncFailure,
 	type SlotSyncProbeState,
@@ -255,6 +261,7 @@ export type OsStageControl = OsStageBundleControl & {
 };
 
 export interface OrchestratorRuntimeDeps {
+	readonly kernel?: KernelEffects;
 	readonly downloadNotices?: DownloadPausedNotices;
 	readonly now: () => number;
 	readonly observeCredentials?: (force?: boolean) => Promise<void>;
@@ -552,6 +559,60 @@ let failedRecoveryInFlight = false;
 // read outside the install launch path: an await there would reorder callers.
 // Absent provenance only withholds automatic recovery of that attempt.
 let packageProvenance: OrchestratorState["packageAttempt"];
+const kernelRuntime = createKernelRuntime({
+	effects: () => deps.kernel ?? defaultKernelEffects,
+	state: () => state,
+	set: (patch) => {
+		const next = { ...state, ...patch };
+		deps.persist(next);
+		adoptState(next);
+		publishWireState();
+	},
+	now: () => deps.now(),
+	capabilities: () => deps.loadCapabilities(),
+	settings: () => deps.loadSettings(),
+	idle: (schedule) => deps.isIdle(schedule),
+	metered: () => deps.onlyMeteredCandidateExists(),
+	busy: () =>
+		isDisruptiveActionPending() ||
+		osSettlementPersistence.pending ||
+		pendingPackageSuccess.pending ||
+		deps.isStreamLive() ||
+		currentLifecycleHolder() === "streaming" ||
+		osStageInProcess ||
+		raucStreamAbortInProcess ||
+		packageInstallStarting ||
+		state.phase === "syncing" ||
+		state.osStageRecovery?.mode === "unsafe" ||
+		!!state.osStageRecovery?.activeAttemptId,
+	bootedSlot: async () => {
+		const slots = (await deps.readRootSlots()).filter(
+			(slot) => slot.state === "booted",
+		);
+		return slots.length === 1 ? (slots[0]?.bootname ?? "") : "";
+	},
+	activate: async (now, action) => {
+		await using control = await acquireRuntimeOsStageControl();
+		const { getDisruptiveActionDecision } = await import(
+			"../disruptive-action-runtime.ts"
+		);
+		if (
+			!control.held() ||
+			deps.isStreamLive() ||
+			isDisruptiveActionPending() ||
+			!getDisruptiveActionDecision().allowed
+		)
+			return false;
+		if (now)
+			await withServiceReservation(action, {
+				unit: "ceralive-rauc-arm@now.service",
+				decision: () => getDisruptiveActionDecision({ powerAction: "reboot" }),
+				shutdownAction: "reboot",
+			});
+		else await action();
+		return true;
+	},
+});
 
 async function ensurePackageProvenance(): Promise<void> {
 	if (packageProvenance) return;
@@ -612,6 +673,7 @@ export function setOrchestratorRuntimeDepsForTest(
 }
 
 export function resetOrchestratorRuntimeForTest(): void {
+	kernelRuntime.reset();
 	deps.downloadNotices?.dispose();
 	packageHoldAttempt = undefined;
 	resetDisruptiveActionReservationForTest();
@@ -706,6 +768,7 @@ export type OsUpdateSummary = {
 		readonly sizeBytes: number;
 	} | null;
 };
+export const getKernelUpdateSummary = () => kernelRuntime.summary();
 
 export function getOsUpdateSummary(): OsUpdateSummary {
 	return {
@@ -795,6 +858,8 @@ export async function checkUpdatesNow(): Promise<ManualCheckOutcome> {
 		return { started: false, reason: "busy" };
 	if ((await readCapabilityRegime()) === null)
 		return { started: false, reason: "busy" };
+	if (await kernelRuntime.reconcile())
+		return { started: false, reason: "busy" };
 	await maybeRetireConsumedOsReceipt();
 	await maybeSettleOsUnlaunchedWitness();
 	if (osSettlementPersistence.pending)
@@ -880,6 +945,8 @@ export async function installUpdatesNow(
 		if (refusal) return refusal;
 	}
 	await maybeRetireConsumedOsReceipt();
+	if (await kernelRuntime.reconcile())
+		return { started: false, reason: "busy" };
 	if (scoped) {
 		const refusal = packageRefusal();
 		if (refusal) return refusal;
@@ -896,6 +963,12 @@ export async function installUpdatesNow(
 		state.failureReason === "booted_version_unknown"
 	)
 		return { started: false, reason: "booted_version_unknown" };
+	if (input?.scope === "kernel" || (!scoped && state.phase === "idle")) {
+		if (deps.isStreamLive()) return { started: false, reason: "stream_active" };
+		return (await kernelRuntime.install(true))
+			? { started: true }
+			: { started: false, reason: "not_available" };
+	}
 	if (state.phase === "os-available") {
 		if (deps.isStreamLive()) return { started: false, reason: "stream_active" };
 		const capabilities = await deps.loadCapabilities();
@@ -1009,6 +1082,10 @@ export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdm
 	if (!cached.allowed) return cached;
 
 	const action = onStreamStart(state);
+	if (state.phase === "kernel-downloading") {
+		kernelRuntime.cancelDownload();
+		return { allowed: true };
+	}
 	if (action === "none" || action === "continue-local") {
 		return { allowed: true };
 	}
@@ -1136,6 +1213,7 @@ async function runPackageCheckCycle(): Promise<void> {
 						nextAttemptAt,
 					},
 		);
+		await kernelRuntime.check();
 		return;
 	}
 	const rateLimited =
@@ -1733,6 +1811,7 @@ const OS_FORCE_ACTIVATION_MS = 7 * 24 * 60 * 60_000;
 // both, and the old stage's catch would fail the new one.
 function osStageBlocked(): boolean {
 	return (
+		kernelRuntime.busy() ||
 		isDisruptiveActionPending() ||
 		osSettlementPersistence.pending ||
 		state.phase !== "os-available" ||
@@ -1990,6 +2069,33 @@ function settleOsStageFailure(
 	attemptId: string,
 ): void {
 	const now = deps.now();
+	const kernelRefusal =
+		error instanceof KernelUpdateError
+			? error
+			: isOsStageError(error) &&
+					error.mode === "operator" &&
+					error.reason === "rauc_install_failed" &&
+					error.cause instanceof KernelUpdateError
+				? error.cause
+				: undefined;
+	if (
+		kernelRefusal &&
+		["os_kernel_downgrade", "os_kernel_identity_unknown"].includes(
+			kernelRefusal.reason,
+		)
+	) {
+		dispatch({ type: "OS_STAGE_OFFER_INVALIDATED", now, attemptId });
+		const refused = { ...state, failureReason: kernelRefusal.reason };
+		deps.persist(refused);
+		adoptState(refused);
+		publishWireState();
+		notifyUpdate({
+			kind: "refused",
+			id: `os:${manifest.version}`,
+			reason: kernelRefusal.reason,
+		});
+		return;
+	}
 	const admissionError =
 		error instanceof OsAgentError
 			? error
@@ -2671,6 +2777,10 @@ export async function runOrchestratorTick(): Promise<void> {
 		return;
 	}
 	acknowledgeTerminalRestPhases();
+	if (await kernelRuntime.reconcile()) {
+		scheduleNextTick();
+		return;
+	}
 	await maybeSettleRecordedOsRollback();
 	if (state.phase === "available" || state.phase === "awaiting-idle")
 		await ensurePackageProvenance();
@@ -2679,6 +2789,10 @@ export async function runOrchestratorTick(): Promise<void> {
 		await maybeFindSlotSyncCandidate();
 		if (getOrchestratorState().phase === "sync-eligible") {
 			await maybeStartSlotSync();
+			scheduleNextTick();
+			return;
+		}
+		if (await kernelRuntime.install(false)) {
 			scheduleNextTick();
 			return;
 		}
@@ -3008,6 +3122,7 @@ async function startOrchestratorRuntime(
 		adoptState(await resumeOrchestratorState(baseline, resumeDeps()));
 	}
 	adoptState(normalizeStartupDiscovery(state, deps.now()));
+	await kernelRuntime.reconcile();
 	if (
 		baseline.phase === "committing" &&
 		state.phase === "failed" &&

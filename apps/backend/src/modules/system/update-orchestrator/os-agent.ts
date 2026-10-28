@@ -13,9 +13,14 @@ import { updatePinController } from "../update-transport/pin.ts";
 import { clearUpdateNotice } from "./notifications.ts";
 import { OsAgentError, readBoardIdentity, readBootId } from "./os-identity.ts";
 import {
+	clearInstalledImageOverlay,
 	installedImageSchema,
 	readInstalledImage,
 } from "./os-installed-image.ts";
+import {
+	checkOsKernelAdmission,
+	checkPinnedOsKernelAdmission,
+} from "./os-kernel-admission.ts";
 import {
 	defaultOsChannelDeps,
 	discoverSignedOsManifest,
@@ -486,6 +491,7 @@ type OsStageEntryDeps = {
 	readonly board: typeof readBoardIdentity;
 	readonly booted: typeof readBootedOsReleaseVersion;
 	readonly compare: typeof compareVersions;
+	readonly admitKernel: typeof checkOsKernelAdmission;
 	readonly runJob: (
 		manifest: OsChannelManifest,
 		control: OsStageRunControl,
@@ -498,6 +504,7 @@ const defaultStageEntry: OsStageEntryDeps = {
 	board: readBoardIdentity,
 	booted: readBootedOsReleaseVersion,
 	compare: compareVersions,
+	admitKernel: checkOsKernelAdmission,
 	runJob: runOsStageJob,
 };
 let stageEntry = defaultStageEntry;
@@ -549,6 +556,8 @@ export async function stageOsBundle(
 		if (!booted) throw new OsAgentError("booted_version_unknown");
 		if (!(await stageEntry.compare(verified.version, booted)))
 			throw new OsAgentError("downgrade_or_same");
+		await stageEntry.admitKernel(verified);
+		assertOsStageToken(control);
 		return await stageEntry.runJob(verified, control, {
 			...defaultOsStageRunEffects,
 			selection: () =>
@@ -581,6 +590,7 @@ export async function stageOsBundle(
 				}
 			},
 			prepareReceipt: async () => {
+				await clearInstalledImageOverlay("inactive");
 				const bootId = await readBootId();
 				const installedImage = await readInstalledImage("inactive");
 				await mkdir(OS_UPDATE_STATE_DIR, { recursive: true, mode: 0o750 });
@@ -657,6 +667,7 @@ async function revalidatePinnedStage(
 			throw new OsAgentError(
 				result.ok ? "manifest_changed_before_stage" : result.reason,
 			);
+		await checkPinnedOsKernelAdmission(manifest);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}

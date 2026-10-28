@@ -215,6 +215,31 @@ the SPA splits the catalog into lazy namespace chunks where the federation bundl
 so the SPA pays the ten-locale tax per namespace rather than all at once. It is recorded
 separately because the remedies and the exit measurements differ.
 
+**2026-10-28 — the kernel update UI crosses both aggregate ceilings
+(accepted footprint, debt still open).** With Bun 1.4.3 and the same build/report
+commands, main `64c69d97` measures **1,229,723 B total SPA gzip / 1,429,441 B
+precache**, passing the old ceilings by only **249 B / 179 B**. The kernel
+capability/backend/UI sequence through `c000188d` measures **1,235,713 B /
+1,435,424 B**, adding **5,990 B / 5,983 B** and exceeding those ceilings by
+**5,741 B / 5,804 B**. CI's corresponding measurement differs by 42 B / 44 B.
+Nineteen new operator-facing keys across ten locales add **4,215 B** to the
+settings catalog chunk; the already-lazy Updates dialog grows **1,126 B**.
+
+Splitting KernelSection again would not remove its catalog or code from either
+aggregate: the report sums all emitted JS/CSS and Workbox precaches the lazy
+chunks too. Dropping copy, languages or offline update controls is not a fix.
+Locale-module/per-locale precache work remains the dedicated reduction path.
+
+Under the accepted-footprint mechanism in `scripts/ci/bundle-report.mjs:16-18`,
+both baselines move to these measured totals: **1,213,588 -> 1,235,713 B**
+and **1,413,236 -> 1,435,424 B**, increases of **22,125 B / 22,188 B**.
+Of that, **16,135 B / 16,205 B** was already on main; the kernel sequence
+accounts for only the **5,990 B / 5,983 B** above. Both displaced baselines
+remain visible in every report. The **16 KiB absolute headroom** and ratios
+are unchanged, giving **1,252,097 B / 1,451,808 B** ceilings. Initial-route,
+single-chunk and federation ceilings, Workbox patterns and its 2 MiB per-file
+limit are untouched. This entry remains open; no catalog reduction is claimed.
+
 **2026-10-13 — the integrated update-system operator surface crosses the two
 aggregate ceilings again (accepted footprint, debt still open).** The final
 three-pick build measures **1,213,588 B total SPA gzip / 1,354,486 B precache**,
