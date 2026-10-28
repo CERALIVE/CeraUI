@@ -23,6 +23,13 @@ import { gzipSync } from 'node:zlib';
 const KIB = 1024;
 
 const SPA_BASELINE = {
+	// ACCEPTED, TRACKED REGRESSION — kernel update UI, measured 2026-10-28.
+	// Main 64c69d97: 1,229,723/1,429,441 B total/precache; c000188d:
+	// 1,235,713/1,435,424 B (+5,990/+5,983 B). Nineteen operator keys x
+	// ten locales add 4,215 B to settings; the dialog is already lazy.
+	// Rebaseline to the measured footprint under TD-spa-i18n-catalog-size
+	// (still open), retaining 1,213,588/1,413,236 B below. Both 16 KiB
+	// headrooms, ratios, route/chunk/federation and Workbox limits stay fixed.
 	// ACCEPTED, TRACKED REGRESSION — artwork-only rebaseline on 2026-10-20.
 	// v2026.10.0 replaces 4,192 B of precached artwork with 62,942 B:
 	// exactly +58,750 B, not the build's full precache delta. Preserve the
@@ -72,11 +79,10 @@ const SPA_BASELINE = {
 	// single-chunk ceilings are NOT widened. Both aggregates now carry a SECOND,
 	// absolute ceiling so a re-derivation cannot hand back a fresh 12% to spend
 	// silently — precache gained one here for the reason totalGzip already had.
-	totalGzip: 1_213_588,
+	totalGzip: 1_235_713,
 	initialRouteGzip: 497_196,
 	largestChunkGzip: 461_577,
-	// The previous baseline plus only the measured canonical artwork increment.
-	precacheGzip: 1_413_236,
+	precacheGzip: 1_435_424,
 };
 
 // The aggregate's binding constraint. A ratio applied to a freshly re-derived
@@ -107,6 +113,11 @@ const SPA_DISPLACED_BASELINES = {
 		{
 			bytes: 1_188_456,
 			label: 'pre-integrated-update-system',
+			debt: 'TD-spa-i18n-catalog-size',
+		},
+		{
+			bytes: 1_213_588,
+			label: 'pre-kernel-update-ui',
 			debt: 'TD-spa-i18n-catalog-size',
 		},
 	],
@@ -141,6 +152,11 @@ const SPA_DISPLACED_BASELINES = {
 			bytes: 1_354_486,
 			label: 'pre-brand-assets-v2026.10.0',
 			debt: 'TD-brand-assets-precache-size',
+		},
+		{
+			bytes: 1_413_236,
+			label: 'pre-kernel-update-ui',
+			debt: 'TD-spa-i18n-catalog-size',
 		},
 	],
 };
