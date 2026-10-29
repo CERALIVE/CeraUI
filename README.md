@@ -554,7 +554,7 @@ Release assets are published through `publish-release.yml`; see
 [`docs/BUILD_PIPELINE.md`](docs/BUILD_PIPELINE.md) for the stable APT handoff.
 
 **Release preparation [PARTIAL; not published].** The root `package.json` prepares
-`2026.10.0` for a dispatch in October 2026; re-predict immediately before dispatch.
+`2026.10.1` for a dispatch in October 2026; re-predict immediately before dispatch.
 If dispatch slips into November, re-predict (`2026.11.0`) and update the manifest.
 The release workflow requires exact equality with its calculated version. Debian
 builds append `-<UTC stamp>.<checkout SHA>`; `deb-version-stamp.test.sh` executes
