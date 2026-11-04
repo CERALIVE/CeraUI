@@ -71,10 +71,6 @@ import {
 } from "./dongle-metadata.ts";
 import { ethernetRoleForWire, isSharedLanPort } from "./ethernet-role.ts";
 import {
-	getPolicyRouteVerdict,
-	refreshPolicyRouteFlags,
-} from "./policy-route-check.ts";
-import {
 	getRouterCellularAdmin,
 	type RouterAdminSim,
 	refreshRouterCellularAdmin,
@@ -702,13 +698,6 @@ export function initNetworkInterfaceMonitoring() {
 	setInterval(() => {
 		void refreshDongleState();
 	}, NETIF_POLL_INTERVAL_MS);
-	// Policy-route self-check on the netif cadence: real-device only, cached, and
-	// degrade-to-null internally — it never spawns in dev/mock, never blocks, and
-	// never throws into this loop.
-	void refreshPolicyRouteFlags(netif);
-	setInterval(() => {
-		void refreshPolicyRouteFlags(netif);
-	}, NETIF_POLL_INTERVAL_MS);
 	void refreshRouterCellularState();
 	setInterval(() => {
 		void refreshRouterCellularState();
@@ -1213,7 +1202,6 @@ type NetworkInterfaceResponseMessage = {
 	[key: string]: Pick<NetworkInterface, "ip" | "tp" | "enabled"> & {
 		error?: string;
 		same_subnet_group?: string;
-		policy_route_missing?: boolean;
 		tx_bps?: number;
 		rx_bps?: number;
 		dongle?: DongleMarker | null;
@@ -1270,11 +1258,6 @@ export function netIfBuildMsg() {
 
 		if (networkInterface.same_subnet_group) {
 			entry.same_subnet_group = networkInterface.same_subnet_group;
-		}
-
-		const policyRouteVerdict = getPolicyRouteVerdict(i);
-		if (policyRouteVerdict !== undefined) {
-			entry.policy_route_missing = policyRouteVerdict;
 		}
 
 		// Explicit on every ethernet row, `uplink` included — a role published

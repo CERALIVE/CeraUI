@@ -1,21 +1,5 @@
 // @vitest-environment jsdom
-/**
- * netif merge — additive-optional field propagation (Final-Wave Fix 1).
- *
- * Regression guard for a silent field drop in the REAL `subscriptions.svelte.ts`
- * netif merge: the `live` object copied only `tp`/`ip`/`error`/`mac`, so the two
- * collision-surfacing fields `same_subnet_group` (Todo 11) and
- * `policy_route_missing` (Todo 12) were stripped on every broadcast — leaving
- * `CollisionBands.svelte` (Todo 13) permanently starved of live data even though
- * its own unit test passed (it injects the netif PROP directly, bypassing this
- * merge).
- *
- * This drives the ACTUAL production path — `initSubscriptions()` registers
- * `handleMessage` via `rpcClient.onMessage`; we capture that handler and feed it
- * real `netif` frames, then read the merged result back through the public
- * `getNetif()` getter. It would FAIL against the pre-fix merge (both fields
- * absent from `getNetif()`), unlike `CollisionBands.test.ts`.
- */
+/** Netif frames preserve same-subnet data and ignore the retired diagnostic. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Capture the message handler `initSubscriptions` wires into the transport, and
@@ -49,13 +33,15 @@ function pushNetif(msg: NetifMessage): void {
 	captured("netif", msg);
 }
 
+const legacy = { policy_route_missing: true };
+
 beforeEach(() => {
 	resetState();
 	initSubscriptions();
 });
 
-describe("netif merge propagates same_subnet_group + policy_route_missing (Fix 1)", () => {
-	it("retains both additive-optional fields from a post-login snapshot", () => {
+describe("netif merge preserves same-subnet data and ignores legacy diagnostics", () => {
+	it("retains same-subnet data while stripping a legacy diagnostic", () => {
 		pushNetif({
 			usb0: {
 				tp: 1,
@@ -67,36 +53,35 @@ describe("netif merge propagates same_subnet_group + policy_route_missing (Fix 1
 				tp: 2,
 				enabled: true,
 				ip: "10.0.0.2",
-				policy_route_missing: true,
+				...legacy,
 			},
 		});
 
 		const netif = getNetif();
 		expect(netif?.usb0?.same_subnet_group).toBe("192.168.0.0/24");
-		expect(netif?.usb1?.policy_route_missing).toBe(true);
+		expect(netif?.usb1).not.toHaveProperty("policy_route_missing");
 	});
 
-	it("persists both fields across a steady-state tick that omits them", () => {
+	it("persists same-subnet data across a steady-state tick that omits it", () => {
 		pushNetif({
 			usb0: {
 				tp: 1,
 				enabled: true,
 				ip: "192.168.0.10",
 				same_subnet_group: "192.168.0.0/24",
-				policy_route_missing: true,
+				...legacy,
 			},
 		});
-		// A later tick carries only the live throughput — the two optional fields
-		// must survive via the `...existing` spread, exactly like ip/error/mac do.
+		// A later throughput tick must preserve the same-subnet group.
 		pushNetif({ usb0: { tp: 999, enabled: true, ip: "192.168.0.10" } });
 
 		const netif = getNetif();
 		expect(netif?.usb0?.tp).toBe(999);
 		expect(netif?.usb0?.same_subnet_group).toBe("192.168.0.0/24");
-		expect(netif?.usb0?.policy_route_missing).toBe(true);
+		expect(netif?.usb0).not.toHaveProperty("policy_route_missing");
 	});
 
-	it("updates both fields when a later frame carries new values", () => {
+	it("updates same-subnet data when a later frame carries new values", () => {
 		pushNetif({
 			usb0: { tp: 1, enabled: true, same_subnet_group: "192.168.0.0/24" },
 		});
@@ -105,13 +90,13 @@ describe("netif merge propagates same_subnet_group + policy_route_missing (Fix 1
 				tp: 1,
 				enabled: true,
 				same_subnet_group: "10.10.0.0/24",
-				policy_route_missing: true,
+				...legacy,
 			},
 		});
 
 		const netif = getNetif();
 		expect(netif?.usb0?.same_subnet_group).toBe("10.10.0.0/24");
-		expect(netif?.usb0?.policy_route_missing).toBe(true);
+		expect(netif?.usb0).not.toHaveProperty("policy_route_missing");
 	});
 
 	it("does not fabricate the fields on an interface that never carried them", () => {
@@ -119,39 +104,25 @@ describe("netif merge propagates same_subnet_group + policy_route_missing (Fix 1
 
 		const netif = getNetif();
 		expect(netif?.eth0?.same_subnet_group).toBeUndefined();
-		expect(netif?.eth0?.policy_route_missing).toBeUndefined();
+		expect(netif?.eth0).not.toHaveProperty("policy_route_missing");
 	});
 
-	/*
-	 * The preserve-on-omission rule above is right for a field the backend could
-	 * not evaluate, but it also meant a raised policy-route warning could never
-	 * come down: the backend only ever emitted `true`, so recovery looked exactly
-	 * like an omitted tick. It now publishes an explicit `false` whenever the
-	 * check completed — which the merge must honour, or the amber band survives
-	 * the condition that raised it.
-	 */
-	it("clears a raised policy-route warning when a later frame reports false", () => {
-		pushNetif({
-			wlan0: {
-				tp: 1,
-				enabled: true,
-				ip: "192.168.2.100",
-				policy_route_missing: true,
-			},
-		});
-		expect(getNetif()?.wlan0?.policy_route_missing).toBe(true);
-
-		// The radio moved to AP mode and left the bond: the check completed and no
-		// longer flags it.
-		pushNetif({
-			wlan0: {
+	it("ignores both true and false legacy verdicts", () => {
+		for (const verdict of [true, false]) {
+			const legacyFrame = {
+				wlan0: {
+					tp: 2,
+					enabled: false,
+					ip: "10.42.0.1",
+					policy_route_missing: verdict,
+				},
+			};
+			pushNetif(legacyFrame);
+			expect(getNetif()?.wlan0).toEqual({
 				tp: 2,
 				enabled: false,
 				ip: "10.42.0.1",
-				policy_route_missing: false,
-			},
-		});
-
-		expect(getNetif()?.wlan0?.policy_route_missing).toBe(false);
+			});
+		}
 	});
 });

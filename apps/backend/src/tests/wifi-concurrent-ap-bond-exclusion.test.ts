@@ -29,7 +29,6 @@ import {
 	setNetifDupIpSuppression,
 	setQueueUpdateGwHook,
 } from "../modules/network/network-interfaces.ts";
-import { resetPolicyRouteFlags } from "../modules/network/policy-route-check.ts";
 import { setNetifState } from "../modules/network/state/netif-state.ts";
 import { genSrtlaIpList } from "../modules/streaming/srtla.ts";
 
@@ -83,7 +82,6 @@ beforeEach(() => {
 		setNetifDupIpSuppression(name, false);
 	}
 	resetBondOptOut();
-	resetPolicyRouteFlags();
 	setQueueUpdateGwHook(null);
 });
 

@@ -98,7 +98,6 @@ const TRANSPORT_KEEP_ALLOWLIST = new Set([
 	"modules/network/monitor/mock-monitor.ts",
 	"modules/network/monitor/monitor-manager.ts",
 	"modules/network/network-ingest.ts",
-	"modules/network/policy-route-check.ts",
 	"modules/network/router-cellular-admin.ts",
 	"modules/network/router-cellular-control.ts",
 	// The public profile key contains `hilink`; this table owns no transport.

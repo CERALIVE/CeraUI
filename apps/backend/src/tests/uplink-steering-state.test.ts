@@ -7,12 +7,16 @@ import {
 	type NetworkInterface,
 } from "../modules/network/network-interfaces.ts";
 import type { UplinkHealthRecord } from "../modules/network/uplink-health/model.ts";
-import type { UplinkRouteCandidate } from "../modules/network/uplink-steering/route-manager.ts";
+import {
+	planUplinkRoute,
+	type UplinkRouteCandidate,
+} from "../modules/network/uplink-steering/route-manager.ts";
 import { stableUplinkMark } from "../modules/network/uplink-steering/ruleset.ts";
 import {
 	readDesiredSteeringState,
 	type SteeringStateBuilderDeps,
 } from "../modules/network/uplink-steering/state-builder.ts";
+import { scripted } from "./uplink-steering-route-test-fixtures.ts";
 
 function netif(
 	ip: string,
@@ -71,7 +75,6 @@ function harness(
 		markForIdentity: stableUplinkMark,
 		isBondCandidate: () => false,
 		isClientZone: (ifname) => ifname === "clap-wlan0" || ifname === "eth9",
-		policyRouteVerdict: () => undefined,
 		planRoute: async (candidate) => {
 			planned.push(candidate);
 			return { ...candidate, table: candidate.ifname, managed: false };
@@ -177,34 +180,49 @@ describe("readDesiredSteeringState", () => {
 		});
 	});
 
-	test("refuses a self-check failure unless the module owns that uplink's table", async () => {
-		const refused = harness({
+	test("prepares wlan1 with no source rules through the managed route planner", async () => {
+		const routeDeps = scripted({
+			"ip rule show":
+				"0: from all lookup local\n32766: from all lookup main\n32767: from all lookup default\n",
+			"ip -4 route show default dev wlan1":
+				"default via 192.168.1.1 proto dhcp src 192.168.1.50 metric 600",
+		});
+		const h = harness({
 			interfaces: () => ({
 				eth9: netif("10.43.0.1", "255.255.255.0", NETIF_ERR_SHAREDLAN),
-				wlan0: netif("192.168.2.8"),
+				wlan1: netif("192.168.1.50"),
 			}),
-			health: () => [health("wlan0", "up", 100)],
+			health: () => [health("wlan1", "up", 100)],
+			wifiIdentity: () => "wifi-mac:00:11:22:33:44:55",
+			markForIdentity: () => 0xca000100,
 			isClientZone: (ifname) => ifname === "eth9",
-			policyRouteVerdict: (ifname) => ifname === "wlan0",
+			planRoute: (candidate) => planUplinkRoute(candidate, routeDeps),
 		});
-		await expect(readDesiredSteeringState(refused)).rejects.toMatchObject({
-			reason: "policy_route_missing",
+		const state = await readDesiredSteeringState(h);
+		expect(state.uplinks.map((uplink) => uplink.ifname)).toEqual(["wlan1"]);
+		expect(state.routes).toHaveLength(1);
+		expect(state.routes[0]).toMatchObject({
+			ifname: "wlan1",
+			managed: true,
+			sourceRulePriority: 100,
+			defaultRouteArgv: [
+				"route",
+				"replace",
+				"table",
+				"30001",
+				"default",
+				"via",
+				"192.168.1.1",
+				"proto",
+				"dhcp",
+				"src",
+				"192.168.1.50",
+				"metric",
+				"600",
+				"dev",
+				"wlan1",
+			],
 		});
-		expect(refused.planned).toEqual([]);
-
-		const provisioned = harness({
-			interfaces: () => ({
-				eth9: netif("10.43.0.1", "255.255.255.0", NETIF_ERR_SHAREDLAN),
-				wwan0: netif("100.64.1.2"),
-			}),
-			health: () => [health("wwan0", "up", 100)],
-			isClientZone: (ifname) => ifname === "eth9",
-			policyRouteVerdict: (ifname) => ifname === "wwan0",
-		});
-		await readDesiredSteeringState(provisioned);
-		expect(provisioned.planned.map((candidate) => candidate.ifname)).toEqual([
-			"wwan0",
-		]);
 	});
 
 	test("withholds module-owned source rules for duplicate uplink addresses", async () => {

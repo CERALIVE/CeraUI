@@ -102,12 +102,6 @@ export const netifEntrySchema = z.object({
 	// Informational CIDR shared with other enabled interfaces; not an error (the
 	// AP/hotspot and lone interfaces are absent). Additive-optional.
 	same_subnet_group: z.string().optional(),
-	// Real-device diagnostic for a bonded (modem/wifi) interface, additive-optional
-	// and TRISTATE. `true` = missing its SRTLA source-routing policy rule or its
-	// table's default route; `false` = the check ran and found neither missing;
-	// ABSENT = the check could not run (dev host, spawn failure) and carries no
-	// verdict — absence is "no news", never an all-clear.
-	policy_route_missing: z.boolean().optional(),
 	// Measured interface throughput in BITS PER SECOND over the last sample
 	// window. Distinct from `tp`, which is a raw TX byte delta over an unstated
 	// interval and therefore cannot be rendered as a rate. Additive-optional.

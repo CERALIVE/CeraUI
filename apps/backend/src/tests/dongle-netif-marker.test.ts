@@ -22,11 +22,6 @@ import {
 	setNetifDupIpSuppression,
 	setQueueUpdateGwHook,
 } from "../modules/network/network-interfaces.ts";
-import {
-	collectPolicyRouteCandidates,
-	isBondedModemOrWifiIface,
-	resetPolicyRouteFlags,
-} from "../modules/network/policy-route-check.ts";
 import { setNetifState } from "../modules/network/state/netif-state.ts";
 import { genSrtlaIpList } from "../modules/streaming/srtla.ts";
 
@@ -90,7 +85,6 @@ function resetState(): void {
 	for (const name of ["dg0h", "dg1h", "eth0", "usb0", "enx344b50000000"]) {
 		setNetifDupIpSuppression(name, false);
 	}
-	resetPolicyRouteFlags();
 	resetDongleMetadata();
 	resetDongleMarkerTracking();
 	setQueueUpdateGwHook(null);
@@ -301,48 +295,6 @@ describe("dup-IP honesty is preserved alongside the marker", () => {
 			"192.168.8.100",
 			"192.168.8.100",
 		]);
-	});
-});
-
-describe("policy-route candidates", () => {
-	test("a dongle veth is NOT a candidate (todo 39), and enx never was", () => {
-		expect(isBondedModemOrWifiIface("wlan0")).toBe(true);
-		expect(isBondedModemOrWifiIface("usb0")).toBe(true);
-		// Retired with the netns layer: nothing creates a `dg*` interface, and an
-		// old-image board still holding one is the retirement path's problem.
-		expect(isBondedModemOrWifiIface("dg0h")).toBe(false);
-		expect(isBondedModemOrWifiIface("dg7h")).toBe(false);
-		expect(isBondedModemOrWifiIface("dg0n")).toBe(false);
-		// The image dispatcher maps only `enx*0`..`enx*7` by LAST character, so
-		// half of correctly-working adapters would false-flag amber.
-		expect(isBondedModemOrWifiIface("enx344b50000000")).toBe(false);
-		expect(isBondedModemOrWifiIface("enx0c5b8f279a64")).toBe(false);
-		expect(isBondedModemOrWifiIface("eth0")).toBe(false);
-	});
-
-	test("a roster of nothing but veths and enx collects no candidate at all", () => {
-		const candidates = collectPolicyRouteCandidates({
-			dg0h: { ip: "10.208.0.1", enabled: true },
-			dg1h: { ip: "10.208.1.1", enabled: false },
-			dg2h: { enabled: true },
-			enx344b50000000: { ip: "192.168.0.169", enabled: true },
-			eth0: { ip: "192.168.78.132", enabled: true },
-		});
-
-		expect(candidates).toEqual([]);
-	});
-
-	// The eligibility rules themselves are unchanged — proven on a class that IS
-	// still collected, so retiring the veth did not quietly retire them with it.
-	test("enabled + IP-bearing is still what selects a candidate", () => {
-		const candidates = collectPolicyRouteCandidates({
-			usb0: { ip: "10.0.0.5", enabled: true },
-			usb1: { ip: "10.0.1.5", enabled: false },
-			usb2: { enabled: true },
-			eth0: { ip: "192.168.78.132", enabled: true },
-		});
-
-		expect(candidates).toEqual([{ name: "usb0", ip: "10.0.0.5" }]);
 	});
 });
 

@@ -1,5 +1,7 @@
 <!-- Moved verbatim from AGENTS.md on 2026-10-05 by lean-rules-docs-landing-latam -->
 
+Retirement (image-building-pipeline PR #115): the dispatcher rules and policy-route self-check are retired; the netif diagnostic and warning are removed, while historical latch examples below remain documentation only.
+
 ## NETWORK COLLISION SURFACING + POLICY-ROUTE SELF-CHECK [EXISTS]
 
 Two informational/warning netif signals surface interface-topology issues WITHOUT ever

@@ -1,5 +1,7 @@
 # Backend contract index
 
+Retirement (image-building-pipeline PR #115): the dispatcher rules and policy-route self-check are retired; the netif diagnostic and warning are removed, while historical latch examples below remain documentation only.
+
 Every original section is retained below, including appended `…AND` runs. Read the full contract for each subsystem you touch before editing it. Paths are quoted from the original section, relative to its original context unless absolute.
 
 | File | Original heading | Governed code paths |

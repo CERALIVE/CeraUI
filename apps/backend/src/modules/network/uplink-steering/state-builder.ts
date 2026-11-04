@@ -10,7 +10,6 @@ import {
 	NETIF_ERR_SHAREDLAN,
 	type NetworkInterface,
 } from "../network-interfaces.ts";
-import { getPolicyRouteVerdict } from "../policy-route-check.ts";
 import type { UplinkHealthRecord } from "../uplink-health/model.ts";
 import { getUplinksMessage } from "../uplink-health/state.ts";
 import type { PreparedSteeringState, UplinkRoutePlan } from "./applier.ts";
@@ -19,11 +18,7 @@ import {
 	SteeringUnavailableError,
 	type SteeringUplink,
 } from "./contracts.ts";
-import {
-	isModuleProvisionedUplink,
-	planUplinkRoute,
-	type UplinkRouteCandidate,
-} from "./route-manager.ts";
+import { planUplinkRoute, type UplinkRouteCandidate } from "./route-manager.ts";
 import { stableUplinkMark } from "./ruleset.ts";
 import { cidrsOverlap, subnetCidr } from "./subnet.ts";
 
@@ -40,7 +35,6 @@ export interface SteeringStateBuilderDeps {
 		entry: NetworkInterface,
 	) => boolean;
 	readonly isClientZone: (ifname: string, entry: NetworkInterface) => boolean;
-	readonly policyRouteVerdict: (ifname: string) => boolean | undefined;
 	readonly planRoute: (
 		candidate: UplinkRouteCandidate,
 	) => Promise<UplinkRoutePlan>;
@@ -58,7 +52,6 @@ const defaultDeps: SteeringStateBuilderDeps = {
 		isSharedLanPort(ifname) ||
 		isConcurrentApIfname(ifname) ||
 		(entry.error & (NETIF_ERR_HOTSPOT | NETIF_ERR_SHAREDLAN)) !== 0,
-	policyRouteVerdict: getPolicyRouteVerdict,
 	planRoute: (candidate) => planUplinkRoute(candidate),
 };
 
@@ -138,15 +131,6 @@ function collectUplinkCandidates(
 		if (!entry?.ip || !entry.netmask || zoneIfaces.has(ifname)) continue;
 		if (!isSupportedUplink(ifname)) continue;
 		if ((entry.error & ~NETIF_ERR_DUPIPV4) !== 0) continue;
-		if (
-			deps.policyRouteVerdict(ifname) === true &&
-			!isModuleProvisionedUplink(ifname)
-		) {
-			throw new SteeringUnavailableError(
-				"policy_route_missing",
-				`${ifname}: policy-route self-check reports no usable default`,
-			);
-		}
 		const record = health.get(ifname);
 		if (record?.state === "down") continue;
 		const wifiId = deps.wifiIdentity(ifname);

@@ -1,12 +1,11 @@
 // @vitest-environment jsdom
 /**
- * CollisionBands — subnet-collision + policy-route health surfacing (Task 13).
+ * CollisionBands — subnet-collision surfacing and retired-warning regression.
  *
- * Proves the three states derived from the additive-optional netif fields
- * (`same_subnet_group` — Todo 11; `policy_route_missing` — Todo 12):
+ * Proves subnet information remains independent of the retired diagnostic:
  *
  *   (a) same_subnet_group set  → calm INFORMATIONAL band (never warning-styled).
- *   (b) policy_route_missing   → amber WARNING band.
+ *   (b) a legacy policy-route payload never renders the retired warning.
  *   (c) duplicate-IPv4 `error` set alone → NEITHER new band (dup-IP surfaces via
  *       a backend notification, entirely separate; the two new states are
  *       orthogonal to it and must not fire for a pure dup-IP payload).
@@ -24,7 +23,7 @@ function entry(partial: Partial<NetifEntry>): NetifEntry {
 	return { tp: 0, enabled: true, ...partial };
 }
 
-describe("CollisionBands — subnet collision + policy-route surfacing (Task 13)", () => {
+describe("CollisionBands — subnet collision and retired warning", () => {
 	it("(a) renders the calm same-subnet-info band when an interface has same_subnet_group", () => {
 		const netif: NetifMessage = {
 			usb0: entry({ ip: "192.168.0.10", same_subnet_group: "192.168.0.0/24" }),
@@ -49,19 +48,16 @@ describe("CollisionBands — subnet collision + policy-route surfacing (Task 13)
 		expect(queryByTestId("policy-route-warning")).toBeNull();
 	});
 
-	it("(b) renders the amber policy-route-warning band when an interface has policy_route_missing", () => {
+	it("never renders the retired warning even for a legacy policy-route payload", () => {
+		const legacy = { policy_route_missing: true };
 		const netif: NetifMessage = {
-			usb0: entry({ ip: "10.0.0.2", policy_route_missing: true }),
+			usb0: entry({ ip: "10.0.0.2", ...legacy }),
 			eth0: entry({ ip: "10.0.1.2" }),
 		};
 		const { queryByTestId } = render(CollisionBands, { props: { netif } });
 
 		const warning = queryByTestId("policy-route-warning");
-		expect(warning, "policy-route-warning band must render").not.toBeNull();
-
-		// WARNING — amber status-warning styling.
-		const cls = warning?.className ?? "";
-		expect(cls).toContain("status-warning");
+		expect(warning).toBeNull();
 
 		// The same-subnet info band must NOT appear for a pure policy-route payload.
 		expect(queryByTestId("same-subnet-info")).toBeNull();

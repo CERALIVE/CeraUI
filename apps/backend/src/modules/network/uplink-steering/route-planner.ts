@@ -1,14 +1,14 @@
 import { argMatch, ID_RE, run } from "../../../helpers/run.ts";
 import { parseDefaultRouteInterface } from "../connectivity-candidates.ts";
 import { parseDefaultRouteLine } from "../gateways.ts";
+import type { UplinkRoutePlan } from "./applier.ts";
+import { SOURCE_ROUTE_RULE_PRIORITY } from "./contracts.ts";
+import { asRouteError, routeUnavailable } from "./route-errors.ts";
 import {
 	isEthernetUplinkIface,
 	parseHasDefaultRoute,
 	parseIpRules,
-} from "../policy-route-check.ts";
-import type { UplinkRoutePlan } from "./applier.ts";
-import { SOURCE_ROUTE_RULE_PRIORITY } from "./contracts.ts";
-import { asRouteError, routeUnavailable } from "./route-errors.ts";
+} from "./route-parsers.ts";
 import { assertFwmarkPriorityAvailable } from "./route-policy.ts";
 
 const MANAGED_TABLE_BASE = 30_000;

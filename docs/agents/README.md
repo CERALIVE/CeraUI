@@ -1,5 +1,7 @@
 # Archived agent contracts
 
+Retirement (image-building-pipeline PR #115): the dispatcher rules and policy-route self-check are retired; the netif diagnostic and warning are removed, while historical latch examples below remain documentation only.
+
 Read the contract for the subsystem you touch before making changes. Every original section remains here.
 
 | Original heading | Contract | Governed paths / scope |
