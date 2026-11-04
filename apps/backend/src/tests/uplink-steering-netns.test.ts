@@ -41,23 +41,27 @@ describe.skipIf(!NETNS_ISOLATED)(
 			const wan0 = steeringUplink("wan-a", "wan0", 100);
 			const wan1 = steeringUplink("wan-b", "wan1", 25);
 			const zone = { ifname: "client0", ipv4Cidr: "10.42.0.0/24" } as const;
+			const clientZones = [
+				zone,
+				{ ifname: "shared0", ipv4Cidr: "10.43.0.0/24" },
+			];
 			const weighted = buildShareRuleset({
-				clientZones: [zone],
+				clientZones,
 				uplinks: [wan0, wan1],
 			});
 			const selectWan0 = buildShareRuleset({
-				clientZones: [zone],
+				clientZones,
 				uplinks: [wan0, { ...wan1, selectable: false, weight: 0 }],
 			});
 			const transitionWan1 = buildShareRuleset({
-				clientZones: [zone],
+				clientZones,
 				uplinks: [
 					{ ...wan0, selectable: false, weight: 0 },
 					{ ...wan1, weight: 100 },
 				],
 			});
 			const finalWan1 = buildShareRuleset({
-				clientZones: [zone],
+				clientZones,
 				uplinks: [{ ...wan1, weight: 100 }],
 			});
 
@@ -121,9 +125,10 @@ describe.skipIf(!NETNS_ISOLATED)(
 						log1,
 						hexMark(wan0.mark),
 						hexMark(wan1.mark),
+						"--nm-shared",
 						...goldenPaths,
 					],
-					{ stdout: "pipe", stderr: "pipe" },
+					{ env: process.env, stdout: "pipe", stderr: "pipe" },
 				);
 				const [stdout, stderr, exitCode] = await Promise.all([
 					new Response(proc.stdout).text(),
@@ -164,6 +169,28 @@ describe.skipIf(!NETNS_ISOLATED)(
 				});
 				expect(["conntrack", "ctnetlink"]).toContain(result.flushBackend);
 				expect(result.foreignTablePresent).toBe(true);
+				expect(result.ingestAfter).toBe(result.ingestBefore);
+				expect(result.nmSharing.coexistence).toEqual({
+					hotspotRoundTrip: "reply",
+					sharedLanRoundTrip: "reply",
+					uplinkToHotspot: "rejected",
+					uplinkToSharedLan: "rejected",
+					hotspotToSharedLan: "rejected",
+					sharedLanToHotspot: "rejected",
+				});
+				expect(result.nmSharing.floorOnly).toEqual({
+					hotspotRoundTrip: "reply",
+					sharedLanRoundTrip: "reply",
+					uplinkToHotspot: "rejected",
+					uplinkToSharedLan: "rejected",
+					hotspotToSharedLan: "rejected",
+					sharedLanToHotspot: "rejected",
+				});
+				expect(result.nmSharing.crossRoutes).toEqual(["shared0", "client0"]);
+				expect(result.nmSharing.withoutRejects).toEqual(["reply", "reply"]);
+				expect(result.nmSharing.freshUnmarkedCrossPackets).toBe(4);
+				expect(result.nmSharing.localUnmarkedPackets).toBe(1);
+				console.info(JSON.stringify(result));
 			} finally {
 				await rm(temp, { recursive: true, force: true });
 			}
@@ -194,6 +221,25 @@ interface NetnsResult {
 		readonly wan1: number;
 	};
 	readonly foreignTablePresent: boolean;
+	readonly ingestBefore: string;
+	readonly ingestAfter: string;
+	readonly nmSharing: {
+		readonly coexistence: SharedProbeResults;
+		readonly floorOnly: SharedProbeResults;
+		readonly crossRoutes: readonly string[];
+		readonly withoutRejects: readonly string[];
+		readonly freshUnmarkedCrossPackets: number;
+		readonly localUnmarkedPackets: number;
+	};
+}
+
+interface SharedProbeResults {
+	readonly hotspotRoundTrip: "reply" | "rejected";
+	readonly sharedLanRoundTrip: "reply" | "rejected";
+	readonly uplinkToHotspot: "reply" | "rejected";
+	readonly uplinkToSharedLan: "reply" | "rejected";
+	readonly hotspotToSharedLan: "reply" | "rejected";
+	readonly sharedLanToHotspot: "reply" | "rejected";
 }
 
 function steeringUplink(

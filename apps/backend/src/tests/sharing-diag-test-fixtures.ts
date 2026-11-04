@@ -121,6 +121,10 @@ function nmSharedTable(ifname: string, prefix: string): string {
 		"\tchain filter_forward {",
 		"\t\ttype filter hook forward priority filter; policy accept;",
 		`\t\tip daddr ${prefix} oifname "${ifname}" ct state { established, related } accept`,
+		`\t\tip saddr ${prefix} iifname "${ifname}" accept`,
+		`\t\tiifname "${ifname}" oifname "${ifname}" accept`,
+		`\t\tiifname "${ifname}" reject`,
+		`\t\toifname "${ifname}" reject`,
 		"\t}",
 		"}",
 	].join("\n");
