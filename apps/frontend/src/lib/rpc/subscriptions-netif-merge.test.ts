@@ -99,30 +99,28 @@ describe("netif merge preserves same-subnet data and ignores legacy diagnostics"
 		expect(netif?.usb0).not.toHaveProperty("policy_route_missing");
 	});
 
-	it("does not fabricate the fields on an interface that never carried them", () => {
-		pushNetif({ eth0: { tp: 5, enabled: true, ip: "10.0.9.1" } });
+	it("ignores a legacy diagnostic on an interface with no subnet group", () => {
+		pushNetif({ eth0: { tp: 5, enabled: true, ip: "10.0.9.1", ...legacy } });
 
 		const netif = getNetif();
 		expect(netif?.eth0?.same_subnet_group).toBeUndefined();
 		expect(netif?.eth0).not.toHaveProperty("policy_route_missing");
 	});
 
-	it("ignores both true and false legacy verdicts", () => {
-		for (const verdict of [true, false]) {
-			const legacyFrame = {
-				wlan0: {
-					tp: 2,
-					enabled: false,
-					ip: "10.42.0.1",
-					policy_route_missing: verdict,
-				},
-			};
-			pushNetif(legacyFrame);
-			expect(getNetif()?.wlan0).toEqual({
+	it.each([true, false])("ignores legacy verdict %s", (verdict) => {
+		const legacyFrame = {
+			wlan0: {
 				tp: 2,
 				enabled: false,
 				ip: "10.42.0.1",
-			});
-		}
+				policy_route_missing: verdict,
+			},
+		};
+		pushNetif(legacyFrame);
+		expect(getNetif()?.wlan0).toEqual({
+			tp: 2,
+			enabled: false,
+			ip: "10.42.0.1",
+		});
 	});
 });

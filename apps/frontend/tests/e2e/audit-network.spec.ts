@@ -63,6 +63,13 @@ function installNetworkHarness(): void {
 			super(url, protocols);
 			w.__net.socket = this;
 			this.__realSend = Real.prototype.send.bind(this);
+			this.addEventListener("message", (event: MessageEvent) => {
+				if (typeof event.data !== "string") return;
+				const frame = JSON.parse(event.data);
+				if (frame.netif?.["audit-lan-b"]?.policy_route_missing === true) {
+					window.dispatchEvent(new Event("audit-legacy-netif-frame"));
+				}
+			});
 		}
 	}
 	w.WebSocket = HookedWS;
@@ -80,12 +87,26 @@ const record = (line: string) => findings.push(line);
 
 test.describe("Audit A2 — Network destination (multi-modem-wifi)", { tag: "@audit" }, () => {
 	test.skip(({ browserName }) => browserName !== "chromium", "single-browser audit walk");
+	let authoritativeNetif: Record<string, unknown> | undefined;
 
 	test.beforeEach(async ({ page }, testInfo) => {
 		test.skip(
 			testInfo.project.name !== "desktop",
 			"desktop layout drives the Network destination audit",
 		);
+		authoritativeNetif = undefined;
+		await page.routeWebSocket(/\/ws(?:\?|$)/, (socket) => {
+			const server = socket.connectToServer();
+			server.onMessage((message) => {
+				if (typeof message !== "string") {
+					socket.send(message);
+					return;
+				}
+				const frame = JSON.parse(message);
+				if (frame.netif && authoritativeNetif) frame.netif = authoritativeNetif;
+				socket.send(JSON.stringify(frame));
+			});
+		});
 		await page.addInitScript(installNetworkHarness);
 		await page.goto("/");
 		await ensureAuthenticated(page);
@@ -206,8 +227,48 @@ test.describe("Audit A2 — Network destination (multi-modem-wifi)", { tag: "@au
 		await expect(subnet).toHaveCount(0);
 		await expect(policy).toHaveCount(0);
 
-		// A new CIDR still surfaces, while a legacy policy-route flag is ignored.
-		await emit(page, "netif", {
+		await page.evaluate(() => {
+			const observation = new Promise<{ warningObserved: boolean; netifFrames: number }>((resolve, reject) => {
+				let netifFrames = 0;
+				let settled = false;
+				const selector = '[data-testid="policy-route-warning"]';
+				const cleanup = () => {
+					observer.disconnect();
+					window.removeEventListener("audit-legacy-netif-frame", onFrame);
+					clearTimeout(deadline);
+				};
+				const finish = (warningObserved: boolean) => {
+					if (settled) return;
+					settled = true;
+					cleanup();
+					resolve({ warningObserved, netifFrames });
+				};
+				const observer = new MutationObserver((records) => {
+					if (records.some((record) => [...record.addedNodes].some((node) =>
+						node instanceof Element && (node.matches(selector) || node.querySelector(selector)),
+					))) finish(true);
+				});
+				const onFrame = () => {
+					netifFrames++;
+					if (netifFrames === 3) {
+						// Let the final message's Svelte DOM work settle before disconnecting.
+						requestAnimationFrame(() => requestAnimationFrame(() => finish(false)));
+					}
+				};
+				const deadline = setTimeout(() => {
+					settled = true;
+					cleanup();
+					reject(new Error("retirement observation did not receive three netif frames"));
+				}, 15_000);
+				observer.observe(document.body, { childList: true, subtree: true });
+				window.addEventListener("audit-legacy-netif-frame", onFrame);
+				if (document.querySelector(selector)) finish(true);
+			});
+			Reflect.set(window, "__policyRouteObservation", observation);
+		});
+
+		// Later mock snapshots must not erase the state whose retirement we observe.
+		authoritativeNetif = {
 			"audit-lan-a": {
 				tp: 0,
 				enabled: false,
@@ -215,12 +276,14 @@ test.describe("Audit A2 — Network destination (multi-modem-wifi)", { tag: "@au
 				same_subnet_group: "192.168.77.0/24",
 			},
 			"audit-lan-b": { tp: 0, enabled: false, ip: "192.168.77.3", policy_route_missing: true },
-		});
+		};
+		await emit(page, "netif", authoritativeNetif);
 
 		await expect(subnet).toBeVisible();
 		await expect(subnet).toHaveAttribute("role", "status");
 		await expect(subnet).toContainText("192.168.77.0/24");
-		await expect(policy).toHaveCount(0);
+		const observation = await page.evaluate(() => Reflect.get(window, "__policyRouteObservation"));
+		expect(observation).toEqual({ warningObserved: false, netifFrames: 3 });
 		record(
 			"#4 CollisionBands: empty subnet flags render no band; injected same_subnet_group renders calm info; legacy policy_route_missing renders no warning — PASS",
 		);
