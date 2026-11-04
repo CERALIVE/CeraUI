@@ -9,6 +9,90 @@ import { stableUplinkMark } from "../modules/network/uplink-steering/ruleset.ts"
 import { scripted } from "./uplink-steering-route-test-fixtures.ts";
 
 describe("uplink steering route planning", () => {
+	test.each([
+		[
+			"wwu1c2",
+			"default via 10.5.4.129 proto static metric 700",
+			["default", "via", "10.5.4.129", "proto", "static", "metric", "700"],
+		],
+		[
+			"ppp0",
+			"default scope link metric 700",
+			["default", "scope", "link", "metric", "700"],
+		],
+	] as const)(
+		"plans the interface-filtered %s default with exactly one device clause",
+		async (ifname, defaultRoute, routeTokens) => {
+			const plan = await planUplinkRoute(
+				{
+					identity: `filtered-${ifname}`,
+					ifname,
+					sourceAddress: "10.5.4.130",
+					sourceAddressUnique: true,
+					mark: 0xca000100,
+				},
+				scripted({
+					"ip rule show":
+						"0: from all lookup local\n32766: from all lookup main\n",
+					[`ip -4 route show default dev ${ifname}`]: defaultRoute,
+				}),
+			);
+
+			expect(plan.defaultRouteArgv).toEqual([
+				"route",
+				"replace",
+				"table",
+				"30001",
+				...routeTokens,
+				"dev",
+				ifname,
+			]);
+		},
+	);
+
+	test("refuses a conflicting device in an interface-filtered default", async () => {
+		await expect(
+			planUplinkRoute(
+				{
+					identity: "filtered-wwu1c2",
+					ifname: "wwu1c2",
+					sourceAddress: "10.5.4.130",
+					sourceAddressUnique: true,
+					mark: 0xca000100,
+				},
+				scripted({
+					"ip rule show":
+						"0: from all lookup local\n32766: from all lookup main\n",
+					"ip -4 route show default dev wwu1c2":
+						"default via 10.5.4.129 dev wwan9 proto static metric 700",
+				}),
+			),
+		).rejects.toMatchObject({
+			name: "SteeringUnavailableError",
+			reason: "policy_route_missing",
+			message: "wwu1c2: interface default route was unusable",
+		});
+	});
+
+	test("does not infer an interface from an unfiltered table default", async () => {
+		await expect(
+			planUplinkRoute(
+				{
+					identity: "wifi-a",
+					ifname: "wlan0",
+					sourceAddress: "10.5.4.130",
+					sourceAddressUnique: true,
+					mark: 0xca000100,
+				},
+				scripted({
+					"ip rule show": "100: from 10.5.4.130 lookup 30001\n",
+					"ip route show table 30001":
+						"default via 10.5.4.129 proto static metric 700",
+				}),
+			),
+		).rejects.toMatchObject({ reason: "policy_route_missing" });
+	});
+
 	test("provisions an interface-specific Ethernet table when no source rule exists", async () => {
 		const mark = stableUplinkMark("onboard-eth0");
 		const baseRules =

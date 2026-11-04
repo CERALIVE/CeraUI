@@ -92,6 +92,7 @@ async function planUplinkRouteInner(
 				existingTable,
 				routeOutput,
 				SOURCE_ROUTE_RULE_PRIORITY,
+				false,
 			);
 		}
 		return { ...candidate, table: existingTable, managed: false };
@@ -161,6 +162,7 @@ async function planTwinRoute(
 		managedTable(candidate.mark),
 		routeOutput,
 		undefined,
+		true,
 	);
 }
 
@@ -182,6 +184,7 @@ async function planManagedRoute(
 		managedTable(candidate.mark),
 		routeOutput,
 		sourceRulePriority,
+		true,
 	);
 }
 
@@ -190,8 +193,9 @@ function managedPlanFromRoute(
 	table: string,
 	defaultRoute: string,
 	sourceRulePriority: number | undefined,
+	devFiltered: boolean,
 ): UplinkRoutePlan {
-	const defaultLine = defaultRoute
+	let defaultLine = defaultRoute
 		.split("\n")
 		.map((line) => line.trim())
 		.find((line) => line.startsWith("default"));
@@ -200,6 +204,18 @@ function managedPlanFromRoute(
 			candidate.ifname,
 			"interface has no discoverable default route",
 		);
+	}
+	if (devFiltered) {
+		const tokens = defaultLine.split(/\s+/);
+		const devIndex = tokens.indexOf("dev");
+		if (devIndex !== -1 && tokens[devIndex + 1] !== candidate.ifname) {
+			throw routeUnavailable(
+				candidate.ifname,
+				"interface default route was unusable",
+			);
+		}
+		// iproute2 omits the device clause when the query already filters by it.
+		if (devIndex === -1) defaultLine += ` dev ${candidate.ifname}`;
 	}
 	const parsed = parseDefaultRouteLine(defaultLine);
 	if (
