@@ -27,6 +27,28 @@ whether the mutation can cost connectivity:
 | `withJournaledModemMutation` | lease PLUS a durable armed journal entry written BEFORE the mutation and cancelled only after it is confirmed. APN/roaming/band/5G/USB-mode. |
 | `beginModemMutation` | the lease alone, for a transaction whose confirmation is DEFERRED past the caller's return (see LEASE LIFETIME below). |
 
+**Ready activation is one narrow lease-only exception [EXISTS; host-tested].**
+Only the retained status poll, after its reconciliation lock is released, may
+activate the resolved `config.conn` once per registration. It positively reads
+NM device state 30 (disconnected), MM `registered`, profile autoconnect `yes`,
+and absence of inhibit/scan, then repeats those reads under `withModemMutation`.
+The same registration, stable key and UUID must still hold and the physical key's
+300 s cooldown must have elapsed. Intent consumption and the cooldown stamp are
+synchronous immediately before `nmConnect(config.conn, 45)`; failure never
+retries. NM state 100 consumes intent without dispatch, before MM eligibility.
+Unknown reads and identity/lease refusals preserve pending intent.
+
+The exception covers ONLY that activation call on a positively disconnected
+device. Resolving a late-readable SIM runs outside the update lock and reuses
+registration's profile selection. Every late profile create, field write,
+autoconnect demotion or deletion holds the identity lease through the existing
+`withJournaledModemMutation("modem-config")` path, which uses the same
+`beginModemMutation` admission as `withModemMutation`. APN/roaming enforcement is
+journaled before effects, never smuggled into the lease-only activation path.
+Journal failure writes no configuration and preserves pending late work.
+The registration, physical key and SIM identity are fenced across awaited
+reads. Coverage: `tests/modem-ready-activation.test.ts`; board evidence is pending.
+
 **IDENTITY IS FAIL-CLOSED.** The identity contract permits an omitted
 `stable_key`, and a target with no resolvable physical key cannot be journaled,
 cannot be rolled back and cannot be re-found after a re-enumeration — so EVERY
