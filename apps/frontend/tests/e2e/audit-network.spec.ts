@@ -22,9 +22,8 @@ import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers/index.j
  *   2. WiFi scan/connect surfaces dispatch through osCommand with an in-flight state.
  *   3. Modem config dialog validates the manual-APN schema bound (mirrors the
  *      backend zod refine: autoconfig !== false || apn.length > 0).
- *   4. CollisionBands render ONLY from their netif flags (same_subnet_group /
- *      policy_route_missing) — absent for explicit false/empty flags, present
- *      once active flags are injected.
+ *   4. CollisionBands renders same-subnet information from its netif flag;
+ *      legacy policy-route diagnostics never render the retired warning.
  *   5. Disabled controls carry an accessible reason (BondToggle tooltip/aria-label).
  *
  * netif flags for check #4 are injected through the dev-only `dev.emit` broadcast
@@ -186,7 +185,7 @@ test.describe("Audit A2 — Network destination (multi-modem-wifi)", { tag: "@au
 		);
 	});
 
-	test("CollisionBands render only from their netif flags", async ({ page }) => {
+	test("CollisionBands renders subnet information and ignores the retired diagnostic", async ({ page }) => {
 		const subnet = page.getByTestId("same-subnet-info");
 		const policy = page.getByTestId("policy-route-warning");
 
@@ -200,7 +199,6 @@ test.describe("Audit A2 — Network destination (multi-modem-wifi)", { tag: "@au
 						tp: 0,
 						enabled: true,
 						same_subnet_group: "",
-						policy_route_missing: false,
 					},
 				]),
 			),
@@ -208,10 +206,7 @@ test.describe("Audit A2 — Network destination (multi-modem-wifi)", { tag: "@au
 		await expect(subnet).toHaveCount(0);
 		await expect(policy).toHaveCount(0);
 
-		// Inject the two flags via dev.emit (merges per-interface, subscriptions
-		// netif case): a new CIDR must surface in the info band and the injected
-		// policy_route_missing must raise the warning band — proving BOTH bands are
-		// driven purely by their netif flags.
+		// A new CIDR still surfaces, while a legacy policy-route flag is ignored.
 		await emit(page, "netif", {
 			"audit-lan-a": {
 				tp: 0,
@@ -225,9 +220,9 @@ test.describe("Audit A2 — Network destination (multi-modem-wifi)", { tag: "@au
 		await expect(subnet).toBeVisible();
 		await expect(subnet).toHaveAttribute("role", "status");
 		await expect(subnet).toContainText("192.168.77.0/24");
-		await expect(policy).toBeVisible();
+		await expect(policy).toHaveCount(0);
 		record(
-			"#4 CollisionBands: explicit false/empty flags render no bands; injected same_subnet_group renders calm info; injected policy_route_missing renders warning — PASS",
+			"#4 CollisionBands: empty subnet flags render no band; injected same_subnet_group renders calm info; legacy policy_route_missing renders no warning — PASS",
 		);
 	});
 
