@@ -30,7 +30,7 @@ const COPY = {
 		install: "Instalar kernel ahora",
 		staged: "Se aplica en el próximo reinicio con el dispositivo inactivo",
 		unknown: "No se pudo determinar el estado de la actualización del kernel.",
-		generic: "El dispositivo no pudo confirmar la actualización del kernel. Consulta Ajustes → Registros del sistema para más detalles.",
+		generic: "El dispositivo no pudo confirmar la actualización del kernel. Consulta Configuración → Registros del sistema para más detalles.",
 		bootFailed: "El nuevo kernel no pasó la comprobación de estado al arrancar.",
 		phases: ["Descargando kernel", "Preparando kernel", "Kernel listo", "Kernel actualizado", "Verificando el nuevo kernel", "Kernel anterior restaurado", "Actualización del kernel fallida"],
 	},
