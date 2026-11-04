@@ -50,29 +50,32 @@ describe("uplink steering route planning", () => {
 		},
 	);
 
-	test("refuses a conflicting device in an interface-filtered default", async () => {
-		await expect(
-			planUplinkRoute(
-				{
-					identity: "filtered-wwu1c2",
-					ifname: "wwu1c2",
-					sourceAddress: "10.5.4.130",
-					sourceAddressUnique: true,
-					mark: 0xca000100,
-				},
-				scripted({
-					"ip rule show":
-						"0: from all lookup local\n32766: from all lookup main\n",
-					"ip -4 route show default dev wwu1c2":
-						"default via 10.5.4.129 dev wwan9 proto static metric 700",
-				}),
-			),
-		).rejects.toMatchObject({
-			name: "SteeringUnavailableError",
-			reason: "policy_route_missing",
-			message: "wwu1c2: interface default route was unusable",
-		});
-	});
+	test.each(["wwu1c2", "wlan1"])(
+		"refuses a conflicting device in an interface-filtered %s default",
+		async (ifname) => {
+			await expect(
+				planUplinkRoute(
+					{
+						identity: `filtered-${ifname}`,
+						ifname,
+						sourceAddress: "10.5.4.130",
+						sourceAddressUnique: true,
+						mark: 0xca000100,
+					},
+					scripted({
+						"ip rule show":
+							"0: from all lookup local\n32766: from all lookup main\n",
+						[`ip -4 route show default dev ${ifname}`]:
+							"default via 10.5.4.129 dev wwan9 proto static metric 700",
+					}),
+				),
+			).rejects.toMatchObject({
+				name: "SteeringUnavailableError",
+				reason: "policy_route_missing",
+				message: `${ifname}: interface default route was unusable`,
+			});
+		},
+	);
 
 	test("does not infer an interface from an unfiltered table default", async () => {
 		await expect(
@@ -220,23 +223,46 @@ describe("uplink steering route planning", () => {
 		expect(plan.sourceRulePriority).toBeUndefined();
 	});
 
-	test("refuses a non-Ethernet uplink with no source-route table", async () => {
+	test("provisions a wlan1 table when no source rule exists", async () => {
 		const h = scripted({
 			"ip rule show": "0: from all lookup local\n32766: from all lookup main\n",
+			"ip -4 route show default dev wlan1":
+				"default via 192.168.1.1 proto dhcp src 192.168.1.50 metric 600",
 		});
 
-		await expect(
-			planUplinkRoute(
-				{
-					identity: "wifi-a",
-					ifname: "wlan0",
-					sourceAddress: "192.168.2.10",
-					sourceAddressUnique: true,
-					mark: stableUplinkMark("wifi-a"),
-				},
-				h,
-			),
-		).rejects.toMatchObject({ reason: "policy_route_missing" });
+		const plan = await planUplinkRoute(
+			{
+				identity: "wifi-a",
+				ifname: "wlan1",
+				sourceAddress: "192.168.1.50",
+				sourceAddressUnique: true,
+				mark: 0xca000100,
+			},
+			h,
+		);
+
+		expect(plan).toMatchObject({
+			managed: true,
+			table: "30001",
+			sourceRulePriority: 100,
+		});
+		expect(plan.defaultRouteArgv).toEqual([
+			"route",
+			"replace",
+			"table",
+			"30001",
+			"default",
+			"via",
+			"192.168.1.1",
+			"proto",
+			"dhcp",
+			"src",
+			"192.168.1.50",
+			"metric",
+			"600",
+			"dev",
+			"wlan1",
+		]);
 	});
 
 	test("refuses an existing table whose default route leaves by another interface", async () => {

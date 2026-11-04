@@ -83,10 +83,7 @@ async function planUplinkRouteInner(
 		parseHasDefaultRoute(routeOutput) &&
 		parseDefaultRouteInterface(routeOutput) === candidate.ifname
 	) {
-		if (
-			isModuleProvisionedUplink(candidate.ifname) &&
-			existingTable === managedTable(candidate.mark)
-		) {
+		if (existingTable === managedTable(candidate.mark)) {
 			return managedPlanFromRoute(
 				candidate,
 				existingTable,
@@ -110,9 +107,7 @@ async function planWithoutSourceRule(
 	candidate: UplinkRouteCandidate,
 	deps: UplinkRouteManagerDeps,
 ): Promise<UplinkRoutePlan> {
-	if (!isModuleProvisionedUplink(candidate.ifname)) {
-		throw routeUnavailable(candidate.ifname, "source rule is missing");
-	}
+	// Image PR #115 retired dispatcher source rules; steering owns every class.
 	return await planManagedRoute(candidate, deps, SOURCE_ROUTE_RULE_PRIORITY);
 }
 
@@ -133,11 +128,9 @@ async function planWithoutSourceRule(
   fwmark machinery `route-policy.ts` already installs for every other uplink, and
   the routing twin of the `curl --interface` binding the health probe uses.
 
-  It is deliberately NOT gated on `isModuleProvisionedUplink`. That gate exists
-  because a MISSING source rule on a dispatcher-mapped interface is evidence of
-  broken routing; for a shared address no per-interface source rule can exist at
-  all, so its absence is the expected steady state and proves nothing. The honest
-  precondition is instead the one below: the interface must own a default route.
+  Image PR #115 retired dispatcher source rules for every interface class.
+  Unlike unique-address uplinks, twins must never create a source rule because
+  the address cannot name one device. Each interface must own a default route.
 */
 async function planTwinRoute(
 	candidate: UplinkRouteCandidate,
