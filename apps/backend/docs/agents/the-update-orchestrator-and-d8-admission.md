@@ -657,7 +657,10 @@ rule in the maintenance probes.
   lifecycle). A refusal dispatches `SYNC_REFUSED`, returning idle with persisted
   `slotSync.nextAttemptAt` and `consecutiveRefusals` before `reset-failed`.
   Retry starts at 15 minutes, doubles per refusal to a 6-hour cap, survives
-  restart and resets on `SYNC_SUCCEEDED`. Absent legacy metadata means no
+  restart and resets on `SYNC_SUCCEEDED`. The counter saturates at the
+  schema's largest safe integer; the doubling exponent is bounded before
+  evaluation so boundary counters remain restart-readable at the 6-hour cap.
+  Absent legacy metadata means no
   deadline and zero refusals. Package and OS checks continue during that wait;
   every mirror retry still passes the unit's gates. Hard failures remain
   `SYNC_FAILED`, persisted before `reset-failed` clears the unit's record.

@@ -1633,8 +1633,9 @@ async function failSlotSyncFromUnit(
 	// record is gone the unit reads inactive-clean, and a matching receipt
 	// (published before mark-good) would turn a restart into a false success.
 	if (probe.kind === "refused") {
+		// Five doublings already exceed the six-hour delay cap.
 		const delay = Math.min(
-			15 * 60_000 * 2 ** (state.slotSync?.consecutiveRefusals ?? 0),
+			15 * 60_000 * 2 ** Math.min(state.slotSync?.consecutiveRefusals ?? 0, 5),
 			6 * 60 * 60_000,
 		);
 		dispatch({ type: "SYNC_REFUSED", now, retryAt: now + delay });

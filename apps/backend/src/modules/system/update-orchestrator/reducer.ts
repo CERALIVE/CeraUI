@@ -653,7 +653,11 @@ function reduceSyncing(
 				failureReason: null,
 				slotSync: {
 					nextAttemptAt: event.retryAt,
-					consecutiveRefusals: (state.slotSync?.consecutiveRefusals ?? 0) + 1,
+					consecutiveRefusals:
+						Math.min(
+							state.slotSync?.consecutiveRefusals ?? 0,
+							Number.MAX_SAFE_INTEGER - 1,
+						) + 1,
 				},
 			});
 		// A failed mirror is not evidence that the running version is bad.
