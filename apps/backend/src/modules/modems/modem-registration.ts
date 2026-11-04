@@ -120,6 +120,7 @@ async function getModemConfig(
 	const operatorId = simInfo["sim.properties.operator-code"];
 
 	const gsmConnections = await getGsmConnections();
+	if (gsmConnections === undefined) return undefined;
 
 	if (gsmConnections.byDevice[modemId]?.[simId]) {
 		const ci = gsmConnections.byDevice[modemId][simId];
@@ -400,16 +401,16 @@ export async function resolveLateModemConfig(
 	if (!isCurrent() || modemStableKeyForId(id) !== stableKey) return "pending";
 	resetGsmConnections();
 	const before = await getModemConfig(sim.modemInfo, sim.simInfo);
-	if (!isCurrent()) return "pending";
+	if (before === undefined || !isCurrent()) return "pending";
 	const guarded = await withJournaledModemMutation(
 		stableKey,
 		"modem-config",
 		{
-			apn: before?.apn ?? "",
-			username: before?.username ?? "",
-			roaming: before?.roaming ?? false,
-			network: before?.network ?? "",
-			autoconfig: before?.autoconfig ?? false,
+			apn: before.apn,
+			username: before.username,
+			roaming: before.roaming,
+			network: before.network,
+			autoconfig: before.autoconfig,
 			network_type: getModem(id)?.network_type.active ?? "",
 		},
 		async (mutation) => {
@@ -768,13 +769,14 @@ export async function registerModemSafe(id: ModemId): Promise<void> {
  * the diff would be empty.
  */
 export async function refreshModemStatus(id: ModemId): Promise<void> {
-	const modem = getModem(id);
-	if (!modem) {
+	if (!getModem(id)) {
 		return;
 	}
 
 	const modemInfo = await mmGetModemWithRetry(id);
-	if (!modemInfo) {
+	// Late SIM resolution can update configuration while this read is in flight.
+	const modem = getModem(id);
+	if (!modemInfo || !modem) {
 		return;
 	}
 

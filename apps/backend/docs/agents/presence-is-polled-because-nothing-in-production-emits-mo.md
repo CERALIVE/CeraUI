@@ -40,6 +40,13 @@ profile when a matching UUID exists. Late profile effects use the journaled
 the work pending without profile writes. Successful resolution publishes the
 full config. Coverage: `tests/modem-ready-activation.test.ts`, with an injected
 clock and no sleeps. Late-MBIM cold-boot hardware evidence remains unavailable.
+Status refresh merges against the current row after its modem read, preserving
+configuration and ICCID resolved while that read was in flight. The shared GSM
+lookup returns unknown for an unreadable roster or any unreadable/truncated
+profile detail row; a partial index never authorizes profile creation or default
+roaming values. Late work stays pending until a complete read succeeds, without
+requiring another SIM edge. The suite also changes the physical key during an
+in-flight activation to enforce consumption before the connection await.
 Raw modem transport reads remain in `modem-registration.ts`; the activation
 coordinator consumes its fresh registration-state read without owning a transport
 or parsing ModemManager fields. The frozen transport boundary is unchanged.

@@ -48,6 +48,11 @@ journaled before effects, never smuggled into the lease-only activation path.
 Journal failure writes no configuration and preserves pending late work.
 The registration, physical key and SIM identity are fenced across awaited
 reads. Coverage: `tests/modem-ready-activation.test.ts`; board evidence is pending.
+An incomplete GSM profile lookup is unknown, never permission to create a
+profile or substitute roaming defaults. Late work remains pending on that read
+failure, including a failure after journal admission; no profile effect runs.
+Overlapping status reads merge into the latest registry row so a completed
+late-SIM resolution cannot be overwritten by an older snapshot.
 
 **IDENTITY IS FAIL-CLOSED.** The identity contract permits an omitted
 `stable_key`, and a target with no resolvable physical key cannot be journaled,

@@ -10,6 +10,7 @@ import { setModemReadyActivationDepsForTest } from "../modules/modems/modem-read
 import {
 	refreshModemStatus,
 	registerModemSafe,
+	resolveLateModemConfig,
 } from "../modules/modems/modem-registration.ts";
 import {
 	discoverModems,
@@ -68,10 +69,12 @@ let realRegistration: boolean;
 let profileAddFails: boolean;
 let simReadFails: boolean;
 let profileReadFails: boolean;
+let profileFieldsFailure: "none" | "unreadable" | "incomplete";
 let commands: string[][];
 let unexpected: string[];
 let onStateRead: (() => Promise<void>) | undefined;
 let onConnect: (() => Promise<void>) | undefined;
+let onModemRead: (() => Promise<void>) | undefined;
 
 function modem(): Modem {
 	return {
@@ -124,10 +127,12 @@ beforeEach(async () => {
 	profileAddFails = false;
 	simReadFails = false;
 	profileReadFails = false;
+	profileFieldsFailure = "none";
 	commands = [];
 	unexpected = [];
 	onStateRead = undefined;
 	onConnect = undefined;
+	onModemRead = undefined;
 	resetLifecycleInterlock();
 	resetRecoveryBarrier();
 	resetGsmConnections();
@@ -155,6 +160,7 @@ beforeEach(async () => {
 			if (args.includes("-i"))
 				return `sim.properties.iccid : ${simReadable ? SIM_ID : "--"}
 sim.properties.operator-name : Test`;
+			await onModemRead?.();
 			return `modem.generic.model : MBIM modem
 modem.generic.state : ${mmState}
 modem.generic.device-identifier : ${DEVICE_ID}
@@ -191,8 +197,13 @@ modem.generic.ports.value[1] : wwan0 (net)`;
 				args.some((arg) =>
 					arg.startsWith("gsm.device-id,gsm.sim-id,gsm.sim-operator-id"),
 				)
-			)
+			) {
+				if (profileFieldsFailure === "unreadable")
+					throw new Error("Profile fields unreadable");
+				if (profileFieldsFailure === "incomplete")
+					return `${DEVICE_ID}\n${SIM_ID}`;
 				return `${DEVICE_ID}\n${SIM_ID}\n\ninternet\n\n\nyes\n\nno`;
+			}
 			if (args.includes("up")) {
 				expect(isModemMutationHeld(KEY)).toBe(true);
 				// A connection wait must never hold the global reconciliation lock.
@@ -512,4 +523,91 @@ test("a failed late profile lookup preserves pending work until a readable poll"
 	await runModemStatusPoll();
 	expect(getModem(2)?.config?.conn).toBe(UUID);
 	expect(activations()).toHaveLength(1);
+});
+
+test("an overlapping status refresh preserves late-resolved SIM configuration", async () => {
+	simReadable = false;
+	realRegistration = true;
+	let resolvedUuid: string | undefined;
+	setModemReadyActivationDepsForTest({
+		now: () => now,
+		resolveConfig: async (...args) => {
+			const started = Promise.withResolvers<void>();
+			const release = Promise.withResolvers<void>();
+			let intercepted = false;
+			onModemRead = async () => {
+				if (intercepted) return;
+				intercepted = true;
+				started.resolve();
+				await release.promise;
+			};
+			const second = runModemStatusPoll();
+			await started.promise;
+			try {
+				const result = await resolveLateModemConfig(...args);
+				resolvedUuid = getModem(2)?.config?.conn;
+				return result;
+			} finally {
+				release.resolve();
+				await second;
+				onModemRead = undefined;
+			}
+		},
+	});
+	await discoverModems();
+	simReadable = true;
+	await runModemStatusPoll();
+	const afterOverlap = getModem(2)?.config?.conn;
+	for (let poll = 0; poll < 3; poll++) await runModemStatusPoll();
+	expect(resolvedUuid).toBe(UUID);
+	expect(afterOverlap).toBe(UUID);
+	expect(getModem(2)?.config).toEqual(modem().config);
+	expect(getModem(2)?.iccid).toBe(SIM_ID);
+	expect(profileWrites()).toEqual([]);
+	expect(activations()).toEqual([["nmcli", "-w", "45", "conn", "up", UUID]]);
+});
+
+for (const failure of ["unreadable", "incomplete"] as const) {
+	test(`${failure} existing profile details keep late configuration pending without a clone`, async () => {
+		simReadable = false;
+		realRegistration = true;
+		await discoverModems();
+		simReadable = true;
+		profileFieldsFailure = failure;
+		await runModemStatusPoll();
+		await runModemStatusPoll();
+		expect(profileWrites()).toEqual([]);
+		expect(getModem(2)?.config).toBeUndefined();
+		expect(activations()).toEqual([]);
+		profileFieldsFailure = "none";
+		await runModemStatusPoll();
+		expect(getModem(2)?.config?.conn).toBe(UUID);
+		expect(getModem(2)?.config?.roaming).toBe(false);
+		expect(profileWrites()).toEqual([]);
+		expect(activations()).toEqual([["nmcli", "-w", "45", "conn", "up", UUID]]);
+	});
+}
+
+test("consumption precedes connection await when the physical key changes in flight", async () => {
+	const started = Promise.withResolvers<void>();
+	const release = Promise.withResolvers<void>();
+	let connects = 0;
+	onConnect = async () => {
+		if (++connects !== 1) return;
+		started.resolve();
+		await release.promise;
+	};
+	const first = runModemStatusPoll();
+	await started.promise;
+	try {
+		setModemIdPathReader(
+			async () => new Map([["wwan0", `${KEY}-replacement`]]),
+		);
+		await refreshModemIdPaths();
+		await runModemStatusPoll();
+	} finally {
+		release.resolve();
+		await first;
+	}
+	expect(activations()).toEqual([["nmcli", "-w", "45", "conn", "up", UUID]]);
 });
