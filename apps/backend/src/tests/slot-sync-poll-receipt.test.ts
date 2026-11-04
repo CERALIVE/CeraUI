@@ -125,8 +125,15 @@ describe("B2: a matching receipt settles only after a fresh finished-and-clean p
 				});
 				await runOrchestratorTick();
 			}
-			expect(getOrchestratorState().phase).toBe("failed");
-			expect(getOrchestratorState().failureReason).toBe(reason);
+			const isRefusal = reason === "slot-sync refused (exit 75)";
+			expect(getOrchestratorState().phase).toBe(isRefusal ? "idle" : "failed");
+			expect(getOrchestratorState().failureReason).toBe(
+				isRefusal ? null : reason,
+			);
+			if (isRefusal)
+				expect(getOrchestratorState()).toMatchObject({
+					slotSync: { nextAttemptAt: 909_000, consecutiveRefusals: 1 },
+				});
 			expect(h.cleanup).toEqual([]);
 			expect(resets).toBe(reason === "slot-sync-unit-absent" ? 0 : 1);
 		}

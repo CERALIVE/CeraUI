@@ -69,18 +69,35 @@ describe("update-orchestrator reducer — pure state machine", () => {
 		expect(state.failureReason).toBeNull();
 	});
 
-	test("a slot-sync failure goes to failed (mirror failure, not a bad version)", () => {
+	test("a slot-sync refusal returns idle with its retry deadline", () => {
 		let state: OrchestratorState = {
 			...initialOrchestratorState(0),
 			phase: "syncing",
 		};
 		state = reduceOrchestrator(state, {
-			type: "SYNC_FAILED",
+			type: "SYNC_REFUSED",
 			now: 1,
-			reason: "slot-sync refused (exit 75)",
+			retryAt: 900_001,
 		});
+		expect(state.phase).toBe("idle");
+		expect(state.failureReason).toBeNull();
+		expect(state.progress).toBeNull();
+		expect(state.slotSync).toEqual({
+			nextAttemptAt: 900_001,
+			consecutiveRefusals: 1,
+		});
+	});
+
+	test("a hard slot-sync failure remains failed without quarantining a version", () => {
+		const state = reduceOrchestrator(
+			{
+				...initialOrchestratorState(0),
+				phase: "syncing",
+			},
+			{ type: "SYNC_FAILED", now: 1, reason: "slot-sync failed (exit 1)" },
+		);
 		expect(state.phase).toBe("failed");
-		expect(state.failureReason).toBe("slot-sync refused (exit 75)");
+		expect(state.failureReason).toBe("slot-sync failed (exit 1)");
 	});
 
 	test("CHECK_SUCCEEDED_NONE returns to idle for both check kinds and updates only the matching clock", () => {

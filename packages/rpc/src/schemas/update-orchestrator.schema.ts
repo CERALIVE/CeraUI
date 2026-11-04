@@ -116,6 +116,13 @@ export const updateOrchestratorPersistedStateSchema = z
 		failureReason: z.string().nullable(),
 		packageCheck: updateOrchestratorScheduleClockSchema,
 		osCheck: updateOrchestratorScheduleClockSchema,
+		slotSync: z
+			.object({
+				nextAttemptAt: z.number().nonnegative().nullable().default(null),
+				consecutiveRefusals: z.number().int().nonnegative().default(0),
+			})
+			.strict()
+			.optional(),
 		cellularOverrideId: z.string().nullable(),
 		packageAttempt: z
 			.object({ bootId: z.string().min(1), slot: z.string().min(1) })

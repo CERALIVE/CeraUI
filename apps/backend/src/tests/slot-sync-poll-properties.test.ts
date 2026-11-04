@@ -144,10 +144,11 @@ describe("B4: a validated terminal exit 75 is a typed refusal on either lifecycl
 			setOrchestratorRuntimeDepsForTest(h.value);
 			syncing();
 			await runOrchestratorTick();
-			expect(getOrchestratorState().phase).toBe("failed");
-			expect(getOrchestratorState().failureReason).toBe(
-				"slot-sync refused (exit 75)",
-			);
+			expect(getOrchestratorState().phase).toBe("idle");
+			expect(getOrchestratorState().failureReason).toBeNull();
+			expect(getOrchestratorState()).toMatchObject({
+				slotSync: { nextAttemptAt: 909_000, consecutiveRefusals: 1 },
+			});
 			expect(h.cleanup).toEqual([]);
 		}
 	});

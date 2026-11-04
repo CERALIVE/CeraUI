@@ -62,6 +62,7 @@ export function toPersisted(
 		failureReason: state.failureReason,
 		packageCheck: state.packageCheck,
 		osCheck: state.osCheck,
+		...(state.slotSync ? { slotSync: state.slotSync } : {}),
 		cellularOverrideId: state.cellularOverrideId,
 		...(state.kernelAttempt ? { kernelAttempt: state.kernelAttempt } : {}),
 		...(state.packageAttempt ? { packageAttempt: state.packageAttempt } : {}),
@@ -87,6 +88,7 @@ export function fromPersisted(
 		failureReason: persisted.failureReason,
 		packageCheck: persisted.packageCheck,
 		osCheck: persisted.osCheck,
+		...(persisted.slotSync ? { slotSync: persisted.slotSync } : {}),
 		cellularOverrideId: persisted.cellularOverrideId,
 		...(persisted.kernelAttempt
 			? { kernelAttempt: persisted.kernelAttempt }

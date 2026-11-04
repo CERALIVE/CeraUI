@@ -91,10 +91,11 @@ describe("reboot-proven slot mirror orchestration", () => {
 			phase: "syncing",
 		});
 		await runOrchestratorTick();
-		expect(getOrchestratorState().failureReason).toBe(
-			"slot-sync refused (exit 75)",
-		);
-		expect(getOrchestratorState().phase).toBe("failed");
+		expect(getOrchestratorState().failureReason).toBeNull();
+		expect(getOrchestratorState().phase).toBe("idle");
+		expect(getOrchestratorState()).toMatchObject({
+			slotSync: { nextAttemptAt: 902_000, consecutiveRefusals: 1 },
+		});
 		expect(reset).toBe(1);
 	});
 

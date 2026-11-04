@@ -66,6 +66,7 @@ export interface OrchestratorState {
 	readonly failureReason: string | null;
 	readonly packageCheck: OrchestratorScheduleClock;
 	readonly osCheck: OrchestratorScheduleClock;
+	readonly slotSync?: UpdateOrchestratorPersistedState["slotSync"];
 	// One-time approval is spent on an attempt, not on success.
 	readonly cellularOverrideId: string | null;
 	readonly packageAttempt?: UpdateOrchestratorPersistedState["packageAttempt"];
@@ -222,12 +223,18 @@ export type OrchestratorEvent =
 	| { readonly type: "SYNC_STARTED"; readonly now: number }
 	| { readonly type: "SYNC_SUCCEEDED"; readonly now: number }
 	| {
+			readonly type: "SYNC_REFUSED";
+			readonly now: number;
+			readonly retryAt: number;
+	  }
+	| {
 			readonly type: "SYNC_FAILED";
 			readonly now: number;
 			readonly reason: string;
 	  }
 	| { readonly type: "SYNC_SETTLED"; readonly now: number }
 	| { readonly type: "SYNC_FAILURE_SUPERSEDED"; readonly now: number }
+	| { readonly type: "SYNC_REFUSAL_RELEASED"; readonly now: number }
 	| {
 			readonly type: "CELLULAR_OVERRIDE_GRANTED";
 			readonly now: number;

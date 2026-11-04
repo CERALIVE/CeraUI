@@ -6,6 +6,10 @@ import {
 	type SlotSyncEvidence,
 } from "./slot-sync-gate.ts";
 
+export function isRecordedSyncRefusal(reason: string | null): boolean {
+	return reason === "slot-sync refused (exit 75)";
+}
+
 export function isRecordedSyncFailure(reason: string | null): boolean {
 	return (
 		reason === "slot-sync-incomplete" ||
