@@ -170,7 +170,7 @@ describe("snapshot broadcast identity", () => {
 		expect(getLinkTelemetry()).toBeNull();
 	});
 
-	it("still preserves policy_route_missing when a netif frame omits it", () => {
+	it("ignores a legacy policy-route diagnostic across netif ticks", () => {
 		push("netif", {
 			wwan0: {
 				ip: "10.0.0.2",
@@ -183,6 +183,7 @@ describe("snapshot broadcast identity", () => {
 			wwan0: { ip: "10.0.0.2", tp: 120, enabled: true },
 		});
 
-		expect(getNetif()?.wwan0?.policy_route_missing).toBe(true);
+		expect(getNetif()?.wwan0).not.toHaveProperty("policy_route_missing");
+		expect(getNetif()?.wwan0?.tp).toBe(120);
 	});
 });

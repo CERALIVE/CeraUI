@@ -163,8 +163,8 @@ export function slotSyncGate(input: SlotSyncGateInput): SlotSyncGate {
 			}
 		}
 	}
-	// Dispatching blind could meet a wedged RAUC, whose exit 75 refusal would
-	// leave a sticky failure; not dispatching could hide a stale fallback. A
+	// Dispatching blind could meet a wedged RAUC and back off on exit 75;
+	// not dispatching could hide a stale fallback. A
 	// later tick retries once the identity resolves.
 	if (
 		input.receiptStateSha256 === input.statusSha256 &&

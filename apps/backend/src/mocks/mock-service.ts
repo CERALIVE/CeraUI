@@ -65,7 +65,6 @@ import type {
 	MockHealthState,
 	MockModemConfigState,
 	MockNetifConfigState,
-	MockPolicyRouteFault,
 	MockRelayValidateFault,
 	MockSimState,
 	MockStreamErrorState,
@@ -85,7 +84,6 @@ export type {
 	MockHealthState,
 	MockModemConfigState,
 	MockNetifConfigState,
-	MockPolicyRouteFault,
 	MockRelayValidateFault,
 	MockSimState,
 	MockStreamErrorState,
@@ -127,9 +125,6 @@ export interface MockState {
 	// Forced relay.validate network-stage fault for the deterministic mock seam in
 	// relay.procedure.ts (test-infra only); null = default successful probe.
 	relayValidateFault: MockRelayValidateFault;
-	// Forced policy-route self-check fault for the dev/mock seam in
-	// policy-route-check.ts (never spawns `ip`); null = no flags.
-	policyRouteFault: MockPolicyRouteFault;
 	// Per-modem SIM lock state (keyed by modem id string) + the in-memory stand-in
 	// for the chmod-600 tmpfs PIN secret read; both reset with the scenario.
 	simStates: Map<string, MockSimState>;
@@ -185,7 +180,6 @@ const mockState: MockState = {
 	mockHealthOverride: null,
 	injectedStreamError: null,
 	relayValidateFault: null,
-	policyRouteFault: null,
 	simStates: new Map(),
 	simPinSecret: null,
 	mockAddons: {},
@@ -260,7 +254,6 @@ export function initMockService(scenarioName?: string): void {
 	mockState.mockHealthOverride = null;
 	mockState.injectedStreamError = null;
 	mockState.relayValidateFault = null;
-	mockState.policyRouteFault = null;
 	mockState.capabilityOverride = null;
 	mockState.gatewayActive = {};
 	mockState.networkIngestActive = { rtmp: true, srt: true };
@@ -682,10 +675,6 @@ export function setMockStreamError(event: MockStreamErrorState): void {
 
 export function setMockRelayValidateFault(fault: MockRelayValidateFault): void {
 	updateMockState({ relayValidateFault: fault });
-}
-
-export function setMockPolicyRouteFault(fault: MockPolicyRouteFault): void {
-	updateMockState({ policyRouteFault: fault });
 }
 
 function clearMockTimers(): void {

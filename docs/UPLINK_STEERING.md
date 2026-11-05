@@ -20,7 +20,7 @@ The implementation lives in
 - nftables table: `inet ceralive_share`
 - desired-state file: `/run/ceralive/share.nft`
 - carrier: `ceralive-share.service`
-- fwmark rule priority: `110`, after the image's source rules at priority `100`
+- fwmark rule priority: `110`, after steering-owned source rules at priority `100`
 - fixed weighted-selection modulus: `10000`, apportioned by largest remainder
 - foreign image table: `inet ceralive_ingest_fw`, input hook priority `-10`
 
@@ -61,16 +61,29 @@ uses an address inside a client prefix.
 
 ## Route support
 
-Existing usable source-routing tables are reused. The module provisions a private,
-identity-derived table for otherwise-unmapped `eth*`, `en*`/`enx*`, `ww*`, and
-`ppp*` uplinks. It adds a priority-100 source rule only when the source address is
-unique. Duplicate-address links keep their existing device-bound behavior.
+Existing usable foreign source-routing tables are reused without claiming them.
+Every supported uplink class (`wl*`, `usb*`, `eth*`, `en*`/`enx*`, `ww*`, and
+`ppp*`) without a source rule gets a private, identity-derived table. A table
+matching that identity remains steering-owned on re-plan for every interface
+class, so teardown removes its owned support. A priority-100 source rule is added
+only when the source address is unique; duplicate-address links use their own
+fwmark tables without an ambiguous source rule.
 
-A Wi-Fi/USB route the image was expected to provision is refused when the
-policy-route self-check says it is missing. An occupied foreign rule at priority
-110, a route table with no usable default, overlapping client/uplink prefixes, a
-client zone that remains a bond candidate, or a stable-mark collision produces a
-typed `steering_unavailable` state rather than a guessed route.
+For `ip -4 route show default dev <ifname>`, iproute2 omits the `dev` clause.
+The planner supplies that query's interface when absent and rejects a conflicting
+`dev`; unfiltered table output must explicitly name the matching interface.
+
+Image-building-pipeline PR #115 removed the dispatcher source rules. The stale
+policy-route self-check, its netif field, mock provider, and warning band are
+retired. Its pure parsers now live in `uplink-steering/route-parsers.ts`.
+The unused `network.collision.policyRouteTitle/Body` translations and frozen
+rendered fixtures remain unchanged. The steering refusal reason
+`policy_route_missing` remains valid for actual route preparation failures.
+
+An occupied foreign rule at priority 110, a route table with no usable default,
+overlapping client/uplink prefixes, a client zone that remains a bond candidate,
+or a stable-mark collision produces a typed `steering_unavailable` state rather
+than a guessed route. Preparation still succeeds or fails as a whole.
 
 On backend restart, the module inventories its namespaced priority-110 rules. It
 publishes the latest ruleset first, then flushes conntrack and removes stale rules

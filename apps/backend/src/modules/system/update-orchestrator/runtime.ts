@@ -1476,6 +1476,7 @@ function noteSlotIdentityGate(gate: SlotSyncGate): void {
 
 async function maybeFindSlotSyncCandidate(): Promise<void> {
 	if (state.phase !== "idle") return;
+	if (deps.now() < (state.slotSync?.nextAttemptAt ?? 0)) return;
 	try {
 		const gate = await checkSlotSyncGate();
 		noteSlotIdentityGate(gate);
@@ -1490,6 +1491,10 @@ async function maybeFindSlotSyncCandidate(): Promise<void> {
 
 async function maybeStartSlotSync(): Promise<void> {
 	if (state.phase !== "sync-eligible") return;
+	if (deps.now() < (state.slotSync?.nextAttemptAt ?? 0)) {
+		dispatch({ type: "SYNC_SKIPPED", now: deps.now() });
+		return;
+	}
 	try {
 		const gate = await checkSlotSyncGate();
 		noteSlotIdentityGate(gate);
@@ -1627,14 +1632,20 @@ async function failSlotSyncFromUnit(
 	// Persist the verdict before clearing systemd's failure record: once the
 	// record is gone the unit reads inactive-clean, and a matching receipt
 	// (published before mark-good) would turn a restart into a false success.
-	dispatch({
-		type: "SYNC_FAILED",
-		now,
-		reason:
-			probe.kind === "refused"
-				? `slot-sync refused (exit ${probe.exitCode})`
-				: `slot-sync failed (exit ${probe.exitCode})`,
-	});
+	if (probe.kind === "refused") {
+		// Five doublings already exceed the six-hour delay cap.
+		const delay = Math.min(
+			15 * 60_000 * 2 ** Math.min(state.slotSync?.consecutiveRefusals ?? 0, 5),
+			6 * 60 * 60_000,
+		);
+		dispatch({ type: "SYNC_REFUSED", now, retryAt: now + delay });
+	} else {
+		dispatch({
+			type: "SYNC_FAILED",
+			now,
+			reason: `slot-sync failed (exit ${probe.exitCode})`,
+		});
+	}
 	await deps.resetSlotSyncFailure().catch((error) => {
 		logger.warn("update-orchestrator: slot-sync reset-failed cleanup failed", {
 			error,

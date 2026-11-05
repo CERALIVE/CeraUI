@@ -54,7 +54,6 @@ import {
 	setNetifDupIpSuppression,
 	setQueueUpdateGwHook,
 } from "../modules/network/network-interfaces.ts";
-import { resetPolicyRouteFlags } from "../modules/network/policy-route-check.ts";
 import { setNetifState } from "../modules/network/state/netif-state.ts";
 import { genSrtlaBondEntries } from "../modules/streaming/srtla.ts";
 import { configureNetworkInterfaceProcedure } from "../rpc/procedures/network.procedure.ts";
@@ -167,7 +166,6 @@ beforeEach(() => {
 		setNetifDupIpSuppression(name, false);
 	}
 	resetBondOptOut();
-	resetPolicyRouteFlags();
 	setQueueUpdateGwHook(null);
 });
 
@@ -693,64 +691,5 @@ describe("the wire shape round-trips through the published schema", () => {
 		]) {
 			expect(ethernetRoleMessageSchema.safeParse(frame).success).toBe(true);
 		}
-	});
-});
-
-describe("the policy-route check now covers ethernet uplinks", () => {
-	test("a wired port with NO rule is withheld, not flagged", async () => {
-		const { checkPolicyRoutes } = await import(
-			"../modules/network/policy-route-check.ts"
-		);
-		const rules = `0:\tfrom all lookup local
-32766:\tfrom all lookup main
-`;
-		const flagged = await checkPolicyRoutes(
-			{ [UPLINK_PORT]: { ip: UPLINK_IP, enabled: true } },
-			{
-				isRealDevice: async () => true,
-				shouldUseMocks: () => false,
-				resolveMockPolicyRouteMissing: () => null,
-				runIpRuleShow: mock(async () => rules),
-				runIpRouteShowTable: mock(async () => ""),
-			},
-		);
-
-		expect([...(flagged ?? [])]).toEqual([]);
-	});
-
-	test("a wired port WITH a rule whose table has no default route IS flagged", async () => {
-		const { checkPolicyRoutes } = await import(
-			"../modules/network/policy-route-check.ts"
-		);
-		const rules = `0:\tfrom all lookup local
-100:\tfrom ${UPLINK_IP} lookup 108
-32766:\tfrom all lookup main
-`;
-		const flagged = await checkPolicyRoutes(
-			{ [UPLINK_PORT]: { ip: UPLINK_IP, enabled: true } },
-			{
-				isRealDevice: async () => true,
-				shouldUseMocks: () => false,
-				resolveMockPolicyRouteMissing: () => null,
-				runIpRuleShow: mock(async () => rules),
-				runIpRouteShowTable: mock(async () => ""),
-			},
-		);
-
-		expect([...(flagged ?? [])]).toEqual([UPLINK_PORT]);
-	});
-
-	test("a shared-lan port is not an uplink, so it is never a candidate", async () => {
-		const { collectEthernetPolicyRouteCandidates } = await import(
-			"../modules/network/policy-route-check.ts"
-		);
-		persistEthernetRole(SHARED_PORT, "shared-lan");
-		processIfconfigOutput(twoPortTopology());
-
-		const candidates = collectEthernetPolicyRouteCandidates(
-			getNetworkInterfaces(),
-		);
-
-		expect(candidates.map((c) => c.name)).toEqual([UPLINK_PORT]);
 	});
 });

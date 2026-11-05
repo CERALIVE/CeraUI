@@ -211,7 +211,11 @@ is owed. See `docs/UPDATE-RECOVERY.md`.
   for `failed` with exact `commit_unit_absent_on_resume` now has a narrow automatic
   consistency path for attempts with recorded boot/slot provenance; a later
   successful mirror can separately supersede a recorded sync failure. Unknown
-  history remains operator-only. Both use fresh proof, CONTROL and the shared
+  history remains operator-only. Exact historical `slot-sync refused (exit 75)`
+  releases to idle without a recovery notice or a later mirror receipt, only
+  after matching persisted state and two clean unit probes under CONTROL and
+  the shared update flock, with current state and held locks rechecked.
+  These paths use fresh proof, CONTROL and the shared
   update flock. Package recovery additionally holds the four standard APT/dpkg
    OFD locks from first read through publication using inline Perl/direct fcntl,
    restricted to Linux little-endian x86_64/aarch64 LP64. Its read-only collection
@@ -650,8 +654,17 @@ rule in the maintenance probes.
   the same grace and is then re-probed, and the receipt re-read, before it
   fails. The parser's `running`,
   `failed` and `refused` verdicts are kept (exit 75 is `refused` on either
-  lifecycle), and a failed or refused verdict is persisted before
-  `reset-failed` clears the unit's record. A receipt matches only when its
+  lifecycle). A refusal dispatches `SYNC_REFUSED`, returning idle with persisted
+  `slotSync.nextAttemptAt` and `consecutiveRefusals` before `reset-failed`.
+  Retry starts at 15 minutes, doubles per refusal to a 6-hour cap, survives
+  restart and resets on `SYNC_SUCCEEDED`. The counter saturates at the
+  schema's largest safe integer; the doubling exponent is bounded before
+  evaluation so boundary counters remain restart-readable at the 6-hour cap.
+  Absent legacy metadata means no
+  deadline and zero refusals. Package and OS checks continue during that wait;
+  every mirror retry still passes the unit's gates. Hard failures remain
+  `SYNC_FAILED`, persisted before `reset-failed` clears the unit's record.
+  A receipt matches only when its
   `target_slot` also names the slot that is not booted now: an OS activation
   swaps the booted slot without changing dpkg, and a SHA-only match skipped
   the post-activation mirror on hardware (task-45d OPI D1). Slot identity is

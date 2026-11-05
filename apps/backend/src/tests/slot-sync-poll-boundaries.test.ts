@@ -109,8 +109,15 @@ describe("B1: the failure verdict is durable before the systemd record is cleare
 			);
 			syncing();
 			await runOrchestratorTick();
-			expect(getOrchestratorState().phase).toBe("failed");
-			expect(getOrchestratorState().failureReason).toBe(reason);
+			const refused = reason === "slot-sync refused (exit 75)";
+			expect(getOrchestratorState().phase).toBe(refused ? "idle" : "failed");
+			expect(getOrchestratorState().failureReason).toBe(
+				refused ? null : reason,
+			);
+			if (refused)
+				expect(getOrchestratorState()).toMatchObject({
+					slotSync: { nextAttemptAt: 909_000, consecutiveRefusals: 1 },
+				});
 			expect(resets).toBe(1);
 		}
 	});

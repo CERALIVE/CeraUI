@@ -89,6 +89,58 @@ function defaultRouteAnswer(ifname: string): Record<string, string> {
 }
 
 describe("a duplicate-IP twin is planned by mark, not by address", () => {
+	test.each([
+		[
+			"wwu1c2",
+			"default via 10.5.4.129 proto static metric 700",
+			["default", "via", "10.5.4.129", "proto", "static", "metric", "700"],
+		],
+		[
+			"ppp0",
+			"default scope link metric 700",
+			["default", "scope", "link", "metric", "700"],
+		],
+	] as const)(
+		"plans a %s twin from its interface-filtered default",
+		async (ifname, defaultRoute, routeTokens) => {
+			const plan = await planUplinkRoute(
+				{ ...twinCandidate(ifname, `filtered-${ifname}`), mark: 0xca000100 },
+				scripted({
+					"ip rule show": AMBIGUOUS_RULES,
+					[`ip -4 route show default dev ${ifname}`]: defaultRoute,
+				}),
+			);
+
+			expect(plan.defaultRouteArgv).toEqual([
+				"route",
+				"replace",
+				"table",
+				"30001",
+				...routeTokens,
+				"dev",
+				ifname,
+			]);
+			expect(plan.sourceRulePriority).toBeUndefined();
+		},
+	);
+
+	test("refuses an interface-filtered twin default naming another device", async () => {
+		await expect(
+			planUplinkRoute(
+				twinCandidate("wwu1c2", "filtered-wwu1c2"),
+				scripted({
+					"ip rule show": AMBIGUOUS_RULES,
+					"ip -4 route show default dev wwu1c2":
+						"default via 10.5.4.129 dev wwan9 proto static metric 700",
+				}),
+			),
+		).rejects.toMatchObject({
+			name: "SteeringUnavailableError",
+			reason: "policy_route_missing",
+			message: "wwu1c2: interface default route was unusable",
+		});
+	});
+
 	test("the plan is managed, table-per-mark, and carries NO source rule", async () => {
 		const h = scripted({
 			"ip rule show": AMBIGUOUS_RULES,

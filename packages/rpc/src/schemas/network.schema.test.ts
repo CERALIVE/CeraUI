@@ -3,10 +3,23 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+	netifMessageSchema,
 	uplinkFlowsResetEventSchema,
 	uplinkShaperStatusSchema,
 	uplinkSteeringStatusSchema,
 } from './network.schema';
+
+describe('legacy netif payloads', () => {
+	test('accepts but strips the retired policy-route diagnostic', () => {
+		expect(
+			netifMessageSchema.parse({
+				wlan1: { tp: 0, enabled: true, ip: '192.168.1.50', policy_route_missing: true },
+			}),
+		).toEqual({
+			wlan1: { tp: 0, enabled: true, ip: '192.168.1.50' },
+		});
+	});
+});
 
 describe('uplink steering wire schemas', () => {
 	test('parses available and typed unavailable persistent states', () => {

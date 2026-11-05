@@ -20,7 +20,10 @@ import {
 	startOsStageAttempt,
 } from "./os-stage-retry.ts";
 import { reduceOsUnlaunchedSettlement } from "./os-unlaunched-state.ts";
-import { isRecordedSyncFailure } from "./sync-failure-recovery.ts";
+import {
+	isRecordedSyncFailure,
+	isRecordedSyncRefusal,
+} from "./sync-failure-recovery.ts";
 import type {
 	OrchestratorEvent,
 	OrchestratorScheduleClock,
@@ -638,7 +641,25 @@ function reduceSyncing(
 ): OrchestratorState {
 	switch (event.type) {
 		case "SYNC_SUCCEEDED":
-			return enter(state, event.now, { phase: "synced", progress: null });
+			return enter(state, event.now, {
+				phase: "synced",
+				progress: null,
+				slotSync: { nextAttemptAt: null, consecutiveRefusals: 0 },
+			});
+		case "SYNC_REFUSED":
+			return enter(state, event.now, {
+				phase: "idle",
+				progress: null,
+				failureReason: null,
+				slotSync: {
+					nextAttemptAt: event.retryAt,
+					consecutiveRefusals:
+						Math.min(
+							state.slotSync?.consecutiveRefusals ?? 0,
+							Number.MAX_SAFE_INTEGER - 1,
+						) + 1,
+				},
+			});
 		// A failed mirror is not evidence that the running version is bad.
 		case "SYNC_FAILED":
 			return enter(state, event.now, {
@@ -687,6 +708,19 @@ function reduceFailed(
 	event: OrchestratorEvent,
 ): OrchestratorState {
 	switch (event.type) {
+		case "SYNC_REFUSAL_RELEASED": {
+			if (!isRecordedSyncRefusal(state.failureReason)) return state;
+			const { recoveredNotice: _notice, ...rest } = state;
+			return enter(rest, event.now, {
+				phase: "idle",
+				progress: null,
+				failureReason: null,
+				slotSync: {
+					nextAttemptAt: event.now,
+					consecutiveRefusals: state.slotSync?.consecutiveRefusals ?? 0,
+				},
+			});
+		}
 		case "SYNC_FAILURE_SUPERSEDED":
 			if (!isRecordedSyncFailure(state.failureReason)) return state;
 			return enter(state, event.now, {

@@ -33,7 +33,6 @@ import {
 	setNetifDupIpSuppression,
 	setQueueUpdateGwHook,
 } from "../modules/network/network-interfaces.ts";
-import { resetPolicyRouteFlags } from "../modules/network/policy-route-check.ts";
 import {
 	type RouterAdminProbeDeps,
 	refreshRouterCellularAdmin,
@@ -103,7 +102,6 @@ beforeEach(() => {
 		setNetifDupIpSuppression(name, false);
 	}
 	resetBondOptOut();
-	resetPolicyRouteFlags();
 	resetRouterCellularAdmin();
 	setQueueUpdateGwHook(null);
 });

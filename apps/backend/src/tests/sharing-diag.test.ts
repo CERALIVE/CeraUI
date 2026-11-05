@@ -47,6 +47,57 @@ function healthy() {
 }
 
 describe("healthy coexistence", () => {
+	it("accepts full NetworkManager shared rules beside steering and ingest tables", () => {
+		const ruleset = nftRuleset({
+			sharedPrefixes: [SHARED_PREFIX, SECOND_SHARED_PREFIX],
+		});
+		const tables = parseNftRuleset(ruleset);
+		expect(tables).not.toBeNull();
+		if (tables === null) throw new Error("shared fixture did not parse");
+
+		for (const [index, prefix] of [
+			SHARED_PREFIX,
+			SECOND_SHARED_PREFIX,
+		].entries()) {
+			const ifname = `wlan${index}`;
+			const table = findNftTable(tables, "ip", `nm-shared-${ifname}`);
+			expect(
+				table?.chains.find((chain) => chain.name === "filter_forward")?.rules,
+			).toEqual([
+				`ip daddr ${prefix} oifname "${ifname}" ct state { established, related } accept`,
+				`ip saddr ${prefix} iifname "${ifname}" accept`,
+				`iifname "${ifname}" oifname "${ifname}" accept`,
+				`iifname "${ifname}" reject`,
+				`oifname "${ifname}" reject`,
+			]);
+		}
+		const diag = deriveSharingDiag(
+			{
+				firewallBackend: EXPECTED_FIREWALL_BACKEND,
+				ipRuleShow: ipRuleShow(),
+				nftRuleset: ruleset,
+				sharedZones: [
+					{ ifname: "wlan0", ipv4Cidr: SHARED_PREFIX },
+					{ ifname: "wlan1", ipv4Cidr: SECOND_SHARED_PREFIX },
+				],
+			},
+			1_000,
+		);
+
+		expect(diag.state).toBe("ok");
+		expect(diag.sharedNat).toEqual({ state: "ok" });
+		expect(diag.foreignTables).toEqual({ state: "ok" });
+		expect(
+			checkSharedNat(
+				ruleset.replace(
+					`ip saddr ${SHARED_PREFIX} ip daddr != ${SHARED_PREFIX} masquerade`,
+					"",
+				),
+				HOTSPOT,
+			).reason,
+		).toBe("shared_nat_missing");
+	});
+
 	it("reports every check ok and rolls up ok", () => {
 		const diag = healthy();
 

@@ -1,18 +1,13 @@
 <!--
-  CollisionBands.svelte — subnet-collision + policy-route health surfacing (Task 13).
+  CollisionBands.svelte — subnet-collision and bond-mapping surfacing.
 
-  Purely informational/warning UI derived from two additive-optional netif fields
-  (Todo 11 + Todo 12) — NEVER a functional gate: this component disables no
+  Purely informational/warning UI — NEVER a functional gate: this component disables no
   interface and blocks no stream. It renders at most two calm bands:
 
     • same_subnet_group set on any interface  → a CALM, INFORMATIONAL band
       (neutral/info styling, NEVER amber/red). Different IPs on the same subnet
       are handled by the OS per-link policy routing, so this is expected, not an
       error.
-    • policy_route_missing === true on any    → an amber WARNING band: a bonded
-      link may route through the wrong modem. The dispatcher reinstalls the rules
-      when the link comes back up, so the guidance is reboot / re-plug.
-
     • bond_mapping disposition other than `mapped` → an amber WARNING band naming
       what is and is not bonded, plus the sender's typed reason. It is DRIVEN by
       the one normalized disposition stream and never inferred: a duplicate-IP
@@ -57,9 +52,6 @@ const sameSubnetGroups = $derived([
 	),
 ]);
 
-// Tristate: `true` flags a real gap, `false` is an all-clear that must retract a
-// previously-raised band, and absent means the backend had no verdict this tick.
-const hasPolicyRouteMissing = $derived(entries.some((entry) => entry.policy_route_missing === true));
 </script>
 
 {#if sameSubnetGroups.length > 0}
@@ -85,25 +77,6 @@ const hasPolicyRouteMissing = $derived(entries.some((entry) => entry.policy_rout
 					>
 				{/each}
 			</div>
-		</div>
-	</div>
-{/if}
-
-{#if hasPolicyRouteMissing}
-	<!-- WARNING — amber; a bonded link may route through the wrong modem. -->
-	<div
-		data-testid="policy-route-warning"
-		role="status"
-		class="bg-status-warning/10 border-status-warning/30 flex items-start gap-3 rounded-xl border p-4"
-	>
-		<TriangleAlert class="text-status-warning mt-0.5 size-5 shrink-0" aria-hidden="true" />
-		<div class="min-w-0 space-y-1">
-			<p class="text-sm font-semibold tracking-tight">
-				{m["network.collision.policyRouteTitle"]()}
-			</p>
-			<p class="text-muted-foreground text-sm">
-				{m["network.collision.policyRouteBody"]()}
-			</p>
 		</div>
 	</div>
 {/if}

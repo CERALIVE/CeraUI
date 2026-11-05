@@ -107,12 +107,13 @@ export function preferGsmConnection(
 	return candidate.uuid < current.uuid ? candidate : current;
 }
 
-async function readGsmConnections() {
+async function readGsmConnections(): Promise<GsmConnections | undefined> {
 	const byDevice: Record<string, Record<string, GsmConnection>> = {};
 	const byOperator: Record<string, GsmConnection> = {};
 	const byUuid: Record<string, GsmConnection> = {};
 
-	const conns = (await nmConnsGet("uuid,type,state")) as Array<string>;
+	const conns = await nmConnsGet("uuid,type,state");
+	if (conns === undefined) return undefined;
 	// The probe runs at most ONCE per read, against the first gsm profile we
 	// meet: this loop is already enumerating them, and asking every profile the
 	// same question would cost one extra nmcli spawn per profile on a board that
@@ -134,13 +135,13 @@ async function readGsmConnections() {
 		}
 
 		const withAutoconfig = resolveGsmAutoconfigSupport();
-		const connInfo = await nmConnGetFields(
-			uuid,
-			withAutoconfig
-				? ([...gsmConnectionFields, "gsm.auto-config"] as const)
-				: gsmConnectionFields,
-		);
-		if (connInfo === undefined) continue;
+		const fields = withAutoconfig
+			? ([...gsmConnectionFields, "gsm.auto-config"] as const)
+			: gsmConnectionFields;
+		const connInfo = await nmConnGetFields(uuid, fields);
+		// A partial index cannot prove absence before creating a GSM profile.
+		if (connInfo === undefined || connInfo.length < fields.length)
+			return undefined;
 
 		const conn: GsmConnection = {
 			state,
@@ -194,7 +195,7 @@ async function readGsmConnections() {
 	return { byDevice, byOperator, byUuid };
 }
 
-export async function getGsmConnections() {
+export async function getGsmConnections(): Promise<GsmConnections | undefined> {
 	if (!gsmConnections) {
 		gsmConnections = await readGsmConnections();
 	}

@@ -45,7 +45,10 @@ import {
 } from "../network/network-manager.ts";
 import { resolveGsmAutoconfigSupport } from "./gsm-autoconfig.ts";
 import { getGsmConnections, resetGsmConnections } from "./gsm-connections.ts";
-import { reconcileDuplicateGsmProfiles } from "./gsm-duplicate-reconcile.ts";
+import {
+	defaultGsmReconcileDeps,
+	reconcileDuplicateGsmProfiles,
+} from "./gsm-duplicate-reconcile.ts";
 import {
 	type ModemId,
 	type ModemInfo,
@@ -68,7 +71,18 @@ import {
 	type SimLock,
 	setModem,
 } from "./modems-state.ts";
+import { modemStableKeyForId } from "./mutation-identity.ts";
+import { withJournaledModemMutation } from "./mutation-lease.ts";
 import { deriveSimPresence } from "./sim-presence.ts";
+
+export type { ModemId } from "./mmcli.ts";
+
+/** Keep raw modem transport reads in the registration owner. */
+export async function readModemRegistrationState(
+	id: ModemId,
+): Promise<string | undefined> {
+	return (await mmGetModem(id))?.["modem.generic.state"];
+}
 
 export type ModemStatus = {
 	connection: string;
@@ -106,6 +120,7 @@ async function getModemConfig(
 	const operatorId = simInfo["sim.properties.operator-code"];
 
 	const gsmConnections = await getGsmConnections();
+	if (gsmConnections === undefined) return undefined;
 
 	if (gsmConnections.byDevice[modemId]?.[simId]) {
 		const ci = gsmConnections.byDevice[modemId][simId];
@@ -315,6 +330,127 @@ async function addConnectionForModem(
 		config.conn = uuid;
 		logger.debug(`Created NM connection ${uuid} for ${modemId}`, config);
 	}
+}
+
+/** Registration and late SIM resolution share profile selection and enforcement. */
+async function resolveModemProfile(
+	modemInfo: ModemInfo,
+	simInfo: SimInfo,
+	isCurrent: () => boolean = () => true,
+): Promise<ModemConfig | undefined> {
+	const config = await getModemConfig(modemInfo, simInfo);
+	if (!isCurrent()) return undefined;
+	// A matching profile must never be replaced by a newly created clone.
+	if (config && !config.conn) {
+		await addConnectionForModem(modemInfo, simInfo, config);
+	} else if (config?.conn) {
+		const enforced = sanitizeModemConfigForNetworkManager({ ...config });
+		const result = await reconcileDuplicateGsmProfiles(
+			modemInfo["modem.generic.device-identifier"],
+			simInfo["sim.properties.iccid"],
+			config.conn,
+			enforced,
+			{
+				...defaultGsmReconcileDeps,
+				setFields: (uuid, fields) =>
+					isCurrent()
+						? defaultGsmReconcileDeps.setFields(uuid, fields)
+						: Promise.resolve(false),
+				remove: (uuid) =>
+					isCurrent()
+						? defaultGsmReconcileDeps.remove(uuid)
+						: Promise.resolve(false),
+			},
+		);
+		if (result.pruned > 0) resetGsmConnections();
+	}
+	return config;
+}
+
+export interface ReadyModemSim {
+	readonly modemInfo: ModemInfo;
+	readonly simInfo: SimInfo;
+}
+
+/** A SIM object alone does not prove its ICCID is readable (e.g. PIN locked). */
+export async function readReadyModemSim(
+	id: ModemId,
+): Promise<ReadyModemSim | "unreadable" | undefined> {
+	const modemInfo = await mmGetModem(id);
+	if (modemInfo === undefined) return undefined;
+	const simId = modemInfo["modem.generic.sim"]?.match(
+		/^\/org\/freedesktop\/ModemManager1\/SIM\/(\d+)$/,
+	)?.[1];
+	if (simId === undefined) return "unreadable";
+	const simInfo = await mmGetSim(Number(simId));
+	if (simInfo === undefined) return undefined;
+	if (!simInfo["sim.properties.iccid"]?.trim()) return "unreadable";
+	return { modemInfo, simInfo };
+}
+
+/**
+ * Runs outside the update lock. All profile effects use the existing journaled
+ * modem-config path, whose identity lease spans arming, writes and retirement.
+ */
+export async function resolveLateModemConfig(
+	id: ModemId,
+	stableKey: string,
+	sim: ReadyModemSim,
+	isCurrent: () => boolean,
+): Promise<"pending" | "attempted" | "resolved"> {
+	if (!isCurrent() || modemStableKeyForId(id) !== stableKey) return "pending";
+	resetGsmConnections();
+	const before = await getModemConfig(sim.modemInfo, sim.simInfo);
+	if (before === undefined || !isCurrent()) return "pending";
+	const guarded = await withJournaledModemMutation(
+		stableKey,
+		"modem-config",
+		{
+			apn: before.apn,
+			username: before.username,
+			roaming: before.roaming,
+			network: before.network,
+			autoconfig: before.autoconfig,
+			network_type: getModem(id)?.network_type.active ?? "",
+		},
+		async (mutation) => {
+			const fresh = await readReadyModemSim(id);
+			if (
+				!isCurrent() ||
+				modemStableKeyForId(id) !== stableKey ||
+				fresh === undefined ||
+				fresh === "unreadable" ||
+				fresh.modemInfo["modem.generic.state"] !== "registered" ||
+				fresh.modemInfo["modem.generic.device-identifier"] !==
+					sim.modemInfo["modem.generic.device-identifier"] ||
+				fresh.simInfo["sim.properties.iccid"] !==
+					sim.simInfo["sim.properties.iccid"]
+			)
+				return { confirmed: true, value: undefined };
+			await mutation.markExecuting();
+			if (!isCurrent()) return { confirmed: true, value: undefined };
+			// Re-read after admission: NM may have created a matching profile meanwhile.
+			resetGsmConnections();
+			const config = await resolveModemProfile(
+				fresh.modemInfo,
+				fresh.simInfo,
+				() => isCurrent() && modemStableKeyForId(id) === stableKey,
+			);
+			return { confirmed: true, value: config };
+		},
+	);
+	if (!guarded.ok || !isCurrent()) return "pending";
+	const config = guarded.value;
+	const modem = getModem(id);
+	if (config === undefined || modem === undefined) return "pending";
+	if (!config.conn) return "attempted";
+	setModem(id, {
+		...modem,
+		config,
+		iccid: sim.simInfo["sim.properties.iccid"],
+		sim_network: sim.simInfo["sim.properties.operator-name"] || "Unknown",
+	});
+	return "resolved";
 }
 
 /**
@@ -530,38 +666,8 @@ async function registerModem(id: number) {
 			simInfo = await mmGetSim(Number.parseInt(simId[1], 10));
 
 			// If a SIM is present, try to find a matching NM connection or create one
-			if (simInfo) {
-				config = await getModemConfig(modemInfo, simInfo);
-
-				// `getModemConfig` ALWAYS returns a config, so an unguarded call
-				// here created a brand-new NetworkManager profile on EVERY
-				// registration — including the pass that had just found one — and
-				// then re-pointed `config.conn` at it. Board-measured on a Rock 5B+
-				// (2026-08-16): 13 gsm profiles for ONE SIM in a single day, each
-				// preceded in the log by a "Found NM connection …" line, while the
-				// profile NetworkManager had actually activated was the oldest. So
-				// every APN save landed on a profile nothing used — a save that
-				// reported success and could never take effect.
-				if (config && !config.conn) {
-					await addConnectionForModem(modemInfo, simInfo, config);
-				} else if (config?.conn) {
-					// Writing to the right profile is only half the job. Disarming the
-					// clones (todo 50) narrows the race; making them CARRY THE SAME
-					// ANSWER removes it, which is what todo 63 needs for roaming — the
-					// operator's "roaming disabled" must survive NetworkManager
-					// activating any profile at all, not just the one we selected.
-					// Sanitizing a COPY: the real config must not be normalized here,
-					// only the fields handed to NetworkManager.
-					const enforced = sanitizeModemConfigForNetworkManager({ ...config });
-					const result = await reconcileDuplicateGsmProfiles(
-						modemInfo["modem.generic.device-identifier"],
-						simInfo["sim.properties.iccid"],
-						config.conn,
-						enforced,
-					);
-					// A prune invalidates the profile cache this registration read from.
-					if (result.pruned > 0) resetGsmConnections();
-				}
+			if (simInfo?.["sim.properties.iccid"]?.trim()) {
+				config = await resolveModemProfile(modemInfo, simInfo);
 			}
 		}
 	}
@@ -663,13 +769,14 @@ export async function registerModemSafe(id: ModemId): Promise<void> {
  * the diff would be empty.
  */
 export async function refreshModemStatus(id: ModemId): Promise<void> {
-	const modem = getModem(id);
-	if (!modem) {
+	if (!getModem(id)) {
 		return;
 	}
 
 	const modemInfo = await mmGetModemWithRetry(id);
-	if (!modemInfo) {
+	// Late SIM resolution can update configuration while this read is in flight.
+	const modem = getModem(id);
+	if (!modemInfo || !modem) {
 		return;
 	}
 

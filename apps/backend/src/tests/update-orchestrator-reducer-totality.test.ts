@@ -98,6 +98,8 @@ describe("update-orchestrator reducer — pure state machine", () => {
 			{ type: "SYNC_SKIPPED", now },
 			{ type: "SYNC_STARTED", now },
 			{ type: "SYNC_SUCCEEDED", now },
+			{ type: "SYNC_REFUSED", now, retryAt: 900_001 },
+			{ type: "SYNC_REFUSAL_RELEASED", now },
 			{ type: "SYNC_FAILED", now, reason: "x" },
 			{ type: "SYNC_SETTLED", now },
 			{ type: "CELLULAR_OVERRIDE_GRANTED", now, id: "abc" },

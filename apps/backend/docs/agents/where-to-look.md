@@ -1,5 +1,7 @@
 <!-- Moved verbatim from AGENTS.md on 2026-10-05 by lean-rules-docs-landing-latam -->
 
+Retirement (image-building-pipeline PR #115): the dispatcher rules and policy-route self-check are retired; the netif diagnostic and warning are removed, while historical latch examples below remain documentation only.
+
 ## WHERE TO LOOK
 
 | Task | Location |

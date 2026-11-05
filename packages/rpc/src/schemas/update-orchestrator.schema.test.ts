@@ -137,6 +137,51 @@ test('preserves settled unsafe and pending-publication recovery without changing
 	expect(updateOrchestratorPersistedStateSchema.parse(pending)).toEqual(pending);
 });
 
+test('legacy agent and OS-attempt snapshots keep their shape without slot-sync metadata', () => {
+	const before = {
+		...state,
+		phase: 'os-available',
+		failureReason: null,
+		osStageRecovery: { ...record, mode: 'automatic' },
+	} as const;
+	const staged = {
+		...before,
+		phase: 'os-staging',
+		osStageRecovery: { ...before.osStageRecovery, activeAttemptId: 'a' },
+	} as const;
+	const localRecovery = {
+		...state,
+		failureReason: 'commit_unit_absent_on_resume',
+		osStageRecovery: undefined,
+	};
+	for (const snapshot of [state, before, staged, localRecovery])
+		expect(updateOrchestratorPersistedStateSchema.parse(snapshot)).toEqual(snapshot);
+});
+
+test('slot-sync refusal metadata round-trips and missing members default compatibly', () => {
+	const slotSync = { nextAttemptAt: 900_000, consecutiveRefusals: 1 };
+	expect(updateOrchestratorPersistedStateSchema.parse({ ...state, slotSync })).toEqual({
+		...state,
+		slotSync,
+	});
+	expect(updateOrchestratorPersistedStateSchema.parse({ ...state, slotSync: {} })).toEqual({
+		...state,
+		slotSync: { nextAttemptAt: null, consecutiveRefusals: 0 },
+	});
+});
+
+test.each([
+	{ nextAttemptAt: -1, consecutiveRefusals: 0 },
+	{ nextAttemptAt: 'soon', consecutiveRefusals: 0 },
+	{ nextAttemptAt: null, consecutiveRefusals: -1 },
+	{ nextAttemptAt: null, consecutiveRefusals: 1.5 },
+	{ nextAttemptAt: null, consecutiveRefusals: 0, foreign: true },
+])('rejects malformed slot-sync retry authority %#', (slotSync) => {
+	expect(updateOrchestratorPersistedStateSchema.safeParse({ ...state, slotSync }).success).toBe(
+		false,
+	);
+});
+
 test('preserves optional historical attempt identity when a failure is settled', () => {
 	// Given a persistence-only recovery record with exact provenance.
 	const input = {

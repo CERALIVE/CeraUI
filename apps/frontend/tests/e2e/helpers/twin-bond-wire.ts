@@ -5,7 +5,7 @@ import type { Page, WebSocketRoute } from "@playwright/test";
 export const TWIN_NETIF: NetifMessage = {
 	enx0c5b8f279a64: {
 		ip: "192.168.8.100", tp: 0, enabled: true, tx_bps: 0, rx_bps: 0,
-		error: "duplicate IPv4 addr", policy_route_missing: false, ethRole: "uplink",
+		error: "duplicate IPv4 addr", ethRole: "uplink",
 		router_cellular: {
 			vendor: "Huawei", model: "E3372 LTE/UMTS/GSM HiLink Modem/Networkcard",
 			vid_pid: "12d1:14dc", kind: "router-cellular", duplicate_model: true,
@@ -13,7 +13,7 @@ export const TWIN_NETIF: NetifMessage = {
 	},
 	eth1: {
 		ip: "192.168.8.100", tp: 495, enabled: true, tx_bps: 792, rx_bps: 8924,
-		error: "duplicate IPv4 addr", policy_route_missing: false, ethRole: "uplink",
+		error: "duplicate IPv4 addr", ethRole: "uplink",
 		router_cellular: {
 			vendor: "Huawei", model: "E3372 LTE/UMTS/GSM HiLink Modem/Networkcard",
 			vid_pid: "12d1:14dc", kind: "router-cellular", duplicate_model: true,

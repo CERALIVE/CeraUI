@@ -602,7 +602,7 @@ function handleMessage(
 			// Lock-aware ingestion for the `enabled` field only.
 			// BondToggle registers per-interface locks as `enabled_${name}` via
 			// markPending/onRpcResolved. Guard only `enabled` — all other fields
-			// (tp, ip, error, mac, same_subnet_group, policy_route_missing,
+			// (tp, ip, error, mac, same_subnet_group,
 			// tx_bps, rx_bps, dongle, router_cellular) flow through live without
 			// registry interaction.
 			//
@@ -631,7 +631,7 @@ function handleMessage(
 				const existing = netifState?.[ifname] ?? ({} as NetifEntry);
 				// Each optional field is spread ONLY when present so a tick that omits
 				// it keeps the prior value via `...existing` (same as ip/error/mac).
-				// same_subnet_group/policy_route_missing MUST be here or CollisionBands
+				// same_subnet_group MUST be here or CollisionBands
 				// never sees live data.
 				const live: Partial<NetifEntry> = {
 					tp: entry.tp,
@@ -640,9 +640,6 @@ function handleMessage(
 					...(entry.mac !== undefined ? { mac: entry.mac } : {}),
 					...(entry.same_subnet_group !== undefined
 						? { same_subnet_group: entry.same_subnet_group }
-						: {}),
-					...(entry.policy_route_missing !== undefined
-						? { policy_route_missing: entry.policy_route_missing }
 						: {}),
 					...(entry.tx_bps !== undefined ? { tx_bps: entry.tx_bps } : {}),
 					...(entry.rx_bps !== undefined ? { rx_bps: entry.rx_bps } : {}),

@@ -14,6 +14,7 @@ import type { RootSlotStatus } from "./slot-status.ts";
 import type { SlotSyncEvidence } from "./slot-sync-gate.ts";
 import {
 	isRecordedSyncFailure,
+	isRecordedSyncRefusal,
 	laterSyncProven,
 	syncUnitClean,
 } from "./sync-failure-recovery.ts";
@@ -51,6 +52,7 @@ export async function recoverFailedUpdate(
 	)
 		return false;
 	const packages = before.failureReason === "commit_unit_absent_on_resume";
+	const refusal = isRecordedSyncRefusal(before.failureReason);
 	if (!packages && !isRecordedSyncFailure(before.failureReason)) return false;
 	if (packages && !before.packageAttempt) return false;
 	await using lease = await port.acquireControl();
@@ -73,19 +75,21 @@ export async function recoverFailedUpdate(
 		)
 			return false;
 		if (!syncUnitClean(await port.inspectSync())) return false;
-		const evidence = await port.readSyncEvidence();
-		const slots = await port.readSlots();
-		const version = await port.readVersion();
-		if (
-			!laterSyncProven({
-				evidence,
-				slots,
-				version,
-				failureAt: before.enteredAt,
-				now: port.now(),
-			})
-		)
-			return false;
+		if (!refusal) {
+			const evidence = await port.readSyncEvidence();
+			const slots = await port.readSlots();
+			const version = await port.readVersion();
+			if (
+				!laterSyncProven({
+					evidence,
+					slots,
+					version,
+					failureAt: before.enteredAt,
+					now: port.now(),
+				})
+			)
+				return false;
+		}
 		if (!syncUnitClean(await port.inspectSync())) return false;
 	}
 	if (
@@ -108,7 +112,9 @@ export async function recoverFailedUpdate(
 	const next = reduceOrchestrator(before, {
 		type: packages
 			? "COMMIT_RESUME_SETTLED_CONSISTENT"
-			: "SYNC_FAILURE_SUPERSEDED",
+			: refusal
+				? "SYNC_REFUSAL_RELEASED"
+				: "SYNC_FAILURE_SUPERSEDED",
 		now: port.now(),
 	});
 	port.persist(next);

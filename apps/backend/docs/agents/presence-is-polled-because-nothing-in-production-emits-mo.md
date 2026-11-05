@@ -13,6 +13,44 @@ Operator configuration and its reconnect scope are unchanged. No APN is guessed
 or silently repaired, and no SIM-less device is blamed for this registered-modem
 failure. Regression: `tests/modem-activation-ownership.test.ts`.
 
+**One registration-scoped exception [EXISTS; host-tested].**
+`modem-ready-activation.ts` arms a pending intent only after a new registration;
+authoritative removal deletes it. Discovery, monitor refreshes, unchanged polls
+and MM state churn never consume or rearm it. Only `runModemStatusPoll`, after
+releasing the reconciliation lock, may spend it. This leaves NM the first chance
+at boot. A positively parsed NM device state 100 consumes it without activation,
+even when MM has not settled. Otherwise MM must freshly report `registered`, the
+modem must have neither inhibit nor scan, the resolved profile's autoconnect must
+read `yes`, and its NM device must positively report state 30. Unknown or failed
+reads leave it pending; resolving by available connection UUID also covers an
+idle `cdc-wdm*` device with an empty IP-IFACE.
+
+The physical identity lease rechecks this registration's intent, identity,
+profile, eligibility and 300 s cooldown before consuming intent and stamping the
+physical key synchronously, immediately before `nmConnect(config.conn, 45)`.
+Failure is consumed too: there is no retry until a new registration, and MM index
+changes do not reset the cooldown. Identity/lease refusals keep intent pending.
+This lease-only exception changes no profile settings or NM retry count.
+
+A SIM unreadable during registration leaves config absent. The retained poll
+resolves it once per readable SIM edge outside the update lock, using the same
+profile selection and duplicate enforcement as registration. It never creates a
+profile when a matching UUID exists. Late profile effects use the journaled
+`modem-config` path and its identity lease; refusal or journal failure leaves
+the work pending without profile writes. Successful resolution publishes the
+full config. Coverage: `tests/modem-ready-activation.test.ts`, with an injected
+clock and no sleeps. Late-MBIM cold-boot hardware evidence remains unavailable.
+Status refresh merges against the current row after its modem read, preserving
+configuration and ICCID resolved while that read was in flight. The shared GSM
+lookup returns unknown for an unreadable roster or any unreadable/truncated
+profile detail row; a partial index never authorizes profile creation or default
+roaming values. Late work stays pending until a complete read succeeds, without
+requiring another SIM edge. The suite also changes the physical key during an
+in-flight activation to enforce consumption before the connection await.
+Raw modem transport reads remain in `modem-registration.ts`; the activation
+coordinator consumes its fresh registration-state read without owning a transport
+or parsing ModemManager fields. The frozen transport boundary is unchanged.
+
 `handleMonitorEvent` (`modem-update-loop.ts`) switches on `modem-added` /
 `modem-removed` / `device-state`. **The first two arms are unreachable on real
 hardware.** The production emitter is `NmcliMonitorManager`, and its

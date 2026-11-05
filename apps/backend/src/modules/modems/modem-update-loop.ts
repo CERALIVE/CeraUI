@@ -62,6 +62,11 @@ import { applyJitter } from "../streaming/constants.ts";
 import { resetGsmConnections } from "./gsm-connections.ts";
 import type { ModemId } from "./mmcli.ts";
 import {
+	armModemReadyActivation,
+	forgetModemReadyActivation,
+	runModemReadyActivations,
+} from "./modem-ready-activation.ts";
+import {
 	mmListWithRetry,
 	refreshModemStatus,
 	registerModemSafe,
@@ -172,6 +177,7 @@ async function handleModemRemoved(id: ModemId): Promise<void> {
 			return;
 		}
 		logger.warn(`Modem ${id} removed`);
+		forgetModemReadyActivation(id);
 		removeModem(id);
 		// Publish: reconciles as `removed` → gsm reset + broadcast (no hot-plug recovery).
 		publishModemsSnapshot();
@@ -264,6 +270,7 @@ async function reconcileModemPresenceLocked(
 	for (const id of getModemIds()) {
 		if (!present.has(id)) {
 			logger.warn(`Modem ${id} removed`);
+			forgetModemReadyActivation(id);
 			removeModem(id);
 			presenceChanged = true;
 		}
@@ -274,6 +281,7 @@ async function reconcileModemPresenceLocked(
 			await presenceDeps.refreshStatus(id);
 		} else {
 			await presenceDeps.registerModem(id);
+			if (getModem(id)) armModemReadyActivation(id);
 			presenceChanged = true;
 		}
 	}
@@ -329,6 +337,11 @@ export async function discoverModems(): Promise<void> {
  */
 export async function runModemStatusPoll(): Promise<void> {
 	await withModemUpdateLock(() => reconcileModemPresenceLocked(false));
+	const configured = await runModemReadyActivations();
+	if (configured.length > 0) {
+		for (const id of configured) triggerGsmConnectionsReset(id);
+		broadcastModems(Object.fromEntries(configured.map((id) => [id, true])));
+	}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

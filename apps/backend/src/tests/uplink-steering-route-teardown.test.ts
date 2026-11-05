@@ -5,6 +5,7 @@ import { FWMARK_RULE_PRIORITY } from "../modules/network/uplink-steering/contrac
 import {
 	ensureUplinkRoute,
 	hasFwmarkRule,
+	planUplinkRoute,
 	removeUplinkRoute,
 	type UplinkRouteManagerDeps,
 } from "../modules/network/uplink-steering/route-manager.ts";
@@ -12,6 +13,112 @@ import { stableUplinkMark } from "../modules/network/uplink-steering/ruleset.ts"
 import { hexMark, scripted } from "./uplink-steering-route-test-fixtures.ts";
 
 describe("uplink steering route teardown", () => {
+	test("retains wlan1 ownership on re-plan so teardown removes all installed support", async () => {
+		const candidate = {
+			identity: "wifi-a",
+			ifname: "wlan1",
+			sourceAddress: "192.168.1.50",
+			sourceAddressUnique: true,
+			mark: 0xca000100,
+		};
+		const answers: Record<string, string> = {
+			"ip rule show": "0: from all lookup local\n32766: from all lookup main\n",
+			"ip -4 route show default dev wlan1":
+				"default via 192.168.1.1 proto dhcp src 192.168.1.50 metric 600",
+		};
+		const h = scripted(answers);
+		const plan = await planUplinkRoute(candidate, h);
+
+		await ensureUplinkRoute(plan, h);
+
+		expect(h.calls.slice(2)).toEqual([
+			["ip", "rule", "show"],
+			["ip", "route", "show", "table", "30001"],
+			[
+				"ip",
+				"route",
+				"replace",
+				"table",
+				"30001",
+				"default",
+				"via",
+				"192.168.1.1",
+				"proto",
+				"dhcp",
+				"src",
+				"192.168.1.50",
+				"metric",
+				"600",
+				"dev",
+				"wlan1",
+			],
+			[
+				"ip",
+				"rule",
+				"add",
+				"priority",
+				"100",
+				"from",
+				"192.168.1.50/32",
+				"lookup",
+				"30001",
+			],
+			[
+				"ip",
+				"rule",
+				"add",
+				"priority",
+				"110",
+				"fwmark",
+				"0xca000100/0xffffff00",
+				"lookup",
+				"30001",
+			],
+		]);
+		answers["ip rule show"] =
+			"0: from all lookup local\n100: from 192.168.1.50 lookup 30001\n110: from all fwmark 0xca000100/0xffffff00 lookup 30001\n32766: from all lookup main\n";
+		answers["ip route show table 30001"] =
+			"default via 192.168.1.1 dev wlan1 proto dhcp src 192.168.1.50 metric 600";
+		h.calls.length = 0;
+
+		const replanned = await planUplinkRoute(candidate, h);
+		expect(replanned).toMatchObject({
+			table: "30001",
+			managed: true,
+			sourceRulePriority: 100,
+		});
+		await removeUplinkRoute(replanned, h);
+
+		expect(h.calls).toEqual([
+			["ip", "rule", "show"],
+			["ip", "route", "show", "table", "30001"],
+			["ip", "rule", "show"],
+			[
+				"ip",
+				"rule",
+				"del",
+				"priority",
+				"110",
+				"fwmark",
+				"0xca000100/0xffffff00",
+				"lookup",
+				"30001",
+			],
+			[
+				"ip",
+				"rule",
+				"del",
+				"priority",
+				"100",
+				"from",
+				"192.168.1.50/32",
+				"lookup",
+				"30001",
+			],
+			["ip", "route", "flush", "table", "30001"],
+		]);
+	});
+
 	test("rolls back partial managed provisioning when fwmark installation fails", async () => {
 		const mark = stableUplinkMark("managed-failure");
 		const plan: UplinkRoutePlan = {

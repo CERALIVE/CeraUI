@@ -98,7 +98,7 @@ async function enforceModemConfigAcrossProfiles(
 	connectionUuid: ConnectionUUID,
 	config: ModemConfig,
 ): Promise<number> {
-	const selected = (await getGsmConnections()).byUuid[connectionUuid];
+	const selected = (await getGsmConnections())?.byUuid[connectionUuid];
 	if (!selected?.deviceId || !selected.simId) return 0;
 
 	const result = await reconcileDuplicateGsmProfiles(
