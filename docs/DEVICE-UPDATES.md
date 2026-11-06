@@ -110,6 +110,13 @@ ignores the freeze-selected 1001 candidate and skips quarantined package/version
 pairs. The running kernel's preferences and holds, and apt-all's held set, are
 not changed.
 
+Before the download, a stale healthy-state record is refreshed: when the
+recorded boot id, build id or dpkg status no longer equals the booted system
+(the image stager would refuse `healthy-state-mismatch`), CeraUI restarts
+`ceralive-healthcheck.service`, starts the slot mirror itself and waits for it
+(15 minute bound). A matching record does nothing; any failed step ends the
+install with `kernel_staging_failed`. The stager's own gate stays the authority.
+
 Downloads run as the declared APT UID, with SourceList restricted to that same
 file and SourceParts disabled. Size, SHA256 and package control identity must
 all match before staging; foreign bytes yield `kernel_origin_mismatch`.
