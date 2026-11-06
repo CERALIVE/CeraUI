@@ -11,6 +11,7 @@ import {
 	hasKernelAptStage,
 	readUpdateCapabilityFile,
 } from "../update-capabilities.ts";
+import { ensureHealthyStateForStage } from "./healthy-state-refresh.ts";
 import {
 	downloadKernelPackage,
 	type KernelPackageRecord,
@@ -68,6 +69,7 @@ export const defaultKernelEffects = {
 			throw error;
 		}
 	},
+	ensureHealthyState: ensureHealthyStateForStage,
 	launch: launchKernelStage,
 	inspect: inspectKernelStage,
 	arm: armKernelActivation,
@@ -195,6 +197,7 @@ export function createKernelRuntime(port: KernelRuntimePort) {
 				progress: null,
 				cellularOverrideId: null,
 			});
+			await port.effects().ensureHealthyState();
 			const deb = await port.effects().download(fresh, controller.signal);
 			attempt = { ...attempt, deb };
 			if (

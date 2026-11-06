@@ -62,6 +62,7 @@ test("real runtime routes scoped kernel install, continues local staging during 
 					version: "7.2.0-ceralive1",
 				}),
 				readOverlay: async () => ({ ...kernelOverlay, attempt }),
+				ensureHealthyState: async () => {},
 				download: async () => "/var/tmp/fixture/kernel.deb",
 				launch: async (value) => {
 					attempt = value.id;

@@ -51,6 +51,7 @@ function fixture(
 		readState: async () => device,
 		readOverlay: async () => overlay,
 		readBooted: async () => kernelRecord,
+		ensureHealthyState: async () => {},
 		download: async () => "/var/tmp/fixture/kernel.deb",
 		launch: async () => {
 			launches++;
@@ -134,6 +135,44 @@ test("kernel download and guarded staging persist exact attempt identity before 
 	expect(f.launches()).toBe(1);
 	expect(await f.lane.reconcile()).toBe(true);
 	expect(f.state().phase).toBe("kernel-staging");
+});
+test("a stale healthy-state record is refreshed before the download and launch", async () => {
+	const order: string[] = [];
+	const f = fixture(
+		{},
+		{
+			ensureHealthyState: async () => {
+				order.push("refresh");
+			},
+			download: async () => {
+				order.push("download");
+				return "/var/tmp/fixture/kernel.deb";
+			},
+		},
+	);
+	expect(await f.lane.install(true)).toBe(true);
+	expect(order).toEqual(["refresh", "download"]);
+	expect(f.launches()).toBe(1);
+});
+test("a failed healthy-state refresh stops the install before any download or launch", async () => {
+	let downloads = 0;
+	const f = fixture(
+		{},
+		{
+			ensureHealthyState: async () => {
+				throw new KernelUpdateError("kernel_staging_failed");
+			},
+			download: async () => {
+				downloads++;
+				return "/var/tmp/fixture/kernel.deb";
+			},
+		},
+	);
+	expect(await f.lane.install(true)).toBe(false);
+	expect(downloads).toBe(0);
+	expect(f.launches()).toBe(0);
+	expect(f.state().phase).toBe("kernel-failed");
+	expect(f.state().failureReason).toBe("kernel_staging_failed");
 });
 test.each([
 	"os-staging",

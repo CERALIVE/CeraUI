@@ -779,6 +779,23 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			"spawnWithTimeout bounds terminal service cleanup after stdout/stderr and ExecMainStatus have been consumed; cleanup failure remains an explicit failed update outcome rather than being reported as success",
 	},
 	{
+		id: "updateOrchestrator.restartHealthcheck",
+		file: "modules/system/update-orchestrator/healthy-state-refresh.ts",
+		symbol: "restartHealthcheck",
+		command: "[systemctl, restart, ceralive-healthcheck.service]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"spawnWithTimeout bounds the restart of the oneshot healthcheck, which re-verifies the booted slot and rewrites its healthy-state record; a nonzero exit or timeout fails the kernel stage preflight with kernel_staging_failed, and the stager's own gate still decides.",
+	},
+	{
 		id: "updateOrchestrator.startSlotSync",
 		file: "modules/system/update-orchestrator/lock.ts",
 		symbol: "startSlotSync",
