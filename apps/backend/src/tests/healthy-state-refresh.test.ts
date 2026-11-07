@@ -10,6 +10,8 @@ type Mirror = "running" | "failed" | "idle";
 function fixture(options: {
 	matches: boolean[];
 	restart?: boolean;
+	restartError?: Error;
+	mirrorStartError?: Error;
 	mirror?: Mirror[];
 }) {
 	const calls: string[] = [];
@@ -23,10 +25,12 @@ function fixture(options: {
 		},
 		restartHealthcheck: async () => {
 			calls.push("restart");
+			if (options.restartError) throw options.restartError;
 			return options.restart ?? true;
 		},
 		startMirror: async () => {
 			calls.push("mirror");
+			if (options.mirrorStartError) throw options.mirrorStartError;
 		},
 		mirrorState: async () =>
 			mirror.length > 1 ? (mirror.shift() as Mirror) : (mirror[0] as Mirror),
@@ -73,6 +77,31 @@ test("a mirror that fails after running refuses the stage", async () => {
 		mirror: ["running", "failed"],
 	});
 	await expect(ensureHealthyStateForStage(f.deps)).rejects.toEqual(failed);
+});
+
+test("a mirror that fails without ever being seen running refuses the stage", async () => {
+	const f = fixture({ matches: [false, true], mirror: ["failed"] });
+	await expect(ensureHealthyStateForStage(f.deps)).rejects.toEqual(failed);
+});
+
+test("a healthcheck restart that throws is a staging failure that keeps its cause", async () => {
+	const cause = new Error("timed out");
+	const f = fixture({ matches: [false], restartError: cause });
+	await expect(ensureHealthyStateForStage(f.deps)).rejects.toMatchObject({
+		reason: "kernel_staging_failed",
+		cause,
+	});
+	expect(f.calls).toEqual(["matches", "restart"]);
+});
+
+test("a mirror start that throws is a staging failure", async () => {
+	const f = fixture({
+		matches: [false],
+		mirrorStartError: new Error("spawn failed"),
+	});
+	await expect(ensureHealthyStateForStage(f.deps)).rejects.toMatchObject({
+		reason: "kernel_staging_failed",
+	});
 });
 
 test("a record that still mismatches after the refresh refuses the stage", async () => {

@@ -51,7 +51,9 @@ const defaultDeps: HealthyStateRefreshDeps = {
 		try {
 			const probe = await inspectSlotSync();
 			if (probe.kind === "running") return "running";
-			return probe.kind === "failed" ? "failed" : "idle";
+			return probe.kind === "failed" || probe.kind === "refused"
+				? "failed"
+				: "idle";
 		} catch {
 			return "running"; // unreadable: keep waiting rather than assume it is quiet
 		}
@@ -60,25 +62,36 @@ const defaultDeps: HealthyStateRefreshDeps = {
 	now: Date.now,
 };
 
+// A timed-out or unspawnable command is a staging failure, not a download failure.
+async function guarded<T>(run: () => Promise<T>): Promise<T> {
+	try {
+		return await run();
+	} catch (cause) {
+		throw new KernelUpdateError("kernel_staging_failed", { cause });
+	}
+}
+
 /** Re-runs the healthcheck (which re-verifies before recording) when the record is stale; the stager's gate stays the authority. */
 export async function ensureHealthyStateForStage(
 	deps: HealthyStateRefreshDeps = defaultDeps,
 ): Promise<void> {
 	if (await deps.matches()) return;
-	if (!(await deps.restartHealthcheck()))
+	if (!(await guarded(deps.restartHealthcheck)))
 		throw new KernelUpdateError("kernel_staging_failed");
 	const started = deps.now();
 	const deadline = started + SETTLE_TIMEOUT_MS;
 	// Own the follow-up mirror so CeraUI's scheduler cannot take the update lock
 	// between the refresh and the stager's non-blocking lock attempt.
-	await deps.startMirror();
+	await guarded(deps.startMirror);
 	let sawRunning = false;
 	for (;;) {
 		const mirror = await deps.mirrorState();
 		if (mirror === "running") sawRunning = true;
-		else if (mirror === "failed" && sawRunning)
-			throw new KernelUpdateError("kernel_staging_failed");
 		else if (sawRunning || deps.now() - started >= MIRROR_START_GRACE_MS) {
+			// The healthcheck already refreshed the record, so a mirror that failed
+			// without ever being seen running must not pass on the record alone.
+			if (mirror === "failed")
+				throw new KernelUpdateError("kernel_staging_failed");
 			if (await deps.matches()) return;
 			throw new KernelUpdateError("kernel_staging_failed");
 		}
