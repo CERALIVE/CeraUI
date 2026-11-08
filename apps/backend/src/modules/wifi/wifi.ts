@@ -88,6 +88,7 @@ import {
 } from "./wifi-hotspot-security.ts";
 import {
 	canHotspot,
+	hotspotApIfname,
 	isApMode,
 	isConcurrentHotspot,
 	type WifiHotspot,
@@ -313,9 +314,13 @@ export function wifiBuildMsg() {
 			// radios.
 			const hotspotCaps = getWifiCapabilitiesForInterface(wifiInterface.ifname);
 			const maxWidthMhz = offeredHotspotMaxWidth(hotspotCaps);
-			// Asked for THIS interface, which is the AP's own: a shared-wiphy board
-			// would otherwise report the station leg's peers as hotspot clients.
-			const clients = getHotspotClientsForInterface(wifiInterface.ifname);
+			// In Hybrid mode, the AP leg is the concurrent virtual
+			// `clap-<parent>` netdev, not the parent station interface.
+			const apIfname = hotspotApIfname(wifiInterface);
+			const clients =
+				apIfname === undefined
+					? undefined
+					: getHotspotClientsForInterface(apIfname);
 
 			const hotspot: NonNullable<WifiInterfaceResponseMessage["hotspot"]> = {
 				...(wifiInterface.hotspot.name !== undefined

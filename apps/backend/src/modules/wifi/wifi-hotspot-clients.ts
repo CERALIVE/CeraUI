@@ -28,11 +28,13 @@
   connected.
 
   THE INTERFACE IS THE AP'S OWN, and that is load-bearing rather than obvious.
-  A board can hold a station leg and an AP leg on ONE wiphy (see
-  `staApCombo`), so asking the wrong netdev returns the OTHER leg's peers — on a
-  station interface `station dump` lists the access point the board is joined
-  TO, which would render the operator's own upstream router as a "client" of
-  their hotspot. The caller passes the AP interface and nothing here guesses one.
+  A board can hold a station leg and an AP leg on ONE wiphy (see `staApCombo`).
+  In Hybrid mode, the AP leg is the concurrent virtual `clap-<parent>` netdev;
+  the parent interface remains the station leg. Asking for the parent's
+  `station dump` lists the access point the board is joined TO, which would
+  render the operator's own upstream router as a "client" of their hotspot.
+  The caller passes the AP interface (`clap-<parent>` in Hybrid mode), and
+  nothing here guesses one.
 
   Four things about the shape of this data, each with its own guard:
 
