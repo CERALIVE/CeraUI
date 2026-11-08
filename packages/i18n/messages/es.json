@@ -2555,7 +2555,7 @@
 	"settings.updates.nextCheck": "Próxima comprobación automática: {time}",
 	"settings.updates.nextCheckSoon": "Próxima comprobación automática: lo antes posible",
 	"settings.updates.checkDeferredMetered": "Esperando una conexión que no sea móvil, porque las actualizaciones de paquetes por red móvil están desactivadas.",
-	"settings.updates.lastAttemptFailed": "La última comprobación, a las {time}, no terminó.",
+	"settings.updates.lastAttemptFailed": "La última comprobación ({time}) no terminó.",
 	"settings.updates.activity.title": "Actividad actual",
 	"settings.updates.eta": "Faltan unos {minutes} min",
 	"settings.updates.detailsFailed": "No se pudieron leer algunos detalles de la actualización desde el dispositivo.",
