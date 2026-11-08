@@ -2,6 +2,20 @@
 
 ## THE WI-FI OFFERING IS DERIVED FROM THE RADIO [EXISTS]
 
+**Hotspot membership is pushed within one five-second poll [EXISTS].** While
+an AP is up, the backend reads its own station dump (`clap-<parent>` in Hybrid).
+Unread state resolves on the first successful poll; joins, leaves and roster
+removal broadcast once. Count and sorted station MACs determine membership;
+signal and rates refresh with other Wi-Fi broadcasts without triggering them.
+The poll forces each read past the cache TTL and remains single-flight per AP.
+The key includes every parsed MAC before the 32-row display cap. Notification
+history records only the roster each device's `wifiBuildMsg` publication
+actually includes, clearing it when the block is omitted. Polls compare the
+same live-AP projection with that record; structural Wi-Fi broadcasts therefore
+acknowledge roster removal too. That projection prunes inactive AP caches and
+flights synchronously. A flight token protects cache writes, so an obsolete
+dump cannot revive an AP or account for delivery.
+
 The three-value band enum (`auto` / `auto_24` / `auto_50`) is still the **wire
 vocabulary** and did not change. What changed is that nothing hardcodes which rungs are
 *offered*. `wifi-capabilities.ts` derives per-adapter truth from `iw phy` and

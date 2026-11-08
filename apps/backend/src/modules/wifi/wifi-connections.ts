@@ -34,11 +34,20 @@ import {
 	onWifiChange,
 	setWifiState,
 } from "./state/wifi-state.ts";
-import { broadcastWifiState, type WifiNetwork } from "./wifi.ts";
+import {
+	broadcastWifiState,
+	currentHotspotApIfnames,
+	type WifiNetwork,
+} from "./wifi.ts";
 import {
 	type WifiAdapterLockKey,
 	wifiAdapterLockKey,
 } from "./wifi-adapter-lock.ts";
+import {
+	type HotspotClientsTimers,
+	setHotspotClientsChangeListener,
+	startHotspotClientsPoll,
+} from "./wifi-hotspot-clients.ts";
 import type { WifiInterface, WifiInterfaceId } from "./wifi-interfaces.ts";
 
 const wifiInterfacesByMacAddress: Record<MacAddress, WifiInterface> = {};
@@ -129,11 +138,16 @@ function wifiSyncState(): boolean {
   Called once at startup. The monitor is the real `nmcli monitor` supervisor in
   production, or the scripted mock in dev/test (createMonitorManager decides).
 */
-export function wifiStateInit(monitor?: IMonitorEmitter): IMonitorEmitter {
+export function wifiStateInit(
+	monitor?: IMonitorEmitter,
+	hotspotTimers?: HotspotClientsTimers,
+): IMonitorEmitter {
 	onWifiChange(() => {
 		diffBroadcastFired = true;
 		broadcastWifiState();
 	});
+	setHotspotClientsChangeListener(() => broadcastWifiState());
+	startHotspotClientsPoll(currentHotspotApIfnames, hotspotTimers);
 
 	const emitter =
 		monitor ??

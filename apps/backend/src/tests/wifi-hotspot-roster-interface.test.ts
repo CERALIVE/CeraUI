@@ -90,9 +90,8 @@ function seedInterface(wifiInterface: WifiInterfaceWithHotspot) {
 describe("wifiBuildMsg hotspot client interface", () => {
 	test("reads Hybrid clients from the concurrent access-point netdev", async () => {
 		const calls = wireStationDump();
-		await refreshHotspotClients(["clap-wlan0"]);
-
-		const entry = seedInterface(
+		addWifiInterface(
+			"aa:bb:cc:dd:ee:ff",
 			makeInterface({
 				conn: UPSTREAM_UUID,
 				activeConn: UPSTREAM_UUID,
@@ -104,6 +103,8 @@ describe("wifiBuildMsg hotspot client interface", () => {
 				},
 			}),
 		);
+		await refreshHotspotClients(["clap-wlan0"]);
+		const entry = wifiBuildMsg()[0];
 
 		expect(entry?.hotspot?.clients).toEqual({
 			count: 1,
@@ -114,9 +115,9 @@ describe("wifiBuildMsg hotspot client interface", () => {
 
 	test("continues to read exclusive AP clients from its own interface", async () => {
 		const calls = wireStationDump();
+		addWifiInterface("aa:bb:cc:dd:ee:ff", makeInterface());
 		await refreshHotspotClients(["wlan0"]);
-
-		const entry = seedInterface(makeInterface());
+		const entry = wifiBuildMsg()[0];
 
 		expect(entry?.hotspot?.clients).toEqual({
 			count: 1,

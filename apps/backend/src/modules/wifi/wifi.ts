@@ -74,9 +74,12 @@ import {
 import { wifiHotspotStart } from "./wifi-hotspot-activation.ts";
 import {
 	buildHotspotClients,
-	getHotspotClientsForInterface,
 	type HotspotClients,
+	hotspotClientsForMessage,
 } from "./wifi-hotspot-clients.ts";
+
+export { currentHotspotApIfnames } from "./wifi-hotspot-clients.ts";
+
 import { wifiHotspotConfig, wifiHotspotStop } from "./wifi-hotspot-config.ts";
 import { handleHotspotConn } from "./wifi-hotspot-discovery.ts";
 import { publishHotspotOutcome } from "./wifi-hotspot-outcome.ts";
@@ -88,7 +91,6 @@ import {
 } from "./wifi-hotspot-security.ts";
 import {
 	canHotspot,
-	hotspotApIfname,
 	isApMode,
 	isConcurrentHotspot,
 	type WifiHotspot,
@@ -283,6 +285,7 @@ export function wifiBuildMsg() {
 	}
 
 	const ifs: Record<string, WifiInterfaceResponseMessage> = {};
+	const hotspotClients = hotspotClientsForMessage();
 	// The interfaces eligible for a link read, collected as the rows are built
 	// so the refresh below is driven by exactly what this build decided is a
 	// connected station — never by a guess made inside the reader.
@@ -316,11 +319,7 @@ export function wifiBuildMsg() {
 			const maxWidthMhz = offeredHotspotMaxWidth(hotspotCaps);
 			// In Hybrid mode, the AP leg is the concurrent virtual
 			// `clap-<parent>` netdev, not the parent station interface.
-			const apIfname = hotspotApIfname(wifiInterface);
-			const clients =
-				apIfname === undefined
-					? undefined
-					: getHotspotClientsForInterface(apIfname);
+			const clients = hotspotClients.get(id);
 
 			const hotspot: NonNullable<WifiInterfaceResponseMessage["hotspot"]> = {
 				...(wifiInterface.hotspot.name !== undefined
