@@ -1001,6 +1001,20 @@ Active only with `apt-all-packages` and `rauc-verity-streaming`.
 Selector and routing reference:
 [HOST-UPLINK-ELECTION.md](./HOST-UPLINK-ELECTION.md).
 
+The details RPC reports optional `findings[].hosts`: non-clear host/state pairs,
+deduplicated in probe order and bounded to 16 per candidate. The latest overall
+`transport` still describes the Connection section; optional `aptTransport`
+retains the last package selection independently, so the OS check that follows
+a manual package check cannot erase its failure evidence. Packages lists the
+first failing host for up to three failed candidates; Connection lists each
+reported host. Older backends without host evidence keep the failure sentence.
+`blocked` means no answer (timed out or blocked), not proof of filtering.
+When no transport is healthy, APT transaction admission and every OS selection
+emit one `No healthy update transport` warning per selection, with `profile`
+and ranked `findings` containing `ifname`, `family` and `reason`. The selector's
+all-host health rule, probe set and timeouts are unchanged. This is host-tested
+diagnostic evidence, not a hardware qualification.
+
 For an OS channel, the plain-HTTP `generate_204` probe still requires exactly
 204 with an empty body: redirects or portal content remain `captive-http`.
 Only a completed, certificate-verified HTTPS HEAD to the expected

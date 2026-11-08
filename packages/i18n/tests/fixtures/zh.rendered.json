@@ -1396,7 +1396,7 @@
 	"settings.transportKindHint": "您的推流如何到达接收端。SRTLA 聚合多条网络链路；RIST 和 SRT 使用单条链路。",
 	"settings.transportProtocol": "传输协议",
 	"settings.updates.checkFailed.captive_portal": "此网络需要先登录。请在浏览器中打开它的登录页面，完成登录后重新检查。",
-	"settings.updates.checkFailed.repos_unreachable": "IPv4 和 IPv6 都无法连接到软件源，因此设备没有开始检查。请检查网络连接后重试。",
+	"settings.updates.checkFailed.repos_unreachable": "设备无法通过任何连接访问所有软件包服务器，因此没有开始检查。请检查网络连接后重试。",
 	"settings.updates.failedReasonGeneric": "更新未完成，设备也未说明原因。详情请查看 设置 → 系统日志。",
 	"settings.updates.cleanup_warning.post_clean_failed": "更新已成功，但无法清理下载的文件。请查看设置 → 系统日志。",
 	"settings.updates.preflightFailedTitle": "更新未开始",

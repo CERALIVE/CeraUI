@@ -159,7 +159,11 @@ const nextPackageCheck = $derived(formatUpdateTime(details?.checks.packages.next
 			</div>
 		{/if}
 
-		<PackagesSection nextCheck={nextPackageCheck} {surface} />
+		<PackagesSection
+			aptTransport={details?.aptTransport ?? (details?.transport?.profile === 'apt' ? details.transport : undefined)}
+			nextCheck={nextPackageCheck}
+			{surface}
+		/>
 
 		{#if !surface.loaded}
 			<div aria-busy="true" class="space-y-3" data-testid="update-details-loading" role="status">

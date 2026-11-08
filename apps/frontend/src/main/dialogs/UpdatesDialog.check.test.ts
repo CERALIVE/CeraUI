@@ -16,7 +16,11 @@
  * stamps regardless of which state it lands in.
  */
 
-import type { UpdatePackage, UpdateState } from "@ceraui/rpc/schemas";
+import type {
+	UpdatePackage,
+	UpdateState,
+	UpdateTransportSummary,
+} from "@ceraui/rpc/schemas";
 import { fireEvent, render, waitFor } from "@testing-library/svelte";
 import { flushSync } from "svelte";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -50,6 +54,7 @@ vi.mock("$lib/rpc/client", () => ({
 			})),
 			startUpdate: vi.fn(async () => ({ success: true })),
 			checkForUpdates: vi.fn(async () => ({ success: true })),
+			getUpdateDetails: vi.fn(),
 		},
 	},
 }));
@@ -86,6 +91,7 @@ afterEach(() => {
 	reactiveUpdateState.reset();
 	document.body.innerHTML = "";
 	vi.clearAllMocks();
+	vi.mocked(rpc.system.getUpdateDetails).mockReset();
 });
 
 const AVAILABLE: UpdateState = {
@@ -262,7 +268,7 @@ describe("UpdatesDialog — a check that could not run names the network reason"
 
 		await waitFor(() => {
 			expect(getByTestId("update-check-failed-reason").textContent).toContain(
-				"Neither IPv4 nor IPv6 reached the package repositories",
+				"The device couldn't reach all of the package servers over any connection",
 			);
 		});
 	});
@@ -505,7 +511,7 @@ describe("UpdatesDialog — a failed install never prints the device's raw reaso
 
 		await waitFor(() => {
 			expect(getByTestId("update-failed-reason").textContent).toContain(
-				"Neither IPv4 nor IPv6 reached the package repositories",
+				"The device couldn't reach all of the package servers over any connection",
 			);
 		});
 	});
@@ -525,6 +531,107 @@ describe("UpdatesDialog — a failed install never prints the device's raw reaso
 		expect(document.body.textContent).not.toContain(token);
 		expect(document.body.textContent).not.toContain("dpkg");
 	});
+});
+
+describe("UpdatesDialog — package failure evidence survives the OS check", () => {
+	const aptTransport: UpdateTransportSummary = {
+		profile: "apt",
+		checkedAt: 1000,
+		status: "none",
+		selected: null,
+		findings: [0, 1, 2, 3].map((index) => ({
+			ifname: `wwan${index}`,
+			family: 4,
+			kind: "cellular",
+			metered: true,
+			healthy: false,
+			captive: false,
+			states: ["blocked"],
+			hosts: [{ host: "deb.debian.org", state: "blocked" }],
+		})),
+	};
+	const osTransport: UpdateTransportSummary = {
+		profile: "os",
+		checkedAt: 1001,
+		status: "selected",
+		selected: { ifname: "eth0", family: 6, kind: "ethernet", metered: false },
+		findings: [],
+	};
+
+	it.each(["dedicated package record", "older backend apt record"] as const)(
+		"shows only the first three failing findings from the %s",
+		async (source) => {
+			reactiveUpdateState.value = {
+				kind: "check_failed",
+				reason: "repos_unreachable",
+			};
+			vi.mocked(rpc.system.getUpdateDetails).mockResolvedValueOnce({
+				slots: null,
+				os: { bootedVersion: null, staged: null, candidate: null },
+				checks: {
+					packages: {
+						lastAttemptAt: null,
+						lastSuccessAt: null,
+						nextAttemptAt: null,
+					},
+					os: { lastAttemptAt: null, lastSuccessAt: null, nextAttemptAt: null },
+				},
+				pendingCellular: null,
+				transport:
+					source === "dedicated package record" ? osTransport : aptTransport,
+				...(source === "dedicated package record" ? { aptTransport } : {}),
+			});
+			const { getAllByTestId } = render(UpdatesDialog, { open: true });
+			await waitFor(() =>
+				expect(getAllByTestId("update-check-what-failed").length).toBe(3),
+			);
+			expect(
+				getAllByTestId("update-check-what-failed").map((row) =>
+					row.textContent?.trim(),
+				),
+			).toEqual([
+				"wwan0 IPv4: deb.debian.org, No answer (timed out or blocked)",
+				"wwan1 IPv4: deb.debian.org, No answer (timed out or blocked)",
+				"wwan2 IPv4: deb.debian.org, No answer (timed out or blocked)",
+			]);
+		},
+	);
+
+	it.each([null, osTransport])(
+		"shows just the sentence without package host evidence: %j",
+		async (transport) => {
+			reactiveUpdateState.value = {
+				kind: "check_failed",
+				reason: "repos_unreachable",
+			};
+			vi.mocked(rpc.system.getUpdateDetails).mockResolvedValueOnce({
+				slots: null,
+				os: { bootedVersion: null, staged: null, candidate: null },
+				checks: {
+					packages: {
+						lastAttemptAt: null,
+						lastSuccessAt: null,
+						nextAttemptAt: null,
+					},
+					os: { lastAttemptAt: null, lastSuccessAt: null, nextAttemptAt: null },
+				},
+				pendingCellular: null,
+				transport,
+			});
+			const { getByTestId, queryAllByTestId } = render(UpdatesDialog, {
+				open: true,
+			});
+			await waitFor(() =>
+				expect(
+					document.querySelector('[data-testid="update-details-loading"]'),
+				).toBeNull(),
+			);
+			expect(getByTestId("update-check-failed-reason").textContent).toContain(
+				"The device couldn't reach all of the package servers over any connection",
+			);
+			expect(queryAllByTestId("update-check-what-failed")).toEqual([]);
+		},
+	);
 });
 
 describe("UpdatesDialog — reachability is ONE muted line", () => {

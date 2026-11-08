@@ -11,11 +11,9 @@
  * an unknown history after a process restart, never proof of no past transfer
  * or a healthy default.
  *
- * Scope, stated so it is not overread: today only the OS agent routes through
- * the selector (the package path still uses its legacy apt-reachability
- * preflight, whose own per-family verdict rides `update_state.reachability`).
- * The selector itself is fixture/netns-proven; live verification against the
- * deployed origins is deferred with Todo 12.
+ * Each profile retains its own latest observation: a combined manual check
+ * selects APT before OS, and the OS result must not erase package failures.
+ * Images without transport-uidrange keep the legacy APT reachability preflight.
  */
 import type {
 	UpdateTransportFinding,
@@ -51,6 +49,13 @@ export function summarizeTransportSelection(
 			healthy: row.healthy,
 			captive: states.some((state) => CAPTIVE_STATES.has(state)),
 			states,
+			hosts: [
+				...new Map(
+					row.hosts
+						.filter(({ state }) => state !== "clear")
+						.map(({ host, state }) => [`${host}\0${state}`, { host, state }]),
+				).values(),
+			].slice(0, 16),
 		};
 	});
 	return {
@@ -71,6 +76,7 @@ export function summarizeTransportSelection(
 }
 
 let lastSelection: UpdateTransportSummary | undefined;
+const lastByProfile = new Map<"apt" | "os", UpdateTransportSummary>();
 
 export function recordTransportSelection(
 	profile: "apt" | "os",
@@ -78,6 +84,7 @@ export function recordTransportSelection(
 	now: number = Date.now(),
 ): void {
 	lastSelection = summarizeTransportSelection(profile, selection, now);
+	lastByProfile.set(profile, lastSelection);
 }
 
 export function getLastTransportSelection():
@@ -86,6 +93,13 @@ export function getLastTransportSelection():
 	return lastSelection;
 }
 
+export function getLastTransportSelectionForProfile(
+	profile: "apt" | "os",
+): UpdateTransportSummary | undefined {
+	return lastByProfile.get(profile);
+}
+
 export function resetLastTransportSelectionForTest(): void {
 	lastSelection = undefined;
+	lastByProfile.clear();
 }

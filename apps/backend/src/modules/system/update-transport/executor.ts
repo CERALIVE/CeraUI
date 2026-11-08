@@ -2,6 +2,7 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { isIP } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { logger } from "../../../helpers/logger.ts";
 import { argMatch, ID_RE } from "../../../helpers/run.ts";
 import {
 	type SpawnWithTimeoutResult,
@@ -385,6 +386,16 @@ export async function selectUpdateTransport(
 ): Promise<TransportSelection> {
 	const selection = await probeUpdateTransport(profile, deps);
 	recordTransportSelection(profile.profile, selection);
+	if (profile.profile === "os" && selection.status === "none") {
+		logger.warn("No healthy update transport", {
+			profile: "os",
+			findings: selection.ranked.map((row) => ({
+				ifname: row.candidate.ifname,
+				family: row.family,
+				reason: row.reason,
+			})),
+		});
+	}
 	return selection;
 }
 

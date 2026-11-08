@@ -1,6 +1,12 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test';
-import { installUpdatesNowInputSchema, updateDetailsSchema } from './update-details.schema';
+import {
+	installUpdatesNowInputSchema,
+	type UpdateTransportFinding,
+	type UpdateTransportSummary,
+	updateDetailsSchema,
+	updateTransportFindingSchema,
+} from './update-details.schema';
 
 const details = {
 	slots: null,
@@ -12,6 +18,54 @@ const details = {
 	pendingCellular: null,
 	transport: null,
 } as const;
+
+describe('transport host evidence contract', () => {
+	const finding = {
+		ifname: 'wwan0',
+		kind: 'cellular',
+		family: 4,
+		metered: true,
+		healthy: false,
+		captive: false,
+		states: ['blocked'],
+	} satisfies UpdateTransportFinding;
+	const hosts: NonNullable<UpdateTransportFinding['hosts']> = [
+		{ host: 'deb.debian.org', state: 'blocked' },
+	];
+
+	test('preserves package evidence independently of the latest OS selection', () => {
+		const aptTransport = {
+			profile: 'apt',
+			checkedAt: 1,
+			status: 'none',
+			selected: null,
+			findings: [{ ...finding, hosts }],
+		} satisfies UpdateTransportSummary;
+		expect(updateDetailsSchema.parse({ ...details, aptTransport }).aptTransport).toEqual(
+			aptTransport,
+		);
+		expect(updateDetailsSchema.parse(details).aptTransport).toBeUndefined();
+		expect(updateTransportFindingSchema.parse(finding).hosts).toBeUndefined();
+	});
+
+	test('accepts at most sixteen host verdicts using the existing state enum', () => {
+		expect(updateTransportFindingSchema.parse({ ...finding, hosts }).hosts).toEqual(hosts);
+		expect(
+			updateTransportFindingSchema.safeParse({ ...finding, hosts: Array(16).fill(hosts[0]) })
+				.success,
+		).toBe(true);
+		expect(
+			updateTransportFindingSchema.safeParse({ ...finding, hosts: Array(17).fill(hosts[0]) })
+				.success,
+		).toBe(false);
+		expect(
+			updateTransportFindingSchema.safeParse({
+				...finding,
+				hosts: [{ host: 'deb.debian.org', state: 'timeout' }],
+			}).success,
+		).toBe(false);
+	});
+});
 
 describe('update credential details contract', () => {
 	test('accepts the kernel scope without changing legacy request or details shapes', () => {

@@ -138,6 +138,16 @@ export async function openPinnedAptTransaction(
 			detail: [],
 		});
 	}
+	if (selection.status === "none") {
+		logger.warn("No healthy update transport", {
+			profile: "apt",
+			findings: selection.ranked.map((row) => ({
+				ifname: row.candidate.ifname,
+				family: row.family,
+				reason: row.reason,
+			})),
+		});
+	}
 	const controller = new AbortController();
 	const cancelled = () => {
 		if (admission.cancelled()) controller.abort();

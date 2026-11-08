@@ -26,8 +26,13 @@
  */
 import { afterEach, describe, expect, test } from "bun:test";
 import { updateTransportSummarySchema } from "@ceraui/rpc/schemas";
+import {
+	defaultUpdateDetailsDeps,
+	readUpdateDetails,
+} from "../modules/system/update-orchestrator/details.ts";
 import { osChannelManifestSchema } from "../modules/system/update-orchestrator/os-manifest.ts";
 import { resetOrchestratorRuntimeForTest } from "../modules/system/update-orchestrator/runtime.ts";
+import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
 import type { RankedTransport } from "../modules/system/update-transport/core.ts";
 import {
 	getLastTransportSelection,
@@ -103,6 +108,7 @@ describe("summarizeTransportSelection", () => {
 					healthy: true,
 					captive: false,
 					states: [],
+					hosts: [],
 				},
 				{
 					ifname: "wlan0",
@@ -112,6 +118,7 @@ describe("summarizeTransportSelection", () => {
 					healthy: false,
 					captive: true,
 					states: ["captive-http"],
+					hosts: [{ host: "h0", state: "captive-http" }],
 				},
 			],
 		});
@@ -142,6 +149,69 @@ describe("summarizeTransportSelection", () => {
 			9,
 		);
 		expect(getLastTransportSelection()?.checkedAt).toBe(9);
+	});
+
+	test("retains failing host and state pairs once in probe order", () => {
+		const blocked = {
+			...row("wwan0", 4, false, ["clear"], "cellular", true),
+			hosts: [
+				{ host: "apt.ceralive.tv", state: "clear", latencyMs: 1 },
+				{ host: "deb.debian.org", state: "blocked", latencyMs: 2 },
+				{ host: "deb.debian.org", state: "blocked", latencyMs: 3 },
+				{ host: "deb.debian.org", state: "dns-failed", latencyMs: 4 },
+			] satisfies RankedTransport["hosts"],
+		};
+		const summary = summarizeTransportSelection(
+			"apt",
+			{
+				status: "none",
+				reason: "no-healthy-transport",
+				ranked: [blocked],
+			},
+			10,
+		);
+		expect(summary.findings[0]?.hosts).toEqual([
+			{ host: "deb.debian.org", state: "blocked" },
+			{ host: "deb.debian.org", state: "dns-failed" },
+		]);
+	});
+
+	test("an OS selection cannot erase the preceding package failure in details", async () => {
+		const blocked = {
+			...row("wwan0", 4, false, ["blocked"], "cellular", true),
+			hosts: [
+				{ host: "apt.ceralive.tv", state: "clear", latencyMs: 1 },
+				{ host: "deb.debian.org", state: "blocked", latencyMs: 2 },
+			] satisfies RankedTransport["hosts"],
+		};
+		recordTransportSelection(
+			"apt",
+			{
+				status: "none",
+				reason: "no-healthy-transport",
+				ranked: [blocked],
+			},
+			10,
+		);
+		const selected = row("wwan0", 4, true, ["clear"], "cellular", true);
+		recordTransportSelection(
+			"os",
+			{ status: "selected", selected, ranked: [selected] },
+			11,
+		);
+		const details = await readUpdateDetails({
+			...defaultUpdateDetailsDeps,
+			loadCapabilities: async () => ({ mode: "legacy", features: [] }),
+			readBootedVersion: async () => undefined,
+			orchestratorState: () => initialOrchestratorState(0),
+			osSummary: () => ({ candidate: null, pendingCellular: null }),
+			credentials: () => ({ expiresAt: null, state: "unavailable" }),
+		});
+		expect(details.transport?.profile).toBe("os");
+		expect(details.aptTransport?.status).toBe("none");
+		expect(details.aptTransport?.findings[0]?.hosts).toEqual([
+			{ host: "deb.debian.org", state: "blocked" },
+		]);
 	});
 });
 

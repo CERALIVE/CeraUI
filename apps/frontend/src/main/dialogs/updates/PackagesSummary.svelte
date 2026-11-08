@@ -11,20 +11,31 @@
   packages are stated, never offered.
 -->
 <script lang="ts">
-import { m } from '@ceraui/i18n/svelte';
-import type { UpdatePreflightReason, UpdateState } from '@ceraui/rpc/schemas';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
+import type { UpdatePreflightReason, UpdateState, UpdateTransportSummary } from '@ceraui/rpc/schemas';
 import { AlertTriangle, CheckCircle2 } from '@lucide/svelte';
 
 import { checkedAtOf, isWithheld } from '$lib/updates/legacy-packages';
 import { actionablePackageOrigins } from '$lib/updates/update-dialog-view';
+import { familyLabel, probeStateKey } from '$lib/updates/update-view';
 
 interface Props {
 	updateState: UpdateState | undefined;
 	/** The next scheduled package check, already formatted. */
 	nextCheck: string | undefined;
+	aptTransport?: UpdateTransportSummary;
 }
 
-let { updateState, nextCheck }: Props = $props();
+let { updateState, nextCheck, aptTransport }: Props = $props();
+
+const failedHosts = $derived(
+	aptTransport?.status === 'none'
+		? aptTransport.findings.flatMap((finding) => {
+			const host = finding.hosts?.find((probe) => probe.state !== 'clear');
+			return !finding.healthy && host ? [{ ifname: finding.ifname, family: finding.family, host }] : [];
+		}).slice(0, 3)
+		: [],
+);
 
 const available = $derived(updateState?.kind === 'available' ? updateState : undefined);
 const count = $derived(available?.package_count ?? 0);
@@ -184,6 +195,20 @@ const checkFailureMessage = $derived.by(() => {
 					<p class="text-muted-foreground mt-1 text-sm break-words" data-testid="update-check-failed-reason">
 						{checkFailureMessage}
 					</p>
+				{/if}
+				{#if checkFailed.reason === 'repos_unreachable' && failedHosts.length > 0}
+					<ul class="mt-2 space-y-1 text-sm">
+						{#each failedHosts as finding (`${finding.ifname}-${finding.family}`)}
+							<li class="break-words" data-testid="update-check-what-failed">
+								{m['settings.updates.checkFailed.whatFailed']({
+									ifname: finding.ifname,
+									family: familyLabel(finding.family),
+									host: finding.host.host,
+									state: resolveMessageKey(probeStateKey(finding.host.state)),
+								})}
+							</li>
+						{/each}
+					</ul>
 				{/if}
 			</div>
 		</div>

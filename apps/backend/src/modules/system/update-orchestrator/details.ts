@@ -24,7 +24,10 @@ import type { UpdateCapabilities, UpdateDetails } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../../helpers/logger.ts";
 import { readUpdateCapabilities } from "../update-capabilities.ts";
-import { getLastTransportSelection } from "../update-transport/last-selection.ts";
+import {
+	getLastTransportSelection,
+	getLastTransportSelectionForProfile,
+} from "../update-transport/last-selection.ts";
 import { credentialDetails } from "./credential-notice-observer.ts";
 import { readStagedReceipt } from "./os-agent.ts";
 import { readBootedOsReleaseVersion } from "./os-manifest.ts";
@@ -52,6 +55,7 @@ export type UpdateDetailsDeps = {
 	readonly orchestratorState: () => OrchestratorState;
 	readonly osSummary: typeof getOsUpdateSummary;
 	readonly lastTransport: typeof getLastTransportSelection;
+	readonly lastAptTransport?: typeof getLastTransportSelection;
 	readonly credentials?: typeof credentialDetails;
 	readonly kernelSummary?: typeof getKernelUpdateSummary;
 };
@@ -64,6 +68,7 @@ export const defaultUpdateDetailsDeps: UpdateDetailsDeps = {
 	orchestratorState: getOrchestratorState,
 	osSummary: getOsUpdateSummary,
 	lastTransport: getLastTransportSelection,
+	lastAptTransport: () => getLastTransportSelectionForProfile("apt"),
 	credentials: credentialDetails,
 	kernelSummary: getKernelUpdateSummary,
 };
@@ -131,6 +136,7 @@ export async function readUpdateDetails(
 		},
 		pendingCellular: os.pendingCellular,
 		transport: deps.lastTransport() ?? null,
+		aptTransport: deps.lastAptTransport?.(),
 		credentials: readCredentials(deps),
 	};
 }

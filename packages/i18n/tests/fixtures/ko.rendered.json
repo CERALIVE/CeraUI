@@ -1396,7 +1396,7 @@
 	"settings.transportKindHint": "스트림이 수신기에 도달하는 방식입니다. SRTLA는 여러 네트워크 링크를 묶고, RIST와 SRT는 단일 링크를 사용합니다.",
 	"settings.transportProtocol": "전송 프로토콜",
 	"settings.updates.checkFailed.captive_portal": "이 네트워크는 먼저 로그인을 요구합니다. 브라우저에서 로그인 페이지를 열어 로그인한 뒤 다시 확인하세요.",
-	"settings.updates.checkFailed.repos_unreachable": "IPv4와 IPv6 모두 패키지 저장소에 연결하지 못해 기기가 확인을 시작하지 않았습니다. 네트워크 연결을 확인한 뒤 다시 시도하세요.",
+	"settings.updates.checkFailed.repos_unreachable": "어떤 연결로도 모든 패키지 서버에 도달하지 못해 기기가 확인을 시작하지 않았습니다. 네트워크 연결을 확인한 뒤 다시 시도하세요.",
 	"settings.updates.failedReasonGeneric": "업데이트가 완료되지 않았고 기기가 이유를 밝히지 않았습니다. 자세한 내용은 설정 → 시스템 로그를 확인하세요.",
 	"settings.updates.cleanup_warning.post_clean_failed": "업데이트는 성공했지만 다운로드한 파일을 정리하지 못했습니다. 설정 → 시스템 로그를 확인하세요.",
 	"settings.updates.preflightFailedTitle": "업데이트가 시작되지 않았습니다",
