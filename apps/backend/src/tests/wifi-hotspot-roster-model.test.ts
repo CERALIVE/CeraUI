@@ -16,6 +16,7 @@ import {
 	wifiStateInit,
 } from "../modules/wifi/wifi-connections.ts";
 import {
+	refreshHotspotClients,
 	resetHotspotClientsForTest,
 	setHotspotClientsChangeListener,
 	setHotspotClientsDepsForTest,
@@ -44,8 +45,8 @@ type Sample = {
 	gate: ReturnType<typeof Promise.withResolvers<string>>;
 };
 
-// Independent oracle: numeric station identities, a last-published display, and
-// samples supplied by the environment. It never reads production cache or keys.
+// Independent oracle: numeric station identities, the display last broadcast to
+// existing viewers, and samples. Private snapshots never acknowledge that display.
 async function scenario(seed: number): Promise<void> {
 	let randomState = seed;
 	const pick = (size: number) => {
@@ -152,12 +153,12 @@ async function scenario(seed: number): Promise<void> {
 				: [{ id: radio.id, members: entry.members }];
 		});
 	};
-	const publication = (frame: boolean) => {
+	const publication = (kind: "private" | "broadcast") => {
 		const rows = display();
-		published = JSON.stringify(
-			rows.map(({ id, members }) => [id, [...members].sort((a, b) => a - b)]),
-		);
-		if (frame)
+		if (kind === "broadcast") {
+			published = JSON.stringify(
+				rows.map(({ id, members }) => [id, [...members].sort((a, b) => a - b)]),
+			);
 			expected.push(
 				Object.fromEntries(
 					rows.map(({ id, members }) => [
@@ -166,6 +167,7 @@ async function scenario(seed: number): Promise<void> {
 					]),
 				),
 			);
+		}
 		// A snapshot can also join outstanding stale/unread samples. Its
 		// eventual completion is another opportunity to publish a changed view.
 		batches.push({
@@ -192,7 +194,7 @@ async function scenario(seed: number): Promise<void> {
 					[...members].sort((a, b) => a - b),
 				]),
 			);
-			if (key !== published) publication(true);
+			if (key !== published) publication("broadcast");
 		}
 	};
 	const capture = spyOn(websocket, "broadcastMsg").mockImplementation(
@@ -329,6 +331,10 @@ async function scenario(seed: number): Promise<void> {
 		expect(actual, `seed ${seed}: ${event}`).toEqual(expected);
 		expect(intervals.size).toBe(polling ? 1 : 0);
 	};
+	const privateSnapshot = () => {
+		publication("private");
+		wifiBuildMsg();
+	};
 	try {
 		resetHotspotClientsForTest();
 		sync();
@@ -340,10 +346,23 @@ async function scenario(seed: number): Promise<void> {
 		// Every seed starts with the previously missed external publication.
 		const first = radios[0];
 		if (!first) throw new Error("missing first radio");
+		// A new viewer connects after one AP has measured a join while the
+		// remaining dumps are held. Existing viewers still need that join.
+		first.members.push(nextMember++);
+		tick();
+		const joined = flights.get(apName(first));
+		if (!joined) throw new Error("missing staggered sample");
+		release(joined);
+		await check("first AP measured an unannounced join");
+		privateSnapshot();
+		privateSnapshot();
+		await check("repeated private snapshots during staggered dumps");
+		samples.filter((s) => !s.done).forEach(release);
+		await check("pending join reaches existing viewers");
 		first.enabled = false;
 		first.deleted = true;
 		sync();
-		publication(true);
+		publication("broadcast");
 		broadcastWifiState();
 		await check("structural off publication");
 		tick();
@@ -354,7 +373,7 @@ async function scenario(seed: number): Promise<void> {
 		sync();
 
 		for (let step = 0; step < 120; step++) {
-			const event = pick(28);
+			const event = pick(31);
 			const radio = radios[pick(radios.length)];
 			if (!radio) throw new Error("missing generated radio");
 			switch (event) {
@@ -446,15 +465,20 @@ async function scenario(seed: number): Promise<void> {
 				case 27:
 					radio.outcome = "garbage";
 					break;
+				case 28:
+				case 29:
+				case 30:
+					privateSnapshot();
+					privateSnapshot();
+					break;
 			}
 			sync();
 			await check(`step ${step}, event ${event}`);
 			if (step % 11 === 0) {
 				if (step % 22 === 0) {
-					publication(false);
-					wifiBuildMsg();
+					privateSnapshot();
 				} else {
-					publication(true);
+					publication("broadcast");
 					broadcastWifiState();
 				}
 				await check(`step ${step}, independent Wi-Fi publication`);
@@ -476,7 +500,127 @@ async function scenario(seed: number): Promise<void> {
 	}
 }
 
-for (let seed = 1; seed <= 320; seed++) {
+const firstSeed = Number(process.env.HOTSPOT_MODEL_SEED ?? 1);
+const seedCount = Number(process.env.HOTSPOT_MODEL_SEEDS ?? 320);
+for (let seed = firstSeed; seed < firstSeed + seedCount; seed++) {
 	test(`published roster model agrees after every event, seed ${seed}`, () =>
 		scenario(seed));
 }
+
+for (const hybrid of [false, true])
+	for (const change of [
+		"join",
+		"leave",
+		"unchanged",
+		"already broadcast",
+	] as const) {
+		test(`private snapshots during staggered ${hybrid ? "Hybrid" : "Hotspot"} dumps: ${change}`, async () => {
+			const registry = isolateWifiRegistry();
+			const monitor = new MockMonitorEmitter();
+			const frames: unknown[] = [];
+			const capture = spyOn(websocket, "broadcastMsg").mockImplementation(
+				(type, data) => {
+					frames.push({ type, data });
+				},
+			);
+			const link = spyOn(
+				capabilities,
+				"refreshWifiLinkTelemetry",
+			).mockResolvedValue(undefined);
+			const first = Promise.withResolvers<string>();
+			const second = Promise.withResolvers<string>();
+			const aps = hybrid ? ["clap-wlan0", "clap-wlan1"] : ["wlan0", "wlan1"];
+			const station = "Station aa:bb:cc:dd:ee:01\n";
+			const baseline = change === "leave" ? station : "";
+			const next = change === "unchanged" || change === "leave" ? "" : station;
+			const count = next === "" ? 0 : 1;
+			const timers = {
+				setInterval: () => 1,
+				clearInterval: () => undefined,
+			};
+			let pending: Promise<void> | undefined;
+			let now = 100_000;
+			try {
+				resetHotspotClientsForTest();
+				for (const id of [0, 1]) {
+					const iface: WifiInterfaceWithHotspot = {
+						id,
+						ifname: `wlan${id}`,
+						conn: hybrid ? "upstream" : "hotspot",
+						activeConn: hybrid ? "upstream" : "hotspot",
+						activeMode: hybrid ? "infrastructure" : "ap",
+						hw: "snapshot-radio",
+						available: new Map(),
+						saved: {},
+						savedAll: {},
+						...(hybrid
+							? {
+									supportsApStaConcurrency: true,
+									concurrentHotspot: {
+										ifname: `clap-wlan${id}`,
+										activeConn: "hotspot",
+									},
+								}
+							: {}),
+						hotspot: {
+							conn: "hotspot",
+							name: "snapshot",
+							availableChannels: ["auto"],
+							warnings: {},
+						},
+					};
+					addWifiInterface(mac(1000 + id), iface);
+				}
+				setHotspotClientsDepsForTest({
+					now: () => now,
+					runIw: async (args) => (args[1] === aps[0] ? baseline : ""),
+				});
+				await refreshHotspotClients(aps);
+				broadcastWifiState();
+				expect(frames).toHaveLength(1);
+				frames.length = 0;
+				wifiStateInit(monitor, timers);
+				wifiStateInit(monitor, timers);
+				// A private read of unchanged state neither broadcasts nor consumes
+				// the later join/leave.
+				wifiBuildMsg();
+				expect(frames).toHaveLength(0);
+				setHotspotClientsDepsForTest({
+					now: () => now,
+					runIw: (args) =>
+						args[1] === aps[0] ? first.promise : second.promise,
+				});
+				pending = refreshHotspotClients(aps, { force: true });
+				first.resolve(next);
+				await first.promise;
+				for (let i = 0; i < 3; i++) {
+					expect(wifiBuildMsg()[0]?.hotspot?.clients?.count).toBe(count);
+					expect(frames).toHaveLength(0);
+				}
+				if (change === "already broadcast") broadcastWifiState();
+				second.resolve("");
+				await pending;
+				now += 5000;
+				setHotspotClientsDepsForTest({
+					now: () => now,
+					runIw: async (args) => (args[1] === aps[0] ? next : ""),
+				});
+				await refreshHotspotClients(aps, { force: true });
+				expect(frames).toHaveLength(change === "unchanged" ? 0 : 1);
+				if (change !== "unchanged")
+					expect(frames[0]).toMatchObject({
+						type: "status",
+						data: { wifi: { "0": { hotspot: { clients: { count } } } } },
+					});
+			} finally {
+				first.resolve("");
+				second.resolve("");
+				await pending;
+				resetHotspotClientsForTest();
+				monitor.reset();
+				link.mockRestore();
+				capture.mockRestore();
+				restoreWifiRegistry(registry);
+			}
+		});
+	}

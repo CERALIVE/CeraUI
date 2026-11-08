@@ -9,8 +9,10 @@ removal broadcast once. Count and sorted station MACs determine membership;
 signal and rates refresh with other Wi-Fi broadcasts without triggering them.
 The poll forces each read past the cache TTL and remains single-flight per AP.
 The key includes every parsed MAC before the 32-row display cap. Notification
-history records only the roster each device's `wifiBuildMsg` publication
-actually includes, clearing it when the block is omitted. Polls compare the
+history records only the roster `broadcastWifiState` sends to all subscribers,
+clearing it when the block is omitted. `wifiBuildMsg` projects the roster
+without acknowledging it: private RPC and new-client snapshots cannot consume
+a pending broadcast to existing viewers. Polls compare the
 same live-AP projection with that record; structural Wi-Fi broadcasts therefore
 acknowledge roster removal too. That projection prunes inactive AP caches and
 flights synchronously. A flight token protects cache writes, so an obsolete

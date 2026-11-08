@@ -76,6 +76,7 @@ import {
 	buildHotspotClients,
 	type HotspotClients,
 	hotspotClientsForMessage,
+	recordHotspotClientsBroadcast,
 } from "./wifi-hotspot-clients.ts";
 
 export { currentHotspotApIfnames } from "./wifi-hotspot-clients.ts";
@@ -395,6 +396,7 @@ export function wifiBuildMsg() {
 
 export function broadcastWifiState() {
 	broadcastMsg("status", { wifi: wifiBuildMsg() });
+	recordHotspotClientsBroadcast();
 }
 
 /*

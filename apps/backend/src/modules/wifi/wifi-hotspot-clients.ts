@@ -69,10 +69,10 @@
   Those readings refresh with every other Wi-Fi broadcast. A broadcast serves
   the fresh cache without forcing another read. A parse-failing AP can still
   schedule a read per broadcast while absent, but absence -> absence never
-  broadcasts again. Notification history is ONLY what wifiBuildMsg published:
-  every publication records the full membership or clears an omitted roster.
-  A poll compares that record with the same live-AP projection; a completed
-  read never acknowledges delivery.
+  broadcasts again. Only broadcastWifiState records the full membership it
+  sends to all subscribers, clearing omitted rosters. Private wifiBuildMsg
+  snapshots never acknowledge delivery to existing viewers. A poll compares
+  that record with the same live-AP projection; reads never acknowledge it.
 */
 
 import {
@@ -241,7 +241,7 @@ type ClientsCache = {
 
 const cache = new Map<string, ClientsCache>();
 const inFlight = new Map<string, Promise<void>>();
-/** Device id -> complete membership last included in a Wi-Fi publication. */
+/** Device id -> complete membership last broadcast to all subscribers. */
 const announced = new Map<number, string>();
 let changeListener: (() => void) | null = null;
 let stopPoll: (() => void) | undefined;
@@ -284,21 +284,28 @@ export function currentHotspotApIfnames(): string[] {
 	return currentRosters().map(({ ifname }) => ifname);
 }
 
-/** The builder's roster projection and its delivery acknowledgement are one step. */
+/** Project roster blocks without acknowledging delivery to any subscriber. */
 export function hotspotClientsForMessage(): ReadonlyMap<
 	number,
 	HotspotClients
 > {
 	const rosters = currentRosters();
 	const clients = new Map<number, HotspotClients>();
-	announced.clear();
 	for (const { id, entry } of rosters) {
 		if (entry === undefined) continue;
 		clients.set(id, entry.clients);
-		announced.set(id, entry.membershipKey);
 	}
 	void refreshHotspotClients(rosters.map(({ ifname }) => ifname));
 	return clients;
+}
+
+/** Called after the synchronous Wi-Fi broadcast, with no intervening read. */
+export function recordHotspotClientsBroadcast(): void {
+	if (shouldUseMocks()) return;
+	announced.clear();
+	for (const { id, entry } of currentRosters()) {
+		if (entry !== undefined) announced.set(id, entry.membershipKey);
+	}
 }
 
 export type HotspotClientsTimers = {

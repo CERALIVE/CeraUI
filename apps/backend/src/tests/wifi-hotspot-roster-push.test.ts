@@ -83,7 +83,7 @@ afterEach(() => {
 
 function countPublication() {
 	changed++;
-	wifiBuildMsg();
+	broadcastWifiState();
 }
 
 function addReaderSecondAp() {
@@ -148,10 +148,11 @@ function hybridBroadcastHarness() {
 		iface,
 		frames,
 		init: () => {
-			// Priming a reader is not a publication. Model the initial UI snapshot
+			// Priming a reader is not a publication. Broadcast the initial roster
 			// explicitly, without consuming later changes during repeated init.
 			if (!initialized) {
-				wifiBuildMsg();
+				broadcastWifiState();
+				frames.length = 0;
 				initialized = true;
 			}
 			return wifiStateInit(monitor, timers);
@@ -406,7 +407,6 @@ for (const primed of [true, false]) {
 			if (primed) {
 				dump = STATION;
 				await refreshHotspotClients(["clap-wlan0"]);
-				wifiBuildMsg();
 			}
 			h.init();
 			setHotspotClientsDepsForTest({
@@ -436,7 +436,6 @@ test("the existing structural off broadcast is not duplicated by the roster poll
 	try {
 		dump = STATION;
 		await refreshHotspotClients(["clap-wlan0"]);
-		wifiBuildMsg();
 		h.init();
 		delete h.iface.concurrentHotspot;
 		broadcastWifiState();
@@ -464,7 +463,6 @@ for (const completedFirst of [0, 1])
 			try {
 				dump = STATION;
 				await refreshHotspotClients(["clap-wlan0", "clap-wlan1"]);
-				wifiBuildMsg();
 				h.init();
 				setHotspotClientsDepsForTest({
 					now: () => nowMs,
@@ -813,7 +811,7 @@ for (const hybrid of [false, true]) {
 		const ap = hybrid ? "clap-wlan0" : "wlan0";
 		addWifiInterface("aa:bb:cc:dd:ee:ff", iface);
 		await refreshHotspotClients([ap]);
-		wifiBuildMsg();
+		broadcastWifiState();
 		const frames: unknown[] = [];
 		const broadcast = spyOn(websocket, "broadcastMsg").mockImplementation(
 			(type, data) => {
@@ -893,7 +891,7 @@ test("station order, signal and rates do not notify but the refreshed telemetry 
 	const second = "Station aa:bb:cc:dd:ee:02 (on wlan0)\n";
 	dump = `${STATION}\tsignal: -40 dBm\n${second}`;
 	await pollHotspotClients(() => ["wlan0"]);
-	wifiBuildMsg();
+	broadcastWifiState();
 	setHotspotClientsChangeListener(countPublication);
 	dump = `${second}${STATION}\tsignal: -70 dBm\n\ttx bitrate: 6.0 MBit/s\n`;
 	await pollHotspotClients(() => ["wlan0"]);
@@ -918,7 +916,7 @@ test("membership includes the total even when the displayed station window is un
 			`Station aa:bb:cc:dd:ee:${i.toString(16).padStart(2, "0")} (on wlan0)\n`,
 	).join("");
 	await pollHotspotClients(() => ["wlan0"]);
-	wifiBuildMsg();
+	broadcastWifiState();
 	setHotspotClientsChangeListener(countPublication);
 	dump += "Station aa:bb:cc:dd:ee:ff (on wlan0)\n";
 	await pollHotspotClients(() => ["wlan0"]);
@@ -929,7 +927,7 @@ test("membership includes the total even when the displayed station window is un
 test("spawn failure keeps membership quiet; parse failure removes it once", async () => {
 	dump = STATION;
 	await pollHotspotClients(() => ["wlan0"]);
-	wifiBuildMsg();
+	broadcastWifiState();
 	setHotspotClientsChangeListener(countPublication);
 	setHotspotClientsDepsForTest({
 		now: () => nowMs,
@@ -975,7 +973,7 @@ test("pruning all APs notifies once and later empty ticks spawn nothing", async 
 	addReaderSecondAp();
 	dump = STATION;
 	await pollHotspotClients(() => ["wlan0", "wlan1"]);
-	wifiBuildMsg();
+	broadcastWifiState();
 	setHotspotClientsChangeListener(countPublication);
 	removeWifiInterface("aa:bb:cc:dd:ee:ff");
 	removeWifiInterface("aa:bb:cc:dd:ef:ff");
