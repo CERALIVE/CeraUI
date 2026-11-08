@@ -94,6 +94,25 @@ describe("readUpdateDetails", () => {
 				mode: "capable",
 				features: ["apt-all-packages", "slot-sync"],
 			}),
+			readSlots: async () => [
+				{
+					name: "rootfs.0",
+					bootname: "A",
+					state: "booted",
+					bootStatus: "good",
+					version: null,
+					lastSyncedAt: null,
+				},
+				{
+					name: "rootfs.1",
+					bootname: "B",
+					state: "inactive",
+					bootStatus: "good",
+					version: "2026.10.100",
+					lastSyncedAt: "2026-11-08T00:00:00Z",
+				},
+			],
+			readBootedVersion: async () => "2026.10.100",
 		});
 		const details = await readUpdateDetails(deps);
 		expect(details.slots).toEqual([
@@ -102,9 +121,50 @@ describe("readUpdateDetails", () => {
 				bootname: "A",
 				state: "booted",
 				bootStatus: "good",
-				version: "2026.9.0",
+				version: "2026.10.100",
 				lastSyncedAt: null,
 			},
+			{
+				name: "rootfs.1",
+				bootname: "B",
+				state: "inactive",
+				bootStatus: "good",
+				version: "2026.10.100",
+				lastSyncedAt: "2026-11-08T00:00:00Z",
+			},
+		]);
+	});
+
+	test("does not replace the booted or inactive slot versions", async () => {
+		const { deps } = detailsDeps({
+			loadCapabilities: async () => ({
+				mode: "capable",
+				features: ["slot-sync"],
+			}),
+			readSlots: async () => [
+				{
+					name: "rootfs.0",
+					bootname: "A",
+					state: "booted",
+					bootStatus: "good",
+					version: "2026.10.90",
+					lastSyncedAt: null,
+				},
+				{
+					name: "rootfs.1",
+					bootname: "B",
+					state: "inactive",
+					bootStatus: "good",
+					version: null,
+					lastSyncedAt: null,
+				},
+			],
+			readBootedVersion: async () => "2026.10.100",
+		});
+		const details = await readUpdateDetails(deps);
+		expect(details.slots?.map(({ version }) => version)).toEqual([
+			"2026.10.90",
+			null,
 		]);
 	});
 

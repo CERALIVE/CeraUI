@@ -1518,7 +1518,9 @@ successful transport probe.
   settings save owns its controls until its requests settle, is built from a
   settings read made after the click, and a lost reply reads "Change not
   confirmed", never "not saved". Unread details and an unestablished running
-  version render as unknown; "No newer system image" needs a check the dialog
+  version render as unknown; when RAUC has no version for the booted slot, the
+  running version from `/etc/ceralive/os-release-version` fills that slot row.
+  "No newer system image" needs a check the dialog
   saw complete with nothing offered on the link it reads over (the candidate is
   memory-only, so a backend restart cannot be told from "nothing found"), plus
   a succeeded latest attempt and a phase that could show a held offer; the

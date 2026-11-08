@@ -122,7 +122,15 @@ export async function readUpdateDetails(
 	});
 	return {
 		...(kernel ? { kernel } : {}),
-		slots: slots ? slots.map((slot) => ({ ...slot })) : null,
+		slots: slots
+			? slots.map((slot) => ({
+					...slot,
+					version:
+						slot.state === "booted" && slot.version === null
+							? (bootedVersion ?? null)
+							: slot.version,
+				}))
+			: null,
 		os: {
 			bootedVersion: bootedVersion ?? null,
 			staged: receipt

@@ -7,7 +7,8 @@
   `rauc status`, which is its own sentence — never an empty table that reads
   like a board with no slots. Every state is a WORD; the badge colour only
   reinforces it. Versions and mirror times are data and render as the device
-  reported them, and a slot that reported none says so instead of showing a dash.
+  reported them. The booted slot's running version may come from os-release;
+  it has no mirror line until a mirror timestamp exists.
 -->
 <script lang="ts">
 import { getLocale, m, resolveMessageKey } from '@ceraui/i18n/svelte';
@@ -74,11 +75,15 @@ const locale = $derived(getLocale());
 							<span class="text-muted-foreground text-xs">{m['settings.updates.slots.versionUnknown']()}</span>
 						{/if}
 					</p>
-					<p class="text-muted-foreground text-xs">
-						{mirrored
-							? m['settings.updates.slots.lastSynced']({ time: mirrored })
-							: m['settings.updates.slots.neverSynced']()}
-					</p>
+					{#if mirrored}
+						<p class="text-muted-foreground text-xs">
+							{m['settings.updates.slots.lastSynced']({ time: mirrored })}
+						</p>
+					{:else if slot.state !== 'booted'}
+						<p class="text-muted-foreground text-xs">
+							{m['settings.updates.slots.neverSynced']()}
+						</p>
+					{/if}
 				</li>
 			{/each}
 		</ul>
