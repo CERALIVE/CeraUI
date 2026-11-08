@@ -35,7 +35,7 @@ test.each([
 	[0, `${wifi}unknown`],
 	[0, wifi.replace("\nGENERAL.METERED:", "")],
 ] as const)(
-	"inventory exit=%s payload=%s cannot authorize an OS check",
+	"inventory exit=%s payload=%s allows OS checks but requires approval for OS downloads",
 	async (exitCode, stdout) => {
 		// Given no positively established unmetered inventory and both toggles off.
 		spyOn(defaultUpdateTransportDeps, "run").mockResolvedValue({
@@ -50,17 +50,22 @@ test.each([
 		// When the real default inventory feeds the policy gate.
 		const onlyMeteredCandidateExists =
 			await defaultOrchestratorRuntimeDeps.onlyMeteredCandidateExists();
-		const gate = decideCellularGate({
+		const gateInput = {
 			onlyMeteredCandidateExists,
 			kind: "os",
-			stage: "check",
 			allowPackagesOverCellular: false,
 			allowSystemOverCellular: false,
 			cellularOverrideId: null,
 			candidateId: "os",
+		} as const;
+		// Then absent cost evidence cannot authorize a download, but checks remain allowed.
+		expect(decideCellularGate({ ...gateInput, stage: "install" })).toEqual({
+			allowed: false,
+			needsOverride: true,
 		});
-		// Then absence of evidence is not permission.
-		expect(gate).toEqual({ allowed: false, needsOverride: false });
+		expect(decideCellularGate({ ...gateInput, stage: "check" })).toEqual({
+			allowed: true,
+		});
 	},
 );
 
