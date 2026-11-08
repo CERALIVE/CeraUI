@@ -8,8 +8,8 @@ are gated by `shouldUseMocks()` or `isDevelopment()` — never active in product
 ### Backend per-file test isolation
 
 The backend `test` script runs `bun test --parallel`, adopted after five full
-smoke runs and twenty consecutive clean acceptance runs on Bun 1.4.2. It
-runs files across worker processes with per-file isolated globals; it does not
+smoke runs and twenty consecutive clean acceptance runs on Bun 1.4.2. On the
+pinned Bun 1.4.4 it runs files across worker processes with per-file isolated globals; it does not
 make tests within a file concurrent. Each file writing fixtures must own a
 `mkdtemp` root and redirect the existing path seam, never use a fixed shared
 path. `sim-autounlock.test.ts` uses `setConfigFilePath()` and absolute reads
@@ -49,10 +49,9 @@ skip runner. Teardown restores the clock spy and real timers; production is unch
 
 The add-on shell/GPG suite and historical source-routing Git guard use
 `tests/helpers/run-test-command.ts`: asynchronous spawn, concurrent stdout/stderr
-drains and exit observation, with scoped disposal. Bun 1.4.2's synchronous spawn
-loop can lose poll accounting when GC finalizes main-loop resources during the
-wait (oven-sh/bun#40078), stalling later children even after they exited.
-The helper's regression reproduces that state in a disposable process; do not
+drains and exit observation, with scoped disposal. The synchronous-loop GC defect
+(oven-sh/bun#40078) is fixed upstream in Bun 1.4.3. The async helper is retained
+because it does not block the event loop, with the GC regression in a disposable process; do not
 replace real shell/GPG verification or Git history with mocks, or switch these
 calls back to `spawnSync`. No test or production timeout was increased.
 

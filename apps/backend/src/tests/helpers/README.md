@@ -10,7 +10,7 @@ bounds. Reader closure counts as EOF only before cancellation. The original
 stall diagnostic coverage, not a flake repair or a proven historical cause.
 
 The diagnostic signal field derives from Bun's `Subprocess["signalCode"]` type,
-including numeric signals on Bun 1.4.3. Snapshots preserve that evidence as JSON
+including numeric signals on the pinned Bun 1.4.4. Snapshots preserve that evidence as JSON
 numbers rather than converting or rejecting it; this does not change collection,
 termination or reservation settlement.
 
@@ -141,10 +141,10 @@ no longer its complete coverage set. These are host fixture proofs, not board
 qualification.
 
 Signed discovery/recovery keeps real `dpkg --compare-versions` comparisons but
-executes them through `runTestCommand`. Synchronous spawning can lose Bun's
-private-loop poll accounting when prior worker-global stderr writers are finalized
-during a call (oven-sh/bun#40078); a completed child can then strand the fixture.
-The helper's disposable-VM GC regression owns this mechanism. Production OS
+executes them through `runTestCommand`. The synchronous-loop GC defect
+(oven-sh/bun#40078) is fixed upstream in Bun 1.4.3. The async helper is retained
+because it does not block the event loop; its disposable-VM GC regression stays.
+Production OS
 version comparison already uses the supervised async spawn policy.
 
 The singleton boot-order test locates the nonblocking orchestrator launch and

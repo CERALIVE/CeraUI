@@ -2,7 +2,7 @@ export async function runTestCommand(
 	cmd: string[],
 	opts: { readonly cwd?: string; readonly env?: Record<string, string> } = {},
 ): Promise<{ code: number; stdout: string; stderr: string }> {
-	// Bun 1.4.2 spawnSync can corrupt its private loop during GC (oven-sh/bun#40078).
+	// #40078 is fixed in Bun 1.4.3; keep async spawn so tests do not block the event loop.
 	await using proc = Bun.spawn(cmd, {
 		...opts,
 		env: { ...process.env, ...opts.env },

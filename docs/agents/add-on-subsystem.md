@@ -130,9 +130,10 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
     or a Bun Error tagged `socketpair`, `fcntl` or `posix_spawn`, releases immediately with the original error and
     no group/unit probe or retry. A returned handle is irrevocably started, including an
     abort racing its assignment; allocated-but-unexecuted evidence stays unknown. This
-    pre-exec tag proof depends on the fixed Bun 1.4.2 spawn shape, not generic errno
-    clearance. Bun can exec successfully, fail `pidfd_open`, block in `wait4` until the
-    leader exits, then throw with no handle. A minimal Bash launcher records `$$` with
+    pre-exec tag proof was audited at bun-v1.4.2..v1.4.4; classification unchanged.
+    1.4.3 added kill-then-reap on `pidfd_open` failure (oven-sh/bun#40080, f86be9d).
+    Exec can still precede the throw; this is not generic errno clearance.
+    A minimal Bash launcher records `$$` with
     builtin `printf` BEFORE `exec "$@"`, exiting 125 if the write fails. Exec preserves
     PID=PGID=SID. The backend exclusively precreates one UUID `.pid` file in root-owned
     0700 `/run/ceralive/addon-launch/` and retains its FD until no-dispatch/group retirement;
@@ -141,9 +142,9 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
     a whole integer 2..2147483647, caches it, and uses the SAME negative-group ESRCH latch
     and descriptor-unit proof; a name census is never helper retirement authority.
     Invalid/nonempty/unreadable identity remains UNKNOWN, including a later empty read.
-    Empty identity after a `pidfd_open` throw proves no helper exec under the fixed Bun
-    1.4.2 assumption that every naturally reachable post-exec throw reaps the child first
-    (spawn_process.rs:552–568,991–1002 at tag bun-v1.4.2); the wait loop retries EINTR,
+    Empty identity after a `pidfd_open` throw proves no helper exec under the audited
+    fixed-options reaping proof (spawn_process.rs:504-555,1018-1047 at bun-v1.4.4);
+    the wait loop (posix_spawn.rs:665-699 at that tag) retries EINTR,
     and ordinary ECHILD means already gone. Untagged/future/non-Error absence gets
     cancellable 100/200/400 ms re-reads (700 ms total) before the same absence decision.
     That delay alone cannot prove death for an unsupported future non-reaping runtime:
