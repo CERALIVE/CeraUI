@@ -24,7 +24,7 @@ test("APT channel reconciliation rechecks pending success after reading its sour
 		},
 	);
 	try {
-		const channel = reconcileAptChannel("capable", "beta", file, "arm64");
+		const channel = reconcileAptChannel("capable", file, "arm64");
 		await read.promise;
 		// When package completion is observed before the source read returns.
 		pendingPackageSuccess.observe();
@@ -34,9 +34,7 @@ test("APT channel reconciliation rechecks pending success after reading its sour
 		reader.mockRestore();
 		expect(await Bun.file(file).text()).toBe("original sources");
 		pendingPackageSuccess.acknowledge(h.success);
-		expect(await reconcileAptChannel("capable", "beta", file, "arm64")).toBe(
-			true,
-		);
+		expect(await reconcileAptChannel("capable", file, "arm64")).toBe(true);
 	} finally {
 		release.resolve();
 		reader.mockRestore();

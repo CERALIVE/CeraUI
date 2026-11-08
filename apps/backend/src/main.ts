@@ -176,7 +176,6 @@ import {
 	awaitUpdateStartupAdjudication,
 	startUpdateOrchestrator,
 } from "./modules/system/update-orchestrator/runtime.ts";
-import { loadUpdateSettings } from "./modules/system/update-settings.ts";
 import { initHotspotCredentials } from "./modules/wifi/hotspot-credentials.ts";
 import { applyPersistedCountry } from "./modules/wifi/regdomain.ts";
 import { reconcileWifiAdapterModes } from "./modules/wifi/wifi-adapter-mode-transition.ts";
@@ -469,8 +468,7 @@ setInterval(updateGwWrapper, UPDATE_GW_INT);
 // host is a dev/mock box (a dev machine must never be handed to apt).
 await guardNonCritical("apt-channel-reconcile", async () => {
 	const mode = (await readUpdateCapabilities()).mode;
-	if (mode === "capable")
-		await reconcileAptChannel(mode, (await loadUpdateSettings()).channel);
+	if (mode === "capable") await reconcileAptChannel(mode);
 });
 // Todo 36: the packages+OS+slot-sync orchestrator. Its own resume path (G17)
 // is the ONLY thing that reattaches to a persisted `committing` phase's

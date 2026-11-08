@@ -24,6 +24,13 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
   `setUpdateSettings`, `getUpdateCapabilities`, `checkUpdatesNow`,
   `installUpdatesNow`, `allowCellularOnce`, `getUpdateDetails`. Launch limits:
   D8 Known gaps (f) below.
+  The channel selects system images only, defaulting to beta. Packages always
+  use stable APT. `update-image-channel.json` holds the image choice while the
+  original six-key settings file keeps `channel: "stable"` for older CeraUI
+  after rollback. Legacy files migrate once, resetting the old system-cellular
+  permission; later explicit Stable image choices persist across slot changes.
+  See [Settings](../DEVICE-UPDATES.md#settings) and the
+  [durable placement map](../CONFIG_PERSISTENCE.md#durable-device-config).
 - **[EXISTS] Updates dialog and global surfaces.** Settings → Software Updates
   shows Packages, System image, Kernel, Slots, Automation, Over cellular and Update
   connection, gated by `updateCapabilityView()`; a legacy image states the limit

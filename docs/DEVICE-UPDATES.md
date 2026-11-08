@@ -301,21 +301,42 @@ Starting-stream launch limits: root AGENTS.md D8 Known gaps (f).
 
 ## Settings
 
-`update-settings.json` (next to `config.json`, CWD-relative, atomic writes) holds
-six fields. Absent means defaults; malformed present content is a typed
-`UpdateSettingsValidationError`, never partial salvage.
+Update settings expose six fields. `update-settings.json` and its
+`update-image-channel.json` sidecar live next to `config.json` (CWD-relative,
+atomic writes). Absent files mean defaults without a write; malformed present
+content in either file is a typed `UpdateSettingsValidationError`, never partial
+salvage. An explicit settings save repairs both files.
 
 | Field | Default | Meaning |
 |---|---|---|
 | `packagesAuto` | `true` | the scheduled package pipeline (check through install) |
 | `systemAuto` | `true` | the scheduled OS pipeline |
 | `schedule` | `{mode: "any-idle", start: "03:00", end: "05:00"}` | any idle moment, or a local HH:mm window |
-| `channel` | `stable` | `stable` or `beta`; the bench `drill` channel is not selectable |
+| `channel` | `beta` | system-image channel only: `stable` or `beta`; packages always use stable APT, and the bench `drill` channel is not selectable |
 | `allowPackagesOverCellular` | `true` | package check and install on a metered-only uplink |
 | `allowSystemOverCellular` | `false` | OS **check** on a metered-only uplink (never the download) |
 
 The `system.getUpdateSettings`, `system.setUpdateSettings` and
 `system.getUpdateCapabilities` RPCs expose them.
+
+The real image selection is stored as `{"schema":1,"channel":"beta"}` (or
+`"stable"`) in the strict sidecar. Every settings save writes the original
+six-key `update-settings.json` with `channel: "stable"` first, then the sidecar
+with the selected image channel. Older CeraUI inside an image or after a RAUC
+rollback can still parse that settings file and reconcile stable-only packages.
+Its image check follows stable until CeraUI updates itself over stable APT.
+An operator explicitly selecting Beta inside that older UI gets its original
+beta-package behavior until CeraUI updates.
+
+A valid settings file without a sidecar migrates once to beta images and resets
+`allowSystemOverCellular` to `false`. The old permission covered only the cheap
+check, so it does not authorize future cellular bundle downloads. Migration writes
+stable legacy settings first, then the sidecar as its completion marker. Failed
+writes warn once per settings path, return migrated values and retry on a later
+load. Once the sidecar exists, loads write nothing and keep its selection,
+including an explicit Stable choice across rollback; an older CeraUI's settings
+rewrite is normalized on the next save. Both files share durable device storage
+across A/B slot changes; see [the placement map](CONFIG_PERSISTENCE.md).
 
 ## The state machine
 
@@ -987,8 +1008,8 @@ Active only with `apt-all-packages` and `rauc-verity-streaming`.
   manufactures staging success; an idle daemon alone leaves the interrupted
   outcome `os_stage_outcome_unknown_after_restart`.
 - A root-owned `/data/ceralive/update-state/os-channel-override` containing
-  exactly `drill` switches the OS channel for bench work. APT always follows
-  Settings. Only genuine override absence uses Settings' OS channel; invalid or
+  exactly `drill` switches the OS channel for bench work. APT always uses the
+  stable suite. Only genuine override absence uses Settings' OS channel; invalid or
   unreadable presence refuses selection instead of silently changing channels.
   Present unreadable authority or invalid bytes, type, owner or mode refuse with
   the existing typed `discovery_failed` reason. EIO/EACCES, oversize,

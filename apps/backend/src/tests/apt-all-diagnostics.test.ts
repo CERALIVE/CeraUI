@@ -17,6 +17,7 @@ import {
 } from "../modules/system/software-updates.ts";
 import { setCeraliveSourcesFileForTest } from "../modules/system/update-apt-channel.ts";
 import { setUpdateCapabilityPathForTest } from "../modules/system/update-capabilities.ts";
+import { UpdateQuarantine } from "../modules/system/update-orchestrator/quarantine.ts";
 import { setUpdateSettingsFilePathForTest } from "../modules/system/update-settings.ts";
 import * as notifications from "../modules/ui/notifications.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
@@ -236,6 +237,42 @@ it("logs once when identical pre-install refusals recur", async () => {
 	for (let attempt = 0; attempt < 3; attempt++) await installAttempt();
 	// Then
 	expect(warn).toHaveBeenCalledTimes(1);
+});
+
+it("refuses a stable dependency conflict with an installed beta package once per attempt without quarantine churn", async () => {
+	failureCommand = "none";
+	recheckExit = 100;
+	stderr = "libc6 : Depends: libc-bin (= 2) but 3~beta1 is installed";
+	const quarantine = spyOn(UpdateQuarantine.prototype, "recordPackageFailure");
+	try {
+		for (let attempt = 0; attempt < 3; attempt++) {
+			await installAttempt();
+			expect(getUpdateState()).toMatchObject({
+				kind: "failed",
+				reason: "discovery_failed",
+			});
+		}
+		expect(
+			warn.mock.calls.filter(
+				([message]) => String(message) === "Capable APT update refused",
+			),
+		).toHaveLength(1);
+		expect(warn).toHaveBeenCalledWith("Capable APT update refused", {
+			reason: "discovery_failed",
+			step: "pinned-simulation",
+			exit: 100,
+			detail: stderr,
+		});
+		expect(commands.filter((argv) => argv.includes("install"))).toHaveLength(3);
+		expect(
+			commands
+				.filter((argv) => argv.includes("install"))
+				.every((argv) => argv[1] === "-s"),
+		).toBe(true);
+		expect(quarantine).toHaveBeenCalledTimes(0);
+	} finally {
+		quarantine.mockRestore();
+	}
 });
 
 it("redacts credentials and bounds stderr before passing it to the logger", async () => {
