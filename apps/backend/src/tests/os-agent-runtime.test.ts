@@ -15,6 +15,7 @@ import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import {
 	candidate,
 	receipt,
+	settings,
 	setup,
 } from "./helpers/os-agent-runtime-harness.ts";
 
@@ -127,7 +128,13 @@ describe("OS install dispatch", () => {
 	});
 
 	test("metered OS download waits for the exact one-time approval", async () => {
-		const { stages } = setup({ onlyMeteredCandidateExists: async () => true });
+		const { stages } = setup({
+			onlyMeteredCandidateExists: async () => true,
+			loadSettings: async () => ({
+				...settings,
+				allowSystemOverCellular: false,
+			}),
+		});
 		expect(await installUpdatesNow()).toEqual({
 			started: false,
 			reason: "not_available",

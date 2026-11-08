@@ -228,7 +228,7 @@ describe("schedule.ts — D12 cellular gate", () => {
 		}
 	});
 
-	test("os check: gated on allowSystemOverCellular alone", () => {
+	test("os check: always allowed, including with cellular downloads off", () => {
 		expect(
 			decideCellularGate({
 				...base,
@@ -244,19 +244,19 @@ describe("schedule.ts — D12 cellular gate", () => {
 				stage: "check",
 				allowSystemOverCellular: false,
 			}),
-		).toEqual({ allowed: false, needsOverride: false });
+		).toEqual({ allowed: true });
 	});
 
-	test("os install: ALWAYS held regardless of allowSystemOverCellular, unless the exact one-time override matches", () => {
+	test("os install: the switch or exact one-time approval permits the download", () => {
 		expect(
 			decideCellularGate({
 				...base,
 				kind: "os",
 				stage: "install",
-				allowSystemOverCellular: true, // toggle is irrelevant here
+				allowSystemOverCellular: true,
 				cellularOverrideId: null,
 			}),
-		).toEqual({ allowed: false, needsOverride: true });
+		).toEqual({ allowed: true });
 
 		expect(
 			decideCellularGate({
@@ -274,6 +274,7 @@ describe("schedule.ts — D12 cellular gate", () => {
 				...base,
 				kind: "os",
 				stage: "install",
+				allowSystemOverCellular: false,
 				cellularOverrideId: "manifest-v8",
 			}),
 		).toEqual({ allowed: false, needsOverride: true });

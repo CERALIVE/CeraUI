@@ -314,7 +314,7 @@ salvage. An explicit settings save repairs both files.
 | `schedule` | `{mode: "any-idle", start: "03:00", end: "05:00"}` | any idle moment, or a local HH:mm window |
 | `channel` | `beta` | system-image channel only: `stable` or `beta`; packages always use stable APT, and the bench `drill` channel is not selectable |
 | `allowPackagesOverCellular` | `true` | package check and install on a metered-only uplink |
-| `allowSystemOverCellular` | `false` | OS **check** on a metered-only uplink (never the download) |
+| `allowSystemOverCellular` | `false` | OS bundle and kernel download on a metered-only uplink without asking; off = one-time approval per candidate |
 
 The `system.getUpdateSettings`, `system.setUpdateSettings` and
 `system.getUpdateCapabilities` RPCs expose them.
@@ -1016,6 +1016,11 @@ Active only with `apt-all-packages` and `rauc-verity-streaming`.
   invalid UTF-8, duplicate-key JSON or any content other than the exact scalar
   cannot authorize a different channel. Discovery proposes no candidate or
   transport and rewrites nothing. A later valid read recovers without a latch.
+- A 404/410 for the image-channel JSON completes discovery with no candidate
+  and sets the in-memory `os.channelUnpublished` detail. The System image section
+  then says the channel has no image yet. Any other completed check clears the
+  flag; older backends omit it. Signature fetching, CMS verification and serial
+  replay rules are unchanged.
 
 ## Transport selection and pinning
 
@@ -1132,8 +1137,8 @@ stage pin requires candidate approval for it exactly as for a metered link.
 | Kind and stage | Metered-only uplink |
 |---|---|
 | packages, check or install | allowed when `allowPackagesOverCellular` |
-| OS check (small manifest) | allowed when `allowSystemOverCellular` |
-| OS install (the bundle) | **always held**, whatever the toggle says |
+| OS check (small manifest) | always allowed |
+| OS install (bundle or kernel) | allowed when `allowSystemOverCellular` is on or the exact candidate has one-time approval |
 
 The package install gate is evaluated again immediately before the install unit
 is launched, not only at check time: an offer discovered over Ethernet does not
@@ -1148,8 +1153,30 @@ notification with the bundle size, and appears in `readUpdateDetails()` as
 `CELLULAR_OVERRIDE_GRANTED`; the gate then allows exactly that candidate id, and
 `OS_STAGING_STARTED` clears the override. The producer captures it before that
 transition: one approval buys one bounded staging job, including its internal
-pair failover, not a later job. A cheap-check toggle never permits unapproved
-cellular bundle failover.
+pair failover, not a later job. The download switch and candidate-specific
+approval use the same computed rule at the gate and when capturing the stage
+control for transport pinning/failover. The switch never fabricates or persists
+`CELLULAR_OVERRIDE_GRANTED`; turning it off holds a later attempt unless that
+candidate has an actual one-time approval. Kernel staging uses the same gate
+and still consumes a one-time approval on start.
+
+Package checks held by the cellular policy record an in-memory deferral.
+`getUpdateDetails` exposes optional `checks.*.deferred` and
+`checks.*.consecutiveFailures`; OS deferral is always null. A due deferred
+package check falls through to the due OS check in the same idle tick; a
+package check that actually ran retains priority for that tick.
+The dialog states the waiting reason, shows overdue checks as "as soon as
+possible", and hides the next-check line when automation is off. An open row
+wakes at its future deadline to replace the timestamp without waiting
+for a backend change. Each row owns one timeout, capped at 2,147,483,647 ms.
+Longer deadlines re-arm from the actual remaining wall time after each chunk;
+fractional delays round up, and absent, negative, non-finite or unrepresentable
+timestamps produce no next-check line or timeout. Already-due valid deadlines
+render immediately without arming a timeout. Changing the deadline or unmounting
+clears the pending chunk; there is no interval or per-second polling. A recorded
+failed attempt is shown separately from the last successful check; an attempt
+interrupted by process restart with zero recorded failures cannot be labeled
+failed.
 
 ## Lagged slot mirror
 

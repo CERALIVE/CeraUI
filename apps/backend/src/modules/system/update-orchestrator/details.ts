@@ -35,6 +35,7 @@ import {
 	getKernelUpdateSummary,
 	getOrchestratorState,
 	getOsUpdateSummary,
+	getPackageCheckDeferral,
 } from "./runtime.ts";
 import { type RootSlotStatus, readBothSlotStatus } from "./slot-status.ts";
 import type { OrchestratorPhase, OrchestratorState } from "./types.ts";
@@ -58,6 +59,7 @@ export type UpdateDetailsDeps = {
 	readonly lastAptTransport?: typeof getLastTransportSelection;
 	readonly credentials?: typeof credentialDetails;
 	readonly kernelSummary?: typeof getKernelUpdateSummary;
+	readonly packageDeferral?: typeof getPackageCheckDeferral;
 };
 
 export const defaultUpdateDetailsDeps: UpdateDetailsDeps = {
@@ -71,6 +73,7 @@ export const defaultUpdateDetailsDeps: UpdateDetailsDeps = {
 	lastAptTransport: () => getLastTransportSelectionForProfile("apt"),
 	credentials: credentialDetails,
 	kernelSummary: getKernelUpdateSummary,
+	packageDeferral: getPackageCheckDeferral,
 };
 
 async function settle<T>(
@@ -119,6 +122,7 @@ export async function readUpdateDetails(
 		lastAttemptAt: c.lastAttemptAt,
 		lastSuccessAt: c.lastSuccessAt,
 		nextAttemptAt: c.nextAttemptAt,
+		consecutiveFailures: c.consecutiveFailures,
 	});
 	return {
 		...(kernel ? { kernel } : {}),
@@ -137,10 +141,14 @@ export async function readUpdateDetails(
 				? { version: receipt.version, stagedAt: receipt.stagedAt }
 				: null,
 			candidate: os.candidate,
+			channelUnpublished: os.channelUnpublished ?? false,
 		},
 		checks: {
-			packages: clock(state.packageCheck),
-			os: clock(state.osCheck),
+			packages: {
+				...clock(state.packageCheck),
+				deferred: deps.packageDeferral?.() ?? null,
+			},
+			os: { ...clock(state.osCheck), deferred: null },
 		},
 		pendingCellular: os.pendingCellular,
 		transport: deps.lastTransport() ?? null,

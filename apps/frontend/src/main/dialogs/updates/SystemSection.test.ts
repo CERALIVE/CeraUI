@@ -79,6 +79,14 @@ afterEach(() => {
 });
 
 describe("SystemSection — unknown is never a fact (C-M3)", () => {
+	it("states an unpublished image channel without claiming no newer image", () => {
+		renderSection(details({ os: { channelUnpublished: true } }), "idle");
+		expect(
+			screen.getByTestId("update-system-channel-empty").textContent?.trim(),
+		).toBe("This channel has no system image yet.");
+		expect(screen.queryByTestId("update-system-no-candidate")).toBeNull();
+		expect(screen.queryByTestId("update-system-candidate-unknown")).toBeNull();
+	});
 	it("renders details the device could not answer as unavailable, with no conclusion drawn", () => {
 		// Given a details read that was rejected.
 		renderSection(undefined);

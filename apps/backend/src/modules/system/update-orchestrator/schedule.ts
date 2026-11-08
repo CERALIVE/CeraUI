@@ -129,9 +129,20 @@ export type CellularGateResult =
 	| { readonly allowed: true }
 	| { readonly allowed: false; readonly needsOverride: boolean };
 
+export function systemCellularApproved(input: {
+	readonly allowSystemOverCellular: boolean;
+	readonly cellularOverrideId: string | null;
+	readonly candidateId: string;
+}): boolean {
+	return (
+		input.allowSystemOverCellular ||
+		input.cellularOverrideId === input.candidateId
+	);
+}
+
 /**
  * A cheap OS check and a large bundle stage have different billing consequences;
- * staging requires candidate-specific approval on a metered-only path.
+ * staging requires the download switch or candidate-specific approval.
  */
 export function decideCellularGate(input: {
 	readonly onlyMeteredCandidateExists: boolean;
@@ -148,11 +159,7 @@ export function decideCellularGate(input: {
 			? { allowed: true }
 			: { allowed: false, needsOverride: false };
 	}
-	if (input.stage === "check") {
-		return input.allowSystemOverCellular
-			? { allowed: true }
-			: { allowed: false, needsOverride: false };
-	}
-	if (input.cellularOverrideId === input.candidateId) return { allowed: true };
+	if (input.stage === "check") return { allowed: true };
+	if (systemCellularApproved(input)) return { allowed: true };
 	return { allowed: false, needsOverride: true };
 }

@@ -29,6 +29,12 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
   original six-key settings file keeps `channel: "stable"` for older CeraUI
   after rollback. Legacy files migrate once, resetting the old system-cellular
   permission; later explicit Stable image choices persist across slot changes.
+  OS manifest checks always run over cellular. The system cellular switch
+  permits bundle/kernel downloads; otherwise an exact one-time approval is
+  required. Approval is computed at use, never persisted from the switch.
+  Deferred package checks cannot starve OS checks in the idle scheduler.
+  Optional details fields expose check deferrals, consecutive failures and an
+  unpublished image channel; older backends may omit all three observations.
   See [Settings](../DEVICE-UPDATES.md#settings) and the
   [durable placement map](../CONFIG_PERSISTENCE.md#durable-device-config).
 - **[EXISTS] Updates dialog and global surfaces.** Settings → Software Updates

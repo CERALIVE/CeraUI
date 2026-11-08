@@ -19,6 +19,29 @@ const details = {
 	transport: null,
 } as const;
 
+test('check waiting and failure observations are optional and survive the wire boundary', () => {
+	const clock = {
+		...details.checks.packages,
+		deferred: { reason: 'metered_only' as const },
+		consecutiveFailures: 2,
+	};
+	const parsed = updateDetailsSchema.parse({
+		...details,
+		os: { ...details.os, channelUnpublished: true },
+		checks: { packages: clock, os: { ...clock, deferred: null } },
+	});
+	expect(parsed.checks.packages).toEqual(clock);
+	expect(parsed.checks.os.deferred).toBeNull();
+	expect(parsed.os.channelUnpublished).toBe(true);
+	expect(updateDetailsSchema.parse(details)).toEqual(details);
+	expect(
+		updateDetailsSchema.safeParse({
+			...details,
+			checks: { ...details.checks, packages: { ...clock, deferred: { reason: 'offline' } } },
+		}).success,
+	).toBe(false);
+});
+
 describe('transport host evidence contract', () => {
 	const finding = {
 		ifname: 'wwan0',

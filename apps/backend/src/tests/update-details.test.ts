@@ -188,6 +188,8 @@ describe("readUpdateDetails", () => {
 			lastAttemptAt: null,
 			lastSuccessAt: null,
 			nextAttemptAt: null,
+			consecutiveFailures: 0,
+			deferred: null,
 		});
 	});
 
@@ -226,6 +228,8 @@ describe("readUpdateDetails", () => {
 			lastAttemptAt: 10,
 			lastSuccessAt: 10,
 			nextAttemptAt: 20,
+			consecutiveFailures: 0,
+			deferred: null,
 		});
 		expect(details.os.candidate).toEqual({
 			version: "2026.10.0",

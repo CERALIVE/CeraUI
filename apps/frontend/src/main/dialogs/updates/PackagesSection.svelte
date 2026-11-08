@@ -16,7 +16,7 @@
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
-import type { UpdateTransportSummary } from '@ceraui/rpc/schemas';
+import type { UpdateCheckClockSummary, UpdateTransportSummary } from '@ceraui/rpc/schemas';
 import { AlertTriangle, Download, RefreshCw } from '@lucide/svelte';
 import { untrack } from 'svelte';
 
@@ -35,12 +35,12 @@ import PackagesSummary from './PackagesSummary.svelte';
 
 interface Props {
 	surface: Pick<UpdateSurface, 'packagesReady' | 'packagesOutcome' | 'installPackages' | 'observeLegacy' | 'pending'>;
-	/** The next scheduled package check, already formatted. */
-	nextCheck: string | undefined;
+	clock?: UpdateCheckClockSummary;
+	autoEnabled?: boolean;
 	aptTransport?: UpdateTransportSummary;
 }
 
-let { surface, nextCheck, aptTransport }: Props = $props();
+let { surface, clock, autoEnabled, aptTransport }: Props = $props();
 
 const updateState = $derived(getUpdateState());
 const actionableCount = $derived(actionableCountOf(availableOf(updateState)));
@@ -174,7 +174,7 @@ $effect(() => () => clearTimeout(checkTimeout));
 
 <section aria-labelledby="updates-packages-heading" class="space-y-5" data-testid="updates-packages">
 	<h3 class="text-sm font-semibold" id="updates-packages-heading">{m['settings.updates.packages.title']()}</h3>
-	<PackagesSummary {aptTransport} {nextCheck} {updateState} />
+	<PackagesSummary {aptTransport} {clock} {autoEnabled} {checking} {updateState} />
 
 	{#if inProgress}
 		<div class="space-y-2" aria-live="polite">

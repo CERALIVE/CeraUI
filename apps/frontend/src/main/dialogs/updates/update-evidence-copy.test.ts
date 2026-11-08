@@ -141,7 +141,7 @@ function available(packages: UpdatePackage[]): UpdateState {
 
 function band(packages: UpdatePackage[]): HTMLElement {
 	render(PackagesSummary, {
-		props: { updateState: available(packages), nextCheck: undefined },
+		props: { updateState: available(packages), clock: undefined },
 	});
 	return screen.getByTestId("update-platform-band");
 }

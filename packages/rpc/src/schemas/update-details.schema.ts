@@ -26,6 +26,11 @@ export const updateCheckClockSummarySchema = z.object({
 	lastAttemptAt: z.number().nullable(),
 	lastSuccessAt: z.number().nullable(),
 	nextAttemptAt: z.number().nullable(),
+	consecutiveFailures: z.number().int().nonnegative().optional(),
+	deferred: z
+		.object({ reason: z.literal('metered_only') })
+		.nullable()
+		.optional(),
 });
 export type UpdateCheckClockSummary = z.infer<typeof updateCheckClockSummarySchema>;
 
@@ -107,6 +112,7 @@ export const updateDetailsSchema = z.object({
 		staged: z.object({ version: z.string(), stagedAt: z.number() }).nullable(),
 		/** The verified manifest the last channel check found, not yet staged. */
 		candidate: z.object({ version: z.string(), sizeBytes: z.number() }).nullable(),
+		channelUnpublished: z.boolean().optional(),
 	}),
 	checks: z.object({
 		packages: updateCheckClockSummarySchema,

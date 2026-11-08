@@ -45,6 +45,12 @@
 			},
 			"plural": false
 		},
+		"settings.updates.lastAttemptFailed": {
+			"params": {
+				"time": "<time>"
+			},
+			"plural": false
+		},
 		"live.education.info": {
 			"params": {
 				"field": "<field>"
