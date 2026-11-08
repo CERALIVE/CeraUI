@@ -43,11 +43,11 @@
 		"clean:all": "bun run clean"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.5.13",
+		"@biomejs/biome": "2.6.5",
 		"@ceralive/biome-config": "^2026.8.0",
-		"@types/node": "^26.5.1",
-		"dotenv-cli": "^11.0.0",
-		"glob": "^13.0.6",
+		"@types/node": "^26.6.6",
+		"dotenv-cli": "^11.1.0",
+		"glob": "^14.0.3",
 		"mprocs": "^0.9.6",
 		"typescript": "catalog:"
 	},
@@ -61,8 +61,8 @@
 			"packages/*"
 		],
 		"catalog": {
-			"typescript": "^6.0.3",
-			"zod": "^4.4.3"
+			"typescript": "^7.0.2",
+			"zod": "^4.6.7"
 		}
 	},
 	"trustedDependencies": [
