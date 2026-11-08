@@ -347,7 +347,7 @@ Web-based control interface for live video streaming with cellular bonding. Buil
 
 ## Quick Start
 
-Use Bun **1.4.3**, matching `.bun-version`, `packageManager`, `mise.toml` and CI.
+Use Bun **1.4.4**, matching `.bun-version`, `packageManager`, `mise.toml` and CI.
 
 ```bash
 bun install

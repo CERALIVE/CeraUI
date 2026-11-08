@@ -318,7 +318,7 @@ export function createServerWebSocketHandler(): WebSocketHandler<ServerSocketDat
 			if (isPreviewSocket(ws)) {
 				preview.message(ws, data);
 			} else {
-				rpc.message(asRpc(ws), data);
+				rpc.message?.(asRpc(ws), data);
 			}
 		},
 		close(ws, code, reason) {

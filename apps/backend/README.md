@@ -131,7 +131,7 @@ bun run check
 bun run test
 ```
 
-The package's `test` script runs `bun test --parallel` on the pinned Bun 1.4.3.
+The package's `test` script runs `bun test --parallel` on the pinned Bun 1.4.4.
 Parallel execution was adopted on 1.4.2 after five smoke runs and twenty consecutive
 clean full-suite runs. Files run
 in isolated worker globals across worker processes, but filesystem paths are still shared. Tests that
