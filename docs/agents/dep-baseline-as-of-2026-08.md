@@ -4,8 +4,8 @@
 
 **Two rows in this table were moved by the experience-stability effort and are current
 as written: `vitest` is stable `5.0.0` (the earlier `5.0.0-rc.4` target was tentative and
-is superseded), and `@orpc/server`/`@orpc/contract` stay EXACT at `2.0.0-beta.32` —
-checked live against the registry, nothing past beta.32 exists.** Both remain exact pins
+is superseded), and `@orpc/server`/`@orpc/contract` stay EXACT at `2.0.0-beta.49` —
+checked live against the registry, nothing past beta.49 exists.** Both remain exact pins
 for the reasons stated below the table; do not soften either to a caret.
 
 **Where a change here also moves a WORKSPACE-ROOT document — the root `AGENTS.md`, the
@@ -17,7 +17,7 @@ documentation hat. Reference the root row here; let todo 49 write it there.
 
 | Package | Version |
 |---------|---------|
-| `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.32 — EXACT pin, see below |
+| `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.49 — EXACT pin, see below |
 | Bun pin (`.bun-version`) | 1.4.3 — exact in `package.json` `packageManager`, `mise.toml` and every workflow's `bun-version`. The 2026-10-14 upgrade also corrects the residual `mise.toml` 1.4.0 pin; `@types/bun` follows 1.4.3 with each package's existing range style. Historical measurements below retain their original runtime versions. |
 | `svelte` | 5.56.10 |
 | `vitest` | 5.0.0 — EXACT stable pin (see the note below the table) |
@@ -106,7 +106,7 @@ before the flip it was running Vitest on whatever Node the runner shipped. It is
 Bun 1.4.3 like every other command in it. That job's own step ORDER is a separate, documented
 contract (vitest must stay immediately after `bun install`) and is untouched.
 
-**oRPC is pinned EXACT on a 2.0 beta.** `^2.0.0-beta.32` would range forward across betas and into stable
+**oRPC is pinned EXACT on a 2.0 beta.** `^2.0.0-beta.49` would range forward across betas and into stable
 2.0.0, which is not acceptable for a device runtime. CeraUI is insulated from v2's biggest break — the RPC
 serializer / error-body wire-format change — because `apps/backend/src/rpc/adapter.ts` speaks its own Bun
 WebSocket `{id, path, input}` protocol and calls oRPC's `call()` directly; there is no `RPCHandler` or
