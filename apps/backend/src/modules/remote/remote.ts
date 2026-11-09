@@ -76,6 +76,7 @@ import {
 	updateCachedRelays,
 	type ValidateRemoteRelaysMessage,
 } from "./remote-relays.ts";
+import { projectRemoteStatus } from "./remote-status.ts";
 import { buildRemoteWsUrl } from "./remote-url.ts";
 
 type RemoteAuthEncoderMessage = {
@@ -415,6 +416,22 @@ async function remoteConnect() {
 
 	remoteStatusHandled = false;
 	remoteWs = new WebSocket(remoteWsUrl);
+	// Every write to this provider socket shares the same privacy boundary.
+	const send = remoteWs.send.bind(remoteWs);
+	remoteWs.send = (data, options?, cb?: (err?: Error) => void) => {
+		const frame: Record<string, unknown> = JSON.parse(String(data));
+		const message = JSON.stringify({
+			...frame,
+			...(frame.status !== undefined
+				? { status: projectRemoteStatus(frame.status) }
+				: {}),
+		});
+		if (typeof options === "function") {
+			send(message, options);
+		} else {
+			send(message, options ?? {}, cb);
+		}
+	};
 	markConnectionActive(
 		remoteWs,
 		getms() + remoteConnectTimeout - remoteTimeout,

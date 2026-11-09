@@ -67,6 +67,20 @@ hand-written, independently-drifting per-repo `protocol.ts` derivations.
 
 ### Key invariants
 
+- **Live hotspot passwords stay local [EXISTS].** All legacy provider socket
+  writes and the v2 status relay use `projectRemoteStatus` to omit
+  `wifi[*].hotspot.password`. Authenticated local status, broadcasts, credential
+  confirmation and QR display retain the password. The field remains optional
+  in the existing schema. This applies to every remote provider intentionally.
+  The v2 broadcast relay is still unwired in production; this change does not
+  connect it. This projection only removes the hotspot password: ordinary config
+  still carries `remote_key` and, when provisioned, `pairing_secret`; those need
+  a separate credential review before enabling config relay.
+- **La contraseña del hotspot activo se queda en el dispositivo [EXISTS].**
+  Los proveedores remotos no reciben `wifi[*].hotspot.password`. Los clientes
+  locales autenticados conservan la contraseña para confirmar credenciales y
+  mostrar el código QR. El relay v2 sigue sin conectarse en producción.
+
 - **Gate = `canDialControlChannel()`** (`paired && deviceId !== undefined`). An unpaired device or one whose `device_id` is missing never dials the hub.
 - **`CERALIVE_CONTROL_HUB_URL`** is the build-time-pinned hub URL. It is NOT operator-configurable and is NOT derived from `custom_provider` or `remote_provider`.
 - **Two token audiences** (`purpose: "device-control"` vs `purpose: "relay-config"`). The purpose check runs BEFORE claim-schema validation — a validly-signed relay-config token is rejected by purpose, not by signature failure.

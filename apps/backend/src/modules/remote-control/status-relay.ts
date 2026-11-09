@@ -18,6 +18,7 @@
  */
 
 import { advanceSeq } from "../../rpc/events.ts";
+import { projectRemoteStatus } from "../remote/remote-status.ts";
 import { PROTOCOL_VERSION, type Status } from "./protocol.ts";
 
 /**
@@ -121,7 +122,7 @@ export function relayStatusToGateway(
 		seq,
 		...(payload === undefined
 			? {}
-			: { payload: payload as Record<string, unknown> }),
+			: { payload: projectRemoteStatus(payload) as Record<string, unknown> }),
 	};
 
 	channel.sendFrame(frame);
