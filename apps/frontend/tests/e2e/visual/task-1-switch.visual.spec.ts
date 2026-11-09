@@ -93,7 +93,15 @@ type SwitchMetrics = {
 };
 
 /** Read rendered switch metrics for the exact located switch element. */
-function readSwitchMetrics(toggle: Locator): Promise<SwitchMetrics> {
+async function readSwitchMetrics(toggle: Locator): Promise<SwitchMetrics> {
+	// aria-checked settles state before the track and thumb transitions finish.
+	await expect
+		.poll(() => toggle.evaluate((el) => el.getAnimations({ subtree: true }).length), {
+			message: 'switch track and thumb transitions should finish before sampling',
+			timeout: 5_000,
+		})
+		.toBe(0);
+
 	return toggle.evaluate((el: HTMLElement) => {
 		const cs = getComputedStyle(el);
 
