@@ -125,6 +125,7 @@ describe("update settings persistence", () => {
 			expect(JSON.parse(readFileSync(sidecar, "utf8"))).toEqual({
 				schema: 1,
 				channel,
+				allowSystemDownloadsOverCellular: true,
 			});
 			expect(await loadUpdateSettings(file)).toEqual(saved);
 		},
@@ -153,6 +154,7 @@ describe("update settings persistence", () => {
 				expect(JSON.parse(readFileSync(sidecar, "utf8"))).toEqual({
 					schema: 1,
 					channel: "beta",
+					allowSystemDownloadsOverCellular: false,
 				});
 				expect(writes.mock.calls.map(([path]) => path)).toEqual([
 					file,
@@ -193,7 +195,11 @@ describe("update settings persistence", () => {
 			bytes: readFileSync(path, "utf8"),
 			mtime: statSync(path).mtimeMs,
 		}));
-		const loaded = { ...rolledBack, channel: "stable" as const };
+		const loaded = {
+			...rolledBack,
+			channel: "stable" as const,
+			allowSystemOverCellular: false,
+		};
 		expect(await loadUpdateSettings(file)).toEqual(loaded);
 		expect(await loadUpdateSettings(file)).toEqual(loaded);
 		expect(
@@ -237,6 +243,7 @@ describe("update settings persistence", () => {
 		expect(JSON.parse(readFileSync(sidecar, "utf8"))).toEqual({
 			schema: 1,
 			channel: "beta",
+			allowSystemDownloadsOverCellular: false,
 		});
 	});
 
@@ -262,6 +269,7 @@ describe("update settings persistence", () => {
 		expect(JSON.parse(readFileSync(sidecar, "utf8"))).toEqual({
 			schema: 1,
 			channel: "beta",
+			allowSystemDownloadsOverCellular: false,
 		});
 	});
 
@@ -271,10 +279,18 @@ describe("update settings persistence", () => {
 		'{"schema":2,"channel":"beta"}',
 		'{"schema":1,"channel":"beta","extra":true}',
 		'{"schema":1,"channel":"beta","channel":"stable"}',
+		'{"schema":1,"channel":"stable","allowSystemDownloadsOverCellular":"true"}',
+		'{"schema":1,"channel":"stable","allowSystemDownloadsOverCellular":null}',
+		'{"schema":1,"channel":"stable","allowSystemDownloadsOverCellular":true,"allowSystemDownloadsOverCellular":false}',
 	])(
 		"rejects damaged sidecar %s and repairs both files on an explicit save",
 		async (bytes) => {
-			writeFileSync(file, JSON.stringify(oldSettingsSchema.parse({})));
+			writeFileSync(
+				file,
+				JSON.stringify(
+					oldSettingsSchema.parse({ allowSystemOverCellular: true }),
+				),
+			);
 			writeFileSync(sidecar, bytes);
 			await expect(loadUpdateSettings(file)).rejects.toBeInstanceOf(
 				UpdateSettingsValidationError,

@@ -47,7 +47,9 @@ allows operator actions to bypass that idle wait. Stream/update admission:
 [D8 Known gaps](docs/agents/the-device-update-system.md).
 Settings → Software Updates shows packages,
 system image, slots, automation (auto toggles, schedule window, channel),
-cellular allowances with per-candidate approval, and the update connection. A
+cellular allowances with per-candidate approval, and the update connection.
+Download consent is stored separately from older check-only preferences, so an
+old UI save after rollback cannot grant OS/kernel downloads over cellular. A
 busy update shows an app-wide badge, and the Live cockpit warns before Go Live;
 Start stays enabled because the device decides admission. Implementation
 reference: [device updates](docs/DEVICE-UPDATES.md).

@@ -17,7 +17,11 @@ export const UPDATE_SETTINGS_FILE = "update-settings.json";
 export const UPDATE_IMAGE_CHANNEL_FILE = "update-image-channel.json";
 
 const imageChannelSchema = z
-	.object({ schema: z.literal(1), channel: z.enum(["stable", "beta"]) })
+	.object({
+		schema: z.literal(1),
+		channel: z.enum(["stable", "beta"]),
+		allowSystemDownloadsOverCellular: z.boolean().default(false),
+	})
 	.strict();
 
 export class UpdateSettingsValidationError extends Error {
@@ -102,10 +106,22 @@ export async function loadUpdateSettings(
 		}
 		const defaults = updateSettingsSchema.parse({});
 		return imageChannel
-			? { ...defaults, channel: imageChannel.channel }
+			? {
+					...defaults,
+					channel: imageChannel.channel,
+					allowSystemOverCellular:
+						imageChannel.allowSystemDownloadsOverCellular,
+				}
 			: defaults;
 	}
-	if (imageChannel) return { ...settings, channel: imageChannel.channel };
+	// Older CeraUI rewrites the six-key file with check-only permission.
+	// Only the sidecar can retain consent to the newer download contract.
+	if (imageChannel)
+		return {
+			...settings,
+			channel: imageChannel.channel,
+			allowSystemOverCellular: imageChannel.allowSystemDownloadsOverCellular,
+		};
 
 	// Write the rollback-compatible settings first; the sidecar marks migration complete.
 	const migrated = {
@@ -143,7 +159,11 @@ export function saveUpdateSettings(
 	);
 	writeFileAtomicSync(
 		imageChannelPath(filePath),
-		JSON.stringify({ schema: 1, channel: parsed.data.channel }),
+		JSON.stringify({
+			schema: 1,
+			channel: parsed.data.channel,
+			allowSystemDownloadsOverCellular: parsed.data.allowSystemOverCellular,
+		}),
 	);
 	return parsed.data;
 }
