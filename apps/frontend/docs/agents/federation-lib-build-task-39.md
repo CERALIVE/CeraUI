@@ -37,7 +37,9 @@ via `bun run build:federation` from the CeraUI root (delegates to the frontend
   now explicitly baselined. The federation harness also renders every locale
   module against the frozen catalog fixtures (`federation-catalog.test.ts`).
 - **Isolation**: this build NEVER touches the SPA `dist/public` output, runs no
-  PWA/service-worker plugin, and emits no `index.html`. The SPA `vite.config.ts` is unmodified.
+  PWA/service-worker plugin, and emits no `index.html`. The SPA and federation
+  Vite configs share the added exact `tailwind-variants` alias; their output
+  directories and PWA behavior remain separate.
 - **CI ordering caveat**: the backend `build` script does `rm -rf ../../dist/`, so
   `build:federation` MUST run AFTER `bun run build` (the full SPA/backend build) — never before,
   or its output is wiped.
