@@ -436,10 +436,9 @@ function reduceOsAvailable(
 				phase: "checking",
 				osCheck: clockAtAttemptStart(state.osCheck, event.now),
 			});
-		// While a failed stage waits for its retry or the operator, packages keep
-		// their own schedule; the recovery record rides through their phases.
+		// Packages keep their own schedule while an OS offer waits; any recovery
+		// record rides through their phases.
 		case "PACKAGE_CHECK_STARTED":
-			if (!state.osStageRecovery) return state;
 			return enter(state, event.now, {
 				phase: "checking",
 				packageCheck: clockAtAttemptStart(state.packageCheck, event.now),

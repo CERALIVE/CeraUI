@@ -386,7 +386,7 @@ gaps for overlap with the independent legacy launcher. Transition table from
 | `os-available` | `OS_STAGING_STARTED` | `os-staging` (consumes the cellular override; persists the attempt id before RAUC runs) |
 | `os-available` | `OS_CHECK_STARTED` | `checking` |
 | `os-available` | `CELLULAR_OVERRIDE_GRANTED` | `os-available` (records the id) |
-| `os-available` with an OS recovery record | `PACKAGE_CHECK_STARTED` | `checking` (the record rides through the package phases) |
+| `os-available` | `PACKAGE_CHECK_STARTED` | `checking` (any recovery record rides through the package phases) |
 | `os-staging` | `OS_STAGING_PROGRESS` | `os-staging` |
 | `os-staging` | `OS_STAGED` | `os-staged` (tokened publication retains the active recovery record until producer settlement; legacy completed-success event clears it) |
 | `os-staging` | `OS_STAGING_FAILED`, typed `automatic` | `os-available`, retry scheduled (see below) |
