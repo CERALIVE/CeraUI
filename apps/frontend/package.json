@@ -53,7 +53,7 @@
 	},
 	"devDependencies": {
 		"@axe-core/playwright": "^4.13.0",
-		"@inlang/paraglide-js": "2.25.2",
+		"@inlang/paraglide-js": "3.2.1",
 		"@lucide/svelte": "^1.70.0",
 		"@playwright/test": "^1.65.0",
 		"@sveltejs/vite-plugin-svelte": "^7.3.1",

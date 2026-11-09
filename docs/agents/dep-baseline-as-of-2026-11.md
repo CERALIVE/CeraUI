@@ -13,5 +13,11 @@ Manifest range styles remain unchanged except for the required exact Svelte hold
 | `vaul-svelte` (frontend) | exact `1.0.0-next.7` | Registry `latest` is `0.3.2`, a downgrade. |
 
 The oRPC packages remain exact `2.0.0-beta.49`; their separate upgrade is complete.
-Paraglide, tailwind-variants, Vitest, jsdom, vite-plugin-pwa and the Biome toolchain
+Paraglide is exact `3.2.1` in frontend and i18n, with message-format `4.6.0`
+and m-function-matcher `2.4.3`. Both compiler layouts preserve byte-identical
+rendering across all ten locales. Explicit message-modules for the SPA and
+locale-modules for federation retain the existing registry and runtime paths.
+No catalog key requires Paraglide 3's reserved-name allocation.
+
+Tailwind-variants, Vitest, jsdom, vite-plugin-pwa and the Biome toolchain
 remain owned by later dependency-refresh steps.
