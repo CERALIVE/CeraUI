@@ -59,7 +59,12 @@ run_case() (
             ;;
         file) printf 'old file\n' > "$public" ;;
         fifo) mkfifo "$public" ;;
-        socket) perl -MSocket -e 'socket(my $s, PF_UNIX, SOCK_STREAM, 0) or die $!; bind($s, sockaddr_un($ARGV[0])) or die $!' "$public" ;;
+        socket)
+            local socket_path=public
+            [[ ${#socket_path} -lt 108 ]] || fail 'Unix socket fixture path must be shorter than 108 bytes'
+            # Bind relative to the parent so a deep TMPDIR cannot exceed sun_path.
+            (cd "$parent"; perl -MSocket -e 'socket(my $s, PF_UNIX, SOCK_STREAM, 0) or die $!; bind($s, sockaddr_un($ARGV[0])) or die $!' "$socket_path")
+            ;;
         permission) chmod 0555 "$parent" ;;
         fresh) argv=(configure) ;;
         other-action) argv=(abort-upgrade); mkdir "$public" ;;

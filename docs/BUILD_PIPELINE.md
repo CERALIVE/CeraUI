@@ -127,6 +127,9 @@ removes only links.
 `deb-public-link.test.sh` exercises the generated configure path over private
 fake roots through the CI-run release/package contract harness; the optional
 `bash scripts/build/deb-public-link-mutations.test.sh` checks its negative controls.
+Its Unix socket fixture binds a checked, short relative path from its parent
+directory, so deep `TMPDIR` paths work without moving files outside the existing
+temporary directory and cleanup trap.
 The hardening companion covers locale, rollback, race and retention cases plus
 an unprivileged user/mount-namespace fixture when supported; otherwise it prints
 an explicit mount-test skip and still checks the pruning command arguments.
