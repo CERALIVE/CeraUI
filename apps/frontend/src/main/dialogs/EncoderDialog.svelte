@@ -649,6 +649,7 @@ function handleSave() {
 				data-testid="encoder-codec-selector"
 				role="radiogroup"
 			>
+				<!-- biome-ignore lint/a11y/useSemanticElements: These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. -->
 				<button
 					type="button"
 					aria-checked={codecIsAuto}
@@ -662,6 +663,7 @@ function handleSave() {
 				>
 					{m["live.encoder.codecAuto"]()}
 				</button>
+				<!-- biome-ignore lint/a11y/useSemanticElements: These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. -->
 				<button
 					type="button"
 					aria-checked={codecIsH264}
@@ -681,6 +683,7 @@ function handleSave() {
 				>
 					H.264
 				</button>
+				<!-- biome-ignore lint/a11y/useSemanticElements: These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. -->
 				<button
 					type="button"
 					aria-checked={codecIsH265}
@@ -727,6 +730,7 @@ function handleSave() {
 				data-testid="encoder-passthrough-selector"
 				role="radiogroup"
 			>
+				<!-- biome-ignore lint/a11y/useSemanticElements: These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. -->
 				<button
 					type="button"
 					aria-checked={passthroughIsAuto}
@@ -740,6 +744,7 @@ function handleSave() {
 				>
 					{m["live.encoder.passthrough.auto"]()}
 				</button>
+				<!-- biome-ignore lint/a11y/useSemanticElements: These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. -->
 				<button
 					type="button"
 					aria-checked={passthroughIsForce}
@@ -753,6 +758,7 @@ function handleSave() {
 				>
 					{m["live.encoder.passthrough.force"]()}
 				</button>
+				<!-- biome-ignore lint/a11y/useSemanticElements: These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. -->
 				<button
 					type="button"
 					aria-checked={passthroughIsOff}
@@ -811,6 +817,7 @@ function handleSave() {
 					aria-label={m["live.encoder.failoverPolicy.title"]()}
 					role="radiogroup"
 				>
+					<!-- biome-ignore lint/a11y/useSemanticElements: These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. -->
 					<button
 						type="button"
 						aria-checked={localFailoverPolicy === 'retime'}
@@ -824,6 +831,7 @@ function handleSave() {
 					>
 						{m["live.encoder.failoverPolicy.retime"]()}
 					</button>
+					<!-- biome-ignore lint/a11y/useSemanticElements: These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. -->
 					<button
 						type="button"
 						aria-checked={localFailoverPolicy === 'adapt'}

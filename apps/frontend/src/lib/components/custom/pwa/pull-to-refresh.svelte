@@ -148,6 +148,7 @@ onMount(() => {
 </script>
 
 <!-- Pull to Refresh Indicator -->
+<!-- biome-ignore lint/a11y/useSemanticElements: Preserve this gesture indicator's fixed div layout and explicit cancel-key handling; native button appearance is not proven equivalent. -->
 <div
 	bind:this={refreshElement}
 	style:transform="translateY(-48px)"

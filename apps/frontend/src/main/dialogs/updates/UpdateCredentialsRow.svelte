@@ -64,6 +64,7 @@ const remaining = $derived(credentialRemainingCopy(view?.daysLeft, locale));
 </script>
 
 {#if view}
+	<!-- biome-ignore lint/a11y/useSemanticElements: This is a read-only credential summary, not a form fieldset; retain its named group and block layout. -->
 	<div
 		aria-labelledby={labelId}
 		class="space-y-1.5 rounded-lg border px-4 py-3"

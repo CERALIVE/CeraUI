@@ -96,6 +96,7 @@ import { BUILD_INFO } from '$lib/env';
 									size="sm"
 									variant="outline"
 									onclick={() => {
+										// biome-ignore lint/suspicious/noConsole: This DevTools control deliberately tests console.log output.
 										console.log('✅ Console log test:', { timestamp: new Date(), level: 'info' });
 									}}
 								>
@@ -130,6 +131,7 @@ import { BUILD_INFO } from '$lib/env';
 									size="sm"
 									variant="outline"
 									onclick={() => {
+										// biome-ignore lint/suspicious/noConsole: This DevTools control deliberately tests console.table formatting.
 										console.table({
 											browser: navigator.userAgent.split(' ')[0],
 											language: navigator.language,

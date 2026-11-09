@@ -365,6 +365,7 @@ async function copyPassword() {
 		     `supports_ap_sta_concurrency` band — a third vocabulary for one fact,
 		     which could not say WHY hybrid was unavailable. -->
 		{#if modeView}
+			<!-- biome-ignore lint/a11y/useSemanticElements: This named wrapper groups the existing WiFi mode widget; a fieldset introduces intrinsic sizing and form-group layout. -->
 			<div
 				class="rounded-lg border px-3 py-2.5"
 				data-testid="hotspot-concurrency-status"

@@ -16,6 +16,7 @@ const legacyEncoder = $derived(!groups.some((group) => group.block === 'rkvenc')
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex (This read-only scroll region needs keyboard focus; axe requires a focusable descendant of the dialog body.) -->
+<!-- biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users need to focus this named read-only region to scroll the dialog body. -->
 <section tabindex="0" class="space-y-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 	aria-label={m['settings.mediaLoad.title']()} data-testid="media-load-detail" data-stale={stale}>
 	<div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">

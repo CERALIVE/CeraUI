@@ -1781,6 +1781,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 							})}
 				</p>
 
+				<!-- biome-ignore lint/a11y/useSemanticElements: The wrapping band picker uses a flex row; a fieldset introduces an anonymous content box and intrinsic sizing. -->
 				<div
 					class="flex flex-wrap gap-1.5"
 					role="group"
@@ -1791,6 +1792,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 					     locked a band they can no longer register on must be able to get
 					     back without hunting for the right one. -->
 					{#each [BAND_ANY, ...bandOffer.offerable] as band (band)}
+						<!-- biome-ignore lint/a11y/useSemanticElements: This band toggle keeps button content and click-driven selection; a native checkbox changes its activation and content model. -->
 						<button
 							type="button"
 							role="checkbox"
@@ -1907,6 +1909,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 				<div class="space-y-1.5" data-testid="modem-five-g-options" role="radiogroup"
 					aria-label={m["network.modem.fiveG.title"]()}>
 					{#each fiveGOptions as option (option.preference)}
+						<!-- biome-ignore lint/a11y/useSemanticElements: This choice contains descriptive content and uses a gated click action; native radio inputs cannot preserve that content model. -->
 						<button
 							aria-checked={option.active}
 							class="focus-visible:ring-ring flex w-full items-start gap-2.5 rounded-md border p-2.5 text-start focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60"
@@ -2726,6 +2729,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 						</p>
 						<div class="flex flex-wrap gap-1.5">
 							{#each usbOffer.targets as target (target)}
+								<!-- biome-ignore lint/a11y/useSemanticElements: This choice contains descriptive content and uses a gated click action; native radio inputs cannot preserve that content model. -->
 								<button
 									type="button"
 									role="radio"

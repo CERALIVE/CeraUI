@@ -20,6 +20,7 @@ let authMessage = $state<LoginOutput | undefined>(undefined);
 
 // Manual subscriber management
 type Subscriber = (status: boolean) => void;
+// biome-ignore lint/nursery/useSvelteReactiveClasses: Imperative subscriptions notify synchronously; tracking Set reads would subscribe effects to listener registration.
 const subscribers = new Set<Subscriber>();
 
 function notifySubscribers(): void {
