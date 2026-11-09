@@ -33,8 +33,10 @@ import { rmSync } from "node:fs";
 import { readUpdateDetails } from "../modules/system/update-orchestrator/details.ts";
 import { OsStageError } from "../modules/system/update-orchestrator/os-stage-error.ts";
 import {
+	allowCellularOnce,
 	checkUpdatesNow,
 	getOrchestratorState,
+	getOsUpdateSummary,
 	installUpdatesNow,
 	resetOrchestratorRuntimeForTest,
 	runOrchestratorTick,
@@ -138,6 +140,68 @@ describe("metered scheduled checks", () => {
 		expect((await readUpdateDetails()).checks.packages.deferred).toBeNull();
 		expect(getOrchestratorState().packageCheck.lastSuccessAt).toBe(1_000_000);
 	});
+
+	test.each(["scheduled", "manual"] as const)(
+		"%s package checks proceed while a first image offer awaits cellular approval",
+		async (action) => {
+			let allowPackagesOverCellular = false;
+			let packageChecks = 0;
+			const h = harness([], {
+				loadSettings: async () => ({
+					packagesAuto: true,
+					systemAuto: true,
+					channel: "stable",
+					schedule: { mode: "any-idle", start: "03:00", end: "05:00" },
+					allowPackagesOverCellular,
+					allowSystemOverCellular: false,
+				}),
+				onlyMeteredCandidateExists: async () => true,
+				runPackageCheck: async () => {
+					packageChecks++;
+					return null;
+				},
+			});
+			setOrchestratorStateForTest(initialOrchestratorState(0));
+
+			await runOrchestratorTick();
+			expect(getOrchestratorState().phase).toBe("os-available");
+			expect(getOrchestratorState().osStageRecovery).toBeUndefined();
+			expect(packageChecks).toBe(0);
+
+			allowPackagesOverCellular = true;
+			h.clock.now += 24 * 60 * MIN;
+			if (action === "scheduled") await runOrchestratorTick();
+			else expect(await checkUpdatesNow()).toEqual({ started: true });
+			expect(packageChecks).toBe(1);
+			expect(getOrchestratorState().packageCheck.lastSuccessAt).toBe(
+				h.clock.now,
+			);
+			expect(h.calls.stages).toBe(0);
+			expect(getOrchestratorState().osStageRecovery).toBeUndefined();
+
+			// The retained offer is re-admitted after package work, still unapproved.
+			await runOrchestratorTick();
+			await runOrchestratorTick();
+			expect(getOrchestratorState().phase).toBe("os-available");
+			expect(getOsUpdateSummary()).toMatchObject({
+				candidate: {
+					version: manifest.version,
+					sizeBytes: manifest.bundle.size,
+				},
+				pendingCellular: {
+					id: manifest.version,
+					sizeBytes: manifest.bundle.size,
+				},
+			});
+			expect(h.calls.stages).toBe(0);
+			expect(packageChecks).toBe(1);
+
+			allowCellularOnce(manifest.version);
+			await runOrchestratorTick();
+			expect(h.calls.stages).toBe(1);
+			expect(getOrchestratorState().phase).toBe("os-staged");
+		},
+	);
 });
 
 describe("OS staging recovery in the scheduler", () => {

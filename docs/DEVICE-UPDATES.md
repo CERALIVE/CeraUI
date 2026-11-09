@@ -340,7 +340,10 @@ value comes only from the sidecar's download consent; a fresh explicit save can
 grant it, and subsequent reads and unrelated UI saves retain that value.
 Migration writes stable legacy settings first, then the sidecar as its completion marker. Failed
 writes warn once per settings path, return migrated values and retry on a later
-load. Once the sidecar exists, loads write nothing and keep its selection,
+load. Synchronous saves invalidate overlapping reads before a migration can
+write; those readers reload current settings, including concurrent first-time
+loaders, so an acknowledged operator save wins. Once the sidecar exists, loads
+write nothing and keep its selection,
 including an explicit Stable choice and explicit new-contract download consent
 across rollback to v2026.11.1, whose writer replaces only the six-key file.
 That old UI cannot grant or revoke the separate download consent; use this
@@ -383,7 +386,7 @@ gaps for overlap with the independent legacy launcher. Transition table from
 | `os-available` | `OS_STAGING_STARTED` | `os-staging` (consumes the cellular override; persists the attempt id before RAUC runs) |
 | `os-available` | `OS_CHECK_STARTED` | `checking` |
 | `os-available` | `CELLULAR_OVERRIDE_GRANTED` | `os-available` (records the id) |
-| `os-available` with an OS recovery record | `PACKAGE_CHECK_STARTED` | `checking` (the record rides through the package phases) |
+| `os-available` | `PACKAGE_CHECK_STARTED` | `checking` (any recovery record rides through the package phases) |
 | `os-staging` | `OS_STAGING_PROGRESS` | `os-staging` |
 | `os-staging` | `OS_STAGED` | `os-staged` (tokened publication retains the active recovery record until producer settlement; legacy completed-success event clears it) |
 | `os-staging` | `OS_STAGING_FAILED`, typed `automatic` | `os-available`, retry scheduled (see below) |

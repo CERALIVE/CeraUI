@@ -2185,10 +2185,13 @@ function settleOsStageFailure(
 	replaceOsStageRecoveryNotice(state);
 }
 
-// A failed stage waiting for its retry or the operator must not stop the
-// package path, so a due package check leaves the OS offer.
+// An OS offer waiting for recovery or cellular approval must not stop packages.
 async function maybeCheckPackagesWhileOsWaits(): Promise<void> {
-	if (state.phase !== "os-available" || !state.osStageRecovery) return;
+	if (
+		state.phase !== "os-available" ||
+		(!state.osStageRecovery && !pendingCellularApproval)
+	)
+		return;
 	const settings = await deps.loadSettings();
 	if (state.phase !== "os-available") return;
 	if (

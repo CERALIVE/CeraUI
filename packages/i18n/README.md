@@ -2,6 +2,10 @@
 
 CeraUI's translation catalogs and runtime. Ten locales, full RTL support.
 
+The Spanish last-checked label uses `Última comprobación: {time}` because
+package checks supply a clock time while system-image checks supply a full
+localized date and time.
+
 Credential update notices use an upper-bound “within {days} days” warning and a
 separate expired message in all ten locales. Threshold numbers identify a warning
 window, not an exact countdown; the expired message takes no day parameter.

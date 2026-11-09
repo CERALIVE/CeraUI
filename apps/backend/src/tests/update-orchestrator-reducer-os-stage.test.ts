@@ -153,13 +153,23 @@ describe("update-orchestrator reducer — OS stage recovery", () => {
 		});
 	});
 
-	test("a package check never leaves os-available when no OS stage failed", () => {
+	test("a package check leaves a first OS offer without inventing recovery", () => {
 		const offered: OrchestratorState = {
 			...initialOrchestratorState(0),
 			phase: "os-available",
 		};
-		expect(
-			reduceOrchestrator(offered, { type: "PACKAGE_CHECK_STARTED", now: 1 }),
-		).toBe(offered);
+		const checking = reduceOrchestrator(offered, {
+			type: "PACKAGE_CHECK_STARTED",
+			now: 1,
+		});
+		expect(checking.phase).toBe("checking");
+		expect(checking.packageCheck.lastAttemptAt).toBe(1);
+		expect(checking.osStageRecovery).toBeUndefined();
+		expect(checking).toEqual({
+			...offered,
+			phase: "checking",
+			enteredAt: 1,
+			packageCheck: { ...offered.packageCheck, lastAttemptAt: 1 },
+		});
 	});
 });

@@ -38,6 +38,9 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
   revocation invalidates captured permission across preparation awaits. Read
   errors refuse download, while exact-candidate one-job approval remains valid.
   Deferred package checks cannot starve OS checks in the idle scheduler.
+  A first image offer waiting for cellular download approval also permits due
+  package checks. The image candidate and pending approval survive package work;
+  OS staging still requires approval and discovery re-admits the held offer.
   Optional details fields expose check deferrals, consecutive failures and an
   unpublished image channel; older backends may omit all three observations.
   See [Settings](../DEVICE-UPDATES.md#settings) and the
