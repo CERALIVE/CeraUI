@@ -1,11 +1,28 @@
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 
 import { expect, test } from './fixtures/index.js';
 
-test('configuration bootstrap keeps the shared seed complete during publication', () => {
-	const configPath = path.resolve(import.meta.dirname, '../../../backend/config.json');
-	const configModule = path.resolve(import.meta.dirname, '../../playwright.config.ts');
+test('configuration bootstrap keeps the shared seed complete during publication', ({}, testInfo) => {
+	const frontend = path.resolve(import.meta.dirname, '../..');
+	const sandboxFrontend = testInfo.outputPath('bootstrap', 'apps', 'frontend');
+	const sandboxBackend = testInfo.outputPath('bootstrap', 'apps', 'backend');
+	fs.mkdirSync(path.join(sandboxFrontend, 'tests/e2e/helpers'), { recursive: true });
+	fs.mkdirSync(sandboxBackend, { recursive: true });
+	for (const file of [
+		'playwright.config.ts',
+		'tests/e2e/helpers/input-picker-hardware-preflight.ts',
+		'tests/e2e/helpers/input-picker-hardware-config.ts',
+		'tests/e2e/helpers/index.ts',
+	]) {
+		fs.copyFileSync(path.join(frontend, file), path.join(sandboxFrontend, file));
+	}
+	fs.symlinkSync(path.join(frontend, 'node_modules'), path.join(sandboxFrontend, 'node_modules'), 'dir');
+	const configPath = path.join(sandboxBackend, 'config.json');
+	const configModule = path.join(sandboxFrontend, 'playwright.config.ts');
+	fs.writeFileSync(configPath, JSON.stringify({ existing: 'local configuration' }));
+	fs.writeFileSync(path.join(sandboxBackend, 'auth_tokens.json'), JSON.stringify({ seed: true }));
 	const output = execFileSync('bun', ['-e', `
 		import assert from 'node:assert/strict';
 		import fs from 'node:fs';
@@ -30,7 +47,12 @@ test('configuration bootstrap keeps the shared seed complete during publication'
 		assert(checked, 'the configuration seed write must be exercised');
 		console.log('complete seed remained readable');
 	`], {
-		env: { ...process.env, CI: 'true' },
+		cwd: sandboxFrontend,
+		env: {
+			...process.env,
+			CI: 'true',
+			PLAYWRIGHT_JSON_OUTPUT_NAME: path.join(sandboxFrontend, 'child-report.json'),
+		},
 		encoding: 'utf8',
 		timeout: 10_000,
 	});

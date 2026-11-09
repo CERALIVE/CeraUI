@@ -229,7 +229,9 @@ Every acquisition uses a fresh `mkdtemp` state directory under
 The shared CI `config.json` seed is published by sibling-file rename: worker
 configuration modules may initialize it concurrently while fixtures copy it.
 `backend-config-seed.spec.ts` reads the shared seed at the write's truncation
-boundary and requires complete JSON throughout publication.
+boundary and requires complete JSON throughout publication. It imports a
+test-owned copy of the bootstrap and cleanup helpers, with private configuration,
+auth seed and report paths, so local developer state is never rewritten.
 The mock preview asks the OS for its own port (`PREVIEW_PORT=0`). The private
 `backend-entry.ts` launcher reports both actual listener ports over child IPC
 after boot. Only that message establishes readiness: a TCP connection to the
