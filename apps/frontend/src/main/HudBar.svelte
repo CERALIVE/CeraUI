@@ -50,6 +50,7 @@ const HEALTH_ICON_COLOR: Record<HealthIndicator, string> = {
 };
 
 let { class: className }: { class?: string } = $props();
+const detailsDescriptionId = $props.id();
 
 let open = $state(false);
 
@@ -312,6 +313,7 @@ $effect(() => {
 
 <span role="status" aria-live="polite" class="sr-only" data-testid="hud-telemetry-status">{announcedTelemetry}</span>
 <span role="status" aria-live="polite" class="sr-only" data-testid="hud-transition-status">{announcedTransition}</span>
+<span id={detailsDescriptionId} class="sr-only">{m["hud.expandDetails"]()}</span>
 
 <Sheet.Root bind:open>
 	<Sheet.Trigger>
@@ -320,7 +322,7 @@ $effect(() => {
 				{...props}
 				type="button"
 				data-hud-region
-				aria-label={m["hud.expandDetails"]()}
+				aria-describedby={detailsDescriptionId}
 				class={cn(
 					'bg-sidebar text-foreground hover:bg-accent/50 focus-visible:ring-ring/50 flex h-12 w-full items-center gap-3 border-t px-4 text-start text-xs font-medium tracking-wide transition-colors focus-visible:ring-2 focus-visible:outline-none',
 					className,

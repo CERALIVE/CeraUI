@@ -184,6 +184,26 @@ beforeEach(() => {
 	state.soc = { temp: null, voltage: null, current: null, isStale: false };
 });
 
+describe("HudBar trigger label in name", () => {
+	it.each([
+		{ visible: "Idle", isStreaming: false, isFullyStale: false },
+		{ visible: "Live", isStreaming: true, isFullyStale: false },
+		{ visible: "Offline", isStreaming: true, isFullyStale: true },
+	])("names the visible $visible verdict and its reason", (lifecycle) => {
+		state.hud = makeHud(lifecycle);
+		state.health = "degraded";
+		state.rollup = degradedRollup();
+		render(HudBar);
+
+		expect(
+			screen.getByRole("button", {
+				name: new RegExp(`${lifecycle.visible}.*Degraded.*No frames advancing`),
+				description: "Expand details",
+			}),
+		).toBe(compactStrip());
+	});
+});
+
 describe("HudBar bitrate honesty — absence renders as absence", () => {
 	it("idle (not streaming): strip bitrate is '—', never a dimmed number", () => {
 		state.hud = makeHud({ isStreaming: false, bitrateKbps: null });
