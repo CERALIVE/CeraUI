@@ -45,6 +45,8 @@ const { device, keepsStation = false, confirmLabel, detail, onConfirm, onCancel 
 	$props();
 
 const bounds = networkConstraints.hotspot;
+// A lazy dialog's spread props invalidate on status ticks, even for the same radio.
+const preparedDevice = $derived(device);
 
 let phase = $state<'loading' | 'ready' | 'load-failed' | 'saving'>('loading');
 let saveFailed = $state(false);
@@ -58,7 +60,7 @@ let acknowledged = $state(false);
 async function load() {
 	phase = 'loading';
 	try {
-		const result = await rpc.wifi.hotspotPrepare({ device });
+		const result = await rpc.wifi.hotspotPrepare({ device: preparedDevice });
 		if (!result.success || !result.name || !result.password) throw new Error('unavailable');
 		loaded = { name: result.name, password: result.password };
 		firstTime = result.firstTime === true;

@@ -2,6 +2,14 @@
 
 ## THE WI-FI OFFERING IS DERIVED FROM THE RADIO [EXISTS]
 
+**Activation credentials follow radio identity, not status ticks [EXISTS].**
+`HotspotActivationConfirm` derives the primitive device key before its load
+effect reads it. A changed `iface` passed through `LazyDialog` can invalidate
+spread props without changing that key; it must not reload prepared credentials
+over an operator's draft. Both copy actions use the bound draft fields.
+The legacy clipboard E2E injects a changed Wi-Fi status between the two copy
+actions and asserts both displayed values and actual clipboard contents.
+
 **Hotspot membership is pushed within one five-second poll [EXISTS].** While
 an AP is up, the backend reads its own station dump (`clap-<parent>` in Hybrid).
 Unread state resolves on the first successful poll; joins, leaves and roster

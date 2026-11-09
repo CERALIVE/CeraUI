@@ -78,6 +78,11 @@ fake lease is not installed OS-update qualification. See
 [`E2E backend isolation`](tests/e2e/PLAYBOOK.md#per-test-backend-state-exists)
 for lifecycle and deliberate shared-browser sequence rules. Run from the workspace root.
 
+Hotspot credential drafts [EXISTS] stay intact when Wi-Fi status refreshes.
+The activation gate reloads prepared credentials only when its radio identity
+changes; its copy buttons use the displayed draft. The legacy clipboard E2E
+case injects a status change between password and SSID copy to guard this.
+
 To run the frontend alone:
 
 ```sh
