@@ -246,6 +246,15 @@ Explicit `port` requests are never silently relocated.
 
 Every acquisition uses a fresh `mkdtemp` state directory under
 `test-results/worker-backends/`; it never deletes another acquisition's files.
+The shared CI `config.json` seed is published by sibling-file rename: worker
+configuration modules may initialize it concurrently while fixtures copy it.
+`backend-config-seed.spec.ts` reads the shared seed at the write's truncation
+boundary and requires complete JSON throughout publication. It imports a
+test-owned copy of the bootstrap and cleanup helpers, with private configuration,
+auth seed and report paths, so local developer state is never rewritten.
+Failed writes or renames remove the unpublished sibling in `finally`; the
+regression forces a rename failure and requires the published seed to stay
+unchanged with no pending sibling left behind.
 The mock preview asks the OS for its own port (`PREVIEW_PORT=0`). The private
 `backend-entry.ts` launcher reports both actual listener ports over child IPC
 after boot. Only that message establishes readiness: a TCP connection to the
@@ -264,7 +273,10 @@ browser runs do not qualify kernel flock, OS recovery or installed updater start
 Production admission, startup retries and the SSH RPC remain unchanged.
 
 `backend-startup.spec.ts` holds a foreign listener open and requires startup
-rejection, then boots simultaneous backends and verifies distinct RPC/preview
+rejection, then retains a fixture-owned backend while booting simultaneous direct
+RPC backends on OS-assigned ports (`port: 0`). Those clients do not use the preview
+proxy's fixed CI port range and must not compete with the retained worker slot.
+The test verifies distinct RPC/preview
 listeners and independent configuration. No login assertions, retries, timeouts,
 or worker counts are relaxed. Diagnosis receipts: [`E2E-BACKEND-OWNERSHIP.md`](../../../../docs/E2E-BACKEND-OWNERSHIP.md).
 
