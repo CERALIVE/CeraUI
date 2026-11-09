@@ -78,10 +78,12 @@ fake lease is not installed OS-update qualification. See
 [`E2E backend isolation`](tests/e2e/PLAYBOOK.md#per-test-backend-state-exists)
 for lifecycle and deliberate shared-browser sequence rules. Run from the workspace root.
 
-Hotspot credential drafts [EXISTS] stay intact when Wi-Fi status refreshes.
-The activation gate reloads prepared credentials only when its radio identity
-changes; its copy buttons use the displayed draft. The legacy clipboard E2E
-case injects a status change between password and SSID copy to guard this.
+Hotspot credential drafts [EXISTS] stay intact when Wi-Fi status refreshes within
+one socket lifetime. A dropped link closes the activation gate and withdraws its
+credentials and acknowledgement: numeric radio keys can be reused after a backend
+restart. Reopening prepares the current radio's values and requires a fresh
+acknowledgement; an old pending save cannot start that radio. The legacy clipboard
+E2E guards same-radio drafts, and the lifecycle component test guards key reuse.
 
 To run the frontend alone:
 
