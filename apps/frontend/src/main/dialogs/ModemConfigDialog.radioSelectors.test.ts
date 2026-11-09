@@ -286,6 +286,27 @@ describe("the band lock — a read failure speaks, it does not vanish", () => {
 	});
 });
 
+describe("the roaming network selector", () => {
+	it("is named by the visible Available Networks label when roaming is enabled", async () => {
+		mount(
+			modem({
+				config: {
+					apn: "internet",
+					username: "",
+					password: "",
+					roaming: true,
+					network: "",
+					autoconfig: true,
+				},
+			}),
+		);
+
+		expect(
+			await screen.findByRole("combobox", { name: "Available Networks" }),
+		).toBe(screen.getByTestId("modem-network-trigger"));
+	});
+});
+
 describe("the network-mode selector", () => {
 	it("a modem that published no catalog renders a reason and NO control", async () => {
 		mount(modem({ network_type: undefined } as Partial<Modem>));

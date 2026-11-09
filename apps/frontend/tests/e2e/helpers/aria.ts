@@ -96,8 +96,8 @@ export async function assertValue(locator: Locator, value: string | RegExp): Pro
  * from any assertion here. Only structural presence is verified.
  *
  * The persistent HUD is `HudBar.svelte`, mounted via `HudRegion.svelte` in both
- * a desktop top slot and a mobile bottom dock. Its trigger button carries the
- * stable `data-hud-region` attribute (verified against the component source) —
+ * a desktop top slot and a mobile bottom dock. Its clickable label region carries
+ * the stable `data-hud-region` attribute and hosts the named details button —
  * the most reliable structural hook that does NOT depend on live telemetry text.
  * Two instances exist (desktop / mobile), only one visible at a time, so we
  * scope to the visible one.

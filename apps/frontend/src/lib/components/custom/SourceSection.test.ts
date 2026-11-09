@@ -1208,6 +1208,16 @@ describe("SourceSection — audio source single vs multiple (kept)", () => {
 		).toBeNull();
 	});
 
+	it("names the audio combobox from its visible selection", () => {
+		const { container, getByRole } = mount({
+			audioSources: ["alsa:usbaudio", "alsa:hdmi"],
+			selectedAudioSource: "alsa:hdmi",
+		});
+		expect(getByRole("combobox", { name: "alsa:hdmi" })).toBe(
+			container.querySelector('[data-testid="audio-source-select"]'),
+		);
+	});
+
 	it("forces audio source READ-ONLY while streaming (live switch gated, Task 10)", () => {
 		const { container } = mount({
 			audioSources: ["alsa:usbaudio", "alsa:hdmi"],

@@ -1387,16 +1387,17 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 					value={selectedAudioSource}
 				>
 					<Select.Trigger
+						aria-labelledby="sourceAudioSelectLabel"
 						class="min-h-11 w-full"
 						data-testid="audio-source-select"
 						id="sourceAudioSelect"
 					>
 						{#if notAvailableAudioSource}
-							<span data-testid="audio-source-unavailable">
+							<span id="sourceAudioSelectLabel" data-testid="audio-source-unavailable">
 								{`${notAvailableAudioSource} (${m["settings.notAvailableAudioSource"]()})`}
 							</span>
 						{:else}
-							<span class="flex min-w-0 items-center gap-2">
+							<span id="sourceAudioSelectLabel" class="flex min-w-0 items-center gap-2">
 								<span class="truncate">{displayedAudioLabel ?? m["settings.selectAudioSource"]()}</span>
 								{#if displayedAudioExternal}
 									<Badge

@@ -22,19 +22,19 @@ documentation hat. Reference the root row here; let todo 49 write it there.
 | `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.49, EXACT pin; see "oRPC" below |
 | Bun pin (`.bun-version`) | 1.4.4; exact in `package.json` `packageManager`, `mise.toml` and every workflow's `bun-version`; `@types/bun` resolves 1.4.4 with each package's existing range style. Historical measurements below retain their original runtime versions. |
 | `svelte` (frontend, i18n) | 5.57.0; EXACT, held back (see below) |
-| `vitest` | 5.1.0; EXACT. Current suite: **439 files / 7,346 tests, 0 failures** locally (measured on the Vitest 5.1.0 move, Bun 1.4.4) |
+| `vitest` | 5.1.0; EXACT. Current suite: **443 files / 7,435 tests, 0 failures** locally (measured on the reviewed held-dependency retry, November 9, 2026, Bun 1.4.4) |
 | `vite` | ^8.3.6, lock 8.3.6 |
 | `jsdom` | ^31.0.0, lock 31.0.0 (engines `^22.22.2 \|\| ^24.15.0 \|\| >=26.0.0`; satisfied by the Node 26 pin) |
 | Node | **26 wherever Node runs at all** — REQUIRED baseline, not a canary. `build-check.yml`, `publish-deb.yml`, and `publish-release.yml` all pin `NODE_VERSION: "26"`; `mise.toml` and both `volta.node` fields (root + `apps/frontend`) match. No cache key is keyed on the version, so the flip needs no cache bust. The `test-fe` shards, `merge-fe-reports`, and `guardrails` are the jobs with NO `setup-node` step — every command in them is Bun (see the Vitest note below). |
 | `tailwindcss` (+ `@tailwindcss/vite`/`@tailwindcss/postcss`) | ^4.3.5, lock 4.3.5 |
 | `@biomejs/biome` | 2.6.6; EXACT, via `@ceralive/biome-config` `^2026.11.0` (lock 2026.11.0, published) |
-| `bits-ui` | ^2.19.2, lock 2.19.2; held back (see below) |
+| `bits-ui` | ^2.20.6, lock 2.20.6; reviewed control-name and dialog adaptations below |
 | `@playwright/test` | ^1.65.0, lock 1.65.0 |
 | `@lucide/svelte` | ^1.70.0, lock 1.70.0 |
 | `@inlang/paraglide-js` | 3.2.1; EXACT (`packages/i18n` + `apps/frontend`, kept in lockstep) |
 | `svelte-check` | ^4.7.8, lock 4.7.8 |
 | `@sveltejs/vite-plugin-svelte` | ^7.3.1, lock 7.3.1 |
-| `@axe-core/playwright` | ^4.13.0, lock 4.13.0; held back (see below) |
+| `@axe-core/playwright` | ^4.14.0, lock 4.14.0; HUD label-in-name defect corrected |
 | `@types/node` | ^26.6.6, lock 26.6.6 (matches the Node 26 runtime baseline) |
 | `zod` | ^4.6.7 (workspace catalog), lock 4.6.7 |
 | `winston` | ^3.19.0, lock 3.19.0 |
@@ -52,10 +52,8 @@ Release each one only when its condition holds and the full gate is green.
 
 | Package | Retained version | Reason |
 | --- | --- | --- |
-| `svelte` (frontend and i18n) | exact `5.57.0` | `sveltejs/svelte#18919` remains open on November 8, 2026; latest `5.57.3` includes the reported reactivity regression. |
-| `bits-ui` (frontend) | `^2.19.2`, lock resolves `2.19.2` | Latest `2.20.6` fails the unchanged disabled-codec accessibility assertion in `AudioDialog.test.ts:256` and closed-dialog removal assertion in `SimUnlockDialog.nested.test.ts:188`. Both persist with one Vitest worker; replacing only bits-ui with `2.19.2` passes all 19 tests in those files. Keep the retained lock resolution until these compatibility failures are resolved without weakening assertions. |
-| `svelte-persistent-runes` (frontend) | `^2.1.0`, lock resolves `2.1.0` | Latest `2.2.0` changes emitted code from `load`/`save` to `createPersistence`/`track`, which CeraUI's runtime substitute does not export. The built federation ABI fails 26 tests with an undefined function call; replacing only this package with `2.1.0` passes all 38 ABI tests. Keep the retained lock resolution until the runtime substitute supports the new ABI and its changed storage semantics are reviewed. |
-| `@axe-core/playwright` (frontend) | `^4.13.0`, lock resolves `4.13.0` | Latest `4.14.0` reports the existing HUD trigger's visible-content/name mismatch (`HudBar.svelte:324`) in 14 functional cases. All 14 persist serially and pass on the previous commit; replacing only the adapter with `4.13.0` also passes all 14 on the upgraded candidate. Hold the checker upgrade until the HUD accessibility issue is fixed without changing the test's allowed-rule baseline. |
+| `svelte` (frontend and i18n) | exact `5.57.0` | Rechecked November 9, 2026: `sveltejs/svelte#18919` is OPEN, with no closure or fix comment; registry latest remains `5.57.3`. Retain the exact pin until the issue closes or a released fix is evidenced. |
+| `svelte-persistent-runes` (frontend) | `^2.1.0`, lock resolves `2.1.0` | Rechecked November 9, 2026 against published `2.2.0`: the same `$persist` input emits `createPersistence`/`track` instead of `load`/`save`; the exact runtime substitute exports only the old pair, and the preprocessor offers no legacy mode. JSON bytes still match, but stored `null` now restores as `null` instead of the initial value, and assigning `undefined` removes an existing key instead of preserving it. The isolated retry fails 26 of the unchanged 38 federation assertions with an undefined function call. Keep the hold until an explicit runtime migration preserves the required storage semantics and all 38 unchanged federation assertions pass. |
 | `typescript` (catalog) | `^6.0.3`, lock resolves `6.0.3` | TypeScript 7 is outside the approved refresh scope. |
 | `vaul-svelte` (frontend) | exact `1.0.0-next.7` | Registry `latest` is `0.3.2`, a downgrade. |
 
@@ -63,7 +61,42 @@ Release each one only when its condition holds and the full gate is green.
 Svelte's status was re-read on 2026-11-09: `sveltejs/svelte#18919` ("Major
 performance regression when computing reactivity") is still OPEN, and registry
 `latest` is `5.57.3`. Lift the exact `5.57.0` pin once that issue closes and a
-release carries the fix.
+release carries the fix, or a released fix is independently evidenced while the
+issue remains open.
+
+The November 9 held-package retry corrects product accessibility gaps:
+
+- **HUD label in name:** a native full-row label activates the details button.
+  That button references the visible lifecycle and distinct health words through
+  `aria-labelledby`; duplicate Idle is omitted from its name. Telemetry and the
+  health reason remain separately accessible in the unchanged row layout.
+  "Expand details" remains the localized `aria-describedby` action hint.
+  Exact-name cases cover Idle, Live and Offline; a six-link idle case requires
+  the single-word name Idle and all six accessible link readings. Axe 4.14.0's
+  allowed-rule baseline is unchanged.
+- **Disabled codec semantics:** `AudioDialogContent` explicitly supplies
+  `aria-disabled` alongside `disabled`. Bits-ui 2.20.0 PR #2227 makes a synthetic
+  click open the real options; the old test's no-options fallback had hidden this
+  omission, which is also present in the old Select implementation. The test now
+  requires real role-based Opus/AAC options and preserves all original DOM and
+  helper assertions unconditionally. The transport helper also retains direct AAC/Opus coverage
+  for SRTLA, SRT and RIST in the RPC schema tests. The standalone SIM test retains
+  its exact DOM-removal assertion inside bounded `waitFor`, respecting PR #2199's
+  presence-frame completion timing instead of the old jsdom-only immediate path.
+  Managed shadcn primitives, visual baselines and persisted-state ABI are unchanged.
+- **Audio-source combobox name:** PR #2216 gives `Select.Trigger` the combobox
+  role, whose name must be supplied explicitly. `SourceSection` associates the
+  trigger with its existing visible selection text, including the unavailable
+  selection branch. A component case locks its accessible name; no visual content
+  or test allowlist changes.
+- **Conditional selector names:** all 16 product Select triggers were audited.
+  The roaming-network and developer hardware-profile selectors now associate
+  their existing visible labels with their controls. Mounted exact-name tests
+  cover both, and the roaming browser case covers desktop and mobile widths.
+- **Released bits-ui hold:** after the canonical shared-merge-engine and budget
+  changes, 2.20.6 passes the ordered full build, federation assets and bundle
+  report. Toast-host is **681,359 B / 688,543 B** and audio is **7,729 B / 7,881 B**
+  gzip. No ceiling was raised by this retry.
 
 ### What the refresh delivered
 
