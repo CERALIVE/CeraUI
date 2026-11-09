@@ -23,32 +23,51 @@
 	},
 	"linter": {
 		"rules": {
-			/*
-			 * staged adoption: rules the frontend did not run before 2026-11 because
-			 * it did not inherit the canon; debt tracked in docs/agents/conventions.md
-			 */
-			"a11y": {
-				"useSemanticElements": "warn",
-				"useAriaPropsSupportedByRole": "warn",
-				"useValidAnchor": "warn",
-				"useFocusableInteractive": "warn",
-				"useKeyWithClickEvents": "warn",
-				"noNoninteractiveTabindex": "warn"
-			},
 			"suspicious": {
 				"noDebugger": "warn",
-				"noConsole": { "level": "warn", "options": { "allow": ["warn", "error"] } },
-				"noEmptyBlockStatements": "error",
-				"noExportsInTest": "warn"
+				"noConsole": { "level": "error", "options": { "allow": ["warn", "error"] } },
+				"noEmptyBlockStatements": "error"
 			},
 			"nursery": {
-				"noFloatingPromises": "warn",
-				"useSvelteRequireEachKey": "warn",
-				"useSvelteReactiveClasses": "warn"
+				"noFloatingPromises": "warn"
 			}
 		}
 	},
 	"overrides": [
+		/*
+		 * Upstream shadcn patterns: generator output retains these six findings.
+		 * Keep managed source intact; exceptions cover only its exact files/rules.
+		 */
+		{
+			"includes": ["src/lib/components/ui/breadcrumb/breadcrumb-link.svelte"],
+			"linter": { "rules": { "a11y": { "useValidAnchor": "off" } } }
+		},
+		{
+			"includes": ["src/lib/components/ui/breadcrumb/breadcrumb-page.svelte"],
+			"linter": {
+				"rules": {
+					"a11y": {
+						"useFocusableInteractive": "off",
+						"useSemanticElements": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": ["src/lib/components/ui/input-group/input-group-addon.svelte"],
+			"linter": {
+				"rules": {
+					"a11y": {
+						"useKeyWithClickEvents": "off",
+						"useSemanticElements": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": ["src/lib/components/ui/input-group/input-group.svelte"],
+			"linter": { "rules": { "a11y": { "useSemanticElements": "off" } } }
+		},
 		{
 			"includes": ["src/tests/brand-assets-integrity.ts"],
 			"formatter": { "lineWidth": 100 },

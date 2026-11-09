@@ -22,7 +22,7 @@
  */
 
 import type { DeviceStats } from "@ceraui/rpc/schemas";
-import { render } from "@testing-library/svelte";
+import { render, within } from "@testing-library/svelte";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { LaneSignalStatus } from "$lib/components/custom/health-trace-view";
 import type {
@@ -238,6 +238,11 @@ describe("per-signal states", () => {
 		};
 		open();
 		const value = byTestId("health-fact-temp-value");
+		expect(
+			within(byTestId("health-fact-temp")).getByRole("img", {
+				name: t.unavailable,
+			}),
+		).toBe(value);
 		expect(value.getAttribute("aria-label")).toBe(t.unavailable);
 		expect(value.textContent?.trim()).toBe("\u2014");
 	});

@@ -95,6 +95,7 @@ const stagedWarning = $derived(
 		>
 			{#each view.options as option (option.role)}
 				{const selected = $derived(option.role === selectedRole)}
+				<!-- biome-ignore lint/a11y/useSemanticElements: Role choices contain nested descriptions and dispatch staged button selections; native radios cannot preserve that content model. -->
 				<button
 					aria-checked={selected}
 					class={cn(

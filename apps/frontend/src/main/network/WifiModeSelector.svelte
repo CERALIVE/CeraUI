@@ -153,6 +153,7 @@ function request(mode: WifiAdapterMode) {
 	>
 		{#each view.options as option (option.mode)}
 			{const blocked = $derived(!option.available || view.pending || lockedReason !== undefined)}
+			<!-- biome-ignore lint/a11y/useSemanticElements: Mode choices contain pending and unavailable glyphs with gated button activation; native radios change the content and activation model. -->
 			<button
 				aria-checked={option.selected}
 				aria-disabled={option.available ? undefined : 'true'}

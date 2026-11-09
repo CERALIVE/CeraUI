@@ -844,6 +844,7 @@ async function applySubnet() {
 								</div>
 
 								{#if subnetConfirming}
+									<!-- biome-ignore lint/a11y/useSemanticElements: This confirmation panel groups the subnet warning and actions; a fieldset introduces form-group sizing and an anonymous content box. -->
 									<div
 										aria-labelledby="dongle-subnet-confirm-title"
 										class="bg-status-warning/10 border-status-warning/30 space-y-3 rounded-lg border p-3"

@@ -27,6 +27,7 @@ const resolveActionLabel = resolveMessageKey;
 // while an entry that drops out of `getActive()` gets its toast dismissed.
 // This is plain bookkeeping, not reactive state — the only reactive dependency
 // is `getActive()`.
+// biome-ignore lint/nursery/useSvelteReactiveClasses: The effect reads and writes this deduplication ledger; making it reactive would subscribe the effect to its own bookkeeping instead of only getActive().
 const renderedAt = new Map<string, number>();
 
 // This host used to ALSO push its own `connection-lost` toast off

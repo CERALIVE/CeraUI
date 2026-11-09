@@ -52,6 +52,7 @@ import {
 	usbOfferSuppressionKey,
 } from "../lib/rpc/usb-mode-offer";
 import { CATALOGS } from "./helpers/catalog";
+import { lookup, missingCopyKeys } from "./helpers/copy-keys";
 
 /** Every dotted key a USB-mode outcome can resolve to, derived from the wire. */
 const REQUIRED_KEYS: readonly string[] = [
@@ -70,30 +71,6 @@ const REQUIRED_KEYS: readonly string[] = [
 		.map(usbOfferSuppressionBodyKey)
 		.filter((key): key is string => key !== undefined),
 ];
-
-/**
- * THE CHECK, as a pure function over one catalog.
- *
- * It is pure so the non-vacuity proof below can hand it a catalog with a key
- * removed instead of editing a file on disk — a gate that can only be trusted
- * after someone breaks the repo to try it is a gate nobody runs.
- */
-export function missingCopyKeys(
-	catalog: unknown,
-	keys: readonly string[],
-): string[] {
-	return keys.filter((key) => typeof lookup(catalog, key) !== "string");
-}
-
-/** Resolve a dotted key against the re-nested catalog tree. */
-function lookup(catalog: unknown, key: string): unknown {
-	let cursor: unknown = catalog;
-	for (const segment of key.split(".")) {
-		if (cursor === null || typeof cursor !== "object") return undefined;
-		cursor = (cursor as Record<string, unknown>)[segment];
-	}
-	return cursor;
-}
 
 /** A structural clone with ONE key removed — the falsifiability control. */
 function withoutKey(catalog: unknown, key: string): unknown {

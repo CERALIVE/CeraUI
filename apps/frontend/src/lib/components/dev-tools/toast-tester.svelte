@@ -244,7 +244,7 @@ function dismissAllToasts() {
 		<div class="space-y-3">
 			<div class="text-sm font-medium">{m["devtools.toastTypes"]()}</div>
 			<div class="grid grid-cols-2 gap-2 md:grid-cols-3">
-				{#each toastTypes as toastType}
+				{#each toastTypes as toastType (toastType.type)}
 				<Button
 					class={`${toastType.bgColor} ${toastType.borderColor} transition-all duration-200 hover:opacity-80`}
 					onclick={toastType.action}
@@ -264,7 +264,7 @@ function dismissAllToasts() {
 		<div class="space-y-3">
 			<div class="text-sm font-medium">{m["devtools.presetExamples"]()}</div>
 			<div class="grid grid-cols-1 gap-2 md:grid-cols-2">
-				{#each presetToasts as preset}
+				{#each presetToasts as preset (preset.type)}
 					<Button
 						class="h-auto justify-start p-3 text-left"
 						onclick={preset.action}

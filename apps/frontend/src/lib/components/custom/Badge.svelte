@@ -102,7 +102,6 @@ const resolvedStatus = $derived<StatusVariant>(
 			stale && 'opacity-50',
 			className,
 		)}
-		aria-label={speedLabel}
 		title={speedLabel}
 	>
 		{speedLabel}

@@ -148,7 +148,10 @@ onMount(() => {
 </script>
 
 <!-- Pull to Refresh Indicator -->
-<div
+<button
+	type="button"
+	disabled={!isRefreshing}
+	aria-hidden={!isRefreshing}
 	bind:this={refreshElement}
 	style:transform="translateY(-48px)"
 	style:margin-top="56px"
@@ -167,27 +170,8 @@ onMount(() => {
 			}
 		}
 	}}
-	onkeydown={(e) => {
-		if (e.key === 'Enter' || e.key === ' ') {
-			e.preventDefault();
-			if (isRefreshing) {
-				// Allow canceling refresh by keyboard
-				isRefreshing = false;
-				canRefresh = false;
-				pullDistance = 0;
-				if (refreshElement) {
-					refreshElement.style.transform = 'translateY(-48px)';
-					refreshElement.style.opacity = '0';
-					refreshElement.style.pointerEvents = 'none';
-					refreshElement.style.cursor = 'default';
-				}
-			}
-		}
-	}}
-	role="button"
-	tabindex="-1"
 >
-	<div class="text-muted-foreground flex items-center gap-2">
+	<span class="text-muted-foreground flex items-center gap-2">
 		<RefreshCw
 			class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''} {canRefresh ? 'text-primary' : ''}"
 		/>
@@ -200,8 +184,8 @@ onMount(() => {
 				{m["pwa.pullToRefresh"]()}
 			{/if}
 		</span>
-	</div>
-</div>
+	</span>
+</button>
 
 <!-- Container for the main content -->
 <div bind:this={containerElement}>

@@ -334,6 +334,7 @@ $effect(() => {
 			<Skeleton class="h-5 w-24" data-testid="{testId}-skeleton" />
 		{:else if status.value === null}
 			<span
+				role="img"
 				class="text-muted-foreground/60 block font-mono text-sm"
 				data-testid="{testId}-value"
 				title={m["settings.deviceHealth.unavailable"]()}

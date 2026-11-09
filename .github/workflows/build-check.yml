@@ -589,6 +589,10 @@ jobs:
           test -x "$runtime_bin"
           test "$(command -v srtla_send)" = "$runtime_bin"
 
+      - name: Generate source component catalogs
+        working-directory: CeraUI
+        run: bun run --filter @ceraui/i18n generate:i18n
+
       - name: Seed E2E auth state
         working-directory: CeraUI
         run: E2E_PASSWORD=12345678 bun run scripts/ci/seed-e2e-auth.ts

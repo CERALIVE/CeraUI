@@ -205,12 +205,13 @@ CI command unchanged while making every promoted class fail on recurrence.
 Biome 2.6.6 and canon 2026.11.0 now run through explicit frontend inheritance in
 `apps/frontend/biome.jsonc`. Both unused-symbol rules are enabled; the earlier
 template false positives came from missing inheritance. The JSONC filename
-supports the required staged-adoption comment without putting comments in JSON.
-The frontend stages ten existing rule families at warning severity: the total
-is 0 errors, 116 warnings and 3 infos, versus 33 warnings and 4 infos before
-adoption. Per-rule counts and the "fix then promote to error" follow-up live in
-[the current agent conventions](agents/conventions.md#staged-frontend-lint-adoption-2026-11).
-Svelte formatting held: biomejs/biome#12994; open human PR #438 touches Svelte files.
+supports the exact managed-generator exception comments without putting comments
+in JSON. All ten newly enforced rule families now use error severity. The total
+is 0 errors, 33 warnings and 3 infos; the previous 74 rule findings and nine
+global finite-check warnings are resolved. Every added site exception and the
+six exact managed-file/rule exceptions live in
+[the current agent conventions](agents/conventions.md#frontend-lint-enforcement-2026-11).
+Svelte formatting remains held under biomejs/biome#12994.
 
 ### Historical two-rule override probe (2026-08-21, Biome 2.5.9)
 

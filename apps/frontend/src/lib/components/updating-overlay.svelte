@@ -98,7 +98,7 @@ onMount(() => {
 </script>
 
 <!-- Enhanced Modern Glassmorphism Overlay -->
-{#if isFinite(progress) && isFinite(total) && isFinite(progressPercentage)}
+{#if Number.isFinite(progress) && Number.isFinite(total) && Number.isFinite(progressPercentage)}
 	<Drawer.Root closeOnEscape={false} closeOnOutsideClick={false} open={true}>
 		<Drawer.Content
 			class="from-background/95 via-background/90 to-background/95 h-full w-full border-0 bg-gradient-to-br backdrop-blur-xl"
@@ -190,7 +190,7 @@ onMount(() => {
 									<span
 										class="text-foreground bg-background/80 rounded-full px-3 py-1.5 text-xl font-bold sm:text-2xl"
 									>
-										{isFinite(progressPercentage) ? progressPercentage.toFixed(0) : '0'}%
+										{Number.isFinite(progressPercentage) ? progressPercentage.toFixed(0) : '0'}%
 									</span>
 								</div>
 							{/if}
@@ -227,20 +227,20 @@ onMount(() => {
 						>
 							<Progress
 								class="h-full rounded-full"
-								max={isFinite(total) ? total : 1}
-								value={isFinite(progress) ? progress : 0}
+								max={Number.isFinite(total) ? total : 1}
+								value={Number.isFinite(progress) ? progress : 0}
 							/>
 						</div>
 
 						<!-- Progress Details -->
 						<div class="text-muted-foreground flex justify-between text-xs sm:text-sm">
 							<span
-								>{isFinite(progress) ? progress : 0}
+								>{Number.isFinite(progress) ? progress : 0}
 								{m["updatingOverlay.of"]()}
-								{isFinite(total) ? total : 1}
+								{Number.isFinite(total) ? total : 1}
 								{m["updatingOverlay.steps"]()}</span
 							>
-							<span>{isFinite(progressPercentage) ? progressPercentage.toFixed(1) : '0.0'}%</span>
+							<span>{Number.isFinite(progressPercentage) ? progressPercentage.toFixed(1) : '0.0'}%</span>
 						</div>
 					</div>
 				</div>
