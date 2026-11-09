@@ -1,19 +1,19 @@
 <script lang="ts">
-import { Cpu, Loader2, RefreshCw } from '@lucide/svelte';
-import { toast } from 'svelte-sonner';
 import {
-	type HardwareType,
-	HARDWARE_LABELS,
-	HARDWARE_DESCRIPTIONS,
 	HARDWARE_COLORS,
+	HARDWARE_DESCRIPTIONS,
+	HARDWARE_LABELS,
+	type HardwareType,
 	hardwareTypeSchema,
 } from '@ceraui/rpc/schemas';
+import { Cpu, Loader2, RefreshCw } from '@lucide/svelte';
+import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
-import { rpc, getIsConnected } from '$lib/rpc';
+import { getIsConnected, rpc } from '$lib/rpc';
 
 // All available hardware types from schema
 const ALL_HARDWARE_TYPES = hardwareTypeSchema.options as HardwareType[];

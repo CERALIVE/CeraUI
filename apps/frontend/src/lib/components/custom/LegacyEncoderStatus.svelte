@@ -104,8 +104,8 @@
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
-import type { Snippet } from 'svelte';
 import { FlaskConical } from '@lucide/svelte';
+import type { Snippet } from 'svelte';
 
 import {
 	deriveEncoderActivity,
@@ -333,7 +333,7 @@ const decoderCores = $derived.by(() => {
 {#snippet coreRows(cores: readonly EncoderCoreReading[], scope: 'encoder' | 'decoder')}
 	<ul class="divide-border min-w-0 divide-y text-xs" data-testid="{scope}-core-list">
 		{#each cores as core (core.core)}
-			{@const tone = coreTone(core)}
+			{const tone = $derived(coreTone(core))}
 			<li
 				class="flex min-w-0 items-baseline gap-2.5 px-3 py-2"
 				data-core-kind={core.kind}

@@ -959,22 +959,23 @@ pre-effect exception: the runner's own pre-spawn checks/preparation/abort, or a 
 tagged `socketpair`, `fcntl` or `posix_spawn`, proves no dispatch and releases immediately
 with the original error, no group/unit probes
 and no wakeup. Once a handle exists, even abort racing assignment is started; unknown
-dispatch retains evidence. Bun 1.4.2 can exec, fail `pidfd_open`, block in `wait4`, reap the
-leader and throw without a handle. The launcher writes `$$` with builtin printf BEFORE
+dispatch retains evidence. Audited at bun-v1.4.2..v1.4.4; classification unchanged.
+1.4.3 added kill-then-reap on `pidfd_open` failure (oven-sh/bun#40080, f86be9d).
+Exec can still precede that throw without a handle. The launcher writes `$$` with builtin printf BEFORE
 exec and exits125 on write failure, so the helper cannot run without recorded identity.
 One UUID file is exclusively precreated under root-owned0700 `/run/ceralive/addon-launch/`;
 its FD remains until no-dispatch or group retirement. Only handle-less recovery reads
 its bounded bytes; whole integer2..2147483647 feeds the same negative-group predicate
 and latch before descriptor units. Early unlink cannot erase the retained inode.
 Invalid/unreadable identity stays UNKNOWN; invalid nonempty bytes never become absence
-clearance. Empty pidfd identity proves no helper exec under the fixed-Bun1.4.2 assumption
-that every naturally reachable post-exec throw reaps first (spawn_process.rs:552–568,
-991–1002 at bun-v1.4.2; ordinary ECHILD means already gone). Untagged/future/non-Error
+clearance. Empty pidfd identity proves no helper exec under the audited fixed-options
+reaping proof (spawn_process.rs:504-555,1018-1047 at bun-v1.4.4;
+posix_spawn.rs:665-699 retries EINTR; ordinary ECHILD means already gone). Untagged/future/non-Error
 absence gets cancellable100/200/400ms re-reads (700ms total), still relying on that
 assumption, never on elapsed-time death. Reaudit before changing options/runtime.
 Cleanup is best-effort, inode-checked, and never completion authority. First-use sweep
 precedes this backend's active files; crash residue is not adopted, cannot affect another
-UUID request, and reboot clears tmpfs. The tag proof depends on the fixed Bun 1.4.2 spawn shape
+UUID request, and reboot clears tmpfs. The tag proof depends on the audited fixed spawn shape
 and does not change other callers' default policy or enable/disable failure tokens.
 Cancellation/retirement fences retry scheduling even when the first observation rejects.
 Child-only collector TERM/KILL, timeout

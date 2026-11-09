@@ -1,7 +1,7 @@
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
 import { Loader2 } from '@lucide/svelte';
-import { AlertDialog as AlertDialogDefault, type WithoutChild } from 'bits-ui';
+import type { AlertDialog as AlertDialogDefault, WithoutChild } from 'bits-ui';
 import type { Snippet } from 'svelte';
 
 import * as AlertDialog from '$lib/components/ui/alert-dialog/index';

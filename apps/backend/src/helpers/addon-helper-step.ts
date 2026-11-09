@@ -168,8 +168,9 @@ export function createAddonHelperStep(
 					throw error;
 				}
 			} catch (error) {
-				// Bun 1.4.2 can exec, reap on pidfd_open failure, then throw without a handle.
-				// Only these source-proven pre-exec tags or our own preparation prove none.
+				// Audited at bun-v1.4.2..v1.4.4; classification unchanged.
+				// 1.4.3 added kill-then-reap on pidfd_open failure (oven-sh/bun#40080, f86be9d).
+				// Exec can precede the throw; only these pre-exec tags or our preparation prove none.
 				if (
 					child === undefined &&
 					(!spawnAttempted ||
@@ -183,7 +184,7 @@ export function createAddonHelperStep(
 				else if (child === undefined) {
 					lostHandle = true;
 					const signal = ports.collect?.signal ?? disruptiveShutdownSignal();
-					// Fixed Bun 1.4.2 post-exec throws wait/reap first; absence is not a census.
+					// Fixed audited options reap before pidfd_open throws; absence is not a census.
 					const identity = await recovery.settle(
 						signal,
 						error instanceof Error &&

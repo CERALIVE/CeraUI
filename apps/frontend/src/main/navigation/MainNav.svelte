@@ -45,8 +45,9 @@ const label = (nav: NavElements[string]) =>
 >
 	<div class="flex items-center gap-1">
 		{#each Object.entries(navElements) as [identifier, navigation] (identifier)}
-			{@const isActive = activeKey === identifier}
+			{const isActive = $derived(activeKey === identifier)}
 			<button
+				type="button"
 				id={`nav-tab-${identifier}`}
 				class={cn(
 					'group relative flex h-11 cursor-pointer items-center gap-2 rounded-lg px-3.5 text-sm font-medium transition-colors',
@@ -62,7 +63,7 @@ const label = (nav: NavElements[string]) =>
 				onclick={() => handleTabNavigation(identifier, navigation)}
 			>
 				{#if navigation.icon}
-					{@const Icon = navigation.icon}
+					{const Icon = $derived(navigation.icon)}
 					<Icon class="h-4 w-4" aria-hidden="true" />
 				{/if}
 				<span>{label(navigation)}</span>

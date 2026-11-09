@@ -67,8 +67,8 @@ const logs = $derived([
 >
 	<div class="space-y-3">
 		{#each logs as log (log.id)}
-			{@const Icon = log.icon}
-			{@const isDownloading = downloading === log.id}
+			{const Icon = $derived(log.icon)}
+			{const isDownloading = $derived(downloading === log.id)}
 			<div class="flex items-center gap-3 rounded-lg border p-3" data-testid={`log-row-${log.id}`}>
 				<span class="bg-secondary text-foreground grid size-10 shrink-0 place-items-center rounded-lg">
 					<Icon class="size-5" />

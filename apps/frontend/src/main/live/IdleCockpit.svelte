@@ -24,6 +24,8 @@
  * threaded down from LiveView's getters/handlers. This component owns NO `$state`,
  * NO RPC, and writes NO config — it only forwards props to its children.
  */
+
+import { m } from '@ceraui/i18n/svelte';
 import type {
 	ActiveEncode,
 	AudioSource,
@@ -35,15 +37,13 @@ import type {
 	RelayMessage,
 	SourcesMessage,
 } from '@ceraui/rpc/schemas';
-import type { ManagedIngestAccount } from '$lib/streaming/receiver-experience';
-import type { ResolvedAudioStatus } from '$lib/streaming/sourceSummary';
-
+import { COMPOSITION_FEATURE, type StartFailureCaptureCause } from '@ceraui/rpc/schemas';
+import { Shuffle, TriangleAlert, Volume2 } from '@lucide/svelte';
 import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import SourceSection from '$lib/components/custom/SourceSection.svelte';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
-import { m } from '@ceraui/i18n/svelte';
-import { COMPOSITION_FEATURE, type StartFailureCaptureCause } from '@ceraui/rpc/schemas';
-import { Shuffle, TriangleAlert, Volume2 } from '@lucide/svelte';
+import type { ManagedIngestAccount } from '$lib/streaming/receiver-experience';
+import type { ResolvedAudioStatus } from '$lib/streaming/sourceSummary';
 
 import CompositionCard from './CompositionCard.svelte';
 import PreviewDisclosure from './PreviewDisclosure.svelte';

@@ -70,10 +70,10 @@ const checked = $derived(formatUpdateTime(transport?.checkedAt, locale));
 
 		<ul class="divide-border divide-y overflow-hidden rounded-lg border">
 			{#each transport.findings as finding (`${finding.ifname}-${finding.family}`)}
-				{@const inUse =
-					transport.selected?.ifname === finding.ifname &&
-					transport.selected?.family === finding.family}
-				{@const verdicts = finding.states.filter((state) => state !== 'clear')}
+				{const inUse =
+					$derived(transport.selected?.ifname === finding.ifname &&
+					transport.selected?.family === finding.family)}
+				{const verdicts = $derived(finding.states.filter((state) => state !== 'clear'))}
 				<li
 					class="space-y-1.5 px-4 py-3"
 					data-family={finding.family}

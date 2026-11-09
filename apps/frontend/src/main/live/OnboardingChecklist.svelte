@@ -99,7 +99,7 @@ const steps = $derived<Step[]>([
 
 			<ol class="space-y-2.5">
 				{#each steps as step (step.id)}
-					{@const StepIcon = step.icon}
+					{const StepIcon = $derived(step.icon)}
 					<li
 						class={cn(
 							'flex items-center gap-3.5 rounded-xl border px-3.5 py-3 transition-colors',

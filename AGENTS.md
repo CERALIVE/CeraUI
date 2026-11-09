@@ -33,7 +33,7 @@ docs/ — engineering contracts
 
 Run from the CeraUI checkout root:
 
-Use exact Bun 1.4.3 from `.bun-version`, `packageManager`, `mise.toml` and CI.
+Use exact Bun 1.4.4 from `.bun-version`, `packageManager`, `mise.toml` and CI.
 
 ```bash
 bun install --frozen-lockfile
@@ -58,7 +58,7 @@ bun run test:release-package-contracts
 | ADD-ON SUBSYSTEM / DEVICE HEALTH PANEL | [Contract 7](docs/agents/add-on-subsystem.md); [Contract 8](docs/agents/device-health-panel.md) |
 | MOCK SUBSYSTEM / DEVICE STATS | [Contract 9](docs/agents/mock-subsystem.md); [Contract 10](docs/agents/device-stats.md) |
 | HARDWARE PREVIEW ENCODE / DEVICE DETECTION + KIOSK EMULATION SAFETY | [Contract 11](docs/agents/hardware-preview-encode.md); [Contract 12](docs/agents/device-detection-kiosk-emulation-safety.md) |
-| DEP BASELINE (as of 2026-08) / LOCAL DEV: CONTROL-CHANNEL OVERRIDE | [Contract 13](docs/agents/dep-baseline-as-of-2026-08.md); [Contract 14](docs/agents/local-dev-control-channel-override.md) |
+| DEP BASELINE (as of 2026-11) / LOCAL DEV: CONTROL-CHANNEL OVERRIDE | [Contract 13](docs/agents/dep-baseline-as-of-2026-11.md); [Contract 14](docs/agents/local-dev-control-channel-override.md) |
 | CONVENTIONS / Release & CI rules | [Contract 15](docs/agents/conventions.md); [Contract 16](docs/agents/release-ci-rules.md) |
 | BUN-NATIVE CONVENTIONS (as of 2026-06) / CAPABILITY CONSUMER | [Contract 17](docs/agents/bun-native-conventions-as-of-2026-06.md); [Contract 18](docs/agents/capability-consumer.md) |
 | THE GATES HAVE AN OPERATOR SURFACE / HOTSPOT QR SURFACE — ONE QR, AND IT IS ESCAPED | [Contract 19](docs/agents/the-gates-have-an-operator-surface.md); [Contract 20](docs/agents/hotspot-qr-surface-one-qr-and-it-is-escaped.md) |

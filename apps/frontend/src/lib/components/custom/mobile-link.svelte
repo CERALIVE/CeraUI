@@ -38,6 +38,7 @@ const {
 </script>
 
 <button
+	type="button"
 	id={identifier ? `nav-sheet-${identifier}` : undefined}
 	class={cn(
 		'group relative w-full cursor-pointer rounded-lg px-4 py-3 text-left transition-colors duration-200',

@@ -12,8 +12,8 @@
   directly at its call site — a rest-spread cannot carry a binding.
 -->
 <script lang="ts">
-import type { LazyDialogRegistration } from './lazy-dialog.svelte';
 import LazyDialogFallback from './LazyDialogFallback.svelte';
+import type { LazyDialogRegistration } from './lazy-dialog.svelte';
 
 interface Props {
 	dialog: LazyDialogRegistration;

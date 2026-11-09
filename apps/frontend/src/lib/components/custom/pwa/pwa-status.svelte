@@ -37,12 +37,12 @@ import { m } from '@ceraui/i18n/svelte';
 import { Download, Share, WifiOff } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
-import { push } from '$lib/stores/notifications.svelte';
 import {
 	deriveConnectionSurfaceUx,
 	getDisconnectedSince,
 	getGraceNow,
 } from '$lib/stores/connection-ux.svelte';
+import { push } from '$lib/stores/notifications.svelte';
 import {
 	getCanInstall,
 	installApp,

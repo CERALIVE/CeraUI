@@ -72,6 +72,7 @@ vi.mock("$lib/rpc/client", () => ({
 	rpc: {
 		auth: { login: vi.fn(async () => ({ success: true })) },
 		streaming: { getConfig: vi.fn(async () => ({})) },
+		ui: { heartbeat: vi.fn(async () => undefined) },
 		status: {
 			getStatus: vi.fn(async () => {
 				transport.hydrateCalls += 1;

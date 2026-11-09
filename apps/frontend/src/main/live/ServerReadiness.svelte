@@ -17,8 +17,8 @@
 -->
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
-import { Link2, Network } from '@lucide/svelte';
 import type { ReceiverKind } from '@ceraui/rpc/schemas';
+import { Link2, Network } from '@lucide/svelte';
 
 import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 import { deriveServerReadiness, kindBadgeLabelKey } from '$lib/streaming/receiver-experience';

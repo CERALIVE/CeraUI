@@ -431,7 +431,7 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 		).toBeNull();
 	});
 
-	it("no source in config: axes degrade to platform-coarse, no source selector, and save succeeds", () => {
+	it("no source in config: axes degrade to platform-coarse, no source selector, and save succeeds", async () => {
 		// A federated mount — the config carries no source/pipeline and no sources
 		// broadcast has arrived. The dialog must render + save without throwing.
 		state.pipelines = pipelinesMessage("generic");
@@ -464,7 +464,7 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 			document.body.querySelectorAll("button"),
 		).find((b) => b.textContent?.trim() === "Save");
 		expect(saveButton).toBeDefined();
-		fireEvent.click(saveButton as HTMLButtonElement);
+		await fireEvent.click(saveButton as HTMLButtonElement);
 		expect(onSave).toHaveBeenCalledTimes(1);
 		const saved = onSave.mock.calls[0]?.[0] as EncoderConfig;
 		expect(saved.source).toBeUndefined();
@@ -509,7 +509,7 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 		}
 	});
 
-	it("a receiver's live signal is a ceiling: a LOWER encode target is valid and saves", () => {
+	it("a receiver's live signal is a ceiling: a LOWER encode target is valid and saves", async () => {
 		// The reported defect: with 1080p59.94 on the cable the dialog disabled every
 		// other resolution/framerate, so 720p30 — a plain downscale the capture leg
 		// handles — could not be picked at all.
@@ -548,7 +548,7 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 			document.body.querySelectorAll("button"),
 		).find((b) => b.textContent?.trim() === "Save");
 		expect((saveButton as HTMLButtonElement).disabled).toBe(false);
-		fireEvent.click(saveButton as HTMLButtonElement);
+		await fireEvent.click(saveButton as HTMLButtonElement);
 		expect(onSave).toHaveBeenCalledTimes(1);
 		const saved = onSave.mock.calls[0]?.[0] as EncoderConfig;
 		expect(saved.resolution).toBe("720p");

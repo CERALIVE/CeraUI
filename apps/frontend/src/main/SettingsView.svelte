@@ -33,8 +33,8 @@ import type { Component } from 'svelte';
 import { MediaQuery } from 'svelte/reactivity';
 
 import AsyncSwitch from '$lib/components/custom/async-switch.svelte';
-import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
 import LowDiskBanner from '$lib/components/custom/LowDiskBanner.svelte';
+import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
 import ModeToggle from '$lib/components/custom/mode-toggle.svelte';
 import { AppDialog, LazyDialog, lazyDialog } from '$lib/components/dialogs';
 import { osCommand } from '$lib/rpc/async-operation.svelte';
@@ -365,7 +365,7 @@ $effect(() => {
 							</div>
 						{/if}
 						{#each group.entries as entry (entry.key)}
-							{@const EntryIcon = entry.icon}
+							{const EntryIcon = $derived(entry.icon)}
 							<button
 								type="button"
 								class={cn(

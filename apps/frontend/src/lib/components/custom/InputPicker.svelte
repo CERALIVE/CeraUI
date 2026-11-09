@@ -114,11 +114,11 @@ function capsLabel(device: CaptureDevice): string {
 					</p>
 					<ul class="space-y-2">
 						{#each group.devices as device (device.input_id)}
-							{@const isActive = device.input_id === activeInput}
-							{@const isSelected = device.input_id === selectedInput}
-						{@const isSwitching = device.input_id === switchingInput}
-						{@const caps = capsLabel(device)}
-						{@const audioBlocked = device.kind === 'audio' && !audioLiveSwitchEnabled}
+							{const isActive = $derived(device.input_id === activeInput)}
+							{const isSelected = $derived(device.input_id === selectedInput)}
+						{const isSwitching = $derived(device.input_id === switchingInput)}
+						{const caps = $derived(capsLabel(device))}
+						{const audioBlocked = $derived(device.kind === 'audio' && !audioLiveSwitchEnabled)}
 						<li
 								class={`flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors ${
 									device.lost

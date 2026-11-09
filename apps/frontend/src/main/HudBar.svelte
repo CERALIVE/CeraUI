@@ -1,7 +1,6 @@
 <script lang="ts">
-import { untrack } from 'svelte';
-import { getLocale, m } from '@ceraui/i18n/svelte';
 import { formatBitrate, formatCurrent, formatRelativeTime, formatTemp, formatVoltage } from '@ceraui/i18n/formatters';
+import { getLocale, m } from '@ceraui/i18n/svelte';
 import ActivityIcon from '@lucide/svelte/icons/activity';
 import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 import CircleDotIcon from '@lucide/svelte/icons/circle-dot';
@@ -15,15 +14,15 @@ import ThermometerIcon from '@lucide/svelte/icons/thermometer';
 import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 import WifiIcon from '@lucide/svelte/icons/wifi';
 import ZapIcon from '@lucide/svelte/icons/zap';
-
+import { untrack } from 'svelte';
+import Badge from '$lib/components/custom/Badge.svelte';
 import BondConstellation from '$lib/components/custom/BondConstellation.svelte';
 import BufferingIndicator from '$lib/components/custom/BufferingIndicator.svelte';
 import LinkBadge from '$lib/components/custom/LinkBadge.svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
-import Badge from '$lib/components/custom/Badge.svelte';
 import * as Sheet from '$lib/components/ui/sheet';
 import * as Tooltip from '$lib/components/ui/tooltip';
-import { type StalenessState, getStalenessState } from '$lib/helpers/staleness';
+import { getStalenessState, type StalenessState } from '$lib/helpers/staleness';
 import { getBufferingState } from '$lib/stores/buffering.svelte';
 import { getDisplayProfile, getDisplayRefreshNonce, prefersEinkTheme } from '$lib/stores/display-profile.svelte';
 import { getHudState, getSocTelemetry } from '$lib/stores/hud.svelte';
@@ -297,10 +296,10 @@ $effect(() => {
 		<dt class="text-muted-foreground text-[0.7rem] font-medium">{label}</dt>
 		<dd class={cn('inline-flex items-center gap-1 font-medium', state === 'ok' ? 'text-status-success' : state === 'bad' ? 'text-status-warning' : 'text-muted-foreground')}>
 			{#if state === 'ok'}
-				{#if okIcon}{@const OkIcon = okIcon}<OkIcon class="size-3.5 shrink-0" aria-hidden="true" />{/if}
+				{#if okIcon}{const OkIcon = $derived(okIcon)}<OkIcon class="size-3.5 shrink-0" aria-hidden="true" />{/if}
 				{okText}
 			{:else if state === 'bad'}
-				{@const BadIcon = badIcon}
+				{const BadIcon = $derived(badIcon)}
 				<BadIcon class="size-3.5 shrink-0" aria-hidden="true" />
 				{badText}
 			{:else}

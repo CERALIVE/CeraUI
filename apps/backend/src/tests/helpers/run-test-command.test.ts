@@ -16,7 +16,7 @@ test("collects both output pipes and preserves a failed command's exit status", 
 
 test("collects a real child after GC poisons Bun's synchronous spawn loop", async () => {
 	const helperUrl = new URL("./run-test-command.ts", import.meta.url).href;
-	// Upstream reproducer: oven-sh/bun#40078. Keep poisoning inside a disposable VM.
+	// #40078 is fixed in Bun 1.4.3; retain the GC regression and nonblocking helper.
 	const result = await runTestCommand(
 		[
 			process.execPath,

@@ -321,7 +321,7 @@ function toggleDocs(id: string) {
 		{/if}
 
 		{#each cards as card (card.descriptor.id)}
-			{@const meta = PHASE_META[card.phase]}
+			{const meta = $derived(PHASE_META[card.phase])}
 			<div
 				class="bg-card space-y-3 rounded-xl border p-4"
 				data-addon-id={card.descriptor.id}
@@ -438,7 +438,7 @@ function toggleDocs(id: string) {
 				{/if}
 
 				{#if actionErrors[card.descriptor.id]}
-					{@const code = actionErrors[card.descriptor.id]}
+					{const code = $derived(actionErrors[card.descriptor.id])}
 					<!-- Pinned warning from the server's structured enable error
 					     (conflict / missing dependency). -->
 					<p
@@ -452,7 +452,7 @@ function toggleDocs(id: string) {
 				{/if}
 
 				{#if card.hasDocs}
-					{@const isOpen = Boolean(docsOpen[card.descriptor.id])}
+					{const isOpen = $derived(Boolean(docsOpen[card.descriptor.id]))}
 					<div class="border-border/60 border-t pt-3">
 						<button
 							class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs font-medium transition-colors"

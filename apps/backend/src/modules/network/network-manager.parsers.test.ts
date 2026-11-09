@@ -3,8 +3,8 @@
  *
  * Happy-path AND malformed-input (output-drift) cases for every extracted
  * parser. The stderr+exitCode surfacing of the consuming call sites is covered
- * centrally by cli-parse.test.ts (describeCliError) — the run()/execFileP spawn
- * seam can't be reliably spied under Bun 1.3.14's ESM re-export binding.
+ * centrally by cli-parse.test.ts (describeCliError). Bun 1.4.4 intercepts ESM
+ * re-export spies; run()/execFileP is kept as an explicit injection seam.
  */
 
 import { describe, expect, it } from "bun:test";

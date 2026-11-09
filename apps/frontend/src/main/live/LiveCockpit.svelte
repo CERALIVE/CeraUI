@@ -401,7 +401,7 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 			canStart={false}
 			{isStreaming}
 			{optimismState}
-			onStart={() => {}}
+			onStart={() => undefined}
 			{onStop}
 		/>
 	{/if}

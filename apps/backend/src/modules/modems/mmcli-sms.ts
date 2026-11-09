@@ -328,10 +328,9 @@ export const legacySmsNormalizer: SmsNormalizer = {
 /**
  * The one CLI seam this module talks through.
  *
- * Injectable because `run()` cannot be reliably spied under Bun 1.3.14's ESM
- * re-export binding (the same limit `mmcli.parsers.test.ts` records), and the
- * behaviours worth pinning here — abort-on-drift, ZERO retries, the read cap —
- * are properties of the call SEQUENCE, not of any one parser.
+ * Kept as an explicit injection seam; Bun 1.4.4 intercepts ESM re-export spies.
+ * Its abort-on-drift, ZERO retries and read cap are properties of the call
+ * sequence, not of any one parser.
  */
 export type SmsCliRunner = (args: string[]) => Promise<string>;
 

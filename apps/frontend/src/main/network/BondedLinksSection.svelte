@@ -2,10 +2,9 @@
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { LinkTelemetryEntry, LinkTelemetryMessage, Modem } from '@ceraui/rpc/schemas';
 import { Radio } from '@lucide/svelte';
-
+import Badge from '$lib/components/custom/Badge.svelte';
 import LinkBadge from '$lib/components/custom/LinkBadge.svelte';
 import LinkTelemetry from '$lib/components/custom/LinkTelemetry.svelte';
-import Badge from '$lib/components/custom/Badge.svelte';
 import { aggregateBondBandwidth, linkUpKbps } from '$lib/helpers/bond-bandwidth';
 import { formatThroughput } from '$lib/helpers/network-speed';
 import { getStalenessState } from '$lib/helpers/staleness';
@@ -91,10 +90,10 @@ const totalStale = $derived(
 		     per-interface sections no longer duplicate them (Task 20). -->
 		<div class="flex flex-col gap-1">
 			{#each links as link (linkRowKey(link, telemetryByIface.get(link.id)))}
-				{@const entry = telemetryByIface.get(link.id)}
-				{@const color = `var(--link-${link.linkIndex + 1})`}
-				{@const hasSignal = link.signal !== null}
-				{@const identity = linkDisambiguation(link, entry, ambiguousLabels)}
+				{const entry = $derived(telemetryByIface.get(link.id))}
+				{const color = $derived(`var(--link-${link.linkIndex + 1})`)}
+				{const hasSignal = $derived(link.signal !== null)}
+				{const identity = $derived(linkDisambiguation(link, entry, ambiguousLabels))}
 				<div
 					data-testid="bonded-link-card"
 					data-link-id={link.id}

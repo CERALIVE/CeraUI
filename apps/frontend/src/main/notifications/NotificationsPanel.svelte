@@ -13,11 +13,10 @@
 -->
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
+import type { NotificationType } from '@ceraui/rpc/schemas';
 import Bell from '@lucide/svelte/icons/bell';
 import Inbox from '@lucide/svelte/icons/inbox';
 import XIcon from '@lucide/svelte/icons/x';
-
-import type { NotificationType } from '@ceraui/rpc/schemas';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import { Badge } from '$lib/components/ui/badge';
@@ -86,7 +85,7 @@ const TONES: Record<NotificationType, string> = {
 	{:else}
 		<ul class="flex flex-col gap-2" data-testid="notifications-list">
 			{#each items as item (item.name)}
-				{@const Icon = NOTIFICATION_ICONS[item.type]}
+				{const Icon = $derived(NOTIFICATION_ICONS[item.type])}
 				<li
 					class={cn(
 						'bg-card flex items-start gap-3 rounded-lg border p-3',

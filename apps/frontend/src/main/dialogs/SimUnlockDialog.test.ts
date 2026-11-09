@@ -93,7 +93,7 @@ beforeEach(() => {
 });
 
 describe("SimUnlockDialog — PIN entry (Task 23)", () => {
-	it("shows the PIN field + submit for a SIM-PIN-locked modem, submit gated on a valid PIN", () => {
+	it("shows the PIN field + submit for a SIM-PIN-locked modem, submit gated on a valid PIN", async () => {
 		render(SimUnlockDialog, {
 			props: {
 				open: true,
@@ -107,11 +107,11 @@ describe("SimUnlockDialog — PIN entry (Task 23)", () => {
 		expect(submitButton().disabled).toBe(true);
 
 		// Too-short PIN (< 4 digits) stays disabled.
-		fireEvent.input(pinInput(), { target: { value: "12" } });
+		await fireEvent.input(pinInput(), { target: { value: "12" } });
 		expect(submitButton().disabled).toBe(true);
 
 		// A valid 4-digit PIN enables submit.
-		fireEvent.input(pinInput(), { target: { value: "1234" } });
+		await fireEvent.input(pinInput(), { target: { value: "1234" } });
 		expect(submitButton().disabled).toBe(false);
 	});
 
@@ -128,7 +128,7 @@ describe("SimUnlockDialog — PIN entry (Task 23)", () => {
 			},
 		});
 
-		fireEvent.input(pinInput(), { target: { value: "4321" } });
+		await fireEvent.input(pinInput(), { target: { value: "4321" } });
 		await fireEvent.click(submitButton());
 
 		expect(unlockSim).toHaveBeenCalledWith({ modemPath: "2", pin: "4321" });
@@ -152,7 +152,7 @@ describe("SimUnlockDialog — PIN entry (Task 23)", () => {
 			},
 		});
 
-		fireEvent.input(pinInput(), { target: { value: "0000" } });
+		await fireEvent.input(pinInput(), { target: { value: "0000" } });
 		await fireEvent.click(submitButton());
 
 		const error = await screen.findByTestId("sim-pin-error");
@@ -183,7 +183,7 @@ describe("SimUnlockDialog — PIN entry (Task 23)", () => {
 });
 
 describe("SimUnlockDialog — PUK recovery", () => {
-	it("shows the PUK + new-PIN fields and the attempts counter, submit gated on valid input", () => {
+	it("shows the PUK + new-PIN fields and the attempts counter, submit gated on valid input", async () => {
 		render(SimUnlockDialog, {
 			props: {
 				open: true,
@@ -202,11 +202,11 @@ describe("SimUnlockDialog — PUK recovery", () => {
 		// Empty → submit disabled.
 		expect(pukSubmit().disabled).toBe(true);
 		// A too-short PUK (< 8 digits) keeps submit disabled even with a valid PIN.
-		fireEvent.input(pukInput(), { target: { value: "1234567" } });
-		fireEvent.input(newPinInput(), { target: { value: "1234" } });
+		await fireEvent.input(pukInput(), { target: { value: "1234567" } });
+		await fireEvent.input(newPinInput(), { target: { value: "1234" } });
 		expect(pukSubmit().disabled).toBe(true);
 		// A full 8-digit PUK + valid new PIN enables submit.
-		fireEvent.input(pukInput(), { target: { value: "12345678" } });
+		await fireEvent.input(pukInput(), { target: { value: "12345678" } });
 		expect(pukSubmit().disabled).toBe(false);
 	});
 
@@ -223,8 +223,8 @@ describe("SimUnlockDialog — PUK recovery", () => {
 			},
 		});
 
-		fireEvent.input(pukInput(), { target: { value: "12345678" } });
-		fireEvent.input(newPinInput(), { target: { value: "4321" } });
+		await fireEvent.input(pukInput(), { target: { value: "12345678" } });
+		await fireEvent.input(newPinInput(), { target: { value: "4321" } });
 		await fireEvent.click(pukSubmit());
 
 		expect(unlockSimPuk).toHaveBeenCalledWith({
@@ -252,8 +252,8 @@ describe("SimUnlockDialog — PUK recovery", () => {
 			},
 		});
 
-		fireEvent.input(pukInput(), { target: { value: "00000000" } });
-		fireEvent.input(newPinInput(), { target: { value: "4321" } });
+		await fireEvent.input(pukInput(), { target: { value: "00000000" } });
+		await fireEvent.input(newPinInput(), { target: { value: "4321" } });
 		await fireEvent.click(pukSubmit());
 
 		expect(await screen.findByTestId("sim-puk-error")).toBeTruthy();
@@ -284,8 +284,8 @@ describe("SimUnlockDialog — PUK recovery", () => {
 			},
 		});
 
-		fireEvent.input(pukInput(), { target: { value: "00000000" } });
-		fireEvent.input(newPinInput(), { target: { value: "4321" } });
+		await fireEvent.input(pukInput(), { target: { value: "00000000" } });
+		await fireEvent.input(newPinInput(), { target: { value: "4321" } });
 		await fireEvent.click(pukSubmit());
 
 		expect(await screen.findByTestId("sim-puk-locked")).toBeTruthy();
@@ -294,7 +294,7 @@ describe("SimUnlockDialog — PUK recovery", () => {
 		expect(screen.queryByTestId("sim-puk-submit")).toBeNull();
 	});
 
-	it("disables submit when the SIM opens with 0 PUK retries remaining", () => {
+	it("disables submit when the SIM opens with 0 PUK retries remaining", async () => {
 		render(SimUnlockDialog, {
 			props: {
 				open: true,
@@ -305,8 +305,8 @@ describe("SimUnlockDialog — PUK recovery", () => {
 
 		// Even a fully valid PUK + new PIN cannot be submitted — the next wrong
 		// PUK would brick the SIM, so submit stays disabled at zero retries.
-		fireEvent.input(pukInput(), { target: { value: "12345678" } });
-		fireEvent.input(newPinInput(), { target: { value: "4321" } });
+		await fireEvent.input(pukInput(), { target: { value: "12345678" } });
+		await fireEvent.input(newPinInput(), { target: { value: "4321" } });
 		expect(pukSubmit().disabled).toBe(true);
 	});
 
@@ -352,7 +352,7 @@ describe("SimUnlockDialog — PUK recovery", () => {
 			},
 		});
 
-		fireEvent.input(pinInput(), { target: { value: "0000" } });
+		await fireEvent.input(pinInput(), { target: { value: "0000" } });
 		await fireEvent.click(submitButton());
 
 		// The dialog switches from the PIN entry to the PUK recovery form.
@@ -398,7 +398,7 @@ describe("SimUnlockDialog — PIN2 (Fixed Dialling Number) entry", () => {
 			},
 		});
 
-		fireEvent.input(pin2Input(), { target: { value: "1111" } });
+		await fireEvent.input(pin2Input(), { target: { value: "1111" } });
 		await fireEvent.click(pin2Submit());
 
 		expect(unlockSimPin2).toHaveBeenCalledWith({
@@ -437,7 +437,7 @@ describe("SimUnlockDialog — PIN2 (Fixed Dialling Number) entry", () => {
 		expect(body.toLowerCase()).not.toContain("sim card is locked");
 	});
 
-	it("gates submit on a valid PIN2 length", () => {
+	it("gates submit on a valid PIN2 length", async () => {
 		render(SimUnlockDialog, {
 			props: {
 				open: true,
@@ -447,9 +447,9 @@ describe("SimUnlockDialog — PIN2 (Fixed Dialling Number) entry", () => {
 		});
 
 		expect(pin2Submit().disabled).toBe(true);
-		fireEvent.input(pin2Input(), { target: { value: "11" } });
+		await fireEvent.input(pin2Input(), { target: { value: "11" } });
 		expect(pin2Submit().disabled).toBe(true);
-		fireEvent.input(pin2Input(), { target: { value: "1111" } });
+		await fireEvent.input(pin2Input(), { target: { value: "1111" } });
 		expect(pin2Submit().disabled).toBe(false);
 	});
 
@@ -467,7 +467,7 @@ describe("SimUnlockDialog — PIN2 (Fixed Dialling Number) entry", () => {
 			},
 		});
 
-		fireEvent.input(pin2Input(), { target: { value: "9999" } });
+		await fireEvent.input(pin2Input(), { target: { value: "9999" } });
 		await fireEvent.click(pin2Submit());
 
 		await waitFor(() =>
@@ -492,7 +492,7 @@ describe("SimUnlockDialog — PIN2 (Fixed Dialling Number) entry", () => {
 			},
 		});
 
-		fireEvent.input(pin2Input(), { target: { value: "9999" } });
+		await fireEvent.input(pin2Input(), { target: { value: "9999" } });
 		await fireEvent.click(pin2Submit());
 
 		await waitFor(() =>
@@ -515,7 +515,7 @@ describe("SimUnlockDialog — PIN2 (Fixed Dialling Number) entry", () => {
 			},
 		});
 
-		fireEvent.input(pin2Input(), { target: { value: "1111" } });
+		await fireEvent.input(pin2Input(), { target: { value: "1111" } });
 		await fireEvent.click(pin2Submit());
 
 		await waitFor(() =>

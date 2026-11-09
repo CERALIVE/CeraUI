@@ -440,8 +440,8 @@ const tiers = $derived(partitionSignals(signals));
 		title={m["settings.deviceStats.cpuFreqHint"]()}
 	>
 		{#each cpuFreqView.rows as row (row.key)}
-			{@const bar = cpuFreqBar(row)}
-			{@const detail = cpuFreqDetail(row)}
+			{const bar = $derived(cpuFreqBar(row))}
+			{const detail = $derived(cpuFreqDetail(row))}
 			<div
 				class="min-w-0 space-y-1"
 				data-policy-count={row.policyIds.length}
@@ -506,7 +506,7 @@ const tiers = $derived(partitionSignals(signals));
 		     as one system, and wraps instead of clipping at 1024px. -->
 		<div class="grid grid-cols-2 gap-x-4 gap-y-3 p-4 sm:grid-cols-3 lg:grid-cols-4">
 			{#each tiers.primary as signal (signal.key)}
-				{@const TileIcon = signal.icon}
+				{const TileIcon = $derived(signal.icon)}
 				<div
 					class={cn(
 						'min-w-0 space-y-1',
@@ -563,7 +563,7 @@ const tiers = $derived(partitionSignals(signals));
 			     icon-and-label line, not the old 36px avatar row), not by hiding. -->
 			<div class="divide-border divide-y border-t" data-testid="device-stats-secondary">
 				{#each tiers.secondary as signal (signal.key)}
-					{@const RowIcon = signal.icon}
+					{const RowIcon = $derived(signal.icon)}
 					<div
 						class="flex w-full items-baseline gap-2 px-4 py-2"
 						data-testid={`device-stat-${signal.key}`}

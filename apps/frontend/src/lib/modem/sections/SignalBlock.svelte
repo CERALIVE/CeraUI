@@ -67,7 +67,7 @@ const TIER_COLOR: Record<ModemSignalTier, string> = {
 	{/if}
 
 	{#if signal.readable}
-		{@const TierIcon = TIER_ICON[signal.tier]}
+		{const TierIcon = $derived(TIER_ICON[signal.tier])}
 		<div
 			class="flex flex-wrap items-center gap-2"
 			data-testid={`${name}-reading`}

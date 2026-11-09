@@ -66,7 +66,7 @@ Four further Build Check facts, all landed 2026-08-14:
   flip, under the then-current `vitest@5.0.0-rc.3` pin, the suite was green at
   **354 files / 5,779 tests — identical to the pre-bump rc.2 baseline** (a HISTORICAL
   figure, kept only because it is what the flip was proven against; the pin is now
-  stable `5.0.0` and the suite has since grown — see DEP BASELINE for the current
+  exact `5.1.0` and the suite has since grown — see DEP BASELINE for the current
   count, and never re-copy the figure into this paragraph), so the frontend `test`
   script now invokes `bun --bun vitest run` and `test-fe` carries no `setup-node`
   step at all. **The Playwright half is NOT flipped and has never produced a green

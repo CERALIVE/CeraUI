@@ -10,9 +10,8 @@ import {
 	TriangleAlert,
 	Wifi,
 } from '@lucide/svelte';
-
-import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
+import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import { LazyDialog, lazyDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
 import * as Popover from '$lib/components/ui/popover';
@@ -116,20 +115,20 @@ $effect(() => {
 			</div>
 		{:else}
 			{#each wifiRadios as [id, iface] (id)}
-				{@const entry = netif?.[iface.ifname]}
-				{@const isSwitching = isOperationPending(wifiHotspotOpKey(id))}
+				{const entry = $derived(netif?.[iface.ifname])}
+				{const isSwitching = $derived(isOperationPending(wifiHotspotOpKey(id)))}
 				<!-- ONE derivation per adapter. The row's identity line, its selector,
 				     HotspotSection's card and HotspotDialog's header all read this same
 				     shape, so the mode they display cannot disagree. -->
-				{@const modeView = deriveWifiAdapterModeView({
+				{const modeView = $derived(deriveWifiAdapterModeView({
 					device: id,
 					iface,
 					entry: getWifiAdapterModeEntry(id),
 					phase: getOperationPhase(wifiModeOpKey(id)),
 					target: wifiModeTarget(getOperationTarget(wifiModeOpKey(id))),
 					failureReason: getOperationReason(wifiModeOpKey(id)),
-				})}
-				{@const isHotspot = modeView.displayMode === 'hotspot'}
+				}))}
+				{const isHotspot = $derived(modeView.displayMode === 'hotspot')}
 				<!-- A radio mid-transition holds its own adapter lock, so every station
 				     mutation dispatched into that window is refused DEVICE_BUSY. The
 				     controls therefore stay put and go disabled-with-reason rather than
@@ -137,32 +136,32 @@ $effect(() => {
 				     kiosk touchscreen cannot hover to reveal a `title`. Reads todo 7's
 				     `wifi-mode:` key too: it answers `idle` until that control exists, so
 				     this is inert today and cannot be forgotten when it lands. -->
-				{@const stationLock = deriveWifiStationLock({
+				{const stationLock = $derived(deriveWifiStationLock({
 					hotspot: getOperationPhase(wifiHotspotOpKey(id)),
 					mode: getOperationPhase(wifiModeOpKey(id)),
-				})}
-				{@const stationLockReason = stationLock.reasonKey
+				}))}
+				{const stationLockReason = $derived(stationLock.reasonKey
 					? resolveMessageKey(stationLock.reasonKey)
-					: undefined}
-				{@const net = activeWifiNetwork(iface)}
-				{@const connected = !isHotspot && Boolean(iface.conn && net)}
-				{@const ifaceStale = staleInterfaces.has(iface.ifname) || isFullyStale}
-				{@const showStale = ifaceStale && !isHotspot && connected}
-				{@const hasIp = Boolean(entry?.ip)}
+					: undefined)}
+				{const net = $derived(activeWifiNetwork(iface))}
+				{const connected = $derived(!isHotspot && Boolean(iface.conn && net))}
+				{const ifaceStale = $derived(staleInterfaces.has(iface.ifname) || isFullyStale)}
+				{const showStale = $derived(ifaceStale && !isHotspot && connected)}
+				{const hasIp = $derived(Boolean(entry?.ip))}
 				<!-- `undefined` here is the device saying it never computed a capability
 				     report (no `iw`, an unresolvable wiphy, a failed parse, or a backend
 				     that predates the field). The strip then contributes NOTHING and the
 				     row is byte-identical to what it rendered before this existed. -->
-				{@const cap = deriveWifiCapabilityView(iface.capabilities)}
+				{const cap = $derived(deriveWifiCapabilityView(iface.capabilities))}
 				<!-- The radio's CEILING is `cap`; this is what the station leg
 				     negotiated. A Wi-Fi 7 adapter on an 802.11ac access point is
 				     genuinely running VHT, so the two can differ and must. -->
-				{@const link = deriveWifiLinkView(iface.link)}
-				{@const degradedReasonKey = iface.degraded_reason
+				{const link = $derived(deriveWifiLinkView(iface.link))}
+				{const degradedReasonKey = $derived(iface.degraded_reason
 					? `network.wifiDegraded.${iface.degraded_reason}`
-					: undefined}
-				{@const blocked = cap?.blockedBands[0]}
-				{@const wpa3Key = cap ? wpa3ChipKey(cap.wpa3Sae) : undefined}
+					: undefined)}
+				{const blocked = $derived(cap?.blockedBands[0])}
+				{const wpa3Key = $derived(cap ? wpa3ChipKey(cap.wpa3Sae) : undefined)}
 				<!-- Single-line row: identity (dot · name · status) left; bond + actions right.
 				     The handle exists because the action group below wraps too, so a probe
 				     climbing to the nearest `.flex-wrap` would stop there, not here. -->
@@ -502,7 +501,7 @@ $effect(() => {
 								<!-- The band exists on this radio and is unavailable right now, so
 								     it stays on screen with its reason. Hiding it would be
 								     indistinguishable from a radio that cannot do 6 GHz at all. -->
-								{@const actionable = blockIsOperatorActionable(blocked)}
+								{const actionable = $derived(blockIsOperatorActionable(blocked))}
 								<div
 									class={cn(
 										'flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-2.5 py-1.5',

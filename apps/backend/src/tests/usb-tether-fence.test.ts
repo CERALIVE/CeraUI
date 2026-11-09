@@ -91,6 +91,7 @@ const SCANNED_EXTENSIONS = [
 	".cjs",
 	".svelte",
 	".json",
+	".jsonc",
 	".yml",
 	".yaml",
 	".sh",

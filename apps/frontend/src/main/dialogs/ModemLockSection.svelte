@@ -85,9 +85,9 @@ import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import {
 	CREDENTIAL_VERIFICATION_COPY,
+	type LockView,
 	lockErrorKey,
 	lockoutRemainingMinutes,
-	type LockView,
 } from '$lib/modem/lock-state';
 import { type MutationOutcome, mutationOutcome } from '$lib/modem/mutation-outcome';
 import { CapabilitySection, readingView } from '$lib/modem/sections';

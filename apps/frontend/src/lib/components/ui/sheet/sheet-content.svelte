@@ -5,8 +5,7 @@ export type Side = 'top' | 'right' | 'bottom' | 'left';
 <script lang="ts">
 import XIcon from '@lucide/svelte/icons/x';
 import { Dialog as SheetPrimitive } from 'bits-ui';
-import type { Snippet } from 'svelte';
-import type { ComponentProps } from 'svelte';
+import type { ComponentProps, Snippet } from 'svelte';
 
 import { Button } from '$lib/components/ui/button/index.js';
 import { cn, type WithoutChildrenOrChild } from '$lib/utils.js';

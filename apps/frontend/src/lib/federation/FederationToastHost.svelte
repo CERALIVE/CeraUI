@@ -1,6 +1,6 @@
 <script lang="ts">
 import { onDestroy } from "svelte";
-import { toast, type ToastT } from "svelte-sonner";
+import { type ToastT, toast } from "svelte-sonner";
 
 const messages = $derived(
 	toast

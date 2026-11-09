@@ -1,4 +1,5 @@
 <script lang="ts">
+import { m } from '@ceraui/i18n/svelte';
 import CardSimIcon from '@lucide/svelte/icons/card-sim';
 import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 import RadarIcon from '@lucide/svelte/icons/radar';
@@ -13,11 +14,9 @@ import WifiLowIcon from '@lucide/svelte/icons/wifi-low';
 import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
 import WifiZeroIcon from '@lucide/svelte/icons/wifi-zero';
 
-import { m } from '@ceraui/i18n/svelte';
-
 import { getSignalCategory, linkVisualState, signalTextClass } from '$lib/helpers/signal';
-import type { ModemSignalTier } from '$main/network/cellular-row';
 import { cn } from '$lib/utils';
+import type { ModemSignalTier } from '$main/network/cellular-row';
 
 interface Props {
 	/** Signal percentage 0–100, or null when no data */

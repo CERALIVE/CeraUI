@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'bun:test';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
+import { spawn } from 'bun';
 
 import {
 	assertFederationAssetSet,
@@ -75,5 +85,45 @@ describe('federation asset contract', () => {
 
 	it('removes generated trailing whitespace before signing', () => {
 		expect(normalizeFederationAssetText('const x = 1;  \n\t\n')).toBe('const x = 1;\n\n');
+	});
+
+	it('matches federation budgets for eight-character base64url chunk hashes', async () => {
+		const root = mkdtempSync(join(tmpdir(), 'ceraui-federation-budget-'));
+		try {
+			mkdirSync(join(root, 'dist/public/assets'), { recursive: true });
+			mkdirSync(join(root, 'dist/federation', VERSION), { recursive: true });
+			writeFileSync(join(root, 'package.json'), JSON.stringify({ version: VERSION }));
+			writeFileSync(join(root, 'dist/public/index.html'), '<script src="/assets/app.js"></script>');
+			writeFileSync(join(root, 'dist/public/assets/app.js'), 'export const ready = true;');
+			writeFileSync(join(root, 'dist/public/sw.js'), 'precacheAndRoute([{url:"assets/app.js"}]);');
+			for (const filename of [
+				'sources-view-model-C-zIlhpe.js',
+				'toast-host-duUb1s03.js',
+				'InfoPopover-a_bCdE1-.js',
+			]) {
+				writeFileSync(
+					join(root, 'dist/federation', VERSION, filename),
+					'export const ready = true;',
+				);
+			}
+			const child = spawn([process.execPath, join(ROOT, 'scripts/ci/bundle-report.mjs')], {
+				cwd: root,
+				env: process.env,
+				stdin: 'ignore',
+				stdout: 'pipe',
+				stderr: 'pipe',
+			});
+			const [stdout, stderr, exit] = await Promise.all([
+				new Response(child.stdout).text(),
+				new Response(child.stderr).text(),
+				child.exited,
+			]);
+			expect(exit, stderr).toBe(0);
+			expect(stdout).toContain('federation sources-view-model.js');
+			expect(stdout).toContain('federation toast-host.js');
+			expect(stdout).toContain('federation InfoPopover.js');
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 });

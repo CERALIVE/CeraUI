@@ -3,10 +3,9 @@
  *
  * Happy-path AND malformed-input (output-drift) cases for every extracted
  * parser. The stderr+exitCode surfacing of the call sites that consume these
- * parsers is covered centrally by cli-parse.test.ts (describeCliError) — the
- * run()/execFileP spawn seam can't be reliably spied under Bun 1.3.14's ESM
- * re-export binding (the pre-existing mmcli-mode-validation suite hits the same
- * limit), so consumer drift wiring is proven via gateways' DI runner instead.
+ * parsers is covered centrally by cli-parse.test.ts (describeCliError).
+ * Bun 1.4.4 intercepts ESM re-export spies; the run()/execFileP boundary is kept
+ * as an explicit injection seam, with consumer drift wiring proven via gateways' DI runner.
  */
 
 import { describe, expect, it } from "bun:test";
