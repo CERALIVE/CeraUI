@@ -33,5 +33,12 @@ executable's Node shebang still selects Node without the explicit flag.
 Jsdom 31 reports visible documents as focused; the two overlay-test RPC doubles
 now include the heartbeat method that Layout calls. Their assertions are unchanged.
 
-Vite-plugin-pwa and the Biome toolchain remain owned by later dependency-refresh
-steps.
+Vite-plugin-pwa is `^2.0.0`, lock resolves `2.0.0`. Its installed runtime output
+is byte-identical to `1.3.0`; the optional assets-generator peer is unused.
+The production service worker keeps all 94 precache entries and identical
+registration, immediate activation, cache cleanup, navigation and runtime-cache
+behavior. The web manifest is byte-identical. Only the timestamp in the app
+version and its resulting entry-chunk hash, HTML reference and precache revisions
+change between builds. Federation continues to exclude the PWA plugin.
+
+The Biome toolchain remains owned by a later dependency-refresh step.
