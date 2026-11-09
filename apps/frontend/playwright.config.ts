@@ -41,8 +41,9 @@ if (
 // Locally, only seed when absent so a dev's real config.json survives.
 const configPath = path.resolve(import.meta.dirname, '../backend/config.json');
 if (process.env.CI || !fs.existsSync(configPath)) {
+	const pendingConfigPath = `${configPath}.${process.pid}.tmp`;
 	fs.writeFileSync(
-		configPath,
+		pendingConfigPath,
 		JSON.stringify({
 			srtla_addr: '127.0.0.1',
 			srtla_port: 5000,
@@ -53,6 +54,8 @@ if (process.env.CI || !fs.existsSync(configPath)) {
 		}),
 		'utf8',
 	);
+	// Other workers may copy the seed while their own config module is loading.
+	fs.renameSync(pendingConfigPath, configPath);
 }
 
 const DEV_PORT = Number(process.env.E2E_PORT ?? 6173);
