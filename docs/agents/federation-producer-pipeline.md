@@ -29,8 +29,10 @@ Federation uses an isolated Paraglide `locale-modules` output and full output
 minification; its message imports and locale-runtime shim resolve together through
 `vite.federation-i18n.ts`. All keys/locales remain inside the signed static graph,
 and the SPA's direct imports and lazy message-module output are unchanged.
-`bun scripts/ci/bundle-report.mjs` checks both built outputs without widened
-ceilings; the built federation harness also checks full-catalog fixture parity.
+`bun scripts/ci/bundle-report.mjs` checks both built outputs. The explicitly
+measured November 2026 toast-host/audio rebaseline and bounded allowances are
+recorded in [the dependency baseline](dep-baseline-as-of-2026-11.md#federation-budgets-and-size-analysis);
+the built federation harness also checks full-catalog fixture parity.
 Shared chunks use Rolldown's default eight-character base64url hash. The report
 strips exactly that suffix, including hyphens and underscores inside the hash,
 while preserving hyphenated asset names. The federation asset tests exercise
@@ -86,10 +88,12 @@ re-verifies the version match before building; for v2026.7.0 it publishes
 `ui-bundle/2026.7.0/`. Steps:
 
 1. `bun run build:federation` — produces `dist/federation/<version>/`
-2. `bun run sign:federation` — produces `.sri` + `.sig` + `manifest.json`
-3. Uploads every signed JS/CSS asset and sidecar plus the signed manifest to R2
+2. `bun scripts/ci/bundle-report.mjs --federation-only` — requires the complete
+   built graph and enforces gzip budgets before any signing or upload.
+3. `bun run sign:federation` — produces `.sri` + `.sig` + `manifest.json`
+4. Uploads every signed JS/CSS asset and sidecar plus the signed manifest to R2
    at `ui-bundle/<ceraui-version>/` with pinned content types.
-4. `publish-federation-immutable.sh` uses conditional `PutObject` writes and a
+5. `publish-federation-immutable.sh` uses conditional `PutObject` writes and a
    digest of the signed payload set. An identical retry preserves existing
    objects (including earlier valid signature bytes), a changed payload fails
    before any write, and a failed fresh publish removes only objects created by

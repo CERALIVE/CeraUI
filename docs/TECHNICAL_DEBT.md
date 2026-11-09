@@ -315,16 +315,22 @@ id: TD-federation-i18n-catalog-size
 title: Federation toast-host shared chunk carries an oversized static Paraglide catalog
 track: 1
 status: open
-exit_criteria: `bun run build:federation && bun scripts/ci/bundle-report.mjs`
+exit_criteria: `bun run build:federation && bun scripts/ci/bundle-report.mjs --federation-only`
 owner: ceraui-team
 registered_at: 2026-08-15
 resolved_at: null
-unblock: The federation toast-host.js shared chunk measured 613,463 B gzip on 2026-08-15, versus the prior 245,936 B budget, because a hosted federation bundle is one signed manifest-pinned module graph and must carry the Paraglide catalog statically rather than lazy-loading the SPA's locale chunks. Revisit this debt in a dedicated architecture effort by evaluating (1) Paraglide outputStructure: "locale-modules", (2) dynamic federation chunks with manifest/signing/CSP support, and (3) a smaller federation-specific catalog surface; keep this entry open until one remedy is implemented and the live budget can be reduced.
+unblock: The federation toast-host.js shared chunk measured 613,463 B gzip on 2026-08-15, versus the prior 245,936 B budget, because a hosted federation bundle is one signed manifest-pinned module graph and must carry the Paraglide catalog statically rather than lazy-loading the SPA's locale chunks. Locale-modules compilation and full minification are already in use. Revisit this debt in a dedicated architecture effort by evaluating dynamic federation chunks with manifest/signing/CSP support or a smaller federation-specific catalog surface; keep this entry open until the static catalog footprint and live budget can be reduced.
 ```
 
-The federation budget exception is intentionally limited to `toast-host.js`; every
-other federation budget remains at its passing value. The measured size is accepted
-as a documented, open debt rather than silently treated as resolved.
+The measured federation rebaseline covers `toast-host.js` and `audio.js`. On
+`85d2b20a`, toast-host's baseline moves from 613,463 B to 680,351 B gzip, with
+8,192 B allowance and an effective ceiling of 688,543 B (previously 674,809 B).
+Audio's baseline moves from 7,009 B to its measured 7,753 B gzip, with 128 B
+allowance and an effective ceiling of 7,881 B (previously 7,709 B). The audio
+rebaseline records an already exceeded limit; it does not resolve the static
+catalog debt. Every other federation and SPA budget remains unchanged.
+`publish-release.yml` enforces both measured limits after federation build and
+before signing/upload. The catalog footprint remains documented, open debt.
 
 ```debt
 id: TD-pip

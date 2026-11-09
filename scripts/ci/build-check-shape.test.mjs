@@ -9,6 +9,27 @@ import { assertBuildCheckContract } from './build-check-contract.mjs';
 const workflowUrl = new URL('../../.github/workflows/build-check.yml', import.meta.url);
 const workflowSource = await file(workflowUrl).text();
 const repoRoot = new URL('../../', import.meta.url).pathname;
+
+test('federation publication enforces gzip budgets after building and before signing or upload', async () => {
+	const workflow = YAML.parse(
+		await file(new URL('../../.github/workflows/publish-release.yml', import.meta.url)).text(),
+	);
+	const steps = workflow.jobs['publish-federation'].steps;
+	const build = steps.findIndex((step) => step.run === 'bun run build:federation');
+	const gate = steps.findIndex(
+		(step) => step.run === 'bun scripts/ci/bundle-report.mjs --federation-only',
+	);
+	const sign = steps.findIndex((step) => step.run === 'bun run sign:federation');
+	const upload = steps.findIndex((step) => step.run?.includes('publish-federation-immutable.sh'));
+	expect(build).toBeGreaterThanOrEqual(0);
+	expect(gate).toBeGreaterThan(build);
+	expect(sign).toBeGreaterThan(gate);
+	expect(upload).toBeGreaterThan(gate);
+	expect(steps[gate]['working-directory']).toBe('CeraUI');
+	expect(steps[gate].if).toBeUndefined();
+	expect(steps[gate]['continue-on-error']).toBeUndefined();
+});
+
 for (const filename of ['build-check.yml', 'publish-release.yml']) {
 	test(`${filename} supplies full history to every backend unit-test job`, async () => {
 		const source = await file(
