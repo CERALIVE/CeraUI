@@ -136,6 +136,7 @@ async function confirm() {
 }
 </script>
 
+<!-- biome-ignore lint/a11y/useSemanticElements: This warning and confirmation panel is a named action group; a fieldset introduces form-group sizing and an anonymous content box. -->
 <div
 	class="border-status-warning/30 bg-status-warning/10 space-y-3 rounded-lg border p-3"
 	data-device={device}

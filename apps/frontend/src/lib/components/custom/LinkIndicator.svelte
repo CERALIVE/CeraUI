@@ -133,6 +133,7 @@ const linkAriaLabel = $derived(linkLevel != null ? `${m["hud.link"]()} ${linkLev
 		{/if}
 	</span>
 {:else}
+	<!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: The dynamic role is img whenever linkAriaLabel is present; otherwise this decoration is aria-hidden. -->
 	<span
 		role={linkLevel != null ? 'img' : undefined}
 		aria-label={linkAriaLabel}

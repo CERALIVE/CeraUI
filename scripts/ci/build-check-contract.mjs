@@ -540,6 +540,21 @@ export function assertBuildCheckContract(source) {
 	assertBrowserCache(e2eSteps, 'test-e2e');
 	assertA11yShard(e2eSteps);
 	assertSrtlaRuntime(setupSteps, e2eSteps, backendSteps);
+	const catalogs = findStep(e2eSteps, 'Generate source component catalogs', 'test-e2e');
+	assertExact(catalogs.if, undefined, 'test-e2e catalog generation condition');
+	assertExact(catalogs['working-directory'], 'CeraUI', 'test-e2e catalog working directory');
+	assertExact(
+		catalogs.run,
+		'bun run --filter @ceraui/i18n generate:i18n',
+		'test-e2e catalog generation command',
+	);
+	assertStepOrder(
+		e2eSteps,
+		'Install dependencies',
+		'Generate source component catalogs',
+		'test-e2e',
+	);
+	assertStepOrder(e2eSteps, 'Generate source component catalogs', 'Start E2E servers', 'test-e2e');
 	const startServers = findStep(e2eSteps, 'Start E2E servers', 'test-e2e');
 	const seedAuth = findStep(e2eSteps, 'Seed E2E auth state', 'test-e2e');
 	assertExact(

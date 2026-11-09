@@ -92,6 +92,20 @@ The backend stores only `sha256(token)`, so that file cannot hand a harness a us
 
 Avoid committing `html` reporter config. It generates large artifacts and is not useful in automated runs.
 
+## Source component prerequisites
+
+`pull-to-refresh.component.spec.ts` mounts the real component on a private
+ephemeral component server. The main E2E application still runs from the
+production build through `vite preview`; its `dist/public` artifact does not
+contain the source facade's generated registry.
+
+Each E2E shard runs `bun run --filter @ceraui/i18n generate:i18n` once, after
+dependency installation and before starting its servers or workers. This creates
+both Paraglide output and the custom `generated/registry.js`; the Vite Paraglide
+plugin creates only the former. Keep generation outside individual tests so
+workers cannot race a shared generated directory. Local CI-mode runs use the same
+prerequisite.
+
 ## Real-hardware gates
 
 Mock seams may retain deterministic negative-path coverage, but they never

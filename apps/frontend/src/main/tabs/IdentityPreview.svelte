@@ -199,7 +199,7 @@ const codecLabels: Record<string, string> = {
 			<div class="space-y-3">
 				<p class="text-muted-foreground text-sm font-medium">Base surfaces</p>
 				<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-					{#each baseSurfaces as s}
+					{#each baseSurfaces as s (s.token)}
 						<div class="space-y-1.5">
 							<div
 								class="h-16 rounded-lg border"
@@ -245,7 +245,7 @@ const codecLabels: Record<string, string> = {
 			<div class="space-y-3">
 				<p class="text-muted-foreground text-sm font-medium">Stream states</p>
 				<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-					{#each stateTokens as s}
+					{#each stateTokens as s (s.token)}
 						<div class="space-y-1.5">
 							<div
 								class="h-16 rounded-lg border"
@@ -260,7 +260,7 @@ const codecLabels: Record<string, string> = {
 			<div class="space-y-3">
 				<p class="text-muted-foreground text-sm font-medium">Semantic status</p>
 				<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-					{#each statusExtended as s}
+					{#each statusExtended as s (s.token)}
 						<div class="space-y-1.5">
 							<div
 								class="h-16 rounded-lg border"
@@ -281,7 +281,7 @@ const codecLabels: Record<string, string> = {
 				</h2>
 			</div>
 			<div class="flex flex-wrap gap-2.5">
-				{#each links as link}
+				{#each links as link (link.index)}
 					<div
 						class="flex items-center gap-2 rounded-full border px-3 py-1.5"
 						style="background-color: color-mix(in oklab, var(--link-{link.index}) 14%, transparent); border-color: color-mix(in oklab, var(--link-{link.index}) 45%, transparent); color: var(--link-{link.index})"
@@ -303,7 +303,7 @@ const codecLabels: Record<string, string> = {
 				</h2>
 			</div>
 			<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-				{#each signalTiers as tier}
+				{#each signalTiers as tier (tier.token)}
 					<div class="bg-card flex flex-col items-start gap-2 rounded-lg border p-4">
 						<LinkIndicator shape="icon" size="md" type="wifi" signal={tier.signal} />
 						<p class="text-foreground text-sm font-medium">{tier.label}</p>
@@ -515,7 +515,7 @@ const codecLabels: Record<string, string> = {
 				</div>
 
 				<div class="flex items-center gap-3">
-					{#each hudLinks as link}
+					{#each hudLinks as link (link.index)}
 						<div class="flex items-center gap-1.5">
 							<span
 								class="font-mono text-xs font-bold"
@@ -593,7 +593,7 @@ const codecLabels: Record<string, string> = {
 						<Card.Description>Bonded connectivity</Card.Description>
 					</Card.Header>
 					<Card.Content class="space-y-3">
-						{#each [{ index: 1, signal: 85 }, { index: 4, signal: 90 }] as link}
+						{#each [{ index: 1, signal: 85 }, { index: 4, signal: 90 }] as link (link.index)}
 							<div class="flex items-center justify-between">
 								<div class="flex items-center gap-2">
 									<span
@@ -626,7 +626,7 @@ const codecLabels: Record<string, string> = {
 						<Card.Description>System configuration</Card.Description>
 					</Card.Header>
 					<Card.Content class="space-y-2.5">
-						{#each [{ k: 'Hostname', v: 'cera-01' }, { k: 'Firmware', v: 'v2.4.1' }, { k: 'SSH', v: 'Enabled' }] as row}
+						{#each [{ k: 'Hostname', v: 'cera-01' }, { k: 'Firmware', v: 'v2.4.1' }, { k: 'SSH', v: 'Enabled' }] as row (row.k)}
 							<div class="flex items-center justify-between">
 								<span class="text-muted-foreground text-sm">{row.k}</span>
 								<span class="text-foreground font-mono text-xs tabular-nums">{row.v}</span>

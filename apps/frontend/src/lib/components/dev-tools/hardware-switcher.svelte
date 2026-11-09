@@ -147,7 +147,7 @@ $effect(() => {
 				</Select.Trigger>
 				<Select.Content>
 					<Select.Group>
-						{#each availableHardware as hw}
+						{#each availableHardware as hw (hw)}
 							<Select.Item value={hw}>
 								<div class="flex items-center gap-2">
 									<div class={`h-2 w-2 rounded-full ${HARDWARE_COLORS[hw].bg}`}></div>
@@ -167,7 +167,7 @@ $effect(() => {
 		<div class="space-y-2">
 			<Label class="text-sm font-medium">Quick Switch</Label>
 			<div class="grid grid-cols-2 gap-2">
-				{#each availableHardware as hw}
+				{#each availableHardware as hw (hw)}
 					<Button
 						class={selectedHardware === hw ? HARDWARE_COLORS[hw].border : ''}
 						disabled={isLoading}

@@ -162,6 +162,7 @@ const backendDisabledReason = $derived(
 				>
 					{#each backendView.options as option (option.backend)}
 						{const locked = $derived(backendView.mode === 'single' || backendPending !== undefined)}
+						<!-- biome-ignore lint/a11y/useSemanticElements: Backend choices retain button activation and pending/selected disabled gates; native radios change that interaction contract. -->
 						<button
 							aria-checked={option.selected}
 							class="min-h-11 rounded-md border px-3 py-1 text-xs font-medium transition-colors {option.selected
