@@ -144,6 +144,13 @@ the bitrate, and ONE temperature chip. Voltage/current, per-link RTT/NAK/weight,
 and the bond constellation live ONLY in the expanded Sheet — adding a fifth
 compact-strip fact is a deliberate UX regression, not a tweak.
 
+The full strip is a native clickable label for its details button. The button's
+accessible name references the visible lifecycle and distinct health verdict;
+an idle lifecycle plus idle health is named Idle once. Link/bitrate/sensor
+readings and the reason remain separately accessible outside that button.
+The localized Expand details description, keyboard activation and full-row
+activation are retained without folding every telemetry update into the name.
+
 ### BondedLinks-owns-telemetry rule
 
 `apps/frontend/src/main/network/BondedLinksSection.svelte` is the documented SOLE

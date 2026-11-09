@@ -21,7 +21,7 @@ import type {
 	HealthIndicator,
 	HealthRollup,
 } from "$lib/stores/stream-health.svelte";
-import type { HudState } from "$lib/types/hud";
+import type { HudState, LinkSignal } from "$lib/types/hud";
 
 import HudBar from "./HudBar.svelte";
 
@@ -189,18 +189,60 @@ describe("HudBar trigger label in name", () => {
 		{ visible: "Idle", isStreaming: false, isFullyStale: false },
 		{ visible: "Live", isStreaming: true, isFullyStale: false },
 		{ visible: "Offline", isStreaming: true, isFullyStale: true },
-	])("names the visible $visible verdict and its reason", (lifecycle) => {
-		state.hud = makeHud(lifecycle);
-		state.health = "degraded";
-		state.rollup = degradedRollup();
+	])(
+		"names only the visible $visible verdict and distinct health",
+		(lifecycle) => {
+			state.hud = makeHud(lifecycle);
+			state.health = "degraded";
+			state.rollup = degradedRollup();
+			render(HudBar);
+
+			expect(
+				screen.getByRole("button", {
+					name: `${lifecycle.visible} Degraded`,
+					description: "Expand details",
+				}),
+			).toBe(compactStrip().querySelector("button"));
+			expect(screen.getByTestId("stream-health-reason").textContent).toBe(
+				"No frames advancing",
+			);
+		},
+	);
+
+	it("names an idle six-link HUD once while keeping link telemetry accessible", () => {
+		state.health = "idle";
+		state.hud = makeHud({
+			links: Array.from(
+				{ length: 6 },
+				(_, linkIndex): LinkSignal => ({
+					id: `wwan${linkIndex}`,
+					type: "modem",
+					linkIndex,
+					signal: 75,
+					label: `Modem ${linkIndex + 1}`,
+					isConnected: true,
+					isStale: false,
+					throughputKbps: 0,
+					rateTxKbps: 0,
+					rateRxKbps: 0,
+					enabled: true,
+					connectionState: "connected",
+				}),
+			),
+		});
 		render(HudBar);
 
 		expect(
-			screen.getByRole("button", {
-				name: new RegExp(`${lifecycle.visible}.*Degraded.*No frames advancing`),
+			within(compactStrip()).getByRole("button", {
+				name: "Idle",
 				description: "Expand details",
 			}),
-		).toBe(compactStrip());
+		).toBe(compactStrip().querySelector("button"));
+		expect(
+			within(compactStrip()).getAllByRole("img", {
+				name: /^Network L[1-6]: 75%$/,
+			}),
+		).toHaveLength(6);
 	});
 });
 
