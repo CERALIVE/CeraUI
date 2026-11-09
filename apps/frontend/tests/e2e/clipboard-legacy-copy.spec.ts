@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import type { WifiStatus } from '@ceraui/rpc/schemas';
 
 import { expect, test } from './fixtures/index.js';
 import { evidencePath } from './helpers/index.js';
@@ -43,7 +42,6 @@ const SENTINEL = '__cera_clipboard_precleared__';
 
 test.describe('Clipboard legacy execCommand copy — focus-trap regression', () => {
 	test('copy inside a focus-trapped dialog actually reaches the OS clipboard', async ({
-		pageRpc,
 		authedPage: page,
 	}, testInfo) => {
 		test.skip(testInfo.project.name !== 'desktop', 'run once, on desktop');
@@ -90,17 +88,6 @@ test.describe('Clipboard legacy execCommand copy — focus-trap regression', () 
 		const clipboardAfterPassword = await page.evaluate(() =>
 			navigator.clipboard.readText(),
 		);
-
-		const wifi = await pageRpc.call<WifiStatus>(['wifi', 'getStatus']);
-		const device = await page.getByTestId('hotspot-activation-confirm').getAttribute('data-device');
-		if (!device || !wifi[device]) throw new Error('Expected the hotspot radio');
-		await pageRpc.call(['dev', 'emit'], {
-			type: 'status',
-			payload: { wifi: { ...wifi, [device]: { ...wifi[device], ifname: 'clipboard-status-tick' } } },
-		});
-		await expect(dialog.getByText('clipboard-status-tick', { exact: true })).toBeVisible();
-		await expect(dialog.getByTestId('hotspot-confirm-name')).toHaveValue(TEST_SSID);
-		await expect(dialog.getByTestId('hotspot-confirm-password')).toHaveValue(TEST_PASSWORD);
 
 		// Also cover the SSID copy button on the same dialog/trap.
 		await dialog.getByRole('button', { name: 'Copy network name' }).click();

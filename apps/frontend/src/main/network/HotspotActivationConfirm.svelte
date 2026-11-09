@@ -25,7 +25,6 @@ import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import { copyToClipboard } from '$lib/helpers/clipboard';
 import { rpc } from '$lib/rpc/client';
-import { getLinkEpoch } from '$lib/rpc/session-epoch.svelte';
 
 import { generateHotspotPassword, hotspotPasswordIsPrintable } from './hotspot-password';
 
@@ -46,14 +45,6 @@ const { device, keepsStation = false, confirmLabel, detail, onConfirm, onCancel 
 	$props();
 
 const bounds = networkConstraints.hotspot;
-// Filter spread-prop ticks only within this socket's radio-discovery lifetime.
-const preparedDevice = $derived(device);
-const openedLink = getLinkEpoch();
-
-$effect.pre(() => {
-	// A restarted backend can reuse the numeric key for a different radio.
-	if (getLinkEpoch() !== openedLink) onCancel();
-});
 
 let phase = $state<'loading' | 'ready' | 'load-failed' | 'saving'>('loading');
 let saveFailed = $state(false);
@@ -67,7 +58,7 @@ let acknowledged = $state(false);
 async function load() {
 	phase = 'loading';
 	try {
-		const result = await rpc.wifi.hotspotPrepare({ device: preparedDevice });
+		const result = await rpc.wifi.hotspotPrepare({ device });
 		if (!result.success || !result.name || !result.password) throw new Error('unavailable');
 		loaded = { name: result.name, password: result.password };
 		firstTime = result.firstTime === true;
@@ -123,12 +114,11 @@ async function copy(value: string, success: string) {
 }
 
 async function confirm() {
-	if (!canConfirm || getLinkEpoch() !== openedLink) return;
+	if (!canConfirm) return;
 	if (name !== loaded.name || password !== loaded.password) {
 		phase = 'saving';
 		try {
 			const result = await rpc.wifi.hotspotPrepare({ device, name, password });
-			if (getLinkEpoch() !== openedLink) return;
 			if (!result.success || result.name !== name || result.password !== password) {
 				throw new Error('not-stored');
 			}

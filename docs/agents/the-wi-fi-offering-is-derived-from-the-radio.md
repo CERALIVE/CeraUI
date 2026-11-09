@@ -2,19 +2,6 @@
 
 ## THE WI-FI OFFERING IS DERIVED FROM THE RADIO [EXISTS]
 
-**Activation drafts belong to one radio in one socket lifetime [EXISTS].**
-`HotspotActivationConfirm` filters redundant spread-prop updates through the
-primitive device key only while its captured `getLinkEpoch()` is current.
-The subscription owner advances that epoch at socket loss, before reconnect
-hydration can replace a nonempty radio roster with reused numeric keys. The gate
-then closes, withdrawing its credentials and acknowledgement; reopening prepares
-the current radio's stored pair. Confirmation checks the epoch again after a
-pending credential save, so an old response cannot activate the replacement.
-Both copy actions use the bound draft fields. The legacy clipboard E2E preserves
-same-radio drafts across a status change. The lifecycle component regression
-replaces a radio under key "0" after a dropped link, in ready and saving phases,
-without an intermediate empty roster, and requires fresh credentials and consent.
-
 **Hotspot membership is pushed within one five-second poll [EXISTS].** While
 an AP is up, the backend reads its own station dump (`clap-<parent>` in Hybrid).
 Unread state resolves on the first successful poll; joins, leaves and roster

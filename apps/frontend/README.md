@@ -78,12 +78,11 @@ fake lease is not installed OS-update qualification. See
 [`E2E backend isolation`](tests/e2e/PLAYBOOK.md#per-test-backend-state-exists)
 for lifecycle and deliberate shared-browser sequence rules. Run from the workspace root.
 
-Hotspot credential drafts [EXISTS] stay intact when Wi-Fi status refreshes within
-one socket lifetime. A dropped link closes the activation gate and withdraws its
-credentials and acknowledgement: numeric radio keys can be reused after a backend
-restart. Reopening prepares the current radio's values and requires a fresh
-acknowledgement; an old pending save cannot start that radio. The legacy clipboard
-E2E guards same-radio drafts, and the lifecycle component test guards key reuse.
+Direct backend concurrency checks [EXISTS] request OS-assigned RPC ports while
+retaining a fixture-owned backend, and verify independent state and listeners.
+The shared E2E configuration seed is published by sibling-file rename with
+exception cleanup. Its regression imports the real bootstrap into private test
+state, leaving local configuration, auth and report files untouched.
 
 To run the frontend alone:
 
