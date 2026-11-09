@@ -20,6 +20,8 @@ import { fireEvent, render, screen } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { audioCodecAllowedForTransport } from "$lib/components/streaming/ValidationAdapter";
+
 // Mutable snapshot the mocked subscriptions read from — each test seeds it.
 const state = vi.hoisted(() => ({
 	sources: undefined as unknown,
@@ -252,6 +254,8 @@ describe("AudioDialog — transport-aware codec gating (C5)", () => {
 		expect(opus.getAttribute("aria-disabled")).toBe("true");
 		expect(opus.getAttribute("title")).toBeTruthy();
 		expect(aac.getAttribute("aria-disabled")).not.toBe("true");
+		expect(audioCodecAllowedForTransport("opus", "srtla")).toBe(false);
+		expect(audioCodecAllowedForTransport("aac", "srtla")).toBe(true);
 	});
 
 	it("does NOT gate any codec when config is absent (federation standalone fail-open)", async () => {
