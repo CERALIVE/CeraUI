@@ -33,7 +33,7 @@
 	"devDependencies": {
 		"@inlang/paraglide-js": "2.25.2",
 		"@types/bun": "^1.4.4",
-		"svelte": "^5.57.0",
+		"svelte": "5.57.0",
 		"typescript": "catalog:"
 	},
 	"keywords": [
