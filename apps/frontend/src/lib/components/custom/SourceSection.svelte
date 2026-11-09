@@ -675,7 +675,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 					</p>
 				{/if}
 				{#if hasCapSummary}
-					<div
+					<section
 						class="flex flex-wrap items-center gap-1.5"
 						data-testid="source-capabilities"
 						aria-label={m["live.source.capabilities"]()}
@@ -702,7 +702,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 								{m["settings.audioSource"]()}
 							</span>
 						{/if}
-					</div>
+					</section>
 				{/if}
 			</div>
 		{/if}

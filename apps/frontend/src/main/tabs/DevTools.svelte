@@ -95,8 +95,9 @@ import { BUILD_INFO } from '$lib/env';
 									class="border-status-success/30 text-status-success hover:bg-status-success/10"
 									size="sm"
 									variant="outline"
-									onclick={() =>
-										console.log('✅ Console log test:', { timestamp: new Date(), level: 'info' })}
+									onclick={() => {
+										console.log('✅ Console log test:', { timestamp: new Date(), level: 'info' });
+									}}
 								>
 									{m["devtools.log"]()}
 								</Button>
@@ -128,12 +129,13 @@ import { BUILD_INFO } from '$lib/env';
 									class="border-status-info/30 text-status-info hover:bg-status-info/10"
 									size="sm"
 									variant="outline"
-									onclick={() =>
+									onclick={() => {
 										console.table({
 											browser: navigator.userAgent.split(' ')[0],
 											language: navigator.language,
 											online: navigator.onLine,
-										})}
+										});
+									}}
 								>
 									{m["devtools.table"]()}
 								</Button>

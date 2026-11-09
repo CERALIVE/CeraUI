@@ -1150,6 +1150,7 @@ const tierLabel = $derived.by(() => {
 
 				{#if activeTier}
 					<span
+						role="note"
 						data-testid="preview-tier-badge"
 						data-tier={activeTier}
 						aria-label={m["live.preview.tierBadgeAria"]()}

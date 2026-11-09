@@ -16,8 +16,8 @@ const legacyEncoder = $derived(!groups.some((group) => group.block === 'rkvenc')
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex (This read-only scroll region needs keyboard focus; axe requires a focusable descendant of the dialog body.) -->
-<div class="space-y-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-	role="region" aria-label={m['settings.mediaLoad.title']()} tabindex="0" data-testid="media-load-detail" data-stale={stale}>
+<section tabindex="0" class="space-y-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+	aria-label={m['settings.mediaLoad.title']()} data-testid="media-load-detail" data-stale={stale}>
 	<div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
 		{#if groups.length}<span>{m['settings.mediaLoad.coreCount']({ count: mediaLoadCoreCount(groups) })}</span>{/if}
 		{#if reading.simulated}
@@ -82,4 +82,4 @@ const legacyEncoder = $derived(!groups.some((group) => group.block === 'rkvenc')
 			</ul>
 		</section>
 	{/each}
-</div>
+</section>

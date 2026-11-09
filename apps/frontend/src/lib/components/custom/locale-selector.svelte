@@ -67,7 +67,7 @@ const handleLocaleChange = (value: string) => {
 		</div>
 
 		<div class="max-h-[min(60vh,22rem)] overflow-y-auto pe-0.5">
-			{#each LOCALES as localeOption}
+			{#each LOCALES as localeOption (localeOption.code)}
 				{const isActive = $derived(selectedLocale === localeOption.code)}
 				<DropdownMenu.Item
 					class={cn(

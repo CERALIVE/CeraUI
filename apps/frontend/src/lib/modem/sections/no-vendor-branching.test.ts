@@ -38,67 +38,14 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-/**
- * The vocabulary a family branch is written in — vendors, dialects and the two
- * transport-class literals the row model uses. Matching is case-insensitive and
- * substring-based on purpose: `Huawei`, `HILINK` and `isRouterEthernet` are all
- * the same mistake.
- */
-const BANNED = [
-	"huawei",
-	"zte",
-	"himi",
-	"ufi",
-	"hilink",
-	"quectel",
-	"simcom",
-	"fibocom",
-	"mm-managed",
-	"router-ethernet",
-	"unrecognized",
-	"unrecognised",
-	"unmanaged",
-] as const;
+import {
+	type ScannedFile,
+	scanForFamilyBranching,
+} from "./__fixtures__/no-vendor-branching";
 
 const SECTIONS_DIR = join(
 	import.meta.dirname ?? new URL(".", import.meta.url).pathname,
 );
-
-interface ScannedFile {
-	readonly path: string;
-	readonly source: string;
-}
-
-interface Violation {
-	readonly path: string;
-	readonly token: string;
-}
-
-/**
- * Remove `//` line comments, `/* *\/` block comments and `<!-- -->` HTML
- * comments. Deliberately simple: it can over-strip a `//` inside a string
- * literal, which makes the gate MORE permissive about prose and no less strict
- * about code — a family branch cannot hide inside a URL.
- */
-export function stripComments(source: string): string {
-	return source
-		.replace(/<!--[\s\S]*?-->/g, " ")
-		.replace(/\/\*[\s\S]*?\*\//g, " ")
-		.replace(/(^|[^:])\/\/[^\n]*/g, "$1");
-}
-
-export function scanForFamilyBranching(
-	files: readonly ScannedFile[],
-): Violation[] {
-	const violations: Violation[] = [];
-	for (const file of files) {
-		const code = stripComments(file.source).toLowerCase();
-		for (const token of BANNED) {
-			if (code.includes(token)) violations.push({ path: file.path, token });
-		}
-	}
-	return violations;
-}
 
 /** Shipped source only — see the header for why tests and fixtures are out. */
 function isShippedSource(relative: string): boolean {

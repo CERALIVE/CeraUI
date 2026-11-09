@@ -213,11 +213,11 @@ function openModemConfig(id: string) {
 
 	{#if isLoading}
 		<!-- Loading state -->
-		<div class="space-y-3" aria-busy="true" aria-label={m["network.view.loading"]()}>
+		<section class="space-y-3" aria-busy="true" aria-label={m["network.view.loading"]()}>
 			<Skeleton class="h-24 w-full rounded-xl" />
 			<Skeleton class="h-32 w-full rounded-xl" />
 			<Skeleton class="h-32 w-full rounded-xl" />
-		</div>
+		</section>
 	{:else}
 		<BondedLinksSection
 			{links}
