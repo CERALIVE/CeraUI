@@ -56,7 +56,10 @@ import {
 	readUpdateCapabilities,
 	UpdateCapabilityReadError,
 } from "../update-capabilities.ts";
-import { loadUpdateSettings } from "../update-settings.ts";
+import {
+	createSystemCellularConsentRead,
+	loadUpdateSettings,
+} from "../update-settings.ts";
 import { discoverCandidates } from "../update-transport/core.ts";
 import { defaultUpdateTransportDeps } from "../update-transport/executor.ts";
 import { admitStreamStart, onStreamStart } from "./admission.ts";
@@ -213,7 +216,6 @@ import {
 	decideCellularGate,
 	scheduledCheckDue,
 	shouldAttemptScheduledCheck,
-	systemCellularApproved,
 } from "./schedule.ts";
 import {
 	type RootSlotStatus,
@@ -1873,6 +1875,7 @@ async function maybeStartOsStage(
 		!capabilities.features.includes("rauc-verity-streaming")
 	)
 		return;
+	const readConsent = createSystemCellularConsentRead(deps.loadSettings);
 	const settings = await deps.loadSettings();
 	if (
 		!bypassIdle &&
@@ -1885,15 +1888,7 @@ async function maybeStartOsStage(
 		await runOsCheckAfterCellularGate(settings);
 		return;
 	}
-	const gate = decideCellularGate({
-		onlyMeteredCandidateExists: await deps.onlyMeteredCandidateExists(),
-		kind: "os",
-		stage: "install",
-		allowPackagesOverCellular: settings.allowPackagesOverCellular,
-		allowSystemOverCellular: settings.allowSystemOverCellular,
-		cellularOverrideId: state.cellularOverrideId,
-		candidateId: candidate.version,
-	});
+	const onlyMetered = await deps.onlyMeteredCandidateExists();
 	if (deps.isOsStageReady && !(await deps.isOsStageReady())) return;
 	await using controlLease = await acquireRuntimeOsStageControl();
 	if (!controlLease.held()) return;
@@ -1903,6 +1898,7 @@ async function maybeStartOsStage(
 		!(persisted === null && !state.osStageRecovery)
 	)
 		return;
+	const consent = await readConsent();
 	// Every await above can let a manual install, a stream abort or a new
 	// check run; the entry fences are only true again if re-read here, and
 	// nothing may await between this re-read and taking the stage.
@@ -1913,6 +1909,15 @@ async function maybeStartOsStage(
 		state.osStageRecovery !== recovery
 	)
 		return;
+	const gate = decideCellularGate({
+		onlyMeteredCandidateExists: onlyMetered,
+		kind: "os",
+		stage: "install",
+		allowPackagesOverCellular: settings.allowPackagesOverCellular,
+		allowSystemOverCellular: consent(),
+		cellularOverrideId: state.cellularOverrideId,
+		candidateId: candidate.version,
+	});
 	if (!gate.allowed) {
 		if (gate.needsOverride) {
 			pendingCellularApproval = {
@@ -1944,15 +1949,16 @@ async function maybeStartOsStage(
 	};
 	const attemptId = token.attemptId;
 	activeOsStage = token;
+	const approvedOnce = state.cellularOverrideId === candidate.version;
 	const control: OsStageControl = {
 		controlLease,
 		attemptId: token.attemptId,
 		signal: token.controller.signal,
-		cellularApproved: systemCellularApproved({
-			allowSystemOverCellular: settings.allowSystemOverCellular,
-			cellularOverrideId: state.cellularOverrideId,
-			candidateId: candidate.version,
-		}),
+		cellularApproved: approvedOnce || consent(),
+		readCellularApproval: async () => {
+			const current = await readConsent();
+			return () => approvedOnce || current();
+		},
 		canCommit: () =>
 			activeOsStage === token &&
 			getOrchestratorState().phase === "os-staging" &&

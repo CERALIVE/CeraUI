@@ -2,8 +2,8 @@
   UpdateCellularSection.svelte — what the device may download over a metered
   cellular uplink (Todo 41).
 
-  Two pessimistic toggles (packages; system image CHECKS), and — only while the
-  orchestrator is actually holding one — the pending system-image download with
+  Two pessimistic download toggles (packages; system images and kernels), and —
+  only while the orchestrator is holding one — the pending system-image download with
   its real size and a one-time "Download over cellular now". The approval is for
   exactly the candidate the device named (`pendingCellular.id`); the dialog's
   surface grants it and starts the download in one step, so the button never
@@ -14,10 +14,10 @@
   not read (early oracle F5). The pending band therefore says "metered or of
   unknown cost", never that only a cellular connection exists.
 
-  The system image toggle allows CHECKS only. A system image is never downloaded
-  over cellular without this explicit per-candidate approval, whatever the
-  toggle says — the hint states that plainly rather than letting the switch read
-  as a download permission.
+  System image checks always run over cellular. The system toggle authorizes OS
+  bundle and kernel downloads without asking; when off, each candidate requires
+  the explicit one-time approval above. The backend retains download consent
+  separately from an older CeraUI's check-only preference after rollback.
 -->
 <script lang="ts">
 import { formatBytes } from '@ceraui/i18n/formatters';

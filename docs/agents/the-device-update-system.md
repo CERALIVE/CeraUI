@@ -27,11 +27,16 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
   The channel selects system images only, defaulting to beta. Packages always
   use stable APT. `update-image-channel.json` holds the image choice while the
   original six-key settings file keeps `channel: "stable"` for older CeraUI
-  after rollback. Legacy files migrate once, resetting the old system-cellular
-  permission; later explicit Stable image choices persist across slot changes.
+  after rollback. Its private `allowSystemDownloadsOverCellular` field supplies
+  download consent; a missing field means false regardless of the old check-only
+  preference. Legacy files migrate once; explicit consent and Stable image choices
+  survive restarts and v2026.11.1 rollback because its writer leaves the sidecar alone.
   OS manifest checks always run over cellular. The system cellular switch
   permits bundle/kernel downloads; otherwise an exact one-time approval is
-  required. Approval is computed at use, never persisted from the switch.
+  required. Candidate approval is computed at use, never persisted from the switch.
+  Queued OS/kernel downloads re-read consent at dispatch; a successful switch
+  revocation invalidates captured permission across preparation awaits. Read
+  errors refuse download, while exact-candidate one-job approval remains valid.
   Deferred package checks cannot starve OS checks in the idle scheduler.
   Optional details fields expose check deferrals, consecutive failures and an
   unpublished image channel; older backends may omit all three observations.

@@ -319,24 +319,36 @@ salvage. An explicit settings save repairs both files.
 The `system.getUpdateSettings`, `system.setUpdateSettings` and
 `system.getUpdateCapabilities` RPCs expose them.
 
-The real image selection is stored as `{"schema":1,"channel":"beta"}` (or
-`"stable"`) in the strict sidecar. Every settings save writes the original
-six-key `update-settings.json` with `channel: "stable"` first, then the sidecar
-with the selected image channel. Older CeraUI inside an image or after a RAUC
-rollback can still parse that settings file and reconcile stable-only packages.
+The real image selection and download consent are stored as
+`{"schema":1,"channel":"beta","allowSystemDownloadsOverCellular":false}` (or
+`"stable"` and the explicit consent value) in the strict private sidecar.
+The public six-field RPC contract is unchanged. Every settings save writes the
+original six-key `update-settings.json` with `channel: "stable"` first, then the
+sidecar with the selected image channel and download consent. Older CeraUI inside
+an image or after a RAUC rollback can still parse that settings file and reconcile
+stable-only packages.
 Its image check follows stable until CeraUI updates itself over stable APT.
 An operator explicitly selecting Beta inside that older UI gets its original
 beta-package behavior until CeraUI updates.
 
 A valid settings file without a sidecar migrates once to beta images and resets
-`allowSystemOverCellular` to `false`. The old permission covered only the cheap
-check, so it does not authorize future cellular bundle downloads. Migration writes
-stable legacy settings first, then the sidecar as its completion marker. Failed
+download consent to `false`. A channel-only sidecar also means no download consent.
+The old six-key permission covered only the cheap check, so it never authorizes
+cellular OS/kernel downloads, even after an older writer saves it following a
+rollback. OS manifest checks remain allowed. The public `allowSystemOverCellular`
+value comes only from the sidecar's download consent; a fresh explicit save can
+grant it, and subsequent reads and unrelated UI saves retain that value.
+Migration writes stable legacy settings first, then the sidecar as its completion marker. Failed
 writes warn once per settings path, return migrated values and retry on a later
 load. Once the sidecar exists, loads write nothing and keep its selection,
-including an explicit Stable choice across rollback; an older CeraUI's settings
-rewrite is normalized on the next save. Both files share durable device storage
-across A/B slot changes; see [the placement map](CONFIG_PERSISTENCE.md).
+including an explicit Stable choice and explicit new-contract download consent
+across rollback to v2026.11.1, whose writer replaces only the six-key file.
+That old UI cannot grant or revoke the separate download consent; use this
+version's switch to change it. Every other preference follows the six-key file,
+and its package channel is normalized on the next save. Losing the sidecar
+requires fresh download approval; malformed consent refuses loading and preserves
+the bytes until an explicit settings save repairs them. Both files share durable
+device storage across A/B slot changes; see [the placement map](CONFIG_PERSISTENCE.md).
 
 ## The state machine
 
@@ -1159,6 +1171,20 @@ control for transport pinning/failover. The switch never fabricates or persists
 `CELLULAR_OVERRIDE_GRANTED`; turning it off holds a later attempt unless that
 candidate has an actual one-time approval. Kernel staging uses the same gate
 and still consumes a one-time approval on start.
+
+Successful revocation also fences an already queued automatic or manual stage.
+OS admission re-reads durable download consent after its preparation awaits;
+each metered RAUC attempt reads again before its final physical proof and checks
+a synchronous revocation fence before submitting the downloader. Kernel staging
+rechecks after healthy-state preparation and again after download-directory
+preparation, immediately before APT download submission. A settings-read error
+starts no download. Revocation during an in-flight read or later preparation
+invalidates that captured switch permission; another await cannot restore it.
+The exact candidate's captured one-job approval remains independent of the
+switch. This fences a transfer that has not started; it does not cancel an
+in-progress transfer. The fence is process-local alongside fresh durable reads,
+under the existing single-backend writer contract, not new power-loss or
+cross-process serialization proof.
 
 Package checks held by the cellular policy record an in-memory deferral.
 `getUpdateDetails` exposes optional `checks.*.deferred` and

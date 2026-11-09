@@ -229,13 +229,18 @@ export async function downloadKernelPackage(
 	record: KernelPackageRecord,
 	uid: number,
 	directory: string,
-	signal: AbortSignal,
+	control: {
+		readonly signal: AbortSignal;
+		readonly authorize: () => Promise<() => void>;
+	},
 	run: Run = spawnWithTimeout,
 	source = CERALIVE_SOURCES_FILE,
 ): Promise<string> {
 	if (!Number.isSafeInteger(uid) || uid <= 0)
 		throw new KernelUpdateError("kernel_download_failed");
 	await chown(directory, uid, uid);
+	// No await may separate the consent fence from downloader submission.
+	(await control.authorize())();
 	const result = await run(
 		[
 			"setpriv",
@@ -249,7 +254,7 @@ export async function downloadKernelPackage(
 			"download",
 			`${record.package}=${record.version}`,
 		],
-		{ timeoutMs: 300_000, signal },
+		{ timeoutMs: 300_000, signal: control.signal },
 	);
 	if (result.exitCode !== 0)
 		throw new KernelUpdateError("kernel_download_failed");
