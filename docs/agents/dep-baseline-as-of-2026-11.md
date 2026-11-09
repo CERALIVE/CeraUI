@@ -132,19 +132,19 @@ release carries the fix.
 
 ### Federation budgets and size analysis
 
-Measured on November 9, 2026 with Bun 1.4.4 after rebasing onto main `b7403580`
-(the update-check, image-channel and hotspot-client changes from PR #438).
+Measured on November 9, 2026 with Bun 1.4.4 after rebasing onto main `85d2b20a`
+(PR #438's update-check/image/hotspot changes and the merged notice/Spanish fixes).
 Each measurement ran `bun run build`, then `bun run test:federation`, then
 `bun scripts/ci/bundle-report.mjs`. The report saw both outputs. Both default and
 optimized toast-host measurements still exceed the historical 674,809 B ceiling.
 
 | Metric | Default v4 | Shared lite merger | Delta |
 | --- | ---: | ---: | ---: |
-| SPA total JS+CSS gzip | 1,081,289 B | 1,070,705 B | -10,584 B |
-| SPA largest chunk gzip | 323,803 B | 313,270 B | -10,533 B |
-| Federation toast-host gzip | 695,026 B | 680,713 B | -14,313 B |
-| Federation toast-host raw | 2,862,976 B | 2,830,205 B | -32,771 B |
-| Federation audio gzip | 7,754 B | 7,752 B | -2 B |
+| SPA total JS+CSS gzip | 1,084,575 B | 1,073,990 B | -10,585 B |
+| SPA largest chunk gzip | 323,839 B | 313,287 B | -10,552 B |
+| Federation toast-host gzip | 694,717 B | 680,351 B | -14,366 B |
+| Federation toast-host raw | 2,863,836 B | 2,831,065 B | -32,771 B |
+| Federation audio gzip | 7,753 B | 7,753 B | 0 B |
 
 All four emitted SPA stylesheets and federation CSS are byte-identical. Small
 non-toast gzip changes reflect changed chunk references; raw audio bytes have
@@ -159,13 +159,14 @@ catalog footprint after removing duplicate merging; it does not resolve that deb
 
 | Asset | Previous baseline | Measured new baseline | Allowance | Previous ceiling | New ceiling |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| toast-host.js | 613,463 B | 680,713 B | 8,192 B | 674,809 B | 688,905 B |
-| audio.js | 7,009 B | 7,752 B | 128 B | 7,709 B | 7,880 B |
+| toast-host.js | 613,463 B | 680,351 B | 8,192 B | 674,809 B | 688,543 B |
+| audio.js | 7,009 B | 7,753 B | 128 B | 7,709 B | 7,881 B |
 
 The first experiment on `6e0d23db` measured 679,064 B / 7,754 B with lite;
 those provisional baselines were superseded before commit. PR #438 adds six
-catalog keys across ten locales, revises update copy and extends the RPC schema.
-The final constants above use the rebased measurements rather than the old tree.
+catalog keys across ten locales, revises update copy and extends the RPC schema;
+that intermediate `b7403580` tree measured 680,713 B / 7,752 B with lite.
+The final constants above also include `85d2b20a`'s notice and Spanish fixes.
 
 Both still retain the smaller of the 10% ratio and the stated absolute allowance.
 The toast allowance is about 1.2%, audio about 1.7%; each covers small build/hash

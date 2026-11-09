@@ -76,9 +76,10 @@ test('publication rejects an executable with no budget baseline', async () => {
 	expect(stderr).toContain('no baseline for stem new-feature.js');
 });
 
+// Each payload exceeds its absolute allowance while staying below the 10% ratio.
 for (const [asset, bytes] of [
-	['toast-host-a_bCdE1-.js', 800_000],
-	['audio.js', 9_000],
+	['toast-host-a_bCdE1-.js', 700_000],
+	['audio.js', 8_000],
 ]) {
 	test(`publication rejects ${asset} above its gzip budget`, async () => {
 		const payload = createHash('shake256', { outputLength: bytes })

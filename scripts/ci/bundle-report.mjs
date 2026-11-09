@@ -171,17 +171,17 @@ const SPA_DISPLACED_BASELINES = {
 // uses isolated locale-modules plus full output minification. No catalog bytes
 // are moved into extra chunks to evade a per-file cap.
 const FEDERATION_BASELINE = {
-	// Re-measured 2026-11-09 on b7403580 after sharing tailwind-merge through
-	// the v4 lite entry. Default v4 measures 695,026/7,754 B, already exceeding
-	// the historical 674,809/7,709 B ceilings. Lite measures 680,713/7,752 B;
-	// the static catalog debt stays open, including the new update-check copy.
+	// Re-measured 2026-11-09 on 85d2b20a after sharing tailwind-merge through
+	// the v4 lite entry. Default v4 measures 694,717/7,753 B, already exceeding
+	// the historical 674,809/7,709 B ceilings. Lite measures 680,351/7,753 B;
+	// the static catalog debt includes the update-check and Spanish corrections.
 	// Preserve displaced measurements below and bound headroom to 8 KiB/128 B,
 	// rather than silently releasing a fresh 10%. See the November baseline doc.
-	'toast-host.js': 680_713,
+	'toast-host.js': 680_351,
 	'server.js': 26_645,
 	'frontend.css': 24_087,
 	'encoder.js': 22_713,
-	'audio.js': 7_752,
+	'audio.js': 7_753,
 	'InfoPopover.js': 6_104,
 	'input.js': 3_845,
 	// Shared by Audio and Encoder since before main 0e16840e; not a catalog split.
