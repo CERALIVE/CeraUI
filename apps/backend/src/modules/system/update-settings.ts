@@ -46,6 +46,8 @@ export function createSystemCellularConsentRead(
 	};
 }
 
+let settingsRevision = 0;
+
 export function setUpdateSettingsFilePathForTest(
 	filePath: string | null,
 ): void {
@@ -108,11 +110,14 @@ async function readPreferences<T>(
 export async function loadUpdateSettings(
 	filePath = updateSettingsFilePath,
 ): Promise<UpdateSettings> {
+	const revision = settingsRevision;
 	const settings = await readPreferences(filePath, updateSettingsSchema);
 	const imageChannel = await readPreferences(
 		imageChannelPath(filePath),
 		imageChannelSchema,
 	);
+	// Saves are synchronous; reload reads spanning a save before returning or migrating.
+	if (revision !== settingsRevision) return loadUpdateSettings(filePath);
 	if (settings === null) {
 		if (!reportedAbsent.has(filePath)) {
 			reportedAbsent.add(filePath);
@@ -167,6 +172,7 @@ export function saveUpdateSettings(
 	if (!parsed.success) {
 		throw new UpdateSettingsValidationError("Invalid update settings input");
 	}
+	settingsRevision++;
 	writeFileAtomicSync(
 		filePath,
 		JSON.stringify({ ...parsed.data, channel: "stable" }),

@@ -340,7 +340,10 @@ value comes only from the sidecar's download consent; a fresh explicit save can
 grant it, and subsequent reads and unrelated UI saves retain that value.
 Migration writes stable legacy settings first, then the sidecar as its completion marker. Failed
 writes warn once per settings path, return migrated values and retry on a later
-load. Once the sidecar exists, loads write nothing and keep its selection,
+load. Synchronous saves invalidate overlapping reads before a migration can
+write; those readers reload current settings, including concurrent first-time
+loaders, so an acknowledged operator save wins. Once the sidecar exists, loads
+write nothing and keep its selection,
 including an explicit Stable choice and explicit new-contract download consent
 across rollback to v2026.11.1, whose writer replaces only the six-key file.
 That old UI cannot grant or revoke the separate download consent; use this
