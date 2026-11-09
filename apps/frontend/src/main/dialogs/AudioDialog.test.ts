@@ -247,22 +247,15 @@ describe("AudioDialog — transport-aware codec gating (C5)", () => {
 		});
 
 		const trigger = document.body.querySelector("#audioCodec");
-		await fireEvent.click(trigger as HTMLElement);
-		await tick();
+		await fireEvent.keyDown(trigger as HTMLElement, { key: "ArrowDown" });
 
-		const opus = codecOptions().find((o) => /opus/i.test(o.textContent ?? ""));
-		const aac = codecOptions().find((o) => /aac/i.test(o.textContent ?? ""));
-		if (opus && aac) {
-			expect(opus.getAttribute("aria-disabled")).toBe("true");
-			expect(opus.getAttribute("title")).toBeTruthy();
-			expect(aac.getAttribute("aria-disabled")).not.toBe("true");
-		} else {
-			// bits-ui didn't mount the portal options in jsdom — the component consumes
-			// this exact re-exported gate verbatim, so asserting it keeps the wiring
-			// proof non-vacuous (real-DOM disabled+title is locked by truthfulness.spec).
-			expect(audioCodecAllowedForTransport("opus", "srtla")).toBe(false);
-			expect(audioCodecAllowedForTransport("aac", "srtla")).toBe(true);
-		}
+		const opus = await screen.findByRole("option", { name: "Opus" });
+		const aac = screen.getByRole("option", { name: "AAC" });
+		expect(opus.getAttribute("aria-disabled")).toBe("true");
+		expect(opus.getAttribute("title")).toBeTruthy();
+		expect(aac.getAttribute("aria-disabled")).not.toBe("true");
+		expect(audioCodecAllowedForTransport("opus", "srtla")).toBe(false);
+		expect(audioCodecAllowedForTransport("aac", "srtla")).toBe(true);
 	});
 
 	it("does NOT gate any codec when config is absent (federation standalone fail-open)", async () => {

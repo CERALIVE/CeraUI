@@ -106,6 +106,12 @@ plugin creates only the former. Keep generation outside individual tests so
 workers cannot race a shared generated directory. Local CI-mode runs use the same
 prerequisite.
 
+The isolated refresh fixture loads only the `pwa` namespace used by its real
+component. Loading the application shell catalog delays this small fixture behind
+thousands of unrelated cold module requests and can exhaust the unchanged test
+timeout under constrained runners. Keep fixture namespace activation aligned with
+the component's actual copy dependencies.
+
 ## Real-hardware gates
 
 Mock seams may retain deterministic negative-path coverage, but they never

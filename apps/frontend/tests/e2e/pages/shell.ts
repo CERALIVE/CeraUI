@@ -41,7 +41,7 @@ export class ShellPage {
 	}
 
 	/**
-	 * The persistent HUD root (the visible [data-hud-region] trigger button).
+	 * The persistent HUD root (the visible [data-hud-region] clickable label).
 	 * Two instances exist (desktop top / mobile bottom dock); only one is
 	 * visible at a time, so this scopes to the visible one.
 	 */

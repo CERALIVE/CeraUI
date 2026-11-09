@@ -185,6 +185,9 @@ describe("standalone — closing closes fully, exactly as before", () => {
 		// The property is that a standalone mount takes no `onBack` at all, so the
 		// close path is byte-identical to the pre-change behaviour: the dialog is
 		// simply gone, and closing it raised nothing.
-		expect(screen.queryByTestId("sim-unlock-dismiss")).toBeNull();
+		// Presence waits for the exit-animation frame before removing the dialog.
+		await waitFor(() =>
+			expect(screen.queryByTestId("sim-unlock-dismiss")).toBeNull(),
+		);
 	});
 });

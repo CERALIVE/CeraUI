@@ -125,14 +125,14 @@ $effect(() => {
 
 		<!-- Hardware Selector -->
 		<div class="space-y-2">
-			<Label class="text-sm font-medium">Select Hardware Profile</Label>
+			<Label class="text-sm font-medium" for="mock-hardware-profile">Select Hardware Profile</Label>
 			<Select.Root
 				disabled={isLoading}
 				onValueChange={(value) => switchHardware(value as HardwareType)}
 				type="single"
 				value={selectedHardware ?? ''}
 			>
-				<Select.Trigger class="w-full">
+				<Select.Trigger class="w-full" id="mock-hardware-profile">
 					{#if isLoading}
 						<Loader2 class="mr-2 h-4 w-4 animate-spin" />
 						Switching...
