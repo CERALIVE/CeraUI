@@ -35,6 +35,7 @@ vi.mock("$lib/rpc/client", () => ({
 		auth: { login: async () => ({ success: true }) },
 		streaming: { getConfig: async () => ({}) },
 		status: { getStatus: async () => ({}) },
+		ui: { heartbeat: vi.fn(async () => undefined) },
 	},
 	rpcClient: {
 		onMessage: (fn: (type: string, data: unknown, seq?: number) => void) => {

@@ -130,6 +130,10 @@ floating-promise error rule and missing-await warning rule. The bounded suite
 audit, timer regression and mutation receipts are documented in
 [`../../docs/FRONTEND-PHANTOM-GREEN-AUDIT.md`](../../docs/FRONTEND-PHANTOM-GREEN-AUDIT.md).
 
+Vitest is pinned exactly to `5.1.0`, with jsdom `^31.0.0`. The test and shard
+scripts retain `bun --bun vitest`: the executable's Node shebang otherwise
+selects Node even when invoked through `bun run`.
+
 `bun run --filter frontend test` runs both Vitest projects. The import-graph
 classifier in `scripts/ci/vitest-classify.mjs` assigns source tests automatically:
 `pure` uses Node with `isolate: false`; `components` uses isolated jsdom. Browser

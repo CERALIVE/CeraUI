@@ -27,5 +27,11 @@ entry bundles its own merge engine beside the `tailwind-merge` that the local
 through `tailwind-variants/lite` with `tailwind-merge` injected would edit the
 CLI-managed primitives and needs an owner decision.
 
-Vitest, jsdom, vite-plugin-pwa and the Biome toolchain remain owned by later
-dependency-refresh steps.
+Vitest is exact `5.1.0` and jsdom is `^31.0.0`, lock resolves `31.0.0`.
+The test and shard commands retain `bun --bun vitest` on Bun `1.4.4`; the
+executable's Node shebang still selects Node without the explicit flag.
+Jsdom 31 reports visible documents as focused; the two overlay-test RPC doubles
+now include the heartbeat method that Layout calls. Their assertions are unchanged.
+
+Vite-plugin-pwa and the Biome toolchain remain owned by later dependency-refresh
+steps.
