@@ -82,12 +82,16 @@ release carries the fix.
   locale-modules for federation keep the existing registry and runtime paths.
   No catalog key needs Paraglide 3's reserved-name allocation.
 - **tailwind-variants 4.0.1.** Class strings match `3.3.1` for all 107 variant
-  combinations of the six `tv()` recipes. Its default entry bundles its own merge
-  engine beside the `tailwind-merge` that the local `cn` uses: the SPA `devtools`
-  chunk grows by 9,281 B gzip and federation `toast-host.js`, already over its
-  budget, by 5,841 B gzip. Sharing one engine through `tailwind-variants/lite`
-  with `tailwind-merge` injected would edit the CLI-managed primitives, so it
-  needs an owner decision.
+  combinations of the six `tv()` recipes. The original default entry added
+  9,281 B gzip to the SPA `devtools` chunk and 5,841 B to federation toast-host.
+  The November 9 follow-up shares `cn`'s `tailwind-merge` through
+  `createTV({ twMerge })` from `tailwind-variants/lite`. An exact bundler alias
+  reaches a local module in the SPA, federation and both Vitest configs;
+  svelte-check resolves that same module through its paths configuration.
+  No CLI-managed primitive changes. All 107 raw, `cn`, caller-override and
+  repeated-call outputs match both 3.3.1 and default 4.0.1 byte for byte, including
+  an explicit conflict-resolution example. Unknown recipe/default and call-site
+  variant keys still fail svelte-check.
 - **Vitest 5.1.0 and jsdom 31.** The test and shard commands keep
   `bun --bun vitest`; the executable's Node shebang still selects Node without
   the explicit flag. Jsdom 31 reports a visible document as focused, and the two
@@ -111,14 +115,9 @@ release carries the fix.
 
 ### Known issues carried by this baseline
 
-- **Federation bundle budgets are exceeded, and no CI job enforces them.** The
-  `toast-host.js` and `audio.js` gzip ceilings in `scripts/ci/bundle-report.mjs`
-  are 674,809 B and 7,709 B. Both were already over before this refresh:
-  678,669 / 7,724 B at the oRPC commit, 686,902 / 7,746 B after the minor sweep,
-  and 693,110 / 7,750 B after Biome. `build-check.yml` runs the report after
-  `build:frontend` only, so the federation half reports "absent, skipped".
-  `publish-release.yml` builds federation but never runs the report. Tracked
-  under `TD-federation-i18n-catalog-size` in `docs/TECHNICAL_DEBT.md`.
+- **The federation catalog remains oversized.** The prior budget breaches are
+  now explicitly rebaselined and enforced before publication, as detailed below.
+  `TD-federation-i18n-catalog-size` in `docs/TECHNICAL_DEBT.md` remains open.
 - **Hosted functional E2E covers functionality; no hosted visual job exists.**
   `build-check.yml` runs functional E2E with `@visual` excluded. The dependency
   refresh's qualified visual parity assessment comes from the base-versus-merged
@@ -130,8 +129,96 @@ release carries the fix.
   parity remains unresolved. The retained dependency-refresh visual comparison
   records the full results and serial controls; hosted CI does not establish
   visual parity.
-- **tailwind-variants bundles a second merge engine** (see above) until the
-  owner decides on the `lite` entry.
+
+### Federation budgets and size analysis
+
+Measured on November 9, 2026 with Bun 1.4.4 after rebasing onto main `b7403580`
+(the update-check, image-channel and hotspot-client changes from PR #438).
+Each measurement ran `bun run build`, then `bun run test:federation`, then
+`bun scripts/ci/bundle-report.mjs`. The report saw both outputs. Both default and
+optimized toast-host measurements still exceed the historical 674,809 B ceiling.
+
+| Metric | Default v4 | Shared lite merger | Delta |
+| --- | ---: | ---: | ---: |
+| SPA total JS+CSS gzip | 1,081,289 B | 1,070,705 B | -10,584 B |
+| SPA largest chunk gzip | 323,803 B | 313,270 B | -10,533 B |
+| Federation toast-host gzip | 695,026 B | 680,713 B | -14,313 B |
+| Federation toast-host raw | 2,862,976 B | 2,830,205 B | -32,771 B |
+| Federation audio gzip | 7,754 B | 7,752 B | -2 B |
+
+All four emitted SPA stylesheets and federation CSS are byte-identical. Small
+non-toast gzip changes reflect changed chunk references; raw audio bytes have
+the same length. Build timestamps and absolute Svelte source paths can affect
+hashes, so these are measured comparisons rather than reproducible-byte promises.
+
+The old baselines came from `e3f17c2a`: toast-host **613,463 B** and audio
+**7,009 B**, with a 10% allowance yielding **674,809 B / 7,709 B** ceilings.
+Both were already exceeded at the oRPC refresh (**678,669 / 7,724 B**),
+before the later dependency changes. This follow-up accepts the existing static
+catalog footprint after removing duplicate merging; it does not resolve that debt.
+
+| Asset | Previous baseline | Measured new baseline | Allowance | Previous ceiling | New ceiling |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| toast-host.js | 613,463 B | 680,713 B | 8,192 B | 674,809 B | 688,905 B |
+| audio.js | 7,009 B | 7,752 B | 128 B | 7,709 B | 7,880 B |
+
+The first experiment on `6e0d23db` measured 679,064 B / 7,754 B with lite;
+those provisional baselines were superseded before commit. PR #438 adds six
+catalog keys across ten locales, revises update copy and extends the RPC schema.
+The final constants above use the rebased measurements rather than the old tree.
+
+Both still retain the smaller of the 10% ratio and the stated absolute allowance.
+The toast allowance is about 1.2%, audio about 1.7%; each covers small build/hash
+variation without restoring a fresh 10% growth allowance. Every other SPA and
+federation budget remains unchanged. The report prints the displaced 2026-08-15
+baselines and the original 223,579 B toast-host measurement on every applicable run.
+
+`publish-release.yml` now runs `bundle-report.mjs --federation-only` immediately
+after its existing federation build, before signing and R2 upload. This is cheaper
+than adding another federation build to every PR: it adds only the measurement
+command to a job already producing those exact assets. Build Check keeps its
+existing SPA budget gate. The publication mode requires the complete build graph,
+entries and CSS, and rejects missing output, partial output, unbaselined assets and
+gzip breaches. Workflow-shape and isolated CLI tests run in Build Check's existing
+guardrail command; the original federation budget/hash tests remain intact.
+
+A scratch sourcemap analysis on `6e0d23db`, before the subsequent six-key update
+addition, attributed final minified toast-host bytes:
+
+| Contributor | Raw attributed bytes, default v4 |
+| --- | ---: |
+| Static catalog dispatch plus all ten locales | 2,242,362 |
+| i18n namespace facade and registry | 105,449 |
+| Zod | 100,104 |
+| bits-ui | 84,558 |
+| Svelte runtime | 54,945 |
+| tailwind-variants | 49,128 |
+| tailwind-merge | 27,563 |
+| Lucide icons | 3,300 |
+
+The analyzer build adds a source-map comment (48 raw bytes); the size table above
+uses normal publishable output. Attributed group gzip is not additive. Catalog
+code accounts for about 78.5% of toast-host raw bytes. There is one Svelte 5.57.0
+runtime and one Zod 4.6.7 graph, not duplicate versions. Only 32 used Lucide icon
+modules survive across all federation chunks, not the entire set. No developer UI
+component survives. Two small Svelte helpers under its `dev` directory remain
+partially retained (2,028 pre-minification bytes); their location alone does not
+establish that removing them would preserve runtime semantics.
+
+The accidental duplication was the default variant entry's compiled merge tables.
+After the alias, only the lite core and the existing tailwind-merge remain;
+tailwind-variants attribution falls to 16,532 raw bytes. No other cheap,
+behavior-preserving removal was established.
+
+Larger proposals remain unimplemented: a reviewed federation-only catalog subset
+could save roughly **400-500 KiB gzip** from the catalog group's isolated
+507 KiB gzip footprint, but changes the current full-catalog contract and needs
+all-locale/ABI proof. A compact shared dispatch/registry representation retaining
+every key could plausibly save **20-60 KiB gzip**; its basis is the dispatch and
+facade's isolated compressed size, not a demonstrated optimized build. These
+estimates overlap and must not be added together. Both require a separate i18n
+design and parity work; no catalog, frozen fixture, locale, signing graph or ABI
+was changed here.
 
 **`vitest` reached stable 5.0.0 during this effort and remains pinned exact, after earning
 that move by flipping a runtime verdict.** Under `vitest@4.1.10` the

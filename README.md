@@ -542,6 +542,14 @@ inline). See `.env.example` for the full layout.
 
 ## Build & Deploy
 
+Bundle budgets [EXISTS]: run `bun run build && bun run test:federation &&
+bun scripts/ci/bundle-report.mjs` in that order. The release workflow also runs
+`bun scripts/ci/bundle-report.mjs --federation-only` after building federation,
+before signing or uploading. That mode requires a complete federation graph and
+fails on a gzip breach without requiring a separate SPA build. Measurements,
+allowances and displaced budgets are recorded in the
+[November dependency baseline](docs/agents/dep-baseline-as-of-2026-11.md#federation-budgets-and-size-analysis).
+
 ### Debian Package
 
 ```bash

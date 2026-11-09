@@ -468,6 +468,10 @@ jobs:
         working-directory: CeraUI
         run: bun run build:federation
 
+      - name: Enforce federation gzip budgets
+        working-directory: CeraUI
+        run: bun scripts/ci/bundle-report.mjs --federation-only
+
       # build+sign+verify gate: sign-federation.ts signs every bundle (GPG + SRI)
       # and the manifest (Ed25519), then self-verifies. It fail-closes when a
       # signing key is absent, so a missing secret blocks publish — by design.

@@ -14,6 +14,12 @@ Svelte 5 PWA for CeraUI — the on-device control plane for CeraLive streaming h
 - **`@ceraui/i18n`** — Paraglide runtime over hand-editable JSON catalogs, 10 languages (workspace package)
 - **vitest** for unit tests, **Playwright** for E2E
 
+The SPA, federation and Vitest configs share the exact `tailwind-variants` alias
+in `vite.variants.ts`. It routes the managed shadcn recipes through the v4 lite
+factory with the same `tailwind-merge` used by `cn`; `tsconfig.app.json` resolves
+the same module for svelte-check. The primitives stay CLI-managed. The recipe
+class oracle runs with `bun run test:build-check-shape` from the workspace root.
+
 ## Registry Dependencies
 
 The `backend` app consumes the streaming engine binding as a pinned public npm

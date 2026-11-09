@@ -28,7 +28,7 @@
 		"build:backend": "bun run --filter backend build:backend-only",
 		"preview": "bun run --filter frontend preview",
 		"test": "bun run --filter @ceraui/rpc test && bun run --filter @ceraui/i18n test && bun run --filter @ceraui/srtla-send test && bun run --filter frontend test && bun run --filter backend test",
-		"test:build-check-shape": "bun test scripts/ci/build-check-shape.test.mjs",
+		"test:build-check-shape": "bun test scripts/ci/build-check-shape.test.mjs scripts/ci/bundle-report.test.mjs scripts/tailwind-variants.test.mjs",
 		"test:release-package-contracts": "bash scripts/build/release-package-contracts.sh",
 		"test:service-contract": "bash scripts/ci/run-service-contract.sh",
 		"check:tech-debt": "bun scripts/check-tech-debt.mjs",
