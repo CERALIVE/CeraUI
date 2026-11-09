@@ -119,8 +119,17 @@ release carries the fix.
   `build:frontend` only, so the federation half reports "absent, skipped".
   `publish-release.yml` builds federation but never runs the report. Tracked
   under `TD-federation-i18n-catalog-size` in `docs/TECHNICAL_DEBT.md`.
-- **The local Playwright visual suite is red on the dev host** independent of
-  these changes. Hosted CI is the binding gate for e2e and visual results.
+- **Hosted functional E2E covers functionality; no hosted visual job exists.**
+  `build-check.yml` runs functional E2E with `@visual` excluded. The dependency
+  refresh's qualified visual parity assessment comes from the base-versus-merged
+  comparison of `116cba73` and `3c669487`: **239/45/144** versus **240/46/142**
+  pass/fail/skip. No persistent introduced regression was reproduced. The only
+  original pass-to-fail case, `task-1-switch`, fails identically on both trees
+  when run alone. The Sharing degraded captures differ by 6–17 pixels at a
+  maximum channel delta of 1/255; the cause remains unproven, so exact raster
+  parity remains unresolved. The retained dependency-refresh visual comparison
+  records the full results and serial controls; hosted CI does not establish
+  visual parity.
 - **tailwind-variants bundles a second merge engine** (see above) until the
   owner decides on the `lite` entry.
 
@@ -152,8 +161,8 @@ where runner settings are split; see `apps/frontend/README.md` → "Unit-test pr
 The explicit `--bun` is load-bearing: `node_modules/.bin/vitest` carries a `#!/usr/bin/env node`
 shebang, so a bare `vitest run` under `bun run` still executes on Node — measured, a probe test
 reported `process.execPath` = node and `process.versions.bun` = `undefined` before the flip, and
-bun / `1.4.2` after it. A caret would range forward into stable 5.0.0 unreviewed, so the pin is
-exact; when 5.0 ships stable this pin moves, but the runtime does not have to move with it.
+bun / `1.4.2` after it. The prerelease was pinned exact to prevent an unreviewed move into
+stable 5.0.0; that pin move did not require a runtime change.
 
 The frontend Vitest config keeps a global `testTimeout` of **20 seconds**. The
 worker pool is capped at `min(16, availableParallelism())`, not a fixed16 workers.
