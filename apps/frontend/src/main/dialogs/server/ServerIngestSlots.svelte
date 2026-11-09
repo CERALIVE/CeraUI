@@ -45,6 +45,7 @@ const idleChoice = 'border-border text-muted-foreground hover:text-foreground';
 		role="radiogroup"
 	>
 		{#each accounts as account (account.endpointId)}
+			<!-- biome-ignore lint/a11y/useSemanticElements: Ingest cards contain formatted account labels and badges; native radio inputs cannot preserve that content model. -->
 			<button
 				aria-checked={activeEndpointId === account.endpointId}
 				class="{choiceBase} {activeEndpointId === account.endpointId ? activeChoice : idleChoice}"

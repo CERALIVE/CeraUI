@@ -361,10 +361,10 @@ function exportCsv(): void {
 					<span class="w-12 text-end">{m["live.ingest.nak"]()}</span>
 					<span class="w-14 text-end">{m["live.ingest.rtt"]()}</span>
 				</div>
-				<div role="list">
+				<!-- biome-ignore lint/a11y/noRedundantRoles: The session-rollup contribution list needs its explicit list role for Safari when Tailwind removes list markers. -->
+				<ul role="list">
 					{#each rollup.links as link, i (link.iface)}
-						<div
-							role="listitem"
+						<li
 							data-testid="ingest-contribution-row"
 							data-iface={link.iface}
 							class="flex items-center gap-3 border-b py-2 text-xs last:border-b-0"
@@ -399,12 +399,12 @@ function exportCsv(): void {
 							>
 								{`${link.avgRtt} ${m["units.ms"]()}`}
 							</span>
-						</div>
+						</li>
 					{/each}
-				</div>
+				</ul>
 			{/if}
 
-			<div
+			<section
 				class="mt-4 flex flex-wrap gap-2 border-t pt-4"
 				aria-label={m["live.ingest.exportAria"]()}
 			>
@@ -428,7 +428,7 @@ function exportCsv(): void {
 					<Download aria-hidden="true" class="size-3.5" />
 					{m["live.ingest.exportCsv"]()}
 				</Button>
-			</div>
+			</section>
 
 			{#if exportError}
 				<!-- Calm, recoverable export-failure notice; the panel stays interactive. -->
@@ -462,11 +462,11 @@ function exportCsv(): void {
 		</div>
 
 		<!-- per-link rows -->
-		<div role="list">
+		<!-- biome-ignore lint/a11y/noRedundantRoles: The live per-link telemetry list needs its explicit list role for Safari when Tailwind removes list markers. -->
+		<ul role="list">
 			{#each linkViews as view, i (view.link.conn_id)}
 				{const link = $derived(view.link)}
-				<div
-					role="listitem"
+				<li
 					data-testid="ingest-row"
 					data-iface={link.iface}
 					data-stale={link.stale ? 'true' : 'false'}
@@ -567,9 +567,9 @@ function exportCsv(): void {
 							{view.degraded ? m["live.ingest.degraded"]() : m["live.ingest.healthy"]()}
 						</span>
 					</div>
-				</div>
+				</li>
 			{/each}
-		</div>
+		</ul>
 
 		<!-- bond totals -->
 		<div class={cn(COLS, 'items-center pt-3 text-xs')}>

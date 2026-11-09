@@ -56,6 +56,7 @@ const label = $derived(
 </script>
 
 <span
+	role="img"
 	data-rtt-tier={tier}
 	class={cn('inline-flex items-center gap-1.5 font-mono text-xs tabular-nums', className)}
 	style:color

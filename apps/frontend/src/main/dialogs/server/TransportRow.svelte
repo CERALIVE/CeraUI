@@ -26,7 +26,7 @@ import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 		/>
 	</div>
 
-	<div aria-labelledby="transport-row-label" class="grid grid-cols-3 gap-1" data-testid="transport-row">
+	<section aria-labelledby="transport-row-label" class="grid grid-cols-3 gap-1" data-testid="transport-row">
 		<div
 			class="border-primary/30 bg-primary/10 text-foreground flex flex-col items-center gap-0.5 rounded-md border px-3 py-2 text-sm font-medium"
 			data-protocol="srtla"
@@ -59,5 +59,5 @@ import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 			<span class="font-mono">SRT</span>
 			<ComingSoon debtId="TD-plain-srt-egress" />
 		</div>
-	</div>
+	</section>
 </div>

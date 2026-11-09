@@ -140,7 +140,50 @@ function replaceExactly(source, before, after, expectedCount = 1) {
 	return source.split(before).join(after);
 }
 
+const catalogGenerationStep = [
+	'      - name: Generate source component catalogs',
+	'        working-directory: CeraUI',
+	'        run: bun run --filter @ceraui/i18n generate:i18n',
+	'',
+].join('\n');
+
 const mutations = [
+	{
+		name: 'missing source-component catalog generation',
+		expectedError: 'test-e2e must contain exactly one "Generate source component catalogs" step',
+		apply: (source) => replaceExactly(source, catalogGenerationStep, ''),
+	},
+	{
+		name: 'conditional source-component catalog generation',
+		expectedError: 'test-e2e catalog generation condition must be',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				'      - name: Generate source component catalogs',
+				`      - name: Generate source component catalogs\n        if: ${expression('false')}`,
+			),
+	},
+	{
+		name: 'Paraglide compilation without the custom registry',
+		expectedError: 'test-e2e catalog generation command must be',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				'bun run --filter @ceraui/i18n generate:i18n',
+				'bun run --filter @ceraui/i18n compile-messages',
+			),
+	},
+	{
+		name: 'catalog generation after the E2E servers start',
+		expectedError:
+			'test-e2e must place "Generate source component catalogs" before "Start E2E servers"',
+		apply: (source) =>
+			replaceExactly(
+				replaceExactly(source, catalogGenerationStep, ''),
+				'      # a11y is desktop-only and small (3 tests); run it once on shard 1 rather',
+				`${catalogGenerationStep}\n      # a11y is desktop-only and small (3 tests); run it once on shard 1 rather`,
+			),
+	},
 	{
 		name: 'single-project matrix even when the old matrix survives in a comment',
 		expectedError: 'test-e2e matrix.include must equal',

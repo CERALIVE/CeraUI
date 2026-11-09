@@ -1050,13 +1050,15 @@ describe("PreviewCanvas — WebRTC tier ladder", () => {
 
 	it("starts on the WebRTC rung: badge=WebRTC and start frame carries tier=webrtc", async () => {
 		stubWebrtcBrowser();
-		const { getByTestId } = render(PreviewCanvas);
+		const { getByTestId, getByRole } = render(PreviewCanvas);
 
 		const ws = await turnOnWebrtc(getByTestId);
 
 		expect(getByTestId("preview").getAttribute("data-tier")).toBe("webrtc");
 		const badge = getByTestId("preview-tier-badge");
 		expect(badge.getAttribute("data-tier")).toBe("webrtc");
+		expect(getByRole("note", { name: "Preview delivery tier" })).toBe(badge);
+		expect(badge.textContent?.trim()).toBe("WebRTC");
 		expect(ws.sent).toContain(
 			JSON.stringify({ action: "start", tier: "webrtc" }),
 		);

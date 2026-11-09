@@ -71,6 +71,7 @@ export const TERMINAL_LINGER_MS = 4_000;
  * write path — they are device-reported truth, not user intent. Kept in sync
  * with the `status` handler in `subscriptions.svelte.ts`.
  */
+// biome-ignore lint/nursery/useSvelteReactiveClasses: This immutable ReadonlySet is a field classification table, not reactive state.
 export const STATUS_FIELDS: ReadonlySet<string> = new Set([
 	"is_streaming",
 	"ssh",

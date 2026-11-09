@@ -22,6 +22,7 @@
 type DisplayRefreshListener = () => void;
 
 /** Imperative subscribers notified on each {@link requestDisplayRefresh}. */
+// biome-ignore lint/nursery/useSvelteReactiveClasses: Listener registration must not trigger reactive consumers; requestDisplayRefresh owns the explicit notification and reactive nonce.
 const listeners = new Set<DisplayRefreshListener>();
 
 /**

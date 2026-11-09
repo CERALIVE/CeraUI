@@ -100,8 +100,8 @@ describe("RelayRttIndicator — rounding, boundaries & a11y (Task 19)", () => {
 	});
 
 	it("mirrors the visible label into both aria-label and title", () => {
-		render(RelayRttIndicator, { props: { rtt: 123 } });
-		const el = badge();
+		const { getByRole } = render(RelayRttIndicator, { props: { rtt: 123 } });
+		const el = getByRole("img", { name: "123 ms" });
 		const text = el.textContent?.trim();
 		expect(text).toBe("123 ms");
 		expect(el.getAttribute("aria-label")).toBe(text);
