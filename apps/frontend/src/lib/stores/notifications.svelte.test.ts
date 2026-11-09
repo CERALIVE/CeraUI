@@ -130,6 +130,21 @@ describe("resolveNotificationText", () => {
 // ============================================
 
 describe("toActiveNotification", () => {
+	it("retains the wire key and params for render-time translation without changing the input", () => {
+		const notification = makeNotification({
+			key: "notifications.appUpdatedDescription",
+			params: { version: "1.2.3" },
+			revision: 7,
+		});
+		const original = structuredClone(notification);
+		const active = toActiveNotification(notification, translations, T0);
+
+		expect(active.key).toBe("notifications.appUpdatedDescription");
+		expect(active.params).toEqual({ version: "1.2.3" });
+		expect(active.text).toBe("Updated to version 1.2.3");
+		expect(notification).toEqual(original);
+	});
+
 	it("converts `duration` seconds → ms with * 1000 (5 → 5000, NOT 12500)", () => {
 		const active = toActiveNotification(
 			makeNotification({ duration: 5 }),

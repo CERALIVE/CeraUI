@@ -13,6 +13,7 @@
  * the page's own flow) and the panel's existing treatment is unchanged by this
  * module's introduction.
  */
+import { m } from "@ceraui/i18n/svelte";
 import type { NotificationType } from "@ceraui/rpc/schemas";
 import CircleAlert from "@lucide/svelte/icons/circle-alert";
 import CircleCheck from "@lucide/svelte/icons/circle-check";
@@ -21,7 +22,25 @@ import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import type { Component } from "svelte";
 
 import { rpc } from "$lib/rpc";
-import { dismiss } from "$lib/stores/notifications.svelte";
+import {
+	type ActiveNotification,
+	dismiss,
+	resolveNotificationText,
+} from "$lib/stores/notifications.svelte";
+
+/** Resolve in the template so the facade tracks locale changes for this text. */
+export function persistentNotificationText(
+	notification: ActiveNotification,
+): string {
+	return resolveNotificationText(
+		{
+			key: notification.key,
+			params: notification.params,
+			msg: notification.text,
+		},
+		m,
+	);
+}
 
 /** One glyph per severity, shared by the band and the panel. */
 export const NOTIFICATION_ICONS: Record<NotificationType, Component> = {

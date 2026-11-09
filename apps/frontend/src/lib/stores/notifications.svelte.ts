@@ -24,8 +24,9 @@
  * Display text is resolved *once, at push time* via the message registry
  * (`@ceraui/i18n/svelte`): when `key` is present and exists in the translation
  * tree it is interpolated with `params`; otherwise the raw `msg` is used as the
- * fallback. Resolution is deliberately eager so a later locale change does NOT
- * re-show or re-translate already-active toasts (D10 — stale is accepted).
+ * fallback. Transient toasts keep this push-time text (D10). Persistent
+ * surfaces resolve the retained key and params at render time so they follow
+ * locale changes without replacing entries or replaying toasts.
  *
  * Duration (the LayoutToastHost `* 2500` bug)
  * -------------------------------------------
@@ -49,12 +50,13 @@ import {
 // ============================================
 
 /** A render-ready notification: text already resolved, duration in ms. */
-export interface ActiveNotification {
+export interface ActiveNotification
+	extends Pick<Notification, "key" | "params"> {
 	/** Stable dedup key (== {@link Notification.name}). */
 	name: string;
 	/** Toast severity. */
 	type: NotificationType;
-	/** Resolved display text (`m[key](params)` or `msg` fallback). */
+	/** Push-time toast text, also the persistent surface's literal fallback. */
 	text: string;
 	/** Whether the operator may manually dismiss the toast. */
 	isDismissable: boolean;
@@ -189,6 +191,10 @@ export function toActiveNotification(
 		name: notification.name,
 		type: notification.type,
 		text: resolveNotificationText(notification, translations),
+		...(notification.key !== undefined ? { key: notification.key } : {}),
+		...(notification.params !== undefined
+			? { params: notification.params }
+			: {}),
 		isDismissable: notification.is_dismissable,
 		isPersistent: notification.is_persistent,
 		durationMs: notification.duration * 1000,

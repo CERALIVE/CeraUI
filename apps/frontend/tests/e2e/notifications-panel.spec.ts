@@ -135,3 +135,48 @@ test('empty state renders when there are no persistent notifications', async ({ 
 		'No persistent notifications → empty state shown, list empty, header badge absent ✓',
 	);
 });
+
+test('existing persistent notices retranslate in flow and in the archive after a locale switch', async ({
+	page,
+	pageRpc,
+}) => {
+	await emitPersistent(pageRpc, {
+		...persistent('locale-refused', 'Wire refusal fallback'),
+		key: 'notifications.updateRefused',
+		params: { reason: 'unrecognized_device_token' },
+		revision: 3,
+	});
+	const notice = page.locator(
+		'[data-testid="persistent-notice"][data-notification="locale-refused"]',
+	);
+	await expect(notice.locator('p')).toHaveText(
+		'Update refused. Check Settings → System Logs for details.',
+	);
+	await emitPersistent(pageRpc, persistent('locale-literal', 'Literal device message'));
+	const names = await page.getByTestId('persistent-notice').evaluateAll((rows) =>
+		rows.map((row) => row.getAttribute('data-notification')),
+	);
+
+	await page.getByTestId('locale-selector').click();
+	await page.getByTestId('locale-option-es').click();
+
+	await expect(page.locator('html')).toHaveAttribute('lang', 'es');
+	await expect(notice.locator('p')).toHaveText(
+		'Actualización rechazada. Consulta Configuración → Registros del sistema para más detalles.',
+	);
+	await expect(
+		page.locator('[data-testid="persistent-notice"][data-notification="locale-literal"] p'),
+	).toHaveText('Literal device message');
+	expect(
+		await page.getByTestId('persistent-notice').evaluateAll((rows) =>
+			rows.map((row) => row.getAttribute('data-notification')),
+		),
+	).toEqual(names);
+	await expect(page.getByTestId('notifications-unread-count')).toHaveText('2');
+	await page.getByTestId('notifications-bell').click();
+	await expect(
+		page.locator('[data-testid="notification-item"][data-notification="locale-refused"] p'),
+	).toHaveText(
+		'Actualización rechazada. Consulta Configuración → Registros del sistema para más detalles.',
+	);
+});

@@ -29,6 +29,7 @@ import { cn } from '$lib/utils';
 import {
 	dismissPersistentNotification,
 	NOTIFICATION_ICONS,
+	persistentNotificationText,
 } from './notification-presentation';
 
 function lookupLabel(key: string): string {
@@ -97,7 +98,7 @@ const TONES: Record<NotificationType, string> = {
 					<Icon class={cn('mt-0.5 size-4 shrink-0', TONES[item.type])} aria-hidden="true" />
 					<div class="min-w-0 flex-1">
 						<p class="text-foreground text-sm leading-relaxed break-words">
-							{item.text}
+							{persistentNotificationText(item)}
 						</p>
 						{#if item.action?.kind === 'navigate'}
 							<Button

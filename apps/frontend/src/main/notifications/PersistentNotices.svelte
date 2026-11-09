@@ -38,6 +38,7 @@ import {
 	NOTIFICATION_BAND_CLASS,
 	NOTIFICATION_BAND_ICON_CLASS,
 	NOTIFICATION_ICONS,
+	persistentNotificationText,
 } from './notification-presentation';
 
 const items = $derived(getPersistent());
@@ -68,7 +69,7 @@ const frozen = $derived(prefersEinkTheme(getDisplayProfile()));
 					/>
 					<div class="min-w-0 flex-1">
 						<p class="text-foreground text-sm leading-relaxed break-words">
-							{item.text}
+							{persistentNotificationText(item)}
 						</p>
 						{#if item.action?.kind === 'navigate'}
 							<Button
