@@ -1,6 +1,6 @@
 import net from 'node:net';
 import { test, expect } from './fixtures/index.js';
-import { startWorkerBackend, workerBackendPort, type WorkerBackend } from './fixtures/backend.js';
+import { startWorkerBackend, type WorkerBackend } from './fixtures/backend.js';
 import { BackendRpc } from './fixtures/backend-rpc.js';
 
 test('an occupied port cannot impersonate the newly spawned backend', async () => {
@@ -31,13 +31,12 @@ test('an occupied port cannot impersonate the newly spawned backend', async () =
 	}
 });
 
-test('concurrent backend acquisitions own distinct state and listeners', async () => {
-	// CI deliberately routes only its fixed, isolated-runner 31xx range.
-	const port = process.env.CI === 'true' ? workerBackendPort() : undefined;
-	// Given two acquisitions in the same worker slot, as across local runs.
+test('concurrent backend acquisitions own distinct state and listeners', async ({ workerBackend }) => {
+	// The fixture retains its worker listener; these direct RPC clients need no preview proxy.
+	// Ask the OS for distinct ports rather than competing for that retained slot.
 	const results = await Promise.allSettled([
-		startWorkerBackend(port === undefined ? {} : { port }),
-		startWorkerBackend(port === undefined ? {} : { port: port + 50 }),
+		startWorkerBackend({ port: 0 }),
+		startWorkerBackend({ port: 0 }),
 	]);
 	const backends = results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
 	try {
@@ -48,6 +47,8 @@ test('concurrent backend acquisitions own distinct state and listeners', async (
 		expect(backends).toHaveLength(2);
 		expect(new Set(backends.map((backend) => backend.port)).size).toBe(2);
 		expect(new Set(backends.map((backend) => backend.previewPort)).size).toBe(2);
+		expect(backends.map((backend) => backend.port)).not.toContain(workerBackend.port);
+		expect(backends.map((backend) => backend.previewPort)).not.toContain(workerBackend.previewPort);
 		const clients: BackendRpc[] = [];
 		try {
 			for (const backend of backends) {
