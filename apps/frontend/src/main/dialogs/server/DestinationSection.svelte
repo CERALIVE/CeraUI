@@ -13,15 +13,15 @@
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
-import { Cloud, Plug } from '@lucide/svelte';
 import type { ProviderSelection, RelayMessage } from '@ceraui/rpc/schemas';
+import { Cloud, Plug } from '@lucide/svelte';
 
 import { Label } from '$lib/components/ui/label';
 import {
-	type ReceiverDestinationChoice,
 	countRelayServersForProvider,
 	MANAGED_DESTINATION_CHOICES,
 	managedCloudLabel,
+	type ReceiverDestinationChoice,
 } from '$lib/streaming/receiver-experience';
 
 interface Props {

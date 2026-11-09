@@ -48,8 +48,8 @@ import { cn } from '$lib/utils';
 import {
 	deriveEthernetRoleStagedWarning,
 	type EthernetRoleContext,
-	ethernetRoleLabelKey,
 	type EthernetRoleView,
+	ethernetRoleLabelKey,
 } from './ethernet-role-view';
 
 interface Props {
@@ -94,7 +94,7 @@ const stagedWarning = $derived(
 			role="radiogroup"
 		>
 			{#each view.options as option (option.role)}
-				{@const selected = option.role === selectedRole}
+				{const selected = $derived(option.role === selectedRole)}
 				<button
 					aria-checked={selected}
 					class={cn(

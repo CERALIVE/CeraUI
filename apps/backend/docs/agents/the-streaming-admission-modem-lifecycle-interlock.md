@@ -36,7 +36,7 @@ guard covers the rest. Nothing else changes: `modems.setUsbMode`'s existing
   as a typed `failed`, so it exercises the ordinary return path — the `finally`
   needs its own fixture (a dep that throws mid-admission).
 - **`admitLifecycle` is an OPTIONAL orchestrator dep, wired only at the
-  production singleton.** The lease is process-wide. Bun 1.4.2 `--parallel`
+  production singleton.** The lease is process-wide. The pinned Bun 1.4.4 `--parallel`
   runs files in isolated worker processes, but tests within each file still
   share module state: a pending start can strand later admissions in that file.
   Keep explicit lease cleanup and use a per-file `mkdtemp` root for persisted

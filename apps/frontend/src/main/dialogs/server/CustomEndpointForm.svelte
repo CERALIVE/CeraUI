@@ -14,11 +14,10 @@ import Check from '@lucide/svelte/icons/check';
 import Circle from '@lucide/svelte/icons/circle';
 import Loader2 from '@lucide/svelte/icons/loader-2';
 import X from '@lucide/svelte/icons/x';
-
+import { deriveStageViews, type Validation } from '$lib/components/streaming/relay-validation';
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
-import { type Validation, deriveStageViews } from '$lib/components/streaming/relay-validation';
 
 interface Props {
 	isStreaming: boolean;

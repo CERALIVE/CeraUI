@@ -82,18 +82,19 @@ export interface EncoderConfig {
 
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
-import { Binary, Cable, Columns3, Cpu, Radio, Usb, Video } from '@lucide/svelte';
 import {
 	BITRATE_DEFAULT_MIN,
 	type CapabilitiesMessage,
 	type DeviceKind,
 	type StreamSource,
 } from '@ceraui/rpc/schemas';
+import { Binary, Cable, Columns3, Cpu, Radio, Usb, Video } from '@lucide/svelte';
 
 import AppliesNextStart from '$lib/components/custom/AppliesNextStart.svelte';
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import PreviewCanvas from '$lib/components/preview/PreviewCanvas.svelte';
+import { normalizeValue, updateMaxBitrate } from '$lib/components/streaming/StreamingUtils';
 import {
 	axisCeiling,
 	bitrateBoundsFromCaps,
@@ -104,15 +105,9 @@ import {
 	offeredAxes,
 	platformCapsForHardware,
 	resolutionOptions,
-	seededAxisSelection,
 	STREAMING_MODE,
+	seededAxisSelection,
 } from '$lib/components/streaming/ValidationAdapter';
-import {
-	captureModeOptions,
-	governingInputMode,
-	inputModeLabelKey,
-} from '$lib/streaming/capture-modes';
-import { normalizeValue, updateMaxBitrate } from '$lib/components/streaming/StreamingUtils';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
@@ -130,16 +125,21 @@ import {
 	getIsStreaming,
 	getSources,
 } from '$lib/rpc/subscriptions.svelte';
-import {
-	probedCapsFromSources,
-	uvcH265SourcesFromSources,
-} from '$lib/streaming/sources-view-model';
 import { appliesOnNextStart, restartChoiceRequired } from '$lib/streaming/appliesNextStart';
+import {
+	captureModeOptions,
+	governingInputMode,
+	inputModeLabelKey,
+} from '$lib/streaming/capture-modes';
 import {
 	captureModeCodecs,
 	resolvePassthroughMode,
 	sourceOffersCodec,
 } from '$lib/streaming/passthrough';
+import {
+	probedCapsFromSources,
+	uvcH265SourcesFromSources,
+} from '$lib/streaming/sources-view-model';
 
 interface Props {
 	open?: boolean;
@@ -565,7 +565,7 @@ function handleSave() {
 		     here. Absent when the config carries no source (e.g. a federated mount). -->
 		<div class="space-y-2">
 			{#if activeSource}
-				{@const SourceIcon = sourceIcon(activeSource)}
+				{const SourceIcon = $derived(sourceIcon(activeSource))}
 				<div
 					class="bg-muted/30 flex items-center gap-2.5 rounded-md border p-2.5"
 					data-testid="encoder-active-source"

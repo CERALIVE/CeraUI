@@ -58,8 +58,8 @@ export interface RenderLane {
 </script>
 
 <script lang="ts">
-import { gsap } from 'gsap';
 import { CircleSlash } from '@lucide/svelte';
+import { gsap } from 'gsap';
 
 import { cn } from '$lib/utils';
 
@@ -210,9 +210,9 @@ $effect(() => () => teardownTimeline());
 
 		<g bind:this={paperEl}>
 			{#each views as view, laneIndex (view.id)}
-				{@const stroke = lanes[laneIndex]?.degraded
+				{const stroke = $derived(lanes[laneIndex]?.degraded
 					? 'var(--status-warning)'
-					: 'var(--primary)'}
+					: 'var(--primary)')}
 				{#each view.segments as segment (segment.id)}
 					<polyline
 						fill="none"
@@ -258,7 +258,7 @@ $effect(() => () => teardownTimeline());
 	<!-- Printed channel names + disclosed scales. HTML so they neither stretch
 	     with the x-distorted viewBox nor resist translation. -->
 	{#each views as view, laneIndex (view.id)}
-		{@const lane = lanes[laneIndex]}
+		{const lane = $derived(lanes[laneIndex])}
 		<span
 			class="text-muted-foreground pointer-events-none absolute start-2 font-mono text-[10px] leading-none"
 			style="top: {view.labelY - 8}px"

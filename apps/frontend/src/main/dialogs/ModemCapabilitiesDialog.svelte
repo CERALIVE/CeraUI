@@ -58,9 +58,8 @@ import {
 	type CapabilityModule,
 } from '@ceraui/rpc/schemas';
 import { LoaderCircle, RadioTower, RotateCw } from '@lucide/svelte';
-
-import { AppDialog } from '$lib/components/dialogs';
 import Badge from '$lib/components/custom/Badge.svelte';
+import { AppDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
 import { Skeleton } from '$lib/components/ui/skeleton';
 import { Switch } from '$lib/components/ui/switch';
@@ -281,7 +280,7 @@ const SKELETON_ROWS = [0, 1, 2];
 			{/if}
 			<div class="divide-border overflow-hidden rounded-lg border">
 				{#each rows as module (module)}
-					{@const label = t(`settings.modemCapabilities.module.${module}`)}
+					{const label = $derived(t(`settings.modemCapabilities.module.${module}`))}
 					<div
 						class="flex items-center justify-between gap-4 border-b px-4 py-3.5 last:border-b-0"
 						data-module={module}

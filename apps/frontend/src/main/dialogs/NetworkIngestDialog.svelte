@@ -227,7 +227,7 @@ const toggleLabels = $derived({
 		<!-- Per-protocol enable/disable rows. -->
 		<div class="divide-border overflow-hidden rounded-lg border">
 			{#each PROTOCOLS as protocol (protocol)}
-				{@const state = statusOf(protocol)}
+				{const state = $derived(statusOf(protocol))}
 				<div
 					class="flex items-center justify-between gap-4 border-b px-4 py-3.5 last:border-b-0"
 					data-protocol={protocol}

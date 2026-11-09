@@ -30,22 +30,31 @@ import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import {
 	AUDIO_SOURCE_AUTO,
 	type AudioBackend,
-	audioCodecSchema,
 	type AudioCodec,
+	audioCodecSchema,
 	type CapabilitiesMessage,
 } from '@ceraui/rpc/schemas';
 import { Volume2 } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
-import {
-	type FederationHostAdapter,
-	requireAppliedConfig,
-} from '$lib/federation/host-contract';
-
 import { AppDialog } from '$lib/components/dialogs';
 import {
 	audioCodecAllowedForTransport,
 	streamingConstraints,
 } from '$lib/components/streaming/ValidationAdapter';
+import {
+	type FederationHostAdapter,
+	requireAppliedConfig,
+} from '$lib/federation/host-contract';
+import { rpc } from '$lib/rpc';
+import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
+import {
+	getAudioCodecs,
+	getCapabilities,
+	getConfig,
+	getIsStreaming,
+	getSources,
+	getStatus,
+} from '$lib/rpc/subscriptions.svelte';
 import {
 	audioBackendSaveErrorMessage,
 	canSelectAudioBackend,
@@ -62,17 +71,7 @@ import {
 	resolvedAudioLabel,
 } from '$lib/streaming/sourceSummary';
 import { pipelinesFromSources } from '$lib/streaming/sources-view-model';
-import { rpc } from '$lib/rpc';
-import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
 import AudioDialogContent from './audio/AudioDialogContent.svelte';
-import {
-	getAudioCodecs,
-	getCapabilities,
-	getConfig,
-	getIsStreaming,
-	getSources,
-	getStatus,
-} from '$lib/rpc/subscriptions.svelte';
 
 export interface AudioConfigValues {
 	/**

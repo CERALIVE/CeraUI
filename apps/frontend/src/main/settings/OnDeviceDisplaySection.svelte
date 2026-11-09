@@ -17,11 +17,11 @@
 import { m } from '@ceraui/i18n/svelte';
 import {
 	KIOSK_UNAVAILABLE_ERROR,
-	kioskDisplaySchema,
 	type KioskConfigureInput,
 	type KioskDisplay,
 	type KioskPerformance,
 	type KioskState,
+	kioskDisplaySchema,
 	kioskPerformanceSchema,
 } from '@ceraui/rpc/schemas';
 import { Keyboard, KeyboardOff, LoaderCircle, Monitor } from '@lucide/svelte';

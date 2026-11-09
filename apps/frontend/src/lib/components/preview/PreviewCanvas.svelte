@@ -15,8 +15,6 @@
   capped, jittered exponential backoff while the toggle stays on.
 -->
 <script lang="ts">
-import { onDestroy, untrack } from 'svelte';
-
 import { m } from '@ceraui/i18n/svelte';
 import {
 	PREVIEW_CLOSE_UNAUTHORIZED,
@@ -24,6 +22,7 @@ import {
 	PREVIEW_CLOSE_UPSTREAM_UNAVAILABLE,
 } from '@ceraui/rpc/schemas';
 import { Eye, EyeOff, Loader, LoaderCircle, Play, ServerOff } from '@lucide/svelte';
+import { onDestroy, untrack } from 'svelte';
 
 import AudioLevelMeter from '$lib/components/preview/AudioLevelMeter.svelte';
 import {

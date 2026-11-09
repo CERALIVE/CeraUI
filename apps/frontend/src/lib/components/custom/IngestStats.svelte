@@ -464,7 +464,7 @@ function exportCsv(): void {
 		<!-- per-link rows -->
 		<div role="list">
 			{#each linkViews as view, i (view.link.conn_id)}
-				{@const link = view.link}
+				{const link = $derived(view.link)}
 				<div
 					role="listitem"
 					data-testid="ingest-row"

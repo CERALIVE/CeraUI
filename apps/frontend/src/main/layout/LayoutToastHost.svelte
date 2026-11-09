@@ -4,12 +4,12 @@ import { MediaQuery } from 'svelte/reactivity';
 import { toast } from 'svelte-sonner';
 
 import { Toaster } from '$lib/components/ui/sonner';
-import { DESKTOP_CHROME_QUERY } from '$lib/layout';
-import { requestDialog } from '$lib/stores/dialog-request.svelte';
 import {
 	startStreaming as startStreamingFn,
 	stopStreaming as stopStreamingFn,
 } from '$lib/helpers/SystemHelper';
+import { DESKTOP_CHROME_QUERY } from '$lib/layout';
+import { requestDialog } from '$lib/stores/dialog-request.svelte';
 import {
 	clearNotifications,
 	dismiss,

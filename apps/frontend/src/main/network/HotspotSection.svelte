@@ -21,15 +21,13 @@
 import { m } from '@ceraui/i18n/svelte';
 import type { WifiInterface } from '@ceraui/rpc/schemas';
 import { ChevronRight, Router, Users } from '@lucide/svelte';
-
-import { getOperationPhase, getOperationTarget } from '$lib/rpc/async-operation.svelte';
 import { Button } from '$lib/components/ui/button';
 import { signalTextClass } from '$lib/helpers/signal';
+import { getOperationPhase, getOperationTarget } from '$lib/rpc/async-operation.svelte';
 import { getWifiAdapterModeEntry } from '$lib/rpc/wifi-adapter-modes.svelte';
-
+import { deriveHotspotClientsView, formatClientRatePair } from './hotspot-clients-view';
 import WifiModeBadge from './WifiModeBadge.svelte';
 import { deriveWifiAdapterModeView, wifiModeTarget } from './wifi-adapter-mode-view';
-import { deriveHotspotClientsView, formatClientRatePair } from './hotspot-clients-view';
 import { wifiModeOpKey } from './wifi-station-lock';
 
 interface Props {
@@ -77,14 +75,14 @@ const CATEGORY_PROBE_PERCENT = { excellent: 80, good: 60, fair: 40, weak: 10 } a
 			</div>
 		{:else}
 			{#each hotspotInterfaces as [id, iface] (id)}
-				{@const clients = deriveHotspotClientsView(iface.hotspot)}
-				{@const modeView = deriveWifiAdapterModeView({
+				{const clients = $derived(deriveHotspotClientsView(iface.hotspot))}
+				{const modeView = $derived(deriveWifiAdapterModeView({
 					device: id,
 					iface,
 					entry: getWifiAdapterModeEntry(id),
 					phase: getOperationPhase(wifiModeOpKey(id)),
 					target: wifiModeTarget(getOperationTarget(wifiModeOpKey(id))),
-				})}
+				}))}
 				<div class="px-4 py-3">
 					<div class="flex items-center gap-3">
 						<span class="bg-status-info size-2 shrink-0 rounded-full" aria-hidden="true"></span>
@@ -120,7 +118,7 @@ const CATEGORY_PROBE_PERCENT = { excellent: 80, good: 60, fair: 40, weak: 10 } a
 							{#if clients.rows.length > 0}
 								<ul class="mt-1.5 space-y-1">
 									{#each clients.rows as row (row.mac)}
-										{@const rate = formatClientRatePair(row.txMbps, row.rxMbps)}
+										{const rate = $derived(formatClientRatePair(row.txMbps, row.rxMbps))}
 										<li
 											class="flex items-center gap-3 text-xs"
 											data-testid="hotspot-client-{row.mac}"

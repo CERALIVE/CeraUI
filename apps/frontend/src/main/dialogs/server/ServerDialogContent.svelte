@@ -2,9 +2,8 @@
 import { m } from '@ceraui/i18n/svelte';
 import type { LatencyRange, RelayAccount, RelayMessage, RelayServer } from '@ceraui/rpc/schemas';
 import { KeyRound } from '@lucide/svelte';
-
-import { Button } from '$lib/components/ui/button';
 import type { Validation } from '$lib/components/streaming/relay-validation';
+import { Button } from '$lib/components/ui/button';
 import type {
 	ManagedIngestAccount,
 	ReceiverDestinationChoice,

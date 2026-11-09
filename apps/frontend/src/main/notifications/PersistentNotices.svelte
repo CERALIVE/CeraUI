@@ -51,7 +51,7 @@ const frozen = $derived(prefersEinkTheme(getDisplayProfile()));
 	<div class="container max-w-7xl pt-3" role="status">
 		<ul class="flex flex-col gap-2" data-testid="persistent-notices">
 			{#each items as item (item.name)}
-				{@const Icon = NOTIFICATION_ICONS[item.type]}
+				{const Icon = $derived(NOTIFICATION_ICONS[item.type])}
 				<li
 					class={cn(
 						'flex items-start gap-3 rounded-xl border p-3',

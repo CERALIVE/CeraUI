@@ -45,9 +45,9 @@ const locale = $derived(getLocale());
 	{:else}
 		<ul class="divide-border divide-y overflow-hidden rounded-lg border">
 			{#each slots as slot (slot.name)}
-				{@const letter = slotLetter(slot)}
-				{@const healthKey = slotHealthKey(slot.bootStatus)}
-				{@const mirrored = formatUpdateTime(slot.lastSyncedAt, locale)}
+				{const letter = $derived(slotLetter(slot))}
+				{const healthKey = $derived(slotHealthKey(slot.bootStatus))}
+				{const mirrored = $derived(formatUpdateTime(slot.lastSyncedAt, locale))}
 				<li
 					class="space-y-1.5 px-4 py-3"
 					data-slot-name={slot.name}

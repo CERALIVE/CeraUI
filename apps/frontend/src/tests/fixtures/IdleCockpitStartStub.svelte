@@ -1,7 +1,7 @@
 <script lang="ts">
-let { onStart } = $props<{
+let { onStart }: {
 	onStart?: (overrides?: { source?: string }) => Promise<void>;
-}>();
+} = $props();
 </script>
 
-<button data-testid="start-stream" onclick={() => void onStart?.()}>Start</button>
+<button type="button" data-testid="start-stream" onclick={() => void onStart?.()}>Start</button>

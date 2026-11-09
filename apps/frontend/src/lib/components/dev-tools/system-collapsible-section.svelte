@@ -9,9 +9,8 @@
   behaviour. Panel-specific body markup is passed via the `children` snippet.
 -->
 <script lang="ts">
-import type { Component, Snippet } from 'svelte';
-
 import { ChevronDown } from '@lucide/svelte';
+import type { Component, Snippet } from 'svelte';
 
 import * as Collapsible from '$lib/components/ui/collapsible';
 

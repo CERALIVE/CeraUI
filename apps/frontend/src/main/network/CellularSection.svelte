@@ -91,13 +91,17 @@ import {
 	SignalMedium,
 	SignalZero,
 } from '@lucide/svelte';
-
-import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
+import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import NoSimBadge from '$lib/components/custom/NoSimBadge.svelte';
 import { Button } from '$lib/components/ui/button';
 import { DiagnosticsBlock } from '$lib/modem/sections';
 import { cn } from '$lib/utils';
+import {
+	detailFields,
+	diagnosticFields,
+	trafficFields,
+} from '../dialogs/router-dongle-fields';
 import type { ModemRowState, ModemRowTone, ModemSignalTier } from './cellular-row';
 import {
 	availabilityReasonKey,
@@ -125,11 +129,6 @@ import {
 	stateLabelKey,
 	stateTone,
 } from './cellular-row';
-import {
-	detailFields,
-	diagnosticFields,
-	trafficFields,
-} from '../dialogs/router-dongle-fields';
 import { openRouterAdminUi, routerAdminOpenReasonKey } from './router-admin-open';
 import type { RouterSignalReadout } from './router-signal';
 import {
@@ -461,48 +460,48 @@ async function openAdminUi(rowId: string): Promise<void> {
 			     a device to the bottom and an MM restart renumbers everything.
 			     See `cellular-row.ts` -> `modemRowSortKey`. -->
 			{#each orderedEntries as [id, modem] (id)}
-				{@const band = resolveClassBand(modem.device_class)}
-				{@const state = resolveRowState(modem, band)}
-				{@const tone = stateTone(state)}
-				{@const simless = isSimlessModem(modem)}
-				{@const primary = primaryLabel(modem, id)}
-				{@const detail = detailLine(modem, primary)}
-				{@const slot = slotBadgeLabel(modem, primary)}
-				{@const instrument = resolveSignalInstrument(modem)}
-				{@const signal = instrument.kind === 'device-stack' ? instrument.tier : undefined}
-				{@const reasonKey = availabilityReasonKey(modem.availability_reason)}
-				{@const entry = netif?.[modem.ifname]}
-				{@const bondBlockedKey = bondDisabledReasonKey(modem, band, state, Boolean(entry?.ip))}
-				{@const configBlockedKey = configureDisabledReasonKey(band, modem)}
-				{@const rowAction = resolveRowAction(modem, band)}
-				{@const roaming = isRoamingActive(modem)}
-				{@const carrier = carrierLabel(modem)}
-				{@const rejectionKey = registrationRejectionKey(modem)}
-				{@const notes = rowNoteKeys({
+				{const band = $derived(resolveClassBand(modem.device_class))}
+				{const state = $derived(resolveRowState(modem, band))}
+				{const tone = $derived(stateTone(state))}
+				{const simless = $derived(isSimlessModem(modem))}
+				{const primary = $derived(primaryLabel(modem, id))}
+				{const detail = $derived(detailLine(modem, primary))}
+				{const slot = $derived(slotBadgeLabel(modem, primary))}
+				{const instrument = $derived(resolveSignalInstrument(modem))}
+				{const signal = $derived(instrument.kind === 'device-stack' ? instrument.tier : undefined)}
+				{const reasonKey = $derived(availabilityReasonKey(modem.availability_reason))}
+				{const entry = $derived(netif?.[modem.ifname])}
+				{const bondBlockedKey = $derived(bondDisabledReasonKey(modem, band, state, Boolean(entry?.ip)))}
+				{const configBlockedKey = $derived(configureDisabledReasonKey(band, modem))}
+				{const rowAction = $derived(resolveRowAction(modem, band))}
+				{const roaming = $derived(isRoamingActive(modem))}
+				{const carrier = $derived(carrierLabel(modem))}
+				{const rejectionKey = $derived(registrationRejectionKey(modem))}
+				{const notes = $derived(rowNoteKeys({
 					rejection: rejectionKey,
 					availability: reasonKey,
 					bond: bondBlockedKey,
 					configure: configBlockedKey,
-				})}
+				}))}
 				<!-- A device this stack does not control is DIMMED, never hidden. The
 				     dimming lands on the identity text only — the note lines beneath
 				     it are the one thing that must stay fully legible. -->
-				{@const unavailable = configBlockedKey !== undefined}
-				{@const ifaceStale = staleInterfaces.has(modem.ifname) || isFullyStale}
-				{@const showStale = ifaceStale && state !== 'no-sim' && modem.status !== undefined}
-				{@const StateIcon = STATE_ICON[state]}
-				{@const stateHintKey = STATE_HINT[state]}
+				{const unavailable = $derived(configBlockedKey !== undefined)}
+				{const ifaceStale = $derived(staleInterfaces.has(modem.ifname) || isFullyStale)}
+				{const showStale = $derived(ifaceStale && state !== 'no-sim' && modem.status !== undefined)}
+				{const StateIcon = $derived(STATE_ICON[state])}
+				{const stateHintKey = $derived(STATE_HINT[state])}
 				<!-- Single-line summary: identity + honest bands left; controls right. -->
-				{@const admin = modem.router_admin}
-				{@const adminSegments = buildAdminSegments(modem)}
-				{@const routerSignal =
-					instrument.kind === 'device-admin' ? instrument.readout : undefined}
-				{@const routerSignalModel = admin?.signal}
-				{@const adminDetails = detailFields(admin)}
-				{@const adminDiagnostics = diagnosticFields(admin)}
-				{@const adminTraffic = trafficFields(admin)}
-				{@const detailsOpen = openDetails[id] === true}
-				{@const detailsId = `modem-details-${id}`}
+				{const admin = $derived(modem.router_admin)}
+				{const adminSegments = $derived(buildAdminSegments(modem))}
+				{const routerSignal =
+					$derived(instrument.kind === 'device-admin' ? instrument.readout : undefined)}
+				{const routerSignalModel = $derived(admin?.signal)}
+				{const adminDetails = $derived(detailFields(admin))}
+				{const adminDiagnostics = $derived(diagnosticFields(admin))}
+				{const adminTraffic = $derived(trafficFields(admin))}
+				{const detailsOpen = $derived(openDetails[id] === true)}
+				{const detailsId = $derived(`modem-details-${id}`)}
 				<div
 					class="px-4 py-2"
 					data-testid="modem-row"
@@ -711,7 +710,7 @@ async function openAdminUi(rowId: string): Promise<void> {
 					     right in one locale and wrong in the other nine. -->
 					<div class="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
 						{#if signal}
-							{@const SignalIcon = SIGNAL_ICON[signal]}
+							{const SignalIcon = $derived(SIGNAL_ICON[signal])}
 							<!-- Qualitative tier with a word behind it — no digits, no
 							     `data-live-value`, so it duplicates no BondedLinks number.
 							     IT CARRIES THE ROUTER CAPSULE'S BOX METRICS, WITH THE FRAME
@@ -753,8 +752,8 @@ async function openAdminUi(rowId: string): Promise<void> {
 						     `resolveSignalInstrument` answers with exactly one of them, and
 						     both directions stay asserted by test. -->
 						{#if routerSignal && !simless}
-							{@const RouterSignalIcon = routerSignalIcon(routerSignal)}
-							{@const stateLabel = t(routerSignalStateKey(routerSignal))}
+							{const RouterSignalIcon = $derived(routerSignalIcon(routerSignal))}
+							{const stateLabel = $derived(t(routerSignalStateKey(routerSignal)))}
 							<span
 								class={cn(
 									'inline-flex items-center gap-1 rounded-md border border-dashed px-1.5 py-1 leading-none',
@@ -899,7 +898,7 @@ async function openAdminUi(rowId: string): Promise<void> {
 							     not a dash: a dash reads as "the radio reported nothing" when
 							     the truth is that the API has no such field at all. -->
 							{#if routerSignalModel}
-								{@const metricRows = routerSignalMetricRows(routerSignalModel)}
+								{const metricRows = $derived(routerSignalMetricRows(routerSignalModel))}
 								<div
 									class="space-y-1"
 									data-testid="router-signal-detail"

@@ -35,8 +35,9 @@ const label = (nav: NavElements[string]) =>
 	class="bg-sidebar flex items-stretch justify-around border-t"
 >
 	{#each Object.entries(navElements) as [identifier, navigation] (identifier)}
-		{@const isActive = activeKey === identifier}
+		{const isActive = $derived(activeKey === identifier)}
 		<button
+			type="button"
 			id={`mobile-nav-tab-${identifier}`}
 			class={cn(
 				'group relative flex min-h-[56px] flex-1 cursor-pointer flex-col items-center justify-center gap-1 px-1 py-2 text-[0.7rem] font-medium transition-colors',
@@ -56,7 +57,7 @@ const label = (nav: NavElements[string]) =>
 				></span>
 			{/if}
 			{#if navigation.icon}
-				{@const Icon = navigation.icon}
+				{const Icon = $derived(navigation.icon)}
 				<Icon class="h-5 w-5" aria-hidden="true" />
 			{/if}
 			<span class="leading-none">{label(navigation)}</span>

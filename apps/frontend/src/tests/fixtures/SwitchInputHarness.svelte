@@ -16,12 +16,12 @@ import { SWITCH_INPUT_ERRORS } from '@ceraui/rpc/schemas';
 import { toast } from 'svelte-sonner';
 
 import InputPicker from '$lib/components/custom/InputPicker.svelte';
+import { rpc } from '$lib/rpc';
 import {
 	confirmOperation,
 	failOperation,
 	osCommand,
 } from '$lib/rpc/async-operation.svelte';
-import { rpc } from '$lib/rpc';
 import { canLiveSwitchInput } from '$lib/streaming/liveAudioSwitch';
 
 let {

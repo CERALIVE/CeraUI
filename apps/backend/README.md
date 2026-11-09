@@ -131,7 +131,7 @@ bun run check
 bun run test
 ```
 
-The package's `test` script runs `bun test --parallel` on the pinned Bun 1.4.3.
+The package's `test` script runs `bun test --parallel` on the pinned Bun 1.4.4.
 Parallel execution was adopted on 1.4.2 after five smoke runs and twenty consecutive
 clean full-suite runs. Files run
 in isolated worker globals across worker processes, but filesystem paths are still shared. Tests that
@@ -143,9 +143,10 @@ inherited marker is never removed. Tests of retained/unknown sentinel evidence
 still create explicit fixtures. The USB-tether source fence scans its own
 temporary snapshot of tracked and new non-ignored source, excluding runtime
 markers; missing source remains an error. The modem-transition fixture controls
-its polling clock. Real add-on/GPG and source-routing Git checks use an async
-test-command helper to avoid Bun 1.4.2's GC-sensitive synchronous-loop defect
-(oven-sh/bun#40078), retaining real child execution and all existing assertions.
+its polling clock. Bun's GC-sensitive synchronous-loop defect (oven-sh/bun#40078)
+is fixed upstream in 1.4.3. Real add-on/GPG and source-routing Git checks retain
+the async test-command helper because it does not block the event loop, with
+real child execution and all existing assertions.
 See `AGENTS.md` → Backend per-file test isolation for these contracts.
 
 Run the complete suite from a full Git checkout. The historical source-routing
@@ -869,8 +870,9 @@ only actual child exit plus ESRCH from the negative owned PGID settles that boun
 Fixed root-only spawning retains child-only timeout signaling and partial output.
 Only the runner's own pre-spawn checks/preparation/abort or Bun Error tags
 `socketpair`/`fcntl`/`posix_spawn` prove no dispatch and release without probes/retries,
-preserving the original error. Bun 1.4.2 can exec, fail `pidfd_open`, block/reap in
-`wait4`, then throw without a handle. This, absent/unknown tags and non-Error throws
+preserving the original error. Audited at bun-v1.4.2..v1.4.4; classification unchanged.
+1.4.3 added kill-then-reap on `pidfd_open` failure (oven-sh/bun#40080, f86be9d).
+Exec can still precede that throw without a handle. This, absent/unknown tags and non-Error throws
 recover through the launcher's pre-exec `$$` file, never a census. The checked launcher
 execs `/usr/bin/bash -c` with a builtin write-before-exec contract; write failure exits125
 before helper effects. One UUID file is exclusively precreated in root-owned0700
@@ -882,7 +884,7 @@ absence gets cancellable100/200/400ms re-reads, not independent death proof. Rea
 any runtime/options change. Cleanup follows retirement/no dispatch, best-effort and
 inode-checked. First-use sweep has no current active files; crash residue is not adopted,
 UUID-bound and reboot-cleared. First-observation cancellation schedules no late retry.
-The tag proof is specific to the fixed Bun 1.4.2 options, not a generic errno whitelist.
+The tag proof is specific to those audited fixed options, not a generic errno whitelist.
 Zombies can over-hold; session-changing descendants and delegated daemon/manager
 work are outside group containment. Generic outer census and direct unit evidence
 remain separate from normal group authority. Restart clears process-local holds, not proof of external completion;

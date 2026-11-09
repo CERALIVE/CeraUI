@@ -12,8 +12,8 @@ const initialLocale = getLocale();
 let selectedLocale: string = $state(initialLocale.code);
 let isOpen = $state(false);
 
-const localeName = $derived.by(() => LOCALES.find((l) => l.code === selectedLocale)?.name ?? 'English');
-const localeFlag = $derived.by(() => LOCALES.find((l) => l.code === selectedLocale)?.flag);
+const localeName = $derived(LOCALES.find((l) => l.code === selectedLocale)?.name ?? 'English');
+const localeFlag = $derived(LOCALES.find((l) => l.code === selectedLocale)?.flag);
 
 const handleLocaleChange = (value: string) => {
 	// The Paraglide store owns the switch: it applies the runtime locale, drives
@@ -68,7 +68,7 @@ const handleLocaleChange = (value: string) => {
 
 		<div class="max-h-[min(60vh,22rem)] overflow-y-auto pe-0.5">
 			{#each LOCALES as localeOption}
-				{@const isActive = selectedLocale === localeOption.code}
+				{const isActive = $derived(selectedLocale === localeOption.code)}
 				<DropdownMenu.Item
 					class={cn(
 						'mt-0.5 flex min-h-11 items-center gap-3 rounded-lg px-2.5 py-2 text-sm transition-colors first:mt-0',

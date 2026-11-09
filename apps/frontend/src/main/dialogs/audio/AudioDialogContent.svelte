@@ -120,7 +120,7 @@ const backendDisabledReason = $derived(
 				<Select.Trigger id="audioCodec" class="w-full" title={codecDisabledReason}>{codecTriggerLabel}</Select.Trigger>
 				<Select.Content><Select.Group>
 					{#each Object.entries(codecOptions ?? {}) as [codec, meta] (codec)}
-						{@const allowed = isCodecAllowed(codec)}
+						{const allowed = $derived(isCodecAllowed(codec))}
 						<Select.Item disabled={!allowed} label={meta.name} title={allowed ? undefined : m["settings.audioCodecUnsupportedTransport"]()} value={codec}></Select.Item>
 					{/each}
 				</Select.Group></Select.Content>
@@ -161,7 +161,7 @@ const backendDisabledReason = $derived(
 					role="radiogroup"
 				>
 					{#each backendView.options as option (option.backend)}
-						{@const locked = backendView.mode === 'single' || backendPending !== undefined}
+						{const locked = $derived(backendView.mode === 'single' || backendPending !== undefined)}
 						<button
 							aria-checked={option.selected}
 							class="min-h-11 rounded-md border px-3 py-1 text-xs font-medium transition-colors {option.selected

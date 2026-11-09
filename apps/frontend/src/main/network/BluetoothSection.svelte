@@ -335,8 +335,8 @@ async function openLiveSources(): Promise<void> {
 					data-testid="bluetooth-devices"
 				>
 					{#each devices as device (device.path)}
-						{@const busy = deviceBusy(device.path)}
-						{@const refusal = deviceRefusals[device.path]}
+						{const busy = $derived(deviceBusy(device.path))}
+						{const refusal = $derived(deviceRefusals[device.path])}
 						<li class="px-3 py-3" data-address={device.address} data-testid="bluetooth-device">
 							<div class="flex items-start gap-3">
 								{#if device.deviceClass === 'audio-input'}

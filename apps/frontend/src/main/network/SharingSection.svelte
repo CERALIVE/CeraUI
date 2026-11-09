@@ -36,8 +36,8 @@ import type {
 	NetifMessage,
 	SharingDiag,
 	UplinkShaperStatus,
-	UplinksMessage,
 	UplinkSteeringStatus,
+	UplinksMessage,
 	WifiInterface,
 } from '@ceraui/rpc/schemas';
 import { ChevronRight, CircleCheck, Info, Share2, TriangleAlert } from '@lucide/svelte';
@@ -161,7 +161,7 @@ const SUMMARY =
 		</h3>
 		<ul class="flex flex-col gap-1.5" data-testid="sharing-uplinks">
 			{#each view.rows as row (row.iface)}
-				{@const color = `var(--link-${row.linkIndex})`}
+				{const color = $derived(`var(--link-${row.linkIndex})`)}
 				<li
 					class={cn('rounded-lg border', row.stale && 'opacity-50')}
 					data-testid="sharing-uplink-{row.iface}"

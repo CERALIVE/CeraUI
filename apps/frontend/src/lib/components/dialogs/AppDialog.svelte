@@ -55,9 +55,9 @@
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
-import { Dialog as DialogPrimitive } from 'bits-ui';
 import Loader2 from '@lucide/svelte/icons/loader-2';
 import XIcon from '@lucide/svelte/icons/x';
+import { Dialog as DialogPrimitive } from 'bits-ui';
 import type { Component, Snippet } from 'svelte';
 import { MediaQuery } from 'svelte/reactivity';
 

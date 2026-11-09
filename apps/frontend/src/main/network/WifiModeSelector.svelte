@@ -152,7 +152,7 @@ function request(mode: WifiAdapterMode) {
 		role="radiogroup"
 	>
 		{#each view.options as option (option.mode)}
-			{@const blocked = !option.available || view.pending || lockedReason !== undefined}
+			{const blocked = $derived(!option.available || view.pending || lockedReason !== undefined)}
 			<button
 				aria-checked={option.selected}
 				aria-disabled={option.available ? undefined : 'true'}
@@ -179,7 +179,7 @@ function request(mode: WifiAdapterMode) {
 				{:else if !option.available}
 					<Ban aria-hidden="true" class="size-3 shrink-0" />
 				{:else if option.selected}
-					{@const Glyph = GLYPH[option.mode]}
+					{const Glyph = $derived(GLYPH[option.mode])}
 					<Glyph aria-hidden="true" class="size-3 shrink-0" />
 				{/if}
 				{resolveMessageKey(wifiModeLabelKey(option.mode))}
@@ -232,7 +232,7 @@ function request(mode: WifiAdapterMode) {
 	{/if}
 
 	{#if gated}
-		{@const gateConsequence = deriveWifiModeConsequence(view.displayMode, gated, context)}
+		{const gateConsequence = $derived(deriveWifiModeConsequence(view.displayMode, gated, context))}
 		<HotspotActivationConfirm
 			detail={gateConsequence
 				? resolveMessageKey(wifiModeConsequenceKeys(gateConsequence).body)
@@ -248,7 +248,7 @@ function request(mode: WifiAdapterMode) {
 	{/if}
 
 	{#if armed && armedConsequence}
-		{@const keys = wifiModeConsequenceKeys(armedConsequence)}
+		{const keys = $derived(wifiModeConsequenceKeys(armedConsequence))}
 		<div
 			class="border-status-warning/30 bg-status-warning/10 space-y-2 rounded-lg border px-2.5 py-2"
 			data-consequence={armedConsequence}
