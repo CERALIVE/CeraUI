@@ -40,7 +40,7 @@ import {
 	osCommand,
 } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
-import { getStreamingAttemptGeneration, supersedeStartingOptimism, type StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
+import { getStreamingAttemptGeneration, type StreamingOptimismState, supersedeStartingOptimism } from '$lib/rpc/streaming-optimism.svelte';
 import {
 	showUnconfirmedStreamStop,
 	stopConfirmedByDevice,

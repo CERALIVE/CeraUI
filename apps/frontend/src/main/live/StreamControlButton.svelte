@@ -1,6 +1,6 @@
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
-import { Play, Square, Loader2 } from '@lucide/svelte';
+import { Loader2, Play, Square } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';

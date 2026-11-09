@@ -39,7 +39,7 @@ const { configRows, isStreaming }: Props = $props();
 	</Card.Header>
 	<Card.Content class="divide-border divide-y py-0">
 		{#each configRows as row (row.label)}
-			{@const locked = isSectionLocked(row.section, isStreaming)}
+			{const locked = $derived(isSectionLocked(row.section, isStreaming))}
 			<div class="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
 				<div class="flex min-w-0 items-start gap-3">
 					<row.icon

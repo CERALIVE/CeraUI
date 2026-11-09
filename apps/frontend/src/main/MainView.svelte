@@ -54,6 +54,7 @@ const isWideDesktop = new MediaQuery(WIDE_DESKTOP_QUERY);
 		<header class="bg-background sticky top-0 z-40 w-full border-b">
 			<div class="container flex h-14 max-w-7xl items-center gap-4">
 				<button
+					type="button"
 					class="hover:bg-accent focus-visible:ring-ring/50 flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors focus-visible:ring-2 focus-visible:outline-none"
 					aria-label={siteName}
 					onclick={goHome}

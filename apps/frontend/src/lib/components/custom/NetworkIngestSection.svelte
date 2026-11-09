@@ -94,7 +94,7 @@ interface IngestRow {
 // addressless) is SHARED with SourceSection via `deriveNetworkIngestRows` (Task 12)
 // so both surfaces read the SAME truth — routed through pipelineAvailability, never
 // re-derived inline. This component maps that structural row onto its own i18n copy.
-const rows = $derived.by<IngestRow[]>(() =>
+const rows = $derived<IngestRow[]>(
 	deriveNetworkIngestRows({
 		networkIngest,
 		pipelines,

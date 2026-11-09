@@ -32,11 +32,12 @@ import { untrack } from 'svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import { networkConstraints } from '$lib/components/streaming/ValidationAdapter';
 import { getWifiUUID, networkRename } from '$lib/helpers/NetworkHelper';
-import { isSecured, wifiRowBlock } from '$lib/helpers/wifi-selector';
 import {
 	deriveWifiDisconnectOutcome,
 	deriveWifiForgetOutcome,
 } from '$lib/helpers/wifi-outcomes';
+import { isSecured, wifiRowBlock } from '$lib/helpers/wifi-selector';
+import { rpc } from '$lib/rpc';
 import {
 	confirmOperation,
 	getOperationPhase,
@@ -44,14 +45,13 @@ import {
 	isOperationPending,
 	osCommand,
 } from '$lib/rpc/async-operation.svelte';
-import { rpc } from '$lib/rpc';
 import { getWifi } from '$lib/rpc/subscriptions.svelte';
-import { hasScanGenerationAdvanced } from '$lib/rpc/wifi-scan-generation';
 import {
 	deriveWifiConnectIdentityOutcome,
 	mintWifiConnectCorrelationId,
 	type PendingWifiConnect,
 } from '$lib/rpc/wifi-connect-identity';
+import { hasScanGenerationAdvanced } from '$lib/rpc/wifi-scan-generation';
 
 import WifiNetworkList from './WifiNetworkList.svelte';
 

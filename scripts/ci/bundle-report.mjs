@@ -261,11 +261,10 @@ function measureSpa(dist) {
 	};
 }
 
-// Strips rolldown's `-<hash>` before the extension so a chunk matches its
-// baseline. The class excludes `-` on purpose: a hash never contains one, and
-// allowing it swallows the name too (`toast-host-duUb1s03.js` -> `toast.js`).
+// Rolldown's default hash has eight base64url characters, including "-" and "_".
+// Fixing the length preserves hyphenated names while accepting hyphens in hashes.
 export function federationStem(filename) {
-	return filename.replace(/-[A-Za-z0-9_]{8,}(?=\.[a-z]+$)/, '');
+	return filename.replace(/-[A-Za-z0-9_-]{8}(?=\.[a-z]+$)/, '');
 }
 
 function measureFederation(dir) {

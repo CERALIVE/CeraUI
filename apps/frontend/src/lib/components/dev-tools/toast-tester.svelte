@@ -250,7 +250,7 @@ function dismissAllToasts() {
 					onclick={toastType.action}
 					variant="outline"
 				>
-						{@const IconComponent = toastType.icon}
+						{const IconComponent = $derived(toastType.icon)}
 						<IconComponent
 							class={`mr-2 h-4 w-4 ${toastType.color} ${toastType.type === 'loading' ? 'animate-spin' : ''}`}
 						/>

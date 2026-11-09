@@ -74,8 +74,8 @@ const systemResolvedLabel = $derived(
 		</div>
 
 		{#each themes as themeOption (themeOption.value)}
-			{@const Icon = themeOption.icon}
-			{@const isActive = theme === themeOption.value}
+			{const Icon = $derived(themeOption.icon)}
+			{const isActive = $derived(theme === themeOption.value)}
 			<DropdownMenu.Item
 				class={cn(
 					'mt-0.5 flex min-h-11 items-center gap-3 rounded-lg px-2.5 py-2 text-sm transition-colors first:mt-0',

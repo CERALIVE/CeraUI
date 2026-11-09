@@ -29,17 +29,17 @@ import InlineSpinner from '$lib/components/custom/InlineSpinner.svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import { Button } from '$lib/components/ui/button';
 import { getWifiUUID } from '$lib/helpers/NetworkHelper';
-import { getOperationPhase, isOperationPending } from '$lib/rpc/async-operation.svelte';
-import {
-	isPendingConnectRow,
-	type PendingWifiConnect,
-} from '$lib/rpc/wifi-connect-identity';
 import {
 	frequencyBand,
 	isSecured,
 	signalTextClass,
 	wifiRowBlock,
 } from '$lib/helpers/wifi-selector';
+import { getOperationPhase, isOperationPending } from '$lib/rpc/async-operation.svelte';
+import {
+	isPendingConnectRow,
+	type PendingWifiConnect,
+} from '$lib/rpc/wifi-connect-identity';
 import { cn } from '$lib/utils';
 
 import WifiConnectForm from './WifiConnectForm.svelte';
@@ -201,21 +201,21 @@ const superseded = $derived(wifiScanResultsSuperseded(scanState));
 	<!-- Network list -->
 	<div class="divide-y rounded-lg border">
 		{#each networks as network (network.ssid)}
-			{@const uuid = getWifiUUID(network, iface?.saved ?? {})}
-			{@const opPending = isOperationPending(`wifi:${deviceId}`)}
-			{@const isConnectRow = isPendingConnectRow(connecting, { ssid: network.ssid, uuid })}
-			{@const isConnecting = isConnectRow && opPending}
-			{@const isConnectTimedOut =
-				isConnectRow && getOperationPhase(`wifi:${deviceId}`) === 'timed_out'}
-			{@const isDisconnecting = !!uuid && disconnecting === uuid}
-			{@const isForgetting = !!uuid && forgetting === uuid}
-			{@const osBusy = !!connecting || !!disconnecting || !!forgetting}
-			{@const expanded = pendingNew?.ssid === network.ssid}
-			{@const confirming = confirmForget === network.ssid}
+			{const uuid = $derived(getWifiUUID(network, iface?.saved ?? {}))}
+			{const opPending = $derived(isOperationPending(`wifi:${deviceId}`))}
+			{const isConnectRow = $derived(isPendingConnectRow(connecting, { ssid: network.ssid, uuid }))}
+			{const isConnecting = $derived(isConnectRow && opPending)}
+			{const isConnectTimedOut =
+				$derived(isConnectRow && getOperationPhase(`wifi:${deviceId}`) === 'timed_out')}
+			{const isDisconnecting = $derived(!!uuid && disconnecting === uuid)}
+			{const isForgetting = $derived(!!uuid && forgetting === uuid)}
+			{const osBusy = $derived(!!connecting || !!disconnecting || !!forgetting)}
+			{const expanded = $derived(pendingNew?.ssid === network.ssid)}
+			{const confirming = $derived(confirmForget === network.ssid)}
 			<!-- CT-2, not CT-1: the network is genuinely in the air, so the row stays
 			     visible and disabled-with-reason rather than being hidden. -->
-			{@const block = wifiRowBlock(network, iface?.capabilities)}
-			{@const blockReason = block ? resolveMessageKey(block.bodyKey) : undefined}
+			{const block = $derived(wifiRowBlock(network, iface?.capabilities))}
+			{const blockReason = $derived(block ? resolveMessageKey(block.bodyKey) : undefined)}
 			<div
 				class={cn(
 					'flex flex-col gap-3 px-3 py-3 transition-colors',

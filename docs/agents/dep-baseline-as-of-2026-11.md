@@ -3,6 +3,14 @@
 The dependency refresh preserves these versions under its no-regression condition.
 Manifest range styles remain unchanged except for the required exact Svelte hold.
 
+Biome: exact `2.6.6` via `@ceralive/biome-config` `^2026.11.0`
+(lock resolves `2026.11.0`). The frontend explicitly extends the registry canon
+in `apps/frontend/biome.jsonc` so its Svelte parser and rules actually run.
+Staged adoption leaves 74 existing findings at warning severity, alongside nine
+newly exposed `noGlobalIsFinite` warnings and the original 33 warnings.
+Biome reports 0 errors, 116 warnings and 3 infos; exact debt and promotion
+criteria are recorded in [conventions.md](conventions.md).
+
 | Package | Retained version | Reason |
 | --- | --- | --- |
 | `svelte` (frontend and i18n) | exact `5.57.0` | `sveltejs/svelte#18919` remains open on November 8, 2026; latest `5.57.3` includes the reported reactivity regression. |

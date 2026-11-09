@@ -2,9 +2,8 @@
 import { m } from '@ceraui/i18n/svelte';
 import type { Modem, NetifEntry, NetifMessage, WifiInterface, WifiStatus } from '@ceraui/rpc/schemas';
 import { Network as NetworkIcon } from '@lucide/svelte';
-
+import { LazyDialog, lazyDialog } from '$lib/components/dialogs';
 import { Skeleton } from '$lib/components/ui/skeleton';
-import { isApRadio } from '$lib/helpers/wifi-mode-outcome';
 import { hotspotIsActive } from '$lib/rpc/os-toggle-predicates';
 import {
 	getBluetooth,
@@ -16,25 +15,23 @@ import {
 	getNetif,
 	getSharingDiag,
 	getStatus,
-	getUplinks,
 	getUplinkShaper,
 	getUplinkSteering,
+	getUplinks,
 	getWifi,
 } from '$lib/rpc/subscriptions.svelte';
 import { getHudState } from '$lib/stores/hud.svelte';
 import type { LinkSignal } from '$lib/types/hud';
 
-import { LazyDialog, lazyDialog } from '$lib/components/dialogs';
-
 import BluetoothSection from './network/BluetoothSection.svelte';
 import BondedLinksSection from './network/BondedLinksSection.svelte';
-import { activeSimLock, isBlockingSimLock } from './network/cellular-row';
 import CellularSection from './network/CellularSection.svelte';
 import CollisionBands from './network/CollisionBands.svelte';
+import { activeSimLock, isBlockingSimLock } from './network/cellular-row';
 import EthernetSection from './network/EthernetSection.svelte';
 import HotspotSection from './network/HotspotSection.svelte';
-import { isWiredSectionEntry, modemClaimedIfnames } from './network/section-assignment';
 import SharingSection from './network/SharingSection.svelte';
+import { isWiredSectionEntry, modemClaimedIfnames } from './network/section-assignment';
 import UnclaimedAdaptersBand from './network/UnclaimedAdaptersBand.svelte';
 import WifiSection from './network/WifiSection.svelte';
 

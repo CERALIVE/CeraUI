@@ -4,13 +4,13 @@ import { m } from '@ceraui/i18n/svelte';
 import { Switch } from '$lib/components/ui/switch';
 import * as Tooltip from '$lib/components/ui/tooltip';
 import { isOperationPending, osCommand } from '$lib/rpc/async-operation.svelte';
+import { rpc } from '$lib/rpc/client';
 import {
 	isPending,
 	markPending,
 	onRpcAppliedReactive,
 	onRpcResolved,
 } from '$lib/rpc/dirty-registry.svelte';
-import { rpc } from '$lib/rpc/client';
 import { shouldReconcileOnReconnect } from '$lib/rpc/reconcile-inflight';
 import { getConnectionState } from '$lib/rpc/subscriptions.svelte';
 import { cn } from '$lib/utils';

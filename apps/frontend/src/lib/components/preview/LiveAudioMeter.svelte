@@ -40,10 +40,10 @@
   nothing an operator or a source positively asserted is ever delayed.
 -->
 <script lang="ts">
-import { untrack } from 'svelte';
+import { resolveMessageKey } from '@ceraui/i18n/svelte';
 
 import type { AudioLevelMessage } from '@ceraui/rpc/schemas';
-
+import { untrack } from 'svelte';
 import AudioLevelMeter from '$lib/components/preview/AudioLevelMeter.svelte';
 import {
 	AUDIO_METER_STALE_MS,
@@ -57,7 +57,6 @@ import {
 	trackMeterFreshness,
 	trackMeterSelection,
 } from '$lib/components/preview/audio-meter-liveness';
-import { resolveMessageKey } from '@ceraui/i18n/svelte';
 
 import { getAudioLevel, getConfig, getStatus } from '$lib/rpc/subscriptions.svelte';
 import { meteredAudioLabel, resolveAudioSourceList } from '$lib/streaming/sourceSummary';

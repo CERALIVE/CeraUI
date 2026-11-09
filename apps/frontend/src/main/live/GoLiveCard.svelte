@@ -302,7 +302,7 @@ function formatBitrate(kbps: number | undefined): string {
 			<!-- Readiness gates — one row per gate, disabled-with-reason, never hidden. -->
 			<div class="divide-border divide-y">
 				{#each GATE_ORDER as key (key)}
-					{@const gate = readiness.gates[key]}
+					{const gate = $derived(readiness.gates[key])}
 					<div
 						class="flex items-center justify-between gap-3 py-2.5 first:pt-0"
 						data-testid="go-live-gate"
@@ -371,7 +371,7 @@ function formatBitrate(kbps: number | undefined): string {
 			<!-- Migrated config rows — same testids + lock semantics, denser rhythm. -->
 			<div class="divide-border divide-y">
 				{#each configRows as row (row.label)}
-					{@const locked = isSectionLocked(row.section, isStreaming)}
+					{const locked = $derived(isSectionLocked(row.section, isStreaming))}
 					<div
 						class="flex items-center justify-between gap-4 py-2.5 first:pt-0"
 						data-section={row.section}

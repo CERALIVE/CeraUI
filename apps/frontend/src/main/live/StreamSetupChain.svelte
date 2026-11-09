@@ -276,10 +276,10 @@ const networkSummary = $derived(
 	chip: 'bitrate' | 'traffic-light' | undefined,
 	onFix: (() => void) | undefined,
 )}
-	{@const locked = isSectionLocked(row.section, isStreaming)}
+	{const locked = $derived(isSectionLocked(row.section, isStreaming))}
 	<!-- C3: Encoder Edit is disabled-with-reason while no source resolves (encoder
 	     settings key off the active source) — the Fix affordance stays the path. -->
-	{@const editDisabled = key === 'encoder' && !effectiveSourceId}
+	{const editDisabled = $derived(key === 'encoder' && !effectiveSourceId)}
 	<div
 		class="flex items-center justify-between gap-4 py-2.5 first:pt-0"
 		data-testid="setup-row"

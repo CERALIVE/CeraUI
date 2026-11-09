@@ -31,6 +31,10 @@ minification; its message imports and locale-runtime shim resolve together throu
 and the SPA's direct imports and lazy message-module output are unchanged.
 `bun scripts/ci/bundle-report.mjs` checks both built outputs without widened
 ceilings; the built federation harness also checks full-catalog fixture parity.
+Shared chunks use Rolldown's default eight-character base64url hash. The report
+strips exactly that suffix, including hyphens and underscores inside the hash,
+while preserving hyphenated asset names. The federation asset tests exercise
+this matching through the report CLI with isolated build artifacts.
 The wrapper uses its bundled Svelte
 runtime to mount and unmount the dialog, so the host never mounts a component
 compiled against a different Svelte runtime. `host` is the typed adapter in

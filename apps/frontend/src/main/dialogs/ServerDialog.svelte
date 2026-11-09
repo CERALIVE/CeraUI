@@ -27,22 +27,22 @@
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
-import { Server } from '@lucide/svelte';
 import type { ConfigMessage, RelayProtocol } from '@ceraui/rpc/schemas';
+import { Server } from '@lucide/svelte';
 import { untrack } from 'svelte';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
+import type { Validation } from '$lib/components/streaming/relay-validation';
+import { parsePort, streamingConstraints } from '$lib/components/streaming/ValidationAdapter';
 import type { FederationHostAdapter } from '$lib/federation/host-contract';
 import {
 	buildRelayValidationInput,
 	canSaveServer,
 	filterProviderEntries,
 	relayEndpoint,
-	serverEndpointErrors,
 	type ServerDraft,
+	serverEndpointErrors,
 } from '$lib/federation/server-model';
-import { parsePort, streamingConstraints } from '$lib/components/streaming/ValidationAdapter';
-import type { Validation } from '$lib/components/streaming/relay-validation';
 import {
 	getCapabilities,
 	getConfig,
@@ -51,16 +51,16 @@ import {
 	getRelays,
 	getSelectedIngestEndpoint,
 } from '$lib/rpc/subscriptions.svelte';
+import { fingerprintForValidation } from '$lib/streaming/destination-validation.svelte';
 import {
-	type ReceiverDestinationChoice,
 	autoSelectIngestSlot,
 	autoSelectManagedRelay,
 	choiceToDestination,
 	deriveDestinationChoice,
 	deriveLatencyRange,
 	isManagedChoice,
+	type ReceiverDestinationChoice,
 } from '$lib/streaming/receiver-experience';
-import { fingerprintForValidation } from '$lib/streaming/destination-validation.svelte';
 import CloudRemoteDialog from './CloudRemoteDialog.svelte';
 import ServerDialogContent from './server/ServerDialogContent.svelte';
 import {

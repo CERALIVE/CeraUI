@@ -4,4 +4,4 @@ let { onStart }: {
 } = $props();
 </script>
 
-<button data-testid="start-stream" onclick={() => void onStart?.()}>Start</button>
+<button type="button" data-testid="start-stream" onclick={() => void onStart?.()}>Start</button>

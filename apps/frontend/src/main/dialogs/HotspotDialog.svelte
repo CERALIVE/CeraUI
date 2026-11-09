@@ -62,6 +62,7 @@ import {
 import { rpc } from '$lib/rpc/client';
 import { hotspotIsActive, hotspotToggleConfirmed } from '$lib/rpc/os-toggle-predicates';
 import { getWifiAdapterModeEntry } from '$lib/rpc/wifi-adapter-modes.svelte';
+import { cn } from '$lib/utils';
 import HotspotActivationConfirm from '$main/network/HotspotActivationConfirm.svelte';
 import WifiModeBadge from '$main/network/WifiModeBadge.svelte';
 import WifiModeSelector from '$main/network/WifiModeSelector.svelte';
@@ -70,7 +71,6 @@ import {
 	wifiModeTarget,
 } from '$main/network/wifi-adapter-mode-view';
 import { wifiModeOpKey } from '$main/network/wifi-station-lock';
-import { cn } from '$lib/utils';
 
 import {
 	deriveHotspotRadioTruth,

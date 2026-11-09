@@ -54,13 +54,13 @@ import type {
 } from '@ceraui/rpc/schemas';
 import { KeyRound, ListChecks, Loader2, ShieldAlert, ShieldX } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
-
-import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import MutationOutcomeBand from '$lib/components/custom/MutationOutcomeBand.svelte';
+import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import { networkConstraints } from '$lib/components/streaming/ValidationAdapter';
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
+import { type ModemWriteBand, modemWriteBand } from '$lib/modem/operator-labels';
 import { rpc } from '$lib/rpc';
 import { isOperationPending, osCommand } from '$lib/rpc/async-operation.svelte';
 import {
@@ -68,7 +68,6 @@ import {
 	classifySimPinResult,
 	classifySimPukResult,
 } from '$lib/rpc/sim-unlock-outcome';
-import { type ModemWriteBand, modemWriteBand } from '$lib/modem/operator-labels';
 import { cn } from '$lib/utils';
 
 interface Props {

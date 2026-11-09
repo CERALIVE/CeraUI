@@ -13,11 +13,10 @@ import {
 } from '@ceraui/rpc/schemas';
 import { Cpu, Loader2, Server } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
-
+import { LazyDialog, LazyDialogFallback, lazyDialog } from '$lib/components/dialogs';
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
 import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
-import { NotSentError } from '$lib/rpc/rpc-error';
 import {
 	confirmOperation,
 	failOperation,
@@ -38,12 +37,54 @@ import {
 	reconcileSwitchingInput,
 	resolveAppliedBitrate,
 } from '$lib/rpc/live-apply-reconcile';
+import { NotSentError } from '$lib/rpc/rpc-error';
+import {
+	getStopStuckBannerVisible,
+	getStreamingAttemptGeneration,
+	getStreamingOptimismState,
+	getStreamingStartFailure,
+	getStreamingStopReason,
+	reconcileStreamingOptimism,
+	retryStopStreaming,
+	revertStreamingOptimism,
+	revertStreamingOptimismFailure,
+	startStreamingOptimism,
+	stopStreamingOptimism,
+	supersedeStartingOptimism,
+} from '$lib/rpc/streaming-optimism.svelte';
+import {
+	getActiveInput,
+	getCapabilities,
+	getConfig,
+	getConfigChange,
+	getConnectionState,
+	getIsConnected,
+	getIsStreaming,
+	getLinkTelemetry,
+	getManagedIngestAccounts,
+	getNetif,
+	getRelays,
+	getSensors,
+	getSources,
+	getStatus,
+} from '$lib/rpc/subscriptions.svelte';
+import { getEncoderLoad } from '$lib/stores/device-health-history.svelte';
+import { deriveBitrateReading, deriveMeasuredBitrateKbps } from '$lib/stores/hud/derive';
+import { getStreamHealthRollup, isVideoSignalLost } from '$lib/stores/stream-health.svelte';
+import { isSelectedAudioLost } from '$lib/streaming/audioLost';
+import type { MatchAction } from '$lib/streaming/capture-failover';
+import { configChangeReport } from '$lib/streaming/configChangeCopy';
+import { isConfigChangeInFlight } from '$lib/streaming/configChangePhase';
 import {
 	fingerprintForValidation,
 	getDestinationValidated,
 	recordValidation,
 	resolveValidationEndpoint,
 } from '$lib/streaming/destination-validation.svelte';
+import { reconcileStartSource } from '$lib/streaming/effective-source';
+import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
+import { encoderSaveErrorMessage } from '$lib/streaming/encoderSaveError';
+import { canLiveSwitchInput, isAudioInputId } from '$lib/streaming/liveAudioSwitch';
 import {
 	buildServerSummary,
 	type Destination,
@@ -60,51 +101,9 @@ import {
 	resolveAudioSourceList,
 	resolvedAudioLabel,
 } from '$lib/streaming/sourceSummary';
-import { LazyDialog, LazyDialogFallback, lazyDialog } from '$lib/components/dialogs';
-import {
-	getActiveInput,
-	getCapabilities,
-	getConfigChange,
-	getConfig,
-	getConnectionState,
-	getIsConnected,
-	getIsStreaming,
-	getLinkTelemetry,
-	getManagedIngestAccounts,
-	getNetif,
-	getRelays,
-	getSensors,
-	getSources,
-	getStatus,
-} from '$lib/rpc/subscriptions.svelte';
-import {
-	getStopStuckBannerVisible,
-	getStreamingAttemptGeneration,
-	getStreamingOptimismState,
-	getStreamingStartFailure,
-	getStreamingStopReason,
-	retryStopStreaming,
-	startStreamingOptimism,
-	stopStreamingOptimism,
-	reconcileStreamingOptimism,
-	revertStreamingOptimism,
-	revertStreamingOptimismFailure,
-	supersedeStartingOptimism,
-} from '$lib/rpc/streaming-optimism.svelte';
-import { getEncoderLoad } from '$lib/stores/device-health-history.svelte';
-import { deriveBitrateReading, deriveMeasuredBitrateKbps } from '$lib/stores/hud/derive';
-import { getStreamHealthRollup, isVideoSignalLost } from '$lib/stores/stream-health.svelte';
-import { isSelectedAudioLost } from '$lib/streaming/audioLost';
-import type { MatchAction } from '$lib/streaming/capture-failover';
-import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
-import { isConfigChangeInFlight } from '$lib/streaming/configChangePhase';
-import { reconcileStartSource } from '$lib/streaming/effective-source';
-import { configChangeReport } from '$lib/streaming/configChangeCopy';
-import { encoderSaveErrorMessage } from '$lib/streaming/encoderSaveError';
-import { canLiveSwitchInput, isAudioInputId } from '$lib/streaming/liveAudioSwitch';
 import { pipelinesFromSources } from '$lib/streaming/sources-view-model';
-import { buildStartConfig } from '$lib/streaming/startStreaming';
 import { startFailureMessage } from '$lib/streaming/start-failure-copy';
+import { buildStartConfig } from '$lib/streaming/startStreaming';
 import { showUnconfirmedStreamStop, startOptimismSuperseded } from '$lib/streaming/unconfirmed-stream';
 import {
 	lifecycleSinceLostStartReply,
@@ -122,9 +121,9 @@ import CapabilityTierBanner from '$main/live/CapabilityTierBanner.svelte';
 import IdleCockpit from '$main/live/IdleCockpit.svelte';
 import LiveCockpit from '$main/live/LiveCockpit.svelte';
 import LiveHeader from '$main/live/LiveHeader.svelte';
+import type { ConfigRow } from '$main/live/StreamSettingsCard.svelte';
 import UnconfirmedStreamBand from '$main/live/UnconfirmedStreamBand.svelte';
 import UpdateRefusalBand from '$main/live/UpdateRefusalBand.svelte';
-import type { ConfigRow } from '$main/live/StreamSettingsCard.svelte';
 
 // Reactive state — non-deprecated subscriptions getters only.
 const config = $derived(getConfig());
@@ -1167,7 +1166,7 @@ const configRows = $derived<ConfigRow[]>([
 
 <!-- Encoder configuration dialog (opened from the Encoder "Edit" row). -->
 {#if EncoderDialog.current}
-	{@const Encoder = EncoderDialog.current}
+	{const Encoder = $derived(EncoderDialog.current)}
 	<Encoder bind:open={encoderOpen} bind:config={encoderConfig} onSave={handleEncoderSave} />
 {:else if EncoderDialog.pending}
 	<LazyDialogFallback

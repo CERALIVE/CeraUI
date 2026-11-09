@@ -1,9 +1,6 @@
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
 import { cubicInOut } from 'svelte/easing';
-
-import { einkGatedFade as fade, einkGatedFly as fly } from '$lib/transitions';
-
 import { setupHashNavigation } from '$lib/helpers/NavigationHelper';
 import {
 	areDestinationNamespacesLoaded,
@@ -17,6 +14,7 @@ import {
 	navigationStore,
 	transitionDirection,
 } from '$lib/stores/navigation.svelte';
+import { einkGatedFade as fade, einkGatedFly as fly } from '$lib/transitions';
 
 // Navigation transition configuration
 const TRANSITION_DURATION = 300;
@@ -133,6 +131,7 @@ const transitionParams = $derived.by(() => {
 					<p class="text-muted-foreground text-sm">{$navigationError}</p>
 				</div>
 				<button
+					type="button"
 					class="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-4 py-2 transition-colors focus-visible:ring-ring/50 focus-visible:ring-2 focus-visible:outline-none"
 					onclick={() => enhancedNavigationStore.setError(null)}
 				>

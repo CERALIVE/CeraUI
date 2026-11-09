@@ -13,8 +13,8 @@ import type {
 	CaptureStreamSource,
 	ConfigMessage,
 	DeviceKind,
-	SourcesMessage,
 	SessionSwitchTarget,
+	SourcesMessage,
 } from '@ceraui/rpc/schemas';
 import { Cable, Check, Radio, RefreshCw, Repeat, Usb, Video } from '@lucide/svelte';
 
@@ -22,11 +22,11 @@ import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte
 import { Button, buttonVariants } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
 import { deriveMatchAction, type MatchAction } from '$lib/streaming/capture-failover';
-import { liveSwitchRows } from '$lib/streaming/live-switch-rows';
 import {
 	canOfferLiveSourceSwitch,
 	deriveLiveSourceState,
 } from '$lib/streaming/live-source-state';
+import { liveSwitchRows } from '$lib/streaming/live-switch-rows';
 
 interface Props {
 	switchTargets?: readonly SessionSwitchTarget[] | undefined;
@@ -165,13 +165,13 @@ function kindBadgeClass(kind: DeviceKind): string {
 
 			<ul class="space-y-2">
 				{#each rows as source (source.id)}
-					{@const displayName = 'labelKey' in source && source.labelKey ? `${t(source.labelKey)} · ${source.displayName}` : source.displayName}
-					{@const RowIcon = KIND_ICON[kindFamily(source.kind)]}
-					{@const isActive = source.id === activeSourceId}
-					{@const sourceMode = 'mode' in source ? source.mode : undefined}
+					{const displayName = $derived('labelKey' in source && source.labelKey ? `${t(source.labelKey)} · ${source.displayName}` : source.displayName)}
+					{const RowIcon = $derived(KIND_ICON[kindFamily(source.kind)])}
+					{const isActive = $derived(source.id === activeSourceId)}
+					{const sourceMode = $derived('mode' in source ? source.mode : undefined)}
 					<!-- A running source that VANISHED gets no lime affirmation — the lost
 					     banner is up and the operator is being told to leave this row. -->
-					{@const affirmActive = isActive && source.lost !== true}
+					{const affirmActive = $derived(isActive && source.lost !== true)}
 					<li
 						class="flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 {isActive
 							? 'border-primary/40 bg-primary/5'
@@ -226,7 +226,7 @@ function kindBadgeClass(kind: DeviceKind): string {
 									{m["live.inputPicker.active"]()}
 								</span>
 								{#if matchAction !== undefined && matchAction.inputId === source.id}
-									{@const action = matchAction}
+									{const action = $derived(matchAction)}
 									<span data-testid="match-camera-action">
 										<SimpleAlertDialog
 											buttonClasses={matchButtonClasses}

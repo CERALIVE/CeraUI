@@ -2,14 +2,13 @@
 import { m } from '@ceraui/i18n/svelte';
 import { AlertCircle, Eye, EyeOff, LoaderCircle } from '@lucide/svelte';
 import { untrack } from 'svelte';
-
+import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
+import ModeToggle from '$lib/components/custom/mode-toggle.svelte';
+import Logo from '$lib/components/icons/Logo.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Checkbox } from '$lib/components/ui/checkbox';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
-import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
-import ModeToggle from '$lib/components/custom/mode-toggle.svelte';
-import Logo from '$lib/components/icons/Logo.svelte';
 import { deviceName, siteName } from '$lib/config';
 import { getNotifications, getStatus } from '$lib/rpc/subscriptions.svelte';
 import {

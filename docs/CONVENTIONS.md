@@ -200,9 +200,24 @@ CI command unchanged while making every promoted class fail on recurrence.
 
 ---
 
-## Svelte lint overrides — why exactly two rules stay off (re-verified 2026-08-21, Biome 2.5.9)
+## Svelte lint adoption (2026-11)
 
-`apps/frontend/biome.json` disables **two** lint rules for `**/*.svelte`, and only two:
+Biome 2.6.6 and canon 2026.11.0 now run through explicit frontend inheritance in
+`apps/frontend/biome.jsonc`. Both unused-symbol rules are enabled; the earlier
+template false positives came from missing inheritance. The JSONC filename
+supports the required staged-adoption comment without putting comments in JSON.
+The frontend stages ten existing rule families at warning severity: the total
+is 0 errors, 116 warnings and 3 infos, versus 33 warnings and 4 infos before
+adoption. Per-rule counts and the "fix then promote to error" follow-up live in
+[the current agent conventions](agents/conventions.md#staged-frontend-lint-adoption-2026-11).
+Svelte formatting held: biomejs/biome#12994; open human PR #438 touches Svelte files.
+
+### Historical two-rule override probe (2026-08-21, Biome 2.5.9)
+
+The following probe and its old config paths are retained as history. Its
+diagnosis and overrides are superseded by the explicit-inheritance fix above.
+
+At that time, `apps/frontend/biome.json` disabled **two** lint rules for `**/*.svelte`:
 
 | Rule | Status | Why |
 |------|--------|-----|

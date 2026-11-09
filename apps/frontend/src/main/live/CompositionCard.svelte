@@ -222,7 +222,7 @@ function patch(fields: Partial<CompositionConfig>): void {
 					role="radiogroup"
 				>
 					{#each COMPOSITION_LAYOUTS as option (option)}
-						{@const active = option === layout}
+						{const active = $derived(option === layout)}
 						<button
 							type="button"
 							aria-checked={active}

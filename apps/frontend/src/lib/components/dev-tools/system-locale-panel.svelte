@@ -1,5 +1,5 @@
 <script lang="ts">
-import { type LocaleCode } from '@ceraui/i18n';
+import type { LocaleCode } from '@ceraui/i18n';
 import { m } from '@ceraui/i18n/svelte';
 import { Globe } from '@lucide/svelte';
 

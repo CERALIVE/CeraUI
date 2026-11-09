@@ -17,16 +17,15 @@ import {
 	TriangleAlert,
 	Users,
 } from '@lucide/svelte';
-
+import Badge from '$lib/components/custom/Badge.svelte';
+import BondToggle from '$lib/components/custom/BondToggle.svelte';
+import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 import * as AlertDialog from '$lib/components/ui/alert-dialog';
 import { Button } from '$lib/components/ui/button';
-import BondToggle from '$lib/components/custom/BondToggle.svelte';
-import Badge from '$lib/components/custom/Badge.svelte';
-import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 import { isLinkLocalIpv4 } from '$lib/helpers/ip-classification';
 import { cn } from '$lib/utils';
 
-import { type EthernetClientZoneState, deriveSharedLanRow } from './ethernet-role-view';
+import { deriveSharedLanRow, type EthernetClientZoneState } from './ethernet-role-view';
 
 interface Props {
 	/** NetworkView applies the marker + modem-claim handover in section-assignment.ts. */
@@ -194,23 +193,23 @@ const ZONE_ICON = {
 			</p>
 		{:else}
 			{#each wiredEntries as [name, iface] (name)}
-				{@const showStale = iface.enabled && (staleInterfaces.has(name) || isFullyStale)}
-				{@const linkLocal = isLinkLocalIpv4(iface.ip)}
+				{const showStale = $derived(iface.enabled && (staleInterfaces.has(name) || isFullyStale))}
+				{const linkLocal = $derived(isLinkLocalIpv4(iface.ip))}
 				<!-- `null` is the backend RETRACTING the claim; the ingestion merge prunes
 				     the row on that frame, so it is normalised away rather than rendered. -->
-				{@const dongle = iface.dongle ?? undefined}
-				{@const dongleBlocked = dongle ? dongleBondBlockedReason(dongle.state) : undefined}
+				{const dongle = $derived(iface.dongle ?? undefined)}
+				{const dongleBlocked = $derived(dongle ? dongleBondBlockedReason(dongle.state) : undefined)}
 				<!-- `null` retracts the classification but KEEPS the row (unlike `dongle`),
 				     so it is normalised to "unclassified" rather than pruned. -->
-				{@const routerCellular = iface.router_cellular ?? undefined}
+				{const routerCellular = $derived(iface.router_cellular ?? undefined)}
 				<!-- `null` retracts this claim and KEEPS the row too. -->
-				{@const modemNet = iface.usb_modem_net ?? undefined}
+				{const modemNet = $derived(iface.usb_modem_net ?? undefined)}
 				<!-- Absent `ethRole` means "not an ethernet port, or an older backend",
 				     never `uplink`, so an unclaimed row renders exactly as before. -->
-				{@const sharedLan = deriveSharedLanRow(iface)}
-				{@const sharedLanReason = sharedLan
+				{const sharedLan = $derived(deriveSharedLanRow(iface))}
+				{const sharedLanReason = $derived(sharedLan
 					? resolveMessageKey(sharedLan.bondExclusionReasonKey)
-					: undefined}
+					: undefined)}
 				<!-- Single-line row: identity (dot · name · status) left; bond + configure right. -->
 				<div class="flex flex-wrap items-center gap-3 px-4 py-2">
 					<!-- `self-start` because a classified row is several lines tall: a
@@ -231,7 +230,7 @@ const ZONE_ICON = {
 					     instead. Desktop is unchanged — `flex-1` still grows past it. -->
 					<div class="min-w-0 flex-1 basis-72">
 						{#if sharedLan}
-							{@const ZoneIcon = ZONE_ICON[sharedLan.zone]}
+							{const ZoneIcon = $derived(ZONE_ICON[sharedLan.zone])}
 							<!-- ONE pill: what the port IS · what its zone is doing, each still a
 							     WORD with its own glyph so colour stays reinforcement. It rides the
 							     name's line, and the "?" beside it carries the concept AND the
@@ -271,7 +270,7 @@ const ZONE_ICON = {
 							{@render portName(name)}
 						{/if}
 						{#if dongle}
-							{@const StateIcon = DONGLE_STATE_ICON[dongle.state]}
+							{const StateIcon = $derived(DONGLE_STATE_ICON[dongle.state])}
 							<!-- What it IS, then where it is in its lifecycle — both in words. -->
 							<div class="mt-0.5 flex flex-wrap items-center gap-1.5">
 								<Badge

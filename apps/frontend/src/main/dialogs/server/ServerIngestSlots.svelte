@@ -10,10 +10,9 @@
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
 import { Cloud } from '@lucide/svelte';
-
+import { Label } from '$lib/components/ui/label';
 import type { ManagedIngestAccount } from '$lib/streaming/receiver-experience';
 import { managedSlotLabel, obsInstanceAssociation } from '$lib/streaming/receiver-experience';
-import { Label } from '$lib/components/ui/label';
 
 interface Props {
 	accounts: readonly ManagedIngestAccount[];
