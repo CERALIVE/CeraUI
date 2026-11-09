@@ -14,9 +14,8 @@
 import { getLocale, m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { UpdateCheckClockSummary, UpdatePreflightReason, UpdateState, UpdateTransportSummary } from '@ceraui/rpc/schemas';
 import { AlertTriangle, CheckCircle2 } from '@lucide/svelte';
-
-import { checkedAtOf, isWithheld } from '$lib/updates/legacy-packages';
 import { createDeadlineClock } from '$lib/updates/deadline-clock.svelte';
+import { checkedAtOf, isWithheld } from '$lib/updates/legacy-packages';
 import { actionablePackageOrigins } from '$lib/updates/update-dialog-view';
 import { checkScheduleLines, familyLabel, formatUpdateTime, probeStateKey } from '$lib/updates/update-view';
 
