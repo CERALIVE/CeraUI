@@ -12,7 +12,11 @@
  * module names paraglide actually emitted.
  */
 
-/** Byte-mirror of paraglide 2.23.2 `toSafeModuleId` (compiler/safe-module-id.js). */
+/**
+ * Mirror of the Paraglide 2.23.2 `toSafeModuleId` algorithm.
+ * Paraglide 3.2.1 adds a fast path for already-safe ids that yields identical
+ * output, guarded by `paraglide-catalog-gate.test.ts`.
+ */
 export function toSafeModuleId(id: string): string {
 	const result = id.toLowerCase().replace(/[^a-z0-9_]/g, "_");
 	if (/[0-9]/.test(result[0] ?? "")) return `_${result}`;
