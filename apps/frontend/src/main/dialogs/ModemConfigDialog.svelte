@@ -1590,7 +1590,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 			{#if formData.roaming}
 				<div class="space-y-2" transition:slide={{ duration: 150 }}>
 					<div class="flex items-center justify-between gap-2">
-						<Label class="text-muted-foreground text-xs">
+						<Label class="text-muted-foreground text-xs" for="modem-roaming-network">
 							{m["network.modem.availableNetworks"]()}
 						</Label>
 						<Button
@@ -1620,7 +1620,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 						type="single"
 						value={formData.network}
 					>
-						<Select.Trigger class="h-10 w-full text-sm" data-testid="modem-network-trigger">
+						<Select.Trigger class="h-10 w-full text-sm" data-testid="modem-network-trigger" id="modem-roaming-network">
 							{selectedNetworkLabel}
 						</Select.Trigger>
 						<Select.Content>

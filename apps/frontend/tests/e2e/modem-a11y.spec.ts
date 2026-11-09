@@ -358,6 +358,31 @@ test.describe("modem UX a11y gate (modem-stack Phase B)", () => {
 		});
 	});
 
+	test("the roaming network combobox keeps its visible name at desktop and mobile widths @a11y", async ({
+		authedPage: page,
+	}) => {
+		for (const viewport of [
+			{ width: 1280, height: 800 },
+			{ width: 390, height: 844 },
+		]) {
+			await page.setViewportSize(viewport);
+			await navigateTo(page, "network");
+			serverConfig({ modem_provisioning: true });
+			send({ status: { modems: fullRoster() } });
+			send({ netif: DONGLE_NETIF });
+			await expect(page.getByTestId("modem-row")).toHaveCount(5);
+			const dialog = await openModemDialog(page);
+			const roaming = dialog.getByRole("switch", { name: "Allow Roaming" });
+			await expect(roaming).toHaveAttribute("aria-checked", "false");
+			await roaming.click();
+			await expect(
+				dialog.getByRole("combobox", { name: "Available Networks", exact: true }),
+			).toBeVisible();
+			await page.keyboard.press("Escape");
+			await expect(dialog).toBeHidden();
+		}
+	});
+
 	// ── 1. axe ───────────────────────────────────────────────────────────────
 	test("axe reports zero critical/serious violations on the cellular surface and the modem dialog @a11y", async ({
 		authedPage: page,
