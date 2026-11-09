@@ -276,7 +276,10 @@ test("download uses only the source list as the declared APT UID without changin
 			record,
 			process.getuid?.() ?? 1000,
 			directory,
-			new AbortController().signal,
+			{
+				signal: new AbortController().signal,
+				authorize: async () => () => {},
+			},
 			async (argv) => {
 				seen.push(argv);
 				if (argv[0] === "setpriv")
@@ -337,7 +340,10 @@ test("a hung download is bounded and cannot turn termination into success", asyn
 				kernelRecord,
 				process.getuid?.() ?? 1000,
 				directory,
-				new AbortController().signal,
+				{
+					signal: new AbortController().signal,
+					authorize: async () => () => {},
+				},
 				async (_argv, options) => {
 					deadline = options?.timeoutMs ?? 0;
 					return spawnWithTimeout(

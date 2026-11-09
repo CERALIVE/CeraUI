@@ -52,6 +52,7 @@ import { killAndRestartRaucForStream } from "./stream-abort.ts";
 
 export type OsStageRunControl = OsStageControl & {
 	readonly cellularApproved?: boolean;
+	readonly readCellularApproval?: () => Promise<() => boolean>;
 	readonly canCommit?: () => boolean;
 };
 export type OsStageRunDeps<T> = {
@@ -297,6 +298,10 @@ async function runLeasedOsStageJob<T>(
 					throw new OsStageError("rauc_install_failed", { cause });
 				}
 				await remaining(admit);
+				// Read before the physical proof; the synchronous fence covers revocation during it.
+				const approved = control.readCellularApproval
+					? await remaining(control.readCellularApproval)
+					: () => control.cellularApproved === true;
 				const before = await freshProof(transport);
 				assertDispatch();
 				if (!deps.lease.held())
@@ -309,6 +314,8 @@ async function runLeasedOsStageJob<T>(
 					throw new OsStageError("rauc_install_failed", {
 						diagnostics: { refusal: "signed-candidate-expired" },
 					});
+				if (transport.candidate.metered !== false && !approved())
+					throw new OsStageError("os_cellular_approval_required");
 				owner.beginAttempt(
 					before,
 					`${transport.candidate.ifname}/${transport.family}`,

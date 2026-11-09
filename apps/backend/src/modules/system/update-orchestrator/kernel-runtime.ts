@@ -11,6 +11,7 @@ import {
 	hasKernelAptStage,
 	readUpdateCapabilityFile,
 } from "../update-capabilities.ts";
+import { createSystemCellularConsentRead } from "../update-settings.ts";
 import { ensureHealthyStateForStage } from "./healthy-state-refresh.ts";
 import {
 	downloadKernelPackage,
@@ -52,18 +53,20 @@ export const defaultKernelEffects = {
 			await readKernelQuarantine(),
 		);
 	},
-	download: async (record: KernelPackageRecord, signal: AbortSignal) => {
+	download: async (
+		record: KernelPackageRecord,
+		signal: AbortSignal,
+		authorize: () => Promise<() => void>,
+	) => {
 		const caps = await readUpdateCapabilityFile();
 		if (!caps?.features.includes("kernel-apt-stage"))
 			throw new KernelUpdateError("kernel_download_failed");
 		const directory = await mkdtemp(join(tmpdir(), "ceraui-kernel-"));
 		try {
-			return await downloadKernelPackage(
-				record,
-				caps.apt_uid,
-				directory,
+			return await downloadKernelPackage(record, caps.apt_uid, directory, {
 				signal,
-			);
+				authorize,
+			});
 		} catch (error) {
 			await rm(directory, { recursive: true, force: true });
 			throw error;
@@ -145,6 +148,7 @@ export function createKernelRuntime(port: KernelRuntimePort) {
 		if (!manual && !candidate) return false;
 		const caps = await port.capabilities();
 		if (!hasKernelAptStage(caps)) return false;
+		const readConsent = createSystemCellularConsentRead(port.settings);
 		const settings = await port.settings();
 		if (
 			!manual &&
@@ -179,8 +183,18 @@ export function createKernelRuntime(port: KernelRuntimePort) {
 		)
 			return false;
 		candidate = fresh;
+		const previous = port.state();
+		const approvedOnce = previous.cellularOverrideId === fresh.version;
 		const controller = new AbortController();
 		flight = controller;
+		const authorizeDownload = async () => {
+			const onlyMetered = await port.metered();
+			const consent = await readConsent();
+			return () => {
+				if (onlyMetered && !approvedOnce && !consent())
+					throw new KernelUpdateError("os_cellular_approval_required");
+			};
+		};
 		let attempt: KernelAttempt = {
 			id: randomUUID(),
 			package: fresh.package,
@@ -198,7 +212,16 @@ export function createKernelRuntime(port: KernelRuntimePort) {
 				cellularOverrideId: null,
 			});
 			await port.effects().ensureHealthyState();
-			const deb = await port.effects().download(fresh, controller.signal);
+			(await authorizeDownload())();
+			if (
+				controller.signal.aborted ||
+				flight !== controller ||
+				port.state().phase !== "kernel-downloading"
+			)
+				return false;
+			const deb = await port
+				.effects()
+				.download(fresh, controller.signal, authorizeDownload);
 			attempt = { ...attempt, deb };
 			if (
 				controller.signal.aborted ||
@@ -219,6 +242,19 @@ export function createKernelRuntime(port: KernelRuntimePort) {
 			return true;
 		} catch (error) {
 			if (!controller.signal.aborted && flight === controller) {
+				if (
+					error instanceof KernelUpdateError &&
+					error.reason === "os_cellular_approval_required"
+				) {
+					port.set({ kernelAttempt: previous.kernelAttempt });
+					publish(previous.phase);
+					port.effects().notify({
+						kind: "cellular-approval",
+						id: fresh.version,
+						size: String(fresh.size),
+					});
+					return false;
+				}
 				candidate = null;
 				if (attempt.deb && port.state().phase === "kernel-staging") {
 					// A lost submission reply cannot prove that PID 1 did not start the writer.

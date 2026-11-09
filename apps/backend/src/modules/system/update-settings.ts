@@ -31,6 +31,20 @@ export class UpdateSettingsValidationError extends Error {
 
 let updateSettingsFilePath = UPDATE_SETTINGS_FILE;
 let imageChannelFilePath: string | null = null;
+let systemCellularRevocations = 0;
+
+// A successful revocation also invalidates a read already in flight.
+export function createSystemCellularConsentRead(
+	loadSettings: () => Promise<UpdateSettings>,
+): () => Promise<() => boolean> {
+	const revision = systemCellularRevocations;
+	return async () => {
+		const settings = await loadSettings();
+		return () =>
+			revision === systemCellularRevocations &&
+			settings.allowSystemOverCellular;
+	};
+}
 
 export function setUpdateSettingsFilePathForTest(
 	filePath: string | null,
@@ -165,5 +179,6 @@ export function saveUpdateSettings(
 			allowSystemDownloadsOverCellular: parsed.data.allowSystemOverCellular,
 		}),
 	);
+	if (!parsed.data.allowSystemOverCellular) systemCellularRevocations++;
 	return parsed.data;
 }
