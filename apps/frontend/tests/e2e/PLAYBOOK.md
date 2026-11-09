@@ -106,6 +106,11 @@ plugin creates only the former. Keep generation outside individual tests so
 workers cannot race a shared generated directory. Local CI-mode runs use the same
 prerequisite.
 
+The private pull-to-refresh fixture initializes the real locale store and loads
+only its `pwa` namespace before mounting. Loading the whole application boot
+catalog adds thousands of unrelated source-module requests to the fixture's
+startup without testing another behavior.
+
 ## Real-hardware gates
 
 Mock seams may retain deterministic negative-path coverage, but they never

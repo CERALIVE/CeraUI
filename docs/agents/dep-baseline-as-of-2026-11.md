@@ -95,7 +95,7 @@ The November 9 held-package retry corrects product accessibility gaps:
   cover both, and the roaming browser case covers desktop and mobile widths.
 - **Released bits-ui hold:** after the canonical shared-merge-engine and budget
   changes, 2.20.6 passes the ordered full build, federation assets and bundle
-  report. Toast-host is **681,359 B / 688,543 B** and audio is **7,733 B / 7,881 B**
+  report. Toast-host is **681,359 B / 688,543 B** and audio is **7,729 B / 7,881 B**
   gzip. No ceiling was raised by this retry.
 
 ### What the refresh delivered
