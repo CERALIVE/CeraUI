@@ -4,7 +4,8 @@
 
 The `publish-federation` job in `.github/workflows/publish-release.yml` is the release-triggered
 CI job that uploads the signed bundles to R2. Pipeline (each step gates the next):
-`bun run build:federation` → `bun run sign:federation` (sign + self-verify) →
+`bun run build:federation` → `bun scripts/ci/bundle-report.mjs --federation-only`
+(complete graph + gzip budgets) → `bun run sign:federation` (sign + self-verify) →
 `bun run sign:federation -- --verify-only` (independent re-verify before any write) →
 `publish-federation-immutable.sh` conditional writes to
 `s3://$R2_BUCKET/ui-bundle/<ceraui-version>/`.

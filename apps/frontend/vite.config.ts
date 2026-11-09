@@ -21,6 +21,7 @@ import {
 	SPA_SOURCEMAP_OUT_DIR,
 	spaSourcemapRelocationPlugin,
 } from "./vite.sourcemaps.ts";
+import { VARIANTS_ALIAS } from "./vite.variants.ts";
 import {
 	applyPreviewWebSocketRoute,
 	DEVICE_WS_PROXY_CONTEXT,
@@ -288,6 +289,7 @@ export default defineConfig(({ mode }) => {
 			// the persist entry has to be exact (see `vite.persist.ts`).
 			alias: [
 				PERSIST_RUNTIME_ALIAS,
+				VARIANTS_ALIAS,
 				{ find: "$lib", replacement: path.resolve("./src/lib") },
 				{ find: "$main", replacement: path.resolve("./src/main") },
 			],

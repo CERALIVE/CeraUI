@@ -17,6 +17,7 @@ import {
 	PARAGLIDE_STRATEGY,
 } from "./vite.i18n.ts";
 import { PERSIST_RUNTIME_ALIAS } from "./vite.persist.ts";
+import { VARIANTS_ALIAS } from "./vite.variants.ts";
 
 // Federation lib-mode build (Task 39) — emits standalone ES-module bundles for the
 // Encoder/Audio/Server config dialogs so ceralive-platform's web dashboard can load
@@ -99,6 +100,7 @@ export default defineConfig({
 		// the persist entry has to be exact (see `vite.persist.ts`).
 		alias: [
 			PERSIST_RUNTIME_ALIAS,
+			VARIANTS_ALIAS,
 			{ find: "$lib", replacement: path.resolve(__dirname, "./src/lib") },
 			{ find: "$main", replacement: path.resolve(__dirname, "./src/main") },
 		],

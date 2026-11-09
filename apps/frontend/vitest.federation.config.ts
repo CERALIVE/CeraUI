@@ -4,6 +4,7 @@ import { persistPlugin } from 'svelte-persistent-runes/plugins';
 import { defineConfig } from 'vitest/config';
 
 import { BUILD_BRAND } from './brand.config.ts';
+import { VARIANTS_ALIAS } from './vite.variants.ts';
 
 // Federation ABI harness — a SEPARATE config because its subject is the built
 // output under dist/federation, not the source tree the default suite compiles.
@@ -33,9 +34,10 @@ export default defineConfig({
 	},
 	resolve: {
 		conditions: ['browser'],
-		alias: {
-			$lib: path.resolve('./src/lib'),
-			$main: path.resolve('./src/main'),
-		},
+		alias: [
+			VARIANTS_ALIAS,
+			{ find: '$lib', replacement: path.resolve('./src/lib') },
+			{ find: '$main', replacement: path.resolve('./src/main') },
+		],
 	},
 });
