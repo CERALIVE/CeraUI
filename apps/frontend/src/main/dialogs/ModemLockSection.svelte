@@ -318,7 +318,7 @@ async function forget(): Promise<void> {
 
 			{#if lock.offersClear}
 				{#if clearConfirming}
-					<!-- biome-ignore lint/a11y/useSemanticElements: This confirmation panel groups explanatory copy and actions; a fieldset introduces form-group sizing and an anonymous content box. -->
+					<!-- biome-ignore lint/a11y/useSemanticElements: The clear-saved-dongle-sign-in confirmation groups its warning and actions; a fieldset introduces different sizing and an anonymous content box. -->
 					<div
 						aria-labelledby="dongle-lock-clear-confirm-title"
 						class="bg-status-warning/10 border-status-warning/30 space-y-3 rounded-lg border p-3"

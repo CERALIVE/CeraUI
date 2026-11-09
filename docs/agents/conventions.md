@@ -10,7 +10,7 @@
 ### Frontend lint enforcement (2026-11)
 
 All ten rule families exposed by canonical inheritance now use error severity.
-The previous 74 warnings are resolved with behavior-preserving fixes, the
+The previous 74 warnings are resolved with source fixes, the
 site exceptions below, and six exact-file exceptions for managed primitives.
 All nine global finite checks now use `Number.isFinite`: every argument is
 `progress`, `total`, or `progressPercentage`, derived from explicit numeric
@@ -33,8 +33,8 @@ useSemanticElements), and input-group.svelte (useSemanticElements). Upstream
 generator output retains these patterns; regenerating input-group also changes
 its dimensions. No directory-wide or rule-wide exception is introduced.
 
-There are **38 added site suppression lines**, so the repository matching-line
-total grows **170 -> 208**. Every new site and its reason is listed below;
+There are **37 added site suppression lines**, so the repository matching-line
+total grows **170 -> 207**. Every new site and its reason is listed below;
 paths are relative to `apps/frontend/src/`. The four Set/Map sites deliberately
 remain non-reactive: field classification is immutable, subscriptions are
 imperative, and toast deduplication must not subscribe its effect to its own writes.
@@ -45,37 +45,45 @@ preserve Safari semantics when Tailwind removes markers. Named block regions use
 section with identical classes. No dimensions, classes, layout rules, test
 snapshots, visual baselines, or frozen catalog renderings change.
 
+Pull-to-refresh cancellation uses a native button that is disabled and hidden
+from assistive technology while inactive. During a pending refresh, Tab reaches
+it and Enter/Space dismiss the indicator through its existing click handler.
+The touch gesture and callback script is unchanged. Its classes, inline styles,
+content geometry, fonts and colors match the earlier surrogate at desktop/mobile
+widths in both themes. The real-browser component test
+`tests/e2e/pull-to-refresh.component.spec.ts` owns the keyboard contract with a
+pending callback; cancellation does not alter that callback's promise lifecycle.
+
 | Site | Rule | Specific reason |
 | --- | --- | --- |
-| `lib/components/custom/IngestStats.svelte:364` | `a11y/noRedundantRoles` | Tailwind removes list markers; explicit list semantics keep Safari exposing this telemetry list. |
-| `lib/components/custom/IngestStats.svelte:465` | `a11y/noRedundantRoles` | Tailwind removes list markers; explicit list semantics keep Safari exposing this telemetry list. |
+| `lib/components/custom/IngestStats.svelte:364` | `a11y/noRedundantRoles` | The session-rollup contribution list needs its explicit list role for Safari when Tailwind removes list markers. |
+| `lib/components/custom/IngestStats.svelte:465` | `a11y/noRedundantRoles` | The live per-link telemetry list needs its explicit list role for Safari when Tailwind removes list markers. |
 | `lib/components/custom/LinkIndicator.svelte:136` | `a11y/useAriaPropsSupportedByRole` | The dynamic role is img whenever linkAriaLabel is present; otherwise this decoration is aria-hidden. |
-| `lib/components/custom/SourceSection.svelte:1020` | `a11y/useSemanticElements` | Mode choices contain labels and use button activation; a native radio input cannot retain that content and click contract. |
-| `lib/components/custom/pwa/pull-to-refresh.svelte:151` | `a11y/useSemanticElements` | Preserve this gesture indicator's fixed div layout and explicit cancel-key handling; native button appearance is not proven equivalent. |
+| `lib/components/custom/SourceSection.svelte:1020` | `a11y/useSemanticElements` | Input-mode buttons select option.inputMode and lock for streaming or rowDisabled; native radios need separate labels and change their focus model. |
 | `lib/components/preview/AudioLevelMeter.svelte:65` | `a11y/useSemanticElements` | This read-only audio group is not a form fieldset; retain its existing block layout and named grouping. |
 | `lib/components/preview/AudioLevelMeter.svelte:92` | `a11y/useSemanticElements` | The meter draws separate RMS and peak child tracks; a native meter does not render these custom child tracks. |
 | `lib/rpc/field-sync-state.svelte.ts:74` | `nursery/useSvelteReactiveClasses` | This immutable ReadonlySet is a field classification table, not reactive state. |
 | `lib/stores/auth-status.svelte.ts:23` | `nursery/useSvelteReactiveClasses` | Imperative subscriptions notify synchronously; tracking Set reads would subscribe effects to listener registration. |
 | `lib/stores/display-refresh.svelte.ts:25` | `nursery/useSvelteReactiveClasses` | Listener registration must not trigger reactive consumers; requestDisplayRefresh owns the explicit notification and reactive nonce. |
-| `main/dialogs/EncoderDialog.svelte:652` | `a11y/useSemanticElements` | These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. |
-| `main/dialogs/EncoderDialog.svelte:666` | `a11y/useSemanticElements` | These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. |
-| `main/dialogs/EncoderDialog.svelte:686` | `a11y/useSemanticElements` | These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. |
-| `main/dialogs/EncoderDialog.svelte:733` | `a11y/useSemanticElements` | These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. |
-| `main/dialogs/EncoderDialog.svelte:747` | `a11y/useSemanticElements` | These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. |
-| `main/dialogs/EncoderDialog.svelte:761` | `a11y/useSemanticElements` | These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. |
-| `main/dialogs/EncoderDialog.svelte:820` | `a11y/useSemanticElements` | These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. |
-| `main/dialogs/EncoderDialog.svelte:834` | `a11y/useSemanticElements` | These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. |
+| `main/dialogs/EncoderDialog.svelte:652` | `a11y/useSemanticElements` | Auto codec clears localCodec to undefined through this text button; a native radio needs a separate label and changes its focus/activation contract. |
+| `main/dialogs/EncoderDialog.svelte:666` | `a11y/useSemanticElements` | The H.264 button selects localCodec and disables when h264Supported is false; native radio/label markup changes its hit target and focus model. |
+| `main/dialogs/EncoderDialog.svelte:686` | `a11y/useSemanticElements` | The H.265 button selects localCodec and disables when h265Supported is false; native radio/label markup changes its hit target and focus model. |
+| `main/dialogs/EncoderDialog.svelte:733` | `a11y/useSemanticElements` | Passthrough Auto stages localPassthrough as auto through this text button; native radio grouping changes its independent Tab stop and label markup. |
+| `main/dialogs/EncoderDialog.svelte:747` | `a11y/useSemanticElements` | Passthrough Force stages localPassthrough as force through this text button; native radio grouping changes its independent Tab stop and label markup. |
+| `main/dialogs/EncoderDialog.svelte:761` | `a11y/useSemanticElements` | Passthrough Off stages localPassthrough as off through this text button; native radio grouping changes its independent Tab stop and label markup. |
+| `main/dialogs/EncoderDialog.svelte:820` | `a11y/useSemanticElements` | The offered Retime choice stages localFailoverPolicy as retime; a native radio needs separate label markup and changes this button focus model. |
+| `main/dialogs/EncoderDialog.svelte:834` | `a11y/useSemanticElements` | The offered Adapt choice stages localFailoverPolicy as adapt; a native radio needs separate label markup and changes this button focus model. |
 | `main/dialogs/HotspotDialog.svelte:368` | `a11y/useSemanticElements` | This named wrapper groups the existing WiFi mode widget; a fieldset introduces intrinsic sizing and form-group layout. |
 | `main/dialogs/ModemConfigDialog.svelte:1784` | `a11y/useSemanticElements` | The wrapping band picker uses a flex row; a fieldset introduces an anonymous content box and intrinsic sizing. |
 | `main/dialogs/ModemConfigDialog.svelte:1795` | `a11y/useSemanticElements` | This band toggle keeps button content and click-driven selection; a native checkbox changes its activation and content model. |
-| `main/dialogs/ModemConfigDialog.svelte:1912` | `a11y/useSemanticElements` | This choice contains descriptive content and uses a gated click action; native radio inputs cannot preserve that content model. |
-| `main/dialogs/ModemConfigDialog.svelte:2732` | `a11y/useSemanticElements` | This choice contains descriptive content and uses a gated click action; native radio inputs cannot preserve that content model. |
-| `main/dialogs/ModemLockSection.svelte:321` | `a11y/useSemanticElements` | This confirmation panel groups explanatory copy and actions; a fieldset introduces form-group sizing and an anonymous content box. |
+| `main/dialogs/ModemConfigDialog.svelte:1912` | `a11y/useSemanticElements` | The 5G choice has title/description/active children and no-SIM, applying and selected gates; a native radio cannot contain that content. |
+| `main/dialogs/ModemConfigDialog.svelte:2732` | `a11y/useSemanticElements` | The USB-target button stages usbSelected and may show recommendation text; native radio/label markup changes that staged-selection surface. |
+| `main/dialogs/ModemLockSection.svelte:321` | `a11y/useSemanticElements` | The clear-saved-dongle-sign-in confirmation groups its warning and actions; a fieldset introduces different sizing and an anonymous content box. |
 | `main/dialogs/RouterDongleDialog.svelte:847` | `a11y/useSemanticElements` | This confirmation panel groups the subnet warning and actions; a fieldset introduces form-group sizing and an anonymous content box. |
 | `main/dialogs/audio/AudioDialogContent.svelte:165` | `a11y/useSemanticElements` | Backend choices retain button activation and pending/selected disabled gates; native radios change that interaction contract. |
 | `main/dialogs/device-health/MediaLoadPanel.svelte:19` | `a11y/noNoninteractiveTabindex` | Keyboard users need to focus this named read-only region to scroll the dialog body. |
-| `main/dialogs/server/DestinationSection.svelte:83` | `a11y/useSemanticElements` | Destination cards contain formatted labels and descriptions; native radio inputs cannot preserve that content model. |
-| `main/dialogs/server/DestinationSection.svelte:101` | `a11y/useSemanticElements` | Destination cards contain formatted labels and descriptions; native radio inputs cannot preserve that content model. |
+| `main/dialogs/server/DestinationSection.svelte:83` | `a11y/useSemanticElements` | Managed-destination cards include provider icon, label and hint with managedDisabled(choice); a native radio needs different card/label markup. |
+| `main/dialogs/server/DestinationSection.svelte:101` | `a11y/useSemanticElements` | The Custom destination card includes its plug icon, label and hint and locks while streaming; a native radio needs different card/label markup. |
 | `main/dialogs/server/ServerIngestSlots.svelte:48` | `a11y/useSemanticElements` | Ingest cards contain formatted account labels and badges; native radio inputs cannot preserve that content model. |
 | `main/dialogs/updates/UpdateCredentialsRow.svelte:67` | `a11y/useSemanticElements` | This is a read-only credential summary, not a form fieldset; retain its named group and block layout. |
 | `main/layout/LayoutToastHost.svelte:30` | `nursery/useSvelteReactiveClasses` | The effect reads and writes this deduplication ledger; making it reactive would subscribe the effect to its own bookkeeping instead of only getActive(). |

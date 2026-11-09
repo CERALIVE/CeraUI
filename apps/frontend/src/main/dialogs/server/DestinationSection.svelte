@@ -80,7 +80,7 @@ const idleChoice = 'border-border text-muted-foreground hover:text-foreground';
 		role="radiogroup"
 	>
 		{#each MANAGED_DESTINATION_CHOICES as choice (choice)}
-			<!-- biome-ignore lint/a11y/useSemanticElements: Destination cards contain formatted labels and descriptions; native radio inputs cannot preserve that content model. -->
+			<!-- biome-ignore lint/a11y/useSemanticElements: Managed-destination cards include provider icon, label and hint with managedDisabled(choice); a native radio needs different card/label markup. -->
 			<button
 				aria-checked={selected === choice}
 				class="{choiceBase} {selected === choice ? activeChoice : idleChoice}"
@@ -98,7 +98,7 @@ const idleChoice = 'border-border text-muted-foreground hover:text-foreground';
 			</button>
 		{/each}
 
-		<!-- biome-ignore lint/a11y/useSemanticElements: Destination cards contain formatted labels and descriptions; native radio inputs cannot preserve that content model. -->
+		<!-- biome-ignore lint/a11y/useSemanticElements: The Custom destination card includes its plug icon, label and hint and locks while streaming; a native radio needs different card/label markup. -->
 		<button
 			aria-checked={selected === 'custom'}
 			class="{choiceBase} {selected === 'custom' ? activeChoice : idleChoice}"

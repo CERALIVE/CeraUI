@@ -1017,7 +1017,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 									>
 										{#each modeOptionsFor(source) as option (option.inputMode)}
 											{const active = $derived(option.inputMode === activeMode)}
-											<!-- biome-ignore lint/a11y/useSemanticElements: Mode choices contain labels and use button activation; a native radio input cannot retain that content and click contract. -->
+											<!-- biome-ignore lint/a11y/useSemanticElements: Input-mode buttons select option.inputMode and lock for streaming or rowDisabled; native radios need separate labels and change their focus model. -->
 											<button
 												aria-checked={active}
 												class="min-h-11 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors {active

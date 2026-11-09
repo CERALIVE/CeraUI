@@ -361,7 +361,7 @@ function exportCsv(): void {
 					<span class="w-12 text-end">{m["live.ingest.nak"]()}</span>
 					<span class="w-14 text-end">{m["live.ingest.rtt"]()}</span>
 				</div>
-				<!-- biome-ignore lint/a11y/noRedundantRoles: Tailwind removes list markers; explicit list semantics keep Safari exposing this telemetry list. -->
+				<!-- biome-ignore lint/a11y/noRedundantRoles: The session-rollup contribution list needs its explicit list role for Safari when Tailwind removes list markers. -->
 				<ul role="list">
 					{#each rollup.links as link, i (link.iface)}
 						<li
@@ -462,7 +462,7 @@ function exportCsv(): void {
 		</div>
 
 		<!-- per-link rows -->
-		<!-- biome-ignore lint/a11y/noRedundantRoles: Tailwind removes list markers; explicit list semantics keep Safari exposing this telemetry list. -->
+		<!-- biome-ignore lint/a11y/noRedundantRoles: The live per-link telemetry list needs its explicit list role for Safari when Tailwind removes list markers. -->
 		<ul role="list">
 			{#each linkViews as view, i (view.link.conn_id)}
 				{const link = $derived(view.link)}

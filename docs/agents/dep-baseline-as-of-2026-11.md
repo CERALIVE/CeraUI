@@ -103,14 +103,17 @@ release carries the fix.
 - **Biome 2.6.6 via canon 2026.11.0.** The frontend now extends the registry
   canon explicitly in `apps/frontend/biome.jsonc`, so its Svelte parser and rules
   actually run. All ten newly enforced rule families now use error severity:
-  the 74 findings are resolved with behavior-preserving fixes, 38 documented
+  the 74 findings are resolved with fixes, 37 documented
   site suppression lines, and six exact-file/rule exceptions for upstream shadcn
   generator patterns. The nine `noGlobalIsFinite` sites use `Number.isFinite`;
   their arguments are already numeric and string conversion remains unchanged.
   Biome reports 0 errors, 33 warnings and 3 infos. Svelte formatting is held
   (biomejs/biome#12994). Exact counts,
-  every new suppression (170 -> 208 repository matching lines), and the managed
+  every new suppression (170 -> 207 repository matching lines), and the managed
   primitive exceptions live in [conventions.md](conventions.md).
+  Pending pull-to-refresh cancellation now supports Tab and native Enter/Space
+  activation without changing pointer layout; its browser component test covers
+  both keyboard actions at desktop and mobile widths.
 
 ### Known issues carried by this baseline
 

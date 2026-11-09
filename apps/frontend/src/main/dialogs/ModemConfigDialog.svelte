@@ -1909,7 +1909,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 				<div class="space-y-1.5" data-testid="modem-five-g-options" role="radiogroup"
 					aria-label={m["network.modem.fiveG.title"]()}>
 					{#each fiveGOptions as option (option.preference)}
-						<!-- biome-ignore lint/a11y/useSemanticElements: This choice contains descriptive content and uses a gated click action; native radio inputs cannot preserve that content model. -->
+						<!-- biome-ignore lint/a11y/useSemanticElements: The 5G choice has title/description/active children and no-SIM, applying and selected gates; a native radio cannot contain that content. -->
 						<button
 							aria-checked={option.active}
 							class="focus-visible:ring-ring flex w-full items-start gap-2.5 rounded-md border p-2.5 text-start focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60"
@@ -2729,7 +2729,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 						</p>
 						<div class="flex flex-wrap gap-1.5">
 							{#each usbOffer.targets as target (target)}
-								<!-- biome-ignore lint/a11y/useSemanticElements: This choice contains descriptive content and uses a gated click action; native radio inputs cannot preserve that content model. -->
+								<!-- biome-ignore lint/a11y/useSemanticElements: The USB-target button stages usbSelected and may show recommendation text; native radio/label markup changes that staged-selection surface. -->
 								<button
 									type="button"
 									role="radio"

@@ -649,7 +649,7 @@ function handleSave() {
 				data-testid="encoder-codec-selector"
 				role="radiogroup"
 			>
-				<!-- biome-ignore lint/a11y/useSemanticElements: These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. -->
+				<!-- biome-ignore lint/a11y/useSemanticElements: Auto codec clears localCodec to undefined through this text button; a native radio needs a separate label and changes its focus/activation contract. -->
 				<button
 					type="button"
 					aria-checked={codecIsAuto}
@@ -663,7 +663,7 @@ function handleSave() {
 				>
 					{m["live.encoder.codecAuto"]()}
 				</button>
-				<!-- biome-ignore lint/a11y/useSemanticElements: These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. -->
+				<!-- biome-ignore lint/a11y/useSemanticElements: The H.264 button selects localCodec and disables when h264Supported is false; native radio/label markup changes its hit target and focus model. -->
 				<button
 					type="button"
 					aria-checked={codecIsH264}
@@ -683,7 +683,7 @@ function handleSave() {
 				>
 					H.264
 				</button>
-				<!-- biome-ignore lint/a11y/useSemanticElements: These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. -->
+				<!-- biome-ignore lint/a11y/useSemanticElements: The H.265 button selects localCodec and disables when h265Supported is false; native radio/label markup changes its hit target and focus model. -->
 				<button
 					type="button"
 					aria-checked={codecIsH265}
@@ -730,7 +730,7 @@ function handleSave() {
 				data-testid="encoder-passthrough-selector"
 				role="radiogroup"
 			>
-				<!-- biome-ignore lint/a11y/useSemanticElements: These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. -->
+				<!-- biome-ignore lint/a11y/useSemanticElements: Passthrough Auto stages localPassthrough as auto through this text button; native radio grouping changes its independent Tab stop and label markup. -->
 				<button
 					type="button"
 					aria-checked={passthroughIsAuto}
@@ -744,7 +744,7 @@ function handleSave() {
 				>
 					{m["live.encoder.passthrough.auto"]()}
 				</button>
-				<!-- biome-ignore lint/a11y/useSemanticElements: These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. -->
+				<!-- biome-ignore lint/a11y/useSemanticElements: Passthrough Force stages localPassthrough as force through this text button; native radio grouping changes its independent Tab stop and label markup. -->
 				<button
 					type="button"
 					aria-checked={passthroughIsForce}
@@ -758,7 +758,7 @@ function handleSave() {
 				>
 					{m["live.encoder.passthrough.force"]()}
 				</button>
-				<!-- biome-ignore lint/a11y/useSemanticElements: These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. -->
+				<!-- biome-ignore lint/a11y/useSemanticElements: Passthrough Off stages localPassthrough as off through this text button; native radio grouping changes its independent Tab stop and label markup. -->
 				<button
 					type="button"
 					aria-checked={passthroughIsOff}
@@ -817,7 +817,7 @@ function handleSave() {
 					aria-label={m["live.encoder.failoverPolicy.title"]()}
 					role="radiogroup"
 				>
-					<!-- biome-ignore lint/a11y/useSemanticElements: These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. -->
+					<!-- biome-ignore lint/a11y/useSemanticElements: The offered Retime choice stages localFailoverPolicy as retime; a native radio needs separate label markup and changes this button focus model. -->
 					<button
 						type="button"
 						aria-checked={localFailoverPolicy === 'retime'}
@@ -831,7 +831,7 @@ function handleSave() {
 					>
 						{m["live.encoder.failoverPolicy.retime"]()}
 					</button>
-					<!-- biome-ignore lint/a11y/useSemanticElements: These codec and policy choices are buttons with explicit disabled gates and click handlers; native inputs change their activation and content model. -->
+					<!-- biome-ignore lint/a11y/useSemanticElements: The offered Adapt choice stages localFailoverPolicy as adapt; a native radio needs separate label markup and changes this button focus model. -->
 					<button
 						type="button"
 						aria-checked={localFailoverPolicy === 'adapt'}
