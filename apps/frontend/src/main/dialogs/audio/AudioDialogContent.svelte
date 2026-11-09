@@ -121,7 +121,7 @@ const backendDisabledReason = $derived(
 				<Select.Content><Select.Group>
 					{#each Object.entries(codecOptions ?? {}) as [codec, meta] (codec)}
 						{const allowed = $derived(isCodecAllowed(codec))}
-						<Select.Item disabled={!allowed} label={meta.name} title={allowed ? undefined : m["settings.audioCodecUnsupportedTransport"]()} value={codec}></Select.Item>
+						<Select.Item aria-disabled={allowed ? undefined : true} disabled={!allowed} label={meta.name} title={allowed ? undefined : m["settings.audioCodecUnsupportedTransport"]()} value={codec}></Select.Item>
 					{/each}
 				</Select.Group></Select.Content>
 			</Select.Root>
