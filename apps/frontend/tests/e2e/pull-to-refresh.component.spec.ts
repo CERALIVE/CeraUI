@@ -31,10 +31,11 @@ test.beforeAll(async () => {
 					const html = `<!doctype html><html><head></head><body>
 						<div id="fixture"></div><script type="module">
 						import { mount } from 'svelte';
-						import { initLocale, ensureNamespaces } from '@ceraui/i18n/svelte';
+						import { initLocale } from '@ceraui/i18n/svelte';
+						import { ensureBootNamespaces } from '/src/lib/i18n/namespace-activation.ts';
 						import Harness from '/src/tests/fixtures/PullToRefreshHarness.svelte';
 						initLocale({ saved: 'en' });
-						await ensureNamespaces(['pwa']);
+						await ensureBootNamespaces();
 						mount(Harness, { target: document.getElementById('fixture') });
 						</script></body></html>`;
 					void vite.transformIndexHtml(request.url, html).then((rendered) => {
