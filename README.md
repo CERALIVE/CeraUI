@@ -50,6 +50,8 @@ system image, slots, automation (auto toggles, schedule window, channel),
 cellular allowances with per-candidate approval, and the update connection.
 Download consent is stored separately from older check-only preferences, so an
 old UI save after rollback cannot grant OS/kernel downloads over cellular. A
+successful download-consent revocation also holds queued downloads before they
+start, including across asynchronous preparation. A
 busy update shows an app-wide badge, and the Live cockpit warns before Go Live;
 Start stays enabled because the device decides admission. Implementation
 reference: [device updates](docs/DEVICE-UPDATES.md).

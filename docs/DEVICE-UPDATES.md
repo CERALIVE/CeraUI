@@ -1172,6 +1172,20 @@ control for transport pinning/failover. The switch never fabricates or persists
 candidate has an actual one-time approval. Kernel staging uses the same gate
 and still consumes a one-time approval on start.
 
+Successful revocation also fences an already queued automatic or manual stage.
+OS admission re-reads durable download consent after its preparation awaits;
+each metered RAUC attempt reads again before its final physical proof and checks
+a synchronous revocation fence before submitting the downloader. Kernel staging
+rechecks after healthy-state preparation and again after download-directory
+preparation, immediately before APT download submission. A settings-read error
+starts no download. Revocation during an in-flight read or later preparation
+invalidates that captured switch permission; another await cannot restore it.
+The exact candidate's captured one-job approval remains independent of the
+switch. This fences a transfer that has not started; it does not cancel an
+in-progress transfer. The fence is process-local alongside fresh durable reads,
+under the existing single-backend writer contract, not new power-loss or
+cross-process serialization proof.
+
 Package checks held by the cellular policy record an in-memory deferral.
 `getUpdateDetails` exposes optional `checks.*.deferred` and
 `checks.*.consecutiveFailures`; OS deferral is always null. A due deferred

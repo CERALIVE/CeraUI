@@ -34,6 +34,9 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
   OS manifest checks always run over cellular. The system cellular switch
   permits bundle/kernel downloads; otherwise an exact one-time approval is
   required. Candidate approval is computed at use, never persisted from the switch.
+  Queued OS/kernel downloads re-read consent at dispatch; a successful switch
+  revocation invalidates captured permission across preparation awaits. Read
+  errors refuse download, while exact-candidate one-job approval remains valid.
   Deferred package checks cannot starve OS checks in the idle scheduler.
   Optional details fields expose check deferrals, consecutive failures and an
   unpublished image channel; older backends may omit all three observations.
