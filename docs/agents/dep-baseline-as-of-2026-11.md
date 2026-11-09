@@ -19,5 +19,13 @@ rendering across all ten locales. Explicit message-modules for the SPA and
 locale-modules for federation retain the existing registry and runtime paths.
 No catalog key requires Paraglide 3's reserved-name allocation.
 
-Tailwind-variants, Vitest, jsdom, vite-plugin-pwa and the Biome toolchain
-remain owned by later dependency-refresh steps.
+Tailwind-variants is `^4.0.1`, lock resolves `4.0.1`. Its class strings match
+`3.3.1` for all 107 variant combinations of the six `tv()` recipes. Its default
+entry bundles its own merge engine beside the `tailwind-merge` that the local
+`cn` uses: the SPA `devtools` chunk grows by 9.0 KiB gzip and federation
+`toast-host.js`, already over its budget, by 5,841 B gzip. Sharing one engine
+through `tailwind-variants/lite` with `tailwind-merge` injected would edit the
+CLI-managed primitives and needs an owner decision.
+
+Vitest, jsdom, vite-plugin-pwa and the Biome toolchain remain owned by later
+dependency-refresh steps.
