@@ -42,20 +42,24 @@ if (
 const configPath = path.resolve(import.meta.dirname, '../backend/config.json');
 if (process.env.CI || !fs.existsSync(configPath)) {
 	const pendingConfigPath = `${configPath}.${process.pid}.tmp`;
-	fs.writeFileSync(
-		pendingConfigPath,
-		JSON.stringify({
-			srtla_addr: '127.0.0.1',
-			srtla_port: 5000,
-			srt_streamid: 'e2e',
-			max_br: 5000,
-			remote_key: 'mock-pairing-key',
-			remote_provider: 'ceralive',
-		}),
-		'utf8',
-	);
-	// Other workers may copy the seed while their own config module is loading.
-	fs.renameSync(pendingConfigPath, configPath);
+	try {
+		fs.writeFileSync(
+			pendingConfigPath,
+			JSON.stringify({
+				srtla_addr: '127.0.0.1',
+				srtla_port: 5000,
+				srt_streamid: 'e2e',
+				max_br: 5000,
+				remote_key: 'mock-pairing-key',
+				remote_provider: 'ceralive',
+			}),
+			'utf8',
+		);
+		// Other workers may copy the seed while their own config module is loading.
+		fs.renameSync(pendingConfigPath, configPath);
+	} finally {
+		fs.rmSync(pendingConfigPath, { force: true });
+	}
 }
 
 const DEV_PORT = Number(process.env.E2E_PORT ?? 6173);

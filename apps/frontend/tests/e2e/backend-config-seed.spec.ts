@@ -45,6 +45,18 @@ test('configuration bootstrap keeps the shared seed complete during publication'
 		};
 		await import(${JSON.stringify(configModule)});
 		assert(checked, 'the configuration seed write must be exercised');
+		const published = fs.readFileSync(configPath, 'utf8');
+		fs.renameSync = () => { throw new Error('forced seed rename failure'); };
+		await assert.rejects(
+			import(${JSON.stringify(configModule)} + '?failed-publication'),
+			/forced seed rename failure/,
+		);
+		assert.equal(fs.readFileSync(configPath, 'utf8'), published);
+		assert.deepEqual(
+			fs.readdirSync(${JSON.stringify(sandboxBackend)})
+				.filter((file) => file.startsWith('config.json.') && file.endsWith('.tmp')),
+			[],
+		);
 		console.log('complete seed remained readable');
 	`], {
 		cwd: sandboxFrontend,
