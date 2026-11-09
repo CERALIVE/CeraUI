@@ -27,6 +27,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { UpdateOrchestratorWireState } from "@ceraui/rpc/schemas";
 import { osChannelManifestSchema } from "../modules/system/update-orchestrator/os-manifest.ts";
+import { OsStageError } from "../modules/system/update-orchestrator/os-stage-error.ts";
 import {
 	allowCellularOnce,
 	type defaultOrchestratorRuntimeDeps,
@@ -88,7 +89,7 @@ function osRuntime(
 				schedule: { mode: "any-idle", start: "03:00", end: "05:00" },
 				channel: "stable",
 				allowPackagesOverCellular: true,
-				allowSystemOverCellular: true,
+				allowSystemOverCellular: false,
 			}),
 			loadCapabilities: async () => ({
 				mode: "capable",
@@ -130,6 +131,7 @@ describe("pending cellular approval + wire push", () => {
 		expect(getOsUpdateSummary()).toEqual({
 			candidate: { version: "2026.10.0", sizeBytes: 734_003_200 },
 			pendingCellular: { id: "2026.10.0", sizeBytes: 734_003_200 },
+			channelUnpublished: false,
 		});
 		expect(stages()).toBe(0);
 
@@ -141,6 +143,41 @@ describe("pending cellular approval + wire push", () => {
 		// Every transition was pushed; the last one is the staged phase.
 		expect(published.map((wire) => wire.phase)).toContain("os-staging");
 		expect(published.at(-1)?.phase).toBe("os-staged");
+	});
+
+	test("switch approval reaches staging without a persisted grant and turning it off blocks retry", async () => {
+		let allowSystemOverCellular = true;
+		const approvals: boolean[] = [];
+		const grants: Array<string | null> = [];
+		osRuntime({
+			loadSettings: async () => ({
+				packagesAuto: false,
+				systemAuto: true,
+				channel: "beta",
+				schedule: { mode: "any-idle", start: "03:00", end: "05:00" },
+				allowPackagesOverCellular: true,
+				allowSystemOverCellular,
+			}),
+			stageOs: async (_manifest, _progress, control) => {
+				approvals.push(control?.cellularApproved === true);
+				grants.push(getOrchestratorState().cellularOverrideId);
+				throw new OsStageError("os_transport_failed");
+			},
+		});
+		await installUpdatesNow();
+		expect(approvals).toEqual([true]);
+		expect(grants).toEqual([null]);
+		allowSystemOverCellular = false;
+		expect(await installUpdatesNow()).toEqual({
+			started: false,
+			reason: "not_available",
+		});
+		expect(approvals).toEqual([true]);
+		expect(getOrchestratorState().cellularOverrideId).toBeNull();
+		expect(getOsUpdateSummary().pendingCellular).toEqual({
+			id: candidate.version,
+			sizeBytes: candidate.bundle.size,
+		});
 	});
 
 	test("an unmetered uplink never asks for approval", async () => {

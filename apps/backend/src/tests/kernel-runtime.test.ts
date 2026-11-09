@@ -42,6 +42,8 @@ function fixture(
 	let live = false;
 	let launches = 0;
 	let acknowledgements = 0;
+	let metered = false;
+	let allowSystemOverCellular = true;
 	const phases: OrchestratorPhase[] = [];
 	const arms: boolean[] = [];
 	const notices: string[] = [];
@@ -87,10 +89,10 @@ function fixture(
 			channel: "stable",
 			schedule: { mode: "any-idle", start: "03:00", end: "05:00" },
 			allowPackagesOverCellular: true,
-			allowSystemOverCellular: true,
+			allowSystemOverCellular,
 		}),
 		idle: async () => true,
-		metered: async () => false,
+		metered: async () => metered,
 		busy: () => busy || live,
 		bootedSlot: async () => bootedSlot,
 		activate: async (_now, action) => {
@@ -107,6 +109,12 @@ function fixture(
 		state: () => state,
 		launches: () => launches,
 		acks: () => acknowledgements,
+		metered: (value: boolean) => {
+			metered = value;
+		},
+		allowCellular: (value: boolean) => {
+			allowSystemOverCellular = value;
+		},
 		device: (value: KernelState | null) => {
 			device = value;
 		},
@@ -127,6 +135,18 @@ function fixture(
 		},
 	};
 }
+test.each([false, true])(
+	"metered kernel download follows the system cellular switch=%s",
+	async (allowed) => {
+		const f = fixture();
+		f.metered(true);
+		f.allowCellular(allowed);
+		expect(await f.lane.install(true)).toBe(allowed);
+		expect(f.launches()).toBe(allowed ? 1 : 0);
+		expect(f.notices).toEqual(allowed ? [] : ["cellular-approval"]);
+		expect(f.state().cellularOverrideId).toBeNull();
+	},
+);
 test("kernel download and guarded staging persist exact attempt identity before launch", async () => {
 	const f = fixture();
 	expect(await f.lane.install(true)).toBe(true);

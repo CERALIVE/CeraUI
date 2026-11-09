@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
 	actionRefusalKey,
 	appliesAfterRestart,
+	checkScheduleLines,
 	etaMinutes,
 	familyLabel,
 	formatUpdateTime,
@@ -28,6 +29,91 @@ import {
 	validateSchedule,
 	withSettings,
 } from "./update-view";
+
+describe("check schedule lines", () => {
+	const clock = {
+		lastAttemptAt: null,
+		lastSuccessAt: null,
+		nextAttemptAt: null,
+	};
+	const options = { autoEnabled: true, checking: false, now: 2_000 };
+	it.each([
+		[null, []],
+		[2_000, [{ key: "settings.updates.nextCheckSoon", values: {} }]],
+		[1_000, [{ key: "settings.updates.nextCheckSoon", values: {} }]],
+		[3_000, [{ key: "settings.updates.nextCheck", values: { time: 3_000 } }]],
+	])("renders the next check for %s", (nextAttemptAt, expected) => {
+		expect(checkScheduleLines({ ...clock, nextAttemptAt }, options)).toEqual(
+			expected,
+		);
+	});
+	it("prioritizes the deferral over a past clock and hides it when automation is off", () => {
+		const deferred = {
+			...clock,
+			nextAttemptAt: 1_000,
+			deferred: { reason: "metered_only" as const },
+		};
+		expect(checkScheduleLines(deferred, options)).toEqual([
+			{ key: "settings.updates.checkDeferredMetered", values: {} },
+		]);
+		expect(
+			checkScheduleLines(deferred, { ...options, autoEnabled: false }),
+		).toEqual([]);
+	});
+	it.each([
+		[null, 1, false, true],
+		[500, 1, false, true],
+		[1_000, 1, false, false],
+		[1_500, 1, false, false],
+		[null, 0, false, false],
+		[null, undefined, false, false],
+		[null, 1, true, false],
+	] as const)(
+		"last success %s failures %s checking %s",
+		(lastSuccessAt, consecutiveFailures, checking, failed) => {
+			expect(
+				checkScheduleLines(
+					{
+						...clock,
+						lastAttemptAt: 1_000,
+						lastSuccessAt,
+						consecutiveFailures,
+					},
+					{ ...options, autoEnabled: false, checking },
+				),
+			).toEqual(
+				failed
+					? [
+							{
+								key: "settings.updates.lastAttemptFailed",
+								values: { time: 1_000 },
+							},
+						]
+					: [],
+			);
+		},
+	);
+	it("orders a failed attempt before the next check and handles absent older-backend fields", () => {
+		expect(
+			checkScheduleLines(
+				{
+					...clock,
+					lastAttemptAt: 1_000,
+					consecutiveFailures: 2,
+					nextAttemptAt: 3_000,
+				},
+				options,
+			),
+		).toEqual([
+			{ key: "settings.updates.lastAttemptFailed", values: { time: 1_000 } },
+			{ key: "settings.updates.nextCheck", values: { time: 3_000 } },
+		]);
+		expect(
+			checkScheduleLines({ ...clock, nextAttemptAt: 3_000 }, options),
+		).toEqual([{ key: "settings.updates.nextCheck", values: { time: 3_000 } }]);
+		expect(checkScheduleLines(undefined, options)).toEqual([]);
+	});
+});
 
 function wire(
 	phase: UpdateOrchestratorWireState["phase"],

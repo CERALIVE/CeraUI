@@ -26,6 +26,11 @@ export const updateCheckClockSummarySchema = z.object({
 	lastAttemptAt: z.number().nullable(),
 	lastSuccessAt: z.number().nullable(),
 	nextAttemptAt: z.number().nullable(),
+	consecutiveFailures: z.number().int().nonnegative().optional(),
+	deferred: z
+		.object({ reason: z.literal('metered_only') })
+		.nullable()
+		.optional(),
 });
 export type UpdateCheckClockSummary = z.infer<typeof updateCheckClockSummarySchema>;
 
@@ -65,6 +70,11 @@ export const updateTransportFindingSchema = z.object({
 	captive: z.boolean(),
 	/** Every non-`clear` verdict any host returned on this candidate, de-duplicated. */
 	states: z.array(updateTransportProbeStateSchema),
+	/** Failing host/state pairs in probe order; absent on older backends. */
+	hosts: z
+		.array(z.object({ host: z.string(), state: updateTransportProbeStateSchema }))
+		.max(16)
+		.optional(),
 });
 export type UpdateTransportFinding = z.infer<typeof updateTransportFindingSchema>;
 
@@ -102,6 +112,7 @@ export const updateDetailsSchema = z.object({
 		staged: z.object({ version: z.string(), stagedAt: z.number() }).nullable(),
 		/** The verified manifest the last channel check found, not yet staged. */
 		candidate: z.object({ version: z.string(), sizeBytes: z.number() }).nullable(),
+		channelUnpublished: z.boolean().optional(),
 	}),
 	checks: z.object({
 		packages: updateCheckClockSummarySchema,
@@ -110,6 +121,8 @@ export const updateDetailsSchema = z.object({
 	/** An OS download held behind the metered-only gate for one-time approval. */
 	pendingCellular: z.object({ id: z.string(), sizeBytes: z.number() }).nullable(),
 	transport: updateTransportSummarySchema.nullable(),
+	/** The last package selection, retained across a subsequent OS check. */
+	aptTransport: updateTransportSummarySchema.optional(),
 	/** Absent on older backends; null expiry means not established. */
 	credentials: updateCredentialsSchema.optional(),
 	kernel: z

@@ -28,11 +28,13 @@
   connected.
 
   THE INTERFACE IS THE AP'S OWN, and that is load-bearing rather than obvious.
-  A board can hold a station leg and an AP leg on ONE wiphy (see
-  `staApCombo`), so asking the wrong netdev returns the OTHER leg's peers — on a
-  station interface `station dump` lists the access point the board is joined
-  TO, which would render the operator's own upstream router as a "client" of
-  their hotspot. The caller passes the AP interface and nothing here guesses one.
+  A board can hold a station leg and an AP leg on ONE wiphy (see `staApCombo`).
+  In Hybrid mode, the AP leg is the concurrent virtual `clap-<parent>` netdev;
+  the parent interface remains the station leg. Asking for the parent's
+  `station dump` lists the access point the board is joined TO, which would
+  render the operator's own upstream router as a "client" of their hotspot.
+  The caller passes the AP interface (`clap-<parent>` in Hybrid mode), and
+  nothing here guesses one.
 
   Four things about the shape of this data, each with its own guard:
 
@@ -59,6 +61,18 @@
   {@link runIw}, which is the ONE `iw` invocation path — so this module adds no
   second seam a test could miss, and `setRegdomainRunner` still covers the
   binary exactly once.
+
+  While an AP is up, `iw dev <ap> station dump` runs every 5 s, so unread
+  state resolves within one poll. Membership is the full count + every sorted
+  station MAC before the wire-row cap; signal and rates are excluded so
+  fluctuating telemetry never broadcasts.
+  Those readings refresh with every other Wi-Fi broadcast. A broadcast serves
+  the fresh cache without forcing another read. A parse-failing AP can still
+  schedule a read per broadcast while absent, but absence -> absence never
+  broadcasts again. Only broadcastWifiState records the full membership it
+  sends to all subscribers, clearing omitted rosters. Private wifiBuildMsg
+  snapshots never acknowledge delivery to existing viewers. A poll compares
+  that record with the same live-AP projection; reads never acknowledge it.
 */
 
 import {
@@ -78,6 +92,8 @@ import {
 	parseOk,
 } from "../system/cli-parse.ts";
 import { runIw } from "./regdomain.ts";
+import { getWifiInterfacesByMacAddress } from "./wifi-connections.ts";
+import { hotspotApIfname } from "./wifi-hotspot-types.ts";
 
 export type { HotspotClient, HotspotClients };
 export { HOTSPOT_CLIENTS_ROW_CAP };
@@ -218,14 +234,118 @@ const defaultDeps: HotspotClientsDeps = {
 let deps: HotspotClientsDeps = defaultDeps;
 
 type ClientsCache = {
+	readonly membershipKey: string;
 	clients: HotspotClients;
 	readAtMs: number;
 };
 
 const cache = new Map<string, ClientsCache>();
 const inFlight = new Map<string, Promise<void>>();
-/** AP interfaces the wire builder has asked about, so a stale read can re-poke. */
-let lastApIfnames: readonly string[] = [];
+/** Device id -> complete membership last broadcast to all subscribers. */
+const announced = new Map<number, string>();
+let changeListener: (() => void) | null = null;
+let stopPoll: (() => void) | undefined;
+
+export function setHotspotClientsChangeListener(
+	listener: (() => void) | null,
+): void {
+	changeListener = listener;
+}
+
+function membershipKey(stations: readonly HotspotClient[]): string {
+	return `${stations.length}:${stations
+		.map((s) => s.mac)
+		.sort()
+		.join(",")}`;
+}
+
+function currentRosters() {
+	const aps = Object.values(getWifiInterfacesByMacAddress()).flatMap(
+		(iface) => {
+			const ifname = hotspotApIfname(iface);
+			return ifname === undefined ? [] : [{ id: iface.id, ifname }];
+		},
+	);
+	const names = new Set(aps.map(({ ifname }) => ifname));
+	for (const ifname of new Set([...cache.keys(), ...inFlight.keys()])) {
+		if (!names.has(ifname)) {
+			cache.delete(ifname);
+			inFlight.delete(ifname);
+		}
+	}
+	return aps.map(({ id, ifname }) => ({
+		id,
+		ifname,
+		entry: cache.get(ifname),
+	}));
+}
+
+export function currentHotspotApIfnames(): string[] {
+	return currentRosters().map(({ ifname }) => ifname);
+}
+
+/** Project roster blocks without acknowledging delivery to any subscriber. */
+export function hotspotClientsForMessage(): ReadonlyMap<
+	number,
+	HotspotClients
+> {
+	const rosters = currentRosters();
+	const clients = new Map<number, HotspotClients>();
+	for (const { id, entry } of rosters) {
+		if (entry === undefined) continue;
+		clients.set(id, entry.clients);
+	}
+	void refreshHotspotClients(rosters.map(({ ifname }) => ifname));
+	return clients;
+}
+
+/** Called after the synchronous Wi-Fi broadcast, with no intervening read. */
+export function recordHotspotClientsBroadcast(): void {
+	if (shouldUseMocks()) return;
+	announced.clear();
+	for (const { id, entry } of currentRosters()) {
+		if (entry !== undefined) announced.set(id, entry.membershipKey);
+	}
+}
+
+export type HotspotClientsTimers = {
+	readonly setInterval: (
+		callback: () => void,
+		delay: number,
+	) => ReturnType<typeof setInterval> | number;
+	readonly clearInterval: (
+		timer: ReturnType<typeof setInterval> | number,
+	) => void;
+};
+
+export function pollHotspotClients(
+	getApIfnames: () => readonly string[],
+): Promise<void> {
+	// readAtMs is stamped after iw completes; TTL-only ticks can skip a poll.
+	return refreshHotspotClients(getApIfnames(), { force: true });
+}
+
+export function stopHotspotClientsPoll(): void {
+	stopPoll?.();
+}
+
+export function startHotspotClientsPoll(
+	getApIfnames: () => readonly string[],
+	timers: HotspotClientsTimers = { setInterval, clearInterval },
+): () => void {
+	stopHotspotClientsPoll();
+	if (shouldUseMocks()) return () => undefined;
+	const timer = timers.setInterval(
+		() => pollHotspotClients(getApIfnames),
+		HOTSPOT_CLIENTS_TTL_MS,
+	);
+	const stop = () => {
+		timers.clearInterval(timer);
+		if (stopPoll === stop) stopPoll = undefined;
+	};
+	stopPoll = stop;
+	return stop;
+}
 
 /** Test seam — mirrors `setWifiCapabilityDepsForTest` / `setRegdomainRunner`. */
 export function setHotspotClientsDepsForTest(
@@ -236,13 +356,18 @@ export function setHotspotClientsDepsForTest(
 
 /** Test seam: drop every cached roster and restore the real runner. */
 export function resetHotspotClientsForTest(): void {
+	stopHotspotClientsPoll();
+	setHotspotClientsChangeListener(null);
 	cache.clear();
 	inFlight.clear();
-	lastApIfnames = [];
+	announced.clear();
 	deps = defaultDeps;
 }
 
-async function readOne(ifname: string): Promise<void> {
+async function readOne(
+	ifname: string,
+	isCurrent: () => boolean,
+): Promise<void> {
 	let dump: string;
 	try {
 		dump = await deps.runIw([
@@ -259,6 +384,11 @@ async function readOne(ifname: string): Promise<void> {
 		return;
 	}
 
+	// Reconcile live AP ownership BEFORE accepting a completion, even when no
+	// removal poll or structural broadcast has happened yet.
+	currentRosters();
+	if (!isCurrent()) return;
+
 	const parsed = parseIwStationDump(dump);
 	if (!parsed.ok) {
 		logParseError(parsed);
@@ -270,6 +400,7 @@ async function readOne(ifname: string): Promise<void> {
 	}
 
 	cache.set(ifname, {
+		membershipKey: membershipKey(parsed.value),
 		clients: buildHotspotClients(parsed.value),
 		readAtMs: deps.now(),
 	});
@@ -286,15 +417,12 @@ export async function refreshHotspotClients(
 	apIfnames: readonly string[],
 	opts?: { force?: boolean },
 ): Promise<void> {
-	lastApIfnames = [...apIfnames];
 	// A dev host has no AP and no `iw`; the mock branch of the wire builder
 	// serves its own roster, so spawning here would be a parallel mechanism.
 	if (shouldUseMocks()) return;
 
-	// An interface that stopped being an AP stops being described.
-	for (const ifname of [...cache.keys()]) {
-		if (!apIfnames.includes(ifname)) cache.delete(ifname);
-	}
+	const listener = changeListener;
+	currentRosters();
 
 	const nowMs = deps.now();
 	const pending: Array<Promise<void>> = [];
@@ -312,18 +440,39 @@ export async function refreshHotspotClients(
 			pending.push(existing);
 			continue;
 		}
-		const run = readOne(ifname)
+		const run: Promise<void> = readOne(
+			ifname,
+			() => inFlight.get(ifname) === run,
+		)
 			.catch((err) => {
 				logger.debug(`hotspot clients: refresh failed for ${ifname}: ${err}`);
 			})
 			.finally(() => {
-				inFlight.delete(ifname);
+				if (inFlight.get(ifname) === run) inFlight.delete(ifname);
 			});
 		inFlight.set(ifname, run);
 		pending.push(run);
 	}
 
 	await Promise.all(pending);
+	// A retired listener cannot be called by its pending work. Delivery history
+	// itself is independent of batches, listener identity, and flight tokens.
+	if (listener === null || listener !== changeListener) return;
+	const membership = new Map(
+		currentRosters().flatMap(({ id, entry }) =>
+			entry === undefined ? [] : [[id, entry.membershipKey] as const],
+		),
+	);
+	if (
+		membership.size === announced.size &&
+		[...membership].every(([id, key]) => announced.get(id) === key)
+	)
+		return;
+	try {
+		listener();
+	} catch (err) {
+		logger.debug(`hotspot clients: change listener failed: ${err}`);
+	}
 }
 
 /**
@@ -338,15 +487,14 @@ export async function refreshHotspotClients(
 export function getHotspotClientsForInterface(
 	ifname: string,
 ): HotspotClients | undefined {
-	if (!lastApIfnames.includes(ifname)) {
-		lastApIfnames = [...new Set([...lastApIfnames, ifname])];
-	}
+	const apIfnames = currentHotspotApIfnames();
+	if (!apIfnames.includes(ifname)) return undefined;
 	const entry = cache.get(ifname);
 	if (
 		entry === undefined ||
 		deps.now() - entry.readAtMs >= HOTSPOT_CLIENTS_TTL_MS
 	) {
-		void refreshHotspotClients(lastApIfnames);
+		void refreshHotspotClients(apIfnames);
 	}
 	return entry?.clients;
 }

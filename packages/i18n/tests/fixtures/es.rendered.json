@@ -1417,7 +1417,7 @@
 	"settings.transportKindHint": "Cómo llega tu transmisión al receptor. SRTLA combina varios enlaces de red; RIST y SRT usan un solo enlace.",
 	"settings.transportProtocol": "Protocolo de transporte",
 	"settings.updates.checkFailed.captive_portal": "Esta red pide iniciar sesión primero. Abre su página de acceso en un navegador, completa el inicio de sesión y vuelve a comprobar.",
-	"settings.updates.checkFailed.repos_unreachable": "Ni IPv4 ni IPv6 llegaron a los repositorios de paquetes, así que el dispositivo no inició la comprobación. Revisa la conexión de red y vuelve a intentarlo.",
+	"settings.updates.checkFailed.repos_unreachable": "El dispositivo no pudo llegar a todos los servidores de paquetes por ninguna conexión, así que no inició la comprobación. Revisa la conexión de red y vuelve a intentarlo.",
 	"settings.updates.failedReasonGeneric": "La actualización no terminó y el dispositivo no indicó el motivo. Consulta Configuración → Registros del sistema para más detalles.",
 	"settings.updates.cleanup_warning.post_clean_failed": "La actualización se completó, pero no se pudieron limpiar los archivos descargados. Consulta Configuración → Registros del sistema.",
 	"settings.updates.preflightFailedTitle": "La actualización no se inició",

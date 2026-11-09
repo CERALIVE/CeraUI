@@ -1,5 +1,76 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
+import { logger } from "../helpers/logger.ts";
 import { selectUpdateTransport } from "../modules/system/update-transport/executor.ts";
+
+test("an OS selection logs every failed cellular interface and family once", async () => {
+	const logged: unknown[][] = [];
+	const warn = spyOn(logger, "warn").mockImplementation(
+		(...args: unknown[]) => {
+			logged.push(args);
+			return logger;
+		},
+	);
+	try {
+		await selectUpdateTransport(
+			{ profile: "os", board: "rock-5b-plus", channel: "stable" },
+			{
+				listIfnames: () => ["wwan0", "wwan1"],
+				readSources: async () => "",
+				credentials: async () => undefined,
+				mmIfnames: () => ["wwan0", "wwan1"],
+				routerIfnames: () => [],
+				dongleIfnames: () => [],
+				run: async (argv) => ({
+					exitCode: argv[0] === "nmcli" ? 0 : 1,
+					stdout:
+						argv[0] === "nmcli"
+							? ["wwan0", "wwan1"]
+									.map(
+										(ifname) =>
+											`GENERAL.DEVICE:${ifname}\nGENERAL.TYPE:gsm\nGENERAL.STATE:100 (connected)\nGENERAL.METERED:yes`,
+									)
+									.join("\n\n")
+							: "",
+					stderr: "",
+				}),
+			},
+		);
+		expect(
+			logged.filter(([message]) => message === "No healthy update transport"),
+		).toEqual([
+			[
+				"No healthy update transport",
+				{
+					profile: "os",
+					findings: [
+						{
+							ifname: "wwan0",
+							family: 4,
+							reason: "metered cellular IPv4: images.ceralive.tv dns-failed",
+						},
+						{
+							ifname: "wwan0",
+							family: 6,
+							reason: "metered cellular IPv6: images.ceralive.tv dns-failed",
+						},
+						{
+							ifname: "wwan1",
+							family: 4,
+							reason: "metered cellular IPv4: images.ceralive.tv dns-failed",
+						},
+						{
+							ifname: "wwan1",
+							family: 6,
+							reason: "metered cellular IPv6: images.ceralive.tv dns-failed",
+						},
+					],
+				},
+			],
+		]);
+	} finally {
+		warn.mockRestore();
+	}
+});
 
 test("APT and OS profiles probe only their configured hosts, on both families, bound to the device", async () => {
 	const calls: string[][] = [];

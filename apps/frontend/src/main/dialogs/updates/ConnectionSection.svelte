@@ -114,6 +114,14 @@ const checked = $derived(formatUpdateTime(transport?.checkedAt, locale));
 							/>
 						{/each}
 					</div>
+					{#each finding.hosts ?? [] as probe (`${probe.host}-${probe.state}`)}
+						<p class="text-muted-foreground text-xs break-words" data-testid="update-connection-host">
+							<span class="font-mono" dir="ltr">{m['settings.updates.connection.hostState']({
+								host: probe.host,
+								state: resolveMessageKey(probeStateKey(probe.state)),
+							})}</span>
+						</p>
+					{/each}
 				</li>
 			{/each}
 		</ul>

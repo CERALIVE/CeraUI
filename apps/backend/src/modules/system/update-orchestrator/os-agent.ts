@@ -368,12 +368,14 @@ export class QuarantinedOsReplayError extends OsAgentError {
 	}
 }
 
+/** Null means the channel JSON is unpublished; undefined means no candidate. */
 export async function checkOsChannel(
 	settingsChannel: "stable" | "beta",
 	quarantine: UpdateQuarantine,
 	read: typeof readSignedOsChannel = readSignedOsChannel,
-): Promise<OsChannelManifest | undefined> {
+): Promise<OsChannelManifest | null | undefined> {
 	const signed = await read(settingsChannel, quarantine);
+	if (signed === null) return null;
 	if (!signed) return undefined;
 	const result = await discoverSignedOsManifest(
 		signed.data,
@@ -420,7 +422,7 @@ export async function checkOsChannel(
 async function readSignedOsChannel(
 	settingsChannel: "stable" | "beta",
 	quarantine: UpdateQuarantine,
-): Promise<SignedOsChannel | undefined> {
+): Promise<SignedOsChannel | null | undefined> {
 	const bootedVersion = await readBootedOsReleaseVersion();
 	if (!bootedVersion) throw new OsAgentError("booted_version_unknown");
 	const { board, compatible } = await readBoardIdentity();
@@ -449,7 +451,7 @@ async function readSignedOsChannel(
 			await chown(dir, file.ota_uid, 0);
 			const json = join(dir, "manifest.json");
 			const sig = join(dir, "manifest.sig");
-			if (!(await fetchAsOta(base, json, file.ota_uid))) return undefined;
+			if (!(await fetchAsOta(base, json, file.ota_uid))) return null;
 			if (!(await fetchAsOta(`${base}.sig`, sig, file.ota_uid)))
 				return undefined;
 			const installed = (

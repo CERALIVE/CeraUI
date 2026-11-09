@@ -15,7 +15,7 @@ export const updateSettingsSchema = z
 		packagesAuto: z.boolean().default(true),
 		systemAuto: z.boolean().default(true),
 		schedule: updateScheduleSchema.default({ mode: 'any-idle', start: '03:00', end: '05:00' }),
-		channel: z.enum(['stable', 'beta']).default('stable'),
+		channel: z.enum(['stable', 'beta']).default('beta'),
 		allowPackagesOverCellular: z.boolean().default(true),
 		allowSystemOverCellular: z.boolean().default(false),
 	})

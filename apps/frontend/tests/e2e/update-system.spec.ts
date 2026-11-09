@@ -426,4 +426,146 @@ test.describe('device update surfaces (Todo 41)', { tag: '@functional' }, () => 
 		await expect(dialog.getByTestId('updates-connection')).toBeVisible();
 		await expect(dialog.getByTestId('update-cellular-pending')).toHaveCount(0);
 	});
+
+	test('package failure evidence survives a later OS transport selection', async ({ page }, testInfo) => {
+		const failedFinding = {
+			ifname: 'wwan0', kind: 'cellular' as const, family: 4 as const, metered: true,
+			healthy: false, captive: false, states: ['blocked' as const],
+			hosts: [{ host: 'deb.debian.org', state: 'blocked' as const }],
+		};
+		const aptTransport = {
+			profile: 'apt' as const, checkedAt: 1_000, status: 'none' as const, selected: null,
+			findings: [failedFinding],
+		};
+		await installUpdateWire(page, {
+			packages: { kind: 'check_failed', reason: 'repos_unreachable', checked_at: 1_000 },
+			fakes: {
+				'system.getUpdateCapabilities': CAPABLE_CAPABILITIES,
+				'system.getUpdateDetails': capableDetails({
+					pendingCellular: null, aptTransport,
+					transport: {
+						profile: 'os', checkedAt: 2_000, status: 'selected',
+						selected: { ifname: 'wwan1', kind: 'cellular', family: 4, metered: true },
+						findings: [
+							{
+								...failedFinding,
+								hosts: [{ host: 'images.ceralive.tv', state: 'blocked' }],
+							},
+							{
+								ifname: 'wwan1', kind: 'cellular', family: 4, metered: true,
+								healthy: true, captive: false, states: [],
+							},
+						],
+					},
+				}),
+			},
+		});
+		await boot(page);
+		const dialog = await openUpdatesDialog(page);
+		await expect(dialog.getByTestId('updates-packages').getByTestId('update-check-what-failed')).toHaveText(
+			'wwan0 IPv4: deb.debian.org, No answer (timed out or blocked)',
+		);
+		await dialog.getByTestId('updates-packages').screenshot({ path: testInfo.outputPath('packages.png') });
+		const connection = dialog.getByTestId('updates-connection');
+		await expect(connection.getByTestId('update-connection-host')).toHaveText(
+			'images.ceralive.tv: No answer (timed out or blocked)',
+		);
+		await connection.screenshot({ path: testInfo.outputPath('connection.png') });
+	});
+
+	test('running and standby slots show their version and mirror evidence', async ({ page }, testInfo) => {
+		await installUpdateWire(page, { fakes: {
+			'system.getUpdateCapabilities': CAPABLE_CAPABILITIES,
+			'system.getUpdateDetails': capableDetails({
+				pendingCellular: null,
+				slots: [
+					{ name: 'rootfs.0', bootname: 'A', state: 'booted', bootStatus: 'good', version: '2026.10.100', lastSyncedAt: null },
+					{ name: 'rootfs.1', bootname: 'B', state: 'inactive', bootStatus: 'good', version: '2026.10.100', lastSyncedAt: '2026-11-08T00:00:00Z' },
+				],
+			}),
+		} });
+		await boot(page);
+		const dialog = await openUpdatesDialog(page);
+		await expect(dialog.getByTestId('update-slot-A')).toContainText('2026.10.100');
+		await expect(dialog.getByTestId('update-slot-A')).not.toContainText('No completed mirror on record');
+		const mirrorTime = await page.evaluate(() => new Intl.DateTimeFormat('en', {
+			dateStyle: 'medium', timeStyle: 'short',
+		}).format(new Date('2026-11-08T00:00:00Z')));
+		await expect(dialog.getByTestId('update-slot-B')).toContainText(`Mirrored ${mirrorTime}`);
+		await dialog.getByTestId('updates-slots').screenshot({ path: testInfo.outputPath('slots.png') });
+	});
+
+	test('overdue OS checks and deferred package checks explain their schedule', async ({ page }, testInfo) => {
+		const wire = await installUpdateWire(page);
+		wire.fake('system.getUpdateCapabilities', CAPABLE_CAPABILITIES);
+		wire.fake('system.getUpdateDetails', capableDetails({
+			pendingCellular: null,
+			checks: {
+				os: { lastAttemptAt: 1_000, lastSuccessAt: null, nextAttemptAt: 2_000, consecutiveFailures: 1, deferred: null },
+				packages: { lastAttemptAt: null, lastSuccessAt: null, nextAttemptAt: 2_000, consecutiveFailures: 0, deferred: { reason: 'metered_only' } },
+			},
+		}));
+		await boot(page);
+		const dialog = await openUpdatesDialog(page);
+		await expect(dialog.getByTestId('updates-system')).toContainText('Next automatic check: as soon as possible');
+		await expect(dialog.getByTestId('updates-system').getByTestId('update-system-schedule').first()).toContainText("didn't finish.");
+		await expect(dialog.getByTestId('updates-packages')).toContainText("Waiting for a connection that isn't cellular, because package updates over cellular are off.");
+		await dialog.getByTestId('updates-system').screenshot({ path: testInfo.outputPath('schedule.png') });
+		await page.keyboard.press('Escape');
+		await expect(dialog).toBeHidden();
+		wire.fake('system.getUpdateSettings', {
+			packagesAuto: false, systemAuto: false, channel: 'beta',
+			schedule: { mode: 'any-idle', start: '03:00', end: '05:00' },
+			allowPackagesOverCellular: false, allowSystemOverCellular: false,
+		});
+		await openUpdatesDialog(page);
+		await expect(dialog.getByTestId('updates-system')).not.toContainText('Next automatic check:');
+		await expect(dialog.getByTestId('updates-system').getByTestId('update-system-schedule')).toContainText("didn't finish.");
+		await expect(dialog.getByTestId('updates-packages').getByTestId('update-next-check')).toHaveCount(0);
+	});
+
+	test('an unpublished stable channel says it has no system image yet', async ({ page }, testInfo) => {
+		const wire = await installUpdateWire(page);
+		wire.fake('system.getUpdateCapabilities', CAPABLE_CAPABILITIES);
+		wire.fake('system.getUpdateSettings', {
+			packagesAuto: true, systemAuto: true, channel: 'stable',
+			schedule: { mode: 'any-idle', start: '03:00', end: '05:00' },
+			allowPackagesOverCellular: false, allowSystemOverCellular: false,
+		});
+		wire.fake('system.getUpdateDetails', capableDetails({
+			pendingCellular: null,
+			os: { bootedVersion: '2026.10.100', candidate: null, staged: null, channelUnpublished: true },
+		}));
+		await boot(page);
+		const dialog = await openUpdatesDialog(page);
+		await expect(dialog.getByTestId('update-system-channel-empty')).toHaveText('This channel has no system image yet.');
+		await expect(dialog.getByTestId('update-system-channel')).toContainText('Stable');
+		await dialog.getByTestId('updates-system').screenshot({ path: testInfo.outputPath('unpublished.png') });
+	});
+
+	test('the channel radio group names the system image choice', async ({ page }, testInfo) => {
+		await installUpdateWire(page, { fakes: {
+			'system.getUpdateCapabilities': CAPABLE_CAPABILITIES,
+			'system.getUpdateDetails': capableDetails({ pendingCellular: null }),
+		} });
+		await boot(page);
+		const dialog = await openUpdatesDialog(page);
+		await expect(dialog.getByRole('radiogroup', { name: 'System image channel', exact: true })).toBeVisible();
+		await dialog.getByTestId('update-channel').screenshot({ path: testInfo.outputPath('channel.png') });
+	});
+
+	test('package and system sections fit a 390 by 844 viewport', async ({ page }) => {
+		await page.setViewportSize({ width: 390, height: 844 });
+		await installUpdateWire(page, { fakes: {
+			'system.getUpdateCapabilities': CAPABLE_CAPABILITIES,
+			'system.getUpdateDetails': capableDetails({ pendingCellular: null }),
+		} });
+		await boot(page);
+		const dialog = await openUpdatesDialog(page);
+		for (const section of ['updates-packages', 'updates-system']) {
+			await dialog.getByTestId(section).scrollIntoViewIfNeeded();
+			await expect(dialog.getByTestId(section)).toBeVisible();
+			expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+		}
+	});
 });

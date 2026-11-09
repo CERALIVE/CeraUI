@@ -6,6 +6,7 @@
  */
 import type {
 	UpdateCapabilities,
+	UpdateCheckClockSummary,
 	UpdateOrchestratorPhase,
 	UpdateOrchestratorWireState,
 	UpdateSettings,
@@ -315,6 +316,70 @@ export function slotLetter(slot: {
 }
 
 // ─── time ──────────────────────────────────────────────────────────────────
+
+type CheckScheduleLine = {
+	readonly key:
+		| "settings.updates.lastAttemptFailed"
+		| "settings.updates.nextCheck"
+		| "settings.updates.nextCheckSoon"
+		| "settings.updates.checkDeferredMetered";
+	readonly values: { readonly time?: number };
+};
+
+/** Non-negative timestamps within JavaScript's representable Date range. */
+export function isValidCheckDeadline(
+	value: number | null | undefined,
+): value is number {
+	return (
+		value !== null &&
+		value !== undefined &&
+		Number.isFinite(value) &&
+		value >= 0 &&
+		value <= 8_640_000_000_000_000
+	);
+}
+
+/** Failed attempts require a recorded failure; restart-interrupted checks lack one. */
+export function checkScheduleLines(
+	clock: UpdateCheckClockSummary | undefined,
+	{
+		autoEnabled,
+		checking,
+		now,
+	}: {
+		readonly autoEnabled: boolean;
+		readonly checking: boolean;
+		readonly now: number;
+	},
+): readonly CheckScheduleLine[] {
+	if (!clock) return [];
+	const lines: CheckScheduleLine[] = [];
+	if (
+		!checking &&
+		clock.lastAttemptAt !== null &&
+		(clock.consecutiveFailures ?? 0) > 0 &&
+		(clock.lastSuccessAt === null || clock.lastSuccessAt < clock.lastAttemptAt)
+	) {
+		lines.push({
+			key: "settings.updates.lastAttemptFailed",
+			values: { time: clock.lastAttemptAt },
+		});
+	}
+	if (!autoEnabled) return lines;
+	if (clock.deferred) {
+		lines.push({ key: "settings.updates.checkDeferredMetered", values: {} });
+	} else if (isValidCheckDeadline(clock.nextAttemptAt)) {
+		lines.push(
+			clock.nextAttemptAt <= now
+				? { key: "settings.updates.nextCheckSoon", values: {} }
+				: {
+						key: "settings.updates.nextCheck",
+						values: { time: clock.nextAttemptAt },
+					},
+		);
+	}
+	return lines;
+}
 
 /** Epoch-ms or ISO timestamp → locale date-time, or `undefined` when unusable. */
 export function formatUpdateTime(

@@ -24,7 +24,10 @@ import type { UpdateCapabilities, UpdateDetails } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../../helpers/logger.ts";
 import { readUpdateCapabilities } from "../update-capabilities.ts";
-import { getLastTransportSelection } from "../update-transport/last-selection.ts";
+import {
+	getLastTransportSelection,
+	getLastTransportSelectionForProfile,
+} from "../update-transport/last-selection.ts";
 import { credentialDetails } from "./credential-notice-observer.ts";
 import { readStagedReceipt } from "./os-agent.ts";
 import { readBootedOsReleaseVersion } from "./os-manifest.ts";
@@ -32,6 +35,7 @@ import {
 	getKernelUpdateSummary,
 	getOrchestratorState,
 	getOsUpdateSummary,
+	getPackageCheckDeferral,
 } from "./runtime.ts";
 import { type RootSlotStatus, readBothSlotStatus } from "./slot-status.ts";
 import type { OrchestratorPhase, OrchestratorState } from "./types.ts";
@@ -52,8 +56,10 @@ export type UpdateDetailsDeps = {
 	readonly orchestratorState: () => OrchestratorState;
 	readonly osSummary: typeof getOsUpdateSummary;
 	readonly lastTransport: typeof getLastTransportSelection;
+	readonly lastAptTransport?: typeof getLastTransportSelection;
 	readonly credentials?: typeof credentialDetails;
 	readonly kernelSummary?: typeof getKernelUpdateSummary;
+	readonly packageDeferral?: typeof getPackageCheckDeferral;
 };
 
 export const defaultUpdateDetailsDeps: UpdateDetailsDeps = {
@@ -64,8 +70,10 @@ export const defaultUpdateDetailsDeps: UpdateDetailsDeps = {
 	orchestratorState: getOrchestratorState,
 	osSummary: getOsUpdateSummary,
 	lastTransport: getLastTransportSelection,
+	lastAptTransport: () => getLastTransportSelectionForProfile("apt"),
 	credentials: credentialDetails,
 	kernelSummary: getKernelUpdateSummary,
+	packageDeferral: getPackageCheckDeferral,
 };
 
 async function settle<T>(
@@ -114,23 +122,37 @@ export async function readUpdateDetails(
 		lastAttemptAt: c.lastAttemptAt,
 		lastSuccessAt: c.lastSuccessAt,
 		nextAttemptAt: c.nextAttemptAt,
+		consecutiveFailures: c.consecutiveFailures,
 	});
 	return {
 		...(kernel ? { kernel } : {}),
-		slots: slots ? slots.map((slot) => ({ ...slot })) : null,
+		slots: slots
+			? slots.map((slot) => ({
+					...slot,
+					version:
+						slot.state === "booted" && slot.version === null
+							? (bootedVersion ?? null)
+							: slot.version,
+				}))
+			: null,
 		os: {
 			bootedVersion: bootedVersion ?? null,
 			staged: receipt
 				? { version: receipt.version, stagedAt: receipt.stagedAt }
 				: null,
 			candidate: os.candidate,
+			channelUnpublished: os.channelUnpublished ?? false,
 		},
 		checks: {
-			packages: clock(state.packageCheck),
-			os: clock(state.osCheck),
+			packages: {
+				...clock(state.packageCheck),
+				deferred: deps.packageDeferral?.() ?? null,
+			},
+			os: { ...clock(state.osCheck), deferred: null },
 		},
 		pendingCellular: os.pendingCellular,
 		transport: deps.lastTransport() ?? null,
+		aptTransport: deps.lastAptTransport?.(),
 		credentials: readCredentials(deps),
 	};
 }

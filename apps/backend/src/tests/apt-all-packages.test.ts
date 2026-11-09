@@ -18,6 +18,7 @@ import {
 	getUpdateState,
 	resetAptReachabilityProbeForTest,
 	resetSoftwareUpdateState,
+	runSoftwareUpdateCheck,
 	runUpdateDiscoveryAndReport,
 	setAptCommandRunnerForTest,
 	setAptReachabilityProbeForTest,
@@ -386,6 +387,82 @@ describe("apt-all-packages admission", () => {
 		).rejects.toThrow("first_party_held_back");
 	});
 
+	it("does not offer a stable version below the installed beta candidate or refuse the check", async () => {
+		// At priority 990 apt retains the newer installed candidate rather than downgrading.
+		const installedBeta = credentialPolicy
+			.replace("Installed: 1.0.0", "Installed: 2.0.0")
+			.replace("Candidate: 1.0.1", "Candidate: 2.0.0")
+			.replace(" *** 1.0.0 990", " *** 2.0.0 100");
+		const result = await discoverAptAllPackages(
+			"Inst ceralive-apt-credentials [2.0.0] (1.0.1 CeraLive:stable [arm64])\n",
+			"",
+			async () => installedBeta,
+			sourcePolicy,
+		);
+		expect(result.actionable).toEqual([]);
+		expect(result.packages).toEqual([
+			{
+				name: "ceralive-apt-credentials",
+				version: "1.0.1",
+				layer: "platform",
+				actionable: false,
+			},
+		]);
+	});
+
+	it.each(["legacy", "capable"] as const)(
+		"keeps a newer beta-installed package out of the %s roster without a refusal",
+		async (mode) => {
+			const dir = await mkdtemp(
+				path.join(tmpdir(), "ceralive-stable-after-beta-"),
+			);
+			const capability = path.join(dir, "capabilities.json");
+			setUpdateCapabilityPathForTest(capability);
+			setCeraliveSourcesFileForTest(path.join(dir, "sources"));
+			setAptReachabilityProbeForTest(async () => ({
+				ipv4: "ok",
+				ipv6: "ok",
+				used: "any",
+				verdict: "any",
+				detail: [],
+			}));
+			// With stable priority 990, both apt discovery commands report no upgrade
+			// for an installed version newer than the stable origin's version.
+			setAptCommandRunnerForTest(async (argv) => ({
+				exitCode: 0,
+				stderr: "",
+				stdout:
+					argv[1] === "policy"
+						? sourcePolicy
+						: argv[1] === "showhold"
+							? ""
+							: "0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n",
+			}));
+			try {
+				if (mode === "capable") {
+					await writeFile(
+						capability,
+						JSON.stringify({
+							schema: 1,
+							features: ["apt-all-packages"],
+							ota_uid: 42041,
+							apt_uid: 42042,
+						}),
+					);
+				}
+				expect(await runUpdateDiscoveryAndReport()).toBe(null);
+				expect(getUpdateState()).toMatchObject({ kind: "idle" });
+			} finally {
+				setUpdateCapabilityPathForTest(null);
+				setCeraliveSourcesFileForTest(null);
+				setAptCommandRunnerForTest(null);
+				resetAptReachabilityProbeForTest();
+				resetSoftwareUpdateState();
+				await rm(dir, { recursive: true, force: true });
+			}
+		},
+	);
+
 	it("capability file selects the real discovery path; absent file keeps legacy argv and roster byte-identical", async () => {
 		const dir = await mkdtemp(
 			path.join(tmpdir(), "ceralive-capability-discovery-"),
@@ -404,6 +481,12 @@ describe("apt-all-packages admission", () => {
 		}));
 		setAptCommandRunnerForTest(async (argv) => {
 			seen.push([...argv]);
+			if (argv[1] === "update") {
+				// The refresh must never fetch the stale beta source written by an older UI.
+				expect(await readFile(source, "utf8")).toBe(
+					buildCeraliveSources("amd64"),
+				);
+			}
 			const result =
 				argv[1] === "-s"
 					? simulation
@@ -450,8 +533,10 @@ describe("apt-all-packages admission", () => {
 					apt_uid: 42042,
 				}),
 			);
-			await runUpdateDiscoveryAndReport();
-			expect(seen[0]).toEqual([
+			await writeFile(source, "old beta sources");
+			expect(await runSoftwareUpdateCheck()).toBe(null);
+			expect(seen[0]?.[1]).toBe("update");
+			expect(seen[1]).toEqual([
 				"/usr/bin/apt-get",
 				"-s",
 				"-o",
@@ -467,7 +552,7 @@ describe("apt-all-packages admission", () => {
 				seen.filter((argv) => argv[1] === "policy" && argv.length === 2),
 			).toHaveLength(1);
 			expect(await readFile(source, "utf8")).toBe(
-				buildCeraliveSources("stable", "amd64"),
+				buildCeraliveSources("amd64"),
 			);
 		} finally {
 			setUpdateCapabilityPathForTest(null);
@@ -665,53 +750,46 @@ describe("apt-all-packages admission", () => {
 });
 
 describe("APT channel", () => {
-	it("layers beta over stable, while stable has one stanza", () => {
-		const stable = buildCeraliveSources("stable", "arm64");
-		expect(stable).toContain(
-			"URIs: https://apt.ceralive.tv/dists/stable/binary-arm64/",
-		);
-		expect(stable).not.toContain("/dists/beta/");
-		expect(buildCeraliveSources("beta", "arm64")).toBe(
-			`${stable}\n${stable.replace("/dists/stable/", "/dists/beta/")}`,
-		);
-	});
-	it("reconciles once in capable mode and leaves legacy files untouched", async () => {
-		const directory = await mkdtemp(
-			path.join(tmpdir(), "ceralive-apt-channel-"),
-		);
-		const file = path.join(directory, "ceralive.sources");
-		try {
-			await writeFile(file, "legacy bytes");
-			expect(await reconcileAptChannel("legacy", "beta", file, "arm64")).toBe(
-				false,
+	it.each(["arm64", "amd64"])(
+		"builds exactly one stable stanza for %s",
+		(arch) => {
+			expect(buildCeraliveSources(arch)).toBe(
+				`Types: deb\nURIs: https://apt.ceralive.tv/dists/stable/binary-${arch}/\nSuites: ./\nSigned-By: /usr/share/keyrings/ceralive-archive-keyring.gpg\n`,
 			);
-			expect(await readFile(file, "utf8")).toBe("legacy bytes");
-			expect(await reconcileAptChannel("capable", "beta", file, "arm64")).toBe(
-				true,
+		},
+	);
+	it.each(["arm64", "amd64"])(
+		"reconciles once in capable mode for %s and leaves legacy files untouched",
+		async (arch) => {
+			const directory = await mkdtemp(
+				path.join(tmpdir(), "ceralive-apt-channel-"),
 			);
-			expect(
-				await reconcileAptChannel("capable", "stable", file, "arm64"),
-			).toBe(true);
-			expect(await readFile(file, "utf8")).toBe(
-				buildCeraliveSources("stable", "arm64"),
-			);
-			expect(
-				buildAptAllInstallArgs(
-					[{ name: "cerastream", version: "2026.9.7" }],
-					"any",
-				),
-			).not.toContain("--allow-downgrades");
-			const stableAfterBeta = await discoverAptAllPackages(
-				"0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n",
-				"",
-				async () => {
-					throw new Error("no candidate must be resolved");
-				},
-				sourcePolicy,
-			);
-			expect(stableAfterBeta.actionable).toEqual([]);
-		} finally {
-			await rm(directory, { recursive: true, force: true });
-		}
-	});
+			const file = path.join(directory, "ceralive.sources");
+			try {
+				await writeFile(file, "legacy bytes");
+				expect(await reconcileAptChannel("legacy", file, arch)).toBe(false);
+				expect(await readFile(file, "utf8")).toBe("legacy bytes");
+				expect(await reconcileAptChannel("capable", file, arch)).toBe(true);
+				expect(await reconcileAptChannel("capable", file, arch)).toBe(false);
+				expect(await readFile(file, "utf8")).toBe(buildCeraliveSources(arch));
+				expect(
+					buildAptAllInstallArgs(
+						[{ name: "cerastream", version: "2026.9.7" }],
+						"any",
+					),
+				).not.toContain("--allow-downgrades");
+				const stableAfterBeta = await discoverAptAllPackages(
+					"0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n",
+					"",
+					async () => {
+						throw new Error("no candidate must be resolved");
+					},
+					sourcePolicy,
+				);
+				expect(stableAfterBeta.actionable).toEqual([]);
+			} finally {
+				await rm(directory, { recursive: true, force: true });
+			}
+		},
+	);
 });

@@ -13,7 +13,7 @@ describe('update settings wire contract', () => {
 			packagesAuto: true,
 			systemAuto: true,
 			schedule: { mode: 'any-idle', start: '03:00', end: '05:00' },
-			channel: 'stable',
+			channel: 'beta',
 			allowPackagesOverCellular: true,
 			allowSystemOverCellular: false,
 		});

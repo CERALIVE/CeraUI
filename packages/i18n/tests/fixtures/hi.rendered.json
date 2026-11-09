@@ -1417,7 +1417,7 @@
 	"settings.transportKindHint": "आपकी स्ट्रीम रिसीवर तक कैसे पहुँचती है। SRTLA कई नेटवर्क लिंक को जोड़ता है; RIST और SRT एकल लिंक का उपयोग करते हैं।",
 	"settings.transportProtocol": "ट्रांसपोर्ट प्रोटोकॉल",
 	"settings.updates.checkFailed.captive_portal": "यह नेटवर्क पहले साइन इन करने के लिए कहता है। ब्राउज़र में इसका साइन-इन पेज खोलें, साइन इन पूरा करें, फिर दोबारा जाँचें।",
-	"settings.updates.checkFailed.repos_unreachable": "IPv4 और IPv6 दोनों से पैकेज रिपॉज़िटरी तक नहीं पहुँचा जा सका, इसलिए डिवाइस ने जाँच शुरू ही नहीं की। नेटवर्क कनेक्शन जाँचें और फिर से प्रयास करें।",
+	"settings.updates.checkFailed.repos_unreachable": "डिवाइस किसी भी कनेक्शन से सभी पैकेज सर्वर तक नहीं पहुँच सका, इसलिए उसने जाँच शुरू नहीं की। नेटवर्क कनेक्शन जाँचें और फिर से प्रयास करें।",
 	"settings.updates.failedReasonGeneric": "अपडेट पूरा नहीं हुआ और डिवाइस ने कारण नहीं बताया। विवरण के लिए सेटिंग्स → सिस्टम लॉग देखें।",
 	"settings.updates.cleanup_warning.post_clean_failed": "अपडेट सफल हुआ, लेकिन डाउनलोड की गई फ़ाइलें हटाई नहीं जा सकीं। सेटिंग्स → सिस्टम लॉग देखें।",
 	"settings.updates.preflightFailedTitle": "अपडेट शुरू नहीं हुआ",

@@ -1,9 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { fetchAsOta } from "../modules/system/update-orchestrator/os-agent.ts";
+import {
+	checkOsChannel,
+	fetchAsOta,
+} from "../modules/system/update-orchestrator/os-agent.ts";
+import { UpdateQuarantine } from "../modules/system/update-orchestrator/quarantine.ts";
 import {
 	checkOsManifestResult,
 	checkUpdatesNow,
 	getOrchestratorState,
+	getOsUpdateSummary,
 	resetOrchestratorRuntimeForTest,
 	setOrchestratorStateForTest,
 } from "../modules/system/update-orchestrator/runtime.ts";
@@ -76,7 +81,11 @@ describe("OS channel publication over a healthy transport", () => {
 				},
 			};
 			if (!(await fetchAsOta(base, "/tmp/manifest.json", 987, fetchDeps)))
-				return undefined;
+				return checkOsChannel(
+					"stable",
+					new UpdateQuarantine(),
+					async () => null,
+				);
 			if (
 				!(await fetchAsOta(`${base}.sig`, "/tmp/manifest.sig", 987, fetchDeps))
 			)
@@ -106,6 +115,7 @@ describe("OS channel publication over a healthy transport", () => {
 			expect(state.failureReason).toBeNull();
 			expect(state.osCheck.consecutiveFailures).toBe(0);
 			expect(state.osCheck.lastSuccessAt).not.toBeNull();
+			expect(getOsUpdateSummary().channelUnpublished).toBe(true);
 			expect(urls).toEqual([
 				"https://images.ceralive.tv/channels/stable/rock-5b-plus.json",
 			]);
@@ -125,6 +135,7 @@ describe("OS channel publication over a healthy transport", () => {
 		expect(state.failureReason).toBeNull();
 		expect(state.osCheck.consecutiveFailures).toBe(0);
 		expect(state.osCheck.lastSuccessAt).not.toBeNull();
+		expect(getOsUpdateSummary().channelUnpublished).toBe(false);
 		expect(urls).toEqual([
 			"https://images.ceralive.tv/channels/stable/rock-5b-plus.json",
 			"https://images.ceralive.tv/channels/stable/rock-5b-plus.json.sig",
@@ -134,6 +145,7 @@ describe("OS channel publication over a healthy transport", () => {
 	test("a published channel still offers the verified candidate", async () => {
 		const { state, urls } = await checkFromHttp(200);
 		expect(state.phase).toBe("os-available");
+		expect(getOsUpdateSummary().channelUnpublished).toBe(false);
 		expect(state.osCheck.lastSuccessAt).not.toBeNull();
 		expect(urls).toEqual([
 			"https://images.ceralive.tv/channels/stable/rock-5b-plus.json",

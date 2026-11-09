@@ -58,16 +58,28 @@ const SURFACE_KEYS: readonly string[] = [
 	"settings.updates.layer.platformBand",
 	"settings.updates.layer.keptBack",
 	"settings.updates.failedReasonGeneric",
+	"settings.updates.connection.state.blocked",
 ];
+
+const TEMPLATE_KEYS = {
+	"settings.updates.checkFailed.whatFailed": [
+		"ifname",
+		"family",
+		"host",
+		"state",
+	],
+	"settings.updates.connection.hostState": ["host", "state"],
+} as const;
 
 const REQUIRED_KEYS: readonly string[] = [
 	...UPDATE_CHECK_FAILURE_REASONS.map((reason) => REASON_COPY_KEY[reason]),
 	...SURFACE_KEYS,
+	...Object.keys(TEMPLATE_KEYS),
 ];
 
 /** The keys this todo ADDED — the ones a locale could still have copy-pasted. */
-const NEW_KEYS: readonly string[] = REQUIRED_KEYS.filter((key) =>
-	key.startsWith("settings.updates."),
+const NEW_KEYS: readonly string[] = REQUIRED_KEYS.filter(
+	(key) => key.startsWith("settings.updates.") && !(key in TEMPLATE_KEYS),
 );
 
 // The legacy Packages section moved out of UpdatesDialog (FIX-16-C); the
@@ -112,7 +124,9 @@ describe("the required list is derived from the wire enum", () => {
 		expect(Object.keys(REASON_COPY_KEY).sort()).toEqual(
 			[...UPDATE_CHECK_FAILURE_REASONS].sort(),
 		);
-		expect(new Set(REQUIRED_KEYS).size).toBe(4 + SURFACE_KEYS.length);
+		expect(new Set(REQUIRED_KEYS).size).toBe(
+			4 + SURFACE_KEYS.length + Object.keys(TEMPLATE_KEYS).length,
+		);
 	});
 
 	it("names the two reasons this device cannot publish yet", () => {
@@ -129,6 +143,18 @@ describe("every locale carries copy for every check-failure reason", () => {
 	it.each(Object.keys(CATALOGS))("%s", (locale) => {
 		expect(missingCopyKeys(CATALOGS[locale], REQUIRED_KEYS)).toEqual([]);
 	});
+
+	it.each(Object.keys(CATALOGS))(
+		"%s preserves every diagnostic template placeholder",
+		(locale) => {
+			for (const [key, placeholders] of Object.entries(TEMPLATE_KEYS)) {
+				const value = lookup(CATALOGS[locale], key);
+				expect(typeof value).toBe("string");
+				for (const placeholder of placeholders)
+					expect(value).toContain(`{${placeholder}}`);
+			}
+		},
+	);
 });
 
 describe("the check is falsifiable — it FAILS on a removed key", () => {

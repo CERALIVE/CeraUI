@@ -1,4 +1,5 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
+import { logger } from "../helpers/logger.ts";
 import * as gateways from "../modules/network/gateways.ts";
 import { withDeviceType } from "../modules/system/device-detection.ts";
 import * as updates from "../modules/system/software-updates.ts";
@@ -10,6 +11,46 @@ useSessionOwnerForFile();
 
 const RANKED = [sample("eth0", "ethernet", 6), sample("wlan0", "wifi", 4)];
 const { t, pinned } = aptEntryHarness();
+
+test("one refused selection logs the interface of both cellular uplinks", async () => {
+	await pinned([
+		sample("wwan0", "cellular", 4, "blocked"),
+		sample("wwan1", "cellular", 6, "dns-failed"),
+	]);
+	const logged: unknown[][] = [];
+	spyOn(logger, "warn").mockImplementation((...args: unknown[]) => {
+		logged.push(args);
+		return logger;
+	});
+	await withDeviceType("real", async () => {
+		expect(await updates.runUpdateDiscoveryAndReport()).toBe(
+			"repos_unreachable",
+		);
+	});
+	const diagnostics = logged.filter(
+		([message]) => message === "No healthy update transport",
+	);
+	expect(diagnostics).toEqual([
+		[
+			"No healthy update transport",
+			{
+				profile: "apt",
+				findings: [
+					{
+						ifname: "wwan0",
+						family: 4,
+						reason: "unmetered cellular IPv4: apt.ceralive.tv blocked",
+					},
+					{
+						ifname: "wwan1",
+						family: 6,
+						reason: "unmetered cellular IPv6: apt.ceralive.tv dns-failed",
+					},
+				],
+			},
+		],
+	]);
+});
 
 test("discovery runs its simulations under the apt pin of the selected family", async () => {
 	// Given IPv6 Ethernet wins the per-transaction selection.

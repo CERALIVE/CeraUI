@@ -35,7 +35,6 @@ import { dialogActivityPhase } from '$lib/updates/update-dialog-view';
 import { createUpdateSurface } from '$lib/updates/update-surface.svelte';
 import {
 	etaMinutes,
-	formatUpdateTime,
 	phaseLabelKey,
 	progressPercent,
 	updateCapabilityView,
@@ -84,7 +83,6 @@ const credentialsRejected = $derived(transportCredentialsRejected(details));
 const activityPhase = $derived(dialogActivityPhase(orchestrator, view.system, view.kernel));
 const activityPercent = $derived(activityPhase ? progressPercent(orchestrator) : undefined);
 const activityEta = $derived(activityPhase ? etaMinutes(orchestrator?.progress?.etaSeconds) : undefined);
-const nextPackageCheck = $derived(formatUpdateTime(details?.checks.packages.nextAttemptAt, locale));
 </script>
 
 <AppDialog
@@ -159,7 +157,12 @@ const nextPackageCheck = $derived(formatUpdateTime(details?.checks.packages.next
 			</div>
 		{/if}
 
-		<PackagesSection nextCheck={nextPackageCheck} {surface} />
+		<PackagesSection
+			aptTransport={details?.aptTransport ?? (details?.transport?.profile === 'apt' ? details.transport : undefined)}
+			clock={details?.checks.packages}
+			autoEnabled={settings?.packagesAuto}
+			{surface}
+		/>
 
 		{#if !surface.loaded}
 			<div aria-busy="true" class="space-y-3" data-testid="update-details-loading" role="status">
@@ -171,6 +174,7 @@ const nextPackageCheck = $derived(formatUpdateTime(details?.checks.packages.next
 			{#if view.system}
 				<SystemSection
 					channel={settings?.channel}
+					autoEnabled={settings?.systemAuto}
 					checking={surface.pending('check')}
 					{details}
 					installing={surface.pending('install')}

@@ -6,6 +6,40 @@ import ConnectionSection from "./ConnectionSection.svelte";
 
 afterEach(cleanup);
 
+it("renders each failing host with its localized state and LTR identity", () => {
+	render(ConnectionSection, {
+		transport: {
+			profile: "apt",
+			checkedAt: 1000,
+			status: "none",
+			selected: null,
+			findings: [
+				{
+					ifname: "wwan0",
+					kind: "cellular",
+					family: 4,
+					metered: true,
+					healthy: false,
+					captive: false,
+					states: ["blocked", "dns-failed"],
+					hosts: [
+						{ host: "deb.debian.org", state: "blocked" },
+						{ host: "apt.ceralive.tv", state: "dns-failed" },
+					],
+				},
+			],
+		},
+	});
+	const hosts = screen.getAllByTestId("update-connection-host");
+	expect(hosts.map((host) => host.textContent?.trim())).toEqual([
+		"deb.debian.org: No answer (timed out or blocked)",
+		"apt.ceralive.tv: Name lookup failed",
+	]);
+	expect(hosts[0]?.querySelector('[dir="ltr"]')?.textContent).toContain(
+		"deb.debian.org",
+	);
+});
+
 it("missing memory-only history says not known, never no download happened", () => {
 	// Given no retained history, when rendered, then historical absence is unknown.
 	render(ConnectionSection, { transport: null });

@@ -8,6 +8,10 @@
   not landed), a MEASURED zero renders a calm "nobody is connected" line, and a
   populated roster renders the count plus one row per station.
 
+  While an AP is up, the backend runs `iw dev <ap> station dump` every 5 s.
+  Unread state resolves within one poll; joins and leaves are pushed here.
+  Signal and rates refresh with other Wi-Fi broadcasts, without frontend polling.
+
   This is the ONLY surface that renders per-client telemetry — the same rule that
   makes BondedLinksSection the sole owner of per-link RTT/NAK/weight. Do not
   restate a client's signal or rate on another card.

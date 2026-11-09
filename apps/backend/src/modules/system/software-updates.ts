@@ -131,7 +131,6 @@ import {
 	pendingPackageSuccess,
 } from "./update-orchestrator/pending-success-fence.ts";
 import { getRecoveredUpdateExitHook } from "./update-orchestrator/recovery-exit-gate.ts";
-import { loadUpdateSettings } from "./update-settings.ts";
 import {
 	deriveUpdateIdentity,
 	deriveUpdateState,
@@ -579,9 +578,8 @@ async function getCapableUpdateSize(
 	reachability: AptReachability,
 ): Promise<SoftwareUpdateError> {
 	aptAllMode = true;
-	const settings = await loadUpdateSettings();
 	pendingPackageSuccess.assertEffectsAllowed();
-	await reconcileAptChannel("capable", settings.channel);
+	await reconcileAptChannel("capable");
 	const simulation = await runAptCommand(
 		buildAptAllDiscoveryArgs(aptFamilyArgs(reachability.verdict)),
 		APT_DISCOVERY_TIMEOUT_MS,
@@ -1042,6 +1040,7 @@ function checkForSoftwareUpdates(
 				callback("discovery_failed", aptGetUpdateFailures);
 				return;
 			}
+			await reconcileAptChannel(capabilities.mode);
 			const network = await openAptNetwork(capabilities);
 			const reachability = network.reachability;
 			pendingPackageSuccess.assertEffectsAllowed();

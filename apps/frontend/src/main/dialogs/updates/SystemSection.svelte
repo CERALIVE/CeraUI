@@ -35,9 +35,11 @@ import { RefreshCw } from '@lucide/svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Progress } from '$lib/components/ui/progress';
+import { createDeadlineClock } from '$lib/updates/deadline-clock.svelte';
 import { systemImagePhase } from '$lib/updates/update-dialog-view';
 import {
 	appliesAfterRestart,
+	checkScheduleLines,
 	etaMinutes,
 	formatUpdateTime,
 	phaseLabelKey,
@@ -50,6 +52,7 @@ interface Props {
 	channel: UpdateSettings['channel'] | undefined;
 	checking: boolean;
 	installing: boolean;
+	autoEnabled?: boolean;
 	/** Positive evidence that the latest OS check found no newer image. */
 	nothingNewer?: boolean;
 	onCheck: () => void;
@@ -62,6 +65,7 @@ let {
 	channel,
 	checking,
 	installing,
+	autoEnabled = true,
 	nothingNewer = false,
 	onCheck,
 	onInstall,
@@ -74,7 +78,10 @@ const staging = $derived(activation === 'os-staging');
 const percent = $derived(staging ? progressPercent(wire) : undefined);
 const eta = $derived(staging ? etaMinutes(wire?.progress?.etaSeconds) : undefined);
 const lastChecked = $derived(formatUpdateTime(details?.checks.os.lastSuccessAt, locale));
-const nextCheck = $derived(formatUpdateTime(details?.checks.os.nextAttemptAt, locale));
+const scheduleClock = createDeadlineClock(() =>
+	autoEnabled && !details?.checks.os.deferred ? details?.checks.os.nextAttemptAt : null,
+);
+const scheduleLines = $derived(checkScheduleLines(details?.checks.os, { autoEnabled, checking, now: scheduleClock.now }));
 // Only a candidate the channel offered and the orchestrator is holding can be
 // installed by hand; anywhere else the device would refuse the request.
 const installable = $derived(activation === 'os-available' && os?.candidate != null);
@@ -153,6 +160,10 @@ const installable = $derived(activation === 'os-available' && os?.candidate != n
 					size: formatBytes(locale)(os.candidate.sizeBytes),
 				})}
 			</p>
+		{:else if os?.channelUnpublished}
+			<p class="text-muted-foreground" data-testid="update-system-channel-empty">
+				{m['settings.updates.system.channelEmpty']()}
+			</p>
 		{:else if !os?.staged && nothingNewer}
 			<p class="text-muted-foreground" data-testid="update-system-no-candidate">
 				{m['settings.updates.system.noCandidate']()}
@@ -165,9 +176,11 @@ const installable = $derived(activation === 'os-available' && os?.candidate != n
 		{#if lastChecked}
 			<p class="text-muted-foreground text-xs">{m['general.updateLastChecked']({ time: lastChecked })}</p>
 		{/if}
-		{#if nextCheck}
-			<p class="text-muted-foreground text-xs">{m['settings.updates.nextCheck']({ time: nextCheck })}</p>
-		{/if}
+		{#each scheduleLines as line (line.key)}
+			<p class="text-muted-foreground text-xs" data-testid="update-system-schedule">
+				{resolveMessageKey(line.key, { time: formatUpdateTime(line.values.time, locale) })}
+			</p>
+		{/each}
 	</div>
 
 	<div class="flex flex-col gap-2 sm:flex-row">

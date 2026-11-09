@@ -23,6 +23,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+	addWifiInterface,
+	removeWifiInterface,
+} from "../modules/wifi/wifi-connections.ts";
+import {
 	buildHotspotClients,
 	getHotspotClientsForInterface,
 	HOTSPOT_CLIENTS_ROW_CAP,
@@ -32,6 +36,11 @@ import {
 	resetHotspotClientsForTest,
 	setHotspotClientsDepsForTest,
 } from "../modules/wifi/wifi-hotspot-clients.ts";
+import type { WifiInterfaceWithHotspot } from "../modules/wifi/wifi-hotspot-types.ts";
+import {
+	isolateWifiRegistry,
+	restoreWifiRegistry,
+} from "./helpers/wifi-registry.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures", "wifi");
 const TWO_CLIENTS = readFileSync(
@@ -149,12 +158,35 @@ describe("buildHotspotClients — count is the TOTAL, rows are a window", () => 
 describe("the roster cache — read failures and roster lifetime", () => {
 	let nowMs = 1_000_000;
 	let calls: string[][];
+	let registry: ReturnType<typeof isolateWifiRegistry>;
 
 	beforeEach(() => {
 		nowMs = 1_000_000;
 		calls = [];
+		registry = isolateWifiRegistry();
+		for (const id of [0, 1]) {
+			const iface: WifiInterfaceWithHotspot = {
+				id,
+				ifname: `wlan${id}`,
+				conn: "hotspot",
+				activeConn: "hotspot",
+				activeMode: "ap",
+				hw: "cache-radio",
+				available: new Map(),
+				saved: {},
+				savedAll: {},
+				hotspot: {
+					conn: "hotspot",
+					name: "cache",
+					availableChannels: ["auto"],
+					warnings: {},
+				},
+			};
+			addWifiInterface(`aa:bb:cc:dd:ee:0${id}`, iface);
+		}
 	});
 
+	afterEach(() => restoreWifiRegistry(registry));
 	function wire(runIw: (args: string[]) => Promise<string>) {
 		setHotspotClientsDepsForTest({
 			now: () => nowMs,
@@ -231,6 +263,8 @@ describe("the roster cache — read failures and roster lifetime", () => {
 		await refreshHotspotClients(["wlan0"]);
 		expect(getHotspotClientsForInterface("wlan0")).toBeDefined();
 
+		removeWifiInterface("aa:bb:cc:dd:ee:00");
+		removeWifiInterface("aa:bb:cc:dd:ee:01");
 		await refreshHotspotClients([]);
 		expect(getHotspotClientsForInterface("wlan0")).toBeUndefined();
 	});

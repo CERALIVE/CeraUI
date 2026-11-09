@@ -103,7 +103,7 @@ export const setUpdateSettingsProcedure = authedProcedure
 	.output(updateSettingsSchema)
 	.handler(async ({ input }) => {
 		const mode = (await readUpdateCapabilities()).mode;
-		if (mode === "capable") await reconcileAptChannel(mode, input.channel);
+		if (mode === "capable") await reconcileAptChannel(mode);
 		return saveUpdateSettings(input);
 	});
 
