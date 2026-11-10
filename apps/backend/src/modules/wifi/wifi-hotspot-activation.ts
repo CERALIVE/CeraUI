@@ -106,9 +106,13 @@ function rememberIdentity(
 	deps: HotspotActivationDeps,
 	conn?: string,
 ): void {
+	if (
+		!canUseHotspotConnection(macAddress, conn) ||
+		!canUseHotspotConnection(macAddress, wifiInterface.hotspot.conn)
+	)
+		return;
 	const { name, password, channel } = wifiInterface.hotspot;
 	if (!name || !password) return;
-	if (!canUseHotspotConnection(macAddress, conn)) return;
 	deps.credentials.remember(macAddress, {
 		ssid: name,
 		password,
@@ -132,15 +136,14 @@ async function resolveHotspotIdentity(
 ): Promise<HotspotIdentity | undefined> {
 	const stored = deps.credentials.get(macAddress);
 	const hotspot = wifiInterface.hotspot;
-	if (
-		!canUseHotspotConnection(macAddress, hotspot.conn) ||
-		!canUseHotspotConnection(macAddress, stored?.conn)
-	) {
-		return undefined;
-	}
+	const owned = () =>
+		wifiInterface.hotspot === hotspot &&
+		canUseHotspotConnection(macAddress, hotspot.conn) &&
+		canUseHotspotConnection(macAddress, stored?.conn);
+	if (!owned()) return undefined;
 	if (!hotspot.conn || !hotspot.name || !hotspot.password) {
 		const existing = await deps.findHotspotConn(macAddress, stored);
-		if (!canUseHotspotConnection(macAddress, stored?.conn)) return undefined;
+		if (!owned()) return undefined;
 		if (existing) {
 			if (!canUseHotspotConnection(macAddress, existing.uuid)) return undefined;
 			hotspot.conn = existing.uuid;
@@ -169,6 +172,7 @@ async function resolveHotspotIdentity(
 			"802-11-wireless.ssid": name,
 			"802-11-wireless-security.psk": password,
 		});
+		if (!owned()) return undefined;
 	}
 	rememberIdentity(
 		macAddress,
@@ -216,10 +220,18 @@ export async function prepareHotspotForInterface(
 	msg: { name?: string; password?: string },
 	deps: HotspotActivationDeps = defaultHotspotDeps,
 ): Promise<HotspotPrepareResult> {
+	const hotspot = wifiInterface.hotspot;
 	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
 		prepareHotspotLocked(macAddress, wifiInterface, msg, deps),
 	);
 	if (!lock.success) return { success: false, error: lock.error };
+	if (
+		lock.result.success &&
+		(wifiInterface.hotspot !== hotspot ||
+			!canUseHotspotConnection(macAddress, wifiInterface.hotspot.conn))
+	) {
+		return { success: false, error: "activation-failed" };
+	}
 	return lock.result;
 }
 
@@ -229,12 +241,19 @@ async function prepareHotspotLocked(
 	msg: { name?: string; password?: string },
 	deps: HotspotActivationDeps,
 ): Promise<HotspotPrepareResult> {
+	const hotspot = wifiInterface.hotspot;
+	const owned = (conn?: string) =>
+		wifiInterface.hotspot === hotspot &&
+		canUseHotspotConnection(macAddress, hotspot.conn) &&
+		canUseHotspotConnection(macAddress, conn);
 	const identity = await resolveHotspotIdentity(
 		macAddress,
 		wifiInterface,
 		deps,
 	);
-	if (!identity) return { success: false, error: "activation-failed" };
+	if (!identity || !owned(identity.conn)) {
+		return { success: false, error: "activation-failed" };
+	}
 	// No profile, and the store has never recorded one: this adapter has never
 	// hosted an AP, so the shown pair is a suggestion rather than a saved setup.
 	const firstTime =
@@ -259,7 +278,7 @@ async function prepareHotspotLocked(
 	}
 	// The profile is written FIRST: a store that ran ahead of a refused write
 	// would show the operator credentials the AP never broadcasts.
-	if (!canUseHotspotConnection(macAddress, identity.conn)) {
+	if (!owned(identity.conn)) {
 		return { success: false, error: "activation-failed" };
 	}
 	if (
@@ -269,6 +288,9 @@ async function prepareHotspotLocked(
 			"802-11-wireless-security.psk": chosen.password,
 		}))
 	) {
+		return { success: false, error: "activation-failed" };
+	}
+	if (!owned(identity.conn)) {
 		return { success: false, error: "activation-failed" };
 	}
 	wifiInterface.hotspot.name = chosen.name;
@@ -340,7 +362,12 @@ async function startHotspotLocked(
 	deps: HotspotActivationDeps,
 ): Promise<HotspotStartResult> {
 	const ifname = wifiInterface.ifname;
-	if (!canUseHotspotConnection(macAddress, wifiInterface.hotspot.conn)) {
+	const hotspot = wifiInterface.hotspot;
+	const owned = (conn?: string) =>
+		wifiInterface.hotspot === hotspot &&
+		canUseHotspotConnection(macAddress, hotspot.conn) &&
+		canUseHotspotConnection(macAddress, conn);
+	if (!owned()) {
 		return { success: false, error: "activation-failed" };
 	}
 	if (
@@ -368,6 +395,12 @@ async function startHotspotLocked(
 	const concurrentInterface = useConcurrentAp
 		? await deps.ensureConcurrentInterface?.(ifname)
 		: undefined;
+	if (!owned()) {
+		if (concurrentInterface?.created) {
+			void deps.releaseConcurrentInterface?.(concurrentInterface.ifname);
+		}
+		return { success: false, error: "activation-failed" };
+	}
 	if (useConcurrentAp && concurrentInterface === undefined) {
 		return { success: false, error: "activation-failed" };
 	}
@@ -418,7 +451,7 @@ async function startHotspotLocked(
 		wifiInterface,
 		deps,
 	);
-	if (!identity) return rollback();
+	if (!identity || !owned(identity.conn)) return rollback();
 	let conn = identity.conn;
 
 	// Cleanup is best-effort, runs off the critical path, and never fails a start.
@@ -429,15 +462,16 @@ async function startHotspotLocked(
 	};
 
 	if (conn) {
-		if (!canUseHotspotConnection(macAddress, conn)) return rollback();
+		if (!owned(conn)) return rollback();
 		await deps.nmConnSetFields(conn, bindingFields);
-		if (!canUseHotspotConnection(macAddress, conn)) return rollback();
+		if (!owned(conn)) return rollback();
 		prune(conn);
 		if (!(await deps.nmConnect(conn, HOTSPOT_UP_TO))) {
 			return rollback();
 		}
-		if (!canUseHotspotConnection(macAddress, conn)) return rollback();
+		if (!owned(conn)) return rollback();
 		await deps.nmConnSetFields(conn, HOTSPOT_AUTOCONNECT_FIELDS);
+		if (!owned(conn)) return rollback();
 		remember(conn);
 	} else {
 		// First hotspot this adapter has ever hosted, or its profile was deleted
@@ -452,19 +486,23 @@ async function startHotspotLocked(
 			password,
 			HOTSPOT_UP_TO,
 		);
-		if (!uuid) {
+		if (!uuid || !owned(uuid)) {
 			return rollback();
 		}
 
 		await deps.nmConnSetFields(uuid, bindingFields);
+		if (!owned(uuid)) return rollback();
 		// The updated settings let the connection be recognised as our hotspot.
 		await deps.wifiUpdateSavedConns();
+		if (!owned(uuid)) return rollback();
 		prune(uuid);
 		// Restart the connection with the updated settings (needed to disable pmf).
 		if (!(await deps.nmConnect(uuid, HOTSPOT_UP_TO))) {
 			return rollback();
 		}
+		if (!owned(uuid)) return rollback();
 		await deps.nmConnSetFields(uuid, HOTSPOT_AUTOCONNECT_FIELDS);
+		if (!owned(uuid)) return rollback();
 		conn = uuid;
 		wifiInterface.hotspot.conn ??= uuid;
 		remember(uuid);

@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
+import {
+	afterEach,
+	beforeEach,
+	expect,
+	jest,
+	mock,
+	spyOn,
+	test,
+} from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -34,7 +42,10 @@ import {
 	prepareHotspotForInterface,
 	startHotspotForInterface,
 } from "../modules/wifi/wifi-hotspot-activation.ts";
-import { wifiHotspotConfig } from "../modules/wifi/wifi-hotspot-config.ts";
+import {
+	type HotspotConfigDeps,
+	wifiHotspotConfig,
+} from "../modules/wifi/wifi-hotspot-config.ts";
 import * as discovery from "../modules/wifi/wifi-hotspot-discovery.ts";
 import { settlePending } from "../modules/wifi/wifi-hotspot-monitor.ts";
 import type {
@@ -72,6 +83,7 @@ let devices = "wlan0:wifi:disconnected:";
 let inherited: ReturnType<typeof isolateWifiRegistry>;
 let scratch: string | undefined;
 let afterWrite: (() => void) | undefined;
+let beforeWrite: ((args: readonly string[]) => Promise<void>) | undefined;
 let unreadableSettings = false;
 
 function profile(mac = "", ifname = "wlan0"): Record<string, string> {
@@ -123,6 +135,8 @@ function activationDeps(): HotspotActivationDeps {
 		findHotspotConn: discovery.findHotspotConnForAdapter,
 		nmConnSetFields: async (uuid, fields) => {
 			effects.push([uuid, JSON.stringify(fields)]);
+			const settings = profiles.get(uuid);
+			if (settings) Object.assign(settings, fields);
 			return true;
 		},
 		nmConnect: async (uuid) => {
@@ -159,6 +173,7 @@ beforeEach(() => {
 	effects.length = 0;
 	unexpected.length = 0;
 	afterWrite = undefined;
+	beforeWrite = undefined;
 	unreadableSettings = false;
 	devices = "wlan0:wifi:disconnected:";
 	setPermanentMacReaderForTest(async () => B);
@@ -194,6 +209,7 @@ beforeEach(() => {
 					.join("\n");
 			}
 			if (args[0] === "con" && args[1] === "modify") {
+				if (beforeWrite) await beforeWrite(args);
 				effects.push([...args]);
 				const fields = profiles.get(args[2] ?? "");
 				for (let i = 3; i < args.length; i += 2) {
@@ -238,6 +254,7 @@ afterEach(async () => {
 	setPermanentMacReaderForTest(null);
 	resetWifiCapabilitiesForTest();
 	setWifiState({});
+	jest.useRealTimers();
 	mock.restore();
 	if (scratch) await rm(scratch, { recursive: true });
 	scratch = undefined;
@@ -631,3 +648,519 @@ test("the same owner's normalized UUID hint remains usable", async () => {
 		)?.uuid,
 	).toBe(FOREIGN);
 });
+
+test("pending prepare cannot repair a UUID claimed by competing discovery", async () => {
+	jest.useFakeTimers();
+	const iface = radio();
+	addWifiInterface(A, {
+		...iface,
+		id: 1,
+		ifname: "wlan1",
+		hotspot: { availableChannels: ["auto"], warnings: {} },
+	});
+	const lookupGate = Promise.withResolvers<void>();
+	const lookupEntered = Promise.withResolvers<void>();
+	const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
+	const entered = [
+		Promise.withResolvers<void>(),
+		Promise.withResolvers<void>(),
+	];
+	let priorityCalls = 0;
+	beforeWrite = async (args) => {
+		if (args[3] !== "connection.autoconnect-priority") return;
+		const index = priorityCalls++;
+		entered[index]?.resolve();
+		await gates[index]?.promise;
+	};
+	const deps = activationDeps();
+	deps.findHotspotConn = async (mac, stored) => {
+		lookupEntered.resolve();
+		await lookupGate.promise;
+		return discovery.findHotspotConnForAdapter(mac, stored);
+	};
+
+	const prepare = prepareHotspotForInterface(B, iface, {}, deps);
+	await lookupEntered.promise;
+	const claimA = discovery.handleHotspotConn(A, FOREIGN, { active: true });
+	await entered[0]?.promise;
+	const claimB = discovery.handleHotspotConn(undefined, FOREIGN, {
+		active: true,
+	});
+	await entered[1]?.promise;
+	gates[0]?.resolve();
+	await claimA;
+	gates[1]?.resolve();
+	await claimB;
+	lookupGate.resolve();
+	const result = await prepare;
+
+	expect(result).toEqual({ success: false, error: "activation-failed" });
+	expect(getHotspotCredentials(A)?.conn).toBe(FOREIGN);
+	expect(getHotspotCredentials(B)).toBeUndefined();
+	expect(iface.hotspot.conn).toBeUndefined();
+	expect(profiles.get(FOREIGN)?.["802-11-wireless.ssid"]).toBe(PAIR.ssid);
+	expect(profiles.get(FOREIGN)?.["802-11-wireless-security.psk"]).toBe(
+		PAIR.password,
+	);
+	expect(effects.filter((effect) => effect[0] === FOREIGN)).toEqual([]);
+});
+
+for (const complete of [false, true]) {
+	test(`empty awaited lookup refuses a ${complete ? "complete" : "incomplete"} foreign cache`, async () => {
+		jest.useFakeTimers();
+		const iface = radio();
+		const lookupGate = Promise.withResolvers<void>();
+		const lookupEntered = Promise.withResolvers<void>();
+		const deps = activationDeps();
+		deps.findHotspotConn = async () => {
+			lookupEntered.resolve();
+			await lookupGate.promise;
+			return undefined;
+		};
+		const prepare = prepareHotspotForInterface(B, iface, {}, deps);
+		await lookupEntered.promise;
+		ownByA(false);
+		iface.hotspot.conn = FOREIGN;
+		if (complete) {
+			iface.hotspot.name = PAIR.ssid;
+			iface.hotspot.password = PAIR.password;
+		}
+		lookupGate.resolve();
+
+		expect(await prepare).toEqual({
+			success: false,
+			error: "activation-failed",
+		});
+		expect(effects).toEqual([]);
+		expect(getHotspotCredentials(B)).toBeUndefined();
+	});
+}
+
+test("pending prepare still adopts a legitimate single-adapter discovery", async () => {
+	jest.useFakeTimers();
+	const iface = radio();
+	const lookupGate = Promise.withResolvers<void>();
+	const lookupEntered = Promise.withResolvers<void>();
+	const deps = activationDeps();
+	deps.findHotspotConn = async (mac, stored) => {
+		lookupEntered.resolve();
+		await lookupGate.promise;
+		return discovery.findHotspotConnForAdapter(mac, stored);
+	};
+	const prepare = prepareHotspotForInterface(B, iface, {}, deps);
+	await lookupEntered.promise;
+	await discovery.handleHotspotConn(undefined, FOREIGN, { active: true });
+	lookupGate.resolve();
+
+	expect(await prepare).toEqual({
+		success: true,
+		name: PAIR.ssid,
+		password: PAIR.password,
+	});
+	expect(getHotspotCredentials(B)?.conn).toBe(FOREIGN);
+	expect(profiles.get(FOREIGN)?.["802-11-wireless-security.psk"]).toBe(
+		PAIR.password,
+	);
+});
+
+for (const unverified of [false, true]) {
+	test(`${unverified ? "unverified" : "verified"} single-adapter prepare and start keep the saved pair`, async () => {
+		jest.useFakeTimers();
+		const iface = radio();
+		if (unverified) iface.degradedReason = "permanent-mac-unresolved";
+		rememberHotspotCredentials(B, OWN_PAIR);
+		const deps = activationDeps();
+		deps.findHotspotConn = async () => undefined;
+
+		const prepared = await prepareHotspotForInterface(B, iface, {}, deps);
+		const started = await startHotspotForInterface(B, iface, deps);
+
+		expect(prepared).toEqual({
+			success: true,
+			name: OWN_PAIR.ssid,
+			password: OWN_PAIR.password,
+			firstTime: true,
+		});
+		expect(started).toEqual({ success: true });
+		expect(effects.filter((effect) => effect[0] === "create")).toEqual([
+			["create", OWN_PAIR.ssid, OWN_PAIR.password],
+		]);
+		expect(getHotspotCredentials(B)).toMatchObject({
+			...OWN_PAIR,
+			conn: "b-new-profile",
+		});
+	});
+}
+
+test("SSID fallback rechecks a candidate claimed while another profile is read", async () => {
+	const gate = Promise.withResolvers<void>();
+	const entered = Promise.withResolvers<void>();
+	const deps = {
+		...discovery.defaultHotspotProfileDeps,
+		getApProfileFields: async (uuid: string) => {
+			if (uuid === UNRELATED) {
+				entered.resolve();
+				await gate.promise;
+			}
+			const fields = profiles.get(uuid);
+			return [
+				fields?.["802-11-wireless.mode"] ?? "",
+				fields?.["802-11-wireless.ssid"] ?? "",
+				fields?.["802-11-wireless-security.psk"] ?? "",
+				"",
+				"",
+				fields?.["802-11-wireless.mac-address"] ?? "",
+			] as const;
+		},
+	};
+	const lookup = discovery.findHotspotConnForAdapter(B, PAIR, deps);
+	await entered.promise;
+	ownByA(false);
+	gate.resolve();
+
+	expect(await lookup).toBeUndefined();
+	expect(getHotspotCredentials(B)).toBeUndefined();
+});
+
+for (const operation of ["prepare", "save", "start"] as const) {
+	test(`${operation} rechecks current cache after identity resolution settles`, async () => {
+		jest.useFakeTimers();
+		const iface = radio();
+		ownByA(false);
+		rememberHotspotCredentials(B, { ...OWN_PAIR, conn: "b-profile" });
+		iface.hotspot = {
+			...iface.hotspot,
+			conn: "b-profile",
+			name: OWN_PAIR.ssid,
+			password: OWN_PAIR.password,
+		};
+		const deps = activationDeps();
+		deps.credentials = {
+			...hotspotCredentialsStore,
+			get: (mac) => {
+				const stored = getHotspotCredentials(mac);
+				queueMicrotask(() => {
+					iface.hotspot.conn = FOREIGN;
+					iface.hotspot.name = PAIR.ssid;
+					iface.hotspot.password = PAIR.password;
+				});
+				return stored;
+			},
+		};
+
+		const result =
+			operation === "start"
+				? await startHotspotForInterface(B, iface, deps)
+				: await prepareHotspotForInterface(
+						B,
+						iface,
+						operation === "save"
+							? { name: "New-B", password: "new-b-secret" }
+							: {},
+						deps,
+					);
+
+		expect(result).toEqual({ success: false, error: "activation-failed" });
+		expect(getHotspotCredentials(B)?.password).toBe(OWN_PAIR.password);
+		expect(effects).toEqual([]);
+	});
+}
+
+test("secret repair refuses credential return when the current cache changes during its await", async () => {
+	const iface = radio();
+	iface.hotspot.conn = "b-profile";
+	rememberHotspotCredentials(B, OWN_PAIR);
+	const gate = Promise.withResolvers<void>();
+	const entered = Promise.withResolvers<void>();
+	const deps = activationDeps();
+	deps.findHotspotConn = async () => undefined;
+	deps.nmConnSetFields = async (uuid, fields) => {
+		effects.push([uuid, JSON.stringify(fields)]);
+		entered.resolve();
+		await gate.promise;
+		return true;
+	};
+	const prepare = prepareHotspotForInterface(B, iface, {}, deps);
+	await entered.promise;
+	ownByA(false);
+	iface.hotspot.conn = FOREIGN;
+	gate.resolve();
+
+	expect(await prepare).toEqual({ success: false, error: "activation-failed" });
+	expect(effects.map((effect) => effect[0])).toEqual(["b-profile"]);
+	expect(getHotspotCredentials(B)?.conn).toBeUndefined();
+});
+
+for (const stage of [
+	"binding",
+	"activation",
+	"autoconnect",
+	"creation",
+	"saved sweep",
+	"new binding",
+	"new activation",
+	"new autoconnect",
+] as const) {
+	test(`start rechecks current cached ownership after ${stage}`, async () => {
+		jest.useFakeTimers();
+		const iface = radio();
+		rememberHotspotCredentials(B, { ...OWN_PAIR, conn: "b-profile" });
+		iface.hotspot = {
+			...iface.hotspot,
+			...(stage === "creation" ||
+			stage === "saved sweep" ||
+			stage.startsWith("new ")
+				? {}
+				: { conn: "b-profile" }),
+			name: OWN_PAIR.ssid,
+			password: OWN_PAIR.password,
+		};
+		const gate = Promise.withResolvers<void>();
+		const entered = Promise.withResolvers<void>();
+		const pause = async () => {
+			entered.resolve();
+			await gate.promise;
+		};
+		const deps = activationDeps();
+		deps.findHotspotConn = async () => undefined;
+		deps.nmConnSetFields = async (uuid, fields) => {
+			effects.push([uuid, JSON.stringify(fields)]);
+			if (
+				((stage === "binding" || stage === "new binding") &&
+					fields["802-11-wireless.mac-address"] !== undefined) ||
+				((stage === "autoconnect" || stage === "new autoconnect") &&
+					fields["connection.autoconnect"] === "yes")
+			)
+				await pause();
+			return true;
+		};
+		deps.nmConnect = async (uuid) => {
+			effects.push(["up", uuid]);
+			if (stage === "activation" || stage === "new activation") await pause();
+			return true;
+		};
+		deps.nmHotspot = async (_ifname, ssid, password) => {
+			effects.push(["create", ssid, password]);
+			if (stage === "creation") await pause();
+			return "b-new-profile";
+		};
+		deps.wifiUpdateSavedConns = async () => {
+			if (stage === "saved sweep") await pause();
+		};
+		const start = startHotspotForInterface(B, iface, deps);
+		await entered.promise;
+		ownByA(false);
+		iface.hotspot.conn = FOREIGN;
+		iface.hotspot.name = PAIR.ssid;
+		iface.hotspot.password = PAIR.password;
+		gate.resolve();
+
+		expect(await start).toEqual({ success: false, error: "activation-failed" });
+		expect(getHotspotCredentials(B)?.password).toBe(OWN_PAIR.password);
+		expect(
+			effects.filter(
+				(effect) => effect[0] === FOREIGN || effect[1] === FOREIGN,
+			),
+		).toEqual([]);
+	});
+}
+
+for (const stage of [
+	"save",
+	"restart failure",
+	"restart success",
+	"rollback save",
+	"rollback restart",
+	"saved sweep",
+] as const) {
+	test(`live configure rechecks current cached ownership after ${stage}`, async () => {
+		jest.useFakeTimers();
+		const iface = radio();
+		iface.hotspot = {
+			...iface.hotspot,
+			conn: "b-profile",
+			name: OWN_PAIR.ssid,
+			password: OWN_PAIR.password,
+			channel: "auto",
+		};
+		iface.activeConn = "b-profile";
+		rememberHotspotCredentials(B, { ...OWN_PAIR, conn: "b-profile" });
+		const gate = Promise.withResolvers<void>();
+		const entered = Promise.withResolvers<void>();
+		const pause = async () => {
+			entered.resolve();
+			await gate.promise;
+		};
+		let writes = 0;
+		let connects = 0;
+		const deps: HotspotConfigDeps = {
+			nmConnSetFields: async (uuid, fields) => {
+				effects.push([uuid, JSON.stringify(fields)]);
+				writes++;
+				if (
+					(stage === "save" && writes === 1) ||
+					(stage === "rollback save" && writes === 2)
+				)
+					await pause();
+				return true;
+			},
+			nmConnect: async (uuid) => {
+				effects.push(["up", uuid]);
+				connects++;
+				if (
+					stage === "restart failure" ||
+					stage === "restart success" ||
+					(stage === "rollback restart" && connects === 2)
+				)
+					await pause();
+				return (
+					stage !== "restart failure" &&
+					!(
+						(stage === "rollback save" || stage === "rollback restart") &&
+						connects === 1
+					)
+				);
+			},
+			wifiUpdateSavedConns: async () => {
+				if (stage === "saved sweep") await pause();
+			},
+			broadcastState: () => {},
+			rememberCredentials: rememberHotspotCredentials,
+			getCapabilities: () => undefined,
+		};
+		const sent: string[] = [];
+		const save = wifiHotspotConfig(
+			{
+				send: (message) => {
+					sent.push(message);
+				},
+			},
+			{ device: 0, name: "New-B", password: "new-b-secret", channel: "auto" },
+			deps,
+		);
+		await entered.promise;
+		ownByA(false);
+		iface.hotspot.conn = FOREIGN;
+		iface.hotspot.name = PAIR.ssid;
+		iface.hotspot.password = PAIR.password;
+		gate.resolve();
+		await save;
+
+		expect(
+			sent.map((message) => JSON.parse(message).wifi.hotspot.config),
+		).toEqual([{ device: 0, error: "saving" }]);
+		expect(
+			effects.filter(
+				(effect) => effect[0] === FOREIGN || effect[1] === FOREIGN,
+			),
+		).toEqual([]);
+		expect(iface.hotspot.transition).toBeUndefined();
+	});
+}
+
+test("prepare rechecks cached ownership after the adapter lock settles", async () => {
+	const iface = radio();
+	ownByA(false);
+	rememberHotspotCredentials(B, OWN_PAIR);
+	const deps = activationDeps();
+	deps.findHotspotConn = async () => undefined;
+	let reads = 0;
+	deps.credentials = {
+		...hotspotCredentialsStore,
+		get: (mac) => {
+			const stored = getHotspotCredentials(mac);
+			if (++reads === 2) {
+				queueMicrotask(() => {
+					iface.hotspot.conn = FOREIGN;
+					iface.hotspot.name = PAIR.ssid;
+					iface.hotspot.password = PAIR.password;
+				});
+			}
+			return stored;
+		},
+	};
+
+	expect(await prepareHotspotForInterface(B, iface, {}, deps)).toEqual({
+		success: false,
+		error: "activation-failed",
+	});
+	expect(getHotspotCredentials(B)?.password).toBe(OWN_PAIR.password);
+	expect(effects).toEqual([]);
+});
+
+test("prepare save refuses a foreign current cache after the profile write settles", async () => {
+	const iface = radio();
+	iface.hotspot = {
+		...iface.hotspot,
+		conn: "b-profile",
+		name: OWN_PAIR.ssid,
+		password: OWN_PAIR.password,
+	};
+	rememberHotspotCredentials(B, { ...OWN_PAIR, conn: "b-profile" });
+	const gate = Promise.withResolvers<void>();
+	const entered = Promise.withResolvers<void>();
+	const deps = activationDeps();
+	deps.nmConnSetFields = async (uuid, fields) => {
+		effects.push([uuid, JSON.stringify(fields)]);
+		entered.resolve();
+		await gate.promise;
+		return true;
+	};
+	const save = prepareHotspotForInterface(
+		B,
+		iface,
+		{ name: "New-B", password: "new-b-secret" },
+		deps,
+	);
+	await entered.promise;
+	ownByA(false);
+	iface.hotspot.conn = FOREIGN;
+	iface.hotspot.name = PAIR.ssid;
+	iface.hotspot.password = PAIR.password;
+	gate.resolve();
+
+	expect(await save).toEqual({ success: false, error: "activation-failed" });
+	expect(getHotspotCredentials(B)?.password).toBe(OWN_PAIR.password);
+	expect(effects.map((effect) => effect[0])).toEqual(["b-profile"]);
+});
+
+for (const conflict of [
+	"candidate claimed",
+	"current cache replaced",
+] as const) {
+	test(`name attribution rejects ${conflict} during the MAC repin`, async () => {
+		const iface = radio();
+		const candidate = conflict === "candidate claimed" ? FOREIGN : "candidate";
+		profiles.set(candidate, profile());
+		const gate = Promise.withResolvers<void>();
+		const entered = Promise.withResolvers<void>();
+		beforeWrite = async (args) => {
+			if (
+				args[2] !== candidate ||
+				!args.includes("802-11-wireless.mac-address")
+			)
+				return;
+			entered.resolve();
+			await gate.promise;
+		};
+		const adoption = discovery.handleHotspotConn(undefined, candidate, {
+			active: true,
+		});
+		await entered.promise;
+		ownByA(false);
+		iface.hotspot.conn = FOREIGN;
+		iface.hotspot.name = PAIR.ssid;
+		iface.hotspot.password = PAIR.password;
+		gate.resolve();
+		await adoption;
+
+		expect(iface.hotspot.conn).toBeUndefined();
+		expect(iface.hotspot.password).toBeUndefined();
+		expect(getHotspotCredentials(B)).toBeUndefined();
+		expect(
+			effects.filter(
+				(effect) => effect[3] === "connection.autoconnect-priority",
+			),
+		).toEqual([]);
+	});
+}

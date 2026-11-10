@@ -67,6 +67,17 @@ evidence. A conflict leaves NetworkManager's active connection and mode
 observable, and leaves the foreign profile, credentials and autoconnect
 untouched.
 
+Ownership is checked again after awaited lookup, repair, save, activation and
+rollback work, using the current cache as well as the selected UUID. An empty
+lookup result does not exempt a cache populated while that lookup was pending.
+An SSID fallback is checked again after the remaining profiles have been read.
+If discovery loses ownership, it removes only the matching rejected UUID and
+credential pair from that adapter's cache, leaving NM active-state observations
+intact. Replacing that rejected cache invalidates operations already waiting
+on it, so clearing a provisional UUID cannot turn a refused prepare into a
+successful credential suggestion. This is internal cache invalidation, with
+no wire token or identity-resolver change.
+
 This does not consume shadow identity, change registry keys, emit tokens,
 introduce limited mode, change NetworkManager targeting or change mode
 transitions. Unresolved radios retain prepare/start capability. A radio
@@ -82,6 +93,12 @@ rename, replug and unverified prepare/start fixtures. The orphan byte fixture
 also runs against unchanged main. The pruning regression loads a legacy
 collision from disk because new store writes can no longer create one; its
 existing assertions are unchanged.
+Deferred race coverage also runs the competing-discovery/empty-lookup schedule,
+complete-cache credential returns, repair/save continuations, live rollback,
+late SSID selection and new/existing-profile activation against the reviewed
+pre-fix head. Single-adapter discovery and verified/unverified prepare/start
+controls retain the existing results. These tests prove dispatch and return
+behavior at the host boundary; they do not qualify physical NM scheduling.
 
 ### Shadow lifetime producer [EXISTS; host-tested only]
 
