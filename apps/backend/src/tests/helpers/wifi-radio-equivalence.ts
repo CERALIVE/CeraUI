@@ -1,4 +1,6 @@
 import { jest, spyOn } from "bun:test";
+import { deepStrictEqual } from "node:assert/strict";
+import { logger } from "../../helpers/logger.ts";
 import * as runner from "../../helpers/run.ts";
 import * as mocks from "../../mocks/mock-service.ts";
 import type { HotspotCredentials } from "../../modules/wifi/hotspot-credentials.ts";
@@ -79,8 +81,18 @@ export async function radioEquivalenceTranscript(
 	let radios: readonly RadioFixture[] = [];
 	const unexpected: string[] = [];
 	const calls: unknown[][] = [];
+	const logs: Array<{ level: string; args: unknown[] }> = [];
 	const store = new Map<string, HotspotCredentials>();
 	const restorers: Array<() => void | Promise<void>> = [];
+	for (const level of ["error", "warn", "info", "debug"] as const) {
+		const log = spyOn(logger, level).mockImplementation(
+			(...args: unknown[]) => {
+				logs.push({ level, args: structuredClone(args) });
+				return logger;
+			},
+		);
+		restorers.push(() => log.mockRestore());
+	}
 	const realSink = compat.broadcastMsg;
 	const sink = spyOn(compat, "broadcastMsg").mockImplementation(
 		(type, data, activeMin, authedOnly) => {
@@ -229,6 +241,17 @@ export async function radioEquivalenceTranscript(
 		keys: Object.keys(getWifiInterfacesByMacAddress()),
 		ids: { ...getWifiIdToMacAddress() },
 	});
+	const legacySnapshot = () =>
+		structuredClone({
+			status: JSON.stringify(wifiBuildMsg()),
+			keys: Object.keys(getWifiInterfacesByMacAddress()),
+			registry: getWifiInterfacesByMacAddress(),
+			ids: getWifiIdToMacAddress(),
+			calls,
+			credentials: [...store],
+			broadcasts,
+			logs,
+		});
 	const frames = [];
 	try {
 		for (const frame of fixture.frames) {
@@ -275,6 +298,7 @@ export async function radioEquivalenceTranscript(
 			}
 			frames.push({ discovered, activations });
 			phase = "frame:published";
+			const beforeShadow = legacySnapshot();
 			// Both main and A receive the same one-millisecond inter-frame gap.
 			jest.advanceTimersByTime(1);
 			const observationModule = new URL(
@@ -287,6 +311,11 @@ export async function radioEquivalenceTranscript(
 				);
 				await wifiRadioObservation.settled;
 			}
+			deepStrictEqual(
+				legacySnapshot(),
+				beforeShadow,
+				"Detached shadow changed legacy state",
+			);
 		}
 		return { frames, calls, unexpected, broadcasts };
 	} finally {

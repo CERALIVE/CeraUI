@@ -1,4 +1,10 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
+import {
+	addWifiInterface,
+	getWifiInterfacesByMacAddress,
+} from "../modules/wifi/wifi-connections.ts";
+import { getWifiIdToMacAddress } from "../modules/wifi/wifi-interfaces.ts";
+import { wifiRadioIdentity } from "../modules/wifi/wifi-radio-identity.ts";
 import { radioEquivalenceCases } from "./fixtures/wifi/radio-equivalence-cases.ts";
 import golden from "./fixtures/wifi/radio-equivalence-main.json";
 import { legacyOverlapTranscript } from "./helpers/wifi-legacy-overlap.ts";
@@ -42,6 +48,47 @@ test("the parity oracle rejects an extra real Wi-Fi broadcast", async () => {
 		JSON.stringify(broadcastTranscripts[fixture.name]),
 	);
 });
+
+test.each(["id", "registry-key", "id-map"] as const)(
+	"the parity oracle rejects a detached producer legacy %s write",
+	async (kind) => {
+		const fixture = radioEquivalenceCases[0];
+		if (!fixture) throw new Error("Missing verified fixture");
+		const discover = wifiRadioIdentity.discover.bind(wifiRadioIdentity);
+		let writes = 0;
+		const mutation = spyOn(wifiRadioIdentity, "discover").mockImplementation(
+			async (...args) => {
+				await discover(...args);
+				if (wifiRadioIdentity.state.rows.size === 0) return;
+				const registry = getWifiInterfacesByMacAddress();
+				const iface = Object.values(registry)[0];
+				if (!iface) throw new Error("Missing legacy mutation target");
+				switch (kind) {
+					case "id":
+						iface.id = 999;
+						break;
+					case "registry-key":
+						addWifiInterface("shadow:legacy:leak", iface);
+						break;
+					case "id-map":
+						getWifiIdToMacAddress()[999] = "shadow:legacy:leak";
+						break;
+					default:
+						throw new Error(`Unhandled mutation: ${kind satisfies never}`);
+				}
+				writes++;
+			},
+		);
+		try {
+			await expect(radioEquivalenceTranscript(fixture)).rejects.toThrow(
+				"Detached shadow changed legacy state",
+			);
+			expect(writes).toBe(1);
+		} finally {
+			mutation.mockRestore();
+		}
+	},
+);
 
 test("overlapping legacy callers match main's distinct observations and broadcasts", async () => {
 	expect(await legacyOverlapTranscript()).toEqual(golden.overlap);
