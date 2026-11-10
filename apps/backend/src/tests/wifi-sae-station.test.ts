@@ -18,13 +18,14 @@
   is touched and every assertion is on argv.
 */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 
 import {
 	classifyWifiStationSecurity,
 	requiresSaeKeyMgmt,
 	wifiJoinRefusal,
 } from "@ceraui/rpc";
+import * as networkManager from "../modules/network/network-manager.ts";
 import type { MessageSocket } from "../modules/ui/message-socket.ts";
 import {
 	handleWifi,
@@ -74,14 +75,13 @@ function makeInterface(): WifiInterface {
 
 let calls: string[][] = [];
 let replies: NmcliRun[] = [];
-
-function socket(): MessageSocket {
-	return { send: () => {} };
-}
+let restoreTransportMocks = () => {};
 
 /** Drive the real `handleWifi` join path and return every nmcli argv it issued. */
 async function join(security: string | undefined): Promise<string[][]> {
-	handleWifi(socket(), {
+	const frames: string[] = [];
+	const conn: MessageSocket = { send: (frame) => frames.push(frame) };
+	handleWifi(conn, {
 		new: {
 			device: 0,
 			ssid: SSID,
@@ -89,27 +89,45 @@ async function join(security: string | undefined): Promise<string[][]> {
 			...(security !== undefined ? { security } : {}),
 		},
 	});
-	// `wifiNew` dispatches its work with `void`; let the microtask chain settle.
-	for (let i = 0; i < 20; i++) await Promise.resolve();
+	// Await the terminal frame so no post-activation read outlives its mocks.
+	await waitFor(() => frames.length > 0);
 	return calls;
 }
 
 beforeEach(() => {
 	calls = [];
 	replies = [];
+	const binding = spyOn(
+		networkManager,
+		"nmConnSetWifiMacAddress",
+	).mockResolvedValue(true);
+	const profiles = spyOn(networkManager, "nmConnsGet").mockResolvedValue([""]);
+	const scan = spyOn(networkManager, "nmScanResults").mockResolvedValue([""]);
+	const spawn = spyOn(Bun, "spawn").mockImplementation(() => {
+		throw new Error("Unexpected native command in injected station fixture");
+	});
+	restoreTransportMocks = () => {
+		try {
+			expect(spawn).not.toHaveBeenCalled();
+		} finally {
+			binding.mockRestore();
+			profiles.mockRestore();
+			scan.mockRestore();
+			spawn.mockRestore();
+		}
+	};
 	addWifiInterface(ADAPTER, makeInterface());
 	getWifiIdToMacAddress()[0] = ADAPTER;
 	setWifiJoinNmcliRunner(async (args) => {
 		calls.push(args);
-		// The default reply is a clean exit that names no uuid, so an argv-only
-		// test settles at the "nothing to activate" warn and never reaches the
-		// post-success tail (which would spawn a real nmcli).
+		// No-UUID replies exercise the existing ambiguous terminal path.
 		return replies.shift() ?? { stdout: "", stderr: "", exitCode: 0 };
 	});
 });
 
 afterEach(() => {
 	setWifiJoinNmcliRunner(null);
+	restoreTransportMocks();
 	delete getWifiIdToMacAddress()[0];
 	removeWifiInterface(ADAPTER);
 	// `bun test` is ONE process: a leaked adapter joins every later file's
@@ -234,13 +252,57 @@ describe("a SAE-only network is BUILT with key-mgmt sae", () => {
 			{ send: (message: string) => sent.push(JSON.parse(message)) },
 			{ new: { device: 0, ssid: SSID, password: PASSWORD, security: "WPA3" } },
 		);
-		// The failure path awaits `wifiDeleteFailedConns()` before it answers, so
-		// this settles on a real timer rather than a microtask drain.
+		// Wait for the asynchronous attempt's terminal frame.
 		await waitFor(() => sent.length > 0);
 
 		expect(sent.at(-1)?.wifi?.new?.error).toBe("auth");
 	});
 });
+
+test.each([
+	[
+		"NM-auto generic failure",
+		"WPA2",
+		[{ stdout: "", stderr: "Activation failed", exitCode: 1 }],
+		"generic",
+	],
+	[
+		"NM-auto auth failure",
+		"WPA2",
+		[
+			{
+				stdout: "Secrets were required, but not provided",
+				stderr: "",
+				exitCode: 4,
+			},
+		],
+		"auth",
+	],
+	[
+		"SAE add failure",
+		"WPA3",
+		[{ stdout: "", stderr: "Add failed", exitCode: 1 }],
+		"generic",
+	],
+	[
+		"SAE unconfirmed add",
+		"WPA3",
+		[{ stdout: "Unconfirmed", stderr: "", exitCode: 0 }],
+		"generic",
+	],
+] satisfies [string, string, NmcliRun[], string][])(
+	"%s retains its existing refusal",
+	async (_name, security, scripted, error) => {
+		replies = scripted;
+		const sent: { wifi?: { new?: { error?: string; device?: number } } }[] = [];
+		handleWifi(
+			{ send: (message) => sent.push(JSON.parse(message)) },
+			{ new: { device: 0, ssid: SSID, password: PASSWORD, security } },
+		);
+		await waitFor(() => sent.length > 0);
+		expect(sent.at(-1)?.wifi?.new).toEqual({ error, device: 0 });
+	},
+);
 
 describe("everything else keeps the single-step path, unchanged", () => {
 	test.each([
@@ -290,20 +352,13 @@ test("adapter id 0 is a real adapter, not an absent one", async () => {
 	expect(await join("WPA2")).toHaveLength(1);
 });
 
-/*
-  The cleanup `runWifiNew` awaits before it can report a failed join.
-
-  `nmConnsGet` signals its own failure by resolving `undefined` rather than
-  throwing — which is exactly what a host with no `nmcli` on `$PATH` produces —
-  so the sweep must treat a non-list as "nothing to enumerate". It used to cast
-  the result to an array and iterate it, and the resulting
-  `undefined is not an object` escaped through the very failure path that owed
-  the operator a typed refusal.
-*/
+// Exercise the same cleanup entrypoint awaited by failed NEW joins.
 describe("wifiDeleteFailedConns", () => {
 	const listed = [
 		"keep-me:802-11-wireless:1712345678",
-		"never-activated:802-11-wireless:0",
+		"operator-staged:802-11-wireless:0",
+		"other-radio-pending:802-11-wireless:0",
+		"uncertain-attempt:802-11-wireless:0",
 		"a-modem:gsm:0",
 		"",
 	];
@@ -322,12 +377,13 @@ describe("wifiDeleteFailedConns", () => {
 		expect(deleted).toEqual([]);
 	});
 
-	test("a listable nmcli still deletes exactly the never-activated wifi profiles", async () => {
+	test("retains unowned zero-timestamp profiles without enumeration or deletion", async () => {
 		const deleted: string[] = [];
+		const enumerated: string[] = [];
 
 		await wifiDeleteFailedConns({
 			listConns: async (fields) => {
-				expect(fields).toBe("uuid,type,timestamp");
+				enumerated.push(fields);
 				return listed;
 			},
 			deleteConn: async (uuid) => {
@@ -336,7 +392,43 @@ describe("wifiDeleteFailedConns", () => {
 			},
 		});
 
-		expect(deleted).toEqual(["never-activated"]);
+		expect(deleted).toEqual([]);
+		expect(enumerated).toEqual([]);
+	});
+
+	test("overlapping failed joins cannot delete another attempt's pending profile", async () => {
+		const snapshot = Promise.withResolvers<string[]>();
+		const deleted: string[] = [];
+		let reads = 0;
+		const deps = {
+			listConns: async () => {
+				reads++;
+				return snapshot.promise;
+			},
+			deleteConn: async (uuid: string) => {
+				deleted.push(uuid);
+				return true;
+			},
+		};
+		const first = wifiDeleteFailedConns(deps);
+		const second = wifiDeleteFailedConns(deps);
+		snapshot.resolve(listed);
+		await Promise.all([first, second]);
+		expect(deleted).toEqual([]);
+		expect(reads).toBe(0);
+	});
+
+	test("unavailable cleanup transports cannot prevent retention from settling", async () => {
+		await expect(
+			wifiDeleteFailedConns({
+				listConns: async () => {
+					throw new Error("Unavailable list");
+				},
+				deleteConn: async () => {
+					throw new Error("Unavailable delete");
+				},
+			}),
+		).resolves.toBeUndefined();
 	});
 });
 
