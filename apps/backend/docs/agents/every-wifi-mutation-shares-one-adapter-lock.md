@@ -103,8 +103,8 @@ terminal. This does not change admission or re-enter the per-adapter lock.
 
 **`runWifiNew`'s `ok:true, uuid:undefined` is AMBIGUOUS, not failed.** It emits
 `{new:{error:"ambiguous"}}` and deliberately does NOT run
-`wifiDeleteFailedConns()` — the failure path does, because a failure proves the
-profile never activated, and this path proves nothing.
+`wifiDeleteFailedConns()` — failed replies also do not establish exclusive profile ownership.
+Automatic failed-join cleanup retains uncertain profiles.
 
 Both `publishOutcome` deps are OPTIONAL so the existing suites' exact dep objects
 still typecheck; production wires them in the `default*Deps`. Coverage:
@@ -116,3 +116,6 @@ reply, and the two station-join frames). Rule-E: all 11 fail on the pre-fix tree
 ## Saved connection refresh ownership
 
 `wifiUpdateSavedConns` assigns each invocation a unique token and builds saved/savedAll maps on private adapter shadows. It publishes synchronously only after all profile reads settle, while that token is still current and the complete adapter registry still contains the captured object identities. A newer refresh or replaced/removed/added adapter withholds publication. Previous complete maps remain visible during reads and list failures. Hotspot handling remains separate. Deferred-list and profile-read regressions live in `tests/wifi-saved-connection.test.ts`.
+## Failed station joins retain uncertain profiles
+
+The legacy `wifiDeleteFailedConns` entry point now logs withheld cleanup without enumerating or deleting profiles. Timestamp zero, a returned UUID and an activation failure do not prove exclusive ownership by a failed attempt. Failed and ambiguous joins can leave profiles behind; explicit Forget remains the deliberate deletion path. This changes automatic cleanup policy and requires design review. Overlapping-join and unavailable-transport regressions live in `tests/wifi-sae-station.test.ts`.
