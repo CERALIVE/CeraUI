@@ -1,4 +1,4 @@
-/** Remote status keeps Wi-Fi diagnostics but never the local hotspot credential. */
+/** Remote status omits local hotspot credentials and radio lifetime tokens. */
 export function projectRemoteStatus(payload: unknown): unknown {
 	if (
 		typeof payload !== "object" ||
@@ -11,18 +11,22 @@ export function projectRemoteStatus(payload: unknown): unknown {
 	}
 
 	const projectInterface = (iface: unknown): unknown => {
-		if (
-			typeof iface !== "object" ||
-			iface === null ||
-			!("hotspot" in iface) ||
-			typeof iface.hotspot !== "object" ||
-			iface.hotspot === null ||
-			!("password" in iface.hotspot)
-		) {
-			return iface;
+		if (typeof iface !== "object" || iface === null) return iface;
+		let projected = iface;
+		if ("incarnation" in iface) {
+			const { incarnation: _incarnation, ...rest } = iface;
+			projected = rest;
 		}
-		const { password: _password, ...hotspot } = iface.hotspot;
-		return { ...iface, hotspot };
+		if (
+			!("hotspot" in projected) ||
+			typeof projected.hotspot !== "object" ||
+			projected.hotspot === null ||
+			!("password" in projected.hotspot)
+		) {
+			return projected;
+		}
+		const { password: _password, ...hotspot } = projected.hotspot;
+		return { ...projected, hotspot };
 	};
 
 	return {

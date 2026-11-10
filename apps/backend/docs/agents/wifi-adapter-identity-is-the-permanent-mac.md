@@ -86,7 +86,7 @@ fields. A successfully completed binding refreshes that evidence to its actual
 new pin; an in-flight binding retains the original selection evidence until
 its final ownership check.
 
-This does not consume shadow identity, change registry keys, emit tokens,
+Ownership arbitration does not consume shadow identity, change registry keys,
 introduce limited mode, change NetworkManager targeting or change mode
 transitions. Unresolved radios retain prepare/start capability. A radio
 returning under a new name or after replug keeps its own credentials.
@@ -108,19 +108,20 @@ pre-fix head. Single-adapter discovery and verified/unverified prepare/start
 controls retain the existing results. These tests prove dispatch and return
 behavior at the host boundary; they do not qualify physical NM scheduling.
 
-### Shadow lifetime producer [EXISTS; host-tested only]
+### Observational lifetime producer [EXISTS; host-tested only]
 
 `modules/wifi/wifi-radio-identity.ts` computes separate, internal evidence.
 The live resolver above, all of its cache tiers, registry keys, numeric ids,
-degraded reasons, id-map membership, credential-store keys and `wifiBuildMsg`
-output are unchanged. No handler consumes the shadow classification or token.
-There is no wire/schema addition or change to hotspot prepare/start/stop,
-mode transitions, profile targeting, credentials or mock behavior.
+degraded reasons, id-map membership and credential-store keys are unchanged.
+No handler consumes the classification or token. The additive protocol projects
+only the optional token in local `wifiBuildMsg` rows and accepts optional request
+tokens without using them. Hotspot prepare/start/stop, mode transitions,
+profile targeting and credential behavior remain unchanged.
 
 The injectable file reader brackets the permanent address and wiphy index with
 the netdev ifindex and resolved `phy80211` path. A reads only these sysfs files
 and symlinks; it starts no new external process. `GENERAL.PATH` acquisition and
-composite identity are deferred to P/B, where the locator has a consumer.
+composite identity remain deferred to the later guarded backend rollout.
 Only a coherent positive ifindex and nonnegative wiphy index produce a witness;
 phy0 is valid. The shadow MAC cache uses the complete `(ifindex, wiphy)` pair,
 serves only same-pair read failures, and is pruned to coherent pairs in each run.
@@ -137,10 +138,22 @@ An unavailable or operational-MAC-missing row retains a predecessor's shadow
 key only with the same coherent witness; a new lifetime gets a placeholder
 until NetworkManager is ready, even if its permanent address is readable.
 
-Internal incarnations rotate on a changed witness, classification or degraded
+Observational incarnations rotate on a changed witness, classification or degraded
 edge. Same-object renames and repeated duplicate runs retain their incarnation.
 Discovery and monitor `unavailable` events project incarnation/degraded-reason
-changes into the shadow snapshot only, without changing broadcast decisions.
+changes into the observational snapshot, without changing broadcast decisions.
+Existing status builds carry the sampled token when one is available.
+Projection also requires the exact registry row, its current observation
+generation and a coherent lifetime. A private weak map invalidates evidence
+before discovery publishes or mutates a row. This covers a new row and a reused
+same-MAC row; an ifname alone never associates a token. Failed, timed-out,
+incoherent and superseded observations leave the field absent until a later
+current sample proves it. Monitor-only unavailable edges retain the original
+row association while rotating the token. The existing disconnect broadcast
+still precedes the monitor observation: a private publication fence omits the
+token in that synchronous window and releases it only after rotation succeeds.
+The fence never restores over a newer discovery generation. Legacy data and scheduling remain
+unchanged.
 Observation sequences fence publication: an older discovery cannot erase a
 later unavailable event or replace a newer completed observation. Canceled
 samples cannot commit their cache or snapshot.
@@ -161,7 +174,8 @@ and unexpected shadow exceptions increment the internal
 `getWifiRadioShadowFailures()` counter without adding error logs.
 
 Coverage: `wifi-radio-identity.test.ts`, `wifi-discovery-single-flight.test.ts`
-and `wifi-radio-equivalence.test.ts`. Nine recorded main fixture families cover
+and `wifi-radio-equivalence.test.ts`. After removing only the optional incarnation
+field from Wi-Fi rows, nine recorded main fixture families cover
 the resolver tiers, unavailable/missing-operational rows, duplicates, rename and
 replug, public prepare/start results, credentials and broadcast count/order.
 The overlapping-call fixture records three independent reads, results
@@ -169,8 +183,16 @@ The overlapping-call fixture records three independent reads, results
 covers independent errors. An extra real broadcast is a permanent negative
 control. Fault tests use fake clocks and capability/command readers to cover
 hanging, slow and rejected sampling plus both integration boundaries.
-All pre-existing main assertions remain unchanged; locator-only A tests are
+The authorized A-only raw-byte assertion now compares all legacy bytes after
+removing only incarnation, with added wire-value rotation and ordinary-status
+stability assertions. Every other pre-existing assertion remains unchanged.
+Locator-only A tests were
 removed with the explicitly deferred feature. Owner hardware gates G1-G5 are
 unrun and are not claimed;
 host evidence does not qualify physical radios or NetworkManager activation.
+
+The [additive protocol contract](../../../../docs/WIFI-INCARNATION-PROTOCOL.md)
+defines token validation, mock rebind control, byte changes, RPC output parsing,
+remote stripping and the workspace package boundary. No frontend uses the token
+for behavior in this step.
 

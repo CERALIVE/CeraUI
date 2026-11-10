@@ -14,6 +14,7 @@ export async function fakeShadowSysfs(radios: () => readonly RadioFixture[]) {
 					path.includes(`/net/${r.ifname}/`) ||
 					path.startsWith(`/sys/devices/equivalence/phy${r.phy}/`),
 			);
+			if (radio?.beforeRead) await radio.beforeRead(path);
 			if (path.endsWith("/ifindex")) return radio?.ifindex.toString();
 			if (path.endsWith("/index")) return radio?.phy.toString();
 			if (path.endsWith("/macaddress")) return radio?.permanent;

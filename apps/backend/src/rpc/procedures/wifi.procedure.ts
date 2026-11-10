@@ -38,6 +38,9 @@
  * (`modules/wifi/wifi-hotspot-outcome.ts`), including the ones that resolve long
  * after the reply — so `accepted: true` is a promise of a later frame, never a
  * claim that the access point is up.
+ *
+ * Optional `incarnation` inputs are parsed by the shared schemas and deliberately
+ * ignored here. This additive protocol step does not enforce radio bindings.
  */
 
 import {

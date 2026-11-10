@@ -53,6 +53,7 @@ import {
 	recordWifiRadioShadowFailure,
 	wifiRadioIdentity,
 } from "./wifi-radio-identity.ts";
+import { suspendWifiRadioRow } from "./wifi-radio-publication.ts";
 
 const wifiInterfacesByMacAddress: Record<MacAddress, WifiInterface> = {};
 
@@ -180,16 +181,23 @@ export function handleWifiMonitorEvent(event: MonitorEvent): void {
 		case "connection-state":
 			handleConnectionStateEvent(event.connection, event.state);
 			break;
-		case "device-state":
+		case "device-state": {
+			const row =
+				event.state === "unavailable"
+					? getWifiInterfaceByIfname(event.device)
+					: undefined;
+			const resume = row ? suspendWifiRadioRow(row) : undefined;
 			handleDeviceStateEvent(event.device, event.state);
 			if (event.state === "unavailable") {
 				try {
 					wifiRadioIdentity.markUnavailable(event.device);
+					resume?.();
 				} catch {
 					recordWifiRadioShadowFailure();
 				}
 			}
 			break;
+		}
 		default:
 			break;
 	}

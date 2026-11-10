@@ -301,12 +301,20 @@ export type WifiAdapterModeEntry = z.infer<typeof wifiAdapterModeEntrySchema>;
 export const wifiAdapterModeStatusSchema = z.record(z.string(), wifiAdapterModeEntrySchema);
 export type WifiAdapterModeStatus = z.infer<typeof wifiAdapterModeStatusSchema>;
 
+// Equality-only, non-secret opaque ASCII token; never trim or coerce it.
+export const wifiIncarnationSchema = z
+	.string()
+	.min(1)
+	.max(128)
+	.regex(/^[A-Za-z0-9_-]+$/);
+
 // `.strict()` because this switches a radio between operating modes — an
 // unknown extra key must be REJECTED rather than silently ignored.
 export const setWifiAdapterModeInputSchema = z
 	.object({
 		device: z.string(),
 		mode: wifiAdapterModeSchema,
+		incarnation: wifiIncarnationSchema.optional(),
 	})
 	.strict();
 export type SetWifiAdapterModeInput = z.infer<typeof setWifiAdapterModeInputSchema>;
@@ -412,6 +420,7 @@ export const wifiInterfaceSchema = z.object({
 	ifname: z.string(),
 	conn: z.string(),
 	hw: z.string(),
+	incarnation: wifiIncarnationSchema.optional(),
 	hotspot: hotspotConfigSchema.optional(),
 	// Absent on a hotspot-mode interface (which carries `hotspot` instead) and on
 	// an interface that cannot host a hotspot — the backend omits both there.
@@ -512,6 +521,7 @@ export type WifiScanInput = z.infer<typeof wifiScanInputSchema>;
 // Hotspot start/stop input schema
 export const hotspotToggleInputSchema = z.object({
 	device: z.string(),
+	incarnation: wifiIncarnationSchema.optional(),
 });
 export type HotspotToggleInput = z.infer<typeof hotspotToggleInputSchema>;
 
@@ -563,6 +573,7 @@ export type HotspotToggleOutput = z.infer<typeof hotspotToggleOutputSchema>;
 */
 export const hotspotPrepareInputSchema = z.object({
 	device: z.string(),
+	incarnation: wifiIncarnationSchema.optional(),
 	name: z.string().min(HOTSPOT_NAME_MIN).max(HOTSPOT_NAME_MAX).optional(),
 	password: z
 		.string()
@@ -586,6 +597,7 @@ export type HotspotPrepareOutput = z.infer<typeof hotspotPrepareOutputSchema>;
 // Hotspot config input schema
 export const hotspotConfigInputSchema = z.object({
 	device: z.string(),
+	incarnation: wifiIncarnationSchema.optional(),
 	name: z
 		.string()
 		.min(HOTSPOT_NAME_MIN, 'Hotspot name must be at least 1 character')

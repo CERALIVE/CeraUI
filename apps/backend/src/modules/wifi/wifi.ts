@@ -17,7 +17,10 @@
 
 /* NetworkManager / nmcli based Wifi Manager */
 
-import type { WifiAdapterCapabilities } from "@ceraui/rpc/schemas";
+import type {
+	WifiAdapterCapabilities,
+	WifiInterface as WifiInterfaceWire,
+} from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
 import { pollWithBackoff } from "../../helpers/retry.ts";
@@ -36,6 +39,7 @@ import {
 	getMockHotspotClients,
 	getMockHotspotConfig,
 } from "../../mocks/providers/wifi.ts";
+import { getMockWifiIncarnation } from "../../mocks/providers/wifi-incarnation.ts";
 import {
 	type ConnectionUUID,
 	type MacAddress,
@@ -105,6 +109,8 @@ import {
 	type WifiInterface,
 	type WifiInterfaceId,
 } from "./wifi-interfaces.ts";
+import { wifiRadioIdentity } from "./wifi-radio-identity.ts";
+import { projectWifiRadioIncarnation } from "./wifi-radio-publication.ts";
 import {
 	planWifiStationJoin,
 	saeActivateArgs,
@@ -168,6 +174,7 @@ export type WifiInterfaceResponseMessage = Pick<
 	// Empty string = no active connection (the wire convention every build path
 	// uses); the real path coerces BaseWifiInterface.conn's null to "" to match.
 	conn: string;
+	incarnation?: WifiInterfaceWire["incarnation"];
 	available?: Array<WifiNetwork>;
 	hotspot?: Pick<WifiHotspot, "name" | "password" | "channel" | "security"> & {
 		available_channels: Record<string, { name: string }>;
@@ -228,6 +235,7 @@ export function wifiBuildMsg() {
 				const hotspot = getMockHotspotConfig(radio.device);
 				ifs[index] = {
 					ifname: radio.ifname,
+					incarnation: getMockWifiIncarnation(radio.device),
 					conn: hotspot.uuid,
 					hw: radio.macAddress,
 					saved: {},
@@ -272,6 +280,7 @@ export function wifiBuildMsg() {
 
 			const entry: WifiInterfaceResponseMessage = {
 				ifname: radio.ifname,
+				incarnation: getMockWifiIncarnation(radio.device),
 				conn: activeSsid ? mockWifiUuidForSsid(activeSsid) : "",
 				hw: radio.macAddress,
 				saved,
@@ -304,6 +313,11 @@ export function wifiBuildMsg() {
 			hw: wifiInterface.hw,
 			saved: {},
 		};
+		const incarnation = projectWifiRadioIncarnation(
+			wifiInterface,
+			wifiRadioIdentity.state.rows.get(wifiInterface.ifname),
+		);
+		if (incarnation !== undefined) entry.incarnation = incarnation;
 		if (wifiInterface.degradedReason !== undefined) {
 			entry.degraded_reason = wifiInterface.degradedReason;
 		}

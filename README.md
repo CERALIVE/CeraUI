@@ -1,5 +1,13 @@
 # CeraUI
 
+**Wi-Fi incarnation protocol [EXISTS; observational only].** Local status may
+include an optional opaque radio lifetime token. Hotspot requests accept it
+without enforcing it; the frontend and NetworkManager behavior are unchanged.
+Only coherent evidence bound to the current row and observation may supply
+the token; pending or failed observations omit it. Remote status strips the
+token. G1-G5 qualification is not claimed.
+See [the additive protocol contract](docs/WIFI-INCARNATION-PROTOCOL.md).
+
 Frontend stream recovery carries status request-dispatch and browser-receipt
 provenance separately. Earlier requests cannot confirm later Stop claims or
 overwrite newer stream-fact observations; a superseded pull allows one bounded
