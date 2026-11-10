@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
-import { EventEmitter } from "node:events";
 import { wifiInterfaceSchema } from "@ceraui/rpc/schemas";
 import * as mockService from "../mocks/mock-service.ts";
 import { getConfig } from "../modules/config.ts";
@@ -19,18 +18,15 @@ import { broadcastMsg, broadcastMsgExcept } from "../rpc/compat.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
 import type { AppWebSocket } from "../rpc/types.ts";
 import {
+	OTHER_PASSWORD,
+	HOTSPOT_PASSWORD as PASSWORD,
+	remoteStatusCases,
+} from "./helpers/remote-status-cases.ts";
+import { StubRemoteSocket, statusClient } from "./helpers/status-client.ts";
+import {
 	isolateWifiRegistry,
 	restoreWifiRegistry,
 } from "./helpers/wifi-registry.ts";
-
-const PASSWORD = "REMOTE_HOTSPOT_SENTINEL_7e912b46";
-
-class StubRemoteSocket extends EventEmitter {
-	readonly sent: string[] = [];
-	send(message: string): void {
-		this.sent.push(message);
-	}
-}
 
 mock.module("ws", () => ({ default: StubRemoteSocket }));
 
@@ -115,10 +111,11 @@ function expectSafeStatus(
 		if (entry.hotspot) delete entry.hotspot.password;
 	}
 	expect(bytes).not.toContain(PASSWORD);
-	expect(bytes).not.toContain('"password":');
-	const status = JSON.parse(bytes).status;
-	expect(status.wifi).toEqual(expected);
-	for (const entry of Object.values(expected)) {
+	const status: { wifi: ReturnType<typeof wifiBuildMsg> } =
+		JSON.parse(bytes).status;
+	expect(status.wifi).toStrictEqual(expected);
+	for (const entry of Object.values(status.wifi)) {
+		if (entry.hotspot) expect(entry.hotspot).not.toHaveProperty("password");
 		expect(wifiInterfaceSchema.safeParse(entry).success).toBe(true);
 	}
 }
@@ -143,10 +140,12 @@ for (const hybrid of [false, true]) {
 		const remote = await authenticateRemote();
 
 		expect(remote.sent.join("\n")).not.toContain(PASSWORD);
-		expect(remote.sent.join("\n")).not.toContain('"password":');
 		const status = remote.sent.find((frame) => "status" in JSON.parse(frame));
 		expect(status).toBeDefined();
 		if (status === undefined) throw new Error("missing initial status");
+		expect(JSON.parse(status).status.wifi[0].hotspot).not.toHaveProperty(
+			"password",
+		);
 		expectSafeStatus(status, local);
 		expect(wifiBuildMsg()).toEqual(local);
 	});
@@ -158,13 +157,8 @@ for (const hybrid of [false, true]) {
 		const localFrames: string[] = [];
 		// Legacy sockets are not registered by production today. Exercise the
 		// shared sender if a status broadcast is delivered to one in the future.
-		remoteClient = Object.assign(remote, {
-			data: { isAuthenticated: true, lastActive: 0 },
-		}) as unknown as AppWebSocket;
-		localClient = {
-			data: { isAuthenticated: true, lastActive: 0 },
-			send: (frame: string) => localFrames.push(frame),
-		} as unknown as AppWebSocket;
+		remoteClient = statusClient((frame) => remote.send(frame));
+		localClient = statusClient((frame) => localFrames.push(frame));
 		addClient(remoteClient);
 		addClient(localClient);
 		remote.sent.length = 0;
@@ -193,9 +187,7 @@ for (const hybrid of [false, true]) {
 			});
 
 			if (except) {
-				const client = {
-					data: { isAuthenticated: true, lastActive: 0 },
-				} as unknown as AppWebSocket;
+				const client = statusClient(() => {});
 				broadcastMsgExcept(client, "status", {
 					wifi: local,
 					is_streaming: true,
@@ -207,7 +199,9 @@ for (const hybrid of [false, true]) {
 			expect(frames).toHaveLength(1);
 			const bytes = JSON.stringify(frames[0]);
 			expect(bytes).not.toContain(PASSWORD);
-			expect(bytes).not.toContain('"password":');
+			expect(JSON.parse(bytes).payload.wifi[0].hotspot).not.toHaveProperty(
+				"password",
+			);
 			const frame = StatusSchema.parse(frames[0]);
 			expectSafeStatus(JSON.stringify({ status: frame.payload }), local);
 			expect(frame.payload?.is_streaming).toBe(true);
@@ -237,3 +231,47 @@ test("an inactive hotspot retains its unchanged local and remote status", async 
 	expect(JSON.stringify(frames)).not.toContain(PASSWORD);
 	expect(wifiBuildMsg()).toEqual(local);
 });
+
+for (const row of remoteStatusCases) {
+	test(`legacy frame removes only the hotspot key: ${row.name}`, async () => {
+		const remote = await authenticateRemote();
+		const local = {
+			first: "envelope-first",
+			status: {
+				first: "status-first",
+				wifi: row.local,
+				modems: { lte: { config: { password: OTHER_PASSWORD } } },
+				last: undefined,
+			},
+			id: "request-id",
+		};
+		const expected = {
+			...local,
+			status: { ...local.status, wifi: row.remote },
+		};
+		remote.sent.length = 0;
+
+		remote.send(JSON.stringify(local));
+
+		expect(remote.sent).toEqual([JSON.stringify(expected)]);
+		expect(remote.sent.join("\n")).not.toContain(PASSWORD);
+		expect(remote.sent.join("\n")).toContain(OTHER_PASSWORD);
+	});
+}
+
+for (const options of [false, true]) {
+	test(`unrelated JSON bytes and send callback survive, options=${options}`, async () => {
+		const remote = await authenticateRemote();
+		const frame =
+			'{ "config": { "password": "unrelated" }, "id": "keep spacing" }\n';
+		let completed = 0;
+		const callback = () => completed++;
+		remote.sent.length = 0;
+
+		if (options) remote.send(frame, { compress: false }, callback);
+		else remote.send(frame, callback);
+
+		expect(remote.sent).toEqual([frame]);
+		expect(completed).toBe(1);
+	});
+}

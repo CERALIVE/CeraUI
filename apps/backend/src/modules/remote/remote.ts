@@ -416,16 +416,17 @@ async function remoteConnect() {
 
 	remoteStatusHandled = false;
 	remoteWs = new WebSocket(remoteWsUrl);
-	// Every write to this provider socket shares the same privacy boundary.
+	// Local fan-out is already serialized. Keep this JSON-text boundary remote-only.
 	const send = remoteWs.send.bind(remoteWs);
 	remoteWs.send = (data, options?, cb?: (err?: Error) => void) => {
 		const frame: Record<string, unknown> = JSON.parse(String(data));
-		const message = JSON.stringify({
-			...frame,
-			...(frame.status !== undefined
-				? { status: projectRemoteStatus(frame.status) }
-				: {}),
-		});
+		const message =
+			frame.status === undefined
+				? data
+				: JSON.stringify({
+						...frame,
+						status: projectRemoteStatus(frame.status),
+					});
 		if (typeof options === "function") {
 			send(message, options);
 		} else {
