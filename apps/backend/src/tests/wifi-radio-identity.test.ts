@@ -1,8 +1,6 @@
-import { describe, expect, spyOn, test } from "bun:test";
-import * as runner from "../helpers/run.ts";
+import { describe, expect, test } from "bun:test";
 import {
 	type RadioIdentityReaders,
-	radioIdentityReaders,
 	WifiRadioIdentityProducer,
 } from "../modules/wifi/wifi-radio-identity.ts";
 
@@ -10,7 +8,7 @@ const MAC = "58:02:05:e1:79:1c";
 const OTHER_MAC = "dc:a6:32:aa:bb:cc";
 const PHY = "/sys/devices/radio/ieee80211/phy0";
 
-type Netdev = { ifindex: string; phy: string; path?: string };
+type Netdev = { ifindex: string; phy: string };
 type Phy = { index: string; mac?: string };
 
 class RadioFiles {
@@ -37,10 +35,6 @@ class RadioFiles {
 			const ifname = /^\/sys\/class\/net\/([^/]+)\/phy80211$/.exec(path)?.[1];
 			return ifname ? this.netdevs.get(ifname)?.phy : undefined;
 		},
-		readPath: async (ifname) => {
-			this.beforeRead(`GENERAL.PATH:${ifname}`);
-			return this.netdevs.get(ifname)?.path;
-		},
 	};
 }
 
@@ -58,7 +52,7 @@ describe("coherent radio evidence", () => {
 		});
 	});
 
-	test.each([2, 3, 4, 5, 6])(
+	test.each([2, 3, 4, 5])(
 		"a netdev replacement at boundary read %i cannot seed the pair cache",
 		async (replaceAt) => {
 			const files = new RadioFiles();
@@ -87,7 +81,7 @@ describe("coherent radio evidence", () => {
 		const files = new RadioFiles();
 		let reads = 0;
 		files.beforeRead = () => {
-			if (++reads === 7) {
+			if (++reads === 6) {
 				files.netdevs.set("wlan0", { ifindex: "3", phy: `${PHY}-new` });
 			}
 		};
@@ -130,46 +124,6 @@ describe("coherent radio evidence", () => {
 			"unverified",
 		);
 	});
-
-	test.each([
-		["PCI-0000:01:00.A\n", "PCI-0000:01:00.A"],
-		["PCI-0000:01:00.A", "PCI-0000:01:00.A"],
-		["PCI-0000:01:00.A\nother\n", undefined],
-		["PCI-0000\\:01\\:00.A\n", undefined],
-		["\n", undefined],
-	])(
-		"the production locator boundary decodes exactly one unescaped field: %j",
-		async (output, expected) => {
-			let argv: readonly string[] | undefined;
-			const command = spyOn(runner, "run").mockImplementation(
-				async (_bin, args) => {
-					argv = args;
-					return output ?? "";
-				},
-			);
-			try {
-				const files = new RadioFiles();
-				const producer = new WifiRadioIdentityProducer({
-					...files.readers,
-					readPath: radioIdentityReaders.readPath,
-				});
-				await producer.discover([{ ifname: "wlan0" }]);
-				expect(producer.state.rows.get("wlan0")?.path).toBe(expected);
-				expect(argv).toEqual([
-					"--terse",
-					"--escape",
-					"no",
-					"--get-values",
-					"GENERAL.PATH",
-					"device",
-					"show",
-					"wlan0",
-				]);
-			} finally {
-				command.mockRestore();
-			}
-		},
-	);
 });
 
 describe("pair-scoped cache and shadow identities", () => {
@@ -323,12 +277,12 @@ describe("two-pass duplicate classification", () => {
 		const release = Promise.withResolvers<void>();
 		const readers = {
 			...files.readers,
-			readPath: async (ifname: string) => {
-				if (ifname === "wlan1") {
+			readText: async (path: string) => {
+				if (path === "/sys/class/net/wlan1/ifindex") {
 					entered.resolve();
 					await release.promise;
 				}
-				return undefined;
+				return files.readers.readText(path);
 			},
 		};
 		const paused = new WifiRadioIdentityProducer(readers);
@@ -363,45 +317,97 @@ describe("two-pass duplicate classification", () => {
 		}
 	});
 
-	test.each([
-		["PCI-0000:01:00.A", "pci-0000:02:00.0", "composite"],
-		["pci-0000:01:00.0", "pci-0000:01:00.0", "limited"],
-		["unsafe*", "pci-0000:02:00.0", "limited"],
-		["unsafe\npath", "pci-0000:02:00.0", "limited"],
-		["unsafe\\path", "pci-0000:02:00.0", "limited"],
-	] as const)(
-		"paths %s / %s classify the first twin as %s",
-		async (path, twinPath, expected) => {
+	test("an older sample cannot overwrite a later unavailable monitor edge", async () => {
+		const files = new RadioFiles();
+		const entered = Promise.withResolvers<void>();
+		const release = Promise.withResolvers<void>();
+		let pause = false;
+		const readers = {
+			...files.readers,
+			readText: async (path: string) => {
+				if (pause && path.endsWith("/macaddress")) {
+					entered.resolve();
+					await release.promise;
+				}
+				return files.readers.readText(path);
+			},
+		};
+		const producer = new WifiRadioIdentityProducer(readers);
+		await producer.discover([{ ifname: "wlan0" }]);
+		pause = true;
+		const older = producer.discover([{ ifname: "wlan0" }]);
+		await entered.promise;
+		producer.markUnavailable("wlan0");
+		const unavailableState = producer.state;
+		const unavailable = producer.state.rows.get("wlan0");
+		release.resolve();
+		await older;
+		expect(producer.state.rows.get("wlan0")).toBe(unavailable);
+		expect(producer.state.rows.get("wlan0")?.degradedReason).toBe(
+			"unavailable",
+		);
+		expect(producer.state).toBe(unavailableState);
+	});
+
+	test.each([true, false])(
+		"a queued older observation cannot erase a later unavailable event (present=%s)",
+		async (present) => {
 			const files = new RadioFiles();
-			files.netdevs.set("wlan0", { ifindex: "3", phy: PHY, path });
-			files.netdevs.set("wlan1", {
-				ifindex: "4",
-				phy: `${PHY}-twin`,
-				path: twinPath,
-			});
-			files.phys.set(`${PHY}-twin`, { index: "1", mac: MAC });
 			const producer = new WifiRadioIdentityProducer(files.readers);
-			await producer.discover([{ ifname: "wlan0" }, { ifname: "wlan1" }]);
-			expect(producer.state.rows.get("wlan0")?.classification).toBe(expected);
-			expect(producer.state.rows.get("wlan0")?.key).toBe(
-				expected === "composite" ? `${MAC}@${path}` : "degraded:wlan0",
-			);
+			await producer.discover([{ ifname: "wlan0" }]);
+			const older = producer.captureObservation();
+			producer.markUnavailable("wlan0");
+			const unavailableState = producer.state;
+			const unavailable = producer.state.rows.get("wlan0");
+			await producer.discover(present ? [{ ifname: "wlan0" }] : [], older);
+			expect(producer.state.rows.get("wlan0")).toBe(unavailable);
+			expect(producer.state).toBe(unavailableState);
+			await producer.discover([{ ifname: "wlan0" }]);
+			expect(producer.state.rows.get("wlan0")?.degradedReason).toBeUndefined();
 		},
 	);
 
-	test("a replacement during GENERAL.PATH cannot attribute its locator to its predecessor", async () => {
+	test("an aborted sample cannot publish or seed its pair cache", async () => {
 		const files = new RadioFiles();
-		files.beforeRead = (path) => {
-			if (path.startsWith("GENERAL.PATH:")) {
-				files.netdevs.set("wlan0", {
-					ifindex: "8",
-					phy: PHY,
-					path: "pci-0000:02:00.0",
-				});
-			}
-		};
-		const producer = new WifiRadioIdentityProducer(files.readers);
+		const entered = Promise.withResolvers<void>();
+		const release = Promise.withResolvers<void>();
+		const controller = new AbortController();
+		const producer = new WifiRadioIdentityProducer({
+			...files.readers,
+			readText: async (path) => {
+				const value = await files.readers.readText(path);
+				if (path.endsWith("/macaddress")) {
+					entered.resolve();
+					await release.promise;
+				}
+				return value;
+			},
+		});
+		const run = producer.discover(
+			[{ ifname: "wlan0" }],
+			producer.captureObservation(),
+			controller.signal,
+		);
+		await entered.promise;
+		controller.abort();
+		release.resolve();
+		await run;
+		expect([...producer.state.rows]).toEqual([]);
+		files.phys.set(PHY, { index: "0" });
 		await producer.discover([{ ifname: "wlan0" }]);
-		expect(producer.state.rows.get("wlan0")?.path).toBeUndefined();
+		expect(producer.state.rows.get("wlan0")?.permanentMac).toBeUndefined();
+	});
+
+	test("an older queued observation starts no I/O after a newer publication", async () => {
+		const files = new RadioFiles();
+		const producer = new WifiRadioIdentityProducer(files.readers);
+		const older = producer.captureObservation();
+		await producer.discover([{ ifname: "wlan0" }]);
+		const published = producer.state;
+		const reads: string[] = [];
+		files.beforeRead = (path) => reads.push(path);
+		await producer.discover([{ ifname: "wlan0" }], older);
+		expect(reads).toEqual([]);
+		expect(producer.state).toBe(published);
 	});
 });

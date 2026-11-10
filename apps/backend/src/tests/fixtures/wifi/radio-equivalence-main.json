@@ -2173,5 +2173,1957 @@
 			],
 			"unexpected": []
 		}
+	},
+	"broadcasts": {
+		"verified fresh": [
+			{
+				"phase": "discovery:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "discovery:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "start:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station",
+							"transition": "activating"
+						}
+					}
+				}
+			},
+			{
+				"phase": "start:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station",
+							"transition": "activating"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto",
+								"clients": {
+									"count": 0,
+									"stations": []
+								}
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			}
+		],
+		"sysfs fail ifname cache hit": [
+			{
+				"phase": "discovery:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "discovery:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "start:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station",
+							"transition": "activating"
+						}
+					}
+				}
+			},
+			{
+				"phase": "start:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station",
+							"transition": "activating"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto",
+								"clients": {
+									"count": 0,
+									"stations": []
+								}
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "discovery:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "discovery:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "start:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station",
+							"transition": "activating"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto",
+								"clients": {
+									"count": 0,
+									"stations": []
+								}
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			}
+		],
+		"operational-MAC cache hit": [
+			{
+				"phase": "discovery:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "discovery:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "start:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station",
+							"transition": "activating"
+						}
+					}
+				}
+			},
+			{
+				"phase": "start:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station",
+							"transition": "activating"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto",
+								"clients": {
+									"count": 0,
+									"stations": []
+								}
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "discovery:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlp-cache",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "discovery:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlp-cache",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "start:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlp-cache",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station",
+							"transition": "activating"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlp-cache",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlp-cache",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlp-cache",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto",
+								"clients": {
+									"count": 0,
+									"stations": []
+								}
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			}
+		],
+		"no-cache/unverified": [
+			{
+				"phase": "discovery:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"degraded_reason": "permanent-mac-unresolved",
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "discovery:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"degraded_reason": "permanent-mac-unresolved",
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "start:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"degraded_reason": "permanent-mac-unresolved",
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station",
+							"transition": "activating"
+						}
+					}
+				}
+			},
+			{
+				"phase": "start:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"degraded_reason": "permanent-mac-unresolved",
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station",
+							"transition": "activating"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"degraded_reason": "permanent-mac-unresolved",
+							"hotspot": {
+								"name": "fixture-020000000001",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"degraded_reason": "permanent-mac-unresolved",
+							"hotspot": {
+								"name": "fixture-020000000001",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"degraded_reason": "permanent-mac-unresolved",
+							"hotspot": {
+								"name": "fixture-020000000001",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto",
+								"clients": {
+									"count": 0,
+									"stations": []
+								}
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			}
+		],
+		"duplicate MAC": [
+			{
+				"phase": "discovery:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan1",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "discovery:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan1",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "start:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan1",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station",
+							"transition": "activating"
+						}
+					}
+				}
+			},
+			{
+				"phase": "start:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan1",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station",
+							"transition": "activating"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan1",
+							"conn": "fixture-uuid-wlan1",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan1",
+							"conn": "fixture-uuid-wlan1",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan1",
+							"conn": "fixture-uuid-wlan1",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto",
+								"clients": {
+									"count": 0,
+									"stations": []
+								}
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			}
+		],
+		"rename": [
+			{
+				"phase": "discovery:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "discovery:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "start:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station",
+							"transition": "activating"
+						}
+					}
+				}
+			},
+			{
+				"phase": "start:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station",
+							"transition": "activating"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto",
+								"clients": {
+									"count": 0,
+									"stations": []
+								}
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "discovery:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlp-renamed",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "discovery:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlp-renamed",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "start:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlp-renamed",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station",
+							"transition": "activating"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlp-renamed",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlp-renamed",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlp-renamed",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto",
+								"clients": {
+									"count": 0,
+									"stations": []
+								}
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			}
+		],
+		"replug": [
+			{
+				"phase": "discovery:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "discovery:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "start:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station",
+							"transition": "activating"
+						}
+					}
+				}
+			},
+			{
+				"phase": "start:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station",
+							"transition": "activating"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto",
+								"clients": {
+									"count": 0,
+									"stations": []
+								}
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "discovery:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {}
+				}
+			},
+			{
+				"phase": "discovery:pending",
+				"at": 1,
+				"payload": {
+					"wifi": {}
+				}
+			},
+			{
+				"phase": "discovery:pending",
+				"at": 2,
+				"payload": {
+					"wifi": {
+						"1": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "discovery:pending",
+				"at": 2,
+				"payload": {
+					"wifi": {
+						"1": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station"
+						}
+					}
+				}
+			},
+			{
+				"phase": "start:pending",
+				"at": 2,
+				"payload": {
+					"wifi": {
+						"1": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station",
+							"transition": "activating"
+						}
+					}
+				}
+			},
+			{
+				"phase": "start:pending",
+				"at": 2,
+				"payload": {
+					"wifi": {
+						"1": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"available": [],
+							"supports_hotspot": true,
+							"mode": "station",
+							"transition": "activating"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 2,
+				"payload": {
+					"wifi": {
+						"1": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 2,
+				"payload": {
+					"wifi": {
+						"1": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto"
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			},
+			{
+				"phase": "confirmation:pending",
+				"at": 2,
+				"payload": {
+					"wifi": {
+						"1": {
+							"ifname": "wlan0",
+							"conn": "fixture-uuid-wlan0",
+							"hw": "Fixture Radio",
+							"saved": {},
+							"hotspot": {
+								"name": "fixture-580205e1791c",
+								"password": "fixture-password",
+								"available_channels": {
+									"auto": {
+										"name": "Auto (any band)"
+									},
+									"auto_24": {
+										"name": "Auto (2.4 GHz)"
+									}
+								},
+								"available_security": {
+									"wpa2": {
+										"name": "WPA2 (Personal)"
+									}
+								},
+								"channel": "auto",
+								"clients": {
+									"count": 0,
+									"stations": []
+								}
+							},
+							"mode": "hotspot"
+						}
+					}
+				}
+			}
+		],
+		"unavailable": [
+			{
+				"phase": "discovery:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "wlan0",
+							"saved": {},
+							"degraded_reason": "unavailable",
+							"available": [],
+							"mode": "station"
+						}
+					}
+				}
+			}
+		],
+		"missing operational MAC": [
+			{
+				"phase": "discovery:pending",
+				"at": 0,
+				"payload": {
+					"wifi": {
+						"0": {
+							"ifname": "wlan0",
+							"conn": "",
+							"hw": "wlan0",
+							"saved": {},
+							"degraded_reason": "operational-mac-missing",
+							"available": [],
+							"mode": "station"
+						}
+					}
+				}
+			}
+		]
+	},
+	"overlap": {
+		"initialReads": 3,
+		"reads": 3,
+		"joined": false,
+		"results": [false, false, true],
+		"broadcasts": 3,
+		"keys": [],
+		"unexpected": []
+	},
+	"errors": {
+		"initialReads": 3,
+		"reads": 3,
+		"joined": false,
+		"results": [
+			{
+				"error": "first legacy failure"
+			},
+			{
+				"value": false
+			},
+			{
+				"error": "third legacy failure"
+			}
+		],
+		"broadcasts": 0,
+		"keys": [],
+		"unexpected": []
 	}
 }

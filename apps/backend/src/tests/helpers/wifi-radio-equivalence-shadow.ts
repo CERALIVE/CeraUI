@@ -3,6 +3,7 @@ import {
 	radioIdentityReaders,
 	wifiRadioIdentity,
 } from "../../modules/wifi/wifi-radio-identity.ts";
+import { wifiRadioObservation } from "../../modules/wifi/wifi-radio-observation.ts";
 import type { RadioFixture } from "./wifi-radio-equivalence.ts";
 
 export async function fakeShadowSysfs(radios: () => readonly RadioFixture[]) {
@@ -27,14 +28,13 @@ export async function fakeShadowSysfs(radios: () => readonly RadioFixture[]) {
 			return radio ? `/sys/devices/equivalence/phy${radio.phy}` : undefined;
 		},
 	);
-	const idPath = spyOn(radioIdentityReaders, "readPath").mockImplementation(
-		async (ifname) =>
-			`pci-0000:01:00.${radios().find((r) => r.ifname === ifname)?.phy}`,
-	);
+	wifiRadioObservation.stop();
+	await wifiRadioObservation.settled;
 	await wifiRadioIdentity.discover([]);
 	return async () => {
+		wifiRadioObservation.stop();
+		await wifiRadioObservation.settled;
 		await wifiRadioIdentity.discover([]);
-		idPath.mockRestore();
 		realpath.mockRestore();
 		text.mockRestore();
 	};

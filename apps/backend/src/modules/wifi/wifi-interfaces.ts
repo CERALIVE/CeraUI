@@ -75,7 +75,11 @@ import {
 	resolveWifiPermanentMac,
 	retainWifiPermanentMacs,
 } from "./wifi-permanent-mac.ts";
-import { wifiRadioIdentity } from "./wifi-radio-identity.ts";
+import {
+	recordWifiRadioShadowFailure,
+	wifiRadioIdentity,
+} from "./wifi-radio-identity.ts";
+import { wifiRadioObservation } from "./wifi-radio-observation.ts";
 
 export type SSID = string;
 export type WifiInterfaceId = number;
@@ -210,9 +214,7 @@ const wifiUpdateTimers = new Set<ReturnType<typeof setTimeout>>();
 export function scheduleWifiUpdate(delayMs: number): void {
 	const timer = setTimeout(() => {
 		wifiUpdateTimers.delete(timer);
-		void wifiUpdateDevices().catch((err: unknown) => {
-			logger.error("WiFi discovery failed", { error: err });
-		});
+		void wifiUpdateDevices();
 	}, delayMs);
 	wifiUpdateTimers.add(timer);
 }
@@ -314,32 +316,13 @@ async function syncActiveConnection(
 	return previousConn !== activeConn || previousMode !== mode;
 }
 
-let discoveryInFlight: Promise<boolean | undefined> | undefined;
-let discoveryQueued: Promise<boolean | undefined> | undefined;
-
-function startDiscovery(): Promise<boolean | undefined> {
-	const run = discoverWifiDevices().finally(() => {
-		if (discoveryInFlight === run) discoveryInFlight = undefined;
-	});
-	discoveryInFlight = run;
-	return run;
-}
-
-// Each caller gets a run that starts after its call; later arrivals cannot
-// extend that promise. Discovery callees must never await this entry point.
-export function wifiUpdateDevices(): Promise<boolean | undefined> {
-	if (discoveryQueued) return discoveryQueued;
-	if (!discoveryInFlight) return startDiscovery();
-	discoveryQueued = discoveryInFlight
-		.catch(() => undefined)
-		.then(() => {
-			discoveryQueued = undefined;
-			return startDiscovery();
-		});
-	return discoveryQueued;
-}
-
-async function discoverWifiDevices() {
+export async function wifiUpdateDevices() {
+	let observation: number | undefined;
+	try {
+		observation = wifiRadioIdentity.captureObservation();
+	} catch {
+		recordWifiRadioShadowFailure();
+	}
 	let newDevices = false;
 	let statusChange = false;
 	let unavailableDevices = false;
@@ -349,22 +332,6 @@ async function discoverWifiDevices() {
 
 	// sorts the results alphabetically by interface name
 	networkDevices.sort();
-
-	await wifiRadioIdentity.discover(
-		networkDevices.flatMap((raw) => {
-			const [ifname, type, state] = nmcliParseSep(raw);
-			if (!ifname || type !== "wifi" || isConcurrentApIfname(ifname)) {
-				return [];
-			}
-			const degradedReason: WifiAdapterDegradedReason | undefined =
-				state === "unavailable"
-					? "unavailable"
-					: !wifiDeviceListGetMacAddress(ifname)
-						? "operational-mac-missing"
-						: undefined;
-			return [{ ifname, ...(degradedReason ? { degradedReason } : {}) }];
-		}),
-	);
 
 	// mark all WiFi adapters as removed
 	for (const wifiInterface of Object.values(getWifiInterfacesByMacAddress())) {
@@ -633,5 +600,28 @@ async function discoverWifiDevices() {
 		unavailableDeviceRetryExpiry = 0;
 	}
 
+	// A task starts sampling only after this legacy promise has been published.
+	if (observation !== undefined) {
+		try {
+			wifiRadioObservation.enqueue(
+				networkDevices.flatMap((raw) => {
+					const [ifname, type, state] = nmcliParseSep(raw);
+					if (!ifname || type !== "wifi" || isConcurrentApIfname(ifname)) {
+						return [];
+					}
+					const degradedReason: WifiAdapterDegradedReason | undefined =
+						state === "unavailable"
+							? "unavailable"
+							: !wifiDeviceListGetMacAddress(ifname)
+								? "operational-mac-missing"
+								: undefined;
+					return [{ ifname, ...(degradedReason ? { degradedReason } : {}) }];
+				}),
+				observation,
+			);
+		} catch {
+			recordWifiRadioShadowFailure();
+		}
+	}
 	return statusChange;
 }

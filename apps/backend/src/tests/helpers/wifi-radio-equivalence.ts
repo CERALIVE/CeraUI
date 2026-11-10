@@ -1,4 +1,4 @@
-import { spyOn } from "bun:test";
+import { jest, spyOn } from "bun:test";
 import * as runner from "../../helpers/run.ts";
 import * as mocks from "../../mocks/mock-service.ts";
 import type { HotspotCredentials } from "../../modules/wifi/hotspot-credentials.ts";
@@ -6,6 +6,7 @@ import {
 	onWifiChange,
 	setWifiState,
 } from "../../modules/wifi/state/wifi-state.ts";
+import * as wifi from "../../modules/wifi/wifi.ts";
 import {
 	currentHotspotApIfnames,
 	wifiBuildMsg,
@@ -21,6 +22,7 @@ import {
 	getWifiInterfacesByMacAddress,
 	resetWifiScanStampsForTest,
 	wifiCancelScanRefresh,
+	wifiStateInit,
 } from "../../modules/wifi/wifi-connections.ts";
 import {
 	wifiDeviceListAdd,
@@ -49,6 +51,7 @@ import {
 	resetWifiPermanentMacCache,
 	setPermanentMacReaderForTest,
 } from "../../modules/wifi/wifi-permanent-mac.ts";
+import * as compat from "../../rpc/compat.ts";
 
 export type RadioFixture = {
 	readonly ifname: string;
@@ -65,12 +68,47 @@ export type EquivalenceFixture = {
 	readonly admitted: boolean;
 };
 
-export async function radioEquivalenceTranscript(fixture: EquivalenceFixture) {
+export async function radioEquivalenceTranscript(
+	fixture: EquivalenceFixture,
+	duplicateBroadcast = false,
+) {
+	jest.useFakeTimers();
+	jest.setSystemTime(0);
+	let phase = "setup";
+	const broadcasts: Array<{ phase: string; at: number; payload: unknown }> = [];
 	let radios: readonly RadioFixture[] = [];
 	const unexpected: string[] = [];
 	const calls: unknown[][] = [];
 	const store = new Map<string, HotspotCredentials>();
 	const restorers: Array<() => void | Promise<void>> = [];
+	const realSink = compat.broadcastMsg;
+	const sink = spyOn(compat, "broadcastMsg").mockImplementation(
+		(type, data, activeMin, authedOnly) => {
+			if (
+				phase !== "cleanup" &&
+				type === "status" &&
+				typeof data === "object" &&
+				data !== null &&
+				"wifi" in data
+			) {
+				broadcasts.push({
+					phase,
+					at: Date.now(),
+					payload: structuredClone(data),
+				});
+			}
+			realSink(type, data, activeMin, authedOnly);
+		},
+	);
+	restorers.push(() => sink.mockRestore());
+	if (duplicateBroadcast) {
+		const owner = wifi.broadcastWifiState;
+		const doubled = spyOn(wifi, "broadcastWifiState").mockImplementation(() => {
+			owner();
+			owner();
+		});
+		restorers.push(() => doubled.mockRestore());
+	}
 	const command = spyOn(runner, "run").mockImplementation(async (bin, args) => {
 		if (bin === "nmcli") {
 			if (
@@ -84,8 +122,6 @@ export async function radioEquivalenceTranscript(fixture: EquivalenceFixture) {
 				)
 			)
 				return "Fixture\nRadio\nyes\nno\nyes";
-			if (args.includes("GENERAL.PATH"))
-				return `pci-0000:01:00.${radios.find((r) => r.ifname === args.at(-1))?.phy}`;
 			if (args.join(" ") === "--terse --fields uuid,type connection show")
 				return "";
 			if (
@@ -111,6 +147,12 @@ export async function radioEquivalenceTranscript(fixture: EquivalenceFixture) {
 	setHotspotClientsDepsForTest({ runIw: async () => "", now: () => 0 });
 	onWifiChange(() => undefined);
 	setWifiState({});
+	wifiStateInit({
+		on: () => undefined,
+		off: () => undefined,
+		start: () => undefined,
+		stop: () => undefined,
+	});
 	setPermanentMacReaderForTest(
 		async (ifname) => radios.find((r) => r.ifname === ifname)?.permanent,
 	);
@@ -174,7 +216,7 @@ export async function radioEquivalenceTranscript(fixture: EquivalenceFixture) {
 		wifiUpdateSavedConns: async () => {
 			calls.push(["wifiUpdateSavedConns"]);
 		},
-		broadcastState: () => undefined,
+		broadcastState: () => wifi.broadcastWifiState(),
 		setDupIpSuppression: (ifname, suppressed) => {
 			calls.push(["setDupIpSuppression", ifname, suppressed]);
 		},
@@ -190,6 +232,7 @@ export async function radioEquivalenceTranscript(fixture: EquivalenceFixture) {
 	const frames = [];
 	try {
 		for (const frame of fixture.frames) {
+			phase = "discovery:pending";
 			radios = frame;
 			wifiDeviceListStartUpdate();
 			for (const radio of radios) {
@@ -198,22 +241,29 @@ export async function radioEquivalenceTranscript(fixture: EquivalenceFixture) {
 			}
 			wifiDeviceListEndUpdate();
 			await wifiUpdateDevices();
+			phase = "discovery:published";
 			await refreshWifiCapabilities(radios.map((r) => r.ifname));
 			wifiCancelScanRefresh();
 			stopWifiUpdateLoopForTest();
 			const discovered = snapshot();
 			const activations = [];
 			for (const iface of Object.values(getWifiInterfacesByMacAddress())) {
+				phase = "prepare:pending";
 				const prepare = await wifiHotspotPrepare({ device: iface.id }, deps);
+				phase = "prepare:published";
 				const prepared = snapshot();
+				phase = "start:pending";
 				const start = await wifiHotspotStart({ device: iface.id }, deps);
+				phase = "start:published";
 				const starting = snapshot();
+				phase = "confirmation:pending";
 				handleWifiMonitorEvent({
 					type: "device-state",
 					device: iface.ifname,
 					state: "connected",
 				});
 				await refreshHotspotClients(currentHotspotApIfnames());
+				phase = "confirmation:published";
 				activations.push({
 					device: iface.id,
 					prepare,
@@ -224,9 +274,24 @@ export async function radioEquivalenceTranscript(fixture: EquivalenceFixture) {
 				});
 			}
 			frames.push({ discovered, activations });
+			phase = "frame:published";
+			// Both main and A receive the same one-millisecond inter-frame gap.
+			jest.advanceTimersByTime(1);
+			const observationModule = new URL(
+				"../../modules/wifi/wifi-radio-observation.ts",
+				import.meta.url,
+			);
+			if (await Bun.file(observationModule).exists()) {
+				const { wifiRadioObservation } = await import(
+					"../../modules/wifi/wifi-radio-observation.ts"
+				);
+				await wifiRadioObservation.settled;
+			}
 		}
-		return { frames, calls, unexpected };
+		return { frames, calls, unexpected, broadcasts };
 	} finally {
+		phase = "cleanup";
+		onWifiChange(() => undefined);
 		wifiCancelScanRefresh();
 		stopWifiUpdateLoopForTest();
 		for (const iface of Object.values(getWifiInterfacesByMacAddress())) {
@@ -249,5 +314,6 @@ export async function radioEquivalenceTranscript(fixture: EquivalenceFixture) {
 		wifiDeviceListEndUpdate();
 		setWifiState({});
 		for (const restore of restorers.reverse()) await restore();
+		jest.useRealTimers();
 	}
 }
