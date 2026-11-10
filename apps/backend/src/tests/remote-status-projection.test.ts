@@ -27,7 +27,11 @@ for (const row of remoteStatusCases) {
 			modems: { lte: { config: { password: OTHER_PASSWORD } } },
 			last: undefined,
 		};
-		const expected = { ...local, wifi: row.remote };
+		const expected = {
+			...local,
+			wifi: row.remote,
+			modems: { lte: { config: {} } },
+		};
 		const original = structuredClone(local);
 
 		const remote = projectRemoteStatus(local);
@@ -35,7 +39,7 @@ for (const row of remoteStatusCases) {
 		expect(remote).toStrictEqual(expected);
 		expect(JSON.stringify(remote)).toBe(JSON.stringify(expected));
 		expect(JSON.stringify(remote)).not.toContain(HOTSPOT_PASSWORD);
-		expect(JSON.stringify(remote)).toContain(OTHER_PASSWORD);
+		expect(remote).not.toHaveProperty("modems.lte.config.password");
 		expect(local).toStrictEqual(original);
 	});
 
@@ -68,13 +72,18 @@ for (const row of remoteStatusCases) {
 				type: "status",
 				cid,
 				seq: 7,
-				payload: { ...local, wifi: row.remote },
+				payload: {
+					...local,
+					wifi: row.remote,
+					modems: { lte: { config: {} } },
+				},
 			}),
 		);
 		expect(JSON.stringify(frames[0])).not.toContain(HOTSPOT_PASSWORD);
 		expect(StatusSchema.parse(frames[0]).payload).toStrictEqual({
 			...local,
 			wifi: row.remote,
+			modems: { lte: { config: {} } },
 		});
 		expect(local).toStrictEqual(original);
 	});

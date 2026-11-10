@@ -37,16 +37,64 @@ export function projectRemoteWifiFrame(payload: unknown): unknown {
 	return projected;
 }
 
-/** Remote status omits local hotspot credentials and radio lifetime tokens. */
-export function projectRemoteStatus(payload: unknown): unknown {
+/** Authentication with the remote itself still uses remote_key. */
+export function projectRemoteConfig(payload: unknown): unknown {
+	if (typeof payload !== "object" || payload === null) return payload;
 	if (
-		typeof payload !== "object" ||
-		payload === null ||
+		!("ssh_pass" in payload) &&
+		!("pairing_secret" in payload) &&
+		!("srt_streamid" in payload) &&
+		!("relay_streamid_override" in payload)
+	) {
+		return payload;
+	}
+	const config = { ...payload };
+	Reflect.deleteProperty(config, "ssh_pass");
+	Reflect.deleteProperty(config, "pairing_secret");
+	Reflect.deleteProperty(config, "srt_streamid");
+	Reflect.deleteProperty(config, "relay_streamid_override");
+	return config;
+}
+
+/** APN credentials belong to the carrier, not the remote management service. */
+export function projectRemoteModems(payload: unknown): unknown {
+	if (typeof payload !== "object" || payload === null) return payload;
+	const projectModem = (modem: unknown): unknown => {
+		if (
+			typeof modem !== "object" ||
+			modem === null ||
+			!("config" in modem) ||
+			typeof modem.config !== "object" ||
+			modem.config === null ||
+			(!("username" in modem.config) && !("password" in modem.config))
+		) {
+			return modem;
+		}
+		const config = { ...modem.config };
+		Reflect.deleteProperty(config, "username");
+		Reflect.deleteProperty(config, "password");
+		return { ...modem, config };
+	};
+	return Array.isArray(payload)
+		? payload.map(projectModem)
+		: Object.fromEntries(
+				Object.entries(payload).map(([id, modem]) => [id, projectModem(modem)]),
+			);
+}
+
+/** Remote status omits local credentials and radio lifetime tokens. */
+export function projectRemoteStatus(payload: unknown): unknown {
+	if (typeof payload !== "object" || payload === null) return payload;
+	const projected =
+		"modems" in payload
+			? { ...payload, modems: projectRemoteModems(payload.modems) }
+			: payload;
+	if (
 		!("wifi" in payload) ||
 		typeof payload.wifi !== "object" ||
 		payload.wifi === null
 	) {
-		return payload;
+		return projected;
 	}
 
 	const projectInterface = (iface: unknown): unknown => {
@@ -69,7 +117,7 @@ export function projectRemoteStatus(payload: unknown): unknown {
 	};
 
 	return {
-		...payload,
+		...projected,
 		wifi: Array.isArray(payload.wifi)
 			? payload.wifi.map(projectInterface)
 			: Object.fromEntries(

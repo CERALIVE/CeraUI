@@ -10,6 +10,13 @@ The backend is a single compiled binary (`ceralive`) produced by `bun build --co
 **Shared contract**: `@ceraui/rpc` (workspace package at `packages/rpc/`)  
 **Engine/bindings**: `@ceralive/cerastream` (public-npm registry dep — JSON-RPC/UDS client), `@ceraui/srtla-send` (private workspace package at `packages/srtla-send/`)
 
+Remote privacy [EXISTS]: every remote provider's config/status responses omit
+provisioned SSH and pairing secrets, APN usernames/passwords, and the media
+stream IDs. Authenticated local clients retain their existing payloads.
+Remote authentication keys remain unchanged. See the
+[remote control contract](docs/agents/remote-control-plane.md) for exact fields,
+result paths, the unwired v2 broadcast relay, and the remaining local log finding.
+
 ### Modem-control compatibility
 
 The backend pins `@ceralive/modem-control` at `1.3.0` EXACTLY. The SMS port, the

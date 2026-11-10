@@ -250,7 +250,11 @@ for (const row of remoteStatusCases) {
 		};
 		const expected = {
 			...local,
-			status: { ...local.status, wifi: row.remote },
+			status: {
+				...local.status,
+				wifi: row.remote,
+				modems: { lte: { config: {} } },
+			},
 		};
 		remote.sent.length = 0;
 
@@ -258,7 +262,9 @@ for (const row of remoteStatusCases) {
 
 		expect(remote.sent).toEqual([JSON.stringify(expected)]);
 		expect(remote.sent.join("\n")).not.toContain(PASSWORD);
-		expect(remote.sent.join("\n")).toContain(OTHER_PASSWORD);
+		expect(JSON.parse(remote.sent[0] ?? "")).not.toHaveProperty(
+			"status.modems.lte.config.password",
+		);
 	});
 }
 
@@ -309,7 +315,9 @@ test("observed radio tokens stay local through initial legacy status and both re
 		expect(frames).toHaveLength(1);
 		expect(JSON.stringify(frames)).not.toContain(token);
 		expect(JSON.stringify(frames)).not.toContain(PASSWORD);
-		const { incarnation: _incarnation, ...legacy } = local[0] ?? {};
+		const iface = local[0];
+		if (!iface) throw new Error("Missing observed radio");
+		const { incarnation: _incarnation, ...legacy } = iface;
 		const { password: _password, ...hotspot } = legacy.hotspot ?? {};
 		expect(StatusSchema.parse(frames[0]).payload?.wifi).toStrictEqual({
 			"0": { ...legacy, hotspot },
