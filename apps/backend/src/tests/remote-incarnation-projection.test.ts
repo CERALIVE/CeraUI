@@ -14,7 +14,10 @@ for (const array of [false, true]) {
 			hotspot: { name: "AP", password: "secret" },
 		};
 		const legacyStation = { ifname: "wlan0", saved: {} };
-		const legacyAp = { ifname: "wlan1", hotspot: { name: "AP" } };
+		const legacyAp = {
+			ifname: "wlan1",
+			hotspot: { name: "AP", password: "secret" },
+		};
 		const wifi = array
 			? [station, null, ap]
 			: { first: station, second: null, third: ap };

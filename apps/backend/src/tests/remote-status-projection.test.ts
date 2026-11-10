@@ -27,19 +27,24 @@ for (const row of remoteStatusCases) {
 			modems: { lte: { config: { password: OTHER_PASSWORD } } },
 			last: undefined,
 		};
-		const expected = { ...local, wifi: row.remote };
+		const expected = {
+			...local,
+			wifi: row.remote,
+		};
 		const original = structuredClone(local);
 
 		const remote = projectRemoteStatus(local);
 
 		expect(remote).toStrictEqual(expected);
 		expect(JSON.stringify(remote)).toBe(JSON.stringify(expected));
-		expect(JSON.stringify(remote)).not.toContain(HOTSPOT_PASSWORD);
+		expect(JSON.stringify(remote)?.includes(HOTSPOT_PASSWORD) ?? false).toBe(
+			JSON.stringify(row.local)?.includes(HOTSPOT_PASSWORD) ?? false,
+		);
 		expect(JSON.stringify(remote)).toContain(OTHER_PASSWORD);
 		expect(local).toStrictEqual(original);
 	});
 
-	test(`v2 serialized frame removes only the hotspot key: ${row.name}`, () => {
+	test(`v2 serialized frame preserves credentials and exact shape: ${row.name}`, () => {
 		const frames: unknown[] = [];
 		const cid = "00000000-0000-4000-8000-000000000001";
 		const uuid = spyOn(crypto, "randomUUID").mockReturnValue(cid);
@@ -68,10 +73,15 @@ for (const row of remoteStatusCases) {
 				type: "status",
 				cid,
 				seq: 7,
-				payload: { ...local, wifi: row.remote },
+				payload: {
+					...local,
+					wifi: row.remote,
+				},
 			}),
 		);
-		expect(JSON.stringify(frames[0])).not.toContain(HOTSPOT_PASSWORD);
+		expect(JSON.stringify(frames[0]).includes(HOTSPOT_PASSWORD)).toBe(
+			JSON.stringify(row.local)?.includes(HOTSPOT_PASSWORD) ?? false,
+		);
 		expect(StatusSchema.parse(frames[0]).payload).toStrictEqual({
 			...local,
 			wifi: row.remote,

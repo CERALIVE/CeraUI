@@ -25,6 +25,7 @@
 
 import { logger } from "../../helpers/logger.ts";
 import type { RPCContext } from "../../rpc/types.ts";
+import { projectRemoteConfig } from "../remote/remote-status.ts";
 import { sendFrame } from "./channel.ts";
 import {
 	getSharedSeenCidStore,
@@ -176,7 +177,7 @@ function buildResult(frame: Command, payload: ResultPayload): Result {
 		type: frame.type,
 		cid: frame.cid,
 		...(frame.role !== undefined ? { role: frame.role } : {}),
-		payload,
+		payload: { ...payload, applied: projectRemoteConfig(payload.applied) },
 	};
 }
 

@@ -10,6 +10,16 @@ The backend is a single compiled binary (`ceralive`) produced by `bun build --co
 **Shared contract**: `@ceraui/rpc` (workspace package at `packages/rpc/`)  
 **Engine/bindings**: `@ceralive/cerastream` (public-npm registry dep — JSON-RPC/UDS client), `@ceraui/srtla-send` (private workspace package at `packages/srtla-send/`)
 
+Remote configuration [EXISTS]: config responses and results withhold only the
+internal `pairing_secret`. SSH passwords, APN credentials, media stream IDs and
+the live hotspot password are sent to the authenticated remote again, allowing
+owner control and trusted delegates to read credentials. Local payloads and
+authentication remain unchanged; radio incarnation metadata stays local.
+Previously received copies are NOT erased. Pairing-secret registration through
+`POST /api/device/pairing-secret` is unchanged. See the
+[remote control contract](docs/agents/remote-control-plane.md) for the exact
+boundary and the still-unwired v2 broadcast relay.
+
 ### Modem-control compatibility
 
 The backend pins `@ceralive/modem-control` at `1.3.0` EXACTLY. The SMS port, the
