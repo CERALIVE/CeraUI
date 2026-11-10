@@ -147,6 +147,86 @@ describe("gateway election current candidates", () => {
 		},
 	]);
 
+	test.each([
+		"health exclusion",
+		"address change",
+		"early sweep",
+		"release inventory",
+	] as const)("discards natural recovery evidence after %s", async (change) => {
+		const table = new DefaultRouteTable(BASELINE);
+		await setDefaultRoute("uplink-b", { runner: table.runner });
+		const before = table.orderedRows();
+		table.mutations.length = 0;
+		const current = {
+			"uplink-a": netif("192.0.2.2"),
+			"uplink-b": netif("198.51.100.2"),
+		};
+		let eligible = true;
+		let now = 0;
+		let deferred = false;
+		const entered = Promise.withResolvers<void>();
+		const resume = Promise.withResolvers<void>();
+		const base = election(table);
+		let releases = 0;
+		const deps: GatewayElectionDeps = {
+			...base,
+			routeRunner: table.runner,
+			now: () => now,
+			interfaces: () => current,
+			eligible: (name) => name !== "uplink-a" || eligible,
+			installRoute: async () => {},
+			releaseRoutes: async (condition) => {
+				if (change === "release inventory") {
+					entered.resolve();
+					await resume.promise;
+				}
+				await setDefaultRoute(undefined, {
+					runner: table.runner,
+					...(condition ? { releaseCondition: condition } : {}),
+				});
+				releases++;
+			},
+			probes: {
+				...base.probes,
+				probeRepository: async () => {
+					if (deferred && change !== "release inventory") {
+						entered.resolve();
+						await resume.promise;
+					}
+					return reachable;
+				},
+			},
+		};
+		if (change !== "early sweep") {
+			await updateGw(deps);
+			now = 5_000;
+			await updateGw(deps);
+		}
+		now = 10_000;
+		deferred = true;
+		const sweep = updateGw(deps);
+		await entered.promise;
+		if (change === "address change") current["uplink-a"].ip = "192.0.2.3";
+		else eligible = false;
+		resume.resolve();
+		expect(await sweep).toBe(false);
+		expect(releases).toBe(0);
+		expect(table.mutations).toEqual([]);
+		expect(table.orderedRows()).toEqual(before);
+		// Restoring the roster must require three fresh observations and dwell.
+		eligible = true;
+		deferred = false;
+		for (const at of [15_000, 20_000]) {
+			now = at;
+			await updateGw(deps);
+			expect(releases).toBe(0);
+		}
+		now = 25_000;
+		expect(await updateGw(deps)).toBe(true);
+		expect(releases).toBe(1);
+		expect(table.rows()).toEqual([...BASELINE].sort());
+	});
+
 	for (const outcome of ["success", "failure"] as const) {
 		test.each([
 			"replacement address",

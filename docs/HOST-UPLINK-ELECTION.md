@@ -572,3 +572,5 @@ Not covered or claimed:
 ## Candidate ownership after probes
 
 Ordinary `updateGw` snapshots the sorted eligible candidate roster, including address and binding identity, before awaiting route recovery and connectivity probes. It compares that roster with current interfaces and steering eligibility after the election. A changed roster returns false before election warnings or the final route decision can consume stale evidence. This sampled check is not a lease across subsequent route-owner awaits and cannot detect a change that returns to identical sampled values. Deferred-probe regressions live in `apps/backend/src/tests/gateway-route-lifecycle.test.ts`.
+
+Natural recovery also rechecks this roster after each recovery observation and in the route owner's release condition, after its awaited inventory read. A mismatch withholds the handoff and clears the healthy streak and release condition; recovery requires fresh observations and dwell after eligibility returns. These remain sampled checks, not a lease through route mutations.

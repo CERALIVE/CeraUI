@@ -163,8 +163,19 @@ export async function updateGw(
 	// Capture values before the awaits; the underlying netif records may mutate.
 	const capturedRoster = candidateRosterIdentity(candidates);
 
+	const candidatesCurrent = () =>
+		candidateRosterIdentity(
+			eligibleProbeCandidates(deps.interfaces()).filter((candidate) =>
+				deps.eligible(candidate.name),
+			),
+		) === capturedRoster;
+
 	const defaultIf = await deps.defaultInterface(4);
-	const recovery = await recoverNaturalGateway(deps, candidates);
+	const recovery = await recoverNaturalGateway(
+		deps,
+		candidates,
+		candidatesCurrent,
+	);
 	if (recovery !== undefined) {
 		if (recovery) notificationRemove(NO_INTERNET_NOTIFICATION);
 		return recovery;
@@ -210,11 +221,8 @@ export async function updateGw(
 		candidates,
 		deps.probes,
 	);
-	const currentCandidates = eligibleProbeCandidates(deps.interfaces()).filter(
-		(candidate) => deps.eligible(candidate.name),
-	);
 	// This sampled check is not a lease across the route owner's later awaits.
-	if (candidateRosterIdentity(currentCandidates) !== capturedRoster) {
+	if (!candidatesCurrent()) {
 		logger.info(
 			"Gateway candidates changed during probing; withholding result",
 		);

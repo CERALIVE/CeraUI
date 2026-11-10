@@ -10,15 +10,26 @@ export async function recoverNaturalGateway(
 		"routeRunner" | "releaseRoutes" | "probes" | "now"
 	>,
 	candidates: readonly ProbeCandidate[],
+	candidatesCurrent: () => boolean,
 ): Promise<boolean | undefined> {
 	if (!deps.routeRunner || !deps.releaseRoutes) return undefined;
 	try {
 		const recovery = naturalUplinkRecovery(deps.routeRunner);
-		if (!(await recovery.ready(candidates, deps.probes, deps.now ?? getms)))
-			return undefined;
+		const ready = await recovery.ready(
+			candidates,
+			deps.probes,
+			deps.now ?? getms,
+		);
+		const current = () => {
+			if (candidatesCurrent()) return true;
+			recovery.invalidate();
+			return false;
+		};
+		if (!current()) return false;
+		if (!ready) return undefined;
 		const condition = recovery.releaseCondition;
 		if (!condition) return false;
-		await deps.releaseRoutes(condition);
+		await deps.releaseRoutes((inventory) => current() && condition(inventory));
 		logger.info("Natural host uplink recovered; released owned preference");
 		return true;
 	} catch (cause) {

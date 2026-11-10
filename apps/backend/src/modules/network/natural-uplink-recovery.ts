@@ -42,6 +42,11 @@ export class NaturalUplinkRecovery {
 		return this.#releaseCondition;
 	}
 
+	invalidate(): void {
+		this.#streak = undefined;
+		this.#releaseCondition = undefined;
+	}
+
 	async observeOwnership(): Promise<void> {
 		const inventory = await readOwnedInventory(this.runner);
 		if (inventory.failures.length > 0)
