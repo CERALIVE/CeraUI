@@ -245,6 +245,7 @@ class RPCClient {
 
 		try {
 			if (this.socket !== null) {
+				this.stopKeepAlive();
 				this.socket = null;
 				this.rejectPendingRequests();
 			}
