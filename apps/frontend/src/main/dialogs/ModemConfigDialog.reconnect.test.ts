@@ -15,14 +15,21 @@
  * reading.
  */
 
+import { m } from "@ceraui/i18n/svelte";
 import type { Modem } from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { tick } from "svelte";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { resetModemsFeed } from "../../tests/helpers/modem-feed.svelte";
+import {
+	getModemsFeed,
+	publishModems,
+	resetModemsFeed,
+} from "../../tests/helpers/modem-feed.svelte";
 import ModemConfigDialog from "./ModemConfigDialog.svelte";
 
 const configure = vi.hoisted(() => vi.fn());
+const setConnected = vi.hoisted(() => vi.fn<(next: boolean) => void>());
 
 vi.mock("$lib/rpc", () => ({
 	rpc: { modems: { configure, setUsbMode: vi.fn(), scan: vi.fn() } },
@@ -30,11 +37,15 @@ vi.mock("$lib/rpc", () => ({
 
 vi.mock("$lib/rpc/subscriptions.svelte", async () => {
 	const feed = await import("../../tests/helpers/modem-feed.svelte");
+	const { fromStore, writable } = await import("svelte/store");
+	const connected = writable(true);
+	const current = fromStore(connected);
+	setConnected.mockImplementation(connected.set);
 	return {
 		getModems: feed.getModemsFeed,
 		getConfig: () => ({}),
 		getStatus: () => ({}),
-		getIsConnected: () => true,
+		getIsConnected: () => current.current,
 	};
 });
 
@@ -114,6 +125,7 @@ beforeAll(() => {
 describe("the reconnect notice", () => {
 	beforeEach(() => {
 		resetModemsFeed();
+		setConnected(true);
 		configure.mockReset();
 		configure.mockResolvedValue({ success: true });
 	});
@@ -166,5 +178,60 @@ describe("the reconnect notice", () => {
 			expect(screen.queryByTestId("modem-scan-button")).not.toBeNull(),
 		);
 		expect(notice()).toBeNull();
+	});
+
+	it("keeps an unsaved draft through a connection loss and the returning modem snapshot", async () => {
+		const initial: Modem = {
+			...modem("connected"),
+			data_usage: { session_bytes: 10, cycle_bytes: 20 },
+		};
+		publishModems({ "2": initial });
+		const { rerender } = mount(initial);
+		const apn = () =>
+			screen.getByLabelText(m["network.modem.apn"]()) as HTMLInputElement;
+		const username = () =>
+			screen.getByLabelText(m["network.modem.username"]()) as HTMLInputElement;
+		await fireEvent.input(apn(), { target: { value: "draft.apn" } });
+		await fireEvent.input(username(), { target: { value: "draft-user" } });
+
+		// Ordinary transport loss retains the last modem snapshot. An empty
+		// roster would instead remove the dialog in NetworkView, and logout's
+		// resetState is a different lifecycle from this still-mounted edit.
+		setConnected(false);
+		await tick();
+		expect(screen.queryByTestId("modem-usage-stale")).not.toBeNull();
+		expect(getModemsFeed()["2"]?.config?.apn).toBe("internet");
+		expect(apn().value).toBe("draft.apn");
+		expect(username().value).toBe("draft-user");
+		expect(configure).not.toHaveBeenCalled();
+
+		// The returning feed reports persisted values, not the unsent draft.
+		// Drive the prop update too, as NetworkView's selected roster entry does.
+		const returned: Modem = {
+			...initial,
+			config: { ...initial.config, apn: "device.apn", username: "device-user" },
+		};
+		setConnected(true);
+		publishModems({ "2": returned });
+		await rerender({ modem: returned });
+		expect(screen.queryByTestId("modem-usage-stale")).toBeNull();
+		expect(getModemsFeed()["2"]?.config?.apn).toBe("device.apn");
+		expect(apn().value).toBe("draft.apn");
+		expect(username().value).toBe("draft-user");
+		expect(configure).not.toHaveBeenCalled();
+
+		await fireEvent.click(
+			screen.getByRole("button", { name: m["network.modem.save"]() }),
+		);
+		await waitFor(() => expect(configure).toHaveBeenCalledTimes(1));
+		expect(configure).toHaveBeenCalledWith(
+			expect.objectContaining({
+				device: "2",
+				apn: "draft.apn",
+				username: "draft-user",
+			}),
+		);
+		// Dispatching the edit does not fabricate an accepted device reading.
+		expect(getModemsFeed()["2"]?.config?.apn).toBe("device.apn");
 	});
 });
