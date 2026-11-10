@@ -1,3 +1,4 @@
+import { mintLinkId } from "../../modems/physical-identity.ts";
 import type {
 	ShareRulesetState,
 	SteeringUplink,
@@ -81,7 +82,7 @@ export class UplinkSteeringApplier {
 					removedSupport.push(route);
 					this.#deps.publishFlowsReset({
 						iface: route.ifname,
-						linkId: route.identity,
+						linkId: mintLinkId(route.identity),
 					});
 				}
 			}
