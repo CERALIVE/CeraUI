@@ -1,14 +1,20 @@
 # CeraUI
 
-**Wi-Fi incarnation protocol [EXISTS; observational only].** Local status may
+**Wi-Fi incarnation binding [EXISTS; backend enforcement pending].** Local status may
 include an optional opaque radio lifetime token. Hotspot requests accept it
-without enforcing it; the frontend and NetworkManager behavior are unchanged.
+without enforcing it. The frontend binds hotspot drafts and acknowledgement to
+the selected device, token, connection and dialog session. Ordinary status
+patches preserve edits; replacement reloads the details and withdraws consent.
+Tokenless rows retain read-only display and Stop, while guarded actions wait
+for identification or a device software update. NetworkManager behavior is unchanged.
 Only coherent evidence bound to the current row and observation may supply
 the token; pending or failed observations omit it. Asynchronous config and mode
 frames echo the token captured at dispatch; RPC replies and hotspot start/stop
 frames retain their existing shapes. Remote status and settlement frames strip
 the token. G1-G5 qualification is not claimed.
 See [the additive protocol contract](docs/WIFI-INCARNATION-PROTOCOL.md).
+The [frontend binding contract](docs/HOTSPOT-DRAFT-BINDING.md) includes
+compatibility limits and the EN/es-419 release documentation handoff.
 
 Frontend stream recovery carries status request-dispatch and browser-receipt
 provenance separately. Earlier requests cannot confirm later Stop claims or

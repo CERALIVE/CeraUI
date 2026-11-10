@@ -40,13 +40,20 @@ export const WIFI_HOTSPOT_OP_PREFIX = "hotspot";
 export const WIFI_MODE_OP_PREFIX = "wifi-mode";
 
 /** The hotspot start/stop op key for a wire device id. */
-export function wifiHotspotOpKey(device: string): string {
-	return `${WIFI_HOTSPOT_OP_PREFIX}:${device}`;
+export function wifiHotspotOpKey(device: string, incarnation?: string): string {
+	return `${WIFI_HOTSPOT_OP_PREFIX}:${device}${incarnation === undefined ? "" : `:${incarnation}`}`;
 }
 
 /** The per-adapter mode-change op key for a wire device id. */
-export function wifiModeOpKey(device: string): string {
-	return `${WIFI_MODE_OP_PREFIX}:${device}`;
+export function wifiModeOpKey(device: string, incarnation?: string): string {
+	return `${WIFI_MODE_OP_PREFIX}:${device}${incarnation === undefined ? "" : `:${incarnation}`}`;
+}
+
+export function wifiHotspotConfigOpKey(
+	device: string,
+	incarnation?: string,
+): string {
+	return `hotspot-config:${device}${incarnation === undefined ? "" : `:${incarnation}`}`;
 }
 
 /**

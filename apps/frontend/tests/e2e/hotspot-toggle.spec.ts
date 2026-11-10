@@ -82,6 +82,7 @@ function installWsHarness(token: string): void {
 		lastWifi: null as Record<string, unknown> | null,
 		// The `device` key the dialog dispatched its last hotspot op against.
 		lastHotspotDevice: undefined as string | undefined,
+		lastHotspotIncarnation: undefined,
 		// Map<path, result>. A matched RPC is dropped + resolved locally with the
 		// given result, so the op's pending window is owned by the test.
 		_fake: {} as Record<string, unknown>,
@@ -140,6 +141,7 @@ function installWsHarness(token: string): void {
 				// echoes (active snapshot / deferred config) hit the same `device`.
 				if (p && HOTSPOT_PATHS.has(p) && msg.input && msg.input.device !== undefined) {
 					w.__cera.lastHotspotDevice = String(msg.input.device);
+					w.__cera.lastHotspotIncarnation = msg.input.incarnation;
 				}
 
 				// Drop+fake an armed RPC: never reaches the backend, resolved locally
@@ -193,6 +195,10 @@ function armFake(page: Page, rpcPath: string, result: unknown): Promise<void> {
 
 function lastHotspotDevice(page: Page): Promise<string | undefined> {
 	return page.evaluate(() => (window as any).__cera.lastHotspotDevice);
+}
+
+function lastHotspotIncarnation(page: Page): Promise<string | undefined> {
+	return page.evaluate<string | undefined>("window.__cera.lastHotspotIncarnation");
 }
 
 /** Wait until a wifi snapshot has been captured from a status broadcast. */
@@ -410,7 +416,7 @@ test.describe(
 
 			// Deferred success event routes into hotspot-config:<device> → confirmed.
 			await emit(page, "wifi", {
-				hotspot: { config: { device, success: true } },
+				hotspot: { config: { device, incarnation: await lastHotspotIncarnation(page), success: true } },
 			});
 			await expect(saveSettled).toBeEnabled();
 			await expect(dialog(page)).toBeVisible();
@@ -441,7 +447,7 @@ test.describe(
 
 			// Deferred error event routes into hotspot-config:<device> → failed.
 			await emit(page, "wifi", {
-				hotspot: { config: { device, success: false, error: "mock_config_error" } },
+				hotspot: { config: { device, incarnation: await lastHotspotIncarnation(page), success: false, error: "mock_config_error" } },
 			});
 
 			// Calm treatment: the save returns enabled (no stuck spinner), the form

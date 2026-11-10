@@ -86,6 +86,8 @@ export function wifiModeDescriptionKey(mode: WifiAdapterMode): string {
  * rendered raw — a machine token is never operator copy.
  */
 export function wifiModeErrorKey(reason: string | undefined): string {
+	if (reason === "radio-changed" || reason === "binding-required")
+		return "network.wifiMode.error.radioChanged";
 	if (reason === undefined) return "network.wifiMode.error.generic";
 	return ERROR_KEY[reason] ?? "network.wifiMode.error.generic";
 }
@@ -162,6 +164,8 @@ export interface WifiAdapterModeOptionView {
 /** Everything a surface needs to render one adapter's mode, derived once. */
 export interface WifiAdapterModeView {
 	device: string;
+	incarnation?: string;
+	degradedReason?: WifiInterface["degraded_reason"];
 	/**
 	 * The mode to DISPLAY. Held on the prior mode while a transition is pending,
 	 * so a raw `wifi` broadcast cannot flip the control before the device has
@@ -284,6 +288,12 @@ export function deriveWifiAdapterModeView(
 	const failed = input.phase === "failed" || input.phase === "timed_out";
 	return {
 		device: input.device,
+		...(input.iface.incarnation !== undefined
+			? { incarnation: input.iface.incarnation }
+			: {}),
+		...(input.iface.degraded_reason !== undefined
+			? { degradedReason: input.iface.degraded_reason }
+			: {}),
 		displayMode,
 		observedMode,
 		deviceAnswered,

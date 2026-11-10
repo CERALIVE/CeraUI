@@ -51,6 +51,7 @@ const start = vi.mocked(rpc.wifi.hotspotStart);
 // A station-mode radio: the wire carries NO hotspot block, so the dialog has
 // never been told any credentials — the exact #413 starting point.
 const STATION: WifiInterface = {
+	incarnation: "radio-A",
 	ifname: "wlan0",
 	conn: "HomeNet",
 	hw: "58:02:05:e1:79:1c",
@@ -144,7 +145,10 @@ describe("HotspotDialog — no hotspot starts unseen (#413)", () => {
 		await openGate();
 
 		expect(start).not.toHaveBeenCalled();
-		expect(prepare).toHaveBeenCalledWith({ device: "0" });
+		expect(prepare).toHaveBeenCalledWith({
+			device: "0",
+			incarnation: "radio-A",
+		});
 		const password = q<HTMLInputElement>("hotspot-confirm-password");
 		expect(q<HTMLInputElement>("hotspot-confirm-name")?.value).toBe(
 			"CERALIVE_791c",
@@ -165,7 +169,7 @@ describe("HotspotDialog — no hotspot starts unseen (#413)", () => {
 
 		await fireEvent.click(q("hotspot-confirm-activate") as HTMLElement);
 		await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
-		expect(start).toHaveBeenCalledWith({ device: "0" });
+		expect(start).toHaveBeenCalledWith({ device: "0", incarnation: "radio-A" });
 		expect(prepare).toHaveBeenCalledTimes(1);
 		expect(q("hotspot-activation-confirm")).toBeNull();
 	});
@@ -193,6 +197,7 @@ describe("HotspotDialog — no hotspot starts unseen (#413)", () => {
 		await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
 		expect(prepare).toHaveBeenLastCalledWith({
 			device: "0",
+			incarnation: "radio-A",
 			name: "CERALIVE_791c",
 			password: "my own pass",
 		});

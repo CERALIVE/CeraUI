@@ -35,6 +35,7 @@ import type {
 	UplinkShaperStatus,
 	UplinkSteeringStatus,
 	UplinksMessage,
+	WifiMessage,
 	WifiStatus,
 } from "@ceraui/rpc/schemas";
 import {
@@ -71,6 +72,10 @@ import {
 	parseIngestSlots,
 } from "$lib/streaming/receiver-experience";
 import { settleStartRecoveryEvidence } from "$lib/streaming/unresolved-stream-actions.svelte";
+import {
+	wifiHotspotConfigOpKey,
+	wifiModeOpKey,
+} from "$main/network/wifi-station-lock";
 import {
 	beginOperation,
 	confirmOperation,
@@ -783,20 +788,8 @@ function handleMessage(
 				device?: string | number;
 				disconnect?: string;
 				new?: { error?: string; success?: boolean; device?: string | number };
-				hotspot?: {
-					config?: {
-						device?: string | number;
-						success?: boolean;
-						error?: string;
-					};
-				};
-				adapter_mode?: {
-					device?: string | number;
-					mode?: string;
-					pending?: boolean;
-					success?: boolean;
-					error?: string;
-				};
+				hotspot?: WifiMessage["hotspot"];
+				adapter_mode?: WifiMessage["adapter_mode"];
 			};
 
 			// Boolean connect result (saved network). The array ack (connect:
@@ -824,8 +817,15 @@ function handleMessage(
 			// Deferred hotspot reconfigure result. `hotspotConfigure` only acks the
 			// dispatch; the real outcome arrives here and resolves the separate
 			// `hotspot-config:${device}` key the HotspotDialog save op stays pending on.
-			if (wifiData.hotspot?.config?.device !== undefined) {
-				const key = `hotspot-config:${wifiData.hotspot.config.device}`;
+			if (
+				wifiData.hotspot?.config?.device !== undefined &&
+				wifiData.hotspot.config.incarnation ===
+					wifiState?.[String(wifiData.hotspot.config.device)]?.incarnation
+			) {
+				const key = wifiHotspotConfigOpKey(
+					String(wifiData.hotspot.config.device),
+					wifiData.hotspot.config.incarnation,
+				);
 				if (wifiData.hotspot.config.success) {
 					confirmOperation(key);
 				} else {
@@ -834,8 +834,15 @@ function handleMessage(
 			}
 			// `begin` on the pending frame is deliberate: it re-arms the TTL and
 			// makes a transition dispatched from ANOTHER client visible here too.
-			if (wifiData.adapter_mode?.device !== undefined) {
-				const key = `wifi-mode:${wifiData.adapter_mode.device}`;
+			if (
+				wifiData.adapter_mode?.device !== undefined &&
+				wifiData.adapter_mode.incarnation ===
+					wifiState?.[String(wifiData.adapter_mode.device)]?.incarnation
+			) {
+				const key = wifiModeOpKey(
+					String(wifiData.adapter_mode.device),
+					wifiData.adapter_mode.incarnation,
+				);
 				if (wifiData.adapter_mode.pending === true) {
 					beginOperation(key, wifiData.adapter_mode.mode);
 				} else if (wifiData.adapter_mode.error !== undefined) {

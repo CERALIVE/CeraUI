@@ -2731,5 +2731,15 @@
 	"hotspotConfirm.inactiveHint": "You'll see and can change the network name and password when you turn the hotspot on.",
 	"network.wifiMode.confirm.switchTo": "Switch to {mode}",
 	"hotspotConfirm.firstTimeTitle": "Set up your hotspot",
-	"hotspotConfirm.firstTimeBody": "This radio hasn't run a hotspot before. Keep the suggested name and password or choose your own."
+	"hotspotConfirm.firstTimeBody": "This radio hasn't run a hotspot before. Keep the suggested name and password or choose your own.",
+	"hotspotConfirm.radioChanged": "These hotspot details were reloaded because the Wi-Fi adapter or connection changed. Check them and confirm again.",
+	"hotspotConfirm.bindingUnsupported": "This device can't yet confirm which Wi-Fi adapter the hotspot would use. Wait for it to be identified, or update the device software and try again.",
+	"hotspotConfirm.radioUnverified": "The hotspot stays off until this Wi-Fi adapter can be identified.",
+	"hotspotConfirm.radioChangedNotSaved": "The Wi-Fi adapter changed, so your changes weren't saved. Check its current details before trying again.",
+	"hotspotConfirm.radioChangedNotStarted": "The Wi-Fi adapter changed, so the hotspot wasn't turned on. Check the details and confirm again.",
+	"hotspotConfigurator.radioChanged": "These hotspot settings were reloaded. Make your changes again before saving.",
+	"hotspotConfigurator.saveRefused": "The Wi-Fi adapter changed, so these settings weren't saved.",
+	"hotspotConfigurator.saveInterrupted": "The new settings couldn't be applied while the hotspot was restarting. The hotspot may be off.",
+	"network.wifiMode.error.radioChanged": "The Wi-Fi adapter changed, so the mode switch didn't finish. Check its current mode before trying again.",
+	"hotspotConfigurator.radioUnverified": "These settings can't be saved until this Wi-Fi adapter can be identified. You can still turn off the hotspot."
 }

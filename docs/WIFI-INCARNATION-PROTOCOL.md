@@ -13,19 +13,25 @@ These inputs do not change admission, targeting, effects or RPC results. A stale
 or unrelated valid token still has the same action behavior as an omitted token.
 Config and mode requests additionally supply observational metadata for the two
 asynchronous frames described below. There is no binding enforcement, new
-refusal, frontend consumption, limited mode, locator acquisition, or
+refusal, limited mode, locator acquisition, or
 NetworkManager targeting change. The broader radio program's limited/composite
 state and guarded actions remain later rollout work. G1-G5 are unrun and
 unclaimed here.
+
+The frontend now consumes this additive protocol for draft ownership and
+expected-incarnation requests. It fixes the draft/acknowledgement overwrite;
+it does not supply backend admission enforcement. See
+[the frontend binding contract](HOTSPOT-DRAFT-BINDING.md).
 
 ## Asynchronous config and mode settlement [EXISTS; host proof only]
 
 Only `wifi.hotspot.config` terminal frames and `wifi.adapter_mode`
 pending/terminal frames gain optional `incarnation`, with the same strict
-1-128-character ASCII bound as the row token. The current frontend settles these
-by device in `subscriptions.svelte.ts`; a delayed frame otherwise cannot identify
-its original radio lifetime. This step adds the producer field without changing
-that consumer.
+1-128-character ASCII bound as the row token. The frontend now dispatches,
+displays and settles config and mode operations with token-qualified keys.
+`subscriptions.svelte.ts` ignores echoed tokens that disagree with the current
+row and routes matching frames to their captured lifetime's key. A tokenless
+frame retains the legacy key only when the current row is also tokenless.
 
 The validated expected token wins when supplied, including a valid unrelated
 token. Otherwise the exact row's proven token is captured synchronously at
@@ -100,8 +106,9 @@ ASCII strings have their stated length; 53 is a producer measurement, not the
 Authorized local clients receive the field through initial `sendStatus`,
 `broadcastWifiState`, `wifi.getStatus`, and aggregate `status.getStatus`.
 Both RPC output schemas retain it. The current frontend's existing shared types,
-JSON receive path and status hydration tolerate both shapes without using the
-token for rendering or actions.
+JSON receive path and status hydration tolerate both shapes. The frontend uses
+the token for hotspot draft ownership and guarded requests, with read-only
+display and Stop retained when it is absent.
 
 Remote-bound status strips it using the projection introduced for local hotspot
 passwords. This includes initial and subsequent legacy remote serialization
@@ -145,6 +152,6 @@ internal-only premise replaces
 only each row's incarnation. Additional emitted-value assertions require
 unavailable/recovery rotation and stability across ordinary saved-network status
 changes. Every other pre-existing assertion remains unchanged. Separate tests
-inspect raw emitted tokens and serialized local/remote frames. User-facing
-binding behavior, copy and coordinated EN/es-419 user documentation belong to
-the later frontend rollout; this step changes no operator controls or claims.
+inspect raw emitted tokens and serialized local/remote frames. The frontend
+binding rollout adds operator copy and the coordinated EN/es-419 documentation
+handoff; limited-mode and port-scope markers and their copy belong to B.

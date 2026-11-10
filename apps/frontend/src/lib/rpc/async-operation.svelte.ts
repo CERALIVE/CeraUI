@@ -567,6 +567,8 @@ export async function osCommand<T>(opts: {
 	busyMessage?: () => string;
 	failMessage?: () => string;
 	onResult?: (r: T) => void;
+	/** A caller-owned dialog/radio lifetime may end while the RPC is pending. */
+	isCurrent?: () => boolean;
 }): Promise<T | undefined> {
 	// Re-entry guard: never dispatch a second RPC for an in-flight key.
 	if (isOperationPending(opts.key)) return undefined;
@@ -574,6 +576,7 @@ export async function osCommand<T>(opts: {
 	beginOperation(opts.key, opts.target, opts.pendingTtlMs);
 	try {
 		const r = await opts.rpc();
+		if (opts.isCurrent && !opts.isCurrent()) return undefined;
 		const v = opts.classify?.(r) ?? defaultClassify(r);
 		if (!v.ok) {
 			failOperation(opts.key, v.reason ?? (v.busy ? "device_busy" : "failed"));
@@ -591,6 +594,7 @@ export async function osCommand<T>(opts: {
 		opts.onResult?.(r);
 		return r;
 	} catch (e) {
+		if (opts.isCurrent && !opts.isCurrent()) return undefined;
 		failOperation(
 			opts.key,
 			e instanceof ConnectionResetError

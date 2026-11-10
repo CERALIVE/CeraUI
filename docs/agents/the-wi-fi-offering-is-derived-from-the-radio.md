@@ -2,6 +2,15 @@
 
 ## THE WI-FI OFFERING IS DERIVED FROM THE RADIO [EXISTS]
 
+**Hotspot drafts belong to one radio lifetime [EXISTS].** The gate and live
+editor preserve edits on same-device/token status patches, including renames.
+Rebinding reloads the form and withdraws consent; session, link and attempt
+fences reject obsolete continuations. Save and mode outcomes use the dispatched
+token echoed by the producer. Tokenless rows remain visible with Stop available,
+but guarded actions require identification. Backend enforcement and limited or
+port-scoped identity states remain later work. See
+[the binding contract](../HOTSPOT-DRAFT-BINDING.md).
+
 **Security offerings are partial, nonempty maps [EXISTS].** A radio without
 positive SAE proof emits only `wpa2`; the shared output schema accepts that
 subset without inventing `wpa3-sae`. An omitted map remains valid for older
