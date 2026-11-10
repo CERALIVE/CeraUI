@@ -423,6 +423,13 @@ A dev-only DevTools destination is available in development builds.
   degraded rows rather than disappearing. Physical-radio validation is still
   pending; see
   [`docs/AP-STA-CONCURRENT-MODE.md`](docs/AP-STA-CONCURRENT-MODE.md).
+- **Internal radio lifetime evidence [EXISTS]**: coherent kernel witnesses,
+  pair-scoped caching and duplicate classification run as detached, bounded
+  sysfs observations. Legacy discovery keeps main's independent per-call behavior;
+  its proposed scheduling bound moves to the later enforcement change. No new
+  external process runs. WiFi status and hotspot behavior are unchanged,
+  including prepare/start for unresolved radios. See the
+  [backend identity contract](apps/backend/docs/agents/wifi-adapter-identity-is-the-permanent-mac.md).
 - **Device Health telemetry**: memory, per-cluster CPU frequency, DDR bus load,
   GPU load, and (on the vendor kernel) per-core decoder load, alongside the
   existing SoC temperature and load-average traces. Every signal is omitted

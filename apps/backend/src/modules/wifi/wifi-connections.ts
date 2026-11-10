@@ -49,6 +49,10 @@ import {
 	startHotspotClientsPoll,
 } from "./wifi-hotspot-clients.ts";
 import type { WifiInterface, WifiInterfaceId } from "./wifi-interfaces.ts";
+import {
+	recordWifiRadioShadowFailure,
+	wifiRadioIdentity,
+} from "./wifi-radio-identity.ts";
 
 const wifiInterfacesByMacAddress: Record<MacAddress, WifiInterface> = {};
 
@@ -178,6 +182,13 @@ export function handleWifiMonitorEvent(event: MonitorEvent): void {
 			break;
 		case "device-state":
 			handleDeviceStateEvent(event.device, event.state);
+			if (event.state === "unavailable") {
+				try {
+					wifiRadioIdentity.markUnavailable(event.device);
+				} catch {
+					recordWifiRadioShadowFailure();
+				}
+			}
 			break;
 		default:
 			break;

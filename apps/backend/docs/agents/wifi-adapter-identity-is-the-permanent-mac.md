@@ -38,11 +38,77 @@ so an ifname rename during a transient sysfs failure keeps the same physical
 identity. Discovery never drops an adapter merely because NetworkManager reports
 `unavailable`, the operational MAC has not landed, or the permanent address cannot
 yet be confirmed: the registry retains a row with a typed `degraded_reason`, keeps
-its numeric id while re-keying on recovery, and the frontend withholds controls
-until identity is trustworthy.
+its numeric id while re-keying on recovery. A permanent-MAC-unresolved row still
+enters the id map and retains today's hotspot prepare/start behavior.
 
 **A monitor event carries an ifname, never a MAC.** `getWifiInterfaceByIfname()`
 (`wifi-connections.ts`) is the bridge; do NOT route a device-state event through
 `wifiDeviceListGetMacAddress()` — that returns the operational address and will
 miss the registry.
+
+### Shadow lifetime producer [EXISTS; host-tested only]
+
+`modules/wifi/wifi-radio-identity.ts` computes separate, internal evidence.
+The live resolver above, all of its cache tiers, registry keys, numeric ids,
+degraded reasons, id-map membership, credential-store keys and `wifiBuildMsg`
+output are unchanged. No handler consumes the shadow classification or token.
+There is no wire/schema addition or change to hotspot prepare/start/stop,
+mode transitions, profile targeting, credentials or mock behavior.
+
+The injectable file reader brackets the permanent address and wiphy index with
+the netdev ifindex and resolved `phy80211` path. A reads only these sysfs files
+and symlinks; it starts no new external process. `GENERAL.PATH` acquisition and
+composite identity are deferred to P/B, where the locator has a consumer.
+Only a coherent positive ifindex and nonnegative wiphy index produce a witness;
+phy0 is valid. The shadow MAC cache uses the complete `(ifindex, wiphy)` pair,
+serves only same-pair read failures, and is pruned to coherent pairs in each run.
+It assumes one fixed network namespace, automatic index allocation and no
+privileged index reassignment or namespace moves.
+
+All eligible radios are sampled before shadow rows are published. Unique MACs
+classify as verified. Shared MACs and coherent but unattributable samples
+classify as limited, and incomplete samples
+as unverified. Limited/unverified keys are isolated `degraded:<ifname>`
+placeholders. These classifications are evidence only; limited hotspot mode is
+not implemented here.
+An unavailable or operational-MAC-missing row retains a predecessor's shadow
+key only with the same coherent witness; a new lifetime gets a placeholder
+until NetworkManager is ready, even if its permanent address is readable.
+
+Internal incarnations rotate on a changed witness, classification or degraded
+edge. Same-object renames and repeated duplicate runs retain their incarnation.
+Discovery and monitor `unavailable` events project incarnation/degraded-reason
+changes into the shadow snapshot only, without changing broadcast decisions.
+Observation sequences fence publication: an older discovery cannot erase a
+later unavailable event or replace a newer completed observation. Canceled
+samples cannot commit their cache or snapshot.
+
+`wifiUpdateDevices` retains main's independent per-call legacy discovery,
+including overlapping reads, per-call errors, results and broadcast ordering.
+The proposed bounded legacy discovery (M1) moves to B, where that observable
+scheduling change can be accepted and documented.
+
+`wifi-radio-observation.ts` schedules sysfs sampling in a later task, after
+legacy publication and promise completion; legacy callers never await it.
+Only this detached work has one active flight and one replaceable latest queued
+batch. A 100 ms budget aborts the sample and prevents further reads or publication.
+An uncancellable read retains its sole physical slot until it settles, so a hung
+read cannot accumulate additional I/O; legacy discovery remains independent.
+Both integration boundaries contain shadow exceptions. Read failures, timeouts
+and unexpected shadow exceptions increment the internal
+`getWifiRadioShadowFailures()` counter without adding error logs.
+
+Coverage: `wifi-radio-identity.test.ts`, `wifi-discovery-single-flight.test.ts`
+and `wifi-radio-equivalence.test.ts`. Nine recorded main fixture families cover
+the resolver tiers, unavailable/missing-operational rows, duplicates, rename and
+replug, public prepare/start results, credentials and broadcast count/order.
+The overlapping-call fixture records three independent reads, results
+`false,false,true`, three broadcasts and an empty registry; a separate fixture
+covers independent errors. An extra real broadcast is a permanent negative
+control. Fault tests use fake clocks and capability/command readers to cover
+hanging, slow and rejected sampling plus both integration boundaries.
+All pre-existing main assertions remain unchanged; locator-only A tests are
+removed with the explicitly deferred feature. Owner hardware gates G1-G5 are
+unrun and are not claimed;
+host evidence does not qualify physical radios or NetworkManager activation.
 

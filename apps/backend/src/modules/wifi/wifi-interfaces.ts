@@ -75,6 +75,11 @@ import {
 	resolveWifiPermanentMac,
 	retainWifiPermanentMacs,
 } from "./wifi-permanent-mac.ts";
+import {
+	recordWifiRadioShadowFailure,
+	wifiRadioIdentity,
+} from "./wifi-radio-identity.ts";
+import { wifiRadioObservation } from "./wifi-radio-observation.ts";
 
 export type SSID = string;
 export type WifiInterfaceId = number;
@@ -312,6 +317,12 @@ async function syncActiveConnection(
 }
 
 export async function wifiUpdateDevices() {
+	let observation: number | undefined;
+	try {
+		observation = wifiRadioIdentity.captureObservation();
+	} catch {
+		recordWifiRadioShadowFailure();
+	}
 	let newDevices = false;
 	let statusChange = false;
 	let unavailableDevices = false;
@@ -589,5 +600,28 @@ export async function wifiUpdateDevices() {
 		unavailableDeviceRetryExpiry = 0;
 	}
 
+	// A task starts sampling only after this legacy promise has been published.
+	if (observation !== undefined) {
+		try {
+			wifiRadioObservation.enqueue(
+				networkDevices.flatMap((raw) => {
+					const [ifname, type, state] = nmcliParseSep(raw);
+					if (!ifname || type !== "wifi" || isConcurrentApIfname(ifname)) {
+						return [];
+					}
+					const degradedReason: WifiAdapterDegradedReason | undefined =
+						state === "unavailable"
+							? "unavailable"
+							: !wifiDeviceListGetMacAddress(ifname)
+								? "operational-mac-missing"
+								: undefined;
+					return [{ ifname, ...(degradedReason ? { degradedReason } : {}) }];
+				}),
+				observation,
+			);
+		} catch {
+			recordWifiRadioShadowFailure();
+		}
+	}
 	return statusChange;
 }
