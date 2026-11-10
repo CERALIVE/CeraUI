@@ -1,3 +1,4 @@
+import { isFibTableAbsent } from "../../helpers/iproute2-absent.ts";
 import type { run } from "../../helpers/run.ts";
 import {
 	type AptRoutingEntry,
@@ -33,13 +34,11 @@ export type AptRoutingOwnership = {
 };
 const prefix = (family: 4 | 6): string[] => (family === 6 ? ["-6"] : []);
 const absent = (error: unknown): boolean =>
-	error instanceof Error &&
-	"stderr" in error &&
-	typeof error.stderr === "string" &&
-	(/^(?:RTNETLINK answers: )?(?:No such file or directory|No such process)$/.test(
-		error.stderr.trim(),
-	) ||
-		/^(?:(?:RTNETLINK answers: |Error: )?(?:ipv[46]: )?)?FIB table does not exist\.?(?:\nDump terminated)?$/.test(
+	isFibTableAbsent(error) ||
+	(error instanceof Error &&
+		"stderr" in error &&
+		typeof error.stderr === "string" &&
+		/^(?:RTNETLINK answers: )?(?:No such file or directory|No such process)$/.test(
 			error.stderr.trim(),
 		));
 

@@ -69,6 +69,15 @@ class, so teardown removes its owned support. A priority-100 source rule is adde
 only when the source address is unique; duplicate-address links use their own
 fwmark tables without an ambiguous source rule.
 
+Never-created tables are empty observations only when iproute2 reports a complete
+`FIB table does not exist` diagnostic, exits with code 2 when a code is present,
+and returns empty stdout. Planning and provisioning can then install the private
+default route before its rules. Restart discovery retains an owned rule even if
+its table never existed, and removal or rollback accepts the same proven absence
+when flushing. Permission errors, timeouts, unrelated diagnostics, and partial
+route output still fail preparation. Manual table routes are unnecessary for
+this cold-start case.
+
 For `ip -4 route show default dev <ifname>`, iproute2 omits the `dev` clause.
 The planner supplies that query's interface when absent and rejects a conflicting
 `dev`; unfiltered table output must explicitly name the matching interface.
@@ -117,6 +126,12 @@ fail-soft: the WebSocket server is already bound, boot continues through
 `guardNonCritical`, and the typed unavailable state remains visible.
 
 ## Verification
+
+`apps/backend/src/tests/uplink-steering-route-kernel.test.ts` probes unprivileged
+user/network namespaces and re-executes itself in a fresh namespace. It first
+proves the raw read rejects for a never-created table and records the exact flush
+reply, then exercises planning, provisioning, teardown, and orphan-rule recovery
+through the real command runner. A skipped namespace probe is not kernel proof.
 
 - Ruleset snapshots cover 0, 1, 2, 3, and 6 uplinks and every client-zone shape.
 - Unit tests pin mark stability, fixed-modulus apportionment, route ownership,

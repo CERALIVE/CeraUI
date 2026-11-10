@@ -1,9 +1,11 @@
+import { isFibTableAbsent } from "../../../helpers/iproute2-absent.ts";
 import { run } from "../../../helpers/run.ts";
 import { parseDefaultRouteInterface } from "../connectivity-candidates.ts";
 import type { RouteProvisioning, UplinkRoutePlan } from "./applier.ts";
 import { asRouteError, routeUnavailable } from "./route-errors.ts";
 import {
 	isManagedUplinkTable,
+	readRouteTable,
 	type UplinkRouteManagerDeps,
 } from "./route-planner.ts";
 import {
@@ -36,12 +38,7 @@ export async function discoverOwnedUplinkRoutes(
 		const rulesOutput = await deps.run("ip", ["rule", "show"]);
 		const routes: UplinkRoutePlan[] = [];
 		for (const owned of parseOwnedFwmarkRules(rulesOutput)) {
-			const routeOutput = await deps.run("ip", [
-				"route",
-				"show",
-				"table",
-				owned.table,
-			]);
+			const routeOutput = await readRouteTable(deps, owned.table);
 			const managed = isManagedUplinkTable(owned.table);
 			const sourceRule = managed
 				? findManagedSourceRule(rulesOutput, owned.table)
@@ -86,12 +83,7 @@ async function ensureUplinkRouteInner(
 	let createdFwmarkRule = false;
 	try {
 		if (plan.managed) {
-			const routeOutput = await deps.run("ip", [
-				"route",
-				"show",
-				"table",
-				plan.table,
-			]);
+			const routeOutput = await readRouteTable(deps, plan.table);
 			if (parseDefaultRouteInterface(routeOutput) !== plan.ifname) {
 				if (plan.defaultRouteArgv === undefined) {
 					throw routeUnavailable(
@@ -148,7 +140,7 @@ export async function rollbackUplinkRoute(
 		await deps.run("ip", sourceRuleArgv("del", route));
 	}
 	if (provisioning.createdTableRoute) {
-		await deps.run("ip", ["route", "flush", "table", route.table]);
+		await flushRouteTable(deps, route.table);
 	}
 }
 
@@ -165,10 +157,21 @@ export async function removeUplinkRoute(
 			await deps.run("ip", sourceRuleArgv("del", plan));
 		}
 		if (plan.managed) {
-			await deps.run("ip", ["route", "flush", "table", plan.table]);
+			await flushRouteTable(deps, plan.table);
 		}
 	} catch (error) {
 		throw asRouteError(plan.ifname, error);
+	}
+}
+
+async function flushRouteTable(
+	deps: UplinkRouteManagerDeps,
+	table: string,
+): Promise<void> {
+	try {
+		await deps.run("ip", ["route", "flush", "table", table]);
+	} catch (error) {
+		if (!isFibTableAbsent(error)) throw error;
 	}
 }
 

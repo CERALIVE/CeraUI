@@ -1,16 +1,98 @@
 import { describe, expect, test } from "bun:test";
-
+import { RunTimeoutError } from "../helpers/run.ts";
 import { FWMARK_RULE_PRIORITY } from "../modules/network/uplink-steering/contracts.ts";
 import {
 	discoverOwnedUplinkRoutes,
 	ensureUplinkRoute,
 	hasForeignFwmarkPriorityRule,
 	planUplinkRoute,
+	removeUplinkRoute,
+	rollbackUplinkRoute,
 } from "../modules/network/uplink-steering/route-manager.ts";
 import { stableUplinkMark } from "../modules/network/uplink-steering/ruleset.ts";
-import { hexMark, scripted } from "./uplink-steering-route-test-fixtures.ts";
+import captured from "./fixtures/iproute2-7.2-absent.json";
+import {
+	absentTableError,
+	hexMark,
+	scripted,
+} from "./uplink-steering-route-test-fixtures.ts";
 
 describe("uplink steering route recovery", () => {
+	test.each([captured.ipv4, captured.ipv6])(
+		"#433 retains ownership when a table read reports absence %#",
+		async (stderr) => {
+			const h = {
+				run: async (_bin: string, args: string[]) => {
+					if (args[0] === "rule")
+						return "110: from all fwmark 0xca000100/0xffffff00 lookup 30001\n";
+					throw absentTableError(stderr);
+				},
+			};
+			expect(await discoverOwnedUplinkRoutes(h)).toEqual([
+				{
+					identity: "recovered:ca000100",
+					ifname: "unknown0",
+					sourceAddress: "0.0.0.0",
+					mark: 0xca000100,
+					table: "30001",
+					managed: true,
+				},
+			]);
+		},
+	);
+
+	test.each([
+		[
+			absentTableError(
+				"Error: ipv4: FIB table does not exist.\nFlush terminated\n",
+			),
+			true,
+		],
+		[absentTableError("Error: Operation not permitted\n"), false],
+		[new RunTimeoutError("ip route flush table 30001", "", ""), false],
+	] as const)(
+		"#433 tolerates only absent-table flush failures %#",
+		async (error, absent) => {
+			const plan = {
+				identity: "removed-modem",
+				ifname: "ww0",
+				sourceAddress: "10.64.0.2",
+				mark: 0xca000100,
+				table: "30001",
+				managed: true,
+			};
+			const deps = {
+				run: async (_bin: string, args: string[]) => {
+					if (args[0] === "rule") return "";
+					throw error;
+				},
+			};
+			const [removal, rollback] = await Promise.allSettled([
+				removeUplinkRoute(plan, deps),
+				rollbackUplinkRoute(
+					{
+						route: plan,
+						changed: true,
+						createdTableRoute: true,
+						createdSourceRule: false,
+						createdFwmarkRule: false,
+					},
+					deps,
+				),
+			]);
+			if (absent) {
+				expect(removal).toEqual({ status: "fulfilled", value: undefined });
+				expect(rollback).toEqual({ status: "fulfilled", value: undefined });
+			} else {
+				expect(removal).toMatchObject({
+					status: "rejected",
+					reason: { reason: "policy_route_missing" },
+				});
+				expect(rollback).toEqual({ status: "rejected", reason: error });
+			}
+		},
+	);
+
 	test("recovers owned fwmark support across a backend restart", async () => {
 		const imageMark = stableUplinkMark("wifi-image-table");
 		const managedMark = stableUplinkMark("wwan-managed-table");
