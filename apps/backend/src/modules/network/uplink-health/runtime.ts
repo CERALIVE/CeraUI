@@ -2,7 +2,11 @@ import { logger } from "../../../helpers/logger.ts";
 import { buildLinkTelemetry } from "../../streaming/link-telemetry.ts";
 import { getIsStreaming } from "../../streaming/streaming.ts";
 import { broadcastMsg } from "../../ui/websocket-server.ts";
-import { eligibleProbeCandidates } from "../connectivity-candidates.ts";
+import {
+	deviceBoundProbeExclusionReason,
+	eligibleProbeCandidates,
+	type ProbeCandidate,
+} from "../connectivity-candidates.ts";
 import { probeConnectivityViaDevice } from "../device-bound-probe.ts";
 import {
 	getNetworkInterfaces,
@@ -17,6 +21,7 @@ import {
 	UPLINK_HEALTH_CONFIG,
 	type UplinkHealthOutcome,
 	type UplinkHealthRecord,
+	type UplinkObservation,
 } from "./model.ts";
 import { getUplinkHealthEngine, notifyUplinkHealthChange } from "./state.ts";
 
@@ -82,34 +87,69 @@ export class UplinkHealthRuntime {
 	readonly #engine = getUplinkHealthEngine();
 	readonly #deps: UplinkHealthRuntimeDeps;
 	#lastJson = "";
+	#round = 0;
+	#completedRound = 0;
+	readonly #samples = new Map<
+		string,
+		{
+			readonly ip: string | undefined;
+			readonly eligible: boolean;
+			round: number;
+		}
+	>();
 
 	constructor(deps: UplinkHealthRuntimeDeps = defaultDeps) {
 		this.#deps = deps;
 	}
 
 	async tick(): Promise<void> {
+		const round = ++this.#round;
 		const now = this.#deps.now();
 		const interfaces = this.#deps.interfaces();
 		const present = new Set(Object.keys(interfaces));
 		this.#engine.removeMissing(present);
-		const passive = this.#passiveIfaces(now);
+		for (const iface of new Set([...present, ...this.#samples.keys()])) {
+			const entry = interfaces[iface];
+			const ip = entry?.ip;
+			const eligible = deviceBoundProbeExclusionReason(entry) === undefined;
+			const previous = this.#samples.get(iface);
+			if (!previous || previous.ip !== ip || previous.eligible !== eligible) {
+				this.#samples.set(iface, { ip, eligible, round });
+			}
+		}
+		const passive = this.#passiveIfaces(now, round);
 		const candidates = eligibleProbeCandidates(interfaces);
 
 		for (const iface of present) {
 			const entry = interfaces[iface];
 			if (!entry?.ip) {
-				this.#engine.observe({
-					iface,
-					...resolveUplinkIdentity(iface),
-					outcome: "definitive_loss",
-					now,
-				});
+				this.#observe(
+					{
+						iface,
+						...resolveUplinkIdentity(iface),
+						outcome: "definitive_loss",
+						now,
+					},
+					round,
+				);
 			}
 		}
 
 		const active = candidates.filter(
 			(candidate) => !passive.has(candidate.name),
 		);
+		// Candidate addresses are primitive snapshots, independent of the mutable
+		// netif entries. A newer observation or completed tick owns later evidence;
+		// merely starting another slow round must not starve current probes.
+		const isCurrent = (candidate: ProbeCandidate): boolean => {
+			const entry = this.#deps.interfaces()[candidate.name];
+			return (
+				round >= this.#completedRound &&
+				round >= (this.#samples.get(candidate.name)?.round ?? 0) &&
+				entry?.ip === candidate.ip &&
+				deviceBoundProbeExclusionReason(entry) === undefined
+			);
+		};
 		// An unresolvable check address is a statement about DNS, not about any
 		// uplink, so the ACTIVE round is skipped whole rather than recording a
 		// failure nothing measured. The passive telemetry and address-loss
@@ -122,21 +162,31 @@ export class UplinkHealthRuntime {
 				offset < active.length;
 				offset += UPLINK_HEALTH_CONFIG.maxConcurrentProbes
 			) {
-				const batch = active.slice(
-					offset,
-					offset + UPLINK_HEALTH_CONFIG.maxConcurrentProbes,
-				);
+				const batch = active
+					.slice(offset, offset + UPLINK_HEALTH_CONFIG.maxConcurrentProbes)
+					.filter(isCurrent);
 				const outcomes = await Promise.all(
 					batch.map((candidate) => this.#deps.probe(candidate.name, target)),
 				);
 				for (const [index, candidate] of batch.entries()) {
-					this.#engine.observe({
-						iface: candidate.name,
-						...resolveUplinkIdentity(candidate.name),
-						outcome: outcomes[index] ?? "failure",
-						now,
-					});
+					if (!isCurrent(candidate)) continue;
+					this.#observe(
+						{
+							iface: candidate.name,
+							...resolveUplinkIdentity(candidate.name),
+							outcome: outcomes[index] ?? "failure",
+							now,
+						},
+						round,
+					);
 				}
+			}
+		}
+		this.#completedRound = Math.max(this.#completedRound, round);
+		const current = this.#deps.interfaces();
+		for (const [iface, sample] of this.#samples) {
+			if (!current[iface] && sample.round <= this.#completedRound) {
+				this.#samples.delete(iface);
 			}
 		}
 		this.#publishIfChanged();
@@ -150,7 +200,13 @@ export class UplinkHealthRuntime {
 		return this.#engine.isClientSteeringEligible(iface);
 	}
 
-	#passiveIfaces(now: number): ReadonlySet<string> {
+	#observe(observation: UplinkObservation, round: number): void {
+		const sample = this.#samples.get(observation.iface);
+		if (sample) sample.round = round;
+		this.#engine.observe(observation);
+	}
+
+	#passiveIfaces(now: number, round: number): ReadonlySet<string> {
 		const passive = new Set<string>();
 		if (!this.#deps.streaming()) return passive;
 		const telemetry = this.#deps.telemetry();
@@ -163,16 +219,19 @@ export class UplinkHealthRuntime {
 				link.stale ||
 				link.rtt_ms >= UPLINK_HEALTH_CONFIG.passiveRttDegradedMs ||
 				link.nak_count >= UPLINK_HEALTH_CONFIG.passiveNakDegradedCount;
-			this.#engine.observe({
-				iface: link.iface,
-				...resolveUplinkIdentity(link.iface),
-				outcome: expired
-					? "definitive_loss"
-					: degraded
-						? "passive_degraded"
-						: "success",
-				now,
-			});
+			this.#observe(
+				{
+					iface: link.iface,
+					...resolveUplinkIdentity(link.iface),
+					outcome: expired
+						? "definitive_loss"
+						: degraded
+							? "passive_degraded"
+							: "success",
+					now,
+				},
+				round,
+			);
 		}
 		return passive;
 	}

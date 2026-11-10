@@ -135,3 +135,7 @@ fail-soft: the WebSocket server is already bound, boot continues through
 The outstanding board drill needs two real uplinks and a hotspot client. It must
 inspect nftables/conntrack marks while confirming SRTLA link distribution remains
 undisturbed.
+
+## Asynchronous health observations
+
+Health rounds snapshot candidate addresses before resolving the probe target. Before each batch and before recording its results, the runtime checks the current address and device-bound eligibility. A newer observation for that interface or a completed newer round supersedes older evidence. Starting another pending round alone does not discard valid slow evidence. Removed-interface sample bookkeeping is retired after completed rounds. Deferred-resolution, probe and batch regressions live in `apps/backend/src/tests/uplink-health.test.ts`.
