@@ -14,9 +14,16 @@
  * (see ../router.ts). It must never be reachable in a production build.
  */
 
-import { devEmitInputSchema, devEmitOutputSchema } from "@ceraui/rpc/schemas";
+import {
+	devEmitInputSchema,
+	devEmitOutputSchema,
+	wifiScanInputSchema,
+} from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
 
+import { mockWifiRadios, shouldUseMocks } from "../../mocks/mock-service.ts";
+import { rebindMockWifi } from "../../mocks/providers/wifi-incarnation.ts";
+import { broadcastWifiState } from "../../modules/wifi/wifi.ts";
 import { broadcast } from "../events.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
@@ -42,5 +49,22 @@ export const devEmitProcedure = authedProcedure
 		}
 
 		broadcast(input.type, input.payload, { only: context.ws });
+		return { success: true };
+	});
+
+/** Rotate only the mock wire token so E2E can observe a replacement radio. */
+export const devRebindWifiProcedure = authedProcedure
+	.input(wifiScanInputSchema)
+	.output(devEmitOutputSchema)
+	.handler(({ input }) => {
+		if (process.env.NODE_ENV === "production" || !shouldUseMocks()) {
+			return { success: false };
+		}
+		const radio = mockWifiRadios.find(
+			(row, index) =>
+				row.device === input.device || String(index) === input.device,
+		);
+		if (!radio || !rebindMockWifi(radio.device)) return { success: false };
+		broadcastWifiState();
 		return { success: true };
 	});
