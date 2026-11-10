@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, type Page, test } from "./fixtures/index.js";
+import { type BackendRpc, expect, type Page, test } from "./fixtures/index.js";
 
 import { evidencePath, navigateTo } from "./helpers";
 
@@ -216,8 +216,19 @@ async function pumpStatusTicks(page: Page, count: number): Promise<void> {
 	}
 }
 
-/** Inject a wifi snapshot where `device` is now broadcasting a hotspot. */
-async function emitHotspotActive(page: Page, device: string): Promise<void> {
+/** Commit the mock AP state before injecting its confirming snapshot. */
+async function emitHotspotActive(page: Page, device: string, backendRpc: BackendRpc): Promise<void> {
+	const prepared = await backendRpc.call<{ success: boolean }>(
+		["wifi", "hotspotPrepare"],
+		{ device, name: FORM_NAME, password: FORM_PASS },
+	);
+	if (!prepared.success) throw new Error("mock hotspot preparation failed");
+	// Bypass the page's fake start so subsequent real status ticks keep the AP on.
+	const started = await backendRpc.call<{ success: boolean }>(
+		["wifi", "hotspotStart"],
+		{ device },
+	);
+	if (!started.success) throw new Error("mock hotspot start failed");
 	await page.evaluate((dev) => {
 		const w = window as any;
 		const clone = JSON.parse(JSON.stringify(w.__cera.lastWifi ?? {}));
@@ -261,13 +272,13 @@ async function startThroughGate(page: Page): Promise<void> {
  * The edit form exists only for a LIVE AP (#413), so configure scenarios first
  * inject a snapshot where the dialog's adapter is broadcasting.
  */
-async function makeHotspotActive(page: Page): Promise<string> {
+async function makeHotspotActive(page: Page, backendRpc: BackendRpc): Promise<string> {
 	await awaitWifiSnapshot(page);
 	const device = await page.evaluate(() => {
 		const wifi = (window as any).__cera.lastWifi as Record<string, { supports_hotspot?: boolean }>;
 		return Object.keys(wifi).find((k) => wifi[k]?.supports_hotspot) ?? Object.keys(wifi)[0];
 	});
-	await emitHotspotActive(page, device as string);
+	await emitHotspotActive(page, device as string, backendRpc);
 	await expect(page.locator("#hotspot-name")).toBeVisible();
 	return device as string;
 }
@@ -325,6 +336,7 @@ test.describe(
 		// ── Scenario 1: hotspot start pending survives periodic status ticks ──────
 		test("hotspot start pending survives periodic status ticks without flipping the label", async ({
 			page,
+			backendRpc,
 		}) => {
 			record("── hotspot start: clobber-resist + confirm ──");
 			await armFake(page, "wifi.hotspotStart", { success: true });
@@ -356,7 +368,7 @@ test.describe(
 
 			// Authoritative snapshot reports the hotspot active → confirm releases it
 			// and the label flips to "Turn Off".
-			await emitHotspotActive(page, device as string);
+			await emitHotspotActive(page, device as string, backendRpc);
 			const turnOff = dialog(page).getByRole("button", {
 				name: "Turn Off",
 				exact: true,
@@ -369,9 +381,10 @@ test.describe(
 		// ── Scenario 2: deferred hotspot.config SUCCESS confirms the save ─────────
 		test("hotspot configure deferred hotspot.config success confirms the save", async ({
 			page,
+			backendRpc,
 		}) => {
 			record("── hotspot configure: deferred success ──");
-			await makeHotspotActive(page);
+			await makeHotspotActive(page, backendRpc);
 			await fillValidForm(page);
 			await armFake(page, "wifi.hotspotConfigure", { success: true });
 
@@ -407,9 +420,10 @@ test.describe(
 		// ── Scenario 3: deferred hotspot.config ERROR calmly re-enables save ──────
 		test("hotspot configure deferred hotspot.config error calmly re-enables save with the form intact", async ({
 			page,
+			backendRpc,
 		}) => {
 			record("── hotspot configure: deferred error ──");
-			await makeHotspotActive(page);
+			await makeHotspotActive(page, backendRpc);
 			await fillValidForm(page);
 			await armFake(page, "wifi.hotspotConfigure", { success: true });
 
