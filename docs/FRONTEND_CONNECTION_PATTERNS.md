@@ -264,6 +264,13 @@ The function guarantees a finite, non-negative number for every input. `2^attemp
 
 `handleReconnect()` is called from `socket.onclose`. It computes the delay, increments `reconnectAttempts`, and schedules the next `connect()` call. The attempt counter resets to 0 on a successful `onopen`.
 
+Socket callbacks retain the transport they belong to and act only while it owns
+`rpcClient.getSocket()`. Closing a socket releases that ownership. Reconnect
+harnesses must close the transport and wait for a new OPEN socket; invoking
+`onopen` again on the closed instance cannot reconnect it. The reused-socket
+regression in `client.reconnect-race.test.ts` covers stale open, message and close
+callbacks while confirming that frames on the replacement still flow.
+
 ---
 
 ## Failed-UI vs transport independence

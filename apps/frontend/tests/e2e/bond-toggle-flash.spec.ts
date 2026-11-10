@@ -294,22 +294,17 @@ function armShortFieldLockTtl(page: Page, ttlMs: number): Promise<void> {
 	}, ttlMs);
 }
 
-/**
- * Drive the app's connection-state machine deterministically by invoking the
- * client's own `onclose` / `onopen` handlers on the live socket — WITHOUT
- * actually closing the transport (readyState stays OPEN, so the transport's
- * backoff `connect()` is a no-op and no real reconnect timing is involved). A
- * `close` then `open` (with a frame flush between) reproduces the exact
- * `disconnected → connected` reconnect edge that `shouldReconcileOnReconnect`
- * keys on, with zero wall-clock timing dependency.
- */
-function emitConn(page: Page, phase: "close" | "open"): Promise<void> {
-	return page.evaluate((ph) => {
-		const s = (window as any).__cera.socket;
-		if (!s) return;
-		if (ph === "close") s.onclose?.(new CloseEvent("close"));
-		else s.onopen?.(new Event("open"));
-	}, phase);
+/** Close the transport and let the client's reconnect timer create a new owner. */
+async function reconnect(page: Page): Promise<void> {
+	await page.evaluate(() => {
+		const c = (window as any).__cera;
+		c.previousSocket = c.socket;
+		c.socket.close();
+	});
+	await expect.poll(() => page.evaluate(() => {
+		const c = (window as any).__cera;
+		return c.socket !== c.previousSocket && c.socket.readyState === WebSocket.OPEN;
+	})).toBe(true);
 }
 
 /**
@@ -786,9 +781,7 @@ test.describe("bond-toggle no-flash (display hold + ingestion gate)", () => {
 			"only the optimistic ON→OFF flip; the RPC is orphaned (stuck pending)",
 		).toEqual(["true"]);
 
-		await emitConn(page, "close");
-		await flush(page);
-		await emitConn(page, "open");
+		await reconnect(page);
 		await flush(page);
 
 		await expect(toggle).toHaveAttribute("aria-busy", "false");
