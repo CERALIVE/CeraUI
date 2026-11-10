@@ -14,6 +14,7 @@ import { broadcastWifiState, wifiBuildMsg } from "../modules/wifi/wifi.ts";
 import * as capabilities from "../modules/wifi/wifi-capabilities.ts";
 import { addWifiInterface } from "../modules/wifi/wifi-connections.ts";
 import type { WifiInterfaceWithHotspot } from "../modules/wifi/wifi-hotspot-types.ts";
+import { wifiRadioIdentity } from "../modules/wifi/wifi-radio-identity.ts";
 import { broadcastMsg, broadcastMsgExcept } from "../rpc/compat.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
 import type { AppWebSocket } from "../rpc/types.ts";
@@ -23,6 +24,7 @@ import {
 	remoteStatusCases,
 } from "./helpers/remote-status-cases.ts";
 import { StubRemoteSocket, statusClient } from "./helpers/status-client.ts";
+import { fakeShadowSysfs } from "./helpers/wifi-radio-equivalence-shadow.ts";
 import {
 	isolateWifiRegistry,
 	restoreWifiRegistry,
@@ -275,3 +277,44 @@ for (const options of [false, true]) {
 		expect(completed).toBe(1);
 	});
 }
+
+test("observed radio tokens stay local through initial legacy status and both relay paths", async () => {
+	const restore = await fakeShadowSysfs(() => [
+		{
+			ifname: "wlan0",
+			ifindex: 10,
+			phy: 0,
+			permanent: "aa:bb:cc:dd:ee:ff",
+			operational: "aa:bb:cc:dd:ee:ff",
+			state: "disconnected",
+		},
+	]);
+	try {
+		seedRadio(false);
+		await wifiRadioIdentity.discover([{ ifname: "wlan0" }]);
+		const local = wifiBuildMsg();
+		const token = local[0]?.incarnation;
+		expect(token).toEqual(expect.any(String));
+		if (!token) throw new Error("Missing observed token");
+		const remote = await authenticateRemote();
+		expect(remote.sent.join("\n")).not.toContain(token);
+		expect(remote.sent.join("\n")).not.toContain(PASSWORD);
+		const frames: unknown[] = [];
+		setControlChannel({
+			isConnected: () => true,
+			sendFrame: (frame) => frames.push(frame),
+		});
+		broadcastMsg("status", { wifi: local });
+		expect(frames).toHaveLength(1);
+		expect(JSON.stringify(frames)).not.toContain(token);
+		expect(JSON.stringify(frames)).not.toContain(PASSWORD);
+		const { incarnation: _incarnation, ...legacy } = local[0] ?? {};
+		const { password: _password, ...hotspot } = legacy.hotspot ?? {};
+		expect(StatusSchema.parse(frames[0]).payload?.wifi).toStrictEqual({
+			"0": { ...legacy, hotspot },
+		});
+		expect(wifiBuildMsg()).toStrictEqual(local);
+	} finally {
+		await restore();
+	}
+});
