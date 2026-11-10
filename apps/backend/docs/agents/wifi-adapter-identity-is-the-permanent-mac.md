@@ -38,11 +38,58 @@ so an ifname rename during a transient sysfs failure keeps the same physical
 identity. Discovery never drops an adapter merely because NetworkManager reports
 `unavailable`, the operational MAC has not landed, or the permanent address cannot
 yet be confirmed: the registry retains a row with a typed `degraded_reason`, keeps
-its numeric id while re-keying on recovery, and the frontend withholds controls
-until identity is trustworthy.
+its numeric id while re-keying on recovery. A permanent-MAC-unresolved row still
+enters the id map and retains today's hotspot prepare/start behavior.
 
 **A monitor event carries an ifname, never a MAC.** `getWifiInterfaceByIfname()`
 (`wifi-connections.ts`) is the bridge; do NOT route a device-state event through
 `wifiDeviceListGetMacAddress()` — that returns the operational address and will
 miss the registry.
+
+### Shadow lifetime producer [EXISTS; host-tested only]
+
+`modules/wifi/wifi-radio-identity.ts` computes separate, internal evidence.
+The live resolver above, all of its cache tiers, registry keys, numeric ids,
+degraded reasons, id-map membership, credential-store keys and `wifiBuildMsg`
+output are unchanged. No handler consumes the shadow classification or token.
+There is no wire/schema addition or change to hotspot prepare/start/stop,
+mode transitions, profile targeting, credentials or mock behavior.
+
+The injectable file reader brackets the permanent address and NetworkManager's
+unescaped `GENERAL.PATH` with the netdev ifindex and resolved `phy80211` path.
+Only a coherent positive ifindex and nonnegative wiphy index produce a witness;
+phy0 is valid. The shadow MAC cache uses the complete `(ifindex, wiphy)` pair,
+serves only same-pair read failures, and is pruned to coherent pairs in each run.
+It assumes one fixed network namespace, automatic index allocation and no
+privileged index reassignment or namespace moves.
+
+All eligible radios are sampled before shadow rows are published. Unique MACs
+classify as verified; shared MACs with distinct safe paths classify as composite.
+Coherent but unattributable samples classify as limited, and incomplete samples
+as unverified. Limited/unverified keys are isolated `degraded:<ifname>`
+placeholders. These classifications are evidence only; limited hotspot mode is
+not implemented here. Paths retain their case and bytes, and wildcard/control
+syntax and duplicate paths are unusable.
+An unavailable or operational-MAC-missing row retains a predecessor's shadow
+key only with the same coherent witness; a new lifetime gets a placeholder
+until NetworkManager is ready, even if its permanent address is readable.
+
+Internal incarnations rotate on a changed witness, classification or degraded
+edge. Same-object renames and repeated duplicate runs retain their incarnation.
+Discovery and monitor `unavailable` events project incarnation/degraded-reason
+changes into the shadow snapshot only, without changing broadcast decisions.
+
+`wifiUpdateDevices` serializes the complete discovery I/O: at most one active
+run and one queued run. A caller receives a run starting at or after its call;
+later callers cannot extend its promise. Rejection releases the queue, and
+timer callers log failures. This is a run-count bound, not a wall-clock promise.
+Discovery callees must never await `wifiUpdateDevices`; hotspot confirmation
+polls call it from outside discovery.
+
+Coverage: `wifi-radio-identity.test.ts`, `wifi-discovery-single-flight.test.ts`
+and `wifi-radio-equivalence.test.ts`. The equivalence fixtures compare every
+legacy resolver tier and discovery edge against main, including unverified
+prepare/start results and credential-store calls. All pre-existing assertions
+remain unchanged. Owner hardware gates G1-G5 are unrun and are not claimed;
+host evidence does not qualify physical radios or NetworkManager activation.
 
