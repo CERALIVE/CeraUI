@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, jest, test } from "bun:test";
 import { wifiStatusSchema } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 import {
@@ -19,6 +19,11 @@ import { wifiProtocolContext } from "./helpers/wifi-protocol-context.ts";
 const originalMode = process.env.MOCK_MODE;
 const originalNodeEnv = process.env.NODE_ENV;
 
+beforeEach(() => {
+	jest.useFakeTimers();
+	jest.setSystemTime(0);
+});
+
 afterEach(() => {
 	resetMockState();
 	stopMockService();
@@ -26,6 +31,7 @@ afterEach(() => {
 	else process.env.MOCK_MODE = originalMode;
 	if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
 	else process.env.NODE_ENV = originalNodeEnv;
+	jest.useRealTimers();
 });
 
 test("mock status and local status bytes retain only the additive incarnation field", async () => {

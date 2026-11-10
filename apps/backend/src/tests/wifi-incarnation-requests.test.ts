@@ -1,4 +1,12 @@
-import { afterEach, expect, mock, spyOn, test } from "bun:test";
+import {
+	afterEach,
+	beforeEach,
+	expect,
+	jest,
+	mock,
+	spyOn,
+	test,
+} from "bun:test";
 import { call } from "@orpc/server";
 import * as mocks from "../mocks/mock-service.ts";
 import { getMockHotspotConfig } from "../mocks/providers/wifi.ts";
@@ -24,12 +32,18 @@ const options = { context };
 const chosen = { name: "Protocol AP", password: "protocol-password" };
 const originalMockMode = process.env.MOCK_MODE;
 
+beforeEach(() => {
+	jest.useFakeTimers();
+	jest.setSystemTime(0);
+});
+
 afterEach(() => {
 	mock.restore();
 	mocks.resetMockState();
 	mocks.stopMockService();
 	if (originalMockMode === undefined) delete process.env.MOCK_MODE;
 	else process.env.MOCK_MODE = originalMockMode;
+	jest.useRealTimers();
 });
 
 for (const incarnation of [undefined, "stale-unrelated-token"]) {
