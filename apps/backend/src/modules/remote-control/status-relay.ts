@@ -18,6 +18,7 @@
  */
 
 import { advanceSeq } from "../../rpc/events.ts";
+import { projectRemoteStatus } from "../remote/remote-status.ts";
 import { PROTOCOL_VERSION, type Status } from "./protocol.ts";
 
 /**
@@ -34,8 +35,8 @@ export interface ControlChannel {
 
 /**
  * The closed v2.0 set of relayable upstream status `type` values (spec §8).
- * This is exactly the broadcast set the hub fans out — it carries NO
- * secret-bearing or local-only types (see the no-secrets contract test).
+ * This is the broadcast set the hub fans out. The event-name allowlist is not
+ * a credential filter: config and modem payloads can contain other secrets.
  *
  * `device.activeProfile` (cloud Todo 15) rides this path: the device reports the
  * SRT-receive `StreamConfig` it is actually streaming under so the platform can
@@ -121,7 +122,7 @@ export function relayStatusToGateway(
 		seq,
 		...(payload === undefined
 			? {}
-			: { payload: payload as Record<string, unknown> }),
+			: { payload: projectRemoteStatus(payload) as Record<string, unknown> }),
 	};
 
 	channel.sendFrame(frame);
