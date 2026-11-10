@@ -262,6 +262,15 @@ auth seed and report paths, so local developer state is never rewritten.
 Failed writes or renames remove the unpublished sibling in `finally`; the
 regression forces a rename failure and requires the published seed to stay
 unchanged with no pending sibling left behind.
+
+`CERALIVE_STREAMING_MARKER` is always overridden with a path inside that same
+acquisition directory, even when the runner inherits a host override. Concurrent
+mock devices must not share the installed device's `/run/ceralive/streaming` guard: a
+sibling Start would otherwise block an idle device with `START_IN_PROGRESS`, and
+a sibling Stop could clear another stream's protection. The production gate stays
+unchanged. `backend-streaming-isolation.spec.ts` holds two streams live in a
+controlled order and verifies an inherited foreign marker remains untouched.
+
 The mock preview asks the OS for its own port (`PREVIEW_PORT=0`). The private
 `backend-entry.ts` launcher reports both actual listener ports over child IPC
 after boot. Only that message establishes readiness: a TCP connection to the
