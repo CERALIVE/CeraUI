@@ -70,9 +70,24 @@ export type EquivalenceFixture = {
 	readonly admitted: boolean;
 };
 
+// P's only allowed byte delta is the optional field on each Wi-Fi row.
+function legacyWifiStatus(rows: unknown): unknown {
+	if (typeof rows !== "object" || rows === null) return rows;
+	return Object.fromEntries(
+		Object.entries(rows).map(([id, row]) => {
+			if (typeof row !== "object" || row === null || !("incarnation" in row)) {
+				return [id, row];
+			}
+			const { incarnation: _incarnation, ...legacy } = row;
+			return [id, legacy];
+		}),
+	);
+}
+
 export async function radioEquivalenceTranscript(
 	fixture: EquivalenceFixture,
 	duplicateBroadcast = false,
+	observe?: (rows: ReturnType<typeof wifiBuildMsg>) => void,
 ) {
 	jest.useFakeTimers();
 	jest.setSystemTime(0);
@@ -106,7 +121,10 @@ export async function radioEquivalenceTranscript(
 				broadcasts.push({
 					phase,
 					at: Date.now(),
-					payload: structuredClone(data),
+					payload: structuredClone({
+						...data,
+						wifi: legacyWifiStatus(data.wifi),
+					}),
 				});
 			}
 			realSink(type, data, activeMin, authedOnly);
@@ -237,13 +255,13 @@ export async function radioEquivalenceTranscript(
 		},
 	};
 	const snapshot = () => ({
-		wifi: wifiBuildMsg(),
+		wifi: legacyWifiStatus(wifiBuildMsg()),
 		keys: Object.keys(getWifiInterfacesByMacAddress()),
 		ids: { ...getWifiIdToMacAddress() },
 	});
 	const legacySnapshot = () =>
 		structuredClone({
-			status: JSON.stringify(wifiBuildMsg()),
+			status: JSON.stringify(legacyWifiStatus(wifiBuildMsg())),
 			keys: Object.keys(getWifiInterfacesByMacAddress()),
 			registry: getWifiInterfacesByMacAddress(),
 			ids: getWifiIdToMacAddress(),
@@ -316,6 +334,7 @@ export async function radioEquivalenceTranscript(
 				beforeShadow,
 				"Detached shadow changed legacy state",
 			);
+			observe?.(structuredClone(wifiBuildMsg()));
 		}
 		return { frames, calls, unexpected, broadcasts };
 	} finally {

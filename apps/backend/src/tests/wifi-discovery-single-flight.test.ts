@@ -407,7 +407,7 @@ test("the real saved-connection callee completes with all capabilities faked", a
 	expect(profiles).toHaveBeenCalledTimes(1);
 });
 
-test("unavailable and recovery stay internal on an already disconnected row", async () => {
+test("unavailable and recovery change only observational status tokens", async () => {
 	const mac = "58:02:05:e1:79:1c";
 	spyOn(radioIdentityReaders, "readText").mockImplementation(async (path) =>
 		path.endsWith("/ifindex") ? "3" : path.endsWith("/index") ? "0" : mac,
@@ -428,7 +428,22 @@ test("unavailable and recovery stay internal on an already disconnected row", as
 	addWifiInterface(mac, iface);
 	setWifiState({ [mac]: { ...iface, mode: "station" } });
 	broadcasts.length = 0;
-	const before = JSON.stringify(wifi.wifiBuildMsg());
+	const legacyBytes = (rows: ReturnType<typeof wifi.wifiBuildMsg>) =>
+		JSON.stringify(
+			Object.fromEntries(
+				Object.entries(rows).map(
+					([id, { incarnation: _incarnation, ...row }]) => [id, row],
+				),
+			),
+		);
+	const initial = wifi.wifiBuildMsg();
+	iface.saved = { "Saved network": "saved-uuid" };
+	await wifiRadioIdentity.discover([{ ifname: "wlan0" }]);
+	const beforeMessage = wifi.wifiBuildMsg();
+	expect(beforeMessage[0]?.incarnation).toEqual(expect.any(String));
+	expect(beforeMessage[0]?.incarnation).toBe(initial[0]?.incarnation);
+	expect(beforeMessage[0]?.saved).toEqual({ "Saved network": "saved-uuid" });
+	const before = legacyBytes(beforeMessage);
 	const healthy = wifiRadioIdentity.state.rows.get("wlan0")?.incarnation;
 	handleWifiMonitorEvent({
 		type: "device-state",
@@ -438,6 +453,9 @@ test("unavailable and recovery stay internal on an already disconnected row", as
 	const degraded = wifiRadioIdentity.state;
 	expect(degraded.changed).toEqual(["wlan0"]);
 	expect(degraded.rows.get("wlan0")?.incarnation).not.toBe(healthy);
+	expect(wifi.wifiBuildMsg()[0]?.incarnation).toBe(
+		degraded.rows.get("wlan0")?.incarnation,
+	);
 	handleWifiMonitorEvent({
 		type: "device-state",
 		device: "wlan0",
@@ -449,6 +467,12 @@ test("unavailable and recovery stay internal on an already disconnected row", as
 	expect(
 		wifiRadioIdentity.state.rows.get("wlan0")?.degradedReason,
 	).toBeUndefined();
-	expect(JSON.stringify(wifi.wifiBuildMsg())).toBe(before);
+	const recovered = wifi.wifiBuildMsg();
+	expect(legacyBytes(recovered)).toBe(before);
+	expect(recovered[0]?.incarnation).toEqual(expect.any(String));
+	expect(recovered[0]?.incarnation).not.toBe(
+		degraded.rows.get("wlan0")?.incarnation,
+	);
+	expect(recovered[0]?.incarnation).not.toBe(healthy);
 	expect(broadcasts).toHaveLength(0);
 });

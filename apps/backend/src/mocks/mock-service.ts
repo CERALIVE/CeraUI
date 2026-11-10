@@ -76,6 +76,7 @@ import { resetMockBluetoothState } from "./providers/bluetooth.ts";
 import { resetMockKioskState } from "./providers/kiosk.ts";
 import { getMockRelaysCache } from "./providers/relays.ts";
 import { resetMockWifiFaults } from "./providers/wifi.ts";
+import { resetMockWifiIncarnations } from "./providers/wifi-incarnation.ts";
 
 // Session-state slot shapes + their Zod schemas live in mock-schemas.ts, so the
 // same schema both types these slots and validates the shipped fixtures at init.
@@ -377,6 +378,7 @@ export function initMockService(scenarioName?: string): void {
 	// `resetMockBluetoothState()`, which both this and `resetMockState()` call.
 	resetMockBluetoothState();
 
+	resetMockWifiIncarnations();
 	startPeriodicUpdates();
 
 	mockState.initialized = true;
@@ -727,6 +729,7 @@ export function resetMockState(): void {
 	clearMockTimers();
 	resetMockKioskState();
 	resetMockWifiFaults();
+	resetMockWifiIncarnations();
 	resetMockBluetoothState();
 	resetAudioNamingDiagnostics();
 	lastEmittedModemFingerprint = null;

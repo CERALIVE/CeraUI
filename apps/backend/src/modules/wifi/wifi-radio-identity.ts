@@ -116,8 +116,8 @@ export type RadioIdentityState = {
 };
 
 /**
- * Shadow-only lifetime evidence. Neither this state nor its diff feeds the
- * live registry, wire projection, credential store or activation handlers.
+ * Observational lifetime evidence. Only the optional status token is projected;
+ * this state never selects registry keys, credentials or activation targets.
  */
 export class WifiRadioIdentityProducer {
 	private permanentMacByLifetime = new Map<string, MacAddress>();
