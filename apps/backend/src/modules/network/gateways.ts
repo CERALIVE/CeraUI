@@ -223,6 +223,7 @@ export async function updateGw(
 	);
 	// This sampled check is not a lease across the route owner's later awaits.
 	if (!candidatesCurrent()) {
+		if (deps.routeRunner) naturalUplinkRecovery(deps.routeRunner).invalidate();
 		logger.info(
 			"Gateway candidates changed during probing; withholding result",
 		);

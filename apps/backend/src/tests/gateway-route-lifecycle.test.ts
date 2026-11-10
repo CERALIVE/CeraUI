@@ -152,6 +152,7 @@ describe("gateway election current candidates", () => {
 		"address change",
 		"early sweep",
 		"release inventory",
+		"ordinary election",
 	] as const)("discards natural recovery evidence after %s", async (change) => {
 		const table = new DefaultRouteTable(BASELINE);
 		await setDefaultRoute("uplink-b", { runner: table.runner });
@@ -188,8 +189,12 @@ describe("gateway election current candidates", () => {
 			},
 			probes: {
 				...base.probes,
-				probeRepository: async () => {
-					if (deferred && change !== "release inventory") {
+				probeRepository: async (name) => {
+					if (
+						deferred &&
+						change !== "release inventory" &&
+						(change !== "ordinary election" || name === "uplink-b")
+					) {
 						entered.resolve();
 						await resume.promise;
 					}
@@ -197,7 +202,7 @@ describe("gateway election current candidates", () => {
 				},
 			},
 		};
-		if (change !== "early sweep") {
+		if (change !== "early sweep" && change !== "ordinary election") {
 			await updateGw(deps);
 			now = 5_000;
 			await updateGw(deps);
