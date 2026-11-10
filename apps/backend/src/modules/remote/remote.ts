@@ -76,7 +76,10 @@ import {
 	updateCachedRelays,
 	type ValidateRemoteRelaysMessage,
 } from "./remote-relays.ts";
-import { projectRemoteStatus } from "./remote-status.ts";
+import {
+	projectRemoteStatus,
+	projectRemoteWifiFrame,
+} from "./remote-status.ts";
 import { buildRemoteWsUrl } from "./remote-url.ts";
 
 type RemoteAuthEncoderMessage = {
@@ -420,13 +423,16 @@ async function remoteConnect() {
 	const send = remoteWs.send.bind(remoteWs);
 	remoteWs.send = (data, options?, cb?: (err?: Error) => void) => {
 		const frame: Record<string, unknown> = JSON.parse(String(data));
-		const message =
+		let projected =
 			frame.status === undefined
-				? data
-				: JSON.stringify({
+				? frame
+				: {
 						...frame,
 						status: projectRemoteStatus(frame.status),
-					});
+					};
+		const wifi = projectRemoteWifiFrame(frame.wifi);
+		if (wifi !== frame.wifi) projected = { ...projected, wifi };
+		const message = projected === frame ? data : JSON.stringify(projected);
 		if (typeof options === "function") {
 			send(message, options);
 		} else {

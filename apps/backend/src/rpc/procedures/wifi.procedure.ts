@@ -81,6 +81,7 @@ import {
 	getMockWifiFaults,
 	setMockHotspotConfig,
 } from "../../mocks/providers/wifi.ts";
+import { getMockWifiIncarnation } from "../../mocks/providers/wifi-incarnation.ts";
 import { isRealDevice } from "../../modules/system/device-detection.ts";
 import { handleWifi, wifiBuildMsg } from "../../modules/wifi/wifi.ts";
 import {
@@ -100,6 +101,11 @@ import {
 	persistWifiCountry,
 	setWifiCountry,
 } from "../../modules/wifi/wifi-country.ts";
+import { captureWifiFrameIncarnation } from "../../modules/wifi/wifi-frame-binding.ts";
+import {
+	type WifiFrameIncarnation,
+	withWifiFrameIncarnation,
+} from "../../modules/wifi/wifi-frame-incarnation.ts";
 import {
 	wifiHotspotPrepare,
 	wifiHotspotStart,
@@ -139,6 +145,19 @@ function resolveMockWifiDevice(device: string): string | undefined {
 	if (mockWifiRadios.some((radio) => radio.device === device)) return device;
 	const index = Number.parseInt(device, 10);
 	return Number.isNaN(index) ? undefined : mockWifiRadios[index]?.device;
+}
+
+function captureRequestFrameIncarnation(
+	device: string,
+	expected: string | undefined,
+	kind: "config" | "mode",
+): WifiFrameIncarnation {
+	if (expected !== undefined) return { incarnation: expected };
+	if (!shouldUseMocks()) return captureWifiFrameIncarnation(device, kind);
+	const radio = resolveMockWifiDevice(device);
+	return radio === undefined
+		? {}
+		: { incarnation: getMockWifiIncarnation(radio) };
 }
 
 // Run `op` under the canonical per-adapter lock when the adapter resolves;
@@ -435,10 +454,13 @@ export const hotspotStopProcedure = authedProcedure
 export const hotspotConfigureProcedure = authedProcedure
 	.input(hotspotConfigInputSchema)
 	.output(successResponseSchema)
-	.handler(async ({ input, context }): Promise<MutationResult> => {
-		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
-		const ws = context.ws;
-		/*
+	.handler(({ input, context }) =>
+		withWifiFrameIncarnation(
+			captureRequestFrameIncarnation(input.device, input.incarnation, "config"),
+			async (): Promise<MutationResult> => {
+				if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
+				const ws = context.ws;
+				/*
 		  An ADMISSION PROBE, not a guard held across the work: `wifiHotspotConfig`
 		  acquires this exact key itself, and holding it here while dispatching made
 		  the transaction refuse ITSELF — every reconfigure answered `saving` on a
@@ -446,33 +468,37 @@ export const hotspotConfigureProcedure = authedProcedure
 		  the transaction's own lock remains the guarantee, and its terminal `wifi`
 		  frame remains the outcome the dialog waits on.
 		*/
-		if (await adapterBusy(wifiAdapterLockKeyForDeviceId(input.device))) {
-			return { success: false, error: "DEVICE_BUSY" };
-		}
+				if (await adapterBusy(wifiAdapterLockKeyForDeviceId(input.device))) {
+					return { success: false, error: "DEVICE_BUSY" };
+				}
 
-		handleWifi(ws, {
-			hotspot: {
-				config: {
-					device: Number(input.device),
-					name: input.name,
-					password: input.password,
-					channel: input.channel,
-					...(input.security !== undefined ? { security: input.security } : {}),
-				},
-			},
-		});
-		if (shouldUseMocks()) {
-			const device = resolveMockWifiDevice(input.device);
-			if (device) {
-				setMockHotspotConfig(device, {
-					name: input.name,
-					password: input.password,
-					channel: input.channel,
+				handleWifi(ws, {
+					hotspot: {
+						config: {
+							device: Number(input.device),
+							name: input.name,
+							password: input.password,
+							channel: input.channel,
+							...(input.security !== undefined
+								? { security: input.security }
+								: {}),
+						},
+					},
 				});
-			}
-		}
-		return { success: true };
-	});
+				if (shouldUseMocks()) {
+					const device = resolveMockWifiDevice(input.device);
+					if (device) {
+						setMockHotspotConfig(device, {
+							name: input.name,
+							password: input.password,
+							channel: input.channel,
+						});
+					}
+				}
+				return { success: true };
+			},
+		),
+	);
 
 /*
   A dev host has no wiphy, so nothing can PROVE an AP+STA combination on it. The
@@ -523,47 +549,52 @@ export const getWifiAdapterModesProcedure = authedProcedure
 export const setWifiAdapterModeProcedure = authedProcedure
 	.input(setWifiAdapterModeInputSchema)
 	.output(setWifiAdapterModeOutputSchema)
-	.handler(async ({ input }): Promise<SetWifiAdapterModeOutput> => {
-		if (mockWifiBusy()) {
-			publishAdapterModeOutcome(input.device, {
-				success: false,
-				error: "DEVICE_BUSY",
-			});
-			return { success: false, error: "DEVICE_BUSY" };
-		}
+	.handler(({ input }) =>
+		withWifiFrameIncarnation(
+			captureRequestFrameIncarnation(input.device, input.incarnation, "mode"),
+			async (): Promise<SetWifiAdapterModeOutput> => {
+				if (mockWifiBusy()) {
+					publishAdapterModeOutcome(input.device, {
+						success: false,
+						error: "DEVICE_BUSY",
+					});
+					return { success: false, error: "DEVICE_BUSY" };
+				}
 
-		if (shouldUseMocks()) {
-			const device = resolveMockWifiDevice(input.device);
-			if (!device) {
-				publishAdapterModeOutcome(input.device, {
-					success: false,
-					error: "no-device",
-				});
-				return { success: false, error: "no-device" };
-			}
-			// A dev host can express `station` and `hotspot` only: `hybrid` needs a
-			// second, real netdev, and pretending otherwise would offer a mode whose
-			// bond-exclusion proof has nothing to exclude.
-			if (input.mode === "hybrid") {
-				publishAdapterModeOutcome(input.device, {
-					success: false,
-					error: "capability-unproven",
-				});
-				return { success: false, error: "capability-unproven" };
-			}
-			getMockState().wifiModes[device] = input.mode;
-			if (input.mode === "hotspot") {
-				setMockWifiConnection(device, { activeNetwork: undefined });
-			}
-			publishAdapterModeOutcome(input.device, {
-				success: true,
-				mode: input.mode,
-			});
-			return { success: true, applied: input.mode };
-		}
+				if (shouldUseMocks()) {
+					const device = resolveMockWifiDevice(input.device);
+					if (!device) {
+						publishAdapterModeOutcome(input.device, {
+							success: false,
+							error: "no-device",
+						});
+						return { success: false, error: "no-device" };
+					}
+					// A dev host can express `station` and `hotspot` only: `hybrid` needs a
+					// second, real netdev, and pretending otherwise would offer a mode whose
+					// bond-exclusion proof has nothing to exclude.
+					if (input.mode === "hybrid") {
+						publishAdapterModeOutcome(input.device, {
+							success: false,
+							error: "capability-unproven",
+						});
+						return { success: false, error: "capability-unproven" };
+					}
+					getMockState().wifiModes[device] = input.mode;
+					if (input.mode === "hotspot") {
+						setMockWifiConnection(device, { activeNetwork: undefined });
+					}
+					publishAdapterModeOutcome(input.device, {
+						success: true,
+						mode: input.mode,
+					});
+					return { success: true, applied: input.mode };
+				}
 
-		return setWifiAdapterMode(input.device, input.mode);
-	});
+				return setWifiAdapterMode(input.device, input.mode);
+			},
+		),
+	);
 
 /**
  * Set the device regulatory country. Mirrors `network.setIngestEnabled`: the

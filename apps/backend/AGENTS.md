@@ -40,7 +40,7 @@ Full PR gate: `bun run test`, `bun run test:e2e`, `bun run check:tech-debt`,
 | Engine IPC ownership | [streaming-engine-seam.md](docs/agents/streaming-engine-seam.md) |
 | Hotplug and cleanup | [sigusr2-udev-hotplug-hook.md](docs/agents/sigusr2-udev-hotplug-hook.md) |
 | Wi-Fi mutation locking | [every-wifi-mutation-shares-one-adapter-lock.md](docs/agents/every-wifi-mutation-shares-one-adapter-lock.md) |
-| Wi-Fi identity, profile ownership and generation-bound lifetime tokens | [wifi-adapter-identity-is-the-permanent-mac.md](docs/agents/wifi-adapter-identity-is-the-permanent-mac.md); [additive protocol](../../docs/WIFI-INCARNATION-PROTOCOL.md) |
+| Wi-Fi identity, profile ownership, lifetime tokens and captured config/mode frame correlation | [wifi-adapter-identity-is-the-permanent-mac.md](docs/agents/wifi-adapter-identity-is-the-permanent-mac.md); [additive protocol](../../docs/WIFI-INCARNATION-PROTOCOL.md) |
 | Notifications and scoped retraction | [a-persistent-notification-must-be-retractable.md](docs/agents/a-persistent-notification-must-be-retractable.md) |
 | Test fixtures and forbidden patterns | [anti-patterns.md](docs/agents/anti-patterns.md) |
 | Start failures and operator diagnostics | [start-failure-diagnostics.md](docs/agents/start-failure-diagnostics.md) |

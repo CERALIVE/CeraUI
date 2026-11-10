@@ -49,7 +49,7 @@ bunx biome check packages/rpc
 | CONVENTIONS | [Contract 19](docs/agents/conventions.md) |
 | ADD-ON `versionId` TRANSITION CONTRACT | [Contract 20](docs/agents/add-on-versionid-transition-contract.md) |
 | ANTI-PATTERNS | [Contract 21](docs/agents/anti-patterns.md) |
-| Optional Wi-Fi incarnation status and request inputs | [Additive protocol](../../docs/WIFI-INCARNATION-PROTOCOL.md) |
+| Optional Wi-Fi incarnation status, inputs and async config/mode frames | [Additive protocol](../../docs/WIFI-INCARNATION-PROTOCOL.md) |
 
 ## HARD RULES
 

@@ -9,12 +9,53 @@ Empty, oversized, non-string or other-character values fail input/output
 validation. Valid values remain opaque and equality-only. An absent field
 retains the legacy shape.
 
-These inputs are deliberately ignored after parsing. A stale or unrelated
-nonempty token has the same effects and results as an omitted token. There is
-no binding enforcement, new refusal, operation-frame correlation, frontend
-consumption, limited mode, locator acquisition, or NetworkManager targeting
-change in P. The broader radio program's limited/composite state and guarded
-actions remain later rollout work. G1-G5 are unrun and unclaimed here.
+These inputs do not change admission, targeting, effects or RPC results. A stale
+or unrelated valid token still has the same action behavior as an omitted token.
+Config and mode requests additionally supply observational metadata for the two
+asynchronous frames described below. There is no binding enforcement, new
+refusal, frontend consumption, limited mode, locator acquisition, or
+NetworkManager targeting change. The broader radio program's limited/composite
+state and guarded actions remain later rollout work. G1-G5 are unrun and
+unclaimed here.
+
+## Asynchronous config and mode settlement [EXISTS; host proof only]
+
+Only `wifi.hotspot.config` terminal frames and `wifi.adapter_mode`
+pending/terminal frames gain optional `incarnation`, with the same strict
+1-128-character ASCII bound as the row token. The current frontend settles these
+by device in `subscriptions.svelte.ts`; a delayed frame otherwise cannot identify
+its original radio lifetime. This step adds the producer field without changing
+that consumer.
+
+The validated expected token wins when supplied, including a valid unrelated
+token. Otherwise the exact row's proven token is captured synchronously at
+acceptance, before the RPC admission probe or any transaction await. The
+existing config id-map lookup and mode registry lookup remain distinct. An
+unproven capture stays absent even if another row becomes proven later.
+Publication never looks up the latest row. Capture does not call the status
+builder, start discovery, compare tokens for admission or wait for sysfs.
+
+A private asynchronous dispatch context carries this metadata without changing
+RPC inputs, results or internal call arguments. Core config continuations and
+their unexpected-throw wrapper retain the captured value. Mode publishers close
+over it for direct refusals, pending state, completion and the terminal timeout,
+including a completion invoked outside its original asynchronous context. Real
+and mock procedures use the same frame builders; mock credentials and mode
+effects stay unchanged.
+
+RPC replies, RPC error envelopes, prepare load/save responses and
+`wifi.hotspot.start`/`stop` frames gain no field. RPC responses already identify
+their dispatch through the request/response pair. The current UI confirms
+start/stop from authoritative status rather than ingesting those terminal
+frames. Internal boot reconciliation uses the shared mode producer; regulatory
+reconfiguration has no additional keyed hotspot settlement frame.
+
+With only the new field removed, the original member ordering and serialized
+frame bytes remain unchanged. No enumerable `undefined` is added. Existing RPC
+result and forwarding assertions remain unchanged. Separate schema, replacement
+schedule, mock and remote tests inspect the raw new field as well as legacy
+bytes. Same-interface replacement tests dispatch against A, establish B before
+pending or terminal publication, and require A's captured token, never B's.
 
 ## Producer and lifetime
 
@@ -69,6 +110,14 @@ relay remains unwired by this change. A cloud mirror receiving those projected
 frames therefore gains zero token bytes. Keeping the token local avoids exposing
 an unused lifetime observation across the remote boundary and preserves remote
 status bytes. It does not classify the token as a credential.
+
+The legacy remote sender also strips the two settlement-frame tokens, preserving
+unrelated members, send options and callbacks. Tokenless non-status frames keep
+their original serialized bytes. Local frames are untouched. The v2 status
+allowlist does not include `wifi`, and its command dispatcher does not invoke
+hotspot procedures; this change adds neither route. The installed v2 decoder
+probe therefore does not apply to these unsupported frame types. No new cloud
+schema, package publication or relay wiring is required.
 
 ## Compatibility and package boundary
 

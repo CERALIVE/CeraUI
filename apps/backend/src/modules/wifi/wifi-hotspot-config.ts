@@ -44,6 +44,7 @@ import {
 	getWifiInterfaceByMacAddress,
 	wifiRescan,
 } from "./wifi-connections.ts";
+import { captureWifiFrameIncarnation } from "./wifi-frame-binding.ts";
 import { hotspotOwnershipGuard } from "./wifi-hotspot-discovery.ts";
 import { settlePending, syncWifiStateCache } from "./wifi-hotspot-monitor.ts";
 import {
@@ -293,6 +294,7 @@ export async function wifiHotspotConfig(
 	msg: NonNullable<WifiHotspotMessage["hotspot"]["config"]>,
 	deps: HotspotConfigDeps = defaultHotspotConfigDeps,
 ) {
+	const binding = captureWifiFrameIncarnation(msg.device, "config");
 	const senderId = getSocketSenderId(conn);
 	/*
 	  These four used to return in silence, which left the dialog's keyed save op
@@ -306,7 +308,7 @@ export async function wifiHotspotConfig(
 				"wifi",
 				{
 					hotspot: {
-						config: { device: msg.device, error: "unavailable" },
+						config: { device: msg.device, error: "unavailable", ...binding },
 					},
 				},
 				senderId,
@@ -334,7 +336,11 @@ export async function wifiHotspotConfig(
 		conn.send(
 			buildMsg(
 				"wifi",
-				{ hotspot: { config: { device: msg.device, error: "name" } } },
+				{
+					hotspot: {
+						config: { device: msg.device, error: "name", ...binding },
+					},
+				},
 				senderId,
 			),
 		);
@@ -350,7 +356,11 @@ export async function wifiHotspotConfig(
 		conn.send(
 			buildMsg(
 				"wifi",
-				{ hotspot: { config: { device: msg.device, error: "password" } } },
+				{
+					hotspot: {
+						config: { device: msg.device, error: "password", ...binding },
+					},
+				},
 				senderId,
 			),
 		);
@@ -367,7 +377,11 @@ export async function wifiHotspotConfig(
 		conn.send(
 			buildMsg(
 				"wifi",
-				{ hotspot: { config: { device: msg.device, error: "channel" } } },
+				{
+					hotspot: {
+						config: { device: msg.device, error: "channel", ...binding },
+					},
+				},
 				senderId,
 			),
 		);
@@ -386,7 +400,11 @@ export async function wifiHotspotConfig(
 		conn.send(
 			buildMsg(
 				"wifi",
-				{ hotspot: { config: { device: msg.device, error: "security" } } },
+				{
+					hotspot: {
+						config: { device: msg.device, error: "security", ...binding },
+					},
+				},
 				senderId,
 			),
 		);
@@ -417,7 +435,11 @@ export async function wifiHotspotConfig(
 		conn.send(
 			buildMsg(
 				"wifi",
-				{ hotspot: { config: { device: msg.device, error: "saving" } } },
+				{
+					hotspot: {
+						config: { device: msg.device, error: "saving", ...binding },
+					},
+				},
 				senderId,
 			),
 		);
@@ -429,7 +451,11 @@ export async function wifiHotspotConfig(
 		conn.send(
 			buildMsg(
 				"wifi",
-				{ hotspot: { config: { device: msg.device, error: result } } },
+				{
+					hotspot: {
+						config: { device: msg.device, error: result, ...binding },
+					},
+				},
 				senderId,
 			),
 		);
@@ -439,7 +465,9 @@ export async function wifiHotspotConfig(
 	conn.send(
 		buildMsg(
 			"wifi",
-			{ hotspot: { config: { device: msg.device, success: true } } },
+			{
+				hotspot: { config: { device: msg.device, success: true, ...binding } },
+			},
 			senderId,
 		),
 	);

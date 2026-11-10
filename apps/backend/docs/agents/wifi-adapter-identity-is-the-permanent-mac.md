@@ -113,10 +113,11 @@ behavior at the host boundary; they do not qualify physical NM scheduling.
 `modules/wifi/wifi-radio-identity.ts` computes separate, internal evidence.
 The live resolver above, all of its cache tiers, registry keys, numeric ids,
 degraded reasons, id-map membership and credential-store keys are unchanged.
-No handler consumes the classification or token. The additive protocol projects
-only the optional token in local `wifiBuildMsg` rows and accepts optional request
-tokens without using them. Hotspot prepare/start/stop, mode transitions,
-profile targeting and credential behavior remain unchanged.
+Action admission consumes neither the classification nor the token. The additive
+protocol projects the optional token in local `wifiBuildMsg` rows and captures it
+for asynchronous config/mode frame correlation. Optional request tokens supply
+only that echoed metadata. Hotspot prepare/start/stop, mode transitions, profile
+targeting and credential behavior remain unchanged.
 
 The injectable file reader brackets the permanent address and wiphy index with
 the netdev ifindex and resolved `phy80211` path. A reads only these sysfs files
