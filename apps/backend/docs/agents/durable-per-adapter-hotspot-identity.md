@@ -120,3 +120,8 @@ Immediately before deletion, cleanup recomputes superseded ownership and live us
 If an adapter selected the profile, a live interface began using it, or persisted
 ownership disappeared while list/profile reads were pending, that candidate survives.
 `wifi-hotspot-identity.test.ts` pauses both reads and covers these ownership changes.
+
+Live use includes the parent station `conn`/`activeConn`, `hotspot.conn`, and
+the virtual AP `concurrentHotspot.activeConn`. AP+STA keeps the active AP UUID
+on that nested field while the parent continues to report its station UUID.
+Cleanup protects it both at candidate collection and after pending reads.

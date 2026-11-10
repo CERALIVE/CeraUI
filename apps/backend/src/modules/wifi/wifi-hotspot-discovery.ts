@@ -480,6 +480,9 @@ function collectConnsInUse(): Set<ConnectionUUID> {
 		if (!wifiInterface) continue;
 		if (wifiInterface.conn) inUse.add(wifiInterface.conn);
 		if (wifiInterface.activeConn) inUse.add(wifiInterface.activeConn);
+		if (wifiInterface.concurrentHotspot?.activeConn) {
+			inUse.add(wifiInterface.concurrentHotspot.activeConn);
+		}
 		if (canHotspot(wifiInterface) && wifiInterface.hotspot.conn) {
 			inUse.add(wifiInterface.hotspot.conn);
 		}
