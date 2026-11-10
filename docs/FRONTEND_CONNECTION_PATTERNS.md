@@ -505,8 +505,12 @@ Terminal phases linger `ASYNC_OP_TERMINAL_LINGER_MS` (4s) then decay to `idle`.
 
 ## Pending Ethernet role echoes
 
-A pending `eth_role` frame retains an already-pending operation and its target.
-Replacing that entry would revoke the RPC dispatch that must settle the result.
-An external pending frame starts an operation only when none is pending; terminal
-frames still confirm or fail it. `eth-role-ingestion.test.ts` covers pending echoes,
-RPC success/refusal/rejection and a new external operation after a terminal frame.
+A pending `eth_role` frame retains an already-pending operation when its target is
+undefined or matches the echoed role, preserving its target and original deadline.
+A different role is a new transition and replaces the pending target. When no
+operation is pending, the frame starts one; terminal frames still confirm or fail
+it. Entry replacement does not control RPC result ownership: `osCommand` checks
+the caller's optional `isCurrent` predicate independently. Cross-client operation
+correlation remains a follow-up. `eth-role-ingestion.test.ts` covers same-target
+deadlines, untargeted echoes, overlapping different-role transitions, RPC
+success/refusal/rejection and a new external operation after a terminal frame.

@@ -81,6 +81,7 @@ import {
 	confirmOperation,
 	destroyAsyncOperations,
 	failOperation,
+	getOperationTarget,
 	isOperationPending,
 	reconcileOperationsOnReconnect,
 } from "./async-operation.svelte";
@@ -722,9 +723,14 @@ function handleMessage(
 			if (outcome?.name !== undefined) {
 				const key = `eth-role:${outcome.name}`;
 				if (outcome.pending === true) {
-					// An echo must retain the current dispatch's entry and target;
-					// replacing it would invalidate osCommand's completion ownership.
-					if (!isOperationPending(key)) beginOperation(key, outcome.role);
+					// A same-target (or untargeted) echo must not restart the pending
+					// entry; a different role is a new transition and replaces the target.
+					const current = getOperationTarget(key);
+					if (
+						!isOperationPending(key) ||
+						(current !== undefined && current !== outcome.role)
+					)
+						beginOperation(key, outcome.role);
 				} else if (outcome.error !== undefined) {
 					failOperation(key, outcome.error);
 				} else if (outcome.success === true) {

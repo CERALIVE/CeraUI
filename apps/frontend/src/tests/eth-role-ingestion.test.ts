@@ -35,12 +35,14 @@ vi.mock("$lib/rpc/client", () => ({
 }));
 
 import {
+	ASYNC_OP_TTL_MS,
 	beginOperation,
 	getOperationPhase,
 	getOperationReason,
 	getOperationTarget,
 	initAsyncOperations,
 	osCommand,
+	sweepOperations,
 } from "$lib/rpc/async-operation.svelte";
 import { initSubscriptions, resetState } from "$lib/rpc/subscriptions.svelte";
 import {
@@ -157,6 +159,42 @@ describe("eth_role ingestion", () => {
 		emit({ name: "eth0", role: "shared-lan", pending: true });
 		expect(getOperationPhase(KEY)).toBe("pending");
 		expect(getOperationTarget(KEY)).toBe("shared-lan");
+	});
+
+	it("a same-target echo keeps the original deadline while the role RPC is pending", async () => {
+		const pending = deferred<{ success: true }>();
+		const clock = vi.spyOn(Date, "now").mockReturnValue(0);
+		const current = osCommand({
+			key: KEY,
+			target: "shared-lan",
+			rpc: () => pending.promise,
+			silent: true,
+		});
+		clock.mockReturnValue(5_000);
+		emit({ name: "eth0", role: "shared-lan", pending: true });
+		clock.mockRestore();
+		pending.resolve({ success: true });
+		expect(await current).toEqual({ success: true });
+		expect(getOperationPhase(KEY)).toBe("pending");
+		expect(getOperationTarget(KEY)).toBe("shared-lan");
+		sweepOperations(ASYNC_OP_TTL_MS + 1);
+		expect(getOperationPhase(KEY)).toBe("timed_out");
+	});
+
+	it("an overlapping external different-target echo replaces the local pending target", async () => {
+		const pending = deferred<{ success: true }>();
+		const current = osCommand({
+			key: KEY,
+			target: "shared-lan",
+			rpc: () => pending.promise,
+			silent: true,
+		});
+		emit({ name: "eth0", role: "uplink", pending: true });
+		const target = getOperationTarget(KEY);
+		pending.resolve({ success: true });
+		expect(await current).toEqual({ success: true });
+		expect(getOperationPhase(KEY)).toBe("pending");
+		expect(target).toBe("uplink");
 	});
 
 	it("a pending frame begins the op and records the target role", () => {
