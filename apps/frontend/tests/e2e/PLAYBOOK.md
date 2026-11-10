@@ -112,6 +112,13 @@ thousands of unrelated cold module requests and can exhaust the unchanged test
 timeout under constrained runners. Keep fixture namespace activation aligned with
 the component's actual copy dependencies.
 
+The hotspot toggle fixture commits its AP credentials and active mode through
+the worker's `backendRpc` before injecting the confirming status. A `dev.emit`
+snapshot changes only the calling socket; it does not change mock state, so the
+next real Wi-Fi feedback tick would otherwise restore the inactive radio. Keep
+the page's fake start armed while testing pending behavior; commit backend state
+only when the helper releases that pending window.
+
 ## Real-hardware gates
 
 Mock seams may retain deterministic negative-path coverage, but they never
