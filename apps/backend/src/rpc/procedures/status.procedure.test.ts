@@ -2,7 +2,11 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { statusResponseSchema } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 
-import { initMockService } from "../../mocks/mock-service.ts";
+import {
+	getMockState,
+	initMockService,
+	mockWifiRadios,
+} from "../../mocks/mock-service.ts";
 import { setup } from "../../modules/setup.ts";
 import type { AppWebSocket, RPCContext } from "../types.ts";
 import { getStatusProcedure } from "./status.procedure.ts";
@@ -59,5 +63,24 @@ describe("status.getStatus — output validation (reconnect re-auth path)", () =
 			context: makeContext(),
 		});
 		expect(statusResponseSchema.safeParse(result).success).toBe(true);
+	});
+
+	test("getStatus accepts a WPA2-only hotspot during reconnect hydration", async () => {
+		const radio = mockWifiRadios[0];
+		if (!radio) throw new Error("the scenario must contain a Wi-Fi radio");
+		const modes = getMockState().wifiModes;
+		const previous = modes[radio.device];
+		modes[radio.device] = "hotspot";
+		try {
+			const result = await call(getStatusProcedure, undefined, {
+				context: makeContext(),
+			});
+			expect(result.wifi?.["0"]?.hotspot?.available_security).toEqual({
+				wpa2: { name: "WPA2 (Personal)" },
+			});
+		} finally {
+			if (previous === undefined) delete modes[radio.device];
+			else modes[radio.device] = previous;
+		}
 	});
 });
