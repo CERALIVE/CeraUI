@@ -116,7 +116,7 @@ $effect(() => {
 		{:else}
 			{#each wifiRadios as [id, iface] (id)}
 				{const entry = $derived(netif?.[iface.ifname])}
-				{const isSwitching = $derived(isOperationPending(wifiHotspotOpKey(id)))}
+				{const isSwitching = $derived(isOperationPending(wifiHotspotOpKey(id, iface.incarnation)))}
 				<!-- ONE derivation per adapter. The row's identity line, its selector,
 				     HotspotSection's card and HotspotDialog's header all read this same
 				     shape, so the mode they display cannot disagree. -->
@@ -124,9 +124,9 @@ $effect(() => {
 					device: id,
 					iface,
 					entry: getWifiAdapterModeEntry(id),
-					phase: getOperationPhase(wifiModeOpKey(id)),
-					target: wifiModeTarget(getOperationTarget(wifiModeOpKey(id))),
-					failureReason: getOperationReason(wifiModeOpKey(id)),
+					phase: getOperationPhase(wifiModeOpKey(id, iface.incarnation)),
+					target: wifiModeTarget(getOperationTarget(wifiModeOpKey(id, iface.incarnation))),
+					failureReason: getOperationReason(wifiModeOpKey(id, iface.incarnation)),
 				}))}
 				{const isHotspot = $derived(modeView.displayMode === 'hotspot')}
 				<!-- A radio mid-transition holds its own adapter lock, so every station
@@ -137,8 +137,8 @@ $effect(() => {
 				     `wifi-mode:` key too: it answers `idle` until that control exists, so
 				     this is inert today and cannot be forgotten when it lands. -->
 				{const stationLock = $derived(deriveWifiStationLock({
-					hotspot: getOperationPhase(wifiHotspotOpKey(id)),
-					mode: getOperationPhase(wifiModeOpKey(id)),
+					hotspot: getOperationPhase(wifiHotspotOpKey(id, iface.incarnation)),
+					mode: getOperationPhase(wifiModeOpKey(id, iface.incarnation)),
 				}))}
 				{const stationLockReason = $derived(stationLock.reasonKey
 					? resolveMessageKey(stationLock.reasonKey)

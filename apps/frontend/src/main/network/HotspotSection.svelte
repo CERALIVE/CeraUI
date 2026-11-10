@@ -84,8 +84,8 @@ const CATEGORY_PROBE_PERCENT = { excellent: 80, good: 60, fair: 40, weak: 10 } a
 					device: id,
 					iface,
 					entry: getWifiAdapterModeEntry(id),
-					phase: getOperationPhase(wifiModeOpKey(id)),
-					target: wifiModeTarget(getOperationTarget(wifiModeOpKey(id))),
+					phase: getOperationPhase(wifiModeOpKey(id, iface.incarnation)),
+					target: wifiModeTarget(getOperationTarget(wifiModeOpKey(id, iface.incarnation))),
 				}))}
 				<div class="px-4 py-3">
 					<div class="flex items-center gap-3">

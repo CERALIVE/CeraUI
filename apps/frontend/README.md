@@ -4,6 +4,13 @@ Svelte 5 PWA for CeraUI — the on-device control plane for CeraLive streaming h
 
 **Status**: [EXISTS] — active development, part of the `ceralive-workspace` Bun monorepo.
 
+**Hotspot draft binding [EXISTS].** The confirmation gate and live editor retain
+typed values across same-device, same-incarnation updates. A different radio,
+connection or dialog session reloads the current details and withdraws consent.
+Config and mode outcomes settle only their echoed lifetime key. Tokenless rows
+keep read-only display and Stop; prepare, save and AP-starting actions require
+a proven token. See [the binding contract](../../docs/HOTSPOT-DRAFT-BINDING.md).
+
 ## Stack
 
 - **Svelte 5** with runes (`$state`, `$derived`, `$effect`) — no `$:` reactive statements

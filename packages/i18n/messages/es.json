@@ -2734,5 +2734,15 @@
 	"hotspotConfirm.inactiveHint": "Al activar el punto de acceso verás el nombre de red y la contraseña, y podrás cambiarlos.",
 	"network.wifiMode.confirm.switchTo": "Cambiar a {mode}",
 	"hotspotConfirm.firstTimeTitle": "Configura tu punto de acceso",
-	"hotspotConfirm.firstTimeBody": "Este adaptador nunca creó un punto de acceso. Deja el nombre y la contraseña sugeridos o elige los tuyos."
+	"hotspotConfirm.firstTimeBody": "Este adaptador nunca creó un punto de acceso. Deja el nombre y la contraseña sugeridos o elige los tuyos.",
+	"hotspotConfirm.radioChanged": "Los datos de este punto de acceso se volvieron a cargar porque cambió el adaptador Wi-Fi o la conexión. Revísalos y confirma otra vez.",
+	"hotspotConfirm.bindingUnsupported": "Este equipo todavía no puede confirmar qué adaptador Wi-Fi usaría el punto de acceso. Espera a que se identifique o actualiza el software del equipo y vuelve a intentarlo.",
+	"hotspotConfirm.radioUnverified": "El punto de acceso seguirá apagado hasta que se pueda identificar este adaptador Wi-Fi.",
+	"hotspotConfirm.radioChangedNotSaved": "El adaptador Wi-Fi cambió, así que tus cambios no se guardaron. Revisa sus datos actuales antes de volver a intentarlo.",
+	"hotspotConfirm.radioChangedNotStarted": "El adaptador Wi-Fi cambió, así que el punto de acceso no se encendió. Revisa los datos y confirma otra vez.",
+	"hotspotConfigurator.radioChanged": "La configuración de este punto de acceso se volvió a cargar. Vuelve a hacer tus cambios antes de guardar.",
+	"hotspotConfigurator.saveRefused": "El adaptador Wi-Fi cambió, así que esta configuración no se guardó.",
+	"hotspotConfigurator.saveInterrupted": "La nueva configuración no se pudo aplicar mientras se reiniciaba el punto de acceso. Es posible que el punto de acceso esté apagado.",
+	"network.wifiMode.error.radioChanged": "El adaptador Wi-Fi cambió, así que el cambio de modo no se completó. Revisa su modo actual antes de volver a intentarlo.",
+	"hotspotConfigurator.radioUnverified": "Esta configuración no se puede guardar hasta que se identifique este adaptador Wi-Fi. Puedes apagar el punto de acceso de todos modos."
 }

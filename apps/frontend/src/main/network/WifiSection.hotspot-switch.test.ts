@@ -87,6 +87,7 @@ const ALL_MODES_OFFERED = {
 
 function wifiIface(overrides: Partial<WifiInterface> = {}): WifiInterface {
 	return {
+		incarnation: "radio-A",
 		ifname: "wlan0",
 		conn: "MyNet",
 		hw: "hw0",
@@ -243,6 +244,7 @@ describe("WifiSection — AP+STA concurrent mode", () => {
 		await acknowledgeCredentials();
 		expect(rpc.wifi.setAdapterMode).toHaveBeenCalledWith({
 			device: "wifi0",
+			incarnation: "radio-A",
 			mode: "hybrid",
 		});
 	});
@@ -291,6 +293,7 @@ describe("WifiSection — a destructive transition is confirmed first", () => {
 		await acknowledgeCredentials();
 		expect(rpc.wifi.setAdapterMode).toHaveBeenCalledWith({
 			device: "wifi0",
+			incarnation: "radio-A",
 			mode: "hotspot",
 		});
 	});
