@@ -78,7 +78,6 @@ import {
 } from "./remote-relays.ts";
 import {
 	projectRemoteConfig,
-	projectRemoteModems,
 	projectRemoteStatus,
 	projectRemoteWifiFrame,
 } from "./remote-status.ts";
@@ -434,9 +433,6 @@ async function remoteConnect() {
 					};
 		const config = projectRemoteConfig(frame.config);
 		if (config !== frame.config) projected = { ...projected, config };
-		if (frame.modems !== undefined) {
-			projected = { ...projected, modems: projectRemoteModems(frame.modems) };
-		}
 		const wifi = projectRemoteWifiFrame(frame.wifi);
 		if (wifi !== frame.wifi) projected = { ...projected, wifi };
 		const message = projected === frame ? data : JSON.stringify(projected);
