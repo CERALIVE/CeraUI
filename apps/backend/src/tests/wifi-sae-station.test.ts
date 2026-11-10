@@ -27,11 +27,13 @@ import {
 } from "@ceraui/rpc";
 import * as networkManager from "../modules/network/network-manager.ts";
 import type { MessageSocket } from "../modules/ui/message-socket.ts";
+import * as websocket from "../modules/ui/websocket-server.ts";
 import {
 	handleWifi,
 	type NmcliRun,
 	setWifiJoinNmcliRunner,
 	wifiDeleteFailedConns,
+	wifiSiblingConnections,
 } from "../modules/wifi/wifi.ts";
 import {
 	addWifiInterface,
@@ -257,6 +259,125 @@ describe("a SAE-only network is BUILT with key-mgmt sae", () => {
 
 		expect(sent.at(-1)?.wifi?.new?.error).toBe("auth");
 	});
+});
+
+test.each([
+	["SAE", false],
+	["SAE", true],
+	["ambiguous", false],
+] as const)(
+	"%s join reconciles retained profiles after replying (existing=%p)",
+	async (mode, existing) => {
+		const oldUuid = "existing-profile";
+		const adapter = getWifiInterfacesByMacAddress()[ADAPTER];
+		if (!adapter) throw new Error("Missing test adapter");
+		if (existing) {
+			adapter.saved[SSID] = oldUuid;
+			adapter.savedAll[SSID] = [oldUuid];
+		}
+		const listing = Promise.withResolvers<string[] | undefined>();
+		const profiles = spyOn(networkManager, "nmConnsGet").mockReturnValue(
+			listing.promise,
+		);
+		const fields = spyOn(networkManager, "nmConnGetFields").mockResolvedValue([
+			"infrastructure",
+			SSID,
+			ADAPTER,
+		]);
+		const broadcast = spyOn(websocket, "broadcastMsg").mockImplementation(
+			() => {},
+		);
+		replies =
+			mode === "SAE"
+				? [
+						{ stdout: ADDED, stderr: "", exitCode: 0 },
+						{
+							stdout: "",
+							stderr: "Secrets were required, but not provided",
+							exitCode: 4,
+						},
+					]
+				: [{ stdout: "Unconfirmed", stderr: "", exitCode: 0 }];
+		try {
+			const frames: string[] = [];
+			handleWifi(
+				{ send: (frame) => frames.push(frame) },
+				{
+					new: {
+						device: 0,
+						ssid: SSID,
+						password: PASSWORD,
+						security: mode === "SAE" ? "WPA3" : "WPA2",
+					},
+				},
+			);
+			await waitFor(() => frames.length > 0);
+			expect(JSON.parse(frames[0] ?? "null").wifi.new).toEqual({
+				error: mode === "SAE" ? "auth" : "ambiguous",
+				device: 0,
+			});
+			expect(broadcast).not.toHaveBeenCalled();
+			listing.resolve([
+				...(existing ? [`${oldUuid}:802-11-wireless`] : []),
+				`${NEW_UUID}:802-11-wireless`,
+			]);
+			await waitFor(() => broadcast.mock.calls.length > 0);
+			expect(adapter.saved[SSID]).toBe(NEW_UUID);
+			expect(wifiSiblingConnections(NEW_UUID)).toEqual(
+				existing ? [NEW_UUID, oldUuid] : [NEW_UUID],
+			);
+			expect(broadcast.mock.calls[0]?.[0]).toBe("status");
+			expect(broadcast.mock.calls[0]?.[1]).toMatchObject({
+				wifi: { 0: { saved: { [SSID]: NEW_UUID } } },
+			});
+		} finally {
+			listing.resolve(undefined);
+			profiles.mockRestore();
+			fields.mockRestore();
+			broadcast.mockRestore();
+		}
+	},
+);
+
+test("a rejected retained-profile refresh cannot change or delay the refusal", async () => {
+	const listing = Promise.withResolvers<string[] | undefined>();
+	const profiles = spyOn(networkManager, "nmConnsGet").mockReturnValue(
+		listing.promise,
+	);
+	const broadcast = spyOn(websocket, "broadcastMsg").mockImplementation(
+		() => {},
+	);
+	replies = [
+		{ stdout: ADDED, stderr: "", exitCode: 0 },
+		{ stdout: "", stderr: "Activation failed", exitCode: 4 },
+	];
+	const adapter = getWifiInterfacesByMacAddress()[ADAPTER];
+	if (!adapter) throw new Error("Missing test adapter");
+	adapter.saved[SSID] = "existing-profile";
+	adapter.savedAll[SSID] = ["existing-profile"];
+	const frames: string[] = [];
+	try {
+		handleWifi(
+			{ send: (frame) => frames.push(frame) },
+			{
+				new: { device: 0, ssid: SSID, password: PASSWORD, security: "WPA3" },
+			},
+		);
+		await waitFor(() => frames.length > 0);
+		expect(JSON.parse(frames[0] ?? "null").wifi.new).toEqual({
+			error: "generic",
+			device: 0,
+		});
+		listing.reject(new Error("Profile transport unavailable"));
+		await waitFor(() => broadcast.mock.calls.length > 0);
+		expect(frames).toHaveLength(1);
+		expect(adapter.saved[SSID]).toBe("existing-profile");
+		expect(adapter.savedAll[SSID]).toEqual(["existing-profile"]);
+	} finally {
+		listing.resolve(undefined);
+		profiles.mockRestore();
+		broadcast.mockRestore();
+	}
 });
 
 test.each([

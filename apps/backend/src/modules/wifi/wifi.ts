@@ -809,6 +809,16 @@ function wifiNew(conn: MessageSocket, msg: WifiNewMessage["new"]) {
 	void runWifiNew(conn, msg, macAddress, plan, senderId);
 }
 
+// Reconcile retained profiles for explicit Forget without delaying a join's
+// terminal reply on profile-list transport availability.
+function refreshRetainedJoinProfiles(): void {
+	void wifiUpdateSavedConns()
+		.then(() => broadcastWifiState())
+		.catch((err) =>
+			logger.warn(`Retained Wi-Fi profile refresh failed: ${errorText(err)}`),
+		);
+}
+
 async function runWifiNew(
 	conn: MessageSocket,
 	msg: WifiNewMessage["new"],
@@ -836,6 +846,7 @@ async function runWifiNew(
 				senderId,
 			),
 		);
+		refreshRetainedJoinProfiles();
 		return;
 	}
 
@@ -858,6 +869,7 @@ async function runWifiNew(
 				senderId,
 			),
 		);
+		refreshRetainedJoinProfiles();
 		return;
 	}
 
