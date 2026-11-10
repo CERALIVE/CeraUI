@@ -44,6 +44,7 @@ import {
 	getWifiInterfaceByMacAddress,
 	wifiRescan,
 } from "./wifi-connections.ts";
+import { hotspotOwnershipGuard } from "./wifi-hotspot-discovery.ts";
 import { settlePending, syncWifiStateCache } from "./wifi-hotspot-monitor.ts";
 import {
 	type HotspotOutcomePublisher,
@@ -488,6 +489,14 @@ async function reconfigureHotspotLocked(
 	security: HotspotSecurityId,
 	deps: HotspotConfigDeps,
 ): Promise<ReconfigureResult> {
+	const owned = hotspotOwnershipGuard(
+		macAddress,
+		wifiInterface,
+		wifiInterface.hotspot.conn,
+	);
+	if (!owned()) {
+		return "saving";
+	}
 	const derived = wifiInterface.hotspot.derivedChannels ?? [];
 	const offeredSecurity = offeredSecurityFor(wifiInterface, deps);
 	// The mode already in force is always restorable, even on an adapter whose
@@ -516,32 +525,50 @@ async function reconfigureHotspotLocked(
 		return "saving";
 	}
 
+	if (!owned()) {
+		return "saving";
+	}
 	// Restart the connection with the updated config
 	wifiInterface.hotspot.transition = "activating";
 	deps.broadcastState();
 
-	if (
-		isHotspotConfigComplete(wifiInterface) &&
-		!(await deps.nmConnect(wifiInterface.hotspot.conn, HOTSPOT_UP_TO))
-	) {
-		// Failed to bring up the hotspot with the new settings; restore it.
-		await nmConnSetHotspotFields(
+	if (isHotspotConfigComplete(wifiInterface)) {
+		const restarted = await deps.nmConnect(
 			wifiInterface.hotspot.conn,
-			wifiInterface.hotspot.name,
-			wifiInterface.hotspot.password,
-			wifiInterface.hotspot.channel,
-			previousSecurity,
-			derived,
-			restorableSecurity,
-			deps,
+			HOTSPOT_UP_TO,
 		);
+		if (!owned()) {
+			delete wifiInterface.hotspot.transition;
+			return "saving";
+		}
+		if (!restarted) {
+			// Failed to bring up the hotspot with the new settings; restore it.
+			await nmConnSetHotspotFields(
+				wifiInterface.hotspot.conn,
+				wifiInterface.hotspot.name,
+				wifiInterface.hotspot.password,
+				wifiInterface.hotspot.channel,
+				previousSecurity,
+				derived,
+				restorableSecurity,
+				deps,
+			);
+			if (!owned()) {
+				delete wifiInterface.hotspot.transition;
+				return "saving";
+			}
 
-		await deps.nmConnect(wifiInterface.hotspot.conn, HOTSPOT_UP_TO);
+			await deps.nmConnect(wifiInterface.hotspot.conn, HOTSPOT_UP_TO);
+			if (!owned()) {
+				delete wifiInterface.hotspot.transition;
+				return "saving";
+			}
 
-		delete wifiInterface.hotspot.transition;
-		deps.broadcastState();
-		syncWifiStateCache(macAddress, wifiInterface);
-		return "activating";
+			delete wifiInterface.hotspot.transition;
+			deps.broadcastState();
+			syncWifiStateCache(macAddress, wifiInterface);
+			return "activating";
+		}
 	}
 
 	// Successfully brought up the hotspot with the new settings, reload the conn.
@@ -560,6 +587,7 @@ async function reconfigureHotspotLocked(
 		});
 	}
 	await deps.wifiUpdateSavedConns();
+	if (!owned()) return "saving";
 	deps.broadcastState();
 	syncWifiStateCache(macAddress, wifiInterface);
 	return "ok";

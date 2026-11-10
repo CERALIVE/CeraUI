@@ -209,6 +209,20 @@ export function getAllHotspotCredentials(): HotspotCredentials[] {
 	return Object.values(entries).map(toCredentials);
 }
 
+/** Absent adapters and retired UUIDs retain their ownership evidence. */
+export function canUseHotspotConnection(
+	macAddress: string,
+	uuid: string | undefined,
+): boolean {
+	if (!uuid) return true;
+	const key = keyFor(macAddress);
+	return !Object.entries(entries).some(
+		([owner, entry]) =>
+			keyFor(owner) !== key &&
+			(entry.conn === uuid || entry.previousConns?.includes(uuid)),
+	);
+}
+
 /**
  * Record (or update) an adapter's hotspot identity. Writes only on a real
  * change, so the routine re-assertions made on every hotspot start cost no I/O.
@@ -221,8 +235,16 @@ export function rememberHotspotCredentials(
 ): void {
 	const key = keyFor(macAddress);
 	if (!key || !credentials.ssid || !credentials.password) return;
+	if (!canUseHotspotConnection(macAddress, credentials.conn)) return;
 
 	const previous = entries[key];
+	// A suggestion must not erase evidence of an already contaminated UUID.
+	if (
+		!credentials.conn &&
+		!canUseHotspotConnection(macAddress, previous?.conn)
+	) {
+		return;
+	}
 	const next: StoredEntry = {
 		ssid: credentials.ssid,
 		password: credentials.password,

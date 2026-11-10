@@ -1090,9 +1090,33 @@ describe("pruneDuplicateHotspotConns — ownership evidence", () => {
 
 	test("an ABSENT adapter's current profile outranks another adapter's history", async () => {
 		addWifiInterface(PERM_MAC, makeHotspotIface({ hotspotConn: "keep" }));
-		rememberConn(PERM_MAC, "shared");
-		rememberConn(PERM_MAC, "keep");
-		rememberConn(SECOND_PERM_MAC, "shared");
+		// Legacy collisions load unchanged; new writes cannot create one.
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hotspot-owners-"));
+		const file = path.join(dir, "credentials.json");
+		try {
+			fs.writeFileSync(
+				file,
+				JSON.stringify({
+					version: 2,
+					adapters: {
+						[PERM_MAC]: {
+							ssid: OWNED_SSID,
+							password: "secret",
+							conn: "keep",
+							previousConns: ["shared"],
+						},
+						[SECOND_PERM_MAC]: {
+							ssid: OWNED_SSID,
+							password: "secret",
+							conn: "shared",
+						},
+					},
+				}),
+			);
+			await initHotspotCredentials(file);
+		} finally {
+			fs.rmSync(dir, { recursive: true });
+		}
 
 		const { deps, deleted } = makeProfileDeps([
 			{

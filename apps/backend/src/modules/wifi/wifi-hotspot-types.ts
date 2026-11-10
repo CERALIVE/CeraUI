@@ -116,6 +116,8 @@ export type ExistingHotspotConn = {
 	ssid: string;
 	password: string;
 	channel: WifiChannel;
+	/** MAC pin read from the selected profile; absent in legacy injected deps. */
+	macAddress?: string;
 };
 
 /**

@@ -18,6 +18,12 @@ it to this exact permanent address, and only as a last resort a profile matching
 the persisted SSID (for profiles written before the MAC binding was
 trustworthy).
 
+Every candidate, including the in-memory UUID, is subject to the
+[profile ownership rule](wifi-adapter-identity-is-the-permanent-mac.md#hotspot-profile-ownership-exists-host-tested-only).
+Another adapter's current or previous UUID, or a known conflicting MAC pin,
+cannot supply this adapter's credentials. Absent adapters retain ownership.
+Legacy unowned profiles still migrate when the existing evidence supports it.
+
 **The identity is resolved BEFORE any start can drop the link (#413).**
 `wifi.hotspotPrepare` runs the SAME resolution (`resolveHotspotIdentity`, shared
 with `startHotspotLocked`) under the adapter lock WITHOUT activating, persists a

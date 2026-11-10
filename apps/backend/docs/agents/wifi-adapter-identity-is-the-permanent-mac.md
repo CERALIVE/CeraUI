@@ -46,6 +46,68 @@ enters the id map and retains today's hotspot prepare/start behavior.
 `wifiDeviceListGetMacAddress()` — that returns the operational address and will
 miss the registry.
 
+### Hotspot profile ownership [EXISTS; host-tested only]
+
+A replacement adapter no longer inherits another adapter's saved hotspot
+credentials when it receives the same interface name. The credential store
+arbitrates every current and previous UUID across all entries, including
+absent adapters. A UUID recorded for another address cannot be adopted, used
+by prepare/start (including the complete in-memory cache and already-active
+shortcut), saved through the live editor, or remembered for this adapter.
+Existing collisions loaded from disk retain their ownership evidence and
+refuse reuse with the existing activation/save errors.
+
+The explicit-MAC active path, saved-profile sweep, interface-name and
+`clap-<ifname>` matches, stored UUID hint, permanent-MAC match and persisted-SSID
+fallback all apply that check. A pin naming another present or persisted
+adapter is conflicting evidence even without a UUID claim. SSID equality
+cannot override either kind of conflict. Unowned legacy profiles with stale
+scan-time pins still migrate through the existing name or persisted-SSID
+evidence. A conflict leaves NetworkManager's active connection and mode
+observable, and leaves the foreign profile, credentials and autoconnect
+untouched.
+
+Ownership is checked again after awaited lookup, repair, save, activation and
+rollback work, using the current cache as well as the selected UUID. An empty
+lookup result does not exempt a cache populated while that lookup was pending.
+An SSID fallback is checked again after the remaining profiles have been read.
+If discovery loses ownership, it removes only the matching rejected UUID and
+credential pair from that adapter's cache, leaving NM active-state observations
+intact. Replacing that rejected cache invalidates operations already waiting
+on it, so clearing a provisional UUID cannot turn a refused prepare into a
+successful credential suggestion. This is internal cache invalidation, with
+no wire token or identity-resolver change.
+
+The selected profile's MAC pin is carried beyond the lookup and checked with
+the UUID at prepare/start return and write boundaries. One shared guard also
+checks the current cache and the selected target after awaits. Pin evidence
+lives in private weak metadata, so neither registry values nor wire frames gain
+fields. A successfully completed binding refreshes that evidence to its actual
+new pin; an in-flight binding retains the original selection evidence until
+its final ownership check.
+
+This does not consume shadow identity, change registry keys, emit tokens,
+introduce limited mode, change NetworkManager targeting or change mode
+transitions. Unresolved radios retain prepare/start capability. A radio
+returning under a new name or after replug keeps its own credentials.
+Same-MAC physical distinction and activation fencing remain outside this
+ownership change; G1-G5 are unrun and unclaimed.
+
+Coverage: `wifi-hotspot-ownership.test.ts` exercises O1-O9 through real
+discovery, saved-sweep, prepare/start and configure boundaries, all stored
+owners, after-await checks, orphan migration and unrelated-profile survival.
+`wifi-radio-equivalence.test.ts` retains the recorded main bytes for verified,
+rename, replug and unverified prepare/start fixtures. The orphan byte fixture
+also runs against unchanged main. The pruning regression loads a legacy
+collision from disk because new store writes can no longer create one; its
+existing assertions are unchanged.
+Deferred race coverage also runs the competing-discovery/empty-lookup schedule,
+complete-cache credential returns, repair/save continuations, live rollback,
+late SSID selection and new/existing-profile activation against the reviewed
+pre-fix head. Single-adapter discovery and verified/unverified prepare/start
+controls retain the existing results. These tests prove dispatch and return
+behavior at the host boundary; they do not qualify physical NM scheduling.
+
 ### Shadow lifetime producer [EXISTS; host-tested only]
 
 `modules/wifi/wifi-radio-identity.ts` computes separate, internal evidence.
