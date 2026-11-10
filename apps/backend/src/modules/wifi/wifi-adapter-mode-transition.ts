@@ -61,6 +61,8 @@ import {
 	publishAdapterModeOutcome,
 } from "./wifi-adapter-mode-outcome.ts";
 import { getWifiInterfacesByMacAddress } from "./wifi-connections.ts";
+import { captureWifiFrameIncarnation } from "./wifi-frame-binding.ts";
+import { withWifiFrameIncarnation } from "./wifi-frame-incarnation.ts";
 import {
 	defaultHotspotDeps,
 	wifiHotspotStart,
@@ -216,8 +218,16 @@ function refuse(
 export async function setWifiAdapterMode(
 	device: number | string,
 	target: WifiAdapterMode,
-	deps: AdapterModeTransitionDeps = defaultAdapterModeDeps,
+	providedDeps: AdapterModeTransitionDeps = defaultAdapterModeDeps,
 ): Promise<SetWifiAdapterModeOutput> {
+	const binding = captureWifiFrameIncarnation(device, "mode");
+	const deps: AdapterModeTransitionDeps = {
+		...providedDeps,
+		publishOutcome: (publishedDevice, outcome) =>
+			withWifiFrameIncarnation(binding, () =>
+				providedDeps.publishOutcome(publishedDevice, outcome),
+			),
+	};
 	const found = findAdapterByDevice(device, deps.resolveInterfaces());
 	if (!found) return refuse(device, "no-device", deps);
 

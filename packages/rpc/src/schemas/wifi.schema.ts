@@ -363,6 +363,7 @@ export const wifiAdapterModeResultSchema = z.object({
 	pending: z.literal(true).optional(),
 	success: z.boolean().optional(),
 	error: wifiAdapterModeErrorSchema.optional(),
+	incarnation: wifiIncarnationSchema.optional(),
 });
 export type WifiAdapterModeResult = z.infer<typeof wifiAdapterModeResultSchema>;
 
@@ -654,6 +655,7 @@ export const wifiMessageSchema = z.object({
 					device: z.union([z.number(), z.string()]),
 					success: z.boolean().optional(),
 					error: z.string().optional(),
+					incarnation: wifiIncarnationSchema.optional(),
 				})
 				.optional(),
 		})

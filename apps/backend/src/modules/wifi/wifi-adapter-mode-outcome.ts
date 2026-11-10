@@ -35,6 +35,7 @@ import type {
 } from "@ceraui/rpc/schemas";
 
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import { getWifiFrameIncarnation } from "./wifi-frame-incarnation.ts";
 
 export type AdapterModeOutcome =
 	| { pending: true; mode: WifiAdapterMode }
@@ -51,11 +52,13 @@ export const publishAdapterModeOutcome: AdapterModeOutcomePublisher = (
 	outcome,
 ) => {
 	broadcastMsg("wifi", {
-		adapter_mode:
-			"pending" in outcome
+		adapter_mode: {
+			...("pending" in outcome
 				? { device, mode: outcome.mode, pending: true }
 				: outcome.success
 					? { device, mode: outcome.mode, success: true }
-					: { device, error: outcome.error },
+					: { device, error: outcome.error }),
+			...getWifiFrameIncarnation(),
+		},
 	});
 };

@@ -78,9 +78,11 @@ hand-written, independently-drifting per-repo `protocol.ts` derivations.
   connect it. The legacy JSON-text sender boundary is retained because the
   shared local fan-out already supplies serialized frames. Moving the projection
   earlier would change that local path or require per-caller policy. The sender
-  parses each JSON frame but only reserializes status frames; unrelated frames
-  retain their original bytes and send options/callbacks.
-  This projection only removes the hotspot password. Separate existing security
+  parses each JSON frame but only reserializes status frames and Wi-Fi
+  config/mode frames carrying local incarnation metadata; tokenless outcome and
+  unrelated frames retain their original bytes and send options/callbacks.
+  This projection removes the hotspot password and local radio incarnation
+  fields. Separate existing security
   findings remain: raw config and self-fencing results can contain `remote_key`,
   provisioned `ssh_pass` and `pairing_secret`; modem status can contain APN
   `username`/`password`; streaming config responses retain stream IDs and

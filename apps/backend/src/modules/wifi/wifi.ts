@@ -85,6 +85,7 @@ import {
 
 export { currentHotspotApIfnames } from "./wifi-hotspot-clients.ts";
 
+import { captureWifiFrameIncarnation } from "./wifi-frame-binding.ts";
 import { wifiHotspotConfig, wifiHotspotStop } from "./wifi-hotspot-config.ts";
 import { handleHotspotConn } from "./wifi-hotspot-discovery.ts";
 import { publishHotspotOutcome } from "./wifi-hotspot-outcome.ts";
@@ -940,12 +941,17 @@ export function handleWifi(conn: MessageSocket, msg: WifiMessage["wifi"]) {
 					});
 				} else if ("config" in hotspotMessage && hotspotMessage.config) {
 					const { device } = hotspotMessage.config;
+					const binding = captureWifiFrameIncarnation(device, "config");
 					void wifiHotspotConfig(conn, hotspotMessage.config).catch((err) => {
 						logger.error(`hotspot configure threw: ${errorText(err)}`);
 						conn.send(
 							buildMsg(
 								"wifi",
-								{ hotspot: { config: { device, error: "unavailable" } } },
+								{
+									hotspot: {
+										config: { device, error: "unavailable", ...binding },
+									},
+								},
 								getSocketSenderId(conn),
 							),
 						);

@@ -4,8 +4,10 @@
 include an optional opaque radio lifetime token. Hotspot requests accept it
 without enforcing it; the frontend and NetworkManager behavior are unchanged.
 Only coherent evidence bound to the current row and observation may supply
-the token; pending or failed observations omit it. Remote status strips the
-token. G1-G5 qualification is not claimed.
+the token; pending or failed observations omit it. Asynchronous config and mode
+frames echo the token captured at dispatch; RPC replies and hotspot start/stop
+frames retain their existing shapes. Remote status and settlement frames strip
+the token. G1-G5 qualification is not claimed.
 See [the additive protocol contract](docs/WIFI-INCARNATION-PROTOCOL.md).
 
 Frontend stream recovery carries status request-dispatch and browser-receipt
