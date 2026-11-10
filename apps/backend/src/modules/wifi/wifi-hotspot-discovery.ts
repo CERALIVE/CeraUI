@@ -552,6 +552,15 @@ export async function pruneDuplicateHotspotConns(
 		const profile = await readApProfile(uuid, deps);
 		if (!profile) continue;
 
+		// Discovery/activation can adopt a candidate while NM reads (or a
+		// previous deletion) are pending. The initial set only narrows the scan;
+		// fresh ownership and live-use evidence must still permit this deletion.
+		if (
+			!collectSupersededHotspotConns(getAllHotspotCredentials()).has(uuid) ||
+			collectConnsInUse().has(uuid)
+		)
+			continue;
+
 		if (await deps.deleteConnection(uuid)) removed.push(uuid);
 	}
 

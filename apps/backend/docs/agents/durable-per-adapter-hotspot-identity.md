@@ -112,3 +112,11 @@ prune negatives). Rule E proof captured in both directions: neutering the
 discovery-before-generation step reddens 5 tests; swapping the repair/activate
 order reddens the ordering test alone.
 
+
+### Cleanup rechecks asynchronous ownership
+
+The candidate set captured before NetworkManager reads only narrows the scan.
+Immediately before deletion, cleanup recomputes superseded ownership and live use.
+If an adapter selected the profile, a live interface began using it, or persisted
+ownership disappeared while list/profile reads were pending, that candidate survives.
+`wifi-hotspot-identity.test.ts` pauses both reads and covers these ownership changes.

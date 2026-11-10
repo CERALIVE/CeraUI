@@ -81,6 +81,7 @@ function makeHotspotIface(
 		hw: "Realtek RTL8852BE",
 		available: new Map(),
 		saved: {},
+		savedAll: {},
 		hotspot: {
 			...(over.hotspotConn ? { conn: over.hotspotConn } : {}),
 			availableChannels: ["auto"],
@@ -1053,6 +1054,70 @@ describe("pruneDuplicateHotspotConns — ownership evidence", () => {
 		expect(removed).toEqual([]);
 		expect(deleted).toEqual([]);
 	});
+
+	for (const pendingRead of ["list", "profile"] as const) {
+		for (const adoptedAs of [
+			"persisted",
+			"conn",
+			"activeConn",
+			"hotspot",
+			"unowned",
+		] as const) {
+			test(`preserves a candidate becoming ${adoptedAs} during the ${pendingRead} read`, async () => {
+				rememberConn(PERM_MAC, "superseded");
+				rememberConn(PERM_MAC, "keep");
+				const { deps, deleted } = makeProfileDeps([
+					{
+						uuid: "superseded",
+						name: "Hotspot-1",
+						mode: "ap",
+						ssid: OWNED_SSID,
+						psk: "y",
+						mac: PERM_MAC,
+					},
+				]);
+				const entered = Promise.withResolvers<void>();
+				const resume = Promise.withResolvers<void>();
+				const waitForAdoption = async () => {
+					entered.resolve();
+					await resume.promise;
+				};
+				const originalList = deps.listConnections;
+				const originalRead = deps.getApProfileFields;
+				if (pendingRead === "list") {
+					deps.listConnections = async (fields) => {
+						await waitForAdoption();
+						return originalList(fields);
+					};
+				} else {
+					deps.getApProfileFields = async (uuid) => {
+						await waitForAdoption();
+						return originalRead(uuid);
+					};
+				}
+				const pruning = pruneDuplicateHotspotConns(PERM_MAC, "keep", deps);
+				await entered.promise;
+				try {
+					if (adoptedAs === "persisted") {
+						// The owning adapter can select its previous profile again.
+						rememberConn(PERM_MAC, "superseded");
+					} else if (adoptedAs === "unowned") {
+						resetHotspotCredentialsForTest();
+					} else {
+						const iface = makeHotspotIface();
+						if (adoptedAs === "hotspot") iface.hotspot.conn = "superseded";
+						else iface[adoptedAs] = "superseded";
+						addWifiInterface(SECOND_PERM_MAC, iface);
+					}
+				} finally {
+					resume.resolve();
+					await pruning;
+				}
+				expect(await pruning).toEqual([]);
+				expect(deleted).toEqual([]);
+			});
+		}
+	}
 
 	test("a genuine superseded duplicate recorded in previousConns IS removed", async () => {
 		addWifiInterface(PERM_MAC, makeHotspotIface({ hotspotConn: "keep" }));
