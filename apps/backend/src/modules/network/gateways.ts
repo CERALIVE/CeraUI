@@ -27,6 +27,7 @@ import {
 	decideConnectivityClaim,
 	deviceBoundProbeExclusionReason,
 	eligibleProbeCandidates,
+	type ProbeCandidate,
 	probeExclusionReason,
 } from "./connectivity-candidates.ts";
 import {
@@ -106,6 +107,23 @@ function defaultGatewayElectionDeps(): GatewayElectionDeps {
 	};
 }
 
+function candidateRosterIdentity(
+	candidates: readonly ProbeCandidate[],
+): string {
+	return JSON.stringify(
+		candidates
+			.map(({ name, ip, binding }) =>
+				JSON.stringify([
+					name,
+					ip,
+					binding.kind,
+					binding.kind === "device" ? binding.ifname : binding.ip,
+				]),
+			)
+			.sort(),
+	);
+}
+
 export async function updateGw(
 	deps: GatewayElectionDeps = defaultGatewayElectionDeps(),
 ): Promise<boolean> {
@@ -142,6 +160,8 @@ export async function updateGw(
 	const candidates = eligibleProbeCandidates(netif).filter((candidate) =>
 		deps.eligible(candidate.name),
 	);
+	// Capture values before the awaits; the underlying netif records may mutate.
+	const capturedRoster = candidateRosterIdentity(candidates);
 
 	const defaultIf = await deps.defaultInterface(4);
 	const recovery = await recoverNaturalGateway(deps, candidates);
@@ -190,6 +210,16 @@ export async function updateGw(
 		candidates,
 		deps.probes,
 	);
+	const currentCandidates = eligibleProbeCandidates(deps.interfaces()).filter(
+		(candidate) => deps.eligible(candidate.name),
+	);
+	// This sampled check is not a lease across the route owner's later awaits.
+	if (candidateRosterIdentity(currentCandidates) !== capturedRoster) {
+		logger.info(
+			"Gateway candidates changed during probing; withholding result",
+		);
+		return false;
+	}
 	logConnectivityElection(election);
 
 	const goodIf = election.elected?.name;

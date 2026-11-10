@@ -568,3 +568,7 @@ Not covered or claimed:
   of recovery. Equal-tier ranking is intentionally not bandwidth/cost optimization.
 - Streaming bind maps, `uplink-steering`, `uplink-shaper`, and retired SRTLA
   source-policy routing are untouched.
+
+## Candidate ownership after probes
+
+Ordinary `updateGw` snapshots the sorted eligible candidate roster, including address and binding identity, before awaiting route recovery and connectivity probes. It compares that roster with current interfaces and steering eligibility after the election. A changed roster returns false before election warnings or the final route decision can consume stale evidence. This sampled check is not a lease across subsequent route-owner awaits and cannot detect a change that returns to identical sampled values. Deferred-probe regressions live in `apps/backend/src/tests/gateway-route-lifecycle.test.ts`.

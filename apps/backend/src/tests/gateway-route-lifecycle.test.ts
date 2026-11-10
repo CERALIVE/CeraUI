@@ -12,6 +12,11 @@ import {
 	type GatewayElectionDeps,
 	updateGw,
 } from "../modules/network/gateways.ts";
+import {
+	NETIF_ERR_HOTSPOT,
+	type NetworkInterface,
+} from "../modules/network/network-interfaces.ts";
+import { deriveVerdict } from "../modules/system/apt-reachability.ts";
 import { DefaultRouteTable } from "./helpers/default-route-table.ts";
 
 const BASELINE = [
@@ -114,4 +119,210 @@ describe("gateway election and shutdown ownership wiring", () => {
 				.filter((row) => row.includes(`proto ${HOST_ROUTE_PROTOCOL}`)),
 		).toHaveLength(1);
 	});
+});
+
+describe("gateway election current candidates", () => {
+	const routes = [
+		BASELINE[0].replace("37", "83"),
+		BASELINE[1].replace("83", "37"),
+	];
+	const netif = (ip: string): NetworkInterface => ({
+		ip,
+		tp: 0,
+		txb: 0,
+		rxb: 0,
+		enabled: true,
+		error: 0,
+	});
+	const reachable = deriveVerdict([
+		{
+			origin: {
+				url: "https://packages.example.test",
+				host: "packages.example.test",
+				scheme: "https",
+				probeUrl: "https://packages.example.test/",
+			},
+			ipv4: "ok",
+			ipv6: "no_route",
+		},
+	]);
+
+	for (const outcome of ["success", "failure"] as const) {
+		test.each([
+			"replacement address",
+			"in-place address",
+			"removed interface",
+			"health exclusion",
+			"hotspot exclusion",
+			"new candidate",
+		] as const)(`withholds stale ${outcome} after %s`, async (change) => {
+			const table = new DefaultRouteTable(routes);
+			await setDefaultRoute("uplink-a", { runner: table.runner });
+			const before = table.orderedRows();
+			expect(before).toHaveLength(routes.length + 1);
+			table.mutations.length = 0;
+			const current: Record<string, NetworkInterface> = {
+				"uplink-a": netif("192.0.2.2"),
+				"uplink-b": netif("198.51.100.2"),
+			};
+			let eligible = true;
+			let validations = 0;
+			const actions: string[] = [];
+			const base = election(table);
+			const entered = Promise.withResolvers<void>();
+			const probe =
+				Promise.withResolvers<
+					Awaited<ReturnType<typeof base.probes.probeRepository>>
+				>();
+			const deps: GatewayElectionDeps = {
+				...base,
+				resolve: async () => ({
+					addrs: ["203.0.113.10"],
+					fromCache: false,
+				}),
+				validateDns: () => validations++,
+				interfaces: () => current,
+				eligible: (name) => name !== "uplink-b" || eligible,
+				installRoute: async (name, family) => {
+					actions.push(`install:${name}:${family}`);
+					await base.installRoute(name, family);
+				},
+				releaseRoutes: async (condition) => {
+					actions.push("release");
+					await base.releaseRoutes?.(condition);
+				},
+				probes: {
+					...base.probes,
+					probeRepository: async (name) => {
+						if (name !== "uplink-b") return base.probes.probeRepository(name);
+						entered.resolve();
+						return probe.promise;
+					},
+				},
+			};
+			const sweep = updateGw(deps);
+			await entered.promise;
+			switch (change) {
+				case "replacement address":
+					current["uplink-b"] = netif("198.51.100.3");
+					break;
+				case "in-place address":
+					current["uplink-b"].ip = "198.51.100.3";
+					break;
+				case "removed interface":
+					delete current["uplink-b"];
+					break;
+				case "health exclusion":
+					eligible = false;
+					break;
+				case "hotspot exclusion":
+					current["uplink-b"].error = NETIF_ERR_HOTSPOT;
+					break;
+				case "new candidate":
+					current["uplink-c"] = netif("203.0.113.2");
+					break;
+			}
+			probe.resolve(
+				outcome === "success"
+					? reachable
+					: await base.probes.probeRepository("uplink-b"),
+			);
+			const result = await sweep;
+			expect(table.mutations).toEqual([]);
+			expect(actions).toEqual([]);
+			expect(table.orderedRows()).toEqual(before);
+			expect(validations).toBe(0);
+			expect(result).toBe(false);
+		});
+	}
+
+	test.each(["unchanged", "counters", "reordered", "disabled"] as const)(
+		"accepts a current winner with %s records",
+		async (change) => {
+			const table = new DefaultRouteTable(routes);
+			await setDefaultRoute("uplink-a", { runner: table.runner });
+			table.mutations.length = 0;
+			let current: Record<string, NetworkInterface> = {
+				"uplink-a": netif("192.0.2.2"),
+				"uplink-b": netif("198.51.100.2"),
+			};
+			const base = election(table);
+			const entered = Promise.withResolvers<void>();
+			const probe = Promise.withResolvers<typeof reachable>();
+			const actions: string[] = [];
+			let validations = 0;
+			const deps: GatewayElectionDeps = {
+				...base,
+				resolve: async () => ({
+					addrs: ["203.0.113.10"],
+					fromCache: false,
+				}),
+				interfaces: () => current,
+				validateDns: () => validations++,
+				installRoute: async (name, family) => {
+					actions.push(`install:${name}:${family}`);
+					await base.installRoute(name, family);
+				},
+				probes: {
+					...base.probes,
+					probeRepository: async () => {
+						entered.resolve();
+						return probe.promise;
+					},
+				},
+			};
+			const sweep = updateGw(deps);
+			await entered.promise;
+			if (change === "counters") {
+				current["uplink-b"].txb++;
+				current["uplink-b"].rxb++;
+			} else if (change === "reordered") {
+				current = {
+					"uplink-b": current["uplink-b"],
+					"uplink-a": current["uplink-a"],
+				};
+			} else if (change === "disabled") {
+				current["uplink-b"].enabled = false;
+			}
+			probe.resolve(reachable);
+			expect(await sweep).toBe(true);
+			expect(actions).toEqual(["install:uplink-b:4"]);
+			expect(validations).toBe(1);
+			expect(table.mutations).toHaveLength(1);
+			expect(table.rows()).toEqual([...routes].sort());
+		},
+	);
+
+	test.each(["known failure", "unknown"] as const)(
+		"keeps current %s release semantics",
+		async (outcome) => {
+			const table = new DefaultRouteTable(routes);
+			await setDefaultRoute("uplink-a", { runner: table.runner });
+			const before = table.rows();
+			table.mutations.length = 0;
+			const base = election(table);
+			let releases = 0;
+			const deps: GatewayElectionDeps = {
+				...base,
+				interfaces: () => ({ "uplink-b": netif("198.51.100.2") }),
+				releaseRoutes: async (condition) => {
+					releases++;
+					await base.releaseRoutes?.(condition);
+				},
+				probes: {
+					...base.probes,
+					probeRepository:
+						outcome === "unknown"
+							? async () => deriveVerdict([])
+							: base.probes.probeRepository,
+				},
+			};
+			expect(await updateGw(deps)).toBe(false);
+			expect(releases).toBe(outcome === "known failure" ? 1 : 0);
+			expect(table.mutations).toHaveLength(outcome === "known failure" ? 1 : 0);
+			expect(table.rows()).toEqual(
+				outcome === "known failure" ? [...routes].sort() : before,
+			);
+		},
+	);
 });
