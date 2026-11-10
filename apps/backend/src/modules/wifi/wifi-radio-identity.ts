@@ -1,8 +1,12 @@
 import { realpath } from "node:fs/promises";
 import { ID_RE } from "../../helpers/run.ts";
 import type { MacAddress } from "../network/network-manager.ts";
-import type { WifiAdapterDegradedReason } from "./wifi-interfaces.ts";
+import type {
+	BaseWifiInterface,
+	WifiAdapterDegradedReason,
+} from "./wifi-interfaces.ts";
 import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
+import { invalidateWifiRadioRow } from "./wifi-radio-publication.ts";
 
 export type RadioLifetime = {
 	readonly ifindex: number;
@@ -18,6 +22,8 @@ export type RadioIdentity = {
 	readonly classification: "verified" | "limited" | "unverified";
 	readonly degradedReason: WifiAdapterDegradedReason | undefined;
 	readonly incarnation: string;
+	readonly row?: BaseWifiInterface;
+	readonly observation?: number;
 };
 
 export type RadioIdentityReaders = {
@@ -54,6 +60,7 @@ export const radioIdentityReaders: RadioIdentityReaders = {
 export type RadioObservation = {
 	readonly ifname: string;
 	readonly degradedReason?: WifiAdapterDegradedReason;
+	readonly row?: BaseWifiInterface;
 };
 
 type RadioSample = {
@@ -137,10 +144,16 @@ export class WifiRadioIdentityProducer {
 
 	async discover(
 		devices: readonly RadioObservation[],
-		sequence = this.captureObservation(),
+		sequence?: number,
 		signal?: AbortSignal,
 	): Promise<void> {
-		if (signal?.aborted || sequence < this.publishedSequence) return;
+		const generation = sequence ?? this.captureObservation();
+		if (signal?.aborted || generation < this.publishedSequence) return;
+		if (sequence === undefined) {
+			for (const device of devices) {
+				if (device.row) invalidateWifiRadioRow(device.row, generation);
+			}
+		}
 		const cache = new Map(this.permanentMacByLifetime);
 		const samples = new Map<string, RadioSample | undefined>();
 		const seen = new Set<string>();
@@ -166,7 +179,7 @@ export class WifiRadioIdentityProducer {
 				samples.set(ifname, undefined);
 			}
 		}
-		if (signal?.aborted || sequence < this.publishedSequence) return;
+		if (signal?.aborted || generation < this.publishedSequence) return;
 		for (const pair of cache.keys()) {
 			if (!seen.has(pair)) cache.delete(pair);
 		}
@@ -217,10 +230,11 @@ export class WifiRadioIdentityProducer {
 				classification,
 				degradedReason,
 				incarnation: unchanged ? previous.incarnation : crypto.randomUUID(),
+				...(device.row ? { row: device.row, observation: generation } : {}),
 			});
 		}
 		this.permanentMacByLifetime = cache;
-		this.publishedSequence = sequence;
+		this.publishedSequence = generation;
 		this.project(rows);
 	}
 

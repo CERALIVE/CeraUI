@@ -80,6 +80,7 @@ import {
 	wifiRadioIdentity,
 } from "./wifi-radio-identity.ts";
 import { wifiRadioObservation } from "./wifi-radio-observation.ts";
+import { invalidateWifiRadioRow } from "./wifi-radio-publication.ts";
 
 export type SSID = string;
 export type WifiInterfaceId = number;
@@ -323,6 +324,9 @@ export async function wifiUpdateDevices() {
 	} catch {
 		recordWifiRadioShadowFailure();
 	}
+	for (const row of Object.values(getWifiInterfacesByMacAddress())) {
+		invalidateWifiRadioRow(row, observation);
+	}
 	let newDevices = false;
 	let statusChange = false;
 	let unavailableDevices = false;
@@ -335,6 +339,7 @@ export async function wifiUpdateDevices() {
 
 	// mark all WiFi adapters as removed
 	for (const wifiInterface of Object.values(getWifiInterfacesByMacAddress())) {
+		invalidateWifiRadioRow(wifiInterface, observation);
 		wifiInterface.removed = true;
 	}
 
@@ -363,7 +368,10 @@ export async function wifiUpdateDevices() {
 				const existed = Object.values(getWifiInterfacesByMacAddress()).some(
 					(wifiInterface) => wifiInterface?.ifname === ifname,
 				);
-				recordDegradedWifiInterface(ifname, "unavailable");
+				invalidateWifiRadioRow(
+					recordDegradedWifiInterface(ifname, "unavailable"),
+					observation,
+				);
 				if (existed) statusChange = true;
 				else newDevices = true;
 				continue;
@@ -381,7 +389,10 @@ export async function wifiUpdateDevices() {
 				const existed = Object.values(getWifiInterfacesByMacAddress()).some(
 					(wifiInterface) => wifiInterface?.ifname === ifname,
 				);
-				recordDegradedWifiInterface(ifname, "operational-mac-missing");
+				invalidateWifiRadioRow(
+					recordDegradedWifiInterface(ifname, "operational-mac-missing"),
+					observation,
+				);
 				if (existed) statusChange = true;
 				else newDevices = true;
 				continue;
@@ -415,6 +426,7 @@ export async function wifiUpdateDevices() {
 			const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
 
 			if (wifiInterface) {
+				invalidateWifiRadioRow(wifiInterface, observation);
 				// the interface is still available
 				delete wifiInterface.removed;
 				if (permanentMacResolved) delete wifiInterface.degradedReason;
@@ -454,6 +466,7 @@ export async function wifiUpdateDevices() {
 						? { degradedReason: "permanent-mac-unresolved" as const }
 						: {}),
 				};
+				invalidateWifiRadioRow(newInterface, observation);
 
 				if (parsedProps.value.supportsAp) {
 					newInterface.supportsApStaConcurrency =
@@ -487,6 +500,7 @@ export async function wifiUpdateDevices() {
 
 			const updatedInterface = getWifiInterfaceByMacAddress(macAddress);
 			if (updatedInterface) {
+				invalidateWifiRadioRow(updatedInterface, observation);
 				wifiIdToMacAddress[updatedInterface.id] = macAddress;
 				if (
 					await syncActiveConnection(updatedInterface, macAddress, activeConn)
@@ -615,7 +629,16 @@ export async function wifiUpdateDevices() {
 							: !wifiDeviceListGetMacAddress(ifname)
 								? "operational-mac-missing"
 								: undefined;
-					return [{ ifname, ...(degradedReason ? { degradedReason } : {}) }];
+					const row = Object.values(getWifiInterfacesByMacAddress()).find(
+						(candidate) => candidate.ifname === ifname,
+					);
+					return [
+						{
+							ifname,
+							...(degradedReason ? { degradedReason } : {}),
+							...(row ? { row } : {}),
+						},
+					];
 				}),
 				observation,
 			);

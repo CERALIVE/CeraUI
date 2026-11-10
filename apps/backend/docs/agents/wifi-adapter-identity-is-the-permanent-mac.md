@@ -143,6 +143,17 @@ edge. Same-object renames and repeated duplicate runs retain their incarnation.
 Discovery and monitor `unavailable` events project incarnation/degraded-reason
 changes into the observational snapshot, without changing broadcast decisions.
 Existing status builds carry the sampled token when one is available.
+Projection also requires the exact registry row, its current observation
+generation and a coherent lifetime. A private weak map invalidates evidence
+before discovery publishes or mutates a row. This covers a new row and a reused
+same-MAC row; an ifname alone never associates a token. Failed, timed-out,
+incoherent and superseded observations leave the field absent until a later
+current sample proves it. Monitor-only unavailable edges retain the original
+row association while rotating the token. The existing disconnect broadcast
+still precedes the monitor observation: a private publication fence omits the
+token in that synchronous window and releases it only after rotation succeeds.
+The fence never restores over a newer discovery generation. Legacy data and scheduling remain
+unchanged.
 Observation sequences fence publication: an older discovery cannot erase a
 later unavailable event or replace a newer completed observation. Canceled
 samples cannot commit their cache or snapshot.

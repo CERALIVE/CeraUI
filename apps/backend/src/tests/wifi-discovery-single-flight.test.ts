@@ -415,7 +415,6 @@ test("unavailable and recovery change only observational status tokens", async (
 	spyOn(radioIdentityReaders, "realpath").mockResolvedValue(
 		"/sys/devices/radio/phy0",
 	);
-	await wifiRadioIdentity.discover([{ ifname: "wlan0" }]);
 	const iface = {
 		id: 0,
 		ifname: "wlan0",
@@ -426,6 +425,7 @@ test("unavailable and recovery change only observational status tokens", async (
 		savedAll: {},
 	};
 	addWifiInterface(mac, iface);
+	await wifiRadioIdentity.discover([{ ifname: "wlan0", row: iface }]);
 	setWifiState({ [mac]: { ...iface, mode: "station" } });
 	broadcasts.length = 0;
 	const legacyBytes = (rows: ReturnType<typeof wifi.wifiBuildMsg>) =>
@@ -438,7 +438,7 @@ test("unavailable and recovery change only observational status tokens", async (
 		);
 	const initial = wifi.wifiBuildMsg();
 	iface.saved = { "Saved network": "saved-uuid" };
-	await wifiRadioIdentity.discover([{ ifname: "wlan0" }]);
+	await wifiRadioIdentity.discover([{ ifname: "wlan0", row: iface }]);
 	const beforeMessage = wifi.wifiBuildMsg();
 	expect(beforeMessage[0]?.incarnation).toEqual(expect.any(String));
 	expect(beforeMessage[0]?.incarnation).toBe(initial[0]?.incarnation);
@@ -462,7 +462,7 @@ test("unavailable and recovery change only observational status tokens", async (
 		state: "unavailable",
 	});
 	expect(wifiRadioIdentity.state).toBe(degraded);
-	await wifiRadioIdentity.discover([{ ifname: "wlan0" }]);
+	await wifiRadioIdentity.discover([{ ifname: "wlan0", row: iface }]);
 	expect(wifiRadioIdentity.state.changed).toEqual(["wlan0"]);
 	expect(
 		wifiRadioIdentity.state.rows.get("wlan0")?.degradedReason,

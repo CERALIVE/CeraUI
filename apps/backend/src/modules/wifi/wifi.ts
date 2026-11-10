@@ -110,6 +110,7 @@ import {
 	type WifiInterfaceId,
 } from "./wifi-interfaces.ts";
 import { wifiRadioIdentity } from "./wifi-radio-identity.ts";
+import { projectWifiRadioIncarnation } from "./wifi-radio-publication.ts";
 import {
 	planWifiStationJoin,
 	saeActivateArgs,
@@ -312,9 +313,10 @@ export function wifiBuildMsg() {
 			hw: wifiInterface.hw,
 			saved: {},
 		};
-		const incarnation = wifiRadioIdentity.state.rows.get(
-			wifiInterface.ifname,
-		)?.incarnation;
+		const incarnation = projectWifiRadioIncarnation(
+			wifiInterface,
+			wifiRadioIdentity.state.rows.get(wifiInterface.ifname),
+		);
 		if (incarnation !== undefined) entry.incarnation = incarnation;
 		if (wifiInterface.degradedReason !== undefined) {
 			entry.degraded_reason = wifiInterface.degradedReason;

@@ -62,12 +62,14 @@ export type RadioFixture = {
 	readonly ifindex: number;
 	readonly phy: number;
 	readonly state: string;
+	readonly beforeRead?: (path: string) => Promise<void>;
 };
 
 export type EquivalenceFixture = {
 	readonly name: string;
 	readonly frames: readonly (readonly RadioFixture[])[];
 	readonly admitted: boolean;
+	readonly publication?: () => Promise<void>;
 };
 
 // P's only allowed byte delta is the optional field on each Wi-Fi row.
@@ -316,6 +318,7 @@ export async function radioEquivalenceTranscript(
 			}
 			frames.push({ discovered, activations });
 			phase = "frame:published";
+			if (fixture.publication) await fixture.publication();
 			const beforeShadow = legacySnapshot();
 			// Both main and A receive the same one-millisecond inter-frame gap.
 			jest.advanceTimersByTime(1);

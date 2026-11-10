@@ -75,7 +75,7 @@ afterEach(() => {
 	mock.restore();
 });
 
-function seedRadio(hybrid: boolean, active = true): void {
+function seedRadio(hybrid: boolean, active = true): WifiInterfaceWithHotspot {
 	const iface: WifiInterfaceWithHotspot = {
 		id: 0,
 		ifname: "wlan0",
@@ -102,6 +102,7 @@ function seedRadio(hybrid: boolean, active = true): void {
 		},
 	};
 	addWifiInterface("aa:bb:cc:dd:ee:ff", iface);
+	return iface;
 }
 
 function expectSafeStatus(
@@ -290,8 +291,8 @@ test("observed radio tokens stay local through initial legacy status and both re
 		},
 	]);
 	try {
-		seedRadio(false);
-		await wifiRadioIdentity.discover([{ ifname: "wlan0" }]);
+		const row = seedRadio(false);
+		await wifiRadioIdentity.discover([{ ifname: "wlan0", row }]);
 		const local = wifiBuildMsg();
 		const token = local[0]?.incarnation;
 		expect(token).toEqual(expect.any(String));
