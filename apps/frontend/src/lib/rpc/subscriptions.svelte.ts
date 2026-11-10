@@ -81,6 +81,7 @@ import {
 	confirmOperation,
 	destroyAsyncOperations,
 	failOperation,
+	isOperationPending,
 	reconcileOperationsOnReconnect,
 } from "./async-operation.svelte";
 import type { ConnectionState } from "./client";
@@ -721,7 +722,9 @@ function handleMessage(
 			if (outcome?.name !== undefined) {
 				const key = `eth-role:${outcome.name}`;
 				if (outcome.pending === true) {
-					beginOperation(key, outcome.role);
+					// An echo must retain the current dispatch's entry and target;
+					// replacing it would invalidate osCommand's completion ownership.
+					if (!isOperationPending(key)) beginOperation(key, outcome.role);
 				} else if (outcome.error !== undefined) {
 					failOperation(key, outcome.error);
 				} else if (outcome.success === true) {

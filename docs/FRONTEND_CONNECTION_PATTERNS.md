@@ -502,3 +502,11 @@ Terminal phases linger `ASYNC_OP_TERMINAL_LINGER_MS` (4s) then decay to `idle`.
 - Streaming start/stop → `streaming-optimism.svelte.ts`
 - Netif enable/disable → dirty-registry/BondToggle
 - Power/reboot → direct raw-rpc (device going down IS the success signal)
+
+## Pending Ethernet role echoes
+
+A pending `eth_role` frame retains an already-pending operation and its target.
+Replacing that entry would revoke the RPC dispatch that must settle the result.
+An external pending frame starts an operation only when none is pending; terminal
+frames still confirm or fail it. `eth-role-ingestion.test.ts` covers pending echoes,
+RPC success/refusal/rejection and a new external operation after a terminal frame.

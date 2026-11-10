@@ -21,6 +21,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const handlers: { message?: (t: string, d: unknown, s?: number) => void } = {};
 
 vi.mock("$lib/rpc/client", () => ({
+	ConnectionResetError: class ConnectionResetError extends Error {},
 	rpc: { wifi: { getAdapterModes: vi.fn(async () => ({})) } },
 	rpcClient: {
 		onMessage: (fn: (t: string, d: unknown, s?: number) => void) => {
@@ -39,17 +40,123 @@ import {
 	getOperationReason,
 	getOperationTarget,
 	initAsyncOperations,
+	osCommand,
 } from "$lib/rpc/async-operation.svelte";
 import { initSubscriptions, resetState } from "$lib/rpc/subscriptions.svelte";
-import { ethernetRoleOpKey } from "$main/network/ethernet-role-view";
+import {
+	deriveEthernetRoleView,
+	ethernetRoleOpKey,
+	ethernetRoleTarget,
+} from "$main/network/ethernet-role-view";
 
 const KEY = ethernetRoleOpKey("eth0");
+
+function deferred<T>() {
+	let resolve!: (value: T) => void;
+	let reject!: (error: unknown) => void;
+	const promise = new Promise<T>((done, fail) => {
+		resolve = done;
+		reject = fail;
+	});
+	return { promise, resolve, reject };
+}
+
+function emit(outcome: unknown) {
+	if (!handlers.message)
+		throw new Error("missing registered subscription handler");
+	handlers.message("eth_role", { eth_role: outcome });
+}
 
 describe("eth_role ingestion", () => {
 	beforeEach(() => {
 		resetState();
 		initAsyncOperations();
 		initSubscriptions();
+	});
+
+	it("the real pending echo and terminal preserve the current RPC result owner", async () => {
+		const pending = deferred<{ success: true; applied: "shared-lan" }>();
+		const onResult = vi.fn();
+		const current = osCommand({
+			key: KEY,
+			target: "shared-lan",
+			rpc: () => pending.promise,
+			silent: true,
+			onResult,
+		});
+		emit({ name: "eth0", role: "shared-lan", pending: true });
+		emit({ name: "eth0", role: "shared-lan", success: true });
+		const result = { success: true as const, applied: "shared-lan" as const };
+		pending.resolve(result);
+		expect(await current).toEqual(result);
+		expect(onResult).toHaveBeenCalledWith(result);
+		expect(getOperationPhase(KEY)).toBe("confirmed");
+	});
+
+	it("same-role pending echoes preserve the no-change target and Shared LAN display", async () => {
+		const pending = deferred<{ success: true }>();
+		const current = osCommand({
+			key: KEY,
+			rpc: () => pending.promise,
+			silent: true,
+		});
+		emit({ name: "eth0", role: "shared-lan", pending: true });
+		emit({ name: "eth0", role: "shared-lan", pending: true });
+		const target = getOperationTarget(KEY);
+		const targetRole = ethernetRoleTarget(target);
+		const view = deriveEthernetRoleView({
+			name: "eth0",
+			iface: { tp: 0, enabled: false, ethRole: "shared-lan" },
+			phase: getOperationPhase(KEY),
+			...(targetRole !== undefined ? { target: targetRole } : {}),
+		});
+		emit({ name: "eth0", role: "shared-lan", success: true });
+		pending.resolve({ success: true });
+		const result = await current;
+		expect(target).toBeUndefined();
+		expect(view.displayRole).toBe("shared-lan");
+		expect(view.pending).toBe(true);
+		expect(result).toEqual({ success: true });
+		expect(getOperationPhase(KEY)).toBe("confirmed");
+	});
+
+	it("a pending echo then terminal refusal retains the current raw refusal reply", async () => {
+		const pending = deferred<{ success: false; error: string }>();
+		const current = osCommand({
+			key: KEY,
+			target: "shared-lan",
+			rpc: () => pending.promise,
+			silent: true,
+		});
+		emit({ name: "eth0", role: "shared-lan", pending: true });
+		emit({ name: "eth0", error: "apply_failed" });
+		const result = { success: false as const, error: "apply_failed" };
+		pending.resolve(result);
+		expect(await current).toEqual(result);
+		expect(getOperationPhase(KEY)).toBe("failed");
+		expect(getOperationReason(KEY)).toBe("apply_failed");
+	});
+
+	it("a pending echo does not suppress the current RPC rejection when no terminal arrives", async () => {
+		const pending = deferred<never>();
+		const current = osCommand({
+			key: KEY,
+			rpc: () => pending.promise,
+			silent: true,
+		});
+		emit({ name: "eth0", role: "shared-lan", pending: true });
+		pending.reject(new Error("reply lost"));
+		expect(await current).toBeUndefined();
+		expect(getOperationPhase(KEY)).toBe("failed");
+		expect(getOperationReason(KEY)).toBe("reply lost");
+	});
+
+	it("an external pending frame after a terminal still begins its new target", () => {
+		beginOperation(KEY, "uplink");
+		emit({ name: "eth0", role: "uplink", success: true });
+		emit({ name: "eth0", role: "shared-lan", pending: true });
+		expect(getOperationPhase(KEY)).toBe("pending");
+		expect(getOperationTarget(KEY)).toBe("shared-lan");
 	});
 
 	it("a pending frame begins the op and records the target role", () => {
