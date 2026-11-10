@@ -1,6 +1,36 @@
 // @vitest-environment jsdom
-import type { RelayServer, StreamingConfigInput } from "@ceraui/rpc/schemas";
-import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+	type RelayServer,
+	receiverKindManifest,
+	SRTLA_MIN_LATENCY_MS,
+	type StreamingConfigInput,
+	streamingSetConfigInputSchema,
+} from "@ceraui/rpc/schemas";
+import ts from "typescript";
+import { describe, expect, it, vi } from "vitest";
+
+import { loadJsonConfig } from "../../../../backend/src/helpers/config-loader";
+import {
+	RUNTIME_CONFIG_DEFAULTS,
+	type RuntimeConfig,
+	runtimeConfigSchema,
+} from "../../../../backend/src/helpers/config-schemas";
+import { buildServerDialogInput } from "../../main/dialogs/server/server-dialog-commands";
+
+vi.mock("../../../../backend/src/helpers/logger.ts", () => ({
+	logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+vi.mock("$lib/rpc", () => ({ rpc: {} }));
+vi.mock("$lib/rpc/dirty-registry.svelte", () => ({
+	markPending: vi.fn(),
+	onRpcResolved: vi.fn(),
+}));
+vi.mock("svelte-sonner", () => ({
+	toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 import {
 	autoSelectIngestSlot,
@@ -478,6 +508,229 @@ function summaryLabels(
 		...overrides,
 	};
 }
+
+/** Execute the actual receiver-write statements, without importing device services.
+ * Reload uses the same JSON representation, loader, schema and defaults as config.ts.
+ * This deliberately does not model the rest of the RPC handler or disk durability.
+ */
+function receiverWritesFromSetConfig() {
+	const source = ts.createSourceFile(
+		"streaming.procedure.ts",
+		readFileSync(
+			resolve(
+				dirname(fileURLToPath(import.meta.url)),
+				"../../../../backend/src/rpc/procedures/streaming.procedure.ts",
+			),
+			"utf8",
+		),
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TS,
+	);
+	const declaration = source.statements
+		.flatMap((statement) =>
+			ts.isVariableStatement(statement)
+				? [...statement.declarationList.declarations]
+				: [],
+		)
+		.find((node) => node.name.getText(source) === "setConfigProcedure");
+	const call = declaration?.initializer;
+	if (
+		!call ||
+		!ts.isCallExpression(call) ||
+		!ts.isPropertyAccessExpression(call.expression) ||
+		call.expression.name.text !== "handler"
+	) {
+		throw new Error(
+			"setConfig handler shape changed; review the receiver persistence seam",
+		);
+	}
+	const handler = call.arguments[0];
+	if (!handler || !ts.isArrowFunction(handler) || !ts.isBlock(handler.body)) {
+		throw new Error("setConfig handler body unavailable");
+	}
+	const statements = [...handler.body.statements];
+	const condition = (node: ts.Statement) =>
+		ts.isIfStatement(node) ? node.expression.getText(source) : "";
+	const first = statements.findIndex(
+		(node) => condition(node) === "input.relay_server",
+	);
+	const last = statements.findIndex(
+		(node) =>
+			condition(node) === "input.selected_ingest_endpoint !== undefined",
+	);
+	const latency = statements.find(
+		(node) => condition(node) === "input.srt_latency !== undefined",
+	);
+	const receiverWrites = statements.slice(first, last + 1);
+	const expectedConditions = [
+		"input.relay_server",
+		"input.relay_account",
+		"input.relay_streamid_override !== undefined",
+		"input.relay_protocol !== undefined",
+		"input.selected_ingest_endpoint !== undefined",
+	];
+	if (
+		first < 0 ||
+		last - first !== 4 ||
+		!latency ||
+		receiverWrites.some(
+			(node, index) => condition(node) !== expectedConditions[index],
+		)
+	) {
+		throw new Error(
+			"Receiver-write boundaries changed; review before running the transition fixture",
+		);
+	}
+	const receiverStatements = [latency, ...receiverWrites].map((node) =>
+		node.getText(source),
+	);
+	return new Function(
+		"config",
+		"input",
+		"SRTLA_MIN_LATENCY_MS",
+		receiverStatements.join("\n"),
+	) as (
+		config: RuntimeConfig,
+		input: StreamingConfigInput,
+		floor: number,
+	) => void;
+}
+
+describe("receiver destination save and reload transitions", () => {
+	const apply = receiverWritesFromSetConfig();
+	const range = deriveLatencyRange({
+		latency_range: { min: 2500, default: 3000, max: 4000 },
+	});
+	const account = slot({
+		endpointId: "slot-a",
+		host: "ingest.example",
+		key: "publish/managed",
+	});
+	const servers = {
+		"relay-a": relayServer({ addr: "relay.example", protocol: "srtla" }),
+	};
+
+	it.each([
+		{ initial: "catalog", final: "catalog" },
+		{ initial: "catalog", final: "slot" },
+		{ initial: "slot", final: "catalog" },
+		{ initial: "slot", final: "slot" },
+	] as const)(
+		"$initial → custom → $final survives receiver writes and persisted reload",
+		async ({ initial, final }) => {
+			let persisted: RuntimeConfig = { remote_provider: "ceralive" };
+			const saveAndReload = async (input: StreamingConfigInput) => {
+				apply(
+					persisted,
+					streamingSetConfigInputSchema.parse(input),
+					SRTLA_MIN_LATENCY_MS,
+				);
+				const loaded = await loadJsonConfig(
+					"receiver-transition.json",
+					runtimeConfigSchema,
+					RUNTIME_CONFIG_DEFAULTS,
+					{
+						parsed: JSON.parse(JSON.stringify(persisted)),
+					},
+				);
+				expect(loaded.loaded).toBe(true);
+				expect(loaded.invalidFields).toEqual([]);
+				persisted = loaded.data;
+			};
+			const managedInput = (kind: "catalog" | "slot", latency: number) =>
+				buildServerDialogInput({
+					...draft({
+						latency,
+						relayServer: "relay-a",
+						relayAccount: "account-a",
+						relayStreamId: "",
+					}),
+					destination: "managed",
+					managedSlot: kind === "slot" ? account : undefined,
+				});
+			const assertManaged = (kind: "catalog" | "slot", latency: number) => {
+				expect(deriveDestinationChoice(persisted)).toBe("ceralive");
+				expect(persisted.selected_ingest_endpoint).toBe(
+					kind === "slot" ? "slot-a" : undefined,
+				);
+				expect(
+					findActiveSlot([account], persisted.selected_ingest_endpoint),
+				).toBe(kind === "slot" ? account : undefined);
+				expect(persisted.relay_server).toBe(
+					kind === "catalog" ? "relay-a" : undefined,
+				);
+				expect(persisted.relay_account).toBe(
+					kind === "catalog" ? "account-a" : undefined,
+				);
+				expect(persisted.srtla_addr).toBe(
+					kind === "slot" ? "ingest.example" : undefined,
+				);
+				expect(persisted.srtla_port).toBe(
+					kind === "slot" ? account.port : undefined,
+				);
+				expect(persisted.srt_streamid).toBe(
+					kind === "slot" ? account.key : undefined,
+				);
+				expect(persisted.srt_latency).toBe(latency);
+				const receiver = resolveReceiverKind({
+					protocol: persisted.relay_protocol,
+					destination: deriveDestination(persisted),
+					server: persisted.relay_server ? servers["relay-a"] : undefined,
+				});
+				// An ingest slot is a managed provider choice with a manual transport endpoint.
+				expect(receiver).toBe(
+					kind === "catalog" ? "srtla_relay" : "srtla_custom",
+				);
+				expect(receiverKindManifest(receiver).fields).toContain(
+					kind === "catalog" ? "server" : "addr",
+				);
+			};
+
+			await saveAndReload(managedInput(initial, range.min));
+			assertManaged(initial, range.min);
+			await saveAndReload(
+				buildServerDialogInput({
+					...draft({
+						addr: " custom.example ",
+						portStr: "6000",
+						streamId: " publish/custom ",
+						latency: range.default,
+					}),
+					destination: "custom",
+				}),
+			);
+			expect(deriveDestinationChoice(persisted)).toBe("custom");
+			expect(persisted.remote_provider).toBe("ceralive");
+			expect(persisted.relay_server).toBeUndefined();
+			expect(persisted.relay_account).toBeUndefined();
+			expect(persisted.selected_ingest_endpoint).toBeUndefined();
+			expect(
+				findActiveSlot([account], persisted.selected_ingest_endpoint),
+			).toBeUndefined();
+			expect(persisted.srtla_addr).toBe("custom.example");
+			expect(persisted.srtla_port).toBe(6000);
+			expect(persisted.srt_streamid).toBe("publish/custom");
+			expect(persisted.srt_latency).toBe(range.default);
+			const customKind = resolveReceiverKind({
+				protocol: persisted.relay_protocol,
+				destination: deriveDestination(persisted),
+			});
+			expect(customKind).toBe("srtla_custom");
+			expect(receiverKindManifest(customKind).fields).not.toContain("server");
+			expect(deriveServerReadiness(customKind, null)).toEqual({
+				variant: "idle",
+			});
+			expect(deriveServerReadiness(customKind, 2)).toEqual({
+				variant: "bonded",
+				count: 2,
+			});
+
+			await saveAndReload(managedInput(final, range.max));
+			assertManaged(final, range.max);
+		},
+	);
+});
 
 describe("buildServerSummary — destination/kind-aware Live server summary (T11)", () => {
 	it("none (no receiver configured) → notConfigured", () => {
