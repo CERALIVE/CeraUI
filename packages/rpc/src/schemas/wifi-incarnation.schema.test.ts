@@ -29,7 +29,7 @@ const requests = [
 	})),
 ];
 
-for (const incarnation of [undefined, 'opaque future token', ' ', 'quote"\\token']) {
+for (const incarnation of [undefined, 'opaque-future-token', 'Az_09-test', 'a'.repeat(128)]) {
 	test(`Wi-Fi and full status preserve optional opaque token ${JSON.stringify(incarnation)}`, () => {
 		const row = { ...legacyRow, ...(incarnation === undefined ? {} : { incarnation }) };
 		const wifi = { '0': row };
@@ -47,7 +47,23 @@ for (const incarnation of [undefined, 'opaque future token', ' ', 'quote"\\token
 	}
 }
 
-for (const incarnation of ['', null, 42, true, [], {}]) {
+for (const incarnation of [
+	'',
+	null,
+	42,
+	true,
+	[],
+	{},
+	'a'.repeat(129),
+	' ',
+	'quote"\\token',
+	'line\r\nbreak',
+	'nul\0token',
+	'not.ascii',
+	'é',
+	'token\n',
+	'token\r',
+]) {
 	test(`Wi-Fi status rejects malformed or empty token ${JSON.stringify(incarnation)}`, () => {
 		expect(wifiStatusSchema.safeParse({ '0': { ...legacyRow, incarnation } }).success).toBe(false);
 	});

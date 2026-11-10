@@ -301,8 +301,12 @@ export type WifiAdapterModeEntry = z.infer<typeof wifiAdapterModeEntrySchema>;
 export const wifiAdapterModeStatusSchema = z.record(z.string(), wifiAdapterModeEntrySchema);
 export type WifiAdapterModeStatus = z.infer<typeof wifiAdapterModeStatusSchema>;
 
-// Equality-only, non-secret lifetime token. Keep opaque; empty is not a binding.
-export const wifiIncarnationSchema = z.string().min(1);
+// Equality-only, non-secret opaque ASCII token; never trim or coerce it.
+export const wifiIncarnationSchema = z
+	.string()
+	.min(1)
+	.max(128)
+	.regex(/^[A-Za-z0-9_-]+$/);
 
 // `.strict()` because this switches a radio between operating modes — an
 // unknown extra key must be REJECTED rather than silently ignored.

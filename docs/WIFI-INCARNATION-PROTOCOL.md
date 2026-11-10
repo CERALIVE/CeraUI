@@ -3,10 +3,11 @@
 PR P exposes one optional `incarnation` string on each local Wi-Fi status row.
 It accepts the same optional input on hotspot prepare (load and save), start,
 stop, configure, and every adapter mode switch, including station.
-The shared schema requires a string with at least one character when present.
-It does not trim, coerce, parse a UUID, or impose a token format: whitespace and
-escaped characters remain opaque bytes. Empty strings and non-strings fail
-input/output validation. An absent field retains the legacy shape.
+The shared schema requires 1-128 ASCII characters from `A-Z`, `a-z`, `0-9`,
+underscore and hyphen when present. It does not trim, coerce or parse a UUID.
+Empty, oversized, non-string or other-character values fail input/output
+validation. Valid values remain opaque and equality-only. An absent field
+retains the legacy shape.
 
 These inputs are deliberately ignored after parsing. A stale or unrelated
 nonempty token has the same effects and results as an omitted token. There is
@@ -17,12 +18,17 @@ actions remain later rollout work. G1-G5 are unrun and unclaimed here.
 
 ## Producer and lifetime
 
-The real status builder reads the existing observational producer's token by
-the row's current interface name. It does not await sysfs, mint a fallback, or
+The real status builder requires evidence for the exact current registry row
+and its observation generation, with a coherent lifetime witness. It does not
+accept an interface-name match alone. It does not await sysfs, mint a fallback, or
 change legacy discovery, registry keys, numeric ids, credential ownership,
 broadcast timing, or handler admission. Before detached observation completes,
-or when no observation exists, the field is absent. The next existing status
-pull, initial snapshot, or broadcast carries the sampled token.
+or when no current coherent observation exists, the field is absent. Discovery
+invalidates prior evidence before publishing or mutating rows, including reused
+row objects. Detached samples carry their captured row and generation; a late,
+failed, timed-out or incoherent observation cannot authorize an older token.
+The next existing status pull, initial snapshot, or broadcast carries the token
+only once current evidence is proven. No new broadcast or discovery wait is added.
 
 The producer's existing coherent ifindex/wiphy/path evidence rotates the random
 token on a replacement, replug, classification change, or either degraded edge.
@@ -37,7 +43,8 @@ procedure `dev.rebindWifi({device})` rotates only that radio's token and emits
 the existing status shape; credentials, mode and connections remain unchanged.
 It accepts the mock numeric id or device name, is registered only outside
 production, and additionally refuses production or non-mock execution.
-Mock initialization and reset clear the token map.
+Mock initialization and reset clear the token map. Mock protocol fixtures use
+fake clocks for all service timers and retain reset/stop cleanup.
 
 ## Exact wire delta and egress
 
@@ -45,9 +52,9 @@ With no token, the status builder adds no property, including no enumerable
 `undefined`; serialized legacy Wi-Fi rows stay byte-identical. With the current
 36-character UUID, each row grows by exactly 53 UTF-8 bytes:
 `,\"incarnation\":\"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\"`.
-Property ordering of all pre-existing members is retained. Other opaque strings
-would have their ordinary JSON escaping and UTF-8 length; 53 is a producer
-measurement, not a schema limit.
+Property ordering of all pre-existing members is retained. Other valid opaque
+ASCII strings have their stated length; 53 is a producer measurement, not the
+128-character schema limit.
 
 Authorized local clients receive the field through initial `sendStatus`,
 `broadcastWifiState`, `wifi.getStatus`, and aggregate `status.getStatus`.
