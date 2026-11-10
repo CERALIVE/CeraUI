@@ -175,7 +175,7 @@ export async function handleHotspotConn(
 		wifiInterface.supportsApStaConcurrency === true &&
 		fields[11] === concurrentApIfname(wifiInterface.ifname);
 	if (!canAdoptHotspotProfile(macAddress, uuid, fields[12])) return;
-	if (!concurrentProfile && fields[12].toLowerCase() !== macAddress) {
+	if (pinned && !concurrentProfile && fields[12].toLowerCase() !== macAddress) {
 		await nmConnSetWifiMacAddress(uuid, macAddress);
 	}
 

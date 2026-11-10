@@ -589,6 +589,18 @@ test("main equivalence: evidence-based orphan migration preserves credentials an
 		}),
 	);
 	expect(JSON.stringify(profiles.get(UNRELATED))).toBe(unrelated);
+	expect(effects).toEqual([
+		[
+			"con",
+			"modify",
+			FOREIGN,
+			"connection.interface-name",
+			"",
+			"802-11-wireless.mac-address",
+			B,
+		],
+		["con", "modify", FOREIGN, "connection.autoconnect-priority", "999"],
+	]);
 });
 
 test("main equivalence: unreadable orphan settings retain the existing name attribution", async () => {
