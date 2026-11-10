@@ -430,6 +430,11 @@ A dev-only DevTools destination is available in development builds.
   external process runs. WiFi status and hotspot behavior are unchanged,
   including prepare/start for unresolved radios. See the
   [backend identity contract](apps/backend/docs/agents/wifi-adapter-identity-is-the-permanent-mac.md).
+- **Hotspot profile ownership [EXISTS]**: a replacement adapter no longer inherits
+  another adapter's saved hotspot credentials through a reused interface name
+  or UUID hint. Current and historical owners remain protected while absent;
+  evidence-based orphan migration and unresolved-radio prepare/start remain.
+  See the [ownership contract](apps/backend/docs/agents/wifi-adapter-identity-is-the-permanent-mac.md#hotspot-profile-ownership-exists-host-tested-only).
 - **Device Health telemetry**: memory, per-cluster CPU frequency, DDR bus load,
   GPU load, and (on the vendor kernel) per-core decoder load, alongside the
   existing SoC temperature and load-average traces. Every signal is omitted

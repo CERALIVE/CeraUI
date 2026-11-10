@@ -46,6 +46,43 @@ enters the id map and retains today's hotspot prepare/start behavior.
 `wifiDeviceListGetMacAddress()` — that returns the operational address and will
 miss the registry.
 
+### Hotspot profile ownership [EXISTS; host-tested only]
+
+A replacement adapter no longer inherits another adapter's saved hotspot
+credentials when it receives the same interface name. The credential store
+arbitrates every current and previous UUID across all entries, including
+absent adapters. A UUID recorded for another address cannot be adopted, used
+by prepare/start (including the complete in-memory cache and already-active
+shortcut), saved through the live editor, or remembered for this adapter.
+Existing collisions loaded from disk retain their ownership evidence and
+refuse reuse with the existing activation/save errors.
+
+The explicit-MAC active path, saved-profile sweep, interface-name and
+`clap-<ifname>` matches, stored UUID hint, permanent-MAC match and persisted-SSID
+fallback all apply that check. A pin naming another present or persisted
+adapter is conflicting evidence even without a UUID claim. SSID equality
+cannot override either kind of conflict. Unowned legacy profiles with stale
+scan-time pins still migrate through the existing name or persisted-SSID
+evidence. A conflict leaves NetworkManager's active connection and mode
+observable, and leaves the foreign profile, credentials and autoconnect
+untouched.
+
+This does not consume shadow identity, change registry keys, emit tokens,
+introduce limited mode, change NetworkManager targeting or change mode
+transitions. Unresolved radios retain prepare/start capability. A radio
+returning under a new name or after replug keeps its own credentials.
+Same-MAC physical distinction and activation fencing remain outside this
+ownership change; G1-G5 are unrun and unclaimed.
+
+Coverage: `wifi-hotspot-ownership.test.ts` exercises O1-O9 through real
+discovery, saved-sweep, prepare/start and configure boundaries, all stored
+owners, after-await checks, orphan migration and unrelated-profile survival.
+`wifi-radio-equivalence.test.ts` retains the recorded main bytes for verified,
+rename, replug and unverified prepare/start fixtures. The orphan byte fixture
+also runs against unchanged main. The pruning regression loads a legacy
+collision from disk because new store writes can no longer create one; its
+existing assertions are unchanged.
+
 ### Shadow lifetime producer [EXISTS; host-tested only]
 
 `modules/wifi/wifi-radio-identity.ts` computes separate, internal evidence.

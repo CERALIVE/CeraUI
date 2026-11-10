@@ -25,7 +25,10 @@ import {
 } from "../network/network-manager.ts";
 import type { MessageSocket } from "../ui/message-socket.ts";
 import { buildMsg, getSocketSenderId } from "../ui/websocket-server.ts";
-import { rememberHotspotCredentials } from "./hotspot-credentials.ts";
+import {
+	canUseHotspotConnection,
+	rememberHotspotCredentials,
+} from "./hotspot-credentials.ts";
 import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
 import {
 	wifiAdapterLockKey,
@@ -488,6 +491,9 @@ async function reconfigureHotspotLocked(
 	security: HotspotSecurityId,
 	deps: HotspotConfigDeps,
 ): Promise<ReconfigureResult> {
+	if (!canUseHotspotConnection(macAddress, wifiInterface.hotspot.conn)) {
+		return "saving";
+	}
 	const derived = wifiInterface.hotspot.derivedChannels ?? [];
 	const offeredSecurity = offeredSecurityFor(wifiInterface, deps);
 	// The mode already in force is always restorable, even on an adapter whose
@@ -516,6 +522,9 @@ async function reconfigureHotspotLocked(
 		return "saving";
 	}
 
+	if (!canUseHotspotConnection(macAddress, wifiInterface.hotspot.conn)) {
+		return "saving";
+	}
 	// Restart the connection with the updated config
 	wifiInterface.hotspot.transition = "activating";
 	deps.broadcastState();

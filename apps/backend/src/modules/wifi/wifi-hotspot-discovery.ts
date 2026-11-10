@@ -27,6 +27,7 @@ import {
 	nmcliParseSep,
 } from "../network/network-manager.ts";
 import {
+	canUseHotspotConnection,
 	getAllHotspotCredentials,
 	getHotspotCredentials,
 	type HotspotCredentials,
@@ -75,6 +76,21 @@ export async function handleHotspotConn(
 	uuid: string,
 	options: HotspotAdoptionOptions = {},
 ) {
+	const fields = await nmConnGetFields(uuid, [
+		"connection.autoconnect-priority",
+		"802-11-wireless.ssid",
+		"802-11-wireless-security.psk",
+		"802-11-wireless.band",
+		"802-11-wireless.channel",
+		"802-11-wireless.hidden",
+		"802-11-wireless-security.key-mgmt",
+		"802-11-wireless-security.pairwise",
+		"802-11-wireless-security.group",
+		"802-11-wireless-security.proto",
+		"802-11-wireless-security.pmf",
+		"connection.interface-name",
+		"802-11-wireless.mac-address",
+	] as const);
 	/*
 	  A profile's pinned `802-11-wireless.mac-address` is only a usable adapter key
 	  while it holds a PERMANENT address. Profiles written before that was enforced
@@ -85,10 +101,16 @@ export async function handleHotspotConn(
 		macAddress_ && getWifiInterfaceByMacAddress(macAddress_)
 			? macAddress_
 			: undefined;
-	const macAddress = pinned || (await findMacAddressForConnection(uuid));
+	const macAddress =
+		pinned ||
+		(await findMacAddressForConnection(
+			uuid,
+			fields?.[12] ?? macAddress_ ?? "",
+		));
 	if (!macAddress) {
 		return;
 	}
+	if (!canAdoptHotspotProfile(macAddress, uuid, fields?.[12] ?? "")) return;
 
 	const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
 	if (!wifiInterface) {
@@ -122,6 +144,7 @@ export async function handleHotspotConn(
 		await nmConnSetFields(uuid, { "connection.autoconnect": "no" });
 		return;
 	}
+	if (fields === undefined) return;
 
 	/*
     we expect and will update automatically:
@@ -135,31 +158,6 @@ export async function handleHotspotConn(
     802-11-wireless-security.proto=rsn
     802-11-wireless-security.pmf=1 (disable) - disables requiring WPA3 Protected Management Frames for compatibility
   */
-	const settingsFields = [
-		"connection.autoconnect-priority",
-		"802-11-wireless.ssid",
-		"802-11-wireless-security.psk",
-		"802-11-wireless.band",
-		"802-11-wireless.channel",
-	] as const;
-	const checkFields = [
-		"802-11-wireless.hidden",
-		"802-11-wireless-security.key-mgmt",
-		"802-11-wireless-security.pairwise",
-		"802-11-wireless-security.group",
-		"802-11-wireless-security.proto",
-		"802-11-wireless-security.pmf",
-	] as const;
-
-	const fields = await nmConnGetFields(uuid, [
-		...settingsFields,
-		...checkFields,
-		"connection.interface-name",
-		"802-11-wireless.mac-address",
-	] as const);
-
-	if (fields === undefined) return;
-
 	/* If the connection doesn't have maximum priority, update it
      This is required to ensure the hotspot is started even if the Wifi
      networks for some matching client connections are available
@@ -176,10 +174,12 @@ export async function handleHotspotConn(
 	const concurrentProfile =
 		wifiInterface.supportsApStaConcurrency === true &&
 		fields[11] === concurrentApIfname(wifiInterface.ifname);
+	if (!canAdoptHotspotProfile(macAddress, uuid, fields[12])) return;
 	if (!concurrentProfile && fields[12].toLowerCase() !== macAddress) {
 		await nmConnSetWifiMacAddress(uuid, macAddress);
 	}
 
+	if (!canAdoptHotspotProfile(macAddress, uuid, fields[12])) return;
 	wifiInterface.hotspot.conn = uuid;
 	wifiInterface.hotspot.name = fields[1];
 	wifiInterface.hotspot.password = fields[2];
@@ -213,7 +213,20 @@ export async function handleHotspotConn(
 	}
 }
 
-async function findMacAddressForConnection(uuid: string) {
+function canAdoptHotspotProfile(
+	macAddress: string,
+	uuid: string,
+	profileMac: string,
+): boolean {
+	const pin = profileMac.toLowerCase();
+	return (
+		canUseHotspotConnection(macAddress, uuid) &&
+		(pin === macAddress.toLowerCase() ||
+			(!getWifiInterfaceByMacAddress(pin) && !getHotspotCredentials(pin)))
+	);
+}
+
+async function findMacAddressForConnection(uuid: string, profileMac: string) {
 	// Check if the connection is in use for any wifi interface
 	const connIfName = (
 		await nmConnGetFields(uuid, ["connection.interface-name"] as const)
@@ -235,6 +248,7 @@ async function findMacAddressForConnection(uuid: string) {
 		) {
 			continue;
 		}
+		if (!canAdoptHotspotProfile(macAddress, uuid, profileMac)) continue;
 
 		// If we can match the connection against a certain interface
 		if (!wifiInterface.hotspot.conn) {
@@ -245,6 +259,7 @@ async function findMacAddressForConnection(uuid: string) {
 			// And if this interface doesn't already have a hotspot connection
 			// Try to update the connection to match the MAC address
 			if (await nmConnSetWifiMacAddress(uuid, macAddress)) {
+				if (!canAdoptHotspotProfile(macAddress, uuid, profileMac)) return;
 				wifiInterface.hotspot.conn = uuid;
 				return macAddress;
 			}
@@ -338,7 +353,12 @@ export async function findHotspotConnForAdapter(
 ): Promise<ExistingHotspotConn | undefined> {
 	if (stored?.conn) {
 		const profile = await readApProfile(stored.conn, deps);
-		if (profile) return profile;
+		if (
+			profile &&
+			canAdoptHotspotProfile(macAddress, profile.uuid, profile.macAddress)
+		) {
+			return profile;
+		}
 	}
 
 	const rows = await listWirelessConns("uuid,type", deps);
@@ -349,6 +369,7 @@ export async function findHotspotConnForAdapter(
 		if (!uuid || type !== "802-11-wireless") continue;
 		const profile = await readApProfile(uuid, deps);
 		if (!profile) continue;
+		if (!canAdoptHotspotProfile(macAddress, uuid, profile.macAddress)) continue;
 		if (profile.macAddress === macAddress) return profile;
 		if (stored && profile.ssid === stored.ssid) ssidMatch ??= profile;
 	}

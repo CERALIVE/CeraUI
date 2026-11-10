@@ -23,7 +23,10 @@ import {
 	nmConnSetFields,
 	nmHotspot,
 } from "../network/network-manager.ts";
-import { hotspotCredentialsStore } from "./hotspot-credentials.ts";
+import {
+	canUseHotspotConnection,
+	hotspotCredentialsStore,
+} from "./hotspot-credentials.ts";
 import { getWifiState, setWifiState } from "./state/wifi-state.ts";
 import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
 import {
@@ -105,6 +108,7 @@ function rememberIdentity(
 ): void {
 	const { name, password, channel } = wifiInterface.hotspot;
 	if (!name || !password) return;
+	if (!canUseHotspotConnection(macAddress, conn)) return;
 	deps.credentials.remember(macAddress, {
 		ssid: name,
 		password,
@@ -125,12 +129,20 @@ async function resolveHotspotIdentity(
 	macAddress: string,
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotActivationDeps,
-): Promise<HotspotIdentity> {
+): Promise<HotspotIdentity | undefined> {
 	const stored = deps.credentials.get(macAddress);
 	const hotspot = wifiInterface.hotspot;
+	if (
+		!canUseHotspotConnection(macAddress, hotspot.conn) ||
+		!canUseHotspotConnection(macAddress, stored?.conn)
+	) {
+		return undefined;
+	}
 	if (!hotspot.conn || !hotspot.name || !hotspot.password) {
 		const existing = await deps.findHotspotConn(macAddress, stored);
+		if (!canUseHotspotConnection(macAddress, stored?.conn)) return undefined;
 		if (existing) {
+			if (!canUseHotspotConnection(macAddress, existing.uuid)) return undefined;
 			hotspot.conn = existing.uuid;
 			hotspot.name = existing.ssid;
 			hotspot.password = existing.password;
@@ -222,6 +234,7 @@ async function prepareHotspotLocked(
 		wifiInterface,
 		deps,
 	);
+	if (!identity) return { success: false, error: "activation-failed" };
 	// No profile, and the store has never recorded one: this adapter has never
 	// hosted an AP, so the shown pair is a suggestion rather than a saved setup.
 	const firstTime =
@@ -246,6 +259,9 @@ async function prepareHotspotLocked(
 	}
 	// The profile is written FIRST: a store that ran ahead of a refused write
 	// would show the operator credentials the AP never broadcasts.
+	if (!canUseHotspotConnection(macAddress, identity.conn)) {
+		return { success: false, error: "activation-failed" };
+	}
 	if (
 		identity.conn &&
 		!(await deps.nmConnSetFields(identity.conn, {
@@ -324,6 +340,9 @@ async function startHotspotLocked(
 	deps: HotspotActivationDeps,
 ): Promise<HotspotStartResult> {
 	const ifname = wifiInterface.ifname;
+	if (!canUseHotspotConnection(macAddress, wifiInterface.hotspot.conn)) {
+		return { success: false, error: "activation-failed" };
+	}
 	if (
 		wifiInterface.hotspot.conn &&
 		(wifiInterface.conn === wifiInterface.hotspot.conn ||
@@ -399,6 +418,7 @@ async function startHotspotLocked(
 		wifiInterface,
 		deps,
 	);
+	if (!identity) return rollback();
 	let conn = identity.conn;
 
 	// Cleanup is best-effort, runs off the critical path, and never fails a start.
@@ -409,11 +429,14 @@ async function startHotspotLocked(
 	};
 
 	if (conn) {
+		if (!canUseHotspotConnection(macAddress, conn)) return rollback();
 		await deps.nmConnSetFields(conn, bindingFields);
+		if (!canUseHotspotConnection(macAddress, conn)) return rollback();
 		prune(conn);
 		if (!(await deps.nmConnect(conn, HOTSPOT_UP_TO))) {
 			return rollback();
 		}
+		if (!canUseHotspotConnection(macAddress, conn)) return rollback();
 		await deps.nmConnSetFields(conn, HOTSPOT_AUTOCONNECT_FIELDS);
 		remember(conn);
 	} else {
