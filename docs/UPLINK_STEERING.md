@@ -198,3 +198,7 @@ undisturbed.
 ## Known-down passive observations
 
 `UplinkHealthEngine` keeps an already-down path down on `passive_degraded`. That observation resets consecutive success evidence; only successful observations advance the existing five-success and 15-second hold-down recovery thresholds. An up path can still become degraded, and captive-portal behavior is unchanged. Model and steering-selection regressions live in `apps/backend/src/tests/uplink-steering-state.test.ts`.
+
+## Asynchronous health observations
+
+Health rounds snapshot candidate addresses before resolving the probe target. Before each batch and before recording its results, the runtime checks the current address and device-bound eligibility. A newer observation for that interface or a completed newer round supersedes older evidence. Starting another pending round alone does not discard valid slow evidence. Removed-interface sample bookkeeping is retired after completed rounds. Deferred-resolution, probe and batch regressions live in `apps/backend/src/tests/uplink-health.test.ts`.
