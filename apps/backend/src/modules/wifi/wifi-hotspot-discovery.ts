@@ -40,7 +40,58 @@ import {
 	getWifiInterfacesByMacAddress,
 } from "./wifi-connections.ts";
 import { HOTSPOT_SECURITY, securityFromNM } from "./wifi-hotspot-security.ts";
-import { canHotspot, type ExistingHotspotConn } from "./wifi-hotspot-types.ts";
+import {
+	canHotspot,
+	type ExistingHotspotConn,
+	type WifiHotspot,
+	type WifiInterfaceWithHotspot,
+} from "./wifi-hotspot-types.ts";
+
+const hotspotProfilePins = new WeakMap<
+	WifiHotspot,
+	{ readonly uuid: string; readonly macAddress: string }
+>();
+
+export function rememberHotspotProfilePin(
+	hotspot: WifiHotspot,
+	uuid: string,
+	macAddress: string = "",
+): void {
+	hotspotProfilePins.set(hotspot, { uuid, macAddress });
+}
+
+export function getHotspotProfilePin(
+	hotspot: WifiHotspot,
+	uuid: string | undefined,
+): string | undefined {
+	const pin = hotspotProfilePins.get(hotspot);
+	return pin?.uuid === uuid ? pin?.macAddress : undefined;
+}
+
+/** Keep pin evidence outside the legacy registry and wire projections. */
+export function hotspotOwnershipGuard(
+	macAddress: string,
+	iface: WifiInterfaceWithHotspot,
+	initialConn?: string,
+): (conn?: string, profileMac?: string) => boolean {
+	const hotspot = iface.hotspot;
+	const initialPin = getHotspotProfilePin(hotspot, initialConn);
+	return (
+		conn = initialConn,
+		profileMac = conn === initialConn ? initialPin : undefined,
+	) =>
+		iface.hotspot === hotspot &&
+		canAdoptHotspotProfile(
+			macAddress,
+			hotspot.conn,
+			getHotspotProfilePin(hotspot, hotspot.conn) ?? "",
+		) &&
+		canAdoptHotspotProfile(
+			macAddress,
+			conn,
+			profileMac ?? getHotspotProfilePin(hotspot, conn) ?? "",
+		);
+}
 
 // ─── NM connection discovery (hotspot bootstrap) ─────────────────────────────
 
@@ -179,16 +230,20 @@ export async function handleHotspotConn(
 	const concurrentProfile =
 		wifiInterface.supportsApStaConcurrency === true &&
 		fields[11] === concurrentApIfname(wifiInterface.ifname);
+	let profileMac = fields[12];
 	if (!canAdoptHotspotProfile(macAddress, uuid, fields[12])) {
 		return clearRejectedHotspotConn(macAddress, uuid);
 	}
 	if (pinned && !concurrentProfile && fields[12].toLowerCase() !== macAddress) {
-		await nmConnSetWifiMacAddress(uuid, macAddress);
+		if (await nmConnSetWifiMacAddress(uuid, macAddress))
+			profileMac = macAddress;
 	}
 
 	if (!canAdoptHotspotProfile(macAddress, uuid, fields[12])) {
 		return clearRejectedHotspotConn(macAddress, uuid);
 	}
+	if (pinned)
+		rememberHotspotProfilePin(wifiInterface.hotspot, uuid, profileMac);
 	wifiInterface.hotspot.conn = uuid;
 	wifiInterface.hotspot.name = fields[1];
 	wifiInterface.hotspot.password = fields[2];
@@ -233,9 +288,9 @@ function clearRejectedHotspotConn(macAddress: string, uuid: string): void {
 	iface.hotspot = hotspot;
 }
 
-function canAdoptHotspotProfile(
+export function canAdoptHotspotProfile(
 	macAddress: string,
-	uuid: string,
+	uuid: string | undefined,
 	profileMac: string,
 ): boolean {
 	const pin = profileMac.toLowerCase();
@@ -273,6 +328,7 @@ async function findMacAddressForConnection(uuid: string, profileMac: string) {
 		// If we can match the connection against a certain interface
 		if (!wifiInterface.hotspot.conn) {
 			if (concurrentProfile) {
+				rememberHotspotProfilePin(wifiInterface.hotspot, uuid, profileMac);
 				wifiInterface.hotspot.conn = uuid;
 				return macAddress;
 			}
@@ -286,6 +342,7 @@ async function findMacAddressForConnection(uuid: string, profileMac: string) {
 				if (currentConn && !canUseHotspotConnection(macAddress, currentConn)) {
 					return clearRejectedHotspotConn(macAddress, currentConn);
 				}
+				rememberHotspotProfilePin(wifiInterface.hotspot, uuid, macAddress);
 				wifiInterface.hotspot.conn = uuid;
 				return macAddress;
 			}

@@ -78,6 +78,14 @@ on it, so clearing a provisional UUID cannot turn a refused prepare into a
 successful credential suggestion. This is internal cache invalidation, with
 no wire token or identity-resolver change.
 
+The selected profile's MAC pin is carried beyond the lookup and checked with
+the UUID at prepare/start return and write boundaries. One shared guard also
+checks the current cache and the selected target after awaits. Pin evidence
+lives in private weak metadata, so neither registry values nor wire frames gain
+fields. A successfully completed binding refreshes that evidence to its actual
+new pin; an in-flight binding retains the original selection evidence until
+its final ownership check.
+
 This does not consume shadow identity, change registry keys, emit tokens,
 introduce limited mode, change NetworkManager targeting or change mode
 transitions. Unresolved radios retain prepare/start capability. A radio

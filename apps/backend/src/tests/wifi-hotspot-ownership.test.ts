@@ -1164,3 +1164,155 @@ for (const conflict of [
 		).toEqual([]);
 	});
 }
+
+for (const operation of ["prepare", "start"] as const) {
+	for (const owner of ["registry", "persisted"] as const) {
+		test(`${operation} rechecks a newly ${owner} owner of the selected profile pin`, async () => {
+			jest.useFakeTimers();
+			const iface = radio();
+			rememberHotspotCredentials(B, {
+				ssid: PAIR.ssid,
+				password: OWN_PAIR.password,
+			});
+			profiles.set(FOREIGN, profile(A));
+			const entered = Promise.withResolvers<void>();
+			const gate = Promise.withResolvers<void>();
+			const deps = activationDeps();
+			deps.findHotspotConn = async (mac, stored) => {
+				const selected = await discovery.findHotspotConnForAdapter(mac, stored);
+				entered.resolve();
+				await gate.promise;
+				return selected;
+			};
+			const pending =
+				operation === "prepare"
+					? prepareHotspotForInterface(B, iface, {}, deps)
+					: startHotspotForInterface(B, iface, deps);
+			await entered.promise;
+			if (owner === "registry") {
+				addWifiInterface(A, {
+					...iface,
+					id: 1,
+					ifname: "wlan1",
+					hotspot: { availableChannels: ["auto"], warnings: {} },
+				});
+			} else {
+				rememberHotspotCredentials(A, PAIR);
+			}
+			gate.resolve();
+
+			expect(await pending).toEqual({
+				success: false,
+				error: "activation-failed",
+			});
+			expect(profiles.get(FOREIGN)?.["802-11-wireless.mac-address"]).toBe(A);
+			expect(getHotspotCredentials(B)?.password).toBe(OWN_PAIR.password);
+			expect(effects).toEqual([]);
+		});
+	}
+}
+
+for (const stage of ["binding", "activation", "autoconnect"] as const) {
+	test(`start rechecks the selected profile pin after ${stage}`, async () => {
+		jest.useFakeTimers();
+		const iface = radio();
+		rememberHotspotCredentials(B, {
+			ssid: PAIR.ssid,
+			password: OWN_PAIR.password,
+		});
+		profiles.set(FOREIGN, profile(A));
+		const entered = Promise.withResolvers<void>();
+		const gate = Promise.withResolvers<void>();
+		const deps = activationDeps();
+		deps.nmConnSetFields = async (uuid, fields) => {
+			effects.push([uuid, JSON.stringify(fields)]);
+			if (
+				(stage === "binding" &&
+					fields["802-11-wireless.mac-address"] !== undefined) ||
+				(stage === "autoconnect" && fields["connection.autoconnect"] === "yes")
+			) {
+				entered.resolve();
+				await gate.promise;
+			}
+			return true;
+		};
+		deps.nmConnect = async (uuid) => {
+			effects.push(["up", uuid]);
+			if (stage === "activation") {
+				entered.resolve();
+				await gate.promise;
+			}
+			return true;
+		};
+		const start = startHotspotForInterface(B, iface, deps);
+		await entered.promise;
+		const admittedEffects = [...effects];
+		addWifiInterface(A, {
+			...iface,
+			id: 1,
+			ifname: "wlan1",
+			hotspot: { availableChannels: ["auto"], warnings: {} },
+		});
+		gate.resolve();
+
+		expect(await start).toEqual({ success: false, error: "activation-failed" });
+		expect(effects).toEqual(admittedEffects);
+		expect(getHotspotCredentials(B)?.password).toBe(OWN_PAIR.password);
+	});
+}
+
+test("completed legacy profile migration keeps its new pin when the old pin owner returns", async () => {
+	jest.useFakeTimers();
+	const iface = radio();
+	rememberHotspotCredentials(B, {
+		ssid: PAIR.ssid,
+		password: OWN_PAIR.password,
+	});
+	profiles.set(FOREIGN, profile(A));
+	const deps = activationDeps();
+
+	expect(await startHotspotForInterface(B, iface, deps)).toEqual({
+		success: true,
+	});
+	addWifiInterface(A, {
+		...iface,
+		id: 1,
+		ifname: "wlan1",
+		hotspot: { availableChannels: ["auto"], warnings: {} },
+	});
+	expect(await prepareHotspotForInterface(B, iface, {}, deps)).toEqual({
+		success: true,
+		name: PAIR.ssid,
+		password: PAIR.password,
+	});
+	expect(profiles.get(FOREIGN)?.["802-11-wireless.mac-address"]).toBe(B);
+});
+
+test("a prepared profile retains pin evidence for a later cached start", async () => {
+	jest.useFakeTimers();
+	const iface = radio();
+	rememberHotspotCredentials(B, {
+		ssid: PAIR.ssid,
+		password: OWN_PAIR.password,
+	});
+	profiles.set(FOREIGN, profile(A));
+	const deps = activationDeps();
+
+	expect(await prepareHotspotForInterface(B, iface, {}, deps)).toEqual({
+		success: true,
+		name: PAIR.ssid,
+		password: PAIR.password,
+	});
+	addWifiInterface(A, {
+		...iface,
+		id: 1,
+		ifname: "wlan1",
+		hotspot: { availableChannels: ["auto"], warnings: {} },
+	});
+	expect(await startHotspotForInterface(B, iface, deps)).toEqual({
+		success: false,
+		error: "activation-failed",
+	});
+	expect(profiles.get(FOREIGN)?.["802-11-wireless.mac-address"]).toBe(A);
+	expect(effects).toEqual([]);
+});

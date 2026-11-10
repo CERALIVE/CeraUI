@@ -25,10 +25,7 @@ import {
 } from "../network/network-manager.ts";
 import type { MessageSocket } from "../ui/message-socket.ts";
 import { buildMsg, getSocketSenderId } from "../ui/websocket-server.ts";
-import {
-	canUseHotspotConnection,
-	rememberHotspotCredentials,
-} from "./hotspot-credentials.ts";
+import { rememberHotspotCredentials } from "./hotspot-credentials.ts";
 import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
 import {
 	wifiAdapterLockKey,
@@ -47,6 +44,7 @@ import {
 	getWifiInterfaceByMacAddress,
 	wifiRescan,
 } from "./wifi-connections.ts";
+import { hotspotOwnershipGuard } from "./wifi-hotspot-discovery.ts";
 import { settlePending, syncWifiStateCache } from "./wifi-hotspot-monitor.ts";
 import {
 	type HotspotOutcomePublisher,
@@ -491,12 +489,11 @@ async function reconfigureHotspotLocked(
 	security: HotspotSecurityId,
 	deps: HotspotConfigDeps,
 ): Promise<ReconfigureResult> {
-	const hotspot = wifiInterface.hotspot;
-	const conn = hotspot.conn;
-	const owned = () =>
-		wifiInterface.hotspot === hotspot &&
-		canUseHotspotConnection(macAddress, hotspot.conn) &&
-		canUseHotspotConnection(macAddress, conn);
+	const owned = hotspotOwnershipGuard(
+		macAddress,
+		wifiInterface,
+		wifiInterface.hotspot.conn,
+	);
 	if (!owned()) {
 		return "saving";
 	}
