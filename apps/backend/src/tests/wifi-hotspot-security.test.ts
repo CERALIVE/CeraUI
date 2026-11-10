@@ -16,7 +16,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { WifiAdapterCapabilities } from "@ceraui/rpc/schemas";
+import {
+	type WifiAdapterCapabilities,
+	wifiStatusSchema,
+} from "@ceraui/rpc/schemas";
+import { call } from "@orpc/server";
 
 import {
 	deriveApChannels,
@@ -59,6 +63,9 @@ import {
 	type WifiInterfaceWithHotspot,
 } from "../modules/wifi/wifi-hotspot-types.ts";
 import { getWifiIdToMacAddress } from "../modules/wifi/wifi-interfaces.ts";
+import { createContext } from "../rpc/context.ts";
+import { getWifiStatusProcedure } from "../rpc/procedures/wifi.procedure.ts";
+import { statusClient } from "./helpers/status-client.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures", "wifi");
 const fixture = (name: string) => readFileSync(join(FIXTURES, name), "utf8");
@@ -175,6 +182,22 @@ afterEach(resetWifiGlobals);
 // ─── 1. the derivation: WPA3 only on PROVEN SAE ──────────────────────────────
 
 describe("offeredHotspotSecurity — proof, never assumption", () => {
+	test("the real WPA2-only producer passes the status schema and Wi-Fi RPC", async () => {
+		addWifiInterface(MAC, hotspotIface());
+		getWifiIdToMacAddress()[0] = MAC;
+
+		const wire = wifiBuildMsg();
+		expect(wire[0]?.hotspot?.available_security).toEqual({
+			wpa2: { name: "WPA2 (Personal)" },
+		});
+		expect(
+			await call(getWifiStatusProcedure, undefined, {
+				context: createContext(statusClient(() => {})),
+			}),
+		).toEqual(wire);
+		expect(wifiStatusSchema.parse(wire)).toEqual(wire);
+	});
+
 	test("WPA2 is offered to every adapter, including one that proved nothing", () => {
 		expect(offeredHotspotSecurity(undefined)).toEqual(["wpa2"]);
 		expect(DEFAULT_HOTSPOT_SECURITY).toBe("wpa2");

@@ -384,7 +384,19 @@ export const hotspotConfigSchema = z.object({
 	// value absent from it is rejected. Optional on the wire because a device
 	// predating this field omits it — absent means "not derived", which the UI
 	// must read as WPA2-only rather than as an empty offering.
-	available_security: z.record(hotspotSecurityIdSchema, z.object({ name: z.string() })).optional(),
+	available_security: z
+		.strictObject({
+			wpa2: z.object({ name: z.string() }).optional(),
+			'wpa3-sae': z.object({ name: z.string() }).optional(),
+		})
+		// Missing modes are valid; empty maps and explicit undefined entries were not.
+		.refine(
+			(offered) =>
+				Object.keys(offered).length > 0 &&
+				Object.values(offered).every((entry) => entry !== undefined),
+			{ message: 'A derived security offering must contain defined modes' },
+		)
+		.optional(),
 	security: hotspotSecurityIdSchema.optional(),
 	// Display only. There is no configurable width anywhere in this contract.
 	max_width_mhz: hotspotBandMaxWidthSchema.optional(),
