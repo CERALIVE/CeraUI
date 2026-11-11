@@ -125,3 +125,36 @@ Live use includes the parent station `conn`/`activeConn`, `hotspot.conn`, and
 the virtual AP `concurrentHotspot.activeConn`. AP+STA keeps the active AP UUID
 on that nested field while the parent continues to report its station UUID.
 Cleanup protects it both at candidate collection and after pending reads.
+
+Cleanup reserves each UUID synchronously before that final ownership recheck and
+holds the reservation until `deleteConnection` settles, releasing it in `finally`
+even on failure. A concurrent prune skips the reserved UUID. Discovery, profile
+selection and the shared ownership guard refuse it during deletion, including
+after pending profile reads. A later discovery or selection reads NetworkManager
+again after settlement; deleted profiles cannot become a cached or persisted
+identity from the in-flight window. Other UUIDs remain available, and the
+per-adapter mutation lock and radio lifetime/draft contracts are unchanged.
+
+Reservation membership alone cannot validate an earlier NM response: a read may
+start before deletion and resume after the reservation has already been released.
+Only a successful deletion records a per-UUID epoch, assigned from a monotonic
+counter. Readers snapshot the counter before NM work and treat a UUID deleted
+since that snapshot as absent. Failed or throwing deletions change no epochs;
+deleting U does not invalidate V. The fence covers interface-name resolution,
+awaited binding repairs and an SSID candidate retained while other profiles are
+read. Epochs remain available for the process lifetime to invalidate delayed
+responses even after reservation release.
+
+Readers never recurse or re-read in response to deletion. Selection tries the
+stored UUID once, then scans the finite inventory without retrying that UUID.
+Adoption drops an invalidated response. An in-flight reserved UUID still skips
+immediately. There is no mutation queue or adapter-lock change.
+
+The promise-barrier tests in `wifi-hotspot-identity.test.ts` cover adoption during
+deletion, fresh reads after settlement, concurrent prune exclusion and an
+unreserved profile selected while another UUID is being deleted. Delayed-read
+regressions hold both profile selection and adoption responses across a complete
+deletion and assert that the deleted UUID is neither selected, cached nor
+persisted without another NM read. Interference tests hold a reader across 48
+unrelated false or throwing deletions and require exactly one read. A successful
+deletion of one candidate leaves another candidate selectable.
