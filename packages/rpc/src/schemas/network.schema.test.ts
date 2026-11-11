@@ -10,6 +10,28 @@ import {
 } from './network.schema';
 
 describe('legacy netif payloads', () => {
+	test('strips USB serials from legacy router-cellular markers (#488)', () => {
+		const marker = {
+			vendor: 'Huawei',
+			model: '14dc',
+			vid_pid: '12d1:14dc',
+			kind: 'router-cellular',
+			duplicate_model: true,
+		} as const;
+
+		expect(
+			netifMessageSchema.parse({
+				eth1: {
+					tp: 0,
+					enabled: true,
+					router_cellular: { ...marker, serial: 'test-legacy-unit' },
+				},
+			}),
+		).toEqual({
+			eth1: { tp: 0, enabled: true, router_cellular: marker },
+		});
+	});
+
 	test('accepts but strips the retired policy-route diagnostic', () => {
 		expect(
 			netifMessageSchema.parse({

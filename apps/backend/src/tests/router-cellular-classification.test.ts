@@ -624,6 +624,42 @@ eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
 		expect(msg.eth0?.router_cellular).toBeUndefined();
 	});
 
+	it.each([
+		["distinct usable serials", "test-unit-alpha", "test-unit-beta"],
+		["shared usable serial", "test-shared-unit", "test-shared-unit"],
+		["shared placeholder serial", "0123456789ABCDEF", "0123456789ABCDEF"],
+	])(
+		"omits USB serials from interface status for %s (#488)",
+		async (_, first, second) => {
+			const tree: Record<string, FixtureDevice> = {
+				enx0c5b8f279a64: {
+					device: { ...HUAWEI_HILINK, serialNumber: first },
+					busId: "1-1.3.2",
+				},
+				eth1: {
+					device: { ...HUAWEI_HILINK, serialNumber: second },
+					busId: "1-1.3.3",
+				},
+			};
+			processIfconfigOutput(IFCONFIG);
+			await refreshUsbNetMarkers(Object.keys(tree), fixtureDeps(tree));
+
+			const msg = netIfBuildMsg();
+
+			for (const ifname of Object.keys(tree)) {
+				expect(msg[ifname]?.router_cellular).toEqual({
+					vendor: "Huawei",
+					model: "14dc",
+					vid_pid: "12d1:14dc",
+					kind: "router-cellular",
+					duplicate_model: true,
+				});
+			}
+			expect(JSON.stringify(msg)).not.toContain(first);
+			expect(JSON.stringify(msg)).not.toContain(second);
+		},
+	);
+
 	it("retracts with ONE explicit null and keeps the row", async () => {
 		processIfconfigOutput(IFCONFIG);
 		await refreshUsbNetMarkers(
