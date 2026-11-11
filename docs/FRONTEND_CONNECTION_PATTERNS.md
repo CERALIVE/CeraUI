@@ -486,7 +486,19 @@ Before this layer, each OS-control dialog hand-rolled its own `$effect` that wat
 
 - **Pure core** (`asyncOpCore`): rune-free functions (`begin`, `confirm`, `fail`, `timeout`, `sweep`) testable under plain vitest
 - **Reactive layer**: lazy singleton with `$effect.root` self-sweep (1s interval) for TTL/linger decay
-- **`osCommand()`**: the single dispatch helper — re-entry guard, `beginOperation`, await RPC, classify result, `failOperation`/`confirmOperation`, single toast path
+- **`osCommand()`**: the single dispatch helper — re-entry guard, begin an attempt, await RPC, classify result, attempt-guarded failure/confirmation, single toast path
+
+Each begin creates a unique attempt identity, even for the same resource and
+target. RPC settlement checks that identity and the captured store before changing
+state; authoritative broadcasts still confirm or fail the current entry by
+resource key. Reconnect clearing invalidates the old attempt, retry begins a new
+one, and store recreation invalidates the captured owner. Superseded calls retain
+their raw result, `onResult` callback and failure toast, subject to the existing
+`isCurrent` and `silent` options.
+
+A same-target Ethernet pending echo preserves the current attempt, result owner
+and deadline under #466. An actual replacement requires a new begin: for the same
+target, a terminal frame followed by an external pending frame establishes it.
 
 ### Phase lifecycle
 
