@@ -56,6 +56,8 @@ export type AsyncOpPhase =
 
 /** A non-idle phase that is physically recorded; `idle` is the absence of an entry. */
 interface AsyncOpEntry {
+	/** Unique to each begin, including replacements with the same target. */
+	attempt: symbol;
 	/** Current phase (an absent key is implicitly `idle`). */
 	phase: Exclude<AsyncOpPhase, "idle">;
 	/** The intended target of the operation (opaque to the core). */
@@ -177,7 +179,13 @@ export function begin(
 	now: number,
 	ttlMs?: number,
 ): boolean {
-	reg.ops[key] = { phase: "pending", target, ts: now, ttlMs };
+	reg.ops[key] = {
+		attempt: Symbol(),
+		phase: "pending",
+		target,
+		ts: now,
+		ttlMs,
+	};
 	return true;
 }
 
@@ -305,7 +313,12 @@ interface AsyncOpStore {
 	isPending: (key: string) => boolean;
 	getReason: (key: string) => string | undefined;
 	getTarget: (key: string) => unknown;
-	begin: (key: string, target?: unknown, now?: number, ttlMs?: number) => void;
+	begin: (
+		key: string,
+		target?: unknown,
+		now?: number,
+		ttlMs?: number,
+	) => () => boolean;
 	confirm: (key: string, now?: number) => void;
 	fail: (key: string, reason: string, now?: number) => void;
 	timeout: (key: string, now?: number) => void;
@@ -356,6 +369,8 @@ function createAsyncOpStore(): AsyncOpStore {
 		getTarget: (key) => getTarget(registry, key),
 		begin: (key, target, now = Date.now(), ttlMs) => {
 			begin(registry, key, target, now, ttlMs);
+			const attempt = registry.ops[key]?.attempt;
+			return () => registry.ops[key]?.attempt === attempt;
 		},
 		confirm: (key, now = Date.now()) => {
 			confirm(registry, key, now);
@@ -553,6 +568,8 @@ function defaultClassify(r: unknown): OsCommandVerdict {
  *    transitions `key → confirmed`. Without it the op stays `pending`: the
  *    per-surface `$effect` confirms on the authoritative broadcast, or the TTL
  *    valve flips it to `timed_out`.
+ *  - RPC settlement only changes the attempt this call began. A replacement
+ *    keeps its state, while this call still delivers its feedback and result.
  *  - `onResult` runs with the raw result on any resolve (ok or not).
  *  - A thrown `rpc` transitions `key → failed` and toasts, returning `undefined`.
  */
@@ -573,13 +590,23 @@ export async function osCommand<T>(opts: {
 	// Re-entry guard: never dispatch a second RPC for an in-flight key.
 	if (isOperationPending(opts.key)) return undefined;
 
-	beginOperation(opts.key, opts.target, opts.pendingTtlMs);
+	const owner = store();
+	const ownsAttempt = owner.begin(
+		opts.key,
+		opts.target,
+		undefined,
+		opts.pendingTtlMs,
+	);
+	// Broadcasts can replace this key while the RPC is in flight, even with the
+	// same target. Only settle our attempt; feedback still belongs to this call.
+	const canSettle = () => singleton === owner && ownsAttempt();
 	try {
 		const r = await opts.rpc();
 		if (opts.isCurrent && !opts.isCurrent()) return undefined;
 		const v = opts.classify?.(r) ?? defaultClassify(r);
 		if (!v.ok) {
-			failOperation(opts.key, v.reason ?? (v.busy ? "device_busy" : "failed"));
+			if (canSettle())
+				owner.fail(opts.key, v.reason ?? (v.busy ? "device_busy" : "failed"));
 			if (!opts.silent) {
 				toast.error(
 					(v.busy ? opts.busyMessage : opts.failMessage)?.() ??
@@ -587,7 +614,7 @@ export async function osCommand<T>(opts: {
 				);
 			}
 		} else if (opts.confirmOnResolve) {
-			confirmOperation(opts.key);
+			if (canSettle()) owner.confirm(opts.key);
 		}
 		// else: stay pending; the per-surface $effect confirms on the authoritative
 		// broadcast, or the TTL valve flips it to timed_out.
@@ -595,14 +622,15 @@ export async function osCommand<T>(opts: {
 		return r;
 	} catch (e) {
 		if (opts.isCurrent && !opts.isCurrent()) return undefined;
-		failOperation(
-			opts.key,
-			e instanceof ConnectionResetError
-				? "connection_reset"
-				: e instanceof Error
-					? e.message
-					: "error",
-		);
+		if (canSettle())
+			owner.fail(
+				opts.key,
+				e instanceof ConnectionResetError
+					? "connection_reset"
+					: e instanceof Error
+						? e.message
+						: "error",
+			);
 		if (!opts.silent) {
 			toast.error(opts.failMessage?.() ?? m["network.os.operationFailed"]());
 		}

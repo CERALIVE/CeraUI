@@ -39,6 +39,7 @@ import {
 	getOperationReason,
 	getOperationTarget,
 	initAsyncOperations,
+	osCommand,
 } from "$lib/rpc/async-operation.svelte";
 import { initSubscriptions, resetState } from "$lib/rpc/subscriptions.svelte";
 import { ethernetRoleOpKey } from "$main/network/ethernet-role-view";
@@ -51,6 +52,34 @@ describe("eth_role ingestion", () => {
 		initAsyncOperations();
 		initSubscriptions();
 	});
+
+	it.each(["uplink", "shared-lan"])(
+		"a local refusal preserves an external %s pending frame and its terminal success",
+		async (role) => {
+			const reply = Promise.withResolvers<{
+				success: boolean;
+				error: string;
+			}>();
+			const command = osCommand({
+				key: KEY,
+				target: "shared-lan",
+				rpc: () => reply.promise,
+				silent: true,
+			});
+			handlers.message?.("eth_role", {
+				eth_role: { name: "eth0", role, pending: true },
+			});
+			reply.resolve({ success: false, error: "DEVICE_BUSY" });
+			await command;
+			expect(getOperationPhase(KEY)).toBe("pending");
+			expect(getOperationTarget(KEY)).toBe(role);
+			expect(getOperationReason(KEY)).toBeUndefined();
+			handlers.message?.("eth_role", {
+				eth_role: { name: "eth0", role, success: true },
+			});
+			expect(getOperationPhase(KEY)).toBe("confirmed");
+		},
+	);
 
 	it("a pending frame begins the op and records the target role", () => {
 		handlers.message?.("eth_role", {
