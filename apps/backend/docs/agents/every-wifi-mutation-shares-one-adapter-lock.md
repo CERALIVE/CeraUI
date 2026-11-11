@@ -112,3 +112,7 @@ still typecheck; production wires them in the `default*Deps`. Coverage:
 both accepted-path settlements, both stop outcomes, the RPC caller's typed
 reply, and the two station-join frames). Rule-E: all 11 fail on the pre-fix tree.
 
+
+## Saved connection refresh ownership
+
+`wifiUpdateSavedConns` assigns each invocation a unique token and builds saved/savedAll maps on private adapter shadows. It publishes synchronously only after all profile reads settle, while that token is still current and the complete adapter registry still contains the captured object identities. A newer refresh or replaced/removed/added adapter withholds publication. Previous complete maps remain visible during reads and list failures. Hotspot handling remains separate. Deferred-list and profile-read regressions live in `tests/wifi-saved-connection.test.ts`.
