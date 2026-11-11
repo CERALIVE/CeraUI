@@ -253,6 +253,7 @@ class RPCClient {
 			this.socket = socket;
 
 			socket.onopen = () => {
+				if (this.socket !== socket) return;
 				this.setConnectionState("connected");
 				this.reconnectAttempts = 0;
 				this.heartbeatTracker.recordTraffic(Date.now());
@@ -269,10 +270,12 @@ class RPCClient {
 			};
 
 			socket.onerror = () => {
+				if (this.socket !== socket) return;
 				this.setConnectionState("error");
 			};
 
 			socket.onmessage = (event) => {
+				if (this.socket !== socket) return;
 				this.handleMessage(event.data);
 			};
 		} catch (error) {
