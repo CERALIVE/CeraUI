@@ -411,7 +411,7 @@ describe("wifiUpdateSavedConns publication ownership", () => {
 		},
 	);
 
-	it("keeps per-row unsupported and missing-field handling without leaking partial rows", async () => {
+	it("reads unsupported and missing-field rows without publishing an incomplete snapshot", async () => {
 		f.list.mockResolvedValue([
 			"synthetic-ethernet:802-3-ethernet",
 			wirelessRow(REFRESH_OLD),
@@ -426,10 +426,10 @@ describe("wifiUpdateSavedConns publication ownership", () => {
 			"",
 		]);
 		await f.run();
-		expect(f.a.saved).toEqual({ "Valid synthetic network": REFRESH_BOUND });
-		expect(f.a.savedAll).toEqual({
-			"Valid synthetic network": [REFRESH_BOUND],
-		});
+		expect(f.a.saved).toBe(f.previousA.saved);
+		expect(f.a.savedAll).toBe(f.previousA.savedAll);
+		expect(f.b.saved).toBe(f.previousB.saved);
+		expect(f.b.savedAll).toBe(f.previousB.savedAll);
 		expect(f.fields).toHaveBeenCalledTimes(3);
 	});
 

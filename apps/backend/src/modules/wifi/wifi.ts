@@ -495,7 +495,7 @@ export async function wifiUpdateSavedConns(onCommitted?: () => void) {
 			logger.debug(`wifiUpdateSavedConns: list failed after retries: ${err}`),
 	});
 	if (connections === undefined || savedConnectionsRefresh !== refresh) return;
-	const hotspots: [MacAddress, ConnectionUUID][] = [];
+	let incomplete = false;
 
 	for (const connection of connections) {
 		try {
@@ -521,12 +521,13 @@ export async function wifiUpdateSavedConns(onCommitted?: () => void) {
 			const [mode, ssid, macTmp] = fields;
 			if (!ssid) {
 				logger.warn("Wifi connection does not have an SSID!", { mode, uuid });
-				return;
+				incomplete = true;
+				continue;
 			}
 
 			const macAddress = macTmp.toLowerCase();
 			if (mode === "ap") {
-				hotspots.push([macAddress, uuid]);
+				void handleHotspotConn(macAddress, uuid);
 			} else if (mode === "infrastructure") {
 				registerSavedWifiConnection(savedInterfaces, macAddress, ssid, uuid);
 			}
@@ -536,18 +537,17 @@ export async function wifiUpdateSavedConns(onCommitted?: () => void) {
 					`Error getting the nmcli connection information: ${err.message}`,
 				);
 			}
-			return;
+			incomplete = true;
 		}
 	}
 
-	if (!isCurrent()) return;
+	if (incomplete || !isCurrent()) return;
 	// Keep the previous snapshot visible until every profile read has settled.
 	for (const { original, shadow } of snapshots) {
 		original.saved = shadow.saved;
 		original.savedAll = shadow.savedAll;
 	}
 	onCommitted?.();
-	for (const [mac, uuid] of hotspots) void handleHotspotConn(mac, uuid);
 }
 
 /* Searches saved connections in wifiIfs by UUID */

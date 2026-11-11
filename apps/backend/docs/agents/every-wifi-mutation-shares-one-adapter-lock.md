@@ -116,13 +116,14 @@ reply, and the two station-join frames). Rule-E: all 11 fail on the pre-fix tree
 ## Saved connection refresh ownership
 
 `wifiUpdateSavedConns` assigns each invocation a unique token and builds saved/savedAll maps on private adapter shadows. It publishes synchronously only after all profile reads settle, while that token is still current and the complete adapter registry still contains the captured object identities. A newer refresh or replaced/removed/added adapter withholds publication. Previous complete maps remain visible during reads and list failures. Hotspot handling remains separate. Deferred-list and profile-read regressions live in `tests/wifi-saved-connection.test.ts`.
+
 ## Failed station joins retain uncertain profiles
 
 The legacy `wifiDeleteFailedConns` entry point now logs withheld cleanup without enumerating or deleting profiles. Timestamp zero, a returned UUID and an activation failure do not prove exclusive ownership by a failed attempt. Failed and ambiguous joins can leave profiles behind; explicit Forget remains the deliberate deletion path. This changes automatic cleanup policy and requires design review. Overlapping-join and unavailable-transport regressions live in `tests/wifi-sae-station.test.ts`.
 
 Failed and ambiguous join replies dispatch a best-effort saved-profile refresh and status broadcast after the terminal reply. This reconciles retained profiles into `saved`/`savedAll` for explicit Forget, including same-SSID siblings, without waiting for profile-list transport availability before reporting refusal. Refresh failures are logged and never turn the refusal into success.
 
-Saved-profile refreshes stage a complete replacement before changing either cache. A missing or throwing detail read leaves the previous snapshot intact. A generation shared by every refresh caller prevents an older listing or detail read from committing over a newer request, and adapter-object checks reject a replaced roster. The post-refusal status broadcast runs only after a complete current snapshot commits. Deferred-list/detail and per-profile failure regressions cover these publication boundaries.
+Saved-profile refreshes stage a complete replacement before changing either cache. A missing or throwing detail read leaves the previous snapshot intact. A generation shared by every refresh caller prevents an older listing or detail read from committing over a newer request, and adapter-object checks reject a replaced roster. The post-refusal status broadcast runs only after a complete current snapshot commits. AP discovery remains independent of station snapshot publication, while replies from a superseded refresh cannot dispatch AP work. Deferred-list/detail and per-profile failure regressions cover these publication boundaries.
 
 Station discovery also accepts predictable `wl…` interface names, including USB
 `wlx…` and PCI `wlp…` names. The periodic interface parser must register their
