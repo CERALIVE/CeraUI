@@ -948,9 +948,10 @@ equality-comparable, which is the only operation consumers may perform.
 vid/pid/serial/`ID_PATH`/hwdb + resolved labels) for EVERY classified USB net
 device, not only router-class ones — that is what lets the same stick resolve to
 ONE identity in both of its compositions. Nothing in that map reaches the `netif`
-wire; the two existing markers are untouched. Its `serial` is carried
-unconditionally, unlike the wire marker's twin discriminator, because an identity
-anchor is needed by a lone device just as much as by a twin.
+wire; `netif.router_cellular` exposes only public classification metadata. The
+physical descriptor's `serial` is carried unconditionally, unlike the internal
+classification marker's twin discriminator, because an identity anchor is needed
+by a lone device just as much as by a twin.
 
 **Display-name precedence**: the MM identity observation — which IS the existing
 HIMI firmware-string chain (`modem-identity.ts` `modemHardwareName`), layered on
