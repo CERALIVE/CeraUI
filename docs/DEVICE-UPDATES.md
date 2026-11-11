@@ -1654,6 +1654,11 @@ a retained record; after the public phase returns to idle, the retained device
 record still states success, rollback or failure. Unknown state/reason tokens
 resolve to localized unknown/diagnostic copy, never raw tokens or success.
 
+The backend's update version comes from the latest persisted kernel attempt,
+falling back to the device record only when there is no attempt. A download
+failure before staging therefore keeps that attempt's version across retries
+and backend restarts, even while the device retains an older staging record.
+
 Downloading and preparing show a percentage and ETA only when the live wire
 phase matches that kernel step; another lane's progress cannot describe a
 retained kernel record. Staged/armed records state that activation waits for the next idle restart;

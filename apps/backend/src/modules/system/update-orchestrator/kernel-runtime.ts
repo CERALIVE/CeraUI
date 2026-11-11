@@ -399,7 +399,7 @@ export function createKernelRuntime(port: KernelRuntimePort) {
 					}
 				: null,
 			state: record?.state ?? null,
-			version: record?.version ?? null,
+			version: port.state().kernelAttempt?.version ?? record?.version ?? null,
 			reason: record?.reason ?? null,
 		}),
 		reset: () => {
