@@ -51,6 +51,16 @@ const hotspotProfilePins = new WeakMap<
 	WifiHotspot,
 	{ readonly uuid: string; readonly macAddress: string }
 >();
+const deletingHotspotConns = new Set<ConnectionUUID>();
+const hotspotDeletionEpochs = new Map<ConnectionUUID, number>();
+let hotspotDeletionEpoch = 0;
+
+function wasHotspotConnDeletedSince(
+	uuid: ConnectionUUID,
+	epoch: number,
+): boolean {
+	return (hotspotDeletionEpochs.get(uuid) ?? 0) > epoch;
+}
 
 export function rememberHotspotProfilePin(
 	hotspot: WifiHotspot,
@@ -118,6 +128,7 @@ export function shouldAdoptHotspotConn(
 	stored: HotspotCredentials | undefined,
 	options: HotspotAdoptionOptions = {},
 ): boolean {
+	if (deletingHotspotConns.has(uuid)) return false;
 	if (options.active) return true;
 	return !stored?.conn || stored.conn === uuid;
 }
@@ -126,7 +137,9 @@ export async function handleHotspotConn(
 	macAddress_: string | undefined,
 	uuid: string,
 	options: HotspotAdoptionOptions = {},
-) {
+): Promise<void> {
+	if (deletingHotspotConns.has(uuid)) return;
+	const epoch = hotspotDeletionEpoch;
 	const fields = await nmConnGetFields(uuid, [
 		"connection.autoconnect-priority",
 		"802-11-wireless.ssid",
@@ -142,6 +155,7 @@ export async function handleHotspotConn(
 		"connection.interface-name",
 		"802-11-wireless.mac-address",
 	] as const);
+	if (wasHotspotConnDeletedSince(uuid, epoch)) return;
 	/*
 	  A profile's pinned `802-11-wireless.mac-address` is only a usable adapter key
 	  while it holds a PERMANENT address. Profiles written before that was enforced
@@ -158,6 +172,7 @@ export async function handleHotspotConn(
 			uuid,
 			fields?.[12] ?? macAddress_ ?? "",
 		));
+	if (wasHotspotConnDeletedSince(uuid, epoch)) return;
 	if (!macAddress) {
 		return;
 	}
@@ -220,6 +235,7 @@ export async function handleHotspotConn(
   */
 	if (fields[0] !== "999") {
 		await nmConnSetFields(uuid, { "connection.autoconnect-priority": "999" });
+		if (wasHotspotConnDeletedSince(uuid, epoch)) return;
 	}
 
 	/*
@@ -239,6 +255,7 @@ export async function handleHotspotConn(
 			profileMac = macAddress;
 	}
 
+	if (wasHotspotConnDeletedSince(uuid, epoch)) return;
 	if (!canAdoptHotspotProfile(macAddress, uuid, fields[12])) {
 		return clearRejectedHotspotConn(macAddress, uuid);
 	}
@@ -295,6 +312,7 @@ export function canAdoptHotspotProfile(
 ): boolean {
 	const pin = profileMac.toLowerCase();
 	return (
+		(!uuid || !deletingHotspotConns.has(uuid)) &&
 		canUseHotspotConnection(macAddress, uuid) &&
 		(pin === macAddress.toLowerCase() ||
 			(!getWifiInterfaceByMacAddress(pin) && !getHotspotCredentials(pin)))
@@ -302,10 +320,12 @@ export function canAdoptHotspotProfile(
 }
 
 async function findMacAddressForConnection(uuid: string, profileMac: string) {
+	const epoch = hotspotDeletionEpoch;
 	// Check if the connection is in use for any wifi interface
 	const connIfName = (
 		await nmConnGetFields(uuid, ["connection.interface-name"] as const)
 	)?.[0];
+	if (wasHotspotConnDeletedSince(uuid, epoch)) return undefined;
 
 	const wifiInterfacesByMacAddress = getWifiInterfacesByMacAddress();
 	for (const macAddress in wifiInterfacesByMacAddress) {
@@ -335,6 +355,7 @@ async function findMacAddressForConnection(uuid: string, profileMac: string) {
 			// And if this interface doesn't already have a hotspot connection
 			// Try to update the connection to match the MAC address
 			if (await nmConnSetWifiMacAddress(uuid, macAddress)) {
+				if (wasHotspotConnDeletedSince(uuid, epoch)) return undefined;
 				if (!canAdoptHotspotProfile(macAddress, uuid, profileMac)) {
 					return clearRejectedHotspotConn(macAddress, uuid);
 				}
@@ -401,7 +422,11 @@ async function readApProfile(
 	uuid: ConnectionUUID,
 	deps: HotspotProfileDeps,
 ): Promise<ApProfile | undefined> {
+	if (deletingHotspotConns.has(uuid)) return undefined;
+	const epoch = hotspotDeletionEpoch;
 	const fields = await deps.getApProfileFields(uuid);
+	if (wasHotspotConnDeletedSince(uuid, epoch)) return undefined;
+	if (deletingHotspotConns.has(uuid)) return undefined;
 	if (fields === undefined) return undefined;
 	if (fields[0] !== "ap" || !fields[1]) return undefined;
 
@@ -437,10 +462,12 @@ export async function findHotspotConnForAdapter(
 	stored: HotspotCredentials | undefined,
 	deps: HotspotProfileDeps = defaultHotspotProfileDeps,
 ): Promise<ExistingHotspotConn | undefined> {
+	const epoch = hotspotDeletionEpoch;
 	if (stored?.conn) {
 		const profile = await readApProfile(stored.conn, deps);
 		if (
 			profile &&
+			!wasHotspotConnDeletedSince(profile.uuid, epoch) &&
 			canAdoptHotspotProfile(macAddress, profile.uuid, profile.macAddress)
 		) {
 			return profile;
@@ -453,14 +480,17 @@ export async function findHotspotConnForAdapter(
 	let ssidMatch: ApProfile | undefined;
 	for (const [uuid, type] of rows) {
 		if (!uuid || type !== "802-11-wireless") continue;
+		if (uuid === stored?.conn || wasHotspotConnDeletedSince(uuid, epoch))
+			continue;
 		const profile = await readApProfile(uuid, deps);
-		if (!profile) continue;
+		if (!profile || wasHotspotConnDeletedSince(uuid, epoch)) continue;
 		if (!canAdoptHotspotProfile(macAddress, uuid, profile.macAddress)) continue;
 		if (profile.macAddress === macAddress) return profile;
 		if (stored && profile.ssid === stored.ssid) ssidMatch ??= profile;
 	}
 
 	return ssidMatch &&
+		!wasHotspotConnDeletedSince(ssidMatch.uuid, epoch) &&
 		canAdoptHotspotProfile(macAddress, ssidMatch.uuid, ssidMatch.macAddress)
 		? ssidMatch
 		: undefined;
@@ -480,6 +510,9 @@ function collectConnsInUse(): Set<ConnectionUUID> {
 		if (!wifiInterface) continue;
 		if (wifiInterface.conn) inUse.add(wifiInterface.conn);
 		if (wifiInterface.activeConn) inUse.add(wifiInterface.activeConn);
+		if (wifiInterface.concurrentHotspot?.activeConn) {
+			inUse.add(wifiInterface.concurrentHotspot.activeConn);
+		}
 		if (canHotspot(wifiInterface) && wifiInterface.hotspot.conn) {
 			inUse.add(wifiInterface.hotspot.conn);
 		}
@@ -552,7 +585,24 @@ export async function pruneDuplicateHotspotConns(
 		const profile = await readApProfile(uuid, deps);
 		if (!profile) continue;
 
-		if (await deps.deleteConnection(uuid)) removed.push(uuid);
+		if (deletingHotspotConns.has(uuid)) continue;
+		// Reserve before the final recheck so discovery cannot adopt the profile
+		// while nmcli deletion is pending. No await separates reservation/recheck.
+		deletingHotspotConns.add(uuid);
+		try {
+			if (
+				!collectSupersededHotspotConns(getAllHotspotCredentials()).has(uuid) ||
+				collectConnsInUse().has(uuid)
+			)
+				continue;
+
+			if (await deps.deleteConnection(uuid)) {
+				hotspotDeletionEpochs.set(uuid, ++hotspotDeletionEpoch);
+				removed.push(uuid);
+			}
+		} finally {
+			deletingHotspotConns.delete(uuid);
+		}
 	}
 
 	if (removed.length > 0) {

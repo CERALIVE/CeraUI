@@ -10,9 +10,10 @@ never named by generated rule text. The carrier effects are isolated in
 `modules/network/uplink-sharing.ts`: fsynced temp → `nft --check` → atomic rename
 → systemd start/reload, with prior-file reload on failure.
 
-**The invariant in one sentence: only forwarded client-zone traffic is steered or
-NATed, and only the client band is ever capped.** Everything below is how that is
-made structural rather than intentional. Every mode transition that can create or
+**Only forwarded client-zone traffic is steered or NATed, and only the client band
+is ever capped. Preserve physical-identity marks and established flows.**
+Everything below is how that is made structural rather than intentional. Every
+mode transition that can create or
 retire a client zone — station / hotspot / hybrid, and the Ethernet `uplink` /
 `shared-lan` role — runs under the one permanent-MAC adapter lock described in
 EVERY WIFI MUTATION SHARES ONE ADAPTER LOCK, so a zone can never be registered
@@ -52,6 +53,16 @@ inventories its priority-110 rules, publishes the latest model first, then flush
 and removes stale support. Any overlap, mark collision, foreign priority owner,
 missing route, nft failure, or rollback failure is fail-soft and surfaces
 `steering_unavailable`; it never blocks the already-bound WS server.
+
+Keep committed steering through stale-route cleanup failures: sharing, provisioned
+support and the forwarding step stay intact. The applier retains pending
+retirements and warns once per distinct failure; the coordinator alone retries
+them after successful or unchanged reconciles. A pending mark/table pair desired
+again by a successfully applied state is discarded without a flush. The cleanup
+snapshot advances only after forwarding succeeds and apply returns normally; a
+failed activation cannot discard pending work. Before commit, a failed transition
+restores removed support and reloads the previous ruleset before rolling new routes
+back.
 
 The CeraUI half is complete and kernel-netns tested. It cannot activate on a fleet
 image until image-building todo 12 ships `ceralive-share.service`, its teardown

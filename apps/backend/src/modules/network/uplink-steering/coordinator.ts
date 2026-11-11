@@ -1,3 +1,4 @@
+import { logger } from "../../../helpers/logger.ts";
 import type { PreparedSteeringState } from "./applier.ts";
 import {
 	type SteeringAvailability,
@@ -14,6 +15,7 @@ export interface UplinkSteeringCoordinatorDeps {
 	): Promise<void>;
 	publishAvailability(status: SteeringAvailability): void;
 	waitBeforeRetry?(delayMs: number): Promise<void>;
+	retryCleanup?(): Promise<void>;
 }
 
 export class UplinkSteeringCoordinator {
@@ -51,6 +53,11 @@ export class UplinkSteeringCoordinator {
 				this.#applied = desired;
 				this.#deps.publishAvailability({ available: true });
 				retryIndex = 0;
+				try {
+					await this.#deps.retryCleanup?.();
+				} catch (error) {
+					logger.warn("uplink steering pending cleanup failed", { err: error });
+				}
 			} catch (error) {
 				const reason =
 					error instanceof SteeringUnavailableError

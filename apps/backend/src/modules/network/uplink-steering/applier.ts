@@ -1,3 +1,5 @@
+import { logger } from "../../../helpers/logger.ts";
+import { mintLinkId } from "../../modems/physical-identity.ts";
 import type {
 	ShareRulesetState,
 	SteeringUplink,
@@ -42,6 +44,9 @@ export interface UplinkSteeringApplierDeps {
 
 export class UplinkSteeringApplier {
 	readonly #deps: UplinkSteeringApplierDeps;
+	#pendingRetirements: UplinkRoutePlan[] = [];
+	#committedRoutes: readonly UplinkRoutePlan[] = [];
+	readonly #cleanupFailures = new Set<string>();
 
 	constructor(deps: UplinkSteeringApplierDeps) {
 		this.#deps = deps;
@@ -57,6 +62,7 @@ export class UplinkSteeringApplier {
 		const isActive = next.clientZones.length > 0;
 		let activatedService = false;
 		let stateCommitted = false;
+		let transitionPublished = false;
 		try {
 			const recoveredRoutes =
 				previous === undefined ? await this.#deps.discoverRoutes() : [];
@@ -75,13 +81,14 @@ export class UplinkSteeringApplier {
 			if (removedRoutes.length > 0 && previous !== undefined) {
 				const transition = transitionState(previous, next, removedRoutes);
 				await this.#deps.applyRuleset(buildShareRuleset(transition), "reload");
+				transitionPublished = true;
 				for (const route of removedRoutes) {
 					await this.#deps.flushConntrack(route.mark);
 					await this.#deps.removeRoute(route);
 					removedSupport.push(route);
 					this.#deps.publishFlowsReset({
 						iface: route.ifname,
-						linkId: route.identity,
+						linkId: mintLinkId(route.identity),
 					});
 				}
 			}
@@ -90,16 +97,16 @@ export class UplinkSteeringApplier {
 				await this.#deps.deactivateSharing();
 				stateCommitted = true;
 				await this.#retireRecoveredRoutes(staleRecoveredRoutes);
-				if (wasActive) await this.#deps.setIpForwarding(false);
-				return;
+				await this.#deps.setIpForwarding(false);
+			} else {
+				const mode = wasActive ? "reload" : "activate";
+				await this.#deps.applyRuleset(buildShareRuleset(next), mode);
+				activatedService = mode === "activate";
+				stateCommitted = true;
+				await this.#retireRecoveredRoutes(staleRecoveredRoutes);
+				if (!wasActive) await this.#deps.setIpForwarding(true);
 			}
-
-			const mode = wasActive ? "reload" : "activate";
-			await this.#deps.applyRuleset(buildShareRuleset(next), mode);
-			activatedService = mode === "activate";
-			stateCommitted = true;
-			await this.#retireRecoveredRoutes(staleRecoveredRoutes);
-			if (!wasActive) await this.#deps.setIpForwarding(true);
+			this.#committedRoutes = next.routes;
 		} catch (error) {
 			const rollbackErrors: unknown[] = [];
 			if (activatedService) {
@@ -113,6 +120,16 @@ export class UplinkSteeringApplier {
 				for (const route of removedSupport.reverse()) {
 					try {
 						await this.#deps.ensureRoute(route);
+					} catch (restoreError) {
+						rollbackErrors.push(restoreError);
+					}
+				}
+				if (transitionPublished && previous !== undefined) {
+					try {
+						await this.#deps.applyRuleset(
+							buildShareRuleset(previous),
+							"reload",
+						);
 					} catch (restoreError) {
 						rollbackErrors.push(restoreError);
 					}
@@ -136,12 +153,42 @@ export class UplinkSteeringApplier {
 		}
 	}
 
+	async retryPendingCleanup(): Promise<void> {
+		const routes = recoveredRoutePlans(
+			this.#pendingRetirements,
+			this.#committedRoutes,
+		);
+		this.#pendingRetirements = [];
+		await this.#retireRecoveredRoutes(routes);
+	}
+
 	async #retireRecoveredRoutes(
 		routes: readonly UplinkRoutePlan[],
 	): Promise<void> {
 		for (const route of routes) {
-			await this.#deps.flushConntrack(route.mark);
-			await this.#deps.removeRoute(route);
+			try {
+				await this.#deps.flushConntrack(route.mark);
+				await this.#deps.removeRoute(route);
+			} catch (error) {
+				const key = recoveredRouteKey(route);
+				if (
+					!this.#pendingRetirements.some(
+						(pending) => recoveredRouteKey(pending) === key,
+					)
+				) {
+					this.#pendingRetirements.push(route);
+				}
+				const failure = `${key}\u0000${error instanceof Error ? error.message : String(error)}`;
+				if (!this.#cleanupFailures.has(failure)) {
+					this.#cleanupFailures.add(failure);
+					logger.warn("uplink steering route cleanup failed", {
+						iface: route.ifname,
+						mark: route.mark,
+						table: route.table,
+						err: error,
+					});
+				}
+			}
 		}
 	}
 }
