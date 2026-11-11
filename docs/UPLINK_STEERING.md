@@ -195,6 +195,20 @@ The outstanding board drill needs two real uplinks and a hotspot client. It must
 inspect nftables/conntrack marks while confirming SRTLA link distribution remains
 undisturbed.
 
-## Known-down passive observations
+## Known-down recovery
 
-`UplinkHealthEngine` keeps an already-down path down on `passive_degraded`. That observation resets consecutive success evidence; only successful observations advance the existing five-success and 15-second hold-down recovery thresholds. An up path can still become degraded, and captive-portal behavior is unchanged. Model and steering-selection regressions live in `apps/backend/src/tests/uplink-steering-state.test.ts`.
+`UplinkHealthEngine` keeps an already-down path down on `passive_degraded` or
+`captive_portal`. Both observations reset consecutive success evidence without
+lifting the path into steering. An up path can still become degraded on either
+observation.
+
+A missing interface retains its down record for the lifetime of the health engine
+and resets its recovery streak, so reappearance cannot start as fresh up.
+While streaming, down paths use active probes at the existing five-second cadence
+instead of passive sender metrics. They rejoin only after the existing five-success
+and 15-second hold-down requirements are met. Other streaming paths continue to use
+passive telemetry without active probes.
+
+Model and steering-selection regressions live in
+`apps/backend/src/tests/uplink-steering-state.test.ts`; all three recovery paths
+are covered in `apps/backend/src/tests/uplink-health-recovery.test.ts`.

@@ -91,7 +91,7 @@ export class UplinkHealthRuntime {
 		const now = this.#deps.now();
 		const interfaces = this.#deps.interfaces();
 		const present = new Set(Object.keys(interfaces));
-		this.#engine.removeMissing(present);
+		this.#engine.removeMissing(present, now);
 		const passive = this.#passiveIfaces(now);
 		const candidates = eligibleProbeCandidates(interfaces);
 
@@ -156,6 +156,8 @@ export class UplinkHealthRuntime {
 		const telemetry = this.#deps.telemetry();
 		if (!telemetry) return passive;
 		for (const link of telemetry.links) {
+			// Down paths need active recovery; passive degradation resets the streak.
+			if (this.#engine.get(link.iface)?.state === "down") continue;
 			passive.add(link.iface);
 			const expired =
 				now - telemetry.lastReadMs >= UPLINK_HEALTH_CONFIG.telemetryExpiryMs;

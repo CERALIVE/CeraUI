@@ -7,10 +7,15 @@
 `modules/network/uplink-health/` owns the client-steering health verdict. Its one
 exported config object fixes the 5 s cadence, three-failure down threshold,
 five-success recovery threshold, 15 s hold-down and three-probe concurrency cap.
-While streaming, interfaces present in SRTLA telemetry receive zero active probes:
-RTT/NAK/staleness can degrade them, while only definitive carrier/route/disconnect/
-expiry evidence removes them from client steering. Captive interception is
-`degraded/captive_portal`, never `down`; modem signal is not an input.
+While streaming, interfaces present in SRTLA telemetry receive zero active probes
+unless already down: down paths use active probes at the same cadence until the
+existing recovery streak and hold-down are met. RTT/NAK/staleness can degrade an up
+path, while definitive carrier/route/disconnect/expiry evidence removes it from
+client steering. Captive interception degrades an up path but keeps an already-down
+path down with weight zero and resets its recovery streak, as does passive
+degradation. Missing down records are retained for the health engine's lifetime
+and their streaks reset, so reappearance still requires full recovery.
+Modem signal is not an input.
 
 The engine publishes `uplinks` records and `gateways.ts` filters default-route
 candidates through their steering eligibility. The engine never edits routes;

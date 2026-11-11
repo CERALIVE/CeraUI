@@ -404,20 +404,17 @@ describe("known-down uplink rejoin", () => {
 		observe("definitive_loss", lostAt + 1);
 		observe("captive_portal", lostAt + 2);
 		expect(engine.get("wlan0")).toMatchObject({
-			state: "degraded",
+			state: "down",
 			reason: "captive_portal",
-			weight: 25,
+			weight: 0,
 			probes: { successes: 0, failures: 0 },
 		});
-		expect(engine.isClientSteeringEligible("wlan0")).toBe(true);
+		expect(engine.isClientSteeringEligible("wlan0")).toBe(false);
 		expect(
 			(await readDesiredSteeringState(h)).uplinks.map(({ ifname, weight }) => ({
 				ifname,
 				weight,
 			})),
-		).toEqual([
-			{ ifname: "wlan0", weight: 25 },
-			{ ifname: "wwan0", weight: 100 },
-		]);
+		).toEqual([{ ifname: "wwan0", weight: 100 }]);
 	});
 });

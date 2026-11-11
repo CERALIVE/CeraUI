@@ -101,9 +101,20 @@ export class UplinkHealthEngine {
 		);
 	}
 
-	removeMissing(ifaces: ReadonlySet<string>): void {
-		for (const iface of this.#records.keys()) {
-			if (!ifaces.has(iface)) this.#records.delete(iface);
+	removeMissing(ifaces: ReadonlySet<string>, now: number): void {
+		for (const [iface, record] of this.#records) {
+			if (ifaces.has(iface)) continue;
+			if (record.state === "down") {
+				// Forgetting a down path would admit its next appearance as fresh up.
+				this.observe({
+					iface,
+					kind: record.kind,
+					outcome: "definitive_loss",
+					now,
+				});
+			} else {
+				this.#records.delete(iface);
+			}
 		}
 	}
 
@@ -181,7 +192,6 @@ export class UplinkHealthEngine {
 	): UplinkHealthState {
 		switch (observation.outcome) {
 			case "captive_portal":
-				return "degraded";
 			case "passive_degraded":
 				return current.state === "down" ? "down" : "degraded";
 			case "definitive_loss":
