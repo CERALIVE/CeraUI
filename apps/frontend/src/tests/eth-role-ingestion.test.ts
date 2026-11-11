@@ -293,4 +293,93 @@ describe("eth_role ingestion", () => {
 		handlers.message?.("eth_role", {});
 		expect(getOperationPhase(KEY)).toBe("idle");
 	});
+
+	it.each([
+		{ role: "uplink", pending: true },
+		{ role: "shared-lan", pending: true },
+		{ role: "shared-lan", success: true },
+		{ error: "apply_failed" },
+	])(
+		"ignores another client's tagged frame %j while mine is pending (#489)",
+		async (frame) => {
+			const reply = Promise.withResolvers<{
+				success: boolean;
+				error: string;
+			}>();
+			const target = { name: "eth0", role: "shared-lan", op: "client-a" };
+			const command = osCommand({
+				key: KEY,
+				target,
+				rpc: () => reply.promise,
+				silent: true,
+			});
+
+			emit({ name: "eth0", op: "client-b", ...frame });
+			const phase = getOperationPhase(KEY);
+			const heldTarget = getOperationTarget(KEY);
+			reply.resolve({ success: false, error: "no_connection" });
+			await command;
+
+			expect(phase).toBe("pending");
+			expect(heldTarget).toEqual(target);
+			expect(getOperationPhase(KEY)).toBe("failed");
+			expect(getOperationReason(KEY)).toBe("no_connection");
+		},
+	);
+
+	it.each([
+		{
+			success: true,
+			role: "shared-lan",
+			phase: "confirmed",
+			reason: undefined,
+		},
+		{ error: "apply_failed", phase: "failed", reason: "apply_failed" },
+	])(
+		"settles only my tagged terminal without restarting its deadline: %j (#489)",
+		(terminal) => {
+			const target = { name: "eth0", role: "shared-lan", op: "client-a" };
+			const clock = vi.spyOn(Date, "now").mockReturnValue(0);
+			beginOperation(KEY, target);
+			clock.mockReturnValue(5_000);
+			emit({ ...target, pending: true });
+			clock.mockRestore();
+
+			expect(getOperationTarget(KEY)).toEqual(target);
+			emit({ name: "eth0", op: target.op, ...terminal });
+			expect(getOperationPhase(KEY)).toBe(terminal.phase);
+			expect(getOperationReason(KEY)).toBe(terminal.reason);
+		},
+	);
+
+	it("foreign tagged frames cannot start or revive an operation (#489)", () => {
+		emit({ name: "eth0", role: "uplink", op: "client-b", pending: true });
+		expect(getOperationPhase(KEY)).toBe("idle");
+		const target = { name: "eth0", role: "shared-lan", op: "client-a" };
+		beginOperation(KEY, target);
+		emit({ ...target, success: true });
+		emit({ name: "eth0", role: "uplink", op: "client-b", pending: true });
+		expect(getOperationPhase(KEY)).toBe("confirmed");
+	});
+
+	it("tagged same-target echoes keep the original timeout (#489)", () => {
+		const target = { name: "eth0", role: "shared-lan", op: "client-a" };
+		const clock = vi.spyOn(Date, "now").mockReturnValue(0);
+		beginOperation(KEY, target);
+		clock.mockReturnValue(5_000);
+		emit({ ...target, pending: true });
+		emit({ ...target, op: "client-b", pending: true });
+		clock.mockRestore();
+		sweepOperations(ASYNC_OP_TTL_MS + 1);
+		expect(getOperationPhase(KEY)).toBe("timed_out");
+	});
+
+	it("an untagged same-role echo preserves a correlated target (#489)", () => {
+		const target = { name: "eth0", role: "shared-lan", op: "client-a" };
+		beginOperation(KEY, target);
+		emit({ name: "eth0", role: "shared-lan", pending: true });
+		expect(getOperationTarget(KEY)).toEqual(target);
+		emit({ name: "eth0", role: "shared-lan", success: true });
+		expect(getOperationPhase(KEY)).toBe("confirmed");
+	});
 });

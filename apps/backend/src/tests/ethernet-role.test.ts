@@ -36,6 +36,7 @@ import {
 	persistEthernetRole,
 	restoreEthernetRole,
 } from "../modules/network/ethernet-role.ts";
+import { publishEthernetRoleOutcome } from "../modules/network/ethernet-role-outcome.ts";
 import {
 	type EthernetRoleTransitionDeps,
 	reconcileEthernetRoles,
@@ -56,6 +57,7 @@ import {
 } from "../modules/network/network-interfaces.ts";
 import { setNetifState } from "../modules/network/state/netif-state.ts";
 import { genSrtlaBondEntries } from "../modules/streaming/srtla.ts";
+import { addClient, removeClient } from "../rpc/events.ts";
 import { configureNetworkInterfaceProcedure } from "../rpc/procedures/network.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
@@ -94,9 +96,9 @@ function iface(over: Partial<NetworkInterface> = {}): NetworkInterface {
 	} as NetworkInterface;
 }
 
-function makeContext(): RPCContext {
+function makeContext(onMessage?: (message: string) => void): RPCContext {
 	const ws = {
-		send: () => {},
+		send: (message: string) => onMessage?.(message),
 		data: { isAuthenticated: true, lastActive: Date.now() },
 	} as unknown as AppWebSocket;
 	return {
@@ -326,6 +328,100 @@ describe("flipping back to uplink restores candidacy", () => {
 });
 
 describe("the role transition", () => {
+	test.each([undefined, "client-a"])(
+		"echoes optional op %j through pending and terminal wire frames (#489)",
+		async (op) => {
+			processIfconfigOutput(twoPortTopology());
+			const frames: unknown[] = [];
+			const { ws } = makeContext((message) => frames.push(JSON.parse(message)));
+			addClient(ws);
+			try {
+				const deps = makeDeps({ publishOutcome: publishEthernetRoleOutcome });
+				await setEthernetRole(SHARED_PORT, "shared-lan", deps, op);
+				const correlation = op === undefined ? {} : { op };
+				expect(frames).toEqual([
+					{
+						eth_role: {
+							eth_role: {
+								name: SHARED_PORT,
+								role: "shared-lan",
+								pending: true,
+								...correlation,
+							},
+						},
+						seq: expect.any(Number),
+					},
+					{
+						eth_role: {
+							eth_role: {
+								name: SHARED_PORT,
+								role: "shared-lan",
+								success: true,
+								...correlation,
+							},
+						},
+						seq: expect.any(Number),
+					},
+				]);
+			} finally {
+				removeClient(ws);
+			}
+		},
+	);
+
+	test("queued clients keep their own IDs on success, no-op and refusal (#489)", async () => {
+		processIfconfigOutput(twoPortTopology());
+		const entered = Promise.withResolvers<void>();
+		const release = Promise.withResolvers<boolean>();
+		const deps = makeDeps({
+			activate: () => {
+				entered.resolve();
+				return release.promise;
+			},
+		});
+		const first = setEthernetRole(SHARED_PORT, "shared-lan", deps, "client-a");
+		await entered.promise;
+		const second = setEthernetRole(
+			SHARED_PORT,
+			"uplink",
+			{
+				...deps,
+				setFields: async () => false,
+			},
+			"client-b",
+		);
+		release.resolve(true);
+		await Promise.all([first, second]);
+		await setEthernetRole(SHARED_PORT, "shared-lan", deps, "client-c");
+		await setEthernetRole("wlan0", "uplink", deps, "client-d");
+		expect(deps.frames).toEqual([
+			{
+				name: SHARED_PORT,
+				outcome: { pending: true, role: "shared-lan", op: "client-a" },
+			},
+			{
+				name: SHARED_PORT,
+				outcome: { success: true, role: "shared-lan", op: "client-a" },
+			},
+			{
+				name: SHARED_PORT,
+				outcome: { pending: true, role: "uplink", op: "client-b" },
+			},
+			{
+				name: SHARED_PORT,
+				outcome: { success: false, error: "apply_failed", op: "client-b" },
+			},
+			{
+				name: SHARED_PORT,
+				outcome: { success: true, role: "shared-lan", op: "client-c" },
+			},
+			{
+				name: "wlan0",
+				outcome: { success: false, error: "not_ethernet", op: "client-d" },
+			},
+		]);
+	});
+
 	test("persists, writes `ipv4.method shared`, and emits pending then terminal", async () => {
 		processIfconfigOutput(twoPortTopology());
 		const deps = makeDeps();
@@ -790,6 +886,10 @@ describe("network.configure answers honestly when handleNetif rejects", () => {
 });
 
 describe("the wire carries the role in BOTH directions", () => {
+	test("Ethernet rows advertise operation support to strict-input clients (#489)", () => {
+		processIfconfigOutput(twoPortTopology());
+		expect(netIfBuildMsg()[SHARED_PORT]).toHaveProperty("ethRoleOp", true);
+	});
 	test("every ethernet row states its role explicitly, `uplink` included", () => {
 		processIfconfigOutput(twoPortTopology());
 

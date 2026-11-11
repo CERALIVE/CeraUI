@@ -123,15 +123,6 @@ export interface SetEthernetRoleResult {
 	error?: EthernetRoleError;
 }
 
-function refuse(
-	name: string,
-	error: EthernetRoleError,
-	deps: EthernetRoleTransitionDeps,
-): SetEthernetRoleResult {
-	deps.publishOutcome(name, { success: false, error });
-	return { success: false, error };
-}
-
 /**
  * Apply the role to NetworkManager: rewrite `ipv4.method`, then re-activate so
  * the change takes effect. NM bakes the method into the ACTIVATION, so a write
@@ -209,12 +200,17 @@ export async function setEthernetRole(
 	name: string,
 	role: EthernetRole,
 	deps: EthernetRoleTransitionDeps = defaultEthernetRoleDeps,
+	op?: string,
 ): Promise<SetEthernetRoleResult> {
 	return withEthernetRoleQueue(name, async () => {
-		if (!isEthernetRoleCandidate(name))
-			return refuse(name, "not_ethernet", deps);
+		const correlation = op === undefined ? {} : { op };
+		const refuse = (error: EthernetRoleError): SetEthernetRoleResult => {
+			deps.publishOutcome(name, { success: false, error, ...correlation });
+			return { success: false, error };
+		};
+		if (!isEthernetRoleCandidate(name)) return refuse("not_ethernet");
 		if (deps.listInterfaces()[name] === undefined) {
-			return refuse(name, "unknown_interface", deps);
+			return refuse("unknown_interface");
 		}
 
 		const previous = deps.readPersistedRole(name);
@@ -224,22 +220,22 @@ export async function setEthernetRole(
 			// recorded — the operator has now stated it explicitly.
 			deps.persistRole(name, role);
 			deps.refreshInterfaces();
-			deps.publishOutcome(name, { success: true, role });
+			deps.publishOutcome(name, { success: true, role, ...correlation });
 			return { success: true, applied: role };
 		}
 
 		deps.persistRole(name, role);
-		deps.publishOutcome(name, { pending: true, role });
+		deps.publishOutcome(name, { pending: true, role, ...correlation });
 
 		const failure = await applyRoleToNetworkManager(name, role, deps);
 		if (failure !== undefined) {
 			deps.restoreRole(name, previous);
 			deps.refreshInterfaces();
-			return refuse(name, failure, deps);
+			return refuse(failure);
 		}
 
 		deps.refreshInterfaces();
-		deps.publishOutcome(name, { success: true, role });
+		deps.publishOutcome(name, { success: true, role, ...correlation });
 		return { success: true, applied: role };
 	});
 }
