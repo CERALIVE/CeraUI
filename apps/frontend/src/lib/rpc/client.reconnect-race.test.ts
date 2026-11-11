@@ -153,6 +153,28 @@ describe("RPCClient reconnect-timer race", () => {
 		expect(FakeWebSocket.instances).toHaveLength(2);
 	});
 
+	it("stops every heartbeat after replacing a closing socket and disconnecting", async () => {
+		const { rpcClient } = await import("$lib/rpc/client");
+		rpcClient.connect();
+		const previous = FakeWebSocket.instances[0];
+		if (!previous) throw new Error("missing initial socket");
+		previous.open();
+		const delayedClose = previous.onclose;
+		previous.readyState = FakeWebSocket.CLOSING;
+
+		rpcClient.connect();
+		const current = FakeWebSocket.instances[1];
+		if (!current) throw new Error("missing replacement socket");
+		current.open();
+		delayedClose?.();
+		rpcClient.disconnect();
+
+		expect(vi.getTimerCount()).toBe(0);
+		vi.advanceTimersByTime(30000);
+		expect(previous.sent).toEqual([]);
+		expect(current.sent).toEqual([]);
+	});
+
 	it("does not publish a delayed broadcast from the replaced socket", async () => {
 		const { rpcClient } = await import("$lib/rpc/client");
 		const messages = vi.fn();
