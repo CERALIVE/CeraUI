@@ -194,7 +194,7 @@ test("real never-created pin tables (exit 2) and empty rule sets prove a clean p
 		if (real.exitCode !== 0)
 			throw Object.assign(new Error(`exit ${real.exitCode}`), {
 				code: real.exitCode,
-				stdout: "",
+				stdout: real.stdout,
 				stderr: real.stderr,
 			});
 		return real.stdout;
@@ -215,7 +215,7 @@ test("pin cleanliness propagates mixed absent-table text with a permission error
 			if (args.includes("route"))
 				throw Object.assign(new Error("ip route show failed"), {
 					code: 2,
-					stdout: "",
+					stdout: "[]\n",
 					stderr:
 						"Error: ipv4: FIB table does not exist.\nDump terminated\nRTNETLINK answers: Operation not permitted\n",
 				});

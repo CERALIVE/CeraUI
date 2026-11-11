@@ -61,7 +61,7 @@ export async function updatePinsClean(runner: typeof run): Promise<boolean> {
 					table,
 				]);
 			} catch (cause) {
-				if (isFibTableAbsent(cause, "read")) continue;
+				if (isFibTableAbsent(cause, "json-read")) continue;
 				throw cause;
 			}
 			if (z.array(z.unknown()).parse(parseAuthorityJson(routes)).length)
