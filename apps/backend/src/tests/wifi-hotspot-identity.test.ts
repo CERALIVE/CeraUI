@@ -1028,7 +1028,118 @@ describe("hotspot deletion reservation", () => {
 		return { profiles, deps, deleted, entered, resume };
 	}
 
-	test("selection re-reads a response held across a completed deletion", async () => {
+	for (const mode of ["selection", "adoption"] as const) {
+		for (const outcome of ["false", "throw"] as const) {
+			test(`${mode} reads once across 48 unrelated ${outcome} deletions`, async () => {
+				rememberConn(PERM_MAC, "failed-duplicate");
+				rememberConn(PERM_MAC, "keep");
+				rememberConn(SECOND_PERM_MAC, "reader");
+				const { deps } = makeProfileDeps([
+					{
+						uuid: "failed-duplicate",
+						name: "Hotspot-1",
+						mode: "ap",
+						ssid: OWNED_SSID,
+						psk: "y",
+						mac: PERM_MAC,
+					},
+				]);
+				const failure = new Error("Deletion failed");
+				let attempts = 0;
+				deps.deleteConnection = async () => {
+					attempts++;
+					if (outcome === "throw") throw failure;
+					return false;
+				};
+				const entered = Promise.withResolvers<void>();
+				const resume = Promise.withResolvers<void>();
+				let reads = 0;
+				const pauseRead = async () => {
+					reads++;
+					entered.resolve();
+					await resume.promise;
+				};
+				const iface = makeHotspotIface({ ifname: "wlan1" });
+				addWifiInterface(SECOND_PERM_MAC, iface);
+				const fields: Record<string, string> = {
+					"connection.autoconnect-priority": "999",
+					"802-11-wireless.ssid": OWNED_SSID,
+					"802-11-wireless-security.psk": "y",
+					"802-11-wireless.band": "",
+					"802-11-wireless.channel": "0",
+					"802-11-wireless.hidden": "no",
+					"802-11-wireless-security.key-mgmt": "wpa-psk",
+					"802-11-wireless-security.pairwise": "ccmp",
+					"802-11-wireless-security.group": "ccmp",
+					"802-11-wireless-security.proto": "rsn",
+					"802-11-wireless-security.pmf": "1",
+					"connection.interface-name": "",
+					"802-11-wireless.mac-address": SECOND_PERM_MAC,
+				};
+				const read = spyOn(runner, "run").mockImplementation(
+					async (bin, args) => {
+						expect(bin).toBe("nmcli");
+						expect(args[4]).toBe("--get-values");
+						expect(args.at(-1)).toBe("reader");
+						await pauseRead();
+						return (args[5] ?? "")
+							.split(",")
+							.map((field) => {
+								if (!(field in fields))
+									throw new Error(`Unexpected field ${field}`);
+								return fields[field];
+							})
+							.join("\n");
+					},
+				);
+				const reader =
+					mode === "selection"
+						? findHotspotConnForAdapter(
+								SECOND_PERM_MAC,
+								getHotspotCredentials(SECOND_PERM_MAC),
+								{
+									...deps,
+									getApProfileFields: async (uuid) => {
+										expect(uuid).toBe("reader");
+										await pauseRead();
+										return ["ap", OWNED_SSID, "y", "", "0", SECOND_PERM_MAC];
+									},
+								},
+							)
+						: handleHotspotConn(SECOND_PERM_MAC, "reader", { active: true });
+				try {
+					await entered.promise;
+					for (let i = 0; i < 48; i++) {
+						const result = await pruneDuplicateHotspotConns(
+							PERM_MAC,
+							"keep",
+							deps,
+						).then(
+							(removed) => removed,
+							(error: unknown) => error,
+						);
+						expect(result).toEqual(outcome === "throw" ? failure : []);
+					}
+					resume.resolve();
+					const selected = await reader;
+					expect(attempts).toBe(48);
+					expect(reads).toBe(1);
+					if (mode === "selection")
+						expect(selected).toMatchObject({ uuid: "reader" });
+					else {
+						expect(iface.hotspot.conn).toBe("reader");
+						expect(getHotspotCredentials(SECOND_PERM_MAC)?.conn).toBe("reader");
+					}
+				} finally {
+					resume.resolve();
+					await reader;
+					read.mockRestore();
+				}
+			});
+		}
+	}
+
+	test("selection discards a response held across a completed deletion", async () => {
 		const { profiles, deps, entered, resume } = deletingProfile();
 		const readEntered = Promise.withResolvers<void>();
 		const releaseRead = Promise.withResolvers<void>();
@@ -1060,10 +1171,10 @@ describe("hotspot deletion reservation", () => {
 			await selection;
 		}
 		expect(await selection).toBeUndefined();
-		expect(observed.at(-1)).toBe(false);
+		expect(observed).toEqual([true, true]);
 	});
 
-	test("adoption re-reads a response held across a completed deletion", async () => {
+	test("adoption discards a response held across a completed deletion", async () => {
 		const { profiles, deps, entered, resume } = deletingProfile();
 		const iface = makeHotspotIface();
 		addWifiInterface(PERM_MAC, iface);
@@ -1119,12 +1230,56 @@ describe("hotspot deletion reservation", () => {
 			await adoption;
 			expect(iface.hotspot.conn).toBeUndefined();
 			expect(getHotspotCredentials(PERM_MAC)?.conn).toBe("keep");
-			expect(observed.at(-1)).toBe(false);
+			expect(observed).toEqual([true]);
 		} finally {
 			resume.resolve();
 			releaseRead.resolve();
 			await adoption;
 			read.mockRestore();
+		}
+	});
+
+	test("selection skips a successfully deleted UUID and keeps another candidate", async () => {
+		const { profiles, deps, entered, resume } = deletingProfile();
+		profiles.push({
+			uuid: "survivor",
+			name: "Operator AP",
+			mode: "ap",
+			ssid: "Survivor",
+			psk: "survivor-secret",
+			mac: PERM_MAC,
+		});
+		const readEntered = Promise.withResolvers<void>();
+		const releaseRead = Promise.withResolvers<void>();
+		const readProfile = deps.getApProfileFields;
+		const reads: string[] = [];
+		deps.getApProfileFields = async (uuid) => {
+			const snapshot = await readProfile(uuid);
+			reads.push(uuid);
+			if (reads.length === 1) {
+				readEntered.resolve();
+				await releaseRead.promise;
+			}
+			return snapshot;
+		};
+		const selection = findHotspotConnForAdapter(
+			PERM_MAC,
+			{ ssid: OWNED_SSID, password: "y", conn: "superseded" },
+			deps,
+		);
+		try {
+			await readEntered.promise;
+			const pruning = pruneDuplicateHotspotConns(PERM_MAC, "keep", deps);
+			await entered.promise;
+			resume.resolve();
+			expect(await pruning).toEqual(["superseded"]);
+			releaseRead.resolve();
+			expect((await selection)?.uuid).toBe("survivor");
+			expect(reads).toEqual(["superseded", "superseded", "survivor"]);
+		} finally {
+			resume.resolve();
+			releaseRead.resolve();
+			await selection;
 		}
 	});
 

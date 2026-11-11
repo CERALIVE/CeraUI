@@ -137,17 +137,24 @@ per-adapter mutation lock and radio lifetime/draft contracts are unchanged.
 
 Reservation membership alone cannot validate an earlier NM response: a read may
 start before deletion and resume after the reservation has already been released.
-A monotonic deletion generation advances at reservation and settlement. Discovery
-and selection capture it before NM reads and discard results when it changes,
-re-reading NetworkManager before selecting or publishing an identity. The same
-fence covers interface-name resolution, awaited binding repairs and an SSID
-candidate retained while other profiles are read. An in-flight reserved UUID
-still skips immediately. The generation retains no UUID history and introduces
-no mutation queue or adapter lock.
+Only a successful deletion records a per-UUID epoch, assigned from a monotonic
+counter. Readers snapshot the counter before NM work and treat a UUID deleted
+since that snapshot as absent. Failed or throwing deletions change no epochs;
+deleting U does not invalidate V. The fence covers interface-name resolution,
+awaited binding repairs and an SSID candidate retained while other profiles are
+read. Epochs remain available for the process lifetime to invalidate delayed
+responses even after reservation release.
+
+Readers never recurse or re-read in response to deletion. Selection tries the
+stored UUID once, then scans the finite inventory without retrying that UUID.
+Adoption drops an invalidated response. An in-flight reserved UUID still skips
+immediately. There is no mutation queue or adapter-lock change.
 
 The promise-barrier tests in `wifi-hotspot-identity.test.ts` cover adoption during
 deletion, fresh reads after settlement, concurrent prune exclusion and an
 unreserved profile selected while another UUID is being deleted. Delayed-read
 regressions hold both profile selection and adoption responses across a complete
 deletion and assert that the deleted UUID is neither selected, cached nor
-persisted, and that the resumed reader asks NM again.
+persisted without another NM read. Interference tests hold a reader across 48
+unrelated false or throwing deletions and require exactly one read. A successful
+deletion of one candidate leaves another candidate selectable.
