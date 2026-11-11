@@ -26,8 +26,12 @@ all been collected. A superseded entry is RETIRED rather than hidden — keeping
 shadow alive would let the row reappear the moment that observation blinked.
 
 **The merge key is the `ID_PATH`-derived `stable_key`, NOT todo 10's identity
-key**, and that is a deliberate divergence. The identity ladder is `usb-serial` >
-`id-path` > `ifname` with no alias table between rungs, which is right for
+key**, and that is a deliberate divergence. The identity ladder is usable,
+unshared `usb-serial` > `id-path` > `ifname` with no alias table between rungs.
+Empty, zero, sequential Dell placeholders and repeated-character serials do not
+identify a unit. A vendor/serial observed on distinct USB parents switches to
+port identity once; the device config remembers only its SHA-256 hash in
+`usb_serial_shared` (newest 64). That is right for
 identity and wrong here: a udev `usb_device` add publishes `ID_SERIAL_SHORT` and
 would anchor on the serial rung, while a D-Bus row carries only `Modem.Physdev`
 and anchors on the path rung — so comparing identity keys would never match and

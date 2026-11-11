@@ -33,12 +33,17 @@
  */
 
 import { beforeEach, describe, expect, it } from "bun:test";
-
+import {
+	readModemCredential,
+	resetModemCredentialsForTest,
+	writeModemCredential,
+} from "../modules/modems/modem-credentials.ts";
 import {
 	fromMmcliModem,
 	fromRouterCellularView,
 } from "../modules/modems/modem-wire-adapters.ts";
 import type { Modem } from "../modules/modems/modems-state.ts";
+import * as physicalIdentity from "../modules/modems/physical-identity.ts";
 import {
 	mintLinkId,
 	type PhysicalDeviceRecord,
@@ -55,6 +60,10 @@ import type {
 	UsbInterfaceDescriptor,
 	UsbNetDevice,
 } from "../modules/network/usb-net-classifier.ts";
+import {
+	constructedTwinDeps,
+	constructedTwins,
+} from "./helpers/constructed-usb-twins.ts";
 
 // ── the board's own descriptors ─────────────────────────────────────────────
 
@@ -486,5 +495,83 @@ describe("the HIMI firmware-string fallback chain is layered on, not replaced", 
 			mm: { model: "RM530N-GL", equipmentId: "123456789012345" },
 		});
 		expect(record.displayName).toBe("RM530N-GL - 12345");
+	});
+});
+
+describe("unusable and shared USB serial identity", () => {
+	it("classifies serials without normalizing their case", () => {
+		for (const serial of [
+			"",
+			" ",
+			"0",
+			"00000000",
+			"0123456789ABCDEF",
+			"0123456789abcdef",
+			"FFFFFFFF",
+		]) {
+			expect(physicalIdentity.usableUsbSerial(serial)).toBeUndefined();
+		}
+		for (const serial of [
+			"2b16081",
+			"c6125db3",
+			"12345678",
+			"0123456789ABCDE0",
+			"0123456789ABCDEF-4-1",
+		]) {
+			expect(physicalIdentity.usableUsbSerial(` ${serial} `)).toBe(serial);
+		}
+	});
+
+	it("replays the constructed Dell twins into distinct port identities on the first scan", async () => {
+		await refreshUsbNetMarkers(
+			constructedTwins.map((d) => d.ifname),
+			constructedTwinDeps(),
+		);
+		const [a, b] = constructedTwins.map((d) =>
+			resolveModemPhysicalIdentity(d.ifname),
+		);
+		expect(a?.anchor).toBe("id-path");
+		expect(b?.anchor).toBe("id-path");
+		expect(a?.linkId).not.toBe(b?.linkId);
+		expect(a?.legacyLinkId).toBe(
+			mintLinkId("usb-serial:413c:0123456789ABCDEF"),
+		);
+		expect(b?.legacyLinkId).toBe(a?.legacyLinkId);
+	});
+
+	it("migrates a singleton credential but refuses the shared legacy credential for twins", async () => {
+		resetModemCredentialsForTest();
+		const legacy = resolvePhysicalDevice({
+			ifname: "old",
+			vid: "413c",
+			serial: "LEGACY-TOKEN",
+		});
+		const oldId = mintLinkId("usb-serial:413c:0123456789ABCDEF");
+		writeModemCredential(
+			{ ...legacy, linkId: oldId },
+			{ username: "USER_TOKEN", password: "PASSWORD_TOKEN" },
+		);
+		const first = constructedTwins[0];
+		if (!first) throw new Error("missing constructed twin");
+		await refreshUsbNetMarkers([first.ifname], constructedTwinDeps([first]));
+		const single = resolveModemPhysicalIdentity(first.ifname);
+		expect(readModemCredential(single)?.username).toBe("USER_TOKEN");
+		expect(readModemCredential({ ...legacy, linkId: oldId })).toBeUndefined();
+
+		resetModemCredentialsForTest();
+		writeModemCredential(
+			{ ...legacy, linkId: oldId },
+			{ username: "USER_TOKEN", password: "PASSWORD_TOKEN" },
+		);
+		await refreshUsbNetMarkers(
+			constructedTwins.map((d) => d.ifname),
+			constructedTwinDeps(),
+		);
+		for (const device of constructedTwins) {
+			expect(
+				readModemCredential(resolveModemPhysicalIdentity(device.ifname)),
+			).toBeUndefined();
+		}
+		resetModemCredentialsForTest();
 	});
 });

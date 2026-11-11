@@ -36,7 +36,11 @@
 
   Board-measured on `ceralive2`, 2026-08-17 (todo 2), on the real fleet:
 
-    1. `usb-serial` — a Qualcomm dual-mode stick at `1-1.4.1` FLIPPED from
+    1. `usb-serial` — only a usable serial not shared by distinct USB parents.
+       Empty, zero, Dell's sequential placeholder and repeated-character
+       descriptors do not identify a unit. The scan remembers shared serials
+       by hash so removing a twin or restarting cannot restore a false identity.
+       A Qualcomm dual-mode stick at `1-1.4.1` FLIPPED from
        `05c6:9024` (`rndis_host`, a router-class tether) to `05c6:9091`
        (`qmi_wwan`, an MM-managed modem) under a plain `uhubctl` power cycle,
        keeping USB serial `2b16081` throughout. So VID:PID is PROVEN not to be
@@ -106,6 +110,8 @@ export interface PhysicalObservation {
 	readonly pid?: string;
 	/** The USB `serial` string descriptor, when the device publishes a usable one. */
 	readonly serial?: string;
+	/** Previous serial-based link id when the scan rejected a shared serial. */
+	readonly legacyLinkId?: string;
 	/** udev hwdb enrichment (`ID_VENDOR_FROM_DATABASE` / `ID_MODEL_FROM_DATABASE`). */
 	readonly hwdbVendor?: string;
 	readonly hwdbModel?: string;
@@ -125,6 +131,7 @@ export interface PhysicalDeviceRecord {
 	readonly anchor: PhysicalIdentityAnchor;
 	/** Minted here, deterministically. See {@link mintLinkId}. */
 	readonly linkId: string;
+	readonly legacyLinkId?: string;
 	/** The ID_PATH-derived wire key, omitted when the device reports no ID_PATH. */
 	readonly stableKey?: string;
 	readonly ifname: string;
@@ -171,9 +178,21 @@ export function mintLinkId(identityKey: string): string {
 }
 
 /** A serial that actually anchors: present, non-empty, not a repeated descriptor. */
+export function usableUsbSerial(raw: string | undefined): string | undefined {
+	const serial = raw?.trim();
+	if (
+		!serial ||
+		serial === "0" ||
+		/^0123456789abcdef$/i.test(serial) ||
+		/^(.)\1{3,}$/.test(serial)
+	) {
+		return undefined;
+	}
+	return serial;
+}
+
 function usableSerial(observation: PhysicalObservation): string | undefined {
-	const serial = observation.serial?.trim();
-	return serial ? serial : undefined;
+	return usableUsbSerial(observation.serial);
 }
 
 /** The identity key and the rung it came from. */
@@ -298,6 +317,20 @@ function firstNamed(...candidates: (string | undefined)[]): string {
 
 /** Every record resolved this process, keyed by identity — read by todos 11/12. */
 const records = new Map<string, PhysicalDeviceRecord>();
+let presentDevices: readonly PhysicalDeviceRecord[] = [];
+
+/** Replaced only by a committed USB scan, including an empty scan. */
+export function setPresentPhysicalDevices(
+	devices: readonly PhysicalDeviceRecord[],
+): void {
+	presentDevices = [
+		...new Map(devices.map((device) => [device.linkId, device])).values(),
+	];
+}
+
+export function listPresentPhysicalDevices(): readonly PhysicalDeviceRecord[] {
+	return presentDevices;
+}
 
 /**
  * Resolve (and remember) the canonical record for one observed device.
@@ -312,6 +345,15 @@ export function resolvePhysicalDevice(
 	const stableKey = deriveModemStableKey(observation.idPath);
 	const { identityKey, anchor } = resolveIdentityKey(observation, stableKey);
 	const serial = usableSerial(observation);
+	const rawSerial = observation.serial?.trim();
+	const vid = observation.vid?.trim().toLowerCase();
+	const legacyLinkId =
+		observation.legacyLinkId ??
+		(rawSerial && serial === undefined
+			? mintLinkId(
+					vid ? `usb-serial:${vid}:${rawSerial}` : `usb-serial:${rawSerial}`,
+				)
+			: undefined);
 	const hwdb =
 		observation.hwdbVendor !== undefined || observation.hwdbModel !== undefined
 			? {
@@ -328,6 +370,7 @@ export function resolvePhysicalDevice(
 		identityKey,
 		anchor,
 		linkId: mintLinkId(identityKey),
+		...(legacyLinkId !== undefined ? { legacyLinkId } : {}),
 		ifname: observation.ifname,
 		displayName: resolveDisplayName(observation),
 		...(stableKey !== undefined ? { stableKey } : {}),
@@ -363,4 +406,5 @@ export function listPhysicalDevices(): readonly PhysicalDeviceRecord[] {
 /** Drop the store (test isolation). Never call this from production code. */
 export function resetPhysicalIdentityRegistry(): void {
 	records.clear();
+	presentDevices = [];
 }

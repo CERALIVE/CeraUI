@@ -4,13 +4,29 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { call } from "@orpc/server";
 
-import { loadConfig, setConfigFilePath } from "../modules/config.ts";
+import {
+	getConfig,
+	loadConfig,
+	saveConfig,
+	setConfigFilePath,
+} from "../modules/config.ts";
+import { mintLinkId } from "../modules/modems/physical-identity.ts";
+import { resolveModemPhysicalIdentity } from "../modules/modems/physical-identity-source.ts";
+import {
+	isBondOptedOut,
+	setPersistentBondOptOut,
+} from "../modules/network/bond-preference.ts";
 import {
 	getNetworkInterfaces,
 	isBondCandidate,
 	netIfBuildMsg,
 	resetBondOptOutSession,
 } from "../modules/network/network-interfaces.ts";
+import {
+	refreshUsbNetMarkers,
+	resetUsbNetMarkers,
+} from "../modules/network/router-cellular-scan.ts";
+import { setBondIdentityResolverForTest } from "../modules/streaming/bond-entry.ts";
 import { configureNetworkInterfaceProcedure } from "../rpc/procedures/network.procedure.ts";
 import {
 	attachHuaweiTwins,
@@ -22,6 +38,10 @@ import {
 	physicalRecord,
 	resetBondFixture,
 } from "./helpers/bond-toggle-fixture.ts";
+import {
+	constructedTwinDeps,
+	constructedTwins,
+} from "./helpers/constructed-usb-twins.ts";
 
 describe("operator bond opt-out — config.json restart persistence", () => {
 	let configPath = "";
@@ -41,7 +61,34 @@ describe("operator bond opt-out — config.json restart persistence", () => {
 
 	afterEach(() => {
 		resetBondFixture();
+		resetUsbNetMarkers();
 		setConfigFilePath("config.json");
+	});
+
+	test("migrates a legacy opt-out to both twins before admitting one", async () => {
+		clearBondNetworkFixture();
+		setBondIdentityResolverForTest(null);
+		await refreshUsbNetMarkers(
+			constructedTwins.map((d) => d.ifname),
+			constructedTwinDeps(),
+		);
+		attachHuaweiTwins("wwu1u4c2", "wwu1c2");
+		const legacy = mintLinkId("usb-serial:413c:0123456789ABCDEF");
+		getConfig().bond_opt_out = { [legacy]: true };
+		saveConfig();
+		expect(isBondOptedOut("wwu1u4c2")).toBe(true);
+		expect(isBondOptedOut("wwu1c2")).toBe(true);
+		// The USB scan can know a twin before the netif projection publishes it.
+		delete getNetworkInterfaces().wwu1c2;
+		setPersistentBondOptOut("wwu1u4c2", false);
+		expect(isBondOptedOut("wwu1u4c2")).toBe(false);
+		expect(isBondOptedOut("wwu1c2")).toBe(true);
+		expect(getConfig().bond_opt_out?.[legacy]).toBeUndefined();
+		const twinId = resolveModemPhysicalIdentity("wwu1c2").linkId;
+		resetBondOptOutSession();
+		await loadConfig();
+		expect(getConfig().bond_opt_out?.[twinId]).toBe(true);
+		expect(isBondOptedOut("wwu1c2")).toBe(true);
 	});
 
 	test("an opt-out survives a simulated backend restart and follows the physical port", async () => {

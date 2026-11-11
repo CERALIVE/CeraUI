@@ -88,7 +88,10 @@ import { z } from "zod";
 
 import { loadCacheFile } from "../../helpers/config-loader.ts";
 import { logger } from "../../helpers/logger.ts";
-import type { PhysicalDeviceRecord } from "./physical-identity.ts";
+import {
+	listPresentPhysicalDevices,
+	type PhysicalDeviceRecord,
+} from "./physical-identity.ts";
 
 /** Device-persistent directory — survives an OTA slot swap. */
 export const MODEM_CREDENTIALS_DIR = "/data/ceralive";
@@ -204,6 +207,29 @@ export function modemCredentialKey(
 	return device.anchor === "ifname" ? undefined : device.linkId;
 }
 
+function credentialEntry(
+	device: PhysicalDeviceRecord,
+): StoredEntry | undefined {
+	const key = modemCredentialKey(device);
+	if (key === undefined) return undefined;
+	const current = entries[key];
+	if (current !== undefined) return current;
+	const legacy = device.legacyLinkId;
+	if (legacy === undefined || entries[legacy] === undefined) return undefined;
+	const owners = listPresentPhysicalDevices().filter(
+		(present) => present.legacyLinkId === legacy,
+	);
+	if (owners.length !== 1 || owners[0]?.linkId !== key) return undefined;
+	const entry = entries[legacy];
+	entries[key] = {
+		...entry,
+		anchor: device.anchor === "usb-serial" ? "usb-serial" : "id-path",
+	};
+	delete entries[legacy];
+	persist();
+	return entries[key];
+}
+
 /** temp(0600) → fsync → chmod(0600) → atomic rename. Throws on any step. */
 function writeSecretFileAtomicSync(target: string, contents: string): void {
 	const dir = path.dirname(target);
@@ -290,7 +316,7 @@ export function readModemCredential(
 ): ModemCredential | undefined {
 	const key = modemCredentialKey(device);
 	if (key === undefined) return undefined;
-	const entry = entries[key];
+	const entry = credentialEntry(device);
 	if (entry === undefined) return undefined;
 	return {
 		username: entry.username,
@@ -383,7 +409,7 @@ export function projectModemCredential(
 	device: PhysicalDeviceRecord,
 ): ModemCredentialStatus {
 	const key = modemCredentialKey(device);
-	const entry = key === undefined ? undefined : entries[key];
+	const entry = key === undefined ? undefined : credentialEntry(device);
 	if (entry === undefined) return { configured: false };
 	return {
 		configured: true,
