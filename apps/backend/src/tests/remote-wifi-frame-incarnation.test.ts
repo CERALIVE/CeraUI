@@ -3,6 +3,7 @@ import * as mocks from "../mocks/mock-service.ts";
 import { getConfig } from "../modules/config.ts";
 import * as dns from "../modules/network/dns.ts";
 import { getRemoteWebSocket, initRemote } from "../modules/remote/remote.ts";
+import { projectRemoteWifiFrame } from "../modules/remote/remote-status.ts";
 import {
 	resetStatusRelay,
 	setControlChannel,
@@ -62,6 +63,19 @@ for (const legacy of cases) {
 						},
 					};
 		const original = structuredClone(bound);
+		expect(projectRemoteWifiFrame(bound)).toStrictEqual(legacy);
+		expect(bound).toStrictEqual(original);
+
+		const mutatingProjection = (input: typeof bound) => {
+			const projected = projectRemoteWifiFrame(input);
+			const frame =
+				"adapter_mode" in input ? input.adapter_mode : input.hotspot.config;
+			Reflect.deleteProperty(frame, "incarnation");
+			return projected;
+		};
+		const control = structuredClone(original);
+		expect(mutatingProjection(control)).toStrictEqual(legacy);
+		expect(() => expect(control).toStrictEqual(original)).toThrow();
 		await initRemote();
 		const remote = getRemoteWebSocket();
 		if (!(remote instanceof StubRemoteSocket))
