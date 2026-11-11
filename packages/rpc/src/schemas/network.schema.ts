@@ -51,15 +51,6 @@ export const routerCellularMarkerSchema = z.object({
 	 * devices actually attached, never assumed from the model.
 	 */
 	duplicate_model: z.boolean(),
-	/**
-	 * The device's own serial, published ONLY alongside `duplicate_model: true`.
-	 *
-	 * Two units of one SKU are indistinguishable by vendor, model and `vid_pid`
-	 * alike, so this is the only fact that separates them on screen. Absent for a
-	 * lone device (nothing to separate it from) and for a device that publishes
-	 * no serial of its own — never fabricated. Additive-optional.
-	 */
-	serial: z.string().min(1).optional(),
 });
 export type RouterCellularMarker = z.infer<typeof routerCellularMarkerSchema>;
 
