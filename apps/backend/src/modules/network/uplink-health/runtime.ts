@@ -113,13 +113,13 @@ export class UplinkHealthRuntime {
 		// Subscribe on first use: the netif import graph cycles back here before
 		// its event emitter is initialized.
 		this.#unsubscribe ??= this.#deps.onInterfacesChange?.(() =>
-			this.#sampleInterfaces(this.#deps.interfaces()),
+			this.#sampleInterfaces(this.#deps.interfaces(), this.#deps.now()),
 		);
 		const round = ++this.#round;
 		const now = this.#deps.now();
 		const interfaces = this.#deps.interfaces();
 		const present = new Set(Object.keys(interfaces));
-		this.#engine.removeMissing(present);
+		this.#engine.removeMissing(present, now);
 		this.#sampleInterfaces(interfaces);
 		const passive = this.#passiveIfaces(now, round);
 		const candidates = eligibleProbeCandidates(interfaces);
@@ -217,7 +217,10 @@ export class UplinkHealthRuntime {
 		this.#unsubscribe = undefined;
 	}
 
-	#sampleInterfaces(interfaces: Record<string, NetworkInterface>): void {
+	#sampleInterfaces(
+		interfaces: Record<string, NetworkInterface>,
+		changedAt?: number,
+	): void {
 		for (const iface of new Set([
 			...Object.keys(interfaces),
 			...this.#samples.keys(),
@@ -242,6 +245,10 @@ export class UplinkHealthRuntime {
 					generation: ++this.#generation,
 					round: this.#round,
 				});
+				// A tick's initial roster is a sample, not an identity-change event.
+				if (changedAt !== undefined) {
+					this.#engine.restartRecovery(iface, changedAt);
+				}
 			}
 		}
 	}
@@ -258,6 +265,10 @@ export class UplinkHealthRuntime {
 		const telemetry = this.#deps.telemetry();
 		if (!telemetry) return passive;
 		for (const link of telemetry.links) {
+			// Stale sender rows must not recreate pruned missing history.
+			if (!this.#deps.interfaces()[link.iface]) continue;
+			// Down paths need active recovery; passive degradation resets the streak.
+			if (this.#engine.get(link.iface)?.state === "down") continue;
 			passive.add(link.iface);
 			const expired =
 				now - telemetry.lastReadMs >= UPLINK_HEALTH_CONFIG.telemetryExpiryMs;
