@@ -1,0 +1,1 @@
+Error: 'device show': invalid field 'IP4.BOGUS'; allowed fields: IP4.ADDRESS,IP4.GATEWAY,IP4.ROUTE,IP4.DNS,IP4.DOMAIN,IP4.SEARCHES,IP4.WINS

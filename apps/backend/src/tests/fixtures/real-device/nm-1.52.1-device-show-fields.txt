@@ -1,4 +1,6 @@
-# GENERAL and CONNECTIONS allowed fields captured on the Rock, NM 1.52.1, 2026-11-11.
+# NM 1.52.1 allowed fields captured on the Rock, 2026-11-11.
+# Sources in order: nmcli-general-fields.txt, nmcli-connections-fields.txt,
+# nmcli-ip4-fields.txt.
 GENERAL.DEVICE
 GENERAL.TYPE
 GENERAL.NM-TYPE
@@ -29,5 +31,10 @@ GENERAL.CON-PATH
 GENERAL.METERED
 CONNECTIONS.AVAILABLE-CONNECTION-PATHS
 CONNECTIONS.AVAILABLE-CONNECTIONS
-# Also read by the existing ceralive2 data-path fixture (2026-08-19).
 IP4.ADDRESS
+IP4.GATEWAY
+IP4.ROUTE
+IP4.DNS
+IP4.DOMAIN
+IP4.SEARCHES
+IP4.WINS

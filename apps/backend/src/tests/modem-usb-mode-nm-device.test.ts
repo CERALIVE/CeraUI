@@ -15,6 +15,7 @@
  */
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -196,6 +197,33 @@ afterEach(async () => {
 });
 
 describe("#434 NM 1.52.1 twin profile replay", () => {
+	test("the allowed-field fixture exactly matches the three captured sections", () => {
+		const captured = [
+			"nmcli-general-fields.txt",
+			"nmcli-connections-fields.txt",
+			"nmcli-ip4-fields.txt",
+		].flatMap((source) => {
+			const reply = readFileSync(
+				new URL(`./fixtures/real-device/${source}`, import.meta.url),
+				"utf8",
+			);
+			const fields = reply.split("allowed fields: ")[1]?.trim();
+			if (fields === undefined)
+				throw new Error(`Missing allowed fields in ${source}`);
+			return fields.split(",");
+		});
+		const allowed = readFileSync(
+			new URL(
+				"./fixtures/real-device/nm-1.52.1-device-show-fields.txt",
+				import.meta.url,
+			),
+			"utf8",
+		)
+			.split("\n")
+			.filter((line) => line !== "" && !line.startsWith("#"));
+		expect(allowed).toEqual([...new Set(captured)]);
+	});
+
 	test("an available-only profile resolves its modem and ignores Ethernet", async () => {
 		const replay = twinProfileReplay();
 		setModemNmDeviceReaderForTest(replay.reader);

@@ -198,10 +198,14 @@ use the same value; nothing else in the capture was substituted.
 
 ## NetworkManager field and profile fixtures
 
-`nm-1.52.1-device-show-fields.txt` contains the GENERAL and CONNECTIONS allowed
-fields returned by NM 1.52.1 on the Rock on November 11, 2026. The separately
-marked IP4.ADDRESS entry is the property already exercised by the ceralive2
-data-path fixture from August 19, 2026.
+`nm-1.52.1-device-show-fields.txt` contains exactly the union of the GENERAL,
+CONNECTIONS and IP4 allowed fields returned by NM 1.52.1 on the Rock on
+November 11, 2026, in capture order. The complete invalid-field replies are
+preserved as `nmcli-general-fields.txt`, `nmcli-connections-fields.txt` and
+`nmcli-ip4-fields.txt`; each was requested with `<section>.BOGUS` on `eth0`
+and returned exit 2. No device or connection values were requested or changed.
+The parity test compares the union against those three replies, including
+field order and absence of additions.
 
 `nm-1.52.1-twin-profile-replay.json` is a redacted, constructed twin-modem replay.
 Its available profile lines follow the measured NM 1.52.1 multiline format
