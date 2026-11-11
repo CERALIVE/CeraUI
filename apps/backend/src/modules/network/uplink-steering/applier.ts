@@ -96,7 +96,6 @@ export class UplinkSteeringApplier {
 			if (!isActive) {
 				await this.#deps.deactivateSharing();
 				stateCommitted = true;
-				this.#committedRoutes = next.routes;
 				await this.#retireRecoveredRoutes(staleRecoveredRoutes);
 				await this.#deps.setIpForwarding(false);
 			} else {
@@ -104,10 +103,10 @@ export class UplinkSteeringApplier {
 				await this.#deps.applyRuleset(buildShareRuleset(next), mode);
 				activatedService = mode === "activate";
 				stateCommitted = true;
-				this.#committedRoutes = next.routes;
 				await this.#retireRecoveredRoutes(staleRecoveredRoutes);
 				if (!wasActive) await this.#deps.setIpForwarding(true);
 			}
+			this.#committedRoutes = next.routes;
 		} catch (error) {
 			const rollbackErrors: unknown[] = [];
 			if (activatedService) {
