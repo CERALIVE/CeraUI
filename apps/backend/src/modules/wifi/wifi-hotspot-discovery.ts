@@ -480,6 +480,9 @@ function collectConnsInUse(): Set<ConnectionUUID> {
 		if (!wifiInterface) continue;
 		if (wifiInterface.conn) inUse.add(wifiInterface.conn);
 		if (wifiInterface.activeConn) inUse.add(wifiInterface.activeConn);
+		if (wifiInterface.concurrentHotspot?.activeConn) {
+			inUse.add(wifiInterface.concurrentHotspot.activeConn);
+		}
 		if (canHotspot(wifiInterface) && wifiInterface.hotspot.conn) {
 			inUse.add(wifiInterface.hotspot.conn);
 		}
@@ -551,6 +554,15 @@ export async function pruneDuplicateHotspotConns(
 
 		const profile = await readApProfile(uuid, deps);
 		if (!profile) continue;
+
+		// Discovery/activation can adopt a candidate while NM reads (or a
+		// previous deletion) are pending. The initial set only narrows the scan;
+		// fresh ownership and live-use evidence must still permit this deletion.
+		if (
+			!collectSupersededHotspotConns(getAllHotspotCredentials()).has(uuid) ||
+			collectConnsInUse().has(uuid)
+		)
+			continue;
 
 		if (await deps.deleteConnection(uuid)) removed.push(uuid);
 	}
