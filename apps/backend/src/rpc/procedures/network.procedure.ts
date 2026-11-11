@@ -120,7 +120,7 @@ export const setEthernetRoleProcedure = authedProcedure
 			return { success: false, error: "unavailable_in_emulated_mode" as const };
 		}
 
-		return setEthernetRole(input.name, input.role);
+		return setEthernetRole(input.name, input.role, undefined, input.op);
 	});
 
 /**

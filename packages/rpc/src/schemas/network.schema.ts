@@ -124,6 +124,8 @@ export const netifEntrySchema = z.object({
 	// ABSENT therefore means "not an ethernet port, or an older backend", and is
 	// never read as `uplink`.
 	ethRole: ethernetRoleSchema.optional(),
+	// Only a current-connection advertisement permits the strict RPC's `op`.
+	ethRoleOp: z.boolean().optional(),
 });
 export type NetifEntry = z.infer<typeof netifEntrySchema>;
 
@@ -303,10 +305,17 @@ export const netifConfigOutputSchema = z.object({
 });
 export type NetifConfigOutput = z.infer<typeof netifConfigOutputSchema>;
 
+const ethernetRoleOperationIdSchema = z
+	.string()
+	.min(16)
+	.max(64)
+	.regex(/^[A-Za-z0-9_-]+$/);
+
 export const setEthernetRoleInputSchema = z
 	.object({
 		name: z.string().min(1),
 		role: ethernetRoleSchema,
+		op: ethernetRoleOperationIdSchema.optional(),
 	})
 	.strict();
 export type SetEthernetRoleInput = z.infer<typeof setEthernetRoleInputSchema>;
@@ -336,6 +345,7 @@ export type SetEthernetRoleOutput = z.infer<typeof setEthernetRoleOutputSchema>;
 // claims the port has reached the role.
 export const ethernetRoleOutcomeSchema = z.object({
 	name: z.string().min(1),
+	op: ethernetRoleOperationIdSchema.optional(),
 	role: ethernetRoleSchema.optional(),
 	pending: z.literal(true).optional(),
 	success: z.literal(true).optional(),

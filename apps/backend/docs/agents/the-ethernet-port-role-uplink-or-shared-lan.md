@@ -43,15 +43,34 @@ preceded by exactly one `pending` frame on an admitted transition; the
 already-applied branch publishes its terminal frame directly, because nothing was
 dispatched and no NM answer will ever settle.
 
-**Wire shape** (`@ceraui/rpc` `network.schema.ts`), frozen for the frontend role
+**Wire shape** (`@ceraui/rpc` `network.schema.ts`), additive for the frontend role
 UI:
 
 ```ts
 netifEntry.ethRole?: 'uplink' | 'shared-lan'   // EXPLICIT on every ethernet row
-rpc.network.setEthernetRole({ name, role })    // input is .strict()
+netifEntry.ethRoleOp?: boolean                // true advertises op support
+rpc.network.setEthernetRole({ name, role, op? }) // input remains .strict()
   -> { success, applied?, error? }             // ethernetRoleErrorSchema, 5 members
-broadcast "eth_role" -> { eth_role: { name, role?, pending?, success?, error? } }
+broadcast "eth_role" -> { eth_role: { name, role?, pending?, success?, error?, op? } }
 ```
+
+`op` is optional and must contain 16 through 64 ASCII URL-safe characters
+(`A-Z`, `a-z`, `0-9`, `_`, `-`). One shared schema enforces this on requests and
+outcomes. Invalid IDs are rejected before the RPC handler can publish a frame.
+The frontend encodes 16 random bytes as 32 lowercase hexadecimal characters.
+The queue-owned transition echoes
+the request's ID on pending and terminal outcomes, including an already-applied
+success or a refusal, and the frame builder omits it when none was supplied.
+No operation ID is persisted. Per-port serialization and
+`EthernetRoleReentryError` remain unchanged.
+
+Every Ethernet row advertises `ethRoleOp: true`; the frontend sends `op` only
+after seeing that flag on its current connection. This protects older backends
+whose strict input schema rejects unknown keys. Old frontends ignore the
+additive fields. Tagged frames match a local request by ID; untagged frames keep
+the existing same-target echo behavior. `eth_role` remains non-relayable.
+Both apps consume the workspace `@ceraui/rpc` source in the same application
+release, so this additive change does not require a registry publish.
 
 `ethRole` is published EXPLICITLY on every ethernet row, `uplink` included —
 never present-only-when-shared. The consumer merge preserves an omitted optional
