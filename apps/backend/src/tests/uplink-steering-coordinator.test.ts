@@ -5,7 +5,10 @@ import {
 	type PreparedSteeringState,
 	UplinkSteeringApplier,
 } from "../modules/network/uplink-steering/applier.ts";
-import type { SteeringAvailability } from "../modules/network/uplink-steering/contracts.ts";
+import {
+	type SteeringAvailability,
+	SteeringUnavailableError,
+} from "../modules/network/uplink-steering/contracts.ts";
 import {
 	UplinkSteeringCoordinator,
 	type UplinkSteeringCoordinatorDeps,
@@ -13,6 +16,149 @@ import {
 import { prepared, uplink } from "./uplink-steering-test-fixtures.ts";
 
 describe("UplinkSteeringCoordinator", () => {
+	test("backs off identical failures from 5 seconds to the 60 second cap while still retrying cleanup", async () => {
+		const desired = prepared([uplink("a", "wwan0", 100)]);
+		let now = 0;
+		let applies = 0;
+		let cleanups = 0;
+		const statuses: SteeringAvailability[] = [];
+		const retryDelays: number[] = [];
+		const coordinator = new UplinkSteeringCoordinator({
+			readDesiredState: async () => structuredClone(desired),
+			apply: async () => {
+				applies++;
+				throw new SteeringUnavailableError("policy_route_missing", "no route");
+			},
+			now: () => now,
+			publishAvailability: (status) => statuses.push(status),
+			waitBeforeRetry: async (delay) => {
+				retryDelays.push(delay);
+				now += delay;
+			},
+			retryCleanup: async () => {
+				cleanups++;
+				throw new Error("cleanup still refused");
+			},
+		});
+
+		await coordinator.requestReconcile();
+		expect(applies).toBe(3);
+		expect(retryDelays).toEqual([100, 500]);
+		const unavailable = statuses.at(-1);
+		expect(unavailable).toEqual({
+			available: false,
+			reason: "policy_route_missing",
+			detail: "no route",
+		});
+		const exhaustedAt = now;
+		for (let event = 1; event <= 10; event++) {
+			now = exhaustedAt + event * 400;
+			await coordinator.requestReconcile();
+		}
+		expect(applies).toBe(3);
+		expect(statuses).toHaveLength(3);
+		expect(statuses.at(-1)).toBe(unavailable);
+		expect(cleanups).toBe(10);
+		expect(coordinator.appliedState()).toBeUndefined();
+
+		let lastFailureAt = exhaustedAt;
+		for (const delay of [5_000, 10_000, 20_000, 40_000, 60_000, 60_000]) {
+			const before = applies;
+			const published = statuses.length;
+			now = lastFailureAt + delay - 1;
+			await coordinator.requestReconcile();
+			expect(applies).toBe(before);
+			expect(statuses).toHaveLength(published);
+			now++;
+			await coordinator.requestReconcile();
+			expect(applies).toBe(before + 1);
+			expect(statuses).toHaveLength(published + 1);
+			lastFailureAt = now;
+		}
+		expect(retryDelays).toEqual([100, 500]);
+	});
+
+	test("a different desired state clears backoff and gets its full immediate retry budget", async () => {
+		const first = prepared([uplink("a", "wwan0", 100)]);
+		const second = prepared([uplink("b", "wwan1", 100)]);
+		let desired = first;
+		const applied: PreparedSteeringState[] = [];
+		const delays: number[] = [];
+		const coordinator = new UplinkSteeringCoordinator({
+			readDesiredState: async () => desired,
+			apply: async (_previous, next) => {
+				applied.push(next);
+				throw new Error("reload refused");
+			},
+			now: () => 0,
+			waitBeforeRetry: async (delay) => {
+				delays.push(delay);
+			},
+			publishAvailability: () => {},
+		});
+		await coordinator.requestReconcile();
+		desired = second;
+		await coordinator.requestReconcile();
+		desired = first;
+		await coordinator.requestReconcile();
+		expect(applied).toEqual([
+			first,
+			first,
+			first,
+			second,
+			second,
+			second,
+			first,
+			first,
+			first,
+		]);
+		expect(delays).toEqual([100, 500, 100, 500, 100, 500]);
+	});
+
+	test("success clears backoff and publishes availability on an unchanged reconcile", async () => {
+		const first = prepared([uplink("a", "wwan0", 100)]);
+		const second = prepared([uplink("b", "wwan1", 100)]);
+		let desired = first;
+		let now = 0;
+		let reject = true;
+		let applies = 0;
+		const statuses: SteeringAvailability[] = [];
+		const coordinator = new UplinkSteeringCoordinator({
+			readDesiredState: async () => desired,
+			apply: async () => {
+				applies++;
+				if (reject) throw new Error("reload refused");
+			},
+			now: () => now,
+			waitBeforeRetry: async () => {},
+			publishAvailability: (status) => statuses.push(status),
+		});
+		await coordinator.requestReconcile();
+		expect(applies).toBe(3);
+		now = 5_000;
+		reject = false;
+		await coordinator.requestReconcile();
+		await coordinator.requestReconcile();
+		expect(applies).toBe(4);
+		expect(statuses.slice(-2)).toEqual([
+			{ available: true },
+			{ available: true },
+		]);
+		expect(coordinator.appliedState()).toBe(first);
+
+		desired = second;
+		reject = true;
+		await coordinator.requestReconcile();
+		expect(applies).toBe(7);
+		expect(coordinator.appliedState()).toBe(first);
+		now += 4_999;
+		await coordinator.requestReconcile();
+		expect(applies).toBe(7);
+		now++;
+		await coordinator.requestReconcile();
+		expect(applies).toBe(8);
+	});
+
 	test.each([true, false])(
 		"commits despite recovered cleanup failure and retries on the next reconcile (active=%s)",
 		async (active) => {
