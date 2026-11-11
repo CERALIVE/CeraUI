@@ -91,7 +91,7 @@ describe("uplink steering route teardown", () => {
 
 		expect(h.calls).toEqual([
 			["ip", "rule", "show"],
-			["ip", "route", "show", "table", "30001"],
+			["ip", "-4", "route", "show", "default", "dev", "wlan1"],
 			["ip", "rule", "show"],
 			[
 				"ip",

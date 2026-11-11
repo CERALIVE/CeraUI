@@ -28,6 +28,8 @@ export interface RouteProvisioning {
 	readonly createdFwmarkRule?: boolean;
 	readonly createdSourceRule?: boolean;
 	readonly createdTableRoute?: boolean;
+	readonly replacedTableRoute?: readonly string[];
+	readonly addedTableRoute?: readonly string[];
 }
 
 export interface UplinkSteeringApplierDeps {

@@ -83,6 +83,24 @@ this cold-start case.
 APT ownership retains its separate, unchanged legacy absence contract. It does
 not inherit steering's exit-code, stdout, or flush-diagnostic policy.
 
+Provisioning compares a managed table's default device, gateway, protocol, and
+metric with the planned route. Managed plans prefer the interface's live
+main-table default, including when an existing source rule already selects the
+managed table. If that query succeeds with empty output, an existing usable
+managed default selected by the source rule is retained, as before; query errors
+still fail planning. Without that existing support, an absent live default fails
+preparation.
+
+A gateway or protocol change at the same metric uses one `ip route replace`.
+Different metrics are distinct kernel route keys, so a metric change adds the
+desired route before deleting the exact old route. Rollback restores the old
+route before deleting the added replacement. A failed add leaves the old route
+untouched; a failed old-route deletion removes only the new route. The table
+always retains a default during these successful writes, and each completed
+change or rollback leaves one default. Neither path flushes or touches another
+uplink's table. An identical route needs no replacement and, when its rules
+already exist, reports no change.
+
 For `ip -4 route show default dev <ifname>`, iproute2 omits the `dev` clause.
 The planner supplies that query's interface when absent and rejects a conflicting
 `dev`; unfiltered table output must explicitly name the matching interface.
