@@ -35,7 +35,7 @@ import AsyncSwitch from '$lib/components/custom/async-switch.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import { Button } from '$lib/components/ui/button';
 import * as Tooltip from '$lib/components/ui/tooltip';
-import { clearOperation, osCommand } from '$lib/rpc/async-operation.svelte';
+import { osCommand } from '$lib/rpc/async-operation.svelte';
 import { type AddonManagerPhase, rpc } from '$lib/rpc/client';
 import { getAddons } from '$lib/rpc/subscriptions.svelte';
 import { cn } from '$lib/utils';
@@ -238,15 +238,12 @@ async function handleToggle(id: string, next: boolean) {
 		target: next,
 		rpc: () => (next ? rpc.addons.install({ id }) : rpc.addons.uninstall({ id })),
 		confirmOnResolve: true,
-		classify: () => ({ ok: true }),
+		classify: (r) => ({ ok: true, clear: !r.success }),
 		failMessage: () => 'Add-on action failed.',
 	});
 	// undefined → re-entry no-op or a thrown RPC (osCommand already toasted).
 	if (!result) throw new Error('addon_action_failed');
 	if (!result.success) {
-		// The op did not apply — drop the optimistically-confirmed async-op entry
-		// so it never reads as a real success.
-		clearOperation(`addon:${id}`);
 		if (result.error === ADDON_UNAVAILABLE_ERROR) {
 			unavailable = true;
 			// Reject so AsyncSwitch reverts to the prior value without a toast.

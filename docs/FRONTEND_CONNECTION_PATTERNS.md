@@ -497,6 +497,17 @@ one, and store recreation invalidates the captured owner. Superseded calls retai
 their raw result, `onResult` callback and failure toast, subject to the existing
 `isCurrent` and `silent` options.
 
+RPC callers must classify and settle inside `osCommand`, rather than confirm,
+fail or clear a resource key after awaiting it. An ok classification with
+`clear: true` releases only the captured attempt, taking precedence over
+`confirmOnResolve`, without a toast or a confirmed phase. Ingest, Bluetooth,
+add-on and kiosk inline refusals use this path; their existing feedback and raw
+results remain independent of settlement ownership. Live input switching uses
+the helper's success/refusal classification and `confirmOnResolve`; `failMessage`
+receives the resolved result (or `undefined` on a throw) for localized source-lost
+feedback. The component regressions expire A, dispatch B and resolve A, asserting
+that B remains pending.
+
 An untagged same-target Ethernet pending echo preserves the current attempt,
 result owner and deadline under #466. An actual replacement requires a new
 begin: for the same target, an untagged terminal followed by an external untagged

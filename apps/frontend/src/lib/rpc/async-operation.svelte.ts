@@ -524,6 +524,8 @@ export function destroyAsyncOperations(): void {
 /** The classification of an OS-op result: terminal-ok, busy, or a discrete failure. */
 interface OsCommandVerdict {
 	ok: boolean;
+	/** An inline refusal releases its attempt without a success phase or toast. */
+	clear?: boolean;
 	busy?: boolean;
 	reason?: string;
 }
@@ -568,6 +570,8 @@ function defaultClassify(r: unknown): OsCommandVerdict {
  *    transitions `key → confirmed`. Without it the op stays `pending`: the
  *    per-surface `$effect` confirms on the authoritative broadcast, or the TTL
  *    valve flips it to `timed_out`.
+ *  - An ok verdict with `clear: true` clears its attempt instead of confirming
+ *    or staying pending; the caller still owns its inline refusal feedback.
  *  - RPC settlement only changes the attempt this call began. A replacement
  *    keeps its state, while this call still delivers its feedback and result.
  *  - `onResult` runs with the raw result on any resolve (ok or not).
@@ -582,7 +586,7 @@ export async function osCommand<T>(opts: {
 	confirmOnResolve?: boolean;
 	silent?: boolean;
 	busyMessage?: () => string;
-	failMessage?: () => string;
+	failMessage?: (result?: T) => string;
 	onResult?: (r: T) => void;
 	/** A caller-owned dialog/radio lifetime may end while the RPC is pending. */
 	isCurrent?: () => boolean;
@@ -609,10 +613,12 @@ export async function osCommand<T>(opts: {
 				owner.fail(opts.key, v.reason ?? (v.busy ? "device_busy" : "failed"));
 			if (!opts.silent) {
 				toast.error(
-					(v.busy ? opts.busyMessage : opts.failMessage)?.() ??
+					(v.busy ? opts.busyMessage : opts.failMessage)?.(r) ??
 						m["network.os.operationFailed"](),
 				);
 			}
+		} else if (v.clear) {
+			if (canSettle()) owner.clear(opts.key);
 		} else if (opts.confirmOnResolve) {
 			if (canSettle()) owner.confirm(opts.key);
 		}

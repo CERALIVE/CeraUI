@@ -17,11 +17,7 @@ import { LazyDialog, LazyDialogFallback, lazyDialog } from '$lib/components/dial
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
 import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
-import {
-	confirmOperation,
-	failOperation,
-	osCommand,
-} from '$lib/rpc/async-operation.svelte';
+import { osCommand } from '$lib/rpc/async-operation.svelte';
 import {
 	markPending,
 	onRpcAppliedReactive,
@@ -362,23 +358,19 @@ async function handleSwitchInput(inputId: string) {
 			key: 'switch-input',
 			target: inputId,
 			rpc: () => rpc.streaming.switchInput({ input_id: inputId }),
-			classify: () => ({ ok: true }),
-			failMessage: () => m["live.inputPicker.switchFailed"](),
+			classify: (r) => ({ ok: r.success, reason: r.error }),
+			confirmOnResolve: true,
+			failMessage: (r) =>
+				r?.error === SWITCH_INPUT_ERRORS.SOURCE_LOST
+					? m["live.inputPicker.sourceLost"]()
+					: m["live.inputPicker.switchFailed"](),
 		});
 		if (!res) return; // re-entry no-op or a thrown RPC (osCommand already toasted)
 		if (res.success) {
-			confirmOperation('switch-input');
 			toast.success(m["live.inputPicker.switched"]({ ms: res.gap_ms ?? 0 }));
 			if (res.audio_follow_pending) {
 				toast.info(m["live.inputPicker.audioFollowsOnRestart"]());
 			}
-		} else {
-			failOperation('switch-input', res.error ?? 'failed');
-			toast.error(
-				res.error === SWITCH_INPUT_ERRORS.SOURCE_LOST
-					? m["live.inputPicker.sourceLost"]()
-					: m["live.inputPicker.switchFailed"](),
-			);
 		}
 	} finally {
 		switchingInput = undefined;

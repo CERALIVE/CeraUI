@@ -35,7 +35,6 @@ import { Button } from '$lib/components/ui/button';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import {
-	clearOperation,
 	getOperationPhase,
 	osCommand,
 } from '$lib/rpc/async-operation.svelte';
@@ -115,22 +114,22 @@ async function handleEnableChange(next: boolean) {
 		target: next,
 		rpc: () => (next ? rpc.system.kioskStart() : rpc.system.kioskStop()),
 		confirmOnResolve: true,
-		classify: () => ({ ok: true }),
+		classify: (r) => ({
+			ok: true,
+			clear: r.error === KIOSK_UNAVAILABLE_ERROR || !r.applied ||
+				(r.error !== undefined && ['streaming', 'stream_liveness_unknown', 'update_in_progress'].includes(r.error)),
+		}),
 		failMessage: () => m["settings.onDeviceDisplay.toggleError"](),
 	});
 	// undefined → re-entry no-op or a thrown RPC (osCommand already toasted).
 	if (!result) throw new Error('kiosk_toggle_failed');
 	if (result.error && ['streaming', 'stream_liveness_unknown', 'update_in_progress'].includes(result.error)) {
 		unavailable = false;
-		clearOperation('kiosk');
 		toast.error(m["notifications.disruptiveActionRefused"]());
 		throw new Error(result.error);
 	}
 	if (result.error === KIOSK_UNAVAILABLE_ERROR || !result.applied) {
 		unavailable = true;
-		// The op did not actually apply — drop the (optimistically confirmed)
-		// async-op entry so it never reads as a real success.
-		clearOperation('kiosk');
 		// Reject so AsyncSwitch reverts to the prior value without an error toast.
 		throw new Error(KIOSK_UNAVAILABLE_ERROR);
 	}
@@ -151,13 +150,15 @@ async function configure(patch: Partial<KioskConfigureInput>) {
 		target: next,
 		rpc: () => rpc.system.kioskConfigure(next),
 		confirmOnResolve: true,
-		classify: () => ({ ok: true }),
+		classify: (r) => ({
+			ok: true,
+			clear: r.error === KIOSK_UNAVAILABLE_ERROR || !r.applied,
+		}),
 		failMessage: () => m["settings.onDeviceDisplay.configureError"](),
 	});
 	if (!result) return; // re-entry no-op or a thrown RPC (osCommand already toasted)
 	if (result.error === KIOSK_UNAVAILABLE_ERROR || !result.applied) {
 		unavailable = true;
-		clearOperation('kiosk-configure');
 		return;
 	}
 	unavailable = false;
@@ -177,13 +178,15 @@ async function signalOsk(visible: boolean) {
 		target: visible,
 		rpc: () => rpc.system.kioskOsk({ visible }),
 		confirmOnResolve: true,
-		classify: () => ({ ok: true }),
+		classify: (r) => ({
+			ok: true,
+			clear: r.error === KIOSK_UNAVAILABLE_ERROR || !r.success,
+		}),
 		failMessage: () => m["settings.onDeviceDisplay.keyboardError"](),
 	});
 	if (!result) return; // re-entry no-op or a thrown RPC (osCommand already toasted)
 	if (result.error === KIOSK_UNAVAILABLE_ERROR || !result.success) {
 		unavailable = true;
-		clearOperation('kiosk-osk');
 		return;
 	}
 	unavailable = false;
