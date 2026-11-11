@@ -197,6 +197,37 @@ describe("eth_role ingestion", () => {
 		expect(target).toBe("uplink");
 	});
 
+	it.each(["uplink", "shared-lan"])(
+		"a local refusal preserves an external %s pending frame and its terminal success",
+		async (role) => {
+			const reply = Promise.withResolvers<{
+				success: boolean;
+				error: string;
+			}>();
+			const command = osCommand({
+				key: KEY,
+				target: "shared-lan",
+				rpc: () => reply.promise,
+				silent: true,
+			});
+			handlers.message?.("eth_role", {
+				eth_role: { name: "eth0", error: "apply_failed" },
+			});
+			handlers.message?.("eth_role", {
+				eth_role: { name: "eth0", role, pending: true },
+			});
+			reply.resolve({ success: false, error: "apply_failed" });
+			await command;
+			expect(getOperationPhase(KEY)).toBe("pending");
+			expect(getOperationTarget(KEY)).toBe(role);
+			expect(getOperationReason(KEY)).toBeUndefined();
+			handlers.message?.("eth_role", {
+				eth_role: { name: "eth0", role, success: true },
+			});
+			expect(getOperationPhase(KEY)).toBe("confirmed");
+		},
+	);
+
 	it("a pending frame begins the op and records the target role", () => {
 		handlers.message?.("eth_role", {
 			eth_role: { name: "eth0", role: "shared-lan", pending: true },

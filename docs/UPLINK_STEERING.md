@@ -212,3 +212,7 @@ passive telemetry without active probes.
 Model and steering-selection regressions live in
 `apps/backend/src/tests/uplink-steering-state.test.ts`; all three recovery paths
 are covered in `apps/backend/src/tests/uplink-health-recovery.test.ts`.
+
+## Asynchronous health observations
+
+Health rounds snapshot candidate addresses and interface generations before resolving the probe target. The runtime synchronously advances an interface's generation on network-interface events that remove it, change its address or change its device-bound eligibility. This rejects old evidence even when removal/re-addition or an address/eligibility change returns to the original state entirely between health ticks. Before each batch and before recording its results, the runtime checks the generation, current address and device-bound eligibility. A newer observation for that interface or a completed newer round supersedes older evidence. Starting another pending round alone does not discard valid slow evidence; counters, bond selection and equivalent entry replacement do not advance generations. Removed-interface sample bookkeeping is retired after completed rounds without reusing generations. Deferred-resolution, probe and batch regressions live in `apps/backend/src/tests/uplink-health.test.ts`; between-tick event regressions live in `apps/backend/src/tests/uplink-health-interface-generation.test.ts`.
