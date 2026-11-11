@@ -12,12 +12,13 @@ never named by generated rule text. The carrier effects are isolated in
 
 **Only forwarded client-zone traffic is steered or NATed, and only the client band
 is ever capped. Preserve physical-identity marks and established flows.**
-Everything below is how that is made structural rather than intentional. Every
-mode transition that can create or
-retire a client zone — station / hotspot / hybrid, and the Ethernet `uplink` /
-`shared-lan` role — runs under the one permanent-MAC adapter lock described in
-EVERY WIFI MUTATION SHARES ONE ADAPTER LOCK, so a zone can never be registered
-against a half-applied adapter state.
+Everything below is how that is made structural rather than intentional. Wi-Fi
+station / hotspot / hybrid transitions run under the permanent-MAC adapter lock
+described in EVERY WIFI MUTATION SHARES ONE ADAPTER LOCK. Ethernet `uplink` /
+`shared-lan` changes and boot reconciliation share one promise chain per port.
+The whole persist -> NetworkManager -> restore sequence completes before the next
+operation on that port begins; other ports proceed independently. Reconciliation
+reads the role again after taking ownership, and drained queue entries are removed.
 
 **Client provenance is structural.** New-flow selection, conntrack mark restore,
 and masquerade all require a positive registered client-zone `iifname`; NAT also
