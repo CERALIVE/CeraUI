@@ -1,6 +1,7 @@
 import { isFibTableAbsent } from "../../../helpers/iproute2-absent.ts";
 import { run } from "../../../helpers/run.ts";
 import { parseDefaultRouteInterface } from "../connectivity-candidates.ts";
+import { parseDefaultRouteLine } from "../gateways.ts";
 import type { RouteProvisioning, UplinkRoutePlan } from "./applier.ts";
 import { asRouteError, routeUnavailable } from "./route-errors.ts";
 import {
@@ -81,18 +82,50 @@ async function ensureUplinkRouteInner(
 	let createdTableRoute = false;
 	let createdSourceRule = false;
 	let createdFwmarkRule = false;
+	let replacedTableRoute: readonly string[] | undefined;
 	try {
 		if (plan.managed) {
 			const routeOutput = await readRouteTable(deps, plan.table);
-			if (parseDefaultRouteInterface(routeOutput) !== plan.ifname) {
-				if (plan.defaultRouteArgv === undefined) {
+			const defaultLine =
+				routeOutput
+					.split("\n")
+					.find((line) => line.trim().startsWith("default")) ?? "";
+			const currentRoute = parseDefaultRouteLine(defaultLine);
+			const sameDevice =
+				parseDefaultRouteInterface(defaultLine) === plan.ifname;
+			const plannedRoute = plan.defaultRouteArgv;
+			const changedDefault =
+				currentRoute.ok &&
+				plannedRoute !== undefined &&
+				["via", "proto", "metric"].some((field) => {
+					const currentIndex = currentRoute.value.indexOf(field);
+					const plannedIndex = plannedRoute.indexOf(field);
+					return (
+						(currentIndex === -1
+							? undefined
+							: currentRoute.value[currentIndex + 1]) !==
+						(plannedIndex === -1 ? undefined : plannedRoute[plannedIndex + 1])
+					);
+				});
+			if (!sameDevice || changedDefault) {
+				if (plannedRoute === undefined) {
 					throw routeUnavailable(
 						plan.ifname,
 						"managed route has no replacement argv",
 					);
 				}
-				await deps.run("ip", [...plan.defaultRouteArgv]);
-				createdTableRoute = true;
+				await deps.run("ip", [...plannedRoute]);
+				if (sameDevice && currentRoute.ok) {
+					replacedTableRoute = [
+						"route",
+						"replace",
+						"table",
+						plan.table,
+						...currentRoute.value.slice(2),
+					];
+				} else {
+					createdTableRoute = true;
+				}
 			}
 		}
 		if (plan.sourceRulePriority !== undefined && !hasSourceRule(rules, plan)) {
@@ -109,6 +142,7 @@ async function ensureUplinkRouteInner(
 			createdTableRoute,
 			createdSourceRule,
 			createdFwmarkRule,
+			replacedTableRoute,
 		);
 		try {
 			await rollbackUplinkRoute(provisioning, deps);
@@ -125,6 +159,7 @@ async function ensureUplinkRouteInner(
 		createdTableRoute,
 		createdSourceRule,
 		createdFwmarkRule,
+		replacedTableRoute,
 	);
 }
 
@@ -139,7 +174,9 @@ export async function rollbackUplinkRoute(
 	if (provisioning.createdSourceRule) {
 		await deps.run("ip", sourceRuleArgv("del", route));
 	}
-	if (provisioning.createdTableRoute) {
+	if (provisioning.replacedTableRoute !== undefined) {
+		await deps.run("ip", [...provisioning.replacedTableRoute]);
+	} else if (provisioning.createdTableRoute) {
 		await flushRouteTable(deps, route.table);
 	}
 }
@@ -180,12 +217,18 @@ function buildProvisioning(
 	createdTableRoute: boolean,
 	createdSourceRule: boolean,
 	createdFwmarkRule: boolean,
+	replacedTableRoute: readonly string[] | undefined,
 ): RouteProvisioning {
 	return {
 		route,
-		changed: createdTableRoute || createdSourceRule || createdFwmarkRule,
+		changed:
+			createdTableRoute ||
+			createdSourceRule ||
+			createdFwmarkRule ||
+			replacedTableRoute !== undefined,
 		createdTableRoute,
 		createdSourceRule,
 		createdFwmarkRule,
+		...(replacedTableRoute === undefined ? {} : { replacedTableRoute }),
 	};
 }

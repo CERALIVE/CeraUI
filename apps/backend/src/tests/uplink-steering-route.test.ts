@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { RunTimeoutError } from "../helpers/run.ts";
 
+import type { UplinkRoutePlan } from "../modules/network/uplink-steering/applier.ts";
 import {
 	ensureUplinkRoute,
 	planUplinkRoute,
+	rollbackUplinkRoute,
 	type UplinkRouteManagerDeps,
 } from "../modules/network/uplink-steering/route-manager.ts";
 import { stableUplinkMark } from "../modules/network/uplink-steering/ruleset.ts";
@@ -251,5 +253,134 @@ describe("uplink steering route planning", () => {
 			reason: "policy_route_missing",
 			message: "wlan0: ip unavailable",
 		});
+	});
+});
+
+describe("managed uplink default route refresh", () => {
+	const plan: UplinkRoutePlan = {
+		identity: "cellular-refresh",
+		ifname: "wwan0",
+		sourceAddress: "10.0.0.2",
+		mark: 0xca000100,
+		table: "30001",
+		managed: true,
+		sourceRulePriority: 100,
+		defaultRouteArgv: [
+			"route",
+			"replace",
+			"table",
+			"30001",
+			"default",
+			"via",
+			"10.0.0.9",
+			"dev",
+			"wwan0",
+		],
+	};
+	const rules = [
+		"100: from 10.0.0.2 lookup 30001",
+		"110: from all fwmark 0xca000100/0xffffff00 lookup 30001",
+		"110: from all fwmark 0xca000200/0xffffff00 lookup 30002",
+	].join("\n");
+
+	test.each([
+		["gateway", "default via 10.0.0.1 dev wwan0"],
+		["metric", "default via 10.0.0.9 dev wwan0 metric 600"],
+		["protocol", "default via 10.0.0.9 dev wwan0 proto dhcp"],
+		["gateway added", "default dev wwan0"],
+	])(
+		"replaces a same-device route after a %s change",
+		async (_field, current) => {
+			const h = scripted({
+				"ip rule show": rules,
+				"ip route show table 30001": `${current}\n`,
+			});
+
+			const provisioning = await ensureUplinkRoute(plan, h);
+
+			expect(h.calls).toEqual([
+				["ip", "rule", "show"],
+				["ip", "route", "show", "table", "30001"],
+				["ip", ...(plan.defaultRouteArgv ?? [])],
+			]);
+			expect(provisioning).toMatchObject({
+				changed: true,
+				createdTableRoute: false,
+				createdSourceRule: false,
+				createdFwmarkRule: false,
+				replacedTableRoute: [
+					"route",
+					"replace",
+					"table",
+					"30001",
+					...current.split(" "),
+				],
+			});
+		},
+	);
+
+	test("rollback restores the previous gateway and route attributes without flushing", async () => {
+		const current =
+			"default via 10.0.0.1 dev wwan0 proto dhcp src 10.0.0.2 metric 600 onlink";
+		const h = scripted({
+			"ip rule show": rules,
+			"ip route show table 30001": `${current}\n`,
+		});
+		const provisioning = await ensureUplinkRoute(plan, h);
+		h.calls.length = 0;
+
+		await rollbackUplinkRoute(provisioning, h);
+
+		expect(h.calls).toEqual([
+			["ip", "route", "replace", "table", "30001", ...current.split(" ")],
+		]);
+	});
+
+	test.each([
+		"default via 10.0.0.9 dev wwan0",
+		"default dev wwan0 via 10.0.0.9",
+	])("leaves an identical route unchanged: %s", async (current) => {
+		const h = scripted({
+			"ip rule show": rules,
+			"ip route show table 30001": `${current}\n`,
+		});
+
+		const provisioning = await ensureUplinkRoute(plan, h);
+
+		expect(provisioning.changed).toBe(false);
+		expect(provisioning.replacedTableRoute).toBeUndefined();
+		expect(h.calls).toEqual([
+			["ip", "rule", "show"],
+			["ip", "route", "show", "table", "30001"],
+		]);
+	});
+
+	test("restores a replaced route when a later rule installation fails", async () => {
+		const current = "default via 10.0.0.1 dev wwan0";
+		const h = scripted({
+			"ip rule show": "",
+			"ip route show table 30001": `${current}\n`,
+		});
+		const deps: UplinkRouteManagerDeps = {
+			run: async (command, args, ...rest) => {
+				const result = await h.run(command, args, ...rest);
+				if (args.includes("fwmark")) throw new Error("fwmark refused");
+				return result;
+			},
+		};
+
+		await expect(ensureUplinkRoute(plan, deps)).rejects.toMatchObject({
+			reason: "policy_route_missing",
+		});
+
+		expect(h.calls.at(-1)).toEqual([
+			"ip",
+			"route",
+			"replace",
+			"table",
+			"30001",
+			...current.split(" "),
+		]);
+		expect(h.calls.some((call) => call.includes("flush"))).toBe(false);
 	});
 });
