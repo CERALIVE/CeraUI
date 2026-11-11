@@ -51,6 +51,7 @@ import {
 	isRecoveryPending,
 	resetRecoveryBarrier,
 } from "../modules/streaming/recovery-barrier.ts";
+import { assertNmDeviceShowFields } from "./helpers/nm-device-show-fixture.ts";
 
 const UUID = "d848da09-f700-4530-b888-be8b99ec8c85";
 const KEY = "platform-xhci-hcd.0.auto-usb-0:1.4.1";
@@ -169,9 +170,17 @@ modem.generic.ports.length : 1
 modem.generic.ports.value[1] : wwan0 (net)`;
 		}
 		if (binary === "nmcli") {
+			if (args.includes("device") && args.includes("show")) {
+				const fields = args[args.indexOf("--get-values") + 1];
+				if (fields === undefined) throw new Error("missing device show fields");
+				assertNmDeviceShowFields(fields);
+			}
 			if (args.includes("DEVICE,TYPE")) return "cdc-wdm0:gsm";
-			if (args.includes("GENERAL.CON-UUID,GENERAL.AVAILABLE-CONNECTIONS"))
-				return `\n${UUID} | gsm-1`;
+			if (args.includes("GENERAL.CON-UUID")) return "";
+			if (args.includes("CONNECTIONS.AVAILABLE-CONNECTIONS")) {
+				expect(args.slice(0, 2)).toEqual(["--mode", "multiline"]);
+				return `CONNECTIONS.AVAILABLE-CONNECTIONS[1]:${UUID} | profile-a`;
+			}
 			if (args.includes("GENERAL.IP-IFACE")) return "";
 			if (args.includes("GENERAL.STATE")) {
 				await onStateRead?.();
@@ -246,6 +255,35 @@ test("a newly registered idle modem gets one activation after discovery", async 
 	expect(activations()).toEqual([]);
 	await runModemStatusPoll();
 	await runModemStatusPoll();
+	expect(activations()).toEqual([["nmcli", "-w", "45", "conn", "up", UUID]]);
+});
+
+test("an empty active UUID reaches ready activation through the available profile", async () => {
+	await runModemStatusPoll();
+	expect(commands).toContainEqual([
+		"nmcli",
+		"--terse",
+		"--escape",
+		"no",
+		"--get-values",
+		"GENERAL.CON-UUID",
+		"device",
+		"show",
+		"cdc-wdm0",
+	]);
+	expect(commands).toContainEqual([
+		"nmcli",
+		"--mode",
+		"multiline",
+		"--terse",
+		"--escape",
+		"no",
+		"--get-values",
+		"CONNECTIONS.AVAILABLE-CONNECTIONS",
+		"device",
+		"show",
+		"cdc-wdm0",
+	]);
 	expect(activations()).toEqual([["nmcli", "-w", "45", "conn", "up", UUID]]);
 });
 

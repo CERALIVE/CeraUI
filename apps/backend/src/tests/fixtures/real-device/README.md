@@ -195,3 +195,16 @@ later capture, not the refusal-time observation, whose cause remains unknown.
 The captured boot ID (in `bootId` and `healthy.boot_id`) is normalized to the
 111 placeholder `11111111-1111-4111-8111-111111111111`, and the tests that name it
 use the same value; nothing else in the capture was substituted.
+
+## NetworkManager field and profile fixtures
+
+`nm-1.52.1-device-show-fields.txt` contains the GENERAL and CONNECTIONS allowed
+fields returned by NM 1.52.1 on the Rock on November 11, 2026. The separately
+marked IP4.ADDRESS entry is the property already exercised by the ceralive2
+data-path fixture from August 19, 2026.
+
+`nm-1.52.1-twin-profile-replay.json` is a redacted, constructed twin-modem replay.
+Its available profile lines follow the measured NM 1.52.1 multiline format
+`CONNECTIONS.AVAILABLE-CONNECTIONS[n]:<uuid> | <name>` and the #434 report.
+It is not a capture from attached modems. Replace this file with the redacted
+bench capture before merge; preserve the resolver and ambiguity assertions.

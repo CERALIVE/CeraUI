@@ -13,17 +13,18 @@
  * the board did not — so every case here drives the PRODUCTION
  * `defaultResolveConnectionId` / `confirmModemDataPath`.
  */
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
 import type {
 	CertifiedCatalog,
 	UsbModeTransitionOutcome,
 	UsbModeTransitionRequest,
 } from "@ceralive/modem-control";
+import { logger } from "../helpers/logger.ts";
+import * as runner from "../helpers/run.ts";
 
 import {
 	type ModemNmDeviceReader,
@@ -44,7 +45,14 @@ import {
 	type ResolvedModemIdentity,
 } from "../modules/modems/usb-mode-identity.ts";
 import { runUsbModeTransition } from "../modules/modems/usb-mode-transition.ts";
+import { nmDeviceProp } from "../modules/network/network-manager.ts";
 import { resetLifecycleInterlock } from "../modules/streaming/lifecycle-admission.ts";
+import { withDeviceType } from "../modules/system/device-detection.ts";
+import {
+	assertNmDeviceShowFields,
+	TWIN_REPLAY_UUID,
+	twinProfileReplay,
+} from "./helpers/nm-device-show-fixture.ts";
 
 const IFNAME = "wwan2";
 const NM_DEVICE = "cdc-wdm2";
@@ -69,7 +77,7 @@ const BOARD_PROPS: Readonly<Record<string, Readonly<Record<string, string>>>> =
 		"cdc-wdm2": {
 			"GENERAL.IP-IFACE": IFNAME,
 			"GENERAL.CON-UUID": CON_UUID,
-			"GENERAL.CON-UUID,GENERAL.AVAILABLE-CONNECTIONS": `${CON_UUID} | Movistar`,
+			"CONNECTIONS.AVAILABLE-CONNECTIONS": `CONNECTIONS.AVAILABLE-CONNECTIONS[1]:${CON_UUID} | profile-a`,
 			"GENERAL.STATE": "100 (connected)",
 			"IP4.ADDRESS": "10.151.220.76/29",
 		},
@@ -83,7 +91,10 @@ function boardNm(): { probed: string[] } {
 	const probed: string[] = [];
 	const reader: ModemNmDeviceReader = {
 		listDevices: () => Promise.resolve(BOARD_NM_DEVICES),
-		deviceProp: (device, fields) => {
+		deviceProp: (device, fields, mode) => {
+			assertNmDeviceShowFields(fields);
+			if (fields === "CONNECTIONS.AVAILABLE-CONNECTIONS")
+				expect(mode).toBe("multiline");
 			probed.push(device);
 			return Promise.resolve([BOARD_PROPS[device]?.[fields] ?? ""]);
 		},
@@ -182,6 +193,218 @@ afterEach(async () => {
 		await rm(journalDir, { recursive: true, force: true });
 		journalDir = undefined;
 	}
+});
+
+describe("#434 NM 1.52.1 twin profile replay", () => {
+	test("an available-only profile resolves its modem and ignores Ethernet", async () => {
+		const replay = twinProfileReplay();
+		setModemNmDeviceReaderForTest(replay.reader);
+		await expect(
+			resolveModemNmDeviceForConnection(TWIN_REPLAY_UUID),
+		).resolves.toBe("cdc-wdm1");
+		expect(replay.reads).toEqual([
+			["cdc-wdm0", "GENERAL.CON-UUID", undefined],
+			["cdc-wdm1", "GENERAL.CON-UUID", undefined],
+			["cdc-wdm0", "CONNECTIONS.AVAILABLE-CONNECTIONS", "multiline"],
+			["cdc-wdm1", "CONNECTIONS.AVAILABLE-CONNECTIONS", "multiline"],
+		]);
+	});
+
+	test("an active hit wins case-insensitively without any available read", async () => {
+		const replay = twinProfileReplay();
+		replay.properties["cdc-wdm1"] = {
+			...replay.properties["cdc-wdm1"],
+			"GENERAL.CON-UUID": TWIN_REPLAY_UUID.toUpperCase(),
+		};
+		setModemNmDeviceReaderForTest(replay.reader);
+		await expect(
+			resolveModemNmDeviceForConnection(TWIN_REPLAY_UUID),
+		).resolves.toBe("cdc-wdm1");
+		expect(replay.reads).toEqual([
+			["cdc-wdm0", "GENERAL.CON-UUID", undefined],
+			["cdc-wdm1", "GENERAL.CON-UUID", undefined],
+		]);
+	});
+
+	test("two active owners stay unresolved without an available read", async () => {
+		const replay = twinProfileReplay();
+		for (const device of ["cdc-wdm0", "cdc-wdm1"])
+			replay.properties[device] = {
+				...replay.properties[device],
+				"GENERAL.CON-UUID": TWIN_REPLAY_UUID,
+			};
+		setModemNmDeviceReaderForTest(replay.reader);
+		await expect(
+			resolveModemNmDeviceForConnection(TWIN_REPLAY_UUID),
+		).resolves.toBeUndefined();
+		expect(replay.reads).toHaveLength(2);
+	});
+
+	test("two devices offering the saved UUID are ambiguous", async () => {
+		const replay = twinProfileReplay();
+		replay.properties["cdc-wdm0"] = {
+			...replay.properties["cdc-wdm0"],
+			"CONNECTIONS.AVAILABLE-CONNECTIONS": `CONNECTIONS.AVAILABLE-CONNECTIONS[1]:${TWIN_REPLAY_UUID} | profile-a`,
+		};
+		setModemNmDeviceReaderForTest(replay.reader);
+		await expect(
+			resolveModemNmDeviceForConnection(TWIN_REPLAY_UUID),
+		).resolves.toBeUndefined();
+	});
+
+	test.each([
+		`CONNECTIONS.AVAILABLE-CONNECTIONS[1]:11111111-2222-3333-4444-555555555555 | profile ${TWIN_REPLAY_UUID}`,
+		`CONNECTIONS.AVAILABLE-CONNECTIONS[1]:${TWIN_REPLAY_UUID}0 | profile-a`,
+		`CONNECTIONS.AVAILABLE-CONNECTIONS[1]:${TWIN_REPLAY_UUID.slice(0, -1)} | profile-a`,
+		`${TWIN_REPLAY_UUID} | profile-a`,
+		"CONNECTIONS.AVAILABLE-CONNECTIONS[1]:-- | profile-a",
+	])(
+		"does not match malformed output or a UUID in the name: %s",
+		async (output) => {
+			const replay = twinProfileReplay();
+			replay.properties["cdc-wdm1"] = {
+				...replay.properties["cdc-wdm1"],
+				"CONNECTIONS.AVAILABLE-CONNECTIONS": output,
+			};
+			setModemNmDeviceReaderForTest(replay.reader);
+			await expect(
+				resolveModemNmDeviceForConnection(TWIN_REPLAY_UUID),
+			).resolves.toBeUndefined();
+		},
+	);
+
+	test("multiple available entries on one device still name one owner", async () => {
+		const replay = twinProfileReplay();
+		replay.properties["cdc-wdm1"] = {
+			...replay.properties["cdc-wdm1"],
+			"CONNECTIONS.AVAILABLE-CONNECTIONS": [
+				"CONNECTIONS.AVAILABLE-CONNECTIONS[1]:11111111-2222-3333-4444-555555555555 | profile-b",
+				`CONNECTIONS.AVAILABLE-CONNECTIONS[2]: ${TWIN_REPLAY_UUID.toUpperCase()} | profile-a`,
+				`CONNECTIONS.AVAILABLE-CONNECTIONS[3]:${TWIN_REPLAY_UUID} | profile-c`,
+			].join("\n"),
+		};
+		setModemNmDeviceReaderForTest(replay.reader);
+		await expect(
+			resolveModemNmDeviceForConnection(TWIN_REPLAY_UUID),
+		).resolves.toBe("cdc-wdm1");
+	});
+
+	test.each([
+		"",
+		"--",
+		"profile-a",
+		TWIN_REPLAY_UUID.slice(0, -1),
+		`${TWIN_REPLAY_UUID}\n`,
+	])(
+		"rejects an invalid connection id before reading devices: %j",
+		async (id) => {
+			const replay = twinProfileReplay();
+			let listed = false;
+			setModemNmDeviceReaderForTest({
+				...replay.reader,
+				listDevices: async () => {
+					listed = true;
+					return ["cdc-wdm0:gsm"];
+				},
+			});
+			await expect(
+				resolveModemNmDeviceForConnection(id),
+			).resolves.toBeUndefined();
+			expect(listed).toBe(false);
+			expect(replay.reads).toEqual([]);
+		},
+	);
+
+	test("the reader fake rejects fields absent from the captured allowlist", () => {
+		expect(() => assertNmDeviceShowFields("GENERAL.BOGUS")).toThrow(
+			"invalid field",
+		);
+		expect(() => assertNmDeviceShowFields("CONNECTIONS.BOGUS")).toThrow(
+			"invalid field",
+		);
+	});
+
+	test("the default reader forwards both reads with the exact nmcli argv", async () => {
+		const calls: string[][] = [];
+		const run = spyOn(runner, "run").mockImplementation(
+			async (binary, args) => {
+				expect(binary).toBe("nmcli");
+				calls.push(args);
+				if (args.includes("DEVICE,TYPE")) return "eth0:ethernet\ncdc-wdm1:gsm";
+				const fields = args[args.indexOf("--get-values") + 1];
+				if (fields === undefined) throw new Error("missing device show fields");
+				assertNmDeviceShowFields(fields);
+				if (fields === "GENERAL.CON-UUID") return "";
+				return `CONNECTIONS.AVAILABLE-CONNECTIONS[1]:${TWIN_REPLAY_UUID} | profile-a`;
+			},
+		);
+		try {
+			await withDeviceType("real", async () => {
+				await expect(
+					resolveModemNmDeviceForConnection(TWIN_REPLAY_UUID),
+				).resolves.toBe("cdc-wdm1");
+			});
+			expect(calls).toEqual([
+				["--terse", "--fields", "DEVICE,TYPE", "device", "status"],
+				[
+					"--terse",
+					"--escape",
+					"no",
+					"--get-values",
+					"GENERAL.CON-UUID",
+					"device",
+					"show",
+					"cdc-wdm1",
+				],
+				[
+					"--mode",
+					"multiline",
+					"--terse",
+					"--escape",
+					"no",
+					"--get-values",
+					"CONNECTIONS.AVAILABLE-CONNECTIONS",
+					"device",
+					"show",
+					"cdc-wdm1",
+				],
+			]);
+		} finally {
+			run.mockRestore();
+		}
+	});
+
+	test("invalid-field diagnostics warn once per field string while other errors stay errors", async () => {
+		let stderr = "Error: 'device show': invalid field 'GENERAL.BOGUS'";
+		const run = spyOn(runner, "run").mockImplementation(async () => {
+			throw Object.assign(new Error("command failed"), { code: 2, stderr });
+		});
+		const warn = spyOn(logger, "warn").mockImplementation(() => {});
+		const error = spyOn(logger, "error").mockImplementation(() => {});
+		try {
+			await withDeviceType("real", async () => {
+				for (const [device, fields] of [
+					["cdc-wdm0", "GENERAL.BOGUS"],
+					["cdc-wdm1", "GENERAL.BOGUS"],
+					["cdc-wdm0", "CONNECTIONS.BOGUS"],
+				] as const)
+					await expect(nmDeviceProp(device, fields)).resolves.toBeUndefined();
+				stderr = "Error: NetworkManager is not running.";
+				await expect(
+					nmDeviceProp("cdc-wdm0", "GENERAL.STATE"),
+				).resolves.toBeUndefined();
+			});
+			expect(warn).toHaveBeenCalledTimes(2);
+			expect(error).toHaveBeenCalledTimes(1);
+			expect(error.mock.calls[0]?.[0]).toContain(
+				"NetworkManager is not running",
+			);
+		} finally {
+			run.mockRestore();
+			warn.mockRestore();
+			error.mockRestore();
+		}
+	});
 });
 
 describe("B7 — one NM-device resolution for both call sites", () => {

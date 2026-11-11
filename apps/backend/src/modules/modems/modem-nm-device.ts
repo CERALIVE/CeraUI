@@ -60,16 +60,17 @@ const MODEM_NM_DEVICE_TYPES: ReadonlySet<string> = new Set(["gsm", "cdma"]);
 export interface ModemNmDeviceReader {
 	/** `nmcli -t -f DEVICE,TYPE device status` rows, `<device>:<type>`. */
 	listDevices(): Promise<readonly string[] | undefined>;
-	/** `nmcli --get-values <fields> device show <device>`, one entry per field. */
+	/** `nmcli --get-values <fields> device show <device>`, one entry per output line. */
 	deviceProp(
 		device: string,
 		fields: string,
+		mode?: "multiline",
 	): Promise<readonly string[] | undefined>;
 }
 
 const defaultReader: ModemNmDeviceReader = {
 	listDevices: () => nmDevices("DEVICE,TYPE"),
-	deviceProp: (device, fields) => nmDeviceProp(device, fields),
+	deviceProp: (device, fields, mode) => nmDeviceProp(device, fields, mode),
 };
 
 let activeReader: ModemNmDeviceReader | undefined;
@@ -120,19 +121,28 @@ export async function resolveModemNmDevice(
 
 /**
  * Resolve the post-re-enumeration NM modem device that can carry a saved
- * connection. `GENERAL.CON-UUID` covers an already reactivated profile;
- * `GENERAL.AVAILABLE-CONNECTIONS` breaks the activation chicken-and-egg when the
- * new NM device exists but the transaction still needs to bring the profile up.
+ * connection UUID. A unique active `GENERAL.CON-UUID` owner takes precedence
+ * over availability. With no active owner, multiline
+ * `CONNECTIONS.AVAILABLE-CONNECTIONS` lists UUIDs before their profile names.
+ * Only a unique modem-class owner resolves; ambiguity stays undefined.
  */
 export async function resolveModemNmDeviceForConnection(
 	connectionId: string,
 ): Promise<string | undefined> {
-	if (connectionId === "") return undefined;
+	if (
+		connectionId.length !== 36 ||
+		!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+			connectionId,
+		)
+	)
+		return undefined;
+	const uuid = connectionId.toLowerCase();
 
 	const reader = activeReader ?? defaultReader;
 	const rows = await reader.listDevices();
 	if (rows === undefined) return undefined;
 
+	const candidates: string[] = [];
 	for (const row of rows) {
 		const [device, type] = row.split(":");
 		if (
@@ -143,24 +153,36 @@ export async function resolveModemNmDeviceForConnection(
 		) {
 			continue;
 		}
-		const values = await reader.deviceProp(
+		candidates.push(device);
+	}
+
+	const matches: string[] = [];
+	for (const device of candidates) {
+		const active = (await reader.deviceProp(device, "GENERAL.CON-UUID"))?.[0];
+		if (active?.trim().toLowerCase() === uuid) matches.push(device);
+	}
+	if (matches.length > 0) {
+		return matches.length === 1 ? matches[0] : undefined;
+	}
+
+	for (const device of candidates) {
+		const available = await reader.deviceProp(
 			device,
-			"GENERAL.CON-UUID,GENERAL.AVAILABLE-CONNECTIONS",
+			"CONNECTIONS.AVAILABLE-CONNECTIONS",
+			"multiline",
 		);
 		if (
-			values?.some((value) => {
-				const normalized = value.trim();
-				return (
-					normalized === connectionId ||
-					(normalized.startsWith(connectionId) &&
-						/\s/.test(normalized.charAt(connectionId.length)))
-				);
-			}) === true
-		) {
-			return device;
-		}
+			available?.some((line) => {
+				const match =
+					/^CONNECTIONS\.AVAILABLE-CONNECTIONS\[\d+\]:\s*([0-9a-fA-F-]{36})\s*\|/.exec(
+						line,
+					);
+				return match?.[1]?.toLowerCase() === uuid;
+			})
+		)
+			matches.push(device);
 	}
-	return undefined;
+	return matches.length === 1 ? matches[0] : undefined;
 }
 
 /**
