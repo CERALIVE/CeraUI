@@ -202,8 +202,13 @@ undisturbed.
 lifting the path into steering. An up path can still become degraded on either
 observation.
 
-A missing interface retains its down record for the lifetime of the health engine
-and resets its recovery streak, so reappearance cannot start as fresh up.
+A missing interface retains its down verdict and resets its recovery streak, so
+brief reappearance still requires five fresh successful probes. Normal health
+ticks prune missing down records 24 hours after the interface was last seen.
+At most 32 missing records are retained; excess records are evicted in order of
+longest absence. A pruned interface that reappears is treated as brand-new, using
+the existing initial-up behavior. These two bounds limit history under interface
+churn without forgetting brief disappearances.
 While streaming, down paths use active probes at the existing five-second cadence
 instead of passive sender metrics. They rejoin only after the existing five-success
 and 15-second hold-down requirements are met. Other streaming paths continue to use

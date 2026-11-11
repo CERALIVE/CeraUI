@@ -5,6 +5,9 @@ export const UPLINK_HEALTH_CONFIG = {
 	probeRoundCadenceMs: 5_000,
 	maxConcurrentProbes: 3,
 	telemetryExpiryMs: 15_000,
+	// Bound churn history while preserving recovery through brief disappearance.
+	missingRecordTtlMs: 24 * 60 * 60 * 1_000,
+	maxMissingRecords: 32,
 	degradedWeight: 25,
 	passiveRttDegradedMs: 1_000,
 	passiveNakDegradedCount: 25,
@@ -81,45 +84,74 @@ const reasonFor = (
 };
 
 export class UplinkHealthEngine {
-	readonly #records = new Map<string, UplinkHealthRecord>();
+	readonly #records = new Map<
+		string,
+		{
+			record: UplinkHealthRecord;
+			lastSeen: number;
+			missingSince?: number;
+		}
+	>();
 
 	observe(observation: UplinkObservation): UplinkHealthRecord {
-		const previous = this.#records.get(observation.iface);
+		const previous = this.#records.get(observation.iface)?.record;
 		const current = previous ?? this.#initialRecord(observation);
 		const next = this.#reduce(current, observation);
-		this.#records.set(observation.iface, next);
+		this.#records.set(observation.iface, {
+			record: next,
+			lastSeen: observation.now,
+		});
 		return next;
 	}
 
 	get(iface: string): UplinkHealthRecord | undefined {
-		return this.#records.get(iface);
+		return this.#records.get(iface)?.record;
 	}
 
 	list(): readonly UplinkHealthRecord[] {
-		return [...this.#records.values()].sort((a, b) =>
-			a.iface.localeCompare(b.iface),
-		);
+		return [...this.#records.values()]
+			.map(({ record }) => record)
+			.sort((a, b) => a.iface.localeCompare(b.iface));
 	}
 
 	removeMissing(ifaces: ReadonlySet<string>, now: number): void {
-		for (const [iface, record] of this.#records) {
-			if (ifaces.has(iface)) continue;
-			if (record.state === "down") {
-				// Forgetting a down path would admit its next appearance as fresh up.
-				this.observe({
-					iface,
-					kind: record.kind,
-					outcome: "definitive_loss",
-					now,
-				});
-			} else {
+		const missing: { readonly iface: string; readonly since: number }[] = [];
+		for (const [iface, entry] of this.#records) {
+			const present = ifaces.has(iface);
+			const { record } = entry;
+			if (
+				(!present || entry.missingSince !== undefined) &&
+				(record.state !== "down" ||
+					now - entry.lastSeen >= UPLINK_HEALTH_CONFIG.missingRecordTtlMs)
+			) {
 				this.#records.delete(iface);
+				continue;
 			}
+			if (present) {
+				entry.lastSeen = now;
+				delete entry.missingSince;
+				continue;
+			}
+			entry.missingSince ??= now;
+			entry.record = this.#reduce(record, {
+				iface,
+				kind: record.kind,
+				outcome: "definitive_loss",
+				now,
+			});
+			missing.push({ iface, since: entry.missingSince });
+		}
+		missing.sort((a, b) => a.since - b.since);
+		for (const { iface } of missing.slice(
+			0,
+			Math.max(0, missing.length - UPLINK_HEALTH_CONFIG.maxMissingRecords),
+		)) {
+			this.#records.delete(iface);
 		}
 	}
 
 	isClientSteeringEligible(iface: string): boolean {
-		return this.#records.get(iface)?.state !== "down";
+		return this.get(iface)?.state !== "down";
 	}
 
 	#initialRecord(observation: UplinkObservation): UplinkHealthRecord {

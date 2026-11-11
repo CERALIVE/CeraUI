@@ -258,6 +258,8 @@ export class UplinkHealthRuntime {
 		const telemetry = this.#deps.telemetry();
 		if (!telemetry) return passive;
 		for (const link of telemetry.links) {
+			// Stale sender rows must not recreate pruned missing history.
+			if (!this.#deps.interfaces()[link.iface]) continue;
 			// Down paths need active recovery; passive degradation resets the streak.
 			if (this.#engine.get(link.iface)?.state === "down") continue;
 			passive.add(link.iface);

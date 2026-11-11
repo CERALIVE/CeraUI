@@ -13,8 +13,9 @@ existing recovery streak and hold-down are met. RTT/NAK/staleness can degrade an
 path, while definitive carrier/route/disconnect/expiry evidence removes it from
 client steering. Captive interception degrades an up path but keeps an already-down
 path down with weight zero and resets its recovery streak, as does passive
-degradation. Missing down records are retained for the health engine's lifetime
-and their streaks reset, so reappearance still requires full recovery.
+degradation. Missing down records reset their streaks and are retained for at most
+24 hours since last seen, with a cap of 32 evicting the longest-missing first.
+Normal health ticks prune them; a pruned interface reappears as brand-new.
 Modem signal is not an input.
 
 The engine publishes `uplinks` records and `gateways.ts` filters default-route
