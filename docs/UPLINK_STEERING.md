@@ -140,3 +140,7 @@ fail-soft: the WebSocket server is already bound, boot continues through
 The outstanding board drill needs two real uplinks and a hotspot client. It must
 inspect nftables/conntrack marks while confirming SRTLA link distribution remains
 undisturbed.
+
+## Known-down passive observations
+
+`UplinkHealthEngine` keeps an already-down path down on `passive_degraded`. That observation resets consecutive success evidence; only successful observations advance the existing five-success and 15-second hold-down recovery thresholds. An up path can still become degraded, and captive-portal behavior is unchanged. Model and steering-selection regressions live in `apps/backend/src/tests/uplink-steering-state.test.ts`.
