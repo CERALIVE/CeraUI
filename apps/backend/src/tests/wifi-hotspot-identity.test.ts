@@ -17,10 +17,11 @@
        match the profile"` on every start.
 */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import * as runner from "../helpers/run.ts";
 
 import {
 	getHotspotCredentials,
@@ -44,6 +45,7 @@ import {
 import {
 	findHotspotConnForAdapter,
 	type HotspotProfileDeps,
+	handleHotspotConn,
 	pruneDuplicateHotspotConns,
 	shouldAdoptHotspotConn,
 } from "../modules/wifi/wifi-hotspot-discovery.ts";
@@ -992,6 +994,215 @@ function rememberConn(macAddress: string, conn: string) {
 		conn,
 	});
 }
+
+describe("hotspot deletion reservation", () => {
+	afterEach(() => {
+		removeWifiInterface(PERM_MAC);
+		removeWifiInterface(SECOND_PERM_MAC);
+	});
+
+	function deletingProfile() {
+		rememberConn(PERM_MAC, "superseded");
+		rememberConn(PERM_MAC, "keep");
+		const profiles: FakeProfile[] = [
+			{
+				uuid: "superseded",
+				name: "Hotspot-1",
+				mode: "ap",
+				ssid: OWNED_SSID,
+				psk: "y",
+				mac: PERM_MAC,
+			},
+		];
+		const { deps, deleted } = makeProfileDeps(profiles);
+		const entered = Promise.withResolvers<void>();
+		const resume = Promise.withResolvers<void>();
+		deps.deleteConnection = async (uuid) => {
+			deleted.push(uuid);
+			entered.resolve();
+			await resume.promise;
+			const index = profiles.findIndex((p) => p.uuid === uuid);
+			if (index !== -1) profiles.splice(index, 1);
+			return true;
+		};
+		return { profiles, deps, deleted, entered, resume };
+	}
+
+	test("adoption during an in-flight deletion cannot persist the deleted profile", async () => {
+		const { profiles, deps, entered, resume } = deletingProfile();
+		const iface = makeHotspotIface();
+		addWifiInterface(PERM_MAC, iface);
+		const reads: string[] = [];
+		const read = spyOn(runner, "run").mockImplementation(async (bin, args) => {
+			expect(bin).toBe("nmcli");
+			expect(args.slice(0, 5)).toEqual([
+				"--terse",
+				"--escape",
+				"no",
+				"--show-secrets",
+				"--get-values",
+			]);
+			const uuid = args.at(-1) ?? "";
+			reads.push(uuid);
+			const p = profiles.find((entry) => entry.uuid === uuid);
+			if (!p) throw new Error("Connection no longer exists");
+			const fields: Record<string, string> = {
+				"connection.autoconnect-priority": "999",
+				"802-11-wireless.ssid": p.ssid,
+				"802-11-wireless-security.psk": p.psk,
+				"802-11-wireless.band": "",
+				"802-11-wireless.channel": "0",
+				"802-11-wireless.hidden": "no",
+				"802-11-wireless-security.key-mgmt": "wpa-psk",
+				"802-11-wireless-security.pairwise": "ccmp",
+				"802-11-wireless-security.group": "ccmp",
+				"802-11-wireless-security.proto": "rsn",
+				"802-11-wireless-security.pmf": "1",
+				"connection.interface-name": "",
+				"802-11-wireless.mac-address": p.mac,
+			};
+			return (args[5] ?? "")
+				.split(",")
+				.map((field) => {
+					if (!(field in fields)) throw new Error(`Unexpected field ${field}`);
+					return fields[field];
+				})
+				.join("\n");
+		});
+		const pruning = pruneDuplicateHotspotConns(PERM_MAC, "keep", deps);
+		await entered.promise;
+		try {
+			try {
+				await handleHotspotConn(PERM_MAC, "superseded", { active: true });
+				expect(iface.hotspot.conn).toBeUndefined();
+				expect(getHotspotCredentials(PERM_MAC)?.conn).toBe("keep");
+				expect(
+					shouldAdoptHotspotConn(
+						"superseded",
+						getHotspotCredentials(PERM_MAC),
+						{ active: true },
+					),
+				).toBe(false);
+			} finally {
+				resume.resolve();
+				await pruning;
+			}
+			const readsBefore = reads.length;
+			await handleHotspotConn(PERM_MAC, "superseded", { active: true });
+			expect(reads.slice(readsBefore)).toEqual(["superseded"]);
+			expect(iface.hotspot.conn).toBeUndefined();
+			expect(getHotspotCredentials(PERM_MAC)?.conn).toBe("keep");
+		} finally {
+			read.mockRestore();
+		}
+	});
+
+	test("selection skips a reserved UUID and re-reads after deletion settles", async () => {
+		const { deps, entered, resume } = deletingProfile();
+		const readProfile = deps.getApProfileFields;
+		const reads: string[] = [];
+		deps.getApProfileFields = async (uuid) => {
+			reads.push(uuid);
+			return readProfile(uuid);
+		};
+		const pruning = pruneDuplicateHotspotConns(PERM_MAC, "keep", deps);
+		await entered.promise;
+		try {
+			expect(
+				await findHotspotConnForAdapter(PERM_MAC, undefined, deps),
+			).toBeUndefined();
+		} finally {
+			resume.resolve();
+			await pruning;
+		}
+		const readsBefore = reads.length;
+		expect(
+			await findHotspotConnForAdapter(
+				PERM_MAC,
+				{ ssid: OWNED_SSID, password: "y", conn: "superseded" },
+				deps,
+			),
+		).toBeUndefined();
+		expect(reads.slice(readsBefore)).toEqual(["superseded"]);
+	});
+
+	test("two concurrent prunes delete a reserved profile once", async () => {
+		const { deps, deleted, entered, resume } = deletingProfile();
+		const deleteProfile = deps.deleteConnection;
+		deps.deleteConnection = async (uuid) => {
+			if (deleted.includes(uuid)) {
+				deleted.push(uuid);
+				return false;
+			}
+			return deleteProfile(uuid);
+		};
+		const first = pruneDuplicateHotspotConns(PERM_MAC, "keep", deps);
+		await entered.promise;
+		const second = pruneDuplicateHotspotConns(PERM_MAC, "keep", deps);
+		try {
+			// The second prune must settle while the first deletion is still pending.
+			expect(await second).toEqual([]);
+			expect(deleted).toEqual(["superseded"]);
+		} finally {
+			resume.resolve();
+			await Promise.all([first, second]);
+		}
+		expect(await first).toEqual(["superseded"]);
+	});
+
+	test("an unreserved profile remains selectable during another deletion", async () => {
+		const { profiles, deps, entered, resume } = deletingProfile();
+		profiles.push({
+			uuid: "unrelated",
+			name: "Operator AP",
+			mode: "ap",
+			ssid: "Other-AP",
+			psk: "other-secret",
+			mac: SECOND_PERM_MAC,
+		});
+		const pruning = pruneDuplicateHotspotConns(PERM_MAC, "keep", deps);
+		await entered.promise;
+		try {
+			expect(
+				(await findHotspotConnForAdapter(SECOND_PERM_MAC, undefined, deps))
+					?.uuid,
+			).toBe("unrelated");
+			expect(shouldAdoptHotspotConn("unrelated", undefined)).toBe(true);
+		} finally {
+			resume.resolve();
+			await pruning;
+		}
+	});
+
+	for (const outcome of ["false", "throw"] as const) {
+		test(`a deletion returning ${outcome} releases its reservation`, async () => {
+			const { deps, entered, resume } = deletingProfile();
+			const failure = new Error("Deletion failed");
+			deps.deleteConnection = async () => {
+				entered.resolve();
+				await resume.promise;
+				if (outcome === "throw") throw failure;
+				return false;
+			};
+			const pruning = pruneDuplicateHotspotConns(PERM_MAC, "keep", deps).then(
+				(removed) => removed,
+				(error: unknown) => error,
+			);
+			await entered.promise;
+			try {
+				expect(shouldAdoptHotspotConn("superseded", undefined)).toBe(false);
+			} finally {
+				resume.resolve();
+				await pruning;
+			}
+			expect(await pruning).toEqual(outcome === "throw" ? failure : []);
+			expect(
+				(await findHotspotConnForAdapter(PERM_MAC, undefined, deps))?.uuid,
+			).toBe("superseded");
+			expect(shouldAdoptHotspotConn("superseded", undefined)).toBe(true);
+		});
+	}
+});
 
 describe("pruneDuplicateHotspotConns — ownership evidence", () => {
 	afterEach(() => {

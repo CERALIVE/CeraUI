@@ -125,3 +125,16 @@ Live use includes the parent station `conn`/`activeConn`, `hotspot.conn`, and
 the virtual AP `concurrentHotspot.activeConn`. AP+STA keeps the active AP UUID
 on that nested field while the parent continues to report its station UUID.
 Cleanup protects it both at candidate collection and after pending reads.
+
+Cleanup reserves each UUID synchronously before that final ownership recheck and
+holds the reservation until `deleteConnection` settles, releasing it in `finally`
+even on failure. A concurrent prune skips the reserved UUID. Discovery, profile
+selection and the shared ownership guard refuse it during deletion, including
+after pending profile reads. A later discovery or selection reads NetworkManager
+again after settlement; deleted profiles cannot become a cached or persisted
+identity from the in-flight window. Other UUIDs remain available, and the
+per-adapter mutation lock and radio lifetime/draft contracts are unchanged.
+
+The promise-barrier tests in `wifi-hotspot-identity.test.ts` cover adoption during
+deletion, fresh reads after settlement, concurrent prune exclusion and an
+unreserved profile selected while another UUID is being deleted.

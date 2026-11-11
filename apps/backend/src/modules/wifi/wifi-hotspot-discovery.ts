@@ -51,6 +51,7 @@ const hotspotProfilePins = new WeakMap<
 	WifiHotspot,
 	{ readonly uuid: string; readonly macAddress: string }
 >();
+const deletingHotspotConns = new Set<ConnectionUUID>();
 
 export function rememberHotspotProfilePin(
 	hotspot: WifiHotspot,
@@ -118,6 +119,7 @@ export function shouldAdoptHotspotConn(
 	stored: HotspotCredentials | undefined,
 	options: HotspotAdoptionOptions = {},
 ): boolean {
+	if (deletingHotspotConns.has(uuid)) return false;
 	if (options.active) return true;
 	return !stored?.conn || stored.conn === uuid;
 }
@@ -127,6 +129,7 @@ export async function handleHotspotConn(
 	uuid: string,
 	options: HotspotAdoptionOptions = {},
 ) {
+	if (deletingHotspotConns.has(uuid)) return;
 	const fields = await nmConnGetFields(uuid, [
 		"connection.autoconnect-priority",
 		"802-11-wireless.ssid",
@@ -295,6 +298,7 @@ export function canAdoptHotspotProfile(
 ): boolean {
 	const pin = profileMac.toLowerCase();
 	return (
+		(!uuid || !deletingHotspotConns.has(uuid)) &&
 		canUseHotspotConnection(macAddress, uuid) &&
 		(pin === macAddress.toLowerCase() ||
 			(!getWifiInterfaceByMacAddress(pin) && !getHotspotCredentials(pin)))
@@ -401,7 +405,9 @@ async function readApProfile(
 	uuid: ConnectionUUID,
 	deps: HotspotProfileDeps,
 ): Promise<ApProfile | undefined> {
+	if (deletingHotspotConns.has(uuid)) return undefined;
 	const fields = await deps.getApProfileFields(uuid);
+	if (deletingHotspotConns.has(uuid)) return undefined;
 	if (fields === undefined) return undefined;
 	if (fields[0] !== "ap" || !fields[1]) return undefined;
 
@@ -555,16 +561,21 @@ export async function pruneDuplicateHotspotConns(
 		const profile = await readApProfile(uuid, deps);
 		if (!profile) continue;
 
-		// Discovery/activation can adopt a candidate while NM reads (or a
-		// previous deletion) are pending. The initial set only narrows the scan;
-		// fresh ownership and live-use evidence must still permit this deletion.
-		if (
-			!collectSupersededHotspotConns(getAllHotspotCredentials()).has(uuid) ||
-			collectConnsInUse().has(uuid)
-		)
-			continue;
+		if (deletingHotspotConns.has(uuid)) continue;
+		// Reserve before the final recheck so discovery cannot adopt the profile
+		// while nmcli deletion is pending. No await separates reservation/recheck.
+		deletingHotspotConns.add(uuid);
+		try {
+			if (
+				!collectSupersededHotspotConns(getAllHotspotCredentials()).has(uuid) ||
+				collectConnsInUse().has(uuid)
+			)
+				continue;
 
-		if (await deps.deleteConnection(uuid)) removed.push(uuid);
+			if (await deps.deleteConnection(uuid)) removed.push(uuid);
+		} finally {
+			deletingHotspotConns.delete(uuid);
+		}
 	}
 
 	if (removed.length > 0) {
