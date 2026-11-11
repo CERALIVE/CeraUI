@@ -417,3 +417,12 @@ await navigateTo(page, 'settings');
 It clicks whichever nav control is currently visible (desktop rail or mobile dock) and asserts `aria-current="page"` before returning. This means the navigation is confirmed before your next assertion runs — no extra `toBeVisible` needed.
 
 Never hardcode `#nav-tab-live` or `#mobile-nav-tab-live` in a spec. The helper exists precisely to abstract that detail.
+
+The rail and dock accept successive different destinations without an elapsed-time
+gate. A former 50 ms click throttle silently discarded a different destination
+while its button remained enabled (#418); waiting longer for `aria-current`
+could not recover that click. Keep synchronization on active navigation and
+mounted destination content rather than adding sleeps or retrying lost clicks.
+`src/main/navigation/Navigation.test.ts` holds the clock fixed while driving both
+real controls through Network, Settings and Live, so this regression does not
+depend on test-runner speed.
