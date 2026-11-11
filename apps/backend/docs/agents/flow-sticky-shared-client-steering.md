@@ -53,6 +53,13 @@ and removes stale support. Any overlap, mark collision, foreign priority owner,
 missing route, nft failure, or rollback failure is fail-soft and surfaces
 `steering_unavailable`; it never blocks the already-bound WS server.
 
+After the latest ruleset commits, stale-route retirement failures keep sharing,
+provisioned support and the forwarding step intact. The applier retains pending
+retirements and warns once per distinct failure; the coordinator alone retries
+them after successful or unchanged reconciles. A pending mark/table pair desired
+again is discarded without a flush. Before commit, a failed transition restores
+removed support and reloads the previous ruleset before rolling new routes back.
+
 The CeraUI half is complete and kernel-netns tested. It cannot activate on a fleet
 image until image-building todo 12 ships `ceralive-share.service`, its teardown
 script, nftables/conntrack packages, and the CeraUI unit ordering. Full contract and

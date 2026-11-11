@@ -104,6 +104,14 @@ publishes the latest ruleset first, then flushes conntrack and removes stale rul
 and private tables. Desired mark/table support is retained even when the old route
 temporarily lacks an interface name.
 
+Once the latest ruleset is committed, a stale-route cleanup failure keeps the live
+ruleset and newly provisioned routes intact, completes the forwarding step, and
+logs each distinct failure once. Failed retirements remain in memory. After every
+successful or unchanged reconcile, the coordinator retries their conntrack flush
+and route removal without degrading the applied state. A pending mark/table pair
+that becomes desired again is dropped without flushing it. A backend restart
+rediscovers any remaining stale support.
+
 ## Hard-down drain
 
 A hard-down uplink is retired in three phases:
@@ -129,6 +137,9 @@ The coordinator is single-flight, recomputes the latest desired model before eac
 apply, skips byte-identical models, and retries twice at bounded delays. Failure is
 fail-soft: the WebSocket server is already bound, boot continues through
 `guardNonCritical`, and the typed unavailable state remains visible.
+If an apply fails after publishing the transition but before committing the final
+state, the applier restores removed support and reloads the previous ruleset before
+rolling back newly provisioned routes.
 
 ## Verification
 
