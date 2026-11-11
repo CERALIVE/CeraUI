@@ -202,6 +202,13 @@ undisturbed.
 lifting the path into steering. An up path can still become degraded on either
 observation.
 
+For an already-down path, any observed removal, re-addition, address change or
+device-bound eligibility change discards counted successes and restarts the
+15-second hold-down synchronously at the interface event. This also applies when
+the interface changes and returns entirely between health ticks or during a
+probe batch. In-flight evidence from the old generation remains invalid.
+The same events do not change an up path's health state.
+
 A missing interface retains its down verdict and resets its recovery streak, so
 brief reappearance still requires five fresh successful probes. Normal health
 ticks prune missing down records 24 hours after the interface was last seen.

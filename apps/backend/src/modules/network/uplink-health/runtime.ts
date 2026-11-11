@@ -113,7 +113,7 @@ export class UplinkHealthRuntime {
 		// Subscribe on first use: the netif import graph cycles back here before
 		// its event emitter is initialized.
 		this.#unsubscribe ??= this.#deps.onInterfacesChange?.(() =>
-			this.#sampleInterfaces(this.#deps.interfaces()),
+			this.#sampleInterfaces(this.#deps.interfaces(), this.#deps.now()),
 		);
 		const round = ++this.#round;
 		const now = this.#deps.now();
@@ -217,7 +217,10 @@ export class UplinkHealthRuntime {
 		this.#unsubscribe = undefined;
 	}
 
-	#sampleInterfaces(interfaces: Record<string, NetworkInterface>): void {
+	#sampleInterfaces(
+		interfaces: Record<string, NetworkInterface>,
+		changedAt?: number,
+	): void {
 		for (const iface of new Set([
 			...Object.keys(interfaces),
 			...this.#samples.keys(),
@@ -242,6 +245,10 @@ export class UplinkHealthRuntime {
 					generation: ++this.#generation,
 					round: this.#round,
 				});
+				// A tick's initial roster is a sample, not an identity-change event.
+				if (changedAt !== undefined) {
+					this.#engine.restartRecovery(iface, changedAt);
+				}
 			}
 		}
 	}

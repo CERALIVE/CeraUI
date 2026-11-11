@@ -108,6 +108,16 @@ export class UplinkHealthEngine {
 		return this.#records.get(iface)?.record;
 	}
 
+	restartRecovery(iface: string, now: number): void {
+		const entry = this.#records.get(iface);
+		if (entry?.record.state !== "down") return;
+		entry.record = {
+			...entry.record,
+			lastTransition: now,
+			probes: { ...entry.record.probes, successes: 0 },
+		};
+	}
+
 	list(): readonly UplinkHealthRecord[] {
 		return [...this.#records.values()]
 			.map(({ record }) => record)
