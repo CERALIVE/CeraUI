@@ -206,7 +206,12 @@ async function save() {
 			role: pendingRoleChange,
 			// getRandomValues also works on the device's plain-HTTP LAN origin.
 			...(supportsEthernetRoleOp(name)
-				? { op: crypto.getRandomValues(new Uint32Array(4)).join('-') }
+				? {
+					op: Array.from(
+						crypto.getRandomValues(new Uint8Array(16)),
+						byte => byte.toString(16).padStart(2, '0'),
+					).join(''),
+				}
 				: {}),
 		};
 		const roleResult = await osCommand({

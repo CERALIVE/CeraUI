@@ -58,7 +58,10 @@ import {
 import { setNetifState } from "../modules/network/state/netif-state.ts";
 import { genSrtlaBondEntries } from "../modules/streaming/srtla.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
-import { configureNetworkInterfaceProcedure } from "../rpc/procedures/network.procedure.ts";
+import {
+	configureNetworkInterfaceProcedure,
+	setEthernetRoleProcedure,
+} from "../rpc/procedures/network.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
 const SHARED_PORT = "eth1";
@@ -328,7 +331,27 @@ describe("flipping back to uplink restores candidacy", () => {
 });
 
 describe("the role transition", () => {
-	test.each([undefined, "client-a"])(
+	test("the RPC rejects a 64 KiB op before any role frame is built (#489)", async () => {
+		const frames: unknown[] = [];
+		const context = makeContext((message) => frames.push(JSON.parse(message)));
+		addClient(context.ws);
+		try {
+			const error = await call(
+				setEthernetRoleProcedure,
+				{ name: SHARED_PORT, role: "shared-lan", op: "a".repeat(65_536) },
+				{ context },
+			).then(
+				() => undefined,
+				(error: unknown) => error,
+			);
+			expect(error).toMatchObject({ code: "BAD_REQUEST" });
+			expect(frames).toEqual([]);
+		} finally {
+			removeClient(context.ws);
+		}
+	});
+
+	test.each([undefined, "client-a-0000001"])(
 		"echoes optional op %j through pending and terminal wire frames (#489)",
 		async (op) => {
 			processIfconfigOutput(twoPortTopology());
@@ -379,7 +402,12 @@ describe("the role transition", () => {
 				return release.promise;
 			},
 		});
-		const first = setEthernetRole(SHARED_PORT, "shared-lan", deps, "client-a");
+		const first = setEthernetRole(
+			SHARED_PORT,
+			"shared-lan",
+			deps,
+			"client-a-0000001",
+		);
 		await entered.promise;
 		const second = setEthernetRole(
 			SHARED_PORT,
@@ -388,36 +416,44 @@ describe("the role transition", () => {
 				...deps,
 				setFields: async () => false,
 			},
-			"client-b",
+			"client-b-0000001",
 		);
 		release.resolve(true);
 		await Promise.all([first, second]);
-		await setEthernetRole(SHARED_PORT, "shared-lan", deps, "client-c");
-		await setEthernetRole("wlan0", "uplink", deps, "client-d");
+		await setEthernetRole(SHARED_PORT, "shared-lan", deps, "client-c-0000001");
+		await setEthernetRole("wlan0", "uplink", deps, "client-d-0000001");
 		expect(deps.frames).toEqual([
 			{
 				name: SHARED_PORT,
-				outcome: { pending: true, role: "shared-lan", op: "client-a" },
+				outcome: { pending: true, role: "shared-lan", op: "client-a-0000001" },
 			},
 			{
 				name: SHARED_PORT,
-				outcome: { success: true, role: "shared-lan", op: "client-a" },
+				outcome: { success: true, role: "shared-lan", op: "client-a-0000001" },
 			},
 			{
 				name: SHARED_PORT,
-				outcome: { pending: true, role: "uplink", op: "client-b" },
+				outcome: { pending: true, role: "uplink", op: "client-b-0000001" },
 			},
 			{
 				name: SHARED_PORT,
-				outcome: { success: false, error: "apply_failed", op: "client-b" },
+				outcome: {
+					success: false,
+					error: "apply_failed",
+					op: "client-b-0000001",
+				},
 			},
 			{
 				name: SHARED_PORT,
-				outcome: { success: true, role: "shared-lan", op: "client-c" },
+				outcome: { success: true, role: "shared-lan", op: "client-c-0000001" },
 			},
 			{
 				name: "wlan0",
-				outcome: { success: false, error: "not_ethernet", op: "client-d" },
+				outcome: {
+					success: false,
+					error: "not_ethernet",
+					op: "client-d-0000001",
+				},
 			},
 		]);
 	});

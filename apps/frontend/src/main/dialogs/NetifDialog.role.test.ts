@@ -21,6 +21,7 @@
  *      inline rather than as a toast that expires.
  */
 import type { NetifEntry } from "@ceraui/rpc/schemas";
+import { setEthernetRoleInputSchema } from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import {
 	afterEach,
@@ -181,8 +182,8 @@ describe("NetifDialog — the role control's offering", () => {
 describe("NetifDialog — the role is STAGED until Save", () => {
 	it("sends a fresh correlation ID on each supported dispatch and owns that target (#489)", async () => {
 		roleSupport.value = true;
-		const firstOp = "1-1-1-1";
-		const secondOp = "2-2-2-2";
+		const firstOp = "00".repeat(16);
+		const secondOp = "ff".repeat(16);
 		let sequence = 0;
 		vi.spyOn(crypto, "randomUUID").mockImplementation(() => {
 			throw new Error("randomUUID requires a secure context");
@@ -190,7 +191,7 @@ describe("NetifDialog — the role is STAGED until Save", () => {
 		const random = vi
 			.spyOn(crypto, "getRandomValues")
 			.mockImplementation((array) => {
-				if (array instanceof Uint32Array) array.fill(++sequence);
+				if (array instanceof Uint8Array) array.fill(sequence++ === 0 ? 0 : 255);
 				return array;
 			});
 		setEthernetRole.mockResolvedValueOnce({
@@ -222,6 +223,9 @@ describe("NetifDialog — the role is STAGED until Save", () => {
 			role: "shared-lan",
 			op: secondOp,
 		});
+		for (const [request] of setEthernetRole.mock.calls) {
+			expect(setEthernetRoleInputSchema.parse(request)).toEqual(request);
+		}
 		random.mockRestore();
 	});
 

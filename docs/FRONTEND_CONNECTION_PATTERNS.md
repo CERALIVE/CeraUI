@@ -528,7 +528,8 @@ Terminal phases linger `ASYNC_OP_TERMINAL_LINGER_MS` (4s) then decay to `idle`.
 
 Ethernet netif rows optionally advertise `ethRoleOp: true`. Only after that
 advertisement on the current connection does Save generate a fresh
-128-bit ID with `crypto.getRandomValues()` and send `{ name, role, op }`,
+128-bit ID with `crypto.getRandomValues()`, encode the 16 bytes as exactly
+32 lowercase hexadecimal characters, and send `{ name, role, op }`,
 recording the same request
 as its async-operation target. Support is replaced from each complete netif
 frame, cleared on connection changes and reset, and never inferred from cached
@@ -537,6 +538,10 @@ its strict input schema accepts. ID generation works on plain-HTTP LAN origins.
 A cached older frontend ignores the additive
 fields from a newer backend. No mutation is probed or retried for negotiation;
 `eth_role` remains outside the remote relay allowlist.
+
+The shared request and outcome schemas allow only 16 through 64 ASCII URL-safe
+characters (`A-Z`, `a-z`, `0-9`, `_`, `-`) for a supplied ID. This bounds both
+directions and rejects oversized or malformed IDs before a role mutation starts.
 
 A tagged `eth_role` frame is consumed only when its `op` exactly matches the
 current request target. Its pending echo preserves the attempt and deadline;

@@ -54,7 +54,11 @@ rpc.network.setEthernetRole({ name, role, op? }) // input remains .strict()
 broadcast "eth_role" -> { eth_role: { name, role?, pending?, success?, error?, op? } }
 ```
 
-`op` is an optional nonempty opaque string. The queue-owned transition echoes
+`op` is optional and must contain 16 through 64 ASCII URL-safe characters
+(`A-Z`, `a-z`, `0-9`, `_`, `-`). One shared schema enforces this on requests and
+outcomes. Invalid IDs are rejected before the RPC handler can publish a frame.
+The frontend encodes 16 random bytes as 32 lowercase hexadecimal characters.
+The queue-owned transition echoes
 the request's ID on pending and terminal outcomes, including an already-applied
 success or a refusal, and the frame builder omits it when none was supplied.
 No operation ID is persisted. Per-port serialization and
