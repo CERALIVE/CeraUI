@@ -65,7 +65,7 @@ import {
 	isOperationPending,
 	osCommand,
 } from '$lib/rpc/async-operation.svelte';
-import { getIsStreaming } from '$lib/rpc/subscriptions.svelte';
+import { getIsStreaming, supportsEthernetRoleOp } from '$lib/rpc/subscriptions.svelte';
 import EthernetRoleSelector from '$main/network/EthernetRoleSelector.svelte';
 import {
 	deriveEthernetRoleView,
@@ -149,8 +149,7 @@ const addressSource = $derived(
 // race — the osCommand re-entry guard is also the cross-surface race guard.
 const netifKey = $derived(`netif:${name}`);
 
-// The role control's own keyed op, read live so a transition dispatched from
-// ANOTHER client moves this dialog too.
+// This control owns its keyed progress; applied roles arrive through netif.
 const roleKey = $derived(ethernetRoleOpKey(name));
 const roleView = $derived(
 	deriveEthernetRoleView({
@@ -202,11 +201,24 @@ async function save() {
 	// change therefore stops the save outright: applying half of it would leave
 	// the operator reading a bond state that belongs to the role they did NOT get.
 	if (pendingRoleChange !== undefined) {
+		const request = {
+			name,
+			role: pendingRoleChange,
+			// getRandomValues also works on the device's plain-HTTP LAN origin.
+			...(supportsEthernetRoleOp(name)
+				? {
+					op: Array.from(
+						crypto.getRandomValues(new Uint8Array(16)),
+						byte => byte.toString(16).padStart(2, '0'),
+					).join(''),
+				}
+				: {}),
+		};
 		const roleResult = await osCommand({
 			key: roleKey,
-			target: pendingRoleChange,
+			target: request.op === undefined ? pendingRoleChange : request,
 			rpc: () =>
-				rpc.network.setEthernetRole({ name, role: pendingRoleChange }),
+				rpc.network.setEthernetRole(request),
 			// The reason renders inline in the role control's own band; a toast
 			// would say the same thing twice and then take it away.
 			silent: true,

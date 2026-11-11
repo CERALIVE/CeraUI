@@ -1208,6 +1208,7 @@ type NetworkInterfaceResponseMessage = {
 		router_cellular?: RouterCellularMarker | null;
 		usb_modem_net?: UsbModemNetMarker | null;
 		ethRole?: EthernetRole;
+		ethRoleOp?: boolean;
 	};
 };
 
@@ -1266,6 +1267,7 @@ export function netIfBuildMsg() {
 		const ethRole = ethernetRoleForWire(i);
 		if (ethRole !== undefined) {
 			entry.ethRole = ethRole;
+			entry.ethRoleOp = true;
 		}
 	}
 

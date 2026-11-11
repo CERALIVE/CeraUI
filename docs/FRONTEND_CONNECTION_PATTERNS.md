@@ -490,15 +490,17 @@ Before this layer, each OS-control dialog hand-rolled its own `$effect` that wat
 
 Each begin creates a unique attempt identity, even for the same resource and
 target. RPC settlement checks that identity and the captured store before changing
-state; authoritative broadcasts still confirm or fail the current entry by
-resource key. Reconnect clearing invalidates the old attempt, retry begins a new
+state; uncorrelated authoritative broadcasts confirm or fail the current entry by
+resource key, while tagged Ethernet role frames must match the request's `op`.
+Reconnect clearing invalidates the old attempt, retry begins a new
 one, and store recreation invalidates the captured owner. Superseded calls retain
 their raw result, `onResult` callback and failure toast, subject to the existing
 `isCurrent` and `silent` options.
 
-A same-target Ethernet pending echo preserves the current attempt, result owner
-and deadline under #466. An actual replacement requires a new begin: for the same
-target, a terminal frame followed by an external pending frame establishes it.
+An untagged same-target Ethernet pending echo preserves the current attempt,
+result owner and deadline under #466. An actual replacement requires a new
+begin: for the same target, an untagged terminal followed by an external untagged
+pending frame establishes it.
 
 ### Phase lifecycle
 
@@ -524,12 +526,35 @@ Terminal phases linger `ASYNC_OP_TERMINAL_LINGER_MS` (4s) then decay to `idle`.
 
 ## Pending Ethernet role echoes
 
-A pending `eth_role` frame retains an already-pending operation when its target is
-undefined or matches the echoed role, preserving its target and original deadline.
-A different role is a new transition and replaces the pending target. When no
-operation is pending, the frame starts one; terminal frames still confirm or fail
-it. Entry replacement does not control RPC result ownership: `osCommand` checks
-the caller's optional `isCurrent` predicate independently. Cross-client operation
-correlation remains a follow-up. `eth-role-ingestion.test.ts` covers same-target
-deadlines, untargeted echoes, overlapping different-role transitions, RPC
-success/refusal/rejection and a new external operation after a terminal frame.
+Ethernet netif rows optionally advertise `ethRoleOp: true`. Only after that
+advertisement on the current connection does Save generate a fresh
+128-bit ID with `crypto.getRandomValues()`, encode the 16 bytes as exactly
+32 lowercase hexadecimal characters, and send `{ name, role, op }`,
+recording the same request
+as its async-operation target. Support is replaced from each complete netif
+frame, cleared on connection changes and reset, and never inferred from cached
+row fields. An older backend therefore receives exactly `{ name, role }`, which
+its strict input schema accepts. ID generation works on plain-HTTP LAN origins.
+A cached older frontend ignores the additive
+fields from a newer backend. No mutation is probed or retried for negotiation;
+`eth_role` remains outside the remote relay allowlist.
+
+The shared request and outcome schemas allow only 16 through 64 ASCII URL-safe
+characters (`A-Z`, `a-z`, `0-9`, `_`, `-`) for a supplied ID. This bounds both
+directions and rejects oversized or malformed IDs before a role mutation starts.
+
+A tagged `eth_role` frame is consumed only when its `op` exactly matches the
+current request target. Its pending echo preserves the attempt and deadline;
+its terminal confirms or fails that attempt. Another client's tagged frames
+cannot start, restart or settle a local operation, including after it settles or
+times out. Applied port state still comes from netif broadcasts.
+
+An untagged frame retains the existing #466 behavior: a pending echo preserves
+an already-pending operation when its target role is undefined or matches,
+including a request target carrying an `op`. A different role replaces the
+target; when no operation is pending, the frame starts one. Untagged terminal
+frames confirm or fail the current operation. `osCommand` retains #499's
+attempt-guarded RPC settlement and independent `isCurrent` result ownership.
+`eth-role-ingestion.test.ts` covers both protocols, overlapping clients, direct
+terminals, original deadlines and late RPC results. The dialog and capability
+tests cover fresh IDs, legacy dispatch, omitted support and reconnect downgrade.

@@ -3,11 +3,86 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+	ethernetRoleMessageSchema,
 	netifMessageSchema,
+	setEthernetRoleInputSchema,
 	uplinkFlowsResetEventSchema,
 	uplinkShaperStatusSchema,
 	uplinkSteeringStatusSchema,
 } from './network.schema';
+
+describe('Ethernet role operation correlation (#489)', () => {
+	test.each([undefined, 'a'.repeat(16), '00'.repeat(16), 'AZaz09_-'.repeat(8)])(
+		'round-trips optional op %j',
+		(op) => {
+			const correlation = op === undefined ? {} : { op };
+			const input = { name: 'eth0', role: 'shared-lan' as const, ...correlation };
+			expect(setEthernetRoleInputSchema.parse(input)).toEqual(input);
+			for (const outcome of [
+				{ role: 'shared-lan', pending: true },
+				{ role: 'shared-lan', success: true },
+				{ error: 'apply_failed' },
+			] as const) {
+				const frame = { eth_role: { name: 'eth0', ...outcome, ...correlation } };
+				expect(ethernetRoleMessageSchema.parse(frame)).toEqual(frame);
+			}
+		},
+	);
+
+	test.each([
+		{ label: 'empty', op: '' },
+		{ label: 'below minimum', op: 'a'.repeat(15) },
+		{ label: 'above maximum', op: 'a'.repeat(65) },
+		{ label: '64 KiB', op: 'a'.repeat(65_536) },
+		{ label: '1 MiB', op: 'a'.repeat(1_048_576) },
+		{ label: 'NUL control', op: `${'a'.repeat(16)}\0` },
+		{ label: 'escape control', op: `${'a'.repeat(16)}\u001b` },
+		{ label: 'space', op: `${'a'.repeat(16)} ` },
+		{ label: 'newline', op: `${'a'.repeat(16)}\n` },
+		{ label: 'non-ASCII', op: `${'a'.repeat(16)}\u00e9` },
+		{ label: 'null', op: null },
+		{ label: 'number', op: 1 },
+		{ label: 'boolean', op: true },
+		{ label: 'object', op: {} },
+		{ label: 'array', op: [] },
+	])('rejects malformed $label on requests and frames', ({ op }) => {
+		expect(setEthernetRoleInputSchema.safeParse({ name: 'eth0', role: 'uplink', op }).success).toBe(
+			false,
+		);
+		for (const outcome of [
+			{ role: 'shared-lan', pending: true },
+			{ role: 'shared-lan', success: true },
+			{ error: 'apply_failed' },
+		]) {
+			expect(
+				ethernetRoleMessageSchema.safeParse({ eth_role: { name: 'eth0', ...outcome, op } }).success,
+			).toBe(false);
+		}
+	});
+
+	test('keeps request validation strict with the additive field', () => {
+		expect(
+			setEthernetRoleInputSchema.safeParse({
+				name: 'eth0',
+				role: 'uplink',
+				op: 'a'.repeat(16),
+				typo: true,
+			}).success,
+		).toBe(false);
+		expect(
+			setEthernetRoleInputSchema.safeParse({ name: 'eth0', role: 'wan', op: 'a'.repeat(16) })
+				.success,
+		).toBe(false);
+	});
+
+	test('retains the optional backend correlation capability', () => {
+		const frame = { eth0: { tp: 0, enabled: true, ethRoleOp: true } };
+		expect(netifMessageSchema.parse(frame)).toEqual(frame);
+		expect(
+			netifMessageSchema.safeParse({ eth0: { tp: 0, enabled: true, ethRoleOp: 'true' } }).success,
+		).toBe(false);
+	});
+});
 
 describe('legacy netif payloads', () => {
 	test('strips USB serials from legacy router-cellular markers (#488)', () => {
