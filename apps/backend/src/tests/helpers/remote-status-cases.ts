@@ -6,6 +6,7 @@ const exclusiveSafe = {
 	mode: "hotspot",
 	hotspot: {
 		name: "Exclusive AP",
+		password: HOTSPOT_PASSWORD,
 		channel: "auto",
 		details: { password: OTHER_PASSWORD, nested: [{ z: 1, a: 2 }] },
 	},
@@ -23,12 +24,16 @@ const exclusive = {
 const concurrentSafe = {
 	mode: "station",
 	saved: { Upstream: "upstream-uuid" },
-	hotspot: { name: "Concurrent AP", channel: "auto_24" },
+	hotspot: {
+		password: HOTSPOT_PASSWORD,
+		name: "Concurrent AP",
+		channel: "auto_24",
+	},
 	link: { tx: { rate: 80, password: OTHER_PASSWORD } },
 };
 const concurrent = {
 	...concurrentSafe,
-	hotspot: { password: HOTSPOT_PASSWORD, ...concurrentSafe.hotspot },
+	hotspot: { ...concurrentSafe.hotspot },
 };
 const inactive = {
 	mode: "station",
@@ -81,7 +86,10 @@ export const remoteStatusCases: ReadonlyArray<{
 		},
 		remote: {
 			z: undefined,
-			a: { hotspot: { name: "Unset" }, retained: undefined },
+			a: {
+				hotspot: { name: "Unset", password: undefined },
+				retained: undefined,
+			},
 		},
 	},
 ];

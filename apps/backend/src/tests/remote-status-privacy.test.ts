@@ -111,14 +111,15 @@ function expectSafeStatus(
 ) {
 	const expected = structuredClone(original);
 	for (const entry of Object.values(expected)) {
-		if (entry.hotspot) delete entry.hotspot.password;
+		delete entry.incarnation;
 	}
-	expect(bytes).not.toContain(PASSWORD);
+	expect(bytes).toContain(PASSWORD);
 	const status: { wifi: ReturnType<typeof wifiBuildMsg> } =
 		JSON.parse(bytes).status;
 	expect(status.wifi).toStrictEqual(expected);
 	for (const entry of Object.values(status.wifi)) {
-		if (entry.hotspot) expect(entry.hotspot).not.toHaveProperty("password");
+		if (entry.hotspot)
+			expect(entry.hotspot).toHaveProperty("password", PASSWORD);
 		expect(wifiInterfaceSchema.safeParse(entry).success).toBe(true);
 	}
 }
@@ -135,19 +136,20 @@ async function authenticateRemote(): Promise<StubRemoteSocket> {
 for (const hybrid of [false, true]) {
 	const mode = hybrid ? "concurrent" : "exclusive";
 
-	test(`${mode} AP initial status after legacy authentication omits the password`, async () => {
+	test(`${mode} AP initial status after legacy authentication includes the password`, async () => {
 		seedRadio(hybrid);
 		const local = wifiBuildMsg();
 		expect(local[0]?.hotspot?.password).toBe(PASSWORD);
 
 		const remote = await authenticateRemote();
 
-		expect(remote.sent.join("\n")).not.toContain(PASSWORD);
+		expect(remote.sent.join("\n")).toContain(PASSWORD);
 		const status = remote.sent.find((frame) => "status" in JSON.parse(frame));
 		expect(status).toBeDefined();
 		if (status === undefined) throw new Error("missing initial status");
-		expect(JSON.parse(status).status.wifi[0].hotspot).not.toHaveProperty(
+		expect(JSON.parse(status).status.wifi[0].hotspot).toHaveProperty(
 			"password",
+			PASSWORD,
 		);
 		expectSafeStatus(status, local);
 		expect(wifiBuildMsg()).toEqual(local);
@@ -180,7 +182,7 @@ for (const hybrid of [false, true]) {
 	});
 
 	for (const except of [false, true]) {
-		test(`${mode} AP v2 ${except ? "except" : "ordinary"} broadcast strips the password`, () => {
+		test(`${mode} AP v2 ${except ? "except" : "ordinary"} broadcast includes the password`, () => {
 			seedRadio(hybrid);
 			const local = wifiBuildMsg();
 			const frames: unknown[] = [];
@@ -201,9 +203,10 @@ for (const hybrid of [false, true]) {
 
 			expect(frames).toHaveLength(1);
 			const bytes = JSON.stringify(frames[0]);
-			expect(bytes).not.toContain(PASSWORD);
-			expect(JSON.parse(bytes).payload.wifi[0].hotspot).not.toHaveProperty(
+			expect(bytes).toContain(PASSWORD);
+			expect(JSON.parse(bytes).payload.wifi[0].hotspot).toHaveProperty(
 				"password",
+				PASSWORD,
 			);
 			const frame = StatusSchema.parse(frames[0]);
 			expectSafeStatus(JSON.stringify({ status: frame.payload }), local);
@@ -236,7 +239,7 @@ test("an inactive hotspot retains its unchanged local and remote status", async 
 });
 
 for (const row of remoteStatusCases) {
-	test(`legacy frame removes only the hotspot key: ${row.name}`, async () => {
+	test(`legacy frame preserves credentials and exact shape: ${row.name}`, async () => {
 		const remote = await authenticateRemote();
 		const local = {
 			first: "envelope-first",
@@ -250,14 +253,19 @@ for (const row of remoteStatusCases) {
 		};
 		const expected = {
 			...local,
-			status: { ...local.status, wifi: row.remote },
+			status: {
+				...local.status,
+				wifi: row.remote,
+			},
 		};
 		remote.sent.length = 0;
 
 		remote.send(JSON.stringify(local));
 
 		expect(remote.sent).toEqual([JSON.stringify(expected)]);
-		expect(remote.sent.join("\n")).not.toContain(PASSWORD);
+		expect(remote.sent.join("\n").includes(PASSWORD)).toBe(
+			JSON.stringify(row.local)?.includes(PASSWORD) ?? false,
+		);
 		expect(remote.sent.join("\n")).toContain(OTHER_PASSWORD);
 	});
 }
@@ -299,7 +307,7 @@ test("observed radio tokens stay local through initial legacy status and both re
 		if (!token) throw new Error("Missing observed token");
 		const remote = await authenticateRemote();
 		expect(remote.sent.join("\n")).not.toContain(token);
-		expect(remote.sent.join("\n")).not.toContain(PASSWORD);
+		expect(remote.sent.join("\n")).toContain(PASSWORD);
 		const frames: unknown[] = [];
 		setControlChannel({
 			isConnected: () => true,
@@ -308,11 +316,12 @@ test("observed radio tokens stay local through initial legacy status and both re
 		broadcastMsg("status", { wifi: local });
 		expect(frames).toHaveLength(1);
 		expect(JSON.stringify(frames)).not.toContain(token);
-		expect(JSON.stringify(frames)).not.toContain(PASSWORD);
-		const { incarnation: _incarnation, ...legacy } = local[0] ?? {};
-		const { password: _password, ...hotspot } = legacy.hotspot ?? {};
+		expect(JSON.stringify(frames)).toContain(PASSWORD);
+		const iface = local[0];
+		if (!iface) throw new Error("Missing observed radio");
+		const { incarnation: _incarnation, ...legacy } = iface;
 		expect(StatusSchema.parse(frames[0]).payload?.wifi).toStrictEqual({
-			"0": { ...legacy, hotspot },
+			"0": legacy,
 		});
 		expect(wifiBuildMsg()).toStrictEqual(local);
 	} finally {

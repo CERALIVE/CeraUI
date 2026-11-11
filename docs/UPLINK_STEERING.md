@@ -100,6 +100,11 @@ A hard-down uplink is retired in three phases:
 3. remove the fwmark rule, any module-owned source rule/private table, and then
    publish the final ruleset.
 
+Conntrack's numeric exit 1 is successful only when stdout is whitespace-only and
+stderr contains solely its versioned `0 flow entries have been deleted.` summary.
+An empty mark is already drained. Other exits or diagnostics retain the original
+failure and prevent retiring route support.
+
 After successful route removal the backend emits transient
 `uplink-flows-reset { iface, linkId }`. It is never post-login hydrated. Persistent
 state uses `uplink-steering`: either `{state:"available"}` or

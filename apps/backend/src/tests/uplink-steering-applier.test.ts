@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { mintLinkId } from "../modules/modems/physical-identity.ts";
 import type { RouteProvisioning } from "../modules/network/uplink-steering/applier.ts";
 import {
 	UplinkSteeringApplier,
@@ -8,6 +9,27 @@ import {
 import { prepared, uplink } from "./uplink-steering-test-fixtures.ts";
 
 describe("UplinkSteeringApplier", () => {
+	test("publishes opaque minted link ids for recovered flow resets", async () => {
+		const identity = "id-path:pci-0000:01:00.0-usb-0:1:1.0";
+		const events: Array<{ readonly linkId: string }> = [];
+		const previous = prepared([
+			uplink(identity, "wwan0", 100),
+			uplink("kept", "wlan0", 100),
+		]);
+		const applier = new UplinkSteeringApplier({
+			...makeApplierDeps([], []),
+			publishFlowsReset: (event) => events.push(event),
+		});
+		const state = prepared([uplink("kept", "wlan0", 100)]);
+
+		await applier.apply(previous, state);
+
+		expect(events).toHaveLength(1);
+		const event = events[0];
+		expect(event?.linkId).toMatch(/^lnk_[0-9a-f]{16}$/);
+		expect(event?.linkId).toBe(mintLinkId(identity));
+	});
+
 	test("hard-down excludes selection before scoped flush and support removal", async () => {
 		const kept = uplink("kept", "wlan0", 100);
 		const down = uplink("down", "wwan0", 100);
@@ -26,7 +48,7 @@ describe("UplinkSteeringApplier", () => {
 			"ruleset:reload",
 			`flush:${down.mark}`,
 			"remove:wwan0",
-			"event:wwan0:down",
+			`event:wwan0:${mintLinkId("down")}`,
 			"ruleset:reload",
 		]);
 		expect(appliedRulesets[0]).toContain(
@@ -110,7 +132,7 @@ describe("UplinkSteeringApplier", () => {
 			"ruleset:reload",
 			`flush:${down.mark}`,
 			"remove:wwan0",
-			"event:wwan0:down",
+			`event:wwan0:${mintLinkId("down")}`,
 			"ruleset:reload",
 			"ensure:wwan0",
 		]);
@@ -132,7 +154,7 @@ describe("UplinkSteeringApplier", () => {
 			"ruleset:reload",
 			`flush:${active.routes[0]?.mark}`,
 			"remove:wwan0",
-			"event:wwan0:a",
+			`event:wwan0:${mintLinkId("a")}`,
 			"deactivate",
 			"forward:off",
 		]);

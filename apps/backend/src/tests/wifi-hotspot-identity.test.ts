@@ -81,6 +81,7 @@ function makeHotspotIface(
 		hw: "Realtek RTL8852BE",
 		available: new Map(),
 		saved: {},
+		savedAll: {},
 		hotspot: {
 			...(over.hotspotConn ? { conn: over.hotspotConn } : {}),
 			availableChannels: ["auto"],
@@ -1051,6 +1052,108 @@ describe("pruneDuplicateHotspotConns — ownership evidence", () => {
 		const removed = await pruneDuplicateHotspotConns(PERM_MAC, "keep", deps);
 
 		expect(removed).toEqual([]);
+		expect(deleted).toEqual([]);
+	});
+
+	for (const pendingRead of ["list", "profile"] as const) {
+		for (const adoptedAs of [
+			"persisted",
+			"conn",
+			"activeConn",
+			"hotspot",
+			"concurrentHotspot",
+			"unowned",
+		] as const) {
+			test(`preserves a candidate becoming ${adoptedAs} during the ${pendingRead} read`, async () => {
+				rememberConn(PERM_MAC, "superseded");
+				rememberConn(PERM_MAC, "keep");
+				const { deps, deleted } = makeProfileDeps([
+					{
+						uuid: "superseded",
+						name: "Hotspot-1",
+						mode: "ap",
+						ssid: OWNED_SSID,
+						psk: "y",
+						mac: PERM_MAC,
+					},
+				]);
+				const entered = Promise.withResolvers<void>();
+				const resume = Promise.withResolvers<void>();
+				const waitForAdoption = async () => {
+					entered.resolve();
+					await resume.promise;
+				};
+				const originalList = deps.listConnections;
+				const originalRead = deps.getApProfileFields;
+				if (pendingRead === "list") {
+					deps.listConnections = async (fields) => {
+						await waitForAdoption();
+						return originalList(fields);
+					};
+				} else {
+					deps.getApProfileFields = async (uuid) => {
+						await waitForAdoption();
+						return originalRead(uuid);
+					};
+				}
+				const pruning = pruneDuplicateHotspotConns(PERM_MAC, "keep", deps);
+				await entered.promise;
+				try {
+					if (adoptedAs === "persisted") {
+						// The owning adapter can select its previous profile again.
+						rememberConn(PERM_MAC, "superseded");
+					} else if (adoptedAs === "unowned") {
+						resetHotspotCredentialsForTest();
+					} else {
+						const iface = makeHotspotIface();
+						if (adoptedAs === "hotspot") iface.hotspot.conn = "superseded";
+						else if (adoptedAs === "concurrentHotspot") {
+							iface.conn = "station";
+							iface.activeConn = "station";
+							iface.supportsApStaConcurrency = true;
+							iface.concurrentHotspot = {
+								ifname: "clap-wlan0",
+								activeConn: "superseded",
+							};
+						} else iface[adoptedAs] = "superseded";
+						addWifiInterface(SECOND_PERM_MAC, iface);
+					}
+				} finally {
+					resume.resolve();
+					await pruning;
+				}
+				expect(await pruning).toEqual([]);
+				expect(deleted).toEqual([]);
+			});
+		}
+	}
+
+	test("preserves an already active concurrent AP while the parent uses a station profile", async () => {
+		const iface = makeHotspotIface({ hotspotConn: "keep" });
+		iface.conn = "station";
+		iface.activeConn = "station";
+		iface.supportsApStaConcurrency = true;
+		iface.concurrentHotspot = {
+			ifname: "clap-wlan0",
+			activeConn: "superseded",
+		};
+		addWifiInterface(PERM_MAC, iface);
+		rememberConn(PERM_MAC, "superseded");
+		rememberConn(PERM_MAC, "keep");
+		const { deps, deleted } = makeProfileDeps([
+			{
+				uuid: "superseded",
+				name: "Hotspot-1",
+				mode: "ap",
+				ssid: OWNED_SSID,
+				psk: "y",
+				mac: PERM_MAC,
+			},
+		]);
+
+		expect(await pruneDuplicateHotspotConns(PERM_MAC, "keep", deps)).toEqual(
+			[],
+		);
 		expect(deleted).toEqual([]);
 	});
 
