@@ -87,16 +87,36 @@ function installWsHarness(token: string): void {
 		// given result, so the op's pending window is owned by the test.
 		_fake: {} as Record<string, unknown>,
 		_seq: 0,
-		emit(type: string, payload: unknown) {
+		emit(type: string, payload: unknown): Promise<void> {
 			const s = w.__cera.socket;
-			if (s)
+			if (!s) throw new Error("hotspot harness socket is not connected");
+			const id = `emit-${++w.__cera._seq}`;
+			// dev.emit sends the broadcast before its reply on this same socket.
+			return new Promise<void>((resolve, reject) => {
+				const onMessage = (event: MessageEvent<string>) => {
+					const receipt = JSON.parse(event.data);
+					if (receipt.id !== id) return;
+					clearTimeout(timeout);
+					s.removeEventListener("message", onMessage);
+					if (receipt.error || receipt.result?.success !== true) {
+						reject(new Error(`dev.emit ${id} failed: ${event.data}`));
+					} else {
+						resolve();
+					}
+				};
+				const timeout = setTimeout(() => {
+					s.removeEventListener("message", onMessage);
+					reject(new Error(`dev.emit ${id} receipt timed out`));
+				}, 10_000);
+				s.addEventListener("message", onMessage);
 				s.__realSend(
 					JSON.stringify({
-						id: `emit-${++w.__cera._seq}`,
+						id,
 						path: ["dev", "emit"],
 						input: { type, payload },
 					}),
 				);
+			});
 		},
 	};
 
@@ -217,7 +237,7 @@ async function pumpStatusTicks(page: Page, count: number): Promise<void> {
 	for (let i = 0; i < count; i++) {
 		await page.evaluate(() => {
 			const w = window as any;
-			w.__cera.emit("status", { wifi: w.__cera.lastWifi });
+			return w.__cera.emit("status", { wifi: w.__cera.lastWifi });
 		});
 	}
 }
@@ -241,7 +261,7 @@ async function emitHotspotActive(page: Page, device: string, backendRpc: Backend
 		const cur = clone[dev] ?? { ifname: dev };
 		cur.hotspot = { name: "CeraTestAP", password: "cerapass123", channel: "auto" };
 		clone[dev] = cur;
-		w.__cera.emit("status", { wifi: clone });
+		return w.__cera.emit("status", { wifi: clone });
 	}, device);
 }
 

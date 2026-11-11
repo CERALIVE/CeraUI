@@ -458,7 +458,32 @@ function rememberSavedUuid(
 	if (!all.includes(uuid)) all.push(uuid);
 }
 
+let savedConnectionsRefresh: symbol | undefined;
+
 export async function wifiUpdateSavedConns() {
+	const refresh = Symbol();
+	savedConnectionsRefresh = refresh;
+	const snapshots = Object.entries(getWifiInterfacesByMacAddress()).map(
+		([macAddress, original]) => ({
+			macAddress,
+			original,
+			shadow: { ...original, saved: {}, savedAll: {} },
+		}),
+	);
+	const savedInterfaces: Record<MacAddress, WifiInterface> = Object.fromEntries(
+		snapshots.map(({ macAddress, shadow }) => [macAddress, shadow]),
+	);
+	const isCurrent = () => {
+		const current = getWifiInterfacesByMacAddress();
+		return (
+			savedConnectionsRefresh === refresh &&
+			Object.keys(current).length === snapshots.length &&
+			snapshots.every(
+				({ macAddress, original }) => current[macAddress] === original,
+			)
+		);
+	};
+
 	// Retry transient nmcli connection-list failures with exponential backoff (T7).
 	const connections = await pollWithBackoff(() => nmConnsGet("uuid,type"), {
 		maxAttempts: 3,
@@ -469,13 +494,7 @@ export async function wifiUpdateSavedConns() {
 		onExhausted: (err) =>
 			logger.debug(`wifiUpdateSavedConns: list failed after retries: ${err}`),
 	});
-	if (connections === undefined) return;
-
-	const wifiInterfacesByMacAddress = getWifiInterfacesByMacAddress();
-	for (const wifiInterface of Object.values(wifiInterfacesByMacAddress)) {
-		wifiInterface.saved = {};
-		wifiInterface.savedAll = {};
-	}
+	if (connections === undefined || savedConnectionsRefresh !== refresh) return;
 
 	for (const connection of connections) {
 		try {
@@ -492,6 +511,7 @@ export async function wifiUpdateSavedConns() {
 				"802-11-wireless.ssid",
 				"802-11-wireless.mac-address",
 			] as const);
+			if (savedConnectionsRefresh !== refresh) return;
 
 			if (fields === undefined) {
 				throw new Error("Failed to get connection fields");
@@ -507,12 +527,7 @@ export async function wifiUpdateSavedConns() {
 			if (mode === "ap") {
 				void handleHotspotConn(macAddress, uuid);
 			} else if (mode === "infrastructure") {
-				registerSavedWifiConnection(
-					wifiInterfacesByMacAddress,
-					macAddress,
-					ssid,
-					uuid,
-				);
+				registerSavedWifiConnection(savedInterfaces, macAddress, ssid, uuid);
 			}
 		} catch (err) {
 			if (err instanceof Error) {
@@ -521,6 +536,13 @@ export async function wifiUpdateSavedConns() {
 				);
 			}
 		}
+	}
+
+	if (!isCurrent()) return;
+	// Keep the previous snapshot visible until every profile read has settled.
+	for (const { original, shadow } of snapshots) {
+		original.saved = shadow.saved;
+		original.savedAll = shadow.savedAll;
 	}
 }
 

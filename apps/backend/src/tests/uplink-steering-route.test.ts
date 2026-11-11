@@ -1,152 +1,98 @@
 import { describe, expect, test } from "bun:test";
+import { RunTimeoutError } from "../helpers/run.ts";
 
+import type { UplinkRoutePlan } from "../modules/network/uplink-steering/applier.ts";
 import {
 	ensureUplinkRoute,
 	planUplinkRoute,
+	rollbackUplinkRoute,
 	type UplinkRouteManagerDeps,
 } from "../modules/network/uplink-steering/route-manager.ts";
 import { stableUplinkMark } from "../modules/network/uplink-steering/ruleset.ts";
-import { scripted } from "./uplink-steering-route-test-fixtures.ts";
+import {
+	absentTableError,
+	scripted,
+} from "./uplink-steering-route-test-fixtures.ts";
 
 describe("uplink steering route planning", () => {
-	test.each([
-		[
-			"wwu1c2",
-			"default via 10.5.4.129 proto static metric 700",
-			["default", "via", "10.5.4.129", "proto", "static", "metric", "700"],
-		],
-		[
-			"ppp0",
-			"default scope link metric 700",
-			["default", "scope", "link", "metric", "700"],
-		],
-	] as const)(
-		"plans the interface-filtered %s default with exactly one device clause",
-		async (ifname, defaultRoute, routeTokens) => {
-			const plan = await planUplinkRoute(
-				{
-					identity: `filtered-${ifname}`,
-					ifname,
-					sourceAddress: "10.5.4.130",
-					sourceAddressUnique: true,
-					mark: 0xca000100,
-				},
-				scripted({
-					"ip rule show":
-						"0: from all lookup local\n32766: from all lookup main\n",
-					[`ip -4 route show default dev ${ifname}`]: defaultRoute,
-				}),
-			);
-
-			expect(plan.defaultRouteArgv).toEqual([
-				"route",
-				"replace",
-				"table",
-				"30001",
-				...routeTokens,
-				"dev",
-				ifname,
-			]);
-		},
-	);
-
-	test.each(["wwu1c2", "wlan1"])(
-		"refuses a conflicting device in an interface-filtered %s default",
-		async (ifname) => {
-			await expect(
-				planUplinkRoute(
-					{
-						identity: `filtered-${ifname}`,
-						ifname,
-						sourceAddress: "10.5.4.130",
-						sourceAddressUnique: true,
-						mark: 0xca000100,
-					},
-					scripted({
-						"ip rule show":
-							"0: from all lookup local\n32766: from all lookup main\n",
-						[`ip -4 route show default dev ${ifname}`]:
-							"default via 10.5.4.129 dev wwan9 proto static metric 700",
-					}),
-				),
-			).rejects.toMatchObject({
-				name: "SteeringUnavailableError",
-				reason: "policy_route_missing",
-				message: `${ifname}: interface default route was unusable`,
-			});
-		},
-	);
-
-	test("does not infer an interface from an unfiltered table default", async () => {
-		await expect(
-			planUplinkRoute(
-				{
-					identity: "wifi-a",
-					ifname: "wlan0",
-					sourceAddress: "10.5.4.130",
-					sourceAddressUnique: true,
-					mark: 0xca000100,
-				},
-				scripted({
-					"ip rule show": "100: from 10.5.4.130 lookup 30001\n",
-					"ip route show table 30001":
-						"default via 10.5.4.129 proto static metric 700",
-				}),
-			),
-		).rejects.toMatchObject({ reason: "policy_route_missing" });
-	});
-
-	test("provisions an interface-specific Ethernet table when no source rule exists", async () => {
-		const mark = stableUplinkMark("onboard-eth0");
-		const baseRules =
-			"0: from all lookup local\n32766: from all lookup main\n32767: from all lookup default\n";
+	test("#433 provisions a never-created table before adding its rules", async () => {
 		const h = scripted({
-			"ip rule show": baseRules,
-			"ip -4 route show default dev eth0":
-				"default via 192.168.1.1 dev eth0 proto dhcp src 192.168.1.20 metric 100\n",
+			"ip rule show": "0: from all lookup local\n32766: from all lookup main\n",
+			"ip -4 route show default dev ww0": "default via 10.64.0.1",
 		});
 		const plan = await planUplinkRoute(
 			{
-				identity: "onboard-eth0",
-				ifname: "eth0",
-				sourceAddress: "192.168.1.20",
+				identity: "cellular-cold",
+				ifname: "ww0",
+				sourceAddress: "10.64.0.2",
 				sourceAddressUnique: true,
-				mark,
+				mark: 0xca000100,
 			},
 			h,
 		);
-		expect(plan.managed).toBe(true);
-		expect(plan.sourceRulePriority).toBe(100);
-		expect(plan.defaultRouteArgv).toEqual([
-			"route",
-			"replace",
-			"table",
-			plan.table,
-			"default",
-			"via",
-			"192.168.1.1",
-			"dev",
-			"eth0",
-			"proto",
-			"dhcp",
-			"src",
-			"192.168.1.20",
-			"metric",
-			"100",
+		expect(await ensureUplinkRoute(plan, h)).toMatchObject({
+			changed: true,
+			createdTableRoute: true,
+			createdSourceRule: true,
+			createdFwmarkRule: true,
+		});
+		expect(h.calls.slice(-3).map((call) => call.slice(1, 3))).toEqual([
+			["route", "replace"],
+			["rule", "add"],
+			["rule", "add"],
 		]);
+	});
 
-		await ensureUplinkRoute(plan, h);
-		expect(h.calls).toContainEqual(["ip", ...(plan.defaultRouteArgv ?? [])]);
-		expect(h.calls).toContainEqual(
-			expect.arrayContaining([
-				"rule",
-				"add",
-				"priority",
-				"100",
-				"from",
-				"192.168.1.20/32",
-			]),
+	test("#433 replans a ww uplink whose source-rule table never existed", async () => {
+		const plan = await planUplinkRoute(
+			{
+				identity: "cellular-stale-rule",
+				ifname: "ww0",
+				sourceAddress: "10.64.0.2",
+				sourceAddressUnique: true,
+				mark: 0xca000100,
+			},
+			scripted({
+				"ip rule show": "100: from 10.64.0.2 lookup 123\n",
+				"ip -4 route show default dev ww0": "default via 10.64.0.1",
+			}),
 		);
+		expect(plan).toMatchObject({ table: "30001", managed: true });
+		expect(plan.sourceRulePriority).toBeUndefined();
+	});
+
+	test.each([
+		Object.assign(absentTableError(), {
+			stderr: "Error: Operation not permitted\n",
+		}),
+		Object.assign(absentTableError(), { stderr: "Error: invalid table ID\n" }),
+		Object.assign(absentTableError(), { code: 1 }),
+		Object.assign(absentTableError(), { stdout: "default dev ww9\n" }),
+		Object.assign(new Error("FIB table does not exist"), {
+			code: 2,
+			stdout: "",
+			stderr: "",
+		}),
+		new RunTimeoutError("ip route show table 123", "", ""),
+	])("#433 preserves unknown read failures %#", async (error) => {
+		const h: UplinkRouteManagerDeps = {
+			run: async (_bin, args) => {
+				if (args[0] === "rule") return "100: from 10.64.0.2 lookup 123\n";
+				throw error;
+			},
+		};
+		await expect(
+			planUplinkRoute(
+				{
+					identity: "cellular-error",
+					ifname: "ww0",
+					sourceAddress: "10.64.0.2",
+					sourceAddressUnique: true,
+					mark: 0xca000100,
+				},
+				h,
+			),
+		).rejects.toMatchObject({ reason: "policy_route_missing" });
 	});
 
 	test("provisions a private Ethernet table without modifying a broken source rule", async () => {
@@ -307,5 +253,146 @@ describe("uplink steering route planning", () => {
 			reason: "policy_route_missing",
 			message: "wlan0: ip unavailable",
 		});
+	});
+});
+
+describe("managed uplink default route refresh", () => {
+	const plan: UplinkRoutePlan = {
+		identity: "cellular-refresh",
+		ifname: "wwan0",
+		sourceAddress: "10.0.0.2",
+		mark: 0xca000100,
+		table: "30001",
+		managed: true,
+		sourceRulePriority: 100,
+		defaultRouteArgv: [
+			"route",
+			"replace",
+			"table",
+			"30001",
+			"default",
+			"via",
+			"10.0.0.9",
+			"dev",
+			"wwan0",
+		],
+	};
+	const rules = [
+		"100: from 10.0.0.2 lookup 30001",
+		"110: from all fwmark 0xca000100/0xffffff00 lookup 30001",
+		"110: from all fwmark 0xca000200/0xffffff00 lookup 30002",
+	].join("\n");
+
+	test.each([
+		["gateway", "default via 10.0.0.1 dev wwan0", false],
+		["metric", "default via 10.0.0.9 dev wwan0 metric 600", true],
+		["protocol", "default via 10.0.0.9 dev wwan0 proto dhcp", false],
+		["gateway added", "default dev wwan0", false],
+	] as const)(
+		"replaces a same-device route after a %s change",
+		async (_field, current, metricChanged) => {
+			const h = scripted({
+				"ip rule show": rules,
+				"ip route show table 30001": `${current}\n`,
+			});
+
+			const provisioning = await ensureUplinkRoute(plan, h);
+
+			expect(h.calls).toEqual([
+				["ip", "rule", "show"],
+				["ip", "route", "show", "table", "30001"],
+				...(metricChanged
+					? [
+							["ip", "route", "add", ...(plan.defaultRouteArgv ?? []).slice(2)],
+							["ip", "route", "del", "table", "30001", ...current.split(" ")],
+						]
+					: [["ip", ...(plan.defaultRouteArgv ?? [])]]),
+			]);
+			expect(provisioning).toMatchObject({
+				changed: true,
+				createdTableRoute: false,
+				createdSourceRule: false,
+				createdFwmarkRule: false,
+				replacedTableRoute: [
+					"route",
+					metricChanged ? "add" : "replace",
+					"table",
+					"30001",
+					...current.split(" "),
+				],
+			});
+			expect(provisioning.addedTableRoute).toEqual(
+				metricChanged
+					? ["route", "add", ...(plan.defaultRouteArgv ?? []).slice(2)]
+					: undefined,
+			);
+		},
+	);
+
+	test("rollback restores the previous gateway and route attributes without flushing", async () => {
+		const current =
+			"default via 10.0.0.1 dev wwan0 proto dhcp src 10.0.0.2 metric 600 onlink";
+		const h = scripted({
+			"ip rule show": rules,
+			"ip route show table 30001": `${current}\n`,
+		});
+		const provisioning = await ensureUplinkRoute(plan, h);
+		h.calls.length = 0;
+
+		await rollbackUplinkRoute(provisioning, h);
+
+		expect(h.calls).toEqual([
+			["ip", "route", "add", "table", "30001", ...current.split(" ")],
+			["ip", "route", "del", ...(plan.defaultRouteArgv ?? []).slice(2)],
+		]);
+	});
+
+	test.each([
+		"default via 10.0.0.9 dev wwan0",
+		"default dev wwan0 via 10.0.0.9",
+		"default via 10.0.0.9 dev wwan0 metric 0",
+	])("leaves an identical route unchanged: %s", async (current) => {
+		const h = scripted({
+			"ip rule show": rules,
+			"ip route show table 30001": `${current}\n`,
+		});
+
+		const provisioning = await ensureUplinkRoute(plan, h);
+
+		expect(provisioning.changed).toBe(false);
+		expect(provisioning.replacedTableRoute).toBeUndefined();
+		expect(h.calls).toEqual([
+			["ip", "rule", "show"],
+			["ip", "route", "show", "table", "30001"],
+		]);
+	});
+
+	test("restores a replaced route when a later rule installation fails", async () => {
+		const current = "default via 10.0.0.1 dev wwan0";
+		const h = scripted({
+			"ip rule show": "",
+			"ip route show table 30001": `${current}\n`,
+		});
+		const deps: UplinkRouteManagerDeps = {
+			run: async (command, args, ...rest) => {
+				const result = await h.run(command, args, ...rest);
+				if (args.includes("fwmark")) throw new Error("fwmark refused");
+				return result;
+			},
+		};
+
+		await expect(ensureUplinkRoute(plan, deps)).rejects.toMatchObject({
+			reason: "policy_route_missing",
+		});
+
+		expect(h.calls.at(-1)).toEqual([
+			"ip",
+			"route",
+			"replace",
+			"table",
+			"30001",
+			...current.split(" "),
+		]);
+		expect(h.calls.some((call) => call.includes("flush"))).toBe(false);
 	});
 });

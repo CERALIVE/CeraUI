@@ -5,6 +5,7 @@ import {
 	beforeEach,
 	describe,
 	expect,
+	jest,
 	mock,
 	spyOn,
 	test,
@@ -56,6 +57,7 @@ describe("session-switch admission through the real adapter and published UDS cl
 	let server: ReturnType<typeof Bun.listen>;
 	let reply: PeerReply;
 	let requests: string[];
+	let requestReceived: ReturnType<typeof Promise.withResolvers<void>>;
 	let originalConfigPath: string;
 	let savedConfig: ReturnType<typeof config.getConfig>;
 	let diskBefore: string;
@@ -101,6 +103,7 @@ describe("session-switch admission through the real adapter and published UDS cl
 		audioBroadcast.mockClear();
 		updateStatus(true);
 		requests = [];
+		requestReceived = Promise.withResolvers<void>();
 		reply = { kind: "roster", value: { switch_targets: [] } };
 		const socketPath = join(directory, "s");
 		server = Bun.listen<{ pending: string }>({
@@ -130,6 +133,7 @@ describe("session-switch admission through the real adapter and published UDS cl
 							});
 							continue;
 						}
+						requestReceived.resolve();
 						switch (reply.kind) {
 							case "rpc-error":
 								respond({
@@ -173,11 +177,13 @@ describe("session-switch admission through the real adapter and published UDS cl
 		// Inject the connection, never listSwitchTargets or the adapter's classification.
 		cerastreamBackend["client"] = await connect({
 			socketPath,
-			requestTimeoutMs: 100,
+			requestTimeoutMs: 10_000,
 		});
+		jest.useFakeTimers();
 	});
 
 	afterEach(async () => {
+		jest.useRealTimers();
 		await cerastreamBackend["client"]?.close();
 		cerastreamBackend["client"] = originalClient;
 		server.stop(true);
@@ -198,11 +204,21 @@ describe("session-switch admission through the real adapter and published UDS cl
 	) {
 		// When: the authenticated procedure crosses the real adapter boundary.
 		const before = structuredClone(config.getConfig());
-		const result = await call(
+		const pendingResult = call(
 			switchInputProcedure,
 			{ input_id: inputId },
 			{ context: makeRpcContext() },
 		);
+		if (
+			reply.kind === "timeout" ||
+			reply.kind === "malformed-json" ||
+			reply.kind === "malformed-error"
+		) {
+			// Advance only after the real peer has consumed the unanswered request.
+			await requestReceived.promise;
+			jest.advanceTimersByTime(10_000);
+		}
+		const result = await pendingResult;
 		// Then: neither discovery, switch dispatch, persistence nor audio follow ran.
 		expect(result).toEqual({ success: false, error: "SWITCH_FAILED" });
 		expect(requests).toEqual(expectedRequests);

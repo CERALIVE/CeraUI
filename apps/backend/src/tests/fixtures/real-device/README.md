@@ -10,6 +10,12 @@ selected complete command sections, delimited by `##### <name>`. Tests remove
 only this envelope, never repair the command output. Raw captures stay outside
 the checkout; fixture tests resolve only repo-local paths.
 
+- `conntrack-1.4.8-zero-delete.txt`: verbatim stderr reported in issue #435 on
+  Rock 5B+, ceralive-device 2026.11.1, conntrack-tools 1.4.8. This single-line
+  receipt has no envelope or privacy substitutions. The effects and coordinator
+  tests replay it through production `flushConntrack` with numeric exit 1 and
+  empty stdout; board reproduction remains a separate hardware check.
+
 - `opi-d8-agent.txt`: the complete captured `agent.json` from Orange Pi D8,
   2026-10-02T00:33:44.122Z, DEV `e29eded3` on Debian 13. The 812 payload bytes
   are preserved exactly, including the absent `attemptId`; no identifiers need

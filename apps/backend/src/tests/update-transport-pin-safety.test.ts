@@ -7,6 +7,21 @@ import {
 	UpdateTransferError,
 } from "../modules/system/update-transport/pin.ts";
 
+const absentFlushError = () =>
+	Object.assign(new Error("ip route flush failed"), {
+		code: 2,
+		stdout: "",
+		stderr: "Error: ipv4: FIB table does not exist.\nFlush terminated",
+	});
+
+const mixedFlushError = () =>
+	Object.assign(new Error("ip route flush failed"), {
+		code: 2,
+		stdout: "",
+		stderr:
+			"Error: ipv4: FIB table does not exist.\nDump terminated\nRTNETLINK answers: Operation not permitted\n",
+	});
+
 const capabilities = updateCapabilityFileSchema.parse({
 	schema: 1,
 	features: ["apt-all-packages", "transport-uidrange"],
@@ -111,6 +126,28 @@ describe("update UID route safety", () => {
 		expect(calls).toContain(
 			`-6 route flush table ${UPDATE_TRANSPORT_TABLE_BASE + 1}`,
 		);
+	});
+
+	test("startup sweep ignores only the exact absent-table flush diagnostic", async () => {
+		const controller = createUpdatePinController({
+			readCapabilities: async () => capabilities,
+			run: async (_bin, args) => {
+				if (args.includes("flush")) throw absentFlushError();
+				return "";
+			},
+		});
+		await expect(controller.sweep()).resolves.toBeUndefined();
+	});
+
+	test("startup sweep propagates a mixed absent-table flush diagnostic", async () => {
+		const controller = createUpdatePinController({
+			readCapabilities: async () => capabilities,
+			run: async (_bin, args) => {
+				if (args.includes("flush")) throw mixedFlushError();
+				return "";
+			},
+		});
+		await expect(controller.sweep()).rejects.toThrow("ip route flush failed");
 	});
 
 	test("startup must sweep first; a foreign priority-120 rule prevents admission", async () => {

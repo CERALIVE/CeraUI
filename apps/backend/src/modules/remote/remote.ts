@@ -77,6 +77,7 @@ import {
 	type ValidateRemoteRelaysMessage,
 } from "./remote-relays.ts";
 import {
+	projectRemoteConfig,
 	projectRemoteStatus,
 	projectRemoteWifiFrame,
 } from "./remote-status.ts";
@@ -430,6 +431,8 @@ async function remoteConnect() {
 						...frame,
 						status: projectRemoteStatus(frame.status),
 					};
+		const config = projectRemoteConfig(frame.config);
+		if (config !== frame.config) projected = { ...projected, config };
 		const wifi = projectRemoteWifiFrame(frame.wifi);
 		if (wifi !== frame.wifi) projected = { ...projected, wifi };
 		const message = projected === frame ? data : JSON.stringify(projected);

@@ -43,6 +43,7 @@ const applier = new UplinkSteeringApplier({
 const coordinator = new UplinkSteeringCoordinator({
 	readDesiredState: readDesiredSteeringState,
 	apply: (previous, next) => applier.apply(previous, next),
+	retryCleanup: () => applier.retryPendingCleanup(),
 	publishAvailability: publishUplinkSteeringAvailability,
 });
 
