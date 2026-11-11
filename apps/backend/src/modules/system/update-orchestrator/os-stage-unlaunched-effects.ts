@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { z } from "zod";
+import { isFibTableAbsent } from "../../../helpers/iproute2-absent.ts";
 import { run } from "../../../helpers/run.ts";
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
 import { updatePinController } from "../update-transport/pin.ts";
@@ -60,15 +61,7 @@ export async function updatePinsClean(runner: typeof run): Promise<boolean> {
 					table,
 				]);
 			} catch (cause) {
-				const stderr: unknown =
-					cause instanceof Error && "stderr" in cause
-						? cause.stderr
-						: undefined;
-				if (
-					typeof stderr === "string" &&
-					stderr.includes("FIB table does not exist")
-				)
-					continue;
+				if (isFibTableAbsent(cause, "read")) continue;
 				throw cause;
 			}
 			if (z.array(z.unknown()).parse(parseAuthorityJson(routes)).length)

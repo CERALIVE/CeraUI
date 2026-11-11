@@ -193,6 +193,8 @@ test("real never-created pin tables (exit 2) and empty rule sets prove a clean p
 		const real = await realDeviceReply("rock-readonly", section);
 		if (real.exitCode !== 0)
 			throw Object.assign(new Error(`exit ${real.exitCode}`), {
+				code: real.exitCode,
+				stdout: "",
 				stderr: real.stderr,
 			});
 		return real.stdout;
@@ -205,4 +207,19 @@ test("real never-created pin tables (exit 2) and empty rule sets prove a clean p
 				: reply(args),
 		),
 	).toBe(false);
+});
+
+test("pin cleanliness propagates mixed absent-table text with a permission error", async () => {
+	await expect(
+		updatePinsClean(async (_bin, args) => {
+			if (args.includes("route"))
+				throw Object.assign(new Error("ip route show failed"), {
+					code: 2,
+					stdout: "",
+					stderr:
+						"Error: ipv4: FIB table does not exist.\nDump terminated\nRTNETLINK answers: Operation not permitted\n",
+				});
+			return "";
+		}),
+	).rejects.toThrow("ip route show failed");
 });
