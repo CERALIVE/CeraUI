@@ -1,5 +1,12 @@
 # CeraUI
 
+**Destination navigation [EXISTS].** The desktop rail and mobile dock accept
+successive destinations without a wall-clock throttle, including in e-ink mode.
+The navigation store still ignores the current destination and blocks active
+transitions. Frozen-clock regression coverage lives in
+`apps/frontend/src/main/navigation/Navigation.test.ts`; browser navigation keeps
+the [existing state-based assertions](apps/frontend/tests/e2e/PLAYBOOK.md#navigateto-helper).
+
 **Wi-Fi incarnation binding [EXISTS; backend enforcement pending].** Local status may
 include an optional opaque radio lifetime token. Hotspot requests accept it
 without enforcing it. The frontend binds hotspot drafts and acknowledgement to

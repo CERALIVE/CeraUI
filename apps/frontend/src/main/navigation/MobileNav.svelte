@@ -9,18 +9,11 @@ import {
 } from '$lib/stores/navigation.svelte';
 import { cn } from '$lib/utils';
 
-let lastNavigationTime = 0;
-const NAVIGATION_THROTTLE_MS = 50;
-
 const currentNav = $derived(getCurrentNavigation() ?? { live: navElements.live });
 const activeKey = $derived(Object.keys(currentNav)[0] ?? 'live');
 
 const handleClick = (identifier: string, navigation: NavElements[string]) => {
 	if ($isNavigationTransitioning || !navigation || !identifier) return;
-
-	const now = Date.now();
-	if (now - lastNavigationTime < NAVIGATION_THROTTLE_MS) return;
-	lastNavigationTime = now;
 
 	navigateTo({ [identifier]: navigation } as NavElements);
 };
