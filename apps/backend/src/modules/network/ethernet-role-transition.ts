@@ -30,6 +30,8 @@
   neither the config nor the netif flags half-applied.
 */
 
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import type { EthernetRole, EthernetRoleError } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
@@ -153,21 +155,34 @@ async function applyRoleToNetworkManager(
 }
 
 const roleOperations = new Map<string, Promise<unknown>>();
+const roleOwnership = new AsyncLocalStorage<
+	ReadonlyMap<string, { active: boolean }>
+>();
 
 async function withEthernetRoleQueue<T>(
 	ifname: string,
 	operation: () => Promise<T>,
 ): Promise<T> {
+	const held = roleOwnership.getStore();
+	if (held?.get(ifname)?.active) return operation();
+
+	const ownership = { active: true };
+	const run = () =>
+		roleOwnership.run(
+			new Map([...(held ?? []), [ifname, ownership]]),
+			operation,
+		);
 	// Either outcome releases the next operation; callers still receive their
 	// own rejection. Retain only the latest operation until that port drains.
 	const current = (roleOperations.get(ifname) ?? Promise.resolve()).then(
-		operation,
-		operation,
+		run,
+		run,
 	);
 	roleOperations.set(ifname, current);
 	try {
 		return await current;
 	} finally {
+		ownership.active = false;
 		if (roleOperations.get(ifname) === current) roleOperations.delete(ifname);
 	}
 }

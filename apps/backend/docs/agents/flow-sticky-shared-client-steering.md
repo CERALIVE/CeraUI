@@ -17,8 +17,10 @@ station / hotspot / hybrid transitions run under the permanent-MAC adapter lock
 described in EVERY WIFI MUTATION SHARES ONE ADAPTER LOCK. Ethernet `uplink` /
 `shared-lan` changes and boot reconciliation share one promise chain per port.
 The whole persist -> NetworkManager -> restore sequence completes before the next
-operation on that port begins; other ports proceed independently. Reconciliation
-reads the role again after taking ownership, and drained queue entries are removed.
+outside operation on that port begins; other ports proceed independently. Nested
+calls in the owning async context reuse its ownership instead of queueing behind
+themselves. Reconciliation reads the role again after taking ownership, and drained
+queue entries are removed.
 
 **Client provenance is structural.** New-flow selection, conntrack mark restore,
 and masquerade all require a positive registered client-zone `iifname`; NAT also
