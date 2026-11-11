@@ -135,3 +135,30 @@ saved profile back through `device wifi connect`: some NetworkManager versions
 reject that retry with a missing key-mgmt error. A failed secret update stops
 before activation and retains the profile. Authentication refusal text is read
 from both output streams.
+
+### Native automatic-fallback qualification
+
+Keep the known-good profile eligible when measuring fallback from a bad join.
+NetworkManager 1.52.1 marks the active profile blocked for `user-requested`
+when `device disconnect` is used. Setting the device's `autoconnect` back to
+`yes` clears the device block, but does not clear that profile block. A profile
+can still appear in `AVAILABLE-CONNECTIONS` and have `connection.autoconnect=yes`
+while blocked internally. Waiting for the retry timeout does not establish that
+this separate user-request block has cleared.
+
+For an explicit-join trial, first prove the good profile connected, then activate
+the bad profile directly, without disconnecting the good one first. Its
+deactivation should report `new-activation`, not `user-requested`. For an
+automatic-priority control, create fresh eligible profiles with autoconnect
+disabled, then enable the bad profile followed by the good one, without any
+manual disconnect. Prove the good credentials separately and preserve both
+UUIDs throughout the failed-join trial. Do not assume that toggling a profile's
+autoconnect clears an internal block; verify native policy evidence.
+Record native activation/failure timestamps and debug policy block reasons;
+cached scan rows alone do not prove autoconnect eligibility.
+
+Use an isolated NetworkManager, D-Bus, supplicant and simulated access points
+for host controls. Simulated timing on another NetworkManager version does not
+replace on-device qualification. Do not change retained-profile priority,
+retry counts, secrets policy or deletion behavior to compensate for a
+qualification setup that suppressed the fallback profile.
