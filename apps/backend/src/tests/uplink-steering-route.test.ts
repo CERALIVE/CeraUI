@@ -301,7 +301,8 @@ describe("managed uplink default route refresh", () => {
 			expect(h.calls).toEqual([
 				["ip", "rule", "show"],
 				["ip", "route", "show", "table", "30001"],
-				["ip", ...(plan.defaultRouteArgv ?? [])],
+				["ip", "route", "del", "table", "30001", ...current.split(" ")],
+				["ip", "route", "add", ...(plan.defaultRouteArgv ?? []).slice(2)],
 			]);
 			expect(provisioning).toMatchObject({
 				changed: true,
@@ -310,10 +311,15 @@ describe("managed uplink default route refresh", () => {
 				createdFwmarkRule: false,
 				replacedTableRoute: [
 					"route",
-					"replace",
+					"add",
 					"table",
 					"30001",
 					...current.split(" "),
+				],
+				addedTableRoute: [
+					"route",
+					"add",
+					...(plan.defaultRouteArgv ?? []).slice(2),
 				],
 			});
 		},
@@ -332,7 +338,8 @@ describe("managed uplink default route refresh", () => {
 		await rollbackUplinkRoute(provisioning, h);
 
 		expect(h.calls).toEqual([
-			["ip", "route", "replace", "table", "30001", ...current.split(" ")],
+			["ip", "route", "del", ...(plan.defaultRouteArgv ?? []).slice(2)],
+			["ip", "route", "add", "table", "30001", ...current.split(" ")],
 		]);
 	});
 
@@ -376,7 +383,7 @@ describe("managed uplink default route refresh", () => {
 		expect(h.calls.at(-1)).toEqual([
 			"ip",
 			"route",
-			"replace",
+			"add",
 			"table",
 			"30001",
 			...current.split(" "),

@@ -1,12 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { run } from "../helpers/run.ts";
+import type { UplinkRoutePlan } from "../modules/network/uplink-steering/applier.ts";
 import {
 	discoverOwnedUplinkRoutes,
 	ensureUplinkRoute,
 	hasFwmarkRule,
 	planUplinkRoute,
 	removeUplinkRoute,
+	rollbackUplinkRoute,
+	type UplinkRouteManagerDeps,
 } from "../modules/network/uplink-steering/route-manager.ts";
 import { runTestCommand } from "./helpers/run-test-command.ts";
 
@@ -17,6 +20,220 @@ const probe = child
 const unavailable = probe !== undefined && probe.code !== 0;
 const reason = `user/network namespace unavailable: ${probe?.stderr.trim()}`;
 const name = "#433 provisions and retires never-created steering tables";
+
+function kernelRefreshTest(
+	name: string,
+	scenario: (deps: UplinkRouteManagerDeps) => Promise<void>,
+): void {
+	(unavailable ? test.skip : test)(
+		unavailable ? `${name} (SKIP: ${reason})` : name,
+		async () => {
+			if (!child) {
+				const result = await runTestCommand(
+					[
+						"unshare",
+						"-Urn",
+						process.execPath,
+						"test",
+						fileURLToPath(import.meta.url),
+						"--test-name-pattern",
+						name,
+					],
+					{ env: { CERALIVE_STEERING_ROUTE_KERNEL_CHILD: "1" } },
+				);
+				console.log(result.stdout + result.stderr);
+				expect(result.code, result.stdout + result.stderr).toBe(0);
+				return;
+			}
+			for (const [iface, address] of [
+				["wwan0", "10.0.0.2/24"],
+				["wwan1", "10.1.0.2/24"],
+			] as const) {
+				await run("ip", ["link", "add", iface, "type", "dummy"]);
+				await run("ip", ["link", "set", iface, "up"]);
+				await run("ip", ["addr", "add", address, "dev", iface]);
+			}
+			await run("ip", [
+				"route",
+				"add",
+				"table",
+				"30002",
+				"default",
+				"via",
+				"10.1.0.1",
+				"dev",
+				"wwan1",
+				"onlink",
+				"mtu",
+				"1350",
+			]);
+			const sentinel = await run("ip", ["route", "show", "table", "30002"]);
+			const calls: string[][] = [];
+			await scenario({
+				run: async (command, args, ...rest) => {
+					calls.push([command, ...args]);
+					return await run(command, args, ...rest);
+				},
+			});
+			expect(await run("ip", ["route", "show", "table", "30002"])).toBe(
+				sentinel,
+			);
+			for (const call of calls) {
+				if (
+					call[1] !== "route" ||
+					!["replace", "add", "del", "flush"].includes(call[2] ?? "")
+				)
+					continue;
+				expect(call.includes("flush")).toBe(false);
+				expect(call[call.indexOf("table") + 1]).toBe("30001");
+			}
+		},
+		30_000,
+	);
+}
+
+describe("real kernel managed route refresh", () => {
+	kernelRefreshTest("replans from the live interface gateway", async (deps) => {
+		await run("ip", [
+			"route",
+			"add",
+			"default",
+			"via",
+			"10.0.0.1",
+			"dev",
+			"wwan0",
+			"proto",
+			"static",
+			"metric",
+			"600",
+		]);
+		const candidate = {
+			identity: "kernel-refresh",
+			ifname: "wwan0",
+			sourceAddress: "10.0.0.2",
+			sourceAddressUnique: true,
+			mark: 0xca000100,
+		};
+		const initial = await planUplinkRoute(candidate, deps);
+		await ensureUplinkRoute(initial, deps);
+		expect(
+			await run("ip", ["route", "show", "table", initial.table]),
+		).toContain("via 10.0.0.1");
+		await run("ip", [
+			"route",
+			"replace",
+			"default",
+			"via",
+			"10.0.0.9",
+			"dev",
+			"wwan0",
+			"proto",
+			"static",
+			"metric",
+			"600",
+		]);
+		const refreshed = await planUplinkRoute(candidate, deps);
+		const receipt = await ensureUplinkRoute(refreshed, deps);
+		const after = await run("ip", ["route", "show", "table", refreshed.table]);
+		expect(after).toContain("via 10.0.0.9");
+		expect(after.trim().split("\n")).toHaveLength(1);
+		expect(refreshed.defaultRouteArgv).not.toEqual(initial.defaultRouteArgv);
+		expect(receipt.changed).toBe(true);
+		expect((await ensureUplinkRoute(refreshed, deps)).changed).toBe(false);
+	});
+
+	kernelRefreshTest(
+		"metric rollback restores only the previous default",
+		async (deps) => {
+			await run("ip", [
+				"route",
+				"add",
+				"table",
+				"30001",
+				"default",
+				"via",
+				"10.0.0.1",
+				"dev",
+				"wwan0",
+				"proto",
+				"dhcp",
+				"src",
+				"10.0.0.2",
+				"metric",
+				"600",
+				"onlink",
+				"mtu",
+				"1400",
+			]);
+			const plan: UplinkRoutePlan = {
+				identity: "kernel-rollback",
+				ifname: "wwan0",
+				sourceAddress: "10.0.0.2",
+				mark: 0xca000100,
+				table: "30001",
+				managed: true,
+				sourceRulePriority: 100,
+				defaultRouteArgv: [
+					"route",
+					"replace",
+					"table",
+					"30001",
+					"default",
+					"via",
+					"10.0.0.9",
+					"dev",
+					"wwan0",
+				],
+			};
+			const before = await run("ip", ["route", "show", "table", plan.table]);
+			const beforeRules = await run("ip", ["rule", "show"]);
+			await expect(
+				ensureUplinkRoute(plan, {
+					run: async (command, args, ...rest) => {
+						if (
+							args[0] === "rule" &&
+							args[1] === "add" &&
+							args.includes("fwmark")
+						)
+							throw new Error("injected later fwmark failure");
+						return await deps.run(command, args, ...rest);
+					},
+				}),
+			).rejects.toMatchObject({ reason: "policy_route_missing" });
+			expect(await run("ip", ["route", "show", "table", plan.table])).toBe(
+				before,
+			);
+			expect(await run("ip", ["rule", "show"])).toBe(beforeRules);
+
+			const receipt = await ensureUplinkRoute(plan, deps);
+			const refreshed = await run("ip", ["route", "show", "table", plan.table]);
+			expect(refreshed).toContain("via 10.0.0.9");
+			expect(refreshed.trim().split("\n")).toHaveLength(1);
+			await rollbackUplinkRoute(receipt, deps);
+			expect(await run("ip", ["route", "show", "table", plan.table])).toBe(
+				before,
+			);
+			expect(await run("ip", ["rule", "show"])).toBe(beforeRules);
+
+			await expect(
+				ensureUplinkRoute(plan, {
+					run: async (command, args, ...rest) => {
+						if (
+							args[0] === "route" &&
+							args[1] === "add" &&
+							args.includes("10.0.0.9")
+						)
+							throw new Error("injected new route failure");
+						return await deps.run(command, args, ...rest);
+					},
+				}),
+			).rejects.toMatchObject({ reason: "policy_route_missing" });
+			expect(await run("ip", ["route", "show", "table", plan.table])).toBe(
+				before,
+			);
+		},
+	);
+});
 
 describe("real kernel steering route absence", () => {
 	(unavailable ? test.skip : test)(

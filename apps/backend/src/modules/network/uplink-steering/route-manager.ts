@@ -83,6 +83,7 @@ async function ensureUplinkRouteInner(
 	let createdSourceRule = false;
 	let createdFwmarkRule = false;
 	let replacedTableRoute: readonly string[] | undefined;
+	let addedTableRoute: readonly string[] | undefined;
 	try {
 		if (plan.managed) {
 			const routeOutput = await readRouteTable(deps, plan.table);
@@ -114,16 +115,22 @@ async function ensureUplinkRouteInner(
 						"managed route has no replacement argv",
 					);
 				}
-				await deps.run("ip", [...plannedRoute]);
 				if (sameDevice && currentRoute.ok) {
-					replacedTableRoute = [
+					const previousRoute = [
 						"route",
-						"replace",
+						"add",
 						"table",
 						plan.table,
 						...currentRoute.value.slice(2),
 					];
+					// A different metric is a distinct kernel route key.
+					await deps.run("ip", ["route", "del", ...previousRoute.slice(2)]);
+					replacedTableRoute = previousRoute;
+					const replacementRoute = ["route", "add", ...plannedRoute.slice(2)];
+					await deps.run("ip", replacementRoute);
+					addedTableRoute = replacementRoute;
 				} else {
+					await deps.run("ip", [...plannedRoute]);
 					createdTableRoute = true;
 				}
 			}
@@ -143,6 +150,7 @@ async function ensureUplinkRouteInner(
 			createdSourceRule,
 			createdFwmarkRule,
 			replacedTableRoute,
+			addedTableRoute,
 		);
 		try {
 			await rollbackUplinkRoute(provisioning, deps);
@@ -160,6 +168,7 @@ async function ensureUplinkRouteInner(
 		createdSourceRule,
 		createdFwmarkRule,
 		replacedTableRoute,
+		addedTableRoute,
 	);
 }
 
@@ -175,6 +184,13 @@ export async function rollbackUplinkRoute(
 		await deps.run("ip", sourceRuleArgv("del", route));
 	}
 	if (provisioning.replacedTableRoute !== undefined) {
+		if (provisioning.addedTableRoute !== undefined) {
+			await deps.run("ip", [
+				"route",
+				"del",
+				...provisioning.addedTableRoute.slice(2),
+			]);
+		}
 		await deps.run("ip", [...provisioning.replacedTableRoute]);
 	} else if (provisioning.createdTableRoute) {
 		await flushRouteTable(deps, route.table);
@@ -218,6 +234,7 @@ function buildProvisioning(
 	createdSourceRule: boolean,
 	createdFwmarkRule: boolean,
 	replacedTableRoute: readonly string[] | undefined,
+	addedTableRoute: readonly string[] | undefined,
 ): RouteProvisioning {
 	return {
 		route,
@@ -230,5 +247,6 @@ function buildProvisioning(
 		createdSourceRule,
 		createdFwmarkRule,
 		...(replacedTableRoute === undefined ? {} : { replacedTableRoute }),
+		...(addedTableRoute === undefined ? {} : { addedTableRoute }),
 	};
 }
