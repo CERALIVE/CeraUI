@@ -34,6 +34,7 @@ import {
 	setWifiJoinNmcliRunner,
 	wifiDeleteFailedConns,
 	wifiSiblingConnections,
+	wifiUpdateSavedConns,
 } from "../modules/wifi/wifi.ts";
 import {
 	addWifiInterface,
@@ -369,7 +370,9 @@ test("a rejected retained-profile refresh cannot change or delay the refusal", a
 			device: 0,
 		});
 		listing.reject(new Error("Profile transport unavailable"));
-		await waitFor(() => broadcast.mock.calls.length > 0);
+		await waitFor(() => profiles.mock.calls.length === 3);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(broadcast).not.toHaveBeenCalled();
 		expect(frames).toHaveLength(1);
 		expect(adapter.saved[SSID]).toBe("existing-profile");
 		expect(adapter.savedAll[SSID]).toEqual(["existing-profile"]);
@@ -379,6 +382,91 @@ test("a rejected retained-profile refresh cannot change or delay the refusal", a
 		broadcast.mockRestore();
 	}
 });
+
+test.each(["missing", "throws"] as const)(
+	"a %s detail read preserves the complete cached snapshot",
+	async (failure) => {
+		const adapter = getWifiInterfacesByMacAddress()[ADAPTER];
+		if (!adapter) throw new Error("Missing test adapter");
+		adapter.saved[SSID] = "cached";
+		adapter.savedAll[SSID] = ["cached", "cached-sibling"];
+		const profiles = spyOn(networkManager, "nmConnsGet").mockResolvedValue([
+			`${NEW_UUID}:802-11-wireless`,
+			"unreadable:802-11-wireless",
+		]);
+		const fields = spyOn(networkManager, "nmConnGetFields").mockImplementation(
+			async (uuid) => {
+				if (uuid === NEW_UUID)
+					return ["infrastructure", SSID, ADAPTER] as never;
+				if (failure === "throws") throw new Error("Unavailable detail read");
+				return undefined;
+			},
+		);
+		try {
+			const publications: string[] = [];
+			await wifiUpdateSavedConns(undefined, () => {
+				publications.push("incomplete");
+			});
+			expect(publications).toEqual([]);
+			expect(adapter.saved).toEqual({ [SSID]: "cached" });
+			expect(adapter.savedAll).toEqual({
+				[SSID]: ["cached", "cached-sibling"],
+			});
+		} finally {
+			profiles.mockRestore();
+			fields.mockRestore();
+		}
+	},
+);
+
+test.each(["listing", "details"] as const)(
+	"a stale %s refresh cannot replace a newer complete snapshot",
+	async (delayed) => {
+		const oldListing = Promise.withResolvers<string[] | undefined>();
+		const oldDetails = Promise.withResolvers<undefined>();
+		const profiles = spyOn(networkManager, "nmConnsGet")
+			.mockImplementationOnce(async () =>
+				delayed === "listing" ? oldListing.promise : ["older:802-11-wireless"],
+			)
+			.mockResolvedValue([
+				"older:802-11-wireless",
+				`${NEW_UUID}:802-11-wireless`,
+			]);
+		let firstDetail = true;
+		const fields = spyOn(networkManager, "nmConnGetFields").mockImplementation(
+			async () => {
+				if (delayed === "details" && firstDetail) {
+					firstDetail = false;
+					await oldDetails.promise;
+				}
+				return ["infrastructure", SSID, ADAPTER] as never;
+			},
+		);
+		try {
+			const publications: string[] = [];
+			const older = wifiUpdateSavedConns(undefined, () => {
+				publications.push("older");
+			});
+			if (delayed === "details")
+				await waitFor(() => fields.mock.calls.length > 0);
+			await wifiUpdateSavedConns(undefined, () => {
+				publications.push("newer");
+			});
+			oldListing.resolve(["older:802-11-wireless"]);
+			oldDetails.resolve(undefined);
+			await older;
+			expect(publications).toEqual(["newer"]);
+			const adapter = getWifiInterfacesByMacAddress()[ADAPTER];
+			expect(adapter?.saved[SSID]).toBe(NEW_UUID);
+			expect(adapter?.savedAll[SSID]).toEqual(["older", NEW_UUID]);
+		} finally {
+			oldListing.resolve([]);
+			oldDetails.resolve(undefined);
+			profiles.mockRestore();
+			fields.mockRestore();
+		}
+	},
+);
 
 test.each([
 	[

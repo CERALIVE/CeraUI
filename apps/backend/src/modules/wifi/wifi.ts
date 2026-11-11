@@ -470,6 +470,7 @@ let savedConnectionsRefresh: symbol | undefined;
 
 export async function wifiUpdateSavedConns(
 	signal?: AbortSignal,
+	onCommitted?: () => void,
 ): Promise<void> {
 	if (signal?.aborted) return;
 	const refresh = Symbol();
@@ -513,6 +514,7 @@ export async function wifiUpdateSavedConns(
 		savedConnectionsRefresh !== refresh
 	)
 		return;
+	const hotspots: [MacAddress, ConnectionUUID][] = [];
 
 	for (const connection of connections) {
 		try {
@@ -538,12 +540,12 @@ export async function wifiUpdateSavedConns(
 			const [mode, ssid, macTmp] = fields;
 			if (!ssid) {
 				logger.warn("Wifi connection does not have an SSID!", { mode, uuid });
-				continue;
+				return;
 			}
 
 			const macAddress = macTmp.toLowerCase();
 			if (mode === "ap") {
-				void handleHotspotConn(macAddress, uuid);
+				hotspots.push([macAddress, uuid]);
 			} else if (mode === "infrastructure") {
 				registerSavedWifiConnection(savedInterfaces, macAddress, ssid, uuid);
 			}
@@ -553,6 +555,7 @@ export async function wifiUpdateSavedConns(
 					`Error getting the nmcli connection information: ${err.message}`,
 				);
 			}
+			return;
 		}
 	}
 
@@ -562,6 +565,8 @@ export async function wifiUpdateSavedConns(
 		original.saved = shadow.saved;
 		original.savedAll = shadow.savedAll;
 	}
+	onCommitted?.();
+	for (const [mac, uuid] of hotspots) void handleHotspotConn(mac, uuid);
 }
 
 /* Searches saved connections in wifiIfs by UUID */
@@ -812,11 +817,9 @@ function wifiNew(conn: MessageSocket, msg: WifiNewMessage["new"]) {
 // Reconcile retained profiles for explicit Forget without delaying a join's
 // terminal reply on profile-list transport availability.
 function refreshRetainedJoinProfiles(): void {
-	void wifiUpdateSavedConns()
-		.then(() => broadcastWifiState())
-		.catch((err) =>
-			logger.warn(`Retained Wi-Fi profile refresh failed: ${errorText(err)}`),
-		);
+	void wifiUpdateSavedConns(undefined, broadcastWifiState).catch((err) =>
+		logger.warn(`Retained Wi-Fi profile refresh failed: ${errorText(err)}`),
+	);
 }
 
 async function runWifiNew(
