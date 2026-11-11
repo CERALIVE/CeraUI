@@ -13,6 +13,176 @@ import {
 import { prepared, uplink } from "./uplink-steering-test-fixtures.ts";
 
 describe("UplinkSteeringCoordinator", () => {
+	test.each([true, false])(
+		"commits despite recovered cleanup failure and retries on the next reconcile (active=%s)",
+		async (active) => {
+			const desired = prepared(
+				[uplink("new", "eth0", 100)],
+				active ? undefined : [],
+			);
+			const stale = prepared([uplink("stale", "wwan0", 100)]).routes[0];
+			if (stale === undefined) throw new Error("missing stale route fixture");
+			let rejectCleanup = true;
+			const effects: string[] = [];
+			const statuses: SteeringAvailability[] = [];
+			const applier = new UplinkSteeringApplier({
+				discoverRoutes: async () => [stale],
+				ensureRoute: async (route) => ({ route, changed: true }),
+				rollbackRoute: async () => {
+					effects.push("rollback");
+				},
+				removeRoute: async () => {
+					effects.push("remove");
+				},
+				applyRuleset: async () => {
+					effects.push("ruleset");
+				},
+				deactivateSharing: async () => {
+					effects.push("deactivate");
+				},
+				flushConntrack: async () => {
+					effects.push("flush");
+					if (rejectCleanup) throw new Error("cleanup refused");
+				},
+				setIpForwarding: async (enabled) => {
+					effects.push(`forward:${enabled}`);
+				},
+				publishFlowsReset: () => {},
+			});
+			const coordinator = new UplinkSteeringCoordinator({
+				readDesiredState: async () => desired,
+				apply: (previous, next) => applier.apply(previous, next),
+				retryCleanup: () => applier.retryPendingCleanup(),
+				publishAvailability: (status) => statuses.push(status),
+				waitBeforeRetry: async () => {
+					effects.push("apply-retry");
+				},
+			});
+
+			await coordinator.requestReconcile();
+			expect(coordinator.appliedState()).toBe(desired);
+			expect(statuses).toEqual([{ available: true }]);
+			expect(effects).toContain(`forward:${active}`);
+			expect(effects).not.toContain("rollback");
+			expect(effects).not.toContain("apply-retry");
+			expect(effects.filter((effect) => effect === "deactivate")).toHaveLength(
+				active ? 0 : 1,
+			);
+			rejectCleanup = false;
+			effects.length = 0;
+
+			await coordinator.requestReconcile();
+			expect(effects).toEqual(["flush", "remove"]);
+			effects.length = 0;
+			await coordinator.requestReconcile();
+			expect(effects).toEqual([]);
+		},
+	);
+
+	test("cleanup dependency errors never undo a successful or unchanged reconcile", async () => {
+		const desired = prepared([uplink("a", "wwan0", 100)]);
+		let applies = 0;
+		let cleanups = 0;
+		const statuses: SteeringAvailability[] = [];
+		const coordinator = new UplinkSteeringCoordinator({
+			readDesiredState: async () => desired,
+			apply: async () => {
+				applies++;
+			},
+			retryCleanup: async () => {
+				cleanups++;
+				throw new Error("cleanup port failed");
+			},
+			publishAvailability: (status) => statuses.push(status),
+			waitBeforeRetry: async () => {
+				throw new Error("unexpected apply retry");
+			},
+		});
+		await coordinator.requestReconcile();
+		await coordinator.requestReconcile();
+		expect(applies).toBe(1);
+		expect(cleanups).toBe(2);
+		expect(statuses).toEqual([{ available: true }, { available: true }]);
+		expect(coordinator.appliedState()).toBe(desired);
+	});
+
+	test("failed activation cannot discard pending cleanup on an unchanged inactive reconcile", async () => {
+		const inactive = prepared([], []);
+		const revived = prepared([uplink("stale", "wwan0", 100)]);
+		const stale = revived.routes[0];
+		if (stale === undefined) throw new Error("missing stale route fixture");
+		let desired = inactive;
+		let cleanupFails = true;
+		const effects: string[] = [];
+		const statuses: SteeringAvailability[] = [];
+		const applier = new UplinkSteeringApplier({
+			discoverRoutes: async () => [stale],
+			ensureRoute: async (route) => ({ route, changed: false }),
+			rollbackRoute: async () => {
+				effects.push("rollback");
+			},
+			removeRoute: async () => {
+				effects.push("remove");
+			},
+			applyRuleset: async () => {
+				effects.push("activate");
+			},
+			deactivateSharing: async () => {
+				effects.push("deactivate");
+			},
+			flushConntrack: async () => {
+				effects.push("flush");
+				if (cleanupFails) throw new Error("cleanup refused");
+			},
+			setIpForwarding: async (enabled) => {
+				effects.push(`forward:${enabled}`);
+				if (enabled) throw new Error("sysctl refused");
+			},
+			publishFlowsReset: () => {},
+		});
+		const coordinator = new UplinkSteeringCoordinator({
+			readDesiredState: async () => desired,
+			apply: (previous, next) => applier.apply(previous, next),
+			retryCleanup: () => applier.retryPendingCleanup(),
+			publishAvailability: (status) => statuses.push(status),
+			waitBeforeRetry: async () => {},
+		});
+		await coordinator.requestReconcile();
+		expect(coordinator.appliedState()).toBe(inactive);
+		expect(effects).toEqual(["deactivate", "flush", "forward:false", "flush"]);
+		effects.length = 0;
+		desired = revived;
+
+		await coordinator.requestReconcile();
+
+		expect(coordinator.appliedState()).toBe(inactive);
+		expect(effects).toEqual([
+			"activate",
+			"forward:true",
+			"deactivate",
+			"activate",
+			"forward:true",
+			"deactivate",
+			"activate",
+			"forward:true",
+			"deactivate",
+		]);
+		expect(statuses.at(-1)).toMatchObject({ available: false });
+		effects.length = 0;
+		desired = inactive;
+		await coordinator.requestReconcile();
+		expect(effects).toEqual(["flush"]);
+		effects.length = 0;
+		cleanupFails = false;
+		await coordinator.requestReconcile();
+		expect(effects).toEqual(["flush", "remove"]);
+		expect(coordinator.appliedState()).toBe(inactive);
+		expect(statuses.at(-1)).toEqual({ available: true });
+		effects.length = 0;
+		await coordinator.requestReconcile();
+		expect(effects).toEqual([]);
+	});
+
 	test("coalesces concurrent triggers and converges to the latest state", async () => {
 		const first = prepared([uplink("a", "wwan0", 100)]);
 		const latest = prepared([uplink("c", "wlan0", 25)]);
