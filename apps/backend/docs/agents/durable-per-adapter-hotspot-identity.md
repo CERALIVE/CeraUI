@@ -135,6 +135,19 @@ again after settlement; deleted profiles cannot become a cached or persisted
 identity from the in-flight window. Other UUIDs remain available, and the
 per-adapter mutation lock and radio lifetime/draft contracts are unchanged.
 
+Reservation membership alone cannot validate an earlier NM response: a read may
+start before deletion and resume after the reservation has already been released.
+A monotonic deletion generation advances at reservation and settlement. Discovery
+and selection capture it before NM reads and discard results when it changes,
+re-reading NetworkManager before selecting or publishing an identity. The same
+fence covers interface-name resolution, awaited binding repairs and an SSID
+candidate retained while other profiles are read. An in-flight reserved UUID
+still skips immediately. The generation retains no UUID history and introduces
+no mutation queue or adapter lock.
+
 The promise-barrier tests in `wifi-hotspot-identity.test.ts` cover adoption during
 deletion, fresh reads after settlement, concurrent prune exclusion and an
-unreserved profile selected while another UUID is being deleted.
+unreserved profile selected while another UUID is being deleted. Delayed-read
+regressions hold both profile selection and adoption responses across a complete
+deletion and assert that the deleted UUID is neither selected, cached nor
+persisted, and that the resumed reader asks NM again.

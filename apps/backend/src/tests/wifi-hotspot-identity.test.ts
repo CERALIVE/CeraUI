@@ -1028,6 +1028,106 @@ describe("hotspot deletion reservation", () => {
 		return { profiles, deps, deleted, entered, resume };
 	}
 
+	test("selection re-reads a response held across a completed deletion", async () => {
+		const { profiles, deps, entered, resume } = deletingProfile();
+		const readEntered = Promise.withResolvers<void>();
+		const releaseRead = Promise.withResolvers<void>();
+		const readProfile = deps.getApProfileFields;
+		const observed: boolean[] = [];
+		deps.getApProfileFields = async (uuid) => {
+			const snapshot = await readProfile(uuid);
+			observed.push(snapshot !== undefined);
+			if (observed.length === 1) {
+				readEntered.resolve();
+				await releaseRead.promise;
+			}
+			return snapshot;
+		};
+		const selection = findHotspotConnForAdapter(
+			PERM_MAC,
+			{ ssid: OWNED_SSID, password: "y", conn: "superseded" },
+			deps,
+		);
+		await readEntered.promise;
+		try {
+			const pruning = pruneDuplicateHotspotConns(PERM_MAC, "keep", deps);
+			await entered.promise;
+			resume.resolve();
+			expect(await pruning).toEqual(["superseded"]);
+			expect(profiles).toEqual([]);
+		} finally {
+			releaseRead.resolve();
+			await selection;
+		}
+		expect(await selection).toBeUndefined();
+		expect(observed.at(-1)).toBe(false);
+	});
+
+	test("adoption re-reads a response held across a completed deletion", async () => {
+		const { profiles, deps, entered, resume } = deletingProfile();
+		const iface = makeHotspotIface();
+		addWifiInterface(PERM_MAC, iface);
+		const readEntered = Promise.withResolvers<void>();
+		const releaseRead = Promise.withResolvers<void>();
+		const observed: boolean[] = [];
+		const read = spyOn(runner, "run").mockImplementation(async (bin, args) => {
+			expect(bin).toBe("nmcli");
+			expect(args[4]).toBe("--get-values");
+			expect(args.at(-1)).toBe("superseded");
+			const p = profiles.find((entry) => entry.uuid === "superseded");
+			observed.push(p !== undefined);
+			if (!p) throw new Error("Connection no longer exists");
+			const fields: Record<string, string> = {
+				"connection.autoconnect-priority": "999",
+				"802-11-wireless.ssid": p.ssid,
+				"802-11-wireless-security.psk": p.psk,
+				"802-11-wireless.band": "",
+				"802-11-wireless.channel": "0",
+				"802-11-wireless.hidden": "no",
+				"802-11-wireless-security.key-mgmt": "wpa-psk",
+				"802-11-wireless-security.pairwise": "ccmp",
+				"802-11-wireless-security.group": "ccmp",
+				"802-11-wireless-security.proto": "rsn",
+				"802-11-wireless-security.pmf": "1",
+				"connection.interface-name": "",
+				"802-11-wireless.mac-address": p.mac,
+			};
+			const snapshot = (args[5] ?? "")
+				.split(",")
+				.map((field) => {
+					if (!(field in fields)) throw new Error(`Unexpected field ${field}`);
+					return fields[field];
+				})
+				.join("\n");
+			if (observed.length === 1) {
+				readEntered.resolve();
+				await releaseRead.promise;
+			}
+			return snapshot;
+		});
+		const adoption = handleHotspotConn(PERM_MAC, "superseded", {
+			active: true,
+		});
+		try {
+			await readEntered.promise;
+			const pruning = pruneDuplicateHotspotConns(PERM_MAC, "keep", deps);
+			await entered.promise;
+			resume.resolve();
+			expect(await pruning).toEqual(["superseded"]);
+			expect(profiles).toEqual([]);
+			releaseRead.resolve();
+			await adoption;
+			expect(iface.hotspot.conn).toBeUndefined();
+			expect(getHotspotCredentials(PERM_MAC)?.conn).toBe("keep");
+			expect(observed.at(-1)).toBe(false);
+		} finally {
+			resume.resolve();
+			releaseRead.resolve();
+			await adoption;
+			read.mockRestore();
+		}
+	});
+
 	test("adoption during an in-flight deletion cannot persist the deleted profile", async () => {
 		const { profiles, deps, entered, resume } = deletingProfile();
 		const iface = makeHotspotIface();
