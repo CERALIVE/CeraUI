@@ -10,13 +10,12 @@ never named by generated rule text. The carrier effects are isolated in
 `modules/network/uplink-sharing.ts`: fsynced temp → `nft --check` → atomic rename
 → systemd start/reload, with prior-file reload on failure.
 
-**The invariant in one sentence: only forwarded client-zone traffic is steered or
-NATed, and only the client band is ever capped.** Everything below is how that is
-made structural rather than intentional. Every mode transition that can create or
-retire a client zone — station / hotspot / hybrid, and the Ethernet `uplink` /
-`shared-lan` role — runs under the one permanent-MAC adapter lock described in
-EVERY WIFI MUTATION SHARES ONE ADAPTER LOCK, so a zone can never be registered
-against a half-applied adapter state.
+**Only forwarded client-zone traffic is steered or NATed, and only the client band
+is ever capped. Preserve physical-identity marks and established flows.**
+Everything below is how that is made structural rather than intentional. Wi-Fi
+station / hotspot / hybrid transitions run under the permanent-MAC adapter lock
+described in EVERY WIFI MUTATION SHARES ONE ADAPTER LOCK.
+Ethernet role changes are serialized per port and must not be nested.
 
 **Client provenance is structural.** New-flow selection, conntrack mark restore,
 and masquerade all require a positive registered client-zone `iifname`; NAT also
@@ -47,11 +46,26 @@ route removal and is never hydrated. `uplink-steering` is persistent and carries
 the shared `@ceraui/rpc` typed availability/refusal state.
 
 The coordinator is single-flight, re-reads the latest model before every apply,
-skips byte-identical state, and retries at 100/500 ms only. On process restart it
+skips byte-identical state, and retries a newly failing state at 100/500 ms.
+After those retries fail, identical desired states leave the unavailable status
+untouched and skip apply for 5 seconds. Each later failed apply doubles that delay
+up to 60 seconds, with one apply per window. A different desired state or success
+clears the backoff. On process restart it
 inventories its priority-110 rules, publishes the latest model first, then flushes
 and removes stale support. Any overlap, mark collision, foreign priority owner,
 missing route, nft failure, or rollback failure is fail-soft and surfaces
 `steering_unavailable`; it never blocks the already-bound WS server.
+
+Keep committed steering through stale-route cleanup failures: sharing, provisioned
+support and the forwarding step stay intact. The applier retains pending
+retirements and warns once per distinct failure; the coordinator alone retries
+them after successful, unchanged, or backoff-skipped reconciles. A pending
+mark/table pair desired again by a successfully applied state is discarded without
+a flush. The cleanup
+snapshot advances only after forwarding succeeds and apply returns normally; a
+failed activation cannot discard pending work. Before commit, a failed transition
+restores removed support and reloads the previous ruleset before rolling new routes
+back.
 
 The CeraUI half is complete and kernel-netns tested. It cannot activate on a fleet
 image until image-building todo 12 ships `ceralive-share.service`, its teardown

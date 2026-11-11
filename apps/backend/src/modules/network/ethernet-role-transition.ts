@@ -19,6 +19,9 @@
   The Ethernet role transition, and the boot reconciliation of the operator's
   persisted choice.
 
+  Nested role calls reject before admission. The frame contract below applies
+  to outside callers.
+
   EVERY EXIT PATH ENDS IN A TERMINAL FRAME, with exactly one publisher per path
   — the `wifi-adapter-mode-transition.ts` contract, applied to a wired port. A
   refusal decided here publishes here; an admitted transition publishes a pending
@@ -29,6 +32,8 @@
   operator's role) and RESTORED the moment NM refuses, so a failed flip leaves
   neither the config nor the netif flags half-applied.
 */
+
+import { AsyncLocalStorage } from "node:async_hooks";
 
 import type { EthernetRole, EthernetRoleError } from "@ceraui/rpc/schemas";
 
@@ -152,40 +157,91 @@ async function applyRoleToNetworkManager(
 	return undefined;
 }
 
+export class EthernetRoleReentryError extends Error {
+	constructor(
+		readonly ownerPort: string,
+		readonly requestedPort: string,
+	) {
+		super(
+			`Ethernet role change for ${requestedPort} cannot nest inside ${ownerPort}`,
+		);
+		this.name = "EthernetRoleReentryError";
+	}
+}
+
+const roleOperations = new Map<string, Promise<unknown>>();
+const roleOwnership = new AsyncLocalStorage<{
+	port: string;
+	active: boolean;
+}>();
+
+function assertNoRoleReentry(requestedPort?: string): void {
+	const owner = roleOwnership.getStore();
+	if (owner?.active) {
+		throw new EthernetRoleReentryError(owner.port, requestedPort ?? owner.port);
+	}
+}
+
+async function withEthernetRoleQueue<T>(
+	ifname: string,
+	operation: () => Promise<T>,
+): Promise<T> {
+	assertNoRoleReentry(ifname);
+
+	const ownership = { port: ifname, active: true };
+	const run = () => roleOwnership.run(ownership, operation);
+	// Either outcome releases the next operation; callers still receive their
+	// own rejection. Retain only the latest operation until that port drains.
+	const current = (roleOperations.get(ifname) ?? Promise.resolve()).then(
+		run,
+		run,
+	);
+	roleOperations.set(ifname, current);
+	try {
+		return await current;
+	} finally {
+		ownership.active = false;
+		if (roleOperations.get(ifname) === current) roleOperations.delete(ifname);
+	}
+}
+
 export async function setEthernetRole(
 	name: string,
 	role: EthernetRole,
 	deps: EthernetRoleTransitionDeps = defaultEthernetRoleDeps,
 ): Promise<SetEthernetRoleResult> {
-	if (!isEthernetRoleCandidate(name)) return refuse(name, "not_ethernet", deps);
-	if (deps.listInterfaces()[name] === undefined) {
-		return refuse(name, "unknown_interface", deps);
-	}
+	return withEthernetRoleQueue(name, async () => {
+		if (!isEthernetRoleCandidate(name))
+			return refuse(name, "not_ethernet", deps);
+		if (deps.listInterfaces()[name] === undefined) {
+			return refuse(name, "unknown_interface", deps);
+		}
 
-	const previous = deps.readPersistedRole(name);
-	if ((previous ?? ETHERNET_ROLE_DEFAULT) === role) {
-		// Already there: nothing is dispatched, so no NM answer will ever settle
-		// and this branch owes the terminal frame itself. The role is still
-		// recorded — the operator has now stated it explicitly.
+		const previous = deps.readPersistedRole(name);
+		if ((previous ?? ETHERNET_ROLE_DEFAULT) === role) {
+			// Already there: nothing is dispatched, so no NM answer will ever settle
+			// and this branch owes the terminal frame itself. The role is still
+			// recorded — the operator has now stated it explicitly.
+			deps.persistRole(name, role);
+			deps.refreshInterfaces();
+			deps.publishOutcome(name, { success: true, role });
+			return { success: true, applied: role };
+		}
+
 		deps.persistRole(name, role);
+		deps.publishOutcome(name, { pending: true, role });
+
+		const failure = await applyRoleToNetworkManager(name, role, deps);
+		if (failure !== undefined) {
+			deps.restoreRole(name, previous);
+			deps.refreshInterfaces();
+			return refuse(name, failure, deps);
+		}
+
 		deps.refreshInterfaces();
 		deps.publishOutcome(name, { success: true, role });
 		return { success: true, applied: role };
-	}
-
-	deps.persistRole(name, role);
-	deps.publishOutcome(name, { pending: true, role });
-
-	const failure = await applyRoleToNetworkManager(name, role, deps);
-	if (failure !== undefined) {
-		deps.restoreRole(name, previous);
-		deps.refreshInterfaces();
-		return refuse(name, failure, deps);
-	}
-
-	deps.refreshInterfaces();
-	deps.publishOutcome(name, { success: true, role });
-	return { success: true, applied: role };
+	});
 }
 
 /**
@@ -197,10 +253,11 @@ export async function setEthernetRole(
  * default, and rewriting `ipv4.method auto` onto every ordinary port at boot
  * would touch profiles the operator never asked us to touch.
  *
- * FAIL-SOFT: it never throws and never rejects. A port that is not present, or
- * whose NM profile could not be rewritten, is LOGGED and left alone — the role
- * is deliberately NOT cleared, because a device that has not finished
- * enumerating must not be read as a refusal that discards the operator's choice.
+ * FAIL-SOFT for outside callers; nested calls reject before admission. A port
+ * that is not present, or whose NM profile could not be rewritten, is LOGGED
+ * and left alone — the role is deliberately NOT cleared, because a device that
+ * has not finished enumerating must not be read as a refusal that discards the
+ * operator's choice.
  */
 export async function reconcileEthernetRoles(
 	deps: EthernetRoleTransitionDeps = defaultEthernetRoleDeps,
@@ -208,43 +265,51 @@ export async function reconcileEthernetRoles(
 		Record<string, EthernetRole>
 	> = getPersistedEthernetRoles,
 ): Promise<void> {
+	// Reconciliation includes every busy port, including an active caller's port.
+	// Reject before its fail-soft catch or any injected reader can run.
+	assertNoRoleReentry();
 	try {
 		const roles = readRoles();
-		const shared = Object.keys(roles).filter(
-			(ifname) => roles[ifname] === "shared-lan",
+		// A queued set may not have persisted yet, or may restore another role.
+		// Select busy ports too, then read their choice only after taking ownership.
+		const ports = new Set([
+			...Object.keys(roles).filter((ifname) => roles[ifname] === "shared-lan"),
+			...roleOperations.keys(),
+		]);
+		if (ports.size === 0) return;
+
+		await Promise.all(
+			[...ports].map((ifname) =>
+				withEthernetRoleQueue(ifname, async () => {
+					try {
+						if (readRoles()[ifname] !== "shared-lan") return;
+						if (deps.listInterfaces()[ifname] === undefined) {
+							logger.debug(
+								`ethernet role reconcile: ${ifname} is not present; leaving shared-lan pending`,
+							);
+							return;
+						}
+
+						const failure = await applyRoleToNetworkManager(
+							ifname,
+							"shared-lan",
+							deps,
+						);
+						if (failure !== undefined) {
+							logger.warn(
+								`ethernet role reconcile: ${ifname} could not be restored to shared-lan (${failure})`,
+							);
+						}
+					} catch (error: unknown) {
+						const message =
+							error instanceof Error ? error.message : String(error);
+						logger.error(
+							`ethernet role reconcile: ${ifname} threw restoring shared-lan: ${message}`,
+						);
+					}
+				}),
+			),
 		);
-		if (shared.length === 0) return;
-
-		const interfaces = deps.listInterfaces();
-
-		for (const ifname of shared) {
-			if (interfaces[ifname] === undefined) {
-				logger.debug(
-					`ethernet role reconcile: ${ifname} is not present; leaving shared-lan pending`,
-				);
-				continue;
-			}
-
-			// Per port, so one interface that throws cannot cost every other its
-			// reconciliation.
-			try {
-				const failure = await applyRoleToNetworkManager(
-					ifname,
-					"shared-lan",
-					deps,
-				);
-				if (failure !== undefined) {
-					logger.warn(
-						`ethernet role reconcile: ${ifname} could not be restored to shared-lan (${failure})`,
-					);
-				}
-			} catch (error: unknown) {
-				const message = error instanceof Error ? error.message : String(error);
-				logger.error(
-					`ethernet role reconcile: ${ifname} threw restoring shared-lan: ${message}`,
-				);
-			}
-		}
 
 		deps.refreshInterfaces();
 	} catch (error: unknown) {
