@@ -1657,9 +1657,14 @@ resolve to localized unknown/diagnostic copy, never raw tokens or success.
 The backend keeps the update version, outcome and reason bound to one attempt
 ID. A matching device record supplies the whole tuple; without a local attempt,
 the device record remains the fallback. An unmatched newer attempt supplies its
-own version and optional persisted `kernelAttempt.failureReason`, never an older
-device outcome. A failed download therefore stays failed after reconciliation
-and backend restart. An in-flight, cancelled or otherwise unconfirmed attempt
+own version, never an older device outcome. The existing top-level
+`failureReason` carries a live failure as before. When an unmatched failure
+returns to idle, it retains only `kernel_interrupted`; the precise reason is
+then kept only in memory, keyed by attempt ID. After backend restart that
+old-schema diagnostic supplies a generic failure for the same current attempt.
+No member is added to `kernelAttempt`, and the writer's
+record shape remains readable by the previous strict reader. An in-flight,
+cancelled or otherwise unconfirmed attempt
 without a matching device record has no confirmed outcome, even when an older
 kernel succeeded or both attempts name the same version. Missing attempt
 versions are rejected by the persisted-state boundary.

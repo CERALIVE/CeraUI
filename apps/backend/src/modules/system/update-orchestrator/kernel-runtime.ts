@@ -120,27 +120,24 @@ export function createKernelRuntime(port: KernelRuntimePort) {
 	let record: Awaited<ReturnType<KernelEffects["readState"]>> = null;
 	let forced: string | null = null;
 	let reconciling: Promise<boolean> | null = null;
+	let failure: { readonly attemptId: string; readonly reason: string } | null =
+		null;
 	const publish = (
 		phase: OrchestratorPhase,
 		failureReason: string | null = null,
 	) => {
 		const attempt = port.state().kernelAttempt;
-		const failedAttempt =
-			phase === "kernel-failed" && failureReason !== null && attempt
-				? { ...attempt, failureReason }
-				: undefined;
+		if (phase === "kernel-failed" && failureReason !== null && attempt)
+			failure = { attemptId: attempt.id, reason: failureReason };
 		if (
 			port.state().phase !== phase ||
-			port.state().failureReason !== failureReason ||
-			(failedAttempt !== undefined &&
-				failedAttempt.failureReason !== attempt?.failureReason)
+			port.state().failureReason !== failureReason
 		)
 			port.set({
 				phase,
 				failureReason,
 				progress: null,
 				enteredAt: port.now(),
-				...(failedAttempt ? { kernelAttempt: failedAttempt } : {}),
 			});
 	};
 	async function check(): Promise<void> {
@@ -292,7 +289,6 @@ export function createKernelRuntime(port: KernelRuntimePort) {
 		record = await effects.readState();
 		const phase = port.state().phase;
 		const attempt = port.state().kernelAttempt;
-		if (phase === "kernel-failed") publish(phase, port.state().failureReason);
 		const matching = record && (!attempt || record.attempt === attempt.id);
 		const observation = attempt?.deb
 			? await effects.inspect(attempt)
@@ -309,7 +305,12 @@ export function createKernelRuntime(port: KernelRuntimePort) {
 						? "kernel_staging_failed"
 						: "kernel_interrupted",
 				);
-			else if (phase.startsWith("kernel-")) publish("idle");
+			else if (phase.startsWith("kernel-"))
+				// Keep only an old-schema diagnostic after releasing workflow admission.
+				publish(
+					"idle",
+					phase === "kernel-failed" ? "kernel_interrupted" : null,
+				);
 			return openPhases.includes(port.state().phase);
 		}
 		if (record.acknowledged && !kernelPending(record)) {
@@ -405,7 +406,17 @@ export function createKernelRuntime(port: KernelRuntimePort) {
 			openPhases.includes(port.state().phase),
 		summary: async (): Promise<NonNullable<UpdateDetails["kernel"]>> => {
 			const booted = await port.effects().readBooted();
-			const attempt = port.state().kernelAttempt;
+			const state = port.state();
+			const attempt = state.kernelAttempt;
+			const persistedFailure =
+				state.phase === "kernel-failed" ||
+				(state.phase === "idle" && state.failureReason === "kernel_interrupted")
+					? "kernel_interrupted"
+					: null;
+			const reason =
+				failure && failure.attemptId === attempt?.id
+					? failure.reason
+					: persistedFailure;
 			const outcome =
 				record && (!attempt || record.attempt === attempt.id)
 					? {
@@ -414,9 +425,9 @@ export function createKernelRuntime(port: KernelRuntimePort) {
 							reason: record.reason,
 						}
 					: {
-							state: attempt?.failureReason ? "failed" : null,
+							state: attempt && reason !== null ? "failed" : null,
 							version: attempt?.version ?? null,
-							reason: attempt?.failureReason ?? null,
+							reason: attempt ? reason : null,
 						};
 			return {
 				booted,
@@ -436,6 +447,7 @@ export function createKernelRuntime(port: KernelRuntimePort) {
 			candidate = null;
 			record = null;
 			forced = null;
+			failure = null;
 		},
 	};
 }

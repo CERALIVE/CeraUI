@@ -16,6 +16,7 @@ import {
 	saveOrchestratorState,
 } from "../modules/system/update-orchestrator/persistence.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
+import { attemptB, attemptFixture } from "./helpers/kernel-attempt-fixture.ts";
 import {
 	kernelCapabilities,
 	kernelOverlay,
@@ -126,10 +127,44 @@ test.each(["succeeded", "failed"] as const)(
 			expect((await restarted.summary()).version).toBe(offered.version);
 			expect(await restarted.summary()).toMatchObject({
 				state: "failed",
-				reason: "kernel_download_failed",
+				reason: "kernel_interrupted",
 			});
 		} finally {
 			await rm(directory, { recursive: true });
 		}
 	},
 );
+
+test("a cancelled retry cannot inherit the previous same-version attempt's in-memory failure", async () => {
+	const entered = Promise.withResolvers<void>();
+	const downloaded = Promise.withResolvers<string>();
+	let downloads = 0;
+	const f = attemptFixture(
+		{},
+		{
+			download: async () => {
+				if (++downloads === 1)
+					throw new KernelUpdateError("kernel_download_failed");
+				entered.resolve();
+				return downloaded.promise;
+			},
+		},
+	);
+	await f.lane.reconcile();
+	expect(await f.lane.install(true)).toBe(false);
+	const failedId = f.port.state().kernelAttempt?.id;
+	await f.lane.reconcile();
+	const retry = f.lane.install(true);
+	await entered.promise;
+	const retryId = f.port.state().kernelAttempt?.id;
+	f.lane.cancelDownload();
+	downloaded.resolve("/var/tmp/fixture/kernel.deb");
+	expect(await retry).toBe(false);
+	await f.lane.reconcile();
+	expect(retryId).not.toBe(failedId);
+	expect(await f.lane.summary()).toMatchObject({
+		state: null,
+		version: attemptB.version,
+		reason: null,
+	});
+});

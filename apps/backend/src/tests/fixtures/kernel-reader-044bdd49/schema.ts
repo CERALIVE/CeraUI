@@ -1,0 +1,206 @@
+// Frozen from packages/rpc/src/schemas/update-orchestrator.schema.ts at 044bdd49.
+// This independent rollback oracle must not follow changes to the current schema.
+import { z } from "zod";
+
+export const ORCHESTRATOR_PHASES = [
+	"idle",
+	"checking",
+	"available",
+	"downloading",
+	"awaiting-idle",
+	"committing",
+	"restarting-services",
+	"settled",
+	"os-available",
+	"os-staging",
+	"os-staged",
+	"os-activation-armed",
+	"os-verifying",
+	"kernel-downloading",
+	"kernel-staging",
+	"kernel-staged",
+	"kernel-verifying",
+	"kernel-succeeded",
+	"kernel-rolled-back",
+	"kernel-failed",
+	"sync-eligible",
+	"syncing",
+	"synced",
+	"quarantined",
+	"failed",
+] as const;
+export const updateOrchestratorPhaseSchema = z.enum(ORCHESTRATOR_PHASES);
+export type UpdateOrchestratorPhase = z.infer<
+	typeof updateOrchestratorPhaseSchema
+>;
+
+export const KERNEL_UPDATE_FAILURE_REASONS = [
+	"kernel_origin_mismatch",
+	"kernel_download_failed",
+	"kernel_staging_failed",
+	"kernel_identity_mismatch",
+	"kernel_boot_failed",
+	"kernel_interrupted",
+] as const;
+export const kernelUpdateFailureReasonSchema = z.enum(
+	KERNEL_UPDATE_FAILURE_REASONS,
+);
+export type KernelUpdateFailureReason = z.infer<
+	typeof kernelUpdateFailureReasonSchema
+>;
+
+export const updateOrchestratorProgressSchema = z.object({
+	percent: z.number().min(0).max(100),
+	etaSeconds: z.number().min(0),
+});
+export type UpdateOrchestratorProgress = z.infer<
+	typeof updateOrchestratorProgressSchema
+>;
+
+export const updateOrchestratorScheduleClockSchema = z.object({
+	lastAttemptAt: z.number().nullable(),
+	lastSuccessAt: z.number().nullable(),
+	consecutiveFailures: z.number().int().min(0),
+	lastFailureWasRateLimited: z.boolean(),
+	nextAttemptAt: z.number().nullable(),
+});
+export type UpdateOrchestratorScheduleClock = z.infer<
+	typeof updateOrchestratorScheduleClockSchema
+>;
+
+export const OS_STAGE_RECOVERY_MODES = [
+	"automatic",
+	"operator",
+	"unsafe",
+] as const;
+export const OS_STAGE_CONFIRMABLE_UNSAFE_REASONS = [
+	"rauc_recovery_unproven",
+	"os_stage_outcome_unknown_after_restart",
+] as const;
+
+export const osStageRecoverySchema = z
+	.object({
+		candidateKey: z.string().min(1),
+		activeAttemptId: z.string().min(1).nullable(),
+		attemptId: z.uuid().optional(),
+		failedRounds: z.number().int().min(0),
+		nextRetryAt: z.number().nullable(),
+		mode: z.enum(OS_STAGE_RECOVERY_MODES),
+		reason: z.string().nullable(),
+	})
+	.strict()
+	.refine(
+		(record) =>
+			record.mode !== "unsafe" ||
+			![
+				"apt-exit-nonzero",
+				"commit_unit_absent_on_resume",
+				"commit_resume_inconclusive",
+			].includes(record.reason ?? ""),
+		{ message: "Non-OS failure cannot be an unsafe OS staging record" },
+	);
+export type OsStageRecovery = z.infer<typeof osStageRecoverySchema>;
+
+export const updateOrchestratorPersistedStateSchema = z
+	.object({
+		schema: z.literal(1),
+		phase: updateOrchestratorPhaseSchema,
+		enteredAt: z.number(),
+		progress: updateOrchestratorProgressSchema.nullable(),
+		failureReason: z.string().nullable(),
+		packageCheck: updateOrchestratorScheduleClockSchema,
+		osCheck: updateOrchestratorScheduleClockSchema,
+		slotSync: z
+			.object({
+				nextAttemptAt: z.number().nonnegative().nullable().default(null),
+				consecutiveRefusals: z.number().int().nonnegative().default(0),
+			})
+			.strict()
+			.optional(),
+		cellularOverrideId: z.string().nullable(),
+		packageAttempt: z
+			.object({ bootId: z.string().min(1), slot: z.string().min(1) })
+			.strict()
+			.optional(),
+		recoveredNotice: z
+			.object({
+				kind: z.enum(["packages-recovered", "slot-sync-recovered"]),
+				id: z.string().min(1),
+			})
+			.strict()
+			.optional(),
+		osStageRecovery: osStageRecoverySchema.optional(),
+		osStageDiscoveryRetryAt: z.number().optional(),
+		kernelAttempt: z
+			.object({
+				id: z.uuid(),
+				package: z
+					.string()
+					.regex(/^linux-image-[0-9]+\.[0-9]+\.[0-9]+-ceralive-rk3588$/),
+				version: z
+					.string()
+					.regex(/^[0-9]+\.[0-9]+\.[0-9]+-ceralive[1-9][0-9]*$/),
+				deb_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+				deb: z
+					.string()
+					.regex(/^\/[A-Za-z0-9_./+-]+\.deb$/)
+					.nullable(),
+			})
+			.strict()
+			.optional(),
+	})
+	.strict()
+	.superRefine((state, ctx) => {
+		const record = state.osStageRecovery;
+		if (!record) return;
+		const active = record.activeAttemptId !== null;
+		const staging = state.phase === "os-staging" || state.phase === "os-staged";
+		let consistent =
+			active === staging && !(active && record.nextRetryAt !== null);
+		if (active && record.attemptId !== undefined)
+			consistent = consistent && record.attemptId === record.activeAttemptId;
+		if (state.osStageDiscoveryRetryAt !== undefined) consistent = false;
+		switch (record.mode) {
+			case "unsafe":
+				consistent =
+					consistent &&
+					state.phase === "failed" &&
+					!active &&
+					record.nextRetryAt === null &&
+					record.reason !== null &&
+					state.failureReason === record.reason;
+				break;
+			case "operator":
+				consistent = consistent && record.nextRetryAt === null;
+				break;
+			case "automatic":
+				consistent =
+					consistent &&
+					(record.nextRetryAt === null || record.failedRounds > 0);
+				break;
+			default: {
+				const unreachable: never = record.mode;
+				return unreachable;
+			}
+		}
+		if (!consistent)
+			ctx.addIssue({
+				code: "custom",
+				path: ["osStageRecovery"],
+				message: "OS recovery phase, attempt and retry policy disagree",
+			});
+	});
+export type UpdateOrchestratorPersistedState = z.infer<
+	typeof updateOrchestratorPersistedStateSchema
+>;
+
+export const updateOrchestratorWireStateSchema = z.object({
+	schema: z.literal(1),
+	phase: updateOrchestratorPhaseSchema,
+	progress: updateOrchestratorProgressSchema.nullable(),
+	failure_reason: z.string().nullable(),
+	cellular_override_id: z.string().nullable(),
+});
+export type UpdateOrchestratorWireState = z.infer<
+	typeof updateOrchestratorWireStateSchema
+>;
