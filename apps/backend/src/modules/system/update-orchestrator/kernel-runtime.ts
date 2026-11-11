@@ -124,11 +124,24 @@ export function createKernelRuntime(port: KernelRuntimePort) {
 		phase: OrchestratorPhase,
 		failureReason: string | null = null,
 	) => {
+		const attempt = port.state().kernelAttempt;
+		const failedAttempt =
+			phase === "kernel-failed" && failureReason !== null && attempt
+				? { ...attempt, failureReason }
+				: undefined;
 		if (
 			port.state().phase !== phase ||
-			port.state().failureReason !== failureReason
+			port.state().failureReason !== failureReason ||
+			(failedAttempt !== undefined &&
+				failedAttempt.failureReason !== attempt?.failureReason)
 		)
-			port.set({ phase, failureReason, progress: null, enteredAt: port.now() });
+			port.set({
+				phase,
+				failureReason,
+				progress: null,
+				enteredAt: port.now(),
+				...(failedAttempt ? { kernelAttempt: failedAttempt } : {}),
+			});
 	};
 	async function check(): Promise<void> {
 		const before = port.state();
@@ -279,6 +292,7 @@ export function createKernelRuntime(port: KernelRuntimePort) {
 		record = await effects.readState();
 		const phase = port.state().phase;
 		const attempt = port.state().kernelAttempt;
+		if (phase === "kernel-failed") publish(phase, port.state().failureReason);
 		const matching = record && (!attempt || record.attempt === attempt.id);
 		const observation = attempt?.deb
 			? await effects.inspect(attempt)
@@ -389,19 +403,33 @@ export function createKernelRuntime(port: KernelRuntimePort) {
 			flight !== null ||
 			kernelPending(record) ||
 			openPhases.includes(port.state().phase),
-		summary: async (): Promise<NonNullable<UpdateDetails["kernel"]>> => ({
-			booted: await port.effects().readBooted(),
-			candidate: candidate
-				? {
-						package: candidate.package,
-						version: candidate.version,
-						sizeBytes: candidate.size,
-					}
-				: null,
-			state: record?.state ?? null,
-			version: port.state().kernelAttempt?.version ?? record?.version ?? null,
-			reason: record?.reason ?? null,
-		}),
+		summary: async (): Promise<NonNullable<UpdateDetails["kernel"]>> => {
+			const booted = await port.effects().readBooted();
+			const attempt = port.state().kernelAttempt;
+			const outcome =
+				record && (!attempt || record.attempt === attempt.id)
+					? {
+							state: record.state,
+							version: record.version,
+							reason: record.reason,
+						}
+					: {
+							state: attempt?.failureReason ? "failed" : null,
+							version: attempt?.version ?? null,
+							reason: attempt?.failureReason ?? null,
+						};
+			return {
+				booted,
+				candidate: candidate
+					? {
+							package: candidate.package,
+							version: candidate.version,
+							sizeBytes: candidate.size,
+						}
+					: null,
+				...outcome,
+			};
+		},
 		reset: () => {
 			flight?.abort();
 			flight = null;

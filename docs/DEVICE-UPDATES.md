@@ -1654,10 +1654,21 @@ a retained record; after the public phase returns to idle, the retained device
 record still states success, rollback or failure. Unknown state/reason tokens
 resolve to localized unknown/diagnostic copy, never raw tokens or success.
 
-The backend's update version comes from the latest persisted kernel attempt,
-falling back to the device record only when there is no attempt. A download
-failure before staging therefore keeps that attempt's version across retries
-and backend restarts, even while the device retains an older staging record.
+The backend keeps the update version, outcome and reason bound to one attempt
+ID. A matching device record supplies the whole tuple; without a local attempt,
+the device record remains the fallback. An unmatched newer attempt supplies its
+own version and optional persisted `kernelAttempt.failureReason`, never an older
+device outcome. A failed download therefore stays failed after reconciliation
+and backend restart. An in-flight, cancelled or otherwise unconfirmed attempt
+without a matching device record has no confirmed outcome, even when an older
+kernel succeeded or both attempts name the same version. Missing attempt
+versions are rejected by the persisted-state boundary.
+
+Kernel details are withheld while a new details read is pending, including
+dismiss/reopen and reconnect. A failed read leaves that tuple unknown rather
+than attaching a cached version or success to the new live phase; a later
+successful read restores the coherent tuple. Other details keep their existing
+read and generation-fence behavior.
 
 Downloading and preparing show a percentage and ETA only when the live wire
 phase matches that kernel step; another lane's progress cannot describe a

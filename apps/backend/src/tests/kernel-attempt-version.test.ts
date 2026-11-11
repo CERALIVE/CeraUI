@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
 	createKernelRuntime,
 	defaultKernelEffects,
@@ -8,6 +11,10 @@ import {
 	type KernelState,
 	KernelUpdateError,
 } from "../modules/system/update-orchestrator/kernel-state.ts";
+import {
+	loadOrchestratorState,
+	saveOrchestratorState,
+} from "../modules/system/update-orchestrator/persistence.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
 import {
 	kernelCapabilities,
@@ -97,13 +104,32 @@ test.each(["succeeded", "failed"] as const)(
 		// The old device record remains intact when the download never reaches staging.
 		expect(device).toMatchObject({ version: kernelRecord.version });
 		await lane.reconcile();
+		expect(await lane.summary()).toMatchObject({
+			state: "failed",
+			version: offered.version,
+			reason: "kernel_download_failed",
+		});
 		await lane.check();
 		expect(await lane.install(true)).toBe(false);
 		expect((await lane.summary()).version).toBe(offered.version);
 
 		// A new runtime rehydrates the retained record alongside the persisted attempt.
-		const restarted = createKernelRuntime(port);
-		await restarted.reconcile();
-		expect((await restarted.summary()).version).toBe(offered.version);
+		const directory = await mkdtemp(join(tmpdir(), "kernel-attempt-restart-"));
+		try {
+			const file = join(directory, "agent.json");
+			saveOrchestratorState(state, file);
+			const loaded = await loadOrchestratorState(file);
+			if (loaded === null) throw new Error("Persisted attempt missing");
+			state = loaded;
+			const restarted = createKernelRuntime(port);
+			await restarted.reconcile();
+			expect((await restarted.summary()).version).toBe(offered.version);
+			expect(await restarted.summary()).toMatchObject({
+				state: "failed",
+				reason: "kernel_download_failed",
+			});
+		} finally {
+			await rm(directory, { recursive: true });
+		}
 	},
 );

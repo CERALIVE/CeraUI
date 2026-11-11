@@ -147,6 +147,7 @@ export const updateOrchestratorPersistedStateSchema = z
 					.string()
 					.regex(/^\/[A-Za-z0-9_./+-]+\.deb$/)
 					.nullable(),
+				failureReason: z.string().min(1).optional(),
 			})
 			.strict()
 			.optional(),
