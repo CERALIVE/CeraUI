@@ -1,7 +1,16 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
+import type { ConfigMessage, StreamingConfigInput } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
-import { getConfig } from "../modules/config.ts";
+import {
+	getConfig,
+	getConfigFilePath,
+	loadConfig,
+	setConfigFilePath,
+} from "../modules/config.ts";
 import {
 	getNetworkInterfaces,
 	processIfconfigOutput,
@@ -16,6 +25,14 @@ import {
 	setConfigProcedure,
 } from "../rpc/procedures/streaming.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
+
+const configDir = mkdtempSync(join(tmpdir(), "rpc-applied-clamp-"));
+const priorConfigPath = getConfigFilePath();
+beforeAll(() => setConfigFilePath(join(configDir, "config.json")));
+afterAll(() => {
+	setConfigFilePath(priorConfigPath);
+	rmSync(configDir, { recursive: true, force: true });
+});
 
 // A bitrate inside the zod validation window (500–50000) but above the encoder
 // hardware ceiling, so the handler must clamp it down to clampBitrate's max.
@@ -251,6 +268,96 @@ describe("streaming.setConfig — applied (post-clamp) state", () => {
 
 		expect(getConfig().max_br).toBe(3000);
 	});
+
+	test.each([
+		["catalog", "catalog"],
+		["catalog", "slot"],
+		["slot", "catalog"],
+		["slot", "slot"],
+	] as const)(
+		"%s → custom → %s persists, echoes and reloads receiver state",
+		async (initial, final) => {
+			const prior = { ...getConfig() };
+			const context = makeContext();
+			const saveAndReload = async (
+				input: StreamingConfigInput,
+				expected: Partial<ConfigMessage>,
+			) => {
+				const result = await call(setConfigProcedure, input, { context });
+				expect(result).toEqual({ success: true, applied: input });
+				const echoed = await call(getConfigProcedure, {}, { context });
+				expect(echoed).toMatchObject(expected);
+				expect(getConfig().remote_provider).toBe("ceralive");
+
+				// Read the bytes written by saveConfig, through the production loader.
+				await loadConfig();
+				const reloaded = await call(getConfigProcedure, {}, { context });
+				expect(reloaded).toMatchObject(expected);
+				expect(getConfig().remote_provider).toBe("ceralive");
+			};
+			const saveManaged = (kind: "catalog" | "slot", latency: number) =>
+				saveAndReload(
+					kind === "catalog"
+						? {
+								relay_server: "relay-a",
+								relay_account: "account-a",
+								relay_streamid_override: "",
+								relay_protocol: "srtla",
+								selected_ingest_endpoint: "",
+								srt_latency: latency,
+							}
+						: {
+								selected_ingest_endpoint: "slot-a",
+								srtla_addr: "ingest.example",
+								srtla_port: 5000,
+								srt_streamid: "publish/managed",
+								relay_protocol: "srtla",
+								srt_latency: latency,
+							},
+					{
+						relay_server: kind === "catalog" ? "relay-a" : undefined,
+						relay_account: kind === "catalog" ? "account-a" : undefined,
+						selected_ingest_endpoint: kind === "slot" ? "slot-a" : undefined,
+						srtla_addr: kind === "slot" ? "ingest.example" : undefined,
+						srtla_port: kind === "slot" ? 5000 : undefined,
+						srt_streamid: kind === "slot" ? "publish/managed" : undefined,
+						relay_protocol: "srtla",
+						srt_latency: latency,
+					},
+				);
+
+			try {
+				getConfig().remote_provider = "ceralive";
+				await saveManaged(initial, 2500);
+				await saveAndReload(
+					{
+						srtla_addr: "custom.example",
+						srtla_port: 6000,
+						srt_streamid: "publish/custom",
+						relay_protocol: "srtla",
+						selected_ingest_endpoint: "",
+						srt_latency: 3000,
+					},
+					{
+						relay_server: undefined,
+						relay_account: undefined,
+						selected_ingest_endpoint: undefined,
+						srtla_addr: "custom.example",
+						srtla_port: 6000,
+						srt_streamid: "publish/custom",
+						relay_protocol: "srtla",
+						srt_latency: 3000,
+					},
+				);
+				await saveManaged(final, 4000);
+			} finally {
+				const config = getConfig();
+				for (const key of Object.keys(config))
+					Reflect.deleteProperty(config, key);
+				Object.assign(config, prior);
+			}
+		},
+	);
 });
 
 describe("streaming.setBitrate — applied (post-clamp) state", () => {
