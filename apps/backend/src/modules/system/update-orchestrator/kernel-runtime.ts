@@ -120,15 +120,25 @@ export function createKernelRuntime(port: KernelRuntimePort) {
 	let record: Awaited<ReturnType<KernelEffects["readState"]>> = null;
 	let forced: string | null = null;
 	let reconciling: Promise<boolean> | null = null;
+	let failure: { readonly attemptId: string; readonly reason: string } | null =
+		null;
 	const publish = (
 		phase: OrchestratorPhase,
 		failureReason: string | null = null,
 	) => {
+		const attempt = port.state().kernelAttempt;
+		if (phase === "kernel-failed" && failureReason !== null && attempt)
+			failure = { attemptId: attempt.id, reason: failureReason };
 		if (
 			port.state().phase !== phase ||
 			port.state().failureReason !== failureReason
 		)
-			port.set({ phase, failureReason, progress: null, enteredAt: port.now() });
+			port.set({
+				phase,
+				failureReason,
+				progress: null,
+				enteredAt: port.now(),
+			});
 	};
 	async function check(): Promise<void> {
 		const before = port.state();
@@ -295,7 +305,12 @@ export function createKernelRuntime(port: KernelRuntimePort) {
 						? "kernel_staging_failed"
 						: "kernel_interrupted",
 				);
-			else if (phase.startsWith("kernel-")) publish("idle");
+			else if (phase.startsWith("kernel-"))
+				// Keep only an old-schema diagnostic after releasing workflow admission.
+				publish(
+					"idle",
+					phase === "kernel-failed" ? "kernel_interrupted" : null,
+				);
 			return openPhases.includes(port.state().phase);
 		}
 		if (record.acknowledged && !kernelPending(record)) {
@@ -389,25 +404,50 @@ export function createKernelRuntime(port: KernelRuntimePort) {
 			flight !== null ||
 			kernelPending(record) ||
 			openPhases.includes(port.state().phase),
-		summary: async (): Promise<NonNullable<UpdateDetails["kernel"]>> => ({
-			booted: await port.effects().readBooted(),
-			candidate: candidate
-				? {
-						package: candidate.package,
-						version: candidate.version,
-						sizeBytes: candidate.size,
-					}
-				: null,
-			state: record?.state ?? null,
-			version: record?.version ?? null,
-			reason: record?.reason ?? null,
-		}),
+		summary: async (): Promise<NonNullable<UpdateDetails["kernel"]>> => {
+			const booted = await port.effects().readBooted();
+			const state = port.state();
+			const attempt = state.kernelAttempt;
+			const persistedFailure =
+				state.phase === "kernel-failed" ||
+				(state.phase === "idle" && state.failureReason === "kernel_interrupted")
+					? "kernel_interrupted"
+					: null;
+			const reason =
+				failure && failure.attemptId === attempt?.id
+					? failure.reason
+					: persistedFailure;
+			const outcome =
+				record && (!attempt || record.attempt === attempt.id)
+					? {
+							state: record.state,
+							version: record.version,
+							reason: record.reason,
+						}
+					: {
+							state: attempt && reason !== null ? "failed" : null,
+							version: attempt?.version ?? null,
+							reason: attempt ? reason : null,
+						};
+			return {
+				booted,
+				candidate: candidate
+					? {
+							package: candidate.package,
+							version: candidate.version,
+							sizeBytes: candidate.size,
+						}
+					: null,
+				...outcome,
+			};
+		},
 		reset: () => {
 			flight?.abort();
 			flight = null;
 			candidate = null;
 			record = null;
 			forced = null;
+			failure = null;
 		},
 	};
 }

@@ -106,7 +106,8 @@ export type OsStageRecovery = z.infer<typeof osStageRecoverySchema>;
 // data — the resume path treats a failed parse as "no trustworthy persisted
 // state", never as "trust it anyway". `osStageRecovery` is optional within
 // schema 1: a file written before it existed stays valid, but a binary from
-// before it existed rejects a file that carries it (strict) and starts fresh.
+// before it existed rejects a file that carries it (strict), blocking recovery.
+// Optional to a new reader does not make new persisted keys rollback-compatible.
 export const updateOrchestratorPersistedStateSchema = z
 	.object({
 		schema: z.literal(1),
