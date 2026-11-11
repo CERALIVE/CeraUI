@@ -95,20 +95,25 @@ async function ensureUplinkRouteInner(
 			const sameDevice =
 				parseDefaultRouteInterface(defaultLine) === plan.ifname;
 			const plannedRoute = plan.defaultRouteArgv;
-			const changedDefault =
-				currentRoute.ok &&
-				plannedRoute !== undefined &&
-				["via", "proto", "metric"].some((field) => {
-					const currentIndex = currentRoute.value.indexOf(field);
-					const plannedIndex = plannedRoute.indexOf(field);
-					return (
-						(currentIndex === -1
-							? undefined
-							: currentRoute.value[currentIndex + 1]) !==
-						(plannedIndex === -1 ? undefined : plannedRoute[plannedIndex + 1])
-					);
-				});
-			if (!sameDevice || changedDefault) {
+			const changedFields =
+				currentRoute.ok && plannedRoute !== undefined
+					? ["via", "proto", "metric"].filter((field) => {
+							const currentIndex = currentRoute.value.indexOf(field);
+							const plannedIndex = plannedRoute.indexOf(field);
+							const current =
+								currentIndex === -1
+									? undefined
+									: currentRoute.value[currentIndex + 1];
+							const planned =
+								plannedIndex === -1
+									? undefined
+									: plannedRoute[plannedIndex + 1];
+							return field === "metric"
+								? (current ?? "0") !== (planned ?? "0")
+								: current !== planned;
+						})
+					: [];
+			if (!sameDevice || changedFields.length > 0) {
 				if (plannedRoute === undefined) {
 					throw routeUnavailable(
 						plan.ifname,
@@ -116,19 +121,24 @@ async function ensureUplinkRouteInner(
 					);
 				}
 				if (sameDevice && currentRoute.ok) {
+					const metricChanged = changedFields.includes("metric");
 					const previousRoute = [
 						"route",
-						"add",
+						metricChanged ? "add" : "replace",
 						"table",
 						plan.table,
 						...currentRoute.value.slice(2),
 					];
 					// A different metric is a distinct kernel route key.
-					await deps.run("ip", ["route", "del", ...previousRoute.slice(2)]);
+					if (metricChanged) {
+						const replacementRoute = ["route", "add", ...plannedRoute.slice(2)];
+						await deps.run("ip", replacementRoute);
+						addedTableRoute = replacementRoute;
+						await deps.run("ip", ["route", "del", ...previousRoute.slice(2)]);
+					} else {
+						await deps.run("ip", [...plannedRoute]);
+					}
 					replacedTableRoute = previousRoute;
-					const replacementRoute = ["route", "add", ...plannedRoute.slice(2)];
-					await deps.run("ip", replacementRoute);
-					addedTableRoute = replacementRoute;
 				} else {
 					await deps.run("ip", [...plannedRoute]);
 					createdTableRoute = true;
@@ -184,14 +194,14 @@ export async function rollbackUplinkRoute(
 		await deps.run("ip", sourceRuleArgv("del", route));
 	}
 	if (provisioning.replacedTableRoute !== undefined) {
-		if (provisioning.addedTableRoute !== undefined) {
-			await deps.run("ip", [
-				"route",
-				"del",
-				...provisioning.addedTableRoute.slice(2),
-			]);
-		}
 		await deps.run("ip", [...provisioning.replacedTableRoute]);
+	}
+	if (provisioning.addedTableRoute !== undefined) {
+		await deps.run("ip", [
+			"route",
+			"del",
+			...provisioning.addedTableRoute.slice(2),
+		]);
 	} else if (provisioning.createdTableRoute) {
 		await flushRouteTable(deps, route.table);
 	}
@@ -242,7 +252,8 @@ function buildProvisioning(
 			createdTableRoute ||
 			createdSourceRule ||
 			createdFwmarkRule ||
-			replacedTableRoute !== undefined,
+			replacedTableRoute !== undefined ||
+			addedTableRoute !== undefined,
 		createdTableRoute,
 		createdSourceRule,
 		createdFwmarkRule,

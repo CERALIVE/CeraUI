@@ -284,13 +284,13 @@ describe("managed uplink default route refresh", () => {
 	].join("\n");
 
 	test.each([
-		["gateway", "default via 10.0.0.1 dev wwan0"],
-		["metric", "default via 10.0.0.9 dev wwan0 metric 600"],
-		["protocol", "default via 10.0.0.9 dev wwan0 proto dhcp"],
-		["gateway added", "default dev wwan0"],
-	])(
+		["gateway", "default via 10.0.0.1 dev wwan0", false],
+		["metric", "default via 10.0.0.9 dev wwan0 metric 600", true],
+		["protocol", "default via 10.0.0.9 dev wwan0 proto dhcp", false],
+		["gateway added", "default dev wwan0", false],
+	] as const)(
 		"replaces a same-device route after a %s change",
-		async (_field, current) => {
+		async (_field, current, metricChanged) => {
 			const h = scripted({
 				"ip rule show": rules,
 				"ip route show table 30001": `${current}\n`,
@@ -301,8 +301,12 @@ describe("managed uplink default route refresh", () => {
 			expect(h.calls).toEqual([
 				["ip", "rule", "show"],
 				["ip", "route", "show", "table", "30001"],
-				["ip", "route", "del", "table", "30001", ...current.split(" ")],
-				["ip", "route", "add", ...(plan.defaultRouteArgv ?? []).slice(2)],
+				...(metricChanged
+					? [
+							["ip", "route", "add", ...(plan.defaultRouteArgv ?? []).slice(2)],
+							["ip", "route", "del", "table", "30001", ...current.split(" ")],
+						]
+					: [["ip", ...(plan.defaultRouteArgv ?? [])]]),
 			]);
 			expect(provisioning).toMatchObject({
 				changed: true,
@@ -311,17 +315,17 @@ describe("managed uplink default route refresh", () => {
 				createdFwmarkRule: false,
 				replacedTableRoute: [
 					"route",
-					"add",
+					metricChanged ? "add" : "replace",
 					"table",
 					"30001",
 					...current.split(" "),
 				],
-				addedTableRoute: [
-					"route",
-					"add",
-					...(plan.defaultRouteArgv ?? []).slice(2),
-				],
 			});
+			expect(provisioning.addedTableRoute).toEqual(
+				metricChanged
+					? ["route", "add", ...(plan.defaultRouteArgv ?? []).slice(2)]
+					: undefined,
+			);
 		},
 	);
 
@@ -338,14 +342,15 @@ describe("managed uplink default route refresh", () => {
 		await rollbackUplinkRoute(provisioning, h);
 
 		expect(h.calls).toEqual([
-			["ip", "route", "del", ...(plan.defaultRouteArgv ?? []).slice(2)],
 			["ip", "route", "add", "table", "30001", ...current.split(" ")],
+			["ip", "route", "del", ...(plan.defaultRouteArgv ?? []).slice(2)],
 		]);
 	});
 
 	test.each([
 		"default via 10.0.0.9 dev wwan0",
 		"default dev wwan0 via 10.0.0.9",
+		"default via 10.0.0.9 dev wwan0 metric 0",
 	])("leaves an identical route unchanged: %s", async (current) => {
 		const h = scripted({
 			"ip rule show": rules,
@@ -383,7 +388,7 @@ describe("managed uplink default route refresh", () => {
 		expect(h.calls.at(-1)).toEqual([
 			"ip",
 			"route",
-			"add",
+			"replace",
 			"table",
 			"30001",
 			...current.split(" "),

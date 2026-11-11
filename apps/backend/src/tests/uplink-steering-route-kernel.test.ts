@@ -69,12 +69,23 @@ function kernelRefreshTest(
 			]);
 			const sentinel = await run("ip", ["route", "show", "table", "30002"]);
 			const calls: string[][] = [];
+			const routeStates: string[] = [];
 			await scenario({
 				run: async (command, args, ...rest) => {
 					calls.push([command, ...args]);
-					return await run(command, args, ...rest);
+					const result = await run(command, args, ...rest);
+					if (
+						args[0] === "route" &&
+						["replace", "add", "del", "flush"].includes(args[1] ?? "")
+					) {
+						routeStates.push(
+							await run("ip", ["route", "show", "table", "30001"]),
+						);
+					}
+					return result;
 				},
 			});
+			for (const state of routeStates) expect(state.trim()).not.toBe("");
 			expect(await run("ip", ["route", "show", "table", "30002"])).toBe(
 				sentinel,
 			);
@@ -93,6 +104,142 @@ function kernelRefreshTest(
 }
 
 describe("real kernel managed route refresh", () => {
+	kernelRefreshTest(
+		"retains usable managed route when live main default is absent",
+		async (deps) => {
+			await run("ip", [
+				"route",
+				"add",
+				"table",
+				"30001",
+				..."default via 10.0.0.1 dev wwan0 proto static metric 600 onlink src 10.0.0.2 mtu 1400".split(
+					" ",
+				),
+			]);
+			await run("ip", [
+				"rule",
+				"add",
+				"priority",
+				"100",
+				"from",
+				"10.0.0.2/32",
+				"lookup",
+				"30001",
+			]);
+			await run("ip", [
+				"rule",
+				"add",
+				"priority",
+				"110",
+				"fwmark",
+				"0xca000100/0xffffff00",
+				"lookup",
+				"30001",
+			]);
+			expect(
+				await run("ip", ["-4", "route", "show", "default", "dev", "wwan0"]),
+			).toBe("");
+			const before = await run("ip", ["route", "show", "table", "30001"]);
+			const candidate = {
+				identity: "no-main-default",
+				ifname: "wwan0",
+				sourceAddress: "10.0.0.2",
+				sourceAddressUnique: true,
+				mark: 0xca000100,
+			};
+			const plan = await planUplinkRoute(candidate, deps);
+			expect((await ensureUplinkRoute(plan, deps)).changed).toBe(false);
+			expect(await run("ip", ["route", "show", "table", "30001"])).toBe(before);
+			await expect(
+				planUplinkRoute(candidate, {
+					run: async (command, args, ...rest) => {
+						if (args[0] === "-4") throw new Error("live query refused");
+						return await deps.run(command, args, ...rest);
+					},
+				}),
+			).rejects.toMatchObject({
+				reason: "policy_route_missing",
+				message: "wwan0: live query refused",
+			});
+			await run("ip", [
+				"rule",
+				"del",
+				"priority",
+				"100",
+				"from",
+				"10.0.0.2/32",
+				"lookup",
+				"30001",
+			]);
+			await expect(planUplinkRoute(candidate, deps)).rejects.toMatchObject({
+				reason: "policy_route_missing",
+			});
+			expect(await run("ip", ["route", "show", "table", "30001"])).toBe(before);
+		},
+	);
+
+	kernelRefreshTest(
+		"same-metric protocol refresh uses one replace",
+		async (deps) => {
+			const current =
+				"default via 10.0.0.1 dev wwan0 proto dhcp src 10.0.0.2 metric 600 onlink mtu 1400";
+			await run("ip", [
+				"route",
+				"add",
+				"table",
+				"30001",
+				...current.split(" "),
+			]);
+			const before = await run("ip", ["route", "show", "table", "30001"]);
+			const plan: UplinkRoutePlan = {
+				identity: "same-metric-protocol",
+				ifname: "wwan0",
+				sourceAddress: "10.0.0.2",
+				mark: 0xca000100,
+				table: "30001",
+				managed: true,
+				defaultRouteArgv: [
+					"route",
+					"replace",
+					"table",
+					"30001",
+					..."default via 10.0.0.1 dev wwan0 proto static metric 600".split(
+						" ",
+					),
+				],
+			};
+			const writes: string[] = [];
+			const tracking: UplinkRouteManagerDeps = {
+				run: async (command, args, ...rest) => {
+					if (
+						args[0] === "route" &&
+						["replace", "add", "del"].includes(args[1] ?? "")
+					)
+						writes.push(args[1] ?? "");
+					return await deps.run(command, args, ...rest);
+				},
+			};
+			const receipt = await ensureUplinkRoute(plan, tracking);
+			expect(writes).toEqual(["replace"]);
+			const after = await run("ip", ["route", "show", "table", "30001"]);
+			expect(after).toContain("proto static");
+			expect(after.trim().split("\n")).toHaveLength(1);
+			await rollbackUplinkRoute(receipt, tracking);
+			expect(writes).toEqual(["replace", "replace"]);
+			expect(await run("ip", ["route", "show", "table", "30001"])).toBe(before);
+			await expect(
+				ensureUplinkRoute(plan, {
+					run: async (command, args, ...rest) => {
+						if (args[0] === "route" && args[1] === "replace")
+							throw new Error("injected replace failure");
+						return await deps.run(command, args, ...rest);
+					},
+				}),
+			).rejects.toMatchObject({ reason: "policy_route_missing" });
+			expect(await run("ip", ["route", "show", "table", "30001"])).toBe(before);
+		},
+	);
+
 	kernelRefreshTest("replans from the live interface gateway", async (deps) => {
 		await run("ip", [
 			"route",
@@ -187,6 +334,7 @@ describe("real kernel managed route refresh", () => {
 			};
 			const before = await run("ip", ["route", "show", "table", plan.table]);
 			const beforeRules = await run("ip", ["rule", "show"]);
+			let beforeFailedAdd: string | undefined;
 			await expect(
 				ensureUplinkRoute(plan, {
 					run: async (command, args, ...rest) => {
@@ -222,15 +370,49 @@ describe("real kernel managed route refresh", () => {
 							args[0] === "route" &&
 							args[1] === "add" &&
 							args.includes("10.0.0.9")
-						)
+						) {
+							beforeFailedAdd = await run("ip", [
+								"route",
+								"show",
+								"table",
+								plan.table,
+							]);
 							throw new Error("injected new route failure");
+						}
 						return await deps.run(command, args, ...rest);
 					},
 				}),
 			).rejects.toMatchObject({ reason: "policy_route_missing" });
+			expect(beforeFailedAdd).toBe(before);
 			expect(await run("ip", ["route", "show", "table", plan.table])).toBe(
 				before,
 			);
+			let beforeFailedDelete: string | undefined;
+			await expect(
+				ensureUplinkRoute(plan, {
+					run: async (command, args, ...rest) => {
+						if (
+							args[0] === "route" &&
+							args[1] === "del" &&
+							args.includes("10.0.0.1")
+						) {
+							beforeFailedDelete = await run("ip", [
+								"route",
+								"show",
+								"table",
+								plan.table,
+							]);
+							throw new Error("injected old-route delete failure");
+						}
+						return await deps.run(command, args, ...rest);
+					},
+				}),
+			).rejects.toMatchObject({ reason: "policy_route_missing" });
+			expect(beforeFailedDelete?.trim().split("\n")).toHaveLength(2);
+			expect(await run("ip", ["route", "show", "table", plan.table])).toBe(
+				before,
+			);
+			expect(await run("ip", ["rule", "show"])).toBe(beforeRules);
 		},
 	);
 });
