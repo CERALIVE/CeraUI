@@ -25,7 +25,6 @@ import Badge from '$lib/components/custom/Badge.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Switch } from '$lib/components/ui/switch';
 import {
-	clearOperation,
 	confirmOperation,
 	getOperationPhase,
 	osCommand,
@@ -87,7 +86,7 @@ async function toggleEnabled(next: boolean): Promise<void> {
 		key: ENABLE_KEY,
 		target: next,
 		rpc: () => (next ? rpc.bluetooth.enable({}) : rpc.bluetooth.disable({})),
-		classify: refusalsRenderInline,
+		classify: (r) => ({ ok: true, clear: !r.success }),
 		failMessage: () => m["network.os.operationFailed"](),
 	});
 	if (!result) {
@@ -96,7 +95,6 @@ async function toggleEnabled(next: boolean): Promise<void> {
 	}
 	if (!result.success) {
 		enableRefusalKey = bluetoothRefusalKey(result.error);
-		clearOperation(ENABLE_KEY);
 		enableTarget = null;
 		return;
 	}
