@@ -38,15 +38,7 @@ export async function readRouteTable(
 	try {
 		return await deps.run("ip", ["route", "show", "table", table]);
 	} catch (error) {
-		if (
-			isFibTableAbsent(error) &&
-			error instanceof Error &&
-			"stdout" in error &&
-			typeof error.stdout === "string" &&
-			error.stdout.trim() === ""
-		) {
-			return "";
-		}
+		if (isFibTableAbsent(error, "read")) return "";
 		throw error;
 	}
 }

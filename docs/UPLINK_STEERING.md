@@ -69,14 +69,19 @@ class, so teardown removes its owned support. A priority-100 source rule is adde
 only when the source address is unique; duplicate-address links use their own
 fwmark tables without an ambiguous source rule.
 
-Never-created tables are empty observations only when iproute2 reports a complete
-`FIB table does not exist` diagnostic, exits with code 2 when a code is present,
-and returns empty stdout. Planning and provisioning can then install the private
+Never-created tables are empty observations only when iproute2 returns numeric
+exit code 2, whitespace-only stdout, and an exact IPv4 or IPv6
+`FIB table does not exist` diagnostic. Reads require `Dump terminated`; flushes
+require `Flush terminated`. CRLF is normalized and surrounding whitespace is
+trimmed before matching stderr. Planning and provisioning can then install the private
 default route before its rules. Restart discovery retains an owned rule even if
 its table never existed, and removal or rollback accepts the same proven absence
 when flushing. Permission errors, timeouts, unrelated diagnostics, and partial
 route output still fail preparation. Manual table routes are unnecessary for
 this cold-start case.
+
+APT ownership retains its separate, unchanged legacy absence contract. It does
+not inherit steering's exit-code, stdout, or flush-diagnostic policy.
 
 For `ip -4 route show default dev <ifname>`, iproute2 omits the `dev` clause.
 The planner supplies that query's interface when absent and rejects a conflicting

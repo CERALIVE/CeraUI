@@ -171,7 +171,7 @@ async function flushRouteTable(
 	try {
 		await deps.run("ip", ["route", "flush", "table", table]);
 	} catch (error) {
-		if (!isFibTableAbsent(error)) throw error;
+		if (!isFibTableAbsent(error, "flush")) throw error;
 	}
 }
 

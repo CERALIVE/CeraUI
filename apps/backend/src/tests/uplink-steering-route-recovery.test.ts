@@ -50,6 +50,55 @@ describe("uplink steering route recovery", () => {
 		],
 		[absentTableError("Error: Operation not permitted\n"), false],
 		[new RunTimeoutError("ip route flush table 30001", "", ""), false],
+		[
+			Object.assign(
+				absentTableError(
+					"Error: ipv4: FIB table does not exist.\nFlush terminated\n",
+				),
+				{ stdout: "default via 10.64.0.1 dev ww0\n" },
+			),
+			false,
+		],
+		[
+			Object.assign(new Error("kernel reply"), {
+				stdout: "",
+				stderr: "Error: ipv4: FIB table does not exist.\nFlush terminated\n",
+			}),
+			false,
+		],
+		[
+			Object.assign(
+				absentTableError(
+					"Error: ipv4: FIB table does not exist.\nFlush terminated\n",
+				),
+				{ code: "2" },
+			),
+			false,
+		],
+		[
+			Object.assign(new Error("kernel reply"), {
+				code: 2,
+				stderr: "Error: ipv4: FIB table does not exist.\nFlush terminated\n",
+			}),
+			false,
+		],
+		[absentTableError(captured.ipv4), false],
+		[absentTableError(captured.delete), false],
+		[
+			absentTableError(
+				"Error: ipv6: FIB table does not exist.\nFlush terminated\n",
+			),
+			true,
+		],
+		[
+			Object.assign(
+				absentTableError(
+					" \tError: ipv4: FIB table does not exist.\r\nFlush terminated\r\n ",
+				),
+				{ stdout: " \t\r\n" },
+			),
+			true,
+		],
 	] as const)(
 		"#433 tolerates only absent-table flush failures %#",
 		async (error, absent) => {
