@@ -1,3 +1,4 @@
+import { isFibTableAbsent } from "../../../helpers/iproute2-absent.ts";
 import { argMatch, ID_RE, type run } from "../../../helpers/run.ts";
 import { parseDefaultRouteInterface } from "../../network/connectivity-candidates.ts";
 import { parseDefaultRouteLine } from "../../network/default-route.ts";
@@ -72,13 +73,7 @@ async function flushTable(
 			String(table),
 		]);
 	} catch (error) {
-		const stderr: unknown =
-			error instanceof Error && "stderr" in error ? error.stderr : undefined;
-		if (
-			typeof stderr !== "string" ||
-			!stderr.includes("FIB table does not exist")
-		)
-			throw error;
+		if (!isFibTableAbsent(error, "flush")) throw error;
 	}
 }
 

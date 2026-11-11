@@ -6,6 +6,33 @@ import { createAptRoutingOwnership } from "../modules/system/apt-routing-ownersh
 import captured from "./fixtures/iproute2-7.2-absent.json";
 import { absentTableError } from "./uplink-steering-route-test-fixtures.ts";
 
+const jsonAbsentStderr =
+	"Error: ipv4: FIB table does not exist.\nDump terminated";
+
+test.each([
+	["JSON empty array stdout", "[]\n", jsonAbsentStderr, 2, true],
+	["empty stdout", "", jsonAbsentStderr, 2, true],
+	[
+		"extra routing diagnostic",
+		"[]\n",
+		`${jsonAbsentStderr}\nRTNETLINK answers: Operation not permitted`,
+		2,
+		false,
+	],
+	["nonempty route array", '[{"dst":"default"}]', jsonAbsentStderr, 2, false],
+	["wrong exit code", "[]\n", jsonAbsentStderr, 1, false],
+] as const)(
+	"json-read accepts only an empty JSON route result and exact absence: %s",
+	(_name, stdout, stderr, code, absent) => {
+		const error = Object.assign(new Error("ip -j route show failed"), {
+			code,
+			stdout,
+			stderr,
+		});
+		expect(isFibTableAbsent(error, "json-read")).toBe(absent);
+	},
+);
+
 test.each([
 	[captured.ipv4, "read", true],
 	[captured.ipv6, "read", true],
