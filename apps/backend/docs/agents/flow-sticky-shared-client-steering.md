@@ -48,7 +48,11 @@ route removal and is never hydrated. `uplink-steering` is persistent and carries
 the shared `@ceraui/rpc` typed availability/refusal state.
 
 The coordinator is single-flight, re-reads the latest model before every apply,
-skips byte-identical state, and retries at 100/500 ms only. On process restart it
+skips byte-identical state, and retries a newly failing state at 100/500 ms.
+After those retries fail, identical desired states leave the unavailable status
+untouched and skip apply for 5 seconds. Each later failed apply doubles that delay
+up to 60 seconds, with one apply per window. A different desired state or success
+clears the backoff. On process restart it
 inventories its priority-110 rules, publishes the latest model first, then flushes
 and removes stale support. Any overlap, mark collision, foreign priority owner,
 missing route, nft failure, or rollback failure is fail-soft and surfaces
@@ -57,8 +61,9 @@ missing route, nft failure, or rollback failure is fail-soft and surfaces
 Keep committed steering through stale-route cleanup failures: sharing, provisioned
 support and the forwarding step stay intact. The applier retains pending
 retirements and warns once per distinct failure; the coordinator alone retries
-them after successful or unchanged reconciles. A pending mark/table pair desired
-again by a successfully applied state is discarded without a flush. The cleanup
+them after successful, unchanged, or backoff-skipped reconciles. A pending
+mark/table pair desired again by a successfully applied state is discarded without
+a flush. The cleanup
 snapshot advances only after forwarding succeeds and apply returns normally; a
 failed activation cannot discard pending work. Before commit, a failed transition
 restores removed support and reloads the previous ruleset before rolling new routes

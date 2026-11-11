@@ -3,6 +3,7 @@ import type { PreparedSteeringState } from "./applier.ts";
 import {
 	type SteeringAvailability,
 	SteeringUnavailableError,
+	type SteeringUnavailableReason,
 } from "./contracts.ts";
 
 export const UPLINK_STEERING_RETRY_DELAYS_MS = [100, 500] as const;
@@ -16,6 +17,7 @@ export interface UplinkSteeringCoordinatorDeps {
 	publishAvailability(status: SteeringAvailability): void;
 	waitBeforeRetry?(delayMs: number): Promise<void>;
 	retryCleanup?(): Promise<void>;
+	now?(): number;
 }
 
 export class UplinkSteeringCoordinator {
@@ -23,6 +25,14 @@ export class UplinkSteeringCoordinator {
 	#applied: PreparedSteeringState | undefined;
 	#dirty = false;
 	#running: Promise<void> | undefined;
+	#lastFailure:
+		| {
+				stateKey: string;
+				reason: SteeringUnavailableReason;
+				attempts: number;
+				nextAttemptAt: number;
+		  }
+		| undefined;
 
 	constructor(deps: UplinkSteeringCoordinatorDeps) {
 		this.#deps = deps;
@@ -45,14 +55,25 @@ export class UplinkSteeringCoordinator {
 		let retryIndex = 0;
 		while (this.#dirty) {
 			this.#dirty = false;
+			let desiredKey: string | undefined;
 			try {
 				const desired = await this.#deps.readDesiredState();
-				if (stateKey(this.#applied) !== stateKey(desired)) {
-					await this.#deps.apply(this.#applied, desired);
+				desiredKey = stateKey(desired);
+				if (this.#lastFailure?.stateKey !== desiredKey) {
+					this.#lastFailure = undefined;
 				}
-				this.#applied = desired;
-				this.#deps.publishAvailability({ available: true });
-				retryIndex = 0;
+				if (
+					this.#lastFailure === undefined ||
+					(this.#deps.now ?? Date.now)() >= this.#lastFailure.nextAttemptAt
+				) {
+					if (stateKey(this.#applied) !== desiredKey) {
+						await this.#deps.apply(this.#applied, desired);
+					}
+					this.#applied = desired;
+					this.#lastFailure = undefined;
+					this.#deps.publishAvailability({ available: true });
+					retryIndex = 0;
+				}
 				try {
 					await this.#deps.retryCleanup?.();
 				} catch (error) {
@@ -68,11 +89,24 @@ export class UplinkSteeringCoordinator {
 					reason,
 					detail: error instanceof Error ? error.message : String(error),
 				});
-				const retryDelay = UPLINK_STEERING_RETRY_DELAYS_MS[retryIndex];
+				const retryDelay =
+					this.#lastFailure === undefined || desiredKey === undefined
+						? UPLINK_STEERING_RETRY_DELAYS_MS[retryIndex]
+						: undefined;
 				if (retryDelay !== undefined) {
 					retryIndex++;
 					await (this.#deps.waitBeforeRetry ?? defaultWait)(retryDelay);
 					this.#dirty = true;
+				} else if (desiredKey !== undefined) {
+					const attempts = (this.#lastFailure?.attempts ?? 0) + 1;
+					this.#lastFailure = {
+						stateKey: desiredKey,
+						reason,
+						attempts,
+						nextAttemptAt:
+							(this.#deps.now ?? Date.now)() +
+							Math.min(5_000 * 2 ** (attempts - 1), 60_000),
+					};
 				}
 			}
 		}
