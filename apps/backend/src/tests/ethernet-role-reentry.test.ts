@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 import type { EthernetRole } from "@ceraui/rpc/schemas";
 
 import {
+	EthernetRoleReentryError,
 	type EthernetRoleTransitionDeps,
 	reconcileEthernetRoles,
 	setEthernetRole,
@@ -31,46 +32,64 @@ function makeDeps(
 }
 
 for (const mode of ["set", "reconcile"] as const) {
-	test(`awaited same-port reconcile inside ${mode} completes`, async () => {
-		const name = `eth-reentry-${mode}`;
-		const roles: Record<string, EthernetRole> =
-			mode === "reconcile" ? { [name]: "shared-lan" } : {};
-		let entered = false;
-		let reads = 0;
-		const deps: EthernetRoleTransitionDeps = {
-			...makeDeps(name, roles),
-			resolveConnection: async () => {
-				reads += 1;
-				if (!entered) {
-					entered = true;
-					await reconcileEthernetRoles(deps, () => roles);
-				}
-				return `uuid-${name}`;
-			},
-		};
+	for (const inner of ["set", "reconcile"] as const) {
+		test(`awaited same-port ${inner} inside ${mode} rejects while the outer completes`, async () => {
+			const name = `eth-reentry-${mode}-${inner}`;
+			const roles: Record<string, EthernetRole> =
+				mode === "reconcile" ? { [name]: "shared-lan" } : {};
+			const nestedErrors: unknown[] = [];
+			let entered = false;
+			let reads = 0;
+			const deps: EthernetRoleTransitionDeps = {
+				...makeDeps(name, roles),
+				resolveConnection: async () => {
+					reads += 1;
+					if (!entered) {
+						entered = true;
+						const nested =
+							inner === "set"
+								? setEthernetRole(name, "uplink", deps)
+								: reconcileEthernetRoles(deps, () => roles);
+						nestedErrors.push(
+							await nested.then(
+								() => undefined,
+								(error: unknown) => error,
+							),
+						);
+					}
+					return `uuid-${name}`;
+				},
+			};
 
-		const deadline = Promise.withResolvers<"deadlock-circuit-breaker">();
-		const timer = setTimeout(
-			() => deadline.resolve("deadlock-circuit-breaker"),
-			500,
-		);
-		try {
-			const operation =
-				mode === "set"
-					? setEthernetRole(name, "shared-lan", deps)
-					: reconcileEthernetRoles(deps, () => roles);
-			const result = await Promise.race([
-				operation.then(() => "completed"),
-				deadline.promise,
-			]);
+			const deadline = Promise.withResolvers<"deadlock-circuit-breaker">();
+			const timer = setTimeout(
+				() => deadline.resolve("deadlock-circuit-breaker"),
+				500,
+			);
+			try {
+				const operation =
+					mode === "set"
+						? setEthernetRole(name, "shared-lan", deps)
+						: reconcileEthernetRoles(deps, () => roles);
+				const result = await Promise.race([
+					operation.then(() => "completed"),
+					deadline.promise,
+				]);
 
-			expect(result).toBe("completed");
-			expect(reads).toBe(2);
-			expect(roles[name]).toBe("shared-lan");
-		} finally {
-			clearTimeout(timer);
-		}
-	});
+				expect(result).toBe("completed");
+				expect(reads).toBe(1);
+				expect(roles[name]).toBe("shared-lan");
+				expect(nestedErrors).toHaveLength(1);
+				expect(nestedErrors[0]).toBeInstanceOf(EthernetRoleReentryError);
+				expect(nestedErrors[0]).toMatchObject({
+					ownerPort: name,
+					requestedPort: name,
+				});
+			} finally {
+				clearTimeout(timer);
+			}
+		});
+	}
 }
 
 test("a same-port request from an unrelated async context still waits", async () => {

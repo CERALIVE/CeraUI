@@ -14,13 +14,8 @@ never named by generated rule text. The carrier effects are isolated in
 is ever capped. Preserve physical-identity marks and established flows.**
 Everything below is how that is made structural rather than intentional. Wi-Fi
 station / hotspot / hybrid transitions run under the permanent-MAC adapter lock
-described in EVERY WIFI MUTATION SHARES ONE ADAPTER LOCK. Ethernet `uplink` /
-`shared-lan` changes and boot reconciliation share one promise chain per port.
-The whole persist -> NetworkManager -> restore sequence completes before the next
-outside operation on that port begins; other ports proceed independently. Nested
-calls in the owning async context reuse its ownership instead of queueing behind
-themselves. Reconciliation reads the role again after taking ownership, and drained
-queue entries are removed.
+described in EVERY WIFI MUTATION SHARES ONE ADAPTER LOCK.
+Ethernet role changes are serialized per port and must not be nested.
 
 **Client provenance is structural.** New-flow selection, conntrack mark restore,
 and masquerade all require a positive registered client-zone `iifname`; NAT also

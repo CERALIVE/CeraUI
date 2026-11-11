@@ -19,6 +19,9 @@
   The Ethernet role transition, and the boot reconciliation of the operator's
   persisted choice.
 
+  Nested role calls reject before admission. The frame contract below applies
+  to outside callers.
+
   EVERY EXIT PATH ENDS IN A TERMINAL FRAME, with exactly one publisher per path
   — the `wifi-adapter-mode-transition.ts` contract, applied to a wired port. A
   refusal decided here publishes here; an admitted transition publishes a pending
@@ -154,24 +157,39 @@ async function applyRoleToNetworkManager(
 	return undefined;
 }
 
+export class EthernetRoleReentryError extends Error {
+	constructor(
+		readonly ownerPort: string,
+		readonly requestedPort: string,
+	) {
+		super(
+			`Ethernet role change for ${requestedPort} cannot nest inside ${ownerPort}`,
+		);
+		this.name = "EthernetRoleReentryError";
+	}
+}
+
 const roleOperations = new Map<string, Promise<unknown>>();
-const roleOwnership = new AsyncLocalStorage<
-	ReadonlyMap<string, { active: boolean }>
->();
+const roleOwnership = new AsyncLocalStorage<{
+	port: string;
+	active: boolean;
+}>();
+
+function assertNoRoleReentry(requestedPort?: string): void {
+	const owner = roleOwnership.getStore();
+	if (owner?.active) {
+		throw new EthernetRoleReentryError(owner.port, requestedPort ?? owner.port);
+	}
+}
 
 async function withEthernetRoleQueue<T>(
 	ifname: string,
 	operation: () => Promise<T>,
 ): Promise<T> {
-	const held = roleOwnership.getStore();
-	if (held?.get(ifname)?.active) return operation();
+	assertNoRoleReentry(ifname);
 
-	const ownership = { active: true };
-	const run = () =>
-		roleOwnership.run(
-			new Map([...(held ?? []), [ifname, ownership]]),
-			operation,
-		);
+	const ownership = { port: ifname, active: true };
+	const run = () => roleOwnership.run(ownership, operation);
 	// Either outcome releases the next operation; callers still receive their
 	// own rejection. Retain only the latest operation until that port drains.
 	const current = (roleOperations.get(ifname) ?? Promise.resolve()).then(
@@ -235,10 +253,11 @@ export async function setEthernetRole(
  * default, and rewriting `ipv4.method auto` onto every ordinary port at boot
  * would touch profiles the operator never asked us to touch.
  *
- * FAIL-SOFT: it never throws and never rejects. A port that is not present, or
- * whose NM profile could not be rewritten, is LOGGED and left alone — the role
- * is deliberately NOT cleared, because a device that has not finished
- * enumerating must not be read as a refusal that discards the operator's choice.
+ * FAIL-SOFT for outside callers; nested calls reject before admission. A port
+ * that is not present, or whose NM profile could not be rewritten, is LOGGED
+ * and left alone — the role is deliberately NOT cleared, because a device that
+ * has not finished enumerating must not be read as a refusal that discards the
+ * operator's choice.
  */
 export async function reconcileEthernetRoles(
 	deps: EthernetRoleTransitionDeps = defaultEthernetRoleDeps,
@@ -246,6 +265,9 @@ export async function reconcileEthernetRoles(
 		Record<string, EthernetRole>
 	> = getPersistedEthernetRoles,
 ): Promise<void> {
+	// Reconciliation includes every busy port, including an active caller's port.
+	// Reject before its fail-soft catch or any injected reader can run.
+	assertNoRoleReentry();
 	try {
 		const roles = readRoles();
 		// A queued set may not have persisted yet, or may restore another role.
