@@ -862,7 +862,7 @@ export function processIfconfigOutput(
 			const isRunning = flags.includes("RUNNING");
 
 			// update the list of WiFi devices
-			if (name?.match("^wlan")) {
+			if (/^wl/.test(name)) {
 				const hwAddr = int.match(/ether ([0-9a-f:]+)/);
 				if (hwAddr?.[1]) {
 					wifiDeviceListAdd(name, hwAddr[1], isRunning ? inetAddr : null);

@@ -665,3 +665,72 @@ function argvFields(argv: string[]): Record<string, string> {
 	}
 	return fields;
 }
+
+test("retrying a retained profile updates its secret and activates the same UUID", async () => {
+	const iface = getWifiInterfacesByMacAddress()[ADAPTER];
+	if (!iface) throw new Error("missing fixture");
+	iface.saved[SSID] = "retained-uuid";
+	replies = [
+		{ stdout: "", stderr: "", exitCode: 0 },
+		{
+			stdout: "Connection successfully activated (D-Bus active path)",
+			stderr: "",
+			exitCode: 0,
+		},
+	];
+	const argv = await join("WPA2");
+	expect(argv).toEqual([
+		[
+			"connection",
+			"modify",
+			"uuid",
+			"retained-uuid",
+			"802-11-wireless-security.psk",
+			PASSWORD,
+		],
+		[
+			"-w",
+			"15",
+			"connection",
+			"up",
+			"uuid",
+			"retained-uuid",
+			"ifname",
+			"wlan0",
+		],
+	]);
+});
+
+test("a failed saved secret update never activates or deletes the profile", async () => {
+	const iface = getWifiInterfacesByMacAddress()[ADAPTER];
+	if (!iface) throw new Error("missing fixture");
+	iface.saved[SSID] = "retained-uuid";
+	replies = [{ stdout: "", stderr: "transport unavailable", exitCode: 1 }];
+	const argv = await join("WPA2");
+	expect(argv).toHaveLength(1);
+	expect(argv[0]?.slice(0, 4)).toEqual([
+		"connection",
+		"modify",
+		"uuid",
+		"retained-uuid",
+	]);
+});
+
+test("authentication refusal on stderr resolves the join as an auth error", async () => {
+	replies = [
+		{
+			stdout: "",
+			stderr: "Error: Secrets were required, but not provided.",
+			exitCode: 4,
+		},
+	];
+	const frames: string[] = [];
+	handleWifi(
+		{ send: (frame) => frames.push(frame) },
+		{
+			new: { device: 0, ssid: SSID, password: PASSWORD, security: "WPA2" },
+		},
+	);
+	await waitFor(() => frames.length > 0);
+	expect(JSON.parse(frames[0] ?? "{}").wifi.new.error).toBe("auth");
+});

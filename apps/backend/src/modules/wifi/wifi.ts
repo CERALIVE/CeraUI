@@ -703,13 +703,51 @@ const wantedSecrets = (output: string) =>
 async function joinViaNmAuto(args: string[]): Promise<WifiJoinOutcome> {
 	const { stdout, stderr, exitCode } = await joinNmcliRunner(args);
 	if (exitCode !== 0 || /^Error:/.test(stdout)) {
-		return { ok: false, authFailed: wantedSecrets(stdout), stdout, stderr };
+		return {
+			ok: false,
+			authFailed: wantedSecrets(`${stdout}\n${stderr}`),
+			stdout,
+			stderr,
+		};
 	}
 	const success = stdout.match(/successfully activated with '(.+)'/);
 	const uuid = success?.[1];
 	return uuid === undefined
 		? { ok: true, authFailed: false, stdout, stderr }
 		: { ok: true, uuid, authFailed: false, stdout, stderr };
+}
+
+async function retrySavedJoin(
+	uuid: ConnectionUUID,
+	password: string,
+	connectArgs: string[],
+): Promise<WifiJoinOutcome> {
+	const changed = await joinNmcliRunner([
+		"connection",
+		"modify",
+		"uuid",
+		uuid,
+		"802-11-wireless-security.psk",
+		password,
+	]);
+	if (changed.exitCode !== 0)
+		return {
+			ok: false,
+			authFailed: wantedSecrets(`${changed.stdout}\n${changed.stderr}`),
+			stdout: changed.stdout,
+			stderr: changed.stderr,
+		};
+	const ifname = connectArgs[connectArgs.indexOf("ifname") + 1];
+	const activated = await joinViaNmAuto([
+		"-w",
+		"15",
+		"connection",
+		"up",
+		"uuid",
+		uuid,
+		...(ifname ? ["ifname", ifname] : []),
+	]);
+	return activated.ok ? { ...activated, uuid } : activated;
 }
 
 /**
@@ -792,7 +830,14 @@ function wifiNew(conn: MessageSocket, msg: WifiNewMessage["new"]) {
 		security: msg.security,
 	});
 
-	void runWifiNew(conn, msg, macAddress, plan, senderId);
+	void runWifiNew(
+		conn,
+		msg,
+		macAddress,
+		plan,
+		senderId,
+		wifiInterface.saved[msg.ssid],
+	);
 }
 
 // Reconcile retained profiles for explicit Forget without delaying a join's
@@ -809,11 +854,14 @@ async function runWifiNew(
 	macAddress: string,
 	plan: WifiStationJoinPlan,
 	senderId: ReturnType<typeof getSocketSenderId>,
+	savedUuid?: ConnectionUUID,
 ) {
 	const outcome =
 		plan.mode === "sae"
 			? await joinViaSaeProfile(plan.addArgs)
-			: await joinViaNmAuto(plan.connectArgs);
+			: savedUuid && msg.password
+				? await retrySavedJoin(savedUuid, msg.password, plan.connectArgs)
+				: await joinViaNmAuto(plan.connectArgs);
 
 	if (!outcome.ok) {
 		await wifiDeleteFailedConns();

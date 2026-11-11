@@ -123,3 +123,15 @@ The legacy `wifiDeleteFailedConns` entry point now logs withheld cleanup without
 Failed and ambiguous join replies dispatch a best-effort saved-profile refresh and status broadcast after the terminal reply. This reconciles retained profiles into `saved`/`savedAll` for explicit Forget, including same-SSID siblings, without waiting for profile-list transport availability before reporting refusal. Refresh failures are logged and never turn the refusal into success.
 
 Saved-profile refreshes stage a complete replacement before changing either cache. A missing or throwing detail read leaves the previous snapshot intact. A generation shared by every refresh caller prevents an older listing or detail read from committing over a newer request, and adapter-object checks reject a replaced roster. The post-refusal status broadcast runs only after a complete current snapshot commits. Deferred-list/detail and per-profile failure regressions cover these publication boundaries.
+
+Station discovery also accepts predictable `wl…` interface names, including USB
+`wlx…` and PCI `wlp…` names. The periodic interface parser must register their
+MAC even while disconnected, before the running/IPv4 gate; otherwise a scanned
+radio remains degraded and cannot resolve its numeric station join target.
+
+A password retry of a saved non-SAE station network updates that UUID's secret
+and activates the same profile on the requested interface. It does not send the
+saved profile back through `device wifi connect`: some NetworkManager versions
+reject that retry with a missing key-mgmt error. A failed secret update stops
+before activation and retains the profile. Authentication refusal text is read
+from both output streams.
