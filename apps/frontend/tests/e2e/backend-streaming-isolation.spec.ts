@@ -1,19 +1,19 @@
 import {
 	existsSync,
-	mkdtempSync,
+	mkdirSync,
 	readFileSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, expect } from "./fixtures/index.js";
 import { startWorkerBackend, type WorkerBackend } from "./fixtures/backend.js";
 import { BackendRpc } from "./fixtures/backend-rpc.js";
 
-test("streaming sentinels belong to each backend acquisition", async () => {
+test("streaming sentinels belong to each backend acquisition", async ({}, testInfo) => {
 	// An inherited marker represents a host or another runner, never this device.
-	const root = mkdtempSync(join(tmpdir(), "e2e-sentinel-"));
+	const root = testInfo.outputPath("sentinel");
+	mkdirSync(root, { recursive: true });
 	const inheritedMarker = join(root, "streaming");
 	const previousMarker = process.env.CERALIVE_STREAMING_MARKER;
 	process.env.CERALIVE_STREAMING_MARKER = inheritedMarker;
