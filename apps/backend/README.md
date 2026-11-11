@@ -568,6 +568,11 @@ for the at-rest mechanism and the still-unsupported ZTE/UFI operator-login paths
 
 Procedures live in `src/rpc/procedures/<domain>.procedure.ts` and are wired into `src/rpc/router.ts`. The shared schema types and validation constants are defined in `@ceraui/rpc` (`packages/rpc/`) and consumed by both the backend and frontend.
 
+The `netif.router_cellular` status marker exposes only vendor, model, USB
+vendor:product, classification, and duplicate-model status. USB serials remain
+in the internal scan cache for existing identity logic and are excluded from
+this marker by the wire projection and shared schema.
+
 Key streaming procedures:
 
 | Procedure | Purpose |

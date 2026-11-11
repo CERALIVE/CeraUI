@@ -311,14 +311,13 @@ reading there makes the resolution immune to the collision instead of a victim o
   `Qualcomm` + `9024`; `routerCellularDisplayName` composes the brand onto the
   descriptor answer as well as onto the admin one, so the row reads
   `Qualcomm 9024` — true, stable, and naming the silicon vendor USB-IF registered.
-- **A twin pair gets a DISCRIMINATOR, and only a twin pair.** Two units of one SKU
-  are identical in vendor, model and `vid_pid` alike, so `RouterCellularMarker.serial`
-  (fed by `unitDiscriminator`, additive-optional on the wire) is the only thing that
-  separates their rows — appended to the display name as `· <serial>`. It is
-  withheld from a lone device (nothing to separate it from) and from a device that
-  publishes no serial or republishes a string descriptor as one: the bench HiLink
-  pair is a `duplicate_model` and still gets none, because none exists. Never
-  fabricated, and never an input to any classification.
+- **A twin pair gets an INTERNAL DISCRIMINATOR.** The scanner retains its
+  `RouterCellularMarker.serial` (fed by `unitDiscriminator`) for existing device
+  identity and naming logic. `applyRouterCellularProjection` copies only vendor,
+  model, `vid_pid`, kind, and `duplicate_model` into `netif.router_cellular`;
+  the shared RPC schema has no serial field. The raw USB serial is never part
+  of this interface-status marker, even for twins with distinct or shared
+  serials. Internal scanner serial handling remains unchanged.
 
 Coverage: `tests/router-cellular-classification.test.ts` — the bench fixtures gained
 their real `busnum`/`devnum` and the verbatim `E:` lines from each device's own udev
@@ -949,9 +948,10 @@ equality-comparable, which is the only operation consumers may perform.
 vid/pid/serial/`ID_PATH`/hwdb + resolved labels) for EVERY classified USB net
 device, not only router-class ones — that is what lets the same stick resolve to
 ONE identity in both of its compositions. Nothing in that map reaches the `netif`
-wire; the two existing markers are untouched. Its `serial` is carried
-unconditionally, unlike the wire marker's twin discriminator, because an identity
-anchor is needed by a lone device just as much as by a twin.
+wire; `netif.router_cellular` exposes only public classification metadata. The
+physical descriptor's `serial` is carried unconditionally, unlike the internal
+classification marker's twin discriminator, because an identity anchor is needed
+by a lone device just as much as by a twin.
 
 **Display-name precedence**: the MM identity observation — which IS the existing
 HIMI firmware-string chain (`modem-identity.ts` `modemHardwareName`), layered on
