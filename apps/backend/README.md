@@ -10,6 +10,16 @@ The backend is a single compiled binary (`ceralive`) produced by `bun build --co
 **Shared contract**: `@ceraui/rpc` (workspace package at `packages/rpc/`)  
 **Engine/bindings**: `@ceralive/cerastream` (public-npm registry dep — JSON-RPC/UDS client), `@ceraui/srtla-send` (private workspace package at `packages/srtla-send/`)
 
+Remote configuration [EXISTS]: config responses and results withhold only the
+internal `pairing_secret`. SSH passwords, APN credentials, media stream IDs and
+the live hotspot password are sent to the authenticated remote again, allowing
+owner control and trusted delegates to read credentials. Local payloads and
+authentication remain unchanged; radio incarnation metadata stays local.
+Previously received copies are NOT erased. Pairing-secret registration through
+`POST /api/device/pairing-secret` is unchanged. See the
+[remote control contract](docs/agents/remote-control-plane.md) for the exact
+boundary and the still-unwired v2 broadcast relay.
+
 ### Modem-control compatibility
 
 The backend pins `@ceralive/modem-control` at `1.3.0` EXACTLY. The SMS port, the
@@ -851,7 +861,9 @@ flow marks, per-uplink policy-route support, and the single-flight reconcile loo
 Only packets entering a registered hotspot/shared-LAN zone are eligible; local
 traffic and foreign nftables tables are structurally outside the generated rules.
 Hard-down removes new-flow selection before a mark-scoped conntrack flush and
-route teardown. Full design, failure behavior, deployment dependency, and netns
+route teardown. Post-commit stale-route cleanup failures retain live steering and
+forwarding; the coordinator retries pending cleanup after successful or unchanged
+reconciles. Full design, failure behavior, deployment dependency, and netns
 coverage: [`docs/UPLINK_STEERING.md`](../../docs/UPLINK_STEERING.md).
 
 ### Streaming-first uplink shaping

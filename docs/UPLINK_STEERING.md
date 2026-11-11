@@ -69,6 +69,38 @@ class, so teardown removes its owned support. A priority-100 source rule is adde
 only when the source address is unique; duplicate-address links use their own
 fwmark tables without an ambiguous source rule.
 
+Never-created tables are empty observations only when iproute2 returns numeric
+exit code 2, whitespace-only stdout, and an exact IPv4 or IPv6
+`FIB table does not exist` diagnostic. Reads require `Dump terminated`; flushes
+require `Flush terminated`. CRLF is normalized and surrounding whitespace is
+trimmed before matching stderr. Planning and provisioning can then install the private
+default route before its rules. Restart discovery retains an owned rule even if
+its table never existed, and removal or rollback accepts the same proven absence
+when flushing. Permission errors, timeouts, unrelated diagnostics, and partial
+route output still fail preparation. Manual table routes are unnecessary for
+this cold-start case.
+
+APT ownership retains its separate, unchanged legacy absence contract. It does
+not inherit steering's exit-code, stdout, or flush-diagnostic policy.
+
+Provisioning compares a managed table's default device, gateway, protocol, and
+metric with the planned route. Managed plans prefer the interface's live
+main-table default, including when an existing source rule already selects the
+managed table. If that query succeeds with empty output, an existing usable
+managed default selected by the source rule is retained, as before; query errors
+still fail planning. Without that existing support, an absent live default fails
+preparation.
+
+A gateway or protocol change at the same metric uses one `ip route replace`.
+Different metrics are distinct kernel route keys, so a metric change adds the
+desired route before deleting the exact old route. Rollback restores the old
+route before deleting the added replacement. A failed add leaves the old route
+untouched; a failed old-route deletion removes only the new route. The table
+always retains a default during these successful writes, and each completed
+change or rollback leaves one default. Neither path flushes or touches another
+uplink's table. An identical route needs no replacement and, when its rules
+already exist, reports no change.
+
 For `ip -4 route show default dev <ifname>`, iproute2 omits the `dev` clause.
 The planner supplies that query's interface when absent and rejects a conflicting
 `dev`; unfiltered table output must explicitly name the matching interface.
@@ -90,6 +122,14 @@ publishes the latest ruleset first, then flushes conntrack and removes stale rul
 and private tables. Desired mark/table support is retained even when the old route
 temporarily lacks an interface name.
 
+Once the latest ruleset is committed, a stale-route cleanup failure keeps the live
+ruleset and newly provisioned routes intact, completes the forwarding step, and
+logs each distinct failure once. Failed retirements remain in memory. After every
+successful, unchanged, or backoff-skipped reconcile, the coordinator retries their
+conntrack flush and route removal without degrading the applied state. A pending mark/table pair
+that becomes desired again is dropped without flushing it. A backend restart
+rediscovers any remaining stale support.
+
 ## Hard-down drain
 
 A hard-down uplink is retired in three phases:
@@ -100,6 +140,11 @@ A hard-down uplink is retired in three phases:
 3. remove the fwmark rule, any module-owned source rule/private table, and then
    publish the final ruleset.
 
+Conntrack's numeric exit 1 is successful only when stdout is whitespace-only and
+stderr contains solely its versioned `0 flow entries have been deleted.` summary.
+An empty mark is already drained. Other exits or diagnostics retain the original
+failure and prevent retiring route support.
+
 After successful route removal the backend emits transient
 `uplink-flows-reset { iface, linkId }`. It is never post-login hydrated. Persistent
 state uses `uplink-steering`: either `{state:"available"}` or
@@ -107,11 +152,25 @@ state uses `uplink-steering`: either `{state:"available"}` or
 `@ceraui/rpc`.
 
 The coordinator is single-flight, recomputes the latest desired model before each
-apply, skips byte-identical models, and retries twice at bounded delays. Failure is
+apply, skips byte-identical models, and retries a newly failing state twice at
+100/500 ms. Only after those retries fail does it record backoff for that desired
+state. Reconciles with the same state skip apply for 5 seconds and leave the
+published unavailable status untouched; pending cleanup still runs. Later failures
+get one apply per window, with the delay doubling to a 60-second cap. A different
+desired state or a success clears the backoff. Failure is
 fail-soft: the WebSocket server is already bound, boot continues through
 `guardNonCritical`, and the typed unavailable state remains visible.
+If an apply fails after publishing the transition but before committing the final
+state, the applier restores removed support and reloads the previous ruleset before
+rolling back newly provisioned routes.
 
 ## Verification
+
+`apps/backend/src/tests/uplink-steering-route-kernel.test.ts` probes unprivileged
+user/network namespaces and re-executes itself in a fresh namespace. It first
+proves the raw read rejects for a never-created table and records the exact flush
+reply, then exercises planning, provisioning, teardown, and orphan-rule recovery
+through the real command runner. A skipped namespace probe is not kernel proof.
 
 - Ruleset snapshots cover 0, 1, 2, 3, and 6 uplinks and every client-zone shape.
 - Unit tests pin mark stability, fixed-modulus apportionment, route ownership,
@@ -135,3 +194,7 @@ fail-soft: the WebSocket server is already bound, boot continues through
 The outstanding board drill needs two real uplinks and a hotspot client. It must
 inspect nftables/conntrack marks while confirming SRTLA link distribution remains
 undisturbed.
+
+## Known-down passive observations
+
+`UplinkHealthEngine` keeps an already-down path down on `passive_degraded`. That observation resets consecutive success evidence; only successful observations advance the existing five-success and 15-second hold-down recovery thresholds. An up path can still become degraded, and captive-portal behavior is unchanged. Model and steering-selection regressions live in `apps/backend/src/tests/uplink-steering-state.test.ts`.

@@ -125,11 +125,31 @@ export async function flushConntrack(
 	mark: number,
 	deps: Pick<UplinkSharingDeps, "run"> = defaultDeps,
 ): Promise<void> {
-	await deps.run("conntrack", [
-		"--delete",
-		"--mark",
-		`${hexMark(mark)}/${hexMark(UPLINK_MARK_MASK)}`,
-	]);
+	try {
+		await deps.run("conntrack", [
+			"--delete",
+			"--mark",
+			`${hexMark(mark)}/${hexMark(UPLINK_MARK_MASK)}`,
+		]);
+	} catch (error) {
+		if (
+			typeof error === "object" &&
+			error !== null &&
+			"code" in error &&
+			error.code === 1 &&
+			"stdout" in error &&
+			typeof error.stdout === "string" &&
+			error.stdout.trim() === "" &&
+			"stderr" in error &&
+			typeof error.stderr === "string" &&
+			/^conntrack v[0-9]+(?:\.[0-9]+)+(?:[-+~][A-Za-z0-9.+~_-]+)? \(conntrack-tools\): 0 flow entries have been deleted\.$/.test(
+				error.stderr.replace(/\r\n/g, "\n").trim(),
+			)
+		) {
+			return;
+		}
+		throw error;
+	}
 }
 
 export async function setIpForwarding(

@@ -167,3 +167,74 @@ describe("uplink sharing privileged argv", () => {
 function hexMark(mark: number): string {
 	return `0x${mark.toString(16).padStart(8, "0")}`;
 }
+
+const stderr = await Bun.file(
+	new URL(
+		"./fixtures/real-device/conntrack-1.4.8-zero-delete.txt",
+		import.meta.url,
+	),
+).text();
+
+describe("flushConntrack zero-deletion result (#435)", () => {
+	test.each([
+		["reporter-supplied conntrack-tools 1.4.8 output", stderr, ""],
+		["CRLF and whitespace", ` \r\n${stderr.trim()}\r\n\t`, " \r\n\t"],
+		["newer version", stderr.replace("1.4.8", "1.4.9"), ""],
+		["distribution version", stderr.replace("1.4.8", "1.4.8-2+deb12u1"), ""],
+	])("accepts %s", async (_name, diagnostic, stdout) => {
+		const error = Object.assign(new Error("conntrack failed"), {
+			code: 1,
+			stdout,
+			stderr: diagnostic,
+		});
+		await expect(
+			flushConntrack(stableUplinkMark("removed"), {
+				run: async () => {
+					throw error;
+				},
+			}),
+		).resolves.toBeUndefined();
+	});
+
+	test.each([
+		["string exit", { code: "1", stdout: "", stderr }],
+		["exit 2", { code: 2, stdout: "", stderr }],
+		["exit 3", { code: 3, stdout: "", stderr }],
+		["missing exit", { stdout: "", stderr }],
+		["missing stdout", { code: 1, stderr }],
+		["non-string stdout", { code: 1, stdout: null, stderr }],
+		["missing stderr", { code: 1, stdout: "" }],
+		[
+			"permission denied",
+			{ code: 1, stdout: "", stderr: "Operation failed: Permission denied" },
+		],
+		["handler failure", { code: 1, stdout: "", stderr: "Can't open handler" }],
+		[
+			"extra diagnostic",
+			{ code: 1, stdout: "", stderr: `${stderr}Permission denied\n` },
+		],
+		[
+			"leading diagnostic",
+			{ code: 1, stdout: "", stderr: `Permission denied\n${stderr}` },
+		],
+		["nonempty stdout", { code: 1, stdout: "flow", stderr }],
+		[
+			"one deleted flow",
+			{ code: 1, stdout: "", stderr: stderr.replace("0 flow", "1 flow") },
+		],
+		["message only", { code: 1, stdout: "", stderr: "", message: stderr }],
+		[
+			"invalid version",
+			{ code: 1, stdout: "", stderr: stderr.replace("1.4.8", "1") },
+		],
+	])("rethrows the original error for %s", async (_name, fields) => {
+		const error = Object.assign(new Error("conntrack failed"), fields);
+		await expect(
+			flushConntrack(stableUplinkMark("removed"), {
+				run: async () => {
+					throw error;
+				},
+			}),
+		).rejects.toBe(error);
+	});
+});

@@ -37,6 +37,7 @@
  */
 
 import { logger } from "../../helpers/logger.ts";
+import { projectRemoteConfig } from "../remote/remote-status.ts";
 import {
 	type DisruptiveReservationOutcome,
 	isPositiveDisruptiveFailure,
@@ -345,7 +346,7 @@ function resultFrame(
 		cid: frame.cid,
 		...(frame.role !== undefined ? { role: frame.role } : {}),
 		...(options.selfFencing === true ? { self_fencing: true } : {}),
-		payload,
+		payload: { ...payload, applied: projectRemoteConfig(payload.applied) },
 	};
 }
 

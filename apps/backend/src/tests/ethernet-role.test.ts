@@ -548,6 +548,181 @@ describe("boot reconciliation", () => {
 	});
 });
 
+describe("per-port role operation ownership", () => {
+	test.each([true, false])(
+		"same-port requests wait for the first NM result (%s) and persist the second role",
+		async (firstSucceeds) => {
+			processIfconfigOutput(twoPortTopology());
+			const entered = Promise.withResolvers<void>();
+			const release = Promise.withResolvers<boolean>();
+			const methods: string[] = [];
+			const deps = makeDeps({
+				setFields: async (_uuid, fields) => {
+					methods.push(fields["ipv4.method"] as string);
+					if (methods.length === 1) {
+						entered.resolve();
+						return release.promise;
+					}
+					return true;
+				},
+			});
+
+			const first = setEthernetRole(SHARED_PORT, "shared-lan", deps);
+			await entered.promise;
+			const second = setEthernetRole(SHARED_PORT, "uplink", deps);
+			const pendingRole = getEthernetRole(SHARED_PORT);
+			const pendingFrames = [...deps.frames];
+			const pendingMethods = [...methods];
+
+			release.resolve(firstSucceeds);
+			const results = await Promise.all([first, second]);
+
+			expect(pendingRole).toBe("shared-lan");
+			expect(pendingMethods).toEqual(["shared"]);
+			expect(pendingFrames.map((frame) => frame.outcome)).toEqual([
+				{ pending: true, role: "shared-lan" },
+			]);
+			expect(results).toEqual([
+				firstSucceeds
+					? { success: true, applied: "shared-lan" }
+					: { success: false, error: "apply_failed" },
+				{ success: true, applied: "uplink" },
+			]);
+			expect(methods).toEqual(firstSucceeds ? ["shared", "auto"] : ["shared"]);
+			expect(getConfig().eth_roles?.[SHARED_PORT]).toBe("uplink");
+		},
+	);
+
+	test("a second port completes while the first port is blocked", async () => {
+		processIfconfigOutput(twoPortTopology());
+		const entered = Promise.withResolvers<void>();
+		const release = Promise.withResolvers<boolean>();
+		const deps = makeDeps({
+			resolveConnection: async (ifname) => `uuid-${ifname}`,
+			setFields: async (uuid) => {
+				if (uuid === "uuid-eth1") {
+					entered.resolve();
+					return release.promise;
+				}
+				return true;
+			},
+		});
+
+		const first = setEthernetRole(SHARED_PORT, "shared-lan", deps);
+		await entered.promise;
+		let secondResult: Awaited<ReturnType<typeof setEthernetRole>>;
+		try {
+			secondResult = await setEthernetRole(UPLINK_PORT, "shared-lan", deps);
+		} finally {
+			release.resolve(true);
+			await first;
+		}
+
+		expect(secondResult).toEqual({ success: true, applied: "shared-lan" });
+		expect(getEthernetRole(UPLINK_PORT)).toBe("shared-lan");
+	});
+
+	test("reconcile queued behind a failed set reads the restored role", async () => {
+		processIfconfigOutput(twoPortTopology());
+		persistEthernetRole(SHARED_PORT, "shared-lan");
+		const entered = Promise.withResolvers<void>();
+		const release = Promise.withResolvers<boolean>();
+		const methods: string[] = [];
+		const deps = makeDeps({
+			setFields: async (_uuid, fields) => {
+				methods.push(fields["ipv4.method"] as string);
+				if (methods.length === 1) {
+					entered.resolve();
+					return release.promise;
+				}
+				return true;
+			},
+		});
+
+		const set = setEthernetRole(SHARED_PORT, "uplink", deps);
+		await entered.promise;
+		const reconcile = reconcileEthernetRoles(deps);
+		const pendingMethods = [...methods];
+		release.resolve(false);
+		await Promise.all([set, reconcile]);
+
+		expect(pendingMethods).toEqual(["auto"]);
+		expect(methods).toEqual(["auto", "shared"]);
+		expect(getEthernetRole(SHARED_PORT)).toBe("shared-lan");
+	});
+
+	test("reconcile queued behind a successful set skips its old shared role", async () => {
+		processIfconfigOutput(twoPortTopology());
+		persistEthernetRole(SHARED_PORT, "shared-lan");
+		const entered = Promise.withResolvers<void>();
+		const release = Promise.withResolvers<string | undefined>();
+		const deps = makeDeps({
+			resolveConnection: async () => {
+				entered.resolve();
+				return release.promise;
+			},
+		});
+
+		const set = setEthernetRole(SHARED_PORT, "uplink", deps);
+		await entered.promise;
+		const reconcile = reconcileEthernetRoles(deps, () => ({
+			[SHARED_PORT]: deps.readPersistedRole(SHARED_PORT) ?? "uplink",
+		}));
+		release.resolve("uuid-eth1");
+		await Promise.all([set, reconcile]);
+
+		expect(deps.writes).toEqual([
+			{ uuid: "uuid-eth1", fields: { "ipv4.method": "auto" } },
+		]);
+		expect(getEthernetRole(SHARED_PORT)).toBe("uplink");
+	});
+
+	test("reconcile includes a set queued before its first persist", async () => {
+		processIfconfigOutput(twoPortTopology());
+		const deps = makeDeps();
+
+		const set = setEthernetRole(SHARED_PORT, "shared-lan", deps);
+		const reconcile = reconcileEthernetRoles(deps);
+		await Promise.all([set, reconcile]);
+
+		expect(deps.writes).toEqual([
+			{ uuid: "uuid-eth1", fields: { "ipv4.method": "shared" } },
+			{ uuid: "uuid-eth1", fields: { "ipv4.method": "shared" } },
+		]);
+	});
+
+	test("a rejected first operation releases the next request on that port", async () => {
+		processIfconfigOutput(twoPortTopology());
+		const entered = Promise.withResolvers<void>();
+		const release = Promise.withResolvers<string | undefined>();
+		const failure = new Error("NM read rejected");
+		let reads = 0;
+		const deps = makeDeps({
+			resolveConnection: async () => {
+				reads += 1;
+				if (reads === 1) {
+					entered.resolve();
+					return release.promise;
+				}
+				return "uuid-eth1";
+			},
+		});
+
+		const firstError = setEthernetRole(SHARED_PORT, "shared-lan", deps).then(
+			() => undefined,
+			(error: unknown) => error,
+		);
+		await entered.promise;
+		const second = setEthernetRole(SHARED_PORT, "uplink", deps);
+		release.reject(failure);
+
+		expect(await firstError).toBe(failure);
+		expect(await second).toEqual({ success: true, applied: "uplink" });
+		expect(reads).toBe(2);
+		expect(getConfig().eth_roles?.[SHARED_PORT]).toBe("uplink");
+	});
+});
+
 describe("network.configure answers honestly when handleNetif rejects", () => {
 	test("a stale address is `success:false` with a typed reason, NEVER `success:true`", async () => {
 		processIfconfigOutput(twoPortTopology());

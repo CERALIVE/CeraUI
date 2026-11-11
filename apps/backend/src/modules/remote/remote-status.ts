@@ -37,7 +37,16 @@ export function projectRemoteWifiFrame(payload: unknown): unknown {
 	return projected;
 }
 
-/** Remote status omits local hotspot credentials and radio lifetime tokens. */
+/** Only the internal pairing seed is withheld from authenticated remote config. */
+export function projectRemoteConfig(payload: unknown): unknown {
+	if (typeof payload !== "object" || payload === null) return payload;
+	if (!("pairing_secret" in payload)) return payload;
+	const config = { ...payload };
+	Reflect.deleteProperty(config, "pairing_secret");
+	return config;
+}
+
+/** Remote status retains credentials and omits only local radio lifetime tokens. */
 export function projectRemoteStatus(payload: unknown): unknown {
 	if (
 		typeof payload !== "object" ||
@@ -49,33 +58,14 @@ export function projectRemoteStatus(payload: unknown): unknown {
 		return payload;
 	}
 
-	const projectInterface = (iface: unknown): unknown => {
-		if (typeof iface !== "object" || iface === null) return iface;
-		let projected = iface;
-		if ("incarnation" in iface) {
-			const { incarnation: _incarnation, ...rest } = iface;
-			projected = rest;
-		}
-		if (
-			!("hotspot" in projected) ||
-			typeof projected.hotspot !== "object" ||
-			projected.hotspot === null ||
-			!("password" in projected.hotspot)
-		) {
-			return projected;
-		}
-		const { password: _password, ...hotspot } = projected.hotspot;
-		return { ...projected, hotspot };
-	};
-
 	return {
 		...payload,
 		wifi: Array.isArray(payload.wifi)
-			? payload.wifi.map(projectInterface)
+			? payload.wifi.map(omitIncarnation)
 			: Object.fromEntries(
 					Object.entries(payload.wifi).map(([id, iface]) => [
 						id,
-						projectInterface(iface),
+						omitIncarnation(iface),
 					]),
 				),
 	};

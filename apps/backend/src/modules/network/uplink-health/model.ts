@@ -181,8 +181,9 @@ export class UplinkHealthEngine {
 	): UplinkHealthState {
 		switch (observation.outcome) {
 			case "captive_portal":
-			case "passive_degraded":
 				return "degraded";
+			case "passive_degraded":
+				return current.state === "down" ? "down" : "degraded";
 			case "definitive_loss":
 				return "down";
 			case "failure":
