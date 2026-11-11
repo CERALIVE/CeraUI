@@ -861,7 +861,9 @@ flow marks, per-uplink policy-route support, and the single-flight reconcile loo
 Only packets entering a registered hotspot/shared-LAN zone are eligible; local
 traffic and foreign nftables tables are structurally outside the generated rules.
 Hard-down removes new-flow selection before a mark-scoped conntrack flush and
-route teardown. Full design, failure behavior, deployment dependency, and netns
+route teardown. Post-commit stale-route cleanup failures retain live steering and
+forwarding; the coordinator retries pending cleanup after successful or unchanged
+reconciles. Full design, failure behavior, deployment dependency, and netns
 coverage: [`docs/UPLINK_STEERING.md`](../../docs/UPLINK_STEERING.md).
 
 ### Streaming-first uplink shaping

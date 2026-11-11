@@ -1,3 +1,4 @@
+import { isFibTableAbsent } from "../../../helpers/iproute2-absent.ts";
 import { argMatch, ID_RE, run } from "../../../helpers/run.ts";
 import { parseDefaultRouteInterface } from "../connectivity-candidates.ts";
 import { parseDefaultRouteLine } from "../gateways.ts";
@@ -29,6 +30,18 @@ export interface UplinkRouteManagerDeps {
 }
 
 const defaultDeps: UplinkRouteManagerDeps = { run };
+
+export async function readRouteTable(
+	deps: UplinkRouteManagerDeps,
+	table: string,
+): Promise<string> {
+	try {
+		return await deps.run("ip", ["route", "show", "table", table]);
+	} catch (error) {
+		if (isFibTableAbsent(error, "read")) return "";
+		throw error;
+	}
+}
 
 export async function planUplinkRoute(
 	candidate: UplinkRouteCandidate,
@@ -73,12 +86,7 @@ async function planUplinkRouteInner(
 	if (existingTable === undefined)
 		return await planWithoutSourceRule(candidate, deps);
 	assertTable(existingTable);
-	const routeOutput = await deps.run("ip", [
-		"route",
-		"show",
-		"table",
-		existingTable,
-	]);
+	const routeOutput = await readRouteTable(deps, existingTable);
 	if (
 		parseHasDefaultRoute(routeOutput) &&
 		parseDefaultRouteInterface(routeOutput) === candidate.ifname
