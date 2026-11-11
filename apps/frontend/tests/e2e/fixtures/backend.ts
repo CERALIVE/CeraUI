@@ -79,6 +79,7 @@ export interface WorkerBackend {
 	readonly port: number;
 	readonly previewPort: number;
 	readonly proxySecret: string;
+	readonly streamingMarkerPath: string;
 	stop(): Promise<void>;
 }
 
@@ -245,6 +246,7 @@ async function spawnWorkerBackend(
 	fs.mkdirSync(STATE_ROOT, { recursive: true });
 	const stateDir = fs.mkdtempSync(path.join(STATE_ROOT, `${port}-`));
 	seedStateDir(stateDir);
+	const streamingMarkerPath = path.join(stateDir, "streaming");
 
 	const logPath = path.join(stateDir, "backend.log");
 	const logFd = fs.openSync(logPath, "w");
@@ -254,6 +256,8 @@ async function spawnWorkerBackend(
 		MOCK_SCENARIO: scenario,
 		PORT: String(port),
 		PREVIEW_PORT: "0",
+		// The host and sibling devices must never share this worker's OTA guard.
+		CERALIVE_STREAMING_MARKER: streamingMarkerPath,
 	};
 	if (process.env.CI === "true") {
 		childEnv.E2E_WORKER_PROXY_SECRET = proxySecret;
@@ -272,6 +276,7 @@ async function spawnWorkerBackend(
 		return {
 			...ready,
 			proxySecret,
+			streamingMarkerPath,
 			stop: () => stopChild(child),
 		};
 	} catch (error) {
