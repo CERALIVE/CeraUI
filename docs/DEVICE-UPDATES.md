@@ -191,15 +191,17 @@ requires present whole-string bounded exit properties and a coherent owned unit;
 missing/malformed evidence stays under observation without success or cleanup.
 Host evidence and limits: [update recovery](./UPDATE-RECOVERY.md#capability-regime-and-terminal-package-evidence).
 
-The eight recognised feature tokens are `rauc-verity-streaming`,
+The nine recognised feature tokens are `rauc-verity-streaming`,
 `rauc-activate-on-shutdown`, `slot-sync`, `origin-protection`,
-`apt-all-packages`, `reprune-hook`, `apt-credentials` and `transport-uidrange`.
+`apt-all-packages`, `reprune-hook`, `apt-credentials`, `transport-uidrange` and
+`kernel-apt-stage`.
 Feature requirements:
 
 | Path | Needs |
 |---|---|
 | Package discovery and install by origin (all packages) | `mode: capable`, i.e. `apt-all-packages` |
 | OS checks, OS staging, System image dialog section | `apt-all-packages` and `rauc-verity-streaming` |
+| Kernel discovery, staging, Kernel dialog section | `mode: capable` and `kernel-apt-stage` |
 | Slot mirror, Slots dialog section | `slot-sync` |
 | UID-pinned transfer (`uidFor` in `pin.ts`) | `transport-uidrange`, nonzero and distinct `ota_uid` / `apt_uid` |
 
