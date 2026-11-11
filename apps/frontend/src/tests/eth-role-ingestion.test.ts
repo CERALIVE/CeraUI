@@ -211,9 +211,12 @@ describe("eth_role ingestion", () => {
 				silent: true,
 			});
 			handlers.message?.("eth_role", {
+				eth_role: { name: "eth0", error: "apply_failed" },
+			});
+			handlers.message?.("eth_role", {
 				eth_role: { name: "eth0", role, pending: true },
 			});
-			reply.resolve({ success: false, error: "DEVICE_BUSY" });
+			reply.resolve({ success: false, error: "apply_failed" });
 			await command;
 			expect(getOperationPhase(KEY)).toBe("pending");
 			expect(getOperationTarget(KEY)).toBe(role);
