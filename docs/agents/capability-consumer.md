@@ -159,6 +159,10 @@ second decision after destination. Key concepts:
   mock seam (`shouldUseMocks()` gate) so integration tests can exercise the full
   validation pipeline without real DNS or UDP reachability. See
   `apps/backend/src/mocks/providers/relay.ts` for the mock provider.
+  With mocks disabled, synchronous `ENETUNREACH` or `EHOSTUNREACH` during UDP
+  socket setup returns `{ valid: false, stage: "probe", reason: "refused" }`,
+  using the existing refusal result. Other synchronous setup errors still
+  reject, including malformed or empty addresses.
 
 **New `server/` sub-components [EXISTS]:**
 
