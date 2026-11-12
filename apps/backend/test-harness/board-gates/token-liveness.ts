@@ -1,5 +1,5 @@
 /// <reference types="bun" />
-import { mkdir, rename, rm } from "node:fs/promises";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { wifiInterfaceSchema } from "@ceraui/rpc/schemas";
@@ -66,6 +66,33 @@ export function serializeEvidence(
 		return value;
 	};
 	return `${JSON.stringify(redact(evidence), null, 2)}\n`;
+}
+
+export async function publishEvidence(
+	out: string,
+	temporary: string,
+	json: string,
+	signal: AbortSignal,
+): Promise<void> {
+	await mkdir(dirname(out), { recursive: true });
+	signal.throwIfAborted();
+	try {
+		await rm(temporary, { force: true });
+	} catch (error) {
+		if (error instanceof Error)
+			throw new ProbeError("cannot remove stale temporary result file");
+		throw error;
+	}
+	// Bun.write ignores the mode for string writes; an exclusive create never reuses a broader file.
+	try {
+		await writeFile(temporary, json, { mode: 0o600, flag: "wx" });
+	} catch (error) {
+		if (error instanceof Error)
+			throw new ProbeError("cannot create temporary result file");
+		throw error;
+	}
+	signal.throwIfAborted();
+	await rename(temporary, out);
 }
 
 export function parsePassFile(text: string): string {
@@ -430,11 +457,7 @@ async function main() {
 			creds.sudoPass,
 			creds.BOARD_IP,
 		]);
-		await mkdir(dirname(options.out), { recursive: true });
-		controller.signal.throwIfAborted();
-		await Bun.write(temporary, json, { mode: 0o600 });
-		controller.signal.throwIfAborted();
-		await rename(temporary, options.out);
+		await publishEvidence(options.out, temporary, json, controller.signal);
 		process.exitCode = evidence.pass ? 0 : 1;
 	} finally {
 		controller.abort();

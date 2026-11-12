@@ -63,7 +63,7 @@ before and after must also match. The regulatory dump is recorded once.
 Exit 0 means the gate passed; exit 1 means a completed run recorded a failing
 verdict; exit 2 means invalid input, interruption or an incomplete run. A failing
 released-build verdict is useful reproduction evidence. Output is written once,
-using a temporary file and atomic rename, after all cycles and the final package
+using an owner-only (mode 0600) temporary file created exclusively and an atomic rename, after all cycles and the final package
 read. SIGINT/SIGTERM close clients, cancel SSH, and remove the temporary file.
 A forced SIGKILL cannot publish partial JSON; an existing result remains intact.
 Run in the foreground of `flock` so interruption also releases the board lock.

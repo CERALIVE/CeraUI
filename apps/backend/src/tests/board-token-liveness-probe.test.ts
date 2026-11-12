@@ -1,7 +1,11 @@
 import { expect, test } from "bun:test";
+import { mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import {
 	evaluateLiveness,
 	parsePassFile,
+	publishEvidence,
 	serializeEvidence,
 	type TokenPoll,
 } from "../../test-harness/board-gates/token-liveness.ts";
@@ -185,13 +189,15 @@ const evidence = {
 		{
 			kind: "cold",
 			bootIdChanged: true,
-			polls: [{ atS: 0, rows: [ready] }],
+			polls: [
+				{ atS: 0, rows: [ready], error: "sudo rejected ssh pass  for admin" },
+			],
 			earlyClientTokenS: 0,
 			pass: true,
 			tokenFirstSeenS: 0,
 			tokenAbsentPolls: 0,
 			noEligibleRowPolls: 0,
-			error: "login refused for pass at 192.0.2.10",
+			error: "login refused for pass Ui-Secret-91 at 192.0.2.10",
 		},
 	],
 	pass: true,
@@ -206,6 +212,10 @@ test.each([
 		secrets: ["Ui-Secret-91", "ssh pass ", "192.0.2.10"],
 	},
 ])("redaction keeps verdicts intact with $name", ({ secrets }) => {
+	for (const secret of secrets)
+		expect(stringValues(evidence).some((value) => value.includes(secret))).toBe(
+			true,
+		);
 	const parsed = JSON.parse(serializeEvidence(evidence, secrets));
 
 	expect(Object.keys(parsed)).toEqual(Object.keys(evidence));
@@ -220,6 +230,30 @@ test.each([
 	expect(parsed.windowS).toBe(480);
 	for (const value of stringValues(parsed))
 		for (const secret of secrets) expect(value).not.toContain(secret);
+});
+
+test("the result file is published owner-only and leaves no temporary file", async () => {
+	const root = await mkdtemp(join(tmpdir(), "board-probe-publish-"));
+	const previousUmask = process.umask(0o022);
+	const signal = new AbortController().signal;
+	try {
+		const out = join(root, "nested", "result.json");
+		await publishEvidence(out, `${out}.1.tmp`, '{"pass":true}\n', signal);
+		expect((await stat(out)).mode & 0o777).toBe(0o600);
+		expect(await Bun.file(out).text()).toBe('{"pass":true}\n');
+		expect(await readdir(dirname(out))).toEqual(["result.json"]);
+
+		const staleOut = join(root, "stale.json");
+		const staleTemporary = `${staleOut}.2.tmp`;
+		await writeFile(staleTemporary, "stale", { mode: 0o644 });
+		await publishEvidence(staleOut, staleTemporary, "{}\n", signal);
+		expect((await stat(staleOut)).mode & 0o777).toBe(0o600);
+		expect(await Bun.file(staleOut).text()).toBe("{}\n");
+		expect((await readdir(root)).sort()).toEqual(["nested", "stale.json"]);
+	} finally {
+		process.umask(previousUmask);
+		await rm(root, { recursive: true, force: true });
+	}
 });
 
 test("the SSH pass file keeps trailing spaces and drops one line ending", () => {
