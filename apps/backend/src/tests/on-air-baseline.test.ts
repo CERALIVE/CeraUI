@@ -1,6 +1,14 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import {
+	afterAll,
+	afterEach,
+	beforeAll,
+	beforeEach,
+	describe,
+	expect,
+	test,
+} from "bun:test";
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CerastreamClient } from "@ceralive/cerastream";
@@ -24,6 +32,7 @@ const RUN_OPTS: StreamRunOptions = {
 	pipeline: "hdmi",
 	host: "127.0.0.1",
 	port: 9000,
+	streamid: "test",
 };
 
 const silentLogger: CerastreamBackendDeps["logger"] = {
@@ -173,20 +182,30 @@ function makeContext(): RPCContext {
 
 describe("streaming.setConfig preserves saved format settings", () => {
 	const config = getConfig();
-	const previousVideoCodec = config.video_codec;
 	let configDirectory: string;
 	let previousConfigPath: string;
+	let configFilePath: string;
+	let previousVideoCodec: RuntimeConfig["video_codec"];
 
-	beforeAll(async () => {
+	beforeAll(() => {
 		previousConfigPath = getConfigFilePath();
-		configDirectory = await mkdtemp(join(tmpdir(), "on-air-baseline-"));
-		setConfigFilePath(join(configDirectory, "config.json"));
 	});
 
-	afterAll(async () => {
+	beforeEach(async () => {
+		previousVideoCodec = config.video_codec;
+		configDirectory = await mkdtemp(join(tmpdir(), "on-air-baseline-"));
+		configFilePath = join(configDirectory, "config.json");
+		setConfigFilePath(configFilePath);
+	});
+
+	afterEach(async () => {
 		config.video_codec = previousVideoCodec;
 		setConfigFilePath(previousConfigPath);
 		await rm(configDirectory, { recursive: true, force: true });
+	});
+
+	afterAll(() => {
+		setConfigFilePath(previousConfigPath);
 	});
 
 	test("saving H.264 persists the selected codec", async () => {
@@ -198,10 +217,15 @@ describe("streaming.setConfig preserves saved format settings", () => {
 		);
 
 		expect(result.success).toBe(true);
-		expect(config.video_codec).toBe("h264");
+		expect(getConfig().video_codec).toBe("h264");
+		const persisted = JSON.parse(
+			await readFile(configFilePath, "utf8"),
+		) as RuntimeConfig;
+		expect(persisted.video_codec).toBe("h264");
 	});
 
 	test("an empty settings save leaves the saved codec in place", async () => {
+		config.video_codec = "h264";
 		const result = await call(
 			setConfigProcedure,
 			{},
@@ -209,6 +233,10 @@ describe("streaming.setConfig preserves saved format settings", () => {
 		);
 
 		expect(result.success).toBe(true);
-		expect(config.video_codec).toBe("h264");
+		expect(getConfig().video_codec).toBe("h264");
+		const persisted = JSON.parse(
+			await readFile(configFilePath, "utf8"),
+		) as RuntimeConfig;
+		expect(persisted.video_codec).toBe("h264");
 	});
 });
