@@ -191,9 +191,10 @@ export function handleWifiMonitorEvent(event: MonitorEvent): void {
 			if (event.state === "unavailable") {
 				try {
 					wifiRadioIdentity.markUnavailable(event.device);
-					resume?.();
 				} catch {
 					recordWifiRadioShadowFailure();
+				} finally {
+					resume?.();
 				}
 			}
 			break;

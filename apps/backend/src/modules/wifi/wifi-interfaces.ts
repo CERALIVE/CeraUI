@@ -320,6 +320,7 @@ async function syncActiveConnection(
 export async function wifiUpdateDevices() {
 	let observation: number | undefined;
 	try {
+		wifiRadioObservation.stop();
 		observation = wifiRadioIdentity.captureObservation();
 	} catch {
 		recordWifiRadioShadowFailure();
@@ -332,7 +333,25 @@ export async function wifiUpdateDevices() {
 	let unavailableDevices = false;
 
 	const networkDevices = await nmDevices("device,type,state,con-uuid");
-	if (!networkDevices) return;
+	if (!networkDevices) {
+		if (observation !== undefined) {
+			try {
+				wifiRadioObservation.enqueue(
+					Object.values(getWifiInterfacesByMacAddress()).map((row) => ({
+						ifname: row.ifname,
+						row,
+						...(row.degradedReason
+							? { degradedReason: row.degradedReason }
+							: {}),
+					})),
+					observation,
+				);
+			} catch {
+				recordWifiRadioShadowFailure();
+			}
+		}
+		return;
+	}
 
 	// sorts the results alphabetically by interface name
 	networkDevices.sort();

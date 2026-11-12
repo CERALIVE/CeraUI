@@ -1,4 +1,5 @@
 import { cancelDisruptiveRetries } from "../modules/system/disruptive-retry.ts";
+import { wifiRadioObservation } from "../modules/wifi/wifi-radio-observation.ts";
 import { logger } from "./logger.ts";
 
 export interface BackendShutdownDeps {
@@ -36,6 +37,7 @@ export function handleTerminationSignal(
 	if (shuttingDown) return;
 	shuttingDown = true;
 	cancelDisruptiveRetries();
+	wifiRadioObservation.stop();
 	logger.info(`received ${signal}; shutting down streaming processes`);
 	void (async () => {
 		if (deps.stopRecoveryRetries)

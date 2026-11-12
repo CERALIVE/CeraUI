@@ -142,8 +142,10 @@ until NetworkManager is ready, even if its permanent address is readable.
 Observational incarnations rotate on a changed witness, classification or degraded
 edge. Same-object renames and repeated duplicate runs retain their incarnation.
 Discovery and monitor `unavailable` events project incarnation/degraded-reason
-changes into the observational snapshot, without changing broadcast decisions.
-Existing status builds carry the sampled token when one is available.
+changes into the observational snapshot. An event with no identity row returns
+before advancing the publication sequence, so a virtual or non-Wi-Fi device
+cannot cancel another radio's pending sample. Existing status builds carry
+the sampled token when one is available.
 Projection also requires the exact registry row, its current observation
 generation and a coherent lifetime. A private weak map invalidates evidence
 before discovery publishes or mutates a row. This covers a new row and a reused
@@ -152,9 +154,9 @@ incoherent and superseded observations leave the field absent until a later
 current sample proves it. Monitor-only unavailable edges retain the original
 row association while rotating the token. The existing disconnect broadcast
 still precedes the monitor observation: a private publication fence omits the
-token in that synchronous window and releases it only after rotation succeeds.
-The fence never restores over a newer discovery generation. Legacy data and scheduling remain
-unchanged.
+token in that synchronous window and releases it in `finally`, including when
+the identity update throws. The fence never restores over a newer discovery
+generation. Legacy data and discovery publication remain unchanged.
 Observation sequences fence publication: an older discovery cannot erase a
 later unavailable event or replace a newer completed observation. Canceled
 samples cannot commit their cache or snapshot.
@@ -166,16 +168,39 @@ scheduling change can be accepted and documented.
 
 `wifi-radio-observation.ts` schedules sysfs sampling in a later task, after
 legacy publication and promise completion; legacy callers never await it.
-Only this detached work has one active flight and one replaceable latest queued
-batch. A 100 ms budget aborts the sample and prevents further reads or publication.
-An uncancellable read retains its sole physical slot until it settles, so a hung
-read cannot accumulate additional I/O; legacy discovery remains independent.
-Both integration boundaries contain shadow exceptions. Read failures, timeouts
-and unexpected shadow exceptions increment the internal
-`getWifiRadioShadowFailures()` counter without adding error logs.
+Only this detached work has one logical active flight and one replaceable latest
+queued batch. A 1000 ms budget aborts the sample and prevents further reads or
+publication from that generation. A held uncancellable physical read may settle
+later; a new logical sample does not wait for it. Lost observations resample the
+current registry with a fresh generation and invalidate each row first, after
+250 ms, then 1 s, then 4 s, with at most three consecutive retries.
+Publication and new discovery reset the retry budget. Discovery cancels pending
+observation work before awaiting NetworkManager, and an absent device listing
+still queues the retained registry rows. `stop()` and process SIGTERM/SIGINT
+shutdown cancel retry timers.
 
-Coverage: `wifi-radio-identity.test.ts`, `wifi-discovery-single-flight.test.ts`
-and `wifi-radio-equivalence.test.ts`. After removing only the optional incarnation
+After a publication, a changed wire-projected token on any current row sends
+exactly one additional local Wi-Fi status frame through a callback installed
+beside `broadcastWifiState`. No projected token change means no frame.
+`broadcastMsgLocal` keeps this notification off the cloud relay; the remote
+projection, registry keys, token format, admission and wire fields are unchanged.
+
+Both integration boundaries contain shadow exceptions. Read failures, timeouts
+and unexpected shadow exceptions increment `getWifiRadioShadowFailures()`.
+Each lost sample also emits one string-only `logger.warn`:
+`Wi-Fi identity sample lost (<reason>) for <ifnames>; retry <n>/3`
+for the three retries, and `; no retries left` for the final exhausted loss.
+An initial sample plus three retries that all time out therefore produces four
+warnings and no pending timer. No status object or credential enters these
+warnings.
+
+Coverage: `wifi-token-liveness.test.ts`, `wifi-radio-identity.test.ts`,
+`wifi-discovery-single-flight.test.ts` and `wifi-radio-equivalence.test.ts`.
+Fake-clock liveness tests reproduce the boot-time virtual-interface event,
+failed listing, recovery after timeout, retry exhaustion, local-only token
+arrival, per-row rotation, exception-safe publication fencing, credential-free
+warnings, and stop/discovery/process-shutdown cancellation.
+After removing only the optional incarnation
 field from Wi-Fi rows, nine recorded main fixture families cover
 the resolver tiers, unavailable/missing-operational rows, duplicates, rename and
 replug, public prepare/start results, credentials and broadcast count/order.
@@ -186,7 +211,11 @@ control. Fault tests use fake clocks and capability/command readers to cover
 hanging, slow and rejected sampling plus both integration boundaries.
 The authorized A-only raw-byte assertion now compares all legacy bytes after
 removing only incarnation, with added wire-value rotation and ordinary-status
-stability assertions. Every other pre-existing assertion remains unchanged.
+stability assertions. The owner-authorized L0 changes keep strict legacy-log
+equality while separately requiring the exact lost-sample warning for hung
+and rejected readers. The hang case counts exactly two reads, including the
+fresh discovery after timeout, and still proves releasing the old read adds
+no third call. The slow case and all other assertions remain unchanged.
 Locator-only A tests were
 removed with the explicitly deferred feature. Owner hardware gates G1-G5 are
 unrun and are not claimed;
