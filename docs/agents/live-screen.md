@@ -199,29 +199,122 @@ the cloud dashboard mounts, so they keep federation ABI 1.
 
 ### 5. States and ranges
 
-- **Sources.** None (the existing `source-empty` state), one (the sole-camera
-  auto-select line), typically two to four (HDMI, USB cameras, a network
-  RTMP or SRT ingest, the test pattern), and occasionally many on a USB hub.
-  Names run from short ("HDMI") to long camera names, and German and Hindi
-  labels are the overflow probes.
-- **Layout.** Absent (no node; a saved composition that the engine no longer
-  supports keeps showing `composition-stale-notice`), idle, and live. Live
-  changes are locked until the change that unlocks them lands.
-- **Preview.** Closed; open but not started; playing; paused by the 30 s
-  unwatched auto-stop (collapsing the disclosure counts as unwatched);
-  unavailable. Opening by default does not start anything: `PreviewCanvas`
-  stays disabled until the operator starts it.
-- **Readiness.** Ready; blocked, with the first blocked gate's reason;
-  warned (advisory, Start stays enabled and the warning stays on its row);
-  starting (the optimistic start state on the button); engine unavailable.
-- **Live.** Zero to several banners at once; the source switch present only
-  with two or more capture sources; the post-stream summary window, where the
-  bar shows Done and the telemetry card shows the session summary.
-- **Audio.** Before `audio_mix`: one source picker and the main input's meter,
-  as today. With `audio_mix`: up to four input strips, each with its own meter
-  while live.
-- **Languages.** All ten locales; Arabic is right-to-left; Japanese, Korean and
-  Chinese use the system font fallbacks.
+Every statement about today's code below cites `path:line` at `origin/main`
+918665c9. If a file has moved on since then, find the cited line again by its
+symbol name.
+
+- **Sources.** Rows come in four origins: `capture`, `coarse`, `virtual` (the
+  test pattern) and `network`
+  (`packages/rpc/src/schemas/sources.schema.ts:112,148,155,162`;
+  `apps/frontend/src/lib/components/custom/SourceSection.svelte:251`). The
+  states are:
+  - None: the `source-empty` state (`SourceSection.svelte:1212`).
+  - One capture source and no saved `config.source`: the sole-camera
+    auto-select line `sole-camera-auto`
+    (`apps/frontend/src/main/live/StreamSetupChain.svelte:406-413`). It writes
+    no config until Start (`StreamSetupChain.svelte:183-188`).
+  - Several.
+
+  Expected ranges, which are not code facts: typically two to four sources
+  (HDMI, USB cameras, a network ingest, the test pattern), occasionally many
+  on a USB hub. Names run from short ("HDMI") to long camera names, and German
+  and Hindi labels are the overflow probes.
+- **Layout.** Absent: there is no node unless the engine advertises
+  `composition` (`apps/frontend/src/main/live/IdleCockpit.svelte:137,193`). A
+  saved composition that the engine no longer supports shows
+  `composition-stale-notice` instead (`IdleCockpit.svelte:143-144,200-203`).
+  Today `CompositionCard` is mounted only by `IdleCockpit`
+  (`IdleCockpit.svelte:194`; `LiveCockpit` does not import it), and it
+  disables its controls whenever `isStreaming` is true
+  (`apps/frontend/src/main/live/CompositionCard.svelte:97,184`). Target: the
+  recomposition puts `layout-controls` into the live desk, and the
+  live-layout change removes the lock.
+- **Preview.**
+  - Closed: today's only default
+    (`apps/frontend/src/main/live/PreviewDisclosure.svelte:35`). The 768 px
+    rule above replaces it.
+  - Open but not started: `PreviewCanvas` starts with `enabled` false
+    (`apps/frontend/src/lib/components/preview/PreviewCanvas.svelte:135`), and
+    only the operator's toggle turns it on (`PreviewCanvas.svelte:860-861`).
+    Opening by default therefore dials nothing.
+  - Running: the canvas reports `connecting`, `waiting`, `live`,
+    `reconnecting`, `unsupported` or `error` (`PreviewCanvas.svelte:81-88`).
+  - Paused by the 30 s unwatched auto-stop (`PreviewCanvas.svelte:111,935-939`).
+    The disclosure's `open` is the canvas's `hostActive`
+    (`PreviewDisclosure.svelte:48`), so a collapsed disclosure counts as
+    unwatched (`PreviewCanvas.svelte:904`). Resume clears the pause
+    (`PreviewCanvas.svelte:873-876`).
+  - Unavailable, when the engine's preview availability says so
+    (`PreviewCanvas.svelte:885-888`).
+- **Readiness.** The gates are checked in a fixed order: source, network,
+  destination, engine
+  (`apps/frontend/src/lib/streaming/go-live-readiness.ts:148`).
+  - Ready: no gate is blocked.
+  - Blocked: Start is disabled, and its reason is the first blocked gate in
+    that order (`go-live-readiness.ts:320-321`;
+    `StreamSetupChain.svelte:171-181`).
+  - Warned: a warning never blocks (`go-live-readiness.ts:320-321`), so Start
+    stays enabled. Where the warning shows depends on the gate:
+    - The destination row shows its warning reason
+      (`StreamSetupChain.svelte:238-240,248-252`).
+    - The encoder row takes the warning tone when its config row flags one,
+      with no reason line (`StreamSetupChain.svelte:226-237,245-247`).
+    - An engine warning (engine starting, schema mismatch) has no row and
+      shows in `CapabilityTierBanner` (`StreamSetupChain.svelte:169-170`;
+      `go-live-readiness.ts:279-296`).
+    - The source and network gates never warn: they are either ok or blocked
+      (`go-live-readiness.ts:174-205,214-223`).
+  - Starting: Start is disabled with the starting reason while the optimistic
+    start is in flight (`StreamSetupChain.svelte:171-174`).
+  - Engine unavailable, or control channel down: the engine gate blocks
+    (`go-live-readiness.ts:279-289`).
+- **Live.**
+  - Banners: none, one or several at once, each with its own condition:
+    - Capture bands: standby, composition suspended, passthrough suspended
+      and rate adapted
+      (`apps/frontend/src/main/live/LiveCockpit.svelte:186,218`).
+    - Source lost (`LiveCockpit.svelte:191,262`).
+    - Video signal lost, hidden while the source-lost banner or standby shows
+      (`LiveCockpit.svelte:208-209`).
+    - Audio lost (`LiveCockpit.svelte:202`).
+    - All links down (`LiveCockpit.svelte:195,308`).
+  - Source switch (`apps/frontend/src/main/live/LiveSourceSwitch.svelte`):
+    - When the engine reports a session roster (`activeEncode.switch_targets`,
+      `LiveSourceSwitch.svelte:76`), the roster is authoritative. The card
+      shows when the roster names at least two distinct inputs
+      (`LiveSourceSwitch.svelte:108-111`), and an input may be a capture, a
+      synthetic test pattern or a network leg
+      (`apps/frontend/src/lib/streaming/live-switch-rows.ts:33-62`). So one
+      capture plus one synthetic leg is a switchable pair, with no second
+      discovered capture
+      (`apps/frontend/src/main/live/LiveSourceSwitch.test.ts:106-131`).
+    - An empty roster shows no card and never falls back to the discovered
+      sources. Instead a status line says no source switches are available
+      in this session (`LiveSourceSwitch.svelte:77-78,270-272`).
+    - Only when there is no roster does the legacy rule apply: at least two
+      capture sources, and the running source is a capture or the source-lost
+      state is up (`apps/frontend/src/lib/streaming/live-source-state.ts:75-82`;
+      `LiveSourceSwitch.svelte:108-110`). A status line then says the engine
+      does not report switch targets (`LiveSourceSwitch.svelte:77,270-272`).
+  - The post-stream summary window: the live controls hide
+    (`LiveCockpit.svelte:324`), `IngestStats` stays mounted and shows the
+    session summary (`LiveCockpit.svelte:385`), and Done replaces Stop
+    (`LiveCockpit.svelte:387-394`).
+- **Audio.**
+  - Today, idle: the Source card's `source-audio` block holds one source
+    picker and a meter for the source picked above it. The block shows once a
+    source is in effect (`SourceSection.svelte:245,1233,1504`).
+  - Today, live: the audio line and its meter sit in `LiveSummaryStrip`
+    (`apps/frontend/src/main/live/LiveSummaryStrip.svelte:131-155`).
+  - Target, with `audio_mix`: up to four input strips, each with its own meter
+    while live. Nothing in today's code reads `audio_mix`.
+- **Languages.** There are ten catalogs: `ar`, `de`, `en`, `es`, `fr`, `hi`,
+  `ja`, `ko`, `pt-BR` and `zh` (`packages/i18n/messages/*.json`).
+  - Arabic sets `dir="rtl"` on the document
+    (`packages/i18n/src/locale-lifecycle.ts:48,69-70`;
+    `apps/frontend/src/main/Layout.svelte:219`).
+  - Japanese, Korean and Chinese fall back to system fonts, because Space
+    Grotesk has no CJK glyphs (`apps/frontend/tailwind.config.ts:103-105`).
 
 ### 6. Interaction and layout
 
