@@ -123,5 +123,15 @@ export async function probeReachability(
 				logger.debug("probeReachability: socket setup failed", { err });
 				finish({ reachable: false, reason: "refused" });
 			});
+	}).catch((err: unknown): ProbeResult => {
+		if (
+			err instanceof Error &&
+			"code" in err &&
+			(err.code === "ENETUNREACH" || err.code === "EHOSTUNREACH")
+		) {
+			logger.debug("probeReachability: socket setup failed", { err });
+			return { reachable: false, reason: "refused" };
+		}
+		throw err;
 	});
 }
