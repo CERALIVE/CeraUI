@@ -25,7 +25,7 @@ import { readTelemetry } from "@ceraui/srtla-send/telemetry";
   the activated `/usr/bin/srtla_send`; locally, point it at a .deb-extracted
   binary:
 
-      dpkg-deb -x srtla_4.1.0_amd64.deb /tmp/srtla-extract
+      dpkg-deb -x srtla_4.2.0_amd64.deb /tmp/srtla-extract
       SRTLA_SEND_BIN=/tmp/srtla-extract/usr/bin/srtla_send bun test
 
   Pointed at a PRE-hard-fork binary (3.3.0), the capability assertions are

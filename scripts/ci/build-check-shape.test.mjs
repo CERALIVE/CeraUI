@@ -121,8 +121,8 @@ const browserCacheKey = `${expression('runner.os')}-ms-playwright-v2-${expressio
 	'steps.playwright-version.outputs.version',
 )}`;
 const srtlaRuntimeUrl =
-	'https://github.com/CERALIVE/srtla-send-rs/releases/download/v4.1.0/srtla_4.1.0_amd64.deb';
-const srtlaRuntimeSha256 = '496217e93cde36eeac0bde1b742c21fed6347a198f05a8cd898be116946b1eb8';
+	'https://github.com/CERALIVE/srtla-send-rs/releases/download/v4.2.0/srtla_4.2.0_amd64.deb';
+const srtlaRuntimeSha256 = 'ec6ed389cf80c472dd1ebf3d8fd820c3bd1517517d54fbf24420322a7affd14f';
 const srtlaDriftedUrl =
 	'https://github.com/CERALIVE/srtla-send-rs/releases/latest/download/srtla_amd64.deb';
 // `setup-e2e` and `test-be` each fetch the pinned runtime, so every mutation
