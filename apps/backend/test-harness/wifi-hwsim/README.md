@@ -15,6 +15,79 @@ physical Wi-Fi hardware**.
 
 ---
 
+## Local VM without host root
+
+`vm/run-vm.sh` runs the same harness in a disposable Debian 12 **generic**
+amd64 guest with its full kernel, NetworkManager, wpa_supplicant and hostapd.
+It requires Linux with readable/writable `/dev/kvm`, QEMU (`qemu-system-x86_64`
+and `qemu-img`), xorriso, OpenSSH, curl, coreutils, flock, tar and Python 3.
+No host module, Docker or administrator password is needed. This remains
+local-only infrastructure, outside shared CI.
+
+From the repository root, set `TMPDIR` to an existing disk-backed directory
+outside `/tmp` (including symlinks), then run:
+
+```bash
+bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh --radios 2 -- bash integration-test.sh
+bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh --radios 4 -- sh -c 'iw dev | grep -c Interface'
+bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh --radios 2 -- false
+```
+
+The first command must print `connected` and exit 0, the second prints at least
+4 interfaces, and the third returns the command's nonzero exit status. On the
+host, `lsmod | grep -c hwsim` must print `0` before and after (grep exits 1 when
+there are no matches). The module is checked with `modinfo` and loaded only
+inside the guest. The AP uses the same `CeraTest` SSID, `ceratest1234` test
+passphrase, channel 6 and WPA2 settings as the container flow. The guest leaves
+the first radio unmanaged by NetworkManager and manages the second as client.
+Static guest-only test addresses (`192.0.2.1/24` and `192.0.2.2/24`) let the
+unchanged integration test exercise association and report `connected` without
+a DHCP server; this does not test DHCP or Internet access.
+
+Flags:
+
+| Flag | Effect |
+|---|---|
+| `--radios N` | Create 2 to 100 radios, default 2. |
+| `--repo PATH` | Copy that repository's committed `HEAD` via `git archive` to `/repo`, and copy the workstation's Bun 1.4.4 to `/usr/local/bin/bun`. Uncommitted files, dependencies and submodules are excluded. Commands still start in `/harness`; `HWSIM_REPO=/repo` is available. |
+| `--keep` | After a successful command, print the SSH command and hold the VM up for inspection until the runner is interrupted or one hour elapses. Keep the runner alive in its terminal; it still owns cleanup. |
+
+The image lives under `$TMPDIR/hwsim-vm/images/`, separate from scripts and
+per-run files. Each invocation fetches Debian's published `SHA512SUMS` over
+certificate-validated HTTPS, selects the exact generic amd64 qcow2 entry and
+checks the image bytes, including cached images. The inspected Debian cloud
+directory publishes no detached signature alongside that checksum file:
+this verifies the digest from Debian's HTTPS origin, not an independently
+authenticated signing key. A corrupt cached image is rejected before boot and
+replaced with one fresh download, which must pass the checksum. A changed published digest
+gets its own cache directory. Interrupted downloads never become cached images.
+
+Each run creates a fresh copy-on-write overlay and NoCloud `cidata` ISO,
+a new instance identity, throwaway SSH key and private known-hosts file.
+The VM uses two vCPUs with host CPU features (required by the copied Bun binary),
+2 GiB RAM and user networking with SSH bound only to
+`127.0.0.1` on an available host port. Downloads, SSH boot (300 seconds),
+cloud-init (600 seconds), transfers and setup all have bounded deadlines.
+The requested command has a 900-second deadline; expiry returns nonzero.
+The runner returns the inner command's exit code rather than boot success.
+On exit, failure, SIGINT or SIGTERM it powers off only the QEMU PID it started,
+escalates if necessary, and removes the entire run directory, including overlay,
+seed, SSH key and partial downloads. `--keep` also cleans up when interrupted.
+SIGKILL or host power loss cannot execute shell traps.
+
+The Debian image cache is the only persistent VM artifact. A completed run
+prints its QEMU PID and removed run directory as cleanup receipts. Do not
+commit images, overlays or seed ISOs.
+
+Parity verified on November 12, 2026 with the generic image's
+`6.1.0-54-amd64` kernel: the unchanged `integration-test.sh` exited 0 with
+`GENERAL.STATE:100 (connected)`. The host's hwsim module count was 0 before
+and after, and the owned QEMU process and run directory were removed.
+The VM path is available for simulated-radio checks; no owner-run fallback
+was needed.
+
+---
+
 ## Why these values?
 
 The AP defaults mirror the task harness contract and are close to the CeraUI
@@ -33,7 +106,7 @@ Override via env: `CERATEST_SSID`, `CERATEST_PSK`, `HWSIM_RADIOS`.
 
 ---
 
-## Prerequisites
+## Container prerequisites
 
 1. **A real Linux host.** `mac80211_hwsim` is a Linux **kernel module**; it runs
    in the host kernel, not in a container or VM you don't control.
