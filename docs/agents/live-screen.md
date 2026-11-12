@@ -1,13 +1,13 @@
 ## LIVE SCREEN: CONTRACT AND DESIGN BRIEF [GREENFIELD]
 
 This file is the target structure of the Live destination, written before any
-of it is built. It is not a description of today's screen.
+of it is built. It is not a description of the screen that ships now.
 
 How to read it:
 
-- A sentence that starts with **Today** describes the code at `origin/main`
-  cf14b600 and cites one `path:line`. If the file has moved on since then, find
-  the line again by its symbol name.
+- A sentence that starts with **Today** describes a constant, a document or
+  what a test asserts at `origin/main` cf14b600, and cites one `path:line`. If
+  the file has moved on since then, find the line again by its symbol name.
 - Every other sentence is a requirement ("must") or a design decision for the
   changes below.
 
@@ -54,13 +54,6 @@ These test ids must keep their names and meaning: `idle-cockpit`,
 `composition-stale-notice`, `live-roadmap`, `live-summary-strip` and
 `summary-done`. No region or test id may be added beyond the table above.
 
-**Today** `IdleCockpit` mounts `CompositionCard` when the engine's capability
-features include `composition`
-(`apps/frontend/src/main/live/IdleCockpit.svelte:137-194`). **Today**, when a
-composition is saved but the engine does not advertise the feature,
-`IdleCockpit` shows `composition-stale-notice` instead
-(`apps/frontend/src/main/live/IdleCockpit.svelte:143-203`).
-
 #### Idle order, inside the `idle-cockpit` root
 
 1. `program-desk`: the preview (`preview-disclosure`), then `layout-controls`.
@@ -71,40 +64,31 @@ composition is saved but the engine does not advertise the feature,
    `live-bar`.
 4. `live-roadmap`.
 
-**Today** a unit test pins the idle order as `source-section`,
+**Today** a unit test expects the idle order `source-section`,
 `preview-disclosure`, `stream-setup-chain`, `live-roadmap`
 (`apps/frontend/src/main/live/IdleCockpit.order.test.ts:50-55`). **Today** an
-end-to-end test asserts that `preview-disclosure` and `source-section` share a
+end-to-end test expects `preview-disclosure` and `source-section` to share a
 parent element (`apps/frontend/tests/e2e/liveview-preview.spec.ts:166-169`).
-The recomposition changes both expectations and must list each one before and
+The recomposition must change both expectations and list each one before and
 after in its pull request.
 
-**Today** the Source card's `source-audio` block contains the
-`open-audio-dialog` button, which opens the Audio dialog
-(`apps/frontend/tests/e2e/live.spec.ts:82`). `audio-card` must contain that
-block with its ids unchanged.
+**Today** an end-to-end test, after it selects a source, expects one
+`open-audio-dialog` inside `source-audio` and expects it to open the Audio
+Settings dialog (`apps/frontend/tests/e2e/live.spec.ts:76-86`). `audio-card`
+must contain the `source-audio` block with its ids unchanged.
 
 #### Live order, inside the `live-cockpit` root
 
-1. The banners that `LiveCockpit` mounts before `LiveSummaryStrip` (see
-   below), unchanged.
+1. The status banners of `LiveCockpit`. This work must not change their content
+   or the conditions that show them.
 2. `program-desk`, with the preview, `LiveSummaryStrip`, `LiveSourceSwitch` and
    `layout-controls`.
 3. `audio-card`, when the engine advertises `audio_mix`. It holds the mixer
-   strips. Without `audio_mix`, the live audio line and its meter must stay in
-   `LiveSummaryStrip`.
+   strips. Without `audio_mix`, the live audio line and its level meter must be
+   shown in `LiveSummaryStrip`.
 4. `telemetry-card`, with `StreamTelemetryStrip` and `IngestStats`.
 5. `live-bar`, with `BitrateAdjuster` and the Stop button, or the Done button
    in the post-stream summary window.
-
-**Today**, outside the summary window, `LiveCockpit` mounts after its banners
-`LiveSummaryStrip`, `LiveSourceSwitch`, `PreviewDisclosure`,
-`StreamTelemetryStrip` and `BitrateAdjuster`, then `IngestStats` and Stop
-(`apps/frontend/src/main/live/LiveCockpit.svelte:218-407`). **Today**
-`summary-done` renders in the summary window and is absent outside it
-(`apps/frontend/src/main/live/LiveCockpit.test.ts:79-96`). **Today**
-`LiveSummaryStrip` holds the live audio line, when there is one, and an audio
-level meter under it (`apps/frontend/src/main/live/LiveSummaryStrip.svelte:131-155`).
 
 #### The Live bar
 
@@ -114,16 +98,6 @@ level meter under it (`apps/frontend/src/main/live/LiveSummaryStrip.svelte:131-1
   visible text, or a ready state, and Start.
 - Live, it must show the bitrate control and Stop.
 
-**Today**, while a start is in flight, Start's disabled reason is the starting
-text; otherwise it is the reason of the first blocked gate that
-`deriveGoLiveReadiness` reports
-(`apps/frontend/src/main/live/StreamSetupChain.svelte:172-181`). **Today** a
-disconnected control channel blocks both the network and the engine gate, and
-`deriveGoLiveReadiness` reports the network gate first
-(`apps/frontend/src/lib/streaming/go-live-readiness.test.ts:533-543`). **Today** the Start
-button carries that reason in its `title` attribute
-(`apps/frontend/src/main/live/StreamSetupChain.test.ts:259-261`).
-
 #### Screen sizes
 
 - At 1024 px and wider the screen must have two columns: `program-desk` on the
@@ -132,15 +106,13 @@ button carries that reason in its `title` attribute
 - At 1024x600 nothing may overflow horizontally, and Start must be visible
   without scrolling.
 
-**Today** desktop chrome applies at 1024 px wide and above, or at 768 px wide
-and above when the height is 600 px or less
-(`apps/frontend/src/lib/layout.ts:29-30`). **Today**, when desktop chrome does
-not apply, `MainView` shows a fixed bottom dock and pads the page by
-`--mobile-dock-height` (`apps/frontend/src/main/MainView.svelte:98-108`).
-**Today** the toast stack is offset above the dock by the same variable
-(`apps/frontend/src/tests/persistent-notice-surface.test.ts:129-137`). The Live
-bar must sit above the dock using that variable, and the toast stack must sit
-above the bar.
+**Today** `DESKTOP_CHROME_QUERY` is
+`(min-width: 1024px), (min-width: 768px) and (max-height: 600px)`
+(`apps/frontend/src/lib/layout.ts:29-30`). **Today** `app.css` sets
+`--mobile-dock-height` to 7rem and documents it as the height of the fixed
+mobile dock (`apps/frontend/src/app.css:230-235`). The Live bar must sit above
+the mobile dock, offset by `--mobile-dock-height`, and the toast stack must sit
+above the Live bar.
 
 #### The preview's open state
 
@@ -149,22 +121,15 @@ above the bar.
 be kept in `localStorage` under the key `ceraui.live.previewOpen` and must win
 over the default.
 
-**Today** `preview-disclosure` starts closed when it mounts
-(`apps/frontend/src/main/live/PreviewDisclosure.svelte:35`). **Today** the
-preview canvas stays off until the operator enables it with its own toggle
-(`apps/frontend/src/lib/components/preview/PreviewCanvas.test.ts:144-154`), so
-an open disclosure does not by itself start a preview. **Today** end-to-end
-helpers open the disclosure by clicking its summary
+**Today** end-to-end helpers open the disclosure by clicking its summary
 (`apps/frontend/tests/e2e/liveview-preview.spec.ts:119-124`). A click on a
 `<details>` summary toggles it, so with an open default on wide viewports the
 recomposition must update those helpers.
 
-#### One cockpit, one preview
+#### One preview
 
-**Today** `LiveView` mounts `LiveCockpit` or `IdleCockpit` through one if/else
-branch (`apps/frontend/src/main/LiveView.svelte:1043-1107`). The Live screen
-must mount one `PreviewCanvas` and one Start or Stop button at a time; a
-dialog opened over it is outside this rule.
+The Live screen must mount one `PreviewCanvas` and one Start or Stop button at
+a time; a dialog opened over it is outside this rule.
 
 #### Dialogs
 
@@ -174,9 +139,9 @@ dialog (destination row); `audio-card` must open the Audio dialog; the network
 row must go to the Network destination.
 
 **Today** the federated bundles are `encoder.js`, `audio.js` and `server.js`,
-built from the Encoder, Audio and Server entry points
-(`docs/agents/federation-producer-pipeline.md:16-18`). **Today** a test pins
-the federation ABI version at 1
+one per config dialog, built from the Encoder, Audio and Server entry points
+(`docs/agents/federation-producer-pipeline.md:12-18`). **Today** a unit test
+pins the federation ABI version at 1
 (`apps/frontend/src/lib/federation/host-contract.test.ts:57`). These dialogs
 must keep that ABI.
 
@@ -191,8 +156,9 @@ must keep that ABI.
   switches the source, changes the layout or the audio, nudges the bitrate,
   stops. The screen must give status at a glance and one obvious control for
   each action.
-- **Cloud dashboard user.** Edits the Encoder, Audio and Server dialogs
-  remotely. This screen opens those same dialogs and must not change them.
+- **Cloud dashboard user.** Works with the Encoder, Audio and Server dialogs
+  through the federated bundles listed under "Dialogs". This screen must open
+  those same dialogs and must not change them.
 
 ### 2. Outcome and proof
 
@@ -219,7 +185,7 @@ must keep that ABI.
 ### 3. Selected direction
 
 - **Visual authority.** The Ground Control world of `.impeccable.md`. This
-  work refines the screen within that world and must add no token.
+  work must refine the screen within that world and must add no token.
 - **Structural thesis: desk, cards, bar.** The picture is the instrument's
   display, so it leads, in the desk. Configuration follows in cards ordered the
   way the signal flows: source and its audio, then output, then connections.
@@ -268,15 +234,18 @@ The screen must handle each of these states:
   unwatched, and unavailable.
 - **Readiness.** Ready, blocked, warned (which must not block Start), starting,
   and engine unavailable or channel disconnected.
+- **Stream lifecycle.** Idle, starting, live, stopping, the post-stream summary
+  window, and a failed start or stop.
 - **Live.** Zero or several banners, the source switch shown or not, and the
   post-stream summary window.
 - **Audio.** One source picker and its meter without `audio_mix`; up to four
   input strips with a meter each while live with `audio_mix`.
-- **Languages.** **Today** ten locales ship
-  (`packages/i18n/src/locale-lifecycle.ts:28-38`). **Today** choosing Arabic
-  sets `dir="rtl"` on the document
-  (`apps/frontend/src/main/Layout.svelte:219`). Every locale must render
-  without overflow, and Arabic must mirror the layout.
+- **Languages.** **Today** `LOCALES` lists ten locales
+  (`packages/i18n/src/locale-lifecycle.ts:28-38`). **Today** an end-to-end test
+  that runs on the desktop project expects `dir="rtl"` on the document after
+  Arabic is chosen in the locale selector
+  (`apps/frontend/tests/e2e/locale-parity.spec.ts:114-123`). Every
+  locale must render without overflow, and Arabic must mirror the layout.
 
 ### 6. Interaction and layout
 
@@ -309,8 +278,8 @@ The screen must handle each of these states:
 - **Accessibility.** WCAG AA in dark and light, logical properties for
   right-to-left, and the 1024x600 kiosk fit (`PRODUCT.md`, Accessibility).
 - **Localization.** Every new string must be a new key in each
-  `packages/i18n/messages/*.json` file, written natively per locale. Keys that
-  are already there must keep their text, and nothing may write
+  `packages/i18n/messages/*.json` file, written natively per locale. A change
+  must not alter the text of a key it did not add, and nothing may write
   `packages/i18n/tests/fixtures/*.rendered.json`.
 - **Open for the final design pass.** Whether the desk column stays pinned while
   the cards column scrolls on wide screens, and the width split between the two
@@ -322,19 +291,20 @@ The structure above came settled, so no discovery interview ran. These
 readings fill gaps in it and can be corrected in a later change:
 
 1. "Left" for the desk column means the inline-start side, mirrored in Arabic.
-2. Inside `live-cockpit`, the banners lead the cards column at 1024 px and
-   wider; anything `LiveView` renders above the cockpit stays full width.
-3. Regions named "card" inside a host card are titled groups, not second
+2. Inside `live-cockpit`, the banners must lead the cards column at 1024 px
+   and wider; anything `LiveView` renders above the cockpit must stay full
+   width.
+3. Regions named "card" inside a host card must be titled groups, not second
    bordered surfaces.
-4. `composition-stale-notice` keeps its id and takes the place of
+4. `composition-stale-notice` must keep its id and take the place of
    `layout-controls` inside `program-desk` when `composition` is not
    advertised.
-5. The 768 px default is read once, at first render. Resizing later does not
-   flip it, and only the operator's own toggle is stored.
-6. The stored value is the string `true` or `false`; any other value is
-   treated as absent.
+5. The 768 px default must be read once, at first render. Resizing later must
+   not flip it, and the operator's own toggle is the one choice to store.
+6. The stored value must be the string `true` or `false`; any other value must
+   be treated as absent.
 7. On a short landscape kiosk narrower than 1024 px (for example 800x480) the
-   screen is one column and the Live bar sits at the viewport bottom, because
-   that size gets desktop chrome without a dock (see "Screen sizes").
+   screen must be one column and the Live bar must sit at the viewport bottom,
+   because `DESKTOP_CHROME_QUERY` (see "Screen sizes") matches that size.
 8. Source tiles and the full-width detail below the selected tile are this
    brief's reading of "rows shown as tiles".
