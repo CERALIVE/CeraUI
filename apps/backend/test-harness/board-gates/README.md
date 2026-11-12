@@ -18,7 +18,11 @@ Hold the shared board lock for the whole invocation. The credential file contain
 the file itself as literal `KEY=value` lines, optionally quoted or prefixed with
 `export`; it never sources shell text or expands variables. A relative SSH pass
 file path resolves beside the credential env file. Keep these files outside Git.
-No credential value or board address is printed or retained in the output.
+No credential value or board address is printed or retained in the output:
+every occurrence inside a JSON string value is replaced with `<redacted>`, while
+keys, numbers and booleans are left intact. The SSH pass file loses only its
+terminal line ending, so trailing spaces stay part of the password as `sshpass`
+reads it.
 
 All four flags are required. Cycle counts are positive integers (at most 100 per
 entry); unknown kinds, empty entries, duplicate flags and malformed counts fail
@@ -41,14 +45,17 @@ WebSocket login/status read has a 15 second deadline; the retained client uses
 keepalive/pong frames and fails a 30 second inbound silence check.
 
 The JSON includes one object per cycle with `kind`, `bootIdChanged`, `polls`,
-`tokenFirstSeenS`, `tokenAbsentPolls` and `earlyClientTokenS`. Each poll retains
+`tokenFirstSeenS`, `tokenAbsentPolls`, `noEligibleRowPolls` and `earlyClientTokenS`. Each poll retains
 only `ifname`, `hasToken`, `degraded_reason` and `supports_hotspot` for each Wi-Fi
 row. It never retains hotspot settings or authentication tokens. Absent-token
 polls count polls at or after 30 seconds with any usable hotspot-capable row
-missing its token. Both each cycle and the whole run carry `pass`: all late polls
-must contain rows, all eligible rows must have tokens, and the uninterrupted early
-client must have received a token-bearing status frame. Read failures and empty
-observations cannot pass. If the first accepted login loses its client before
+missing its token. A row is eligible when it supports hotspot and has no
+`degraded_reason`. `noEligibleRowPolls` counts polls at or after 30 seconds with
+no eligible row, so a radio that degrades or loses hotspot support cannot pass by
+exemption. Both each cycle and the whole run carry `pass`: every late poll must
+contain at least one eligible row, all eligible rows must have tokens, and the
+uninterrupted early client must have received a token-bearing status frame. Late
+read failures and empty late observations cannot pass. If the first accepted login loses its client before
 status hydration completes, the cycle fails rather than substituting a reconnect.
 Package versions from `dpkg-query -W ceralive-device`
 before and after must also match. The regulatory dump is recorded once.

@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import {
 	evaluateLiveness,
+	parsePassFile,
+	serializeEvidence,
 	type TokenPoll,
 } from "../../test-harness/board-gates/token-liveness.ts";
 
@@ -70,6 +72,33 @@ test.each([
 		pass: true,
 	},
 	{
+		name: "a late poll whose only row is degraded fails",
+		polls: [
+			{
+				atS: 45,
+				rows: [{ ...ready, hasToken: false, degraded_reason: "unavailable" }],
+			},
+		],
+		early: 0,
+		pass: false,
+	},
+	{
+		name: "a late poll whose only row lost hotspot support fails",
+		polls: [{ atS: 45, rows: [{ ...ready, supports_hotspot: false }] }],
+		early: 0,
+		pass: false,
+	},
+	{
+		name: "losing the last eligible row at one late poll fails",
+		polls: [
+			{ atS: 30, rows: [ready] },
+			{ atS: 35, rows: [{ ...ready, degraded_reason: "unavailable" }] },
+			{ atS: 40, rows: [ready] },
+		],
+		early: 0,
+		pass: false,
+	},
+	{
 		name: "fresh clients cannot substitute for the early client",
 		polls: [{ atS: 45, rows: [ready] }],
 		early: null,
@@ -120,5 +149,83 @@ test("counts absent polls after the deadline and records recovery time", () => {
 		pass: false,
 		tokenFirstSeenS: 50,
 		tokenAbsentPolls: 2,
+		noEligibleRowPolls: 0,
 	});
+});
+
+test("counts late polls without an eligible row", () => {
+	const degraded = { ...ready, degraded_reason: "unavailable" };
+	const polls: TokenPoll[] = [
+		{ atS: 0, rows: [degraded] },
+		{ atS: 30, rows: [degraded] },
+		{ atS: 35, rows: [ready] },
+	];
+
+	expect(evaluateLiveness(polls, 0)).toMatchObject({
+		pass: false,
+		tokenAbsentPolls: 0,
+		noEligibleRowPolls: 1,
+	});
+});
+
+const stringValues = (value: unknown): string[] =>
+	typeof value === "string"
+		? [value]
+		: value && typeof value === "object"
+			? Object.values(value).flatMap(stringValues)
+			: [];
+
+const evidence = {
+	recordedAt: "2026-11-12T00:00:00.000Z",
+	windowS: 480,
+	packageBefore: "ceralive-device 2026.11.2 true pass",
+	packageAfter: "ceralive-device 2026.11.2 true pass",
+	iwReg: "country 00: DFS-UNSET",
+	cycles: [
+		{
+			kind: "cold",
+			bootIdChanged: true,
+			polls: [{ atS: 0, rows: [ready] }],
+			earlyClientTokenS: 0,
+			pass: true,
+			tokenFirstSeenS: 0,
+			tokenAbsentPolls: 0,
+			noEligibleRowPolls: 0,
+			error: "login refused for pass at 192.0.2.10",
+		},
+	],
+	pass: true,
+};
+
+test.each([
+	{ name: "a credential equal to true", secrets: ["true"] },
+	{ name: "a credential equal to 0", secrets: ["0"] },
+	{ name: "a credential equal to a verdict key", secrets: ["pass"] },
+	{
+		name: "realistic credentials and address",
+		secrets: ["Ui-Secret-91", "ssh pass ", "192.0.2.10"],
+	},
+])("redaction keeps verdicts intact with $name", ({ secrets }) => {
+	const parsed = JSON.parse(serializeEvidence(evidence, secrets));
+
+	expect(Object.keys(parsed)).toEqual(Object.keys(evidence));
+	expect(parsed.pass).toBe(true);
+	expect(parsed.cycles).toHaveLength(1);
+	expect(parsed.cycles[0]).toMatchObject({
+		pass: true,
+		tokenAbsentPolls: 0,
+		noEligibleRowPolls: 0,
+		bootIdChanged: true,
+	});
+	expect(parsed.windowS).toBe(480);
+	for (const value of stringValues(parsed))
+		for (const secret of secrets) expect(value).not.toContain(secret);
+});
+
+test("the SSH pass file keeps trailing spaces and drops one line ending", () => {
+	expect(parsePassFile("secret \n")).toBe("secret ");
+	expect(parsePassFile("secret\t\r\n")).toBe("secret\t");
+	expect(parsePassFile("secret")).toBe("secret");
+	expect(() => parsePassFile("\n")).toThrow();
+	expect(() => parsePassFile("one\ntwo\n")).toThrow();
 });

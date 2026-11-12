@@ -22,20 +22,22 @@ export function evaluateLiveness(
 	earlyClientTokenS: number | null,
 ) {
 	const late = polls.filter((poll) => poll.atS >= 30);
+	const eligible = (row: TokenRow) => row.supports_hotspot && !row.degraded_reason;
 	const tokenAbsentPolls = late.filter((poll) =>
-		poll.rows.some(
-			(row) => row.supports_hotspot && !row.degraded_reason && !row.hasToken,
-		),
+		poll.rows.some((row) => eligible(row) && !row.hasToken),
 	).length;
+	const noEligibleRowPolls = late.filter((poll) => !poll.rows.some(eligible)).length;
 	return {
 		pass:
 			late.length > 0 &&
 			tokenAbsentPolls === 0 &&
+			noEligibleRowPolls === 0 &&
 			earlyClientTokenS !== null &&
 			late.every((poll) => !poll.error && poll.rows.length > 0),
 		tokenFirstSeenS:
 			polls.find((poll) => poll.rows.some((row) => row.hasToken))?.atS ?? null,
 		tokenAbsentPolls,
+		noEligibleRowPolls,
 	};
 }
 
@@ -43,6 +45,34 @@ class ProbeError extends Error {
 	constructor(message: string, readonly loginAccepted = false) {
 		super(message);
 	}
+}
+
+export function serializeEvidence(
+	evidence: unknown,
+	secrets: readonly string[],
+): string {
+	// Only string values are redacted: keys, numbers and booleans stay valid JSON.
+	const redact = (value: unknown): unknown => {
+		if (typeof value === "string")
+			return secrets.reduce(
+				(text, secret) => text.replaceAll(secret, "<redacted>"),
+				value,
+			);
+		if (Array.isArray(value)) return value.map(redact);
+		if (value && typeof value === "object")
+			return Object.fromEntries(
+				Object.entries(value).map(([key, item]) => [key, redact(item)]),
+			);
+		return value;
+	};
+	return `${JSON.stringify(redact(evidence), null, 2)}\n`;
+}
+
+export function parsePassFile(text: string): string {
+	// sshpass -f keeps trailing spaces, so only the terminal line ending is dropped.
+	const pass = text.replace(/\r?\n$/, "");
+	if (!pass || /[\r\n]/.test(pass)) throw new ProbeError("invalid SSH pass file");
+	return pass;
 }
 const cycleKind = z.enum(["cold", "restart", "nm-restart"]);
 type CycleKind = z.infer<typeof cycleKind>;
@@ -125,16 +155,14 @@ async function readCredentials(path: string) {
 		...parsed.data,
 		BOARD_SSH_PASS_FILE: resolve(dirname(path), parsed.data.BOARD_SSH_PASS_FILE),
 	};
-	let sudoPass: string;
+	let passText: string;
 	try {
-		sudoPass = (await Bun.file(credentials.BOARD_SSH_PASS_FILE).text()).trimEnd();
+		passText = await Bun.file(credentials.BOARD_SSH_PASS_FILE).text();
 	} catch (error) {
 		if (error instanceof Error) throw new ProbeError("cannot read SSH pass file");
 		throw error;
 	}
-	if (!sudoPass || /[\r\n]/.test(sudoPass))
-		throw new ProbeError("invalid SSH pass file");
-	return { ...credentials, sudoPass };
+	return { ...credentials, sudoPass: parsePassFile(passText) };
 }
 
 async function ssh(
@@ -397,9 +425,11 @@ async function main() {
 			packageBefore: before, packageAfter: after, iwReg: reg, cycles,
 			pass: before === after && cycles.every((entry) => entry.pass),
 		};
-		let json = `${JSON.stringify(evidence, null, 2)}\n`;
-		for (const secret of [creds.UI_PASS, creds.sudoPass, creds.BOARD_IP])
-			json = json.replaceAll(secret, "<redacted>");
+		const json = serializeEvidence(evidence, [
+			creds.UI_PASS,
+			creds.sudoPass,
+			creds.BOARD_IP,
+		]);
 		await mkdir(dirname(options.out), { recursive: true });
 		controller.signal.throwIfAborted();
 		await Bun.write(temporary, json, { mode: 0o600 });
