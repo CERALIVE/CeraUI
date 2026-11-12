@@ -69,13 +69,37 @@ The real status builder requires evidence for the exact current registry row
 and its observation generation, with a coherent lifetime witness. It does not
 accept an interface-name match alone. It does not await sysfs, mint a fallback, or
 change legacy discovery, registry keys, numeric ids, credential ownership,
-broadcast timing, or handler admission. Before detached observation completes,
+or handler admission. Before detached observation completes,
 or when no current coherent observation exists, the field is absent. Discovery
 invalidates prior evidence before publishing or mutating rows, including reused
 row objects. Detached samples carry their captured row and generation; a late,
 failed, timed-out or incoherent observation cannot authorize an older token.
-The next existing status pull, initial snapshot, or broadcast carries the token
-only once current evidence is proven. No new broadcast or discovery wait is added.
+After a detached publication, the producer compares each current row's projected
+wire token with its value before publication. A changed token sends exactly one
+Wi-Fi status frame to authenticated local clients through `broadcastMsgLocal`;
+unchanged projected tokens send none. The cloud relay receives no additional
+frame and its projection is unchanged. Existing pulls and initial snapshots
+also carry proven tokens. Legacy discovery never waits for sampling.
+
+Each sample has a 1000 ms budget. A lost sample (superseded, aborted, timed out
+or rejected) resamples the current registry rows with a fresh generation after
+250 ms, then 1 s, then 4 s, for at most three consecutive retries. Each retry
+invalidates those rows before sampling. A publication or a new discovery resets
+the retry budget. Discovery cancels pending observation work before awaiting
+the device listing; an absent listing still queues the retained registry rows.
+An `unavailable` event for an interface that has no identity row does not advance
+the publication sequence. The monitor publication fence is released in `finally`,
+including when the identity update throws.
+
+There is at most one logical sample in flight and one latest queued batch.
+A timed-out physical read may settle later; its aborted generation cannot issue
+further reads or publish. A fresh sample can proceed without waiting for it.
+`stop()` and production SIGTERM/SIGINT shutdown cancel pending retry timers.
+Each lost sample logs only a string identifying its reason and interface names:
+`Wi-Fi identity sample lost (<reason>) for <ifnames>; retry <n>/3` for retries
+1, 2 and 3; the final loss ends with `; no retries left`. Thus an initial
+sample and three retries that all time out produce four warnings and no
+remaining timer. These warnings contain no status payload or credentials.
 
 The producer's existing coherent ifindex/wiphy/path evidence rotates the random
 token on a replacement, replug, classification change, or either degraded edge.

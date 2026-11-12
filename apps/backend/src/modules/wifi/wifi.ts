@@ -57,6 +57,7 @@ import { logParseError } from "../system/cli-parse.ts";
 import type { MessageSocket } from "../ui/message-socket.ts";
 import {
 	broadcastMsg,
+	broadcastMsgLocal,
 	buildMsg,
 	getSocketSenderId,
 } from "../ui/websocket-server.ts";
@@ -111,7 +112,10 @@ import {
 	type WifiInterfaceId,
 } from "./wifi-interfaces.ts";
 import { wifiRadioIdentity } from "./wifi-radio-identity.ts";
-import { projectWifiRadioIncarnation } from "./wifi-radio-publication.ts";
+import {
+	projectWifiRadioIncarnation,
+	setWifiRadioPublicationListener,
+} from "./wifi-radio-publication.ts";
 import {
 	planWifiStationJoin,
 	saeActivateArgs,
@@ -413,6 +417,11 @@ export function broadcastWifiState() {
 	broadcastMsg("status", { wifi: wifiBuildMsg() });
 	recordHotspotClientsBroadcast();
 }
+
+setWifiRadioPublicationListener(() => {
+	broadcastMsgLocal("status", { wifi: wifiBuildMsg() });
+	recordHotspotClientsBroadcast();
+});
 
 /*
   Record one saved infrastructure connection on the interface(s) it can be used

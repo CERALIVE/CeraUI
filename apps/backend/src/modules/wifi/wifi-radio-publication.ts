@@ -6,6 +6,16 @@ const observationByRow = new WeakMap<
 	number | symbol | undefined
 >();
 
+let publicationListener: (() => void) | undefined;
+
+export function setWifiRadioPublicationListener(listener: () => void): void {
+	publicationListener = listener;
+}
+
+export function notifyWifiRadioPublication(): void {
+	publicationListener?.();
+}
+
 export function invalidateWifiRadioRow(
 	row: BaseWifiInterface,
 	observation: number | undefined,

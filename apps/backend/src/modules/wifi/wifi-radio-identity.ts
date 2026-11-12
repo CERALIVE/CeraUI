@@ -138,6 +138,10 @@ export class WifiRadioIdentityProducer {
 		return this.snapshot;
 	}
 
+	get publishedObservation(): number {
+		return this.publishedSequence;
+	}
+
 	captureObservation(): number {
 		return ++this.sequence;
 	}
@@ -239,9 +243,9 @@ export class WifiRadioIdentityProducer {
 	}
 
 	markUnavailable(ifname: string): void {
-		this.publishedSequence = this.captureObservation();
 		const row = this.snapshot.rows.get(ifname);
 		if (!row || row.degradedReason === "unavailable") return;
+		this.publishedSequence = this.captureObservation();
 		const rows = new Map(this.snapshot.rows);
 		rows.set(ifname, {
 			...row,
