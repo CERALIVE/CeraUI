@@ -289,12 +289,12 @@ desktop/mobile × two-shard matrix. The setup job caches only Playwright browser
 binaries, keyed by the exact version reported by the installed Playwright CLI;
 it does not install runner-local OS packages.
 
-The same setup job downloads the immutable `srtla` 4.1.0 amd64 release
+The same setup job downloads the immutable `srtla` 4.2.0 amd64 release
 package, pinned to SHA-256
-`496217e93cde36eeac0bde1b742c21fed6347a198f05a8cd898be116946b1eb8`.
+`ec6ed389cf80c472dd1ebf3d8fd820c3bd1517517d54fbf24420322a7affd14f`.
 Before extraction it verifies the Debian `Package`, `Version`, and `Architecture`
 fields, then uploads only the extracted runtime as the one-day
-`srtla-send-runtime-amd64-v4.1.0` artifact. This proves the backend against the
+`srtla-send-runtime-amd64-v4.2.0` artifact. This proves the backend against the
 released executable without a test stub, system-wide install, sibling checkout,
 or weakened production preflight.
 

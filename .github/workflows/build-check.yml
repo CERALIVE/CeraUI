@@ -319,18 +319,18 @@ jobs:
         run: |
           set -euo pipefail
           package_dir="dist/ci-packages"
-          package_path="$package_dir/srtla_4.1.0_amd64.deb"
+          package_path="$package_dir/srtla_4.2.0_amd64.deb"
           runtime_root="dist/ci-runtime"
           mkdir -p "$package_dir" "$runtime_root"
 
           curl --fail --location --silent --show-error \
             --output "$package_path" \
-            https://github.com/CERALIVE/srtla-send-rs/releases/download/v4.1.0/srtla_4.1.0_amd64.deb
+            https://github.com/CERALIVE/srtla-send-rs/releases/download/v4.2.0/srtla_4.2.0_amd64.deb
           printf '%s  %s\n' \
-            496217e93cde36eeac0bde1b742c21fed6347a198f05a8cd898be116946b1eb8 \
+            ec6ed389cf80c472dd1ebf3d8fd820c3bd1517517d54fbf24420322a7affd14f \
             "$package_path" | sha256sum --check
           test "$(dpkg-deb --field "$package_path" Package)" = srtla
-          test "$(dpkg-deb --field "$package_path" Version)" = 4.1.0
+          test "$(dpkg-deb --field "$package_path" Version)" = 4.2.0
           test "$(dpkg-deb --field "$package_path" Architecture)" = amd64
           dpkg-deb --extract "$package_path" "$runtime_root"
           test -f "$runtime_root/usr/bin/srtla_send"
@@ -433,18 +433,18 @@ jobs:
         run: |
           set -euo pipefail
           package_dir="dist/ci-packages"
-          package_path="$package_dir/srtla_4.1.0_amd64.deb"
+          package_path="$package_dir/srtla_4.2.0_amd64.deb"
           runtime_root="dist/ci-runtime"
           mkdir -p "$package_dir" "$runtime_root"
 
           curl --fail --location --silent --show-error \
             --output "$package_path" \
-            https://github.com/CERALIVE/srtla-send-rs/releases/download/v4.1.0/srtla_4.1.0_amd64.deb
+            https://github.com/CERALIVE/srtla-send-rs/releases/download/v4.2.0/srtla_4.2.0_amd64.deb
           printf '%s  %s\n' \
-            496217e93cde36eeac0bde1b742c21fed6347a198f05a8cd898be116946b1eb8 \
+            ec6ed389cf80c472dd1ebf3d8fd820c3bd1517517d54fbf24420322a7affd14f \
             "$package_path" | sha256sum --check
           test "$(dpkg-deb --field "$package_path" Package)" = srtla
-          test "$(dpkg-deb --field "$package_path" Version)" = 4.1.0
+          test "$(dpkg-deb --field "$package_path" Version)" = 4.2.0
           test "$(dpkg-deb --field "$package_path" Architecture)" = amd64
           dpkg-deb --extract "$package_path" "$runtime_root"
           test -f "$runtime_root/usr/bin/srtla_send"
@@ -472,7 +472,7 @@ jobs:
       - name: Upload srtla-send runtime
         uses: actions/upload-artifact@v7
         with:
-          name: srtla-send-runtime-amd64-v4.1.0
+          name: srtla-send-runtime-amd64-v4.2.0
           path: CeraUI/dist/ci-runtime/
           if-no-files-found: error
           retention-days: 1
@@ -566,7 +566,7 @@ jobs:
       - name: Download srtla-send runtime
         uses: actions/download-artifact@v8
         with:
-          name: srtla-send-runtime-amd64-v4.1.0
+          name: srtla-send-runtime-amd64-v4.2.0
           path: CeraUI/dist/ci-runtime
 
       - name: Activate srtla-send runtime
