@@ -102,9 +102,8 @@ typed `not-confirmed`; a late publisher is fenced and cannot emit a second mode
 terminal. This does not change admission or re-enter the per-adapter lock.
 
 **`runWifiNew`'s `ok:true, uuid:undefined` is AMBIGUOUS, not failed.** It emits
-`{new:{error:"ambiguous"}}` and deliberately does NOT run
-`wifiDeleteFailedConns()` — failed replies also do not establish exclusive profile ownership.
-Automatic failed-join cleanup retains uncertain profiles.
+`{new:{error:"ambiguous"}}` and retains uncertain profiles. Failed replies also
+do not establish exclusive profile ownership; neither outcome deletes profiles.
 
 Both `publishOutcome` deps are OPTIONAL so the existing suites' exact dep objects
 still typecheck; production wires them in the `default*Deps`. Coverage:
@@ -119,7 +118,13 @@ reply, and the two station-join frames). Rule-E: all 11 fail on the pre-fix tree
 
 ## Failed station joins retain uncertain profiles
 
-The legacy `wifiDeleteFailedConns` entry point now logs withheld cleanup without enumerating or deleting profiles. Timestamp zero, a returned UUID and an activation failure do not prove exclusive ownership by a failed attempt. Failed and ambiguous joins can leave profiles behind; explicit Forget remains the deliberate deletion path. This changes automatic cleanup policy and requires design review. Overlapping-join and unavailable-transport regressions live in `tests/wifi-sae-station.test.ts`.
+Failed joins have no cleanup entry point or deletion dependencies. Timestamp zero,
+a returned UUID and an activation failure do not prove exclusive ownership by a
+failed attempt. Failed and ambiguous joins can leave profiles behind; explicit
+Forget remains the deliberate deletion path. Production-handler regressions in
+`tests/wifi-profile-retention.test.ts` hold two joins in flight and verify staged
+and pending profiles survive both refusals, with available or unavailable
+profile-list transport.
 
 Failed and ambiguous join replies dispatch a best-effort saved-profile refresh and status broadcast after the terminal reply. This reconciles retained profiles into `saved`/`savedAll` for explicit Forget, including same-SSID siblings, without waiting for profile-list transport availability before reporting refusal. Refresh failures are logged and never turn the refusal into success.
 
@@ -130,12 +135,16 @@ Station discovery also accepts predictable `wl…` interface names, including US
 MAC even while disconnected, before the running/IPv4 gate; otherwise a scanned
 radio remains degraded and cannot resolve its numeric station join target.
 
-A password retry of a saved non-SAE station network updates that UUID's secret
-and activates the same profile on the requested interface. It does not send the
-saved profile back through `device wifi connect`: some NetworkManager versions
-reject that retry with a missing key-mgmt error. A failed secret update stops
-before activation and retains the profile. Authentication refusal text is read
-from both output streams.
+A password retry reuses a saved UUID only when the requested security advertises
+a WPA/WPA2 personal leg (including WPA2/WPA3 transition mode) and a fresh profile
+read confirms `802-11-wireless-security.key-mgmt=wpa-psk`. Compatibility is
+resolved before any secret write. The retry updates PSK and activates the same
+profile on the requested interface; a failed update stops before activation.
+An incompatible same-SSID SAE profile remains untouched. WEP, enterprise, open,
+unknown security and unreadable profile security use the established
+`device wifi connect` path without a direct PSK write into the saved UUID.
+SAE-only requests keep their separate add/activate path. Authentication refusal
+text is read from both output streams.
 
 ### Native automatic-fallback qualification
 
