@@ -774,11 +774,15 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 		{/if}
 
 		<!-- Unified device-first source list: capture / coarse / virtual / network rows.
-		     Selecting a row persists config.source through the field-sync lock. -->
+		     Selecting a row persists config.source through the field-sync lock.
+		     Live screen contract: the rows are tiles, a grid from 768 px. A row that
+		     opens any detail below its tile (modes, warnings, ingest instructions)
+		     spans the full width, so the detail sits under it and every other tile
+		     keeps one height. -->
 		{#if hasSources}
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 			<div class="space-y-2" data-testid="source-list" tabindex={-1}>
-				<ul class="space-y-2">
+				<ul class="grid gap-2 md:grid-cols-2">
 					{#each visibleSources as source (source.id)}
 						{const selected = $derived(config?.source === source.id)}
 						{const disabled = $derived(rowDisabled(source))}
@@ -791,6 +795,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 							sources?.sources,
 						))}
 						<li
+							class="min-w-0 md:has-[>:nth-child(2)]:col-span-full"
 							data-testid={`source-row-${source.id}`}
 							data-origin={source.origin}
 							data-selected={selected}
@@ -798,7 +803,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 						>
 							<div class="flex items-center gap-2">
 								<button
-									class="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-lg border px-3 py-3 text-left transition-colors {selected
+									class="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-lg border px-3 py-3 text-left transition-colors {selected
 										? coarseUnbound.unbound
 											? 'border-status-warning/60 bg-status-warning/10'
 											: 'border-primary bg-primary/10'
@@ -1230,7 +1235,17 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 		     config.source or the implicit sole camera) — fail-open when `sources` is
 		     undefined (standalone / federation mount). -->
 		{#if showAudioSurface}
-		<div class="space-y-2 border-t pt-5" data-testid="source-audio">
+		<!-- Live screen contract: the audio card is a titled group after the tiles,
+		     split from them by a hairline — never a card inside this card. -->
+		<section
+			aria-labelledby="live-audio-card-title"
+			class="space-y-3 border-t pt-5"
+			data-testid="audio-card"
+		>
+		<h2 class="text-muted-foreground text-xs font-medium" id="live-audio-card-title">
+			{m["live.audioCard.title"]()}
+		</h2>
+		<div class="space-y-2" data-testid="source-audio">
 			<div class="flex items-center gap-1">
 				<Volume2 aria-hidden={true} class="text-muted-foreground size-4 shrink-0" />
 				<span class="text-sm font-medium">{m["settings.audioSource"]()}</span>
@@ -1503,6 +1518,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 			     the honest answer when no level frame has arrived. -->
 			<LiveAudioMeter class="pt-0.5" />
 		</div>
+		</section>
 		{/if}
 	</Card.Content>
 </Card.Root>

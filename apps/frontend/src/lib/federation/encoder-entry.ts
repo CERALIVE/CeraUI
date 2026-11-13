@@ -4,12 +4,14 @@ import type {
 	Framerate,
 	Resolution,
 	VideoCodec,
+	VideoPassthrough,
 } from "@ceraui/rpc/schemas";
 import { mount, unmount } from "svelte";
 import { toast } from "svelte-sonner";
 import "../../app.css";
 import { buildEncoderSetConfig } from "$lib/streaming/encoderConfig";
 import { encoderSaveErrorMessage } from "$lib/streaming/encoderSaveError";
+import type { BalancerAlgorithm } from "$lib/streaming/outputFormat";
 import EncoderDialog, {
 	type FailoverRatePolicy,
 } from "$main/dialogs/EncoderDialog.svelte";
@@ -32,7 +34,9 @@ type HostedEncoderConfig = {
 	readonly framerate: Framerate | undefined;
 	readonly bitrate: number | undefined;
 	readonly bitrateOverlay: boolean | undefined;
-	readonly codec?: VideoCodec;
+	readonly codec?: VideoCodec | null;
+	readonly balancer?: BalancerAlgorithm;
+	readonly passthrough?: VideoPassthrough;
 	readonly failoverRatePolicy?: FailoverRatePolicy;
 };
 
@@ -44,18 +48,38 @@ function encoderConfig(config: ConfigMessage | undefined): HostedEncoderConfig {
 		bitrate: config?.max_br,
 		bitrateOverlay: config?.bitrate_overlay,
 		codec: config?.video_codec,
+		balancer: config?.balancer,
+		passthrough: config?.video_passthrough,
 		...(policy === undefined ? {} : { failoverRatePolicy: policy }),
 	};
+}
+
+// The saved-passthrough notice's reset, written through the host like any save.
+async function resetPassthrough(
+	options: FederationMountOptions,
+): Promise<boolean> {
+	try {
+		const result = await options.host.setConfig({ video_passthrough: "auto" });
+		if (!result.success) {
+			toast.error(encoderSaveErrorMessage(result.error, m));
+			return false;
+		}
+		return true;
+	} catch {
+		toast.error(m["notifications.saveFailed"]());
+		return false;
+	}
 }
 
 async function saveEncoderConfig(
 	options: FederationMountOptions,
 	draft: HostedEncoderConfig,
 ): Promise<void> {
+	const input = buildEncoderSetConfig(draft, undefined);
+	// An untouched Save carries nothing: write nothing through the host.
+	if (Object.keys(input).length === 0) return;
 	try {
-		const result = await options.host.setConfig(
-			buildEncoderSetConfig(draft, undefined),
-		);
+		const result = await options.host.setConfig(input);
 		// Named BEFORE `requireAppliedConfig` throws: it collapses every refusal
 		// into one opaque Error, so the typed reason has to be read off the result.
 		if (!result.success) {
@@ -80,6 +104,7 @@ export function mountDialog(
 			open: true,
 			config: encoderConfig(options.config),
 			capabilities: options.capabilities,
+			onResetPassthrough: () => resetPassthrough(options),
 			onSave: (draft: HostedEncoderConfig) => {
 				void saveEncoderConfig(options, draft);
 			},

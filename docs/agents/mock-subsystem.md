@@ -108,6 +108,12 @@ ladder by what it returns or throws — no direct flag mutation:
   snapshot, so `getCapabilities()` returns the cached snapshot with
   `engineUnavailable: true`. Simulates a cerastream crash after a successful start.
 
+Full profiles report `encoder.default_codec: "h265"`; the minimal safe floor
+leaves it absent. Active mock encodes report `route_reason: "not-compressed"` for
+capture and `"adaptive-active"` for network ingest. Existing uppercase `codecs`
+values remain unchanged. `mock-capabilities-producer-schema.test.ts` checks every
+scenario through the installed producer parser and the RPC projection.
+
 **`setMockEngineCapabilities(partial)` — test-only capability override seam (T5):**
 `setMockEngineCapabilities(partial)` (exported from `mocks/providers/streaming.ts`)
 merges a `Partial<ScenarioCapabilities>` onto the active scenario's profile, then

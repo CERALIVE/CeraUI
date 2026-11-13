@@ -32,6 +32,12 @@ reconciliation) is documented in
   refusal — never the `rollback_failed` "and the stream stopped" sentence, which
   would describe a healthy live stream as dead. Backend contract:
   [`apps/backend/AGENTS.md`](../../apps/backend/AGENTS.md) → "THE ENGINE SPEAKS PIXELS".
+- **The composition card is the second writer.** While live, `CompositionCard`
+  sends layout, opacity and second-input changes with `apply_now: true`, holds
+  its controls while any change is `applying`, and renders a refused or reverted
+  outcome inline through the same `configChangeReport`, in an alert below its
+  controls. Turning composition on or off stays a next-start change. Contract:
+  [`live-screen.md`](live-screen.md) → "The layout while live".
 - **Device-UI reachability caveat:** `EncoderDialog` is mounted above the
   idle/live cockpit switch, but the `open-encoder-dialog` row lives in
   `IdleCockpit` only. So on the device the choice is reachable when the dialog is

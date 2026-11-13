@@ -108,14 +108,17 @@ window.stopStreamingWithNotificationClear = stopStreaming;
 // is anchored to that same edge, so without a clearance the card lands on the
 // nav and wins its hit test — board-measured at BOTH 375x812 and 768x900, and
 // the second is why this is keyed on MainView's own dock query rather than on
-// sonner's 600px breakpoint, which does not fire at 768.
+// sonner's 600px breakpoint, which does not fire at 768. The Live screen's fixed
+// Live bar sits on that same edge (above the dock on mobile) and publishes its
+// height as `--live-bar-height` while mounted, so the stack clears it too; with
+// no bar the variable is unset and the desktop offset is sonner's own 24px.
 const isDesktop = new MediaQuery(DESKTOP_CHROME_QUERY);
 const toasterOffset = $derived(
 	isDesktop.current
-		? undefined
+		? { bottom: 'calc(var(--live-bar-height, 0px) + 1.5rem)' }
 		: {
 				bottom:
-					'calc(var(--mobile-dock-height) + env(safe-area-inset-bottom, 0px) + 1rem)',
+					'calc(var(--mobile-dock-height) + var(--live-bar-height, 0px) + env(safe-area-inset-bottom, 0px) + 1rem)',
 			},
 );
 </script>

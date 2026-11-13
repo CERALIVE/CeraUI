@@ -16,6 +16,7 @@
  */
 
 import type { EthernetRole, NetifEntry } from "@ceraui/rpc/schemas";
+import { setEthernetRoleInputSchema } from "@ceraui/rpc/schemas";
 
 import type { AsyncOpPhase } from "$lib/rpc/async-operation.svelte";
 import { isBondMember } from "$lib/stores/hud/link-status";
@@ -89,9 +90,9 @@ export function ethernetRoleErrorKey(reason: string | undefined): string {
 
 /** Narrow the async-op store's opaque `target`; anything else is no target. */
 export function ethernetRoleTarget(value: unknown): EthernetRole | undefined {
-	return ETHERNET_ROLES.includes(value as EthernetRole)
-		? (value as EthernetRole)
-		: undefined;
+	if (value === "uplink" || value === "shared-lan") return value;
+	const request = setEthernetRoleInputSchema.safeParse(value);
+	return request.success ? request.data.role : undefined;
 }
 
 /** The other member of the two-value enum. */

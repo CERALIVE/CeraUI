@@ -1,0 +1,20 @@
+{
+	"description": "Captured from a board with two identical QMI modems, identifiers tokenized.",
+	"capturedAt": "2026-11-13",
+	"general": "GENERAL.DEVICE:cdc-wdm1\nGENERAL.IP-IFACE:\nGENERAL.TYPE:gsm\nGENERAL.STATE:40 (connecting (prepare))\nGENERAL.METERED:unknown\n\nGENERAL.DEVICE:cdc-wdm0\nGENERAL.IP-IFACE:\nGENERAL.TYPE:gsm\nGENERAL.STATE:30 (disconnected)\nGENERAL.METERED:unknown\n",
+	"connections": "REDACTED_004:00000000-0000-4000-8000-000000000004:gsm:cdc-wdm1\nREDACTED_006:00000000-0000-4000-8000-000000000006:gsm:\n",
+	"devices": [
+		{
+			"device": "cdc-wdm0",
+			"active": "\n",
+			"tabular": "\n00000000-0000-4000-8000-000000000006 | REDACTED_006\n",
+			"multiline": "CONNECTIONS.AVAILABLE-CONNECTIONS[1]:00000000-0000-4000-8000-000000000006 | REDACTED_006\n"
+		},
+		{
+			"device": "cdc-wdm1",
+			"active": "00000000-0000-4000-8000-000000000004\n",
+			"tabular": "00000000-0000-4000-8000-000000000004\n00000000-0000-4000-8000-000000000004 | REDACTED_004\n",
+			"multiline": "CONNECTIONS.AVAILABLE-CONNECTIONS[1]:00000000-0000-4000-8000-000000000004 | REDACTED_004\n"
+		}
+	]
+}

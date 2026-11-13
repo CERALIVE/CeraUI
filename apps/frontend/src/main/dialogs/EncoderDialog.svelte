@@ -1,8 +1,8 @@
 <!--
   EncoderDialog.svelte — focused video-encoder configuration dialog.
 
-  Pure encoding (no source selection): the dialog exposes independent
-  codec / bitrate / resolution / framerate selectors directly. There is no
+  Pure encoding (no source selection): the dialog exposes the output format,
+  bitrate / resolution / framerate selectors directly. There is no
   mode-preset catalog — every control is capability-gated on its own. The active
   source is chosen in the Source section and shown here as a READ-ONLY context
   line (name + kind); this dialog never writes `source`/`pipeline`.
@@ -13,13 +13,16 @@
     that source's Tier-2 device modes). Framerate is gated PER selected resolution,
     so a rate the device can't drive at that resolution renders
     disabled-with-reason. Every rung outside the offered set renders DISABLED with a
-    reason tooltip — never hidden. H.265 is disabled-with-reason when the platform
-    can't encode it. With no active source (config lacking `source`/`pipeline`, e.g.
+    reason tooltip — never hidden. With no active source (config lacking `source`/`pipeline`, e.g.
     a federated mount) the axes degrade to the platform-coarse offering.
   • All numeric bounds come from `streamingConstraints` / `bitrateBoundsFromCaps`
     (ValidationAdapter) — no inline literals.
-  • The operator's codec choice (`localCodec`) is written to the draft's `codec`
-    field → persisted as `video_codec` on save.
+  • The output format is the engine's default (`encoder.default_codec`) unless the
+    operator opts into choosing one of the codecs `intersectCaps` offers. The
+    "Adapt bitrate to the network" switch stands for the balancer, and one line
+    (`resolveRoute`) says what the device will do with the picture. A save writes
+    `video_codec` / `balancer` only when the operator changed them; a saved
+    `video_passthrough` is shown as a notice whose reset is its own save.
 
   Behaviour
   ---------
@@ -42,6 +45,8 @@ import type {
 	VideoPassthrough,
 } from '@ceraui/rpc/schemas';
 
+import type { BalancerAlgorithm } from '$lib/streaming/outputFormat';
+
 export type FailoverRatePolicy = NonNullable<StreamingSetConfigInput['failover_rate_policy']>;
 
 // The `get-capabilities.features` token (cerastream `ENGINE_FEATURES`) gating
@@ -60,13 +65,16 @@ export interface EncoderConfig {
 	framerate: Framerate | undefined;
 	bitrate: number | undefined;
 	bitrateOverlay: boolean | undefined;
-	// Egress video codec. `undefined` = "Auto (recommended)" → the engine's
-	// platform default (never written to `video_codec`); `h264`/`h265` = the
-	// operator's explicit choice. Optional so callers that don't set it (LiveView
-	// seed) stay valid.
-	codec?: VideoCodec;
-	// Same-codec passthrough policy (auto/force/off). Optional so a seed without
-	// it stays valid; the dialog defaults it to `auto` on open.
+	// Egress video codec. On the way IN it seeds the dialog (a hosted mount has no
+	// saved config of its own). On the way OUT it is present only when the operator
+	// changed it: `h264`/`h265` = an explicit choice, `null` = back to the engine's
+	// automatic format (clears `video_codec`), `undefined` = untouched.
+	codec?: VideoCodec | null;
+	// The bitrate balancer, same in/out rule: OUT only when the operator flipped
+	// the adaptive switch (`adaptive` or `fixed`); a saved `aimd` is never rewritten.
+	balancer?: BalancerAlgorithm;
+	// The saved same-codec passthrough policy, IN only (a hosted mount's seed). The
+	// dialog never writes it on Save; its reset is a separate save.
 	passthrough?: VideoPassthrough;
 	// What the engine does when a backup camera cannot deliver the stream's rate
 	// or size (`retime` repeats frames, `adapt` follows the camera). Present on
@@ -82,13 +90,26 @@ export interface EncoderConfig {
 
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
+import { intersectCaps } from '@ceraui/rpc';
 import {
+	type ActiveEncode,
 	BITRATE_DEFAULT_MIN,
 	type CapabilitiesMessage,
 	type DeviceKind,
 	type StreamSource,
 } from '@ceraui/rpc/schemas';
-import { Binary, Cable, Columns3, Cpu, Radio, Usb, Video } from '@lucide/svelte';
+import {
+	ArrowRightLeft,
+	Binary,
+	Cable,
+	Columns3,
+	Cpu,
+	Radio,
+	TriangleAlert,
+	Usb,
+	Video,
+	Zap,
+} from '@lucide/svelte';
 
 import AppliesNextStart from '$lib/components/custom/AppliesNextStart.svelte';
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
@@ -99,7 +120,6 @@ import {
 	axisCeiling,
 	bitrateBoundsFromCaps,
 	clampBitrateToBounds,
-	deriveCodecOptions,
 	type FramerateOption,
 	framerateOptionsForResolution,
 	offeredAxes,
@@ -108,10 +128,12 @@ import {
 	STREAMING_MODE,
 	seededAxisSelection,
 } from '$lib/components/streaming/ValidationAdapter';
+import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import { Slider } from '$lib/components/ui/slider';
+import { Switch } from '$lib/components/ui/switch';
 import {
 	getFramerateLabel,
 	getHardwareLabel,
@@ -132,10 +154,15 @@ import {
 	inputModeLabelKey,
 } from '$lib/streaming/capture-modes';
 import {
-	captureModeCodecs,
-	resolvePassthroughMode,
-	sourceOffersCodec,
-} from '$lib/streaming/passthrough';
+	automaticCodec,
+	codecLabel,
+	expectedOutputCodec,
+	manualCodecs,
+	type RouteOutcome,
+	resolveRoute,
+	routeCopy,
+	routeReasonKey,
+} from '$lib/streaming/outputFormat';
 import {
 	probedCapsFromSources,
 	uvcH265SourcesFromSources,
@@ -156,6 +183,13 @@ interface Props {
 	 * undefined. Additive-optional: a device mount leaves it unset.
 	 */
 	capabilities?: CapabilitiesMessage;
+	/** The engine's realized encode while live; the route line reads it. */
+	activeEncode?: ActiveEncode | null;
+	/**
+	 * Saves `video_passthrough: 'auto'` on its own and resolves whether the device
+	 * took it. Without it the saved-passthrough notice has no reset button.
+	 */
+	onResetPassthrough?: () => Promise<boolean>;
 }
 
 let {
@@ -163,6 +197,8 @@ let {
 	config = $bindable(),
 	onSave,
 	capabilities: capabilitiesOverride,
+	activeEncode = null,
+	onResetPassthrough,
 }: Props = $props();
 
 const BITRATE_STEP = 50;
@@ -184,15 +220,14 @@ const platformCaps = $derived(capabilities?.platform ?? platformCapsForHardware(
 // Bitrate clamps to the board's real window (encoder.bitrate_range), falling
 // back to the schema-wide range only until the contract arrives.
 const BITRATE = $derived(bitrateBoundsFromCaps(capabilities));
-const codecOptions = $derived(deriveCodecOptions(capabilities?.encoders, platformCaps));
-const h265Option = $derived(codecOptions.find((codec) => codec.value === 'h265'));
-const h264Supported = $derived(codecOptions.some((codec) => codec.value === 'h264'));
-const h265Supported = $derived(h265Option !== undefined);
-const h265SoftwareOnly = $derived(h265Option?.softwareWarning ?? false);
-// Resolved engine default for "Auto": prefer hardware H.265, but never resolve
-// onto a codec the engine's own ladder omitted.
-const resolvedAutoCodec = $derived<VideoCodec>(
-	h265Supported && (platformCaps.hardware_accelerated || !h264Supported) ? 'h265' : 'h264',
+// The codecs the operator may pick once they opt out of the automatic format:
+// exactly what intersectCaps offers on this platform, nothing it does not.
+const manualChoices = $derived(manualCodecs(intersectCaps(platformCaps, undefined, STREAMING_MODE)));
+const namedAutomaticCodec = $derived(automaticCodec(capabilities));
+const automaticLabel = $derived(
+	namedAutomaticCodec
+		? m["live.encoder.format.automatic"]({ codec: codecLabel(namedAutomaticCodec) })
+		: m["live.encoder.format.automaticUnknown"](),
 );
 const uvcH265Sources = $derived(uvcH265SourcesFromSources(sourcesMessage));
 // ── i18n key resolver (mirrors the legacy EncoderCard helper) ──────────────────
@@ -220,21 +255,26 @@ let localResolution = $state<Resolution>('1080p');
 let localFramerate = $state<Framerate>(30);
 let localBitrate = $state<number>(BITRATE_DEFAULT_MIN);
 let localOverlay = $state(false);
-// Operator's egress codec choice: `undefined` = "Auto (recommended)" (engine
-// resolves the platform default), `h264`/`h265` = explicit. Persisted to the
-// draft's `codec` → `video_codec`, and drives the segmented selector + preset
-// matching.
+// Output format: `undefined` = the engine's automatic format, a codec = the
+// operator's own pick (the manual switch is on exactly then). Written only when it
+// differs from the open-time seed.
 let localCodec = $state<VideoCodec | undefined>(undefined);
-// The segmented-selector active-state (Auto = undefined selection).
-const codecIsAuto = $derived(localCodec === undefined);
-const codecIsH264 = $derived(localCodec === 'h264');
-const codecIsH265 = $derived(localCodec === 'h265');
+let seededCodec = $state<VideoCodec | undefined>(undefined);
+const manualOn = $derived(localCodec !== undefined);
 
-// Same-codec passthrough policy (auto/force/off). Defaults to auto on open.
+// Adaptive bitrate: on for a saved `adaptive`, `aimd` or nothing. Written only
+// when the operator flips it, so a saved `aimd` survives an unrelated save.
+let seededBalancer = $state<BalancerAlgorithm | undefined>(undefined);
+let localAdaptive = $state(true);
+const balancerChanged = $derived(localAdaptive !== (seededBalancer !== 'fixed'));
+const effectiveBalancer = $derived<BalancerAlgorithm | undefined>(
+	balancerChanged ? (localAdaptive ? 'adaptive' : 'fixed') : seededBalancer,
+);
+
+// The saved same-codec passthrough policy. Never written on Save; the notice's
+// reset saves `auto` on its own.
 let localPassthrough = $state<VideoPassthrough>('auto');
-const passthroughIsAuto = $derived(localPassthrough === 'auto');
-const passthroughIsForce = $derived(localPassthrough === 'force');
-const passthroughIsOff = $derived(localPassthrough === 'off');
+let resettingPassthrough = $state(false);
 
 // Backup-camera rate policy. `retime` is the device's own default, so an
 // unconfigured board seeds there rather than onto an unstated choice.
@@ -248,6 +288,11 @@ let bitrateClamped = $state(false);
 // restart-required field changed mid-stream can be badged "applies on next start".
 let seededResolution = $state<Resolution>('1080p');
 let seededFramerate = $state<Framerate>(30);
+// The rest of the open-time snapshot: Save writes a setting only when the operator
+// moved it away from what the dialog showed at open.
+let seededBitrate = $state<number>(BITRATE_DEFAULT_MIN);
+let seededOverlay = $state(false);
+let seededFailoverPolicy = $state<FailoverRatePolicy>('retime');
 
 // Seed the working copy from the bound draft first, falling back to the saved
 // device config. Re-seed on every open so a cancelled edit is fully discarded.
@@ -272,25 +317,38 @@ function seedDraft(fromSaved: boolean): void {
 		const seedBitrate = savedConfig?.max_br ?? BITRATE.defaultMin;
 		localBitrate = Number.isFinite(seedBitrate) ? seedBitrate : BITRATE.defaultMin;
 		localOverlay = savedConfig?.bitrate_overlay ?? false;
-		localCodec = savedConfig?.video_codec;
-		localPassthrough = savedConfig?.video_passthrough ?? 'auto';
+		seedFormat();
 		localFailoverPolicy = savedConfig?.failover_rate_policy ?? 'retime';
 	} else {
 		({ resolution: localResolution, framerate: localFramerate } = seededAxisSelection(axes, {
-			resolution: config?.resolution,
-			framerate: config?.framerate,
+			resolution: config?.resolution ?? savedConfig?.resolution,
+			framerate: config?.framerate ?? savedConfig?.framerate,
 		}));
 		const seedBitrate = config?.bitrate ?? savedConfig?.max_br ?? BITRATE.defaultMin;
 		localBitrate = Number.isFinite(seedBitrate) ? seedBitrate : BITRATE.defaultMin;
 		localOverlay = config?.bitrateOverlay ?? savedConfig?.bitrate_overlay ?? false;
-		localCodec = config?.codec;
-		localPassthrough = config?.passthrough ?? savedConfig?.video_passthrough ?? 'auto';
+		seedFormat();
 		localFailoverPolicy =
 			config?.failoverRatePolicy ?? savedConfig?.failover_rate_policy ?? 'retime';
 	}
 	seededResolution = localResolution;
 	seededFramerate = localFramerate;
+	seededBitrate = localBitrate;
+	seededOverlay = localOverlay;
+	seededFailoverPolicy = localFailoverPolicy;
 	bitrateClamped = false;
+}
+
+// The format keys seed from the device's saved config, so the manual switch is on
+// exactly when a `video_codec` is saved. A hosted mount has no saved config of its
+// own and passes the host's values on `config` instead.
+function seedFormat(): void {
+	const saved = savedConfig;
+	localCodec = saved ? saved.video_codec : (config?.codec ?? undefined);
+	seededBalancer = saved ? saved.balancer : config?.balancer;
+	localPassthrough = (saved ? saved.video_passthrough : config?.passthrough) ?? 'auto';
+	seededCodec = localCodec;
+	localAdaptive = seededBalancer !== 'fixed';
 }
 
 $effect(() => {
@@ -320,41 +378,60 @@ const activeSource = $derived(
 	sourcesMessage?.sources.find((source) => source.id === savedConfig?.source),
 );
 
-// ── Passthrough resolved-mode disclosure (pre-start) ───────────────────────────
-// The resolved output codec (explicit pick or the Auto-resolved default) drives
-// whether the active source can be passed through. Under the honest todo-16
-// policy adaptive bitrate is always active (there is no operator control to make
-// it fixed), so `auto` always transcodes — passthrough surfaces only for `force`.
-const passthroughOutputCodec = $derived<VideoCodec>(localCodec ?? resolvedAutoCodec);
-const activeSourceKind = $derived(
-	activeSource?.origin === 'capture' ? activeSource.kind : undefined,
-);
-// A dual-codec device's `kind` collapses to one value, so pass the truthful
-// modes-derived codec set: it keeps passthrough eligibility correct when the
-// operator picks the codec the collapsed `kind` doesn't name.
-const activeSourceCodecs = $derived(
-	activeSource?.origin === 'capture' ? captureModeCodecs(activeSource.modes) : undefined,
-);
-const passthroughSourceEligible = $derived(
-	sourceOffersCodec(activeSourceKind, passthroughOutputCodec, activeSourceCodecs),
-);
-const resolvedPassthroughMode = $derived(
-	resolvePassthroughMode({
-		setting: localPassthrough,
-		sourceOffersOutputCodec: passthroughSourceEligible,
-		adaptiveActive: true,
+// ── The route line: what the device does with the picture ───────────────────
+// Live it reports the engine's own answer; before start it follows the saved
+// passthrough, the adaptive switch and the active source (resolveRoute).
+const route = $derived(
+	resolveRoute({
+		outputCodec: expectedOutputCodec(localCodec, capabilities, platformCaps),
+		balancer: effectiveBalancer,
+		passthrough: localPassthrough,
+		source: activeSource,
+		activeEncode: isStreaming ? activeEncode : null,
 	}),
 );
-const passthroughActive = $derived(resolvedPassthroughMode === 'passthrough');
-// A human token for the source's incoming codec, used in the transcode line
-// ("Re-encoding <in>→<out>"). Raw/HDMI/network sources have no codec token.
-const inputCodecLabel = $derived.by<string>(() => {
-	if (activeSourceKind === 'mjpeg') return 'MJPEG';
-	if (activeSourceKind === 'uvc_h264') return 'H.264';
-	if (activeSourceKind === 'uvc_h265') return 'H.265';
-	return m["live.encoder.passthrough.inputRaw"]();
+const routeText = $derived.by(() => {
+	const copy = routeCopy(route);
+	return t(copy.key, copy.params);
 });
-const outputCodecLabel = $derived(passthroughOutputCodec === 'h265' ? 'H.265' : 'H.264');
+const routeReasonText = $derived.by(() => {
+	const key = routeReasonKey(route.reason);
+	return key ? t(key) : undefined;
+});
+const ROUTE_ICON: Record<RouteOutcome, typeof Zap> = {
+	untouched: Zap,
+	willTryUntouched: Zap,
+	forceUnavailable: TriangleAlert,
+	sameFormatAdapted: ArrowRightLeft,
+	sameFormatFixed: ArrowRightLeft,
+	converted: ArrowRightLeft,
+	encoded: Cpu,
+};
+const RouteIcon = $derived(ROUTE_ICON[route.outcome]);
+// The camera fixes the bitrate while its own stream goes out untouched.
+const passthroughActive = $derived(route.outcome === 'untouched');
+const legacyPassthrough = $derived(
+	localPassthrough === 'force' || localPassthrough === 'off' ? localPassthrough : undefined,
+);
+
+function setManual(on: boolean): void {
+	if (!on) {
+		localCodec = undefined;
+		return;
+	}
+	const automatic = expectedOutputCodec(undefined, capabilities, platformCaps);
+	localCodec = manualChoices.find((codec) => codec === automatic) ?? manualChoices[0];
+}
+
+async function resetPassthrough(): Promise<void> {
+	if (!onResetPassthrough || resettingPassthrough) return;
+	resettingPassthrough = true;
+	try {
+		if (await onResetPassthrough()) localPassthrough = 'auto';
+	} finally {
+		resettingPassthrough = false;
+	}
+}
 
 // Capture kind → coarse device family. Drives the context-line ICON only: a UVC
 // dongle (`uvc_h264`) is USB family, so it gets the USB glyph. The visible kind
@@ -456,9 +533,9 @@ const errors = $derived.by(() => {
 });
 const isValid = $derived(Object.keys(errors).length === 0);
 
-const codecSupported = $derived(
-	localCodec === undefined || (localCodec === 'h264' ? h264Supported : h265Supported),
-);
+const codecSupported = $derived(localCodec === undefined || manualChoices.includes(localCodec));
+// H.265 on a board with no hardware encoder runs in software, with a CPU caveat.
+const h265SoftwareOnly = $derived(!platformCaps.hardware_accelerated);
 
 // Save-time axis/codec re-validation (C7). The draft is re-checked against the
 // CURRENT offered set — the SAME derivations that drive each control's
@@ -502,6 +579,7 @@ function handleSave() {
 	// time (defence-in-depth beside the disabled primary button): an axis the
 	// hardware no longer offers blocks save and surfaces the inline reason.
 	if (!canSave) return;
+	const bitrateChanged = localBitrate !== seededBitrate;
 	const normalized = normalizeValue(localBitrate, BITRATE.min, BITRATE.max, BITRATE_STEP);
 	localBitrate = normalized;
 
@@ -512,20 +590,25 @@ function handleSave() {
 	// (federated mount) they pass through and the consumer re-gates on the pipeline.
 	const allowResolution = activeSource?.supportsResolutionOverride ?? true;
 	const allowFramerate = activeSource?.supportsFramerateOverride ?? true;
+	// Only what the operator changed in this session: an untouched Save carries
+	// nothing, so no saved value is rewritten.
 	const next: EncoderConfig = {
-		resolution: allowResolution ? localResolution : undefined,
-		framerate: allowFramerate ? localFramerate : undefined,
-		bitrate: normalized,
-		bitrateOverlay: localOverlay,
-		codec: localCodec,
-		passthrough: localPassthrough,
-		...(failoverPolicyOffered ? { failoverRatePolicy: localFailoverPolicy } : {}),
+		resolution:
+			allowResolution && localResolution !== seededResolution ? localResolution : undefined,
+		framerate: allowFramerate && localFramerate !== seededFramerate ? localFramerate : undefined,
+		bitrate: bitrateChanged ? normalized : undefined,
+		bitrateOverlay: localOverlay !== seededOverlay ? localOverlay : undefined,
+		...(localCodec !== seededCodec ? { codec: localCodec ?? null } : {}),
+		...(balancerChanged ? { balancer: localAdaptive ? 'adaptive' : 'fixed' } : {}),
+		...(failoverPolicyOffered && localFailoverPolicy !== seededFailoverPolicy
+			? { failoverRatePolicy: localFailoverPolicy }
+			: {}),
 		applyNow: choiceRequired && applyMode === 'now',
 	};
 	config = next;
 
-	// Apply the new bitrate live; no-op unless currently streaming.
-	updateMaxBitrate(normalized, isStreaming);
+	// Apply a changed bitrate live; no-op unless currently streaming.
+	if (bitrateChanged) updateMaxBitrate(normalized, isStreaming);
 
 	// Notify LiveView so it can persist the selection via rpc.streaming.setConfig.
 	onSave?.(next);
@@ -638,172 +721,143 @@ function handleSave() {
 		     + toggle and tears down on dialog close (unmount). -->
 		<PreviewCanvas compact />
 
-		<!-- Encoder codec: a first-class, capability-gated selector (replaces the
-		     old display-only chips). Auto resolves the engine default; H.265 is
-		     disabled-with-reason when the platform can't encode it — never hidden. -->
-		<div class="space-y-2">
-			<Label class="text-sm font-medium">{m["settings.videoCodec"]()}</Label>
-			<div
-				class="bg-card/40 grid grid-cols-3 gap-1.5 rounded-lg border p-1"
-				aria-label={m["settings.videoCodec"]()}
-				data-testid="encoder-codec-selector"
-				role="radiogroup"
-			>
-				<!-- biome-ignore lint/a11y/useSemanticElements: Auto codec clears localCodec to undefined through this text button; a native radio needs a separate label and changes its focus/activation contract. -->
-				<button
-					type="button"
-					aria-checked={codecIsAuto}
-					class="flex min-h-[44px] items-center justify-center rounded-md px-2 py-2 text-xs font-medium transition-colors {codecIsAuto
-						? 'bg-primary/10 text-primary ring-primary ring-1'
-						: 'text-muted-foreground hover:bg-primary/5'}"
-					data-active={codecIsAuto}
-					data-testid="codec-auto"
-					onclick={() => (localCodec = undefined)}
-					role="radio"
-				>
-					{m["live.encoder.codecAuto"]()}
-				</button>
-				<!-- biome-ignore lint/a11y/useSemanticElements: The H.264 button selects localCodec and disables when h264Supported is false; native radio/label markup changes its hit target and focus model. -->
-				<button
-					type="button"
-					aria-checked={codecIsH264}
-					aria-disabled={h264Supported ? undefined : 'true'}
-					class="flex min-h-[44px] items-center justify-center rounded-md px-2 py-2 font-mono text-xs font-medium transition-colors {codecIsH264
-						? 'bg-primary/10 text-primary ring-primary ring-1'
-						: h264Supported
-							? 'text-muted-foreground hover:bg-primary/5'
-							: 'text-muted-foreground/50 cursor-not-allowed'}"
-					data-active={codecIsH264}
-					data-supported={h264Supported}
-					data-testid="codec-h264"
-					disabled={!h264Supported}
-					onclick={() => (localCodec = 'h264')}
-					role="radio"
-					title={h264Supported ? undefined : m["live.education.reason.unsupportedPlatform"]()}
-				>
-					H.264
-				</button>
-				<!-- biome-ignore lint/a11y/useSemanticElements: The H.265 button selects localCodec and disables when h265Supported is false; native radio/label markup changes its hit target and focus model. -->
-				<button
-					type="button"
-					aria-checked={codecIsH265}
-					aria-disabled={h265Supported ? undefined : 'true'}
-					class="flex min-h-[44px] items-center justify-center rounded-md px-2 py-2 font-mono text-xs font-medium transition-colors {codecIsH265
-						? 'bg-primary/10 text-primary ring-primary ring-1'
-						: h265Supported
-							? 'text-muted-foreground hover:bg-primary/5'
-							: 'text-muted-foreground/50 cursor-not-allowed'}"
-					data-active={codecIsH265}
-					data-supported={h265Supported}
-					data-testid="codec-h265"
-					disabled={!h265Supported}
-					onclick={() => (localCodec = 'h265')}
-					role="radio"
-					title={h265Supported ? undefined : m["live.encoder.codecH265Unavailable"]()}
-				>
-					H.265
-				</button>
+		<!-- Output format: the engine's automatic format unless the operator opts in to
+		     one of the codecs intersectCaps offers (an unoffered codec gets no control),
+		     the adaptive-bitrate switch, then one line saying what the device will do. -->
+		<section aria-labelledby="encoder-format-heading" class="space-y-2">
+			<h3 class="text-sm font-medium" id="encoder-format-heading">{m["settings.videoCodec"]()}</h3>
+			<div class="divide-border divide-y rounded-lg border">
+				<div class="space-y-2 p-3">
+					<p
+						class="text-sm font-medium {manualOn ? 'text-muted-foreground' : 'text-foreground'}"
+						data-active={!manualOn}
+						data-testid="encoder-format-automatic"
+					>
+						{automaticLabel}
+					</p>
+					<div class="flex min-h-[44px] items-center justify-between gap-3">
+						<Label
+							class="text-muted-foreground flex-1 cursor-pointer text-sm font-normal"
+							for="encoder-format-manual"
+							id="encoder-format-manual-label"
+						>
+							{m["live.encoder.format.manual"]()}
+						</Label>
+						<Switch
+							checked={manualOn}
+							data-testid="encoder-format-manual"
+							id="encoder-format-manual"
+							onCheckedChange={setManual}
+						/>
+					</div>
+					{#if manualOn}
+						<div
+							class="bg-muted/40 flex gap-1.5 rounded-md p-1"
+							aria-labelledby="encoder-format-manual-label"
+							role="radiogroup"
+						>
+							{#each manualChoices as codec (codec)}
+								{const checked = $derived(localCodec === codec)}
+								<!-- biome-ignore lint/a11y/useSemanticElements: Each offered codec stages localCodec through this text button, the dialog's segmented-radio pattern; a native radio needs separate label markup and changes its focus model. -->
+								<button
+									type="button"
+									aria-checked={checked}
+									class="flex min-h-[44px] flex-1 items-center justify-center rounded-md px-2 py-2 font-mono text-xs font-medium transition-colors motion-reduce:transition-none {checked
+										? 'bg-primary/10 text-primary ring-primary ring-1'
+										: 'text-muted-foreground hover:bg-primary/5'}"
+									data-active={checked}
+									data-testid="encoder-format-{codec}"
+									onclick={() => (localCodec = codec)}
+									role="radio"
+								>
+									{codecLabel(codec)}
+								</button>
+							{/each}
+						</div>
+						<p class="text-muted-foreground text-xs">{m["live.encoder.format.manualHint"]()}</p>
+						{#if localCodec === 'h265' && h265SoftwareOnly}
+							<p class="text-status-warning text-xs" data-testid="codec-h265-software">
+								{m["settings.softwareEncodeWarning"]()}
+							</p>
+						{/if}
+					{/if}
+				</div>
+				<div class="space-y-1 p-3">
+					<div class="flex min-h-[44px] items-center justify-between gap-3">
+						<Label class="flex-1 cursor-pointer text-sm font-medium" for="encoder-adaptive">
+							{m["live.encoder.adaptive.title"]()}
+						</Label>
+						<Switch
+							aria-describedby={isStreaming ? 'encoder-adaptive-locked' : undefined}
+							checked={localAdaptive}
+							data-testid="encoder-adaptive"
+							disabled={isStreaming}
+							id="encoder-adaptive"
+							onCheckedChange={(next) => (localAdaptive = next)}
+						/>
+					</div>
+					{#if isStreaming}
+						<span id="encoder-adaptive-locked">
+							<AppliesNextStart label={m["live.encoder.appliesNextStart"]()} show={true} />
+						</span>
+					{:else if !localAdaptive}
+						<p class="text-muted-foreground text-xs">{m["live.encoder.adaptive.offHint"]()}</p>
+					{/if}
+				</div>
 			</div>
-			{#if codecIsAuto}
-				<p class="text-muted-foreground text-xs" data-testid="codec-auto-resolved">
-					{resolvedAutoCodec === 'h265'
-						? m["live.encoder.codecAutoResolvedH265"]()
-						: m["live.encoder.codecAutoResolvedH264"]()}
-				</p>
-			{/if}
-			{#if codecIsH265 && h265SoftwareOnly}
-				<p class="text-status-warning text-xs" data-testid="codec-h265-software">
-					{m["settings.softwareEncodeWarning"]()}
-				</p>
-			{/if}
-		</div>
-
-		<!-- Same-codec passthrough policy (advanced): Auto / Force / Off. The resolved
-		     mode is disclosed BEFORE start so `force` is safe — the operator sees the
-		     consequence (camera controls bitrate; adaptive bonded bitrate inactive)
-		     ahead of going live, never only while streaming. -->
-		<div class="space-y-2">
-			<Label class="text-sm font-medium">{m["live.encoder.passthrough.title"]()}</Label>
 			<div
-				class="bg-card/40 grid grid-cols-3 gap-1.5 rounded-lg border p-1"
-				aria-label={m["live.encoder.passthrough.title"]()}
-				data-testid="encoder-passthrough-selector"
-				role="radiogroup"
+				class="flex items-start gap-2.5 rounded-lg px-3 py-2.5 text-xs {route.outcome === 'forceUnavailable'
+					? 'border-status-warning/50 bg-status-warning/10 border'
+					: route.outcome === 'untouched'
+						? 'bg-primary/5'
+						: 'bg-muted/40'}"
+				data-route={route.outcome}
+				data-testid="encoder-route"
+				role="status"
 			>
-				<!-- biome-ignore lint/a11y/useSemanticElements: Passthrough Auto stages localPassthrough as auto through this text button; native radio grouping changes its independent Tab stop and label markup. -->
-				<button
-					type="button"
-					aria-checked={passthroughIsAuto}
-					class="flex min-h-[44px] items-center justify-center rounded-md px-2 py-2 text-xs font-medium transition-colors {passthroughIsAuto
-						? 'bg-primary/10 text-primary ring-primary ring-1'
-						: 'text-muted-foreground hover:bg-primary/5'}"
-					data-active={passthroughIsAuto}
-					data-testid="passthrough-auto"
-					onclick={() => (localPassthrough = 'auto')}
-					role="radio"
-				>
-					{m["live.encoder.passthrough.auto"]()}
-				</button>
-				<!-- biome-ignore lint/a11y/useSemanticElements: Passthrough Force stages localPassthrough as force through this text button; native radio grouping changes its independent Tab stop and label markup. -->
-				<button
-					type="button"
-					aria-checked={passthroughIsForce}
-					class="flex min-h-[44px] items-center justify-center rounded-md px-2 py-2 text-xs font-medium transition-colors {passthroughIsForce
-						? 'bg-primary/10 text-primary ring-primary ring-1'
-						: 'text-muted-foreground hover:bg-primary/5'}"
-					data-active={passthroughIsForce}
-					data-testid="passthrough-force"
-					onclick={() => (localPassthrough = 'force')}
-					role="radio"
-				>
-					{m["live.encoder.passthrough.force"]()}
-				</button>
-				<!-- biome-ignore lint/a11y/useSemanticElements: Passthrough Off stages localPassthrough as off through this text button; native radio grouping changes its independent Tab stop and label markup. -->
-				<button
-					type="button"
-					aria-checked={passthroughIsOff}
-					class="flex min-h-[44px] items-center justify-center rounded-md px-2 py-2 text-xs font-medium transition-colors {passthroughIsOff
-						? 'bg-primary/10 text-primary ring-primary ring-1'
-						: 'text-muted-foreground hover:bg-primary/5'}"
-					data-active={passthroughIsOff}
-					data-testid="passthrough-off"
-					onclick={() => (localPassthrough = 'off')}
-					role="radio"
-				>
-					{m["live.encoder.passthrough.off"]()}
-				</button>
+				<RouteIcon
+					aria-hidden={true}
+					class="mt-px size-3.5 shrink-0 rtl:-scale-x-100 {route.outcome === 'forceUnavailable'
+						? 'text-status-warning'
+						: route.outcome === 'untouched'
+							? 'text-primary'
+							: 'text-muted-foreground'}"
+				/>
+				<p class="text-foreground min-w-0 space-y-0.5">
+					<span class="block">{routeText}</span>
+					{#if routeReasonText}
+						<span class="text-muted-foreground block" data-route-reason={route.reason}>
+							{routeReasonText}
+						</span>
+					{/if}
+				</p>
 			</div>
-			<!-- Resolved-mode disclosure: derived from setting + source kind + output
-			     codec, shown pre-start so the operator knows the consequence. -->
-			{#if resolvedPassthroughMode === 'passthrough'}
-				<p
-					class="text-primary bg-primary/5 rounded-md p-2 text-xs"
-					data-testid="passthrough-disclosure"
-					data-mode="passthrough"
+			{#if legacyPassthrough}
+				<div
+					class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border px-3 py-2"
+					data-setting={legacyPassthrough}
+					data-testid="encoder-legacy-passthrough"
 				>
-					{m["live.encoder.passthrough.disclosurePassthrough"]()}
-				</p>
-			{:else if resolvedPassthroughMode === 'forceUnavailable'}
-				<p
-					class="text-status-warning bg-status-warning/10 rounded-md p-2 text-xs"
-					data-testid="passthrough-disclosure"
-					data-mode="forceUnavailable"
-				>
-					{m["live.encoder.passthrough.disclosureForceUnavailable"]()}
-				</p>
-			{:else}
-				<p
-					class="text-muted-foreground bg-muted rounded-md p-2 text-xs"
-					data-testid="passthrough-disclosure"
-					data-mode="transcode"
-				>
-					{m["live.encoder.passthrough.disclosureTranscode"]({
-						input: inputCodecLabel,
-						output: outputCodecLabel,
-					})}
-				</p>
+					<p class="text-muted-foreground min-w-48 flex-1 text-xs">
+						{legacyPassthrough === 'force'
+							? m["live.encoder.legacy.force"]()
+							: m["live.encoder.legacy.off"]()}
+					</p>
+					{#if onResetPassthrough}
+						<Button
+							class="min-h-[44px] shrink-0"
+							data-testid="encoder-legacy-passthrough-reset"
+							disabled={resettingPassthrough}
+							onclick={resetPassthrough}
+							size="sm"
+							variant="outline"
+						>
+							{m["live.encoder.legacy.reset"]()}
+						</Button>
+					{/if}
+				</div>
 			{/if}
-		</div>
+		</section>
 
 		<!-- Backup-camera rate policy. Rendered ONLY when the engine advertises the
 		     feature: an engine that never did silently ignores the field, and a

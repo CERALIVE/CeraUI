@@ -6,6 +6,8 @@ import { captureStatusSchema } from '@ceralive/cerastream/dist/capture-status.js
 import { sessionSwitchTargetSchema } from '@ceralive/cerastream/dist/session-switch.js';
 import { z } from 'zod';
 
+// The engine's known `active_encode.route_reason` tokens; the wire accepts future ones too.
+export { ROUTE_REASONS } from '@ceralive/cerastream/dist/constants.js';
 export type { SessionSwitchTarget } from '@ceralive/cerastream/dist/session-switch.js';
 
 import { modemListSchema } from './modems.schema';
@@ -320,6 +322,7 @@ export const activeEncodeSchema = z.object({
 	// Codec of the incoming/decoded source before re-encode (e.g. "h264"), when
 	// the engine reports it. Additive + optional — absent on a legacy engine.
 	input_codec: z.string().optional(),
+	route_reason: z.string().optional(),
 	// True on a same-codec passthrough graph (no re-encode; camera fixes the
 	// bitrate); absent/false on transcode. Additive + optional (cerastream 0.5.0).
 	passthrough: z.boolean().optional(),

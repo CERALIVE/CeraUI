@@ -191,9 +191,10 @@ export function handleWifiMonitorEvent(event: MonitorEvent): void {
 			if (event.state === "unavailable") {
 				try {
 					wifiRadioIdentity.markUnavailable(event.device);
-					resume?.();
 				} catch {
 					recordWifiRadioShadowFailure();
+				} finally {
+					resume?.();
 				}
 			}
 			break;
@@ -330,11 +331,14 @@ export function parseWifiScanRow(raw: string): ParsedWifiScanRow | null {
 }
 
 export async function wifiUpdateScanResult(): Promise<boolean> {
+	const signal = scanRefreshController.signal;
+	if (signal.aborted) return false;
 	// Retry transient nmcli scan/list failures with exponential backoff (T7).
 	const wifiNetworks = await pollWithBackoff(
 		() =>
 			nmScanResults("IN-USE,BSSID,SSID,MODE,CHAN,RATE,SIGNAL,BARS,SECURITY"),
 		{
+			signal,
 			maxAttempts: 3,
 			baseDelayMs: 200,
 			maxDelayMs: 1000,
@@ -343,6 +347,7 @@ export async function wifiUpdateScanResult(): Promise<boolean> {
 				logger.debug(`wifiUpdateScanResult: scan failed after retries: ${err}`),
 		},
 	);
+	if (signal.aborted) return false;
 	/*
 	  `undefined` is a failed READ, never an empty result: `nmScanResults` splits
 	  a successful empty answer into `[""]`, so a genuinely empty scan reaches the
@@ -396,18 +401,20 @@ export async function wifiUpdateScanResult(): Promise<boolean> {
 export const WIFI_SCAN_REFRESH_DEBOUNCE_MS = 3000;
 
 let scanRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let scanRefreshController = new AbortController();
 // The action run when the debounce fires. Overridable in tests to observe
 // execution deterministically without spawning nmcli.
 let scanRefreshAction: () => unknown = wifiUpdateScanResult;
 
 export function wifiScheduleScanRefresh(): void {
+	if (scanRefreshController.signal.aborted) return;
 	if (scanRefreshTimer !== null) {
 		clearTimeout(scanRefreshTimer);
 	}
 	scanRefreshTimer = setTimeout(() => {
 		scanRefreshTimer = null;
 		void scanRefreshAction();
-	}, WIFI_SCAN_REFRESH_DEBOUNCE_MS);
+	}, WIFI_SCAN_REFRESH_DEBOUNCE_MS).unref();
 }
 
 /** Number of pending debounce timers (0 or 1). Test introspection. */
@@ -421,6 +428,16 @@ export function wifiCancelScanRefresh(): void {
 		clearTimeout(scanRefreshTimer);
 		scanRefreshTimer = null;
 	}
+}
+
+export function terminateWifiScanRefresh(): void {
+	scanRefreshController.abort();
+	wifiCancelScanRefresh();
+}
+
+export function resetWifiScanRefreshForTest(): void {
+	terminateWifiScanRefresh();
+	scanRefreshController = new AbortController();
 }
 
 /** Test seam: override the action run when the debounce timer fires. */

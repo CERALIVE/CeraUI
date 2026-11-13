@@ -201,10 +201,9 @@ function installWsHarness(token: string): void {
 				if (p === "network.configure" && w.__cera._dropFakeNetcfg) {
 					w.__cera.lastConfigureName = msg.input && msg.input.name;
 					const mode = w.__cera._dropFakeNetcfg;
-					// Orphan mode: drop the configure RPC and NEVER resolve it, so the
-					// owning promise stays pending forever — emulating a socket that
-					// dropped mid-operation (the component's `finally` never runs, leaving
-					// `pending` stuck until the reconnect-edge reconciliation clears it).
+					// Orphan mode: drop the configure RPC without a reply. Closing the
+					// transport later rejects the pending call with ConnectionResetError,
+					// letting the toggle release its field-lock and pending state.
 					if (mode === "orphan") return undefined;
 					const id = msg.id;
 					const input = msg.input ?? {};
@@ -294,22 +293,17 @@ function armShortFieldLockTtl(page: Page, ttlMs: number): Promise<void> {
 	}, ttlMs);
 }
 
-/**
- * Drive the app's connection-state machine deterministically by invoking the
- * client's own `onclose` / `onopen` handlers on the live socket — WITHOUT
- * actually closing the transport (readyState stays OPEN, so the transport's
- * backoff `connect()` is a no-op and no real reconnect timing is involved). A
- * `close` then `open` (with a frame flush between) reproduces the exact
- * `disconnected → connected` reconnect edge that `shouldReconcileOnReconnect`
- * keys on, with zero wall-clock timing dependency.
- */
-function emitConn(page: Page, phase: "close" | "open"): Promise<void> {
-	return page.evaluate((ph) => {
-		const s = (window as any).__cera.socket;
-		if (!s) return;
-		if (ph === "close") s.onclose?.(new CloseEvent("close"));
-		else s.onopen?.(new Event("open"));
-	}, phase);
+/** Close the transport and let the client's reconnect timer create a new owner. */
+async function reconnect(page: Page): Promise<void> {
+	await page.evaluate(() => {
+		const c = (window as any).__cera;
+		c.previousSocket = c.socket;
+		c.socket.close();
+	});
+	await expect.poll(() => page.evaluate(() => {
+		const c = (window as any).__cera;
+		return c.socket !== c.previousSocket && c.socket.readyState === WebSocket.OPEN;
+	})).toBe(true);
 }
 
 /**
@@ -762,8 +756,8 @@ test.describe("bond-toggle no-flash (display hold + ingestion gate)", () => {
 		]);
 	});
 
-	// ── Scenario H — WS reconnect mid-toggle (reconcile-inflight) ───────────────
-	test("H: WS reconnect mid-toggle — reconcile-inflight clears the stuck pending and snaps to the authoritative value (no wrong-direction flash)", async ({
+	// ── Scenario H — WS reconnect mid-toggle (transport reset) ─────────────────
+	test("H: WS reconnect mid-toggle — transport reset clears pending and returns to the authoritative value (no wrong-direction flash)", async ({
 		page,
 	}) => {
 		const enabledToggles = await findEnabledToggles(page);
@@ -783,12 +777,10 @@ test.describe("bond-toggle no-flash (display hold + ingestion gate)", () => {
 		await expect(toggle).toHaveAttribute("aria-busy", "true");
 		expect(
 			await ariaLog(page),
-			"only the optimistic ON→OFF flip; the RPC is orphaned (stuck pending)",
+			"only the optimistic ON→OFF flip; the dropped RPC is still pending",
 		).toEqual(["true"]);
 
-		await emitConn(page, "close");
-		await flush(page);
-		await emitConn(page, "open");
+		await reconnect(page);
 		await flush(page);
 
 		await expect(toggle).toHaveAttribute("aria-busy", "false");
@@ -796,30 +788,30 @@ test.describe("bond-toggle no-flash (display hold + ingestion gate)", () => {
 		await expect(toggle).toHaveAttribute("aria-checked", "true");
 		expect(
 			await ariaLog(page),
-			"ON→OFF optimistic, then OFF→ON reconcile to the authoritative prop",
+			"ON→OFF optimistic, then OFF→ON after transport reset rejects the RPC",
 		).toEqual(["true", "false"]);
 
 		for (let i = 0; i < 6; i++) {
 			await flush(page);
 			expect(
 				await toggle.getAttribute("aria-checked"),
-				"reconciled state must not oscillate",
+				"authoritative state must not oscillate after transport reset",
 			).toBe("true");
 		}
 		expect(
 			await ariaLog(page),
-			"no further transitions after the reconcile",
+			"no further transitions after transport reset",
 		).toEqual(["true", "false"]);
 
 		await inject(page, "netif", { [name]: { enabled: false, tp: 9 } });
 		await expect(toggle).toHaveAttribute("aria-checked", "false");
 
 		writeEvidence19("task-19-reconnect-inflight.txt", [
-			"Scenario H — WS reconnect mid-toggle (reconcile-inflight)",
+			"Scenario H — WS reconnect mid-toggle (transport reset)",
 			`Interface: ${name}`,
-			"Orphaned configure RPC → `pending` stuck (aria-busy=true), held OFF.",
-			"Connection driven disconnected → connected (genuine reconnect edge).",
-			"shouldReconcileOnReconnect fired → lock released + pending cleared.",
+			"Configure RPC dropped without a reply → pending (aria-busy=true), held OFF.",
+			"Transport closed → pending RPC rejected with ConnectionResetError.",
+			"RPC failure handling released the field-lock and cleared pending; a fresh socket opened.",
 			"Toggle snapped to authoritative ON (orphaned disable never applied).",
 			"Post-reconnect echo netif{enabled:false} flowed freely → lock was released.",
 			"Result: PASS (no stuck pending, no wrong-direction flash)",

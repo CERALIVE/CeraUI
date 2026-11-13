@@ -9,16 +9,17 @@
  *   draft.source         → pipeline
  *   draft.bitrateOverlay → bitrate_overlay
  *   draft.bitrate        → max_br
- *   draft.codec          → video_codec  (only when explicitly chosen — Auto omits it)
- *   draft.passthrough    → video_passthrough  (auto/force/off, forwarded verbatim)
+ *   draft.codec          → video_codec  (h264/h265, or null to clear it; absent omits it)
+ *   draft.balancer       → balancer     (only when the operator flipped the adaptive switch)
  *   draft.failoverRatePolicy → failover_rate_policy (only when the dialog offered it)
  *   draft.resolution     → resolution  (CAPABILITY-GATED)
  *   draft.framerate      → framerate   (CAPABILITY-GATED)
  *
- * `codec` is the operator's explicit codec choice (`h264`/`h265`). It is
- * `undefined` for the "Auto (recommended)" selection, in which case
- * `video_codec` is OMITTED so the engine applies its own platform default —
- * the FE never guesses the engine default onto the wire.
+ * The dialog puts `codec` and `balancer` on the draft only when the operator
+ * changed them, so a save never rewrites a saved value it did not touch. `codec:
+ * null` is the return to the engine's automatic format and clears `video_codec`;
+ * the FE never guesses the engine default onto the wire. `video_passthrough` is
+ * never written here: the saved-passthrough notice resets it with its own save.
  *
  * Resolution/framerate are only forwarded when the selected pipeline advertises
  * the matching override support (`supportsResolutionOverride` /
@@ -75,15 +76,8 @@ export function buildEncoderSetConfig(
 		input.bitrate_overlay = draft.bitrateOverlay;
 	}
 	if (draft.bitrate !== undefined) input.max_br = draft.bitrate;
-	// Egress video codec: forwarded ONLY when the operator explicitly picked
-	// H.264/H.265. "Auto" leaves `draft.codec` undefined → `video_codec` omitted
-	// → the engine resolves its own platform default.
 	if (draft.codec !== undefined) input.video_codec = draft.codec;
-	// Same-codec passthrough policy (auto/force/off) — persisted verbatim so the
-	// engine receives the operator's policy at start.
-	if (draft.passthrough !== undefined) {
-		input.video_passthrough = draft.passthrough;
-	}
+	if (draft.balancer !== undefined) input.balancer = draft.balancer;
 	// Backup-camera rate policy: present on the draft only when the engine
 	// advertised the feature, so forwarding it verbatim is already gated.
 	if (draft.failoverRatePolicy !== undefined) {

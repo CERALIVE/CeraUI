@@ -202,8 +202,8 @@ function savedRefreshFixture() {
 			settle.push(() => answer.resolve(undefined));
 			return answer;
 		},
-		run() {
-			const result = wifiUpdateSavedConns();
+		run(signal?: AbortSignal) {
+			const result = wifiUpdateSavedConns(signal);
 			runs.push(result);
 			return result;
 		},
@@ -232,6 +232,43 @@ describe("wifiUpdateSavedConns publication ownership", () => {
 	});
 	afterEach(async () => {
 		await f.restore();
+	});
+
+	it("an aborted held listing starts no profile reads and preserves visible maps", async () => {
+		const controller = new AbortController();
+		const listing = f.deferList();
+		const run = f.run(controller.signal);
+		controller.abort();
+		listing.resolve([wirelessRow(REFRESH_NEW)]);
+		await run;
+		await f.run(controller.signal);
+		expect(f.list).toHaveBeenCalledTimes(1);
+		expect(f.fields).not.toHaveBeenCalled();
+		expect(f.a.saved).toBe(f.previousA.saved);
+		expect(f.a.savedAll).toBe(f.previousA.savedAll);
+	});
+
+	it("an aborted held profile neither dispatches an AP nor reads the next profile", async () => {
+		const controller = new AbortController();
+		f.list.mockResolvedValue([
+			wirelessRow(REFRESH_NEW),
+			wirelessRow(REFRESH_BOUND),
+		]);
+		const delayed = f.deferFields(REFRESH_NEW);
+		f.profiles.set(REFRESH_BOUND, ["infrastructure", "Later network", ""]);
+		const run = f.run(controller.signal);
+		await delayed.started;
+		controller.abort();
+		delayed.resolve(["ap", "Cancelled AP", ADAPTER_A]);
+		await run;
+		expect(f.ap).not.toHaveBeenCalled();
+		expect(f.fields).not.toHaveBeenCalledWith(REFRESH_BOUND, [
+			"802-11-wireless.mode",
+			"802-11-wireless.ssid",
+			"802-11-wireless.mac-address",
+		]);
+		expect(f.a.saved).toBe(f.previousA.saved);
+		expect(f.a.savedAll).toBe(f.previousA.savedAll);
 	});
 
 	it("retains both visible maps while profile fields are pending, then publishes the complete pair", async () => {
@@ -371,7 +408,7 @@ describe("wifiUpdateSavedConns publication ownership", () => {
 	it.each([{ rows: [] }, { rows: [""] }])(
 		"preserves the existing confirmed empty-list policy for %p",
 		async ({ rows }) => {
-			f.list.mockResolvedValue(rows);
+			f.list.mockResolvedValue([...rows]);
 			await f.run();
 			expect(f.a.saved).toEqual({});
 			expect(f.a.savedAll).toEqual({});

@@ -153,6 +153,14 @@ describe("PreviewCanvas", () => {
 		expect(container.querySelector('[data-testid="preview-video"]')).toBeNull();
 	});
 
+	it("names the toggle by its visible text (WCAG 2.5.3 label in name)", () => {
+		const { getByTestId } = render(PreviewCanvas);
+		const toggle = getByTestId("preview-toggle");
+		expect(toggle.hasAttribute("aria-label")).toBe(false);
+		expect(toggle.textContent?.trim()).toBe("Start preview");
+		expect(toggle.getAttribute("aria-pressed")).toBe("false");
+	});
+
 	it("shows the 'preview off' copy (not noSignal) while the toggle is off", () => {
 		const { getByTestId } = render(PreviewCanvas);
 		const off = getByTestId("preview-off");

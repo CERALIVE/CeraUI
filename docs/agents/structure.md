@@ -3,7 +3,7 @@
 ## STRUCTURE
 
 The live cockpit consumes an authoritative session-switch namespace, distinct from
-device discovery. Both consumers pin published cerastream 2026.9.11, schema 0.21.0.
+device discovery. Both consumers pin published cerastream 2026.11.0, schema 0.22.0.
 Admission, the legacy two-capture fallback, explicit absent/empty notices,
 and the outstanding U6 colour drill are in [LIVE-SESSION-SWITCHING](../LIVE-SESSION-SWITCHING.md).
 

@@ -7,7 +7,7 @@
 not admission, and never persist capture config or trigger audio follow. Only an
 unsupported query uses the legacy registry path. See
 [LIVE-SESSION-SWITCHING](../../../../docs/LIVE-SESSION-SWITCHING.md) for the published
-2026.9.11/schema 0.21.0 contract. Targets carry `input_id`, `kind`, and optional
+2026.11.0/schema 0.22.0 contract. Targets carry `input_id`, `kind`, and optional
 source-mode fields;
 membership is authoritative, including explicit `[]` for passthrough/composition.
 Non-membership is `SWITCH_FAILED`, not evidence of a physical unplug. The
@@ -18,7 +18,7 @@ leave discovery, capture persistence and pending audio follow untouched.
 
 ### Engine-owned encoder ladder [EXISTS]
 
-`@ceralive/cerastream@2026.9.11` parses the additive `encoders[]` block before
+`@ceralive/cerastream@2026.11.0` parses the additive `encoders[]` block before
 `capabilities.ts` caches or broadcasts it. The backend performs no codec-table
 reconstruction: live and cached snapshots retain the producer-owned
 `EncoderCapability[]`, while the minimal cold-start floor omits it so the frontend
@@ -26,6 +26,11 @@ uses its explicitly-tested legacy platform fallback. Every consumed nested field
 is listed in `producer-schema-drift.test.ts`; `producer-wire-type-shadow.test.ts`
 separately rejects local `PlatformCaps`, `VideoSourceCap`, `EncoderCapability`, and
 matching schema declarations.
+
+Optional `encoder.default_codec` survives the producer parser and capabilities
+projection. The status projection forwards optional `active_encode.route_reason`;
+the RPC active-encode schema lives in `status.schema.ts`. Older engine snapshots
+remain valid without either field.
 
 The `streaming` router exposes these procedures:
 
@@ -40,6 +45,24 @@ The `streaming` router exposes these procedures:
 | `getConfig()` | Return current config snapshot |
 
 `setConfig` writes the provided fields onto the running config (same relay/manual mutual-exclusion logic as `updateConfig`, minus DNS/pipeline validation), then calls `saveConfig` and broadcasts a `config` message. Use this for all config-only dialogs that must not start the stream.
+
+### Format settings [EXISTS]
+
+`setConfig` accepts optional `balancer` through the published producer's
+`balancerAlgorithmSchema` (`adaptive`, `fixed`, `aimd`). It persists the value,
+echoes it in `applied`, and includes it in config broadcasts and `getConfig`.
+Unknown algorithms fail input validation before persistence. Remote
+`streaming.setConfig` dispatches to this same procedure.
+
+`video_codec: null` clears the saved codec; omission leaves the saved selection
+alone. Disk and config messages retain an optional, non-null codec. The next
+start therefore omits engine `codec` after a clear. Balancer saves and codec
+clears make no engine call while streaming, including a clear with `apply_now`.
+Explicit non-null codec choices retain the existing apply-now transaction.
+`video_passthrough` remains accepted, stored and forwarded unchanged. Loading
+saved settings does not rewrite values, and runtime defaults and start assembly
+are unchanged. Coverage: `streaming-format-settings.test.ts` and the unedited
+`on-air-baseline.test.ts`.
 
 `start` input is PARTIAL by contract. `updateConfig` projects the saved runtime
 config through `streamingConfigInputSchema`, overlays the caller's stated fields,

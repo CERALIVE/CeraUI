@@ -70,6 +70,7 @@ const FULL_PROFILE_CAPABILITIES: GetCapabilitiesResult = {
 	},
 	encoder: {
 		codecs: ["H264", "H265"],
+		default_codec: "h265",
 		bitrate_range: { min: 1000, max: 12000, unit: "kbps" },
 	},
 	encoders: ["h265", "h264"].map((codec) => ({
@@ -176,6 +177,7 @@ const DEFAULT_MOCK_TRANSPORTS = ["srtla", "rist"] as const;
 // no active_encode, so the mock returns null when not streaming.
 const FULL_PROFILE_ACTIVE_ENCODE: ActiveEncode = {
 	codec: "h265",
+	route_reason: "not-compressed",
 	resolution: "1920x1080",
 	framerate: 30,
 	active_input: "hdmi",
@@ -757,6 +759,7 @@ export function getMockActiveEncode(): ActiveEncode | null {
 			framerate: 30,
 			active_input: sourceId,
 			input_codec: sourceId === "srt" ? "h265" : "h264",
+			route_reason: "adaptive-active",
 		};
 	}
 	return { ...FULL_PROFILE_ACTIVE_ENCODE };

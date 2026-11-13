@@ -74,8 +74,8 @@ import {
 } from "./usb-net-classifier.ts";
 
 /**
- * The subset of a classified router-mode cellular dongle that reaches the
- * `netif` wire projection.
+ * Internal classification of a router-mode cellular dongle. The `netif` wire
+ * projection selects its public metadata and excludes the serial.
  */
 export type RouterCellularMarker = {
 	vendor: string;
@@ -93,11 +93,9 @@ export type RouterCellularMarker = {
 	 */
 	duplicate_model: boolean;
 	/**
-	 * The device's own serial, present ONLY while `duplicate_model` is true.
-	 *
-	 * It is the one fact that separates two units of one SKU, and it is withheld
-	 * otherwise because a lone device needs no discriminator and a serial beside
-	 * its name is noise. A device that publishes none simply has no entry here.
+	 * The device's own serial, retained internally only while `duplicate_model`
+	 * is true. A device that publishes none simply has no entry here.
+	 * `applyRouterCellularProjection` never sends this serial to UI clients.
 	 */
 	serial?: string;
 };
@@ -527,10 +525,9 @@ function rejectSharedSerial(
 /**
  * The identity resolver's view of one device.
  *
- * The serial is carried UNCONDITIONALLY here, unlike the wire marker's
- * `serial` — that one is a twin discriminator withheld from a lone device
- * because a serial beside a name is noise, whereas this one is an identity
- * anchor and a lone device needs it just as much as a twin does.
+ * The serial is carried UNCONDITIONALLY here, unlike the internal classification
+ * marker's twin discriminator. An identity anchor is needed by a lone device
+ * just as much as by a twin. Neither serial enters the `netif` wire projection.
  */
 function physicalDescriptor(
 	ifname: string,

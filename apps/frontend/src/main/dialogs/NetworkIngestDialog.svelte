@@ -27,7 +27,6 @@ import { LoaderCircle, Radio } from '@lucide/svelte';
 import { AppDialog } from '$lib/components/dialogs';
 import { Switch } from '$lib/components/ui/switch';
 import {
-	clearOperation,
 	confirmOperation,
 	getOperationPhase,
 	osCommand,
@@ -96,7 +95,7 @@ async function toggle(protocol: Protocol, next: boolean) {
 		classify: (r) =>
 			!r.success && r.error !== NETWORK_INGEST_UNAVAILABLE_ERROR
 				? { ok: false, reason: r.error }
-				: { ok: true },
+				: { ok: true, clear: !r.success },
 		failMessage: () => m["network.os.operationFailed"](),
 	});
 	// undefined → re-entry no-op or a thrown RPC (osCommand already toasted).
@@ -109,7 +108,6 @@ async function toggle(protocol: Protocol, next: boolean) {
 		// drop the pending op so it never reads as a real success, revert the target.
 		if (result.error === NETWORK_INGEST_UNAVAILABLE_ERROR) {
 			unavailable = true;
-			clearOperation(key);
 		}
 		targets[protocol] = null;
 		return;

@@ -43,6 +43,7 @@ import {
 	type WifiNetwork,
 	wifiUpdateSavedConns,
 } from "./wifi.ts";
+import { notifyWifiAdapterModeDiscovery } from "./wifi-adapter-mode-events.ts";
 import { supportsApStaConcurrency } from "./wifi-ap-sta-capability.ts";
 import { refreshWifiCapabilities } from "./wifi-capabilities.ts";
 import type { AutoWifiChannel } from "./wifi-channels.ts";
@@ -56,6 +57,8 @@ import {
 	getWifiInterfaceByMacAddress,
 	getWifiInterfacesByMacAddress,
 	removeWifiInterface,
+	resetWifiScanRefreshForTest,
+	terminateWifiScanRefresh,
 	wifiScheduleScanRefresh,
 	wifiUpdateScanResult,
 } from "./wifi-connections.ts";
@@ -211,23 +214,32 @@ export function getMacAddressForWifiInterface(id: WifiInterfaceId) {
 let unavailableDeviceRetryExpiry = 0;
 let wifiIfId = 0;
 const wifiUpdateTimers = new Set<ReturnType<typeof setTimeout>>();
+let discoveryController = new AbortController();
 
 export function scheduleWifiUpdate(delayMs: number): void {
+	if (discoveryController.signal.aborted) return;
 	const timer = setTimeout(() => {
 		wifiUpdateTimers.delete(timer);
 		void wifiUpdateDevices();
-	}, delayMs);
+	}, delayMs).unref();
 	wifiUpdateTimers.add(timer);
 }
 
-export function stopWifiUpdateLoopForTest(): void {
+function cancelWifiUpdateTimers(): void {
 	for (const timer of wifiUpdateTimers) clearTimeout(timer);
 	wifiUpdateTimers.clear();
 	unavailableDeviceRetryExpiry = 0;
 }
 
+export function stopWifiUpdateLoopForTest(): void {
+	cancelWifiUpdateTimers();
+}
+
 export function resetWifiInterfaceDiscoveryForTest(): void {
-	stopWifiUpdateLoopForTest();
+	cancelWifiUpdateTimers();
+	discoveryController.abort();
+	discoveryController = new AbortController();
+	resetWifiScanRefreshForTest();
 	wifiIfId = 0;
 }
 
@@ -300,6 +312,7 @@ async function syncActiveConnection(
 	}
 
 	const mode = await resolveConnectionMode(activeConn);
+	if (discoveryController.signal.aborted) return false;
 	wifiInterface.activeConn = activeConn;
 	wifiInterface.activeMode = mode;
 
@@ -317,9 +330,45 @@ async function syncActiveConnection(
 	return previousConn !== activeConn || previousMode !== mode;
 }
 
-export async function wifiUpdateDevices() {
+let activeDiscovery: Promise<boolean | undefined> | undefined;
+let queuedDiscovery:
+	| ReturnType<typeof Promise.withResolvers<boolean | undefined>>
+	| undefined;
+
+export function terminateWifiDiscovery(): void {
+	discoveryController.abort();
+	cancelWifiUpdateTimers();
+	terminateWifiScanRefresh();
+	// Undefined already means discovery produced no update; do not strand waiters.
+	queuedDiscovery?.resolve(undefined);
+	queuedDiscovery = undefined;
+}
+
+export function wifiUpdateDevices(): Promise<boolean | undefined> {
+	if (discoveryController.signal.aborted) return Promise.resolve(undefined);
+	if (activeDiscovery) {
+		queuedDiscovery ??= Promise.withResolvers<boolean | undefined>();
+		return queuedDiscovery.promise;
+	}
+
+	const run = discoverWifiDevices();
+	activeDiscovery = run;
+	const finish = () => {
+		activeDiscovery = undefined;
+		const queued = queuedDiscovery;
+		queuedDiscovery = undefined;
+		if (queued) wifiUpdateDevices().then(queued.resolve, queued.reject);
+	};
+	// A queued caller needs a read begun after its call, even if this run fails.
+	void run.then(finish, finish);
+	return run;
+}
+
+async function discoverWifiDevices() {
+	const signal = discoveryController.signal;
 	let observation: number | undefined;
 	try {
+		wifiRadioObservation.stop();
 		observation = wifiRadioIdentity.captureObservation();
 	} catch {
 		recordWifiRadioShadowFailure();
@@ -332,7 +381,26 @@ export async function wifiUpdateDevices() {
 	let unavailableDevices = false;
 
 	const networkDevices = await nmDevices("device,type,state,con-uuid");
-	if (!networkDevices) return;
+	if (signal.aborted) return;
+	if (!networkDevices) {
+		if (observation !== undefined) {
+			try {
+				wifiRadioObservation.enqueue(
+					Object.values(getWifiInterfacesByMacAddress()).map((row) => ({
+						ifname: row.ifname,
+						row,
+						...(row.degradedReason
+							? { degradedReason: row.degradedReason }
+							: {}),
+					})),
+					observation,
+				);
+			} catch {
+				recordWifiRadioShadowFailure();
+			}
+		}
+		return;
+	}
 
 	// sorts the results alphabetically by interface name
 	networkDevices.sort();
@@ -406,6 +474,7 @@ export async function wifiUpdateDevices() {
 			*/
 			seenIfnames.push(ifname);
 			const macAddress = await resolveWifiPermanentMac(ifname, currentMac);
+			if (signal.aborted) return;
 			const permanentMacResolved =
 				getWifiPermanentMacCached(ifname) !== undefined;
 			let recoveredId: WifiInterfaceId | undefined;
@@ -449,6 +518,7 @@ export async function wifiUpdateDevices() {
 						"GENERAL.VENDOR,GENERAL.PRODUCT,WIFI-PROPERTIES.AP,WIFI-PROPERTIES.5GHZ,WIFI-PROPERTIES.2GHZ",
 					),
 				);
+				if (signal.aborted) return;
 				if (!parsedProps.ok) {
 					logParseError(parsedProps);
 					continue;
@@ -471,9 +541,11 @@ export async function wifiUpdateDevices() {
 				if (parsedProps.value.supportsAp) {
 					newInterface.supportsApStaConcurrency =
 						await supportsApStaConcurrency(ifname);
+					if (signal.aborted) return;
 					if (newInterface.supportsApStaConcurrency) {
 						const concurrentInterface =
 							await ensureConcurrentApInterface(ifname);
+						if (signal.aborted) return;
 						if (concurrentInterface === undefined) {
 							newInterface.supportsApStaConcurrency = false;
 						}
@@ -515,6 +587,7 @@ export async function wifiUpdateDevices() {
 				);
 			}
 		}
+		if (signal.aborted) return;
 	}
 
 	for (const wifiInterface of Object.values(getWifiInterfacesByMacAddress())) {
@@ -531,6 +604,7 @@ export async function wifiUpdateDevices() {
 		const activeConn = concurrentDevices.get(virtualIfname) ?? null;
 		if (activeConn && canHotspot(wifiInterface)) {
 			await handleHotspotConn(undefined, activeConn, { active: true });
+			if (signal.aborted) return;
 		}
 		const previous = wifiInterface.concurrentHotspot;
 		wifiInterface.concurrentHotspot = { ifname: virtualIfname, activeConn };
@@ -558,12 +632,14 @@ export async function wifiUpdateDevices() {
 	}
 
 	if (newDevices) {
-		await wifiUpdateSavedConns();
+		await wifiUpdateSavedConns(signal);
+		if (signal.aborted) return;
 		wifiScheduleScanRefresh();
 	}
 
 	if (statusChange) {
 		await wifiUpdateScanResult();
+		if (signal.aborted) return;
 		wifiScheduleScanRefresh();
 	}
 
@@ -591,6 +667,7 @@ export async function wifiUpdateDevices() {
 			// Remove hotspot IPs from the source IP address list for BCRPT
 		}
 	}
+	if (signal.aborted) return;
 	logger.debug("Wifi interfaces", wifiInterfacesByMacAddress);
 
 	/* If some wifi adapters were marked unavailable, recheck periodically
@@ -646,5 +723,8 @@ export async function wifiUpdateDevices() {
 			recordWifiRadioShadowFailure();
 		}
 	}
+	queueMicrotask(() => {
+		void notifyWifiAdapterModeDiscovery();
+	});
 	return statusChange;
 }

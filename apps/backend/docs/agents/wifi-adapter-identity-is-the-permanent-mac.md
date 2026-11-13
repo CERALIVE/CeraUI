@@ -142,8 +142,10 @@ until NetworkManager is ready, even if its permanent address is readable.
 Observational incarnations rotate on a changed witness, classification or degraded
 edge. Same-object renames and repeated duplicate runs retain their incarnation.
 Discovery and monitor `unavailable` events project incarnation/degraded-reason
-changes into the observational snapshot, without changing broadcast decisions.
-Existing status builds carry the sampled token when one is available.
+changes into the observational snapshot. An event with no identity row returns
+before advancing the publication sequence, so a virtual or non-Wi-Fi device
+cannot cancel another radio's pending sample. Existing status builds carry
+the sampled token when one is available.
 Projection also requires the exact registry row, its current observation
 generation and a coherent lifetime. A private weak map invalidates evidence
 before discovery publishes or mutates a row. This covers a new row and a reused
@@ -152,41 +154,128 @@ incoherent and superseded observations leave the field absent until a later
 current sample proves it. Monitor-only unavailable edges retain the original
 row association while rotating the token. The existing disconnect broadcast
 still precedes the monitor observation: a private publication fence omits the
-token in that synchronous window and releases it only after rotation succeeds.
-The fence never restores over a newer discovery generation. Legacy data and scheduling remain
-unchanged.
+token in that synchronous window and releases it in `finally`, including when
+the identity update throws. The fence never restores over a newer discovery
+generation. Legacy data and discovery publication remain unchanged.
 Observation sequences fence publication: an older discovery cannot erase a
 later unavailable event or replace a newer completed observation. Canceled
 samples cannot commit their cache or snapshot.
 
-`wifiUpdateDevices` retains main's independent per-call legacy discovery,
-including overlapping reads, per-call errors, results and broadcast ordering.
-The proposed bounded legacy discovery (M1) moves to B, where that observable
-scheduling change can be accepted and documented.
+`wifiUpdateDevices` allows one active discovery and one queued discovery.
+Callers arriving during the active run share the queued run, whose device
+listing starts after their calls. Each run retains its own result or original
+error object, and a rejection still starts the queued run. Confirmation polls
+use this same queue. The queue creates no timers and leaves the discovery body,
+classification, tokens and wire fields unchanged. Both the AP+STA probe and
+concurrent-interface default runners use `runIw` and its `/usr/sbin/iw`
+fallback while retaining their injected test runners.
+
+Discovery is a terminal shutdown owner alongside observation. The composition
+root injects both terminations into the shutdown helper, which imports no Wi-Fi
+modules. Termination settles queued and later callers with `undefined`, the
+existing no-update result, even while an active listing is still held. Active
+work checks the terminal fence after awaits. Pending scan refreshes, scan
+backoff waits and unavailable-device retries are cancelled; later scheduling
+cannot reopen them. Discovery and scan timers are unreferenced. The reusable
+cancel helpers do not clear the terminal state; only explicit test setup reopens
+it. `wifi-discovery-shutdown.test.ts` covers both signals, delayed cleanup,
+late saved/scan reads and cancellation of a pending scan retry.
+
+The discovery-owned abort signal also accompanies its saved-connection refresh.
+It cancels an already-waiting saved-list retry, prevents a failed held listing
+from arming another wait, and fences later profile reads, AP dispatch and saved
+map publication. Saved refreshes entered with an already-aborted signal perform
+no read. Independent saved-refresh callers that omit the signal retain their
+existing retry schedule and timer lifetime; the shared retry helper's
+unsignaled consumers are unchanged.
 
 `wifi-radio-observation.ts` schedules sysfs sampling in a later task, after
 legacy publication and promise completion; legacy callers never await it.
-Only this detached work has one active flight and one replaceable latest queued
-batch. A 100 ms budget aborts the sample and prevents further reads or publication.
-An uncancellable read retains its sole physical slot until it settles, so a hung
-read cannot accumulate additional I/O; legacy discovery remains independent.
-Both integration boundaries contain shadow exceptions. Read failures, timeouts
-and unexpected shadow exceptions increment the internal
-`getWifiRadioShadowFailures()` counter without adding error logs.
+Only this detached work has one logical active flight and one replaceable latest
+queued batch. A 1000 ms budget aborts the sample and prevents further reads or
+publication from that generation. A held uncancellable physical read may settle
+later; a new logical sample does not wait for it while capacity is available.
+`wifi-radio-read-budget.ts` bounds all outstanding physical text/symlink reads
+to four across every producer, discovery and retry. An operation increments the
+counter when it starts and decrements it only on settlement; cancellation never
+pretends that the operation finished. At capacity the latest sample waits
+without a new reader call or sampling timeout. One string-only warning per
+saturation episode names the held count. Settlement resumes only a queued
+capacity-deferred sample; it does not revive an exhausted retry cycle, which
+requires another discovery. Capacity wait has no finite bound if reads stay held.
 
-Coverage: `wifi-radio-identity.test.ts`, `wifi-discovery-single-flight.test.ts`
-and `wifi-radio-equivalence.test.ts`. After removing only the optional incarnation
+Lost observations resample the
+current registry with a fresh generation and invalidate each row first, after
+250 ms, then 1 s, then 4 s, with at most three consecutive retries.
+An incomplete/inconsistent bracket still publishes uncertainty. A current
+sampled row with no declared degraded reason and no coherent projectable token
+is a loss with reason `incomplete`, so it retries instead of being stranded.
+A row declared degraded/limited by its own contract does not retry solely for
+absent proof. Coherent publication and new discovery reset the retry budget.
+Discovery cancels pending
+observation work before awaiting NetworkManager, and an absent device listing
+still queues the retained registry rows.
+
+Explicit `stop()` and `terminate()` cancel without a warning or retry.
+`stop()` remains reusable; `terminate()` permanently rejects enqueue, starts
+and retry work. Process SIGTERM/SIGINT injects `terminate()` through
+`BackendShutdownDeps` at the main composition root, including when an older
+discovery is still awaiting its listing. The shutdown helper has no Wi-Fi or
+application bootstrap import. Wi-Fi-owned test setup alone reopens the singleton.
+Every observation-owned start, deadline, retry and queued-continuation timer is
+unreferenced; explicit cancellation still clears timers, but they cannot retain
+an otherwise finished process.
+
+After a publication, a changed wire-projected token on any current row sends
+exactly one additional local Wi-Fi status frame through a callback installed
+beside `broadcastWifiState`. No projected token change means no frame.
+`broadcastMsgLocal` keeps this notification off the cloud relay; the remote
+projection, registry keys, token format, admission and wire fields are unchanged.
+The local callback never records global hotspot membership delivery. Only the
+normal global `broadcastWifiState` path acknowledges the roster, preserving
+one global/control-channel notification when a poll overlaps token publication.
+
+Both integration boundaries contain shadow exceptions. Read failures, timeouts
+and unexpected shadow exceptions increment `getWifiRadioShadowFailures()`.
+Each lost sample also emits one string-only `logger.warn`:
+`Wi-Fi identity sample lost (<reason>) for <ifnames>; retry <n>/3`
+for the three retries, and `; no retries left` for the final exhausted loss.
+An initial sample plus three retries that all time out therefore produces four
+warnings and no pending timer. No status object or credential enters these
+warnings.
+
+Coverage: `wifi-token-liveness.test.ts`, `wifi-radio-identity.test.ts`,
+`wifi-discovery-single-flight.test.ts` and `wifi-radio-equivalence.test.ts`.
+`process-lifetime.test.ts` covers helper-only subprocess imports without the
+application preload or setup file, injected termination, and native timer
+reference state/natural exit with a never-settling reader.
+Fake-clock liveness tests reproduce the boot-time virtual-interface event,
+failed listing, recovery after timeout, retry exhaustion, local-only token
+arrival, per-row rotation, exception-safe publication fencing, credential-free
+warnings, rejection/supersession recovery and exhaustion, incomplete brackets,
+budget resets and already-fired retry cancellation. `wifi-radio-read-liveness`
+regressions cover the four-operation physical bound, late completion fences,
+settlement recovery and terminal pending-listing shutdown; the roster publication
+regression uses real authenticated local and injected control-channel delivery.
+After removing only the optional incarnation
 field from Wi-Fi rows, nine recorded main fixture families cover
 the resolver tiers, unavailable/missing-operational rows, duplicates, rename and
 replug, public prepare/start results, credentials and broadcast count/order.
-The overlapping-call fixture records three independent reads, results
-`false,false,true`, three broadcasts and an empty registry; a separate fixture
-covers independent errors. An extra real broadcast is a permanent negative
-control. Fault tests use fake clocks and capability/command readers to cover
+The overlapping-call fixture now records one initial read and one queued read,
+results `false,false,false`, one broadcast and the final unavailable row;
+the error fixture preserves the first run's error and shares the queued result.
+`wifi-discovery-bounded.test.ts` covers sequential registry equivalence,
+freshness, rejection recovery, the production confirmation poll and a burst of
+100 callers with no timer left pending. An extra real broadcast is a permanent
+negative control. Fault tests use fake clocks and capability/command readers to cover
 hanging, slow and rejected sampling plus both integration boundaries.
 The authorized A-only raw-byte assertion now compares all legacy bytes after
 removing only incarnation, with added wire-value rotation and ordinary-status
-stability assertions. Every other pre-existing assertion remains unchanged.
+stability assertions. The owner-authorized L0 changes keep strict legacy-log
+equality while separately requiring the exact lost-sample warning for hung
+and rejected readers. The hang case counts exactly two reads, including the
+fresh discovery after timeout, and still proves releasing the old read adds
+no third call. The slow case and all other assertions remain unchanged.
 Locator-only A tests were
 removed with the explicitly deferred feature. Owner hardware gates G1-G5 are
 unrun and are not claimed;
@@ -196,4 +285,100 @@ The [additive protocol contract](../../../../docs/WIFI-INCARNATION-PROTOCOL.md)
 defines token validation, mock rebind control, byte changes, RPC output parsing,
 remote stripping and the workspace package boundary. No frontend uses the token
 for behavior in this step.
+
+### Chosen mode and boot restore [EXISTS; host and mock-browser tested]
+
+Explicit Start and Stop remember the chosen mode through an optional recorder in
+the existing transaction dependencies. RPC and legacy dispatch keep their call
+shapes. The real recorder uses the same `wifi_modes` store functions as explicit
+mode selection; all three paths resolve the logical intent key through
+`resolveWifiAdapterModeIntentKey`. Keys and values remain readable by an older
+backend. The mock mode offering reports the mock's chosen mode as `desired`.
+
+Start records the actual hybrid or exclusive target inside the adapter lock,
+after path validation and before allocating a virtual interface or changing
+NetworkManager. A recorded hybrid choice cannot fall back to exclusive mode:
+false or unknown concurrency refuses with `activation-failed`, without effects
+or a persistence write. An explicit hybrid mode switch retains its existing
+`capability-unproven` refusal. With absent or station intent, a proven non-hybrid
+radio still starts exclusively. If concurrency is unknown, the existing
+exclusive path remains available, but it does not create a durable hotspot
+choice from that uncertainty. An already-active Start applies the same recording
+proof: observed hybrid is recorded; observed exclusive mode is recorded only with
+proven absence of concurrency or an existing explicit hotspot choice. Retrying an
+unknown exclusive fallback never manufactures a persisted exclusive preference.
+Before any already-active exclusive shortcut can succeed or record, an explicit
+hybrid choice with absent or unknown concurrency is refused with
+`activation-failed`. An already-active hybrid topology keeps its shortcut.
+Start and boot restore consume the same current capability cache. The legacy
+discovery probe's `false` also represents read failure, so that row flag is not
+proof of absent concurrency. A later successful capability publication can
+restore pending hybrid without recreating or manually repairing the row. Actual
+concurrent-interface allocation remains the final admission check; successful
+allocation updates the row's concurrent path state before confirmation.
+
+Stop records station under the same key before teardown, including the
+already-stopped shortcut. A definite refusal or throw restores the previous
+value, deleting a previously absent key. Start has one undo at the lock exit,
+including failure before an activation rollback exists; an accepted but
+`not-confirmed` activation keeps its target. Undo applies only while the stored
+value is still this operation's target, so an older failure cannot overwrite a
+newer choice.
+Both persistence and restoration roll back their in-memory map on a synchronous
+write exception. Reads therefore keep the last successfully persisted value or
+absence, even if an undo's own write fails. A failed initial preference write
+cannot leave an unpersisted hotspot choice eligible for later restore.
+
+Explicit mode changes hold one adapter lock across persistence, intermediate
+teardown and activation. Internal delegates do not reacquire that lock and omit
+the recorder by destructuring, so a hybrid/hotspot switch's intermediate Stop
+cannot replace its target with station. Regulatory reconfigure and its rollback
+use their existing direct activation path and never record a new mode choice.
+After confirmed teardown, Stop retires matching parent aliases independently of
+virtual cleanup. It examines the current concurrent observation even when none
+existed at entry, matching the captured virtual name or the parent's canonical
+`clap-` name. The stopped UUID or an idle marker on that interface is retired.
+A different active UUID, another interface name, or newer parent observation is
+preserved. This covers discovery introducing the idle marker during disconnect;
+later repopulation while virtual release is awaited remains a follow-up below.
+
+While streaming, an exclusive Start or a switch to hotspot that would replace a
+connected station link refuses with `DEVICE_BUSY`, logs once and writes nothing.
+Hybrid Start, Stop, and station or hybrid selection remain available.
+
+Boot restore is apply-only. It waits for the first completed discovery
+publication, then follows discovery, capability-publication and streaming-clearance
+edges; it has no polling deadline or restore timer. Each attempt re-reads current
+intent and the registry under the adapter lock, never calls the persisting mode
+setter, and skips station intent, active or observed APs, and owned pending
+activations. Streaming leaves a disruptive restore pending with one warning.
+An unavailable hybrid capability leaves hybrid pending with `activation-failed`.
+The same unchanged edge does not repeat an attempt or warning; a late adapter,
+capability arrival or cleared stream re-arms pending work. Accepted activations
+are not dispatched twice for the same row and intent.
+Capability edges come only from successful cache publication or an invalidation
+that changes evidence. A failed read retaining the same expired cache emits no
+edge, so a pending restore cannot turn one discovery event into an endless probe
+cycle. Single-flight cleanup remains in `finally`, independent of publication.
+Each interface also carries an internal equality revision of its phy binding and
+concurrency proof. Invalidation and recovery advance that evidence even when
+restore coalesces the events during a waiting activation. Pending-attempt dedup
+includes this revision, so true-to-unknown-to-true recovery is not lost after a
+definite activation refusal. Identical proof/binding publications leave it
+unchanged, and accepted activations remain suppressed. The producer retains only
+the latest mapped interface set or its invalidation; revision reads start no IO.
+
+The event source is a graph-free leaf, introduces no wire field, and has a
+cancellable subscription. Shutdown retires restore before terminating identity
+observation. It cannot start another adapter after cancellation.
+The later limited-radio D12 exception and composite identity keys remain outside
+this step; this restore applies only to the existing matching intent key.
+
+### Inherited follow-ups outside B2 round 4 [PARTIAL]
+
+- Bound retries when the initial capability read fails with no retained cache.
+- Run one trailing capability computation for a newer interface set joining an
+  older flight.
+- Bind confirmation to the chosen activation topology, covering discovery
+  repopulation while virtual-interface release is awaited.
 

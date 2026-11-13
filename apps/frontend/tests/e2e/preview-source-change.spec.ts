@@ -221,7 +221,11 @@ test.describe('C4 preview follows the applied source', () => {
 		// Open the collapsed preview disclosure and enable the preview.
 		const disclosure = page.getByTestId('preview-disclosure');
 		await expect(disclosure).toBeVisible({ timeout: 15_000 });
-		await disclosure.locator('summary').click();
+		// Open by default from 768 px (Live screen contract), and a summary click
+		// toggles a <details> — so reveal it only when it is closed.
+		if (!(await disclosure.evaluate((el) => (el as HTMLDetailsElement).open))) {
+			await disclosure.locator('summary').click();
+		}
 		const preview = page.getByTestId('preview');
 		await expect(preview).toBeVisible();
 		await page.getByTestId('preview-toggle').click();

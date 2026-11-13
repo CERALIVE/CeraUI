@@ -206,7 +206,17 @@ test.each(["hang", "slow", "throw"] as const)(
 			jest.advanceTimersByTime(RADIO_SHADOW_TIMEOUT_MS);
 		}
 		expect(broadcasts).toEqual(expected.broadcasts);
-		expect(logs).toEqual(expected.logs);
+		if (mode === "slow") {
+			expect(logs).toEqual(expected.logs);
+		} else {
+			const warning = `Wi-Fi identity sample lost (${mode === "hang" ? "timed out" : "rejected"}) for wlan0; retry 1/3`;
+			expect(logs.filter(({ args }) => args[0] !== warning)).toEqual(
+				expected.logs,
+			);
+			expect(logs.filter(({ args }) => args[0] === warning)).toEqual([
+				{ level: "warn", args: [warning] },
+			]);
+		}
 		expect(getWifiRadioShadowFailures() - failures).toBe(
 			mode === "slow" ? 0 : 1,
 		);
@@ -214,11 +224,12 @@ test.each(["hang", "slow", "throw"] as const)(
 			const another = startLegacy();
 			expect(await another).toBe(true);
 			jest.advanceTimersByTime(0);
-			expect(read).toHaveBeenCalledTimes(1);
+			// Includes the fresh read a later discovery makes after a timed-out sample.
+			expect(read).toHaveBeenCalledTimes(2);
 			wifiRadioObservation.stop();
 			gate.resolve("3");
 			await wifiRadioObservation.settled;
-			expect(read).toHaveBeenCalledTimes(1);
+			expect(read).toHaveBeenCalledTimes(2);
 		}
 	},
 );
@@ -364,7 +375,7 @@ test("shadow rejection releases its queued batch without propagating", async () 
 	expect(getWifiRadioShadowFailures() - failures).toBe(1);
 });
 
-test("the production confirmation poll keeps its independent main read", async () => {
+test("the production confirmation poll waits for its queued fresh read", async () => {
 	const gate = Promise.withResolvers<string[]>();
 	releases.push(() => gate.resolve([]));
 	let reads = 0;
@@ -383,9 +394,9 @@ test("the production confirmation poll keeps its independent main read", async (
 	};
 	const discovery = startLegacy();
 	const confirmation = defaultHotspotDeps.pollHotspotActive?.(iface);
-	expect(reads).toBe(2);
-	expect(await confirmation).toBe(true);
+	expect(reads).toBe(1);
 	gate.resolve([]);
+	expect(await confirmation).toBe(true);
 	expect(await discovery).toBe(false);
 });
 

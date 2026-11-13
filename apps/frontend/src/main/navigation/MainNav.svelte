@@ -11,9 +11,6 @@ import {
 } from '$lib/stores/navigation.svelte';
 import { cn } from '$lib/utils';
 
-let lastNavigationTime = 0;
-const NAVIGATION_THROTTLE_MS = 50;
-
 // Rail nav belongs to "desktop chrome": ≥1024px OR a short landscape kiosk panel
 // (≥768px ∧ ≤600px tall). Below that the mobile bottom dock (MobileNav) renders
 // instead. Reactive so the rail/dock swap on resize. Mirrors MainView's pivot.
@@ -24,10 +21,6 @@ const activeKey = $derived(Object.keys(currentNav)[0] ?? 'live');
 
 const handleTabNavigation = (identifier: string, navigation: NavElements[string]) => {
 	if ($isNavigationTransitioning || !navigation || !identifier) return;
-
-	const now = Date.now();
-	if (now - lastNavigationTime < NAVIGATION_THROTTLE_MS) return;
-	lastNavigationTime = now;
 
 	navigateTo({ [identifier]: navigation } as NavElements);
 };

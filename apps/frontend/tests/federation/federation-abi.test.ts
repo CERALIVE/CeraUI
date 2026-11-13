@@ -238,18 +238,51 @@ describe("federation additive options — the BUILT audio bundle", () => {
 	});
 });
 
-describe("federation save-failure surface", () => {
-	it("surfaces a resolved {success:false} write instead of reporting success", async () => {
+describe("federation encoder bundle — the host's saved format settings", () => {
+	it("reads the host's balancer and passthrough, and resets passthrough through the host", async () => {
 		const module = await loadEntry("encoder");
-		const failures: string[] = [];
+		const writes: unknown[] = [];
 		const { handle } = await mountInto(module, {
-			// Explicit: the bundle's locale is module state that survives unmount, so
-			// an earlier mount's `ar` would otherwise decide what this asserts.
+			locale: "en",
+			config: {
+				video_codec: "h264",
+				balancer: "fixed",
+				video_passthrough: "force",
+			} as NonNullable<FederationMountOptions["config"]>,
+			capabilities: BASE_CAPABILITIES,
+			host: hostAdapter({
+				setConfig: async (input) => {
+					writes.push(input);
+					return { success: true };
+				},
+			}),
+		});
+		const byId = (id: string) => document.querySelector(`[data-testid="${id}"]`);
+
+		expect(byId("encoder-format-manual")?.getAttribute("aria-checked")).toBe("true");
+		expect(byId("encoder-adaptive")?.getAttribute("aria-checked")).toBe("false");
+		expect(byId("encoder-legacy-passthrough")?.getAttribute("data-setting")).toBe("force");
+
+		(byId("encoder-legacy-passthrough-reset") as HTMLButtonElement | null)?.click();
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		expect(writes).toEqual([{ video_passthrough: "auto" }]);
+		expect(byId("encoder-legacy-passthrough")).toBeNull();
+
+		await handle.destroy();
+	});
+});
+
+describe("federation save-failure surface", () => {
+	it("writes nothing through the host when Save is pressed with no change", async () => {
+		const module = await loadEntry("encoder");
+		const writes: unknown[] = [];
+		const { handle } = await mountInto(module, {
 			locale: "en",
 			host: hostAdapter({
-				setConfig: async () => {
-					failures.push("called");
-					return { success: false, error: "device_mode_unsupported" };
+				setConfig: async (input) => {
+					writes.push(input);
+					return { success: true };
 				},
 			}),
 		});
@@ -258,10 +291,38 @@ describe("federation save-failure surface", () => {
 			/save|حفظ/i.test(button.textContent ?? ""),
 		);
 		expect(save, "the encoder dialog renders no save control").toBeDefined();
+		// The save handler calls the host synchronously, so nothing can arrive later.
+		save?.click();
+		expect(writes).toEqual([]);
+
+		await handle.destroy();
+	});
+
+	it("surfaces a resolved {success:false} write instead of reporting success", async () => {
+		const module = await loadEntry("encoder");
+		const failures: unknown[] = [];
+		const { handle } = await mountInto(module, {
+			// Explicit: the bundle's locale is module state that survives unmount, so
+			// an earlier mount's `ar` would otherwise decide what this asserts.
+			locale: "en",
+			host: hostAdapter({
+				setConfig: async (input) => {
+					failures.push(input);
+					return { success: false, error: "device_mode_unsupported" };
+				},
+			}),
+		});
+
+		// A Save only writes what changed, so change one setting first.
+		(document.querySelector('[data-testid="encoder-adaptive"]') as HTMLElement | null)?.click();
+		const save = [...document.querySelectorAll("button")].find((button) =>
+			/save|حفظ/i.test(button.textContent ?? ""),
+		);
+		expect(save, "the encoder dialog renders no save control").toBeDefined();
 		save?.click();
 		await new Promise((resolve) => setTimeout(resolve, 100));
 
-		expect(failures).toEqual(["called"]);
+		expect(failures).toEqual([{ balancer: "fixed" }]);
 		const catalog = JSON.parse(
 			readFileSync(
 				join(ROOT, "packages", "i18n", "messages", "en.json"),

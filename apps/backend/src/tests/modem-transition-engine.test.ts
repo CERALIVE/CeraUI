@@ -27,6 +27,7 @@ import type { UsbDeviceSnapshot } from "@ceralive/modem-control";
 import { call } from "@orpc/server";
 
 import { getConfig } from "../modules/config.ts";
+import { setModemNmDeviceReaderForTest } from "../modules/modems/modem-nm-device.ts";
 import {
 	resetMutationBlockDeps,
 	setMutationBlockDeps,
@@ -44,8 +45,10 @@ import {
 } from "../modules/modems/mutation-rollback.ts";
 import {
 	createTransitionEngine,
+	defaultTransitionEngineDeps,
 	findAtPort,
 } from "../modules/modems/transition-engine.ts";
+import { confirmModemDataPath } from "../modules/modems/usb-mode-identity.ts";
 import {
 	resetUsbModeDispatchDeps,
 	setUsbModeDispatchDeps,
@@ -56,6 +59,10 @@ import { updateStatus } from "../modules/streaming/streaming.ts";
 import { withDeviceType } from "../modules/system/device-detection.ts";
 import { setUsbModeProcedure } from "../rpc/procedures/modems.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
+import {
+	TWIN_REPLAY_UUID,
+	twinProfileReplay,
+} from "./helpers/nm-device-show-fixture.ts";
 
 const KEY = "platform-xhci-hcd.0.auto-usb-0:1.4.1";
 const SKU = {
@@ -233,6 +240,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+	setModemNmDeviceReaderForTest(null);
 	resetMutationBlockDeps();
 	setSystemTime();
 	resetUsbModeDispatchDeps();
@@ -294,6 +302,52 @@ describe("the AT port is resolved from ModemManager's own list", () => {
 });
 
 describe("the full gate chain with the engine wired", () => {
+	test("the production resolver reactivates the returned NM device and confirms its data path", async () => {
+		const replay = twinProfileReplay();
+		setModemNmDeviceReaderForTest(replay.reader);
+		const bus = scriptedBus(MBIM_IFACES);
+		const activated: string[] = [];
+		const confirmed: string[] = [];
+		useDispatch({
+			resolveConnectionId: async () => TWIN_REPLAY_UUID,
+			createEngine: (identity) =>
+				createTransitionEngine(
+					{ stableKey: identity.stableKey, ports: identity.ports },
+					{
+						...engineDeps(bus, activated),
+						resolveReenumeratedIfname: (id) => {
+							// Advance only the injected clock so broken resolution fails boundedly.
+							setSystemTime(new Date(Date.now() + 100));
+							return defaultTransitionEngineDeps().resolveReenumeratedIfname(
+								id,
+							);
+						},
+					},
+				),
+			confirmDataPath: async (name) => {
+				confirmed.push(name);
+				return confirmModemDataPath(name);
+			},
+		});
+		let result: unknown;
+		await withDeviceType("real", async () => {
+			result = await call(
+				setUsbModeProcedure,
+				{ device: "0", mode: "mbim", confirm: true },
+				{ context: makeContext() },
+			);
+		});
+		expect(result).toEqual({ success: true });
+		expect(activated).toEqual(["cdc-wdm1"]);
+		expect(confirmed).toEqual(["cdc-wdm1"]);
+		expect(replay.reads).toContainEqual([
+			"cdc-wdm1",
+			"CONNECTIONS.AVAILABLE-CONNECTIONS",
+			"multiline",
+		]);
+		expect(await readMutationEntry(KEY)).toBeUndefined();
+	});
+
 	test("a certified switch runs the transaction and cancels the armed rollback", async () => {
 		const bus = scriptedBus(MBIM_IFACES, undefined);
 		const activated: string[] = [];

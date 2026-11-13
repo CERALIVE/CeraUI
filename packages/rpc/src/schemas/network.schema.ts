@@ -51,15 +51,6 @@ export const routerCellularMarkerSchema = z.object({
 	 * devices actually attached, never assumed from the model.
 	 */
 	duplicate_model: z.boolean(),
-	/**
-	 * The device's own serial, published ONLY alongside `duplicate_model: true`.
-	 *
-	 * Two units of one SKU are indistinguishable by vendor, model and `vid_pid`
-	 * alike, so this is the only fact that separates them on screen. Absent for a
-	 * lone device (nothing to separate it from) and for a device that publishes
-	 * no serial of its own — never fabricated. Additive-optional.
-	 */
-	serial: z.string().min(1).optional(),
 });
 export type RouterCellularMarker = z.infer<typeof routerCellularMarkerSchema>;
 
@@ -133,6 +124,8 @@ export const netifEntrySchema = z.object({
 	// ABSENT therefore means "not an ethernet port, or an older backend", and is
 	// never read as `uplink`.
 	ethRole: ethernetRoleSchema.optional(),
+	// Only a current-connection advertisement permits the strict RPC's `op`.
+	ethRoleOp: z.boolean().optional(),
 });
 export type NetifEntry = z.infer<typeof netifEntrySchema>;
 
@@ -312,10 +305,17 @@ export const netifConfigOutputSchema = z.object({
 });
 export type NetifConfigOutput = z.infer<typeof netifConfigOutputSchema>;
 
+const ethernetRoleOperationIdSchema = z
+	.string()
+	.min(16)
+	.max(64)
+	.regex(/^[A-Za-z0-9_-]+$/);
+
 export const setEthernetRoleInputSchema = z
 	.object({
 		name: z.string().min(1),
 		role: ethernetRoleSchema,
+		op: ethernetRoleOperationIdSchema.optional(),
 	})
 	.strict();
 export type SetEthernetRoleInput = z.infer<typeof setEthernetRoleInputSchema>;
@@ -345,6 +345,7 @@ export type SetEthernetRoleOutput = z.infer<typeof setEthernetRoleOutputSchema>;
 // claims the port has reached the role.
 export const ethernetRoleOutcomeSchema = z.object({
 	name: z.string().min(1),
+	op: ethernetRoleOperationIdSchema.optional(),
 	role: ethernetRoleSchema.optional(),
 	pending: z.literal(true).optional(),
 	success: z.literal(true).optional(),

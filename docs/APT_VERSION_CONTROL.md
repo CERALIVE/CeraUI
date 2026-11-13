@@ -214,10 +214,10 @@ from the other — resolve a component to its repository through an explicit map
 never by assuming they share a name.
 
 **Package version source:** `ci/build-deb.sh` derives the `.deb` version directly from
-`Cargo.toml` `[workspace.package] version`. The current package version is `4.1.0`,
-and `versions.yaml` pins it at `v4.1.0`.
+`Cargo.toml` `[workspace.package] version`. The current package version is `4.2.0`,
+and `versions.yaml` pins it at `v4.2.0`.
 
-**Tag namespace:** GitHub release tags are `v<package-version>` (currently `v4.1.0`).
+**Tag namespace:** GitHub release tags are `v<package-version>` (currently `v4.2.0`).
 The tag triggers the `.deb` build workflow and the build refuses a tag that disagrees
 with `Cargo.toml`, so tag and package version move together.
 

@@ -13,6 +13,7 @@ export async function retryWithBackoff<T>(
 		baseDelayMs: number;
 		maxDelayMs: number;
 		shouldRetry?: (err: unknown) => boolean;
+		signal?: AbortSignal;
 	},
 ): Promise<T> {
 	const { maxAttempts, baseDelayMs, maxDelayMs } = options;
@@ -21,10 +22,12 @@ export async function retryWithBackoff<T>(
 	let lastError: unknown;
 
 	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+		options.signal?.throwIfAborted();
 		try {
 			return await fn();
 		} catch (err) {
 			lastError = err;
+			options.signal?.throwIfAborted();
 
 			// If shouldRetry returns false, throw immediately
 			if (!shouldRetry(err)) {
@@ -40,7 +43,19 @@ export async function retryWithBackoff<T>(
 			const delayMs = Math.min(baseDelayMs * 2 ** (attempt - 1), maxDelayMs);
 
 			// Wait before retrying
-			await new Promise((resolve) => setTimeout(resolve, delayMs));
+			await new Promise<void>((resolve, reject) => {
+				const signal = options.signal;
+				const abort = () => {
+					clearTimeout(timer);
+					reject(signal?.reason);
+				};
+				const timer = setTimeout(() => {
+					signal?.removeEventListener("abort", abort);
+					resolve();
+				}, delayMs);
+				if (signal) timer.unref();
+				signal?.addEventListener("abort", abort, { once: true });
+			});
 		}
 	}
 
@@ -64,6 +79,7 @@ export async function pollWithBackoff<T>(
 		baseDelayMs: number;
 		maxDelayMs: number;
 		shouldRetry?: (err: unknown) => boolean;
+		signal?: AbortSignal;
 		emptyResultError?: () => unknown;
 		onExhausted?: (err: unknown) => void;
 	},
@@ -81,7 +97,7 @@ export async function pollWithBackoff<T>(
 			return result;
 		}, retryOptions);
 	} catch (err) {
-		onExhausted?.(err);
+		if (!options.signal?.aborted) onExhausted?.(err);
 		return undefined;
 	}
 }

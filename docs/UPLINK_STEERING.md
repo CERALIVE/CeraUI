@@ -195,6 +195,36 @@ The outstanding board drill needs two real uplinks and a hotspot client. It must
 inspect nftables/conntrack marks while confirming SRTLA link distribution remains
 undisturbed.
 
-## Known-down passive observations
+## Known-down recovery
 
-`UplinkHealthEngine` keeps an already-down path down on `passive_degraded`. That observation resets consecutive success evidence; only successful observations advance the existing five-success and 15-second hold-down recovery thresholds. An up path can still become degraded, and captive-portal behavior is unchanged. Model and steering-selection regressions live in `apps/backend/src/tests/uplink-steering-state.test.ts`.
+`UplinkHealthEngine` keeps an already-down path down on `passive_degraded` or
+`captive_portal`. Both observations reset consecutive success evidence without
+lifting the path into steering. An up path can still become degraded on either
+observation.
+
+For an already-down path, any observed removal, re-addition, address change or
+device-bound eligibility change discards counted successes and restarts the
+15-second hold-down synchronously at the interface event. This also applies when
+the interface changes and returns entirely between health ticks or during a
+probe batch. In-flight evidence from the old generation remains invalid.
+The same events do not change an up path's health state.
+
+A missing interface retains its down verdict and resets its recovery streak, so
+brief reappearance still requires five fresh successful probes. Normal health
+ticks prune missing down records 24 hours after the interface was last seen.
+At most 32 missing records are retained; excess records are evicted in order of
+longest absence. A pruned interface that reappears is treated as brand-new, using
+the existing initial-up behavior. These two bounds limit history under interface
+churn without forgetting brief disappearances.
+While streaming, down paths use active probes at the existing five-second cadence
+instead of passive sender metrics. They rejoin only after the existing five-success
+and 15-second hold-down requirements are met. Other streaming paths continue to use
+passive telemetry without active probes.
+
+Model and steering-selection regressions live in
+`apps/backend/src/tests/uplink-steering-state.test.ts`; all three recovery paths
+are covered in `apps/backend/src/tests/uplink-health-recovery.test.ts`.
+
+## Asynchronous health observations
+
+Health rounds snapshot candidate addresses and interface generations before resolving the probe target. The runtime synchronously advances an interface's generation on network-interface events that remove it, change its address or change its device-bound eligibility. This rejects old evidence even when removal/re-addition or an address/eligibility change returns to the original state entirely between health ticks. Before each batch and before recording its results, the runtime checks the generation, current address and device-bound eligibility. A newer observation for that interface or a completed newer round supersedes older evidence. Starting another pending round alone does not discard valid slow evidence; counters, bond selection and equivalent entry replacement do not advance generations. Removed-interface sample bookkeeping is retired after completed rounds without reusing generations. Deferred-resolution, probe and batch regressions live in `apps/backend/src/tests/uplink-health.test.ts`; between-tick event regressions live in `apps/backend/src/tests/uplink-health-interface-generation.test.ts`.

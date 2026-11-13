@@ -33,10 +33,11 @@ import { broadcastMsg } from "../ui/websocket-server.ts";
 
 export const ETHERNET_ROLE_MESSAGE = "eth_role";
 
-export type EthernetRoleOutcome =
+export type EthernetRoleOutcome = (
 	| { pending: true; role: EthernetRole }
 	| { success: true; role: EthernetRole }
-	| { success: false; error: EthernetRoleError };
+	| { success: false; error: EthernetRoleError }
+) & { readonly op?: string };
 
 export type EthernetRoleOutcomePublisher = (
 	name: string,
@@ -48,11 +49,13 @@ export const publishEthernetRoleOutcome: EthernetRoleOutcomePublisher = (
 	outcome,
 ) => {
 	broadcastMsg(ETHERNET_ROLE_MESSAGE, {
-		eth_role:
-			"pending" in outcome
+		eth_role: {
+			...(outcome.op !== undefined ? { op: outcome.op } : {}),
+			...("pending" in outcome
 				? { name, role: outcome.role, pending: true }
 				: outcome.success
 					? { name, role: outcome.role, success: true }
-					: { name, error: outcome.error },
+					: { name, error: outcome.error }),
+		},
 	});
 };
