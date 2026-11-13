@@ -33,6 +33,7 @@ function installWsHarness(token: string): void {
 	const Real = w.WebSocket;
 	w.__cera = {
 		socket: null,
+		setConfigInputs: [] as unknown[],
 		injectBroadcast(payload: unknown) {
 			const s = w.__cera.socket;
 			if (s) {
@@ -56,6 +57,9 @@ function installWsHarness(token: string): void {
 				if (Array.isArray(msg.path) && msg.path.join(".") === "auth.login") {
 					msg.input = { token, persistent_token: true };
 					return this.__realSend(JSON.stringify(msg));
+				}
+				if (Array.isArray(msg.path) && msg.path.join(".") === "streaming.setConfig") {
+					w.__cera.setConfigInputs.push(msg.input);
 				}
 			} catch {
 				/* non-RPC frame */
@@ -141,6 +145,12 @@ const UVC_H265_DEVICES = {
 	},
 };
 
+function setConfigInputs(page: Page): Promise<unknown[]> {
+	return page.evaluate(
+		() => (window as { __cera: { setConfigInputs: unknown[] } }).__cera.setConfigInputs,
+	);
+}
+
 async function openEncoder(page: Page): Promise<void> {
 	await navigateTo(page, "live");
 	await inject(page, SERVER_CONFIG);
@@ -189,6 +199,23 @@ test.describe("encoder capability wiring", () => {
 		await inject(page, UVC_H265_DEVICES);
 
 		await expect(page.getByTestId("source-uvc_h265").first()).toBeVisible();
+	});
+
+	test("Save writes only the settings the operator changed", async ({ page }) => {
+		await openEncoder(page);
+		const dialog = page.getByRole("dialog", { name: "Encoder Settings" });
+
+		// An untouched Save must not write; the next Save's request proves it, because
+		// requests leave in order and only one may be recorded.
+		await dialog.getByRole("button", { name: "Save" }).click();
+		await expect(dialog).toBeHidden();
+
+		await page.getByTestId("open-encoder-dialog").click();
+		await expect(dialog).toBeVisible();
+		await dialog.getByTestId("encoder-adaptive").click();
+		await dialog.getByRole("button", { name: "Save" }).click();
+
+		await expect.poll(() => setConfigInputs(page)).toEqual([{ balancer: "fixed" }]);
 	});
 
 	test("offers generic H.265 with a software-encode warning badge", async ({

@@ -25,7 +25,7 @@ import type {
 	NetworkStreamSource,
 	SourcesMessage,
 } from "@ceraui/rpc/schemas";
-import { fireEvent, render } from "@testing-library/svelte";
+import { fireEvent, render, screen } from "@testing-library/svelte";
 import { tick } from "svelte";
 import {
 	afterEach,
@@ -472,7 +472,12 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 		).toBeNull();
 		expect(document.body.querySelector("#encoder-source")).toBeNull();
 
-		// Save round-trips the encoding selection WITHOUT a source/pipeline.
+		// Save round-trips the operator's change WITHOUT a source/pipeline, and
+		// carries only what changed (the untouched axes stay out of the draft).
+		const bitrateInput = document.body.querySelector(
+			"#encoder-bitrate",
+		) as HTMLInputElement;
+		await fireEvent.input(bitrateInput, { target: { value: "7000" } });
 		const saveButton = Array.from(
 			document.body.querySelectorAll("button"),
 		).find((b) => b.textContent?.trim() === "Save");
@@ -481,9 +486,9 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 		expect(onSave).toHaveBeenCalledTimes(1);
 		const saved = onSave.mock.calls[0]?.[0] as EncoderConfig;
 		expect(saved.source).toBeUndefined();
-		expect(saved.resolution).toBe("1080p");
-		expect(saved.framerate).toBe(30);
-		expect(saved.bitrate).toBe(6000);
+		expect(saved.bitrate).toBe(7000);
+		expect(saved.resolution).toBeUndefined();
+		expect(saved.framerate).toBeUndefined();
 	});
 
 	it("network source (no resolution override): resolution axis disabled-with-reason (T14 audit)", async () => {
@@ -535,10 +540,21 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 		render(EncoderDialog, {
 			props: {
 				open: true,
-				config: encoderConfig({ resolution: "720p", framerate: 30 }),
+				config: encoderConfig({ resolution: "1080p", framerate: 30 }),
 				onSave,
 			},
 		});
+
+		// The operator picks the lower 720p target (30 fps is already selected).
+		const trigger = document.body.querySelector(
+			"#encoder-resolution",
+		) as HTMLElement;
+		await fireEvent.keyDown(trigger, { key: "ArrowDown" });
+		const lower = await screen.findByRole("option", { name: /720p/ });
+		await fireEvent.pointerUp(lower);
+		await fireEvent.click(lower);
+		await tick();
+		expect(trigger.textContent).toContain("720p");
 
 		expect(
 			document.body
@@ -565,7 +581,7 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 		expect(onSave).toHaveBeenCalledTimes(1);
 		const saved = onSave.mock.calls[0]?.[0] as EncoderConfig;
 		expect(saved.resolution).toBe("720p");
-		expect(saved.framerate).toBe(30);
+		expect(saved.framerate).toBeUndefined();
 	});
 
 	it("a receiver's live signal still blocks an encode target ABOVE it (no upscale)", async () => {

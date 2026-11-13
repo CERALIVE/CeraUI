@@ -288,6 +288,11 @@ let bitrateClamped = $state(false);
 // restart-required field changed mid-stream can be badged "applies on next start".
 let seededResolution = $state<Resolution>('1080p');
 let seededFramerate = $state<Framerate>(30);
+// The rest of the open-time snapshot: Save writes a setting only when the operator
+// moved it away from what the dialog showed at open.
+let seededBitrate = $state<number>(BITRATE_DEFAULT_MIN);
+let seededOverlay = $state(false);
+let seededFailoverPolicy = $state<FailoverRatePolicy>('retime');
 
 // Seed the working copy from the bound draft first, falling back to the saved
 // device config. Re-seed on every open so a cancelled edit is fully discarded.
@@ -316,8 +321,8 @@ function seedDraft(fromSaved: boolean): void {
 		localFailoverPolicy = savedConfig?.failover_rate_policy ?? 'retime';
 	} else {
 		({ resolution: localResolution, framerate: localFramerate } = seededAxisSelection(axes, {
-			resolution: config?.resolution,
-			framerate: config?.framerate,
+			resolution: config?.resolution ?? savedConfig?.resolution,
+			framerate: config?.framerate ?? savedConfig?.framerate,
 		}));
 		const seedBitrate = config?.bitrate ?? savedConfig?.max_br ?? BITRATE.defaultMin;
 		localBitrate = Number.isFinite(seedBitrate) ? seedBitrate : BITRATE.defaultMin;
@@ -328,6 +333,9 @@ function seedDraft(fromSaved: boolean): void {
 	}
 	seededResolution = localResolution;
 	seededFramerate = localFramerate;
+	seededBitrate = localBitrate;
+	seededOverlay = localOverlay;
+	seededFailoverPolicy = localFailoverPolicy;
 	bitrateClamped = false;
 }
 
@@ -571,6 +579,7 @@ function handleSave() {
 	// time (defence-in-depth beside the disabled primary button): an axis the
 	// hardware no longer offers blocks save and surfaces the inline reason.
 	if (!canSave) return;
+	const bitrateChanged = localBitrate !== seededBitrate;
 	const normalized = normalizeValue(localBitrate, BITRATE.min, BITRATE.max, BITRATE_STEP);
 	localBitrate = normalized;
 
@@ -581,20 +590,25 @@ function handleSave() {
 	// (federated mount) they pass through and the consumer re-gates on the pipeline.
 	const allowResolution = activeSource?.supportsResolutionOverride ?? true;
 	const allowFramerate = activeSource?.supportsFramerateOverride ?? true;
+	// Only what the operator changed in this session: an untouched Save carries
+	// nothing, so no saved value is rewritten.
 	const next: EncoderConfig = {
-		resolution: allowResolution ? localResolution : undefined,
-		framerate: allowFramerate ? localFramerate : undefined,
-		bitrate: normalized,
-		bitrateOverlay: localOverlay,
+		resolution:
+			allowResolution && localResolution !== seededResolution ? localResolution : undefined,
+		framerate: allowFramerate && localFramerate !== seededFramerate ? localFramerate : undefined,
+		bitrate: bitrateChanged ? normalized : undefined,
+		bitrateOverlay: localOverlay !== seededOverlay ? localOverlay : undefined,
 		...(localCodec !== seededCodec ? { codec: localCodec ?? null } : {}),
 		...(balancerChanged ? { balancer: localAdaptive ? 'adaptive' : 'fixed' } : {}),
-		...(failoverPolicyOffered ? { failoverRatePolicy: localFailoverPolicy } : {}),
+		...(failoverPolicyOffered && localFailoverPolicy !== seededFailoverPolicy
+			? { failoverRatePolicy: localFailoverPolicy }
+			: {}),
 		applyNow: choiceRequired && applyMode === 'now',
 	};
 	config = next;
 
-	// Apply the new bitrate live; no-op unless currently streaming.
-	updateMaxBitrate(normalized, isStreaming);
+	// Apply a changed bitrate live; no-op unless currently streaming.
+	if (bitrateChanged) updateMaxBitrate(normalized, isStreaming);
 
 	// Notify LiveView so it can persist the selection via rpc.streaming.setConfig.
 	onSave?.(next);

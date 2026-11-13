@@ -572,6 +572,8 @@ async function handleEncoderSave(saved: EncoderConfig) {
 	// server echo of the old value can't revert the optimistic edit; release
 	// after the RPC settles (resolve or reject) to avoid a permanent lock.
 	const input = buildEncoderSetConfig(saved, effectivePipelineData);
+	// An untouched Save carries nothing: send no request, so no saved key is rewritten.
+	if (Object.keys(input).length === 0) return;
 	// `apply_now` is a directive, not a config field — locking it would leave a
 	// pending field the server never echoes back.
 	const fields = Object.entries(input).filter(([field]) => field !== 'apply_now');

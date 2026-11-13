@@ -75,10 +75,11 @@ async function saveEncoderConfig(
 	options: FederationMountOptions,
 	draft: HostedEncoderConfig,
 ): Promise<void> {
+	const input = buildEncoderSetConfig(draft, undefined);
+	// An untouched Save carries nothing: write nothing through the host.
+	if (Object.keys(input).length === 0) return;
 	try {
-		const result = await options.host.setConfig(
-			buildEncoderSetConfig(draft, undefined),
-		);
+		const result = await options.host.setConfig(input);
 		// Named BEFORE `requireAppliedConfig` throws: it collapses every refusal
 		// into one opaque Error, so the typed reason has to be read off the result.
 		if (!result.success) {
