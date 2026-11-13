@@ -740,7 +740,7 @@ test.describe("Capability truthfulness (functional)", () => {
 	});
 
 	// ── (a) H.265 codec + capability-tier banner flip across the 3 snapshots ────
-	test("the H.265 codec option flips enabled ⇄ disabled-with-reason across the three capability snapshots", async ({
+	test("the H.265 codec choice is offered ⇄ withdrawn across the three capability snapshots", async ({
 		page,
 	}) => {
 		// `source` un-gates the encoder-edit trigger (Task 18/19).
@@ -752,24 +752,24 @@ test.describe("Capability truthfulness (functional)", () => {
 		const dialog = page.getByRole("dialog", { name: "Encoder Settings" });
 		await expect(dialog).toBeVisible({ timeout: 15_000 });
 
-		const h265 = dialog.getByTestId("codec-h265");
+		// The codec choices appear once the operator opts into choosing the format.
+		await dialog.getByTestId("encoder-format-manual").click();
+		const h265 = dialog.getByTestId("encoder-format-h265");
 		const banner = (id: string) => page.getByTestId(id);
 
-		// FULL CAPS → H.265 is a real, enabled encode choice; no reason tooltip and
-		// no capability-tier banner (normal tier).
+		// FULL CAPS → H.265 is a real, enabled encode choice and no capability-tier
+		// banner shows (normal tier).
 		await expect(h265).toBeEnabled();
-		await expect(h265).toHaveAttribute("data-supported", "true");
-		await expect(h265).not.toHaveAttribute("title", /.+/);
+		await expect(dialog.getByTestId("encoder-format-h264")).toBeEnabled();
 		await expect(banner("capability-engine-starting")).toHaveCount(0);
 		await expect(banner("capability-engine-unavailable")).toHaveCount(0);
 
-		// ENGINE-STARTING FLOOR → the SAME control is disabled and MUST explain why
-		// (non-empty title); the calm engine-starting banner appears.
+		// ENGINE-STARTING FLOOR → the floor offers no H.265, so the choice is gone
+		// (an unsupported codec contributes no control, DESIGN.md CT-1) while H.264
+		// stays; the calm engine-starting banner appears.
 		sendEngineStartingFloor();
-		await expect(h265).toBeDisabled();
-		await expect(h265).toHaveAttribute("data-supported", "false");
-		await expect(h265).toHaveAttribute("aria-disabled", "true");
-		await expect(h265).toHaveAttribute("title", /\S/);
+		await expect(h265).toHaveCount(0);
+		await expect(dialog.getByTestId("encoder-format-h264")).toBeEnabled();
 		await expect(banner("capability-engine-starting")).toBeVisible();
 		await expect(banner("capability-engine-starting")).toHaveAttribute(
 			"role",
@@ -781,7 +781,6 @@ test.describe("Capability truthfulness (functional)", () => {
 		// replaces the starting one (priority: unavailable › starting).
 		sendEngineUnavailableCached();
 		await expect(h265).toBeEnabled();
-		await expect(h265).toHaveAttribute("data-supported", "true");
 		await expect(banner("capability-engine-unavailable")).toBeVisible();
 		await expect(banner("capability-engine-starting")).toHaveCount(0);
 	});
@@ -1569,7 +1568,7 @@ test.describe("Capability truthfulness (functional)", () => {
 
 		// The rebuilt capability-first dialog rendered (so the 0-count below is a
 		// real absence, not a dialog that failed to open).
-		await expect(dialog.getByTestId("encoder-codec-selector")).toBeVisible();
+		await expect(dialog.getByTestId("encoder-format-automatic")).toBeVisible();
 		await expect(dialog.getByTestId("encoder-bitrate-control")).toBeVisible();
 
 		await expect(page.locator('[data-testid="mode-presets"]')).toHaveCount(0);

@@ -19,6 +19,7 @@ import { ensureAuthenticated, navigateTo } from "./helpers";
  * and filling it in sends the `composition` object; without it the card is
  * ABSENT FROM THE DOM — not disabled, not hidden-but-present — and a config that
  * still carries a saved composition says so instead of silently applying it.
+ * The third proves the layouts stay one tap away while a stream runs.
  */
 
 interface CompositionWire {
@@ -268,5 +269,47 @@ test.describe("PiP/PbP composition — feature-gated on the engine token", () =>
 		await expect(page.getByTestId("composition-card")).toHaveCount(0);
 		await expect(page.getByTestId("composition-enable")).toHaveCount(0);
 		await expect(page.getByTestId("composition-layout-selector")).toHaveCount(0);
+	});
+
+	test("live — the six layouts stay one tap away and change the running stream", async ({
+		page,
+		backendRpc,
+	}) => {
+		await wire.publish({
+			capabilities: capsWith(["composition"]),
+			config: { ...BASE_CONFIG, composition: SAVED_COMPOSITION },
+		});
+
+		// A real stream on the worker's mock backend (test-scoped, so it ends with
+		// the test): its `status` push is not one of the dropped broadcasts, so the
+		// page goes live on the device's word.
+		await backendRpc.call(["streaming", "setConfig"], {
+			source: "usb",
+			srtla_addr: "127.0.0.1",
+			srtla_port: 5000,
+			srt_streamid: "e2e",
+		});
+		expect(
+			await backendRpc.call(["streaming", "start"], { source: "usb" }),
+		).toMatchObject({ success: true });
+
+		const live = page.getByTestId("live-cockpit");
+		await expect(live).toBeVisible({ timeout: 15_000 });
+
+		const layouts = live.getByTestId("composition-layout-selector");
+		await expect(layouts.getByRole("radio")).toHaveCount(6);
+
+		const sideBySide = live.getByTestId("composition-layout-pbp-left-right");
+		await sideBySide.click();
+		await expect(sideBySide).toHaveAttribute("aria-checked", "true");
+
+		// Live, the write asks for the running stream to change now.
+		expect(wire.setConfigCalls().at(-1)).toMatchObject({
+			apply_now: true,
+			composition: {
+				secondary_input_id: "/dev/video1",
+				layout: "pbp-left-right",
+			},
+		});
 	});
 });

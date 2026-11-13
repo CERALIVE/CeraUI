@@ -172,6 +172,7 @@ describe("MOCK_SCENARIO=streaming-active", () => {
 		const encode = getMockActiveEncode();
 		expect(encode).toEqual({
 			codec: "h265",
+			route_reason: "not-compressed",
 			resolution: "1920x1080",
 			framerate: 30,
 			active_input: "hdmi",

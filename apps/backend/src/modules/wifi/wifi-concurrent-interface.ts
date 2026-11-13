@@ -8,13 +8,14 @@
     (at your option) any later version.
 */
 
-import { argMatch, ID_RE, run } from "../../helpers/run.ts";
+import { argMatch, ID_RE } from "../../helpers/run.ts";
 import { nmDeviceProp } from "../network/network-manager.ts";
+import { runIw } from "./regdomain.ts";
 
 type InterfaceRunner = (command: string, args: string[]) => Promise<string>;
 type InterfaceWaiter = (ifname: string) => Promise<boolean>;
 
-const defaultRunner: InterfaceRunner = (command, args) => run(command, args);
+const defaultRunner: InterfaceRunner = (_command, args) => runIw(args);
 const defaultWaiter: InterfaceWaiter = async (ifname) => {
 	for (let attempt = 0; attempt < 20; attempt++) {
 		if ((await nmDeviceProp(ifname, "GENERAL.STATE")) !== undefined)

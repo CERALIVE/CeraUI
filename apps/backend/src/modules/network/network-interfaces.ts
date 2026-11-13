@@ -24,6 +24,7 @@ import type {
 	NetifConfigError,
 	NetifConfigInput,
 	NotificationType,
+	RouterCellularMarker,
 } from "@ceraui/rpc/schemas";
 import { NETIF_DUPLICATE_IPV4_ERROR } from "@ceraui/rpc/schemas";
 import type WebSocket from "ws";
@@ -79,7 +80,6 @@ import {
 	getModemNetMarker,
 	getRouterCellularMarker,
 	getRouterCellularMarkers,
-	type RouterCellularMarker,
 	refreshUsbNetMarkers,
 	type UsbModemNetMarker,
 } from "./router-cellular-scan.ts";
@@ -1208,6 +1208,7 @@ type NetworkInterfaceResponseMessage = {
 		router_cellular?: RouterCellularMarker | null;
 		usb_modem_net?: UsbModemNetMarker | null;
 		ethRole?: EthernetRole;
+		ethRoleOp?: boolean;
 	};
 };
 
@@ -1266,6 +1267,7 @@ export function netIfBuildMsg() {
 		const ethRole = ethernetRoleForWire(i);
 		if (ethRole !== undefined) {
 			entry.ethRole = ethRole;
+			entry.ethRoleOp = true;
 		}
 	}
 
@@ -1304,7 +1306,13 @@ function applyRouterCellularProjection(
 		if (!entry) continue;
 		const marker = getRouterCellularMarker(name);
 		if (marker) {
-			entry.router_cellular = marker;
+			entry.router_cellular = {
+				vendor: marker.vendor,
+				model: marker.model,
+				vid_pid: marker.vid_pid,
+				kind: marker.kind,
+				duplicate_model: marker.duplicate_model,
+			};
 			marked.add(name);
 		} else if (lastRouterCellularMarked.has(name)) {
 			entry.router_cellular = null;

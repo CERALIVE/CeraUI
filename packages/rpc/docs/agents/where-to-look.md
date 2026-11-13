@@ -6,6 +6,7 @@
 |------|----------|
 | Add a new RPC procedure | `contracts/{domain}.contract.ts` → wire into `contracts/index.ts` |
 | Add/change input or output shape | `schemas/{domain}.schema.ts` |
+| Balancer settings and explicit codec clear | `schemas/streaming.schema.ts` → producer `balancerAlgorithmSchema`, nullable input `video_codec`; config echoes stay optional/non-null. Backend settings contract: [`streaming-rpc-procedures.md`](../../../../apps/backend/docs/agents/streaming-rpc-procedures.md) |
 | Shared-client steering status/refusal + transient hard-down reset | `schemas/network.schema.ts` → `uplinkSteeringStatusSchema` / `uplinkFlowsResetEventSchema` |
 | Name the DEVICE behind an uplink-health row without renaming the row | `schemas/network.schema.ts` → `uplinkHealthRecordSchema.displayName`; section below → AN UPLINK ROW CARRIES A NAME, NOT A SECOND IDENTITY |
 | Streaming-first shaper mode/algorithm + priority degradation | `schemas/network.schema.ts` → `uplinkShaperStatusSchema` |

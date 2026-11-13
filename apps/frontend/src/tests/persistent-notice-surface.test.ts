@@ -137,6 +137,14 @@ describe("LayoutToastHost — the toast layer is transient only", () => {
 		expect(offset?.bottom).toContain("--mobile-dock-height");
 		expect(props.mobileOffset).toEqual(props.offset);
 	});
+
+	it("clears the Live bar: the toast stack is offset above it too", () => {
+		render(LayoutToastHost);
+		flushSync();
+
+		const offset = readToasterProps().offset as { bottom?: string } | undefined;
+		expect(offset?.bottom).toContain("--live-bar-height");
+	});
 });
 
 describe("PersistentNotices — the in-flow home for a notice with no expiry", () => {

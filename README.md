@@ -1,5 +1,17 @@
 # CeraUI
 
+**Streaming settings RPC [EXISTS].** Settings clients can save the producer's
+balancer selection or clear a saved codec with `video_codec: null` for the next
+start. Saved keys, defaults and passthrough choices remain unchanged. See the
+[settings contract](apps/backend/docs/agents/streaming-rpc-procedures.md#format-settings-exists).
+
+**Destination navigation [EXISTS].** The desktop rail and mobile dock accept
+successive destinations without a wall-clock throttle, including in e-ink mode.
+The navigation store still ignores the current destination and blocks active
+transitions. Frozen-clock regression coverage lives in
+`apps/frontend/src/main/navigation/Navigation.test.ts`; browser navigation keeps
+the [existing state-based assertions](apps/frontend/tests/e2e/PLAYBOOK.md#navigateto-helper).
+
 **Wi-Fi incarnation binding [EXISTS; backend enforcement pending].** Local status may
 include an optional opaque radio lifetime token. Hotspot requests accept it
 without enforcing it. The frontend binds hotspot drafts and acknowledgement to
@@ -594,7 +606,7 @@ Release assets are published through `publish-release.yml`; see
 [`docs/BUILD_PIPELINE.md`](docs/BUILD_PIPELINE.md) for the stable APT handoff.
 
 **Release preparation [PARTIAL; not published].** The root `package.json` prepares
-`2026.11.2` for a dispatch in November 2026; re-predict immediately before dispatch.
+`2026.11.3` for a dispatch in November 2026; re-predict immediately before dispatch.
 If dispatch slips into December, re-predict (`2026.12.0`) and update the manifest.
 The release workflow requires exact equality with its calculated version. Debian
 builds append `-<UTC stamp>.<checkout SHA>`; `deb-version-stamp.test.sh` executes
@@ -613,8 +625,9 @@ original entry; any repair/restore error warns without failing configure. See
 [retention and mount limits](docs/BUILD_PIPELINE.md#frontend-link-repair-exists-host-tested-board-proof-owed).
 To check a device: `readlink /opt/ceralive/public` must print `/var/www/ceralive`.
 
-CeraUI pins the published `@ceralive/cerastream@2026.9.11` in both
-the backend and shared RPC package, carrying schema 0.21.0's capture status,
+CeraUI pins the published `@ceralive/cerastream@2026.11.0` in both
+the backend and shared RPC package, carrying schema 0.22.0's optional
+`encoder.default_codec` and `active_encode.route_reason` alongside capture status,
 failover-rate policy, raw-input classifications, and source-mode session-switch fields.
 The producer's exported
 `ChangeConfigParams` and installed schema are regression-tested directly.

@@ -66,6 +66,7 @@ import {
 	parseOk,
 } from "../system/cli-parse.ts";
 import { runIw } from "./regdomain.ts";
+import { notifyWifiAdapterModeEdge } from "./wifi-adapter-mode-events.ts";
 import { parseRegulatoryRuleLine } from "./wifi-regulatory-rules.ts";
 
 export type { WifiLinkTelemetry };
@@ -725,6 +726,42 @@ let cache: CapabilityCache | undefined;
 let inFlight: Promise<void> | undefined;
 let lastIfnames: readonly string[] = [];
 
+type CapabilityEvidence = {
+	readonly binding: string | undefined;
+	readonly proof: string | undefined;
+	readonly revision: number;
+};
+let evidenceSequence = 0;
+// Retain only the latest mapped set, or its invalidation, rather than a history.
+let evidenceByIfname = new Map<string, CapabilityEvidence>();
+
+/** Equality token for proof/binding changes; this read never starts IO. */
+export function getWifiCapabilityEvidenceRevision(ifname: string): number {
+	return evidenceByIfname.get(ifname)?.revision ?? 0;
+}
+
+/** Cleanup or a failed read is not a publication of new capability evidence. */
+function publishCapabilities(next: CapabilityCache | undefined): void {
+	if (cache === next) return;
+	const nextEvidence = new Map<string, CapabilityEvidence>();
+	for (const ifname of next?.byIfname.keys() ?? evidenceByIfname.keys()) {
+		const binding = next?.byIfname.get(ifname);
+		const proof =
+			binding === undefined
+				? undefined
+				: JSON.stringify(next?.byPhy.get(binding)?.staApCombo);
+		const previous = evidenceByIfname.get(ifname);
+		const revision =
+			previous && previous.binding === binding && previous.proof === proof
+				? previous.revision
+				: ++evidenceSequence;
+		nextEvidence.set(ifname, { binding, proof, revision });
+	}
+	evidenceByIfname = nextEvidence;
+	cache = next;
+	void notifyWifiAdapterModeEdge();
+}
+
 /** Test seam — mirrors `setRegdomainRunner` / `setSshServiceRunner`. */
 export function setWifiCapabilityDepsForTest(
 	next: Partial<WifiCapabilityDeps> | null,
@@ -737,6 +774,8 @@ export function resetWifiCapabilitiesForTest(): void {
 	cache = undefined;
 	inFlight = undefined;
 	lastIfnames = [];
+	evidenceByIfname.clear();
+	evidenceSequence = 0;
 	linkCache.clear();
 	linkInFlight.clear();
 	deps = defaultDeps;
@@ -813,7 +852,7 @@ async function computeCapabilities(ifnames: readonly string[]): Promise<void> {
 		// Drift means we can no longer vouch for ANY value read this way. The
 		// cache is dropped so the wire omits `capabilities` rather than serving a
 		// stale claim under a shape we can no longer read.
-		cache = undefined;
+		publishCapabilities(undefined);
 		return;
 	}
 
@@ -821,7 +860,7 @@ async function computeCapabilities(ifnames: readonly string[]): Promise<void> {
 	const regParsed = parseIwRegDomains(regDump);
 	if (!regParsed.ok) {
 		logParseError(regParsed);
-		cache = undefined;
+		publishCapabilities(undefined);
 		return;
 	}
 
@@ -829,7 +868,7 @@ async function computeCapabilities(ifnames: readonly string[]): Promise<void> {
 	const devParsed = parseIwDevPhyMap(devDump);
 	if (!devParsed.ok) {
 		logParseError(devParsed);
-		cache = undefined;
+		publishCapabilities(undefined);
 		return;
 	}
 
@@ -863,13 +902,13 @@ async function computeCapabilities(ifnames: readonly string[]): Promise<void> {
 		});
 	}
 
-	cache = {
+	publishCapabilities({
 		byPhy,
 		byIfname,
 		ifnameKey: ifnameKeyOf(ifnames),
 		computedAtMs: nowMs,
 		selfManaged,
-	};
+	});
 }
 
 /**
@@ -886,7 +925,7 @@ export async function refreshWifiCapabilities(
 ): Promise<void> {
 	lastIfnames = [...ifnames];
 	if (ifnames.length === 0) {
-		cache = undefined;
+		publishCapabilities(undefined);
 		return;
 	}
 

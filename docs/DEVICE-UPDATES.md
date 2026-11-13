@@ -191,15 +191,17 @@ requires present whole-string bounded exit properties and a coherent owned unit;
 missing/malformed evidence stays under observation without success or cleanup.
 Host evidence and limits: [update recovery](./UPDATE-RECOVERY.md#capability-regime-and-terminal-package-evidence).
 
-The eight recognised feature tokens are `rauc-verity-streaming`,
+The nine recognised feature tokens are `rauc-verity-streaming`,
 `rauc-activate-on-shutdown`, `slot-sync`, `origin-protection`,
-`apt-all-packages`, `reprune-hook`, `apt-credentials` and `transport-uidrange`.
+`apt-all-packages`, `reprune-hook`, `apt-credentials`, `transport-uidrange` and
+`kernel-apt-stage`.
 Feature requirements:
 
 | Path | Needs |
 |---|---|
 | Package discovery and install by origin (all packages) | `mode: capable`, i.e. `apt-all-packages` |
 | OS checks, OS staging, System image dialog section | `apt-all-packages` and `rauc-verity-streaming` |
+| Kernel discovery, staging, Kernel dialog section | `mode: capable` and `kernel-apt-stage` |
 | Slot mirror, Slots dialog section | `slot-sync` |
 | UID-pinned transfer (`uidFor` in `pin.ts`) | `transport-uidrange`, nonzero and distinct `ota_uid` / `apt_uid` |
 
@@ -1651,6 +1653,27 @@ available candidate are separate facts. Live kernel phases take precedence over
 a retained record; after the public phase returns to idle, the retained device
 record still states success, rollback or failure. Unknown state/reason tokens
 resolve to localized unknown/diagnostic copy, never raw tokens or success.
+
+The backend keeps the update version, outcome and reason bound to one attempt
+ID. A matching device record supplies the whole tuple; without a local attempt,
+the device record remains the fallback. An unmatched newer attempt supplies its
+own version, never an older device outcome. The existing top-level
+`failureReason` carries a live failure as before. When an unmatched failure
+returns to idle, it retains only `kernel_interrupted`; the precise reason is
+then kept only in memory, keyed by attempt ID. After backend restart that
+old-schema diagnostic supplies a generic failure for the same current attempt.
+No member is added to `kernelAttempt`, and the writer's
+record shape remains readable by the previous strict reader. An in-flight,
+cancelled or otherwise unconfirmed attempt
+without a matching device record has no confirmed outcome, even when an older
+kernel succeeded or both attempts name the same version. Missing attempt
+versions are rejected by the persisted-state boundary.
+
+Kernel details are withheld while a new details read is pending, including
+dismiss/reopen and reconnect. A failed read leaves that tuple unknown rather
+than attaching a cached version or success to the new live phase; a later
+successful read restores the coherent tuple. Other details keep their existing
+read and generation-fence behavior.
 
 Downloading and preparing show a percentage and ETA only when the live wire
 phase matches that kernel step; another lane's progress cannot describe a

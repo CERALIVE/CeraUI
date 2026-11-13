@@ -3,7 +3,7 @@
 ## APPLY-NOW CONFIG CHANGE — TRANSACTION + STAGED PERSISTENCE [EXISTS]
 
 Composition now follows the same staging/dispatch/outcome path, including explicit
-null. Both consumers now pin the verified published `@ceralive/cerastream@2026.9.11`,
+null. Both consumers now pin the verified published `@ceralive/cerastream@2026.11.0`,
 whose exported `ChangeConfigParams` and schema preserve null. The already-verified
 adapter retains its narrow raw-request path and producer-owned result validation;
 no local wire type is introduced. `composition-binding-contract.test.ts` fails
@@ -23,6 +23,11 @@ echoed in `applied`). Absent/false is the unchanged apply-on-next-start path, so
 no existing caller changes behaviour and a save can never restart a live
 broadcast by itself. `apply_now` while NOT streaming degrades to an ordinary
 save — it never dispatches a transaction.
+
+Balancer settings and `video_codec: null` persist for the next start even with
+`apply_now`. The producer change-config contract accepts only a concrete codec,
+so the null clear is kept out of the staged candidate and engine delta. Concrete
+codec choices retain the transaction described below.
 
 **Everything routes through the orchestrator seam.** `changeStreamSessionConfig`
 → `stream-session-orchestrator.ts` → `config-change-bridge.ts` → the pinned

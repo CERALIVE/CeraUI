@@ -47,6 +47,7 @@ import {
 	getSocketSenderId,
 	setSocketSenderId,
 } from "../ui/websocket-server.ts";
+import { notifyWifiAdapterModeEdge } from "../wifi/wifi-adapter-mode-events.ts";
 import { getAudioDevices } from "./audio.ts";
 import { getLastCapabilities, getSupportedTransports } from "./capabilities.ts";
 import { isCompositionSupported } from "./composition.ts";
@@ -99,6 +100,7 @@ export function updateStatus(status: boolean) {
 			}
 		}
 		isStreaming = status;
+		if (!status) void notifyWifiAdapterModeEdge();
 		broadcastMsg("status", { is_streaming: isStreaming });
 
 		return true;

@@ -37,14 +37,12 @@ const {
 }: Props = $props();
 </script>
 
-<!-- Bitrate control — live hot-adjust only (T12). Mounted solely in LiveCockpit,
-     so the commit target is always the streaming setBitrate path; the idle max_br
-     ceiling is owned by EncoderDialog, never this control. -->
+<!-- Bitrate control — live hot-adjust only (T12). Mounted solely in LiveCockpit's
+     Live bar, so the commit target is always the streaming setBitrate path; the
+     idle max_br ceiling is owned by EncoderDialog, never this control. The bar is
+     its surface, so it carries no card chrome of its own. -->
 
-<section
-	aria-label={m["live.adjustBitrate"]()}
-	class="bg-card space-y-3 rounded-xl border px-5 py-4"
->
+<section aria-label={m["live.adjustBitrate"]()} class="min-w-0 flex-1 space-y-1.5">
 	<div class="flex items-center justify-between gap-4">
 		<p class="text-sm font-medium">{m["live.adjustBitrate"]()}</p>
 		<p

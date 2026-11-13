@@ -8,6 +8,17 @@ import {
 } from './status.schema';
 
 describe('activeEncodeSchema (Todo 19 — realized runtime encode)', () => {
+	test('route_reason is optional and survives status response parsing', () => {
+		const encode = { codec: 'h265', resolution: '1920x1080', framerate: 30 };
+		expect(activeEncodeSchema.parse(encode)).not.toHaveProperty('route_reason');
+		expect(
+			statusResponseSchema.parse({
+				active_encode: { ...encode, route_reason: 'adaptive-active' },
+			}).active_encode,
+		).toMatchObject({ route_reason: 'adaptive-active' });
+		expect(activeEncodeSchema.safeParse({ ...encode, route_reason: 5 }).success).toBe(false);
+	});
+
 	test('parses a full active_encode payload', () => {
 		const parsed = activeEncodeSchema.parse({
 			codec: 'h265',

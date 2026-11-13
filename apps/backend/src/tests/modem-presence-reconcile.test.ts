@@ -1,5 +1,16 @@
-import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import {
+	afterAll,
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	mock,
+	spyOn,
+	test,
+} from "bun:test";
+import * as runner from "../helpers/run.ts";
 import type { Modem, ModemId } from "../modules/modems/mmcli.ts";
+import { setModemReadyActivationDepsForTest } from "../modules/modems/modem-ready-activation.ts";
 import {
 	discoverModems,
 	runModemStatusPoll,
@@ -86,8 +97,18 @@ function install(
 }
 
 describe("modem presence reconcile (board: FM350 never registered)", () => {
+	const readSim = mock(async (_id: ModemId) => undefined);
+
+	beforeEach(() => {
+		readSim.mockClear();
+		setModemReadyActivationDepsForTest({ readSim });
+		spyOn(runner, "run").mockResolvedValue("");
+	});
+
 	afterEach(() => {
 		setModemPresenceDepsForTest(null);
+		setModemReadyActivationDepsForTest(null);
+		spyOn(runner, "run").mockRestore();
 	});
 
 	afterAll(() => {
@@ -113,6 +134,8 @@ describe("modem presence reconcile (board: FM350 never registered)", () => {
 			expect(getModem(gone)).toBeUndefined();
 		}
 		expect(getModemIds().sort((a, b) => a - b)).toEqual([...LIVE_ROSTER]);
+		expect(readSim).toHaveBeenCalledWith(FM350);
+		expect(runner.run).not.toHaveBeenCalled();
 	});
 
 	test("a poll-discovered modem reconciles as an ADDITION, invalidating cached gsm profiles", async () => {

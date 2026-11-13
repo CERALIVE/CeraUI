@@ -180,6 +180,31 @@ afterEach(() => {
 });
 
 describe("hotspot draft ownership through the real dialog", () => {
+	it("loads an open tokenless gate once when a status update brings its token", async () => {
+		const tokenless = row();
+		delete tokenless.incarnation;
+		const view = render(HotspotDialog, {
+			open: true,
+			deviceId: "0",
+			iface: tokenless,
+		});
+		await fireEvent.click(
+			screen.getByRole("button", { name: "Enable Hotspot" }),
+		);
+		expect(screen.getByTestId("hotspot-confirm-unavailable")).toBeTruthy();
+		expect(prepare).toHaveBeenCalledTimes(0);
+		const gateElement = screen.getByTestId("hotspot-activation-confirm");
+		await view.rerender({ open: true, deviceId: "0", iface: row() });
+		await ready();
+		expect(screen.getByTestId("hotspot-activation-confirm")).toBe(gateElement);
+		expect(prepare).toHaveBeenCalledExactlyOnceWith({
+			device: "0",
+			incarnation: "radio-A",
+		});
+		await view.rerender({ open: true, deviceId: "0", iface: row() });
+		expect(prepare).toHaveBeenCalledTimes(1);
+	});
+
 	for (const patch of [
 		{ ifname: "renamed0" },
 		{ scanGeneration: 9 },

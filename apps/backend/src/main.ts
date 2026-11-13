@@ -178,9 +178,11 @@ import {
 } from "./modules/system/update-orchestrator/runtime.ts";
 import { initHotspotCredentials } from "./modules/wifi/hotspot-credentials.ts";
 import { applyPersistedCountry } from "./modules/wifi/regdomain.ts";
-import { reconcileWifiAdapterModes } from "./modules/wifi/wifi-adapter-mode-transition.ts";
+import { startWifiAdapterModeRestore } from "./modules/wifi/wifi-adapter-mode-transition.ts";
 import { wifiStateInit } from "./modules/wifi/wifi-connections.ts";
 import { handleWifiMonitorEvent as handleHotspotMonitorEvent } from "./modules/wifi/wifi-hotspot-monitor.ts";
+import { terminateWifiDiscovery } from "./modules/wifi/wifi-interfaces.ts";
+import { wifiRadioObservation } from "./modules/wifi/wifi-radio-observation.ts";
 import { onHeartbeatTick, startHeartbeat } from "./rpc/heartbeat.ts";
 import { getServer, initServer } from "./rpc/index.ts";
 import { stopLegacyTokenMigration } from "./rpc/procedures/auth.procedure.ts";
@@ -517,12 +519,9 @@ wifiStateInit(networkMonitor);
 // Hotspot NM-confirmation: flips station↔hotspot once NM reports the switch
 networkMonitor.on("monitor-event", handleHotspotMonitorEvent);
 
-// Re-apply the operator's persisted per-adapter WiFi mode. Deliberately NOT
-// awaited: the adapter registry is filled by the netif poll seconds after this
-// point, so the reconciler does its own bounded wait — awaiting it here would
-// put a radio on the boot critical path for no gain. It is idempotent and never
-// throws, so a device with no stated preference pays one map lookup.
-void guardNonCritical("wifi-adapter-modes", reconcileWifiAdapterModes);
+// Apply-only restore starts after discovery publication and follows late radio,
+// capability and stream-clearance edges without a boot-time polling deadline.
+const stopWifiAdapterModeRestore = startWifiAdapterModeRestore();
 
 // Re-apply the operator's persisted shared-LAN Ethernet roles. Deliberately NOT
 // awaited, for the reason above: it rewrites NetworkManager profiles, and a
@@ -681,6 +680,11 @@ function stopRecoveryRetries(): void {
 process.on("SIGTERM", () =>
 	handleTerminationSignal("SIGTERM", {
 		stopRecoveryRetries,
+		terminateWifiObservation: () => {
+			stopWifiAdapterModeRestore();
+			wifiRadioObservation.terminate();
+		},
+		terminateWifiDiscovery,
 		gracefulShutdown,
 		stopSrtIngest: stopSRTIngest,
 		stopDmesgWatchers,
@@ -692,6 +696,11 @@ process.on("SIGTERM", () =>
 process.on("SIGINT", () =>
 	handleTerminationSignal("SIGINT", {
 		stopRecoveryRetries,
+		terminateWifiObservation: () => {
+			stopWifiAdapterModeRestore();
+			wifiRadioObservation.terminate();
+		},
+		terminateWifiDiscovery,
 		gracefulShutdown,
 		stopSrtIngest: stopSRTIngest,
 		stopDmesgWatchers,

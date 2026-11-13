@@ -51,20 +51,20 @@ const GATED_JOBS = [
 	'build',
 ];
 const SUMMARY_NEEDS = ['changes', ...GATED_JOBS];
-const SRTLA_RUNTIME_ARTIFACT = 'srtla-send-runtime-amd64-v4.1.0';
+const SRTLA_RUNTIME_ARTIFACT = 'srtla-send-runtime-amd64-v4.2.0';
 const SRTLA_RUNTIME_URL =
-	'https://github.com/CERALIVE/srtla-send-rs/releases/download/v4.1.0/srtla_4.1.0_amd64.deb';
-const SRTLA_RUNTIME_SHA256 = '496217e93cde36eeac0bde1b742c21fed6347a198f05a8cd898be116946b1eb8';
+	'https://github.com/CERALIVE/srtla-send-rs/releases/download/v4.2.0/srtla_4.2.0_amd64.deb';
+const SRTLA_RUNTIME_SHA256 = 'ec6ed389cf80c472dd1ebf3d8fd820c3bd1517517d54fbf24420322a7affd14f';
 const SRTLA_PREPARE_COMMANDS = [
 	'set -euo pipefail',
 	'package_dir="dist/ci-packages"',
-	'package_path="$package_dir/srtla_4.1.0_amd64.deb"',
+	'package_path="$package_dir/srtla_4.2.0_amd64.deb"',
 	'runtime_root="dist/ci-runtime"',
 	'mkdir -p "$package_dir" "$runtime_root"',
 	`curl --fail --location --silent --show-error --output "$package_path" ${SRTLA_RUNTIME_URL}`,
 	`printf '%s  %s\\n' ${SRTLA_RUNTIME_SHA256} "$package_path" | sha256sum --check`,
 	'test "$(dpkg-deb --field "$package_path" Package)" = srtla',
-	'test "$(dpkg-deb --field "$package_path" Version)" = 4.1.0',
+	'test "$(dpkg-deb --field "$package_path" Version)" = 4.2.0',
 	'test "$(dpkg-deb --field "$package_path" Architecture)" = amd64',
 	'dpkg-deb --extract "$package_path" "$runtime_root"',
 	'test -f "$runtime_root/usr/bin/srtla_send"',

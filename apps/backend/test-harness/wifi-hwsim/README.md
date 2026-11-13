@@ -15,6 +15,182 @@ physical Wi-Fi hardware**.
 
 ---
 
+## Local VM without host root
+
+`vm/run-vm.sh` runs the same harness in a disposable Debian 12 **generic**
+amd64 guest with its full kernel, NetworkManager, wpa_supplicant and hostapd.
+It requires Linux with readable/writable `/dev/kvm`, QEMU (`qemu-system-x86_64`
+and `qemu-img`), xorriso, OpenSSH, curl, coreutils, find, flock, tar, Git and Python
+with `os.pidfd_open`/`signal.pidfd_send_signal` support (Linux, Python 3.9+).
+`--repo` additionally requires the workstation's Bun 1.4.4 binary.
+No host module, Docker or administrator password is needed. This remains
+local-only infrastructure, outside shared CI.
+
+From the repository root, create state on disk outside `/tmp` and every Git
+work tree, then run:
+
+```bash
+mkdir -p "$HOME/.cache/ceraui-hwsim-state"
+export TMPDIR="$HOME/.cache/ceraui-hwsim-state"
+bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh --radios 2 -- bash integration-test.sh
+bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh --radios 4 -- sh -c 'iw dev | grep -c Interface'
+bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh --radios 2 -- false
+```
+
+The canonical state path is checked, including symlinks; repository state and
+paths under `/tmp` are rejected before any download or key creation. Paths
+containing commas are rejected because QEMU's drive syntax uses that delimiter.
+Pre-existing symlinks below the state root are rejected before permissions or
+files are changed, including `runs`, `images`, digest directories and image
+entries; they cannot redirect state into a checkout or `/tmp`.
+
+The first command must print `connected` and exit 0, the second prints at least
+4 interfaces, and the third returns the command's nonzero exit status. On the
+host, `lsmod | grep -c hwsim` must print `0` before and after (grep exits 1 when
+there are no matches). The module is checked with `modinfo` and loaded only
+inside the guest. The AP uses the same `CeraTest` SSID, `ceratest1234` test
+passphrase, channel 6 and WPA2 settings as the container flow. The guest leaves
+the first radio unmanaged by NetworkManager and manages the second as client.
+Static guest-only test addresses (`192.0.2.1/24` and `192.0.2.2/24`) let the
+unchanged integration test exercise association and report `connected` without
+a DHCP server; this does not test DHCP or Internet access.
+
+Flags:
+
+| Flag | Effect |
+|---|---|
+| `--radios N` | Create 2 to 100 radios, default 2. |
+| `--repo PATH` | Normalize PATH to its Git work-tree root, export committed `HEAD` to `/repo`, copy workstation Bun 1.4.4, and run `bun install --frozen-lockfile --linker=hoisted` in the guest. Hoisting makes workspace dependencies available to root-level gate imports. Commands start in `/repo`; `HWSIM_REPO=/repo` is available. Uncommitted files, workstation dependencies and submodules are excluded. |
+| `--no-install` | Skip the guest dependency install for self-contained repository commands. Without `--repo`, commands start in `/harness`. |
+| `--keep` | After a successful command, print the SSH command and hold the VM up for inspection until the runner is interrupted or one hour elapses. Keep the runner alive in its terminal; it still owns cleanup. |
+
+For example, dependency imports execute from the exported repository root:
+
+```bash
+bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh --radios 2 --repo "$PWD" -- \
+  bun -e "import 'zod'; import 'winston'; console.log('deps-ok')"
+```
+
+Later plan commands such as
+`bun apps/backend/test-harness/wifi-hwsim/checks/first-ap.ts` likewise run from
+`/repo` when `--repo` is used; those gate files are supplied by their later plan
+steps. The guest initializes local Git metadata solely so the archived
+repository's install hooks can configure hooks; it does not invent a commit.
+The exported application SHA is printed separately. An install failure is an
+infrastructure failure, before the requested command runs.
+
+The command CWD also contains committed `apps/backend/setup.json` copied to
+`/repo/setup.json`: production `modules/setup.ts` parses that required image
+metadata relative to CWD at import time. `/repo/config.json` starts as a fresh
+`{}` for simulator-owned runtime settings. Optional relay, DNS and authentication
+caches may start absent; their loaders handle absence. Application logs and
+subsequent state writes stay in this disposable guest CWD. No workstation
+configuration, credentials or runtime state is copied. This metadata enables
+imports and does not qualify the guest as physical RK3588 hardware:
+
+```bash
+bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh --radios 2 --repo "$PWD" -- \
+  bun -e "await import('./apps/backend/src/modules/network/network-manager.ts'); console.log('import-ok')"
+```
+
+The image lives under `$TMPDIR/hwsim-vm/images/`, separate from scripts and
+per-run files. Each invocation fetches Debian's published `SHA512SUMS` over
+certificate-validated HTTPS, selects the exact generic amd64 qcow2 entry and
+checks the image bytes, including cached images. The inspected Debian cloud
+directory publishes no detached signature alongside that checksum file:
+this verifies the digest from Debian's HTTPS origin, not an independently
+authenticated signing key. A corrupt cached image is rejected before boot and
+replaced with one fresh download, which must pass the checksum. A changed published digest
+gets its own cache directory. Interrupted downloads never become cached images.
+Both curl transfers disable default curl configuration with a first-argument
+`-q`, so a workstation curlrc cannot disable HTTPS certificate verification.
+The cache directories are mode `0700` and verified images are mode `0444`;
+each run uses a copy-on-write overlay without copying the backing image.
+Same-user cache writers are trusted: these permissions and the cooperative lock
+do not protect against an active owner replacing bytes between verification and
+QEMU opening the backing file.
+
+Each run creates a fresh copy-on-write overlay and NoCloud `cidata` ISO,
+a new instance identity, throwaway SSH key and private known-hosts file.
+The VM uses two vCPUs with host CPU features (required by the copied Bun binary),
+2 GiB RAM and user networking with SSH bound only to
+`127.0.0.1` on an available host port. Downloads, SSH boot (300 seconds),
+cloud-init (600 seconds), transfers and setup all have bounded deadlines.
+The requested command has a 900-second deadline; expiry returns nonzero.
+Forwarding bind collisions get at most three fresh-port attempts within the
+boot deadline and are reported as infrastructure failures. SSH readiness is
+accepted only while the recorded QEMU PID and process starttime still match.
+All SSH/SCP calls, including poweroff, use `-F /dev/null`, the explicit
+throwaway identity, `IdentitiesOnly=yes` and `IdentityAgent=none`; workstation
+SSH configuration and agents cannot redirect commands or retain the key.
+User networking limits the inbound SSH forward to loopback; it does **not**
+isolate the guest from the host or Internet. Outbound access provisions packages
+and repository dependencies.
+The runner returns the inner command's exit code rather than boot success.
+On exit, failure, SIGINT or SIGTERM it powers off its recorded QEMU process,
+escalates only while PID and `/proc` starttime still match, and removes the
+entire run directory, including overlay,
+seed, SSH key and partial downloads. `--keep` also cleans up when interrupted.
+Signals use a pidfd to close the identity-check-to-signal race. Cleanup traps
+are installed before resource creation; cancellation is deferred across child
+launch and ownership registration, including bounded command children.
+Initial registration requires the recorded PPID to equal the runner's PID.
+Cleanup ignores INT/TERM before disabling EXIT; cancellation at cleanup entry
+enters cleanup directly rather than aborting an active EXIT handler.
+SIGKILL or host power loss cannot execute shell traps.
+
+The Debian image cache is the only persistent VM artifact. A completed run
+prints its QEMU PID and removed run directory as cleanup receipts. Do not
+commit images, overlays or seed ISOs.
+
+Parity verified on November 12, 2026 with the generic image's
+`6.1.0-54-amd64` kernel: the unchanged `integration-test.sh` exited 0 with
+`GENERAL.STATE:100 (connected)`. The host's hwsim module count was 0 before
+and after, and the owned QEMU process and run directory were removed.
+The VM path is available for simulated-radio checks; no owner-run fallback
+was needed.
+
+Each invocation records the image SHA512, guest kernel (`uname -r`),
+NetworkManager, iw and wpa_supplicant versions, and the exported application SHA
+with `--repo`. These receipts identify the actual environment: `latest` and
+guest package updates can change it between runs.
+
+The device receipt is kernel `7.2.0-ceralive-rk3588` and NetworkManager `1.52.1`;
+this Debian 12 simulator uses kernel `6.1` and NetworkManager `1.42.4`.
+Device qualification remains separate. hwsim does not model physical driver,
+firmware, RF, USB/PCI topology or physical interface limits, so a passing VM gate
+does not prove slot-limit behavior. Duplicate-address behavior is unqualified
+here: its later gate must record the actual Debian result with a working
+distinct-address control, rather than infer it from an upstream error string.
+
+The unchanged `integration-test.sh` accepts any state output containing
+`connected`, including `disconnected`. Its PASS marker alone is insufficient:
+the parity receipt must contain **`GENERAL.STATE:100 (connected)`**. The VM
+qualification checks that numeric connected state; the integration script is
+not changed by this runner.
+
+### Stub-only self-test
+
+```bash
+bash apps/backend/test-harness/wifi-hwsim/vm/selftest.sh
+```
+
+This compact local regression test uses a whitelist PATH and verifies executable
+VM/network stubs before each case. It checks foreign-parent PID rejection,
+cleanup-entry TERM/INT and redirected state rejection. It never boots a VM or
+loads a host module and remains outside shared CI.
+
+### Later gates
+
+`replacement.ts`, `hybrid-target.ts` and `first-ap.ts` do not exist yet and must
+be committed before their reviewed gate head is qualified. Duplicate-address
+testing needs a working distinct-address creation control first. Require state
+100 **and the intended active profile/SSID** for association; the integration
+script's `connected` substring alone accepts `disconnected`. Establish positive
+controls before treating application refusal as a passing negative control.
+
+---
+
 ## Why these values?
 
 The AP defaults mirror the task harness contract and are close to the CeraUI
@@ -33,7 +209,7 @@ Override via env: `CERATEST_SSID`, `CERATEST_PSK`, `HWSIM_RADIOS`.
 
 ---
 
-## Prerequisites
+## Container prerequisites
 
 1. **A real Linux host.** `mac80211_hwsim` is a Linux **kernel module**; it runs
    in the host kernel, not in a container or VM you don't control.

@@ -1,12 +1,16 @@
 // @vitest-environment jsdom
 /**
- * EncoderDialog — passthrough surfacing (Todo 18).
+ * EncoderDialog — a saved Passthrough choice after the selector is gone.
  *
- * Locks the pre-start resolved-mode disclosure and the bitrate disabled-with-reason:
- *  - force + a passthrough-capable source (uvc_h264 + h264 out) → passthrough band,
- *    bitrate slider + input disabled, the "Bitrate set by camera" reason visible.
- *  - force + an MJPEG source → forceUnavailable warning (start would fail typed).
- *  - auto (adaptive always active) → transcode band regardless of source.
+ * The Passthrough radios are replaced by the adaptive switch and the route line;
+ * a saved `video_passthrough` keeps working exactly as before and is shown as a
+ * notice with a one-tap reset:
+ *  - force + a passthrough-capable source (uvc_h264 + h264 out) → the untouched
+ *    route, bitrate slider + input disabled, the "Bitrate set by camera" reason
+ *    visible, and the force notice.
+ *  - force + an MJPEG source → the forceUnavailable route (start would fail
+ *    typed), bitrate enabled, and the force notice.
+ *  - auto → the adaptive switch on, the same-format route, no notice.
  */
 import type { CaptureStreamSource, SourcesMessage } from "@ceraui/rpc/schemas";
 import { render } from "@testing-library/svelte";
@@ -108,6 +112,18 @@ function q(testid: string): HTMLElement | null {
 	return document.body.querySelector(`[data-testid="${testid}"]`);
 }
 
+function expectNoPassthroughSelector(): void {
+	for (const id of [
+		"encoder-passthrough-selector",
+		"passthrough-auto",
+		"passthrough-force",
+		"passthrough-off",
+		"passthrough-disclosure",
+	]) {
+		expect(q(id), id).toBeNull();
+	}
+}
+
 beforeAll(() => {
 	if (!("ResizeObserver" in window)) {
 		(window as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
@@ -151,8 +167,8 @@ afterEach(() => {
 
 vi.setConfig({ testTimeout: 15000 });
 
-describe("EncoderDialog — passthrough disclosure + bitrate gate", () => {
-	it("force + uvc_h264 + h264 out → passthrough band, bitrate disabled with reason", () => {
+describe("EncoderDialog — saved passthrough, route line + bitrate gate", () => {
+	it("force + uvc_h264 + h264 out → untouched route, bitrate disabled with reason, force notice", () => {
 		reactiveSources.value = sourcesMessage([UVC_H264]);
 		reactiveConfig.value = {
 			source: "uvc-0",
@@ -162,12 +178,20 @@ describe("EncoderDialog — passthrough disclosure + bitrate gate", () => {
 		} as never;
 
 		render(EncoderDialog, {
-			props: { open: true, config: encoderConfig({ codec: "h264" }) },
+			props: {
+				open: true,
+				config: encoderConfig({ codec: "h264" }),
+				onResetPassthrough: vi.fn(async () => true),
+			},
 		});
 		flushSync();
 
-		const disclosure = q("passthrough-disclosure");
-		expect(disclosure?.getAttribute("data-mode")).toBe("passthrough");
+		expectNoPassthroughSelector();
+		expect(q("encoder-route")?.getAttribute("data-route")).toBe("untouched");
+		expect(q("encoder-legacy-passthrough")?.getAttribute("data-setting")).toBe(
+			"force",
+		);
+		expect(q("encoder-legacy-passthrough-reset")).not.toBeNull();
 
 		// The disabled reason is VISIBLE without interacting with the slider.
 		const reason = q("bitrate-passthrough-disabled");
@@ -185,7 +209,7 @@ describe("EncoderDialog — passthrough disclosure + bitrate gate", () => {
 		expect(input?.disabled).toBe(true);
 	});
 
-	it("force + mjpeg source → forceUnavailable warning (start would fail typed)", () => {
+	it("force + mjpeg source → forceUnavailable route (start would fail typed), force notice", () => {
 		reactiveSources.value = sourcesMessage([MJPEG]);
 		reactiveConfig.value = {
 			source: "rode-0",
@@ -195,18 +219,26 @@ describe("EncoderDialog — passthrough disclosure + bitrate gate", () => {
 		} as never;
 
 		render(EncoderDialog, {
-			props: { open: true, config: encoderConfig({ codec: "h264" }) },
+			props: {
+				open: true,
+				config: encoderConfig({ codec: "h264" }),
+				onResetPassthrough: vi.fn(async () => true),
+			},
 		});
 		flushSync();
 
-		expect(q("passthrough-disclosure")?.getAttribute("data-mode")).toBe(
+		expectNoPassthroughSelector();
+		expect(q("encoder-route")?.getAttribute("data-route")).toBe(
 			"forceUnavailable",
 		);
-		// Bitrate stays enabled (no passthrough active).
+		expect(q("encoder-legacy-passthrough")?.getAttribute("data-setting")).toBe(
+			"force",
+		);
+		// Bitrate stays enabled (nothing passes through).
 		expect(q("bitrate-passthrough-disabled")).toBeNull();
 	});
 
-	it("auto + uvc_h264 → transcode band (adaptive bitrate always active)", () => {
+	it("auto + uvc_h264 → adaptive switch on, same-format route, no notice", () => {
 		reactiveSources.value = sourcesMessage([UVC_H264]);
 		reactiveConfig.value = {
 			source: "uvc-0",
@@ -220,12 +252,43 @@ describe("EncoderDialog — passthrough disclosure + bitrate gate", () => {
 		});
 		flushSync();
 
-		expect(q("passthrough-disclosure")?.getAttribute("data-mode")).toBe(
-			"transcode",
+		expectNoPassthroughSelector();
+		expect(q("encoder-adaptive")?.getAttribute("aria-checked")).toBe("true");
+		expect(q("encoder-route")?.getAttribute("data-route")).toBe(
+			"sameFormatAdapted",
 		);
+		expect(q("encoder-legacy-passthrough")).toBeNull();
 		const input = document.body.querySelector(
 			"#encoder-bitrate",
 		) as HTMLInputElement | null;
 		expect(input?.disabled).toBe(false);
+	});
+
+	it("off + uvc_h264 → the off notice with its reset, same-format route", () => {
+		reactiveSources.value = sourcesMessage([UVC_H264]);
+		reactiveConfig.value = {
+			source: "uvc-0",
+			pipeline: "libuvch264",
+			video_codec: "h264",
+			video_passthrough: "off",
+		} as never;
+
+		render(EncoderDialog, {
+			props: {
+				open: true,
+				config: encoderConfig({ codec: "h264" }),
+				onResetPassthrough: vi.fn(async () => true),
+			},
+		});
+		flushSync();
+
+		expectNoPassthroughSelector();
+		expect(q("encoder-legacy-passthrough")?.getAttribute("data-setting")).toBe(
+			"off",
+		);
+		expect(q("encoder-legacy-passthrough-reset")).not.toBeNull();
+		expect(q("encoder-route")?.getAttribute("data-route")).toBe(
+			"sameFormatAdapted",
+		);
 	});
 });

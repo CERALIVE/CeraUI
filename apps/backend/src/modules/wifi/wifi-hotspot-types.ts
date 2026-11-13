@@ -19,6 +19,7 @@ import type {
 	HotspotCredentials,
 	HotspotCredentialsStore,
 } from "./hotspot-credentials.ts";
+import type { WifiAdapterModeRecorder } from "./wifi-adapter-mode.ts";
 import type {
 	AutoWifiChannel,
 	DerivedApChannel,
@@ -172,6 +173,12 @@ export type HotspotStartResult =
  * `pollHotspotActive` so confirmation comes purely from a fed monitor event).
  */
 export type HotspotActivationDeps = {
+	/** Present only for explicit user toggles; mode transitions and boot omit it. */
+	recordIntent?: WifiAdapterModeRecorder;
+	/** Current kernel proof; production never treats a failed legacy probe as absence. */
+	readCapabilities?: (
+		ifname: string,
+	) => { staApCombo: { supported: boolean } } | undefined;
 	nmConnect: (uuid: string, timeout?: number) => Promise<unknown>;
 	nmConnSetFields: (
 		uuid: string,

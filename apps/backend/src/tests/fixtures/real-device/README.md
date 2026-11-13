@@ -210,5 +210,15 @@ field order and absence of additions.
 `nm-1.52.1-twin-profile-replay.json` is a redacted, constructed twin-modem replay.
 Its available profile lines follow the measured NM 1.52.1 multiline format
 `CONNECTIONS.AVAILABLE-CONNECTIONS[n]:<uuid> | <name>` and the #434 report.
-It is not a capture from attached modems. Replace this file with the redacted
-bench capture before merge; preserve the resolver and ambiguity assertions.
+It is not a capture from attached modems. Keep this fixture and its ambiguity
+assertions: the real capture below does not demonstrate overlapping profiles.
+
+`nm-1.52.1-twin-profile-capture.json` was captured from a board with two identical
+QMI modems, identifiers tokenized, on November 13, 2026. It preserves the two gsm
+records from the general device read, the gsm profile rows, and each device's
+active UUID, combined tabular read and multiline available-profile read.
+`cdc-wdm0` has no active UUID and one unbound available profile; `cdc-wdm1` has
+an active UUID and one available profile bound to it. The lists do not overlap.
+Neither modem was registered; the active UUID is an NM association, not proof of
+working cellular connectivity. The production resolver tests replay both devices,
+then clear active UUIDs to exercise both captured available-profile lists.

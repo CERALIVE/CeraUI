@@ -9,7 +9,8 @@
  * started after it, so a slow opening snapshot can never overwrite a newer read
  * or an echoed save (C-M2). Capabilities have their own counter too. A restored
  * session re-reads all three: an OS replacement changes the image behind a
- * dropped link (early oracle R5).
+ * dropped link (early oracle R5). Kernel tuples are withdrawn at each new read
+ * so a retained attempt cannot describe a newer phase while its read is pending.
  *
  * Sessions. `reset()` (the dialog closing) starts a new session. Every write
  * still in flight (a read, a save echo, an action's result and the read it
@@ -173,10 +174,16 @@ export function createUpdateSurface(): UpdateSurface {
 		landCapabilities(gen, caps, link);
 	}
 
+	function beginDetailsRead(): number {
+		// An older kernel tuple cannot describe the attempt behind a new phase/session.
+		if (details?.kernel) details = { ...details, kernel: undefined };
+		return ++detailsSeq;
+	}
+
 	async function load(): Promise<void> {
 		const gen = ++loadSeq;
 		const settingsGen = owner.beginRead();
-		const detailsGen = ++detailsSeq;
+		const detailsGen = beginDetailsRead();
 		const link = getLinkEpoch();
 		const [, applied, read] = await Promise.allSettled([
 			reloadCapabilities(),
@@ -198,7 +205,7 @@ export function createUpdateSurface(): UpdateSurface {
 	}
 
 	async function reloadDetails(): Promise<void> {
-		const gen = ++detailsSeq;
+		const gen = beginDetailsRead();
 		const link = getLinkEpoch();
 		try {
 			const next = await settle(() => rpc.system.getUpdateDetails());
@@ -330,7 +337,7 @@ export function createUpdateSurface(): UpdateSurface {
 			]),
 		reset() {
 			loadSeq += 1;
-			detailsSeq += 1;
+			beginDetailsRead();
 			capsSeq += 1;
 			capsLink = undefined;
 			actions.reset();

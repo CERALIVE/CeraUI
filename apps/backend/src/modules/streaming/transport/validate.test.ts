@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
 
 import { probeReachability } from "./validate.ts";
 
@@ -17,6 +17,35 @@ afterEach(() => {
 });
 
 describe("probeReachability", () => {
+	it.each(["ENETUNREACH", "EHOSTUNREACH"])(
+		"reports refused when socket setup throws %s synchronously",
+		async (code) => {
+			const socketSpy = spyOn(Bun, "udpSocket").mockImplementation(() => {
+				throw Object.assign(new Error(code), { code });
+			});
+			try {
+				await expect(probeReachability("192.0.2.1", 9999)).resolves.toEqual({
+					reachable: false,
+					reason: "refused",
+				});
+			} finally {
+				socketSpy.mockRestore();
+			}
+		},
+	);
+
+	it("rejects with the original unexpected synchronous socket setup error", async () => {
+		const error = new Error("unexpected socket setup failure");
+		const socketSpy = spyOn(Bun, "udpSocket").mockImplementation(() => {
+			throw error;
+		});
+		try {
+			await expect(probeReachability("192.0.2.1", 9999)).rejects.toBe(error);
+		} finally {
+			socketSpy.mockRestore();
+		}
+	});
+
 	it("reports reachable when the peer answers", async () => {
 		const server = await Bun.udpSocket({
 			socket: {

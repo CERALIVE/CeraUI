@@ -25,7 +25,7 @@ import type {
 	NetworkStreamSource,
 	SourcesMessage,
 } from "@ceraui/rpc/schemas";
-import { fireEvent, render } from "@testing-library/svelte";
+import { fireEvent, render, screen } from "@testing-library/svelte";
 import { tick } from "svelte";
 import {
 	afterEach,
@@ -277,7 +277,7 @@ afterEach(() => {
 vi.setConfig({ testTimeout: 15000 });
 
 describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
-	it("caps-full: reaches the 4K/60 ceiling and enables H.265", () => {
+	it("caps-full: reaches the 4K/60 ceiling and enables H.265", async () => {
 		state.pipelines = pipelinesMessage("rk3588");
 		state.capabilities = capsWith();
 		state.sources = sourcesMessage("rk3588", [HDMI_SOURCE]);
@@ -293,13 +293,20 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 		expect(summaryText()).toContain("30 fps");
 		expect(summaryText()).not.toContain("60 fps");
 
-		// H.265 is a first-class enabled choice on this platform.
-		const h265 = document.body.querySelector('[data-testid="codec-h265"]');
-		expect(h265?.getAttribute("data-supported")).toBe("true");
+		// H.265 is an enabled choice on this platform once the operator opts in.
+		await fireEvent.click(
+			document.body.querySelector(
+				'[data-testid="encoder-format-manual"]',
+			) as HTMLElement,
+		);
+		const h265 = document.body.querySelector(
+			'[data-testid="encoder-format-h265"]',
+		);
+		expect(h265).not.toBeNull();
 		expect(h265?.hasAttribute("disabled")).toBe(false);
 	});
 
-	it("engine-starting minimal floor: only 1080p + H.264", () => {
+	it("engine-starting minimal floor: only 1080p + H.264", async () => {
 		// Software floor board + an H.264-only, 1080p-capped capability snapshot; the
 		// active source is a coarse entry with empty modes — the minimal safe floor.
 		state.pipelines = pipelinesMessage("generic");
@@ -322,12 +329,18 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 		expect(summaryText()).toContain("1080p");
 		expect(summaryText()).not.toContain("4K");
 
-		// H.265 is disabled-with-reason (never hidden).
-		const h265 = document.body.querySelector('[data-testid="codec-h265"]');
-		expect(h265).not.toBeNull();
-		expect(h265?.getAttribute("data-supported")).toBe("false");
-		expect(h265?.hasAttribute("disabled")).toBe(true);
-		expect(h265?.getAttribute("title")).toBeTruthy();
+		// The floor offers only H.264: H.265 contributes no choice at all.
+		await fireEvent.click(
+			document.body.querySelector(
+				'[data-testid="encoder-format-manual"]',
+			) as HTMLElement,
+		);
+		expect(
+			document.body.querySelector('[data-testid="encoder-format-h264"]'),
+		).not.toBeNull();
+		expect(
+			document.body.querySelector('[data-testid="encoder-format-h265"]'),
+		).toBeNull();
 	});
 
 	it("opens VALID on a receiver whose only rate is not the 30 fps fallback", async () => {
@@ -459,7 +472,12 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 		).toBeNull();
 		expect(document.body.querySelector("#encoder-source")).toBeNull();
 
-		// Save round-trips the encoding selection WITHOUT a source/pipeline.
+		// Save round-trips the operator's change WITHOUT a source/pipeline, and
+		// carries only what changed (the untouched axes stay out of the draft).
+		const bitrateInput = document.body.querySelector(
+			"#encoder-bitrate",
+		) as HTMLInputElement;
+		await fireEvent.input(bitrateInput, { target: { value: "7000" } });
 		const saveButton = Array.from(
 			document.body.querySelectorAll("button"),
 		).find((b) => b.textContent?.trim() === "Save");
@@ -468,9 +486,9 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 		expect(onSave).toHaveBeenCalledTimes(1);
 		const saved = onSave.mock.calls[0]?.[0] as EncoderConfig;
 		expect(saved.source).toBeUndefined();
-		expect(saved.resolution).toBe("1080p");
-		expect(saved.framerate).toBe(30);
-		expect(saved.bitrate).toBe(6000);
+		expect(saved.bitrate).toBe(7000);
+		expect(saved.resolution).toBeUndefined();
+		expect(saved.framerate).toBeUndefined();
 	});
 
 	it("network source (no resolution override): resolution axis disabled-with-reason (T14 audit)", async () => {
@@ -522,10 +540,21 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 		render(EncoderDialog, {
 			props: {
 				open: true,
-				config: encoderConfig({ resolution: "720p", framerate: 30 }),
+				config: encoderConfig({ resolution: "1080p", framerate: 30 }),
 				onSave,
 			},
 		});
+
+		// The operator picks the lower 720p target (30 fps is already selected).
+		const trigger = document.body.querySelector(
+			"#encoder-resolution",
+		) as HTMLElement;
+		await fireEvent.keyDown(trigger, { key: "ArrowDown" });
+		const lower = await screen.findByRole("option", { name: /720p/ });
+		await fireEvent.pointerUp(lower);
+		await fireEvent.click(lower);
+		await tick();
+		expect(trigger.textContent).toContain("720p");
 
 		expect(
 			document.body
@@ -552,7 +581,7 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 		expect(onSave).toHaveBeenCalledTimes(1);
 		const saved = onSave.mock.calls[0]?.[0] as EncoderConfig;
 		expect(saved.resolution).toBe("720p");
-		expect(saved.framerate).toBe(30);
+		expect(saved.framerate).toBeUndefined();
 	});
 
 	it("a receiver's live signal still blocks an encode target ABOVE it (no upscale)", async () => {

@@ -15,14 +15,25 @@ Options outside the offered set are shown **disabled with a reason tooltip** —
 hidden, so operators can see what the hardware doesn't support and why.
 
 **The encoder universe is engine-owned [EXISTS].** The published
-`@ceralive/cerastream@2026.9.11` binding carries `get-capabilities.encoders[]` with
+`@ceralive/cerastream@2026.11.0` binding carries `get-capabilities.encoders[]` with
 one entry per codec (`codec`, maximum resolution/framerate, accepted pixel formats,
 and `gates."4k60"`). `@ceraui/rpc` imports the producer schemas and types directly;
 it does not redeclare `PlatformCaps`, `VideoSourceCap`, or `EncoderCapability`.
-The backend forwards the parsed ladder, and `EncoderDialog` derives codec
-availability from it. `PLATFORM_CAPS_BY_HARDWARE` remains only for a legacy or
+The backend forwards the parsed ladder. `PLATFORM_CAPS_BY_HARDWARE` remains only for a legacy or
 absent `encoders` snapshot and is pinned to the engine platform golden by a test.
 `producer-wire-type-shadow.test.ts` rejects any reintroduced local declaration.
+
+Schema 0.22.0 also retains optional `encoder.default_codec` through the producer
+parser, bitrate normalization, cache and RPC schema. The backend forwards optional
+`active_encode.route_reason` in status; absent fields remain absent for older engines.
+
+**The output format is automatic [EXISTS].** `EncoderDialog` shows no codec choice
+by default: it names `encoder.default_codec` ("Automatic (H.265)") or says just
+"Automatic". Only after the operator turns on "Choose the format" does it offer
+one radio per codec `intersectCaps` offers on the platform; an unoffered codec gets
+no control, not a disabled one. The route line and its known `route_reason` copy
+come from `apps/frontend/src/lib/streaming/outputFormat.ts`; an unknown reason
+token renders nothing. See [live-screen.md](live-screen.md).
 
 **`pipeline-sources.ts` per-board tables deleted [EXISTS].** The static per-board
 capability tables that previously lived in `pipeline-sources.ts` are removed. All
@@ -159,6 +170,10 @@ second decision after destination. Key concepts:
   mock seam (`shouldUseMocks()` gate) so integration tests can exercise the full
   validation pipeline without real DNS or UDP reachability. See
   `apps/backend/src/mocks/providers/relay.ts` for the mock provider.
+  With mocks disabled, synchronous `ENETUNREACH` or `EHOSTUNREACH` during UDP
+  socket setup returns `{ valid: false, stage: "probe", reason: "refused" }`,
+  using the existing refusal result. Other synchronous setup errors still
+  reject, including malformed or empty addresses.
 
 **New `server/` sub-components [EXISTS]:**
 

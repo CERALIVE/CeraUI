@@ -276,6 +276,31 @@ describe('video_codec + selected_video_input (Todo 19)', () => {
 	});
 });
 
+describe('format settings input and persisted config echo', () => {
+	test.each(['adaptive', 'fixed', 'aimd'])(
+		'accepts producer balancer %s on input and echo',
+		(balancer) => {
+			expect(streamingConfigInputSchema.parse({ balancer })).toHaveProperty('balancer', balancer);
+			expect(configMessageSchema.parse({ balancer })).toHaveProperty('balancer', balancer);
+		},
+	);
+
+	test('keeps balancer optional and rejects unknown algorithms', () => {
+		expect(streamingConfigInputSchema.parse({})).not.toHaveProperty('balancer');
+		expect(configMessageSchema.parse({})).not.toHaveProperty('balancer');
+		expect(streamingConfigInputSchema.safeParse({ balancer: 'bogus' }).success).toBe(false);
+		expect(configMessageSchema.safeParse({ balancer: 'turbo' }).success).toBe(false);
+	});
+
+	test('accepts codec null only as an input clear directive', () => {
+		expect(streamingConfigInputSchema.parse({ video_codec: null })).toHaveProperty(
+			'video_codec',
+			null,
+		);
+		expect(configMessageSchema.safeParse({ video_codec: null }).success).toBe(false);
+	});
+});
+
 describe('deviceKindSchema — additive engine-typed kinds (Todo 19)', () => {
 	test('legacy kinds still parse', () => {
 		for (const kind of ['hdmi', 'usb', 'network', 'test', 'audio', 'other']) {

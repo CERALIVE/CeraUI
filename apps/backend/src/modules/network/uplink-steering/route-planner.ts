@@ -86,12 +86,32 @@ async function planUplinkRouteInner(
 	if (existingTable === undefined)
 		return await planWithoutSourceRule(candidate, deps);
 	assertTable(existingTable);
+	const managed = existingTable === managedTable(candidate.mark);
+	if (managed) {
+		const liveDefault = await deps.run("ip", [
+			"-4",
+			"route",
+			"show",
+			"default",
+			"dev",
+			argMatch(ID_RE, candidate.ifname),
+		]);
+		if (liveDefault.trim() !== "") {
+			return managedPlanFromRoute(
+				candidate,
+				existingTable,
+				liveDefault,
+				SOURCE_ROUTE_RULE_PRIORITY,
+				true,
+			);
+		}
+	}
 	const routeOutput = await readRouteTable(deps, existingTable);
 	if (
 		parseHasDefaultRoute(routeOutput) &&
 		parseDefaultRouteInterface(routeOutput) === candidate.ifname
 	) {
-		if (existingTable === managedTable(candidate.mark)) {
+		if (managed) {
 			return managedPlanFromRoute(
 				candidate,
 				existingTable,

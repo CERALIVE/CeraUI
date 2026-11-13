@@ -18,6 +18,7 @@ import {
 	destroyAsyncOperations,
 	getOperationPhase,
 	getOperationReason,
+	getOperationTarget,
 	isOperationPending,
 	osCommand,
 	reconcileOperationsOnReconnect,
@@ -362,6 +363,79 @@ describe("osCommand dispatch helper", () => {
 	afterEach(() => {
 		destroyAsyncOperations();
 	});
+
+	it.each(["uplink", "shared-lan"])(
+		"keeps an external %s attempt pending after a local refusal, then accepts its success",
+		async (externalTarget) => {
+			const reply = Promise.withResolvers<{
+				success: boolean;
+				error: string;
+			}>();
+			const onResult = vi.fn();
+			const command = osCommand({
+				key: "ethernet:eth0",
+				target: "shared-lan",
+				rpc: () => reply.promise,
+				busyMessage: () => "busy",
+				onResult,
+			});
+			// Subscription pending frames begin a new attempt on the same key.
+			beginOperation("ethernet:eth0", externalTarget);
+			const refusal = { success: false, error: "DEVICE_BUSY" };
+			reply.resolve(refusal);
+			expect(await command).toEqual(refusal);
+			expect(onResult).toHaveBeenCalledWith(refusal);
+			expect(toast.error).toHaveBeenCalledExactlyOnceWith("busy");
+			expect(getOperationPhase("ethernet:eth0")).toBe("pending");
+			expect(getOperationTarget("ethernet:eth0")).toBe(externalTarget);
+			expect(getOperationReason("ethernet:eth0")).toBeUndefined();
+			confirmOperation("ethernet:eth0");
+			expect(getOperationPhase("ethernet:eth0")).toBe("confirmed");
+		},
+	);
+
+	it.each(["uplink", "shared-lan"])(
+		"does not fail an external %s attempt when the local RPC throws",
+		async (externalTarget) => {
+			const reply = Promise.withResolvers<never>();
+			const command = osCommand({
+				key: "ethernet:eth0",
+				target: "shared-lan",
+				rpc: () => reply.promise,
+				failMessage: () => "refused",
+			});
+			beginOperation("ethernet:eth0", externalTarget);
+			reply.reject(new Error("refused"));
+			expect(await command).toBeUndefined();
+			expect(toast.error).toHaveBeenCalledExactlyOnceWith("refused");
+			expect(getOperationPhase("ethernet:eth0")).toBe("pending");
+			confirmOperation("ethernet:eth0");
+			expect(getOperationPhase("ethernet:eth0")).toBe("confirmed");
+		},
+	);
+
+	it.each(["uplink", "shared-lan"])(
+		"does not confirm an external %s attempt on local RPC success",
+		async (externalTarget) => {
+			const reply = Promise.withResolvers<{ success: boolean }>();
+			const onResult = vi.fn();
+			const command = osCommand({
+				key: "ethernet:eth0",
+				target: "shared-lan",
+				confirmOnResolve: true,
+				rpc: () => reply.promise,
+				onResult,
+			});
+			beginOperation("ethernet:eth0", externalTarget);
+			reply.resolve({ success: true });
+			expect(await command).toEqual({ success: true });
+			expect(onResult).toHaveBeenCalledWith({ success: true });
+			expect(toast.error).not.toHaveBeenCalled();
+			expect(getOperationPhase("ethernet:eth0")).toBe("pending");
+			confirmOperation("ethernet:eth0");
+			expect(getOperationPhase("ethernet:eth0")).toBe("confirmed");
+		},
+	);
 
 	// 1. fire-and-forget success stays pending (the broadcast/TTL settles it later)
 	it("leaves a fire-and-forget op pending on {success:true} and toasts nothing", async () => {

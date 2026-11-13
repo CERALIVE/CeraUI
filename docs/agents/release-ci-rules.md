@@ -24,7 +24,7 @@ isolated runners install their own Playwright OS dependencies: desktop shards
 so the functional command and `-of-<total>` blob artifact names remain
 project-correct. Browser cache keys use the exact installed Playwright CLI
 version, and the four lanes retain unique blob artifacts for the merged report. The
-setup job also downloads the published `srtla` 4.1.0 amd64 `.deb`,
+setup job also downloads the published `srtla` 4.2.0 amd64 `.deb`,
 verifies its pinned SHA-256 and Debian package metadata, extracts only its runtime
 payload, and uploads that payload as a one-day artifact. The backend unit lane
 fetches the same pinned package independently — it does not depend on the E2E

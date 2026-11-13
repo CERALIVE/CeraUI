@@ -1,6 +1,22 @@
 // @vitest-environment jsdom
-import type { RelayServer, StreamingConfigInput } from "@ceraui/rpc/schemas";
-import { describe, expect, it } from "vitest";
+import {
+	type RelayServer,
+	receiverKindManifest,
+	type StreamingConfigInput,
+	streamingSetConfigInputSchema,
+} from "@ceraui/rpc/schemas";
+import { describe, expect, it, vi } from "vitest";
+
+import { buildServerDialogInput } from "../../main/dialogs/server/server-dialog-commands";
+
+vi.mock("$lib/rpc", () => ({ rpc: {} }));
+vi.mock("$lib/rpc/dirty-registry.svelte", () => ({
+	markPending: vi.fn(),
+	onRpcResolved: vi.fn(),
+}));
+vi.mock("svelte-sonner", () => ({
+	toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 import {
 	autoSelectIngestSlot,
@@ -478,6 +494,130 @@ function summaryLabels(
 		...overrides,
 	};
 }
+
+describe("receiver destination dialog inputs and summaries", () => {
+	const range = deriveLatencyRange({
+		latency_range: { min: 2500, default: 3000, max: 4000 },
+	});
+	const account = slot({
+		endpointId: "slot-a",
+		host: "ingest.example",
+		key: "publish/managed",
+	});
+	const servers = {
+		"relay-a": relayServer({ addr: "relay.example", protocol: "srtla" }),
+	};
+
+	it.each([
+		{ initial: "catalog", final: "catalog" },
+		{ initial: "catalog", final: "slot" },
+		{ initial: "slot", final: "catalog" },
+		{ initial: "slot", final: "slot" },
+	] as const)(
+		"$initial → custom → $final builds valid inputs and destination summaries",
+		({ initial, final }) => {
+			const managedInput = (kind: "catalog" | "slot", latency: number) =>
+				buildServerDialogInput({
+					...draft({
+						latency,
+						relayServer: "relay-a",
+						relayAccount: "account-a",
+						relayStreamId: "",
+					}),
+					destination: "managed",
+					managedSlot: kind === "slot" ? account : undefined,
+				});
+			const assertManaged = (kind: "catalog" | "slot", latency: number) => {
+				const input = managedInput(kind, latency);
+				expect(streamingSetConfigInputSchema.parse(input)).toEqual(input);
+				const config = { ...input, remote_provider: "ceralive" };
+				expect(deriveDestinationChoice(config)).toBe("ceralive");
+				expect(config.selected_ingest_endpoint).toBe(
+					kind === "slot" ? "slot-a" : "",
+				);
+				expect(findActiveSlot([account], config.selected_ingest_endpoint)).toBe(
+					kind === "slot" ? account : undefined,
+				);
+				expect(config.relay_server).toBe(
+					kind === "catalog" ? "relay-a" : undefined,
+				);
+				expect(config.relay_account).toBe(
+					kind === "catalog" ? "account-a" : undefined,
+				);
+				expect(config.srtla_addr).toBe(
+					kind === "slot" ? "ingest.example" : undefined,
+				);
+				expect(config.srtla_port).toBe(
+					kind === "slot" ? account.port : undefined,
+				);
+				expect(config.srt_streamid).toBe(
+					kind === "slot" ? account.key : undefined,
+				);
+				expect(config.srt_latency).toBe(latency);
+				const receiver = resolveReceiverKind({
+					protocol: config.relay_protocol,
+					destination: deriveDestination(config),
+					server: config.relay_server ? servers["relay-a"] : undefined,
+				});
+				// An ingest slot is a managed provider choice with a manual transport endpoint.
+				expect(receiver).toBe(
+					kind === "catalog" ? "srtla_relay" : "srtla_custom",
+				);
+				expect(receiverKindManifest(receiver).fields).toContain(
+					kind === "catalog" ? "server" : "addr",
+				);
+				expect(buildServerSummary(config, receiver, 2, summaryLabels())).toBe(
+					kind === "catalog"
+						? "CeraLive Cloud · SRTLA · Bonded · Bonded across 2 links"
+						: "ingest.example:5000 · SRTLA · Custom",
+				);
+			};
+
+			assertManaged(initial, range.min);
+			const input = buildServerDialogInput({
+				...draft({
+					addr: " custom.example ",
+					portStr: "6000",
+					streamId: " publish/custom ",
+					latency: range.default,
+				}),
+				destination: "custom",
+			});
+			expect(streamingSetConfigInputSchema.parse(input)).toEqual(input);
+			const config = { ...input, remote_provider: "ceralive" };
+			expect(deriveDestinationChoice(config)).toBe("custom");
+			expect(config.remote_provider).toBe("ceralive");
+			expect(config.relay_server).toBeUndefined();
+			expect(config.relay_account).toBeUndefined();
+			expect(config.selected_ingest_endpoint).toBe("");
+			expect(
+				findActiveSlot([account], config.selected_ingest_endpoint),
+			).toBeUndefined();
+			expect(config.srtla_addr).toBe("custom.example");
+			expect(config.srtla_port).toBe(6000);
+			expect(config.srt_streamid).toBe("publish/custom");
+			expect(config.srt_latency).toBe(range.default);
+			const customKind = resolveReceiverKind({
+				protocol: config.relay_protocol,
+				destination: deriveDestination(config),
+			});
+			expect(customKind).toBe("srtla_custom");
+			expect(receiverKindManifest(customKind).fields).not.toContain("server");
+			expect(deriveServerReadiness(customKind, null)).toEqual({
+				variant: "idle",
+			});
+			expect(deriveServerReadiness(customKind, 2)).toEqual({
+				variant: "bonded",
+				count: 2,
+			});
+			expect(buildServerSummary(config, customKind, 2, summaryLabels())).toBe(
+				"custom.example:6000 · SRTLA · Custom",
+			);
+
+			assertManaged(final, range.max);
+		},
+	);
+});
 
 describe("buildServerSummary — destination/kind-aware Live server summary (T11)", () => {
 	it("none (no receiver configured) → notConfigured", () => {

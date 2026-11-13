@@ -180,7 +180,11 @@ export async function routePreviewEncode(
 export async function openPreviewDisclosure(page: Page): Promise<void> {
 	const disclosure = page.getByTestId('preview-disclosure');
 	await expect(disclosure).toBeVisible();
-	await disclosure.locator('summary').click();
+	// Open by default from 768 px (Live screen contract), and a summary click
+	// toggles a <details> — so reveal it only when it is closed.
+	if (!(await disclosure.evaluate((el) => (el as HTMLDetailsElement).open))) {
+		await disclosure.locator('summary').click();
+	}
 	await expect(page.getByTestId('preview')).toBeVisible();
 }
 

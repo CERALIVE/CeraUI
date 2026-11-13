@@ -262,6 +262,15 @@ auth seed and report paths, so local developer state is never rewritten.
 Failed writes or renames remove the unpublished sibling in `finally`; the
 regression forces a rename failure and requires the published seed to stay
 unchanged with no pending sibling left behind.
+
+`CERALIVE_STREAMING_MARKER` is always overridden with a path inside that same
+acquisition directory, even when the runner inherits a host override. Concurrent
+mock devices must not share the installed device's `/run/ceralive/streaming` guard: a
+sibling Start would otherwise block an idle device with `START_IN_PROGRESS`, and
+a sibling Stop could clear another stream's protection. The production gate stays
+unchanged. `backend-streaming-isolation.spec.ts` holds two streams live in a
+controlled order and verifies an inherited foreign marker remains untouched.
+
 The mock preview asks the OS for its own port (`PREVIEW_PORT=0`). The private
 `backend-entry.ts` launcher reports both actual listener ports over child IPC
 after boot. Only that message establishes readiness: a TCP connection to the
@@ -408,3 +417,12 @@ await navigateTo(page, 'settings');
 It clicks whichever nav control is currently visible (desktop rail or mobile dock) and asserts `aria-current="page"` before returning. This means the navigation is confirmed before your next assertion runs — no extra `toBeVisible` needed.
 
 Never hardcode `#nav-tab-live` or `#mobile-nav-tab-live` in a spec. The helper exists precisely to abstract that detail.
+
+The rail and dock accept successive different destinations without an elapsed-time
+gate. A former 50 ms click throttle silently discarded a different destination
+while its button remained enabled (#418); waiting longer for `aria-current`
+could not recover that click. Keep synchronization on active navigation and
+mounted destination content rather than adding sleeps or retrying lost clicks.
+`src/main/navigation/Navigation.test.ts` holds the clock fixed while driving both
+real controls through Network, Settings and Live, so this regression does not
+depend on test-runner speed.

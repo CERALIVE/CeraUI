@@ -6,7 +6,7 @@ import {
 	expect,
 	test,
 } from "bun:test";
-import type { ActiveEncode } from "@ceraui/rpc/schemas";
+import { type ActiveEncode, statusResponseSchema } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 import type WebSocket from "ws";
 import type { RuntimeConfig } from "../helpers/config-schemas.ts";
@@ -321,6 +321,45 @@ const NETWORK_STATUS_EVENT = {
 } as Parameters<CerastreamBackend["handleEvent"]>[0];
 
 describe("active_encode reaches the wire (T14 pre-existing-gap fix)", () => {
+	test("route_reason survives the engine status projection, broadcast and pull schema", async () => {
+		const { backend } = makeBackend();
+		backend.handleEvent({
+			type: "status",
+			seq: 0,
+			state: "streaming",
+			streaming: true,
+			active_encode: {
+				codec: "h265",
+				resolution: "1920x1080",
+				framerate: 30,
+				route_reason: "adaptive-active",
+			},
+		});
+		setMockActiveEncodeProvider(
+			() =>
+				statusResponseSchema.parse(backend.getTelemetry()).active_encode ??
+				null,
+		);
+
+		const sent: string[] = [];
+		sendStatus({
+			send: (frame: string) => sent.push(frame),
+		} as unknown as WebSocket);
+		const broadcast = statusResponseSchema.parse(
+			JSON.parse(sent[0] as string).status,
+		);
+		expect(broadcast.active_encode).toMatchObject({
+			route_reason: "adaptive-active",
+		});
+
+		const pulled = await call(getStatusProcedure, undefined, {
+			context: makeContext([]),
+		});
+		expect(pulled.active_encode).toMatchObject({
+			route_reason: "adaptive-active",
+		});
+	});
+
 	test("a fake status event's input_codec rides the ACTUAL status broadcast payload AND the pull procedure", async () => {
 		// handleEvent bypasses the binding parse; the bridge is a no-op — the field
 		// must survive extract -> telemetry -> the status snapshot builder onto the wire.

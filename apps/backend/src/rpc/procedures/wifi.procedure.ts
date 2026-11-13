@@ -511,9 +511,12 @@ function mockAdapterModeStatus(): WifiAdapterModeStatus {
 	const state = getMockState();
 	const status: WifiAdapterModeStatus = {};
 	mockWifiRadios.forEach((radio, index) => {
+		const mode =
+			state.wifiModes[radio.device] === "hotspot" ? "hotspot" : "station";
 		status[String(index)] = {
 			ifname: radio.ifname,
-			mode: state.wifiModes[radio.device] === "hotspot" ? "hotspot" : "station",
+			mode,
+			desired: mode,
 			options: wifiAdapterModeOptions({
 				supportsHotspot: radio.supports_hotspot === true,
 				staApComboSupported: undefined,
