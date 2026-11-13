@@ -919,13 +919,32 @@ proven unusable.
 
 | Rung | Applies to | Why |
 |---|---|---|
-| `usb-serial` | the Qualcomm dual-mode sticks (`2b16081`, `c6125db3`) | a `uhubctl` power cycle flipped one from `05c6:9024`/`rndis_host` to `05c6:9091`/`qmi_wwan` under the SAME serial, so VID:PID is PROVEN not to be an identity and the serial is proven to survive the one transition that moves a device between adapter classes |
-| `id-path` | the two HiLink twins | they expose NO usable USB serial (freshly re-read, not assumed) and share one factory MAC, so only the PORT separates them. Identity is SAME-PORT stability: stable across a replug into the same port and across a composition change, and DELIBERATELY different when a unit is moved to another port |
+| `usb-serial` | a usable serial unique to one USB parent, including the Qualcomm dual-mode sticks | the serial survives a composition change; PID is never an identity input |
+| `id-path` | missing, placeholder or shared serials, including the HiLink and Dell twins | only the PORT separates them. Identity is SAME-PORT stability: stable across a replug into the same port and across a composition change, and DELIBERATELY different when a unit is moved to another port |
 | `ifname` | anything with neither | the honest floor; the record says `anchor: "ifname"` rather than looking stronger than it is |
 
 **There is deliberately NO alias table unifying rungs.** A port alias pointing at
 a serial-anchored identity would hand the NEXT device plugged into that port the
 previous unit's identity — a silent misattribution far worse than a re-minted id.
+
+Serials are trimmed with case preserved. Empty strings, `0`, the Dell
+`0123456789ABCDEF` placeholder (either case), and one character repeated at least
+four times are unusable. A scan compares `(lowercase vendor, usable serial)`
+across distinct canonical USB parents; multiple network functions on one parent
+do not count as twins, and a different PID does not separate shared serials.
+Only a committed scan updates the sticky set or config. The optional
+`usb_serial_shared` config array stores SHA-256 hashes of vendor/serial pairs,
+never raw serials, and is written only when it changes. The newest 64 hashes
+survive a restart; an evicted, very old pair can in theory become trusted again.
+A non-placeholder serial shared by twins therefore switches to port identity
+once, when its twin is first seen, and remains there after the twin is removed.
+
+Affected devices change link id and steering mark once. The rejected serial's
+opaque `legacyLinkId` preserves an existing bond opt-out; toggling one twin first
+migrates the old exclusion to every present twin so its sibling stays excluded.
+Router login credentials re-key automatically only when exactly one present
+physical device owns the legacy id. Twins must re-enter credentials once.
+Remove any sysfs serial bind mount before upgrading.
 
 **`stable_key` is NOT `identityKey`, and this todo did not re-key it.** The wire's
 `stable_key` keeps its exact meaning — the ID_PATH-derived key from the ONE shared
@@ -949,9 +968,8 @@ vid/pid/serial/`ID_PATH`/hwdb + resolved labels) for EVERY classified USB net
 device, not only router-class ones — that is what lets the same stick resolve to
 ONE identity in both of its compositions. Nothing in that map reaches the `netif`
 wire; `netif.router_cellular` exposes only public classification metadata. The
-physical descriptor's `serial` is carried unconditionally, unlike the internal
-classification marker's twin discriminator, because an identity anchor is needed
-by a lone device just as much as by a twin.
+physical descriptor's `serial` is available to a singleton too, but a shared
+serial is omitted and only its opaque legacy link id is retained for migration.
 
 **Display-name precedence**: the MM identity observation — which IS the existing
 HIMI firmware-string chain (`modem-identity.ts` `modemHardwareName`), layered on

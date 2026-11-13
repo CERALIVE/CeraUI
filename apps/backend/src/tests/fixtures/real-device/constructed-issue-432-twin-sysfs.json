@@ -1,0 +1,35 @@
+{
+	"provenance": "Constructed from issue #432 and its reproduction; replace with bench capture before merge. Only serial and parent paths were reported; other capture fields are constructed.",
+	"devices": [
+		{
+			"ifname": "wwu1u4c2",
+			"readlink": "/sys/devices/platform/fc800000.usb/usb3/3-1/3-1.4/3-1.4:1.0",
+			"idVendor": "413c",
+			"idProduct": "81d7",
+			"serial": "0123456789ABCDEF",
+			"busnum": "3",
+			"devpath": "1.4",
+			"udevadm": {
+				"ID_PATH": "platform-fc800000.usb-usb-0:1.4:1.0",
+				"ID_VENDOR_ID": "413c",
+				"ID_MODEL_ID": "81d7",
+				"ID_NET_DRIVER": "cdc_mbim"
+			}
+		},
+		{
+			"ifname": "wwu1c2",
+			"readlink": "/sys/devices/platform/fc400000.usb/xhci-hcd.0.auto/usb4/4-1/4-1:1.0",
+			"idVendor": "413c",
+			"idProduct": "81d7",
+			"serial": "0123456789ABCDEF",
+			"busnum": "4",
+			"devpath": "1",
+			"udevadm": {
+				"ID_PATH": "platform-fc400000.usb-usb-0:1:1.0",
+				"ID_VENDOR_ID": "413c",
+				"ID_MODEL_ID": "81d7",
+				"ID_NET_DRIVER": "cdc_mbim"
+			}
+		}
+	]
+}

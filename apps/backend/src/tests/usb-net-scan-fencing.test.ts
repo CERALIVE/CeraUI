@@ -9,7 +9,17 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { runtimeConfigSchema } from "../helpers/config-schemas.ts";
+import {
+	getConfig,
+	loadConfig,
+	saveConfig,
+	setConfigFilePath,
+} from "../modules/config.ts";
+import { resolveModemPhysicalIdentity } from "../modules/modems/physical-identity-source.ts";
 import {
 	getRouterCellularMarker,
 	getUsbPhysicalDescriptor,
@@ -19,6 +29,10 @@ import {
 	scanUsbNetMarkers,
 } from "../modules/network/router-cellular-scan.ts";
 import type { UsbNetDevice } from "../modules/network/usb-net-classifier.ts";
+import {
+	constructedTwinDeps,
+	constructedTwins,
+} from "./helpers/constructed-usb-twins.ts";
 
 /** Huawei HiLink `12d1:14dc` — ECM tether plus the ZeroCD storage companion. */
 const HUAWEI_HILINK: UsbNetDevice = {
@@ -283,5 +297,181 @@ describe("refreshUsbNetMarkers — generation-fenced single flight", () => {
 
 		expect(await refreshUsbNetMarkers(["eth1"], zte.deps)).toBe(false);
 		expect(getRouterCellularMarker("eth1")?.vid_pid).toBe("19d2:1405");
+	});
+});
+
+describe("shared USB serials are remembered only by committed scans", () => {
+	let dir = "";
+	let writes = 0;
+	let hashes: string[] = [];
+	beforeEach(() => {
+		resetUsbNetMarkers();
+		dir = mkdtempSync(join(tmpdir(), "shared-serial-"));
+		setConfigFilePath(join(dir, "config.json"));
+		getConfig().usb_serial_shared = undefined;
+		writes = 0;
+		hashes = [];
+	});
+	afterEach(() => {
+		resetUsbNetMarkers();
+		getConfig().usb_serial_shared = undefined;
+		setConfigFilePath("config.json");
+		rmSync(dir, { recursive: true });
+	});
+
+	function pair(serial = "SHARED_SERIAL_TOKEN"): RouterCellularScanDeps {
+		return {
+			...constructedTwinDeps(constructedTwins.map((d) => ({ ...d, serial }))),
+			sharedSerials: {
+				load: () => hashes,
+				save: (next) => {
+					hashes = next;
+					writes += 1;
+				},
+			},
+		};
+	}
+	const names = constructedTwins.map((d) => d.ifname);
+
+	it("counts distinct USB parents, ignores PID differences, and keeps VIDs separate", async () => {
+		const first = constructedTwins[0];
+		const second = constructedTwins[1];
+		if (!first || !second) throw new Error("missing twins");
+		for (const [devices, duplicate] of [
+			[
+				[
+					{ ...first },
+					{
+						...first,
+						ifname: "wwan-extra",
+						readlink: first.readlink.replace(/:1\.0$/, ":1.4"),
+						udevadm: {
+							...first.udevadm,
+							ID_PATH: first.udevadm.ID_PATH.replace(/:1\.0$/, ":1.4"),
+						},
+					},
+				],
+				false,
+			],
+			[[{ ...first }, { ...second, idProduct: "9999" }], true],
+			[[{ ...first }, { ...second, idVendor: "05c6" }], false],
+		] as const) {
+			resetUsbNetMarkers();
+			const deps = constructedTwinDeps(
+				devices.map((d) => ({ ...d, serial: "SHARED_SERIAL_TOKEN" })),
+			);
+			await refreshUsbNetMarkers(
+				devices.map((d) => d.ifname),
+				deps,
+			);
+			for (const device of devices) {
+				expect(resolveModemPhysicalIdentity(device.ifname).anchor).toBe(
+					duplicate ? "id-path" : "usb-serial",
+				);
+				expect(getUsbPhysicalDescriptor(device.ifname)?.serial).toBe(
+					duplicate ? undefined : "SHARED_SERIAL_TOKEN",
+				);
+			}
+		}
+	});
+
+	it("keeps a singleton on its port after pair detection and config reload", async () => {
+		const deps = pair();
+		await refreshUsbNetMarkers(names.slice(0, 1), deps);
+		expect(resolveModemPhysicalIdentity(names[0] ?? "").anchor).toBe(
+			"usb-serial",
+		);
+		expect(writes).toBe(0);
+		await refreshUsbNetMarkers(names, deps);
+		const id = resolveModemPhysicalIdentity(names[0] ?? "").linkId;
+		expect(resolveModemPhysicalIdentity(names[0] ?? "").anchor).toBe("id-path");
+		const digest = new Bun.CryptoHasher("sha256")
+			.update("413c:SHARED_SERIAL_TOKEN")
+			.digest("hex");
+		expect(hashes).toEqual([digest]);
+		expect(hashes[0]).toMatch(/^[0-9a-f]{64}$/);
+		expect(writes).toBe(1);
+		await refreshUsbNetMarkers(names, deps);
+		expect(writes).toBe(1);
+		resetUsbNetMarkers();
+		await refreshUsbNetMarkers(names.slice(0, 1), deps);
+		expect(resolveModemPhysicalIdentity(names[0] ?? "").linkId).toBe(id);
+		expect(writes).toBe(1);
+	});
+
+	it("persists only hashes through the real config schema and reload path", async () => {
+		writeFileSync(join(dir, "config.json"), "{}");
+		await loadConfig();
+		const deps = pair("PERSISTED_SERIAL_TOKEN");
+		deps.sharedSerials = {
+			load: () => getConfig().usb_serial_shared ?? [],
+			save: (next) => {
+				getConfig().usb_serial_shared = next;
+				saveConfig();
+				writes += 1;
+			},
+		};
+		await refreshUsbNetMarkers(names, deps);
+		const data = readFileSync(join(dir, "config.json"), "utf8");
+		expect(data).not.toContain("PERSISTED_SERIAL_TOKEN");
+		const parsed = runtimeConfigSchema.parse(JSON.parse(data));
+		expect(parsed.usb_serial_shared).toEqual([
+			new Bun.CryptoHasher("sha256")
+				.update("413c:PERSISTED_SERIAL_TOKEN")
+				.digest("hex"),
+		]);
+		resetUsbNetMarkers();
+		getConfig().usb_serial_shared = undefined;
+		await loadConfig();
+		await refreshUsbNetMarkers(names.slice(0, 1), deps);
+		expect(resolveModemPhysicalIdentity(names[0] ?? "").anchor).toBe("id-path");
+		expect(writes).toBe(1);
+	});
+
+	it("keeps the newest 64 hashes and writes only on a new shared serial", async () => {
+		hashes = Array.from({ length: 64 }, (_, i) =>
+			new Bun.CryptoHasher("sha256").update(`OLD_TOKEN_${i}`).digest("hex"),
+		);
+		const oldest = hashes[0];
+		const deps = pair();
+		await refreshUsbNetMarkers(names, deps);
+		expect(hashes).toHaveLength(64);
+		expect(hashes).not.toContain(oldest);
+		expect(hashes.at(-1)).toBe(
+			new Bun.CryptoHasher("sha256")
+				.update("413c:SHARED_SERIAL_TOKEN")
+				.digest("hex"),
+		);
+		expect(writes).toBe(1);
+	});
+
+	it("does not persist or remember duplicates from a superseded scan", async () => {
+		const gate = makeGate();
+		const old = pair();
+		const resolveLink = old.resolveLink;
+		old.resolveLink = async (path) => {
+			await gate.passed;
+			return resolveLink(path);
+		};
+		const pending = refreshUsbNetMarkers(names, old);
+		const newer = pair();
+		await refreshUsbNetMarkers(names.slice(0, 1), newer);
+		gate.open();
+		expect(await pending).toBe(false);
+		expect(hashes).toEqual([]);
+		expect(writes).toBe(0);
+		resetUsbNetMarkers();
+		await refreshUsbNetMarkers(names.slice(0, 1), newer);
+		expect(resolveModemPhysicalIdentity(names[0] ?? "").anchor).toBe(
+			"usb-serial",
+		);
+	});
+
+	it("validates hash-only config with absent meaning empty", () => {
+		expect(runtimeConfigSchema.parse({}).usb_serial_shared).toBeUndefined();
+		expect(
+			runtimeConfigSchema.safeParse({ usb_serial_shared: ["RAW_SERIAL_TOKEN"] })
+				.success,
+		).toBe(false);
 	});
 });

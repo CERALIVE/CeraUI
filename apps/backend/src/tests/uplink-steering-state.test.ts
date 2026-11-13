@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test";
-
+import { resolveModemPhysicalIdentity } from "../modules/modems/physical-identity-source.ts";
 import {
 	NETIF_ERR_DUPIPV4,
 	NETIF_ERR_HOTSPOT,
 	NETIF_ERR_SHAREDLAN,
 	type NetworkInterface,
 } from "../modules/network/network-interfaces.ts";
+import {
+	refreshUsbNetMarkers,
+	resetUsbNetMarkers,
+} from "../modules/network/router-cellular-scan.ts";
 import {
 	UPLINK_HEALTH_CONFIG,
 	UplinkHealthEngine,
@@ -21,6 +25,10 @@ import {
 	readDesiredSteeringState,
 	type SteeringStateBuilderDeps,
 } from "../modules/network/uplink-steering/state-builder.ts";
+import {
+	constructedTwinDeps,
+	constructedTwins,
+} from "./helpers/constructed-usb-twins.ts";
 import { scripted } from "./uplink-steering-route-test-fixtures.ts";
 
 function netif(
@@ -90,6 +98,29 @@ function harness(
 }
 
 describe("readDesiredSteeringState", () => {
+	test("assigns the constructed Dell placeholders two distinct steering marks", async () => {
+		try {
+			await refreshUsbNetMarkers(
+				constructedTwins.map((d) => d.ifname),
+				constructedTwinDeps(),
+			);
+			const h = harness({
+				interfaces: () => ({
+					eth9: netif("10.43.0.1", "255.255.255.0", NETIF_ERR_SHAREDLAN),
+					wwu1u4c2: netif("100.64.1.2"),
+					wwu1c2: netif("100.64.2.2"),
+				}),
+				health: () => [],
+				physicalIdentity: (ifname) =>
+					resolveModemPhysicalIdentity(ifname).identityKey,
+			});
+			const state = await readDesiredSteeringState(h);
+			expect(state.uplinks).toHaveLength(2);
+			expect(new Set(state.uplinks.map((u) => u.mark)).size).toBe(2);
+		} finally {
+			resetUsbNetMarkers();
+		}
+	});
 	test("derives both client zones and consumes health weights", async () => {
 		const h = harness();
 		const state = await readDesiredSteeringState(h);

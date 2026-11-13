@@ -54,6 +54,9 @@ export function resolveModemPhysicalIdentity(
 					pid: descriptor.pid,
 					descriptorVendor: descriptor.vendor,
 					descriptorModel: descriptor.model,
+					...(descriptor.legacyLinkId !== undefined
+						? { legacyLinkId: descriptor.legacyLinkId }
+						: {}),
 					...(descriptor.serial !== undefined
 						? { serial: descriptor.serial }
 						: {}),
