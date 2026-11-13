@@ -203,10 +203,11 @@ test.describe("encoder capability wiring", () => {
 			),
 		);
 
-		// Codec selector is now always visible (no Advanced expander after todo 9 flattening).
+		// The codec choices appear once the operator opts into choosing the format.
 		// The software-encode caveat surfaces once H.265 (offered but hw-unaccelerated)
 		// is the selected codec.
-		await page.getByTestId("codec-h265").click();
+		await page.getByTestId("encoder-format-manual").click();
+		await page.getByTestId("encoder-format-h265").click();
 		const badge = page.getByTestId("codec-h265-software").first();
 		await expect(badge).toBeVisible();
 		await expect(badge).toContainText(/software/i);

@@ -170,6 +170,45 @@ describe("buildEncoderSetConfig", () => {
 			expect("resolution" in out).toBe(false);
 			expect("framerate" in out).toBe(false);
 		});
+
+		it("forwards video_codec = null when the operator returned to Automatic", () => {
+			const out = buildEncoderSetConfig(
+				makeDraft({ codec: null }),
+				bothOverrides,
+			);
+			expect(out).toHaveProperty("video_codec", null);
+		});
+	});
+
+	describe("balancer and passthrough (format keys the dialog writes on change only)", () => {
+		it("forwards the balancer the draft carries", () => {
+			expect(
+				buildEncoderSetConfig(makeDraft({ balancer: "fixed" }), bothOverrides)
+					.balancer,
+			).toBe("fixed");
+			expect(
+				buildEncoderSetConfig(
+					makeDraft({ balancer: "adaptive" }),
+					bothOverrides,
+				).balancer,
+			).toBe("adaptive");
+		});
+
+		it("omits balancer when the draft has none", () => {
+			expect(
+				"balancer" in buildEncoderSetConfig(makeDraft(), bothOverrides),
+			).toBe(false);
+		});
+
+		it("never writes video_passthrough, even when the draft carries the saved one", () => {
+			for (const passthrough of ["auto", "force", "off"] as const) {
+				const out = buildEncoderSetConfig(
+					makeDraft({ passthrough }),
+					bothOverrides,
+				);
+				expect("video_passthrough" in out).toBe(false);
+			}
+		});
 	});
 
 	describe("end-to-end shape", () => {

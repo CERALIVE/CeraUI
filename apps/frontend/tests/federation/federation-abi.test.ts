@@ -238,6 +238,41 @@ describe("federation additive options — the BUILT audio bundle", () => {
 	});
 });
 
+describe("federation encoder bundle — the host's saved format settings", () => {
+	it("reads the host's balancer and passthrough, and resets passthrough through the host", async () => {
+		const module = await loadEntry("encoder");
+		const writes: unknown[] = [];
+		const { handle } = await mountInto(module, {
+			locale: "en",
+			config: {
+				video_codec: "h264",
+				balancer: "fixed",
+				video_passthrough: "force",
+			} as NonNullable<FederationMountOptions["config"]>,
+			capabilities: BASE_CAPABILITIES,
+			host: hostAdapter({
+				setConfig: async (input) => {
+					writes.push(input);
+					return { success: true };
+				},
+			}),
+		});
+		const byId = (id: string) => document.querySelector(`[data-testid="${id}"]`);
+
+		expect(byId("encoder-format-manual")?.getAttribute("aria-checked")).toBe("true");
+		expect(byId("encoder-adaptive")?.getAttribute("aria-checked")).toBe("false");
+		expect(byId("encoder-legacy-passthrough")?.getAttribute("data-setting")).toBe("force");
+
+		(byId("encoder-legacy-passthrough-reset") as HTMLButtonElement | null)?.click();
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		expect(writes).toEqual([{ video_passthrough: "auto" }]);
+		expect(byId("encoder-legacy-passthrough")).toBeNull();
+
+		await handle.destroy();
+	});
+});
+
 describe("federation save-failure surface", () => {
 	it("surfaces a resolved {success:false} write instead of reporting success", async () => {
 		const module = await loadEntry("encoder");

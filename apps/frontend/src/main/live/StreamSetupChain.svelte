@@ -286,118 +286,132 @@ const networkSummary = $derived(
 	     settings key off the active source) — the Fix affordance stays the path. -->
 	{const editDisabled = $derived(key === 'encoder' && !effectiveSourceId)}
 	<div
-		class="flex items-center justify-between gap-4 py-2.5 first:pt-0"
+		class="py-2.5 first:pt-0"
 		data-testid="setup-row"
 		data-row={key}
 		data-state={state}
 		data-section={row.section}
 	>
-		<div class="flex min-w-0 items-start gap-2.5">
-			<span
-				class="mt-1.5 size-2 shrink-0 rounded-full"
-				style="background: {stateColor(state)};"
-				aria-hidden={true}
-			></span>
-			<row.icon
-				aria-hidden={true}
-				class="text-muted-foreground mt-0.5 size-4 shrink-0"
-			/>
-			<div class="min-w-0">
-				<p class="text-sm font-medium">{row.label}</p>
-				<p
-					class="truncate font-mono text-sm {state === 'warn'
-						? 'font-medium'
-						: 'text-muted-foreground'}"
-					style={state === 'warn' ? 'color: var(--status-warning);' : undefined}
-				>
-					{row.value}
-				</p>
-				{#if reasonKey}
+		<div class="flex items-center justify-between gap-4">
+			<div class="flex min-w-0 items-start gap-2.5">
+				<span
+					class="mt-1.5 size-2 shrink-0 rounded-full"
+					style="background: {stateColor(state)};"
+					aria-hidden={true}
+				></span>
+				<row.icon
+					aria-hidden={true}
+					class="text-muted-foreground mt-0.5 size-4 shrink-0"
+				/>
+				<div class="min-w-0">
+					<p class="text-sm font-medium">{row.label}</p>
 					<p
-						class="text-muted-foreground truncate text-xs"
-						data-testid="setup-row-reason"
+						class="truncate font-mono text-sm {state === 'warn'
+							? 'font-medium'
+							: 'text-muted-foreground'}"
+						style={state === 'warn' ? 'color: var(--status-warning);' : undefined}
 					>
-						{resolveReason(reasonKey)}
+						{row.value}
 					</p>
-					{#if onFix && state === 'blocked'}
-						<!-- Source-gate fix: retargets to the source list (LiveView scrolls/
-						     focuses it) — it does NOT open the encoder dialog. -->
-						<button
-							class="text-primary mt-1.5 inline-flex min-h-[44px] items-center gap-1 text-xs font-medium hover:underline focus-visible:underline focus-visible:outline-none"
-							data-testid="setup-row-fix"
-							data-fix="openSource"
-							onclick={onFix}
-							type="button"
+					{#if reasonKey}
+						<p
+							class="text-muted-foreground truncate text-xs"
+							data-testid="setup-row-reason"
 						>
-							{m["live.goLive.fix.openSource"]()}
-							<ChevronRight aria-hidden={true} class="h-3.5 w-3.5 rtl:-scale-x-100" />
-						</button>
+							{resolveReason(reasonKey)}
+						</p>
+						{#if onFix && state === 'blocked'}
+							<!-- Source-gate fix: retargets to the source list (LiveView scrolls/
+							     focuses it) — it does NOT open the encoder dialog. -->
+							<button
+								class="text-primary mt-1.5 inline-flex min-h-[44px] items-center gap-1 text-xs font-medium hover:underline focus-visible:underline focus-visible:outline-none"
+								data-testid="setup-row-fix"
+								data-fix="openSource"
+								onclick={onFix}
+								type="button"
+							>
+								{m["live.goLive.fix.openSource"]()}
+								<ChevronRight aria-hidden={true} class="h-3.5 w-3.5 rtl:-scale-x-100" />
+							</button>
+						{/if}
 					{/if}
+				</div>
+			</div>
+			<div class="flex shrink-0 items-center gap-2">
+				{#if chip === 'traffic-light'}
+					<!-- Traffic-light: green = validated, neutral = unchecked. Never blocks
+					     Start. -->
+					<span
+						class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium"
+						data-testid="destination-traffic-light"
+						data-validated={destinationValidated === true}
+						style={destinationValidated === true
+							? 'color: var(--status-success);'
+							: undefined}
+					>
+						<span
+							class="size-2 rounded-full"
+							style="background: {destinationValidated === true
+								? 'var(--status-success)'
+								: 'var(--muted-foreground)'};"
+							aria-hidden={true}
+						></span>
+						<span class="hidden sm:inline">
+							{destinationValidated === true
+								? m["live.goLive.validated"]()
+								: m["live.goLive.notChecked"]()}
+						</span>
+					</span>
+				{/if}
+				{#if chip === 'bitrate' && maxBitrate}
+					<!-- Bitrate-ceiling tap-to-edit chip — opens EncoderDialog. -->
+					<button
+						class="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex min-h-[44px] items-center rounded-md px-2 font-mono text-xs font-medium"
+						data-testid="bitrate-ceiling-chip"
+						onclick={onOpenEncoder}
+						title={m["live.goLive.maxBitrate"]()}
+						type="button"
+					>
+						{formatBitrate(maxBitrate)}
+					</button>
+				{/if}
+				{#if locked}
+					<span
+						class="text-muted-foreground inline-flex min-h-[44px] items-center gap-1.5 rounded-md px-2 text-xs font-medium"
+						title={m["live.stopToChange"]()}
+					>
+						<Lock aria-hidden={true} class="h-3.5 w-3.5" />
+						<span class="hidden sm:inline">{m["live.stopToChange"]()}</span>
+					</span>
+				{:else}
+					<Button
+						class="min-h-[44px] gap-1.5"
+						data-testid={row.testId}
+						disabled={editDisabled}
+						onclick={row.onEdit}
+						size="sm"
+						title={editDisabled ? resolveReason(READINESS_SOURCE_REASON) : undefined}
+						variant="ghost"
+					>
+						<Pencil aria-hidden={true} class="h-3.5 w-3.5" />
+						<span class="hidden sm:inline">{m["live.editSettings"]()}</span>
+						<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
+					</Button>
 				{/if}
 			</div>
 		</div>
-		<div class="flex shrink-0 items-center gap-2">
-			{#if chip === 'traffic-light'}
-				<!-- Traffic-light: green = validated, neutral = unchecked. Never blocks
-				     Start. -->
-				<span
-					class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium"
-					data-testid="destination-traffic-light"
-					data-validated={destinationValidated === true}
-					style={destinationValidated === true
-						? 'color: var(--status-success);'
-						: undefined}
-				>
-					<span
-						class="size-2 rounded-full"
-						style="background: {destinationValidated === true
-							? 'var(--status-success)'
-							: 'var(--muted-foreground)'};"
-						aria-hidden={true}
-					></span>
-					<span class="hidden sm:inline">
-						{destinationValidated === true
-							? m["live.goLive.validated"]()
-							: m["live.goLive.notChecked"]()}
-					</span>
-				</span>
-			{/if}
-			{#if chip === 'bitrate' && maxBitrate}
-				<!-- Bitrate-ceiling tap-to-edit chip — opens EncoderDialog. -->
-				<button
-					class="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex min-h-[44px] items-center rounded-md px-2 font-mono text-xs font-medium"
-					data-testid="bitrate-ceiling-chip"
-					onclick={onOpenEncoder}
-					title={m["live.goLive.maxBitrate"]()}
-					type="button"
-				>
-					{formatBitrate(maxBitrate)}
-				</button>
-			{/if}
-			{#if locked}
-				<span
-					class="text-muted-foreground inline-flex min-h-[44px] items-center gap-1.5 rounded-md px-2 text-xs font-medium"
-					title={m["live.stopToChange"]()}
-				>
-					<Lock aria-hidden={true} class="h-3.5 w-3.5" />
-					<span class="hidden sm:inline">{m["live.stopToChange"]()}</span>
-				</span>
-			{:else}
-				<Button
-					class="min-h-[44px] gap-1.5"
-					data-testid={row.testId}
-					disabled={editDisabled}
-					onclick={row.onEdit}
-					size="sm"
-					title={editDisabled ? resolveReason(READINESS_SOURCE_REASON) : undefined}
-					variant="ghost"
-				>
-					<Pencil aria-hidden={true} class="h-3.5 w-3.5" />
-					<span class="hidden sm:inline">{m["live.editSettings"]()}</span>
-					<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
-				</Button>
-			{/if}
-		</div>
+		<!-- The encoder's route line spans the row under the text column, so it reads as
+		     one or two lines instead of a narrow column beside the chips. -->
+		{#if row.route}
+			<p
+				class="ps-11 pt-1.5 text-xs {row.route.outcome === 'forceUnavailable'
+					? 'text-status-warning font-medium'
+					: 'text-muted-foreground'}"
+				data-route={row.route.outcome}
+			>
+				{row.route.text}
+			</p>
+		{/if}
 	</div>
 {/snippet}
 

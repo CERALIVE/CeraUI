@@ -14,6 +14,7 @@ import {
 import { Cpu, Loader2, Server } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 import { LazyDialog, LazyDialogFallback, lazyDialog } from '$lib/components/dialogs';
+import { platformCapsForHardware } from '$lib/components/streaming/ValidationAdapter';
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
 import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
@@ -81,6 +82,7 @@ import { reconcileStartSource } from '$lib/streaming/effective-source';
 import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
 import { encoderSaveErrorMessage } from '$lib/streaming/encoderSaveError';
 import { canLiveSwitchInput, isAudioInputId } from '$lib/streaming/liveAudioSwitch';
+import { expectedOutputCodec, resolveRoute, routeCopy } from '$lib/streaming/outputFormat';
 import {
 	buildServerSummary,
 	type Destination,
@@ -596,6 +598,26 @@ async function handleEncoderSave(saved: EncoderConfig) {
 	}
 }
 
+// The saved-passthrough notice's reset: its own save of `auto`, never folded into
+// the encoder save, so nothing the operator did not change is written.
+async function handleResetPassthrough(): Promise<boolean> {
+	markPending('video_passthrough', 'auto');
+	try {
+		const result = await rpc.streaming.setConfig({ video_passthrough: 'auto' });
+		if (result.success) {
+			toast.success(m["notifications.saved"]());
+			return true;
+		}
+		toast.error(encoderSaveErrorMessage(result.error, m));
+		return false;
+	} catch {
+		toast.error(m["notifications.saveFailed"]());
+		return false;
+	} finally {
+		onRpcResolved('video_passthrough');
+	}
+}
+
 // Capture failover: adopt the backup camera's mode as the stream settings. It
 // rides the SAME apply-now save the encoder dialog uses, so the transaction,
 // the field locks and the outcome report are one code path — the draft is
@@ -815,6 +837,28 @@ const encoderSummary = $derived.by(() => {
 	// (`serverSummary`) is the ONE idle surface that names the transport.
 	return parts.join(' · ');
 });
+// The encoder row's route line: the same resolveRoute the Encoder dialog shows,
+// from the saved settings and the configured source (the Output card is idle-only).
+const encoderRoute = $derived.by(() => {
+	const sources = getSources();
+	const source = config?.source
+		? sources?.sources.find((s) => s.id === config.source)
+		: undefined;
+	if (!source) return undefined;
+	const caps = getCapabilities();
+	const route = resolveRoute({
+		outputCodec: expectedOutputCodec(
+			config?.video_codec,
+			caps,
+			caps?.platform ?? platformCapsForHardware(sources?.hardware),
+		),
+		balancer: config?.balancer,
+		passthrough: config?.video_passthrough,
+		source,
+	});
+	const copy = routeCopy(route);
+	return { outcome: route.outcome, text: t(copy.key, copy.params) };
+});
 // Kind-aware server config-row summary (T11): reuses the header's `receiverKind`
 // and the live `linkCount` (null while idle → 0, so a disconnected receiver
 // shows no fresh bonding clause).
@@ -975,6 +1019,7 @@ const configRows = $derived<ConfigRow[]>([
 		onEdit: () => (encoderOpen = true),
 		testId: 'open-encoder-dialog',
 		warn: pipelineNeedsReconfigure,
+		...(encoderRoute ? { route: encoderRoute } : {}),
 	},
 	{
 		icon: Server,
@@ -1160,7 +1205,13 @@ const configRows = $derived<ConfigRow[]>([
 <!-- Encoder configuration dialog (opened from the Encoder "Edit" row). -->
 {#if EncoderDialog.current}
 	{const Encoder = $derived(EncoderDialog.current)}
-	<Encoder bind:open={encoderOpen} bind:config={encoderConfig} onSave={handleEncoderSave} />
+	<Encoder
+		activeEncode={getStatus()?.active_encode ?? null}
+		bind:open={encoderOpen}
+		bind:config={encoderConfig}
+		onResetPassthrough={handleResetPassthrough}
+		onSave={handleEncoderSave}
+	/>
 {:else if EncoderDialog.pending}
 	<LazyDialogFallback
 		bind:open={encoderOpen}

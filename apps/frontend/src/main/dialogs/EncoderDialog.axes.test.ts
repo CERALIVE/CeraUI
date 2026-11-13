@@ -277,7 +277,7 @@ afterEach(() => {
 vi.setConfig({ testTimeout: 15000 });
 
 describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
-	it("caps-full: reaches the 4K/60 ceiling and enables H.265", () => {
+	it("caps-full: reaches the 4K/60 ceiling and enables H.265", async () => {
 		state.pipelines = pipelinesMessage("rk3588");
 		state.capabilities = capsWith();
 		state.sources = sourcesMessage("rk3588", [HDMI_SOURCE]);
@@ -293,13 +293,20 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 		expect(summaryText()).toContain("30 fps");
 		expect(summaryText()).not.toContain("60 fps");
 
-		// H.265 is a first-class enabled choice on this platform.
-		const h265 = document.body.querySelector('[data-testid="codec-h265"]');
-		expect(h265?.getAttribute("data-supported")).toBe("true");
+		// H.265 is an enabled choice on this platform once the operator opts in.
+		await fireEvent.click(
+			document.body.querySelector(
+				'[data-testid="encoder-format-manual"]',
+			) as HTMLElement,
+		);
+		const h265 = document.body.querySelector(
+			'[data-testid="encoder-format-h265"]',
+		);
+		expect(h265).not.toBeNull();
 		expect(h265?.hasAttribute("disabled")).toBe(false);
 	});
 
-	it("engine-starting minimal floor: only 1080p + H.264", () => {
+	it("engine-starting minimal floor: only 1080p + H.264", async () => {
 		// Software floor board + an H.264-only, 1080p-capped capability snapshot; the
 		// active source is a coarse entry with empty modes — the minimal safe floor.
 		state.pipelines = pipelinesMessage("generic");
@@ -322,12 +329,18 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 		expect(summaryText()).toContain("1080p");
 		expect(summaryText()).not.toContain("4K");
 
-		// H.265 is disabled-with-reason (never hidden).
-		const h265 = document.body.querySelector('[data-testid="codec-h265"]');
-		expect(h265).not.toBeNull();
-		expect(h265?.getAttribute("data-supported")).toBe("false");
-		expect(h265?.hasAttribute("disabled")).toBe(true);
-		expect(h265?.getAttribute("title")).toBeTruthy();
+		// The floor offers only H.264: H.265 contributes no choice at all.
+		await fireEvent.click(
+			document.body.querySelector(
+				'[data-testid="encoder-format-manual"]',
+			) as HTMLElement,
+		);
+		expect(
+			document.body.querySelector('[data-testid="encoder-format-h264"]'),
+		).not.toBeNull();
+		expect(
+			document.body.querySelector('[data-testid="encoder-format-h265"]'),
+		).toBeNull();
 	});
 
 	it("opens VALID on a receiver whose only rate is not the 30 fps fallback", async () => {

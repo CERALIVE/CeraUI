@@ -368,8 +368,8 @@ test.describe("Live destination coherence audit", { tag: "@audit" }, () => {
 		expect(silent, `silent disabled controls: ${silent.join(", ")}`).toEqual([]);
 	});
 
-	// ── (engine-starting) Banner + H.265 disabled-with-reason + tightened bounds ──
-	test("engine-starting tier shows the calm banner, disables H.265 with a reason, and floors the encoder+latency bounds", async ({
+	// ── (engine-starting) Banner + H.265 withdrawn + tightened bounds ──
+	test("engine-starting tier shows the calm banner, withdraws the H.265 choice, and floors the encoder+latency bounds", async ({
 		page,
 	}) => {
 		serverConfig({ source: "video-hdmi" });
@@ -382,14 +382,15 @@ test.describe("Live destination coherence audit", { tag: "@audit" }, () => {
 		await expect(banner).toBeVisible({ timeout: 15_000 });
 		await expect(banner).toHaveAttribute("role", "status");
 
-		// Encoder: H.265 disabled WITH a non-empty reason; bitrate floored to 2000‥6000.
+		// Encoder: the floor offers only H.264, so H.265 is no choice at all; bitrate
+		// floored to 2000‥6000.
 		await openConfigDialog(page, "open-encoder-dialog");
 		const dialog = page.getByRole("dialog", { name: "Encoder Settings" });
 		await expect(dialog).toBeVisible({ timeout: 15_000 });
 
-		const h265 = dialog.getByTestId("codec-h265");
-		await expect(h265).toBeDisabled();
-		await expect(h265).toHaveAttribute("title", /\S/);
+		await dialog.getByTestId("encoder-format-manual").click();
+		await expect(dialog.getByTestId("encoder-format-h264")).toBeEnabled();
+		await expect(dialog.getByTestId("encoder-format-h265")).toHaveCount(0);
 
 		const bitrate = page.locator("#encoder-bitrate");
 		await expect(bitrate).toHaveAttribute("min", "2000");
@@ -431,7 +432,8 @@ test.describe("Live destination coherence audit", { tag: "@audit" }, () => {
 		await openConfigDialog(page, "open-encoder-dialog");
 		const dialog = page.getByRole("dialog", { name: "Encoder Settings" });
 		await expect(dialog).toBeVisible({ timeout: 15_000 });
-		await expect(dialog.getByTestId("codec-h265")).toBeEnabled();
+		await dialog.getByTestId("encoder-format-manual").click();
+		await expect(dialog.getByTestId("encoder-format-h265")).toBeEnabled();
 		const bitrate = page.locator("#encoder-bitrate");
 		await expect(bitrate).toHaveAttribute("min", "2000");
 		await expect(bitrate).toHaveAttribute("max", "12000");
