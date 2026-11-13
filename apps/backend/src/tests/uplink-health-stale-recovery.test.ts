@@ -11,7 +11,7 @@ import {
 import { UplinkHealthRuntime } from "../modules/network/uplink-health/runtime.ts";
 import { setUplinkHealthEngineForTest } from "../modules/network/uplink-health/state.ts";
 import { stableUplinkMark } from "../modules/network/uplink-steering/ruleset.ts";
-import { readDesiredSteeringState } from "../modules/network/uplink-steering/state-builder.ts";
+import { readReadySteeringState as readDesiredSteeringState } from "./uplink-steering-test-fixtures.ts";
 
 afterEach(() => setUplinkHealthEngineForTest(null));
 

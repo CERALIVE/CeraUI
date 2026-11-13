@@ -1,15 +1,23 @@
 import { logger } from "../../../helpers/logger.ts";
+import { IDENTITY_READINESS_DEADLINE_MS } from "../router-cellular-scan.ts";
 import type { PreparedSteeringState } from "./applier.ts";
 import {
 	type SteeringAvailability,
 	SteeringUnavailableError,
 	type SteeringUnavailableReason,
 } from "./contracts.ts";
+import type {
+	DesiredSteeringState,
+	PendingSteeringState,
+	SteeringReadinessContext,
+} from "./state-builder.ts";
 
 export const UPLINK_STEERING_RETRY_DELAYS_MS = [100, 500] as const;
 
 export interface UplinkSteeringCoordinatorDeps {
-	readDesiredState(): Promise<PreparedSteeringState>;
+	readDesiredState(
+		context: SteeringReadinessContext,
+	): Promise<DesiredSteeringState>;
 	apply(
 		previous: PreparedSteeringState | undefined,
 		next: PreparedSteeringState,
@@ -18,6 +26,7 @@ export interface UplinkSteeringCoordinatorDeps {
 	waitBeforeRetry?(delayMs: number): Promise<void>;
 	retryCleanup?(): Promise<void>;
 	now?(): number;
+	schedule?(callback: () => Promise<void>, delayMs: number): () => void;
 }
 
 export class UplinkSteeringCoordinator {
@@ -25,6 +34,10 @@ export class UplinkSteeringCoordinator {
 	#applied: PreparedSteeringState | undefined;
 	#dirty = false;
 	#running: Promise<void> | undefined;
+	#pendingReadiness: PendingSteeringState | undefined;
+	#readinessDeadlineArmed = false;
+	#cancelReadinessDeadline: (() => void) | undefined;
+	#zonesReadyBypass = false;
 	#lastFailure:
 		| {
 				stateKey: string;
@@ -51,13 +64,46 @@ export class UplinkSteeringCoordinator {
 		return this.#applied;
 	}
 
+	stop(): void {
+		this.#cancelReadinessDeadline?.();
+		this.#cancelReadinessDeadline = undefined;
+	}
+
+	#awaitReadiness(pending: PendingSteeringState): void {
+		this.#pendingReadiness = pending;
+		if (!pending.netifReady || this.#readinessDeadlineArmed) return;
+		this.#readinessDeadlineArmed = true;
+		this.#cancelReadinessDeadline = (this.#deps.schedule ?? defaultSchedule)(
+			async () => {
+				this.#cancelReadinessDeadline = undefined;
+				if (this.#pendingReadiness?.netifReady === false) return;
+				this.#zonesReadyBypass = true;
+				if (this.#pendingReadiness?.reason === "zones") {
+					logger.warn(
+						"uplink steering Wi-Fi zones readiness deadline expired; bypassing classification",
+					);
+				}
+				await this.requestReconcile();
+			},
+			IDENTITY_READINESS_DEADLINE_MS,
+		);
+	}
+
 	async #drain(): Promise<void> {
 		let retryIndex = 0;
 		while (this.#dirty) {
 			this.#dirty = false;
 			let desiredKey: string | undefined;
 			try {
-				const desired = await this.#deps.readDesiredState();
+				const desired = await this.#deps.readDesiredState({
+					hasAppliedState: this.#applied !== undefined,
+					zonesReadyBypass: this.#zonesReadyBypass,
+				});
+				if ("pending" in desired) {
+					this.#awaitReadiness(desired);
+					continue;
+				}
+				this.#pendingReadiness = undefined;
 				desiredKey = stateKey(desired);
 				if (this.#lastFailure?.stateKey !== desiredKey) {
 					this.#lastFailure = undefined;
@@ -121,4 +167,14 @@ function stateKey(
 
 async function defaultWait(delayMs: number): Promise<void> {
 	await Bun.sleep(delayMs);
+}
+
+function defaultSchedule(
+	callback: () => Promise<void>,
+	delayMs: number,
+): () => void {
+	const timer = setTimeout(() => {
+		void callback();
+	}, delayMs).unref();
+	return () => clearTimeout(timer);
 }
