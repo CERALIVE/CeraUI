@@ -8,7 +8,8 @@
     (at your option) any later version.
 */
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import * as runner from "../helpers/run.ts";
 import { wifiBuildMsg } from "../modules/wifi/wifi.ts";
 import {
 	parseApStaConcurrencySupport,
@@ -82,6 +83,28 @@ Supported wiphy radios:
 });
 
 describe("AP+STA capability probe", () => {
+	test("with bare iw missing and /usr/sbin/iw answering, hybrid capability is still proven", async () => {
+		const command = spyOn(runner, "run").mockImplementation(
+			async (command, args) => {
+				if (command === "iw")
+					throw Object.assign(new Error("iw: command not found"), {
+						code: "ENOENT",
+					});
+				if (command !== "/usr/sbin/iw")
+					throw new Error(`Unexpected binary ${command}`);
+				return args[0] === "dev"
+					? "Interface wlan0\n\twiphy 2\n"
+					: "valid interface combinations:\n * #{ managed } <= 1, #{ AP } <= 1, total <= 2, #channels <= 1";
+			},
+		);
+
+		try {
+			expect(await supportsApStaConcurrency("wlan0")).toBe(true);
+		} finally {
+			command.mockRestore();
+		}
+	});
+
 	test("maps interface to wiphy and caches the PHY result", async () => {
 		const calls: string[][] = [];
 		setApStaCapabilityRunnerForTest(async (_command, args) => {

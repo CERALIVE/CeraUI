@@ -90,10 +90,30 @@ test.each(["id", "registry-key", "id-map"] as const)(
 	},
 );
 
-test("overlapping legacy callers match main's distinct observations and broadcasts", async () => {
-	expect(await legacyOverlapTranscript()).toEqual(golden.overlap);
+test("overlapping callers share the queued observation and its broadcasts", async () => {
+	expect(await legacyOverlapTranscript()).toEqual({
+		initialReads: 1,
+		reads: 2,
+		joined: true,
+		results: [false, false, false],
+		broadcasts: 1,
+		keys: ["degraded:wlan0"],
+		unexpected: [],
+	});
 });
 
-test("overlapping legacy callers retain independent errors exactly as main", async () => {
-	expect(await legacyOverlapTranscript(true)).toEqual(golden.errors);
+test("a discovery failure stays with its run while queued callers share success", async () => {
+	expect(await legacyOverlapTranscript(true)).toEqual({
+		initialReads: 1,
+		reads: 2,
+		joined: true,
+		results: [
+			{ error: "first legacy failure" },
+			{ value: false },
+			{ value: false },
+		],
+		broadcasts: 0,
+		keys: [],
+		unexpected: [],
+	});
 });

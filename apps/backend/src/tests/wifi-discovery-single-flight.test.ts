@@ -375,7 +375,7 @@ test("shadow rejection releases its queued batch without propagating", async () 
 	expect(getWifiRadioShadowFailures() - failures).toBe(1);
 });
 
-test("the production confirmation poll keeps its independent main read", async () => {
+test("the production confirmation poll waits for its queued fresh read", async () => {
 	const gate = Promise.withResolvers<string[]>();
 	releases.push(() => gate.resolve([]));
 	let reads = 0;
@@ -394,9 +394,9 @@ test("the production confirmation poll keeps its independent main read", async (
 	};
 	const discovery = startLegacy();
 	const confirmation = defaultHotspotDeps.pollHotspotActive?.(iface);
-	expect(reads).toBe(2);
-	expect(await confirmation).toBe(true);
+	expect(reads).toBe(1);
 	gate.resolve([]);
+	expect(await confirmation).toBe(true);
 	expect(await discovery).toBe(false);
 });
 
