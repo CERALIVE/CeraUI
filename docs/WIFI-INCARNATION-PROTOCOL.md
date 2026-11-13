@@ -69,13 +69,65 @@ The real status builder requires evidence for the exact current registry row
 and its observation generation, with a coherent lifetime witness. It does not
 accept an interface-name match alone. It does not await sysfs, mint a fallback, or
 change legacy discovery, registry keys, numeric ids, credential ownership,
-broadcast timing, or handler admission. Before detached observation completes,
+or handler admission. Before detached observation completes,
 or when no current coherent observation exists, the field is absent. Discovery
 invalidates prior evidence before publishing or mutating rows, including reused
 row objects. Detached samples carry their captured row and generation; a late,
 failed, timed-out or incoherent observation cannot authorize an older token.
-The next existing status pull, initial snapshot, or broadcast carries the token
-only once current evidence is proven. No new broadcast or discovery wait is added.
+After a detached publication, the producer compares each current row's projected
+wire token with its value before publication. A changed token sends exactly one
+Wi-Fi status frame to authenticated local clients through `broadcastMsgLocal`;
+unchanged projected tokens send none. The cloud relay receives no additional
+frame and its projection is unchanged. Existing pulls and initial snapshots
+also carry proven tokens. A local token frame never acknowledges hotspot roster
+delivery: only `broadcastWifiState` records membership sent to all subscribers,
+so a pending roster poll still sends its normal global/control-channel update.
+Legacy discovery never waits for sampling.
+
+Each sample has a 1000 ms budget. A lost sample (superseded, incomplete, timed out
+or rejected) resamples the current registry rows with a fresh generation after
+250 ms, then 1 s, then 4 s, for at most three consecutive retries. Each retry
+invalidates those rows before sampling. An incomplete or inconsistent bracket
+still publishes uncertainty. If a current sampled registry row has no declared
+degraded reason but lacks a coherent projectable token, that publication is a
+lost sample with reason `incomplete`; it does not reset the budget.
+Rows declared degraded or limited by their existing contract do not retry
+solely for absent proof. A coherent publication or a new discovery resets
+the retry budget. Discovery cancels pending observation work before awaiting
+the device listing; an absent listing still queues the retained registry rows.
+An `unavailable` event for an interface that has no identity row does not advance
+the publication sequence. The monitor publication fence is released in `finally`,
+including when the identity update throws.
+
+There is at most one logical sample in flight and one latest queued batch.
+A timed-out physical read may settle later; its aborted generation cannot issue
+further reads or publish. A fresh sample can proceed without waiting for it.
+All text and symlink identity reads share a module-level bound of four
+outstanding physical operations across producers, discoveries and retries.
+The counter decreases only when the operation settles, not on logical abort.
+At capacity, sampling defers without calling another reader or starting a new
+sampling timeout, logs one string warning per saturation episode
+(`Wi-Fi identity reads still held (4); deferring sampling`), and resumes the
+latest queued sample when a held read settles.
+Settlement wakes only a queued capacity-deferred sample; it does not restart an
+exhausted retry cycle. After retry exhaustion, another discovery is required.
+Capacity deferral has no finite recovery bound if held reads never settle.
+
+All observation-owned start, deadline, retry and queued-continuation timers are
+unreferenced, so those timers alone cannot keep an otherwise finished process
+alive. Explicit cancellation still clears them.
+
+Explicit `stop()` or `terminate()` cancels without a lost-sample warning or
+retry. `stop()` is reusable discovery cancellation; `terminate()` is terminal.
+Production SIGTERM/SIGINT injects `terminate()` from the `main.ts` composition,
+so a device listing already in flight cannot enqueue or restart observation
+during cleanup. The generic shutdown helper imports no Wi-Fi/application graph.
+Wi-Fi-owned test setup reopens the singleton for another isolated test.
+Each lost sample logs only a string identifying its reason and interface names:
+`Wi-Fi identity sample lost (<reason>) for <ifnames>; retry <n>/3` for retries
+1, 2 and 3; the final loss ends with `; no retries left`. Thus an initial
+sample and three retries that all time out produce four warnings and no
+remaining timer. These warnings contain no status payload or credentials.
 
 The producer's existing coherent ifindex/wiphy/path evidence rotates the random
 token on a replacement, replug, classification change, or either degraded edge.

@@ -53,7 +53,10 @@ import {
 	resetWifiPermanentMacCache,
 	setPermanentMacReaderForTest,
 } from "../../modules/wifi/wifi-permanent-mac.ts";
+import { wifiRadioIdentity } from "../../modules/wifi/wifi-radio-identity.ts";
+import { projectWifiRadioIncarnation } from "../../modules/wifi/wifi-radio-publication.ts";
 import * as compat from "../../rpc/compat.ts";
+import { getClients } from "../../rpc/events.ts";
 
 export type RadioFixture = {
 	readonly ifname: string;
@@ -99,6 +102,13 @@ export async function radioEquivalenceTranscript(
 	const unexpected: string[] = [];
 	const calls: unknown[][] = [];
 	const logs: Array<{ level: string; args: unknown[] }> = [];
+	const localBroadcasts: Array<{
+		type: string;
+		payload: unknown;
+		recipients: number;
+		log: (typeof logs)[number] | undefined;
+	}> = [];
+	const publicationLogs = new Set<(typeof logs)[number]>();
 	const store = new Map<string, HotspotCredentials>();
 	const restorers: Array<() => void | Promise<void>> = [];
 	for (const level of ["error", "warn", "info", "debug"] as const) {
@@ -133,6 +143,26 @@ export async function radioEquivalenceTranscript(
 		},
 	);
 	restorers.push(() => sink.mockRestore());
+	const realLocal = compat.broadcastMsgLocal;
+	const localSink = spyOn(compat, "broadcastMsgLocal").mockImplementation(
+		(type, data, activeMin = 0, except, authedOnly = true) => {
+			const recipients = [...getClients()].filter(
+				(client) =>
+					client !== except &&
+					(!authedOnly || client.data.isAuthenticated) &&
+					client.data.lastActive >= activeMin,
+			).length;
+			const result = realLocal(type, data, activeMin, except, authedOnly);
+			localBroadcasts.push({
+				type,
+				payload: structuredClone(data),
+				recipients,
+				log: logs.at(-1),
+			});
+			return result;
+		},
+	);
+	restorers.push(() => localSink.mockRestore());
 	if (duplicateBroadcast) {
 		const owner = wifi.broadcastWifiState;
 		const doubled = spyOn(wifi, "broadcastWifiState").mockImplementation(() => {
@@ -270,7 +300,7 @@ export async function radioEquivalenceTranscript(
 			calls,
 			credentials: [...store],
 			broadcasts,
-			logs,
+			logs: logs.filter((entry) => !publicationLogs.has(entry)),
 		});
 	const frames = [];
 	try {
@@ -320,6 +350,16 @@ export async function radioEquivalenceTranscript(
 			phase = "frame:published";
 			if (fixture.publication) await fixture.publication();
 			const beforeShadow = legacySnapshot();
+			const wireBefore = new Map(
+				Object.values(getWifiInterfacesByMacAddress()).map((row) => [
+					row.ifname,
+					projectWifiRadioIncarnation(
+						row,
+						wifiRadioIdentity.state.rows.get(row.ifname),
+					),
+				]),
+			);
+			const beforeLocal = localBroadcasts.length;
 			// Both main and A receive the same one-millisecond inter-frame gap.
 			jest.advanceTimersByTime(1);
 			const observationModule = new URL(
@@ -331,6 +371,33 @@ export async function radioEquivalenceTranscript(
 					"../../modules/wifi/wifi-radio-observation.ts"
 				);
 				await wifiRadioObservation.settled;
+			}
+			const tokenChanged = Object.values(getWifiInterfacesByMacAddress()).some(
+				(row) =>
+					wireBefore.get(row.ifname) !==
+					projectWifiRadioIncarnation(
+						row,
+						wifiRadioIdentity.state.rows.get(row.ifname),
+					),
+			);
+			const publicationFrames = localBroadcasts.slice(beforeLocal);
+			deepStrictEqual(
+				publicationFrames.map(({ type, payload }) => ({ type, payload })),
+				tokenChanged
+					? [{ type: "status", payload: { wifi: wifiBuildMsg() } }]
+					: [],
+				"Detached shadow changed legacy state: publication frame count or payload",
+			);
+			for (const frame of publicationFrames) {
+				deepStrictEqual(
+					frame.log,
+					{
+						level: "debug",
+						args: ["broadcast", { event: "status", clients: frame.recipients }],
+					},
+					"Detached shadow changed legacy state: publication debug log",
+				);
+				if (frame.log) publicationLogs.add(frame.log);
 			}
 			deepStrictEqual(
 				legacySnapshot(),

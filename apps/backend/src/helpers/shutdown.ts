@@ -4,6 +4,7 @@ import { logger } from "./logger.ts";
 export interface BackendShutdownDeps {
 	/** Cancels background retry owners so none starts work during teardown. */
 	readonly stopRecoveryRetries?: () => void;
+	readonly terminateWifiObservation?: () => void;
 	readonly gracefulShutdown: () => Promise<void>;
 	readonly stopSrtIngest: () => Promise<void>;
 	readonly stopDmesgWatchers: () => void;
@@ -36,6 +37,7 @@ export function handleTerminationSignal(
 	if (shuttingDown) return;
 	shuttingDown = true;
 	cancelDisruptiveRetries();
+	deps.terminateWifiObservation?.();
 	logger.info(`received ${signal}; shutting down streaming processes`);
 	void (async () => {
 		if (deps.stopRecoveryRetries)
