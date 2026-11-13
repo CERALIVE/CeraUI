@@ -154,12 +154,16 @@ for (const condition of CONDITIONS) {
 					const root = document.querySelector('[data-testid="idle-cockpit"]');
 					if (root === null) throw new Error('idle-cockpit is not mounted');
 
-					// The four blocks by name: from 1024 px the desk and the cards
-					// stand in two column wrappers, so they are no longer all direct
-					// children of the root.
-					const laidOut = ['program-desk', 'source-section', 'stream-setup-chain', 'live-roadmap']
-						.map((id) => root.querySelector(`[data-testid="${id}"]`))
-						.filter((el): el is Element => el !== null && el.getBoundingClientRect().height > 0);
+					// The four blocks in DOCUMENT order (querySelectorAll walks the
+					// tree), so a reordered cockpit reports its real order. From 1024 px
+					// the desk and the cards stand in two column wrappers, so they are
+					// no longer all direct children of the root.
+					const blockSelector = ['program-desk', 'source-section', 'stream-setup-chain', 'live-roadmap']
+						.map((id) => `[data-testid="${id}"]`)
+						.join(', ');
+					const laidOut = [...root.querySelectorAll(blockSelector)].filter(
+						(el) => el.getBoundingClientRect().height > 0,
+					);
 					const describe = (el: Element): string =>
 						el.getAttribute('data-testid') ?? el.tagName.toLowerCase();
 
