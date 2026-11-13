@@ -685,6 +685,16 @@ rule in the maintenance probes.
   [`docs/UPDATE-RECOVERY.md`](../../../../docs/UPDATE-RECOVERY.md).
 - **Transport** (`update-transport/`). Routing scope and DNS limits:
   [`docs/HOST-UPLINK-ELECTION.md`](../../../../docs/HOST-UPLINK-ELECTION.md).
+  Candidate discovery and the scheduler's cost inventory share
+  `UPDATE_INVENTORY_NMCLI_FIELDS`. A nonempty, non-`--` `GENERAL.IP-IFACE`
+  names the kernel data interface; otherwise `GENERAL.DEVICE` is used.
+  A control-port owner wins over a self-named shadow in either order, including
+  its connection state and metering. Two owners discard only their contested
+  key; duplicate original devices or malformed records reject the inventory.
+  Modem-only devices therefore reach normal cellular download consent instead
+  of losing their update candidates. Gatewayless PPP defaults remain pinnable.
+  Regression coverage includes a clearly constructed twin-modem replay;
+  connected-bearer hardware capture is still owed.
   `run()` optionally refreshes selection after safe cleanup, preserving one
   three-distinct-pair budget and the exact 15-minute pair hold. Its cancellation
   and metered-approval hooks are opt-in; omitted hooks preserve existing callers.

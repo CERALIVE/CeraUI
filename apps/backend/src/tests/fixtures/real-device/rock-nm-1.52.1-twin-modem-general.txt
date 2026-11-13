@@ -1,0 +1,19 @@
+# CONSTRUCTED replay, not a connected-bearer capture.
+# Built from the captured NetworkManager 1.52.1 allowed fields/device-show shapes
+# and the control-port/data-interface mismatch reported in CeraUI issue #431.
+# Neither bench modem had a connected data bearer; connected states and IP
+# interfaces below are constructed. A real connected-bearer capture will be
+# added later as an additional fixture. No device identities were copied.
+
+##### twin-modem-general
+GENERAL.DEVICE:cdc-wdm0
+GENERAL.IP-IFACE:wwan0
+GENERAL.TYPE:gsm
+GENERAL.STATE:100 (connected)
+GENERAL.METERED:yes
+
+GENERAL.DEVICE:cdc-wdm1
+GENERAL.IP-IFACE:wwan1
+GENERAL.TYPE:gsm
+GENERAL.STATE:100 (connected)
+GENERAL.METERED:yes

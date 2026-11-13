@@ -28,13 +28,14 @@
  * invariant the plan calls out explicitly: `installUpdatesNow` bypasses IDLE
  * but NEVER bypasses the D8 stream-admission block.
  */
-import { afterEach, describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { readFileSync, rmSync } from "node:fs";
 import { readUpdateDetails } from "../modules/system/update-orchestrator/details.ts";
 import { OsStageError } from "../modules/system/update-orchestrator/os-stage-error.ts";
 import {
 	allowCellularOnce,
 	checkUpdatesNow,
+	defaultOrchestratorRuntimeDeps,
 	getOrchestratorState,
 	getOsUpdateSummary,
 	installUpdatesNow,
@@ -48,9 +49,14 @@ import {
 	type OrchestratorState,
 } from "../modules/system/update-orchestrator/types.ts";
 import {
+	defaultUpdateTransportDeps,
+	selectUpdateTransport,
+} from "../modules/system/update-transport/executor.ts";
+import {
 	getPersistentNotifications,
 	notificationRemove,
 } from "../modules/ui/notifications.ts";
+import { assertNmDeviceShowFields } from "./helpers/nm-device-show-fixture.ts";
 import {
 	fakeDeps,
 	quarantineDirs,
@@ -65,11 +71,111 @@ import {
 } from "./helpers/orchestrator-runtime-os-scheduler.ts";
 
 afterEach(() => {
+	mock.restore();
 	resetOrchestratorRuntimeForTest();
 	for (const dir of quarantineDirs.splice(0)) rmSync(dir, { recursive: true });
 });
 
 describe("metered scheduled checks", () => {
+	const twinInventory =
+		readFileSync(
+			new URL(
+				"./fixtures/real-device/rock-nm-1.52.1-twin-modem-general.txt",
+				import.meta.url,
+			),
+			"utf8",
+		).split("##### twin-modem-general\n")[1] ?? "";
+
+	function replayInventory(stdout: string, ifnames: string[]) {
+		spyOn(defaultUpdateTransportDeps, "listIfnames").mockReturnValue(ifnames);
+		spyOn(defaultUpdateTransportDeps, "mmIfnames").mockReturnValue([]);
+		spyOn(defaultUpdateTransportDeps, "routerIfnames").mockReturnValue([]);
+		spyOn(defaultUpdateTransportDeps, "dongleIfnames").mockReturnValue([]);
+		spyOn(defaultUpdateTransportDeps, "run").mockImplementation(
+			async (argv) => {
+				if (argv[0] === "nmcli") {
+					assertNmDeviceShowFields(argv[3] ?? "");
+					if (
+						argv[3] !==
+						"GENERAL.DEVICE,GENERAL.IP-IFACE,GENERAL.TYPE,GENERAL.STATE,GENERAL.METERED"
+					)
+						throw new Error("inventory query omitted the IP interface");
+					return { exitCode: 0, stdout, stderr: "" };
+				}
+				if (argv[0] === "resolvectl")
+					return {
+						exitCode: 0,
+						stdout: `${argv.at(-1)}: ${argv.includes("-6") ? "2001:db8::1" : "192.0.2.1"}`,
+						stderr: "",
+					};
+				return {
+					exitCode: 0,
+					stdout: argv.at(-1)?.endsWith("/generate_204")
+						? "\n<<<update-probe>>>204 0.01"
+						: "\n<<<update-probe>>>200 0.02",
+					stderr: "",
+				};
+			},
+		);
+	}
+
+	test("real metered inventory preserves unmetered Ethernet alongside modem control ports", async () => {
+		replayInventory(
+			`GENERAL.DEVICE:eth0\nGENERAL.IP-IFACE:eth0\nGENERAL.TYPE:ethernet\nGENERAL.STATE:100 (connected)\nGENERAL.METERED:no\n\n${twinInventory}`,
+			["eth0", "wwan0", "wwan1"],
+		);
+		expect(
+			await defaultOrchestratorRuntimeDeps.onlyMeteredCandidateExists(),
+		).toBe(false);
+	});
+
+	test("modem-only inventory reaches cellular download consent without repos_unreachable (#431)", async () => {
+		replayInventory(twinInventory, ["wwan0", "wwan1"]);
+		const h = harness([], {
+			loadSettings: async () => ({
+				packagesAuto: true,
+				systemAuto: true,
+				channel: "stable",
+				schedule: { mode: "any-idle", start: "03:00", end: "05:00" },
+				allowPackagesOverCellular: false,
+				allowSystemOverCellular: false,
+			}),
+			onlyMeteredCandidateExists:
+				defaultOrchestratorRuntimeDeps.onlyMeteredCandidateExists,
+			checkOsManifest: async () => {
+				const selection = await selectUpdateTransport({
+					profile: "os",
+					board: "rock-5b-plus",
+					channel: "stable",
+				});
+				return {
+					available: selection.status === "selected",
+					manifest: selection.status === "selected" ? manifest : undefined,
+					rateLimited: false,
+					failed: selection.status === "none",
+					reason: selection.status === "none" ? "repos_unreachable" : "",
+				};
+			},
+		});
+		setOrchestratorStateForTest(initialOrchestratorState(0));
+		await runOrchestratorTick();
+		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).toBe("os-available");
+		expect(getOsUpdateSummary().pendingCellular).toEqual({
+			id: manifest.version,
+			sizeBytes: manifest.bundle.size,
+		});
+		expect(h.calls.stages).toBe(0);
+		expect((await readUpdateDetails()).checks.packages.deferred).toEqual({
+			reason: "metered_only",
+		});
+		expect(
+			getPersistentNotifications(true).show.filter((notice) =>
+				notice.name.includes("repos_unreachable"),
+			),
+		).toEqual([]);
+	});
+
 	test.each([false, true])(
 		"both due: packages allowed=%s preserves priority or falls through",
 		async (allowed) => {
