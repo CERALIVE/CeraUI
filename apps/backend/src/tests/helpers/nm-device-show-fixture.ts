@@ -29,7 +29,7 @@ export const TWIN_REPLAY_UUID = twinReplay.connectionId;
 
 /**
  * Redacted replay shaped from the NM 1.52.1 multiline measurement and #434.
- * Replace the twin profile fixture with the real bench capture before merge.
+ * The real capture cannot show overlapping profiles; keep this replay for ambiguity coverage.
  */
 export function twinProfileReplay(): {
 	reader: ModemNmDeviceReader;
