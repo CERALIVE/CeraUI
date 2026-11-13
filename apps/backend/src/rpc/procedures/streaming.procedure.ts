@@ -508,6 +508,7 @@ export const getConfigProcedure = authedProcedure
 		return {
 			asrc: config.asrc,
 			max_br,
+			balancer: config.balancer,
 			acodec: config.acodec,
 			// Travels with the audio pick it belongs to; absent means no selection
 			// was ever stated, never `alsa`.
@@ -582,7 +583,13 @@ function stageApplyNowFields(
 	sourceRouting: Extract<ResolveSourceRoutingResult, { ok: true }> | undefined,
 ): StagedConfigFields | undefined {
 	if (input.apply_now !== true) return undefined;
-	if (!APPLY_NOW_FIELDS.some((field) => input[field] !== undefined))
+	if (
+		!APPLY_NOW_FIELDS.some((field) =>
+			field === "video_codec"
+				? input.video_codec != null
+				: input[field] !== undefined,
+		)
+	)
 		return undefined;
 	if (!getApplyNowGate().isStreamLive()) return undefined;
 
@@ -590,9 +597,7 @@ function stageApplyNowFields(
 		...(input.source === undefined ? {} : { source: input.source }),
 		...(input.resolution === undefined ? {} : { resolution: input.resolution }),
 		...(input.framerate === undefined ? {} : { framerate: input.framerate }),
-		...(input.video_codec === undefined
-			? {}
-			: { video_codec: input.video_codec }),
+		...(input.video_codec == null ? {} : { video_codec: input.video_codec }),
 		...(input.input_mode === undefined ? {} : { input_mode: input.input_mode }),
 		...(input.composition === undefined
 			? {}
@@ -632,7 +637,11 @@ function stageApplyNowFields(
 		previous,
 	});
 
-	for (const field of APPLY_NOW_FIELDS) delete input[field];
+	// The engine change-config contract cannot clear a codec; use its next-start default.
+	for (const field of APPLY_NOW_FIELDS) {
+		if (field !== "video_codec" || input.video_codec !== null)
+			delete input[field];
+	}
 	if (sourceRouting !== undefined) delete input.pipeline;
 
 	return candidate;
@@ -938,6 +947,7 @@ export const setConfigProcedure = authedProcedure
 		if (input.audio_backend !== undefined)
 			config.audio_backend = input.audio_backend;
 		if (input.max_br !== undefined) config.max_br = clampBitrate(input.max_br);
+		if (input.balancer !== undefined) config.balancer = input.balancer;
 		if (input.resolution !== undefined) config.resolution = input.resolution;
 		if (input.framerate !== undefined) config.framerate = input.framerate;
 		for (const field of staleOverrides) {
@@ -951,7 +961,8 @@ export const setConfigProcedure = authedProcedure
 			);
 			config[field] = undefined;
 		}
-		if (input.video_codec !== undefined) config.video_codec = input.video_codec;
+		if (input.video_codec !== undefined)
+			config.video_codec = input.video_codec ?? undefined;
 		if (input.video_passthrough !== undefined)
 			config.video_passthrough = input.video_passthrough;
 		// Persist only. A live reload is intentionally deferred to the capture
@@ -1045,6 +1056,7 @@ export const setConfigProcedure = authedProcedure
 		if (input.audio_backend !== undefined)
 			applied.audio_backend = config.audio_backend;
 		if (input.max_br !== undefined) applied.max_br = config.max_br;
+		if (input.balancer !== undefined) applied.balancer = config.balancer;
 		if (input.resolution !== undefined) applied.resolution = config.resolution;
 		if (input.framerate !== undefined) applied.framerate = config.framerate;
 		if (input.video_codec !== undefined)

@@ -45,6 +45,7 @@ import {
 	AUDIO_SOURCE_AUTO,
 	audioBackendSchema,
 	audioCodecSchema,
+	balancerAlgorithmSchema,
 	compositionConfigSchema,
 	type DetectionMethod,
 	detectionMethodSchema,
@@ -157,9 +158,7 @@ export type Framerate = z.infer<typeof framerateSchema>;
 export type VideoCodec = z.infer<typeof videoCodecSchema>;
 export type VideoPassthrough = z.infer<typeof videoPassthroughSchema>;
 
-// Bitrate balancer algorithm, defined locally — like resolution/framerate above
-// — to keep this schema free of an engine-binding dependency.
-export const balancerSchema = z.enum(["adaptive", "fixed", "aimd"]);
+export const balancerSchema = balancerAlgorithmSchema;
 
 export type Balancer = z.infer<typeof balancerSchema>;
 

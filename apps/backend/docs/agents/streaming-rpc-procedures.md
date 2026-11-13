@@ -46,6 +46,24 @@ The `streaming` router exposes these procedures:
 
 `setConfig` writes the provided fields onto the running config (same relay/manual mutual-exclusion logic as `updateConfig`, minus DNS/pipeline validation), then calls `saveConfig` and broadcasts a `config` message. Use this for all config-only dialogs that must not start the stream.
 
+### Format settings [EXISTS]
+
+`setConfig` accepts optional `balancer` through the published producer's
+`balancerAlgorithmSchema` (`adaptive`, `fixed`, `aimd`). It persists the value,
+echoes it in `applied`, and includes it in config broadcasts and `getConfig`.
+Unknown algorithms fail input validation before persistence. Remote
+`streaming.setConfig` dispatches to this same procedure.
+
+`video_codec: null` clears the saved codec; omission leaves the saved selection
+alone. Disk and config messages retain an optional, non-null codec. The next
+start therefore omits engine `codec` after a clear. Balancer saves and codec
+clears make no engine call while streaming, including a clear with `apply_now`.
+Explicit non-null codec choices retain the existing apply-now transaction.
+`video_passthrough` remains accepted, stored and forwarded unchanged. Loading
+saved settings does not rewrite values, and runtime defaults and start assembly
+are unchanged. Coverage: `streaming-format-settings.test.ts` and the unedited
+`on-air-baseline.test.ts`.
+
 `start` input is PARTIAL by contract. `updateConfig` projects the saved runtime
 config through `streamingConfigInputSchema`, overlays the caller's stated fields,
 then validates the effective whole. Thus `{}` means “start exactly what is saved” —

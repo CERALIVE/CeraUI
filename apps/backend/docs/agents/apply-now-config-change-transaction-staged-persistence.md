@@ -24,6 +24,11 @@ no existing caller changes behaviour and a save can never restart a live
 broadcast by itself. `apply_now` while NOT streaming degrades to an ordinary
 save — it never dispatches a transaction.
 
+Balancer settings and `video_codec: null` persist for the next start even with
+`apply_now`. The producer change-config contract accepts only a concrete codec,
+so the null clear is kept out of the staged candidate and engine delta. Concrete
+codec choices retain the transaction described below.
+
 **Everything routes through the orchestrator seam.** `changeStreamSessionConfig`
 → `stream-session-orchestrator.ts` → `config-change-bridge.ts` → the pinned
 `@ceralive/cerastream` `changeConfig()`. There is NO direct streamloop

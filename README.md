@@ -1,5 +1,10 @@
 # CeraUI
 
+**Streaming settings RPC [EXISTS].** Settings clients can save the producer's
+balancer selection or clear a saved codec with `video_codec: null` for the next
+start. Saved keys, defaults and passthrough choices remain unchanged. See the
+[settings contract](apps/backend/docs/agents/streaming-rpc-procedures.md#format-settings-exists).
+
 **Destination navigation [EXISTS].** The desktop rail and mobile dock accept
 successive destinations without a wall-clock throttle, including in e-ink mode.
 The navigation store still ignores the current destination and blocks active

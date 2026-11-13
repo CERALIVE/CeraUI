@@ -17,6 +17,7 @@ import {
 	videoSourceCapSchema,
 } from '@ceralive/cerastream/dist/messages.js';
 import {
+	balancerAlgorithmSchema,
 	type CompositionConfig,
 	type CompositionLayout,
 	compositionConfigSchema,
@@ -28,6 +29,7 @@ import { startFailureSchema, stopResultSchema } from './streaming-lifecycle.sche
 import { regulatoryCountrySchema } from './wifi.schema';
 
 export {
+	balancerAlgorithmSchema,
 	COMPOSITION_FEATURE,
 	type CompositionConfig,
 	type CompositionLayout,
@@ -355,6 +357,7 @@ export const streamingConfigInputSchema = z.object({
 	asrc: z.string().optional(),
 	bitrate_overlay: z.boolean().optional(),
 	max_br: z.number().int().min(BITRATE_MIN).max(BITRATE_MAX).optional(),
+	balancer: balancerAlgorithmSchema.optional(),
 	autostart: z.boolean().optional(),
 	resolution: resolutionSchema.optional(),
 	framerate: framerateSchema.optional(),
@@ -365,7 +368,8 @@ export const streamingConfigInputSchema = z.object({
 	// Egress video codec + operator-selected video input_id (Todo 19). Both
 	// additive/optional: absent codec → engine platform default; absent input →
 	// engine default source. `selected_video_input` is a capture-device input_id.
-	video_codec: videoCodecSchema.optional(),
+	// On settings saves, null clears the saved codec; omission leaves it alone.
+	video_codec: videoCodecSchema.nullable().optional(),
 	selected_video_input: z.string().optional(),
 	// Same-codec passthrough policy (auto/force/off), sent to the engine at start
 	// (cerastream Todo 16). Additive-optional; absent = auto.
@@ -891,6 +895,7 @@ import {
 
 // Config message schema (what the server sends to clients)
 export const configMessageSchema = z.object({
+	balancer: balancerAlgorithmSchema.optional(),
 	asrc: z.string().optional(),
 	ssh_pass: z.string().optional(),
 	max_br: z.number().optional(),
