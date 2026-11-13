@@ -8,6 +8,8 @@
  *     the next start;
  *   • a change the engine refuses leaves the previous layout running, so the
  *     previous radio is checked again and the reason is on screen;
+ *   • live, the opacity is sent once, when the drag or the held key is
+ *     released, never once per step;
  *   • turning composition on or off still waits for the next start: only the
  *     enable switch stays locked, with the locked text beside it;
  *   • idle, the same tap is the unchanged plain save (no `apply_now`).
@@ -131,6 +133,25 @@ function radio(layout: string): HTMLElement {
 	return screen.getByTestId(`composition-layout-${layout}`);
 }
 
+function opacityPart(slot: "slider" | "slider-thumb"): HTMLElement {
+	const part = screen
+		.getByTestId("composition-alpha-control")
+		.querySelector<HTMLElement>(`[data-slot="${slot}"]`);
+	if (part === null) throw new Error(`opacity ${slot} not rendered`);
+	return part;
+}
+
+function expectOneOpacityWrite(alpha: number): void {
+	expect(setConfig).toHaveBeenCalledTimes(1);
+	const [input] = setConfig.mock.calls[0] ?? [];
+	expect(input).toMatchObject({
+		composition: { secondary_input_id: "/dev/video1", layout: "pip-top-right" },
+		apply_now: true,
+	});
+	const written = input?.composition as { alpha: number } | undefined;
+	expect(written?.alpha).toBeCloseTo(alpha);
+}
+
 describe("CompositionCard — live layout, opacity and second input", () => {
 	it("streaming: a layout tap writes the full composition with apply_now", async () => {
 		setConfig.mockResolvedValue(APPLIED);
@@ -184,27 +205,70 @@ describe("CompositionCard — live layout, opacity and second input", () => {
 		expect(reason.closest('[role="alert"]')).not.toBeNull();
 	});
 
-	it("streaming: an opacity step writes the new opacity with apply_now", async () => {
+	it("streaming: held arrow keys send one opacity write, when the key comes up", async () => {
 		setConfig.mockResolvedValue(APPLIED);
 		renderCard(true);
 
-		const thumb = screen
-			.getByTestId("composition-alpha-control")
-			.querySelector<HTMLElement>('[data-slot="slider-thumb"]');
-		if (thumb === null) throw new Error("opacity thumb not rendered");
+		const thumb = opacityPart("slider-thumb");
 		await fireEvent.keyDown(thumb, { key: "ArrowLeft" });
+		await fireEvent.keyDown(thumb, { key: "ArrowLeft", repeat: true });
+		await fireEvent.keyDown(thumb, { key: "ArrowLeft", repeat: true });
 
-		expect(setConfig).toHaveBeenCalledTimes(1);
-		const [input] = setConfig.mock.calls[0] ?? [];
-		expect(input).toMatchObject({
-			composition: {
-				secondary_input_id: "/dev/video1",
-				layout: "pip-top-right",
-			},
-			apply_now: true,
-		});
-		const written = input?.composition as { alpha: number };
-		expect(written.alpha).toBeCloseTo(0.95);
+		// Held: the value moves on screen, nothing reaches the running stream.
+		expect(setConfig).not.toHaveBeenCalled();
+		expect(screen.getByTestId("composition-alpha-value").textContent).toContain(
+			"0.85",
+		);
+
+		await fireEvent.keyUp(thumb, { key: "ArrowLeft" });
+
+		expectOneOpacityWrite(0.85);
+	});
+
+	it("streaming: a held key is sent once when focus leaves before the key comes up", async () => {
+		setConfig.mockResolvedValue(APPLIED);
+		renderCard(true);
+
+		const thumb = opacityPart("slider-thumb");
+		await fireEvent.keyDown(thumb, { key: "ArrowLeft" });
+		await fireEvent.keyDown(thumb, { key: "ArrowLeft", repeat: true });
+		expect(setConfig).not.toHaveBeenCalled();
+
+		await fireEvent.focusOut(thumb);
+
+		expectOneOpacityWrite(0.9);
+	});
+
+	it("streaming: a drag sends one opacity write, at pointer release", async () => {
+		setConfig.mockResolvedValue(APPLIED);
+		renderCard(true);
+
+		// jsdom lays nothing out; give the track a 100 px width to drag across.
+		const slider = opacityPart("slider");
+		slider.getBoundingClientRect = () =>
+			({
+				left: 0,
+				right: 100,
+				top: 0,
+				bottom: 10,
+				width: 100,
+				height: 10,
+				x: 0,
+				y: 0,
+			}) as DOMRect;
+
+		await fireEvent.pointerDown(slider, { button: 0, clientX: 80 });
+		await fireEvent.pointerMove(document, { clientX: 70 });
+		await fireEvent.pointerMove(document, { clientX: 60 });
+
+		expect(setConfig).not.toHaveBeenCalled();
+		expect(screen.getByTestId("composition-alpha-value").textContent).toContain(
+			"0.60",
+		);
+
+		await fireEvent.pointerUp(document);
+
+		expectOneOpacityWrite(0.6);
 	});
 
 	it("streaming: only the enable switch stays locked, with the locked text beside it", () => {

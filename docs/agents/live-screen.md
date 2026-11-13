@@ -66,7 +66,8 @@ These test ids must keep their names and meaning: `idle-cockpit`,
   (`composition-secondary`) stay enabled. Each change is sent as
   `streaming.setConfig({ composition, apply_now: true })`, so the backend runs
   it as an apply-now transaction and keeps it only when the engine reports it
-  applied. The opacity is sent when the drag is released, as one change.
+  applied. The opacity is sent once, as one change, when the drag or the held
+  key is released, or when focus leaves the slider; never once per step.
 - Until the engine answers, the new value shows as the choice and the controls
   are busy. Any apply-now change in flight, from this card or from the Encoder
   dialog, holds the controls.

@@ -79,8 +79,11 @@ const persisted = $derived(config?.composition);
 // echo and a refused one falls back to the persisted, still-running values.
 let pending = $state<CompositionConfig | undefined>(undefined);
 let liveRefusal = $state<string | undefined>(undefined);
-// Live, a drag only previews the opacity; the release commits it as one change.
+// Live, the opacity previews while it moves and is sent as one change on
+// release. The slider reports a commit for every key press, so a keyboard
+// adjustment is held until the key comes up or focus leaves the slider.
 let draggedAlpha = $state<number | undefined>(undefined);
+let keyAdjusting = false;
 
 const shown = $derived(pending ?? persisted);
 
@@ -187,10 +190,16 @@ function previewAlpha(value: number): void {
 	else patch({ alpha: value });
 }
 
-function commitAlpha(value: number): void {
-	if (!isStreaming) return;
+function releaseAlpha(): void {
+	keyAdjusting = false;
+	if (!isStreaming || draggedAlpha === undefined) return;
+	const value = draggedAlpha;
 	draggedAlpha = undefined;
-	patch({ alpha: value });
+	if (value !== alpha) patch({ alpha: value });
+}
+
+function commitAlpha(): void {
+	if (!keyAdjusting) releaseAlpha();
 }
 </script>
 
@@ -339,8 +348,16 @@ function commitAlpha(value: number): void {
 						disabled={busy}
 						max={COMPOSITION_ALPHA_MAX}
 						min={COMPOSITION_ALPHA_MIN}
+						onfocusout={releaseAlpha}
+						onkeydowncapture={() => {
+							keyAdjusting = true;
+						}}
+						onkeyup={releaseAlpha}
+						onpointerdowncapture={() => {
+							keyAdjusting = false;
+						}}
 						onValueChange={(value) => previewAlpha(value as number)}
-						onValueCommit={(value) => commitAlpha(value as number)}
+						onValueCommit={commitAlpha}
 						step={ALPHA_STEP}
 						type="single"
 						value={alpha}
