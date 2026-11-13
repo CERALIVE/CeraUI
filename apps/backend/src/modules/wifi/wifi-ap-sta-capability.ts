@@ -8,11 +8,12 @@
     (at your option) any later version.
 */
 
-import { argMatch, ID_RE, run } from "../../helpers/run.ts";
+import { argMatch, ID_RE } from "../../helpers/run.ts";
+import { runIw } from "./regdomain.ts";
 
 type CapabilityRunner = (command: string, args: string[]) => Promise<string>;
 
-const defaultRunner: CapabilityRunner = (command, args) => run(command, args);
+const defaultRunner: CapabilityRunner = (_command, args) => runIw(args);
 let capabilityRunner: CapabilityRunner = defaultRunner;
 
 const cachedPhySupport = new Map<string, boolean>();

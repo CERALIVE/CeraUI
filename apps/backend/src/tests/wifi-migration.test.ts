@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, jest } from "bun:test";
 
 import type { StateDiff } from "../modules/network/state-types.ts";
 import {
@@ -33,19 +33,33 @@ type FakeTimer = {
 describe("wifi debounced scan refresh (hard cutover from the 6-timer schedule)", () => {
 	const realSetTimeout = globalThis.setTimeout;
 	const realClearTimeout = globalThis.clearTimeout;
-	let timers: Map<number, FakeTimer>;
+	let timers: Map<ReturnType<typeof setTimeout>, FakeTimer>;
 	let nextId: number;
 
 	beforeEach(() => {
+		jest.useFakeTimers();
+		const fakeSetTimeout = globalThis.setTimeout;
+		const fakeClearTimeout = globalThis.clearTimeout;
 		timers = new Map();
 		nextId = 1;
 		globalThis.setTimeout = ((fn: () => void, delay?: number) => {
 			const id = nextId++;
-			timers.set(id, { id, fn, delay: delay ?? 0, cleared: false });
-			return id as unknown as ReturnType<typeof setTimeout>;
+			const handle = fakeSetTimeout(fn, delay);
+			timers.set(handle, {
+				id,
+				fn: () => {
+					fakeClearTimeout(handle);
+					fn();
+				},
+				delay: delay ?? 0,
+				cleared: false,
+			});
+			return handle;
 		}) as typeof setTimeout;
 		globalThis.clearTimeout = ((id?: ReturnType<typeof setTimeout>) => {
-			const timer = timers.get(id as unknown as number);
+			if (id === undefined) return;
+			fakeClearTimeout(id);
+			const timer = timers.get(id);
 			if (timer) timer.cleared = true;
 		}) as typeof clearTimeout;
 	});
@@ -54,6 +68,7 @@ describe("wifi debounced scan refresh (hard cutover from the 6-timer schedule)",
 		wifiCancelScanRefresh();
 		globalThis.setTimeout = realSetTimeout;
 		globalThis.clearTimeout = realClearTimeout;
+		jest.useRealTimers();
 		setScanRefreshAction(wifiUpdateScanResult);
 	});
 
@@ -120,6 +135,7 @@ describe("wifi connection-state event flips to connected", () => {
 				],
 			]),
 			saved: { MySSID: "uuid-myssid" },
+			savedAll: { MySSID: ["uuid-myssid"] },
 		};
 		addWifiInterface(MAC, wifiInterface);
 

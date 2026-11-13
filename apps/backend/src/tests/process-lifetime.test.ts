@@ -6,6 +6,7 @@ import {
 	handleTerminationSignal,
 	resetShutdownForTest,
 } from "../helpers/shutdown.ts";
+import { standalone } from "./helpers/standalone-process.ts";
 
 const root = resolve(import.meta.dir, "../../../..");
 const shutdown = join(root, "apps/backend/src/helpers/shutdown.ts");
@@ -17,24 +18,6 @@ const identity = join(
 	root,
 	"apps/backend/src/modules/wifi/wifi-radio-identity.ts",
 );
-
-async function standalone(source: string, cwd: string) {
-	const child = Bun.spawn([process.execPath, "--eval", source], {
-		cwd,
-		env: process.env,
-		stdin: "ignore",
-		stdout: "pipe",
-		stderr: "pipe",
-		timeout: 15_000,
-		killSignal: "SIGTERM",
-	});
-	const [stdout, stderr, exit] = await Promise.all([
-		new Response(child.stdout).text(),
-		new Response(child.stderr).text(),
-		child.exited,
-	]);
-	return { stdout, stderr, exit };
-}
 
 test.each(["repository root", "empty directory"] as const)(
 	"shutdown imports and exits naturally without application preload from %s",
@@ -139,4 +122,134 @@ console.log("MAIN_FINISHED");
 		for (const line of lines.filter((line) => line.startsWith("REF ")))
 			expect(JSON.parse(line.slice(4))).toMatchObject({ hasRef: false });
 	},
+);
+
+test("terminal discovery exits naturally without the application preload", async () => {
+	const empty = await mkdtemp(join(tmpdir(), "discovery-termination-"));
+	try {
+		await Bun.write(
+			join(empty, "setup.json"),
+			JSON.stringify({ hw: "rk3588", engine: "cerastream" }),
+		);
+		const source = `
+const {spyOn} = await import("bun:test");
+const {logger} = await import(${JSON.stringify(join(root, "apps/backend/src/helpers/logger.ts"))});
+for (const level of ["warn","error","info","debug"])
+  spyOn(logger, level).mockImplementation(() => logger);
+const {handleTerminationSignal} = await import(${JSON.stringify(shutdown)});
+const {wifiRadioObservation} = await import(${JSON.stringify(observation)});
+const {scheduleWifiUpdate, terminateWifiDiscovery} = await import(${JSON.stringify(join(root, "apps/backend/src/modules/wifi/wifi-interfaces.ts"))});
+const {wifiScheduleScanRefresh} = await import(${JSON.stringify(join(root, "apps/backend/src/modules/wifi/wifi-connections.ts"))});
+const nativeTimeout = globalThis.setTimeout;
+const timers = [];
+globalThis.setTimeout = (callback, delay, ...args) => {
+  const timer = nativeTimeout(callback, delay, ...args);
+  timers.push(timer);
+  return timer;
+};
+scheduleWifiUpdate(60_000);
+wifiScheduleScanRefresh();
+console.log("REFS " + JSON.stringify(timers.map(timer => timer.hasRef())));
+handleTerminationSignal("SIGTERM", {
+  terminateWifiObservation: () => wifiRadioObservation.terminate(),
+  terminateWifiDiscovery,
+  stopSrtIngest: async () => {},
+  stopDmesgWatchers: () => {},
+  gracefulShutdown: async () => {},
+  exit: () => console.log("TERMINATED")
+});
+`;
+		const result = await standalone(source, empty);
+		expect(result).toEqual({
+			stdout: "REFS [false,false]\nTERMINATED\n",
+			stderr: "",
+			exit: 0,
+		});
+	} finally {
+		await rm(empty, { recursive: true, force: true });
+	}
+}, 25_000);
+
+test.each(["held read", "pending backoff"] as const)(
+	"saved-connection %s exits naturally after terminal discovery shutdown",
+	async (boundary) => {
+		const empty = await mkdtemp(join(tmpdir(), "saved-retry-termination-"));
+		try {
+			await Bun.write(
+				join(empty, "setup.json"),
+				JSON.stringify({ hw: "rk3588", engine: "cerastream" }),
+			);
+			const source = `
+const {spyOn} = await import("bun:test");
+const {logger} = await import(${JSON.stringify(join(root, "apps/backend/src/helpers/logger.ts"))});
+for (const level of ["warn","error","info","debug"])
+  spyOn(logger, level).mockImplementation(() => logger);
+const nm = await import(${JSON.stringify(join(root, "apps/backend/src/modules/network/network-manager.ts"))});
+const {handleTerminationSignal} = await import(${JSON.stringify(shutdown)});
+const {wifiRadioObservation} = await import(${JSON.stringify(observation)});
+const {wifiUpdateDevices, terminateWifiDiscovery} = await import(${JSON.stringify(join(root, "apps/backend/src/modules/wifi/wifi-interfaces.ts"))});
+const {clearWifiInterfacesForTest} = await import(${JSON.stringify(join(root, "apps/backend/src/modules/wifi/wifi-connections.ts"))});
+const {setWifiCapabilityDepsForTest} = await import(${JSON.stringify(join(root, "apps/backend/src/modules/wifi/wifi-capabilities.ts"))});
+clearWifiInterfacesForTest();
+setWifiCapabilityDepsForTest({
+  runIw: async () => "", readPhyName: async () => undefined,
+  pathExists: async () => false, readNmcliWifiProperties: async () => new Map(),
+  now: () => 0
+});
+spyOn(nm, "nmDevices").mockResolvedValue(["wlan0:wifi:unavailable:"]);
+spyOn(nm, "nmScanResults").mockResolvedValue([""]);
+const entered = Promise.withResolvers();
+const saved = Promise.withResolvers();
+const waiting = Promise.withResolvers();
+let savedReads = 0;
+spyOn(nm, "nmConnsGet").mockImplementation(() => {
+  savedReads++;
+  entered.resolve();
+  return saved.promise;
+});
+const refs = [];
+const nativeTimeout = globalThis.setTimeout;
+globalThis.setTimeout = (callback, delay, ...args) => {
+  const timer = nativeTimeout(callback, delay, ...args);
+  if (delay === 200 || delay === 400) {
+    queueMicrotask(() => refs.push(timer.hasRef()));
+    waiting.resolve();
+  }
+  return timer;
+};
+const active = wifiUpdateDevices();
+await entered.promise;
+if (${JSON.stringify(boundary)} === "pending backoff") {
+  saved.resolve(undefined);
+  await waiting.promise;
+}
+const cleanup = Promise.withResolvers();
+const exited = Promise.withResolvers();
+handleTerminationSignal("SIGTERM", {
+  terminateWifiObservation: () => wifiRadioObservation.terminate(),
+  terminateWifiDiscovery,
+  stopSrtIngest: () => cleanup.promise,
+  stopDmesgWatchers: () => {},
+  gracefulShutdown: async () => {},
+  exit: code => exited.resolve(code)
+});
+saved.resolve(undefined);
+await active;
+console.log("SAVED " + JSON.stringify({savedReads, refs}));
+cleanup.resolve();
+await exited.promise;
+`;
+			expect(await standalone(source, empty)).toEqual({
+				stdout: `SAVED ${JSON.stringify({
+					savedReads: 1,
+					refs: boundary === "pending backoff" ? [false] : [],
+				})}\n`,
+				stderr: "",
+				exit: 0,
+			});
+		} finally {
+			await rm(empty, { recursive: true, force: true });
+		}
+	},
+	25_000,
 );

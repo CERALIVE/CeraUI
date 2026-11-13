@@ -468,7 +468,10 @@ function rememberSavedUuid(
 
 let savedConnectionsRefresh: symbol | undefined;
 
-export async function wifiUpdateSavedConns() {
+export async function wifiUpdateSavedConns(
+	signal?: AbortSignal,
+): Promise<void> {
+	if (signal?.aborted) return;
 	const refresh = Symbol();
 	savedConnectionsRefresh = refresh;
 	const snapshots = Object.entries(getWifiInterfacesByMacAddress()).map(
@@ -484,6 +487,7 @@ export async function wifiUpdateSavedConns() {
 	const isCurrent = () => {
 		const current = getWifiInterfacesByMacAddress();
 		return (
+			!signal?.aborted &&
 			savedConnectionsRefresh === refresh &&
 			Object.keys(current).length === snapshots.length &&
 			snapshots.every(
@@ -494,6 +498,7 @@ export async function wifiUpdateSavedConns() {
 
 	// Retry transient nmcli connection-list failures with exponential backoff (T7).
 	const connections = await pollWithBackoff(() => nmConnsGet("uuid,type"), {
+		...(signal ? { signal } : {}),
 		maxAttempts: 3,
 		baseDelayMs: 200,
 		maxDelayMs: 1000,
@@ -502,7 +507,12 @@ export async function wifiUpdateSavedConns() {
 		onExhausted: (err) =>
 			logger.debug(`wifiUpdateSavedConns: list failed after retries: ${err}`),
 	});
-	if (connections === undefined || savedConnectionsRefresh !== refresh) return;
+	if (
+		signal?.aborted ||
+		connections === undefined ||
+		savedConnectionsRefresh !== refresh
+	)
+		return;
 
 	for (const connection of connections) {
 		try {
@@ -519,7 +529,7 @@ export async function wifiUpdateSavedConns() {
 				"802-11-wireless.ssid",
 				"802-11-wireless.mac-address",
 			] as const);
-			if (savedConnectionsRefresh !== refresh) return;
+			if (signal?.aborted || savedConnectionsRefresh !== refresh) return;
 
 			if (fields === undefined) {
 				throw new Error("Failed to get connection fields");

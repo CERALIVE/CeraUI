@@ -1,25 +1,26 @@
 import { jest, spyOn } from "bun:test";
-import * as runner from "../../helpers/run.ts";
-import * as nm from "../../modules/network/network-manager.ts";
-import {
-	resetWifiCapabilitiesForTest,
-	setWifiCapabilityDepsForTest,
-} from "../../modules/wifi/wifi-capabilities.ts";
-import {
-	clearWifiInterfacesForTest,
-	getWifiInterfacesByMacAddress,
-	wifiCancelScanRefresh,
-	wifiStateInit,
-} from "../../modules/wifi/wifi-connections.ts";
-import { resetHotspotClientsForTest } from "../../modules/wifi/wifi-hotspot-clients.ts";
-import {
-	resetWifiInterfaceDiscoveryForTest,
-	stopWifiUpdateLoopForTest,
-	wifiUpdateDevices,
-} from "../../modules/wifi/wifi-interfaces.ts";
-import * as compat from "../../rpc/compat.ts";
 
 export async function legacyOverlapTranscript(errors = false) {
+	// Keep importing this test helper independent of application bootstrap.
+	const runner = await import("../../helpers/run.ts");
+	const nm = await import("../../modules/network/network-manager.ts");
+	const { resetWifiCapabilitiesForTest, setWifiCapabilityDepsForTest } =
+		await import("../../modules/wifi/wifi-capabilities.ts");
+	const {
+		clearWifiInterfacesForTest,
+		getWifiInterfacesByMacAddress,
+		wifiCancelScanRefresh,
+		wifiStateInit,
+	} = await import("../../modules/wifi/wifi-connections.ts");
+	const { resetHotspotClientsForTest } = await import(
+		"../../modules/wifi/wifi-hotspot-clients.ts"
+	);
+	const {
+		resetWifiInterfaceDiscoveryForTest,
+		stopWifiUpdateLoopForTest,
+		wifiUpdateDevices,
+	} = await import("../../modules/wifi/wifi-interfaces.ts");
+	const compat = await import("../../rpc/compat.ts");
 	jest.useFakeTimers();
 	jest.setSystemTime(0);
 	clearWifiInterfacesForTest();
@@ -31,7 +32,7 @@ export async function legacyOverlapTranscript(errors = false) {
 		readNmcliWifiProperties: async () => new Map(),
 		now: () => 0,
 	});
-	const gates = Array.from({ length: 3 }, () =>
+	const gates = Array.from({ length: 2 }, () =>
 		Promise.withResolvers<string[]>(),
 	);
 	const unexpected: string[] = [];
@@ -79,9 +80,9 @@ export async function legacyOverlapTranscript(errors = false) {
 	);
 	try {
 		const initialReads = reads;
-		if (initialReads !== 3) {
+		if (initialReads !== 1) {
 			throw new Error(
-				`Legacy per-call reads changed: ${initialReads}, expected 3`,
+				`Bounded discovery initial reads changed: ${initialReads}, expected 1`,
 			);
 		}
 		if (errors) gates[0]?.reject(new Error("first legacy failure"));
@@ -89,8 +90,6 @@ export async function legacyOverlapTranscript(errors = false) {
 		await outcomes[0];
 		gates[1]?.resolve(errors ? [] : ["wlan0:wifi:unavailable:"]);
 		await outcomes[1];
-		if (errors) gates[2]?.reject(new Error("third legacy failure"));
-		else gates[2]?.resolve([]);
 		const settled = await Promise.all(outcomes);
 		return {
 			initialReads,

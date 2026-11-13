@@ -161,10 +161,33 @@ Observation sequences fence publication: an older discovery cannot erase a
 later unavailable event or replace a newer completed observation. Canceled
 samples cannot commit their cache or snapshot.
 
-`wifiUpdateDevices` retains main's independent per-call legacy discovery,
-including overlapping reads, per-call errors, results and broadcast ordering.
-The proposed bounded legacy discovery (M1) moves to B, where that observable
-scheduling change can be accepted and documented.
+`wifiUpdateDevices` allows one active discovery and one queued discovery.
+Callers arriving during the active run share the queued run, whose device
+listing starts after their calls. Each run retains its own result or original
+error object, and a rejection still starts the queued run. Confirmation polls
+use this same queue. The queue creates no timers and leaves the discovery body,
+classification, tokens and wire fields unchanged. Both the AP+STA probe and
+concurrent-interface default runners use `runIw` and its `/usr/sbin/iw`
+fallback while retaining their injected test runners.
+
+Discovery is a terminal shutdown owner alongside observation. The composition
+root injects both terminations into the shutdown helper, which imports no Wi-Fi
+modules. Termination settles queued and later callers with `undefined`, the
+existing no-update result, even while an active listing is still held. Active
+work checks the terminal fence after awaits. Pending scan refreshes, scan
+backoff waits and unavailable-device retries are cancelled; later scheduling
+cannot reopen them. Discovery and scan timers are unreferenced. The reusable
+cancel helpers do not clear the terminal state; only explicit test setup reopens
+it. `wifi-discovery-shutdown.test.ts` covers both signals, delayed cleanup,
+late saved/scan reads and cancellation of a pending scan retry.
+
+The discovery-owned abort signal also accompanies its saved-connection refresh.
+It cancels an already-waiting saved-list retry, prevents a failed held listing
+from arming another wait, and fences later profile reads, AP dispatch and saved
+map publication. Saved refreshes entered with an already-aborted signal perform
+no read. Independent saved-refresh callers that omit the signal retain their
+existing retry schedule and timer lifetime; the shared retry helper's
+unsignaled consumers are unchanged.
 
 `wifi-radio-observation.ts` schedules sysfs sampling in a later task, after
 legacy publication and promise completion; legacy callers never await it.
@@ -238,10 +261,13 @@ After removing only the optional incarnation
 field from Wi-Fi rows, nine recorded main fixture families cover
 the resolver tiers, unavailable/missing-operational rows, duplicates, rename and
 replug, public prepare/start results, credentials and broadcast count/order.
-The overlapping-call fixture records three independent reads, results
-`false,false,true`, three broadcasts and an empty registry; a separate fixture
-covers independent errors. An extra real broadcast is a permanent negative
-control. Fault tests use fake clocks and capability/command readers to cover
+The overlapping-call fixture now records one initial read and one queued read,
+results `false,false,false`, one broadcast and the final unavailable row;
+the error fixture preserves the first run's error and shares the queued result.
+`wifi-discovery-bounded.test.ts` covers sequential registry equivalence,
+freshness, rejection recovery, the production confirmation poll and a burst of
+100 callers with no timer left pending. An extra real broadcast is a permanent
+negative control. Fault tests use fake clocks and capability/command readers to cover
 hanging, slow and rejected sampling plus both integration boundaries.
 The authorized A-only raw-byte assertion now compares all legacy bytes after
 removing only incarnation, with added wire-value rotation and ordinary-status
