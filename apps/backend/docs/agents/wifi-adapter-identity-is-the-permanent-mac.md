@@ -286,3 +286,99 @@ defines token validation, mock rebind control, byte changes, RPC output parsing,
 remote stripping and the workspace package boundary. No frontend uses the token
 for behavior in this step.
 
+### Chosen mode and boot restore [EXISTS; host and mock-browser tested]
+
+Explicit Start and Stop remember the chosen mode through an optional recorder in
+the existing transaction dependencies. RPC and legacy dispatch keep their call
+shapes. The real recorder uses the same `wifi_modes` store functions as explicit
+mode selection; all three paths resolve the logical intent key through
+`resolveWifiAdapterModeIntentKey`. Keys and values remain readable by an older
+backend. The mock mode offering reports the mock's chosen mode as `desired`.
+
+Start records the actual hybrid or exclusive target inside the adapter lock,
+after path validation and before allocating a virtual interface or changing
+NetworkManager. A recorded hybrid choice cannot fall back to exclusive mode:
+false or unknown concurrency refuses with `activation-failed`, without effects
+or a persistence write. An explicit hybrid mode switch retains its existing
+`capability-unproven` refusal. With absent or station intent, a proven non-hybrid
+radio still starts exclusively. If concurrency is unknown, the existing
+exclusive path remains available, but it does not create a durable hotspot
+choice from that uncertainty. An already-active Start applies the same recording
+proof: observed hybrid is recorded; observed exclusive mode is recorded only with
+proven absence of concurrency or an existing explicit hotspot choice. Retrying an
+unknown exclusive fallback never manufactures a persisted exclusive preference.
+Before any already-active exclusive shortcut can succeed or record, an explicit
+hybrid choice with absent or unknown concurrency is refused with
+`activation-failed`. An already-active hybrid topology keeps its shortcut.
+Start and boot restore consume the same current capability cache. The legacy
+discovery probe's `false` also represents read failure, so that row flag is not
+proof of absent concurrency. A later successful capability publication can
+restore pending hybrid without recreating or manually repairing the row. Actual
+concurrent-interface allocation remains the final admission check; successful
+allocation updates the row's concurrent path state before confirmation.
+
+Stop records station under the same key before teardown, including the
+already-stopped shortcut. A definite refusal or throw restores the previous
+value, deleting a previously absent key. Start has one undo at the lock exit,
+including failure before an activation rollback exists; an accepted but
+`not-confirmed` activation keeps its target. Undo applies only while the stored
+value is still this operation's target, so an older failure cannot overwrite a
+newer choice.
+Both persistence and restoration roll back their in-memory map on a synchronous
+write exception. Reads therefore keep the last successfully persisted value or
+absence, even if an undo's own write fails. A failed initial preference write
+cannot leave an unpersisted hotspot choice eligible for later restore.
+
+Explicit mode changes hold one adapter lock across persistence, intermediate
+teardown and activation. Internal delegates do not reacquire that lock and omit
+the recorder by destructuring, so a hybrid/hotspot switch's intermediate Stop
+cannot replace its target with station. Regulatory reconfigure and its rollback
+use their existing direct activation path and never record a new mode choice.
+After confirmed teardown, Stop retires matching parent aliases independently of
+virtual cleanup. It examines the current concurrent observation even when none
+existed at entry, matching the captured virtual name or the parent's canonical
+`clap-` name. The stopped UUID or an idle marker on that interface is retired.
+A different active UUID, another interface name, or newer parent observation is
+preserved. This covers discovery introducing the idle marker during disconnect;
+later repopulation while virtual release is awaited remains a follow-up below.
+
+While streaming, an exclusive Start or a switch to hotspot that would replace a
+connected station link refuses with `DEVICE_BUSY`, logs once and writes nothing.
+Hybrid Start, Stop, and station or hybrid selection remain available.
+
+Boot restore is apply-only. It waits for the first completed discovery
+publication, then follows discovery, capability-publication and streaming-clearance
+edges; it has no polling deadline or restore timer. Each attempt re-reads current
+intent and the registry under the adapter lock, never calls the persisting mode
+setter, and skips station intent, active or observed APs, and owned pending
+activations. Streaming leaves a disruptive restore pending with one warning.
+An unavailable hybrid capability leaves hybrid pending with `activation-failed`.
+The same unchanged edge does not repeat an attempt or warning; a late adapter,
+capability arrival or cleared stream re-arms pending work. Accepted activations
+are not dispatched twice for the same row and intent.
+Capability edges come only from successful cache publication or an invalidation
+that changes evidence. A failed read retaining the same expired cache emits no
+edge, so a pending restore cannot turn one discovery event into an endless probe
+cycle. Single-flight cleanup remains in `finally`, independent of publication.
+Each interface also carries an internal equality revision of its phy binding and
+concurrency proof. Invalidation and recovery advance that evidence even when
+restore coalesces the events during a waiting activation. Pending-attempt dedup
+includes this revision, so true-to-unknown-to-true recovery is not lost after a
+definite activation refusal. Identical proof/binding publications leave it
+unchanged, and accepted activations remain suppressed. The producer retains only
+the latest mapped interface set or its invalidation; revision reads start no IO.
+
+The event source is a graph-free leaf, introduces no wire field, and has a
+cancellable subscription. Shutdown retires restore before terminating identity
+observation. It cannot start another adapter after cancellation.
+The later limited-radio D12 exception and composite identity keys remain outside
+this step; this restore applies only to the existing matching intent key.
+
+### Inherited follow-ups outside B2 round 4 [PARTIAL]
+
+- Bound retries when the initial capability read fails with no retained cache.
+- Run one trailing capability computation for a newer interface set joining an
+  older flight.
+- Bind confirmation to the chosen activation topology, covering discovery
+  repopulation while virtual-interface release is awaited.
+

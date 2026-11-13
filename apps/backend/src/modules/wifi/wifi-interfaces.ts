@@ -43,6 +43,7 @@ import {
 	type WifiNetwork,
 	wifiUpdateSavedConns,
 } from "./wifi.ts";
+import { notifyWifiAdapterModeDiscovery } from "./wifi-adapter-mode-events.ts";
 import { supportsApStaConcurrency } from "./wifi-ap-sta-capability.ts";
 import { refreshWifiCapabilities } from "./wifi-capabilities.ts";
 import type { AutoWifiChannel } from "./wifi-channels.ts";
@@ -722,5 +723,8 @@ async function discoverWifiDevices() {
 			recordWifiRadioShadowFailure();
 		}
 	}
+	queueMicrotask(() => {
+		void notifyWifiAdapterModeDiscovery();
+	});
 	return statusChange;
 }

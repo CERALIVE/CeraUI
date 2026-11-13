@@ -175,9 +175,23 @@ export function persistWifiAdapterMode(
 	macAddress: string,
 	mode: WifiAdapterMode,
 ): void {
+	saveWifiAdapterModes({
+		...(getConfig().wifi_modes ?? {}),
+		[macAddress]: mode,
+	});
+}
+
+/** A failed atomic write must never publish an unpersisted intent to readers. */
+function saveWifiAdapterModes(next: Record<string, WifiAdapterMode>): void {
 	const config = getConfig();
-	config.wifi_modes = { ...(config.wifi_modes ?? {}), [macAddress]: mode };
-	saveConfig();
+	const previous = config.wifi_modes;
+	config.wifi_modes = next;
+	try {
+		saveConfig();
+	} catch (error: unknown) {
+		config.wifi_modes = previous;
+		throw error;
+	}
 }
 
 /**
@@ -198,8 +212,37 @@ export function restoreWifiAdapterMode(
 	} else {
 		next[macAddress] = previous;
 	}
-	config.wifi_modes = next;
-	saveConfig();
+	saveWifiAdapterModes(next);
+}
+
+/** One policy point for the logical intent identity, shared by Start, Stop and boot. */
+export function resolveWifiAdapterModeIntentKey(macAddress: string): string {
+	return macAddress;
+}
+
+export interface WifiAdapterModeRecorder {
+	readonly read: typeof getPersistedWifiAdapterMode;
+	readonly persist: typeof persistWifiAdapterMode;
+	readonly restore: typeof restoreWifiAdapterMode;
+}
+
+export const wifiAdapterModeRecorder: WifiAdapterModeRecorder = {
+	read: getPersistedWifiAdapterMode,
+	persist: persistWifiAdapterMode,
+	restore: restoreWifiAdapterMode,
+};
+
+/** Undo only our own write; another authority may have superseded this intent. */
+export function recordWifiAdapterModeIntent(
+	key: string,
+	target: WifiAdapterMode,
+	recorder: WifiAdapterModeRecorder,
+): () => void {
+	const previous = recorder.read(key);
+	recorder.persist(key, target);
+	return () => {
+		if (recorder.read(key) === target) recorder.restore(key, previous);
+	};
 }
 
 // ─── wire projection ─────────────────────────────────────────────────────────
