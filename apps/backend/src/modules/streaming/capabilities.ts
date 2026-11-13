@@ -390,6 +390,7 @@ export async function getCapabilities(
 		const caps: GetCapabilitiesResult = {
 			...rawCaps,
 			encoder: {
+				// Preserve the producer's optional default_codec while normalizing units.
 				...rawCaps.encoder,
 				bitrate_range: normalizeBitrateRangeToKbps(
 					rawCaps.encoder.bitrate_range,

@@ -15,7 +15,7 @@ Options outside the offered set are shown **disabled with a reason tooltip** —
 hidden, so operators can see what the hardware doesn't support and why.
 
 **The encoder universe is engine-owned [EXISTS].** The published
-`@ceralive/cerastream@2026.9.11` binding carries `get-capabilities.encoders[]` with
+`@ceralive/cerastream@2026.11.0` binding carries `get-capabilities.encoders[]` with
 one entry per codec (`codec`, maximum resolution/framerate, accepted pixel formats,
 and `gates."4k60"`). `@ceraui/rpc` imports the producer schemas and types directly;
 it does not redeclare `PlatformCaps`, `VideoSourceCap`, or `EncoderCapability`.
@@ -23,6 +23,10 @@ The backend forwards the parsed ladder, and `EncoderDialog` derives codec
 availability from it. `PLATFORM_CAPS_BY_HARDWARE` remains only for a legacy or
 absent `encoders` snapshot and is pinned to the engine platform golden by a test.
 `producer-wire-type-shadow.test.ts` rejects any reintroduced local declaration.
+
+Schema 0.22.0 also retains optional `encoder.default_codec` through the producer
+parser, bitrate normalization, cache and RPC schema. The backend forwards optional
+`active_encode.route_reason` in status; absent fields remain absent for older engines.
 
 **`pipeline-sources.ts` per-board tables deleted [EXISTS].** The static per-board
 capability tables that previously lived in `pipeline-sources.ts` are removed. All
