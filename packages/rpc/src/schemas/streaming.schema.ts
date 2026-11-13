@@ -605,6 +605,7 @@ export type DeviceModeGroup = z.infer<typeof deviceModeGroupSchema>;
 
 export const capabilitiesMessageSchema = z.object({
 	platform: platformCapsSchema,
+	// The published encoder schema retains optional default_codec (schema 0.22.0).
 	encoder: encoderCapsSchema,
 	encoders: z.array(encoderCapabilitySchema).optional(),
 	sources: z.array(videoSourceCapSchema),

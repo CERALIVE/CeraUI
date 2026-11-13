@@ -620,8 +620,9 @@ original entry; any repair/restore error warns without failing configure. See
 [retention and mount limits](docs/BUILD_PIPELINE.md#frontend-link-repair-exists-host-tested-board-proof-owed).
 To check a device: `readlink /opt/ceralive/public` must print `/var/www/ceralive`.
 
-CeraUI pins the published `@ceralive/cerastream@2026.9.11` in both
-the backend and shared RPC package, carrying schema 0.21.0's capture status,
+CeraUI pins the published `@ceralive/cerastream@2026.11.0` in both
+the backend and shared RPC package, carrying schema 0.22.0's optional
+`encoder.default_codec` and `active_encode.route_reason` alongside capture status,
 failover-rate policy, raw-input classifications, and source-mode session-switch fields.
 The producer's exported
 `ChangeConfigParams` and installed schema are regression-tested directly.

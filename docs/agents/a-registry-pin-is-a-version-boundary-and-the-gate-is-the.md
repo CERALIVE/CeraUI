@@ -7,6 +7,11 @@ CeraUI consumes THREE npm producers whose wire data is Zod-validated:
 A pin is a version boundary as well as a path boundary, and the failure mode on
 the wrong side of it is SILENT.
 
+Both cerastream consumers pin published `2026.11.0` (schema `0.22.0`).
+The drift manifest includes `encoder.default_codec` and
+`active_encode.route_reason`; the mock producer-schema test proves that parsing
+retains the default codec before the capabilities projection reaches RPC.
+
 A fourth producer schema — the sender's telemetry — is still Zod-validated and
 still in the drift manifest, but it is no longer PINNED: `@ceraui/srtla-send` is
 a workspace package, so its schema and its consumer move in the same commit and

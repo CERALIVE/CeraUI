@@ -3,7 +3,7 @@
 ## APPLY-NOW CONFIG CHANGE — TRANSACTION + STAGED PERSISTENCE [EXISTS]
 
 Composition now follows the same staging/dispatch/outcome path, including explicit
-null. Both consumers now pin the verified published `@ceralive/cerastream@2026.9.11`,
+null. Both consumers now pin the verified published `@ceralive/cerastream@2026.11.0`,
 whose exported `ChangeConfigParams` and schema preserve null. The already-verified
 adapter retains its narrow raw-request path and producer-owned result validation;
 no local wire type is introduced. `composition-binding-contract.test.ts` fails

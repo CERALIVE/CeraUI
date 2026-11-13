@@ -383,6 +383,9 @@ export function extractActiveEncode(event: unknown): ActiveEncode | null {
 		...(typeof a.input_codec === "string"
 			? { input_codec: a.input_codec }
 			: {}),
+		...(typeof a.route_reason === "string"
+			? { route_reason: a.route_reason }
+			: {}),
 		...(typeof a.passthrough === "boolean"
 			? { passthrough: a.passthrough }
 			: {}),
