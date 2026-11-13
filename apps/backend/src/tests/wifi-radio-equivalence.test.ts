@@ -20,11 +20,81 @@ for (const fixture of radioEquivalenceCases) {
 		const { broadcasts, ...transcript } =
 			await radioEquivalenceTranscript(fixture);
 		expect(transcript.unexpected).toEqual([]);
-		for (const frame of transcript.frames) {
+		for (const [index, frame] of transcript.frames.entries()) {
 			for (const activation of frame.activations) {
-				expect(activation.prepare.success).toBe(fixture.admitted);
-				expect(activation.start.success).toBe(fixture.admitted);
+				const admitted = fixture.limitedFrames?.includes(index)
+					? false
+					: fixture.admitted;
+				expect(activation.prepare.success).toBe(admitted);
+				expect(activation.start.success).toBe(admitted);
 			}
+		}
+		if (fixture.limitedFrames) {
+			const verified = golden.transcripts["verified fresh"];
+			const expectedCalls: unknown[][] =
+				fixture.frames.length > 1 ? [...verified.calls] : [];
+			const expectedBroadcasts: typeof broadcasts =
+				fixture.frames.length > 1
+					? [...golden.broadcasts["verified fresh"]]
+					: [];
+			expect(transcript.frames).toHaveLength(fixture.frames.length);
+			for (const [index, frame] of transcript.frames.entries()) {
+				if (!fixture.limitedFrames.includes(index)) {
+					expect(JSON.stringify(frame)).toBe(
+						JSON.stringify(verified.frames[0]),
+					);
+					continue;
+				}
+				const radios = fixture.frames[index];
+				if (!radios) throw new Error("Missing limited input frame");
+				const adapters = radios.map((radio, offset) => ({
+					id: index === 0 ? offset : 1,
+					key: `limited:${radio.ifindex}:${radio.phy}`,
+					wifi: {
+						ifname: radio.ifname,
+						conn: "",
+						hw: "Fixture Radio",
+						saved: {},
+						degraded_reason: "permanent-mac-unresolved",
+						available: [],
+						supports_hotspot: true,
+						mode: "station",
+					},
+				}));
+				const wifi = Object.fromEntries(
+					adapters.map((adapter) => [adapter.id, adapter.wifi]),
+				);
+				const snapshot = {
+					wifi,
+					keys: adapters.map((adapter) => adapter.key),
+					ids: Object.fromEntries(
+						adapters.map((adapter) => [adapter.id, adapter.key]),
+					),
+				};
+				const refusal = { success: false, error: "activation-failed" } as const;
+				expect(frame.discovered).toEqual(snapshot);
+				expect(frame.activations).toEqual(
+					adapters.map(({ id }) => ({
+						device: id,
+						prepare: refusal,
+						start: refusal,
+						prepared: snapshot,
+						starting: snapshot,
+						confirmed: snapshot,
+					})),
+				);
+				for (const { id } of adapters)
+					expectedCalls.push(["publishOutcome", "start", id, refusal]);
+				const broadcast = {
+					phase: "discovery:pending",
+					at: index,
+					payload: { wifi },
+				};
+				expectedBroadcasts.push(broadcast, broadcast);
+			}
+			expect(transcript.calls).toEqual(expectedCalls);
+			expect(broadcasts).toEqual(expectedBroadcasts);
+			return;
 		}
 		const bytes = JSON.stringify(transcript);
 		expect(bytes).toBe(JSON.stringify(transcripts[fixture.name]));
@@ -80,9 +150,9 @@ test.each(["id", "registry-key", "id-map"] as const)(
 			},
 		);
 		try {
-			await expect(radioEquivalenceTranscript(fixture)).rejects.toThrow(
-				"Detached shadow changed legacy state",
-			);
+			await expect(
+				radioEquivalenceTranscript({ ...fixture, resample: true }),
+			).rejects.toThrow("Detached shadow changed legacy state");
 			expect(writes).toBe(1);
 		} finally {
 			mutation.mockRestore();

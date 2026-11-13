@@ -40,7 +40,7 @@ export function getWifiRadioShadowFailures(): number {
 	return shadowFailures;
 }
 
-// These reads are observational. The existing resolver still owns every live key.
+// The bracketed lifetime sample owns adapter identity.
 export const radioIdentityReaders: RadioIdentityReaders = {
 	readText: (path) =>
 		Bun.file(path)
@@ -81,14 +81,15 @@ export type RadioIdentityState = {
 };
 
 /**
- * Observational lifetime evidence. Only the optional status token is projected;
- * this state never selects registry keys, credentials or activation targets.
+ * Coherent lifetime evidence selects registry keys before discovery publishes.
  */
 export class WifiRadioIdentityProducer {
 	private permanentMacByLifetime = new Map<string, MacAddress>();
 	private snapshot: RadioIdentityState = { rows: new Map(), changed: [] };
 	private sequence = 0;
 	private publishedSequence = 0;
+	// Discovery can publish rows before a capacity-deferred sample begins.
+	private observedRows = new Map<string, BaseWifiInterface>();
 
 	constructor(private readonly readers: RadioIdentityReaders) {}
 
@@ -101,7 +102,22 @@ export class WifiRadioIdentityProducer {
 	}
 
 	captureObservation(): number {
+		this.observedRows.clear();
 		return ++this.sequence;
+	}
+
+	associateRows(rows: readonly BaseWifiInterface[], sequence: number): void {
+		if (sequence !== this.sequence) return;
+		for (const row of rows) this.observedRows.set(row.ifname, row);
+		if (sequence !== this.publishedSequence) return;
+		const associated = new Map(this.snapshot.rows);
+		for (const row of rows) {
+			const identity = associated.get(row.ifname);
+			if (!identity) continue;
+			invalidateWifiRadioRow(row, sequence);
+			associated.set(row.ifname, { ...identity, row, observation: sequence });
+		}
+		this.snapshot = { ...this.snapshot, rows: associated };
 	}
 
 	async discover(
@@ -119,13 +135,14 @@ export class WifiRadioIdentityProducer {
 		const cache = new Map(this.permanentMacByLifetime);
 		const samples = new Map<string, RadioSample | undefined>();
 		const seen = new Set<string>();
-		const macCounts = new Map<MacAddress, number>();
+		const macPaths = new Map<MacAddress, Set<string>>();
+		const interfacesByPhy = new Map<string, number>();
 		// Finish classification before publishing any healthy identity edge.
 		for (const { ifname } of devices) {
 			const sample = await sampleRadio(ifname, this.readers, signal);
 			if (signal?.aborted) return;
 			if (sample) {
-				const pair = `${sample.lifetime.ifindex}:${sample.lifetime.wiphy}`;
+				const pair = `${sample.lifetime.ifindex}:${sample.lifetime.wiphy}:${sample.lifetime.phyPath}`;
 				seen.add(pair);
 				if (sample.permanentMac) {
 					cache.set(pair, sample.permanentMac);
@@ -134,8 +151,14 @@ export class WifiRadioIdentityProducer {
 					sample.permanentMac ??
 					(sample.macReadFailed ? cache.get(pair) : undefined);
 				samples.set(ifname, { ...sample, permanentMac });
+				const path = sample.lifetime.phyPath;
+				if (!ifname.startsWith("clap-")) {
+					interfacesByPhy.set(path, (interfacesByPhy.get(path) ?? 0) + 1);
+				}
 				if (permanentMac) {
-					macCounts.set(permanentMac, (macCounts.get(permanentMac) ?? 0) + 1);
+					const paths = macPaths.get(permanentMac) ?? new Set<string>();
+					paths.add(path);
+					macPaths.set(permanentMac, paths);
 				}
 			} else {
 				samples.set(ifname, undefined);
@@ -148,16 +171,26 @@ export class WifiRadioIdentityProducer {
 
 		const rows = new Map<string, RadioIdentity>();
 		for (const device of devices) {
+			const row =
+				device.row ??
+				(generation === this.sequence
+					? this.observedRows.get(device.ifname)
+					: undefined);
 			const sample = samples.get(device.ifname);
 			const mac = sample?.permanentMac;
-			const shared = mac !== undefined && (macCounts.get(mac) ?? 0) > 1;
+			const shared =
+				(mac !== undefined && (macPaths.get(mac)?.size ?? 0) > 1) ||
+				(sample !== undefined &&
+					(interfacesByPhy.get(sample.lifetime.phyPath) ?? 0) > 1);
 			const classification = !sample
 				? "unverified"
 				: !mac || shared
 					? "limited"
 					: "verified";
 			const degradedReason =
-				device.degradedReason ??
+				(device.degradedReason === "permanent-mac-unresolved"
+					? undefined
+					: device.degradedReason) ??
 				(classification === "limited" || classification === "unverified"
 					? "permanent-mac-unresolved"
 					: undefined);
@@ -167,7 +200,9 @@ export class WifiRadioIdentityProducer {
 			let key =
 				classification === "verified" && mac
 					? mac
-					: `degraded:${device.ifname}`;
+					: classification === "limited" && sample
+						? `limited:${sample.lifetime.ifindex}:${sample.lifetime.wiphy}`
+						: `degraded:${device.ifname}`;
 			// A not-ready row can retain a key only with its predecessor's witness.
 			if (
 				(degradedReason === "unavailable" ||
@@ -192,7 +227,7 @@ export class WifiRadioIdentityProducer {
 				classification,
 				degradedReason,
 				incarnation: unchanged ? previous.incarnation : crypto.randomUUID(),
-				...(device.row ? { row: device.row, observation: generation } : {}),
+				...(row ? { row, observation: generation } : {}),
 			});
 		}
 		this.permanentMacByLifetime = cache;

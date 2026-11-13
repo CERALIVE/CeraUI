@@ -15,6 +15,7 @@ import {
 	resetUsbNetMarkers,
 } from "../modules/network/router-cellular-scan.ts";
 import { UplinkSteeringApplier } from "../modules/network/uplink-steering/applier.ts";
+import type { UplinkFlowsResetEvent } from "../modules/network/uplink-steering/contracts.ts";
 import { UplinkSteeringCoordinator } from "../modules/network/uplink-steering/coordinator.ts";
 import * as routes from "../modules/network/uplink-steering/route-manager.ts";
 import { stableUplinkMark } from "../modules/network/uplink-steering/ruleset.ts";
@@ -42,11 +43,11 @@ import {
 	wifiUpdateDevices,
 	wifiZonesReady,
 } from "../modules/wifi/wifi-interfaces.ts";
+import { setPermanentMacReaderForTest } from "../modules/wifi/wifi-permanent-mac.ts";
 import {
-	resetWifiPermanentMacCache,
-	setPermanentMacReaderForTest,
-} from "../modules/wifi/wifi-permanent-mac.ts";
-import { radioIdentityReaders } from "../modules/wifi/wifi-radio-identity.ts";
+	radioIdentityReaders,
+	wifiRadioIdentity,
+} from "../modules/wifi/wifi-radio-identity.ts";
 import { wifiRadioObservation } from "../modules/wifi/wifi-radio-observation.ts";
 import * as compat from "../rpc/compat.ts";
 import { constructedTwinDeps } from "./helpers/constructed-usb-twins.ts";
@@ -71,7 +72,7 @@ beforeEach(async () => {
 	await wifiRadioObservation.settled;
 	resetWifiInterfaceDiscoveryForTest();
 	resetWifiConnectionModeCache();
-	resetWifiPermanentMacCache();
+	await wifiRadioIdentity.discover([]);
 	clearWifiInterfacesForTest();
 	resetUsbNetMarkers();
 	processIfconfigOutput(snapshot);
@@ -123,7 +124,7 @@ afterEach(async () => {
 	resetWifiConnectionModeCache();
 	resetWifiCapabilitiesForTest();
 	setPermanentMacReaderForTest(null);
-	resetWifiPermanentMacCache();
+	await wifiRadioIdentity.discover([]);
 	clearWifiInterfacesForTest();
 	resetUsbNetMarkers();
 	processIfconfigOutput("");
@@ -543,5 +544,159 @@ test.each(["wlwg0", "wlx020000000001"])(
 		await h.controller.requestReconcile();
 		expect(h.effects).toEqual([]);
 		expect(wifiZonesReady()).toBe(false);
+	},
+);
+
+test.each([
+	"unrelated witness",
+	"current witness",
+	"initial unknown",
+	"replacement",
+] as const)(
+	"physical Wi-Fi steering survives classification uncertainty: %s",
+	async (change) => {
+		const permanent = "58:02:05:e1:79:1c";
+		const replacement = "68:02:05:e1:79:1d";
+		let changed = change === "initial unknown";
+		clearWifiInterfacesForTest();
+		addWifiInterface(permanent, {
+			id: 0,
+			ifname: "wlan0",
+			conn: "station",
+			hw: "Test radio",
+			available: new Map(),
+			saved: {},
+			savedAll: {},
+		});
+		processIfconfigOutput(
+			[
+				"wlan0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>",
+				"        inet 192.168.2.8  netmask 255.255.255.0",
+				`        ether ${permanent}`,
+				"",
+				"clap-clients: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>",
+				"        inet 10.42.0.1  netmask 255.255.255.0",
+				"        ether 02:00:00:00:00:09",
+			].join("\n"),
+		);
+		spyOn(nm, "nmDevices").mockResolvedValue([
+			"wlan0:wifi:connected:station",
+			"clap-wlan0:wifi:disconnected:",
+		]);
+		spyOn(nm, "nmConnGetFields").mockResolvedValue(["infrastructure"]);
+		spyOn(nm, "nmDeviceProp").mockResolvedValue([
+			"Test",
+			"Radio",
+			"no",
+			"no",
+			"yes",
+		]);
+		spyOn(radioIdentityReaders, "realpath").mockImplementation(async (path) =>
+			path.includes("/net/wlan0/")
+				? "/sys/devices/radio/phy0"
+				: "/sys/devices/radio/phy1",
+		);
+		spyOn(radioIdentityReaders, "readText").mockImplementation(async (path) => {
+			if (path.endsWith("/ifindex")) {
+				const parent = path.includes("/net/wlan0/");
+				if (
+					changed &&
+					((parent &&
+						change !== "unrelated witness" &&
+						change !== "replacement") ||
+						(!parent && change === "unrelated witness"))
+				)
+					return undefined;
+				return parent
+					? changed && change === "replacement"
+						? "30"
+						: "3"
+					: "8";
+			}
+			if (path.endsWith("/index")) return path.includes("/phy0/") ? "0" : "1";
+			return path.includes("/phy0/")
+				? changed && change === "replacement"
+					? replacement
+					: permanent
+				: "14:ac:60:12:34:56";
+		});
+		setPermanentMacReaderForTest(async () =>
+			changed && change === "replacement" ? replacement : permanent,
+		);
+		spyOn(routes, "planUplinkRoute").mockImplementation(async (candidate) => ({
+			...candidate,
+			table: String(30_000 + ((candidate.mark >>> 8) & 0xffff)),
+			managed: true,
+		}));
+		const flushed: number[] = [];
+		const removed: string[] = [];
+		const reset: UplinkFlowsResetEvent[] = [];
+		const applier = new UplinkSteeringApplier({
+			discoverRoutes: async () => [],
+			ensureRoute: async (route) => ({ route, changed: false }),
+			rollbackRoute: async () => {},
+			removeRoute: async (route) => {
+				removed.push(route.table);
+			},
+			applyRuleset: async () => {},
+			deactivateSharing: async () => {},
+			flushConntrack: async (mark) => {
+				flushed.push(mark);
+			},
+			setIpForwarding: async () => {},
+			publishFlowsReset: (event) => {
+				reset.push(event);
+			},
+		});
+		coordinator = new UplinkSteeringCoordinator({
+			readDesiredState: (context) =>
+				readDesiredSteeringState(undefined, context),
+			apply: (previous, next) => applier.apply(previous, next),
+			publishAvailability: () => {},
+		});
+		await wifiUpdateDevices();
+		await coordinator.requestReconcile();
+		if (change === "initial unknown") {
+			expect(await readDesiredSteeringState()).toEqual({
+				pending: true,
+				netifReady: true,
+				reason: "identity",
+			});
+			expect(coordinator.appliedState()).toBeUndefined();
+		} else {
+			const first = coordinator.appliedState();
+			expect(first?.uplinks.map((entry) => entry.identity)).toEqual([
+				`wifi-mac:${permanent}`,
+			]);
+			expect(first?.routes.map((route) => route.table)).toEqual(["73883"]);
+			const lifetime = wifiRadioIdentity.state.rows.get("wlan0")?.lifetime;
+			changed = true;
+			await wifiUpdateDevices();
+			await coordinator.requestReconcile();
+			if (change === "unrelated witness")
+				expect(wifiRadioIdentity.state.rows.get("wlan0")?.lifetime).toEqual(
+					lifetime,
+				);
+			if (change === "current witness")
+				expect(
+					await readDesiredSteeringState(undefined, { hasAppliedState: true }),
+				).toEqual({
+					pending: true,
+					netifReady: true,
+					reason: "identity",
+				});
+			expect(
+				coordinator.appliedState()?.uplinks.map((entry) => entry.identity),
+			).toEqual([
+				`wifi-mac:${change === "replacement" ? replacement : permanent}`,
+			]);
+			if (change !== "replacement")
+				expect(coordinator.appliedState()?.routes).toEqual(first?.routes);
+		}
+		expect(flushed).toEqual(change === "replacement" ? [3400231680] : []);
+		expect(removed).toEqual(change === "replacement" ? ["73883"] : []);
+		expect(reset.map((event) => event.iface)).toEqual(
+			change === "replacement" ? ["wlan0"] : [],
+		);
 	},
 );

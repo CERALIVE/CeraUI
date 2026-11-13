@@ -23,9 +23,10 @@ const RETRY_DELAYS_MS = [250, 1000, 4000] as const;
 type PendingObservation = {
 	readonly devices: readonly RadioObservation[];
 	readonly sequence: number;
+	readonly onPublication: (() => void) | undefined;
 };
 
-/** Only shadow work coalesces; legacy discovery never waits on this queue. */
+/** Discovery awaits the initial sample; lost samples retain bounded retries. */
 export class WifiRadioObservation {
 	private queued: PendingObservation | undefined;
 	private timer: ReturnType<typeof setTimeout> | undefined;
@@ -45,7 +46,11 @@ export class WifiRadioObservation {
 		return this.active?.promise;
 	}
 
-	enqueue(devices: readonly RadioObservation[], sequence: number): void {
+	enqueue(
+		devices: readonly RadioObservation[],
+		sequence: number,
+		onPublication?: () => void,
+	): void {
 		if (this.terminated) return;
 		this.stopped = false;
 		this.discovery++;
@@ -53,11 +58,27 @@ export class WifiRadioObservation {
 		if (this.timer !== undefined) clearTimeout(this.timer);
 		this.timer = undefined;
 		if (!this.queued || sequence > this.queued.sequence) {
-			this.queued = { devices, sequence };
+			this.queued = { devices, sequence, onPublication };
 		}
 		if (!this.active && !this.resumeRead && this.timer === undefined) {
 			this.timer = setTimeout(() => this.start(), 0).unref();
 		}
+	}
+
+	async sample(
+		devices: readonly RadioObservation[],
+		sequence: number,
+		onPublication: () => void,
+	): Promise<boolean> {
+		await this.active?.promise;
+		if (this.terminated) return false;
+		const cancellation = this.cancellation;
+		this.enqueue(devices, sequence, onPublication);
+		if (this.timer !== undefined) clearTimeout(this.timer);
+		this.timer = undefined;
+		this.start(false);
+		await this.active?.promise;
+		return !this.terminated && cancellation === this.cancellation;
 	}
 
 	stop(): void {
@@ -82,7 +103,7 @@ export class WifiRadioObservation {
 		this.terminated = false;
 	}
 
-	private start(): void {
+	private start(publish = true): void {
 		this.timer = undefined;
 		if (this.stopped || this.terminated || this.active) return;
 		const next = this.queued;
@@ -138,8 +159,10 @@ export class WifiRadioObservation {
 					return;
 				let loss = outcome;
 				if (outcome === "published") {
+					if (publish) next.onPublication?.();
 					const currentRows = Object.values(getWifiInterfacesByMacAddress());
 					if (
+						publish &&
 						currentRows.some(
 							(row) =>
 								wireBefore.get(row.ifname) !==
@@ -152,14 +175,19 @@ export class WifiRadioObservation {
 						notifyWifiRadioPublication();
 					}
 					const incomplete = next.devices.some(
-						({ row }) =>
-							row !== undefined &&
-							currentRows.includes(row) &&
-							row.degradedReason === undefined &&
-							projectWifiRadioIncarnation(
-								row,
-								this.producer.state.rows.get(row.ifname),
-							) === undefined,
+						({ row, ifname, degradedReason }) =>
+							next.onPublication
+								? degradedReason !== "unavailable" &&
+									degradedReason !== "operational-mac-missing" &&
+									this.producer.state.rows.get(ifname)?.classification ===
+										"unverified"
+								: row !== undefined &&
+									currentRows.includes(row) &&
+									row.degradedReason === undefined &&
+									projectWifiRadioIncarnation(
+										row,
+										this.producer.state.rows.get(row.ifname),
+									) === undefined,
 					);
 					if (!incomplete) {
 						this.retries = 0;
@@ -202,7 +230,11 @@ export class WifiRadioObservation {
 							};
 						},
 					);
-					this.queued = { devices, sequence };
+					this.queued = {
+						devices,
+						sequence,
+						onPublication: next.onPublication,
+					};
 					this.start();
 				}, delay).unref();
 			})

@@ -50,8 +50,8 @@ import type {
 	WifiInterfaceWithHotspot,
 } from "../modules/wifi/wifi-hotspot-types.ts";
 import * as interfaces from "../modules/wifi/wifi-interfaces.ts";
-import * as permanent from "../modules/wifi/wifi-permanent-mac.ts";
 import { wifiRadioObservation } from "../modules/wifi/wifi-radio-observation.ts";
+import { fakeShadowSysfs } from "./helpers/wifi-radio-equivalence-shadow.ts";
 import {
 	isolateWifiRegistry,
 	restoreWifiRegistry,
@@ -69,6 +69,7 @@ let scratch: string;
 let effects: string[];
 let cancel: (() => void) | undefined;
 let unsubscribe: (() => void) | undefined;
+let restoreShadow: () => Promise<void>;
 
 const flush = async () => {
 	for (let i = 0; i < 1000; i++) await Promise.resolve();
@@ -111,6 +112,24 @@ async function prove(
 
 beforeEach(async () => {
 	jest.useFakeTimers();
+	restoreShadow = await fakeShadowSysfs(() => [
+		{
+			ifname: "wlan0",
+			operational: MAC,
+			permanent: MAC,
+			ifindex: 3,
+			phy: 0,
+			state: "connected",
+		},
+		{
+			ifname: "clap-wlan0",
+			operational: MAC,
+			permanent: MAC,
+			ifindex: 4,
+			phy: 0,
+			state: "disconnected",
+		},
+	]);
 	inherited = isolateWifiRegistry();
 	originalPath = config.getConfigFilePath();
 	originalModes = config.getConfig().wifi_modes;
@@ -187,6 +206,7 @@ afterEach(async () => {
 	unsubscribe = undefined;
 	settlePending("wlan0", false);
 	wifiRadioObservation.stop();
+	await restoreShadow();
 	connections.wifiCancelScanRefresh();
 	interfaces.stopWifiUpdateLoopForTest();
 	caps.resetWifiCapabilitiesForTest();
@@ -285,10 +305,8 @@ test("real discovery replacing an active marker with idle during teardown still 
 	spyOn(nm, "nmConnGetFields").mockResolvedValue(["infrastructure"]);
 	spyOn(devices, "wifiDeviceListGetMacAddress").mockReturnValue(MAC);
 	spyOn(devices, "wifiDeviceListGetInetAddress").mockReturnValue("192.0.2.2");
-	spyOn(permanent, "resolveWifiPermanentMac").mockResolvedValue(MAC);
 	spyOn(connections, "wifiUpdateScanResult").mockResolvedValue(true);
 	spyOn(connections, "wifiScheduleScanRefresh").mockImplementation(() => {});
-	spyOn(wifiRadioObservation, "enqueue").mockImplementation(() => {});
 	spyOn(defaultHotspotStopDeps, "nmDisconnect").mockImplementation(async () => {
 		effects.push("down");
 		await interfaces.wifiUpdateDevices();
@@ -388,10 +406,8 @@ for (const parent of ["disconnected", "new-station"] as const) {
 		spyOn(nm, "nmConnGetFields").mockResolvedValue(["infrastructure"]);
 		spyOn(devices, "wifiDeviceListGetMacAddress").mockReturnValue(MAC);
 		spyOn(devices, "wifiDeviceListGetInetAddress").mockReturnValue("192.0.2.2");
-		spyOn(permanent, "resolveWifiPermanentMac").mockResolvedValue(MAC);
 		spyOn(connections, "wifiUpdateScanResult").mockResolvedValue(true);
 		spyOn(connections, "wifiScheduleScanRefresh").mockImplementation(() => {});
-		spyOn(wifiRadioObservation, "enqueue").mockImplementation(() => {});
 		spyOn(defaultHotspotStopDeps, "nmDisconnect").mockImplementation(
 			async () => {
 				effects.push("down");

@@ -49,13 +49,13 @@ import {
 	pruneDuplicateHotspotConns,
 	shouldAdoptHotspotConn,
 } from "../modules/wifi/wifi-hotspot-discovery.ts";
+import { settlePending } from "../modules/wifi/wifi-hotspot-monitor.ts";
 import type {
 	HotspotActivationDeps,
 	WifiInterfaceWithHotspot,
 } from "../modules/wifi/wifi-hotspot-types.ts";
 import {
 	normalizeMacAddress,
-	resetWifiPermanentMacCache,
 	resolveWifiPermanentMac,
 	setPermanentMacReaderForTest,
 } from "../modules/wifi/wifi-permanent-mac.ts";
@@ -72,13 +72,16 @@ const PASSWORD_PROOF_MACS = [
 	"58:02:05:ff:ee:dd",
 	"02:00:00:00:00:01",
 ] as const;
+const fixtureIfnames = new Set<string>();
 
 function makeHotspotIface(
 	over: { ifname?: string; hotspotConn?: string } = {},
 ): WifiInterfaceWithHotspot {
+	const ifname = over.ifname ?? "wlan0";
+	fixtureIfnames.add(ifname);
 	return {
 		id: 0,
-		ifname: over.ifname ?? "wlan0",
+		ifname,
 		conn: null,
 		hw: "Realtek RTL8852BE",
 		available: new Map(),
@@ -146,12 +149,12 @@ beforeEach(() => {
 	setWifiState({});
 	onWifiChange(() => {});
 	resetHotspotCredentialsForTest();
-	resetWifiPermanentMacCache();
 });
 
 afterEach(() => {
+	for (const ifname of fixtureIfnames) settlePending(ifname, false);
+	fixtureIfnames.clear();
 	setPermanentMacReaderForTest(null);
-	resetWifiPermanentMacCache();
 	resetHotspotCredentialsForTest();
 });
 
@@ -173,27 +176,27 @@ describe("permanent MAC resolution", () => {
 		expect(duringScan).toBe(first);
 	});
 
-	test("a transient sysfs failure holds the last permanent address", async () => {
+	test("a failed sysfs read cannot reuse an ifname-only identity", async () => {
 		setPermanentMacReaderForTest(async () => PERM_MAC);
 		await resolveWifiPermanentMac("wlan0", PERM_MAC);
 
 		setPermanentMacReaderForTest(async () => undefined);
-		expect(await resolveWifiPermanentMac("wlan0", RANDOM_MAC)).toBe(PERM_MAC);
+		expect(await resolveWifiPermanentMac("wlan0", RANDOM_MAC)).toBeUndefined();
 	});
 
-	test("an ifname rename keeps the permanent identity when the new sysfs read fails", async () => {
+	test("a renamed interface cannot reuse an operational-address identity", async () => {
 		setPermanentMacReaderForTest(async (ifname) =>
 			ifname === "wlan0" ? PERM_MAC : undefined,
 		);
 		await resolveWifiPermanentMac("wlan0", RANDOM_MAC);
 
-		expect(await resolveWifiPermanentMac("wlp1s0", RANDOM_MAC)).toBe(PERM_MAC);
+		expect(await resolveWifiPermanentMac("wlp1s0", RANDOM_MAC)).toBeUndefined();
 	});
 
-	test("with no permanent address at all it degrades to the current one", async () => {
+	test("an unreadable permanent address cannot fall back to the operational address", async () => {
 		setPermanentMacReaderForTest(async () => undefined);
 
-		expect(await resolveWifiPermanentMac("wlan0", RANDOM_MAC)).toBe(RANDOM_MAC);
+		expect(await resolveWifiPermanentMac("wlan0", RANDOM_MAC)).toBeUndefined();
 	});
 
 	test("rejects malformed and all-zero addresses", () => {

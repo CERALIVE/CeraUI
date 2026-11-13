@@ -75,6 +75,7 @@ import {
 	getMacAddressForWifiInterface,
 	wifiUpdateDevices,
 } from "./wifi-interfaces.ts";
+import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 
 /** Production defaults: real NetworkManager + broadcast + dup-IP suppression. */
 export const defaultHotspotDeps: HotspotActivationDeps = {
@@ -147,6 +148,7 @@ async function resolveHotspotIdentity(
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotActivationDeps,
 ): Promise<HotspotIdentity | undefined> {
+	if (!normalizeMacAddress(macAddress)) return undefined;
 	const stored = deps.credentials.get(macAddress);
 	const hotspot = wifiInterface.hotspot;
 	let profileMac = getHotspotProfilePin(hotspot, hotspot.conn);

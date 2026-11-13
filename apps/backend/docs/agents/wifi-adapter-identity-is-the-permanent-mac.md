@@ -2,44 +2,54 @@
 
 ## WIFI ADAPTER IDENTITY IS THE PERMANENT MAC [EXISTS]
 
-Every adapter-keyed WiFi structure — the `wifiInterfacesByMacAddress` registry,
-the `wifiState` cache, the numeric UI id map, the hotspot credential store, and
-the `802-11-wireless.mac-address` pinned into a NetworkManager profile — is keyed
-on the radio's **permanent hardware address**, resolved by
-`modules/wifi/wifi-permanent-mac.ts` (`resolveWifiPermanentMac`).
+Every adapter-keyed Wi-Fi structure uses the coherent lifetime sample from
+`WifiRadioIdentityProducer`. A verified adapter keeps its normalized permanent
+hardware address as the registry, numeric-id-map and credential-store key;
+NetworkManager profiles are pinned to that permanent address.
 
-**`ifconfig`/`GENERAL.HWADDR` report the OPERATIONAL address, and it moves.**
-NetworkManager randomizes a WiFi device's MAC while scanning
-(`wifi.scan-rand-mac-address`, on by default) and resets it when it activates a
-connection. Confirmed on a Rock 5B+, roughly every 7 minutes:
-`device (wlan0): set-hw-addr: set MAC address to 26:C3:93:B6:9C:A7 (scanning)`.
-Two things broke while the registry keyed on that value:
+`ifconfig` and `GENERAL.HWADDR` report the operational address, which
+NetworkManager randomizes while scanning. They cannot supply identity, including
+through a remembered interface name or an operational-address alias. The
+standalone `resolveWifiPermanentMac` reads sysfs only and returns undefined
+when the permanent address is unreadable. Its old fallback tiers are removed.
 
-- the registry re-keyed itself, so the adapter's adopted hotspot profile, saved
-  connection map and id were discarded and rebuilt empty; and
-- profiles were pinned to a randomized address. **NetworkManager matches
-  `802-11-wireless.mac-address` against the PERMANENT address**, so those
-  profiles could never activate again — the board's journal recorded
-  `audit: op="connection-activate" result="fail" reason="… device MAC address
-  does not match the profile"` on every hotspot start.
+The producer brackets ifindex, resolved `phy80211` path, wiphy index and
+permanent address with a second ifindex/path read. Its cache uses the complete
+`(ifindex, wiphy, phyPath)` tuple, survives a same-lifetime read failure, and
+is pruned when a lifetime disappears or becomes incoherent. Zero or malformed
+addresses never use that read-failure cache. Phy zero is valid.
 
-**Resolution ladder** (`resolveWifiPermanentMac(ifname, currentMac)`):
-`/sys/class/net/<ifname>/phy80211/macaddress` (the cfg80211 `wiphy->perm_addr`,
-verified byte-equal to NetworkManager's D-Bus `PermHwAddress` on the reference
-board) → the last permanent address read for that interface → the current
-address. The cached tier is load-bearing: a transient sysfs failure must not
-re-key the registry onto a scan-time address for one poll. `busctl` is
-deliberately NOT used — it is not in the `helpers/run.ts` ALLOWED set, and a
-single sysfs read needs no spawn at all. `setPermanentMacReaderForTest` is the
-test seam.
+Classification finishes before discovery publishes a row:
 
-The cache also correlates the last permanent address through the operational MAC,
-so an ifname rename during a transient sysfs failure keeps the same physical
-identity. Discovery never drops an adapter merely because NetworkManager reports
-`unavailable`, the operational MAC has not landed, or the permanent address cannot
-yet be confirmed: the registry retains a row with a typed `degraded_reason`, keeps
-its numeric id while re-keying on recovery. A permanent-MAC-unresolved row still
-enters the id map and retains today's hotspot prepare/start behavior.
+- **Verified:** a readable or same-lifetime cached address is unique across
+  distinct phy paths, and the phy has one non-`clap` interface. Key: the MAC.
+- **Limited:** a coherent lifetime lacks an attributable address, shares its
+  address with another phy, or has multiple non-`clap` interfaces. Key:
+  `limited:<ifindex>:<wiphy>`.
+- **Unverified:** the lifetime bracket is incomplete or inconsistent. Key:
+  `degraded:<ifname>`.
+
+A `clap-*` interface is sampled as another witness of its phy, never counted
+as another physical radio, and never published as an adapter row. A ready
+limited/unverified row carries `degraded_reason: "permanent-mac-unresolved"`;
+there is no new status field. Unavailable and operational-address-missing rows
+retain their existing degraded reasons and not-ready key rule: only the same
+coherent predecessor witness can retain a verified key.
+
+Classification keys are not physical steering identities. Shared-client
+steering reads the coherent permanent address for the exact sampled registry
+object, so a limited classification cannot rotate an unchanged station's
+mark or retire its routes. A registered radio without that proof leaves
+steering pending, including after an apply; it never supplies a provisional
+key as a permanent MAC. This does not gate station operations or alter
+credential-store ownership.
+
+Discovery never adopts credentials, repins a profile, writes autoconnect or
+allocates a virtual interface for an unresolved key. Limited keys never enter
+the credential store. Non-MAC keys are rejected before hotspot credential
+resolution or profile adoption. Verified store keys and credential continuity
+are unchanged. Typed limited-mode request refusals and read-only live-profile
+handling remain a separate backend step.
 
 **A monitor event carries an ifname, never a MAC.** `getWifiInterfaceByIfname()`
 (`wifi-connections.ts`) is the bridge; do NOT route a device-state event through
@@ -86,18 +96,18 @@ fields. A successfully completed binding refreshes that evidence to its actual
 new pin; an in-flight binding retains the original selection evidence until
 its final ownership check.
 
-Ownership arbitration does not consume shadow identity, change registry keys,
-introduce limited mode, change NetworkManager targeting or change mode
-transitions. Unresolved radios retain prepare/start capability. A radio
-returning under a new name or after replug keeps its own credentials.
-Same-MAC physical distinction and activation fencing remain outside this
-ownership change; G1-G5 are unrun and unclaimed.
+Ownership arbitration remains independent of lifetime admission. Its existing
+UUID and pin checks apply to verified keys; unresolved keys cannot enter profile
+adoption or credential resolution. Returning verified adapters retain their own
+credentials. Composite same-MAC physical identity and activation fencing remain
+outside this classification change. This change claims host proof only.
 
 Coverage: `wifi-hotspot-ownership.test.ts` exercises O1-O9 through real
 discovery, saved-sweep, prepare/start and configure boundaries, all stored
 owners, after-await checks, orphan migration and unrelated-profile survival.
 `wifi-radio-equivalence.test.ts` retains the recorded main bytes for verified,
-rename, replug and unverified prepare/start fixtures. The orphan byte fixture
+rename and replug fixtures, and explicitly checks the isolated limited keys
+and mutation-free outcomes of the four unresolved fixture families. The orphan byte fixture
 also runs against unchanged main. The pruning regression loads a legacy
 collision from disk because new store writes can no longer create one; its
 existing assertions are unchanged.
@@ -108,183 +118,87 @@ pre-fix head. Single-adapter discovery and verified/unverified prepare/start
 controls retain the existing results. These tests prove dispatch and return
 behavior at the host boundary; they do not qualify physical NM scheduling.
 
-### Observational lifetime producer [EXISTS; host-tested only]
+### Sampled lifetime identity [EXISTS; host-tested only]
 
-`modules/wifi/wifi-radio-identity.ts` computes separate, internal evidence.
-The live resolver above, all of its cache tiers, registry keys, numeric ids,
-degraded reasons, id-map membership and credential-store keys are unchanged.
-Action admission consumes neither the classification nor the token. The additive
-protocol projects the optional token in local `wifiBuildMsg` rows and captures it
-for asynchronous config/mode frame correlation. Optional request tokens supply
-only that echoed metadata. Hotspot prepare/start/stop, mode transitions, profile
-targeting and credential behavior remain unchanged.
+The sample is authoritative for registry keys. One active discovery and one
+queued discovery still bound legacy device listings; queued callers share a
+fresh run begun after their calls and retain that run's result or original
+error. Confirmation polls use the same queue. The initial identity sample is
+awaited inside that run, with the producer's 1000 ms deadline. A lost sample
+publishes an isolated uncertain row rather than an operational-address key.
 
-The injectable file reader brackets the permanent address and wiphy index with
-the netdev ifindex and resolved `phy80211` path. A reads only these sysfs files
-and symlinks; it starts no new external process. `GENERAL.PATH` acquisition and
-composite identity remain deferred to the later guarded backend rollout.
-Only a coherent positive ifindex and nonnegative wiphy index produce a witness;
-phy0 is valid. The shadow MAC cache uses the complete `(ifindex, wiphy)` pair,
-serves only same-pair read failures, and is pruned to coherent pairs in each run.
-It assumes one fixed network namespace, automatic index allocation and no
-privileged index reassignment or namespace moves.
+The four-operation physical read budget remains shared across producers. A
+cancelled or timed-out physical read holds its slot until it actually settles.
+At saturation no fifth read starts; sampling resumes when capacity returns.
+Discovery does not wait indefinitely for capacity. The latest deferred sample
+can recover the retained row without an unrelated network event.
+Its exact row bindings remain scoped to the observation generation while the
+sample is deferred. A same-lifetime rename through an unavailable observation
+retains the full sampled-key row, including its AP capabilities.
+A new unavailable observation retires the parent's active UUID, AP mode and
+connection fields while retaining its capabilities and cached hotspot settings.
 
-All eligible radios are sampled before shadow rows are published. Unique MACs
-classify as verified. Shared MACs and coherent but unattributable samples
-classify as limited, and incomplete samples
-as unverified. Limited/unverified keys are isolated `degraded:<ifname>`
-placeholders. These classifications are evidence only; limited hotspot mode is
-not implemented here.
-An unavailable or operational-MAC-missing row retains a predecessor's shadow
-key only with the same coherent witness; a new lifetime gets a placeholder
-until NetworkManager is ready, even if its permanent address is readable.
+A private weak association binds each sampled token to the exact registry
+object and observation generation before scan refresh or other discovery
+broadcasts can publish it. Witness, classification and degraded edges rotate
+incarnations; repeated evidence and true same-lifetime renames retain them.
+An incomplete or failed proof has no wire incarnation. A failed-proof
+replacement uses a fresh degraded object/id and removes the predecessor's
+registry entry; it never inherits the predecessor's token. Recovery gets a
+fresh token, while a successful same-lifetime recovery keeps its token.
 
-Observational incarnations rotate on a changed witness, classification or degraded
-edge. Same-object renames and repeated duplicate runs retain their incarnation.
-Discovery and monitor `unavailable` events project incarnation/degraded-reason
-changes into the observational snapshot. An event with no identity row returns
-before advancing the publication sequence, so a virtual or non-Wi-Fi device
-cannot cancel another radio's pending sample. Existing status builds carry
-the sampled token when one is available.
-Projection also requires the exact registry row, its current observation
-generation and a coherent lifetime. A private weak map invalidates evidence
-before discovery publishes or mutates a row. This covers a new row and a reused
-same-MAC row; an ifname alone never associates a token. Failed, timed-out,
-incoherent and superseded observations leave the field absent until a later
-current sample proves it. Monitor-only unavailable edges retain the original
-row association while rotating the token. The existing disconnect broadcast
-still precedes the monitor observation: a private publication fence omits the
-token in that synchronous window and releases it in `finally`, including when
-the identity update throws. The fence never restores over a newer discovery
-generation. Legacy data and discovery publication remain unchanged.
-Observation sequences fence publication: an older discovery cannot erase a
-later unavailable event or replace a newer completed observation. Canceled
-samples cannot commit their cache or snapshot.
+Monitor events still carry ifnames. A virtual/non-Wi-Fi unavailable event
+cannot cancel another radio's sample. A real unavailable event rotates only
+its current row. The synchronous disconnect broadcast withholds the token
+through a private publication fence, released in finally without overwriting
+a newer discovery generation. Optional request tokens still supply echoed
+config/mode frame metadata only; token admission is a later step.
 
-`wifiUpdateDevices` allows one active discovery and one queued discovery.
-Callers arriving during the active run share the queued run, whose device
-listing starts after their calls. Each run retains its own result or original
-error object, and a rejection still starts the queued run. Confirmation polls
-use this same queue. The queue creates no timers and leaves the discovery body,
-classification, tokens and wire fields unchanged. Both the AP+STA probe and
-concurrent-interface default runners use `runIw` and its `/usr/sbin/iw`
-fallback while retaining their injected test runners.
+A timed-out, rejected, superseded or incomplete sample retains L0's bounded
+retry schedule: 250 ms, 1 s and 4 s, at most three retries. A retry samples the
+current registry with a fresh generation, applies recovered keys and degraded
+reasons, then projects its token. A failed NetworkManager listing also queues
+the retained rows. Successful publication or new discovery resets the retry
+budget. Explicit stop/termination cancels without a warning or retry.
 
-Discovery is a terminal shutdown owner alongside observation. The composition
-root injects both terminations into the shutdown helper, which imports no Wi-Fi
-modules. Termination settles queued and later callers with `undefined`, the
-existing no-update result, even while an active listing is still held. Active
-work checks the terminal fence after awaits. Pending scan refreshes, scan
-backoff waits and unavailable-device retries are cancelled; later scheduling
-cannot reopen them. Discovery and scan timers are unreferenced. The reusable
-cancel helpers do not clear the terminal state; only explicit test setup reopens
-it. `wifi-discovery-shutdown.test.ts` covers both signals, delayed cleanup,
-late saved/scan reads and cancellation of a pending scan retry.
+Each lost sample emits the exact string-only warning
+`Wi-Fi identity sample lost (<reason>) for <ifnames>; retry <n>/3`, or
+`; no retries left` on exhaustion. No status or credential enters that log.
+Read failures, timeouts and unexpected observation exceptions retain the
+internal `getWifiRadioShadowFailures()` counter. Capacity saturation logs
+one string-only held-count warning per episode.
 
-The discovery-owned abort signal also accompanies its saved-connection refresh.
-It cancels an already-waiting saved-list retry, prevents a failed held listing
-from arming another wait, and fences later profile reads, AP dispatch and saved
-map publication. Saved refreshes entered with an already-aborted signal perform
-no read. Independent saved-refresh callers that omit the signal retain their
-existing retry schedule and timer lifetime; the shared retry helper's
-unsignaled consumers are unchanged.
+A changed token is delivered locally. When the normal discovery broadcast
+already carries it, no extra local frame is needed; otherwise one local
+Wi-Fi status frame carries the change. Retry publication does the same.
+No projected change means no frame. Local token delivery never acknowledges
+global hotspot-roster membership or changes the cloud projection.
 
-`wifi-radio-observation.ts` schedules sysfs sampling in a later task, after
-legacy publication and promise completion; legacy callers never await it.
-Only this detached work has one logical active flight and one replaceable latest
-queued batch. A 1000 ms budget aborts the sample and prevents further reads or
-publication from that generation. A held uncancellable physical read may settle
-later; a new logical sample does not wait for it while capacity is available.
-`wifi-radio-read-budget.ts` bounds all outstanding physical text/symlink reads
-to four across every producer, discovery and retry. An operation increments the
-counter when it starts and decrements it only on settlement; cancellation never
-pretends that the operation finished. At capacity the latest sample waits
-without a new reader call or sampling timeout. One string-only warning per
-saturation episode names the held count. Settlement resumes only a queued
-capacity-deferred sample; it does not revive an exhausted retry cycle, which
-requires another discovery. Capacity wait has no finite bound if reads stay held.
+Observation stop is reusable; termination is permanent. The awaited sample
+propagates cancellation to discovery so a shutdown cannot continue into a
+fallback row, saved-profile refresh or scan scheduling. Discovery also owns
+its terminal abort signal, queued callers, scan refreshes, backoff waits and
+unavailable-device retries. The composition root injects observation and
+discovery termination into the graph-free shutdown helper. Observation,
+discovery and scan timers remain unreferenced and explicitly cancellable.
 
-Lost observations resample the
-current registry with a fresh generation and invalidate each row first, after
-250 ms, then 1 s, then 4 s, with at most three consecutive retries.
-An incomplete/inconsistent bracket still publishes uncertainty. A current
-sampled row with no declared degraded reason and no coherent projectable token
-is a loss with reason `incomplete`, so it retries instead of being stranded.
-A row declared degraded/limited by its own contract does not retry solely for
-absent proof. Coherent publication and new discovery reset the retry budget.
-Discovery cancels pending
-observation work before awaiting NetworkManager, and an absent device listing
-still queues the retained registry rows.
-
-Explicit `stop()` and `terminate()` cancel without a warning or retry.
-`stop()` remains reusable; `terminate()` permanently rejects enqueue, starts
-and retry work. Process SIGTERM/SIGINT injects `terminate()` through
-`BackendShutdownDeps` at the main composition root, including when an older
-discovery is still awaiting its listing. The shutdown helper has no Wi-Fi or
-application bootstrap import. Wi-Fi-owned test setup alone reopens the singleton.
-Every observation-owned start, deadline, retry and queued-continuation timer is
-unreferenced; explicit cancellation still clears timers, but they cannot retain
-an otherwise finished process.
-
-After a publication, a changed wire-projected token on any current row sends
-exactly one additional local Wi-Fi status frame through a callback installed
-beside `broadcastWifiState`. No projected token change means no frame.
-`broadcastMsgLocal` keeps this notification off the cloud relay; the remote
-projection, registry keys, token format, admission and wire fields are unchanged.
-The local callback never records global hotspot membership delivery. Only the
-normal global `broadcastWifiState` path acknowledges the roster, preserving
-one global/control-channel notification when a poll overlaps token publication.
-
-Both integration boundaries contain shadow exceptions. Read failures, timeouts
-and unexpected shadow exceptions increment `getWifiRadioShadowFailures()`.
-Each lost sample also emits one string-only `logger.warn`:
-`Wi-Fi identity sample lost (<reason>) for <ifnames>; retry <n>/3`
-for the three retries, and `; no retries left` for the final exhausted loss.
-An initial sample plus three retries that all time out therefore produces four
-warnings and no pending timer. No status object or credential enters these
-warnings.
-
-Coverage: `wifi-token-liveness.test.ts`, `wifi-radio-identity.test.ts`,
-`wifi-discovery-single-flight.test.ts` and `wifi-radio-equivalence.test.ts`.
-`process-lifetime.test.ts` covers helper-only subprocess imports without the
-application preload or setup file, injected termination, and native timer
-reference state/natural exit with a never-settling reader.
-Fake-clock liveness tests reproduce the boot-time virtual-interface event,
-failed listing, recovery after timeout, retry exhaustion, local-only token
-arrival, per-row rotation, exception-safe publication fencing, credential-free
-warnings, rejection/supersession recovery and exhaustion, incomplete brackets,
-budget resets and already-fired retry cancellation. `wifi-radio-read-liveness`
-regressions cover the four-operation physical bound, late completion fences,
-settlement recovery and terminal pending-listing shutdown; the roster publication
-regression uses real authenticated local and injected control-channel delivery.
-After removing only the optional incarnation
-field from Wi-Fi rows, nine recorded main fixture families cover
-the resolver tiers, unavailable/missing-operational rows, duplicates, rename and
-replug, public prepare/start results, credentials and broadcast count/order.
-The overlapping-call fixture now records one initial read and one queued read,
-results `false,false,false`, one broadcast and the final unavailable row;
-the error fixture preserves the first run's error and shares the queued result.
-`wifi-discovery-bounded.test.ts` covers sequential registry equivalence,
-freshness, rejection recovery, the production confirmation poll and a burst of
-100 callers with no timer left pending. An extra real broadcast is a permanent
-negative control. Fault tests use fake clocks and capability/command readers to cover
-hanging, slow and rejected sampling plus both integration boundaries.
-The authorized A-only raw-byte assertion now compares all legacy bytes after
-removing only incarnation, with added wire-value rotation and ordinary-status
-stability assertions. The owner-authorized L0 changes keep strict legacy-log
-equality while separately requiring the exact lost-sample warning for hung
-and rejected readers. The hang case counts exactly two reads, including the
-fresh discovery after timeout, and still proves releasing the old read adds
-no third call. The slow case and all other assertions remain unchanged.
-Locator-only A tests were
-removed with the explicitly deferred feature. Owner hardware gates G1-G5 are
-unrun and are not claimed;
-host evidence does not qualify physical radios or NetworkManager activation.
+Coverage includes `wifi-identity-keys.test.ts` (unsafe cache rejection,
+per-phy uniqueness, separate same-phy limited rows and every equivalence fixture),
+`wifi-radio-read-liveness.test.ts` (the exact sample deadline/retry,
+local token delivery and terminal cancellation),
+`wifi-incarnation-publication.test.ts` (all eight replacement/proof cases on
+all four status surfaces), the unchanged B1 bound and shutdown assertions,
+and L0 retry/physical-read/native process-lifetime tests.
+`wifi-radio-equivalence.test.ts` preserves the recorded verified bytes and
+checks the four authorized limited fixture deltas without regenerating the
+golden file. Its three observational mutation controls still reject the same
+id, registry-key and id-map writes.
 
 The [additive protocol contract](../../../../docs/WIFI-INCARNATION-PROTOCOL.md)
-defines token validation, mock rebind control, byte changes, RPC output parsing,
-remote stripping and the workspace package boundary. No frontend uses the token
-for behavior in this step.
+continues to define token shape, frame correlation, remote stripping and the
+shared package boundary. This host-tested mechanism does not qualify physical
+radios or NetworkManager activation. The single-unverifiable-radio boot-restore
+exception and typed limited-mode handling remain outside this step.
 
 ### Chosen mode and boot restore [EXISTS; host and mock-browser tested]
 

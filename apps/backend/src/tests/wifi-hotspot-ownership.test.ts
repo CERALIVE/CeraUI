@@ -60,11 +60,8 @@ import {
 	stopWifiUpdateLoopForTest,
 	wifiUpdateDevices,
 } from "../modules/wifi/wifi-interfaces.ts";
-import {
-	resetWifiPermanentMacCache,
-	setPermanentMacReaderForTest,
-} from "../modules/wifi/wifi-permanent-mac.ts";
 import { wifiRadioObservation } from "../modules/wifi/wifi-radio-observation.ts";
+import { fakeShadowSysfs } from "./helpers/wifi-radio-equivalence-shadow.ts";
 import {
 	isolateWifiRegistry,
 	restoreWifiRegistry,
@@ -85,6 +82,7 @@ let scratch: string | undefined;
 let afterWrite: (() => void) | undefined;
 let beforeWrite: ((args: readonly string[]) => Promise<void>) | undefined;
 let unreadableSettings = false;
+let restoreShadow: () => Promise<void>;
 
 function profile(mac = "", ifname = "wlan0"): Record<string, string> {
 	return {
@@ -154,12 +152,11 @@ function activationDeps(): HotspotActivationDeps {
 	};
 }
 
-beforeEach(() => {
+beforeEach(async () => {
 	inherited = isolateWifiRegistry();
 	resetHotspotCredentialsForTest();
 	resetWifiConnectionModeCache();
 	resetWifiInterfaceDiscoveryForTest();
-	resetWifiPermanentMacCache();
 	resetWifiCapabilitiesForTest();
 	onWifiChange(() => {});
 	setWifiState({});
@@ -176,7 +173,24 @@ beforeEach(() => {
 	beforeWrite = undefined;
 	unreadableSettings = false;
 	devices = "wlan0:wifi:disconnected:";
-	setPermanentMacReaderForTest(async () => B);
+	restoreShadow = await fakeShadowSysfs(() => [
+		{
+			ifname: "wlan0",
+			operational: B,
+			permanent: B,
+			ifindex: 3,
+			phy: 0,
+			state: "disconnected",
+		},
+		{
+			ifname: "clap-wlan0",
+			operational: B,
+			permanent: B,
+			ifindex: 4,
+			phy: 0,
+			state: "connected",
+		},
+	]);
 	setWifiCapabilityDepsForTest({
 		runIw: async () => "",
 		readPhyName: async () => undefined,
@@ -245,13 +259,12 @@ afterEach(async () => {
 	stopWifiUpdateLoopForTest();
 	wifiCancelScanRefresh();
 	wifiRadioObservation.stop();
+	await restoreShadow();
 	settlePending("wlan0", true);
 	restoreWifiRegistry(inherited);
 	resetHotspotCredentialsForTest();
 	resetWifiConnectionModeCache();
 	resetWifiInterfaceDiscoveryForTest();
-	resetWifiPermanentMacCache();
-	setPermanentMacReaderForTest(null);
 	resetWifiCapabilitiesForTest();
 	setWifiState({});
 	jest.useRealTimers();

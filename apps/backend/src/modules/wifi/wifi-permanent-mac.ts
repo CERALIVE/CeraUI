@@ -38,12 +38,10 @@
   and was verified byte-equal to NetworkManager's own D-Bus `PermHwAddress`
   property on the reference RK3588 board.
 
-  FALLBACK. A device with no `phy80211` node (or a non-Linux test host) resolves
-  to the caller-supplied current address — i.e. exactly the pre-fix behaviour, so
-  nothing regresses where the permanent address cannot be read.
+  An unreadable address stays unresolved. Only the coherent lifetime producer
+  may reuse a prior address, with the same ifindex, wiphy and phy path.
 */
 
-import { logger } from "../../helpers/logger.ts";
 import { ID_RE } from "../../helpers/run.ts";
 import type { MacAddress } from "../network/network-manager.ts";
 
@@ -94,72 +92,13 @@ export function setPermanentMacReaderForTest(
 	activeReader = reader ?? readPermanentMacFromSysfs;
 }
 
-/** Last successfully-read permanent address per interface name. */
-const permanentMacByIfname = new Map<string, MacAddress>();
-const permanentMacByOperationalMac = new Map<MacAddress, MacAddress>();
-/** Interfaces already warned about, so the fallback logs once, not per poll. */
-const fallbackWarned = new Set<string>();
-
 /**
- * Resolve the stable hardware identity of a WiFi adapter.
- *
- * Resolution order: the kernel's permanent address → the last permanent address
- * successfully read for this interface → the caller's current (possibly
- * randomized) address. The cached tier matters: a transient sysfs read failure
- * must not re-key the adapter registry onto a scan-time address for one poll.
+ * Read only the kernel permanent address. Discovery uses the bracketed
+ * WifiRadioIdentityProducer sample, never an ifname or operational-MAC cache.
  */
 export async function resolveWifiPermanentMac(
 	ifname: string,
-	currentMac: MacAddress,
-): Promise<MacAddress> {
-	const resolved = normalizeMacAddress(await activeReader(ifname));
-	if (resolved) {
-		if (permanentMacByIfname.get(ifname) !== resolved) {
-			permanentMacByIfname.set(ifname, resolved);
-			fallbackWarned.delete(ifname);
-		}
-		permanentMacByOperationalMac.set(currentMac.toLowerCase(), resolved);
-		return resolved;
-	}
-
-	const cached = permanentMacByIfname.get(ifname);
-	if (cached) return cached;
-	const renamed = permanentMacByOperationalMac.get(currentMac.toLowerCase());
-	if (renamed) {
-		permanentMacByIfname.set(ifname, renamed);
-		return renamed;
-	}
-
-	if (!fallbackWarned.has(ifname)) {
-		fallbackWarned.add(ifname);
-		logger.warn(
-			`Could not read the permanent MAC address of ${ifname}; falling back to its current address. Hotspot identity may change if NetworkManager randomizes it.`,
-		);
-	}
-	return currentMac.toLowerCase();
-}
-
-/** The last permanent address resolved for `ifname`, if any. */
-export function getWifiPermanentMacCached(
-	ifname: string,
-): MacAddress | undefined {
-	return permanentMacByIfname.get(ifname);
-}
-
-/** Drop cached entries for interfaces that are no longer present. */
-export function retainWifiPermanentMacs(ifnames: Iterable<string>): void {
-	const keep = new Set(ifnames);
-	for (const ifname of [...permanentMacByIfname.keys()]) {
-		if (!keep.has(ifname)) {
-			permanentMacByIfname.delete(ifname);
-			fallbackWarned.delete(ifname);
-		}
-	}
-}
-
-/** Test seam: clear all cached permanent addresses. */
-export function resetWifiPermanentMacCache(): void {
-	permanentMacByIfname.clear();
-	permanentMacByOperationalMac.clear();
-	fallbackWarned.clear();
+	_currentMac: MacAddress,
+): Promise<MacAddress | undefined> {
+	return normalizeMacAddress(await activeReader(ifname));
 }

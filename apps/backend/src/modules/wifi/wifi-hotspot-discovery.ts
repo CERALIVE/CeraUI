@@ -46,6 +46,7 @@ import {
 	type WifiHotspot,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
+import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 
 const hotspotProfilePins = new WeakMap<
 	WifiHotspot,
@@ -138,6 +139,7 @@ export async function handleHotspotConn(
 	uuid: string,
 	options: HotspotAdoptionOptions = {},
 ): Promise<void> {
+	if (macAddress_ !== undefined && !normalizeMacAddress(macAddress_)) return;
 	if (deletingHotspotConns.has(uuid)) return;
 	const epoch = hotspotDeletionEpoch;
 	const fields = await nmConnGetFields(uuid, [
@@ -310,6 +312,7 @@ export function canAdoptHotspotProfile(
 	uuid: string | undefined,
 	profileMac: string,
 ): boolean {
+	if (!normalizeMacAddress(macAddress)) return false;
 	const pin = profileMac.toLowerCase();
 	return (
 		(!uuid || !deletingHotspotConns.has(uuid)) &&
