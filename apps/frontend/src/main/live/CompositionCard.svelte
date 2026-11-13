@@ -3,15 +3,23 @@
   `rgacompositor` session mode.
 
   VISIBILITY IS THE PARENT'S. This component renders whenever it is mounted;
-  `IdleCockpit` mounts it only while the engine's `get-capabilities.features`
-  array carries the `composition` token, so an engine that cannot compose leaves
-  ZERO nodes in the DOM rather than a disabled card — there is no capability
-  being withheld to explain, so a greyed control would imply one that exists.
+  `IdleCockpit` and `LiveCockpit` mount it only while the engine's
+  `get-capabilities.features` array carries the `composition` token, so an
+  engine that cannot compose leaves ZERO nodes in the DOM rather than a disabled
+  card — there is no capability being withheld to explain, so a greyed control
+  would imply one that exists.
 
   It owns its `streaming.setConfig` write (the `SourceSection` precedent) and
   nothing else: the secondary picker is the SAME `sources.sources` list the
   source card renders, filtered to `origin === 'capture'` and to rows that are
   not already the primary.
+
+  LIVE, the layout, the opacity and the second input change the running stream:
+  the write carries `apply_now: true`, so the backend runs it as an apply-now
+  transaction and keeps it only when the engine reports it applied. Until then
+  the new value shows as the choice; a refused change puts the previous one
+  back and says why. Turning composition on or off still waits for the next
+  start, so the enable switch alone stays locked.
 -->
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
@@ -22,6 +30,7 @@ import type {
 	ConfigMessage,
 	SourcesMessage,
 	StartFailureCaptureCause,
+	StreamingSetConfigInput,
 } from '@ceraui/rpc/schemas';
 import {
 	COMPOSITION_ALPHA_MAX,
@@ -29,7 +38,7 @@ import {
 	COMPOSITION_LAYOUT_DEFAULT,
 	COMPOSITION_LAYOUTS,
 } from '@ceraui/rpc/schemas';
-import { Activity, PictureInPicture2 } from '@lucide/svelte';
+import { Activity, Loader2, PictureInPicture2 } from '@lucide/svelte';
 
 import * as Card from '$lib/components/ui/card';
 import { Label } from '$lib/components/ui/label';
@@ -37,6 +46,9 @@ import * as Select from '$lib/components/ui/select';
 import { Slider } from '$lib/components/ui/slider';
 import { Switch } from '$lib/components/ui/switch';
 import { rpc } from '$lib/rpc';
+import { getConfigChange } from '$lib/rpc/subscriptions.svelte';
+import { configChangeReport } from '$lib/streaming/configChangeCopy';
+import { isConfigChangeInFlight } from '$lib/streaming/configChangePhase';
 
 interface Props {
 	sources: SourcesMessage | undefined;
@@ -62,6 +74,16 @@ const COMPOSITION_CAUSES = new Set<StartFailureCaptureCause>([
 
 const persisted = $derived(config?.composition);
 
+// A live change the engine has not answered yet. It shows as the choice; once
+// the answer lands it is dropped, so an applied change reads from the config
+// echo and a refused one falls back to the persisted, still-running values.
+let pending = $state<CompositionConfig | undefined>(undefined);
+let liveRefusal = $state<string | undefined>(undefined);
+// Live, a drag only previews the opacity; the release commits it as one change.
+let draggedAlpha = $state<number | undefined>(undefined);
+
+const shown = $derived(pending ?? persisted);
+
 // A secondary leg must be a real capture device that is present and is not the
 // primary — a coarse/virtual/network row has no second node to open.
 const candidates = $derived(
@@ -75,11 +97,11 @@ const candidates = $derived(
 );
 
 const enabled = $derived(persisted !== undefined);
-const secondaryId = $derived(persisted?.secondary_input_id);
+const secondaryId = $derived(shown?.secondary_input_id);
 const layout = $derived<CompositionLayout>(
-	persisted?.layout ?? COMPOSITION_LAYOUT_DEFAULT,
+	shown?.layout ?? COMPOSITION_LAYOUT_DEFAULT,
 );
-const alpha = $derived(persisted?.alpha ?? DEFAULT_ALPHA);
+const alpha = $derived(shown?.alpha ?? DEFAULT_ALPHA);
 
 const secondaryName = $derived(
 	candidates.find((s) => s.id === secondaryId)?.displayName ?? secondaryId,
@@ -91,19 +113,25 @@ const refusal = $derived(
 		: undefined,
 );
 
-// The composition is baked into the engine graph at build time, so it can only
-// ever take effect at the next start — the controls lock while live rather than
-// pretending a change applies now.
+// Adding or removing the second leg rebuilds the engine graph, so turning
+// composition on or off only takes effect at the next start: the enable switch
+// locks while live. The layout, the opacity and the second input do not.
 const locked = $derived(isStreaming);
 
 let saving = $state(false);
+// Any apply-now change in flight, this card's or another surface's, holds the
+// controls: the engine runs one change at a time.
+const applying = $derived(
+	isStreaming && isConfigChangeInFlight(getConfigChange()),
+);
+const busy = $derived(saving || applying);
 
 function layoutLabel(value: CompositionLayout): string {
 	return resolveMessageKey(`live.composition.layoutName.${value}`);
 }
 
 async function write(next: CompositionConfig | null): Promise<void> {
-	if (locked || saving) return;
+	if (saving) return;
 	saving = true;
 	try {
 		await rpc.streaming.setConfig({ composition: next });
@@ -112,7 +140,32 @@ async function write(next: CompositionConfig | null): Promise<void> {
 	}
 }
 
+async function applyLive(next: CompositionConfig): Promise<void> {
+	if (busy) return;
+	saving = true;
+	pending = next;
+	liveRefusal = undefined;
+	// The encoder save's shape (`buildEncoderSetConfig`): the apply-now
+	// directive rides the setConfig input without being a config field.
+	const input: StreamingSetConfigInput = { composition: next, apply_now: true };
+	try {
+		const result = await rpc.streaming.setConfig(input);
+		const change = result.configChange;
+		if (change !== undefined && change.result !== 'applied') {
+			liveRefusal = configChangeReport(change, m).message;
+		} else if (!result.success) {
+			liveRefusal = m['notifications.saveFailed']();
+		}
+	} catch {
+		liveRefusal = m['notifications.saveFailed']();
+	} finally {
+		pending = undefined;
+		saving = false;
+	}
+}
+
 function toggle(on: boolean): void {
+	if (locked) return;
 	if (!on) {
 		void write(null);
 		return;
@@ -124,12 +177,20 @@ function toggle(on: boolean): void {
 
 function patch(fields: Partial<CompositionConfig>): void {
 	if (secondaryId === undefined) return;
-	void write({
-		secondary_input_id: secondaryId,
-		layout,
-		alpha,
-		...fields,
-	});
+	const next = { secondary_input_id: secondaryId, layout, alpha, ...fields };
+	if (isStreaming) void applyLive(next);
+	else void write(next);
+}
+
+function previewAlpha(value: number): void {
+	if (isStreaming) draggedAlpha = value;
+	else patch({ alpha: value });
+}
+
+function commitAlpha(value: number): void {
+	if (!isStreaming) return;
+	draggedAlpha = undefined;
+	patch({ alpha: value });
 }
 </script>
 
@@ -140,12 +201,28 @@ function patch(fields: Partial<CompositionConfig>): void {
 				<div class="flex items-center gap-1.5">
 					<PictureInPicture2 aria-hidden={true} class="text-primary size-4 shrink-0" />
 					<span class="text-sm font-semibold">{m["live.composition.title"]()}</span>
+					{#if isStreaming && busy}
+						<Loader2
+							aria-hidden={true}
+							class="text-status-info size-3.5 shrink-0 animate-spin motion-reduce:animate-none"
+						/>
+					{/if}
 				</div>
 				<p class="text-muted-foreground text-xs">
 					{m["live.composition.description"]()}
 				</p>
+				{#if locked}
+					<p
+						class="text-muted-foreground text-xs"
+						data-testid="composition-locked"
+						id="composition-locked"
+					>
+						{m["live.composition.lockedWhileStreaming"]()}
+					</p>
+				{/if}
 			</div>
 			<Switch
+				aria-describedby={locked ? 'composition-locked' : undefined}
 				aria-label={m["live.composition.enable"]()}
 				checked={enabled}
 				data-testid="composition-enable"
@@ -180,19 +257,13 @@ function patch(fields: Partial<CompositionConfig>): void {
 			</p>
 		{/if}
 
-		{#if locked}
-			<p class="text-muted-foreground text-xs" data-testid="composition-locked">
-				{m["live.composition.lockedWhileStreaming"]()}
-			</p>
-		{/if}
-
 		{#if enabled}
-			<div class="space-y-2" data-testid="composition-secondary">
+			<div aria-busy={busy} class="space-y-2" data-testid="composition-secondary">
 				<Label class="text-sm font-medium" for="composition-secondary-trigger">
 					{m["live.composition.secondary"]()}
 				</Label>
 				<Select.Root
-					disabled={locked || saving}
+					disabled={busy}
 					onValueChange={(value) => patch({ secondary_input_id: value })}
 					type="single"
 					value={secondaryId}
@@ -217,6 +288,7 @@ function patch(fields: Partial<CompositionConfig>): void {
 				<Label class="text-sm font-medium">{m["live.composition.layout"]()}</Label>
 				<div
 					class="bg-card/40 grid grid-cols-2 gap-1.5 rounded-lg border p-1 sm:grid-cols-3"
+					aria-busy={busy}
 					aria-label={m["live.composition.layout"]()}
 					data-testid="composition-layout-selector"
 					role="radiogroup"
@@ -232,7 +304,7 @@ function patch(fields: Partial<CompositionConfig>): void {
 								: 'text-muted-foreground hover:bg-primary/5'}"
 							data-active={active}
 							data-testid={`composition-layout-${option}`}
-							disabled={locked || saving}
+							disabled={busy}
 							onclick={() => patch({ layout: option })}
 							role="radio"
 						>
@@ -242,32 +314,55 @@ function patch(fields: Partial<CompositionConfig>): void {
 				</div>
 			</div>
 
-			<div
-				class="bg-muted/40 space-y-3 rounded-lg border p-4"
-				data-testid="composition-alpha-control"
-			>
-				<div class="flex items-center justify-between gap-2">
-					<Label class="text-sm font-medium" for="composition-alpha">
-						{m["live.composition.alpha"]()}
-					</Label>
-					<span
-						class="bg-primary/10 text-primary rounded-md px-2 py-1 font-mono text-xs"
-						data-testid="composition-alpha-value"
-					>
-						{alpha.toFixed(2)}
-					</span>
+			<!-- The opacity control and the live outcome region share one block, so
+			     the empty region never adds the card's section gap. -->
+			<div>
+				<div
+					aria-busy={busy}
+					class="bg-muted/40 space-y-3 rounded-lg border p-4"
+					data-testid="composition-alpha-control"
+				>
+					<div class="flex items-center justify-between gap-2">
+						<Label class="text-sm font-medium" for="composition-alpha">
+							{m["live.composition.alpha"]()}
+						</Label>
+						<span
+							class="bg-primary/10 text-primary rounded-md px-2 py-1 font-mono text-xs"
+							data-testid="composition-alpha-value"
+						>
+							{(draggedAlpha ?? alpha).toFixed(2)}
+						</span>
+					</div>
+					<Slider
+						id="composition-alpha"
+						aria-label={m["live.composition.alpha"]()}
+						disabled={busy}
+						max={COMPOSITION_ALPHA_MAX}
+						min={COMPOSITION_ALPHA_MIN}
+						onValueChange={(value) => previewAlpha(value as number)}
+						onValueCommit={(value) => commitAlpha(value as number)}
+						step={ALPHA_STEP}
+						type="single"
+						value={alpha}
+					/>
 				</div>
-				<Slider
-					id="composition-alpha"
-					aria-label={m["live.composition.alpha"]()}
-					disabled={locked || saving}
-					max={COMPOSITION_ALPHA_MAX}
-					min={COMPOSITION_ALPHA_MIN}
-					onValueChange={(value) => patch({ alpha: value as number })}
-					step={ALPHA_STEP}
-					type="single"
-					value={alpha}
-				/>
+
+				<!-- The live outcome region is mounted, empty, for the whole session, so
+				     a refused change is announced the moment it lands; it sits below the
+				     controls so a late answer never moves what is under the operator's
+				     finger. -->
+				{#if isStreaming}
+					<div aria-live="assertive" role="alert">
+						{#if liveRefusal !== undefined}
+							<div
+								class="border-status-warning/50 bg-status-warning/10 mt-5 flex items-start gap-3 rounded-lg border p-3"
+							>
+								<Activity aria-hidden={true} class="text-status-warning mt-0.5 size-4 shrink-0" />
+								<p class="text-foreground min-w-0 text-xs">{liveRefusal}</p>
+							</div>
+						{/if}
+					</div>
+				{/if}
 			</div>
 		{/if}
 	</Card.Content>

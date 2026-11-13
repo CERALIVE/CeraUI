@@ -87,7 +87,7 @@ pending callback; cancellation does not alter that callback's promise lifecycle.
 | `main/dialogs/server/ServerIngestSlots.svelte:48` | `a11y/useSemanticElements` | Ingest cards contain formatted account labels and badges; native radio inputs cannot preserve that content model. |
 | `main/dialogs/updates/UpdateCredentialsRow.svelte:67` | `a11y/useSemanticElements` | This is a read-only credential summary, not a form fieldset; retain its named group and block layout. |
 | `main/layout/LayoutToastHost.svelte:30` | `nursery/useSvelteReactiveClasses` | The effect reads and writes this deduplication ledger; making it reactive would subscribe the effect to its own bookkeeping instead of only getActive(). |
-| `main/live/CompositionCard.svelte:226` | `a11y/useSemanticElements` | Layout choices use button click actions and explicit save/lock gates; native radios change their activation contract. |
+| `main/live/CompositionCard.svelte:298` | `a11y/useSemanticElements` | Layout choices use button click actions and explicit save/lock gates; native radios change their activation contract. |
 | `main/network/EthernetRoleSelector.svelte:98` | `a11y/useSemanticElements` | Role choices contain nested descriptions and dispatch staged button selections; native radios cannot preserve that content model. |
 | `main/network/HotspotActivationConfirm.svelte:137` | `a11y/useSemanticElements` | This warning and confirmation panel is a named action group; a fieldset introduces form-group sizing and an anonymous content box. |
 | `main/network/WifiModeSelector.svelte:156` | `a11y/useSemanticElements` | Mode choices contain pending and unavailable glyphs with gated button activation; native radios change the content and activation model. |
