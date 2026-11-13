@@ -20,7 +20,7 @@ physical Wi-Fi hardware**.
 `vm/run-vm.sh` runs the same harness in a disposable Debian 12 **generic**
 amd64 guest with its full kernel, NetworkManager, wpa_supplicant and hostapd.
 It requires Linux with readable/writable `/dev/kvm`, QEMU (`qemu-system-x86_64`
-and `qemu-img`), xorriso, OpenSSH, curl, coreutils, flock, tar, Git and Python
+and `qemu-img`), xorriso, OpenSSH, curl, coreutils, find, flock, tar, Git and Python
 with `os.pidfd_open`/`signal.pidfd_send_signal` support (Linux, Python 3.9+).
 `--repo` additionally requires the workstation's Bun 1.4.4 binary.
 No host module, Docker or administrator password is needed. This remains
@@ -40,6 +40,9 @@ bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh --radios 2 -- false
 The canonical state path is checked, including symlinks; repository state and
 paths under `/tmp` are rejected before any download or key creation. Paths
 containing commas are rejected because QEMU's drive syntax uses that delimiter.
+Pre-existing symlinks below the state root are rejected before permissions or
+files are changed, including `runs`, `images`, digest directories and image
+entries; they cannot redirect state into a checkout or `/tmp`.
 
 The first command must print `connected` and exit 0, the second prints at least
 4 interfaces, and the third returns the command's nonzero exit status. On the
@@ -75,6 +78,20 @@ steps. The guest initializes local Git metadata solely so the archived
 repository's install hooks can configure hooks; it does not invent a commit.
 The exported application SHA is printed separately. An install failure is an
 infrastructure failure, before the requested command runs.
+
+The command CWD also contains committed `apps/backend/setup.json` copied to
+`/repo/setup.json`: production `modules/setup.ts` parses that required image
+metadata relative to CWD at import time. `/repo/config.json` starts as a fresh
+`{}` for simulator-owned runtime settings. Optional relay, DNS and authentication
+caches may start absent; their loaders handle absence. Application logs and
+subsequent state writes stay in this disposable guest CWD. No workstation
+configuration, credentials or runtime state is copied. This metadata enables
+imports and does not qualify the guest as physical RK3588 hardware:
+
+```bash
+bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh --radios 2 --repo "$PWD" -- \
+  bun -e "await import('./apps/backend/src/modules/network/network-manager.ts'); console.log('import-ok')"
+```
 
 The image lives under `$TMPDIR/hwsim-vm/images/`, separate from scripts and
 per-run files. Each invocation fetches Debian's published `SHA512SUMS` over
@@ -117,6 +134,9 @@ seed, SSH key and partial downloads. `--keep` also cleans up when interrupted.
 Signals use a pidfd to close the identity-check-to-signal race. Cleanup traps
 are installed before resource creation; cancellation is deferred across child
 launch and ownership registration, including bounded command children.
+Initial registration requires the recorded PPID to equal the runner's PID.
+Cleanup ignores INT/TERM before disabling EXIT; cancellation at cleanup entry
+enters cleanup directly rather than aborting an active EXIT handler.
 SIGKILL or host power loss cannot execute shell traps.
 
 The Debian image cache is the only persistent VM artifact. A completed run
@@ -148,6 +168,26 @@ The unchanged `integration-test.sh` accepts any state output containing
 the parity receipt must contain **`GENERAL.STATE:100 (connected)`**. The VM
 qualification checks that numeric connected state; the integration script is
 not changed by this runner.
+
+### Stub-only self-test
+
+```bash
+bash apps/backend/test-harness/wifi-hwsim/vm/selftest.sh
+```
+
+This compact local regression test uses a whitelist PATH and verifies executable
+VM/network stubs before each case. It checks foreign-parent PID rejection,
+cleanup-entry TERM/INT and redirected state rejection. It never boots a VM or
+loads a host module and remains outside shared CI.
+
+### Later gates
+
+`replacement.ts`, `hybrid-target.ts` and `first-ap.ts` do not exist yet and must
+be committed before their reviewed gate head is qualified. Duplicate-address
+testing needs a working distinct-address creation control first. Require state
+100 **and the intended active profile/SSID** for association; the integration
+script's `connected` substring alone accepts `disconnected`. Establish positive
+controls before treating application refusal as a passing negative control.
 
 ---
 

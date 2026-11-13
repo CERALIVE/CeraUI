@@ -43,7 +43,15 @@ if [[ "$root" == /tmp || "$root" == /tmp/* ]] ||
 	die "state directory must be outside /tmp and every Git work tree"
 fi
 [[ "$root" != *,* ]] || die "state directory cannot contain a comma (QEMU drive syntax)"
-for tool in qemu-system-x86_64 qemu-img xorriso ssh ssh-keygen scp curl sha512sum python3 timeout flock tar git; do
+check_state_links() {
+	local link
+	if [[ -d "$root" ]]; then
+		link=$(find "$root" -type l -print -quit) || die "cannot inspect state directory"
+		[[ -z "$link" ]] || die "state directory must not contain symlinks: $link"
+	fi
+}
+check_state_links
+for tool in qemu-system-x86_64 qemu-img xorriso ssh ssh-keygen scp curl sha512sum python3 timeout flock tar git find; do
 	command -v "$tool" >/dev/null || die "required executable missing: $tool"
 done
 [[ -r /dev/kvm && -w /dev/kvm ]] || die "/dev/kvm must be readable and writable"
@@ -71,6 +79,7 @@ process_start() {
 	[[ -r /proc/$1/stat ]] || return 1
 	read -r stat <"/proc/$1/stat" || return 1
 	read -r -a fields <<<"${stat##*) }"
+	[[ "${fields[1]}" == "$$" ]] || return 1
 	printf '%s\n' "${fields[19]}"
 }
 owned_alive() {
@@ -123,7 +132,7 @@ stop_owned() {
 }
 honor_cancel() {
 	registering=0
-	if ((cancel)); then exit "$cancel_rc"; fi
+	if ((cancel)); then cleanup "$cancel_rc"; fi
 }
 
 # Run foreground work as a bounded, interruptible child; timeout owns its group.
@@ -143,9 +152,9 @@ run() {
 }
 
 cleanup() {
-	local rc=${1:-$?}
-	trap - EXIT
 	trap '' INT TERM
+	trap - EXIT
+	local rc=$1
 	set +e
 	cancel=0
 	registering=0
@@ -173,9 +182,9 @@ cleanup() {
 	echo "run-vm.sh: cleanup pid=${vm_pid:-none} removed=$run_dir exit=$rc"
 	exit "$rc"
 }
-trap 'cleanup' EXIT
-trap 'cancel=1 cancel_rc=130; if [[ $registering == 0 ]]; then exit "$cancel_rc"; fi' INT
-trap 'cancel=1 cancel_rc=143; if [[ $registering == 0 ]]; then exit "$cancel_rc"; fi' TERM
+trap 'cleanup "$?"' EXIT
+trap 'cancel=1 cancel_rc=130; if [[ $registering == 0 ]]; then cleanup "$cancel_rc"; fi' INT
+trap 'cancel=1 cancel_rc=143; if [[ $registering == 0 ]]; then cleanup "$cancel_rc"; fi' TERM
 mkdir -p "$root" "$root/images" "$root/runs"
 chmod 700 "$root" "$root/images" "$root/runs"
 registering=1
@@ -190,6 +199,7 @@ run 60 curl -q --fail --location --proto '=https' --proto-redir '=https' \
 digest=$(awk -v name="$image_name" '$2 == name {print $1}' "$run_dir/SHA512SUMS")
 [[ "$digest" =~ ^[a-f0-9]{128}$ ]] || die "invalid or missing image SHA512 in Debian's HTTPS SHA512SUMS"
 image="$root/images/$digest/$image_name"
+check_state_links
 mkdir -p "$(dirname "$image")"
 exec {image_lock}>"$root/images/download.lock"
 run 960 flock -x -w 950 "$image_lock"
@@ -294,6 +304,8 @@ tar -xf /root/harness.tar -C /harness
 if [[ -f /root/repo.tar ]]; then
 	mkdir /repo
 	tar -xf /root/repo.tar -C /repo
+	cp /repo/apps/backend/setup.json /repo/setup.json
+	printf '{}\n' >/repo/config.json
 	git init -q /repo
 	install -m 755 /root/bun /usr/local/bin/bun
 	bun --version
@@ -345,7 +357,7 @@ GUEST
 
 if [[ -n "$repo" ]] && ((install_deps)); then
 	run 920 ssh "${ssh_opts[@]}" root@127.0.0.1 \
-		'cd /repo && timeout -k 5 900 bun install --frozen-lockfile --linker=hoisted' ||
+		"cd /repo && timeout -k 5 900 bun install --frozen-lockfile --linker=hoisted; rc=\$?; printf \"run-vm.sh: guest_install_exit=%s\n\" \"\$rc\"; exit \"\$rc\"" ||
 		die "infrastructure failure: guest frozen dependency installation failed"
 fi
 rc=0
