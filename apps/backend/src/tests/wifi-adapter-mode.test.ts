@@ -579,22 +579,12 @@ describe("a failed transition rolls the persisted mode back", () => {
 });
 
 describe("boot reconciliation is idempotent and fail-soft", () => {
-	const noSleep = async () => {};
-
 	test("an adapter already in its stated mode is not touched", async () => {
 		persistWifiAdapterMode(MAC, "station");
 		const { deps, recorder } = makeDeps({ [MAC]: makeIface() });
 
-		await reconcileWifiAdapterModes(
-			deps,
-			() => ({ [MAC]: "station" }),
-			noSleep,
-		);
-		await reconcileWifiAdapterModes(
-			deps,
-			() => ({ [MAC]: "station" }),
-			noSleep,
-		);
+		await reconcileWifiAdapterModes(deps, () => ({ [MAC]: "station" }));
+		await reconcileWifiAdapterModes(deps, () => ({ [MAC]: "station" }));
 
 		expect(recorder.calls).toEqual([]);
 		expect(recorder.frames).toEqual([]);
@@ -605,7 +595,7 @@ describe("boot reconciliation is idempotent and fail-soft", () => {
 		const iface = makeIface({ supportsApStaConcurrency: true });
 		const { deps, recorder } = makeDeps({ [MAC]: iface });
 
-		await reconcileWifiAdapterModes(deps, () => ({ [MAC]: "hybrid" }), noSleep);
+		await reconcileWifiAdapterModes(deps, () => ({ [MAC]: "hybrid" }));
 
 		expect(recorder.calls).toEqual(["start:0"]);
 		expect(getPersistedWifiAdapterMode(MAC)).toBe("hybrid");
@@ -613,7 +603,7 @@ describe("boot reconciliation is idempotent and fail-soft", () => {
 
 	test("no stated preference reconciles nothing at all", async () => {
 		const { deps, recorder } = makeDeps({ [MAC]: makeIface() });
-		await reconcileWifiAdapterModes(deps, () => ({}), noSleep);
+		await reconcileWifiAdapterModes(deps, () => ({}));
 		expect(recorder.calls).toEqual([]);
 	});
 
@@ -621,11 +611,7 @@ describe("boot reconciliation is idempotent and fail-soft", () => {
 		persistWifiAdapterMode(SECOND_MAC, "hotspot");
 		const { deps, recorder } = makeDeps({ [MAC]: makeIface() });
 
-		await reconcileWifiAdapterModes(
-			deps,
-			() => ({ [SECOND_MAC]: "hotspot" }),
-			noSleep,
-		);
+		await reconcileWifiAdapterModes(deps, () => ({ [SECOND_MAC]: "hotspot" }));
 
 		expect(recorder.calls).toEqual([]);
 		expect(getPersistedWifiAdapterMode(SECOND_MAC)).toBe("hotspot");
@@ -638,7 +624,7 @@ describe("boot reconciliation is idempotent and fail-soft", () => {
 			{ readCapabilities: combo(undefined) },
 		);
 
-		await reconcileWifiAdapterModes(deps, () => ({ [MAC]: "hybrid" }), noSleep);
+		await reconcileWifiAdapterModes(deps, () => ({ [MAC]: "hybrid" }));
 
 		expect(recorder.calls).toEqual([]);
 		// A capability read that has not landed must not be read as a refusal that
@@ -658,7 +644,7 @@ describe("boot reconciliation is idempotent and fail-soft", () => {
 		);
 
 		await expect(
-			reconcileWifiAdapterModes(deps, () => ({ [MAC]: "hotspot" }), noSleep),
+			reconcileWifiAdapterModes(deps, () => ({ [MAC]: "hotspot" })),
 		).resolves.toBeUndefined();
 		expect(getPersistedWifiAdapterMode(MAC)).toBe("hotspot");
 	});
@@ -666,13 +652,9 @@ describe("boot reconciliation is idempotent and fail-soft", () => {
 	test("a throwing preference read never rejects either", async () => {
 		const { deps } = makeDeps({ [MAC]: makeIface() });
 		await expect(
-			reconcileWifiAdapterModes(
-				deps,
-				() => {
-					throw new Error("unreadable config");
-				},
-				noSleep,
-			),
+			reconcileWifiAdapterModes(deps, () => {
+				throw new Error("unreadable config");
+			}),
 		).resolves.toBeUndefined();
 	});
 });

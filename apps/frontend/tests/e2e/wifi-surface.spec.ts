@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import { wifiAdapterModeStatusSchema } from "@ceraui/rpc/schemas";
 
 import { expect, type Page, test } from "./fixtures/index.js";
 
-import { evidencePath, navigateTo } from "./helpers";
+import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers";
 
 /**
  * T9 — WiFi surface clobber regressions (ceraui-os-interaction-ux), @functional.
@@ -224,6 +225,28 @@ async function openWifiDialog(page: Page): Promise<void> {
 function dialog(page: Page) {
 	return page.getByRole("dialog", { name: DIALOG });
 }
+
+test("direct hotspot start remembers the desired mode in the selector", { tag: "@functional" }, async ({
+	page,
+	backendRpc,
+}) => {
+	expect(await backendRpc.call(["wifi", "hotspotStart"], { device: DEVICE_ID })).toEqual({
+		success: true,
+		accepted: true,
+	});
+	const modes = wifiAdapterModeStatusSchema.parse(
+		await backendRpc.call(["wifi", "getAdapterModes"]),
+	);
+	expect(modes[DEVICE_ID]?.desired).toBe("hotspot");
+	await page.goto("/");
+	await ensureAuthenticated(page);
+	await navigateTo(page, "network");
+	await page.getByTestId("open-wifi-mode").first().click();
+	await expect(page.getByTestId("wifi-mode-option-0-hotspot")).toHaveAttribute(
+		"aria-checked",
+		"true",
+	);
+});
 
 
 test.describe(

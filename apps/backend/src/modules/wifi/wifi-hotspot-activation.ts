@@ -15,6 +15,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import type { WifiAdapterMode } from "@ceraui/rpc/schemas";
 import { randomBase64 } from "../../helpers/crypto.ts";
 import { logger } from "../../helpers/logger.ts";
 import { setNetifDupIpSuppression } from "../network/network-interfaces.ts";
@@ -23,6 +24,7 @@ import {
 	nmConnSetFields,
 	nmHotspot,
 } from "../network/network-manager.ts";
+import { getIsStreaming } from "../streaming/streaming.ts";
 import { hotspotCredentialsStore } from "./hotspot-credentials.ts";
 import { getWifiState, setWifiState } from "./state/wifi-state.ts";
 import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
@@ -30,7 +32,15 @@ import {
 	wifiAdapterLockKey,
 	withWifiAdapterLock,
 } from "./wifi-adapter-lock.ts";
-import { getPersistedWifiAdapterMode } from "./wifi-adapter-mode.ts";
+import {
+	getPersistedWifiAdapterMode,
+	observedWifiAdapterMode,
+	recordWifiAdapterModeIntent,
+	resolveWifiAdapterModeIntentKey,
+	wifiAdapterModeCapability,
+	wifiAdapterModeRecorder,
+} from "./wifi-adapter-mode.ts";
+import { getWifiCapabilitiesForInterface } from "./wifi-capabilities.ts";
 import {
 	concurrentHotspotBindingFields,
 	ensureConcurrentApInterface,
@@ -68,6 +78,8 @@ import {
 
 /** Production defaults: real NetworkManager + broadcast + dup-IP suppression. */
 export const defaultHotspotDeps: HotspotActivationDeps = {
+	recordIntent: wifiAdapterModeRecorder,
+	readCapabilities: getWifiCapabilitiesForInterface,
 	nmConnect,
 	nmConnSetFields,
 	nmHotspot,
@@ -82,7 +94,8 @@ export const defaultHotspotDeps: HotspotActivationDeps = {
 	ensureConcurrentInterface: ensureConcurrentApInterface,
 	releaseConcurrentInterface: releaseConcurrentApInterface,
 	preferConcurrentAp: (macAddress) =>
-		getPersistedWifiAdapterMode(macAddress) !== "hotspot",
+		getPersistedWifiAdapterMode(resolveWifiAdapterModeIntentKey(macAddress)) !==
+		"hotspot",
 	publishOutcome: publishHotspotOutcome,
 	pollHotspotActive: async (iface) => {
 		// Re-poll authoritative NM device state, then check whether the active
@@ -357,21 +370,71 @@ export async function startHotspotForInterface(
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotActivationDeps = defaultHotspotDeps,
 ): Promise<HotspotStartResult> {
-	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
-		startHotspotLocked(macAddress, wifiInterface, deps),
+	const lock = await withWifiAdapterLock(
+		wifiAdapterLockKey(macAddress),
+		async () => {
+			let undo: (() => void) | undefined;
+			let succeeded = false;
+			try {
+				const result = await startHotspotLocked(
+					macAddress,
+					wifiInterface,
+					deps,
+					(target) => {
+						if (deps.recordIntent) {
+							undo = recordWifiAdapterModeIntent(
+								resolveWifiAdapterModeIntentKey(macAddress),
+								target,
+								deps.recordIntent,
+							);
+						}
+					},
+				);
+				succeeded = result.success;
+				return result;
+			} finally {
+				if (!succeeded) undo?.();
+			}
+		},
 	);
 	if (!lock.success) return { success: false, error: lock.error };
 	return lock.result;
 }
 
-async function startHotspotLocked(
+/** Internal delegate: the caller owns the adapter lock and its intent transaction. */
+export async function startHotspotLocked(
 	macAddress: string,
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotActivationDeps,
+	recordIntent?: (target: WifiAdapterMode) => void,
 ): Promise<HotspotStartResult> {
 	const ifname = wifiInterface.ifname;
 	const owned = hotspotOwnershipGuard(macAddress, wifiInterface);
 	if (!owned()) {
+		return { success: false, error: "activation-failed" };
+	}
+	const concurrency = deps.readCapabilities
+		? wifiAdapterModeCapability(wifiInterface, deps.readCapabilities)
+				.staApComboSupported
+		: wifiInterface.supportsApStaConcurrency;
+	const intent = getPersistedWifiAdapterMode(
+		resolveWifiAdapterModeIntentKey(macAddress),
+	);
+	const recordChosenMode = (mode: WifiAdapterMode): void => {
+		if (mode === "hybrid" || concurrency === false || intent === "hotspot") {
+			recordIntent?.(mode);
+		}
+	};
+	const useConcurrentAp =
+		concurrency === true && (deps.preferConcurrentAp?.(macAddress) ?? true);
+	if (
+		intent === "hybrid" &&
+		!useConcurrentAp &&
+		observedWifiAdapterMode(wifiInterface) !== "hybrid"
+	) {
+		logger.warn(
+			`wifi hotspot start: activation-failed on ${ifname}; hybrid capability is not proven`,
+		);
 		return { success: false, error: "activation-failed" };
 	}
 	if (
@@ -383,6 +446,7 @@ async function startHotspotLocked(
 	) {
 		// Already up: nothing is dispatched, so no confirmation will ever settle
 		// and this branch owes the terminal frame itself.
+		recordChosenMode(observedWifiAdapterMode(wifiInterface));
 		deps.publishOutcome?.("start", wifiInterface.id, { success: true });
 		return { success: true };
 	}
@@ -393,9 +457,13 @@ async function startHotspotLocked(
 	  was asked for. An adapter with no stated preference resolves to concurrency,
 	  which is the behaviour every capable radio had before the mode was selectable.
 	*/
-	const useConcurrentAp =
-		wifiInterface.supportsApStaConcurrency === true &&
-		(deps.preferConcurrentAp?.(macAddress) ?? true);
+	if (!useConcurrentAp && wifiInterface.conn && getIsStreaming()) {
+		logger.warn(
+			`wifi hotspot start: streaming keeps the station link on ${ifname}`,
+		);
+		return { success: false, error: "DEVICE_BUSY" };
+	}
+	recordChosenMode(useConcurrentAp ? "hybrid" : "hotspot");
 	const concurrentInterface = useConcurrentAp
 		? await deps.ensureConcurrentInterface?.(ifname)
 		: undefined;
@@ -413,6 +481,7 @@ async function startHotspotLocked(
 		? concurrentHotspotBindingFields(ifname)
 		: hotspotBindingFields(macAddress, wifiInterface.hotspot.security);
 	if (concurrentInterface) {
+		wifiInterface.supportsApStaConcurrency = true;
 		wifiInterface.concurrentHotspot = {
 			ifname: concurrentInterface.ifname,
 			activeConn: null,

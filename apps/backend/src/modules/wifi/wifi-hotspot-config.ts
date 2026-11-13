@@ -31,6 +31,12 @@ import {
 	wifiAdapterLockKey,
 	withWifiAdapterLock,
 } from "./wifi-adapter-lock.ts";
+import {
+	recordWifiAdapterModeIntent,
+	resolveWifiAdapterModeIntentKey,
+	type WifiAdapterModeRecorder,
+	wifiAdapterModeRecorder,
+} from "./wifi-adapter-mode.ts";
 import { getWifiCapabilitiesForInterface } from "./wifi-capabilities.ts";
 import {
 	type DerivedApChannel,
@@ -39,7 +45,10 @@ import {
 	nmSettingsForChannel,
 	type WifiChannel,
 } from "./wifi-channels.ts";
-import { releaseConcurrentApInterface } from "./wifi-concurrent-interface.ts";
+import {
+	concurrentApIfname,
+	releaseConcurrentApInterface,
+} from "./wifi-concurrent-interface.ts";
 import {
 	getWifiInterfaceByMacAddress,
 	wifiRescan,
@@ -111,20 +120,38 @@ async function resolveAndStop(
 	if (!wifiInterface) return { success: false, error: "no-device" };
 	if (!canHotspot(wifiInterface))
 		return { success: false, error: "unsupported" };
-	/*
-	  A radio already in station mode has nothing to take down. That is the
-	  operator's requested end state, so it is a SUCCESS — reporting it as a
-	  failure would make a double-tap, or a stop racing the confirmation poll,
-	  look broken on a device that is doing exactly what was asked.
-	*/
-	if (!isHotspotActive(wifiInterface) || !wifiInterface.hotspot.conn) {
-		return { success: true };
-	}
-
-	return stopHotspotForInterface(macAddress, wifiInterface, deps);
+	const lock = await withWifiAdapterLock(
+		wifiAdapterLockKey(macAddress),
+		async () => {
+			const undo = deps.recordIntent
+				? recordWifiAdapterModeIntent(
+						resolveWifiAdapterModeIntentKey(macAddress),
+						"station",
+						deps.recordIntent,
+					)
+				: undefined;
+			let succeeded = false;
+			try {
+				const result =
+					!isHotspotActive(wifiInterface) || !wifiInterface.hotspot.conn
+						? ({ success: true } as const)
+						: await stopHotspotForInterfaceLocked(
+								macAddress,
+								wifiInterface,
+								deps,
+							);
+				succeeded = result.success;
+				return result;
+			} finally {
+				if (!succeeded) undo?.();
+			}
+		},
+	);
+	return lock.success ? lock.result : { success: false, error: lock.error };
 }
 
 export type HotspotStopDeps = {
+	recordIntent?: WifiAdapterModeRecorder;
 	nmConnSetFields: typeof nmConnSetFields;
 	nmDisconnect: typeof nmDisconnect;
 	releaseConcurrentInterface: typeof releaseConcurrentApInterface;
@@ -136,6 +163,7 @@ export type HotspotStopDeps = {
 };
 
 export const defaultHotspotStopDeps: HotspotStopDeps = {
+	recordIntent: wifiAdapterModeRecorder,
 	nmConnSetFields,
 	nmDisconnect,
 	releaseConcurrentInterface: releaseConcurrentApInterface,
@@ -150,12 +178,21 @@ export async function stopHotspotForInterface(
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotStopDeps = defaultHotspotStopDeps,
 ): Promise<HotspotStopResult> {
-	settlePending(wifiInterface.ifname, false);
 	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
-		stopHotspotLocked(macAddress, wifiInterface, deps),
+		stopHotspotForInterfaceLocked(macAddress, wifiInterface, deps),
 	);
 	if (!lock.success) return { success: false, error: "DEVICE_BUSY" };
 	return lock.result;
+}
+
+/** Internal maintenance delegate; never records intent or reacquires the lock. */
+export async function stopHotspotForInterfaceLocked(
+	macAddress: string,
+	wifiInterface: WifiInterfaceWithHotspot,
+	deps: HotspotStopDeps,
+): Promise<HotspotStopResult> {
+	settlePending(wifiInterface.ifname, false);
+	return stopHotspotLocked(macAddress, wifiInterface, deps);
 }
 
 async function stopHotspotLocked(
@@ -169,7 +206,12 @@ async function stopHotspotLocked(
 	// Read BEFORE the teardown clears it: the dup-IP suppression release below has
 	// to pair with whichever interface took it on the way in, and a capable radio
 	// hosting an EXCLUSIVE hotspot has no virtual netdev at all.
-	const wasConcurrent = wifiInterface.concurrentHotspot !== undefined;
+	const concurrent = wifiInterface.concurrentHotspot;
+	const virtualIfname =
+		concurrent?.ifname ?? concurrentApIfname(wifiInterface.ifname);
+	const wasConcurrent = concurrent !== undefined;
+	const activeConn = wifiInterface.activeConn;
+	const activeMode = wifiInterface.activeMode;
 
 	wifiInterface.hotspot.transition = "deactivating";
 	deps.broadcastState();
@@ -179,13 +221,24 @@ async function stopHotspotLocked(
 
 	const disconnected = await deps.nmDisconnect(conn);
 	if (disconnected) {
-		if (wifiInterface.concurrentHotspot) {
-			const virtualIfname = wifiInterface.concurrentHotspot.ifname;
-			delete wifiInterface.concurrentHotspot;
-			await deps.releaseConcurrentInterface(virtualIfname);
-		} else {
+		const sameObservation =
+			wifiInterface.activeConn === activeConn &&
+			wifiInterface.activeMode === activeMode;
+		if (activeConn === conn && sameObservation) {
+			delete wifiInterface.activeConn;
+			delete wifiInterface.activeMode;
+		}
+		if (wifiInterface.conn === conn && sameObservation) {
 			wifiInterface.conn = null;
 			wifiInterface.available.clear();
+		}
+		const current = wifiInterface.concurrentHotspot;
+		if (
+			current?.ifname === virtualIfname &&
+			(current.activeConn === conn || current.activeConn === null)
+		) {
+			delete wifiInterface.concurrentHotspot;
+			await deps.releaseConcurrentInterface(virtualIfname);
 		}
 	}
 
