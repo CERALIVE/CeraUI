@@ -54,11 +54,17 @@ const DESIGN_PASS_DIR = path.resolve(
  * and this is its mechanism.
  */
 const REQUIRED_TESTIDS: readonly string[] = [
-	// IdleCockpit composition (the four blocks, in order)
+	// IdleCockpit composition (the four blocks, in order) and the regions of the
+	// Live screen contract they host
 	'idle-cockpit',
-	'source-section',
+	'program-desk',
 	'preview-disclosure',
+	'source-section',
+	'audio-card',
 	'stream-setup-chain',
+	'output-card',
+	'connections-card',
+	'live-bar',
 	'live-roadmap',
 	// SourceSection — header, selected-source line, capability cluster
 	'source-capabilities',
@@ -148,17 +154,22 @@ for (const condition of CONDITIONS) {
 					const root = document.querySelector('[data-testid="idle-cockpit"]');
 					if (root === null) throw new Error('idle-cockpit is not mounted');
 
-					const laidOut = [...root.children].filter(
-						(el) => el.getBoundingClientRect().height > 0,
-					);
+					// The four blocks by name: from 1024 px the desk and the cards
+					// stand in two column wrappers, so they are no longer all direct
+					// children of the root.
+					const laidOut = ['program-desk', 'source-section', 'stream-setup-chain', 'live-roadmap']
+						.map((id) => root.querySelector(`[data-testid="${id}"]`))
+						.filter((el): el is Element => el !== null && el.getBoundingClientRect().height > 0);
 					const describe = (el: Element): string =>
 						el.getAttribute('data-testid') ?? el.tagName.toLowerCase();
 
+					// A gap is a vertical step between two blocks of the SAME column.
 					const gaps: number[] = [];
 					for (let i = 1; i < laidOut.length; i += 1) {
 						const previous = laidOut[i - 1]?.getBoundingClientRect();
 						const current = laidOut[i]?.getBoundingClientRect();
 						if (previous === undefined || current === undefined) continue;
+						if (Math.round(previous.left) !== Math.round(current.left)) continue;
 						gaps.push(Math.round(current.top - previous.bottom));
 					}
 
@@ -234,8 +245,8 @@ for (const condition of CONDITIONS) {
 					geometry.blocks,
 					`${condition.name}: the idle cockpit must lay out its four blocks`,
 				).toEqual([
+					'program-desk',
 					'source-section',
-					'preview-disclosure',
 					'stream-setup-chain',
 					'live-roadmap',
 				]);
@@ -244,11 +255,11 @@ for (const condition of CONDITIONS) {
 					`${condition.name}: the four blocks must share ONE gap rhythm, measured ${geometry.gaps.join(' / ')}px`,
 				).toHaveLength(1);
 
-				// ── 6. Both disclosures stay collapsed by default ────────────────────
+				// ── 6. Only the preview opens by default, and only from 768 px ───────
 				expect(
 					geometry.openDetails,
 					`${condition.name}: a disclosure opened itself: ${geometry.openDetails.join(', ')}`,
-				).toEqual([]);
+				).toEqual(condition.viewport.width >= 768 ? ['preview-disclosure'] : []);
 			},
 		);
 	});

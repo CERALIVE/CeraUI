@@ -58,7 +58,11 @@ list, which already reflects this):
 
 - **`StreamSetupChain.svelte`** — ONE "Stream setup" card of THREE
   always-visible rows in signal order (Encoder → Destination → Network) — no
-  collapse state, no thin ready-bar; every row is rendered at all times. It is a
+  collapse state; every row is rendered at all times. Encoder + Destination form
+  the titled Output group (`output-card`), Network the Connections group
+  (`connections-card`), and Start sits in the `LiveBar` (`live-bar`, fixed to the
+  viewport bottom above the mobile dock) beside the first blocking reason or the
+  ready text — see [live-screen.md](live-screen.md). It is a
   presentation-only remap of the pure `deriveGoLiveReadiness()`
   (`apps/frontend/src/lib/streaming/go-live-readiness.ts`, four gates:
   source/network/destination/engine) — the verdict is consumed byte-unchanged and
@@ -73,14 +77,21 @@ list, which already reflects this):
   the implicit id into the Start payload WITHOUT writing config — the row only
   shows a "Change" affordance. It owns NO RPC and writes NO config itself; every
   action is a callback prop from `LiveView`.
-- **`IdleCockpit.svelte`** — pre-stream wrapper, source-first order:
-  `SourceSection` → `StreamSetupChain` (readiness rows + Start, mounted exactly
-  once) → a collapsed Preview `<details>` disclosure → a collapsed Roadmap
-  `<details>` disclosure (the relocated `TD-pip`/`TD-mode-fallback`/
-  `TD-embedded-audio` "coming soon" pills). Pure prop pass-through — no `$state`,
-  no RPC.
-- **`LiveCockpit.svelte`** — streaming wrapper: telemetry strip → bitrate
-  adjuster (the sole bitrate-hot-adjust owner while live) → `IngestStats` → Stop.
+- **`IdleCockpit.svelte`** — pre-stream wrapper, in the Live screen contract's
+  order ([live-screen.md](live-screen.md)): `ProgramDesk` (`program-desk`: the
+  Preview `<details>` disclosure, open by default from 768 px with the operator's
+  choice kept in `localStorage` `ceraui.live.previewOpen`, then `layout-controls`
+  while the engine advertises composition) → `SourceSection` (source tiles, then
+  `audio-card`) → `StreamSetupChain` (readiness rows + the Live bar with Start,
+  mounted exactly once) → a collapsed Roadmap `<details>` disclosure (the
+  relocated `TD-pip`/`TD-mode-fallback`/`TD-embedded-audio` "coming soon" pills).
+  From 1024 px the desk is the wider inline-start column. Pure prop pass-through
+  — no `$state`, no RPC.
+- **`LiveCockpit.svelte`** — streaming wrapper: the status banners →
+  `ProgramDesk` (preview → `LiveSummaryStrip` → `LiveSourceSwitch` →
+  `layout-controls`) → `telemetry-card` (telemetry strip + `IngestStats`) → the
+  Live bar with the bitrate adjuster (the sole bitrate-hot-adjust owner while
+  live) and Stop, or Done in the post-stream summary window.
 - **`LiveView.svelte`** switches between the two on the OPTIMISTIC streaming edge
   (`isStreaming || streamingOptimismState === 'starting'`) — never on the raw
   `is_streaming` flag alone, so Start never flickers back to idle mid-launch.

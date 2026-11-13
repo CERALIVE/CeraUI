@@ -1,7 +1,11 @@
-## LIVE SCREEN: CONTRACT AND DESIGN BRIEF [GREENFIELD]
+## LIVE SCREEN: CONTRACT AND DESIGN BRIEF [PARTIAL]
 
 This file is the target structure of the Live destination, written before any
-of it is built. It is not a description of the screen that ships now.
+of it was built.
+
+Status: change 1 below has landed — the regions, both orders, the Live bar, the
+two-column layout and the preview's open state exist as described. Changes 2-6
+are still to come.
 
 How to read it:
 
