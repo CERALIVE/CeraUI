@@ -1,6 +1,7 @@
 <script lang="ts" module>
 import type { Cpu } from '@lucide/svelte';
 
+import type { RouteOutcome } from '$lib/streaming/outputFormat';
 import type { StreamSection } from '$lib/streaming/streamingLockPolicy';
 
 export type ConfigRow = {
@@ -13,6 +14,8 @@ export type ConfigRow = {
 	// mobile, Pencil icon aria-hidden), so the trigger needs a testid to target.
 	testId: string;
 	warn?: boolean;
+	// The encoder row's route line, the same one the Encoder dialog shows.
+	route?: { outcome: RouteOutcome; text: string };
 };
 </script>
 

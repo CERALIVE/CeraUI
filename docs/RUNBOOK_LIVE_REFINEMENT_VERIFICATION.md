@@ -205,13 +205,13 @@ ssh root@<device-ip> "journalctl -u cerastream.service --since '-1 min' --no-pag
 
 ### Step 4 — Explicit H.264 selection round-trips
 
-**Action:** Stop the stream. Open the Encoder dialog, select the explicit
-**H.264** codec segment (`data-testid="encoder-codec-selector"` →
-`codec-h264`), save, and start the stream again on the same UVC source.
+**Action:** Stop the stream. Open the Encoder dialog, turn on **Choose the
+format** (`data-testid="encoder-format-manual"`), select **H.264**
+(`encoder-format-h264`), save, and start the stream again on the same UVC source.
 
 **Expected result:** The active-config value string now reads `... h264 ...`
 (not h265) — the explicit operator choice overrides the platform default.
-Stop and restart without touching the codec selector: it stays on H.264 (the
+Stop and restart without touching the format controls: it stays on H.264 (the
 selection persisted in config, not just the in-memory draft).
 
 **Evidence:**

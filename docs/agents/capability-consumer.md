@@ -19,14 +19,21 @@ hidden, so operators can see what the hardware doesn't support and why.
 one entry per codec (`codec`, maximum resolution/framerate, accepted pixel formats,
 and `gates."4k60"`). `@ceraui/rpc` imports the producer schemas and types directly;
 it does not redeclare `PlatformCaps`, `VideoSourceCap`, or `EncoderCapability`.
-The backend forwards the parsed ladder, and `EncoderDialog` derives codec
-availability from it. `PLATFORM_CAPS_BY_HARDWARE` remains only for a legacy or
+The backend forwards the parsed ladder. `PLATFORM_CAPS_BY_HARDWARE` remains only for a legacy or
 absent `encoders` snapshot and is pinned to the engine platform golden by a test.
 `producer-wire-type-shadow.test.ts` rejects any reintroduced local declaration.
 
 Schema 0.22.0 also retains optional `encoder.default_codec` through the producer
 parser, bitrate normalization, cache and RPC schema. The backend forwards optional
 `active_encode.route_reason` in status; absent fields remain absent for older engines.
+
+**The output format is automatic [EXISTS].** `EncoderDialog` shows no codec choice
+by default: it names `encoder.default_codec` ("Automatic (H.265)") or says just
+"Automatic". Only after the operator turns on "Choose the format" does it offer
+one radio per codec `intersectCaps` offers on the platform; an unoffered codec gets
+no control, not a disabled one. The route line and its known `route_reason` copy
+come from `apps/frontend/src/lib/streaming/outputFormat.ts`; an unknown reason
+token renders nothing. See [live-screen.md](live-screen.md).
 
 **`pipeline-sources.ts` per-board tables deleted [EXISTS].** The static per-board
 capability tables that previously lived in `pipeline-sources.ts` are removed. All

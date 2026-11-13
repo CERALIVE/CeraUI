@@ -169,10 +169,11 @@ test.describe("@visual Task 13 quick wins", () => {
 		await page.locator("#encoder-source").click();
 		await page.locator('[role="option"][data-value="hdmi"]').click();
 
-		// The codec section is now an always-visible segmented selector.
-		// Verify both H.264 and H.265 buttons are present and visible.
-		await expect(page.getByTestId("codec-h264")).toBeVisible();
-		await expect(page.getByTestId("codec-h265")).toBeVisible();
+		// The codec choices appear once the operator opts into choosing the format.
+		// Verify both H.264 and H.265 choices are present and visible.
+		await dialog.getByTestId("encoder-format-manual").click();
+		await expect(page.getByTestId("encoder-format-h264")).toBeVisible();
+		await expect(page.getByTestId("encoder-format-h265")).toBeVisible();
 
 		// An over-max entry snaps to the shared board ceiling (6000) and surfaces
 		// the clamp notice — the number input and slider can never diverge.

@@ -6,6 +6,8 @@ import { captureStatusSchema } from '@ceralive/cerastream/dist/capture-status.js
 import { sessionSwitchTargetSchema } from '@ceralive/cerastream/dist/session-switch.js';
 import { z } from 'zod';
 
+// The engine's known `active_encode.route_reason` tokens; the wire accepts future ones too.
+export { ROUTE_REASONS } from '@ceralive/cerastream/dist/constants.js';
 export type { SessionSwitchTarget } from '@ceralive/cerastream/dist/session-switch.js';
 
 import { modemListSchema } from './modems.schema';

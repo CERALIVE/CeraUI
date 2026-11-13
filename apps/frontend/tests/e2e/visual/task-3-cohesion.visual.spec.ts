@@ -163,11 +163,12 @@ test.describe("@visual task-3 cohesion primitives", () => {
 		await page.locator("#encoder-source").click();
 		await page.locator('[role="option"][data-value="hdmi"]').click();
 
-		// The codec section is now an always-visible segmented selector with three
-		// buttons: Auto, H.264, and H.265. Verify the selector and its buttons render.
-		await expect(dialog.getByTestId("encoder-codec-selector")).toBeVisible();
-		await expect(page.getByTestId("codec-h264")).toBeVisible();
-		await expect(page.getByTestId("codec-h265")).toBeVisible();
+		// The format is automatic; its codec choices appear once the operator opts
+		// into choosing the format. Verify the line, the switch and both choices.
+		await expect(dialog.getByTestId("encoder-format-automatic")).toBeVisible();
+		await dialog.getByTestId("encoder-format-manual").click();
+		await expect(page.getByTestId("encoder-format-h264")).toBeVisible();
+		await expect(page.getByTestId("encoder-format-h265")).toBeVisible();
 
 		await dialog.screenshot({ path: COHESION_EVIDENCE });
 	});

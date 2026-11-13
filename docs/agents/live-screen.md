@@ -3,10 +3,11 @@
 This file is the target structure of the Live destination, written before any
 of it was built.
 
-Status: changes 1 and 2 below have landed — the regions, both orders, the Live
-bar, the two-column layout and the preview's open state exist as described, and
-the layout, the opacity and the second input change while live. Changes 3-6 are
-still to come.
+Status: changes 1 to 3 below have landed — the regions, both orders, the Live
+bar, the two-column layout and the preview's open state exist as described, the
+layout, the opacity and the second input change while live, and the Encoder
+dialog has the automatic format, the adaptive switch and the route line.
+Changes 4-6 are still to come.
 
 How to read it:
 
@@ -173,6 +174,33 @@ one per config dialog, built from the Encoder, Audio and Server entry points
 pins the federation ABI version at 1
 (`apps/frontend/src/lib/federation/host-contract.test.ts:57`). These dialogs
 must keep that ABI.
+
+#### The Encoder dialog's output format [EXISTS]
+
+- The operator never picks an encode mode. The format line
+  (`encoder-format-automatic`) reads "Automatic (H.265)" with the codec the
+  engine names in `encoder.default_codec`, or just "Automatic" when it names
+  none.
+- The switch `encoder-format-manual` is on exactly when the saved config has a
+  `video_codec`. On, it reveals one radio per codec `intersectCaps` offers
+  (`encoder-format-<codec>`); a codec it does not offer has no control. Turning
+  it off saves `video_codec: null`, which returns the device to the automatic
+  format.
+- The switch `encoder-adaptive` ("Adapt bitrate to the network") is on for a
+  saved balancer of `adaptive`, `aimd` or none and writes `fixed` or `adaptive`
+  only when the operator flips it. It is disabled while live, beside the
+  "Applies on next start" text.
+- The route line `encoder-route` (`data-route` names the outcome) comes from
+  `resolveRoute` in `apps/frontend/src/lib/streaming/outputFormat.ts`: the
+  engine's active encode and its `route_reason` while live, the saved
+  passthrough, the adaptive switch and the active source before start. The
+  encoder row in `output-card` shows the same line.
+- A Save writes only the format keys the operator changed. `video_passthrough`
+  is never written by Save: a saved `force` or `off` shows the notice
+  `encoder-legacy-passthrough` with the button
+  `encoder-legacy-passthrough-reset`, which saves `video_passthrough: 'auto'` on
+  its own. The federated Encoder bundle reads the host's `balancer` and
+  `video_passthrough` and resets through `host.setConfig`; the ABI stays 1.
 
 ### 1. Job and audience
 
