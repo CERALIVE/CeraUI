@@ -9,6 +9,7 @@ import {
 	MEDIA_TYPE_H264,
 	MEDIA_TYPE_H265,
 	type OfferedSet,
+	type PlatformCaps,
 } from "@ceraui/rpc";
 import {
 	type ActiveEncode,
@@ -29,7 +30,6 @@ import { captureModeCodecs, sourceOffersCodec } from "./passthrough";
 export type BalancerAlgorithm = NonNullable<
 	StreamingSetConfigInput["balancer"]
 >;
-type PlatformCaps = CapabilitiesMessage["platform"];
 
 export type RouteOutcome =
 	| "untouched"
