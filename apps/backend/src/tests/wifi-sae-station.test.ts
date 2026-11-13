@@ -18,19 +18,23 @@
   is touched and every assertion is on argv.
 */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 
 import {
 	classifyWifiStationSecurity,
 	requiresSaeKeyMgmt,
 	wifiJoinRefusal,
 } from "@ceraui/rpc";
+import * as networkManager from "../modules/network/network-manager.ts";
 import type { MessageSocket } from "../modules/ui/message-socket.ts";
+import * as websocket from "../modules/ui/websocket-server.ts";
 import {
 	handleWifi,
 	type NmcliRun,
 	setWifiJoinNmcliRunner,
 	wifiDeleteFailedConns,
+	wifiSiblingConnections,
+	wifiUpdateSavedConns,
 } from "../modules/wifi/wifi.ts";
 import {
 	addWifiInterface,
@@ -74,14 +78,13 @@ function makeInterface(): WifiInterface {
 
 let calls: string[][] = [];
 let replies: NmcliRun[] = [];
-
-function socket(): MessageSocket {
-	return { send: () => {} };
-}
+let restoreTransportMocks = () => {};
 
 /** Drive the real `handleWifi` join path and return every nmcli argv it issued. */
 async function join(security: string | undefined): Promise<string[][]> {
-	handleWifi(socket(), {
+	const frames: string[] = [];
+	const conn: MessageSocket = { send: (frame) => frames.push(frame) };
+	handleWifi(conn, {
 		new: {
 			device: 0,
 			ssid: SSID,
@@ -89,27 +92,45 @@ async function join(security: string | undefined): Promise<string[][]> {
 			...(security !== undefined ? { security } : {}),
 		},
 	});
-	// `wifiNew` dispatches its work with `void`; let the microtask chain settle.
-	for (let i = 0; i < 20; i++) await Promise.resolve();
+	// Await the terminal frame so no post-activation read outlives its mocks.
+	await waitFor(() => frames.length > 0);
 	return calls;
 }
 
 beforeEach(() => {
 	calls = [];
 	replies = [];
+	const binding = spyOn(
+		networkManager,
+		"nmConnSetWifiMacAddress",
+	).mockResolvedValue(true);
+	const profiles = spyOn(networkManager, "nmConnsGet").mockResolvedValue([""]);
+	const scan = spyOn(networkManager, "nmScanResults").mockResolvedValue([""]);
+	const spawn = spyOn(Bun, "spawn").mockImplementation(() => {
+		throw new Error("Unexpected native command in injected station fixture");
+	});
+	restoreTransportMocks = () => {
+		try {
+			expect(spawn).not.toHaveBeenCalled();
+		} finally {
+			binding.mockRestore();
+			profiles.mockRestore();
+			scan.mockRestore();
+			spawn.mockRestore();
+		}
+	};
 	addWifiInterface(ADAPTER, makeInterface());
 	getWifiIdToMacAddress()[0] = ADAPTER;
 	setWifiJoinNmcliRunner(async (args) => {
 		calls.push(args);
-		// The default reply is a clean exit that names no uuid, so an argv-only
-		// test settles at the "nothing to activate" warn and never reaches the
-		// post-success tail (which would spawn a real nmcli).
+		// No-UUID replies exercise the existing ambiguous terminal path.
 		return replies.shift() ?? { stdout: "", stderr: "", exitCode: 0 };
 	});
 });
 
 afterEach(() => {
 	setWifiJoinNmcliRunner(null);
+	restoreTransportMocks();
 	delete getWifiIdToMacAddress()[0];
 	removeWifiInterface(ADAPTER);
 	// `bun test` is ONE process: a leaked adapter joins every later file's
@@ -234,13 +255,263 @@ describe("a SAE-only network is BUILT with key-mgmt sae", () => {
 			{ send: (message: string) => sent.push(JSON.parse(message)) },
 			{ new: { device: 0, ssid: SSID, password: PASSWORD, security: "WPA3" } },
 		);
-		// The failure path awaits `wifiDeleteFailedConns()` before it answers, so
-		// this settles on a real timer rather than a microtask drain.
+		// Wait for the asynchronous attempt's terminal frame.
 		await waitFor(() => sent.length > 0);
 
 		expect(sent.at(-1)?.wifi?.new?.error).toBe("auth");
 	});
 });
+
+test.each([
+	["SAE", false],
+	["SAE", true],
+	["ambiguous", false],
+] as const)(
+	"%s join reconciles retained profiles after replying (existing=%p)",
+	async (mode, existing) => {
+		const oldUuid = "existing-profile";
+		const adapter = getWifiInterfacesByMacAddress()[ADAPTER];
+		if (!adapter) throw new Error("Missing test adapter");
+		if (existing) {
+			adapter.saved[SSID] = oldUuid;
+			adapter.savedAll[SSID] = [oldUuid];
+		}
+		const listing = Promise.withResolvers<string[] | undefined>();
+		const profiles = spyOn(networkManager, "nmConnsGet").mockReturnValue(
+			listing.promise,
+		);
+		const fields = spyOn(networkManager, "nmConnGetFields").mockResolvedValue([
+			"infrastructure",
+			SSID,
+			ADAPTER,
+		]);
+		const broadcast = spyOn(websocket, "broadcastMsg").mockImplementation(
+			() => {},
+		);
+		replies =
+			mode === "SAE"
+				? [
+						{ stdout: ADDED, stderr: "", exitCode: 0 },
+						{
+							stdout: "",
+							stderr: "Secrets were required, but not provided",
+							exitCode: 4,
+						},
+					]
+				: [{ stdout: "Unconfirmed", stderr: "", exitCode: 0 }];
+		try {
+			const frames: string[] = [];
+			handleWifi(
+				{ send: (frame) => frames.push(frame) },
+				{
+					new: {
+						device: 0,
+						ssid: SSID,
+						password: PASSWORD,
+						security: mode === "SAE" ? "WPA3" : "WPA2",
+					},
+				},
+			);
+			await waitFor(() => frames.length > 0);
+			expect(JSON.parse(frames[0] ?? "null").wifi.new).toEqual({
+				error: mode === "SAE" ? "auth" : "ambiguous",
+				device: 0,
+			});
+			expect(broadcast).not.toHaveBeenCalled();
+			listing.resolve([
+				...(existing ? [`${oldUuid}:802-11-wireless`] : []),
+				`${NEW_UUID}:802-11-wireless`,
+			]);
+			await waitFor(() => broadcast.mock.calls.length > 0);
+			expect(adapter.saved[SSID]).toBe(NEW_UUID);
+			expect(wifiSiblingConnections(NEW_UUID)).toEqual(
+				existing ? [NEW_UUID, oldUuid] : [NEW_UUID],
+			);
+			expect(broadcast.mock.calls[0]?.[0]).toBe("status");
+			expect(broadcast.mock.calls[0]?.[1]).toMatchObject({
+				wifi: { 0: { saved: { [SSID]: NEW_UUID } } },
+			});
+		} finally {
+			listing.resolve(undefined);
+			profiles.mockRestore();
+			fields.mockRestore();
+			broadcast.mockRestore();
+		}
+	},
+);
+
+test("a rejected retained-profile refresh cannot change or delay the refusal", async () => {
+	const listing = Promise.withResolvers<string[] | undefined>();
+	const profiles = spyOn(networkManager, "nmConnsGet").mockReturnValue(
+		listing.promise,
+	);
+	const broadcast = spyOn(websocket, "broadcastMsg").mockImplementation(
+		() => {},
+	);
+	replies = [
+		{ stdout: ADDED, stderr: "", exitCode: 0 },
+		{ stdout: "", stderr: "Activation failed", exitCode: 4 },
+	];
+	const adapter = getWifiInterfacesByMacAddress()[ADAPTER];
+	if (!adapter) throw new Error("Missing test adapter");
+	adapter.saved[SSID] = "existing-profile";
+	adapter.savedAll[SSID] = ["existing-profile"];
+	const frames: string[] = [];
+	try {
+		handleWifi(
+			{ send: (frame) => frames.push(frame) },
+			{
+				new: { device: 0, ssid: SSID, password: PASSWORD, security: "WPA3" },
+			},
+		);
+		await waitFor(() => frames.length > 0);
+		expect(JSON.parse(frames[0] ?? "null").wifi.new).toEqual({
+			error: "generic",
+			device: 0,
+		});
+		listing.reject(new Error("Profile transport unavailable"));
+		await waitFor(() => profiles.mock.calls.length === 3);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(broadcast).not.toHaveBeenCalled();
+		expect(frames).toHaveLength(1);
+		expect(adapter.saved[SSID]).toBe("existing-profile");
+		expect(adapter.savedAll[SSID]).toEqual(["existing-profile"]);
+	} finally {
+		listing.resolve(undefined);
+		profiles.mockRestore();
+		broadcast.mockRestore();
+	}
+});
+
+test.each(["missing", "throws"] as const)(
+	"a %s detail read preserves the complete cached snapshot",
+	async (failure) => {
+		const adapter = getWifiInterfacesByMacAddress()[ADAPTER];
+		if (!adapter) throw new Error("Missing test adapter");
+		adapter.saved[SSID] = "cached";
+		adapter.savedAll[SSID] = ["cached", "cached-sibling"];
+		const profiles = spyOn(networkManager, "nmConnsGet").mockResolvedValue([
+			`${NEW_UUID}:802-11-wireless`,
+			"unreadable:802-11-wireless",
+		]);
+		const fields = spyOn(networkManager, "nmConnGetFields").mockImplementation(
+			async (uuid) => {
+				if (uuid === NEW_UUID)
+					return ["infrastructure", SSID, ADAPTER] as never;
+				if (failure === "throws") throw new Error("Unavailable detail read");
+				return undefined;
+			},
+		);
+		try {
+			const publications: string[] = [];
+			await wifiUpdateSavedConns(undefined, () => {
+				publications.push("incomplete");
+			});
+			expect(publications).toEqual([]);
+			expect(adapter.saved).toEqual({ [SSID]: "cached" });
+			expect(adapter.savedAll).toEqual({
+				[SSID]: ["cached", "cached-sibling"],
+			});
+		} finally {
+			profiles.mockRestore();
+			fields.mockRestore();
+		}
+	},
+);
+
+test.each(["listing", "details"] as const)(
+	"a stale %s refresh cannot replace a newer complete snapshot",
+	async (delayed) => {
+		const oldListing = Promise.withResolvers<string[] | undefined>();
+		const oldDetails = Promise.withResolvers<undefined>();
+		const profiles = spyOn(networkManager, "nmConnsGet")
+			.mockImplementationOnce(async () =>
+				delayed === "listing" ? oldListing.promise : ["older:802-11-wireless"],
+			)
+			.mockResolvedValue([
+				"older:802-11-wireless",
+				`${NEW_UUID}:802-11-wireless`,
+			]);
+		let firstDetail = true;
+		const fields = spyOn(networkManager, "nmConnGetFields").mockImplementation(
+			async () => {
+				if (delayed === "details" && firstDetail) {
+					firstDetail = false;
+					await oldDetails.promise;
+				}
+				return ["infrastructure", SSID, ADAPTER] as never;
+			},
+		);
+		try {
+			const publications: string[] = [];
+			const older = wifiUpdateSavedConns(undefined, () => {
+				publications.push("older");
+			});
+			if (delayed === "details")
+				await waitFor(() => fields.mock.calls.length > 0);
+			await wifiUpdateSavedConns(undefined, () => {
+				publications.push("newer");
+			});
+			oldListing.resolve(["older:802-11-wireless"]);
+			oldDetails.resolve(undefined);
+			await older;
+			expect(publications).toEqual(["newer"]);
+			const adapter = getWifiInterfacesByMacAddress()[ADAPTER];
+			expect(adapter?.saved[SSID]).toBe(NEW_UUID);
+			expect(adapter?.savedAll[SSID]).toEqual(["older", NEW_UUID]);
+		} finally {
+			oldListing.resolve([]);
+			oldDetails.resolve(undefined);
+			profiles.mockRestore();
+			fields.mockRestore();
+		}
+	},
+);
+
+test.each([
+	[
+		"NM-auto generic failure",
+		"WPA2",
+		[{ stdout: "", stderr: "Activation failed", exitCode: 1 }],
+		"generic",
+	],
+	[
+		"NM-auto auth failure",
+		"WPA2",
+		[
+			{
+				stdout: "Secrets were required, but not provided",
+				stderr: "",
+				exitCode: 4,
+			},
+		],
+		"auth",
+	],
+	[
+		"SAE add failure",
+		"WPA3",
+		[{ stdout: "", stderr: "Add failed", exitCode: 1 }],
+		"generic",
+	],
+	[
+		"SAE unconfirmed add",
+		"WPA3",
+		[{ stdout: "Unconfirmed", stderr: "", exitCode: 0 }],
+		"generic",
+	],
+] satisfies [string, string, NmcliRun[], string][])(
+	"%s retains its existing refusal",
+	async (_name, security, scripted, error) => {
+		replies = scripted;
+		const sent: { wifi?: { new?: { error?: string; device?: number } } }[] = [];
+		handleWifi(
+			{ send: (message) => sent.push(JSON.parse(message)) },
+			{ new: { device: 0, ssid: SSID, password: PASSWORD, security } },
+		);
+		await waitFor(() => sent.length > 0);
+		expect(sent.at(-1)?.wifi?.new).toEqual({ error, device: 0 });
+	},
+);
 
 describe("everything else keeps the single-step path, unchanged", () => {
 	test.each([
@@ -290,20 +561,13 @@ test("adapter id 0 is a real adapter, not an absent one", async () => {
 	expect(await join("WPA2")).toHaveLength(1);
 });
 
-/*
-  The cleanup `runWifiNew` awaits before it can report a failed join.
-
-  `nmConnsGet` signals its own failure by resolving `undefined` rather than
-  throwing — which is exactly what a host with no `nmcli` on `$PATH` produces —
-  so the sweep must treat a non-list as "nothing to enumerate". It used to cast
-  the result to an array and iterate it, and the resulting
-  `undefined is not an object` escaped through the very failure path that owed
-  the operator a typed refusal.
-*/
+// Exercise the same cleanup entrypoint awaited by failed NEW joins.
 describe("wifiDeleteFailedConns", () => {
 	const listed = [
 		"keep-me:802-11-wireless:1712345678",
-		"never-activated:802-11-wireless:0",
+		"operator-staged:802-11-wireless:0",
+		"other-radio-pending:802-11-wireless:0",
+		"uncertain-attempt:802-11-wireless:0",
 		"a-modem:gsm:0",
 		"",
 	];
@@ -322,12 +586,13 @@ describe("wifiDeleteFailedConns", () => {
 		expect(deleted).toEqual([]);
 	});
 
-	test("a listable nmcli still deletes exactly the never-activated wifi profiles", async () => {
+	test("retains unowned zero-timestamp profiles without enumeration or deletion", async () => {
 		const deleted: string[] = [];
+		const enumerated: string[] = [];
 
 		await wifiDeleteFailedConns({
 			listConns: async (fields) => {
-				expect(fields).toBe("uuid,type,timestamp");
+				enumerated.push(fields);
 				return listed;
 			},
 			deleteConn: async (uuid) => {
@@ -336,7 +601,43 @@ describe("wifiDeleteFailedConns", () => {
 			},
 		});
 
-		expect(deleted).toEqual(["never-activated"]);
+		expect(deleted).toEqual([]);
+		expect(enumerated).toEqual([]);
+	});
+
+	test("overlapping failed joins cannot delete another attempt's pending profile", async () => {
+		const snapshot = Promise.withResolvers<string[]>();
+		const deleted: string[] = [];
+		let reads = 0;
+		const deps = {
+			listConns: async () => {
+				reads++;
+				return snapshot.promise;
+			},
+			deleteConn: async (uuid: string) => {
+				deleted.push(uuid);
+				return true;
+			},
+		};
+		const first = wifiDeleteFailedConns(deps);
+		const second = wifiDeleteFailedConns(deps);
+		snapshot.resolve(listed);
+		await Promise.all([first, second]);
+		expect(deleted).toEqual([]);
+		expect(reads).toBe(0);
+	});
+
+	test("unavailable cleanup transports cannot prevent retention from settling", async () => {
+		await expect(
+			wifiDeleteFailedConns({
+				listConns: async () => {
+					throw new Error("Unavailable list");
+				},
+				deleteConn: async () => {
+					throw new Error("Unavailable delete");
+				},
+			}),
+		).resolves.toBeUndefined();
 	});
 });
 
@@ -364,3 +665,72 @@ function argvFields(argv: string[]): Record<string, string> {
 	}
 	return fields;
 }
+
+test("retrying a retained profile updates its secret and activates the same UUID", async () => {
+	const iface = getWifiInterfacesByMacAddress()[ADAPTER];
+	if (!iface) throw new Error("missing fixture");
+	iface.saved[SSID] = "retained-uuid";
+	replies = [
+		{ stdout: "", stderr: "", exitCode: 0 },
+		{
+			stdout: "Connection successfully activated (D-Bus active path)",
+			stderr: "",
+			exitCode: 0,
+		},
+	];
+	const argv = await join("WPA2");
+	expect(argv).toEqual([
+		[
+			"connection",
+			"modify",
+			"uuid",
+			"retained-uuid",
+			"802-11-wireless-security.psk",
+			PASSWORD,
+		],
+		[
+			"-w",
+			"15",
+			"connection",
+			"up",
+			"uuid",
+			"retained-uuid",
+			"ifname",
+			"wlan0",
+		],
+	]);
+});
+
+test("a failed saved secret update never activates or deletes the profile", async () => {
+	const iface = getWifiInterfacesByMacAddress()[ADAPTER];
+	if (!iface) throw new Error("missing fixture");
+	iface.saved[SSID] = "retained-uuid";
+	replies = [{ stdout: "", stderr: "transport unavailable", exitCode: 1 }];
+	const argv = await join("WPA2");
+	expect(argv).toHaveLength(1);
+	expect(argv[0]?.slice(0, 4)).toEqual([
+		"connection",
+		"modify",
+		"uuid",
+		"retained-uuid",
+	]);
+});
+
+test("authentication refusal on stderr resolves the join as an auth error", async () => {
+	replies = [
+		{
+			stdout: "",
+			stderr: "Error: Secrets were required, but not provided.",
+			exitCode: 4,
+		},
+	];
+	const frames: string[] = [];
+	handleWifi(
+		{ send: (frame) => frames.push(frame) },
+		{
+			new: { device: 0, ssid: SSID, password: PASSWORD, security: "WPA2" },
+		},
+	);
+	await waitFor(() => frames.length > 0);
+	expect(JSON.parse(frames[0] ?? "{}").wifi.new.error).toBe("auth");
+});
