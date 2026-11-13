@@ -51,6 +51,7 @@ import {
 } from "./wifi-concurrent-interface.ts";
 import {
 	getWifiInterfaceByMacAddress,
+	getWifiInterfacesByMacAddress,
 	wifiRescan,
 } from "./wifi-connections.ts";
 import { captureWifiFrameIncarnation } from "./wifi-frame-binding.ts";
@@ -75,6 +76,8 @@ import {
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
 import { getMacAddressForWifiInterface } from "./wifi-interfaces.ts";
+import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
+import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
 // ─── hotspot config validation constants ──────────────────────────────────────
 
@@ -125,7 +128,12 @@ async function resolveAndStop(
 		async () => {
 			const undo = deps.recordIntent
 				? recordWifiAdapterModeIntent(
-						resolveWifiAdapterModeIntentKey(macAddress),
+						resolveWifiAdapterModeIntentKey(
+							macAddress,
+							undefined,
+							Object.values(getWifiInterfacesByMacAddress()).filter(canHotspot)
+								.length,
+						),
 						"station",
 						deps.recordIntent,
 					)
@@ -191,7 +199,6 @@ export async function stopHotspotForInterfaceLocked(
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotStopDeps,
 ): Promise<HotspotStopResult> {
-	settlePending(wifiInterface.ifname, false);
 	return stopHotspotLocked(macAddress, wifiInterface, deps);
 }
 
@@ -212,12 +219,17 @@ async function stopHotspotLocked(
 	const wasConcurrent = concurrent !== undefined;
 	const activeConn = wifiInterface.activeConn;
 	const activeMode = wifiInterface.activeMode;
+	settlePending(wifiInterface.ifname, false);
 
 	wifiInterface.hotspot.transition = "deactivating";
 	deps.broadcastState();
 	syncWifiStateCache(macAddress, wifiInterface);
 
-	await deps.nmConnSetFields(conn, { "connection.autoconnect": "no" });
+	if (
+		normalizeMacAddress(macAddress) &&
+		wifiInterface.degradedReason !== "permanent-mac-unresolved"
+	)
+		await deps.nmConnSetFields(conn, { "connection.autoconnect": "no" });
 
 	const disconnected = await deps.nmDisconnect(conn);
 	if (disconnected) {
@@ -225,6 +237,11 @@ async function stopHotspotLocked(
 			wifiInterface.activeConn === activeConn &&
 			wifiInterface.activeMode === activeMode;
 		if (activeConn === conn && sameObservation) {
+			transitionVirtualBinding(wifiInterface, {
+				kind: "parent",
+				connection: null,
+				mode: "unknown",
+			});
 			delete wifiInterface.activeConn;
 			delete wifiInterface.activeMode;
 		}
@@ -237,8 +254,9 @@ async function stopHotspotLocked(
 			current?.ifname === virtualIfname &&
 			(current.activeConn === conn || current.activeConn === null)
 		) {
-			delete wifiInterface.concurrentHotspot;
-			await deps.releaseConcurrentInterface(virtualIfname);
+			transitionVirtualBinding(wifiInterface, { kind: "retire" });
+			if (normalizeMacAddress(macAddress))
+				await deps.releaseConcurrentInterface(virtualIfname);
 		}
 	}
 
@@ -355,13 +373,13 @@ export async function wifiHotspotConfig(
 	  said. `unavailable` is one token for all four because they are one operator
 	  fact: this adapter is not currently a reconfigurable hotspot.
 	*/
-	const refuse = () => {
+	const refuse = (error = "unavailable") => {
 		conn.send(
 			buildMsg(
 				"wifi",
 				{
 					hotspot: {
-						config: { device: msg.device, error: "unavailable", ...binding },
+						config: { device: msg.device, error, ...binding },
 					},
 				},
 				senderId,
@@ -375,6 +393,11 @@ export async function wifiHotspotConfig(
 
 	const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
 	if (!wifiInterface) return refuse();
+	if (
+		!normalizeMacAddress(macAddress) ||
+		wifiInterface.degradedReason === "permanent-mac-unresolved"
+	)
+		return refuse("radio-unverified");
 	if (!canHotspot(wifiInterface)) return refuse();
 	// Make sure the interface is already in hotspot mode
 	if (!isHotspotActive(wifiInterface)) return refuse();

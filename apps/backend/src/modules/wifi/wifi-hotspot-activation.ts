@@ -45,6 +45,7 @@ import {
 	concurrentHotspotBindingFields,
 	ensureConcurrentApInterface,
 	releaseConcurrentApInterface,
+	releaseCreatedConcurrentApInterface,
 } from "./wifi-concurrent-interface.ts";
 import { getWifiInterfaceByMacAddress } from "./wifi-connections.ts";
 import {
@@ -76,6 +77,7 @@ import {
 	wifiUpdateDevices,
 } from "./wifi-interfaces.ts";
 import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
+import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
 /** Production defaults: real NetworkManager + broadcast + dup-IP suppression. */
 export const defaultHotspotDeps: HotspotActivationDeps = {
@@ -94,6 +96,7 @@ export const defaultHotspotDeps: HotspotActivationDeps = {
 	},
 	ensureConcurrentInterface: ensureConcurrentApInterface,
 	releaseConcurrentInterface: releaseConcurrentApInterface,
+	rollbackConcurrentInterface: releaseCreatedConcurrentApInterface,
 	preferConcurrentAp: (macAddress) =>
 		getPersistedWifiAdapterMode(resolveWifiAdapterModeIntentKey(macAddress)) !==
 		"hotspot",
@@ -216,7 +219,12 @@ export type HotspotPrepareResult =
 	| { success: true; name: string; password: string; firstTime?: true }
 	| {
 			success: false;
-			error: "DEVICE_BUSY" | "no-device" | "unsupported" | "activation-failed";
+			error:
+				| "DEVICE_BUSY"
+				| "no-device"
+				| "unsupported"
+				| "activation-failed"
+				| "radio-unverified";
 	  };
 
 /**
@@ -262,6 +270,11 @@ async function prepareHotspotLocked(
 	msg: { name?: string; password?: string },
 	deps: HotspotActivationDeps,
 ): Promise<HotspotPrepareResult> {
+	if (
+		!normalizeMacAddress(macAddress) ||
+		wifiInterface.degradedReason === "permanent-mac-unresolved"
+	)
+		return { success: false, error: "radio-unverified" };
 	const owned = hotspotOwnershipGuard(macAddress, wifiInterface);
 	const identity = await resolveHotspotIdentity(
 		macAddress,
@@ -410,6 +423,11 @@ export async function startHotspotLocked(
 	deps: HotspotActivationDeps,
 	recordIntent?: (target: WifiAdapterMode) => void,
 ): Promise<HotspotStartResult> {
+	if (
+		!normalizeMacAddress(macAddress) ||
+		wifiInterface.degradedReason === "permanent-mac-unresolved"
+	)
+		return { success: false, error: "radio-unverified" };
 	const ifname = wifiInterface.ifname;
 	const owned = hotspotOwnershipGuard(macAddress, wifiInterface);
 	if (!owned()) {
@@ -469,138 +487,153 @@ export async function startHotspotLocked(
 	const concurrentInterface = useConcurrentAp
 		? await deps.ensureConcurrentInterface?.(ifname)
 		: undefined;
-	if (!owned()) {
-		if (concurrentInterface?.created) {
-			void deps.releaseConcurrentInterface?.(concurrentInterface.ifname);
+	let acceptedAllocation = false;
+	let rollbackState: (() => HotspotStartResult) | undefined;
+	try {
+		if (!owned()) {
+			return { success: false, error: "activation-failed" };
 		}
-		return { success: false, error: "activation-failed" };
-	}
-	if (useConcurrentAp && concurrentInterface === undefined) {
-		return { success: false, error: "activation-failed" };
-	}
-	const activationIfname = concurrentInterface?.ifname ?? ifname;
-	const bindingFields = concurrentInterface
-		? concurrentHotspotBindingFields(ifname)
-		: hotspotBindingFields(macAddress, wifiInterface.hotspot.security);
-	if (concurrentInterface) {
-		wifiInterface.supportsApStaConcurrency = true;
-		wifiInterface.concurrentHotspot = {
-			ifname: concurrentInterface.ifname,
-			activeConn: null,
-		};
-	}
-
-	// Snapshot prior state for rollback. getWifiState() returns the live cache
-	// reference; syncing below swaps in a NEW object, so this stays the old one.
-	const priorCache = getWifiState();
-	const priorConn = wifiInterface.conn;
-
-	// Begin the transition: broadcast `activating` immediately (responsive UI),
-	// suppress dup-IP warnings for the window, but DO NOT flip mode yet.
-	wifiInterface.hotspot.transition = "activating";
-	if (!concurrentInterface) deps.setDupIpSuppression(ifname, true);
-	deps.broadcastState();
-	syncWifiStateCache(macAddress, wifiInterface); // still station (isHotspot false)
-
-	const rollback = (): HotspotStartResult => {
-		delete wifiInterface.hotspot.transition;
-		wifiInterface.conn = priorConn;
-		if (!concurrentInterface) deps.setDupIpSuppression(ifname, false);
-		// Restore the cached state so it is NEVER left in hotspot mode on failure.
-		setWifiState(priorCache);
-		if (concurrentInterface?.created) {
-			void deps.releaseConcurrentInterface?.(concurrentInterface.ifname);
+		if (useConcurrentAp && concurrentInterface === undefined) {
+			return { success: false, error: "activation-failed" };
 		}
-		delete wifiInterface.concurrentHotspot;
+		const activationIfname = concurrentInterface?.ifname ?? ifname;
+		const bindingFields = concurrentInterface
+			? concurrentHotspotBindingFields(ifname)
+			: hotspotBindingFields(macAddress, wifiInterface.hotspot.security);
+		if (concurrentInterface) {
+			wifiInterface.supportsApStaConcurrency = true;
+			transitionVirtualBinding(wifiInterface, {
+				kind: "pending",
+				ifname: concurrentInterface.ifname,
+			});
+		}
+
+		// Snapshot prior state for rollback. getWifiState() returns the live cache
+		// reference; syncing below swaps in a NEW object, so this stays the old one.
+		const priorCache = getWifiState();
+		const priorConn = wifiInterface.conn;
+
+		// Begin the transition: broadcast `activating` immediately (responsive UI),
+		// suppress dup-IP warnings for the window, but DO NOT flip mode yet.
+		wifiInterface.hotspot.transition = "activating";
+		if (!concurrentInterface) deps.setDupIpSuppression(ifname, true);
 		deps.broadcastState();
-		return { success: false, error: "activation-failed" };
-	};
+		syncWifiStateCache(macAddress, wifiInterface); // still station (isHotspot false)
 
-	// The SAME resolution `wifiHotspotPrepare` showed the operator, so the AP
-	// broadcasts exactly the credentials they acknowledged.
-	const identity = await resolveHotspotIdentity(
-		macAddress,
-		wifiInterface,
-		deps,
-	);
-	if (!identity || !owned(identity.conn, identity.profileMac))
-		return rollback();
-	let conn = identity.conn;
+		const rollback = (): HotspotStartResult => {
+			delete wifiInterface.hotspot.transition;
+			wifiInterface.conn = priorConn;
+			if (!concurrentInterface) deps.setDupIpSuppression(ifname, false);
+			// Restore the cached state so it is NEVER left in hotspot mode on failure.
+			setWifiState(priorCache);
+			transitionVirtualBinding(wifiInterface, { kind: "retire" });
+			deps.broadcastState();
+			return { success: false, error: "activation-failed" };
+		};
+		rollbackState = rollback;
 
-	// Cleanup is best-effort, runs off the critical path, and never fails a start.
-	const prune = (keepUuid: string) => {
-		void deps
-			.pruneHotspotConns(macAddress, keepUuid)
-			.catch((err) => logger.debug(`hotspot profile cleanup failed: ${err}`));
-	};
-
-	if (conn) {
-		if (!owned(conn, identity.profileMac)) return rollback();
-		const rebound = await deps.nmConnSetFields(conn, bindingFields);
-		if (!owned(conn, identity.profileMac)) return rollback();
-		prune(conn);
-		if (!(await deps.nmConnect(conn, HOTSPOT_UP_TO))) {
-			return rollback();
-		}
-		if (!owned(conn, identity.profileMac)) return rollback();
-		await deps.nmConnSetFields(conn, HOTSPOT_AUTOCONNECT_FIELDS);
-		if (!owned(conn, identity.profileMac)) return rollback();
-		rememberIdentity(
+		// The SAME resolution `wifiHotspotPrepare` showed the operator, so the AP
+		// broadcasts exactly the credentials they acknowledged.
+		const identity = await resolveHotspotIdentity(
 			macAddress,
 			wifiInterface,
 			deps,
-			conn,
-			identity.profileMac,
 		);
-		if (rebound)
-			rememberHotspotProfilePin(
-				wifiInterface.hotspot,
+		if (!identity || !owned(identity.conn, identity.profileMac))
+			return rollback();
+		let conn = identity.conn;
+
+		// Cleanup is best-effort, runs off the critical path, and never fails a start.
+		const prune = (keepUuid: string) => {
+			void deps
+				.pruneHotspotConns(macAddress, keepUuid)
+				.catch((err) => logger.debug(`hotspot profile cleanup failed: ${err}`));
+		};
+
+		if (conn) {
+			if (!owned(conn, identity.profileMac)) return rollback();
+			const rebound = await deps.nmConnSetFields(conn, bindingFields);
+			if (!owned(conn, identity.profileMac)) return rollback();
+			prune(conn);
+			if (!(await deps.nmConnect(conn, HOTSPOT_UP_TO))) {
+				return rollback();
+			}
+			if (!owned(conn, identity.profileMac)) return rollback();
+			await deps.nmConnSetFields(conn, HOTSPOT_AUTOCONNECT_FIELDS);
+			if (!owned(conn, identity.profileMac)) return rollback();
+			rememberIdentity(
+				macAddress,
+				wifiInterface,
+				deps,
 				conn,
-				bindingFields["802-11-wireless.mac-address"],
+				identity.profileMac,
 			);
-	} else {
-		// First hotspot this adapter has ever hosted, or its profile was deleted
-		// outside CeraUI: the identity resolved (and already persisted) above.
-		const { name, password } = identity;
-		deps.broadcastState();
-		syncWifiStateCache(macAddress, wifiInterface);
+			if (rebound)
+				rememberHotspotProfilePin(
+					wifiInterface.hotspot,
+					conn,
+					bindingFields["802-11-wireless.mac-address"],
+				);
+		} else {
+			// First hotspot this adapter has ever hosted, or its profile was deleted
+			// outside CeraUI: the identity resolved (and already persisted) above.
+			const { name, password } = identity;
+			deps.broadcastState();
+			syncWifiStateCache(macAddress, wifiInterface);
 
-		const uuid = await deps.nmHotspot(
-			activationIfname,
-			name,
-			password,
-			HOTSPOT_UP_TO,
-		);
-		if (!uuid || !owned(uuid)) {
-			return rollback();
+			const uuid = await deps.nmHotspot(
+				activationIfname,
+				name,
+				password,
+				HOTSPOT_UP_TO,
+			);
+			if (!uuid || !owned(uuid)) {
+				return rollback();
+			}
+
+			const rebound = await deps.nmConnSetFields(uuid, bindingFields);
+			if (!owned(uuid)) return rollback();
+			// The updated settings let the connection be recognised as our hotspot.
+			await deps.wifiUpdateSavedConns();
+			if (!owned(uuid)) return rollback();
+			prune(uuid);
+			// Restart the connection with the updated settings (needed to disable pmf).
+			if (!(await deps.nmConnect(uuid, HOTSPOT_UP_TO))) {
+				return rollback();
+			}
+			if (!owned(uuid)) return rollback();
+			await deps.nmConnSetFields(uuid, HOTSPOT_AUTOCONNECT_FIELDS);
+			if (!owned(uuid)) return rollback();
+			conn = uuid;
+			wifiInterface.hotspot.conn ??= uuid;
+			rememberIdentity(macAddress, wifiInterface, deps, uuid);
+			if (rebound)
+				rememberHotspotProfilePin(
+					wifiInterface.hotspot,
+					uuid,
+					bindingFields["802-11-wireless.mac-address"],
+				);
 		}
 
-		const rebound = await deps.nmConnSetFields(uuid, bindingFields);
-		if (!owned(uuid)) return rollback();
-		// The updated settings let the connection be recognised as our hotspot.
-		await deps.wifiUpdateSavedConns();
-		if (!owned(uuid)) return rollback();
-		prune(uuid);
-		// Restart the connection with the updated settings (needed to disable pmf).
-		if (!(await deps.nmConnect(uuid, HOTSPOT_UP_TO))) {
-			return rollback();
+		// NM activation issued successfully. The mode flip waits for confirmation —
+		// it does NOT block this call (so the UI shows `activating` meanwhile).
+		registerPendingConfirmation(macAddress, wifiInterface, deps);
+		acceptedAllocation = true;
+		return { success: true };
+	} catch (error) {
+		try {
+			rollbackState?.();
+		} catch (rollbackError) {
+			logger.warn("Wi-Fi hotspot activation state rollback failed", {
+				error: rollbackError instanceof Error ? rollbackError.name : "unknown",
+			});
 		}
-		if (!owned(uuid)) return rollback();
-		await deps.nmConnSetFields(uuid, HOTSPOT_AUTOCONNECT_FIELDS);
-		if (!owned(uuid)) return rollback();
-		conn = uuid;
-		wifiInterface.hotspot.conn ??= uuid;
-		rememberIdentity(macAddress, wifiInterface, deps, uuid);
-		if (rebound)
-			rememberHotspotProfilePin(
-				wifiInterface.hotspot,
-				uuid,
-				bindingFields["802-11-wireless.mac-address"],
-			);
+		throw error;
+	} finally {
+		if (!acceptedAllocation && concurrentInterface?.created) {
+			if (deps.rollbackConcurrentInterface)
+				await deps.rollbackConcurrentInterface(concurrentInterface);
+			else await deps.releaseConcurrentInterface?.(concurrentInterface.ifname);
+		}
 	}
-
-	// NM activation issued successfully. The mode flip waits for confirmation —
-	// it does NOT block this call (so the UI shows `activating` meanwhile).
-	registerPendingConfirmation(macAddress, wifiInterface, deps);
-	return { success: true };
 }

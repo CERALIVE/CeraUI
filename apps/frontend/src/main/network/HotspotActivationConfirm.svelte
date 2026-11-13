@@ -101,6 +101,10 @@ async function load() {
 			device: captured.device, incarnation: captured.incarnation,
 		});
 		if (!current(seq, captured)) return;
+		if (result.error === 'radio-unverified') {
+			phase = 'unverified';
+			return;
+		}
 		if (wifiRadioChanged(result)) {
 			refused = true;
 			phase = 'load-failed';
@@ -185,6 +189,11 @@ async function confirm() {
 				device: captured.device, incarnation: captured.incarnation, ...chosen,
 			});
 			if (!current(seq, captured)) return;
+			if (result.error === 'radio-unverified') {
+				phase = 'unverified';
+				acknowledged = false;
+				return;
+			}
 			if (wifiRadioChanged(result)) {
 				refused = true;
 				acknowledged = false;

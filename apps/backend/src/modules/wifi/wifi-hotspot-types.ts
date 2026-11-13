@@ -32,6 +32,7 @@ import {
 	hotspotSecurityFields,
 } from "./wifi-hotspot-security.ts";
 import type { BaseWifiInterface, WifiInterface } from "./wifi-interfaces.ts";
+import type { VirtualHotspotBinding } from "./wifi-virtual-binding.ts";
 
 export type WifiHotspotMessage = {
 	hotspot: {
@@ -91,10 +92,7 @@ export type WifiHotspot = {
 export type WifiInterfaceWithHotspot = BaseWifiInterface & {
 	hotspot: WifiHotspot;
 	supportsApStaConcurrency?: boolean;
-	concurrentHotspot?: {
-		ifname: string;
-		activeConn: string | null;
-	};
+	concurrentHotspot?: VirtualHotspotBinding;
 };
 
 /**
@@ -164,7 +162,12 @@ export type HotspotStartResult =
 	| { success: true }
 	| {
 			success: false;
-			error: "DEVICE_BUSY" | "no-device" | "unsupported" | "activation-failed";
+			error:
+				| "DEVICE_BUSY"
+				| "no-device"
+				| "unsupported"
+				| "activation-failed"
+				| "radio-unverified";
 	  };
 
 /**
@@ -210,6 +213,10 @@ export type HotspotActivationDeps = {
 		ifname: string,
 	) => Promise<{ ifname: string; created: boolean } | undefined>;
 	releaseConcurrentInterface?: (ifname: string) => Promise<void>;
+	rollbackConcurrentInterface?: (target: {
+		ifname: string;
+		created: boolean;
+	}) => Promise<void>;
 	/**
 	 * Does the operator want this adapter's AP to run ALONGSIDE its station leg?
 	 *

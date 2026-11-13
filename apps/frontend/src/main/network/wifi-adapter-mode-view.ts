@@ -53,6 +53,7 @@ const UNAVAILABLE_REASON_KEY: Record<WifiAdapterModeUnavailableReason, string> =
 	};
 
 const ERROR_KEY: Record<string, string> = {
+	"radio-unverified": "hotspotConfirm.radioUnverified",
 	DEVICE_BUSY: "network.wifiMode.error.deviceBusy",
 	"no-device": "network.wifiMode.error.noDevice",
 	unsupported: "network.wifiMode.error.unsupported",

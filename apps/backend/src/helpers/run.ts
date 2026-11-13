@@ -53,6 +53,8 @@ export const DEFAULT_MAX_BUFFER = 10 * 1024 * 1024;
 export const DEFAULT_TIMEOUT_MS = 30_000;
 
 export type RunOpts = {
+	/** Select stderr for commands whose machine receipt is on that channel. */
+	output?: "stdout" | "stderr";
 	/** Max bytes captured from stdout/stderr before the child is killed. */
 	maxBuffer?: number;
 	/**
@@ -321,7 +323,7 @@ async function spawnCollect(
 }
 
 /**
- * Run an allowlisted binary argv-only (NO shell) and resolve with its stdout.
+ * Run an allowlisted binary argv-only (NO shell), selecting stdout by default.
  *
  * @throws if `bin` is not in {@link ALLOWED}.
  * @throws {@link RunTimeoutError} if the command exceeds its timeout budget.
@@ -345,12 +347,12 @@ export async function run(
 	}
 
 	try {
-		const { stdout } = await execFileP(bin, [...args], {
+		const { stdout, stderr } = await execFileP(bin, [...args], {
 			...opts,
 			maxBuffer: opts?.maxBuffer ?? DEFAULT_MAX_BUFFER,
 			timeout: opts?.timeout ?? DEFAULT_TIMEOUT_MS,
 		});
-		return stdout;
+		return opts?.output === "stderr" ? stderr : stdout;
 	} catch (err) {
 		if (err instanceof SpawnTimeoutError) {
 			throw err instanceof SpawnAbortError
@@ -396,7 +398,7 @@ export async function runWithStdin(
 	);
 
 	if (code === 0) {
-		return stdout;
+		return opts?.output === "stderr" ? stderr : stdout;
 	}
 	throw new Error(
 		`${bin} exited with code ${code}${stderr ? `: ${stderr.trim()}` : ""}`,

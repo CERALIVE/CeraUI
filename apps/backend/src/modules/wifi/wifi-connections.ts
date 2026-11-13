@@ -48,12 +48,14 @@ import {
 	setHotspotClientsChangeListener,
 	startHotspotClientsPoll,
 } from "./wifi-hotspot-clients.ts";
+import { canHotspot } from "./wifi-hotspot-types.ts";
 import type { WifiInterface, WifiInterfaceId } from "./wifi-interfaces.ts";
 import {
 	recordWifiRadioShadowFailure,
 	wifiRadioIdentity,
 } from "./wifi-radio-identity.ts";
 import { suspendWifiRadioRow } from "./wifi-radio-publication.ts";
+import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
 const wifiInterfacesByMacAddress: Record<MacAddress, WifiInterface> = {};
 
@@ -82,7 +84,13 @@ export function getWifiInterfaceByIfname(
 	return undefined;
 }
 
-export function removeWifiInterface(macAddress: MacAddress) {
+export function removeWifiInterface(
+	macAddress: MacAddress,
+	binding: "retire" | "transfer" = "retire",
+) {
+	const row = wifiInterfacesByMacAddress[macAddress];
+	if (row && binding === "retire")
+		transitionVirtualBinding(row, { kind: "retire", parentConn: null });
 	delete wifiInterfacesByMacAddress[macAddress];
 }
 
@@ -90,7 +98,16 @@ export function addWifiInterface(
 	macAddress: MacAddress,
 	wifiInterface: WifiInterface,
 ) {
+	const previous = wifiInterfacesByMacAddress[macAddress];
+	if (previous && previous !== wifiInterface)
+		transitionVirtualBinding(previous, { kind: "retire", parentConn: null });
 	wifiInterfacesByMacAddress[macAddress] = wifiInterface;
+	if (wifiInterface.concurrentHotspot)
+		transitionVirtualBinding(wifiInterface, {
+			kind: "set",
+			ifname: wifiInterface.concurrentHotspot.ifname,
+			activeConn: wifiInterface.concurrentHotspot.activeConn,
+		});
 }
 
 export function clearWifiInterfacesForTest(): void {
@@ -210,7 +227,14 @@ function markInterfaceConnected(
 	ssid: string,
 ): void {
 	const uuid = wifiInterface.saved[ssid];
-	if (uuid) wifiInterface.conn = uuid;
+	transitionVirtualBinding(wifiInterface, {
+		kind: "parent",
+		connection: uuid ?? null,
+		mode: "infrastructure",
+	});
+	wifiInterface.conn = uuid ?? null;
+	wifiInterface.activeConn = uuid ?? null;
+	wifiInterface.activeMode = "infrastructure";
 
 	for (const [key, network] of wifiInterface.available) {
 		wifiInterface.available.set(key, { ...network, active: key === ssid });
@@ -229,7 +253,14 @@ function markInterfaceConnected(
 
 /* Clear the active connection on an interface (immutably). */
 function markInterfaceDisconnected(wifiInterface: WifiInterface): void {
+	transitionVirtualBinding(wifiInterface, {
+		kind: "parent",
+		connection: null,
+		mode: "unknown",
+	});
 	wifiInterface.conn = null;
+	wifiInterface.activeConn = null;
+	delete wifiInterface.activeMode;
 	for (const [key, network] of wifiInterface.available) {
 		if (network.active) {
 			wifiInterface.available.set(key, { ...network, active: false });
@@ -243,14 +274,44 @@ function handleConnectionStateEvent(connection: string, state: string): void {
 	if (!up && !down) return;
 
 	let changed = false;
+	let virtualChanged = false;
 	for (const macAddress in wifiInterfacesByMacAddress) {
 		const wifiInterface = wifiInterfacesByMacAddress[macAddress];
 		if (!wifiInterface) continue;
 
+		const virtualDown =
+			down &&
+			canHotspot(wifiInterface) &&
+			wifiInterface.hotspot.name === connection &&
+			wifiInterface.concurrentHotspot?.activeConn ===
+				wifiInterface.hotspot.conn &&
+			wifiInterface.hotspot.conn !== undefined;
+		if (virtualDown && wifiInterface.concurrentHotspot) {
+			transitionVirtualBinding(wifiInterface, { kind: "clear" });
+			changed = true;
+			virtualChanged = true;
+			continue;
+		}
 		const matches =
 			wifiInterface.available.has(connection) ||
-			connection in wifiInterface.saved;
+			connection in wifiInterface.saved ||
+			(down &&
+				canHotspot(wifiInterface) &&
+				wifiInterface.hotspot.name === connection);
 		if (!matches) continue;
+		const active = wifiInterface.activeConn ?? wifiInterface.conn;
+		if (
+			down &&
+			active &&
+			wifiInterface.saved[connection] !== active &&
+			!wifiInterface.available.get(connection)?.active &&
+			!(
+				canHotspot(wifiInterface) &&
+				wifiInterface.hotspot.name === connection &&
+				wifiInterface.hotspot.conn === active
+			)
+		)
+			continue;
 
 		if (up) {
 			markInterfaceConnected(wifiInterface, connection);
@@ -260,12 +321,28 @@ function handleConnectionStateEvent(connection: string, state: string): void {
 		changed = true;
 	}
 
-	if (changed) wifiSyncState();
+	if (changed) {
+		const published = wifiSyncState();
+		if (virtualChanged && !published) broadcastWifiState();
+	}
 }
 
 function handleDeviceStateEvent(device: string, state: string): void {
 	const wifiInterface = getWifiInterfaceByIfname(device);
-	if (!wifiInterface) return;
+	if (!wifiInterface) {
+		if (state === "disconnected" || state === "unavailable") {
+			for (const row of Object.values(wifiInterfacesByMacAddress)) {
+				if (
+					row.concurrentHotspot?.ifname === device &&
+					row.concurrentHotspot.activeConn !== null
+				) {
+					transitionVirtualBinding(row, { kind: "clear" });
+					broadcastWifiState();
+				}
+			}
+		}
+		return;
+	}
 
 	if (state === "disconnected" || state === "unavailable") {
 		markInterfaceDisconnected(wifiInterface);

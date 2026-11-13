@@ -310,6 +310,17 @@ $effect(() => {
 								/>
 							</Popover.Content>
 							</Popover.Root>
+						{:else if iface.degraded_reason === 'permanent-mac-unresolved'}
+							{#if hotspotIsActive(iface)}
+								<Button data-testid="open-hotspot-details" size="sm" variant="ghost" onclick={() => openHotspotSetup(id)}>
+									{m["network.dialog.hotspotDetails"]()}
+								</Button>
+							{:else}
+								<Button data-testid="open-wifi-selector-dialog" size="sm" variant="ghost" onclick={() => onConnect(id)}>
+									{m["network.view.connect"]()}
+								</Button>
+							{/if}
+							<WifiModeSelector view={modeView} context={{ stationLinkLive: connected, hotspotLive: hotspotIsActive(iface) }} />
 						{/if}
 					</div>
 

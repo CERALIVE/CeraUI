@@ -48,8 +48,8 @@ Discovery never adopts credentials, repins a profile, writes autoconnect or
 allocates a virtual interface for an unresolved key. Limited keys never enter
 the credential store. Non-MAC keys are rejected before hotspot credential
 resolution or profile adoption. Verified store keys and credential continuity
-are unchanged. Typed limited-mode request refusals and read-only live-profile
-handling remain a separate backend step.
+are unchanged. Limited-mode requests and read-only live-profile handling follow
+the rules below.
 
 **A monitor event carries an ifname, never a MAC.** `getWifiInterfaceByIfname()`
 (`wifi-connections.ts`) is the bridge; do NOT route a device-state event through
@@ -137,6 +137,19 @@ sample is deferred. A same-lifetime rename through an unavailable observation
 retains the full sampled-key row, including its AP capabilities.
 A new unavailable observation retires the parent's active UUID, AP mode and
 connection fields while retaining its capabilities and cached hotspot settings.
+The missing-operational-address branch retires the same three fields. Device
+and matching connection-down events do likewise; virtual-leg events retire only
+that leg and preserve the parent station. An unrelated old connection event
+cannot clear a newer connection.
+
+Retry and failed-listing recovery preserve the complete last physical witness
+roster, including unpublished `clap-*` interfaces. Current published rows are
+bound separately from that roster; registry membership never proves uniqueness.
+Any incomplete lifetime bracket in that still-listed roster withholds verified
+classification for the sample. A failed sysfs read cannot establish that a
+duplicate disappeared. Verification resumes after coherent sampling or a fresh
+successful listing that removes the missing witness. Same-phy Rock and the
+single-interface Orange topology retain their normal verified classification.
 
 A private weak association binds each sampled token to the exact registry
 object and observation generation before scan refresh or other discovery
@@ -197,8 +210,113 @@ id, registry-key and id-map writes.
 The [additive protocol contract](../../../../docs/WIFI-INCARNATION-PROTOCOL.md)
 continues to define token shape, frame correlation, remote stripping and the
 shared package boundary. This host-tested mechanism does not qualify physical
-radios or NetworkManager activation. The single-unverifiable-radio boot-restore
-exception and typed limited-mode handling remain outside this step.
+radios or NetworkManager activation.
+
+### Limited operation [EXISTS; host and mock-browser proof only]
+
+Prepare (both load and save), Start, Configure, and selection of hotspot or
+hybrid refuse with `radio-unverified` before credentials, NetworkManager or
+virtual-interface effects, including an already-active shortcut. Configure also
+sends its captured terminal `config: {error: "radio-unverified"}` frame.
+These checks live in the shared backend transactions, so direct and legacy
+callers receive the same refusal as RPC clients. Tokens remain optional and
+unenforced in this step.
+
+Display, Copy, Stop and station operations remain available. Discovery reads
+the AP profile NetworkManager reports active on the exact device into memory
+only. Existing virtual APs remain observable when a fresh concurrency probe
+fails, unless coherent parent and virtual samples positively identify different
+phy paths or wiphy indices. Such a contradiction clears the virtual association.
+`transitionVirtualBinding` is the single writer of immutable virtual bindings.
+It privately owns the associated UUID and retired Stop authority for discovery,
+Start, confirmation, refresh, monitor-down, Stop, rollback and registry removal.
+Invalidation retires live authority while preserving a reusable inactive profile
+hint; a hint cannot block adoption of a freshly observed parent AP. Positively
+invalid physical associations discard their matching cached target. A legitimate
+exclusive parent target is preserved independently.
+A fresh complete parent listing naming that same known UUID preserves it even
+when the current profile or mode read fails.
+
+Complete-listing disappearance, rename, replug and cross-phy contradiction are
+evaluated against the whole roster before any parent AP adoption. A failed or
+malformed/partial listing cannot establish disappearance. Confirmation records
+its selected UUID through the same owner even before any discovery refresh.
+Registry-key transfer preserves the binding; actual row removal retires it.
+The 126-cell production-graph matrix in `wifi-virtual-binding.test.ts` covers
+discovery, Start-confirmation and refresh across all lifecycle events and
+present/absent/changed parent APs, preserving foreign profiles throughout.
+The observed exclusive or concurrent UUID remains stoppable even when
+its profile cannot be read; a changed UUID clears the previous profile details
+before reading the new profile. Same-UUID exclusive discovery retries the
+read-only details and preserves loaded credentials when a refresh fails.
+Both exclusive and concurrent detail changes use the normal Wi-Fi status
+broadcast, including recovered reads and changed credentials. Saved-profile
+refresh waits for AP adoption before its callers publish.
+A readable non-AP profile retires its provisional hotspot target.
+Discovery does not search for a replacement profile, adopt credentials, repair
+a pin or priority, or write autoconnect or the credential store. Stop deactivates
+that observed UUID without an autoconnect write or virtual-interface deletion.
+New station joins do not pin a limited registry key as a MAC address.
+When a regulatory change requires restarting a limited AP, the backend stops
+it instead and logs a warning; that maintenance path leaves mode intent intact.
+
+The boot restore has one private exception (D12). Exactly one hotspot-capable
+adapter and one logical non-station intent must remain. Plain MAC and MAC@port
+keys for the same address count as one. All address groups with any non-station
+record are counted before precedence is applied; the plain record wins, or a
+single composite record when no plain record exists. Its owned AP profile must exist,
+and its stored channel must be `auto` or among the currently derived permitted
+channels for that adapter's bands. Streaming must permit the transition.
+Hybrid also requires proven concurrency and a profile already bound to the
+current fixed virtual-interface name; otherwise it stays pending rather than
+becoming exclusive.
+
+Only boot restore may activate that existing profile on a limited adapter.
+Cancellation and the current adapter roster, exact row, intent, streaming and
+channel eligibility are rechecked after awaited prerequisites, including hybrid
+interface allocation, before activation. The same admission predicate reaches
+the fixed-name allocator's internal awaits and precedes its mutations.
+An incompatible or invisible existing interface is refused without deletion.
+Creation records private kernel ifindex/wdev evidence from the add command's own
+nl80211 NEW_INTERFACE reply. `iw --debug` exposes that reply on stderr; its
+family, sequence, socket port, command, interface name and attribute lengths are
+checked before granting ownership. A subsequent mutable-name read never confers
+deletion authority. Missing or malformed receipts refuse ownership and report
+the failure without deleting an unproven object. A captured reply remains usable
+after a command timeout; failed later metadata reads cannot erase the obligation.
+Object-bound metadata also checks that the created object still has the target
+name before handoff.
+
+Cleanup addresses that exact wireless device, not its mutable name, and never deletes a
+reused or replacement interface. Cancellation retires activation authority while
+preserving cleanup authority. The allocation remains owned through activation;
+refusal, failure, exception and cancellation roll back the operation's own target.
+Discovery retains the handle until row insertion and releases it on pre-handoff
+abort or exception. A rejected activation await also runs the existing state
+rollback, clearing transition and concurrent state while preserving the original
+error, before releasing its exact created resource.
+It does not change credentials, credential-store contents, autoconnect or mode
+intent. Hybrid uses the existing fixed-interface allocator until the target
+allocator step lands. A successful restore logs exactly
+`hotspot restored on an adapter that could not be identified`; every refusal
+logs its failed condition once per unchanged restore edge.
+Accepted restoration is identified by the selected logical owner and mode;
+an unrelated station preference cannot dispatch that accepted activation again.
+Stop and station selection resolve the same logical persisted intent, so the
+stopped hotspot is not restored again. This recovery requires the same sole
+hotspot-capable adapter condition; with another such adapter present, a limited
+radio cannot clear that other adapter's persisted intent.
+
+Accepted limit: a replacement of that sole unidentifiable adapter cannot be
+distinguished from the original and receives the same boot restore. An
+exclusive profile independently auto-activated by NetworkManager remains
+observable and stoppable outside D12. Physical limited-radio restore is
+unqualified; both lab radios have verifiable identities.
+
+Coverage: `wifi-limited-mode.test.ts`, the active-profile discovery case in
+`wifi-identity-keys.test.ts`, the four explicit limited equivalence deltas and
+`hotspot-limited-mode.spec.ts`. The `wifi-limited` mock scenario retains live
+details and safe controls and refuses direct guarded RPC requests.
 
 ### Chosen mode and boot restore [EXISTS; host and mock-browser tested]
 
@@ -285,8 +403,8 @@ the latest mapped interface set or its invalidation; revision reads start no IO.
 The event source is a graph-free leaf, introduces no wire field, and has a
 cancellable subscription. Shutdown retires restore before terminating identity
 observation. It cannot start another adapter after cancellation.
-The later limited-radio D12 exception and composite identity keys remain outside
-this step; this restore applies only to the existing matching intent key.
+Verified restore uses its matching intent key. Limited restore uses the D12
+exception above; composite physical identity remains a later step.
 
 ### Inherited follow-ups outside B2 round 4 [PARTIAL]
 

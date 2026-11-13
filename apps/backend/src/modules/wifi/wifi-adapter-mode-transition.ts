@@ -77,6 +77,7 @@ import {
 import type { HotspotStartResult } from "./wifi-hotspot-types.ts";
 import { canHotspot, HOTSPOT_UP_TO } from "./wifi-hotspot-types.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
+import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 
 export {
 	reconcileWifiAdapterModes,
@@ -260,6 +261,17 @@ export async function setWifiAdapterMode(
 	const lock = await withWifiAdapterLock(
 		wifiAdapterLockKey(macAddress),
 		async (): Promise<SetWifiAdapterModeOutput> => {
+			const intentKey = resolveWifiAdapterModeIntentKey(
+				macAddress,
+				undefined,
+				Object.values(deps.resolveInterfaces()).filter(canHotspot).length,
+			);
+			if (
+				target !== "station" &&
+				(!normalizeMacAddress(macAddress) ||
+					wifiInterface.degradedReason === "permanent-mac-unresolved")
+			)
+				return refuse(wifiInterface.id, "radio-unverified", deps);
 			const options = wifiAdapterModeOptions(
 				wifiAdapterModeCapability(wifiInterface, deps.readCapabilities),
 			);
@@ -277,7 +289,7 @@ export async function setWifiAdapterMode(
 				// Already there: nothing is dispatched, so no confirmation will ever
 				// settle and this branch owes the terminal frame itself. The preference is
 				// still recorded — the operator has now stated it explicitly.
-				deps.persistMode(resolveWifiAdapterModeIntentKey(macAddress), target);
+				if (intentKey !== undefined) deps.persistMode(intentKey, target);
 				deps.publishOutcome(wifiInterface.id, { success: true, mode: target });
 				return { success: true, applied: target };
 			}
@@ -294,15 +306,11 @@ export async function setWifiAdapterMode(
 				return refuse(wifiInterface.id, "DEVICE_BUSY", deps);
 			}
 
-			const undo = recordWifiAdapterModeIntent(
-				resolveWifiAdapterModeIntentKey(macAddress),
-				target,
-				{
-					read: deps.readPersistedMode,
-					persist: deps.persistMode,
-					restore: deps.restoreMode,
-				},
-			);
+			const undo = recordWifiAdapterModeIntent(intentKey, target, {
+				read: deps.readPersistedMode,
+				persist: deps.persistMode,
+				restore: deps.restoreMode,
+			});
 			let succeeded = false;
 			try {
 				deps.publishOutcome(wifiInterface.id, { pending: true, mode: target });

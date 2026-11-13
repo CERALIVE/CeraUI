@@ -36,6 +36,7 @@ export class WifiRadioObservation {
 	private stopped = false;
 	private terminated = false;
 	private resumeRead: (() => void) | undefined;
+	private physicalWitnesses: readonly RadioObservation[] = [];
 	private active:
 		| { readonly controller: AbortController; readonly promise: Promise<void> }
 		| undefined;
@@ -58,7 +59,15 @@ export class WifiRadioObservation {
 		if (this.timer !== undefined) clearTimeout(this.timer);
 		this.timer = undefined;
 		if (!this.queued || sequence > this.queued.sequence) {
-			this.queued = { devices, sequence, onPublication };
+			const complete = new Map(
+				this.physicalWitnesses.map((device) => [device.ifname, device]),
+			);
+			for (const device of devices) complete.set(device.ifname, device);
+			this.queued = {
+				devices: [...complete.values()],
+				sequence,
+				onPublication,
+			};
 		}
 		if (!this.active && !this.resumeRead && this.timer === undefined) {
 			this.timer = setTimeout(() => this.start(), 0).unref();
@@ -73,6 +82,10 @@ export class WifiRadioObservation {
 		await this.active?.promise;
 		if (this.terminated) return false;
 		const cancellation = this.cancellation;
+		this.physicalWitnesses = devices.map(({ ifname, degradedReason }) => ({
+			ifname,
+			...(degradedReason ? { degradedReason } : {}),
+		}));
 		this.enqueue(devices, sequence, onPublication);
 		if (this.timer !== undefined) clearTimeout(this.timer);
 		this.timer = undefined;
@@ -96,11 +109,13 @@ export class WifiRadioObservation {
 
 	terminate(): void {
 		this.terminated = true;
+		this.physicalWitnesses = [];
 		this.stop();
 	}
 
 	reopenForTest(): void {
 		this.terminated = false;
+		this.physicalWitnesses = [];
 	}
 
 	private start(publish = true): void {
@@ -218,18 +233,22 @@ export class WifiRadioObservation {
 					if (this.stopped || this.terminated || discovery !== this.discovery)
 						return;
 					const sequence = this.producer.captureObservation();
-					const devices = Object.values(getWifiInterfacesByMacAddress()).map(
-						(row) => {
-							invalidateWifiRadioRow(row, sequence);
-							return {
-								ifname: row.ifname,
-								row,
-								...(row.degradedReason
-									? { degradedReason: row.degradedReason }
-									: {}),
-							};
-						},
+					const current = new Map(
+						Object.values(getWifiInterfacesByMacAddress()).map((row) => [
+							row.ifname,
+							row,
+						]),
 					);
+					const devices = next.devices.map(({ ifname, degradedReason }) => {
+						const row = current.get(ifname);
+						if (row) invalidateWifiRadioRow(row, sequence);
+						const reason = row?.degradedReason ?? degradedReason;
+						return {
+							ifname,
+							...(row ? { row } : {}),
+							...(reason ? { degradedReason: reason } : {}),
+						};
+					});
 					this.queued = {
 						devices,
 						sequence,

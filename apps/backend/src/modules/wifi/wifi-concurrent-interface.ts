@@ -8,9 +8,19 @@
     (at your option) any later version.
 */
 
-import { argMatch, ID_RE } from "../../helpers/run.ts";
+import { logger } from "../../helpers/logger.ts";
+import {
+	argMatch,
+	ID_RE,
+	RunAbortError,
+	RunTimeoutError,
+} from "../../helpers/run.ts";
 import { nmDeviceProp } from "../network/network-manager.ts";
 import { runIw } from "./regdomain.ts";
+import {
+	type CreatedInterface,
+	createdInterfaceReceipt,
+} from "./wifi-interface-creation.ts";
 
 type InterfaceRunner = (command: string, args: string[]) => Promise<string>;
 type InterfaceWaiter = (ifname: string) => Promise<boolean>;
@@ -57,25 +67,56 @@ export type ConcurrentApInterface = {
 	type: "managed";
 };
 
+const createdInterfaces = new WeakMap<object, CreatedInterface>();
+
+function interfaceIdentity(info: string): CreatedInterface | undefined {
+	const ifindex = info.match(/^\s*ifindex\s+([1-9]\d*)\s*$/m)?.[1];
+	const wdev = info.match(/^\s*wdev\s+(0x[0-9a-f]+)\s*$/im)?.[1];
+	return ifindex && wdev ? { ifindex, wdev } : undefined;
+}
+
+/** Creation owns cleanup even after activation admission has been retired. */
+export async function releaseCreatedConcurrentApInterface(target: {
+	ifname: string;
+	created: boolean;
+}): Promise<void> {
+	const owned = createdInterfaces.get(target);
+	if (!owned) return;
+	try {
+		// Stable wireless-device addressing cannot delete a same-name replacement.
+		await interfaceRunner("iw", ["wdev", owned.wdev, "del"]);
+		createdInterfaces.delete(target);
+	} catch {
+		return;
+	}
+}
+
 export async function ensureConcurrentApInterface(
 	parentIfname: string,
+	admitted: () => boolean = () => true,
 ): Promise<ConcurrentApInterface | undefined> {
 	const parent = argMatch(ID_RE, parentIfname);
 	const ifname = argMatch(ID_RE, concurrentApIfname(parentIfname));
+	if (!admitted()) return undefined;
 	const info = await interfaceRunner("iw", ["dev", ifname, "info"]).catch(
 		() => undefined,
 	);
+	if (!admitted()) return undefined;
 	if (info !== undefined) {
-		if (
-			/^\s*type\s+managed\s*$/m.test(info) &&
-			(await interfaceWaiter(ifname))
-		) {
-			return { ifname, created: false, type: "managed" };
-		}
-		await releaseConcurrentApInterface(ifname);
+		if (!/^\s*type\s+managed\s*$/m.test(info)) return undefined;
+		const visible = await interfaceWaiter(ifname);
+		if (!admitted() || !visible) return undefined;
+		return { ifname, created: false, type: "managed" };
 	}
+	const target: ConcurrentApInterface = {
+		ifname,
+		created: true,
+		type: "managed",
+	};
+	let handedOff = false;
 	try {
-		await interfaceRunner("iw", [
+		const receipt = await interfaceRunner("iw", [
+			"--debug",
 			"dev",
 			parent,
 			"interface",
@@ -83,12 +124,51 @@ export async function ensureConcurrentApInterface(
 			ifname,
 			"type",
 			"managed",
+		]).catch((error: unknown) => {
+			const partial =
+				error instanceof RunTimeoutError || error instanceof RunAbortError
+					? error.partialStderr
+					: error instanceof Error &&
+							"stderr" in error &&
+							typeof error.stderr === "string"
+						? error.stderr
+						: "";
+			const identity = createdInterfaceReceipt(partial, ifname);
+			if (identity) createdInterfaces.set(target, identity);
+			throw error;
+		});
+		const identity = createdInterfaceReceipt(receipt, ifname);
+		if (!identity) {
+			logger.warn(
+				`Wi-Fi interface creation receipt unavailable for ${ifname}; refusing ownership`,
+			);
+			return undefined;
+		}
+		createdInterfaces.set(target, identity);
+		if (!admitted()) return undefined;
+		// This read observes the captured object; it never grants ownership.
+		const createdInfo = await interfaceRunner("iw", [
+			"wdev",
+			identity.wdev,
+			"info",
 		]);
-		if (await interfaceWaiter(ifname))
-			return { ifname, created: true, type: "managed" };
-		await releaseConcurrentApInterface(ifname);
+		const current = interfaceIdentity(createdInfo);
+		if (
+			current?.ifindex !== identity.ifindex ||
+			current.wdev !== identity.wdev ||
+			createdInfo.match(/^\s*Interface\s+(\S+)\s*$/m)?.[1] !== ifname
+		)
+			return undefined;
+		const visible = await interfaceWaiter(ifname);
+		if (!admitted()) return undefined;
+		if (visible) {
+			handedOff = true;
+			return target;
+		}
 	} catch {
 		return undefined;
+	} finally {
+		if (!handedOff) await releaseCreatedConcurrentApInterface(target);
 	}
 	return undefined;
 }

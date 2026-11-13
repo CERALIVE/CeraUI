@@ -139,7 +139,60 @@ export async function handleHotspotConn(
 	uuid: string,
 	options: HotspotAdoptionOptions = {},
 ): Promise<void> {
-	if (macAddress_ !== undefined && !normalizeMacAddress(macAddress_)) return;
+	if (
+		macAddress_ !== undefined &&
+		(!normalizeMacAddress(macAddress_) ||
+			getWifiInterfaceByMacAddress(macAddress_)?.degradedReason ===
+				"permanent-mac-unresolved")
+	) {
+		const row = getWifiInterfaceByMacAddress(macAddress_);
+		if (
+			!options.active ||
+			!row ||
+			!canHotspot(row) ||
+			!(
+				(row.activeConn === uuid && row.activeMode === "ap") ||
+				row.concurrentHotspot?.activeConn === uuid
+			)
+		)
+			return;
+		if (row.hotspot.conn !== uuid) {
+			delete row.hotspot.name;
+			delete row.hotspot.password;
+			delete row.hotspot.channel;
+			delete row.hotspot.security;
+		}
+		row.hotspot.conn = uuid;
+		const fields = await nmConnGetFields(uuid, [
+			"802-11-wireless.mode",
+			"802-11-wireless.ssid",
+			"802-11-wireless-security.psk",
+			"802-11-wireless.band",
+			"802-11-wireless.channel",
+			"802-11-wireless-security.key-mgmt",
+		] as const);
+		if (fields?.[0] && fields[0] !== "ap" && row.hotspot.conn === uuid) {
+			delete row.hotspot.conn;
+			delete row.hotspot.name;
+			delete row.hotspot.password;
+			delete row.hotspot.channel;
+			delete row.hotspot.security;
+			return;
+		}
+		if (
+			fields?.[0] !== "ap" ||
+			row.hotspot.conn !== uuid ||
+			(row.activeConn !== uuid && row.concurrentHotspot?.activeConn !== uuid)
+		)
+			return;
+		row.hotspot.conn = uuid;
+		row.hotspot.name = fields[1];
+		row.hotspot.password = fields[2];
+		row.hotspot.channel = channelFromNM(fields[3], fields[4]);
+		const security = securityFromNM(fields[5]);
+		if (security !== undefined) row.hotspot.security = security;
+		return;
+	}
 	if (deletingHotspotConns.has(uuid)) return;
 	const epoch = hotspotDeletionEpoch;
 	const fields = await nmConnGetFields(uuid, [

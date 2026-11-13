@@ -179,6 +179,8 @@ export class WifiRadioIdentityProducer {
 			const sample = samples.get(device.ifname);
 			const mac = sample?.permanentMac;
 			const shared =
+				// A still-listed uncertain witness cannot establish MAC uniqueness.
+				[...samples.values()].some((other) => other === undefined) ||
 				(mac !== undefined && (macPaths.get(mac)?.size ?? 0) > 1) ||
 				(sample !== undefined &&
 					(interfacesByPhy.get(sample.lifetime.phyPath) ?? 0) > 1);

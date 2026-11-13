@@ -50,6 +50,7 @@ import {
 	isConcurrentHotspot,
 } from "./wifi-hotspot-types.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
+import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 
 /** Display order, and the order the TOTAL offered set is emitted in. */
 export const WIFI_ADAPTER_MODES = [
@@ -153,9 +154,11 @@ export function isWifiAdapterModeAvailable(
  * on a stated preference only, so an untouched device keeps its behaviour.
  */
 export function getPersistedWifiAdapterMode(
-	macAddress: string,
+	macAddress: string | undefined,
 ): WifiAdapterMode | undefined {
-	return getConfig().wifi_modes?.[macAddress];
+	return macAddress === undefined
+		? undefined
+		: getConfig().wifi_modes?.[macAddress];
 }
 
 /** Every stated preference, keyed by permanent MAC. */
@@ -216,12 +219,26 @@ export function restoreWifiAdapterMode(
 }
 
 /** One policy point for the logical intent identity, shared by Start, Stop and boot. */
-export function resolveWifiAdapterModeIntentKey(macAddress: string): string {
-	return macAddress;
+export function resolveWifiAdapterModeIntentKey(
+	macAddress: string,
+	preferences = getPersistedWifiAdapterModes(),
+	hotspotAdapterCount = 0,
+): string | undefined {
+	if (normalizeMacAddress(macAddress)) return macAddress;
+	if (hotspotAdapterCount !== 1) return undefined;
+	const keys = Object.keys(preferences).filter(
+		(key) => preferences[key] !== "station",
+	);
+	const addresses = new Set(keys.map((key) => key.split("@")[0]));
+	if (addresses.size !== 1) return undefined;
+	const address = keys[0]?.split("@")[0];
+	if (address && preferences[address] !== undefined)
+		return preferences[address] === "station" ? undefined : address;
+	return keys.length === 1 ? keys[0] : undefined;
 }
 
 export interface WifiAdapterModeRecorder {
-	readonly read: typeof getPersistedWifiAdapterMode;
+	readonly read: (key: string) => WifiAdapterMode | undefined;
 	readonly persist: typeof persistWifiAdapterMode;
 	readonly restore: typeof restoreWifiAdapterMode;
 }
@@ -234,10 +251,11 @@ export const wifiAdapterModeRecorder: WifiAdapterModeRecorder = {
 
 /** Undo only our own write; another authority may have superseded this intent. */
 export function recordWifiAdapterModeIntent(
-	key: string,
+	key: string | undefined,
 	target: WifiAdapterMode,
 	recorder: WifiAdapterModeRecorder,
 ): () => void {
+	if (key === undefined) return () => undefined;
 	const previous = recorder.read(key);
 	recorder.persist(key, target);
 	return () => {

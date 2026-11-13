@@ -70,6 +70,10 @@ export function getMockHotspotConfig(device: string): MockHotspotConfig {
 	return mockHotspotConfigs[device] ?? mockHotspotConfigs.wlan0;
 }
 
+export function isMockWifiLimited(device: string | undefined): boolean {
+	return getScenarioConfig().limitedWifi === true && device === "wlan0";
+}
+
 export function setMockHotspotConfig(
 	device: string,
 	update: { name?: string; password?: string; channel?: string },

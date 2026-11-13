@@ -71,7 +71,7 @@ for (const fixture of radioEquivalenceCases) {
 						adapters.map((adapter) => [adapter.id, adapter.key]),
 					),
 				};
-				const refusal = { success: false, error: "activation-failed" } as const;
+				const refusal = { success: false, error: "radio-unverified" } as const;
 				expect(frame.discovered).toEqual(snapshot);
 				expect(frame.activations).toEqual(
 					adapters.map(({ id }) => ({

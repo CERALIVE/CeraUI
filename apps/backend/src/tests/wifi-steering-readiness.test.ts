@@ -70,6 +70,7 @@ beforeEach(async () => {
 	jest.setSystemTime(0);
 	wifiRadioObservation.stop();
 	await wifiRadioObservation.settled;
+	wifiRadioObservation.reopenForTest();
 	resetWifiInterfaceDiscoveryForTest();
 	resetWifiConnectionModeCache();
 	await wifiRadioIdentity.discover([]);

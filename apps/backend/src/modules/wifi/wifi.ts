@@ -38,6 +38,7 @@ import {
 import {
 	getMockHotspotClients,
 	getMockHotspotConfig,
+	isMockWifiLimited,
 } from "../../mocks/providers/wifi.ts";
 import { getMockWifiIncarnation } from "../../mocks/providers/wifi-incarnation.ts";
 import {
@@ -83,6 +84,7 @@ import {
 	hotspotClientsForMessage,
 	recordHotspotClientsBroadcast,
 } from "./wifi-hotspot-clients.ts";
+import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 
 export { currentHotspotApIfnames } from "./wifi-hotspot-clients.ts";
 
@@ -241,6 +243,9 @@ export function wifiBuildMsg() {
 				ifs[index] = {
 					ifname: radio.ifname,
 					incarnation: getMockWifiIncarnation(radio.device),
+					...(isMockWifiLimited(radio.device)
+						? { degraded_reason: "permanent-mac-unresolved" as const }
+						: {}),
 					conn: hotspot.uuid,
 					hw: radio.macAddress,
 					saved: {},
@@ -286,6 +291,9 @@ export function wifiBuildMsg() {
 			const entry: WifiInterfaceResponseMessage = {
 				ifname: radio.ifname,
 				incarnation: getMockWifiIncarnation(radio.device),
+				...(isMockWifiLimited(radio.device)
+					? { degraded_reason: "permanent-mac-unresolved" as const }
+					: {}),
 				conn: activeSsid ? mockWifiUuidForSsid(activeSsid) : "",
 				hw: radio.macAddress,
 				saved,
@@ -546,7 +554,7 @@ export async function wifiUpdateSavedConns(
 
 			const macAddress = macTmp.toLowerCase();
 			if (mode === "ap") {
-				void handleHotspotConn(macAddress, uuid);
+				await handleHotspotConn(macAddress, uuid);
 			} else if (mode === "infrastructure") {
 				registerSavedWifiConnection(savedInterfaces, macAddress, ssid, uuid);
 			}
@@ -916,7 +924,10 @@ async function runWifiNew(
 		return;
 	}
 
-	if (!(await nmConnSetWifiMacAddress(outcome.uuid, macAddress))) {
+	if (
+		normalizeMacAddress(macAddress) &&
+		!(await nmConnSetWifiMacAddress(outcome.uuid, macAddress))
+	) {
 		logger.warn(
 			"Failed to set the MAC address for the newly created connection",
 		);

@@ -279,7 +279,8 @@ async function handleSave() {
 		key: wifiHotspotConfigOpKey(binding.device, binding.incarnation),
 		rpc: () => rpc.wifi.hotspotConfigure(input),
 		isCurrent: () => current(binding),
-		failMessage: () => m["network.os.operationFailed"](),
+		failMessage: (result) => result?.error === 'radio-unverified'
+			? m['hotspotConfigurator.radioUnverified']() : m["network.os.operationFailed"](),
 		busyMessage: () => m["network.os.deviceBusy"](),
 		// NO confirmOnResolve — confirm comes from the deferred hotspot.config event.
 	});
@@ -327,7 +328,8 @@ async function startConfirmed(incarnation: string) {
 				confirmingStart = true;
 			}
 		},
-		failMessage: () => m["network.os.operationFailed"](),
+		failMessage: (result) => result?.error === 'radio-unverified'
+			? m['hotspotConfirm.radioUnverified']() : m["network.os.operationFailed"](),
 		busyMessage: () => m["network.os.deviceBusy"](),
 	});
 }
@@ -379,13 +381,15 @@ async function copyPassword() {
 				{m['hotspotConfigurator.radioChanged']()}
 			</p>
 		{/if}
-		{#if isActive && !canEdit}
+		{#if (isActive && !canEdit) || radioReason === 'permanent-mac-unresolved'}
 			<p class="text-muted-foreground text-xs" role="status" data-testid="hotspot-editor-unavailable">
 				{#if radioReason}{resolveMessageKey(`network.wifiDegraded.${radioReason}`)} {/if}
 				{radioReason ? m['hotspotConfigurator.radioUnverified']() : m['hotspotConfirm.bindingUnsupported']()}
 			</p>
 		{/if}
-		{#if configFailure === 'radio-changed' || configFailure === 'binding-required' || configFailure === 'activating'}
+		{#if configFailure === 'radio-unverified'}
+			<p class="text-muted-foreground text-xs" role="status">{m['hotspotConfigurator.radioUnverified']()}</p>
+		{:else if configFailure === 'radio-changed' || configFailure === 'binding-required' || configFailure === 'activating'}
 			<p class="text-muted-foreground text-xs" role="status">
 				{configFailure === 'activating' ? m['hotspotConfigurator.saveInterrupted']() : m['hotspotConfigurator.saveRefused']()}
 			</p>
@@ -673,7 +677,7 @@ async function copyPassword() {
 		<!-- One action row at a time: while the credential gate is open, its own
 		     Cancel / Turn on are the only way forward, and Save exists only for a
 		     live AP (`hotspotConfigure` refuses anything else). -->
-		{#if !confirmingStart}
+		{#if !confirmingStart && (isActive || radioReason !== 'permanent-mac-unresolved')}
 		<Button
 			class="sm:min-w-28"
 			disabled={toggling}
@@ -689,7 +693,7 @@ async function copyPassword() {
 			{isActive ? m["network.status.turnOff"]() : m["network.status.enableHotspot"]()}
 		</Button>
 		{/if}
-		{#if isActive}
+		{#if isActive && radioReason !== 'permanent-mac-unresolved'}
 		<Button class="sm:min-w-24" disabled={!canEdit || !isFormValid || configuring} onclick={handleSave}>
 			{#if configuring}
 				<Loader2 class="size-4 animate-spin motion-reduce:animate-none" />

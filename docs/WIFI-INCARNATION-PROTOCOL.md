@@ -9,14 +9,46 @@ Empty, oversized, non-string or other-character values fail input/output
 validation. Valid values remain opaque and equality-only. An absent field
 retains the legacy shape.
 
-These inputs do not change admission, targeting, effects or RPC results. A stale
-or unrelated valid token still has the same action behavior as an omitted token.
+These inputs do not change token admission or targeting. A stale or unrelated
+valid token still has the same action behavior as an omitted token.
 Config and mode requests additionally supply observational metadata for the two
-asynchronous frames described below. There is no binding enforcement, new
-refusal, limited mode, locator acquisition, or
-NetworkManager targeting change. The broader radio program's limited/composite
-state and guarded actions remain later rollout work. G1-G5 are unrun and
-unclaimed here.
+asynchronous frames described below. There is no token binding enforcement or
+locator acquisition. Backend limited-mode refusals are now implemented below;
+composite physical identity and token admission remain later rollout work.
+G1-G5 are unrun and unclaimed here.
+
+## Backend limited mode [EXISTS; host and mock-browser proof only]
+
+Rows with unresolved permanent identity retain
+`degraded_reason: "permanent-mac-unresolved"`. No status field is added.
+Prepare load/save, Start, Configure and mode selection of hotspot/hybrid return
+`radio-unverified` before any credential or radio effect. The toggle and mode
+error schemas accept that additive enum member. Configure sends the same token
+in its terminal `wifi.hotspot.config.error`; its optional incarnation follows
+the capture rules below. Stop and station actions remain available.
+
+The live AP's name and password come read-only from the profile NetworkManager
+reports active on that device. Copy and Stop remain available; Stop deactivates
+the UUID without rewriting autoconnect. Discovery neither adopts credentials
+nor repairs a limited profile. A regulatory change that would restart that AP
+stops it with a warning instead, leaving persisted mode intent unchanged.
+
+Boot alone may restore an existing owned profile under D12: one hotspot-capable
+adapter, one logical non-station intent (MAC and MAC@port count as one), the
+plain record's profile or the sole composite record's profile, a currently
+permitted stored channel or `auto`, and no disruptive streaming transition.
+Hybrid requires proven concurrency and the existing fixed interface binding.
+No credential, autoconnect or mode-intent write is allowed.
+Every failed condition logs once per unchanged edge; success logs
+`hotspot restored on an adapter that could not be identified`.
+Replacing that sole unidentifiable adapter is undetectable and restores the same
+profile: this is the accepted D12 limit, proven on the host only.
+
+The frontend maps the refusal to existing localized unverified copy without
+adding strings. The `wifi-limited` mock scenario and
+`hotspot-limited-mode.spec.ts` exercise details, Copy, Stop, absent setup/Save/
+start controls and direct RPC refusal. Older tabs accept the additive error
+through the existing plain JSON client and use their generic error copy.
 
 The frontend now consumes this additive protocol for draft ownership and
 expected-incarnation requests. It fixes the draft/acknowledgement overwrite;
@@ -68,8 +100,9 @@ pending or terminal publication, and require A's captured token, never B's.
 The real status builder requires evidence for the exact current registry row
 and its observation generation, with a coherent lifetime witness. It does not
 accept an interface-name match alone. It does not await sysfs, mint a fallback, or
-change legacy discovery, registry keys, numeric ids, credential ownership,
-or handler admission. Before detached observation completes,
+infer identity from an interface name. Discovery awaits the coherent sample
+before classifying keys as verified MAC, `limited:<ifindex>:<wiphy>`, or
+incoherent `degraded:<ifname>`. Before that observation completes,
 or when no current coherent observation exists, the field is absent. Discovery
 invalidates prior evidence before publishing or mutating rows, including reused
 row objects. Detached samples carry their captured row and generation; a late,
@@ -82,7 +115,7 @@ frame and its projection is unchanged. Existing pulls and initial snapshots
 also carry proven tokens. A local token frame never acknowledges hotspot roster
 delivery: only `broadcastWifiState` records membership sent to all subscribers,
 so a pending roster poll still sends its normal global/control-channel update.
-Legacy discovery never waits for sampling.
+Discovery awaits sampling within its existing bounded run.
 
 Each sample has a 1000 ms budget. A lost sample (superseded, incomplete, timed out
 or rejected) resamples the current registry rows with a fresh generation after

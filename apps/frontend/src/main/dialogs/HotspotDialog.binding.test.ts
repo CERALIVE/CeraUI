@@ -180,6 +180,28 @@ afterEach(() => {
 });
 
 describe("hotspot draft ownership through the real dialog", () => {
+	it("maps an unexpected prepare refusal to the existing unverified notice", async () => {
+		prepare.mockResolvedValueOnce({
+			success: false,
+			error: "radio-unverified",
+		});
+		render(HotspotDialog, { open: true, deviceId: "0", iface: row() });
+		await fireEvent.click(
+			screen.getByRole("button", { name: "Enable Hotspot" }),
+		);
+		await waitFor(() =>
+			expect(
+				screen.getByTestId("hotspot-activation-confirm").dataset.phase,
+			).toBe("unverified"),
+		);
+		expect(
+			screen.getByTestId("hotspot-confirm-unavailable").textContent,
+		).toContain("identified");
+		expect(
+			screen.getByTestId("hotspot-confirm-activate").hasAttribute("disabled"),
+		).toBe(true);
+	});
+
 	it("loads an open tokenless gate once when a status update brings its token", async () => {
 		const tokenless = row();
 		delete tokenless.incarnation;
@@ -484,16 +506,27 @@ describe("hotspot draft ownership through the real dialog", () => {
 			delete iface.incarnation;
 			iface.degraded_reason = reason;
 			render(HotspotDialog, { open: true, deviceId: "0", iface });
-			await fireEvent.click(
-				screen.getByRole("button", { name: "Enable Hotspot" }),
-			);
-			expect(
-				screen.getByTestId("hotspot-confirm-unavailable").textContent,
-			).toContain(reason ? "identified" : "update the device software");
+			if (reason === "permanent-mac-unresolved") {
+				const notice = await screen.findByTestId("hotspot-editor-unavailable");
+				expect(notice.textContent).toContain("identified");
+				expect(
+					screen.queryByRole("button", { name: "Enable Hotspot" }),
+				).toBeNull();
+				expect(screen.queryByTestId("hotspot-confirm-activate")).toBeNull();
+			} else {
+				await fireEvent.click(
+					screen.getByRole("button", { name: "Enable Hotspot" }),
+				);
+				expect(
+					screen.getByTestId("hotspot-confirm-unavailable").textContent,
+				).toContain(reason ? "identified" : "update the device software");
+				expect(
+					screen
+						.getByTestId("hotspot-confirm-activate")
+						.hasAttribute("disabled"),
+				).toBe(true);
+			}
 			expect(prepare).toHaveBeenCalledTimes(0);
-			expect(
-				screen.getByTestId("hotspot-confirm-activate").hasAttribute("disabled"),
-			).toBe(true);
 		});
 	}
 });

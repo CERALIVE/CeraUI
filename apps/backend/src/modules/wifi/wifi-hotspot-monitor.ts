@@ -27,6 +27,7 @@ import type {
 	WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
+import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
 // Bounded confirmation poll: a production backstop for the NM monitor event.
 // Re-polls authoritative NM state until the hotspot connection is reported
@@ -107,6 +108,7 @@ export function registerPendingConfirmation(
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotActivationDeps,
 ): void {
+	transitionVirtualBinding(wifiInterface, { kind: "associate" });
 	const ifname = wifiInterface.ifname;
 	const connName = wifiInterface.hotspot.name ?? ifname;
 
@@ -118,7 +120,11 @@ export function registerPendingConfirmation(
 			wifiInterface.supportsApStaConcurrency === true &&
 			wifiInterface.concurrentHotspot
 		) {
-			wifiInterface.concurrentHotspot.activeConn = wifiInterface.hotspot.conn;
+			transitionVirtualBinding(wifiInterface, {
+				kind: "set",
+				ifname: wifiInterface.concurrentHotspot.ifname,
+				activeConn: wifiInterface.hotspot.conn,
+			});
 		} else if (wifiInterface.hotspot.conn) {
 			// Reflect the NM-confirmed active connection so isHotspot() is true.
 			wifiInterface.conn = wifiInterface.hotspot.conn;
@@ -139,6 +145,7 @@ export function registerPendingConfirmation(
 		// Confirmation never arrived — clear the transition (soft rollback). The
 		// next NM poll will reconcile if the hotspot did in fact come up.
 		delete wifiInterface.hotspot.transition;
+		transitionVirtualBinding(wifiInterface, { kind: "clear" });
 		if (!wifiInterface.concurrentHotspot) {
 			deps.setDupIpSuppression(ifname, false);
 		}

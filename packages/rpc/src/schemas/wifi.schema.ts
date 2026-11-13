@@ -323,10 +323,11 @@ export type SetWifiAdapterModeInput = z.infer<typeof setWifiAdapterModeInputSche
   Why a mode change did not complete. The first five are `hotspotToggleError`'s
   own members, deliberately reused rather than re-spelled — a mode change IS a
   hotspot start/stop underneath, so a refusal must read identically whichever
-  control produced it. `capability-unproven` is the one addition: `hybrid` was
-  asked for on a radio whose AP+STA combination has not been proven.
+  control produced it. `capability-unproven` means hybrid capability is not
+  proven; `radio-unverified` means the adapter's permanent identity is unresolved.
 */
 export const wifiAdapterModeErrorSchema = z.enum([
+	'radio-unverified',
 	'DEVICE_BUSY',
 	'no-device',
 	'unsupported',
@@ -537,8 +538,10 @@ export type HotspotToggleInput = z.infer<typeof hotspotToggleInputSchema>;
     activation-failed    NetworkManager refused; the adapter was rolled back
     not-confirmed        activation was issued and NM never confirmed the AP
     deactivation-failed  NetworkManager did not take the hotspot down
+    radio-unverified     the adapter's permanent identity is unresolved
 */
 export const hotspotToggleErrorSchema = z.enum([
+	'radio-unverified',
 	'DEVICE_BUSY',
 	'no-device',
 	'unsupported',

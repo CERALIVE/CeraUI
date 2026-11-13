@@ -777,7 +777,7 @@ test("pending prepare still adopts a legitimate single-adapter discovery", async
 });
 
 for (const unverified of [false, true]) {
-	test(`${unverified ? "unverified" : "verified"} single-adapter prepare and start keep the saved pair`, async () => {
+	test(`${unverified ? "unverified" : "verified"} single-adapter prepare and start preserve credential ownership`, async () => {
 		jest.useFakeTimers();
 		const iface = radio();
 		if (unverified) iface.degradedReason = "permanent-mac-unresolved";
@@ -788,20 +788,37 @@ for (const unverified of [false, true]) {
 		const prepared = await prepareHotspotForInterface(B, iface, {}, deps);
 		const started = await startHotspotForInterface(B, iface, deps);
 
-		expect(prepared).toEqual({
-			success: true,
-			name: OWN_PAIR.ssid,
-			password: OWN_PAIR.password,
-			firstTime: true,
-		});
-		expect(started).toEqual({ success: true });
-		expect(effects.filter((effect) => effect[0] === "create")).toEqual([
-			["create", OWN_PAIR.ssid, OWN_PAIR.password],
-		]);
+		expect(prepared).toEqual(
+			unverified
+				? {
+						success: false,
+						error: "radio-unverified",
+					}
+				: {
+						success: true,
+						name: OWN_PAIR.ssid,
+						password: OWN_PAIR.password,
+						firstTime: true,
+					},
+		);
+		expect(started).toEqual(
+			unverified
+				? { success: false, error: "radio-unverified" }
+				: { success: true },
+		);
+		expect(effects.filter((effect) => effect[0] === "create")).toEqual(
+			unverified ? [] : [["create", OWN_PAIR.ssid, OWN_PAIR.password]],
+		);
 		expect(getHotspotCredentials(B)).toMatchObject({
 			...OWN_PAIR,
-			conn: "b-new-profile",
+			...(unverified ? {} : { conn: "b-new-profile" }),
 		});
+		if (unverified) expect(effects).toEqual([]);
+		if (unverified)
+			expect(getHotspotCredentials(B)).toEqual({
+				...OWN_PAIR,
+				previousConns: [],
+			});
 	});
 }
 

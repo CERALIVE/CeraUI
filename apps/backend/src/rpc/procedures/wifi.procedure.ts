@@ -79,6 +79,7 @@ import {
 import {
 	getMockHotspotConfig,
 	getMockWifiFaults,
+	isMockWifiLimited,
 	setMockHotspotConfig,
 } from "../../mocks/providers/wifi.ts";
 import { getMockWifiIncarnation } from "../../mocks/providers/wifi-incarnation.ts";
@@ -110,8 +111,12 @@ import {
 	wifiHotspotPrepare,
 	wifiHotspotStart,
 } from "../../modules/wifi/wifi-hotspot-activation.ts";
-import { wifiHotspotStop } from "../../modules/wifi/wifi-hotspot-config.ts";
+import {
+	wifiHotspotConfig,
+	wifiHotspotStop,
+} from "../../modules/wifi/wifi-hotspot-config.ts";
 import { publishHotspotOutcome } from "../../modules/wifi/wifi-hotspot-outcome.ts";
+import { normalizeMacAddress } from "../../modules/wifi/wifi-permanent-mac.ts";
 import { broadcast } from "../events.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
@@ -371,6 +376,14 @@ export const hotspotStartProcedure = authedProcedure
 	.input(hotspotToggleInputSchema)
 	.output(hotspotToggleOutputSchema)
 	.handler(async ({ input }): Promise<HotspotToggleOutput> => {
+		if (
+			shouldUseMocks() &&
+			isMockWifiLimited(resolveMockWifiDevice(input.device))
+		) {
+			const result = { success: false, error: "radio-unverified" } as const;
+			publishHotspotOutcome("start", Number(input.device), result);
+			return result;
+		}
 		if (mockWifiBusy()) return refuseHotspot("start", input.device);
 		/*
 		  An admission PROBE, released before the transaction runs — see
@@ -415,6 +428,8 @@ export const hotspotPrepareProcedure = authedProcedure
 		if (shouldUseMocks()) {
 			const device = resolveMockWifiDevice(input.device);
 			if (!device) return { success: false, error: "no-device" };
+			if (isMockWifiLimited(device))
+				return { success: false, error: "radio-unverified" };
 			if (chosen) setMockHotspotConfig(device, chosen);
 			const { name, password } = getMockHotspotConfig(device);
 			return { success: true, name, password };
@@ -457,9 +472,35 @@ export const hotspotConfigureProcedure = authedProcedure
 	.handler(({ input, context }) =>
 		withWifiFrameIncarnation(
 			captureRequestFrameIncarnation(input.device, input.incarnation, "config"),
-			async (): Promise<MutationResult> => {
+			async (): Promise<{
+				success: boolean;
+				error?: "DEVICE_BUSY" | "radio-unverified";
+			}> => {
 				if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
 				const ws = context.ws;
+				if (
+					shouldUseMocks() &&
+					isMockWifiLimited(resolveMockWifiDevice(input.device))
+				) {
+					ws.send(
+						JSON.stringify({
+							wifi: {
+								hotspot: {
+									config: {
+										device: input.device,
+										error: "radio-unverified",
+										...captureRequestFrameIncarnation(
+											input.device,
+											input.incarnation,
+											"config",
+										),
+									},
+								},
+							},
+						}),
+					);
+					return { success: false, error: "radio-unverified" };
+				}
 				/*
 		  An ADMISSION PROBE, not a guard held across the work: `wifiHotspotConfig`
 		  acquires this exact key itself, and holding it here while dispatching made
@@ -470,6 +511,21 @@ export const hotspotConfigureProcedure = authedProcedure
 		*/
 				if (await adapterBusy(wifiAdapterLockKeyForDeviceId(input.device))) {
 					return { success: false, error: "DEVICE_BUSY" };
+				}
+				const limited = Object.entries(getWifiInterfacesByMacAddress()).some(
+					([key, row]) =>
+						row.id === Number(input.device) &&
+						(!normalizeMacAddress(key) ||
+							row.degradedReason === "permanent-mac-unresolved"),
+				);
+				if (limited) {
+					await wifiHotspotConfig(ws, {
+						device: Number(input.device),
+						name: input.name,
+						password: input.password,
+						channel: input.channel,
+					});
+					return { success: false, error: "radio-unverified" };
 				}
 
 				handleWifi(ws, {
@@ -572,6 +628,13 @@ export const setWifiAdapterModeProcedure = authedProcedure
 							error: "no-device",
 						});
 						return { success: false, error: "no-device" };
+					}
+					if (input.mode !== "station" && isMockWifiLimited(device)) {
+						publishAdapterModeOutcome(input.device, {
+							success: false,
+							error: "radio-unverified",
+						});
+						return { success: false, error: "radio-unverified" };
 					}
 					// A dev host can express `station` and `hotspot` only: `hybrid` needs a
 					// second, real netdev, and pretending otherwise would offer a mode whose
