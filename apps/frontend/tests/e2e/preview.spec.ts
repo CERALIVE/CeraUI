@@ -91,16 +91,20 @@ function injectServerConfig(): void {
 }
 
 /**
- * Open the collapsed "Preview" <details> disclosure (T11) so the preview section
- * (data-testid="preview") is visible. IdleCockpit ships the preview inside a
- * closed-by-default disclosure; opening it only REVEALS the surface — the preview
+ * Reveal the "Preview" <details> disclosure so the preview section
+ * (data-testid="preview") is visible. The disclosure is open by default from
+ * 768 px and closed below; revealing it only REVEALS the surface — the preview
  * stays off (data-status="idle") until `preview-toggle` is clicked, so the tier
  * selection and honest off-copy are still observed exactly as before.
  */
 async function openPreviewDisclosure(page: Page): Promise<void> {
 	const disclosure = page.getByTestId('preview-disclosure');
 	await expect(disclosure).toBeVisible();
-	await disclosure.locator('summary').click();
+	// Open by default from 768 px (Live screen contract), and a summary click
+	// toggles a <details> — so reveal it only when it is closed.
+	if (!(await disclosure.evaluate((el) => (el as HTMLDetailsElement).open))) {
+		await disclosure.locator('summary').click();
+	}
 	await expect(page.getByTestId('preview')).toBeVisible();
 }
 
@@ -345,7 +349,11 @@ test.describe('PreviewCanvas — mid-stream surface', () => {
 		await expect(disclosure).toBeVisible();
 		await expect(disclosure).toHaveAttribute('data-streaming', 'true');
 
-		await disclosure.locator('summary').click();
+		// Open by default from 768 px (Live screen contract), and a summary click
+		// toggles a <details> — so reveal it only when it is closed.
+		if (!(await disclosure.evaluate((el) => (el as HTMLDetailsElement).open))) {
+			await disclosure.locator('summary').click();
+		}
 		const preview = page.getByTestId('preview');
 		await expect(preview).toBeVisible();
 		// Still OFF until the operator asks — opening only reveals the surface.

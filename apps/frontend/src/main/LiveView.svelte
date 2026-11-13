@@ -987,7 +987,7 @@ const configRows = $derived<ConfigRow[]>([
 ]);
 </script>
 
-<div class="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-6">
+<div class="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-6 lg:max-w-6xl">
 	<LiveHeader {isStreaming} unconfirmed={streamOutcomeUnknown} />
 
 	<!-- Capability-tier state: calm banner when the engine is offline/starting or
@@ -1059,6 +1059,7 @@ const configRows = $derived<ConfigRow[]>([
 			{switchingInput}
 			onSwitch={handleSwitchInput}
 			onMatchCamera={handleMatchCamera}
+			capabilities={getCapabilities()}
 			bitrate={formatBitrate(liveBitrate.primaryKbps ?? undefined)}
 			bitrateMeasured={liveBitrate.isMeasured}
 			bitrateTarget={liveBitrate.isMeasured && liveBitrate.targetKbps != null

@@ -10,12 +10,14 @@ import { ensureAuthenticated, navigateTo } from './helpers/index.js';
  *
  * Proves the already-shipped local preview meets the issue's intent against the
  * real frontend in a browser:
- *   1. <PreviewCanvas> (data-testid="preview") renders in the same idle-cockpit
- *      column as the unified <SourceSection> (data-testid="source-section", which
- *      wraps the device-first `source-list` <ul> that replaced the removed
- *      <InputPicker>). Since T11 the preview lives inside a collapsed-by-default
- *      "Preview" <details> disclosure (data-testid="preview-disclosure") — every
- *      test opens it (see openPreviewDisclosure) before asserting preview visibility.
+ *   1. <PreviewCanvas> (data-testid="preview") renders in the idle cockpit's
+ *      program desk (data-testid="program-desk"), ahead of the unified
+ *      <SourceSection> (data-testid="source-section", which wraps the
+ *      device-first `source-list` <ul> that replaced the removed <InputPicker>).
+ *      The preview lives inside the "Preview" <details> disclosure
+ *      (data-testid="preview-disclosure"), open by default from 768 px — every
+ *      test reveals it (see openPreviewDisclosure) before asserting preview
+ *      visibility.
  *   2. The preview toggle is operable (aria-pressed flips, canvas mounts).
  *   3. The audio level meter mounts when the preview is on.
  *   4. With no active encode the preview reaches the `waiting` state and shows
@@ -109,17 +111,21 @@ function injectServerConfig(): void {
 }
 
 /**
- * Open the collapsed "Preview" <details> disclosure (T11) so <PreviewCanvas>
- * (data-testid="preview") becomes visible. IdleCockpit ships the preview inside a
- * closed-by-default disclosure — it never dials the engine until opened — so every
- * preview assertion must reveal it first. Opening the disclosure does NOT start the
- * preview (that stays off until `preview-toggle` is clicked). Mirrors the
- * roadmap-disclosure fix in source-overhaul.visual.spec.ts (commit dfffa2db).
+ * Reveal the "Preview" <details> disclosure so <PreviewCanvas>
+ * (data-testid="preview") becomes visible. The disclosure is open by default from
+ * 768 px and closed below, so the mobile project still has to open it; revealing it
+ * does NOT start the preview (that stays off until `preview-toggle` is clicked).
+ * Mirrors the roadmap-disclosure fix in source-overhaul.visual.spec.ts (commit
+ * dfffa2db).
  */
 async function openPreviewDisclosure(page: Page): Promise<void> {
 	const disclosure = page.getByTestId('preview-disclosure');
 	await expect(disclosure).toBeVisible();
-	await disclosure.locator('summary').click();
+	// Open by default from 768 px (Live screen contract), and a summary click
+	// toggles a <details> — so reveal it only when it is closed.
+	if (!(await disclosure.evaluate((el) => (el as HTMLDetailsElement).open))) {
+		await disclosure.locator('summary').click();
+	}
 	await expect(page.getByTestId('preview')).toBeVisible();
 }
 
@@ -140,7 +146,7 @@ test.describe('LiveView preview placement (#72)', () => {
 		await openPreviewDisclosure(page);
 	});
 
-	test('PreviewCanvas renders under the source section, toggle + meter operable', async ({
+	test('PreviewCanvas renders in the program desk ahead of the source section, toggle + meter operable', async ({
 		page,
 	}) => {
 		const sourceList = page.getByTestId('source-list');
@@ -148,28 +154,28 @@ test.describe('LiveView preview placement (#72)', () => {
 		await expect(sourceList).toBeVisible();
 		await expect(preview).toBeVisible();
 
-		// DOM proof for the device-first idle cockpit (Tasks 11–13): T13 replaced the
+		// DOM proof for the idle cockpit (Live screen contract): T13 replaced the
 		// bare <InputPicker> with the unified <SourceSection> `source-list` <ul>, and
-		// T11 moved <PreviewCanvas> into the "Preview" <details> disclosure (opened in
-		// beforeEach). The invariant is that the preview disclosure and the source
-		// section are same-column siblings inside the idle cockpit, and the source
-		// section wraps the unified source list.
+		// <PreviewCanvas> lives in the "Preview" <details> disclosure (revealed in
+		// beforeEach). The invariant is that the preview disclosure sits in the
+		// program desk, the desk and the source section are both inside the idle
+		// cockpit with the desk first, and the source section wraps the unified
+		// source list.
 		const placement = await page.evaluate(() => {
 			const cockpit = document.querySelector('[data-testid="idle-cockpit"]');
+			const desk = document.querySelector('[data-testid="program-desk"]');
 			const disclosure = document.querySelector('[data-testid="preview-disclosure"]');
 			const section = document.querySelector('[data-testid="source-section"]');
 			const list = document.querySelector('[data-testid="source-list"]');
 			const preview = document.querySelector('[data-testid="preview"]');
-			if (!cockpit || !disclosure || !section || !list || !preview) return 'missing';
+			if (!cockpit || !desk || !disclosure || !section || !list || !preview) return 'missing';
 			const wrapsList = section.contains(list);
 			const previewInDisclosure = disclosure.contains(preview);
-			const sameColumn =
-				disclosure.parentElement === section.parentElement &&
-				cockpit.contains(disclosure) &&
-				cockpit.contains(section);
-			return wrapsList && previewInDisclosure && sameColumn
+			const inDesk = desk.contains(disclosure) && cockpit.contains(desk) && cockpit.contains(section);
+			const deskFirst = Boolean(desk.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING);
+			return wrapsList && previewInDisclosure && inDesk && deskFirst
 				? 'ok'
-				: `wrapsList=${wrapsList} previewInDisclosure=${previewInDisclosure} sameColumn=${sameColumn}`;
+				: `wrapsList=${wrapsList} previewInDisclosure=${previewInDisclosure} inDesk=${inDesk} deskFirst=${deskFirst}`;
 		});
 		expect(placement).toBe('ok');
 

@@ -26,7 +26,11 @@
  * The ENGINE gate is intentionally NOT a row — the CapabilityTierBanner and the
  * Start button's disabled reason own it (readiness blocking semantics unchanged).
  *
- * There is NO collapse state and NO ready bar: all three rows are ALWAYS rendered.
+ * There is NO collapse state: all three rows are ALWAYS rendered. Live screen
+ * contract: Encoder + Destination form the titled Output group (`output-card`),
+ * Network the Connections group (`connections-card`), and Start sits in the
+ * {@link LiveBar} fixed to the viewport bottom, beside the same disabled reason
+ * the button carries as its title (or the ready text when nothing blocks).
  *
  * As with GoLiveCard, this component owns NO RPC and writes NO config — every
  * action is a callback prop, so the sole-camera "no premature setConfig" contract
@@ -58,6 +62,7 @@ import { pipelineAvailability } from '$lib/streaming/pipelineAvailability';
 import type { ManagedIngestAccount } from '$lib/streaming/receiver-experience';
 import { isSectionLocked } from '$lib/streaming/streamingLockPolicy';
 
+import LiveBar from './LiveBar.svelte';
 import StreamControlButton from './StreamControlButton.svelte';
 import type { ConfigRow } from './StreamSettingsCard.svelte';
 
@@ -400,7 +405,7 @@ const networkSummary = $derived(
 	<Card.Header class="pb-3">
 		<Card.Title class="text-sm font-semibold">{m["live.setup.title"]()}</Card.Title>
 	</Card.Header>
-	<Card.Content class="space-y-4 py-0 pb-4">
+	<Card.Content class="space-y-4 py-0">
 		<!-- Sole-camera auto-select line — only while config.source is unset and a
 		     single capture source exists. Writes NO config; Change opens the list. -->
 		{#if soleCamera}
@@ -424,82 +429,112 @@ const networkSummary = $derived(
 			</div>
 		{/if}
 
-		<!-- Four setup rows in signal order — always fully rendered (no collapse). -->
-		<div class="divide-border divide-y">
-			{#if encoderRow}
-				{@render setupRow(
-					'encoder',
-					encoderRow,
-					encoderState,
-					encoderReason,
-					'bitrate',
-					onOpenSource,
-				)}
-			{/if}
-			{#if serverRow}
-				{@render setupRow(
-					'destination',
-					serverRow,
-					destinationState,
-					destinationReason,
-					'traffic-light',
-					undefined,
-				)}
-			{/if}
-
-			<!-- Network — synthesized (no config dialog); action navigates to Network. -->
-			<div
-				class="flex items-center justify-between gap-4 py-2.5 first:pt-0"
-				data-testid="setup-row"
-				data-row="network"
-				data-state={networkState}
+		<!-- Setup rows in signal order — always fully rendered (no collapse). Titled
+		     groups inside this card, split by a hairline, never cards in a card. -->
+		{#if encoderRow || serverRow}
+			<section
+				aria-labelledby="live-output-card-title"
+				class="space-y-2"
+				data-testid="output-card"
 			>
-				<div class="flex min-w-0 items-start gap-2.5">
-					<span
-						class="mt-1.5 size-2 shrink-0 rounded-full"
-						style="background: {stateColor(networkState)};"
-						aria-hidden={true}
-					></span>
-					<Network
-						aria-hidden={true}
-						class="text-muted-foreground mt-0.5 size-4 shrink-0"
-					/>
-					<div class="min-w-0">
-						<p class="text-sm font-medium">{m["live.goLive.gate.network"]()}</p>
-						<p class="text-muted-foreground truncate font-mono text-sm">
-							{networkSummary}
-						</p>
-						{#if networkReason}
-							<p
-								class="text-muted-foreground truncate text-xs"
-								data-testid="setup-row-reason"
-							>
-								{resolveReason(networkReason)}
-							</p>
-						{/if}
-					</div>
+				<h2 class="text-muted-foreground text-xs font-medium" id="live-output-card-title">
+					{m["live.outputCard.title"]()}
+				</h2>
+				<div class="divide-border divide-y">
+					{#if encoderRow}
+						{@render setupRow(
+							'encoder',
+							encoderRow,
+							encoderState,
+							encoderReason,
+							'bitrate',
+							onOpenSource,
+						)}
+					{/if}
+					{#if serverRow}
+						{@render setupRow(
+							'destination',
+							serverRow,
+							destinationState,
+							destinationReason,
+							'traffic-light',
+							undefined,
+						)}
+					{/if}
 				</div>
-				<Button
-					class="min-h-[44px] shrink-0 gap-1.5"
-					data-testid="setup-row-fix"
-					data-fix="goNetwork"
-					onclick={onGoNetwork}
-					size="sm"
-					variant="ghost"
-				>
-					{m["live.goLive.fix.goNetwork"]()}
-					<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
-				</Button>
-			</div>
-		</div>
+			</section>
+		{/if}
 
-		<StreamControlButton
-			{canStart}
-			disabledReason={startDisabledReason}
-			{isStreaming}
-			{optimismState}
-			onStart={handleStartClick}
-			{onStop}
-		/>
+		<section
+			aria-labelledby="live-connections-card-title"
+			class="space-y-2 border-t pt-4"
+			data-testid="connections-card"
+		>
+			<h2 class="text-muted-foreground text-xs font-medium" id="live-connections-card-title">
+				{m["live.connectionsCard.title"]()}
+			</h2>
+			<!-- Network — synthesized (no config dialog); action navigates to Network. -->
+			<div>
+				<div
+					class="flex items-center justify-between gap-4 py-2.5 first:pt-0"
+					data-testid="setup-row"
+					data-row="network"
+					data-state={networkState}
+				>
+					<div class="flex min-w-0 items-start gap-2.5">
+						<span
+							class="mt-1.5 size-2 shrink-0 rounded-full"
+							style="background: {stateColor(networkState)};"
+							aria-hidden={true}
+						></span>
+						<Network
+							aria-hidden={true}
+							class="text-muted-foreground mt-0.5 size-4 shrink-0"
+						/>
+						<div class="min-w-0">
+							<p class="text-sm font-medium">{m["live.goLive.gate.network"]()}</p>
+							<p class="text-muted-foreground truncate font-mono text-sm">
+								{networkSummary}
+							</p>
+							{#if networkReason}
+								<p
+									class="text-muted-foreground truncate text-xs"
+									data-testid="setup-row-reason"
+								>
+									{resolveReason(networkReason)}
+								</p>
+							{/if}
+						</div>
+					</div>
+					<Button
+						class="min-h-[44px] shrink-0 gap-1.5"
+						data-testid="setup-row-fix"
+						data-fix="goNetwork"
+						onclick={onGoNetwork}
+						size="sm"
+						variant="ghost"
+					>
+						{m["live.goLive.fix.goNetwork"]()}
+						<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
+					</Button>
+				</div>
+			</div>
+		</section>
+
+		<LiveBar
+			blocked={startDisabledReason !== undefined}
+			status={startDisabledReason ?? m["live.bar.ready"]()}
+		>
+			<div class="shrink-0 sm:min-w-56">
+				<StreamControlButton
+					{canStart}
+					disabledReason={startDisabledReason}
+					{isStreaming}
+					{optimismState}
+					onStart={handleStartClick}
+					{onStop}
+				/>
+			</div>
+		</LiveBar>
 	</Card.Content>
 </Card.Root>

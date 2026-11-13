@@ -1076,7 +1076,7 @@ const tierLabel = $derived.by(() => {
 			class="ms-auto gap-1.5"
 			data-testid="preview-toggle"
 			aria-pressed={enabled}
-			aria-label={m["live.preview.toggleAria"]()}
+			title={m["live.preview.toggleAria"]()}
 			onclick={toggle}
 			size="sm"
 			variant={enabled ? 'secondary' : 'default'}
