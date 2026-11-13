@@ -109,12 +109,20 @@ At capacity, sampling defers without calling another reader or starting a new
 sampling timeout, logs one string warning per saturation episode
 (`Wi-Fi identity reads still held (4); deferring sampling`), and resumes the
 latest queued sample when a held read settles.
+Settlement wakes only a queued capacity-deferred sample; it does not restart an
+exhausted retry cycle. After retry exhaustion, another discovery is required.
+Capacity deferral has no finite recovery bound if held reads never settle.
+
+All observation-owned start, deadline, retry and queued-continuation timers are
+unreferenced, so those timers alone cannot keep an otherwise finished process
+alive. Explicit cancellation still clears them.
 
 Explicit `stop()` or `terminate()` cancels without a lost-sample warning or
 retry. `stop()` is reusable discovery cancellation; `terminate()` is terminal.
-Production SIGTERM/SIGINT calls `terminate()`, so a device listing already in
-flight cannot enqueue or restart observation during cleanup. Only the existing
-test reset path reopens the singleton for another isolated test.
+Production SIGTERM/SIGINT injects `terminate()` from the `main.ts` composition,
+so a device listing already in flight cannot enqueue or restart observation
+during cleanup. The generic shutdown helper imports no Wi-Fi/application graph.
+Wi-Fi-owned test setup reopens the singleton for another isolated test.
 Each lost sample logs only a string identifying its reason and interface names:
 `Wi-Fi identity sample lost (<reason>) for <ifnames>; retry <n>/3` for retries
 1, 2 and 3; the final loss ends with `; no retries left`. Thus an initial

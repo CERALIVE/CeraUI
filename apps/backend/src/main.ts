@@ -181,6 +181,7 @@ import { applyPersistedCountry } from "./modules/wifi/regdomain.ts";
 import { reconcileWifiAdapterModes } from "./modules/wifi/wifi-adapter-mode-transition.ts";
 import { wifiStateInit } from "./modules/wifi/wifi-connections.ts";
 import { handleWifiMonitorEvent as handleHotspotMonitorEvent } from "./modules/wifi/wifi-hotspot-monitor.ts";
+import { wifiRadioObservation } from "./modules/wifi/wifi-radio-observation.ts";
 import { onHeartbeatTick, startHeartbeat } from "./rpc/heartbeat.ts";
 import { getServer, initServer } from "./rpc/index.ts";
 import { stopLegacyTokenMigration } from "./rpc/procedures/auth.procedure.ts";
@@ -681,6 +682,7 @@ function stopRecoveryRetries(): void {
 process.on("SIGTERM", () =>
 	handleTerminationSignal("SIGTERM", {
 		stopRecoveryRetries,
+		terminateWifiObservation: () => wifiRadioObservation.terminate(),
 		gracefulShutdown,
 		stopSrtIngest: stopSRTIngest,
 		stopDmesgWatchers,
@@ -692,6 +694,7 @@ process.on("SIGTERM", () =>
 process.on("SIGINT", () =>
 	handleTerminationSignal("SIGINT", {
 		stopRecoveryRetries,
+		terminateWifiObservation: () => wifiRadioObservation.terminate(),
 		gracefulShutdown,
 		stopSrtIngest: stopSRTIngest,
 		stopDmesgWatchers,

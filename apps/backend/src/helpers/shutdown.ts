@@ -1,10 +1,10 @@
 import { cancelDisruptiveRetries } from "../modules/system/disruptive-retry.ts";
-import { wifiRadioObservation } from "../modules/wifi/wifi-radio-observation.ts";
 import { logger } from "./logger.ts";
 
 export interface BackendShutdownDeps {
 	/** Cancels background retry owners so none starts work during teardown. */
 	readonly stopRecoveryRetries?: () => void;
+	readonly terminateWifiObservation?: () => void;
 	readonly gracefulShutdown: () => Promise<void>;
 	readonly stopSrtIngest: () => Promise<void>;
 	readonly stopDmesgWatchers: () => void;
@@ -28,7 +28,6 @@ async function settleCleanup(
 
 export function resetShutdownForTest(): void {
 	shuttingDown = false;
-	wifiRadioObservation.reopenForTest();
 }
 
 export function handleTerminationSignal(
@@ -38,7 +37,7 @@ export function handleTerminationSignal(
 	if (shuttingDown) return;
 	shuttingDown = true;
 	cancelDisruptiveRetries();
-	wifiRadioObservation.terminate();
+	deps.terminateWifiObservation?.();
 	logger.info(`received ${signal}; shutting down streaming processes`);
 	void (async () => {
 		if (deps.stopRecoveryRetries)

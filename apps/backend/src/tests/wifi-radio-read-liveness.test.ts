@@ -82,6 +82,7 @@ beforeEach(async () => {
 	jest.setSystemTime(0);
 	registry = isolateWifiRegistry();
 	resetShutdownForTest();
+	wifiRadioObservation.reopenForTest();
 	wifiRadioObservation.stop();
 	await wifiRadioObservation.settled;
 	await wifiRadioIdentity.discover([]);
@@ -135,6 +136,7 @@ afterEach(async () => {
 	setWifiState({});
 	restoreWifiRegistry(registry);
 	resetShutdownForTest();
+	wifiRadioObservation.reopenForTest();
 	mock.restore();
 	jest.useRealTimers();
 });
@@ -287,6 +289,7 @@ for (const signal of ["SIGTERM", "SIGINT"] as const) {
 			work.push(discovery);
 			const before = wifiRadioIdentity.state;
 			handleTerminationSignal(signal, {
+				terminateWifiObservation: () => wifiRadioObservation.terminate(),
 				stopSrtIngest: () => cleanup.promise,
 				stopDmesgWatchers: () => undefined,
 				gracefulShutdown: async () => undefined,

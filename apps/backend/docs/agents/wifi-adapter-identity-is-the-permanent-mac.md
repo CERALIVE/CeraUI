@@ -177,7 +177,9 @@ to four across every producer, discovery and retry. An operation increments the
 counter when it starts and decrements it only on settlement; cancellation never
 pretends that the operation finished. At capacity the latest sample waits
 without a new reader call or sampling timeout. One string-only warning per
-saturation episode names the held count, and settlement re-arms sampling.
+saturation episode names the held count. Settlement resumes only a queued
+capacity-deferred sample; it does not revive an exhausted retry cycle, which
+requires another discovery. Capacity wait has no finite bound if reads stay held.
 
 Lost observations resample the
 current registry with a fresh generation and invalidate each row first, after
@@ -193,9 +195,13 @@ still queues the retained registry rows.
 
 Explicit `stop()` and `terminate()` cancel without a warning or retry.
 `stop()` remains reusable; `terminate()` permanently rejects enqueue, starts
-and retry work. Process SIGTERM/SIGINT uses `terminate()`, including when an
-older discovery is still awaiting its listing. The existing shutdown test-reset
-path alone reopens the singleton for another isolated test.
+and retry work. Process SIGTERM/SIGINT injects `terminate()` through
+`BackendShutdownDeps` at the main composition root, including when an older
+discovery is still awaiting its listing. The shutdown helper has no Wi-Fi or
+application bootstrap import. Wi-Fi-owned test setup alone reopens the singleton.
+Every observation-owned start, deadline, retry and queued-continuation timer is
+unreferenced; explicit cancellation still clears timers, but they cannot retain
+an otherwise finished process.
 
 After a publication, a changed wire-projected token on any current row sends
 exactly one additional local Wi-Fi status frame through a callback installed
@@ -217,6 +223,9 @@ warnings.
 
 Coverage: `wifi-token-liveness.test.ts`, `wifi-radio-identity.test.ts`,
 `wifi-discovery-single-flight.test.ts` and `wifi-radio-equivalence.test.ts`.
+`process-lifetime.test.ts` covers helper-only subprocess imports without the
+application preload or setup file, injected termination, and native timer
+reference state/natural exit with a never-settling reader.
 Fake-clock liveness tests reproduce the boot-time virtual-interface event,
 failed listing, recovery after timeout, retry exhaustion, local-only token
 arrival, per-row rotation, exception-safe publication fencing, credential-free

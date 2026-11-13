@@ -186,6 +186,7 @@ beforeEach(async () => {
 	inheritedChannel = getControlChannel();
 	setControlChannel(null);
 	resetShutdownForTest();
+	wifiRadioObservation.reopenForTest();
 	spyOn(radioIdentityReaders, "readText").mockImplementation(async (path) =>
 		healthyText(path),
 	);
@@ -233,6 +234,7 @@ afterEach(async () => {
 	restoreWifiRegistry(inheritedRegistry);
 	setControlChannel(inheritedChannel);
 	resetShutdownForTest();
+	wifiRadioObservation.reopenForTest();
 	jest.useRealTimers();
 });
 
@@ -451,6 +453,7 @@ test.each(["SIGTERM", "SIGINT"] as const)(
 		expect(jest.getTimerCount()).toBe(1);
 		const exited = Promise.withResolvers<number>();
 		handleTerminationSignal(signal, {
+			terminateWifiObservation: () => wifiRadioObservation.terminate(),
 			gracefulShutdown: async () => undefined,
 			stopSrtIngest: async () => undefined,
 			stopDmesgWatchers: () => undefined,

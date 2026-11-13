@@ -56,7 +56,7 @@ export class WifiRadioObservation {
 			this.queued = { devices, sequence };
 		}
 		if (!this.active && !this.resumeRead && this.timer === undefined) {
-			this.timer = setTimeout(() => this.start(), 0);
+			this.timer = setTimeout(() => this.start(), 0).unref();
 		}
 	}
 
@@ -117,7 +117,7 @@ export class WifiRadioObservation {
 				reason = "timed out";
 				controller.abort();
 			}
-		}, RADIO_SHADOW_TIMEOUT_MS);
+		}, RADIO_SHADOW_TIMEOUT_MS).unref();
 		const sample = Promise.resolve()
 			.then(() =>
 				this.producer.discover(next.devices, next.sequence, controller.signal),
@@ -204,14 +204,14 @@ export class WifiRadioObservation {
 					);
 					this.queued = { devices, sequence };
 					this.start();
-				}, delay);
+				}, delay).unref();
 			})
 			.finally(() => {
 				clearTimeout(timeout);
 				controller.signal.removeEventListener("abort", onAbort);
 				this.active = undefined;
 				if (this.queued && !this.stopped && !this.terminated) {
-					this.timer = setTimeout(() => this.start(), 0);
+					this.timer = setTimeout(() => this.start(), 0).unref();
 				}
 			});
 		// A timed-out read can settle later, but its aborted generation cannot publish.
