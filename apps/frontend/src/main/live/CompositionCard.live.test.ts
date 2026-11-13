@@ -275,6 +275,37 @@ describe("CompositionCard — live layout, opacity and second input", () => {
 		expectOneOpacityWrite(0.9);
 	});
 
+	it("streaming: a shifted Numpad4 release still ends the adjustment it started", async () => {
+		setConfig.mockResolvedValue(APPLIED);
+		renderCard(true);
+
+		const thumb = opacityPart("slider-thumb");
+		await fireEvent.keyDown(thumb, { key: "ArrowLeft", code: "Numpad4" });
+		await fireEvent.keyDown(thumb, {
+			key: "Shift",
+			code: "ShiftLeft",
+			shiftKey: true,
+		});
+		expect(setConfig).not.toHaveBeenCalled();
+		await fireEvent.keyUp(thumb, { key: "4", code: "Numpad4", shiftKey: true });
+
+		expectOneOpacityWrite(0.95);
+		await fireEvent.keyUp(thumb, { key: "Shift", code: "ShiftLeft" });
+		expect(setConfig).toHaveBeenCalledTimes(1);
+	});
+
+	it("streaming: a keyup reporting a different key than its keydown releases by code", async () => {
+		setConfig.mockResolvedValue(APPLIED);
+		renderCard(true);
+
+		const thumb = opacityPart("slider-thumb");
+		await fireEvent.keyDown(thumb, { key: "ArrowLeft", code: "ArrowLeft" });
+		expect(setConfig).not.toHaveBeenCalled();
+		await fireEvent.keyUp(thumb, { key: "Unidentified", code: "ArrowLeft" });
+
+		expectOneOpacityWrite(0.95);
+	});
+
 	it("streaming: a held key is sent once when focus leaves before the key comes up", async () => {
 		setConfig.mockResolvedValue(APPLIED);
 		renderCard(true);

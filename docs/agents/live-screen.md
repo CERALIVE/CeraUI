@@ -70,6 +70,8 @@ These test ids must keep their names and meaning: `idle-cockpit`,
   released, when the last held adjusting key (arrows, Home, End, PageUp,
   PageDown) comes up, or when focus leaves the slider; never once per step.
   Releasing any other key (Shift, Escape, Enter) neither sends nor ends it.
+  A key is released by its physical key (its code), so a keyup that reports a
+  different key, such as a shifted Numpad4, still ends the adjustment.
 - Until the engine answers, the new value shows as the choice and the controls
   are busy. Any apply-now change in flight, from this card or from the Encoder
   dialog, holds the controls.

@@ -83,6 +83,8 @@ let liveRefusal = $state<string | undefined>(undefined);
 // release. The slider reports a commit for every key press, so a keyboard
 // adjustment stays open while any adjusting key is held and ends when the
 // last one comes up or focus leaves; other keys neither commit nor end it.
+// Held keys are tracked by the physical key (event.code): a keyup can report a
+// different key than its keydown (Shift turns Numpad4's ArrowLeft into "4").
 let draggedAlpha = $state<number | undefined>(undefined);
 const ADJUSTING_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'];
 let heldKeys: string[] = [];
@@ -203,15 +205,21 @@ function commitAlpha(): void {
 	if (heldKeys.length === 0) releaseAlpha();
 }
 
+function pressedKey(event: KeyboardEvent): string {
+	return event.code || event.key;
+}
+
 function holdKey(event: KeyboardEvent): void {
-	if (ADJUSTING_KEYS.includes(event.key) && !heldKeys.includes(event.key)) {
-		heldKeys = [...heldKeys, event.key];
+	const pressed = pressedKey(event);
+	if (ADJUSTING_KEYS.includes(event.key) && !heldKeys.includes(pressed)) {
+		heldKeys = [...heldKeys, pressed];
 	}
 }
 
 function releaseKey(event: KeyboardEvent): void {
-	if (!heldKeys.includes(event.key)) return;
-	heldKeys = heldKeys.filter((key) => key !== event.key);
+	const pressed = pressedKey(event);
+	if (!heldKeys.includes(pressed)) return;
+	heldKeys = heldKeys.filter((key) => key !== pressed);
 	if (heldKeys.length === 0) releaseAlpha();
 }
 
