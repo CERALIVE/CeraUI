@@ -91,9 +91,14 @@ confirmed re-registration with a live data path.
 connection on a concrete device.** USB composition switches can make the physical
 modem visible before its replacement netdev appears in NetworkManager. The engine's
 request-scoped enumeration wrapper therefore withholds the returned target snapshot
-and polls `GENERAL.CON-UUID,GENERAL.AVAILABLE-CONNECTIONS` for the transaction's NM
-connection id. Only after that bounded resolver finds the owning interface is the
-snapshot returned with the resolved ifname injected. Expiry throws a transaction
+and first reads `GENERAL.CON-UUID` across modem-class devices for the transaction's
+NM connection UUID. A unique active owner wins; otherwise, with no active owner,
+it reads `CONNECTIONS.AVAILABLE-CONNECTIONS` in multiline mode and matches only the
+UUID before the profile-name separator. Ambiguous ownership stays unresolved.
+Only after that bounded resolver finds the owning NM device is the snapshot
+returned with its name injected. This name can be `cdc-wdmN`, rather than a kernel
+data interface: the engine passes it to NM activation and data-path confirmation
+reads that same NM device's state and address. Expiry throws a transaction
 error, leaves the failed journal outcome intact, and never reports a switch as
 successful merely because the USB device reappeared. Coverage is split between
 `tests/modem-transition-engine.test.ts` (delayed success plus bounded timeout) and

@@ -1,0 +1,20 @@
+{
+	"connectionId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+	"devices": ["eth0:ethernet", "cdc-wdm0:gsm", "cdc-wdm1:gsm"],
+	"properties": {
+		"eth0": {
+			"GENERAL.CON-UUID": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+			"CONNECTIONS.AVAILABLE-CONNECTIONS": "CONNECTIONS.AVAILABLE-CONNECTIONS[1]:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee | profile-a"
+		},
+		"cdc-wdm0": {
+			"GENERAL.CON-UUID": "",
+			"CONNECTIONS.AVAILABLE-CONNECTIONS": "CONNECTIONS.AVAILABLE-CONNECTIONS[1]:11111111-2222-3333-4444-555555555555 | profile-b"
+		},
+		"cdc-wdm1": {
+			"GENERAL.CON-UUID": "",
+			"CONNECTIONS.AVAILABLE-CONNECTIONS": "CONNECTIONS.AVAILABLE-CONNECTIONS[1]:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee | profile-a",
+			"GENERAL.STATE": "100 (connected)",
+			"IP4.ADDRESS": "192.0.2.2/30"
+		}
+	}
+}
