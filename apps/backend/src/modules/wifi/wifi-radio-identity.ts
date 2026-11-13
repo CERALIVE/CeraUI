@@ -1,12 +1,11 @@
 import { realpath } from "node:fs/promises";
-import { ID_RE } from "../../helpers/run.ts";
 import type { MacAddress } from "../network/network-manager.ts";
 import type {
 	BaseWifiInterface,
 	WifiAdapterDegradedReason,
 } from "./wifi-interfaces.ts";
-import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 import { invalidateWifiRadioRow } from "./wifi-radio-publication.ts";
+import { type RadioSample, sampleRadio } from "./wifi-radio-read-budget.ts";
 
 export type RadioLifetime = {
 	readonly ifindex: number;
@@ -63,18 +62,6 @@ export type RadioObservation = {
 	readonly row?: BaseWifiInterface;
 };
 
-type RadioSample = {
-	readonly lifetime: RadioLifetime;
-	readonly permanentMac: MacAddress | undefined;
-	readonly macReadFailed: boolean;
-};
-
-function index(raw: string | undefined, minimum: number): number | undefined {
-	if (raw === undefined || !/^\d+$/.test(raw.trim())) return undefined;
-	const value = Number(raw.trim());
-	return Number.isSafeInteger(value) && value >= minimum ? value : undefined;
-}
-
 function sameLifetime(
 	a: RadioLifetime | undefined,
 	b: RadioLifetime | undefined,
@@ -86,35 +73,6 @@ function sameLifetime(
 		a.wiphy === b.wiphy &&
 		a.phyPath === b.phyPath
 	);
-}
-
-async function sampleRadio(
-	ifname: string,
-	readers: RadioIdentityReaders,
-	signal: AbortSignal | undefined,
-): Promise<RadioSample | undefined> {
-	if (signal?.aborted || !ID_RE.test(ifname)) return undefined;
-	const net = `/sys/class/net/${ifname}`;
-	const i1 = index(await readers.readText(`${net}/ifindex`), 1);
-	if (signal?.aborted) return undefined;
-	const d1 = await readers.realpath(`${net}/phy80211`);
-	if (signal?.aborted || i1 === undefined || !d1) return undefined;
-	const wiphy = index(await readers.readText(`${d1}/index`), 0);
-	if (signal?.aborted) return undefined;
-	const rawMac = await readers.readText(`${d1}/macaddress`);
-	if (signal?.aborted) return undefined;
-	const permanentMac = normalizeMacAddress(rawMac);
-	const i2 = index(await readers.readText(`${net}/ifindex`), 1);
-	if (signal?.aborted) return undefined;
-	const d2 = await readers.realpath(`${net}/phy80211`);
-	if (signal?.aborted || i1 !== i2 || d1 !== d2 || wiphy === undefined) {
-		return undefined;
-	}
-	return {
-		lifetime: { ifindex: i1, wiphy, phyPath: d1 },
-		permanentMac,
-		macReadFailed: rawMac === undefined,
-	};
 }
 
 export type RadioIdentityState = {

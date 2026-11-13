@@ -11,6 +11,10 @@ import {
 	notifyWifiRadioPublication,
 	projectWifiRadioIncarnation,
 } from "./wifi-radio-publication.ts";
+import {
+	deferWifiRadioRead,
+	hasWifiRadioReadCapacity,
+} from "./wifi-radio-read-budget.ts";
 
 export const RADIO_SHADOW_TIMEOUT_MS = 1000;
 
@@ -27,7 +31,10 @@ export class WifiRadioObservation {
 	private timer: ReturnType<typeof setTimeout> | undefined;
 	private retries = 0;
 	private discovery = 0;
+	private cancellation = 0;
 	private stopped = false;
+	private terminated = false;
+	private resumeRead: (() => void) | undefined;
 	private active:
 		| { readonly controller: AbortController; readonly promise: Promise<void> }
 		| undefined;
@@ -39,6 +46,7 @@ export class WifiRadioObservation {
 	}
 
 	enqueue(devices: readonly RadioObservation[], sequence: number): void {
+		if (this.terminated) return;
 		this.stopped = false;
 		this.discovery++;
 		this.retries = 0;
@@ -47,7 +55,7 @@ export class WifiRadioObservation {
 		if (!this.queued || sequence > this.queued.sequence) {
 			this.queued = { devices, sequence };
 		}
-		if (!this.active && this.timer === undefined) {
+		if (!this.active && !this.resumeRead && this.timer === undefined) {
 			this.timer = setTimeout(() => this.start(), 0);
 		}
 	}
@@ -55,20 +63,42 @@ export class WifiRadioObservation {
 	stop(): void {
 		this.stopped = true;
 		this.discovery++;
+		this.cancellation++;
 		this.retries = 0;
 		this.queued = undefined;
 		if (this.timer !== undefined) clearTimeout(this.timer);
 		this.timer = undefined;
+		this.resumeRead?.();
+		this.resumeRead = undefined;
 		this.active?.controller.abort();
+	}
+
+	terminate(): void {
+		this.terminated = true;
+		this.stop();
+	}
+
+	reopenForTest(): void {
+		this.terminated = false;
 	}
 
 	private start(): void {
 		this.timer = undefined;
+		if (this.stopped || this.terminated || this.active) return;
 		const next = this.queued;
 		if (!next) return;
+		if (!hasWifiRadioReadCapacity()) {
+			this.resumeRead ??= deferWifiRadioRead(() => {
+				this.resumeRead = undefined;
+				if (!this.stopped && !this.terminated && !this.active && this.queued)
+					this.start();
+			});
+			return;
+		}
 		this.queued = undefined;
 		const controller = new AbortController();
 		const discovery = this.discovery;
+		const cancellation = this.cancellation;
 		const wireBefore = new Map(
 			Object.values(getWifiInterfacesByMacAddress()).map((row) => [
 				row.ifname,
@@ -100,11 +130,17 @@ export class WifiRadioObservation {
 			.catch(() => "rejected");
 		const promise = Promise.race([sample, aborted.promise])
 			.then((outcome) => {
-				if (this.stopped) return;
+				if (
+					this.stopped ||
+					this.terminated ||
+					cancellation !== this.cancellation
+				)
+					return;
+				let loss = outcome;
 				if (outcome === "published") {
-					this.retries = 0;
+					const currentRows = Object.values(getWifiInterfacesByMacAddress());
 					if (
-						Object.values(getWifiInterfacesByMacAddress()).some(
+						currentRows.some(
 							(row) =>
 								wireBefore.get(row.ifname) !==
 								projectWifiRadioIncarnation(
@@ -115,9 +151,27 @@ export class WifiRadioObservation {
 					) {
 						notifyWifiRadioPublication();
 					}
-					return;
+					const incomplete = next.devices.some(
+						({ row }) =>
+							row !== undefined &&
+							currentRows.includes(row) &&
+							row.degradedReason === undefined &&
+							projectWifiRadioIncarnation(
+								row,
+								this.producer.state.rows.get(row.ifname),
+							) === undefined,
+					);
+					if (!incomplete) {
+						this.retries = 0;
+						return;
+					}
+					loss = "incomplete";
 				}
-				if (outcome === "timed out" || outcome === "rejected") {
+				if (
+					loss === "timed out" ||
+					loss === "rejected" ||
+					loss === "incomplete"
+				) {
 					recordWifiRadioShadowFailure();
 				}
 				const delay = RETRY_DELAYS_MS[this.retries];
@@ -126,13 +180,15 @@ export class WifiRadioObservation {
 						? "no retries left"
 						: `retry ${this.retries + 1}/3`;
 				logger.warn(
-					`Wi-Fi identity sample lost (${outcome}) for ${next.devices.map(({ ifname }) => ifname).join(", ")}; ${retry}`,
+					`Wi-Fi identity sample lost (${loss}) for ${next.devices.map(({ ifname }) => ifname).join(", ")}; ${retry}`,
 				);
 				if (discovery !== this.discovery) return;
 				if (delay === undefined) return;
 				this.retries++;
 				this.timer = setTimeout(() => {
 					this.timer = undefined;
+					if (this.stopped || this.terminated || discovery !== this.discovery)
+						return;
 					const sequence = this.producer.captureObservation();
 					const devices = Object.values(getWifiInterfacesByMacAddress()).map(
 						(row) => {
@@ -154,7 +210,7 @@ export class WifiRadioObservation {
 				clearTimeout(timeout);
 				controller.signal.removeEventListener("abort", onAbort);
 				this.active = undefined;
-				if (this.queued) {
+				if (this.queued && !this.stopped && !this.terminated) {
 					this.timer = setTimeout(() => this.start(), 0);
 				}
 			});

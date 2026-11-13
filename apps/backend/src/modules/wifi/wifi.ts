@@ -420,7 +420,6 @@ export function broadcastWifiState() {
 
 setWifiRadioPublicationListener(() => {
 	broadcastMsgLocal("status", { wifi: wifiBuildMsg() });
-	recordHotspotClientsBroadcast();
 });
 
 /*

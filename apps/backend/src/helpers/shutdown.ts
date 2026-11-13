@@ -28,6 +28,7 @@ async function settleCleanup(
 
 export function resetShutdownForTest(): void {
 	shuttingDown = false;
+	wifiRadioObservation.reopenForTest();
 }
 
 export function handleTerminationSignal(
@@ -37,7 +38,7 @@ export function handleTerminationSignal(
 	if (shuttingDown) return;
 	shuttingDown = true;
 	cancelDisruptiveRetries();
-	wifiRadioObservation.stop();
+	wifiRadioObservation.terminate();
 	logger.info(`received ${signal}; shutting down streaming processes`);
 	void (async () => {
 		if (deps.stopRecoveryRetries)

@@ -171,19 +171,40 @@ legacy publication and promise completion; legacy callers never await it.
 Only this detached work has one logical active flight and one replaceable latest
 queued batch. A 1000 ms budget aborts the sample and prevents further reads or
 publication from that generation. A held uncancellable physical read may settle
-later; a new logical sample does not wait for it. Lost observations resample the
+later; a new logical sample does not wait for it while capacity is available.
+`wifi-radio-read-budget.ts` bounds all outstanding physical text/symlink reads
+to four across every producer, discovery and retry. An operation increments the
+counter when it starts and decrements it only on settlement; cancellation never
+pretends that the operation finished. At capacity the latest sample waits
+without a new reader call or sampling timeout. One string-only warning per
+saturation episode names the held count, and settlement re-arms sampling.
+
+Lost observations resample the
 current registry with a fresh generation and invalidate each row first, after
 250 ms, then 1 s, then 4 s, with at most three consecutive retries.
-Publication and new discovery reset the retry budget. Discovery cancels pending
+An incomplete/inconsistent bracket still publishes uncertainty. A current
+sampled row with no declared degraded reason and no coherent projectable token
+is a loss with reason `incomplete`, so it retries instead of being stranded.
+A row declared degraded/limited by its own contract does not retry solely for
+absent proof. Coherent publication and new discovery reset the retry budget.
+Discovery cancels pending
 observation work before awaiting NetworkManager, and an absent device listing
-still queues the retained registry rows. `stop()` and process SIGTERM/SIGINT
-shutdown cancel retry timers.
+still queues the retained registry rows.
+
+Explicit `stop()` and `terminate()` cancel without a warning or retry.
+`stop()` remains reusable; `terminate()` permanently rejects enqueue, starts
+and retry work. Process SIGTERM/SIGINT uses `terminate()`, including when an
+older discovery is still awaiting its listing. The existing shutdown test-reset
+path alone reopens the singleton for another isolated test.
 
 After a publication, a changed wire-projected token on any current row sends
 exactly one additional local Wi-Fi status frame through a callback installed
 beside `broadcastWifiState`. No projected token change means no frame.
 `broadcastMsgLocal` keeps this notification off the cloud relay; the remote
 projection, registry keys, token format, admission and wire fields are unchanged.
+The local callback never records global hotspot membership delivery. Only the
+normal global `broadcastWifiState` path acknowledges the roster, preserving
+one global/control-channel notification when a poll overlaps token publication.
 
 Both integration boundaries contain shadow exceptions. Read failures, timeouts
 and unexpected shadow exceptions increment `getWifiRadioShadowFailures()`.
@@ -199,7 +220,11 @@ Coverage: `wifi-token-liveness.test.ts`, `wifi-radio-identity.test.ts`,
 Fake-clock liveness tests reproduce the boot-time virtual-interface event,
 failed listing, recovery after timeout, retry exhaustion, local-only token
 arrival, per-row rotation, exception-safe publication fencing, credential-free
-warnings, and stop/discovery/process-shutdown cancellation.
+warnings, rejection/supersession recovery and exhaustion, incomplete brackets,
+budget resets and already-fired retry cancellation. `wifi-radio-read-liveness`
+regressions cover the four-operation physical bound, late completion fences,
+settlement recovery and terminal pending-listing shutdown; the roster publication
+regression uses real authenticated local and injected control-channel delivery.
 After removing only the optional incarnation
 field from Wi-Fi rows, nine recorded main fixture families cover
 the resolver tiers, unavailable/missing-operational rows, duplicates, rename and
