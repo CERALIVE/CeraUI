@@ -81,9 +81,11 @@ let pending = $state<CompositionConfig | undefined>(undefined);
 let liveRefusal = $state<string | undefined>(undefined);
 // Live, the opacity previews while it moves and is sent as one change on
 // release. The slider reports a commit for every key press, so a keyboard
-// adjustment is held until the key comes up or focus leaves the slider.
+// adjustment stays open while any adjusting key is held and ends when the
+// last one comes up or focus leaves; other keys neither commit nor end it.
 let draggedAlpha = $state<number | undefined>(undefined);
-let keyAdjusting = false;
+const ADJUSTING_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'];
+let heldKeys: string[] = [];
 
 const shown = $derived(pending ?? persisted);
 
@@ -191,7 +193,6 @@ function previewAlpha(value: number): void {
 }
 
 function releaseAlpha(): void {
-	keyAdjusting = false;
 	if (!isStreaming || draggedAlpha === undefined) return;
 	const value = draggedAlpha;
 	draggedAlpha = undefined;
@@ -199,7 +200,24 @@ function releaseAlpha(): void {
 }
 
 function commitAlpha(): void {
-	if (!keyAdjusting) releaseAlpha();
+	if (heldKeys.length === 0) releaseAlpha();
+}
+
+function holdKey(event: KeyboardEvent): void {
+	if (ADJUSTING_KEYS.includes(event.key) && !heldKeys.includes(event.key)) {
+		heldKeys = [...heldKeys, event.key];
+	}
+}
+
+function releaseKey(event: KeyboardEvent): void {
+	if (!heldKeys.includes(event.key)) return;
+	heldKeys = heldKeys.filter((key) => key !== event.key);
+	if (heldKeys.length === 0) releaseAlpha();
+}
+
+function endAdjustment(): void {
+	heldKeys = [];
+	releaseAlpha();
 }
 </script>
 
@@ -348,13 +366,11 @@ function commitAlpha(): void {
 						disabled={busy}
 						max={COMPOSITION_ALPHA_MAX}
 						min={COMPOSITION_ALPHA_MIN}
-						onfocusout={releaseAlpha}
-						onkeydowncapture={() => {
-							keyAdjusting = true;
-						}}
-						onkeyup={releaseAlpha}
+						onfocusout={endAdjustment}
+						onkeydowncapture={holdKey}
+						onkeyup={releaseKey}
 						onpointerdowncapture={() => {
-							keyAdjusting = false;
+							heldKeys = [];
 						}}
 						onValueChange={(value) => previewAlpha(value as number)}
 						onValueCommit={commitAlpha}

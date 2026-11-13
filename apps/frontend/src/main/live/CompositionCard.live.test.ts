@@ -225,6 +225,56 @@ describe("CompositionCard — live layout, opacity and second input", () => {
 		expectOneOpacityWrite(0.85);
 	});
 
+	it("streaming: releasing Shift while the arrow stays held sends one write, at the arrow's release", async () => {
+		setConfig.mockResolvedValue(APPLIED);
+		renderCard(true);
+
+		const thumb = opacityPart("slider-thumb");
+		await fireEvent.keyDown(thumb, { key: "Shift", shiftKey: true });
+		await fireEvent.keyDown(thumb, { key: "ArrowLeft", shiftKey: true });
+		await fireEvent.keyUp(thumb, { key: "Shift" });
+		expect(setConfig).not.toHaveBeenCalled();
+
+		await fireEvent.keyDown(thumb, { key: "ArrowLeft", repeat: true });
+		expect(setConfig).not.toHaveBeenCalled();
+		await fireEvent.keyUp(thumb, { key: "ArrowLeft" });
+
+		expectOneOpacityWrite(0.9);
+	});
+
+	it("streaming: two overlapping arrow keys send one write, after both are up", async () => {
+		setConfig.mockResolvedValue(APPLIED);
+		renderCard(true);
+
+		const thumb = opacityPart("slider-thumb");
+		await fireEvent.keyDown(thumb, { key: "ArrowLeft" });
+		await fireEvent.keyDown(thumb, { key: "ArrowDown" });
+		await fireEvent.keyUp(thumb, { key: "ArrowLeft" });
+		expect(setConfig).not.toHaveBeenCalled();
+
+		await fireEvent.keyUp(thumb, { key: "ArrowDown" });
+
+		expectOneOpacityWrite(0.9);
+	});
+
+	it("streaming: Escape or Enter released mid-hold sends nothing until the arrow comes up", async () => {
+		setConfig.mockResolvedValue(APPLIED);
+		renderCard(true);
+
+		const thumb = opacityPart("slider-thumb");
+		await fireEvent.keyDown(thumb, { key: "ArrowLeft" });
+		await fireEvent.keyDown(thumb, { key: "Escape" });
+		await fireEvent.keyUp(thumb, { key: "Escape" });
+		await fireEvent.keyDown(thumb, { key: "Enter" });
+		await fireEvent.keyUp(thumb, { key: "Enter" });
+		expect(setConfig).not.toHaveBeenCalled();
+
+		await fireEvent.keyDown(thumb, { key: "ArrowLeft", repeat: true });
+		await fireEvent.keyUp(thumb, { key: "ArrowLeft" });
+
+		expectOneOpacityWrite(0.9);
+	});
+
 	it("streaming: a held key is sent once when focus leaves before the key comes up", async () => {
 		setConfig.mockResolvedValue(APPLIED);
 		renderCard(true);
