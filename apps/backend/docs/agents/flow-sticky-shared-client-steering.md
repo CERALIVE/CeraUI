@@ -53,7 +53,9 @@ producer scan. Older OS refreshes cannot overwrite a newer snapshot.
 `usbNetScanCovers(ifname)` and `identityDeadlineExpired(ifname)` in
 `router-cellular-scan.ts` are the shared predicates for identity consumers.
 The single identity deadline starts when a name first enters a published netif
-snapshot and expires after 15 seconds, with one fallback warning per name.
+snapshot and expires after 15 monotonic seconds (`getms`, backed by
+`process.hrtime`), with one fallback warning per name. Wall-clock corrections
+cannot expire it early or revoke an expired deadline.
 Before the first apply, any eligible uncovered non-Wi-Fi uplink holds the whole
 plan pending; after an apply, only uncovered candidates are omitted. A covering
 scan commit requests reconciliation immediately, including serial-only or

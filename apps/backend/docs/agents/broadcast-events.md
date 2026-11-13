@@ -17,10 +17,11 @@ and idPath. It adds no wire event and never publishes raw serials. Steering
 subscribes to request reconciliation even when the netif payload is unchanged.
 
 `usbNetScanCovers(ifname)` accepts completed reads with or without a USB
-descriptor. `identityDeadlineExpired(ifname)` uses the shared 15 second clock
-starting at first netif publication, warning once when an uncovered name reaches
-fallback. Consumers must use these predicates rather than independent identity
-clocks. Steering holds recovered sharing while the first OS snapshot or Wi-Fi
+descriptor. `identityDeadlineExpired(ifname)` uses the shared 15 second monotonic
+clock (`getms` / `process.hrtime`) starting at first netif publication, warning once
+when an uncovered name reaches fallback. Wall-clock corrections cannot expire it
+early or revoke expiry. Consumers must use these predicates rather than independent
+identity clocks. Steering holds recovered sharing while the first OS snapshot or Wi-Fi
 zone classification is pending. Its separate startup reconcile deadline bypasses
 Wi-Fi classification 15 seconds after the first pending result with a netif
 snapshot; if classification never succeeds and no zone is known, that bypass

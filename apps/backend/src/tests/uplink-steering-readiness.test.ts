@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, jest, spyOn, test } from "bun:test";
 import { logger } from "../helpers/logger.ts";
 import * as runner from "../helpers/run.ts";
+import * as time from "../helpers/time.ts";
 import { resolveModemPhysicalIdentity } from "../modules/modems/physical-identity-source.ts";
 import {
 	getNetworkInterfaces,
@@ -134,6 +135,147 @@ function recoveredSharing(classified = false) {
 	}));
 	return { coordinator, effects, statuses };
 }
+
+function identityDeadlineFixture() {
+	jest.useFakeTimers();
+	jest.setSystemTime(0);
+	resetUsbNetMarkers();
+	resetNetifSnapshotForTest();
+	const clock = { now: 0 };
+	spyOn(time, "getms").mockImplementation(() => clock.now);
+	const flushed: number[] = [];
+	const removed: string[] = [];
+	const deadlines: Array<{ armedAt: number; delay: number }> = [];
+	const applier = new UplinkSteeringApplier({
+		discoverRoutes: async () => [],
+		ensureRoute: async (route) => ({ route, changed: false }),
+		rollbackRoute: async () => {},
+		removeRoute: async (route) => {
+			removed.push(route.ifname);
+		},
+		applyRuleset: async () => {},
+		deactivateSharing: async () => {},
+		flushConntrack: async (mark) => {
+			flushed.push(mark);
+		},
+		setIpForwarding: async () => {},
+		publishFlowsReset: () => {},
+	});
+	const coordinator = new UplinkSteeringCoordinator({
+		readDesiredState: (context) =>
+			readDesiredSteeringState(
+				{
+					netifReady: hasNetifSnapshot,
+					zonesReady: () => true,
+					identityCovered: usbNetScanCovers,
+					identityDeadlineExpired,
+					interfaces: getNetworkInterfaces,
+					health: () => [],
+					wifiIdentity: () => undefined,
+					physicalIdentity: (ifname) =>
+						resolveModemPhysicalIdentity(ifname).identityKey,
+					markForIdentity: stableUplinkMark,
+					isBondCandidate: () => false,
+					isClientZone: (ifname) => ifname === "eth9",
+					planRoute: async (candidate) => ({
+						...candidate,
+						table: "30001",
+						managed: false,
+					}),
+				},
+				context,
+			),
+		apply: (previous, next) => applier.apply(previous, next),
+		retryCleanup: () => applier.retryPendingCleanup(),
+		publishAvailability: () => {},
+		now: () => clock.now,
+		schedule: (_fire, delay) => {
+			deadlines.push({ armedAt: clock.now, delay });
+			return () => {};
+		},
+	});
+	const publish = () =>
+		processIfconfigOutput(
+			[ifconfig("eth9", "10.42.0.1"), ifconfig("wwan0", "100.64.1.2")].join(
+				"\n\n",
+			),
+		);
+	return { clock, coordinator, deadlines, flushed, removed, publish };
+}
+
+describe("#436 identity deadline clock corrections", () => {
+	test("rollback after expiry keeps the active fallback mark and route through the real applier", async () => {
+		const h = identityDeadlineFixture();
+		try {
+			h.publish();
+			await h.coordinator.requestReconcile();
+			h.clock.now = 15_000;
+			jest.advanceTimersByTime(15_000);
+			await h.coordinator.requestReconcile();
+			expect(h.coordinator.appliedState()?.uplinks[0]?.mark).toBe(0xca20a300);
+
+			jest.setSystemTime(1_000);
+			await h.coordinator.requestReconcile();
+
+			expect(h.flushed).toEqual([]);
+			expect(h.removed).toEqual([]);
+			expect(h.coordinator.appliedState()?.uplinks[0]?.ifname).toBe("wwan0");
+		} finally {
+			h.coordinator.stop();
+		}
+	});
+
+	test("a forward wall-clock jump cannot admit an uncovered interface before fifteen elapsed seconds", async () => {
+		const h = identityDeadlineFixture();
+		try {
+			h.publish();
+			await h.coordinator.requestReconcile();
+			h.clock.now = 1_000;
+			jest.advanceTimersByTime(1_000);
+			jest.setSystemTime(3_600_000);
+			await h.coordinator.requestReconcile();
+
+			expect(h.coordinator.appliedState()).toBeUndefined();
+			expect(h.flushed).toEqual([]);
+			expect(h.removed).toEqual([]);
+			h.clock.now = 15_000;
+			await h.coordinator.requestReconcile();
+			expect(h.coordinator.appliedState()?.uplinks[0]?.ifname).toBe("wwan0");
+		} finally {
+			h.coordinator.stop();
+		}
+	});
+
+	test("the deadline arms only after netif readiness despite wall-clock jumps", async () => {
+		const h = identityDeadlineFixture();
+		try {
+			h.clock.now = 60_000;
+			jest.advanceTimersByTime(60_000);
+			jest.setSystemTime(3_600_000);
+			await h.coordinator.requestReconcile();
+			expect(h.deadlines).toEqual([]);
+			expect(h.coordinator.appliedState()).toBeUndefined();
+
+			h.publish();
+			await h.coordinator.requestReconcile();
+			expect(h.deadlines).toEqual([{ armedAt: 60_000, delay: 15_000 }]);
+			h.clock.now = 74_999;
+			jest.advanceTimersByTime(14_999);
+			jest.setSystemTime(7_200_000);
+			await h.coordinator.requestReconcile();
+			expect(h.coordinator.appliedState()).toBeUndefined();
+
+			h.clock.now = 75_000;
+			await h.coordinator.requestReconcile();
+			expect(h.coordinator.appliedState()?.uplinks[0]?.ifname).toBe("wwan0");
+			expect(h.deadlines).toHaveLength(1);
+			expect(h.flushed).toEqual([]);
+			expect(h.removed).toEqual([]);
+		} finally {
+			h.coordinator.stop();
+		}
+	});
+});
 
 describe("#436 startup readiness", () => {
 	test("real startup ordering keeps recovered sharing while wlan0 awaits its hotspot flag", async () => {
@@ -405,14 +547,18 @@ describe("#436 startup readiness", () => {
 	test("a never-covered modem uses its fallback after the shared deadline and warns once", async () => {
 		jest.useFakeTimers();
 		jest.setSystemTime(0);
+		const clock = { now: 0 };
+		spyOn(time, "getms").mockImplementation(() => clock.now);
 		resetUsbNetMarkers();
 		processIfconfigOutput(output);
 		const { coordinator, effects } = recoveredSharing(true);
 		const warn = spyOn(logger, "warn");
 		await coordinator.requestReconcile();
+		clock.now = 14_900;
 		jest.advanceTimersByTime(14_900);
 		await coordinator.requestReconcile();
 		expect(effects).toEqual([]);
+		clock.now = 15_000;
 		jest.advanceTimersByTime(100);
 		await coordinator.requestReconcile();
 		expect(coordinator.appliedState()?.uplinks[0]?.identity).toBe(

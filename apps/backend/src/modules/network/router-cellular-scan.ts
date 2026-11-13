@@ -54,6 +54,7 @@ import {
 } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
+import { getms } from "../../helpers/time.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import {
 	mintLinkId,
@@ -584,7 +585,7 @@ export function usbNetScanCovers(ifname: string): boolean {
 /** The publication clock is shared by every identity-minting consumer. */
 export function notePublishedNetifSnapshot(
 	ifnames: readonly string[],
-	now: number = Date.now(),
+	now: number = getms(),
 ): void {
 	const present = new Set(ifnames);
 	for (const ifname of identityFirstPublishedAt.keys()) {
@@ -601,7 +602,7 @@ export function notePublishedNetifSnapshot(
 
 export function identityDeadlineExpired(
 	ifname: string,
-	now: number = Date.now(),
+	now: number = getms(),
 ): boolean {
 	const firstSeen = identityFirstPublishedAt.get(ifname);
 	if (
