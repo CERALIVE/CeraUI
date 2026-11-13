@@ -3,9 +3,10 @@
 This file is the target structure of the Live destination, written before any
 of it was built.
 
-Status: change 1 below has landed — the regions, both orders, the Live bar, the
-two-column layout and the preview's open state exist as described. Changes 2-6
-are still to come.
+Status: changes 1 and 2 below have landed — the regions, both orders, the Live
+bar, the two-column layout and the preview's open state exist as described, and
+the layout, the opacity and the second input change while live. Changes 3-6 are
+still to come.
 
 How to read it:
 
@@ -57,6 +58,30 @@ These test ids must keep their names and meaning: `idle-cockpit`,
 `stream-setup-chain`, `setup-row`, `preview-disclosure`, `composition-card`,
 `composition-stale-notice`, `live-roadmap`, `live-summary-strip` and
 `summary-done`. No region or test id may be added beyond the table above.
+
+#### The layout while live [EXISTS]
+
+- While live, the six layout radios, the opacity control
+  (`composition-alpha-control`) and the second-input select
+  (`composition-secondary`) stay enabled. Each change is sent as
+  `streaming.setConfig({ composition, apply_now: true })`, so the backend runs
+  it as an apply-now transaction and keeps it only when the engine reports it
+  applied. The opacity is sent once, as one change, when the drag is
+  released, when the last held adjusting key (arrows, Home, End, PageUp,
+  PageDown) comes up, or when focus leaves the slider; never once per step.
+  Releasing any other key (Shift, Escape, Enter) neither sends nor ends it.
+  A key is released by its physical key (its code), so a keyup that reports a
+  different key, such as a shifted Numpad4, still ends the adjustment.
+- Until the engine answers, the new value shows as the choice and the controls
+  are busy. Any apply-now change in flight, from this card or from the Encoder
+  dialog, holds the controls.
+- A refused or reverted change puts the previous value back and shows the
+  engine's reason, as keyed copy, in an alert below the controls, so a late
+  answer never moves a control the operator is touching.
+- Turning composition on or off still applies at the next start:
+  `composition-enable` stays disabled while live, with `composition-locked`
+  beside it.
+- Idle, a change is the plain save, without `apply_now`.
 
 #### Idle order, inside the `idle-cockpit` root
 
