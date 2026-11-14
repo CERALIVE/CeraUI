@@ -144,8 +144,8 @@ describe("cerastream bindings version-skew guard", () => {
 	test("SCHEMA_VERSION matches the encoder-route 0.22.0 contract", () => {
 		// Package CalVer is independent of the hello schema version. The previous
 		// 2026.9.4 package still declared 0.16.0 and rejected the new HDMI causes.
-		// 2026.11.0 adds optional encoder.default_codec and active_encode.route_reason.
-		expect(SCHEMA_VERSION).toBe("0.22.0");
+		// 2026.11.1 adds audio mix and composition geometry on schema 0.23.0.
+		expect(SCHEMA_VERSION).toBe("0.23.0");
 	});
 
 	test("a rejected start carries the engine's typed capture causes", () => {

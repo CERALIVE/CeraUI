@@ -151,6 +151,7 @@ const CERASTREAM_FIELDS: SchemaManifest = {
 		"supported_profiles",
 		"profile_catalog_version",
 		"network_embedded_audio",
+		"audio_mix",
 	],
 	listDevicesResultSchema: ["devices"],
 	statusEventSchema: [
@@ -205,6 +206,7 @@ const CERASTREAM_FIELDS: SchemaManifest = {
 		"floor_db",
 		"unavailable",
 		"reason",
+		"inputs",
 	],
 	audioConfigSchema: ["backend", "mode", "device", "codec", "delay_ms"],
 	runtimeErrorEventSchema: ["type", "code", "source", "reason", "selected"],

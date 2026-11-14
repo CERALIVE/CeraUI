@@ -35,6 +35,7 @@ import type { ServerWebSocket } from "bun";
 import { logger } from "../../helpers/logger.ts";
 import { shouldUseMocks } from "../mock-service.ts";
 import { PREVIEW_FIXTURE } from "./preview-fixture.ts";
+import { getMockAudioInputLevels } from "./streaming.ts";
 
 type PreviewServer = ReturnType<typeof Bun.serve<PreviewConn>>;
 
@@ -129,6 +130,10 @@ function sendAudioLevel(ws: ServerWebSocket<PreviewConn>): void {
 	const phase = conn.audioSeq;
 	const wobble = (offset: number) =>
 		Math.round((-24 + 12 * Math.sin((phase + offset) / 3)) * 10) / 10;
+	const inputs = getMockAudioInputLevels(
+		[wobble(0), wobble(1)],
+		[wobble(0) + 3, wobble(1) + 3],
+	);
 	ws.send(
 		JSON.stringify({
 			type: "audio-level",
@@ -136,6 +141,7 @@ function sendAudioLevel(ws: ServerWebSocket<PreviewConn>): void {
 			pts_us: conn.ptsUs,
 			rms_db: [wobble(0), wobble(1)],
 			peak_db: [wobble(0) + 3, wobble(1) + 3],
+			...(inputs.length > 0 ? { inputs } : {}),
 		}),
 	);
 	conn.audioSeq += 1;

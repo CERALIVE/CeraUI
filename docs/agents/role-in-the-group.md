@@ -12,7 +12,7 @@ setup.json are coerced to `"cerastream"` at parse time with a warning).
 The backend resolves both streaming deps as public-npm registry packages — no sibling checkout, no vendored tarball:
 
 ```
-"@ceralive/cerastream":  "2026.11.0"   (public npm, @ceralive scope)
+"@ceralive/cerastream":  "2026.11.1"   (public npm, @ceralive scope)
 ```
 
 It is a published npm package (`@ceralive` scope on npmjs.org) consumed as a normal registry dep, not a `link:` path and not a vendored `.tgz`. No sibling checkout of the `srtla` receiver or sender repositories is needed for `CeraUI` to install or build.

@@ -4,14 +4,34 @@ Simulates cerastream/srtla streaming statistics for development mode
 */
 
 import {
+	AUDIO_DELAY_MAX_MS,
+	AUDIO_GAIN_DB_MAX,
+	AUDIO_GAIN_DB_MIN,
+	AUDIO_MIX_FEATURE,
+	AUDIO_MIX_MAX_INPUTS,
+	AUDIO_MIX_MAX_TRACKS,
+	type AudioConfig,
+	type AudioInputLevel,
 	type CaptureDeviceKind,
 	CerastreamConnectionError,
+	CerastreamRpcError,
+	COMPOSITION_FEATURE,
+	COMPOSITION_GEOMETRY_FEATURE,
+	COMPOSITION_RECT_MIN,
+	type CompositionConfig,
+	compositionConfigSchema,
 	type GetCapabilitiesResult,
 	type ListDevicesResult,
 	type ProcessErrorCode,
 	type ProcessErrorSource,
+	RPC_ERROR_NUMERIC,
 	type RuntimeErrorEvent,
 	SCHEMA_VERSION,
+	type SetAudioMixParams,
+	type SetAudioMixResult,
+	type StartParams,
+	setAudioMixParamsSchema,
+	startParamsSchema,
 } from "@ceralive/cerastream";
 import { mediaTypeToSourceKind } from "@ceraui/rpc";
 import type {
@@ -225,6 +245,19 @@ export function getMockEngineCapabilities(): EngineCapabilitiesSnapshot {
 		// The engine's native bps units — routed through normalizeBitrateRangeToKbps
 		// in getCapabilities() so caps-full exercises the bps→kbps conversion seam.
 		caps.encoder = { ...caps.encoder, bitrate_range: FULL_PROFILE_BITRATE_BPS };
+		caps.audio_mix = {
+			max_inputs: AUDIO_MIX_MAX_INPUTS,
+			max_tracks: AUDIO_MIX_MAX_TRACKS,
+			gain_db_min: AUDIO_GAIN_DB_MIN,
+			gain_db_max: AUDIO_GAIN_DB_MAX,
+			delay_ms_max: AUDIO_DELAY_MAX_MS,
+		};
+		caps.features = [
+			...(caps.features ?? []),
+			AUDIO_MIX_FEATURE,
+			COMPOSITION_FEATURE,
+			COMPOSITION_GEOMETRY_FEATURE,
+		];
 	}
 	const transports = [...(profile.transports ?? DEFAULT_MOCK_TRANSPORTS)];
 	const schemaVersion = profile.schemaVersionMismatch
@@ -427,6 +460,7 @@ export function getMockAudioDevices(): MockAudioDevices {
 	}
 	switch (getActiveScenario()) {
 		case "caps-full":
+			return buildMockDualUsbAudioDevices({ "HDMI Input": "rockchiphdmiin" });
 		case "streaming-active":
 			return buildMockDualUsbAudioDevices();
 		case "multi-modem-wifi":
@@ -688,11 +722,231 @@ export function getMockBcrpStatus() {
 /**
  * Start mock streaming (for testing)
  */
-export function startMockStreaming(): void {
+export function startMockStreaming(params?: StartParams): void {
 	if (!shouldUseMocks()) {
 		return;
 	}
+	if (params !== undefined) {
+		validateMockAudioMix(
+			params.audio,
+			params.pipeline === "rtmp" || params.pipeline === "srt",
+		);
+		if (params.composition) validateMockComposition(params.composition);
+		for (const input of params.audio?.inputs ?? []) {
+			if (
+				input.input_id !== "embedded" &&
+				!getMockEngineDevices().devices.some(
+					(device) =>
+						device.media_class === "audio" &&
+						device.input_id === input.input_id,
+				)
+			) {
+				throw new CerastreamRpcError(
+					RPC_ERROR_NUMERIC["cerastream.audio.device_not_found"],
+					input.input_id,
+					"cerastream.audio.device_not_found",
+					null,
+				);
+			}
+		}
+		if (params.audio?.inputs && !getMockEngineCapabilities().caps.audio_mix) {
+			throw mockParamsInvalid("audio-mix-unsupported");
+		}
+		const parsed = startParamsSchema.safeParse(params);
+		if (!parsed.success) throw mockParamsInvalid(parsed.error.message);
+		updateMockState({ engineStart: structuredClone(parsed.data) });
+	} else {
+		updateMockState({ engineStart: null });
+	}
 	setStreamingState(true);
+}
+
+function mockParamsInvalid(token: string): CerastreamRpcError {
+	return new CerastreamRpcError(
+		-32602,
+		token,
+		"cerastream.params.invalid",
+		null,
+	);
+}
+
+function validateMockAudioMix(
+	audio: AudioConfig | undefined,
+	isNetwork: boolean,
+): void {
+	if (audio?.inputs === undefined) return;
+	const inputs = audio.inputs;
+	if (inputs.length === 0) throw mockParamsInvalid("audio-mix-empty");
+	if (inputs.length > AUDIO_MIX_MAX_INPUTS)
+		throw mockParamsInvalid("audio-mix-too-many-inputs");
+	if (audio.device !== undefined)
+		throw mockParamsInvalid("audio-mix-with-device");
+	if (audio.mode === "none")
+		throw mockParamsInvalid("audio-mix-with-mode-none");
+	const ids = new Set<string>();
+	const tracks = new Set<number>();
+	for (const input of inputs) {
+		if (ids.has(input.input_id))
+			throw mockParamsInvalid("audio-mix-duplicate-input");
+		ids.add(input.input_id);
+		if (input.input_id === "embedded" && !isNetwork) {
+			throw mockParamsInvalid("audio-mix-embedded-without-network-source");
+		}
+		if (
+			input.tracks.length === 0 ||
+			new Set(input.tracks).size !== input.tracks.length ||
+			input.tracks.some((track) => track < 1 || track > AUDIO_MIX_MAX_TRACKS)
+		) {
+			throw mockParamsInvalid("audio-tracks-invalid");
+		}
+		for (const track of input.tracks) tracks.add(track);
+		const gain = input.gain_db ?? 0;
+		if (
+			!Number.isFinite(gain) ||
+			gain < AUDIO_GAIN_DB_MIN ||
+			gain > AUDIO_GAIN_DB_MAX
+		) {
+			throw mockParamsInvalid("audio-gain-range");
+		}
+		if ((input.delay_ms ?? 0) > AUDIO_DELAY_MAX_MS)
+			throw mockParamsInvalid("audio-delay-range");
+	}
+	if (
+		Array.from({ length: tracks.size }, (_, i) => i + 1).some(
+			(track) => !tracks.has(track),
+		)
+	) {
+		throw mockParamsInvalid("audio-tracks-gap");
+	}
+}
+
+function validateMockComposition(config: CompositionConfig): void {
+	if (config.layout === "custom") {
+		const rect = config.rect;
+		if (rect === undefined) throw mockParamsInvalid("composition-rect-missing");
+		if (
+			Object.values(rect).some(
+				(value) => !Number.isFinite(value) || value < 0,
+			) ||
+			rect.x + rect.width > 1 ||
+			rect.y + rect.height > 1 ||
+			rect.width < COMPOSITION_RECT_MIN ||
+			rect.height < COMPOSITION_RECT_MIN
+		) {
+			throw mockParamsInvalid("composition-rect-range");
+		}
+		if (
+			!getMockEngineCapabilities().caps.features?.includes(
+				COMPOSITION_GEOMETRY_FEATURE,
+			)
+		) {
+			throw new CerastreamRpcError(
+				RPC_ERROR_NUMERIC["cerastream.params.invalid"],
+				"invalid params: composition-unsupported: rgacompositor did not pass its READY backend trial",
+				"cerastream.params.invalid",
+				null,
+				{
+					code: "cerastream.params.invalid",
+					capture_causes: [
+						{ device: "composition", cause: "composition-unsupported" },
+					],
+				},
+			);
+		}
+	} else if (config.rect !== undefined) {
+		throw mockParamsInvalid("composition-rect-unexpected");
+	}
+}
+
+/** The same admitted batch is echoed and retained for subsequent reads/rebuilds. */
+export function setMockAudioMix(params: SetAudioMixParams): SetAudioMixResult {
+	const current = getMockState().engineStart;
+	if (
+		!shouldUseMocks() ||
+		!getStreamingStats().isActive ||
+		!current?.audio?.inputs
+	) {
+		throw mockParamsInvalid("audio-mix-inactive");
+	}
+	const parsed = setAudioMixParamsSchema.safeParse(params);
+	if (!parsed.success) throw mockParamsInvalid(parsed.error.message);
+	const audio = {
+		...current.audio,
+		inputs: structuredClone(current.audio.inputs),
+	};
+	const next = { ...current, audio };
+	const inputs = audio.inputs;
+	const applied: SetAudioMixResult["inputs"] = [];
+	for (const update of parsed.data.inputs) {
+		const input = inputs.find((input) => input.input_id === update.input_id);
+		if (!input)
+			throw new CerastreamRpcError(
+				RPC_ERROR_NUMERIC["cerastream.audio.device_not_found"],
+				update.input_id,
+				"cerastream.audio.device_not_found",
+				null,
+			);
+		if (update.gain_db !== undefined) input.gain_db = update.gain_db;
+		if (update.mute !== undefined) input.mute = update.mute;
+		if (update.delay_ms !== undefined) input.delay_ms = update.delay_ms;
+		validateMockAudioMix(next.audio, true);
+		applied.push({
+			input_id: input.input_id,
+			gain_db: input.gain_db ?? 0,
+			mute: input.mute ?? false,
+			delay_ms: input.delay_ms ?? 0,
+		});
+	}
+	updateMockState({ engineStart: next });
+	return { inputs: applied };
+}
+
+export function switchMockAudio(inputId: string): {
+	active_audio_input: string;
+} {
+	if (
+		getStreamingStats().isActive &&
+		getMockState().engineStart?.audio?.inputs
+	) {
+		throw mockParamsInvalid("audio-mix-active");
+	}
+	return { active_audio_input: inputId };
+}
+
+export function changeMockComposition(composition: CompositionConfig): void {
+	const current = getMockState().engineStart;
+	if (!shouldUseMocks() || !getStreamingStats().isActive || !current) {
+		throw new CerastreamRpcError(
+			RPC_ERROR_NUMERIC["cerastream.state.not_streaming"],
+			"engine is not streaming",
+			"cerastream.state.not_streaming",
+			null,
+		);
+	}
+	validateMockComposition(composition);
+	const parsed = compositionConfigSchema.safeParse(composition);
+	if (!parsed.success) throw mockParamsInvalid(parsed.error.message);
+	updateMockState({
+		engineStart: { ...current, composition: structuredClone(parsed.data) },
+	});
+}
+
+/** Synthetic readings follow the real post-gain/post-mute meter placement. */
+export function getMockAudioInputLevels(
+	rms: number[],
+	peak: number[],
+): AudioInputLevel[] {
+	if (!shouldUseMocks() || !getStreamingStats().isActive) return [];
+	return (getMockState().engineStart?.audio?.inputs ?? []).map((input) => {
+		const level = (db: number) =>
+			input.mute ? -1_000_000 : db + (input.gain_db ?? 0);
+		return {
+			input_id: input.input_id,
+			channels: rms.length,
+			rms_db: rms.map(level),
+			peak_db: peak.map(level),
+		};
+	});
 }
 
 /**

@@ -15,7 +15,7 @@ Options outside the offered set are shown **disabled with a reason tooltip** —
 hidden, so operators can see what the hardware doesn't support and why.
 
 **The encoder universe is engine-owned [EXISTS].** The published
-`@ceralive/cerastream@2026.11.0` binding carries `get-capabilities.encoders[]` with
+`@ceralive/cerastream@2026.11.1` binding carries `get-capabilities.encoders[]` with
 one entry per codec (`codec`, maximum resolution/framerate, accepted pixel formats,
 and `gates."4k60"`). `@ceraui/rpc` imports the producer schemas and types directly;
 it does not redeclare `PlatformCaps`, `VideoSourceCap`, or `EncoderCapability`.
@@ -23,9 +23,16 @@ The backend forwards the parsed ladder. `PLATFORM_CAPS_BY_HARDWARE` remains only
 absent `encoders` snapshot and is pinned to the engine platform golden by a test.
 `producer-wire-type-shadow.test.ts` rejects any reintroduced local declaration.
 
-Schema 0.22.0 also retains optional `encoder.default_codec` through the producer
+Schema 0.23.0 also retains optional `encoder.default_codec` through the producer
 parser, bitrate normalization, cache and RPC schema. The backend forwards optional
 `active_encode.route_reason` in status; absent fields remain absent for older engines.
+
+Optional `audio_mix` uses the producer's capability schema and the existing
+capability spread/cache; optional audio-level `inputs` uses the producer's
+per-input level schema and passes through `audio-meter-bridge.ts` unchanged.
+`COMPOSITION_LAYOUTS` filters out `custom` so the six preset controls stay stable.
+Free geometry consumers import the producer's `compositionRectSchema` and
+`COMPOSITION_RECT_MIN` through RPC.
 
 **The output format is automatic [EXISTS].** `EncoderDialog` shows no codec choice
 by default: it names `encoder.default_codec` ("Automatic (H.265)") or says just

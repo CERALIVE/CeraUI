@@ -16,6 +16,7 @@
 //           timer — side-effect-clean, so each test starts from the scenario's
 //           seeded state with no leaked intervals or cross-test bleed.
 
+import type { StartParams } from "@ceralive/cerastream";
 import type {
 	AddonConfig,
 	AddonState,
@@ -94,6 +95,7 @@ export type {
 // Dynamic mock state that changes over time
 export interface MockState {
 	initialized: boolean;
+	engineStart: StartParams | null;
 	modemSignals: Map<number, number>;
 	modemStates: Map<number, "registered" | "connected" | "searching">;
 	networkTraffic: Map<string, number>;
@@ -156,6 +158,7 @@ export interface MockState {
 
 const mockState: MockState = {
 	initialized: false,
+	engineStart: null,
 	modemSignals: new Map(),
 	modemStates: new Map(),
 	networkTraffic: new Map(),
@@ -256,6 +259,7 @@ export function initMockService(scenarioName?: string): void {
 	mockState.injectedStreamError = null;
 	mockState.relayValidateFault = null;
 	mockState.capabilityOverride = null;
+	mockState.engineStart = null;
 	mockState.gatewayActive = {};
 	mockState.networkIngestActive = { rtmp: true, srt: true };
 	mockState.networkIngestMediamtxSrt = false;
@@ -639,6 +643,7 @@ export function setStreamingState(isActive: boolean): void {
 		mockState.streaming.connectedRelays = config.modems;
 	} else {
 		mockState.streaming.connectedRelays = 0;
+		mockState.engineStart = null;
 	}
 }
 
@@ -703,6 +708,7 @@ function clearMockTimers(): void {
  */
 export function stopMockService(): void {
 	clearMockTimers();
+	mockState.engineStart = null;
 	setRelaysCacheMock(undefined);
 	mockState.initialized = false;
 	logger.info("🎭 Mock service stopped");
