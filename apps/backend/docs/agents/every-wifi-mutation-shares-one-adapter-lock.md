@@ -103,8 +103,8 @@ terminal. This does not change admission or re-enter the per-adapter lock.
 
 **`runWifiNew`'s `ok:true, uuid:undefined` is AMBIGUOUS, not failed.** It emits
 `{new:{error:"ambiguous"}}` and deliberately does NOT run
-`wifiDeleteFailedConns()` — the failure path does, because a failure proves the
-profile never activated, and this path proves nothing.
+`wifiDeleteFailedConns()` — failed replies also do not establish exclusive profile ownership.
+Automatic failed-join cleanup retains uncertain profiles.
 
 Both `publishOutcome` deps are OPTIONAL so the existing suites' exact dep objects
 still typecheck; production wires them in the `default*Deps`. Coverage:
@@ -116,3 +116,50 @@ reply, and the two station-join frames). Rule-E: all 11 fail on the pre-fix tree
 ## Saved connection refresh ownership
 
 `wifiUpdateSavedConns` assigns each invocation a unique token and builds saved/savedAll maps on private adapter shadows. It publishes synchronously only after all profile reads settle, while that token is still current and the complete adapter registry still contains the captured object identities. A newer refresh or replaced/removed/added adapter withholds publication. Previous complete maps remain visible during reads and list failures. Hotspot handling remains separate. Deferred-list and profile-read regressions live in `tests/wifi-saved-connection.test.ts`.
+
+## Failed station joins retain uncertain profiles
+
+The legacy `wifiDeleteFailedConns` entry point now logs withheld cleanup without enumerating or deleting profiles. Timestamp zero, a returned UUID and an activation failure do not prove exclusive ownership by a failed attempt. Failed and ambiguous joins can leave profiles behind; explicit Forget remains the deliberate deletion path. This changes automatic cleanup policy and requires design review. Overlapping-join and unavailable-transport regressions live in `tests/wifi-sae-station.test.ts`.
+
+Failed and ambiguous join replies dispatch a best-effort saved-profile refresh and status broadcast after the terminal reply. This reconciles retained profiles into `saved`/`savedAll` for explicit Forget, including same-SSID siblings, without waiting for profile-list transport availability before reporting refusal. Refresh failures are logged and never turn the refusal into success.
+
+Saved-profile refreshes stage a complete replacement before changing either cache. A missing or throwing detail read leaves the previous snapshot intact. A generation shared by every refresh caller prevents an older listing or detail read from committing over a newer request, and adapter-object checks reject a replaced roster. The post-refusal status broadcast runs only after a complete current snapshot commits. AP discovery remains independent of station snapshot publication, while replies from a superseded refresh cannot dispatch AP work. Deferred-list/detail and per-profile failure regressions cover these publication boundaries.
+
+Station discovery also accepts predictable `wl…` interface names, including USB
+`wlx…` and PCI `wlp…` names. The periodic interface parser must register their
+MAC even while disconnected, before the running/IPv4 gate; otherwise a scanned
+radio remains degraded and cannot resolve its numeric station join target.
+
+A password retry of a saved non-SAE station network updates that UUID's secret
+and activates the same profile on the requested interface. It does not send the
+saved profile back through `device wifi connect`: some NetworkManager versions
+reject that retry with a missing key-mgmt error. A failed secret update stops
+before activation and retains the profile. Authentication refusal text is read
+from both output streams.
+
+### Native automatic-fallback qualification
+
+Keep the known-good profile eligible when measuring fallback from a bad join.
+NetworkManager 1.52.1 marks the active profile blocked for `user-requested`
+when `device disconnect` is used. Setting the device's `autoconnect` back to
+`yes` clears the device block, but does not clear that profile block. A profile
+can still appear in `AVAILABLE-CONNECTIONS` and have `connection.autoconnect=yes`
+while blocked internally. Waiting for the retry timeout does not establish that
+this separate user-request block has cleared.
+
+For an explicit-join trial, first prove the good profile connected, then activate
+the bad profile directly, without disconnecting the good one first. Its
+deactivation should report `new-activation`, not `user-requested`. For an
+automatic-priority control, create fresh eligible profiles with autoconnect
+disabled, then enable the bad profile followed by the good one, without any
+manual disconnect. Prove the good credentials separately and preserve both
+UUIDs throughout the failed-join trial. Do not assume that toggling a profile's
+autoconnect clears an internal block; verify native policy evidence.
+Record native activation/failure timestamps and debug policy block reasons;
+cached scan rows alone do not prove autoconnect eligibility.
+
+Use an isolated NetworkManager, D-Bus, supplicant and simulated access points
+for host controls. Simulated timing on another NetworkManager version does not
+replace on-device qualification. Do not change retained-profile priority,
+retry counts, secrets policy or deletion behavior to compensate for a
+qualification setup that suppressed the fallback profile.

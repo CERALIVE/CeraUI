@@ -1,15 +1,21 @@
 import { resolveModemPhysicalIdentity } from "../../modems/physical-identity-source.ts";
 import { isConcurrentApIfname } from "../../wifi/wifi-concurrent-interface.ts";
 import { getWifiInterfacesByMacAddress } from "../../wifi/wifi-connections.ts";
+import { wifiZonesReady } from "../../wifi/wifi-interfaces.ts";
 import { isSharedLanPort } from "../ethernet-role.ts";
 import {
 	getNetworkInterfaces,
+	hasNetifSnapshot,
 	isBondCandidate,
 	NETIF_ERR_DUPIPV4,
 	NETIF_ERR_HOTSPOT,
 	NETIF_ERR_SHAREDLAN,
 	type NetworkInterface,
 } from "../network-interfaces.ts";
+import {
+	identityDeadlineExpired,
+	usbNetScanCovers,
+} from "../router-cellular-scan.ts";
 import type { UplinkHealthRecord } from "../uplink-health/model.ts";
 import { getUplinksMessage } from "../uplink-health/state.ts";
 import type { PreparedSteeringState, UplinkRoutePlan } from "./applier.ts";
@@ -25,6 +31,10 @@ import { cidrsOverlap, subnetCidr } from "./subnet.ts";
 type NetworkSnapshot = Record<string, NetworkInterface | undefined>;
 
 export interface SteeringStateBuilderDeps {
+	readonly netifReady: () => boolean;
+	readonly zonesReady: () => boolean;
+	readonly identityCovered: (ifname: string) => boolean;
+	readonly identityDeadlineExpired: (ifname: string) => boolean;
 	readonly interfaces: () => NetworkSnapshot;
 	readonly health: () => readonly UplinkHealthRecord[];
 	readonly wifiIdentity: (ifname: string) => string | undefined;
@@ -41,6 +51,10 @@ export interface SteeringStateBuilderDeps {
 }
 
 const defaultDeps: SteeringStateBuilderDeps = {
+	netifReady: hasNetifSnapshot,
+	zonesReady: wifiZonesReady,
+	identityCovered: usbNetScanCovers,
+	identityDeadlineExpired,
 	interfaces: getNetworkInterfaces,
 	health: getUplinksMessage,
 	wifiIdentity: wifiIdentity,
@@ -55,15 +69,40 @@ const defaultDeps: SteeringStateBuilderDeps = {
 	planRoute: (candidate) => planUplinkRoute(candidate),
 };
 
+export interface SteeringReadinessContext {
+	readonly hasAppliedState?: boolean;
+	readonly zonesReadyBypass?: boolean;
+}
+
+export interface PendingSteeringState {
+	readonly pending: true;
+	readonly netifReady: boolean;
+	readonly reason: "netif" | "zones" | "identity";
+}
+
+export type DesiredSteeringState = PreparedSteeringState | PendingSteeringState;
+
 export async function readDesiredSteeringState(
 	deps: SteeringStateBuilderDeps = defaultDeps,
-): Promise<PreparedSteeringState> {
+	context: SteeringReadinessContext = {},
+): Promise<DesiredSteeringState> {
+	if (!deps.netifReady())
+		return { pending: true, netifReady: false, reason: "netif" };
+	if (!context.zonesReadyBypass && !deps.zonesReady())
+		return { pending: true, netifReady: true, reason: "zones" };
 	const interfaces = deps.interfaces();
 	const zones = collectClientZones(interfaces, deps);
 	if (zones.length === 0) return { clientZones: [], uplinks: [], routes: [] };
 	assertClientZonesDisjoint(zones);
 	const health = new Map(deps.health().map((record) => [record.iface, record]));
-	const candidates = collectUplinkCandidates(interfaces, zones, health, deps);
+	const { candidates, identityPending } = collectUplinkCandidates(
+		interfaces,
+		zones,
+		health,
+		deps,
+	);
+	if (!context.hasAppliedState && identityPending)
+		return { pending: true, netifReady: true, reason: "identity" };
 	assertNoOverlap(zones, candidates);
 	assertDistinctMarks(candidates);
 	const routes: UplinkRoutePlan[] = [];
@@ -116,7 +155,8 @@ function collectUplinkCandidates(
 	zones: readonly ClientZone[],
 	health: ReadonlyMap<string, UplinkHealthRecord>,
 	deps: SteeringStateBuilderDeps,
-): UplinkCandidate[] {
+): { candidates: UplinkCandidate[]; identityPending: boolean } {
+	let identityPending = false;
 	const zoneIfaces = new Set(zones.map((zone) => zone.ifname));
 	const sourceAddressCounts = new Map<string, number>();
 	for (const entry of Object.values(interfaces)) {
@@ -135,6 +175,14 @@ function collectUplinkCandidates(
 		if (record?.state === "down") continue;
 		const wifiId = deps.wifiIdentity(ifname);
 		if (ifname.startsWith("wl") && wifiId === undefined) continue;
+		if (
+			wifiId === undefined &&
+			!deps.identityCovered(ifname) &&
+			!deps.identityDeadlineExpired(ifname)
+		) {
+			identityPending = true;
+			continue;
+		}
 		const identity = wifiId ?? deps.physicalIdentity(ifname);
 		const weight = record?.weight ?? 100;
 		candidates.push({
@@ -150,9 +198,12 @@ function collectUplinkCandidates(
 			subnet: subnetCidr(entry.ip, entry.netmask),
 		});
 	}
-	return candidates.sort((a, b) =>
-		a.uplink.ifname.localeCompare(b.uplink.ifname),
-	);
+	return {
+		candidates: candidates.sort((a, b) =>
+			a.uplink.ifname.localeCompare(b.uplink.ifname),
+		),
+		identityPending,
+	};
 }
 
 function assertNoOverlap(

@@ -470,6 +470,7 @@ let savedConnectionsRefresh: symbol | undefined;
 
 export async function wifiUpdateSavedConns(
 	signal?: AbortSignal,
+	onCommitted?: () => void,
 ): Promise<void> {
 	if (signal?.aborted) return;
 	const refresh = Symbol();
@@ -513,6 +514,7 @@ export async function wifiUpdateSavedConns(
 		savedConnectionsRefresh !== refresh
 	)
 		return;
+	let incomplete = false;
 
 	for (const connection of connections) {
 		try {
@@ -538,6 +540,7 @@ export async function wifiUpdateSavedConns(
 			const [mode, ssid, macTmp] = fields;
 			if (!ssid) {
 				logger.warn("Wifi connection does not have an SSID!", { mode, uuid });
+				incomplete = true;
 				continue;
 			}
 
@@ -553,15 +556,17 @@ export async function wifiUpdateSavedConns(
 					`Error getting the nmcli connection information: ${err.message}`,
 				);
 			}
+			incomplete = true;
 		}
 	}
 
-	if (!isCurrent()) return;
+	if (incomplete || !isCurrent()) return;
 	// Keep the previous snapshot visible until every profile read has settled.
 	for (const { original, shadow } of snapshots) {
 		original.saved = shadow.saved;
 		original.savedAll = shadow.savedAll;
 	}
+	onCommitted?.();
 }
 
 /* Searches saved connections in wifiIfs by UUID */
@@ -632,12 +637,9 @@ async function wifiForget(uuid: ConnectionUUID) {
 }
 
 /*
-  `nmConnsGet` REPORTS a failure by resolving `undefined` — it never throws — so
-  a missing or erroring nmcli arrives here as a non-array, and the retired
-  `as Array<string>` cast turned that into `undefined is not an object`. This is
-  best-effort cleanup on `runWifiNew`'s FAILURE path, so the crash replaced the
-  typed refusal the operator was owed with an unhandled rejection. A sweep that
-  cannot enumerate has nothing to delete: say so and return.
+  A failed join can leave profile effects unresolved. Neither timestamp zero
+  nor a returned UUID proves exclusive ownership, so this legacy cleanup
+  entrypoint retains profiles. Explicit Forget remains the deletion owner.
 */
 export type WifiFailedConnsDeps = {
 	listConns: (fields: string) => Promise<string[] | undefined>;
@@ -650,27 +652,9 @@ const defaultFailedConnsDeps: WifiFailedConnsDeps = {
 };
 
 export async function wifiDeleteFailedConns(
-	deps: WifiFailedConnsDeps = defaultFailedConnsDeps,
+	_deps: WifiFailedConnsDeps = defaultFailedConnsDeps,
 ) {
-	const connections = await deps.listConns("uuid,type,timestamp");
-	if (!Array.isArray(connections)) {
-		logger.warn(
-			"wifiDeleteFailedConns: could not list connections; skipping cleanup",
-		);
-		return;
-	}
-
-	for (const connection of connections) {
-		const [uuid, type, ts] = nmcliParseSep(connection) as [
-			string,
-			string,
-			string,
-		];
-		if (type !== "802-11-wireless") continue;
-		if (ts === "0") {
-			await deps.deleteConn(uuid);
-		}
-	}
+	logger.warn("Wi-Fi join cleanup withheld: profile ownership is unconfirmed");
 }
 
 export type NmcliRun = {
@@ -738,7 +722,12 @@ const wantedSecrets = (output: string) =>
 async function joinViaNmAuto(args: string[]): Promise<WifiJoinOutcome> {
 	const { stdout, stderr, exitCode } = await joinNmcliRunner(args);
 	if (exitCode !== 0 || /^Error:/.test(stdout)) {
-		return { ok: false, authFailed: wantedSecrets(stdout), stdout, stderr };
+		return {
+			ok: false,
+			authFailed: wantedSecrets(`${stdout}\n${stderr}`),
+			stdout,
+			stderr,
+		};
 	}
 	const success = stdout.match(/successfully activated with '(.+)'/);
 	const uuid = success?.[1];
@@ -747,10 +736,43 @@ async function joinViaNmAuto(args: string[]): Promise<WifiJoinOutcome> {
 		: { ok: true, uuid, authFailed: false, stdout, stderr };
 }
 
+async function retrySavedJoin(
+	uuid: ConnectionUUID,
+	password: string,
+	connectArgs: string[],
+): Promise<WifiJoinOutcome> {
+	const changed = await joinNmcliRunner([
+		"connection",
+		"modify",
+		"uuid",
+		uuid,
+		"802-11-wireless-security.psk",
+		password,
+	]);
+	if (changed.exitCode !== 0)
+		return {
+			ok: false,
+			authFailed: wantedSecrets(`${changed.stdout}\n${changed.stderr}`),
+			stdout: changed.stdout,
+			stderr: changed.stderr,
+		};
+	const ifname = connectArgs[connectArgs.indexOf("ifname") + 1];
+	const activated = await joinViaNmAuto([
+		"-w",
+		"15",
+		"connection",
+		"up",
+		"uuid",
+		uuid,
+		...(ifname ? ["ifname", ifname] : []),
+	]);
+	return activated.ok ? { ...activated, uuid } : activated;
+}
+
 /**
- * A failed activation leaves a never-activated profile behind; the caller's
- * `wifiDeleteFailedConns()` removes it, because NetworkManager reports its
- * timestamp as `0`.
+ * An add or activation reply can fail after profile effects have occurred.
+ * Retain uncertain profiles rather than inferring deletion authority from a
+ * returned UUID, activation failure or timestamp.
  */
 async function joinViaSaeProfile(addArgs: string[]): Promise<WifiJoinOutcome> {
 	const added = await joinNmcliRunner(addArgs);
@@ -827,7 +849,22 @@ function wifiNew(conn: MessageSocket, msg: WifiNewMessage["new"]) {
 		security: msg.security,
 	});
 
-	void runWifiNew(conn, msg, macAddress, plan, senderId);
+	void runWifiNew(
+		conn,
+		msg,
+		macAddress,
+		plan,
+		senderId,
+		wifiInterface.saved[msg.ssid],
+	);
+}
+
+// Reconcile retained profiles for explicit Forget without delaying a join's
+// terminal reply on profile-list transport availability.
+function refreshRetainedJoinProfiles(): void {
+	void wifiUpdateSavedConns(undefined, broadcastWifiState).catch((err) =>
+		logger.warn(`Retained Wi-Fi profile refresh failed: ${errorText(err)}`),
+	);
 }
 
 async function runWifiNew(
@@ -836,11 +873,14 @@ async function runWifiNew(
 	macAddress: string,
 	plan: WifiStationJoinPlan,
 	senderId: ReturnType<typeof getSocketSenderId>,
+	savedUuid?: ConnectionUUID,
 ) {
 	const outcome =
 		plan.mode === "sae"
 			? await joinViaSaeProfile(plan.addArgs)
-			: await joinViaNmAuto(plan.connectArgs);
+			: savedUuid && msg.password
+				? await retrySavedJoin(savedUuid, msg.password, plan.connectArgs)
+				: await joinViaNmAuto(plan.connectArgs);
 
 	if (!outcome.ok) {
 		await wifiDeleteFailedConns();
@@ -857,6 +897,7 @@ async function runWifiNew(
 				senderId,
 			),
 		);
+		refreshRetainedJoinProfiles();
 		return;
 	}
 
@@ -869,8 +910,8 @@ async function runWifiNew(
 		  whether the network was joined — but a bare `return` is the one answer
 		  that is certainly wrong: it leaves the dialog's keyed op to expire on its
 		  TTL with no explanation. `ambiguous` says exactly that much, and nothing
-		  is cleaned up: `wifiDeleteFailedConns` runs on the FAILURE path because a
-		  failure proves the profile never activated, and this path proves nothing.
+		  is cleaned up. Failed activation replies also leave effects uncertain;
+		  automatic cleanup retains profiles without exclusive ownership proof.
 		*/
 		conn.send(
 			buildMsg(
@@ -879,6 +920,7 @@ async function runWifiNew(
 				senderId,
 			),
 		);
+		refreshRetainedJoinProfiles();
 		return;
 	}
 
