@@ -218,6 +218,10 @@ export function audioMixWithPrimary(
 export const setAudioMixInputSchema = audioMixUpdateSchema.omit({ input_id: true }).extend({
 	id: z.string(),
 	delay_ms: z.number().optional(),
+	// One strip's membership or track edit; the device composes it on its own saved
+	// mix, and it applies at the next start.
+	include: z.boolean().optional(),
+	track: z.object({ number: z.number().int(), on: z.boolean() }).optional(),
 });
 export const setAudioMixOutputSchema = z.object({
 	success: z.boolean(),

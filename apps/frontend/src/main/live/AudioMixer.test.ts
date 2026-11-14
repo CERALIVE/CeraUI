@@ -4,7 +4,7 @@
  * contract, change 4).
  *
  *   • without the engine's `audio_mix` capability nothing renders;
- *   • idle, every change saves `setConfig({ audio_inputs })` with every enabled
+ *   • idle, every change sends only that input's delta to `setAudioMix` (the
  *     strip, and `null` once only the main input is left at its defaults;
  *   • live on a mix session, level, mute and delay go to `setAudioMix` (never
  *     `setConfig`), the level at most every 100 ms while dragging and once on
@@ -124,7 +124,7 @@ function input(id: string, fields: Partial<Input> = {}): Input {
 	return { id, ...DEFAULTS, ...fields };
 }
 
-const SAVED_OK: StreamingSetConfigOutput = { success: true, applied: {} };
+const EDIT_OK: SetAudioMixOutput = { success: true, applies_next_start: true };
 
 function mixer(
 	options: {
@@ -252,20 +252,20 @@ describe("AudioMixer — idle", () => {
 		);
 		await fireEvent.click(enable("usb-a"));
 		expect(setConfig).not.toHaveBeenCalled();
+		expect(setAudioMix).not.toHaveBeenCalled();
 	});
 
-	it("enabling a second input saves both, main input first, each on Track 1", async () => {
-		setConfig.mockResolvedValue(SAVED_OK);
+	it("enabling a second input sends only that input in; the device composes the mix", async () => {
+		setAudioMix.mockResolvedValue(EDIT_OK);
 		mixer();
 		await fireEvent.click(enable("usb-b"));
-		expect(setConfig).toHaveBeenCalledTimes(1);
-		expect(setConfig).toHaveBeenCalledWith({
-			audio_inputs: [input("usb-a"), input("usb-b")],
-		});
+		expect(setAudioMix).toHaveBeenCalledTimes(1);
+		expect(setAudioMix).toHaveBeenCalledWith({ id: "usb-b", include: true });
+		expect(setConfig).not.toHaveBeenCalled();
 	});
 
-	it("keeps the saved values of every enabled strip when another one changes", async () => {
-		setConfig.mockResolvedValue(SAVED_OK);
+	it("a mute change sends only that input's mute, never the other inputs' values", async () => {
+		setAudioMix.mockResolvedValue(EDIT_OK);
 		mixer({
 			config: {
 				asrc: "usb-a",
@@ -276,16 +276,12 @@ describe("AudioMixer — idle", () => {
 			},
 		});
 		await fireEvent.click(mute("usb-b"));
-		expect(setConfig).toHaveBeenCalledWith({
-			audio_inputs: [
-				input("usb-a", { gain_db: -6 }),
-				input("usb-b", { tracks: [1, 2], delay_ms: 120, mute: true }),
-			],
-		});
+		expect(setAudioMix.mock.calls).toEqual([[{ id: "usb-b", mute: true }]]);
+		expect(setConfig).not.toHaveBeenCalled();
 	});
 
-	it("returning the only enabled strip to its defaults saves audio_inputs: null", async () => {
-		setConfig.mockResolvedValue(SAVED_OK);
+	it("resetting the only enabled strip's level sends only its level; the device clears the saved mix", async () => {
+		setAudioMix.mockResolvedValue(EDIT_OK);
 		mixer({
 			config: {
 				asrc: "usb-a",
@@ -293,26 +289,27 @@ describe("AudioMixer — idle", () => {
 			},
 		});
 		await fireEvent.click(screen.getByTestId("audio-strip-gain-reset-usb-a"));
-		expect(setConfig).toHaveBeenCalledWith({ audio_inputs: null });
+		expect(setAudioMix.mock.calls).toEqual([[{ id: "usb-a", gain_db: 0 }]]);
+		expect(setConfig).not.toHaveBeenCalled();
 	});
 
-	it("turning off the last other input saves audio_inputs: null", async () => {
-		setConfig.mockResolvedValue(SAVED_OK);
+	it("turning off the last other input sends only that input out; the device clears the saved mix", async () => {
+		setAudioMix.mockResolvedValue(EDIT_OK);
 		mixer({
 			config: { asrc: "usb-a", audio_inputs: [input("usb-a"), input("usb-b")] },
 		});
 		await fireEvent.click(enable("usb-b"));
-		expect(setConfig).toHaveBeenCalledWith({ audio_inputs: null });
+		expect(setAudioMix.mock.calls).toEqual([[{ id: "usb-b", include: false }]]);
+		expect(setConfig).not.toHaveBeenCalled();
 	});
 
 	it("a level change is saved once, on release, with the new level", async () => {
-		setConfig.mockResolvedValue(SAVED_OK);
+		setAudioMix.mockResolvedValue(EDIT_OK);
 		mixer();
 		await fireEvent.keyDown(gainThumb("usb-a"), { key: "ArrowLeft" });
-		expect(setConfig).toHaveBeenCalledTimes(1);
-		expect(setConfig).toHaveBeenCalledWith({
-			audio_inputs: [input("usb-a", { gain_db: -1 })],
-		});
+		expect(setAudioMix).toHaveBeenCalledTimes(1);
+		expect(setAudioMix).toHaveBeenCalledWith({ id: "usb-a", gain_db: -1 });
+		expect(setConfig).not.toHaveBeenCalled();
 	});
 
 	it("turning off the only chip on Track 1 is refused with the reason, and nothing is saved", async () => {
@@ -327,6 +324,7 @@ describe("AudioMixer — idle", () => {
 		});
 		await fireEvent.click(chip("usb-a", 1));
 		expect(setConfig).not.toHaveBeenCalled();
+		expect(setAudioMix).not.toHaveBeenCalled();
 		expect(chip("usb-a", 1).getAttribute("aria-pressed")).toBe("true");
 		expect(errorOf("usb-a").textContent).toContain(GAP);
 		expect(errorOf("usb-a").getAttribute("role")).toBe("alert");
@@ -338,6 +336,7 @@ describe("AudioMixer — idle", () => {
 		});
 		await fireEvent.click(chip("usb-b", 3));
 		expect(setConfig).not.toHaveBeenCalled();
+		expect(setAudioMix).not.toHaveBeenCalled();
 		expect(errorOf("usb-b").textContent).toContain(GAP);
 	});
 
@@ -350,27 +349,30 @@ describe("AudioMixer — idle", () => {
 		});
 		await fireEvent.click(chip("usb-b", 1));
 		expect(setConfig).not.toHaveBeenCalled();
+		expect(setAudioMix).not.toHaveBeenCalled();
 		expect(errorOf("usb-b").textContent).toContain(
 			"Every input needs at least one track.",
 		);
 	});
 
 	it("putting a second input on Track 2 is saved", async () => {
-		setConfig.mockResolvedValue(SAVED_OK);
+		setAudioMix.mockResolvedValue(EDIT_OK);
 		mixer({
 			config: { asrc: "usb-a", audio_inputs: [input("usb-a"), input("usb-b")] },
 		});
 		await fireEvent.click(chip("usb-b", 2));
 		await fireEvent.click(chip("usb-b", 1));
-		expect(setConfig).toHaveBeenNthCalledWith(1, {
-			audio_inputs: [input("usb-a"), input("usb-b", { tracks: [1, 2] })],
+		expect(setAudioMix).toHaveBeenNthCalledWith(1, {
+			id: "usb-b",
+			track: { number: 2, on: true },
 		});
+		expect(setConfig).not.toHaveBeenCalled();
 	});
 
 	it("a save the backend refuses shows its reason beside the strip and leaves the chips as they were", async () => {
-		let answer: (value: StreamingSetConfigOutput) => void = () => undefined;
-		setConfig.mockReturnValue(
-			new Promise<StreamingSetConfigOutput>((resolve) => {
+		let answer: (value: SetAudioMixOutput) => void = () => undefined;
+		setAudioMix.mockReturnValue(
+			new Promise<SetAudioMixOutput>((resolve) => {
 				answer = resolve;
 			}),
 		);
@@ -382,7 +384,7 @@ describe("AudioMixer — idle", () => {
 		await waitFor(() =>
 			expect(chip("usb-b", 2).getAttribute("aria-pressed")).toBe("true"),
 		);
-		answer({ success: false, error: "audio_tracks_gap", applied: {} });
+		answer({ success: false, error: "audio_tracks_gap" });
 		await waitFor(() =>
 			expect(chip("usb-b", 2).getAttribute("aria-pressed")).toBe("false"),
 		);
@@ -413,11 +415,7 @@ describe("AudioMixer — idle", () => {
 	])(
 		"a refused save with %s shows its copy, never the raw token",
 		async (token, copy) => {
-			setConfig.mockResolvedValue({
-				success: false,
-				error: token,
-				applied: {},
-			});
+			setAudioMix.mockResolvedValue({ success: false, error: token });
 			mixer();
 			await fireEvent.click(enable("usb-b"));
 			await waitFor(() => expect(errorOf("usb-b").textContent).toContain(copy));
@@ -426,7 +424,7 @@ describe("AudioMixer — idle", () => {
 	);
 
 	it("a save that throws says it failed", async () => {
-		setConfig.mockRejectedValue(new Error("socket closed"));
+		setAudioMix.mockRejectedValue(new Error("socket closed"));
 		mixer();
 		await fireEvent.click(enable("usb-b"));
 		await waitFor(() => expect(errorOf("usb-b").textContent).not.toBe(""));
@@ -434,8 +432,8 @@ describe("AudioMixer — idle", () => {
 });
 
 describe("AudioMixer — which input is the main one", () => {
-	it("Auto follows the input the device resolved, and saves it first", async () => {
-		setConfig.mockResolvedValue(SAVED_OK);
+	it("Auto follows the input the device resolved, and turning another input on sends only that input", async () => {
+		setAudioMix.mockResolvedValue(EDIT_OK);
 		mixer({
 			config: { asrc: "Auto", pipeline: "hdmi" },
 			status: { resolved_asrc: "usb-b" },
@@ -444,13 +442,11 @@ describe("AudioMixer — which input is the main one", () => {
 		expect(enable("usb-b").getAttribute("aria-checked")).toBe("true");
 		expectEnabled(enable("usb-a"));
 		await fireEvent.click(enable("usb-a"));
-		expect(setConfig).toHaveBeenCalledWith({
-			audio_inputs: [input("usb-b"), input("usb-a")],
-		});
+		expect(setAudioMix.mock.calls).toEqual([[{ id: "usb-a", include: true }]]);
 	});
 
-	it("the main input is saved first even when its strip is not the first one", async () => {
-		setConfig.mockResolvedValue(SAVED_OK);
+	it("an edit on a strip that is not the main one sends only that strip's change", async () => {
+		setAudioMix.mockResolvedValue(EDIT_OK);
 		mixer({
 			config: {
 				asrc: "Auto",
@@ -460,13 +456,11 @@ describe("AudioMixer — which input is the main one", () => {
 			status: { resolved_asrc: "usb-b" },
 		});
 		await fireEvent.click(mute("usb-a"));
-		expect(setConfig).toHaveBeenCalledWith({
-			audio_inputs: [input("usb-b"), input("usb-a", { mute: true })],
-		});
+		expect(setAudioMix.mock.calls).toEqual([[{ id: "usb-a", mute: true }]]);
 	});
 
-	it("a network source's embedded audio is the main strip and is saved under the source id", async () => {
-		setConfig.mockResolvedValue(SAVED_OK);
+	it("a network source's embedded audio is the main strip; turning another input on sends only that input", async () => {
+		setAudioMix.mockResolvedValue(EDIT_OK);
 		feed.sources = {
 			hardware: "rk3588",
 			sources: [
@@ -495,9 +489,7 @@ describe("AudioMixer — which input is the main one", () => {
 		expect(stripIds()).toEqual(["rtmp", "usb-a", "usb-b", "hdmi"]);
 		expectDisabled(enable("rtmp"));
 		await fireEvent.click(enable("usb-a"));
-		expect(setConfig).toHaveBeenCalledWith({
-			audio_inputs: [input("rtmp"), input("usb-a")],
-		});
+		expect(setAudioMix.mock.calls).toEqual([[{ id: "usb-a", include: true }]]);
 	});
 
 	it("without a main input, no other input can be turned on and the reason is shown", async () => {
@@ -512,6 +504,7 @@ describe("AudioMixer — which input is the main one", () => {
 		expect(screen.getByTestId("live-audio-meter")).toBeTruthy();
 		await fireEvent.click(enable("usb-b"));
 		expect(setConfig).not.toHaveBeenCalled();
+		expect(setAudioMix).not.toHaveBeenCalled();
 	});
 });
 
@@ -569,6 +562,22 @@ describe("AudioMixer — live on a mix session", () => {
 		await waitFor(() =>
 			expect(gainThumb("usb-b").getAttribute("aria-valuenow")).toBe("-3"),
 		);
+	});
+
+	it("a live mute the device applies stays shown while live, ahead of the saved config", async () => {
+		let answer: (value: SetAudioMixOutput) => void = () => undefined;
+		setAudioMix.mockReturnValue(
+			new Promise<SetAudioMixOutput>((resolve) => {
+				answer = resolve;
+			}),
+		);
+		mixer({ config: LIVE_CONFIG, isStreaming: true, mixActive: true });
+		expect(mute("usb-b").getAttribute("aria-pressed")).toBe("false");
+		await fireEvent.click(mute("usb-b"));
+		answer(applied("usb-b", { mute: true }));
+		await setAudioMix.mock.results[0]?.value;
+		await tick();
+		expect(mute("usb-b").getAttribute("aria-pressed")).toBe("true");
 	});
 
 	it("while dragging the level is sent at most every 100 ms, and once more on release", async () => {
@@ -763,13 +772,13 @@ describe("AudioMixer — every bound comes from the capability", () => {
 	);
 
 	it("idle, the level reaches both ends of the range and no further", async () => {
-		setConfig.mockResolvedValue(SAVED_OK);
+		setAudioMix.mockResolvedValue(EDIT_OK);
 		mixer();
 		await fireEvent.keyDown(gainThumb("usb-a"), { key: "End" });
 		await fireEvent.keyDown(gainThumb("usb-a"), { key: "Home" });
-		expect(setConfig.mock.calls.map(([call]) => call)).toEqual([
-			{ audio_inputs: [input("usb-a", { gain_db: 12 })] },
-			{ audio_inputs: [input("usb-a", { gain_db: -60 })] },
+		expect(setAudioMix.mock.calls.map(([call]) => call)).toEqual([
+			{ id: "usb-a", gain_db: 12 },
+			{ id: "usb-a", gain_db: -60 },
 		]);
 	});
 
@@ -802,7 +811,7 @@ describe("AudioMixer — every bound comes from the capability", () => {
 		["-1", false],
 		["12.5", false],
 	])("idle, a delay of %s ms is saved: %s", async (value, accepted) => {
-		setConfig.mockResolvedValue(SAVED_OK);
+		setAudioMix.mockResolvedValue(EDIT_OK);
 		mixer({
 			config: {
 				asrc: "usb-a",
@@ -811,15 +820,13 @@ describe("AudioMixer — every bound comes from the capability", () => {
 		});
 		await fireEvent.change(delay("usb-a"), { target: { value } });
 		if (accepted) {
-			expect(setConfig).toHaveBeenCalledWith({
-				audio_inputs: [
-					input("usb-a", { delay_ms: Number(value) }),
-					input("usb-b"),
-				],
-			});
+			expect(setAudioMix.mock.calls).toEqual([
+				[{ id: "usb-a", delay_ms: Number(value) }],
+			]);
 			expect(errorOf("usb-a").textContent).toBe("");
 		} else {
 			expect(setConfig).not.toHaveBeenCalled();
+			expect(setAudioMix).not.toHaveBeenCalled();
 			expect(errorOf("usb-a").textContent).toContain(
 				"Delay must be a whole number from 0 to 2000 ms.",
 			);
@@ -897,21 +904,20 @@ describe("AudioMixer — every bound comes from the capability", () => {
 		);
 		await fireEvent.click(enable("hdmi"));
 		expect(setConfig).not.toHaveBeenCalled();
+		expect(setAudioMix).not.toHaveBeenCalled();
 		// Turning one off is still allowed.
 		expectEnabled(enable("usb-b"));
 	});
 
 	it("one below max_inputs, another input can still be turned on", async () => {
-		setConfig.mockResolvedValue(SAVED_OK);
+		setAudioMix.mockResolvedValue(EDIT_OK);
 		mixer({
 			capabilities: caps({ max_inputs: 3 }),
 			config: { asrc: "usb-a", audio_inputs: [input("usb-a"), input("usb-b")] },
 		});
 		expectEnabled(enable("hdmi"));
 		await fireEvent.click(enable("hdmi"));
-		expect(setConfig).toHaveBeenCalledWith({
-			audio_inputs: [input("usb-a"), input("usb-b"), input("hdmi")],
-		});
+		expect(setAudioMix.mock.calls).toEqual([[{ id: "hdmi", include: true }]]);
 	});
 
 	it("live, the switches stay disabled even below max_inputs", () => {
@@ -971,24 +977,16 @@ describe("AudioMixer — a new main input", () => {
 		await view.rerender({ config: withMain("hdmi") });
 		await tick();
 		expect(setConfig).not.toHaveBeenCalled();
+		expect(setAudioMix).not.toHaveBeenCalled();
 	});
 
-	it("after a load whose saved mix lacks the main input, an edit saves the mix Start sends, main input first", async () => {
-		setConfig.mockResolvedValue(SAVED_OK);
+	it("after a load whose saved mix lacks the main input, an edit sends only that input's change", async () => {
+		setAudioMix.mockResolvedValue(EDIT_OK);
 		mixer({ config: withMain("hdmi") });
 		await fireEvent.click(mute("usb-b"));
-		await waitFor(() => expect(setConfig).toHaveBeenCalled());
-		expect(setConfig.mock.calls).toEqual([
-			[
-				{
-					audio_inputs: [
-						input("hdmi"),
-						input("usb-a"),
-						input("usb-b", { tracks: [2], mute: true }),
-					],
-				},
-			],
-		]);
+		await waitFor(() => expect(setAudioMix).toHaveBeenCalled());
+		expect(setAudioMix.mock.calls).toEqual([[{ id: "usb-b", mute: true }]]);
+		expect(setConfig).not.toHaveBeenCalled();
 	});
 
 	it("Auto resolved to an input outside the saved mix shows it on as the main input, saving nothing", async () => {
@@ -998,6 +996,7 @@ describe("AudioMixer — a new main input", () => {
 		expectDisabled(enable("hdmi"));
 		expect(enable("usb-a").getAttribute("aria-checked")).toBe("true");
 		expect(setConfig).not.toHaveBeenCalled();
+		expect(setAudioMix).not.toHaveBeenCalled();
 	});
 
 	it("a main input that was already in the saved mix needs no save, and the old main input stays an ordinary input", async () => {
@@ -1005,6 +1004,7 @@ describe("AudioMixer — a new main input", () => {
 		await view.rerender({ config: withMain("usb-b") });
 		await tick();
 		expect(setConfig).not.toHaveBeenCalled();
+		expect(setAudioMix).not.toHaveBeenCalled();
 		expectDisabled(enable("usb-b"));
 		expect(enable("usb-a").getAttribute("aria-checked")).toBe("true");
 		expectEnabled(enable("usb-a"));
@@ -1029,6 +1029,7 @@ describe("AudioMixer — a new main input", () => {
 		expect(enable("usb-a").getAttribute("aria-checked")).toBe("false");
 		expect(chip("usb-b", 2).getAttribute("aria-pressed")).toBe("true");
 		expect(setConfig).not.toHaveBeenCalled();
+		expect(setAudioMix).not.toHaveBeenCalled();
 	});
 
 	it("live, a main input change saves nothing: membership waits for the next start", async () => {
@@ -1040,5 +1041,6 @@ describe("AudioMixer — a new main input", () => {
 		await view.rerender({ config: withMain("hdmi") });
 		await tick();
 		expect(setConfig).not.toHaveBeenCalled();
+		expect(setAudioMix).not.toHaveBeenCalled();
 	});
 });

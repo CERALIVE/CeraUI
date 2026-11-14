@@ -9,6 +9,7 @@ import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { setMockAudioMix } from "../../mocks/providers/streaming.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
 import {
+	changedAudioInputs,
 	effectiveAudioInputs,
 	primaryAudioInputId,
 	storedAudioInputs,
@@ -29,8 +30,31 @@ export const setAudioMixProcedure = os
 	.use(authMiddleware)
 	.input(setAudioMixInputSchema)
 	.output(setAudioMixOutputSchema)
-	.handler(async ({ input: { id, ...update } }) => {
+	.handler(async ({ input: { id, include, track, ...update } }) => {
 		const config = getConfig();
+		// Composed and written in this synchronous stretch, so edits serialize.
+		if (include !== undefined || track !== undefined) {
+			const changed = changedAudioInputs(config, id, { include, track });
+			if ("error" in changed) return { success: false, error: changed.error };
+			config.audio_inputs = storedAudioInputs(changed.inputs, config);
+			saveConfig();
+			broadcastMsg("config", config);
+			const entry = changed.inputs.find((input) => input.id === id);
+			return {
+				success: true,
+				applies_next_start: true,
+				...(entry === undefined
+					? {}
+					: {
+							applied: {
+								id,
+								gain_db: entry.gain_db,
+								mute: entry.mute,
+								delay_ms: entry.delay_ms,
+							},
+						}),
+			};
+		}
 		const live = getAudioMixActive();
 		const running = getAudioMixInputs()?.find((input) => input.id === id);
 		const primary = primaryAudioInputId(config);

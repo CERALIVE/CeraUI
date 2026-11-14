@@ -11,9 +11,10 @@
   its strip is always on, and it is in the mix Start sends even when the saved
   mix lacks it (the backend's effective mix); showing it never saves anything.
 
-  Idle, a change saves `streaming.setConfig({ audio_inputs })` with every enabled
-  strip, main input first, and `null` once only the main input is left at its
-  defaults (the backend's own rule, so a default setup stays on today's path).
+  Idle, each change sends only that input's delta to `streaming.setAudioMix`: a
+  level, mute or delay value, one track on or off, or the input in or out. The
+  device composes it on its own saved mix, so an edit never carries a stale copy
+  of the other inputs; its config echo is what the strips then show.
   Live on a mix session (`status.audio_mix_active`), level, mute and delay go to
   `streaming.setAudioMix` and the device's applied values win; membership and
   tracks wait for the next start. Live without a mix, every control waits.
@@ -112,8 +113,8 @@ const strips = $derived.by(() => {
 });
 const hasPrimary = $derived(strips.some((strip) => strip.id === primaryId));
 
-// An idle save not answered yet shows as the choice; `null` is a save of null.
-let pending = $state<AudioInputSetting[] | null | undefined>(undefined);
+// An idle edit not answered yet shows as the choice.
+let pending = $state<AudioInputSetting[] | undefined>(undefined);
 let saveSeq = 0;
 
 const inputs = $derived.by(() => {
@@ -205,38 +206,26 @@ function tracksError(next: readonly AudioInputSetting[]): string | undefined {
 	return undefined;
 }
 
-function isDefault(input: AudioInputSetting): boolean {
-	return (
-		input.gain_db === 0 &&
-		!input.mute &&
-		input.delay_ms === 0 &&
-		input.tracks.length === 1 &&
-		input.tracks[0] === 1
-	);
-}
-
-/** Every enabled strip after `change`, main input first. */
+/** Every enabled strip after `change`: an edit's preview and the input to the track rule. */
 function nextInputs(
 	change: (entries: AudioInputSetting[]) => AudioInputSetting[],
 ): AudioInputSetting[] {
 	const enabled = strips.filter((strip) => isEnabled(strip.id)).map((strip) => entryFor(strip.id));
-	return change(enabled).sort(
-		(a, b) => Number(b.id === primaryId) - Number(a.id === primaryId),
-	);
+	return change(enabled);
 }
 
-async function save(id: string, next: AudioInputSetting[]): Promise<void> {
-	const only = next[0];
-	const value =
-		next.length === 0 ||
-		(next.length === 1 && only !== undefined && only.id === primaryId && isDefault(only))
-			? null
-			: next;
+// One input's delta; `preview` only shows the change until the device's config
+// echo arrives with the mix it composed.
+async function edit(
+	id: string,
+	delta: Omit<SetAudioMixInput, 'id'>,
+	preview: AudioInputSetting[],
+): Promise<void> {
 	const seq = ++saveSeq;
-	pending = value;
+	pending = preview;
 	clearError(id);
 	try {
-		const result = await rpc.streaming.setConfig({ audio_inputs: value });
+		const result = await rpc.streaming.setAudioMix({ id, ...delta });
 		if (!result.success) setError(id, result.error);
 	} catch {
 		setError(id, SAVE_FAILED);
@@ -245,9 +234,10 @@ async function save(id: string, next: AudioInputSetting[]): Promise<void> {
 	}
 }
 
-function saveEntry(id: string, fields: Partial<AudioInputSetting>): void {
-	void save(
+function saveEntry(id: string, fields: Pick<SetAudioMixInput, 'gain_db' | 'mute' | 'delay_ms'>): void {
+	void edit(
 		id,
+		fields,
 		nextInputs((entries) =>
 			entries.map((entry) => (entry.id === id ? { ...entry, ...fields } : entry)),
 		),
@@ -257,8 +247,9 @@ function saveEntry(id: string, fields: Partial<AudioInputSetting>): void {
 function toggleInput(id: string, on: boolean): void {
 	if (isStreaming || id === primaryId) return;
 	if (on && (!hasPrimary || full)) return;
-	void save(
+	void edit(
 		id,
+		{ include: on },
 		nextInputs((entries) =>
 			on ? [...entries, defaults(id)] : entries.filter((entry) => entry.id !== id),
 		),
@@ -284,7 +275,7 @@ function toggleTrack(id: string, track: number): void {
 		setError(id, refusal);
 		return;
 	}
-	void save(id, next);
+	void edit(id, { track: { number: track, on: !entryFor(id).tracks.includes(track) } }, next);
 }
 
 // Live writes: the latest answer per input wins; an older one is dropped.

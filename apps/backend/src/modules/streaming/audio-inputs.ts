@@ -3,6 +3,7 @@ import {
 	AUDIO_SOURCE_AUTO,
 	type AudioInputSetting,
 	audioMixWithPrimary,
+	defaultAudioInput,
 } from "@ceraui/rpc/schemas";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import {
@@ -187,6 +188,48 @@ export function pickedAudioInputs(
 		capability.max_inputs,
 		primaryAudioInputId(config),
 	);
+}
+
+/**
+ * The saved mix after one strip's membership or track edit, composed on the
+ * device's current mix so an edit never carries a client's copy of the others.
+ */
+export function changedAudioInputs(
+	config: RuntimeConfig,
+	id: string,
+	change: {
+		include?: boolean | undefined;
+		track?: { number: number; on: boolean } | undefined;
+	},
+): { inputs: AudioInputSetting[] } | { error: string } {
+	const primary = primaryAudioInputId(config);
+	if (change.include === false && id === primary)
+		return { error: "audio_input_primary" };
+	let next =
+		effectiveAudioInputs(config) ??
+		(primary === undefined ? [] : [defaultAudioInput(primary)]);
+	if (change.include === true && !next.some((input) => input.id === id))
+		next = [...next, defaultAudioInput(id)];
+	if (change.include === false) next = next.filter((input) => input.id !== id);
+	const { track } = change;
+	if (track !== undefined) {
+		if (!next.some((input) => input.id === id))
+			return { error: "audio_input_unknown" };
+		next = next.map((input) =>
+			input.id !== id
+				? input
+				: {
+						...input,
+						tracks: track.on
+							? [...new Set([...input.tracks, track.number])].sort(
+									(a, b) => a - b,
+								)
+							: input.tracks.filter((existing) => existing !== track.number),
+					},
+		);
+	}
+	const error = validateAudioInputs(next, config);
+	return error === undefined ? { inputs: next } : { error };
 }
 
 export function engineAudioInputs(

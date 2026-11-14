@@ -1389,3 +1389,164 @@ test("an asrc save without the pick marker changes no membership", async () => {
 	).toMatchObject({ success: true });
 	expect((await disk()).audio_inputs).toEqual(saved);
 });
+
+type MixEntry = ReturnType<typeof entry>;
+type Delta = {
+	id: string;
+	gain_db?: number;
+	mute?: boolean;
+	delay_ms?: number;
+	include?: boolean;
+	track?: { number: number; on: boolean };
+};
+
+test("interleaved picks and edits from two tabs with stale views never lose an accepted input or setting", async () => {
+	// The reference: the mix rules in plain terms, applied in the order the device accepts them.
+	const model = {
+		asrc: "Primary",
+		mix: [{ ...entry("Primary"), gain_db: -2 }] as MixEntry[],
+	};
+	const applyPick = (id: string) => {
+		if (!model.mix.some((input) => input.id === id)) {
+			if (model.mix.length < 4) model.mix = [entry(id), ...model.mix];
+			else {
+				const replaced =
+					model.mix.find((input) => input.id === model.asrc) ?? model.mix[0];
+				model.mix = [
+					entry(id, [...(replaced?.tracks ?? [1])]),
+					...model.mix.filter((input) => input !== replaced),
+				];
+			}
+		}
+		model.asrc = id;
+	};
+	const applyEdit = ({ id, include, track, ...values }: Delta) => {
+		if (include === true && !model.mix.some((input) => input.id === id))
+			model.mix = [...model.mix, entry(id)];
+		if (include === false)
+			model.mix = model.mix.filter((input) => input.id !== id);
+		model.mix = model.mix.map((input) =>
+			input.id !== id
+				? input
+				: {
+						...input,
+						...values,
+						...(track === undefined
+							? {}
+							: {
+									tracks: track.on
+										? [...new Set([...input.tracks, track.number])].sort(
+												(a, b) => a - b,
+											)
+										: input.tracks.filter((n) => n !== track.number),
+								}),
+					},
+		);
+	};
+	expect(await save(model.mix)).toMatchObject({ success: true });
+	// Both tabs keep the view they loaded and never hear back, like tabs whose answers are held.
+	const stale = structuredClone(model.mix);
+	const toggle = (id: string, n: number): Delta => ({
+		id,
+		track: {
+			number: n,
+			on: !(
+				stale.find((input) => input.id === id)?.tracks.includes(n) ?? false
+			),
+		},
+	});
+	const steps: Array<[string, { pick: string } | Delta]> = [
+		["tab A picks Second", { pick: "Second" }],
+		["tab B, stale, sets Primary to -3 dB", { id: "Primary", gain_db: -3 }],
+		["tab A picks Third", { pick: "Third" }],
+		["tab B mutes Second", { id: "Second", mute: true }],
+		["tab A puts Second on Track 2", toggle("Second", 2)],
+		["tab B delays Third 120 ms", { id: "Third", delay_ms: 120 }],
+		["tab A turns Fourth in", { id: "Fourth", include: true }],
+		["tab B, stale, picks Fifth in the full mix", { pick: "Fifth" }],
+		[
+			"tab A takes Second off Track 1",
+			{ id: "Second", track: { number: 1, on: false } },
+		],
+		["tab B turns Fourth out", { id: "Fourth", include: false }],
+		["tab A puts Fifth on Track 3", toggle("Fifth", 3)],
+		["tab B sets Second to -6 dB", { id: "Second", gain_db: -6 }],
+	];
+	for (const [label, step] of steps) {
+		const result = "pick" in step ? await pick(step.pick) : await change(step);
+		expect(result.success, label).toBe(true);
+		if ("pick" in step) applyPick(step.pick);
+		else applyEdit(step);
+		const saved = await disk();
+		expect(saved.audio_inputs, label).toEqual(model.mix);
+		expect(saved.asrc, label).toBe(model.asrc);
+	}
+	// Both tabs send at once without waiting, each on a different input: every edit lands.
+	const burst: Delta[] = [
+		{ id: "Primary", mute: true },
+		{ id: "Fifth", gain_db: -9 },
+		toggle("Second", 3),
+	];
+	const results = await Promise.all(burst.map((delta) => change(delta)));
+	expect(results.map((result) => result.success)).toEqual([true, true, true]);
+	for (const delta of burst) applyEdit(delta);
+	expect((await disk()).audio_inputs).toEqual(model.mix);
+});
+
+test("turning off the last other input clears the saved mix", async () => {
+	expect(await save([entry("Primary"), entry("Second")])).toMatchObject({
+		success: true,
+	});
+	expect(await change({ id: "Second", include: false })).toMatchObject({
+		success: true,
+		applies_next_start: true,
+	});
+	expect(await disk()).not.toHaveProperty("audio_inputs");
+});
+
+test("a level reset that leaves only the main input at its defaults clears the saved mix", async () => {
+	expect(await save([{ ...entry("Primary"), gain_db: -6 }])).toMatchObject({
+		success: true,
+	});
+	expect(await change({ id: "Primary", gain_db: 0 })).toMatchObject({
+		success: true,
+	});
+	expect(await disk()).not.toHaveProperty("audio_inputs");
+});
+
+test("turning the main input out is refused and changes nothing", async () => {
+	const saved = [entry("Primary"), entry("Second", [2])];
+	expect(await save(saved)).toMatchObject({ success: true });
+	expect(await change({ id: "Primary", include: false })).toEqual({
+		success: false,
+		error: "audio_input_primary",
+	});
+	expect((await disk()).audio_inputs).toEqual(saved);
+});
+
+test("turning an input in past max_inputs is refused and changes nothing", async () => {
+	await maxInputs(2);
+	const saved = [entry("Primary"), entry("Second", [2])];
+	expect(await save(saved)).toMatchObject({ success: true });
+	expect(await change({ id: "Third", include: true })).toEqual({
+		success: false,
+		error: "audio_inputs_too_many",
+	});
+	expect((await disk()).audio_inputs).toEqual(saved);
+});
+
+test("after a load whose saved mix lacks the main input, turning another input in keeps the main input first", async () => {
+	expect(await save([entry("Primary"), entry("Second", [2])])).toMatchObject({
+		success: true,
+	});
+	getConfig().asrc = "Third";
+	expect(await change({ id: "Fourth", include: true })).toMatchObject({
+		success: true,
+	});
+	expect((await disk()).audio_inputs).toEqual([
+		entry("Third"),
+		entry("Primary"),
+		entry("Second", [2]),
+		entry("Fourth"),
+	]);
+});

@@ -93,7 +93,11 @@ mix, and nothing is written until an operator edit. `setConfig({ asrc,
 audio_pick: true })` is the picker's explicit pick: `pickedAudioInputs` adds
 the picked device to the current saved mix (replacing the current main input,
 Auto resolved, in a full mix) and saves both in one synchronous write, so
-picks serialize; without `audio_pick` an `asrc` save changes no membership. For a network source, its source id (`rtmp` or `srt`) denotes
+picks serialize; without `audio_pick` an `asrc` save changes no membership.
+Idle edits from the Live strips arrive as per-input deltas on
+`setAudioMix`: values, or `include` / `track` for membership and tracks, which
+`changedAudioInputs` composes on the current saved mix (refusing to turn the
+main input out with `audio_input_primary`) and saves for the next start. For a network source, its source id (`rtmp` or `srt`) denotes
 the embedded input and becomes engine `embedded`. Without saved inputs or the
 capability, start serialization stays on the existing path. The compatibility
 start-schema export aliases the published producer schema, preserving its

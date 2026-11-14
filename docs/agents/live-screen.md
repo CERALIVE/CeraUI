@@ -248,10 +248,14 @@ must keep that ABI.
   `audio-level` message, which reads unavailable when the input has no reading
   or the socket is down; a muted input reads silent. Today's meter stays in
   `LiveSummaryStrip` while live.
-- Idle, a change saves `streaming.setConfig({ audio_inputs })` with every
-  enabled strip, main input first, and `audio_inputs: null` once only the main
-  input is left at its defaults. An unanswered save shows as the choice; a
-  refused one puts the previous state back.
+- Idle, a change sends only that input's delta to `streaming.setAudioMix`: a
+  level, mute or delay value, one track on or off (`track`), or the input in or
+  out (`include`). The client never sends a whole `audio_inputs` array: the
+  device composes each delta on its own current saved mix in one synchronous
+  write (main input first, `audio_inputs` cleared once only the main input is
+  left at its defaults), so edits and picks from several tabs never drop one
+  another. An unanswered edit shows as the choice; a refused one puts the
+  previous state back.
 - Live on a session whose status says `audio_mix_active`, level, mute and
   delay call `streaming.setAudioMix` with only the changed field (the level
   at most every 100 ms while dragging and once on release), and the values the
