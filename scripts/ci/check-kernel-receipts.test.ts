@@ -6,16 +6,16 @@ import { checkInputs, checkReport, checkReportFile } from './check-kernel-receip
 const file = 'uplink-steering-route-kernel.test.ts';
 const scenarios = suites[file];
 const testcase = (name: string, status = '') => `<testcase name="${name}">${status}</testcase>`;
-const nested = `<testsuite name="describe" file="src/tests/${file}" tests="5">${scenarios.map((name) => testcase(name)).join('')}</testsuite>`;
-const suite = `<testsuite name="src/tests/${file}" file="src/tests/${file}" tests="6" skipped="0" failures="0">${nested}${testcase('kernel scenario receipt set')}</testsuite>`;
+const nested = `<testsuite name="describe" file="src/tests/${file}" tests="7">${scenarios.map((name) => testcase(name)).join('')}</testsuite>`;
+const suite = `<testsuite name="src/tests/${file}" file="src/tests/${file}" tests="8" skipped="0" failures="0">${nested}${testcase('kernel scenario receipt set')}</testsuite>`;
 const report = `<testsuites>${suite}</testsuites>`;
 
 test('counts descendant cases once in Bun nested suites', () => {
 	expect(checkReport(report)).toEqual({
 		kernel_files: 1,
-		testcases: 6,
+		testcases: 8,
 		skips: 0,
-		receipts: 5,
+		receipts: 7,
 	});
 });
 
@@ -28,7 +28,7 @@ test.each([
 	['missing receipt set', report.replace(testcase('kernel scenario receipt set'), '')],
 	['wrong scenario', report.replace(scenarios[0] ?? '', 'unexpected scenario')],
 	['declared skip', report.replace('skipped="0"', 'skipped="1"')],
-	['declared count', report.replace('tests="6"', 'tests="7"')],
+	['declared count', report.replace('tests="8"', 'tests="9"')],
 	['corrupt XML', '<testsuites>'],
 	['empty report', ''],
 	['non XML', 'not a report'],

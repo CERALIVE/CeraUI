@@ -87,10 +87,10 @@ async function ensureUplinkRouteInner(
 	try {
 		if (plan.managed) {
 			const routeOutput = await readRouteTable(deps, plan.table);
-			const defaultLine =
-				routeOutput
-					.split("\n")
-					.find((line) => line.trim().startsWith("default")) ?? "";
+			const defaultLines = routeOutput
+				.split("\n")
+				.filter((line) => line.trim().startsWith("default"));
+			const defaultLine = defaultLines[0] ?? "";
 			const currentRoute = parseDefaultRouteLine(defaultLine);
 			const sameDevice =
 				parseDefaultRouteInterface(defaultLine) === plan.ifname;
@@ -120,7 +120,12 @@ async function ensureUplinkRouteInner(
 						"managed route has no replacement argv",
 					);
 				}
-				if (sameDevice && currentRoute.ok) {
+				if (
+					currentRoute.ok &&
+					(sameDevice ||
+						(defaultLines.length === 1 &&
+							!/\b(?:tos|dsfield)\b/.test(defaultLine)))
+				) {
 					const metricChanged = changedFields.includes("metric");
 					const previousRoute = [
 						"route",

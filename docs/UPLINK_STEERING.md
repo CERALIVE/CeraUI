@@ -101,6 +101,11 @@ change or rollback leaves one default. Neither path flushes or touches another
 uplink's table. An identical route needs no replacement and, when its rules
 already exist, reports no change.
 
+When a managed table has one plain default on another device, a failed reload
+restores that replaced route and its attributes instead of flushing the table,
+including when the replacement changes the metric. Multiple-default and
+TOS-specific inventories retain their existing behavior.
+
 For `ip -4 route show default dev <ifname>`, iproute2 omits the `dev` clause.
 The planner supplies that query's interface when absent and rejects a conflicting
 `dev`; unfiltered table output must explicitly name the matching interface.

@@ -1,6 +1,8 @@
 {
 	"uplink-steering-route-kernel.test.ts": [
 		"#433 provisions and retires never-created steering tables",
+		"#534 rename rollback restores a cross-device default with metric 100",
+		"#534 rename rollback restores a cross-device default with metric 200",
 		"retains usable managed route when live main default is absent",
 		"same-metric protocol refresh uses one replace",
 		"replans from the live interface gateway",
