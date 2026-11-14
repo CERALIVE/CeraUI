@@ -61,6 +61,10 @@ uses an address inside a client prefix.
 
 ## Route support
 
+`uplink-steering/route-table-ownership.ts` owns managed table provisioning,
+partial-failure rollback, and flushing; `route-manager.ts` coordinates route
+discovery and the source/fwmark rule lifecycle.
+
 Existing usable foreign source-routing tables are reused without claiming them.
 Every supported uplink class (`wl*`, `usb*`, `eth*`, `en*`/`enx*`, `ww*`, and
 `ppp*`) without a source rule gets a private, identity-derived table. A table
