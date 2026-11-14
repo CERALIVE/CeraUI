@@ -204,7 +204,7 @@ function removedRoutePlans(
 }
 
 function routeKey(route: UplinkRoutePlan): string {
-	return `${route.identity}\u0000${route.ifname}\u0000${route.table}\u0000${route.mark}`;
+	return `${route.identity}\u0000${route.table}\u0000${route.mark}`;
 }
 
 function recoveredRoutePlans(
@@ -230,7 +230,7 @@ function transitionState(
 		const route = previous.routes.find(
 			(candidate) =>
 				candidate.identity === uplink.identity &&
-				candidate.ifname === uplink.ifname,
+				candidate.mark === uplink.mark,
 		);
 		if (route === undefined || !removedKeys.has(routeKey(route))) continue;
 		retainedSupport.push({ ...uplink, selectable: false, weight: 0 });
