@@ -1,3 +1,4 @@
+import { logger } from "../../../helpers/logger.ts";
 import { resolveModemPhysicalIdentity } from "../../modems/physical-identity-source.ts";
 import { isConcurrentApIfname } from "../../wifi/wifi-concurrent-interface.ts";
 import { getWifiInterfacesByMacAddress } from "../../wifi/wifi-connections.ts";
@@ -25,7 +26,7 @@ import {
 	type SteeringUplink,
 } from "./contracts.ts";
 import { planUplinkRoute, type UplinkRouteCandidate } from "./route-manager.ts";
-import { stableUplinkMark } from "./ruleset.ts";
+import { markForSlot, stableUplinkMark } from "./ruleset.ts";
 import { cidrsOverlap, subnetCidr } from "./subnet.ts";
 
 type NetworkSnapshot = Record<string, NetworkInterface | undefined>;
@@ -199,11 +200,39 @@ function collectUplinkCandidates(
 		});
 	}
 	return {
-		candidates: candidates.sort((a, b) =>
+		candidates: resolveMarkCollisions(candidates).sort((a, b) =>
 			a.uplink.ifname.localeCompare(b.uplink.ifname),
 		),
 		identityPending,
 	};
+}
+
+function resolveMarkCollisions(
+	candidates: UplinkCandidate[],
+): UplinkCandidate[] {
+	candidates.sort((a, b) => a.uplink.identity.localeCompare(b.uplink.identity));
+	const owners = new Map<number, string>();
+	// Reserve every natural mark before probing so only colliding claimants move.
+	for (const { uplink } of candidates) {
+		if (!owners.has(uplink.mark)) owners.set(uplink.mark, uplink.ifname);
+	}
+	return candidates.map((candidate) => {
+		const { uplink } = candidate;
+		const owner = owners.get(uplink.mark);
+		if (owner === uplink.ifname) return candidate;
+		let slot = (uplink.mark >>> 8) & 0xffff;
+		do {
+			slot = slot === 0xffff ? 1 : slot + 1;
+		} while (owners.has(markForSlot(slot)));
+		const mark = markForSlot(slot);
+		owners.set(mark, uplink.ifname);
+		logger.info("resolved uplink steering mark collision", {
+			iface: uplink.ifname,
+			otherIface: owner,
+			mark,
+		});
+		return { ...candidate, uplink: { ...uplink, mark } };
+	});
 }
 
 function assertNoOverlap(

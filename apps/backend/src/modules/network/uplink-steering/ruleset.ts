@@ -18,6 +18,10 @@ const SAFE_NFT_IFNAME_RE = /^[A-Za-z0-9_.][A-Za-z0-9_.-]{0,14}$/;
 
 /** Deterministic FNV-1a mark: stable across reweights and backend restarts. */
 export function stableUplinkMark(identity: string): number {
+	return markForSlot(slotForIdentity(identity));
+}
+
+export function slotForIdentity(identity: string): number {
 	if (identity.length === 0)
 		throw new Error("uplink identity must not be empty");
 	let hash = 0x811c9dc5;
@@ -27,6 +31,10 @@ export function stableUplinkMark(identity: string): number {
 	}
 	let slot = ((hash >>> 16) ^ hash) & 0xffff;
 	if (slot === 0) slot = 1;
+	return slot;
+}
+
+export function markForSlot(slot: number): number {
 	return (CLIENT_FLOW_NAMESPACE | (slot << 8)) >>> 0;
 }
 

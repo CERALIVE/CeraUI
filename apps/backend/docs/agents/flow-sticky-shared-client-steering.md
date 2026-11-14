@@ -26,9 +26,12 @@ mark and recirculates out the WAN.
 
 **Marks are physical-identity keyed.** The high byte `0xca` proves client-zone
 provenance, the next 16 bits select the uplink, and the low byte is preserved.
-The fixed 10000-bucket verdict map uses largest-remainder apportionment. Reorder,
-add/remove, and reweight never change a surviving mark, so established flows keep
-their original route while only new flows see the new weights.
+The fixed 10000-bucket verdict map uses largest-remainder apportionment. Marks are
+stable per identity across reorder, reweight and backend restarts for the same
+identity set. If identities hash to the same slot, the identity-sorted first keeps
+it; later claimants probe upward to the next free slot, wrapping from 65535 to 1
+and never using 0. Every natural slot is reserved before probing, so non-colliding
+identities never move. Only probers can move when the identity set changes.
 
 **Startup readiness preserves recovered sharing.** The first OS netif snapshot
 must exist before planning, including when it is empty. A snapshot with no
@@ -84,8 +87,10 @@ untouched and skip apply for 5 seconds. Each later failed apply doubles that del
 up to 60 seconds, with one apply per window. A different desired state or success
 clears the backoff. On process restart it
 inventories its priority-110 rules, publishes the latest model first, then flushes
-and removes stale support. Any overlap, mark collision, foreign priority owner,
-missing route, nft failure, or rollback failure is fail-soft and surfaces
+and removes stale support. Hash-slot collisions are resolved with an info log
+naming both interfaces; the distinct-mark assertion and `mark_collision` refusal
+remain as invariants. Any overlap, foreign priority owner, missing route, nft
+failure, or rollback failure is fail-soft and surfaces
 `steering_unavailable`; it never blocks the already-bound WS server.
 
 Keep committed steering through stale-route cleanup failures: sharing, provisioned
