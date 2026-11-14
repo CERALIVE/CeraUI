@@ -627,7 +627,7 @@ inline). See `.env.example` for the full layout.
 | `VITE_SOCKET_ENDPOINT` | dev only | `.env.development` | `ws://<page hostname>` | WebSocket endpoint (scheme + host, no port) |
 | `VITE_SOCKET_PORT` | dev only | `.env.development` | `3002` | Backend dev WebSocket port |
 | `MOCK_SCENARIO` | dev only | `.env.development` | `multi-modem-wifi` | Hardware mock scenario |
-| `LOG_LEVEL` | dev + prod | shell / systemd env | _(per-transport default)_ | Override Winston log level for all transports. Dev console default: `info`; prod console: `warn`; file: `debug`. Set to `debug` to enable per-RPC call trace lines. |
+| `LOG_LEVEL` | dev + prod | shell / systemd env | _(per-transport default)_ | Override Winston log level for all transports. Dev console default: `info`; prod console: `debug`; file: `debug`. Set to `debug` to enable per-RPC call trace lines. |
 
 ## Build & Deploy
 
