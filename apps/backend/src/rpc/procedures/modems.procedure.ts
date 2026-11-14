@@ -5,12 +5,9 @@
 
 import {
 	CAPABILITY_MODULE_CONFIG_KEY,
-	deriveModemStableKey,
 	fccUnlockOptionsInputSchema,
 	fccUnlockOptionsOutputSchema,
 	isCapabilityGateEnabled,
-	type ModemConfigRefusal,
-	type ModemMutationRefusal,
 	modemBandsInputSchema,
 	modemBandsOutputSchema,
 	modemCapabilitiesOutputSchema,
@@ -58,7 +55,6 @@ import {
 import { os } from "@orpc/server";
 
 import { logger } from "../../helpers/logger.ts";
-import { setMockModemConfig } from "../../mocks/mock-service.ts";
 import {
 	mockAttemptSimPin2Unlock,
 	mockAttemptSimPukUnlock,
@@ -90,11 +86,6 @@ import {
 	broadcastModems,
 	getCommittedModemsWireMessage,
 } from "../../modules/modems/modem-status.ts";
-import { getModemIdPath } from "../../modules/modems/modem-wire-producer.ts";
-import {
-	applyModemConfig,
-	type ModemConfigOutcome,
-} from "../../modules/modems/modems.ts";
 import { getModem, setModem } from "../../modules/modems/modems-state.ts";
 import {
 	acknowledgeMutation,
@@ -108,7 +99,6 @@ import {
 } from "../../modules/modems/mutation-identity.ts";
 import {
 	beginModemMutation,
-	withJournaledModemMutation,
 	withModemMutation,
 } from "../../modules/modems/mutation-lease.ts";
 import { modemOperationOutcomeFromError } from "../../modules/modems/operation-outcome.ts";
@@ -118,12 +108,6 @@ import {
 } from "../../modules/modems/sim-pin2.ts";
 import { clearSimPin, storeSimPin } from "../../modules/modems/sim-secrets.ts";
 import { readSmsInboxForBackend } from "../../modules/modems/sms-backend.ts";
-import {
-	getCachedUsagePolicy,
-	type ModemUsagePolicy,
-	usagePolicySlotKey,
-	writeUsagePolicy,
-} from "../../modules/modems/usage-policy.ts";
 import { resolveUsbModeOptions } from "../../modules/modems/usb-mode-certification.ts";
 import {
 	getUsbModeDispatchDeps,
@@ -142,6 +126,7 @@ import { isRealDevice } from "../../modules/system/device-detection.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import { cellularReadyMiddleware } from "../middleware/cellular.middleware.ts";
 import type { RPCContext } from "../types.ts";
+import { configureModem } from "./modems-configure.ts";
 
 // Base procedure with context
 const baseProcedure = os.$context<RPCContext>();
@@ -165,180 +150,11 @@ export const getAllModemsProcedure = modemProcedure
 		return modemListSchema.parse(getCommittedModemsWireMessage());
 	});
 
-/**
- * The mutation-safety refusals are members of `modemConfigRefusalSchema`, so the
- * mapping is an identity — declared rather than inlined so the type system fails
- * the build if the two vocabularies are ever allowed to drift apart.
- */
-function configRefusalFor(refusal: ModemMutationRefusal): ModemConfigRefusal {
-	return refusal;
-}
-
-/**
- * Configure modem procedure
- */
+/** Configure modem through the shared mutation and applied-state handler. */
 export const configureModemProcedure = modemProcedure
 	.input(modemConfigInputSchema)
 	.output(modemConfigOutputSchema)
-	.handler(async ({ input }) => {
-		// Normalised (post-clamp) config the device actually persists.
-		const roaming = input.roaming ?? false;
-		const network = input.network ?? "";
-		const autoconfig = input.autoconfig ?? false;
-		const modemId = Number(input.device);
-
-		// AWAITED, and its outcome is REPORTED. This used to dispatch the apply
-		// fire-and-forget through `handleModems` and answer `{success: true}` no
-		// matter what happened, so a refusal reached the operator as a save.
-		// A concurrent call joins the one-slot trailing scheduler, so the pre-lock
-		// value remains a refusal until this request's callback actually runs. Held
-		// on an object
-		// so the assignment inside the closure is visible to the check below.
-		const state: { outcome: ModemConfigOutcome } = {
-			outcome: { ok: false, reason: "device_busy" },
-		};
-
-		const applyRadioConfig = async (): Promise<void> => {
-			await withModemUpdateLock(async () => {
-				state.outcome = await applyModemConfig({
-					device: modemId,
-					network_type: input.network_type,
-					roaming,
-					network,
-					autoconfig,
-					apn: input.apn,
-					username: input.username,
-					password: input.password,
-				});
-
-				if (shouldMockModems()) {
-					setMockModemConfig(input.device, {
-						apn: input.apn,
-						network_type_active: input.network_type,
-						roaming,
-					});
-
-					const modem = getModem(modemId);
-					if (modem) {
-						modem.network_type.active = input.network_type;
-						if (modem.config) {
-							modem.config.apn = input.apn;
-							modem.config.username = input.username;
-							modem.config.password = input.password;
-							modem.config.roaming = roaming;
-							modem.config.network = network;
-							modem.config.autoconfig = autoconfig;
-						}
-						broadcastModems({ [modemId]: true });
-					}
-					state.outcome = { ok: true, reconnected: false };
-				}
-			});
-		};
-
-		const before = getModem(modemId)?.config;
-		const guarded = await withJournaledModemMutation(
-			modemStableKeyForId(modemId),
-			"modem-config",
-			{
-				apn: before?.apn ?? "",
-				username: before?.username ?? "",
-				roaming: before?.roaming ?? false,
-				network: before?.network ?? "",
-				autoconfig: before?.autoconfig ?? false,
-				network_type: getModem(modemId)?.network_type.active ?? "",
-			},
-			async () => {
-				await applyRadioConfig();
-				// EVERY typed refusal from `applyModemConfig` describes a write that
-				// did NOT land — the profile write is verified and the bearer
-				// tear-down is gated on a real change — so the pre-state is still
-				// current and the armed entry is cancelled rather than left blocking
-				// the device. Only a THROW leaves a state nobody can name, and the
-				// journaled wrapper marks that `failed` on its own.
-				return { confirmed: true, value: undefined };
-			},
-		);
-		if (!guarded.ok) {
-			return { success: false, error: configRefusalFor(guarded.refusal) };
-		}
-
-		if (!state.outcome.ok) {
-			return { success: false, error: state.outcome.reason };
-		}
-
-		// The usage policy is LOCAL durable state, not a modem write, so it is
-		// applied outside the modem lock and only after the radio config landed —
-		// a save that failed at the radio must not leave a meter bound half-changed.
-		const policy = await applyUsagePolicyChange(input);
-		if (!policy.ok) {
-			return { success: false, error: policy.reason };
-		}
-
-		return {
-			success: true,
-			reconnected: state.outcome.reconnected,
-			applied: {
-				device: input.device,
-				network_type: input.network_type,
-				roaming,
-				network,
-				autoconfig,
-				apn: input.apn,
-				username: input.username,
-				password: input.password,
-				...(policy.policy.cycleDay !== undefined
-					? { data_usage_cycle_day: policy.policy.cycleDay }
-					: {}),
-				...(policy.policy.thresholdBytes !== undefined
-					? { data_usage_threshold_bytes: policy.policy.thresholdBytes }
-					: {}),
-			},
-		};
-	});
-
-/**
- * Persist the request's usage-policy fields, if it carries any.
- *
- * A request that mentions NEITHER field touches nothing and reports the policy
- * already on file — an APN-only save must not require the caller to restate a
- * meter bound it has no opinion about, and must not be refused on a device whose
- * pinned `@ceralive/modem-control` cannot write one.
- */
-async function applyUsagePolicyChange(input: {
-	device: string;
-	data_usage_cycle_day?: number | null | undefined;
-	data_usage_threshold_bytes?: number | null | undefined;
-}): Promise<
-	| { ok: true; policy: ModemUsagePolicy }
-	| { ok: false; reason: ModemConfigRefusal }
-> {
-	const ifname = getModem(Number(input.device))?.ifname;
-	const idPath = ifname !== undefined ? getModemIdPath(ifname) : undefined;
-	const slotKey = usagePolicySlotKey(
-		input.device,
-		deriveModemStableKey(idPath),
-	);
-	const touchesPolicy =
-		input.data_usage_cycle_day !== undefined ||
-		input.data_usage_threshold_bytes !== undefined;
-	if (!touchesPolicy) {
-		return { ok: true, policy: getCachedUsagePolicy(slotKey) ?? {} };
-	}
-	const written = await writeUsagePolicy(slotKey, {
-		...(input.data_usage_cycle_day !== undefined
-			? { cycleDay: input.data_usage_cycle_day }
-			: {}),
-		...(input.data_usage_threshold_bytes !== undefined
-			? { thresholdBytes: input.data_usage_threshold_bytes }
-			: {}),
-	});
-	if (!written.ok) {
-		return { ok: false, reason: written.reason };
-	}
-	broadcastModems();
-	return { ok: true, policy: written.policy };
-}
+	.handler(({ input }) => configureModem(input));
 
 /**
  * Scan modem networks procedure
