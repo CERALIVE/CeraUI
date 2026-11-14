@@ -43,7 +43,7 @@ import { reconcileDuplicateGsmProfiles } from "./gsm-duplicate-reconcile.ts";
 import { setGsmOperatorName } from "./gsm-operators-cache.ts";
 import { mmSetNetworkTypes } from "./mmcli.ts";
 import { modemNetworkScan } from "./modem-network-scan.ts";
-import { sanitizeModemConfigForNetworkManager } from "./modem-registration.ts";
+import { sanitizeModemConfigForNetworkManager } from "./modem-nm-config.ts";
 import { broadcastModems } from "./modem-status.ts";
 import { getModem, type ModemConfig } from "./modems-state.ts";
 

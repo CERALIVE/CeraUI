@@ -1,5 +1,11 @@
 # CeraUI
 
+**Modem configuration acknowledgement [EXISTS; host-tested].** Automatic APN,
+credentials and operator selection are normalized before NetworkManager writes.
+`modems.configure.applied` reports the saved values, including automatic APN
+disabled by the device capability gate. See the
+[modem save contract](apps/backend/docs/agents/a-modem-save-spends-a-reconnect-only-when-it-must.md#applied-configuration-receipts-exists).
+
 **Streaming settings RPC [EXISTS].** Settings clients can save the producer's
 balancer selection or clear a saved codec with `video_codec: null` for the next
 start. Saved keys, defaults and passthrough choices remain unchanged. See the

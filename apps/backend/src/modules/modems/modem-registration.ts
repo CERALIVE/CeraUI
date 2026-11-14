@@ -40,10 +40,8 @@ import { logger } from "../../helpers/logger.ts";
 import { pollWithBackoff } from "../../helpers/retry.ts";
 import {
 	type NetworkManagerConnection,
-	type NetworkManagerConnectionModemConfig,
 	nmConnAdd,
 } from "../network/network-manager.ts";
-import { resolveGsmAutoconfigSupport } from "./gsm-autoconfig.ts";
 import { getGsmConnections, resetGsmConnections } from "./gsm-connections.ts";
 import {
 	defaultGsmReconcileDeps,
@@ -64,6 +62,7 @@ import {
 	type SimInfo,
 } from "./mmcli.ts";
 import { modemHardwareName } from "./modem-identity.ts";
+import { sanitizeModemConfigForNetworkManager } from "./modem-nm-config.ts";
 import {
 	getModem,
 	type Modem,
@@ -267,37 +266,6 @@ function buildSimLock(modemInfo: Readonly<ModemInfo>): SimLockReading {
 				? { required: info.required }
 				: { required: info.required, remainingAttempts },
 	};
-}
-
-function applyAutoconfigToModemConfig(
-	config: ModemConfig,
-	autoConfig: boolean,
-) {
-	if (autoConfig) {
-		config.apn = "";
-		config.username = "";
-		config.password = "";
-	} else {
-		config.autoconfig = false;
-	}
-}
-
-export function sanitizeModemConfigForNetworkManager(config: ModemConfig) {
-	const autoConfig = resolveGsmAutoconfigSupport() && config.autoconfig;
-
-	const fields: NetworkManagerConnectionModemConfig = {
-		"gsm.apn": config.apn || "", // Empty string fallback; Bun runtime limitation with empty CLI args
-		"gsm.username": config.username || "", // Empty string fallback; Bun runtime limitation with empty CLI args
-		"gsm.password": config.password || "", // Empty string fallback; Bun runtime limitation with empty CLI args
-		"gsm.password-flags": !config.password ? "4" : "0",
-		"gsm.home-only": config.roaming ? "no" : "yes",
-		"gsm.network-id": config.roaming ? config.network : "",
-		"gsm.auto-config": autoConfig ? "yes" : "no",
-	};
-
-	applyAutoconfigToModemConfig(config, autoConfig);
-
-	return fields;
 }
 
 async function addConnectionForModem(

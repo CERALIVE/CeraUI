@@ -77,6 +77,38 @@ Coverage: `@ceraui/rpc` `modem-apply-scope.test.ts` (the decision table),
 REAL `applyModemConfig`). Frontend half:
 `apps/frontend/src/main/dialogs/ModemConfigDialog.reconnect.test.ts`.
 
+## Applied configuration receipts [EXISTS]
+
+`modules/modems/modem-nm-config.ts` owns the shared NM normalization used for
+creation, saves and duplicate enforcement. It uses
+`normalizeModemConnectionFields` before constructing any NM property: automatic
+APN clears APN, username and password and sets password flags to `4`; a capability
+opt-out leaves automatic APN disabled; roaming disabled clears the operator lock.
+The in-memory configuration and the written properties therefore agree.
+
+`rpc/procedures/modems-configure.ts` captures the successful applied configuration
+and radio mode under the modem update lock. Its response uses that snapshot,
+including the capability-gated automatic APN value, rather than the request.
+Later usage-policy persistence or a later modem save cannot replace the receipt.
+The authenticated procedure and mutation journal admission remain in force.
+
+`tests/modem-configure-normalization.test.ts` drives the real configure RPC and
+NM writer against an argv-level nmcli double. It covers capability-disabled
+automatic APN, stale credentials with automatic APN enabled, and an unquoted
+manual APN. The writer passes string values directly in argv and adds no literal
+quote characters. The source of the older quoted bench APNs remains unknown;
+this change does not strip operator-supplied characters or migrate old profiles.
+Host coverage does not establish a successful carrier data session.
+
+Release documentation handoff for docs.ceralive.tv (EN/es-419):
+
+- EN: Saving modem settings reports the values applied by the device. Automatic
+  APN clears manual APN credentials when supported; a device that cannot enable
+  it reports it as disabled.
+- es-419: Al guardar los ajustes del módem, ves los valores que aplicó el
+  dispositivo. El APN automático borra las credenciales manuales cuando es
+  compatible; si el dispositivo no puede activarlo, aparece desactivado.
+
 ## …AND EVERY PROFILE BOUND TO THE SIM CARRIES THE SAME ANSWER [EXISTS]
 
 Todo 50 fixed WHICH NetworkManager profile a modem save writes to, and disarmed
