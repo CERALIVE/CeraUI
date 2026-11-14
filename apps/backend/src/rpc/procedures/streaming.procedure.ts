@@ -61,6 +61,7 @@ import {
 	getInjectedMockStreamError,
 	isMockGatewayActive,
 	setMockDeviceAttached,
+	startMockStreaming,
 } from "../../mocks/providers/streaming.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
 import { reportActiveProfile } from "../../modules/remote-control/active-profile-reporter.ts";
@@ -69,7 +70,13 @@ import {
 	AUDIO_BACKEND_UNSUPPORTED_ERROR,
 	isAudioBackendSupported,
 } from "../../modules/streaming/audio-backend.ts";
+import {
+	engineAudioInputs,
+	storedAudioInputs,
+	validateAudioInputs,
+} from "../../modules/streaming/audio-inputs.ts";
 import { syncAudioMeterPreference } from "../../modules/streaming/audio-meter-bridge.ts";
+import { getAudioMixActive } from "../../modules/streaming/audio-mix-status.ts";
 import {
 	getResolvedAsrc,
 	refreshResolvedAsrcPreview,
@@ -145,6 +152,8 @@ import { start as startStream } from "../../modules/streaming/streamloop.ts";
 import { broadcastMsg } from "../../modules/ui/websocket-server.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
+
+export { setAudioMixProcedure } from "./audio-mix.procedure.ts";
 
 interface StreamingProcedureDeps {
 	readonly getSourcesMessage: typeof getSourcesMessage;
@@ -368,7 +377,32 @@ export const streamingStartProcedure = authedProcedure
 						framerate: applied.framerate,
 						max_br: applied.max_br,
 					});
-					setStreamingState(true);
+					const config = {
+						...getConfig(),
+						...applied,
+						audio_inputs: applied.audio_inputs ?? getConfig().audio_inputs,
+						composition: applied.composition ?? getConfig().composition,
+						video_codec: applied.video_codec ?? getConfig().video_codec,
+					};
+					const inputs = engineAudioInputs(config);
+					startMockStreaming({
+						pipeline: config.pipeline ?? "test",
+						srt: {
+							host: "127.0.0.1",
+							port: 9000,
+							latency_ms: config.srt_latency ?? 2000,
+						},
+						bitrate: {
+							min_bitrate: 500,
+							max_bitrate: config.max_br ?? 5000,
+							balancer: config.balancer ?? "adaptive",
+						},
+						...(inputs === undefined ? {} : { audio: { inputs } }),
+					});
+					broadcastMsg("status", {
+						is_streaming: true,
+						audio_mix_active: getAudioMixActive(),
+					});
 					appliedResponse = applied;
 					return;
 				}
@@ -507,6 +541,7 @@ export const getConfigProcedure = authedProcedure
 
 		return {
 			asrc: config.asrc,
+			audio_inputs: config.audio_inputs,
 			max_br,
 			balancer: config.balancer,
 			acodec: config.acodec,
@@ -925,6 +960,18 @@ export const setConfigProcedure = authedProcedure
 			};
 		}
 
+		const audioConfig = {
+			...config,
+			...input,
+			audio_inputs: config.audio_inputs,
+			composition: config.composition,
+			video_codec: config.video_codec,
+		};
+		if (input.audio_inputs != null) {
+			const error = validateAudioInputs(input.audio_inputs, audioConfig);
+			if (error !== undefined) return { success: false, error, applied: {} };
+		}
+
 		// Apply-now splits the save in two: the restart-requiring fields are held
 		// back (staged, never written) so `config.json` keeps describing what the
 		// engine is ACTUALLY running until the transaction says `applied`. Every
@@ -941,6 +988,8 @@ export const setConfigProcedure = authedProcedure
 		if (input.pipeline !== undefined) config.pipeline = input.pipeline;
 		if (input.acodec !== undefined) config.acodec = input.acodec;
 		if (input.asrc !== undefined) config.asrc = input.asrc;
+		if (input.audio_inputs !== undefined)
+			config.audio_inputs = storedAudioInputs(input.audio_inputs, audioConfig);
 		// Never staged behind `apply_now`: the engine fixes its audio backend when
 		// it builds the graph and answers a live reload with `applies:
 		// "next-session"`, so this can only ever take effect at the next start.
@@ -1053,6 +1102,8 @@ export const setConfigProcedure = authedProcedure
 		if (input.pipeline !== undefined) applied.pipeline = config.pipeline;
 		if (input.acodec !== undefined) applied.acodec = config.acodec;
 		if (input.asrc !== undefined) applied.asrc = config.asrc;
+		if (input.audio_inputs !== undefined)
+			applied.audio_inputs = config.audio_inputs ?? null;
 		if (input.audio_backend !== undefined)
 			applied.audio_backend = config.audio_backend;
 		if (input.max_br !== undefined) applied.max_br = config.max_br;
@@ -1389,6 +1440,8 @@ export const switchAudioProcedure = authedProcedure
 	.input(switchAudioInputSchema)
 	.output(switchAudioOutputSchema)
 	.handler(async ({ input }) => {
+		if (getAudioMixActive())
+			return { success: false, error: "audio_mix_active" };
 		// The engine's live switch resolves a REGISTRY ID; a Bluetooth microphone
 		// is addressed by an opaque BlueALSA PCM string that names no registry
 		// entry, so the engine would answer `device_not_found` for a device that
