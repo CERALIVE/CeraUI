@@ -26,6 +26,7 @@ Full PR gate: `bun run test`, `bun run test:e2e`, `bun run check:tech-debt`,
 | Cellular composition and wire projection | [the-cellular-subsystem-one-composition-root-one-wire.md](docs/agents/the-cellular-subsystem-one-composition-root-one-wire.md) |
 | Modem presence and exact-identity admission | [a-device-is-announced-before-any-modem-service-can-descri.md](docs/agents/a-device-is-announced-before-any-modem-service-can-descri.md) |
 | Modem mutation leases, journal and rollback | [the-modem-mutation-safety-contract.md](docs/agents/the-modem-mutation-safety-contract.md) |
+| Modem configuration normalization and applied receipts | [a-modem-save-spends-a-reconnect-only-when-it-must.md](docs/agents/a-modem-save-spends-a-reconnect-only-when-it-must.md) |
 | Modem feature gates | [the-capability-feature-gate-framework.md](docs/agents/the-capability-feature-gate-framework.md) |
 | Shared-client flow-sticky steering | [flow-sticky-shared-client-steering.md](docs/agents/flow-sticky-shared-client-steering.md) |
 | Streaming-first shaping and read-only NAT diagnostics | [streaming-first-uplink-shaping.md](docs/agents/streaming-first-uplink-shaping.md) |
