@@ -22,6 +22,7 @@ Full PR gate: `bun run test`, `bun run test:e2e`, `bun run check:tech-debt`,
 |---|---|
 | Before changes, read the owning subsystem contract | [All backend contracts](docs/agents/README.md) |
 | Versions | [Contract](docs/agents/a-version-an-operator-reads-must-be-a-live-read.md) |
+| Events | [Emitter](docs/agents/event-emitter.md) |
 | Log filters | [Logs](test-harness/journal-conformance/README.md) |
 | Projection, modem roster and first-sight USB bond admission | [an-isolated-dongle-is-surfaced-without-entering-the-bond.md](docs/agents/an-isolated-dongle-is-surfaced-without-entering-the-bond.md) |
 | Cellular composition and wire projection | [the-cellular-subsystem-one-composition-root-one-wire.md](docs/agents/the-cellular-subsystem-one-composition-root-one-wire.md) |

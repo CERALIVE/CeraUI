@@ -6,6 +6,7 @@ Every original section is retained below, including appended `…AND` runs. Read
 
 | File | Original heading | Governed code paths |
 |---|---|---|
+| [event-emitter.md](event-emitter.md) | Device event emitter [EXISTS] | `src/modules/events/emit.ts`, `src/tests/events-emit.test.ts` |
 | [overview.md](overview.md) | preamble | `../../AGENTS.md` |
 | [overview-2.md](overview-2.md) | OVERVIEW | `../../docs/E2E-BACKEND-OWNERSHIP.md`, `@ceralive/cerastream`, `@ceraui/srtla-send`, `packages/srtla-send/` |
 | [structure.md](structure.md) | STRUCTURE | `src/main.ts`, `src/modules/`, `streaming/`, `modems/`, `network/`, `wifi/`, `system/`, `ui/`, `ingest/`, `remote/`, `src/rpc/`, `procedures/<domain>.procedure.ts`, `middleware/`, `src/helpers/`, `src/mocks/`, `src/tests/` |
