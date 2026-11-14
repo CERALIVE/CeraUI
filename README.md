@@ -8,8 +8,9 @@ start. Saved keys, defaults and passthrough choices remain unchanged. See the
 **Audio input backend [EXISTS; hardware qualification owed].** Capable engines
 can receive saved inputs and tracks, with gain, mute and delay updates while a
 mix session runs. The single-source default retains its existing engine path.
-The mixer UI remains planned. See the
-[audio input contract](apps/backend/docs/agents/streaming-rpc-procedures.md#audio-inputs-exists).
+The Audio card shows a strip per input on such engines. See the
+[audio input contract](apps/backend/docs/agents/streaming-rpc-procedures.md#audio-inputs-exists)
+and the [mixer contract](docs/agents/live-screen.md#the-audio-cards-mixer-exists).
 
 **Destination navigation [EXISTS].** The desktop rail and mobile dock accept
 successive destinations without a wall-clock throttle, including in e-ink mode.

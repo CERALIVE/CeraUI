@@ -67,6 +67,8 @@ import type {
 	Revisions,
 	RevokeTokenInput,
 	RevokeTokenOutput,
+	SetAudioMixInput,
+	SetAudioMixOutput,
 	SetEthernetRoleInput,
 	SetEthernetRoleOutput,
 	SetFccUnlockInput,
@@ -675,6 +677,7 @@ export interface TypedRPC {
 		listDevices: () => Promise<ListDevicesOutput>;
 		switchInput: (input: SwitchInputInput) => Promise<SwitchInputOutput>;
 		switchAudio: (input: SwitchAudioInput) => Promise<SwitchAudioOutput>;
+		setAudioMix: (input: SetAudioMixInput) => Promise<SetAudioMixOutput>;
 		reloadAudioDelay: (
 			input: ReloadAudioDelayInput,
 		) => Promise<ReloadAudioDelayOutput>;

@@ -7,10 +7,12 @@
  *   2. {@link ProgramDesk} — the preview, {@link LiveSummaryStrip}, the
  *      {@link LiveSourceSwitch} and, while the engine advertises composition,
  *      `layout-controls`.
- *   3. The telemetry card — {@link StreamTelemetryStrip} (bitrate / temp / uptime
+ *   3. The audio card — {@link AudioMixer}, one strip per input — only while the
+ *      engine advertises `audio_mix`.
+ *   4. The telemetry card — {@link StreamTelemetryStrip} (bitrate / temp / uptime
  *      headline) and {@link IngestStats} (per-link srtla ingest telemetry + session
  *      summary).
- *   4. {@link LiveBar} — {@link BitrateAdjuster} (the ONLY field changeable
+ *   5. {@link LiveBar} — {@link BitrateAdjuster} (the ONLY field changeable
  *      mid-stream, live hot-adjust via `setBitrate`, owned by LiveView) and
  *      {@link StreamControlButton} in Stop mode; Done in the summary window.
  *
@@ -50,6 +52,7 @@ import type { EncoderLoadReading } from '$lib/streaming/encoder-load';
 import { deriveLiveSourceState } from '$lib/streaming/live-source-state';
 import type { ActiveSummary } from '$lib/streaming/sourceSummary';
 
+import AudioMixer from './AudioMixer.svelte';
 import BitrateAdjuster from './BitrateAdjuster.svelte';
 import CompositionCard from './CompositionCard.svelte';
 import LiveBar from './LiveBar.svelte';
@@ -225,6 +228,9 @@ const showVideoSignalLost = $derived(
 );
 
 const canCompose = $derived(compositionSupported(capabilities));
+// The audio card exists only for an engine that mixes; without it the live
+// audio line and its meter stay in LiveSummaryStrip.
+const canMix = $derived(capabilities?.audio_mix !== undefined);
 // Whether any banner is up: the banners lead the cards column only when they
 // exist, so an alert-free stream opens no empty row above the telemetry card.
 const hasBanners = $derived(
@@ -239,12 +245,12 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 <!-- `pb-(--live-bar-height)`: the fixed Live bar publishes its own height, so the
      last block always scrolls clear of it. The two-column grid is dropped in the
      summary window, where the desk is gone and the summary stands alone; its
-     flexible second row takes the desk's extra height, so the telemetry card
-     sits right under the banners. -->
+     flexible last row takes the desk's extra height, so the audio and telemetry
+     cards sit right under the banners. -->
 <div
 	class="flex flex-col gap-6 pb-(--live-bar-height) {summaryMode
 		? ''
-		: 'lg:grid lg:grid-cols-5 lg:grid-rows-[auto_1fr] lg:items-start'}"
+		: 'lg:grid lg:grid-cols-5 lg:grid-rows-[auto_auto_1fr] lg:items-start'}"
 	data-testid="live-cockpit"
 	data-summary-mode={summaryMode ? 'true' : 'false'}
 >
@@ -364,7 +370,7 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 		     session (wave2 14e), so the desk's disclosure dials the same single-use-
 		     token proxy and stays off until its own toggle is pressed. -->
 		<ProgramDesk
-			class="lg:col-span-3 lg:col-start-1 lg:row-span-2 lg:row-start-1"
+			class="lg:col-span-3 lg:col-start-1 lg:row-span-3 lg:row-start-1"
 			streaming={true}
 		>
 			<!-- "Now streaming" summary strip: what the device is CURRENTLY streaming
@@ -404,6 +410,20 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 				</div>
 			{/if}
 		</ProgramDesk>
+	{/if}
+
+	{#if !summaryMode && canMix}
+		<!-- A titled group in the cards column, like the telemetry card below it. -->
+		<section
+			aria-labelledby="live-audio-card-title"
+			class="flex min-w-0 flex-col gap-3 lg:col-span-2 lg:col-start-4"
+			data-testid="audio-card"
+		>
+			<h2 class="text-muted-foreground text-xs font-medium" id="live-audio-card-title">
+				{m["live.audioCard.title"]()}
+			</h2>
+			<AudioMixer {capabilities} {config} {isStreaming} />
+		</section>
 	{/if}
 
 	<!-- One titled group, not a card: the strip and the stats are surfaces already.

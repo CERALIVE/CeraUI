@@ -43,14 +43,7 @@ export function audioInputEngineId(id: string, config: RuntimeConfig): string {
 	return resolveAudioMode(id, false, getAudioDevices()).device ?? id;
 }
 
-export function validateAudioInputs(
-	inputs: readonly AudioInputSetting[],
-	config: RuntimeConfig,
-): string | undefined {
-	const capability = getLastCapabilities()?.audio_mix;
-	if (!capability) return "audio_mix_unsupported";
-	if (inputs.length === 0) return "audio_inputs_empty";
-	if (inputs.length > capability.max_inputs) return "audio_inputs_too_many";
+function availableAudioInputIds(config: RuntimeConfig): Set<string> {
 	const available = new Set(
 		deriveAudioSources()
 			.filter(
@@ -63,6 +56,18 @@ export function validateAudioInputs(
 		const embedded = config.source ?? config.pipeline;
 		if (embedded !== undefined) available.add(embedded);
 	}
+	return available;
+}
+
+export function validateAudioInputs(
+	inputs: readonly AudioInputSetting[],
+	config: RuntimeConfig,
+): string | undefined {
+	const capability = getLastCapabilities()?.audio_mix;
+	if (!capability) return "audio_mix_unsupported";
+	if (inputs.length === 0) return "audio_inputs_empty";
+	if (inputs.length > capability.max_inputs) return "audio_inputs_too_many";
+	const available = availableAudioInputIds(config);
 	const ids = new Set<string>();
 	const tracks = new Set<number>();
 	for (const input of inputs) {
@@ -130,15 +135,48 @@ export function storedAudioInputs(
 	return inputs;
 }
 
+/**
+ * The mix Start sends and live changes address: the saved entries with the
+ * main input in them. A main input outside the saved mix joins first on Track
+ * 1, or in a full mix takes the first entry's place and tracks (the UI saves the
+ * main input first). Nothing is written here: the saved mix changes only when
+ * the operator edits it, so loading never rewrites it.
+ */
+export function effectiveAudioInputs(
+	config: RuntimeConfig,
+): AudioInputSetting[] | undefined {
+	const saved = config.audio_inputs;
+	const capability = getLastCapabilities()?.audio_mix;
+	const primary = primaryAudioInputId(config);
+	if (
+		!capability ||
+		!saved?.length ||
+		primary === undefined ||
+		saved.some((input) => input.id === primary) ||
+		!availableAudioInputIds(config).has(primary)
+	)
+		return saved;
+	const entry = {
+		id: primary,
+		tracks: [1],
+		gain_db: 0,
+		mute: false,
+		delay_ms: 0,
+	};
+	if (saved.length < capability.max_inputs) return [entry, ...saved];
+	const [replaced, ...others] = saved;
+	return [{ ...entry, tracks: [...(replaced?.tracks ?? [1])] }, ...others];
+}
+
 export function engineAudioInputs(
 	config: RuntimeConfig,
 ): AudioInputConfig[] | undefined {
-	if (!getLastCapabilities()?.audio_mix || !config.audio_inputs?.length)
-		return undefined;
+	const inputs = effectiveAudioInputs(config);
+	if (!getLastCapabilities()?.audio_mix || !inputs?.length) return undefined;
 	const primary = primaryAudioInputId(config);
 	const ordered = [
-		...config.audio_inputs.filter((input) => input.id === primary),
-		...config.audio_inputs.filter((input) => input.id !== primary),
+		...inputs.filter((input) => input.id === primary),
+		...inputs.filter((input) => input.id !== primary),
 	];
 	return ordered.map(({ id, ...input }) => ({
 		input_id: audioInputEngineId(id, config),

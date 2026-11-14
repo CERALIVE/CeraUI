@@ -194,6 +194,31 @@
 		"locales": ["de", "es", "fr"],
 		"reason": "\"Audio\" is the French word; fr general.audioCodec reads \"Codec audio\". de audio.sources.noAudio reads \"Kein Audio\" and general.audioCodec \"Audio-Codec\". es: Audio is the Spanish word; es general.audioSettings reads \"Configuración de Audio\"."
 	},
+	"live.audioMixer.delay": {
+		"value": "Delay",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Audio engineering term the owner keeps untranslated in every locale, as on mixing consoles and receivers."
+	},
+	"live.audioMixer.gain": {
+		"value": "Gain",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Audio engineering term the owner keeps untranslated in every locale, as on mixing consoles and receivers."
+	},
+	"live.audioMixer.mute": {
+		"value": "Mute",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Audio engineering term the owner keeps untranslated in every locale, as on mixing consoles and receivers."
+	},
+	"live.audioMixer.track": {
+		"value": "Track {n}",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Track label with its number; the engineering term Track stays untranslated in every locale, matching receivers."
+	},
+	"live.audioMixer.tracks": {
+		"value": "Tracks",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Audio engineering term the owner keeps untranslated in every locale, as on mixing consoles and receivers."
+	},
 	"live.composition.title": {
 		"value": "Composition",
 		"locales": ["fr"],

@@ -9,6 +9,7 @@ import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { setMockAudioMix } from "../../mocks/providers/streaming.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
 import {
+	effectiveAudioInputs,
 	primaryAudioInputId,
 	storedAudioInputs,
 	validateAudioInputs,
@@ -34,7 +35,7 @@ export const setAudioMixProcedure = os
 		const running = getAudioMixInputs()?.find((input) => input.id === id);
 		const primary = primaryAudioInputId(config);
 		const saved =
-			config.audio_inputs ??
+			effectiveAudioInputs(config) ??
 			(primary === undefined
 				? []
 				: [
@@ -88,7 +89,7 @@ export const setAudioMixProcedure = os
 				};
 			}
 		}
-		const next = (live ? (getConfig().audio_inputs ?? []) : saved).map(
+		const next = (live ? (effectiveAudioInputs(getConfig()) ?? []) : saved).map(
 			(input) => (input.id === id ? { ...input, ...applied } : input),
 		);
 		if (!live) {

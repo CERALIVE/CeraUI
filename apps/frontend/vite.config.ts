@@ -279,10 +279,11 @@ export default defineConfig(({ mode }) => {
 			},
 			// Vite's raw-size notice is presentation-only. The gzip initial-route,
 			// largest-chunk, precache, and aggregate budgets are enforced by
-			// scripts/ci/bundle-report.mjs. Re-derived 2026-10-13 from the integrated
-			// build's largest emitted chunk (devtools: 1,103.48 kB):
-			// ceil(1,103.48 * 1.05) = 1,159 kB, preserving 5% raw-notice headroom.
-			chunkSizeWarningLimit: 1159,
+			// scripts/ci/bundle-report.mjs. Re-derived 2026-11-14 from the integrated
+			// build's largest emitted chunk (devtools: 1,163.55 kB, which carries the
+			// Live screen and so its audio mixer):
+			// ceil(1,163.55 * 1.05) = 1,222 kB, preserving 5% raw-notice headroom.
+			chunkSizeWarningLimit: 1222,
 		},
 		resolve: {
 			// Array form, not the object map: object aliases are PREFIX matches, and
