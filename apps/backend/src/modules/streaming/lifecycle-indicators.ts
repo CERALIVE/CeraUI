@@ -98,16 +98,18 @@ const INDICATOR_COPY: Record<LifecycleIndicator, IndicatorCopy> = {
 export interface LifecycleIndicatorDeps {
 	notify: typeof notificationBroadcast;
 	removeNotification: typeof notificationRemove;
+	emitEvent?: typeof emitEvent;
 }
 
-function defaultDeps(): LifecycleIndicatorDeps {
+function defaultDeps(): Required<LifecycleIndicatorDeps> {
 	return {
 		notify: notificationBroadcast,
 		removeNotification: notificationRemove,
+		emitEvent,
 	};
 }
 
-let indicatorDeps: LifecycleIndicatorDeps = defaultDeps();
+let indicatorDeps = defaultDeps();
 
 /**
  * Test seam: swap the notify/remove surface (null restores production wiring).
@@ -116,13 +118,14 @@ let indicatorDeps: LifecycleIndicatorDeps = defaultDeps();
 export function setLifecycleIndicatorDepsForTest(
 	deps: LifecycleIndicatorDeps | null,
 ): void {
-	indicatorDeps = deps ?? defaultDeps();
-	indicatorStates.clear();
+	indicatorDeps = { ...defaultDeps(), ...deps };
+	resetLifecycleIndicatorState();
 }
 
 /** Drop all transition state (per-test isolation; also used on a fresh start). */
 export function resetLifecycleIndicatorState(): void {
 	indicatorStates.clear();
+	lostVideoSources.clear();
 }
 
 type IndicatorState = "ok" | "bad";
@@ -130,6 +133,7 @@ type IndicatorState = "ok" | "bad";
 // Process-wide transition state. Absent == "ok" (never emitted). Only an EDGE
 // (ok→bad or bad→ok) emits, which is exactly the dedupe contract.
 const indicatorStates = new Map<LifecycleIndicator, IndicatorState>();
+const lostVideoSources = new Set<string>();
 
 /**
  * Core emit-on-transition machine. `isStreaming` gates every indicator — an
@@ -204,11 +208,25 @@ export function reportActiveVideoSource(p: {
 	activeSourceId: string | undefined;
 	presentSourceIds: readonly string[];
 }): void {
+	const activeSourceId = p.activeSourceId;
 	const bad =
-		p.activeSourceId !== undefined &&
+		activeSourceId !== undefined &&
 		p.presentSourceIds.length > 0 &&
-		!p.presentSourceIds.includes(p.activeSourceId);
+		!p.presentSourceIds.includes(activeSourceId);
 	evaluateIndicator("active-source-lost", p.isStreaming, bad);
+	if (!p.isStreaming) {
+		lostVideoSources.clear();
+		return;
+	}
+	for (const id of lostVideoSources) {
+		if (!p.presentSourceIds.includes(id)) continue;
+		lostVideoSources.delete(id);
+		indicatorDeps.emitEvent("capture_source_recovered", {});
+	}
+	if (bad && !lostVideoSources.has(activeSourceId)) {
+		lostVideoSources.add(activeSourceId);
+		indicatorDeps.emitEvent("capture_source_lost", {});
+	}
 }
 
 /**
@@ -220,7 +238,14 @@ export function reportActiveAudioSource(p: {
 	isStreaming: boolean;
 	isDeviceLost: boolean;
 }): void {
-	evaluateIndicator("active-audio-lost", p.isStreaming, p.isDeviceLost);
+	const edge = evaluateIndicator(
+		"active-audio-lost",
+		p.isStreaming,
+		p.isDeviceLost,
+	);
+	if (edge === "lost") indicatorDeps.emitEvent("audio_source_lost", {});
+	else if (edge === "recovered")
+		indicatorDeps.emitEvent("audio_source_recovered", {});
 }
 
 /**
