@@ -308,6 +308,13 @@ one session never writes the choice. These rules carry it:
   re-probe agrees, so a runner that resolved against a unit that did not take is
   reported as a failure rather than a silent success.
 
+The setter's complete command, confirmation/status probe and config save share
+one FIFO promise chain with boot reconciliation. The next writer starts only
+after the previous writer settles, so an older delayed status probe cannot save
+over a later confirmed choice. After successful queued requests, the unit and
+saved field reflect the last request. Failed or unconfirmed requests do not
+save; a rejection remains visible to its caller without poisoning the queue.
+
 At boot, `main.ts` awaits provisioning, then password sync, then
 `reconcileSshPersistence(passwordSynced)` before the status probe. The explicit
 sync outcome prevents enabling and starting SSH with a password that did not
@@ -345,6 +352,10 @@ omitted-when-false reddens 6.
 The same suite also covers first-boot adoption, both slot-restore directions,
 masked/throwing probes, refused commands, missing passwords, failed password
 sync, damaged-config rebuilds and the temporary-session no-write contract.
+Deferred-probe regressions hold an older confirmation while submitting the next
+request: both opposite-value orders, both same-value orders, each boot/setter
+interleaving, and failed, unconfirmed or rejected request recovery. They verify
+the final unit and saved choice agree and a subsequent boot issues no command.
 
 ### SSH password sync on boot — OTA slot-swap fix [EXISTS]
 

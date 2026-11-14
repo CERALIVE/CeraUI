@@ -372,6 +372,15 @@ export async function startStopSsh(
 		: status?.active === false;
 }
 
+let sshPersistenceTail: Promise<unknown> = Promise.resolve();
+
+function queueSshPersistence<T>(operation: () => Promise<T>): Promise<T> {
+	// Both writers share request order, even after a preceding request rejected.
+	const result = sshPersistenceTail.then(operation, operation);
+	sshPersistenceTail = result;
+	return result;
+}
+
 /**
  * Arm (or un-arm) the ssh unit for boot — `systemctl enable|disable ssh`.
  *
@@ -390,44 +399,47 @@ export async function startStopSsh(
  * caller never reports a persistence change the unit did not take. Only then is
  * the choice saved in the /data-backed config for the next OS slot.
  */
-export async function setSshPersistent(
+export function setSshPersistent(
 	enabled: boolean,
 	statusDeps: Partial<SshStatusDeps> = {},
 ): Promise<boolean> {
-	const ssh_user = resolveSshUser();
-	const action = enabled ? "enable" : "disable";
+	return queueSshPersistence(async () => {
+		const ssh_user = resolveSshUser();
+		const action = enabled ? "enable" : "disable";
 
-	// Dev/mock seam: flip the mock boot-persistence flag and broadcast it without
-	// spawning systemctl, so the toggle works on a dev box (mirrors startStopSsh).
-	if (shouldUseMocks()) {
-		mockSshEnabled = enabled;
-		broadcastMockSshStatus(ssh_user);
-		return true;
-	}
+		// Dev/mock seam: flip the mock boot-persistence flag and broadcast it without
+		// spawning systemctl, so the toggle works on a dev box (mirrors startStopSsh).
+		if (shouldUseMocks()) {
+			mockSshEnabled = enabled;
+			broadcastMockSshStatus(ssh_user);
+			return true;
+		}
 
-	const { getDisruptiveActionDecision } = await import(
-		"./disruptive-action-runtime.ts"
-	);
-	try {
-		await withServiceReservation(() => sshPersistenceRunner(action), {
-			unit: "ssh.service",
-			decision: getDisruptiveActionDecision,
-		});
-		const state = await readSshEnabledState(
-			statusDeps.systemctlIsEnabled ?? defaultSshStatusDeps.systemctlIsEnabled,
+		const { getDisruptiveActionDecision } = await import(
+			"./disruptive-action-runtime.ts"
 		);
-		await getSshStatus(statusDeps);
-		if (state !== (enabled ? "enabled" : "disabled")) return false;
-		getConfig().ssh_persistent = enabled;
-		saveConfig();
-		return true;
-	} catch (err) {
-		if (err instanceof DisruptiveActionRefusal) throw err;
-		logger.error(
-			`Error running systemctl ${action} ssh: ${describeCliError(err)}`,
-		);
-		return false;
-	}
+		try {
+			await withServiceReservation(() => sshPersistenceRunner(action), {
+				unit: "ssh.service",
+				decision: getDisruptiveActionDecision,
+			});
+			const state = await readSshEnabledState(
+				statusDeps.systemctlIsEnabled ??
+					defaultSshStatusDeps.systemctlIsEnabled,
+			);
+			await getSshStatus(statusDeps);
+			if (state !== (enabled ? "enabled" : "disabled")) return false;
+			getConfig().ssh_persistent = enabled;
+			saveConfig();
+			return true;
+		} catch (err) {
+			if (err instanceof DisruptiveActionRefusal) throw err;
+			logger.error(
+				`Error running systemctl ${action} ssh: ${describeCliError(err)}`,
+			);
+			return false;
+		}
+	});
 }
 
 /**
@@ -435,34 +447,36 @@ export async function setSshPersistent(
  * An absent choice adopts only an enabled/disabled unit; masks and unknown
  * states are left alone. Boot must continue after any probe, command or save error.
  */
-export async function reconcileSshPersistence(
+export function reconcileSshPersistence(
 	passwordSynced: boolean,
 	deps: Partial<Pick<SshStatusDeps, "systemctlIsEnabled">> = {},
 ): Promise<void> {
-	if (shouldUseMocks()) return;
-	try {
-		const state = await readSshEnabledState(
-			deps.systemctlIsEnabled ?? defaultSshStatusDeps.systemctlIsEnabled,
-		);
-		if (state !== "enabled" && state !== "disabled") return;
-		const config = getConfig();
-		const enabled = state === "enabled";
-		if (config.ssh_persistent === undefined) {
-			config.ssh_persistent = enabled;
-			saveConfig();
-			return;
+	return queueSshPersistence(async () => {
+		if (shouldUseMocks()) return;
+		try {
+			const state = await readSshEnabledState(
+				deps.systemctlIsEnabled ?? defaultSshStatusDeps.systemctlIsEnabled,
+			);
+			if (state !== "enabled" && state !== "disabled") return;
+			const config = getConfig();
+			const enabled = state === "enabled";
+			if (config.ssh_persistent === undefined) {
+				config.ssh_persistent = enabled;
+				saveConfig();
+				return;
+			}
+			if (config.ssh_persistent === enabled) return;
+			if (config.ssh_persistent) {
+				if (config.ssh_pass === undefined || !passwordSynced) return;
+				await sshPersistenceRunner("enable");
+				await sshServiceRunner("start");
+			} else {
+				await sshPersistenceRunner("disable");
+			}
+		} catch (err) {
+			logger.error("Failed to reconcile SSH boot persistence", { err });
 		}
-		if (config.ssh_persistent === enabled) return;
-		if (config.ssh_persistent) {
-			if (config.ssh_pass === undefined || !passwordSynced) return;
-			await sshPersistenceRunner("enable");
-			await sshServiceRunner("start");
-		} else {
-			await sshPersistenceRunner("disable");
-		}
-	} catch (err) {
-		logger.error("Failed to reconcile SSH boot persistence", { err });
-	}
+	});
 }
 
 /**

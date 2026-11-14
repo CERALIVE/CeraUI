@@ -304,6 +304,168 @@ function storedChoice(): boolean | undefined {
 	).ssh_persistent;
 }
 
+describe("SSH persistence request ordering", () => {
+	test.each([
+		[true, false],
+		[false, true],
+		[true, true],
+		[false, false],
+	] as const)(
+		"a held %p confirmation cannot overwrite the later %p request",
+		async (firstChoice, lastChoice) => {
+			enterProd();
+			let unitEnabled = !firstChoice;
+			const held = Promise.withResolvers<void>();
+			const release = Promise.withResolvers<void>();
+			const deps: Partial<SshStatusDeps> = {
+				...statusDeps(),
+				systemctlIsEnabled: async () => ({
+					stdout: unitEnabled ? "enabled" : "disabled",
+					stderr: "",
+				}),
+			};
+			setSshPersistenceRunner(async (action) => {
+				unitEnabled = action === "enable";
+			});
+			const older = setSshPersistent(firstChoice, {
+				...deps,
+				systemctlIsActive: async () => {
+					held.resolve();
+					await release.promise;
+					return { stdout: "active", stderr: "" };
+				},
+			});
+			await held.promise;
+			const later = setSshPersistent(lastChoice, deps);
+			try {
+				// Drain submitted work while the older probe is explicitly held.
+				await new Promise<void>(setImmediate);
+			} finally {
+				release.resolve();
+			}
+			expect(await Promise.all([older, later])).toEqual([true, true]);
+
+			const saved = storedChoice();
+			const unitBeforeBoot = unitEnabled;
+			const bootCommands: string[] = [];
+			setSshPersistenceRunner(async (action) => {
+				bootCommands.push(action);
+				unitEnabled = action === "enable";
+			});
+			setSshServiceRunner(async (action) => {
+				bootCommands.push(action);
+			});
+			await reconcileSshPersistence(true, deps);
+
+			expect({ saved, unitBeforeBoot, bootCommands, unitEnabled }).toEqual({
+				saved: lastChoice,
+				unitBeforeBoot: lastChoice,
+				bootCommands: [],
+				unitEnabled: lastChoice,
+			});
+		},
+	);
+
+	test.each(["failed", "unconfirmed"] as const)(
+		"after a request is %s, the next request still succeeds",
+		async (outcome) => {
+			enterProd();
+			let unitEnabled = false;
+			let attempts = 0;
+			setSshPersistenceRunner(async (action) => {
+				if (attempts++ === 0) {
+					if (outcome === "failed")
+						throw Object.assign(new Error("systemctl failed"), { code: 1 });
+					return;
+				}
+				unitEnabled = action === "enable";
+			});
+			const deps = {
+				...statusDeps(),
+				systemctlIsEnabled: async () => ({
+					stdout: unitEnabled ? "enabled" : "disabled",
+					stderr: "",
+				}),
+			};
+
+			expect(await setSshPersistent(true, deps)).toBe(false);
+			expect(storedChoice()).toBeUndefined();
+			expect(await setSshPersistent(true, deps)).toBe(true);
+			expect(storedChoice()).toBe(true);
+			expect(unitEnabled).toBe(true);
+		},
+	);
+
+	test("a rejected request does not poison the next request", async () => {
+		enterProd();
+		setup.ssh_user = "-invalid";
+		await expect(setSshPersistent(true)).rejects.toThrow("invalid ssh_user");
+		setup.ssh_user = "produser";
+		setSshPersistenceRunner(async () => {});
+
+		expect(await setSshPersistent(false, statusDeps())).toBe(true);
+		expect(storedChoice()).toBe(false);
+	});
+
+	test.each(["boot", "setter"] as const)(
+		"a held %s writer cannot race the other persistence writer",
+		async (firstOwner) => {
+			enterProd();
+			getConfig().ssh_persistent = firstOwner === "setter" ? false : undefined;
+			let unitEnabled = false;
+			const serviceCommands: string[] = [];
+			setSshServiceRunner(async (action) => {
+				serviceCommands.push(action);
+			});
+			const held = Promise.withResolvers<void>();
+			const release = Promise.withResolvers<void>();
+			const deps = {
+				...statusDeps(),
+				systemctlIsEnabled: async () => ({
+					stdout: unitEnabled ? "enabled" : "disabled",
+					stderr: "",
+				}),
+			};
+			setSshPersistenceRunner(async (action) => {
+				unitEnabled = action === "enable";
+			});
+			const first =
+				firstOwner === "boot"
+					? reconcileSshPersistence(true, {
+							systemctlIsEnabled: async () => {
+								const stdout = unitEnabled ? "enabled" : "disabled";
+								held.resolve();
+								await release.promise;
+								return { stdout, stderr: "" };
+							},
+						})
+					: setSshPersistent(true, {
+							...deps,
+							systemctlIsActive: async () => {
+								held.resolve();
+								await release.promise;
+								return { stdout: "active", stderr: "" };
+							},
+						});
+			await held.promise;
+			const second =
+				firstOwner === "boot"
+					? setSshPersistent(true, deps)
+					: reconcileSshPersistence(true, deps);
+			try {
+				await new Promise<void>(setImmediate);
+			} finally {
+				release.resolve();
+			}
+			await Promise.all([first, second]);
+
+			expect(storedChoice()).toBe(true);
+			expect(unitEnabled).toBe(true);
+			expect(serviceCommands).toEqual([]);
+		},
+	);
+});
+
 describe("reconcileSshPersistence - persisted boot choice", () => {
 	let calls: string[];
 
