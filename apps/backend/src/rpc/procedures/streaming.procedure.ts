@@ -88,9 +88,8 @@ import { isBluetoothAudioSourceId } from "../../modules/streaming/bluetooth-audi
 import { getLastCapabilities } from "../../modules/streaming/capabilities.ts";
 import { mapCerastreamError } from "../../modules/streaming/cerastream-error-mapping.ts";
 import {
-	COMPOSITION_UNSUPPORTED_ERROR,
 	compositionResidueShouldClear,
-	isCompositionSupported,
+	resolveCompositionWrite,
 } from "../../modules/streaming/composition.ts";
 import { getApplyNowGate } from "../../modules/streaming/config-change-bridge.ts";
 import {
@@ -942,24 +941,25 @@ export const setConfigProcedure = authedProcedure
 
 		// Same pre-mutation ordering as the two gates above. Only a STATED object
 		// is gated; an explicit `null` is the operator turning composition OFF and
-		// must stay reachable on an engine that no longer advertises the token.
-		if (
-			input.composition != null &&
-			!isCompositionSupported(getLastCapabilities())
-		) {
-			logger.warn(
-				"setConfig: engine has not advertised the composition feature",
-				{
-					module: "streaming",
-					features: getLastCapabilities()?.features,
-				},
-			);
-			return {
-				success: false,
-				error: COMPOSITION_UNSUPPORTED_ERROR,
-				applied: {},
-			};
+		// must stay reachable on an engine that no longer advertises the token. A
+		// placement is composed here, in this synchronous stretch, on the
+		// composition the device has saved now, so placements serialize.
+		const compositionWrite = resolveCompositionWrite(
+			input,
+			config.composition,
+			getLastCapabilities(),
+		);
+		if ("error" in compositionWrite) {
+			logger.warn("setConfig: engine cannot take this composition", {
+				module: "streaming",
+				error: compositionWrite.error,
+				features: getLastCapabilities()?.features,
+			});
+			return { success: false, error: compositionWrite.error, applied: {} };
 		}
+		if (compositionWrite.composition !== undefined)
+			input.composition = compositionWrite.composition;
+		delete input.composition_rect;
 
 		// Read and written in this synchronous stretch, so picks serialize.
 		const audioInputs =

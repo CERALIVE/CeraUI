@@ -3,11 +3,12 @@
 This file is the target structure of the Live destination, written before any
 of it was built.
 
-Status: changes 1 to 4 below have landed — the regions, both orders, the Live
+Status: changes 1 to 5 below have landed — the regions, both orders, the Live
 bar, the two-column layout and the preview's open state exist as described, the
 layout, the opacity and the second input change while live, the Encoder
-dialog has the automatic format, the adaptive switch and the route line, and
-the Audio card has a strip per input. Changes 5 and 6 are still to come.
+dialog has the automatic format, the adaptive switch and the route line, the
+Audio card has a strip per input, and the second input is placed on the
+preview. Change 6 is still to come.
 
 How to read it:
 
@@ -274,6 +275,53 @@ must keep that ABI.
 - The mock backend does not bridge `audio-level` to the main socket (its meter
   bridge is skipped under mocks), so `audio-mixer.spec.ts` injects that frame
   when it checks the per-input meters.
+
+#### The layout designer [EXISTS]
+
+- `LayoutDesigner` draws the inset `layout-inset` over the preview picture in
+  `program-desk`, only while composition is on (a saved `composition`), the
+  engine advertises `composition-geometry` and `preview-disclosure` is open.
+  It covers the picture's letterboxed area (`videoBox`); while the preview is
+  off or unavailable, `PreviewCanvas` gives it an empty 16:9 stage, so placing
+  never needs the preview to play. Without the capability no designer node
+  exists.
+- The inset is where the compositor puts the second input: the saved `rect`
+  for `custom`, else the preset's own rectangle (`presetRect`: half of each
+  axis, a 5% margin for the four insets). It drags with pointer capture,
+  resizes from four corner handles `layout-inset-handle-<corner>` (44 px hit
+  areas) and, focused, moves with the arrow keys by 1% (Shift 5%) and resizes
+  with Alt and the arrow keys. It is a native button with an accessible name
+  and a polite live description of its position, size and keys; during a
+  pointer drag the description keeps the starting position. Rectangles are
+  fractions of the output frame, so they never mirror right to left.
+- The rectangle moves locally while a pointer or an arrow key is held and is
+  sent once, on release, already clamped (`clampRect`: inside the frame, each
+  side at least `COMPOSITION_RECT_MIN`), as
+  `streaming.setConfig({ composition_rect })`, with `apply_now: true` while
+  live. A press that does not move it sends nothing.
+- The device decides the composition. `resolveCompositionWrite` composes the
+  placement onto the composition it has saved now, in the same synchronous
+  write (`layout: 'custom'` and the rectangle; the second input and the
+  opacity stay the device's), and a custom write without a rectangle keeps the
+  saved one. Quick drags and a stale second tab therefore compose with every
+  other change; the client never sends its own copy of the other fields. A
+  rectangle is accepted only with `custom`, only with `composition-geometry`
+  and only when it fits the frame (`compositionRectFits` in
+  `@ceraui/rpc/schemas`); otherwise the save is refused before anything is
+  written, with `composition_geometry_unsupported`, `composition_rect_invalid`
+  or `composition_unsupported`.
+- One placement is in flight at a time; one released before the answer waits
+  for it and replaces any older waiting one. A refused placement falls back to
+  the device's saved rectangle and shows the keyed copy of its token
+  (`live.layout.error.<token>`) or the engine's outcome, in an alert over the
+  picture that is mounted for the whole session.
+- With `composition-geometry`, `composition-layout-selector` gains a seventh
+  radio, `composition-layout-custom`. Choosing it sends the active preset's
+  rectangle as the placement. While custom, the card's other changes (second
+  input, opacity) carry no rectangle and keep the device's. With the preview
+  closed the radio is described by `live.layout.openPreviewToPlace`.
+- Under mocks, a live layout-only change reaches the mock engine
+  (`changeMockComposition`), as `set-audio-mix` does.
 
 ### 1. Job and audience
 

@@ -103,6 +103,36 @@ refusal that blocked the ordinary switching graph after the lifecycle repair.
   stop-log wording correction are host-tested additions after the above binary;
   neither is misrepresented as present in its hardware receipt.
 
+## Free placement [PARTIAL — host-tested, no board]
+
+The second input can sit anywhere in the frame: `composition.layout: 'custom'`
+with `composition.rect` (fractions of the output frame, producer schema
+`compositionRectSchema`). The rectangle travels with the rest of the
+composition through `setConfig`, the apply-now transaction and Start, unchanged.
+
+- `streaming.setConfig` also takes `composition_rect`, a placement: the
+  backend writes `layout: 'custom'` and that rectangle onto the composition it
+  has saved at that moment (`resolveCompositionWrite`, in the synchronous
+  stretch before the first config mutation), so the sender never overwrites
+  the second input or the opacity with a stale copy. A custom write without a
+  rectangle keeps the saved one; a preset drops it.
+- Before anything is written, a rectangle or a custom layout is refused with
+  `composition_geometry_unsupported` when the engine does not advertise
+  `composition-geometry`, and with `composition_rect_invalid` when it comes
+  with a preset, is missing, has nothing to place, or does not fit the frame
+  (`compositionRectFits`: the engine's own rule, every side at least
+  `COMPOSITION_RECT_MIN`). `composition_unsupported` keeps its meaning.
+- Live, the composed composition is staged as one apply-now change and kept
+  only once the engine reports it applied; a refusal leaves the running
+  composition saved.
+- Under mocks, a layout-only live change goes to `changeMockComposition`, so
+  the mock stack applies it; other live changes still go to the engine client.
+
+Proof: `composition-geometry.test.ts`, `mock-composition-live.test.ts`,
+`LayoutDesigner.test.ts`, `layoutRect.test.ts` and
+`apps/frontend/tests/e2e/layout-designer.spec.ts`. Owed on a board: a live
+rectangle change through the RK3588 compositor, checked in a decoded output.
+
 Initial candidate failures and harness errors are retained in private bundle
 **opi-lifecycle-20260917**, not discarded. No new video-rate claim uses
 `frames_emitted`. Installed hashes, config and engine state were restored;

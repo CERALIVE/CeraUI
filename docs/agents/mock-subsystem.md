@@ -197,7 +197,9 @@ schema and minimum are exported separately by RPC. The preview socket adds
 levels; its existing top-level meter remains unchanged. This simulates control
 and meter contracts, not GStreamer timing or hardware behavior. The settings
 RPC now records its mapped inputs through `startMockStreaming` and uses
-`setMockAudioMix` for live writes. Audio validation and unknown-input errors
+`setMockAudioMix` for live writes. The config-change bridge sends a live
+layout-only change to `changeMockComposition`; other live changes still go to
+the engine client (`mock-composition-live.test.ts`). Audio validation and unknown-input errors
 include the native message prefix and complete `data.code`; the live source
 switch retains the native mixing refusal message. The mixer UI drives these
 through the same RPCs; the mock does not bridge `audio-level` to the main

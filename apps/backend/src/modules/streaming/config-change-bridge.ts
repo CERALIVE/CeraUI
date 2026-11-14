@@ -1,4 +1,7 @@
-import { CerastreamRpcError } from "@ceralive/cerastream";
+import {
+	CerastreamRpcError,
+	type ChangeConfigResult,
+} from "@ceralive/cerastream";
 import {
 	CONFIG_CHANGE_EVENT,
 	CONFIG_CHANGE_REASON_ENGINE_LOST,
@@ -10,6 +13,8 @@ import {
 } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
+import { changeMockComposition } from "../../mocks/providers/streaming.ts";
 import { broadcastMsg } from "../../rpc/compat.ts";
 import type { CerastreamBackend } from "./cerastream-backend.ts";
 import {
@@ -57,28 +62,34 @@ export async function changeEngineRuntimeConfig(
 	delta: StreamConfigChangeDelta,
 	attemptId: string,
 ): Promise<EngineConfigChangeOutcome> {
-	const backend: ChangeConfigCapableBackend = getStreamingBackend();
-	const dispatch = backend.changeConfig;
-	if (dispatch === undefined)
-		throw new Error("engine does not support change-config");
+	const params = {
+		...(delta.resolution === undefined
+			? {}
+			: { resolution: encodeResolutionForEngine(delta.resolution) }),
+		...(delta.framerate === undefined ? {} : { framerate: delta.framerate }),
+		...(delta.video_codec === undefined ? {} : { codec: delta.video_codec }),
+		...(delta.input_id === undefined ? {} : { input_id: delta.input_id }),
+		...(delta.pipeline === undefined ? {} : { pipeline: delta.pipeline }),
+		...(delta.input_mode === undefined ? {} : { input_mode: delta.input_mode }),
+		...(delta.composition == null ? {} : { composition: delta.composition }),
+	};
 
-	const result = await dispatch.call(
-		backend,
-		{
-			...(delta.resolution === undefined
-				? {}
-				: { resolution: encodeResolutionForEngine(delta.resolution) }),
-			...(delta.framerate === undefined ? {} : { framerate: delta.framerate }),
-			...(delta.video_codec === undefined ? {} : { codec: delta.video_codec }),
-			...(delta.input_id === undefined ? {} : { input_id: delta.input_id }),
-			...(delta.pipeline === undefined ? {} : { pipeline: delta.pipeline }),
-			...(delta.input_mode === undefined
-				? {}
-				: { input_mode: delta.input_mode }),
-			...(delta.composition == null ? {} : { composition: delta.composition }),
-		},
-		delta.composition === null,
-	);
+	// The mock engine answers a layout-only change, as it answers set-audio-mix;
+	// any other live change has no mock engine and stays an engine fault.
+	let result: ChangeConfigResult;
+	if (
+		shouldUseMocks() &&
+		params.composition !== undefined &&
+		Object.keys(params).length === 1
+	) {
+		result = changeMockComposition(params.composition);
+	} else {
+		const backend: ChangeConfigCapableBackend = getStreamingBackend();
+		const dispatch = backend.changeConfig;
+		if (dispatch === undefined)
+			throw new Error("engine does not support change-config");
+		result = await dispatch.call(backend, params, delta.composition === null);
+	}
 
 	logger.info("config change transaction settled", {
 		module: "streaming",

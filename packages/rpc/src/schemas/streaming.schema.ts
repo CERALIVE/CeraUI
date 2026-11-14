@@ -8,7 +8,11 @@
 // browser-safe package cannot pull into the frontend graph. `types.js` imports
 // nothing but zod, and the package ships no `exports` map to forbid the path.
 import { failoverRatePolicyInputSchema } from '@ceralive/cerastream/dist/capture-status.js';
-import { COMPOSITION_FEATURE, COMPOSITION_RECT_MIN } from '@ceralive/cerastream/dist/constants.js';
+import {
+	COMPOSITION_FEATURE,
+	COMPOSITION_GEOMETRY_FEATURE,
+	COMPOSITION_RECT_MIN,
+} from '@ceralive/cerastream/dist/constants.js';
 import { rpcErrorSchema } from '@ceralive/cerastream/dist/envelope.js';
 import {
 	audioMixCapsSchema,
@@ -25,6 +29,7 @@ import {
 	balancerAlgorithmSchema,
 	type CompositionConfig,
 	type CompositionLayout,
+	type CompositionRect,
 	compositionConfigSchema,
 	compositionLayoutSchema,
 	compositionRectSchema,
@@ -37,9 +42,11 @@ import { regulatoryCountrySchema } from './wifi.schema';
 export {
 	balancerAlgorithmSchema,
 	COMPOSITION_FEATURE,
+	COMPOSITION_GEOMETRY_FEATURE,
 	COMPOSITION_RECT_MIN,
 	type CompositionConfig,
 	type CompositionLayout,
+	type CompositionRect,
 	compositionConfigSchema,
 	compositionLayoutSchema,
 	compositionRectSchema,
@@ -60,6 +67,22 @@ const [firstCompositionLayout] = COMPOSITION_LAYOUTS;
 if (firstCompositionLayout === undefined)
 	throw new Error('compositionLayoutSchema advertises no layout options');
 export const COMPOSITION_LAYOUT_DEFAULT: CompositionLayout = firstCompositionLayout;
+
+/**
+ * The engine's own admission rule for a free rectangle (fractions of the output
+ * frame): finite, inside the frame, every side at least `COMPOSITION_RECT_MIN`.
+ * Shared by the backend's save gate and the designer's clamp.
+ */
+export function compositionRectFits(rect: CompositionRect): boolean {
+	const { x, y, width, height } = rect;
+	return (
+		[x, y, width, height].every((value) => Number.isFinite(value) && value >= 0) &&
+		x + width <= 1 &&
+		y + height <= 1 &&
+		width >= COMPOSITION_RECT_MIN &&
+		height >= COMPOSITION_RECT_MIN
+	);
+}
 
 export const COMPOSITION_ALPHA_MIN = 0;
 export const COMPOSITION_ALPHA_MAX = 1;
@@ -478,6 +501,10 @@ export const streamingConfigInputSchema = z.object({
 	// token. `null` is an explicit CLEAR — absent means "leave the persisted value
 	// alone", so without it an operator could never turn composition back off.
 	composition: compositionConfigSchema.nullable().optional(),
+	// Places the second input: the backend writes `layout: 'custom'` and this
+	// rectangle onto the composition IT has saved, so a placement never carries
+	// the sender's possibly stale copy of the other composition fields.
+	composition_rect: compositionRectSchema.optional(),
 });
 export type StreamingConfigInput = z.infer<typeof streamingConfigInputSchema>;
 

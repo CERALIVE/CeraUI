@@ -20,6 +20,13 @@
   the new value shows as the choice; a refused change puts the previous one
   back and says why. Turning composition on or off still waits for the next
   start, so the enable switch alone stays locked.
+
+  With `geometry` (the engine advertises `composition-geometry`) a seventh
+  layout, `custom`, places the second input freely on the preview
+  (`LayoutDesigner`). Choosing it sends the active preset's rectangle as the
+  `composition_rect` placement; the device composes it on its saved
+  composition. The card never sends a rectangle of its own: while custom, its
+  other changes leave the device's saved rectangle in place.
 -->
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
@@ -49,6 +56,9 @@ import { rpc } from '$lib/rpc';
 import { getConfigChange } from '$lib/rpc/subscriptions.svelte';
 import { configChangeReport } from '$lib/streaming/configChangeCopy';
 import { isConfigChangeInFlight } from '$lib/streaming/configChangePhase';
+import { presetRect } from '$lib/streaming/layoutRect';
+
+import { previewDisclosure } from './previewDisclosure.svelte';
 
 interface Props {
 	sources: SourcesMessage | undefined;
@@ -60,9 +70,13 @@ interface Props {
 	 * source card, which owns the primary leg.
 	 */
 	captureCause?: StartFailureCaptureCause | undefined;
+	/** The engine advertises `composition-geometry`: offer the `custom` layout. */
+	geometry?: boolean;
 }
 
-const { sources, config, isStreaming, captureCause }: Props = $props();
+const { sources, config, isStreaming, captureCause, geometry = false }: Props = $props();
+const uid = $props.id();
+const customHintId = `${uid}-custom-hint`;
 
 const ALPHA_STEP = 0.05;
 const DEFAULT_ALPHA = 1;
@@ -137,24 +151,26 @@ function layoutLabel(value: CompositionLayout): string {
 	return resolveMessageKey(`live.composition.layoutName.${value}`);
 }
 
-async function write(next: CompositionConfig | null): Promise<void> {
+async function save(input: StreamingSetConfigInput): Promise<void> {
 	if (saving) return;
 	saving = true;
 	try {
-		await rpc.streaming.setConfig({ composition: next });
+		await rpc.streaming.setConfig(input);
 	} finally {
 		saving = false;
 	}
 }
 
-async function applyLive(next: CompositionConfig): Promise<void> {
+// The encoder save's shape (`buildEncoderSetConfig`): the apply-now directive
+// rides the setConfig input without being a config field.
+async function applyLive(
+	next: CompositionConfig,
+	input: StreamingSetConfigInput = { composition: next, apply_now: true },
+): Promise<void> {
 	if (busy) return;
 	saving = true;
 	pending = next;
 	liveRefusal = undefined;
-	// The encoder save's shape (`buildEncoderSetConfig`): the apply-now
-	// directive rides the setConfig input without being a config field.
-	const input: StreamingSetConfigInput = { composition: next, apply_now: true };
 	try {
 		const result = await rpc.streaming.setConfig(input);
 		const change = result.configChange;
@@ -174,19 +190,30 @@ async function applyLive(next: CompositionConfig): Promise<void> {
 function toggle(on: boolean): void {
 	if (locked) return;
 	if (!on) {
-		void write(null);
+		void save({ composition: null });
 		return;
 	}
 	const first = candidates[0];
 	if (first === undefined) return;
-	void write({ secondary_input_id: first.id, layout, alpha });
+	void save({ composition: { secondary_input_id: first.id, layout, alpha } });
 }
 
 function patch(fields: Partial<CompositionConfig>): void {
 	if (secondaryId === undefined) return;
 	const next = { secondary_input_id: secondaryId, layout, alpha, ...fields };
 	if (isStreaming) void applyLive(next);
-	else void write(next);
+	else void save({ composition: next });
+}
+
+function chooseCustom(): void {
+	if (layout === 'custom' || secondaryId === undefined) return;
+	const rect = presetRect(layout);
+	if (isStreaming)
+		void applyLive(
+			{ secondary_input_id: secondaryId, layout: 'custom', alpha, rect },
+			{ composition_rect: rect, apply_now: true },
+		);
+	else void save({ composition_rect: rect });
 }
 
 function previewAlpha(value: number): void {
@@ -346,7 +373,31 @@ function endAdjustment(): void {
 							{layoutLabel(option)}
 						</button>
 					{/each}
+					{#if geometry}
+						<!-- biome-ignore lint/a11y/useSemanticElements: same radio contract as the presets above. -->
+						<button
+							type="button"
+							aria-checked={layout === 'custom'}
+							aria-describedby={previewDisclosure.open ? undefined : customHintId}
+							class="flex min-h-[44px] items-center justify-center rounded-md px-2 py-2 text-center text-xs font-medium transition-colors {layout ===
+							'custom'
+								? 'bg-primary/10 text-primary ring-primary ring-1'
+								: 'text-muted-foreground hover:bg-primary/5'}"
+							data-active={layout === 'custom'}
+							data-testid="composition-layout-custom"
+							disabled={busy}
+							onclick={chooseCustom}
+							role="radio"
+						>
+							{m["live.layout.custom"]()}
+						</button>
+					{/if}
 				</div>
+				{#if geometry && !previewDisclosure.open}
+					<p class="text-muted-foreground text-xs" id={customHintId}>
+						{m["live.layout.openPreviewToPlace"]()}
+					</p>
+				{/if}
 			</div>
 
 			<!-- The opacity control and the live outcome region share one block, so

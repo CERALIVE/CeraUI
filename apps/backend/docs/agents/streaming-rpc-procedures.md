@@ -46,6 +46,17 @@ The `streaming` router exposes these procedures:
 
 `setConfig` writes the provided fields onto the running config (same relay/manual mutual-exclusion logic as `updateConfig`, minus DNS/pipeline validation), then calls `saveConfig` and broadcasts a `config` message. Use this for all config-only dialogs that must not start the stream.
 
+### Composition placement [EXISTS]
+
+`setConfig({ composition_rect })` places the second input: the backend writes
+`layout: 'custom'` and the rectangle onto its own saved composition in the
+synchronous pre-mutation stretch (`resolveCompositionWrite` in
+`modules/streaming/composition.ts`), and a custom `composition` without a
+`rect` keeps the saved one. Refusals, before any write:
+`composition_unsupported`, `composition_geometry_unsupported` and
+`composition_rect_invalid`. With `apply_now`, the composed composition is the
+staged change; [composition lifecycle](../../../../docs/COMPOSITION-LIFECYCLE.md).
+
 ### Format settings [EXISTS]
 
 `setConfig` accepts optional `balancer` through the published producer's
