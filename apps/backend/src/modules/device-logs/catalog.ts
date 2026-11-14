@@ -1,0 +1,67 @@
+import { LOG_SOURCES, type LogSource } from "@ceraui/rpc/schemas";
+
+export const SOURCE_UNITS: Readonly<Record<LogSource, readonly string[]>> = {
+	app: ["ceralive.service"],
+	engine: ["cerastream.service"],
+	bonding: ["srtla-send.service", "srtla.service"],
+	network: [
+		"NetworkManager.service",
+		"wpa_supplicant.service",
+		"ceralive-share.service",
+		"ceralive-ingest-firewall.service",
+		"ceralive-rtmp-gateway.service",
+	],
+	cellular: [
+		"ModemManager.service",
+		"ceralive-fcc-reconcile.service",
+		"ceralive-dongle-netns-retire.service",
+	],
+	updates: [
+		"rauc.service",
+		"ceralive-software-update.service",
+		"ceralive-slot-sync.service",
+		"ceralive-healthcheck.service",
+		"ceralive-rauc-activate.service",
+		"ceralive-rauc-arm@now.service",
+		"ceralive-rauc-arm@arm.service",
+		"ceralive-os-stage-guard.service",
+		"ceralive-dpkg-recover.service",
+		"apt-daily.service",
+		"apt-daily-upgrade.service",
+		"ceralive-rauc-arm@.service",
+	],
+	device: [
+		"kiosk.service",
+		"ssh.service",
+		"systemd-journald.service",
+		"ceralive-addon-reconciler.service",
+		"ceralive-boot-script-sync.service",
+		"ceralive-ci-uart-bootstrap.service",
+		"ceralive-cpu-governor.service",
+		"ceralive-fan-curve.service",
+		"ceralive-fan-kickstart.service",
+		"ceralive-hdmirx-edid.service",
+		"ceralive-led-status.service",
+		"ceralive-partlabel-guard.service",
+		"ceralive-portal@.service",
+		"ceralive-provision.service",
+		"ceralive-ssh-firstboot.service",
+		"ceralive-tls-firstboot.service",
+		"ceralive-typec-policy.service",
+		"ceralive-typec-recheck.service",
+		"cert-rotation-expiry.service",
+		"cert-rotation.service",
+		"rauc-hawkbit-updater.service",
+		"ceralive-journal-gc.service",
+		"ceralive-machine-id.service",
+		"pipewire.service",
+		"wireplumber.service",
+	],
+	kernel: [],
+};
+
+export function sourceOfUnit(unit: string): LogSource | null {
+	return (
+		LOG_SOURCES.find((source) => SOURCE_UNITS[source].includes(unit)) ?? null
+	);
+}

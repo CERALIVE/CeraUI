@@ -21,7 +21,8 @@ Full PR gate: `bun run test`, `bun run test:e2e`, `bun run check:tech-debt`,
 ## WHERE TO LOOK
 | Code path or task | Contract |
 |---|---|
-| Before changes, read the owning subsystem contract | [All backend contracts](docs/agents/README.md) |
+| Before changes, read contract | [Index](docs/agents/README.md) |
+| Log filters | [Logs](test-harness/journal-conformance/README.md) |
 | Projection, modem roster and first-sight USB bond admission | [an-isolated-dongle-is-surfaced-without-entering-the-bond.md](docs/agents/an-isolated-dongle-is-surfaced-without-entering-the-bond.md) |
 | Cellular composition and wire projection | [the-cellular-subsystem-one-composition-root-one-wire.md](docs/agents/the-cellular-subsystem-one-composition-root-one-wire.md) |
 | Modem presence and exact-identity admission | [a-device-is-announced-before-any-modem-service-can-descri.md](docs/agents/a-device-is-announced-before-any-modem-service-can-descri.md) |

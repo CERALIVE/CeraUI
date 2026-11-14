@@ -59,3 +59,29 @@ predecessor disk accounting and lifecycle ids for downstream consumers.
 
 This proves the Debian systemd 257 behavior in containers. Physical device
 latency, CPU load and streaming log volume remain unmeasured.
+
+## Source catalog and filter compiler [EXISTS]
+
+`src/modules/device-logs/catalog.ts` assigns the named services and the remaining
+inventory services to sources; unlisted units return `null`. The inventory in
+`src/tests/fixtures/device-units.txt` records service basenames from image
+`origin/master` at `36aef71b1ce032726d7bfe2e91594fef02af560b` under `mkosi/runtime`,
+then CeraUI's deployment services and the engine and sender service names.
+Template names stay literal; the two known rauc-arm instances are listed
+separately. Arbitrary template instances are not expanded into journal matches.
+The device remainder also contains the inventory's certificate, PipeWire,
+WirePlumber and legacy hawkBit units.
+
+`compileFilter(filter, { bootId })` returns field `matches` for placement after
+the reader's `--` boundary and an unchanged literal `residual.text`. The reader
+applies case-insensitive substring search to the displayed message and tests
+time membership per record. This compiler emits neither options nor time bounds.
+Repeated and reordered source or level selections produce a bounded canonical
+token list. Suppression notices use a separate boot-scoped OR group without a
+priority restriction; their source relevance belongs to the reader.
+
+Run `cd apps/backend && bun test ./src/tests/device-logs-filter.test.ts`.
+`golden-argv.txt` is JSONL with `name`, `filter`, `bootId` and `matches` per row.
+Tests compare it without writing; regenerate explicitly with `UPDATE_GOLDEN=1`
+on the same test command. Paging and follow consumers add their option cases
+and journal replay assertions when those readers are implemented.
