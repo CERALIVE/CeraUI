@@ -36,6 +36,7 @@
 // heal). Every effectful surface (notify / removeNotification) is injected so the
 // transition machine is exercisable fixture-driven with no real broadcast.
 
+import { emitEvent } from "../events/emit.ts";
 import {
 	notificationBroadcast,
 	notificationRemove,
@@ -234,7 +235,12 @@ export function reportAllLinksDown(p: {
 	activeLinks: number;
 }): void {
 	const bad = p.linkCount > 0 && p.activeLinks === 0;
-	evaluateIndicator("all-links-down", p.isStreaming, bad);
+	const action = evaluateIndicator("all-links-down", p.isStreaming, bad);
+	if (action === "lost") {
+		emitEvent("bond_all_links_down", { linkCount: p.linkCount });
+	} else if (action === "recovered") {
+		emitEvent("bond_links_recovered", { linkCount: p.linkCount });
+	}
 }
 
 /**
