@@ -127,6 +127,11 @@ publishes the latest ruleset first, then flushes conntrack and removes stale rul
 and private tables. Desired mark/table support is retained even when the old route
 temporarily lacks an interface name.
 
+An in-place interface rename retains the continuing identity's table and fwmark
+rule without flushing its flows, including when final ruleset publication fails.
+Route retention matches identity, table, and mark; the interface name is mutable.
+A departing identity still follows the hard-down drain below.
+
 Once the latest ruleset is committed, a stale-route cleanup failure keeps the live
 ruleset and newly provisioned routes intact, completes the forwarding step, and
 logs each distinct failure once. Failed retirements remain in memory. After every
