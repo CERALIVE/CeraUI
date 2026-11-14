@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+	type AudioInputConfig,
 	connect,
 	type GetCapabilitiesResult,
 	PROTOCOL_VERSION,
@@ -24,6 +25,7 @@ import { runtimeConfigSchema } from "../helpers/config-schemas.ts";
 import {
 	getConfig,
 	getConfigFilePath,
+	loadConfig,
 	saveConfig,
 	setConfigFilePath,
 } from "../modules/config.ts";
@@ -104,6 +106,8 @@ let meterSocket: Socket<{ pending: string }> | undefined;
 let holdStart: boolean;
 let startObserved: ReturnType<typeof Promise.withResolvers<void>>;
 let releaseStart: (() => void) | undefined;
+let engineAppliedGain: number | undefined;
+let engineInputs: AudioInputConfig[];
 
 async function capabilities(supported = true) {
 	clearCapabilitiesCache();
@@ -135,6 +139,8 @@ beforeEach(async () => {
 	await capabilities();
 	requests = [];
 	engineError = undefined;
+	engineAppliedGain = undefined;
+	engineInputs = [];
 	liveSpies = [];
 	meterSocket = undefined;
 	holdStart = false;
@@ -178,6 +184,9 @@ beforeEach(async () => {
 							result = { subscribed: ["audio-level"] };
 							break;
 						case "start":
+							engineInputs = structuredClone(
+								startParamsSchema.parse(request.params).audio?.inputs ?? [],
+							);
 							result = { session_id: "audio-inputs", state: "streaming" };
 							if (holdStart) {
 								releaseStart = () =>
@@ -189,17 +198,32 @@ beforeEach(async () => {
 							}
 							break;
 						case "set-audio-mix": {
-							const update = setAudioMixParamsSchema.parse(request.params)
-								.inputs[0];
+							const updates = setAudioMixParamsSchema.parse(
+								request.params,
+							).inputs;
 							result = {
-								inputs: [
-									{
-										input_id: update?.input_id,
-										gain_db: update?.gain_db ?? 0,
-										mute: update?.mute ?? false,
-										delay_ms: update?.delay_ms ?? 0,
-									},
-								],
+								inputs: updates.map((update) => {
+									const input = engineInputs.find(
+										(input) => input.input_id === update.input_id,
+									);
+									if (!input)
+										throw new Error(
+											`Unexpected peer input: ${update.input_id}`,
+										);
+									if (update.gain_db !== undefined)
+										input.gain_db = update.gain_db;
+									if (engineAppliedGain !== undefined)
+										input.gain_db = engineAppliedGain;
+									if (update.mute !== undefined) input.mute = update.mute;
+									if (update.delay_ms !== undefined)
+										input.delay_ms = update.delay_ms;
+									return {
+										input_id: input.input_id,
+										gain_db: input.gain_db ?? 0,
+										mute: input.mute ?? false,
+										delay_ms: input.delay_ms ?? 0,
+									};
+								}),
 							};
 							break;
 						}
@@ -604,6 +628,135 @@ test("live mix update drives the published client once and persists applied valu
 	expect((await disk()).audio_inputs).toEqual([
 		{ ...entry("Second", [2]), gain_db: -20, mute: true, delay_ms: 800 },
 		entry("Primary"),
+	]);
+});
+
+for (const mute of [undefined, false, true]) {
+	test(`saving primary mute ${mute} retains only the muted non-default through reload and Start`, async () => {
+		const primary = {
+			id: "Primary",
+			tracks: [1],
+			gain_db: 0,
+			delay_ms: 0,
+			...(mute === undefined ? {} : { mute }),
+		};
+		expect(
+			await call(
+				procedures.setConfigProcedure,
+				{ audio_inputs: [primary] },
+				{ context: makeRpcContext() },
+			),
+		).toMatchObject({ success: true });
+		const persisted = await disk();
+		if (mute === true)
+			expect(persisted.audio_inputs).toEqual([
+				{ ...entry("Primary"), mute: true },
+			]);
+		else expect(persisted).not.toHaveProperty("audio_inputs");
+		const savedBytes = await Bun.file(getConfigFilePath()).text();
+		await loadConfig();
+		expect(await Bun.file(getConfigFilePath()).text()).toBe(savedBytes);
+		const params = await start();
+		if (mute === true)
+			expect(params.audio?.inputs).toEqual([
+				{
+					input_id: "hw:CARD=primary",
+					tracks: [1],
+					gain_db: 0,
+					mute: true,
+					delay_ms: 0,
+				},
+			]);
+		else expect(params.audio).not.toHaveProperty("inputs");
+	});
+
+	test(`loaded primary mute ${mute} maps its default at Start and retains it on a partial live update`, async () => {
+		const primary = {
+			id: "Primary",
+			tracks: [1],
+			gain_db: 0,
+			delay_ms: 0,
+			...(mute === undefined ? {} : { mute }),
+		};
+		const savedBytes = JSON.stringify({
+			...getConfig(),
+			audio_inputs: [primary],
+		});
+		await Bun.write(getConfigFilePath(), savedBytes);
+		await loadConfig();
+		expect(getConfig().audio_inputs).toEqual([
+			{ ...entry("Primary"), mute: mute ?? false },
+		]);
+		expect(await Bun.file(getConfigFilePath()).text()).toBe(savedBytes);
+		expect((await start()).audio?.inputs).toEqual([
+			{
+				input_id: "hw:CARD=primary",
+				tracks: [1],
+				gain_db: 0,
+				mute: mute ?? false,
+				delay_ms: 0,
+			},
+		]);
+		routeLiveProcedure();
+		expect(await change({ id: "Primary", gain_db: -7 })).toEqual({
+			success: true,
+			applied: { id: "Primary", gain_db: -7, mute: mute ?? false, delay_ms: 0 },
+			applies_next_start: false,
+		});
+		expect((await disk()).audio_inputs).toEqual([
+			{ ...entry("Primary"), gain_db: -7, mute: mute ?? false },
+		]);
+	});
+}
+
+test("a partial live update preserves a nonzero admitted gain in the reply and on disk", async () => {
+	await save([entry("Primary"), { ...entry("Second", [2]), gain_db: -9 }]);
+	await start();
+	routeLiveProcedure();
+	expect(await change({ id: "Second", mute: true, delay_ms: 300 })).toEqual({
+		success: true,
+		applied: { id: "Second", gain_db: -9, mute: true, delay_ms: 300 },
+		applies_next_start: false,
+	});
+	expect((await disk()).audio_inputs).toEqual([
+		entry("Primary"),
+		{ ...entry("Second", [2]), gain_db: -9, mute: true, delay_ms: 300 },
+	]);
+});
+
+test("a different engine-applied gain is echoed persisted reloaded and mapped into the next Start", async () => {
+	await save([entry("Primary"), entry("Second", [2])]);
+	await start();
+	routeLiveProcedure();
+	engineAppliedGain = -11;
+	expect(await change({ id: "Second", gain_db: -20 })).toEqual({
+		success: true,
+		applied: { id: "Second", gain_db: -11, mute: false, delay_ms: 0 },
+		applies_next_start: false,
+	});
+	expect((await disk()).audio_inputs).toEqual([
+		entry("Primary"),
+		{ ...entry("Second", [2]), gain_db: -11 },
+	]);
+	await backend.confirmStop();
+	updateStatus(false);
+	await loadConfig();
+	requests = [];
+	expect((await start()).audio?.inputs).toEqual([
+		{
+			input_id: "hw:CARD=primary",
+			tracks: [1],
+			gain_db: 0,
+			mute: false,
+			delay_ms: 0,
+		},
+		{
+			input_id: "hw:CARD=second",
+			tracks: [2],
+			gain_db: -11,
+			mute: false,
+			delay_ms: 0,
+		},
 	]);
 });
 

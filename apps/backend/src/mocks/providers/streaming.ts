@@ -731,7 +731,6 @@ export function startMockStreaming(params?: StartParams): void {
 			params.audio,
 			params.pipeline === "rtmp" || params.pipeline === "srt",
 		);
-		if (params.composition) validateMockComposition(params.composition);
 		for (const input of params.audio?.inputs ?? []) {
 			if (
 				input.input_id !== "embedded" &&
@@ -750,6 +749,7 @@ export function startMockStreaming(params?: StartParams): void {
 				);
 			}
 		}
+		if (params.composition) validateMockComposition(params.composition);
 		if (params.audio?.inputs && !getMockEngineCapabilities().caps.audio_mix) {
 			throw mockAudioMixInvalid("audio-mix-unsupported");
 		}
@@ -762,12 +762,13 @@ export function startMockStreaming(params?: StartParams): void {
 	setStreamingState(true);
 }
 
-function mockParamsInvalid(token: string): CerastreamRpcError {
+function mockParamsInvalid(message: string): CerastreamRpcError {
 	return new CerastreamRpcError(
 		-32602,
-		token,
+		`invalid params: ${message}`,
 		"cerastream.params.invalid",
 		null,
+		{ code: "cerastream.params.invalid" },
 	);
 }
 
@@ -834,7 +835,10 @@ function validateMockAudioMix(
 function validateMockComposition(config: CompositionConfig): void {
 	if (config.layout === "custom") {
 		const rect = config.rect;
-		if (rect === undefined) throw mockParamsInvalid("composition-rect-missing");
+		if (rect === undefined)
+			throw mockParamsInvalid(
+				"composition-rect-missing: custom layout requires rect",
+			);
 		if (
 			Object.values(rect).some(
 				(value) => !Number.isFinite(value) || value < 0,
@@ -844,28 +848,30 @@ function validateMockComposition(config: CompositionConfig): void {
 			rect.width < COMPOSITION_RECT_MIN ||
 			rect.height < COMPOSITION_RECT_MIN
 		) {
-			throw mockParamsInvalid("composition-rect-range");
-		}
-		if (
-			!getMockEngineCapabilities().caps.features?.includes(
-				COMPOSITION_GEOMETRY_FEATURE,
-			)
-		) {
-			throw new CerastreamRpcError(
-				RPC_ERROR_NUMERIC["cerastream.params.invalid"],
-				"invalid params: composition-unsupported: rgacompositor did not pass its READY backend trial",
-				"cerastream.params.invalid",
-				null,
-				{
-					code: "cerastream.params.invalid",
-					capture_causes: [
-						{ device: "composition", cause: "composition-unsupported" },
-					],
-				},
+			throw mockParamsInvalid(
+				"composition-rect-range: rect must fit the frame with sides at least 0.125",
 			);
 		}
 	} else if (config.rect !== undefined) {
-		throw mockParamsInvalid("composition-rect-unexpected");
+		throw mockParamsInvalid(
+			"composition-rect-unexpected: preset layouts do not accept rect",
+		);
+	}
+	if (
+		!getMockEngineCapabilities().caps.features?.includes(COMPOSITION_FEATURE)
+	) {
+		throw new CerastreamRpcError(
+			RPC_ERROR_NUMERIC["cerastream.params.invalid"],
+			"invalid params: composition-unsupported: rgacompositor did not pass its READY backend trial",
+			"cerastream.params.invalid",
+			null,
+			{
+				code: "cerastream.params.invalid",
+				capture_causes: [
+					{ device: "composition", cause: "composition-unsupported" },
+				],
+			},
+		);
 	}
 }
 
@@ -936,9 +942,10 @@ export function changeMockComposition(composition: CompositionConfig): void {
 	if (!shouldUseMocks() || !getStreamingStats().isActive || !current) {
 		throw new CerastreamRpcError(
 			RPC_ERROR_NUMERIC["cerastream.state.not_streaming"],
-			"engine is not streaming",
+			"no active stream",
 			"cerastream.state.not_streaming",
 			null,
+			{ code: "cerastream.state.not_streaming" },
 		);
 	}
 	validateMockComposition(composition);

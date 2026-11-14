@@ -70,6 +70,9 @@ are unchanged. Coverage: `streaming-format-settings.test.ts` and the unedited
 per-input delay in milliseconds. An omitted field leaves the saved set alone.
 Null clears it; exactly the primary input at 0 dB, unmuted, 0 ms and Track 1
 also clears it. Loading config performs no migration and never rewrites `asrc`.
+An omitted per-input mute means false, matching the producer's default. Loading
+fills that value in memory without rewriting the file; an explicit true at
+otherwise default primary settings remains an explicit muted mix.
 Membership and track changes apply at the next start, including with `apply_now`.
 
 The save gate runs before any mutation against `audio_mix` and the selectable
@@ -97,7 +100,11 @@ switching even after a mix is saved.
 
 `streaming.setAudioMix({ id, gain_db?, mute?, delay_ms? })` uses that session's
 admitted input identity. A live mix sends one producer `setAudioMix` request,
-returns the applied state and saves its values. Pending membership and track
+returns the applied state and saves its values.
+The reply is authoritative even when its gain differs from the request; partial
+live updates retain the admitted gain, mute and delay unless the engine changes
+them. Reloading saved settings and the next Start retain those applied values.
+Pending membership and track
 edits remain pending; updating an input removed from next-start settings does
 not re-enable it. Idle or on a legacy session, the procedure only saves an
 already-enabled input (or the default primary), returning

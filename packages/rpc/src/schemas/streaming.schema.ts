@@ -183,7 +183,7 @@ export const audioInputSettingSchema = audioInputConfigSchema.omit({ input_id: t
 	id: z.string(),
 	tracks: z.array(z.number()),
 	gain_db: z.number(),
-	mute: z.boolean(),
+	mute: z.boolean().default(false),
 	delay_ms: z.number(),
 });
 export type AudioInputSetting = z.infer<typeof audioInputSettingSchema>;

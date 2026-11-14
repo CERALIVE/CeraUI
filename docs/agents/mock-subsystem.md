@@ -124,14 +124,25 @@ fields and omit these additions, including `multi-modem-wifi`.
 `audio.inputs` and `composition.rect` in `mockState.engineStart`. The mock
 enforces the engine's empty/count/duplicate input, track membership/gaps,
 gain/delay, device/mode conflicts and embedded-network rules, then resolves
-audio registry identities and capability support. `setMockAudioMix` validates
+audio registry identities before checking rectangle validity, compositor
+availability and finally mix factory support. An unknown audio identity therefore
+outranks every composition refusal, including its capture causes.
+`setMockAudioMix` validates
 the whole batch before committing, preserves tracks, echoes applied defaults,
 and refuses a non-mix session with `audio-mix-inactive`. Unknown input errors
 carry `cerastream.audio.device_not_found`; `switchMockAudio` refuses a running
 mix with `audio-mix-active`. Stop and reset clear the admitted session.
 
+The live methods preserve their separate native admission orders.
+`setMockAudioMix` checks the admitted mix session, then each update's identity
+before its values, validating each update before proceeding to the next.
+`changeMockComposition` checks the running session, then rectangle validity and
+compositor availability; it retains the already-admitted audio. Neither live
+method invents a new Start admission or changes the other subsystem's state.
+
 `changeMockComposition` enforces missing/unexpected/range rectangle errors and
-the geometry feature gate. At start and live, an unavailable compositor returns
+the compositor availability gate for presets and custom layouts. At start and
+live, an unavailable compositor returns
 the native `composition-unsupported` refusal: numeric code `-32602`,
 `data.code: "cerastream.params.invalid"` and
 `data.capture_causes: [{ device: "composition", cause: "composition-unsupported" }]`.
@@ -139,6 +150,10 @@ Rectangle validation precedes that refusal, so malformed geometry remains
 `composition-rect-range` without a capture cause. Frame-edge equality and the
 minimum size are inclusive; regression tests cover both sides of each bound
 through start and live admission.
+Geometry refusals and inactive live changes also retain the complete native
+message and `data.code`. `mock-audio-precedence.test.ts` pins paired failures,
+including audio shape versus composition, unknown audio versus composition,
+geometry versus availability, and live session/identity/value admission.
 Presets never enter `custom`; the producer rectangle
 schema and minimum are exported separately by RPC. The preview socket adds
 `inputs[]` only for an admitted live mix, with synthetic post-gain/post-mute
