@@ -414,6 +414,30 @@ jobs:
         working-directory: CeraUI
         run: bun run --filter @ceraui/i18n test
 
+  journal-conformance:
+    name: Journal conformance (systemd 257)
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout CeraUI
+        uses: actions/checkout@v7
+        with:
+          path: CeraUI
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - name: Prepare Debian trixie image
+        run: docker pull debian:trixie
+
+      - name: Journal conformance
+        working-directory: CeraUI
+        run: bun run test:journal-conformance
+
   setup-e2e:
     name: E2E setup (package deps, browser cache, frontend build)
     needs: changes
@@ -908,6 +932,7 @@ jobs:
       - merge-fe-reports
       - guardrails
       - test-be
+      - journal-conformance
       - setup-e2e
       - test-e2e
       - merge-e2e-reports
@@ -927,6 +952,7 @@ jobs:
             merge-fe-reports=${{ needs['merge-fe-reports'].result }}
             guardrails=${{ needs.guardrails.result }}
             test-be=${{ needs['test-be'].result }}
+            journal-conformance=${{ needs['journal-conformance'].result }}
             setup-e2e=${{ needs['setup-e2e'].result }}
             test-e2e=${{ needs['test-e2e'].result }}
             merge-e2e-reports=${{ needs['merge-e2e-reports'].result }}

@@ -19,6 +19,12 @@ credentials and operator selection are normalized before NetworkManager writes.
 disabled by the device capability gate. See the
 [modem save contract](apps/backend/docs/agents/a-modem-save-spends-a-reconnect-only-when-it-must.md#applied-configuration-receipts-exists).
 
+**Journal conformance [EXISTS].** `bun run test:journal-conformance` checks
+real systemd 257 journal behavior in disposable Debian trixie containers.
+Docker and a local `debian:trixie` image are required. The Build Check workflow
+runs the suite on code changes and includes its result in the required summary.
+See the [harness contract](apps/backend/test-harness/journal-conformance/README.md).
+
 **Streaming settings RPC [EXISTS].** Settings clients can save the producer's
 balancer selection or clear a saved codec with `video_codec: null` for the next
 start. Saved keys, defaults and passthrough choices remain unchanged. See the

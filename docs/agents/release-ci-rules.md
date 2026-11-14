@@ -2,6 +2,21 @@
 
 ## Release & CI rules
 
+The `journal-conformance` Build Check job runs the real systemd 257 container
+suite for the existing `changes.outputs.code` gate, including backend changes.
+It inherits read-only contents permission and workflow cancellation, pins Bun
+1.4.4, and has a 15-minute timeout. The harness needs no dependency install.
+The required `test` summary depends on this job and reads its result; failure,
+cancellation or a code-change skip therefore fails the summary.
+
+Workflow expectation change: `GATED_JOBS` previously contained `test-fe`,
+`merge-fe-reports`, `guardrails`, `test-be`, `setup-e2e`, `test-e2e`,
+`merge-e2e-reports`, `build` (8). It now inserts `journal-conformance` after
+`test-be` (9). `test.needs` adds the same job, growing from 9 to 10 entries
+including `changes`; its result map grows from 9 to 10. Existing expectations
+remain in place. The workspace CI manifest must model the additional job and
+run steps when the workspace integration is updated.
+
 These two rules govern how multi-repo efforts land. They COMPLEMENT — never replace
 — the root workflow rules (`../AGENTS.md` Rules A–E) and CeraUI's testing gate.
 
