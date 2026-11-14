@@ -1827,7 +1827,7 @@
 	"network.sharing.band.noHealthyUplinkTitle": "कोई स्वस्थ अपलिंक नहीं",
 	"network.sharing.band.noHealthyUplinkBody": "सभी अपलिंक बंद हैं, इसलिए जुड़े उपकरणों के पास बाहर जाने का रास्ता नहीं है। स्ट्रीम पर कोई असर नहीं पड़ता।",
 	"network.sharing.band.steeringUnavailableTitle": "अपलिंक बँटवारा उपलब्ध नहीं",
-	"network.sharing.band.steeringUnavailableBody": "जुड़े उपकरण कई अपलिंक में बँटने के बजाय डिफ़ॉल्ट रूट का उपयोग करते हैं।",
+	"network.sharing.band.steeringUnavailableBody": "CeraUI उपकरणों का अपलिंक के बीच नया बँटवारा लागू नहीं कर सका। पिछली व्यवस्था सक्रिय रह सकती है; अगर कोई पिछली व्यवस्था नहीं थी, तो उपकरण डिफ़ॉल्ट रूट का उपयोग करते हैं।",
 	"network.sharing.band.uplinksUnreportedTitle": "अपलिंक की स्थिति सूचित नहीं",
 	"network.sharing.band.uplinksUnreportedBody": "डिवाइस ने अभी तक अपलिंक स्थिति की सूचना नहीं भेजी है।",
 	"network.sharing.steeringReason.bondCandidate": "एक क्लाइंट क्षेत्र स्वयं एक बॉन्डेड अपलिंक भी है, जिस पर डिवाइस ट्रैफ़िक बाँटने से इनकार करता है।",

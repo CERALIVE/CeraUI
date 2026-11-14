@@ -1827,7 +1827,7 @@
 	"network.sharing.band.noHealthyUplinkTitle": "Kein funktionierender Uplink",
 	"network.sharing.band.noHealthyUplinkBody": "Alle Uplinks sind ausgefallen, verbundene Geräte kommen also nicht ins Internet. Der Stream selbst ist nicht betroffen.",
 	"network.sharing.band.steeringUnavailableTitle": "Verteilung auf Uplinks nicht verfügbar",
-	"network.sharing.band.steeringUnavailableBody": "Verbundene Geräte nutzen die Standardroute, statt auf mehrere Uplinks verteilt zu werden.",
+	"network.sharing.band.steeringUnavailableBody": "CeraUI konnte die neueste Verteilung der Geräte auf Uplinks nicht anwenden. Die bisherige Konfiguration kann aktiv bleiben; ohne vorherige Konfiguration nutzen die Geräte die Standardroute.",
 	"network.sharing.band.uplinksUnreportedTitle": "Uplink-Zustand nicht gemeldet",
 	"network.sharing.band.uplinksUnreportedBody": "Das Gerät hat noch keinen Bericht zum Uplink-Zustand gesendet.",
 	"network.sharing.steeringReason.bondCandidate": "Eine Client-Zone ist zugleich ein gebündelter Uplink, den das Gerät nicht zur Verteilung heranzieht.",

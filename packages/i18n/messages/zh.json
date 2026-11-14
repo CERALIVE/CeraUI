@@ -1782,7 +1782,7 @@
 	"network.sharing.band.noHealthyUplinkTitle": "没有可用的上行链路",
 	"network.sharing.band.noHealthyUplinkBody": "所有上行链路都已中断，所连设备无法上网。推流本身不受影响。",
 	"network.sharing.band.steeringUnavailableTitle": "链路分流不可用",
-	"network.sharing.band.steeringUnavailableBody": "所连设备退回到默认路由，不再分散到多条上行链路。",
+	"network.sharing.band.steeringUnavailableBody": "CeraUI 无法应用最新的设备上行链路分配方案。之前的设置可能仍然生效；如果没有之前的设置，设备将使用默认路由。",
 	"network.sharing.band.uplinksUnreportedTitle": "上行链路状态未上报",
 	"network.sharing.band.uplinksUnreportedBody": "设备尚未发送上行链路状态报告。",
 	"network.sharing.steeringReason.bondCandidate": "某个客户端区域同时也是聚合上行链路，设备拒绝对其分流。",
