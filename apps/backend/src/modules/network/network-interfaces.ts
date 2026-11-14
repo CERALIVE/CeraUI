@@ -80,7 +80,11 @@ import {
 	getModemNetMarker,
 	getRouterCellularMarker,
 	getRouterCellularMarkers,
+	identityDeadlineExpired,
+	invalidateUsbNetReading,
 	notePublishedNetifSnapshot,
+	onUsbNetScanCommitted,
+	readNetdevSubsystem,
 	refreshUsbNetMarkers,
 	type UsbModemNetMarker,
 	usbNetScanCovers,
@@ -93,6 +97,8 @@ import {
 } from "./unclaimed-adapters.ts";
 
 export type NetworkInterface = {
+	usb?: boolean;
+	identitySettled?: boolean;
 	ip?: string;
 	netmask?: string;
 	tp: number;
@@ -158,6 +164,8 @@ export const NETIF_ERR_NOSIM = 0x04;
 export const NETIF_ERR_SHAREDLAN = 0x08;
 
 let netif: Record<string, NetworkInterface> = {};
+const presenceEpoch = new Map<string, number>();
+type NetdevBusEvidence = { readonly bus: string; readonly seen: number };
 let netifSnapshotReady = false;
 let netifRefreshGeneration = 0;
 const scanPublicationWarnings = new Set<string>();
@@ -171,6 +179,32 @@ export function resetNetifSnapshotForTest(): void {
 	netifSnapshotReady = false;
 	netifRefreshGeneration++;
 	scanPublicationWarnings.clear();
+	presenceEpoch.clear();
+}
+
+function bumpPresence(name: string, removed = false): void {
+	const epoch = (presenceEpoch.get(name) ?? 0) + 1;
+	presenceEpoch.set(name, epoch);
+	if (removed) invalidateUsbNetReading(name, epoch);
+}
+
+let scanSettlementInstalled = false;
+function installScanSettlement(): void {
+	if (scanSettlementInstalled) return;
+	scanSettlementInstalled = true;
+	onUsbNetScanCommitted(() => {
+		let released = false;
+		for (const [name, int] of Object.entries(netif)) {
+			if (int.usb && !int.identitySettled && usbNetScanCovers(name)) {
+				int.identitySettled = true;
+				released = true;
+			}
+		}
+		if (released) {
+			triggerNetworkInterfacesChange();
+			broadcastNetif();
+		}
+	});
 }
 
 // Interfaces excluded from dup-IPv4 detection during a station<->hotspot
@@ -228,6 +262,18 @@ export function isDupIpOnly(int: NetworkInterface): boolean {
 	return int.error === NETIF_ERR_DUPIPV4;
 }
 
+export function isBondIdentityPending(
+	name: string,
+	int: NetworkInterface,
+): boolean {
+	return (
+		int.usb === true &&
+		!int.identitySettled &&
+		!usbNetScanCovers(name) &&
+		!identityDeadlineExpired(name)
+	);
+}
+
 /**
  * May this interface be offered to the bond?
  *
@@ -238,6 +284,7 @@ export function isDupIpOnly(int: NetworkInterface): boolean {
  */
 export function isBondCandidate(name: string, int: NetworkInterface): boolean {
 	if (!int.ip) return false;
+	if (isBondIdentityPending(name, int)) return false;
 	if (isConcurrentApIfname(name)) return false;
 	if (isSharedLanPort(name)) return false;
 	if ((int.error & ~NETIF_ERR_DUPIPV4) !== 0) return false;
@@ -648,9 +695,11 @@ export function handleNetifMonitorEvent(event: MonitorEvent): void {
 		if (!netif[name]) {
 			// New running interface; IP/throughput get filled in by the next poll.
 			netif[name] = { tp: 0, txb: 0, rxb: 0, enabled: true, error: 0 };
+			bumpPresence(name);
 			mutated = true;
 		}
 	} else if (isNetifDownState(event.state)) {
+		bumpPresence(name, true);
 		if (netif[name]) {
 			delete netif[name];
 			mutated = true;
@@ -851,6 +900,19 @@ async function refreshNetifFromOs(): Promise<void> {
 				(name) =>
 					name !== "" && name !== "lo" && !/^(?:docker|l4tbr)/.test(name),
 			);
+		const buses = new Map<string, NetdevBusEvidence>();
+		for (const name of ifnames) {
+			if (!netif[name]?.identitySettled && !netif[name]?.usb) {
+				const seen = presenceEpoch.get(name) ?? 0;
+				void readNetdevSubsystem(name).then(
+					(bus) => {
+						if (bus) buses.set(name, { bus, seen });
+					},
+					(error) =>
+						logger.debug("netdev bus read failed", { ifname: name, error }),
+				);
+			}
+		}
 		if (ifnames.some((name) => !usbNetScanCovers(name))) {
 			let timer: ReturnType<typeof setTimeout> | undefined;
 			let expired = false;
@@ -881,7 +943,7 @@ async function refreshNetifFromOs(): Promise<void> {
 				}
 			}
 		}
-		processIfconfigOutput(ifconfigOut, ipOverrides);
+		processIfconfigOutput(ifconfigOut, ipOverrides, undefined, buses);
 	} catch (error: unknown) {
 		const message = error instanceof Error ? error.message : String(error);
 		logger.error(`Error getting ifconfig: ${message}`);
@@ -892,7 +954,10 @@ export function processIfconfigOutput(
 	stdout: string,
 	ipOverrides?: Map<string, IpAddrSelection>,
 	now: number = getms(),
+	buses?: ReadonlyMap<string, NetdevBusEvidence>,
 ) {
+	installScanSettlement();
+	const previousIfnames = new Set(Object.keys(netif));
 	const firstSnapshot = !netifSnapshotReady;
 	let intsChanged = false;
 	const newInterfaces: Record<string, NetworkInterface> = {};
@@ -956,6 +1021,11 @@ export function processIfconfigOutput(
 
 			const enabled = !previous || previous.enabled;
 			const error = previous ? previous.error : 0;
+			const evidence = buses?.get(name);
+			const fresh =
+				evidence !== undefined &&
+				evidence.seen === (presenceEpoch.get(name) ?? 0);
+			const usb = previous?.usb === true || (fresh && evidence.bus === "usb");
 			newInterfaces[name] = {
 				...(inetAddr !== undefined ? { ip: inetAddr } : {}),
 				...(netmask !== undefined ? { netmask } : {}),
@@ -967,6 +1037,8 @@ export function processIfconfigOutput(
 				tp,
 				enabled,
 				error,
+				...(usb ? { usb } : {}),
+				...(previous?.identitySettled ? { identitySettled: true } : {}),
 			};
 
 			// Detect interfaces that are new or with a different address
@@ -1020,12 +1092,24 @@ export function processIfconfigOutput(
 	}
 
 	netif = newInterfaces;
+	for (const name of new Set([...previousIfnames, ...Object.keys(netif)])) {
+		if (previousIfnames.has(name) !== (netif[name] !== undefined))
+			bumpPresence(name, previousIfnames.has(name));
+	}
 	netifSnapshotReady = true;
 	notePublishedNetifSnapshot(Object.keys(netif));
 
-	if (intsChanged || firstSnapshot) {
+	let released = false;
+	for (const [name, int] of Object.entries(netif)) {
+		if (int.ip && !int.identitySettled && !isBondIdentityPending(name, int)) {
+			if (int.usb) released = true;
+			int.identitySettled = true;
+		}
+	}
+	if (intsChanged || firstSnapshot || released) {
 		triggerNetworkInterfacesChange();
-		notifyTopologyChange();
+		if (intsChanged || firstSnapshot) notifyTopologyChange();
+		if (released) broadcastNetif();
 	}
 
 	// Reconcile + broadcast (covers throughput-only deltas too); no-op when the

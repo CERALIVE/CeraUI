@@ -125,7 +125,7 @@ fields and omit these additions, including `multi-modem-wifi`.
 enforces the engine's empty/count/duplicate input, track membership/gaps,
 gain/delay, device/mode conflicts and embedded-network rules, then resolves
 audio registry identities before checking rectangle validity, compositor
-availability and finally mix factory support. An unknown audio identity therefore
+availability, secondary/alpha/capture admission and finally mix factory support. An unknown audio identity therefore
 outranks every composition refusal, including its capture causes.
 `setMockAudioMix` validates
 the whole batch before committing, preserves tracks, echoes applied defaults,
@@ -137,7 +137,7 @@ The live methods preserve their separate native admission orders.
 `setMockAudioMix` checks the admitted mix session, then each update's identity
 before its values, validating each update before proceeding to the next.
 `changeMockComposition` checks the running session, then rectangle validity and
-compositor availability; it retains the already-admitted audio. Neither live
+compositor availability and the same secondary/alpha/capture admission; it retains the already-admitted audio. Neither live
 method invents a new Start admission or changes the other subsystem's state.
 
 `changeMockComposition` enforces missing/unexpected/range rectangle errors and
@@ -154,6 +154,19 @@ Geometry refusals and inactive live changes also retain the complete native
 message and `data.code`. `mock-audio-precedence.test.ts` pins paired failures,
 including audio shape versus composition, unknown audio versus composition,
 geometry versus availability, and live session/identity/value admission.
+`providers/composition.ts` owns the shared native composition admission. After
+geometry and compositor availability it checks a blank secondary (Rust Unicode
+White_Space semantics), finite alpha in the inclusive range 0 to 1, secondary
+lookup in video captures only, then primary selection. An explicit primary must
+exist in that capture roster and differ from the secondary; automatic selection
+needs another capture. Secondary refusals retain `secondary-unavailable` and
+their exact capture cause; a missing explicit primary retains
+`cerastream.device.not_found`. Forced passthrough is refused after selection.
+The resolved primary is retained separately from operator Start intent so live
+composition changes cannot silently select another primary after hotplug or a
+secondary edit. Stop and scenario lifecycle clear that session identity.
+`mock-composition-admission.test.ts` pins the post-availability pairs, alpha
+boundaries, capture-only identities, automatic selection and retained primary.
 Presets never enter `custom`; the producer rectangle
 schema and minimum are exported separately by RPC. The preview socket adds
 `inputs[]` only for an admitted live mix, with synthetic post-gain/post-mute

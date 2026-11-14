@@ -997,6 +997,71 @@ deliberate different-port divergence, hwdb model recovery, the minting contract
 ifname fallback, the mmcli row's byte-identical `stable_key`, and the preserved
 HIMI chain.
 
+### First-sight USB bond admission [EXISTS]
+
+Transport classification, scan coverage and admission are separate facts.
+The OS netif refresh issues one asynchronous read of
+`/sys/class/net/<if>/device/subsystem` for each unsettled name without positive
+USB evidence, using exactly its parsed ifconfig name set. Only `usb` is positive
+evidence; interface names and driver names do not
+classify transport. A positive `usb` latch survives later refreshes for that
+entry. The bus map is the fourth `processIfconfigOutput` parameter; the third
+parameter remains the sample clock.
+
+An addressed USB entry stays out of both global and local-subnet SRTLA collectors
+until `usbNetScanCovers(name)` or the shared `identityDeadlineExpired(name)`
+predicate permits admission. The existing 2 second scan publication bound and
+15 second clock from first netif publication are unchanged. The wire row reports
+`enabled:false` during this hold without overwriting the operator's choice.
+Physical opt-outs still apply when coverage supplies the final identity.
+
+`identitySettled` latches admission on an addressed publication that is no longer
+pending, or synchronously at a covering scan commit. Losing coverage in a later
+scan never withdraws that entry. Classification and settlement die when removal
+is observed by the monitor, a poll without the name, or a non-RUNNING row.
+Per-name presence counters fence bus results issued before an observed create,
+delete or replacement; stale classification is ignored while the raw ifconfig
+row follows the existing publication path. An addressed row admitted after stale
+evidence is ignored is settled and is not re-read on the next refresh. Only
+addressless unsettled rows retry missing classification. The settlement listener
+is installed once on the first publication, avoiding import-time calls through
+the network/scan/registry dependency cycle.
+
+Each USB descriptor reading records the name's last observed removal epoch from
+the producer's presence counter. A monitor down/removal event, including one
+before first publication, or a poll that drops an existing entry invalidates its
+pending reading. At commit, a reading with a changed epoch loses its descriptor,
+markers and coverage for that name and a fresh scan is requested; other names can
+still commit. Previously committed snapshots retain their existing lifecycle.
+First publication and monitor creation adopt the covering reading without
+invalidating it. `tests/usb-net-incarnation.test.ts` exercises these paths with
+parked reads and both USB and non-USB replacements.
+
+The scope is positive USB evidence available at first addressed publication.
+An unreadable, missing, rejected or still-pending bus link keeps the previous
+behavior: provisional interface-name identity, then physical identity when
+coverage arrives. There is no awaited classifier read, extra I/O deadline or
+hold for unknown transport. This applies to Ethernet and virtual interfaces too.
+A completed scan covers even a rejected descriptor read, so that commit can
+release a USB entry weakly before 15 seconds. A weak identity is still refused
+for durable bond preferences and modem credentials. Coverage, descriptors and
+the readiness clock remain name-keyed; unobserved rapid replug within one poll
+cadence is outside the observed-incarnation fence.
+
+Both release points call `triggerNetworkInterfacesChange()` and `broadcastNetif()`.
+Thus a coverage-only or deadline-only release delivers a real `netif` frame with
+`enabled:true` for an otherwise eligible row even if counters and raw enabled
+state are unchanged. Duplicate frames are allowed. The session serializes the
+release event with its scan-commit refresh; the same applied publication owes
+one restart.
+
+Coverage: `tests/bind-map-identity-readiness.test.ts`,
+`tests/bond-identity-scan-parity.test.ts`,
+`tests/network-module-init-order.test.ts`, and the B13 cases in
+`tests/bond-session-restart-obligation.test.ts`. They cover both collectors,
+disk/registry identity, physical opt-outs, shared-serial twins, real release
+frames, unknown/error scope, observed replacement and unchanged Ethernet behavior.
+
 ### The two `05c6:9024` sticks are RNDIS + read-only UFI devices [EXISTS]
 
 Historical pre-RAUC evidence below records why the kernel fix was required. Todo
@@ -1121,6 +1186,28 @@ neither fsyncs nor sets a mode — is deliberately not used here).
 - **A failed sidecar write RETIRES the sidecar.** One that survives its own failed
   republication describes bytes no longer on disk, which the reader can only call
   a hash mismatch; absent is the honest state (`missing_file`).
+
+**Applied publications determine reloads.** `publication.changed` compares the
+entries with the last publication whose IP list was renamed into place.
+`ok`, `unmappable` and `sidecar_write_failed` all apply the IP list and advance
+that comparison point, including legacy or degraded operation. An
+`ips_write_failed` attempt applies nothing, returns `changed:false` and leaves
+the comparison point intact. `publishSrtlaBond` still registers the attempted
+entries regardless of the writer outcome: after a failed IP write the registry
+can run ahead of disk and the sender until the next applied publication.
+
+**Session refreshes run in order.** `streamloop/session.ts` queues both netif
+changes and committed USB scans on one promise chain per session. A scan commit
+alone can therefore replace a provisional identity without another netif event.
+While the session still owns the launch and streaming is active, each applied
+changed publication owes exactly one sender restart; unchanged publications owe
+none. A thrown preparation is logged once and the queue continues. Both
+listeners are removed on stop, failed start or session replacement, and queued
+work checks ownership before preparing and restarting. A write that never
+settles stalls later refreshes in that session. There is no timeout: without
+cancellation or fencing, a late rename could race a newer publication.
+Coverage: `tests/bond-session-restart-obligation.test.ts` exercises overlap,
+rejection recovery, failed IP writes, scan-only refreshes and Ethernet neutrality.
 
 ### THE DUPLICATE-IP POLICY SPLIT
 

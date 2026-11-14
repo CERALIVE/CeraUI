@@ -363,6 +363,15 @@ export async function readUsbNetDevice(
 	};
 }
 
+export function readNetdevSubsystem(
+	ifname: string,
+	deps: RouterCellularScanDeps = defaultRouterCellularScanDeps,
+): Promise<string | undefined> {
+	return deps.readLinkName(
+		join(deps.sysfsRoot, "sys/class/net", ifname, "device/subsystem"),
+	);
+}
+
 /**
  * The subset of a ModemManager-manageable USB device that reaches the wire.
  *
@@ -429,6 +438,7 @@ export type UsbNetMarkerSets = {
 export async function scanUsbNetMarkers(
 	ifnames: readonly string[],
 	deps: RouterCellularScanDeps = defaultRouterCellularScanDeps,
+	readEpochs?: Map<string, number>,
 ): Promise<UsbNetMarkerSets> {
 	const found: Array<{ ifname: string; device: UsbNetDevice }> = [];
 	const modemNet = new Map<string, UsbModemNetMarker>();
@@ -436,6 +446,7 @@ export async function scanUsbNetMarkers(
 
 	for (const ifname of ifnames) {
 		try {
+			readEpochs?.set(ifname, netdevRemovalEpochs.get(ifname) ?? 0);
 			const device = await readUsbNetDevice(ifname, deps);
 			if (device === undefined) continue;
 			const verdict = classifyUsbNetDevice(device);
@@ -571,6 +582,7 @@ let modemNetMarkers: Map<string, UsbModemNetMarker> = new Map();
 let physicalDescriptors: Map<string, UsbPhysicalDescriptor> = new Map();
 let sharedSerialHashes = new Set<string>();
 let coveredIfnames = new Set<string>();
+const netdevRemovalEpochs = new Map<string, number>();
 const scanCommittedListeners = new Set<() => void>();
 const identityFirstPublishedAt = new Map<string, number>();
 const identityDeadlineWarnings = new Set<string>();
@@ -580,6 +592,11 @@ export const IDENTITY_READINESS_DEADLINE_MS = 15_000;
 /** A completed read counts even when the interface has no USB descriptor. */
 export function usbNetScanCovers(ifname: string): boolean {
 	return coveredIfnames.has(ifname);
+}
+
+/** Creation adopts its covering read; only observed removal invalidates it. */
+export function invalidateUsbNetReading(ifname: string, epoch: number): void {
+	netdevRemovalEpochs.set(ifname, epoch);
 }
 
 /** The publication clock is shared by every identity-minting consumer. */
@@ -691,7 +708,8 @@ async function runUsbNetScan(
 	generation: number,
 ): Promise<boolean> {
 	try {
-		const scanned = await scanUsbNetMarkers(ifnames, deps);
+		const readEpochs = new Map<string, number>();
+		const scanned = await scanUsbNetMarkers(ifnames, deps, readEpochs);
 		if (generation !== usbNetScanGeneration) {
 			// A newer sweep (or a reset) started while this one was reading, so
 			// this result describes a world that has already been superseded.
@@ -702,6 +720,16 @@ async function runUsbNetScan(
 				current: usbNetScanGeneration,
 			});
 			return false;
+		}
+		const stale = new Set(
+			ifnames.filter(
+				(name) => readEpochs.get(name) !== (netdevRemovalEpochs.get(name) ?? 0),
+			),
+		);
+		for (const name of stale) {
+			scanned.routerCellular.delete(name);
+			scanned.modemNet.delete(name);
+			scanned.physical.delete(name);
 		}
 		// Taken here rather than before the read: only the newest generation can
 		// reach this line, so nothing else can have committed in between — and a
@@ -727,7 +755,7 @@ async function runUsbNetScan(
 		markers = scanned.routerCellular;
 		modemNetMarkers = scanned.modemNet;
 		physicalDescriptors = scanned.physical;
-		coveredIfnames = new Set(ifnames);
+		coveredIfnames = new Set(ifnames.filter((name) => !stale.has(name)));
 		setPresentPhysicalDevices(
 			[...physicalDescriptors.values()].map((descriptor) =>
 				resolvePhysicalDevice(descriptor),
@@ -736,6 +764,12 @@ async function runUsbNetScan(
 		const changed = snapshotKey(cachedSets()) !== before;
 		if (changed) {
 			for (const listener of scanCommittedListeners) listener();
+		}
+		if (stale.size > 0) {
+			queueMicrotask(() => {
+				if (generation === usbNetScanGeneration)
+					void refreshUsbNetMarkers(ifnames, deps);
+			});
 		}
 		return changed;
 	} catch (err) {
@@ -822,6 +856,7 @@ export function resetUsbNetMarkers(): void {
 	physicalDescriptors = new Map();
 	sharedSerialHashes = new Set();
 	coveredIfnames = new Set();
+	netdevRemovalEpochs.clear();
 	identityFirstPublishedAt.clear();
 	identityDeadlineWarnings.clear();
 	setPresentPhysicalDevices([]);
