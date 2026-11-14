@@ -31,6 +31,7 @@ export interface RouteProvisioning {
 	readonly replacedTableRoute?: readonly string[];
 	readonly addedTableRoute?: readonly string[];
 	readonly removedTableRoutes?: readonly (readonly string[])[];
+	readonly removedSourceRules?: readonly UplinkRoutePlan[];
 }
 
 export interface UplinkSteeringApplierDeps {
@@ -173,10 +174,10 @@ export class UplinkSteeringApplier {
 				await this.#deps.flushConntrack(route.mark);
 				await this.#deps.removeRoute(route);
 			} catch (error) {
-				const key = recoveredRouteKey(route);
+				const key = retirementWorkKey(route);
 				if (
 					!this.#pendingRetirements.some(
-						(pending) => recoveredRouteKey(pending) === key,
+						(pending) => retirementWorkKey(pending) === key,
 					)
 				) {
 					this.#pendingRetirements.push(route);
@@ -218,6 +219,10 @@ function recoveredRoutePlans(
 
 function recoveredRouteKey(route: UplinkRoutePlan): string {
 	return `${route.mark}\u0000${route.table}`;
+}
+
+function retirementWorkKey(route: UplinkRoutePlan): string {
+	return `${recoveredRouteKey(route)}\u0000${route.sourceAddress}\u0000${route.sourceRulePriority}`;
 }
 
 function transitionState(

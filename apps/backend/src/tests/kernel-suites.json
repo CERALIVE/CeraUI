@@ -23,6 +23,16 @@
 		"add-before-delete process crash converges on restart",
 		"partial stale-route deletion failure restores inventory"
 	],
+	"uplink-steering-source-kernel.test.ts": [
+		"CR:dual-source",
+		"P12 multiple stale managed tables",
+		"CR:crash-source absent claimant",
+		"P11 unique to twin removes source rules",
+		"orphan-cleanup-retry",
+		"rollback restores removed source inventory",
+		"control own plus foreign remains ambiguous",
+		"control present claimant completes interrupted source support"
+	],
 	"uplink-steering-rename-kernel.test.ts": [
 		"rename retains table, fwmark rule and marked lookup",
 		"rename retains support after final-publication failure",

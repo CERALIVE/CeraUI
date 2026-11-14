@@ -1,6 +1,7 @@
 import { run } from "../../../helpers/run.ts";
 import { parseDefaultRouteInterface } from "../connectivity-candidates.ts";
 import type { RouteProvisioning, UplinkRoutePlan } from "./applier.ts";
+import { markForSlot, slotForManagedTable } from "./mark-layout.ts";
 import { asRouteError } from "./route-errors.ts";
 import {
 	isManagedUplinkTable,
@@ -14,6 +15,7 @@ import {
 	hasFwmarkRule,
 	hasSourceRule,
 	parseOwnedFwmarkRules,
+	parseSteeringSourceRules,
 	sourceRuleArgv,
 } from "./route-policy.ts";
 import {
@@ -60,6 +62,29 @@ export async function discoverOwnedUplinkRoutes(
 					: { sourceRulePriority: sourceRule.priority }),
 			});
 		}
+		for (const source of parseSteeringSourceRules(rulesOutput)) {
+			if (
+				routes.some(
+					(route) =>
+						route.table === source.table &&
+						route.sourceAddress === source.sourceAddress &&
+						route.sourceRulePriority === source.priority,
+				)
+			)
+				continue;
+			const slot = slotForManagedTable(source.table);
+			if (slot === undefined) continue;
+			const mark = markForSlot(slot);
+			routes.push({
+				identity: `recovered:${mark.toString(16)}`,
+				ifname: "unknown0",
+				sourceAddress: source.sourceAddress,
+				mark,
+				table: source.table,
+				managed: true,
+				sourceRulePriority: source.priority,
+			});
+		}
 		return routes;
 	} catch (error) {
 		throw asRouteError("uplink-steering", error);
@@ -86,8 +111,27 @@ async function ensureUplinkRouteInner(
 	let tableChanges: TableChanges = { createdTableRoute: false };
 	let createdSourceRule = false;
 	let createdFwmarkRule = false;
+	const removedSourceRules: UplinkRoutePlan[] = [];
 	try {
 		tableChanges = await ensureManagedTableRoute(plan, deps);
+		for (const source of plan.managed ? parseSteeringSourceRules(rules) : []) {
+			const staleSource =
+				source.sourceAddress === plan.sourceAddress &&
+				source.table !== plan.table;
+			const staleTable =
+				source.table === plan.table &&
+				(source.sourceAddress !== plan.sourceAddress ||
+					plan.sourceRulePriority === undefined);
+			if (!staleSource && !staleTable) continue;
+			const stale = {
+				...plan,
+				table: source.table,
+				sourceAddress: source.sourceAddress,
+				sourceRulePriority: source.priority,
+			};
+			await deps.run("ip", sourceRuleArgv("del", stale));
+			removedSourceRules.push(stale);
+		}
 		if (plan.sourceRulePriority !== undefined && !hasSourceRule(rules, plan)) {
 			await deps.run("ip", sourceRuleArgv("add", plan));
 			createdSourceRule = true;
@@ -102,6 +146,7 @@ async function ensureUplinkRouteInner(
 			tableChanges,
 			createdSourceRule,
 			createdFwmarkRule,
+			removedSourceRules,
 		);
 		try {
 			await rollbackUplinkRoute(provisioning, deps);
@@ -118,6 +163,7 @@ async function ensureUplinkRouteInner(
 		tableChanges,
 		createdSourceRule,
 		createdFwmarkRule,
+		removedSourceRules,
 	);
 }
 
@@ -131,6 +177,9 @@ export async function rollbackUplinkRoute(
 	}
 	if (provisioning.createdSourceRule) {
 		await deps.run("ip", sourceRuleArgv("del", route));
+	}
+	for (const source of provisioning.removedSourceRules ?? []) {
+		await deps.run("ip", sourceRuleArgv("add", source));
 	}
 	await rollbackManagedTableRoute(provisioning, deps);
 }
@@ -160,6 +209,7 @@ function buildProvisioning(
 	tableChanges: TableChanges,
 	createdSourceRule: boolean,
 	createdFwmarkRule: boolean,
+	removedSourceRules: readonly UplinkRoutePlan[],
 ): RouteProvisioning {
 	const {
 		createdTableRoute,
@@ -173,6 +223,7 @@ function buildProvisioning(
 			createdTableRoute ||
 			createdSourceRule ||
 			createdFwmarkRule ||
+			removedSourceRules.length > 0 ||
 			replacedTableRoute !== undefined ||
 			addedTableRoute !== undefined ||
 			removedTableRoutes !== undefined,
@@ -182,5 +233,6 @@ function buildProvisioning(
 		...(replacedTableRoute === undefined ? {} : { replacedTableRoute }),
 		...(addedTableRoute === undefined ? {} : { addedTableRoute }),
 		...(removedTableRoutes === undefined ? {} : { removedTableRoutes }),
+		...(removedSourceRules.length === 0 ? {} : { removedSourceRules }),
 	};
 }

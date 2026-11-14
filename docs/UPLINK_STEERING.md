@@ -135,6 +135,12 @@ publishes the latest ruleset first, then flushes conntrack and removes stale rul
 and private tables. Desired mark/table support is retained even when the old route
 temporarily lacks an interface name.
 
+Recovery also inventories priority-100 source rules in managed tables, including
+source-only support left by a crash. Planning ignores stale managed references
+before checking foreign-table ambiguity; provisioning removes obsolete source
+rules and restores them on rollback. Cleanup retries retain each source rule
+independently while desired support remains protected by mark and table.
+
 An in-place interface rename retains the continuing identity's table and fwmark
 rule without flushing its flows, including when final ruleset publication fails.
 Route retention matches identity, table, and mark; the interface name is mutable.
