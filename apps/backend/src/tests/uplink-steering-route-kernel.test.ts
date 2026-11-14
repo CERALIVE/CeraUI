@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
-import { run } from "../helpers/run.ts";
-import type { UplinkRoutePlan } from "../modules/network/uplink-steering/applier.ts";
+import { run, runWithStdin } from "../helpers/run.ts";
+import {
+	type PreparedSteeringState,
+	type UplinkRoutePlan,
+	UplinkSteeringApplier,
+} from "../modules/network/uplink-steering/applier.ts";
 import {
 	discoverOwnedUplinkRoutes,
 	ensureUplinkRoute,
@@ -104,6 +108,146 @@ function kernelRefreshTest(
 }
 
 describe("real kernel managed route refresh", () => {
+	for (const metric of [100, 200]) {
+		kernelRefreshTest(
+			`#534 rename rollback restores a cross-device default with metric ${metric}`,
+			async (deps) => {
+				await run("ip", [
+					"route",
+					"add",
+					"default",
+					"via",
+					"10.1.0.1",
+					"dev",
+					"wwan1",
+					"proto",
+					"static",
+					"metric",
+					"100",
+				]);
+				const candidate = {
+					identity: "renamed-modem",
+					ifname: "wwan1",
+					sourceAddress: "10.1.0.2",
+					sourceAddressUnique: false,
+					mark: 0xca000100,
+				};
+				const previousRoute = await planUplinkRoute(candidate, deps);
+				const previous: PreparedSteeringState = {
+					clientZones: [{ ifname: "eth9", ipv4Cidr: "10.90.0.0/24" }],
+					uplinks: [{ ...candidate, selectable: true, weight: 100 }],
+					routes: [previousRoute],
+				};
+				const flushes: number[] = [];
+				let rejectReload = false;
+				const applier = new UplinkSteeringApplier({
+					discoverRoutes: () => discoverOwnedUplinkRoutes(deps),
+					ensureRoute: (route) => ensureUplinkRoute(route, deps),
+					rollbackRoute: (receipt) => rollbackUplinkRoute(receipt, deps),
+					removeRoute: (route) => removeUplinkRoute(route, deps),
+					applyRuleset: async (ruleset, mode) => {
+						if (rejectReload) {
+							expect(mode).toBe("reload");
+							expect(
+								await run("ip", [
+									"route",
+									"show",
+									"table",
+									previousRoute.table,
+								]),
+							).toContain("dev wwan0");
+							throw new Error("injected reload failure");
+						}
+						await runWithStdin("nft", ["-f", "-"], ruleset);
+					},
+					deactivateSharing: async () => {
+						throw new Error("unexpected deactivation");
+					},
+					flushConntrack: async (mark) => {
+						flushes.push(mark);
+					},
+					setIpForwarding: async () => {},
+					publishFlowsReset: () => {
+						throw new Error("unexpected flow reset");
+					},
+				});
+				await applier.apply(undefined, previous);
+				const before = await run("ip", [
+					"route",
+					"show",
+					"table",
+					previousRoute.table,
+				]);
+				const beforeRules = await run("ip", ["rule", "show"]);
+				const beforeNft = await run("nft", [
+					"list",
+					"table",
+					"inet",
+					"ceralive_share",
+				]);
+				await run("ip", ["route", "del", "default", "dev", "wwan1"]);
+				await run("ip", [
+					"route",
+					"add",
+					"default",
+					"via",
+					"10.0.0.1",
+					"dev",
+					"wwan0",
+					"proto",
+					"static",
+					"metric",
+					String(metric),
+				]);
+				const nextRoute = await planUplinkRoute(
+					{
+						...candidate,
+						ifname: "wwan0",
+						sourceAddress: "10.0.0.2",
+					},
+					deps,
+				);
+				const next: PreparedSteeringState = {
+					...previous,
+					uplinks: [
+						{ ...candidate, ifname: "wwan0", selectable: true, weight: 100 },
+					],
+					routes: [nextRoute],
+				};
+				rejectReload = true;
+
+				await expect(applier.apply(previous, next)).rejects.toThrow(
+					"injected reload failure",
+				);
+
+				const after = await run("ip", [
+					"route",
+					"show",
+					"table",
+					previousRoute.table,
+				]);
+				const lookup = await run("ip", [
+					"route",
+					"get",
+					"203.0.113.1",
+					"mark",
+					"0xca000100",
+				]);
+				console.log(
+					"ROLLBACK_ROUTE",
+					JSON.stringify({ metric, before, after, lookup }),
+				);
+				expect(after).toBe(before);
+				expect(lookup).toContain("dev wwan1");
+				expect(await run("ip", ["rule", "show"])).toBe(beforeRules);
+				expect(
+					await run("nft", ["list", "table", "inet", "ceralive_share"]),
+				).toBe(beforeNft);
+				expect(flushes).toEqual([]);
+			},
+		);
+	}
+
 	kernelRefreshTest(
 		"retains usable managed route when live main default is absent",
 		async (deps) => {
