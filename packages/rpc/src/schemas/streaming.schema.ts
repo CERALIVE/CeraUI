@@ -199,6 +199,8 @@ export const setAudioMixOutputSchema = z.object({
 	error: z.string().optional(),
 	engine_error: rpcErrorSchema.shape.error.optional(),
 });
+export type SetAudioMixInput = z.infer<typeof setAudioMixInputSchema>;
+export type SetAudioMixOutput = z.infer<typeof setAudioMixOutputSchema>;
 
 // The `auto` kind (T5) is APPENDED to the existing variants: it tags the "Auto"
 // pseudo-source. Existing variants (device/none/pipeline_default) are unchanged and

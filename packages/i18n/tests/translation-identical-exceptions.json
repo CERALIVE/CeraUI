@@ -34,6 +34,31 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Secure Reliable Transport protocol identifier used by transport diagnostics."
 	},
+	"live.audioMixer.delay": {
+		"value": "Delay",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Audio engineering term the owner keeps untranslated in every locale, as on mixing consoles and receivers."
+	},
+	"live.audioMixer.gain": {
+		"value": "Gain",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Audio engineering term the owner keeps untranslated in every locale, as on mixing consoles and receivers."
+	},
+	"live.audioMixer.mute": {
+		"value": "Mute",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Audio engineering term the owner keeps untranslated in every locale, as on mixing consoles and receivers."
+	},
+	"live.audioMixer.track": {
+		"value": "Track {n}",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Track label with its number; the engineering term Track stays untranslated in every locale, matching receivers."
+	},
+	"live.audioMixer.tracks": {
+		"value": "Tracks",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Audio engineering term the owner keeps untranslated in every locale, as on mixing consoles and receivers."
+	},
 	"live.encoder.accelerated": {
 		"value": "Hardware",
 		"locales": ["es"],

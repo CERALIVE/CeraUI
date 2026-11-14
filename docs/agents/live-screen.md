@@ -3,11 +3,11 @@
 This file is the target structure of the Live destination, written before any
 of it was built.
 
-Status: changes 1 to 3 below have landed — the regions, both orders, the Live
+Status: changes 1 to 4 below have landed — the regions, both orders, the Live
 bar, the two-column layout and the preview's open state exist as described, the
-layout, the opacity and the second input change while live, and the Encoder
-dialog has the automatic format, the adaptive switch and the route line.
-Changes 4-6 are still to come.
+layout, the opacity and the second input change while live, the Encoder
+dialog has the automatic format, the adaptive switch and the route line, and
+the Audio card has a strip per input. Changes 5 and 6 are still to come.
 
 How to read it:
 
@@ -201,6 +201,60 @@ must keep that ABI.
   `encoder-legacy-passthrough-reset`, which saves `video_passthrough: 'auto'` on
   its own. The federated Encoder bundle reads the host's `balancer` and
   `video_passthrough` and resets through `host.setConfig`; the ABI stays 1.
+
+#### The Audio card's mixer [EXISTS]
+
+- `AudioMixer` (`audio-mixer`) renders only when the capabilities carry
+  `audio_mix`; without it the idle `audio-card` is today's picker and meter and
+  the live screen has no `audio-card`. Idle, it sits in `audio-card` under
+  `source-audio`; live, in the `audio-card` that `LiveCockpit` renders after
+  `program-desk`, in the cards column, never in the post-stream summary window.
+- One strip per selectable audio device in `status.audio_sources` (no
+  pseudo-source, no row with an `unavailable_reason`), plus the embedded audio
+  of a network source when the engine routes it, saved under the source id.
+  Each strip, `audio-strip-<id>`, holds the switch `audio-strip-enable-<id>`;
+  while it is on, the level slider `audio-strip-gain-<id>` (the capability's
+  `gain_db_min` to `gain_db_max`, steps of 1) with `audio-strip-gain-reset-<id>`,
+  the mute button `audio-strip-mute-<id>` (`aria-pressed`), the delay field
+  `audio-strip-delay-<id>` (0 to `delay_ms_max` ms, steps of 10) and one chip
+  per track, `audio-strip-track-<id>-<n>` for 1 to `max_tracks`
+  (`aria-pressed`). `audio-strip-reason-<id>` says why a switch is disabled and
+  `audio-strip-error-<id>` (`role="alert"`, always mounted) shows a refusal.
+  Under the strips, `audio-mixer-track-hint` says most receivers play Track 1.
+- The main input is the backend's: the picker's input, Auto's resolution, or
+  the embedded audio when the picker defers to the source. Its strip is always
+  on and its switch disabled with the reason beside it. Without a main input,
+  no other strip can be turned on. At `max_inputs` enabled strips, the others
+  cannot be turned on and say the mix is full.
+- Meters: before going live, the main strip carries today's meter (the
+  picker's meter moves into it, so the card never shows the same bars twice)
+  and every other strip says its level shows once live. Live on a mix session,
+  every enabled strip shows that input's own level from the `inputs[]` of the
+  `audio-level` message, which reads unavailable when the input has no reading
+  or the socket is down; a muted input reads silent. Today's meter stays in
+  `LiveSummaryStrip` while live.
+- Idle, a change saves `streaming.setConfig({ audio_inputs })` with every
+  enabled strip, main input first, and `audio_inputs: null` once only the main
+  input is left at its defaults. An unanswered save shows as the choice; a
+  refused one puts the previous state back.
+- Live on a session whose status says `audio_mix_active`, level, mute and
+  delay call `streaming.setAudioMix` with only the changed field (the level
+  at most every 100 ms while dragging and once on release), and the values the
+  device applied win. The switches and chips are disabled and described by
+  `audio-mixer-next-start` ("Applies on next start"). Live on a session started
+  without the mix, every strip control is disabled with that text. While a mix
+  session runs, the source picker is read-only with `audio-source-mix-locked`.
+- Every refusal shown is the keyed copy of one backend token
+  (`live.audioMixer.error.<token>` for `audio_mix_unsupported`,
+  `audio_input_unknown`, `audio_inputs_empty`, `audio_input_duplicate`,
+  `audio_inputs_too_many`, `audio_tracks_invalid`, `audio_tracks_gap`,
+  `audio_gain_range`, `audio_delay_range` and `audio_mix_active`); any other
+  token, such as an engine refusal, reads as a generic refusal and never as the
+  raw token. The UI refuses a track change or a delay the backend would refuse,
+  in the backend's order and with the same copy, and sends nothing.
+- The mock backend does not bridge `audio-level` to the main socket (its meter
+  bridge is skipped under mocks), so `audio-mixer.spec.ts` injects that frame
+  when it checks the per-input meters.
 
 ### 1. Job and audience
 

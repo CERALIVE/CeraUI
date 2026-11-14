@@ -116,8 +116,9 @@ Per-input meter entries keep their measured values and map engine `input_id`
 back to picker ids. Live mix meters follow the admitted stream even if a
 deferred audio pick changes; idle meter selection is unchanged. Coverage:
 `audio-inputs.test.ts` drives the published UDS client, persistence and RPC;
-`mock-audio-contract.test.ts` pins native error serialization. The mixer UI
-and layout designer remain separate changes; no hardware qualification or
+`mock-audio-contract.test.ts` pins native error serialization. The mixer UI is
+the Audio card's strips ([live screen contract](../../../../docs/agents/live-screen.md#the-audio-cards-mixer-exists));
+the layout designer remains a separate change. No hardware qualification or
 release documentation claim follows from these host checks.
 
 `start` input is PARTIAL by contract. `updateConfig` projects the saved runtime
