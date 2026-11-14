@@ -8,14 +8,21 @@ const scenarios = suites[file];
 const testcase = (name: string, status = '') => `<testcase name="${name}">${status}</testcase>`;
 const nested = `<testsuite name="describe" file="src/tests/${file}" tests="7">${scenarios.map((name) => testcase(name)).join('')}</testsuite>`;
 const suite = `<testsuite name="src/tests/${file}" file="src/tests/${file}" tests="8" skipped="0" failures="0">${nested}${testcase('kernel scenario receipt set')}</testsuite>`;
-const report = `<testsuites>${suite}</testsuites>`;
+const additionalSuites = Object.entries(suites)
+	.filter(([name]) => name !== file)
+	.map(
+		([name, scenarios]) =>
+			`<testsuite name="src/tests/${name}" file="src/tests/${name}" tests="${scenarios.length + 1}" skipped="0" failures="0">${scenarios.map((name) => testcase(name)).join('')}${testcase('kernel scenario receipt set')}</testsuite>`,
+	)
+	.join('');
+const report = `<testsuites>${suite}${additionalSuites}</testsuites>`;
 
 test('counts descendant cases once in Bun nested suites', () => {
 	expect(checkReport(report)).toEqual({
-		kernel_files: 1,
-		testcases: 8,
+		kernel_files: 2,
+		testcases: 15,
 		skips: 0,
-		receipts: 7,
+		receipts: 13,
 	});
 });
 
@@ -49,7 +56,11 @@ test('permits deliberate skips outside the kernel manifest', () => {
 
 test('accepts compiler input containing every manifest file', () => {
 	expect(() =>
-		checkInputs(resolve(import.meta.dir, '../../apps/backend/src/tests', file)),
+		checkInputs(
+			Object.keys(suites)
+				.map((file) => resolve(import.meta.dir, '../../apps/backend/src/tests', file))
+				.join('\n'),
+		),
 	).not.toThrow();
 });
 

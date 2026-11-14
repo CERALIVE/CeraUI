@@ -3,7 +3,8 @@
 	"include": [
 		"src/tests/helpers/**/*.ts",
 		"src/tests/kernel-namespace.test.ts",
-		"src/tests/uplink-steering-route-kernel.test.ts"
+		"src/tests/uplink-steering-route-kernel.test.ts",
+		"src/tests/uplink-steering-rename-kernel.test.ts"
 	],
 	"exclude": []
 }

@@ -7,5 +7,13 @@
 		"same-metric protocol refresh uses one replace",
 		"replans from the live interface gateway",
 		"metric rollback restores only the previous default"
+	],
+	"uplink-steering-rename-kernel.test.ts": [
+		"rename retains table, fwmark rule and marked lookup",
+		"rename retains support after final-publication failure",
+		"rebinding retains support on another netdev",
+		"rebinding final-publication failure restores the old netdev",
+		"rename transition-publication failure retains support",
+		"departing identity still flushes and retires support"
 	]
 }
