@@ -65,6 +65,7 @@ import {
 	bootRuntimeConfig,
 	stopRuntimeConfigRecovery,
 } from "./modules/config-boot.ts";
+import { initLogSettings } from "./modules/device-logs/settings.ts";
 import { initIdentity } from "./modules/identity/index.ts";
 import { initRTMPIngestStats } from "./modules/ingest/rtmp.ts";
 import { initSRTIngest, stopSRTIngest } from "./modules/ingest/srt.ts";
@@ -433,6 +434,7 @@ void guardNonCritical("boot-record", async () => {
 initHardwareMonitoring();
 initDeviceStats();
 initCpu();
+await guardNonCritical("log-settings", initLogSettings);
 await guardNonCritical("encoder-load", initEncoderLoad);
 await guardNonCritical("fan", initFan);
 await guardNonCritical("rtmp-ingest", initRTMPIngestStats);
