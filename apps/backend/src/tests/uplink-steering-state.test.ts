@@ -71,6 +71,7 @@ function harness(
 	const planned: UplinkRouteCandidate[] = [];
 	return {
 		netifReady: () => true,
+		discoverRoutes: async () => [],
 		zonesReady: () => true,
 		identityCovered: () => true,
 		identityDeadlineExpired: () => false,
@@ -347,13 +348,159 @@ describe("readDesiredSteeringState", () => {
 		});
 	});
 
-	test("refuses two active identities that collide in the mark namespace", async () => {
+	test("resolves two active identities that collide in the mark namespace", async () => {
 		const h = harness({ markForIdentity: () => 0xca001100 });
 
-		await expect(readDesiredSteeringState(h)).rejects.toMatchObject({
-			reason: "mark_collision",
+		const outcome = await readDesiredSteeringState(h).then(
+			(state) => state,
+			(error: unknown) => error,
+		);
+		expect(outcome).toMatchObject({
+			uplinks: [
+				{ ifname: "wlan0", mark: 0xca001200 },
+				{ ifname: "wwan0", mark: 0xca001100 },
+			],
 		});
-		expect(h.planned).toEqual([]);
+		expect(h.planned.map(({ mark }) => mark)).toEqual([0xca001200, 0xca001100]);
+	});
+
+	test("keeps non-colliding marks and route plans byte-identical", async () => {
+		const state = await readReadySteeringState(harness());
+
+		expect(JSON.stringify(state)).toMatchSnapshot("non-colliding steering");
+	});
+
+	test("steers constructed twin modems whose physical identities hash to the same slot", async () => {
+		const identities = ["constructed-twin-322", "constructed-twin-386"];
+		expect(identities.map(stableUplinkMark)).toEqual([0xca671800, 0xca671800]);
+		const h = harness({
+			interfaces: () => ({
+				eth9: netif("10.43.0.1", "255.255.255.0", NETIF_ERR_SHAREDLAN),
+				wwan0: netif("100.64.1.2"),
+				wwan1: netif("100.64.2.2"),
+			}),
+			health: () => [],
+			physicalIdentity: (ifname) =>
+				ifname === "wwan0" ? "constructed-twin-386" : "constructed-twin-322",
+		});
+
+		await expect(readDesiredSteeringState(h)).resolves.toMatchObject({
+			uplinks: [
+				{ ifname: "wwan0", mark: 0xca671900 },
+				{ ifname: "wwan1", mark: 0xca671800 },
+			],
+			routes: [
+				{ ifname: "wwan0", mark: 0xca671900 },
+				{ ifname: "wwan1", mark: 0xca671800 },
+			],
+		});
+	});
+
+	test.each([
+		{
+			name: "two claimants",
+			slots: [17, 17],
+			expected: [17, 18],
+		},
+		{
+			name: "later natural owner reserves the next slot",
+			slots: [17, 17, 18],
+			expected: [17, 19, 18],
+		},
+		{
+			name: "multiple probers skip every natural owner",
+			slots: [17, 17, 17, 18],
+			expected: [17, 19, 20, 18],
+		},
+		{
+			name: "wrap skips zero",
+			slots: [0xffff, 0xffff],
+			expected: [0xffff, 1],
+		},
+		{
+			name: "wrap skips reserved slot one",
+			slots: [0xffff, 0xffff, 1],
+			expected: [0xffff, 2, 1],
+		},
+	])(
+		"assigns $name deterministically across input orders and fresh builders",
+		async ({ slots, expected }) => {
+			const devices = slots.map((slot, index) => ({
+				identity: `constructed-${index}`,
+				ifname: `wwan${slots.length - index}`,
+				mark: (0xca000000 | (slot << 8)) >>> 0,
+			}));
+			for (const order of [
+				devices,
+				[...devices].reverse(),
+				[...devices.slice(1), ...devices.slice(0, 1)],
+			]) {
+				const h = harness({
+					interfaces: () => ({
+						eth9: netif("10.43.0.1", "255.255.255.0", NETIF_ERR_SHAREDLAN),
+						...Object.fromEntries(
+							order.map(({ ifname }) => [ifname, netif("100.64.1.2")]),
+						),
+					}),
+					health: () => [],
+					physicalIdentity: (ifname) =>
+						devices.find((device) => device.ifname === ifname)?.identity ?? "",
+					markForIdentity: (identity) =>
+						devices.find((device) => device.identity === identity)?.mark ?? 0,
+				});
+
+				await expect(readDesiredSteeringState(h)).resolves.toMatchObject({
+					uplinks: devices
+						.map(({ identity, ifname }, index) => ({
+							identity,
+							ifname,
+							mark: (0xca000000 | ((expected[index] ?? 0) << 8)) >>> 0,
+						}))
+						.reverse(),
+				});
+			}
+		},
+	);
+
+	test("only probers move when a new natural owner needs their assigned slot", async () => {
+		const h = harness({
+			interfaces: () => ({
+				eth9: netif("10.43.0.1", "255.255.255.0", NETIF_ERR_SHAREDLAN),
+				wwan0: netif("100.64.1.2"),
+				wwan1: netif("100.64.2.2"),
+			}),
+			health: () => [],
+			physicalIdentity: (ifname) => `constructed-${ifname}`,
+			markForIdentity: (identity) =>
+				identity === "constructed-wwan2" ? 0xca001200 : 0xca001100,
+		});
+		await expect(readDesiredSteeringState(h)).resolves.toMatchObject({
+			uplinks: [
+				{ ifname: "wwan0", mark: 0xca001100 },
+				{ ifname: "wwan1", mark: 0xca001200 },
+			],
+		});
+		const expanded = {
+			...h,
+			interfaces: () => ({
+				...h.interfaces(),
+				wwan2: netif("100.64.3.2"),
+			}),
+		};
+
+		await expect(readDesiredSteeringState(expanded)).resolves.toMatchObject({
+			uplinks: [
+				{ ifname: "wwan0", mark: 0xca001100 },
+				{ ifname: "wwan1", mark: 0xca001300 },
+				{ ifname: "wwan2", mark: 0xca001200 },
+			],
+		});
+		await expect(readDesiredSteeringState(h)).resolves.toMatchObject({
+			uplinks: [
+				{ ifname: "wwan0", mark: 0xca001100 },
+				{ ifname: "wwan1", mark: 0xca001200 },
+			],
+		});
 	});
 });
 

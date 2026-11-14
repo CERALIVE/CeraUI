@@ -105,6 +105,7 @@ function recoveredSharing(classified = false) {
 				classified
 					? {
 							netifReady: hasNetifSnapshot,
+							discoverRoutes: async () => [],
 							zonesReady: () => true,
 							identityCovered: usbNetScanCovers,
 							identityDeadlineExpired,
@@ -166,6 +167,7 @@ function identityDeadlineFixture() {
 			readDesiredSteeringState(
 				{
 					netifReady: hasNetifSnapshot,
+					discoverRoutes: async () => [],
 					zonesReady: () => true,
 					identityCovered: usbNetScanCovers,
 					identityDeadlineExpired,

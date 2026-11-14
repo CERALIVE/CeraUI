@@ -1,3 +1,4 @@
+import { logger } from "../../../helpers/logger.ts";
 import { resolveModemPhysicalIdentity } from "../../modems/physical-identity-source.ts";
 import { isConcurrentApIfname } from "../../wifi/wifi-concurrent-interface.ts";
 import { getWifiInterfacesByMacAddress } from "../../wifi/wifi-connections.ts";
@@ -24,8 +25,12 @@ import {
 	SteeringUnavailableError,
 	type SteeringUplink,
 } from "./contracts.ts";
-import { planUplinkRoute, type UplinkRouteCandidate } from "./route-manager.ts";
-import { stableUplinkMark } from "./ruleset.ts";
+import {
+	discoverOwnedUplinkRoutes,
+	planUplinkRoute,
+	type UplinkRouteCandidate,
+} from "./route-manager.ts";
+import { markForSlot, stableUplinkMark } from "./ruleset.ts";
 import { cidrsOverlap, subnetCidr } from "./subnet.ts";
 
 type NetworkSnapshot = Record<string, NetworkInterface | undefined>;
@@ -48,6 +53,7 @@ export interface SteeringStateBuilderDeps {
 	readonly planRoute: (
 		candidate: UplinkRouteCandidate,
 	) => Promise<UplinkRoutePlan>;
+	readonly discoverRoutes: () => Promise<readonly UplinkRoutePlan[]>;
 }
 
 const defaultDeps: SteeringStateBuilderDeps = {
@@ -67,11 +73,13 @@ const defaultDeps: SteeringStateBuilderDeps = {
 		isConcurrentApIfname(ifname) ||
 		(entry.error & (NETIF_ERR_HOTSPOT | NETIF_ERR_SHAREDLAN)) !== 0,
 	planRoute: (candidate) => planUplinkRoute(candidate),
+	discoverRoutes: discoverOwnedUplinkRoutes,
 };
 
 export interface SteeringReadinessContext {
 	readonly hasAppliedState?: boolean;
 	readonly zonesReadyBypass?: boolean;
+	readonly appliedUplinks?: readonly SteeringUplink[];
 }
 
 export interface PendingSteeringState {
@@ -95,7 +103,7 @@ export async function readDesiredSteeringState(
 	if (zones.length === 0) return { clientZones: [], uplinks: [], routes: [] };
 	assertClientZonesDisjoint(zones);
 	const health = new Map(deps.health().map((record) => [record.iface, record]));
-	const { candidates, identityPending } = collectUplinkCandidates(
+	const { candidates: collected, identityPending } = collectUplinkCandidates(
 		interfaces,
 		zones,
 		health,
@@ -103,7 +111,23 @@ export async function readDesiredSteeringState(
 	);
 	if (!context.hasAppliedState && identityPending)
 		return { pending: true, netifReady: true, reason: "identity" };
-	assertNoOverlap(zones, candidates);
+	assertNoOverlap(zones, collected);
+	let appliedUplinks = context.appliedUplinks ?? [];
+	if (!context.hasAppliedState && appliedUplinks.length === 0) {
+		const recovered = await deps.discoverRoutes();
+		appliedUplinks = recovered.map((route) => ({
+			identity:
+				collected.find((candidate) => candidate.uplink.ifname === route.ifname)
+					?.uplink.identity ?? route.identity,
+			ifname: route.ifname,
+			mark: route.mark,
+			selectable: false,
+			weight: 0,
+		}));
+	}
+	const candidates = resolveMarkCollisions(collected, appliedUplinks).sort(
+		(a, b) => a.uplink.ifname.localeCompare(b.uplink.ifname),
+	);
 	assertDistinctMarks(candidates);
 	const routes: UplinkRoutePlan[] = [];
 	for (const candidate of candidates) {
@@ -199,11 +223,46 @@ function collectUplinkCandidates(
 		});
 	}
 	return {
-		candidates: candidates.sort((a, b) =>
-			a.uplink.ifname.localeCompare(b.uplink.ifname),
-		),
+		candidates,
 		identityPending,
 	};
+}
+
+function resolveMarkCollisions(
+	candidates: UplinkCandidate[],
+	appliedUplinks: readonly SteeringUplink[],
+): UplinkCandidate[] {
+	candidates.sort((a, b) => a.uplink.identity.localeCompare(b.uplink.identity));
+	const marked = candidates.map((candidate) => {
+		const applied = appliedUplinks.find(
+			(uplink) => uplink.identity === candidate.uplink.identity,
+		);
+		return applied === undefined
+			? candidate
+			: { ...candidate, uplink: { ...candidate.uplink, mark: applied.mark } };
+	});
+	// Departing marks stay reserved until the applier retires their old flows.
+	const owners = new Map(appliedUplinks.map((uplink) => [uplink.mark, uplink]));
+	for (const { uplink } of marked) {
+		if (!owners.has(uplink.mark)) owners.set(uplink.mark, uplink);
+	}
+	return marked.map((candidate) => {
+		const { uplink } = candidate;
+		const owner = owners.get(uplink.mark);
+		if (owner?.identity === uplink.identity) return candidate;
+		let slot = (uplink.mark >>> 8) & 0xffff;
+		do {
+			slot = slot === 0xffff ? 1 : slot + 1;
+		} while (owners.has(markForSlot(slot)));
+		const mark = markForSlot(slot);
+		owners.set(mark, uplink);
+		logger.info("resolved uplink steering mark collision", {
+			iface: uplink.ifname,
+			otherIface: owner?.ifname,
+			mark,
+		});
+		return { ...candidate, uplink: { ...uplink, mark } };
+	});
 }
 
 function assertNoOverlap(
