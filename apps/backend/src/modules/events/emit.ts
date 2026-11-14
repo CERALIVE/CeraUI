@@ -5,7 +5,7 @@ import {
 } from "@ceraui/rpc/events";
 import { logger, logRedact } from "../../helpers/logger.ts";
 import { currentBootId } from "../device-logs/boot-id.ts";
-import { appendEvent, tailSeq } from "./store.ts";
+import { appendEvent, readEvents, tailSeq } from "./store.ts";
 
 type DeviceEvent = Parameters<typeof appendEvent>[0];
 interface EventTimer {
@@ -17,6 +17,7 @@ export interface EventEmitterDeps {
 	readonly bootId: typeof currentBootId;
 	readonly tailSeq: () => number;
 	readonly appendEvent: typeof appendEvent;
+	readonly readEvents: typeof readEvents;
 	readonly log: (
 		level: string,
 		message: string,
@@ -32,6 +33,7 @@ function defaultDeps(): EventEmitterDeps {
 		bootId: currentBootId,
 		tailSeq,
 		appendEvent,
+		readEvents,
 		log: (level, message, meta) => {
 			logger.log(level, message, meta);
 		},
@@ -69,6 +71,7 @@ let boot: string | undefined;
 let lastSync: number | undefined;
 const windows = new Map<string, Window>();
 const updates = new Set<string>();
+let updatesSeeded = false;
 
 function warn(message: string, code?: EventCode): void {
 	try {
@@ -95,6 +98,7 @@ function clearCoalescing(): void {
 	}
 	windows.clear();
 	updates.clear();
+	updatesSeeded = false;
 }
 
 function publish(pending: Pending, at: number, suppressed?: number): void {
@@ -174,6 +178,25 @@ export function emitEvent<C extends EventCode>(
 		};
 		const at = deps.now();
 		if (definition.family === "update") {
+			if (!updatesSeeded) {
+				updatesSeeded = true;
+				try {
+					const registry = new Map(Object.entries(EVENT_REGISTRY));
+					for (const event of deps.readEvents()) {
+						const storedDefinition = registry.get(event.code);
+						if (
+							event.bootId !== bootId ||
+							storedDefinition?.family !== "update"
+						)
+							continue;
+						updates.add(storedDefinition.subject(event.params));
+						if (updates.size >= MAX_SUBJECTS) break;
+					}
+				} catch {
+					updates.clear();
+					warn("event update seed failed");
+				}
+			}
 			if (updates.has(subject) || updates.size >= MAX_SUBJECTS) return;
 			updates.add(subject);
 		} else {
