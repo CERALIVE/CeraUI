@@ -22,6 +22,9 @@ import type {
 	ClaimCodeOutput,
 	CompletePairingInput,
 	CompletePairingOutput,
+	EventBootRecord,
+	EventListInput,
+	EventListOutput,
 	FccUnlockOptionsInput,
 	FccUnlockOptionsOutput,
 	GetEngineOutput,
@@ -639,6 +642,11 @@ export type AddonOpResult =
  * Maps contract structure to callable async functions
  */
 export interface TypedRPC {
+	events: {
+		list: (input: EventListInput) => Promise<EventListOutput>;
+		boots: () => Promise<EventBootRecord[]>;
+		clear: () => Promise<SuccessResponse>;
+	};
 	auth: {
 		login: (input: LoginInput) => Promise<LoginOutput>;
 		setPassword: (input: SetPasswordInput) => Promise<SuccessResponse>;

@@ -13,6 +13,7 @@ import type {
 	CaptureDevice,
 	ConfigMessage,
 	CpuInfo,
+	DeviceEvent,
 	DeviceStats,
 	DevicesMessage,
 	EncoderLoad,
@@ -41,6 +42,8 @@ import type {
 import {
 	CONFIG_CHANGE_EVENT,
 	configChangeStateSchema,
+	deviceEventSchema,
+	EVENT_PUSH,
 	ethernetRoleMessageSchema,
 	hardwareTypeSchema,
 	notificationsMessageSchema,
@@ -117,6 +120,14 @@ import {
 } from "./wifi-adapter-modes.svelte";
 
 export { mergeModemList };
+
+let eventFeedListener: ((events: DeviceEvent[]) => void) | undefined;
+
+export function setEventFeedListener(
+	listener: ((events: DeviceEvent[]) => void) | undefined,
+): void {
+	eventFeedListener = listener;
+}
 
 // ============================================
 // Svelte 5 Reactive State ($state)
@@ -511,6 +522,23 @@ function handleMessage(
 	if (!connectionReadyState) connectionReadyState = true;
 
 	switch (type) {
+		case EVENT_PUSH: {
+			if (
+				!eventFeedListener ||
+				!data ||
+				typeof data !== "object" ||
+				!("append" in data) ||
+				!Array.isArray(data.append)
+			)
+				break;
+			const events: DeviceEvent[] = [];
+			for (const record of data.append) {
+				const parsed = deviceEventSchema.safeParse(record);
+				if (parsed.success) events.push(parsed.data);
+			}
+			if (events.length) eventFeedListener(events);
+			break;
+		}
 		case "auth":
 			authState = data as typeof authState;
 			break;
@@ -1238,6 +1266,7 @@ export function initSubscriptions(): void {
  * Reset all state (for testing or logout)
  */
 export function resetState(): void {
+	eventFeedListener = undefined;
 	authState = undefined;
 	configState = undefined;
 	statusState = undefined;

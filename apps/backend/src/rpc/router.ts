@@ -35,6 +35,11 @@ import {
 	devRebindWifiProcedure,
 } from "./procedures/dev.procedure.ts";
 import {
+	clearEventsProcedure,
+	eventBootsProcedure,
+	listEventsProcedure,
+} from "./procedures/events.procedure.ts";
+import {
 	acknowledgeMutationProcedure,
 	configureModemProcedure,
 	decommissionMutationProcedure,
@@ -167,6 +172,11 @@ const base = os.$context<RPCContext>();
 
 const stableRoutes = {
 	ui: base.router({ heartbeat: heartbeatProcedure }),
+	events: base.router({
+		list: listEventsProcedure,
+		boots: eventBootsProcedure,
+		clear: clearEventsProcedure,
+	}),
 	auth: base.router({
 		login: loginProcedure,
 		setPassword: setPasswordProcedure,
