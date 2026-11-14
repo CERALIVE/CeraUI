@@ -24,6 +24,7 @@ import {
 	getRouterCellularMarker,
 } from "../../network/router-cellular-scan.ts";
 import { parseAuthorityJson } from "../update-orchestrator/strict-authority-json.ts";
+import { UPDATE_INVENTORY_NMCLI_FIELDS } from "./candidate-inventory.ts";
 import {
 	classifyHttp,
 	classifyTransfer,
@@ -410,7 +411,7 @@ async function probeUpdateTransport(
 			"nmcli",
 			"-t",
 			"-f",
-			"GENERAL.DEVICE,GENERAL.TYPE,GENERAL.STATE,GENERAL.METERED",
+			UPDATE_INVENTORY_NMCLI_FIELDS,
 			"device",
 			"show",
 		]);

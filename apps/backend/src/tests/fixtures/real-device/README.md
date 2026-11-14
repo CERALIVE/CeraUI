@@ -105,7 +105,7 @@ the checkout; fixture tests resolve only repo-local paths.
 | `b2-status`, `b2-operation`, `b2-rauc-service`, `b2-rauc-stat`, `b2-rauc-cgroup-procs`, `b2-blocks`, `b2-mountinfo` | `observeRaucStage`: idle instance `656:879`, target inactive, boot primary `rootfs.0`, no stage resources | Live install/NBD/dm/mount ownership, writer retirement and healthy boot verdict (healthy read intentionally unavailable in replay) |
 | `b2-rauc-cgroup`, `b2-dm`, `b2-nbd` | `observeRaucStage` NBD attribution accepts the real `0::/<path>` row (test-constructed `nbd0` pid only); no aggregated-output parser for dm/nbd listings; real block list contains no NBD/dm nodes | NBD attribution, dm UUID/slaves and RAUC mount positive branches require live install |
 | `b2-clients` | `osInstallClientsGone`: actual NUL-separated RAUC service argv is not an installer; captured comm-filtered inventory contains only RAUC | A present installer client and whole-proc race/failure handling |
-| `b2-nmcli` | `selectUpdateTransport` / `discoverCandidates`: real Ethernet connected/unmetered candidate classification | Other device-kind qualification |
+| `b2-nmcli` | `selectUpdateTransport` / `discoverCandidates`: real Ethernet connected/unmetered candidate classification | Connected modem capture still owed; the constructed twin replay below covers control-port/data-interface matching |
 | `b2-version`, guardian `version` / `os`, guard fdinfo/locks/job | Historical capture-base supporting evidence; H4/H6 now replay it through exported strict lock ownership and typed zero-Job observation | New positive kernel-resource and nonzero-Job captures remain owed; parser implementation is not a hardware pass |
 
 Rock had no active NBD/dm mapping or private update route. Its real empty private
@@ -197,6 +197,15 @@ The captured boot ID (in `bootId` and `healthy.boot_id`) is normalized to the
 use the same value; nothing else in the capture was substituted.
 
 ## NetworkManager field and profile fixtures
+
+`rock-nm-1.52.1-twin-modem-general.txt` is a CONSTRUCTED replay, not a
+connected-bearer capture. Its fields and device-show rendering follow the
+captured NM 1.52.1 field lists and shapes; its control-port/data-interface
+mismatch follows issue #431. Neither bench modem had a connected bearer, so
+the connected states and IP interfaces are constructed. Tests strip only the
+header envelope and replay the payload through candidate discovery and update
+selection/consent. A real connected-bearer capture will be added later as an
+additional fixture. This replay does not qualify hardware connectivity.
 
 `nm-1.52.1-device-show-fields.txt` contains exactly the union of the GENERAL,
 CONNECTIONS and IP4 allowed fields returned by NM 1.52.1 on the Rock on
