@@ -101,7 +101,16 @@ export type RouterCellularMarker = {
 	serial?: string;
 };
 
+export type LinkRead =
+	| { readonly ok: true; readonly target: string }
+	| { readonly ok: false; readonly code: string };
+export type NetdevBus =
+	| { readonly kind: "bus"; readonly bus: string }
+	| { readonly kind: "no-device" | "vanished" }
+	| { readonly kind: "unreadable"; readonly code: string };
+
 export type RouterCellularScanDeps = {
+	readLinkResult?: (path: string) => Promise<LinkRead>;
 	/** Absent for isolated reader fixtures; production uses device config. */
 	sharedSerials?: {
 		load(): readonly string[];
@@ -147,6 +156,20 @@ async function defaultReadLinkName(path: string): Promise<string | undefined> {
 	}
 }
 
+async function defaultReadLinkResult(path: string): Promise<LinkRead> {
+	try {
+		return { ok: true, target: await readlink(path) };
+	} catch (error) {
+		const code =
+			error instanceof Error &&
+			"code" in error &&
+			typeof error.code === "string"
+				? error.code
+				: "UNKNOWN";
+		return { ok: false, code };
+	}
+}
+
 export const defaultRouterCellularScanDeps: RouterCellularScanDeps = {
 	sharedSerials: {
 		load: () => getConfig().usb_serial_shared ?? [],
@@ -161,6 +184,7 @@ export const defaultRouterCellularScanDeps: RouterCellularScanDeps = {
 	readAttr: defaultReadAttr,
 	resolveLink: defaultResolveLink,
 	readLinkName: defaultReadLinkName,
+	readLinkResult: defaultReadLinkResult,
 };
 
 /** Parse a sysfs hex-byte attribute (`"0a"`, `"ff"`); `undefined` when unusable. */
@@ -363,13 +387,24 @@ export async function readUsbNetDevice(
 	};
 }
 
-export function readNetdevSubsystem(
+export async function readNetdevBus(
 	ifname: string,
 	deps: RouterCellularScanDeps = defaultRouterCellularScanDeps,
-): Promise<string | undefined> {
-	return deps.readLinkName(
-		join(deps.sysfsRoot, "sys/class/net", ifname, "device/subsystem"),
-	);
+): Promise<NetdevBus> {
+	const read = deps.readLinkResult ?? defaultReadLinkResult;
+	const path = join(deps.sysfsRoot, "sys/class/net", ifname);
+	let result = await read(join(path, "device/subsystem"));
+	if (!result.ok && result.code !== "ENOENT")
+		result = await read(join(path, "device/subsystem"));
+	if (result.ok) return { kind: "bus", bus: basename(result.target) };
+	if (result.code !== "ENOENT")
+		return { kind: "unreadable", code: result.code };
+	let device = await read(path);
+	if (!device.ok && device.code !== "ENOENT") device = await read(path);
+	if (device.ok) return { kind: "no-device" };
+	return device.code === "ENOENT"
+		? { kind: "vanished" }
+		: { kind: "unreadable", code: device.code };
 }
 
 /**
