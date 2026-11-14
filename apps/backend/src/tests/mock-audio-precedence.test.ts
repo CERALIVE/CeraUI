@@ -167,6 +167,50 @@ const unavailableComposition: ReturnType<typeof refusal> = {
 	captureCauses: [{ device: "composition", cause: "composition-unsupported" }],
 };
 
+for (const row of [
+	{
+		name: "input count before explicit device",
+		audio: {
+			inputs: Array.from({ length: 5 }, (_, i) => input(`missing-${i}`)),
+			device: first,
+		},
+		token: "audio-mix-too-many-inputs",
+	},
+	{
+		name: "explicit device before mode none",
+		audio: { inputs: [input()], device: first, mode: "none" },
+		token: "audio-mix-with-device",
+	},
+	{
+		name: "mode none before duplicate input",
+		audio: { inputs: [input(), input()], mode: "none" },
+		token: "audio-mix-with-mode-none",
+	},
+	{
+		name: "embedded eligibility before invalid tracks",
+		audio: { inputs: [input("embedded", [0])] },
+		token: "audio-mix-embedded-without-network-source",
+	},
+	{
+		name: "invalid tracks before gain",
+		audio: { inputs: [{ ...input(first, [0]), gain_db: 13 }] },
+		token: "audio-tracks-invalid",
+	},
+	{
+		name: "gain before delay",
+		audio: { inputs: [{ ...input(), gain_db: 13, delay_ms: 2001 }] },
+		token: "audio-gain-range",
+	},
+] satisfies Array<{ name: string; audio: AudioConfig; token: string }>) {
+	test(`Start prioritizes ${row.name} when both fail atomically`, () => {
+		const previous = structuredClone(getMockState().engineStart);
+		expect(
+			refusal(() => startMockStreaming({ ...base, audio: row.audio })),
+		).toEqual(invalidMix(row.token));
+		expect(getMockState().engineStart).toEqual(previous);
+	});
+}
+
 for (const audio of audioFailures) {
 	for (const composition of compositionFailures) {
 		test(`Start prioritizes ${audio.name} before ${composition.name}`, () => {

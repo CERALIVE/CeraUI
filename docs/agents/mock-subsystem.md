@@ -155,6 +155,10 @@ Geometry refusals and inactive live changes also retain the complete native
 message and `data.code`. `mock-audio-precedence.test.ts` pins paired failures,
 including audio shape versus composition, unknown audio versus composition,
 geometry versus availability, and live session/identity/value admission.
+Its simultaneous audio refusals pin count before device, device before mode none,
+mode none before duplicate identity, embedded eligibility before tracks, tracks
+before gain, and gain before delay. Count, device and mode are Start-only fields;
+live updates retain admitted membership and exercise gain/delay priority atomically.
 `providers/composition.ts` owns the shared native composition admission. After
 geometry and compositor availability it checks a blank secondary (Rust Unicode
 White_Space semantics), finite alpha in the inclusive range 0 to 1, secondary
