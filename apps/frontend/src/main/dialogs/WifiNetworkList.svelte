@@ -11,10 +11,12 @@
 -->
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
+import { requiresSaeKeyMgmt } from '@ceraui/rpc';
 import type { AvailableWifiNetwork, WifiInterface } from '@ceraui/rpc/schemas';
 import {
 	Check,
 	Clock,
+	KeyRound,
 	Loader2,
 	Lock,
 	Plug,
@@ -78,7 +80,10 @@ interface Props {
 	disconnecting: string | undefined;
 	/** UUID of the saved network whose forget is in flight, if any. */
 	forgetting: string | undefined;
-	/** The new secured network whose inline password form is expanded, if any. */
+	/**
+	 * The secured network whose inline password form is expanded, if any: a new
+	 * one, or a saved one whose password is being corrected.
+	 */
 	pendingNew: AvailableWifiNetwork | undefined;
 	/** SSID currently showing the forget-confirm affordance, if any. */
 	confirmForget: string | undefined;
@@ -212,6 +217,9 @@ const superseded = $derived(wifiScanResultsSuperseded(scanState));
 			{const osBusy = $derived(!!connecting || !!disconnecting || !!forgetting)}
 			{const expanded = $derived(pendingNew?.ssid === network.ssid)}
 			{const confirming = $derived(confirmForget === network.ssid)}
+			<!-- The device rewrites a saved profile's secret in place only off the SAE-only
+			     path; an SAE-only join always adds a second profile. -->
+			{const correctable = $derived(isSecured(network) && !requiresSaeKeyMgmt(network.security))}
 			<!-- CT-2, not CT-1: the network is genuinely in the air, so the row stays
 			     visible and disabled-with-reason rather than being hidden. -->
 			{const block = $derived(wifiRowBlock(network, iface?.capabilities))}
@@ -331,6 +339,20 @@ const superseded = $derived(wifiScanResultsSuperseded(scanState));
 									<Plug class="size-4" />
 									<span class="hidden sm:inline">{m["wifiSelector.button.connect"]()}</span>
 								</Button>
+								{#if correctable}
+									<Button
+										aria-expanded={expanded}
+										aria-label={`${m["wifiSelector.button.changePassword"]()} ${network.ssid}`}
+										class="text-muted-foreground hover:text-foreground size-9"
+										disabled={ifaceBusy || osBusy || !!block}
+										onclick={() => onConnectNew(network)}
+										size="icon"
+										title={blockReason ?? m["wifiSelector.button.changePassword"]()}
+										variant="ghost"
+									>
+										<KeyRound class="size-4" />
+									</Button>
+								{/if}
 							{/if}
 							<Button
 								aria-label={`${m["wifiSelector.button.forget"]()} ${network.ssid}`}
@@ -379,7 +401,7 @@ const superseded = $derived(wifiScanResultsSuperseded(scanState));
 					</div>
 				{/if}
 
-				<!-- Inline password form for a new secured network -->
+				<!-- Inline password form for a new secured network, or a saved one's correction -->
 				{#if expanded}
 					<WifiConnectForm
 						{passwordMin}

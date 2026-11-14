@@ -1,6 +1,6 @@
 <!--
   WifiConnectForm.svelte — inline password entry + connect action for a new
-  (unsaved) secured WiFi network.
+  (unsaved) secured WiFi network, or a saved one whose password is corrected.
 
   Extracted verbatim from WifiSelectorDialog.svelte's `expanded` block. The parent
   owns the connect/submit logic and the password floor; this component only drives
