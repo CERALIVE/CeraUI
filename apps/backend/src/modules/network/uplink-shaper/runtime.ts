@@ -43,6 +43,7 @@ export async function tickUplinkShaper(): Promise<void> {
 	if (!enabled) return;
 	try {
 		const steering = await readDesiredSteeringState();
+		if ("pending" in steering) return;
 		const telemetry = buildLinkTelemetry()?.links ?? [];
 		await coordinator.update({
 			streaming: getStreamLifecycleState() === "streaming",
