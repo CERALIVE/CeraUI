@@ -2,6 +2,31 @@
 
 ## BROADCAST EVENTS
 
+### Netif publication and USB scan commits [EXISTS]
+
+The OS producer waits up to 2 seconds before publishing interface names not
+covered by the last committed USB scan. It scans the full parsed interface set,
+rechecks after supersession and fences older OS refreshes. The periodic USB
+caller joins an in-flight scan, so a sweep of the old netif set cannot replace
+the producer's new-interface sweep.
+
+`onUsbNetScanCommitted(listener)` is an internal subscription, with an unsubscribe
+return value. It fires only after a changed committed snapshot; the deterministic
+snapshot key includes covered names and physical descriptors, including serial
+and idPath. It adds no wire event and never publishes raw serials. Steering
+subscribes to request reconciliation even when the netif payload is unchanged.
+
+`usbNetScanCovers(ifname)` accepts completed reads with or without a USB
+descriptor. `identityDeadlineExpired(ifname)` uses the shared 15 second monotonic
+clock (`getms` / `process.hrtime`) starting at first netif publication, warning once
+when an uncovered name reaches fallback. Wall-clock corrections cannot expire it
+early or revoke expiry. Consumers must use these predicates rather than independent
+identity clocks. Steering holds recovered sharing while the first OS snapshot or Wi-Fi
+zone classification is pending. Its separate startup reconcile deadline bypasses
+Wi-Fi classification 15 seconds after the first pending result with a netif
+snapshot; if classification never succeeds and no zone is known, that bypass
+tears down recovered sharing. See `flow-sticky-shared-client-steering.md`.
+
 ### Per-uplink health (`uplinks`) [EXISTS]
 
 `modules/network/uplink-health/` owns the client-steering health verdict. Its one
