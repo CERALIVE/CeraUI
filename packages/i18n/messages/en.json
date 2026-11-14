@@ -1827,7 +1827,7 @@
 	"network.sharing.band.noHealthyUplinkTitle": "No healthy uplink",
 	"network.sharing.band.noHealthyUplinkBody": "Every uplink is down, so connected devices have no way out. The stream itself is unaffected.",
 	"network.sharing.band.steeringUnavailableTitle": "Client steering unavailable",
-	"network.sharing.band.steeringUnavailableBody": "Connected devices fall back to the default route instead of being spread across uplinks.",
+	"network.sharing.band.steeringUnavailableBody": "CeraUI couldn't apply the latest split of devices across uplinks. The previous setup may stay active; without one, devices use the default route.",
 	"network.sharing.band.uplinksUnreportedTitle": "Uplink health not reported",
 	"network.sharing.band.uplinksUnreportedBody": "The device has not sent an uplink health report yet.",
 	"network.sharing.steeringReason.bondCandidate": "A client zone is also a bonded uplink, which the device refuses to steer.",

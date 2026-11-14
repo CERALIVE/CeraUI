@@ -1830,7 +1830,7 @@
 	"network.sharing.band.noHealthyUplinkTitle": "Aucune liaison opérationnelle",
 	"network.sharing.band.noHealthyUplinkBody": "Toutes les liaisons sont hors service, les appareils connectés n'ont donc aucune sortie. Le flux lui-même n'est pas affecté.",
 	"network.sharing.band.steeringUnavailableTitle": "Répartition entre liaisons indisponible",
-	"network.sharing.band.steeringUnavailableBody": "Les appareils connectés utilisent la route par défaut au lieu d'être répartis entre les liaisons.",
+	"network.sharing.band.steeringUnavailableBody": "CeraUI n'a pas pu appliquer la dernière répartition des appareils entre les liaisons. La configuration précédente peut rester active ; sans configuration précédente, les appareils utilisent la route par défaut.",
 	"network.sharing.band.uplinksUnreportedTitle": "État des liaisons non signalé",
 	"network.sharing.band.uplinksUnreportedBody": "L'appareil n'a pas encore envoyé de rapport sur l'état des liaisons.",
 	"network.sharing.steeringReason.bondCandidate": "Une zone cliente est aussi une liaison agrégée, que l'appareil refuse d'utiliser pour la répartition.",

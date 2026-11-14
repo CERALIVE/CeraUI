@@ -1782,7 +1782,7 @@
 	"network.sharing.band.noHealthyUplinkTitle": "정상인 업링크 없음",
 	"network.sharing.band.noHealthyUplinkBody": "모든 업링크가 중단되어 연결된 기기가 밖으로 나갈 수 없습니다. 스트림 자체는 영향받지 않습니다.",
 	"network.sharing.band.steeringUnavailableTitle": "회선 분배를 사용할 수 없음",
-	"network.sharing.band.steeringUnavailableBody": "연결된 기기가 여러 업링크로 분배되지 않고 기본 경로를 사용합니다.",
+	"network.sharing.band.steeringUnavailableBody": "CeraUI가 기기를 업링크에 분배하는 최신 설정을 적용하지 못했습니다. 이전 설정이 계속 적용될 수 있으며, 이전 설정이 없으면 기기는 기본 경로를 사용합니다.",
 	"network.sharing.band.uplinksUnreportedTitle": "업링크 상태 미보고",
 	"network.sharing.band.uplinksUnreportedBody": "장치가 아직 업링크 상태 보고를 보내지 않았습니다.",
 	"network.sharing.steeringReason.bondCandidate": "클라이언트 영역이 결합된 업링크를 겸하고 있어 장치가 분배를 거부했습니다.",

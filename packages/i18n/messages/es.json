@@ -1830,7 +1830,7 @@
 	"network.sharing.band.noHealthyUplinkTitle": "Ningún enlace en buen estado",
 	"network.sharing.band.noHealthyUplinkBody": "Todos los enlaces están caídos, así que los equipos conectados no tienen salida. La emisión no se ve afectada.",
 	"network.sharing.band.steeringUnavailableTitle": "Reparto entre enlaces no disponible",
-	"network.sharing.band.steeringUnavailableBody": "Los equipos conectados usan la ruta predeterminada en lugar de repartirse entre los enlaces.",
+	"network.sharing.band.steeringUnavailableBody": "CeraUI no pudo aplicar el reparto más reciente de los equipos entre enlaces. La configuración anterior puede seguir activa; si no había una, los equipos usan la ruta predeterminada.",
 	"network.sharing.band.uplinksUnreportedTitle": "Estado de los enlaces sin informar",
 	"network.sharing.band.uplinksUnreportedBody": "El dispositivo todavía no ha enviado un informe del estado de los enlaces.",
 	"network.sharing.steeringReason.bondCandidate": "Una zona de clientes también es un enlace agregado, y el dispositivo se niega a repartir tráfico por ella.",

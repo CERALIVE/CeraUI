@@ -1830,7 +1830,7 @@
 	"network.sharing.band.noHealthyUplinkTitle": "Nenhum enlace saudável",
 	"network.sharing.band.noHealthyUplinkBody": "Todos os enlaces estão fora do ar, então os aparelhos conectados não têm saída. A transmissão em si não é afetada.",
 	"network.sharing.band.steeringUnavailableTitle": "Distribuição entre enlaces indisponível",
-	"network.sharing.band.steeringUnavailableBody": "Os aparelhos conectados usam a rota padrão em vez de serem distribuídos entre os enlaces.",
+	"network.sharing.band.steeringUnavailableBody": "O CeraUI não conseguiu aplicar a distribuição mais recente dos aparelhos entre os enlaces. A configuração anterior pode continuar ativa; se não havia uma, os aparelhos usam a rota padrão.",
 	"network.sharing.band.uplinksUnreportedTitle": "Saúde dos enlaces não informada",
 	"network.sharing.band.uplinksUnreportedBody": "O dispositivo ainda não enviou um relatório de saúde dos enlaces.",
 	"network.sharing.steeringReason.bondCandidate": "Uma zona de clientes também é um enlace agregado, que o dispositivo se recusa a usar na distribuição.",

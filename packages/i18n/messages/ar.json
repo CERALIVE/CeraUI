@@ -1839,7 +1839,7 @@
 	"network.sharing.band.noHealthyUplinkTitle": "لا توجد وصلة صاعدة سليمة",
 	"network.sharing.band.noHealthyUplinkBody": "جميع الوصلات الصاعدة متوقفة، لذا لا منفذ للأجهزة المتصلة إلى الخارج. أما البث نفسه فلا يتأثر.",
 	"network.sharing.band.steeringUnavailableTitle": "توزيع الأجهزة على الوصلات غير متاح",
-	"network.sharing.band.steeringUnavailableBody": "تستخدم الأجهزة المتصلة المسار الافتراضي بدل توزيعها على عدة وصلات صاعدة.",
+	"network.sharing.band.steeringUnavailableBody": "تعذّر على CeraUI تطبيق أحدث توزيع للأجهزة على الوصلات الصاعدة. قد يبقى الإعداد السابق نشطًا؛ وإن لم يكن هناك إعداد سابق، تستخدم الأجهزة المسار الافتراضي.",
 	"network.sharing.band.uplinksUnreportedTitle": "لم يُبلَّغ عن حالة الوصلات الصاعدة",
 	"network.sharing.band.uplinksUnreportedBody": "لم يرسل الجهاز بعد تقريرًا عن حالة الوصلات الصاعدة.",
 	"network.sharing.steeringReason.bondCandidate": "أحد نطاقات الأجهزة المتصلة هو أيضًا وصلة صاعدة مجمّعة، ويرفض الجهاز التوزيع عليها.",

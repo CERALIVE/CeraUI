@@ -1782,7 +1782,7 @@
 	"network.sharing.band.noHealthyUplinkTitle": "正常なアップリンクがありません",
 	"network.sharing.band.noHealthyUplinkBody": "すべてのアップリンクが停止しているため、接続中の機器は外部に出られません。配信自体には影響しません。",
 	"network.sharing.band.steeringUnavailableTitle": "回線への振り分けを利用できません",
-	"network.sharing.band.steeringUnavailableBody": "接続中の機器は複数のアップリンクに振り分けられず、既定の経路を使用します。",
+	"network.sharing.band.steeringUnavailableBody": "CeraUIは機器のアップリンクへの最新の振り分けを適用できませんでした。以前の設定が引き続き有効な場合があり、以前の設定がなければ機器は既定の経路を使用します。",
 	"network.sharing.band.uplinksUnreportedTitle": "アップリンクの状態は未報告",
 	"network.sharing.band.uplinksUnreportedBody": "本機はまだアップリンクの状態を送信していません。",
 	"network.sharing.steeringReason.bondCandidate": "クライアント範囲が結合済みアップリンクを兼ねているため、本機は振り分けを拒否しました。",
