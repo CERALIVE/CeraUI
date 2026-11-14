@@ -413,6 +413,10 @@ The app is organized into three primary destinations:
 
 A dev-only DevTools destination is available in development builds.
 
+The SSH-at-boot choice is stored in the existing device config and restored on
+each OS slot after password sync. Temporary Start/Stop remains independent.
+See the [SSH persistence contract](apps/backend/docs/agents/dev-mock-seams.md#ssh-boot-persistence-is-a-second-axis-not-a-side-effect-exists).
+
 ### Other Highlights
 
 - **Live session source switching**: the cockpit can offer engine-reported

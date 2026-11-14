@@ -19,20 +19,32 @@
  * replaces it.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type WebSocket from "ws";
 
+import { runtimeConfigSchema } from "../helpers/config-schemas.ts";
 import { initMockService, shouldUseMocks } from "../mocks/mock-service.ts";
-import { getConfig } from "../modules/config.ts";
+import {
+	getConfig,
+	getConfigFilePath,
+	saveConfig,
+	setConfigFilePath,
+} from "../modules/config.ts";
+import { bootRuntimeConfig } from "../modules/config-boot.ts";
 import { setup } from "../modules/setup.ts";
 import {
+	ensureSshPasswordSynced,
+	getSshPasswordHash,
 	getSshStatus,
 	parseSystemctlIsEnabled,
+	reconcileSshPersistence,
 	resetMockSshState,
 	resetSshPersistenceRunner,
 	resetSshServiceRunner,
 	type SshStatusDeps,
+	setSshPasswordHash,
 	setSshPersistenceRunner,
 	setSshPersistent,
 	setSshServiceRunner,
@@ -70,6 +82,10 @@ let savedMockMode: string | undefined;
 let savedDeviceType: string | undefined;
 let savedSshUser: string | undefined;
 let savedSshPass: string | undefined;
+let savedPersistent: boolean | undefined;
+let savedHash: string | undefined;
+let savedConfigPath: string;
+let configRoot: string;
 
 beforeEach(() => {
 	savedNodeEnv = process.env.NODE_ENV;
@@ -77,6 +93,13 @@ beforeEach(() => {
 	savedDeviceType = process.env.CERALIVE_DEVICE_TYPE;
 	savedSshUser = setup.ssh_user;
 	savedSshPass = getConfig().ssh_pass;
+	savedPersistent = getConfig().ssh_persistent;
+	savedHash = getSshPasswordHash();
+	savedConfigPath = getConfigFilePath();
+	configRoot = mkdtempSync(join(tmpdir(), "ssh-persistence-"));
+	setConfigFilePath(join(configRoot, "config.json"));
+	getConfig().ssh_persistent = undefined;
+	saveConfig();
 	resetMockSshState();
 });
 
@@ -94,6 +117,10 @@ afterEach(() => {
 	restore("CERALIVE_DEVICE_TYPE", savedDeviceType);
 	setup.ssh_user = savedSshUser;
 	getConfig().ssh_pass = savedSshPass;
+	getConfig().ssh_persistent = savedPersistent;
+	setSshPasswordHash(savedHash);
+	setConfigFilePath(savedConfigPath);
+	rmSync(configRoot, { recursive: true, force: true });
 });
 
 /** Production mode: the real runner seams fire, the mock branch is skipped. */
@@ -124,6 +151,8 @@ describe("setSshPersistent — the enable/disable verb", () => {
 		expect(ok).toBe(true);
 		expect(persistence).toEqual(["enable"]);
 		expect(service).toEqual([]);
+		expect(getConfig().ssh_persistent).toBe(true);
+		expect(storedChoice()).toBe(true);
 	});
 
 	test("disabling runs `disable` and NEVER start/stop", async () => {
@@ -142,6 +171,8 @@ describe("setSshPersistent — the enable/disable verb", () => {
 		expect(ok).toBe(true);
 		expect(persistence).toEqual(["disable"]);
 		expect(service).toEqual([]);
+		expect(getConfig().ssh_persistent).toBe(false);
+		expect(storedChoice()).toBe(false);
 	});
 
 	test("a refused systemctl reports failure rather than a silent success", async () => {
@@ -153,6 +184,7 @@ describe("setSshPersistent — the enable/disable verb", () => {
 		expect(await setSshPersistent(true, statusDeps({ enabled: false }))).toBe(
 			false,
 		);
+		expect(storedChoice()).toBeUndefined();
 	});
 
 	test("the device's own re-probe decides — an unchanged unit is NOT success", async () => {
@@ -164,6 +196,24 @@ describe("setSshPersistent — the enable/disable verb", () => {
 		expect(await setSshPersistent(true, statusDeps({ enabled: false }))).toBe(
 			false,
 		);
+		expect(storedChoice()).toBeUndefined();
+	});
+
+	test("an unreadable re-probe never commits a disable request", async () => {
+		enterProd();
+		getConfig().ssh_persistent = true;
+		saveConfig();
+		setSshPersistenceRunner(async () => {});
+
+		const ok = await setSshPersistent(false, {
+			...statusDeps(),
+			systemctlIsEnabled: async () => {
+				throw new Error("systemctl unavailable");
+			},
+		});
+
+		expect(ok).toBe(false);
+		expect(storedChoice()).toBe(true);
 	});
 
 	test("(dev) flips the mock flag with NO systemctl spawn", async () => {
@@ -180,6 +230,7 @@ describe("setSshPersistent — the enable/disable verb", () => {
 
 		expect(await setSshPersistent(true)).toBe(true);
 		expect(persistence).toEqual([]);
+		expect(storedChoice()).toBeUndefined();
 	});
 });
 
@@ -226,6 +277,7 @@ describe("the running state and the boot state are independent", () => {
 
 		expect(service).toEqual(["start", "stop"]);
 		expect(persistence).toEqual([]);
+		expect(storedChoice()).toBeUndefined();
 	});
 
 	test("stopping the service does NOT clear the boot arming", async () => {
@@ -243,6 +295,339 @@ describe("the running state and the boot state are independent", () => {
 
 		expect(status?.active).toBe(false);
 		expect(status?.enabled).toBe(true);
+	});
+});
+
+function storedChoice(): boolean | undefined {
+	return runtimeConfigSchema.parse(
+		JSON.parse(readFileSync(getConfigFilePath(), "utf8")),
+	).ssh_persistent;
+}
+
+describe("SSH persistence request ordering", () => {
+	test.each([
+		[true, false],
+		[false, true],
+		[true, true],
+		[false, false],
+	] as const)(
+		"a held %p confirmation cannot overwrite the later %p request",
+		async (firstChoice, lastChoice) => {
+			enterProd();
+			let unitEnabled = !firstChoice;
+			const held = Promise.withResolvers<void>();
+			const release = Promise.withResolvers<void>();
+			const deps: Partial<SshStatusDeps> = {
+				...statusDeps(),
+				systemctlIsEnabled: async () => ({
+					stdout: unitEnabled ? "enabled" : "disabled",
+					stderr: "",
+				}),
+			};
+			setSshPersistenceRunner(async (action) => {
+				unitEnabled = action === "enable";
+			});
+			const older = setSshPersistent(firstChoice, {
+				...deps,
+				systemctlIsActive: async () => {
+					held.resolve();
+					await release.promise;
+					return { stdout: "active", stderr: "" };
+				},
+			});
+			await held.promise;
+			const later = setSshPersistent(lastChoice, deps);
+			try {
+				// Drain submitted work while the older probe is explicitly held.
+				await new Promise<void>(setImmediate);
+			} finally {
+				release.resolve();
+			}
+			expect(await Promise.all([older, later])).toEqual([true, true]);
+
+			const saved = storedChoice();
+			const unitBeforeBoot = unitEnabled;
+			const bootCommands: string[] = [];
+			setSshPersistenceRunner(async (action) => {
+				bootCommands.push(action);
+				unitEnabled = action === "enable";
+			});
+			setSshServiceRunner(async (action) => {
+				bootCommands.push(action);
+			});
+			await reconcileSshPersistence(true, deps);
+
+			expect({ saved, unitBeforeBoot, bootCommands, unitEnabled }).toEqual({
+				saved: lastChoice,
+				unitBeforeBoot: lastChoice,
+				bootCommands: [],
+				unitEnabled: lastChoice,
+			});
+		},
+	);
+
+	test.each(["failed", "unconfirmed"] as const)(
+		"after a request is %s, the next request still succeeds",
+		async (outcome) => {
+			enterProd();
+			let unitEnabled = false;
+			let attempts = 0;
+			setSshPersistenceRunner(async (action) => {
+				if (attempts++ === 0) {
+					if (outcome === "failed")
+						throw Object.assign(new Error("systemctl failed"), { code: 1 });
+					return;
+				}
+				unitEnabled = action === "enable";
+			});
+			const deps = {
+				...statusDeps(),
+				systemctlIsEnabled: async () => ({
+					stdout: unitEnabled ? "enabled" : "disabled",
+					stderr: "",
+				}),
+			};
+
+			expect(await setSshPersistent(true, deps)).toBe(false);
+			expect(storedChoice()).toBeUndefined();
+			expect(await setSshPersistent(true, deps)).toBe(true);
+			expect(storedChoice()).toBe(true);
+			expect(unitEnabled).toBe(true);
+		},
+	);
+
+	test("a rejected request does not poison the next request", async () => {
+		enterProd();
+		setup.ssh_user = "-invalid";
+		await expect(setSshPersistent(true)).rejects.toThrow("invalid ssh_user");
+		setup.ssh_user = "produser";
+		setSshPersistenceRunner(async () => {});
+
+		expect(await setSshPersistent(false, statusDeps())).toBe(true);
+		expect(storedChoice()).toBe(false);
+	});
+
+	test.each(["boot", "setter"] as const)(
+		"a held %s writer cannot race the other persistence writer",
+		async (firstOwner) => {
+			enterProd();
+			getConfig().ssh_persistent = firstOwner === "setter" ? false : undefined;
+			let unitEnabled = false;
+			const serviceCommands: string[] = [];
+			setSshServiceRunner(async (action) => {
+				serviceCommands.push(action);
+			});
+			const held = Promise.withResolvers<void>();
+			const release = Promise.withResolvers<void>();
+			const deps = {
+				...statusDeps(),
+				systemctlIsEnabled: async () => ({
+					stdout: unitEnabled ? "enabled" : "disabled",
+					stderr: "",
+				}),
+			};
+			setSshPersistenceRunner(async (action) => {
+				unitEnabled = action === "enable";
+			});
+			const first =
+				firstOwner === "boot"
+					? reconcileSshPersistence(true, {
+							systemctlIsEnabled: async () => {
+								const stdout = unitEnabled ? "enabled" : "disabled";
+								held.resolve();
+								await release.promise;
+								return { stdout, stderr: "" };
+							},
+						})
+					: setSshPersistent(true, {
+							...deps,
+							systemctlIsActive: async () => {
+								held.resolve();
+								await release.promise;
+								return { stdout: "active", stderr: "" };
+							},
+						});
+			await held.promise;
+			const second =
+				firstOwner === "boot"
+					? setSshPersistent(true, deps)
+					: reconcileSshPersistence(true, deps);
+			try {
+				await new Promise<void>(setImmediate);
+			} finally {
+				release.resolve();
+			}
+			await Promise.all([first, second]);
+
+			expect(storedChoice()).toBe(true);
+			expect(unitEnabled).toBe(true);
+			expect(serviceCommands).toEqual([]);
+		},
+	);
+});
+
+describe("reconcileSshPersistence - persisted boot choice", () => {
+	let calls: string[];
+
+	beforeEach(() => {
+		enterProd();
+		calls = [];
+		setSshPersistenceRunner(async (action) => {
+			calls.push(action);
+		});
+		setSshServiceRunner(async (action) => {
+			calls.push(action);
+		});
+	});
+
+	test.each([
+		["enabled", true],
+		["disabled", false],
+	] as const)(
+		"first boot records %s without changing the unit",
+		async (state, enabled) => {
+			await reconcileSshPersistence(true, {
+				systemctlIsEnabled: async () => {
+					if (!enabled)
+						throw Object.assign(new Error("exit 1"), { stdout: `${state}\n` });
+					return { stdout: `${state}\n`, stderr: "" };
+				},
+			});
+
+			expect(storedChoice()).toBe(enabled);
+			expect(calls).toEqual([]);
+		},
+	);
+
+	test.each([
+		[true, false, ["enable", "start"]],
+		[false, true, ["disable"]],
+	] as const)(
+		"stored %p reconciles a unit enabled=%p",
+		async (choice, enabled, expected) => {
+			getConfig().ssh_persistent = choice;
+			saveConfig();
+			const before = readFileSync(getConfigFilePath(), "utf8");
+
+			await reconcileSshPersistence(true, statusDeps({ enabled }));
+
+			expect(calls).toEqual([...expected]);
+			expect(readFileSync(getConfigFilePath(), "utf8")).toBe(before);
+		},
+	);
+
+	test.each(["masked", "masked-runtime", "static", "enabled-runtime", ""])(
+		"%s is never changed or recorded as an operator choice",
+		async (state) => {
+			getConfig().ssh_persistent = true;
+			const before = readFileSync(getConfigFilePath(), "utf8");
+			await reconcileSshPersistence(true, {
+				systemctlIsEnabled: async () => ({ stdout: state, stderr: "" }),
+			});
+			expect(calls).toEqual([]);
+			expect(readFileSync(getConfigFilePath(), "utf8")).toBe(before);
+		},
+	);
+
+	test("throwing systemctl never throws and never writes config", async () => {
+		const before = readFileSync(getConfigFilePath(), "utf8");
+		await expect(
+			reconcileSshPersistence(true, {
+				systemctlIsEnabled: async () => {
+					throw new Error("systemctl unavailable");
+				},
+			}),
+		).resolves.toBeUndefined();
+		expect(calls).toEqual([]);
+		expect(readFileSync(getConfigFilePath(), "utf8")).toBe(before);
+	});
+
+	test.each([true, false])(
+		"a throwing persistence runner preserves choice=%p and never starts",
+		async (choice) => {
+			getConfig().ssh_persistent = choice;
+			saveConfig();
+			const before = readFileSync(getConfigFilePath(), "utf8");
+			setSshPersistenceRunner(async () => {
+				throw new Error("systemctl failed");
+			});
+
+			await expect(
+				reconcileSshPersistence(true, statusDeps({ enabled: !choice })),
+			).resolves.toBeUndefined();
+
+			expect(calls).toEqual([]);
+			expect(readFileSync(getConfigFilePath(), "utf8")).toBe(before);
+		},
+	);
+
+	test("temporary start never commits a boot choice", async () => {
+		await startStopSsh(stubWs(), "start_ssh", statusDeps({ active: true }));
+		expect(calls).toEqual(["start"]);
+		expect(getConfig().ssh_persistent).toBeUndefined();
+		expect(storedChoice()).toBeUndefined();
+	});
+
+	test("stored enabled without a password neither enables nor starts", async () => {
+		getConfig().ssh_persistent = true;
+		getConfig().ssh_pass = undefined;
+
+		await reconcileSshPersistence(true, statusDeps({ enabled: false }));
+
+		expect(calls).toEqual([]);
+	});
+
+	test.each([true, false])(
+		"a rebuilt damaged config learns enabled=%p and leaves the unit alone",
+		async (enabled) => {
+			writeFileSync(
+				getConfigFilePath(),
+				JSON.stringify({ autostart: "damaged", ssh_persistent: !enabled }),
+			);
+			await bootRuntimeConfig({
+				onDamagedReset: () => {},
+				sleep: async () => {},
+			});
+			expect(getConfig().ssh_persistent).toBeUndefined();
+
+			await reconcileSshPersistence(true, statusDeps({ enabled }));
+
+			expect(storedChoice()).toBe(enabled);
+			expect(calls).toEqual([]);
+		},
+	);
+
+	test("a failed password sync prevents both enabling and starting", async () => {
+		getConfig().ssh_persistent = true;
+		setSshPasswordHash("$6$old$hash");
+		const synced = await ensureSshPasswordSynced({
+			readShadow: () => SHADOW,
+			applyPassword: async () => {
+				throw new Error("passwd failed");
+			},
+		});
+
+		expect(synced).toBe(false);
+		await reconcileSshPersistence(synced, statusDeps({ enabled: false }));
+		expect(calls).toEqual([]);
+	});
+
+	test("mocks never probe, change the unit, or save config", async () => {
+		process.env.NODE_ENV = "development";
+		initMockService("multi-modem-wifi");
+		let probes = 0;
+		const before = readFileSync(getConfigFilePath(), "utf8");
+
+		await reconcileSshPersistence(true, {
+			systemctlIsEnabled: async () => {
+				probes++;
+				return { stdout: "enabled", stderr: "" };
+			},
+		});
+
+		expect(probes).toBe(0);
+		expect(calls).toEqual([]);
+		expect(readFileSync(getConfigFilePath(), "utf8")).toBe(before);
 	});
 });
 
