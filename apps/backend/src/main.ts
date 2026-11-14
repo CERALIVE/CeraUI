@@ -177,6 +177,7 @@ import {
 	awaitUpdateStartupAdjudication,
 	startUpdateOrchestrator,
 } from "./modules/system/update-orchestrator/runtime.ts";
+import { logBootRecord } from "./modules/system/version-context.ts";
 import { initHotspotCredentials } from "./modules/wifi/hotspot-credentials.ts";
 import { applyPersistedCountry } from "./modules/wifi/regdomain.ts";
 import { startWifiAdapterModeRestore } from "./modules/wifi/wifi-adapter-mode-transition.ts";
@@ -425,7 +426,10 @@ await guardNonCritical("mock-preview", () => {
 	startMockPreviewServer();
 });
 
-void initRevisions();
+void guardNonCritical("boot-record", async () => {
+	await initRevisions();
+	await logBootRecord();
+});
 initHardwareMonitoring();
 initDeviceStats();
 initCpu();

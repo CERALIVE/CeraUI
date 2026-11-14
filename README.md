@@ -19,6 +19,12 @@ credentials and operator selection are normalized before NetworkManager writes.
 disabled by the device capability gate. See the
 [modem save contract](apps/backend/docs/agents/a-modem-save-spends-a-reconnect-only-when-it-must.md#applied-configuration-receipts-exists).
 
+**Boot version context [EXISTS].** After revisions initialize, the backend records
+one structured `device started` line with the running versions, journal boot ID,
+OS image, active slot and board. Optional unreadable sources remain null; RAUC
+does not block startup. See the
+[version contract](apps/backend/docs/agents/a-version-an-operator-reads-must-be-a-live-read.md#boot-version-context-exists).
+
 **Journal conformance [EXISTS].** `bun run test:journal-conformance` checks
 real systemd 257 journal behavior in disposable Debian trixie containers.
 Docker and a local `debian:trixie` image are required. The Build Check workflow
