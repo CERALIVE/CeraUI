@@ -100,6 +100,7 @@ export function evidenceHarness(protectedAtBoot = false) {
 			},
 			reloadConfig: unused,
 			setBitrate: unused,
+			setAudioMix: unused,
 			requestKeyframe: unused,
 			setEdidProfile: unused,
 			listSwitchTargets: unused,
