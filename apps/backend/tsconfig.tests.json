@@ -1,0 +1,9 @@
+{
+	"extends": "./tsconfig.json",
+	"include": [
+		"src/tests/helpers/**/*.ts",
+		"src/tests/kernel-namespace.test.ts",
+		"src/tests/uplink-steering-route-kernel.test.ts"
+	],
+	"exclude": []
+}

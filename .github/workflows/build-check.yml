@@ -304,6 +304,17 @@ jobs:
       - name: Enable unprivileged user namespaces (Ubuntu 24.04 AppArmor restriction)
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
+      - name: Kernel test typecheck and compiler inputs
+        working-directory: CeraUI
+        run: |
+          set -euo pipefail
+          bun run --filter backend check:tests
+          (cd apps/backend && bun ../../scripts/tsc.mjs -p tsconfig.tests.json --listFilesOnly) | bun scripts/ci/check-kernel-receipts.ts inputs
+
+      - name: Kernel receipt checker unit tests
+        working-directory: CeraUI
+        run: bun test scripts/ci/check-kernel-receipts.test.ts
+
       - name: Mock device attach service contract
         working-directory: CeraUI
         run: bun run test:service-contract
@@ -346,7 +357,15 @@ jobs:
 
       - name: Unit tests (bun)
         working-directory: CeraUI
-        run: bun run --filter backend test
+        run: |
+          set -euo pipefail
+          mkdir -p apps/backend/dist
+          bun run --filter backend test -- --reporter=junit --reporter-outfile=dist/backend-junit.xml
+          test -s apps/backend/dist/backend-junit.xml
+
+      - name: Kernel report receipt gate
+        working-directory: CeraUI
+        run: bun scripts/ci/check-kernel-receipts.ts report
 
       # These two tests measure a REAL weighted packet distribution through a real
       # netns/nftables setup, so their statistical bounds only hold with CPU
