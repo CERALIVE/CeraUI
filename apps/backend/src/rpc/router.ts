@@ -11,6 +11,7 @@ import {
 	listAddonsProcedure,
 	uninstallAddonProcedure,
 } from "./procedures/addons.procedure.ts";
+import { setAudioMixProcedure } from "./procedures/audio-mix.procedure.ts";
 import {
 	loginProcedure,
 	logoutProcedure,
@@ -187,6 +188,7 @@ const stableRoutes = {
 		listDevices: listDevicesProcedure,
 		switchInput: switchInputProcedure,
 		switchAudio: switchAudioProcedure,
+		setAudioMix: setAudioMixProcedure,
 		reloadAudioDelay: reloadAudioDelayProcedure,
 		// Dev-only mock hardware switcher
 		setMockHardware: setMockHardwareProcedure,
