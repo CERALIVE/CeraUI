@@ -2416,6 +2416,7 @@
 	"wifiSelector.blocked.wpa3Body": "이 어댑터는 WPA3 네트워크에 연결할 수 없습니다. WPA2도 지원하는 네트워크를 선택하세요.",
 	"wifiSelector.blocked.wpa3Title": "WPA3 전용 네트워크",
 	"wifiSelector.button.connect": "연결",
+	"wifiSelector.button.changePassword": "비밀번호 변경",
 	"wifiSelector.button.disconnect": "연결 해제",
 	"wifiSelector.button.forget": "삭제",
 	"wifiSelector.button.scan": "스캔",
