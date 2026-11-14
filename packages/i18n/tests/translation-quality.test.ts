@@ -1,7 +1,59 @@
 import { describe, expect, it } from "bun:test";
 
+import { isDeepStrictEqual } from "node:util";
+
 import type { LocaleCode } from "../src/locale-lifecycle.js";
+import type { CatalogValue } from "./helpers/catalog.js";
 import { NON_BASE_LOCALES, readCatalog } from "./helpers/catalog.js";
+import translationDebt from "./translation-debt-baseline.json";
+import identicalExceptions from "./translation-identical-exceptions.json";
+
+const KEY_EXCEPTIONS: Readonly<
+	Record<string, { readonly value: string; readonly reason: string }>
+> = identicalExceptions.allLocales;
+const LOCALE_EXCEPTIONS: Readonly<
+	Record<
+		string,
+		{
+			readonly value: string;
+			readonly locales: readonly string[];
+			readonly reason: string;
+		}
+	>
+> = identicalExceptions.byLocale;
+
+function translationIssues(
+	locale: LocaleCode,
+	english: Readonly<Record<string, CatalogValue>>,
+	localized: Readonly<Record<string, CatalogValue>>,
+	debt: Readonly<Record<string, readonly string[]>>,
+): string[] {
+	const issues: string[] = [];
+	for (const key of new Set([...Object.keys(english), ...Object.keys(debt)])) {
+		const identical =
+			Object.hasOwn(english, key) &&
+			isDeepStrictEqual(english[key], localized[key]);
+		if (debt[key]?.includes(locale)) {
+			if (!identical) {
+				issues.push(
+					`${locale}: ${key} is no longer English-identical; remove ${locale} from translation-debt-baseline.json for this key.`,
+				);
+			}
+			continue;
+		}
+		const exception = LOCALE_EXCEPTIONS[key];
+		if (
+			identical &&
+			KEY_EXCEPTIONS[key]?.value !== english[key] &&
+			!(exception?.value === english[key] && exception.locales.includes(locale))
+		) {
+			issues.push(
+				`${locale}: ${key} is identical to English; translate it or review an exact exception.`,
+			);
+		}
+	}
+	return issues;
+}
 
 // ---------------------------------------------------------------------------
 // Translation-quality gate for the exact keys added by todos 6, 10, 11, 12, 13
@@ -72,4 +124,103 @@ describe("translation-quality gate: keys added by todos 6/10-13", () => {
 			}
 		});
 	}
+});
+
+describe("catalog-wide English-copy ratchet", () => {
+	for (const locale of NON_BASE_LOCALES) {
+		it(`${locale}: rejects a newly copied English hotspot message with its key`, () => {
+			const key = "hotspotConfirm.radioChanged";
+			const fixture = { [key]: "New English message" };
+			expect(translationIssues(locale, fixture, fixture, {})).toEqual([
+				`${locale}: ${key} is identical to English; translate it or review an exact exception.`,
+			]);
+		});
+
+		it(`${locale}: every shipped key is translated, an exception, or known debt`, () => {
+			expect(
+				translationIssues(
+					locale,
+					readCatalog("en"),
+					readCatalog(locale),
+					translationDebt,
+				),
+			).toEqual([]);
+		});
+	}
+
+	it("accepts the reviewed CeraLive brand value", () => {
+		const fixture = {
+			"hotspotConfigurator.hotspot.placeholderName": "CeraLive",
+		};
+		expect(translationIssues("ja", fixture, fixture, {})).toEqual([]);
+	});
+
+	it.each([
+		["hotspotConfigurator.hotspot.placeholderName", "New English message"],
+		["probe.newBrandMessage", "CeraLive"],
+	])(
+		"does not extend an exception to another key or value: %s",
+		(key, value) => {
+			const fixture = { [key]: value };
+			expect(translationIssues("ja", fixture, fixture, {})).toEqual([
+				`ja: ${key} is identical to English; translate it or review an exact exception.`,
+			]);
+		},
+	);
+
+	it("keeps a German shared term scoped to German", () => {
+		const fixture = { "devtools.browser": "Browser" };
+		expect(translationIssues("de", fixture, fixture, {})).toEqual([]);
+		expect(translationIssues("zh", fixture, fixture, {})).toEqual([
+			"zh: devtools.browser is identical to English; translate it or review an exact exception.",
+		]);
+	});
+
+	it("compares parsed plural values rather than object identity", () => {
+		const key = "live.server.bondedAcross";
+		const fixture = { [key]: readCatalog("en")[key] };
+		expect(
+			translationIssues("ja", fixture, structuredClone(fixture), {}),
+		).toEqual([
+			`ja: ${key} is identical to English; translate it or review an exact exception.`,
+		]);
+	});
+
+	it("accepts an explicitly recorded untranslated debt pair", () => {
+		const key = "errorBoundary.retry";
+		const fixture = { [key]: readCatalog("en")[key] };
+		expect(
+			translationIssues("ar", fixture, fixture, {
+				[key]: translationDebt[key],
+			}),
+		).toEqual([]);
+	});
+
+	it.each(["translated", "removed"])(
+		"requires removal of a %s pair from the debt baseline",
+		(state) => {
+			const key = "errorBoundary.retry";
+			const english: Readonly<Record<string, CatalogValue>> =
+				state === "removed" ? {} : { [key]: readCatalog("en")[key] };
+			const localized: Readonly<Record<string, CatalogValue>> =
+				state === "removed" ? {} : { [key]: "Translated fixture" };
+			expect(
+				translationIssues("ar", english, localized, {
+					[key]: translationDebt[key],
+				}),
+			).toEqual([
+				`ar: ${key} is no longer English-identical; remove ar from translation-debt-baseline.json for this key.`,
+			]);
+		},
+	);
+
+	it("records debt only for unique supported non-English locales", () => {
+		for (const locales of Object.values(translationDebt)) {
+			expect(locales.length).toBeGreaterThan(0);
+			expect(new Set(locales).size).toBe(locales.length);
+			for (const locale of locales) {
+				expect(NON_BASE_LOCALES.some((code) => code === locale)).toBe(true);
+			}
+		}
+	});
 });

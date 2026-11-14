@@ -40,6 +40,7 @@ bunx biome check packages/i18n
 | IMPORT PATHS | [Contract 4](docs/agents/import-paths.md) |
 | GENERATE | [Contract 5](docs/agents/generate.md) |
 | CONVENTIONS + ANTI-PATTERNS | [Contract 6](docs/agents/conventions-anti-patterns.md) |
+| English-copy exceptions and shrinking translation debt | [Translation-quality ratchet](README.md#translation-quality-ratchet) |
 
 ## HARD RULES
 

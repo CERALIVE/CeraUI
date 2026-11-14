@@ -1,0 +1,796 @@
+{
+	"advanced.providerNamePlaceholder": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"errorBoundary.description": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"errorBoundary.retry": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+	"errorBoundary.title": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+	"general.unknownSource": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+	"live.education.reason.rawCaptureNotStreamable": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"live.encoder.codecAuto": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+	"live.encoder.codecAutoResolvedH264": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"live.encoder.codecAutoResolvedH265": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"live.encoder.codecH265Unavailable": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"live.inputPicker.groups.raw_video": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"live.inputPicker.groups.unknown": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"live.reconfigureRequired": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"live.startFailure.class.engine_internal": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"live.startFailure.class.engine_restarting": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"live.startFailure.class.engine_unavailable": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"live.startFailure.class.protocol_incompatible": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"live.startFailure.class.start_invalid": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"live.startFailure.class.start_timeout": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"network.view.hotspotNoBond": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"network.view.hotspotSwitchBody": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"network.view.hotspotSwitchConfirm": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"network.view.hotspotSwitchTitle": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"network.view.modemManufacturer": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"network.view.modemModel": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"network.view.speed": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+	"network.view.switchToHotspot": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"network.view.switchToStation": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"network.view.totalBandwidth": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"notifications.appInstalled": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"notifications.appInstalledDescription": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"notifications.appUpdated": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"notifications.appUpdatedDescription": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"notifications.bootconfigUpdating": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"notifications.connectionLost": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"notifications.connectionRecovered": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"notifications.hdmiError": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"notifications.installCancelled": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"notifications.installCancelledDescription": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"notifications.installFailed": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"notifications.installFailedDescription": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"notifications.jetsonUndervoltage": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"notifications.relayNone": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"notifications.relayWaiting": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"notifications.updateAvailable": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"notifications.updateAvailableDescription": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"osActions.sshResetFailed": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"osActions.sshToggleFailed": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"osActions.updateFailed": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+	"settings.hardwareTypes.generic": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.index.groups.display": [
+		"ar",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.configureError": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.description": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.displayProfile": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.displayProfileDesc": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.enable": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.enableDesc": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.hideKeyboard": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.keyboard": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.keyboardDesc": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.keyboardError": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.motion": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.motionDesc": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.performance": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.performanceDesc": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.performanceModes.balanced": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.performanceModes.high": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.performanceModes.low": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.profiles.mono": [
+		"ar",
+		"de",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.showKeyboard": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.stateHints.disabled": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.stateHints.enabledFailed": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.stateHints.enabledRunning": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.stateHints.enabledStopped": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.stateHints.failedNoDisplay": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.states.disabled": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.states.enabledFailed": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.states.enabledRunning": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.states.enabledStopped": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.states.failedNoDisplay": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.title": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.toggleError": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.touch": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.touchDesc": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	],
+	"settings.onDeviceDisplay.unavailable": [
+		"ar",
+		"de",
+		"fr",
+		"hi",
+		"ja",
+		"ko",
+		"pt-BR",
+		"zh"
+	]
+}

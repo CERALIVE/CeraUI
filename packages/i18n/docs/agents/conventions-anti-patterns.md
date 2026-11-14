@@ -5,6 +5,9 @@
 - New keys go into `messages/en.json` first — it is the base locale and the SOURCE
   OF TRUTH, edited by hand. Other locales follow; the parity gate fails on a
   differing key set.
+- The existing translation-quality gate covers every key and non-English
+  locale. Exact justified exceptions and the separate shrinking debt baseline
+  are documented in [the package README](../../README.md#translation-quality-ratchet).
 - **The test suite reads `messages/*.json` and the frozen fixtures, and imports no
   message runtime.** Shared readers live in `tests/helpers/catalog.ts`.
 - **Nothing may write `tests/fixtures/*.rendered.json`.** It is the immutable

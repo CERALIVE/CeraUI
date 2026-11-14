@@ -203,7 +203,8 @@ message-format plugin reads.
 1. Add it to `messages/en.json` (`en` is the base locale; a key absent there does
    not exist).
 2. Add the same key to the other nine files. The locale-parity gate fails on a
-   key set that differs between locales.
+   key set that differs between locales. The translation-quality gate rejects
+   new values copied from English (see [the ratchet](#translation-quality-ratchet)).
 3. `bun run --filter @ceraui/i18n generate:i18n`
 4. Use it: `m["your.new.key"]()`.
 
@@ -255,7 +256,7 @@ checkout — several gates render through the generated registry.
 | `plural-parity-gate.test.ts` | Plural rendering matches the frozen oracle, and every variant set covers exactly its locale's CLDR categories with the catch-all last. |
 | `svelte-adapter-plural.test.ts` | The store facade (`m`) renders every plural key byte-identically to the frozen oracle; retired legacy grammar stays absent from the catalogs. |
 | `server-plural.test.ts` | `live.server.bondedAcross` renders the exact singular/plural English copy. |
-| `translation-quality.test.ts` | The keys added by todos 6/10-13 are real per-locale translations with no interpolation residue. |
+| `translation-quality.test.ts` | Every key in every non-English locale passes the English-copy ratchet; the historical param-free keys also remain non-empty with no interpolation residue. |
 | `backend-labelkey-contract.test.ts` | Every dotted key the backend can emit as data resolves in the `en` catalog. |
 | `paraglide-catalog-gate.test.ts` | The catalog carries every key, with no safe-module-id collisions, and paraglide emitted exactly one module per key. |
 | `paraglide-reverse-render-gate.test.ts` | Every compiled message renders byte-identically to the frozen oracle. |
@@ -273,3 +274,34 @@ Frontend-side, `apps/frontend/src/tests/` adds the locale-store DOM contract, th
 umbrella-import gate, and the lazy-namespace proof. Copy-asserting frontend tests
 read the catalogs through `apps/frontend/src/tests/helpers/catalog.ts`, which
 re-nests the flat dotted keys so path-style assertions stay unchanged.
+
+### Translation-quality ratchet
+
+The existing `tests/translation-quality.test.ts` compares every base-catalog
+value with every non-English locale, including parsed plural messages. A new
+English-identical value fails with its locale and key.
+
+`tests/translation-identical-exceptions.json` contains reviewed legitimate
+identical values. Each entry pins its exact key and English value and includes
+a one-line reason. `allLocales` is reserved for locale-independent brand names,
+protocol identifiers, units, and literal placeholders. `byLocale` explicitly
+lists shared spellings and retained engineering terms in particular locales,
+including the owner's Spanish terminology. A changed English value does not
+inherit the old exception. Review additions individually; never exempt an
+entire locale, namespace, or pattern.
+
+`tests/translation-debt-baseline.json` is **untranslated-message debt, not an
+exception list**. Its initial inventory is 678 locale/key pairs across 85 keys,
+recorded separately so the guard can protect new messages without legitimizing
+existing untranslated sentences. It maps each debt key to the affected locales.
+Do not add new debt. When a message is translated or removed, remove that locale
+from its baseline entry; delete the key when no locales remain. A stale debt
+entry fails and explicitly instructs its removal.
+
+Run the checker and its fixture regressions from this checkout:
+
+```bash
+bun run --filter @ceraui/i18n generate:i18n
+cd packages/i18n
+bun test --timeout 30000 ./tests/translation-quality.test.ts
+```
