@@ -1,0 +1,9 @@
+{
+	"uplink-steering-route-kernel.test.ts": [
+		"#433 provisions and retires never-created steering tables",
+		"retains usable managed route when live main default is absent",
+		"same-metric protocol refresh uses one replace",
+		"replans from the live interface gateway",
+		"metric rollback restores only the previous default"
+	]
+}
