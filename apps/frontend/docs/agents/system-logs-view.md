@@ -236,7 +236,9 @@ Rules for this copy:
   shape here is kept. Enum values are used verbatim as key segments (hyphens
   included). A code uses either one detail key or one detail key per variant
   (detail.operator, detail.engine_loss), never both; a code without a matching sentence shows its title alone.
-- Spanish is es-419 with tú and uses "registros" for logs in UI copy.
+- Spanish is es-419 with tú. UI copy uses "registros" for logs, "partición"
+  for a system slot (`systemLogs.boots.slot` is "Partición {slot}") and
+  "transmisión" for the stream (`timeline.family.stream` is "Transmisión").
 - Existing keys reused unchanged are listed in section 1; none is edited.
 
 ### Screen chrome, boots and shared labels
@@ -604,7 +606,7 @@ turned into underscores, plus update_failed.
 | `timeline.update_refused.title` | Update refused |
 | `timeline.update_refused.detail` | The reason is in the raw logs around this time. |
 | `timeline.update_download_paused.title` | Update put on hold |
-| `timeline.update_download_paused.detail` | The download waited for a stream start. |
+| `timeline.update_download_paused.detail` | The download was put on hold for a stream start. |
 | `timeline.update_os_staged.title` | System image staged |
 | `timeline.update_os_staged.detail` | System version {version}. It applies after the next clean restart. |
 | `timeline.update_os_activation_requested.title` | System image activation requested |
@@ -640,7 +642,7 @@ turned into underscores, plus update_failed.
 | `timeline.update_failed.detail.download` | The download failed. |
 | `timeline.update_failed.detail.commit` | Installing the packages failed. |
 | `timeline.update_failed.detail.sync` | Copying the update to the other system slot failed. |
-| `timeline.update_failed.detail.os_staging` | Preparing the system image failed. |
+| `timeline.update_failed.detail.os-staging` | Preparing the system image failed. |
 
 ### Timeline: device
 
@@ -684,7 +686,7 @@ turned into underscores, plus update_failed.
 | `timeline.capture_input_returned.title` | Capture input returned |
 | `timeline.capture_input_returned.detail` | Input: {name} |
 | `timeline.capture_standby_entered.title` | Black standby started |
-| `timeline.capture_standby_entered.detail` | The stream stayed connected and sent a black picture until a camera returned. |
+| `timeline.capture_standby_entered.detail` | The stream stayed connected and sent a black picture while waiting for a camera to return. |
 | `timeline.capture_standby_exited.title` | Black standby ended |
 | `timeline.capture_standby_exited.detail` | Standby lasted: {duration} |
 
