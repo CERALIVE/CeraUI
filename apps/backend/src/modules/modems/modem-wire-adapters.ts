@@ -83,7 +83,7 @@ import type {
 	DongleMetadata,
 	DongleState,
 } from "../network/dongle-metadata.ts";
-import { modemHardwareName } from "./modem-identity.ts";
+import { isHimiUfiRouter, modemHardwareName } from "./modem-identity.ts";
 import type {
 	ProjectedModemAdditive,
 	ProjectedModemConfig,
@@ -202,6 +202,9 @@ export function fromMmcliModem(
 	// The wire `status` block is byte-locked against the pre-Phase-B builder, so
 	// these two must travel as additive top-level fields and never inside it.
 	const additive: Mutable<ProjectedModemAdditive> = {};
+	if (modem.status.availability_reason !== undefined) {
+		additive.availability_reason = modem.status.availability_reason;
+	}
 	if (modem.status.registration_rejection !== undefined) {
 		additive.registration_rejection = modem.status.registration_rejection;
 	}
@@ -460,7 +463,10 @@ function buildDbusAdditive(
 		additive.device_class = view.deviceClass;
 		observed = true;
 	}
-	if (view.availabilityReason !== undefined) {
+	if (isHimiUfiRouter(view)) {
+		additive.availability_reason = "himi_ufi_router";
+		observed = true;
+	} else if (view.availabilityReason !== undefined) {
 		additive.availability_reason = view.availabilityReason;
 		observed = true;
 	}

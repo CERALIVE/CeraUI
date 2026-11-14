@@ -118,6 +118,19 @@ export type MmcliHardwareIdentity = {
 };
 
 /**
+ * These Android router sticks retain their own data call even in QMI mode.
+ * The shared Qualcomm USB ID, numeric model and ADB interface alone prove none
+ * of that; require the device-reported HiMI U01 firmware family.
+ */
+export function isHimiUfiRouter(
+	identity: Pick<MmcliHardwareIdentity, "model" | "firmwareRevision">,
+): boolean {
+	return [identity.firmwareRevision, identity.model].some((value) =>
+		value?.trim().startsWith("HIMI_U01_MODEM_"),
+	);
+}
+
+/**
  * Last-resort label. Not a vendor claim and not a name — it states the ONE thing
  * that is certainly true when every identity field the device published is
  * garbage, and leaves the IMEI tail to do the identifying.

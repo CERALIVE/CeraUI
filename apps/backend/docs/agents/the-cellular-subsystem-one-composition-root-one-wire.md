@@ -83,6 +83,22 @@ real file.
 
 ### THE PROJECTION IS WHAT REACHES THE WIRE — AND THE LEGACY BUILDER IS THE ORACLE
 
+**HiMI UFI router sticks [EXISTS].** A ModemManager firmware revision or model
+starting with `HIMI_U01_MODEM_` identifies this Android router family.
+`modem-identity.ts` owns the predicate; both the mmcli status builder and D-Bus
+adapter publish `availability_reason: "himi_ufi_router"` through the existing
+modem projection. USB `05c6:9091`, ADB `ff/42/01`, `Android`, and a numeric model
+alone do not identify it. No additional USB or device reads are performed.
+
+The warning is a hardware limitation, independent of MM's connection state:
+rejected host data calls can leave MM `registered`, `home`, and `attached`.
+The existing availability note explains that the stick keeps the mobile
+connection for itself and cannot serve as a CeraLive modem; use router
+(USB network) mode or a regular modem. CeraUI changes no stick settings and
+does not try to disable its embedded data call or SIM-switch watchdog.
+Coverage: `src/tests/himi-ufi-router.test.ts` and the rendered
+`CellularSection.test.ts` regression for issue #573.
+
 `modem-status.ts` exports TWO builders, and picking the wrong one is silent:
 
 | Function | Role |

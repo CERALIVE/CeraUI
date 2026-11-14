@@ -957,6 +957,7 @@
 	"network.cellular.initializingTitle": "セルラーを起動しています",
 	"network.cellular.reason.initializing": "モデムを検出しました — モデムサービスがこの機器を認識するのを待っています。",
 	"network.cellular.reason.undriveable": "この機器は接続されたままですが、どのモデムサービスからも制御できません。",
+	"network.cellular.reason.himiUfiRouter": "このデバイスはモバイル接続を自分自身で使用するルーター型の USB スティックのため、CeraLive ではモデムとして使用できません。ルーターモード（USB ネットワーク）で使用するか、通常のモデムを使用してください。",
 	"network.cellular.reason.routerControlsUnverified": "このドングルは、設定変更が実際に反映されることを一度も確認できませんでした。そのためここでは何も提供しません。ドングル自身の Web インターフェースを使用してください。",
 	"network.cellular.reason.routerManaged": "この接続はドングル自身が管理します。ネットワーク設定はドングル自身の Web インターフェースにあり、ここにはありません。",
 	"network.cellular.reason.unknown": "このデバイスはここからは設定できません。",

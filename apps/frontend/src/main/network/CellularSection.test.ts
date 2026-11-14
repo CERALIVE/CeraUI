@@ -670,6 +670,26 @@ describe("CellularSection — the cellular stack is still initializing", () => {
  * rows, and the empty-state claim must be gone the moment either exists.
  */
 describe("CellularSection — the real board roster", () => {
+	it("explains a HiMI router stick's failed data call inline (#573)", () => {
+		const { container } = renderSection({
+			modem: {
+				name: "HIMI_U01_MODEM_V2.0 - 00099",
+				availability_reason: "himi_ufi_router",
+				status: {
+					connection: "registered",
+					signal: 76,
+					roaming: false,
+					network_type: "4G",
+				},
+			},
+			netif: {},
+		});
+
+		expect(container.textContent).toContain(
+			"This device is a router-type USB stick that keeps the mobile connection for itself, so CeraLive cannot use it as a modem. Use it in router (USB network) mode or use a regular modem.",
+		);
+	});
+
 	const BOARD: [string, Modem][] = [
 		[
 			"2",

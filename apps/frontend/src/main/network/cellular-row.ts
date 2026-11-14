@@ -168,6 +168,7 @@ export type ModemRowAction = "configure" | "unlock";
  * two must not describe it differently (and it costs no new translation).
  */
 const AVAILABILITY_REASON_KEYS: Readonly<Record<string, string>> = {
+	himi_ufi_router: "network.cellular.reason.himiUfiRouter",
 	router_managed: "network.cellular.reason.routerManaged",
 	// A CLASSIFIED dongle — one this stack reaches directly, with no netns layer
 	// between — resolves to the SAME sentence as a netns-claimed one, because the
