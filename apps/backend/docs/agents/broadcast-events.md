@@ -27,8 +27,8 @@ Wi-Fi classification 15 seconds after the first pending result with a netif
 snapshot; if classification never succeeds and no zone is known, that bypass
 tears down recovered sharing. See `flow-sticky-shared-client-steering.md`.
 
-First-sight admission uses positive `usb` evidence from each netdev's own sysfs
-bus link. Held rows report `enabled:false` in `netif` and enter neither SRTLA
+First-sight admission uses positive `usb` evidence or an unreadable result from
+each netdev's own sysfs bus link. Held rows report `enabled:false` in `netif` and enter neither SRTLA
 collector. Coverage or the shared deadline settles the entry permanently for
 its observed lifetime. The lazy scan settlement listener is installed by the
 first `processIfconfigOutput` call, after module initialization.
@@ -38,7 +38,10 @@ A settlement calls both `triggerNetworkInterfacesChange()` and
 An otherwise eligible row therefore reaches `broadcastMsg("netif", ...)` with
 `enabled:true` even when raw enabled state and counters are unchanged. At least
 one release frame is delivered; counter reconciliation may also send an identical
-frame. Missing, failed or pending bus reads keep the previous admission behavior.
+frame. Failed or pending bus reads hold an uncovered entry until coverage or the
+shared deadline; a fresh readable non-USB result also releases it on publication.
+Absent bus links with a present netdev, and vanished netdevs, keep the previous
+admission behavior. Readable Ethernet and covered entries retain their timing.
 See the first-sight USB contract in
 `an-isolated-dongle-is-surfaced-without-entering-the-bond.md`.
 

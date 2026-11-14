@@ -11,6 +11,7 @@ import {
 	UPLINK_MARK_MASK,
 	WEIGHT_BUCKET_MODULUS,
 } from "./contracts.ts";
+import { markForSlot } from "./mark-layout.ts";
 
 const IPV4_CIDR_RE =
 	/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d|[12]\d|3[0-2])$/;
@@ -25,9 +26,7 @@ export function stableUplinkMark(identity: string): number {
 		hash ^= byte;
 		hash = Math.imul(hash, 0x01000193) >>> 0;
 	}
-	let slot = ((hash >>> 16) ^ hash) & 0xffff;
-	if (slot === 0) slot = 1;
-	return (CLIENT_FLOW_NAMESPACE | (slot << 8)) >>> 0;
+	return markForSlot(((hash >>> 16) ^ hash) & 0xffff);
 }
 
 export function buildShareRuleset(state: ShareRulesetState): string {

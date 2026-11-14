@@ -15,6 +15,7 @@ import {
 	type CaptureDeviceKind,
 	CerastreamConnectionError,
 	CerastreamRpcError,
+	type ChangeConfigResult,
 	COMPOSITION_FEATURE,
 	COMPOSITION_GEOMETRY_FEATURE,
 	type CompositionConfig,
@@ -68,6 +69,7 @@ import { mockWifiRadios, type ScenarioCapabilities } from "../mock-config.ts";
 import type { MockAudioDevices, MockDeviceModes } from "../mock-schemas.ts";
 import {
 	getActiveScenario,
+	getMockHealth,
 	getMockState,
 	getScenarioConfig,
 	getStreamingStats,
@@ -754,19 +756,29 @@ export function startMockStreaming(params?: StartParams): void {
 			getMockEngineCapabilities().caps,
 			getMockEngineDevices().devices,
 		);
+		if (params.composition && params.video_passthrough === "force")
+			throw mockParamsInvalid(
+				"video_passthrough=force cannot be combined with composition",
+			);
 		if (params.audio?.inputs && !getMockEngineCapabilities().caps.audio_mix) {
 			throw mockAudioMixInvalid("audio-mix-unsupported");
 		}
 		const parsed = startParamsSchema.safeParse(params);
 		if (!parsed.success) throw mockParamsInvalid(parsed.error.message);
+		const healthOverride = getMockState().mockHealthOverride;
 		updateMockState({
 			engineStart: structuredClone(parsed.data),
 			engineCompositionPrimaryInputId: compositionPrimary,
+			engineKnownGoodCandidate: structuredClone(parsed.data),
+			...(healthOverride === null
+				? {}
+				: { mockHealthOverride: { ...healthOverride, frameCount: 0 } }),
 		});
 	} else {
 		updateMockState({
 			engineStart: null,
 			engineCompositionPrimaryInputId: null,
+			engineKnownGoodCandidate: null,
 		});
 	}
 	setStreamingState(true);
@@ -894,8 +906,11 @@ export function switchMockAudio(inputId: string): {
 	return { active_audio_input: inputId };
 }
 
-export function changeMockComposition(composition: CompositionConfig): void {
-	const current = getMockState().engineStart;
+export function changeMockComposition(
+	composition: CompositionConfig,
+): ChangeConfigResult {
+	const state = getMockState();
+	const current = state.engineStart;
 	if (!shouldUseMocks() || !getStreamingStats().isActive || !current) {
 		throw new CerastreamRpcError(
 			RPC_ERROR_NUMERIC["cerastream.state.not_streaming"],
@@ -904,6 +919,23 @@ export function changeMockComposition(composition: CompositionConfig): void {
 			null,
 			{ code: "cerastream.state.not_streaming" },
 		);
+	}
+	const attempt = state.engineChangeCounter + 1;
+	const attemptId = `cc-${attempt}`;
+	updateMockState({ engineChangeCounter: attempt });
+	const health = getMockHealth();
+	if (
+		state.engineKnownGoodCandidate &&
+		health.processAlive &&
+		health.framesAdvancing &&
+		health.frameCount >= 2 &&
+		health.activeLinks === 0
+	) {
+		// With no egress counter, only the native links-down gate is provable.
+		updateMockState({
+			engineKnownGood: structuredClone(state.engineKnownGoodCandidate),
+			engineKnownGoodCandidate: null,
+		});
 	}
 	const compositionPrimary = validateMockComposition(
 		{
@@ -918,10 +950,53 @@ export function changeMockComposition(composition: CompositionConfig): void {
 	);
 	const parsed = compositionConfigSchema.safeParse(composition);
 	if (!parsed.success) throw mockParamsInvalid(parsed.error.message);
-	updateMockState({
-		engineStart: { ...current, composition: structuredClone(parsed.data) },
-		engineCompositionPrimaryInputId: compositionPrimary,
-	});
+	const next = { ...current, composition: structuredClone(parsed.data) };
+	if (current.composition) {
+		updateMockState({
+			engineStart: next,
+			engineCompositionPrimaryInputId: compositionPrimary,
+		});
+		return { attempt_id: attemptId, phase: "applied", state: "streaming" };
+	}
+	const good = state.engineKnownGood;
+	setStreamingState(false);
+	try {
+		startMockStreaming(next);
+		updateMockState({
+			engineKnownGood: structuredClone(next),
+			engineKnownGoodCandidate: null,
+		});
+		return { attempt_id: attemptId, phase: "applied", state: "streaming" };
+	} catch (error) {
+		if (!(error instanceof CerastreamRpcError)) throw error;
+		const cause = error.message;
+		if (!good) {
+			return {
+				attempt_id: attemptId,
+				phase: "rollback_failed",
+				state: "idle",
+				reason: `${cause}; no_known_good`,
+			};
+		}
+		try {
+			startMockStreaming(good);
+		} catch (rollbackError) {
+			if (!(rollbackError instanceof CerastreamRpcError)) throw rollbackError;
+			return {
+				attempt_id: attemptId,
+				phase: "rollback_failed",
+				state: "idle",
+				reason: `${cause}; rollback: ${rollbackError.message}`,
+			};
+		}
+		updateMockState({ engineKnownGoodCandidate: null });
+		return {
+			attempt_id: attemptId,
+			phase: "reverted",
+			state: "streaming",
+			reason: cause,
+		};
+	}
 }
 
 /** Synthetic readings follow the real post-gain/post-mute meter placement. */

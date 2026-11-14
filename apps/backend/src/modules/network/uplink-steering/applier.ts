@@ -30,6 +30,8 @@ export interface RouteProvisioning {
 	readonly createdTableRoute?: boolean;
 	readonly replacedTableRoute?: readonly string[];
 	readonly addedTableRoute?: readonly string[];
+	readonly removedTableRoutes?: readonly (readonly string[])[];
+	readonly removedSourceRules?: readonly UplinkRoutePlan[];
 }
 
 export interface UplinkSteeringApplierDeps {
@@ -172,10 +174,10 @@ export class UplinkSteeringApplier {
 				await this.#deps.flushConntrack(route.mark);
 				await this.#deps.removeRoute(route);
 			} catch (error) {
-				const key = recoveredRouteKey(route);
+				const key = retirementWorkKey(route);
 				if (
 					!this.#pendingRetirements.some(
-						(pending) => recoveredRouteKey(pending) === key,
+						(pending) => retirementWorkKey(pending) === key,
 					)
 				) {
 					this.#pendingRetirements.push(route);
@@ -204,7 +206,7 @@ function removedRoutePlans(
 }
 
 function routeKey(route: UplinkRoutePlan): string {
-	return `${route.identity}\u0000${route.ifname}\u0000${route.table}\u0000${route.mark}`;
+	return `${route.identity}\u0000${route.table}\u0000${route.mark}`;
 }
 
 function recoveredRoutePlans(
@@ -219,6 +221,10 @@ function recoveredRouteKey(route: UplinkRoutePlan): string {
 	return `${route.mark}\u0000${route.table}`;
 }
 
+function retirementWorkKey(route: UplinkRoutePlan): string {
+	return `${recoveredRouteKey(route)}\u0000${route.sourceAddress}\u0000${route.sourceRulePriority}`;
+}
+
 function transitionState(
 	previous: PreparedSteeringState,
 	next: PreparedSteeringState,
@@ -230,7 +236,7 @@ function transitionState(
 		const route = previous.routes.find(
 			(candidate) =>
 				candidate.identity === uplink.identity &&
-				candidate.ifname === uplink.ifname,
+				candidate.mark === uplink.mark,
 		);
 		if (route === undefined || !removedKeys.has(routeKey(route))) continue;
 		retainedSupport.push({ ...uplink, selectable: false, weight: 0 });

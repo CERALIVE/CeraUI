@@ -396,3 +396,73 @@ describe("managed uplink default route refresh", () => {
 		expect(h.calls.some((call) => call.includes("flush"))).toBe(false);
 	});
 });
+
+describe("cross-device managed default rollback", () => {
+	test.each([100, 200])(
+		"#534 restores the replaced device with planned metric %s",
+		async (metric) => {
+			const current = "default via 10.1.0.1 dev wwan1 proto static metric 100";
+			const planned = `default via 10.0.0.1 dev wwan0 proto static metric ${metric}`;
+			const plan: UplinkRoutePlan = {
+				identity: "renamed-modem",
+				ifname: "wwan0",
+				sourceAddress: "10.0.0.2",
+				mark: 0xca000100,
+				table: "30001",
+				managed: true,
+				defaultRouteArgv: [
+					"route",
+					"replace",
+					"table",
+					"30001",
+					...planned.split(" "),
+				],
+			};
+			const h = scripted({
+				"ip rule show":
+					"110: from all fwmark 0xca000100/0xffffff00 lookup 30001",
+				"ip route show table 30001": current,
+			});
+			const metricChanged = metric !== 100;
+
+			const receipt = await ensureUplinkRoute(plan, h);
+			await rollbackUplinkRoute(receipt, h);
+
+			expect(receipt.createdTableRoute).toBe(false);
+			expect(receipt.replacedTableRoute).toEqual([
+				"route",
+				metricChanged ? "add" : "replace",
+				"table",
+				"30001",
+				...current.split(" "),
+			]);
+			expect(h.calls.slice(2)).toEqual(
+				metricChanged
+					? [
+							["ip", "route", "add", "table", "30001", ...planned.split(" ")],
+							["ip", "route", "del", "table", "30001", ...current.split(" ")],
+							["ip", "route", "add", "table", "30001", ...current.split(" ")],
+							["ip", "route", "del", "table", "30001", ...planned.split(" ")],
+						]
+					: [
+							[
+								"ip",
+								"route",
+								"replace",
+								"table",
+								"30001",
+								...planned.split(" "),
+							],
+							[
+								"ip",
+								"route",
+								"replace",
+								"table",
+								"30001",
+								...current.split(" "),
+							],
+						],
+			);
+		},
+	);
+});

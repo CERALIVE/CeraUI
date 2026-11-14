@@ -1,0 +1,44 @@
+{
+	"uplink-steering-route-kernel.test.ts": [
+		"#433 provisions and retires never-created steering tables",
+		"#534 rename rollback restores a cross-device default with metric 100",
+		"#534 rename rollback restores a cross-device default with metric 200",
+		"retains usable managed route when live main default is absent",
+		"same-metric protocol refresh uses one replace",
+		"replans from the live interface gateway",
+		"metric rollback restores only the previous default"
+	],
+	"uplink-steering-table-key-kernel.test.ts": [
+		"TOS-KEY removes the stale TOS default",
+		"installed planned TOS route is a no-op control",
+		"single host route cannot override the planned default",
+		"second default cannot select the stale modem",
+		"second default is removed above the planned metric",
+		"crash-route is reclaimed by a fresh applier",
+		"P6 converges to planned metric 150 over 50 and 150",
+		"P6 converges to planned metric 50 over 50 and 150",
+		"planned TOS keeps its route over a plain same-metric line",
+		"rollback restores TOS and host route inventory",
+		"typed blackhole default is restored on rollback",
+		"add-before-delete process crash converges on restart",
+		"partial stale-route deletion failure restores inventory"
+	],
+	"uplink-steering-source-kernel.test.ts": [
+		"CR:dual-source",
+		"P12 multiple stale managed tables",
+		"CR:crash-source absent claimant",
+		"P11 unique to twin removes source rules",
+		"orphan-cleanup-retry",
+		"rollback restores removed source inventory",
+		"control own plus foreign remains ambiguous",
+		"control present claimant completes interrupted source support"
+	],
+	"uplink-steering-rename-kernel.test.ts": [
+		"rename retains table, fwmark rule and marked lookup",
+		"rename retains support after final-publication failure",
+		"rebinding retains support on another netdev",
+		"rebinding final-publication failure restores the old netdev",
+		"rename transition-publication failure retains support",
+		"departing identity still flushes and retires support"
+	]
+}

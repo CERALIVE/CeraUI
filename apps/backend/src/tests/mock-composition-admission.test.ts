@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
 	CerastreamRpcError,
+	type ChangeConfigResult,
 	type CompositionConfig,
+	changeConfigResultSchema,
 	type StartParams,
 } from "@ceralive/cerastream";
 import {
@@ -15,6 +17,7 @@ import {
 	setMockDeviceAttached,
 	startMockStreaming,
 } from "../mocks/providers/streaming.ts";
+import { forcedLegacy } from "./helpers/forced-legacy.ts";
 
 const savedMode = process.env.MOCK_MODE;
 const base: StartParams = {
@@ -89,6 +92,7 @@ const rows: Array<{
 	autoPrimary?: boolean;
 	legacy?: boolean;
 	force?: boolean;
+	liveTransaction?: ChangeConfigResult;
 	primary?: string;
 }> = [
 	{
@@ -241,6 +245,13 @@ const rows: Array<{
 		force: true,
 		legacy: true,
 		expected: forceError,
+		liveTransaction: {
+			attempt_id: "cc-1",
+			phase: "rollback_failed",
+			state: "idle",
+			reason:
+				"invalid params: video_passthrough=force cannot be combined with composition; no_known_good",
+		},
 	},
 ];
 
@@ -248,6 +259,20 @@ for (const path of ["start", "live"] as const) {
 	for (const row of rows) {
 		test(`${path} composition admission: ${row.name}`, () => {
 			if (row.unavailable) initMockService("multi-modem-wifi");
+			if (path === "live" && row.liveTransaction) {
+				startMockStreaming(forcedLegacy);
+				expect(
+					changeConfigResultSchema.parse(
+						changeMockComposition({
+							...row.composition,
+							secondary_input_id: "hdmi",
+						}),
+					),
+				).toEqual(row.liveTransaction);
+				expect(getMockState().engineStart).toBeNull();
+				expect(getStreamingStats().isActive).toBe(false);
+				return;
+			}
 			const request: StartParams = {
 				...base,
 				input_id: row.autoPrimary ? undefined : (row.primary ?? base.input_id),

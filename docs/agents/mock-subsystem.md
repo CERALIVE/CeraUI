@@ -136,9 +136,10 @@ mix with `audio-mix-active`. Stop and reset clear the admitted session.
 The live methods preserve their separate native admission orders.
 `setMockAudioMix` checks the admitted mix session, then each update's identity
 before its values, validating each update before proceeding to the next.
-`changeMockComposition` checks the running session, then rectangle validity and
-compositor availability and the same secondary/alpha/capture admission; it retains the already-admitted audio. Neither live
-method invents a new Start admission or changes the other subsystem's state.
+`changeMockComposition` checks the running session, then rectangle validity,
+compositor availability and the same secondary/alpha/capture admission.
+Live mix writes and in-place composition edits retain the admitted audio.
+Enabling composition on a legacy session takes the rebuild transaction instead.
 
 `changeMockComposition` enforces missing/unexpected/range rectangle errors and
 the compositor availability gate for presets and custom layouts. At start and
@@ -161,12 +162,31 @@ lookup in video captures only, then primary selection. An explicit primary must
 exist in that capture roster and differ from the secondary; automatic selection
 needs another capture. Secondary refusals retain `secondary-unavailable` and
 their exact capture cause; a missing explicit primary retains
-`cerastream.device.not_found`. Forced passthrough is refused after selection.
+`cerastream.device.not_found`. Start refuses forced passthrough after selection;
+that policy is not part of the shared composition selector.
 The resolved primary is retained separately from operator Start intent so live
 composition changes cannot silently select another primary after hotplug or a
 secondary edit. Stop and scenario lifecycle clear that session identity.
 `mock-composition-admission.test.ts` pins the post-availability pairs, alpha
 boundaries, capture-only identities, automatic selection and retained primary.
+`changeMockComposition` returns the published `ChangeConfigResult`. A live
+preflight refusal still throws its native RPC envelope without tearing down the
+session. An admitted legacy rebuild uses the Start boundary; its failure becomes
+a transaction reason rather than a preflight RPC exception.
+With no confirmed target it returns `rollback_failed` / `idle`, appending
+`; no_known_good`. A single successful restore returns `reverted` / `streaming`
+with the original cause. Restore failure returns `rollback_failed` / `idle`,
+appending `; rollback: ` and the restore's native message.
+The mock confirms a target after a successful simulated rebuild or an existing
+health sample that proves two advancing frames with no active links. Without an
+egress counter, connected links do not constitute send proof. Plain Start only
+proposes a candidate; in-place edits do not invent outcome-gate proof.
+Physical frame/egress qualification is not claimed. The confirmed target and `cc-N` counter survive
+stream stops but clear with the mock process/scenario. Preflight failures consume
+their admitted attempt id, matching the native transaction claim order.
+`mock-composition-transaction.test.ts` covers these result boundaries and retains
+the earlier preflight pairs; the one former live force-exception expectation is
+corrected to the native rollback result without changing its Start counterpart.
 Presets never enter `custom`; the producer rectangle
 schema and minimum are exported separately by RPC. The preview socket adds
 `inputs[]` only for an admitted live mix, with synthetic post-gain/post-mute

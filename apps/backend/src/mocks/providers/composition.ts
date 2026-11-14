@@ -33,7 +33,7 @@ function secondaryUnavailable(id: string): CerastreamRpcError {
 
 /** Native composition admission, returning the session's resolved primary identity. */
 export function validateMockComposition(
-	params: Pick<StartParams, "composition" | "input_id" | "video_passthrough">,
+	params: Pick<StartParams, "composition" | "input_id">,
 	caps: GetCapabilitiesResult,
 	devices: ListDevicesResult["devices"],
 ): string | null {
@@ -112,9 +112,5 @@ export function validateMockComposition(
 		if (!selected) throw secondaryUnavailable(config.secondary_input_id);
 		primary = selected.input_id;
 	}
-	if (params.video_passthrough === "force")
-		throw mockParamsInvalid(
-			"video_passthrough=force cannot be combined with composition",
-		);
 	return primary;
 }

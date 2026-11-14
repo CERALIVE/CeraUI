@@ -165,21 +165,20 @@ for (const name of [MODEM, "eth1", "wlan1"]) {
 	}
 }
 
-test("B6 pending bus at first addressed offer keeps main behavior permanently", async () => {
+test("B6 pending bus at first addressed offer stays held until coverage", async () => {
 	scan = firstSightScan(output);
 	const bus = Promise.withResolvers<string | undefined>();
 	scan.setBus(MODEM, () => bus.promise);
 	try {
 		await publishAtBound();
-		const weak = resolvePhysicalDevice({ ifname: MODEM }).linkId;
-		expect(srtla.genSrtlaBondEntries()).toEqual([
-			{ iface: MODEM, ip: IP, linkId: weak },
-		]);
+		expectHeld();
 		bus.resolve("usb");
 		await tick();
 		await publishAtBound();
-		expect(netIfBuildMsg()[MODEM]?.enabled).toBe(true);
-		expect(local()).toEqual([{ iface: MODEM, ip: IP, linkId: weak }]);
+		expectHeld();
+		scan.release();
+		await scan.settle();
+		expect(local()[0]?.linkId).toBe(firstSightPhysicalDevice().linkId);
 	} finally {
 		bus.resolve(undefined);
 	}
@@ -200,7 +199,7 @@ test("B6 addressless unsettled names retry classification and latch positive USB
 	expect(scan.busCounts.get(MODEM)).toBe(readsBefore + 1);
 });
 
-test("B6 rejecting bus reads keep main admission with one debug record", async () => {
+test("B6 rejecting bus reads stay held with one debug record", async () => {
 	scan = firstSightScan(output);
 	scan.setBus(MODEM, async () => {
 		throw new Error("constructed bus rejection");
@@ -208,7 +207,7 @@ test("B6 rejecting bus reads keep main admission with one debug record", async (
 	const debug = spyOn(logger, "debug");
 	await publishAtBound();
 	await tick();
-	expect(netIfBuildMsg()[MODEM]?.enabled).toBe(true);
+	expectHeld();
 	expect(
 		debug.mock.calls.filter((args) => {
 			const message: unknown = args[0];

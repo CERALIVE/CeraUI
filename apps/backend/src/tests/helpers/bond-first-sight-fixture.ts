@@ -83,12 +83,18 @@ export function firstSightScan(
 		fixture.listDir,
 	);
 	spyOn(defaultRouterCellularScanDeps, "readLinkName").mockImplementation(
-		(path) => {
+		fixture.readLinkName,
+	);
+	spyOn(defaultRouterCellularScanDeps, "readLinkResult").mockImplementation(
+		async (path) => {
 			if (!path.endsWith("/device/subsystem"))
-				return fixture.readLinkName(path);
+				return { ok: true, target: "/sys/devices/virtual/net/fixture" };
 			const name = path.split("/").at(-3) ?? "";
 			busCounts.set(name, (busCounts.get(name) ?? 0) + 1);
-			return busReplies.get(name)?.() ?? Promise.resolve(undefined);
+			const bus = await busReplies.get(name)?.();
+			return bus === undefined
+				? { ok: false, code: "ENOENT" }
+				: { ok: true, target: `/sys/bus/${bus}` };
 		},
 	);
 	spyOn(runner, "run").mockImplementation(async (bin) =>

@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { fileURLToPath } from "node:url";
-import { run } from "../helpers/run.ts";
-import type { UplinkRoutePlan } from "../modules/network/uplink-steering/applier.ts";
+import { run, runWithStdin } from "../helpers/run.ts";
+import {
+	type PreparedSteeringState,
+	type UplinkRoutePlan,
+	UplinkSteeringApplier,
+} from "../modules/network/uplink-steering/applier.ts";
 import {
 	discoverOwnedUplinkRoutes,
 	ensureUplinkRoute,
@@ -11,99 +14,228 @@ import {
 	rollbackUplinkRoute,
 	type UplinkRouteManagerDeps,
 } from "../modules/network/uplink-steering/route-manager.ts";
+import {
+	inNamespace,
+	isKernelChild,
+	kernelReceipt,
+	preflight,
+} from "./helpers/kernel-namespace.ts";
 import { runTestCommand } from "./helpers/run-test-command.ts";
+import suites from "./kernel-suites.json";
 
-const child = process.env.CERALIVE_STEERING_ROUTE_KERNEL_CHILD === "1";
-const probe = child
-	? undefined
-	: await runTestCommand(["unshare", "-Urn", "true"]);
-const unavailable = probe !== undefined && probe.code !== 0;
-const reason = `user/network namespace unavailable: ${probe?.stderr.trim()}`;
+const file = import.meta.filename;
+const child = isKernelChild(file);
+const probe = child ? { ok: true, detail: "" } : await preflight();
+const receipts: string[] = [];
 const name = "#433 provisions and retires never-created steering tables";
 
 function kernelRefreshTest(
 	name: string,
 	scenario: (deps: UplinkRouteManagerDeps) => Promise<void>,
 ): void {
-	(unavailable ? test.skip : test)(
-		unavailable ? `${name} (SKIP: ${reason})` : name,
-		async () => {
-			if (!child) {
-				const result = await runTestCommand(
-					[
-						"unshare",
-						"-Urn",
-						process.execPath,
-						"test",
-						fileURLToPath(import.meta.url),
-						"--test-name-pattern",
-						name,
-					],
-					{ env: { CERALIVE_STEERING_ROUTE_KERNEL_CHILD: "1" } },
-				);
-				console.log(result.stdout + result.stderr);
-				expect(result.code, result.stdout + result.stderr).toBe(0);
-				return;
-			}
-			for (const [iface, address] of [
-				["wwan0", "10.0.0.2/24"],
-				["wwan1", "10.1.0.2/24"],
-			] as const) {
-				await run("ip", ["link", "add", iface, "type", "dummy"]);
-				await run("ip", ["link", "set", iface, "up"]);
-				await run("ip", ["addr", "add", address, "dev", iface]);
-			}
-			await run("ip", [
-				"route",
-				"add",
-				"table",
-				"30002",
-				"default",
-				"via",
-				"10.1.0.1",
-				"dev",
-				"wwan1",
-				"onlink",
-				"mtu",
-				"1350",
-			]);
-			const sentinel = await run("ip", ["route", "show", "table", "30002"]);
-			const calls: string[][] = [];
-			const routeStates: string[] = [];
-			await scenario({
-				run: async (command, args, ...rest) => {
-					calls.push([command, ...args]);
-					const result = await run(command, args, ...rest);
-					if (
-						args[0] === "route" &&
-						["replace", "add", "del", "flush"].includes(args[1] ?? "")
-					) {
-						routeStates.push(
-							await run("ip", ["route", "show", "table", "30001"]),
-						);
-					}
-					return result;
-				},
-			});
-			for (const state of routeStates) expect(state.trim()).not.toBe("");
-			expect(await run("ip", ["route", "show", "table", "30002"])).toBe(
-				sentinel,
-			);
-			for (const call of calls) {
+	test(name, async () => {
+		expect(probe.ok, probe.detail).toBe(true);
+		if (!child) {
+			await inNamespace(file, name);
+			receipts.push(name);
+			return;
+		}
+		for (const [iface, address] of [
+			["wwan0", "10.0.0.2/24"],
+			["wwan1", "10.1.0.2/24"],
+		] as const) {
+			await run("ip", ["link", "add", iface, "type", "dummy"]);
+			await run("ip", ["link", "set", iface, "up"]);
+			await run("ip", ["addr", "add", address, "dev", iface]);
+		}
+		await run("ip", [
+			"route",
+			"add",
+			"table",
+			"30002",
+			"default",
+			"via",
+			"10.1.0.1",
+			"dev",
+			"wwan1",
+			"onlink",
+			"mtu",
+			"1350",
+		]);
+		const sentinel = await run("ip", ["route", "show", "table", "30002"]);
+		const calls: string[][] = [];
+		const routeStates: string[] = [];
+		await scenario({
+			run: async (command, args, ...rest) => {
+				calls.push([command, ...args]);
+				const result = await run(command, args, ...rest);
 				if (
-					call[1] !== "route" ||
-					!["replace", "add", "del", "flush"].includes(call[2] ?? "")
-				)
-					continue;
-				expect(call.includes("flush")).toBe(false);
-				expect(call[call.indexOf("table") + 1]).toBe("30001");
-			}
-		},
-		30_000,
-	);
+					args[0] === "route" &&
+					["replace", "add", "del", "flush"].includes(args[1] ?? "")
+				) {
+					routeStates.push(
+						await run("ip", ["route", "show", "table", "30001"]),
+					);
+				}
+				return result;
+			},
+		});
+		for (const state of routeStates) expect(state.trim()).not.toBe("");
+		expect(await run("ip", ["route", "show", "table", "30002"])).toBe(sentinel);
+		for (const call of calls) {
+			if (
+				call[1] !== "route" ||
+				!["replace", "add", "del", "flush"].includes(call[2] ?? "")
+			)
+				continue;
+			expect(call.includes("flush")).toBe(false);
+			expect(call[call.indexOf("table") + 1]).toBe("30001");
+		}
+		console.log(kernelReceipt(file, name));
+	}, 30_000);
 }
 
 describe("real kernel managed route refresh", () => {
+	for (const metric of [100, 200]) {
+		kernelRefreshTest(
+			`#534 rename rollback restores a cross-device default with metric ${metric}`,
+			async (deps) => {
+				await run("ip", [
+					"route",
+					"add",
+					"default",
+					"via",
+					"10.1.0.1",
+					"dev",
+					"wwan1",
+					"proto",
+					"static",
+					"metric",
+					"100",
+				]);
+				const candidate = {
+					identity: "renamed-modem",
+					ifname: "wwan1",
+					sourceAddress: "10.1.0.2",
+					sourceAddressUnique: false,
+					mark: 0xca000100,
+				};
+				const previousRoute = await planUplinkRoute(candidate, deps);
+				const previous: PreparedSteeringState = {
+					clientZones: [{ ifname: "eth9", ipv4Cidr: "10.90.0.0/24" }],
+					uplinks: [{ ...candidate, selectable: true, weight: 100 }],
+					routes: [previousRoute],
+				};
+				const flushes: number[] = [];
+				let rejectReload = false;
+				const applier = new UplinkSteeringApplier({
+					discoverRoutes: () => discoverOwnedUplinkRoutes(deps),
+					ensureRoute: (route) => ensureUplinkRoute(route, deps),
+					rollbackRoute: (receipt) => rollbackUplinkRoute(receipt, deps),
+					removeRoute: (route) => removeUplinkRoute(route, deps),
+					applyRuleset: async (ruleset, mode) => {
+						if (rejectReload) {
+							expect(mode).toBe("reload");
+							expect(
+								await run("ip", [
+									"route",
+									"show",
+									"table",
+									previousRoute.table,
+								]),
+							).toContain("dev wwan0");
+							throw new Error("injected reload failure");
+						}
+						await runWithStdin("nft", ["-f", "-"], ruleset);
+					},
+					deactivateSharing: async () => {
+						throw new Error("unexpected deactivation");
+					},
+					flushConntrack: async (mark) => {
+						flushes.push(mark);
+					},
+					setIpForwarding: async () => {},
+					publishFlowsReset: () => {
+						throw new Error("unexpected flow reset");
+					},
+				});
+				await applier.apply(undefined, previous);
+				const before = await run("ip", [
+					"route",
+					"show",
+					"table",
+					previousRoute.table,
+				]);
+				const beforeRules = await run("ip", ["rule", "show"]);
+				const beforeNft = await run("nft", [
+					"list",
+					"table",
+					"inet",
+					"ceralive_share",
+				]);
+				await run("ip", ["route", "del", "default", "dev", "wwan1"]);
+				await run("ip", [
+					"route",
+					"add",
+					"default",
+					"via",
+					"10.0.0.1",
+					"dev",
+					"wwan0",
+					"proto",
+					"static",
+					"metric",
+					String(metric),
+				]);
+				const nextRoute = await planUplinkRoute(
+					{
+						...candidate,
+						ifname: "wwan0",
+						sourceAddress: "10.0.0.2",
+					},
+					deps,
+				);
+				const next: PreparedSteeringState = {
+					...previous,
+					uplinks: [
+						{ ...candidate, ifname: "wwan0", selectable: true, weight: 100 },
+					],
+					routes: [nextRoute],
+				};
+				rejectReload = true;
+
+				await expect(applier.apply(previous, next)).rejects.toThrow(
+					"injected reload failure",
+				);
+
+				const after = await run("ip", [
+					"route",
+					"show",
+					"table",
+					previousRoute.table,
+				]);
+				const lookup = await run("ip", [
+					"route",
+					"get",
+					"203.0.113.1",
+					"mark",
+					"0xca000100",
+				]);
+				console.log(
+					"ROLLBACK_ROUTE",
+					JSON.stringify({ metric, before, after, lookup }),
+				);
+				expect(after).toBe(before);
+				expect(lookup).toContain("dev wwan1");
+				expect(await run("ip", ["rule", "show"])).toBe(beforeRules);
+				expect(
+					await run("nft", ["list", "table", "inet", "ceralive_share"]),
+				).toBe(beforeNft);
+				expect(flushes).toEqual([]);
+			},
+		);
+	}
+
 	kernelRefreshTest(
 		"retains usable managed route when live main default is absent",
 		async (deps) => {
@@ -418,104 +550,97 @@ describe("real kernel managed route refresh", () => {
 });
 
 describe("real kernel steering route absence", () => {
-	(unavailable ? test.skip : test)(
-		unavailable ? `${name} (SKIP: ${reason})` : name,
-		async () => {
-			if (!child) {
-				const result = await runTestCommand(
-					[
-						"unshare",
-						"-Urn",
-						process.execPath,
-						"test",
-						fileURLToPath(import.meta.url),
-						"--test-name-pattern",
-						name,
-					],
-					{ env: { CERALIVE_STEERING_ROUTE_KERNEL_CHILD: "1" } },
-				);
-				console.log(result.stdout + result.stderr);
-				expect(result.code, result.stdout + result.stderr).toBe(0);
-				return;
-			}
-			// Prove absence before any route or rule can create the managed table.
-			await expect(
-				run("ip", ["route", "show", "table", "30001"]),
-			).rejects.toMatchObject({
-				code: 2,
-				stdout: "",
-				stderr: "Error: ipv4: FIB table does not exist.\nDump terminated\n",
-			});
-			const flush = await runTestCommand([
-				"ip",
-				"route",
-				"flush",
-				"table",
-				"30001",
-			]);
-			console.log("ABSENT_TABLE_FLUSH", JSON.stringify(flush));
-			expect(flush).toEqual({
-				code: 2,
-				stdout: "",
-				stderr: "Error: ipv4: FIB table does not exist.\nFlush terminated\n",
-			});
+	test(name, async () => {
+		expect(probe.ok, probe.detail).toBe(true);
+		if (!child) {
+			await inNamespace(file, name);
+			receipts.push(name);
+			return;
+		}
+		// Prove absence before any route or rule can create the managed table.
+		await expect(
+			run("ip", ["route", "show", "table", "30001"]),
+		).rejects.toMatchObject({
+			code: 2,
+			stdout: "",
+			stderr: "Error: ipv4: FIB table does not exist.\nDump terminated\n",
+		});
+		const flush = await runTestCommand([
+			"ip",
+			"route",
+			"flush",
+			"table",
+			"30001",
+		]);
+		console.log("ABSENT_TABLE_FLUSH", JSON.stringify(flush));
+		expect(flush).toEqual({
+			code: 2,
+			stdout: "",
+			stderr: "Error: ipv4: FIB table does not exist.\nFlush terminated\n",
+		});
 
-			await run("ip", ["link", "add", "ww0", "type", "dummy"]);
-			await run("ip", ["link", "set", "ww0", "up"]);
-			await run("ip", ["addr", "add", "10.64.0.2/24", "dev", "ww0"]);
-			await run("ip", [
-				"route",
-				"add",
-				"default",
-				"via",
-				"10.64.0.1",
-				"dev",
-				"ww0",
-			]);
-			const plan = await planUplinkRoute({
-				identity: "kernel-modem",
-				ifname: "ww0",
-				sourceAddress: "10.64.0.2",
-				sourceAddressUnique: true,
-				mark: 0xca000100,
-			});
-			await ensureUplinkRoute(plan);
-			expect(await run("ip", ["route", "show", "table", plan.table])).toContain(
-				"default via 10.64.0.1 dev ww0",
-			);
-			expect(hasFwmarkRule(await run("ip", ["rule", "show"]), plan)).toBe(true);
+		await run("ip", ["link", "add", "ww0", "type", "dummy"]);
+		await run("ip", ["link", "set", "ww0", "up"]);
+		await run("ip", ["addr", "add", "10.64.0.2/24", "dev", "ww0"]);
+		await run("ip", [
+			"route",
+			"add",
+			"default",
+			"via",
+			"10.64.0.1",
+			"dev",
+			"ww0",
+		]);
+		const plan = await planUplinkRoute({
+			identity: "kernel-modem",
+			ifname: "ww0",
+			sourceAddress: "10.64.0.2",
+			sourceAddressUnique: true,
+			mark: 0xca000100,
+		});
+		await ensureUplinkRoute(plan);
+		expect(await run("ip", ["route", "show", "table", plan.table])).toContain(
+			"default via 10.64.0.1 dev ww0",
+		);
+		expect(hasFwmarkRule(await run("ip", ["rule", "show"]), plan)).toBe(true);
 
-			await removeUplinkRoute(plan);
-			expect(hasFwmarkRule(await run("ip", ["rule", "show"]), plan)).toBe(
-				false,
-			);
-			expect(await run("ip", ["route", "show", "table", plan.table])).toBe("");
+		await removeUplinkRoute(plan);
+		expect(hasFwmarkRule(await run("ip", ["rule", "show"]), plan)).toBe(false);
+		expect(await run("ip", ["route", "show", "table", plan.table])).toBe("");
 
-			// A rule may outlive a table that has never been instantiated.
-			await run("ip", [
-				"rule",
-				"add",
-				"priority",
-				"110",
-				"fwmark",
-				"0xca000200/0xffffff00",
-				"lookup",
-				"30002",
-			]);
-			const recovered = await discoverOwnedUplinkRoutes();
-			expect(recovered).toMatchObject([
-				{
-					table: "30002",
-					mark: 0xca000200,
-					ifname: "unknown0",
-					managed: true,
-				},
-			]);
-			const [orphan] = recovered;
-			if (orphan === undefined) throw new Error("owned rule was not recovered");
-			await removeUplinkRoute(orphan);
-			expect(await discoverOwnedUplinkRoutes()).toEqual([]);
-		},
-		30_000,
-	);
+		// A rule may outlive a table that has never been instantiated.
+		await run("ip", [
+			"rule",
+			"add",
+			"priority",
+			"110",
+			"fwmark",
+			"0xca000200/0xffffff00",
+			"lookup",
+			"30002",
+		]);
+		const recovered = await discoverOwnedUplinkRoutes();
+		expect(recovered).toMatchObject([
+			{
+				table: "30002",
+				mark: 0xca000200,
+				ifname: "unknown0",
+				managed: true,
+			},
+		]);
+		const [orphan] = recovered;
+		if (orphan === undefined) throw new Error("owned rule was not recovered");
+		await removeUplinkRoute(orphan);
+		expect(await discoverOwnedUplinkRoutes()).toEqual([]);
+		console.log(kernelReceipt(file, name));
+	}, 30_000);
 });
+
+if (!child) {
+	test("kernel scenario receipt set", () => {
+		expect(probe.ok, probe.detail).toBe(true);
+		expect([...receipts].sort()).toEqual(
+			[...suites["uplink-steering-route-kernel.test.ts"]].sort(),
+		);
+	});
+}
