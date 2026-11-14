@@ -54,6 +54,11 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Secure Reliable Transport protocol identifier used by transport diagnostics."
 	},
+	"hud.live": {
+		"value": "Live",
+		"locales": ["es"],
+		"reason": "Live names the streaming screen in the es docs: ceralive-docs quotes it as \"Live\" on about 20 es pages (quoted-label-baseline) and spanish-style.test.ts pins it; renaming the screen is a docs-wide change."
+	},
 	"live.audioCard.title": {
 		"value": "Audio",
 		"locales": ["es"],
