@@ -150,18 +150,35 @@ async function probeSshActive(
 	}
 }
 
-/** Resolve whether the ssh service is boot-enabled, swallowing the exit code. */
+/** Keep the unit-state word on non-zero exits; reject an unreadable probe. */
+async function readSshEnabledState(
+	systemctlIsEnabled: SshStatusDeps["systemctlIsEnabled"],
+): Promise<string> {
+	try {
+		return (await systemctlIsEnabled()).stdout.trim();
+	} catch (err) {
+		// Disabled/masked units exit non-zero but still supply an authoritative word.
+		if (
+			err instanceof Error &&
+			"stdout" in err &&
+			typeof err.stdout === "string" &&
+			err.stdout.trim() !== ""
+		)
+			return err.stdout.trim();
+		throw err;
+	}
+}
+
+/** Resolve boot-enabled status; an unreadable probe remains false on the wire. */
 async function probeSshEnabled(
 	systemctlIsEnabled: SshStatusDeps["systemctlIsEnabled"],
 ): Promise<boolean> {
 	try {
-		const { stdout } = await systemctlIsEnabled();
-		return parseSystemctlIsEnabled(stdout);
-	} catch (err) {
-		// `is-enabled` exits non-zero for disabled/static/masked/unknown, and
-		// still prints the word on stdout. Read it; ANY failure is not-enabled.
-		const stdout = (err as { stdout?: string } | null)?.stdout ?? "";
-		return parseSystemctlIsEnabled(stdout);
+		return parseSystemctlIsEnabled(
+			await readSshEnabledState(systemctlIsEnabled),
+		);
+	} catch {
+		return false;
 	}
 }
 
@@ -355,6 +372,15 @@ export async function startStopSsh(
 		: status?.active === false;
 }
 
+let sshPersistenceTail: Promise<unknown> = Promise.resolve();
+
+function queueSshPersistence<T>(operation: () => Promise<T>): Promise<T> {
+	// Both writers share request order, even after a preceding request rejected.
+	const result = sshPersistenceTail.then(operation, operation);
+	sshPersistenceTail = result;
+	return result;
+}
+
 /**
  * Arm (or un-arm) the ssh unit for boot — `systemctl enable|disable ssh`.
  *
@@ -370,41 +396,87 @@ export async function startStopSsh(
  * `is-enabled: disabled`, which cost a multi-hour board-access outage.
  *
  * Returns whether the device's own re-probe confirms the requested state, so a
- * caller never reports a persistence change the unit did not take.
+ * caller never reports a persistence change the unit did not take. Only then is
+ * the choice saved in the /data-backed config for the next OS slot.
  */
-export async function setSshPersistent(
+export function setSshPersistent(
 	enabled: boolean,
 	statusDeps: Partial<SshStatusDeps> = {},
 ): Promise<boolean> {
-	const ssh_user = resolveSshUser();
-	const action = enabled ? "enable" : "disable";
+	return queueSshPersistence(async () => {
+		const ssh_user = resolveSshUser();
+		const action = enabled ? "enable" : "disable";
 
-	// Dev/mock seam: flip the mock boot-persistence flag and broadcast it without
-	// spawning systemctl, so the toggle works on a dev box (mirrors startStopSsh).
-	if (shouldUseMocks()) {
-		mockSshEnabled = enabled;
-		broadcastMockSshStatus(ssh_user);
-		return true;
-	}
+		// Dev/mock seam: flip the mock boot-persistence flag and broadcast it without
+		// spawning systemctl, so the toggle works on a dev box (mirrors startStopSsh).
+		if (shouldUseMocks()) {
+			mockSshEnabled = enabled;
+			broadcastMockSshStatus(ssh_user);
+			return true;
+		}
 
-	const { getDisruptiveActionDecision } = await import(
-		"./disruptive-action-runtime.ts"
-	);
-	try {
-		await withServiceReservation(() => sshPersistenceRunner(action), {
-			unit: "ssh.service",
-			decision: getDisruptiveActionDecision,
-		});
-	} catch (err) {
-		if (err instanceof DisruptiveActionRefusal) throw err;
-		logger.error(
-			`Error running systemctl ${action} ssh: ${describeCliError(err)}`,
+		const { getDisruptiveActionDecision } = await import(
+			"./disruptive-action-runtime.ts"
 		);
-		return false;
-	}
+		try {
+			await withServiceReservation(() => sshPersistenceRunner(action), {
+				unit: "ssh.service",
+				decision: getDisruptiveActionDecision,
+			});
+			const state = await readSshEnabledState(
+				statusDeps.systemctlIsEnabled ??
+					defaultSshStatusDeps.systemctlIsEnabled,
+			);
+			await getSshStatus(statusDeps);
+			if (state !== (enabled ? "enabled" : "disabled")) return false;
+			getConfig().ssh_persistent = enabled;
+			saveConfig();
+			return true;
+		} catch (err) {
+			if (err instanceof DisruptiveActionRefusal) throw err;
+			logger.error(
+				`Error running systemctl ${action} ssh: ${describeCliError(err)}`,
+			);
+			return false;
+		}
+	});
+}
 
-	const status = await getSshStatus(statusDeps);
-	return status?.enabled === enabled;
+/**
+ * Restore the /data-backed boot choice on this slot, after password sync.
+ * An absent choice adopts only an enabled/disabled unit; masks and unknown
+ * states are left alone. Boot must continue after any probe, command or save error.
+ */
+export function reconcileSshPersistence(
+	passwordSynced: boolean,
+	deps: Partial<Pick<SshStatusDeps, "systemctlIsEnabled">> = {},
+): Promise<void> {
+	return queueSshPersistence(async () => {
+		if (shouldUseMocks()) return;
+		try {
+			const state = await readSshEnabledState(
+				deps.systemctlIsEnabled ?? defaultSshStatusDeps.systemctlIsEnabled,
+			);
+			if (state !== "enabled" && state !== "disabled") return;
+			const config = getConfig();
+			const enabled = state === "enabled";
+			if (config.ssh_persistent === undefined) {
+				config.ssh_persistent = enabled;
+				saveConfig();
+				return;
+			}
+			if (config.ssh_persistent === enabled) return;
+			if (config.ssh_persistent) {
+				if (config.ssh_pass === undefined || !passwordSynced) return;
+				await sshPersistenceRunner("enable");
+				await sshServiceRunner("start");
+			} else {
+				await sshPersistenceRunner("disable");
+			}
+		} catch (err) {
+			logger.error("Failed to reconcile SSH boot persistence", { err });
+		}
+	});
 }
 
 /**
@@ -576,26 +648,27 @@ const defaultSshPasswordSyncDeps: SshPasswordSyncDeps = {
  * matches (the common same-slot boot). It re-applies the EXISTING persisted
  * password — it NEVER generates a new one and NEVER writes config (the credential
  * is unchanged; only the OS-level shadow entry must catch up).
+ * Returns true only when the persisted password is ready on this slot.
  */
 export async function ensureSshPasswordSynced(
 	deps: Partial<SshPasswordSyncDeps> = {},
-): Promise<void> {
+): Promise<boolean> {
 	// Dev/mock seam: never spawn passwd or read the real /etc/shadow on a dev box
 	// (mirrors startStopSsh's shouldUseMocks() gate).
-	if (shouldUseMocks()) return;
+	if (shouldUseMocks()) return false;
 
 	let ssh_user: string;
 	try {
 		ssh_user = resolveSshUser();
 	} catch (err) {
 		logger.error(`Skipping SSH password sync: ${err}`);
-		return;
+		return false;
 	}
 
 	// Nothing persisted yet → nothing to sync. Leaves the existing "generate on
 	// first startStopSsh when ssh_pass is undefined" contract untouched.
 	const password = getConfig().ssh_pass;
-	if (password === undefined) return;
+	if (password === undefined) return false;
 
 	const { readShadow, applyPassword } = {
 		...defaultSshPasswordSyncDeps,
@@ -606,7 +679,8 @@ export async function ensureSshPasswordSynced(
 	// ssh_pass_hash. Equal → this slot already matches (the common same-slot
 	// boot); a fast, harmless no-op.
 	const liveHash = await probeSshUserHash(readShadow, ssh_user);
-	if (liveHash === sshPasswordHash) return;
+	if (liveHash === undefined) return false;
+	if (liveHash === sshPasswordHash) return true;
 
 	try {
 		// Mismatch (a fresh OTA slot still carrying the build-time password):
@@ -623,7 +697,7 @@ export async function ensureSshPasswordSynced(
 			0,
 			true,
 		);
-		return;
+		return false;
 	}
 
 	// Re-probe so the cached hash (and the SSH status tile it feeds) reflects the
@@ -631,4 +705,5 @@ export async function ensureSshPasswordSynced(
 	// hash's, so read back the authoritative value rather than assume it.
 	sshPasswordHash = await probeSshUserHash(readShadow, ssh_user);
 	logger.info(`Re-applied the persisted SSH password for ${ssh_user}`);
+	return sshPasswordHash !== undefined;
 }

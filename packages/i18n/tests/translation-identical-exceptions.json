@@ -4,20 +4,55 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Literal example DNS hostname for the provider-host input; no prose to translate."
 	},
+	"devtools.cookies": {
+		"value": "Cookies",
+		"locales": ["fr"],
+		"reason": "French uses \"cookies\" for browser cookies; the fr devtools panel keeps web terms such as \"Toast\" and \"DOM\" untranslated."
+	},
 	"devtools.mbps": {
 		"value": "Mbps",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Megabits-per-second unit abbreviation for numeric bitrate readings."
+	},
+	"devtools.mode": {
+		"value": "Mode",
+		"locales": ["fr"],
+		"reason": "\"Mode\" is the French word; fr devtools.developmentMode reads \"Mode Développement\"."
 	},
 	"devtools.ms": {
 		"value": "ms",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR"],
 		"reason": "Millisecond unit abbreviation for numeric duration readings."
 	},
+	"devtools.phase": {
+		"value": "Phase",
+		"locales": ["fr"],
+		"reason": "\"Phase\" is the French word for an update stage; same spelling in French."
+	},
 	"devtools.rtt": {
 		"value": "RTT",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Round-trip-time statistic acronym used by the network diagnostics."
+	},
+	"devtools.total": {
+		"value": "Total",
+		"locales": ["fr"],
+		"reason": "\"Total\" is the French word; fr devtools.screenshotCount reads \"Bureau + Mobile (5 onglets, 2 thèmes chacun) + Hors ligne (2 thèmes) = 22 total\"."
+	},
+	"devtools.type": {
+		"value": "Type",
+		"locales": ["fr"],
+		"reason": "\"Type\" is the French word; fr devtools.toastTypes reads \"Types de Toast\"."
+	},
+	"general.configuration": {
+		"value": "Configuration",
+		"locales": ["fr"],
+		"reason": "\"Configuration\" is the French word; fr advanced.remoteConfigSaved reads \"Configuration distante enregistrée\"."
+	},
+	"general.port": {
+		"value": "Port",
+		"locales": ["fr"],
+		"reason": "\"Port\" is the French word; fr devtools.socketPort reads \"Port du Socket\"."
 	},
 	"hotspotConfigurator.hotspot.placeholderName": {
 		"value": "CeraLive",
@@ -34,6 +69,31 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Secure Reliable Transport protocol identifier used by transport diagnostics."
 	},
+	"hud.healthStable": {
+		"value": "Stable",
+		"locales": ["fr"],
+		"reason": "\"Stable\" is the French adjective; fr settings.updates.channel.hint reads \"Bêta reçoit les nouvelles images système en premier. Les paquets proviennent toujours de Stable.\"."
+	},
+	"live.audioCard.title": {
+		"value": "Audio",
+		"locales": ["fr"],
+		"reason": "\"Audio\" is the French word; fr general.audioCodec reads \"Codec audio\"."
+	},
+	"live.composition.title": {
+		"value": "Composition",
+		"locales": ["fr"],
+		"reason": "\"Composition\" is the French word for a video layout; same spelling in French."
+	},
+	"live.education.field.audio.title": {
+		"value": "Audio",
+		"locales": ["fr"],
+		"reason": "\"Audio\" is the French word; fr general.audioCodec reads \"Codec audio\"."
+	},
+	"live.education.field.mode.title": {
+		"value": "Mode",
+		"locales": ["fr"],
+		"reason": "\"Mode\" is the French word; fr live.preview.compatBadge reads \"Mode de compatibilité\"."
+	},
 	"live.encoder.accelerated": {
 		"value": "Hardware",
 		"locales": ["es"],
@@ -41,13 +101,28 @@
 	},
 	"live.encoder.passthrough.title": {
 		"value": "Passthrough",
-		"locales": ["es"],
-		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\""
+		"locales": ["es", "fr"],
+		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\"; fr live.encoder.route.reason.passthrough-off reads \"Le passthrough est désactivé dans les réglages enregistrés.\""
+	},
+	"live.encoder.probedCapAudio": {
+		"value": "Audio",
+		"locales": ["fr"],
+		"reason": "\"Audio\" is the French word; fr general.audioCodec reads \"Codec audio\"."
 	},
 	"live.encoder.software": {
 		"value": "Software",
 		"locales": ["es"],
 		"reason": "es devtools.newVersionDesc uses \"actualización de software\", retaining the engineering term in translated prose."
+	},
+	"live.goLive.gate.destination": {
+		"value": "Destination",
+		"locales": ["fr"],
+		"reason": "\"Destination\" is the French word; fr live.chooseDestination reads \"Choisir une destination\"."
+	},
+	"live.ingest.healthy": {
+		"value": "Stable",
+		"locales": ["fr"],
+		"reason": "\"Stable\" is the French adjective; fr settings.updates.channel.hint reads \"Bêta reçoit les nouvelles images système en premier. Les paquets proviennent toujours de Stable.\"."
 	},
 	"live.ingest.nak": {
 		"value": "NAK",
@@ -58,6 +133,21 @@
 		"value": "RTT",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Round-trip-time statistic acronym used by the network diagnostics."
+	},
+	"live.ingest.total": {
+		"value": "Total",
+		"locales": ["fr"],
+		"reason": "\"Total\" is the French word; fr devtools.screenshotCount reads \"Bureau + Mobile (5 onglets, 2 thèmes chacun) + Hors ligne (2 thèmes) = 22 total\"."
+	},
+	"live.inputPicker.active": {
+		"value": "Active",
+		"locales": ["fr"],
+		"reason": "\"Active\" is the French feminine adjective agreeing with source/entrée; fr live.education.field.mode.body reads \"La diffusion envoie la vidéo encodée vers votre serveur ; l'aperçu l'affiche localement sans passer en direct. Le mode actif limite les options affichées à celles qu'il prend en charge.\"."
+	},
+	"live.inputPicker.groups.audio": {
+		"value": "Audio",
+		"locales": ["fr"],
+		"reason": "\"Audio\" is the French word; fr general.audioCodec reads \"Codec audio\"."
 	},
 	"live.inputPicker.groups.camlink": {
 		"value": "Cam Link",
@@ -73,6 +163,11 @@
 		"value": "UVC · MJPEG",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "USB Video Class and Motion JPEG standard identifiers separated by a display dot."
+	},
+	"live.inputPicker.groups.test": {
+		"value": "Test",
+		"locales": ["fr"],
+		"reason": "\"Test\" is the French word for the virtual test sources; fr devtools.consoleTesting reads \"Test de Console\"."
 	},
 	"live.inputPicker.groups.usb": {
 		"value": "USB",
@@ -94,10 +189,15 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "USB Video Class carrying the H.265 video coding standard."
 	},
+	"live.modes.label": {
+		"value": "Mode",
+		"locales": ["fr"],
+		"reason": "\"Mode\" is the French word; fr live.preview.compatBadge reads \"Mode de compatibilité\"."
+	},
 	"live.passthrough.activeChip": {
 		"value": "Passthrough",
-		"locales": ["es"],
-		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\""
+		"locales": ["es", "fr"],
+		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\"; fr live.encoder.route.reason.passthrough-off reads \"Le passthrough est désactivé dans les réglages enregistrés.\""
 	},
 	"live.preview.encode.activeHardware": {
 		"value": "{element} — hardware",
@@ -124,6 +224,16 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "WebRTC browser communication API name identifying the preview tier."
 	},
+	"live.source.audioQualityNegotiated": {
+		"value": "{khz} kHz mono",
+		"locales": ["fr"],
+		"reason": "\"kHz\" is the SI unit and \"mono\" is the French word; the whole value reads the same in French."
+	},
+	"live.source.label": {
+		"value": "Source",
+		"locales": ["fr"],
+		"reason": "\"Source\" is the French word; fr live.cannotStartNoPipeline reads \"Sélectionnez une source vidéo avant de démarrer la diffusion\"."
+	},
 	"live.title": {
 		"value": "Live",
 		"locales": ["de", "es", "fr", "pt-BR"],
@@ -143,6 +253,16 @@
 		"value": "Bluetooth",
 		"locales": ["de", "es", "fr", "ja", "pt-BR"],
 		"reason": "Bluetooth wireless standard and trademark; only the listed catalogs retain this spelling."
+	},
+	"network.deviceCount.modem": {
+		"value": "modem",
+		"locales": ["fr"],
+		"reason": "\"modem\" is the French word; fr network.modem.noSim reads \"Aucune carte SIM détectée\"."
+	},
+	"network.deviceCount.modems": {
+		"value": "modems",
+		"locales": ["fr"],
+		"reason": "\"modems\" is the French plural; fr network.cellular.initializingBody reads \"Le service modem est encore en cours de démarrage. Les modems et leurs réglages apparaîtront ici dès qu'il sera prêt.\"."
 	},
 	"network.modem.apn": {
 		"value": "APN",
@@ -178,6 +298,11 @@
 		"value": "{generation} {frequency}",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Radio-generation and frequency interpolations only, separated by one space."
+	},
+	"network.modem.configuration": {
+		"value": "Configuration",
+		"locales": ["fr"],
+		"reason": "\"Configuration\" is the French word; fr advanced.remoteConfigSaved reads \"Configuration distante enregistrée\"."
 	},
 	"network.modem.detail.firmware": {
 		"value": "Firmware",
@@ -224,6 +349,26 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "5G New Radio cellular standard identifier."
 	},
+	"network.modem.networkMode.unnamed": {
+		"value": "Mode {index}",
+		"locales": ["fr"],
+		"reason": "\"Mode\" is the French word; fr live.preview.compatBadge reads \"Mode de compatibilité\"."
+	},
+	"network.modem.sections.diagnostics.interface": {
+		"value": "Interface",
+		"locales": ["fr"],
+		"reason": "\"Interface\" is the French word; fr advanced.lanPassword reads \"Mot de passe de l'interface Web LAN\"."
+	},
+	"network.modem.sections.diagnostics.transport": {
+		"value": "Transport",
+		"locales": ["fr"],
+		"reason": "\"Transport\" is the French word; fr live.server.singleLinkHint reads \"Ce récepteur utilise un seul lien direct. L'agrégation de plusieurs liens n'est pas utilisée pour ce transport.\"."
+	},
+	"network.modem.sections.signal.title": {
+		"value": "Signal",
+		"locales": ["fr"],
+		"reason": "\"Signal\" is the French word; fr hud.noSignal reads \"Aucun signal\"."
+	},
 	"network.modem.sections.sim.title": {
 		"value": "SIM",
 		"locales": ["de", "es", "fr", "ja", "ko", "pt-BR"],
@@ -238,6 +383,11 @@
 		"value": "SIM PIN",
 		"locales": ["hi", "ja", "ko"],
 		"reason": "SIM and PIN credential identifiers; only the listed catalogs use this exact order and spelling."
+	},
+	"network.modem.sms.title": {
+		"value": "Messages",
+		"locales": ["fr"],
+		"reason": "\"Messages\" is the French plural; fr network.modem.sms.capped reads \"Affichage des {count} messages les plus récents stockés sur cette SIM.\"."
 	},
 	"network.routerCellular.apnLabel": {
 		"value": "APN",
@@ -258,6 +408,11 @@
 		"value": "PCI",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "3GPP Physical Cell Identity field acronym in cellular diagnostics, not a prose label."
+	},
+	"network.routerCellular.diagnosticsTitle": {
+		"value": "Diagnostics",
+		"locales": ["fr"],
+		"reason": "\"Diagnostics\" is the French plural; fr advanced.applicationLogsDescription reads \"Journaux d'application et diagnostics\"."
 	},
 	"network.routerCellular.firmwareLabel": {
 		"value": "Firmware",
@@ -284,6 +439,11 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "International Mobile Subscriber Identity field acronym."
 	},
+	"network.routerCellular.netMode.unnamed": {
+		"value": "Mode {index}",
+		"locales": ["fr"],
+		"reason": "\"Mode\" is the French word; fr live.preview.compatBadge reads \"Mode de compatibilité\"."
+	},
 	"network.routerCellular.signal.metric.rsrp": {
 		"value": "RSRP",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
@@ -304,10 +464,20 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Signal-to-noise ratio measurement acronym."
 	},
+	"network.routerCellular.signalBars": {
+		"value": "Signal {bars}/{max}",
+		"locales": ["fr"],
+		"reason": "\"Signal\" is the French word; fr hud.noSignal reads \"Aucun signal\"."
+	},
 	"network.routerCellular.subnet.addressPlaceholder": {
 		"value": "192.168.9.1",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Literal IPv4 address example for the subnet address input."
+	},
+	"network.sharing.diagnostics.disclosure": {
+		"value": "Diagnostics",
+		"locales": ["fr"],
+		"reason": "\"Diagnostics\" is the French plural; fr advanced.applicationLogsDescription reads \"Journaux d'application et diagnostics\"."
 	},
 	"network.sharing.kind.ethernet": {
 		"value": "Ethernet",
@@ -439,10 +609,25 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Wi-Fi Protected Access 3 security standard identifier."
 	},
+	"network.wifiMode.open": {
+		"value": "Mode",
+		"locales": ["fr"],
+		"reason": "\"Mode\" is the French word; fr live.preview.compatBadge reads \"Mode de compatibilité\"."
+	},
+	"network.wifiMode.station": {
+		"value": "Station",
+		"locales": ["fr"],
+		"reason": "\"Station\" is the French Wi-Fi client mode term; fr network.routerCellular.detail.stationId reads \"ID de station (non expliqué)\"."
+	},
 	"networking.types.ethernet": {
 		"value": "Ethernet",
 		"locales": ["de", "es", "fr", "pt-BR"],
 		"reason": "IEEE 802.3 Ethernet standard name; catalogs using localized spellings remain outside this entry."
+	},
+	"networking.types.modem": {
+		"value": "Modem",
+		"locales": ["fr"],
+		"reason": "\"Modem\" is the French word; fr network.modem.noSim reads \"Aucune carte SIM détectée\"."
 	},
 	"networking.types.usb": {
 		"value": "USB",
@@ -454,6 +639,16 @@
 		"locales": ["ar", "es", "fr", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Wi-Fi wireless standard label spelling used only in the explicitly listed catalogs."
 	},
+	"notifications.panel.title": {
+		"value": "Notifications",
+		"locales": ["fr"],
+		"reason": "\"Notifications\" is the French plural; fr devtools.testDifferentTypes reads \"Testez différents types de notifications toast et leurs comportements\"."
+	},
+	"settings.destination": {
+		"value": "Destination",
+		"locales": ["fr"],
+		"reason": "\"Destination\" is the French word; fr live.chooseDestination reads \"Choisir une destination\"."
+	},
 	"settings.deviceHealth.axis.minutesAgo": {
 		"value": "−{n} min",
 		"locales": ["es", "fr", "pt-BR"],
@@ -463,6 +658,11 @@
 		"value": "GPU",
 		"locales": ["de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Graphics Processing Unit hardware acronym."
+	},
+	"settings.dialogs.sources.title": {
+		"value": "Sources",
+		"locales": ["fr"],
+		"reason": "\"Sources\" is the French plural; fr live.summary.switchUnknown reads \"Ce moteur ne communique pas les sources accessibles en direct.\"."
 	},
 	"settings.hardwareTypes.jetson": {
 		"value": "NVIDIA Jetson",
@@ -494,6 +694,11 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Liquid Crystal Display panel technology acronym."
 	},
+	"settings.onDeviceDisplay.profiles.mono": {
+		"value": "Monochrome",
+		"locales": ["fr"],
+		"reason": "\"Monochrome\" is the French word; same spelling in French."
+	},
 	"settings.sources.camlink": {
 		"value": "Cam Link 4K",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
@@ -514,6 +719,11 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Linux Video4Linux2 API and Motion JPEG coding-standard identifiers."
 	},
+	"settings.transportKind": {
+		"value": "Transport",
+		"locales": ["fr"],
+		"reason": "\"Transport\" is the French word; fr live.server.singleLinkHint reads \"Ce récepteur utilise un seul lien direct. L'agrégation de plusieurs liens n'est pas utilisée pour ce transport.\"."
+	},
 	"settings.transportKindBadge.rist": {
 		"value": "RIST",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
@@ -523,6 +733,11 @@
 		"value": "SRT",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Secure Reliable Transport protocol identifier used by transport diagnostics."
+	},
+	"settings.updates.channel.stable": {
+		"value": "Stable",
+		"locales": ["fr"],
+		"reason": "\"Stable\" is the French channel name; fr settings.updates.channel.hint reads \"Bêta reçoit les nouvelles images système en premier. Les paquets proviennent toujours de Stable.\"."
 	},
 	"settings.updates.checkFailed.whatFailed": {
 		"value": "{ifname} {family}: {host}, {state}",
@@ -553,6 +768,11 @@
 		"value": "DNS",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Domain Name System protocol acronym used for endpoint validation."
+	},
+	"settings.videoCodec": {
+		"value": "Codec",
+		"locales": ["fr"],
+		"reason": "\"Codec\" is the French word; fr general.audioCodec reads \"Codec audio\"."
 	},
 	"units.kbps": {
 		"value": "kbps",

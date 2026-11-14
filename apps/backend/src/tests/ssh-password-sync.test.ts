@@ -156,6 +156,40 @@ describe("ensureSshPasswordSynced — nothing to sync", () => {
 });
 
 describe("ensureSshPasswordSynced — boot-safety (never propagates)", () => {
+	test("a matching password reports success for boot reconciliation", async () => {
+		enterProd();
+		setup.ssh_user = "produser";
+		getConfig().ssh_pass = "persisted-secret";
+		setSshPasswordHash("$6$abc$hashvalue");
+
+		expect(
+			await ensureSshPasswordSynced({
+				readShadow: () => shadowLine("produser", "$6$abc$hashvalue"),
+				applyPassword: captureApply([]),
+			}),
+		).toBe(true);
+	});
+
+	test("unreadable shadow with no cached hash cannot report success", async () => {
+		enterProd();
+		setup.ssh_user = "produser";
+		getConfig().ssh_pass = "persisted-secret";
+		setSshPasswordHash(undefined);
+		let applies = 0;
+
+		const synced = await ensureSshPasswordSynced({
+			readShadow: () => {
+				throw new Error("EACCES: /etc/shadow");
+			},
+			applyPassword: async () => {
+				applies++;
+			},
+		});
+
+		expect(synced).toBe(false);
+		expect(applies).toBe(0);
+	});
+
 	test("(prod) a passwd failure is swallowed, not thrown", async () => {
 		enterProd();
 		setup.ssh_user = "produser";
@@ -169,7 +203,7 @@ describe("ensureSshPasswordSynced — boot-safety (never propagates)", () => {
 					throw new Error("passwd exited with code 1");
 				},
 			}),
-		).resolves.toBeUndefined();
+		).resolves.toBe(false);
 	});
 
 	test("(prod) a shadow-read failure is swallowed, not thrown", async () => {
@@ -185,7 +219,7 @@ describe("ensureSshPasswordSynced — boot-safety (never propagates)", () => {
 				},
 				applyPassword: captureApply([]),
 			}),
-		).resolves.toBeUndefined();
+		).resolves.toBe(false);
 	});
 });
 
