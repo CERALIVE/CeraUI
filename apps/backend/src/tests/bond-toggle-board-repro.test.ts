@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { call } from "@orpc/server";
 
 import { clearRecentLogLines, getRecentLogLines } from "../helpers/logger.ts";
+import { getNetworkInterfaces } from "../modules/network/network-interfaces.ts";
 import { configureNetworkInterfaceProcedure } from "../rpc/procedures/network.procedure.ts";
 import {
 	attachHuaweiTwins,
@@ -11,12 +12,14 @@ import {
 	makeRpcContext,
 	resetBondFixture,
 } from "./helpers/bond-toggle-fixture.ts";
+import { coverBondInterfaces } from "./helpers/covered-bond-fixture.ts";
 
 describe("network.configure — board-reproduced Huawei include truth", () => {
-	beforeEach(() => {
+	beforeEach(async () => {
 		resetBondFixture();
 		installHuaweiIdentityResolver();
 		attachHuaweiTwins();
+		await coverBondInterfaces(Object.keys(getNetworkInterfaces()));
 		clearRecentLogLines();
 	});
 

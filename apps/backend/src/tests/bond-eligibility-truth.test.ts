@@ -18,12 +18,14 @@ import {
 	makeRpcContext,
 	resetBondFixture,
 } from "./helpers/bond-toggle-fixture.ts";
+import { coverBondInterfaces } from "./helpers/covered-bond-fixture.ts";
 
 describe("duplicate-IP bond eligibility — one displayed and admitted verdict", () => {
-	beforeEach(() => {
+	beforeEach(async () => {
 		resetBondFixture();
 		installHuaweiIdentityResolver();
 		attachHuaweiTwins();
+		await coverBondInterfaces(Object.keys(getNetworkInterfaces()));
 	});
 
 	afterEach(() => {

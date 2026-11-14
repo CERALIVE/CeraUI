@@ -24,6 +24,7 @@ import {
 } from "../modules/network/network-interfaces.ts";
 import { setNetifState } from "../modules/network/state/netif-state.ts";
 import { genSrtlaIpList } from "../modules/streaming/srtla.ts";
+import { coverBondInterfaces } from "./helpers/covered-bond-fixture.ts";
 
 const NOW = 1_755_331_200_000;
 
@@ -90,8 +91,15 @@ function resetState(): void {
 	setQueueUpdateGwHook(null);
 }
 
-beforeEach(() => {
+beforeEach(async () => {
 	resetState();
+	await coverBondInterfaces([
+		"dg0h",
+		"dg1h",
+		"eth0",
+		"usb0",
+		"enx344b50000000",
+	]);
 });
 
 describe("dongle marker — live rows", () => {

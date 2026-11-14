@@ -42,6 +42,7 @@ import {
 	constructedTwinDeps,
 	constructedTwins,
 } from "./helpers/constructed-usb-twins.ts";
+import { coverBondInterfaces } from "./helpers/covered-bond-fixture.ts";
 
 describe("operator bond opt-out — config.json restart persistence", () => {
 	let configPath = "";
@@ -57,6 +58,7 @@ describe("operator bond opt-out — config.json restart persistence", () => {
 		await loadConfig();
 		installHuaweiIdentityResolver();
 		attachHuaweiTwins();
+		await coverBondInterfaces(Object.keys(getNetworkInterfaces()));
 	});
 
 	afterEach(() => {
@@ -115,6 +117,7 @@ describe("operator bond opt-out — config.json restart persistence", () => {
 			usbHuaweiB: HUAWEI_PORT_IDENTITIES.enx0c5b8f279a64,
 		});
 		attachHuaweiTwins("usbHuaweiA", "usbHuaweiB");
+		await coverBondInterfaces(Object.keys(getNetworkInterfaces()));
 		const wire = netIfBuildMsg();
 		const current = wire.usbHuaweiA;
 

@@ -988,6 +988,34 @@ neighbouring interface.
 `physical-identity-source.ts` is the one place that assembles an observation from
 the live caches; the resolver itself reads no device.
 
+### First-sight identity readiness [EXISTS — host tested]
+
+The OS producer waits up to 2 seconds for a covering USB scan before publishing a
+new interface. A covered modem therefore exposes its persisted bond opt-out,
+physical bind-map/link-registry id and stored router credentials on the first
+publication. A completed scan without a USB descriptor also counts as coverage.
+
+An interface published after that bound remains visible but cannot join either
+the public or local-receiver bond, mint a bond id or persist a physical opt-out
+until `usbNetScanCovers(ifname)` or `identityDeadlineExpired(ifname)` allows it.
+These are the producer's shared predicates, with one 15-second monotonic deadline
+from first publication and one fallback warning per name. There is no second
+consumer clock. The next netif poll announces readiness even when the topology
+did not change, so deadline fallback also reaches an active stream.
+
+An active session subscribes to USB scan commits as well as netif changes and
+removes both subscriptions when it stops. Bond refreshes run in order: a scan
+commit and its following netif publication cannot race the two-file writer or
+restart the sender twice for the same addition. Only a changed publication
+requests `restartSrtla()`.
+
+Coverage: `tests/bond-identity-first-sight.test.ts` drives promise-gated production
+netif publication through opt-out, bind-map, registry, credentials and an active
+session. `tests/bind-map-identity-readiness.test.ts` covers the 2-second bound and
+shared deadline; the existing bond suites use completed scans before testing
+their independent admission and degradation rules. This is constructed host
+evidence, not physical modem qualification.
+
 Coverage: `tests/modem-physical-identity.test.ts` — the dual-mode stick's identity
 and `link_id` across the 9024⇄9091 flip (both bench sticks, with the two-sticks
 negative), its coherent titling in both compositions, the twins resolving DISTINCT

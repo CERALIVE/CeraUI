@@ -23,6 +23,7 @@
 import type WebSocket from "ws";
 import { logger } from "../../../helpers/logger.ts";
 import { onNetworkInterfacesChange } from "../../network/network-interfaces.ts";
+import { onUsbNetScanCommitted } from "../../network/router-cellular-scan.ts";
 import { isUpdating } from "../../system/software-updates.ts";
 import { sendStatus } from "../../ui/status.ts";
 import { getSocketSenderId } from "../../ui/websocket-server.ts";
@@ -139,7 +140,12 @@ export async function start(
 			}),
 		);
 	}
-	const refreshSrtlaIpAddresses = async () => {
+	let refreshing = Promise.resolve();
+	const refreshSrtlaIpAddresses = () => {
+		refreshing = refreshing.then(refreshBond);
+		return refreshing;
+	};
+	const refreshBond = async () => {
 		if (sessionResources?.generation !== generation || !ownsLaunch()) return;
 		try {
 			// `changed` is true for a MAPPING-ONLY republication too — moving a link
@@ -153,11 +159,16 @@ export async function start(
 			logger.warn("Failed to refresh SRTLA IP addresses", { error });
 		}
 	};
+	const removeNetifListener = onNetworkInterfacesChange(
+		refreshSrtlaIpAddresses,
+	);
+	const removeScanListener = onUsbNetScanCommitted(refreshSrtlaIpAddresses);
 	sessionResources = {
 		generation,
-		removeNetworkInterfacesChangeListener: onNetworkInterfacesChange(
-			refreshSrtlaIpAddresses,
-		),
+		removeNetworkInterfacesChangeListener: () => {
+			removeNetifListener();
+			removeScanListener();
+		},
 	};
 
 	let result: StartStreamResult;

@@ -67,6 +67,7 @@ import {
 	genSrtlaBondEntries,
 	setBondIdentityResolverForTest,
 } from "../modules/streaming/srtla.ts";
+import { coverBondInterfaces } from "./helpers/covered-bond-fixture.ts";
 
 const HEALTHY_IF = "eth0";
 const HEALTHY_IP = "192.168.78.132";
@@ -161,7 +162,8 @@ function entryFor(entries: readonly BondEntry[], iface: string): BondEntry {
 	return found;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+	await coverBondInterfaces([HEALTHY_IF, DEGRADED_IF]);
 	const netif = getNetworkInterfaces();
 	for (const name of Object.keys(netif)) delete netif[name];
 	setNetifState({});

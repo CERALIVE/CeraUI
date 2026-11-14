@@ -61,6 +61,7 @@ import {
 } from "../modules/ui/notifications.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
 import type { AppWebSocket } from "../rpc/types.ts";
+import { coverBondInterfaces } from "./helpers/covered-bond-fixture.ts";
 
 /**
  * The bench pair, verbatim. They ship ONE factory MAC, so systemd can name only
@@ -186,6 +187,7 @@ function shownNotices(
 }
 
 beforeEach(async () => {
+	await coverBondInterfaces([TWIN_A, TWIN_B, SOLO_IF]);
 	const netif = getNetworkInterfaces();
 	for (const name of Object.keys(netif)) delete netif[name];
 	setNetifState({});

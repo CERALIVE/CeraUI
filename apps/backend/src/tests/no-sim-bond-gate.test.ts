@@ -40,6 +40,7 @@ import {
 } from "../modules/network/router-cellular-admin.ts";
 import { setNetifState } from "../modules/network/state/netif-state.ts";
 import { genSrtlaIpList } from "../modules/streaming/srtla.ts";
+import { coverBondInterfaces } from "./helpers/covered-bond-fixture.ts";
 
 // Verbatim from the bench ZTE MF79U with no card in it. `modem_sim_undetected`
 // is the device's OWN word for the slot being empty — the only kind of evidence
@@ -94,7 +95,8 @@ function iface(over: Partial<NetworkInterface> = {}): NetworkInterface {
 	} as NetworkInterface;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+	await coverBondInterfaces(["enx344b50000000", "eth0"]);
 	const netif = getNetworkInterfaces();
 	for (const name of Object.keys(netif)) delete netif[name];
 	setNetifState({});

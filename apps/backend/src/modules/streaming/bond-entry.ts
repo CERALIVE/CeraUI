@@ -2,6 +2,10 @@ import { logger } from "../../helpers/logger.ts";
 import type { PhysicalDeviceRecord } from "../modems/physical-identity.ts";
 import { resolveModemPhysicalIdentity } from "../modems/physical-identity-source.ts";
 import {
+	identityDeadlineExpired,
+	usbNetScanCovers,
+} from "../network/router-cellular-scan.ts";
+import {
 	type BondEntry,
 	isMappableEntry,
 	unmappableBondEntry,
@@ -10,6 +14,10 @@ import {
 export type BondIdentityResolver = typeof resolveModemPhysicalIdentity;
 
 let identityResolver: BondIdentityResolver = resolveModemPhysicalIdentity;
+
+export function isBondIdentityReady(ifname: string): boolean {
+	return usbNetScanCovers(ifname) || identityDeadlineExpired(ifname);
+}
 
 export function setBondIdentityResolverForTest(
 	fn: BondIdentityResolver | null,
@@ -20,6 +28,7 @@ export function setBondIdentityResolverForTest(
 export function resolveBondPhysicalIdentity(
 	ifname: string,
 ): PhysicalDeviceRecord | undefined {
+	if (!isBondIdentityReady(ifname)) return undefined;
 	try {
 		return identityResolver(ifname);
 	} catch {
@@ -32,6 +41,7 @@ export function describeBondEntry(
 	ip: string,
 	logFailure = true,
 ): BondEntry {
+	if (!isBondIdentityReady(ifname)) return unmappableBondEntry(ip, ifname);
 	try {
 		const record = identityResolver(ifname);
 		return {

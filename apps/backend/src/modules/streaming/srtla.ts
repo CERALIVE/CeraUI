@@ -36,6 +36,7 @@ import {
 } from "./bind-map-writer.ts";
 import {
 	describeBondEntry,
+	isBondIdentityReady,
 	isBondLinkMappable,
 	setBondIdentityResolverForTest,
 } from "./bond-entry.ts";
@@ -95,6 +96,7 @@ function collectBondEntries(
 	for (const name in networkInterfaces) {
 		const networkInterface = networkInterfaces[name];
 		if (!networkInterface?.ip) continue;
+		if (!isBondIdentityReady(name)) continue;
 		if (!accept(name, networkInterface)) continue;
 		const entry = describeBondEntry(name, networkInterface.ip);
 		if (requireMappableDuplicate && !admitEntry(networkInterface, entry))

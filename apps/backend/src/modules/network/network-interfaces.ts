@@ -40,7 +40,10 @@ import {
 	getMockModemNetMarker,
 	shouldMockNetwork,
 } from "../../mocks/providers/network.ts";
-import { isBondLinkMappable } from "../streaming/bond-entry.ts";
+import {
+	isBondIdentityReady,
+	isBondLinkMappable,
+} from "../streaming/bond-entry.ts";
 // Type-only: erased at build time, so it adds no runtime edge back into
 // `modules/streaming/`, which imports this module.
 import type { BondMappingState } from "../streaming/link-mapping-report.ts";
@@ -161,6 +164,7 @@ let netif: Record<string, NetworkInterface> = {};
 let netifSnapshotReady = false;
 let netifRefreshGeneration = 0;
 const scanPublicationWarnings = new Set<string>();
+let pendingBondIdentities = new Set<string>();
 
 export function hasNetifSnapshot(): boolean {
 	return netifSnapshotReady;
@@ -171,6 +175,7 @@ export function resetNetifSnapshotForTest(): void {
 	netifSnapshotReady = false;
 	netifRefreshGeneration++;
 	scanPublicationWarnings.clear();
+	pendingBondIdentities.clear();
 }
 
 // Interfaces excluded from dup-IPv4 detection during a station<->hotspot
@@ -238,6 +243,7 @@ export function isDupIpOnly(int: NetworkInterface): boolean {
  */
 export function isBondCandidate(name: string, int: NetworkInterface): boolean {
 	if (!int.ip) return false;
+	if (!isBondIdentityReady(name)) return false;
 	if (isConcurrentApIfname(name)) return false;
 	if (isSharedLanPort(name)) return false;
 	if ((int.error & ~NETIF_ERR_DUPIPV4) !== 0) return false;
@@ -1023,7 +1029,14 @@ export function processIfconfigOutput(
 	netifSnapshotReady = true;
 	notePublishedNetifSnapshot(Object.keys(netif));
 
-	if (intsChanged || firstSnapshot) {
+	const identityBecameReady = [...pendingBondIdentities].some(
+		(name) => netif[name] !== undefined && isBondIdentityReady(name),
+	);
+	pendingBondIdentities = new Set(
+		Object.keys(netif).filter((name) => !isBondIdentityReady(name)),
+	);
+
+	if (intsChanged || firstSnapshot || identityBecameReady) {
 		triggerNetworkInterfacesChange();
 		notifyTopologyChange();
 	}

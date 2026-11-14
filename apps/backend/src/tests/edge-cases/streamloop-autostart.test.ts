@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 
 // Edge-case hardening for the boot-time autostart path (streamloop/autostart.ts).
 //
@@ -34,8 +34,13 @@ import {
 	setOrchestratorStateForTest,
 } from "../../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../../modules/system/update-orchestrator/types.ts";
+import { coverBondInterfaces } from "../helpers/covered-bond-fixture.ts";
 
 type Scheduled = { fn: () => unknown; delay: number | undefined };
+
+beforeEach(async () => {
+	await coverBondInterfaces(["__edgecase_test"]);
+});
 
 // Replace setTimeout with a recorder so retries are observed, never armed.
 function captureTimers(): {

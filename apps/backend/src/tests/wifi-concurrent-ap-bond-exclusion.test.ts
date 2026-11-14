@@ -31,6 +31,7 @@ import {
 } from "../modules/network/network-interfaces.ts";
 import { setNetifState } from "../modules/network/state/netif-state.ts";
 import { genSrtlaIpList } from "../modules/streaming/srtla.ts";
+import { coverBondInterfaces } from "./helpers/covered-bond-fixture.ts";
 
 const CONCURRENT_AP = "clap-wlan0";
 const AP_ADDRESS = "10.42.0.1";
@@ -74,7 +75,8 @@ function iface(over: Partial<NetworkInterface> = {}): NetworkInterface {
 	} as NetworkInterface;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+	await coverBondInterfaces([CONCURRENT_AP, "wlan0", "eth0"]);
 	const netif = getNetworkInterfaces();
 	for (const name of Object.keys(netif)) delete netif[name];
 	setNetifState({});

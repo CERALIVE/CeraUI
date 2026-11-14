@@ -15,10 +15,12 @@ import {
 } from "../modules/network/network-interfaces.ts";
 import { setBondIdentityResolverForTest } from "../modules/streaming/bond-entry.ts";
 import { genSrtlaBondEntries } from "../modules/streaming/srtla.ts";
+import { coverBondInterfaces } from "./helpers/covered-bond-fixture.ts";
 
 const IFACE = "bond-wire0";
 
-beforeEach(() => {
+beforeEach(async () => {
+	await coverBondInterfaces([IFACE]);
 	resetBondOptOut();
 	getNetworkInterfaces()[IFACE] = {
 		ip: "192.168.8.100",

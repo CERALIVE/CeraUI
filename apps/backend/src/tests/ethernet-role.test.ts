@@ -63,6 +63,7 @@ import {
 	setEthernetRoleProcedure,
 } from "../rpc/procedures/network.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
+import { coverBondInterfaces } from "./helpers/covered-bond-fixture.ts";
 
 const SHARED_PORT = "eth1";
 const UPLINK_PORT = "eth0";
@@ -156,7 +157,8 @@ const TEST_CONFIG_FILE = `${process.env.TMPDIR ?? "/tmp"}/ceraui-eth-role-${proc
 
 let previousConfigFile = "";
 
-beforeEach(() => {
+beforeEach(async () => {
+	await coverBondInterfaces([SHARED_PORT, UPLINK_PORT]);
 	// `persistEthernetRole` performs a REAL synchronous write, so the repo's own
 	// config.json is what it hits without this redirect.
 	previousConfigFile = getConfigFilePath();

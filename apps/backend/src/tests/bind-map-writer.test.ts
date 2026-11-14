@@ -38,6 +38,7 @@ import {
 	resetBindMapWriter,
 } from "../modules/streaming/bind-map-writer.ts";
 import { genSrtlaBondEntries } from "../modules/streaming/srtla.ts";
+import { coverBondInterfaces } from "./helpers/covered-bond-fixture.ts";
 
 const TWIN_IP = "192.168.8.100";
 
@@ -85,7 +86,8 @@ const entry = (ip: string, ifname: string, linkId: string): BondEntry => ({
 	linkId,
 });
 
-beforeEach(() => {
+beforeEach(async () => {
+	await coverBondInterfaces(["enx0c5b8f279a64", "eth1", "eth0", "wlan0"]);
 	const netif = getNetworkInterfaces();
 	for (const name of Object.keys(netif)) delete netif[name];
 	setNetifState({});
