@@ -65,7 +65,6 @@
 	"live.education.field.audio.title": ["de", "es", "fr"],
 	"live.education.field.mode.title": ["fr"],
 	"live.education.reason.rawCaptureNotStreamable": [
-		"ar",
 		"de",
 		"fr",
 		"hi",
@@ -119,7 +118,6 @@
 	"live.inputPicker.active": ["fr"],
 	"live.inputPicker.groups.audio": ["de", "es", "fr"],
 	"live.inputPicker.groups.raw_video": [
-		"ar",
 		"de",
 		"fr",
 		"hi",
@@ -130,7 +128,6 @@
 	],
 	"live.inputPicker.groups.test": ["de", "fr"],
 	"live.inputPicker.groups.unknown": [
-		"ar",
 		"de",
 		"fr",
 		"hi",

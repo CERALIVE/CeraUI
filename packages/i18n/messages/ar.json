@@ -1,7 +1,7 @@
 {
-	"live.inputPicker.groups.raw_video": "Raw video",
-	"live.inputPicker.groups.unknown": "Unclassified input",
-	"live.education.reason.rawCaptureNotStreamable": "This raw video input is detected, but streaming from it is not supported.",
+	"live.inputPicker.groups.raw_video": "فيديو غير مضغوط",
+	"live.inputPicker.groups.unknown": "مدخل غير مصنّف",
+	"live.education.reason.rawCaptureNotStreamable": "تم اكتشاف مدخل الفيديو غير المضغوط هذا، لكن البث منه غير مدعوم.",
 	"live.summary.switchUnknown": "لا يبلّغ هذا المحرّك عن المصادر المتاحة للتبديل أثناء البث.",
 	"live.summary.switchEmpty": "لا يتوفر تبديل للمصدر في هذه الجلسة.",
 	"network.routerCellular.lock.verification.admin_unreachable": "تعذر الوصول إلى صفحة تسجيل الدخول للمودم. لم تُحفظ كلمة المرور هذه. تحقق من الاتصال قبل المحاولة مجددًا.",
