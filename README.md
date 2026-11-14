@@ -5,6 +5,12 @@ balancer selection or clear a saved codec with `video_codec: null` for the next
 start. Saved keys, defaults and passthrough choices remain unchanged. See the
 [settings contract](apps/backend/docs/agents/streaming-rpc-procedures.md#format-settings-exists).
 
+**Audio input backend [EXISTS; hardware qualification owed].** Capable engines
+can receive saved inputs and tracks, with gain, mute and delay updates while a
+mix session runs. The single-source default retains its existing engine path.
+The mixer UI remains planned. See the
+[audio input contract](apps/backend/docs/agents/streaming-rpc-procedures.md#audio-inputs-exists).
+
 **Destination navigation [EXISTS].** The desktop rail and mobile dock accept
 successive destinations without a wall-clock throttle, including in e-ink mode.
 The navigation store still ignores the current destination and blocks active
@@ -412,6 +418,10 @@ The app is organized into three primary destinations:
 - **Settings** — system and device configuration. All actions open focused dialogs: cloud remote, LAN password, SSH, logs, software updates, power, version info, and per-protocol network-ingest (RTMP/SRT) enable/disable. Software-update preflight refusals report their reason and clear the progress overlay. The post-acceptance silent-return gap is recorded in [D8 Known gaps](docs/agents/the-device-update-system.md), item (c). Update-state details: [device updates](docs/DEVICE-UPDATES.md).
 
 A dev-only DevTools destination is available in development builds.
+
+The SSH-at-boot choice is stored in the existing device config and restored on
+each OS slot after password sync. Temporary Start/Stop remains independent.
+See the [SSH persistence contract](apps/backend/docs/agents/dev-mock-seams.md#ssh-boot-persistence-is-a-second-axis-not-a-side-effect-exists).
 
 ### Other Highlights
 

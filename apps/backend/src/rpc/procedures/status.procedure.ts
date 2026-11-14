@@ -28,6 +28,7 @@ import {
 	deriveAudioSources,
 	getAudioDevices,
 } from "../../modules/streaming/audio.ts";
+import { getAudioMixActive } from "../../modules/streaming/audio-mix-status.ts";
 import {
 	getPendingAudioFollowAsrc,
 	getResolvedAsrc,
@@ -82,6 +83,7 @@ export const getStatusProcedure = authedProcedure
 		void getSshStatus();
 		return {
 			is_streaming: getIsStreaming(),
+			audio_mix_active: getAudioMixActive(),
 			stream_lifecycle: getStreamLifecycleState(),
 			available_updates: getAvailableUpdates(),
 			updating: getSoftUpdateStatus(),
@@ -131,6 +133,7 @@ export function buildInitialStatus() {
 		relays: getRelays() ? buildRelaysMsg() : null,
 		status: {
 			is_streaming: getIsStreaming(),
+			audio_mix_active: getAudioMixActive(),
 			stream_lifecycle: getStreamLifecycleState(),
 			available_updates: getAvailableUpdates(),
 			updating: getSoftUpdateStatus(),
