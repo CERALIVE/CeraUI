@@ -997,6 +997,61 @@ deliberate different-port divergence, hwdb model recovery, the minting contract
 ifname fallback, the mmcli row's byte-identical `stable_key`, and the preserved
 HIMI chain.
 
+### First-sight USB bond admission [EXISTS]
+
+Transport classification, scan coverage and admission are separate facts.
+The OS netif refresh issues one asynchronous read of
+`/sys/class/net/<if>/device/subsystem` for each unsettled name without positive
+USB evidence, using exactly its parsed ifconfig name set. Only `usb` is positive
+evidence; interface names and driver names do not
+classify transport. A positive `usb` latch survives later refreshes for that
+entry. The bus map is the fourth `processIfconfigOutput` parameter; the third
+parameter remains the sample clock.
+
+An addressed USB entry stays out of both global and local-subnet SRTLA collectors
+until `usbNetScanCovers(name)` or the shared `identityDeadlineExpired(name)`
+predicate permits admission. The existing 2 second scan publication bound and
+15 second clock from first netif publication are unchanged. The wire row reports
+`enabled:false` during this hold without overwriting the operator's choice.
+Physical opt-outs still apply when coverage supplies the final identity.
+
+`identitySettled` latches admission on an addressed publication that is no longer
+pending, or synchronously at a covering scan commit. Losing coverage in a later
+scan never withdraws that entry. Classification and settlement die when removal
+is observed by the monitor, a poll without the name, or a non-RUNNING row.
+Per-name presence counters fence bus results issued before an observed create,
+delete or replacement; stale classification is ignored while the raw ifconfig
+row follows the existing publication path. An addressed row admitted after stale
+evidence is ignored is settled and is not re-read on the next refresh. Only
+addressless unsettled rows retry missing classification. The settlement listener
+is installed once on the first publication, avoiding import-time calls through
+the network/scan/registry dependency cycle.
+
+The scope is positive USB evidence available at first addressed publication.
+An unreadable, missing, rejected or still-pending bus link keeps the previous
+behavior: provisional interface-name identity, then physical identity when
+coverage arrives. There is no awaited classifier read, extra I/O deadline or
+hold for unknown transport. This applies to Ethernet and virtual interfaces too.
+A completed scan covers even a rejected descriptor read, so that commit can
+release a USB entry weakly before 15 seconds. A weak identity is still refused
+for durable bond preferences and modem credentials. Coverage, descriptors and
+the readiness clock remain name-keyed; unobserved rapid replug within one poll
+cadence is outside the observed-incarnation fence.
+
+Both release points call `triggerNetworkInterfacesChange()` and `broadcastNetif()`.
+Thus a coverage-only or deadline-only release delivers a real `netif` frame with
+`enabled:true` for an otherwise eligible row even if counters and raw enabled
+state are unchanged. Duplicate frames are allowed. The session serializes the
+release event with its scan-commit refresh; the same applied publication owes
+one restart.
+
+Coverage: `tests/bind-map-identity-readiness.test.ts`,
+`tests/bond-identity-scan-parity.test.ts`,
+`tests/network-module-init-order.test.ts`, and the B13 cases in
+`tests/bond-session-restart-obligation.test.ts`. They cover both collectors,
+disk/registry identity, physical opt-outs, shared-serial twins, real release
+frames, unknown/error scope, observed replacement and unchanged Ethernet behavior.
+
 ### The two `05c6:9024` sticks are RNDIS + read-only UFI devices [EXISTS]
 
 Historical pre-RAUC evidence below records why the kernel fix was required. Todo
