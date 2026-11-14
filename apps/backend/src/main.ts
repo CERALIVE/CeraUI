@@ -67,6 +67,7 @@ import {
 	stopRuntimeConfigRecovery,
 } from "./modules/config-boot.ts";
 import { initLogSettings } from "./modules/device-logs/settings.ts";
+import { initCellularEvents } from "./modules/events/cellular-events.ts";
 import { setEventSink } from "./modules/events/emit.ts";
 import { initIdentity } from "./modules/identity/index.ts";
 import { initRTMPIngestStats } from "./modules/ingest/rtmp.ts";
@@ -574,6 +575,7 @@ await guardNonCritical("cellular-shadow", startModemShadowIfEnabled);
 await guardNonCritical("udev-provisional", initUdevProvisionalMonitor);
 
 // Event-driven modems share the SAME monitor (one nmcli monitor for all)
+initCellularEvents();
 void initModemUpdateLoop({ monitor: networkMonitor });
 
 // Replay the durable modem-mutation journal and LOWER the admission barrier.
