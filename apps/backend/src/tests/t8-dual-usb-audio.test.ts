@@ -43,7 +43,7 @@ describe("T8 — Dual USB audio fixtures with engine audio entries", () => {
 		const { devices } = getMockEngineDevices();
 
 		const audioDevices = devices.filter((d) => d.media_class === "audio");
-		expect(audioDevices).toHaveLength(2);
+		expect(audioDevices).toHaveLength(3);
 
 		const rode = audioDevices.find((d) => d.alsa_card_id === "rode_ai_micro");
 		expect(rode).toBeDefined();
@@ -54,6 +54,9 @@ describe("T8 — Dual USB audio fixtures with engine audio entries", () => {
 		expect(elgato).toBeDefined();
 		expect(elgato?.display_name).toBe("Elgato Wave:3");
 		expect(elgato?.input_id).toBe("audio_elgato_wave3");
+		const hdmi = audioDevices.find((d) => d.alsa_card_id === "rockchiphdmiin");
+		expect(hdmi?.display_name).toBe("HDMI Input");
+		expect(hdmi?.input_id).toBe("audio_rockchiphdmiin");
 	});
 
 	test("streaming-active scenario also includes dual USB audio entries", () => {

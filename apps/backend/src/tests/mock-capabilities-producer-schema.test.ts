@@ -59,6 +59,30 @@ describe("mock capabilities producer schema", () => {
 			expect(wire.encoder.codecs).toEqual(
 				config.capabilities?.fullProfile ? ["H264", "H265"] : ["H264"],
 			);
+			if (scenario === "caps-full") {
+				const expected = {
+					max_inputs: 4,
+					max_tracks: 4,
+					gain_db_min: -60,
+					gain_db_max: 12,
+					delay_ms_max: 2000,
+				};
+				expect(producer).toHaveProperty("audio_mix", expected);
+				expect(wire).toHaveProperty("audio_mix", expected);
+				expect(wire.features).toEqual(
+					expect.arrayContaining(["audio-mix", "composition-geometry"]),
+				);
+				expect(
+					getMockEngineDevices().devices.filter(
+						(d) => d.media_class === "audio",
+					),
+				).toHaveLength(3);
+			} else {
+				expect(producer).not.toHaveProperty("audio_mix");
+				expect(wire).not.toHaveProperty("audio_mix");
+				expect(wire.features ?? []).not.toContain("audio-mix");
+				expect(wire.features ?? []).not.toContain("composition-geometry");
+			}
 		});
 	}
 });

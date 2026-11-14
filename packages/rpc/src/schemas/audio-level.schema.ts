@@ -11,6 +11,7 @@
  * a silence level for a missing device or a degenerate `audio.mode` — a gap is
  * always the explicit `unavailable` variant.
  */
+import { audioInputLevelSchema } from '@ceralive/cerastream/dist/events.js';
 import { z } from 'zod';
 
 export const AUDIO_LEVEL_OWNERS = ['sidecar', 'streaming'] as const;
@@ -50,6 +51,7 @@ export const audioLevelMessageSchema = z.object({
 	// dBFS, range (-inf, 0]; digital silence serialises as the `floor_db` sentinel.
 	rms_db: z.array(z.number()).optional(),
 	peak_db: z.array(z.number()).optional(),
+	inputs: z.array(audioInputLevelSchema).optional(),
 	floor_db: z.number().optional(),
 	// The gap marker — present (and only present) when there is no real level.
 	unavailable: z.literal(true).optional(),

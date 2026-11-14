@@ -94,6 +94,7 @@ describe("mock device_modes — getMockEngineDevices expansion", () => {
 			"usb2",
 			"audio_rode_ai_micro",
 			"audio_elgato_wave3",
+			"audio_rockchiphdmiin",
 		]);
 		const hdmi = devices[0];
 		expect(hdmi?.kind).toBe("hdmi");

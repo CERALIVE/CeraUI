@@ -206,6 +206,7 @@ export function toAudioLevelMessage(
 		...(event.channels !== undefined ? { channels: event.channels } : {}),
 		...(event.rms_db !== undefined ? { rms_db: event.rms_db } : {}),
 		...(event.peak_db !== undefined ? { peak_db: event.peak_db } : {}),
+		...(event.inputs !== undefined ? { inputs: event.inputs } : {}),
 		...(event.floor_db !== undefined ? { floor_db: event.floor_db } : {}),
 		...(event.unavailable !== undefined
 			? { unavailable: event.unavailable }

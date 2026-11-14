@@ -114,6 +114,30 @@ capture and `"adaptive-active"` for network ingest. Existing uppercase `codecs`
 values remain unchanged. `mock-capabilities-producer-schema.test.ts` checks every
 scenario through the installed producer parser and the RPC projection.
 
+**Audio mix and free geometry [EXISTS; host simulation].** Only `caps-full`
+adds `audio_mix` (four inputs, four tracks, -60 to 12 dB, up to 2000 ms),
+`audio-mix`, `composition` and `composition-geometry`, and a third audio device
+(the existing HDMI Input fixture name). Other scenarios retain their previous
+fields and omit these additions, including `multi-modem-wifi`.
+
+`startMockStreaming(params)` admits producer-owned `StartParams`, preserving
+`audio.inputs` and `composition.rect` in `mockState.engineStart`. The mock
+enforces the engine's empty/count/duplicate input, track membership/gaps,
+gain/delay, device/mode conflicts and embedded-network rules, then resolves
+audio registry identities and capability support. `setMockAudioMix` validates
+the whole batch before committing, preserves tracks, echoes applied defaults,
+and refuses a non-mix session with `audio-mix-inactive`. Unknown input errors
+carry `cerastream.audio.device_not_found`; `switchMockAudio` refuses a running
+mix with `audio-mix-active`. Stop and reset clear the admitted session.
+
+`changeMockComposition` enforces missing/unexpected/range rectangle errors and
+the geometry feature gate. Presets never enter `custom`; the producer rectangle
+schema and minimum are exported separately by RPC. The preview socket adds
+`inputs[]` only for an admitted live mix, with synthetic post-gain/post-mute
+levels; its existing top-level meter remains unchanged. This simulates control
+and meter contracts, not GStreamer timing or hardware behavior. Settings-to-engine
+audio mapping and the mixer/designer UI are separate work.
+
 **`setMockEngineCapabilities(partial)` — test-only capability override seam (T5):**
 `setMockEngineCapabilities(partial)` (exported from `mocks/providers/streaming.ts`)
 merges a `Partial<ScenarioCapabilities>` onto the active scenario's profile, then

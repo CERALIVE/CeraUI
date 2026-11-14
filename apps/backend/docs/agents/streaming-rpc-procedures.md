@@ -7,7 +7,7 @@
 not admission, and never persist capture config or trigger audio follow. Only an
 unsupported query uses the legacy registry path. See
 [LIVE-SESSION-SWITCHING](../../../../docs/LIVE-SESSION-SWITCHING.md) for the published
-2026.11.0/schema 0.22.0 contract. Targets carry `input_id`, `kind`, and optional
+2026.11.1/schema 0.23.0 contract. Targets carry `input_id`, `kind`, and optional
 source-mode fields;
 membership is authoritative, including explicit `[]` for passthrough/composition.
 Non-membership is `SWITCH_FAILED`, not evidence of a physical unplug. The
@@ -18,7 +18,7 @@ leave discovery, capture persistence and pending audio follow untouched.
 
 ### Engine-owned encoder ladder [EXISTS]
 
-`@ceralive/cerastream@2026.11.0` parses the additive `encoders[]` block before
+`@ceralive/cerastream@2026.11.1` parses the additive `encoders[]` block before
 `capabilities.ts` caches or broadcasts it. The backend performs no codec-table
 reconstruction: live and cached snapshots retain the producer-owned
 `EncoderCapability[]`, while the minimal cold-start floor omits it so the frontend

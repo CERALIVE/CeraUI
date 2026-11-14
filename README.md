@@ -625,10 +625,15 @@ original entry; any repair/restore error warns without failing configure. See
 [retention and mount limits](docs/BUILD_PIPELINE.md#frontend-link-repair-exists-host-tested-board-proof-owed).
 To check a device: `readlink /opt/ceralive/public` must print `/var/www/ceralive`.
 
-CeraUI pins the published `@ceralive/cerastream@2026.11.0` in both
-the backend and shared RPC package, carrying schema 0.22.0's optional
+CeraUI pins the published `@ceralive/cerastream@2026.11.1` in both
+the backend and shared RPC package, carrying schema 0.23.0's optional
 `encoder.default_codec` and `active_encode.route_reason` alongside capture status,
 failover-rate policy, raw-input classifications, and source-mode session-switch fields.
+Optional `audio_mix` capabilities and per-input audio levels now survive the RPC
+boundary. The mock models audio mix admission, live controls and free composition
+rectangles; the six preset choices stay unchanged. See the
+[mock contract](docs/agents/mock-subsystem.md). Audio settings persistence and the
+mixer/designer controls are separate work.
 The producer's exported
 `ChangeConfigParams` and installed schema are regression-tested directly.
 The bindings-skew gate checks the schema version and preservation of the three
