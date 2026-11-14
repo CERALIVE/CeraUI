@@ -10,10 +10,17 @@ test.each(["kernel-lock", "output"])(
 		const path = join(dir, "fifo");
 		expect(await Bun.spawn(["mkfifo", "-m", "600", path]).exited).toBe(0);
 		const info = lstatSync(path);
+		const start = `
+ await new Promise(resolve => {
+   process.once("message", resolve);
+   process.send("ready");
+ });
+ `;
 		const source =
 			reader === "kernel-lock"
 				? `
  const {readOsLockKernelDevice} = await import(${JSON.stringify(join(import.meta.dir, "../modules/system/update-orchestrator/os-stage-lock-device.ts"))});
+ ${start}
  const value = await readOsLockKernelDevice(${JSON.stringify(path)}, ${JSON.stringify({ dev: info.dev, ino: info.ino })});
  if (value !== null) throw new Error("accepted FIFO"); console.log("refused");
  `
@@ -22,25 +29,45 @@ test.each(["kernel-lock", "output"])(
  const fs = (await import("node:fs/promises")).default; const native = fs.open;
  spyOn(fs, "open").mockImplementation((p,f,m) => native(p === "/run/ceralive/software-update.stdout" ? ${JSON.stringify(path)} : p,f,m));
  const {readSoftwareUpdateOutput, UnsafeSoftwareUpdateOutputPathError} = await import(${JSON.stringify(join(import.meta.dir, "../modules/system/software-update-output.ts"))});
+ ${start}
  try { await readSoftwareUpdateOutput("/run/ceralive/software-update.stdout",0); throw new Error("accepted FIFO"); }
  catch(error) { if (!(error instanceof UnsafeSoftwareUpdateOutputPathError)) throw error; console.log("refused"); }
  `;
+		let timer: ReturnType<typeof setTimeout> | undefined;
 		try {
-			const child = Bun.spawn([process.execPath, "--eval", source], {
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			const timer = setTimeout(() => child.kill(), 2000);
+			const child = Bun.spawn(
+				[
+					process.execPath,
+					"--eval",
+					`${source}
+ process.send("refused");
+ process.disconnect();
+ `,
+				],
+				{
+					env: process.env,
+					stdout: "pipe",
+					stderr: "pipe",
+					ipc(message, child) {
+						if (message === "ready") {
+							// Budget the FIFO read, after imports and before process drainage.
+							timer = setTimeout(() => child.kill(), 2000);
+							child.send("read");
+						}
+						if (message === "refused") clearTimeout(timer);
+					},
+				},
+			);
 			const [output, stderr, exit] = await Promise.all([
 				new Response(child.stdout).text(),
 				new Response(child.stderr).text(),
 				child.exited,
 			]);
-			clearTimeout(timer);
 			expect({ exit, stderr }).toEqual({ exit: 0, stderr: "" });
 			expect(output.trim()).toBe("refused");
 			expect(lstatSync(path).ino).toBe(info.ino);
 		} finally {
+			clearTimeout(timer);
 			rmSync(dir, { recursive: true, force: true });
 		}
 	},
