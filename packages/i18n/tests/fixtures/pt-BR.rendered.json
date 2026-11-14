@@ -943,7 +943,7 @@
 	"network.view.hotspotNoBond": "O hotspot não pode entrar no agrupamento",
 	"network.view.hotspotOff": "O hotspot está desligado",
 	"network.view.hotspotOffHint": "Compartilhe a conexão deste dispositivo por WiFi.",
-	"network.view.hotspotSwitchBody": "Mudar para hotspot vai desconectar esta rede WiFi e removê-la do agrupamento.",
+	"network.view.hotspotSwitchBody": "Mudar para ponto de acesso vai desconectar esta rede WiFi e removê-la do agrupamento.",
 	"network.view.hotspotSwitchConfirm": "Mudar para ponto de acesso",
 	"network.view.hotspotSwitchTitle": "Mudar para ponto de acesso?",
 	"network.view.inBond": "Na agregação",
