@@ -1,0 +1,592 @@
+{
+	"advanced.providerHostPlaceholder": {
+		"value": "remote.example.com",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Literal example DNS hostname for the provider-host input; no prose to translate."
+	},
+	"devtools.mbps": {
+		"value": "Mbps",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Megabits-per-second unit abbreviation for numeric bitrate readings."
+	},
+	"devtools.ms": {
+		"value": "ms",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR"],
+		"reason": "Millisecond unit abbreviation for numeric duration readings."
+	},
+	"devtools.rtt": {
+		"value": "RTT",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Round-trip-time statistic acronym used by the network diagnostics."
+	},
+	"hotspotConfigurator.hotspot.placeholderName": {
+		"value": "CeraLive",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "CeraLive product name used as the default hotspot SSID."
+	},
+	"hud.bitrate": {
+		"value": "Bitrate",
+		"locales": ["es"],
+		"reason": "es live.adjustBitrate reads \"Ajustar bitrate\", preserving the owner's bitrate terminology."
+	},
+	"hud.healthSrt": {
+		"value": "SRT",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Secure Reliable Transport protocol identifier used by transport diagnostics."
+	},
+	"live.encoder.accelerated": {
+		"value": "Hardware",
+		"locales": ["es"],
+		"reason": "es live.education.field.codec.body uses \"codificador por hardware\", retaining the engineering term in translated prose."
+	},
+	"live.encoder.passthrough.title": {
+		"value": "Passthrough",
+		"locales": ["es"],
+		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\""
+	},
+	"live.encoder.software": {
+		"value": "Software",
+		"locales": ["es"],
+		"reason": "es devtools.newVersionDesc uses \"actualización de software\", retaining the engineering term in translated prose."
+	},
+	"live.ingest.nak": {
+		"value": "NAK",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Negative-acknowledgement packet statistic acronym, rather than a user instruction."
+	},
+	"live.ingest.rtt": {
+		"value": "RTT",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Round-trip-time statistic acronym used by the network diagnostics."
+	},
+	"live.inputPicker.groups.camlink": {
+		"value": "Cam Link",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Elgato Cam Link capture-device product name."
+	},
+	"live.inputPicker.groups.hdmi": {
+		"value": "HDMI",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "High-Definition Multimedia Interface standard name for the input group."
+	},
+	"live.inputPicker.groups.mjpeg": {
+		"value": "UVC · MJPEG",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "USB Video Class and Motion JPEG standard identifiers separated by a display dot."
+	},
+	"live.inputPicker.groups.usb": {
+		"value": "USB",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Universal Serial Bus interface standard identifier."
+	},
+	"live.inputPicker.groups.uvc_dual": {
+		"value": "UVC H.264/H.265",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "USB Video Class and the H.264/H.265 video coding standard identifiers."
+	},
+	"live.inputPicker.groups.uvc_h264": {
+		"value": "UVC H.264",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "USB Video Class carrying the H.264 video coding standard."
+	},
+	"live.inputPicker.groups.uvc_h265": {
+		"value": "UVC H.265",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "USB Video Class carrying the H.265 video coding standard."
+	},
+	"live.passthrough.activeChip": {
+		"value": "Passthrough",
+		"locales": ["es"],
+		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\""
+	},
+	"live.preview.encode.activeHardware": {
+		"value": "{element} — hardware",
+		"locales": ["es"],
+		"reason": "Only interpolation plus hardware; es live.education.field.codec.body likewise uses \"por hardware\" in translated prose."
+	},
+	"live.preview.encode.activeSoftware": {
+		"value": "{element} — software",
+		"locales": ["es"],
+		"reason": "Only interpolation plus software; es devtools.newVersionDesc likewise uses \"actualización de software\" in translated prose."
+	},
+	"live.preview.tierMse": {
+		"value": "MSE",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Media Source Extensions browser API acronym identifying the preview tier."
+	},
+	"live.preview.tierWebcodecs": {
+		"value": "WebCodecs",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "WebCodecs browser API name identifying the preview tier."
+	},
+	"live.preview.tierWebrtc": {
+		"value": "WebRTC",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "WebRTC browser communication API name identifying the preview tier."
+	},
+	"live.title": {
+		"value": "Live",
+		"locales": ["de", "es", "fr", "pt-BR"],
+		"reason": "Live is the product screen name shared by navigation.live and live.title in each listed locale catalog."
+	},
+	"navigation.live": {
+		"value": "Live",
+		"locales": ["de", "es", "fr", "pt-BR"],
+		"reason": "Live is the product screen name shared by navigation.live and live.title in each listed locale catalog."
+	},
+	"network.bluetooth.enableLabel": {
+		"value": "Bluetooth",
+		"locales": ["de", "es", "fr", "ja", "pt-BR"],
+		"reason": "Bluetooth wireless standard and trademark; only the listed catalogs retain this spelling."
+	},
+	"network.bluetooth.title": {
+		"value": "Bluetooth",
+		"locales": ["de", "es", "fr", "ja", "pt-BR"],
+		"reason": "Bluetooth wireless standard and trademark; only the listed catalogs retain this spelling."
+	},
+	"network.modem.apn": {
+		"value": "APN",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Access Point Name cellular configuration acronym."
+	},
+	"network.modem.apnPlaceholder": {
+		"value": "internet.provider.com",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Literal example APN hostname; translating its components would change the example address."
+	},
+	"network.modem.bands.generation.gsm": {
+		"value": "2G",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Second-generation GSM radio generation identifier."
+	},
+	"network.modem.bands.generation.lte": {
+		"value": "4G",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Fourth-generation LTE radio generation identifier."
+	},
+	"network.modem.bands.generation.nr": {
+		"value": "5G",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Fifth-generation NR radio generation identifier."
+	},
+	"network.modem.bands.generation.umts": {
+		"value": "3G",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Third-generation UMTS radio generation identifier."
+	},
+	"network.modem.bands.label.frequency": {
+		"value": "{generation} {frequency}",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Radio-generation and frequency interpolations only, separated by one space."
+	},
+	"network.modem.detail.firmware": {
+		"value": "Firmware",
+		"locales": ["es"],
+		"reason": "es network.modem.bands.description ends \"modelo y firmware\", retaining the engineering term in translated prose."
+	},
+	"network.modem.detail.rsrp": {
+		"value": "RSRP",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "3GPP reference-signal received-power measurement acronym."
+	},
+	"network.modem.detail.rsrq": {
+		"value": "RSRQ",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "3GPP reference-signal received-quality measurement acronym."
+	},
+	"network.modem.detail.simType": {
+		"value": "SIM",
+		"locales": ["ar", "de", "es", "fr", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Subscriber Identity Module standard acronym, scoped to catalogs retaining the Latin identifier."
+	},
+	"network.modem.detail.simTypeEsim": {
+		"value": "eSIM",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Embedded Subscriber Identity Module standard identifier."
+	},
+	"network.modem.detail.sinr": {
+		"value": "SINR",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Signal-to-interference-plus-noise ratio measurement acronym."
+	},
+	"network.modem.detail.snr": {
+		"value": "SNR",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Signal-to-noise ratio measurement acronym."
+	},
+	"network.modem.detail.techLte": {
+		"value": "LTE",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Long Term Evolution cellular radio standard identifier."
+	},
+	"network.modem.detail.techNr": {
+		"value": "5G NR",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "5G New Radio cellular standard identifier."
+	},
+	"network.modem.sections.sim.title": {
+		"value": "SIM",
+		"locales": ["de", "es", "fr", "ja", "ko", "pt-BR"],
+		"reason": "Subscriber Identity Module standard acronym, scoped to catalogs retaining the Latin identifier."
+	},
+	"network.modem.simUnlock.pin2Label": {
+		"value": "SIM PIN2",
+		"locales": ["hi", "ja", "ko", "zh"],
+		"reason": "SIM and PIN2 credential identifiers; only the listed catalogs use this exact order and spelling."
+	},
+	"network.modem.simUnlock.pinLabel": {
+		"value": "SIM PIN",
+		"locales": ["hi", "ja", "ko"],
+		"reason": "SIM and PIN credential identifiers; only the listed catalogs use this exact order and spelling."
+	},
+	"network.routerCellular.apnLabel": {
+		"value": "APN",
+		"locales": ["de", "es", "fr", "hi", "ja", "ko", "pt-BR"],
+		"reason": "Access Point Name cellular configuration acronym."
+	},
+	"network.routerCellular.detail.mcc": {
+		"value": "MCC",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "3GPP Mobile Country Code field identifier."
+	},
+	"network.routerCellular.detail.mnc": {
+		"value": "MNC",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "3GPP Mobile Network Code field identifier."
+	},
+	"network.routerCellular.detail.pci": {
+		"value": "PCI",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "3GPP Physical Cell Identity field acronym in cellular diagnostics, not a prose label."
+	},
+	"network.routerCellular.firmwareLabel": {
+		"value": "Firmware",
+		"locales": ["es"],
+		"reason": "es network.modem.bands.description ends \"modelo y firmware\", retaining the engineering term in translated prose."
+	},
+	"network.routerCellular.hardwareLabel": {
+		"value": "Hardware",
+		"locales": ["es"],
+		"reason": "es live.education.field.codec.body uses \"codificador por hardware\", retaining the engineering term in translated prose."
+	},
+	"network.routerCellular.iccidLabel": {
+		"value": "ICCID",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Integrated Circuit Card Identifier field acronym."
+	},
+	"network.routerCellular.imeiLabel": {
+		"value": "IMEI",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "International Mobile Equipment Identity field acronym."
+	},
+	"network.routerCellular.imsiLabel": {
+		"value": "IMSI",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "International Mobile Subscriber Identity field acronym."
+	},
+	"network.routerCellular.signal.metric.rsrp": {
+		"value": "RSRP",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "3GPP reference-signal received-power measurement acronym."
+	},
+	"network.routerCellular.signal.metric.rsrq": {
+		"value": "RSRQ",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "3GPP reference-signal received-quality measurement acronym."
+	},
+	"network.routerCellular.signal.metric.sinr": {
+		"value": "SINR",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Signal-to-interference-plus-noise ratio measurement acronym."
+	},
+	"network.routerCellular.signal.metric.snr": {
+		"value": "SNR",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Signal-to-noise ratio measurement acronym."
+	},
+	"network.routerCellular.subnet.addressPlaceholder": {
+		"value": "192.168.9.1",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Literal IPv4 address example for the subnet address input."
+	},
+	"network.sharing.kind.ethernet": {
+		"value": "Ethernet",
+		"locales": ["de", "es", "fr", "pt-BR"],
+		"reason": "IEEE 802.3 Ethernet standard name; catalogs using localized spellings remain outside this entry."
+	},
+	"network.sharing.kind.wifi": {
+		"value": "Wi-Fi",
+		"locales": ["es", "fr", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi wireless standard trademark; catalogs using localized spellings remain outside this entry."
+	},
+	"network.sharing.priority.algorithmCake": {
+		"value": "CAKE",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Linux CAKE queue-discipline identifier shown by the traffic-shaping implementation."
+	},
+	"network.sharing.priority.algorithmHtb": {
+		"value": "HTB + fq_codel",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Linux HTB and fq_codel queue-discipline identifiers, joined by a plus sign."
+	},
+	"network.summary.totalBandwidth": {
+		"value": "{total} Kbps",
+		"locales": ["de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Numeric total interpolation followed by the existing kilobits-per-second unit notation."
+	},
+	"network.unclaimedAdapters.bus.pci": {
+		"value": "PCIe",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "PCI Express hardware bus standard abbreviation."
+	},
+	"network.unclaimedAdapters.bus.usb": {
+		"value": "USB",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Universal Serial Bus interface standard identifier."
+	},
+	"network.view.concurrentModeBadge": {
+		"value": "WiFi + AP",
+		"locales": ["ja", "ko"],
+		"reason": "Wi-Fi plus the IEEE 802.11 AP role acronym; only ja and ko retain both identifiers."
+	},
+	"network.view.ethernet": {
+		"value": "Ethernet",
+		"locales": ["de", "es", "fr", "pt-BR"],
+		"reason": "IEEE 802.3 Ethernet standard name; catalogs using localized spellings remain outside this entry."
+	},
+	"network.view.hotspotClientRate": {
+		"value": "{rate} Mbps",
+		"locales": ["ar", "es", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Numeric client-rate interpolation followed by the megabits-per-second unit."
+	},
+	"network.view.hotspotClientSignal": {
+		"value": "{dbm} dBm",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Numeric signal-level interpolation followed by the decibel-milliwatt unit."
+	},
+	"network.view.nak": {
+		"value": "NAK",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Negative-acknowledgement packet statistic acronym, rather than a user instruction."
+	},
+	"network.view.rtt": {
+		"value": "RTT",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Round-trip-time statistic acronym used by the network diagnostics."
+	},
+	"network.view.wifi": {
+		"value": "WiFi",
+		"locales": ["ar", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi wireless standard label spelling used only in the explicitly listed catalogs."
+	},
+	"network.wifi.ssid": {
+		"value": "SSID",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "IEEE 802.11 Service Set Identifier field acronym."
+	},
+	"network.wifiCapability.band24": {
+		"value": "2.4 GHz",
+		"locales": ["hi", "ja", "zh"],
+		"reason": "2.4 GHz radio frequency with a decimal point, scoped to catalogs using that exact numeric notation."
+	},
+	"network.wifiCapability.band5": {
+		"value": "5 GHz",
+		"locales": ["de", "es", "fr", "hi", "ja", "pt-BR", "zh"],
+		"reason": "Integer radio-band frequency followed by the gigahertz unit."
+	},
+	"network.wifiCapability.band6": {
+		"value": "6 GHz",
+		"locales": ["de", "es", "fr", "hi", "ja", "pt-BR", "zh"],
+		"reason": "Integer radio-band frequency followed by the gigahertz unit."
+	},
+	"network.wifiCapability.generation.wifi4": {
+		"value": "Wi-Fi 4",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi Alliance generation name for IEEE 802.11n."
+	},
+	"network.wifiCapability.generation.wifi5": {
+		"value": "Wi-Fi 5",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi Alliance generation name for IEEE 802.11ac."
+	},
+	"network.wifiCapability.generation.wifi6": {
+		"value": "Wi-Fi 6",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi Alliance generation name for IEEE 802.11ax."
+	},
+	"network.wifiCapability.generation.wifi6e": {
+		"value": "Wi-Fi 6E",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi Alliance generation name for IEEE 802.11ax operation in the 6 GHz band."
+	},
+	"network.wifiCapability.generation.wifi7": {
+		"value": "Wi-Fi 7",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi Alliance generation name for IEEE 802.11be."
+	},
+	"network.wifiCapability.linkRate": {
+		"value": "{mbps} Mbit/s",
+		"locales": ["de", "es", "fr", "hi", "ja", "pt-BR", "zh"],
+		"reason": "Numeric link-rate interpolation followed by the megabits-per-second unit."
+	},
+	"network.wifiCapability.width": {
+		"value": "{mhz} MHz",
+		"locales": ["de", "es", "fr", "hi", "ja", "pt-BR", "zh"],
+		"reason": "Numeric channel-width interpolation followed by the megahertz unit."
+	},
+	"network.wifiCapability.wpa3.supported": {
+		"value": "WPA3",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi Protected Access 3 security standard identifier."
+	},
+	"networking.types.ethernet": {
+		"value": "Ethernet",
+		"locales": ["de", "es", "fr", "pt-BR"],
+		"reason": "IEEE 802.3 Ethernet standard name; catalogs using localized spellings remain outside this entry."
+	},
+	"networking.types.usb": {
+		"value": "USB",
+		"locales": ["de", "es", "fr", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Universal Serial Bus interface standard identifier."
+	},
+	"networking.types.wifi": {
+		"value": "WiFi",
+		"locales": ["ar", "es", "fr", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi wireless standard label spelling used only in the explicitly listed catalogs."
+	},
+	"settings.deviceHealth.axis.minutesAgo": {
+		"value": "−{n} min",
+		"locales": ["es", "fr", "pt-BR"],
+		"reason": "Numeric elapsed-minutes axis notation; only es, fr, and pt-BR currently retain this minus/unit format."
+	},
+	"settings.deviceStats.gpu": {
+		"value": "GPU",
+		"locales": ["de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Graphics Processing Unit hardware acronym."
+	},
+	"settings.hardwareTypes.jetson": {
+		"value": "NVIDIA Jetson",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "NVIDIA Jetson hardware product family name."
+	},
+	"settings.hardwareTypes.n100": {
+		"value": "Intel N100",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Intel N100 processor product name."
+	},
+	"settings.hardwareTypes.rk3588": {
+		"value": "Rockchip RK3588",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Rockchip RK3588 system-on-chip product name."
+	},
+	"settings.index.groups.software": {
+		"value": "Software",
+		"locales": ["es"],
+		"reason": "es devtools.newVersionDesc uses \"actualización de software\", retaining the engineering term in translated prose."
+	},
+	"settings.onDeviceDisplay.profiles.eink": {
+		"value": "E-ink",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "E-ink panel technology identifier used by the display-profile configuration."
+	},
+	"settings.onDeviceDisplay.profiles.lcd": {
+		"value": "LCD",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Liquid Crystal Display panel technology acronym."
+	},
+	"settings.sources.camlink": {
+		"value": "Cam Link 4K",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Elgato Cam Link 4K capture-device product name."
+	},
+	"settings.sources.decklink": {
+		"value": "Decklink SDI",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "DeckLink capture-device product name paired with the SDI interface acronym."
+	},
+	"settings.sources.usb_mjpeg": {
+		"value": "USB MJPEG",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "USB interface and Motion JPEG coding-standard identifiers."
+	},
+	"settings.sources.v4l_mjpeg": {
+		"value": "V4L2 MJPEG",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Linux Video4Linux2 API and Motion JPEG coding-standard identifiers."
+	},
+	"settings.transportKindBadge.rist": {
+		"value": "RIST",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Reliable Internet Stream Transport protocol identifier."
+	},
+	"settings.transportKindBadge.srt": {
+		"value": "SRT",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Secure Reliable Transport protocol identifier used by transport diagnostics."
+	},
+	"settings.updates.checkFailed.whatFailed": {
+		"value": "{ifname} {family}: {host}, {state}",
+		"locales": ["de", "es", "hi", "ko", "pt-BR"],
+		"reason": "Interface, family, host and state interpolations with locale-specific punctuation; no literal prose."
+	},
+	"settings.updates.connection.hostState": {
+		"value": "{host}: {state}",
+		"locales": ["ar", "de", "es", "hi", "ja", "ko", "pt-BR"],
+		"reason": "Host and state interpolations with locale-specific punctuation; no literal prose."
+	},
+	"settings.updates.connection.kind.ethernet": {
+		"value": "Ethernet",
+		"locales": ["de", "es", "fr", "pt-BR"],
+		"reason": "IEEE 802.3 Ethernet standard name; catalogs using localized spellings remain outside this entry."
+	},
+	"settings.updates.connection.kind.wifi": {
+		"value": "Wi-Fi",
+		"locales": ["ar", "es", "fr", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi wireless standard trademark; catalogs using localized spellings remain outside this entry."
+	},
+	"settings.updates.kernel.title": {
+		"value": "Kernel",
+		"locales": ["es"],
+		"reason": "es network.unclaimedAdapters.titleOne reads \"Adaptador detectado: sin controlador en este kernel\"."
+	},
+	"settings.validateStages.dns": {
+		"value": "DNS",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Domain Name System protocol acronym used for endpoint validation."
+	},
+	"units.kbps": {
+		"value": "kbps",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Kilobits-per-second unit abbreviation for numeric bitrate readings."
+	},
+	"units.mbps": {
+		"value": "Mbps",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Megabits-per-second unit abbreviation for numeric bitrate readings."
+	},
+	"units.ms": {
+		"value": "ms",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Millisecond unit abbreviation for numeric duration readings."
+	},
+	"wifiBands.band_2_4ghz": {
+		"value": "2.4 GHz",
+		"locales": ["hi", "ja", "ko", "zh"],
+		"reason": "2.4 GHz radio frequency with a decimal point, scoped to catalogs using that exact numeric notation."
+	},
+	"wifiBands.band_5ghz": {
+		"value": "5 GHz",
+		"locales": ["de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Integer radio-band frequency followed by the gigahertz unit."
+	},
+	"wifiBands.band_6ghz": {
+		"value": "6 GHz",
+		"locales": ["de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Integer radio-band frequency followed by the gigahertz unit."
+	},
+	"wifiSelector.hotspot.placeholderPassword": {
+		"value": "********",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Password mask characters, rather than a human-language example."
+	}
+}
