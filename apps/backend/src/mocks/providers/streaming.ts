@@ -840,7 +840,18 @@ function validateMockComposition(config: CompositionConfig): void {
 				COMPOSITION_GEOMETRY_FEATURE,
 			)
 		) {
-			throw mockParamsInvalid("composition-geometry-unsupported");
+			throw new CerastreamRpcError(
+				RPC_ERROR_NUMERIC["cerastream.params.invalid"],
+				"invalid params: composition-unsupported: rgacompositor did not pass its READY backend trial",
+				"cerastream.params.invalid",
+				null,
+				{
+					code: "cerastream.params.invalid",
+					capture_causes: [
+						{ device: "composition", cause: "composition-unsupported" },
+					],
+				},
+			);
 		}
 	} else if (config.rect !== undefined) {
 		throw mockParamsInvalid("composition-rect-unexpected");

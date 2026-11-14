@@ -86,7 +86,7 @@ test("the default scenario refuses audio mix and custom geometry", () => {
 			...base,
 			composition: { secondary_input_id: "hdmi", layout: "custom", rect },
 		}),
-	).toThrow("composition-geometry-unsupported");
+	).toThrow("composition-unsupported");
 });
 
 test("live input changes echo defaults and retain membership and tracks", () => {

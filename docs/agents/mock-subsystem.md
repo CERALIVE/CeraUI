@@ -131,7 +131,15 @@ carry `cerastream.audio.device_not_found`; `switchMockAudio` refuses a running
 mix with `audio-mix-active`. Stop and reset clear the admitted session.
 
 `changeMockComposition` enforces missing/unexpected/range rectangle errors and
-the geometry feature gate. Presets never enter `custom`; the producer rectangle
+the geometry feature gate. At start and live, an unavailable compositor returns
+the native `composition-unsupported` refusal: numeric code `-32602`,
+`data.code: "cerastream.params.invalid"` and
+`data.capture_causes: [{ device: "composition", cause: "composition-unsupported" }]`.
+Rectangle validation precedes that refusal, so malformed geometry remains
+`composition-rect-range` without a capture cause. Frame-edge equality and the
+minimum size are inclusive; regression tests cover both sides of each bound
+through start and live admission.
+Presets never enter `custom`; the producer rectangle
 schema and minimum are exported separately by RPC. The preview socket adds
 `inputs[]` only for an admitted live mix, with synthetic post-gain/post-mute
 levels; its existing top-level meter remains unchanged. This simulates control
