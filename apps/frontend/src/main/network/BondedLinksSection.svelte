@@ -142,7 +142,10 @@ const totalStale = $derived(
 							<span class="text-muted-foreground shrink-0 text-[10px] uppercase tracking-wide">
 								{m["network.view.noSimLink"]()}
 							</span>
-						{:else if link.type === 'modem' && link.connectionState === 'scanning'}
+						{/if}
+						<!-- A searching modem usually still reports a signal reading, so the
+						     scanning label stands on its own instead of hiding behind it. -->
+						{#if link.type === 'modem' && link.connectionState === 'scanning'}
 							<span class="text-muted-foreground shrink-0 text-[10px] uppercase tracking-wide">
 								{m["network.modem.scanning"]()}
 							</span>

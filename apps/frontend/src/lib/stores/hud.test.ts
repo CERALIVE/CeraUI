@@ -1324,6 +1324,10 @@ describe("connectionState — per-modem backend mapping", () => {
 		expect(stateFor("scanning")).toBe("scanning");
 	});
 
+	it("maps a searching modem with a signal reading to scanning", () => {
+		expect(stateFor("searching")).toBe("scanning");
+	});
+
 	it("collapses 'failed' to 'disconnected'", () => {
 		expect(stateFor("failed")).toBe("disconnected");
 	});
