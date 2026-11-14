@@ -25,6 +25,7 @@ import { OS_STAGE_CONFIRMABLE_UNSAFE_REASONS } from "@ceraui/rpc/schemas";
 import { awaitUpdatePhysicalReconciliation } from "../../../helpers/boot-guard.ts";
 import { logger } from "../../../helpers/logger.ts";
 import { shouldUseMocks } from "../../../mocks/mock-service.ts";
+import { emitEvent } from "../../events/emit.ts";
 import { currentLifecycleHolder } from "../../streaming/lifecycle-admission.ts";
 import { broadcastMsg } from "../../ui/websocket-server.ts";
 import { cleanAptCache } from "../apt-cache-clean.ts";
@@ -821,6 +822,30 @@ function dispatch(event: OrchestratorEvent): OrchestratorState {
 	const next = reduceOrchestrator(state, event);
 	if (next !== state) {
 		adoptState(next);
+		try {
+			switch (event.type) {
+				case "DOWNLOAD_FAILED":
+					emitEvent("update_failed", {
+						stage: "download",
+						reason: event.reason,
+					});
+					break;
+				case "COMMIT_FAILED":
+					emitEvent("update_failed", { stage: "commit", reason: event.reason });
+					break;
+				case "SYNC_FAILED":
+					emitEvent("update_failed", { stage: "sync", reason: event.reason });
+					break;
+				case "OS_STAGING_FAILED":
+					emitEvent("update_failed", {
+						stage: "os-staging",
+						reason: event.reason,
+					});
+					break;
+			}
+		} catch {
+			// Event history must not interrupt transition persistence or publication.
+		}
 		deps.persist(state);
 		publishWireState();
 	}
