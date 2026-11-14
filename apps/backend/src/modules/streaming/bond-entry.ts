@@ -4,6 +4,7 @@ import { resolveModemPhysicalIdentity } from "../modems/physical-identity-source
 import {
 	identityDeadlineExpired,
 	usbNetScanCovers,
+	usbNetScanFoundNonUsb,
 } from "../network/router-cellular-scan.ts";
 import {
 	type BondEntry,
@@ -16,7 +17,12 @@ export type BondIdentityResolver = typeof resolveModemPhysicalIdentity;
 let identityResolver: BondIdentityResolver = resolveModemPhysicalIdentity;
 
 export function isBondIdentityReady(ifname: string): boolean {
-	return usbNetScanCovers(ifname) || identityDeadlineExpired(ifname);
+	return (
+		ifname.startsWith("wl") ||
+		usbNetScanCovers(ifname) ||
+		usbNetScanFoundNonUsb(ifname) ||
+		identityDeadlineExpired(ifname)
+	);
 }
 
 export function setBondIdentityResolverForTest(
@@ -28,7 +34,6 @@ export function setBondIdentityResolverForTest(
 export function resolveBondPhysicalIdentity(
 	ifname: string,
 ): PhysicalDeviceRecord | undefined {
-	if (!isBondIdentityReady(ifname)) return undefined;
 	try {
 		return identityResolver(ifname);
 	} catch {

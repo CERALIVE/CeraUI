@@ -37,15 +37,23 @@ export function firstSightPhysicalDevice() {
 }
 
 /** The real OS publication and USB reader, with only OS reads and time injected. */
-export function firstSightScan(output: string) {
+export function firstSightScan(
+	output: string,
+	blockedIfnames: readonly string[] = [FIRST_SIGHT_IFACE],
+	devices = constructedTwins,
+) {
 	const gate = Promise.withResolvers<void>();
 	const entered = Promise.withResolvers<void>();
 	const clock = { now: 0 };
-	const fixture = constructedTwinDeps();
+	const fixture = constructedTwinDeps(devices);
 	spyOn(time, "getms").mockImplementation(() => clock.now);
 	spyOn(defaultRouterCellularScanDeps, "resolveLink").mockImplementation(
 		async (path) => {
-			if (path === `/sys/class/net/${FIRST_SIGHT_IFACE}/device`) {
+			if (
+				blockedIfnames.some(
+					(ifname) => path === `/sys/class/net/${ifname}/device`,
+				)
+			) {
 				entered.resolve();
 				await gate.promise;
 			}

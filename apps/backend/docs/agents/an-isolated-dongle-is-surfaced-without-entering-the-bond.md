@@ -995,13 +995,22 @@ new interface. A covered modem therefore exposes its persisted bond opt-out,
 physical bind-map/link-registry id and stored router credentials on the first
 publication. A completed scan without a USB descriptor also counts as coverage.
 
-An interface published after that bound remains visible but cannot join either
-the public or local-receiver bond, mint a bond id or persist a physical opt-out
-until `usbNetScanCovers(ifname)` or `identityDeadlineExpired(ifname)` allows it.
+An uncovered USB interface published after that bound remains visible but cannot
+join either the public or local-receiver bond or mint a bond id until
+`usbNetScanCovers(ifname)` or `identityDeadlineExpired(ifname)` allows it.
 These are the producer's shared predicates, with one 15-second monotonic deadline
 from first publication and one fallback warning per name. There is no second
 consumer clock. The next netif poll announces readiness even when the topology
 did not change, so deadline fallback also reaches an active stream.
+
+Wi-Fi and covered interfaces keep their existing admission. Descriptor reads
+start independently, so a stalled USB device cannot hide a completed non-USB
+read; `usbNetScanFoundNonUsb(ifname)` releases only that interface from the bond
+wait. Early non-USB results are generation-fenced. Physical USB descriptors,
+shared-serial decisions and persisted hashes still commit atomically for the
+whole scan, so an Ethernet-named USB modem cannot use the non-USB exemption.
+Bond preferences already refuse the resolver's `ifname` anchor for persistence;
+they do not need a separate readiness guard.
 
 An active session subscribes to USB scan commits as well as netif changes and
 removes both subscriptions when it stops. Bond refreshes run in order: a scan
@@ -1010,8 +1019,12 @@ restart the sender twice for the same addition. Only a changed publication
 requests `restartSrtla()`.
 
 Coverage: `tests/bond-identity-first-sight.test.ts` drives promise-gated production
-netif publication through opt-out, bind-map, registry, credentials and an active
-session. `tests/bind-map-identity-readiness.test.ts` covers the 2-second bound and
+netif publication through opt-out, bind-map, registry and credentials.
+`tests/bond-identity-first-sight-session.test.ts` overlaps scan and netif events
+behind a preparation barrier and asserts one sender restart, including when the
+first refresh fails. `tests/bond-identity-scan-parity.test.ts` covers non-USB
+Ethernet, Wi-Fi, covered USB, Ethernet-named USB and superseded non-USB reads.
+`tests/bind-map-identity-readiness.test.ts` covers the 2-second bound and
 shared deadline; the existing bond suites use completed scans before testing
 their independent admission and degradation rules. This is constructed host
 evidence, not physical modem qualification.

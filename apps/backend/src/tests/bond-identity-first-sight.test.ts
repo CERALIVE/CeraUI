@@ -1,8 +1,7 @@
-import { afterEach, beforeEach, expect, jest, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, expect, jest, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import WebSocket from "ws";
 import { getConfig } from "../modules/config.ts";
 import {
 	readModemCredential,
@@ -13,18 +12,13 @@ import { resetPhysicalIdentityRegistry } from "../modules/modems/physical-identi
 import { resolveModemPhysicalIdentity } from "../modules/modems/physical-identity-source.ts";
 import {
 	getNetworkInterfaces,
-	hasNetifSnapshot,
 	netIfBuildMsg,
 	onNetworkInterfacesChange,
-	processIfconfigOutput,
 	resetBondOptOut,
 	resetNetifSnapshotForTest,
 	updateNetif,
 } from "../modules/network/network-interfaces.ts";
-import {
-	refreshUsbNetMarkers,
-	resetUsbNetMarkers,
-} from "../modules/network/router-cellular-scan.ts";
+import { resetUsbNetMarkers } from "../modules/network/router-cellular-scan.ts";
 import { setup } from "../modules/setup.ts";
 import { resetBindMapWriter } from "../modules/streaming/bind-map-writer.ts";
 import {
@@ -32,11 +26,6 @@ import {
 	resetBondIdentities,
 } from "../modules/streaming/link-registry.ts";
 import * as srtla from "../modules/streaming/srtla.ts";
-import * as streaming from "../modules/streaming/streaming.ts";
-import { getStreamingBackend } from "../modules/streaming/streaming-engine.ts";
-import * as session from "../modules/streaming/streamloop/session.ts";
-import * as preparation from "../modules/streaming/streamloop/srtla-ip-preparation.ts";
-import * as launch from "../modules/streaming/streamloop/start-stream.ts";
 import {
 	firstSightIfconfig,
 	firstSightPhysicalDevice,
@@ -157,83 +146,5 @@ test("(c) stored router credentials resolve at the first netif sighting", async 
 		await publication;
 		await scan.settle();
 		unsubscribe();
-	}
-});
-
-test("(d) coverage after stream start admits the modem with exactly one sender restart", async () => {
-	jest.useFakeTimers();
-	const scan = firstSightScan(
-		[
-			firstSightIfconfig("eth9", "192.0.2.2"),
-			firstSightIfconfig(MODEM, IP),
-		].join("\n\n"),
-	);
-	await refreshUsbNetMarkers(["eth9"]);
-	processIfconfigOutput(firstSightIfconfig("eth9", "192.0.2.2"));
-	let live = false;
-	spyOn(streaming, "getIsStreaming").mockImplementation(() => live);
-	spyOn(streaming, "updateConfig").mockResolvedValue({
-		pipeline: {
-			source: "hdmi",
-			name: "Constructed",
-			hardware: "generic",
-			description: "Constructed",
-			supportsAudio: false,
-			supportsResolutionOverride: false,
-			supportsFramerateOverride: false,
-			audio_kind: "none",
-		},
-		srtlaAddr: "203.0.113.1",
-		srtlaPort: 5000,
-		streamid: "constructed",
-	});
-	spyOn(launch, "startStream").mockResolvedValue({ success: true });
-	const pending: ReturnType<typeof preparation.prepareSrtlaIpAddresses>[] = [];
-	const prepare = preparation.prepareSrtlaIpAddresses;
-	spyOn(preparation, "prepareSrtlaIpAddresses").mockImplementation(
-		(address) => {
-			const result = prepare(address);
-			pending.push(result);
-			return result;
-		},
-	);
-	const restart = spyOn(srtla, "restartSrtla").mockImplementation(() => {});
-	const socket = WebSocket.prototype;
-	let publication: ReturnType<typeof updateNetif>;
-	try {
-		expect(await session.start(socket, {}, 18)).toEqual({ success: true });
-		live = true;
-		publication = updateNetif();
-		await scan.entered;
-		jest.advanceTimersByTime(2_000);
-		await publication;
-		await Promise.all(pending);
-		// The name is visible, but a stream must not acquire a temporary link id.
-		expect(hasNetifSnapshot()).toBe(true);
-		expect(getNetworkInterfaces()[MODEM]).toBeDefined();
-		expect(identityForIface(MODEM)).toBeUndefined();
-		expect(restart).toHaveBeenCalledTimes(0);
-		scan.release();
-		await scan.settle();
-		await Promise.all(pending);
-		expect(identityForIface(MODEM)?.linkId).toBe(
-			firstSightPhysicalDevice().linkId,
-		);
-		expect(restart).toHaveBeenCalledTimes(1);
-		// Identical OS and scan snapshots must not restart the sender again.
-		await updateNetif();
-		await scan.settle();
-		await Promise.all(pending);
-		expect(restart).toHaveBeenCalledTimes(1);
-	} finally {
-		scan.release();
-		await publication;
-		await scan.settle();
-		await Promise.all(pending);
-		spyOn(getStreamingBackend(), "stop").mockImplementation((done) => {
-			done();
-			return true;
-		});
-		await session.stopGeneration(18);
 	}
 });

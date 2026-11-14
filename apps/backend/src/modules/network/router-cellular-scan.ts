@@ -429,14 +429,29 @@ export type UsbNetMarkerSets = {
 export async function scanUsbNetMarkers(
 	ifnames: readonly string[],
 	deps: RouterCellularScanDeps = defaultRouterCellularScanDeps,
+	onNonUsbRead?: (ifname: string) => void,
 ): Promise<UsbNetMarkerSets> {
 	const found: Array<{ ifname: string; device: UsbNetDevice }> = [];
 	const modemNet = new Map<string, UsbModemNetMarker>();
 	const physical = new Map<string, UsbPhysicalDescriptor>();
 
-	for (const ifname of ifnames) {
+	// A slow USB device must not hide another interface's non-USB result.
+	// Physical USB identities still commit together after shared-serial checks.
+	const readings = ifnames.map((ifname) => ({
+		ifname,
+		result: readUsbNetDevice(ifname, deps).then(
+			(device) => {
+				if (device === undefined) onNonUsbRead?.(ifname);
+				return { device };
+			},
+			(error: unknown) => ({ error }),
+		),
+	}));
+	for (const { ifname, result } of readings) {
 		try {
-			const device = await readUsbNetDevice(ifname, deps);
+			const reading = await result;
+			if ("error" in reading) throw reading.error;
+			const { device } = reading;
 			if (device === undefined) continue;
 			const verdict = classifyUsbNetDevice(device);
 			physical.set(ifname, physicalDescriptor(ifname, device, verdict));
@@ -571,6 +586,7 @@ let modemNetMarkers: Map<string, UsbModemNetMarker> = new Map();
 let physicalDescriptors: Map<string, UsbPhysicalDescriptor> = new Map();
 let sharedSerialHashes = new Set<string>();
 let coveredIfnames = new Set<string>();
+let nonUsbIfnames = new Set<string>();
 const scanCommittedListeners = new Set<() => void>();
 const identityFirstPublishedAt = new Map<string, number>();
 const identityDeadlineWarnings = new Set<string>();
@@ -580,6 +596,11 @@ export const IDENTITY_READINESS_DEADLINE_MS = 15_000;
 /** A completed read counts even when the interface has no USB descriptor. */
 export function usbNetScanCovers(ifname: string): boolean {
 	return coveredIfnames.has(ifname);
+}
+
+/** Non-USB reads finish independently of the atomic USB identity commit. */
+export function usbNetScanFoundNonUsb(ifname: string): boolean {
+	return nonUsbIfnames.has(ifname);
 }
 
 /** The publication clock is shared by every identity-minting consumer. */
@@ -691,7 +712,9 @@ async function runUsbNetScan(
 	generation: number,
 ): Promise<boolean> {
 	try {
-		const scanned = await scanUsbNetMarkers(ifnames, deps);
+		const scanned = await scanUsbNetMarkers(ifnames, deps, (ifname) => {
+			if (generation === usbNetScanGeneration) nonUsbIfnames.add(ifname);
+		});
 		if (generation !== usbNetScanGeneration) {
 			// A newer sweep (or a reset) started while this one was reading, so
 			// this result describes a world that has already been superseded.
@@ -777,6 +800,7 @@ export function refreshUsbNetMarkers(
 		return pending.result;
 	}
 	const generation = ++usbNetScanGeneration;
+	nonUsbIfnames = new Set();
 	const result = runUsbNetScan(ifnames, deps, generation);
 	inFlightUsbNetScan = { generation, key, deps, result };
 	return result;
@@ -822,6 +846,7 @@ export function resetUsbNetMarkers(): void {
 	physicalDescriptors = new Map();
 	sharedSerialHashes = new Set();
 	coveredIfnames = new Set();
+	nonUsbIfnames = new Set();
 	identityFirstPublishedAt.clear();
 	identityDeadlineWarnings.clear();
 	setPresentPhysicalDevices([]);
