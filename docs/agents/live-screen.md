@@ -226,6 +226,13 @@ must keep that ABI.
   on and its switch disabled with the reason beside it. Without a main input,
   no other strip can be turned on. At `max_inputs` enabled strips, the others
   cannot be turned on and say the mix is full.
+- The main input is always in the saved mix, because Start sends only saved
+  entries. Idle, when the main input changes to one outside a saved mix (a new
+  pick, a source switch, Auto), the mixer saves it first at its defaults on
+  Track 1 and the old main input stays an ordinary input. In a full mix the new
+  main input takes the old one's place and its tracks instead. A main input
+  that was already in the mix needs no save (the backend sends it first), and
+  live nothing is saved until the next start.
 - Meters: before going live, the main strip carries today's meter (the
   picker's meter moves into it, so the card never shows the same bars twice)
   and every other strip says its level shows once live. Live on a mix session,

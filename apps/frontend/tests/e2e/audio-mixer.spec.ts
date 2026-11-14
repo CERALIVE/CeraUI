@@ -285,4 +285,50 @@ test.describe("audio mixer — caps-full", () => {
 		await expect(page.getByTestId(`audio-strip-track-${MAIN}-1`)).toHaveAttribute("aria-pressed", "true");
 		expect(wire.calls("streaming.setConfig")).toHaveLength(before);
 	});
+
+	test("picking a main input outside the saved mix saves it first on Track 1, and live its level change is applied", async ({
+		page,
+		backendRpc,
+	}) => {
+		const THIRD = "HDMI Input";
+		expect(await selectableDevices(backendRpc)).toContain(THIRD);
+		const saved = [
+			{ id: MAIN, tracks: [1], gain_db: 0, mute: false, delay_ms: 0 },
+			{ id: SECOND, tracks: [2], gain_db: 0, mute: false, delay_ms: 0 },
+		];
+		await backendRpc.call(["streaming", "setConfig"], { audio_inputs: saved });
+		await expect(page.getByTestId(`audio-strip-enable-${SECOND}`)).toHaveAttribute("aria-checked", "true");
+
+		await page.getByTestId("audio-source-select").click();
+		await page.getByRole("option", { name: /HDMI Input/ }).click();
+		await expect
+			.poll(() => backendRpc.call<{ asrc?: string; audio_inputs?: unknown[] }>(["streaming", "getConfig"]))
+			.toMatchObject({
+				asrc: THIRD,
+				audio_inputs: [{ id: THIRD, tracks: [1], gain_db: 0, mute: false, delay_ms: 0 }, ...saved],
+			});
+		await expect(page.getByTestId(`audio-strip-enable-${THIRD}`)).toBeDisabled();
+		await expect(page.getByTestId(`audio-strip-enable-${MAIN}`)).toBeEnabled();
+		await expect(page.getByTestId(`audio-strip-enable-${MAIN}`)).toHaveAttribute("aria-checked", "true");
+
+		await page.getByTestId("live-bar").getByRole("button", { name: "Start stream" }).click();
+		const card = page.getByTestId("live-cockpit").getByTestId("audio-card");
+		await expect(card).toBeVisible({ timeout: 15_000 });
+		const thumb = card.getByTestId(`audio-strip-gain-${THIRD}`).getByRole("slider");
+		await expect(thumb).toBeEnabled();
+		await thumb.focus();
+		await thumb.press("ArrowLeft");
+		await expect.poll(() => wire.calls("streaming.setAudioMix").at(-1)?.result).toMatchObject({
+			success: true,
+			applies_next_start: false,
+			applied: { id: THIRD, gain_db: -1 },
+		});
+		await expect(card.getByTestId(`audio-strip-error-${THIRD}`)).toBeEmpty();
+
+		await page.getByTestId("live-bar").getByRole("button", { name: "Stop stream" }).click();
+		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
+			timeout: 15_000,
+		});
+		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
+	});
 });

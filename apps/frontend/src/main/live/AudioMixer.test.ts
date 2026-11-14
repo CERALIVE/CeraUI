@@ -28,6 +28,7 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/svelte";
+import { tick } from "svelte";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 const setConfig = vi.hoisted(() =>
@@ -948,5 +949,77 @@ describe("AudioMixer — accessible names", () => {
 		expect(
 			screen.getByRole("group", { name: "Tracks for Elgato Wave:3" }),
 		).toBeTruthy();
+	});
+});
+
+describe("AudioMixer — a new main input", () => {
+	const SAVED = [input("usb-a"), input("usb-b", { tracks: [2] })];
+	const withMain = (asrc: string, audio_inputs: Input[] = SAVED) =>
+		({ asrc, pipeline: "hdmi", audio_inputs }) as unknown as ConfigMessage;
+
+	it("a main input outside the saved mix is saved first, at its defaults on Track 1, and the old one stays on", async () => {
+		setConfig.mockResolvedValue(SAVED_OK);
+		const view = mixer({ config: withMain("usb-a") });
+		await tick();
+		expect(setConfig).not.toHaveBeenCalled();
+
+		await view.rerender({ config: withMain("hdmi") });
+		await waitFor(() => expect(setConfig).toHaveBeenCalled());
+		expect(setConfig.mock.calls).toEqual([
+			[{ audio_inputs: [input("hdmi"), ...SAVED] }],
+		]);
+		expect(enable("hdmi").getAttribute("aria-checked")).toBe("true");
+		expectDisabled(enable("hdmi"));
+		expect(enable("usb-a").getAttribute("aria-checked")).toBe("true");
+		expectEnabled(enable("usb-a"));
+		await tick();
+		expect(setConfig).toHaveBeenCalledTimes(1);
+	});
+
+	it("a main input that was already in the saved mix needs no save, and the old main input stays an ordinary input", async () => {
+		const view = mixer({ config: withMain("usb-a") });
+		await view.rerender({ config: withMain("usb-b") });
+		await tick();
+		expect(setConfig).not.toHaveBeenCalled();
+		expectDisabled(enable("usb-b"));
+		expect(enable("usb-a").getAttribute("aria-checked")).toBe("true");
+		expectEnabled(enable("usb-a"));
+		expect(chip("usb-b", 2).getAttribute("aria-pressed")).toBe("true");
+		expect(chip("usb-a", 1).getAttribute("aria-pressed")).toBe("true");
+	});
+
+	it("in a full mix the new main input takes the old one's place and its tracks, so no track is left empty", async () => {
+		setConfig.mockResolvedValue(SAVED_OK);
+		const full = [
+			input("usb-a", { tracks: [1, 3] }),
+			input("usb-b", { tracks: [2] }),
+		];
+		const view = mixer({
+			capabilities: caps({ max_inputs: 2 }),
+			config: withMain("usb-a", full),
+		});
+		await view.rerender({ config: withMain("hdmi", full) });
+		await waitFor(() => expect(setConfig).toHaveBeenCalled());
+		expect(setConfig.mock.calls).toEqual([
+			[
+				{
+					audio_inputs: [
+						input("hdmi", { tracks: [1, 3] }),
+						input("usb-b", { tracks: [2] }),
+					],
+				},
+			],
+		]);
+	});
+
+	it("live, a main input change saves nothing: membership waits for the next start", async () => {
+		const view = mixer({
+			isStreaming: true,
+			mixActive: true,
+			config: withMain("usb-a"),
+		});
+		await view.rerender({ config: withMain("hdmi") });
+		await tick();
+		expect(setConfig).not.toHaveBeenCalled();
 	});
 });
