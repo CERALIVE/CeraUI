@@ -82,9 +82,10 @@ import {
 	getRouterCellularMarkers,
 	identityDeadlineExpired,
 	invalidateUsbNetReading,
+	type NetdevBus,
 	notePublishedNetifSnapshot,
 	onUsbNetScanCommitted,
-	readNetdevSubsystem,
+	readNetdevBus,
 	refreshUsbNetMarkers,
 	type UsbModemNetMarker,
 	usbNetScanCovers,
@@ -98,6 +99,8 @@ import {
 
 export type NetworkInterface = {
 	usb?: boolean;
+	busUnreadable?: boolean;
+	busReadWarned?: boolean;
 	identitySettled?: boolean;
 	ip?: string;
 	netmask?: string;
@@ -165,7 +168,10 @@ export const NETIF_ERR_SHAREDLAN = 0x08;
 
 let netif: Record<string, NetworkInterface> = {};
 const presenceEpoch = new Map<string, number>();
-type NetdevBusEvidence = { readonly bus: string; readonly seen: number };
+type NetdevBusEvidence = {
+	readonly result: NetdevBus;
+	readonly seen: number;
+};
 let netifSnapshotReady = false;
 let netifRefreshGeneration = 0;
 const scanPublicationWarnings = new Set<string>();
@@ -195,7 +201,11 @@ function installScanSettlement(): void {
 	onUsbNetScanCommitted(() => {
 		let released = false;
 		for (const [name, int] of Object.entries(netif)) {
-			if (int.usb && !int.identitySettled && usbNetScanCovers(name)) {
+			if (
+				(int.usb || int.busUnreadable) &&
+				!int.identitySettled &&
+				usbNetScanCovers(name)
+			) {
 				int.identitySettled = true;
 				released = true;
 			}
@@ -267,7 +277,7 @@ export function isBondIdentityPending(
 	int: NetworkInterface,
 ): boolean {
 	return (
-		int.usb === true &&
+		(int.usb === true || int.busUnreadable === true) &&
 		!int.identitySettled &&
 		!usbNetScanCovers(name) &&
 		!identityDeadlineExpired(name)
@@ -901,17 +911,27 @@ async function refreshNetifFromOs(): Promise<void> {
 					name !== "" && name !== "lo" && !/^(?:docker|l4tbr)/.test(name),
 			);
 		const buses = new Map<string, NetdevBusEvidence>();
+		const reads = new Map<string, { seen: number; promise: Promise<void> }>();
+		const issue = (name: string): void => {
+			buses.delete(name);
+			const seen = presenceEpoch.get(name) ?? 0;
+			const promise = readNetdevBus(name).then(
+				(result) => {
+					if (reads.get(name)?.seen === seen) buses.set(name, { result, seen });
+				},
+				(error: unknown) => {
+					if (reads.get(name)?.seen === seen)
+						buses.set(name, {
+							result: { kind: "unreadable", code: "UNKNOWN" },
+							seen,
+						});
+					logger.debug("netdev bus read failed", { ifname: name, error });
+				},
+			);
+			reads.set(name, { seen, promise });
+		};
 		for (const name of ifnames) {
-			if (!netif[name]?.identitySettled && !netif[name]?.usb) {
-				const seen = presenceEpoch.get(name) ?? 0;
-				void readNetdevSubsystem(name).then(
-					(bus) => {
-						if (bus) buses.set(name, { bus, seen });
-					},
-					(error) =>
-						logger.debug("netdev bus read failed", { ifname: name, error }),
-				);
-			}
+			if (!netif[name]?.identitySettled && !netif[name]?.usb) issue(name);
 		}
 		if (ifnames.some((name) => !usbNetScanCovers(name))) {
 			let timer: ReturnType<typeof setTimeout> | undefined;
@@ -943,6 +963,49 @@ async function refreshNetifFromOs(): Promise<void> {
 				}
 			}
 		}
+		if (ifnames.some((name) => !usbNetScanCovers(name))) {
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			const stale = () =>
+				[...reads]
+					.filter(
+						([name, read]) =>
+							!usbNetScanCovers(name) &&
+							read.seen !== (presenceEpoch.get(name) ?? 0),
+					)
+					.map(([name]) => name);
+			if (stale().length > 0) {
+				let expired = false;
+				let timer: ReturnType<typeof setTimeout> | undefined;
+				const deadline = new Promise<void>((resolve) => {
+					timer = setTimeout(() => {
+						expired = true;
+						resolve();
+					}, 250);
+				});
+				try {
+					let names = stale();
+					while (!expired && names.length > 0) {
+						for (const name of names) issue(name);
+						await Promise.race([
+							Promise.all(names.map((name) => reads.get(name)?.promise)),
+							deadline,
+						]);
+						await new Promise<void>((resolve) => setImmediate(resolve));
+						names = stale();
+					}
+				} finally {
+					clearTimeout(timer);
+				}
+			}
+			for (const [name, read] of reads) {
+				if (!buses.has(name) && !usbNetScanCovers(name))
+					buses.set(name, {
+						result: { kind: "unreadable", code: "TIMEOUT" },
+						seen: read.seen,
+					});
+			}
+		}
+		if (generation !== netifRefreshGeneration) return;
 		processIfconfigOutput(ifconfigOut, ipOverrides, undefined, buses);
 	} catch (error: unknown) {
 		const message = error instanceof Error ? error.message : String(error);
@@ -957,6 +1020,7 @@ export function processIfconfigOutput(
 	buses?: ReadonlyMap<string, NetdevBusEvidence>,
 ) {
 	installScanSettlement();
+	const previousNetif = netif;
 	const previousIfnames = new Set(Object.keys(netif));
 	const firstSnapshot = !netifSnapshotReady;
 	let intsChanged = false;
@@ -1025,7 +1089,16 @@ export function processIfconfigOutput(
 			const fresh =
 				evidence !== undefined &&
 				evidence.seen === (presenceEpoch.get(name) ?? 0);
-			const usb = previous?.usb === true || (fresh && evidence.bus === "usb");
+			const usb =
+				previous?.usb === true ||
+				(fresh &&
+					evidence.result.kind === "bus" &&
+					evidence.result.bus === "usb");
+			const busUnreadable =
+				!previous?.identitySettled &&
+				(evidence !== undefined
+					? !fresh || evidence.result.kind === "unreadable"
+					: previous?.busUnreadable === true);
 			newInterfaces[name] = {
 				...(inetAddr !== undefined ? { ip: inetAddr } : {}),
 				...(netmask !== undefined ? { netmask } : {}),
@@ -1038,8 +1111,27 @@ export function processIfconfigOutput(
 				enabled,
 				error,
 				...(usb ? { usb } : {}),
+				...(busUnreadable ? { busUnreadable } : {}),
+				...(previous?.busReadWarned ? { busReadWarned: true } : {}),
 				...(previous?.identitySettled ? { identitySettled: true } : {}),
 			};
+			const entry = newInterfaces[name];
+			if (
+				entry.busUnreadable &&
+				!entry.busReadWarned &&
+				isBondIdentityPending(name, entry)
+			) {
+				const code = !fresh
+					? "STALE"
+					: evidence.result.kind === "unreadable"
+						? evidence.result.code
+						: "UNKNOWN";
+				logger.warn(
+					"netdev bus link unreadable; holding first-sight identity until scan coverage or deadline",
+					{ ifname: name, code },
+				);
+				entry.busReadWarned = true;
+			}
 
 			// Detect interfaces that are new or with a different address
 			if (!netif[name] || netif[name].ip !== inetAddr) {
@@ -1102,7 +1194,7 @@ export function processIfconfigOutput(
 	let released = false;
 	for (const [name, int] of Object.entries(netif)) {
 		if (int.ip && !int.identitySettled && !isBondIdentityPending(name, int)) {
-			if (int.usb) released = true;
+			if (int.usb || previousNetif[name]?.busUnreadable) released = true;
 			int.identitySettled = true;
 		}
 	}
