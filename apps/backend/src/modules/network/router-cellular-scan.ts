@@ -54,6 +54,7 @@ import {
 } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
+import { getms } from "../../helpers/time.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import {
 	mintLinkId,
@@ -569,16 +570,75 @@ let markers: Map<string, RouterCellularMarker> = new Map();
 let modemNetMarkers: Map<string, UsbModemNetMarker> = new Map();
 let physicalDescriptors: Map<string, UsbPhysicalDescriptor> = new Map();
 let sharedSerialHashes = new Set<string>();
+let coveredIfnames = new Set<string>();
+const scanCommittedListeners = new Set<() => void>();
+const identityFirstPublishedAt = new Map<string, number>();
+const identityDeadlineWarnings = new Set<string>();
+
+export const IDENTITY_READINESS_DEADLINE_MS = 15_000;
+
+/** A completed read counts even when the interface has no USB descriptor. */
+export function usbNetScanCovers(ifname: string): boolean {
+	return coveredIfnames.has(ifname);
+}
+
+/** The publication clock is shared by every identity-minting consumer. */
+export function notePublishedNetifSnapshot(
+	ifnames: readonly string[],
+	now: number = getms(),
+): void {
+	const present = new Set(ifnames);
+	for (const ifname of identityFirstPublishedAt.keys()) {
+		if (!present.has(ifname)) {
+			identityFirstPublishedAt.delete(ifname);
+			identityDeadlineWarnings.delete(ifname);
+		}
+	}
+	for (const ifname of present) {
+		if (!identityFirstPublishedAt.has(ifname))
+			identityFirstPublishedAt.set(ifname, now);
+	}
+}
+
+export function identityDeadlineExpired(
+	ifname: string,
+	now: number = getms(),
+): boolean {
+	const firstSeen = identityFirstPublishedAt.get(ifname);
+	if (
+		firstSeen === undefined ||
+		now - firstSeen < IDENTITY_READINESS_DEADLINE_MS
+	)
+		return false;
+	if (!usbNetScanCovers(ifname) && !identityDeadlineWarnings.has(ifname)) {
+		identityDeadlineWarnings.add(ifname);
+		logger.warn("USB identity deadline expired; using fallback identity", {
+			ifname,
+		});
+	}
+	return true;
+}
+
+export function onUsbNetScanCommitted(listener: () => void): () => void {
+	scanCommittedListeners.add(listener);
+	return () => {
+		scanCommittedListeners.delete(listener);
+	};
+}
 
 function snapshotKey(current: UsbNetMarkerSets): string {
-	const router = [...current.routerCellular.entries()].map(
-		([ifname, m]) =>
-			`${ifname}:${m.vid_pid}:${m.duplicate_model}:${m.serial ?? ""}`,
-	);
-	const modem = [...current.modemNet.entries()].map(
-		([ifname, m]) => `${ifname}:${m.vid_pid}:modem-net`,
-	);
-	return [...router, ...modem].sort().join("|");
+	return JSON.stringify({
+		covered: [...coveredIfnames].sort(),
+		router: [...current.routerCellular.entries()].sort(([a], [b]) =>
+			a.localeCompare(b),
+		),
+		modem: [...current.modemNet.entries()].sort(([a], [b]) =>
+			a.localeCompare(b),
+		),
+		physical: [...current.physical.entries()].sort(([a], [b]) =>
+			a.localeCompare(b),
+		),
+	});
 }
 
 function cachedSets(): UsbNetMarkerSets {
@@ -667,12 +727,17 @@ async function runUsbNetScan(
 		markers = scanned.routerCellular;
 		modemNetMarkers = scanned.modemNet;
 		physicalDescriptors = scanned.physical;
+		coveredIfnames = new Set(ifnames);
 		setPresentPhysicalDevices(
 			[...physicalDescriptors.values()].map((descriptor) =>
 				resolvePhysicalDevice(descriptor),
 			),
 		);
-		return snapshotKey(cachedSets()) !== before;
+		const changed = snapshotKey(cachedSets()) !== before;
+		if (changed) {
+			for (const listener of scanCommittedListeners) listener();
+		}
+		return changed;
 	} catch (err) {
 		logger.debug("usb-net scan degraded", { err });
 		return false;
@@ -698,10 +763,15 @@ async function runUsbNetScan(
 export function refreshUsbNetMarkers(
 	ifnames: readonly string[],
 	deps: RouterCellularScanDeps = defaultRouterCellularScanDeps,
+	options: { readonly joinInFlight?: boolean } = {},
 ): Promise<boolean> {
 	const key = scanRequestKey(ifnames);
 	const pending = inFlightUsbNetScan;
-	if (pending && pending.key === key && pending.deps === deps) {
+	if (
+		pending &&
+		pending.deps === deps &&
+		(options.joinInFlight || pending.key === key)
+	) {
 		// The identical question is already being asked of the identical tree; a
 		// second sweep could only answer it twice and race its own twin.
 		return pending.result;
@@ -751,5 +821,8 @@ export function resetUsbNetMarkers(): void {
 	modemNetMarkers = new Map();
 	physicalDescriptors = new Map();
 	sharedSerialHashes = new Set();
+	coveredIfnames = new Set();
+	identityFirstPublishedAt.clear();
+	identityDeadlineWarnings.clear();
 	setPresentPhysicalDevices([]);
 }

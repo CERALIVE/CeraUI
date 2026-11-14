@@ -215,6 +215,30 @@ let unavailableDeviceRetryExpiry = 0;
 let wifiIfId = 0;
 const wifiUpdateTimers = new Set<ReturnType<typeof setTimeout>>();
 let discoveryController = new AbortController();
+let wifiDeviceRefreshCompleted = false;
+let classifiedWifiIfnames = new Set<string>();
+
+/** Only a completed device refresh can classify the current netif snapshot. */
+export function wifiZonesReady(): boolean {
+	const names = Object.keys(getNetworkInterfaces()).filter((name) =>
+		name.startsWith("wlan"),
+	);
+	if (names.length === 0) return true;
+	if (!wifiDeviceRefreshCompleted) return false;
+	const wifi = Object.values(getWifiInterfacesByMacAddress());
+	return names.every(
+		(ifname) =>
+			classifiedWifiIfnames.has(ifname) &&
+			wifi.some(
+				(entry) =>
+					entry.ifname === ifname &&
+					!entry.removed &&
+					(entry.activeConn === null ||
+						entry.activeMode === "ap" ||
+						entry.activeMode === "infrastructure"),
+			),
+	);
+}
 
 export function scheduleWifiUpdate(delayMs: number): void {
 	if (discoveryController.signal.aborted) return;
@@ -241,6 +265,8 @@ export function resetWifiInterfaceDiscoveryForTest(): void {
 	discoveryController = new AbortController();
 	resetWifiScanRefreshForTest();
 	wifiIfId = 0;
+	wifiDeviceRefreshCompleted = false;
+	classifiedWifiIfnames.clear();
 }
 
 export function recordDegradedWifiInterface(
@@ -365,6 +391,9 @@ export function wifiUpdateDevices(): Promise<boolean | undefined> {
 }
 
 async function discoverWifiDevices() {
+	wifiDeviceRefreshCompleted = false;
+	classifiedWifiIfnames = new Set();
+	let classificationComplete = true;
 	const signal = discoveryController.signal;
 	let observation: number | undefined;
 	try {
@@ -431,6 +460,7 @@ async function discoverWifiDevices() {
 				continue;
 			}
 			if (state === "unavailable") {
+				classificationComplete = false;
 				unavailableDevices = true;
 				seenIfnames.push(ifname);
 				const existed = Object.values(getWifiInterfacesByMacAddress()).some(
@@ -453,6 +483,7 @@ async function discoverWifiDevices() {
 					: null;
 			const currentMac = wifiDeviceListGetMacAddress(ifname);
 			if (!currentMac) {
+				classificationComplete = false;
 				seenIfnames.push(ifname);
 				const existed = Object.values(getWifiInterfacesByMacAddress()).some(
 					(wifiInterface) => wifiInterface?.ifname === ifname,
@@ -520,6 +551,7 @@ async function discoverWifiDevices() {
 				);
 				if (signal.aborted) return;
 				if (!parsedProps.ok) {
+					classificationComplete = false;
 					logParseError(parsedProps);
 					continue;
 				}
@@ -579,8 +611,16 @@ async function discoverWifiDevices() {
 				) {
 					statusChange = true;
 				}
+				classifiedWifiIfnames.add(ifname);
+				if (
+					activeConn !== null &&
+					updatedInterface.activeMode !== "ap" &&
+					updatedInterface.activeMode !== "infrastructure"
+				)
+					classificationComplete = false;
 			}
 		} catch (err) {
+			classificationComplete = false;
 			if (err instanceof Error) {
 				logger.error(
 					`Error getting the nmcli WiFi device information: ${err.message}`,
@@ -726,5 +766,7 @@ async function discoverWifiDevices() {
 	queueMicrotask(() => {
 		void notifyWifiAdapterModeDiscovery();
 	});
+	wifiDeviceRefreshCompleted = classificationComplete;
+	triggerNetworkInterfacesChange();
 	return statusChange;
 }

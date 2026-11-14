@@ -16,6 +16,83 @@ import {
 import { prepared, uplink } from "./uplink-steering-test-fixtures.ts";
 
 describe("UplinkSteeringCoordinator", () => {
+	test("pending preserves identical-failure backoff and performs no cleanup or availability update", async () => {
+		const failed = prepared([uplink("a", "wwan0", 100)]);
+		let pending = false;
+		let now = 0;
+		let applies = 0;
+		let cleanups = 0;
+		const statuses: SteeringAvailability[] = [];
+		const coordinator = new UplinkSteeringCoordinator({
+			readDesiredState: async () =>
+				pending
+					? { pending: true, netifReady: false, reason: "netif" }
+					: failed,
+			apply: async () => {
+				applies++;
+				throw new Error("reload refused");
+			},
+			retryCleanup: async () => {
+				cleanups++;
+			},
+			waitBeforeRetry: async () => {},
+			publishAvailability: (status) => {
+				statuses.push(status);
+			},
+			now: () => now,
+		});
+		await coordinator.requestReconcile();
+		expect(applies).toBe(3);
+		pending = true;
+		await coordinator.requestReconcile();
+		expect(applies).toBe(3);
+		expect(cleanups).toBe(0);
+		expect(statuses).toHaveLength(3);
+		pending = false;
+		now = 4_999;
+		await coordinator.requestReconcile();
+		expect(applies).toBe(3);
+		now++;
+		await coordinator.requestReconcile();
+		expect(applies).toBe(4);
+	});
+
+	test("arms one deadline only after netif readiness and permanently bypasses unknown zones", async () => {
+		let netifReady = false;
+		const deadlines: Array<{ delay: number; fire: () => Promise<void> }> = [];
+		const applied: PreparedSteeringState[] = [];
+		const empty = prepared([], []);
+		const coordinator = new UplinkSteeringCoordinator({
+			readDesiredState: async (context = {}) =>
+				netifReady && context.zonesReadyBypass
+					? empty
+					: {
+							pending: true,
+							netifReady,
+							reason: netifReady ? "zones" : "netif",
+						},
+			apply: async (_previous, next) => {
+				applied.push(next);
+			},
+			publishAvailability: () => {},
+			schedule: (fire, delay) => {
+				deadlines.push({ fire, delay });
+				return () => {};
+			},
+		});
+		await coordinator.requestReconcile();
+		expect(deadlines).toEqual([]);
+		netifReady = true;
+		await coordinator.requestReconcile();
+		await coordinator.requestReconcile();
+		expect(applied).toEqual([]);
+		expect(deadlines.map((entry) => entry.delay)).toEqual([15_000]);
+		await deadlines[0]?.fire();
+		await coordinator.requestReconcile();
+		expect(applied).toEqual([empty]);
+		expect(deadlines).toHaveLength(1);
+	});
+
 	test("backs off identical failures from 5 seconds to the 60 second cap while still retrying cleanup", async () => {
 		const desired = prepared([uplink("a", "wwan0", 100)]);
 		let now = 0;

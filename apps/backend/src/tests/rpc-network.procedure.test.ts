@@ -119,7 +119,7 @@ describe("network.configure — mock immediate netif broadcast (Issue 2)", () =>
 		initMockService("multi-modem-wifi");
 		// Seed the legacy netif map from the mock ifconfig so netIfBuildMsg has
 		// eth0 to overlay the mock enabled flag onto.
-		updateNetif();
+		void updateNetif();
 	});
 
 	afterEach(() => {
