@@ -19,10 +19,10 @@ const report = `<testsuites>${suite}${additionalSuites}</testsuites>`;
 
 test('counts descendant cases once in Bun nested suites', () => {
 	expect(checkReport(report)).toEqual({
-		kernel_files: 2,
-		testcases: 15,
+		kernel_files: 3,
+		testcases: 29,
 		skips: 0,
-		receipts: 13,
+		receipts: 26,
 	});
 });
 

@@ -30,6 +30,7 @@ export interface RouteProvisioning {
 	readonly createdTableRoute?: boolean;
 	readonly replacedTableRoute?: readonly string[];
 	readonly addedTableRoute?: readonly string[];
+	readonly removedTableRoutes?: readonly (readonly string[])[];
 }
 
 export interface UplinkSteeringApplierDeps {

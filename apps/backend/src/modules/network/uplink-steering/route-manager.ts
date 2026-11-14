@@ -161,8 +161,12 @@ function buildProvisioning(
 	createdSourceRule: boolean,
 	createdFwmarkRule: boolean,
 ): RouteProvisioning {
-	const { createdTableRoute, replacedTableRoute, addedTableRoute } =
-		tableChanges;
+	const {
+		createdTableRoute,
+		replacedTableRoute,
+		addedTableRoute,
+		removedTableRoutes,
+	} = tableChanges;
 	return {
 		route,
 		changed:
@@ -170,11 +174,13 @@ function buildProvisioning(
 			createdSourceRule ||
 			createdFwmarkRule ||
 			replacedTableRoute !== undefined ||
-			addedTableRoute !== undefined,
+			addedTableRoute !== undefined ||
+			removedTableRoutes !== undefined,
 		createdTableRoute,
 		createdSourceRule,
 		createdFwmarkRule,
 		...(replacedTableRoute === undefined ? {} : { replacedTableRoute }),
 		...(addedTableRoute === undefined ? {} : { addedTableRoute }),
+		...(removedTableRoutes === undefined ? {} : { removedTableRoutes }),
 	};
 }
