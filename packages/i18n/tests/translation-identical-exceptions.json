@@ -124,6 +124,11 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "WebRTC browser communication API name identifying the preview tier."
 	},
+	"live.source.audioQualityNegotiated": {
+		"value": "{khz} kHz mono",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR live.source.audioQualityCeiling reads \"Até 16 kHz mono\"; \"kHz mono\" is the same in Portuguese."
+	},
 	"live.title": {
 		"value": "Live",
 		"locales": ["de", "es", "fr", "pt-BR"],
@@ -143,6 +148,11 @@
 		"value": "Bluetooth",
 		"locales": ["de", "es", "fr", "ja", "pt-BR"],
 		"reason": "Bluetooth wireless standard and trademark; only the listed catalogs retain this spelling."
+	},
+	"network.ethRole.uplink": {
+		"value": "Uplink",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR network.ethRole.staged.body reads \"Alternar esta porta entre Uplink e Rede compartilhada\", keeping the term untranslated."
 	},
 	"network.modem.apn": {
 		"value": "APN",
@@ -181,8 +191,8 @@
 	},
 	"network.modem.detail.firmware": {
 		"value": "Firmware",
-		"locales": ["es"],
-		"reason": "es network.modem.bands.description ends \"modelo y firmware\", retaining the engineering term in translated prose."
+		"locales": ["es", "pt-BR"],
+		"reason": "es network.modem.bands.description ends \"modelo y firmware\", retaining the engineering term in translated prose; pt-BR network.modem.bands.reason.uncertified reads \"neste modelo e firmware\", retaining the engineering term."
 	},
 	"network.modem.detail.rsrp": {
 		"value": "RSRP",
@@ -224,6 +234,11 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "5G New Radio cellular standard identifier."
 	},
+	"network.modem.sections.diagnostics.interface": {
+		"value": "Interface",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR network.sections.networkInterfaces reads \"Interfaces de Rede\"; \"Interface\" is the Portuguese word."
+	},
 	"network.modem.sections.sim.title": {
 		"value": "SIM",
 		"locales": ["de", "es", "fr", "ja", "ko", "pt-BR"],
@@ -259,15 +274,20 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "3GPP Physical Cell Identity field acronym in cellular diagnostics, not a prose label."
 	},
+	"network.routerCellular.detail.roaming": {
+		"value": "Roaming",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR network.modem.enableRoaming reads \"Permitir Roaming\", keeping the term untranslated."
+	},
 	"network.routerCellular.firmwareLabel": {
 		"value": "Firmware",
-		"locales": ["es"],
-		"reason": "es network.modem.bands.description ends \"modelo y firmware\", retaining the engineering term in translated prose."
+		"locales": ["es", "pt-BR"],
+		"reason": "es network.modem.bands.description ends \"modelo y firmware\", retaining the engineering term in translated prose; pt-BR network.routerCellular.netMode.refused reads \"Este firmware se recusa\", retaining the engineering term."
 	},
 	"network.routerCellular.hardwareLabel": {
 		"value": "Hardware",
-		"locales": ["es"],
-		"reason": "es live.education.field.codec.body uses \"codificador por hardware\", retaining the engineering term in translated prose."
+		"locales": ["es", "pt-BR"],
+		"reason": "es live.education.field.codec.body uses \"codificador por hardware\", retaining the engineering term in translated prose; pt-BR general.hardwareSensors reads \"Sensores de Hardware\", keeping the term untranslated."
 	},
 	"network.routerCellular.iccidLabel": {
 		"value": "ICCID",
@@ -524,6 +544,11 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Secure Reliable Transport protocol identifier used by transport diagnostics."
 	},
+	"settings.updates.channel.beta": {
+		"value": "Beta",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR settings.updates.channel.hint reads \"Beta recebe as novas imagens do sistema primeiro\", naming the channel Beta."
+	},
 	"settings.updates.checkFailed.whatFailed": {
 		"value": "{ifname} {family}: {host}, {state}",
 		"locales": ["de", "es", "hi", "ko", "pt-BR"],
@@ -546,8 +571,13 @@
 	},
 	"settings.updates.kernel.title": {
 		"value": "Kernel",
-		"locales": ["es"],
-		"reason": "es network.unclaimedAdapters.titleOne reads \"Adaptador detectado: sin controlador en este kernel\"."
+		"locales": ["es", "pt-BR"],
+		"reason": "es network.unclaimedAdapters.titleOne reads \"Adaptador detectado: sin controlador en este kernel\"; pt-BR settings.updates.phase.kernelStaged reads \"Kernel pronto\", keeping the term untranslated."
+	},
+	"settings.updates.slots.slot": {
+		"value": "Slot {letter}",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR settings.deviceStats.bootSlot reads \"Slot de inicialização\", keeping the term untranslated."
 	},
 	"settings.validateStages.dns": {
 		"value": "DNS",

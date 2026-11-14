@@ -1,7 +1,7 @@
 {
-	"live.inputPicker.groups.raw_video": "Raw video",
-	"live.inputPicker.groups.unknown": "Unclassified input",
-	"live.education.reason.rawCaptureNotStreamable": "This raw video input is detected, but streaming from it is not supported.",
+	"live.inputPicker.groups.raw_video": "Vídeo bruto",
+	"live.inputPicker.groups.unknown": "Entrada não classificada",
+	"live.education.reason.rawCaptureNotStreamable": "Esta entrada de vídeo bruto foi detectada, mas não há suporte para transmitir a partir dela.",
 	"live.summary.switchUnknown": "Este mecanismo não informa os destinos de troca ao vivo.",
 	"live.summary.switchEmpty": "Nenhuma troca de fonte está disponível nesta sessão.",
 	"network.routerCellular.lock.verification.admin_unreachable": "Não foi possível acessar a página de login do modem. Esta senha não foi salva. Verifique a conexão antes de tentar novamente.",
