@@ -6,13 +6,13 @@
 	},
 	"devtools.cookies": {
 		"value": "Cookies",
-		"locales": ["de", "es", "fr"],
-		"reason": "French uses \"cookies\" for browser cookies; the fr devtools panel keeps web terms such as \"Toast\" and \"DOM\" untranslated. Cookie is the standard German loanword (Duden) and the label German browsers use for this storage; no German alternative is in use. es: Cookies is the browser storage term es-419 browsers show untranslated; es devtools labels keep web terms such as \"Offline (2 temas)\" in devtools.screenshotCount."
+		"locales": ["de", "es", "fr", "pt-BR"],
+		"reason": "French uses \"cookies\" for browser cookies; the fr devtools panel keeps web terms such as \"Toast\" and \"DOM\" untranslated. Cookie is the standard German loanword (Duden) and the label German browsers use for this storage; no German alternative is in use. es: Cookies is the browser storage term es-419 browsers show untranslated; es devtools labels keep web terms such as \"Offline (2 temas)\" in devtools.screenshotCount; Browser storage term shown on the developer page; pt-BR browsers label it \"Cookies\" untranslated."
 	},
 	"devtools.downlink": {
 		"value": "Downlink",
-		"locales": ["de"],
-		"reason": "Network Information API field name; de network.wifiMode.confirm.dropsUplinkBody keeps its pair term untranslated (\"WLAN nicht mehr als Uplink\")."
+		"locales": ["de", "pt-BR"],
+		"reason": "Network Information API field name; de network.wifiMode.confirm.dropsUplinkBody keeps its pair term untranslated (\"WLAN nicht mehr als Uplink\"); Network Information API field name on the developer page; pt-BR network.ethRole.staged.body keeps the paired term \"Uplink\" untranslated."
 	},
 	"devtools.error": {
 		"value": "Error",
@@ -26,8 +26,8 @@
 	},
 	"devtools.log": {
 		"value": "Log",
-		"locales": ["de"],
-		"reason": "Labels the console.log test button; de advanced.downloadDeviceLog reads \"CeraLive-Logdatei herunterladen\"."
+		"locales": ["de", "pt-BR"],
+		"reason": "Labels the console.log test button; de advanced.downloadDeviceLog reads \"CeraLive-Logdatei herunterladen\"; pt-BR advanced.ceraliveLog reads \"Log do CeraLive\", keeping the term untranslated."
 	},
 	"devtools.mbps": {
 		"value": "Mbps",
@@ -51,13 +51,13 @@
 	},
 	"devtools.offline": {
 		"value": "Offline",
-		"locales": ["de"],
-		"reason": "de devtools.screenshotUtilityDescription says \"Offline-Modus\"; offline is a standard German adjective."
+		"locales": ["de", "pt-BR"],
+		"reason": "de devtools.screenshotUtilityDescription says \"Offline-Modus\"; offline is a standard German adjective; pt-BR devtools.screenshotCount reads \"... + Offline (2 temas)\", keeping the term untranslated."
 	},
 	"devtools.online": {
 		"value": "Online",
-		"locales": ["de"],
-		"reason": "de devtools.onlineStatus reads \"Online-Status\"; online is a standard German adjective."
+		"locales": ["de", "pt-BR"],
+		"reason": "de devtools.onlineStatus reads \"Online-Status\"; online is a standard German adjective; pt-BR devtools.onlineStatus reads \"Status Online\", keeping the term untranslated."
 	},
 	"devtools.phase": {
 		"value": "Phase",
@@ -71,18 +71,28 @@
 	},
 	"devtools.status": {
 		"value": "Status",
-		"locales": ["de"],
-		"reason": "de devtools.onlineStatus reads \"Online-Status\" and live.unconfirmedStream.title \"Stream-Status nicht bestätigt\"."
+		"locales": ["de", "pt-BR"],
+		"reason": "de devtools.onlineStatus reads \"Online-Status\" and live.unconfirmedStream.title \"Stream-Status nicht bestätigt\"; pt-BR hud.streamHealth reads \"Status da transmissão\", keeping the term untranslated."
 	},
 	"devtools.total": {
 		"value": "Total",
-		"locales": ["es", "fr"],
-		"reason": "\"Total\" is the French word; fr devtools.screenshotCount reads \"Bureau + Mobile (5 onglets, 2 thèmes chacun) + Hors ligne (2 thèmes) = 22 total\". es: Total is the Spanish word; es network.summary.networksActive reads \"{count} redes, {active} activas • Total: {total} Kbps\"."
+		"locales": ["es", "fr", "pt-BR"],
+		"reason": "\"Total\" is the French word; fr devtools.screenshotCount reads \"Bureau + Mobile (5 onglets, 2 thèmes chacun) + Hors ligne (2 thèmes) = 22 total\". es: Total is the Spanish word; es network.summary.networksActive reads \"{count} redes, {active} activas • Total: {total} Kbps\"; pt-BR network.summary.networksActive reads \"... • Total: {total} Kbps\"; \"Total\" is the Portuguese word."
 	},
 	"devtools.type": {
 		"value": "Type",
 		"locales": ["fr"],
 		"reason": "\"Type\" is the French word; fr devtools.toastTypes reads \"Types de Toast\"."
+	},
+	"devtools.userAgent": {
+		"value": "User Agent",
+		"locales": ["pt-BR"],
+		"reason": "HTTP User-Agent header name shown on the developer page; a protocol identifier, not prose."
+	},
+	"devtools.viewport": {
+		"value": "Viewport",
+		"locales": ["pt-BR"],
+		"reason": "CSS/browser viewport term shown on the developer page next to untranslated technical fields (Cookies, User Agent)."
 	},
 	"general.configuration": {
 		"value": "Configuration",
@@ -91,8 +101,8 @@
 	},
 	"general.offline": {
 		"value": "Offline",
-		"locales": ["de"],
-		"reason": "de devtools.screenshotUtilityDescription says \"Offline-Modus\"; offline is a standard German adjective."
+		"locales": ["de", "pt-BR"],
+		"reason": "de devtools.screenshotUtilityDescription says \"Offline-Modus\"; offline is a standard German adjective; pt-BR devtools.screenshotCount reads \"... + Offline (2 temas)\", keeping the term untranslated."
 	},
 	"general.pageTitle": {
 		"value": "Dashboard",
@@ -106,8 +116,8 @@
 	},
 	"general.status": {
 		"value": "Status",
-		"locales": ["de"],
-		"reason": "de devtools.onlineStatus reads \"Online-Status\" and live.unconfirmedStream.title \"Stream-Status nicht bestätigt\"."
+		"locales": ["de", "pt-BR"],
+		"reason": "de devtools.onlineStatus reads \"Online-Status\" and live.unconfirmedStream.title \"Stream-Status nicht bestätigt\"; pt-BR hud.streamHealth reads \"Status da transmissão\", keeping the term untranslated."
 	},
 	"general.streaming": {
 		"value": "Streaming",
@@ -131,8 +141,8 @@
 	},
 	"hud.bitrate": {
 		"value": "Bitrate",
-		"locales": ["de", "es"],
-		"reason": "es live.adjustBitrate reads \"Ajustar bitrate\", preserving the owner's bitrate terminology. de general.maxBitrate reads \"Maximale Bitrate\" and live.adjustBitrate \"Bitrate anpassen\"."
+		"locales": ["de", "es", "pt-BR"],
+		"reason": "es live.adjustBitrate reads \"Ajustar bitrate\", preserving the owner's bitrate terminology. de general.maxBitrate reads \"Maximale Bitrate\" and live.adjustBitrate \"Bitrate anpassen\"; pt-BR live.adjustBitrate reads \"Ajustar bitrate\", keeping the term untranslated."
 	},
 	"hud.encoder": {
 		"value": "Encoder",
@@ -154,6 +164,11 @@
 		"locales": ["fr"],
 		"reason": "\"Stable\" is the French adjective; fr settings.updates.channel.hint reads \"Bêta reçoit les nouvelles images système en premier. Les paquets proviennent toujours de Stable.\"."
 	},
+	"hud.link": {
+		"value": "Link",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR live.server.singleLink reads \"Link único\", keeping the term untranslated."
+	},
 	"hud.live": {
 		"value": "Live",
 		"locales": ["de", "es"],
@@ -161,13 +176,13 @@
 	},
 	"hud.offline": {
 		"value": "Offline",
-		"locales": ["de"],
-		"reason": "de devtools.screenshotUtilityDescription says \"Offline-Modus\"; offline is a standard German adjective."
+		"locales": ["de", "pt-BR"],
+		"reason": "de devtools.screenshotUtilityDescription says \"Offline-Modus\"; offline is a standard German adjective; pt-BR devtools.screenshotCount reads \"... + Offline (2 temas)\", keeping the term untranslated."
 	},
 	"hud.status": {
 		"value": "Status",
-		"locales": ["de"],
-		"reason": "de devtools.onlineStatus reads \"Online-Status\" and live.unconfirmedStream.title \"Stream-Status nicht bestätigt\"."
+		"locales": ["de", "pt-BR"],
+		"reason": "de devtools.onlineStatus reads \"Online-Status\" and live.unconfirmedStream.title \"Stream-Status nicht bestätigt\"; pt-BR hud.streamHealth reads \"Status da transmissão\", keeping the term untranslated."
 	},
 	"hud.streaming": {
 		"value": "Streaming",
@@ -196,13 +211,13 @@
 	},
 	"live.encoder.accelerated": {
 		"value": "Hardware",
-		"locales": ["de", "es"],
-		"reason": "es live.education.field.codec.body uses \"codificador por hardware\", retaining the engineering term in translated prose. de general.hardwareSensors reads \"Hardware-Sensoren\"."
+		"locales": ["de", "es", "pt-BR"],
+		"reason": "es live.education.field.codec.body uses \"codificador por hardware\", retaining the engineering term in translated prose. de general.hardwareSensors reads \"Hardware-Sensoren\"; pt-BR general.hardwareSensors reads \"Sensores de Hardware\", keeping the term untranslated."
 	},
 	"live.encoder.passthrough.title": {
 		"value": "Passthrough",
-		"locales": ["de", "es", "fr"],
-		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\"; fr live.encoder.route.reason.passthrough-off reads \"Le passthrough est désactivé dans les réglages enregistrés.\" de live.encoder.route.reason.passthrough-off reads \"Passthrough ist in den gespeicherten Einstellungen ausgeschaltet.\""
+		"locales": ["de", "es", "fr", "pt-BR"],
+		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\"; fr live.encoder.route.reason.passthrough-off reads \"Le passthrough est désactivé dans les réglages enregistrés.\" de live.encoder.route.reason.passthrough-off reads \"Passthrough ist in den gespeicherten Einstellungen ausgeschaltet.\"; pt-BR live.encoder.passthrough.disclosurePassthrough starts \"Passthrough — a câmera controla o bitrate\", keeping the term untranslated."
 	},
 	"live.encoder.probedCapAudio": {
 		"value": "Audio",
@@ -211,8 +226,8 @@
 	},
 	"live.encoder.software": {
 		"value": "Software",
-		"locales": ["de", "es"],
-		"reason": "es devtools.newVersionDesc uses \"actualización de software\", retaining the engineering term in translated prose. de devtools.newVersionDesc reads \"Ein Software-Update ist zur Installation bereit.\""
+		"locales": ["de", "es", "pt-BR"],
+		"reason": "es devtools.newVersionDesc uses \"actualización de software\", retaining the engineering term in translated prose. de devtools.newVersionDesc reads \"Ein Software-Update ist zur Installation bereit.\"; pt-BR updatingOverlay.title reads \"Atualizando o Software do Dispositivo\", keeping the term untranslated."
 	},
 	"live.goLive.gate.destination": {
 		"value": "Destination",
@@ -229,6 +244,16 @@
 		"locales": ["fr"],
 		"reason": "\"Stable\" is the French adjective; fr settings.updates.channel.hint reads \"Bêta reçoit les nouvelles images système en premier. Les paquets proviennent toujours de Stable.\"."
 	},
+	"live.ingest.link": {
+		"value": "Link",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR live.server.singleLink reads \"Link único\", keeping the term untranslated."
+	},
+	"live.ingest.links": {
+		"value": "Links",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR live.ingest.linksReadyTitle reads \"Links prontos\", keeping the term untranslated."
+	},
 	"live.ingest.nak": {
 		"value": "NAK",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
@@ -241,8 +266,8 @@
 	},
 	"live.ingest.total": {
 		"value": "Total",
-		"locales": ["es", "fr"],
-		"reason": "\"Total\" is the French word; fr devtools.screenshotCount reads \"Bureau + Mobile (5 onglets, 2 thèmes chacun) + Hors ligne (2 thèmes) = 22 total\". es: Total is the Spanish word; es network.summary.networksActive reads \"{count} redes, {active} activas • Total: {total} Kbps\"."
+		"locales": ["es", "fr", "pt-BR"],
+		"reason": "\"Total\" is the French word; fr devtools.screenshotCount reads \"Bureau + Mobile (5 onglets, 2 thèmes chacun) + Hors ligne (2 thèmes) = 22 total\". es: Total is the Spanish word; es network.summary.networksActive reads \"{count} redes, {active} activas • Total: {total} Kbps\"; pt-BR network.summary.networksActive reads \"... • Total: {total} Kbps\"; \"Total\" is the Portuguese word."
 	},
 	"live.ingest.trend": {
 		"value": "Trend",
@@ -311,18 +336,18 @@
 	},
 	"live.passthrough.activeChip": {
 		"value": "Passthrough",
-		"locales": ["de", "es", "fr"],
-		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\"; fr live.encoder.route.reason.passthrough-off reads \"Le passthrough est désactivé dans les réglages enregistrés.\" de live.encoder.route.reason.passthrough-off reads \"Passthrough ist in den gespeicherten Einstellungen ausgeschaltet.\""
+		"locales": ["de", "es", "fr", "pt-BR"],
+		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\"; fr live.encoder.route.reason.passthrough-off reads \"Le passthrough est désactivé dans les réglages enregistrés.\" de live.encoder.route.reason.passthrough-off reads \"Passthrough ist in den gespeicherten Einstellungen ausgeschaltet.\"; pt-BR live.encoder.passthrough.disclosurePassthrough starts \"Passthrough — a câmera controla o bitrate\", keeping the term untranslated."
 	},
 	"live.preview.encode.activeHardware": {
 		"value": "{element} — hardware",
-		"locales": ["es"],
-		"reason": "Only interpolation plus hardware; es live.education.field.codec.body likewise uses \"por hardware\" in translated prose."
+		"locales": ["es", "pt-BR"],
+		"reason": "Only interpolation plus hardware; es live.education.field.codec.body likewise uses \"por hardware\" in translated prose; Only interpolation plus hardware; pt-BR general.hardwareSensors reads \"Sensores de Hardware\"."
 	},
 	"live.preview.encode.activeSoftware": {
 		"value": "{element} — software",
-		"locales": ["es"],
-		"reason": "Only interpolation plus software; es devtools.newVersionDesc likewise uses \"actualización de software\" in translated prose."
+		"locales": ["es", "pt-BR"],
+		"reason": "Only interpolation plus software; es devtools.newVersionDesc likewise uses \"actualización de software\" in translated prose; Only interpolation plus software; pt-BR updatingOverlay.title reads \"Atualizando o Software do Dispositivo\"."
 	},
 	"live.preview.tierMse": {
 		"value": "MSE",
@@ -351,8 +376,8 @@
 	},
 	"live.source.audioQualityNegotiated": {
 		"value": "{khz} kHz mono",
-		"locales": ["es", "fr"],
-		"reason": "\"kHz\" is the SI unit and \"mono\" is the French word; the whole value reads the same in French. es: Interpolation, kHz unit and the Spanish word mono; es live.source.audioQualityCeiling reads \"Hasta 16 kHz mono\"."
+		"locales": ["es", "fr", "pt-BR"],
+		"reason": "\"kHz\" is the SI unit and \"mono\" is the French word; the whole value reads the same in French. es: Interpolation, kHz unit and the Spanish word mono; es live.source.audioQualityCeiling reads \"Hasta 16 kHz mono\"; pt-BR live.source.audioQualityCeiling reads \"Até 16 kHz mono\"; \"kHz mono\" is the same in Portuguese."
 	},
 	"live.source.label": {
 		"value": "Source",
@@ -406,18 +431,18 @@
 	},
 	"network.deviceCount.modem": {
 		"value": "modem",
-		"locales": ["fr"],
-		"reason": "\"modem\" is the French word; fr network.modem.noSim reads \"Aucune carte SIM détectée\"."
+		"locales": ["fr", "pt-BR"],
+		"reason": "\"modem\" is the French word; fr network.modem.noSim reads \"Aucune carte SIM détectée\"; pt-BR network.emptyStates.noDevicesDescription reads \"Nenhum adaptador WiFi ou modem celular detectado\"; \"modem\" is the Portuguese word."
 	},
 	"network.deviceCount.modems": {
 		"value": "modems",
-		"locales": ["fr"],
-		"reason": "\"modems\" is the French plural; fr network.cellular.initializingBody reads \"Le service modem est encore en cours de démarrage. Les modems et leurs réglages apparaîtront ici dès qu'il sera prêt.\"."
+		"locales": ["fr", "pt-BR"],
+		"reason": "\"modems\" is the French plural; fr network.cellular.initializingBody reads \"Le service modem est encore en cours de démarrage. Les modems et leurs réglages apparaîtront ici dès qu'il sera prêt.\"; pt-BR network.pageDescription reads \"Gerencie suas conexões WiFi, hotspots, modems celulares e interfaces de rede\"; \"modems\" is the Portuguese plural."
 	},
 	"network.ethRole.uplink": {
 		"value": "Uplink",
-		"locales": ["de"],
-		"reason": "de network.wifiMode.confirm.dropsUplinkBody says \"WLAN nicht mehr als Uplink\" and network.cellular.class.routerEthernetHint \"Ethernet-Uplink\"."
+		"locales": ["de", "pt-BR"],
+		"reason": "de network.wifiMode.confirm.dropsUplinkBody says \"WLAN nicht mehr als Uplink\" and network.cellular.class.routerEthernetHint \"Ethernet-Uplink\"; pt-BR network.ethRole.staged.body reads \"Alternar esta porta entre Uplink e Rede compartilhada\", keeping the term untranslated."
 	},
 	"network.hotspot.name": {
 		"value": "Name",
@@ -471,8 +496,8 @@
 	},
 	"network.modem.detail.firmware": {
 		"value": "Firmware",
-		"locales": ["de", "es"],
-		"reason": "es network.modem.bands.description ends \"modelo y firmware\", retaining the engineering term in translated prose. de network.routerCellular.netMode.refused reads \"Diese Firmware verweigert die Auskunft ...\"."
+		"locales": ["de", "es", "pt-BR"],
+		"reason": "es network.modem.bands.description ends \"modelo y firmware\", retaining the engineering term in translated prose. de network.routerCellular.netMode.refused reads \"Diese Firmware verweigert die Auskunft ...\"; pt-BR network.modem.bands.reason.uncertified reads \"neste modelo e firmware\", retaining the engineering term."
 	},
 	"network.modem.detail.rsrp": {
 		"value": "RSRP",
@@ -521,8 +546,8 @@
 	},
 	"network.modem.sections.diagnostics.interface": {
 		"value": "Interface",
-		"locales": ["fr"],
-		"reason": "\"Interface\" is the French word; fr advanced.lanPassword reads \"Mot de passe de l'interface Web LAN\"."
+		"locales": ["fr", "pt-BR"],
+		"reason": "\"Interface\" is the French word; fr advanced.lanPassword reads \"Mot de passe de l'interface Web LAN\"; pt-BR network.sections.networkInterfaces reads \"Interfaces de Rede\"; \"Interface\" is the Portuguese word."
 	},
 	"network.modem.sections.diagnostics.transport": {
 		"value": "Transport",
@@ -576,8 +601,8 @@
 	},
 	"network.routerCellular.detail.roaming": {
 		"value": "Roaming",
-		"locales": ["de"],
-		"reason": "de network.cellular.rejection.roamingNotAllowed reads \"Roaming ist hier für diese SIM nicht erlaubt.\""
+		"locales": ["de", "pt-BR"],
+		"reason": "de network.cellular.rejection.roamingNotAllowed reads \"Roaming ist hier für diese SIM nicht erlaubt.\"; pt-BR network.modem.enableRoaming reads \"Permitir Roaming\", keeping the term untranslated."
 	},
 	"network.routerCellular.diagnosticsTitle": {
 		"value": "Diagnostics",
@@ -586,13 +611,13 @@
 	},
 	"network.routerCellular.firmwareLabel": {
 		"value": "Firmware",
-		"locales": ["de", "es"],
-		"reason": "es network.modem.bands.description ends \"modelo y firmware\", retaining the engineering term in translated prose. de network.routerCellular.netMode.refused reads \"Diese Firmware verweigert die Auskunft ...\"."
+		"locales": ["de", "es", "pt-BR"],
+		"reason": "es network.modem.bands.description ends \"modelo y firmware\", retaining the engineering term in translated prose. de network.routerCellular.netMode.refused reads \"Diese Firmware verweigert die Auskunft ...\"; pt-BR network.routerCellular.netMode.refused reads \"Este firmware se recusa\", retaining the engineering term."
 	},
 	"network.routerCellular.hardwareLabel": {
 		"value": "Hardware",
-		"locales": ["de", "es"],
-		"reason": "es live.education.field.codec.body uses \"codificador por hardware\", retaining the engineering term in translated prose. de general.hardwareSensors reads \"Hardware-Sensoren\"."
+		"locales": ["de", "es", "pt-BR"],
+		"reason": "es live.education.field.codec.body uses \"codificador por hardware\", retaining the engineering term in translated prose. de general.hardwareSensors reads \"Hardware-Sensoren\"; pt-BR general.hardwareSensors reads \"Sensores de Hardware\", keeping the term untranslated."
 	},
 	"network.routerCellular.iccidLabel": {
 		"value": "ICCID",
@@ -706,8 +731,8 @@
 	},
 	"network.view.hotspot": {
 		"value": "Hotspot",
-		"locales": ["de", "es"],
-		"reason": "de hotspotConfigurator.dialog.configHotspot reads \"Hotspot konfigurieren\". es: es keeps the hotspot anglicism, e.g. network.status.enableHotspot reads \"Habilitar Hotspot\"."
+		"locales": ["de", "es", "pt-BR"],
+		"reason": "de hotspotConfigurator.dialog.configHotspot reads \"Hotspot konfigurieren\". es: es keeps the hotspot anglicism, e.g. network.status.enableHotspot reads \"Habilitar Hotspot\"; pt-BR network.view.hotspotOff reads \"O hotspot está desligado\", keeping the term untranslated."
 	},
 	"network.view.hotspotClientRate": {
 		"value": "{rate} Mbps",
@@ -718,6 +743,11 @@
 		"value": "{dbm} dBm",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Numeric signal-level interpolation followed by the decibel-milliwatt unit."
+	},
+	"network.view.linkLocal": {
+		"value": "Link-local",
+		"locales": ["pt-BR"],
+		"reason": "IPv4/IPv6 link-local address scope name; pt-BR network.cellular.state.routerLinkUp reads \"Link ativo\", keeping \"Link\" untranslated."
 	},
 	"network.view.nak": {
 		"value": "NAK",
@@ -804,6 +834,11 @@
 		"locales": ["fr"],
 		"reason": "\"Station\" is the French Wi-Fi client mode term; fr network.routerCellular.detail.stationId reads \"ID de station (non expliqué)\"."
 	},
+	"networking.labels.interface": {
+		"value": "Interface:",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR network.sections.networkInterfaces reads \"Interfaces de Rede\"; \"Interface\" is the Portuguese word."
+	},
 	"networking.types.ethernet": {
 		"value": "Ethernet",
 		"locales": ["de", "es", "fr", "pt-BR"],
@@ -816,8 +851,8 @@
 	},
 	"networking.types.modem": {
 		"value": "Modem",
-		"locales": ["de", "fr"],
-		"reason": "\"Modem\" is the French word; fr network.modem.noSim reads \"Aucune carte SIM détectée\". de live.startFailure.class.modem_transition_active reads \"Ein Modem wechselt gerade den USB-Modus\"."
+		"locales": ["de", "fr", "pt-BR"],
+		"reason": "\"Modem\" is the French word; fr network.modem.noSim reads \"Aucune carte SIM détectée\". de live.startFailure.class.modem_transition_active reads \"Ein Modem wechselt gerade den USB-Modus\"; pt-BR network.emptyStates.noDevicesDescription reads \"Nenhum adaptador WiFi ou modem celular detectado\"; \"Modem\" is the Portuguese word."
 	},
 	"networking.types.usb": {
 		"value": "USB",
@@ -864,6 +899,11 @@
 		"locales": ["de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Graphics Processing Unit hardware acronym."
 	},
+	"settings.deviceStats.swap": {
+		"value": "Swap",
+		"locales": ["pt-BR"],
+		"reason": "Linux swap space name, kept untranslated in pt-BR system tools; pt-BR settings.deviceStats.bootSlot reads \"Slot de inicialização\", keeping sibling system terms untranslated."
+	},
 	"settings.dialogs.sources.title": {
 		"value": "Sources",
 		"locales": ["fr"],
@@ -886,8 +926,8 @@
 	},
 	"settings.index.groups.software": {
 		"value": "Software",
-		"locales": ["de", "es"],
-		"reason": "es devtools.newVersionDesc uses \"actualización de software\", retaining the engineering term in translated prose. de devtools.newVersionDesc reads \"Ein Software-Update ist zur Installation bereit.\""
+		"locales": ["de", "es", "pt-BR"],
+		"reason": "es devtools.newVersionDesc uses \"actualización de software\", retaining the engineering term in translated prose. de devtools.newVersionDesc reads \"Ein Software-Update ist zur Installation bereit.\"; pt-BR updatingOverlay.title reads \"Atualizando o Software do Dispositivo\", keeping the term untranslated."
 	},
 	"settings.index.groups.streaming": {
 		"value": "Streaming",
@@ -956,8 +996,8 @@
 	},
 	"settings.updates.channel.beta": {
 		"value": "Beta",
-		"locales": ["de", "es"],
-		"reason": "de settings.updates.channel.hint reads \"Beta erhält neue Systemabbilder zuerst.\" es: Beta is the channel name in Spanish too; es settings.updates.channel.hint reads \"Beta recibe primero las nuevas imágenes del sistema.\""
+		"locales": ["de", "es", "pt-BR"],
+		"reason": "de settings.updates.channel.hint reads \"Beta erhält neue Systemabbilder zuerst.\" es: Beta is the channel name in Spanish too; es settings.updates.channel.hint reads \"Beta recibe primero las nuevas imágenes del sistema.\"; pt-BR settings.updates.channel.hint reads \"Beta recebe as novas imagens do sistema primeiro\", naming the channel Beta."
 	},
 	"settings.updates.channel.stable": {
 		"value": "Stable",
@@ -986,13 +1026,13 @@
 	},
 	"settings.updates.kernel.title": {
 		"value": "Kernel",
-		"locales": ["de", "es"],
-		"reason": "es network.unclaimedAdapters.titleOne reads \"Adaptador detectado: sin controlador en este kernel\". de network.unclaimedAdapters.titleOne reads \"kein Treiber in diesem Kernel\"."
+		"locales": ["de", "es", "pt-BR"],
+		"reason": "es network.unclaimedAdapters.titleOne reads \"Adaptador detectado: sin controlador en este kernel\". de network.unclaimedAdapters.titleOne reads \"kein Treiber in diesem Kernel\"; pt-BR settings.updates.phase.kernelStaged reads \"Kernel pronto\", keeping the term untranslated."
 	},
 	"settings.updates.slots.slot": {
 		"value": "Slot {letter}",
-		"locales": ["de"],
-		"reason": "de settings.deviceStats.bootSlot reads \"Boot-Slot\" and notifications.updateSlotsCurrent \"System-Slots\"."
+		"locales": ["de", "pt-BR"],
+		"reason": "de settings.deviceStats.bootSlot reads \"Boot-Slot\" and notifications.updateSlotsCurrent \"System-Slots\"; pt-BR settings.deviceStats.bootSlot reads \"Slot de inicialização\", keeping the term untranslated."
 	},
 	"settings.updates.system.status": {
 		"value": "Status",
@@ -1004,10 +1044,15 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Domain Name System protocol acronym used for endpoint validation."
 	},
+	"settings.validateStages.endpoint": {
+		"value": "Endpoint",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR devtools.socketEndpoint reads \"Endpoint do Socket\", keeping the term untranslated."
+	},
 	"settings.videoCodec": {
 		"value": "Codec",
-		"locales": ["de", "fr"],
-		"reason": "\"Codec\" is the French word; fr general.audioCodec reads \"Codec audio\". de live.education.field.codec.title reads \"Video-Codec\" and general.audioCodec \"Audio-Codec\"."
+		"locales": ["de", "fr", "pt-BR"],
+		"reason": "\"Codec\" is the French word; fr general.audioCodec reads \"Codec audio\". de live.education.field.codec.title reads \"Video-Codec\" and general.audioCodec \"Audio-Codec\"; pt-BR general.audioCodec reads \"Codec de Áudio\", keeping the term untranslated."
 	},
 	"theme.system": {
 		"value": "System",
