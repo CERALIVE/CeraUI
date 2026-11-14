@@ -107,8 +107,12 @@ already exist, reports no change.
 
 When a managed table has one plain default on another device, a failed reload
 restores that replaced route and its attributes instead of flushing the table,
-including when the replacement changes the metric. Multiple-default and
-TOS-specific inventories retain their existing behavior.
+including when the replacement changes the metric. Other inventories are reconciled
+by the planned route's prefix, TOS and metric: stale defaults and host routes are
+removed, while an installed planned route is retained. Typed defaults also use
+this complete-key path, so rollback restores their type and the previous inventory.
+The ordinary single-default path requires the planned TOS; an installed
+TOS-specific plan remains a no-op.
 
 For `ip -4 route show default dev <ifname>`, iproute2 omits the `dev` clause.
 The planner supplies that query's interface when absent and rejects a conflicting

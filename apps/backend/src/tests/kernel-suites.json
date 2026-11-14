@@ -8,6 +8,21 @@
 		"replans from the live interface gateway",
 		"metric rollback restores only the previous default"
 	],
+	"uplink-steering-table-key-kernel.test.ts": [
+		"TOS-KEY removes the stale TOS default",
+		"installed planned TOS route is a no-op control",
+		"single host route cannot override the planned default",
+		"second default cannot select the stale modem",
+		"second default is removed above the planned metric",
+		"crash-route is reclaimed by a fresh applier",
+		"P6 converges to planned metric 150 over 50 and 150",
+		"P6 converges to planned metric 50 over 50 and 150",
+		"planned TOS keeps its route over a plain same-metric line",
+		"rollback restores TOS and host route inventory",
+		"typed blackhole default is restored on rollback",
+		"add-before-delete process crash converges on restart",
+		"partial stale-route deletion failure restores inventory"
+	],
 	"uplink-steering-source-kernel.test.ts": [
 		"CR:dual-source",
 		"P12 multiple stale managed tables",

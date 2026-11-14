@@ -12,6 +12,30 @@ export interface TableChanges {
 	readonly createdTableRoute: boolean;
 	readonly replacedTableRoute?: readonly string[];
 	readonly addedTableRoute?: readonly string[];
+	readonly removedTableRoutes?: readonly (readonly string[])[];
+}
+
+function routeField(
+	route: readonly string[],
+	field: string,
+): string | undefined {
+	const index = route.indexOf(field);
+	return index === -1 ? undefined : route[index + 1];
+}
+
+function routeTos(route: readonly string[]): number {
+	return Number(routeField(route, "tos") ?? routeField(route, "dsfield") ?? 0);
+}
+
+function routeKey(route: readonly string[]): string {
+	const typed = ["blackhole", "unreachable", "prohibit", "throw"].includes(
+		route[0] ?? "",
+	);
+	return JSON.stringify([
+		route[typed ? 1 : 0],
+		routeTos(route),
+		Number(routeField(route, "metric") ?? 0),
+	]);
 }
 
 export async function ensureManagedTableRoute(
@@ -21,16 +45,97 @@ export async function ensureManagedTableRoute(
 	let createdTableRoute = false;
 	let replacedTableRoute: readonly string[] | undefined;
 	let addedTableRoute: readonly string[] | undefined;
+	const removedTableRoutes: string[][] = [];
 	const changes = (): TableChanges => ({
 		createdTableRoute,
 		...(replacedTableRoute === undefined ? {} : { replacedTableRoute }),
 		...(addedTableRoute === undefined ? {} : { addedTableRoute }),
+		...(removedTableRoutes.length === 0 ? {} : { removedTableRoutes }),
 	});
 	try {
 		if (plan.managed) {
 			const routeOutput = await readRouteTable(deps, plan.table);
-			const defaultLines = routeOutput
+			const lines = routeOutput
 				.split("\n")
+				.map((line) =>
+					line
+						.trim()
+						.split(/\s+/)
+						.filter(
+							(token) =>
+								token !== "" &&
+								![
+									"linkdown",
+									"dead",
+									"pervasive",
+									"offload",
+									"trap",
+									"rt_offload",
+									"rt_trap",
+									"rt_offload_failed",
+								].includes(token),
+						),
+				)
+				.filter((line) => line.length > 0);
+			const planned = plan.defaultRouteArgv?.slice(4);
+			const [only] = lines;
+			if (
+				lines.length > 0 &&
+				!(
+					lines.length === 1 &&
+					only?.[0] === "default" &&
+					routeTos(only) === routeTos(planned ?? [])
+				)
+			) {
+				if (planned === undefined) {
+					throw routeUnavailable(
+						plan.ifname,
+						"managed route has no replacement argv",
+					);
+				}
+				const key = routeKey(planned);
+				const consumed = lines.find((line) => routeKey(line) === key);
+				const isPlanned = (line: readonly string[]) =>
+					routeKey(line) === key &&
+					line[0] === planned[0] &&
+					["dev", "via", "proto"].every(
+						(field) => routeField(line, field) === routeField(planned, field),
+					);
+				if (!lines.some(isPlanned)) {
+					await deps.run("ip", [
+						"route",
+						consumed === undefined ? "add" : "replace",
+						"table",
+						plan.table,
+						...planned,
+					]);
+					if (consumed === undefined) {
+						addedTableRoute = ["route", "add", "table", plan.table, ...planned];
+					} else {
+						replacedTableRoute = [
+							"route",
+							"replace",
+							"table",
+							plan.table,
+							...consumed,
+						];
+					}
+				}
+				for (const line of lines) {
+					if (line === consumed || isPlanned(line)) continue;
+					await deps.run("ip", ["route", "del", "table", plan.table, ...line]);
+					removedTableRoutes.push([
+						"route",
+						"add",
+						"table",
+						plan.table,
+						...line,
+					]);
+				}
+				return changes();
+			}
+			const defaultLines = lines
+				.map((line) => line.join(" "))
 				.filter((line) => line.trim().startsWith("default"));
 			const defaultLine = defaultLines[0] ?? "";
 			const currentRoute = parseDefaultRouteLine(defaultLine);
@@ -110,11 +215,18 @@ export async function ensureManagedTableRoute(
 export async function rollbackManagedTableRoute(
 	provisioning: Pick<
 		RouteProvisioning,
-		"route" | "createdTableRoute" | "replacedTableRoute" | "addedTableRoute"
+		| "route"
+		| "createdTableRoute"
+		| "replacedTableRoute"
+		| "addedTableRoute"
+		| "removedTableRoutes"
 	>,
 	deps: UplinkRouteManagerDeps,
 ): Promise<void> {
 	const { route } = provisioning;
+	for (const removed of provisioning.removedTableRoutes ?? []) {
+		await deps.run("ip", [...removed]);
+	}
 	if (provisioning.replacedTableRoute !== undefined) {
 		await deps.run("ip", [...provisioning.replacedTableRoute]);
 	}
