@@ -188,6 +188,33 @@ export const audioInputSettingSchema = audioInputConfigSchema.omit({ input_id: t
 });
 export type AudioInputSetting = z.infer<typeof audioInputSettingSchema>;
 
+export function defaultAudioInput(id: string): AudioInputSetting {
+	return { id, tracks: [1], gain_db: 0, mute: false, delay_ms: 0 };
+}
+
+/**
+ * The audio mix with `primary` in it: the one rule the backend (Start, live and
+ * idle admission, an explicit pick) and the Live strips share. A primary outside
+ * the saved mix joins first on Track 1; in a full mix it takes the place and the
+ * tracks of `previous`, the primary it replaces, or of the first entry (the UI
+ * saves the primary first) when `previous` is not in the mix.
+ */
+export function audioMixWithPrimary(
+	saved: readonly AudioInputSetting[] | null | undefined,
+	primary: string | undefined,
+	maxInputs: number,
+	previous?: string,
+): AudioInputSetting[] | undefined {
+	if (!saved?.length) return undefined;
+	if (primary === undefined || saved.some((input) => input.id === primary)) return [...saved];
+	if (saved.length < maxInputs) return [defaultAudioInput(primary), ...saved];
+	const replaced = saved.find((input) => input.id === previous) ?? saved[0];
+	return [
+		{ ...defaultAudioInput(primary), tracks: [...(replaced?.tracks ?? [1])] },
+		...saved.filter((input) => input !== replaced),
+	];
+}
+
 export const setAudioMixInputSchema = audioMixUpdateSchema.omit({ input_id: true }).extend({
 	id: z.string(),
 	delay_ms: z.number().optional(),
@@ -387,6 +414,9 @@ export const streamingConfigInputSchema = z.object({
 	selected_ingest_endpoint: z.string().optional(),
 	asrc: z.string().optional(),
 	audio_inputs: z.array(audioInputSettingSchema).nullable().optional(),
+	// An explicit audio-picker pick of `asrc`: the backend adds it to the saved
+	// mix against its own current mix and main input (`audioMixWithPrimary`).
+	audio_pick: z.boolean().optional(),
 	bitrate_overlay: z.boolean().optional(),
 	max_br: z.number().int().min(BITRATE_MIN).max(BITRATE_MAX).optional(),
 	balancer: balancerAlgorithmSchema.optional(),

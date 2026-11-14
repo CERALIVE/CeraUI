@@ -65,7 +65,11 @@ async function installMixerWire(
 					const call: RpcCall = { path: frame.path.join("."), input: frame.input ?? {} };
 					all.push(call);
 					byId.set(frame.id, call);
-					if (call.path === "streaming.setConfig" && refusal !== null && "audio_inputs" in call.input) {
+					if (
+						call.path === "streaming.setConfig" &&
+						refusal !== null &&
+						("audio_inputs" in call.input || call.input.audio_pick === true)
+					) {
 						call.result = { success: false, error: refusal, applied: {} };
 						ws.send(JSON.stringify({ id: frame.id, result: call.result }));
 						return;
@@ -441,6 +445,64 @@ test.describe("audio mixer — caps-full", () => {
 		wire.refuseAudioInputs(null);
 		await startButton(page).click();
 		await thirdGainIsAdmittedLive(page);
+		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
+	});
+	const mixEntry = (id: string, tracks = [1], gain_db = 0) => ({ id, tracks, gain_db, mute: false, delay_ms: 0 });
+	const savedConfig = (backendRpc: BackendRpc) =>
+		backendRpc.call<{ asrc?: string; audio_inputs?: unknown[] }>(["streaming", "getConfig"]);
+
+	async function pickDevice(page: Page, name: RegExp): Promise<void> {
+		await page.getByTestId("audio-source-select").click();
+		await page.getByRole("option", { name }).click();
+	}
+
+	test("two picks made before either answer arrives both stay in the mix", async ({ page, backendRpc }) => {
+		await backendRpc.call(["streaming", "setConfig"], { audio_inputs: [mixEntry(MAIN, [1], -3)] });
+		await expect(page.getByTestId(`audio-strip-enable-${MAIN}`)).toBeDisabled();
+		wire.delayServer(300);
+		await pickDevice(page, /Elgato Wave:3/);
+		await pickThird(page);
+		wire.delayServer(0);
+		await expect
+			.poll(() => savedConfig(backendRpc))
+			.toMatchObject({ asrc: THIRD, audio_inputs: [mixEntry(THIRD), mixEntry(SECOND), mixEntry(MAIN, [1], -3)] });
+		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
+	});
+
+	test("a second tab that has not heard another tab's pick keeps it when it picks", async ({
+		page,
+		backendRpc,
+		workerBackend,
+	}) => {
+		await backendRpc.call(["streaming", "setConfig"], { audio_inputs: [mixEntry(MAIN, [1], -3)] });
+		const other = await page.context().newPage();
+		let hold = false;
+		const held: Array<() => void> = [];
+		await other.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
+			const server = ws.connectToServer();
+			ws.onMessage((message) => server.send(message));
+			server.onMessage((message) => {
+				if (hold) held.push(() => ws.send(message));
+				else ws.send(message);
+			});
+		});
+		await other.addInitScript((port: number) => {
+			(window as { __ceraSocketPort?: number }).__ceraSocketPort = port;
+		}, workerBackend.port);
+		await openLive(other);
+		await expect(other.getByTestId(`audio-strip-enable-${MAIN}`)).toHaveAttribute("aria-checked", "true");
+		hold = true;
+		await pickDevice(page, /Elgato Wave:3/);
+		await expect
+			.poll(() => savedConfig(backendRpc))
+			.toMatchObject({ asrc: SECOND, audio_inputs: [mixEntry(SECOND), mixEntry(MAIN, [1], -3)] });
+		await pickDevice(other, /HDMI Input/);
+		await expect
+			.poll(() => savedConfig(backendRpc))
+			.toMatchObject({ asrc: THIRD, audio_inputs: [mixEntry(THIRD), mixEntry(SECOND), mixEntry(MAIN, [1], -3)] });
+		hold = false;
+		for (const send of held.splice(0)) send();
+		await other.close();
 		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
 	});
 });

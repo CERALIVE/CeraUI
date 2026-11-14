@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ListDevicesResult } from "@ceralive/cerastream";
 import {
 	type AudioInputConfig,
 	connect,
@@ -30,6 +31,7 @@ import {
 	setConfigFilePath,
 } from "../modules/config.ts";
 import { setMockAudioDevicesProvider } from "../modules/streaming/audio.ts";
+import { primaryAudioInputId } from "../modules/streaming/audio-inputs.ts";
 import {
 	initAudioMeterBridge,
 	settleAudioMeterBridge,
@@ -42,6 +44,10 @@ import {
 	cerastreamBackend,
 } from "../modules/streaming/cerastream-backend.ts";
 import { initPipelines } from "../modules/streaming/pipelines.ts";
+import {
+	refreshEngineDeviceCache,
+	resetEngineDeviceCache,
+} from "../modules/streaming/sources.ts";
 import {
 	getIsStreaming,
 	updateStatus,
@@ -1214,4 +1220,172 @@ test("live, a level change on a main input outside the saved mix is admitted and
 		entry("Primary"),
 		entry("Second", [2]),
 	]);
+});
+
+const pick = (asrc: string) =>
+	call(
+		procedures.setConfigProcedure,
+		{ asrc, audio_pick: true },
+		{ context: makeRpcContext() },
+	);
+const ids = (inputs: Array<{ id: string }> | undefined) =>
+	inputs?.map((input) => input.id);
+async function maxInputs(
+	max_inputs: number,
+	extra: Partial<GetCapabilitiesResult> = {},
+) {
+	clearCapabilitiesCache();
+	const mix = caps.audio_mix as NonNullable<GetCapabilitiesResult["audio_mix"]>;
+	await initPipelines({
+		fetchEngineCapabilities: async () => ({
+			caps: { ...caps, ...extra, audio_mix: { ...mix, max_inputs } },
+			schemaVersion: SCHEMA_VERSION,
+		}),
+		fetchEngineDevices: async () => ({ devices: [] }),
+	});
+}
+
+test("an explicit pick outside a saved mix saves the pick and the mix it implies in one write", async () => {
+	expect(await save([entry("Primary"), entry("Second", [2])])).toMatchObject({
+		success: true,
+	});
+	expect(await pick("Third")).toMatchObject({
+		success: true,
+		applied: {
+			asrc: "Third",
+			audio_inputs: [entry("Third"), entry("Primary"), entry("Second", [2])],
+		},
+	});
+	expect(await disk()).toMatchObject({
+		asrc: "Third",
+		audio_inputs: [entry("Third"), entry("Primary"), entry("Second", [2])],
+	});
+});
+
+test("a pick already in the saved mix saves only the pick", async () => {
+	const saved = [entry("Primary"), entry("Second", [2])];
+	expect(await save(saved)).toMatchObject({ success: true });
+	const result = await pick("Second");
+	expect(result).toMatchObject({ success: true, applied: { asrc: "Second" } });
+	expect(result.applied).not.toHaveProperty("audio_inputs");
+	expect(await disk()).toMatchObject({ asrc: "Second", audio_inputs: saved });
+});
+
+test("picks sent without waiting compose on the saved mix: B then C keeps B", async () => {
+	expect(await save([{ ...entry("Primary"), gain_db: -3 }])).toMatchObject({
+		success: true,
+	});
+	const [b, c] = await Promise.all([pick("Second"), pick("Third")]);
+	expect([b.success, c.success]).toEqual([true, true]);
+	const saved = await disk();
+	expect([...(ids(saved.audio_inputs) ?? [])].sort()).toEqual([
+		"Primary",
+		"Second",
+		"Third",
+	]);
+	expect(saved.audio_inputs[0].id).toBe(saved.asrc);
+	expect(saved.audio_inputs).toContainEqual({
+		...entry("Primary"),
+		gain_db: -3,
+	});
+});
+
+test("a stale second tab's pick keeps the input another tab picked", async () => {
+	expect(await save([{ ...entry("Primary"), gain_db: -3 }])).toMatchObject({
+		success: true,
+	});
+	expect(await pick("Second")).toMatchObject({ success: true });
+	expect(await pick("Third")).toMatchObject({ success: true });
+	expect((await disk()).audio_inputs).toEqual([
+		entry("Third"),
+		entry("Second"),
+		{ ...entry("Primary"), gain_db: -3 },
+	]);
+});
+
+test("full mix, chained: a secondary picked as main keeps the mix, then a new input replaces it and keeps the first", async () => {
+	await maxInputs(2);
+	expect(await save([entry("Primary"), entry("Second", [2])])).toMatchObject({
+		success: true,
+	});
+	expect((await pick("Second")).applied).not.toHaveProperty("audio_inputs");
+	expect(await pick("Third")).toMatchObject({ success: true });
+	expect(await disk()).toMatchObject({
+		asrc: "Third",
+		audio_inputs: [entry("Third", [2]), entry("Primary")],
+	});
+});
+
+test("full mix with Auto resolved to a same-device input: a new pick replaces that input, keeps the other and takes its track", async () => {
+	const uvc = (
+		caps.sources as NonNullable<GetCapabilitiesResult["sources"]>
+	)[0];
+	await maxInputs(2, {
+		sources: [...(caps.sources ?? []), { ...uvc, id: "libuvch264" }],
+	});
+	setMockAudioDevicesProvider(() => ({ ...devices, "USB audio": "Micro" }));
+	await refreshEngineDeviceCache({
+		fetchEngineDevices: async () =>
+			({
+				devices: [
+					{
+						input_id: "usb-cam-1",
+						device_path: "/dev/video1",
+						display_name: "USB Streamer",
+						media_class: "video",
+						kind: "uvc_h264",
+						physical_group_id: "usb:10-1",
+					},
+					{
+						input_id: "usb-audio-1",
+						device_path: "",
+						display_name: "RØDE AI-Micro",
+						media_class: "audio",
+						kind: "audio",
+						alsa_card_id: "Micro",
+						physical_group_id: "usb:10-1",
+					},
+				],
+			}) as unknown as ListDevicesResult,
+	});
+	try {
+		getConfig().source = "usb-cam-1";
+		expect(
+			await save([entry("Primary"), entry("USB audio", [2])]),
+		).toMatchObject({ success: true });
+		expect((await pick("Auto")).applied).not.toHaveProperty("audio_inputs");
+		expect(primaryAudioInputId(getConfig())).toBe("USB audio");
+		expect(await pick("Second")).toMatchObject({ success: true });
+		expect(await disk()).toMatchObject({
+			asrc: "Second",
+			audio_inputs: [entry("Second", [2]), entry("Primary")],
+		});
+	} finally {
+		resetEngineDeviceCache();
+	}
+});
+
+test("a pick whose mix the device refuses changes nothing", async () => {
+	const saved = [entry("Primary"), entry("Fourth", [2])];
+	expect(await save(saved)).toMatchObject({ success: true });
+	const { Fourth: _unplugged, ...rest } = devices;
+	setMockAudioDevicesProvider(() => rest);
+	expect(await pick("Third")).toMatchObject({
+		success: false,
+		error: "audio_input_unknown",
+	});
+	expect(await disk()).toMatchObject({ asrc: "Primary", audio_inputs: saved });
+});
+
+test("an asrc save without the pick marker changes no membership", async () => {
+	const saved = [entry("Primary"), entry("Second", [2])];
+	expect(await save(saved)).toMatchObject({ success: true });
+	expect(
+		await call(
+			procedures.setConfigProcedure,
+			{ asrc: "Third" },
+			{ context: makeRpcContext() },
+		),
+	).toMatchObject({ success: true });
+	expect((await disk()).audio_inputs).toEqual(saved);
 });

@@ -232,11 +232,15 @@ must keep that ABI.
   input stays an ordinary input), or in a full mix gives it the first entry's
   place and tracks. The strips show the same mix. Opening Live never saves;
   only an edit of an audio control saves, and it saves the mix shown.
-- A pick in the audio picker of a device outside a saved mix saves `asrc` and
-  the mix it implies in one `setConfig` (`audioPickSave`), so in a full mix the
-  pick replaces the main input it actually replaces. A refused mix retries
-  with `asrc` alone, so the pick is never lost. A pick already in the mix saves
-  only `asrc`.
+- A pick in the audio picker sends only `setConfig({ asrc, audio_pick: true })`.
+  The backend decides the membership in the same synchronous write, against its
+  own current saved mix and current main input (Auto's resolution included):
+  a device outside the mix joins it, and in a full mix it replaces the main
+  input it actually replaces and takes its tracks. Quick successive picks and a
+  stale second tab therefore compose. A refused mix retries with `asrc` alone,
+  so the pick is never lost; a pick already in the mix changes only `asrc`.
+- The rule itself is `audioMixWithPrimary` in `@ceraui/rpc/schemas`, shared by
+  the backend and the strips.
 - Meters: before going live, the main strip carries today's meter (the
   picker's meter moves into it, so the card never shows the same bars twice)
   and every other strip says its level shows once live. Live on a mix session,

@@ -30,7 +30,11 @@ import type {
 	ConfigMessage,
 	SetAudioMixInput,
 } from '@ceraui/rpc/schemas';
-import { AUDIO_SOURCE_AUTO } from '@ceraui/rpc/schemas';
+import {
+	AUDIO_SOURCE_AUTO,
+	audioMixWithPrimary,
+	defaultAudioInput as defaults,
+} from '@ceraui/rpc/schemas';
 import { Activity, RotateCcw, Volume2, VolumeX } from '@lucide/svelte';
 import { Slider as SliderPrimitive } from 'bits-ui';
 
@@ -46,7 +50,6 @@ import {
 	getSources,
 	getStatus,
 } from '$lib/rpc/subscriptions.svelte';
-import { defaultAudioInput as defaults, effectiveAudioInputs } from '$lib/streaming/audio-mix';
 import { audioSourceLabel, resolveAudioSourceList } from '$lib/streaming/sourceSummary';
 import { pipelinesFromSources } from '$lib/streaming/sources-view-model';
 
@@ -116,7 +119,7 @@ let saveSeq = 0;
 const inputs = $derived.by(() => {
 	const source = pending !== undefined ? pending : config?.audio_inputs;
 	return (
-		effectiveAudioInputs(source, hasPrimary ? primaryId : undefined, mix?.max_inputs ?? 0) ??
+		audioMixWithPrimary(source, hasPrimary ? primaryId : undefined, mix?.max_inputs ?? 0) ??
 		(hasPrimary && primaryId !== undefined ? [defaults(primaryId)] : [])
 	);
 });

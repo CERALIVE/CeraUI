@@ -72,6 +72,7 @@ import {
 } from "../../modules/streaming/audio-backend.ts";
 import {
 	engineAudioInputs,
+	pickedAudioInputs,
 	storedAudioInputs,
 	validateAudioInputs,
 } from "../../modules/streaming/audio-inputs.ts";
@@ -960,6 +961,13 @@ export const setConfigProcedure = authedProcedure
 			};
 		}
 
+		// Read and written in this synchronous stretch, so picks serialize.
+		const audioInputs =
+			input.audio_inputs !== undefined
+				? input.audio_inputs
+				: input.audio_pick === true && input.asrc !== undefined
+					? pickedAudioInputs(input.asrc, config)
+					: undefined;
 		const audioConfig = {
 			...config,
 			...input,
@@ -967,8 +975,8 @@ export const setConfigProcedure = authedProcedure
 			composition: config.composition,
 			video_codec: config.video_codec,
 		};
-		if (input.audio_inputs != null) {
-			const error = validateAudioInputs(input.audio_inputs, audioConfig);
+		if (audioInputs != null) {
+			const error = validateAudioInputs(audioInputs, audioConfig);
 			if (error !== undefined) return { success: false, error, applied: {} };
 		}
 
@@ -988,8 +996,8 @@ export const setConfigProcedure = authedProcedure
 		if (input.pipeline !== undefined) config.pipeline = input.pipeline;
 		if (input.acodec !== undefined) config.acodec = input.acodec;
 		if (input.asrc !== undefined) config.asrc = input.asrc;
-		if (input.audio_inputs !== undefined)
-			config.audio_inputs = storedAudioInputs(input.audio_inputs, audioConfig);
+		if (audioInputs !== undefined)
+			config.audio_inputs = storedAudioInputs(audioInputs, audioConfig);
 		// Never staged behind `apply_now`: the engine fixes its audio backend when
 		// it builds the graph and answers a live reload with `applies:
 		// "next-session"`, so this can only ever take effect at the next start.
@@ -1102,7 +1110,7 @@ export const setConfigProcedure = authedProcedure
 		if (input.pipeline !== undefined) applied.pipeline = config.pipeline;
 		if (input.acodec !== undefined) applied.acodec = config.acodec;
 		if (input.asrc !== undefined) applied.asrc = config.asrc;
-		if (input.audio_inputs !== undefined)
+		if (audioInputs !== undefined)
 			applied.audio_inputs = config.audio_inputs ?? null;
 		if (input.audio_backend !== undefined)
 			applied.audio_backend = config.audio_backend;

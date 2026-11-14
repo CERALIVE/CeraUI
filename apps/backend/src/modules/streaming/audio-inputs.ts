@@ -1,5 +1,9 @@
 import type { AudioInputConfig } from "@ceralive/cerastream";
-import { AUDIO_SOURCE_AUTO, type AudioInputSetting } from "@ceraui/rpc/schemas";
+import {
+	AUDIO_SOURCE_AUTO,
+	type AudioInputSetting,
+	audioMixWithPrimary,
+} from "@ceraui/rpc/schemas";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import {
 	deriveAudioSources,
@@ -136,36 +140,53 @@ export function storedAudioInputs(
 }
 
 /**
- * The mix Start sends and live changes address: the saved entries with the
- * main input in them. A main input outside the saved mix joins first on Track
- * 1, or in a full mix takes the first entry's place and tracks (the UI saves the
- * main input first). Nothing is written here: the saved mix changes only when
- * the operator edits it, so loading never rewrites it.
+ * The mix Start sends and live changes address: the saved entries with the main
+ * input in them (`audioMixWithPrimary`). Nothing is written here, so loading and
+ * Start never rewrite the saved mix.
  */
 export function effectiveAudioInputs(
 	config: RuntimeConfig,
 ): AudioInputSetting[] | undefined {
-	const saved = config.audio_inputs;
 	const capability = getLastCapabilities()?.audio_mix;
 	const primary = primaryAudioInputId(config);
 	if (
 		!capability ||
-		!saved?.length ||
 		primary === undefined ||
-		saved.some((input) => input.id === primary) ||
 		!availableAudioInputIds(config).has(primary)
 	)
-		return saved;
-	const entry = {
-		id: primary,
-		tracks: [1],
-		gain_db: 0,
-		mute: false,
-		delay_ms: 0,
-	};
-	if (saved.length < capability.max_inputs) return [entry, ...saved];
-	const [replaced, ...others] = saved;
-	return [{ ...entry, tracks: [...(replaced?.tracks ?? [1])] }, ...others];
+		return config.audio_inputs;
+	return audioMixWithPrimary(
+		config.audio_inputs,
+		primary,
+		capability.max_inputs,
+	);
+}
+
+/**
+ * The saved mix after an explicit pick of `asrc`, decided against the backend's
+ * own current saved mix and current main input (Auto's resolution included), so
+ * quick successive picks and a stale second tab compose. Undefined when the pick
+ * changes no membership.
+ */
+export function pickedAudioInputs(
+	asrc: string,
+	config: RuntimeConfig,
+): AudioInputSetting[] | undefined {
+	const capability = getLastCapabilities()?.audio_mix;
+	const saved = config.audio_inputs;
+	if (
+		!capability ||
+		!saved?.length ||
+		saved.some((input) => input.id === asrc) ||
+		!availableAudioInputIds(config).has(asrc)
+	)
+		return undefined;
+	return audioMixWithPrimary(
+		saved,
+		asrc,
+		capability.max_inputs,
+		primaryAudioInputId(config),
+	);
 }
 
 export function engineAudioInputs(
