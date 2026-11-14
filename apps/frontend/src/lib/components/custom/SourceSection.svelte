@@ -107,6 +107,7 @@ import {
 	resolvedAudioLabel,
 	withAutoAudioEntry,
 } from '$lib/streaming/sourceSummary';
+import AudioMixer from '$main/live/AudioMixer.svelte';
 
 // Durable engineering note (public GitHub, gstlibuvcsrc repo) explaining how a
 // UVC device's descriptors are read to decide whether it has hardware H.264 — the
@@ -593,8 +594,12 @@ const audioIsAuto = $derived(config?.asrc === AUDIO_SOURCE_AUTO);
 const resolvedAudio = $derived(
 	resolvedAudioLabel(config, audioStatus, audioSourceEntries, t),
 );
+// The mixer replaces the picker's meter with one strip per input; while a mix
+// session runs the backend refuses a source switch, so the picker says so.
+const mixerShown = $derived(capabilities?.audio_mix !== undefined);
+const audioMixLive = $derived(audioStatus?.audio_mix_active === true);
 // Live audio switch is gated (Task 10): force read-only while streaming.
-const audioReadOnly = $derived(audioMode === 'single' || isStreaming);
+const audioReadOnly = $derived(audioMode === 'single' || isStreaming || audioMixLive);
 const audioComingSoon = $derived(isStreaming && audioMode === 'multiple');
 
 // Embedded network-ingest audio (Task 13): the ACTIVE source's `audioKind` is
@@ -1512,12 +1517,28 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 			</Select.Root>
 		{/if}
 
+			{#if audioMixLive}
+				<p
+					class="text-status-warning text-xs"
+					data-testid="audio-source-mix-locked"
+					role="status"
+				>
+					{m["live.audioMixer.error.audio_mix_active"]()}
+				</p>
+			{/if}
+
 			<!-- Live level meter for the source picked directly above — a slim inline
 			     strip, not its own page section, so the bars sit next to the device
 			     they belong to. Always mounted: the meter's own unavailable copy is
-			     the honest answer when no level frame has arrived. -->
-			<LiveAudioMeter class="pt-0.5" />
+			     the honest answer when no level frame has arrived. With the mixer,
+			     the main input's strip carries it instead. -->
+			{#if !mixerShown}
+				<LiveAudioMeter class="pt-0.5" />
+			{/if}
 		</div>
+		{#if mixerShown}
+			<AudioMixer {capabilities} {config} {isStreaming} />
+		{/if}
 		</section>
 		{/if}
 	</Card.Content>

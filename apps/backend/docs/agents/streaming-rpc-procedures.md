@@ -86,7 +86,18 @@ Non-numeric/non-finite values fail RPC input parsing.
 
 The engine adapter resolves every picker id through the existing audio resolver,
 puts the primary first, omits `audio.device` and sends producer-owned
-`audio.inputs`. For a network source, its source id (`rtmp` or `srt`) denotes
+`audio.inputs`. It sends `effectiveAudioInputs`: a primary the device can open
+but the saved mix lacks joins first on Track 1, or in a full mix takes the
+first entry's place and tracks. Live and idle `setAudioMix` admit the same
+mix, and nothing is written until an operator edit. `setConfig({ asrc,
+audio_pick: true })` is the picker's explicit pick: `pickedAudioInputs` adds
+the picked device to the current saved mix (replacing the current main input,
+Auto resolved, in a full mix) and saves both in one synchronous write, so
+picks serialize; without `audio_pick` an `asrc` save changes no membership.
+Idle edits from the Live strips arrive as per-input deltas on
+`setAudioMix`: values, or `include` / `track` for membership and tracks, which
+`changedAudioInputs` composes on the current saved mix (refusing to turn the
+main input out with `audio_input_primary`) and saves for the next start. For a network source, its source id (`rtmp` or `srt`) denotes
 the embedded input and becomes engine `embedded`. Without saved inputs or the
 capability, start serialization stays on the existing path. The compatibility
 start-schema export aliases the published producer schema, preserving its
@@ -116,8 +127,9 @@ Per-input meter entries keep their measured values and map engine `input_id`
 back to picker ids. Live mix meters follow the admitted stream even if a
 deferred audio pick changes; idle meter selection is unchanged. Coverage:
 `audio-inputs.test.ts` drives the published UDS client, persistence and RPC;
-`mock-audio-contract.test.ts` pins native error serialization. The mixer UI
-and layout designer remain separate changes; no hardware qualification or
+`mock-audio-contract.test.ts` pins native error serialization. The mixer UI is
+the Audio card's strips ([live screen contract](../../../../docs/agents/live-screen.md#the-audio-cards-mixer-exists));
+the layout designer remains a separate change. No hardware qualification or
 release documentation claim follows from these host checks.
 
 `start` input is PARTIAL by contract. `updateConfig` projects the saved runtime

@@ -3,10 +3,11 @@
  * LiveCockpit — the live order of the Live screen contract.
  *
  *   banners → program-desk (preview → live-summary-strip → live-source-switch
- *   → layout-controls) → telemetry-card (telemetry strip, ingest stats) →
- *   live-bar (bitrate adjuster, Stop).
+ *   → layout-controls) → audio-card → telemetry-card (telemetry strip, ingest
+ *   stats) → live-bar (bitrate adjuster, Stop).
  *
- * `layout-controls` exists only while the engine advertises `composition`.
+ * `layout-controls` exists only while the engine advertises `composition`, and
+ * `audio-card` only while it advertises `audio_mix`.
  */
 import type {
 	ActiveEncode,
@@ -93,32 +94,34 @@ const LINKS_DOWN = {
 } as unknown as LinkTelemetryMessage;
 
 function cockpit(capabilities?: CapabilitiesMessage) {
-	return render(LiveCockpit, {
-		props: {
-			liveSummary: SUMMARY,
-			sources: SOURCES,
-			config: CONFIG,
-			activeEncode: ACTIVE_ENCODE,
-			activeInput: "cam-a",
-			onSwitch: () => {},
-			bitrate: "6 Mbps",
-			bitrateDraft: 6000,
-			bitrateLabel: "6 Mbps",
-			bitrateMin: 500,
-			bitrateMax: 12000,
-			sliderMin: 1000,
-			sliderMax: 9000,
-			step: 250,
-			onStep: () => {},
-			onSliderChange: () => {},
-			onSliderCommit: () => {},
-			telemetry: LINKS_DOWN,
-			isStreaming: true,
-			optimismState: "streaming" as StreamingOptimismState,
-			onStop: () => {},
-			capabilities,
-		},
-	});
+	return render(LiveCockpit, { props: cockpitProps(capabilities) });
+}
+
+function cockpitProps(capabilities?: CapabilitiesMessage) {
+	return {
+		liveSummary: SUMMARY,
+		sources: SOURCES,
+		config: CONFIG,
+		activeEncode: ACTIVE_ENCODE,
+		activeInput: "cam-a",
+		onSwitch: () => {},
+		bitrate: "6 Mbps",
+		bitrateDraft: 6000,
+		bitrateLabel: "6 Mbps",
+		bitrateMin: 500,
+		bitrateMax: 12000,
+		sliderMin: 1000,
+		sliderMax: 9000,
+		step: 250,
+		onStep: () => {},
+		onSliderChange: () => {},
+		onSliderCommit: () => {},
+		telemetry: LINKS_DOWN,
+		isStreaming: true,
+		optimismState: "streaming" as StreamingOptimismState,
+		onStop: () => {},
+		capabilities,
+	};
 }
 
 function byTestId(root: ParentNode, id: string): HTMLElement {
@@ -143,6 +146,17 @@ function expectInOrder(
 
 const COMPOSING = {
 	features: [COMPOSITION_FEATURE],
+} as unknown as CapabilitiesMessage;
+
+const MIXING = {
+	features: [COMPOSITION_FEATURE],
+	audio_mix: {
+		max_inputs: 4,
+		max_tracks: 4,
+		gain_db_min: -60,
+		gain_db_max: 12,
+		delay_ms_max: 2000,
+	},
 } as unknown as CapabilitiesMessage;
 
 describe("LiveCockpit — live order", () => {
@@ -192,6 +206,34 @@ describe("LiveCockpit — live order", () => {
 
 		within(bar).getByRole("slider");
 		within(bar).getByRole("button", { name: /stop stream/i });
+	});
+
+	it("puts the audio card after program-desk and before telemetry-card when the engine mixes audio", () => {
+		const { container } = cockpit(MIXING);
+		const root = byTestId(container, "live-cockpit");
+
+		const order = ["program-desk", "audio-card", "telemetry-card", "live-bar"];
+		expectInOrder(
+			order.map((id) => byTestId(root, id)),
+			order,
+		);
+		byTestId(byTestId(root, "audio-card"), "audio-mixer");
+		expect(
+			byTestId(root, "program-desk").contains(byTestId(root, "audio-card")),
+		).toBe(false);
+	});
+
+	it("renders no audio-card without audio_mix", () => {
+		const { container } = cockpit(COMPOSING);
+		expect(container.querySelector('[data-testid="audio-card"]')).toBeNull();
+		expect(container.querySelector('[data-testid="audio-mixer"]')).toBeNull();
+	});
+
+	it("renders no audio-card in the post-stream summary window", () => {
+		const { container } = render(LiveCockpit, {
+			props: { ...cockpitProps(MIXING), isStreaming: false, summaryMode: true },
+		});
+		expect(container.querySelector('[data-testid="audio-card"]')).toBeNull();
 	});
 
 	it("renders no layout-controls without the composition feature", () => {

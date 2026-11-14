@@ -268,6 +268,7 @@ export interface ResolvedAudioStatus {
 	resolved_asrc_reason?: ResolvedAsrcReason | null;
 	resolved_asrc_candidates?: string[] | null;
 	pending_audio_follow_asrc?: string | null;
+	audio_mix_active?: boolean;
 }
 
 /**

@@ -199,8 +199,10 @@ and meter contracts, not GStreamer timing or hardware behavior. The settings
 RPC now records its mapped inputs through `startMockStreaming` and uses
 `setMockAudioMix` for live writes. Audio validation and unknown-input errors
 include the native message prefix and complete `data.code`; the live source
-switch retains the native mixing refusal message. The mixer/designer UI
-remains separate work. See the
+switch retains the native mixing refusal message. The mixer UI drives these
+through the same RPCs; the mock does not bridge `audio-level` to the main
+socket, so per-input meters stay unavailable on the mock stack unless a test
+injects the frame. The layout designer UI remains separate work. See the
 [audio input contract](../../apps/backend/docs/agents/streaming-rpc-procedures.md#audio-inputs-exists).
 
 **`setMockEngineCapabilities(partial)` — test-only capability override seam (T5):**
