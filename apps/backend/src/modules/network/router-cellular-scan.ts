@@ -363,6 +363,15 @@ export async function readUsbNetDevice(
 	};
 }
 
+export function readNetdevSubsystem(
+	ifname: string,
+	deps: RouterCellularScanDeps = defaultRouterCellularScanDeps,
+): Promise<string | undefined> {
+	return deps.readLinkName(
+		join(deps.sysfsRoot, "sys/class/net", ifname, "device/subsystem"),
+	);
+}
+
 /**
  * The subset of a ModemManager-manageable USB device that reaches the wire.
  *

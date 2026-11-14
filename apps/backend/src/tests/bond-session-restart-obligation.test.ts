@@ -273,3 +273,64 @@ test("A3 unchanged Ethernet identity owes no restart after scan and netif refres
 	expect(restart).toHaveBeenCalledTimes(0);
 	expect(identityForIface("eth9")).toEqual(original);
 });
+
+for (const release of ["coverage", "deadline"] as const) {
+	test(`B13 USB ${release} admission restarts only for applied changes`, async () => {
+		jest.useFakeTimers();
+		const eth9 = firstSightIfconfig("eth9", "192.0.2.2");
+		const output = `${eth9}\n\n${firstSightIfconfig(MODEM, IP)}`;
+		const scan = firstSightScan(output, {
+			buses: { [MODEM]: "usb", eth9: "platform" },
+		});
+		await refreshUsbNetMarkers(["eth9"]);
+		processIfconfigOutput(eth9);
+		const restart = await startLive();
+		const realPrepare = preparation.prepareSrtlaIpAddresses;
+		const pending: Promise<unknown>[] = [];
+		spyOn(preparation, "prepareSrtlaIpAddresses").mockImplementation(
+			(address) => {
+				const result = realPrepare(address);
+				pending.push(result);
+				return result;
+			},
+		);
+		const drain = async () => {
+			let seen = -1;
+			while (seen !== pending.length) {
+				seen = pending.length;
+				await Promise.allSettled(pending);
+				await new Promise<void>((resolve) => setImmediate(resolve));
+			}
+		};
+		const publication = updateNetif();
+		try {
+			await scan.entered;
+			jest.advanceTimersByTime(2_000);
+			await publication;
+			await drain();
+			expect(restart).toHaveBeenCalledTimes(0);
+			expect(identityForIface(MODEM)).toBeUndefined();
+			if (release === "deadline") {
+				scan.clock.now = 15_000;
+				processIfconfigOutput(output);
+				await drain();
+				expect(restart).toHaveBeenCalledTimes(1);
+			}
+			scan.release();
+			await scan.settle();
+			await drain();
+			expect(identityForIface(MODEM)?.linkId).toBe(
+				firstSightPhysicalDevice().linkId,
+			);
+			expect(restart).toHaveBeenCalledTimes(release === "deadline" ? 2 : 1);
+			await updateNetif();
+			await drain();
+			expect(restart).toHaveBeenCalledTimes(release === "deadline" ? 2 : 1);
+		} finally {
+			scan.release();
+			await publication;
+			await scan.settle();
+			await drain();
+		}
+	});
+}
