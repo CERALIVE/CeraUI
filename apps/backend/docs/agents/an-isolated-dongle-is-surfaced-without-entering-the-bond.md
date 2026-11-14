@@ -1122,6 +1122,28 @@ neither fsyncs nor sets a mode — is deliberately not used here).
   republication describes bytes no longer on disk, which the reader can only call
   a hash mismatch; absent is the honest state (`missing_file`).
 
+**Applied publications determine reloads.** `publication.changed` compares the
+entries with the last publication whose IP list was renamed into place.
+`ok`, `unmappable` and `sidecar_write_failed` all apply the IP list and advance
+that comparison point, including legacy or degraded operation. An
+`ips_write_failed` attempt applies nothing, returns `changed:false` and leaves
+the comparison point intact. `publishSrtlaBond` still registers the attempted
+entries regardless of the writer outcome: after a failed IP write the registry
+can run ahead of disk and the sender until the next applied publication.
+
+**Session refreshes run in order.** `streamloop/session.ts` queues both netif
+changes and committed USB scans on one promise chain per session. A scan commit
+alone can therefore replace a provisional identity without another netif event.
+While the session still owns the launch and streaming is active, each applied
+changed publication owes exactly one sender restart; unchanged publications owe
+none. A thrown preparation is logged once and the queue continues. Both
+listeners are removed on stop, failed start or session replacement, and queued
+work checks ownership before preparing and restarting. A write that never
+settles stalls later refreshes in that session. There is no timeout: without
+cancellation or fencing, a late rename could race a newer publication.
+Coverage: `tests/bond-session-restart-obligation.test.ts` exercises overlap,
+rejection recovery, failed IP writes, scan-only refreshes and Ethernet neutrality.
+
 ### THE DUPLICATE-IP POLICY SPLIT
 
 **Wire projection:** `netifEntrySchema.error` is an optional string.

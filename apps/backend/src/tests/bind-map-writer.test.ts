@@ -315,6 +315,33 @@ describe("ADR-003 publication protocol", () => {
 		expect(readFileSync(deps.ipsFile, "utf8")).toBe("10.0.0.1");
 	});
 
+	test("A4 a failed IP write owes no reload and preserves the applied comparison", async () => {
+		const deps = writerDeps();
+		const entries = [entry("192.0.2.2", "eth9", "lnk_7b0bd35950ec673f")];
+		const failing = {
+			...deps,
+			writeFile: async (path: string, contents: string) => {
+				if (path.startsWith(deps.ipsFile)) throw new Error("IP write failure");
+				await deps.writeFile(path, contents);
+			},
+		};
+
+		const first = await publishBondMapping(entries, failing);
+		const second = await publishBondMapping(entries, deps);
+		const third = await publishBondMapping(entries, deps);
+		console.log(
+			"A4",
+			JSON.stringify([first.changed, second.changed, third.changed]),
+		);
+		expect(first).toEqual({
+			ok: false,
+			reason: "ips_write_failed",
+			changed: false,
+		});
+		expect(second.changed).toBe(true);
+		expect(third.changed).toBe(false);
+	});
+
 	test("the session fires SIGHUP off `changed`, not off the IP list", () => {
 		// `refreshSrtlaIpAddresses` is private to start(), so the wiring is pinned
 		// statically — the same technique cellular-boot-order.test.ts uses for a
