@@ -1,3 +1,15 @@
+import type {
+	UplinkHealthReason,
+	UplinkHealthState,
+	UplinkKind,
+} from "@ceraui/rpc/events";
+
+export type {
+	UplinkHealthReason,
+	UplinkHealthState,
+	UplinkKind,
+} from "@ceraui/rpc/events";
+
 export const UPLINK_HEALTH_CONFIG = {
 	failedRoundsDown: 3,
 	successfulRoundsUp: 5,
@@ -13,13 +25,6 @@ export const UPLINK_HEALTH_CONFIG = {
 	passiveNakDegradedCount: 25,
 } as const;
 
-export type UplinkKind = "ethernet" | "wifi" | "cellular" | "other";
-export type UplinkHealthState = "up" | "degraded" | "down";
-export type UplinkHealthReason =
-	| "probe_failed"
-	| "captive_portal"
-	| "passive_congestion"
-	| "definitive_loss";
 export type UplinkHealthOutcome =
 	| "success"
 	| "failure"

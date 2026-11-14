@@ -59,6 +59,11 @@
 import fs from "node:fs";
 
 import {
+	type RecoveryFailureReason,
+	recoveryFailureReasonSchema,
+	type StreamStopCause,
+} from "@ceraui/rpc/events";
+import {
 	audioCodecSchema,
 	inputModeSchema,
 	type LifecycleState,
@@ -118,26 +123,12 @@ const armedStreamConfigSchema = z.object({
 });
 export type ArmedStreamConfig = z.infer<typeof armedStreamConfigSchema>;
 
-/** Why a stop was issued. `operator` is the ONLY cause that clears the marker. */
-export const STREAM_STOP_CAUSES = [
-	"operator",
-	"engine_loss",
-	"reconfigure",
-] as const;
-export type StreamStopCause = (typeof STREAM_STOP_CAUSES)[number];
-
-/** Why a restoration could not be attempted, or attempted and did not land. */
-export const RECOVERY_FAILURE_REASONS = [
-	"runtime_state_unknown",
-	"lifecycle_busy",
-	"config_invalid",
-	"start_failed",
-	"start_busy",
-	"start_cancelled",
-] as const;
-export type RecoveryFailureReason = (typeof RECOVERY_FAILURE_REASONS)[number];
-
-const recoveryFailureReasonSchema = z.enum(RECOVERY_FAILURE_REASONS);
+export {
+	RECOVERY_FAILURE_REASONS,
+	type RecoveryFailureReason,
+	STREAM_STOP_CAUSES,
+	type StreamStopCause,
+} from "@ceraui/rpc/events";
 
 /**
  * The terminal attempted-state. Its PRESENCE — not its outcome — is the
