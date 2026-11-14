@@ -200,6 +200,7 @@ export const runtimeConfigSchema = z.object({
 	password_hash: z.string().optional(),
 	ssh_pass: z.string().optional(),
 	ssh_pass_hash: z.string().optional(),
+	ssh_persistent: z.boolean().optional(),
 
 	// Relay/SRTLA settings
 	relay_server: z.string().optional(),
