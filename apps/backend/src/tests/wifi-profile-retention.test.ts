@@ -68,13 +68,14 @@ function useTransport(security: string) {
 		}
 		if (args.includes("connect")) {
 			if (/802\.1X|ENTERPRISE|^$/i.test(security)) return REFUSED;
+			const password = args[args.indexOf("password") + 1];
 			// NM auto-selection can provision the requested security without
 			// changing an incompatible existing profile.
 			profiles.set(
 				FRESH,
 				security === "WEP"
-					? { keyMgmt: "none", wepKey: PASSWORD }
-					: { keyMgmt: "wpa-psk", psk: PASSWORD },
+					? { keyMgmt: "none", wepKey: password }
+					: { keyMgmt: "wpa-psk", psk: password },
 			);
 			return activate(FRESH, security);
 		}
@@ -237,11 +238,19 @@ test.each(["available", "unavailable"] as const)(
 			return logger;
 		});
 		profiles.set(SAVED, { keyMgmt: "wpa-psk", psk: "fixture-staged" });
-		const listing = spyOn(nm, "nmConnsGet").mockImplementation(async () => {
-			return availability === "available"
-				? [...profiles.keys()].map((uuid) => `${uuid}:802-11-wireless`)
-				: undefined;
-		});
+		const listing = spyOn(nm, "nmConnsGet").mockImplementation(
+			async (fields) => {
+				if (fields !== "uuid,type" && fields !== "uuid,type,timestamp")
+					throw new Error("Unexpected profile listing fields");
+				return availability === "available"
+					? [...profiles.keys()].map((uuid) =>
+							fields === "uuid,type,timestamp"
+								? `${uuid}:802-11-wireless:0`
+								: `${uuid}:802-11-wireless`,
+						)
+					: undefined;
+			},
+		);
 		const fields = spyOn(nm, "nmConnGetFields").mockResolvedValue([
 			"infrastructure",
 			SSID,
