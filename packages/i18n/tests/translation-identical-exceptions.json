@@ -57,7 +57,7 @@
 	"hud.live": {
 		"value": "Live",
 		"locales": ["es"],
-		"reason": "Live names the streaming screen in the es docs: ceralive-docs quotes it as \"Live\" on about 20 es pages (quoted-label-baseline) and spanish-style.test.ts pins it; renaming the screen is a docs-wide change."
+		"reason": "HUD live-state pill shown next to \"Desconectado\" and \"Inactivo\"; ceralive-docs pins \"Live\" in its quoted-label baseline and spanish-style.test.ts."
 	},
 	"live.audioCard.title": {
 		"value": "Audio",
@@ -194,11 +194,6 @@
 		"locales": ["de", "es", "fr", "pt-BR"],
 		"reason": "Live is the product screen name shared by navigation.live and live.title in each listed locale catalog."
 	},
-	"navigation.streaming": {
-		"value": "Streaming",
-		"locales": ["es"],
-		"reason": "es keeps the streaming anglicism, e.g. live.startFailure.class.engine_unavailable reads \"El motor de streaming no está disponible.\""
-	},
 	"network.bluetooth.enableLabel": {
 		"value": "Bluetooth",
 		"locales": ["de", "es", "fr", "ja", "pt-BR"],
@@ -323,11 +318,6 @@
 		"value": "PCI",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "3GPP Physical Cell Identity field acronym in cellular diagnostics, not a prose label."
-	},
-	"network.routerCellular.detail.roaming": {
-		"value": "Roaming",
-		"locales": ["es"],
-		"reason": "es keeps the roaming anglicism, e.g. network.modem.enableRoaming reads \"Permitir Roaming\"."
 	},
 	"network.routerCellular.firmwareLabel": {
 		"value": "Firmware",
