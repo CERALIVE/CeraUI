@@ -40,11 +40,13 @@ bunx biome check packages/i18n
 | IMPORT PATHS | [Contract 4](docs/agents/import-paths.md) |
 | GENERATE | [Contract 5](docs/agents/generate.md) |
 | CONVENTIONS + ANTI-PATTERNS | [Contract 6](docs/agents/conventions-anti-patterns.md) |
+| English-copy exceptions and shrinking translation debt | [Translation-quality ratchet](README.md#translation-quality-ratchet) |
 
 ## HARD RULES
 
 - Spanish strings are neutral LATAM (tú); docs.ceralive.tv quotes es.json verbatim, so a label change needs a docs update (Rule G)
 - messages/en.json is the hand-edited base locale; maintain identical key sets across all locales.
+- English-copy exceptions must name exact current locale/key/value matches; remove stale exceptions and debt as the gate directs.
 - Never hand-edit generated/ or src/paraglide/; generate:i18n runs before consumers, never as an install-time hook.
 - Never write tests/fixtures/*.rendered.json; deliberate copy changes re-freeze the immutable oracle in a separately reviewed PR.
 - 2026-10-20 — Recorded exception (brand-assets-rollout, root AGENTS.md): the casing-only re-freeze of notifications.ceraliveUpdateAvailable landed as a separately reviewed commit inside that effort's single CeraUI PR; regeneration stayed forbidden.
