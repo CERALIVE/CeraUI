@@ -4,6 +4,21 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Literal example DNS hostname for the provider-host input; no prose to translate."
 	},
+	"devtools.cookies": {
+		"value": "Cookies",
+		"locales": ["pt-BR"],
+		"reason": "Browser storage term shown on the developer page; pt-BR browsers label it \"Cookies\" untranslated."
+	},
+	"devtools.downlink": {
+		"value": "Downlink",
+		"locales": ["pt-BR"],
+		"reason": "Network Information API field name on the developer page; pt-BR network.ethRole.staged.body keeps the paired term \"Uplink\" untranslated."
+	},
+	"devtools.log": {
+		"value": "Log",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR advanced.ceraliveLog reads \"Log do CeraLive\", keeping the term untranslated."
+	},
 	"devtools.mbps": {
 		"value": "Mbps",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
@@ -14,10 +29,50 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR"],
 		"reason": "Millisecond unit abbreviation for numeric duration readings."
 	},
+	"devtools.offline": {
+		"value": "Offline",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR devtools.screenshotCount reads \"... + Offline (2 temas)\", keeping the term untranslated."
+	},
+	"devtools.online": {
+		"value": "Online",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR devtools.onlineStatus reads \"Status Online\", keeping the term untranslated."
+	},
 	"devtools.rtt": {
 		"value": "RTT",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Round-trip-time statistic acronym used by the network diagnostics."
+	},
+	"devtools.status": {
+		"value": "Status",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR hud.streamHealth reads \"Status da transmissão\", keeping the term untranslated."
+	},
+	"devtools.total": {
+		"value": "Total",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR network.summary.networksActive reads \"... • Total: {total} Kbps\"; \"Total\" is the Portuguese word."
+	},
+	"devtools.userAgent": {
+		"value": "User Agent",
+		"locales": ["pt-BR"],
+		"reason": "HTTP User-Agent header name shown on the developer page; a protocol identifier, not prose."
+	},
+	"devtools.viewport": {
+		"value": "Viewport",
+		"locales": ["pt-BR"],
+		"reason": "CSS/browser viewport term shown on the developer page next to untranslated technical fields (Cookies, User Agent)."
+	},
+	"general.offline": {
+		"value": "Offline",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR devtools.screenshotCount reads \"... + Offline (2 temas)\", keeping the term untranslated."
+	},
+	"general.status": {
+		"value": "Status",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR hud.streamHealth reads \"Status da transmissão\", keeping the term untranslated."
 	},
 	"hotspotConfigurator.hotspot.placeholderName": {
 		"value": "CeraLive",
@@ -26,28 +81,53 @@
 	},
 	"hud.bitrate": {
 		"value": "Bitrate",
-		"locales": ["es"],
-		"reason": "es live.adjustBitrate reads \"Ajustar bitrate\", preserving the owner's bitrate terminology."
+		"locales": ["es", "pt-BR"],
+		"reason": "es live.adjustBitrate reads \"Ajustar bitrate\", preserving the owner's bitrate terminology; pt-BR live.adjustBitrate reads \"Ajustar bitrate\", keeping the term untranslated."
 	},
 	"hud.healthSrt": {
 		"value": "SRT",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Secure Reliable Transport protocol identifier used by transport diagnostics."
 	},
+	"hud.link": {
+		"value": "Link",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR live.server.singleLink reads \"Link único\", keeping the term untranslated."
+	},
+	"hud.offline": {
+		"value": "Offline",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR devtools.screenshotCount reads \"... + Offline (2 temas)\", keeping the term untranslated."
+	},
+	"hud.status": {
+		"value": "Status",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR hud.streamHealth reads \"Status da transmissão\", keeping the term untranslated."
+	},
 	"live.encoder.accelerated": {
 		"value": "Hardware",
-		"locales": ["es"],
-		"reason": "es live.education.field.codec.body uses \"codificador por hardware\", retaining the engineering term in translated prose."
+		"locales": ["es", "pt-BR"],
+		"reason": "es live.education.field.codec.body uses \"codificador por hardware\", retaining the engineering term in translated prose; pt-BR general.hardwareSensors reads \"Sensores de Hardware\", keeping the term untranslated."
 	},
 	"live.encoder.passthrough.title": {
 		"value": "Passthrough",
-		"locales": ["es"],
-		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\""
+		"locales": ["es", "pt-BR"],
+		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\"; pt-BR live.encoder.passthrough.disclosurePassthrough starts \"Passthrough — a câmera controla o bitrate\", keeping the term untranslated."
 	},
 	"live.encoder.software": {
 		"value": "Software",
-		"locales": ["es"],
-		"reason": "es devtools.newVersionDesc uses \"actualización de software\", retaining the engineering term in translated prose."
+		"locales": ["es", "pt-BR"],
+		"reason": "es devtools.newVersionDesc uses \"actualización de software\", retaining the engineering term in translated prose; pt-BR updatingOverlay.title reads \"Atualizando o Software do Dispositivo\", keeping the term untranslated."
+	},
+	"live.ingest.link": {
+		"value": "Link",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR live.server.singleLink reads \"Link único\", keeping the term untranslated."
+	},
+	"live.ingest.links": {
+		"value": "Links",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR live.ingest.linksReadyTitle reads \"Links prontos\", keeping the term untranslated."
 	},
 	"live.ingest.nak": {
 		"value": "NAK",
@@ -58,6 +138,11 @@
 		"value": "RTT",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Round-trip-time statistic acronym used by the network diagnostics."
+	},
+	"live.ingest.total": {
+		"value": "Total",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR network.summary.networksActive reads \"... • Total: {total} Kbps\"; \"Total\" is the Portuguese word."
 	},
 	"live.inputPicker.groups.camlink": {
 		"value": "Cam Link",
@@ -96,18 +181,18 @@
 	},
 	"live.passthrough.activeChip": {
 		"value": "Passthrough",
-		"locales": ["es"],
-		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\""
+		"locales": ["es", "pt-BR"],
+		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\"; pt-BR live.encoder.passthrough.disclosurePassthrough starts \"Passthrough — a câmera controla o bitrate\", keeping the term untranslated."
 	},
 	"live.preview.encode.activeHardware": {
 		"value": "{element} — hardware",
-		"locales": ["es"],
-		"reason": "Only interpolation plus hardware; es live.education.field.codec.body likewise uses \"por hardware\" in translated prose."
+		"locales": ["es", "pt-BR"],
+		"reason": "Only interpolation plus hardware; es live.education.field.codec.body likewise uses \"por hardware\" in translated prose; Only interpolation plus hardware; pt-BR general.hardwareSensors reads \"Sensores de Hardware\"."
 	},
 	"live.preview.encode.activeSoftware": {
 		"value": "{element} — software",
-		"locales": ["es"],
-		"reason": "Only interpolation plus software; es devtools.newVersionDesc likewise uses \"actualización de software\" in translated prose."
+		"locales": ["es", "pt-BR"],
+		"reason": "Only interpolation plus software; es devtools.newVersionDesc likewise uses \"actualización de software\" in translated prose; Only interpolation plus software; pt-BR updatingOverlay.title reads \"Atualizando o Software do Dispositivo\"."
 	},
 	"live.preview.tierMse": {
 		"value": "MSE",
@@ -148,6 +233,16 @@
 		"value": "Bluetooth",
 		"locales": ["de", "es", "fr", "ja", "pt-BR"],
 		"reason": "Bluetooth wireless standard and trademark; only the listed catalogs retain this spelling."
+	},
+	"network.deviceCount.modem": {
+		"value": "modem",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR network.emptyStates.noDevicesDescription reads \"Nenhum adaptador WiFi ou modem celular detectado\"; \"modem\" is the Portuguese word."
+	},
+	"network.deviceCount.modems": {
+		"value": "modems",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR network.pageDescription reads \"Gerencie suas conexões WiFi, hotspots, modems celulares e interfaces de rede\"; \"modems\" is the Portuguese plural."
 	},
 	"network.ethRole.uplink": {
 		"value": "Uplink",
@@ -374,6 +469,11 @@
 		"locales": ["de", "es", "fr", "pt-BR"],
 		"reason": "IEEE 802.3 Ethernet standard name; catalogs using localized spellings remain outside this entry."
 	},
+	"network.view.hotspot": {
+		"value": "Hotspot",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR network.view.hotspotOff reads \"O hotspot está desligado\", keeping the term untranslated."
+	},
 	"network.view.hotspotClientRate": {
 		"value": "{rate} Mbps",
 		"locales": ["ar", "es", "hi", "ja", "ko", "pt-BR", "zh"],
@@ -383,6 +483,11 @@
 		"value": "{dbm} dBm",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Numeric signal-level interpolation followed by the decibel-milliwatt unit."
+	},
+	"network.view.linkLocal": {
+		"value": "Link-local",
+		"locales": ["pt-BR"],
+		"reason": "IPv4/IPv6 link-local address scope name; pt-BR network.cellular.state.routerLinkUp reads \"Link ativo\", keeping \"Link\" untranslated."
 	},
 	"network.view.nak": {
 		"value": "NAK",
@@ -459,10 +564,20 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Wi-Fi Protected Access 3 security standard identifier."
 	},
+	"networking.labels.interface": {
+		"value": "Interface:",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR network.sections.networkInterfaces reads \"Interfaces de Rede\"; \"Interface\" is the Portuguese word."
+	},
 	"networking.types.ethernet": {
 		"value": "Ethernet",
 		"locales": ["de", "es", "fr", "pt-BR"],
 		"reason": "IEEE 802.3 Ethernet standard name; catalogs using localized spellings remain outside this entry."
+	},
+	"networking.types.modem": {
+		"value": "Modem",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR network.emptyStates.noDevicesDescription reads \"Nenhum adaptador WiFi ou modem celular detectado\"; \"Modem\" is the Portuguese word."
 	},
 	"networking.types.usb": {
 		"value": "USB",
@@ -484,6 +599,11 @@
 		"locales": ["de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Graphics Processing Unit hardware acronym."
 	},
+	"settings.deviceStats.swap": {
+		"value": "Swap",
+		"locales": ["pt-BR"],
+		"reason": "Linux swap space name, kept untranslated in pt-BR system tools; pt-BR settings.deviceStats.bootSlot reads \"Slot de inicialização\", keeping sibling system terms untranslated."
+	},
 	"settings.hardwareTypes.jetson": {
 		"value": "NVIDIA Jetson",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
@@ -501,8 +621,8 @@
 	},
 	"settings.index.groups.software": {
 		"value": "Software",
-		"locales": ["es"],
-		"reason": "es devtools.newVersionDesc uses \"actualización de software\", retaining the engineering term in translated prose."
+		"locales": ["es", "pt-BR"],
+		"reason": "es devtools.newVersionDesc uses \"actualización de software\", retaining the engineering term in translated prose; pt-BR updatingOverlay.title reads \"Atualizando o Software do Dispositivo\", keeping the term untranslated."
 	},
 	"settings.onDeviceDisplay.profiles.eink": {
 		"value": "E-ink",
@@ -583,6 +703,16 @@
 		"value": "DNS",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Domain Name System protocol acronym used for endpoint validation."
+	},
+	"settings.validateStages.endpoint": {
+		"value": "Endpoint",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR devtools.socketEndpoint reads \"Endpoint do Socket\", keeping the term untranslated."
+	},
+	"settings.videoCodec": {
+		"value": "Codec",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR general.audioCodec reads \"Codec de Áudio\", keeping the term untranslated."
 	},
 	"units.kbps": {
 		"value": "kbps",
