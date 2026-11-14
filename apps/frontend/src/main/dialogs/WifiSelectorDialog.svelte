@@ -240,7 +240,10 @@ async function handleDisconnect(uuid: string, network: AvailableWifiNetwork) {
 	});
 }
 
-/** New (unsaved) network: secured → reveal inline password form; open → connect now. */
+/**
+ * New (unsaved) network: secured → reveal inline password form; open → connect now.
+ * A saved secured row opens the same form to correct its profile's password.
+ */
 function handleConnectNew(network: AvailableWifiNetwork) {
 	if (ifaceBusy || wifiRowBlock(network, iface?.capabilities)) return;
 	confirmForget = undefined;
@@ -263,11 +266,15 @@ function submitNew() {
 	const ssid = pendingNew.ssid;
 	const security = pendingNew.security;
 	const pw = password;
+	// A saved SSID's join rewrites that profile's secret and activates the same
+	// uuid on the device, so the uuid is this connect's identity.
+	const uuid = getWifiUUID(pendingNew, iface?.saved ?? {});
 	pendingNew = undefined;
 	password = '';
 	showPassword = false;
-	void connectVia(newConnectIntent(ssid), () =>
-		rpc.wifi.connectNew({ device: deviceId, ssid, password: pw, security }),
+	void connectVia(
+		uuid ? { ssid, uuid, baselineConn: iface?.conn } : newConnectIntent(ssid),
+		() => rpc.wifi.connectNew({ device: deviceId, ssid, password: pw, security }),
 	);
 }
 
