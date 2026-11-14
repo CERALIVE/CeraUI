@@ -5,6 +5,7 @@ import { oc } from '@orpc/contract';
 
 import { authContract } from './auth.contract';
 import { bluetoothContract } from './bluetooth.contract';
+import { logsContract } from './logs.contract';
 import { modemsContract } from './modems.contract';
 import { networkContract } from './network.contract';
 import { notificationsContract } from './notifications.contract';
@@ -34,6 +35,7 @@ export const appContract = oc.router({
 	modems: modemsContract,
 	wifi: wifiContract,
 	bluetooth: bluetoothContract,
+	logs: logsContract,
 	network: networkContract,
 	system: systemContract,
 	ui: uiContract,
@@ -51,6 +53,7 @@ export type AppContract = typeof appContract;
 // Re-export individual contracts for granular usage
 export { authContract } from './auth.contract';
 export { bluetoothContract } from './bluetooth.contract';
+export { logsContract } from './logs.contract';
 export { modemsContract } from './modems.contract';
 export { networkContract } from './network.contract';
 export { notificationsContract } from './notifications.contract';
