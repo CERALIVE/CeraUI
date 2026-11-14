@@ -26,12 +26,15 @@ mark and recirculates out the WAN.
 
 **Marks are physical-identity keyed.** The high byte `0xca` proves client-zone
 provenance, the next 16 bits select the uplink, and the low byte is preserved.
-The fixed 10000-bucket verdict map uses largest-remainder apportionment. Marks are
-stable per identity across reorder, reweight and backend restarts for the same
-identity set. If identities hash to the same slot, the identity-sorted first keeps
-it; later claimants probe upward to the next free slot, wrapping from 65535 to 1
-and never using 0. Every natural slot is reserved before probing, so non-colliding
-identities never move. Only probers can move when the identity set changes.
+The fixed 10000-bucket verdict map uses largest-remainder apportionment. The
+coordinator supplies its successfully applied uplinks to the builder: a surviving
+identity always keeps its applied mark when links join or leave. Departing marks
+remain reserved during the transition until their old flows are retired. Only
+newcomers probe upward to a free slot, wrapping from 65535 to 1 and never using 0.
+Without applied history, natural slots are reserved in identity order before
+probing; the same identity set produces the same cold-start assignment across
+input order and fresh processes. Non-colliding marks remain unchanged. The
+shaping consumer uses the same applied ownership when reading desired marks.
 
 **Startup readiness preserves recovered sharing.** The first OS netif snapshot
 must exist before planning, including when it is empty. A snapshot with no

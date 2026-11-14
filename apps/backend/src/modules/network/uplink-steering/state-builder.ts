@@ -73,6 +73,7 @@ const defaultDeps: SteeringStateBuilderDeps = {
 export interface SteeringReadinessContext {
 	readonly hasAppliedState?: boolean;
 	readonly zonesReadyBypass?: boolean;
+	readonly appliedUplinks?: readonly SteeringUplink[];
 }
 
 export interface PendingSteeringState {
@@ -101,6 +102,7 @@ export async function readDesiredSteeringState(
 		zones,
 		health,
 		deps,
+		context.appliedUplinks ?? [],
 	);
 	if (!context.hasAppliedState && identityPending)
 		return { pending: true, netifReady: true, reason: "identity" };
@@ -156,6 +158,7 @@ function collectUplinkCandidates(
 	zones: readonly ClientZone[],
 	health: ReadonlyMap<string, UplinkHealthRecord>,
 	deps: SteeringStateBuilderDeps,
+	appliedUplinks: readonly SteeringUplink[],
 ): { candidates: UplinkCandidate[]; identityPending: boolean } {
 	let identityPending = false;
 	const zoneIfaces = new Set(zones.map((zone) => zone.ifname));
@@ -185,12 +188,15 @@ function collectUplinkCandidates(
 			continue;
 		}
 		const identity = wifiId ?? deps.physicalIdentity(ifname);
+		const applied = appliedUplinks.find(
+			(uplink) => uplink.identity === identity,
+		);
 		const weight = record?.weight ?? 100;
 		candidates.push({
 			uplink: {
 				identity,
 				ifname,
-				mark: deps.markForIdentity(identity),
+				mark: applied?.mark ?? deps.markForIdentity(identity),
 				selectable: weight > 0,
 				weight,
 			},
@@ -200,7 +206,7 @@ function collectUplinkCandidates(
 		});
 	}
 	return {
-		candidates: resolveMarkCollisions(candidates).sort((a, b) =>
+		candidates: resolveMarkCollisions(candidates, appliedUplinks).sort((a, b) =>
 			a.uplink.ifname.localeCompare(b.uplink.ifname),
 		),
 		identityPending,
@@ -209,26 +215,27 @@ function collectUplinkCandidates(
 
 function resolveMarkCollisions(
 	candidates: UplinkCandidate[],
+	appliedUplinks: readonly SteeringUplink[],
 ): UplinkCandidate[] {
 	candidates.sort((a, b) => a.uplink.identity.localeCompare(b.uplink.identity));
-	const owners = new Map<number, string>();
-	// Reserve every natural mark before probing so only colliding claimants move.
+	// Departing marks stay reserved until the applier retires their old flows.
+	const owners = new Map(appliedUplinks.map((uplink) => [uplink.mark, uplink]));
 	for (const { uplink } of candidates) {
-		if (!owners.has(uplink.mark)) owners.set(uplink.mark, uplink.ifname);
+		if (!owners.has(uplink.mark)) owners.set(uplink.mark, uplink);
 	}
 	return candidates.map((candidate) => {
 		const { uplink } = candidate;
 		const owner = owners.get(uplink.mark);
-		if (owner === uplink.ifname) return candidate;
+		if (owner?.identity === uplink.identity) return candidate;
 		let slot = (uplink.mark >>> 8) & 0xffff;
 		do {
 			slot = slot === 0xffff ? 1 : slot + 1;
 		} while (owners.has(markForSlot(slot)));
 		const mark = markForSlot(slot);
-		owners.set(mark, uplink.ifname);
+		owners.set(mark, uplink);
 		logger.info("resolved uplink steering mark collision", {
 			iface: uplink.ifname,
-			otherIface: owner,
+			otherIface: owner?.ifname,
 			mark,
 		});
 		return { ...candidate, uplink: { ...uplink, mark } };

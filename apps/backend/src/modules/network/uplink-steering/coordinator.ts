@@ -98,6 +98,7 @@ export class UplinkSteeringCoordinator {
 				const desired = await this.#deps.readDesiredState({
 					hasAppliedState: this.#applied !== undefined,
 					zonesReadyBypass: this.#zonesReadyBypass,
+					appliedUplinks: this.#applied?.uplinks ?? [],
 				});
 				if ("pending" in desired) {
 					this.#awaitReadiness(desired);
