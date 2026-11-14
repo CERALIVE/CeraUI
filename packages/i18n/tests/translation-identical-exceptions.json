@@ -1,1067 +1,592 @@
 {
-	"allLocales": {
-		"advanced.providerHostPlaceholder": {
-			"value": "remote.example.com",
-			"reason": "\"remote.example.com\" is a literal address, mask, or interpolation-only template."
-		},
-		"devtools.mbps": {
-			"value": "Mbps",
-			"reason": "\"Mbps\" contains only numeric/unit notation and interpolation."
-		},
-		"devtools.ms": {
-			"value": "ms",
-			"reason": "\"ms\" contains only numeric/unit notation and interpolation."
-		},
-		"devtools.rtt": {
-			"value": "RTT",
-			"reason": "\"RTT\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"hotspotConfigurator.hotspot.placeholderName": {
-			"value": "CeraLive",
-			"reason": "\"CeraLive\" is an unchanged brand or product name."
-		},
-		"hud.healthSrt": {
-			"value": "SRT",
-			"reason": "\"SRT\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"live.ingest.nak": {
-			"value": "NAK",
-			"reason": "\"NAK\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"live.ingest.rtt": {
-			"value": "RTT",
-			"reason": "\"RTT\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"live.inputPicker.groups.camlink": {
-			"value": "Cam Link",
-			"reason": "\"Cam Link\" is an unchanged brand or product name."
-		},
-		"live.inputPicker.groups.hdmi": {
-			"value": "HDMI",
-			"reason": "\"HDMI\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"live.inputPicker.groups.mjpeg": {
-			"value": "UVC · MJPEG",
-			"reason": "\"UVC · MJPEG\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"live.inputPicker.groups.usb": {
-			"value": "USB",
-			"reason": "\"USB\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"live.inputPicker.groups.uvc_dual": {
-			"value": "UVC H.264/H.265",
-			"reason": "\"UVC H.264/H.265\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"live.inputPicker.groups.uvc_h264": {
-			"value": "UVC H.264",
-			"reason": "\"UVC H.264\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"live.inputPicker.groups.uvc_h265": {
-			"value": "UVC H.265",
-			"reason": "\"UVC H.265\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"live.preview.tierMse": {
-			"value": "MSE",
-			"reason": "\"MSE\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"live.preview.tierWebcodecs": {
-			"value": "WebCodecs",
-			"reason": "\"WebCodecs\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"live.preview.tierWebrtc": {
-			"value": "WebRTC",
-			"reason": "\"WebRTC\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.bluetooth.enableLabel": {
-			"value": "Bluetooth",
-			"reason": "\"Bluetooth\" is an unchanged brand or product name."
-		},
-		"network.bluetooth.title": {
-			"value": "Bluetooth",
-			"reason": "\"Bluetooth\" is an unchanged brand or product name."
-		},
-		"network.modem.apn": {
-			"value": "APN",
-			"reason": "\"APN\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.modem.apnPlaceholder": {
-			"value": "internet.provider.com",
-			"reason": "\"internet.provider.com\" is a literal address, mask, or interpolation-only template."
-		},
-		"network.modem.bands.generation.gsm": {
-			"value": "2G",
-			"reason": "\"2G\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.modem.bands.generation.lte": {
-			"value": "4G",
-			"reason": "\"4G\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.modem.bands.generation.nr": {
-			"value": "5G",
-			"reason": "\"5G\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.modem.bands.generation.umts": {
-			"value": "3G",
-			"reason": "\"3G\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.modem.bands.label.frequency": {
-			"value": "{generation} {frequency}",
-			"reason": "\"{generation} {frequency}\" is a literal address, mask, or interpolation-only template."
-		},
-		"network.modem.detail.rsrp": {
-			"value": "RSRP",
-			"reason": "\"RSRP\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.modem.detail.rsrq": {
-			"value": "RSRQ",
-			"reason": "\"RSRQ\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.modem.detail.simType": {
-			"value": "SIM",
-			"reason": "\"SIM\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.modem.detail.simTypeEsim": {
-			"value": "eSIM",
-			"reason": "\"eSIM\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.modem.detail.sinr": {
-			"value": "SINR",
-			"reason": "\"SINR\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.modem.detail.snr": {
-			"value": "SNR",
-			"reason": "\"SNR\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.modem.detail.techLte": {
-			"value": "LTE",
-			"reason": "\"LTE\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.modem.detail.techNr": {
-			"value": "5G NR",
-			"reason": "\"5G NR\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.modem.sections.sim.title": {
-			"value": "SIM",
-			"reason": "\"SIM\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.modem.simUnlock.pin2Label": {
-			"value": "SIM PIN2",
-			"reason": "\"SIM PIN2\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.modem.simUnlock.pinLabel": {
-			"value": "SIM PIN",
-			"reason": "\"SIM PIN\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.routerCellular.apnLabel": {
-			"value": "APN",
-			"reason": "\"APN\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.routerCellular.detail.mcc": {
-			"value": "MCC",
-			"reason": "\"MCC\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.routerCellular.detail.mnc": {
-			"value": "MNC",
-			"reason": "\"MNC\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.routerCellular.detail.pci": {
-			"value": "PCI",
-			"reason": "\"PCI\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.routerCellular.iccidLabel": {
-			"value": "ICCID",
-			"reason": "\"ICCID\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.routerCellular.imeiLabel": {
-			"value": "IMEI",
-			"reason": "\"IMEI\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.routerCellular.imsiLabel": {
-			"value": "IMSI",
-			"reason": "\"IMSI\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.routerCellular.signal.metric.rsrp": {
-			"value": "RSRP",
-			"reason": "\"RSRP\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.routerCellular.signal.metric.rsrq": {
-			"value": "RSRQ",
-			"reason": "\"RSRQ\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.routerCellular.signal.metric.sinr": {
-			"value": "SINR",
-			"reason": "\"SINR\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.routerCellular.signal.metric.snr": {
-			"value": "SNR",
-			"reason": "\"SNR\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.routerCellular.subnet.addressPlaceholder": {
-			"value": "192.168.9.1",
-			"reason": "\"192.168.9.1\" is a literal address, mask, or interpolation-only template."
-		},
-		"network.sharing.kind.ethernet": {
-			"value": "Ethernet",
-			"reason": "\"Ethernet\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.sharing.kind.wifi": {
-			"value": "Wi-Fi",
-			"reason": "\"Wi-Fi\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.sharing.priority.algorithmCake": {
-			"value": "CAKE",
-			"reason": "\"CAKE\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.sharing.priority.algorithmHtb": {
-			"value": "HTB + fq_codel",
-			"reason": "\"HTB + fq_codel\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.summary.totalBandwidth": {
-			"value": "{total} Kbps",
-			"reason": "\"{total} Kbps\" contains only numeric/unit notation and interpolation."
-		},
-		"network.unclaimedAdapters.bus.pci": {
-			"value": "PCIe",
-			"reason": "\"PCIe\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.unclaimedAdapters.bus.usb": {
-			"value": "USB",
-			"reason": "\"USB\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.view.concurrentModeBadge": {
-			"value": "WiFi + AP",
-			"reason": "\"WiFi + AP\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.view.ethernet": {
-			"value": "Ethernet",
-			"reason": "\"Ethernet\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.view.hotspotClientRate": {
-			"value": "{rate} Mbps",
-			"reason": "\"{rate} Mbps\" contains only numeric/unit notation and interpolation."
-		},
-		"network.view.hotspotClientSignal": {
-			"value": "{dbm} dBm",
-			"reason": "\"{dbm} dBm\" contains only numeric/unit notation and interpolation."
-		},
-		"network.view.nak": {
-			"value": "NAK",
-			"reason": "\"NAK\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.view.rtt": {
-			"value": "RTT",
-			"reason": "\"RTT\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.view.wifi": {
-			"value": "WiFi",
-			"reason": "\"WiFi\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.wifi.ssid": {
-			"value": "SSID",
-			"reason": "\"SSID\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.wifiCapability.band24": {
-			"value": "2.4 GHz",
-			"reason": "\"2.4 GHz\" contains only numeric/unit notation and interpolation."
-		},
-		"network.wifiCapability.band5": {
-			"value": "5 GHz",
-			"reason": "\"5 GHz\" contains only numeric/unit notation and interpolation."
-		},
-		"network.wifiCapability.band6": {
-			"value": "6 GHz",
-			"reason": "\"6 GHz\" contains only numeric/unit notation and interpolation."
-		},
-		"network.wifiCapability.generation.wifi4": {
-			"value": "Wi-Fi 4",
-			"reason": "\"Wi-Fi 4\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.wifiCapability.generation.wifi5": {
-			"value": "Wi-Fi 5",
-			"reason": "\"Wi-Fi 5\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.wifiCapability.generation.wifi6": {
-			"value": "Wi-Fi 6",
-			"reason": "\"Wi-Fi 6\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.wifiCapability.generation.wifi6e": {
-			"value": "Wi-Fi 6E",
-			"reason": "\"Wi-Fi 6E\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.wifiCapability.generation.wifi7": {
-			"value": "Wi-Fi 7",
-			"reason": "\"Wi-Fi 7\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"network.wifiCapability.linkRate": {
-			"value": "{mbps} Mbit/s",
-			"reason": "\"{mbps} Mbit/s\" contains only numeric/unit notation and interpolation."
-		},
-		"network.wifiCapability.width": {
-			"value": "{mhz} MHz",
-			"reason": "\"{mhz} MHz\" contains only numeric/unit notation and interpolation."
-		},
-		"network.wifiCapability.wpa3.supported": {
-			"value": "WPA3",
-			"reason": "\"WPA3\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"networking.types.ethernet": {
-			"value": "Ethernet",
-			"reason": "\"Ethernet\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"networking.types.usb": {
-			"value": "USB",
-			"reason": "\"USB\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"networking.types.wifi": {
-			"value": "WiFi",
-			"reason": "\"WiFi\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"settings.deviceHealth.axis.minutesAgo": {
-			"value": "−{n} min",
-			"reason": "\"−{n} min\" contains only numeric/unit notation and interpolation."
-		},
-		"settings.deviceStats.gpu": {
-			"value": "GPU",
-			"reason": "\"GPU\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"settings.hardwareTypes.jetson": {
-			"value": "NVIDIA Jetson",
-			"reason": "\"NVIDIA Jetson\" is an unchanged brand or product name."
-		},
-		"settings.hardwareTypes.n100": {
-			"value": "Intel N100",
-			"reason": "\"Intel N100\" is an unchanged brand or product name."
-		},
-		"settings.hardwareTypes.rk3588": {
-			"value": "Rockchip RK3588",
-			"reason": "\"Rockchip RK3588\" is an unchanged brand or product name."
-		},
-		"settings.onDeviceDisplay.profiles.eink": {
-			"value": "E-ink",
-			"reason": "\"E-ink\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"settings.onDeviceDisplay.profiles.lcd": {
-			"value": "LCD",
-			"reason": "\"LCD\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"settings.sources.camlink": {
-			"value": "Cam Link 4K",
-			"reason": "\"Cam Link 4K\" is an unchanged brand or product name."
-		},
-		"settings.sources.decklink": {
-			"value": "Decklink SDI",
-			"reason": "\"Decklink SDI\" is an unchanged brand or product name."
-		},
-		"settings.sources.usb_mjpeg": {
-			"value": "USB MJPEG",
-			"reason": "\"USB MJPEG\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"settings.sources.v4l_mjpeg": {
-			"value": "V4L2 MJPEG",
-			"reason": "\"V4L2 MJPEG\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"settings.transportKindBadge.rist": {
-			"value": "RIST",
-			"reason": "\"RIST\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"settings.transportKindBadge.srt": {
-			"value": "SRT",
-			"reason": "\"SRT\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"settings.updates.checkFailed.whatFailed": {
-			"value": "{ifname} {family}: {host}, {state}",
-			"reason": "\"{ifname} {family}: {host}, {state}\" is a literal address, mask, or interpolation-only template."
-		},
-		"settings.updates.connection.hostState": {
-			"value": "{host}: {state}",
-			"reason": "\"{host}: {state}\" is a literal address, mask, or interpolation-only template."
-		},
-		"settings.updates.connection.kind.ethernet": {
-			"value": "Ethernet",
-			"reason": "\"Ethernet\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"settings.updates.connection.kind.wifi": {
-			"value": "Wi-Fi",
-			"reason": "\"Wi-Fi\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"settings.validateStages.dns": {
-			"value": "DNS",
-			"reason": "\"DNS\" is a protocol, API, or engineering identifier with locale-independent spelling."
-		},
-		"units.kbps": {
-			"value": "kbps",
-			"reason": "\"kbps\" contains only numeric/unit notation and interpolation."
-		},
-		"units.mbps": {
-			"value": "Mbps",
-			"reason": "\"Mbps\" contains only numeric/unit notation and interpolation."
-		},
-		"units.ms": {
-			"value": "ms",
-			"reason": "\"ms\" contains only numeric/unit notation and interpolation."
-		},
-		"wifiBands.band_2_4ghz": {
-			"value": "2.4 GHz",
-			"reason": "\"2.4 GHz\" contains only numeric/unit notation and interpolation."
-		},
-		"wifiBands.band_5ghz": {
-			"value": "5 GHz",
-			"reason": "\"5 GHz\" contains only numeric/unit notation and interpolation."
-		},
-		"wifiBands.band_6ghz": {
-			"value": "6 GHz",
-			"reason": "\"6 GHz\" contains only numeric/unit notation and interpolation."
-		},
-		"wifiSelector.hotspot.placeholderPassword": {
-			"value": "********",
-			"reason": "\"********\" is a literal address, mask, or interpolation-only template."
-		}
+	"advanced.providerHostPlaceholder": {
+		"value": "remote.example.com",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Literal example DNS hostname for the provider-host input; no prose to translate."
 	},
-	"byLocale": {
-		"devtools.browser": {
-			"value": "Browser",
-			"locales": ["de"],
-			"reason": "\"Browser\" is a retained protocol, API, or engineering term in de."
-		},
-		"devtools.cookies": {
-			"value": "Cookies",
-			"locales": ["de", "es", "fr", "pt-BR"],
-			"reason": "\"Cookies\" is a retained protocol, API, or engineering term in de, es, fr, pt-BR."
-		},
-		"devtools.downlink": {
-			"value": "Downlink",
-			"locales": ["de", "pt-BR"],
-			"reason": "\"Downlink\" is a retained protocol, API, or engineering term in de, pt-BR."
-		},
-		"devtools.error": {
-			"value": "Error",
-			"locales": ["es"],
-			"reason": "\"Error\" has the same legitimate spelling in es."
-		},
-		"devtools.info": {
-			"value": "Info",
-			"locales": ["de", "es", "fr", "pt-BR"],
-			"reason": "\"Info\" has the same legitimate spelling in de, es, fr, pt-BR."
-		},
-		"devtools.log": {
-			"value": "Log",
-			"locales": ["de", "es", "fr", "pt-BR"],
-			"reason": "\"Log\" is a retained protocol, API, or engineering term in de, es, fr, pt-BR."
-		},
-		"devtools.mode": {
-			"value": "Mode",
-			"locales": ["fr"],
-			"reason": "\"Mode\" has the same legitimate spelling in fr."
-		},
-		"devtools.no": {
-			"value": "No",
-			"locales": ["es"],
-			"reason": "\"No\" has the same legitimate spelling in es."
-		},
-		"devtools.nodeEnv": {
-			"value": "Node Env",
-			"locales": ["ar", "hi"],
-			"reason": "\"Node Env\" is a retained protocol, API, or engineering term in ar, hi."
-		},
-		"devtools.offline": {
-			"value": "Offline",
-			"locales": ["de", "pt-BR"],
-			"reason": "\"Offline\" is a retained protocol, API, or engineering term in de, pt-BR."
-		},
-		"devtools.online": {
-			"value": "Online",
-			"locales": ["de", "pt-BR"],
-			"reason": "\"Online\" is a retained protocol, API, or engineering term in de, pt-BR."
-		},
-		"devtools.persistent": {
-			"value": "Persistent",
-			"locales": ["de"],
-			"reason": "\"Persistent\" has the same legitimate spelling in de."
-		},
-		"devtools.phase": {
-			"value": "Phase",
-			"locales": ["de", "fr"],
-			"reason": "\"Phase\" has the same legitimate spelling in de, fr."
-		},
-		"devtools.status": {
-			"value": "Status",
-			"locales": ["de", "pt-BR"],
-			"reason": "\"Status\" has the same legitimate spelling in de, pt-BR."
-		},
-		"devtools.table": {
-			"value": "Table",
-			"locales": ["fr"],
-			"reason": "\"Table\" has the same legitimate spelling in fr."
-		},
-		"devtools.total": {
-			"value": "Total",
-			"locales": ["es", "fr", "pt-BR"],
-			"reason": "\"Total\" has the same legitimate spelling in es, fr, pt-BR."
-		},
-		"devtools.type": {
-			"value": "Type",
-			"locales": ["fr"],
-			"reason": "\"Type\" has the same legitimate spelling in fr."
-		},
-		"devtools.userAgent": {
-			"value": "User Agent",
-			"locales": ["de", "fr", "pt-BR"],
-			"reason": "\"User Agent\" is a retained protocol, API, or engineering term in de, fr, pt-BR."
-		},
-		"devtools.viewport": {
-			"value": "Viewport",
-			"locales": ["de", "es", "fr", "pt-BR"],
-			"reason": "\"Viewport\" is a retained protocol, API, or engineering term in de, es, fr, pt-BR."
-		},
-		"general.configuration": {
-			"value": "Configuration",
-			"locales": ["fr"],
-			"reason": "\"Configuration\" has the same legitimate spelling in fr."
-		},
-		"general.offline": {
-			"value": "Offline",
-			"locales": ["de", "pt-BR"],
-			"reason": "\"Offline\" is a retained protocol, API, or engineering term in de, pt-BR."
-		},
-		"general.pageTitle": {
-			"value": "Dashboard",
-			"locales": ["de"],
-			"reason": "\"Dashboard\" is a retained protocol, API, or engineering term in de."
-		},
-		"general.port": {
-			"value": "Port",
-			"locales": ["de", "fr"],
-			"reason": "\"Port\" is a retained protocol, API, or engineering term in de, fr."
-		},
-		"general.status": {
-			"value": "Status",
-			"locales": ["de", "pt-BR"],
-			"reason": "\"Status\" has the same legitimate spelling in de, pt-BR."
-		},
-		"general.streaming": {
-			"value": "Streaming",
-			"locales": ["de"],
-			"reason": "\"Streaming\" is a retained protocol, API, or engineering term in de."
-		},
-		"general.updates": {
-			"value": "Updates",
-			"locales": ["de"],
-			"reason": "\"Updates\" is a retained protocol, API, or engineering term in de."
-		},
-		"hotspotConfigurator.hotspot.name": {
-			"value": "Name",
-			"locales": ["de"],
-			"reason": "\"Name\" has the same legitimate spelling in de."
-		},
-		"hud.bitrate": {
-			"value": "Bitrate",
-			"locales": ["de", "es", "fr", "pt-BR"],
-			"reason": "\"Bitrate\" is a retained protocol, API, or engineering term in de, es, fr, pt-BR."
-		},
-		"hud.encoder": {
-			"value": "Encoder",
-			"locales": ["de"],
-			"reason": "\"Encoder\" is a retained protocol, API, or engineering term in de."
-		},
-		"hud.healthFrames": {
-			"value": "Frames",
-			"locales": ["de"],
-			"reason": "\"Frames\" is a retained protocol, API, or engineering term in de."
-		},
-		"hud.healthStable": {
-			"value": "Stable",
-			"locales": ["fr"],
-			"reason": "\"Stable\" has the same legitimate spelling in fr."
-		},
-		"hud.link": {
-			"value": "Link",
-			"locales": ["pt-BR"],
-			"reason": "\"Link\" is a retained protocol, API, or engineering term in pt-BR."
-		},
-		"hud.live": {
-			"value": "Live",
-			"locales": ["de", "es", "fr", "pt-BR"],
-			"reason": "\"Live\" is a retained protocol, API, or engineering term in de, es, fr, pt-BR."
-		},
-		"hud.offline": {
-			"value": "Offline",
-			"locales": ["de", "pt-BR"],
-			"reason": "\"Offline\" is a retained protocol, API, or engineering term in de, pt-BR."
-		},
-		"hud.status": {
-			"value": "Status",
-			"locales": ["de", "pt-BR"],
-			"reason": "\"Status\" has the same legitimate spelling in de, pt-BR."
-		},
-		"hud.streaming": {
-			"value": "Streaming",
-			"locales": ["de"],
-			"reason": "\"Streaming\" is a retained protocol, API, or engineering term in de."
-		},
-		"live.audioCard.title": {
-			"value": "Audio",
-			"locales": ["de", "es", "fr"],
-			"reason": "\"Audio\" has the same legitimate spelling in de, es, fr."
-		},
-		"live.comingSoon.pip": {
-			"value": "Picture-in-picture",
-			"locales": ["pt-BR"],
-			"reason": "\"Picture-in-picture\" is a retained protocol, API, or engineering term in pt-BR."
-		},
-		"live.comingSoon.roadmap": {
-			"value": "Roadmap",
-			"locales": ["de"],
-			"reason": "\"Roadmap\" is a retained protocol, API, or engineering term in de."
-		},
-		"live.composition.title": {
-			"value": "Composition",
-			"locales": ["fr"],
-			"reason": "\"Composition\" has the same legitimate spelling in fr."
-		},
-		"live.education.field.audio.title": {
-			"value": "Audio",
-			"locales": ["de", "es", "fr"],
-			"reason": "\"Audio\" has the same legitimate spelling in de, es, fr."
-		},
-		"live.education.field.mode.title": {
-			"value": "Mode",
-			"locales": ["fr"],
-			"reason": "\"Mode\" has the same legitimate spelling in fr."
-		},
-		"live.encoder.accelerated": {
-			"value": "Hardware",
-			"locales": ["de", "es", "pt-BR"],
-			"reason": "\"Hardware\" is a retained protocol, API, or engineering term in de, es, pt-BR."
-		},
-		"live.encoder.passthrough.title": {
-			"value": "Passthrough",
-			"locales": ["de", "es", "fr", "pt-BR"],
-			"reason": "\"Passthrough\" is a retained protocol, API, or engineering term in de, es, fr, pt-BR."
-		},
-		"live.encoder.probedCapAudio": {
-			"value": "Audio",
-			"locales": ["de", "es", "fr"],
-			"reason": "\"Audio\" has the same legitimate spelling in de, es, fr."
-		},
-		"live.encoder.software": {
-			"value": "Software",
-			"locales": ["de", "es", "pt-BR"],
-			"reason": "\"Software\" is a retained protocol, API, or engineering term in de, es, pt-BR."
-		},
-		"live.goLive.gate.destination": {
-			"value": "Destination",
-			"locales": ["fr"],
-			"reason": "\"Destination\" has the same legitimate spelling in fr."
-		},
-		"live.goLive.gate.engine": {
-			"value": "Encoder",
-			"locales": ["de"],
-			"reason": "\"Encoder\" is a retained protocol, API, or engineering term in de."
-		},
-		"live.ingest.healthy": {
-			"value": "Stable",
-			"locales": ["fr"],
-			"reason": "\"Stable\" has the same legitimate spelling in fr."
-		},
-		"live.ingest.link": {
-			"value": "Link",
-			"locales": ["pt-BR"],
-			"reason": "\"Link\" is a retained protocol, API, or engineering term in pt-BR."
-		},
-		"live.ingest.links": {
-			"value": "Links",
-			"locales": ["pt-BR"],
-			"reason": "\"Links\" is a retained protocol, API, or engineering term in pt-BR."
-		},
-		"live.ingest.total": {
-			"value": "Total",
-			"locales": ["es", "fr", "pt-BR"],
-			"reason": "\"Total\" has the same legitimate spelling in es, fr, pt-BR."
-		},
-		"live.ingest.trend": {
-			"value": "Trend",
-			"locales": ["de"],
-			"reason": "\"Trend\" has the same legitimate spelling in de."
-		},
-		"live.inputPicker.active": {
-			"value": "Active",
-			"locales": ["fr"],
-			"reason": "\"Active\" has the same legitimate spelling in fr."
-		},
-		"live.inputPicker.groups.audio": {
-			"value": "Audio",
-			"locales": ["de", "es", "fr"],
-			"reason": "\"Audio\" has the same legitimate spelling in de, es, fr."
-		},
-		"live.inputPicker.groups.test": {
-			"value": "Test",
-			"locales": ["de", "fr"],
-			"reason": "\"Test\" has the same legitimate spelling in de, fr."
-		},
-		"live.modes.label": {
-			"value": "Mode",
-			"locales": ["fr"],
-			"reason": "\"Mode\" has the same legitimate spelling in fr."
-		},
-		"live.modes.streaming": {
-			"value": "Streaming",
-			"locales": ["de"],
-			"reason": "\"Streaming\" is a retained protocol, API, or engineering term in de."
-		},
-		"live.passthrough.activeChip": {
-			"value": "Passthrough",
-			"locales": ["de", "es", "fr", "pt-BR"],
-			"reason": "\"Passthrough\" is a retained protocol, API, or engineering term in de, es, fr, pt-BR."
-		},
-		"live.preview.encode.activeHardware": {
-			"value": "{element} — hardware",
-			"locales": ["es", "pt-BR"],
-			"reason": "\"{element} — hardware\" is a retained protocol, API, or engineering term in es, pt-BR."
-		},
-		"live.preview.encode.activeSoftware": {
-			"value": "{element} — software",
-			"locales": ["es", "pt-BR"],
-			"reason": "\"{element} — software\" is a retained protocol, API, or engineering term in es, pt-BR."
-		},
-		"live.preview.unavailable.engineOffline.title": {
-			"value": "Engine offline",
-			"locales": ["de"],
-			"reason": "\"Engine offline\" is a retained protocol, API, or engineering term in de."
-		},
-		"live.source.activeLive": {
-			"value": "Live",
-			"locales": ["de"],
-			"reason": "\"Live\" is a retained protocol, API, or engineering term in de."
-		},
-		"live.source.audioQualityNegotiated": {
-			"value": "{khz} kHz mono",
-			"locales": ["es", "fr", "pt-BR"],
-			"reason": "\"{khz} kHz mono\" is a retained protocol, API, or engineering term in es, fr, pt-BR."
-		},
-		"live.source.label": {
-			"value": "Source",
-			"locales": ["fr"],
-			"reason": "\"Source\" has the same legitimate spelling in fr."
-		},
-		"live.streamingActive": {
-			"value": "Streaming",
-			"locales": ["de"],
-			"reason": "\"Streaming\" is a retained protocol, API, or engineering term in de."
-		},
-		"live.title": {
-			"value": "Live",
-			"locales": ["de", "es", "fr", "pt-BR"],
-			"reason": "\"Live\" is a retained protocol, API, or engineering term in de, es, fr, pt-BR."
-		},
-		"navigation.devtools": {
-			"value": "Dev Tools",
-			"locales": ["de"],
-			"reason": "\"Dev Tools\" is a retained protocol, API, or engineering term in de."
-		},
-		"navigation.general": {
-			"value": "General",
-			"locales": ["es"],
-			"reason": "\"General\" has the same legitimate spelling in es."
-		},
-		"navigation.live": {
-			"value": "Live",
-			"locales": ["de", "es", "fr", "pt-BR"],
-			"reason": "\"Live\" is a retained protocol, API, or engineering term in de, es, fr, pt-BR."
-		},
-		"navigation.streaming": {
-			"value": "Streaming",
-			"locales": ["de", "es"],
-			"reason": "\"Streaming\" is a retained protocol, API, or engineering term in de, es."
-		},
-		"network.cellular.details.toggle": {
-			"value": "Details",
-			"locales": ["de"],
-			"reason": "\"Details\" has the same legitimate spelling in de."
-		},
-		"network.cellular.roaming.badge": {
-			"value": "Roaming",
-			"locales": ["de"],
-			"reason": "\"Roaming\" is a retained protocol, API, or engineering term in de."
-		},
-		"network.deviceCount.modem": {
-			"value": "modem",
-			"locales": ["fr", "pt-BR"],
-			"reason": "\"modem\" has the same legitimate spelling in fr, pt-BR."
-		},
-		"network.deviceCount.modems": {
-			"value": "modems",
-			"locales": ["fr", "pt-BR"],
-			"reason": "\"modems\" has the same legitimate spelling in fr, pt-BR."
-		},
-		"network.ethRole.uplink": {
-			"value": "Uplink",
-			"locales": ["de", "pt-BR"],
-			"reason": "\"Uplink\" is a retained protocol, API, or engineering term in de, pt-BR."
-		},
-		"network.hotspot.name": {
-			"value": "Name",
-			"locales": ["de"],
-			"reason": "\"Name\" has the same legitimate spelling in de."
-		},
-		"network.modem.configuration": {
-			"value": "Configuration",
-			"locales": ["fr"],
-			"reason": "\"Configuration\" has the same legitimate spelling in fr."
-		},
-		"network.modem.detail.band": {
-			"value": "Band",
-			"locales": ["de"],
-			"reason": "\"Band\" has the same legitimate spelling in de."
-		},
-		"network.modem.detail.firmware": {
-			"value": "Firmware",
-			"locales": ["de", "es", "pt-BR"],
-			"reason": "\"Firmware\" is a retained protocol, API, or engineering term in de, es, pt-BR."
-		},
-		"network.modem.networkMode.unnamed": {
-			"value": "Mode {index}",
-			"locales": ["fr"],
-			"reason": "\"Mode {index}\" has the same legitimate spelling in fr."
-		},
-		"network.modem.sections.diagnostics.interface": {
-			"value": "Interface",
-			"locales": ["fr", "pt-BR"],
-			"reason": "\"Interface\" has the same legitimate spelling in fr, pt-BR."
-		},
-		"network.modem.sections.diagnostics.transport": {
-			"value": "Transport",
-			"locales": ["fr"],
-			"reason": "\"Transport\" has the same legitimate spelling in fr."
-		},
-		"network.modem.sections.signal.title": {
-			"value": "Signal",
-			"locales": ["de", "fr"],
-			"reason": "\"Signal\" has the same legitimate spelling in de, fr."
-		},
-		"network.modem.sms.title": {
-			"value": "Messages",
-			"locales": ["fr"],
-			"reason": "\"Messages\" has the same legitimate spelling in fr."
-		},
-		"network.routerCellular.detail.roaming": {
-			"value": "Roaming",
-			"locales": ["de", "es", "pt-BR"],
-			"reason": "\"Roaming\" is a retained protocol, API, or engineering term in de, es, pt-BR."
-		},
-		"network.routerCellular.diagnosticsTitle": {
-			"value": "Diagnostics",
-			"locales": ["fr"],
-			"reason": "\"Diagnostics\" has the same legitimate spelling in fr."
-		},
-		"network.routerCellular.firmwareLabel": {
-			"value": "Firmware",
-			"locales": ["de", "es", "pt-BR"],
-			"reason": "\"Firmware\" is a retained protocol, API, or engineering term in de, es, pt-BR."
-		},
-		"network.routerCellular.hardwareLabel": {
-			"value": "Hardware",
-			"locales": ["de", "es", "pt-BR"],
-			"reason": "\"Hardware\" is a retained protocol, API, or engineering term in de, es, pt-BR."
-		},
-		"network.routerCellular.netMode.unnamed": {
-			"value": "Mode {index}",
-			"locales": ["fr"],
-			"reason": "\"Mode {index}\" has the same legitimate spelling in fr."
-		},
-		"network.routerCellular.signalBars": {
-			"value": "Signal {bars}/{max}",
-			"locales": ["de", "fr"],
-			"reason": "\"Signal {bars}/{max}\" has the same legitimate spelling in de, fr."
-		},
-		"network.sharing.diagnostics.disclosure": {
-			"value": "Diagnostics",
-			"locales": ["fr"],
-			"reason": "\"Diagnostics\" has the same legitimate spelling in fr."
-		},
-		"network.sharing.uplinkDetail.disclosure": {
-			"value": "Details",
-			"locales": ["de"],
-			"reason": "\"Details\" has the same legitimate spelling in de."
-		},
-		"network.status.details": {
-			"value": "Details",
-			"locales": ["de"],
-			"reason": "\"Details\" has the same legitimate spelling in de."
-		},
-		"network.view.hotspot": {
-			"value": "Hotspot",
-			"locales": ["de", "es", "fr", "pt-BR"],
-			"reason": "\"Hotspot\" is a retained protocol, API, or engineering term in de, es, fr, pt-BR."
-		},
-		"network.view.linkLocal": {
-			"value": "Link-local",
-			"locales": ["de", "pt-BR"],
-			"reason": "\"Link-local\" is a retained protocol, API, or engineering term in de, pt-BR."
-		},
-		"network.wifiMode.open": {
-			"value": "Mode",
-			"locales": ["fr"],
-			"reason": "\"Mode\" has the same legitimate spelling in fr."
-		},
-		"network.wifiMode.station": {
-			"value": "Station",
-			"locales": ["fr"],
-			"reason": "\"Station\" has the same legitimate spelling in fr."
-		},
-		"networking.labels.interface": {
-			"value": "Interface:",
-			"locales": ["fr", "pt-BR"],
-			"reason": "\"Interface:\" has the same legitimate spelling in fr, pt-BR."
-		},
-		"networking.types.hotspot": {
-			"value": "Hotspot",
-			"locales": ["de"],
-			"reason": "\"Hotspot\" is a retained protocol, API, or engineering term in de."
-		},
-		"networking.types.modem": {
-			"value": "Modem",
-			"locales": ["de", "fr", "pt-BR"],
-			"reason": "\"Modem\" is a retained protocol, API, or engineering term in de, fr, pt-BR."
-		},
-		"notifications.error": {
-			"value": "Error",
-			"locales": ["es"],
-			"reason": "\"Error\" has the same legitimate spelling in es."
-		},
-		"notifications.panel.title": {
-			"value": "Notifications",
-			"locales": ["fr"],
-			"reason": "\"Notifications\" has the same legitimate spelling in fr."
-		},
-		"settings.bitrate": {
-			"value": "Bitrate (Kbps)",
-			"locales": ["de"],
-			"reason": "\"Bitrate (Kbps)\" is a retained protocol, API, or engineering term in de."
-		},
-		"settings.destination": {
-			"value": "Destination",
-			"locales": ["fr"],
-			"reason": "\"Destination\" has the same legitimate spelling in fr."
-		},
-		"settings.deviceHealth.cores.engineLabel": {
-			"value": "Engine",
-			"locales": ["de"],
-			"reason": "\"Engine\" is a retained protocol, API, or engineering term in de."
-		},
-		"settings.deviceHealth.nowStrip.encoder": {
-			"value": "Encoder",
-			"locales": ["de"],
-			"reason": "\"Encoder\" is a retained protocol, API, or engineering term in de."
-		},
-		"settings.deviceStats.swap": {
-			"value": "Swap",
-			"locales": ["fr", "pt-BR"],
-			"reason": "\"Swap\" is a retained protocol, API, or engineering term in fr, pt-BR."
-		},
-		"settings.dialogs.sources.title": {
-			"value": "Sources",
-			"locales": ["fr"],
-			"reason": "\"Sources\" has the same legitimate spelling in fr."
-		},
-		"settings.index.groups.display": {
-			"value": "Display",
-			"locales": ["de"],
-			"reason": "\"Display\" has the same legitimate spelling in de."
-		},
-		"settings.index.groups.software": {
-			"value": "Software",
-			"locales": ["de", "es", "pt-BR"],
-			"reason": "\"Software\" is a retained protocol, API, or engineering term in de, es, pt-BR."
-		},
-		"settings.index.groups.streaming": {
-			"value": "Streaming",
-			"locales": ["de"],
-			"reason": "\"Streaming\" is a retained protocol, API, or engineering term in de."
-		},
-		"settings.index.groups.system": {
-			"value": "System",
-			"locales": ["de"],
-			"reason": "\"System\" has the same legitimate spelling in de."
-		},
-		"settings.onDeviceDisplay.profiles.mono": {
-			"value": "Monochrome",
-			"locales": ["fr"],
-			"reason": "\"Monochrome\" has the same legitimate spelling in fr."
-		},
-		"settings.optional": {
-			"value": "optional",
-			"locales": ["de"],
-			"reason": "\"optional\" has the same legitimate spelling in de."
-		},
-		"settings.perfectSync": {
-			"value": "Sync",
-			"locales": ["de", "fr", "pt-BR"],
-			"reason": "\"Sync\" is a retained protocol, API, or engineering term in de, fr, pt-BR."
-		},
-		"settings.sources.hdmi": {
-			"value": "HDMI Capture",
-			"locales": ["de"],
-			"reason": "\"HDMI Capture\" is a retained protocol, API, or engineering term in de."
-		},
-		"settings.sources.rtmp": {
-			"value": "RTMP Ingest",
-			"locales": ["de"],
-			"reason": "\"RTMP Ingest\" is a retained protocol, API, or engineering term in de."
-		},
-		"settings.sources.srt": {
-			"value": "SRT Ingest",
-			"locales": ["de"],
-			"reason": "\"SRT Ingest\" is a retained protocol, API, or engineering term in de."
-		},
-		"settings.transportKind": {
-			"value": "Transport",
-			"locales": ["de", "fr"],
-			"reason": "\"Transport\" has the same legitimate spelling in de, fr."
-		},
-		"settings.updates.channel.beta": {
-			"value": "Beta",
-			"locales": ["de", "es", "pt-BR"],
-			"reason": "\"Beta\" has the same legitimate spelling in de, es, pt-BR."
-		},
-		"settings.updates.channel.stable": {
-			"value": "Stable",
-			"locales": ["fr"],
-			"reason": "\"Stable\" has the same legitimate spelling in fr."
-		},
-		"settings.updates.kernel.title": {
-			"value": "Kernel",
-			"locales": ["de", "es", "pt-BR"],
-			"reason": "\"Kernel\" is a retained protocol, API, or engineering term in de, es, pt-BR."
-		},
-		"settings.updates.slots.slot": {
-			"value": "Slot {letter}",
-			"locales": ["de", "pt-BR"],
-			"reason": "\"Slot {letter}\" is a retained protocol, API, or engineering term in de, pt-BR."
-		},
-		"settings.updates.system.status": {
-			"value": "Status",
-			"locales": ["de"],
-			"reason": "\"Status\" has the same legitimate spelling in de."
-		},
-		"settings.validateStages.endpoint": {
-			"value": "Endpoint",
-			"locales": ["pt-BR"],
-			"reason": "\"Endpoint\" is a retained protocol, API, or engineering term in pt-BR."
-		},
-		"settings.videoCodec": {
-			"value": "Codec",
-			"locales": ["de", "fr", "pt-BR"],
-			"reason": "\"Codec\" is a retained protocol, API, or engineering term in de, fr, pt-BR."
-		},
-		"theme.system": {
-			"value": "System",
-			"locales": ["de"],
-			"reason": "\"System\" has the same legitimate spelling in de."
-		},
-		"wifiStatus.hotspot": {
-			"value": "Hotspot",
-			"locales": ["de"],
-			"reason": "\"Hotspot\" is a retained protocol, API, or engineering term in de."
-		}
+	"devtools.mbps": {
+		"value": "Mbps",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Megabits-per-second unit abbreviation for numeric bitrate readings."
+	},
+	"devtools.ms": {
+		"value": "ms",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR"],
+		"reason": "Millisecond unit abbreviation for numeric duration readings."
+	},
+	"devtools.rtt": {
+		"value": "RTT",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Round-trip-time statistic acronym used by the network diagnostics."
+	},
+	"hotspotConfigurator.hotspot.placeholderName": {
+		"value": "CeraLive",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "CeraLive product name used as the default hotspot SSID."
+	},
+	"hud.bitrate": {
+		"value": "Bitrate",
+		"locales": ["es"],
+		"reason": "es live.adjustBitrate reads \"Ajustar bitrate\", preserving the owner's bitrate terminology."
+	},
+	"hud.healthSrt": {
+		"value": "SRT",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Secure Reliable Transport protocol identifier used by transport diagnostics."
+	},
+	"live.encoder.accelerated": {
+		"value": "Hardware",
+		"locales": ["es"],
+		"reason": "es live.education.field.codec.body uses \"codificador por hardware\", retaining the engineering term in translated prose."
+	},
+	"live.encoder.passthrough.title": {
+		"value": "Passthrough",
+		"locales": ["es"],
+		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\""
+	},
+	"live.encoder.software": {
+		"value": "Software",
+		"locales": ["es"],
+		"reason": "es devtools.newVersionDesc uses \"actualización de software\", retaining the engineering term in translated prose."
+	},
+	"live.ingest.nak": {
+		"value": "NAK",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Negative-acknowledgement packet statistic acronym, rather than a user instruction."
+	},
+	"live.ingest.rtt": {
+		"value": "RTT",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Round-trip-time statistic acronym used by the network diagnostics."
+	},
+	"live.inputPicker.groups.camlink": {
+		"value": "Cam Link",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Elgato Cam Link capture-device product name."
+	},
+	"live.inputPicker.groups.hdmi": {
+		"value": "HDMI",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "High-Definition Multimedia Interface standard name for the input group."
+	},
+	"live.inputPicker.groups.mjpeg": {
+		"value": "UVC · MJPEG",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "USB Video Class and Motion JPEG standard identifiers separated by a display dot."
+	},
+	"live.inputPicker.groups.usb": {
+		"value": "USB",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Universal Serial Bus interface standard identifier."
+	},
+	"live.inputPicker.groups.uvc_dual": {
+		"value": "UVC H.264/H.265",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "USB Video Class and the H.264/H.265 video coding standard identifiers."
+	},
+	"live.inputPicker.groups.uvc_h264": {
+		"value": "UVC H.264",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "USB Video Class carrying the H.264 video coding standard."
+	},
+	"live.inputPicker.groups.uvc_h265": {
+		"value": "UVC H.265",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "USB Video Class carrying the H.265 video coding standard."
+	},
+	"live.passthrough.activeChip": {
+		"value": "Passthrough",
+		"locales": ["es"],
+		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\""
+	},
+	"live.preview.encode.activeHardware": {
+		"value": "{element} — hardware",
+		"locales": ["es"],
+		"reason": "Only interpolation plus hardware; es live.education.field.codec.body likewise uses \"por hardware\" in translated prose."
+	},
+	"live.preview.encode.activeSoftware": {
+		"value": "{element} — software",
+		"locales": ["es"],
+		"reason": "Only interpolation plus software; es devtools.newVersionDesc likewise uses \"actualización de software\" in translated prose."
+	},
+	"live.preview.tierMse": {
+		"value": "MSE",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Media Source Extensions browser API acronym identifying the preview tier."
+	},
+	"live.preview.tierWebcodecs": {
+		"value": "WebCodecs",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "WebCodecs browser API name identifying the preview tier."
+	},
+	"live.preview.tierWebrtc": {
+		"value": "WebRTC",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "WebRTC browser communication API name identifying the preview tier."
+	},
+	"live.title": {
+		"value": "Live",
+		"locales": ["de", "es", "fr", "pt-BR"],
+		"reason": "Live is the product screen name shared by navigation.live and live.title in each listed locale catalog."
+	},
+	"navigation.live": {
+		"value": "Live",
+		"locales": ["de", "es", "fr", "pt-BR"],
+		"reason": "Live is the product screen name shared by navigation.live and live.title in each listed locale catalog."
+	},
+	"network.bluetooth.enableLabel": {
+		"value": "Bluetooth",
+		"locales": ["de", "es", "fr", "ja", "pt-BR"],
+		"reason": "Bluetooth wireless standard and trademark; only the listed catalogs retain this spelling."
+	},
+	"network.bluetooth.title": {
+		"value": "Bluetooth",
+		"locales": ["de", "es", "fr", "ja", "pt-BR"],
+		"reason": "Bluetooth wireless standard and trademark; only the listed catalogs retain this spelling."
+	},
+	"network.modem.apn": {
+		"value": "APN",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Access Point Name cellular configuration acronym."
+	},
+	"network.modem.apnPlaceholder": {
+		"value": "internet.provider.com",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Literal example APN hostname; translating its components would change the example address."
+	},
+	"network.modem.bands.generation.gsm": {
+		"value": "2G",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Second-generation GSM radio generation identifier."
+	},
+	"network.modem.bands.generation.lte": {
+		"value": "4G",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Fourth-generation LTE radio generation identifier."
+	},
+	"network.modem.bands.generation.nr": {
+		"value": "5G",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Fifth-generation NR radio generation identifier."
+	},
+	"network.modem.bands.generation.umts": {
+		"value": "3G",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Third-generation UMTS radio generation identifier."
+	},
+	"network.modem.bands.label.frequency": {
+		"value": "{generation} {frequency}",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Radio-generation and frequency interpolations only, separated by one space."
+	},
+	"network.modem.detail.firmware": {
+		"value": "Firmware",
+		"locales": ["es"],
+		"reason": "es network.modem.bands.description ends \"modelo y firmware\", retaining the engineering term in translated prose."
+	},
+	"network.modem.detail.rsrp": {
+		"value": "RSRP",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "3GPP reference-signal received-power measurement acronym."
+	},
+	"network.modem.detail.rsrq": {
+		"value": "RSRQ",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "3GPP reference-signal received-quality measurement acronym."
+	},
+	"network.modem.detail.simType": {
+		"value": "SIM",
+		"locales": ["ar", "de", "es", "fr", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Subscriber Identity Module standard acronym, scoped to catalogs retaining the Latin identifier."
+	},
+	"network.modem.detail.simTypeEsim": {
+		"value": "eSIM",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Embedded Subscriber Identity Module standard identifier."
+	},
+	"network.modem.detail.sinr": {
+		"value": "SINR",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Signal-to-interference-plus-noise ratio measurement acronym."
+	},
+	"network.modem.detail.snr": {
+		"value": "SNR",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Signal-to-noise ratio measurement acronym."
+	},
+	"network.modem.detail.techLte": {
+		"value": "LTE",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Long Term Evolution cellular radio standard identifier."
+	},
+	"network.modem.detail.techNr": {
+		"value": "5G NR",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "5G New Radio cellular standard identifier."
+	},
+	"network.modem.sections.sim.title": {
+		"value": "SIM",
+		"locales": ["de", "es", "fr", "ja", "ko", "pt-BR"],
+		"reason": "Subscriber Identity Module standard acronym, scoped to catalogs retaining the Latin identifier."
+	},
+	"network.modem.simUnlock.pin2Label": {
+		"value": "SIM PIN2",
+		"locales": ["hi", "ja", "ko", "zh"],
+		"reason": "SIM and PIN2 credential identifiers; only the listed catalogs use this exact order and spelling."
+	},
+	"network.modem.simUnlock.pinLabel": {
+		"value": "SIM PIN",
+		"locales": ["hi", "ja", "ko"],
+		"reason": "SIM and PIN credential identifiers; only the listed catalogs use this exact order and spelling."
+	},
+	"network.routerCellular.apnLabel": {
+		"value": "APN",
+		"locales": ["de", "es", "fr", "hi", "ja", "ko", "pt-BR"],
+		"reason": "Access Point Name cellular configuration acronym."
+	},
+	"network.routerCellular.detail.mcc": {
+		"value": "MCC",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "3GPP Mobile Country Code field identifier."
+	},
+	"network.routerCellular.detail.mnc": {
+		"value": "MNC",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "3GPP Mobile Network Code field identifier."
+	},
+	"network.routerCellular.detail.pci": {
+		"value": "PCI",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "3GPP Physical Cell Identity field acronym in cellular diagnostics, not a prose label."
+	},
+	"network.routerCellular.firmwareLabel": {
+		"value": "Firmware",
+		"locales": ["es"],
+		"reason": "es network.modem.bands.description ends \"modelo y firmware\", retaining the engineering term in translated prose."
+	},
+	"network.routerCellular.hardwareLabel": {
+		"value": "Hardware",
+		"locales": ["es"],
+		"reason": "es live.education.field.codec.body uses \"codificador por hardware\", retaining the engineering term in translated prose."
+	},
+	"network.routerCellular.iccidLabel": {
+		"value": "ICCID",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Integrated Circuit Card Identifier field acronym."
+	},
+	"network.routerCellular.imeiLabel": {
+		"value": "IMEI",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "International Mobile Equipment Identity field acronym."
+	},
+	"network.routerCellular.imsiLabel": {
+		"value": "IMSI",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "International Mobile Subscriber Identity field acronym."
+	},
+	"network.routerCellular.signal.metric.rsrp": {
+		"value": "RSRP",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "3GPP reference-signal received-power measurement acronym."
+	},
+	"network.routerCellular.signal.metric.rsrq": {
+		"value": "RSRQ",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "3GPP reference-signal received-quality measurement acronym."
+	},
+	"network.routerCellular.signal.metric.sinr": {
+		"value": "SINR",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Signal-to-interference-plus-noise ratio measurement acronym."
+	},
+	"network.routerCellular.signal.metric.snr": {
+		"value": "SNR",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Signal-to-noise ratio measurement acronym."
+	},
+	"network.routerCellular.subnet.addressPlaceholder": {
+		"value": "192.168.9.1",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Literal IPv4 address example for the subnet address input."
+	},
+	"network.sharing.kind.ethernet": {
+		"value": "Ethernet",
+		"locales": ["de", "es", "fr", "pt-BR"],
+		"reason": "IEEE 802.3 Ethernet standard name; catalogs using localized spellings remain outside this entry."
+	},
+	"network.sharing.kind.wifi": {
+		"value": "Wi-Fi",
+		"locales": ["es", "fr", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi wireless standard trademark; catalogs using localized spellings remain outside this entry."
+	},
+	"network.sharing.priority.algorithmCake": {
+		"value": "CAKE",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Linux CAKE queue-discipline identifier shown by the traffic-shaping implementation."
+	},
+	"network.sharing.priority.algorithmHtb": {
+		"value": "HTB + fq_codel",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Linux HTB and fq_codel queue-discipline identifiers, joined by a plus sign."
+	},
+	"network.summary.totalBandwidth": {
+		"value": "{total} Kbps",
+		"locales": ["de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Numeric total interpolation followed by the existing kilobits-per-second unit notation."
+	},
+	"network.unclaimedAdapters.bus.pci": {
+		"value": "PCIe",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "PCI Express hardware bus standard abbreviation."
+	},
+	"network.unclaimedAdapters.bus.usb": {
+		"value": "USB",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Universal Serial Bus interface standard identifier."
+	},
+	"network.view.concurrentModeBadge": {
+		"value": "WiFi + AP",
+		"locales": ["ja", "ko"],
+		"reason": "Wi-Fi plus the IEEE 802.11 AP role acronym; only ja and ko retain both identifiers."
+	},
+	"network.view.ethernet": {
+		"value": "Ethernet",
+		"locales": ["de", "es", "fr", "pt-BR"],
+		"reason": "IEEE 802.3 Ethernet standard name; catalogs using localized spellings remain outside this entry."
+	},
+	"network.view.hotspotClientRate": {
+		"value": "{rate} Mbps",
+		"locales": ["ar", "es", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Numeric client-rate interpolation followed by the megabits-per-second unit."
+	},
+	"network.view.hotspotClientSignal": {
+		"value": "{dbm} dBm",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Numeric signal-level interpolation followed by the decibel-milliwatt unit."
+	},
+	"network.view.nak": {
+		"value": "NAK",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Negative-acknowledgement packet statistic acronym, rather than a user instruction."
+	},
+	"network.view.rtt": {
+		"value": "RTT",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Round-trip-time statistic acronym used by the network diagnostics."
+	},
+	"network.view.wifi": {
+		"value": "WiFi",
+		"locales": ["ar", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi wireless standard label spelling used only in the explicitly listed catalogs."
+	},
+	"network.wifi.ssid": {
+		"value": "SSID",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "IEEE 802.11 Service Set Identifier field acronym."
+	},
+	"network.wifiCapability.band24": {
+		"value": "2.4 GHz",
+		"locales": ["hi", "ja", "zh"],
+		"reason": "2.4 GHz radio frequency with a decimal point, scoped to catalogs using that exact numeric notation."
+	},
+	"network.wifiCapability.band5": {
+		"value": "5 GHz",
+		"locales": ["de", "es", "fr", "hi", "ja", "pt-BR", "zh"],
+		"reason": "Integer radio-band frequency followed by the gigahertz unit."
+	},
+	"network.wifiCapability.band6": {
+		"value": "6 GHz",
+		"locales": ["de", "es", "fr", "hi", "ja", "pt-BR", "zh"],
+		"reason": "Integer radio-band frequency followed by the gigahertz unit."
+	},
+	"network.wifiCapability.generation.wifi4": {
+		"value": "Wi-Fi 4",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi Alliance generation name for IEEE 802.11n."
+	},
+	"network.wifiCapability.generation.wifi5": {
+		"value": "Wi-Fi 5",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi Alliance generation name for IEEE 802.11ac."
+	},
+	"network.wifiCapability.generation.wifi6": {
+		"value": "Wi-Fi 6",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi Alliance generation name for IEEE 802.11ax."
+	},
+	"network.wifiCapability.generation.wifi6e": {
+		"value": "Wi-Fi 6E",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi Alliance generation name for IEEE 802.11ax operation in the 6 GHz band."
+	},
+	"network.wifiCapability.generation.wifi7": {
+		"value": "Wi-Fi 7",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi Alliance generation name for IEEE 802.11be."
+	},
+	"network.wifiCapability.linkRate": {
+		"value": "{mbps} Mbit/s",
+		"locales": ["de", "es", "fr", "hi", "ja", "pt-BR", "zh"],
+		"reason": "Numeric link-rate interpolation followed by the megabits-per-second unit."
+	},
+	"network.wifiCapability.width": {
+		"value": "{mhz} MHz",
+		"locales": ["de", "es", "fr", "hi", "ja", "pt-BR", "zh"],
+		"reason": "Numeric channel-width interpolation followed by the megahertz unit."
+	},
+	"network.wifiCapability.wpa3.supported": {
+		"value": "WPA3",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi Protected Access 3 security standard identifier."
+	},
+	"networking.types.ethernet": {
+		"value": "Ethernet",
+		"locales": ["de", "es", "fr", "pt-BR"],
+		"reason": "IEEE 802.3 Ethernet standard name; catalogs using localized spellings remain outside this entry."
+	},
+	"networking.types.usb": {
+		"value": "USB",
+		"locales": ["de", "es", "fr", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Universal Serial Bus interface standard identifier."
+	},
+	"networking.types.wifi": {
+		"value": "WiFi",
+		"locales": ["ar", "es", "fr", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi wireless standard label spelling used only in the explicitly listed catalogs."
+	},
+	"settings.deviceHealth.axis.minutesAgo": {
+		"value": "−{n} min",
+		"locales": ["es", "fr", "pt-BR"],
+		"reason": "Numeric elapsed-minutes axis notation; only es, fr, and pt-BR currently retain this minus/unit format."
+	},
+	"settings.deviceStats.gpu": {
+		"value": "GPU",
+		"locales": ["de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Graphics Processing Unit hardware acronym."
+	},
+	"settings.hardwareTypes.jetson": {
+		"value": "NVIDIA Jetson",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "NVIDIA Jetson hardware product family name."
+	},
+	"settings.hardwareTypes.n100": {
+		"value": "Intel N100",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Intel N100 processor product name."
+	},
+	"settings.hardwareTypes.rk3588": {
+		"value": "Rockchip RK3588",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Rockchip RK3588 system-on-chip product name."
+	},
+	"settings.index.groups.software": {
+		"value": "Software",
+		"locales": ["es"],
+		"reason": "es devtools.newVersionDesc uses \"actualización de software\", retaining the engineering term in translated prose."
+	},
+	"settings.onDeviceDisplay.profiles.eink": {
+		"value": "E-ink",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "E-ink panel technology identifier used by the display-profile configuration."
+	},
+	"settings.onDeviceDisplay.profiles.lcd": {
+		"value": "LCD",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Liquid Crystal Display panel technology acronym."
+	},
+	"settings.sources.camlink": {
+		"value": "Cam Link 4K",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Elgato Cam Link 4K capture-device product name."
+	},
+	"settings.sources.decklink": {
+		"value": "Decklink SDI",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "DeckLink capture-device product name paired with the SDI interface acronym."
+	},
+	"settings.sources.usb_mjpeg": {
+		"value": "USB MJPEG",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "USB interface and Motion JPEG coding-standard identifiers."
+	},
+	"settings.sources.v4l_mjpeg": {
+		"value": "V4L2 MJPEG",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Linux Video4Linux2 API and Motion JPEG coding-standard identifiers."
+	},
+	"settings.transportKindBadge.rist": {
+		"value": "RIST",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Reliable Internet Stream Transport protocol identifier."
+	},
+	"settings.transportKindBadge.srt": {
+		"value": "SRT",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Secure Reliable Transport protocol identifier used by transport diagnostics."
+	},
+	"settings.updates.checkFailed.whatFailed": {
+		"value": "{ifname} {family}: {host}, {state}",
+		"locales": ["de", "es", "hi", "ko", "pt-BR"],
+		"reason": "Interface, family, host and state interpolations with locale-specific punctuation; no literal prose."
+	},
+	"settings.updates.connection.hostState": {
+		"value": "{host}: {state}",
+		"locales": ["ar", "de", "es", "hi", "ja", "ko", "pt-BR"],
+		"reason": "Host and state interpolations with locale-specific punctuation; no literal prose."
+	},
+	"settings.updates.connection.kind.ethernet": {
+		"value": "Ethernet",
+		"locales": ["de", "es", "fr", "pt-BR"],
+		"reason": "IEEE 802.3 Ethernet standard name; catalogs using localized spellings remain outside this entry."
+	},
+	"settings.updates.connection.kind.wifi": {
+		"value": "Wi-Fi",
+		"locales": ["ar", "es", "fr", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Wi-Fi wireless standard trademark; catalogs using localized spellings remain outside this entry."
+	},
+	"settings.updates.kernel.title": {
+		"value": "Kernel",
+		"locales": ["es"],
+		"reason": "es network.unclaimedAdapters.titleOne reads \"Adaptador detectado: sin controlador en este kernel\"."
+	},
+	"settings.validateStages.dns": {
+		"value": "DNS",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Domain Name System protocol acronym used for endpoint validation."
+	},
+	"units.kbps": {
+		"value": "kbps",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Kilobits-per-second unit abbreviation for numeric bitrate readings."
+	},
+	"units.mbps": {
+		"value": "Mbps",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Megabits-per-second unit abbreviation for numeric bitrate readings."
+	},
+	"units.ms": {
+		"value": "ms",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Millisecond unit abbreviation for numeric duration readings."
+	},
+	"wifiBands.band_2_4ghz": {
+		"value": "2.4 GHz",
+		"locales": ["hi", "ja", "ko", "zh"],
+		"reason": "2.4 GHz radio frequency with a decimal point, scoped to catalogs using that exact numeric notation."
+	},
+	"wifiBands.band_5ghz": {
+		"value": "5 GHz",
+		"locales": ["de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Integer radio-band frequency followed by the gigahertz unit."
+	},
+	"wifiBands.band_6ghz": {
+		"value": "6 GHz",
+		"locales": ["de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Integer radio-band frequency followed by the gigahertz unit."
+	},
+	"wifiSelector.hotspot.placeholderPassword": {
+		"value": "********",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "Password mask characters, rather than a human-language example."
 	}
 }

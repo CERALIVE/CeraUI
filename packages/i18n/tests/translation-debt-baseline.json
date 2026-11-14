@@ -9,6 +9,25 @@
 		"pt-BR",
 		"zh"
 	],
+	"devtools.browser": ["de"],
+	"devtools.cookies": ["de", "es", "fr", "pt-BR"],
+	"devtools.downlink": ["de", "pt-BR"],
+	"devtools.error": ["es"],
+	"devtools.info": ["de", "es", "fr", "pt-BR"],
+	"devtools.log": ["de", "es", "fr", "pt-BR"],
+	"devtools.mode": ["fr"],
+	"devtools.no": ["es"],
+	"devtools.nodeEnv": ["ar", "hi"],
+	"devtools.offline": ["de", "pt-BR"],
+	"devtools.online": ["de", "pt-BR"],
+	"devtools.persistent": ["de"],
+	"devtools.phase": ["de", "fr"],
+	"devtools.status": ["de", "pt-BR"],
+	"devtools.table": ["fr"],
+	"devtools.total": ["es", "fr", "pt-BR"],
+	"devtools.type": ["fr"],
+	"devtools.userAgent": ["de", "fr", "pt-BR"],
+	"devtools.viewport": ["de", "es", "fr", "pt-BR"],
 	"errorBoundary.description": [
 		"ar",
 		"de",
@@ -21,7 +40,30 @@
 	],
 	"errorBoundary.retry": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 	"errorBoundary.title": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+	"general.configuration": ["fr"],
+	"general.offline": ["de", "pt-BR"],
+	"general.pageTitle": ["de"],
+	"general.port": ["de", "fr"],
+	"general.status": ["de", "pt-BR"],
+	"general.streaming": ["de"],
 	"general.unknownSource": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+	"general.updates": ["de"],
+	"hotspotConfigurator.hotspot.name": ["de"],
+	"hud.bitrate": ["de", "fr", "pt-BR"],
+	"hud.encoder": ["de"],
+	"hud.healthFrames": ["de"],
+	"hud.healthStable": ["fr"],
+	"hud.link": ["pt-BR"],
+	"hud.live": ["de", "es", "fr", "pt-BR"],
+	"hud.offline": ["de", "pt-BR"],
+	"hud.status": ["de", "pt-BR"],
+	"hud.streaming": ["de"],
+	"live.audioCard.title": ["de", "es", "fr"],
+	"live.comingSoon.pip": ["pt-BR"],
+	"live.comingSoon.roadmap": ["de"],
+	"live.composition.title": ["fr"],
+	"live.education.field.audio.title": ["de", "es", "fr"],
+	"live.education.field.mode.title": ["fr"],
 	"live.education.reason.rawCaptureNotStreamable": [
 		"ar",
 		"de",
@@ -32,6 +74,7 @@
 		"pt-BR",
 		"zh"
 	],
+	"live.encoder.accelerated": ["de", "pt-BR"],
 	"live.encoder.codecAuto": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 	"live.encoder.codecAutoResolvedH264": [
 		"ar",
@@ -63,6 +106,18 @@
 		"pt-BR",
 		"zh"
 	],
+	"live.encoder.passthrough.title": ["de", "fr", "pt-BR"],
+	"live.encoder.probedCapAudio": ["de", "es", "fr"],
+	"live.encoder.software": ["de", "pt-BR"],
+	"live.goLive.gate.destination": ["fr"],
+	"live.goLive.gate.engine": ["de"],
+	"live.ingest.healthy": ["fr"],
+	"live.ingest.link": ["pt-BR"],
+	"live.ingest.links": ["pt-BR"],
+	"live.ingest.total": ["es", "fr", "pt-BR"],
+	"live.ingest.trend": ["de"],
+	"live.inputPicker.active": ["fr"],
+	"live.inputPicker.groups.audio": ["de", "es", "fr"],
 	"live.inputPicker.groups.raw_video": [
 		"ar",
 		"de",
@@ -73,6 +128,7 @@
 		"pt-BR",
 		"zh"
 	],
+	"live.inputPicker.groups.test": ["de", "fr"],
 	"live.inputPicker.groups.unknown": [
 		"ar",
 		"de",
@@ -83,6 +139,12 @@
 		"pt-BR",
 		"zh"
 	],
+	"live.modes.label": ["fr"],
+	"live.modes.streaming": ["de"],
+	"live.passthrough.activeChip": ["de", "fr", "pt-BR"],
+	"live.preview.encode.activeHardware": ["pt-BR"],
+	"live.preview.encode.activeSoftware": ["pt-BR"],
+	"live.preview.unavailable.engineOffline.title": ["de"],
 	"live.reconfigureRequired": [
 		"ar",
 		"de",
@@ -93,6 +155,9 @@
 		"pt-BR",
 		"zh"
 	],
+	"live.source.activeLive": ["de"],
+	"live.source.audioQualityNegotiated": ["es", "fr", "pt-BR"],
+	"live.source.label": ["fr"],
 	"live.startFailure.class.engine_internal": [
 		"ar",
 		"de",
@@ -153,6 +218,34 @@
 		"pt-BR",
 		"zh"
 	],
+	"live.streamingActive": ["de"],
+	"navigation.devtools": ["de"],
+	"navigation.general": ["es"],
+	"navigation.streaming": ["de", "es"],
+	"network.cellular.details.toggle": ["de"],
+	"network.cellular.roaming.badge": ["de"],
+	"network.deviceCount.modem": ["fr", "pt-BR"],
+	"network.deviceCount.modems": ["fr", "pt-BR"],
+	"network.ethRole.uplink": ["de", "pt-BR"],
+	"network.hotspot.name": ["de"],
+	"network.modem.configuration": ["fr"],
+	"network.modem.detail.band": ["de"],
+	"network.modem.detail.firmware": ["de", "pt-BR"],
+	"network.modem.networkMode.unnamed": ["fr"],
+	"network.modem.sections.diagnostics.interface": ["fr", "pt-BR"],
+	"network.modem.sections.diagnostics.transport": ["fr"],
+	"network.modem.sections.signal.title": ["de", "fr"],
+	"network.modem.sms.title": ["fr"],
+	"network.routerCellular.detail.roaming": ["de", "es", "pt-BR"],
+	"network.routerCellular.diagnosticsTitle": ["fr"],
+	"network.routerCellular.firmwareLabel": ["de", "pt-BR"],
+	"network.routerCellular.hardwareLabel": ["de", "pt-BR"],
+	"network.routerCellular.netMode.unnamed": ["fr"],
+	"network.routerCellular.signalBars": ["de", "fr"],
+	"network.sharing.diagnostics.disclosure": ["fr"],
+	"network.sharing.uplinkDetail.disclosure": ["de"],
+	"network.status.details": ["de"],
+	"network.view.hotspot": ["de", "es", "fr", "pt-BR"],
 	"network.view.hotspotNoBond": [
 		"ar",
 		"de",
@@ -193,6 +286,7 @@
 		"pt-BR",
 		"zh"
 	],
+	"network.view.linkLocal": ["de", "pt-BR"],
 	"network.view.modemManufacturer": [
 		"ar",
 		"de",
@@ -244,6 +338,11 @@
 		"pt-BR",
 		"zh"
 	],
+	"network.wifiMode.open": ["fr"],
+	"network.wifiMode.station": ["fr"],
+	"networking.labels.interface": ["fr", "pt-BR"],
+	"networking.types.hotspot": ["de"],
+	"networking.types.modem": ["de", "fr", "pt-BR"],
 	"notifications.appInstalled": [
 		"ar",
 		"de",
@@ -314,6 +413,7 @@
 		"pt-BR",
 		"zh"
 	],
+	"notifications.error": ["es"],
 	"notifications.hdmiError": [
 		"ar",
 		"de",
@@ -374,6 +474,7 @@
 		"pt-BR",
 		"zh"
 	],
+	"notifications.panel.title": ["fr"],
 	"notifications.relayNone": [
 		"ar",
 		"de",
@@ -435,6 +536,12 @@
 		"zh"
 	],
 	"osActions.updateFailed": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+	"settings.bitrate": ["de"],
+	"settings.destination": ["fr"],
+	"settings.deviceHealth.cores.engineLabel": ["de"],
+	"settings.deviceHealth.nowStrip.encoder": ["de"],
+	"settings.deviceStats.swap": ["fr", "pt-BR"],
+	"settings.dialogs.sources.title": ["fr"],
 	"settings.hardwareTypes.generic": [
 		"ar",
 		"de",
@@ -447,6 +554,7 @@
 	],
 	"settings.index.groups.display": [
 		"ar",
+		"de",
 		"fr",
 		"hi",
 		"ja",
@@ -454,6 +562,9 @@
 		"pt-BR",
 		"zh"
 	],
+	"settings.index.groups.software": ["de", "pt-BR"],
+	"settings.index.groups.streaming": ["de"],
+	"settings.index.groups.system": ["de"],
 	"settings.onDeviceDisplay.configureError": [
 		"ar",
 		"de",
@@ -627,6 +738,7 @@
 	"settings.onDeviceDisplay.profiles.mono": [
 		"ar",
 		"de",
+		"fr",
 		"hi",
 		"ja",
 		"ko",
@@ -792,5 +904,21 @@
 		"ko",
 		"pt-BR",
 		"zh"
-	]
+	],
+	"settings.optional": ["de"],
+	"settings.perfectSync": ["de", "fr", "pt-BR"],
+	"settings.sources.hdmi": ["de"],
+	"settings.sources.rtmp": ["de"],
+	"settings.sources.srt": ["de"],
+	"settings.transportKind": ["de", "fr"],
+	"settings.updates.channel.beta": ["de", "es", "pt-BR"],
+	"settings.updates.channel.stable": ["fr"],
+	"settings.updates.kernel.title": ["de", "pt-BR"],
+	"settings.updates.slots.slot": ["de", "pt-BR"],
+	"settings.updates.system.status": ["de"],
+	"settings.validateStages.endpoint": ["pt-BR"],
+	"settings.videoCodec": ["de", "fr", "pt-BR"],
+	"theme.system": ["de"],
+	"wifiBands.band_2_4ghz": ["pt-BR"],
+	"wifiStatus.hotspot": ["de"]
 }

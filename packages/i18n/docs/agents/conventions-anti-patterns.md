@@ -6,7 +6,7 @@
   OF TRUTH, edited by hand. Other locales follow; the parity gate fails on a
   differing key set.
 - The existing translation-quality gate covers every key and non-English
-  locale. Exact justified exceptions and the separate shrinking debt baseline
+  locale. Current locale-scoped exceptions and the separate shrinking debt baseline
   are documented in [the package README](../../README.md#translation-quality-ratchet).
 - **The test suite reads `messages/*.json` and the frozen fixtures, and imports no
   message runtime.** Shared readers live in `tests/helpers/catalog.ts`.

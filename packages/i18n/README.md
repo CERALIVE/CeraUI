@@ -282,18 +282,21 @@ value with every non-English locale, including parsed plural messages. A new
 English-identical value fails with its locale and key.
 
 `tests/translation-identical-exceptions.json` contains reviewed legitimate
-identical values. Each entry pins its exact key and English value and includes
-a one-line reason. `allLocales` is reserved for locale-independent brand names,
-protocol identifiers, units, and literal placeholders. `byLocale` explicitly
-lists shared spellings and retained engineering terms in particular locales,
-including the owner's Spanish terminology. A changed English value does not
-inherit the old exception. Review additions individually; never exempt an
-entire locale, namespace, or pattern.
+identical values. Each entry pins its exact key, English value, and only the
+locales whose catalogs currently use that identical value. Its one-line reason
+identifies the brand, protocol, standard, code, unit, or placeholder involved.
+Retained Spanish engineering terms cite their use in translated catalog text;
+ordinary UI words requiring review belong in debt. An exception becomes stale
+when its locale translates the value, its English value changes, or its key is
+removed. The gate names the file entry and locale to remove. Review additions
+individually; never exempt an entire locale, namespace, or pattern. The gate
+also checks its actual locale coverage against catalog filenames on disk.
 
 `tests/translation-debt-baseline.json` is **untranslated-message debt, not an
-exception list**. Its initial inventory is 678 locale/key pairs across 85 keys,
-recorded separately so the guard can protect new messages without legitimizing
-existing untranslated sentences. It maps each debt key to the affected locales.
+exception list**. This file is the current inventory of English-identical UI
+copy requiring translation or native review, recorded separately so the guard
+can protect new messages without legitimizing that copy as terminology.
+It maps each debt key to the affected locales.
 Do not add new debt. When a message is translated or removed, remove that locale
 from its baseline entry; delete the key when no locales remain. A stale debt
 entry fails and explicitly instructs its removal.
