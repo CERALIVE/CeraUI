@@ -94,6 +94,12 @@ an omitted codec leaves it unchanged. Null is an RPC directive, never a saved
 codec value. Existing passthrough selections and start-request assembly remain
 unchanged. See the [settings RPC contract](../apps/backend/docs/agents/streaming-rpc-procedures.md#format-settings-exists).
 
+Optional `audio_inputs` uses CeraUI picker ids and persists only stated changes.
+Null or the primary input's exact defaults removes the key. The next start
+resolves engine ids without rewriting `asrc`; live mix writes persist the
+engine's applied values while retaining pending membership and track edits.
+See the [audio input contract](../apps/backend/docs/agents/streaming-rpc-procedures.md#audio-inputs-exists).
+
 | File | Writer | Atomicity | Notes |
 |------|--------|-----------|-------|
 | `config.json` | `saveConfig` (`modules/config.ts:93`) | Atomic (`writeFileAtomicSync`) | The single runtime state file: relay target, audio/video settings, kiosk state, add-on state, and (see below) the password/SSH hashes. Pre-dates T6 (E3 guardrail). At boot a damaged file is archived to `config.json.damaged-<sha256>` and replaced by first-run settings; an unreadable one is never written and is retried after the server binds (`modules/config-boot.ts`, see UPDATE-RECOVERY.md). **Ownership consequence (pre-existing, owner decision):** when the damaged file holds no salvageable bcrypt `password_hash` (zero-byte, truncated before the hash, unparseable), the device is UNCLAIMED after the reset and any LAN client that connects first can set the password. That is identical to merge-base 23bcf379, whose permissive loader logged "Invalid JSON in config file ... using defaults" and showed the same prompt; this record does not narrow it. |

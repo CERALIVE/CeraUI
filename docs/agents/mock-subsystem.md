@@ -143,8 +143,13 @@ Presets never enter `custom`; the producer rectangle
 schema and minimum are exported separately by RPC. The preview socket adds
 `inputs[]` only for an admitted live mix, with synthetic post-gain/post-mute
 levels; its existing top-level meter remains unchanged. This simulates control
-and meter contracts, not GStreamer timing or hardware behavior. Settings-to-engine
-audio mapping and the mixer/designer UI are separate work.
+and meter contracts, not GStreamer timing or hardware behavior. The settings
+RPC now records its mapped inputs through `startMockStreaming` and uses
+`setMockAudioMix` for live writes. Audio validation and unknown-input errors
+include the native message prefix and complete `data.code`; the live source
+switch retains the native mixing refusal message. The mixer/designer UI
+remains separate work. See the
+[audio input contract](../../apps/backend/docs/agents/streaming-rpc-procedures.md#audio-inputs-exists).
 
 **`setMockEngineCapabilities(partial)` — test-only capability override seam (T5):**
 `setMockEngineCapabilities(partial)` (exported from `mocks/providers/streaming.ts`)

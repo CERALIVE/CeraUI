@@ -63,6 +63,7 @@ import {
 	type CardAliases,
 	classifyMeterIdentity,
 } from "./audio-card-vocabulary.ts";
+import { audioMixSourceId, getAudioMixActive } from "./audio-mix-status.ts";
 import { supportsMeterDevicePreference } from "./cerastream-backend.ts";
 import { asRawRequestClient } from "./raw-request.ts";
 import { getStreamLifecycleState } from "./stream-lifecycle-status.ts";
@@ -206,7 +207,14 @@ export function toAudioLevelMessage(
 		...(event.channels !== undefined ? { channels: event.channels } : {}),
 		...(event.rms_db !== undefined ? { rms_db: event.rms_db } : {}),
 		...(event.peak_db !== undefined ? { peak_db: event.peak_db } : {}),
-		...(event.inputs !== undefined ? { inputs: event.inputs } : {}),
+		...(event.inputs !== undefined
+			? {
+					inputs: event.inputs.map((input) => ({
+						...input,
+						input_id: audioMixSourceId(input.input_id),
+					})),
+				}
+			: {}),
 		...(event.floor_db !== undefined ? { floor_db: event.floor_db } : {}),
 		...(event.unavailable !== undefined
 			? { unavailable: event.unavailable }
@@ -442,6 +450,8 @@ function projectLevel(
 	deps: AudioMeterBridgeDeps,
 ): AudioLevelMessage {
 	const message = toAudioLevelMessage(event);
+	if (getAudioMixActive() && message.source?.owner === "streaming")
+		return message;
 	// An explicit "No audio" pick outranks whatever the engine is metering,
 	// including the engine's own gap reason: the operator asked for silence, so
 	// that is the state — and the engine, told only `meter_device: null`, is

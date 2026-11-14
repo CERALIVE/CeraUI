@@ -743,14 +743,15 @@ export function startMockStreaming(params?: StartParams): void {
 			) {
 				throw new CerastreamRpcError(
 					RPC_ERROR_NUMERIC["cerastream.audio.device_not_found"],
-					input.input_id,
+					`audio device not found: ${input.input_id}`,
 					"cerastream.audio.device_not_found",
 					null,
+					{ code: "cerastream.audio.device_not_found" },
 				);
 			}
 		}
 		if (params.audio?.inputs && !getMockEngineCapabilities().caps.audio_mix) {
-			throw mockParamsInvalid("audio-mix-unsupported");
+			throw mockAudioMixInvalid("audio-mix-unsupported");
 		}
 		const parsed = startParamsSchema.safeParse(params);
 		if (!parsed.success) throw mockParamsInvalid(parsed.error.message);
@@ -770,34 +771,44 @@ function mockParamsInvalid(token: string): CerastreamRpcError {
 	);
 }
 
+function mockAudioMixInvalid(token: string): CerastreamRpcError {
+	return new CerastreamRpcError(
+		-32602,
+		`invalid params: ${token}: invalid audio mix configuration`,
+		"cerastream.params.invalid",
+		null,
+		{ code: "cerastream.params.invalid" },
+	);
+}
+
 function validateMockAudioMix(
 	audio: AudioConfig | undefined,
 	isNetwork: boolean,
 ): void {
 	if (audio?.inputs === undefined) return;
 	const inputs = audio.inputs;
-	if (inputs.length === 0) throw mockParamsInvalid("audio-mix-empty");
+	if (inputs.length === 0) throw mockAudioMixInvalid("audio-mix-empty");
 	if (inputs.length > AUDIO_MIX_MAX_INPUTS)
-		throw mockParamsInvalid("audio-mix-too-many-inputs");
+		throw mockAudioMixInvalid("audio-mix-too-many-inputs");
 	if (audio.device !== undefined)
-		throw mockParamsInvalid("audio-mix-with-device");
+		throw mockAudioMixInvalid("audio-mix-with-device");
 	if (audio.mode === "none")
-		throw mockParamsInvalid("audio-mix-with-mode-none");
+		throw mockAudioMixInvalid("audio-mix-with-mode-none");
 	const ids = new Set<string>();
 	const tracks = new Set<number>();
 	for (const input of inputs) {
 		if (ids.has(input.input_id))
-			throw mockParamsInvalid("audio-mix-duplicate-input");
+			throw mockAudioMixInvalid("audio-mix-duplicate-input");
 		ids.add(input.input_id);
 		if (input.input_id === "embedded" && !isNetwork) {
-			throw mockParamsInvalid("audio-mix-embedded-without-network-source");
+			throw mockAudioMixInvalid("audio-mix-embedded-without-network-source");
 		}
 		if (
 			input.tracks.length === 0 ||
 			new Set(input.tracks).size !== input.tracks.length ||
 			input.tracks.some((track) => track < 1 || track > AUDIO_MIX_MAX_TRACKS)
 		) {
-			throw mockParamsInvalid("audio-tracks-invalid");
+			throw mockAudioMixInvalid("audio-tracks-invalid");
 		}
 		for (const track of input.tracks) tracks.add(track);
 		const gain = input.gain_db ?? 0;
@@ -806,17 +817,17 @@ function validateMockAudioMix(
 			gain < AUDIO_GAIN_DB_MIN ||
 			gain > AUDIO_GAIN_DB_MAX
 		) {
-			throw mockParamsInvalid("audio-gain-range");
+			throw mockAudioMixInvalid("audio-gain-range");
 		}
 		if ((input.delay_ms ?? 0) > AUDIO_DELAY_MAX_MS)
-			throw mockParamsInvalid("audio-delay-range");
+			throw mockAudioMixInvalid("audio-delay-range");
 	}
 	if (
 		Array.from({ length: tracks.size }, (_, i) => i + 1).some(
 			(track) => !tracks.has(track),
 		)
 	) {
-		throw mockParamsInvalid("audio-tracks-gap");
+		throw mockAudioMixInvalid("audio-tracks-gap");
 	}
 }
 
@@ -866,7 +877,7 @@ export function setMockAudioMix(params: SetAudioMixParams): SetAudioMixResult {
 		!getStreamingStats().isActive ||
 		!current?.audio?.inputs
 	) {
-		throw mockParamsInvalid("audio-mix-inactive");
+		throw mockAudioMixInvalid("audio-mix-inactive");
 	}
 	const parsed = setAudioMixParamsSchema.safeParse(params);
 	if (!parsed.success) throw mockParamsInvalid(parsed.error.message);
@@ -882,9 +893,10 @@ export function setMockAudioMix(params: SetAudioMixParams): SetAudioMixResult {
 		if (!input)
 			throw new CerastreamRpcError(
 				RPC_ERROR_NUMERIC["cerastream.audio.device_not_found"],
-				update.input_id,
+				`audio device not found: ${update.input_id}`,
 				"cerastream.audio.device_not_found",
 				null,
+				{ code: "cerastream.audio.device_not_found" },
 			);
 		if (update.gain_db !== undefined) input.gain_db = update.gain_db;
 		if (update.mute !== undefined) input.mute = update.mute;
@@ -908,7 +920,13 @@ export function switchMockAudio(inputId: string): {
 		getStreamingStats().isActive &&
 		getMockState().engineStart?.audio?.inputs
 	) {
-		throw mockParamsInvalid("audio-mix-active");
+		throw new CerastreamRpcError(
+			-32602,
+			"invalid params: audio-mix-active: switch-audio is unavailable while mixing inputs",
+			"cerastream.params.invalid",
+			null,
+			{ code: "cerastream.params.invalid" },
+		);
 	}
 	return { active_audio_input: inputId };
 }

@@ -32,7 +32,7 @@ Full PR gate: `bun run test`, `bun run test:e2e`, `bun run check:tech-debt`,
 | Exact-name update roster and installation | [software-update-start-contract.md](docs/agents/software-update-start-contract.md) |
 | Update discovery and actionable entries | [software-update-check-contract.md](docs/agents/software-update-check-contract.md) |
 | Update orchestrator, D8, OS staging and slot mirroring | [the-update-orchestrator-and-d8-admission.md](docs/agents/the-update-orchestrator-and-d8-admission.md) |
-| Streaming RPC and lifecycle | [streaming-rpc-procedures.md](docs/agents/streaming-rpc-procedures.md) |
+| Streaming RPC, lifecycle and audio inputs | [streaming-rpc-procedures.md](docs/agents/streaming-rpc-procedures.md) |
 | Live capture and audio visibility | [a-live-capture-device-is-never-silently-dropped.md](docs/agents/a-live-capture-device-is-never-silently-dropped.md) |
 | Audio identity and naming | [audio-device-naming.md](docs/agents/audio-device-naming.md) |
 | Audio backend override | [the-audio-backend-is-an-override-and-absent-is-not-a-defa.md](docs/agents/the-audio-backend-is-an-override-and-absent-is-not-a-defa.md) |

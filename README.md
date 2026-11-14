@@ -5,6 +5,12 @@ balancer selection or clear a saved codec with `video_codec: null` for the next
 start. Saved keys, defaults and passthrough choices remain unchanged. See the
 [settings contract](apps/backend/docs/agents/streaming-rpc-procedures.md#format-settings-exists).
 
+**Audio input backend [EXISTS; hardware qualification owed].** Capable engines
+can receive saved inputs and tracks, with gain, mute and delay updates while a
+mix session runs. The single-source default retains its existing engine path.
+The mixer UI remains planned. See the
+[audio input contract](apps/backend/docs/agents/streaming-rpc-procedures.md#audio-inputs-exists).
+
 **Destination navigation [EXISTS].** The desktop rail and mobile dock accept
 successive destinations without a wall-clock throttle, including in e-ink mode.
 The navigation store still ignores the current destination and blocks active
