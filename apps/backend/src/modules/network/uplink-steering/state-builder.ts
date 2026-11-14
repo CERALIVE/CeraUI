@@ -25,7 +25,11 @@ import {
 	SteeringUnavailableError,
 	type SteeringUplink,
 } from "./contracts.ts";
-import { planUplinkRoute, type UplinkRouteCandidate } from "./route-manager.ts";
+import {
+	discoverOwnedUplinkRoutes,
+	planUplinkRoute,
+	type UplinkRouteCandidate,
+} from "./route-manager.ts";
 import { markForSlot, stableUplinkMark } from "./ruleset.ts";
 import { cidrsOverlap, subnetCidr } from "./subnet.ts";
 
@@ -49,6 +53,7 @@ export interface SteeringStateBuilderDeps {
 	readonly planRoute: (
 		candidate: UplinkRouteCandidate,
 	) => Promise<UplinkRoutePlan>;
+	readonly discoverRoutes: () => Promise<readonly UplinkRoutePlan[]>;
 }
 
 const defaultDeps: SteeringStateBuilderDeps = {
@@ -68,6 +73,7 @@ const defaultDeps: SteeringStateBuilderDeps = {
 		isConcurrentApIfname(ifname) ||
 		(entry.error & (NETIF_ERR_HOTSPOT | NETIF_ERR_SHAREDLAN)) !== 0,
 	planRoute: (candidate) => planUplinkRoute(candidate),
+	discoverRoutes: discoverOwnedUplinkRoutes,
 };
 
 export interface SteeringReadinessContext {
@@ -97,16 +103,31 @@ export async function readDesiredSteeringState(
 	if (zones.length === 0) return { clientZones: [], uplinks: [], routes: [] };
 	assertClientZonesDisjoint(zones);
 	const health = new Map(deps.health().map((record) => [record.iface, record]));
-	const { candidates, identityPending } = collectUplinkCandidates(
+	const { candidates: collected, identityPending } = collectUplinkCandidates(
 		interfaces,
 		zones,
 		health,
 		deps,
-		context.appliedUplinks ?? [],
 	);
 	if (!context.hasAppliedState && identityPending)
 		return { pending: true, netifReady: true, reason: "identity" };
-	assertNoOverlap(zones, candidates);
+	assertNoOverlap(zones, collected);
+	let appliedUplinks = context.appliedUplinks ?? [];
+	if (!context.hasAppliedState && appliedUplinks.length === 0) {
+		const recovered = await deps.discoverRoutes();
+		appliedUplinks = recovered.map((route) => ({
+			identity:
+				collected.find((candidate) => candidate.uplink.ifname === route.ifname)
+					?.uplink.identity ?? route.identity,
+			ifname: route.ifname,
+			mark: route.mark,
+			selectable: false,
+			weight: 0,
+		}));
+	}
+	const candidates = resolveMarkCollisions(collected, appliedUplinks).sort(
+		(a, b) => a.uplink.ifname.localeCompare(b.uplink.ifname),
+	);
 	assertDistinctMarks(candidates);
 	const routes: UplinkRoutePlan[] = [];
 	for (const candidate of candidates) {
@@ -158,7 +179,6 @@ function collectUplinkCandidates(
 	zones: readonly ClientZone[],
 	health: ReadonlyMap<string, UplinkHealthRecord>,
 	deps: SteeringStateBuilderDeps,
-	appliedUplinks: readonly SteeringUplink[],
 ): { candidates: UplinkCandidate[]; identityPending: boolean } {
 	let identityPending = false;
 	const zoneIfaces = new Set(zones.map((zone) => zone.ifname));
@@ -188,15 +208,12 @@ function collectUplinkCandidates(
 			continue;
 		}
 		const identity = wifiId ?? deps.physicalIdentity(ifname);
-		const applied = appliedUplinks.find(
-			(uplink) => uplink.identity === identity,
-		);
 		const weight = record?.weight ?? 100;
 		candidates.push({
 			uplink: {
 				identity,
 				ifname,
-				mark: applied?.mark ?? deps.markForIdentity(identity),
+				mark: deps.markForIdentity(identity),
 				selectable: weight > 0,
 				weight,
 			},
@@ -206,9 +223,7 @@ function collectUplinkCandidates(
 		});
 	}
 	return {
-		candidates: resolveMarkCollisions(candidates, appliedUplinks).sort((a, b) =>
-			a.uplink.ifname.localeCompare(b.uplink.ifname),
-		),
+		candidates,
 		identityPending,
 	};
 }
@@ -218,12 +233,20 @@ function resolveMarkCollisions(
 	appliedUplinks: readonly SteeringUplink[],
 ): UplinkCandidate[] {
 	candidates.sort((a, b) => a.uplink.identity.localeCompare(b.uplink.identity));
+	const marked = candidates.map((candidate) => {
+		const applied = appliedUplinks.find(
+			(uplink) => uplink.identity === candidate.uplink.identity,
+		);
+		return applied === undefined
+			? candidate
+			: { ...candidate, uplink: { ...candidate.uplink, mark: applied.mark } };
+	});
 	// Departing marks stay reserved until the applier retires their old flows.
 	const owners = new Map(appliedUplinks.map((uplink) => [uplink.mark, uplink]));
-	for (const { uplink } of candidates) {
+	for (const { uplink } of marked) {
 		if (!owners.has(uplink.mark)) owners.set(uplink.mark, uplink);
 	}
-	return candidates.map((candidate) => {
+	return marked.map((candidate) => {
 		const { uplink } = candidate;
 		const owner = owners.get(uplink.mark);
 		if (owner?.identity === uplink.identity) return candidate;

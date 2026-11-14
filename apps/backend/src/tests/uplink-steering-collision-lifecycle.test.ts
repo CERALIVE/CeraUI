@@ -66,6 +66,7 @@ function lifecycle() {
 	});
 	const deps: SteeringStateBuilderDeps = {
 		netifReady: () => true,
+		discoverRoutes: async () => [],
 		zonesReady: () => true,
 		identityCovered: () => true,
 		identityDeadlineExpired: () => false,

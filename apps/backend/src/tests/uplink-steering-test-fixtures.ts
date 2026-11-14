@@ -13,7 +13,11 @@ import {
 export async function readReadySteeringState(
 	deps: Omit<
 		SteeringStateBuilderDeps,
-		"netifReady" | "zonesReady" | "identityCovered" | "identityDeadlineExpired"
+		| "netifReady"
+		| "zonesReady"
+		| "identityCovered"
+		| "identityDeadlineExpired"
+		| "discoverRoutes"
 	> &
 		Partial<SteeringStateBuilderDeps>,
 	context?: SteeringReadinessContext,
@@ -24,6 +28,7 @@ export async function readReadySteeringState(
 			zonesReady: () => true,
 			identityCovered: () => true,
 			identityDeadlineExpired: () => false,
+			discoverRoutes: async () => [],
 			...deps,
 		},
 		context,

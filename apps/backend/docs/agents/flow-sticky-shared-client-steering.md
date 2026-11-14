@@ -36,6 +36,16 @@ probing; the same identity set produces the same cold-start assignment across
 input order and fresh processes. Non-colliding marks remain unchanged. The
 shaping consumer uses the same applied ownership when reading desired marks.
 
+**A backend restart adopts live kernel ownership before route planning.** Once
+readiness is satisfied, the builder inventories the existing priority-110 mark
+rules and their table interfaces. Matching current interfaces retain those marks;
+disappeared interfaces keep their marks reserved until the applier retires their
+old support and conntrack entries. A restart therefore preserves a warm collision
+assignment, including duplicate-address modems, rather than swapping ownership
+through a new cold allocation. With no live kernel ownership, allocation remains
+the deterministic cold-start rule above. Custom builder compositions supply
+`discoverRoutes` from the same route inventory used by their applier.
+
 **Startup readiness preserves recovered sharing.** The first OS netif snapshot
 must exist before planning, including when it is empty. A snapshot with no
 `wlan*` interface needs no Wi-Fi discovery; otherwise a completed Wi-Fi device

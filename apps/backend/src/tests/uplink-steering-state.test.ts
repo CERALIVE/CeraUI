@@ -71,6 +71,7 @@ function harness(
 	const planned: UplinkRouteCandidate[] = [];
 	return {
 		netifReady: () => true,
+		discoverRoutes: async () => [],
 		zonesReady: () => true,
 		identityCovered: () => true,
 		identityDeadlineExpired: () => false,
