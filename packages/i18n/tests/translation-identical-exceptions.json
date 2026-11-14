@@ -4,6 +4,26 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Literal example DNS hostname for the provider-host input; no prose to translate."
 	},
+	"devtools.cookies": {
+		"value": "Cookies",
+		"locales": ["de"],
+		"reason": "Cookie is the standard German loanword (Duden) and the label German browsers use for this storage; no German alternative is in use."
+	},
+	"devtools.downlink": {
+		"value": "Downlink",
+		"locales": ["de"],
+		"reason": "Network Information API field name; de network.wifiMode.confirm.dropsUplinkBody keeps its pair term untranslated (\"WLAN nicht mehr als Uplink\")."
+	},
+	"devtools.info": {
+		"value": "Info",
+		"locales": ["de"],
+		"reason": "Toast level name beside de devtools.success \"Erfolg\" and devtools.warn \"Warnung\"; Info is standard German (Duden)."
+	},
+	"devtools.log": {
+		"value": "Log",
+		"locales": ["de"],
+		"reason": "Labels the console.log test button; de advanced.downloadDeviceLog reads \"CeraLive-Logdatei herunterladen\"."
+	},
 	"devtools.mbps": {
 		"value": "Mbps",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
@@ -14,10 +34,65 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR"],
 		"reason": "Millisecond unit abbreviation for numeric duration readings."
 	},
+	"devtools.offline": {
+		"value": "Offline",
+		"locales": ["de"],
+		"reason": "de devtools.screenshotUtilityDescription says \"Offline-Modus\"; offline is a standard German adjective."
+	},
+	"devtools.online": {
+		"value": "Online",
+		"locales": ["de"],
+		"reason": "de devtools.onlineStatus reads \"Online-Status\"; online is a standard German adjective."
+	},
+	"devtools.phase": {
+		"value": "Phase",
+		"locales": ["de"],
+		"reason": "Phase is the German word; de devtools.demoInfo2 reads \"Zeigt alle Phasen\"."
+	},
 	"devtools.rtt": {
 		"value": "RTT",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Round-trip-time statistic acronym used by the network diagnostics."
+	},
+	"devtools.status": {
+		"value": "Status",
+		"locales": ["de"],
+		"reason": "de devtools.onlineStatus reads \"Online-Status\" and live.unconfirmedStream.title \"Stream-Status nicht bestätigt\"."
+	},
+	"general.offline": {
+		"value": "Offline",
+		"locales": ["de"],
+		"reason": "de devtools.screenshotUtilityDescription says \"Offline-Modus\"; offline is a standard German adjective."
+	},
+	"general.pageTitle": {
+		"value": "Dashboard",
+		"locales": ["de"],
+		"reason": "de settings.dialogs.getYourKey reads \"Cloud-Dashboard öffnen\"."
+	},
+	"general.port": {
+		"value": "Port",
+		"locales": ["de"],
+		"reason": "de devtools.socketPort reads \"Socket-Port\" and settings.destinationCustomHint \"Adresse und Port\"."
+	},
+	"general.status": {
+		"value": "Status",
+		"locales": ["de"],
+		"reason": "de devtools.onlineStatus reads \"Online-Status\" and live.unconfirmedStream.title \"Stream-Status nicht bestätigt\"."
+	},
+	"general.streaming": {
+		"value": "Streaming",
+		"locales": ["de"],
+		"reason": "de hud.announceStreamStarted reads \"Streaming gestartet\" and general.pleaseConfigureServer says \"mit dem Streaming zu beginnen\"."
+	},
+	"general.updates": {
+		"value": "Updates",
+		"locales": ["de"],
+		"reason": "de general.checkForUpdates reads \"Nach Updates suchen\"."
+	},
+	"hotspotConfigurator.hotspot.name": {
+		"value": "Name",
+		"locales": ["de"],
+		"reason": "de hotspotConfigurator.validation.nameMinLength reads \"Der Name muss mindestens 3 Zeichen lang sein\"."
 	},
 	"hotspotConfigurator.hotspot.placeholderName": {
 		"value": "CeraLive",
@@ -26,28 +101,78 @@
 	},
 	"hud.bitrate": {
 		"value": "Bitrate",
-		"locales": ["es"],
-		"reason": "es live.adjustBitrate reads \"Ajustar bitrate\", preserving the owner's bitrate terminology."
+		"locales": ["de", "es"],
+		"reason": "es live.adjustBitrate reads \"Ajustar bitrate\", preserving the owner's bitrate terminology. de general.maxBitrate reads \"Maximale Bitrate\" and live.adjustBitrate \"Bitrate anpassen\"."
+	},
+	"hud.encoder": {
+		"value": "Encoder",
+		"locales": ["de"],
+		"reason": "de hud.healthExplainDead reads \"Encoder-Prozess läuft nicht\" and live.onboarding.steps.server.hint \"Richte den Encoder ... aus\"."
+	},
+	"hud.healthFrames": {
+		"value": "Frames",
+		"locales": ["de"],
+		"reason": "de settings.deviceHealth.encoder.framesAdvancing reads \"Frames laufen\"."
 	},
 	"hud.healthSrt": {
 		"value": "SRT",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Secure Reliable Transport protocol identifier used by transport diagnostics."
 	},
+	"hud.live": {
+		"value": "Live",
+		"locales": ["de"],
+		"reason": "de navigation.live reads \"Live\" and general.liveMetrics \"Live-Metriken\"."
+	},
+	"hud.offline": {
+		"value": "Offline",
+		"locales": ["de"],
+		"reason": "de devtools.screenshotUtilityDescription says \"Offline-Modus\"; offline is a standard German adjective."
+	},
+	"hud.status": {
+		"value": "Status",
+		"locales": ["de"],
+		"reason": "de devtools.onlineStatus reads \"Online-Status\" and live.unconfirmedStream.title \"Stream-Status nicht bestätigt\"."
+	},
+	"hud.streaming": {
+		"value": "Streaming",
+		"locales": ["de"],
+		"reason": "de hud.announceStreamStarted reads \"Streaming gestartet\" and general.pleaseConfigureServer says \"mit dem Streaming zu beginnen\"."
+	},
+	"live.audioCard.title": {
+		"value": "Audio",
+		"locales": ["de"],
+		"reason": "de audio.sources.noAudio reads \"Kein Audio\" and general.audioCodec \"Audio-Codec\"."
+	},
+	"live.education.field.audio.title": {
+		"value": "Audio",
+		"locales": ["de"],
+		"reason": "de audio.sources.noAudio reads \"Kein Audio\" and general.audioCodec \"Audio-Codec\"."
+	},
 	"live.encoder.accelerated": {
 		"value": "Hardware",
-		"locales": ["es"],
-		"reason": "es live.education.field.codec.body uses \"codificador por hardware\", retaining the engineering term in translated prose."
+		"locales": ["de", "es"],
+		"reason": "es live.education.field.codec.body uses \"codificador por hardware\", retaining the engineering term in translated prose. de general.hardwareSensors reads \"Hardware-Sensoren\"."
 	},
 	"live.encoder.passthrough.title": {
 		"value": "Passthrough",
-		"locales": ["es"],
-		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\""
+		"locales": ["de", "es"],
+		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\" de live.encoder.route.reason.passthrough-off reads \"Passthrough ist in den gespeicherten Einstellungen ausgeschaltet.\""
+	},
+	"live.encoder.probedCapAudio": {
+		"value": "Audio",
+		"locales": ["de"],
+		"reason": "de audio.sources.noAudio reads \"Kein Audio\" and general.audioCodec \"Audio-Codec\"."
 	},
 	"live.encoder.software": {
 		"value": "Software",
-		"locales": ["es"],
-		"reason": "es devtools.newVersionDesc uses \"actualización de software\", retaining the engineering term in translated prose."
+		"locales": ["de", "es"],
+		"reason": "es devtools.newVersionDesc uses \"actualización de software\", retaining the engineering term in translated prose. de devtools.newVersionDesc reads \"Ein Software-Update ist zur Installation bereit.\""
+	},
+	"live.goLive.gate.engine": {
+		"value": "Encoder",
+		"locales": ["de"],
+		"reason": "de hud.healthExplainDead reads \"Encoder-Prozess läuft nicht\" and live.onboarding.steps.server.hint \"Richte den Encoder ... aus\"."
 	},
 	"live.ingest.nak": {
 		"value": "NAK",
@@ -58,6 +183,16 @@
 		"value": "RTT",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Round-trip-time statistic acronym used by the network diagnostics."
+	},
+	"live.ingest.trend": {
+		"value": "Trend",
+		"locales": ["de"],
+		"reason": "de live.ingest.trendLabel reads \"RTT-Trend für {iface}\"."
+	},
+	"live.inputPicker.groups.audio": {
+		"value": "Audio",
+		"locales": ["de"],
+		"reason": "de audio.sources.noAudio reads \"Kein Audio\" and general.audioCodec \"Audio-Codec\"."
 	},
 	"live.inputPicker.groups.camlink": {
 		"value": "Cam Link",
@@ -73,6 +208,11 @@
 		"value": "UVC · MJPEG",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "USB Video Class and Motion JPEG standard identifiers separated by a display dot."
+	},
+	"live.inputPicker.groups.test": {
+		"value": "Test",
+		"locales": ["de"],
+		"reason": "Test is the German word; de devtools.consoleTesting reads \"Konsolen-Test\"."
 	},
 	"live.inputPicker.groups.usb": {
 		"value": "USB",
@@ -94,10 +234,15 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "USB Video Class carrying the H.265 video coding standard."
 	},
+	"live.modes.streaming": {
+		"value": "Streaming",
+		"locales": ["de"],
+		"reason": "de hud.announceStreamStarted reads \"Streaming gestartet\" and general.pleaseConfigureServer says \"mit dem Streaming zu beginnen\"."
+	},
 	"live.passthrough.activeChip": {
 		"value": "Passthrough",
-		"locales": ["es"],
-		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\""
+		"locales": ["de", "es"],
+		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\" de live.encoder.route.reason.passthrough-off reads \"Passthrough ist in den gespeicherten Einstellungen ausgeschaltet.\""
 	},
 	"live.preview.encode.activeHardware": {
 		"value": "{element} — hardware",
@@ -124,6 +269,21 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "WebRTC browser communication API name identifying the preview tier."
 	},
+	"live.preview.unavailable.engineOffline.title": {
+		"value": "Engine offline",
+		"locales": ["de"],
+		"reason": "Matches de sibling live.preview.unavailable.engineStarting.title \"Engine startet\"; offline is standard German (devtools.screenshotUtilityDescription \"Offline-Modus\")."
+	},
+	"live.source.activeLive": {
+		"value": "Live",
+		"locales": ["de"],
+		"reason": "de navigation.live reads \"Live\" and general.liveMetrics \"Live-Metriken\"."
+	},
+	"live.streamingActive": {
+		"value": "Streaming",
+		"locales": ["de"],
+		"reason": "de hud.announceStreamStarted reads \"Streaming gestartet\" and general.pleaseConfigureServer says \"mit dem Streaming zu beginnen\"."
+	},
 	"live.title": {
 		"value": "Live",
 		"locales": ["de", "es", "fr", "pt-BR"],
@@ -134,6 +294,11 @@
 		"locales": ["de", "es", "fr", "pt-BR"],
 		"reason": "Live is the product screen name shared by navigation.live and live.title in each listed locale catalog."
 	},
+	"navigation.streaming": {
+		"value": "Streaming",
+		"locales": ["de"],
+		"reason": "de hud.announceStreamStarted reads \"Streaming gestartet\" and general.pleaseConfigureServer says \"mit dem Streaming zu beginnen\"."
+	},
 	"network.bluetooth.enableLabel": {
 		"value": "Bluetooth",
 		"locales": ["de", "es", "fr", "ja", "pt-BR"],
@@ -143,6 +308,26 @@
 		"value": "Bluetooth",
 		"locales": ["de", "es", "fr", "ja", "pt-BR"],
 		"reason": "Bluetooth wireless standard and trademark; only the listed catalogs retain this spelling."
+	},
+	"network.cellular.details.toggle": {
+		"value": "Details",
+		"locales": ["de"],
+		"reason": "de hud.expandDetails reads \"Details anzeigen\"."
+	},
+	"network.cellular.roaming.badge": {
+		"value": "Roaming",
+		"locales": ["de"],
+		"reason": "de network.cellular.rejection.roamingNotAllowed reads \"Roaming ist hier für diese SIM nicht erlaubt.\""
+	},
+	"network.ethRole.uplink": {
+		"value": "Uplink",
+		"locales": ["de"],
+		"reason": "de network.wifiMode.confirm.dropsUplinkBody says \"WLAN nicht mehr als Uplink\" and network.cellular.class.routerEthernetHint \"Ethernet-Uplink\"."
+	},
+	"network.hotspot.name": {
+		"value": "Name",
+		"locales": ["de"],
+		"reason": "de hotspotConfigurator.validation.nameMinLength reads \"Der Name muss mindestens 3 Zeichen lang sein\"."
 	},
 	"network.modem.apn": {
 		"value": "APN",
@@ -179,10 +364,15 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Radio-generation and frequency interpolations only, separated by one space."
 	},
+	"network.modem.detail.band": {
+		"value": "Band",
+		"locales": ["de"],
+		"reason": "de network.modem.bands.any reads \"Beliebiges Band\"."
+	},
 	"network.modem.detail.firmware": {
 		"value": "Firmware",
-		"locales": ["es"],
-		"reason": "es network.modem.bands.description ends \"modelo y firmware\", retaining the engineering term in translated prose."
+		"locales": ["de", "es"],
+		"reason": "es network.modem.bands.description ends \"modelo y firmware\", retaining the engineering term in translated prose. de network.routerCellular.netMode.refused reads \"Diese Firmware verweigert die Auskunft ...\"."
 	},
 	"network.modem.detail.rsrp": {
 		"value": "RSRP",
@@ -224,6 +414,11 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "5G New Radio cellular standard identifier."
 	},
+	"network.modem.sections.signal.title": {
+		"value": "Signal",
+		"locales": ["de"],
+		"reason": "de hud.noSignal reads \"Kein Signal\"."
+	},
 	"network.modem.sections.sim.title": {
 		"value": "SIM",
 		"locales": ["de", "es", "fr", "ja", "ko", "pt-BR"],
@@ -259,15 +454,20 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "3GPP Physical Cell Identity field acronym in cellular diagnostics, not a prose label."
 	},
+	"network.routerCellular.detail.roaming": {
+		"value": "Roaming",
+		"locales": ["de"],
+		"reason": "de network.cellular.rejection.roamingNotAllowed reads \"Roaming ist hier für diese SIM nicht erlaubt.\""
+	},
 	"network.routerCellular.firmwareLabel": {
 		"value": "Firmware",
-		"locales": ["es"],
-		"reason": "es network.modem.bands.description ends \"modelo y firmware\", retaining the engineering term in translated prose."
+		"locales": ["de", "es"],
+		"reason": "es network.modem.bands.description ends \"modelo y firmware\", retaining the engineering term in translated prose. de network.routerCellular.netMode.refused reads \"Diese Firmware verweigert die Auskunft ...\"."
 	},
 	"network.routerCellular.hardwareLabel": {
 		"value": "Hardware",
-		"locales": ["es"],
-		"reason": "es live.education.field.codec.body uses \"codificador por hardware\", retaining the engineering term in translated prose."
+		"locales": ["de", "es"],
+		"reason": "es live.education.field.codec.body uses \"codificador por hardware\", retaining the engineering term in translated prose. de general.hardwareSensors reads \"Hardware-Sensoren\"."
 	},
 	"network.routerCellular.iccidLabel": {
 		"value": "ICCID",
@@ -304,6 +504,11 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Signal-to-noise ratio measurement acronym."
 	},
+	"network.routerCellular.signalBars": {
+		"value": "Signal {bars}/{max}",
+		"locales": ["de"],
+		"reason": "de hud.noSignal reads \"Kein Signal\"; the {bars}/{max} tokens carry no prose."
+	},
 	"network.routerCellular.subnet.addressPlaceholder": {
 		"value": "192.168.9.1",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
@@ -329,6 +534,16 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Linux HTB and fq_codel queue-discipline identifiers, joined by a plus sign."
 	},
+	"network.sharing.uplinkDetail.disclosure": {
+		"value": "Details",
+		"locales": ["de"],
+		"reason": "de hud.expandDetails reads \"Details anzeigen\"."
+	},
+	"network.status.details": {
+		"value": "Details",
+		"locales": ["de"],
+		"reason": "de hud.expandDetails reads \"Details anzeigen\"."
+	},
 	"network.summary.totalBandwidth": {
 		"value": "{total} Kbps",
 		"locales": ["de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
@@ -353,6 +568,11 @@
 		"value": "Ethernet",
 		"locales": ["de", "es", "fr", "pt-BR"],
 		"reason": "IEEE 802.3 Ethernet standard name; catalogs using localized spellings remain outside this entry."
+	},
+	"network.view.hotspot": {
+		"value": "Hotspot",
+		"locales": ["de"],
+		"reason": "de hotspotConfigurator.dialog.configHotspot reads \"Hotspot konfigurieren\"."
 	},
 	"network.view.hotspotClientRate": {
 		"value": "{rate} Mbps",
@@ -444,6 +664,16 @@
 		"locales": ["de", "es", "fr", "pt-BR"],
 		"reason": "IEEE 802.3 Ethernet standard name; catalogs using localized spellings remain outside this entry."
 	},
+	"networking.types.hotspot": {
+		"value": "Hotspot",
+		"locales": ["de"],
+		"reason": "de hotspotConfigurator.dialog.configHotspot reads \"Hotspot konfigurieren\"."
+	},
+	"networking.types.modem": {
+		"value": "Modem",
+		"locales": ["de"],
+		"reason": "de live.startFailure.class.modem_transition_active reads \"Ein Modem wechselt gerade den USB-Modus\"."
+	},
 	"networking.types.usb": {
 		"value": "USB",
 		"locales": ["de", "es", "fr", "ja", "ko", "pt-BR", "zh"],
@@ -458,6 +688,16 @@
 		"value": "−{n} min",
 		"locales": ["es", "fr", "pt-BR"],
 		"reason": "Numeric elapsed-minutes axis notation; only es, fr, and pt-BR currently retain this minus/unit format."
+	},
+	"settings.deviceHealth.cores.engineLabel": {
+		"value": "Engine",
+		"locales": ["de"],
+		"reason": "de live.preview.unavailable.engineStarting.title reads \"Engine startet\"."
+	},
+	"settings.deviceHealth.nowStrip.encoder": {
+		"value": "Encoder",
+		"locales": ["de"],
+		"reason": "de hud.healthExplainDead reads \"Encoder-Prozess läuft nicht\" and live.onboarding.steps.server.hint \"Richte den Encoder ... aus\"."
 	},
 	"settings.deviceStats.gpu": {
 		"value": "GPU",
@@ -481,8 +721,18 @@
 	},
 	"settings.index.groups.software": {
 		"value": "Software",
-		"locales": ["es"],
-		"reason": "es devtools.newVersionDesc uses \"actualización de software\", retaining the engineering term in translated prose."
+		"locales": ["de", "es"],
+		"reason": "es devtools.newVersionDesc uses \"actualización de software\", retaining the engineering term in translated prose. de devtools.newVersionDesc reads \"Ein Software-Update ist zur Installation bereit.\""
+	},
+	"settings.index.groups.streaming": {
+		"value": "Streaming",
+		"locales": ["de"],
+		"reason": "de hud.announceStreamStarted reads \"Streaming gestartet\" and general.pleaseConfigureServer says \"mit dem Streaming zu beginnen\"."
+	},
+	"settings.index.groups.system": {
+		"value": "System",
+		"locales": ["de"],
+		"reason": "de notifications.updateSlotsCurrent reads \"Beide System-Slots sind aktuell.\" and advanced.downloadSystemLog \"System-Logdatei herunterladen\"."
 	},
 	"settings.onDeviceDisplay.profiles.eink": {
 		"value": "E-ink",
@@ -493,6 +743,11 @@
 		"value": "LCD",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Liquid Crystal Display panel technology acronym."
+	},
+	"settings.optional": {
+		"value": "optional",
+		"locales": ["de"],
+		"reason": "optional is the German adjective; de settings.pairing.authorizationHint starts \"Optional\"."
 	},
 	"settings.sources.camlink": {
 		"value": "Cam Link 4K",
@@ -514,6 +769,11 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Linux Video4Linux2 API and Motion JPEG coding-standard identifiers."
 	},
+	"settings.transportKind": {
+		"value": "Transport",
+		"locales": ["de"],
+		"reason": "de settings.audioCodecUnsupportedTransport reads \"vom aktuellen Transport nicht unterstützt\"."
+	},
 	"settings.transportKindBadge.rist": {
 		"value": "RIST",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
@@ -523,6 +783,11 @@
 		"value": "SRT",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Secure Reliable Transport protocol identifier used by transport diagnostics."
+	},
+	"settings.updates.channel.beta": {
+		"value": "Beta",
+		"locales": ["de"],
+		"reason": "de settings.updates.channel.hint reads \"Beta erhält neue Systemabbilder zuerst.\""
 	},
 	"settings.updates.checkFailed.whatFailed": {
 		"value": "{ifname} {family}: {host}, {state}",
@@ -546,13 +811,33 @@
 	},
 	"settings.updates.kernel.title": {
 		"value": "Kernel",
-		"locales": ["es"],
-		"reason": "es network.unclaimedAdapters.titleOne reads \"Adaptador detectado: sin controlador en este kernel\"."
+		"locales": ["de", "es"],
+		"reason": "es network.unclaimedAdapters.titleOne reads \"Adaptador detectado: sin controlador en este kernel\". de network.unclaimedAdapters.titleOne reads \"kein Treiber in diesem Kernel\"."
+	},
+	"settings.updates.slots.slot": {
+		"value": "Slot {letter}",
+		"locales": ["de"],
+		"reason": "de settings.deviceStats.bootSlot reads \"Boot-Slot\" and notifications.updateSlotsCurrent \"System-Slots\"."
+	},
+	"settings.updates.system.status": {
+		"value": "Status",
+		"locales": ["de"],
+		"reason": "de devtools.onlineStatus reads \"Online-Status\" and live.unconfirmedStream.title \"Stream-Status nicht bestätigt\"."
 	},
 	"settings.validateStages.dns": {
 		"value": "DNS",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Domain Name System protocol acronym used for endpoint validation."
+	},
+	"settings.videoCodec": {
+		"value": "Codec",
+		"locales": ["de"],
+		"reason": "de live.education.field.codec.title reads \"Video-Codec\" and general.audioCodec \"Audio-Codec\"."
+	},
+	"theme.system": {
+		"value": "System",
+		"locales": ["de"],
+		"reason": "de notifications.updateSlotsCurrent reads \"Beide System-Slots sind aktuell.\" and advanced.downloadSystemLog \"System-Logdatei herunterladen\"."
 	},
 	"units.kbps": {
 		"value": "kbps",
@@ -588,5 +873,10 @@
 		"value": "********",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Password mask characters, rather than a human-language example."
+	},
+	"wifiStatus.hotspot": {
+		"value": "Hotspot",
+		"locales": ["de"],
+		"reason": "de hotspotConfigurator.dialog.configHotspot reads \"Hotspot konfigurieren\"."
 	}
 }
