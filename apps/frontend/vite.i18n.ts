@@ -139,3 +139,37 @@ export function devOnlyI18nNamespacePlugin(isProduction: boolean): {
 		},
 	};
 }
+
+/**
+ * Namespaces no federated dialog (encoder, audio, server) reads.
+ *
+ * The federation build inlines its whole catalog (debt id
+ * `TD-federation-i18n-catalog-size`), so every key added to the SPA would also
+ * ship in each signed bundle. These namespaces belong to the device-only System
+ * Logs view; emptying their barrels keeps that copy out of the federation graph.
+ */
+export const FEDERATION_EXCLUDED_NAMESPACES: readonly string[] = [
+	"systemLogs",
+	"timeline",
+];
+
+/** Whether a module id is a barrel for a namespace the federation build omits. */
+export function isFederationExcludedNamespaceBarrel(id: string): boolean {
+	const barrel = NAMESPACE_BARREL.exec(id);
+	return (
+		barrel !== null && FEDERATION_EXCLUDED_NAMESPACES.includes(barrel[1] ?? "")
+	);
+}
+
+/** Replaces the federation-excluded barrels with an empty one. Federation config only. */
+export function federationExcludedI18nNamespacePlugin(): {
+	name: string;
+	load(id: string): string | null;
+} {
+	return {
+		name: "ceraui:federation-excluded-i18n-namespaces",
+		load(id: string): string | null {
+			return isFederationExcludedNamespaceBarrel(id) ? EMPTY_BARREL : null;
+		},
+	};
+}

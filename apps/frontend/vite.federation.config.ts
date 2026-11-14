@@ -13,6 +13,7 @@ import {
 	federationI18nPlugin,
 } from "./vite.federation-i18n.ts";
 import {
+	federationExcludedI18nNamespacePlugin,
 	PARAGLIDE_PROJECT,
 	PARAGLIDE_STRATEGY,
 } from "./vite.i18n.ts";
@@ -54,6 +55,7 @@ export default defineConfig({
 		// The entire catalog is static here. Grouping functions by locale compresses
 		// that graph better than per-message modules without omitting any messages.
 		federationI18nPlugin(),
+		federationExcludedI18nNamespacePlugin(),
 		paraglideVitePlugin({
 			project: PARAGLIDE_PROJECT,
 			outdir: FEDERATION_PARAGLIDE_OUTDIR,

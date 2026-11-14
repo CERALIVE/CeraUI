@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import {
 	BOOT_NAMESPACES,
 	DESTINATION_NAMESPACES,
+	DIALOG_NAMESPACES,
 	orphanNamespaces,
 } from "$lib/i18n/namespace-activation";
 
@@ -25,6 +26,7 @@ describe("i18n namespace activation", () => {
 		const referenced = [
 			...BOOT_NAMESPACES,
 			...Object.values(DESTINATION_NAMESPACES).flat(),
+			...Object.values(DIALOG_NAMESPACES).flat(),
 		];
 		expect(referenced.filter((ns) => !known.has(ns))).toEqual([]);
 	});
@@ -61,6 +63,14 @@ describe("i18n namespace activation", () => {
 			"updatingOverlay",
 		]) {
 			expect(BOOT_NAMESPACES).toContain(ns);
+		}
+	});
+
+	it("defers the System Logs namespaces to the dialog that reads them", () => {
+		expect(DIALOG_NAMESPACES.systemLogs).toEqual(["systemLogs", "timeline"]);
+		for (const ns of ["systemLogs", "timeline"]) {
+			expect(BOOT_NAMESPACES).not.toContain(ns);
+			expect(Object.values(DESTINATION_NAMESPACES).flat()).not.toContain(ns);
 		}
 	});
 
