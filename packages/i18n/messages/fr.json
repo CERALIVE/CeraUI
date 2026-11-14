@@ -2464,6 +2464,7 @@
 	"wifiSelector.blocked.wpa3Body": "Cet adaptateur ne peut pas rejoindre les réseaux WPA3. Choisissez un réseau qui propose aussi le WPA2.",
 	"wifiSelector.blocked.wpa3Title": "Réseau WPA3 uniquement",
 	"wifiSelector.button.connect": "Connecter",
+	"wifiSelector.button.changePassword": "Modifier le mot de passe",
 	"wifiSelector.button.disconnect": "Déconnecter",
 	"wifiSelector.button.forget": "Oublier",
 	"wifiSelector.button.scan": "Balayer",

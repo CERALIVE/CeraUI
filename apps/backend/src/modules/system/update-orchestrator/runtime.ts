@@ -60,6 +60,7 @@ import {
 	createSystemCellularConsentRead,
 	loadUpdateSettings,
 } from "../update-settings.ts";
+import { UPDATE_INVENTORY_NMCLI_FIELDS } from "../update-transport/candidate-inventory.ts";
 import { discoverCandidates } from "../update-transport/core.ts";
 import { defaultUpdateTransportDeps } from "../update-transport/executor.ts";
 import { admitStreamStart, onStreamStart } from "./admission.ts";
@@ -371,7 +372,7 @@ async function defaultOnlyMeteredCandidateExists(): Promise<boolean> {
 			"nmcli",
 			"-t",
 			"-f",
-			"GENERAL.DEVICE,GENERAL.TYPE,GENERAL.STATE,GENERAL.METERED",
+			UPDATE_INVENTORY_NMCLI_FIELDS,
 			"device",
 			"show",
 		]);

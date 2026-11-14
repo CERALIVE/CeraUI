@@ -636,27 +636,6 @@ async function wifiForget(uuid: ConnectionUUID) {
 	}
 }
 
-/*
-  A failed join can leave profile effects unresolved. Neither timestamp zero
-  nor a returned UUID proves exclusive ownership, so this legacy cleanup
-  entrypoint retains profiles. Explicit Forget remains the deletion owner.
-*/
-export type WifiFailedConnsDeps = {
-	listConns: (fields: string) => Promise<string[] | undefined>;
-	deleteConn: (uuid: ConnectionUUID) => Promise<boolean>;
-};
-
-const defaultFailedConnsDeps: WifiFailedConnsDeps = {
-	listConns: nmConnsGet,
-	deleteConn: nmConnDelete,
-};
-
-export async function wifiDeleteFailedConns(
-	_deps: WifiFailedConnsDeps = defaultFailedConnsDeps,
-) {
-	logger.warn("Wi-Fi join cleanup withheld: profile ownership is unconfirmed");
-}
-
 export type NmcliRun = {
 	readonly stdout: string;
 	readonly stderr: string;
@@ -875,16 +854,29 @@ async function runWifiNew(
 	senderId: ReturnType<typeof getSocketSenderId>,
 	savedUuid?: ConnectionUUID,
 ) {
+	const security = (msg.security ?? "").trim().split(/\s+/);
+	// Both the requested network and the stored profile must support PSK
+	// before a same-SSID UUID grants authority to replace its secret.
+	const keyMgmt =
+		plan.mode === "nm-auto" &&
+		savedUuid &&
+		msg.password &&
+		security.some((token) => /^WPA[12]?(?:-PERSONAL)?$/i.test(token)) &&
+		security.every((token) => /^(?:WPA[123]?(?:-PERSONAL)?|SAE)$/i.test(token))
+			? (
+					await nmConnGetFields(savedUuid, [
+						"802-11-wireless-security.key-mgmt",
+					] as const)
+				)?.[0]
+			: undefined;
 	const outcome =
 		plan.mode === "sae"
 			? await joinViaSaeProfile(plan.addArgs)
-			: savedUuid && msg.password
+			: savedUuid && msg.password && keyMgmt === "wpa-psk"
 				? await retrySavedJoin(savedUuid, msg.password, plan.connectArgs)
 				: await joinViaNmAuto(plan.connectArgs);
 
 	if (!outcome.ok) {
-		await wifiDeleteFailedConns();
-
 		conn.send(
 			buildMsg(
 				"wifi",

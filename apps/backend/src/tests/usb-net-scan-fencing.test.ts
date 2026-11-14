@@ -23,10 +23,14 @@ import { resolveModemPhysicalIdentity } from "../modules/modems/physical-identit
 import {
 	getRouterCellularMarker,
 	getUsbPhysicalDescriptor,
+	identityDeadlineExpired,
+	notePublishedNetifSnapshot,
+	onUsbNetScanCommitted,
 	type RouterCellularScanDeps,
 	refreshUsbNetMarkers,
 	resetUsbNetMarkers,
 	scanUsbNetMarkers,
+	usbNetScanCovers,
 } from "../modules/network/router-cellular-scan.ts";
 import type { UsbNetDevice } from "../modules/network/usb-net-classifier.ts";
 import {
@@ -183,6 +187,33 @@ describe("refreshUsbNetMarkers — generation-fenced single flight", () => {
 	// `modems` wire projection and gave its roster a synthetic row.
 	afterEach(() => {
 		resetUsbNetMarkers();
+	});
+
+	it("covers completed reads without a USB descriptor and publishes coverage changes once", async () => {
+		const empty = fixture({});
+		let commits = 0;
+		const unsubscribe = onUsbNetScanCommitted(() => {
+			commits++;
+		});
+		try {
+			expect(usbNetScanCovers("eth0")).toBe(false);
+			expect(await refreshUsbNetMarkers(["eth0"], empty.deps)).toBe(true);
+			expect(usbNetScanCovers("eth0")).toBe(true);
+			expect(await refreshUsbNetMarkers(["eth0"], empty.deps)).toBe(false);
+			expect(commits).toBe(1);
+		} finally {
+			unsubscribe();
+		}
+	});
+
+	it("shares a publication deadline and resets it when the name disappears", () => {
+		notePublishedNetifSnapshot(["wwan0"], 500);
+		notePublishedNetifSnapshot(["wwan0"], 2_000);
+		expect(identityDeadlineExpired("wwan0", 15_499)).toBe(false);
+		expect(identityDeadlineExpired("wwan0", 15_500)).toBe(true);
+		notePublishedNetifSnapshot([], 16_000);
+		notePublishedNetifSnapshot(["wwan0"], 17_000);
+		expect(identityDeadlineExpired("wwan0", 17_000)).toBe(false);
 	});
 
 	it("drops an OLDER sweep that completes after a NEWER one", async () => {
