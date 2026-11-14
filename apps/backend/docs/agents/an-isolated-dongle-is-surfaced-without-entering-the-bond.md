@@ -1027,6 +1027,16 @@ addressless unsettled rows retry missing classification. The settlement listener
 is installed once on the first publication, avoiding import-time calls through
 the network/scan/registry dependency cycle.
 
+Each USB descriptor reading records the name's last observed removal epoch from
+the producer's presence counter. A monitor down/removal event, including one
+before first publication, or a poll that drops an existing entry invalidates its
+pending reading. At commit, a reading with a changed epoch loses its descriptor,
+markers and coverage for that name and a fresh scan is requested; other names can
+still commit. Previously committed snapshots retain their existing lifecycle.
+First publication and monitor creation adopt the covering reading without
+invalidating it. `tests/usb-net-incarnation.test.ts` exercises these paths with
+parked reads and both USB and non-USB replacements.
+
 The scope is positive USB evidence available at first addressed publication.
 An unreadable, missing, rejected or still-pending bus link keeps the previous
 behavior: provisional interface-name identity, then physical identity when

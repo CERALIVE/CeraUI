@@ -81,6 +81,7 @@ import {
 	getRouterCellularMarker,
 	getRouterCellularMarkers,
 	identityDeadlineExpired,
+	invalidateUsbNetReading,
 	notePublishedNetifSnapshot,
 	onUsbNetScanCommitted,
 	readNetdevSubsystem,
@@ -181,8 +182,10 @@ export function resetNetifSnapshotForTest(): void {
 	presenceEpoch.clear();
 }
 
-function bumpPresence(name: string): void {
-	presenceEpoch.set(name, (presenceEpoch.get(name) ?? 0) + 1);
+function bumpPresence(name: string, removed = false): void {
+	const epoch = (presenceEpoch.get(name) ?? 0) + 1;
+	presenceEpoch.set(name, epoch);
+	if (removed) invalidateUsbNetReading(name, epoch);
 }
 
 let scanSettlementInstalled = false;
@@ -696,9 +699,9 @@ export function handleNetifMonitorEvent(event: MonitorEvent): void {
 			mutated = true;
 		}
 	} else if (isNetifDownState(event.state)) {
+		bumpPresence(name, true);
 		if (netif[name]) {
 			delete netif[name];
-			bumpPresence(name);
 			mutated = true;
 		}
 	}
@@ -1091,7 +1094,7 @@ export function processIfconfigOutput(
 	netif = newInterfaces;
 	for (const name of new Set([...previousIfnames, ...Object.keys(netif)])) {
 		if (previousIfnames.has(name) !== (netif[name] !== undefined))
-			bumpPresence(name);
+			bumpPresence(name, previousIfnames.has(name));
 	}
 	netifSnapshotReady = true;
 	notePublishedNetifSnapshot(Object.keys(netif));
