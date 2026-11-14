@@ -6,8 +6,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"devtools.browser": ["de"],
 	"devtools.cookies": ["de", "es", "fr", "pt-BR"],
@@ -28,25 +27,16 @@
 	"devtools.type": ["fr"],
 	"devtools.userAgent": ["de", "fr", "pt-BR"],
 	"devtools.viewport": ["de", "es", "fr", "pt-BR"],
-	"errorBoundary.description": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
-	"errorBoundary.retry": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
-	"errorBoundary.title": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+	"errorBoundary.description": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
+	"errorBoundary.retry": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
+	"errorBoundary.title": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
 	"general.configuration": ["fr"],
 	"general.offline": ["de", "pt-BR"],
 	"general.pageTitle": ["de"],
 	"general.port": ["de", "fr"],
 	"general.status": ["de", "pt-BR"],
 	"general.streaming": ["de"],
-	"general.unknownSource": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+	"general.unknownSource": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
 	"general.updates": ["de"],
 	"hotspotConfigurator.hotspot.name": ["de"],
 	"hud.bitrate": ["de", "fr", "pt-BR"],
@@ -71,11 +61,10 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"live.encoder.accelerated": ["de", "pt-BR"],
-	"live.encoder.codecAuto": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+	"live.encoder.codecAuto": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
 	"live.encoder.codecAutoResolvedH264": [
 		"ar",
 		"de",
@@ -83,8 +72,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"live.encoder.codecAutoResolvedH265": [
 		"ar",
@@ -93,8 +81,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"live.encoder.codecH265Unavailable": [
 		"ar",
@@ -103,8 +90,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"live.encoder.passthrough.title": ["de", "fr", "pt-BR"],
 	"live.encoder.probedCapAudio": ["de", "es", "fr"],
@@ -125,8 +111,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"live.inputPicker.groups.test": ["de", "fr"],
 	"live.inputPicker.groups.unknown": [
@@ -136,8 +121,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"live.modes.label": ["fr"],
 	"live.modes.streaming": ["de"],
@@ -145,16 +129,7 @@
 	"live.preview.encode.activeHardware": ["pt-BR"],
 	"live.preview.encode.activeSoftware": ["pt-BR"],
 	"live.preview.unavailable.engineOffline.title": ["de"],
-	"live.reconfigureRequired": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
+	"live.reconfigureRequired": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
 	"live.source.activeLive": ["de"],
 	"live.source.audioQualityNegotiated": ["es", "fr", "pt-BR"],
 	"live.source.label": ["fr"],
@@ -165,8 +140,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"live.startFailure.class.engine_restarting": [
 		"ar",
@@ -175,8 +149,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"live.startFailure.class.engine_unavailable": [
 		"ar",
@@ -185,8 +158,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"live.startFailure.class.protocol_incompatible": [
 		"ar",
@@ -195,8 +167,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"live.startFailure.class.start_invalid": [
 		"ar",
@@ -205,8 +176,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"live.startFailure.class.start_timeout": [
 		"ar",
@@ -215,8 +185,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"live.streamingActive": ["de"],
 	"navigation.devtools": ["de"],
@@ -246,16 +215,7 @@
 	"network.sharing.uplinkDetail.disclosure": ["de"],
 	"network.status.details": ["de"],
 	"network.view.hotspot": ["de", "es", "fr", "pt-BR"],
-	"network.view.hotspotNoBond": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
+	"network.view.hotspotNoBond": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
 	"network.view.hotspotSwitchBody": [
 		"ar",
 		"de",
@@ -263,8 +223,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"network.view.hotspotSwitchConfirm": [
 		"ar",
@@ -273,8 +232,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"network.view.hotspotSwitchTitle": [
 		"ar",
@@ -283,8 +241,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"network.view.linkLocal": ["de", "pt-BR"],
 	"network.view.modemManufacturer": [
@@ -294,65 +251,19 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
-	"network.view.modemModel": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
-	"network.view.speed": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
-	"network.view.switchToHotspot": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
-	"network.view.switchToStation": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
-	"network.view.totalBandwidth": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
+	"network.view.modemModel": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
+	"network.view.speed": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
+	"network.view.switchToHotspot": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
+	"network.view.switchToStation": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
+	"network.view.totalBandwidth": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
 	"network.wifiMode.open": ["fr"],
 	"network.wifiMode.station": ["fr"],
 	"networking.labels.interface": ["fr", "pt-BR"],
 	"networking.types.hotspot": ["de"],
 	"networking.types.modem": ["de", "fr", "pt-BR"],
-	"notifications.appInstalled": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
+	"notifications.appInstalled": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
 	"notifications.appInstalledDescription": [
 		"ar",
 		"de",
@@ -360,19 +271,9 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
-	"notifications.appUpdated": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
+	"notifications.appUpdated": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
 	"notifications.appUpdatedDescription": [
 		"ar",
 		"de",
@@ -380,8 +281,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"notifications.bootconfigUpdating": [
 		"ar",
@@ -390,19 +290,9 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
-	"notifications.connectionLost": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
+	"notifications.connectionLost": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
 	"notifications.connectionRecovered": [
 		"ar",
 		"de",
@@ -410,20 +300,10 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"notifications.error": ["es"],
-	"notifications.hdmiError": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
+	"notifications.hdmiError": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
 	"notifications.installCancelled": [
 		"ar",
 		"de",
@@ -431,8 +311,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"notifications.installCancelledDescription": [
 		"ar",
@@ -441,19 +320,9 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
-	"notifications.installFailed": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
+	"notifications.installFailed": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
 	"notifications.installFailedDescription": [
 		"ar",
 		"de",
@@ -461,8 +330,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"notifications.jetsonUndervoltage": [
 		"ar",
@@ -471,30 +339,11 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"notifications.panel.title": ["fr"],
-	"notifications.relayNone": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
-	"notifications.relayWaiting": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
+	"notifications.relayNone": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
+	"notifications.relayWaiting": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
 	"notifications.updateAvailable": [
 		"ar",
 		"de",
@@ -502,8 +351,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"notifications.updateAvailableDescription": [
 		"ar",
@@ -512,30 +360,11 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
-	"osActions.sshResetFailed": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
-	"osActions.sshToggleFailed": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
-	"osActions.updateFailed": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+	"osActions.sshResetFailed": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
+	"osActions.sshToggleFailed": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
+	"osActions.updateFailed": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR"],
 	"settings.bitrate": ["de"],
 	"settings.destination": ["fr"],
 	"settings.deviceHealth.cores.engineLabel": ["de"],
@@ -549,8 +378,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.index.groups.display": [
 		"ar",
@@ -559,8 +387,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.index.groups.software": ["de", "pt-BR"],
 	"settings.index.groups.streaming": ["de"],
@@ -572,8 +399,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.description": [
 		"ar",
@@ -582,8 +408,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.displayProfile": [
 		"ar",
@@ -592,8 +417,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.displayProfileDesc": [
 		"ar",
@@ -602,8 +426,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.enable": [
 		"ar",
@@ -612,8 +435,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.enableDesc": [
 		"ar",
@@ -622,8 +444,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.hideKeyboard": [
 		"ar",
@@ -632,8 +453,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.keyboard": [
 		"ar",
@@ -642,8 +462,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.keyboardDesc": [
 		"ar",
@@ -652,8 +471,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.keyboardError": [
 		"ar",
@@ -662,8 +480,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.motion": [
 		"ar",
@@ -672,8 +489,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.motionDesc": [
 		"ar",
@@ -682,8 +498,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.performance": [
 		"ar",
@@ -692,8 +507,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.performanceDesc": [
 		"ar",
@@ -702,8 +516,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.performanceModes.balanced": [
 		"ar",
@@ -712,8 +525,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.performanceModes.high": [
 		"ar",
@@ -722,8 +534,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.performanceModes.low": [
 		"ar",
@@ -732,8 +543,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.profiles.mono": [
 		"ar",
@@ -742,8 +552,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.showKeyboard": [
 		"ar",
@@ -752,8 +561,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.stateHints.disabled": [
 		"ar",
@@ -762,8 +570,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.stateHints.enabledFailed": [
 		"ar",
@@ -772,8 +579,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.stateHints.enabledRunning": [
 		"ar",
@@ -782,8 +588,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.stateHints.enabledStopped": [
 		"ar",
@@ -792,8 +597,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.stateHints.failedNoDisplay": [
 		"ar",
@@ -802,8 +606,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.states.disabled": [
 		"ar",
@@ -812,8 +615,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.states.enabledFailed": [
 		"ar",
@@ -822,8 +624,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.states.enabledRunning": [
 		"ar",
@@ -832,8 +633,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.states.enabledStopped": [
 		"ar",
@@ -842,8 +642,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.states.failedNoDisplay": [
 		"ar",
@@ -852,8 +651,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.title": [
 		"ar",
@@ -862,8 +660,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.toggleError": [
 		"ar",
@@ -872,8 +669,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.touch": [
 		"ar",
@@ -882,8 +678,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.touchDesc": [
 		"ar",
@@ -892,8 +687,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.onDeviceDisplay.unavailable": [
 		"ar",
@@ -902,8 +696,7 @@
 		"hi",
 		"ja",
 		"ko",
-		"pt-BR",
-		"zh"
+		"pt-BR"
 	],
 	"settings.optional": ["de"],
 	"settings.perfectSync": ["de", "fr", "pt-BR"],
