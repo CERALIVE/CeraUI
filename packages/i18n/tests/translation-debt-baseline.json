@@ -5,7 +5,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -28,25 +27,16 @@
 	"devtools.type": ["fr"],
 	"devtools.userAgent": ["de", "fr", "pt-BR"],
 	"devtools.viewport": ["de", "es", "fr", "pt-BR"],
-	"errorBoundary.description": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
-	"errorBoundary.retry": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
-	"errorBoundary.title": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+	"errorBoundary.description": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
+	"errorBoundary.retry": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
+	"errorBoundary.title": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
 	"general.configuration": ["fr"],
 	"general.offline": ["de", "pt-BR"],
 	"general.pageTitle": ["de"],
 	"general.port": ["de", "fr"],
 	"general.status": ["de", "pt-BR"],
 	"general.streaming": ["de"],
-	"general.unknownSource": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+	"general.unknownSource": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
 	"general.updates": ["de"],
 	"hotspotConfigurator.hotspot.name": ["de"],
 	"hud.bitrate": ["de", "fr", "pt-BR"],
@@ -74,14 +64,13 @@
 		"zh"
 	],
 	"live.encoder.accelerated": ["de", "pt-BR"],
-	"live.encoder.codecAuto": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+	"live.encoder.codecAuto": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
 	"live.encoder.codecAutoResolvedH264": [
 		"ar",
 		"de",
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -91,7 +80,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -101,7 +89,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -142,16 +129,7 @@
 	"live.preview.encode.activeHardware": ["pt-BR"],
 	"live.preview.encode.activeSoftware": ["pt-BR"],
 	"live.preview.unavailable.engineOffline.title": ["de"],
-	"live.reconfigureRequired": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
+	"live.reconfigureRequired": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
 	"live.source.activeLive": ["de"],
 	"live.source.audioQualityNegotiated": ["es", "fr", "pt-BR"],
 	"live.source.label": ["fr"],
@@ -161,7 +139,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -171,7 +148,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -181,7 +157,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -191,7 +166,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -201,7 +175,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -211,7 +184,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -243,23 +215,13 @@
 	"network.sharing.uplinkDetail.disclosure": ["de"],
 	"network.status.details": ["de"],
 	"network.view.hotspot": ["de", "es", "fr", "pt-BR"],
-	"network.view.hotspotNoBond": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
+	"network.view.hotspotNoBond": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
 	"network.view.hotspotSwitchBody": [
 		"ar",
 		"de",
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -269,7 +231,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -279,7 +240,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -290,93 +250,36 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
-	"network.view.modemModel": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
-	"network.view.speed": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
-	"network.view.switchToHotspot": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
-	"network.view.switchToStation": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
-	"network.view.totalBandwidth": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
+	"network.view.modemModel": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
+	"network.view.speed": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
+	"network.view.switchToHotspot": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
+	"network.view.switchToStation": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
+	"network.view.totalBandwidth": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
 	"network.wifiMode.open": ["fr"],
 	"network.wifiMode.station": ["fr"],
 	"networking.labels.interface": ["fr", "pt-BR"],
 	"networking.types.hotspot": ["de"],
 	"networking.types.modem": ["de", "fr", "pt-BR"],
-	"notifications.appInstalled": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
+	"notifications.appInstalled": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
 	"notifications.appInstalledDescription": [
 		"ar",
 		"de",
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
-	"notifications.appUpdated": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
+	"notifications.appUpdated": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
 	"notifications.appUpdatedDescription": [
 		"ar",
 		"de",
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -386,48 +289,27 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
-	"notifications.connectionLost": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
+	"notifications.connectionLost": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
 	"notifications.connectionRecovered": [
 		"ar",
 		"de",
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
 	"notifications.error": ["es"],
-	"notifications.hdmiError": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
+	"notifications.hdmiError": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
 	"notifications.installCancelled": [
 		"ar",
 		"de",
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -437,27 +319,16 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
-	"notifications.installFailed": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
+	"notifications.installFailed": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
 	"notifications.installFailedDescription": [
 		"ar",
 		"de",
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -467,38 +338,18 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
 	"notifications.panel.title": ["fr"],
-	"notifications.relayNone": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
-	"notifications.relayWaiting": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
+	"notifications.relayNone": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
+	"notifications.relayWaiting": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
 	"notifications.updateAvailable": [
 		"ar",
 		"de",
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -508,31 +359,12 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
-	"osActions.sshResetFailed": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
-	"osActions.sshToggleFailed": [
-		"ar",
-		"de",
-		"fr",
-		"hi",
-		"ja",
-		"ko",
-		"pt-BR",
-		"zh"
-	],
-	"osActions.updateFailed": ["ar", "de", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+	"osActions.sshResetFailed": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
+	"osActions.sshToggleFailed": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
+	"osActions.updateFailed": ["ar", "de", "fr", "hi", "ja", "pt-BR", "zh"],
 	"settings.bitrate": ["de"],
 	"settings.destination": ["fr"],
 	"settings.deviceHealth.cores.engineLabel": ["de"],
@@ -545,7 +377,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -555,7 +386,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -568,7 +398,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -578,7 +407,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -588,7 +416,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -598,7 +425,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -608,7 +434,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -618,7 +443,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -628,7 +452,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -638,7 +461,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -648,7 +470,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -658,7 +479,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -668,7 +488,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -678,7 +497,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -688,7 +506,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -698,7 +515,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -708,7 +524,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -718,7 +533,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -728,7 +542,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -738,7 +551,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -748,7 +560,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -758,7 +569,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -768,7 +578,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -778,7 +587,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -788,7 +596,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -798,7 +605,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -808,7 +614,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -818,7 +623,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -828,7 +632,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -838,7 +641,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -848,7 +650,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -858,7 +659,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -868,7 +668,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -878,7 +677,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -888,7 +686,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
@@ -898,7 +695,6 @@
 		"fr",
 		"hi",
 		"ja",
-		"ko",
 		"pt-BR",
 		"zh"
 	],
