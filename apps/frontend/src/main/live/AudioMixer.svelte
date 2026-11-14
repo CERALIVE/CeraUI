@@ -8,8 +8,8 @@
   Every bound is the capability's: gain from `gain_db_min` to `gain_db_max`,
   delay from 0 to `delay_ms_max`, one chip per track up to `max_tracks`, and at
   most `max_inputs` enabled strips. The input picked above is the main input:
-  its strip is always on, and it is always in the saved mix, because Start sends
-  only saved entries.
+  its strip is always on, and it is in the mix Start sends even when the saved
+  mix lacks it (the backend's effective mix); showing it never saves anything.
 
   Idle, a change saves `streaming.setConfig({ audio_inputs })` with every enabled
   strip, main input first, and `null` once only the main input is left at its
@@ -46,6 +46,7 @@ import {
 	getSources,
 	getStatus,
 } from '$lib/rpc/subscriptions.svelte';
+import { defaultAudioInput as defaults, effectiveAudioInputs } from '$lib/streaming/audio-mix';
 import { audioSourceLabel, resolveAudioSourceList } from '$lib/streaming/sourceSummary';
 import { pipelinesFromSources } from '$lib/streaming/sources-view-model';
 
@@ -108,18 +109,16 @@ const strips = $derived.by(() => {
 });
 const hasPrimary = $derived(strips.some((strip) => strip.id === primaryId));
 
-function defaults(id: string): AudioInputSetting {
-	return { id, tracks: [1], gain_db: 0, mute: false, delay_ms: 0 };
-}
-
 // An idle save not answered yet shows as the choice; `null` is a save of null.
 let pending = $state<AudioInputSetting[] | null | undefined>(undefined);
 let saveSeq = 0;
 
 const inputs = $derived.by(() => {
 	const source = pending !== undefined ? pending : config?.audio_inputs;
-	if (source && source.length > 0) return source;
-	return hasPrimary && primaryId !== undefined ? [defaults(primaryId)] : [];
+	return (
+		effectiveAudioInputs(source, hasPrimary ? primaryId : undefined, mix?.max_inputs ?? 0) ??
+		(hasPrimary && primaryId !== undefined ? [defaults(primaryId)] : [])
+	);
 });
 
 function isEnabled(id: string): boolean {
@@ -284,33 +283,6 @@ function toggleTrack(id: string, track: number): void {
 	}
 	void save(id, next);
 }
-
-// A main input outside the saved mix (a new pick, a source switch, Auto) is
-// saved first at its defaults, so what the strips show is what Start sends. The
-// old main input stays an ordinary input; in a full mix it gives the new one its
-// place and its tracks, so the tracks keep running from 1 with no gap.
-let reconciled: string | undefined;
-$effect(() => {
-	const saved = config?.audio_inputs;
-	const id = primaryId;
-	if (!mix || isStreaming || pending !== undefined || !hasPrimary || id === undefined) return;
-	if (!saved?.length || saved.some((input) => input.id === id)) return;
-	const key = JSON.stringify([id, saved]);
-	if (key === reconciled) return;
-	reconciled = key;
-	const [old, ...others] = saved;
-	const next =
-		saved.length < mix.max_inputs
-			? [defaults(id), ...saved]
-			: [
-					{
-						...defaults(id),
-						tracks: [...new Set([1, ...(old?.tracks ?? [])])].sort((a, b) => a - b),
-					},
-					...others,
-				];
-	void save(id, next);
-});
 
 // Live writes: the latest answer per input wins; an older one is dropped.
 const liveSeq: Record<string, number> = {};

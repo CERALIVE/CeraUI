@@ -125,7 +125,11 @@ import {
 	notificationRemove,
 } from "../ui/notifications.ts";
 import { resolveAudioMode } from "./audio.ts";
-import { audioInputEngineId, engineAudioInputs } from "./audio-inputs.ts";
+import {
+	audioInputEngineId,
+	effectiveAudioInputs,
+	engineAudioInputs,
+} from "./audio-inputs.ts";
 import { getLastCapabilities } from "./capabilities.ts";
 import {
 	clearSelectedCaptureDegraded,
@@ -790,7 +794,7 @@ export class CerastreamBackend implements StreamingBackend {
 			const audioMixInputs = params.audio?.inputs?.map((input) => ({
 				...structuredClone(input),
 				id:
-					config.audio_inputs?.find(
+					effectiveAudioInputs(config)?.find(
 						(saved) => audioInputEngineId(saved.id, config) === input.input_id,
 					)?.id ?? input.input_id,
 			}));

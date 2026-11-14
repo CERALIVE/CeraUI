@@ -1084,3 +1084,134 @@ test("streaming mix levels survive a deferred No audio selection", async () => {
 		clearTimeout(deadline);
 	}
 });
+
+test("Start sends a main input outside the saved mix first on Track 1 and leaves the saved mix as it was", async () => {
+	const saved = [entry("Primary"), entry("Second", [2])];
+	expect(await save(saved)).toMatchObject({ success: true });
+	getConfig().asrc = "Third";
+	expect((await start()).audio?.inputs).toEqual([
+		{
+			input_id: "hw:CARD=third",
+			tracks: [1],
+			gain_db: 0,
+			mute: false,
+			delay_ms: 0,
+		},
+		{
+			input_id: "hw:CARD=primary",
+			tracks: [1],
+			gain_db: 0,
+			mute: false,
+			delay_ms: 0,
+		},
+		{
+			input_id: "hw:CARD=second",
+			tracks: [2],
+			gain_db: 0,
+			mute: false,
+			delay_ms: 0,
+		},
+	]);
+	expect(getConfig().audio_inputs).toEqual(saved);
+	expect((await disk()).audio_inputs).toEqual(saved);
+});
+
+test("in a full saved mix Start gives a main input outside it the first entry's place and tracks", async () => {
+	const saved = [
+		entry("Primary", [1, 2]),
+		entry("Second", [3]),
+		entry("Third", [4]),
+		entry("Fourth", [4]),
+	];
+	expect(await save(saved)).toMatchObject({ success: true });
+	getConfig().asrc = "Fifth";
+	expect((await start()).audio?.inputs).toEqual([
+		{
+			input_id: "hw:CARD=fifth",
+			tracks: [1, 2],
+			gain_db: 0,
+			mute: false,
+			delay_ms: 0,
+		},
+		{
+			input_id: "hw:CARD=second",
+			tracks: [3],
+			gain_db: 0,
+			mute: false,
+			delay_ms: 0,
+		},
+		{
+			input_id: "hw:CARD=third",
+			tracks: [4],
+			gain_db: 0,
+			mute: false,
+			delay_ms: 0,
+		},
+		{
+			input_id: "hw:CARD=fourth",
+			tracks: [4],
+			gain_db: 0,
+			mute: false,
+			delay_ms: 0,
+		},
+	]);
+});
+
+test("a main input the device cannot open is not added to the mix Start sends", async () => {
+	expect(await save([entry("Primary"), entry("Second", [2])])).toMatchObject({
+		success: true,
+	});
+	getConfig().asrc = "Ghost";
+	expect((await start()).audio?.inputs).toEqual([
+		{
+			input_id: "hw:CARD=primary",
+			tracks: [1],
+			gain_db: 0,
+			mute: false,
+			delay_ms: 0,
+		},
+		{
+			input_id: "hw:CARD=second",
+			tracks: [2],
+			gain_db: 0,
+			mute: false,
+			delay_ms: 0,
+		},
+	]);
+});
+
+test("idle, a level change on a main input outside the saved mix saves the mix Start sends", async () => {
+	expect(await save([entry("Primary"), entry("Second", [2])])).toMatchObject({
+		success: true,
+	});
+	getConfig().asrc = "Third";
+	expect(await change({ id: "Third", gain_db: -2 })).toMatchObject({
+		success: true,
+		applies_next_start: true,
+		applied: { id: "Third", gain_db: -2 },
+	});
+	expect((await disk()).audio_inputs).toEqual([
+		{ ...entry("Third"), gain_db: -2 },
+		entry("Primary"),
+		entry("Second", [2]),
+	]);
+});
+
+test("live, a level change on a main input outside the saved mix is admitted and saved with the mix it runs in", async () => {
+	expect(await save([entry("Primary"), entry("Second", [2])])).toMatchObject({
+		success: true,
+	});
+	getConfig().asrc = "Third";
+	await start();
+	routeLiveProcedure();
+	expect(await change({ id: "Third", gain_db: -3 })).toMatchObject({
+		success: true,
+		applies_next_start: false,
+		applied: { id: "Third", gain_db: -3 },
+	});
+	expect(getConfig().audio_inputs).toEqual([
+		{ ...entry("Third"), gain_db: -3 },
+		entry("Primary"),
+		entry("Second", [2]),
+	]);
+});

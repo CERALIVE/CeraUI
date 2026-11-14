@@ -226,13 +226,17 @@ must keep that ABI.
   on and its switch disabled with the reason beside it. Without a main input,
   no other strip can be turned on. At `max_inputs` enabled strips, the others
   cannot be turned on and say the mix is full.
-- The main input is always in the saved mix, because Start sends only saved
-  entries. Idle, when the main input changes to one outside a saved mix (a new
-  pick, a source switch, Auto), the mixer saves it first at its defaults on
-  Track 1 and the old main input stays an ordinary input. In a full mix the new
-  main input takes the old one's place and its tracks instead. A main input
-  that was already in the mix needs no save (the backend sends it first), and
-  live nothing is saved until the next start.
+- The main input is always in the mix Start sends, decided where it is used,
+  never by a follow-up save: the backend's `effectiveAudioInputs` adds a main
+  input outside the saved mix first at its defaults on Track 1 (the old main
+  input stays an ordinary input), or in a full mix gives it the first entry's
+  place and tracks. The strips show the same mix. Opening Live never saves;
+  only an edit of an audio control saves, and it saves the mix shown.
+- A pick in the audio picker of a device outside a saved mix saves `asrc` and
+  the mix it implies in one `setConfig` (`audioPickSave`), so in a full mix the
+  pick replaces the main input it actually replaces. A refused mix retries
+  with `asrc` alone, so the pick is never lost. A pick already in the mix saves
+  only `asrc`.
 - Meters: before going live, the main strip carries today's meter (the
   picker's meter moves into it, so the card never shows the same bars twice)
   and every other strip says its level shows once live. Live on a mix session,

@@ -68,6 +68,7 @@ import {
 import { getEncoderLoad } from '$lib/stores/device-health-history.svelte';
 import { deriveBitrateReading, deriveMeasuredBitrateKbps } from '$lib/stores/hud/derive';
 import { getStreamHealthRollup, isVideoSignalLost } from '$lib/stores/stream-health.svelte';
+import { audioPickSave } from '$lib/streaming/audio-mix';
 import { isSelectedAudioLost } from '$lib/streaming/audioLost';
 import type { MatchAction } from '$lib/streaming/capture-failover';
 import { configChangeReport } from '$lib/streaming/configChangeCopy';
@@ -674,6 +675,13 @@ async function handleSelectAudioSource(selection: string) {
 	// id before persisting — the engine ALSA path is keyed on the asrc id, and the
 	// field-lock/echo must key on the same wire value the `config` broadcast echoes.
 	const asrc = audioSelectionWireId(selection, audioEntries);
+	const entry = audioEntries.find((source) => source.id === asrc);
+	const save = audioPickSave(asrc, {
+		saved: config?.audio_inputs,
+		maxInputs: getCapabilities()?.audio_mix?.max_inputs,
+		previous: effectiveAudioSource,
+		mixInput: entry?.kind === 'device' && entry.unavailable_reason === undefined,
+	});
 	audioOverride = {
 		asrc,
 		acodec: effectiveAudioCodec ?? 'aac',
@@ -681,7 +689,11 @@ async function handleSelectAudioSource(selection: string) {
 	};
 	markPending('asrc', asrc);
 	try {
-		await rpc.streaming.setConfig({ asrc });
+		const result = await rpc.streaming.setConfig(save);
+		// A refused mix (a saved input since unplugged) must not lose the pick;
+		// Start still sends the new main input first.
+		if (!result.success && save.audio_inputs !== undefined)
+			await rpc.streaming.setConfig({ asrc });
 	} catch {
 		toast.error(m["notifications.saveFailed"]());
 	} finally {

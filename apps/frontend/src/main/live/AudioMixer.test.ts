@@ -957,23 +957,47 @@ describe("AudioMixer — a new main input", () => {
 	const withMain = (asrc: string, audio_inputs: Input[] = SAVED) =>
 		({ asrc, pipeline: "hdmi", audio_inputs }) as unknown as ConfigMessage;
 
-	it("a main input outside the saved mix is saved first, at its defaults on Track 1, and the old one stays on", async () => {
-		setConfig.mockResolvedValue(SAVED_OK);
-		const view = mixer({ config: withMain("usb-a") });
+	it("a main input outside the saved mix shows in it on Track 1 and the old one stays on, saving nothing on load or on change", async () => {
+		const view = mixer({ config: withMain("hdmi") });
+		await tick();
+		expect(enable("hdmi").getAttribute("aria-checked")).toBe("true");
+		expectDisabled(enable("hdmi"));
+		expect(chip("hdmi", 1).getAttribute("aria-pressed")).toBe("true");
+		expect(enable("usb-a").getAttribute("aria-checked")).toBe("true");
+		expectEnabled(enable("usb-a"));
+		expect(enable("usb-b").getAttribute("aria-checked")).toBe("true");
+
+		await view.rerender({ config: withMain("usb-a") });
+		await view.rerender({ config: withMain("hdmi") });
 		await tick();
 		expect(setConfig).not.toHaveBeenCalled();
+	});
 
-		await view.rerender({ config: withMain("hdmi") });
+	it("after a load whose saved mix lacks the main input, an edit saves the mix Start sends, main input first", async () => {
+		setConfig.mockResolvedValue(SAVED_OK);
+		mixer({ config: withMain("hdmi") });
+		await fireEvent.click(mute("usb-b"));
 		await waitFor(() => expect(setConfig).toHaveBeenCalled());
 		expect(setConfig.mock.calls).toEqual([
-			[{ audio_inputs: [input("hdmi"), ...SAVED] }],
+			[
+				{
+					audio_inputs: [
+						input("hdmi"),
+						input("usb-a"),
+						input("usb-b", { tracks: [2], mute: true }),
+					],
+				},
+			],
 		]);
+	});
+
+	it("Auto resolved to an input outside the saved mix shows it on as the main input, saving nothing", async () => {
+		mixer({ config: withMain("Auto"), status: { resolved_asrc: "hdmi" } });
+		await tick();
 		expect(enable("hdmi").getAttribute("aria-checked")).toBe("true");
 		expectDisabled(enable("hdmi"));
 		expect(enable("usb-a").getAttribute("aria-checked")).toBe("true");
-		expectEnabled(enable("usb-a"));
-		await tick();
-		expect(setConfig).toHaveBeenCalledTimes(1);
+		expect(setConfig).not.toHaveBeenCalled();
 	});
 
 	it("a main input that was already in the saved mix needs no save, and the old main input stays an ordinary input", async () => {
@@ -989,7 +1013,6 @@ describe("AudioMixer — a new main input", () => {
 	});
 
 	it("in a full mix the new main input takes the old one's place and its tracks, so no track is left empty", async () => {
-		setConfig.mockResolvedValue(SAVED_OK);
 		const full = [
 			input("usb-a", { tracks: [1, 3] }),
 			input("usb-b", { tracks: [2] }),
@@ -999,17 +1022,13 @@ describe("AudioMixer — a new main input", () => {
 			config: withMain("usb-a", full),
 		});
 		await view.rerender({ config: withMain("hdmi", full) });
-		await waitFor(() => expect(setConfig).toHaveBeenCalled());
-		expect(setConfig.mock.calls).toEqual([
-			[
-				{
-					audio_inputs: [
-						input("hdmi", { tracks: [1, 3] }),
-						input("usb-b", { tracks: [2] }),
-					],
-				},
-			],
-		]);
+		await tick();
+		expect(enable("hdmi").getAttribute("aria-checked")).toBe("true");
+		expect(chip("hdmi", 1).getAttribute("aria-pressed")).toBe("true");
+		expect(chip("hdmi", 3).getAttribute("aria-pressed")).toBe("true");
+		expect(enable("usb-a").getAttribute("aria-checked")).toBe("false");
+		expect(chip("usb-b", 2).getAttribute("aria-pressed")).toBe("true");
+		expect(setConfig).not.toHaveBeenCalled();
 	});
 
 	it("live, a main input change saves nothing: membership waits for the next start", async () => {

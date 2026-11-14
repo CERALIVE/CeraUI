@@ -29,6 +29,8 @@ interface MixerWire {
 	inject(frame: Record<string, unknown>): void;
 	/** Answer the next audio_inputs saves with this backend token instead. */
 	refuseAudioInputs(token: string | null): void;
+	/** Hold every device frame this long before the page sees it, in order; 0 stops. */
+	delayServer(ms: number): void;
 }
 
 async function installMixerWire(
@@ -42,6 +44,9 @@ async function installMixerWire(
 	const all: RpcCall[] = [];
 	let refusal: string | null = null;
 	let route: { send: (data: string) => void } | null = null;
+	let delayMs = 0;
+	let held = 0;
+	let tail: Promise<void> = Promise.resolve();
 
 	await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 		route = ws;
@@ -82,7 +87,18 @@ async function installMixerWire(
 			} catch {
 				/* non-JSON / binary frame */
 			}
-			ws.send(message);
+			if (delayMs === 0 && held === 0) {
+				ws.send(message);
+				return;
+			}
+			const due = Date.now() + delayMs;
+			held += 1;
+			tail = tail.then(async () => {
+				const wait = due - Date.now();
+				if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+				ws.send(message);
+				held -= 1;
+			});
 		});
 	});
 
@@ -91,6 +107,9 @@ async function installMixerWire(
 		inject: (frame) => route?.send(JSON.stringify(frame)),
 		refuseAudioInputs: (token) => {
 			refusal = token;
+		},
+		delayServer: (ms) => {
+			delayMs = ms;
 		},
 	};
 }
@@ -329,6 +348,99 @@ test.describe("audio mixer — caps-full", () => {
 		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
 			timeout: 15_000,
 		});
+		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
+	});
+	const THIRD = "HDMI Input";
+	const savedTwo = [
+		{ id: MAIN, tracks: [1], gain_db: 0, mute: false, delay_ms: 0 },
+		{ id: SECOND, tracks: [2], gain_db: 0, mute: false, delay_ms: 0 },
+	];
+	const startButton = (page: Page) => page.getByTestId("live-bar").getByRole("button", { name: "Start stream" });
+
+	async function pickThird(page: Page): Promise<void> {
+		await page.getByTestId("audio-source-select").click();
+		await page.getByRole("option", { name: /HDMI Input/ }).click();
+	}
+
+	// Live, the new main input's level change is admitted by the session Start launched.
+	async function thirdGainIsAdmittedLive(page: Page): Promise<void> {
+		const card = page.getByTestId("live-cockpit").getByTestId("audio-card");
+		await expect(card).toBeVisible({ timeout: 15_000 });
+		const thumb = card.getByTestId(`audio-strip-gain-${THIRD}`).getByRole("slider");
+		await expect(thumb).toBeEnabled();
+		await thumb.focus();
+		await thumb.press("ArrowLeft");
+		await expect.poll(() => wire.calls("streaming.setAudioMix").at(-1)?.result).toMatchObject({
+			success: true,
+			applies_next_start: false,
+			applied: { id: THIRD, gain_db: -1 },
+		});
+		await expect(card.getByTestId(`audio-strip-error-${THIRD}`)).toBeEmpty();
+		await page.getByTestId("live-bar").getByRole("button", { name: "Stop stream" }).click();
+		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
+			timeout: 15_000,
+		});
+	}
+
+	test("Start pressed right after picking a main input outside the saved mix sends it first and admits its live level", async ({
+		page,
+		backendRpc,
+	}) => {
+		await backendRpc.call(["streaming", "setConfig"], { audio_inputs: savedTwo });
+		await expect(page.getByTestId(`audio-strip-enable-${SECOND}`)).toHaveAttribute("aria-checked", "true");
+		await pickThird(page);
+		await startButton(page).click();
+		await thirdGainIsAdmittedLive(page);
+		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
+	});
+
+	test("Start pressed while every device answer is held 300 ms, in order, still sends the new main input first", async ({
+		page,
+		backendRpc,
+	}) => {
+		await backendRpc.call(["streaming", "setConfig"], { audio_inputs: savedTwo });
+		await expect(page.getByTestId(`audio-strip-enable-${SECOND}`)).toHaveAttribute("aria-checked", "true");
+		wire.delayServer(300);
+		await pickThird(page);
+		await startButton(page).click();
+		await expect(page.getByTestId("live-cockpit")).toBeVisible({ timeout: 15_000 });
+		wire.delayServer(0);
+		await thirdGainIsAdmittedLive(page);
+		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
+	});
+
+	test("opening Live with a saved mix that lacks the main input saves nothing, and Start still sends it first", async ({
+		page,
+		backendRpc,
+	}) => {
+		await backendRpc.call(["streaming", "setConfig"], { asrc: THIRD, audio_inputs: savedTwo });
+		await openLive(page);
+		await expect(page.getByTestId(`audio-strip-enable-${THIRD}`)).toHaveAttribute("aria-checked", "true");
+		await expect(page.getByTestId(`audio-strip-enable-${MAIN}`)).toHaveAttribute("aria-checked", "true");
+		await startButton(page).click();
+		await expect(page.getByTestId("live-cockpit")).toBeVisible({ timeout: 15_000 });
+		expect(wire.calls("streaming.setConfig").filter((call) => "audio_inputs" in call.input)).toEqual([]);
+		expect(
+			(await backendRpc.call<{ audio_inputs?: unknown[] }>(["streaming", "getConfig"])).audio_inputs,
+		).toEqual(savedTwo);
+		await thirdGainIsAdmittedLive(page);
+		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
+	});
+
+	test("a pick whose mix the device refuses still saves the pick, and Start still sends the new main input first", async ({
+		page,
+		backendRpc,
+	}) => {
+		await backendRpc.call(["streaming", "setConfig"], { audio_inputs: savedTwo });
+		await expect(page.getByTestId(`audio-strip-enable-${SECOND}`)).toHaveAttribute("aria-checked", "true");
+		wire.refuseAudioInputs("audio_input_unknown");
+		await pickThird(page);
+		await expect
+			.poll(() => backendRpc.call<{ asrc?: string; audio_inputs?: unknown[] }>(["streaming", "getConfig"]))
+			.toMatchObject({ asrc: THIRD, audio_inputs: savedTwo });
+		wire.refuseAudioInputs(null);
+		await startButton(page).click();
+		await thirdGainIsAdmittedLive(page);
 		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
 	});
 });

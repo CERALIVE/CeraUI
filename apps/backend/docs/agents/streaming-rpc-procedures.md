@@ -86,7 +86,10 @@ Non-numeric/non-finite values fail RPC input parsing.
 
 The engine adapter resolves every picker id through the existing audio resolver,
 puts the primary first, omits `audio.device` and sends producer-owned
-`audio.inputs`. For a network source, its source id (`rtmp` or `srt`) denotes
+`audio.inputs`. It sends `effectiveAudioInputs`: a primary the device can open
+but the saved mix lacks joins first on Track 1, or in a full mix takes the
+first entry's place and tracks. Live and idle `setAudioMix` admit the same
+mix, and nothing is written until an operator edit. For a network source, its source id (`rtmp` or `srt`) denotes
 the embedded input and becomes engine `embedded`. Without saved inputs or the
 capability, start serialization stays on the existing path. The compatibility
 start-schema export aliases the published producer schema, preserving its
