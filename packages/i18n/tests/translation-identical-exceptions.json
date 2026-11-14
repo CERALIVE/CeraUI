@@ -4,6 +4,16 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Literal example DNS hostname for the provider-host input; no prose to translate."
 	},
+	"devtools.cookies": {
+		"value": "Cookies",
+		"locales": ["es"],
+		"reason": "Cookies is the browser storage term es-419 browsers show untranslated; es devtools labels keep web terms such as \"Offline (2 temas)\" in devtools.screenshotCount."
+	},
+	"devtools.error": {
+		"value": "Error",
+		"locales": ["es"],
+		"reason": "Error is the Spanish word; es advanced.copyFailed reads \"Error al copiar\" and devtools.networkError reads \"Error de Red\"."
+	},
 	"devtools.mbps": {
 		"value": "Mbps",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
@@ -14,10 +24,20 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR"],
 		"reason": "Millisecond unit abbreviation for numeric duration readings."
 	},
+	"devtools.no": {
+		"value": "No",
+		"locales": ["es"],
+		"reason": "No is the Spanish negative; es live.education.reason.pipelineNotOffered reads \"No compatible con el motor de streaming actual\"."
+	},
 	"devtools.rtt": {
 		"value": "RTT",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Round-trip-time statistic acronym used by the network diagnostics."
+	},
+	"devtools.total": {
+		"value": "Total",
+		"locales": ["es"],
+		"reason": "Total is the Spanish word; es network.summary.networksActive reads \"{count} redes, {active} activas • Total: {total} Kbps\"."
 	},
 	"hotspotConfigurator.hotspot.placeholderName": {
 		"value": "CeraLive",
@@ -34,6 +54,16 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Secure Reliable Transport protocol identifier used by transport diagnostics."
 	},
+	"live.audioCard.title": {
+		"value": "Audio",
+		"locales": ["es"],
+		"reason": "Audio is the Spanish word; es general.audioSettings reads \"Configuración de Audio\"."
+	},
+	"live.education.field.audio.title": {
+		"value": "Audio",
+		"locales": ["es"],
+		"reason": "Audio is the Spanish word; es general.audioSettings reads \"Configuración de Audio\"."
+	},
 	"live.encoder.accelerated": {
 		"value": "Hardware",
 		"locales": ["es"],
@@ -43,6 +73,11 @@
 		"value": "Passthrough",
 		"locales": ["es"],
 		"reason": "es live.encoder.route.reason.passthrough-off reads \"El passthrough está desactivado en la configuración guardada.\""
+	},
+	"live.encoder.probedCapAudio": {
+		"value": "Audio",
+		"locales": ["es"],
+		"reason": "Audio is the Spanish word; es general.audioSettings reads \"Configuración de Audio\"."
 	},
 	"live.encoder.software": {
 		"value": "Software",
@@ -58,6 +93,16 @@
 		"value": "RTT",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Round-trip-time statistic acronym used by the network diagnostics."
+	},
+	"live.ingest.total": {
+		"value": "Total",
+		"locales": ["es"],
+		"reason": "Total is the Spanish word; es network.summary.networksActive reads \"{count} redes, {active} activas • Total: {total} Kbps\"."
+	},
+	"live.inputPicker.groups.audio": {
+		"value": "Audio",
+		"locales": ["es"],
+		"reason": "Audio is the Spanish word; es general.audioSettings reads \"Configuración de Audio\"."
 	},
 	"live.inputPicker.groups.camlink": {
 		"value": "Cam Link",
@@ -124,15 +169,30 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "WebRTC browser communication API name identifying the preview tier."
 	},
+	"live.source.audioQualityNegotiated": {
+		"value": "{khz} kHz mono",
+		"locales": ["es"],
+		"reason": "Interpolation, kHz unit and the Spanish word mono; es live.source.audioQualityCeiling reads \"Hasta 16 kHz mono\"."
+	},
 	"live.title": {
 		"value": "Live",
 		"locales": ["de", "es", "fr", "pt-BR"],
 		"reason": "Live is the product screen name shared by navigation.live and live.title in each listed locale catalog."
 	},
+	"navigation.general": {
+		"value": "General",
+		"locales": ["es"],
+		"reason": "General is the Spanish word; es keeps it as the section name for the general settings group."
+	},
 	"navigation.live": {
 		"value": "Live",
 		"locales": ["de", "es", "fr", "pt-BR"],
 		"reason": "Live is the product screen name shared by navigation.live and live.title in each listed locale catalog."
+	},
+	"navigation.streaming": {
+		"value": "Streaming",
+		"locales": ["es"],
+		"reason": "es keeps the streaming anglicism, e.g. live.startFailure.class.engine_unavailable reads \"El motor de streaming no está disponible.\""
 	},
 	"network.bluetooth.enableLabel": {
 		"value": "Bluetooth",
@@ -259,6 +319,11 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "3GPP Physical Cell Identity field acronym in cellular diagnostics, not a prose label."
 	},
+	"network.routerCellular.detail.roaming": {
+		"value": "Roaming",
+		"locales": ["es"],
+		"reason": "es keeps the roaming anglicism, e.g. network.modem.enableRoaming reads \"Permitir Roaming\"."
+	},
 	"network.routerCellular.firmwareLabel": {
 		"value": "Firmware",
 		"locales": ["es"],
@@ -353,6 +418,11 @@
 		"value": "Ethernet",
 		"locales": ["de", "es", "fr", "pt-BR"],
 		"reason": "IEEE 802.3 Ethernet standard name; catalogs using localized spellings remain outside this entry."
+	},
+	"network.view.hotspot": {
+		"value": "Hotspot",
+		"locales": ["es"],
+		"reason": "es keeps the hotspot anglicism, e.g. network.status.enableHotspot reads \"Habilitar Hotspot\"."
 	},
 	"network.view.hotspotClientRate": {
 		"value": "{rate} Mbps",
@@ -454,6 +524,11 @@
 		"locales": ["ar", "es", "fr", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Wi-Fi wireless standard label spelling used only in the explicitly listed catalogs."
 	},
+	"notifications.error": {
+		"value": "Error",
+		"locales": ["es"],
+		"reason": "Error is the Spanish word; es advanced.copyFailed reads \"Error al copiar\" and devtools.networkError reads \"Error de Red\"."
+	},
 	"settings.deviceHealth.axis.minutesAgo": {
 		"value": "−{n} min",
 		"locales": ["es", "fr", "pt-BR"],
@@ -523,6 +598,11 @@
 		"value": "SRT",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Secure Reliable Transport protocol identifier used by transport diagnostics."
+	},
+	"settings.updates.channel.beta": {
+		"value": "Beta",
+		"locales": ["es"],
+		"reason": "Beta is the channel name in Spanish too; es settings.updates.channel.hint reads \"Beta recibe primero las nuevas imágenes del sistema.\""
 	},
 	"settings.updates.checkFailed.whatFailed": {
 		"value": "{ifname} {family}: {host}, {state}",
