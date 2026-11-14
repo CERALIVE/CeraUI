@@ -45,6 +45,7 @@ import {
 	AUDIO_SOURCE_AUTO,
 	audioBackendSchema,
 	audioCodecSchema,
+	audioInputSettingSchema,
 	balancerAlgorithmSchema,
 	compositionConfigSchema,
 	type DetectionMethod,
@@ -200,6 +201,7 @@ export const runtimeConfigSchema = z.object({
 	password_hash: z.string().optional(),
 	ssh_pass: z.string().optional(),
 	ssh_pass_hash: z.string().optional(),
+	ssh_persistent: z.boolean().optional(),
 
 	// Relay/SRTLA settings
 	relay_server: z.string().optional(),
@@ -238,6 +240,7 @@ export const runtimeConfigSchema = z.object({
 
 	// Audio settings
 	asrc: z.string().optional(),
+	audio_inputs: z.array(audioInputSettingSchema).optional(),
 	acodec: legacyTolerantAudioCodecSchema.optional(),
 	// Which audio backend the engine builds its audio legs with. Additive-optional
 	// and deliberately ABSENT FROM `RUNTIME_CONFIG_DEFAULTS`: an absent value means

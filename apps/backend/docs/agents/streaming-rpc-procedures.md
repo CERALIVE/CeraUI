@@ -64,6 +64,62 @@ saved settings does not rewrite values, and runtime defaults and start assembly
 are unchanged. Coverage: `streaming-format-settings.test.ts` and the unedited
 `on-air-baseline.test.ts`.
 
+### Audio inputs [EXISTS]
+
+`setConfig({ audio_inputs })` stores picker ids, tracks, gain in dB, mute and
+per-input delay in milliseconds. An omitted field leaves the saved set alone.
+Null clears it; exactly the primary input at 0 dB, unmuted, 0 ms and Track 1
+also clears it. Loading config performs no migration and never rewrites `asrc`.
+An omitted per-input mute means false, matching the producer's default. Loading
+fills that value in memory without rewriting the file; an explicit true at
+otherwise default primary settings remains an explicit muted mix.
+Membership and track changes apply at the next start, including with `apply_now`.
+
+The save gate runs before any mutation against `audio_mix` and the selectable
+audio source list. Its errors are `audio_mix_unsupported`, `audio_input_unknown`,
+`audio_inputs_empty`, `audio_input_duplicate`, `audio_inputs_too_many`,
+`audio_tracks_invalid`, `audio_tracks_gap`, `audio_gain_range` and
+`audio_delay_range`. Tracks must be distinct integers from 1 to the advertised
+maximum, and their union must be 1 through k. Gain includes both advertised
+endpoints. Delay is an integer from zero through the advertised maximum.
+Non-numeric/non-finite values fail RPC input parsing.
+
+The engine adapter resolves every picker id through the existing audio resolver,
+puts the primary first, omits `audio.device` and sends producer-owned
+`audio.inputs`. For a network source, its source id (`rtmp` or `srt`) denotes
+the embedded input and becomes engine `embedded`. Without saved inputs or the
+capability, start serialization stays on the existing path. The compatibility
+start-schema export aliases the published producer schema, preserving its
+additive audio fields.
+
+`audio_mix_active` describes the admitted running session, independently of
+next-start saves. Status snapshots, updates and initial hydration carry it;
+Stop, engine idle or connection loss withdraw it. Only an active mix refuses
+`switchAudio` with `audio_mix_active`. A legacy session retains live source
+switching even after a mix is saved.
+
+`streaming.setAudioMix({ id, gain_db?, mute?, delay_ms? })` uses that session's
+admitted input identity. A live mix sends one producer `setAudioMix` request,
+returns the applied state and saves its values.
+The reply is authoritative even when its gain differs from the request; partial
+live updates retain the admitted gain, mute and delay unless the engine changes
+them. Reloading saved settings and the next Start retain those applied values.
+Pending membership and track
+edits remain pending; updating an input removed from next-start settings does
+not re-enable it. Idle or on a legacy session, the procedure only saves an
+already-enabled input (or the default primary), returning
+`applies_next_start: true`. Unknown inputs and invalid values leave disk and
+the engine untouched. Native RPC refusals retain their complete numeric code,
+message and data, including capture causes, under `engine_error`.
+
+Per-input meter entries keep their measured values and map engine `input_id`
+back to picker ids. Live mix meters follow the admitted stream even if a
+deferred audio pick changes; idle meter selection is unchanged. Coverage:
+`audio-inputs.test.ts` drives the published UDS client, persistence and RPC;
+`mock-audio-contract.test.ts` pins native error serialization. The mixer UI
+and layout designer remain separate changes; no hardware qualification or
+release documentation claim follows from these host checks.
+
 `start` input is PARTIAL by contract. `updateConfig` projects the saved runtime
 config through `streamingConfigInputSchema`, overlays the caller's stated fields,
 then validates the effective whole. Thus `{}` means “start exactly what is saved” —

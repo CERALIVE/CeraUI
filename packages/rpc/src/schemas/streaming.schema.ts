@@ -9,8 +9,11 @@
 // nothing but zod, and the package ships no `exports` map to forbid the path.
 import { failoverRatePolicyInputSchema } from '@ceralive/cerastream/dist/capture-status.js';
 import { COMPOSITION_FEATURE, COMPOSITION_RECT_MIN } from '@ceralive/cerastream/dist/constants.js';
+import { rpcErrorSchema } from '@ceralive/cerastream/dist/envelope.js';
 import {
 	audioMixCapsSchema,
+	audioMixStateSchema,
+	audioMixUpdateSchema,
 	type EncoderCapability,
 	encoderCapabilitySchema,
 	encoderCapsSchema,
@@ -18,6 +21,7 @@ import {
 	videoSourceCapSchema,
 } from '@ceralive/cerastream/dist/messages.js';
 import {
+	audioInputConfigSchema,
 	balancerAlgorithmSchema,
 	type CompositionConfig,
 	type CompositionLayout,
@@ -173,6 +177,28 @@ export function audioCodecAllowedForTransport(codec: AudioCodec, protocol: Relay
 // USB same-physical-device → pipeline-default). Additive: the constant is the EXACT wire
 // string, so `config.asrc === AUDIO_SOURCE_AUTO` opts into auto resolution.
 export const AUDIO_SOURCE_AUTO = 'Auto';
+
+// CeraUI stores picker ids; only the engine adapter resolves them to input_id.
+export const audioInputSettingSchema = audioInputConfigSchema.omit({ input_id: true }).extend({
+	id: z.string(),
+	tracks: z.array(z.number()),
+	gain_db: z.number(),
+	mute: z.boolean().default(false),
+	delay_ms: z.number(),
+});
+export type AudioInputSetting = z.infer<typeof audioInputSettingSchema>;
+
+export const setAudioMixInputSchema = audioMixUpdateSchema.omit({ input_id: true }).extend({
+	id: z.string(),
+	delay_ms: z.number().optional(),
+});
+export const setAudioMixOutputSchema = z.object({
+	success: z.boolean(),
+	applied: audioMixStateSchema.omit({ input_id: true }).extend({ id: z.string() }).optional(),
+	applies_next_start: z.boolean().optional(),
+	error: z.string().optional(),
+	engine_error: rpcErrorSchema.shape.error.optional(),
+});
 
 // The `auto` kind (T5) is APPENDED to the existing variants: it tags the "Auto"
 // pseudo-source. Existing variants (device/none/pipeline_default) are unchanged and
@@ -358,6 +384,7 @@ export const streamingConfigInputSchema = z.object({
 	// stable id across re-pushes that move the slot to a new host/port.
 	selected_ingest_endpoint: z.string().optional(),
 	asrc: z.string().optional(),
+	audio_inputs: z.array(audioInputSettingSchema).nullable().optional(),
 	bitrate_overlay: z.boolean().optional(),
 	max_br: z.number().int().min(BITRATE_MIN).max(BITRATE_MAX).optional(),
 	balancer: balancerAlgorithmSchema.optional(),
@@ -901,6 +928,7 @@ import {
 export const configMessageSchema = z.object({
 	balancer: balancerAlgorithmSchema.optional(),
 	asrc: z.string().optional(),
+	audio_inputs: z.array(audioInputSettingSchema).optional(),
 	ssh_pass: z.string().optional(),
 	max_br: z.number().optional(),
 	acodec: audioCodecSchema.optional(),
@@ -1258,6 +1286,7 @@ export const SWITCH_AUDIO_ERRORS = {
 	SWITCH_FAILED: 'SWITCH_FAILED',
 } as const;
 export const switchAudioErrorSchema = z.enum([
+	'audio_mix_active',
 	SWITCH_AUDIO_ERRORS.AUDIO_DEVICE_NOT_FOUND,
 	SWITCH_AUDIO_ERRORS.NOT_LIVE_SWITCHABLE,
 	SWITCH_AUDIO_ERRORS.NOT_STREAMING,

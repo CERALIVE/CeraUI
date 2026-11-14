@@ -166,6 +166,7 @@ import {
 	ensureSshPasswordProvisioned,
 	ensureSshPasswordSynced,
 	getSshStatus,
+	reconcileSshPersistence,
 } from "./modules/system/ssh.ts";
 import { noteStreamReconciliationCompleted } from "./modules/system/stream-reconciliation-latch.ts";
 import { reconcileAptChannel } from "./modules/system/update-apt-channel.ts";
@@ -449,7 +450,13 @@ await guardNonCritical("ssh-password-provision", ensureSshPasswordProvisioned);
 // survive an A/B OTA slot swap, so a fresh slot silently locks the operator out
 // until this re-applies the persisted password (mirrors ceralive-ssh-firstboot.sh's
 // host-key restore). Fail-soft: a sync failure must never brick boot.
-await guardNonCritical("ssh-password-sync", ensureSshPasswordSynced);
+let sshPasswordSynced = false;
+await guardNonCritical("ssh-password-sync", async () => {
+	sshPasswordSynced = await ensureSshPasswordSynced();
+});
+await guardNonCritical("ssh-persistence", () =>
+	reconcileSshPersistence(sshPasswordSynced),
+);
 void getSshStatus();
 
 await guardNonCritical("hardware-identity-drift", async () => {
