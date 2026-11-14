@@ -1864,7 +1864,7 @@
 	"notifications.captureRateAdapted": "直播已使用备用摄像头可提供的画质；主摄像头恢复后将还原您的设置。",
 	"notifications.captureStandby": "所有摄像头均已断开 — 直播处于待机状态，摄像头恢复后会自动继续。",
 	"notifications.captureStandbyLong": "直播已待机超过10分钟。摄像头恢复后会继续。",
-	"notifications.bootconfigUpdating": "请勿重置系统或断开电源。引导程序正在后台更新，此时断电可能导致主板变砖。",
+	"notifications.bootconfigUpdating": "请勿重置系统或断开电源。引导程序正在后台更新，此时重置或断电可能导致主板变砖。",
 	"notifications.ceraliveUpdateAvailable": "有可用的 CeraLive 更新。打开 设置 → 软件更新 进行安装。",
 	"notifications.ceraliveUpdateFailed": "软件更新失败。打开 设置 → 软件更新 查看原因并重试。",
 	"notifications.connectionLost": "连接已断开",

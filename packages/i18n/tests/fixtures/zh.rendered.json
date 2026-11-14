@@ -987,7 +987,7 @@
 	"notifications.appInstalledDescription": "CeraUI 已添加到你的主屏幕！",
 	"notifications.appUpdated": "应用已更新",
 	"notifications.appUpdatedDescription": "已更新到版本 <version>",
-	"notifications.bootconfigUpdating": "请勿重置系统或断开电源。引导程序正在后台更新，此时断电可能导致主板变砖。",
+	"notifications.bootconfigUpdating": "请勿重置系统或断开电源。引导程序正在后台更新，此时重置或断电可能导致主板变砖。",
 	"notifications.ceraliveUpdateAvailable": "有可用的 CeraLive 更新。打开 设置 → 软件更新 进行安装。",
 	"notifications.ceraliveUpdateFailed": "软件更新失败。打开 设置 → 软件更新 查看原因并重试。",
 	"notifications.connectionLost": "连接已断开",
