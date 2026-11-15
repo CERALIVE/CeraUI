@@ -68,6 +68,7 @@ import {
 } from "./modules/config-boot.ts";
 import { initLogSettings } from "./modules/device-logs/settings.ts";
 import { initCellularEvents } from "./modules/events/cellular-events.ts";
+import { recordDeviceStart } from "./modules/events/device-start.ts";
 import { setEventSink } from "./modules/events/emit.ts";
 import { initIdentity } from "./modules/identity/index.ts";
 import { initRTMPIngestStats } from "./modules/ingest/rtmp.ts";
@@ -437,6 +438,7 @@ await guardNonCritical("mock-preview", () => {
 void guardNonCritical("boot-record", async () => {
 	await initRevisions();
 	await logBootRecord();
+	await recordDeviceStart();
 });
 initHardwareMonitoring();
 initDeviceStats();

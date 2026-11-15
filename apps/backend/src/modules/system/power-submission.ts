@@ -1,4 +1,5 @@
 import { logger } from "../../helpers/logger.ts";
+import { emitDeviceEvent } from "../events/device-emit.ts";
 import { notePlannedShutdown } from "../streaming/armed-stream-marker.ts";
 import { notifyDisruptiveActionRefused } from "./disruptive-action-refusal.ts";
 import {
@@ -16,12 +17,14 @@ export function submitPowerCommand(
 		command,
 	);
 	if (!admission.allowed) {
+		emitDeviceEvent("power_action_refused", { reason: admission.reason });
 		notifyDisruptiveActionRefused(admission.reason);
 		return { success: false, error: admission.reason };
 	}
 	let effectInvoked = false;
 	try {
 		notePlannedShutdown(command);
+		emitDeviceEvent("shutdown_requested", { action: command, origin: "local" });
 		effectInvoked = true;
 		runner(command);
 		admission.reservation.releaseAfterCompletion();

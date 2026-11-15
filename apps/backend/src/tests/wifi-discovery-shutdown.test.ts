@@ -13,6 +13,7 @@ import {
 	handleTerminationSignal,
 	resetShutdownForTest,
 } from "../helpers/shutdown.ts";
+import { resetEventEmitterForTest } from "../modules/events/emit.ts";
 import * as nm from "../modules/network/network-manager.ts";
 import {
 	onWifiChange,
@@ -70,6 +71,10 @@ function shutdown(signal: "SIGTERM" | "SIGINT") {
 beforeEach(async () => {
 	jest.useFakeTimers();
 	jest.setSystemTime(0);
+	// This suite counts Wi-Fi timers; event coalescing owns a separate scheduler.
+	resetEventEmitterForTest({
+		schedule: () => ({ unref: () => {}, cancel: () => {} }),
+	});
 	registry = isolateWifiRegistry();
 	wifiRadioObservation.reopenForTest();
 	wifiRadioObservation.stop();
@@ -125,6 +130,7 @@ afterEach(async () => {
 	wifiRadioObservation.reopenForTest();
 	onWifiChange(() => undefined);
 	setWifiState({});
+	resetEventEmitterForTest();
 	mock.restore();
 	restoreWifiRegistry(registry);
 	jest.useRealTimers();

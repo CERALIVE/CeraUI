@@ -31,6 +31,7 @@ import {
 } from "../../mocks/providers/sensors.ts";
 
 import { getConfig } from "../config.ts";
+import { emitDeviceEvent } from "../events/device-emit.ts";
 import { getRTMPIngestStats } from "../ingest/rtmp.ts";
 import { getSRTIngestStats } from "../ingest/srt.ts";
 import { getSourcesMessage } from "../streaming/sources.ts";
@@ -131,6 +132,7 @@ async function monitorBootconfig() {
 	}
 
 	if (await isServiceFailed(bootconfigService)) {
+		emitDeviceEvent("bootloader_update_failed", {});
 		const msg =
 			"Updating the bootloader failed. Please download the system log from the Advanced / developer menu";
 		notificationBroadcast("bootconfig", "error", msg, 0, true, false);

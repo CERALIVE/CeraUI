@@ -1,3 +1,4 @@
+import { emitDeviceEvent } from "../modules/events/device-emit.ts";
 import { cancelDisruptiveRetries } from "../modules/system/disruptive-retry.ts";
 import { logger } from "./logger.ts";
 
@@ -37,6 +38,8 @@ export function handleTerminationSignal(
 ): void {
 	if (shuttingDown) return;
 	shuttingDown = true;
+	if (signal === "SIGTERM" || signal === "SIGINT")
+		emitDeviceEvent("service_stopping", { signal });
 	cancelDisruptiveRetries();
 	deps.terminateWifiObservation?.();
 	deps.terminateWifiDiscovery?.();

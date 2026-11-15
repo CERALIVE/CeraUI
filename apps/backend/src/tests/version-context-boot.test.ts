@@ -53,7 +53,7 @@ describe("version context", () => {
 	test("the entrypoint starts a non-blocking guarded record after revisions resolve", async () => {
 		const main = await Bun.file(new URL("../main.ts", import.meta.url)).text();
 		expect(main).toMatch(
-			/void guardNonCritical\("boot-record", async \(\) => \{\s*await initRevisions\(\);\s*await logBootRecord\(\);\s*\}\);/,
+			/void guardNonCritical\("boot-record", async \(\) => \{\s*await initRevisions\(\);\s*await logBootRecord\(\);\s*await recordDeviceStart\(\);\s*\}\);/,
 		);
 	});
 

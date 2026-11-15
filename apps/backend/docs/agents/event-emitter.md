@@ -52,3 +52,34 @@ every registry code and declared key through redaction and the real store.
 sharing one boot and store, plus injected seed failures, identity filtering,
 boot changes, lazy initialization and the existing subject bound.
 Physical device latency, CPU cost and journal volume remain unmeasured.
+
+## Device lifecycle producers [EXISTS]
+
+After the guarded boot version log, `device-start.ts` collects the version
+context, appends it as an object to the boot ring, and emits flat
+`device_started` params. The classified boot list's journal `index === -1`
+supplies the previous identity, shutdown classification and unclean evidence.
+An unavailable list leaves the previous fields null; a failed boot append
+does not suppress the independent events. Version collection failure remains
+owned by the noncritical boot guard.
+
+Power submission records a refusal at admission or a shutdown request after
+the planned-shutdown marker and before the runner. `origin: "local"` identifies
+the local system RPC, the only caller of this submission path. The first
+SIGTERM/SIGINT records service stopping after latching termination.
+Config damage, positively detected hardware drift and a failed enabled
+bootloader update emit at their existing decision points.
+
+`device-disk.ts` observes completed /data samples in the existing stats tick.
+It admits only nonnegative safe integer byte counts with used no greater than
+total. Invalid or unavailable samples preserve the prior state. The first low
+sample emits; subsequent strict crossings below 512 MiB and back emit once.
+Equality is healthy. The latch advances before publishing so throwing or
+reentrant consumers cannot replay the edge.
+
+All these producers use the typed `device-emit.ts` boundary. A throwing
+emitter cannot interrupt their control paths. No probe, timer or subprocess
+is added. `events-device-emits.test.ts` and `events-device-lifecycle.test.ts`
+exercise the real producers and typed store path; `events-device-wiring.test.ts`
+executes the actual composition nodes with recording ports, without starting
+host services.
