@@ -165,6 +165,48 @@ equal 'time vacuum removed the archived flood' \
 equal 'time vacuum leaves zero of 960 archived entries' \
 	"$("${J[@]}" _SYSTEMD_UNIT=time-fill.service | jq -s length)" 0
 
+# Keep the original disk-scaled flood above; this independent unit forces drops.
+mkfifo /state/rate-limit-release
+exec {rate_release_fd}<>/state/rate-limit-release
+start_follow --lines=all _SYSTEMD_UNIT=rate-limited-flood.service PRIORITY=3
+systemd-run --quiet --unit=rate-limited-flood \
+	-p LogRateLimitIntervalSec=2s -p LogRateLimitBurst=1 -p RuntimeMaxSec=20s \
+	sh -ec 'i=0; while [ "$i" -lt 6000 ]; do echo "limited-flood $i"; i=$((i+1)); done
+		printf "<3>limited-flood-complete\n"
+		read -r release </state/rate-limit-release
+		echo limited-after-interval'
+next_message limited-flood-complete
+stop_follow
+equal 'per-unit rate interval' \
+	"$(systemctl show rate-limited-flood.service -p LogRateLimitIntervalUSec --value)" 2s
+equal 'per-unit rate burst' \
+	"$(systemctl show rate-limited-flood.service -p LogRateLimitBurst --value)" 1
+sync_journal
+limited_count="$("${J[@]}" _SYSTEMD_UNIT=rate-limited-flood.service |
+	jq -rs '[.[] | select(.MESSAGE | startswith("limited-flood "))] | length')"
+(( limited_count > 0 && limited_count < 6000 )) ||
+	fail "per-unit limit stored $limited_count of 6000 entries"
+# The same live unit writes after its interval; that write emits the drop receipt.
+systemd-run --quiet --unit=rate-limit-release --on-active=3s --timer-property=AccuracySec=1us \
+	sh -ec 'printf "resume\n" >/state/rate-limit-release'
+if ! timeout --kill-after=2s 15s bash -euc '
+	while :; do
+		journalctl --no-pager --all -o json MESSAGE_ID=a596d6fe7bfa4994828e72309e95d61e |
+			jq -ces "map(select(.MESSAGE | endswith(\"rate-limited-flood.service\"))) |
+				select(length == 1) | .[0]" >/state/suppression-limited.jsonl && exit 0
+	done
+'; then
+	"${J[@]}" --grep='Suppressed|limited-flood'
+	fail 'timed out awaiting the per-unit suppression MESSAGE_ID'
+fi
+bash /conformance/assert-suppression.sh rate-limited-flood.service 6000 "$limited_count" \
+	</state/suppression-limited.jsonl || fail 'suppression ID, message or dropped count mismatch'
+echo "PASS live: suppression MESSAGE_ID a596d6fe7bfa4994828e72309e95d61e"
+echo "SUPPRESSION_LIMITED stored=$limited_count written=6000"
+echo "SUPPRESSION_LIMITED_JSON $(jq -c . /state/suppression-limited.jsonl)"
+exec {rate_release_fd}<&-
+rm /state/rate-limit-release
+
 machine="$(tr -d '\n' </etc/machine-id)"
 predecessor=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
 mkdir -p "/var/log/journal/$predecessor"
