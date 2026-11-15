@@ -30,9 +30,11 @@ import type {
 	FccUnlockOptionsOutput,
 	GetEngineOutput,
 	HotspotConfigInput,
+	HotspotConfigOutput,
 	HotspotPrepareInput,
 	HotspotPrepareOutput,
 	HotspotToggleInput,
+	HotspotToggleOutput,
 	InstallUpdatesNowInput,
 	KioskConfigureInput,
 	KioskConfigureOutput,
@@ -455,6 +457,20 @@ class RPCClient {
 			for (const [type, value] of Object.entries(parsed)) {
 				if (type === "id" || type === "seq" || type === LOG_FOLLOW_GAP_FROM)
 					continue;
+				// Private mode refusals are call replies; only sequenced terminals
+				// belong to the transaction shared by all subscribed clients.
+				if (
+					seq === undefined &&
+					type === "wifi" &&
+					typeof value === "object" &&
+					value !== null &&
+					"adapter_mode" in value &&
+					typeof value.adapter_mode === "object" &&
+					value.adapter_mode !== null &&
+					"error" in value.adapter_mode &&
+					typeof value.adapter_mode.error === "string"
+				)
+					continue;
 				const payload =
 					type === LOG_FOLLOW_EVENT &&
 					typeof value === "object" &&
@@ -857,12 +873,14 @@ export interface TypedRPC {
 		connectNew: (input: WifiNewInput) => Promise<WifiOperationOutput>;
 		forget: (input: WifiForgetInput) => Promise<SuccessResponse>;
 		scan: (input: WifiScanInput) => Promise<SuccessResponse>;
-		hotspotStart: (input: HotspotToggleInput) => Promise<SuccessResponse>;
+		hotspotStart: (input: HotspotToggleInput) => Promise<HotspotToggleOutput>;
 		hotspotStop: (input: HotspotToggleInput) => Promise<SuccessResponse>;
 		hotspotPrepare: (
 			input: HotspotPrepareInput,
 		) => Promise<HotspotPrepareOutput>;
-		hotspotConfigure: (input: HotspotConfigInput) => Promise<SuccessResponse>;
+		hotspotConfigure: (
+			input: HotspotConfigInput,
+		) => Promise<HotspotConfigOutput>;
 		setCountry: (input: SetWifiCountryInput) => Promise<SetWifiCountryOutput>;
 		getAdapterModes: () => Promise<WifiAdapterModeStatus>;
 		/**

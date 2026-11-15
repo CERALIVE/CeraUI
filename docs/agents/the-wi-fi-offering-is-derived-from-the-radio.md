@@ -7,8 +7,10 @@ editor preserve edits on same-device/token status patches, including renames.
 Rebinding reloads the form and withdraws consent; session, link and attempt
 fences reject obsolete continuations. Save and mode outcomes use the dispatched
 token echoed by the producer. Tokenless rows remain visible with Stop available,
-but guarded actions require identification. Backend enforcement and limited or
-port-scoped identity states remain later work. See
+but guarded actions require identification. The backend now enforces the
+expected token at request and request-bound transaction-lock entry and retains
+safe Stop, station and internal actions. Request admission is separate from
+frame correlation metadata. Port-scoped identity remains separate work. See
 [the binding contract](../HOTSPOT-DRAFT-BINDING.md).
 
 **Security offerings are partial, nonempty maps [EXISTS].** A radio without

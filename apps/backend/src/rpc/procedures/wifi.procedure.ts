@@ -39,14 +39,15 @@
  * after the reply — so `accepted: true` is a promise of a later frame, never a
  * claim that the access point is up.
  *
- * Optional `incarnation` inputs are parsed by the shared schemas and deliberately
- * ignored here. This additive protocol step does not enforce radio bindings.
+ * Guarded requests prove their binding under the admission probe, then again
+ * at transaction lock entry. Stop and station never require a token.
  */
 
 import {
 	type HotspotPrepareOutput,
 	type HotspotToggleOutput,
 	hotspotConfigInputSchema,
+	hotspotConfigOutputSchema,
 	hotspotPrepareInputSchema,
 	hotspotPrepareOutputSchema,
 	hotspotToggleInputSchema,
@@ -79,10 +80,9 @@ import {
 import {
 	getMockHotspotConfig,
 	getMockWifiFaults,
-	isMockWifiLimited,
 	setMockHotspotConfig,
 } from "../../mocks/providers/wifi.ts";
-import { getMockWifiIncarnation } from "../../mocks/providers/wifi-incarnation.ts";
+import { resolveMockWifiDevice } from "../../mocks/providers/wifi-incarnation.ts";
 import { isRealDevice } from "../../modules/system/device-detection.ts";
 import { handleWifi, wifiBuildMsg } from "../../modules/wifi/wifi.ts";
 import {
@@ -95,30 +95,28 @@ import {
 	buildWifiAdapterModeStatus,
 	wifiAdapterModeOptions,
 } from "../../modules/wifi/wifi-adapter-mode.ts";
-import { publishAdapterModeOutcome } from "../../modules/wifi/wifi-adapter-mode-outcome.ts";
+import {
+	type AdapterModeRefusalPublisher,
+	buildAdapterModeOutcome,
+	publishAdapterModeOutcome,
+} from "../../modules/wifi/wifi-adapter-mode-outcome.ts";
 import { setWifiAdapterMode } from "../../modules/wifi/wifi-adapter-mode-transition.ts";
+import { withoutWifiRequestBinding } from "../../modules/wifi/wifi-binding.ts";
 import { getWifiInterfacesByMacAddress } from "../../modules/wifi/wifi-connections.ts";
 import {
 	persistWifiCountry,
 	setWifiCountry,
 } from "../../modules/wifi/wifi-country.ts";
-import { captureWifiFrameIncarnation } from "../../modules/wifi/wifi-frame-binding.ts";
-import {
-	type WifiFrameIncarnation,
-	withWifiFrameIncarnation,
-} from "../../modules/wifi/wifi-frame-incarnation.ts";
 import {
 	wifiHotspotPrepare,
 	wifiHotspotStart,
 } from "../../modules/wifi/wifi-hotspot-activation.ts";
-import {
-	wifiHotspotConfig,
-	wifiHotspotStop,
-} from "../../modules/wifi/wifi-hotspot-config.ts";
+import { wifiHotspotStop } from "../../modules/wifi/wifi-hotspot-config.ts";
 import { publishHotspotOutcome } from "../../modules/wifi/wifi-hotspot-outcome.ts";
-import { normalizeMacAddress } from "../../modules/wifi/wifi-permanent-mac.ts";
+import { withWifiModeRequestRefusal } from "../../modules/wifi/wifi-mode-request.ts";
 import { broadcast } from "../events.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
+import { wifiRequestAdmission } from "../middleware/wifi-admission.middleware.ts";
 import type { RPCContext } from "../types.ts";
 
 const MOCK_WIFI_DEVICE = "wlan0";
@@ -144,25 +142,6 @@ type MutationResult = {
 // concurrent operation.
 function mockWifiBusy(): boolean {
 	return shouldUseMocks() && getMockWifiFaults().deviceBusy;
-}
-
-function resolveMockWifiDevice(device: string): string | undefined {
-	if (mockWifiRadios.some((radio) => radio.device === device)) return device;
-	const index = Number.parseInt(device, 10);
-	return Number.isNaN(index) ? undefined : mockWifiRadios[index]?.device;
-}
-
-function captureRequestFrameIncarnation(
-	device: string,
-	expected: string | undefined,
-	kind: "config" | "mode",
-): WifiFrameIncarnation {
-	if (expected !== undefined) return { incarnation: expected };
-	if (!shouldUseMocks()) return captureWifiFrameIncarnation(device, kind);
-	const radio = resolveMockWifiDevice(device);
-	return radio === undefined
-		? {}
-		: { incarnation: getMockWifiIncarnation(radio) };
 }
 
 // Run `op` under the canonical per-adapter lock when the adapter resolves;
@@ -375,26 +354,8 @@ export const wifiScanProcedure = authedProcedure
 export const hotspotStartProcedure = authedProcedure
 	.input(hotspotToggleInputSchema)
 	.output(hotspotToggleOutputSchema)
+	.use(wifiRequestAdmission("start"))
 	.handler(async ({ input }): Promise<HotspotToggleOutput> => {
-		if (
-			shouldUseMocks() &&
-			isMockWifiLimited(resolveMockWifiDevice(input.device))
-		) {
-			const result = { success: false, error: "radio-unverified" } as const;
-			publishHotspotOutcome("start", Number(input.device), result);
-			return result;
-		}
-		if (mockWifiBusy()) return refuseHotspot("start", input.device);
-		/*
-		  An admission PROBE, released before the transaction runs — see
-		  `hotspotConfigure` below for why the lock is never held across the
-		  dispatch. It answers up front for an adapter this layer can resolve; the
-		  transaction's own lock is still what actually serializes the work, and
-		  its DEVICE_BUSY comes back through the awaited result either way.
-		*/
-		if (await adapterBusy(wifiAdapterLockKeyForDeviceId(input.device))) {
-			return refuseHotspot("start", input.device);
-		}
 		if (shouldUseMocks()) {
 			if (!getMockWifiFaults().suppressConfirm) {
 				const device = resolveMockWifiDevice(input.device);
@@ -406,9 +367,8 @@ export const hotspotStartProcedure = authedProcedure
 			publishHotspotOutcome("start", Number(input.device), { success: true });
 			return { success: true, accepted: true };
 		}
-
 		const result = await wifiHotspotStart({ device: Number(input.device) });
-		if (!result.success) return { success: false, error: result.error };
+		if (!result.success) return result;
 		return { success: true, accepted: true };
 	});
 
@@ -419,8 +379,8 @@ export const hotspotStartProcedure = authedProcedure
 export const hotspotPrepareProcedure = authedProcedure
 	.input(hotspotPrepareInputSchema)
 	.output(hotspotPrepareOutputSchema)
+	.use(wifiRequestAdmission("prepare"))
 	.handler(async ({ input }): Promise<HotspotPrepareOutput> => {
-		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
 		const chosen =
 			input.name !== undefined && input.password !== undefined
 				? { name: input.name, password: input.password }
@@ -428,8 +388,6 @@ export const hotspotPrepareProcedure = authedProcedure
 		if (shouldUseMocks()) {
 			const device = resolveMockWifiDevice(input.device);
 			if (!device) return { success: false, error: "no-device" };
-			if (isMockWifiLimited(device))
-				return { success: false, error: "radio-unverified" };
 			if (chosen) setMockHotspotConfig(device, chosen);
 			const { name, password } = getMockHotspotConfig(device);
 			return { success: true, name, password };
@@ -468,93 +426,31 @@ export const hotspotStopProcedure = authedProcedure
  */
 export const hotspotConfigureProcedure = authedProcedure
 	.input(hotspotConfigInputSchema)
-	.output(successResponseSchema)
-	.handler(({ input, context }) =>
-		withWifiFrameIncarnation(
-			captureRequestFrameIncarnation(input.device, input.incarnation, "config"),
-			async (): Promise<{
-				success: boolean;
-				error?: "DEVICE_BUSY" | "radio-unverified";
-			}> => {
-				if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
-				const ws = context.ws;
-				if (
-					shouldUseMocks() &&
-					isMockWifiLimited(resolveMockWifiDevice(input.device))
-				) {
-					ws.send(
-						JSON.stringify({
-							wifi: {
-								hotspot: {
-									config: {
-										device: input.device,
-										error: "radio-unverified",
-										...captureRequestFrameIncarnation(
-											input.device,
-											input.incarnation,
-											"config",
-										),
-									},
-								},
-							},
-						}),
-					);
-					return { success: false, error: "radio-unverified" };
-				}
-				/*
-		  An ADMISSION PROBE, not a guard held across the work: `wifiHotspotConfig`
-		  acquires this exact key itself, and holding it here while dispatching made
-		  the transaction refuse ITSELF — every reconfigure answered `saving` on a
-		  healthy radio. The probe still refuses a genuinely busy adapter up front;
-		  the transaction's own lock remains the guarantee, and its terminal `wifi`
-		  frame remains the outcome the dialog waits on.
-		*/
-				if (await adapterBusy(wifiAdapterLockKeyForDeviceId(input.device))) {
-					return { success: false, error: "DEVICE_BUSY" };
-				}
-				const limited = Object.entries(getWifiInterfacesByMacAddress()).some(
-					([key, row]) =>
-						row.id === Number(input.device) &&
-						(!normalizeMacAddress(key) ||
-							row.degradedReason === "permanent-mac-unresolved"),
-				);
-				if (limited) {
-					await wifiHotspotConfig(ws, {
-						device: Number(input.device),
-						name: input.name,
-						password: input.password,
-						channel: input.channel,
-					});
-					return { success: false, error: "radio-unverified" };
-				}
-
-				handleWifi(ws, {
-					hotspot: {
-						config: {
-							device: Number(input.device),
-							name: input.name,
-							password: input.password,
-							channel: input.channel,
-							...(input.security !== undefined
-								? { security: input.security }
-								: {}),
-						},
-					},
-				});
-				if (shouldUseMocks()) {
-					const device = resolveMockWifiDevice(input.device);
-					if (device) {
-						setMockHotspotConfig(device, {
-							name: input.name,
-							password: input.password,
-							channel: input.channel,
-						});
-					}
-				}
-				return { success: true };
+	.output(hotspotConfigOutputSchema)
+	.use(wifiRequestAdmission("configure"))
+	.handler(({ input, context }) => {
+		handleWifi(context.ws, {
+			hotspot: {
+				config: {
+					device: Number(input.device),
+					name: input.name,
+					password: input.password,
+					channel: input.channel,
+					...(input.security !== undefined ? { security: input.security } : {}),
+				},
 			},
-		),
-	);
+		});
+		if (shouldUseMocks()) {
+			const device = resolveMockWifiDevice(input.device);
+			if (device)
+				setMockHotspotConfig(device, {
+					name: input.name,
+					password: input.password,
+					channel: input.channel,
+				});
+		}
+		return { success: true };
+	});
 
 /*
   A dev host has no wiphy, so nothing can PROVE an AP+STA combination on it. The
@@ -608,59 +504,52 @@ export const getWifiAdapterModesProcedure = authedProcedure
 export const setWifiAdapterModeProcedure = authedProcedure
 	.input(setWifiAdapterModeInputSchema)
 	.output(setWifiAdapterModeOutputSchema)
-	.handler(({ input }) =>
-		withWifiFrameIncarnation(
-			captureRequestFrameIncarnation(input.device, input.incarnation, "mode"),
-			async (): Promise<SetWifiAdapterModeOutput> => {
-				if (mockWifiBusy()) {
-					publishAdapterModeOutcome(input.device, {
-						success: false,
-						error: "DEVICE_BUSY",
-					});
-					return { success: false, error: "DEVICE_BUSY" };
-				}
-
-				if (shouldUseMocks()) {
-					const device = resolveMockWifiDevice(input.device);
-					if (!device) {
-						publishAdapterModeOutcome(input.device, {
-							success: false,
-							error: "no-device",
-						});
-						return { success: false, error: "no-device" };
-					}
-					if (input.mode !== "station" && isMockWifiLimited(device)) {
-						publishAdapterModeOutcome(input.device, {
-							success: false,
-							error: "radio-unverified",
-						});
-						return { success: false, error: "radio-unverified" };
-					}
-					// A dev host can express `station` and `hotspot` only: `hybrid` needs a
-					// second, real netdev, and pretending otherwise would offer a mode whose
-					// bond-exclusion proof has nothing to exclude.
-					if (input.mode === "hybrid") {
-						publishAdapterModeOutcome(input.device, {
-							success: false,
-							error: "capability-unproven",
-						});
-						return { success: false, error: "capability-unproven" };
-					}
-					getMockState().wifiModes[device] = input.mode;
-					if (input.mode === "hotspot") {
-						setMockWifiConnection(device, { activeNetwork: undefined });
-					}
-					publishAdapterModeOutcome(input.device, {
-						success: true,
-						mode: input.mode,
-					});
-					return { success: true, applied: input.mode };
-				}
-
-				return setWifiAdapterMode(input.device, input.mode);
-			},
-		),
-	);
+	.use(wifiRequestAdmission("mode"))
+	.handler(async ({ input, context }): Promise<SetWifiAdapterModeOutput> => {
+		const publishRefusal: AdapterModeRefusalPublisher = (device, outcome) =>
+			withoutWifiRequestBinding(() =>
+				context.ws.send(
+					JSON.stringify({
+						wifi: { adapter_mode: buildAdapterModeOutcome(device, outcome) },
+					}),
+				),
+			);
+		if (input.mode === "station" && mockWifiBusy()) {
+			publishRefusal(input.device, {
+				success: false,
+				error: "DEVICE_BUSY",
+			});
+			return { success: false, error: "DEVICE_BUSY" };
+		}
+		if (shouldUseMocks()) {
+			const device = resolveMockWifiDevice(input.device);
+			if (!device) {
+				publishRefusal(input.device, {
+					success: false,
+					error: "no-device",
+				});
+				return { success: false, error: "no-device" };
+			}
+			if (input.mode === "hybrid") {
+				publishRefusal(input.device, {
+					success: false,
+					error: "capability-unproven",
+				});
+				return { success: false, error: "capability-unproven" };
+			}
+			getMockState().wifiModes[device] = input.mode;
+			if (input.mode === "hotspot")
+				setMockWifiConnection(device, { activeNetwork: undefined });
+			publishAdapterModeOutcome(input.device, {
+				success: true,
+				mode: input.mode,
+			});
+			return { success: true, applied: input.mode };
+		}
+		return withWifiModeRequestRefusal(publishRefusal, () =>
+			setWifiAdapterMode(input.device, input.mode),
+		);
+	});
 
 /**
  * Set the device regulatory country. Mirrors `network.setIngestEnabled`: the

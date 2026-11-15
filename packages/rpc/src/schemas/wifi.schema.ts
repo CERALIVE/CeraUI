@@ -324,9 +324,12 @@ export type SetWifiAdapterModeInput = z.infer<typeof setWifiAdapterModeInputSche
   own members, deliberately reused rather than re-spelled — a mode change IS a
   hotspot start/stop underneath, so a refusal must read identically whichever
   control produced it. `capability-unproven` means hybrid capability is not
-  proven; `radio-unverified` means the adapter's permanent identity is unresolved.
+  proven. Entry admission adds binding-required, radio-changed and
+  radio-unverified for missing, stale and unresolved adapter identity.
 */
 export const wifiAdapterModeErrorSchema = z.enum([
+	'binding-required',
+	'radio-changed',
 	'radio-unverified',
 	'DEVICE_BUSY',
 	'no-device',
@@ -352,6 +355,7 @@ export const setWifiAdapterModeOutputSchema = z.object({
 	// transition must not echo the value back as though it had been recorded.
 	applied: wifiAdapterModeSchema.optional(),
 	error: wifiAdapterModeErrorSchema.optional(),
+	reason: z.string().optional(),
 });
 export type SetWifiAdapterModeOutput = z.infer<typeof setWifiAdapterModeOutputSchema>;
 
@@ -365,6 +369,7 @@ export const wifiAdapterModeResultSchema = z.object({
 	success: z.boolean().optional(),
 	error: wifiAdapterModeErrorSchema.optional(),
 	incarnation: wifiIncarnationSchema.optional(),
+	reason: z.string().optional(),
 });
 export type WifiAdapterModeResult = z.infer<typeof wifiAdapterModeResultSchema>;
 
@@ -541,6 +546,8 @@ export type HotspotToggleInput = z.infer<typeof hotspotToggleInputSchema>;
     radio-unverified     the adapter's permanent identity is unresolved
 */
 export const hotspotToggleErrorSchema = z.enum([
+	'binding-required',
+	'radio-changed',
 	'radio-unverified',
 	'DEVICE_BUSY',
 	'no-device',
@@ -566,6 +573,7 @@ export const hotspotToggleOutputSchema = z.object({
 	success: z.boolean(),
 	accepted: z.literal(true).optional(),
 	error: hotspotToggleErrorSchema.optional(),
+	reason: z.string().optional(),
 });
 export type HotspotToggleOutput = z.infer<typeof hotspotToggleOutputSchema>;
 
@@ -595,6 +603,7 @@ export const hotspotPrepareOutputSchema = z.object({
 	// The adapter has never hosted an AP: the pair is a suggestion, not a saved setup.
 	firstTime: z.literal(true).optional(),
 	error: hotspotToggleErrorSchema.optional(),
+	reason: z.string().optional(),
 });
 export type HotspotPrepareOutput = z.infer<typeof hotspotPrepareOutputSchema>;
 
@@ -618,6 +627,13 @@ export const hotspotConfigInputSchema = z.object({
 });
 export type HotspotConfigInput = z.infer<typeof hotspotConfigInputSchema>;
 
+export const hotspotConfigOutputSchema = z.object({
+	success: z.boolean(),
+	error: z.string().optional(),
+	reason: z.string().optional(),
+});
+export type HotspotConfigOutput = z.infer<typeof hotspotConfigOutputSchema>;
+
 // WiFi operation output schema
 export const wifiOperationOutputSchema = z.object({
 	success: z.boolean(),
@@ -631,6 +647,7 @@ export const hotspotToggleResultSchema = z.object({
 	device: z.union([z.number(), z.string()]),
 	success: z.boolean().optional(),
 	error: hotspotToggleErrorSchema.optional(),
+	reason: z.string().optional(),
 });
 export type HotspotToggleResult = z.infer<typeof hotspotToggleResultSchema>;
 
@@ -659,6 +676,7 @@ export const wifiMessageSchema = z.object({
 					success: z.boolean().optional(),
 					error: z.string().optional(),
 					incarnation: wifiIncarnationSchema.optional(),
+					reason: z.string().optional(),
 				})
 				.optional(),
 		})

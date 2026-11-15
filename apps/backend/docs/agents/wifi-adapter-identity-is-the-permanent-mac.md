@@ -127,6 +127,10 @@ error. Confirmation polls use the same queue. The initial identity sample is
 awaited inside that run, with the producer's 1000 ms deadline. A lost sample
 publishes an isolated uncertain row rather than an operational-address key.
 
+Guarded RPC requests require the expected token at request and transaction-lock
+entry; frame correlation remains separate from that authority. The sampled
+registry, numeric-id and credential-store key rules above remain authoritative.
+
 The four-operation physical read budget remains shared across producers. A
 cancelled or timed-out physical read holds its slot until it actually settles.
 At saturation no fifth read starts; sampling resumes when capacity returns.
@@ -164,8 +168,8 @@ Monitor events still carry ifnames. A virtual/non-Wi-Fi unavailable event
 cannot cancel another radio's sample. A real unavailable event rotates only
 its current row. The synchronous disconnect broadcast withholds the token
 through a private publication fence, released in finally without overwriting
-a newer discovery generation. Optional request tokens still supply echoed
-config/mode frame metadata only; token admission is a later step.
+a newer discovery generation. Captured request tokens supply echoed config/mode metadata; request and
+transaction-lock admission enforce the expected token separately.
 
 A timed-out, rejected, superseded or incomplete sample retains L0's bounded
 retry schedule: 250 ms, 1 s and 4 s, at most three retries. A retry samples the
@@ -207,9 +211,38 @@ checks the four authorized limited fixture deltas without regenerating the
 golden file. Its three observational mutation controls still reject the same
 id, registry-key and id-map writes.
 
+### Request admission [EXISTS; host-tested only]
+
+One shared RPC middleware binds guarded requests
+and their transaction-lock entry to a fresh physical sample. Internal callers
+without request context retain their base behavior. The request context is
+one-shot: the transaction lock-entry check consumes it on admit and refuse, and
+middleware retires it in `finally` on every exit. The record belongs only to
+its device, so another adapter's internal work never inherits the requirement.
+Configure retains the record until its dispatched lock attempt enters or exits,
+without awaiting the writer. Mock effects consume it synchronously; outcome
+publishers and restore edges run without it.
+Captured config/mode
+metadata has a separate context, remains fixed for the dispatch, and never
+grants admission by itself.
+
+RPC entry refusals keep their existing result and Start/Configure/mode frame,
+but send that frame only to the requesting socket. They never publish a
+terminal to another client's accepted transaction. Prepare remains RPC-only;
+transaction publishers and internal callers retain their existing broadcasts.
+Every mode refusal before pending follows that private route, including
+station's token-free busy path, transaction preflight/lock exits and mocks.
+A one-shot request publication scope supplies an optional reply callback through
+the existing publisher hook; internal two-argument calls are unchanged. The
+existing sequence envelope separates private replies from broadcast terminals,
+so the frontend no longer infers request ownership from matching targets or
+filters busy terminals from observers. The additive protocol contract records
+the exact routing and attempt rules.
+
 The [additive protocol contract](../../../../docs/WIFI-INCARNATION-PROTOCOL.md)
 continues to define token shape, frame correlation, remote stripping and the
-shared package boundary. This host-tested mechanism does not qualify physical
+shared package boundary. Token validation, bounded current-unobserved recovery
+and exact frontend attempt ownership follow that same contract. This host-tested mechanism does not qualify physical
 radios or NetworkManager activation.
 
 ### Limited operation [EXISTS; host and mock-browser proof only]
@@ -219,8 +252,8 @@ hybrid refuse with `radio-unverified` before credentials, NetworkManager or
 virtual-interface effects, including an already-active shortcut. Configure also
 sends its captured terminal `config: {error: "radio-unverified"}` frame.
 These checks live in the shared backend transactions, so direct and legacy
-callers receive the same refusal as RPC clients. Tokens remain optional and
-unenforced in this step.
+callers receive the same refusal as RPC clients. Guarded RPC tokens are enforced separately; these transaction checks also
+protect direct and internal paths.
 
 Display, Copy, Stop and station operations remain available. Discovery reads
 the AP profile NetworkManager reports active on the exact device into memory

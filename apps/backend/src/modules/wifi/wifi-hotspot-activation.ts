@@ -40,6 +40,7 @@ import {
 	wifiAdapterModeCapability,
 	wifiAdapterModeRecorder,
 } from "./wifi-adapter-mode.ts";
+import { admitWifiRequest } from "./wifi-binding.ts";
 import { getWifiCapabilitiesForInterface } from "./wifi-capabilities.ts";
 import {
 	concurrentHotspotBindingFields,
@@ -224,7 +225,10 @@ export type HotspotPrepareResult =
 				| "no-device"
 				| "unsupported"
 				| "activation-failed"
-				| "radio-unverified";
+				| "radio-unverified"
+				| "binding-required"
+				| "radio-changed";
+			reason?: string;
 	  };
 
 /**
@@ -255,7 +259,11 @@ export async function prepareHotspotForInterface(
 ): Promise<HotspotPrepareResult> {
 	const owned = hotspotOwnershipGuard(macAddress, wifiInterface);
 	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
-		prepareHotspotLocked(macAddress, wifiInterface, msg, deps),
+		admitWifiRequest(
+			wifiInterface,
+			() => prepareHotspotLocked(macAddress, wifiInterface, msg, deps),
+			(refusal) => refusal,
+		),
 	);
 	if (!lock.success) return { success: false, error: lock.error };
 	if (lock.result.success && !owned()) {
@@ -385,38 +393,45 @@ export async function startHotspotForInterface(
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotActivationDeps = defaultHotspotDeps,
 ): Promise<HotspotStartResult> {
-	const lock = await withWifiAdapterLock(
-		wifiAdapterLockKey(macAddress),
-		async () => {
-			let undo: (() => void) | undefined;
-			let succeeded = false;
-			try {
-				const result = await startHotspotLocked(
-					macAddress,
-					wifiInterface,
-					deps,
-					(target) => {
-						if (deps.recordIntent) {
-							undo = recordWifiAdapterModeIntent(
-								resolveWifiAdapterModeIntentKey(macAddress),
-								target,
-								deps.recordIntent,
-							);
-						}
-					},
-				);
-				succeeded = result.success;
-				return result;
-			} finally {
-				if (!succeeded) undo?.();
-			}
-		},
+	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
+		admitWifiRequest(
+			wifiInterface,
+			async (): Promise<HotspotStartResult> => {
+				let undo: (() => void) | undefined;
+				let succeeded = false;
+				try {
+					const result = await startHotspotLocked(
+						macAddress,
+						wifiInterface,
+						deps,
+						(target) => {
+							if (deps.recordIntent) {
+								undo = recordWifiAdapterModeIntent(
+									resolveWifiAdapterModeIntentKey(macAddress),
+									target,
+									deps.recordIntent,
+								);
+							}
+						},
+					);
+					succeeded = result.success;
+					return result;
+				} finally {
+					if (!succeeded) undo?.();
+				}
+			},
+			(refusal) => refusal,
+		),
 	);
 	if (!lock.success) return { success: false, error: lock.error };
 	return lock.result;
 }
 
-/** Internal delegate: the caller owns the adapter lock and its intent transaction. */
+/**
+ * Internal delegate: the caller owns the adapter lock, its intent transaction
+ * and request admission, so a mode transition's start never re-admits after it
+ * has already changed the radio.
+ */
 export async function startHotspotLocked(
 	macAddress: string,
 	wifiInterface: WifiInterfaceWithHotspot,

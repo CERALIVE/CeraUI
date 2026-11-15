@@ -17,7 +17,7 @@
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { WifiInterface } from '@ceraui/rpc/schemas';
 import { Copy, Dices, Loader2, TriangleAlert } from '@lucide/svelte';
-import { untrack } from 'svelte';
+import { onDestroy, tick, untrack } from 'svelte';
 import { toast } from 'svelte-sonner';
 
 import { networkConstraints } from '$lib/components/streaming';
@@ -28,6 +28,7 @@ import { Label } from '$lib/components/ui/label';
 import { copyToClipboard } from '$lib/helpers/clipboard';
 import { rpc } from '$lib/rpc/client';
 import { getLinkEpoch } from '$lib/rpc/session-epoch.svelte';
+import { waitForWifiStatus } from '$lib/rpc/wifi-status-receipt';
 
 import { generateHotspotPassword, hotspotPasswordIsPrintable } from './hotspot-password';
 import { sameWifiRadio, type WifiRadioBinding, wifiRadioChanged } from './wifi-radio-binding';
@@ -60,6 +61,8 @@ let invalidated = $state(false);
 let refused = $state(false);
 let binding: WifiRadioBinding | undefined;
 let attempt = 0;
+let awaitingStatus = false;
+let observation: AbortController | undefined;
 const radioDevice = $derived(device);
 const radioToken = $derived(incarnation);
 const radioReason = $derived(degradedReason);
@@ -77,7 +80,37 @@ function current(seq: number, captured: WifiRadioBinding): boolean {
 	}) && degradedReason === undefined;
 }
 
+onDestroy(() => { attempt += 1; observation?.abort(); });
+
+async function prepare(captured: WifiRadioBinding, seq: number, chosen?: { name: string; password: string }) {
+	if (!captured.incarnation) return;
+	const invoke = (token: string) => rpc.wifi.hotspotPrepare({
+		device: captured.device, incarnation: token, ...chosen,
+	});
+	let accepted = captured;
+	let retried = false;
+	let result = await invoke(captured.incarnation);
+	if (result.reason === 'current-unobserved' && current(seq, captured)) {
+		const controller = new AbortController();
+		observation = controller;
+		awaitingStatus = true;
+		const next = await waitForWifiStatus(captured.device, controller.signal);
+		await tick();
+		if (observation === controller) { observation = undefined; awaitingStatus = false; }
+		if (seq !== attempt || captured.device !== device || captured.link !== getLinkEpoch()) return;
+		if (!next?.incarnation) { phase = 'unsupported'; acknowledged = false; return; }
+		accepted = { ...captured, incarnation: next.incarnation, session };
+		binding = accepted;
+		retried = true;
+		result = await invoke(next.incarnation);
+	}
+	return { result, captured: accepted, retried };
+}
+
 async function load() {
+	observation?.abort();
+	observation = undefined;
+	awaitingStatus = false;
 	const captured = { device, incarnation, link: getLinkEpoch(), session };
 	const seq = ++attempt;
 	binding = captured;
@@ -97,15 +130,15 @@ async function load() {
 	}
 	phase = 'loading';
 	try {
-		const result = await rpc.wifi.hotspotPrepare({
-			device: captured.device, incarnation: captured.incarnation,
-		});
-		if (!current(seq, captured)) return;
+		const response = await prepare(captured, seq);
+		if (!response || !current(seq, response.captured)) return;
+		const { result } = response;
 		if (result.error === 'radio-unverified') {
 			phase = 'unverified';
 			return;
 		}
 		if (wifiRadioChanged(result)) {
+			if (response.retried) invalidated = true;
 			refused = true;
 			phase = 'load-failed';
 			return;
@@ -117,7 +150,8 @@ async function load() {
 		password = result.password;
 		phase = 'ready';
 	} catch {
-		if (current(seq, captured)) phase = 'load-failed';
+		// A rebound retry rejects against the binding it was accepted under.
+		if (binding && current(seq, binding)) phase = 'load-failed';
 	}
 }
 
@@ -128,9 +162,10 @@ $effect.pre(() => {
 	radioReason;
 	untrack(() => {
 		invalidated = binding !== undefined && !sameWifiRadio(binding, next);
+		if (awaitingStatus && binding && binding.device === next.device &&
+			binding.link === next.link && binding.incarnation !== next.incarnation) return;
 		void load();
 	});
-	return () => { attempt += 1; };
 });
 
 const nameError = $derived(
@@ -182,19 +217,21 @@ async function confirm() {
 	const seq = attempt;
 	if (!canConfirm || !captured?.incarnation || !current(seq, captured)) return;
 	const chosen = { name, password };
+	let accepted = captured;
 	if (name !== loaded.name || password !== loaded.password) {
 		phase = 'saving';
 		try {
-			const result = await rpc.wifi.hotspotPrepare({
-				device: captured.device, incarnation: captured.incarnation, ...chosen,
-			});
-			if (!current(seq, captured)) return;
+			const response = await prepare(captured, seq, chosen);
+			if (!response || !current(seq, response.captured)) return;
+			accepted = response.captured;
+			const { result } = response;
 			if (result.error === 'radio-unverified') {
 				phase = 'unverified';
 				acknowledged = false;
 				return;
 			}
 			if (wifiRadioChanged(result)) {
+				if (response.retried) invalidated = true;
 				refused = true;
 				acknowledged = false;
 				phase = 'ready';
@@ -205,14 +242,14 @@ async function confirm() {
 			}
 			loaded = chosen;
 		} catch {
-			if (!current(seq, captured)) return;
+			if (!binding || !current(seq, binding)) return;
 			phase = 'ready';
 			saveFailed = true;
 			return;
 		}
 		phase = 'ready';
 	}
-	if (current(seq, captured)) onConfirm(captured.incarnation);
+	if (accepted.incarnation && current(seq, accepted)) onConfirm(accepted.incarnation);
 }
 </script>
 

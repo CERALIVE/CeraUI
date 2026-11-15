@@ -26,6 +26,7 @@ import {
 	type AdapterModeTransitionDeps,
 	defaultAdapterModeDeps,
 } from "./wifi-adapter-mode-transition.ts";
+import { withoutWifiRequestBinding } from "./wifi-binding.ts";
 import { getWifiCapabilityEvidenceRevision } from "./wifi-capabilities.ts";
 import { channelFromNM } from "./wifi-channels.ts";
 import {
@@ -332,7 +333,10 @@ export function startWifiAdapterModeRestore(
 		});
 		return flight;
 	};
-	const unsubscribe = source.subscribe(request);
+	// An edge may be published from inside a request; restore is never its work.
+	const unsubscribe = source.subscribe(() =>
+		withoutWifiRequestBinding(request),
+	);
 	void request();
 	return () => {
 		stopped = true;

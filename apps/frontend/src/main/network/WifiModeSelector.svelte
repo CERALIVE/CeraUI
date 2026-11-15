@@ -56,6 +56,7 @@ import {
 	wifiModeDescriptionKey,
 	wifiModeLabelKey,
 } from './wifi-adapter-mode-view';
+import { withWifiEntryRetry } from './wifi-entry-request';
 import { sameWifiRadio, type WifiRadioBinding, wifiRadioChanged } from './wifi-radio-binding';
 import { wifiModeOpKey } from './wifi-station-lock';
 
@@ -109,6 +110,10 @@ const radioDevice = $derived(view.device);
 const radioToken = $derived(view.incarnation);
 const radioReason = $derived(view.degradedReason);
 let previous: WifiRadioBinding | undefined;
+let admission: AbortController | undefined;
+let admissionOwner: WifiRadioBinding | undefined;
+let bindingUnsupported = $state(false);
+let reloaded = $state(false);
 
 function capture(): WifiRadioBinding {
 	return { device: view.device, incarnation: view.incarnation, link: getLinkEpoch(), session };
@@ -122,15 +127,18 @@ $effect.pre(() => {
 	const binding = { device: radioDevice, incarnation: radioToken, link: getLinkEpoch() };
 	radioReason;
 	untrack(() => {
+		if (admissionOwner && (admissionOwner.device !== binding.device ||
+			admissionOwner.link !== binding.link)) admission?.abort();
 		if (previous && (previous.device !== binding.device ||
 			previous.incarnation !== binding.incarnation || previous.link !== binding.link)) {
+			bindingUnsupported = false;
 			session += 1;
 			armed = undefined;
 		}
 		previous = { ...binding, session };
 	});
 });
-onDestroy(() => { session += 1; });
+onDestroy(() => { session += 1; admission?.abort(); });
 
 const armedConsequence = $derived(
 	armed === undefined
@@ -141,21 +149,45 @@ const armedConsequence = $derived(
 const unavailable = $derived(view.options.filter((option) => !option.available));
 
 async function apply(mode: WifiAdapterMode, incarnation = view.incarnation) {
-	const binding = capture();
-	if (incarnation !== binding.incarnation ||
+	const original = capture();
+	let binding = original;
+	if (incarnation !== original.incarnation ||
 		(mode !== 'station' && (!incarnation || view.degradedReason))) return;
 	armed = undefined;
 	gated = undefined;
 	await osCommand({
 		key: wifiModeOpKey(binding.device, incarnation),
 		target: mode,
-		rpc: () => rpc.wifi.setAdapterMode({
-			device: binding.device, mode, ...(incarnation !== undefined ? { incarnation } : {}),
-		}),
+		rpc: async (handoff) => {
+			const invoke = (token?: string) => rpc.wifi.setAdapterMode({
+				device: original.device, mode, ...(token !== undefined ? { incarnation: token } : {}),
+			});
+			if (mode === 'station') return invoke(incarnation);
+			admission?.abort();
+			const controller = new AbortController();
+			admission = controller;
+			admissionOwner = original;
+			const owned = () => view.device === original.device && getLinkEpoch() === original.link;
+			const result = await withWifiEntryRetry(original, invoke, {
+				signal: controller.signal,
+				current: owned,
+				rebind: (token) => {
+					binding = { ...capture(), incarnation: token };
+					return handoff(wifiModeOpKey(original.device, token));
+				},
+			});
+			if (!result && !controller.signal.aborted && owned()) {
+				bindingUnsupported = true;
+				session += 1;
+				gated = mode;
+			}
+			return result ?? { success: false, error: 'binding-required' };
+		},
 		isCurrent: () => current(binding),
 		onResult: (result) => {
 			if (mode !== 'station' && wifiRadioChanged(result) && current(binding) && !gated) {
 				session += 1;
+				reloaded = true;
 				gated = mode;
 			}
 		},
@@ -167,6 +199,9 @@ async function apply(mode: WifiAdapterMode, incarnation = view.incarnation) {
 
 function request(mode: WifiAdapterMode) {
 	if (mode === view.displayMode) return;
+	admission?.abort();
+	bindingUnsupported = false;
+	reloaded = false;
 	session += 1;
 	if ((view.displayMode === 'station' || !view.incarnation || view.degradedReason) && mode !== 'station') {
 		armed = undefined;
@@ -285,11 +320,12 @@ function request(mode: WifiAdapterMode) {
 				mode: resolveMessageKey(wifiModeLabelKey(gated)),
 			})}
 			device={view.device}
-			incarnation={view.incarnation}
+			incarnation={bindingUnsupported ? undefined : view.incarnation}
 			degradedReason={view.degradedReason}
 			{session}
+			{reloaded}
 			keepsStation={gated === 'hybrid'}
-			onCancel={() => { session += 1; gated = undefined; }}
+			onCancel={() => { admission?.abort(); session += 1; gated = undefined; }}
 			onConfirm={(incarnation) => gated && apply(gated, incarnation)}
 		/>
 	{/if}

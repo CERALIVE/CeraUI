@@ -37,6 +37,11 @@ import {
 	type WifiAdapterModeRecorder,
 	wifiAdapterModeRecorder,
 } from "./wifi-adapter-mode.ts";
+import {
+	admitWifiRequest,
+	registerWifiRequestLockEntry,
+	type WifiBindingRefusal,
+} from "./wifi-binding.ts";
 import { getWifiCapabilitiesForInterface } from "./wifi-capabilities.ts";
 import {
 	type DerivedApChannel,
@@ -373,13 +378,18 @@ export async function wifiHotspotConfig(
 	  said. `unavailable` is one token for all four because they are one operator
 	  fact: this adapter is not currently a reconfigurable hotspot.
 	*/
-	const refuse = (error = "unavailable") => {
+	const refuse = (error = "unavailable", reason?: string) => {
 		conn.send(
 			buildMsg(
 				"wifi",
 				{
 					hotspot: {
-						config: { device: msg.device, error, ...binding },
+						config: {
+							device: msg.device,
+							error,
+							...(reason === undefined ? {} : { reason }),
+							...binding,
+						},
 					},
 				},
 				senderId,
@@ -495,17 +505,26 @@ export async function wifiHotspotConfig(
 
 	// Serialize the reconfigure against every other mutation on this ADAPTER —
 	// the RPC layer's `runGuarded` acquires the identical key.
-	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
-		reconfigureHotspotLocked(
-			macAddress,
+	const entered = registerWifiRequestLockEntry(wifiInterface);
+	const pending = withWifiAdapterLock(wifiAdapterLockKey(macAddress), () => {
+		const result = admitWifiRequest(
 			wifiInterface,
-			name,
-			password,
-			channel,
-			security,
-			deps,
-		),
-	);
+			() =>
+				reconfigureHotspotLocked(
+					macAddress,
+					wifiInterface,
+					name,
+					password,
+					channel,
+					security,
+					deps,
+				),
+			(refusal): ReconfigureResult => refusal,
+		);
+		entered?.();
+		return result;
+	});
+	const lock = await (entered ? pending.finally(entered) : pending);
 
 	if (!lock.success) {
 		conn.send(
@@ -523,6 +542,7 @@ export async function wifiHotspotConfig(
 	}
 
 	const result = lock.result;
+	if (typeof result === "object") return refuse(result.error, result.reason);
 	if (result === "saving" || result === "activating") {
 		conn.send(
 			buildMsg(
@@ -582,7 +602,7 @@ export async function reconfigureHotspotForRegdomain(
 	return lock.success && lock.result === "ok";
 }
 
-type ReconfigureResult = "ok" | "saving" | "activating";
+type ReconfigureResult = "ok" | "saving" | "activating" | WifiBindingRefusal;
 
 async function reconfigureHotspotLocked(
 	macAddress: string,

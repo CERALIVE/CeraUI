@@ -83,6 +83,7 @@ import {
 	isolateWifiRegistry,
 	restoreWifiRegistry,
 } from "./helpers/wifi-registry.ts";
+import { wifiRequestBinding } from "./helpers/wifi-request-binding.ts";
 
 const MAC = "dc:a6:32:01:02:03";
 const IFNAME = "wlan-intent";
@@ -336,17 +337,22 @@ for (const capability of [false, true] as const) {
 	test(`(1) confirmed direct ${capability ? "hybrid" : "exclusive"} start records its actual mode before effects`, async () => {
 		seed(radio(capability));
 		const mode = capability ? "hybrid" : "hotspot";
-		const result = await call(
-			hotspotStartProcedure,
-			{ device: "0" },
-			{ context: wifiProtocolContext() },
-		);
-		settlePending(IFNAME, true);
-		expect(result).toEqual({ success: true, accepted: true });
-		expect(observedWifiAdapterMode(row)).toBe(mode);
-		expect(await diskModes()).toEqual({ [MAC]: mode });
-		expect(modesAtEffect.every((value) => value === mode)).toBe(true);
-		expect(transcript).toContain("activate");
+		const binding = await wifiRequestBinding(MAC, row);
+		try {
+			const result = await call(
+				hotspotStartProcedure,
+				{ device: "0", incarnation: binding.incarnation },
+				{ context: wifiProtocolContext() },
+			);
+			settlePending(IFNAME, true);
+			expect(result).toEqual({ success: true, accepted: true });
+			expect(observedWifiAdapterMode(row)).toBe(mode);
+			expect(await diskModes()).toEqual({ [MAC]: mode });
+			expect(modesAtEffect.every((value) => value === mode)).toBe(true);
+			expect(transcript).toContain("activate");
+		} finally {
+			await binding.restore();
+		}
 	});
 }
 

@@ -46,6 +46,7 @@ test("remote status exposes the live hotspot password and a new password reaches
 		const password = "delegate-updated-password";
 		const input = hotspotConfigInputSchema.parse({
 			device: "0",
+			incarnation: fixture.before,
 			name: remote.hotspot?.name,
 			password,
 			channel: remote.hotspot?.channel,
@@ -91,5 +92,33 @@ test("remote status exposes the live hotspot password and a new password reaches
 		resetStatusRelay();
 		await fixture.restore();
 		await rm(scratch, { recursive: true, force: true });
+	}
+});
+
+test("a remote-shaped save without the local binding refuses before the config writer", async () => {
+	const fixture = await wifiFrameFixture(true, true);
+	const writer = spyOn(defaultHotspotConfigDeps, "nmConnSetFields");
+	const remember = spyOn(defaultHotspotConfigDeps, "rememberCredentials");
+	try {
+		expect(
+			await call(
+				hotspotConfigureProcedure,
+				{
+					device: "0",
+					name: "Delegate AP",
+					password: "delegate-password",
+					channel: "auto",
+				},
+				{ context: fixture.context },
+			),
+		).toEqual({ success: false, error: "binding-required" });
+		await fixture.configReceived;
+		expect(writer).not.toHaveBeenCalled();
+		expect(remember).not.toHaveBeenCalled();
+		expect(
+			JSON.parse(fixture.frames.at(-1) ?? "{}").wifi.hotspot.config.error,
+		).toBe("binding-required");
+	} finally {
+		await fixture.restore();
 	}
 });

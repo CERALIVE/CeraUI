@@ -27,7 +27,10 @@ import {
 } from "../modules/wifi/state/wifi-state.ts";
 import { handleWifi, setWifiJoinNmcliRunner } from "../modules/wifi/wifi.ts";
 import { wifiAdapterLockKey } from "../modules/wifi/wifi-adapter-lock.ts";
-import { addWifiInterface } from "../modules/wifi/wifi-connections.ts";
+import {
+	addWifiInterface,
+	getWifiInterfacesByMacAddress,
+} from "../modules/wifi/wifi-connections.ts";
 import { wifiHotspotStart } from "../modules/wifi/wifi-hotspot-activation.ts";
 import {
 	type HotspotStopDeps,
@@ -53,6 +56,7 @@ import {
 	isolateWifiRegistry,
 	restoreWifiRegistry,
 } from "./helpers/wifi-registry.ts";
+import { wifiRequestBinding } from "./helpers/wifi-request-binding.ts";
 
 const MAC = "dc:a6:32:7e:01:01";
 const DEVICE_ID = "0";
@@ -392,11 +396,14 @@ describe("the RPC caller receives the typed outcome (F-03)", () => {
 		const received: string[] = [];
 		const client = captureClient(received);
 		addClient(client);
+		const row = getWifiInterfacesByMacAddress()[MAC];
+		if (!row) throw new Error("missing request fixture row");
+		const binding = await wifiRequestBinding(MAC, row);
 
 		try {
 			const result = await call(
 				hotspotStartProcedure,
-				{ device: DEVICE_ID },
+				{ device: DEVICE_ID, incarnation: binding.incarnation },
 				{ context: makeContext() },
 			);
 			expect(result).toEqual({ success: false, error: "unsupported" });
@@ -414,6 +421,7 @@ describe("the RPC caller receives the typed outcome (F-03)", () => {
 				hotspot: { start: { device: 0, error: "unsupported" } },
 			});
 		} finally {
+			await binding.restore();
 			removeClient(client);
 		}
 	});

@@ -499,7 +499,29 @@ resource key, while tagged Ethernet role frames must match the request's `op`.
 Reconnect clearing invalidates the old attempt, retry begins a new
 one, and store recreation invalidates the captured owner. Superseded calls retain
 their raw result, `onResult` callback and failure toast, subject to the existing
-`isCurrent` and `silent` options.
+`isCurrent` and `silent` options. A caller that rebinds and resends inside `rpc`
+passes the resend's key to the `handoff` argument first; the attempt moves to
+that key, so settlement and the surface's pending state follow the resend. If
+this call no longer owns its attempt, or a different key is already pending (such
+as another client's transition), the other operation is left intact: `handoff`
+returns false, nothing is resent, and the first refusal stands.
+The current attempt must also still be pending: an already confirmed, failed or
+timed-out attempt keeps its settled outcome and is not resent. `osCommand`
+also leaves its existing terminal feedback in place instead of delivering the
+abandoned retry's earlier refusal through classification or `onResult`.
+Every pending Wi-Fi mode echo replaces RPC attempt ownership, including an
+equal-target echo. Ownership is the attempt's unique identity; equality of keys
+or targets cannot transfer it. The local-marker machinery is removed.
+
+All RPC mode refusals before pending are private to their requester, including
+station busy probes and the transaction's other preflight exits. Their existing
+unsequenced mode-error frames are consumed at the RPC receive boundary; only the
+correlated RPC result settles its own attempt. Broadcast mode terminals use the
+existing sequenced envelope and settle every observer regardless of error reason.
+The DEVICE_BUSY locality filter is deleted. A reconnect-cleared idle entry can be
+recreated by its terminal without reopening an already terminal attempt.
+Configure retains its distinct asynchronous terminal handling. No new wire,
+status or attachment field is introduced.
 
 RPC callers must classify and settle inside `osCommand`, rather than confirm,
 fail or clear a resource key after awaiting it. An ok classification with

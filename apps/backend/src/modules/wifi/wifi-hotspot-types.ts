@@ -167,7 +167,10 @@ export type HotspotStartResult =
 				| "no-device"
 				| "unsupported"
 				| "activation-failed"
-				| "radio-unverified";
+				| "radio-unverified"
+				| "binding-required"
+				| "radio-changed";
+			reason?: string;
 	  };
 
 /**
