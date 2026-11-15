@@ -1,19 +1,46 @@
-# CONSTRUCTED replay, not a connected-bearer capture.
-# Built from the captured NetworkManager 1.52.1 allowed fields/device-show shapes
-# and the control-port/data-interface mismatch reported in CeraUI issue #431.
-# Neither bench modem had a connected data bearer; connected states and IP
-# interfaces below are constructed. A real connected-bearer capture will be
-# added later as an additional fixture. No device identities were copied.
+# Real capture: Rock 5B+, NetworkManager 1.52.1, 2026-11-15.
+# Twin connected cellular bearers plus the complete device inventory.
+# Already redacted and identifier-free; payload bytes are unchanged.
 
 ##### twin-modem-general
+GENERAL.DEVICE:eth0
+GENERAL.IP-IFACE:eth0
+GENERAL.TYPE:ethernet
+GENERAL.STATE:100 (connected)
+GENERAL.METERED:no (guessed)
+
 GENERAL.DEVICE:cdc-wdm0
-GENERAL.IP-IFACE:wwan0
+GENERAL.IP-IFACE:wwu1u4u3i2
 GENERAL.TYPE:gsm
 GENERAL.STATE:100 (connected)
-GENERAL.METERED:yes
+GENERAL.METERED:yes (guessed)
 
 GENERAL.DEVICE:cdc-wdm1
-GENERAL.IP-IFACE:wwan1
+GENERAL.IP-IFACE:wwu1u4u2i2
 GENERAL.TYPE:gsm
 GENERAL.STATE:100 (connected)
-GENERAL.METERED:yes
+GENERAL.METERED:yes (guessed)
+
+GENERAL.DEVICE:lo
+GENERAL.IP-IFACE:lo
+GENERAL.TYPE:loopback
+GENERAL.STATE:100 (connected (externally))
+GENERAL.METERED:no (guessed)
+
+GENERAL.DEVICE:wlan0
+GENERAL.IP-IFACE:
+GENERAL.TYPE:wifi
+GENERAL.STATE:30 (disconnected)
+GENERAL.METERED:unknown
+
+GENERAL.DEVICE:p2p-dev-wlan0
+GENERAL.IP-IFACE:
+GENERAL.TYPE:wifi-p2p
+GENERAL.STATE:30 (disconnected)
+GENERAL.METERED:unknown
+
+GENERAL.DEVICE:clap-wlan0
+GENERAL.IP-IFACE:
+GENERAL.TYPE:wifi
+GENERAL.STATE:20 (unavailable)
+GENERAL.METERED:unknown
