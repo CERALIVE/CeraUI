@@ -539,7 +539,7 @@ describe("unusable and shared USB serial identity", () => {
 		expect(b?.legacyLinkId).toBe(a?.legacyLinkId);
 	});
 
-	it("migrates a singleton credential but refuses the shared legacy credential for twins", async () => {
+	it("refuses an unbound legacy credential for both singletons and twins", async () => {
 		resetModemCredentialsForTest();
 		const legacy = resolvePhysicalDevice({
 			ifname: "old",
@@ -555,8 +555,10 @@ describe("unusable and shared USB serial identity", () => {
 		if (!first) throw new Error("missing constructed twin");
 		await refreshUsbNetMarkers([first.ifname], constructedTwinDeps([first]));
 		const single = resolveModemPhysicalIdentity(first.ifname);
-		expect(readModemCredential(single)?.username).toBe("USER_TOKEN");
-		expect(readModemCredential({ ...legacy, linkId: oldId })).toBeUndefined();
+		expect(readModemCredential(single)?.username).toBeUndefined();
+		expect(readModemCredential({ ...legacy, linkId: oldId })?.username).toBe(
+			"USER_TOKEN",
+		);
 
 		resetModemCredentialsForTest();
 		writeModemCredential(
