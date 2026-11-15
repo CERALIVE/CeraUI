@@ -7,8 +7,9 @@ import { ensureAuthenticated, navigateTo } from '../helpers/index.js';
  * Two states are worth pixels: the inset placed over the preview's empty stage
  * (the preview off, so no decoded frame enters the pixels) and the layout
  * radios with the seventh, `custom`, chosen. Both run on the `caps-full` mock,
- * which advertises `composition-geometry`. Desktop only: mobile baselines are
- * not tracked (`.gitignore`), and the functional spec covers the phone layout.
+ * which advertises `composition-geometry`. Desktop only (`@desktop-only`): mobile
+ * baselines are not tracked (`.gitignore`), and the functional spec covers the
+ * phone layout.
  */
 
 test.use({ backendScenario: 'caps-full' });
@@ -35,15 +36,13 @@ test.describe('@visual layout designer', () => {
 		await backendRpc.call(['streaming', 'setConfig'], { composition: null });
 	});
 
-	test('@visual the inset placed on the preview', { tag: '@visual' }, async ({ page }, testInfo) => {
-		test.skip(testInfo.project.name !== 'desktop', 'mobile baselines are not tracked');
+	test('@visual the inset placed on the preview', { tag: ['@visual', '@desktop-only'] }, async ({ page }) => {
 		const preview = page.getByTestId('program-desk').getByTestId('preview');
 		await expect(preview.getByTestId('layout-inset')).toBeVisible();
 		await expect(preview).toHaveScreenshot('layout-designer-inset.png', { maxDiffPixels: 100 });
 	});
 
-	test('@visual the layout radios with custom chosen', { tag: '@visual' }, async ({ page }, testInfo) => {
-		test.skip(testInfo.project.name !== 'desktop', 'mobile baselines are not tracked');
+	test('@visual the layout radios with custom chosen', { tag: ['@visual', '@desktop-only'] }, async ({ page }) => {
 		const radios = page.getByTestId('composition-layout-selector');
 		await expect(page.getByTestId('composition-layout-custom')).toHaveAttribute('aria-checked', 'true');
 		await expect(radios).toHaveScreenshot('layout-designer-radios.png', { maxDiffPixels: 100 });

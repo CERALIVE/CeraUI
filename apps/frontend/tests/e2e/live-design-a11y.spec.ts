@@ -176,10 +176,9 @@ async function focusStopsUnderTheBar(page: Page): Promise<string[]> {
 	return hidden;
 }
 
-test.describe('@a11y Live screen design pass — caps-full', () => {
-	test.skip(({ browserName }) => browserName !== 'chromium', 'single-engine layout proof');
-	test.beforeEach(async ({ backendRpc }, testInfo) => {
-		test.skip(testInfo.project.name !== 'desktop', 'each test drives its own viewports');
+// Each test drives its own viewports, so it runs once, on desktop.
+test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-only' }, () => {
+	test.beforeEach(async ({ backendRpc }) => {
 		await backendRpc.call(['streaming', 'setConfig'], SEED);
 	});
 

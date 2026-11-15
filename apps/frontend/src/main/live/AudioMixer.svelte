@@ -16,8 +16,10 @@
   device composes it on its own saved mix, so an edit never carries a stale copy
   of the other inputs; its config echo is what the strips then show.
   Live on a mix session (`status.audio_mix_active`), level, mute and delay go to
-  `streaming.setAudioMix` and the device's applied values win; membership and
-  tracks wait for the next start. Live without a mix, every control waits.
+  `streaming.setAudioMix` and the device's applied values win until a config
+  broadcast changes that input after the change was sent (another tab's write,
+  or the change's own echo with the same values); membership and tracks wait
+  for the next start. Live without a mix, every control waits.
 
   A refusal is shown beside its strip as the copy of the backend token that
   names it. The UI refuses a track change the backend would refuse with the same
@@ -37,6 +39,7 @@ import {
 	defaultAudioInput as defaults,
 } from '@ceraui/rpc/schemas';
 import { Activity, RotateCcw, Volume2, VolumeX } from '@lucide/svelte';
+import { untrack } from 'svelte';
 
 import LabeledSlider from '$lib/components/custom/LabeledSlider.svelte';
 import AudioLevelMeter from '$lib/components/preview/AudioLevelMeter.svelte';
@@ -136,9 +139,47 @@ function entryFor(id: string): AudioInputSetting {
 const enabledCount = $derived(strips.filter((strip) => isEnabled(strip.id)).length);
 const full = $derived(mix !== undefined && enabledCount >= mix.max_inputs);
 
-// The device's answer to the latest live change, per input; it wins over the
-// saved value until the session ends.
-let liveApplied = $state<Record<string, Values>>({});
+const valuesKey = ({ gain_db, mute, delay_ms }: Values): string => `${gain_db}|${mute}|${delay_ms}`;
+// An input the saved mix does not list is at its defaults.
+const AT_DEFAULTS = valuesKey(defaults(''));
+
+// The level the device was last sent or answered, per input; asking for that same
+// level again sends nothing. A broadcast that changes the input replaces it with
+// the saved level, which is what the device now holds.
+const gainSent: Record<string, number> = {};
+
+// How many config broadcasts changed each input's saved level, mute or delay,
+// read from the saved mix itself, so an input with no strip (gone or
+// unavailable) still counts. Counted, not compared, so a value changed and
+// changed back still counts.
+let broadcasts = $state<Record<string, number>>({});
+let lastSaved: Record<string, string> = {};
+$effect.pre(() => {
+	const saved: Record<string, string> = {};
+	const savedGain: Record<string, number> = {};
+	for (const input of config?.audio_inputs ?? []) {
+		saved[input.id] = valuesKey(input);
+		savedGain[input.id] = input.gain_db;
+	}
+	untrack(() => {
+		const changed = Object.keys({ ...lastSaved, ...saved }).filter(
+			(id) => (lastSaved[id] ?? AT_DEFAULTS) !== (saved[id] ?? AT_DEFAULTS),
+		);
+		lastSaved = saved;
+		if (changed.length === 0) return;
+		const next = { ...broadcasts };
+		for (const id of changed) {
+			next[id] = (next[id] ?? 0) + 1;
+			gainSent[id] = savedGain[id] ?? defaults(id).gain_db;
+		}
+		broadcasts = next;
+	});
+});
+
+// The device's answer to this tab's latest live change, per input. It wins until
+// the session ends, unless a broadcast changed that input after the change was
+// sent: then the broadcast is newer (another tab's write, or our own echo).
+let liveApplied = $state<Record<string, { values: Values; sentAt: number }>>({});
 $effect(() => {
 	if (!mixLive) liveApplied = {};
 });
@@ -146,7 +187,9 @@ $effect(() => {
 function shown(id: string): AudioInputSetting {
 	const entry = entryFor(id);
 	const applied = mixLive ? liveApplied[id] : undefined;
-	return applied === undefined ? entry : { ...entry, ...applied };
+	return applied === undefined || applied.sentAt !== (broadcasts[id] ?? 0)
+		? entry
+		: { ...entry, ...applied.values };
 }
 
 let errors = $state<Record<string, string>>({});
@@ -286,6 +329,7 @@ async function sendLive(id: string, update: Omit<SetAudioMixInput, 'id'>): Promi
 	const seq = (liveSeq[id] ?? 0) + 1;
 	liveSeq[id] = seq;
 	inflight[id] = (inflight[id] ?? 0) + 1;
+	const sentAt = broadcasts[id] ?? 0;
 	clearError(id);
 	try {
 		const result = await rpc.streaming.setAudioMix({ id, ...update });
@@ -293,9 +337,10 @@ async function sendLive(id: string, update: Omit<SetAudioMixInput, 'id'>): Promi
 		if (!result.success) {
 			setError(id, result.error);
 			delete gainSent[id];
-		} else if (result.applied !== undefined) {
+		} else if (result.applied !== undefined && sentAt === (broadcasts[id] ?? 0)) {
+			// An answer a broadcast overtook is older than what that broadcast set.
 			const { gain_db, mute, delay_ms } = result.applied;
-			liveApplied = { ...liveApplied, [id]: { gain_db, mute, delay_ms } };
+			liveApplied = { ...liveApplied, [id]: { values: { gain_db, mute, delay_ms }, sentAt } };
 			gainSent[id] = gain_db;
 		}
 	} catch {
@@ -313,7 +358,6 @@ async function sendLive(id: string, update: Omit<SetAudioMixInput, 'id'>): Promi
 // GAIN_SEND_INTERVAL_MS while dragging and once more on release; idle, it is
 // saved once, on release.
 let gainDraft = $state<Record<string, number>>({});
-const gainSent: Record<string, number> = {};
 const gainSentAt: Record<string, number> = {};
 const gainTimer: Record<string, ReturnType<typeof setTimeout> | undefined> = {};
 const dragging: Record<string, boolean> = {};
@@ -323,6 +367,26 @@ function dropDraft(id: string): void {
 	const { [id]: _dropped, ...rest } = gainDraft;
 	gainDraft = rest;
 }
+
+// A level control that goes away mid-drag (its strip leaves, or its input leaves
+// the mix) never sees its release: end that drag, so the level shows the device's
+// values again when the control returns. Same condition the markup renders it on.
+$effect(() => {
+	const controls = new Set(
+		mix === undefined
+			? []
+			: strips.filter((strip) => isEnabled(strip.id)).map((strip) => strip.id),
+	);
+	untrack(() => {
+		for (const id of Object.keys(gainDraft)) {
+			if (controls.has(id)) continue;
+			dragging[id] = false;
+			clearTimeout(gainTimer[id]);
+			gainTimer[id] = undefined;
+			dropDraft(id);
+		}
+	});
+});
 
 function sendGain(id: string): void {
 	const value = gainDraft[id];

@@ -44,21 +44,14 @@ vi.mock("$lib/rpc", () => ({
 	rpcClient: {},
 }));
 
-// The socket-fed getters, set per test before rendering.
-const feed = vi.hoisted(() => ({
-	status: undefined as Record<string, unknown> | undefined,
-	level: undefined as Record<string, unknown> | undefined,
-	sources: undefined as Record<string, unknown> | undefined,
-	connected: true,
-}));
-vi.mock("$lib/rpc/subscriptions.svelte", () => ({
-	getStatus: () => feed.status,
-	getAudioLevel: () => feed.level,
-	getSources: () => feed.sources,
-	getConfig: () => undefined,
-	getIsConnected: () => feed.connected,
-}));
+// The socket-fed getters, set per test before rendering; reactive, so a test can
+// also change the device roster mid-session.
+vi.mock(
+	"$lib/rpc/subscriptions.svelte",
+	async () => await import("./__fixtures__/mixer-feed.svelte"),
+);
 
+import { feed } from "./__fixtures__/mixer-feed.svelte";
 import AudioMixer from "./AudioMixer.svelte";
 
 beforeAll(() => {
@@ -522,6 +515,27 @@ describe("AudioMixer — live on a mix session", () => {
 		};
 	}
 
+	// A config broadcast of LIVE_CONFIG with these values on usb-b.
+	const withB = (fields: Partial<Input>) => ({
+		asrc: "usb-a",
+		audio_inputs: [input("usb-a"), input("usb-b", { tracks: [2], ...fields })],
+	});
+
+	// The next `count` answers of setAudioMix, each held until the test releases it.
+	function holdAnswers(
+		count: number,
+	): Array<(value: SetAudioMixOutput) => void> {
+		const release: Array<(value: SetAudioMixOutput) => void> = [];
+		for (let n = 0; n < count; n++) {
+			setAudioMix.mockReturnValueOnce(
+				new Promise<SetAudioMixOutput>((resolve) => {
+					release.push(resolve);
+				}),
+			);
+		}
+		return release;
+	}
+
 	it("a level change calls setAudioMix and never setConfig", async () => {
 		setAudioMix.mockResolvedValue(applied("usb-b", { gain_db: -1 }));
 		mixer({ config: LIVE_CONFIG, isStreaming: true, mixActive: true });
@@ -578,6 +592,335 @@ describe("AudioMixer — live on a mix session", () => {
 		await setAudioMix.mock.results[0]?.value;
 		await tick();
 		expect(mute("usb-b").getAttribute("aria-pressed")).toBe("true");
+	});
+
+	it("another tab's later mute shows here after this tab's level change, and the next mute click unmutes", async () => {
+		let answer: (value: SetAudioMixOutput) => void = () => undefined;
+		setAudioMix.mockReturnValueOnce(
+			new Promise<SetAudioMixOutput>((resolve) => {
+				answer = resolve;
+			}),
+		);
+		const view = mixer({
+			config: LIVE_CONFIG,
+			isStreaming: true,
+			mixActive: true,
+		});
+
+		// This tab lowers the level; the device's config echo precedes its answer.
+		await fireEvent.keyDown(gainThumb("usb-b"), { key: "ArrowLeft" });
+		await view.rerender({ config: withB({ gain_db: -1 }) });
+		answer(applied("usb-b", { gain_db: -1 }));
+		await setAudioMix.mock.results[0]?.value;
+		await tick();
+
+		// The other tab mutes the input: its config broadcast arrives here.
+		await view.rerender({ config: withB({ gain_db: -1, mute: true }) });
+		expect(mute("usb-b").getAttribute("aria-pressed")).toBe("true");
+		expect(gainThumb("usb-b").getAttribute("aria-valuenow")).toBe("-1");
+
+		setAudioMix.mockResolvedValueOnce(applied("usb-b", { gain_db: -1 }));
+		await fireEvent.click(mute("usb-b"));
+		expect(setAudioMix).toHaveBeenLastCalledWith({ id: "usb-b", mute: false });
+	});
+
+	it.each([
+		[
+			"mute",
+			{ mute: true },
+			async () => {
+				expect(mute("usb-b").getAttribute("aria-pressed")).toBe("true");
+				setAudioMix.mockResolvedValueOnce(applied("usb-b", { gain_db: -1 }));
+				await fireEvent.click(mute("usb-b"));
+				expect(setAudioMix).toHaveBeenLastCalledWith({
+					id: "usb-b",
+					mute: false,
+				});
+			},
+		],
+		[
+			"delay",
+			{ delay_ms: 120 },
+			async () => expect(delay("usb-b").value).toBe("120"),
+		],
+		[
+			"level",
+			{ gain_db: -7 },
+			async () =>
+				expect(gainThumb("usb-b").getAttribute("aria-valuenow")).toBe("-7"),
+		],
+	] as const)(
+		"another tab's %s arriving while this tab's level change waits for its answer stays shown after that answer",
+		async (_field, fields, expectShown) => {
+			const [answer] = holdAnswers(1);
+			const view = mixer({
+				config: LIVE_CONFIG,
+				isStreaming: true,
+				mixActive: true,
+			});
+			await fireEvent.keyDown(gainThumb("usb-b"), { key: "ArrowLeft" });
+			await view.rerender({ config: withB({ gain_db: -1 }) });
+			await view.rerender({ config: withB({ gain_db: -1, ...fields }) });
+			answer?.(applied("usb-b", { gain_db: -1 }));
+			await setAudioMix.mock.results[0]?.value;
+			await tick();
+			await expectShown();
+		},
+	);
+
+	it("two changes answered out of order, with another tab's mute between, show the device's last saved values", async () => {
+		const [first, second] = holdAnswers(2);
+		const view = mixer({
+			config: LIVE_CONFIG,
+			isStreaming: true,
+			mixActive: true,
+		});
+		await fireEvent.change(delay("usb-b"), { target: { value: "100" } });
+		await fireEvent.change(delay("usb-b"), { target: { value: "200" } });
+
+		// The device finishes the second change first; another tab mutes before its answer lands.
+		await view.rerender({ config: withB({ delay_ms: 200 }) });
+		await view.rerender({ config: withB({ delay_ms: 200, mute: true }) });
+		second?.(applied("usb-b", { delay_ms: 200 }));
+		await setAudioMix.mock.results[1]?.value;
+		await tick();
+
+		// The first change lands last: its echo, then its answer.
+		await view.rerender({ config: withB({ delay_ms: 100, mute: true }) });
+		first?.(applied("usb-b", { delay_ms: 100 }));
+		await setAudioMix.mock.results[0]?.value;
+		await tick();
+
+		expect(delay("usb-b").value).toBe("100");
+		expect(mute("usb-b").getAttribute("aria-pressed")).toBe("true");
+	});
+
+	it("another tab putting this tab's level back shows the level it put back", async () => {
+		const [answer] = holdAnswers(1);
+		const view = mixer({
+			config: LIVE_CONFIG,
+			isStreaming: true,
+			mixActive: true,
+		});
+		await fireEvent.keyDown(gainThumb("usb-b"), { key: "ArrowLeft" });
+		await view.rerender({ config: withB({ gain_db: -1 }) });
+		answer?.(applied("usb-b", { gain_db: -1 }));
+		await setAudioMix.mock.results[0]?.value;
+		await tick();
+
+		await view.rerender({ config: withB({ gain_db: 0 }) });
+		expect(gainThumb("usb-b").getAttribute("aria-valuenow")).toBe("0");
+	});
+
+	const hidings: Array<[string, (sources: typeof AUDIO_SOURCES) => object[]]> =
+		[
+			[
+				"leaves the source list",
+				(sources) => sources.filter((source) => source.id !== "usb-b"),
+			],
+			[
+				"becomes unavailable",
+				(sources) =>
+					sources.map((source) =>
+						source.id === "usb-b"
+							? { ...source, unavailable_reason: "engine_update_required" }
+							: source,
+					),
+			],
+		];
+
+	it.each(hidings)(
+		"an input that %s while its saved level changes and changes back shows the saved level when it returns",
+		async (_case, hide) => {
+			const [answer] = holdAnswers(1);
+			const view = mixer({
+				config: LIVE_CONFIG,
+				isStreaming: true,
+				mixActive: true,
+			});
+			await fireEvent.keyDown(gainThumb("usb-b"), { key: "ArrowLeft" });
+
+			const roster = feed.status;
+			feed.status = { ...roster, audio_sources: hide(AUDIO_SOURCES) };
+			await tick();
+			expect(screen.queryByTestId("audio-strip-usb-b")).toBeNull();
+			await view.rerender({ config: withB({ gain_db: -7 }) });
+			await view.rerender({ config: withB({ gain_db: 0 }) });
+
+			feed.status = roster;
+			await tick();
+			answer?.(applied("usb-b", { gain_db: -1 }));
+			await setAudioMix.mock.results[0]?.value;
+			await tick();
+			expect(gainThumb("usb-b").getAttribute("aria-valuenow")).toBe("0");
+		},
+	);
+
+	it.each(hidings)(
+		"a strip whose input %s mid-drag shows the saved level when it returns, not the dragged one",
+		async (_case, hide) => {
+			setAudioMix.mockResolvedValue(applied("usb-b", { gain_db: -10 }));
+			const view = mixer({
+				config: LIVE_CONFIG,
+				isStreaming: true,
+				mixActive: true,
+			});
+			// 72 px across -60..12 dB: one pixel per dB, clientX = gain + 60.
+			gainRoot("usb-b").getBoundingClientRect = () =>
+				({
+					left: 0,
+					right: 72,
+					top: 0,
+					bottom: 10,
+					width: 72,
+					height: 10,
+					x: 0,
+					y: 0,
+				}) as DOMRect;
+			await fireEvent.pointerDown(gainRoot("usb-b"), {
+				button: 0,
+				clientX: 50,
+			});
+			await setAudioMix.mock.results[0]?.value;
+			await tick();
+
+			// The strip goes away before the pointer is released, so it never sees the release.
+			const roster = feed.status;
+			feed.status = { ...roster, audio_sources: hide(AUDIO_SOURCES) };
+			await tick();
+			await view.rerender({ config: withB({ gain_db: -7 }) });
+			feed.status = roster;
+			await tick();
+			expect(gainThumb("usb-b").getAttribute("aria-valuenow")).toBe("-7");
+		},
+	);
+
+	it("a gain control that goes away mid-drag because another tab takes its input out of the mix shows the saved level when it returns", async () => {
+		setAudioMix.mockResolvedValue(applied("usb-b", { gain_db: -10 }));
+		const view = mixer({
+			config: LIVE_CONFIG,
+			isStreaming: true,
+			mixActive: true,
+		});
+		// 72 px across -60..12 dB: one pixel per dB, clientX = gain + 60.
+		gainRoot("usb-b").getBoundingClientRect = () =>
+			({
+				left: 0,
+				right: 72,
+				top: 0,
+				bottom: 10,
+				width: 72,
+				height: 10,
+				x: 0,
+				y: 0,
+			}) as DOMRect;
+		await fireEvent.pointerDown(gainRoot("usb-b"), { button: 0, clientX: 50 });
+		await setAudioMix.mock.results[0]?.value;
+		await view.rerender({ config: withB({ gain_db: -10 }) });
+
+		// Taken out of the mix for the next start: the strip stays, its controls go, the pointer is still down.
+		await view.rerender({
+			config: { asrc: "usb-a", audio_inputs: [input("usb-a")] },
+		});
+		expect(screen.queryByTestId("audio-strip-usb-b")).not.toBeNull();
+		expect(screen.queryByTestId("audio-strip-gain-usb-b")).toBeNull();
+		await view.rerender({ config: withB({ gain_db: -7 }) });
+		expect(gainThumb("usb-b").getAttribute("aria-valuenow")).toBe("-7");
+	});
+
+	it("a level change still waiting to be sent when its control goes away is never sent", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		setAudioMix.mockResolvedValue(applied("usb-b", { gain_db: -10 }));
+		const view = mixer({
+			config: LIVE_CONFIG,
+			isStreaming: true,
+			mixActive: true,
+		});
+		gainRoot("usb-b").getBoundingClientRect = () =>
+			({
+				left: 0,
+				right: 72,
+				top: 0,
+				bottom: 10,
+				width: 72,
+				height: 10,
+				x: 0,
+				y: 0,
+			}) as DOMRect;
+		await fireEvent.pointerDown(gainRoot("usb-b"), { button: 0, clientX: 50 });
+		await fireEvent.pointerMove(document, { clientX: 40 });
+
+		await view.rerender({
+			config: { asrc: "usb-a", audio_inputs: [input("usb-a")] },
+		});
+		vi.advanceTimersByTime(500);
+		expect(setAudioMix.mock.calls).toEqual([[{ id: "usb-b", gain_db: -10 }]]);
+	});
+
+	it("after a late answer another tab's level overrode, asking for the same level again sends it", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const [answer] = holdAnswers(1);
+		setAudioMix.mockResolvedValue(applied("usb-b", { gain_db: 12 }));
+		const view = mixer({
+			config: LIVE_CONFIG,
+			isStreaming: true,
+			mixActive: true,
+		});
+		await fireEvent.keyDown(gainThumb("usb-b"), { key: "End" });
+		await fireEvent.keyUp(gainThumb("usb-b"), { key: "End" });
+		expect(setAudioMix.mock.calls).toEqual([[{ id: "usb-b", gain_db: 12 }]]);
+
+		// Its echo, then another tab's -7, then the late +12 answer.
+		await view.rerender({ config: withB({ gain_db: 12 }) });
+		await view.rerender({ config: withB({ gain_db: -7 }) });
+		answer?.(applied("usb-b", { gain_db: 12 }));
+		await setAudioMix.mock.results[0]?.value;
+		await tick();
+		expect(gainThumb("usb-b").getAttribute("aria-valuenow")).toBe("-7");
+
+		vi.advanceTimersByTime(101);
+		await fireEvent.keyDown(gainThumb("usb-b"), { key: "End" });
+		await fireEvent.keyUp(gainThumb("usb-b"), { key: "End" });
+		vi.advanceTimersByTime(101);
+		await tick();
+		expect(setAudioMix.mock.calls).toEqual([
+			[{ id: "usb-b", gain_db: 12 }],
+			[{ id: "usb-b", gain_db: 12 }],
+		]);
+	});
+
+	it("an answer that lands before its own echo still yields to another tab's later change", async () => {
+		const [answer] = holdAnswers(1);
+		const view = mixer({
+			config: LIVE_CONFIG,
+			isStreaming: true,
+			mixActive: true,
+		});
+		await fireEvent.keyDown(gainThumb("usb-b"), { key: "ArrowLeft" });
+		answer?.(applied("usb-b", { gain_db: -1 }));
+		await setAudioMix.mock.results[0]?.value;
+		await tick();
+
+		await view.rerender({ config: withB({ gain_db: -1 }) });
+		await view.rerender({ config: withB({ gain_db: 0 }) });
+		expect(gainThumb("usb-b").getAttribute("aria-valuenow")).toBe("0");
+	});
+
+	it("a config broadcast that leaves an input as it was keeps the level the device applied", async () => {
+		// Only the main input at its defaults: the device saves no echo for a live change.
+		setAudioMix.mockResolvedValueOnce(applied("usb-a", { gain_db: -1 }));
+		const view = mixer({
+			config: { asrc: "usb-a" },
+			isStreaming: true,
+			mixActive: true,
+		});
+		await fireEvent.keyDown(gainThumb("usb-a"), { key: "ArrowLeft" });
+		await setAudioMix.mock.results[0]?.value;
+		await tick();
+		await view.rerender({ config: { asrc: "usb-a", max_br: 6000 } });
+		expect(gainThumb("usb-a").getAttribute("aria-valuenow")).toBe("-1");
 	});
 
 	it("while dragging the level is sent at most every 100 ms, and once more on release", async () => {
