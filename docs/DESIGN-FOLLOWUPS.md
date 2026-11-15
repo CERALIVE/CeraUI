@@ -357,8 +357,9 @@ command. Registering them there would mean inventing markers for work that has n
 
 The final design pass on the Live screen and the Encoder dialog
 ([`docs/agents/live-screen.md`](agents/live-screen.md), "The final design
-pass") fixed every finding its audit rated blocking or serious. These four were
-rated minor or polish and left, each for the reason given.
+pass") fixed every finding its audit rated blocking or serious. These findings were
+rated minor or polish. Each open entry states why it is deferred; resolved
+entries record the follow-up that removed their blocker.
 
 ### DF-18 — Inset panels inside cards on the Live screen
 
@@ -400,21 +401,22 @@ rated minor or polish and left, each for the reason given.
 - **Exit condition:** the chips are isolated left to right (`dir="ltr"`, as the
   mixer's dB values are) and the name wraps or carries its full text.
 
-### DF-22 — The preview's own card sits inside the preview disclosure card
+### DF-22 — The preview's own card sits inside the preview disclosure card (resolved)
 
-- **What:** the desk draws `PreviewCanvas`'s card inside `preview-disclosure`'s card
+- **What:** the desk drew `PreviewCanvas`'s card inside `preview-disclosure`'s card
   (the brief's "no card inside a card"). Rendering it `compact` removes the inner
   card, but moves the picture by its padding, and that exposed a latent designer
   defect: the inset's 2 px border at each corner is a move zone, not a resize zone,
   so a press at the exact corner resizes or moves depending on sub-pixel layout
   (`layout-designer.spec.ts`, right-edge drag, failed deterministically).
-- **Why it is deferred:** fixing the corner zones changes the designer's pointer
-  behaviour, which the design pass must not touch.
+- **Resolution:** the corner caps cover the inset's 2 px border as well as its
+  interior, so a border press resizes consistently. The preview uses its existing
+  `compact` variant and the disclosure supplies the card chrome.
 - **Where:** `apps/frontend/src/main/live/PreviewDisclosure.svelte`,
-  `apps/frontend/src/main/live/LayoutDesigner.svelte` (`CAP_POSITION`, the caps sit
-  inside the border).
-- **Exit condition:** the caps cover the border ring at each corner, then the
-  preview renders `compact` and the designer specs pass.
+  `apps/frontend/src/main/live/LayoutDesigner.svelte` (`CAP_POSITION`).
+- **Coverage:** `layout-designer.spec.ts` checks resizing from every corner's
+  border and the preview's single card border; its existing phone case checks
+  that the smallest inset still moves from its middle.
 
 ### DF-21 — "Preview" is said twice in the desk
 

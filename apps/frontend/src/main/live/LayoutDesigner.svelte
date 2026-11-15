@@ -17,7 +17,7 @@
   refused placement falls back to the device's saved rectangle and says why.
 
   Each corner resizes from a 44 px box centred on it (`layout-inset-handle-*`)
-  that sits UNDER the inset, plus a cap inside the inset's corner of at most
+  that sits UNDER the inset, plus a cap over the inset's corner of at most
   half that box and at most a quarter of the inset. So the corner keeps its full
   44 px zone on a normal inset, and even the smallest inset keeps its middle as
   a place to grab and move it.
@@ -67,10 +67,10 @@ const ARROWS: Record<string, readonly [number, number]> = {
 	ArrowDown: [0, 1],
 };
 const CAP_POSITION: Record<Corner, string> = {
-	'top-left': 'left-0 top-0',
-	'top-right': 'right-0 top-0',
-	'bottom-left': 'bottom-0 left-0',
-	'bottom-right': 'right-0 bottom-0',
+	'top-left': '-left-[2px] -top-[2px]',
+	'top-right': '-right-[2px] -top-[2px]',
+	'bottom-left': '-bottom-[2px] -left-[2px]',
+	'bottom-right': '-right-[2px] -bottom-[2px]',
 };
 const descriptionId = $props.id();
 
