@@ -632,6 +632,17 @@ export function usbNetScanCovers(ifname: string): boolean {
 /** Creation adopts its covering read; only observed removal invalidates it. */
 export function invalidateUsbNetReading(ifname: string, epoch: number): void {
 	netdevRemovalEpochs.set(ifname, epoch);
+	coveredIfnames.delete(ifname);
+	physicalDescriptors.delete(ifname);
+	markers.delete(ifname);
+	modemNetMarkers.delete(ifname);
+	identityFirstPublishedAt.delete(ifname);
+	identityDeadlineWarnings.delete(ifname);
+	setPresentPhysicalDevices(
+		[...physicalDescriptors.values()].map((descriptor) =>
+			resolvePhysicalDevice(descriptor),
+		),
+	);
 }
 
 /** The publication clock is shared by every identity-minting consumer. */

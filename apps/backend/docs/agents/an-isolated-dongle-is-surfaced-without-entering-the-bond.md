@@ -1036,12 +1036,21 @@ the network/scan/registry dependency cycle.
 Each USB descriptor reading records the name's last observed removal epoch from
 the producer's presence counter. A monitor down/removal event, including one
 before first publication, or a poll that drops an existing entry invalidates its
-pending reading. At commit, a reading with a changed epoch loses its descriptor,
+pending reading and immediately removes its committed descriptor, markers and
+coverage. The present-device view used for credential ownership is rebuilt from
+the surviving descriptors, and the removed name's readiness clock and warning
+are cleared. At commit, a reading with a changed epoch loses its descriptor,
 markers and coverage for that name and a fresh scan is requested; other names can
-still commit. Previously committed snapshots retain their existing lifecycle.
+still commit. A replacement reusing the name must obtain its own covering read
+or reach its own readiness deadline before identity-dependent admission.
 First publication and monitor creation adopt the covering reading without
 invalidating it. `tests/usb-net-incarnation.test.ts` exercises these paths with
 parked reads and both USB and non-USB replacements.
+`tests/usb-net-committed-incarnation.test.ts` covers completed scans followed by
+monitor, absent-poll and non-RUNNING removal, with the replacement scan blocked
+and no fixture cache clearing. Both SRTLA collectors and steering exclude the
+replacement until its fresh descriptor commits; surviving interfaces retain
+their coverage and identity.
 
 The classifier preserves error codes through the optional `readLinkResult`
 dependency; existing descriptor/driver reads still use `readLinkName`. A bus
@@ -1066,9 +1075,9 @@ this is not a promise of one total warning across all owners.
 A completed scan covers even a rejected descriptor read, so that commit can
 release a USB entry weakly before 15 seconds. A weak identity is still refused
 for durable bond preferences and modem credentials. Coverage, descriptors and
-the readiness clock remain name-keyed; their existing committed-snapshot and
-deadline limitations remain even after observed reuse. Rapid replug that is not
-observed within one poll cadence is outside the incarnation fence.
+the readiness clock remain name-keyed, but observed removal ends their lifetime.
+Rapid replug that is not observed within one poll cadence is outside the
+incarnation fence.
 
 Residuals include rename/unregister after the OS snapshot, ordinary parent
 teardown, drivers without a USB parent, vendor ordering differences, and missing,
