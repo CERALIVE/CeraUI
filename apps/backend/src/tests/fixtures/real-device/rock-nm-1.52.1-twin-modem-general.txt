@@ -1,6 +1,8 @@
-# Real capture: Rock 5B+, NetworkManager 1.52.1, 2026-11-15.
-# Twin connected cellular bearers plus the complete device inventory.
-# Already redacted and identifier-free; payload bytes are unchanged.
+# Board: Radxa Rock 5B+ (RK3588); OS: Debian GNU/Linux 13 (trixie); kernel: 7.2.0-ceralive-rk3588.
+# Tools: nmcli 1.52.1; CeraUI package: ceralive-device 2026.11.2-20261110T235725.31b06d5.
+# Captured: 2026-11-15T16:37:06Z; twin connected cellular bearers and complete device inventory.
+# Command (mirrors the #528 production query; capture invocation not recorded): nmcli -t -f GENERAL.DEVICE,GENERAL.IP-IFACE,GENERAL.TYPE,GENERAL.STATE,GENERAL.METERED device show
+# Normalisation: none; no substitutions were needed in this section; whitespace retained.
 
 ##### twin-modem-general
 GENERAL.DEVICE:eth0
