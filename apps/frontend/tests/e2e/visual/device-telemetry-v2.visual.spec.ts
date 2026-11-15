@@ -416,7 +416,11 @@ test.describe("@visual device telemetry v2", () => {
 			// The narrowest of the three mount sites, and it stacks like the others.
 			await expectCoresStackVertically(page, "telemetry-encoder");
 
-			const strip = page.locator('section:has([data-testid="telemetry-encoder"])');
+			// The strip sits inside the telemetry card's own section; scope to the card so
+			// `section:has` resolves to the strip alone.
+			const strip = page
+				.getByTestId("telemetry-card")
+				.locator('section:has([data-testid="telemetry-encoder"])');
 			await strip.screenshot({
 				path: path.join(EVIDENCE_DIR, `telemetry-v2-live-strip-${label}.png`),
 			});
