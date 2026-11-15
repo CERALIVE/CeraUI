@@ -24,6 +24,9 @@ interface RpcCall {
 	path: string;
 	input: Record<string, unknown>;
 	result?: Record<string, unknown>;
+	/** Where the request and its answer fell in one order of frames, as the page sent and saw them. */
+	sent: number;
+	delivered?: number;
 }
 
 interface DesignerWire {
@@ -50,8 +53,13 @@ async function installDesignerWire(
 	let held = 0;
 	let tail: Promise<void> = Promise.resolve();
 	let holding = false;
-	const heldFrames: Array<string | Buffer> = [];
+	const heldFrames: Array<{ message: string | Buffer; call: RpcCall | undefined }> = [];
 	let page_: { send(message: string | Buffer): void } | undefined;
+	let order = 0;
+	const deliver = (message: string | Buffer, call: RpcCall | undefined) => {
+		page_?.send(message);
+		if (call) call.delivered = ++order;
+	};
 
 	await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 		const server = ws.connectToServer();
@@ -62,7 +70,7 @@ async function installDesignerWire(
 			try {
 				const frame = JSON.parse(text) as { id?: unknown; path?: unknown; input?: Record<string, unknown> };
 				if (Array.isArray(frame.path) && frame.id !== undefined) {
-					const call: RpcCall = { path: frame.path.join("."), input: frame.input ?? {} };
+					const call: RpcCall = { path: frame.path.join("."), input: frame.input ?? {}, sent: ++order };
 					all.push(call);
 					byId.set(frame.id, call);
 				}
@@ -74,19 +82,20 @@ async function installDesignerWire(
 		server.onMessage((message) => {
 			pageRpc.acceptServerMessage(message);
 			const text = typeof message === "string" ? message : message.toString();
+			let call: RpcCall | undefined;
 			try {
 				const frame = JSON.parse(text) as { id?: unknown; result?: Record<string, unknown> };
-				const call = frame.id === undefined ? undefined : byId.get(frame.id);
+				call = frame.id === undefined ? undefined : byId.get(frame.id);
 				if (call) call.result = frame.result;
 			} catch {
 				/* non-JSON / binary frame */
 			}
 			if (holding) {
-				heldFrames.push(message);
+				heldFrames.push({ message, call });
 				return;
 			}
 			if (delayMs === 0 && held === 0) {
-				ws.send(message);
+				deliver(message, call);
 				return;
 			}
 			const due = Date.now() + delayMs;
@@ -94,7 +103,7 @@ async function installDesignerWire(
 			tail = tail.then(async () => {
 				const wait = due - Date.now();
 				if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
-				ws.send(message);
+				deliver(message, call);
 				held -= 1;
 			});
 		});
@@ -110,7 +119,7 @@ async function installDesignerWire(
 		},
 		releaseServer: () => {
 			holding = false;
-			for (const message of heldFrames.splice(0)) page_?.send(message);
+			for (const { message, call } of heldFrames.splice(0)) deliver(message, call);
 		},
 	};
 }
@@ -331,6 +340,106 @@ test.describe("layout designer — caps-full", () => {
 		expect(saved?.layout).toBe("pbp-left-right");
 		expect(saved).not.toHaveProperty("rect");
 		await expect(page.getByTestId("composition-layout-pbp-left-right")).toHaveAttribute("aria-checked", "true");
+	});
+
+	test("Start pressed while idle placements wait for the device runs the newest of them, and a later move changes the running stream", async ({
+		page,
+		backendRpc,
+	}) => {
+		await page.getByTestId("composition-layout-custom").click();
+		await expect.poll(async () => (await savedComposition(backendRpc))?.layout).toBe("custom");
+		const idle = page.getByTestId("program-desk").getByTestId("layout-inset");
+		await expect(page.getByTestId("composition-layout-pbp-left-right")).toBeEnabled();
+		await expect.poll(async () => shownRect(idle)).toEqual({ x: 0.45, y: 0.05, width: 0.5, height: 0.5 });
+		const before = wire.calls("streaming.setConfig").length;
+
+		// Device frames held in order, two idle drags, Start, then the frames released.
+		wire.holdServer();
+		await dragBy(page, idle, idle, -0.1, 0.1);
+		await dragBy(page, idle, idle, -0.1, 0.1);
+		await page.getByTestId("live-bar").getByRole("button", { name: "Start stream" }).click();
+		await expect.poll(() => wire.calls("streaming.setConfig").length).toBe(before + 1);
+		wire.releaseServer();
+
+		const cockpit = page.getByTestId("live-cockpit");
+		await expect(cockpit).toBeVisible({ timeout: 15_000 });
+		const [first, second] = wire.calls("streaming.setConfig").slice(before);
+		const [start] = wire.calls("streaming.start");
+		expect(Object.keys(first?.input ?? {})).toEqual(["composition_rect"]);
+		expect(Object.keys(second?.input ?? {})).toEqual(["composition_rect"]);
+		expect(near(first?.input.composition_rect as Rect, { x: 0.35, y: 0.15, width: 0.5, height: 0.5 })).toBe(true);
+		const newest = second?.input.composition_rect as Rect;
+		expect(near(newest, { x: 0.25, y: 0.25, width: 0.5, height: 0.5 })).toBe(true);
+		// Start left only once the newest placement was saved, so Start ran it.
+		expect(second?.delivered).toBeLessThan(start?.sent ?? 0);
+		expect(near((await savedComposition(backendRpc))?.rect, newest)).toBe(true);
+		const live = cockpit.getByTestId("program-desk").getByTestId("layout-inset");
+		await expect.poll(async () => near(await shownRect(live), newest)).toBe(true);
+
+		await dragBy(page, live, live, 0.2, 0);
+		await expect
+			.poll(() => wire.calls("streaming.setConfig").at(-1)?.result)
+			.toMatchObject({ success: true, configChange: { result: "applied" } });
+		const moved = wire.calls("streaming.setConfig").at(-1);
+		expect(moved?.input).toMatchObject({ apply_now: true });
+		expect(moved?.sent).toBeGreaterThan(start?.delivered ?? Number.POSITIVE_INFINITY);
+		const running = moved?.input.composition_rect as Rect;
+		expect(near(running, { x: 0.45, y: 0.25, width: 0.5, height: 0.5 })).toBe(true);
+		expect(near((await savedComposition(backendRpc))?.rect, running)).toBe(true);
+		await expect.poll(async () => near(await shownRect(live), running)).toBe(true);
+
+		await page.getByTestId("live-bar").getByRole("button", { name: "Stop stream" }).click();
+		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
+			timeout: 15_000,
+		});
+	});
+
+	test("Stop pressed while live placements wait for the device ends the stream on the newest of them, and the next move only saves", async ({
+		page,
+		backendRpc,
+	}) => {
+		await page.getByTestId("composition-layout-custom").click();
+		await expect.poll(async () => (await savedComposition(backendRpc))?.layout).toBe("custom");
+		await page.getByTestId("live-bar").getByRole("button", { name: "Start stream" }).click();
+		const cockpit = page.getByTestId("live-cockpit");
+		await expect(cockpit).toBeVisible({ timeout: 15_000 });
+		const live = cockpit.getByTestId("program-desk").getByTestId("layout-inset");
+		await expect.poll(async () => shownRect(live)).toEqual({ x: 0.45, y: 0.05, width: 0.5, height: 0.5 });
+		const before = wire.calls("streaming.setConfig").length;
+
+		wire.holdServer();
+		await dragBy(page, live, live, -0.1, 0.1);
+		await dragBy(page, live, live, -0.1, 0.1);
+		await page.getByTestId("live-bar").getByRole("button", { name: "Stop stream" }).click();
+		await expect.poll(() => wire.calls("streaming.setConfig").length).toBe(before + 1);
+		wire.releaseServer();
+
+		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
+			timeout: 15_000,
+		});
+		const [first, second] = wire.calls("streaming.setConfig").slice(before);
+		const stop = wire.calls("streaming.stop").at(-1);
+		for (const placement of [first, second]) {
+			expect(placement?.input).toMatchObject({ apply_now: true });
+			expect(placement?.result).toMatchObject({ success: true, configChange: { result: "applied" } });
+		}
+		const newest = second?.input.composition_rect as Rect;
+		expect(near(newest, { x: 0.25, y: 0.25, width: 0.5, height: 0.5 })).toBe(true);
+		// The stream ended on the newest placement: Stop left only after the engine applied it.
+		expect(second?.delivered).toBeLessThan(stop?.sent ?? 0);
+		expect(near((await savedComposition(backendRpc))?.rect, newest)).toBe(true);
+
+		// The ended session's summary first; Done returns to the idle cockpit.
+		await page.getByTestId("summary-done").click();
+		const inset = page.getByTestId("idle-cockpit").getByTestId("program-desk").getByTestId("layout-inset");
+		await expect.poll(async () => near(await shownRect(inset), newest)).toBe(true);
+		await dragBy(page, inset, inset, 0.1, 0);
+		await expect.poll(() => wire.calls("streaming.setConfig").at(-1)?.result).toMatchObject({ success: true });
+		const after = wire.calls("streaming.setConfig").at(-1);
+		expect(after?.sent).toBeGreaterThan(stop?.delivered ?? Number.POSITIVE_INFINITY);
+		expect(after?.input).not.toHaveProperty("apply_now");
+		expect(after?.result).not.toHaveProperty("configChange");
+		expect(near((await savedComposition(backendRpc))?.rect, after?.input.composition_rect as Rect)).toBe(true);
 	});
 
 	test("Escape during a pointer drag puts the inset back and sends nothing", async ({ page, backendRpc }) => {

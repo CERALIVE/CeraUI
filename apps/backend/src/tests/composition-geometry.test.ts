@@ -334,3 +334,37 @@ test("live, a refused placement leaves the running composition saved", async () 
 	expect(result.configChange?.result).toBe("reverted");
 	expect(getConfig().composition).toEqual(SAVED);
 });
+
+// The browser decides `apply_now` when it SENDS a write, from the session at
+// that moment. These two pin why that is safe and why it is required.
+test("idle, a write that asks to change the running stream is saved like any idle write", async () => {
+	let dispatched = 0;
+	setApplyNowGateForTest({
+		isStreamLive: () => false,
+		dispatch: async () => {
+			dispatched += 1;
+			return { result: "applied", attemptId: "idle" };
+		},
+	});
+	const result = await save({ composition_rect: PLACED, apply_now: true });
+	expect(dispatched).toBe(0);
+	expect(result.success).toBe(true);
+	expect(result).not.toHaveProperty("configChange");
+	expect(getConfig().composition).toEqual(placedAt(PLACED));
+	expect((await disk()).composition).toEqual(placedAt(PLACED));
+});
+
+test("live, a write without apply_now is only saved for the next start: the running stream never gets it", async () => {
+	let dispatched = 0;
+	setApplyNowGateForTest({
+		isStreamLive: () => true,
+		dispatch: async () => {
+			dispatched += 1;
+			return { result: "applied", attemptId: "live" };
+		},
+	});
+	const result = await save({ composition_rect: PLACED });
+	expect(dispatched).toBe(0);
+	expect(result).not.toHaveProperty("configChange");
+	expect(getConfig().composition).toEqual(placedAt(PLACED));
+});

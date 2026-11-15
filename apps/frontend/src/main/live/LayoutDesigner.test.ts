@@ -32,9 +32,15 @@ const setConfig = vi.hoisted(() =>
 		(input: Record<string, unknown>) => Promise<StreamingSetConfigOutput>
 	>(),
 );
-vi.mock("$lib/rpc", () => ({
+vi.mock("$lib/rpc/client", () => ({
 	rpc: { streaming: { setConfig } },
 	rpcClient: {},
+}));
+// The device's own word on the session, which the composition lane reads when
+// it sends a placement.
+const session = vi.hoisted(() => ({ streaming: false }));
+vi.mock("$lib/rpc/subscriptions.svelte", () => ({
+	getIsStreaming: () => session.streaming,
 }));
 
 import LayoutDesigner from "./LayoutDesigner.svelte";
@@ -94,10 +100,10 @@ function renderDesigner(
 	composition: CompositionConfig = PRESET,
 	isStreaming = false,
 ) {
+	session.streaming = isStreaming;
 	return render(LayoutDesigner, {
 		props: {
 			composition,
-			isStreaming,
 			pictureWidth: 1920,
 			pictureHeight: 1080,
 		},
@@ -421,7 +427,6 @@ describe("LayoutDesigner", () => {
 				layout: "custom",
 				rect: { x: 0.6, y: 0.5, width: 0.4, height: 0.5 },
 			},
-			isStreaming: false,
 			pictureWidth: 1920,
 			pictureHeight: 1080,
 		});

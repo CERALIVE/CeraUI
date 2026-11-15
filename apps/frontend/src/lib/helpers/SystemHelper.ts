@@ -8,6 +8,7 @@ import type {
 
 import { rpc } from "$lib/rpc/client";
 import { createPassword } from "$lib/stores/auth-status.svelte";
+import { sendSessionTransition } from "$lib/streaming/compositionWrites.svelte";
 
 // Re-export type for backward compatibility
 export type { AudioCodecs };
@@ -124,7 +125,7 @@ export const setBitrate = async (bitrate: number) => {
 
 export const stopStreaming = async () => {
 	try {
-		await rpc.streaming.stop();
+		await sendSessionTransition("idle", () => rpc.streaming.stop());
 	} catch (error) {
 		console.error("Failed to stop streaming:", error);
 		throw error;
@@ -162,7 +163,11 @@ export const startStreaming = async (config: ConfigMessage) => {
 			selected_ingest_endpoint: config.selected_ingest_endpoint,
 			autostart: config.autostart,
 		};
-		return await rpc.streaming.start(input);
+		// In order with this tab's composition writes, so a placement made before
+		// Start is saved before Start reads it (`compositionWrites`).
+		return await sendSessionTransition("live", () =>
+			rpc.streaming.start(input),
+		);
 	} catch (error) {
 		console.error("Failed to start streaming:", error);
 		throw error;

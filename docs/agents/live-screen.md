@@ -334,6 +334,27 @@ must keep that ABI.
   or the engine's outcome; the designer then falls back to the device's saved
   rectangle, in an alert over the picture that is mounted for the whole
   session.
+- Start and Stop go through the same lane (`SystemHelper.startStreaming` and
+  `stopStreaming`, which the Live bar, the stop watchdog, its Retry and the
+  toast host all use, and `UnconfirmedStreamBand`'s Stop). One rule holds at
+  every session change: a Start or a Stop drops nothing; a write made before it
+  is sent before it and one made after it is sent after its answer. So a
+  placement released just before Start is saved first and Start runs it; one
+  released just before Stop changes the running stream first and the next
+  Start begins from it. A Start or a Stop waits only for a write, never for an
+  earlier Start or Stop, so a redispatched Stop still reaches a device that has
+  not answered the first. Only a newer composition write drops a waiting
+  placement, the round-2 rule, wherever the transitions fall.
+- Whether a write changes the running stream is decided when the lane SENDS
+  it: `apply_now: true` while the device reports a live stream
+  (`getIsStreaming`) or right after this tab's Start was answered, before that
+  status arrives. Callers pass no directive. Sending `apply_now` to an idle
+  device only saves; a live write without it would be saved for the next Start
+  only, which is the split this rule prevents. A session that ends or starts on
+  its own (engine failure, a dropped socket, another tab) reaches the lane
+  through the device's status. Only this tab's writes are ordered: a Start from
+  another tab or the cloud, or the device's own restart, can still land between
+  another write and the engine reading the saved composition.
 - With `composition-geometry`, `composition-layout-selector` gains a seventh
   radio, `composition-layout-custom`. Choosing it sends `custom` alone; the
   device takes the rectangle of the preset it has saved. With the preview

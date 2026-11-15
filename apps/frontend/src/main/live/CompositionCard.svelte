@@ -15,8 +15,9 @@
   not already the primary.
 
   LIVE, the layout, the opacity and the second input change the running stream:
-  the write carries `apply_now: true`, so the backend runs it as an apply-now
-  transaction and keeps it only when the engine reports it applied. Until then
+  the lane adds `apply_now: true` when it sends the write while the stream runs,
+  so the backend runs it as an apply-now transaction and keeps it only when the
+  engine reports it applied. Until then
   the new value shows as the choice; a refused change puts the previous one
   back and says why. Turning composition on or off still waits for the next
   start, so the enable switch alone stays locked.
@@ -30,8 +31,8 @@
   it has saved, so a tab with an older view never overwrites another tab's newer
   change. Turning composition on or off sends the whole composition. All of it
   goes through the tab's one composition lane (`compositionWrites`), shared with
-  the designer, so writes leave in order and a newer change here drops a
-  placement still waiting there.
+  the designer, Start and Stop, so writes leave in order and a newer change here
+  drops a placement still waiting there.
 -->
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
@@ -57,7 +58,7 @@ import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import { Slider } from '$lib/components/ui/slider';
 import { Switch } from '$lib/components/ui/switch';
-import { getConfigChange } from '$lib/rpc/subscriptions.svelte';
+import { getConfigChange, getIsStreaming } from '$lib/rpc/subscriptions.svelte';
 import { compositionRefusal, sendCompositionWrite } from '$lib/streaming/compositionWrites.svelte';
 import { isConfigChangeInFlight } from '$lib/streaming/configChangePhase';
 
@@ -158,22 +159,20 @@ async function save(input: StreamingSetConfigInput): Promise<void> {
 	if (saving) return;
 	saving = true;
 	try {
-		await sendCompositionWrite(input);
+		await sendCompositionWrite(input, getIsStreaming);
 	} finally {
 		saving = false;
 	}
 }
 
-// The encoder save's shape (`buildEncoderSetConfig`): the apply-now directive
-// rides the setConfig input without being a config field. `next` is only what
-// the controls show until the device answers.
+// `next` is only what the controls show until the device answers.
 async function applyLive(next: CompositionConfig, input: StreamingSetConfigInput): Promise<void> {
 	if (busy) return;
 	saving = true;
 	pending = next;
 	liveRefusal = undefined;
 	try {
-		const result = await sendCompositionWrite(input);
+		const result = await sendCompositionWrite(input, getIsStreaming);
 		liveRefusal = result === undefined ? undefined : compositionRefusal(result);
 	} catch {
 		liveRefusal = m['notifications.saveFailed']();
@@ -197,7 +196,7 @@ function toggle(on: boolean): void {
 function patch(fields: NonNullable<StreamingSetConfigInput['composition_patch']>): void {
 	if (secondaryId === undefined) return;
 	const next = { secondary_input_id: secondaryId, layout, alpha, ...fields };
-	if (isStreaming) void applyLive(next, { composition_patch: fields, apply_now: true });
+	if (isStreaming) void applyLive(next, { composition_patch: fields });
 	else void save({ composition_patch: fields });
 }
 

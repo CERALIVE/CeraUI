@@ -6,9 +6,13 @@
  * view: enable and disable as whole compositions, every other control as a
  * delta (`composition_patch`, `composition_rect`). Steps interleave
  * deterministically (a seeded generator, no timers), idle and live, with live
- * changes sometimes refused by the engine. After every step the device's saved
- * composition, and live what the engine was asked to run, equal a plain
- * reference model that applies each control's intent to the device's own state.
+ * changes sometimes refused by the engine. Starts and Stops come between the
+ * writes, and each write asks to change the running stream exactly when the
+ * session is live as it is sent, as the browser's lane decides. After every step
+ * the device's saved composition equals a plain reference model that applies
+ * each control's intent to the device's own state, and while live the engine
+ * runs exactly what is saved: a Start runs the saved composition, and every
+ * applied change is what was saved.
  */
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -228,9 +232,13 @@ for (const seed of [7, 1337, 20261115]) {
 					: { result: "applied", attemptId: "step" };
 			},
 		});
+		let running: Composition;
 		let steps = 0;
 		while (steps < 160) {
-			if (next() < 0.1) live = !live;
+			if (next() < 0.1) {
+				live = !live;
+				running = live ? getConfig().composition : undefined;
+			}
 			const client = next() < 0.5 ? 0 : 1;
 			const op = pickOp(views[client], live, next);
 			if (op === undefined) continue;
@@ -254,6 +262,11 @@ for (const seed of [7, 1337, 20261115]) {
 				});
 			if (engineSaw !== null)
 				expect(engineSaw, JSON.stringify(step)).toEqual(model(device, op));
+			if (engineSaw !== null && !refusedByEngine) running = engineSaw;
+			if (live)
+				expect(running, JSON.stringify({ ...step, running })).toEqual(
+					getConfig().composition,
+				);
 
 			device = getConfig().composition;
 			views[client] = device;

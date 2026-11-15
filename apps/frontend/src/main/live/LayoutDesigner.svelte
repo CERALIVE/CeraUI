@@ -6,14 +6,15 @@
   (`videoBox`). It drags with pointer capture, resizes from four corners, and
   moves with the arrow keys (1%, Shift 5%; Alt resizes). It moves locally while
   dragging and sends ONE placement on release: `composition_rect`, already
-  clamped, which the device composes onto the composition it has saved (live,
-  with `apply_now: true`). Escape during a drag puts it back and sends nothing.
+  clamped, which the device composes onto the composition it has saved. Escape
+  during a drag puts it back and sends nothing.
 
   Every write goes through the tab's one composition lane
-  (`compositionWrites`), shared with the layout card: writes leave in order, and
-  a placement still waiting when the card makes a newer change is dropped, so
-  an older drag can never undo a newer choice. A refused placement falls back to
-  the device's saved rectangle and says why.
+  (`compositionWrites`), shared with the layout card, Start and Stop: writes
+  leave in order, a placement still waiting when the card makes a newer change
+  is dropped, so an older drag can never undo a newer choice, and the lane
+  decides when it sends a placement whether it changes the running stream. A
+  refused placement falls back to the device's saved rectangle and says why.
 
   Each corner resizes from a 44 px box centred on it (`layout-inset-handle-*`)
   that sits UNDER the inset, plus a cap inside the inset's corner of at most
@@ -31,6 +32,7 @@
 import { m } from '@ceraui/i18n/svelte';
 import type { CompositionConfig, CompositionRect } from '@ceraui/rpc/schemas';
 
+import { getIsStreaming } from '$lib/rpc/subscriptions.svelte';
 import {
 	compositionRefusal,
 	pendingPlacement,
@@ -49,13 +51,12 @@ import {
 interface Props {
 	/** The composition the device has saved. */
 	composition: CompositionConfig;
-	isStreaming: boolean;
 	/** The picture's own size, 0 while unknown. */
 	pictureWidth?: number;
 	pictureHeight?: number;
 }
 
-const { composition, isStreaming, pictureWidth = 0, pictureHeight = 0 }: Props = $props();
+const { composition, pictureWidth = 0, pictureHeight = 0 }: Props = $props();
 
 const STEP = 0.01;
 const FAST_STEP = 0.05;
@@ -113,9 +114,7 @@ async function commit(): Promise<void> {
 	if (placed === undefined || sameRect(placed, shown)) return;
 	refusal = undefined;
 	try {
-		const result = await sendCompositionWrite(
-			isStreaming ? { composition_rect: placed, apply_now: true } : { composition_rect: placed },
-		);
+		const result = await sendCompositionWrite({ composition_rect: placed }, getIsStreaming);
 		if (result !== undefined) refusal = compositionRefusal(result);
 	} catch {
 		refusal = m['notifications.saveFailed']();

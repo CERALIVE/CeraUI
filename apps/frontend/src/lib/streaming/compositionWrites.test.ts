@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 /**
- * The tab's one composition lane (`compositionWrites`): every composition write
- * from the layout card and the layout designer leaves one at a time, in the
- * order it was made, and a placement still waiting when any newer write arrives
- * is dropped unsent, so an older drag can never undo a newer choice.
+ * The tab's one lane (`compositionWrites`): every composition write from the
+ * layout card and the layout designer, and every Start and Stop, leaves one at
+ * a time, in the order it was made. A placement still waiting when a newer
+ * composition write arrives is dropped unsent, so an older drag can never undo
+ * a newer choice; a Start or a Stop drops nothing. Whether a write changes the
+ * running stream (`apply_now`) follows the session when the write is sent.
  */
 import type { StreamingSetConfigOutput } from "@ceraui/rpc/schemas";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -13,7 +15,7 @@ const setConfig = vi.hoisted(() =>
 		(input: Record<string, unknown>) => Promise<StreamingSetConfigOutput>
 	>(),
 );
-vi.mock("$lib/rpc", () => ({
+vi.mock("$lib/rpc/client", () => ({
 	rpc: { streaming: { setConfig } },
 	rpcClient: {},
 }));
@@ -21,8 +23,14 @@ vi.mock("$lib/rpc", () => ({
 import {
 	compositionRefusal,
 	pendingPlacement,
-	sendCompositionWrite,
+	sendSessionTransition,
+	sendCompositionWrite as sendWrite,
 } from "./compositionWrites.svelte";
+
+// The device's own word on the session (its status push), read at send time.
+const session = { streaming: false };
+const sendCompositionWrite = (input: Parameters<typeof sendWrite>[0]) =>
+	sendWrite(input, () => session.streaming);
 
 const SAVED: StreamingSetConfigOutput = { success: true, applied: {} };
 const A = { x: 0.1, y: 0.1, width: 0.3, height: 0.3 };
@@ -50,9 +58,41 @@ function heldDevice() {
 const sent = () => setConfig.mock.calls.map(([input]) => input);
 const flush = () => new Promise<void>((resolve) => queueMicrotask(resolve));
 
-afterEach(() => {
+afterEach(async () => {
+	// Every test ends with no session, as the device would after a Stop.
+	await sendSessionTransition("idle", async () => ({ success: true }));
+	session.streaming = false;
 	setConfig.mockReset();
 });
+
+/** Writes, Starts and Stops against a device that answers each only when told, in one ordered log. */
+function heldLane() {
+	const log: Array<[string, unknown]> = [];
+	const answers: Array<(result: unknown) => void> = [];
+	const held =
+		(path: string) =>
+		(input?: unknown): Promise<never> =>
+			new Promise((resolve) => {
+				log.push([path, input]);
+				answers.push(resolve as (result: unknown) => void);
+			});
+	setConfig.mockImplementation(held("setConfig"));
+	return {
+		log,
+		start: () => sendSessionTransition("live", held("start")),
+		stop: () => sendSessionTransition("idle", held("stop")),
+		answer: async (result: unknown, logged: number) => {
+			answers.shift()?.(result);
+			await vi.waitFor(() => expect(log).toHaveLength(logged));
+		},
+		settle: async (result: unknown) => {
+			answers.shift()?.(result);
+			await vi.waitFor(() => expect(answers).toHaveLength(0));
+		},
+	};
+}
+
+const STARTED = { success: true, is_streaming: true };
 
 describe("compositionWrites", () => {
 	it("sends one write at a time, in the order they were made", async () => {
@@ -143,5 +183,144 @@ describe("compositionWrites", () => {
 			expect(copy).not.toContain(error);
 		}
 		expect(compositionRefusal(SAVED)).toBeUndefined();
+	});
+});
+
+describe("compositionWrites with Start and Stop", () => {
+	it("a Start waits for the write in flight and the placement made before it, which go out only saving", async () => {
+		const lane = heldLane();
+		void sendCompositionWrite({ composition_rect: A });
+		void sendCompositionWrite({ composition_rect: B });
+		const started = lane.start();
+		expect(lane.log).toEqual([["setConfig", { composition_rect: A }]]);
+		await lane.answer(SAVED, 2);
+		await lane.answer(SAVED, 3);
+		expect(lane.log).toEqual([
+			["setConfig", { composition_rect: A }],
+			["setConfig", { composition_rect: B }],
+			["start", undefined],
+		]);
+		await lane.settle(STARTED);
+		await expect(started).resolves.toEqual(STARTED);
+	});
+
+	it("a write made while a Start is unanswered is sent after it and changes the running stream, before the device's status says live", async () => {
+		const lane = heldLane();
+		void lane.start();
+		const placed = sendCompositionWrite({ composition_rect: A });
+		const tapped = sendCompositionWrite({ composition_patch: { alpha: 0.5 } });
+		expect(pendingPlacement()).toBeUndefined();
+		await lane.answer(STARTED, 2);
+		await expect(placed).resolves.toBeUndefined();
+		await lane.settle(SAVED);
+		await expect(tapped).resolves.toEqual(SAVED);
+		expect(lane.log).toEqual([
+			["start", undefined],
+			["setConfig", { composition_patch: { alpha: 0.5 }, apply_now: true }],
+		]);
+	});
+
+	it("a Start drops no waiting placement, but a newer composition write still does", async () => {
+		const lane = heldLane();
+		void sendCompositionWrite({ composition_rect: A });
+		const waiting = sendCompositionWrite({ composition_rect: B });
+		void lane.start();
+		expect(pendingPlacement()).toEqual(B);
+		void sendCompositionWrite({
+			composition_patch: { layout: "pbp-left-right" },
+		});
+		await expect(waiting).resolves.toBeUndefined();
+		await lane.answer(SAVED, 2);
+		await lane.answer(STARTED, 3);
+		await lane.settle(SAVED);
+		expect(lane.log).toEqual([
+			["setConfig", { composition_rect: A }],
+			["start", undefined],
+			[
+				"setConfig",
+				{ composition_patch: { layout: "pbp-left-right" }, apply_now: true },
+			],
+		]);
+	});
+
+	it("live, a Stop sends the placements made before it first, changing the running stream; one made after it only saves", async () => {
+		session.streaming = true;
+		const lane = heldLane();
+		void sendCompositionWrite({ composition_rect: A });
+		void sendCompositionWrite({ composition_rect: B });
+		const stopped = lane.stop();
+		await lane.answer(SAVED, 2);
+		await lane.answer(SAVED, 3);
+		session.streaming = false;
+		await lane.settle({ success: true, result: "stopped" });
+		await stopped;
+		void sendCompositionWrite({ composition_patch: { alpha: 0.4 } });
+		await vi.waitFor(() => expect(lane.log).toHaveLength(4));
+		await lane.settle(SAVED);
+		expect(lane.log).toEqual([
+			["setConfig", { composition_rect: A, apply_now: true }],
+			["setConfig", { composition_rect: B, apply_now: true }],
+			["stop", undefined],
+			["setConfig", { composition_patch: { alpha: 0.4 } }],
+		]);
+	});
+
+	it("a Stop never waits for an earlier Stop still unanswered, and a write waits for both", async () => {
+		session.streaming = true;
+		const lane = heldLane();
+		const first = lane.stop();
+		void sendCompositionWrite({ composition_rect: A });
+		const second = lane.stop();
+		expect(lane.log).toEqual([
+			["stop", undefined],
+			["stop", undefined],
+		]);
+		session.streaming = false;
+		await lane.answer({ success: true, result: "stopped" }, 2);
+		await first;
+		expect(lane.log).toHaveLength(2);
+		await lane.answer({ success: true, result: "stopped" }, 3);
+		await second;
+		await lane.settle(SAVED);
+		expect(lane.log[2]).toEqual(["setConfig", { composition_rect: A }]);
+	});
+
+	it("the session when a write is sent decides, not the one when it was made", async () => {
+		const lane = heldLane();
+		void sendCompositionWrite({ composition_patch: { alpha: 0.2 } });
+		void sendCompositionWrite({ composition_rect: A });
+		session.streaming = true;
+		await lane.answer(SAVED, 2);
+		void sendCompositionWrite({ composition_rect: B });
+		session.streaming = false;
+		await lane.answer(SAVED, 3);
+		await lane.settle(SAVED);
+		expect(lane.log).toEqual([
+			["setConfig", { composition_patch: { alpha: 0.2 } }],
+			["setConfig", { composition_rect: A, apply_now: true }],
+			["setConfig", { composition_rect: B }],
+		]);
+	});
+
+	it("after a refused Start the next write only saves; after a Start whose answer was lost it asks to change the running stream", async () => {
+		const lane = heldLane();
+		const refused = lane.start();
+		await lane.settle({ success: false, error: "START_IN_PROGRESS" });
+		await refused;
+		void sendCompositionWrite({ composition_rect: A });
+		await lane.settle(SAVED);
+
+		const lost = sendSessionTransition("live", () =>
+			Promise.reject(new Error("socket closed")),
+		);
+		await expect(lost).rejects.toThrow("socket closed");
+		void sendCompositionWrite({ composition_rect: B });
+		await vi.waitFor(() => expect(lane.log).toHaveLength(3));
+		await lane.settle(SAVED);
+		expect(lane.log).toEqual([
+			["start", undefined],
+			["setConfig", { composition_rect: A }],
+			["setConfig", { composition_rect: B, apply_now: true }],
+		]);
 	});
 });

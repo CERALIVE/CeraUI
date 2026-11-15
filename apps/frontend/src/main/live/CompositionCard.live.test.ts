@@ -37,7 +37,7 @@ const setConfig = vi.hoisted(() =>
 		(input: Record<string, unknown>) => Promise<StreamingSetConfigOutput>
 	>(),
 );
-vi.mock("$lib/rpc", () => ({
+vi.mock("$lib/rpc/client", () => ({
 	rpc: { streaming: { setConfig } },
 	rpcClient: {},
 }));
@@ -47,8 +47,12 @@ vi.mock("$lib/rpc", () => ({
 const configChange = vi.hoisted(() => ({
 	view: undefined as ConfigChangeView,
 }));
+// The device's own word on the session, which the composition lane reads when
+// it sends a write.
+const session = vi.hoisted(() => ({ streaming: false }));
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getConfigChange: () => configChange.view,
+	getIsStreaming: () => session.streaming,
 }));
 
 import CompositionCard from "./CompositionCard.svelte";
@@ -125,6 +129,7 @@ const REFUSED: StreamingSetConfigOutput = {
 };
 
 function renderCard(isStreaming: boolean) {
+	session.streaming = isStreaming;
 	return render(CompositionCard, {
 		props: { sources: SOURCES, config: CONFIG, isStreaming },
 	});

@@ -89,7 +89,6 @@ function handleToggle(event: Event & { currentTarget: HTMLDetailsElement }) {
 	{#if placement !== undefined}
 		<LayoutDesigner
 			composition={placement}
-			isStreaming={streaming}
 			pictureHeight={picture.height}
 			pictureWidth={picture.width}
 		/>

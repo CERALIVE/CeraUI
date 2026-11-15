@@ -124,6 +124,11 @@ composition through `setConfig`, the apply-now transaction and Start, unchanged.
   absolute. A patch to `custom` keeps a saved custom rectangle, else takes the
   saved preset's rectangle (`presetRect`, shared with the frontend from
   `@ceraui/rpc/schemas`); a patch to a preset drops the rectangle.
+- In the browser, every composition write, Start and Stop of a tab go through
+  one ordered lane (`compositionWrites`), and each write asks for `apply_now`
+  only when it is sent, from the session at that moment. A placement made
+  before a Start is saved before the Start reads the saved composition; one
+  made after it waits for the answer and changes the running stream.
 - Before anything is written, a rectangle or a custom layout is refused with
   `composition_geometry_unsupported` when the engine does not advertise
   `composition-geometry`, and with `composition_rect_invalid` when it comes
@@ -140,8 +145,10 @@ composition through `setConfig`, the apply-now transaction and Start, unchanged.
   the mock stack applies it; other live changes still go to the engine client.
 
 Proof: `composition-geometry.test.ts`, `composition-interleaving.test.ts`
-(two clients with stale views, seeded and timer-free, idle and live, against a
-reference model after every step), `mock-composition-live.test.ts`,
+(two clients with stale views, seeded and timer-free, idle and live with
+Starts and Stops between the writes, against a reference model after every
+step, and while live the engine runs exactly what is saved),
+`mock-composition-live.test.ts`,
 `compositionWrites.test.ts`, `compositionSurfaces.test.ts`,
 `LayoutDesigner.test.ts`, `layoutRect.test.ts` and
 `apps/frontend/tests/e2e/layout-designer.spec.ts`. Owed on a board: a live

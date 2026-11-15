@@ -24,12 +24,14 @@ const setConfig = vi.hoisted(() =>
 		(input: Record<string, unknown>) => Promise<StreamingSetConfigOutput>
 	>(),
 );
-vi.mock("$lib/rpc", () => ({
+vi.mock("$lib/rpc/client", () => ({
 	rpc: { streaming: { setConfig } },
 	rpcClient: {},
 }));
+const session = vi.hoisted(() => ({ streaming: false }));
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getConfigChange: () => undefined,
+	getIsStreaming: () => session.streaming,
 }));
 
 import CompositionCard from "./CompositionCard.svelte";
@@ -99,6 +101,7 @@ function renderCard(
 		geometry?: boolean;
 	} = {},
 ) {
+	session.streaming = props.isStreaming ?? false;
 	return render(CompositionCard, {
 		props: {
 			sources: SOURCES,
