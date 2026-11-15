@@ -3,6 +3,7 @@
 	"include": [
 		"src/tests/helpers/**/*.ts",
 		"src/tests/bond-identity-scan-parity.test.ts",
+		"src/tests/modem-credential-ownership.test.ts",
 		"src/tests/usb-net-committed-incarnation.test.ts",
 		"src/tests/kernel-namespace.test.ts",
 		"src/tests/uplink-steering-route-kernel.test.ts",
