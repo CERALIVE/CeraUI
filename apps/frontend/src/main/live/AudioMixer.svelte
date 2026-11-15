@@ -7,7 +7,8 @@
 
   Every bound is the capability's: gain from `gain_db_min` to `gain_db_max`,
   delay from 0 to `delay_ms_max`, one chip per track up to `max_tracks`, and at
-  most `max_inputs` enabled strips. The input picked above is the main input:
+  most `max_inputs` inputs in the mix, with or without a strip. The input
+  picked above is the main input:
   its strip is always on, and it is in the mix Start sends even when the saved
   mix lacks it (the backend's effective mix); showing it never saves anything.
 
@@ -136,8 +137,7 @@ function entryFor(id: string): AudioInputSetting {
 	return inputs.find((input) => input.id === id) ?? defaults(id);
 }
 
-const enabledCount = $derived(strips.filter((strip) => isEnabled(strip.id)).length);
-const full = $derived(mix !== undefined && enabledCount >= mix.max_inputs);
+const full = $derived(mix !== undefined && inputs.length >= mix.max_inputs);
 
 const valuesKey = ({ gain_db, mute, delay_ms }: Values): string => `${gain_db}|${mute}|${delay_ms}`;
 // An input the saved mix does not list is at its defaults.
@@ -182,6 +182,15 @@ $effect.pre(() => {
 let liveApplied = $state<Record<string, { values: Values; sentAt: number }>>({});
 $effect(() => {
 	if (!mixLive) liveApplied = {};
+	// A queued live intent ends with its session or this component.
+	return () => {
+		for (const id of Object.keys(gainTimer)) {
+			clearTimeout(gainTimer[id]);
+			gainTimer[id] = undefined;
+			dragging[id] = false;
+			dropDraft(id);
+		}
+	};
 });
 
 function shown(id: string): AudioInputSetting {
@@ -250,12 +259,11 @@ function tracksError(next: readonly AudioInputSetting[]): string | undefined {
 	return undefined;
 }
 
-/** Every enabled strip after `change`: an edit's preview and the input to the track rule. */
+/** The full mix after `change`, including inputs absent from the current roster. */
 function nextInputs(
 	change: (entries: AudioInputSetting[]) => AudioInputSetting[],
 ): AudioInputSetting[] {
-	const enabled = strips.filter((strip) => isEnabled(strip.id)).map((strip) => entryFor(strip.id));
-	return change(enabled);
+	return change(inputs);
 }
 
 // One input's delta; `preview` only shows the change until the device's config
@@ -391,7 +399,8 @@ $effect(() => {
 
 function sendGain(id: string): void {
 	const value = gainDraft[id];
-	if (value === undefined || value === gainSent[id]) return;
+	// A queued level is sent only while its session is still live.
+	if (!mixLive || value === undefined || value === gainSent[id]) return;
 	gainSentAt[id] = Date.now();
 	gainSent[id] = value;
 	void sendLive(id, { gain_db: value });
