@@ -6,7 +6,7 @@ Every original section is retained below, including appended `…AND` runs. Read
 
 | File | Original heading | Governed code paths |
 |---|---|---|
-| [device-journal-reader.md](device-journal-reader.md) | DEVICE JOURNAL PRIMITIVES [EXISTS] | `src/modules/device-logs/parse.ts` |
+| [device-journal-reader.md](device-journal-reader.md) | DEVICE JOURNAL PRIMITIVES / Scan budget [EXISTS] | `src/modules/device-logs/parse.ts`, `src/modules/device-logs/bounds.ts`, `src/tests/device-logs-bounds.test.ts` |
 | [event-emitter.md](event-emitter.md) | Device event emitter [EXISTS] | `src/modules/events/emit.ts`, `src/tests/events-emit.test.ts` |
 | [overview.md](overview.md) | preamble | `../../AGENTS.md` |
 | [overview-2.md](overview-2.md) | OVERVIEW | `../../docs/E2E-BACKEND-OWNERSHIP.md`, `@ceralive/cerastream`, `@ceraui/srtla-send`, `packages/srtla-send/` |
