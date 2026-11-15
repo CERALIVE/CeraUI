@@ -72,6 +72,14 @@ const REFERENCE_BACKEND_PORT = 3003;
 export const EVIDENCE_DIR = path.resolve(import.meta.dirname, 'test-results');
 const ciManagesServers = Boolean(process.env.CI);
 
+// @dev-only tests open views only the Vite dev build has: import.meta.env.DEV
+// compiles the Identity and Dev Tools destinations out of production. CI serves
+// the built preview on DEV_PORT, so they get a dev server of their own beside it;
+// locally DEV_PORT already is the dev server.
+const DEV_ONLY_PORT = ciManagesServers ? DEV_PORT + 1 : DEV_PORT;
+const desktop = { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } };
+const mobile = { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 } };
+
 export default defineConfig({
   testDir: 'tests/e2e',
   outputDir: EVIDENCE_DIR,
@@ -96,21 +104,34 @@ export default defineConfig({
     video: 'off',
   },
   // A test that proves one layout only is tagged @desktop-only or @mobile-only;
-  // the other project leaves it out instead of skipping it at run time.
+  // the other project leaves it out instead of skipping it at run time. A test
+  // tagged @dev-only runs only in the -dev projects, on the Vite dev server.
   projects: [
+    { name: 'desktop', grepInvert: /@mobile-only|@dev-only/, use: desktop },
+    { name: 'mobile', grepInvert: /@desktop-only|@dev-only/, use: mobile },
     {
-      name: 'desktop',
+      name: 'desktop-dev',
+      grep: /@dev-only/,
       grepInvert: /@mobile-only/,
-      use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },
+      use: { ...desktop, baseURL: `http://localhost:${DEV_ONLY_PORT}` },
     },
     {
-      name: 'mobile',
+      name: 'mobile-dev',
+      grep: /@dev-only/,
       grepInvert: /@desktop-only/,
-      use: { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 } },
+      use: { ...mobile, baseURL: `http://localhost:${DEV_ONLY_PORT}` },
     },
   ],
   webServer: ciManagesServers
-    ? []
+    ? [
+        {
+          // The CI lane starts the preview and the backend itself.
+          command: `bun run --filter frontend dev -- --port ${DEV_ONLY_PORT} --strictPort`,
+          port: DEV_ONLY_PORT,
+          reuseExistingServer: false,
+          timeout: 120_000,
+        },
+      ]
     : [
         {
           command: 'bun run --filter frontend dev',
