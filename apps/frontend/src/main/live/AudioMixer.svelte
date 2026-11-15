@@ -139,24 +139,27 @@ function entryFor(id: string): AudioInputSetting {
 const enabledCount = $derived(strips.filter((strip) => isEnabled(strip.id)).length);
 const full = $derived(mix !== undefined && enabledCount >= mix.max_inputs);
 
-// How many config broadcasts changed each input's level, mute or delay. Counted,
-// not compared, so a value changed and changed back still counts.
+const valuesKey = ({ gain_db, mute, delay_ms }: Values): string => `${gain_db}|${mute}|${delay_ms}`;
+// An input the saved mix does not list is at its defaults.
+const AT_DEFAULTS = valuesKey(defaults(''));
+
+// How many config broadcasts changed each input's saved level, mute or delay,
+// read from the saved mix itself, so an input with no strip (gone or
+// unavailable) still counts. Counted, not compared, so a value changed and
+// changed back still counts.
 let broadcasts = $state<Record<string, number>>({});
-const lastSeen: Record<string, string> = {};
+let lastSaved: Record<string, string> = {};
 $effect.pre(() => {
-	const seen = strips.map((strip) => {
-		const { gain_db, mute, delay_ms } = entryFor(strip.id);
-		return [strip.id, `${gain_db}|${mute}|${delay_ms}`] as const;
-	});
+	const saved: Record<string, string> = {};
+	for (const input of config?.audio_inputs ?? []) saved[input.id] = valuesKey(input);
 	untrack(() => {
-		const changed = seen.filter(([id, values]) => {
-			const before = lastSeen[id];
-			lastSeen[id] = values;
-			return before !== undefined && before !== values;
-		});
+		const changed = Object.keys({ ...lastSaved, ...saved }).filter(
+			(id) => (lastSaved[id] ?? AT_DEFAULTS) !== (saved[id] ?? AT_DEFAULTS),
+		);
+		lastSaved = saved;
 		if (changed.length === 0) return;
 		const next = { ...broadcasts };
-		for (const [id] of changed) next[id] = (next[id] ?? 0) + 1;
+		for (const id of changed) next[id] = (next[id] ?? 0) + 1;
 		broadcasts = next;
 	});
 });
@@ -352,6 +355,21 @@ function dropDraft(id: string): void {
 	const { [id]: _dropped, ...rest } = gainDraft;
 	gainDraft = rest;
 }
+
+// A strip that goes away mid-drag never sees its release: end that drag, so the
+// level shows the device's values again when the strip returns.
+$effect(() => {
+	const visible = new Set(strips.map((strip) => strip.id));
+	untrack(() => {
+		for (const id of Object.keys(gainDraft)) {
+			if (visible.has(id)) continue;
+			dragging[id] = false;
+			clearTimeout(gainTimer[id]);
+			gainTimer[id] = undefined;
+			dropDraft(id);
+		}
+	});
+});
 
 function sendGain(id: string): void {
 	const value = gainDraft[id];

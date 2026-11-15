@@ -44,21 +44,14 @@ vi.mock("$lib/rpc", () => ({
 	rpcClient: {},
 }));
 
-// The socket-fed getters, set per test before rendering.
-const feed = vi.hoisted(() => ({
-	status: undefined as Record<string, unknown> | undefined,
-	level: undefined as Record<string, unknown> | undefined,
-	sources: undefined as Record<string, unknown> | undefined,
-	connected: true,
-}));
-vi.mock("$lib/rpc/subscriptions.svelte", () => ({
-	getStatus: () => feed.status,
-	getAudioLevel: () => feed.level,
-	getSources: () => feed.sources,
-	getConfig: () => undefined,
-	getIsConnected: () => feed.connected,
-}));
+// The socket-fed getters, set per test before rendering; reactive, so a test can
+// also change the device roster mid-session.
+vi.mock(
+	"$lib/rpc/subscriptions.svelte",
+	async () => await import("./__fixtures__/mixer-feed.svelte"),
+);
 
+import { feed } from "./__fixtures__/mixer-feed.svelte";
 import AudioMixer from "./AudioMixer.svelte";
 
 beforeAll(() => {
@@ -718,6 +711,89 @@ describe("AudioMixer — live on a mix session", () => {
 		await view.rerender({ config: withB({ gain_db: 0 }) });
 		expect(gainThumb("usb-b").getAttribute("aria-valuenow")).toBe("0");
 	});
+
+	const hidings: Array<[string, (sources: typeof AUDIO_SOURCES) => object[]]> =
+		[
+			[
+				"leaves the source list",
+				(sources) => sources.filter((source) => source.id !== "usb-b"),
+			],
+			[
+				"becomes unavailable",
+				(sources) =>
+					sources.map((source) =>
+						source.id === "usb-b"
+							? { ...source, unavailable_reason: "engine_update_required" }
+							: source,
+					),
+			],
+		];
+
+	it.each(hidings)(
+		"an input that %s while its saved level changes and changes back shows the saved level when it returns",
+		async (_case, hide) => {
+			const [answer] = holdAnswers(1);
+			const view = mixer({
+				config: LIVE_CONFIG,
+				isStreaming: true,
+				mixActive: true,
+			});
+			await fireEvent.keyDown(gainThumb("usb-b"), { key: "ArrowLeft" });
+
+			const roster = feed.status;
+			feed.status = { ...roster, audio_sources: hide(AUDIO_SOURCES) };
+			await tick();
+			expect(screen.queryByTestId("audio-strip-usb-b")).toBeNull();
+			await view.rerender({ config: withB({ gain_db: -7 }) });
+			await view.rerender({ config: withB({ gain_db: 0 }) });
+
+			feed.status = roster;
+			await tick();
+			answer?.(applied("usb-b", { gain_db: -1 }));
+			await setAudioMix.mock.results[0]?.value;
+			await tick();
+			expect(gainThumb("usb-b").getAttribute("aria-valuenow")).toBe("0");
+		},
+	);
+
+	it.each(hidings)(
+		"a strip whose input %s mid-drag shows the saved level when it returns, not the dragged one",
+		async (_case, hide) => {
+			setAudioMix.mockResolvedValue(applied("usb-b", { gain_db: -10 }));
+			const view = mixer({
+				config: LIVE_CONFIG,
+				isStreaming: true,
+				mixActive: true,
+			});
+			// 72 px across -60..12 dB: one pixel per dB, clientX = gain + 60.
+			gainRoot("usb-b").getBoundingClientRect = () =>
+				({
+					left: 0,
+					right: 72,
+					top: 0,
+					bottom: 10,
+					width: 72,
+					height: 10,
+					x: 0,
+					y: 0,
+				}) as DOMRect;
+			await fireEvent.pointerDown(gainRoot("usb-b"), {
+				button: 0,
+				clientX: 50,
+			});
+			await setAudioMix.mock.results[0]?.value;
+			await tick();
+
+			// The strip goes away before the pointer is released, so it never sees the release.
+			const roster = feed.status;
+			feed.status = { ...roster, audio_sources: hide(AUDIO_SOURCES) };
+			await tick();
+			await view.rerender({ config: withB({ gain_db: -7 }) });
+			feed.status = roster;
+			await tick();
+			expect(gainThumb("usb-b").getAttribute("aria-valuenow")).toBe("-7");
+		},
+	);
 
 	it("an answer that lands before its own echo still yields to another tab's later change", async () => {
 		const [answer] = holdAnswers(1);
