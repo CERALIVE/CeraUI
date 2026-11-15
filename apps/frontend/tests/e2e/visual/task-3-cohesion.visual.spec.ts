@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "../fixtures/index.js";
 
 import { navigateTo } from "../helpers/index.js";
 
@@ -58,6 +58,34 @@ const GENERIC_PIPELINES = {
 			defaultFramerate: 30,
 		},
 	},
+};
+
+// The dialog's capability axes key off the board in the `sources` snapshot and the
+// source `config.source` names; this HDMI input is that source.
+const GENERIC_SOURCES = {
+	hardware: "generic",
+	sources: [
+		{
+			origin: "capture",
+			id: "hdmi",
+			pipelineId: "hdmi",
+			kind: "hdmi",
+			displayName: "HDMI Capture",
+			devicePath: "/dev/video0",
+			modes: [
+				{ width: 3840, height: 2160, framerates: [30, 60] },
+				{ width: 1920, height: 1080, framerates: [30, 60] },
+				{ width: 1280, height: 720, framerates: [30, 60] },
+			],
+			supportsAudio: true,
+			supportsResolutionOverride: true,
+			supportsFramerateOverride: true,
+			defaultResolution: "1080p",
+			defaultFramerate: 30,
+			audioKind: "selectable",
+			available: true,
+		},
+	],
 };
 
 function installWsHarness(token: string): void {
@@ -141,14 +169,19 @@ test.describe("@visual task-3 cohesion primitives", () => {
 						srtla_port: 5000,
 						srt_streamid: "e2e",
 						max_br: 5000,
+						// Edit stays disabled-with-reason until a source resolves.
+						pipeline: "hdmi",
+						source: "hdmi",
 					});
 					await emit(page, "pipelines", GENERIC_PIPELINES);
-					return page
-						.getByTestId("open-encoder-dialog")
-						.isVisible()
-						.catch(() => false);
+					await emit(page, "sources", GENERIC_SOURCES);
+					const edit = page.getByTestId("open-encoder-dialog");
+					return (await edit.isVisible()) && (await edit.isEnabled());
 				},
-				{ timeout: 10_000, message: "encoder edit row should be present" },
+				{
+					timeout: 10_000,
+					message: "encoder edit row should be present and enabled",
+				},
 			)
 			.toBe(true);
 	});
@@ -160,8 +193,12 @@ test.describe("@visual task-3 cohesion primitives", () => {
 		const dialog = page.getByRole("dialog", { name: "Encoder Settings" });
 		await expect(dialog).toBeVisible();
 
-		await page.locator("#encoder-source").click();
-		await page.locator('[role="option"][data-value="hdmi"]').click();
+		// The Source section picks the input (no picker here since #137); the
+		// dialog reflects the active source read-only.
+		await expect(dialog.getByTestId("encoder-active-source")).toHaveAttribute(
+			"data-source-id",
+			"hdmi",
+		);
 
 		// The format is automatic; its codec choices appear once the operator opts
 		// into choosing the format. Verify the line, the switch and both choices.

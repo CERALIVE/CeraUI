@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "../fixtures/index.js";
 
 import { evidencePath, navigateTo } from "../helpers/index.js";
 
@@ -11,12 +11,14 @@ import { evidencePath, navigateTo } from "../helpers/index.js";
  * functional `--grep-invert @visual` run).
  *
  * It drives the REAL EncoderDialog against a deterministic capability snapshot
- * injected over the dev `pipelines` broadcast: a `generic` (software, 1080p
- * ceiling) board with an override-capable HDMI source. The dialog must then:
+ * injected over the dev `sources` broadcast: a `generic` (software, 1080p
+ * ceiling) board with an override-capable HDMI source, made active through
+ * `config.source` (the Live Source section picks the input; the dialog only
+ * reflects it). The Source section must list only the offered source(s), and the
+ * dialog must then:
  *   • render 2160p / 1440p DISABLED with aria-disabled + a "not supported"
  *     reason tooltip — not hidden;
- *   • leave 1080p selectable;
- *   • list only the offered source(s) in the picker.
+ *   • leave 1080p selectable.
  *
  * Auth + injection reuse the field-lock / input-picker WebSocket harness.
  */
@@ -51,6 +53,34 @@ const GENERIC_PIPELINES = {
 			defaultFramerate: 30,
 		},
 	},
+};
+
+// The dialog's capability axes key off the board in the `sources` snapshot and the
+// source `config.source` names; this HDMI input is that source.
+const GENERIC_SOURCES = {
+	hardware: "generic",
+	sources: [
+		{
+			origin: "capture",
+			id: "hdmi",
+			pipelineId: "hdmi",
+			kind: "hdmi",
+			displayName: "HDMI Capture",
+			devicePath: "/dev/video0",
+			modes: [
+				{ width: 3840, height: 2160, framerates: [30, 60] },
+				{ width: 1920, height: 1080, framerates: [30, 60] },
+				{ width: 1280, height: 720, framerates: [30, 60] },
+			],
+			supportsAudio: true,
+			supportsResolutionOverride: true,
+			supportsFramerateOverride: true,
+			defaultResolution: "1080p",
+			defaultFramerate: 30,
+			audioKind: "selectable",
+			available: true,
+		},
+	],
 };
 
 function installWsHarness(token: string): void {
@@ -131,7 +161,8 @@ test.describe("@visual capability-driven encoder options", () => {
 		await page.goto("/");
 		await navigateTo(page, "live");
 		// Inject a server config (leaves the Live empty state so the encoder edit
-		// row renders) + the deterministic capability snapshot. Re-emit until they
+		// row renders) naming the active source (Edit stays disabled-with-reason
+		// without one) + the deterministic capability snapshot. Re-emit until they
 		// land — post-login the backend pushes its own snapshots once.
 		await expect
 			.poll(
@@ -141,14 +172,18 @@ test.describe("@visual capability-driven encoder options", () => {
 						srtla_port: 5000,
 						srt_streamid: "e2e",
 						max_br: 5000,
+						pipeline: "hdmi",
+						source: "hdmi",
 					});
 					await emit(page, "pipelines", GENERIC_PIPELINES);
-					return page
-						.getByTestId("open-encoder-dialog")
-						.isVisible()
-						.catch(() => false);
+					await emit(page, "sources", GENERIC_SOURCES);
+					const edit = page.getByTestId("open-encoder-dialog");
+					return (await edit.isVisible()) && (await edit.isEnabled());
 				},
-				{ timeout: 10_000, message: "encoder edit row should be present" },
+				{
+					timeout: 10_000,
+					message: "encoder edit row should be present and enabled",
+				},
 			)
 			.toBe(true);
 	});
@@ -156,19 +191,20 @@ test.describe("@visual capability-driven encoder options", () => {
 	test("incompatible resolutions render disabled with a reason; compatible ones stay selectable @visual", async ({
 		page,
 	}) => {
+		// The Live Source section lists only the offered source, selected — capture
+		// it as evidence (the dialog has no source picker since #137).
+		const hdmiRow = page.getByTestId("source-row-hdmi");
+		await expect(hdmiRow).toBeVisible();
+		await expect(hdmiRow).toHaveAttribute("data-selected", "true");
+		await page.screenshot({ path: evidencePath("encoder-source-list.png") });
+
 		await page.getByTestId("open-encoder-dialog").click();
 		const dialog = page.getByRole("dialog", { name: "Encoder Settings" });
 		await expect(dialog).toBeVisible();
-
-		// Select the offered HDMI source so the resolution control renders.
-		await page.locator("#encoder-source").click();
-		await page.locator('[role="option"][data-value="hdmi"]').click();
-
-		// Source picker shows only the offered source — capture it as evidence.
-		await page.locator("#encoder-source").click();
-		await expect(page.locator('[role="option"][data-value="hdmi"]')).toBeVisible();
-		await page.screenshot({ path: evidencePath("encoder-source-list.png") });
-		await page.keyboard.press("Escape");
+		await expect(dialog.getByTestId("encoder-active-source")).toHaveAttribute(
+			"data-source-id",
+			"hdmi",
+		);
 
 		await page.locator("#encoder-resolution").click();
 
