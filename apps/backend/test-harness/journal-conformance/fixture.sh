@@ -100,4 +100,5 @@ check 'clock journal order' 'm1 m2 m3 m4 m5 m6 m7'
 check 'clock since forward includes out of range record' 'm3 m4 m5 m6 m7' --since=@1700000002
 check 'clock since reverse hides in range records' 'm7 m6' -r --since=@1700000002
 check 'clock until forward cuts by position' 'm1 m2 m3 m4 m5' --until=@1700000003
+source /conformance/query/replay.sh
 echo 'FIXTURE OK systemd 257'

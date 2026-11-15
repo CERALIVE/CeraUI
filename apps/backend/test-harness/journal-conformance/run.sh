@@ -38,6 +38,7 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 docker run --pull=never --rm -i --name "$fixture" \
+	-v "$here:/conformance:ro" \
 	-e CONFORMANCE_SELFTEST="${CONFORMANCE_SELFTEST:-0}" debian:trixie bash -s <"$here/fixture.sh"
 docker volume create "$volume"
 created_volume=1
