@@ -52,14 +52,14 @@ const MM_NETERR_LOCATION_AREA_NOT_ALLOWED = 12;
 /**
  * The Qualcomm reference-design stick whose firmware answers ModemManager's
  * identity query with a bare numeral. mmcli reports it verbatim as
- * `manufacturer: 1` / `model: 0` / IMEI `868837088254863`.
+ * `manufacturer: 1` / `model: 0` / IMEI `000000000012345`.
  */
 const GARBAGE_IDENTITY_MODEM = {
 	path: "/org/freedesktop/ModemManager1/Modem/0",
 	ifname: "wwan1",
 	model: "0",
 	manufacturer: "1",
-	equipmentId: "868837088254863",
+	equipmentId: "000000000012345",
 	revision: "HIMI_U01_MODEM_V1.0  1  [Sep 09 2015 10:00:00]",
 	physdev:
 		"/sys/devices/platform/fc400000.usb/xhci-hcd.0.auto/usb1/1-1/1-1.4/1-1.4.3",
@@ -71,7 +71,7 @@ const REJECTED_QUECTEL = {
 	ifname: "wwan2",
 	model: "RM530N-GL",
 	manufacturer: "Quectel",
-	equipmentId: "867978050016855",
+	equipmentId: "000000000023456",
 	revision: "RM530NGLAAR05A01M4G",
 	physdev:
 		"/sys/devices/platform/fc400000.usb/xhci-hcd.0.auto/usb4/4-1/4-1.4/4-1.4.4",
@@ -94,11 +94,11 @@ function rowFor(fixture: Parameters<typeof managedObjectsTree>[0][number]) {
 }
 
 describe("a D-Bus row is titled by the SAME rule as an mmcli row", () => {
-	test("Given firmware answering `model: 0`, When the row is titled, Then it falls back to the firmware string instead of rendering '0 - 54863'", () => {
+	test("Given firmware answering `model: 0`, When the row is titled, Then it falls back to the firmware string instead of rendering '0 - 12345'", () => {
 		const { source } = rowFor(GARBAGE_IDENTITY_MODEM);
 
-		expect(source.name).toBe("HIMI_U01_MODEM_V1.0 - 54863");
-		expect(source.name).not.toBe("0 - 54863");
+		expect(source.name).toBe("HIMI_U01_MODEM_V1.0 - 12345");
+		expect(source.name).not.toBe("0 - 12345");
 	});
 
 	test("Given the same identity fields, When titled by either backend, Then the two names match byte for byte", () => {
@@ -117,7 +117,7 @@ describe("a D-Bus row is titled by the SAME rule as an mmcli row", () => {
 	test("Given a modem whose model DOES name a product, When titled, Then the title is unchanged", () => {
 		const { source } = rowFor(REJECTED_QUECTEL);
 
-		expect(source.name).toBe("RM530N-GL - 16855");
+		expect(source.name).toBe("RM530N-GL - 23456");
 	});
 
 	test("Given a modem reporting no IMEI, When titled, Then no bare ' - ' suffix is appended", () => {
