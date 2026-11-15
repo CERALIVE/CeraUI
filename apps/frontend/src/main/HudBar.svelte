@@ -322,7 +322,7 @@ $effect(() => {
 				for={`${detailsDescriptionId}-trigger`}
 				data-hud-region
 				class={cn(
-					'bg-sidebar text-foreground hover:bg-accent/50 relative flex h-12 w-full cursor-pointer items-center gap-3 border-t px-4 text-start text-xs font-medium tracking-wide transition-colors',
+					'bg-sidebar text-foreground hover:bg-accent/50 relative flex h-12 w-full cursor-pointer items-center gap-1 border-t px-2 text-start text-xs font-medium tracking-wide transition-colors min-[400px]:gap-2 min-[400px]:px-3 sm:gap-3 sm:px-4',
 					className,
 				)}
 			>
@@ -332,7 +332,7 @@ $effect(() => {
 				  operator cannot recover. The column stays inside the strip's `h-12`
 				  box, so `--mobile-dock-height` does not grow.
 				-->
-				<span class="flex min-w-0 flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-3">
+				<span data-testid="stream-verdict" class="flex min-w-0 shrink-0 flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-3">
 					<!-- Keep the visible verdict as the label; telemetry stays independently accessible. -->
 					<button
 						{...props}
@@ -343,7 +343,7 @@ $effect(() => {
 						aria-describedby={detailsDescriptionId}
 						class="pointer-events-none absolute inset-0 border-0 bg-transparent p-0 focus-visible:ring-ring/50 focus-visible:ring-2 focus-visible:outline-none"
 					></button>
-					<span class="inline-flex shrink-0 items-center gap-3">
+					<span class="inline-flex shrink-0 items-center gap-1.5 min-[400px]:gap-3">
 						<!-- Lead status badge -->
 						{#if isOffline}
 							<span
@@ -385,11 +385,12 @@ $effect(() => {
 					</span>
 
 					{#if healthReason}
-						<!-- Capped below `sm` so the second line cannot widen the cluster
-						     past the badge row above it and steal strip width. -->
+						<!-- Capped at every width: the verdict cluster does not shrink, so an
+						     uncapped reason would take the bitrate's and the links' room.
+						     The full text stays in the title and in the details sheet. -->
 						<span
 							data-testid="stream-health-reason"
-							class="text-muted-foreground max-w-[9rem] min-w-0 truncate text-[0.7rem] leading-tight font-medium sm:max-w-none"
+							class="text-muted-foreground max-w-[9rem] min-w-0 truncate text-[0.7rem] leading-tight font-medium lg:max-w-[14rem]"
 							title={healthReason.detail}
 						>
 							{healthReason.detail}
@@ -420,8 +421,10 @@ $effect(() => {
 					{/if}
 					{bitrateText}
 					{#if showTargetQualifier}
+						<!-- Below `sm` the strip shows the headline alone; the target and
+						     the limit stay in the accessible name and the details sheet. -->
 						<span
-							class="text-muted-foreground/70 text-[0.7rem]"
+							class="text-muted-foreground/70 hidden text-[0.7rem] sm:inline"
 							data-testid="hud-bitrate-target"
 							title={m["hud.bitrateTargetHint"]()}
 						>
@@ -433,8 +436,8 @@ $effect(() => {
 						     StreamTelemetryStrip report); the separator is an
 						     `aria-hidden` middot, and the accessible name above already
 						     names the ceiling with its own word label. -->
-						<span aria-hidden="true" class="text-muted-foreground/40">·</span>
-						<span class="text-muted-foreground/70 text-[0.7rem]" data-testid="hud-bitrate-limit">
+						<span aria-hidden="true" class="text-muted-foreground/40 hidden sm:inline">·</span>
+						<span class="text-muted-foreground/70 hidden text-[0.7rem] sm:inline" data-testid="hud-bitrate-limit">
 							{bitrateLimitText}
 						</span>
 					{/if}
@@ -442,14 +445,19 @@ $effect(() => {
 
 				<span class="bg-border h-5 w-px shrink-0" aria-hidden="true"></span>
 
-				<!-- Bonded link signals -->
-				<span class="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden">
+				<!-- Bonded link signals. A badge that does not fit wraps onto a second
+				     row that the fixed height hides, so a badge shows whole or not at
+				     all; when not even one fits, the container query hides them all. -->
+				<span
+					data-testid="strip-links"
+					class="@container flex h-4 min-w-0 flex-1 flex-wrap content-start items-center gap-2.5 overflow-hidden"
+				>
 					{#if hud.links.length === 0}
 						<span class="text-muted-foreground/60 truncate">{m["hud.noData"]()}</span>
 					{:else}
 						{#each hud.links as link (link.linkIndex)}
 							<span
-								class={cn('inline-flex shrink-0 items-end gap-1.5', link.isStale && 'opacity-50')}
+								class={cn('inline-flex h-4 shrink-0 items-end gap-1.5 @max-[2.5rem]:hidden', link.isStale && 'opacity-50')}
 								role="img"
 								aria-label={linkLabel(link)}
 							>
@@ -471,7 +479,7 @@ $effect(() => {
 					{#if soc.isStale}
 						<ClockIcon class="size-3 shrink-0 opacity-50" aria-hidden="true" />
 					{:else}
-						<ThermometerIcon class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+						<ThermometerIcon class="text-muted-foreground hidden size-3.5 shrink-0 min-[400px]:block" aria-hidden="true" />
 					{/if}
 					{@render socValue(tempState, tempText, m["hud.temperature"]())}
 				</span>
