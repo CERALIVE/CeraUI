@@ -288,37 +288,55 @@ must keep that ABI.
 - The inset is where the compositor puts the second input: the saved `rect`
   for `custom`, else the preset's own rectangle (`presetRect`: half of each
   axis, a 5% margin for the four insets). It drags with pointer capture,
-  resizes from four corner handles `layout-inset-handle-<corner>` (44 px hit
-  areas) and, focused, moves with the arrow keys by 1% (Shift 5%) and resizes
+  resizes from four corners and, focused, moves with the arrow keys by 1%
+  (Shift 5%) and resizes
   with Alt and the arrow keys. It is a native button with an accessible name
   and a polite live description of its position, size and keys; during a
   pointer drag the description keeps the starting position. Rectangles are
   fractions of the output frame, so they never mirror right to left.
+- Each corner resizes from a 44 px box centred on it
+  (`layout-inset-handle-<corner>`, `data-corner`) that sits under the inset,
+  plus a cap in the inset's own corner (`data-corner-cap`) of at most 22 px and
+  at most a quarter of each side. On a normal inset the corner keeps its whole
+  44 px zone; at the smallest size on a 375 px phone (about 30 by 17 px) the
+  caps stay small, so most of the inset, its middle included, still moves it.
+  The caps and the boxes share one pointer path on the picture-area layer; the
+  keyboard path is the focused inset button.
 - The rectangle moves locally while a pointer or an arrow key is held and is
   sent once, on release, already clamped (`clampRect`: inside the frame, each
   side at least `COMPOSITION_RECT_MIN`), as
   `streaming.setConfig({ composition_rect })`, with `apply_now: true` while
-  live. A press that does not move it sends nothing.
+  live. A press that does not move it sends nothing. Escape during a pointer
+  drag or a held key puts it back, lets the pointer go and sends nothing.
 - The device decides the composition. `resolveCompositionWrite` composes the
   placement onto the composition it has saved now, in the same synchronous
   write (`layout: 'custom'` and the rectangle; the second input and the
-  opacity stay the device's), and a custom write without a rectangle keeps the
-  saved one. Quick drags and a stale second tab therefore compose with every
-  other change; the client never sends its own copy of the other fields. A
-  rectangle is accepted only with `custom`, only with `composition-geometry`
-  and only when it fits the frame (`compositionRectFits` in
-  `@ceraui/rpc/schemas`); otherwise the save is refused before anything is
-  written, with `composition_geometry_unsupported`, `composition_rect_invalid`
-  or `composition_unsupported`.
-- One placement is in flight at a time; one released before the answer waits
-  for it and replaces any older waiting one. A refused placement falls back to
-  the device's saved rectangle and shows the keyed copy of its token
-  (`live.layout.error.<token>`) or the engine's outcome, in an alert over the
-  picture that is mounted for the whole session.
+  opacity stay the device's). The layout card sends each of its changes the
+  same way, as that one field (`composition_patch`: layout, second input or
+  opacity) merged onto the saved composition; only turning composition on or
+  off sends the whole `composition`. Quick drags and a stale second tab
+  therefore compose with every other change; no client sends its own copy of
+  the other fields. A rectangle is accepted only with `custom`, only with
+  `composition-geometry` and only when it fits the frame
+  (`compositionRectFits` in `@ceraui/rpc/schemas`); a rectangle sent with an
+  explicit preset layout is a contradiction and is refused. Every refusal
+  happens before anything is written: `composition_geometry_unsupported`,
+  `composition_rect_invalid`, `composition_unsupported`, or `composition_off`
+  for a change to a composition the device no longer has.
+- Every composition write of a tab, from the card and the designer alike,
+  goes through one ordered lane (`lib/streaming/compositionWrites.svelte.ts`):
+  one write in flight at a time, in the order made. A placement released
+  before the answer waits for it and replaces any older waiting placement; any
+  newer write (a layout, second input, opacity, on or off) drops a placement
+  still waiting, unsent, so an older drag can never undo a newer choice. While
+  waiting or in flight, the newest placement is what the inset shows. A
+  refused write shows the keyed copy of its token (`live.layout.error.<token>`)
+  or the engine's outcome; the designer then falls back to the device's saved
+  rectangle, in an alert over the picture that is mounted for the whole
+  session.
 - With `composition-geometry`, `composition-layout-selector` gains a seventh
-  radio, `composition-layout-custom`. Choosing it sends the active preset's
-  rectangle as the placement. While custom, the card's other changes (second
-  input, opacity) carry no rectangle and keep the device's. With the preview
+  radio, `composition-layout-custom`. Choosing it sends `custom` alone; the
+  device takes the rectangle of the preset it has saved. With the preview
   closed the radio is described by `live.layout.openPreviewToPlace`.
 - Under mocks, a live layout-only change reaches the mock engine
   (`changeMockComposition`), as `set-audio-mix` does.

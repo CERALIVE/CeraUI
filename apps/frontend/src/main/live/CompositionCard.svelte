@@ -23,10 +23,15 @@
 
   With `geometry` (the engine advertises `composition-geometry`) a seventh
   layout, `custom`, places the second input freely on the preview
-  (`LayoutDesigner`). Choosing it sends the active preset's rectangle as the
-  `composition_rect` placement; the device composes it on its saved
-  composition. The card never sends a rectangle of its own: while custom, its
-  other changes leave the device's saved rectangle in place.
+  (`LayoutDesigner`); the device takes the rectangle of the preset it has saved.
+
+  Every change of one field (layout, second input, opacity) is sent as that
+  field alone, `composition_patch`, which the device merges onto the composition
+  it has saved, so a tab with an older view never overwrites another tab's newer
+  change. Turning composition on or off sends the whole composition. All of it
+  goes through the tab's one composition lane (`compositionWrites`), shared with
+  the designer, so writes leave in order and a newer change here drops a
+  placement still waiting there.
 -->
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
@@ -52,11 +57,9 @@ import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import { Slider } from '$lib/components/ui/slider';
 import { Switch } from '$lib/components/ui/switch';
-import { rpc } from '$lib/rpc';
 import { getConfigChange } from '$lib/rpc/subscriptions.svelte';
-import { configChangeReport } from '$lib/streaming/configChangeCopy';
+import { compositionRefusal, sendCompositionWrite } from '$lib/streaming/compositionWrites.svelte';
 import { isConfigChangeInFlight } from '$lib/streaming/configChangePhase';
-import { presetRect } from '$lib/streaming/layoutRect';
 
 import { previewDisclosure } from './previewDisclosure.svelte';
 
@@ -155,30 +158,23 @@ async function save(input: StreamingSetConfigInput): Promise<void> {
 	if (saving) return;
 	saving = true;
 	try {
-		await rpc.streaming.setConfig(input);
+		await sendCompositionWrite(input);
 	} finally {
 		saving = false;
 	}
 }
 
 // The encoder save's shape (`buildEncoderSetConfig`): the apply-now directive
-// rides the setConfig input without being a config field.
-async function applyLive(
-	next: CompositionConfig,
-	input: StreamingSetConfigInput = { composition: next, apply_now: true },
-): Promise<void> {
+// rides the setConfig input without being a config field. `next` is only what
+// the controls show until the device answers.
+async function applyLive(next: CompositionConfig, input: StreamingSetConfigInput): Promise<void> {
 	if (busy) return;
 	saving = true;
 	pending = next;
 	liveRefusal = undefined;
 	try {
-		const result = await rpc.streaming.setConfig(input);
-		const change = result.configChange;
-		if (change !== undefined && change.result !== 'applied') {
-			liveRefusal = configChangeReport(change, m).message;
-		} else if (!result.success) {
-			liveRefusal = m['notifications.saveFailed']();
-		}
+		const result = await sendCompositionWrite(input);
+		liveRefusal = result === undefined ? undefined : compositionRefusal(result);
 	} catch {
 		liveRefusal = m['notifications.saveFailed']();
 	} finally {
@@ -198,22 +194,15 @@ function toggle(on: boolean): void {
 	void save({ composition: { secondary_input_id: first.id, layout, alpha } });
 }
 
-function patch(fields: Partial<CompositionConfig>): void {
+function patch(fields: NonNullable<StreamingSetConfigInput['composition_patch']>): void {
 	if (secondaryId === undefined) return;
 	const next = { secondary_input_id: secondaryId, layout, alpha, ...fields };
-	if (isStreaming) void applyLive(next);
-	else void save({ composition: next });
+	if (isStreaming) void applyLive(next, { composition_patch: fields, apply_now: true });
+	else void save({ composition_patch: fields });
 }
 
 function chooseCustom(): void {
-	if (layout === 'custom' || secondaryId === undefined) return;
-	const rect = presetRect(layout);
-	if (isStreaming)
-		void applyLive(
-			{ secondary_input_id: secondaryId, layout: 'custom', alpha, rect },
-			{ composition_rect: rect, apply_now: true },
-		);
-	else void save({ composition_rect: rect });
+	if (layout !== 'custom') patch({ layout: 'custom' });
 }
 
 function previewAlpha(value: number): void {

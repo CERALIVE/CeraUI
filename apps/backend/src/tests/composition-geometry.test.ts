@@ -197,8 +197,80 @@ test("a rectangle the engine would refuse is refused with its own token and noth
 	getConfig().composition = undefined;
 	expect(await save({ composition_rect: PLACED })).toMatchObject({
 		success: false,
-		error: "composition_rect_invalid",
+		error: "composition_off",
 	});
+	expect(await disk()).toEqual({});
+});
+
+test("a rectangle beside an explicitly stated preset contradicts itself and is refused, changing nothing", async () => {
+	for (const input of [
+		{
+			composition: { ...SAVED, layout: "pbp-left-right" },
+			composition_rect: PLACED,
+		},
+		{
+			composition_patch: { layout: "pbp-top-bottom" },
+			composition_rect: PLACED,
+		},
+	] satisfies StreamingSetConfigInput[]) {
+		expect(await save(input)).toMatchObject({
+			success: false,
+			error: "composition_rect_invalid",
+		});
+	}
+	expect(getConfig().composition).toEqual(SAVED);
+	expect(await disk()).toEqual({});
+
+	await save({
+		composition: { ...SAVED, layout: "custom" },
+		composition_rect: PLACED,
+	});
+	expect(getConfig().composition).toEqual(placedAt(PLACED));
+});
+
+test("field changes are merged onto the device's saved composition", async () => {
+	await save({ composition_rect: PLACED });
+	await save({ composition_patch: { alpha: 0.7 } });
+	await save({ composition_patch: { secondary_input_id: "camera-c" } });
+	expect(getConfig().composition).toEqual({
+		secondary_input_id: "camera-c",
+		layout: "custom",
+		alpha: 0.7,
+		rect: PLACED,
+	});
+	await save({ composition_patch: { layout: "pip-bottom-left" } });
+	expect(getConfig().composition).toEqual({
+		secondary_input_id: "camera-c",
+		layout: "pip-bottom-left",
+		alpha: 0.7,
+	});
+});
+
+test("custom takes the rectangle of the preset the device has saved, or keeps its own", async () => {
+	getConfig().composition = { ...SAVED, layout: "pbp-top-bottom" };
+	await save({ composition_patch: { layout: "custom" } });
+	expect(getConfig().composition).toEqual({
+		...SAVED,
+		layout: "custom",
+		rect: { x: 0, y: 0.5, width: 1, height: 0.5 },
+	});
+	await save({ composition_rect: PLACED });
+	await save({ composition_patch: { layout: "custom" } });
+	expect(getConfig().composition).toEqual(placedAt(PLACED));
+});
+
+test("a field change while composition is off is refused as composition_off", async () => {
+	getConfig().composition = undefined;
+	for (const input of [
+		{ composition_patch: { layout: "pip-top-left" } },
+		{ composition_patch: { alpha: 0.5 } },
+	] satisfies StreamingSetConfigInput[]) {
+		expect(await save(input)).toMatchObject({
+			success: false,
+			error: "composition_off",
+		});
+	}
+	expect(getConfig().composition).toBeUndefined();
 	expect(await disk()).toEqual({});
 });
 

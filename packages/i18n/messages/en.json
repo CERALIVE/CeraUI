@@ -2590,6 +2590,7 @@
 	"live.layout.error.composition_unsupported": "This device can't combine two inputs right now, so the position didn't change.",
 	"live.layout.error.composition_geometry_unsupported": "This device offers only the preset layouts, so the position didn't change.",
 	"live.layout.error.composition_rect_invalid": "The device couldn't use that position. Check that two inputs are combined, then try again.",
+	"live.layout.error.composition_off": "Two inputs are no longer combined on the device, so nothing changed.",
 	"live.startFailure.class.capture_source_unavailable.composition-unsupported": "This device can't combine two inputs. Turn Composition off, then start again.",
 	"live.startFailure.class.capture_source_unavailable.secondary-unavailable": "The second input isn't available. Reconnect it or pick another, then start again.",
 	"notifications.streamStartCompositionUnsupportedFailed": "Stream failed to start: this device can't combine two inputs. Turn Composition off, then start again.",

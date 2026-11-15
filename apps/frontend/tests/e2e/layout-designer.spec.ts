@@ -13,9 +13,11 @@ import { ensureAuthenticated, navigateTo } from "./helpers/index.js";
  * (`layout-designer-absent.spec.ts` covers `multi-modem-wifi`, which advertises
  * neither; a scenario is per worker, so per file). The page's socket is
  * proxied, never rewritten: every placement reaches the real mock backend and,
- * live, its mock engine. The proxy records the RPC frames and can hold the
- * device's answers to check that placements made before an answer arrives still
- * compose.
+ * live, its mock engine. The proxy records the RPC frames and can delay or
+ * hold the device's answers (held frames are the device's own, released in
+ * order, never fabricated) to check that writes made before an answer arrives
+ * still compose: placements in order, and a newer card change winning over a
+ * placement still waiting.
  */
 
 interface RpcCall {
@@ -28,6 +30,9 @@ interface DesignerWire {
 	calls(path: string): RpcCall[];
 	/** Hold every device frame this long before the page sees it, in order; 0 stops. */
 	delayServer(ms: number): void;
+	/** Keep every device frame from the page until `releaseServer`, then send them in order. */
+	holdServer(): void;
+	releaseServer(): void;
 }
 
 type Rect = { x: number; y: number; width: number; height: number };
@@ -44,10 +49,14 @@ async function installDesignerWire(
 	let delayMs = 0;
 	let held = 0;
 	let tail: Promise<void> = Promise.resolve();
+	let holding = false;
+	const heldFrames: Array<string | Buffer> = [];
+	let page_: { send(message: string | Buffer): void } | undefined;
 
 	await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 		const server = ws.connectToServer();
 		pageRpc.bindConnectionLifecycle(ws, server);
+		page_ = ws;
 		ws.onMessage((message) => {
 			const text = typeof message === "string" ? message : message.toString();
 			try {
@@ -72,6 +81,10 @@ async function installDesignerWire(
 			} catch {
 				/* non-JSON / binary frame */
 			}
+			if (holding) {
+				heldFrames.push(message);
+				return;
+			}
 			if (delayMs === 0 && held === 0) {
 				ws.send(message);
 				return;
@@ -91,6 +104,13 @@ async function installDesignerWire(
 		calls: (path) => all.filter((call) => call.path === path),
 		delayServer: (ms) => {
 			delayMs = ms;
+		},
+		holdServer: () => {
+			holding = true;
+		},
+		releaseServer: () => {
+			holding = false;
+			for (const message of heldFrames.splice(0)) page_?.send(message);
 		},
 	};
 }
@@ -191,7 +211,7 @@ test.describe("layout designer — caps-full", () => {
 			.poll(async () => near((await savedComposition(backendRpc))?.rect, { x: 0.05, y: 0.45, width: 0.3, height: 0.35 }))
 			.toBe(true);
 		const saved = (await savedComposition(backendRpc))?.rect;
-		expect(wire.calls("streaming.setConfig").filter((call) => "composition_rect" in call.input)).toHaveLength(3);
+		expect(wire.calls("streaming.setConfig").filter((call) => "composition_rect" in call.input)).toHaveLength(2);
 
 		await page.reload();
 		await ensureAuthenticated(page);
@@ -261,7 +281,7 @@ test.describe("layout designer — caps-full", () => {
 		wire.delayServer(0);
 		await expect
 			.poll(() => wire.calls("streaming.setConfig").filter((call) => "composition_rect" in call.input).length)
-			.toBe(4);
+			.toBe(3);
 		const [first, second] = wire
 			.calls("streaming.setConfig")
 			.filter((call) => "composition_rect" in call.input)
@@ -275,6 +295,68 @@ test.describe("layout designer — caps-full", () => {
 		await page.getByTestId("live-bar").getByRole("button", { name: "Stop stream" }).click();
 		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
 			timeout: 15_000,
+		});
+	});
+
+	test("a layout tap made while drags wait for the device wins, and the drag still waiting is never sent", async ({
+		page,
+		backendRpc,
+	}) => {
+		await page.getByTestId("composition-layout-custom").click();
+		await expect.poll(async () => (await savedComposition(backendRpc))?.layout).toBe("custom");
+		const inset = page.getByTestId("program-desk").getByTestId("layout-inset");
+		// The page has the answer to its own custom tap before any frame is held.
+		await expect(page.getByTestId("composition-layout-pbp-left-right")).toBeEnabled();
+		await expect.poll(async () => shownRect(inset)).toEqual({ x: 0.45, y: 0.05, width: 0.5, height: 0.5 });
+		const before = wire.calls("streaming.setConfig").length;
+
+		wire.holdServer();
+		await dragBy(page, inset, inset, -0.15, 0.1);
+		await dragBy(page, inset, inset, -0.1, 0.1);
+		await page.getByTestId("composition-layout-pbp-left-right").click();
+		await expect.poll(() => wire.calls("streaming.setConfig").length).toBe(before + 1);
+		wire.releaseServer();
+
+		await expect.poll(async () => (await savedComposition(backendRpc))?.layout).toBe("pbp-left-right");
+		await expect.poll(() => wire.calls("streaming.setConfig").at(-1)?.result).toMatchObject({ success: true });
+		const writes = wire
+			.calls("streaming.setConfig")
+			.slice(before)
+			.map((call) => call.input);
+		expect(writes).toHaveLength(2);
+		expect(Object.keys(writes[0] ?? {})).toEqual(["composition_rect"]);
+		expect(near(writes[0]?.composition_rect as Rect, { x: 0.3, y: 0.15, width: 0.5, height: 0.5 })).toBe(true);
+		expect(writes[1]).toEqual({ composition_patch: { layout: "pbp-left-right" } });
+		const saved = await savedComposition(backendRpc);
+		expect(saved?.layout).toBe("pbp-left-right");
+		expect(saved).not.toHaveProperty("rect");
+		await expect(page.getByTestId("composition-layout-pbp-left-right")).toHaveAttribute("aria-checked", "true");
+	});
+
+	test("Escape during a pointer drag puts the inset back and sends nothing", async ({ page, backendRpc }) => {
+		const inset = page.getByTestId("program-desk").getByTestId("layout-inset");
+		await backendRpc.call(["streaming", "setConfig"], {
+			composition_rect: { x: 0.2, y: 0.2, width: 0.4, height: 0.4 },
+		});
+		await expect.poll(async () => shownRect(inset)).toEqual({ x: 0.2, y: 0.2, width: 0.4, height: 0.4 });
+		const before = wire.calls("streaming.setConfig").length;
+
+		const from = await inset.boundingBox();
+		if (from === null) throw new Error("designer is not on screen");
+		await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+		await page.mouse.down();
+		await page.mouse.move(from.x + from.width / 2 + 120, from.y + from.height / 2 + 60, { steps: 6 });
+		await expect.poll(async () => near(await shownRect(inset), { x: 0.2, y: 0.2, width: 0.4, height: 0.4 })).toBe(false);
+		await page.keyboard.press("Escape");
+		await expect.poll(async () => shownRect(inset)).toEqual({ x: 0.2, y: 0.2, width: 0.4, height: 0.4 });
+		await page.mouse.move(from.x + from.width / 2 + 200, from.y + from.height / 2, { steps: 3 });
+		await page.mouse.up();
+
+		// The next placement is the first one sent since the cancelled drag.
+		await inset.press("ArrowRight");
+		await expect.poll(() => wire.calls("streaming.setConfig").length).toBe(before + 1);
+		expect(wire.calls("streaming.setConfig").at(-1)?.input).toEqual({
+			composition_rect: { x: 0.21, y: 0.2, width: 0.4, height: 0.4 },
 		});
 	});
 
@@ -329,4 +411,97 @@ test.describe("layout designer — caps-full", () => {
 			},
 		};
 	}
+});
+
+test.describe("layout designer — caps-full, on a 375 x 812 phone", () => {
+	test.skip(({ browserName }) => browserName !== "chromium", "single-browser pointer proof");
+	test.use({ viewport: { width: 375, height: 812 } });
+
+	const MINIMUM: Rect = { x: 0.4, y: 0.4, width: 0.125, height: 0.125 };
+	let wire: DesignerWire;
+
+	test.beforeEach(async ({ page, pageRpc, backendRpc }, testInfo) => {
+		test.skip(testInfo.project.name !== "mobile", "the phone layout");
+		await backendRpc.call(["streaming", "setConfig"], {
+			source: "usb",
+			srtla_addr: "127.0.0.1",
+			srtla_port: 5000,
+			composition: null,
+		});
+		await page.addInitScript(() => localStorage.setItem("ceraui.live.previewOpen", "true"));
+		wire = await installDesignerWire(page, pageRpc);
+		await openLive(page);
+		await page.getByTestId("composition-enable").click();
+		await expect.poll(async () => (await savedComposition(backendRpc))?.layout).toBe("pip-top-right");
+		await backendRpc.call(["streaming", "setConfig"], { composition_rect: MINIMUM });
+	});
+
+	test.afterEach(async ({ backendRpc }) => {
+		await backendRpc.call(["streaming", "setConfig"], { composition: null });
+	});
+
+	test("at the smallest size most of the inset still moves it, each corner keeps a 44 px resize box, and a drag from its middle moves it", async ({
+		page,
+		backendRpc,
+	}) => {
+		const inset = page.getByTestId("layout-inset");
+		await expect.poll(async () => shownRect(inset)).toEqual(MINIMUM);
+		await inset.scrollIntoViewIfNeeded();
+
+		// Every whole pixel of the inset, hit-tested the way a finger or a pointer lands.
+		const grid = await inset.evaluate((element) => {
+			const box = element.getBoundingClientRect();
+			const move: Array<{ x: number; y: number }> = [];
+			const resize = new Set<string>();
+			let points = 0;
+			for (let y = 0.5; y < box.height; y += 1)
+				for (let x = 0.5; x < box.width; x += 1) {
+					points += 1;
+					const hit = document.elementFromPoint(box.left + x, box.top + y);
+					const corner = hit?.closest<HTMLElement>("[data-corner], [data-corner-cap]");
+					if (corner) resize.add(corner.dataset.corner ?? corner.dataset.cornerCap ?? "");
+					else if (hit?.closest('[data-testid="layout-inset"]') === element) move.push({ x, y });
+				}
+			const centre = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+			return {
+				points,
+				move,
+				resize: [...resize].sort(),
+				centreMoves:
+					centre?.closest("[data-corner], [data-corner-cap]") === null &&
+					centre?.closest('[data-testid="layout-inset"]') === element,
+			};
+		});
+		expect(grid.centreMoves).toBe(true);
+		expect(grid.move.length).toBeGreaterThanOrEqual(grid.points / 2);
+		expect(grid.resize).toEqual(["bottom-left", "bottom-right", "top-left", "top-right"]);
+		const boxes = await page
+			.locator("[data-corner]")
+			.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect()));
+		expect(boxes).toHaveLength(4);
+		for (const box of boxes) {
+			expect(box.width).toBeGreaterThanOrEqual(44);
+			expect(box.height).toBeGreaterThanOrEqual(44);
+		}
+
+		const before = wire.calls("streaming.setConfig").length;
+		const picture = await inset.locator("..").boundingBox();
+		const from = await inset.boundingBox();
+		if (picture === null || from === null) throw new Error("designer is not on screen");
+		const x = from.x + from.width / 2;
+		const y = from.y + from.height / 2;
+		await page.mouse.move(x, y);
+		await page.mouse.down();
+		await page.mouse.move(x + 0.2 * picture.width, y + 0.1 * picture.height, { steps: 8 });
+		await page.mouse.up();
+		await expect.poll(() => wire.calls("streaming.setConfig").length).toBe(before + 1);
+		const placed = wire.calls("streaming.setConfig").at(-1)?.input.composition_rect as Rect;
+		expect(near(placed, { x: 0.6, y: 0.5, width: 0.125, height: 0.125 })).toBe(true);
+		expect([placed.width, placed.height]).toEqual([0.125, 0.125]);
+		await expect.poll(async () => near((await savedComposition(backendRpc))?.rect, placed)).toBe(true);
+
+		expect(
+			await runAxe(page, { include: ['[data-testid="preview"]', '[data-testid="composition-layout-selector"]'] }),
+		).toEqual([]);
+	});
 });

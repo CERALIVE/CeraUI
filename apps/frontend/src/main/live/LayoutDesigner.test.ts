@@ -9,7 +9,10 @@
  *   • live, the same placement carries `apply_now: true`;
  *   • a refused placement puts the last applied rectangle back and says why;
  *   • a placement released while an earlier one is unanswered waits for that
- *     answer and is then sent, so quick drags never drop one another.
+ *     answer and is then sent, so quick drags never drop one another;
+ *   • each corner also resizes from a cap inside the inset, never larger than a
+ *     quarter of it, so even the smallest inset keeps its middle for moving;
+ *   • Escape during a pointer drag puts the inset back and sends nothing.
  */
 import type {
 	CompositionConfig,
@@ -208,6 +211,65 @@ describe("LayoutDesigner", () => {
 		expect(sent()).toEqual([
 			{ composition_rect: { x: 0.825, y: 0.05, width: 0.125, height: 0.125 } },
 		]);
+	});
+
+	it("resizes from the cap inside each corner too", async () => {
+		setConfig.mockResolvedValue(SAVED);
+		renderDesigner();
+		const cap = inset().querySelector<HTMLElement>(
+			'[data-corner-cap="bottom-left"]',
+		);
+		expect(cap).not.toBeNull();
+		await drag(cap as HTMLElement, 600, -600);
+		expect(sent()).toEqual([
+			{ composition_rect: { x: 0.825, y: 0.05, width: 0.125, height: 0.125 } },
+		]);
+	});
+
+	it("at the smallest size, a press on the inset's middle moves it without resizing", async () => {
+		setConfig.mockResolvedValue(SAVED);
+		renderDesigner({
+			...PRESET,
+			layout: "custom",
+			rect: { x: 0.4, y: 0.4, width: 0.125, height: 0.125 },
+		});
+		await drag(inset(), 64, 36);
+		expect(sent()).toEqual([
+			{ composition_rect: { x: 0.5, y: 0.5, width: 0.125, height: 0.125 } },
+		]);
+	});
+
+	it("Escape during a pointer drag puts it back, lets the pointer go and sends nothing", async () => {
+		const release = vi.spyOn(HTMLElement.prototype, "releasePointerCapture");
+		renderDesigner();
+		await fireEvent.pointerDown(inset(), {
+			pointerId: 7,
+			button: 0,
+			clientX: 100,
+			clientY: 100,
+		});
+		await fireEvent.pointerMove(inset(), {
+			pointerId: 7,
+			clientX: 100 - 256,
+			clientY: 100 + 144,
+		});
+		expect(shownRect()).toEqual({ x: 0.05, y: 0.45, width: 0.5, height: 0.5 });
+		await fireEvent.keyDown(inset(), { key: "Escape", code: "Escape" });
+		expect(shownRect()).toEqual({ x: 0.45, y: 0.05, width: 0.5, height: 0.5 });
+		expect(release).toHaveBeenCalledWith(7);
+		await fireEvent.pointerMove(inset(), {
+			pointerId: 7,
+			clientX: 100 + 300,
+			clientY: 100,
+		});
+		await fireEvent.pointerUp(inset(), {
+			pointerId: 7,
+			clientX: 100 + 300,
+			clientY: 100,
+		});
+		expect(shownRect()).toEqual({ x: 0.45, y: 0.05, width: 0.5, height: 0.5 });
+		expect(setConfig).not.toHaveBeenCalled();
+		release.mockRestore();
 	});
 
 	it("sends nothing for a press that does not move it", async () => {

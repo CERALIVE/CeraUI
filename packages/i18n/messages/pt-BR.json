@@ -2593,6 +2593,7 @@
 	"live.layout.error.composition_unsupported": "Este dispositivo não consegue combinar duas entradas agora, então a posição não mudou.",
 	"live.layout.error.composition_geometry_unsupported": "Este dispositivo oferece só as disposições predefinidas, então a posição não mudou.",
 	"live.layout.error.composition_rect_invalid": "O dispositivo não conseguiu usar essa posição. Verifique se as duas entradas estão combinadas e tente de novo.",
+	"live.layout.error.composition_off": "As duas entradas não estão mais combinadas no dispositivo, então nada mudou.",
 	"live.startFailure.class.capture_source_unavailable.composition-unsupported": "Este dispositivo não consegue combinar duas entradas. Desative Composição e inicie novamente.",
 	"live.startFailure.class.capture_source_unavailable.secondary-unavailable": "A segunda entrada não está disponível. Reconecte-a ou escolha outra e inicie novamente.",
 	"notifications.streamStartCompositionUnsupportedFailed": "Falha ao iniciar: este dispositivo não consegue combinar duas entradas. Desative Composição e inicie novamente.",

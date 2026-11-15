@@ -2590,6 +2590,7 @@
 	"live.layout.error.composition_unsupported": "यह डिवाइस अभी दो इनपुट नहीं मिला सकता, इसलिए जगह नहीं बदली।",
 	"live.layout.error.composition_geometry_unsupported": "यह डिवाइस सिर्फ़ तय लेआउट देता है, इसलिए जगह नहीं बदली।",
 	"live.layout.error.composition_rect_invalid": "डिवाइस इस जगह का उपयोग नहीं कर सका। देखें कि दो इनपुट मिले हुए हैं, फिर दोबारा कोशिश करें।",
+	"live.layout.error.composition_off": "डिवाइस पर अब दो इनपुट मिले हुए नहीं हैं, इसलिए कुछ नहीं बदला।",
 	"live.startFailure.class.capture_source_unavailable.composition-unsupported": "यह डिवाइस दो इनपुट नहीं मिला सकता। कंपोज़िशन बंद करें, फिर शुरू करें।",
 	"live.startFailure.class.capture_source_unavailable.secondary-unavailable": "दूसरा इनपुट उपलब्ध नहीं है। उसे जोड़ें या कोई और चुनें।",
 	"notifications.streamStartCompositionUnsupportedFailed": "शुरू नहीं हो सकी: यह डिवाइस दो इनपुट नहीं मिला सकता। कंपोज़िशन बंद करें, फिर शुरू करें।",

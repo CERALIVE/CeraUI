@@ -3,9 +3,10 @@
  * CompositionCard while live — the layout, the opacity and the second input
  * change on the running stream (Live screen contract, change 2).
  *
- *   • live, a layout tap writes the FULL composition with `apply_now: true`, so
- *     the backend stages it as an apply-now transaction instead of saving it for
- *     the next start;
+ *   • live, a layout tap writes that field alone (`composition_patch`) with
+ *     `apply_now: true`, so the backend merges it onto its own saved composition
+ *     and stages it as an apply-now transaction instead of saving it for the
+ *     next start;
  *   • a change the engine refuses leaves the previous layout running, so the
  *     previous radio is checked again and the reason is on screen;
  *   • live, the opacity is sent once, when the drag or the held key is
@@ -144,16 +145,18 @@ function opacityPart(slot: "slider" | "slider-thumb"): HTMLElement {
 function expectOneOpacityWrite(alpha: number): void {
 	expect(setConfig).toHaveBeenCalledTimes(1);
 	const [input] = setConfig.mock.calls[0] ?? [];
-	expect(input).toMatchObject({
-		composition: { secondary_input_id: "/dev/video1", layout: "pip-top-right" },
-		apply_now: true,
-	});
-	const written = input?.composition as { alpha: number } | undefined;
+	expect(Object.keys(input ?? {}).sort()).toEqual([
+		"apply_now",
+		"composition_patch",
+	]);
+	expect(input).toMatchObject({ apply_now: true });
+	const written = input?.composition_patch as { alpha: number } | undefined;
+	expect(Object.keys(written ?? {})).toEqual(["alpha"]);
 	expect(written?.alpha).toBeCloseTo(alpha);
 }
 
 describe("CompositionCard — live layout, opacity and second input", () => {
-	it("streaming: a layout tap writes the full composition with apply_now", async () => {
+	it("streaming: a layout tap writes the layout alone with apply_now", async () => {
 		setConfig.mockResolvedValue(APPLIED);
 		renderCard(true);
 
@@ -161,11 +164,7 @@ describe("CompositionCard — live layout, opacity and second input", () => {
 
 		expect(setConfig).toHaveBeenCalledTimes(1);
 		expect(setConfig).toHaveBeenCalledWith({
-			composition: {
-				secondary_input_id: "/dev/video1",
-				layout: "pbp-left-right",
-				alpha: 1,
-			},
+			composition_patch: { layout: "pbp-left-right" },
 			apply_now: true,
 		});
 	});
@@ -399,7 +398,7 @@ describe("CompositionCard — live layout, opacity and second input", () => {
 		expect(setConfig).not.toHaveBeenCalled();
 	});
 
-	it("idle: the same tap saves the composition without apply_now", async () => {
+	it("idle: the same tap saves the layout alone without apply_now", async () => {
 		setConfig.mockResolvedValue({ success: true, applied: {} });
 		renderCard(false);
 
@@ -408,13 +407,7 @@ describe("CompositionCard — live layout, opacity and second input", () => {
 
 		expect(setConfig).toHaveBeenCalledTimes(1);
 		const [input] = setConfig.mock.calls[0] ?? [];
-		expect(input).toEqual({
-			composition: {
-				secondary_input_id: "/dev/video1",
-				layout: "pbp-left-right",
-				alpha: 1,
-			},
-		});
+		expect(input).toEqual({ composition_patch: { layout: "pbp-left-right" } });
 		expect(input).not.toHaveProperty("apply_now");
 	});
 });

@@ -116,19 +116,33 @@ composition through `setConfig`, the apply-now transaction and Start, unchanged.
   stretch before the first config mutation), so the sender never overwrites
   the second input or the opacity with a stale copy. A custom write without a
   rectangle keeps the saved one; a preset drops it.
+- `streaming.setConfig` also takes `composition_patch`, one or more of
+  `layout`, `secondary_input_id` and `alpha`, merged the same way onto the
+  saved composition. The layout card sends every one-field change this way, so
+  a tab with an older view never overwrites another tab's newer change; only
+  turning composition on (the whole `composition`) or off (`null`) is
+  absolute. A patch to `custom` keeps a saved custom rectangle, else takes the
+  saved preset's rectangle (`presetRect`, shared with the frontend from
+  `@ceraui/rpc/schemas`); a patch to a preset drops the rectangle.
 - Before anything is written, a rectangle or a custom layout is refused with
   `composition_geometry_unsupported` when the engine does not advertise
   `composition-geometry`, and with `composition_rect_invalid` when it comes
-  with a preset, is missing, has nothing to place, or does not fit the frame
-  (`compositionRectFits`: the engine's own rule, every side at least
-  `COMPOSITION_RECT_MIN`). `composition_unsupported` keeps its meaning.
+  with a preset (also a preset named explicitly beside `composition_rect`, in
+  `composition` or `composition_patch`), is missing, has nothing to place, or
+  does not fit the frame (`compositionRectFits`: the engine's own rule, every
+  side at least `COMPOSITION_RECT_MIN`). A placement or a patch while the
+  device has no composition is refused with `composition_off`.
+  `composition_unsupported` keeps its meaning.
 - Live, the composed composition is staged as one apply-now change and kept
   only once the engine reports it applied; a refusal leaves the running
   composition saved.
 - Under mocks, a layout-only live change goes to `changeMockComposition`, so
   the mock stack applies it; other live changes still go to the engine client.
 
-Proof: `composition-geometry.test.ts`, `mock-composition-live.test.ts`,
+Proof: `composition-geometry.test.ts`, `composition-interleaving.test.ts`
+(two clients with stale views, seeded and timer-free, idle and live, against a
+reference model after every step), `mock-composition-live.test.ts`,
+`compositionWrites.test.ts`, `compositionSurfaces.test.ts`,
 `LayoutDesigner.test.ts`, `layoutRect.test.ts` and
 `apps/frontend/tests/e2e/layout-designer.spec.ts`. Owed on a board: a live
 rectangle change through the RK3588 compositor, checked in a decoded output.

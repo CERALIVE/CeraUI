@@ -2593,6 +2593,7 @@
 	"live.layout.error.composition_unsupported": "Cet appareil ne peut pas combiner deux entrées pour le moment ; la position n'a pas changé.",
 	"live.layout.error.composition_geometry_unsupported": "Cet appareil ne propose que les dispositions prédéfinies ; la position n'a pas changé.",
 	"live.layout.error.composition_rect_invalid": "L'appareil n'a pas pu utiliser cette position. Vérifiez que deux entrées sont combinées, puis réessayez.",
+	"live.layout.error.composition_off": "Les deux entrées ne sont plus combinées sur l'appareil ; rien n'a changé.",
 	"live.startFailure.class.capture_source_unavailable.composition-unsupported": "Cet appareil ne peut pas combiner deux entrées. Désactivez Composition, puis relancez.",
 	"live.startFailure.class.capture_source_unavailable.secondary-unavailable": "La seconde entrée n'est pas disponible. Rebranchez-la ou choisissez-en une autre, puis relancez.",
 	"notifications.streamStartCompositionUnsupportedFailed": "Échec du démarrage : cet appareil ne peut pas combiner deux entrées. Désactivez Composition, puis relancez.",

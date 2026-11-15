@@ -2545,6 +2545,7 @@
 	"live.layout.error.composition_unsupported": "このデバイスは現在 2 つの入力を合成できないため、位置は変わりませんでした。",
 	"live.layout.error.composition_geometry_unsupported": "このデバイスではプリセットのレイアウトのみ使用できるため、位置は変わりませんでした。",
 	"live.layout.error.composition_rect_invalid": "デバイスはこの位置を使用できませんでした。2 つの入力が合成されていることを確認して、もう一度お試しください。",
+	"live.layout.error.composition_off": "デバイスで 2 つの入力が合成されなくなったため、何も変わりませんでした。",
 	"live.startFailure.class.capture_source_unavailable.composition-unsupported": "このデバイスは 2 つの入力を合成できません。合成をオフにして開始し直してください。",
 	"live.startFailure.class.capture_source_unavailable.secondary-unavailable": "2 つ目の入力を利用できません。接続し直すか別の入力を選んでください。",
 	"notifications.streamStartCompositionUnsupportedFailed": "開始できませんでした: このデバイスは 2 つの入力を合成できません。合成をオフにして開始し直してください。",

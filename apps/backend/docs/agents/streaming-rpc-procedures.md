@@ -52,10 +52,15 @@ The `streaming` router exposes these procedures:
 `layout: 'custom'` and the rectangle onto its own saved composition in the
 synchronous pre-mutation stretch (`resolveCompositionWrite` in
 `modules/streaming/composition.ts`), and a custom `composition` without a
-`rect` keeps the saved one. Refusals, before any write:
-`composition_unsupported`, `composition_geometry_unsupported` and
-`composition_rect_invalid`. With `apply_now`, the composed composition is the
-staged change; [composition lifecycle](../../../../docs/COMPOSITION-LIFECYCLE.md).
+`rect` keeps the saved one. `setConfig({ composition_patch })` merges one or
+more of `layout`, `secondary_input_id` and `alpha` onto the saved composition
+the same way (a patch to `custom` takes the saved preset's rectangle).
+Refusals, before any write: `composition_unsupported`,
+`composition_geometry_unsupported`, `composition_rect_invalid` (also for a
+rectangle beside an explicit preset layout) and `composition_off` (a placement
+or patch with no saved composition). With `apply_now`, the composed
+composition is the staged change;
+[composition lifecycle](../../../../docs/COMPOSITION-LIFECYCLE.md).
 
 ### Format settings [EXISTS]
 
@@ -140,7 +145,7 @@ deferred audio pick changes; idle meter selection is unchanged. Coverage:
 `audio-inputs.test.ts` drives the published UDS client, persistence and RPC;
 `mock-audio-contract.test.ts` pins native error serialization. The mixer UI is
 the Audio card's strips ([live screen contract](../../../../docs/agents/live-screen.md#the-audio-cards-mixer-exists));
-the layout designer remains a separate change. No hardware qualification or
+the layout designer is [composition placement](#composition-placement-exists). No hardware qualification or
 release documentation claim follows from these host checks.
 
 `start` input is PARTIAL by contract. `updateConfig` projects the saved runtime

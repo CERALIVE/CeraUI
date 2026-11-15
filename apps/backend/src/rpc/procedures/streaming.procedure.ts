@@ -960,6 +960,7 @@ export const setConfigProcedure = authedProcedure
 		if (compositionWrite.composition !== undefined)
 			input.composition = compositionWrite.composition;
 		delete input.composition_rect;
+		delete input.composition_patch;
 
 		// Read and written in this synchronous stretch, so picks serialize.
 		const audioInputs =

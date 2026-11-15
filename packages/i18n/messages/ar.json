@@ -2602,6 +2602,7 @@
 	"live.layout.error.composition_unsupported": "لا يستطيع هذا الجهاز دمج مدخلين الآن، لذا لم يتغير الموضع.",
 	"live.layout.error.composition_geometry_unsupported": "يوفر هذا الجهاز التخطيطات الجاهزة فقط، لذا لم يتغير الموضع.",
 	"live.layout.error.composition_rect_invalid": "تعذّر على الجهاز استخدام هذا الموضع. تأكد من دمج مدخلين ثم حاول مرة أخرى.",
+	"live.layout.error.composition_off": "لم يعد الجهاز يدمج مدخلين، لذا لم يتغير شيء.",
 	"live.startFailure.class.capture_source_unavailable.composition-unsupported": "لا يستطيع هذا الجهاز دمج مدخلين. أوقف التركيب ثم ابدأ من جديد.",
 	"live.startFailure.class.capture_source_unavailable.secondary-unavailable": "المدخل الثاني غير متاح. أعِد توصيله أو اختر غيره.",
 	"notifications.streamStartCompositionUnsupportedFailed": "تعذّر البدء: لا يستطيع هذا الجهاز دمج مدخلين. أوقف التركيب ثم ابدأ من جديد.",

@@ -150,6 +150,14 @@ async function installCompositionWire(
 						};
 						if (input.composition == null) delete state.config.composition;
 					}
+					// A one-field change merges onto the saved composition.
+					const saved = state.config.composition as Record<string, unknown> | undefined;
+					if (input.composition_patch !== undefined && saved !== undefined) {
+						state.config = {
+							...state.config,
+							composition: { ...saved, ...(input.composition_patch as Record<string, unknown>) },
+						};
+					}
 					ws.send(
 						JSON.stringify({ id: frame.id, result: { success: true, applied: input } }),
 					);
@@ -241,10 +249,13 @@ test.describe("PiP/PbP composition — feature-gated on the engine token", () =>
 			.map((input) => input.composition)
 			.filter((c): c is Record<string, unknown> => c != null);
 
-		expect(written.length).toBeGreaterThan(0);
-		expect(written.at(-1)).toMatchObject({
-			secondary_input_id: "/dev/video1",
-			layout: "pbp-left-right",
+		// Turning it on sends the whole composition; the layout tap sends the
+		// layout alone, which the device merges onto it.
+		expect(written).toEqual([
+			{ secondary_input_id: "/dev/video1", layout: "pip-top-right", alpha: 1 },
+		]);
+		expect(wire.setConfigCalls().at(-1)).toEqual({
+			composition_patch: { layout: "pbp-left-right" },
 		});
 	});
 
@@ -304,12 +315,9 @@ test.describe("PiP/PbP composition — feature-gated on the engine token", () =>
 		await expect(sideBySide).toHaveAttribute("aria-checked", "true");
 
 		// Live, the write asks for the running stream to change now.
-		expect(wire.setConfigCalls().at(-1)).toMatchObject({
+		expect(wire.setConfigCalls().at(-1)).toEqual({
 			apply_now: true,
-			composition: {
-				secondary_input_id: "/dev/video1",
-				layout: "pbp-left-right",
-			},
+			composition_patch: { layout: "pbp-left-right" },
 		});
 	});
 });

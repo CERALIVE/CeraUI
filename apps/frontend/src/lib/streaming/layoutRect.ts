@@ -1,8 +1,9 @@
 import {
 	COMPOSITION_RECT_MIN,
-	type CompositionLayout,
 	type CompositionRect,
 } from "@ceraui/rpc/schemas";
+
+export { presetRect } from "@ceraui/rpc/schemas";
 
 /**
  * Geometry for the second picture input, in fractions of the output frame.
@@ -35,28 +36,6 @@ const fromUnits = (x: number, y: number, width: number, height: number) => ({
 	width: width / UNIT,
 	height: height / UNIT,
 });
-
-/** Where the compositor puts the second input for a preset: half of each axis, a 5% margin for the insets. */
-export function presetRect(
-	layout: Exclude<CompositionLayout, "custom">,
-): CompositionRect {
-	const half = UNIT / 2;
-	const margin = UNIT / 20;
-	switch (layout) {
-		case "pip-top-right":
-			return fromUnits(UNIT - margin - half, margin, half, half);
-		case "pip-top-left":
-			return fromUnits(margin, margin, half, half);
-		case "pip-bottom-right":
-			return fromUnits(UNIT - margin - half, UNIT - margin - half, half, half);
-		case "pip-bottom-left":
-			return fromUnits(margin, UNIT - margin - half, half, half);
-		case "pbp-left-right":
-			return fromUnits(half, 0, UNIT - half, UNIT);
-		case "pbp-top-bottom":
-			return fromUnits(0, half, UNIT, UNIT - half);
-	}
-}
 
 /** Inside the frame, each side at least `COMPOSITION_RECT_MIN`; a fitting rectangle is returned unchanged. */
 export function clampRect(rect: CompositionRect): CompositionRect {

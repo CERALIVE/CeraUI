@@ -2590,6 +2590,7 @@
 	"live.layout.error.composition_unsupported": "Dieses Gerät kann gerade keine zwei Eingänge kombinieren, daher hat sich die Position nicht geändert.",
 	"live.layout.error.composition_geometry_unsupported": "Dieses Gerät bietet nur die vorgegebenen Anordnungen, daher hat sich die Position nicht geändert.",
 	"live.layout.error.composition_rect_invalid": "Das Gerät konnte diese Position nicht übernehmen. Prüfe, ob zwei Eingänge kombiniert sind, und versuche es erneut.",
+	"live.layout.error.composition_off": "Auf dem Gerät sind keine zwei Eingänge mehr kombiniert, daher hat sich nichts geändert.",
 	"live.startFailure.class.capture_source_unavailable.composition-unsupported": "Dieses Gerät kann keine zwei Eingänge kombinieren. Schalte Komposition aus und starte erneut.",
 	"live.startFailure.class.capture_source_unavailable.secondary-unavailable": "Der zweite Eingang ist nicht verfügbar. Schließe ihn an oder wähle einen anderen und starte erneut.",
 	"notifications.streamStartCompositionUnsupportedFailed": "Start fehlgeschlagen: Dieses Gerät kann keine zwei Eingänge kombinieren. Schalte Komposition aus und starte erneut.",

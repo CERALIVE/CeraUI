@@ -4,10 +4,10 @@
  * designer").
  *
  *   • the radio exists only when the engine advertises `composition-geometry`;
- *   • choosing it sends the active preset's rectangle as the placement delta
- *     `composition_rect`, with `apply_now: true` while live;
- *   • while custom, the other controls never send the card's own copy of the
- *     rectangle: the device keeps its saved one;
+ *   • choosing it sends `custom` alone (`composition_patch`): the device takes
+ *     the rectangle of the preset it has saved; with `apply_now: true` live;
+ *   • every other control sends only its own field, so the device keeps its
+ *     saved rectangle and every other field;
  *   • with the preview closed, the radio carries the hint to open it.
  */
 import type {
@@ -131,12 +131,12 @@ describe("CompositionCard — custom layout", () => {
 		).toBe("false");
 	});
 
-	it("idle, choosing it places the second input where the active preset put it", async () => {
+	it("idle, choosing it asks the device to place the second input where its preset puts it", async () => {
 		setConfig.mockResolvedValue({ success: true, applied: {} });
 		renderCard();
 		await fireEvent.click(screen.getByTestId("composition-layout-custom"));
 		expect(setConfig.mock.calls.map(([input]) => input)).toEqual([
-			{ composition_rect: { x: 0.05, y: 0.45, width: 0.5, height: 0.5 } },
+			{ composition_patch: { layout: "custom" } },
 		]);
 	});
 
@@ -149,10 +149,7 @@ describe("CompositionCard — custom layout", () => {
 		renderCard({ isStreaming: true });
 		await fireEvent.click(screen.getByTestId("composition-layout-custom"));
 		expect(setConfig.mock.calls.map(([input]) => input)).toEqual([
-			{
-				composition_rect: { x: 0.05, y: 0.45, width: 0.5, height: 0.5 },
-				apply_now: true,
-			},
+			{ composition_patch: { layout: "custom" }, apply_now: true },
 		]);
 	});
 
@@ -186,11 +183,7 @@ describe("CompositionCard — custom layout", () => {
 		);
 		const [input] = setConfig.mock.calls[0] ?? [];
 		expect(input).toEqual({
-			composition: {
-				secondary_input_id: "/dev/video1",
-				layout: "pbp-top-bottom",
-				alpha: 1,
-			},
+			composition_patch: { layout: "pbp-top-bottom" },
 			apply_now: true,
 		});
 	});
