@@ -712,3 +712,46 @@ describe("HudBar strip — the FOUR-fact budget is locked", () => {
 		}
 	});
 });
+
+describe("HudBar strip — narrow widths keep the verdict and the bitrate apart", () => {
+	// jsdom lays nothing out; the rendered geometry is measured at 320–1024 px in
+	// tests/e2e/hud-narrow-strip.spec.ts. These lock the mechanisms it relies on.
+	it("keeps the verdict cluster and the bitrate from shrinking", () => {
+		state.hud = makeHud({ isStreaming: true, bitrateKbps: 12500 });
+		state.health = "healthy";
+		render(HudBar);
+
+		expect(classesOf(screen.getByTestId("stream-verdict"))).toContain(
+			"shrink-0",
+		);
+		expect(classesOf(stripBitrate())).toContain("shrink-0");
+	});
+
+	it("caps the health reason at every width, not only below `sm`", () => {
+		state.health = "degraded";
+		state.rollup = degradedRollup(
+			"A long explanation of why the video frames have stopped advancing",
+		);
+		state.hud = makeHud({ isStreaming: true, bitrateKbps: 12500 });
+		render(HudBar);
+
+		const classes = classesOf(screen.getByTestId("stream-health-reason"));
+		expect(classes).toContain("max-w-[9rem]");
+		expect(classes).toContain("truncate");
+		expect(classes).not.toContain("sm:max-w-none");
+	});
+
+	it("shows only the headline below `sm`; target and limit stay in the accessible name", () => {
+		state.hud = throttledLiveHud();
+		render(HudBar);
+
+		for (const id of ["hud-bitrate-target", "hud-bitrate-limit"]) {
+			const classes = classesOf(screen.getByTestId(id));
+			expect(classes).toContain("hidden");
+			expect(classes).toContain("sm:inline");
+		}
+		const name = stripBitrate().getAttribute("aria-label") ?? "";
+		expect(name).toContain("4.1 Mbps");
+		expect(name).toContain("6 Mbps");
+	});
+});
