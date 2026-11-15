@@ -49,7 +49,7 @@ Full PR gate: `bun run test`, `bun run test:e2e`, `bun run check:tech-debt`,
 
 ## HARD RULES
 - The update-orchestrator, recovery, D8 stream-admission, disruptive-action, OS-stage, journal and add-on helper hard rules are binding and live verbatim in [update-orchestrator-hard-rules.md](docs/agents/update-orchestrator-hard-rules.md); read it before touching those paths.
-- The projection is what reaches the wire: seed lifecycle state from the owner at composition before hydration, without broadcast or engine-query wait. Retained protection seeds reconciling; absent/unprotected boot seeds idle. The first safe transition still broadcasts, including same-state reconciliation. Runtime evidence is bound to its producing client/epoch and invalidated at new Start/acquisition/commit; old idle cannot establish new-session idle. Preserve producer identity and schema.
+- The projection is what reaches the wire; preserve producer identity and schema. Its lifecycle seeding and runtime-evidence rule is binding and lives verbatim in [lifecycle-projection-hard-rules.md](docs/agents/lifecycle-projection-hard-rules.md).
 - Streaming-first uplink shaping caps only shared clients; local stream egress stays uncapped. Foreign roots fail closed.
 - The two NAT layers are watched, never arbitrated: diagnostics are read-only, tri-state, and never gate streaming or mutate either layer.
 - Modem roster: exact triplets; RNDIS e0/01/03 admits; e0/01/01, e0/01/04 veto; ID_MM_DEVICE_IGNORE=1 excludes; weak retires, strong stays undriveable.

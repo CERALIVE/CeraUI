@@ -332,6 +332,19 @@ catalog debt. Every other federation and SPA budget remains unchanged.
 `publish-release.yml` enforces both measured limits after federation build and
 before signing/upload. The catalog footprint remains documented, open debt.
 
+**2026-11-15 — the federation catalog is scoped to the dialogs' namespaces.**
+On `be1b880a` toast-host measured 700,075 B gzip, 11,532 B over its 688,543 B
+ceiling. Since `85d2b20a`, 81 new keys (69 under `live.*`) and the nine-locale
+translation fixes added 20,197 B gzip of catalog JSON, and the bundle carried
+every namespace, including ones no dialog renders. Federation now registers only
+the 14 namespaces the Encoder, Audio and Server dialogs render, each in all ten
+locales (`FEDERATION_NAMESPACES` in `apps/frontend/src/lib/federation/messages.ts`).
+`tests/federation/federation-namespaces.test.ts` fails when a built bundle
+references a key outside them. Toast-host now measures 628,355 B gzip
+(2,646,629 B raw, down from 2,940,628 B). The baseline, allowance and ceiling are
+unchanged. The debt stays open, because the scoped catalog is still static and is
+still most of the chunk.
+
 ```debt
 id: TD-pip
 title: Picture-in-picture / source compositing
