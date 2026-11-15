@@ -20,6 +20,7 @@ import type {
 	FanReading,
 	KioskStatus,
 	LinkTelemetryMessage,
+	LogFollowMessage,
 	ModemList,
 	NetifEntry,
 	NetifMessage,
@@ -46,6 +47,8 @@ import {
 	EVENT_PUSH,
 	ethernetRoleMessageSchema,
 	hardwareTypeSchema,
+	LOG_FOLLOW_EVENT,
+	logFollowMessageSchema,
 	notificationsMessageSchema,
 	pipelineSchema,
 	setEthernetRoleInputSchema,
@@ -127,6 +130,14 @@ export function setEventFeedListener(
 	listener: ((events: DeviceEvent[]) => void) | undefined,
 ): void {
 	eventFeedListener = listener;
+}
+
+let logFollowListener: ((message: LogFollowMessage) => void) | undefined;
+
+export function setLogFollowListener(
+	listener: ((message: LogFollowMessage) => void) | undefined,
+): void {
+	logFollowListener = listener;
 }
 
 // ============================================
@@ -1072,6 +1083,18 @@ function handleMessage(
 			}
 			break;
 
+		case LOG_FOLLOW_EVENT: {
+			const parsed = logFollowMessageSchema.safeParse(data);
+			if (parsed.success) {
+				try {
+					logFollowListener?.(parsed.data);
+				} catch (error) {
+					console.error("Log follow listener failed:", error);
+				}
+			}
+			break;
+		}
+
 		case "log":
 			// Download log file
 			if (typeof data === "object" && data !== null) {
@@ -1267,6 +1290,7 @@ export function initSubscriptions(): void {
  */
 export function resetState(): void {
 	eventFeedListener = undefined;
+	logFollowListener = undefined;
 	authState = undefined;
 	configState = undefined;
 	statusState = undefined;

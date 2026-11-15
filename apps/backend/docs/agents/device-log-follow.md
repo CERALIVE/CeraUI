@@ -1,8 +1,9 @@
 # Device log live follow [EXISTS]
 
 `src/modules/device-logs/follow.ts` exports `startFollow`, `stopFollow` and
-`stopAllFollows("cleared")`. This is a backend service; RPC and socket-close wiring
-belong to the subsequent integration todo. There is no remote log transport here.
+`stopAllFollows("cleared")`. Authenticated `logs.followStart` and `logs.followStop`
+call these exports; adapter close removes the client before joining its follower.
+There is no remote log transport here.
 Each socket owns one subscription; replacement stops and joins the old one first.
 Four subscriptions may run device-wide, independently of query scan admission.
 Missing current boot identity refuses the start.
@@ -48,3 +49,25 @@ Tests live in `src/tests/device-logs-follow*.test.ts`; fake schedulers and child
 cover batching and lifecycle, while the real mock ring covers filtered resume and
 an entry pending at pause. Physical board latency, CPU and streaming log volume
 remain unmeasured.
+
+## Local log RPC integration [EXISTS]
+
+`src/rpc/procedures/logs.procedure.ts` exposes paging, event location, classified
+boots, follow, storage, retention, cleanup and export-ticket creation. Every
+procedure requires authentication and uses `@ceraui/rpc/schemas` for admission
+and replies. The router registers the eleven procedures under `logs`; bundle
+procedures belong to the subsequent bundle work. The frontend's `TypedRPC.logs`
+imports the same shared input and output types.
+
+A socket owns its follow until `followStop` or socket close. The subscription
+listener retains no messages, ignores malformed frames silently and contains
+throwing consumers. Mock mode uses the logger ring without systemd. Startup
+awaits guarded retention initialization immediately after log settings; failure
+degrades readiness and boot continues. The legacy `system.getLog`,
+`system.getSyslog` and `log` push remain unchanged. No remote log command or
+subprocess is added.
+
+`src/tests/logs-procedures.test.ts`, `logs-delegation.test.ts`,
+`logs-lifecycle.test.ts` and `logs-retention-startup.test.ts` cover integration;
+the frontend listener tests are `lib/rpc/subscriptions-log-follow.test.ts`.
+Board latency, CPU and streaming log volume remain unmeasured.

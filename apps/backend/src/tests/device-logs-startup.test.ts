@@ -97,6 +97,7 @@ describe("device log startup wiring", () => {
 					`detail:${expectedDetail}`,
 					"guard:complete",
 					"statement",
+					"statement",
 					"encoder",
 					"ready",
 				]);

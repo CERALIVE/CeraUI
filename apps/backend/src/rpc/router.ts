@@ -40,6 +40,19 @@ import {
 	listEventsProcedure,
 } from "./procedures/events.procedure.ts";
 import {
+	aroundLogsProcedure,
+	clearAllLogsProcedure,
+	createLogExportProcedure,
+	deleteLegacyDebugProcedure,
+	deleteOlderLogFilesProcedure,
+	followStartProcedure,
+	followStopProcedure,
+	getLogStorageProcedure,
+	logBootsProcedure,
+	queryLogsProcedure,
+	setLogRetentionProcedure,
+} from "./procedures/logs.procedure.ts";
+import {
 	acknowledgeMutationProcedure,
 	configureModemProcedure,
 	decommissionMutationProcedure,
@@ -172,6 +185,19 @@ const base = os.$context<RPCContext>();
 
 const stableRoutes = {
 	ui: base.router({ heartbeat: heartbeatProcedure }),
+	logs: base.router({
+		query: queryLogsProcedure,
+		around: aroundLogsProcedure,
+		boots: logBootsProcedure,
+		followStart: followStartProcedure,
+		followStop: followStopProcedure,
+		getStorage: getLogStorageProcedure,
+		setRetention: setLogRetentionProcedure,
+		deleteOlderFiles: deleteOlderLogFilesProcedure,
+		deleteLegacyDebug: deleteLegacyDebugProcedure,
+		clearAll: clearAllLogsProcedure,
+		createExport: createLogExportProcedure,
+	}),
 	events: base.router({
 		list: listEventsProcedure,
 		boots: eventBootsProcedure,

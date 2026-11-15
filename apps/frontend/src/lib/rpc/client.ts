@@ -39,9 +39,23 @@ import type {
 	KioskStatus,
 	KioskToggleOutput,
 	ListDevicesOutput,
+	LogAroundInput,
+	LogAroundOutput,
+	LogBootInfo,
+	LogDeleteOlderFilesOutput,
+	LogExportInput,
+	LogExportOutput,
+	LogFollowStartInput,
+	LogFollowStartOutput,
+	LogFollowStopOutput,
 	LoginInput,
 	LoginOutput,
 	LogoutOutput,
+	LogQueryInput,
+	LogQueryOutput,
+	LogRetention,
+	LogStorage,
+	LogStorageOutput,
 	ModemBandsInput,
 	ModemBandsOutput,
 	ModemCapabilitiesOutput,
@@ -932,6 +946,19 @@ export interface TypedRPC {
 	notifications: {
 		getPersistent: () => Promise<unknown>;
 		dismiss: (input: { name: string }) => Promise<SuccessResponse>;
+	};
+	logs: {
+		query: (input: LogQueryInput) => Promise<LogQueryOutput>;
+		around: (input: LogAroundInput) => Promise<LogAroundOutput>;
+		boots: () => Promise<LogBootInfo[]>;
+		followStart: (input: LogFollowStartInput) => Promise<LogFollowStartOutput>;
+		followStop: () => Promise<LogFollowStopOutput>;
+		getStorage: () => Promise<LogStorage>;
+		setRetention: (input: LogRetention) => Promise<LogStorageOutput>;
+		deleteOlderFiles: () => Promise<LogDeleteOlderFilesOutput>;
+		deleteLegacyDebug: () => Promise<LogStorageOutput>;
+		clearAll: () => Promise<LogStorageOutput>;
+		createExport: (input: LogExportInput) => Promise<LogExportOutput>;
 	};
 	pairing: {
 		generateClaimCode: () => Promise<ClaimCodeOutput>;

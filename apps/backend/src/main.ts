@@ -66,6 +66,7 @@ import {
 	bootRuntimeConfig,
 	stopRuntimeConfigRecovery,
 } from "./modules/config-boot.ts";
+import { initLogRetention } from "./modules/device-logs/retention.ts";
 import { initLogSettings } from "./modules/device-logs/settings.ts";
 import { initCellularEvents } from "./modules/events/cellular-events.ts";
 import { recordDeviceStart } from "./modules/events/device-start.ts";
@@ -444,6 +445,7 @@ initHardwareMonitoring();
 initDeviceStats();
 initCpu();
 await guardNonCritical("log-settings", initLogSettings);
+await guardNonCritical("log-retention", initLogRetention);
 await guardNonCritical("encoder-load", initEncoderLoad);
 await guardNonCritical("fan", initFan);
 await guardNonCritical("rtmp-ingest", initRTMPIngestStats);
