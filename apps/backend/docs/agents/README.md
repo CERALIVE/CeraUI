@@ -6,7 +6,7 @@ Every original section is retained below, including appended `…AND` runs. Read
 
 | File | Original heading | Governed code paths |
 |---|---|---|
-| [device-journal-reader.md](device-journal-reader.md) | DEVICE JOURNAL PRIMITIVES [EXISTS] / Scan budget [EXISTS] / Termination decision table; Observable death before a reader signal [EXISTS] | `src/modules/device-logs/parse.ts`, `src/modules/device-logs/bounds.ts`, `src/modules/device-logs/termination.ts`, `src/tests/device-logs-bounds.test.ts`, `src/tests/device-logs-termination.test.ts` |
+| [device-journal-reader.md](device-journal-reader.md) | DEVICE JOURNAL PRIMITIVES [EXISTS] / Scan budget [EXISTS] / Termination decision table; Observable death before a reader signal [EXISTS] | `src/modules/device-logs/parse.ts`, `src/modules/device-logs/bounds.ts`, `src/modules/device-logs/termination.ts`, `src/modules/device-logs/reader.ts`, `src/tests/device-logs-bounds.test.ts`, `src/tests/device-logs-termination.test.ts`, `src/tests/device-logs-reader*.test.ts`, `src/tests/helpers/device-journal.ts`, `src/tests/device-logs-public.types.ts`, `src/tests/spawn-policy.test.ts`, `src/tests/fixtures/device-journal-spawn-ids.json` |
 | [event-emitter.md](event-emitter.md) | Device event emitter [EXISTS] | `src/modules/events/emit.ts`, `src/tests/events-emit.test.ts` |
 | [overview.md](overview.md) | preamble | `../../AGENTS.md` |
 | [overview-2.md](overview-2.md) | OVERVIEW | `../../docs/E2E-BACKEND-OWNERSHIP.md`, `@ceralive/cerastream`, `@ceraui/srtla-send`, `packages/srtla-send/` |

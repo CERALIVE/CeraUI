@@ -1,5 +1,30 @@
 # Device journal primitives [EXISTS]
 
+`src/modules/device-logs/reader.ts` exports `scanJournal`, `JournalReadError`,
+`JOURNAL_LIMITS` and `JOURNAL_OUTPUT_FIELDS`. Callers supply internal `options`
+and the filter compiler's `matches`; these arrays must never contain client argv.
+The reader requests JSON with unabridged messages and an end-of-options boundary.
+It never uses the buffered `run` helper.
+
+The default limits are 2,000 ms, 4,096 candidate records (including skipped
+records), 8 MiB stdout, 1 MiB per JSON line and 64 KiB retained stderr. Stderr
+continues draining after its capture limit. An unfinished line spends its byte
+budget before JSON parsing; malformed JSON and invalid UTF-8 fail the scan.
+Callbacks receive `RawJournalRecord` and return `continue` or `stop`.
+The result carries `status`, the reaped `exitCode` (null only when cancelled
+before spawn), and `skippedRecords`.
+
+Only `eof` proves a successful physical end of the scope, including both pipe
+drains and a zero child exit. `stopped` is callback or signal cancellation;
+`budget` proves no end. The paging owner decides look-ahead and `hasMore`.
+Termination sends TERM, escalates to KILL after 100 ms and joins the child's
+exit. A zero exit induced by cancellation does not become EOF. Unexpected
+nonzero exits fail with `READ_FAILED`. Exit classification happens after reaping:
+cancellation accepts zero or a signal exit matching TERM/KILL actually sent by
+this reader. An external KILL remains a failure when the reader sent only TERM,
+including when stop or abort races with that death. ENOENT at spawn is
+`JOURNAL_UNAVAILABLE`; an oversized line is `RECORD_TOO_LARGE`.
+
 `parse.ts` exports `parseRecord`, `RawJournalRecord` and `toLogEntry`. Missing
 or malformed cursor, timestamp or journal-form boot ID returns null and is
 counted by the reader. Timestamps must be nonnegative safe integer
@@ -75,6 +100,19 @@ An exit already learned before stop/abort sends no new signal and uses the
 no-signals column. Stop/abort before reaping uses the signals actually issued.
 No cancellation arriving after successful completion changes an already returned
 EOF. A pre-aborted scan has no child and returns S with null exit code.
+
+| Non-completion condition | Required outcome |
+|---|---|
+| Spawn ENOENT | `JOURNAL_UNAVAILABLE`, no child |
+| Other spawn failure | `READ_FAILED`, no child |
+| Malformed/truncated JSON or invalid transport UTF-8 | `READ_FAILED`, retire and reap |
+| JSON record over 1 MiB | `RECORD_TOO_LARGE`, retire and reap |
+| Stdout, candidate or deadline budget | B only if termination passes the table; otherwise F |
+| Callback/stream failure | Preserve the failure after retirement; never return success |
+
+These rules preserve the first failure when parsing/delivery already failed.
+Missing/unknown termination metadata is not treated as a clean normal exit.
+Only zero normal exit establishes physical EOF; cancellation never does.
 
 ### Observable death before a reader signal
 

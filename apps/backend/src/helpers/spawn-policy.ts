@@ -316,6 +316,24 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			"argv-only spawnWithTimeout; RAUC install stays inside the UID pin through confirmed completion",
 	})),
 	{
+		id: "deviceLogs.journalScan",
+		file: "modules/device-logs/reader.ts",
+		symbol: "scanJournal",
+		command:
+			"[journalctl, -o, json, --all, fixed fields, internal options, --, compiled matches]",
+		class: "bounded-command",
+		status: "enforced",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		mechanism:
+			"Incremental byte/record/deadline bounds; abort and stop retire TERM/KILL then reap",
+	},
+	{
 		id: "osStage.orphanLock",
 		file: "modules/system/update-orchestrator/os-stage-orphan-lock.ts",
 		symbol: "acquireOsOrphanLock",

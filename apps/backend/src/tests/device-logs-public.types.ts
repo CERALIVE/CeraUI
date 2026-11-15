@@ -4,6 +4,16 @@ import type {
 	RawJournalRecord,
 	toLogEntry,
 } from "../modules/device-logs/parse.ts";
+import type {
+	JOURNAL_LIMITS,
+	JOURNAL_OUTPUT_FIELDS,
+	JournalChild,
+	JournalClock,
+	JournalReadError,
+	JournalScanResult,
+	ScanJournalOptions,
+	scanJournal,
+} from "../modules/device-logs/reader.ts";
 
 type Equal<L, R> =
 	(<T>() => T extends L ? 1 : 2) extends <T>() => T extends R ? 1 : 2
@@ -18,10 +28,83 @@ type ExpectedRaw = LogEntry & {
 	readonly unitField: string | null;
 	readonly pid: number | null;
 };
-
+interface ExpectedChild {
+	readonly stdout: ReadableStream<Uint8Array>;
+	readonly stderr: ReadableStream<Uint8Array>;
+	readonly exited: Promise<number>;
+	readonly signalCode: number | NodeJS.Signals | null;
+	readonly pid?: number;
+	readonly exitCode?: number | null;
+	readonly killed?: boolean;
+	kill(signal: "SIGTERM" | "SIGKILL"): void;
+}
+interface ExpectedClock {
+	now(): number;
+	setTimeout(callback: () => void, delay: number): number;
+	clearTimeout(timer: number): void;
+}
+interface ExpectedLimits {
+	readonly deadlineMs: 2000;
+	readonly records: 4096;
+	readonly stdoutBytes: number;
+	readonly recordBytes: number;
+	readonly stderrBytes: number;
+}
+interface ExpectedResult {
+	readonly status: "eof" | "stopped" | "budget";
+	readonly exitCode: number | null;
+	readonly skippedRecords: number;
+}
+interface ExpectedOptions {
+	readonly options: string[];
+	readonly matches: string[];
+	readonly signal?: AbortSignal;
+	readonly limits?: Partial<Record<keyof ExpectedLimits, number>>;
+	readonly onRecord: (record: ExpectedRaw) => "continue" | "stop";
+	readonly spawn?: (argv: string[]) => ExpectedChild;
+	readonly clock?: ExpectedClock;
+}
 // These assertions are checked by the strict test project, not erased-test execution.
 export type DeviceJournalPublicContracts = [
 	Assert<Equal<RawJournalRecord, ExpectedRaw>>,
 	Assert<Equal<typeof parseRecord, (input: unknown) => ExpectedRaw | null>>,
 	Assert<Equal<typeof toLogEntry, (record: ExpectedRaw) => LogEntry>>,
+	Assert<Equal<JournalChild, ExpectedChild>>,
+	Assert<Equal<JournalClock, ExpectedClock>>,
+	Assert<Equal<ScanJournalOptions, ExpectedOptions>>,
+	Assert<Equal<JournalScanResult, ExpectedResult>>,
+	Assert<
+		Equal<
+			typeof scanJournal,
+			(input: ExpectedOptions) => Promise<ExpectedResult>
+		>
+	>,
+	Assert<Equal<typeof JOURNAL_LIMITS, ExpectedLimits>>,
+	Assert<
+		Equal<
+			typeof JOURNAL_OUTPUT_FIELDS,
+			"MESSAGE,PRIORITY,_SYSTEMD_UNIT,SYSLOG_IDENTIFIER,_BOOT_ID,_TRANSPORT,MESSAGE_ID,UNIT,_PID"
+		>
+	>,
+	Assert<
+		Equal<
+			ConstructorParameters<typeof JournalReadError>,
+			[
+				code: "JOURNAL_UNAVAILABLE" | "RECORD_TOO_LARGE" | "READ_FAILED",
+				stderr?: string | undefined,
+			]
+		>
+	>,
+	Assert<
+		Equal<
+			Pick<JournalReadError, "code" | "stderr">,
+			{
+				readonly code:
+					| "JOURNAL_UNAVAILABLE"
+					| "RECORD_TOO_LARGE"
+					| "READ_FAILED";
+				stderr: string;
+			}
+		>
+	>,
 ];

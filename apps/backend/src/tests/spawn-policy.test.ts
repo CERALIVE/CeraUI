@@ -23,15 +23,17 @@ import {
 	superviseWorker,
 	validateSpawnSite,
 } from "../helpers/spawn-policy.ts";
+import expectedIds from "./fixtures/device-journal-spawn-ids.json";
 
 const alive = (proc: ManagedProcess): boolean =>
 	proc.exitCode === null && proc.signalCode === null;
 
 describe("spawn-policy registry consistency", () => {
-	it("classifies all 74 production spawn sites with unique ids", () => {
-		expect(SPAWN_POLICY).toHaveLength(74);
+	it("classifies all 75 production spawn sites with unique ids", () => {
+		expect(SPAWN_POLICY).toHaveLength(75);
 		const ids = new Set(SPAWN_POLICY.map((s) => s.id));
-		expect(ids.size).toBe(74);
+		expect(ids.size).toBe(75);
+		expect([...ids].sort()).toEqual(expectedIds);
 		expect(getSpawnSite("updateRecovery.probe")).toMatchObject({
 			file: "modules/system/update-orchestrator/recovery-probes.ts",
 			class: "bounded-probe",
@@ -98,6 +100,32 @@ describe("spawn-policy registry consistency", () => {
 			status: "enforced",
 			contract: { timed: true, lifetimeTimeoutExempt: false },
 		});
+	});
+
+	it("registers the exact bounded journal scan site and reader file association", () => {
+		expect(getSpawnSite("deviceLogs.journalScan")).toEqual({
+			id: "deviceLogs.journalScan",
+			file: "modules/device-logs/reader.ts",
+			symbol: "scanJournal",
+			command:
+				"[journalctl, -o, json, --all, fixed fields, internal options, --, compiled matches]",
+			class: "bounded-command",
+			status: "enforced",
+			contract: {
+				timed: true,
+				startupTimeout: false,
+				shutdownCleanup: false,
+				shutdownAbort: false,
+				lifetimeTimeoutExempt: false,
+			},
+			mechanism:
+				"Incremental byte/record/deadline bounds; abort and stop retire TERM/KILL then reap",
+		});
+		expect(
+			SPAWN_POLICY.filter(
+				(site) => site.file === "modules/device-logs/reader.ts",
+			).map((site) => site.id),
+		).toEqual(["deviceLogs.journalScan"]);
 	});
 
 	// The diagnostic's `nft list ruleset` is a READ on its own slow cadence, so it
