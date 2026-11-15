@@ -110,7 +110,7 @@ const ZTE_REGISTERED = `{"modem_main_state":"modem_init_complete","ppp_status":"
 
 // ── CAPTURED — Qualcomm/HiMI UFI `POST /himiapi/json`, phase-B todo 69 ──────
 const UFI_SYSINFO = `{"reply":"ok","params":{"bsid":"25002","cellid":134318388,"cputemp":57,"wifinum":0,"ethnum":0,"SIGNAL":-96}}`;
-const UFI_OVERVIEW = `{"reply":"ok","params":{"SYSVER":"UFI_HM_SIM1_V020_251125","HWVER":"HW1.0","IMEI":"868837088254863","SSID":"4G-UFI-611A","WANIP":"-","IMSI":"-","ICCID":"-","WEBVER":"WEB1.1","SIGNAL":-96}}`;
+const UFI_OVERVIEW = `{"reply":"ok","params":{"SYSVER":"UFI_HM_SIM1_V020_251125","HWVER":"HW1.0","IMEI":"000000000012345","SSID":"4G-UFI-611A","WANIP":"-","IMSI":"-","ICCID":"-","WEBVER":"WEB1.1","SIGNAL":-96}}`;
 const UFI_STATUS = `{"reply":"ok","params":{"signalStrength":-96,"carrier":"无服务。","internetState":"disconnected","imsi":"-","simCardState":"invalid","wifiapstatus":"on"}}`;
 // CAPTURED — what every himiapi command answers before login / after expiry.
 const UFI_SESSION_OUT = `{"reply":"SessionOut"}`;

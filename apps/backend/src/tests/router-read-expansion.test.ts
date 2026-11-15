@@ -92,7 +92,7 @@ const UFI_OVERVIEW = JSON.stringify({
 	params: {
 		SYSVER: "UFI_HM_SIM1_V020_251125",
 		HWVER: "HW1.0",
-		IMEI: "868837088254863",
+		IMEI: "000000000012345",
 		SSID: "4G-UFI-611A",
 		WANIP: "-",
 		IMSI: "-",
