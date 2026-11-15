@@ -19,6 +19,11 @@ credentials and operator selection are normalized before NetworkManager writes.
 disabled by the device capability gate. See the
 [modem save contract](apps/backend/docs/agents/a-modem-save-spends-a-reconnect-only-when-it-must.md#applied-configuration-receipts-exists).
 
+**Journal reader primitives [EXISTS].** The backend has bounded journal scans,
+record parsing and logger-ring mock scan/follow adapters. These are internal
+building blocks for the planned viewer. See the
+[reader contract](apps/backend/docs/agents/device-journal-reader.md).
+
 **Boot version context [EXISTS].** After revisions initialize, the backend records
 one structured `device started` line with the running versions, journal boot ID,
 OS image, active slot and board. Optional unreadable sources remain null; RAUC

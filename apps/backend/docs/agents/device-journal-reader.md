@@ -46,6 +46,21 @@ The contracted suppression ID is recognized synthetically by the parser.
 The systemd 257 conformance flood produced no suppression notice: its text and
 ID remain unproven. No notice text is inferred or manufactured here.
 
+`mock-journal.ts` exports `scanMockJournal`, `followMockJournal` and
+`mockJournal = { scan, follow }`. Callers choose it through `shouldUseMocks()`.
+Scans accept the reader's options excluding `spawn`, share its bounds and
+results, and use the real redacted logger ring without spawning. Positions
+support forward/reverse traversal and inclusive/exclusive mock cursors.
+Compiled field groups apply before delivery; residuals remain with callers.
+The cursor is `mock=<seq>` using the logger's monotonic eviction/clear offset.
+Boot identity comes only from `currentBootId()`.
+
+Mock follow accepts `options`, `matches`, `signal` and `onRecord`, returning
+`{ abort, exited }`. It subscribes before draining the snapshot, keeps reentrant
+appends in journal order, and unsubscribes on abort, callback stop or error.
+Its pending queue is bounded by the ring capacity. It owns no timer.
+The real follower and its batching/admission remain separate consumers.
+
 These are backend primitives, not a released viewer. Container behavior is
 host evidence; board latency, CPU and streaming volume remain unmeasured.
 

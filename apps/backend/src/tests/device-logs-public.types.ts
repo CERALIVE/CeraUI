@@ -1,5 +1,11 @@
 import type { LogEntry } from "@ceraui/rpc/schemas";
 import type {
+	followMockJournal,
+	MockFollowHandle,
+	mockJournal,
+	scanMockJournal,
+} from "../modules/device-logs/mock-journal.ts";
+import type {
 	parseRecord,
 	RawJournalRecord,
 	toLogEntry,
@@ -64,6 +70,17 @@ interface ExpectedOptions {
 	readonly spawn?: (argv: string[]) => ExpectedChild;
 	readonly clock?: ExpectedClock;
 }
+interface ExpectedFollow {
+	readonly exited: Promise<number>;
+	abort(): void;
+}
+type ExpectedMockScan = (
+	input: Omit<ExpectedOptions, "spawn">,
+) => Promise<ExpectedResult>;
+type ExpectedMockFollow = (
+	input: Pick<ExpectedOptions, "options" | "matches" | "signal" | "onRecord">,
+) => ExpectedFollow;
+
 // These assertions are checked by the strict test project, not erased-test execution.
 export type DeviceJournalPublicContracts = [
 	Assert<Equal<RawJournalRecord, ExpectedRaw>>,
@@ -104,6 +121,26 @@ export type DeviceJournalPublicContracts = [
 					| "RECORD_TOO_LARGE"
 					| "READ_FAILED";
 				stderr: string;
+			}
+		>
+	>,
+	Assert<Equal<MockFollowHandle, ExpectedFollow>>,
+	Assert<Equal<typeof scanMockJournal, ExpectedMockScan>>,
+	Assert<Equal<typeof followMockJournal, ExpectedMockFollow>>,
+	Assert<
+		Equal<
+			"spawn" extends keyof Parameters<typeof scanMockJournal>[0]
+				? true
+				: false,
+			false
+		>
+	>,
+	Assert<
+		Equal<
+			typeof mockJournal,
+			{
+				readonly scan: ExpectedMockScan;
+				readonly follow: ExpectedMockFollow;
 			}
 		>
 	>,
