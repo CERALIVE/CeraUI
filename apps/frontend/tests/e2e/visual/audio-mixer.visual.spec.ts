@@ -10,8 +10,8 @@ import { ensureAuthenticated, navigateTo } from '../helpers/index.js';
  * today's meter, a second input on Track 2, the others off) and the live card on
  * a mix session (switches and chips held for the next start). Both run on the
  * `caps-full` mock, whose meters have no main-socket level and so rest in their
- * static unavailable state. Desktop only: mobile baselines are not tracked
- * (`.gitignore`), and the functional spec covers the phone layout. The backend also lists the sound cards of the
+ * static unavailable state. Desktop only (`@desktop-only`): mobile baselines are
+ * not tracked (`.gitignore`), and the functional spec covers the phone layout. The backend also lists the sound cards of the
  * host it runs on, so the socket is proxied and the device list narrowed to
  * caps-full's three, keeping the pixels independent of the machine.
  */
@@ -90,16 +90,14 @@ test.describe('@visual audio mixer', () => {
 		await installNarrowedSocket(page, pageRpc);
 	});
 
-	test('@visual idle — strips under the picker', { tag: '@visual' }, async ({ page }, testInfo) => {
-		test.skip(testInfo.project.name !== 'desktop', 'mobile baselines are not tracked');
+	test('@visual idle — strips under the picker', { tag: ['@visual', '@desktop-only'] }, async ({ page }) => {
 		await idleWithTwoInputs(page);
 		const card = page.getByTestId('idle-cockpit').getByTestId('audio-card');
 		await expect(card.getByTestId('audio-mixer')).toBeVisible();
 		await expect(card).toHaveScreenshot('audio-mixer-idle.png', { maxDiffPixels: 100 });
 	});
 
-	test('@visual live — a mix session', { tag: '@visual' }, async ({ page }, testInfo) => {
-		test.skip(testInfo.project.name !== 'desktop', 'mobile baselines are not tracked');
+	test('@visual live — a mix session', { tag: ['@visual', '@desktop-only'] }, async ({ page }) => {
 		await idleWithTwoInputs(page);
 		await page.getByTestId('live-bar').getByRole('button', { name: 'Start stream' }).click();
 		const card = page.getByTestId('live-cockpit').getByTestId('audio-card');

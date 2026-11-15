@@ -580,6 +580,58 @@ describe("AudioMixer — live on a mix session", () => {
 		expect(mute("usb-b").getAttribute("aria-pressed")).toBe("true");
 	});
 
+	it("another tab's later mute shows here after this tab's level change, and the next mute click unmutes", async () => {
+		let answer: (value: SetAudioMixOutput) => void = () => undefined;
+		setAudioMix.mockReturnValueOnce(
+			new Promise<SetAudioMixOutput>((resolve) => {
+				answer = resolve;
+			}),
+		);
+		const view = mixer({
+			config: LIVE_CONFIG,
+			isStreaming: true,
+			mixActive: true,
+		});
+		const withB = (fields: Partial<Input>) => ({
+			asrc: "usb-a",
+			audio_inputs: [
+				input("usb-a"),
+				input("usb-b", { tracks: [2], ...fields }),
+			],
+		});
+
+		// This tab lowers the level; the device's config echo precedes its answer.
+		await fireEvent.keyDown(gainThumb("usb-b"), { key: "ArrowLeft" });
+		await view.rerender({ config: withB({ gain_db: -1 }) });
+		answer(applied("usb-b", { gain_db: -1 }));
+		await setAudioMix.mock.results[0]?.value;
+		await tick();
+
+		// The other tab mutes the input: its config broadcast arrives here.
+		await view.rerender({ config: withB({ gain_db: -1, mute: true }) });
+		expect(mute("usb-b").getAttribute("aria-pressed")).toBe("true");
+		expect(gainThumb("usb-b").getAttribute("aria-valuenow")).toBe("-1");
+
+		setAudioMix.mockResolvedValueOnce(applied("usb-b", { gain_db: -1 }));
+		await fireEvent.click(mute("usb-b"));
+		expect(setAudioMix).toHaveBeenLastCalledWith({ id: "usb-b", mute: false });
+	});
+
+	it("a config broadcast that leaves an input as it was keeps the level the device applied", async () => {
+		// Only the main input at its defaults: the device saves no echo for a live change.
+		setAudioMix.mockResolvedValueOnce(applied("usb-a", { gain_db: -1 }));
+		const view = mixer({
+			config: { asrc: "usb-a" },
+			isStreaming: true,
+			mixActive: true,
+		});
+		await fireEvent.keyDown(gainThumb("usb-a"), { key: "ArrowLeft" });
+		await setAudioMix.mock.results[0]?.value;
+		await tick();
+		await view.rerender({ config: { asrc: "usb-a", max_br: 6000 } });
+		expect(gainThumb("usb-a").getAttribute("aria-valuenow")).toBe("-1");
+	});
+
 	it("while dragging the level is sent at most every 100 ms, and once more on release", async () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(0);

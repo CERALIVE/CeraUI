@@ -9,8 +9,8 @@ import { ensureAuthenticated, navigateTo } from "./helpers/index.js";
  * per file.
  */
 test.describe("layout designer — multi-modem-wifi", () => {
-	test("without composition-geometry there is no custom layout and no designer", async ({ page }, testInfo) => {
-		test.skip(testInfo.project.name !== "desktop", "desktop layout drives the program desk");
+	// The desktop layout drives the program desk.
+	test("without composition-geometry there is no custom layout and no designer", { tag: "@desktop-only" }, async ({ page }) => {
 		await page.goto("/");
 		await ensureAuthenticated(page);
 		await navigateTo(page, "live");

@@ -16,7 +16,8 @@
   device composes it on its own saved mix, so an edit never carries a stale copy
   of the other inputs; its config echo is what the strips then show.
   Live on a mix session (`status.audio_mix_active`), level, mute and delay go to
-  `streaming.setAudioMix` and the device's applied values win; membership and
+  `streaming.setAudioMix` and the device's applied values win until a later
+  config broadcast changes that field (another tab's write); membership and
   tracks wait for the next start. Live without a mix, every control waits.
 
   A refusal is shown beside its strip as the copy of the backend token that
@@ -136,17 +137,24 @@ function entryFor(id: string): AudioInputSetting {
 const enabledCount = $derived(strips.filter((strip) => isEnabled(strip.id)).length);
 const full = $derived(mix !== undefined && enabledCount >= mix.max_inputs);
 
-// The device's answer to the latest live change, per input; it wins over the
-// saved value until the session ends.
-let liveApplied = $state<Record<string, Values>>({});
+// The device's answer to this tab's latest live change, per input, with the
+// saved values it answered over. It wins until the session ends, except for a
+// field a later config broadcast changed since: another tab wrote it. Our own
+// write's echo arrives on the same socket before its answer, so it never counts.
+let liveApplied = $state<Record<string, { values: Values; over: Values }>>({});
 $effect(() => {
 	if (!mixLive) liveApplied = {};
 });
 
+const valuesOf = ({ gain_db, mute, delay_ms }: Values): Values => ({ gain_db, mute, delay_ms });
+
 function shown(id: string): AudioInputSetting {
 	const entry = entryFor(id);
 	const applied = mixLive ? liveApplied[id] : undefined;
-	return applied === undefined ? entry : { ...entry, ...applied };
+	if (applied === undefined) return entry;
+	const field = <K extends keyof Values>(key: K): Values[K] =>
+		entry[key] === applied.over[key] ? applied.values[key] : entry[key];
+	return { ...entry, gain_db: field('gain_db'), mute: field('mute'), delay_ms: field('delay_ms') };
 }
 
 let errors = $state<Record<string, string>>({});
@@ -294,9 +302,11 @@ async function sendLive(id: string, update: Omit<SetAudioMixInput, 'id'>): Promi
 			setError(id, result.error);
 			delete gainSent[id];
 		} else if (result.applied !== undefined) {
-			const { gain_db, mute, delay_ms } = result.applied;
-			liveApplied = { ...liveApplied, [id]: { gain_db, mute, delay_ms } };
-			gainSent[id] = gain_db;
+			liveApplied = {
+				...liveApplied,
+				[id]: { values: valuesOf(result.applied), over: valuesOf(entryFor(id)) },
+			};
+			gainSent[id] = result.applied.gain_db;
 		}
 	} catch {
 		if (seq === liveSeq[id]) {

@@ -70,6 +70,21 @@ async function settle(): Promise<void> {
 	await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+/**
+ * Resolves once nothing in the document matches `selector`. Call it before the
+ * action that removes the node; the test timeout bounds the wait.
+ */
+function removal(selector: string): Promise<void> {
+	return new Promise((resolve) => {
+		const observer = new MutationObserver(() => {
+			if (document.querySelector(selector) !== null) return;
+			observer.disconnect();
+			resolve();
+		});
+		observer.observe(document.body, { childList: true, subtree: true });
+	});
+}
+
 async function mountInto(
 	module: FederationModule,
 	options: FederationMountOptions,
@@ -263,8 +278,9 @@ describe("federation encoder bundle — the host's saved format settings", () =>
 		expect(byId("encoder-adaptive")?.getAttribute("aria-checked")).toBe("false");
 		expect(byId("encoder-legacy-passthrough")?.getAttribute("data-setting")).toBe("force");
 
+		const reset = removal('[data-testid="encoder-legacy-passthrough"]');
 		(byId("encoder-legacy-passthrough-reset") as HTMLButtonElement | null)?.click();
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		await reset;
 
 		expect(writes).toEqual([{ video_passthrough: "auto" }]);
 		expect(byId("encoder-legacy-passthrough")).toBeNull();

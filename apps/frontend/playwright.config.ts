@@ -95,9 +95,19 @@ export default defineConfig({
     trace: 'retain-on-failure',
     video: 'off',
   },
+  // A test that proves one layout only is tagged @desktop-only or @mobile-only;
+  // the other project leaves it out instead of skipping it at run time.
   projects: [
-    { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
-    { name: 'mobile', use: { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 } } },
+    {
+      name: 'desktop',
+      grepInvert: /@mobile-only/,
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },
+    },
+    {
+      name: 'mobile',
+      grepInvert: /@desktop-only/,
+      use: { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 } },
+    },
   ],
   webServer: ciManagesServers
     ? []

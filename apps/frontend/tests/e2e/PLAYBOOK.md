@@ -193,6 +193,12 @@ Baseline images are committed to the repo. A PR that changes them requires a del
 
 ---
 
+## One Layout Only
+
+A test that proves only one layout carries the tag `@desktop-only` or `@mobile-only` (on the test or its `describe`). `playwright.config.ts` gives each project a `grepInvert` for the other tag, so the other project never lists the test, instead of skipping it at run time by project name.
+
+---
+
 ## Page Object and Fixture Usage
 
 Always import `test` and `expect` from the local fixtures, not directly from `@playwright/test`. The fixtures wire up `authedPage`, the screenshot guard, and other shared setup.

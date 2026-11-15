@@ -187,13 +187,11 @@ async function dragBy(page: Page, inset: Locator, grip: Locator, fx: number, fy:
 
 test.use({ backendScenario: "caps-full" });
 
-test.describe("layout designer — caps-full", () => {
-	test.skip(({ browserName }) => browserName !== "chromium", "single-browser pointer proof");
-
+// The desktop layout drives the program desk.
+test.describe("layout designer — caps-full", { tag: "@desktop-only" }, () => {
 	let wire: DesignerWire;
 
-	test.beforeEach(async ({ page, pageRpc, backendRpc }, testInfo) => {
-		test.skip(testInfo.project.name !== "desktop", "desktop layout drives the program desk");
+	test.beforeEach(async ({ page, pageRpc, backendRpc }) => {
 		await backendRpc.call(["streaming", "setConfig"], {
 			source: "usb",
 			srtla_addr: "127.0.0.1",
@@ -567,15 +565,13 @@ test.describe("layout designer — caps-full", () => {
 	}
 });
 
-test.describe("layout designer — caps-full, on a 375 x 812 phone", () => {
-	test.skip(({ browserName }) => browserName !== "chromium", "single-browser pointer proof");
+test.describe("layout designer — caps-full, on a 375 x 812 phone", { tag: "@mobile-only" }, () => {
 	test.use({ viewport: { width: 375, height: 812 } });
 
 	const MINIMUM: Rect = { x: 0.4, y: 0.4, width: 0.125, height: 0.125 };
 	let wire: DesignerWire;
 
-	test.beforeEach(async ({ page, pageRpc, backendRpc }, testInfo) => {
-		test.skip(testInfo.project.name !== "mobile", "the phone layout");
+	test.beforeEach(async ({ page, pageRpc, backendRpc }) => {
 		await backendRpc.call(["streaming", "setConfig"], {
 			source: "usb",
 			srtla_addr: "127.0.0.1",
