@@ -676,10 +676,18 @@ resolved_at: 2026-06-17
 unblock: cerastream switch-audio IPC (Track 2 Task 18)
 ```
 
-Resolved in Task 25. `isAudioLiveSwitchEnabled(caps)` now returns `true` when the
-engine advertises `audio_live_switch`. The live picker's audio entries render with
-an enabled Switch button; the `coming-soon` affordance and `data-debt-id` marker
-are removed from `InputPicker.svelte`.
+Resolved in Task 25. `isAudioLiveSwitchEnabled(caps)` returns `true` when the
+engine advertises `audio_live_switch`, and the `coming-soon` affordance and
+`data-debt-id` marker are gone from `InputPicker.svelte`.
+
+Today no live picker offers an audio entry. `InputPicker` has not been mounted on
+the Live screen since #137. The live source switch (`LiveSourceSwitch.svelte`)
+lists the session's published `switch_targets` as capture, synthetic (test
+pattern) and network rows (`lib/streaming/live-switch-rows.ts`), and falls back to
+the discovered capture sources only when no roster is reported. None of those rows
+is an `audio:*` id, so `LiveView`'s `handleSwitchAudio` is unreachable from the UI. Live audio is controlled in the Audio card's mixer strips (enable, gain,
+mute, delay, tracks) when the engine advertises `audio_mix`; see
+`docs/agents/live-screen.md`, "The Audio card's mixer".
 
 ```debt
 id: TD-live-audio-delay

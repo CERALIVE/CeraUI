@@ -600,7 +600,6 @@ const mixerShown = $derived(capabilities?.audio_mix !== undefined);
 const audioMixLive = $derived(audioStatus?.audio_mix_active === true);
 // Live audio switch is gated (Task 10): force read-only while streaming.
 const audioReadOnly = $derived(audioMode === 'single' || isStreaming || audioMixLive);
-const audioComingSoon = $derived(isStreaming && audioMode === 'multiple');
 
 // Embedded network-ingest audio (Task 13): the ACTIVE source's `audioKind` is
 // `embedded` (an rtmp/srt pipeline carries its audio muxed into the incoming
@@ -1259,14 +1258,6 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 					testId="info-audio"
 					title={m["live.education.field.audio.title"]()}
 				/>
-				{#if audioComingSoon}
-					<span
-						class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium"
-						title={m["live.comingSoon.hint"]()}
-					>
-						{m["live.comingSoon.label"]()}
-					</span>
-				{/if}
 				{#if onOpenAudioDialog && !isStreaming}
 					<Button
 						class="ml-auto min-h-11 gap-1.5"

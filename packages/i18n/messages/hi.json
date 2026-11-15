@@ -797,6 +797,7 @@
 	"live.audioMixer.needsPrimary": "दूसरे इनपुट मिक्स करने के लिए ऊपर एक ऑडियो स्रोत चुनें।",
 	"live.audioMixer.error.audio_mix_unsupported": "यह डिवाइस ऑडियो इनपुट मिक्स नहीं कर सकता।",
 	"live.audioMixer.error.audio_input_unknown": "यह इनपुट अब उपलब्ध नहीं है। इसे फिर से जोड़ें या बंद करें।",
+	"live.audioMixer.error.audio_input_primary": "मुख्य इनपुट हमेशा मिक्स में रहता है। इसे बंद करने के लिए कोई दूसरा ऑडियो स्रोत चुनें।",
 	"live.audioMixer.error.audio_inputs_empty": "मिक्स में कम से कम एक इनपुट रखें।",
 	"live.audioMixer.error.audio_input_duplicate": "यह इनपुट मिक्स में दो बार है। इसे बंद करके फिर से चालू करें।",
 	"live.audioMixer.error.audio_inputs_too_many": "मिक्स भर गया है। पहले कोई दूसरा इनपुट बंद करें।",

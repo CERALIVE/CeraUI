@@ -391,6 +391,10 @@ describe("AudioMixer — idle", () => {
 			"audio_input_unknown",
 			"This input isn't available any more. Reconnect it or turn it off.",
 		],
+		[
+			"audio_input_primary",
+			"The main input always stays in the mix. To turn it off, choose another audio source.",
+		],
 		["audio_inputs_empty", "Keep at least one input in the mix."],
 		[
 			"audio_input_duplicate",
