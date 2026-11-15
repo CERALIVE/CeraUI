@@ -290,7 +290,7 @@ must keep that ABI.
   It covers the picture's letterboxed area (`videoBox`); while the preview is
   off or unavailable, `PreviewCanvas` gives it an empty 16:9 stage, so placing
   never needs the preview to play. Without the capability no designer node
-  exists.
+  exists. The canvas renders `compact`: the disclosure supplies the card chrome.
 - The inset is where the compositor puts the second input: the saved `rect`
   for `custom`, else the preset's own rectangle (`presetRect`: half of each
   axis, a 5% margin for the four insets). It drags with pointer capture,
@@ -304,7 +304,9 @@ must keep that ABI.
 - Each corner resizes from a 44 px box centred on it
   (`layout-inset-handle-<corner>`, `data-corner`) that sits under the inset,
   plus a cap in the inset's own corner (`data-corner-cap`) of at most 22 px and
-  at most a quarter of each side. On a normal inset the corner keeps its whole
+  at most a quarter of each side. Each cap extends across the inset's 2 px
+  border, so the border at a corner resizes rather than moving the inset.
+  On a normal inset the corner keeps its whole
   44 px zone; at the smallest size on a 375 px phone (about 30 by 17 px) the
   caps stay small, so most of the inset, its middle included, still moves it.
   The caps and the boxes share one pointer path on the picture-area layer; the

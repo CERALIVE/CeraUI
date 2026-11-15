@@ -208,6 +208,51 @@ test.describe("layout designer — caps-full", { tag: "@desktop-only" }, () => {
 		await backendRpc.call(["streaming", "setConfig"], { composition: null });
 	});
 
+	for (const corner of ["top-left", "top-right", "bottom-left", "bottom-right"] as const) {
+		test(`the ${corner} border resizes rather than moving the inset`, async ({ page, backendRpc }) => {
+			await backendRpc.call(["streaming", "setConfig"], {
+				composition_rect: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
+			});
+			const inset = page.getByTestId("layout-inset");
+			await expect.poll(() => shownRect(inset)).toEqual({
+				x: 0.25, y: 0.25, width: 0.5, height: 0.5,
+			});
+			await inset.scrollIntoViewIfNeeded();
+			const picture = await inset.locator("..").boundingBox();
+			const bounds = await inset.boundingBox();
+			if (picture === null || bounds === null) throw new Error("designer is not on screen");
+			const left = corner.endsWith("left");
+			const top = corner.startsWith("top");
+			// Stay on the painted border, clear of the rounded corner's cutout.
+			const x = left ? bounds.x + 8 : bounds.x + bounds.width - 8;
+			const y = top ? bounds.y + 1 : bounds.y + bounds.height - 1;
+
+			await page.mouse.move(x, y);
+			await page.mouse.down();
+			await page.mouse.move(
+				x + (left ? -0.1 : 0.1) * picture.width,
+				y + (top ? -0.1 : 0.1) * picture.height,
+				{ steps: 8 },
+			);
+			await page.mouse.up();
+
+			await expect.poll(async () => near((await savedComposition(backendRpc))?.rect, {
+				x: left ? 0.15 : 0.25,
+				y: top ? 0.15 : 0.25,
+				width: 0.6,
+				height: 0.6,
+			})).toBe(true);
+		});
+	}
+
+	test("the preview disclosure supplies the only card border", async ({ page }) => {
+		const borders = await page.getByTestId("preview").evaluate((element) => {
+			const style = getComputedStyle(element);
+			return [style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth];
+		});
+		expect(borders).toEqual(["0px", "0px", "0px", "0px"]);
+	});
+
 	test("choose custom, drag the inset to the bottom left, resize it from a corner, reload, and see the same rectangle", async ({
 		page,
 		backendRpc,
