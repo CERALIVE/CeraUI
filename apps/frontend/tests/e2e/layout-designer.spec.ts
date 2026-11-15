@@ -1,5 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 
+import type { MockEngineState } from "./fixtures/backend.js";
 import { type BackendRpc, expect, test } from "./fixtures/index.js";
 import { runAxe } from "./helpers/axe.js";
 import { ensureAuthenticated, navigateTo } from "./helpers/index.js";
@@ -36,6 +37,8 @@ interface DesignerWire {
 	/** Keep every device frame from the page until `releaseServer`, then send them in order. */
 	holdServer(): void;
 	releaseServer(): void;
+	/** Run `read` when the page next sends `path`, before the device gets it. */
+	beforeSending(path: string, read: () => Promise<void>): void;
 }
 
 type Rect = { x: number; y: number; width: number; height: number };
@@ -56,6 +59,7 @@ async function installDesignerWire(
 	const heldFrames: Array<{ message: string | Buffer; call: RpcCall | undefined }> = [];
 	let page_: { send(message: string | Buffer): void } | undefined;
 	let order = 0;
+	const beforeSend = new Map<string, () => Promise<void>>();
 	const deliver = (message: string | Buffer, call: RpcCall | undefined) => {
 		page_?.send(message);
 		if (call) call.delivered = ++order;
@@ -67,15 +71,22 @@ async function installDesignerWire(
 		page_ = ws;
 		ws.onMessage((message) => {
 			const text = typeof message === "string" ? message : message.toString();
+			let call: RpcCall | undefined;
 			try {
 				const frame = JSON.parse(text) as { id?: unknown; path?: unknown; input?: Record<string, unknown> };
 				if (Array.isArray(frame.path) && frame.id !== undefined) {
-					const call: RpcCall = { path: frame.path.join("."), input: frame.input ?? {}, sent: ++order };
+					call = { path: frame.path.join("."), input: frame.input ?? {}, sent: ++order };
 					all.push(call);
 					byId.set(frame.id, call);
 				}
 			} catch {
 				/* non-RPC frame */
+			}
+			const read = call === undefined ? undefined : beforeSend.get(call.path);
+			if (call !== undefined && read !== undefined) {
+				beforeSend.delete(call.path);
+				void read().then(() => server.send(message));
+				return;
 			}
 			server.send(message);
 		});
@@ -120,6 +131,9 @@ async function installDesignerWire(
 		releaseServer: () => {
 			holding = false;
 			for (const { message, call } of heldFrames.splice(0)) deliver(message, call);
+		},
+		beforeSending: (path, read) => {
+			beforeSend.set(path, read);
 		},
 	};
 }
@@ -345,6 +359,7 @@ test.describe("layout designer — caps-full", () => {
 	test("Start pressed while idle placements wait for the device runs the newest of them, and a later move changes the running stream", async ({
 		page,
 		backendRpc,
+		workerBackend,
 	}) => {
 		await page.getByTestId("composition-layout-custom").click();
 		await expect.poll(async () => (await savedComposition(backendRpc))?.layout).toBe("custom");
@@ -375,6 +390,10 @@ test.describe("layout designer — caps-full", () => {
 		expect(near((await savedComposition(backendRpc))?.rect, newest)).toBe(true);
 		const live = cockpit.getByTestId("program-desk").getByTestId("layout-inset");
 		await expect.poll(async () => near(await shownRect(live), newest)).toBe(true);
+		// What the engine runs is what is saved and shown.
+		const started = await workerBackend.mockEngine();
+		expect(started.streaming).toBe(true);
+		expect(started.composition).toEqual(await savedComposition(backendRpc));
 
 		await dragBy(page, live, live, 0.2, 0);
 		await expect
@@ -387,6 +406,7 @@ test.describe("layout designer — caps-full", () => {
 		expect(near(running, { x: 0.45, y: 0.25, width: 0.5, height: 0.5 })).toBe(true);
 		expect(near((await savedComposition(backendRpc))?.rect, running)).toBe(true);
 		await expect.poll(async () => near(await shownRect(live), running)).toBe(true);
+		expect((await workerBackend.mockEngine()).composition).toEqual(await savedComposition(backendRpc));
 
 		await page.getByTestId("live-bar").getByRole("button", { name: "Stop stream" }).click();
 		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
@@ -397,6 +417,7 @@ test.describe("layout designer — caps-full", () => {
 	test("Stop pressed while live placements wait for the device ends the stream on the newest of them, and the next move only saves", async ({
 		page,
 		backendRpc,
+		workerBackend,
 	}) => {
 		await page.getByTestId("composition-layout-custom").click();
 		await expect.poll(async () => (await savedComposition(backendRpc))?.layout).toBe("custom");
@@ -406,6 +427,11 @@ test.describe("layout designer — caps-full", () => {
 		const live = cockpit.getByTestId("program-desk").getByTestId("layout-inset");
 		await expect.poll(async () => shownRect(live)).toEqual({ x: 0.45, y: 0.05, width: 0.5, height: 0.5 });
 		const before = wire.calls("streaming.setConfig").length;
+		// What the engine runs at the moment Stop reaches the device.
+		let atStop: MockEngineState | undefined;
+		wire.beforeSending("streaming.stop", async () => {
+			atStop = await workerBackend.mockEngine();
+		});
 
 		wire.holdServer();
 		await dragBy(page, live, live, -0.1, 0.1);
@@ -428,6 +454,9 @@ test.describe("layout designer — caps-full", () => {
 		// The stream ended on the newest placement: Stop left only after the engine applied it.
 		expect(second?.delivered).toBeLessThan(stop?.sent ?? 0);
 		expect(near((await savedComposition(backendRpc))?.rect, newest)).toBe(true);
+		expect(atStop?.streaming).toBe(true);
+		expect(atStop?.composition).toEqual(await savedComposition(backendRpc));
+		await expect.poll(async () => (await workerBackend.mockEngine()).streaming).toBe(false);
 
 		// The ended session's summary first; Done returns to the idle cockpit.
 		await page.getByTestId("summary-done").click();
@@ -440,6 +469,22 @@ test.describe("layout designer — caps-full", () => {
 		expect(after?.input).not.toHaveProperty("apply_now");
 		expect(after?.result).not.toHaveProperty("configChange");
 		expect(near((await savedComposition(backendRpc))?.rect, after?.input.composition_rect as Rect)).toBe(true);
+
+		// The next Start begins from the newest saved composition.
+		await page.getByTestId("live-bar").getByRole("button", { name: "Start stream" }).click();
+		const again = page.getByTestId("live-cockpit");
+		await expect(again).toBeVisible({ timeout: 15_000 });
+		const restarted = await workerBackend.mockEngine();
+		expect(restarted.streaming).toBe(true);
+		expect(restarted.composition).toEqual(await savedComposition(backendRpc));
+		const shownAgain = again.getByTestId("program-desk").getByTestId("layout-inset");
+		await expect
+			.poll(async () => near(await shownRect(shownAgain), after?.input.composition_rect as Rect))
+			.toBe(true);
+		await page.getByTestId("live-bar").getByRole("button", { name: "Stop stream" }).click();
+		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
+			timeout: 15_000,
+		});
 	});
 
 	test("Escape during a pointer drag puts the inset back and sends nothing", async ({ page, backendRpc }) => {

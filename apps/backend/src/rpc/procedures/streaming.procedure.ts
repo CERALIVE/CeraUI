@@ -89,6 +89,7 @@ import { getLastCapabilities } from "../../modules/streaming/capabilities.ts";
 import { mapCerastreamError } from "../../modules/streaming/cerastream-error-mapping.ts";
 import {
 	compositionResidueShouldClear,
+	isCompositionSupported,
 	resolveCompositionWrite,
 } from "../../modules/streaming/composition.ts";
 import { getApplyNowGate } from "../../modules/streaming/config-change-bridge.ts";
@@ -385,6 +386,13 @@ export const streamingStartProcedure = authedProcedure
 						video_codec: applied.video_codec ?? getConfig().video_codec,
 					};
 					const inputs = engineAudioInputs(config);
+					// What the engine adapter hands over at a real start, after
+					// `validateConfig` drops a composition the engine does not advertise.
+					const composition =
+						config.composition != null &&
+						isCompositionSupported(getLastCapabilities())
+							? config.composition
+							: undefined;
 					startMockStreaming({
 						pipeline: config.pipeline ?? "test",
 						srt: {
@@ -398,6 +406,7 @@ export const streamingStartProcedure = authedProcedure
 							balancer: config.balancer ?? "adaptive",
 						},
 						...(inputs === undefined ? {} : { audio: { inputs } }),
+						...(composition === undefined ? {} : { composition }),
 					});
 					broadcastMsg("status", {
 						is_streaming: true,

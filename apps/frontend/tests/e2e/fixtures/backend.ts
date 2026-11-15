@@ -75,12 +75,44 @@ const STATE_ROOT = path.resolve(
 	"../../../test-results/worker-backends",
 );
 
+/** What the mock engine runs, read over the private child channel. */
+export interface MockEngineState {
+	readonly streaming: boolean;
+	readonly composition: Record<string, unknown> | null;
+}
+
 export interface WorkerBackend {
 	readonly port: number;
 	readonly previewPort: number;
 	readonly proxySecret: string;
 	readonly streamingMarkerPath: string;
+	mockEngine(): Promise<MockEngineState>;
 	stop(): Promise<void>;
+}
+
+let mockEngineReads = 0;
+
+function readMockEngine(child: ChildProcess): Promise<MockEngineState> {
+	const id = ++mockEngineReads;
+	return new Promise((resolve, reject) => {
+		const timeout = setTimeout(() => {
+			child.off("message", onMessage);
+			reject(new Error("mock engine read timed out"));
+		}, READY_TIMEOUT_MS);
+		const onMessage = (message: unknown) => {
+			if (
+				typeof message !== "object" || message === null ||
+				!("type" in message) || message.type !== "mock-engine" ||
+				!("id" in message) || message.id !== id
+			)
+				return;
+			clearTimeout(timeout);
+			child.off("message", onMessage);
+			resolve(message as unknown as MockEngineState);
+		};
+		child.on("message", onMessage);
+		child.send({ type: "mock-engine", id });
+	});
 }
 
 /** Bounded by `workers`, so ports never grow across retries/respawns. */
@@ -277,6 +309,7 @@ async function spawnWorkerBackend(
 			...ready,
 			proxySecret,
 			streamingMarkerPath,
+			mockEngine: () => readMockEngine(child),
 			stop: () => stopChild(child),
 		};
 	} catch (error) {
