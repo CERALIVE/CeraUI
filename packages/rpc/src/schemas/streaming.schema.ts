@@ -8,7 +8,11 @@
 // browser-safe package cannot pull into the frontend graph. `types.js` imports
 // nothing but zod, and the package ships no `exports` map to forbid the path.
 import { failoverRatePolicyInputSchema } from '@ceralive/cerastream/dist/capture-status.js';
-import { COMPOSITION_FEATURE, COMPOSITION_RECT_MIN } from '@ceralive/cerastream/dist/constants.js';
+import {
+	COMPOSITION_FEATURE,
+	COMPOSITION_GEOMETRY_FEATURE,
+	COMPOSITION_RECT_MIN,
+} from '@ceralive/cerastream/dist/constants.js';
 import { rpcErrorSchema } from '@ceralive/cerastream/dist/envelope.js';
 import {
 	audioMixCapsSchema,
@@ -25,6 +29,7 @@ import {
 	balancerAlgorithmSchema,
 	type CompositionConfig,
 	type CompositionLayout,
+	type CompositionRect,
 	compositionConfigSchema,
 	compositionLayoutSchema,
 	compositionRectSchema,
@@ -37,9 +42,11 @@ import { regulatoryCountrySchema } from './wifi.schema';
 export {
 	balancerAlgorithmSchema,
 	COMPOSITION_FEATURE,
+	COMPOSITION_GEOMETRY_FEATURE,
 	COMPOSITION_RECT_MIN,
 	type CompositionConfig,
 	type CompositionLayout,
+	type CompositionRect,
 	compositionConfigSchema,
 	compositionLayoutSchema,
 	compositionRectSchema,
@@ -60,6 +67,56 @@ const [firstCompositionLayout] = COMPOSITION_LAYOUTS;
 if (firstCompositionLayout === undefined)
 	throw new Error('compositionLayoutSchema advertises no layout options');
 export const COMPOSITION_LAYOUT_DEFAULT: CompositionLayout = firstCompositionLayout;
+
+const RECT_UNIT = 10_000;
+
+/**
+ * Where the compositor puts the second input for a preset: half of each axis and
+ * a 5% margin for the four insets (`gstrgacompositor.c`). In whole
+ * ten-thousandths, so every value is exact. Shared by the backend, which turns a
+ * preset into `custom` from the device's own layout, and the designer.
+ */
+export function presetRect(layout: Exclude<CompositionLayout, 'custom'>): CompositionRect {
+	const half = RECT_UNIT / 2;
+	const margin = RECT_UNIT / 20;
+	const far = RECT_UNIT - margin - half;
+	const rect = (x: number, y: number, width: number, height: number) => ({
+		x: x / RECT_UNIT,
+		y: y / RECT_UNIT,
+		width: width / RECT_UNIT,
+		height: height / RECT_UNIT,
+	});
+	switch (layout) {
+		case 'pip-top-right':
+			return rect(far, margin, half, half);
+		case 'pip-top-left':
+			return rect(margin, margin, half, half);
+		case 'pip-bottom-right':
+			return rect(far, far, half, half);
+		case 'pip-bottom-left':
+			return rect(margin, far, half, half);
+		case 'pbp-left-right':
+			return rect(half, 0, RECT_UNIT - half, RECT_UNIT);
+		case 'pbp-top-bottom':
+			return rect(0, half, RECT_UNIT, RECT_UNIT - half);
+	}
+}
+
+/**
+ * The engine's own admission rule for a free rectangle (fractions of the output
+ * frame): finite, inside the frame, every side at least `COMPOSITION_RECT_MIN`.
+ * Shared by the backend's save gate and the designer's clamp.
+ */
+export function compositionRectFits(rect: CompositionRect): boolean {
+	const { x, y, width, height } = rect;
+	return (
+		[x, y, width, height].every((value) => Number.isFinite(value) && value >= 0) &&
+		x + width <= 1 &&
+		y + height <= 1 &&
+		width >= COMPOSITION_RECT_MIN &&
+		height >= COMPOSITION_RECT_MIN
+	);
+}
 
 export const COMPOSITION_ALPHA_MIN = 0;
 export const COMPOSITION_ALPHA_MAX = 1;
@@ -478,6 +535,15 @@ export const streamingConfigInputSchema = z.object({
 	// token. `null` is an explicit CLEAR — absent means "leave the persisted value
 	// alone", so without it an operator could never turn composition back off.
 	composition: compositionConfigSchema.nullable().optional(),
+	// Places the second input: the backend writes `layout: 'custom'` and this
+	// rectangle onto the composition IT has saved, so a placement never carries
+	// the sender's possibly stale copy of the other composition fields.
+	composition_rect: compositionRectSchema.optional(),
+	// Changes only the stated fields of the saved composition (layout, second
+	// input, opacity), merged by the backend onto the composition it has saved,
+	// for the same reason. A preset drops the rectangle; `custom` takes the
+	// device's own preset rectangle.
+	composition_patch: compositionConfigSchema.omit({ rect: true }).partial().optional(),
 });
 export type StreamingConfigInput = z.infer<typeof streamingConfigInputSchema>;
 

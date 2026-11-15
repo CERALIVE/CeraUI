@@ -21,19 +21,28 @@
  * config + status surface with no involvement in the socket, the token mint or
  * the delivery-tier ladder, and it renders nothing at all unless the board
  * published `preview_hw_capability`.
+ *
+ * While it is open and the cockpit hands in a `placement`, `LayoutDesigner` is
+ * drawn over the picture so the second input can be placed on it. The open
+ * state is published in `previewDisclosure` for the layout controls.
  */
 import { m } from '@ceraui/i18n/svelte';
+import type { CompositionConfig } from '@ceraui/rpc/schemas';
 
 import PreviewCanvas from '$lib/components/preview/PreviewCanvas.svelte';
 
+import LayoutDesigner from './LayoutDesigner.svelte';
 import PreviewEncodeControl from './PreviewEncodeControl.svelte';
+import { previewDisclosure } from './previewDisclosure.svelte';
 
 interface Props {
 	/** Marks the mid-stream mount so tests and CSS can tell the two apart. */
 	streaming?: boolean;
+	/** The saved composition to place, when the engine can place it freely. */
+	placement?: CompositionConfig | undefined;
 }
 
-const { streaming = false }: Props = $props();
+const { streaming = false, placement = undefined }: Props = $props();
 
 const OPEN_KEY = 'ceraui.live.previewOpen';
 const OPEN_BY_DEFAULT_QUERY = '(min-width: 768px)';
@@ -46,12 +55,14 @@ function initialOpen(): boolean {
 
 const startOpen = initialOpen();
 let open = $state(startOpen);
+previewDisclosure.open = startOpen;
 // The browser also fires `toggle` for the state the element rendered with; only
 // a change from the last known state is the operator's choice.
 let lastOpen = startOpen;
 
 function handleToggle(event: Event & { currentTarget: HTMLDetailsElement }) {
 	const next = event.currentTarget.open;
+	previewDisclosure.open = next;
 	if (next === lastOpen) return;
 	lastOpen = next;
 	localStorage.setItem(OPEN_KEY, String(next));
@@ -69,7 +80,17 @@ function handleToggle(event: Event & { currentTarget: HTMLDetailsElement }) {
 		{m["live.modes.preview"]()}
 	</summary>
 	<div class="px-4 pb-4">
-		<PreviewCanvas hostActive={open} />
+		<PreviewCanvas hostActive={open} overlay={open && placement !== undefined ? designer : undefined} />
 		<PreviewEncodeControl />
 	</div>
 </details>
+
+{#snippet designer(picture: { width: number; height: number })}
+	{#if placement !== undefined}
+		<LayoutDesigner
+			composition={placement}
+			pictureHeight={picture.height}
+			pictureWidth={picture.width}
+		/>
+	{/if}
+{/snippet}

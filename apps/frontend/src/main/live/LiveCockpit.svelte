@@ -47,7 +47,7 @@ import IngestStats from '$lib/components/custom/IngestStats.svelte';
 import { Button } from '$lib/components/ui/button';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
 import { deriveCaptureBands, type MatchAction } from '$lib/streaming/capture-failover';
-import { compositionSupported } from '$lib/streaming/compositionSupport';
+import { compositionGeometrySupported, compositionSupported } from '$lib/streaming/compositionSupport';
 import type { EncoderLoadReading } from '$lib/streaming/encoder-load';
 import { deriveLiveSourceState } from '$lib/streaming/live-source-state';
 import type { ActiveSummary } from '$lib/streaming/sourceSummary';
@@ -228,6 +228,7 @@ const showVideoSignalLost = $derived(
 );
 
 const canCompose = $derived(compositionSupported(capabilities));
+const canPlace = $derived(compositionGeometrySupported(capabilities));
 // The audio card exists only for an engine that mixes; without it the live
 // audio line and its meter stay in LiveSummaryStrip.
 const canMix = $derived(capabilities?.audio_mix !== undefined);
@@ -371,6 +372,7 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 		     token proxy and stays off until its own toggle is pressed. -->
 		<ProgramDesk
 			class="lg:col-span-3 lg:col-start-1 lg:row-span-3 lg:row-start-1"
+			placement={canPlace ? config?.composition : undefined}
 			streaming={true}
 		>
 			<!-- "Now streaming" summary strip: what the device is CURRENTLY streaming
@@ -406,7 +408,7 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 			     that cannot compose renders no node at all. -->
 			{#if canCompose}
 				<div data-testid="layout-controls">
-					<CompositionCard {config} {isStreaming} {sources} />
+					<CompositionCard {config} geometry={canPlace} {isStreaming} {sources} />
 				</div>
 			{/if}
 		</ProgramDesk>

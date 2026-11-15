@@ -46,6 +46,22 @@ The `streaming` router exposes these procedures:
 
 `setConfig` writes the provided fields onto the running config (same relay/manual mutual-exclusion logic as `updateConfig`, minus DNS/pipeline validation), then calls `saveConfig` and broadcasts a `config` message. Use this for all config-only dialogs that must not start the stream.
 
+### Composition placement [EXISTS]
+
+`setConfig({ composition_rect })` places the second input: the backend writes
+`layout: 'custom'` and the rectangle onto its own saved composition in the
+synchronous pre-mutation stretch (`resolveCompositionWrite` in
+`modules/streaming/composition.ts`), and a custom `composition` without a
+`rect` keeps the saved one. `setConfig({ composition_patch })` merges one or
+more of `layout`, `secondary_input_id` and `alpha` onto the saved composition
+the same way (a patch to `custom` takes the saved preset's rectangle).
+Refusals, before any write: `composition_unsupported`,
+`composition_geometry_unsupported`, `composition_rect_invalid` (also for a
+rectangle beside an explicit preset layout) and `composition_off` (a placement
+or patch with no saved composition). With `apply_now`, the composed
+composition is the staged change;
+[composition lifecycle](../../../../docs/COMPOSITION-LIFECYCLE.md).
+
 ### Format settings [EXISTS]
 
 `setConfig` accepts optional `balancer` through the published producer's
@@ -129,7 +145,7 @@ deferred audio pick changes; idle meter selection is unchanged. Coverage:
 `audio-inputs.test.ts` drives the published UDS client, persistence and RPC;
 `mock-audio-contract.test.ts` pins native error serialization. The mixer UI is
 the Audio card's strips ([live screen contract](../../../../docs/agents/live-screen.md#the-audio-cards-mixer-exists));
-the layout designer remains a separate change. No hardware qualification or
+the layout designer is [composition placement](#composition-placement-exists). No hardware qualification or
 release documentation claim follows from these host checks.
 
 `start` input is PARTIAL by contract. `updateConfig` projects the saved runtime

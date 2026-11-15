@@ -3,11 +3,12 @@
 This file is the target structure of the Live destination, written before any
 of it was built.
 
-Status: changes 1 to 4 below have landed — the regions, both orders, the Live
+Status: changes 1 to 5 below have landed — the regions, both orders, the Live
 bar, the two-column layout and the preview's open state exist as described, the
 layout, the opacity and the second input change while live, the Encoder
-dialog has the automatic format, the adaptive switch and the route line, and
-the Audio card has a strip per input. Changes 5 and 6 are still to come.
+dialog has the automatic format, the adaptive switch and the route line, the
+Audio card has a strip per input, and the second input is placed on the
+preview. Change 6 is still to come.
 
 How to read it:
 
@@ -274,6 +275,92 @@ must keep that ABI.
 - The mock backend does not bridge `audio-level` to the main socket (its meter
   bridge is skipped under mocks), so `audio-mixer.spec.ts` injects that frame
   when it checks the per-input meters.
+
+#### The layout designer [EXISTS]
+
+- `LayoutDesigner` draws the inset `layout-inset` over the preview picture in
+  `program-desk`, only while composition is on (a saved `composition`), the
+  engine advertises `composition-geometry` and `preview-disclosure` is open.
+  It covers the picture's letterboxed area (`videoBox`); while the preview is
+  off or unavailable, `PreviewCanvas` gives it an empty 16:9 stage, so placing
+  never needs the preview to play. Without the capability no designer node
+  exists.
+- The inset is where the compositor puts the second input: the saved `rect`
+  for `custom`, else the preset's own rectangle (`presetRect`: half of each
+  axis, a 5% margin for the four insets). It drags with pointer capture,
+  resizes from four corners and, focused, moves with the arrow keys by 1%
+  (Shift 5%) and resizes
+  with Alt and the arrow keys. It is a native button with an accessible name
+  and a polite live description of its position, size and keys; during a
+  pointer drag the description keeps the starting position. Rectangles are
+  fractions of the output frame, so they never mirror right to left.
+- Each corner resizes from a 44 px box centred on it
+  (`layout-inset-handle-<corner>`, `data-corner`) that sits under the inset,
+  plus a cap in the inset's own corner (`data-corner-cap`) of at most 22 px and
+  at most a quarter of each side. On a normal inset the corner keeps its whole
+  44 px zone; at the smallest size on a 375 px phone (about 30 by 17 px) the
+  caps stay small, so most of the inset, its middle included, still moves it.
+  The caps and the boxes share one pointer path on the picture-area layer; the
+  keyboard path is the focused inset button.
+- The rectangle moves locally while a pointer or an arrow key is held and is
+  sent once, on release, already clamped (`clampRect`: inside the frame, each
+  side at least `COMPOSITION_RECT_MIN`), as
+  `streaming.setConfig({ composition_rect })`, with `apply_now: true` while
+  live. A press that does not move it sends nothing. Escape during a pointer
+  drag or a held key puts it back, lets the pointer go and sends nothing.
+- The device decides the composition. `resolveCompositionWrite` composes the
+  placement onto the composition it has saved now, in the same synchronous
+  write (`layout: 'custom'` and the rectangle; the second input and the
+  opacity stay the device's). The layout card sends each of its changes the
+  same way, as that one field (`composition_patch`: layout, second input or
+  opacity) merged onto the saved composition; only turning composition on or
+  off sends the whole `composition`. Quick drags and a stale second tab
+  therefore compose with every other change; no client sends its own copy of
+  the other fields. A rectangle is accepted only with `custom`, only with
+  `composition-geometry` and only when it fits the frame
+  (`compositionRectFits` in `@ceraui/rpc/schemas`); a rectangle sent with an
+  explicit preset layout is a contradiction and is refused. Every refusal
+  happens before anything is written: `composition_geometry_unsupported`,
+  `composition_rect_invalid`, `composition_unsupported`, or `composition_off`
+  for a change to a composition the device no longer has.
+- Every composition write of a tab, from the card and the designer alike,
+  goes through one ordered lane (`lib/streaming/compositionWrites.svelte.ts`):
+  one write in flight at a time, in the order made. A placement released
+  before the answer waits for it and replaces any older waiting placement; any
+  newer write (a layout, second input, opacity, on or off) drops a placement
+  still waiting, unsent, so an older drag can never undo a newer choice. While
+  waiting or in flight, the newest placement is what the inset shows. A
+  refused write shows the keyed copy of its token (`live.layout.error.<token>`)
+  or the engine's outcome; the designer then falls back to the device's saved
+  rectangle, in an alert over the picture that is mounted for the whole
+  session.
+- Start and Stop go through the same lane (`SystemHelper.startStreaming` and
+  `stopStreaming`, which the Live bar, the stop watchdog, its Retry and the
+  toast host all use, and `UnconfirmedStreamBand`'s Stop). One rule holds at
+  every session change: a Start or a Stop drops nothing; a write made before it
+  is sent before it and one made after it is sent after its answer. So a
+  placement released just before Start is saved first and Start runs it; one
+  released just before Stop changes the running stream first and the next
+  Start begins from it. A Start or a Stop waits only for a write, never for an
+  earlier Start or Stop, so a redispatched Stop still reaches a device that has
+  not answered the first. Only a newer composition write drops a waiting
+  placement, the round-2 rule, wherever the transitions fall.
+- Whether a write changes the running stream is decided when the lane SENDS
+  it: `apply_now: true` while the device reports a live stream
+  (`getIsStreaming`) or right after this tab's Start was answered, before that
+  status arrives. Callers pass no directive. Sending `apply_now` to an idle
+  device only saves; a live write without it would be saved for the next Start
+  only, which is the split this rule prevents. A session that ends or starts on
+  its own (engine failure, a dropped socket, another tab) reaches the lane
+  through the device's status. Only this tab's writes are ordered: a Start from
+  another tab or the cloud, or the device's own restart, can still land between
+  another write and the engine reading the saved composition.
+- With `composition-geometry`, `composition-layout-selector` gains a seventh
+  radio, `composition-layout-custom`. Choosing it sends `custom` alone; the
+  device takes the rectangle of the preset it has saved. With the preview
+  closed the radio is described by `live.layout.openPreviewToPlace`.
+- Under mocks, a live layout-only change reaches the mock engine
+  (`changeMockComposition`), as `set-audio-mix` does.
 
 ### 1. Job and audience
 

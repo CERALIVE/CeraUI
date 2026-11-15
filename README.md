@@ -649,8 +649,8 @@ failover-rate policy, raw-input classifications, and source-mode session-switch 
 Optional `audio_mix` capabilities and per-input audio levels now survive the RPC
 boundary. The mock models audio mix admission, live controls and free composition
 rectangles; the six preset choices stay unchanged. See the
-[mock contract](docs/agents/mock-subsystem.md). Audio settings persistence and the
-mixer/designer controls are separate work.
+[mock contract](docs/agents/mock-subsystem.md). The Audio card's mixer and the
+layout designer drive them, and a live layout-only change reaches the mock engine.
 The producer's exported
 `ChangeConfigParams` and installed schema are regression-tested directly.
 The bindings-skew gate checks the schema version and preservation of the three
