@@ -18,6 +18,9 @@ test.describe('@visual Task 8 — unified source surface', () => {
 
 		const live = new LivePage(page);
 		await live.open();
+		// The audio block is gated on an effective source, and the default scenario
+		// seeds its captures with no config.source, so pick one first.
+		await live.selectSource();
 
 		const section = page.getByTestId('source-section');
 		await expect(section).toBeVisible({ timeout: 20_000 });
