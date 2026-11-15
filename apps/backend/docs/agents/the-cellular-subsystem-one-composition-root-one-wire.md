@@ -85,17 +85,24 @@ real file.
 
 **HiMI UFI router sticks [EXISTS].** A ModemManager firmware revision or model
 starting with `HIMI_U01_MODEM_` identifies this Android router family.
-`modem-identity.ts` owns the predicate; both the mmcli status builder and D-Bus
-adapter publish `availability_reason: "himi_ufi_router"` through the existing
-modem projection. USB `05c6:9091`, ADB `ff/42/01`, `Android`, and a numeric model
-alone do not identify it. No additional USB or device reads are performed.
+`modem-identity.ts` owns the family predicate. Both modem adapters publish
+`availability_reason: "himi_ufi_router"` only after the existing ready-activation
+request returned false, while MM is not connected and the existing network
+cache reports no address. Family identity or `registered` alone never raises it.
+USB `05c6:9091`, ADB `ff/42/01`, `Android`, and a numeric model alone do not
+identify it. No additional USB reads, device reads, or polling path are added.
 
-The warning is a hardware limitation, independent of MM's connection state:
-rejected host data calls can leave MM `registered`, `home`, and `attached`.
-The existing availability note explains that the stick keeps the mobile
-connection for itself and cannot serve as a CeraLive modem; use router
-(USB network) mode or a regular modem. CeraUI changes no stick settings and
-does not try to disable its embedded data call or SIM-switch watchdog.
+The failure is retained on the current modem entry, identity-fenced against an
+in-flight removal or replacement, and cleared when a connection or address is
+observed. The existing partial modem frame carries the warning and an explicit
+empty reason on recovery so the merging frontend retracts it.
+
+HIMI U01 remains Verified in the modem documentation: QMI works when its own
+router is not holding the connection. The conditional guidance recommends router
+(USB network) mode or a regular modem and names the cellular modem docs page.
+CeraUI changes no stick settings and does not try to disable its embedded data
+call or SIM-switch watchdog. The EN/es-419 docs note accompanies the release docs
+update; the Verified row stays.
 Coverage: `src/tests/himi-ufi-router.test.ts` and the rendered
 `CellularSection.test.ts` regression for issue #573.
 

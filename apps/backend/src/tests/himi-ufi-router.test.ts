@@ -64,6 +64,7 @@ describe("HiMI UFI router warning (#573)", () => {
 			...DBUS_VIEW,
 			model,
 			...(firmwareRevision !== undefined ? { firmwareRevision } : {}),
+			dataConnectionFailed: true,
 		});
 
 		expect(source.additive?.availability_reason).toBe("himi_ufi_router");
@@ -74,16 +75,68 @@ describe("HiMI UFI router warning (#573)", () => {
 	test.each(["registered", "failed"])(
 		"surfaces the specific warning after a data-call failure with MM %s",
 		(state) => {
-			const refreshed = mergeRefreshedModem(MODEM, {
-				...MODEM_INFO,
-				"modem.generic.state": state,
-			});
+			const refreshed = mergeRefreshedModem(
+				{ ...MODEM, data_connection_failed: true },
+				{
+					...MODEM_INFO,
+					"modem.generic.state": state,
+				},
+			);
 			const result = projectModemWire([fromMmcliModem(99, refreshed)], {
 				hasGsmAutoconfig: false,
 			});
 
 			expect(result.message["99"]?.availability_reason).toBe("himi_ufi_router");
 			expect(result.message["99"]?.status?.connection).toBe(state);
+		},
+	);
+
+	test.each([
+		["registered", false, false],
+		["connected", true, false],
+		["registered", true, true],
+	] as const)(
+		"suppresses the warning for state %s, failed attempt %s, address %s",
+		(state, failedAttempt, hasAddress) => {
+			const refreshed = mergeRefreshedModem(
+				{
+					...MODEM,
+					...(failedAttempt ? { data_connection_failed: true } : {}),
+				},
+				{ ...MODEM_INFO, "modem.generic.state": state },
+			);
+			const mmcli = fromMmcliModem(99, refreshed, { hasAddress });
+			const dbus = fromDbusView({
+				...DBUS_VIEW,
+				firmwareRevision: "HIMI_U01_MODEM_V2.0",
+				mmState: state,
+				dataConnectionFailed: failedAttempt,
+				hasAddress,
+			});
+
+			// An explicit empty reason retracts a previous warning in the merging UI.
+			expect(mmcli.additive?.availability_reason).toBe("");
+			expect(dbus.additive?.availability_reason).toBe("");
+		},
+	);
+
+	test.each([
+		["registered", "himi_ufi_router"],
+		["connected", ""],
+	])(
+		"publishes the warning or its retraction in a %s partial frame",
+		(state, reason) => {
+			const refreshed = mergeRefreshedModem(
+				{ ...MODEM, data_connection_failed: true },
+				{ ...MODEM_INFO, "modem.generic.state": state },
+			);
+
+			const result = projectModemWire([fromMmcliModem(99, refreshed)], {
+				hasGsmAutoconfig: false,
+				fullState: {},
+			});
+
+			expect(result.message["99"]?.availability_reason).toBe(reason);
 		},
 	);
 
@@ -105,11 +158,15 @@ describe("HiMI UFI router warning (#573)", () => {
 					: {}),
 			};
 
-			const mmcli = fromMmcliModem(99, mergeRefreshedModem(MODEM, info));
+			const mmcli = fromMmcliModem(
+				99,
+				mergeRefreshedModem({ ...MODEM, data_connection_failed: true }, info),
+			);
 			const dbus = fromDbusView({
 				...DBUS_VIEW,
 				model,
 				...(firmwareRevision !== undefined ? { firmwareRevision } : {}),
+				dataConnectionFailed: true,
 			});
 
 			expect(mmcli.additive?.availability_reason).toBeUndefined();

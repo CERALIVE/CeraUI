@@ -686,7 +686,7 @@ describe("CellularSection — the real board roster", () => {
 		});
 
 		expect(container.textContent).toContain(
-			"This device is a router-type USB stick that keeps the mobile connection for itself, so CeraLive cannot use it as a modem. Use it in router (USB network) mode or use a regular modem.",
+			"This HIMI U01 stick's own router is using the mobile connection, so CeraLive can't start its data connection. Use router mode (USB network) or a regular modem. See docs.ceralive.tv/hardware/cellular-modems/.",
 		);
 	});
 

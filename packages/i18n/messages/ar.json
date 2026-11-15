@@ -1014,7 +1014,7 @@
 	"network.cellular.initializingTitle": "جارٍ تشغيل الشبكة الخلوية",
 	"network.cellular.reason.initializing": "تم اكتشاف مودم — في انتظار أن تصفه خدمة المودم.",
 	"network.cellular.reason.undriveable": "لا يزال هذا الجهاز متصلاً، ولكن لا تستطيع أي خدمة مودم التحكم به.",
-	"network.cellular.reason.himiUfiRouter": "هذا الجهاز عبارة عن راوتر USB يحتفظ باتصال بيانات الجوال لنفسه، لذلك لا يستطيع CeraLive استخدامه كمودم. استخدمه في وضع الراوتر (شبكة USB) أو استخدم مودمًا عاديًا.",
+	"network.cellular.reason.himiUfiRouter": "الموجّه المدمج في وحدة HIMI U01 هذه يستخدم الاتصال الخلوي، لذلك لا يستطيع CeraLive بدء اتصال البيانات. استخدم وضع الموجّه (شبكة USB) أو مودمًا تقليديًا. راجع docs.ceralive.tv/hardware/cellular-modems/.",
 	"network.cellular.reason.routerControlsUnverified": "لم يؤكد هذا المودم قط أن تغيير أي إعداد يُطبَّق فعليًا، لذلك لا يُعرض هنا شيء. استخدم واجهته الإلكترونية الخاصة بدلًا من ذلك.",
 	"network.cellular.reason.routerManaged": "يدير المودم هذا الاتصال بنفسه. توجد إعدادات شبكته في واجهته الإلكترونية الخاصة، لا هنا.",
 	"network.cellular.reason.unknown": "لا يمكن ضبط هذا الجهاز من هنا.",

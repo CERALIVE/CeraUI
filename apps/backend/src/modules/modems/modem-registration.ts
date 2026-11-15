@@ -96,7 +96,7 @@ export type ModemStatus = {
 	packet_service_state?: string;
 	registration_rejection?: ModemRegistrationRejection;
 	radio_power?: ModemRadioPower;
-	availability_reason?: "himi_ufi_router";
+	himi_ufi_router?: true;
 };
 
 // Bounded retry for transient mmcli failures (mock mode never retries — the
@@ -190,7 +190,7 @@ function buildModemStatus(
 			model: modemInfo["modem.generic.model"],
 			firmwareRevision: modemInfo["modem.generic.revision"],
 		})
-			? { availability_reason: "himi_ufi_router" }
+			? { himi_ufi_router: true }
 			: {}),
 		...(network !== undefined ? { network } : {}),
 		network_type,

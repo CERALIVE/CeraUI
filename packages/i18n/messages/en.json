@@ -1002,7 +1002,7 @@
 	"network.cellular.initializingTitle": "Cellular is starting up",
 	"network.cellular.reason.initializing": "Modem detected — waiting for the modem service to describe it.",
 	"network.cellular.reason.undriveable": "This device is still attached, but no modem service can control it.",
-	"network.cellular.reason.himiUfiRouter": "This device is a router-type USB stick that keeps the mobile connection for itself, so CeraLive cannot use it as a modem. Use it in router (USB network) mode or use a regular modem.",
+	"network.cellular.reason.himiUfiRouter": "This HIMI U01 stick's own router is using the mobile connection, so CeraLive can't start its data connection. Use router mode (USB network) or a regular modem. See docs.ceralive.tv/hardware/cellular-modems/.",
 	"network.cellular.reason.routerControlsUnverified": "This dongle never confirmed that a settings change actually takes effect, so nothing is offered here. Use its own web interface instead.",
 	"network.cellular.reason.routerManaged": "The dongle manages this connection itself. Its network settings live in its own web interface, not here.",
 	"network.cellular.reason.unknown": "This device can't be configured from here.",

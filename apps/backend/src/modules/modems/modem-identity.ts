@@ -118,9 +118,9 @@ export type MmcliHardwareIdentity = {
 };
 
 /**
- * These Android router sticks retain their own data call even in QMI mode.
- * The shared Qualcomm USB ID, numeric model and ADB interface alone prove none
- * of that; require the device-reported HiMI U01 firmware family.
+ * Identify the HiMI U01 family; this alone says nothing about data connectivity.
+ * Some units run their own router in QMI mode. The shared Qualcomm USB ID,
+ * numeric model and ADB interface alone do not identify this firmware family.
  */
 export function isHimiUfiRouter(
 	identity: Pick<MmcliHardwareIdentity, "model" | "firmwareRevision">,
