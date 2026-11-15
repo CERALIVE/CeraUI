@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "../fixtures/index.js";
 
 import { evidencePath, navigateTo } from "../helpers/index.js";
 
@@ -13,7 +13,7 @@ import { evidencePath, navigateTo } from "../helpers/index.js";
  *     supported-range hint, the clamp notice, AND the uniform per-codec
  *     hardware/software acceleration labels.
  *   • task-13-applies-next-start.png — the "Applies on next start" badge shown
- *     against a restart-required source edited while a stream is live.
+ *     against a restart-required resolution edited while a stream is live.
  *
  * Drives the REAL EncoderDialog against a deterministic `generic` (software)
  * capability snapshot injected over the dev broadcast, reusing the field-lock /
@@ -50,6 +50,34 @@ const GENERIC_PIPELINES = {
 			defaultFramerate: 30,
 		},
 	},
+};
+
+// The dialog's capability axes key off the board in the `sources` snapshot and the
+// source `config.source` names; this HDMI input is that source.
+const GENERIC_SOURCES = {
+	hardware: "generic",
+	sources: [
+		{
+			origin: "capture",
+			id: "hdmi",
+			pipelineId: "hdmi",
+			kind: "hdmi",
+			displayName: "HDMI Capture",
+			devicePath: "/dev/video0",
+			modes: [
+				{ width: 3840, height: 2160, framerates: [30, 60] },
+				{ width: 1920, height: 1080, framerates: [30, 60] },
+				{ width: 1280, height: 720, framerates: [30, 60] },
+			],
+			supportsAudio: true,
+			supportsResolutionOverride: true,
+			supportsFramerateOverride: true,
+			defaultResolution: "1080p",
+			defaultFramerate: 30,
+			audioKind: "selectable",
+			available: true,
+		},
+	],
 };
 
 const GENERIC_CAPS = {
@@ -146,15 +174,20 @@ test.describe("@visual Task 13 quick wins", () => {
 						srtla_port: 5000,
 						srt_streamid: "e2e",
 						max_br: 5000,
+						// Edit stays disabled-with-reason until a source resolves.
+						pipeline: "hdmi",
+						source: "hdmi",
 					});
 					await emit(page, "pipelines", GENERIC_PIPELINES);
+					await emit(page, "sources", GENERIC_SOURCES);
 					await emit(page, "capabilities", GENERIC_CAPS);
-					return page
-						.getByTestId("open-encoder-dialog")
-						.isVisible()
-						.catch(() => false);
+					const edit = page.getByTestId("open-encoder-dialog");
+					return (await edit.isVisible()) && (await edit.isEnabled());
 				},
-				{ timeout: 10_000, message: "encoder edit row should be present" },
+				{
+					timeout: 10_000,
+					message: "encoder edit row should be present and enabled",
+				},
 			)
 			.toBe(true);
 	});
@@ -166,8 +199,12 @@ test.describe("@visual Task 13 quick wins", () => {
 		const dialog = page.getByRole("dialog", { name: "Encoder Settings" });
 		await expect(dialog).toBeVisible();
 
-		await page.locator("#encoder-source").click();
-		await page.locator('[role="option"][data-value="hdmi"]').click();
+		// The Source section picks the input (no picker here since #137); the
+		// dialog reflects the active source read-only.
+		await expect(dialog.getByTestId("encoder-active-source")).toHaveAttribute(
+			"data-source-id",
+			"hdmi",
+		);
 
 		// The codec choices appear once the operator opts into choosing the format.
 		// Verify both H.264 and H.265 choices are present and visible.
@@ -193,13 +230,16 @@ test.describe("@visual Task 13 quick wins", () => {
 		const dialog = page.getByRole("dialog", { name: "Encoder Settings" });
 		await expect(dialog).toBeVisible();
 
-		// Edit the restart-required video source, then mark the stream live: the
-		// edit can't apply mid-stream, so the "Applies on next start" badge shows.
-		await page.locator("#encoder-source").click();
-		await page.locator('[role="option"][data-value="hdmi"]').click();
+		// Edit the restart-required resolution, then mark the stream live: the edit
+		// can't apply mid-stream, so the "Applies on next start" badge shows. The
+		// source is no longer edited here (the Source section owns it since #137).
+		await page.locator("#encoder-resolution").click();
+		await page
+			.locator('[data-testid="resolution-option"][data-value="720p"]')
+			.click();
 		await emit(page, "status", { is_streaming: true });
 
-		const badge = page.getByTestId("source-applies-next-start");
+		const badge = page.getByTestId("resolution-applies-next-start");
 		await expect(badge).toBeVisible();
 		await expect(badge).toContainText(/next start/i);
 
