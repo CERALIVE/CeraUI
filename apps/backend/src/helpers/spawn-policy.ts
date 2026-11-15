@@ -316,6 +316,24 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			"argv-only spawnWithTimeout; RAUC install stays inside the UID pin through confirmed completion",
 	})),
 	{
+		id: "deviceLogs.journalFollow",
+		file: "modules/device-logs/follow.ts",
+		symbol: "nativeFollow",
+		command:
+			"[journalctl, -f, -o, json, --all, fixed fields, position, --, compiled matches]",
+		class: "watcher",
+		status: "enforced",
+		contract: {
+			timed: false,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: true,
+			lifetimeTimeoutExempt: true,
+		},
+		mechanism:
+			"Socket-owned abort; bounded batches; TERM/KILL and reap before replacement",
+	},
+	{
 		id: "deviceLogs.journalScan",
 		file: "modules/device-logs/reader.ts",
 		symbol: "scanJournal",
