@@ -9,6 +9,7 @@ import { PREVIEW_TOKEN_PARAM, PREVIEW_WS_PATH } from "@ceraui/rpc/schemas";
 import type { Server } from "bun";
 
 import { logger } from "../helpers/logger.ts";
+import { handleLogExportRequest } from "../modules/device-logs/export.ts";
 import { getIsStreaming } from "../modules/streaming/streaming.ts";
 import { getLocalObservability } from "../modules/system/observability.ts";
 import { getSystemdSocket } from "../modules/system/systemd.ts";
@@ -128,6 +129,10 @@ async function handleRequest(
 	server: Server<ServerSocketData>,
 ): Promise<Response> {
 	const url = new URL(req.url);
+
+	if (url.pathname === "/api/logs/export") {
+		return handleLogExportRequest(req);
+	}
 
 	// Single-use loopback kiosk-token exchange (DC-3): swap the tmpfs token for a
 	// session cookie, loopback-only. Returns null when no kiosk_token is present
