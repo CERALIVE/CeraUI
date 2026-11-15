@@ -40,3 +40,85 @@ records) and 8 MiB stdout. Exactly 8 MiB is allowed; the next byte is over budge
 The constants and all errors remain the reader's responsibility; this helper
 has no default clock, timer, process or reader import. Reader composition is
 provided by the separate bounded-reader unit.
+
+### Termination decision table
+
+`JournalChild.signalCode` is the native termination kind, read after reaping.
+A normal exit has `signalCode === null`; numeric 143 and 137 are ordinary
+failures in that case. They never prove TERM or KILL death.
+One classifier owns every process-completion decision after the child is joined.
+
+In this table `F` means `READ_FAILED`, `S` means `stopped`, and `B` means `budget`.
+`T` means the reader issued TERM; `TK` means it issued TERM and then escalation
+KILL. A cancellation request alone owns no OS signal.
+
+| Reaped observation | EOF/no signals | stop/no signals | stop/T | stop/TK | abort/no signals | abort/T | abort/TK | budget/no signals | budget/T | budget/TK |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Normal exit 0, signal null | eof | S | S | S | S | S | S | B | B | B |
+| Normal exit 1, signal null | F | F | F | F | F | F | F | F | F | F |
+| Normal exit 42, signal null | F | F | F | F | F | F | F | F | F | F |
+| Normal exit 137, signal null | F | F | F | F | F | F | F | F | F | F |
+| Normal exit 143, signal null | F | F | F | F | F | F | F | F | F | F |
+| Any other nonzero normal exit | F | F | F | F | F | F | F | F | F | F |
+| Signal TERM death | F | F | S | S | F | S | S | F | B | B |
+| Signal KILL death | F | F | F | S | F | F | S | F | F | B |
+| Signal INT death | F | F | F | F | F | F | F | F | F | F |
+| Signal HUP death | F | F | F | F | F | F | F | F | F | F |
+| Any other signal death | F | F | F | F | F | F | F | F | F | F |
+| Unknown numeric signal metadata | F | F | F | F | F | F | F | F | F | F |
+
+A signal is reader-owned only when its observed kind is among the signals this
+reader issued. Thus an external KILL after only TERM is F; reader escalation
+observed as KILL is S/B. A late TERM observation after escalation is also owned
+because TERM was issued. An ordinary 137 or 143 exit is always F.
+An exit already learned before stop/abort sends no new signal and uses the
+no-signals column. Stop/abort before reaping uses the signals actually issued.
+No cancellation arriving after successful completion changes an already returned
+EOF. A pre-aborted scan has no child and returns S with null exit code.
+
+### Observable death before a reader signal
+
+The classifier also receives `diedBeforeOurSignal`. When true, every cell in
+the termination table is `READ_FAILED`, including a normal zero exit whose death
+was already visible before the reader's first signal attempt. It is not evidence
+of a cancellation caused by the reader. An exit already learned before retirement
+does not cause a signal attempt and retains the no-signals table behavior.
+
+| Observation before signaling | `diedBeforeOurSignal` | Signals claimed | Normal 0 | Normal nonzero, including 137/143 | TERM death | KILL death | Other signal |
+|---|---|---|---|---|---|---|---|
+| Already dead before first TERM | true | none | F | F | F | F | F |
+| ESRCH on first TERM | true | none | F | F | F | F | F |
+| Alive/unknown before first TERM | false | only successfully attempted signals | prior table | F | prior table | prior table | F |
+| Already dead before escalation after valid TERM | false | TERM only | prior table | F | S/B | F | F |
+| Alive/unknown before escalation after valid TERM | false | TERM and successful KILL attempt | prior table | F | S/B | S/B | F |
+
+Immediately before TERM and before escalation KILL, the reader inspects the
+native `exitCode`, `signalCode` and `killed` fields. On Linux, when a child PID is
+available, it also reads `/proc/<pid>/stat`: zombie `Z`, dead `X`, or missing stat
+means already dead. The command name is delimited by its final closing parenthesis;
+state is field 3 and starttime is field 22. The reader captures starttime after
+spawn and compares it before signaling; a changed identity is never signaled.
+Missing stat at spawn remains evidence of death even if that PID later exists.
+These observations occur before joining/reaping the child.
+
+If death is visible before the first reader signal, the reader sends no signal
+and sets `diedBeforeOurSignal`. Before escalation, an already-dead child receives
+no KILL; a previously valid TERM attribution is retained and the classifier still
+checks the final termination kind. Thus an external INT/HUP/KILL after TERM
+cannot become reader-owned, while a death genuinely caused by that TERM remains
+a valid stop/budget. ESRCH from a signal attempt is harmless: no ownership is
+claimed for that signal and the child is still joined.
+
+On non-Linux or mock children without a PID there is no proc read; only native
+handle fields are used. An unreadable or malformed proc record is unknown,
+not already dead, and leaves the native-field observation in force. If the
+initial identity was unreadable, no starttime comparison is possible; observations
+remain restricted to the unreaped child handle and occur before the reader joins it.
+
+There is an irreducible race: an external identical-kind signal can arrive in
+the nanoseconds between the pre-kill observation and the reader's kill. The
+runtime exposes no pidfd attribution for these signals, so that case is
+indistinguishable and is classified as the reader's. The reader sends exactly
+one TERM; no later TERM can disambiguate which sender caused that death.
+This check proves only that death was not already observable before our signal,
+not universal causal ownership across that window.
