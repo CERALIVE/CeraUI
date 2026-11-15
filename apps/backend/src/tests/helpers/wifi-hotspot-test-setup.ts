@@ -6,6 +6,8 @@ import type {
 /** These suites deliver their trusted confirmation explicitly with settlePending. */
 export function mockHotspotConfirmationPoll(): void {
 	spyOn(defaultHotspotDeps, "pollHotspotActive").mockResolvedValue(true);
+	// These adapters do not model NM files; never probe the workstation's NM.
+	spyOn(defaultHotspotDeps, "readProfileInstance").mockResolvedValue(undefined);
 	spyOn(nm, "nmDevices").mockResolvedValue([]);
 }
 
@@ -41,7 +43,9 @@ export function makeDeps(
 	return {
 		nmConnect: async () => true,
 		nmConnSetFields: async () => true,
-		nmHotspot: async () => "hotspot-uuid",
+		nmApConnAdd: async () => "hotspot-uuid",
+		nmConnDelete: async () => true,
+		nmDisconnect: async () => true,
 		wifiUpdateSavedConns: async () => undefined,
 		broadcastState: () => undefined,
 		setDupIpSuppression: () => undefined,

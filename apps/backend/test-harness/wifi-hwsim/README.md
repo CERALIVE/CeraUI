@@ -182,12 +182,102 @@ loads a host module and remains outside shared CI.
 
 ### Later gates
 
-`replacement.ts`, `hybrid-target.ts` and `first-ap.ts` do not exist yet and must
+`replacement.ts` and `hybrid-target.ts` do not exist yet and must
 be committed before their reviewed gate head is qualified. Duplicate-address
 testing needs a working distinct-address creation control first. Require state
 100 **and the intended active profile/SSID** for association; the integration
 script's `connected` substring alone accepts `disconnected`. Establish positive
 controls before treating application refusal as a passing negative control.
+
+### First AP add-then-up gate
+
+`checks/first-ap.ts` is a local-only guest check. It calls the real
+`nmApConnAdd` and `nmConnect`, verifies the inactive profile's autoconnect,
+AP mode, permanent MAC and shared IPv4 fields, then checks AP mode/channel
+and client association with the exact profile and SSID. A working AP on
+distinct-address radio B is the positive control for B's later MAC-incompatible
+refusal of A's profile. It then restarts NetworkManager inside the guest and
+checks that the bus-scoped NM run identity changes while the settings fingerprint
+and persisted creation authority survive. Owned add/modify writes refresh the bound
+keyfile receipt within the same NM run; up/down/delete keep strict equality.
+Restart must preserve filename/device/inode/ctime.
+The same script then calls the backend's production `wifiHotspotStart` and
+`wifiHotspotStop` entry points for the saved UUID. A resolved-adapter test row
+uses real NM activity and sysfs data; the production radio-identity sampler
+must verify its lifetime and permanent MAC. Vendor/product remain unknown:
+neither product discovery nor identity logic is patched. This avoids assuming
+hwsim has physical manufacturer metadata.
+The fixture feeds the radio's observed operational MAC/IP through the existing
+device-list cache API. Real discovery publishes and retains its numeric ID;
+the harness does not register an ID mapping itself.
+
+The case first confirms activity after the NM restart, then Stops and Starts
+the same saved UUID. It requires the real terminal broadcast and connected NM
+state, and verifies the credential UUID remains bound; the transient creation
+marker retires on confirmation. Each confirmation has a 60-second deadline.
+The existing transaction, adapter lock, NM operations and bounded confirmation
+code all run with production defaults. RPC transport/admission is covered by
+the related RPC/roundtrip/context unit suites, not claimed by this native case.
+No second runner or product identity bypass is introduced.
+The check removes only its recorded
+profile UUIDs.
+
+The guest needs `dnsmasq-base` for NetworkManager's shared IPv4 mode; the
+baseline association harness does not install it. Provision that package
+inside the disposable guest before the check:
+
+```bash
+bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh --radios 4 --repo "$PWD" -- \
+  bash -c 'apt-get install -y dnsmasq-base && bun apps/backend/test-harness/wifi-hwsim/checks/first-ap.ts'
+```
+
+The four radios must belong to `mac80211_hwsim`. Root and the VM runner's
+`HWSIM_REPO=/repo` environment are required. The script never prints a PSK or
+a secret-bearing command exception. A source/type check does not qualify
+NetworkManager behavior; the VM run remains a separate gate.
+
+Failure receipts include a fixed phase and check id. Assertions report only
+expected/actual kinds and array lengths; values, exception messages/stacks and
+command argv are never serialized. Phase markers cover A's add, returned UUID,
+instance binding, settings read, provenance, binding tuple and inactive-state
+checks. `wifi-first-ap-diagnostics.test.ts` exercises that CLI boundary with
+credential-bearing command and assertion errors.
+Start admission, terminal Start confirmation and Stop outcomes retain only
+success and the canonical error enum in phase receipts, never a free-form reason.
+The adjacent `checks/first-ap-radio.test.ts` reproduces empty-cache `no-device`
+and verifies that observed MAC/IP keeps the ID through real discovery.
+
+The pending expanded case installs a guest-only nmcli shim which checks that
+the synthetic PSK never appears in child argv or environment. The AP and a
+separate station activation must associate using that persisted secret.
+The client setup also uses the protected secret boundary. Phase receipts
+never print the PSK, raw keyfile data or arbitrary command failures.
+
+The same saved-profile case starts the existing R1 restore composition,
+observes an externally downed owned AP and requires recovery on that exact
+owner. Public Stop must keep station intent without restart. Scheduled
+activation refusals must exhaust three attempts and degrade only that owner.
+The adjacent recovery test drives that orchestration against the existing
+R1 fake-NM fixture and fake clock; it does not qualify native behavior.
+
+Additional native cases compare real writes to the offline prediction for
+arm/disarm, binding, band/channel and credential deltas. The shim schedules
+in-place/atomic restores after the real reply, an in-place edit before the
+real write, and an actual activation between modify and readback. That
+activation must preserve authority when the predicted bytes match; VersionId
+is a diagnostic measurement, never equality evidence. On NM 1.42.4 the same
+activation control runs without that unsupported property.
+Foreign results must be preserved with no later product mutation and visible
+authority degradation. Exact daemon/offline byte parity remains unverified
+until the owner clears the expanded VM candidate. The NM 1.52.1 guest decision
+is pending; no run on that version is claimed.
+
+Retiring product readbacks now emit a sanitized WARN with changed field names,
+two-read stat witnesses, path/run flags and optional VersionId. The console
+therefore retains these receipts without requiring INFO logging. Secret
+rediscovery separately reports presence flags and short digests; empty or
+hidden display reads preserve the same owned profile's known credential.
+These diagnostics do not prove the cause of earlier uncaptured failures.
 
 ---
 

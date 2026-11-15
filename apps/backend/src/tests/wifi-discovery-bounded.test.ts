@@ -189,6 +189,7 @@ test("(3) rejection belongs to its run and queued callers recover together", asy
 });
 
 test("(4) the production activation confirmation waits for the queued discovery", async () => {
+	spyOn(nm, "nmDeviceProp").mockResolvedValue(["100", "ap"]);
 	const iface: WifiInterfaceWithHotspot = {
 		id: 0,
 		ifname: "wlan0",

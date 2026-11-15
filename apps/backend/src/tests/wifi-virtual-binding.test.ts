@@ -87,7 +87,7 @@ for (const source of sources)
 						});
 					} else if (event === "confirmation-failure") {
 						expect(await fixture.start()).toEqual({ success: true });
-						settlePending(fixture.row().ifname, false);
+						await settlePending(fixture.row().ifname, false);
 					}
 				} else if (event === "absent-then-parent") {
 					await fixture.discover([bindingParent]);

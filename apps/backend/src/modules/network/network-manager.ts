@@ -31,6 +31,21 @@ import {
 	parseFail,
 	parseOk,
 } from "../system/cli-parse.ts";
+import {
+	type HotspotProfileOperation,
+	type HotspotProfileOperationResult,
+	runHotspotProfileOperation,
+} from "../wifi/wifi-hotspot-profile-operation.ts";
+import { parseNmcliFields } from "./network-manager-output.ts";
+import type { NmProfileReadTrace } from "./network-manager-profile-diagnostics.ts";
+import {
+	type NmProfileInstance,
+	readNmProfileInstance,
+	sameNmProfileResource,
+} from "./network-manager-profile-instance.ts";
+import { writeNmWifiSecret } from "./network-manager-secret.ts";
+
+export { nmcliParseSep } from "./network-manager-output.ts";
 
 export type ConnectionUUID = string;
 export type MacAddress = string;
@@ -88,6 +103,30 @@ export async function nmConnAdd(connection: NetworkManagerConnection) {
 	return undefined;
 }
 
+async function readNmFields(
+	fields: string,
+	command: string[],
+	secrets = false,
+) {
+	const names = fields.split(",");
+	const args = [
+		"--mode",
+		"multiline",
+		"--terse",
+		"--escape",
+		"no",
+		...(secrets ? ["--show-secrets"] : []),
+		"--fields",
+		fields,
+		...command,
+	];
+	const mock = shouldMockWifi() ? handleNmcliCommand(args) : null;
+	const stdout = mock ?? (await run("nmcli", args));
+	const row = parseNmcliFields(stdout, names);
+	if (!row?.size) throw new Error("NM named-field output rejected");
+	return row;
+}
+
 export async function nmConnsGet(fields: string) {
 	try {
 		// Check for mock mode
@@ -112,8 +151,8 @@ export async function nmConnsGet(fields: string) {
 			"show",
 		]);
 		return stdout.split("\n");
-	} catch (err) {
-		logger.error(`nmConnsGet err: ${describeCliError(err)}`);
+	} catch {
+		logger.error("nmConnsGet: profile inventory failed");
 	}
 	return undefined;
 }
@@ -121,9 +160,23 @@ export async function nmConnsGet(fields: string) {
 export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
 	uuid: ConnectionUUID,
 	fields: Tupel,
+	layout?: "fixed",
 ) {
 	try {
-		// Check for mock mode
+		if (
+			layout !== "fixed" &&
+			new Set(fields.map((field) => field.split(".")[0])).size > 1
+		) {
+			const row = await readNmFields(
+				fields.join(","),
+				["connection", "show", argMatch(ID_RE, uuid)],
+				true,
+			);
+			return fields.map((field) => row.get(field.toLowerCase()) ?? "") as {
+				[K in keyof Tupel]: string;
+			};
+		}
+		// A single setting cannot omit an intervening setting's value.
 		if (shouldMockWifi()) {
 			const mockOutput = handleNmcliCommand([
 				"--terse",
@@ -136,13 +189,11 @@ export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
 				"show",
 				uuid,
 			]);
-			if (mockOutput !== null) {
+			if (mockOutput !== null)
 				return mockOutput.split("\n") as {
 					[K in keyof Tupel]: string;
 				};
-			}
 		}
-
 		const stdout = await run("nmcli", [
 			"--terse",
 			"--escape",
@@ -157,8 +208,8 @@ export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
 		return stdout.split("\n") as {
 			[K in keyof Tupel]: string;
 		};
-	} catch (err) {
-		logger.error(`nmConnGetFields err: ${describeCliError(err)}`);
+	} catch {
+		logger.error("nmConnGetFields: profile read failed");
 	}
 	return undefined;
 }
@@ -174,6 +225,8 @@ export async function nmConnSetFields(
 			return true;
 		}
 
+		if (fields["802-11-wireless-security.psk"] !== undefined)
+			return await writeNmWifiSecret(argMatch(ID_RE, uuid), fields);
 		const args = ["con", "modify", argMatch(ID_RE, uuid)];
 		for (const field in fields) {
 			const value = fields[field];
@@ -184,10 +237,8 @@ export async function nmConnSetFields(
 		}
 		const stdout = await run("nmcli", args);
 		return stdout === "";
-	} catch (err) {
-		if (err instanceof Error) {
-			logger.error(`nmConnSetFields err: ${err.message}`);
-		}
+	} catch {
+		logger.error("nmConnSetFields: connection update failed");
 	}
 	return false;
 }
@@ -219,14 +270,25 @@ export async function nmConnDelete(uuid: ConnectionUUID) {
 		}
 
 		const stdout = await run("nmcli", ["conn", "del", argMatch(ID_RE, uuid)]);
-		return parseNmConnDeleted(stdout);
+		if (parseNmConnDeleted(stdout)) return true;
 	} catch (err) {
 		logger.error(`nmConnDelete err: ${describeCliError(err)}`);
 	}
-	return false;
+	const rows = await nmConnsGet("uuid");
+	return Boolean(
+		rows?.every(
+			(row) =>
+				row === "" ||
+				/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(row),
+		) && !rows.includes(uuid),
+	);
 }
 
-export async function nmConnect(uuid: ConnectionUUID, timeout?: number) {
+export async function nmConnect(
+	uuid: ConnectionUUID,
+	timeout?: number,
+	onActivated?: (path: string) => void,
+) {
 	try {
 		// In mock mode, simulate successful connection
 		if (shouldMockWifi()) {
@@ -239,6 +301,10 @@ export async function nmConnect(uuid: ConnectionUUID, timeout?: number) {
 			"nmcli",
 			timeoutArgs.concat(["conn", "up", argMatch(ID_RE, uuid)]),
 		);
+		const path = stdout.match(
+			/D-Bus active path: (\/org\/freedesktop\/NetworkManager\/ActiveConnection\/\d+)/,
+		)?.[1];
+		if (path) onActivated?.(path);
 		return parseNmConnActivated(stdout);
 	} catch (err) {
 		logger.error(`nmConnect err: ${describeCliError(err)}`);
@@ -317,6 +383,24 @@ export async function nmDeviceProp(
 			});
 		}
 
+		if (
+			new Set(fields.split(",").map((field) => field.split(".")[0])).size > 1
+		) {
+			const row = await readNmFields(fields, [
+				"device",
+				"show",
+				argMatch(ID_RE, device),
+			]);
+			return mode === "multiline"
+				? [...row].map(([key, value]) => `${key.toUpperCase()}:${value}`)
+				: fields.split(",").map((field) => {
+						const base = field.toLowerCase();
+						return [...row]
+							.filter(([key]) => key.replace(/\[\d+\]$/, "") === base)
+							.map(([, value]) => value)
+							.join("\n");
+					});
+		}
 		const stdout = await run("nmcli", [
 			...(mode === undefined ? [] : ["--mode", mode]),
 			"--terse",
@@ -408,55 +492,164 @@ export async function nmScanResults(fields: string) {
 	return undefined;
 }
 
-export async function nmHotspot(
-	device: string,
-	ssid: string,
-	password: string,
-	timeout?: number,
-) {
-	try {
-		// In mock mode, return a fake hotspot UUID
-		if (shouldMockWifi()) {
-			const fakeUuid = `hotspot-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-			logger.info(
-				`🎭 Mock: Started hotspot ${ssid} on ${device} with UUID ${fakeUuid}`,
-			);
-			return fakeUuid;
-		}
-
-		const timeoutArgs = timeout ? ["-w", String(timeout)] : [];
-		const stdout = await run(
-			"nmcli",
-			timeoutArgs.concat([
-				"device",
-				"wifi",
-				"hotspot",
-				"ssid",
-				ssid,
-				"password",
-				password,
-				"ifname",
-				argMatch(ID_RE, device),
-			]),
-		);
-
-		const parsed = parseNmHotspotUuid(stdout);
-		if (parsed.ok) return parsed.value;
-		logParseError(parsed);
-		return null;
-	} catch (err) {
-		// argv carries the hotspot password — keep the redacted-by-logger
-		// message, never surface stderr/argv which could echo the secret.
-		if (err instanceof Error) {
-			logger.error(`nmHotspot err: ${err.message}`);
-		}
+/** A dispatched add failed; its exact UUID and checked cleanup outcome survive. */
+export class NmApConnAddError extends Error {
+	constructor(
+		readonly uuid: string,
+		readonly cleanupConfirmed: boolean,
+		readonly autoconnectDisabled: boolean,
+		readonly instance?: NmProfileInstance | null,
+	) {
+		super("Hotspot profile creation failed");
+		this.name = "NmApConnAddError";
 	}
-	return undefined;
 }
 
-// parses : separated values, with automatic \ escape detection and stripping
-export function nmcliParseSep(value: string) {
-	return value.split(/(?<!\\):/).map((a) => a.replace(/\\:/g, ":"));
+/** Create a bound AP profile without selecting or activating a device. */
+export async function nmApConnAdd(
+	device: string,
+	identity: { readonly name: string; readonly password: string },
+	bindingFields: Readonly<Record<string, string>>,
+	recordCreation?: (uuid: string, instance?: NmProfileInstance) => boolean,
+): Promise<string | undefined> {
+	// Retain our UUID before dispatch; a mismatched receipt never grants cleanup
+	// authority over the UUID printed by NetworkManager.
+	const uuid = crypto.randomUUID();
+	let dispatched = false;
+	let instance: NmProfileInstance | null | undefined;
+	let secretWrite: HotspotProfileOperationResult | null | undefined;
+	const fields = {
+		type: "wifi",
+		ifname: device,
+		"connection.id": "Hotspot",
+		"802-11-wireless.ssid": identity.name,
+		"802-11-wireless.mode": "ap",
+		"ipv4.method": "shared",
+		"ipv6.method": "ignore",
+		"802-11-wireless-security.key-mgmt": "wpa-psk",
+		"802-11-wireless-security.proto": "rsn",
+		"802-11-wireless-security.pairwise": "ccmp",
+		"802-11-wireless-security.group": "ccmp",
+		"802-11-wireless-security.psk": identity.password,
+		"802-11-wireless-security.psk-flags": "0",
+		...bindingFields,
+		"connection.autoconnect": "no",
+		"connection.uuid": uuid,
+	};
+	const submitted = {
+		...Object.fromEntries(
+			Object.entries(fields).filter(
+				([key]) => key !== "type" && key !== "ifname",
+			),
+		),
+		"connection.type": "802-11-wireless",
+	};
+	const initial = { ...submitted, "802-11-wireless-security.psk": "" };
+	const readSubmitted = async (
+		id: string,
+		_fields?: Readonly<Record<string, string>>,
+		trace: NmProfileReadTrace = {},
+	) => {
+		if (secretWrite === null || secretWrite?.checked === false) {
+			trace.exit = "owned-write-unverified";
+			return undefined;
+		}
+		const observed = await readNmProfileInstance(id, submitted, trace);
+		return secretWrite?.instance &&
+			!sameNmProfileResource(secretWrite.instance, observed)
+			? undefined
+			: observed;
+	};
+	try {
+		if (recordCreation && !recordCreation(uuid)) return undefined;
+		if (shouldMockWifi()) return uuid;
+		argMatch(ID_RE, device);
+		dispatched = true;
+		let stdout: string | undefined;
+		const added = await runHotspotProfileOperation(
+			{
+				uuid,
+				kind: "add",
+				run: async () => {
+					stdout = await run("nmcli", [
+						"connection",
+						"add",
+						...Object.entries(fields)
+							.filter(([key]) => key !== "802-11-wireless-security.psk")
+							.flat(),
+					]);
+					instance = await readNmProfileInstance(uuid, initial);
+					if (!instance?.file) return false;
+					secretWrite = null;
+					secretWrite = await runHotspotProfileOperation(
+						{
+							uuid,
+							kind: "modify",
+							fields: { "802-11-wireless-security.psk": identity.password },
+							run: (delta) => nmConnSetFields(uuid, delta),
+						},
+						{ instance, readProfileInstance: readNmProfileInstance },
+					);
+					if (secretWrite.checked) instance = secretWrite.instance;
+					return secretWrite.success;
+				},
+			},
+			{ instance: null, readProfileInstance: readSubmitted },
+		);
+		if (added.checked) instance = added.instance;
+		if (stdout !== undefined) {
+			const parsed = parseNmConnAddUuid(stdout);
+			if (
+				added.success &&
+				instance &&
+				parsed.ok &&
+				parsed.value === uuid &&
+				(!recordCreation || recordCreation(uuid, instance))
+			)
+				return uuid;
+		}
+		logger.error("nmApConnAdd: profile creation receipt could not be verified");
+	} catch {
+		// An nmcli error can echo the complete argv, stdout or PSK in its message.
+		logger.error("nmApConnAdd: connection add failed");
+	}
+	if (dispatched) {
+		if (secretWrite === null || secretWrite?.checked === false)
+			return undefined;
+		instance ??=
+			(await readSubmitted(uuid)) ??
+			(await readNmProfileInstance(uuid, initial));
+		// Different submitted settings grant no creation or cleanup authority.
+		if (!instance?.file) return undefined;
+		const act = async (
+			operation: HotspotProfileOperation,
+		): Promise<boolean> => {
+			const result = await runHotspotProfileOperation(operation, {
+				instance,
+				readProfileInstance: readNmProfileInstance,
+			});
+			instance = result.instance;
+			return result.success;
+		};
+		const autoconnectDisabled = await act({
+			uuid,
+			kind: "modify",
+			fields: { "connection.autoconnect": "no" },
+			run: (delta) => nmConnSetFields(uuid, delta),
+		});
+		const cleanupConfirmed = await act({
+			uuid,
+			kind: "delete",
+			run: () => nmConnDelete(uuid),
+		});
+		throw new NmApConnAddError(
+			uuid,
+			cleanupConfirmed,
+			autoconnectDisabled,
+			instance,
+		);
+	}
+	return undefined;
 }
 
 // ─── named result parsers (fail-loud on nmcli output drift) ──────────────────

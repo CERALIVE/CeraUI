@@ -7,6 +7,106 @@ Every adapter-keyed Wi-Fi structure uses the coherent lifetime sample from
 hardware address as the registry, numeric-id-map and credential-store key;
 NetworkManager profiles are pinned to that permanent address.
 
+### Hotspot profile writes [EXISTS; native requalification pending]
+
+The NetworkManager boundary keeps PSKs off child argv and environment. It
+normalizes secret-bearing keyfile data through the existing bounded stdin
+runner, writes a mode-0600 sibling, fsyncs and atomically publishes it before
+asking NM to load it. First add remains inactive and autoconnect-off; submitted
+SSID, security, credential and binding fields must match before the checked
+receipt can grant creation or cleanup authority. Start carries that receipt.
+An indistinguishable exact clone before add readback remains outside this
+settings-based guarantee.
+
+Every owned keyfile modify declares its exact delta. The existing operation
+helper holds the verified old inode open, predicts the resulting bytes with
+NM's own offline serializer and skips no-ops. A success adopts only exact
+predicted bytes with an unchanged old inode's content. Only the canonical
+`[connection]` timestamp may differ, and only when its value matches the daemon
+timestamp read inside the coherent profile observation. Duplicate groups/keys,
+foreign settings and every other byte remain subject to exact equality.
+The resulting verified file becomes the new receipt. VersionId is diagnostic
+only: NM can activate outside the adapter lock and advance it independently.
+A failure with the original inode,
+metadata and bytes unchanged retains the prior receipt without rebinding it.
+All other outcomes preserve the profile, retire authority and degrade health.
+Ephemeral descriptors, bytes and read receipts add no persistent recovery store.
+Up, down and delete compare settings, file identity and bytes without adopting
+new file evidence.
+
+File observation lives in `network-manager-profile-file.ts`; read-only byte
+classification lives in `wifi-hotspot-profile-readback.ts`. The existing
+operation helper remains the sole dispatch/retirement owner and uses the
+same credential record store.
+
+Mixed-setting readback is keyed by the explicit NM field name through
+`network-manager-output.ts`. An absent optional setting never shifts later
+values; a wholly empty or malformed reply grants no evidence. Multiline values
+remain literal, including colons, backslashes and whitespace. Single-setting,
+scalar and fixed-list reads preserve their existing argv. Non-owned client
+profiles share the protected secret writer and strict file proof without
+requiring AP-mode or adapter-owner evidence. Rejected writes emit a WARN with
+only the whitelisted rejecting-check code.
+
+Mixed-section device reads project indexed fields to their requested base
+field in producer order, joining multiple values with a newline. Named multiline
+mode retains the original indexed labels; missing fields still yield an empty
+scalar and duplicate labels reject the entire reply.
+
+NM 1.42.4 and 1.52.1 both provide the offline stdin/keyfile serializer; native
+daemon/offline byte parity is a separate gate and mismatches fail closed.
+Byte-identical foreign writes after NM's rename and whole-file replacement
+before its rename remain the documented limits.
+
+#### Known limits
+
+**LOW-1: No-op prediction can miss live autoconnect drift.** If the keyfile
+still says `no`, a temporary live NM change sets `yes`, and the request returns
+to `no` (A -> B -> A), byte prediction sees no file delta. Dispatch is skipped
+and the ownership fingerprint excludes autoconnect, so success can leave the
+live value at `yes`. No-op behavior is unchanged by this round.
+
+**LOW-2: Option B proves resulting content, not who last wrote it.** A foreign
+byte-identical replacement after NM's write is adopted and may later receive
+our cleanup actions. NM can also overwrite an atomic foreign replacement
+before its rename. These are accepted attribution limits, not an authorship
+guarantee; VersionId remains diagnostic only.
+
+Every authority-retiring readback emits one WARN with the reason, changed
+setting names, missing-file-receipt category, numeric stat witnesses,
+path/run change flags and optional VersionId. Ephemeral observation metadata
+belongs to the existing receipt and never enters its persisted JSON. A loaded
+receipt without per-field history reports that comparison as unavailable.
+Warnings never include setting values, raw keyfiles, filenames, PSKs or argv.
+
+### Hotspot credential rediscovery [EXISTS; host-tested only]
+
+Empty or hidden NM secret readbacks cannot replace a known credential for
+the same UUID and binding. Discovery retains the existing stored credential;
+the limited active-profile view uses the same rule without admitting control.
+A first Start still protects its resolved chosen credential before the durable
+UUID hint is written, using the accepted UUID/binding evidence.
+Every available initial or changed secret must match a fresh coherent profile
+read and its persistent keyfile through NM's own serializer before publication
+or persistence. A stale display value is never credential authority.
+An owned write completed during verification wins over that older read.
+The guarded cache/store commit emits only presence flags and short digests.
+Credentials never carry into another UUID or a rejected binding.
+
+Prepare and Start verify a selected lookup credential through
+`readVerifiedNmWifiSecret` before it enters the cache or identity store.
+Lookup/display tuples are hints, including when no durable UUID hint exists.
+The shared verifier reads the guarded persistent keyfile and checks it through
+NM's serializer; a stale display password cannot become a chosen credential.
+Owned create, repair, Save and rollback writes remain checked before publication.
+
+The same guarded file-secret observation supplies the credential component of
+`readNmProfileInstance` and its submitted-field comparison. This reader does not
+request the nmcli PSK display field. Empty/hidden/plaintext visibility changes
+therefore cannot fail an add or change activation/cleanup authority. The
+persisted secret still must match exactly, and non-secret NM settings plus
+strict file/byte evidence remain mandatory. No credential store is added.
+
 ### Hotspot autoconnect policy [EXISTS; host-tested only]
 
 `wifi-adapter-reconciler.ts` is the single policy/convergence authority.
@@ -226,6 +326,104 @@ late SSID selection and new/existing-profile activation against the reviewed
 pre-fix head. Single-adapter discovery and verified/unverified prepare/start
 controls retain the existing results. These tests prove dispatch and return
 behavior at the host boundary; they do not qualify physical NM scheduling.
+
+### First hotspot profile [EXISTS; host-tested only]
+
+First Start uses `nmApConnAdd` to create a persistent AP profile with its bind
+and security fields and `autoconnect=no` in one command. The helper generates
+the UUID before dispatch and accepts only that UUID in the add receipt.
+Lock-entry admission precedes creation and activation; internal callers retain
+the existing ownership and limited-row rules. Ownership checks and NM refusal
+remain the checks between add and up. Fresh physical re-admission belongs to
+the later in-operation admission change.
+
+A dispatched add failure or receipt mismatch deletes only the generated UUID,
+including when NetworkManager created the profile before the runner rejected.
+Start retains that exact-UUID cleanup until the transaction accepts success.
+Ownership loss, saved-refresh or autoconnect failure, activation refusal and
+post-up exceptions attempt a checked autoconnect-off write, deactivate an
+attempted activation and delete the new profile. An unsuccessful teardown
+retains the exact UUID, matching cache/store adoption and allocation receipt
+as an input to the logical owner's reconciler. Start, Stop and discovery consume
+that obligation under the same owner lock. It reports `cleanup-pending` and logs the checked
+suppression/deactivation results instead of pretending the profile is gone.
+Failed cleanup uses the existing five-minute discovery retry budget. Stop attempts
+the retained UUID even when the row has not observed its activation; a successful
+disconnect reports stopped while unfinished deletion or policy remains degraded
+and retryable. An unsuccessful disconnect retains the existing failure result.
+
+Before the atomic add, the generated UUID is written as `pendingCreation` in the
+existing credential ownership record. The store stays version 2; ordinary
+adoption preserves this private field but cannot create it. A failed record write
+refuses the add. Confirmed activation, completed cleanup or confirmed absence
+retires only the matching UUID. A profile rename preserves creation evidence;
+an observed replacement settings object retires the old resource's record.
+Before up, the record is durably bound to the exact NM settings path, NM run
+identity, resource fingerprint and keyfile filename/device/inode/ctime.
+Startup checks that instance at observation and again
+before down/off writes. Mismatch, including a same-path settings replacement,
+retires the record without touching the profile; unbound records grant no
+teardown authority. The fingerprint excludes the cosmetic profile name while
+including its literal path binding.
+The NM profile ID is again the cosmetic `Hotspot`, with no provenance authority.
+There is no separate durable store. Before legacy missing-intent backfill or
+restoration, startup requires positive owned-AP evidence and a unique UUID owner;
+without saved hotspot/hybrid intent it deactivates the observed AP and checks
+autoconnect-off. Failed reads or actions retain owner degradation and bounded
+retry. It never deletes by name. An unstamped legacy profile keeps B5's upgrade
+preservation rule; saved hotspot/hybrid intent keeps the chosen AP available.
+
+Cleanup authority captures the NM settings object path, its bus-scoped unique
+NM owner and a fingerprint of the profile's binding, credentials and AP settings.
+Paths are compared only within the same identified NM run. Passive observations
+and pre-action checks always require unchanged file identity. Across runs, matching
+settings and unchanged file identity rebind the existing creation record and cleanup progress to the new run
+before actions; the next same-run replacement still invalidates them. Every cleanup action
+re-reads that evidence. A changed or absent instance drops the obligation
+without suppressing, disconnecting or deleting a replacement with the same
+UUID. A changed or unreadable file drops authority with visible hotspot health
+degradation. Checked add readback establishes the initial receipt. A successful
+modify refreshes it only when same-run object continuity, the held old inode
+and NM's exact byte prediction agree. A failed or lost modify reply with unchanged
+resource, metadata and bytes retains the prior receipt without rebinding; every
+other failed outcome retires authority and leaves the profile untouched.
+Up/down/delete retain strict evidence checks; they never authorize a changed file.
+A restart between commit and readback
+cannot establish continuity and leaves the profile untouched. Dropping stale authority also
+invalidates its cached active aliases before Start can accept an already-active
+shortcut.
+
+Confirmed removal (including an authoritative UUID list after a lost delete
+reply) clears matching provisional adoption and cached active aliases.
+Deletion epochs fence delayed discovery only while those continuations remain
+in flight; their scoped disposers retire the tombstones at settlement.
+Replaced hotspot objects, replacement store entries and unrelated profiles
+remain intact. A failed fresh
+add cannot restore the deleted UUID from an older cache snapshot.
+
+Retained cleanup remembers checked autoconnect suppression and disconnection.
+A retry reads NM's UUID/active inventory, keeps confirmed stopped state for an
+inactive profile, and retries deletion without a redundant down. A refused down
+is accepted as stopped only after that inventory proves the UUID inactive;
+unreadable or active evidence retains failure and the bounded recovery path.
+
+Monitor events trigger confirmation rather than proving it. The pending
+activation captures its UUID, hotspot object, activation interface, profile
+instance and the active-connection path returned by NM's up receipt.
+Production confirmation waits for the shared discovery flight, brackets an
+AP-profile mode read with device-state/UUID/active-path reads, and compares the
+profile instance on both sides. After the final roster await it rechecks the
+captured settings instance and active path, while retaining the original queued
+discovery order. A replacement during that await cannot confirm. It accepts only state 100 on the captured
+activation and profile in AP mode. A station reconnect or same-name connection
+cannot publish hotspot success. The existing bounded timeout still applies.
+
+Command failures and malformed receipts never log the passphrase. Regressions
+are split across `wifi-first-ap-add-then-up.test.ts`, `wifi-first-ap-cleanup.test.ts`,
+`wifi-first-ap-discovery.test.ts`, `wifi-first-ap-confirmation.test.ts` and
+`wifi-first-ap-instance.test.ts` and `wifi-first-ap-reconcile.test.ts`, with command and instance fixtures under
+`helpers/wifi-first-ap-*.ts`. Real NM qualification uses the local-only
+`test-harness/wifi-hwsim/checks/first-ap.ts` VM check and remains separate.
 
 ### Sampled lifetime identity [EXISTS; host-tested only]
 

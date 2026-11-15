@@ -6,16 +6,13 @@ import {
 	getHotspotCredentials,
 } from "./hotspot-credentials.ts";
 import { getDerivedApChannels, refreshHotspotChannels } from "./regdomain.ts";
-
 import {
 	type getPersistedWifiAdapterModes,
 	observedWifiAdapterMode,
 	resolveWifiAdapterModeIntentKey,
 	wifiAdapterModeCapability,
 } from "./wifi-adapter-mode.ts";
-
 import type { AdapterModeTransitionDeps } from "./wifi-adapter-mode-transition.ts";
-
 import { channelFromNM } from "./wifi-channels.ts";
 import {
 	type ConcurrentApInterface,
@@ -23,6 +20,7 @@ import {
 	ensureConcurrentApInterface,
 	releaseCreatedConcurrentApInterface,
 } from "./wifi-concurrent-interface.ts";
+import { runHotspotProfileOperation } from "./wifi-hotspot-profile-operation.ts";
 import {
 	canHotspot,
 	HOTSPOT_UP_TO,
@@ -119,7 +117,14 @@ export async function restoreLimitedHotspot(
 		}
 		if (!canUseHotspotConnection(key, stored.conn))
 			return pending("profile ownership changed");
-		const activated = await nmConnect(stored.conn, HOTSPOT_UP_TO);
+		const restoreUuid = stored.conn;
+		const activated = (
+			await runHotspotProfileOperation({
+				uuid: restoreUuid,
+				kind: "up",
+				run: () => nmConnect(restoreUuid, HOTSPOT_UP_TO),
+			})
+		).success;
 		if (stopped()) return undefined;
 		if (!activated) {
 			refuse("activation failed");

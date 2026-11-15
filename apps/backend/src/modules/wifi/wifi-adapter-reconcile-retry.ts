@@ -6,7 +6,52 @@ import {
 	scheduleWifiDiscoveryRetry,
 } from "./wifi-interfaces.ts";
 
-const owners = new Map<string, { deadline: number; pending: Set<string> }>();
+export type WifiPendingTeardownResult = {
+	readonly complete: boolean;
+	readonly stopped: boolean;
+};
+
+type OwnerRecovery = {
+	deadline: number;
+	pending: Set<string>;
+	teardown?: () => Promise<WifiPendingTeardownResult>;
+};
+
+const owners = new Map<string, OwnerRecovery>();
+
+function recoveryFor(owner: string): OwnerRecovery {
+	let state = owners.get(owner);
+	if (!state) {
+		state = { deadline: getms() + 5 * 60 * 1000, pending: new Set() };
+		owners.set(owner, state);
+	}
+	return state;
+}
+
+/** Captured-resource executors submit obligations under the existing owner lock. */
+export function registerWifiAdapterTeardownLocked(
+	owner: string,
+	teardown: () => Promise<WifiPendingTeardownResult>,
+): void {
+	recoveryFor(owner).teardown = teardown;
+	retryWifiAdapterReconcile(owner, "first-start cleanup pending", "cleanup");
+}
+
+/** Start, Stop and discovery consume the same input under that same lock. */
+export async function reconcileWifiAdapterTeardownLocked(
+	owner: string,
+): Promise<WifiPendingTeardownResult> {
+	const state = owners.get(owner);
+	if (!state?.teardown) return { complete: true, stopped: true };
+	const result = await state.teardown();
+	if (result.complete) {
+		delete state.teardown;
+		clearWifiAdapterReconcile(owner, "cleanup");
+	} else {
+		retryWifiAdapterReconcile(owner, "first-start cleanup pending", "cleanup");
+	}
+	return result;
+}
 
 /** One owner budget, using the existing coalesced discovery timer for all causes. */
 export function retryWifiAdapterReconcile(
@@ -18,11 +63,7 @@ export function retryWifiAdapterReconcile(
 		logger.error(`Wi-Fi hotspot ${subsystem} failed for ${owner}: ${reason}`);
 		markBootDegraded(`wifi-hotspot-${subsystem}:${owner}`);
 	}
-	let state = owners.get(owner);
-	if (!state) {
-		state = { deadline: getms() + 5 * 60 * 1000, pending: new Set() };
-		owners.set(owner, state);
-	}
+	const state = recoveryFor(owner);
 	state.pending.add(subsystem);
 	if (getms() < state.deadline) scheduleWifiDiscoveryRetry();
 	return false;

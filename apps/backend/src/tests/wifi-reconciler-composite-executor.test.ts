@@ -24,6 +24,15 @@ test.each(["hotspot", "hybrid"] as const)(
 	"r5 default executor restores composite %s intent with physical NM pins",
 	async (mode) => {
 		const owner = `${MAC}@phy0`;
+		const confirmed = Promise.withResolvers<void>();
+		spyOn(defaultAdapterModeDeps, "publishHotspotOutcome").mockImplementation(
+			(kind, _device, outcome) => {
+				if (kind !== "start") return;
+				if (outcome.success) confirmed.resolve();
+				else
+					confirmed.reject(new Error("Composite fixture confirmation refused"));
+			},
+		);
 		resetHotspotCredentialsForTest();
 		rememberHotspotCredentials(owner, {
 			ssid: "Policy AP",
@@ -42,18 +51,21 @@ test.each(["hotspot", "hybrid"] as const)(
 		spyOn(defaultHotspotDeps, "nmConnSetFields").mockImplementation(
 			(uuid, fields) => nm.nmConnSetFields(uuid, fields),
 		);
-		spyOn(defaultHotspotDeps, "nmConnect").mockImplementation(async (uuid) => {
-			f.activations.push(uuid);
-			f.list(
-				mode === "hybrid"
-					? [
-							"wlan0:wifi:connected:station-link",
-							`clap-wlan0:wifi:connected:${uuid}`,
-						]
-					: [`wlan0:wifi:connected:${uuid}`],
-			);
-			return true;
-		});
+		spyOn(defaultHotspotDeps, "nmConnect").mockImplementation(
+			async (uuid, _timeout, activated) => {
+				activated?.("/org/freedesktop/NetworkManager/ActiveConnection/1");
+				f.activations.push(uuid);
+				f.list(
+					mode === "hybrid"
+						? [
+								"wlan0:wifi:connected:station-link",
+								`clap-wlan0:wifi:connected:${uuid}`,
+							]
+						: [`wlan0:wifi:connected:${uuid}`],
+				);
+				return true;
+			},
+		);
 		spyOn(defaultHotspotDeps, "pollHotspotActive").mockResolvedValue(true);
 		spyOn(defaultHotspotDeps, "pruneHotspotConns").mockResolvedValue();
 		spyOn(defaultHotspotDeps, "ensureConcurrentInterface").mockResolvedValue({
@@ -69,7 +81,7 @@ test.each(["hotspot", "hybrid"] as const)(
 			...defaultAdapterModeDeps,
 			readCapabilities: () => ({ staApCombo: { supported: true } }),
 		});
-		for (let turn = 0; turn < 256; turn++) await Promise.resolve();
+		await confirmed.promise;
 		expect(f.activations).toEqual([PROFILE]);
 		expect(observedWifiAdapterMode(f.row())).toBe(mode);
 		expect(getHotspotCredentials(owner)?.conn).toBe(PROFILE);

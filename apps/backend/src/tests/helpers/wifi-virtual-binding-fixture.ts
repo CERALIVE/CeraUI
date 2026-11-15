@@ -27,6 +27,7 @@ import * as monitor from "../../modules/wifi/wifi-hotspot-monitor.ts";
 import { canHotspot } from "../../modules/wifi/wifi-hotspot-types.ts";
 import * as interfaces from "../../modules/wifi/wifi-interfaces.ts";
 import { wifiRadioObservation } from "../../modules/wifi/wifi-radio-observation.ts";
+import { nmcliFieldNames, nmcliFieldOutput } from "./nmcli-field-output.ts";
 import type { RadioFixture } from "./wifi-radio-equivalence.ts";
 import { fakeShadowSysfs } from "./wifi-radio-equivalence-shadow.ts";
 
@@ -59,6 +60,7 @@ export async function virtualBindingFixture() {
 	const active = new Set<string>(["foreign-ap"]);
 	const down: string[] = [];
 	const modified = new Set<string>();
+	let confirmation = false;
 	const profile = (uuid: string, fields: readonly string[]) => {
 		if (
 			uuid === unreadableHandoffMode &&
@@ -124,8 +126,11 @@ export async function virtualBindingFixture() {
 	});
 	spyOn(connections, "wifiUpdateScanResult").mockResolvedValue(false);
 	spyOn(runner, "run").mockImplementation(async (bin, args) => {
-		if (bin === "nmcli" && args.includes("--get-values"))
-			return profile(args.at(-1) ?? "", (args[5] ?? "").split(",")).join("\n");
+		const names = nmcliFieldNames(args);
+		if (bin === "nmcli" && names.length > 0) {
+			const values = profile(args.at(-1) ?? "", names);
+			return nmcliFieldOutput(args, (field) => values[names.indexOf(field)]);
+		}
 		throw new Error(`Unexpected binding fixture command ${bin}`);
 	});
 	concurrent.setConcurrentInterfaceDepsForTest(
@@ -189,6 +194,7 @@ export async function virtualBindingFixture() {
 			return row();
 		},
 		async start(fail = false) {
+			confirmation = false;
 			const {
 				recordIntent: _intent,
 				pollHotspotActive: _poll,
@@ -200,13 +206,17 @@ export async function virtualBindingFixture() {
 				credentials: { get: () => undefined, remember: () => undefined },
 				findHotspotConn: async () => undefined,
 				preferConcurrentAp: () => true,
-				nmHotspot: async () => (fail ? undefined : "old-ap"),
+				nmApConnAdd: async () => (fail ? undefined : "old-ap"),
 				nmConnect: async () => !fail,
 				nmConnSetFields: nm.nmConnSetFields,
 				wifiUpdateSavedConns: async () => undefined,
 				pruneHotspotConns: async () => undefined,
 				broadcastState: () => undefined,
 				setDupIpSuppression: () => undefined,
+				pollHotspotActive: async (_iface, uuid) =>
+					confirmation &&
+					uuid !== undefined &&
+					profile(uuid, ["802-11-wireless.mode"])[0] === "ap",
 			});
 		},
 		async confirm() {
@@ -216,6 +226,7 @@ export async function virtualBindingFixture() {
 					? { ...radio, active: "old-ap", state: "connected" }
 					: radio,
 			);
+			confirmation = true;
 			await monitor.handleWifiMonitorEvent({
 				type: "connection-state",
 				connection: row().hotspot.name ?? "",
@@ -224,8 +235,8 @@ export async function virtualBindingFixture() {
 		},
 		stop: () => wifiHotspotStop({ device: row().id }, stopDeps),
 		async close() {
-			monitor.settlePending("wlan0", false);
-			monitor.settlePending("wlmoved", false);
+			await monitor.settlePending("wlan0", false);
+			await monitor.settlePending("wlmoved", false);
 			wifiRadioObservation.stop();
 			await wifiRadioObservation.settled;
 			await restoreSysfs();

@@ -13,6 +13,7 @@ import type {
 	WifiInterfaceWithHotspot,
 } from "../../modules/wifi/wifi-hotspot-types.ts";
 import { getWifiIdToMacAddress } from "../../modules/wifi/wifi-interfaces.ts";
+import { nmcliFieldNames, nmcliFieldOutput } from "./nmcli-field-output.ts";
 import {
 	autoconnectFixture,
 	MAC,
@@ -59,8 +60,16 @@ export function stopActivityFixture(): (
 		let disarm: ReturnType<Scenario["holdDisarm"]> | undefined;
 		let entered: ReturnType<typeof Promise.withResolvers<void>> | undefined;
 		let released: ReturnType<typeof Promise.withResolvers<void>> | undefined;
-		spyOn(nm, "nmConnsGet").mockImplementation(connectionInventory);
-		spyOn(runner, "run").mockImplementation(async (binary, args = []) => {
+		const inventorySpy = spyOn(nm, "nmConnsGet");
+		const resourceInventory = inventorySpy.getMockImplementation();
+		if (!resourceInventory)
+			throw new Error("Missing fixture resource inventory");
+		inventorySpy.mockImplementation(connectionInventory);
+		const runSpy = spyOn(runner, "run");
+		const resourceBoundary = runSpy.getMockImplementation();
+		if (!resourceBoundary) throw new Error("Missing fixture resource boundary");
+		runSpy.mockImplementation(async (binary, args = [], options) => {
+			if (binary === "busctl") return resourceBoundary(binary, args, options);
 			if (binary !== "nmcli") throw new Error(`Unexpected binary: ${binary}`);
 			commands.push(args.join(" "));
 			if (args[0] === "con" && args[1] === "modify") {
@@ -70,7 +79,7 @@ export function stopActivityFixture(): (
 						args[4 + i * 2],
 					]),
 				);
-				Object.assign(f.profiles.get(args[2] ?? "") ?? {}, fields);
+				await resourceBoundary(binary, args, options);
 				if (disarm && fields["connection.autoconnect"] === "no") {
 					entered?.resolve();
 					await released?.promise;
@@ -84,8 +93,14 @@ export function stopActivityFixture(): (
 				return "Connection successfully deactivated";
 			}
 			const fieldsAt = args.indexOf("--fields");
-			if (fieldsAt >= 0 && args.includes("connection")) {
+			if (
+				fieldsAt >= 0 &&
+				args.includes("connection") &&
+				!args.includes("multiline")
+			) {
 				const fields = args[fieldsAt + 1] ?? "";
+				if (fields === "uuid,dbus-path" || fields === "uuid,filename")
+					return (await resourceInventory(fields))?.join("\n") ?? "";
 				if (fields.includes("active")) {
 					queries.push(fields);
 					if (model.query === "unreadable")
@@ -112,13 +127,9 @@ export function stopActivityFixture(): (
 					)
 					.join("\n");
 			}
-			const getAt = args.indexOf("--get-values");
-			if (getAt >= 0) {
-				const profile = f.profiles.get(args[getAt + 4] ?? "");
-				return (args[getAt + 1] ?? "")
-					.split(",")
-					.map((field) => profile?.[field] ?? "")
-					.join("\n");
+			if (nmcliFieldNames(args).length > 0) {
+				const profile = f.profiles.get(args.at(-1) ?? "");
+				return nmcliFieldOutput(args, (field) => profile?.[field] ?? "");
 			}
 			throw new Error(`Unexpected CLI command: ${args.join(" ")}`);
 		});
@@ -160,6 +171,8 @@ export function stopActivityFixture(): (
 			events,
 			model,
 			holdDisarm() {
+				const profile = f.profiles.get(PROFILE);
+				if (profile) profile["connection.autoconnect"] = "yes";
 				entered = Promise.withResolvers<void>();
 				released = Promise.withResolvers<void>();
 				disarm = {

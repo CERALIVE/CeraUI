@@ -393,7 +393,7 @@ test("an admitted transition's teardown, prune, poll and terminal timer run with
 			[],
 		);
 	} finally {
-		settlePending(state.row.ifname, false);
+		await settlePending(state.row.ifname, false);
 		await state.restore();
 	}
 });
@@ -604,8 +604,8 @@ test("a confirmation poll's discovery restores another radio's pending hotspot n
 		expect(starts.some((frame) => frame.error !== undefined)).toBe(false);
 	} finally {
 		stop();
-		settlePending(rowB.ifname, false);
-		settlePending(state.row.ifname, false);
+		await settlePending(rowB.ifname, false);
+		await settlePending(state.row.ifname, false);
 		config.getConfig().wifi_modes = modes;
 		setWifiState(wifiState);
 		await state.restore();

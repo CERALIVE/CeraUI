@@ -402,6 +402,8 @@ test("shadow rejection releases its queued batch without propagating", async () 
 });
 
 test("the production confirmation poll waits for its queued fresh read", async () => {
+	spyOn(nm, "nmDeviceProp").mockResolvedValue(["100", "ap"]);
+	spyOn(nm, "nmConnGetFields").mockResolvedValue(["ap"]);
 	const gate = Promise.withResolvers<string[]>();
 	releases.push(() => gate.resolve([]));
 	let reads = 0;

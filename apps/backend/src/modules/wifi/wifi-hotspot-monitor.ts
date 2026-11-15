@@ -1,3 +1,4 @@
+// allow: SIZE_OK - one pending-activation state machine keeps cancellation, instance proof and terminal publication together.
 /*
     CeraUI - web UI for the CeraLive project
     Copyright (C) 2024-2025 CeraLive project
@@ -17,7 +18,16 @@
 
 import { logger } from "../../helpers/logger.ts";
 import { retryWithBackoff } from "../../helpers/retry.ts";
-import { nmcliParseSep, nmDevices } from "../network/network-manager.ts";
+import {
+	nmcliParseSep,
+	nmDeviceProp,
+	nmDevices,
+} from "../network/network-manager.ts";
+import {
+	type NmProfileInstance,
+	sameNmProfileActivation,
+	sameNmProfileInstance,
+} from "../network/network-manager-profile-instance.ts";
 import type { MonitorEvent, WifiState } from "../network/state-types.ts";
 import {
 	getModeForInterface,
@@ -26,6 +36,7 @@ import {
 } from "./state/wifi-state.ts";
 import type {
 	HotspotActivationDeps,
+	HotspotActivationInstance,
 	HotspotConfirmationTarget,
 	WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
@@ -60,6 +71,8 @@ export function syncWifiStateCache(
 // ─── pending NM-confirmation registry ────────────────────────────────────────
 
 type PendingHotspot = {
+	readonly uuid: string;
+	activation: HotspotActivationInstance | undefined;
 	readonly ifname: string;
 	readonly apIfname: string;
 	readonly connName: string;
@@ -80,6 +93,43 @@ function current(pending: PendingHotspot): boolean {
 		pendingHotspots.get(pending.ifname) === pending &&
 		pendingByRow.get(pending.row) === pending
 	);
+}
+
+/** Existing pending snapshots are the only in-process confirmation evidence. */
+export function getPendingHotspotProfile(
+	uuid: string,
+): NmProfileInstance | undefined {
+	for (const pending of pendingHotspots.values())
+		if (
+			pending.uuid === uuid &&
+			current(pending) &&
+			pending.matches() &&
+			pending.activation?.profile?.file
+		)
+			return pending.activation.profile;
+	return undefined;
+}
+
+/** Only the shared keyfile-write readback calls this; explicit new intents cancel their old frame. */
+export function recordPendingHotspotModify(
+	uuid: string,
+	before: NmProfileInstance | null | undefined,
+	after: NmProfileInstance,
+): void {
+	for (const pending of pendingHotspots.values()) {
+		if (
+			pending.uuid !== uuid ||
+			!current(pending) ||
+			!pending.matches() ||
+			!sameNmProfileActivation(pending.activation?.profile, before) ||
+			!sameNmProfileInstance(before, after)
+		)
+			continue;
+		pending.activation = {
+			profile: after,
+			activePath: pending.activation?.activePath,
+		};
+	}
 }
 
 function settleCaptured(pending: PendingHotspot, confirmed: boolean): void {
@@ -149,6 +199,7 @@ export function registerPendingConfirmation(
 	const ifname = wifiInterface.ifname;
 	const hotspot = wifiInterface.hotspot;
 	const device = wifiInterface.id;
+	const owner = target.credentialOwner ?? target.macAddress;
 	const controller = new AbortController();
 	const virtual = target.ifname !== ifname;
 	const lifetime = wifiRadioIdentity.state.rows.get(ifname)?.lifetime;
@@ -170,6 +221,7 @@ export function registerPendingConfirmation(
 				wifiRadioIdentity.state.rows.get(target.ifname)?.lifetime,
 			));
 	const confirm = (): void => {
+		deps.credentials.clearCreation?.(owner, target.uuid);
 		if (virtual)
 			transitionVirtualBinding(wifiInterface, {
 				kind: "set",
@@ -211,12 +263,17 @@ export function registerPendingConfirmation(
 			.then(async () => {
 				if (
 					deps.pollHotspotActive &&
-					!(await deps.pollHotspotActive(wifiInterface))
+					!(await deps.pollHotspotActive(
+						wifiInterface,
+						target.uuid,
+						target.ifname,
+						pending.activation,
+					))
 				)
 					return false;
 				if (!current(pending) || !matches()) return false;
 				const rows = await nmDevices("device,type,state,con-uuid");
-				return (
+				const up =
 					rows?.some((raw) => {
 						const [apIfname, type, state, uuid] = nmcliParseSep(raw);
 						return (
@@ -225,7 +282,23 @@ export function registerPendingConfirmation(
 							(state === "connected" || state === "connected (externally)") &&
 							uuid === target.uuid
 						);
-					}) ?? false
+					}) ?? false;
+				if (!up || !current(pending) || !matches()) return false;
+				const activation = pending.activation;
+				if (!activation?.profile && !activation?.activePath) return true;
+				const state = await nmDeviceProp(
+					target.ifname,
+					"GENERAL.STATE,GENERAL.CON-UUID,GENERAL.CON-PATH",
+				);
+				return (
+					Boolean(activation.activePath) &&
+					Number.parseInt(state?.[0] ?? "", 10) === 100 &&
+					state?.[1] === target.uuid &&
+					state?.[2] === activation.activePath &&
+					sameNmProfileActivation(
+						activation.profile,
+						await deps.readProfileInstance?.(target.uuid),
+					)
 				);
 			})
 			.then((up) => up && current(pending) && matches())
@@ -235,6 +308,8 @@ export function registerPendingConfirmation(
 		return flight;
 	};
 	const pending: PendingHotspot = {
+		uuid: target.uuid,
+		activation: target.activation,
 		ifname,
 		apIfname: target.ifname,
 		connName: hotspot.name ?? ifname,
@@ -250,7 +325,11 @@ export function registerPendingConfirmation(
 	if (deps.pollHotspotActive) {
 		retryWithBackoff(
 			async () => {
-				if (await probe()) return true;
+				if (!current(pending)) return true;
+				if (await probe()) {
+					settleCaptured(pending, true);
+					return true;
+				}
 				throw new Error("hotspot not yet confirmed");
 			},
 			{

@@ -1,8 +1,12 @@
 import { nmConnSetFields, nmDisconnect } from "../network/network-manager.ts";
+import { readNmProfileInstance } from "../network/network-manager-profile-instance.ts";
 import type { DeviceLockResult } from "../network/state/device-lock.ts";
 import {
+	clearHotspotProfileCreation,
 	getHotspotCredentialOwners,
 	getHotspotCredentials,
+	getPendingHotspotCreation,
+	getPendingHotspotCreationInstance,
 	pruneAbsentHotspotHistory,
 } from "./hotspot-credentials.ts";
 import {
@@ -21,6 +25,10 @@ import type { WifiPolicyObservation } from "./wifi-adapter-reconciler.ts";
 import { uniqueHotspotAddress } from "./wifi-autoconnect-policy.ts";
 import { getWifiInterfacesByMacAddress } from "./wifi-connections.ts";
 import { observeHotspotProfile } from "./wifi-hotspot-profile-observation.ts";
+import {
+	type HotspotProfileOperation,
+	runHotspotProfileOperation,
+} from "./wifi-hotspot-profile-operation.ts";
 import { canHotspot } from "./wifi-hotspot-types.ts";
 import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 import { literalWifiDevicePath } from "./wifi-radio-read-budget.ts";
@@ -32,22 +40,27 @@ export async function applyHotspotProfilePolicy(
 ): Promise<DeviceLockResult<string | undefined>> {
 	const heldKey = wifiAdapterLockKey(owner);
 	const stored = getHotspotCredentials(owner);
+	const pendingCreation = getPendingHotspotCreation(owner);
 	const uuids = new Set([
 		...(stored?.conn ? [stored.conn] : []),
 		...(stored?.previousConns ?? []),
+		...(pendingCreation ? [pendingCreation] : []),
 	]);
 	const write = observation.write ?? nmConnSetFields;
 	const mac = normalizeMacAddress(owner.split("@")[0]);
-	const station =
-		observation.station || getPersistedWifiAdapterMode(owner) === "station";
+	const intent = getPersistedWifiAdapterMode(owner);
+	const station = observation.station || intent === "station";
 	for (const uuid of uuids) {
 		const profile = await observeHotspotProfile(uuid);
 		switch (profile.kind) {
 			case "absent":
+				clearHotspotProfileCreation(owner, uuid);
 				pruneAbsentHotspotHistory(owner, uuid);
 				continue;
 			case "unreadable":
 				return { success: true, result: `could not read ${uuid}` };
+			case "replaced":
+				continue;
 			case "read":
 				break;
 		}
@@ -55,6 +68,30 @@ export async function applyHotspotProfilePolicy(
 		const owners = getHotspotCredentialOwners(uuid);
 		if (!owners.includes(owner)) continue;
 		const resolved = owners.length === 1;
+		const failedFirstStart =
+			profile.firstStart && intent !== "hotspot" && intent !== "hybrid";
+		let creationInstance = getPendingHotspotCreationInstance(owner);
+		const act = async (
+			operation: HotspotProfileOperation,
+		): Promise<boolean | undefined> => {
+			const result = await runHotspotProfileOperation(
+				operation,
+				profile.firstStart
+					? {
+							instance: creationInstance,
+							readProfileInstance: readNmProfileInstance,
+							owner,
+						}
+					: undefined,
+			);
+			creationInstance = result.instance ?? undefined;
+			return result.checked ? result.success : undefined;
+		};
+		if (failedFirstStart && !resolved)
+			return {
+				success: true,
+				result: `could not resolve first-start owner ${uuid}`,
+			};
 		const hybrid = profile.ifname.startsWith("clap-");
 		const pin = normalizeMacAddress(profile.mac);
 		const pathPin = literalWifiDevicePath(profile.path);
@@ -102,10 +139,15 @@ export async function applyHotspotProfilePolicy(
 								(!profile.mac ||
 									(pin !== undefined && candidate.permanentMac === pin)),
 						});
-				if (station) {
+				if (station || failedFirstStart) {
 					if (resolved && [...observation.active.values()].includes(uuid)) {
-						if (!(await nmDisconnect(uuid)))
-							return `could not deactivate ${uuid}`;
+						const disconnected = await act({
+							uuid,
+							kind: "down",
+							run: () => nmDisconnect(uuid),
+						});
+						if (disconnected === undefined) return undefined;
+						if (!disconnected) return `could not deactivate ${uuid}`;
 						for (const [ifname, active] of observation.active)
 							if (active === uuid) observation.active.set(ifname, null);
 					}
@@ -141,11 +183,17 @@ export async function applyHotspotProfilePolicy(
 						}
 					}
 				}
-				if (
-					profile.autoconnect === "yes" &&
-					!(await write(uuid, { "connection.autoconnect": "no" }))
-				)
-					return `could not disable ${uuid}`;
+				if (profile.autoconnect === "yes" || failedFirstStart) {
+					const disabled = await act({
+						uuid,
+						kind: "modify",
+						fields: { "connection.autoconnect": "no" },
+						run: (fields) => write(uuid, fields),
+					});
+					if (disabled === undefined) return undefined;
+					if (!disabled) return `could not disable ${uuid}`;
+				}
+				if (failedFirstStart) clearHotspotProfileCreation(owner, uuid);
 				return undefined;
 			},
 		);

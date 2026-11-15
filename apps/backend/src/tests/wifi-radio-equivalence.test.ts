@@ -25,7 +25,9 @@ const verifiedTranscript = {
 		index === 9 ? [call[0], call[1], bindingFields] : call,
 	),
 };
-const transcripts: Readonly<Record<string, unknown>> = {
+const transcripts: Readonly<
+	Record<string, { readonly calls: readonly (readonly unknown[])[] }>
+> = {
 	...golden.transcripts,
 	"verified fresh": verifiedTranscript,
 	rename: {
@@ -51,6 +53,32 @@ const transcripts: Readonly<Record<string, unknown>> = {
 };
 const broadcastTranscripts: Readonly<Record<string, unknown>> =
 	golden.broadcasts;
+
+/** B7 changes only first-profile creation; retain the recorded main oracle. */
+function firstApTranscript<
+	T extends { readonly calls: readonly (readonly unknown[])[] },
+>(transcript: T | undefined) {
+	if (!transcript) throw new Error("Missing recorded main transcript");
+	return {
+		...transcript,
+		calls: transcript.calls.flatMap((call, index, calls) => {
+			if (call[0] === "nmHotspot") {
+				const binding = calls[index + 1];
+				if (binding?.[0] !== "nmConnSetFields")
+					throw new Error("Missing recorded first-profile binding");
+				return [
+					[
+						"nmApConnAdd",
+						call[1],
+						{ name: call[2], password: call[3] },
+						binding[2],
+					],
+				];
+			}
+			return calls[index - 1]?.[0] === "nmHotspot" ? [] : [[...call]];
+		}),
+	};
+}
 
 // R-A: shadow identity must preserve main's public discovery and activation bytes.
 for (const fixture of radioEquivalenceCases) {
@@ -130,12 +158,16 @@ for (const fixture of radioEquivalenceCases) {
 				};
 				expectedBroadcasts.push(broadcast, broadcast);
 			}
-			expect(transcript.calls).toEqual(expectedCalls);
+			expect(transcript.calls).toEqual(
+				firstApTranscript({ calls: expectedCalls }).calls,
+			);
 			expect(broadcasts).toEqual(expectedBroadcasts);
 			return;
 		}
 		const bytes = JSON.stringify(transcript);
-		expect(bytes).toBe(JSON.stringify(transcripts[fixture.name]));
+		expect(bytes).toBe(
+			JSON.stringify(firstApTranscript(transcripts[fixture.name])),
+		);
 		expect(JSON.stringify(broadcasts)).toBe(
 			JSON.stringify(broadcastTranscripts[fixture.name]),
 		);
@@ -150,7 +182,7 @@ test("the parity oracle rejects an extra real Wi-Fi broadcast", async () => {
 		true,
 	);
 	expect(JSON.stringify(transcript)).toBe(
-		JSON.stringify(transcripts[fixture.name]),
+		JSON.stringify(firstApTranscript(transcripts[fixture.name])),
 	);
 	expect(JSON.stringify(broadcasts)).not.toBe(
 		JSON.stringify(broadcastTranscripts[fixture.name]),

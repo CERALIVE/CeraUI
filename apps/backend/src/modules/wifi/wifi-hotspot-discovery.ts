@@ -22,14 +22,20 @@ import {
 	nmConnDelete,
 	nmConnGetFields,
 	nmConnSetFields,
-	nmConnSetWifiMacAddress,
 	nmConnsGet,
 	nmcliParseSep,
 } from "../network/network-manager.ts";
 import {
+	isNmWifiSecretAvailable,
+	readVerifiedNmWifiSecret,
+} from "../network/network-manager-secret.ts";
+import {
 	canUseHotspotConnection,
+	clearHotspotProfileCreation,
 	getAllHotspotCredentials,
+	getHotspotCredentialOwners,
 	getHotspotCredentials,
+	getPendingHotspotCreation,
 	type HotspotCredentials,
 	rememberHotspotCredentials,
 } from "./hotspot-credentials.ts";
@@ -39,6 +45,12 @@ import {
 	getWifiInterfaceByMacAddress,
 	getWifiInterfacesByMacAddress,
 } from "./wifi-connections.ts";
+import {
+	recordHotspotProfileDeletion,
+	trackHotspotProfileRead,
+	wasHotspotConnDeletedSince,
+} from "./wifi-hotspot-discovery-fence.ts";
+import { runHotspotProfileOperation } from "./wifi-hotspot-profile-operation.ts";
 import { HOTSPOT_SECURITY, securityFromNM } from "./wifi-hotspot-security.ts";
 import {
 	canHotspot,
@@ -53,15 +65,6 @@ const hotspotProfilePins = new WeakMap<
 	{ readonly uuid: string; readonly macAddress: string }
 >();
 const deletingHotspotConns = new Set<ConnectionUUID>();
-const hotspotDeletionEpochs = new Map<ConnectionUUID, number>();
-let hotspotDeletionEpoch = 0;
-
-function wasHotspotConnDeletedSince(
-	uuid: ConnectionUUID,
-	epoch: number,
-): boolean {
-	return (hotspotDeletionEpochs.get(uuid) ?? 0) > epoch;
-}
 
 export function rememberHotspotProfilePin(
 	hotspot: WifiHotspot,
@@ -134,6 +137,112 @@ export function shouldAdoptHotspotConn(
 	return !stored?.conn || stored.conn === uuid;
 }
 
+async function applyHotspotCredentialReadback(
+	owner: string,
+	iface: WifiInterfaceWithHotspot,
+	uuid: string,
+	observed: string | undefined,
+	settings: Readonly<Record<string, string>>,
+	apply: (password: string | undefined) => void,
+): Promise<void> {
+	const hotspot = iface.hotspot;
+	const initial = {
+		conn: hotspot.conn,
+		name: hotspot.name,
+		channel: hotspot.channel,
+		security: hotspot.security,
+	};
+	const physicalMac = normalizeMacAddress(owner.split("@")[0]);
+	const binding =
+		settings["802-11-wireless.mac-address"] ??
+		getHotspotProfilePin(hotspot, uuid) ??
+		physicalMac ??
+		"";
+	const active = () =>
+		(iface.activeConn === uuid && iface.activeMode === "ap") ||
+		iface.concurrentHotspot?.activeConn === uuid;
+	const stored = () => (physicalMac ? getHotspotCredentials(owner) : undefined);
+	const knownPassword = (credential: HotspotCredentials | undefined) => {
+		if (credential?.conn === uuid) return credential.password;
+		if (credential?.conn) return undefined;
+		const matched =
+			hotspot.conn === uuid &&
+			(getHotspotProfilePin(hotspot, uuid) === binding || active());
+		if (
+			credential &&
+			credential.ssid === settings["802-11-wireless.ssid"] &&
+			(getPendingHotspotCreation(owner) === uuid || matched)
+		)
+			return credential.password;
+		return matched ? hotspot.password : undefined;
+	};
+	const before = stored();
+	const known = knownPassword(before);
+	const cachedPresent = Boolean(hotspot.password);
+	const available = isNmWifiSecretAvailable(observed);
+	const verifiedPassword =
+		available && observed === known
+			? known
+			: available
+				? await readVerifiedNmWifiSecret(uuid, {
+						...settings,
+						"802-11-wireless.mac-address": binding,
+					})
+				: undefined;
+	const verified = verifiedPassword !== undefined;
+	const current = stored();
+	if (
+		getWifiInterfaceByMacAddress(owner) !== iface ||
+		iface.hotspot !== hotspot ||
+		hotspot.conn !== initial.conn ||
+		hotspot.name !== initial.name ||
+		hotspot.channel !== initial.channel ||
+		hotspot.security !== initial.security ||
+		current?.conn !== before?.conn ||
+		current?.ssid !== before?.ssid ||
+		current?.channel !== before?.channel ||
+		!(physicalMac ? canAdoptHotspotProfile(owner, uuid, binding) : active())
+	)
+		return;
+	const knownNow = knownPassword(current);
+	const ownWriteWon = knownNow !== known;
+	const password = ownWriteWon
+		? knownNow
+		: verified
+			? verifiedPassword
+			: knownNow;
+	const digest = (value: string | undefined) =>
+		value
+			? new Bun.CryptoHasher("sha256").update(value).digest("hex").slice(0, 12)
+			: null;
+	apply(password);
+	const committed = stored();
+	if (committed?.conn === uuid && password && password !== committed.password)
+		rememberHotspotCredentials(owner, { ...committed, password });
+	logger.warn(
+		verified && !ownWriteWon && password !== known
+			? "Hotspot credential readback updated"
+			: "Hotspot credential readback preserved",
+		{
+			storedPresent: Boolean(current?.password),
+			cachedPresent,
+			observedPresent: Boolean(observed),
+			observedHidden: observed === "<hidden>",
+			verifiedRead: verified && password === observed,
+			ownWriteWon,
+			sameProfile: Boolean(knownNow),
+			source: Object.hasOwn(settings, "802-11-wireless.mac-address")
+				? "profile-discovery"
+				: "active-unresolved",
+			storedDigest: digest(
+				current?.conn === uuid ? current.password : undefined,
+			),
+			observedDigest: digest(available ? observed : undefined),
+			credentialDigest: digest(password),
+		},
+	);
+}
+
 export async function handleHotspotConn(
 	macAddress_: string | undefined,
 	uuid: string,
@@ -170,6 +279,7 @@ export async function handleHotspotConn(
 			"802-11-wireless.band",
 			"802-11-wireless.channel",
 			"802-11-wireless-security.key-mgmt",
+			"802-11-wireless.mac-address",
 		] as const);
 		if (fields?.[0] && fields[0] !== "ap" && row.hotspot.conn === uuid) {
 			delete row.hotspot.conn;
@@ -185,16 +295,33 @@ export async function handleHotspotConn(
 			(row.activeConn !== uuid && row.concurrentHotspot?.activeConn !== uuid)
 		)
 			return;
-		row.hotspot.conn = uuid;
-		row.hotspot.name = fields[1];
-		row.hotspot.password = fields[2];
-		row.hotspot.channel = channelFromNM(fields[3], fields[4]);
-		const security = securityFromNM(fields[5]);
-		if (security !== undefined) row.hotspot.security = security;
+		await applyHotspotCredentialReadback(
+			macAddress_,
+			row,
+			uuid,
+			fields[2],
+			{
+				"802-11-wireless.ssid": fields[1],
+				"802-11-wireless.band": fields[3],
+				"802-11-wireless.channel": fields[4],
+				"802-11-wireless-security.key-mgmt": fields[5],
+				"802-11-wireless.mac-address": fields[6],
+			},
+			(password) => {
+				row.hotspot.conn = uuid;
+				row.hotspot.name = fields[1];
+				if (password === undefined) delete row.hotspot.password;
+				else row.hotspot.password = password;
+				row.hotspot.channel = channelFromNM(fields[3], fields[4]);
+				const security = securityFromNM(fields[5]);
+				if (security !== undefined) row.hotspot.security = security;
+			},
+		);
 		return;
 	}
 	if (deletingHotspotConns.has(uuid)) return;
-	const epoch = hotspotDeletionEpoch;
+	using read = trackHotspotProfileRead();
+	const epoch = read.epoch;
 	const fields = await nmConnGetFields(uuid, [
 		"connection.autoconnect-priority",
 		"802-11-wireless.ssid",
@@ -264,7 +391,17 @@ export async function handleHotspotConn(
 	) {
 		// Another profile is this adapter's persisted identity — keep this
 		// duplicate from auto-starting and from claiming the adapter.
-		await nmConnSetFields(uuid, { "connection.autoconnect": "no" });
+		if (
+			!(
+				await runHotspotProfileOperation({
+					uuid,
+					kind: "modify",
+					fields: { "connection.autoconnect": "no" },
+					run: (fields) => nmConnSetFields(uuid, fields),
+				})
+			).checked
+		)
+			return;
 		if (!canAdoptHotspotProfile(macAddress, uuid, fields?.[12] ?? "")) {
 			clearRejectedHotspotConn(macAddress, uuid);
 		}
@@ -289,7 +426,17 @@ export async function handleHotspotConn(
      networks for some matching client connections are available
   */
 	if (fields[0] !== "999") {
-		await nmConnSetFields(uuid, { "connection.autoconnect-priority": "999" });
+		if (
+			!(
+				await runHotspotProfileOperation({
+					uuid,
+					kind: "modify",
+					fields: { "connection.autoconnect-priority": "999" },
+					run: (fields) => nmConnSetFields(uuid, fields),
+				})
+			).checked
+		)
+			return;
 		if (wasHotspotConnDeletedSince(uuid, epoch)) return;
 	}
 
@@ -301,13 +448,23 @@ export async function handleHotspotConn(
 	const concurrentProfile =
 		wifiInterface.supportsApStaConcurrency === true &&
 		fields[11] === concurrentApIfname(wifiInterface.ifname);
-	let profileMac = fields[12];
+	let profileMac =
+		getHotspotProfilePin(wifiInterface.hotspot, uuid) ?? fields[12];
 	if (!canAdoptHotspotProfile(macAddress, uuid, fields[12])) {
 		return clearRejectedHotspotConn(macAddress, uuid);
 	}
 	if (pinned && !concurrentProfile && fields[12].toLowerCase() !== macAddress) {
-		if (await nmConnSetWifiMacAddress(uuid, macAddress))
-			profileMac = macAddress;
+		const repaired = await runHotspotProfileOperation({
+			uuid,
+			kind: "modify",
+			fields: {
+				"connection.interface-name": "",
+				"802-11-wireless.mac-address": macAddress,
+			},
+			run: (fields) => nmConnSetFields(uuid, fields),
+		});
+		if (!repaired.checked) return;
+		if (repaired.success) profileMac = macAddress;
 	}
 
 	if (wasHotspotConnDeletedSince(uuid, epoch)) return;
@@ -316,37 +473,49 @@ export async function handleHotspotConn(
 	}
 	if (pinned)
 		rememberHotspotProfilePin(wifiInterface.hotspot, uuid, profileMac);
-	wifiInterface.hotspot.conn = uuid;
-	wifiInterface.hotspot.name = fields[1];
-	wifiInterface.hotspot.password = fields[2];
-	wifiInterface.hotspot.channel = channelFromNM(fields[3], fields[4]);
-
-	rememberHotspotCredentials(macAddress, {
-		ssid: fields[1],
-		password: fields[2],
-		conn: uuid,
-		channel: wifiInterface.hotspot.channel,
-	});
-
 	// The profile itself is the truth about which security mode is in force, so
 	// it is ADOPTED here rather than assumed from memory — the same rule the
 	// channel above follows. A key-mgmt this build does not manage adopts
 	// nothing and falls through to the modification warning.
 	const observedSecurity = securityFromNM(fields[6]);
-	if (observedSecurity !== undefined) {
-		wifiInterface.hotspot.security = observedSecurity;
-	}
-
-	if (
-		fields[5] !== "no" ||
-		observedSecurity === undefined ||
-		fields[7] !== "ccmp" ||
-		fields[8] !== "ccmp" ||
-		fields[9] !== "rsn" ||
-		fields[10] !== HOTSPOT_SECURITY[observedSecurity].nmPmfObserved
-	) {
-		wifiInterface.hotspot.warnings.modified = true;
-	}
+	await applyHotspotCredentialReadback(
+		macAddress,
+		wifiInterface,
+		uuid,
+		fields[2],
+		{
+			"802-11-wireless.ssid": fields[1],
+			"802-11-wireless.band": fields[3],
+			"802-11-wireless.channel": fields[4],
+			"802-11-wireless-security.key-mgmt": fields[6],
+			"802-11-wireless.mac-address": profileMac,
+		},
+		(password) => {
+			wifiInterface.hotspot.conn = uuid;
+			wifiInterface.hotspot.name = fields[1];
+			if (password === undefined) delete wifiInterface.hotspot.password;
+			else wifiInterface.hotspot.password = password;
+			wifiInterface.hotspot.channel = channelFromNM(fields[3], fields[4]);
+			if (password !== undefined)
+				rememberHotspotCredentials(macAddress, {
+					ssid: fields[1],
+					password,
+					conn: uuid,
+					channel: wifiInterface.hotspot.channel,
+				});
+			if (observedSecurity !== undefined)
+				wifiInterface.hotspot.security = observedSecurity;
+			if (
+				fields[5] !== "no" ||
+				observedSecurity === undefined ||
+				fields[7] !== "ccmp" ||
+				fields[8] !== "ccmp" ||
+				fields[9] !== "rsn" ||
+				fields[10] !== HOTSPOT_SECURITY[observedSecurity].nmPmfObserved
+			)
+				wifiInterface.hotspot.warnings.modified = true;
+		},
+	);
 }
 
 function clearRejectedHotspotConn(macAddress: string, uuid: string): void {
@@ -377,7 +546,8 @@ export function canAdoptHotspotProfile(
 }
 
 async function findMacAddressForConnection(uuid: string, profileMac: string) {
-	const epoch = hotspotDeletionEpoch;
+	using read = trackHotspotProfileRead();
+	const epoch = read.epoch;
 	// Check if the connection is in use for any wifi interface
 	const connIfName = (
 		await nmConnGetFields(uuid, ["connection.interface-name"] as const)
@@ -411,7 +581,17 @@ async function findMacAddressForConnection(uuid: string, profileMac: string) {
 			}
 			// And if this interface doesn't already have a hotspot connection
 			// Try to update the connection to match the MAC address
-			if (await nmConnSetWifiMacAddress(uuid, macAddress)) {
+			const repaired = await runHotspotProfileOperation({
+				uuid,
+				kind: "modify",
+				fields: {
+					"connection.interface-name": "",
+					"802-11-wireless.mac-address": macAddress,
+				},
+				run: (fields) => nmConnSetFields(uuid, fields),
+			});
+			if (!repaired.checked) return undefined;
+			if (repaired.success) {
 				if (wasHotspotConnDeletedSince(uuid, epoch)) return undefined;
 				if (!canAdoptHotspotProfile(macAddress, uuid, profileMac)) {
 					return clearRejectedHotspotConn(macAddress, uuid);
@@ -426,7 +606,17 @@ async function findMacAddressForConnection(uuid: string, profileMac: string) {
 			}
 		} else {
 			// If the interface already has a hotspot connection, then disable autoconnect
-			await nmConnSetFields(uuid, { "connection.autoconnect": "no" });
+			if (
+				!(
+					await runHotspotProfileOperation({
+						uuid,
+						kind: "modify",
+						fields: { "connection.autoconnect": "no" },
+						run: (fields) => nmConnSetFields(uuid, fields),
+					})
+				).checked
+			)
+				return;
 			if (!canAdoptHotspotProfile(macAddress, uuid, profileMac)) {
 				clearRejectedHotspotConn(macAddress, uuid);
 			}
@@ -472,7 +662,14 @@ export type HotspotProfileDeps = {
 export const defaultHotspotProfileDeps: HotspotProfileDeps = {
 	getApProfileFields: (uuid) => nmConnGetFields(uuid, AP_PROFILE_FIELDS),
 	listConnections: nmConnsGet,
-	deleteConnection: nmConnDelete,
+	deleteConnection: async (uuid) =>
+		(
+			await runHotspotProfileOperation({
+				uuid,
+				kind: "delete",
+				run: () => nmConnDelete(uuid),
+			})
+		).success,
 };
 
 async function readApProfile(
@@ -480,17 +677,17 @@ async function readApProfile(
 	deps: HotspotProfileDeps,
 ): Promise<ApProfile | undefined> {
 	if (deletingHotspotConns.has(uuid)) return undefined;
-	const epoch = hotspotDeletionEpoch;
+	using read = trackHotspotProfileRead();
+	const epoch = read.epoch;
 	const fields = await deps.getApProfileFields(uuid);
 	if (wasHotspotConnDeletedSince(uuid, epoch)) return undefined;
 	if (deletingHotspotConns.has(uuid)) return undefined;
 	if (fields === undefined) return undefined;
 	if (fields[0] !== "ap" || !fields[1]) return undefined;
-
 	return {
 		uuid,
 		ssid: fields[1],
-		password: fields[2],
+		password: isNmWifiSecretAvailable(fields[2]) ? fields[2] : "",
 		channel: channelFromNM(fields[3], fields[4]),
 		macAddress: fields[5].toLowerCase(),
 	};
@@ -520,7 +717,8 @@ export async function findHotspotConnForAdapter(
 	deps: HotspotProfileDeps = defaultHotspotProfileDeps,
 ): Promise<ExistingHotspotConn | undefined> {
 	const physicalMac = normalizeMacAddress(macAddress.split("@")[0]);
-	const epoch = hotspotDeletionEpoch;
+	using read = trackHotspotProfileRead();
+	const epoch = read.epoch;
 	if (stored?.conn) {
 		const profile = await readApProfile(stored.conn, deps);
 		if (
@@ -564,6 +762,10 @@ const GENERATED_HOTSPOT_ID_RE = /^Hotspot(?:-\d+)?$/;
 
 function collectConnsInUse(): Set<ConnectionUUID> {
 	const inUse = new Set<ConnectionUUID>();
+	for (const owner of getHotspotCredentialOwners()) {
+		const pending = getPendingHotspotCreation(owner);
+		if (pending) inUse.add(pending);
+	}
 	for (const wifiInterface of Object.values(getWifiInterfacesByMacAddress())) {
 		if (!wifiInterface) continue;
 		if (wifiInterface.conn) inUse.add(wifiInterface.conn);
@@ -655,7 +857,9 @@ export async function pruneDuplicateHotspotConns(
 				continue;
 
 			if (await deps.deleteConnection(uuid)) {
-				hotspotDeletionEpochs.set(uuid, ++hotspotDeletionEpoch);
+				recordHotspotProfileDeletion(uuid);
+				for (const owner of getHotspotCredentialOwners(uuid))
+					clearHotspotProfileCreation(owner, uuid);
 				removed.push(uuid);
 			}
 		} finally {

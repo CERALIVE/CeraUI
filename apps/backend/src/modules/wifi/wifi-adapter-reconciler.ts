@@ -36,12 +36,15 @@ import {
 import {
 	clearWifiAdapterReconcile,
 	rearmWifiAdapterReconcile,
+	reconcileWifiAdapterTeardownLocked,
 	retryWifiAdapterReconcile,
+	type WifiPendingTeardownResult,
 } from "./wifi-adapter-reconcile-retry.ts";
 import type {
 	HotspotStopDeps,
 	HotspotStopResult,
 } from "./wifi-hotspot-config.ts";
+import { runHotspotProfileOperation } from "./wifi-hotspot-profile-operation.ts";
 import { applyHotspotProfilePolicy } from "./wifi-hotspot-profile-policy.ts";
 import { teardownHotspotLocked } from "./wifi-hotspot-teardown.ts";
 import {
@@ -65,8 +68,11 @@ export async function reconcileWifiAdapterLocked(
 		identities: wifiRadioIdentity.state.rows,
 		active: new Map(),
 	},
+	teardown?: WifiPendingTeardownResult,
 ): Promise<boolean> {
 	if (!normalizeMacAddress(owner.split("@")[0])) return true;
+	if (!(teardown ?? (await reconcileWifiAdapterTeardownLocked(owner))).complete)
+		return false;
 	const applied = await applyHotspotProfilePolicy(owner, observation);
 	if (!applied.success)
 		return retryWifiAdapterReconcile(owner, undefined, "discovery");
@@ -99,12 +105,13 @@ export async function reconcileWifiAdapterProfileLocked(
 		readonly fields: Record<string, string>;
 		readonly write: HotspotActivationDeps["nmConnSetFields"];
 	},
-): Promise<void> {
+): Promise<boolean> {
 	if (!(await profile.write(profile.uuid, profile.fields)))
-		retryWifiAdapterReconcile(
+		return retryWifiAdapterReconcile(
 			wifiAdapterLockKey(owner),
 			`could not apply ${profile.uuid} policy`,
 		);
+	return true;
 }
 
 /** Stop reports actual teardown; policy failure remains recoverable owner health. */
@@ -114,26 +121,40 @@ export async function reconcileWifiAdapterStopLocked(
 	deps: HotspotStopDeps,
 ): Promise<HotspotStopResult> {
 	const owner = resolveWifiAdapterOwner(registryKey, row);
+	const cleanup = await reconcileWifiAdapterTeardownLocked(owner);
 	const conn = row.hotspot.conn;
 	if (
 		normalizeMacAddress(registryKey) &&
 		row.degradedReason !== "permanent-mac-unresolved" &&
 		(isHotspotActive(row) || row.hotspot.transition === "activating") &&
 		conn &&
-		!(await deps.nmConnSetFields(conn, {
-			"connection.autoconnect": "no",
-		}))
+		!(
+			await runHotspotProfileOperation({
+				uuid: conn,
+				kind: "modify",
+				selected: true,
+				fields: { "connection.autoconnect": "no" },
+				run: (fields) => deps.nmConnSetFields(conn, fields),
+			})
+		).success
 	)
 		retryWifiAdapterReconcile(owner, `could not disable ${conn}`);
 	const result = await teardownHotspotLocked(registryKey, row, deps, conn);
-	await reconcileWifiAdapterLocked(owner, {
-		identities: wifiRadioIdentity.state.rows,
-		active: new Map(),
-		station: true,
-		write: deps.nmConnSetFields,
-	});
-	if (result.success) clearWifiAdapterReconcile(owner, "restore");
-	return result;
+	await reconcileWifiAdapterLocked(
+		owner,
+		{
+			identities: wifiRadioIdentity.state.rows,
+			active: new Map(),
+			station: true,
+			write: deps.nmConnSetFields,
+		},
+		cleanup,
+	);
+	if (result.success && cleanup.stopped)
+		clearWifiAdapterReconcile(owner, "restore");
+	return cleanup.stopped
+		? result
+		: { success: false, error: "deactivation-failed" };
 }
 
 /** Physical recovery episodes share boot confirmation and the same owner retry state. */

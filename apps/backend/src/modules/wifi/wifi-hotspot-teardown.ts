@@ -13,6 +13,7 @@ import {
 	settlePending,
 	syncWifiStateCache,
 } from "./wifi-hotspot-monitor.ts";
+import { runHotspotProfileOperation } from "./wifi-hotspot-profile-operation.ts";
 import {
 	isHotspotActive,
 	type WifiInterfaceWithHotspot,
@@ -61,7 +62,14 @@ export async function teardownHotspotLocked(
 	deps.broadcastState();
 	syncWifiStateCache(macAddress, wifiInterface);
 
-	const disconnected = await deps.nmDisconnect(conn);
+	const disconnected = (
+		await runHotspotProfileOperation({
+			uuid: conn,
+			kind: "down",
+			selected: true,
+			run: () => deps.nmDisconnect(conn),
+		})
+	).success;
 	if (disconnected) {
 		const sameObservation =
 			wifiInterface.activeConn === activeConn &&

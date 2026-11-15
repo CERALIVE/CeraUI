@@ -205,7 +205,7 @@ afterEach(async () => {
 	cancel = undefined;
 	unsubscribe?.();
 	unsubscribe = undefined;
-	settlePending("wlan0", false);
+	await settlePending("wlan0", false);
 	wifiRadioObservation.stop();
 	await restoreShadow();
 	connections.wifiCancelScanRefresh();
@@ -314,7 +314,7 @@ test("real discovery replacing an active marker with idle during teardown still 
 		return true;
 	});
 	const result = await setWifiAdapterMode(0, "hotspot");
-	settlePending("wlan0", true);
+	await settlePending("wlan0", true);
 	expect(result).toEqual({ success: true, accepted: true, applied: "hotspot" });
 	expect(effects).not.toContain("virtual");
 	expect(observedWifiAdapterMode(row)).toBe("hotspot");
@@ -357,7 +357,7 @@ for (const observed of ["station", "hotspot", "hybrid"] as const) {
 				config.saveConfig();
 				const before = await Bun.file(config.getConfigFilePath()).text();
 				const result = await wifiHotspotStart({ device: 0 });
-				settlePending("wlan0", true);
+				await settlePending("wlan0", true);
 				const mustRefuse =
 					previous === "hybrid" && supported !== true && observed !== "hybrid";
 				const target: WifiAdapterMode =
@@ -425,7 +425,7 @@ for (const parent of ["disconnected", "new-station"] as const) {
 			accepted: true,
 			applied: "hotspot",
 		});
-		settlePending("wlan0", true);
+		await settlePending("wlan0", true);
 		expect(observedWifiAdapterMode(row)).toBe("hotspot");
 		expect(effects).not.toContain("virtual");
 	});
@@ -493,7 +493,7 @@ for (const accepted of [false, true]) {
 		finish.resolve(accepted);
 		await discovery;
 		await flush();
-		settlePending("wlan0", true);
+		await settlePending("wlan0", true);
 		expect(attempts).toBe(accepted ? 1 : 2);
 		expect(observedWifiAdapterMode(row)).toBe("hybrid");
 		expect(getPersistedWifiAdapterModes()).toEqual({ [MAC]: "hybrid" });
@@ -540,7 +540,7 @@ test("a coalesced binding change re-arms pending intent even when support stays 
 	finish.resolve(false);
 	await discovery;
 	await flush();
-	settlePending("wlan0", true);
+	await settlePending("wlan0", true);
 	expect(attempts).toBe(2);
 	expect(observedWifiAdapterMode(row)).toBe("hybrid");
 });

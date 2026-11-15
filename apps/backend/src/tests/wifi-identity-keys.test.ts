@@ -10,6 +10,7 @@ import {
 import { logger } from "../helpers/logger.ts";
 import * as runner from "../helpers/run.ts";
 import * as nm from "../modules/network/network-manager.ts";
+import * as nmSecrets from "../modules/network/network-manager-secret.ts";
 import * as credentials from "../modules/wifi/hotspot-credentials.ts";
 import {
 	onWifiChange,
@@ -51,6 +52,10 @@ import { wifiRadioObservation } from "../modules/wifi/wifi-radio-observation.ts"
 import { readWifiRadio } from "../modules/wifi/wifi-radio-read-budget.ts";
 import * as compat from "../rpc/compat.ts";
 import { radioEquivalenceCases } from "./fixtures/wifi/radio-equivalence-cases.ts";
+import {
+	nmcliFieldNames,
+	nmcliFieldOutput,
+} from "./helpers/nmcli-field-output.ts";
 import type { RadioFixture } from "./helpers/wifi-radio-equivalence.ts";
 import { fakeShadowSysfs } from "./helpers/wifi-radio-equivalence-shadow.ts";
 
@@ -136,13 +141,27 @@ beforeEach(async () => {
 				"GENERAL.VENDOR,GENERAL.PRODUCT,WIFI-PROPERTIES.AP,WIFI-PROPERTIES.5GHZ,WIFI-PROPERTIES.2GHZ",
 			)
 		)
-			return "Fixture\nRadio\nyes\nno\nyes";
+			return nmcliFieldOutput(
+				args,
+				(field) =>
+					(
+						({
+							"GENERAL.VENDOR": "Fixture",
+							"GENERAL.PRODUCT": "Radio",
+							"WIFI-PROPERTIES.AP": "yes",
+							"WIFI-PROPERTIES.5GHZ": "no",
+							"WIFI-PROPERTIES.2GHZ": "yes",
+						}) as Record<string, string>
+					)[field],
+			);
 		if (args.includes("uuid,type")) return "";
 		if (args.includes("IN-USE,BSSID,SSID,MODE,CHAN,RATE,SIGNAL,BARS,SECURITY"))
 			return "";
-		if (args.includes("--get-values")) {
+		if (nmcliFieldNames(args).length > 0) {
 			if (["station", "virtual-station"].includes(args.at(-1) ?? ""))
-				return "infrastructure";
+				return nmcliFieldOutput(args, (field) =>
+					field === "802-11-wireless.mode" ? "infrastructure" : "",
+				);
 			const fields: Record<string, string> = {
 				"802-11-wireless.mode": "ap",
 				"connection.autoconnect-priority": "999",
@@ -159,10 +178,7 @@ beforeEach(async () => {
 				"connection.interface-name": profileBinding.ifname,
 				"802-11-wireless.mac-address": profileBinding.mac,
 			};
-			return (args[5] ?? "")
-				.split(",")
-				.map((key) => fields[key] ?? "")
-				.join("\n");
+			return nmcliFieldOutput(args, (key) => fields[key] ?? "");
 		}
 		if (args.includes("modify")) {
 			writes.push(args.join(" "));
@@ -170,6 +186,9 @@ beforeEach(async () => {
 		}
 		throw new Error(`Unexpected nmcli command: ${args.join(" ")}`);
 	});
+	spyOn(nmSecrets, "readVerifiedNmWifiSecret").mockImplementation(
+		async () => profilePassword,
+	);
 });
 
 afterEach(async () => {

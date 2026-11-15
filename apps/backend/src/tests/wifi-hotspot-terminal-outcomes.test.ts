@@ -121,7 +121,9 @@ function makeStartDeps(
 	return {
 		nmConnect: async () => true,
 		nmConnSetFields: async () => true,
-		nmHotspot: async () => "hotspot-uuid",
+		nmApConnAdd: async () => "hotspot-uuid",
+		nmConnDelete: async () => true,
+		nmDisconnect: async () => true,
 		wifiUpdateSavedConns: async () => {},
 		broadcastState: () => {},
 		setDupIpSuppression: () => {},
@@ -174,7 +176,7 @@ describe("hotspot start — a failure is typed, and every path is terminal", () 
 
 		const result = await wifiHotspotStart(
 			{ device: 0 },
-			makeStartDeps({ nmHotspot: async () => undefined }),
+			makeStartDeps({ nmApConnAdd: async () => undefined }),
 		);
 
 		expect(result).toEqual({ success: false, error: "activation-failed" });
@@ -205,7 +207,7 @@ describe("hotspot start — a failure is typed, and every path is terminal", () 
 		const result = await wifiHotspotStart(
 			{ device: 0 },
 			makeStartDeps({
-				nmHotspot: async () => {
+				nmApConnAdd: async () => {
 					nmCalls.push("nmHotspot");
 					return "hotspot-uuid";
 				},

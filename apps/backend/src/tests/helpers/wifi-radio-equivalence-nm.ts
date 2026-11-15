@@ -1,4 +1,5 @@
 import type { run } from "../../helpers/run.ts";
+import { nmcliFieldOutput } from "./nmcli-field-output.ts";
 import type { RadioFixture } from "./wifi-radio-equivalence.ts";
 
 type EquivalenceNm = {
@@ -35,7 +36,19 @@ export function createEquivalenceNm(
 						"GENERAL.VENDOR,GENERAL.PRODUCT,WIFI-PROPERTIES.AP,WIFI-PROPERTIES.5GHZ,WIFI-PROPERTIES.2GHZ",
 					)
 				)
-					return "Fixture\nRadio\nyes\nno\nyes";
+					return nmcliFieldOutput(
+						args,
+						(field) =>
+							(
+								({
+									"GENERAL.VENDOR": "Fixture",
+									"GENERAL.PRODUCT": "Radio",
+									"WIFI-PROPERTIES.AP": "yes",
+									"WIFI-PROPERTIES.5GHZ": "no",
+									"WIFI-PROPERTIES.2GHZ": "yes",
+								}) as Record<string, string>
+							)[field],
+					);
 				if (args.join(" ") === "--terse --fields uuid,type connection show")
 					return "";
 				if (

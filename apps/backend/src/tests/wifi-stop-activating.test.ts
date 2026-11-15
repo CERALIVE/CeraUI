@@ -150,7 +150,7 @@ test.each(["create", "up"] as const)(
 			resetHotspotCredentialsForTest();
 			delete s.row.hotspot.conn;
 			f.profiles.delete(PROFILE);
-			s.start.nmHotspot = async () => {
+			s.start.nmApConnAdd = async () => {
 				f.profiles.set(PROFILE, { "802-11-wireless.mode": "ap" });
 				entered.resolve();
 				await release.promise;

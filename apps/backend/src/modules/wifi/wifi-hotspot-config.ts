@@ -66,6 +66,7 @@ import {
 	type HotspotOutcomePublisher,
 	publishHotspotOutcome,
 } from "./wifi-hotspot-outcome.ts";
+import { runHotspotProfileOperation } from "./wifi-hotspot-profile-operation.ts";
 import {
 	DEFAULT_HOTSPOT_SECURITY,
 	type HotspotSecurityId,
@@ -272,7 +273,12 @@ function nmConnSetHotspotFields(
 		...securityFields,
 	};
 
-	return deps.nmConnSetFields(uuid, settingsToChange);
+	return runHotspotProfileOperation({
+		uuid,
+		kind: "modify",
+		fields: settingsToChange,
+		run: (fields) => deps.nmConnSetFields(uuid, fields),
+	}).then((result) => result.success);
 }
 
 function isHotspotConfigComplete(
@@ -580,10 +586,14 @@ async function reconfigureHotspotLocked(
 	deps.broadcastState();
 
 	if (isHotspotConfigComplete(wifiInterface)) {
-		const restarted = await deps.nmConnect(
-			wifiInterface.hotspot.conn,
-			HOTSPOT_UP_TO,
-		);
+		const restartUuid = wifiInterface.hotspot.conn;
+		const restarted = (
+			await runHotspotProfileOperation({
+				uuid: restartUuid,
+				kind: "up",
+				run: () => deps.nmConnect(restartUuid, HOTSPOT_UP_TO),
+			})
+		).success;
 		if (!owned()) {
 			delete wifiInterface.hotspot.transition;
 			return "saving";
@@ -605,7 +615,11 @@ async function reconfigureHotspotLocked(
 				return "saving";
 			}
 
-			await deps.nmConnect(wifiInterface.hotspot.conn, HOTSPOT_UP_TO);
+			await runHotspotProfileOperation({
+				uuid: restartUuid,
+				kind: "up",
+				run: () => deps.nmConnect(restartUuid, HOTSPOT_UP_TO),
+			});
 			if (!owned()) {
 				delete wifiInterface.hotspot.transition;
 				return "saving";

@@ -27,6 +27,7 @@ import {
 	defaultAdapterModeDeps,
 	reconcileWifiAdapterModes,
 } from "../../modules/wifi/wifi-adapter-mode-transition.ts";
+import * as reconciler from "../../modules/wifi/wifi-adapter-reconciler.ts";
 import {
 	resetWifiCapabilitiesForTest,
 	setWifiCapabilityDepsForTest,
@@ -84,7 +85,13 @@ export function autoconnectFixture() {
 			activations.push(uuid);
 			return true;
 		},
-		nmHotspot: async () => PROFILE,
+		nmApConnAdd: async (_device, _identity, fields) => {
+			const profile = profiles.get(PROFILE);
+			if (profile) Object.assign(profile, fields);
+			return PROFILE;
+		},
+		nmConnDelete: async () => true,
+		nmDisconnect: async () => true,
 		wifiUpdateSavedConns: async () => undefined,
 		broadcastState: () => undefined,
 		setDupIpSuppression: () => undefined,
@@ -150,7 +157,7 @@ export function autoconnectFixture() {
 		);
 	}
 
-	async function start(): Promise<unknown> {
+	async function start() {
 		await sample();
 		const result = await startHotspotForInterface(MAC, row, deps);
 		settlePending(row.ifname, true);
@@ -189,6 +196,7 @@ export function autoconnectFixture() {
 		seed();
 		spyOn(streaming, "getIsStreaming").mockReturnValue(false);
 		network.install();
+		spyOn(reconciler, "reconcileWifiAdapterPolicies");
 		for (const level of ["debug", "info", "warn", "error"] as const)
 			spyOn(logger, level).mockImplementation(() => logger);
 		onWifiChange(() => undefined);
@@ -216,6 +224,7 @@ export function autoconnectFixture() {
 		onWifiChange(() => undefined);
 		setWifiState({});
 		mock.restore();
+		network.close();
 		restoreWifiRegistry(inherited);
 		getConfig().wifi_modes = previousModes;
 		setConfigFilePath(previousConfigPath);

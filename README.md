@@ -524,7 +524,10 @@ See the [SSH persistence contract](apps/backend/docs/agents/dev-mock-seams.md#ss
   serializes policy, Stop, mode changes, identity transfer and bounded boot
   restoration. An observed lost hotspot is restored up to three times while
   its saved intent remains on; Stop keeps it off. Confirmed-absent history is
-  pruned; failed reads retry without granting AP teardown authority. See the
+  pruned; failed reads retry without granting AP teardown authority. Retained
+  first-start cleanup also runs through that owner lock; Stop consumes it before
+  reporting, and persisted creation instances recover safely after a service restart.
+  See the
   [lifecycle contract](docs/AP-STA-CONCURRENT-MODE.md#logical-owner-reconciliation-exists-host-tested-only).
 - **Device Health telemetry**: memory, per-cluster CPU frequency, DDR bus load,
   GPU load, and (on the vendor kernel) per-core decoder load, alongside the

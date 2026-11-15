@@ -16,6 +16,16 @@
 */
 
 import type {
+	nmApConnAdd,
+	nmConnDelete,
+	nmConnect,
+	nmDisconnect,
+} from "../network/network-manager.ts";
+import type {
+	NmProfileInstance,
+	readNmProfileInstance,
+} from "../network/network-manager-profile-instance.ts";
+import type {
 	HotspotCredentials,
 	HotspotCredentialsStore,
 } from "./hotspot-credentials.ts";
@@ -169,6 +179,13 @@ export type HotspotStartResult =
 export type HotspotConfirmationTarget = {
 	readonly uuid: string;
 	readonly ifname: string;
+	readonly credentialOwner?: string;
+	readonly activation?: HotspotActivationInstance;
+};
+
+export type HotspotActivationInstance = {
+	readonly profile: NmProfileInstance | null | undefined;
+	readonly activePath: string | undefined;
 };
 
 /**
@@ -183,17 +200,16 @@ export type HotspotActivationDeps = {
 	readCapabilities?: (
 		ifname: string,
 	) => { staApCombo: { supported: boolean } } | undefined;
-	nmConnect: (uuid: string, timeout?: number) => Promise<unknown>;
+	nmConnect: (...args: Parameters<typeof nmConnect>) => Promise<unknown>;
+	/** Production reads NM instance evidence; injected NM implementations supply their own. */
+	readProfileInstance?: typeof readNmProfileInstance;
 	nmConnSetFields: (
 		uuid: string,
 		fields: Record<string, string>,
 	) => Promise<unknown>;
-	nmHotspot: (
-		device: string,
-		ssid: string,
-		password: string,
-		timeout?: number,
-	) => Promise<string | null | undefined>;
+	nmApConnAdd: typeof nmApConnAdd;
+	nmConnDelete: typeof nmConnDelete;
+	nmDisconnect: typeof nmDisconnect;
 	wifiUpdateSavedConns: () => Promise<void>;
 	broadcastState: () => void;
 	setDupIpSuppression: (ifname: string, suppressed: boolean) => void;
@@ -241,7 +257,12 @@ export type HotspotActivationDeps = {
 	 * selected AP UUID is up, or attempts are exhausted. When omitted,
 	 * confirmation can only arrive via {@link handleWifiMonitorEvent}.
 	 */
-	pollHotspotActive?: (iface: WifiInterfaceWithHotspot) => Promise<boolean>;
+	pollHotspotActive?: (
+		iface: WifiInterfaceWithHotspot,
+		uuid?: string,
+		activationIfname?: string,
+		activation?: HotspotActivationInstance,
+	) => Promise<boolean>;
 };
 
 // ─── mode predicates ─────────────────────────────────────────────────────────

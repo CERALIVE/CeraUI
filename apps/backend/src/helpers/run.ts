@@ -113,6 +113,8 @@ export const ALLOWED: Set<string> = new Set<string>([
 	"nmcli",
 	"mmcli",
 	"systemctl",
+	// Fixed read-only system-bus identity calls for NM resource receipts.
+	"busctl",
 	"/usr/bin/systemd-notify",
 	"journalctl",
 	"ip",
@@ -236,6 +238,7 @@ async function spawnCollect(
 	}
 
 	const child = Bun.spawn(argv, {
+		env: process.env,
 		stdin: input === undefined ? "ignore" : "pipe",
 		stdout: "pipe",
 		stderr: "pipe",

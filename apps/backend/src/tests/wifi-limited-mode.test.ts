@@ -12,6 +12,7 @@ import {
 	setConfigFilePath,
 } from "../modules/config.ts";
 import * as nm from "../modules/network/network-manager.ts";
+import * as nmSecrets from "../modules/network/network-manager-secret.ts";
 import * as streaming from "../modules/streaming/streaming.ts";
 import * as credentials from "../modules/wifi/hotspot-credentials.ts";
 import { setDerivedApChannels } from "../modules/wifi/regdomain.ts";
@@ -61,6 +62,10 @@ import {
 import { wifiRadioObservation } from "../modules/wifi/wifi-radio-observation.ts";
 import { hotspotConfigureProcedure } from "../rpc/procedures/wifi.procedure.ts";
 import { iwCreationReceipt } from "./helpers/iw-creation-receipt.ts";
+import {
+	nmcliFieldNames,
+	nmcliFieldOutput,
+} from "./helpers/nmcli-field-output.ts";
 import { wifiProtocolContext } from "./helpers/wifi-protocol-context.ts";
 import {
 	isolateWifiRegistry,
@@ -152,9 +157,9 @@ beforeEach(async () => {
 		},
 	);
 	spyOn(runner, "run").mockImplementation(async (bin, args) => {
-		if (bin !== "nmcli" || !args.includes("--get-values"))
+		if (bin !== "nmcli" || nmcliFieldNames(args).length === 0)
 			throw new Error(`Unexpected limited test command: ${bin}`);
-		reads.push(`profile:${args[8]}`);
+		reads.push(`profile:${args.at(-1)}`);
 		const values: Record<string, string> = {
 			"802-11-wireless.mode": "ap",
 			"802-11-wireless.ssid": NAME,
@@ -164,11 +169,11 @@ beforeEach(async () => {
 			"802-11-wireless-security.key-mgmt": "wpa-psk",
 			"connection.interface-name": profileIfname,
 		};
-		return (args[5] ?? "")
-			.split(",")
-			.map((field) => values[field] ?? "")
-			.join("\n");
+		return nmcliFieldOutput(args, (field) => values[field] ?? "");
 	});
+	spyOn(nmSecrets, "readVerifiedNmWifiSecret").mockImplementation(
+		async (uuid) => (uuid === UUID ? PASSWORD : undefined),
+	);
 	spyOn(nm, "nmConnect").mockImplementation(async (uuid) => {
 		effects.push(`up:${uuid}`);
 		return true;
@@ -871,7 +876,7 @@ for (const outcome of [
 			if (outcome === "rollback-throws" && row.hotspot.transition === undefined)
 				throw new Error("Rollback observer refused");
 		});
-		spyOn(defaultHotspotDeps, "nmHotspot").mockImplementation(async () => {
+		spyOn(defaultHotspotDeps, "nmApConnAdd").mockImplementation(async () => {
 			if (throws) throw creationError;
 			if (outcome === "replacement")
 				fixture.targets.set("clap-wlan0", { ifindex: 99, wdev: "0x99" });
@@ -970,7 +975,7 @@ test("limited station connect and new join succeed without an invalid MAC pin", 
 	});
 	row.saved = { "Station fixture": "station-fixture" };
 	const connected = Promise.withResolvers<string>();
-	handleWifi(
+	const connecting = handleWifi(
 		{ send: (frame) => connected.resolve(String(frame)) },
 		{ connect: "station-fixture" },
 	);
@@ -978,13 +983,14 @@ test("limited station connect and new join succeed without an invalid MAC pin", 
 		connect: true,
 		device: "0",
 	});
+	await connecting;
 	setWifiJoinNmcliRunner(async () => ({
 		stdout: "Device 'wlan0' successfully activated with 'new-station-fixture'.",
 		stderr: "",
 		exitCode: 0,
 	}));
 	const joined = Promise.withResolvers<string>();
-	handleWifi(
+	const joining = handleWifi(
 		{ send: (frame) => joined.resolve(String(frame)) },
 		{
 			new: { device: 0, ssid: "Station fixture", password: PASSWORD },
@@ -994,6 +1000,7 @@ test("limited station connect and new join succeed without an invalid MAC pin", 
 		new: { success: true, device: 0 },
 	});
 	expect(effects).toEqual(["up:station-fixture"]);
+	await joining;
 });
 
 test("limited Stop and station selection cannot clear another present radio's intent", async () => {

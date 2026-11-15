@@ -251,8 +251,10 @@ export async function radioEquivalenceTranscript(
 		restorers.push(await fakeShadowSysfs(() => radios));
 	}
 
+	let confirmedUuid: string | undefined;
 	const deps: HotspotActivationDeps = {
 		recordIntent: wifiAdapterModeRecorder,
+		pollHotspotActive: async (_iface, uuid) => confirmedUuid === uuid,
 		credentials: {
 			get: (mac) => {
 				calls.push(["credentials.get", mac]);
@@ -273,10 +275,12 @@ export async function radioEquivalenceTranscript(
 			calls.push(["findHotspotConn", mac, stored]);
 			return undefined;
 		},
-		nmHotspot: async (ifname, ssid, password) => {
-			calls.push(["nmHotspot", ifname, ssid, password]);
+		nmApConnAdd: async (ifname, identity, bindingFields) => {
+			calls.push(["nmApConnAdd", ifname, identity, bindingFields]);
 			return `fixture-uuid-${ifname}`;
 		},
+		nmConnDelete: async () => true,
+		nmDisconnect: async () => true,
 		nmConnSetFields: async (uuid, fields) => {
 			calls.push(["nmConnSetFields", uuid, fields]);
 			return true;
@@ -342,12 +346,14 @@ export async function radioEquivalenceTranscript(
 				phase = "prepare:published";
 				const prepared = snapshot();
 				phase = "start:pending";
+				confirmedUuid = undefined;
 				const start = await wifiHotspotStart({ device: iface.id }, deps);
 				phase = "start:published";
 				const starting = snapshot();
 				phase = "confirmation:pending";
 				if (canHotspot(iface) && iface.hotspot.conn)
 					nm.activate(iface.ifname, iface.hotspot.conn);
+				confirmedUuid = "hotspot" in iface ? iface.hotspot.conn : undefined;
 				await handleWifiMonitorEvent({
 					type: "device-state",
 					device: iface.ifname,

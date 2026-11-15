@@ -666,7 +666,9 @@ describe("exclusive vs concurrent is the OPERATOR's choice, not the radio's", ()
 		return {
 			nmConnect: async () => true,
 			nmConnSetFields: async () => true,
-			nmHotspot: async () => "hotspot-uuid",
+			nmApConnAdd: async () => "hotspot-uuid",
+			nmConnDelete: async () => true,
+			nmDisconnect: async () => true,
 			wifiUpdateSavedConns: async () => {},
 			broadcastState: () => {},
 			setDupIpSuppression: () => {},
@@ -692,7 +694,7 @@ describe("exclusive vs concurrent is the OPERATOR's choice, not the radio's", ()
 				ensured++;
 				return { ifname: "clap-wlan0", created: true };
 			},
-			nmHotspot: async (device) => {
+			nmApConnAdd: async (device) => {
 				hotspotDevices.push(device);
 				return "hotspot-uuid";
 			},
@@ -723,7 +725,7 @@ describe("exclusive vs concurrent is the OPERATOR's choice, not the radio's", ()
 				ifname: "clap-wlan0",
 				created: true,
 			}),
-			nmHotspot: async (device) => {
+			nmApConnAdd: async (device) => {
 				hotspotDevices.push(device);
 				return "hotspot-uuid";
 			},
@@ -750,7 +752,7 @@ describe("exclusive vs concurrent is the OPERATOR's choice, not the radio's", ()
 				ifname: "clap-wlan0",
 				created: true,
 			}),
-			nmHotspot: async (device) => {
+			nmApConnAdd: async (device) => {
 				hotspotDevices.push(device);
 				return "hotspot-uuid";
 			},
