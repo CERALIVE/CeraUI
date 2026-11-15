@@ -54,7 +54,7 @@ export const HDMI_NO_SIGNAL_MSG = "No HDMI signal detected";
 
 /** The EXACT wire message of the EMI/cable-quality advisory raise. */
 export const EMI_ADVISORY_MSG =
-	"HDMI signal issues detected. This is usually caused either by EMI or a by a faulty cable. " +
+	"HDMI signal issues detected. This is usually caused either by EMI or by a faulty cable. " +
 	"Try to move any modems away from the HDMI cable and the encoder. " +
 	"If that fails, try out a different HDMI cable or to manually set a lower HDMI resolution/framerate on your camera";
 
