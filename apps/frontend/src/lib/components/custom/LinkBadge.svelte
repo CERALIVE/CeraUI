@@ -39,6 +39,8 @@ interface Props {
 	typeLabel?: string | undefined;
 	/** Twin discriminator, rendered only for a label more than one row shares. */
 	identity?: string | undefined;
+	/** A transient link state worth naming next to the kind ("Scanning"). `row` variant only. */
+	state?: string | undefined;
 }
 
 const {
@@ -46,6 +48,7 @@ const {
 	variant = 'row',
 	typeLabel = undefined,
 	identity = undefined,
+	state = undefined,
 }: Props = $props();
 
 const color = $derived(`var(--link-${link.linkIndex + 1})`);
@@ -84,7 +87,15 @@ const color = $derived(`var(--link-${link.linkIndex + 1})`);
 			>{link.label}</span
 		>
 		<span class="text-muted-foreground truncate text-[10px] uppercase tracking-wide">
-			{typeLabel}{#if identity}<!--
+			<!-- The state rides the kind line, ahead of the twin discriminator, so it
+			     never widens the instrument group and is the last thing to truncate.
+			     Foreground, not a status tone: those fall under 4.5:1 on the light
+			     identity tints (DESIGN.md §14). -->
+			{typeLabel}{#if state}<!--
+			-->&nbsp;·&nbsp;<!--
+			--><span data-testid="link-badge-state" class="text-foreground font-semibold"
+					>{state}</span
+				>{/if}{#if identity}<!--
 			-->&nbsp;·&nbsp;<!--
 			--><span data-testid="bonded-link-identity" dir="ltr" class="font-mono normal-case"
 					>{identity}</span
