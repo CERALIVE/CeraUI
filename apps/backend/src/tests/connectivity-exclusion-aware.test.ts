@@ -57,7 +57,7 @@ describe("probeExclusionReason", () => {
 	test("a broadcasting hotspot radio is never a probe source", () => {
 		expect(
 			probeExclusionReason(iface({ enabled: false, error: NETIF_ERR_HOTSPOT })),
-		).toBe("WiFi hotspot");
+		).toBe("Wi-Fi hotspot");
 	});
 
 	test("an addressless interface is excluded — there is no source to bind", () => {
@@ -98,7 +98,7 @@ describe("deviceBoundProbeExclusionReason", () => {
 			deviceBoundProbeExclusionReason(
 				iface({ enabled: false, error: NETIF_ERR_HOTSPOT }),
 			),
-		).toBe("WiFi hotspot");
+		).toBe("Wi-Fi hotspot");
 	});
 
 	test("a hotspot radio that ALSO has a dup address is still excluded", () => {
@@ -106,7 +106,7 @@ describe("deviceBoundProbeExclusionReason", () => {
 			deviceBoundProbeExclusionReason(
 				iface({ error: NETIF_ERR_HOTSPOT | NETIF_ERR_DUPIPV4 }),
 			),
-		).toBe("WiFi hotspot");
+		).toBe("Wi-Fi hotspot");
 	});
 
 	test("an addressless interface is excluded — it has no lease to egress on", () => {

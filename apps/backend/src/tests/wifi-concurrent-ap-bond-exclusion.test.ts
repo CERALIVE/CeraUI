@@ -117,8 +117,8 @@ describe("a concurrent AP holding 10.42.0.1 never enters the bond", () => {
 		// The flag is what the wire, the probe-eligibility rule and the
 		// same-subnet grouping all already read, so they inherit the exclusion
 		// rather than each learning a second rule.
-		expect(getNetifErrorMsg(entry as NetworkInterface)).toBe("WiFi hotspot");
-		expect(netIfBuildMsg()[CONCURRENT_AP]?.error).toBe("WiFi hotspot");
+		expect(getNetifErrorMsg(entry as NetworkInterface)).toBe("Wi-Fi hotspot");
+		expect(netIfBuildMsg()[CONCURRENT_AP]?.error).toBe("Wi-Fi hotspot");
 	});
 
 	test("the parent station is untouched — a hybrid radio still bonds", () => {

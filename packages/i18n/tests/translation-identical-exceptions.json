@@ -744,11 +744,6 @@
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Universal Serial Bus interface standard identifier."
 	},
-	"network.view.concurrentModeBadge": {
-		"value": "WiFi + AP",
-		"locales": ["ja", "ko"],
-		"reason": "Wi-Fi plus the IEEE 802.11 AP role acronym; only ja and ko retain both identifiers."
-	},
 	"network.view.ethernet": {
 		"value": "Ethernet",
 		"locales": ["de", "es", "fr", "pt-BR"],
@@ -783,11 +778,6 @@
 		"value": "RTT",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Round-trip-time statistic acronym used by the network diagnostics."
-	},
-	"network.view.wifi": {
-		"value": "WiFi",
-		"locales": ["ar", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
-		"reason": "Wi-Fi wireless standard label spelling used only in the explicitly listed catalogs."
 	},
 	"network.wifi.ssid": {
 		"value": "SSID",
@@ -883,11 +873,6 @@
 		"value": "USB",
 		"locales": ["de", "es", "fr", "ja", "ko", "pt-BR", "zh"],
 		"reason": "Universal Serial Bus interface standard identifier."
-	},
-	"networking.types.wifi": {
-		"value": "WiFi",
-		"locales": ["ar", "es", "fr", "ja", "ko", "pt-BR", "zh"],
-		"reason": "Wi-Fi wireless standard label spelling used only in the explicitly listed catalogs."
 	},
 	"notifications.error": {
 		"value": "Error",

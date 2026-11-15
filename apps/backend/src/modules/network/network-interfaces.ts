@@ -1354,7 +1354,7 @@ function computeSameSubnetGroups(
 
 // The order is deliberate, we want *hotspot* to have higher priority
 const netIfErrors = {
-	2: "WiFi hotspot",
+	2: "Wi-Fi hotspot",
 	1: NETIF_DUPLICATE_IPV4_ERROR,
 	4: "no SIM",
 	8: "shared LAN",

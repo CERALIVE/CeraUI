@@ -327,7 +327,7 @@ describe("WifiSection — zero radios is a stated fact", () => {
 
 		const empty = getByTestId("wifi-no-adapter");
 		expect(empty.getAttribute("role")).toBe("status");
-		expect(empty.textContent).toContain("No WiFi interfaces found");
+		expect(empty.textContent).toContain("No Wi-Fi interfaces found");
 		expect(empty.textContent).toContain("no usable Wi-Fi radio");
 		expect(queryByTestId("wifi-capabilities")).toBeNull();
 	});

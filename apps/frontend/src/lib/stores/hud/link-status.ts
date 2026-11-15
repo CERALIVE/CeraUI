@@ -190,7 +190,7 @@ export function buildBond(
 			type: "wifi",
 			linkIndex: 0,
 			signal: active && Number.isFinite(active.signal) ? active.signal : null,
-			label: active?.ssid || "WiFi",
+			label: active?.ssid || "Wi-Fi",
 			isConnected,
 			isStale: wifiStale || fullyStale || staleIds.has(id),
 			throughputKbps: throughputFor(id),
