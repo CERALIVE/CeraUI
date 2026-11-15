@@ -278,5 +278,21 @@ export function reportEngineState(p: {
 	isStreaming: boolean;
 	reachable: boolean;
 }): void {
-	evaluateIndicator("engine-crashed", p.isStreaming, !p.reachable);
+	const edge = evaluateIndicator("engine-crashed", p.isStreaming, !p.reachable);
+	if (edge === "lost") {
+		try {
+			emitEvent("engine_lost", { streaming: p.isStreaming });
+		} catch {
+			// Event history must not alter stream control.
+		}
+	}
+	if (edge === "recovered") reportEngineRecovery(p.isStreaming);
+}
+
+export function reportEngineRecovery(streaming: boolean): void {
+	try {
+		emitEvent("engine_recovered", { streaming });
+	} catch {
+		// Event history must not alter stream control.
+	}
 }

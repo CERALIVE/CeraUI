@@ -2,6 +2,7 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as timers from "node:timers";
 import {
 	EVENT_REGISTRY,
 	type EventCode,
@@ -573,16 +574,16 @@ test("update dedupe stays bounded without admitting forgotten identities in the 
 
 test("native scheduled timers are unreferenced and cancelled by reset", () => {
 	const h = harness();
-	const realSetTimeout = globalThis.setTimeout;
+	const realSetTimeout = timers.setTimeout;
 	const native: ReturnType<typeof setTimeout>[] = [];
-	const spy = spyOn(globalThis, "setTimeout").mockImplementation(
+	const spy = spyOn(timers, "setTimeout").mockImplementation(
 		Object.assign((...args: Parameters<typeof setTimeout>) => {
 			const timer = realSetTimeout(...args);
 			native.push(timer);
 			return timer;
 		}, realSetTimeout),
 	);
-	const cancel = spyOn(globalThis, "clearTimeout");
+	const cancel = spyOn(timers, "clearTimeout");
 	try {
 		resetEventEmitterForTest({
 			bootId: () => BOOT,
@@ -592,10 +593,12 @@ test("native scheduled timers are unreferenced and cancelled by reset", () => {
 			warn: () => {},
 		});
 		emitEvent("link_down", link);
+		expect(spy).toHaveBeenCalledWith(expect.any(Function), 30_000);
 		expect(native).toHaveLength(1);
 		expect(native[0]?.hasRef()).toBe(false);
 		resetEventEmitterForTest();
 		expect(cancel).toHaveBeenCalledWith(native[0]);
+		expect(cancel.mock.calls[0]?.[0]).toBe(native[0]);
 	} finally {
 		spy.mockRestore();
 		cancel.mockRestore();
