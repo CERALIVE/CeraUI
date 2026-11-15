@@ -1045,13 +1045,17 @@ kernel no longer lists in `/sys/class/net` — including one before first
 publication, or a poll that drops an existing entry invalidates its pending
 reading and immediately removes its committed descriptor, markers and coverage.
 A monitor down state on a name still present in sysfs is a link flap on a
-plugged-in device and keeps that incarnation's committed identity. Removal
-republishes `netif` and the modem roster itself, the edge the following scan
-used to report, so a removed router dongle's row is retracted on the same tick
-rather than a later sweep. The present-device view used to carry a legacy
-shared-serial bond opt-out to every present twin is rebuilt from the surviving
-descriptors, and the removed name's readiness clock and warning are cleared. At
-commit, a reading with a changed epoch loses its descriptor, markers and
+plugged-in device and keeps that incarnation's committed identity. An unplug
+whose sysfs node lingers past the monitor event is therefore not invalidated by
+the next poll: the monitor already dropped the netif entry, so the poll no
+longer reports a removal. Its committed coverage and descriptor survive until
+the next periodic USB scan (at most 5 s), and a flapping modem keeps its
+identity only until that scan. Removal republishes `netif` and the modem roster
+itself, the edge the following scan used to report, so a removed router
+dongle's row is retracted on the same tick rather than a later sweep. The
+present-device view used to carry a legacy shared-serial bond opt-out to every
+present twin is rebuilt from the surviving descriptors, and the removed name's
+readiness clock and warning are cleared. At commit, a reading with a changed epoch loses its descriptor, markers and
 coverage for that name and a fresh scan is requested; other names can still
 commit. A replacement reusing the name must obtain its own covering read or
 reach its own readiness deadline before identity-dependent admission.

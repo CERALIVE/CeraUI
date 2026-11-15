@@ -115,17 +115,30 @@ for (const removal of ["monitor", "absent"] as const) {
 		} else {
 			processIfconfigOutput("");
 		}
-		await refreshRouterCellularState();
-		await new Promise<void>((resolve) => setImmediate(resolve));
+		// One microtask turn, before any periodic scan: the removal itself must
+		// publish a netif without the name, and the committed caches must be gone.
+		await Promise.resolve();
 
+		const netifFrames = frames.filter((frame) => frame.type === "netif");
+		expect(netifFrames.length).toBeGreaterThan(0);
+		expect(JSON.stringify(netifFrames.at(-1)?.data)).not.toContain(ROUTER);
 		expect(usbNetScanCovers(ROUTER)).toBe(false);
 		expect(getUsbPhysicalDescriptor(ROUTER)).toBeUndefined();
 		expect(getRouterCellularMarker(ROUTER)).toBeUndefined();
 		expect(listPresentPhysicalDevices()).toEqual([]);
+
+		// The roster broadcaster loads its module lazily, which needs one event-loop
+		// turn (not a timed wait), still before the periodic scan.
+		await new Promise<void>((resolve) => setImmediate(resolve));
 		const rosters = rosterFrames();
 		expect(rosters.length).toBeGreaterThan(0);
 		expect(JSON.stringify(rosters.at(-1)?.data)).not.toContain(ROUTER);
-		expect(frames.some((frame) => frame.type === "netif")).toBe(true);
+
+		// The periodic scan starts from the emptied caches, so it adds nothing.
+		frames = [];
+		await refreshRouterCellularState();
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		expect(rosterFrames()).toEqual([]);
 	});
 }
 
