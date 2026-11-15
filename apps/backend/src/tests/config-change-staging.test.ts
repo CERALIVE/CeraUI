@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 
+import { abandonStagedConfigChange } from "../modules/streaming/config-change-persistence.ts";
 import {
 	clearStagedConfigChange,
 	type EngineEncodeSnapshot,
@@ -78,6 +79,26 @@ describe("staging holds the candidate off disk", () => {
 		expect(getStagedConfigChange()).toBeUndefined();
 		expect(readInflightMarker(deps)).toBeUndefined();
 		expect(deps.file()).toBeUndefined();
+	});
+
+	test("a second attempt cannot take the stage, and retiring it leaves the first intact", () => {
+		// Given an accepted attempt holding the stage while its change applies.
+		stageConfigChange(marker({ attemptId: "accepted-A" }), deps);
+
+		// When an overlapping attempt tries to stage, and is then abandoned as busy.
+		const claimed = stageConfigChange(
+			marker({
+				attemptId: "rejected-busy-B",
+				candidate: { resolution: "1280x720", framerate: 30 },
+			}),
+			deps,
+		);
+		abandonStagedConfigChange("rejected-busy-B");
+
+		// Then the accepted attempt still owns the held candidate and the marker.
+		expect(getStagedConfigChange()?.attemptId).toBe("accepted-A");
+		expect(readInflightMarker(deps)?.attemptId).toBe("accepted-A");
+		expect(claimed).toBe(false);
 	});
 
 	test("an unreadable marker is discarded rather than trusted", () => {

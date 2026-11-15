@@ -26,16 +26,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { getConfig } from "../modules/config.ts";
+import { commitStagedConfigChange } from "../modules/streaming/config-change-persistence.ts";
 import {
 	buildEngineEncodeSnapshot,
 	type InflightReconcileDeps,
 	runInflightConfigChangeReconciliation,
 	settleInflightConfigChangeReconciliation,
 } from "../modules/streaming/config-change-reconcile-wiring.ts";
-import type {
-	EngineEncodeSnapshot,
-	InflightConfigMarker,
-	StagingDeps,
+import {
+	clearStagedConfigChange,
+	type EngineEncodeSnapshot,
+	getStagedConfigChange,
+	type InflightConfigMarker,
+	type StagingDeps,
+	stageConfigChange,
 } from "../modules/streaming/config-change-staging.ts";
 
 let markerDir: string;
@@ -131,6 +135,7 @@ describe("F11 — crash-window reconciliation is wired into production", () => {
 		const config = getConfig();
 		config.resolution = priorResolution;
 		config.framerate = priorFramerate;
+		clearStagedConfigChange(fileStagingDeps());
 		rmSync(markerDir, { recursive: true, force: true });
 	});
 
@@ -308,6 +313,69 @@ describe("F11 — crash-window reconciliation is wired into production", () => {
 		expect(second.asked).toBe(0);
 		expect(getConfig().resolution).toBe("2160p");
 		await settleInflightConfigChangeReconciliation();
+	});
+
+	test("a marker staged by a change running NOW is not a crash leftover", async () => {
+		// Given a live change that has staged its marker, and the boot or reconnect
+		// hook firing before the engine applies it (still on the old geometry).
+		stageConfigChange({ ...MARKER, attemptId: "live" }, fileStagingDeps());
+
+		const verdict = await runInflightConfigChangeReconciliation(
+			harness([
+				{
+					streaming: true,
+					resolution: "1080p",
+					framerate: 30,
+					pipelinePlaying: true,
+					framesEmitted: 900,
+				},
+			]),
+		);
+
+		// Then the change keeps its stage and its marker, and its own `applied`
+		// still persists the candidate.
+		expect(getStagedConfigChange()?.attemptId).toBe("live");
+		expect(markerOnDisk()).toBe(true);
+		expect(verdict).toBe("no_marker");
+		commitStagedConfigChange("live");
+		expect(getConfig().resolution).toBe("2160p");
+	});
+
+	test("retiring a crash marker leaves a change running NOW staged", async () => {
+		// Given a crash marker on disk, and a live change whose own marker write
+		// failed, so it is staged in memory only.
+		plantMarker(MARKER);
+		stageConfigChange(
+			{
+				...MARKER,
+				attemptId: "live",
+				candidate: { resolution: "720p", framerate: 30 },
+			},
+			{
+				...fileStagingDeps(),
+				writeMarker: () => {
+					throw new Error("disk full");
+				},
+			},
+		);
+
+		// When the crash marker is judged with the engine on its candidate.
+		const verdict = await runInflightConfigChangeReconciliation(
+			harness([
+				{
+					streaming: true,
+					resolution: "3840x2160",
+					framerate: 30,
+					pipelinePlaying: true,
+					framesEmitted: 900,
+				},
+			]),
+		);
+
+		// Then only the crash marker is retired; the live change keeps its stage.
+		expect(verdict).toBe("persisted_candidate");
+		expect(markerOnDisk()).toBe(false);
+		expect(getStagedConfigChange()?.attemptId).toBe("live");
 	});
 });
 

@@ -134,6 +134,29 @@ immediately, unchanged. `config.json` is written ONLY on `applied`
 leave the persisted values byte-identical, because those values are still the
 ones the engine is running.
 
+**THE STAGE BELONGS TO ONE ATTEMPT.** Each apply-now save builds its marker with
+its own `attemptId` and stages it only at dispatch, after every await in
+`setConfig` and in the same synchronous stretch as the orchestrator's admission.
+`stageConfigChange` refuses (returns `false`, writing nothing) while another
+attempt holds the stage, and `setConfig` answers that save `busy`, exactly as
+admission would. `commitStagedConfigChange(attemptId)` and
+`abandonStagedConfigChange(attemptId)` retire only that attempt, and a dispatch
+that throws still releases it. Before this, two overlapping saves (one parked on
+the Bluetooth refresh an `audio_backend` change awaits) shared one stage: the
+later save replaced the earlier candidate and marker, and the busy loser's
+abandon then removed the winner's, so an `applied` change was never persisted.
+
+**A FINISHED ATTEMPT NEVER KEEPS THE STAGE, EVEN WHEN ITS WRITE FAILS.** If
+`config.json` cannot be written after `applied`, the error still reaches the
+caller, but `commitStagedConfigChange` first releases the in-memory stage
+(`releaseStagedConfigChange`) and leaves the marker on disk. The engine runs the
+candidate and the in-memory config already holds it, so the next successful
+config write of any kind persists it. Until then the marker is recovery evidence
+that no running change owns, so the next boot or engine reconnect judges it like
+a crash leftover and completes the write. The next apply-now save is admitted
+normally; its own marker replaces the old one, and its commit writes the whole
+in-memory config, the earlier candidate included.
+
 **CRASH-WINDOW RECONCILIATION IS MARKER-ONLY.** `reconcileInflightConfigChange`
 does nothing at all without the marker. A bare params-vs-config mismatch WITHOUT
 a marker is a legitimate "apply on next start" the operator chose, and
@@ -143,7 +166,10 @@ the CANDIDATE + outcome gate satisfied (`pipeline_playing` and frames advancing)
 ⇒ persist the candidate; engine on the PREVIOUS params or idle ⇒ retain the old
 values; transitional/unreachable/neither ⇒ write NOTHING and KEEP the marker for
 the next reconnect. Guessing in either direction persists a config the operator
-never got or discards one they did.
+never got or discards one they did. A marker whose `attemptId` is the one this
+process has staged belongs to a change still running, not to a crash: it is
+never judged (`no_marker`), and a judged marker is removed alone, never the
+stage of a change running now.
 
 **AND IT IS ARMED — `config-change-reconcile-wiring.ts` is what calls it.** For
 one wave the paragraph above described behaviour that could not happen: the only
@@ -193,12 +219,17 @@ Coverage: `tests/config-change-reconcile-wiring.test.ts` (a REAL on-disk marker
 through the REAL writer and REAL `config.json`: persist-candidate, retain-previous,
 the undecided-then-decisive re-ask, the never-decisive defer that keeps the marker,
 the no-marker zero-side-effect case, double-apply, the overlapping-run join, the
-config-space normalization table, and the two call-site locks),
+config-space normalization table, the two call-site locks, and a running change's
+stage surviving both hooks),
 `tests/config-change-orchestrator.test.ts` (admission, the four typed
 outcomes, stop-during-applying, stop-during-rollback, the teardown_timeout →
 engine-exit escalation chain, attempt fencing, deadline reconcile, and the
 deadline-sizing assertion), `tests/config-change-staging.test.ts` (the pure
-marker/judgement table), `tests/config-change-persistence.test.ts` (the REAL
-procedure: applied-writes vs reverted/rollback_failed-don't, the delta contents,
-both apply-now fallbacks, and marker-present vs marker-absent reconciliation).
+marker/judgement table and the one-attempt stage),
+`tests/config-change-persistence.test.ts` (the REAL procedure:
+applied-writes vs reverted/rollback_failed-don't, the delta contents, both
+apply-now fallbacks, a throwing dispatch releasing the stage, a `config.json`
+write failing after `applied` (next save admitted, marker kept and later
+judged), two overlapping saves through the real orchestrator admission, and
+marker-present vs marker-absent reconciliation).
 
