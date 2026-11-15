@@ -407,7 +407,7 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 			<!-- Layout: mounted ONLY while the engine advertises composition, so a board
 			     that cannot compose renders no node at all. -->
 			{#if canCompose}
-				<div data-testid="layout-controls">
+				<div data-testid="layout-controls" data-touch-region>
 					<CompositionCard {config} geometry={canPlace} {isStreaming} {sources} />
 				</div>
 			{/if}
@@ -419,7 +419,7 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 		<section
 			aria-labelledby="live-audio-card-title"
 			class="flex min-w-0 flex-col gap-3 lg:col-span-2 lg:col-start-4"
-			data-testid="audio-card"
+			data-testid="audio-card" data-touch-region
 		>
 			<h2 class="text-muted-foreground text-xs font-medium" id="live-audio-card-title">
 				{m["live.audioCard.title"]()}

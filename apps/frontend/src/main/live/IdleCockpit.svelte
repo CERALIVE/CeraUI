@@ -169,7 +169,7 @@ const audioEmbeddedComingSoon = $derived(
 		     board that cannot compose renders no node at all rather than a disabled
 		     card. The stale-config notice is its counterpart on the absent branch. -->
 		{#if canCompose}
-			<div data-testid="layout-controls">
+			<div data-testid="layout-controls" data-touch-region>
 				<CompositionCard
 					captureCause={startFailureCaptureCause}
 					{config}

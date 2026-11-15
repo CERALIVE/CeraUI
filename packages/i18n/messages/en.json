@@ -2588,6 +2588,7 @@
 	"live.layout.inset": "Second input position",
 	"live.layout.insetPosition": "{x}% from the left, {y}% from the top, {width}% wide, {height}% tall.",
 	"live.layout.insetKeys": "Move it with the arrow keys. Hold Shift to move faster, or Alt to resize.",
+	"live.layout.insetCancel": "Press Escape before letting go to put it back where it was.",
 	"live.layout.error.composition_unsupported": "This device can't combine two inputs right now, so the position didn't change.",
 	"live.layout.error.composition_geometry_unsupported": "This device offers only the preset layouts, so the position didn't change.",
 	"live.layout.error.composition_rect_invalid": "The device couldn't use that position. Check that two inputs are combined, then try again.",

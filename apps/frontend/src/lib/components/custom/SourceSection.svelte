@@ -833,7 +833,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 										/>
 										<span class="flex min-w-0 flex-col">
 											<span
-												class="truncate text-sm font-medium {source.origin === 'coarse'
+												class="line-clamp-2 text-sm font-medium break-words {source.origin === 'coarse'
 													? 'text-muted-foreground'
 													: ''}"
 												data-testid={`source-row-name-${source.id}`}
@@ -1245,7 +1245,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 		<section
 			aria-labelledby="live-audio-card-title"
 			class="space-y-3 border-t pt-5"
-			data-testid="audio-card"
+			data-testid="audio-card" data-touch-region
 		>
 		<h2 class="text-muted-foreground text-xs font-medium" id="live-audio-card-title">
 			{m["live.audioCard.title"]()}

@@ -2588,6 +2588,7 @@
 	"live.layout.inset": "दूसरे इनपुट की जगह",
 	"live.layout.insetPosition": "बाएँ किनारे से {x}%, ऊपर से {y}%, चौड़ाई {width}%, ऊँचाई {height}%।",
 	"live.layout.insetKeys": "तीर कुंजियों से खिसकाएँ। तेज़ी से खिसकाने के लिए Shift दबाए रखें, आकार बदलने के लिए Alt।",
+	"live.layout.insetCancel": "पिछली जगह पर लौटाने के लिए छोड़ने से पहले Escape दबाएँ।",
 	"live.layout.error.composition_unsupported": "यह डिवाइस अभी दो इनपुट नहीं मिला सकता, इसलिए जगह नहीं बदली।",
 	"live.layout.error.composition_geometry_unsupported": "यह डिवाइस सिर्फ़ तय लेआउट देता है, इसलिए जगह नहीं बदली।",
 	"live.layout.error.composition_rect_invalid": "डिवाइस इस जगह का उपयोग नहीं कर सका। देखें कि दो इनपुट मिले हुए हैं, फिर दोबारा कोशिश करें।",

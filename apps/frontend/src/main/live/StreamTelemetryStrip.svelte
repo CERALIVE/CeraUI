@@ -74,7 +74,7 @@ const {
 			<span data-testid="telemetry-bitrate" style="color: var(--status-live);">{bitrate}</span>
 		</p>
 		{#if bitrateTarget || bitrateLimit}
-			<p class="text-muted-foreground/70 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
+			<p class="text-muted-foreground flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
 				{#if bitrateTarget}
 					<span data-testid="telemetry-bitrate-target" title={m["hud.bitrateTargetHint"]()}>
 						{m["hud.bitrateTarget"]()}

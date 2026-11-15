@@ -2543,6 +2543,7 @@
 	"live.layout.inset": "2 つ目の入力の位置",
 	"live.layout.insetPosition": "左端から {x}%、上端から {y}%、幅 {width}%、高さ {height}%。",
 	"live.layout.insetKeys": "矢印キーで移動します。Shift を押しながらで速く移動、Alt を押しながらでサイズを変更します。",
+	"live.layout.insetCancel": "離す前に Esc を押すと、元の位置に戻ります。",
 	"live.layout.error.composition_unsupported": "このデバイスは現在 2 つの入力を合成できないため、位置は変わりませんでした。",
 	"live.layout.error.composition_geometry_unsupported": "このデバイスではプリセットのレイアウトのみ使用できるため、位置は変わりませんでした。",
 	"live.layout.error.composition_rect_invalid": "デバイスはこの位置を使用できませんでした。2 つの入力が合成されていることを確認して、もう一度お試しください。",

@@ -37,8 +37,8 @@ import {
 	defaultAudioInput as defaults,
 } from '@ceraui/rpc/schemas';
 import { Activity, RotateCcw, Volume2, VolumeX } from '@lucide/svelte';
-import { Slider as SliderPrimitive } from 'bits-ui';
 
+import LabeledSlider from '$lib/components/custom/LabeledSlider.svelte';
 import AudioLevelMeter from '$lib/components/preview/AudioLevelMeter.svelte';
 import LiveAudioMeter from '$lib/components/preview/LiveAudioMeter.svelte';
 import { Button } from '$lib/components/ui/button';
@@ -502,38 +502,19 @@ const headingId = `${uid}-heading`;
 							<span class="text-muted-foreground w-10 shrink-0 text-xs font-medium">
 								{m['live.audioMixer.gain']()}
 							</span>
-							<SliderPrimitive.Root
-								class="relative flex min-h-6 w-full min-w-0 touch-none items-center select-none data-disabled:opacity-50"
-								data-slot="slider"
+							<LabeledSlider
 								data-testid={`audio-strip-gain-${strip.id}`}
+								{describedBy}
 								disabled={valuesLocked}
+								label={m['live.audioMixer.gainFor']({ name: strip.label })}
 								max={mix.gain_db_max}
 								min={mix.gain_db_min}
-								onValueChange={(value: number) => moveGain(strip.id, value)}
-								onValueCommit={(value: number) => commitGain(strip.id, value)}
+								onValueChange={(value) => moveGain(strip.id, value)}
+								onValueCommit={(value) => commitGain(strip.id, value)}
 								step={1}
-								type="single"
 								value={gain}
-							>
-								{#snippet children({ thumbItems })}
-									<span
-										class="bg-muted relative h-1 w-full grow overflow-hidden rounded-full"
-										data-slot="slider-track"
-									>
-										<SliderPrimitive.Range class="bg-primary absolute h-full select-none" />
-									</span>
-									{#each thumbItems as thumb (thumb.index)}
-										<SliderPrimitive.Thumb
-											aria-describedby={describedBy}
-											aria-label={m['live.audioMixer.gainFor']({ name: strip.label })}
-											aria-valuetext={formatDb(gain)}
-											class="border-ring ring-ring/50 relative block size-3 shrink-0 rounded-full border bg-white transition-[color,box-shadow] select-none after:absolute after:-inset-2 hover:ring-3 focus-visible:ring-3 focus-visible:outline-hidden active:ring-3 disabled:pointer-events-none disabled:opacity-50"
-											data-slot="slider-thumb"
-											index={thumb.index}
-										/>
-									{/each}
-								{/snippet}
-							</SliderPrimitive.Root>
+								valueText={formatDb(gain)}
+							/>
 							<!-- A signed measurement keeps its own order in right-to-left locales. -->
 							<span
 								class="bg-primary/10 text-primary w-16 shrink-0 rounded-md px-2 py-1 text-center font-mono text-xs tabular-nums"
@@ -562,7 +543,7 @@ const headingId = `${uid}-heading`;
 								aria-label={m['live.audioMixer.muteFor']({ name: strip.label })}
 								aria-pressed={values.mute}
 								class={values.mute
-									? 'border-status-warning/60 bg-status-warning/15 text-status-warning hover:bg-status-warning/20 hover:text-status-warning'
+									? 'border-status-warning/60 bg-status-warning/15 hover:bg-status-warning/20'
 									: ''}
 								data-testid={`audio-strip-mute-${strip.id}`}
 								disabled={valuesLocked}
@@ -571,7 +552,8 @@ const headingId = `${uid}-heading`;
 								variant="outline"
 							>
 								{#if values.mute}
-									<VolumeX aria-hidden={true} />
+									<!-- The tint and the icon carry the warning; the word stays foreground (AA). -->
+									<VolumeX aria-hidden={true} class="text-status-warning" />
 								{:else}
 									<Volume2 aria-hidden={true} />
 								{/if}

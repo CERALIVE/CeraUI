@@ -2543,6 +2543,7 @@
 	"live.layout.inset": "第二路输入的位置",
 	"live.layout.insetPosition": "距左边缘 {x}%，距上边缘 {y}%，宽 {width}%，高 {height}%。",
 	"live.layout.insetKeys": "用方向键移动。按住 Shift 可加快移动，按住 Alt 可调整大小。",
+	"live.layout.insetCancel": "松开前按 Esc 可放回原位。",
 	"live.layout.error.composition_unsupported": "此设备当前无法合成两路输入，因此位置未改变。",
 	"live.layout.error.composition_geometry_unsupported": "此设备仅提供预设布局，因此位置未改变。",
 	"live.layout.error.composition_rect_invalid": "设备无法使用该位置。请确认已合成两路输入，然后重试。",

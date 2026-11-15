@@ -292,8 +292,10 @@ const networkSummary = $derived(
 		data-state={state}
 		data-section={row.section}
 	>
-		<div class="flex items-center justify-between gap-4">
-			<div class="flex min-w-0 items-start gap-2.5">
+		<!-- The text keeps at least 12rem; when the actions do not fit beside it they
+		     wrap under it, at the inline end, instead of squeezing the value. -->
+		<div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+			<div class="flex min-w-0 flex-[1_1_12rem] items-start gap-2.5">
 				<span
 					class="mt-1.5 size-2 shrink-0 rounded-full"
 					style="background: {stateColor(state)};"
@@ -306,7 +308,7 @@ const networkSummary = $derived(
 				<div class="min-w-0">
 					<p class="text-sm font-medium">{row.label}</p>
 					<p
-						class="truncate font-mono text-sm {state === 'warn'
+						class="font-mono text-sm break-words {state === 'warn'
 							? 'font-medium'
 							: 'text-muted-foreground'}"
 						style={state === 'warn' ? 'color: var(--status-warning);' : undefined}
@@ -315,7 +317,7 @@ const networkSummary = $derived(
 					</p>
 					{#if reasonKey}
 						<p
-							class="text-muted-foreground truncate text-xs"
+							class="text-muted-foreground text-xs break-words"
 							data-testid="setup-row-reason"
 						>
 							{resolveReason(reasonKey)}
@@ -337,7 +339,7 @@ const networkSummary = $derived(
 					{/if}
 				</div>
 			</div>
-			<div class="flex shrink-0 items-center gap-2">
+			<div class="ms-auto flex shrink-0 items-center gap-2">
 				{#if chip === 'traffic-light'}
 					<!-- Traffic-light: green = validated, neutral = unchecked. Never blocks
 					     Start. -->
@@ -356,7 +358,7 @@ const networkSummary = $derived(
 								: 'var(--muted-foreground)'};"
 							aria-hidden={true}
 						></span>
-						<span class="hidden sm:inline">
+						<span>
 							{destinationValidated === true
 								? m["live.goLive.validated"]()
 								: m["live.goLive.notChecked"]()}
@@ -394,7 +396,7 @@ const networkSummary = $derived(
 						variant="ghost"
 					>
 						<Pencil aria-hidden={true} class="h-3.5 w-3.5" />
-						<span class="hidden sm:inline">{m["live.editSettings"]()}</span>
+						<span class="max-sm:sr-only">{m["live.editSettings"]()}</span>
 						<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
 					</Button>
 				{/if}
@@ -490,12 +492,12 @@ const networkSummary = $derived(
 			<!-- Network — synthesized (no config dialog); action navigates to Network. -->
 			<div>
 				<div
-					class="flex items-center justify-between gap-4 py-2.5 first:pt-0"
+					class="flex flex-wrap items-center gap-x-4 gap-y-1 py-2.5 first:pt-0"
 					data-testid="setup-row"
 					data-row="network"
 					data-state={networkState}
 				>
-					<div class="flex min-w-0 items-start gap-2.5">
+					<div class="flex min-w-0 flex-[1_1_12rem] items-start gap-2.5">
 						<span
 							class="mt-1.5 size-2 shrink-0 rounded-full"
 							style="background: {stateColor(networkState)};"
@@ -507,12 +509,12 @@ const networkSummary = $derived(
 						/>
 						<div class="min-w-0">
 							<p class="text-sm font-medium">{m["live.goLive.gate.network"]()}</p>
-							<p class="text-muted-foreground truncate font-mono text-sm">
+							<p class="text-muted-foreground font-mono text-sm break-words">
 								{networkSummary}
 							</p>
 							{#if networkReason}
 								<p
-									class="text-muted-foreground truncate text-xs"
+									class="text-muted-foreground text-xs break-words"
 									data-testid="setup-row-reason"
 								>
 									{resolveReason(networkReason)}
@@ -521,7 +523,7 @@ const networkSummary = $derived(
 						</div>
 					</div>
 					<Button
-						class="min-h-[44px] shrink-0 gap-1.5"
+						class="ms-auto min-h-[44px] shrink-0 gap-1.5"
 						data-testid="setup-row-fix"
 						data-fix="goNetwork"
 						onclick={onGoNetwork}
