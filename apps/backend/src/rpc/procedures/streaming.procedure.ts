@@ -98,6 +98,7 @@ import {
 	commitStagedConfigChange,
 } from "../../modules/streaming/config-change-persistence.ts";
 import {
+	type InflightConfigMarker,
 	type StagedConfigFields,
 	stageConfigChange,
 } from "../../modules/streaming/config-change-staging.ts";
@@ -614,8 +615,9 @@ const APPLY_NOW_FIELDS = [
 ] as const;
 
 /**
- * Move the restart-requiring fields off `input` and into a staged marker,
- * returning `undefined` when this save is an ordinary "apply on next start".
+ * Move the restart-requiring fields off `input` and into a marker for this
+ * attempt, returning `undefined` when this save is an ordinary "apply on next
+ * start". The marker is staged later, at dispatch.
  *
  * It MUTATES `input` on purpose: deleting the fields is what makes the existing
  * merge block below skip them, so there is exactly one place that decides
@@ -625,7 +627,7 @@ function stageApplyNowFields(
 	input: StreamingSetConfigInput,
 	config: RuntimeConfig,
 	sourceRouting: Extract<ResolveSourceRoutingResult, { ok: true }> | undefined,
-): StagedConfigFields | undefined {
+): InflightConfigMarker | undefined {
 	if (input.apply_now !== true) return undefined;
 	if (
 		!APPLY_NOW_FIELDS.some((field) =>
@@ -674,13 +676,6 @@ function stageApplyNowFields(
 			: { selected_video_input: config.selected_video_input }),
 	};
 
-	stageConfigChange({
-		attemptId: newAttemptId(),
-		startedAt: Date.now(),
-		candidate,
-		previous,
-	});
-
 	// The engine change-config contract cannot clear a codec; use its next-start default.
 	for (const field of APPLY_NOW_FIELDS) {
 		if (field !== "video_codec" || input.video_codec !== null)
@@ -688,7 +683,12 @@ function stageApplyNowFields(
 	}
 	if (sourceRouting !== undefined) delete input.pipeline;
 
-	return candidate;
+	return {
+		attemptId: newAttemptId(),
+		startedAt: Date.now(),
+		candidate,
+		previous,
+	};
 }
 
 /**
@@ -994,8 +994,8 @@ export const setConfigProcedure = authedProcedure
 		// back (staged, never written) so `config.json` keeps describing what the
 		// engine is ACTUALLY running until the transaction says `applied`. Every
 		// other field in the same save persists immediately, exactly as before.
-		const staged = stageApplyNowFields(input, config, sourceRouting);
-		if (staged !== undefined) sourceRouting = undefined;
+		const marker = stageApplyNowFields(input, config, sourceRouting);
+		if (marker !== undefined) sourceRouting = undefined;
 
 		if (input.srt_latency !== undefined)
 			config.srt_latency = Math.max(input.srt_latency, SRTLA_MIN_LATENCY_MS);
@@ -1200,34 +1200,46 @@ export const setConfigProcedure = authedProcedure
 			syncAudioMeterPreference();
 		}
 
-		if (staged === undefined) return { success: true, applied };
+		if (marker === undefined) return { success: true, applied };
 
-		const outcome = await getApplyNowGate().dispatch({
-			...(staged.resolution === undefined
-				? {}
-				: { resolution: staged.resolution }),
-			...(staged.framerate === undefined
-				? {}
-				: { framerate: staged.framerate }),
-			...(staged.video_codec === undefined
-				? {}
-				: { video_codec: staged.video_codec }),
-			...(staged.selected_video_input === undefined
-				? {}
-				: { input_id: staged.selected_video_input }),
-			...(staged.pipeline === undefined ? {} : { pipeline: staged.pipeline }),
-			...(staged.input_mode === undefined
-				? {}
-				: { input_mode: staged.input_mode }),
-			...(staged.composition === undefined
-				? {}
-				: { composition: staged.composition }),
-		});
+		// Staged in the same synchronous stretch as the orchestrator's admission,
+		// after every await above, so of two overlapping saves the later one is
+		// busy before it can touch the other's stage, as admission would answer it.
+		if (!stageConfigChange(marker))
+			return { success: false, applied, configChange: { result: "busy" } };
+		const staged = marker.candidate;
+		const outcome = await getApplyNowGate()
+			.dispatch({
+				...(staged.resolution === undefined
+					? {}
+					: { resolution: staged.resolution }),
+				...(staged.framerate === undefined
+					? {}
+					: { framerate: staged.framerate }),
+				...(staged.video_codec === undefined
+					? {}
+					: { video_codec: staged.video_codec }),
+				...(staged.selected_video_input === undefined
+					? {}
+					: { input_id: staged.selected_video_input }),
+				...(staged.pipeline === undefined ? {} : { pipeline: staged.pipeline }),
+				...(staged.input_mode === undefined
+					? {}
+					: { input_mode: staged.input_mode }),
+				...(staged.composition === undefined
+					? {}
+					: { composition: staged.composition }),
+			})
+			.catch((error: unknown) => {
+				// The stage is exclusive, so a dispatch that throws must still release it.
+				abandonStagedConfigChange(marker.attemptId);
+				throw error;
+			});
 
 		if (outcome.result !== "applied") {
 			// reverted / rollback_failed / busy / rejected all leave the persisted
 			// values alone — they are still the ones the engine last ran.
-			abandonStagedConfigChange();
+			abandonStagedConfigChange(marker.attemptId);
 			return {
 				success: outcome.result === "reverted",
 				applied,
@@ -1235,7 +1247,7 @@ export const setConfigProcedure = authedProcedure
 			};
 		}
 
-		commitStagedConfigChange();
+		commitStagedConfigChange(marker.attemptId);
 		const persisted = getConfig();
 		if (staged.composition !== undefined)
 			applied.composition = persisted.composition ?? null;
