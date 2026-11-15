@@ -143,6 +143,11 @@ const valuesKey = ({ gain_db, mute, delay_ms }: Values): string => `${gain_db}|$
 // An input the saved mix does not list is at its defaults.
 const AT_DEFAULTS = valuesKey(defaults(''));
 
+// The level the device was last sent or answered, per input; asking for that same
+// level again sends nothing. A broadcast that changes the input replaces it with
+// the saved level, which is what the device now holds.
+const gainSent: Record<string, number> = {};
+
 // How many config broadcasts changed each input's saved level, mute or delay,
 // read from the saved mix itself, so an input with no strip (gone or
 // unavailable) still counts. Counted, not compared, so a value changed and
@@ -151,7 +156,11 @@ let broadcasts = $state<Record<string, number>>({});
 let lastSaved: Record<string, string> = {};
 $effect.pre(() => {
 	const saved: Record<string, string> = {};
-	for (const input of config?.audio_inputs ?? []) saved[input.id] = valuesKey(input);
+	const savedGain: Record<string, number> = {};
+	for (const input of config?.audio_inputs ?? []) {
+		saved[input.id] = valuesKey(input);
+		savedGain[input.id] = input.gain_db;
+	}
 	untrack(() => {
 		const changed = Object.keys({ ...lastSaved, ...saved }).filter(
 			(id) => (lastSaved[id] ?? AT_DEFAULTS) !== (saved[id] ?? AT_DEFAULTS),
@@ -159,7 +168,10 @@ $effect.pre(() => {
 		lastSaved = saved;
 		if (changed.length === 0) return;
 		const next = { ...broadcasts };
-		for (const id of changed) next[id] = (next[id] ?? 0) + 1;
+		for (const id of changed) {
+			next[id] = (next[id] ?? 0) + 1;
+			gainSent[id] = savedGain[id] ?? defaults(id).gain_db;
+		}
 		broadcasts = next;
 	});
 });
@@ -325,7 +337,8 @@ async function sendLive(id: string, update: Omit<SetAudioMixInput, 'id'>): Promi
 		if (!result.success) {
 			setError(id, result.error);
 			delete gainSent[id];
-		} else if (result.applied !== undefined) {
+		} else if (result.applied !== undefined && sentAt === (broadcasts[id] ?? 0)) {
+			// An answer a broadcast overtook is older than what that broadcast set.
 			const { gain_db, mute, delay_ms } = result.applied;
 			liveApplied = { ...liveApplied, [id]: { values: { gain_db, mute, delay_ms }, sentAt } };
 			gainSent[id] = gain_db;
@@ -345,7 +358,6 @@ async function sendLive(id: string, update: Omit<SetAudioMixInput, 'id'>): Promi
 // GAIN_SEND_INTERVAL_MS while dragging and once more on release; idle, it is
 // saved once, on release.
 let gainDraft = $state<Record<string, number>>({});
-const gainSent: Record<string, number> = {};
 const gainSentAt: Record<string, number> = {};
 const gainTimer: Record<string, ReturnType<typeof setTimeout> | undefined> = {};
 const dragging: Record<string, boolean> = {};
@@ -356,13 +368,18 @@ function dropDraft(id: string): void {
 	gainDraft = rest;
 }
 
-// A strip that goes away mid-drag never sees its release: end that drag, so the
-// level shows the device's values again when the strip returns.
+// A level control that goes away mid-drag (its strip leaves, or its input leaves
+// the mix) never sees its release: end that drag, so the level shows the device's
+// values again when the control returns. Same condition the markup renders it on.
 $effect(() => {
-	const visible = new Set(strips.map((strip) => strip.id));
+	const controls = new Set(
+		mix === undefined
+			? []
+			: strips.filter((strip) => isEnabled(strip.id)).map((strip) => strip.id),
+	);
 	untrack(() => {
 		for (const id of Object.keys(gainDraft)) {
-			if (visible.has(id)) continue;
+			if (controls.has(id)) continue;
 			dragging[id] = false;
 			clearTimeout(gainTimer[id]);
 			gainTimer[id] = undefined;
