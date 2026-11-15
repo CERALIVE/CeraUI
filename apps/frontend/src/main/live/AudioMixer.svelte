@@ -16,9 +16,10 @@
   device composes it on its own saved mix, so an edit never carries a stale copy
   of the other inputs; its config echo is what the strips then show.
   Live on a mix session (`status.audio_mix_active`), level, mute and delay go to
-  `streaming.setAudioMix` and the device's applied values win until a later
-  config broadcast changes that field (another tab's write); membership and
-  tracks wait for the next start. Live without a mix, every control waits.
+  `streaming.setAudioMix` and the device's applied values win until a config
+  broadcast changes that input after the change was sent (another tab's write,
+  or the change's own echo with the same values); membership and tracks wait
+  for the next start. Live without a mix, every control waits.
 
   A refusal is shown beside its strip as the copy of the backend token that
   names it. The UI refuses a track change the backend would refuse with the same
@@ -38,6 +39,7 @@ import {
 	defaultAudioInput as defaults,
 } from '@ceraui/rpc/schemas';
 import { Activity, RotateCcw, Volume2, VolumeX } from '@lucide/svelte';
+import { untrack } from 'svelte';
 
 import LabeledSlider from '$lib/components/custom/LabeledSlider.svelte';
 import AudioLevelMeter from '$lib/components/preview/AudioLevelMeter.svelte';
@@ -137,24 +139,42 @@ function entryFor(id: string): AudioInputSetting {
 const enabledCount = $derived(strips.filter((strip) => isEnabled(strip.id)).length);
 const full = $derived(mix !== undefined && enabledCount >= mix.max_inputs);
 
-// The device's answer to this tab's latest live change, per input, with the
-// saved values it answered over. It wins until the session ends, except for a
-// field a later config broadcast changed since: another tab wrote it. Our own
-// write's echo arrives on the same socket before its answer, so it never counts.
-let liveApplied = $state<Record<string, { values: Values; over: Values }>>({});
+// How many config broadcasts changed each input's level, mute or delay. Counted,
+// not compared, so a value changed and changed back still counts.
+let broadcasts = $state<Record<string, number>>({});
+const lastSeen: Record<string, string> = {};
+$effect.pre(() => {
+	const seen = strips.map((strip) => {
+		const { gain_db, mute, delay_ms } = entryFor(strip.id);
+		return [strip.id, `${gain_db}|${mute}|${delay_ms}`] as const;
+	});
+	untrack(() => {
+		const changed = seen.filter(([id, values]) => {
+			const before = lastSeen[id];
+			lastSeen[id] = values;
+			return before !== undefined && before !== values;
+		});
+		if (changed.length === 0) return;
+		const next = { ...broadcasts };
+		for (const [id] of changed) next[id] = (next[id] ?? 0) + 1;
+		broadcasts = next;
+	});
+});
+
+// The device's answer to this tab's latest live change, per input. It wins until
+// the session ends, unless a broadcast changed that input after the change was
+// sent: then the broadcast is newer (another tab's write, or our own echo).
+let liveApplied = $state<Record<string, { values: Values; sentAt: number }>>({});
 $effect(() => {
 	if (!mixLive) liveApplied = {};
 });
 
-const valuesOf = ({ gain_db, mute, delay_ms }: Values): Values => ({ gain_db, mute, delay_ms });
-
 function shown(id: string): AudioInputSetting {
 	const entry = entryFor(id);
 	const applied = mixLive ? liveApplied[id] : undefined;
-	if (applied === undefined) return entry;
-	const field = <K extends keyof Values>(key: K): Values[K] =>
-		entry[key] === applied.over[key] ? applied.values[key] : entry[key];
-	return { ...entry, gain_db: field('gain_db'), mute: field('mute'), delay_ms: field('delay_ms') };
+	return applied === undefined || applied.sentAt !== (broadcasts[id] ?? 0)
+		? entry
+		: { ...entry, ...applied.values };
 }
 
 let errors = $state<Record<string, string>>({});
@@ -294,6 +314,7 @@ async function sendLive(id: string, update: Omit<SetAudioMixInput, 'id'>): Promi
 	const seq = (liveSeq[id] ?? 0) + 1;
 	liveSeq[id] = seq;
 	inflight[id] = (inflight[id] ?? 0) + 1;
+	const sentAt = broadcasts[id] ?? 0;
 	clearError(id);
 	try {
 		const result = await rpc.streaming.setAudioMix({ id, ...update });
@@ -302,11 +323,9 @@ async function sendLive(id: string, update: Omit<SetAudioMixInput, 'id'>): Promi
 			setError(id, result.error);
 			delete gainSent[id];
 		} else if (result.applied !== undefined) {
-			liveApplied = {
-				...liveApplied,
-				[id]: { values: valuesOf(result.applied), over: valuesOf(entryFor(id)) },
-			};
-			gainSent[id] = result.applied.gain_db;
+			const { gain_db, mute, delay_ms } = result.applied;
+			liveApplied = { ...liveApplied, [id]: { values: { gain_db, mute, delay_ms }, sentAt } };
+			gainSent[id] = gain_db;
 		}
 	} catch {
 		if (seq === liveSeq[id]) {
