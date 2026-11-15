@@ -58,7 +58,7 @@ describe("concurrent AP virtual interface", () => {
 		expect(calls).toEqual([["dev", "clap-wlan0", "info"]]);
 	});
 
-	test("removes the virtual interface explicitly", async () => {
+	test("does not delete a virtual interface without a creation record", async () => {
 		const calls: string[][] = [];
 		setConcurrentInterfaceDepsForTest(
 			async (_command, args) => {
@@ -68,7 +68,7 @@ describe("concurrent AP virtual interface", () => {
 			async () => true,
 		);
 		await releaseConcurrentApInterface("clap-wlan0");
-		expect(calls).toEqual([["dev", "clap-wlan0", "del"]]);
+		expect(calls).toEqual([]);
 	});
 });
 
@@ -83,7 +83,12 @@ for (const outcome of [
 		const targets = new Map<string, { ifindex: number; wdev: string }>();
 		let created = false;
 		setConcurrentInterfaceDepsForTest(
-			async (_bin, args) => {
+			async (bin, args) => {
+				if (
+					bin === "nmcli" &&
+					args.join(" ") === "device set clap-wlan0 autoconnect no"
+				)
+					return "";
 				const entry =
 					args[0] === "wdev"
 						? [...targets].find(([, value]) => value.wdev === args[1])
