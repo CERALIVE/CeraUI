@@ -338,6 +338,10 @@ export { LOADER_CONFIG };
  * unreachable there, and a dialog would render every string as its own dotted
  * key. This module is NOT re-exported from `/svelte`; importing it from the app
  * would pull the whole catalog back into the entry chunk.
+ *
+ * Each namespace is also re-exported by name, beside `registerNamespaces`, so a
+ * standalone build that renders only part of the catalog can import just those
+ * namespaces and let the bundler drop the rest.
  */
 function eagerEntrySource(namespaces: string[]): string {
 	const imports = namespaces
@@ -346,8 +350,14 @@ function eagerEntrySource(namespaces: string[]): string {
 	const entries = namespaces
 		.map((ns, index) => `\t${quote(ns)}: _ns${index}.messages,`)
 		.join("\n");
+	const reexports = namespaces
+		.map((ns) => `export { messages as ${ns} } from "./namespaces/${ns}.js";`)
+		.join("\n");
 	return `${BANNER}import { registerNamespaces } from "./registry.js";
 ${imports}
+
+export { registerNamespaces };
+${reexports}
 
 let registered = false;
 
@@ -361,8 +371,20 @@ ${entries}
 `;
 }
 
-const EAGER_ENTRY_DECLARATION = `${BANNER}export declare function registerAllNamespaces(): void;
+function eagerEntryDeclaration(namespaces: string[]): string {
+	const declarations = namespaces
+		.map(
+			(ns) =>
+				`export declare const ${ns}: Readonly<Record<string, MessageFn>>;`,
+		)
+		.join("\n");
+	return `${BANNER}import type { MessageFn } from "./types.js";
+
+export { registerNamespaces } from "./registry.js";
+export declare function registerAllNamespaces(): void;
+${declarations}
 `;
+}
 
 /**
  * A narrow re-export of the paraglide runtime. It exists so the facade never
@@ -477,7 +499,7 @@ export function generateRegistry(
 	writeFileSync(join(outDir, "registry.js"), registrySource(namespaces, lazy));
 	writeFileSync(join(outDir, "registry.d.ts"), REGISTRY_DECLARATION);
 	writeFileSync(join(outDir, "eager.js"), eagerEntrySource(namespaces));
-	writeFileSync(join(outDir, "eager.d.ts"), EAGER_ENTRY_DECLARATION);
+	writeFileSync(join(outDir, "eager.d.ts"), eagerEntryDeclaration(namespaces));
 
 	// Bundler-facing sidecar. `manualChunks` is synchronous and runs in the Vite
 	// config's own module scope, so it cannot `await import()` the ESM loader

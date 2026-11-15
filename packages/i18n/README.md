@@ -30,7 +30,7 @@ adapter, its plural resolver, and the TypeScript locale dictionaries are gone �
 | `@ceraui/i18n` | Locale constants — `LOCALES`, `RTL_LANGUAGES`, `BASE_LOCALE`, `directionFor`, `isSupportedLocale`, `resolveInitialLocale`. |
 | `@ceraui/i18n/formatters` | Standalone `Intl` formatters (`formatBytes`, `formatBitrate`, …). No i18n runtime dependency at all — safe to import anywhere, backend included. |
 | `@ceraui/i18n/svelte` | The Paraglide runes store and the `m` message facade. The ONE module frontend call sites import. |
-| `@ceraui/i18n/eager` | `registerAllNamespaces()` — the whole catalog from static imports. For a build that cannot fetch a sibling chunk (the federation bundles) and for test harnesses. **Never import it from app code**: it re-fuses the catalog into the entry chunk. |
+| `@ceraui/i18n/eager` | `registerAllNamespaces()` — the whole catalog from static imports — plus each namespace's messages by name and `registerNamespaces()`, so a standalone build can register only what it renders. For a build that cannot fetch a sibling chunk (the federation bundles) and for test harnesses. **Never import it from app code**: it re-fuses the catalog into the entry chunk. |
 
 There is no `/node` subpath and no legacy adapter subpath — both retired with the
 generator.

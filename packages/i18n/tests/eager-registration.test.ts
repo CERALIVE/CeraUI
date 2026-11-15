@@ -55,6 +55,21 @@ describe("eager catalog registration", () => {
 		);
 	});
 
+	it("exports each namespace by name for a partial standalone catalog", async () => {
+		// Given a standalone build that renders only the live namespace
+		const { registry, eager } = await freshCatalog();
+		expect(
+			registry.NAMESPACES.filter((namespace) => !(namespace in eager)),
+		).toEqual([]);
+		// When it registers that namespace through its named export
+		eager.registerNamespaces({ live: eager.live });
+		// Then live renders and every other namespace stays unregistered
+		expect(registry.resolveMessageKey("live.setup.title")).toBe("Stream setup");
+		expect(registry.NAMESPACES.filter(registry.isNamespaceLoaded)).toEqual([
+			"live",
+		]);
+	});
+
 	it("retries when registration throws before completion", async () => {
 		// Given a registration which did not complete
 		const { registry, eager } = await freshCatalog();
