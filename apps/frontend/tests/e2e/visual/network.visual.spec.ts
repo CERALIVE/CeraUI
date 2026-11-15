@@ -12,7 +12,9 @@ import { NetworkPage } from '../pages/network.js';
  * byte-identical, and a re-generation run reported nothing to update. A baseline
  * that cannot see the surface it guards is not a gate.
  *
- * `fullPage: true` makes the desktop baseline 1280×2032, covering Bonded Links →
+ * `fullPage: true` makes the desktop baseline 1280×1823 (1280×2032 until the
+ * bonded-link cards tightened and the modem USB rows folded into their Cellular
+ * rows), covering Bonded Links →
  * Internet Sharing → WiFi → Cellular → Ethernet → Hotspot → Bluetooth. Verified
  * stable: three consecutive verify runs passed with no pixel drift, on top of
  * the two stabilizers below and `mask.css`.

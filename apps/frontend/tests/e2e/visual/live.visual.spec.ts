@@ -132,6 +132,11 @@ for (const condition of CONDITIONS) {
 			await ensureAuthenticated(page);
 			await navigateTo(page, 'live');
 			await expect(page.getByTestId('idle-cockpit')).toBeVisible({ timeout: 20_000 });
+			// The default scenario seeds two captures and no `config.source`, and the
+			// audio card and the active-config line render only once an effective
+			// source exists (C1). Pick one, as an operator does before going live and
+			// as live.spec.ts does, so the inventory measures the whole idle path.
+			await new LivePage(page).selectSource();
 		});
 
 		test(

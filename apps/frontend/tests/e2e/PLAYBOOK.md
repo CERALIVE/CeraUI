@@ -189,7 +189,9 @@ bun run --filter frontend test:e2e:visual
 bun run test:e2e:visual
 ```
 
-Baseline images are committed to the repo. A PR that changes them requires a deliberate `--update-snapshots` run and a reviewer sign-off that the visual change was intentional.
+Baseline images are committed to the repo, the mobile project's `*-mobile-linux.png` included. A PR that changes them requires a deliberate `--update-snapshots` run and a reviewer sign-off that the visual change was intentional.
+
+Record baselines against the built preview (`bun run build:frontend`), with `CI=true` exported before the preview and the backend start, as the visual gate runs. The Vite dev server adds dev-only navigation (Identity, Dev Tools) and the Svelte inspector button, so a baseline recorded there fails against the built app.
 
 ---
 

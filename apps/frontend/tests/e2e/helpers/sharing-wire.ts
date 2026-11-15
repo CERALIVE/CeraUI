@@ -250,7 +250,7 @@ export async function installSharingWire(
  * Add the declared shared-LAN port to a device `netif` frame, leaving every
  * real interface untouched. Returns `null` for any other frame.
  */
-function withSharedLan(
+export function withSharedLan(
 	frame: Record<string, unknown>,
 	ifname: string | undefined,
 ): Record<string, unknown> | null {
