@@ -118,6 +118,19 @@ export type MmcliHardwareIdentity = {
 };
 
 /**
+ * Identify the HiMI U01 family; this alone says nothing about data connectivity.
+ * Some units run their own router in QMI mode. The shared Qualcomm USB ID,
+ * numeric model and ADB interface alone do not identify this firmware family.
+ */
+export function isHimiUfiRouter(
+	identity: Pick<MmcliHardwareIdentity, "model" | "firmwareRevision">,
+): boolean {
+	return [identity.firmwareRevision, identity.model].some((value) =>
+		value?.trim().startsWith("HIMI_U01_MODEM_"),
+	);
+}
+
+/**
  * Last-resort label. Not a vendor claim and not a name — it states the ONE thing
  * that is certainly true when every identity field the device published is
  * garbage, and leaves the IMEI tail to do the identifying.

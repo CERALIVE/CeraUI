@@ -212,6 +212,7 @@ function collectRadioSources(): ProjectedModemSource[] {
 		sources.push(
 			fromMmcliModem(id, modem, {
 				identity,
+				hasAddress: Boolean(getNetworkInterfaces()[modem.ifname]?.ip),
 				...(idPath !== undefined ? { idPath } : {}),
 			}),
 		);
@@ -272,17 +273,25 @@ function withScanResults(view: DbusModemView): DbusModemView {
  * `modems.getAll` carried no `config` key at all.
  *
  * Join key is the MM index, exactly as above. A modem the mmcli side holds no
- * profile for is returned UNCHANGED — "not yet provisioned" must stay absent
+ * profile for keeps its config absent — "not yet provisioned" must stay absent
  * rather than become an empty profile the dialog renders as a real, blank one.
  * The `conn` UUID is deliberately NOT copied: it is internal routing state, and
  * the mmcli adapter does not put it on the wire either.
+ * Activation failure and address evidence join from the existing CeraUI owners
+ * here too; neither fact is a ModemManager observation.
  */
 function withConnectionConfig(view: DbusModemView): DbusModemView {
-	if (view.config !== undefined) return view;
-	const config = getModem(view.runtimeId)?.config;
-	if (config === undefined) return view;
-	return {
+	const modem = getModem(view.runtimeId);
+	const source = {
 		...view,
+		dataConnectionFailed: modem?.data_connection_failed === true,
+		hasAddress: Boolean(getNetworkInterfaces()[view.ifname]?.ip),
+	};
+	if (view.config !== undefined) return source;
+	const config = modem?.config;
+	if (config === undefined) return source;
+	return {
+		...source,
 		config: {
 			apn: config.apn,
 			username: config.username,
