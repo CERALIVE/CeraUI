@@ -185,7 +185,7 @@ test.describe('Internet-Sharing surface', () => {
 			page
 				.getByRole('heading', { name, level: 2 })
 				.locator('xpath=ancestor::section[1]');
-		const names = ['Bonded Links', 'WiFi', 'Cellular', 'Ethernet'];
+		const names = ['Bonded Links', 'Wi-Fi', 'Cellular', 'Ethernet'];
 		const before = await Promise.all(
 			names.map((name) => sibling(name).locator('button:not([disabled])').count()),
 		);

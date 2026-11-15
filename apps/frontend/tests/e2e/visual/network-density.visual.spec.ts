@@ -75,7 +75,7 @@ test.describe("@visual NetworkView density", () => {
 		const section = (name: string) =>
 			page.getByRole("heading", { name, level: 2 }).locator("xpath=ancestor::section[1]");
 
-		const wifi = section("WiFi");
+		const wifi = section("Wi-Fi");
 		const cellular = page.getByRole("heading", { name: "Cellular", level: 2 });
 		const ethernet = section("Ethernet");
 		await expect(wifi).toBeVisible();
