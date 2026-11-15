@@ -942,8 +942,14 @@ once, when its twin is first seen, and remains there after the twin is removed.
 Affected devices change link id and steering mark once. The rejected serial's
 opaque `legacyLinkId` preserves an existing bond opt-out; toggling one twin first
 migrates the old exclusion to every present twin so its sibling stays excluded.
-Router login credentials re-key automatically only when exactly one present
-physical device owns the legacy id. Twins must re-enter credentials once.
+Router login credentials are read only under the device's exact resolved
+`linkId`. A rejected serial's legacy id has no durable binding to a port, so it
+cannot transfer a login, even if only one twin remains or the backend restarts.
+Legacy entries are retained without assignment; exact-key owners keep their
+credentials. An affected user may need to re-enter a router login once through
+the existing credential dialog. Coverage:
+`tests/modem-credential-ownership.test.ts` (twin removal, restart, and present
+owner retention) and `tests/modem-physical-identity.test.ts` (singleton refusal).
 Remove any sysfs serial bind mount before upgrading.
 
 **`stable_key` is NOT `identityKey`, and this todo did not re-key it.** The wire's
