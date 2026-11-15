@@ -1002,6 +1002,7 @@
 	"network.cellular.initializingTitle": "Mobilfunk startet gerade",
 	"network.cellular.reason.initializing": "Modem erkannt – warte darauf, dass der Modemdienst es beschreibt.",
 	"network.cellular.reason.undriveable": "Dieses Gerät ist weiterhin angeschlossen, kann aber von keinem Modemdienst gesteuert werden.",
+	"network.cellular.reason.himiUfiRouter": "Der integrierte Router dieses HIMI U01 belegt die Mobilfunkverbindung, sodass CeraLive keine Datenverbindung aufbauen kann. Nutzen Sie den Router-Modus (USB-Netzwerk) oder ein herkömmliches Modem. Mehr dazu: docs.ceralive.tv/hardware/cellular-modems/.",
 	"network.cellular.reason.routerControlsUnverified": "Dieser Stick hat nie bestätigt, dass eine Einstellungsänderung tatsächlich greift, deshalb wird hier nichts angeboten. Nutzen Sie stattdessen dessen eigene Weboberfläche.",
 	"network.cellular.reason.routerManaged": "Der Stick verwaltet diese Verbindung selbst. Seine Netzwerkeinstellungen liegen in dessen eigener Weboberfläche, nicht hier.",
 	"network.cellular.reason.unknown": "Dieses Gerät kann hier nicht konfiguriert werden.",

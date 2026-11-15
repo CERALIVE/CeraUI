@@ -1,4 +1,5 @@
 import { logger } from "../../helpers/logger.ts";
+import { getNetworkInterfaces } from "../network/network-interfaces.ts";
 import { nmConnect, nmConnGetFields } from "../network/network-manager.ts";
 import {
 	readModemNmDeviceProp,
@@ -10,7 +11,7 @@ import {
 	readReadyModemSim,
 	resolveLateModemConfig,
 } from "./modem-registration.ts";
-import { getModem, getModemIds } from "./modems-state.ts";
+import { getModem, getModemIds, setModem } from "./modems-state.ts";
 import { modemStableKeyForId } from "./mutation-identity.ts";
 import { withModemMutation } from "./mutation-lease.ts";
 
@@ -160,6 +161,16 @@ async function readReadiness(
 export async function runModemReadyActivations(): Promise<readonly ModemId[]> {
 	const configured: ModemId[] = [];
 	for (const id of getModemIds()) {
+		const modem = getModem(id);
+		if (
+			modem?.data_connection_failed === true &&
+			(modem.status?.connection === "connected" ||
+				Boolean(getNetworkInterfaces()[modem.ifname]?.ip))
+		) {
+			const { data_connection_failed: _failure, ...recovered } = modem;
+			setModem(id, recovered);
+			configured.push(id);
+		}
 		const intent = intents.get(id);
 		if (intent === undefined || !isPending(id, intent)) continue;
 		try {
@@ -187,6 +198,16 @@ export async function runModemReadyActivations(): Promise<readonly ModemId[]> {
 				intent.state = "consumed";
 				lastDispatch.set(key, deps.now());
 				const result = await deps.connect(uuid, 45);
+				const currentModem = getModem(id);
+				if (
+					result === false &&
+					intents.get(id) === intent &&
+					deps.stableKey(id) === key &&
+					currentModem?.config?.conn === uuid
+				) {
+					setModem(id, { ...currentModem, data_connection_failed: true });
+					configured.push(id);
+				}
 				logger.info("modem ready activation", { id, stableKey: key, result });
 			});
 		} catch (error) {

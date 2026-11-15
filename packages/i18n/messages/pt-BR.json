@@ -1005,6 +1005,7 @@
 	"network.cellular.initializingTitle": "O celular está iniciando",
 	"network.cellular.reason.initializing": "Modem detectado — aguardando o serviço de modems descrevê-lo.",
 	"network.cellular.reason.undriveable": "Este dispositivo continua conectado, mas nenhum serviço de modem consegue controlá-lo.",
+	"network.cellular.reason.himiUfiRouter": "O roteador deste HIMI U01 está usando a conexão móvel, por isso o CeraLive não consegue iniciar sua conexão de dados. Use o modo roteador (rede USB) ou um modem convencional. Consulte docs.ceralive.tv/hardware/cellular-modems/.",
 	"network.cellular.reason.routerControlsUnverified": "Este modem USB nunca confirmou que uma mudança de configuração realmente tem efeito, então nada é oferecido aqui. Use a própria interface web dele.",
 	"network.cellular.reason.routerManaged": "O modem USB gerencia esta conexão sozinho. As configurações de rede dele ficam na sua própria interface web, não aqui.",
 	"network.cellular.reason.unknown": "Este dispositivo não pode ser configurado aqui.",

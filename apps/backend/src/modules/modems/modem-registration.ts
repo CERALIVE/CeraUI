@@ -61,7 +61,7 @@ import {
 	parseModemUnlockInfo,
 	type SimInfo,
 } from "./mmcli.ts";
-import { modemHardwareName } from "./modem-identity.ts";
+import { isHimiUfiRouter, modemHardwareName } from "./modem-identity.ts";
 import { sanitizeModemConfigForNetworkManager } from "./modem-nm-config.ts";
 import {
 	getModem,
@@ -96,6 +96,7 @@ export type ModemStatus = {
 	packet_service_state?: string;
 	registration_rejection?: ModemRegistrationRejection;
 	radio_power?: ModemRadioPower;
+	himi_ufi_router?: true;
 };
 
 // Bounded retry for transient mmcli failures (mock mode never retries — the
@@ -185,6 +186,12 @@ function buildModemStatus(
 
 	return {
 		connection,
+		...(isHimiUfiRouter({
+			model: modemInfo["modem.generic.model"],
+			firmwareRevision: modemInfo["modem.generic.revision"],
+		})
+			? { himi_ufi_router: true }
+			: {}),
 		...(network !== undefined ? { network } : {}),
 		network_type,
 		signal,

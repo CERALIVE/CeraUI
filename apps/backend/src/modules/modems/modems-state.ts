@@ -73,6 +73,8 @@ export type Modem = {
 	inhibit?: true; // don't bring up automatically
 	config?: ModemConfig;
 	status?: ModemStatus;
+	/** The existing ready-activation request returned false; cleared on recovery. */
+	data_connection_failed?: true;
 	/**
 	 * Whether ModemManager can SEE a card in this modem. Absent means the read
 	 * could not answer — never "no SIM"; see `sim-presence.ts`, which owns the

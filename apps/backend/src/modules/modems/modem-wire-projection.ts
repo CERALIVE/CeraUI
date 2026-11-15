@@ -496,6 +496,9 @@ function buildWireEntry(
 	}
 
 	if (!sendFull) {
+		if (source.additive?.availability_reason !== undefined) {
+			entry.availability_reason = source.additive.availability_reason;
+		}
 		return entry;
 	}
 
