@@ -800,6 +800,7 @@
 	"live.audioMixer.needsPrimary": "Elige arriba una fuente de audio para mezclar otras entradas con ella.",
 	"live.audioMixer.error.audio_mix_unsupported": "Este dispositivo no puede mezclar entradas de audio.",
 	"live.audioMixer.error.audio_input_unknown": "Esta entrada ya no está disponible. Reconéctala o desactívala.",
+	"live.audioMixer.error.audio_input_primary": "La entrada principal siempre se queda en la mezcla. Para desactivarla, elige otra fuente de audio.",
 	"live.audioMixer.error.audio_inputs_empty": "Deja al menos una entrada en la mezcla.",
 	"live.audioMixer.error.audio_input_duplicate": "Esta entrada está dos veces en la mezcla. Desactívala y vuelve a activarla.",
 	"live.audioMixer.error.audio_inputs_too_many": "La mezcla está llena. Primero desactiva otra entrada.",

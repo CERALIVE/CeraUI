@@ -73,11 +73,17 @@ export function getStagedConfigChange(): InflightConfigMarker | undefined {
  * values that are still running on the engine, so a `reverted` costs no disk
  * write at all and a crash mid-transaction cannot leave the device booting into
  * a config the hardware never accepted.
+ *
+ * The stage belongs to ONE attempt at a time. While another attempt holds it,
+ * this returns `false` and touches neither the held candidate nor the marker,
+ * so an overlapping change can never replace, or later retire, the one in
+ * flight.
  */
 export function stageConfigChange(
 	marker: InflightConfigMarker,
 	deps: StagingDeps = defaultStagingDeps,
-): void {
+): boolean {
+	if (staged !== undefined) return false;
 	staged = marker;
 	try {
 		deps.writeMarker(deps.markerPath, JSON.stringify(marker));
@@ -86,6 +92,15 @@ export function stageConfigChange(
 		// buys crash recovery, so failing to write it must not fail the change.
 		logger.warn("could not write the config-change in-flight marker", { err });
 	}
+	return true;
+}
+
+/**
+ * Free the in-memory stage but leave the marker on disk. With no change
+ * owning it any more, reconciliation judges that marker like a crash leftover.
+ */
+export function releaseStagedConfigChange(): void {
+	staged = undefined;
 }
 
 export function clearStagedConfigChange(

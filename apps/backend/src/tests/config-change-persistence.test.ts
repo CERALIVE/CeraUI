@@ -11,11 +11,27 @@
  * does: the guarantee has to hold for a direct RPC call, not just the dialog.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+	type GetCapabilitiesResult,
+	SCHEMA_VERSION,
+} from "@ceralive/cerastream";
 import type { ConfigChangeResult } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 
-import { getConfig } from "../modules/config.ts";
+import {
+	getConfig,
+	getConfigFilePath,
+	setConfigFilePath,
+} from "../modules/config.ts";
+import {
+	resetBluetoothAudioForTest,
+	setBluetoothAudioDepsForTest,
+} from "../modules/streaming/bluetooth-audio.ts";
+import { clearCapabilitiesCache } from "../modules/streaming/capabilities.ts";
 import {
 	type ApplyNowGate,
 	setApplyNowGateForTest,
@@ -23,10 +39,17 @@ import {
 import { reconcileInflightConfigChange } from "../modules/streaming/config-change-persistence.ts";
 import {
 	clearStagedConfigChange,
+	defaultStagingDeps,
 	getStagedConfigChange,
 	type InflightConfigMarker,
+	readInflightMarker,
 	type StagingDeps,
 } from "../modules/streaming/config-change-staging.ts";
+import { initPipelines } from "../modules/streaming/pipelines.ts";
+import {
+	createStreamSessionOrchestrator,
+	type EngineConfigChangeOutcome,
+} from "../modules/streaming/stream-session-orchestrator.ts";
 import { setConfigProcedure } from "../rpc/procedures/streaming.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
@@ -202,6 +225,109 @@ describe("apply-now staged persistence", () => {
 		// Then the transaction carries geometry only — never the overlay.
 		expect(g.deltas).toEqual([{ resolution: "2160p", framerate: 30 }]);
 	});
+
+	test("a dispatch that throws still releases the stage", async () => {
+		// Given a gate whose dispatch fails outright.
+		setApplyNowGateForTest({
+			isStreamLive: () => true,
+			dispatch: async () => {
+				throw new Error("engine bridge down");
+			},
+		});
+
+		// When an apply-now change is attempted.
+		const attempt = call(
+			setConfigProcedure,
+			{ resolution: "2160p", apply_now: true },
+			{ context: makeContext() },
+		);
+
+		// Then the failure surfaces, nothing is persisted, and the stage is free
+		// for the next change.
+		await expect(attempt).rejects.toThrow();
+		expect(getConfig().resolution).toBe("1080p");
+		expect(getStagedConfigChange()).toBeUndefined();
+	});
+});
+
+describe("a config.json write that fails after `applied`", () => {
+	let dir: string;
+	let priorPath: string;
+	let prior: Pick<ReturnType<typeof getConfig>, "resolution" | "framerate">;
+
+	beforeEach(async () => {
+		dir = await mkdtemp(join(tmpdir(), "apply-now-write-fail-"));
+		priorPath = getConfigFilePath();
+		setConfigFilePath(join(dir, "config.json"));
+		const config = getConfig();
+		prior = { resolution: config.resolution, framerate: config.framerate };
+		config.resolution = "1080p";
+		config.framerate = 30;
+	});
+
+	afterEach(async () => {
+		setApplyNowGateForTest(null);
+		clearStagedConfigChange();
+		Object.assign(getConfig(), prior);
+		setConfigFilePath(priorPath);
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	/** The engine applies 2160p; only the config.json write that follows fails. */
+	async function applyWithFailingWrite(): Promise<void> {
+		setApplyNowGateForTest({
+			isStreamLive: () => true,
+			dispatch: async () => {
+				setConfigFilePath(join(dir, "missing", "config.json"));
+				return APPLIED;
+			},
+		});
+		await expect(
+			call(
+				setConfigProcedure,
+				{ resolution: "2160p", apply_now: true },
+				{ context: makeContext() },
+			),
+		).rejects.toThrow();
+		setConfigFilePath(join(dir, "config.json"));
+	}
+
+	test("the next change is not busy, and the recovery marker is kept", async () => {
+		// Given a change the engine applied but config.json could not record.
+		await applyWithFailingWrite();
+
+		// Then its marker stays on disk as recovery evidence.
+		expect(readInflightMarker()?.candidate).toEqual({ resolution: "2160p" });
+
+		// And once the disk is writable again, the next change is admitted.
+		setApplyNowGateForTest(gate(APPLIED));
+		const next = await call(
+			setConfigProcedure,
+			{ resolution: "720p", apply_now: true },
+			{ context: makeContext() },
+		);
+		expect(next.configChange).toEqual(APPLIED);
+		expect(getConfig().resolution).toBe("720p");
+	});
+
+	test("reconciliation judges the kept marker and completes the write", async () => {
+		// Given a change the engine applied but config.json could not record.
+		await applyWithFailingWrite();
+
+		// When the engine-reconnect hook finds the engine live on that candidate.
+		const verdict = reconcileInflightConfigChange({
+			streaming: true,
+			resolution: "2160p",
+			framerate: 30,
+			pipelinePlaying: true,
+			framesEmitted: 500,
+		});
+
+		// Then the marker is judged like a crash leftover: the write is completed
+		// and the marker retired.
+		expect(verdict).toBe("persisted_candidate");
+		expect(readInflightMarker()).toBeUndefined();
+	});
 });
 
 describe("apply-now falls back rather than surprising the operator", () => {
@@ -356,5 +482,160 @@ describe("crash-window reconciliation through the real writer", () => {
 		expect(getConfig().resolution).toBe("1080p");
 		expect(deps.readMarker(deps.markerPath)).toBeDefined();
 		config.resolution = priorResolution;
+	});
+});
+
+const OVERLAP_CAPS: GetCapabilitiesResult = {
+	platform: {
+		supports_h265: true,
+		hardware_accelerated: true,
+		max_resolution: "2160p",
+	},
+	encoder: {
+		codecs: ["h264", "h265"],
+		bitrate_range: { min: 500, max: 50000, unit: "kbps" },
+	},
+	sources: [],
+	audio_backends: { supported: ["alsa", "pipewire"], active: "pipewire" },
+};
+
+describe("two overlapping apply-now saves", () => {
+	let dir: string;
+	let priorPath: string;
+	let prior: Pick<
+		ReturnType<typeof getConfig>,
+		"resolution" | "framerate" | "audio_backend"
+	>;
+	let marker: string | undefined;
+
+	beforeEach(async () => {
+		dir = await mkdtemp(join(tmpdir(), "apply-now-overlap-"));
+		priorPath = getConfigFilePath();
+		setConfigFilePath(join(dir, "config.json"));
+		const config = getConfig();
+		prior = {
+			resolution: config.resolution,
+			framerate: config.framerate,
+			audio_backend: config.audio_backend,
+		};
+		config.resolution = "1080p";
+		config.framerate = 30;
+		marker = undefined;
+		spyOn(defaultStagingDeps, "readMarker").mockImplementation(() => marker);
+		spyOn(defaultStagingDeps, "writeMarker").mockImplementation(
+			(_path, contents) => {
+				marker = contents;
+			},
+		);
+		spyOn(defaultStagingDeps, "removeMarker").mockImplementation(() => {
+			marker = undefined;
+		});
+		clearCapabilitiesCache();
+		await initPipelines({
+			fetchEngineCapabilities: async () => ({
+				caps: OVERLAP_CAPS,
+				schemaVersion: SCHEMA_VERSION,
+			}),
+			fetchEngineDevices: async () => ({ devices: [] }),
+		});
+	});
+
+	afterEach(async () => {
+		setApplyNowGateForTest(null);
+		clearStagedConfigChange();
+		spyOn(defaultStagingDeps, "readMarker").mockRestore();
+		spyOn(defaultStagingDeps, "writeMarker").mockRestore();
+		spyOn(defaultStagingDeps, "removeMarker").mockRestore();
+		resetBluetoothAudioForTest();
+		clearCapabilitiesCache();
+		Object.assign(getConfig(), prior);
+		setConfigFilePath(priorPath);
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	test("the change admitted first keeps its stage; the other is busy and retires nothing", async () => {
+		// Given a live session behind the real orchestrator admission, whose engine
+		// holds a change open until the test answers it.
+		let attempts = 0;
+		let answerEngine: (outcome: EngineConfigChangeOutcome) => void = () => {};
+		let engineCalled: () => void = () => {};
+		const engineAsked = new Promise<void>((resolve) => {
+			engineCalled = resolve;
+		});
+		const orchestrator = createStreamSessionOrchestrator({
+			createAttemptId: () => `engine-${++attempts}`,
+			setStreamingStatus: () => {},
+			stopRuntime: async () => {},
+			queryRuntime: async () => "idle",
+			scheduleTimeout: () => 0,
+			cancelTimeout: () => {},
+			scheduleLaunchDeadline: () => 0,
+			cancelLaunchDeadline: () => {},
+			changeRuntimeConfig: () => {
+				engineCalled();
+				return new Promise((resolve) => {
+					answerEngine = resolve;
+				});
+			},
+		});
+		await orchestrator.start({ origin: "ui", launch: async () => {} });
+		setApplyNowGateForTest({
+			isStreamLive: () => orchestrator.snapshot().state === "streaming",
+			dispatch: (delta) => orchestrator.changeConfig(delta),
+		});
+		// And the Bluetooth refresh an audio-backend save awaits held open, which
+		// parks that save after it chose apply-now and before admission.
+		let releaseBluetooth: () => void = () => {};
+		let bluetoothCalled: () => void = () => {};
+		const bluetoothAsked = new Promise<void>((resolve) => {
+			bluetoothCalled = resolve;
+		});
+		setBluetoothAudioDepsForTest({
+			readEnumeratedPcms: async () => [],
+			readRegistryDevices: () => [],
+			engineSupportsPcmSpec: () => true,
+			engineSupportsPipewireCapture: () => false,
+			readEngineAudioDevices: () => [],
+			readAudioProvider: () => {
+				bluetoothCalled();
+				return new Promise((resolve) => {
+					releaseBluetooth = () => resolve("bluealsa");
+				});
+			},
+			readAudioBackend: () => undefined,
+		});
+
+		// When save A (backend + 2160p) parks on that refresh, save B (720p) reaches
+		// admission, and only then does A continue.
+		const first = call(
+			setConfigProcedure,
+			{ resolution: "2160p", audio_backend: "alsa", apply_now: true },
+			{ context: makeContext() },
+		);
+		await bluetoothAsked;
+		const second = call(
+			setConfigProcedure,
+			{ resolution: "720p", apply_now: true },
+			{ context: makeContext() },
+		);
+		await engineAsked;
+		releaseBluetooth();
+		const firstResult = await first;
+
+		// Then A is busy, and B still owns the held candidate and the crash marker.
+		expect(firstResult.configChange).toEqual({ result: "busy" });
+		expect(getStagedConfigChange()?.candidate.resolution).toBe("720p");
+		expect(readInflightMarker()?.attemptId).toBe(
+			getStagedConfigChange()?.attemptId,
+		);
+
+		// And B's applied change is the one persisted, with nothing left staged.
+		answerEngine({ phase: "applied" });
+		const secondResult = await second;
+		expect(secondResult.configChange?.result).toBe("applied");
+		expect(getConfig().resolution).toBe("720p");
+		expect(getConfig().audio_backend).toBe("alsa");
+		expect(getStagedConfigChange()).toBeUndefined();
+		expect(readInflightMarker()).toBeUndefined();
 	});
 });

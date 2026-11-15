@@ -80,7 +80,7 @@ function handleToggle(event: Event & { currentTarget: HTMLDetailsElement }) {
 		{m["live.modes.preview"]()}
 	</summary>
 	<div class="px-4 pb-4">
-		<PreviewCanvas hostActive={open} overlay={open && placement !== undefined ? designer : undefined} />
+		<PreviewCanvas compact hostActive={open} overlay={open && placement !== undefined ? designer : undefined} />
 		<PreviewEncodeControl />
 	</div>
 </details>
