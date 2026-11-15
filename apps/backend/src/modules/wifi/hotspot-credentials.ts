@@ -209,6 +209,28 @@ export function getAllHotspotCredentials(): HotspotCredentials[] {
 	return Object.values(entries).map(toCredentials);
 }
 
+/** All persisted keys, or the keys that positively own a current/retired UUID. */
+export function getHotspotCredentialOwners(uuid?: string): string[] {
+	return Object.entries(entries)
+		.filter(
+			([, entry]) =>
+				uuid === undefined ||
+				entry.conn === uuid ||
+				entry.previousConns?.includes(uuid),
+		)
+		.map(([key]) => key);
+}
+
+/** A successful NM inventory proved this retired UUID no longer exists. */
+export function pruneAbsentHotspotHistory(owner: string, uuid: string): void {
+	const entry = entries[keyFor(owner) ?? ""];
+	if (!entry?.previousConns?.includes(uuid)) return;
+	entry.previousConns = entry.previousConns.filter(
+		(previous) => previous !== uuid,
+	);
+	persist();
+}
+
 /** Absent adapters and retired UUIDs retain their ownership evidence. */
 export function canUseHotspotConnection(
 	macAddress: string,

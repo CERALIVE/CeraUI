@@ -202,14 +202,21 @@ export async function virtualBindingFixture() {
 				preferConcurrentAp: () => true,
 				nmHotspot: async () => (fail ? undefined : "old-ap"),
 				nmConnect: async () => !fail,
+				nmConnSetFields: nm.nmConnSetFields,
 				wifiUpdateSavedConns: async () => undefined,
 				pruneHotspotConns: async () => undefined,
 				broadcastState: () => undefined,
 				setDupIpSuppression: () => undefined,
 			});
 		},
-		confirm() {
-			monitor.handleWifiMonitorEvent({
+		async confirm() {
+			const target = row().concurrentHotspot?.ifname ?? row().ifname;
+			radios = radios.map((radio) =>
+				radio.ifname === target
+					? { ...radio, active: "old-ap", state: "connected" }
+					: radio,
+			);
+			await monitor.handleWifiMonitorEvent({
 				type: "connection-state",
 				connection: row().hotspot.name ?? "",
 				state: "activated",

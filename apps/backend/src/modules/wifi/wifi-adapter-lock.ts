@@ -51,8 +51,12 @@ import {
 	type DeviceLockResult,
 	withDeviceLock,
 } from "../network/state/device-lock.ts";
+import {
+	resolveWifiAdapterOwner,
+	retainWifiAdapterOwners,
+} from "./wifi-adapter-owner.ts";
 import { getWifiInterfacesByMacAddress } from "./wifi-connections.ts";
-import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
+import type { WifiInterface } from "./wifi-interfaces.ts";
 
 /** Opaque-by-convention lock key. Never build one by hand. */
 export type WifiAdapterLockKey = string;
@@ -67,7 +71,10 @@ export type WifiAdapterLockKey = string;
  * turn a serialized mutation into an unguarded one.
  */
 export function wifiAdapterLockKey(macAddress: MacAddress): WifiAdapterLockKey {
-	return normalizeMacAddress(macAddress) ?? macAddress.trim().toLowerCase();
+	return resolveWifiAdapterOwner(
+		macAddress,
+		getWifiInterfacesByMacAddress()[macAddress],
+	);
 }
 
 /**
@@ -116,5 +123,38 @@ export function withWifiAdapterLock<T>(
 	key: WifiAdapterLockKey,
 	fn: () => Promise<T>,
 ): Promise<DeviceLockResult<T>> {
-	return withDeviceLock(key, fn);
+	return withDeviceLock(key, async () => {
+		const release = retainWifiAdapterOwners(
+			key,
+			getWifiInterfacesByMacAddress(),
+		);
+		try {
+			return await fn();
+		} finally {
+			release();
+		}
+	});
+}
+
+/** The owner is held; retain current row aliases through binding and NM actions. */
+export function withWifiAdapterPolicyLocks<T>(
+	heldKey: WifiAdapterLockKey,
+	targets: ReadonlySet<WifiInterface>,
+	fn: () => Promise<T>,
+): Promise<DeviceLockResult<T>> {
+	const aliases = [
+		...new Set(
+			Object.entries(getWifiInterfacesByMacAddress())
+				.filter(([, row]) => targets.has(row))
+				.map(([key]) => wifiAdapterLockKey(key))
+				.filter((key) => key !== heldKey),
+		),
+	].sort();
+	const acquire = async (index: number): Promise<DeviceLockResult<T>> => {
+		const key = aliases[index];
+		if (key === undefined) return { success: true, result: await fn() };
+		const locked = await withWifiAdapterLock(key, () => acquire(index + 1));
+		return locked.success ? locked.result : locked;
+	};
+	return acquire(0);
 }

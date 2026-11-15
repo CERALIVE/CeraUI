@@ -365,12 +365,13 @@ export function canAdoptHotspotProfile(
 	uuid: string | undefined,
 	profileMac: string,
 ): boolean {
-	if (!normalizeMacAddress(macAddress)) return false;
+	const physicalMac = normalizeMacAddress(macAddress.split("@")[0]);
+	if (!physicalMac) return false;
 	const pin = profileMac.toLowerCase();
 	return (
 		(!uuid || !deletingHotspotConns.has(uuid)) &&
 		canUseHotspotConnection(macAddress, uuid) &&
-		(pin === macAddress.toLowerCase() ||
+		(pin === physicalMac ||
 			(!getWifiInterfaceByMacAddress(pin) && !getHotspotCredentials(pin)))
 	);
 }
@@ -518,6 +519,7 @@ export async function findHotspotConnForAdapter(
 	stored: HotspotCredentials | undefined,
 	deps: HotspotProfileDeps = defaultHotspotProfileDeps,
 ): Promise<ExistingHotspotConn | undefined> {
+	const physicalMac = normalizeMacAddress(macAddress.split("@")[0]);
 	const epoch = hotspotDeletionEpoch;
 	if (stored?.conn) {
 		const profile = await readApProfile(stored.conn, deps);
@@ -541,7 +543,7 @@ export async function findHotspotConnForAdapter(
 		const profile = await readApProfile(uuid, deps);
 		if (!profile || wasHotspotConnDeletedSince(uuid, epoch)) continue;
 		if (!canAdoptHotspotProfile(macAddress, uuid, profile.macAddress)) continue;
-		if (profile.macAddress === macAddress) return profile;
+		if (profile.macAddress === physicalMac) return profile;
 		if (stored && profile.ssid === stored.ssid) ssidMatch ??= profile;
 	}
 

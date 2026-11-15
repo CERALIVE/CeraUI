@@ -211,7 +211,7 @@ export const wifiConnectProcedure = authedProcedure
 		const ws = context.ws;
 		const lockKey = wifiAdapterLockKeyForConnectionUuid(input.uuid);
 		const busy = await runGuarded(lockKey, () => {
-			handleWifi(ws, { connect: input.uuid });
+			void handleWifi(ws, { connect: input.uuid });
 			if (shouldUseMocks()) {
 				const faults = getMockWifiFaults();
 				if (faults.savedConnectFails) {
@@ -247,7 +247,7 @@ export const wifiDisconnectProcedure = authedProcedure
 		const ws = context.ws;
 		const lockKey = wifiAdapterLockKeyForConnectionUuid(input.uuid);
 		const busy = await runGuarded(lockKey, () => {
-			handleWifi(ws, { disconnect: input.uuid });
+			void handleWifi(ws, { disconnect: input.uuid });
 			if (shouldUseMocks() && !getMockWifiFaults().suppressConfirm) {
 				setMockWifiConnection(MOCK_WIFI_DEVICE, { activeNetwork: undefined });
 			}
@@ -267,7 +267,7 @@ export const wifiConnectNewProcedure = authedProcedure
 		const ws = context.ws;
 		const lockKey = wifiAdapterLockKeyForDeviceId(input.device);
 		const busy = await runGuarded(lockKey, () => {
-			handleWifi(ws, {
+			void handleWifi(ws, {
 				new: {
 					device: Number(input.device),
 					ssid: input.ssid,
@@ -310,7 +310,7 @@ export const wifiForgetProcedure = authedProcedure
 		const ws = context.ws;
 		const lockKey = wifiAdapterLockKeyForConnectionUuid(input.uuid);
 		const busy = await runGuarded(lockKey, () => {
-			handleWifi(ws, { forget: input.uuid });
+			void handleWifi(ws, { forget: input.uuid });
 			if (shouldUseMocks()) {
 				const ssid = mockWifiSsidForUuid(input.uuid);
 				if (ssid) {
@@ -342,7 +342,7 @@ export const wifiScanProcedure = authedProcedure
 		const ws = context.ws;
 		const lockKey = wifiAdapterLockKeyForDeviceId(input.device);
 		const busy = await runGuarded(lockKey, () => {
-			handleWifi(ws, { scan: Number(input.device) });
+			void handleWifi(ws, { scan: Number(input.device) });
 		});
 		if (busy) return { success: false, error: "DEVICE_BUSY" };
 		return { success: true };
@@ -429,7 +429,7 @@ export const hotspotConfigureProcedure = authedProcedure
 	.output(hotspotConfigOutputSchema)
 	.use(wifiRequestAdmission("configure"))
 	.handler(({ input, context }) => {
-		handleWifi(context.ws, {
+		void handleWifi(context.ws, {
 			hotspot: {
 				config: {
 					device: Number(input.device),
@@ -449,7 +449,7 @@ export const hotspotConfigureProcedure = authedProcedure
 					channel: input.channel,
 				});
 		}
-		return { success: true };
+		return { success: true } as const;
 	});
 
 /*

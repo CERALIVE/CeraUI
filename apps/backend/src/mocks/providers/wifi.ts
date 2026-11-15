@@ -250,6 +250,12 @@ function getMockConnections(args: string[]): string {
 				switch (f.trim()) {
 					case "uuid":
 						return conn.uuid;
+					case "active":
+						return getMockState().wifiModes[conn.device] !== "hotspot" &&
+							getMockState().wifiConnections.get(conn.device)?.activeNetwork ===
+								conn.name
+							? "yes"
+							: "no";
 					case "type":
 						return conn.type;
 					case "name":
@@ -270,6 +276,10 @@ function getMockConnections(args: string[]): string {
 				switch (f.trim()) {
 					case "uuid":
 						return hotspot.uuid;
+					case "active":
+						return getMockState().wifiModes[device] === "hotspot"
+							? "yes"
+							: "no";
 					case "type":
 						return "802-11-wireless";
 					case "name":

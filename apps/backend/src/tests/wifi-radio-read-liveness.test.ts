@@ -104,6 +104,9 @@ beforeEach(async () => {
 	spyOn(radioIdentityReaders, "realpath").mockResolvedValue(
 		"/sys/devices/radio/phy0",
 	);
+	spyOn(radioIdentityReaders, "readDevicePath").mockResolvedValue(
+		"platform-test-wlan0",
+	);
 	spyOn(nm, "nmDevices").mockResolvedValue(undefined);
 	spyOn(devices, "wifiDeviceListGetMacAddress").mockReturnValue(mac);
 	setPermanentMacReaderForTest(async () => mac);

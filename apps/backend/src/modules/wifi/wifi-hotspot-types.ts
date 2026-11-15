@@ -139,23 +139,16 @@ export type ExistingHotspotConn = {
 export function hotspotBindingFields(
 	permanentMacAddress: string,
 	security: HotspotSecurityId = DEFAULT_HOTSPOT_SECURITY,
+	devicePath?: string,
 ): Record<string, string> {
 	return {
 		"connection.interface-name": "",
 		"802-11-wireless.mac-address": permanentMacAddress,
+		"match.path": devicePath ?? "",
+		"connection.autoconnect": "no",
 		...hotspotSecurityFields(security),
 	};
 }
-
-/**
- * Applied only AFTER a confirmed activation. Arming autoconnect beforehand lets
- * NetworkManager race its own auto-activation against the explicit `con up`, and
- * would leave a profile that never came up trying again at every boot.
- */
-export const HOTSPOT_AUTOCONNECT_FIELDS: Record<string, string> = {
-	"connection.autoconnect": "yes",
-	"connection.autoconnect-priority": "999",
-};
 
 /** Result of a hotspot start request. */
 export type HotspotStartResult =
@@ -173,10 +166,15 @@ export type HotspotStartResult =
 			reason?: string;
 	  };
 
+export type HotspotConfirmationTarget = {
+	readonly uuid: string;
+	readonly ifname: string;
+};
+
 /**
  * Injectable side-effect surface for the hotspot start flow. Production wires
- * the real NetworkManager helpers; tests pass deterministic fakes (and omit
- * `pollHotspotActive` so confirmation comes purely from a fed monitor event).
+ * the real NetworkManager helpers; tests pass deterministic fakes. Monitor
+ * events and positive poll hints still require selected-AP NM evidence.
  */
 export type HotspotActivationDeps = {
 	/** Present only for explicit user toggles; mode transitions and boot omit it. */
@@ -239,9 +237,9 @@ export type HotspotActivationDeps = {
 	publishOutcome?: HotspotOutcomePublisher;
 	/**
 	 * Optional bounded confirmation poll. When provided, it is retried with
-	 * backoff until it returns `true` (confirming the hotspot is up) or attempts
-	 * are exhausted (rolling the transition back). When omitted, confirmation can
-	 * only arrive via {@link handleWifiMonitorEvent}.
+	 * backoff until it returns `true` and the pending monitor verifies the
+	 * selected AP UUID is up, or attempts are exhausted. When omitted,
+	 * confirmation can only arrive via {@link handleWifiMonitorEvent}.
 	 */
 	pollHotspotActive?: (iface: WifiInterfaceWithHotspot) => Promise<boolean>;
 };

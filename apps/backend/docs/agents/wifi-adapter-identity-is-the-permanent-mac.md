@@ -7,6 +7,115 @@ Every adapter-keyed Wi-Fi structure uses the coherent lifetime sample from
 hardware address as the registry, numeric-id-map and credential-store key;
 NetworkManager profiles are pinned to that permanent address.
 
+### Hotspot autoconnect policy [EXISTS; host-tested only]
+
+`wifi-adapter-reconciler.ts` is the single policy/convergence authority.
+`wifi-adapter-owner.ts` resolves observed UUID ownership and the existing D12
+exception; `wifi-adapter-lock.ts` retains that exact owner for an admitted
+operation. Limited registry keys, composite owner keys, Stop, mode changes,
+discovery, boot restore and identity transfer share one lock domain. Health
+and retry accounting retain the complete logical owner, including `@`.
+
+Each owned UUID is observed as READ, UNREADABLE or confirmed ABSENT. Only a
+successful UUID inventory can establish absence after a failed detail read.
+Confirmed-absent historical UUIDs are pruned without deleting profiles or
+discarding current credentials. Unreadable UUIDs retain ownership and retry.
+Only positively read AP profiles with one current UUID claimant grant startup
+deactivation authority. Competing unresolved claimants preserve a live AP even
+when one claimant requests station; safe autoconnect disarming remains separate.
+Fresh connection observations remain available during an admitted operation;
+policy writes, registry transfer and publication wait. Stop preserves a newer
+station UUID observed while deactivation was pending.
+After an awaited profile read, policy retains the current aliases of its
+candidate and observed/cached target rows through binding and every NM action.
+The retained operation's old key therefore remains an admission barrier during
+a fresh owner binding. Busy aliases defer through the existing discovery retry
+without failure health; unrelated rows remain independent.
+Literal path and interface pins constrain candidate owners before a same-MAC
+match can qualify. Positive contradictions revoke remembered inactive bindings
+and prevent the same cached UUID from restoring them. Unreadable evidence retains
+valid serialization knowledge; incomplete evidence cannot revive a revoked
+binding. Fresh matching pins can restore it. An admitted operation retains its
+captured owner until lock release. Inactive path-pinned twins
+therefore retain their separate composite owner locks and station intent.
+Activation uses that logical owner for credentials and intent, while the
+registry key and physical permanent MAC continue to supply NM/cache bindings.
+
+The coherent sample also reads NetworkManager's unescaped `GENERAL.PATH`
+between its two ifindex reads. It preserves colons and case exactly. Empty
+paths, wildcard/operator syntax (`*?[!|&` and backticks), whitespace, control
+characters and paths shared by distinct phys cannot supply a `match.path` pin.
+Virtual `clap-*` interfaces do not count as additional physical radios.
+
+An exclusive Start writes the permanent MAC, the literal `match.path` and
+autoconnect off before activation, and refuses activation if that write fails.
+After a successful activation it arms autoconnect only with saved `hotspot` or
+`hybrid` intent, both pins and a unique address across present phys, credential
+owner keys and `wifi_modes`.
+Hybrid profiles explicitly remain autoconnect off. Direct Starts retain their
+mode intent even when no safe autoconnect path exists; B2 restores that intent.
+
+Before discovery creates virtual interfaces or publishes rows, it examines
+every persisted current and historical owned AP UUID under Start's canonical
+adapter lock, including the profile read, policy check and write. A busy lock
+withholds the discovery pass until a later refresh. Unsafe autonomous
+profiles first gain any missing durable `hotspot` or `hybrid` intent, then
+autoconnect is disabled. A failed intent write preserves the old autoconnect
+value and recovery path. The pass also handles a newly present or persisted
+same-address twin. It never modifies station profiles or writes profiles without
+persisted ownership. Deactivation follows saved station intent as described
+below. An unresolved present radio
+that could own an inactive, unpinned profile retains that recovery path, even
+when several radios are unreadable and D12 restore cannot select one. Positive
+same-address twins still quiesce. Every possible owner is evaluated independently:
+a verified row appearing first cannot bypass another unresolved possible owner.
+
+Saved `station` intent disables autoconnect on that owner's current and
+historical AP profiles, including safely pinned inactive profiles. Explicit
+station selection checks these writes before reporting success, even when the
+adapter is already in station mode; refusal restores the previous intent.
+Startup applies the same station rule before publication and deactivates an
+active owned AP, including one whose autoconnect is already off. The mutable
+connection observation is retired after confirmed deactivation, so discovery
+cannot republish the connection it just stopped. A failed profile read,
+autoconnect-off write or station-intent deactivation logs an error and records
+`wifi-hotspot-autoconnect:<owner>` in the existing boot-readiness degradation
+status. Discovery withholds virtual-interface creation and the complete row
+publication until a subsequent pass succeeds. A complete successful policy pass
+clears only that owner's entry; unrelated boot degradation is preserved.
+Policy failure and a busy adapter lock use the existing discovery timer: one
+pending retry every three seconds, bounded by the existing five-minute budget.
+A busy lock alone is not degradation.
+The write after activation is checked through the same failure path. Successful
+policy work cannot cancel pending identity transfer or another owner's retry;
+the shared timer is cancelled only when all pending owner work has converged.
+
+Direct Stop uses the same checked current/historical owner policy for verified
+and limited adapters. It always attempts the disconnect and reports
+`{ success: true }` with station intent when the AP is stopped, even if policy
+work failed. That failure remains degraded and is retried until the off-write
+lands or the bounded budget expires. A failed disconnect still reports
+`deactivation-failed` and restores the previous intent. This keeps a rejected
+Stop-time off-write from leaving an AP active after reboot: startup sees station
+intent, stops any active owned AP and retries the profile policy.
+
+Identity observation retries limited as well as unverified discovery witnesses
+at 250 ms, 1 s and 4 s, for at most three retries. Retry publication awaits the
+same checked quiesce pass before transferring registry keys or delivering a
+token, then notifies mode reconciliation. A failed pass withholds that
+publication and schedules the existing bounded discovery retry.
+
+Moving a known adapter to a new port preserves its credentials; its old path
+does not autoconnect there. Bound restore rewrites the port pin. Rolling back
+to an older backend retains that pin, so a moved USB adapter may require a
+fresh hotspot Start. Hybrid and pathless restore depend on CeraUI starting.
+These are host-tested policies, not physical NetworkManager qualification.
+
+Configure RPC awaits the shared configuration transaction before returning its
+existing acknowledgement. The shared dispatcher returns that completion while
+retaining the terminal-frame error handler. Additional identity reads cannot
+make the acknowledgement race lock entry or leave the request's work detached.
+
 `ifconfig` and `GENERAL.HWADDR` report the operational address, which
 NetworkManager randomizes while scanning. They cannot supply identity, including
 through a remembered interface name or an operational-address alias. The
@@ -287,8 +396,10 @@ broadcast, including recovered reads and changed credentials. Saved-profile
 refresh waits for AP adoption before its callers publish.
 A readable non-AP profile retires its provisional hotspot target.
 Discovery does not search for a replacement profile, adopt credentials, repair
-a pin or priority, or write autoconnect or the credential store. Stop deactivates
-that observed UUID without an autoconnect write or virtual-interface deletion.
+a pin or priority, or write an unresolved key into the credential store.
+Stop deactivates the observed UUID without virtual-interface deletion. When the
+logical intent owner can be resolved, it also checks that owner's current and
+historical AP autoconnect policy under the Stop contract above.
 New station joins do not pin a limited registry key as a MAC address.
 When a regulatory change requires restarting a limited AP, the backend stops
 it instead and logs a warning; that maintenance path leaves mode intent intact.
@@ -367,11 +478,10 @@ false or unknown concurrency refuses with `activation-failed`, without effects
 or a persistence write. An explicit hybrid mode switch retains its existing
 `capability-unproven` refusal. With absent or station intent, a proven non-hybrid
 radio still starts exclusively. If concurrency is unknown, the existing
-exclusive path remains available, but it does not create a durable hotspot
-choice from that uncertainty. An already-active Start applies the same recording
-proof: observed hybrid is recorded; observed exclusive mode is recorded only with
-proven absence of concurrency or an existing explicit hotspot choice. Retrying an
-unknown exclusive fallback never manufactures a persisted exclusive preference.
+exclusive path remains available. Every successful exclusive Start records
+`hotspot` for reboot, including unknown-capability and already-active Starts,
+so an AP without safe autoconnect has a restore intent. An observed hybrid
+Start records `hybrid`; refused Starts still restore their previous intent.
 Before any already-active exclusive shortcut can succeed or record, an explicit
 hybrid choice with absent or unknown concurrency is refused with
 `activation-failed`. An already-active hybrid topology keeps its shortcut.
@@ -383,8 +493,23 @@ concurrent-interface allocation remains the final admission check; successful
 allocation updates the row's concurrent path state before confirmation.
 
 Stop records station under the same key before teardown, including the
-already-stopped shortcut. A definite refusal or throw restores the previous
-value, deleting a previously absent key. Start has one undo at the lock exit,
+already-stopped shortcut. A disconnect refusal or throw restores the previous
+value, deleting a previously absent key. Policy failure after a successful Stop
+keeps station intent, reports stopped, and retries with recoverable degradation.
+An accepted Start that is still activating is not already stopped: Stop
+disarms its selected profile, retires pending confirmation, and awaits NM down
+before reporting success. A late connected event cannot confirm that retired
+Start. Create/up work still holding the adapter lock continues to refuse Stop
+with DEVICE_BUSY and leaves intent and NM state untouched.
+The selected UUID is captured before awaited disarm. An absent observer
+transition does not prove inactivity: before the inactive shortcut succeeds,
+NM's uuid,active inventory must prove that UUID inactive or absent. An NM
+active connection includes activation in progress and must take the normal down
+path. Unreadable or malformed inventory cannot authorize the shortcut; normal
+down must supply its receipt instead. This also covers immediate retry after
+failed down and committed-down/lost-reply recovery, without retained parallel
+teardown state.
+Start has one undo at the lock exit,
 including failure before an activation rollback exists; an accepted but
 `not-confirmed` activation keeps its target. Undo applies only while the stored
 value is still this operation's target, so an older failure cannot overwrite a
@@ -413,14 +538,35 @@ Hybrid Start, Stop, and station or hybrid selection remain available.
 
 Boot restore is apply-only. It waits for the first completed discovery
 publication, then follows discovery, capability-publication and streaming-clearance
-edges; it has no polling deadline or restore timer. Each attempt re-reads current
+edges. Failed activation reuses the bounded discovery timer, with at most three
+attempts for the current boot choice until observed AP success. Acceptance
+alone never completes restore: the actual confirmation outcome settles it,
+and failed confirmation retains bounded recovery. Exhaustion records
+`wifi-hotspot-restore:<logical-owner>`; successful restoration clears that entry.
+Station intent cancels the current cycle entry even while activation is pending.
+A late terminal requires that exact live attempt and unchanged registry/intent;
+it cannot recreate a cancelled entry or its degradation. Cycle-less apply calls
+retain their local settlement contract.
+
+Confirmation captures the selected UUID, actual AP interface, row and available
+physical lifetime. Device events concern that AP interface; a station event on a
+hybrid parent's interface supplies no AP evidence. Names and positive poll hints
+trigger observation but cannot settle activation alone. NM must report the
+captured AP interface connected on the captured UUID, and the pending record,
+selection and lifetime must still match after the read. A held old poll cannot
+settle its replacement or manufacture state using the row's newer UUID.
+The existing poll helper retains queued discovery; its status boolean is only a
+candidate for the pending monitor's mandatory AP-specific check.
+
+Each attempt re-reads current
 intent and the registry under the adapter lock, never calls the persisting mode
 setter, and skips station intent, active or observed APs, and owned pending
 activations. Streaming leaves a disruptive restore pending with one warning.
 An unavailable hybrid capability leaves hybrid pending with `activation-failed`.
-The same unchanged edge does not repeat an attempt or warning; a late adapter,
-capability arrival or cleared stream re-arms pending work. Accepted activations
-are not dispatched twice for the same row and intent.
+An unchanged capability edge cannot dispatch an immediate duplicate; scheduled
+retries follow failed activation. A late adapter,
+capability arrival or cleared stream re-arms pending work. Pending accepted
+activations are not duplicated by unrelated edges; failed confirmation can retry.
 Capability edges come only from successful cache publication or an invalidation
 that changes evidence. A failed read retaining the same expired cache emits no
 edge, so a pending restore cannot turn one discovery event into an endless probe
@@ -430,7 +576,8 @@ concurrency proof. Invalidation and recovery advance that evidence even when
 restore coalesces the events during a waiting activation. Pending-attempt dedup
 includes this revision, so true-to-unknown-to-true recovery is not lost after a
 definite activation refusal. Identical proof/binding publications leave it
-unchanged, and accepted activations remain suppressed. The producer retains only
+unchanged. Observed success completes restoration; acceptance remains pending.
+The producer retains only
 the latest mapped interface set or its invalidation; revision reads start no IO.
 
 The event source is a graph-free leaf, introduces no wire field, and has a
@@ -444,6 +591,6 @@ exception above; composite physical identity remains a later step.
 - Bound retries when the initial capability read fails with no retained cache.
 - Run one trailing capability computation for a newer interface set joining an
   older flight.
-- Bind confirmation to the chosen activation topology, covering discovery
-  repopulation while virtual-interface release is awaited.
+- Preserve virtual ownership if discovery repopulates while release is awaited
+  (the separate B7 teardown follow-up).
 

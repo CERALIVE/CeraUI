@@ -5,6 +5,7 @@ export interface WifiAdapterModeRestoreSource {
 }
 
 let discoveryPublished = false;
+let discoveryRevision = 0;
 const listeners = new Set<() => Promise<void>>();
 
 export const wifiAdapterModeRestoreSource: WifiAdapterModeRestoreSource = {
@@ -23,5 +24,10 @@ export async function notifyWifiAdapterModeEdge(): Promise<void> {
 
 export function notifyWifiAdapterModeDiscovery(): Promise<void> {
 	discoveryPublished = true;
+	discoveryRevision++;
 	return notifyWifiAdapterModeEdge();
+}
+
+export function getWifiAdapterModeDiscoveryRevision(): number {
+	return discoveryRevision;
 }

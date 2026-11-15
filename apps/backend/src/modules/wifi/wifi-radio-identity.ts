@@ -18,6 +18,7 @@ export type RadioIdentity = {
 	readonly key: string;
 	readonly lifetime: RadioLifetime | undefined;
 	readonly permanentMac: MacAddress | undefined;
+	readonly devicePath?: string;
 	readonly classification: "verified" | "limited" | "unverified";
 	readonly degradedReason: WifiAdapterDegradedReason | undefined;
 	readonly incarnation: string;
@@ -28,6 +29,7 @@ export type RadioIdentity = {
 export type RadioIdentityReaders = {
 	readonly readText: (path: string) => Promise<string | undefined>;
 	readonly realpath: (path: string) => Promise<string | undefined>;
+	readonly readDevicePath?: (ifname: string) => Promise<string | undefined>;
 };
 
 let shadowFailures = 0;
@@ -42,6 +44,10 @@ export function getWifiRadioShadowFailures(): number {
 
 // The bracketed lifetime sample owns adapter identity.
 export const radioIdentityReaders: RadioIdentityReaders = {
+	readDevicePath: async (ifname) => {
+		const { nmDeviceProp } = await import("../network/network-manager.ts");
+		return (await nmDeviceProp(ifname, "GENERAL.PATH"))?.[0];
+	},
 	readText: (path) =>
 		Bun.file(path)
 			.text()
@@ -62,7 +68,7 @@ export type RadioObservation = {
 	readonly row?: BaseWifiInterface;
 };
 
-function sameLifetime(
+export function sameRadioLifetime(
 	a: RadioLifetime | undefined,
 	b: RadioLifetime | undefined,
 ): boolean {
@@ -137,6 +143,7 @@ export class WifiRadioIdentityProducer {
 		const seen = new Set<string>();
 		const macPaths = new Map<MacAddress, Set<string>>();
 		const interfacesByPhy = new Map<string, number>();
+		const devicePaths = new Map<string, Set<string>>();
 		// Finish classification before publishing any healthy identity edge.
 		for (const { ifname } of devices) {
 			const sample = await sampleRadio(ifname, this.readers, signal);
@@ -154,6 +161,12 @@ export class WifiRadioIdentityProducer {
 				const path = sample.lifetime.phyPath;
 				if (!ifname.startsWith("clap-")) {
 					interfacesByPhy.set(path, (interfacesByPhy.get(path) ?? 0) + 1);
+					if (sample.devicePath) {
+						const phys =
+							devicePaths.get(sample.devicePath) ?? new Set<string>();
+						phys.add(path);
+						devicePaths.set(sample.devicePath, phys);
+					}
 				}
 				if (permanentMac) {
 					const paths = macPaths.get(permanentMac) ?? new Set<string>();
@@ -197,7 +210,7 @@ export class WifiRadioIdentityProducer {
 					? "permanent-mac-unresolved"
 					: undefined);
 			const previous = [...this.snapshot.rows.values()].find((row) =>
-				sameLifetime(row.lifetime, sample?.lifetime),
+				sameRadioLifetime(row.lifetime, sample?.lifetime),
 			);
 			let key =
 				classification === "verified" && mac
@@ -226,6 +239,9 @@ export class WifiRadioIdentityProducer {
 				key,
 				lifetime: sample?.lifetime,
 				permanentMac: mac,
+				...(sample?.devicePath && devicePaths.get(sample.devicePath)?.size === 1
+					? { devicePath: sample.devicePath }
+					: {}),
 				classification,
 				degradedReason,
 				incarnation: unchanged ? previous.incarnation : crypto.randomUUID(),

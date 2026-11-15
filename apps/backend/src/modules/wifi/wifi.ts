@@ -955,7 +955,11 @@ async function wifiConnect(conn: MessageSocket, uuid: ConnectionUUID) {
 // is the oRPC wifi procedure, whose `context.ws` is a Bun ServerWebSocket, and
 // declaring the unrelated `ws` type here is what forced every call site to
 // launder it through `as unknown as WebSocket`.
-export function handleWifi(conn: MessageSocket, msg: WifiMessage["wifi"]) {
+export function handleWifi(
+	conn: MessageSocket,
+	msg: WifiMessage["wifi"],
+): Promise<void> | undefined {
+	let configuration: Promise<void> | undefined;
 	for (const type in msg) {
 		switch (type) {
 			case "connect":
@@ -1000,11 +1004,12 @@ export function handleWifi(conn: MessageSocket, msg: WifiMessage["wifi"]) {
 					type,
 				);
 				/*
-				  These are dispatched, not awaited — but they are NOT bare
-				  fire-and-forget: each transaction publishes a terminal `wifi` frame
+				  Each transaction publishes a terminal `wifi` frame
 				  on every outcome it can reach, and the `catch` arms cover the one
 				  outcome it cannot (an unexpected throw), so no path on this branch
-				  can leave an operator's keyed op to expire on its TTL.
+				  can leave an operator's keyed op to expire on its TTL. Configuration
+				  also returns its completion so RPC cannot acknowledge it before
+				  the transaction has entered and finished its adapter lock.
 				*/
 				if ("start" in hotspotMessage && hotspotMessage.start) {
 					const { device } = hotspotMessage.start;
@@ -1027,23 +1032,26 @@ export function handleWifi(conn: MessageSocket, msg: WifiMessage["wifi"]) {
 				} else if ("config" in hotspotMessage && hotspotMessage.config) {
 					const { device } = hotspotMessage.config;
 					const binding = captureWifiFrameIncarnation(device, "config");
-					void wifiHotspotConfig(conn, hotspotMessage.config).catch((err) => {
-						logger.error(`hotspot configure threw: ${errorText(err)}`);
-						conn.send(
-							buildMsg(
-								"wifi",
-								{
-									hotspot: {
-										config: { device, error: "unavailable", ...binding },
+					configuration = wifiHotspotConfig(conn, hotspotMessage.config).catch(
+						(err) => {
+							logger.error(`hotspot configure threw: ${errorText(err)}`);
+							conn.send(
+								buildMsg(
+									"wifi",
+									{
+										hotspot: {
+											config: { device, error: "unavailable", ...binding },
+										},
 									},
-								},
-								getSocketSenderId(conn),
-							),
-						);
-					});
+									getSocketSenderId(conn),
+								),
+							);
+						},
+					);
 				}
 				break;
 			}
 		}
 	}
+	return configuration;
 }

@@ -120,6 +120,9 @@ beforeEach(async () => {
 	commands.length = 0;
 	spyOn(radioIdentityReaders, "readText").mockResolvedValue(undefined);
 	spyOn(radioIdentityReaders, "realpath").mockResolvedValue(undefined);
+	spyOn(radioIdentityReaders, "readDevicePath").mockResolvedValue(
+		"platform-test-wlan0",
+	);
 	wifiRadioObservation.stop();
 	await wifiRadioObservation.settled;
 	await wifiRadioIdentity.discover([]);

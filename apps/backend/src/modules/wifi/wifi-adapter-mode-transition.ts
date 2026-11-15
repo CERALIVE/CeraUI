@@ -44,38 +44,32 @@ import {
 	withWifiAdapterLock,
 } from "./wifi-adapter-lock.ts";
 import {
-	getPersistedWifiAdapterMode,
 	isWifiAdapterModeAvailable,
 	observedWifiAdapterMode,
-	persistWifiAdapterMode,
 	recordWifiAdapterModeIntent,
 	resolveWifiAdapterModeIntentKey,
-	restoreWifiAdapterMode,
 	wifiAdapterModeCapability,
 	wifiAdapterModeOptions,
 } from "./wifi-adapter-mode.ts";
 import {
-	type AdapterModeOutcomePublisher,
-	type AdapterModeRefusalPublisher,
-	publishAdapterModeOutcome,
+	defaultAdapterModeDeps,
+	findAdapterByDevice,
+} from "./wifi-adapter-mode-deps.ts";
+import type {
+	AdapterModeOutcomePublisher,
+	AdapterModeRefusalPublisher,
 } from "./wifi-adapter-mode-outcome.ts";
+import { reconcileWifiAdapterModeLocked } from "./wifi-adapter-reconciler.ts";
+
+export { defaultAdapterModeDeps } from "./wifi-adapter-mode-deps.ts";
+
+import { resolveWifiAdapterOwner } from "./wifi-adapter-owner.ts";
 import { admitWifiRequest, withoutWifiRequestBinding } from "./wifi-binding.ts";
-import { getWifiInterfacesByMacAddress } from "./wifi-connections.ts";
 import { captureWifiFrameIncarnation } from "./wifi-frame-binding.ts";
 import { withWifiFrameIncarnation } from "./wifi-frame-incarnation.ts";
-import {
-	defaultHotspotDeps,
-	startHotspotLocked,
-} from "./wifi-hotspot-activation.ts";
-import {
-	defaultHotspotStopDeps,
-	type HotspotStopResult,
-	stopHotspotForInterfaceLocked,
-} from "./wifi-hotspot-config.ts";
-import {
-	type HotspotOutcomePublisher,
-	publishHotspotOutcome,
-} from "./wifi-hotspot-outcome.ts";
+
+import type { HotspotStopResult } from "./wifi-hotspot-config.ts";
+import type { HotspotOutcomePublisher } from "./wifi-hotspot-outcome.ts";
 import type { HotspotStartResult } from "./wifi-hotspot-types.ts";
 import { canHotspot, HOTSPOT_UP_TO } from "./wifi-hotspot-types.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
@@ -86,11 +80,6 @@ export {
 	reconcileWifiAdapterModes,
 	startWifiAdapterModeRestore,
 } from "./wifi-adapter-mode-restore.ts";
-
-/** Modes whose target state includes a live access point. */
-function hostsAccessPoint(mode: WifiAdapterMode): boolean {
-	return mode !== "station";
-}
 
 export interface AdapterModeTransitionDeps {
 	readonly resolveInterfaces: () => Readonly<Record<string, WifiInterface>>;
@@ -120,75 +109,6 @@ export interface AdapterModeTransitionDeps {
 		callback: () => void,
 		delayMs: number,
 	) => () => void;
-}
-
-/**
- * Was the adapter busy at this instant? Acquires and releases immediately, so it
- * never becomes the lock the delegated transaction has to contend with.
- */
-async function probeAdapterBusy(macAddress: string): Promise<boolean> {
-	const probe = await withWifiAdapterLock(
-		wifiAdapterLockKey(macAddress),
-		async () => true,
-	);
-	return !probe.success;
-}
-
-export const defaultAdapterModeDeps: AdapterModeTransitionDeps = {
-	resolveInterfaces: getWifiInterfacesByMacAddress,
-	isAdapterBusy: probeAdapterBusy,
-	startHotspot: async (device, publish) => {
-		const found = findAdapterByDevice(device, getWifiInterfacesByMacAddress());
-		const { recordIntent: _recorder, ...deps } = defaultHotspotDeps;
-		const result: HotspotStartResult = !found
-			? { success: false, error: "no-device" }
-			: !canHotspot(found.wifiInterface)
-				? { success: false, error: "unsupported" }
-				: await startHotspotLocked(found.macAddress, found.wifiInterface, {
-						...deps,
-						publishOutcome: publish,
-					});
-		if (!result.success) publish("start", device, result);
-		return result;
-	},
-	stopHotspot: async (device, publish) => {
-		const found = findAdapterByDevice(device, getWifiInterfacesByMacAddress());
-		const { recordIntent: _recorder, ...deps } = defaultHotspotStopDeps;
-		const result: HotspotStopResult = !found
-			? { success: false, error: "no-device" }
-			: !canHotspot(found.wifiInterface)
-				? { success: false, error: "unsupported" }
-				: await stopHotspotForInterfaceLocked(
-						found.macAddress,
-						found.wifiInterface,
-						{ ...deps, publishOutcome: publish },
-					);
-		publish("stop", device, result);
-		return result;
-	},
-	publishOutcome: publishAdapterModeOutcome,
-	publishHotspotOutcome,
-	persistMode: persistWifiAdapterMode,
-	restoreMode: restoreWifiAdapterMode,
-	readPersistedMode: getPersistedWifiAdapterMode,
-	armTerminalTimeout: (callback, delayMs) => {
-		const timer = setTimeout(callback, delayMs);
-		timer.unref();
-		return () => clearTimeout(timer);
-	},
-};
-
-function findAdapterByDevice(
-	device: number | string,
-	interfaces: Readonly<Record<string, WifiInterface>>,
-): { macAddress: string; wifiInterface: WifiInterface } | undefined {
-	const id = typeof device === "number" ? device : Number.parseInt(device, 10);
-	if (Number.isNaN(id)) return undefined;
-	for (const macAddress in interfaces) {
-		const wifiInterface = interfaces[macAddress];
-		if (wifiInterface?.id === id) return { macAddress, wifiInterface };
-	}
-	return undefined;
 }
 
 /**
@@ -277,39 +197,34 @@ export async function setWifiAdapterMode(
 		return refuse(wifiInterface.id, "DEVICE_BUSY", publishRefusal);
 	}
 	const transition = async (): Promise<SetWifiAdapterModeOutput> => {
-		const intentKey = resolveWifiAdapterModeIntentKey(
-			macAddress,
-			undefined,
-			Object.values(deps.resolveInterfaces()).filter(canHotspot).length,
-		);
+		const id = wifiInterface.id;
+		const owner = resolveWifiAdapterOwner(macAddress, wifiInterface);
+		const intentKey = normalizeMacAddress(owner.split("@")[0])
+			? owner
+			: resolveWifiAdapterModeIntentKey(
+					macAddress,
+					undefined,
+					Object.values(deps.resolveInterfaces()).filter(canHotspot).length,
+				);
 		if (
 			target !== "station" &&
 			(!normalizeMacAddress(macAddress) ||
 				wifiInterface.degradedReason === "permanent-mac-unresolved")
 		)
-			return refuse(wifiInterface.id, "radio-unverified", publishRefusal);
+			return refuse(id, "radio-unverified", publishRefusal);
 		const options = wifiAdapterModeOptions(
 			wifiAdapterModeCapability(wifiInterface, deps.readCapabilities),
 		);
 		if (!isWifiAdapterModeAvailable(target, options)) {
 			const reason = options.find((option) => option.mode === target)?.reason;
 			return refuse(
-				wifiInterface.id,
+				id,
 				reason === "unsupported" ? "unsupported" : "capability-unproven",
 				publishRefusal,
 			);
 		}
 
 		const current = observedWifiAdapterMode(wifiInterface);
-		if (current === target) {
-			// Already there: nothing is dispatched, so no confirmation will ever
-			// settle and this branch owes the terminal frame itself. The preference is
-			// still recorded — the operator has now stated it explicitly.
-			if (intentKey !== undefined) deps.persistMode(intentKey, target);
-			deps.publishOutcome(wifiInterface.id, { success: true, mode: target });
-			return { success: true, applied: target };
-		}
-
 		if (
 			target === "hotspot" &&
 			current !== "hotspot" &&
@@ -319,7 +234,7 @@ export async function setWifiAdapterMode(
 			logger.warn(
 				`wifi mode switch: streaming keeps the station link on ${wifiInterface.ifname}`,
 			);
-			return refuse(wifiInterface.id, "DEVICE_BUSY", publishRefusal);
+			return refuse(id, "DEVICE_BUSY", publishRefusal);
 		}
 
 		const undo = recordWifiAdapterModeIntent(intentKey, target, {
@@ -329,43 +244,24 @@ export async function setWifiAdapterMode(
 		});
 		let succeeded = false;
 		try {
-			deps.publishOutcome(wifiInterface.id, { pending: true, mode: target });
-
-			// Leaving an AP mode always tears the current one down first. For a
-			// hotspot<->hybrid switch that teardown is a step rather than the outcome, so
-			// it publishes only the hotspot's own frame and the mode's terminal is still
-			// owed by the start that follows.
-			if (hostsAccessPoint(current)) {
-				const stopped = await deps.stopHotspot(
-					wifiInterface.id,
-					hostsAccessPoint(target)
-						? deps.publishHotspotOutcome
-						: chainModeTerminal(wifiInterface.id, target, deps),
-				);
-				if (!stopped.success) {
-					if (hostsAccessPoint(target)) {
-						deps.publishOutcome(wifiInterface.id, {
-							success: false,
-							error: stopped.error,
-						});
-					}
-					return { success: false, error: stopped.error };
-				}
-				if (!hostsAccessPoint(target)) {
-					succeeded = true;
-					return { success: true, applied: target };
-				}
-			}
-
-			const started = await deps.startHotspot(
-				wifiInterface.id,
-				chainModeTerminal(wifiInterface.id, target, deps),
-			);
-			if (!started.success) {
-				return { success: false, error: started.error };
-			}
-			succeeded = true;
-			return { success: true, accepted: true, applied: target };
+			const result = await reconcileWifiAdapterModeLocked(owner, {
+				row: wifiInterface,
+				target,
+				publish: deps.publishOutcome,
+				publishPending: () => {
+					deps.publishOutcome(id, { pending: true, mode: target });
+				},
+				start: () => deps.startHotspot(id, chainModeTerminal(id, target, deps)),
+				stop: (terminal) =>
+					deps.stopHotspot(
+						id,
+						terminal
+							? chainModeTerminal(id, target, deps)
+							: deps.publishHotspotOutcome,
+					),
+			});
+			succeeded = result.success;
+			return result;
 		} finally {
 			if (!succeeded) undo();
 		}

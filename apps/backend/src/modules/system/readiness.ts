@@ -50,6 +50,12 @@ export function markBootDegraded(subsystem: string): void {
 	}
 }
 
+/** Recover one subsystem after its owner confirms a complete successful pass. */
+export function clearBootDegraded(subsystem: string): void {
+	const index = degradedSubsystems.indexOf(subsystem);
+	if (index !== -1) degradedSubsystems.splice(index, 1);
+}
+
 /** Snapshot of the current boot-readiness state (defensive copy). */
 export function getBootReadiness(): BootReadiness {
 	return {

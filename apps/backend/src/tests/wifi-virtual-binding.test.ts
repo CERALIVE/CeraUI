@@ -46,7 +46,7 @@ for (const source of sources)
 				await fixture.discover([bindingParent, virtual]);
 				if (source === "Start-confirmation") {
 					expect(await fixture.start()).toEqual({ success: true });
-					fixture.confirm();
+					await fixture.confirm();
 				} else if (source === "refreshed") {
 					await fixture.discover([bindingParent, virtual]);
 				}

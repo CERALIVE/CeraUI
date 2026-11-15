@@ -78,6 +78,7 @@ import {
 	hotspotStartProcedure,
 	hotspotStopProcedure,
 } from "../rpc/procedures/wifi.procedure.ts";
+import { mockHotspotConfirmationPoll } from "./helpers/wifi-hotspot-test-setup.ts";
 import { wifiProtocolContext } from "./helpers/wifi-protocol-context.ts";
 import {
 	isolateWifiRegistry,
@@ -289,9 +290,7 @@ beforeEach(async () => {
 	spyOn(defaultHotspotDeps, "releaseConcurrentInterface").mockImplementation(
 		async () => {},
 	);
-	spyOn(defaultHotspotDeps, "pollHotspotActive").mockImplementation(
-		async () => true,
-	);
+	mockHotspotConfirmationPoll();
 	spyOn(defaultHotspotStopDeps, "nmConnSetFields").mockImplementation(
 		async () => {
 			effect("stop-fields");
@@ -560,8 +559,8 @@ test("unknown capability and absent intent allow exclusive start without pinning
 	expect(await wifiHotspotStart({ device: 0 })).toEqual({ success: true });
 	settlePending(IFNAME, true);
 	expect(observedWifiAdapterMode(row)).toBe("hotspot");
-	expect(getPersistedWifiAdapterModes()).toEqual({});
-	expect(await Bun.file(getConfigFilePath()).exists()).toBe(false);
+	expect(getPersistedWifiAdapterModes()).toEqual({ [MAC]: "hotspot" });
+	expect(await Bun.file(getConfigFilePath()).exists()).toBe(true);
 });
 
 test("unknown capability preserves a station choice instead of pinning exclusive mode", async () => {
@@ -570,7 +569,7 @@ test("unknown capability preserves a station choice instead of pinning exclusive
 	expect(await wifiHotspotStart({ device: 0 })).toEqual({ success: true });
 	settlePending(IFNAME, true);
 	expect(observedWifiAdapterMode(row)).toBe("hotspot");
-	expect(await diskModes()).toEqual({ [MAC]: "station" });
+	expect(await diskModes()).toEqual({ [MAC]: "hotspot" });
 });
 
 test("capability arrival retries pending hybrid once and a duplicate edge does not start twice", async () => {
@@ -614,9 +613,7 @@ for (const mode of ["station", "hotspot", "hybrid"] as const) {
 				? await wifiHotspotStop({ device: 0 })
 				: await wifiHotspotStart({ device: 0 });
 		expect(result).toEqual({ success: true });
-		expect(await diskModes()).toEqual(
-			mode === "hotspot" ? {} : { [MAC]: mode },
-		);
+		expect(await diskModes()).toEqual({ [MAC]: mode });
 		expect(transcript).toEqual([]);
 	});
 }
@@ -795,7 +792,9 @@ test("legacy Start and Stop dispatch remember their choices through the unchange
 		started.resolve();
 		return true;
 	});
-	handleWifi(wifiProtocolContext().ws, { hotspot: { start: { device: 0 } } });
+	const dispatchedStart = handleWifi(wifiProtocolContext().ws, {
+		hotspot: { start: { device: 0 } },
+	});
 	await started.promise;
 	for (let turn = 0; turn < 30; turn++) await Promise.resolve();
 	settlePending(IFNAME, true);
@@ -806,11 +805,14 @@ test("legacy Start and Stop dispatch remember their choices through the unchange
 		stopped.resolve();
 		return true;
 	});
-	handleWifi(wifiProtocolContext().ws, { hotspot: { stop: { device: 0 } } });
+	const dispatchedStop = handleWifi(wifiProtocolContext().ws, {
+		hotspot: { stop: { device: 0 } },
+	});
 	await stopped.promise;
 	for (let turn = 0; turn < 30; turn++) await Promise.resolve();
 	expect(await diskModes()).toEqual({ [MAC]: "station" });
 	expect(observedWifiAdapterMode(row)).toBe("station");
+	await Promise.all([dispatchedStart, dispatchedStop]);
 });
 
 test("the event leaf imports without preload or application files and cannot retain a process", async () => {
@@ -951,8 +953,8 @@ test("F3 the actual failed probe permits exclusive Start without recording hotsp
 	expect(await wifiHotspotStart({ device: 0 })).toEqual({ success: true });
 	settlePending(IFNAME, true);
 	expect(observedWifiAdapterMode(row)).toBe("hotspot");
-	expect(getPersistedWifiAdapterModes()).toEqual({});
-	expect(await Bun.file(getConfigFilePath()).exists()).toBe(false);
+	expect(getPersistedWifiAdapterModes()).toEqual({ [MAC]: "hotspot" });
+	expect(await Bun.file(getConfigFilePath()).exists()).toBe(true);
 });
 
 for (const newer of ["station", "hotspot", "mode-only"] as const) {

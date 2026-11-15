@@ -51,6 +51,7 @@ import type {
 } from "../modules/wifi/wifi-hotspot-types.ts";
 import * as interfaces from "../modules/wifi/wifi-interfaces.ts";
 import { wifiRadioObservation } from "../modules/wifi/wifi-radio-observation.ts";
+import { mockHotspotConfirmationPoll } from "./helpers/wifi-hotspot-test-setup.ts";
 import { fakeShadowSysfs } from "./helpers/wifi-radio-equivalence-shadow.ts";
 import {
 	isolateWifiRegistry,
@@ -182,8 +183,8 @@ beforeEach(async () => {
 			effects.push("virtual");
 			return { ifname: "clap-wlan0", created: true };
 		},
-		pollHotspotActive: async () => true,
 	} satisfies Partial<HotspotActivationDeps>);
+	mockHotspotConfirmationPoll();
 	Object.assign(defaultHotspotStopDeps, {
 		nmConnSetFields: async () => true,
 		nmDisconnect: async () => {
@@ -273,10 +274,10 @@ test("an unknown exclusive fallback remains unrecorded after a duplicate Start",
 	row.supportsApStaConcurrency = await legacy.supportsApStaConcurrency("wlan0");
 	expect(await wifiHotspotStart({ device: 0 })).toEqual({ success: true });
 	settlePending("wlan0", true);
-	expect(getPersistedWifiAdapterModes()).toEqual({});
+	expect(getPersistedWifiAdapterModes()).toEqual({ [MAC]: "hotspot" });
 	effects = [];
 	expect(await wifiHotspotStart({ device: 0 })).toEqual({ success: true });
-	expect(getPersistedWifiAdapterModes()).toEqual({});
+	expect(getPersistedWifiAdapterModes()).toEqual({ [MAC]: "hotspot" });
 	expect(effects).toEqual([]);
 	expect(observedWifiAdapterMode(row)).toBe("hotspot");
 });
@@ -365,11 +366,7 @@ for (const observed of ["station", "hotspot", "hybrid"] as const) {
 						: supported === true && previous !== "hotspot"
 							? "hybrid"
 							: "hotspot";
-				const expected = mustRefuse
-					? previous
-					: target === "hybrid" || supported === false || previous === "hotspot"
-						? target
-						: previous;
+				const expected = mustRefuse ? previous : target;
 				expect(getPersistedWifiAdapterMode(MAC)).toBe(expected);
 				if (mustRefuse) {
 					expect(result).toEqual({
@@ -520,7 +517,7 @@ test("identical successful capability publications never re-arm a refused activa
 	}
 	expect(attempts).toBe(1);
 	expect(observedWifiAdapterMode(row)).toBe("station");
-	expect(jest.getTimerCount()).toBe(0);
+	expect(jest.getTimerCount()).toBe(1);
 });
 
 test("a coalesced binding change re-arms pending intent even when support stays true", async () => {

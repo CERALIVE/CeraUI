@@ -33,10 +33,11 @@ import {
 } from "./wifi-adapter-lock.ts";
 import {
 	recordWifiAdapterModeIntent,
-	resolveWifiAdapterModeIntentKey,
 	type WifiAdapterModeRecorder,
 	wifiAdapterModeRecorder,
 } from "./wifi-adapter-mode.ts";
+import { resolveWifiAdapterOwner } from "./wifi-adapter-owner.ts";
+import { reconcileWifiAdapterStopLocked } from "./wifi-adapter-reconciler.ts";
 import {
 	admitWifiRequest,
 	registerWifiRequestLockEntry,
@@ -50,18 +51,14 @@ import {
 	nmSettingsForChannel,
 	type WifiChannel,
 } from "./wifi-channels.ts";
-import {
-	concurrentApIfname,
-	releaseConcurrentApInterface,
-} from "./wifi-concurrent-interface.ts";
+import { releaseConcurrentApInterface } from "./wifi-concurrent-interface.ts";
 import {
 	getWifiInterfaceByMacAddress,
-	getWifiInterfacesByMacAddress,
 	wifiRescan,
 } from "./wifi-connections.ts";
 import { captureWifiFrameIncarnation } from "./wifi-frame-binding.ts";
 import { hotspotOwnershipGuard } from "./wifi-hotspot-discovery.ts";
-import { settlePending, syncWifiStateCache } from "./wifi-hotspot-monitor.ts";
+import { syncWifiStateCache } from "./wifi-hotspot-monitor.ts";
 import {
 	type HotspotOutcomePublisher,
 	publishHotspotOutcome,
@@ -82,7 +79,6 @@ import {
 } from "./wifi-hotspot-types.ts";
 import { getMacAddressForWifiInterface } from "./wifi-interfaces.ts";
 import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
-import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
 // ─── hotspot config validation constants ──────────────────────────────────────
 
@@ -130,29 +126,21 @@ async function resolveAndStop(
 		return { success: false, error: "unsupported" };
 	const lock = await withWifiAdapterLock(
 		wifiAdapterLockKey(macAddress),
-		async () => {
+		async (): Promise<HotspotStopResult> => {
+			const owner = resolveWifiAdapterOwner(macAddress, wifiInterface);
+			const intentKey = normalizeMacAddress(owner.split("@")[0])
+				? owner
+				: undefined;
 			const undo = deps.recordIntent
-				? recordWifiAdapterModeIntent(
-						resolveWifiAdapterModeIntentKey(
-							macAddress,
-							undefined,
-							Object.values(getWifiInterfacesByMacAddress()).filter(canHotspot)
-								.length,
-						),
-						"station",
-						deps.recordIntent,
-					)
+				? recordWifiAdapterModeIntent(intentKey, "station", deps.recordIntent)
 				: undefined;
 			let succeeded = false;
 			try {
-				const result =
-					!isHotspotActive(wifiInterface) || !wifiInterface.hotspot.conn
-						? ({ success: true } as const)
-						: await stopHotspotForInterfaceLocked(
-								macAddress,
-								wifiInterface,
-								deps,
-							);
+				const result = await stopHotspotForInterfaceLocked(
+					macAddress,
+					wifiInterface,
+					deps,
+				);
 				succeeded = result.success;
 				return result;
 			} finally {
@@ -176,7 +164,11 @@ export type HotspotStopDeps = {
 };
 
 export const defaultHotspotStopDeps: HotspotStopDeps = {
-	recordIntent: wifiAdapterModeRecorder,
+	recordIntent: {
+		read: (key) => wifiAdapterModeRecorder.read(key),
+		persist: (key, mode) => wifiAdapterModeRecorder.persist(key, mode),
+		restore: (key, previous) => wifiAdapterModeRecorder.restore(key, previous),
+	},
 	nmConnSetFields,
 	nmDisconnect,
 	releaseConcurrentInterface: releaseConcurrentApInterface,
@@ -204,79 +196,7 @@ export async function stopHotspotForInterfaceLocked(
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotStopDeps,
 ): Promise<HotspotStopResult> {
-	return stopHotspotLocked(macAddress, wifiInterface, deps);
-}
-
-async function stopHotspotLocked(
-	macAddress: string,
-	wifiInterface: WifiInterfaceWithHotspot,
-	deps: HotspotStopDeps,
-): Promise<HotspotStopResult> {
-	const conn = wifiInterface.hotspot.conn;
-	if (!conn) return { success: true };
-
-	// Read BEFORE the teardown clears it: the dup-IP suppression release below has
-	// to pair with whichever interface took it on the way in, and a capable radio
-	// hosting an EXCLUSIVE hotspot has no virtual netdev at all.
-	const concurrent = wifiInterface.concurrentHotspot;
-	const virtualIfname =
-		concurrent?.ifname ?? concurrentApIfname(wifiInterface.ifname);
-	const wasConcurrent = concurrent !== undefined;
-	const activeConn = wifiInterface.activeConn;
-	const activeMode = wifiInterface.activeMode;
-	settlePending(wifiInterface.ifname, false);
-
-	wifiInterface.hotspot.transition = "deactivating";
-	deps.broadcastState();
-	syncWifiStateCache(macAddress, wifiInterface);
-
-	if (
-		normalizeMacAddress(macAddress) &&
-		wifiInterface.degradedReason !== "permanent-mac-unresolved"
-	)
-		await deps.nmConnSetFields(conn, { "connection.autoconnect": "no" });
-
-	const disconnected = await deps.nmDisconnect(conn);
-	if (disconnected) {
-		const sameObservation =
-			wifiInterface.activeConn === activeConn &&
-			wifiInterface.activeMode === activeMode;
-		if (activeConn === conn && sameObservation) {
-			transitionVirtualBinding(wifiInterface, {
-				kind: "parent",
-				connection: null,
-				mode: "unknown",
-			});
-			delete wifiInterface.activeConn;
-			delete wifiInterface.activeMode;
-		}
-		if (wifiInterface.conn === conn && sameObservation) {
-			wifiInterface.conn = null;
-			wifiInterface.available.clear();
-		}
-		const current = wifiInterface.concurrentHotspot;
-		if (
-			current?.ifname === virtualIfname &&
-			(current.activeConn === conn || current.activeConn === null)
-		) {
-			transitionVirtualBinding(wifiInterface, { kind: "retire" });
-			if (normalizeMacAddress(macAddress))
-				await deps.releaseConcurrentInterface(virtualIfname);
-		}
-	}
-
-	delete wifiInterface.hotspot.transition;
-	if (!wasConcurrent) {
-		deps.setDupIpSuppression(wifiInterface.ifname, false);
-	}
-	deps.broadcastState();
-	syncWifiStateCache(macAddress, wifiInterface);
-	void deps.rescan();
-	// The transition is cleared either way, so the state broadcast above looks
-	// identical for both outcomes — only this return distinguishes them.
-	return disconnected
-		? { success: true }
-		: { success: false, error: "deactivation-failed" };
+	return reconcileWifiAdapterStopLocked(macAddress, wifiInterface, deps);
 }
 
 // ─── config ──────────────────────────────────────────────────────────────────

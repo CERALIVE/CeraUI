@@ -547,7 +547,9 @@ for (const concurrent of [false, true]) {
 		expect(iface.hotspot.conn).toBeUndefined();
 		expect(iface.hotspot.password).toBeUndefined();
 		expect(getHotspotCredentials(B)).toBeUndefined();
-		expect(effects).toEqual([]);
+		expect(effects).toEqual([
+			["con", "modify", "a-profile", "connection.autoconnect", "no"],
+		]);
 	});
 }
 
@@ -959,7 +961,7 @@ for (const stage of [
 				((stage === "binding" || stage === "new binding") &&
 					fields["802-11-wireless.mac-address"] !== undefined) ||
 				((stage === "autoconnect" || stage === "new autoconnect") &&
-					fields["connection.autoconnect"] === "yes")
+					fields["connection.autoconnect-priority"] === "999")
 			)
 				await pause();
 			return true;
@@ -1259,7 +1261,8 @@ for (const stage of ["binding", "activation", "autoconnect"] as const) {
 			if (
 				(stage === "binding" &&
 					fields["802-11-wireless.mac-address"] !== undefined) ||
-				(stage === "autoconnect" && fields["connection.autoconnect"] === "yes")
+				(stage === "autoconnect" &&
+					fields["connection.autoconnect-priority"] === "999")
 			) {
 				entered.resolve();
 				await gate.promise;

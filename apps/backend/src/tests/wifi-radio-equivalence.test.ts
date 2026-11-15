@@ -10,7 +10,45 @@ import golden from "./fixtures/wifi/radio-equivalence-main.json";
 import { legacyOverlapTranscript } from "./helpers/wifi-legacy-overlap.ts";
 import { radioEquivalenceTranscript } from "./helpers/wifi-radio-equivalence.ts";
 
-const transcripts: Readonly<Record<string, unknown>> = golden.transcripts;
+const bindingFields = {
+	"connection.interface-name": "",
+	"802-11-wireless.mac-address": "58:02:05:e1:79:1c",
+	"match.path": "platform-equivalence-phy0",
+	"connection.autoconnect": "no",
+	"802-11-wireless-security.key-mgmt": "wpa-psk",
+	"802-11-wireless-security.pmf": "disable",
+};
+// Keep the recorded baseline immutable; replace only the approved B5 bindings.
+const verifiedTranscript = {
+	...golden.transcripts["verified fresh"],
+	calls: golden.transcripts["verified fresh"].calls.map((call, index) =>
+		index === 9 ? [call[0], call[1], bindingFields] : call,
+	),
+};
+const transcripts: Readonly<Record<string, unknown>> = {
+	...golden.transcripts,
+	"verified fresh": verifiedTranscript,
+	rename: {
+		...golden.transcripts.rename,
+		calls: golden.transcripts.rename.calls.map((call, index) =>
+			index === 9 || index === 20 ? [call[0], call[1], bindingFields] : call,
+		),
+	},
+	replug: {
+		...golden.transcripts.replug,
+		calls: golden.transcripts.replug.calls.map((call, index) =>
+			index === 9
+				? [call[0], call[1], bindingFields]
+				: index === 26
+					? [
+							call[0],
+							call[1],
+							{ ...bindingFields, "match.path": "platform-equivalence-phy2" },
+						]
+					: call,
+		),
+	},
+};
 const broadcastTranscripts: Readonly<Record<string, unknown>> =
 	golden.broadcasts;
 
@@ -30,7 +68,7 @@ for (const fixture of radioEquivalenceCases) {
 			}
 		}
 		if (fixture.limitedFrames) {
-			const verified = golden.transcripts["verified fresh"];
+			const verified = verifiedTranscript;
 			const expectedCalls: unknown[][] =
 				fixture.frames.length > 1 ? [...verified.calls] : [];
 			const expectedBroadcasts: typeof broadcasts =

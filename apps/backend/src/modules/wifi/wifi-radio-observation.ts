@@ -20,10 +20,12 @@ export const RADIO_SHADOW_TIMEOUT_MS = 1000;
 
 const RETRY_DELAYS_MS = [250, 1000, 4000] as const;
 
+type RadioPublication = () => void | boolean | Promise<void> | Promise<boolean>;
+
 type PendingObservation = {
 	readonly devices: readonly RadioObservation[];
 	readonly sequence: number;
-	readonly onPublication: (() => void) | undefined;
+	readonly onPublication: RadioPublication | undefined;
 };
 
 /** Discovery awaits the initial sample; lost samples retain bounded retries. */
@@ -50,7 +52,7 @@ export class WifiRadioObservation {
 	enqueue(
 		devices: readonly RadioObservation[],
 		sequence: number,
-		onPublication?: () => void,
+		onPublication?: RadioPublication,
 	): void {
 		if (this.terminated) return;
 		this.stopped = false;
@@ -77,7 +79,7 @@ export class WifiRadioObservation {
 	async sample(
 		devices: readonly RadioObservation[],
 		sequence: number,
-		onPublication: () => void,
+		onPublication: RadioPublication,
 	): Promise<boolean> {
 		await this.active?.promise;
 		if (this.terminated) return false;
@@ -165,7 +167,7 @@ export class WifiRadioObservation {
 			)
 			.catch(() => "rejected");
 		const promise = Promise.race([sample, aborted.promise])
-			.then((outcome) => {
+			.then(async (outcome) => {
 				if (
 					this.stopped ||
 					this.terminated ||
@@ -174,7 +176,14 @@ export class WifiRadioObservation {
 					return;
 				let loss = outcome;
 				if (outcome === "published") {
-					if (publish) next.onPublication?.();
+					clearTimeout(timeout);
+					if (publish && (await next.onPublication?.()) === false) return;
+					if (
+						this.stopped ||
+						this.terminated ||
+						cancellation !== this.cancellation
+					)
+						return;
 					const currentRows = Object.values(getWifiInterfacesByMacAddress());
 					if (
 						publish &&
@@ -194,8 +203,8 @@ export class WifiRadioObservation {
 							next.onPublication
 								? degradedReason !== "unavailable" &&
 									degradedReason !== "operational-mac-missing" &&
-									this.producer.state.rows.get(ifname)?.classification ===
-										"unverified"
+									this.producer.state.rows.get(ifname)?.classification !==
+										"verified"
 								: row !== undefined &&
 									currentRows.includes(row) &&
 									row.degradedReason === undefined &&

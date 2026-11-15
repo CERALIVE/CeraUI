@@ -1,7 +1,14 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { HotspotCredentials } from "../../modules/wifi/hotspot-credentials.ts";
 import type { wifiBuildMsg } from "../../modules/wifi/wifi.ts";
-import type { HotspotActivationDeps } from "../../modules/wifi/wifi-hotspot-types.ts";
+import {
+	canHotspot,
+	type HotspotActivationDeps,
+} from "../../modules/wifi/wifi-hotspot-types.ts";
 import type { wifiUpdateDevices } from "../../modules/wifi/wifi-interfaces.ts";
+import { createEquivalenceNm } from "./wifi-radio-equivalence-nm.ts";
 
 export type RadioFixture = {
 	readonly ifname: string;
@@ -51,6 +58,12 @@ export async function radioEquivalenceTranscript(
 	const { logger } = await import("../../helpers/logger.ts");
 	const runner = await import("../../helpers/run.ts");
 	const mocks = await import("../../mocks/mock-service.ts");
+	const { getConfig, getConfigFilePath, setConfigFilePath } = await import(
+		"../../modules/config.ts"
+	);
+	const { wifiAdapterModeRecorder } = await import(
+		"../../modules/wifi/wifi-adapter-mode.ts"
+	);
 	const { onWifiChange, setWifiState } = await import(
 		"../../modules/wifi/state/wifi-state.ts"
 	);
@@ -121,7 +134,18 @@ export async function radioEquivalenceTranscript(
 	}> = [];
 	const publicationLogs = new Set<(typeof logs)[number]>();
 	const store = new Map<string, HotspotCredentials>();
+	const nm = createEquivalenceNm(() => radios, unexpected);
 	const restorers: Array<() => void | Promise<void>> = [];
+	const previousConfigPath = getConfigFilePath();
+	const previousModes = getConfig().wifi_modes;
+	const modeScratch = await mkdtemp(join(tmpdir(), "wifi-parity-modes-"));
+	setConfigFilePath(join(modeScratch, "config.json"));
+	getConfig().wifi_modes = {};
+	restorers.push(async () => {
+		getConfig().wifi_modes = previousModes;
+		setConfigFilePath(previousConfigPath);
+		await rm(modeScratch, { recursive: true, force: true });
+	});
 	for (const level of ["error", "warn", "info", "debug"] as const) {
 		const log = spyOn(logger, level).mockImplementation(
 			(...args: unknown[]) => {
@@ -182,29 +206,7 @@ export async function radioEquivalenceTranscript(
 		});
 		restorers.push(() => doubled.mockRestore());
 	}
-	const command = spyOn(runner, "run").mockImplementation(async (bin, args) => {
-		if (bin === "nmcli") {
-			if (
-				args.join(" ") ===
-				"--terse --fields device,type,state,con-uuid device status"
-			)
-				return radios.map((r) => `${r.ifname}:wifi:${r.state}:`).join("\n");
-			if (
-				args.includes(
-					"GENERAL.VENDOR,GENERAL.PRODUCT,WIFI-PROPERTIES.AP,WIFI-PROPERTIES.5GHZ,WIFI-PROPERTIES.2GHZ",
-				)
-			)
-				return "Fixture\nRadio\nyes\nno\nyes";
-			if (args.join(" ") === "--terse --fields uuid,type connection show")
-				return "";
-			if (
-				args.includes("IN-USE,BSSID,SSID,MODE,CHAN,RATE,SIGNAL,BARS,SECURITY")
-			)
-				return "";
-		}
-		unexpected.push(`${bin} ${args.join(" ")}`);
-		throw new Error(`Unexpected equivalence command: ${bin} ${args.join(" ")}`);
-	});
+	const command = spyOn(runner, "run").mockImplementation(nm.run);
 	const mockMode = spyOn(mocks, "shouldUseMocks").mockReturnValue(false);
 	restorers.push(
 		() => command.mockRestore(),
@@ -250,6 +252,7 @@ export async function radioEquivalenceTranscript(
 	}
 
 	const deps: HotspotActivationDeps = {
+		recordIntent: wifiAdapterModeRecorder,
 		credentials: {
 			get: (mac) => {
 				calls.push(["credentials.get", mac]);
@@ -317,6 +320,7 @@ export async function radioEquivalenceTranscript(
 		for (const frame of fixture.frames) {
 			phase = "discovery:pending";
 			radios = frame;
+			nm.reset();
 			wifiDeviceListStartUpdate();
 			for (const radio of radios) {
 				if (radio.operational)
@@ -342,7 +346,9 @@ export async function radioEquivalenceTranscript(
 				phase = "start:published";
 				const starting = snapshot();
 				phase = "confirmation:pending";
-				handleWifiMonitorEvent({
+				if (canHotspot(iface) && iface.hotspot.conn)
+					nm.activate(iface.ifname, iface.hotspot.conn);
+				await handleWifiMonitorEvent({
 					type: "device-state",
 					device: iface.ifname,
 					state: "connected",
@@ -440,7 +446,7 @@ export async function radioEquivalenceTranscript(
 		wifiCancelScanRefresh();
 		stopWifiUpdateLoopForTest();
 		for (const iface of Object.values(getWifiInterfacesByMacAddress())) {
-			handleWifiMonitorEvent({
+			await handleWifiMonitorEvent({
 				type: "device-state",
 				device: iface.ifname,
 				state: "connected",

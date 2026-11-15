@@ -36,7 +36,6 @@ import {
 	type HotspotStopDeps,
 	wifiHotspotStop,
 } from "../modules/wifi/wifi-hotspot-config.ts";
-import { handleWifiMonitorEvent } from "../modules/wifi/wifi-hotspot-monitor.ts";
 import type {
 	HotspotOutcomeKind,
 	HotspotToggleOutcome,
@@ -273,8 +272,10 @@ describe("hotspot start — the accepted path is settled by a LATER frame", () =
 		// inside the test, standing in for "advance time ~12s".
 		const realSetTimeout = globalThis.setTimeout;
 		globalThis.setTimeout = ((fn: () => void) => {
+			const timer = realSetTimeout(() => {}, 0);
+			clearTimeout(timer);
 			fn();
-			return 0 as unknown as ReturnType<typeof setTimeout>;
+			return timer;
 		}) as typeof globalThis.setTimeout;
 
 		try {
@@ -307,33 +308,6 @@ describe("hotspot start — the accepted path is settled by a LATER frame", () =
 		} finally {
 			globalThis.setTimeout = realSetTimeout;
 		}
-	});
-
-	test("an NM-confirmed activation publishes success exactly once", async () => {
-		const iface = makeHotspotIface("wlan2");
-		seed(iface);
-
-		const result = await wifiHotspotStart(
-			{ device: 0 },
-			makeStartDeps({
-				wifiUpdateSavedConns: async () => {
-					iface.hotspot.conn = "hotspot-uuid";
-				},
-			}),
-		);
-		expect(result).toEqual({ success: true });
-		expect(published).toEqual([]);
-
-		handleWifiMonitorEvent({
-			type: "connection-state",
-			connection: iface.hotspot.name ?? "",
-			state: "activated",
-		});
-
-		expect(published).toEqual([
-			{ kind: "start", device: 0, outcome: { success: true } },
-		]);
-		expect(getWifiState()[MAC]?.mode).toBe("hotspot");
 	});
 });
 
@@ -445,7 +419,7 @@ describe("a station join that resolves no connection is terminal (F-07)", () => 
 			send: (message: string) => sent.push(message),
 		} as unknown as AppWebSocket;
 
-		handleWifi(conn, {
+		const dispatched = handleWifi(conn, {
 			new: { device: 0, ssid: "CeraNet", password: "supersecret" },
 		});
 		for (let i = 0; i < 20; i++) await Promise.resolve();
@@ -459,6 +433,7 @@ describe("a station join that resolves no connection is terminal (F-07)", () => 
 			new: { error: "ambiguous", device: 0 },
 		});
 		expect(wifiMessageSchema.safeParse(frames[0]).success).toBe(true);
+		await dispatched;
 	});
 
 	test("an unresolvable adapter answers rather than going quiet", async () => {
@@ -468,7 +443,7 @@ describe("a station join that resolves no connection is terminal (F-07)", () => 
 			send: (message: string) => sent.push(message),
 		} as unknown as AppWebSocket;
 
-		handleWifi(conn, {
+		const dispatched = handleWifi(conn, {
 			new: { device: 9, ssid: "CeraNet", password: "supersecret" },
 		});
 		for (let i = 0; i < 20; i++) await Promise.resolve();
@@ -479,5 +454,6 @@ describe("a station join that resolves no connection is terminal (F-07)", () => 
 			.map((obj) => obj.wifi);
 
 		expect(frames).toContainEqual({ new: { error: "generic", device: 9 } });
+		await dispatched;
 	});
 });
