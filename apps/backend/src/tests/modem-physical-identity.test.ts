@@ -263,7 +263,7 @@ describe("the dual-mode stick resolves to ONE identity in BOTH compositions", ()
 		// …and then, after a power cycle, as an MM-managed QMI modem.
 		const qmi = await observe(QMI_TREE, "wwan2", {
 			idPath: `${idPathFor("1-1.4.3")}:1.4`,
-			mm: { name: "HIMI_U01_MODEM - 54863" },
+			mm: { name: "HIMI_U01_MODEM - 12345" },
 		});
 
 		expect(rndis.identityKey).toBe(qmi.identityKey);
@@ -299,7 +299,7 @@ describe("the dual-mode stick resolves to ONE identity in BOTH compositions", ()
 				},
 			},
 			"wwan1",
-			{ mm: { name: "HIMI_U01_MODEM - 54863" } },
+			{ mm: { name: "HIMI_U01_MODEM - 12345" } },
 		);
 		expect(rndis.linkId).toBe(qmi.linkId);
 		// …and the two STICKS are still separate devices.
@@ -310,7 +310,7 @@ describe("the dual-mode stick resolves to ONE identity in BOTH compositions", ()
 	it("titles it coherently in both compositions — never the class string", async () => {
 		const rndis = await observe(RNDIS_TREE, "usb0");
 		const qmi = await observe(QMI_TREE, "wwan2", {
-			mm: { name: "HIMI_U01_MODEM - 54863" },
+			mm: { name: "HIMI_U01_MODEM - 12345" },
 		});
 
 		// `Android` is what BOTH descriptors publish, i.e. a device class. Neither
@@ -318,7 +318,7 @@ describe("the dual-mode stick resolves to ONE identity in BOTH compositions", ()
 		expect(rndis.displayName).not.toContain("Android");
 		expect(qmi.displayName).not.toContain("Android");
 		expect(rndis.displayName).toBe("Qualcomm 9024");
-		expect(qmi.displayName).toBe("HIMI_U01_MODEM - 54863");
+		expect(qmi.displayName).toBe("HIMI_U01_MODEM - 12345");
 	});
 
 	it("re-resolves to the same record on every poll of an unchanged device", async () => {
@@ -443,7 +443,7 @@ describe("the wired consumers", () => {
 	it("leaves the mmcli row's stable_key byte-identical to the ID_PATH rule", () => {
 		const modem = {
 			ifname: "wwan2",
-			name: "HIMI_U01_MODEM - 54863",
+			name: "HIMI_U01_MODEM - 12345",
 			sim_network: "<NO SIM>",
 			network_type: { supported: {}, active: null },
 			status: {
@@ -476,14 +476,14 @@ describe("the HIMI firmware-string fallback chain is layered on, not replaced", 
 			ifname: "wwan2",
 			idPath: idPathFor("1-1.4.3"),
 			mm: {
-				name: "0 - 72633",
+				name: "0 - 78901",
 				model: "0",
 				manufacturer: "1",
 				firmwareRevision: "HIMI_U01_MODEM_V2.0  1  [May 13 2022 13:00:00]",
-				equipmentId: "868837088254863",
+				equipmentId: "000000000012345",
 			},
 		});
-		expect(record.displayName).toBe("HIMI_U01_MODEM_V2.0 - 54863");
+		expect(record.displayName).toBe("HIMI_U01_MODEM_V2.0 - 12345");
 	});
 
 	it("prefers a real model over every other layer", () => {

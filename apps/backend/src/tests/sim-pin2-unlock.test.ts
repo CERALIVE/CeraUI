@@ -36,7 +36,7 @@ afterEach(() => {
 
 /**
  * VERBATIM `qmicli --uim-get-card-status` output from the bench RM530N-GL
- * (Quectel, IMEI 867978050016855) on 2026-08-16. Two applications, and the
+ * (Quectel, synthetic IMEI 000000000023456) on 2026-08-16. Two applications, and the
  * SECOND one's PIN2 counters are the trap this fixture exists to reproduce.
  */
 const BOARD_CARD_STATUS = `[/dev/cdc-wdm0] Successfully got card status
