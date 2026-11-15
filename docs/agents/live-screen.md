@@ -228,8 +228,9 @@ must keep that ABI.
 - The main input is the backend's: the picker's input, Auto's resolution, or
   the embedded audio when the picker defers to the source. Its strip is always
   on and its switch disabled with the reason beside it. Without a main input,
-  no other strip can be turned on. At `max_inputs` enabled strips, the others
-  cannot be turned on and say the mix is full.
+  no other strip can be turned on. At `max_inputs` inputs in the mix (a saved
+  input with no strip, gone or unavailable, still counts), the others cannot be
+  turned on and say the mix is full.
 - The main input is always in the mix Start sends, decided where it is used,
   never by a follow-up save: the backend's `effectiveAudioInputs` adds a main
   input outside the saved mix first at its defaults on Track 1 (the old main
@@ -263,18 +264,20 @@ must keep that ABI.
 - Live on a session whose status says `audio_mix_active`, level, mute and
   delay call `streaming.setAudioMix` with only the changed field (the level
   at most every 100 ms while dragging and once on release), and the values the
-  device applied win. The switches and chips are disabled and described by
+  device applied win. A level still queued when the mix session ends (Stop, or
+  the session stops mixing) or the mixer unmounts is dropped, never sent. The switches and chips are disabled and described by
   `audio-mixer-next-start` ("Applies on next start"). Live on a session started
   without the mix, every strip control is disabled with that text. While a mix
   session runs, the source picker is read-only with `audio-source-mix-locked`.
 - Every refusal shown is the keyed copy of one backend token
   (`live.audioMixer.error.<token>` for `audio_mix_unsupported`,
-  `audio_input_unknown`, `audio_inputs_empty`, `audio_input_duplicate`,
+  `audio_input_unknown`, `audio_input_primary`, `audio_inputs_empty`, `audio_input_duplicate`,
   `audio_inputs_too_many`, `audio_tracks_invalid`, `audio_tracks_gap`,
   `audio_gain_range`, `audio_delay_range` and `audio_mix_active`); any other
   token, such as an engine refusal, reads as a generic refusal and never as the
   raw token. The UI refuses a track change or a delay the backend would refuse,
-  in the backend's order and with the same copy, and sends nothing.
+  in the backend's order and with the same copy, and sends nothing. The track
+  check reads the whole mix, saved inputs with no strip included.
 - The mock backend does not bridge `audio-level` to the main socket (its meter
   bridge is skipped under mocks), so `audio-mixer.spec.ts` injects that frame
   when it checks the per-input meters.

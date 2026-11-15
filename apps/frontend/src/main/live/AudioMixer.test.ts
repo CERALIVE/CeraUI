@@ -333,6 +333,55 @@ describe("AudioMixer — idle", () => {
 		expect(errorOf("usb-b").textContent).toContain(GAP);
 	});
 
+	it.each(["missing", "unavailable"])(
+		"track checks retain a saved input whose strip is %s",
+		async (visibility) => {
+			setAudioMix.mockResolvedValue(EDIT_OK);
+			mixer({
+				config: {
+					asrc: "usb-a",
+					audio_inputs: [
+						input("usb-a", { tracks: [1, 2] }),
+						input("usb-b", { tracks: [3] }),
+					],
+				},
+				status: {
+					audio_sources: AUDIO_SOURCES.filter(
+						(source) => source.id !== "usb-b" || visibility !== "missing",
+					).map((source) =>
+						source.id === "usb-b"
+							? { ...source, unavailable_reason: "engine_update_required" }
+							: source,
+					),
+				},
+			});
+			await fireEvent.click(chip("usb-a", 2));
+			expect(setAudioMix).not.toHaveBeenCalled();
+			expect(errorOf("usb-a").textContent).toContain(GAP);
+			expect(chip("usb-a", 2).getAttribute("aria-pressed")).toBe("true");
+		},
+	);
+
+	it("a saved input hidden by a stale roster still fills a track gap", async () => {
+		setAudioMix.mockResolvedValue(EDIT_OK);
+		mixer({
+			config: {
+				asrc: "usb-a",
+				audio_inputs: [
+					input("usb-a", { tracks: [2] }),
+					input("usb-b", { tracks: [1] }),
+				],
+			},
+			status: {
+				audio_sources: AUDIO_SOURCES.filter((source) => source.id !== "usb-b"),
+			},
+		});
+		await fireEvent.click(chip("usb-a", 3));
+		expect(setAudioMix.mock.calls).toEqual([
+			[{ id: "usb-a", track: { number: 3, on: true } }],
+		]);
+	});
+
 	it("turning off an input's last chip is refused: every input needs a track", async () => {
 		mixer({
 			config: {
@@ -390,6 +439,10 @@ describe("AudioMixer — idle", () => {
 		[
 			"audio_input_unknown",
 			"This input isn't available any more. Reconnect it or turn it off.",
+		],
+		[
+			"audio_input_primary",
+			"The main input always stays in the mix. To turn it off, choose another audio source.",
 		],
 		["audio_inputs_empty", "Keep at least one input in the mix."],
 		[
@@ -891,6 +944,40 @@ describe("AudioMixer — live on a mix session", () => {
 		]);
 	});
 
+	it.each(["Stop", "mix ends", "before effects flush", "unmount"])(
+		"a queued gain is cancelled on %s",
+		async (ending) => {
+			vi.useFakeTimers();
+			vi.setSystemTime(0);
+			setAudioMix.mockResolvedValue(applied("usb-b", { gain_db: -10 }));
+			const view = mixer({
+				config: LIVE_CONFIG,
+				isStreaming: true,
+				mixActive: true,
+			});
+			gainRoot("usb-b").getBoundingClientRect = () => new DOMRect(0, 0, 72, 10);
+			await fireEvent.pointerDown(gainRoot("usb-b"), {
+				button: 0,
+				clientX: 50,
+			});
+			await fireEvent.pointerMove(document, { clientX: 40 });
+			expect(setAudioMix.mock.calls).toEqual([[{ id: "usb-b", gain_db: -10 }]]);
+
+			if (ending === "unmount") view.unmount();
+			else if (ending === "Stop") await view.rerender({ isStreaming: false });
+			else {
+				feed.status = { ...feed.status, audio_mix_active: false };
+				if (ending === "mix ends") await tick();
+			}
+			vi.advanceTimersByTime(101);
+			await tick();
+			expect(setAudioMix.mock.calls).toEqual([[{ id: "usb-b", gain_db: -10 }]]);
+			if (ending === "Stop") {
+				expect(gainThumb("usb-b").getAttribute("aria-valuenow")).toBe("0");
+			}
+		},
+	);
+
 	it("an answer that lands before its own echo still yields to another tab's later change", async () => {
 		const [answer] = holdAnswers(1);
 		const view = mixer({
@@ -1262,6 +1349,35 @@ describe("AudioMixer — every bound comes from the capability", () => {
 		await fireEvent.click(enable("hdmi"));
 		expect(setAudioMix.mock.calls).toEqual([[{ id: "hdmi", include: true }]]);
 	});
+
+	it.each(["missing", "unavailable"])(
+		"a saved input whose strip is %s still counts toward max_inputs",
+		async (visibility) => {
+			setAudioMix.mockResolvedValue(EDIT_OK);
+			mixer({
+				capabilities: caps({ max_inputs: 2 }),
+				config: {
+					asrc: "usb-a",
+					audio_inputs: [input("usb-a"), input("usb-b")],
+				},
+				status: {
+					audio_sources: AUDIO_SOURCES.filter(
+						(source) => source.id !== "usb-b" || visibility !== "missing",
+					).map((source) =>
+						source.id === "usb-b"
+							? { ...source, unavailable_reason: "engine_update_required" }
+							: source,
+					),
+				},
+			});
+			await fireEvent.click(enable("hdmi"));
+			expect(setAudioMix).not.toHaveBeenCalled();
+			expectDisabled(enable("hdmi"));
+			expect(reasonOf("hdmi").textContent).toContain(
+				"The mix is full. Turn another input off first.",
+			);
+		},
+	);
 
 	it("live, the switches stay disabled even below max_inputs", () => {
 		mixer({
