@@ -4,13 +4,14 @@
  * dotted key wherever it is read. These gates fail the build on that, and on a
  * quiet re-fusion of the heavyweight namespaces back into the boot await.
  */
-import { NAMESPACES } from "@ceraui/i18n/svelte";
+import { isNamespaceLoaded, NAMESPACES } from "@ceraui/i18n/svelte";
 import { describe, expect, it } from "vitest";
 
 import {
 	BOOT_NAMESPACES,
 	DESTINATION_NAMESPACES,
 	DIALOG_NAMESPACES,
+	ensureDialogNamespaces,
 	orphanNamespaces,
 } from "$lib/i18n/namespace-activation";
 
@@ -72,6 +73,19 @@ describe("i18n namespace activation", () => {
 			expect(BOOT_NAMESPACES).not.toContain(ns);
 			expect(Object.values(DESTINATION_NAMESPACES).flat()).not.toContain(ns);
 		}
+	});
+
+	it("loads a dialog's own namespaces when the dialog asks for them", async () => {
+		await ensureDialogNamespaces("systemLogs");
+		for (const ns of DIALOG_NAMESPACES.systemLogs ?? []) {
+			expect(isNamespaceLoaded(ns)).toBe(true);
+		}
+	});
+
+	it("resolves at once for a dialog that claims no namespaces", async () => {
+		await expect(
+			ensureDialogNamespaces("no-such-dialog"),
+		).resolves.toBeUndefined();
 	});
 
 	it("claims nothing for the default destination — it boots with the shell", () => {

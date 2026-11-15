@@ -31,12 +31,20 @@
     `destructive` variant (`bg-destructive`).
   • Reduced motion: enter/exit animation is suppressed under
     `prefers-reduced-motion: reduce`.
+  • Fullscreen: the centered Dialog at every width, pinned with `fixed inset-0`
+    and no height cap or radius; the body drops its padding and scroll so the
+    children own layout and scrolling. An inline `translate: none` cancels the
+    centering translate, which app.css's unlayered ≤500px rule would otherwise
+    force back, and which lands half a pixel off on an odd viewport width.
 
   API
   ----
   open            (bindable) — controls visibility.
   title           string     — required, drives the accessible name.
   description?    string     — supporting line under the title.
+  headerAside?    Snippet    — content beside the title, outside it, so the
+                               accessible name stays the title (additive).
+  fullscreen?     boolean    — full-viewport work surface (additive; off by default).
   icon?           Component  — optional Lucide icon shown beside the title.
   destructive?    boolean    — style the default primary action as destructive.
   children        Snippet    — the dialog body (scrollable region).
@@ -71,6 +79,8 @@ interface Props {
 	open?: boolean;
 	title: string;
 	description?: string;
+	headerAside?: Snippet;
+	fullscreen?: boolean;
 	icon?: Component;
 	destructive?: boolean;
 	children?: Snippet;
@@ -90,6 +100,8 @@ let {
 	open = $bindable(false),
 	title,
 	description,
+	headerAside,
+	fullscreen = false,
 	icon,
 	destructive = false,
 	children,
@@ -127,7 +139,18 @@ const surfaceClass = cn(
 	'flex max-h-[85svh] w-full flex-col gap-0 overflow-hidden p-0',
 	'motion-reduce:animate-none motion-reduce:transition-none',
 );
+
+const fullscreenSurfaceClass = 'inset-0 max-h-none max-w-none rounded-none ring-0 sm:max-w-none';
 </script>
+
+{#snippet heading()}
+	<DialogPrimitive.Title class="flex items-center gap-2.5 text-base leading-tight font-semibold">
+		{#if Icon}
+			<Icon class="text-primary size-5 shrink-0" />
+		{/if}
+		<span class="min-w-0 truncate">{title}</span>
+	</DialogPrimitive.Title>
+{/snippet}
 
 {#snippet body()}
 	<!-- Header -->
@@ -135,12 +158,16 @@ const surfaceClass = cn(
 		class="bg-card relative flex shrink-0 flex-col gap-1.5 border-b px-5 py-4 pe-14"
 		data-app-dialog-header
 	>
-		<DialogPrimitive.Title class="flex items-center gap-2.5 text-base leading-tight font-semibold">
-			{#if Icon}
-				<Icon class="text-primary size-5 shrink-0" />
-			{/if}
-			<span class="min-w-0 truncate">{title}</span>
-		</DialogPrimitive.Title>
+		{#if headerAside}
+			<div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+				{@render heading()}
+				<div class="ms-auto flex items-center gap-2">
+					{@render headerAside()}
+				</div>
+			</div>
+		{:else}
+			{@render heading()}
+		{/if}
 		{#if description}
 			<DialogPrimitive.Description class="text-muted-foreground text-sm leading-relaxed">
 				{description}
@@ -165,8 +192,8 @@ const surfaceClass = cn(
 		</DialogPrimitive.Close>
 	</div>
 
-	<!-- Body (scrollable) -->
-	<div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+	<!-- Body (scrollable, or owned by the children when fullscreen) -->
+	<div class={fullscreen ? 'flex min-h-0 flex-1 flex-col' : 'min-h-0 flex-1 overflow-y-auto px-5 py-4'}>
 		{@render children?.()}
 	</div>
 
@@ -208,9 +235,13 @@ const surfaceClass = cn(
 	{/if}
 {/snippet}
 
-{#if isDesktop.current}
+{#if isDesktop.current || fullscreen}
 	<Dialog.Root bind:open>
-		<Dialog.Content class={cn(surfaceClass, 'sm:max-w-lg', contentClass)} showCloseButton={false}>
+		<Dialog.Content
+			class={cn(surfaceClass, fullscreen ? fullscreenSurfaceClass : 'sm:max-w-lg', contentClass)}
+			showCloseButton={false}
+			style={fullscreen ? 'translate: none' : undefined}
+		>
 			{@render body()}
 		</Dialog.Content>
 	</Dialog.Root>

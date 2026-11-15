@@ -89,6 +89,11 @@ export function ensureDestinationNamespaces(key: string): Promise<void> {
 	return ensureNamespaces(DESTINATION_NAMESPACES[key] ?? []);
 }
 
+/** The dialog twin of {@link ensureDestinationNamespaces}: a lazy dialog awaits its own set. */
+export function ensureDialogNamespaces(key: string): Promise<void> {
+	return ensureNamespaces(DIALOG_NAMESPACES[key] ?? []);
+}
+
 /**
  * Whether a destination can render RIGHT NOW, with no fetch and no await.
  *

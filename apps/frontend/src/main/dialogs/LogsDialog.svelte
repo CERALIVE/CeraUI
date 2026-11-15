@@ -1,122 +1,29 @@
 <!--
-  LogsDialog.svelte — diagnostic log downloads (Task 26).
+  LogsDialog.svelte — System Logs, a full-viewport view opened from Settings.
 
-  Two actions: download the CeraLive application log and the full system log.
-  Both request the log over the system RPC (getLog / getSyslog); the backend
-  pushes a `log` message which the subscription layer turns into a file download.
+  A thin AppDialog shell in the DeviceHealthDialog pattern: the header carries
+  the stream-state pill at its inline end, and SystemLogsView owns the body. The
+  two shipped log downloads live in its Downloads region. No title icon: the
+  only lime in this view is the pill's Live state.
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
-import { AlertTriangle, Download, FileText, Loader2, RefreshCw, ScrollText, Terminal } from '@lucide/svelte';
 
 import { AppDialog } from '$lib/components/dialogs';
-import { Button } from '$lib/components/ui/button';
-import { getDeviceLog, getSystemLog } from '$lib/helpers/SystemHelper';
+
+import StreamStatePill from '../system-logs/StreamStatePill.svelte';
+import SystemLogsView from '../system-logs/SystemLogsView.svelte';
 
 interface Props {
 	open?: boolean;
 }
 
 let { open = $bindable(false) }: Props = $props();
-
-type LogKind = 'device' | 'system';
-
-// In-flight + failure are surfaced INLINE (progress spinner on the row, calm
-// amber retry band below) rather than via a bare toast — a transient toast is
-// easy to miss and offers no recovery. The download is a single awaited request
-// with no backend progress events, so "progress" is the in-flight indicator.
-let downloading = $state<LogKind | null>(null);
-let failed = $state<LogKind | null>(null);
-
-async function download(kind: LogKind) {
-	if (downloading !== null) return;
-	downloading = kind;
-	failed = null;
-	try {
-		await (kind === 'device' ? getDeviceLog() : getSystemLog());
-	} catch (error) {
-		console.error(`Failed to request ${kind} log:`, error);
-		failed = kind;
-	} finally {
-		downloading = null;
-	}
-}
-
-const logs = $derived([
-	{
-		id: 'device' as const,
-		icon: FileText,
-		title: m["advanced.ceraliveLog"](),
-		desc: m["advanced.ceraliveLogTooltip"](),
-	},
-	{
-		id: 'system' as const,
-		icon: Terminal,
-		title: m["advanced.systemLog"](),
-		desc: m["advanced.systemLogTooltip"](),
-	},
-]);
 </script>
 
-<AppDialog
-	bind:open
-	description={m["settings.index.logsDesc"]()}
-	hideFooter
-	icon={ScrollText}
-	title={m["settings.index.logs"]()}
->
-	<div class="space-y-3">
-		{#each logs as log (log.id)}
-			{const Icon = $derived(log.icon)}
-			{const isDownloading = $derived(downloading === log.id)}
-			<div class="flex items-center gap-3 rounded-lg border p-3" data-testid={`log-row-${log.id}`}>
-				<span class="bg-secondary text-foreground grid size-10 shrink-0 place-items-center rounded-lg">
-					<Icon class="size-5" />
-				</span>
-				<div class="min-w-0 flex-1">
-					<p class="truncate text-sm font-semibold">{log.title}</p>
-					<p class="text-muted-foreground truncate text-xs">{log.desc}</p>
-				</div>
-				<Button
-					class="shrink-0 gap-1.5"
-					data-testid={`log-download-${log.id}`}
-					disabled={downloading !== null}
-					onclick={() => download(log.id)}
-					size="sm"
-					variant="outline"
-				>
-					{#if isDownloading}
-						<Loader2 class="size-4 animate-spin motion-reduce:animate-none" />
-						{m["advanced.downloading"]()}
-					{:else}
-						<Download class="size-4" />
-						{m["advanced.download"]()}
-					{/if}
-				</Button>
-			</div>
-		{/each}
-
-		{#if failed}
-			<!-- Calm amber recovery band — the failed download stays actionable. -->
-			<div
-				class="border-status-warning/30 bg-status-warning/10 flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center"
-				data-testid="log-download-error"
-				role="alert"
-			>
-				<AlertTriangle aria-hidden="true" class="text-status-warning size-4 shrink-0" />
-				<p class="text-status-warning min-w-0 flex-1 text-xs">{m["advanced.downloadFailed"]()}</p>
-				<Button
-					class="shrink-0 gap-1.5"
-					data-testid="log-download-retry"
-					disabled={downloading !== null}
-					onclick={() => failed && download(failed)}
-					size="sm"
-					variant="outline"
-				>
-					<RefreshCw class="size-4" />
-					{m["advanced.retryDownload"]()}
-				</Button>
-			</div>
-		{/if}
-	</div>
+<AppDialog bind:open fullscreen hideFooter title={m["settings.index.logs"]()}>
+	{#snippet headerAside()}
+		<StreamStatePill />
+	{/snippet}
+	<SystemLogsView />
 </AppDialog>
