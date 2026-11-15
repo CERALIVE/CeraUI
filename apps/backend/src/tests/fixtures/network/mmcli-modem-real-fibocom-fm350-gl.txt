@@ -10,7 +10,7 @@ modem.generic.supported-capabilities.length     : 1
 modem.generic.supported-capabilities.value[1]   : gsm-umts, lte
 modem.generic.current-capabilities.length       : 1
 modem.generic.current-capabilities.value[1]     : gsm-umts, lte
-modem.generic.equipment-identifier              : 350274430001765
+modem.generic.equipment-identifier              : 000000000034567
 modem.generic.device                            : /sys/devices/platform/fc400000.usb/xhci-hcd.0.auto/usb1/1-1/1-1.2
 modem.generic.physdev                           : /sys/devices/platform/fc400000.usb/xhci-hcd.0.auto/usb1/1-1/1-1.2
 modem.generic.drivers.length                    : 2
@@ -39,7 +39,7 @@ modem.generic.supported-ip-families.length      : 3
 modem.generic.supported-ip-families.value[1]    : ipv4
 modem.generic.supported-ip-families.value[2]    : ipv6
 modem.generic.supported-ip-families.value[3]    : ipv4v6
-modem.3gpp.imei                                 : 350274430001765
+modem.3gpp.imei                                 : 000000000034567
 modem.3gpp.enabled-locks                        : --
 modem.3gpp.operator-code                        : --
 modem.3gpp.operator-name                        : --
