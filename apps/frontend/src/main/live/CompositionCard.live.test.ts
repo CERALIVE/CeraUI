@@ -161,6 +161,13 @@ function expectOneOpacityWrite(alpha: number): void {
 }
 
 describe("CompositionCard — live layout, opacity and second input", () => {
+	it("names the opacity thumb itself, so a screen reader announces the control it focuses", () => {
+		renderCard(false);
+
+		const thumb = screen.getByRole("slider", { name: "Second input opacity" });
+		expect(thumb).toBe(opacityPart("slider-thumb"));
+	});
+
 	it("streaming: a layout tap writes the layout alone with apply_now", async () => {
 		setConfig.mockResolvedValue(APPLIED);
 		renderCard(true);

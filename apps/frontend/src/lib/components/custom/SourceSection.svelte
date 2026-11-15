@@ -833,7 +833,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 										/>
 										<span class="flex min-w-0 flex-col">
 											<span
-												class="truncate text-sm font-medium {source.origin === 'coarse'
+												class="line-clamp-2 text-sm font-medium break-words {source.origin === 'coarse'
 													? 'text-muted-foreground'
 													: ''}"
 												data-testid={`source-row-name-${source.id}`}

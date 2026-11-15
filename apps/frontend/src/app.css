@@ -280,6 +280,13 @@
 	inset-inline: min(-0.75rem, calc((100% - var(--touch-target-min)) / 2));
 }
 
+/* A slider thumb must not grow either: it is a 12px dot positioned by its own
+   centre. Its shipped `after:-inset-2` overlay is widened to the token on both
+   axes instead, by the same reasoning and for the same layer reason as above. */
+[data-layout-mode='touch'] [data-slot='slider-thumb']::after {
+	inset: min(-0.5rem, calc((100% - var(--touch-target-min)) / 2));
+}
+
 /* The same mechanism on BOTH axes, for the shell's compact icon controls that opt
    in with `data-touch-target="hit-area"`. Each is square and small (36/32/24px),
    so the `min-height` lift leaves the WIDTH short while stretching the paint.

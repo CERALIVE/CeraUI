@@ -2543,6 +2543,7 @@
 	"live.layout.inset": "두 번째 입력 위치",
 	"live.layout.insetPosition": "왼쪽 가장자리에서 {x}%, 위쪽 가장자리에서 {y}%, 너비 {width}%, 높이 {height}%.",
 	"live.layout.insetKeys": "화살표 키로 이동합니다. Shift를 누르면 더 빠르게 이동하고, Alt를 누르면 크기를 바꿉니다.",
+	"live.layout.insetCancel": "놓기 전에 Esc를 누르면 원래 위치로 돌아갑니다.",
 	"live.layout.error.composition_unsupported": "이 기기는 지금 입력 두 개를 합성할 수 없어 위치가 바뀌지 않았습니다.",
 	"live.layout.error.composition_geometry_unsupported": "이 기기는 미리 정의된 레이아웃만 지원해 위치가 바뀌지 않았습니다.",
 	"live.layout.error.composition_rect_invalid": "기기가 이 위치를 사용하지 못했습니다. 입력 두 개가 합성되어 있는지 확인한 뒤 다시 시도하세요.",

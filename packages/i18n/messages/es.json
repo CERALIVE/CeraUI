@@ -2591,6 +2591,7 @@
 	"live.layout.inset": "Posición de la segunda entrada",
 	"live.layout.insetPosition": "A {x}% del borde izquierdo y {y}% del borde superior, con {width}% de ancho y {height}% de alto.",
 	"live.layout.insetKeys": "Muévela con las flechas. Mantén Shift para moverla más rápido o Alt para cambiar su tamaño.",
+	"live.layout.insetCancel": "Presiona Escape antes de soltarla para dejarla donde estaba.",
 	"live.layout.error.composition_unsupported": "Este dispositivo no puede combinar dos entradas en este momento, así que la posición no cambió.",
 	"live.layout.error.composition_geometry_unsupported": "Este dispositivo solo ofrece las disposiciones predefinidas, así que la posición no cambió.",
 	"live.layout.error.composition_rect_invalid": "El dispositivo no pudo usar esa posición. Revisa que las dos entradas estén combinadas e inténtalo de nuevo.",

@@ -2,8 +2,8 @@
 import { m } from '@ceraui/i18n/svelte';
 import { Minus, Plus } from '@lucide/svelte';
 
+import LabeledSlider from '$lib/components/custom/LabeledSlider.svelte';
 import { Button } from '$lib/components/ui/button';
-import { Slider } from '$lib/components/ui/slider';
 
 interface Props {
 	/** Live draft value (kbps) shown on the slider and stepper bounds. */
@@ -63,16 +63,16 @@ const {
 		>
 			<Minus aria-hidden={true} class="h-4 w-4" />
 		</Button>
-		<Slider
-			aria-label={m["live.adjustBitrate"]()}
+		<LabeledSlider
 			class="grow"
+			label={m["live.adjustBitrate"]()}
 			max={sliderMax}
 			min={sliderMin}
-			onValueChange={(v: number) => onSliderChange(v)}
-			onValueCommit={(v: number) => onSliderCommit(v)}
+			onValueChange={onSliderChange}
+			onValueCommit={onSliderCommit}
 			step={step}
-			type="single"
 			value={bitrateDraft}
+			valueText={bitrateLabel}
 		/>
 		<Button
 			aria-label="+{step} {m["units.kbps"]()}"

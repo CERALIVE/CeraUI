@@ -112,6 +112,7 @@ import {
 } from '@lucide/svelte';
 
 import AppliesNextStart from '$lib/components/custom/AppliesNextStart.svelte';
+import LabeledSlider from '$lib/components/custom/LabeledSlider.svelte';
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import PreviewCanvas from '$lib/components/preview/PreviewCanvas.svelte';
@@ -132,7 +133,6 @@ import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
-import { Slider } from '$lib/components/ui/slider';
 import { Switch } from '$lib/components/ui/switch';
 import {
 	getFramerateLabel,
@@ -916,14 +916,13 @@ function handleSave() {
 					{Number.isFinite(localBitrate) ? localBitrate : BITRATE.defaultMin}
 				</span>
 			</div>
-			<Slider
-				aria-label={m["settings.bitrate"]()}
+			<LabeledSlider
 				disabled={passthroughActive}
+				label={m["settings.bitrate"]()}
 				max={BITRATE.max}
 				min={BITRATE.min}
-				onValueChange={(value) => commitBitrate(value as number)}
+				onValueChange={commitBitrate}
 				step={BITRATE_STEP}
-				type="single"
 				value={sliderValue}
 			/>
 			<Input

@@ -1,14 +1,14 @@
-## LIVE SCREEN: CONTRACT AND DESIGN BRIEF [PARTIAL]
+## LIVE SCREEN: CONTRACT AND DESIGN BRIEF [EXISTS]
 
 This file is the target structure of the Live destination, written before any
 of it was built.
 
-Status: changes 1 to 5 below have landed — the regions, both orders, the Live
+Status: all six changes below have landed — the regions, both orders, the Live
 bar, the two-column layout and the preview's open state exist as described, the
 layout, the opacity and the second input change while live, the Encoder
 dialog has the automatic format, the adaptive switch and the route line, the
-Audio card has a strip per input, and the second input is placed on the
-preview. Change 6 is still to come.
+Audio card has a strip per input, the second input is placed on the preview,
+and the final design pass has set the rules in "The final design pass" below.
 
 How to read it:
 
@@ -128,6 +128,9 @@ must contain the `source-audio` block with its ids unchanged.
 - Idle, it must show the first blocking reason from `deriveGoLiveReadiness` as
   visible text, or a ready state, and Start.
 - Live, it must show the bitrate control and Stop.
+- While it is mounted, the document's `scroll-padding-bottom` is the bar's
+  height (plus the mobile dock below desktop chrome), so a control reached with
+  Tab or scrolled into view stops above the bar, never under it (WCAG 2.4.11).
 
 #### Screen sizes
 
@@ -291,7 +294,8 @@ must keep that ABI.
   resizes from four corners and, focused, moves with the arrow keys by 1%
   (Shift 5%) and resizes
   with Alt and the arrow keys. It is a native button with an accessible name
-  and a polite live description of its position, size and keys; during a
+  and a polite live description of its position, size and keys, including
+  that Escape before letting go puts it back; during a
   pointer drag the description keeps the starting position. Rectangles are
   fractions of the output frame, so they never mirror right to left.
 - Each corner resizes from a 44 px box centred on it
@@ -361,6 +365,38 @@ must keep that ABI.
   closed the radio is described by `live.layout.openPreviewToPlace`.
 - Under mocks, a live layout-only change reaches the mock engine
   (`changeMockComposition`), as `set-audio-mix` does.
+
+#### The final design pass [EXISTS]
+
+An audit of the screen as changes 1 to 5 left it, idle and live, at the four
+sizes, in both themes and in English, Spanish and Arabic. It changed no region,
+order or test id, reworded no string (it added one, the Escape hint) and changed
+no control's effect; it set these rules, each pinned by
+`apps/frontend/tests/e2e/live-design-a11y.spec.ts`:
+
+- Every slider on the screen and in the Encoder dialog is a `LabeledSlider`
+  (`apps/frontend/src/lib/components/custom/LabeledSlider.svelte`): its name,
+  description and value text sit on the thumb, the element that takes focus,
+  and it runs with the reading direction, so in Arabic the maximum is on the
+  left like the Live bar's plus button. The shadcn `Slider` primitive put the
+  name on its root and drew no track or fill (its `data-horizontal:` classes
+  never match bits-ui's `data-orientation`).
+- In touch layout a slider thumb keeps its 12 px dot and reaches 44 px through
+  its `::after` hit area, the switch mechanism in `app.css`; an info button
+  does the same through `data-touch-target="hit-area"`.
+- Text meets AA in dark and light: the preview encoding helper, the target
+  bitrate in the telemetry card and a muted strip's Mute label use full
+  `text-muted-foreground` or `text-foreground`; a muted strip keeps its warning
+  tint and icon.
+- At phone width the Output card's Edit buttons keep their words for screen
+  readers, and the destination check shows its words, not only its dot. Setup
+  values and reasons wrap instead of being cut: a row's text keeps at least
+  12rem, and when its actions do not fit beside that they wrap under it at the
+  inline end. A source tile's name wraps to two lines.
+- Under `prefers-reduced-motion: reduce` nothing on the screen keeps animating;
+  the live dot in the summary stays lit and still.
+
+Deliberately left, with reasons, in `docs/DESIGN-FOLLOWUPS.md` section 5.
 
 ### 1. Job and audience
 
@@ -498,9 +534,12 @@ The screen must handle each of these states:
   `packages/i18n/messages/*.json` file, written natively per locale. A change
   must not alter the text of a key it did not add, and nothing may write
   `packages/i18n/tests/fixtures/*.rendered.json`.
-- **Open for the final design pass.** Whether the desk column stays pinned while
-  the cards column scrolls on wide screens, and the width split between the two
-  columns. Until then both columns must scroll with the page.
+- **Decided in the final design pass.** Both columns scroll with the page and
+  the split stays three fifths for the desk, two for the cards. Pinning the desk
+  was rejected: live at 1024x600 the desk (preview, now-streaming summary, source
+  switch, layout controls) is taller than the space between the header and the
+  Live bar, so a pinned desk would hold its own lower controls out of reach
+  until the cards column ended.
 
 #### Assumptions made without an interview
 

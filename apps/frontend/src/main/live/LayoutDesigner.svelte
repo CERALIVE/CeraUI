@@ -282,6 +282,7 @@ const cursorFor = (corner: Corner) =>
 	<span aria-live="polite" class="sr-only" id={descriptionId}>
 		{position}
 		{m['live.layout.insetKeys']()}
+		{m['live.layout.insetCancel']()}
 	</span>
 
 	<!-- Mounted for the whole session so a refusal is announced the moment it lands. -->

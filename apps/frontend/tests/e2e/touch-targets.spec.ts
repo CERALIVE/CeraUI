@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { Page } from '@playwright/test';
 
 import { expect, test } from './fixtures/index.js';
+import { type HitArea, measureHitAreas } from './helpers/hit-area.js';
 import { ensureAuthenticated, navigateTo } from './helpers/index.js';
 import { KIOSK_VIEWPORT } from './helpers/modem-containment.js';
 
@@ -64,75 +65,17 @@ const EVIDENCE_DIR = path.resolve(
 
 const TARGET_PX = 44;
 
-interface ControlMetrics {
-	readonly name: string;
-	readonly boxWidth: number;
-	readonly boxHeight: number;
-	readonly hitWidth: number;
-	readonly hitHeight: number;
-	readonly overlay: { top: number; bottom: number; left: number; right: number } | null;
-}
+type ControlMetrics = HitArea;
 
-/**
- * Box geometry plus the `::after` hit-area overlay's own extent.
- *
- * The overlay is read from the pseudo's RESOLVED insets, not probed with
- * `elementFromPoint`: two of these three controls are measured with a modal
- * dialog or a sticky banner on screen, where a hit test answers about occlusion
- * rather than about the declared target. An absolutely-positioned pseudo
- * resolves its insets against the host's PADDING box, so the overlay's extent is
- * that box minus both insets on each axis; logical insets map to physical ones
- * in the base (LTR) locale this leg runs in. A control with no overlay reports
- * `content: none`, falls through, and is measured on its box alone — which is
- * exactly the pre-fix reading this gate must be able to fail on.
- */
+/** The one control `selector` matches, measured by the shared hit-area reader. */
 async function measureControl(
 	page: Page,
 	name: string,
 	selector: string,
 ): Promise<ControlMetrics> {
-	return page.evaluate(
-		([label, sel]) => {
-			const node = document.querySelector(sel as string) as HTMLElement | null;
-			if (node === null) throw new Error(`no element matched ${sel}`);
-			const rect = node.getBoundingClientRect();
-			const style = getComputedStyle(node);
-			const after = getComputedStyle(node, '::after');
-			const px = (value: string): number => {
-				const parsed = Number.parseFloat(value);
-				return Number.isFinite(parsed) ? parsed : Number.NaN;
-			};
-
-			let overlay: {
-				top: number;
-				bottom: number;
-				left: number;
-				right: number;
-			} | null = null;
-			if (after.position === 'absolute' && after.content !== 'none') {
-				const top = rect.top + px(style.borderTopWidth) + px(after.insetBlockStart);
-				const bottom =
-					rect.bottom - px(style.borderBottomWidth) - px(after.insetBlockEnd);
-				const left =
-					rect.left + px(style.borderLeftWidth) + px(after.insetInlineStart);
-				const right =
-					rect.right - px(style.borderRightWidth) - px(after.insetInlineEnd);
-				if ([top, bottom, left, right].every((n) => Number.isFinite(n))) {
-					overlay = { top, bottom, left, right };
-				}
-			}
-
-			return {
-				name: label as string,
-				boxWidth: rect.width,
-				boxHeight: rect.height,
-				hitWidth: Math.max(rect.width, overlay ? overlay.right - overlay.left : 0),
-				hitHeight: Math.max(rect.height, overlay ? overlay.bottom - overlay.top : 0),
-				overlay,
-			};
-		},
-		[name, selector] as const,
-	);
+	const [control] = await measureHitAreas(page, selector);
+	if (control === undefined) throw new Error(`no element matched ${selector}`);
+	return { ...control, name };
 }
 
 /** Computed animation state of the first element a selector resolves to. */

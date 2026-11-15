@@ -2600,6 +2600,7 @@
 	"live.layout.inset": "موضع المدخل الثاني",
 	"live.layout.insetPosition": "{x}% من الحافة اليسرى و{y}% من الحافة العليا، بعرض {width}% وارتفاع {height}%.",
 	"live.layout.insetKeys": "حرّكه بمفاتيح الأسهم. اضغط Shift مع الأسهم للتحريك أسرع، أو Alt لتغيير الحجم.",
+	"live.layout.insetCancel": "اضغط Escape قبل الإفلات لإعادته إلى موضعه السابق.",
 	"live.layout.error.composition_unsupported": "لا يستطيع هذا الجهاز دمج مدخلين الآن، لذا لم يتغير الموضع.",
 	"live.layout.error.composition_geometry_unsupported": "يوفر هذا الجهاز التخطيطات الجاهزة فقط، لذا لم يتغير الموضع.",
 	"live.layout.error.composition_rect_invalid": "تعذّر على الجهاز استخدام هذا الموضع. تأكد من دمج مدخلين ثم حاول مرة أخرى.",

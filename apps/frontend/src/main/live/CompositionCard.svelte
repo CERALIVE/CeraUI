@@ -53,10 +53,10 @@ import {
 } from '@ceraui/rpc/schemas';
 import { Activity, Loader2, PictureInPicture2 } from '@lucide/svelte';
 
+import LabeledSlider from '$lib/components/custom/LabeledSlider.svelte';
 import * as Card from '$lib/components/ui/card';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
-import { Slider } from '$lib/components/ui/slider';
 import { Switch } from '$lib/components/ui/switch';
 import { getConfigChange, getIsStreaming } from '$lib/rpc/subscriptions.svelte';
 import { compositionRefusal, sendCompositionWrite } from '$lib/streaming/compositionWrites.svelte';
@@ -407,10 +407,10 @@ function endAdjustment(): void {
 							{(draggedAlpha ?? alpha).toFixed(2)}
 						</span>
 					</div>
-					<Slider
+					<LabeledSlider
 						id="composition-alpha"
-						aria-label={m["live.composition.alpha"]()}
 						disabled={busy}
+						label={m["live.composition.alpha"]()}
 						max={COMPOSITION_ALPHA_MAX}
 						min={COMPOSITION_ALPHA_MIN}
 						onfocusout={endAdjustment}
@@ -419,10 +419,9 @@ function endAdjustment(): void {
 						onpointerdowncapture={() => {
 							heldKeys = [];
 						}}
-						onValueChange={(value) => previewAlpha(value as number)}
+						onValueChange={previewAlpha}
 						onValueCommit={commitAlpha}
 						step={ALPHA_STEP}
-						type="single"
 						value={alpha}
 					/>
 				</div>

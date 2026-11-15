@@ -175,6 +175,14 @@ describe("LayoutDesigner", () => {
 		expect(description?.textContent).toMatch(/45.*5.*50.*50/);
 	});
 
+	it("its description says that Escape puts it back during a move", () => {
+		renderDesigner();
+		const description = document.getElementById(
+			inset().getAttribute("aria-describedby") ?? "",
+		);
+		expect(description?.textContent).toContain("Escape");
+	});
+
 	it("moves locally while dragging and ends in one setConfig with the clamped rectangle", async () => {
 		setConfig.mockResolvedValue(SAVED);
 		renderDesigner();
