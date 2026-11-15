@@ -7,6 +7,7 @@ import { m, setLocale, getLocale } from '@ceraui/i18n/svelte';    // frontend â€
 import { formatBytes } from '@ceraui/i18n/formatters';             // anywhere
 import { LOCALES, RTL_LANGUAGES } from '@ceraui/i18n';             // locale constants
 import { registerAllNamespaces } from '@ceraui/i18n/eager';        // standalone builds ONLY
+import { live, registerNamespaces } from '@ceraui/i18n/eager';     // standalone builds ONLY, partial catalog
 ```
 
 `m` is keyed on the **verbatim dotted key**: `m["live.setup.title"]()`. There is no
@@ -20,7 +21,10 @@ activation point (`apps/frontend/src/lib/i18n/namespace-activation.ts`).
 for a build that cannot fetch a sibling chunk: the federation dialog bundles (one
 hosted module, strict CSP, signed manifest pinning an exact chunk graph) and the
 test harnesses â€” `packages/i18n/tests/setup.ts` here, and
-`apps/frontend/vitest.components.setup.ts` there.
+`apps/frontend/vitest.components.setup.ts` there. Each namespace's messages are also
+exported by name beside `registerNamespaces()`; the federation bundles register
+only the namespaces their dialogs render (`apps/frontend/src/lib/federation/messages.ts`),
+so the bundler drops the rest.
 
 **The frontend now has TWO setup files, and only one of them touches this
 package.** `apps/frontend/vitest.storage.setup.ts` installs a fresh `Storage` per
