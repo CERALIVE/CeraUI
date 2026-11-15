@@ -1233,6 +1233,20 @@ describe("SourceSection — audio source single vs multiple (kept)", () => {
 		expect(readonly?.textContent).toContain("alsa:hdmi");
 	});
 
+	// Live audio belongs to the Audio card's mixer: no roadmap pill beside the picker.
+	it("shows no 'Coming soon' pill beside the audio source, even with several sources while streaming", () => {
+		const { container } = mount({
+			audioSources: ["alsa:usbaudio", "alsa:hdmi"],
+			selectedAudioSource: "alsa:hdmi",
+			isStreaming: true,
+		});
+		const audio = container.querySelector<HTMLElement>(
+			'[data-testid="source-audio"]',
+		);
+		expect(audio?.textContent).toContain("Audio source");
+		expect(audio?.textContent).not.toContain("Coming soon");
+	});
+
 	it("shows an explanatory placeholder when no audio source is reported", () => {
 		const { container } = mount({ audioSources: [] });
 		expect(

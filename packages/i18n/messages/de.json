@@ -797,6 +797,7 @@
 	"live.audioMixer.needsPrimary": "Wähle oben eine Audioquelle, um weitere Eingänge dazuzumischen.",
 	"live.audioMixer.error.audio_mix_unsupported": "Dieses Gerät kann keine Audioeingänge mischen.",
 	"live.audioMixer.error.audio_input_unknown": "Dieser Eingang ist nicht mehr verfügbar. Schließe ihn wieder an oder schalte ihn aus.",
+	"live.audioMixer.error.audio_input_primary": "Der Haupteingang bleibt immer im Mix. Wähle eine andere Audioquelle, um ihn auszuschalten.",
 	"live.audioMixer.error.audio_inputs_empty": "Lass mindestens einen Eingang im Mix.",
 	"live.audioMixer.error.audio_input_duplicate": "Dieser Eingang ist doppelt im Mix. Schalte ihn aus und wieder ein.",
 	"live.audioMixer.error.audio_inputs_too_many": "Der Mix ist voll. Schalte zuerst einen anderen Eingang aus.",

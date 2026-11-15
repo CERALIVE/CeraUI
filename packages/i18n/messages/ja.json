@@ -752,6 +752,7 @@
 	"live.audioMixer.needsPrimary": "ほかの入力をミックスするには、上でオーディオソースを選んでください。",
 	"live.audioMixer.error.audio_mix_unsupported": "このデバイスはオーディオ入力をミックスできません。",
 	"live.audioMixer.error.audio_input_unknown": "この入力は使用できなくなりました。接続し直すか、オフにしてください。",
+	"live.audioMixer.error.audio_input_primary": "メイン入力は常にミックスに含まれます。オフにするには、別のオーディオソースを選択してください。",
 	"live.audioMixer.error.audio_inputs_empty": "ミックスには少なくとも 1 つの入力を残してください。",
 	"live.audioMixer.error.audio_input_duplicate": "この入力がミックスに 2 回含まれています。一度オフにしてから、もう一度オンにしてください。",
 	"live.audioMixer.error.audio_inputs_too_many": "ミックスがいっぱいです。先にほかの入力をオフにしてください。",

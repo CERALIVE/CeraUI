@@ -269,7 +269,7 @@ must keep that ABI.
   session runs, the source picker is read-only with `audio-source-mix-locked`.
 - Every refusal shown is the keyed copy of one backend token
   (`live.audioMixer.error.<token>` for `audio_mix_unsupported`,
-  `audio_input_unknown`, `audio_inputs_empty`, `audio_input_duplicate`,
+  `audio_input_unknown`, `audio_input_primary`, `audio_inputs_empty`, `audio_input_duplicate`,
   `audio_inputs_too_many`, `audio_tracks_invalid`, `audio_tracks_gap`,
   `audio_gain_range`, `audio_delay_range` and `audio_mix_active`); any other
   token, such as an engine refusal, reads as a generic refusal and never as the

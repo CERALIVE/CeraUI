@@ -207,6 +207,7 @@ function clearError(id: string): void {
 const ERROR_COPY: Record<string, () => string> = {
 	audio_mix_unsupported: () => m['live.audioMixer.error.audio_mix_unsupported'](),
 	audio_input_unknown: () => m['live.audioMixer.error.audio_input_unknown'](),
+	audio_input_primary: () => m['live.audioMixer.error.audio_input_primary'](),
 	audio_inputs_empty: () => m['live.audioMixer.error.audio_inputs_empty'](),
 	audio_input_duplicate: () => m['live.audioMixer.error.audio_input_duplicate'](),
 	audio_inputs_too_many: () => m['live.audioMixer.error.audio_inputs_too_many'](),

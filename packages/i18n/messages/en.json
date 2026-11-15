@@ -797,6 +797,7 @@
 	"live.audioMixer.needsPrimary": "Pick an audio source above to mix other inputs with it.",
 	"live.audioMixer.error.audio_mix_unsupported": "This device can't mix audio inputs.",
 	"live.audioMixer.error.audio_input_unknown": "This input isn't available any more. Reconnect it or turn it off.",
+	"live.audioMixer.error.audio_input_primary": "The main input always stays in the mix. To turn it off, choose another audio source.",
 	"live.audioMixer.error.audio_inputs_empty": "Keep at least one input in the mix.",
 	"live.audioMixer.error.audio_input_duplicate": "This input is in the mix twice. Turn it off, then on again.",
 	"live.audioMixer.error.audio_inputs_too_many": "The mix is full. Turn another input off first.",

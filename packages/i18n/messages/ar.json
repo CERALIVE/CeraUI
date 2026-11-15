@@ -809,6 +809,7 @@
 	"live.audioMixer.needsPrimary": "اختر مصدر صوت في الأعلى لمزج مدخلات أخرى معه.",
 	"live.audioMixer.error.audio_mix_unsupported": "لا يستطيع هذا الجهاز مزج مدخلات الصوت.",
 	"live.audioMixer.error.audio_input_unknown": "لم يعد هذا المدخل متاحًا. أعد توصيله أو أوقفه.",
+	"live.audioMixer.error.audio_input_primary": "يبقى المدخل الرئيسي دائمًا ضمن المزج. لإيقافه، اختر مصدر صوت آخر.",
 	"live.audioMixer.error.audio_inputs_empty": "أبقِ مدخلًا واحدًا على الأقل في المزج.",
 	"live.audioMixer.error.audio_input_duplicate": "هذا المدخل موجود مرتين في المزج. أوقفه ثم شغّله من جديد.",
 	"live.audioMixer.error.audio_inputs_too_many": "المزج ممتلئ. أوقف مدخلًا آخر أولًا.",

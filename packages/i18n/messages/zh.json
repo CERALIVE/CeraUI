@@ -752,6 +752,7 @@
 	"live.audioMixer.needsPrimary": "请先在上方选择一个音频源，再混入其他输入。",
 	"live.audioMixer.error.audio_mix_unsupported": "此设备无法混合音频输入。",
 	"live.audioMixer.error.audio_input_unknown": "此输入已不可用。请重新连接或将其关闭。",
+	"live.audioMixer.error.audio_input_primary": "主输入始终在混音中。要将其关闭，请选择其他音频源。",
 	"live.audioMixer.error.audio_inputs_empty": "混音中至少要保留一个输入。",
 	"live.audioMixer.error.audio_input_duplicate": "此输入在混音中出现了两次。请先关闭再重新打开。",
 	"live.audioMixer.error.audio_inputs_too_many": "混音已满。请先关闭另一个输入。",
