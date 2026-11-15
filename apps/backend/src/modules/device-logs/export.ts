@@ -8,7 +8,7 @@ import { currentBootId } from "./boot-id.ts";
 import type { ParsedQuery } from "./continuation.ts";
 import { EXPORT_TIME_MS, exportChunks } from "./export-body.ts";
 import { exportFilename } from "./export-format.ts";
-import { getLogState } from "./settings.ts";
+import { getLogState, historyClearing } from "./settings.ts";
 import { reserveLogSharing } from "./sharing.ts";
 
 interface Ticket {
@@ -25,7 +25,15 @@ export async function createExport(
 	_conn: object,
 	input: LogExportInput,
 ): Promise<LogExportOutput> {
+	const epoch = getLogState().historyEpoch;
 	const parsed = logExportInputSchema.parse(input);
+	for (;;) {
+		const gate = historyClearing();
+		if (epoch !== getLogState().historyEpoch)
+			return { ok: false, error: "READ_FAILED" };
+		if (!gate) break;
+		await gate;
+	}
 	const query = logQueryInputSchema.parse({
 		...parsed.filter,
 		boot: parsed.boot,
@@ -57,7 +65,7 @@ export async function createExport(
 	tickets.set(ticket, {
 		query,
 		bootId,
-		epoch: getLogState().historyEpoch,
+		epoch,
 		expiresAt,
 		lease,
 	});
@@ -68,6 +76,14 @@ export async function handleLogExportRequest(
 	request: Request,
 ): Promise<Response> {
 	if (request.method !== "GET") return new Response(null, { status: 405 });
+	const epoch = getLogState().historyEpoch;
+	for (;;) {
+		const gate = historyClearing();
+		if (epoch !== getLogState().historyEpoch)
+			return new Response(null, { status: 403 });
+		if (!gate) break;
+		await gate;
+	}
 	const key = new URL(request.url).searchParams.get("ticket") ?? "";
 	const ticket = tickets.get(key);
 	tickets.delete(key);
@@ -97,6 +113,7 @@ export async function handleLogExportRequest(
 	let cancelled = false;
 	let pending = Promise.resolve();
 	const finish = () => {
+		if (finished) return;
 		finished = true;
 		signal.removeEventListener("abort", onAbort);
 		clearTimeout(timeout);

@@ -85,3 +85,45 @@ Run `cd apps/backend && bun test ./src/tests/device-logs-filter.test.ts`.
 Tests compare it without writing; regenerate explicitly with `UPDATE_GOLDEN=1`
 on the same test command. Paging and follow consumers add their option cases
 and journal replay assertions when those readers are implemented.
+
+## Retention and cleanup [EXISTS]
+
+`src/modules/device-logs/retention.ts` owns retention changes and serializes
+maintenance, older-file vacuum, legacy-file removal and clear. Settings and
+maintenance receipts use the existing atomic settings store. Unknown or invalid
+image ceilings disable retention changes; no image limit is assumed.
+
+The daily check runs only with an explicit user limit and a readable ceiling.
+It vacuums archived files without rotating. Its receipt reports whether observed
+size and oldest-entry age meet the target; active journal files may prevent that.
+Storage reports journalctl usage separately from recursive journal-directory
+bytes, including the image-owned predecessor directory. Recent source volume
+is a bounded sample, never a rate estimate.
+
+Older-file cleanup rotates and vacuums using rounded uptime plus sixty seconds,
+then reports journal boot counts before and after. Files may contain more than
+one boot. Clear refuses during a busy update phase, persists a new history epoch
+and closes admission in one synchronous step. Follow, export and query
+cancellations start together and join for at most 15 seconds. A rejected or
+timed-out drain returns `READ_FAILED`, reopens admission and deletes nothing.
+After another update-phase check, clear rotates and vacuums, removes only the six
+legacy debug files, and records its completion time. Admission stays closed
+through final storage readout; new requests wait and old pending requests use
+their existing cancellation outcome. Export queries share scan admission;
+their captured history epoch expires after clear. The event store and predecessor
+directory are never deleted. Export cancellation invalidates unused tickets and
+releases a paused download's sharing lease without requiring another client read.
+Mock operations use the logger ring without native
+journal commands or image/journal-directory reads; legacy unlink precedes the
+ring reset and its immediate clear record.
+
+The [retention contract](../../docs/agents/device-log-retention.md) records
+the full-disk persistence limit, metadata readers outside admission, and the
+landed reader and follow-stream defects that retention cannot repair.
+
+`ceiling.ts`, `retention-files.ts` and `storage.ts` keep parsing, filesystem
+operations and readout separate. All journal commands reuse the registered,
+bounded argv-only `run()` helper; no new direct spawn site is introduced.
+Tests are `src/tests/device-logs-retention*.test.ts`.
+RPC integration belongs to the later wiring todo. Board latency, CPU and streaming
+log volume remain unmeasured.

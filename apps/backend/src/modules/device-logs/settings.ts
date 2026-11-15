@@ -36,6 +36,23 @@ let settings = defaultSettings;
 let state = defaultState;
 let settingsLoaded = false;
 let stateLoaded = false;
+let historyClear: ReturnType<typeof Promise.withResolvers<void>> | null = null;
+
+export function historyClearing(): Promise<void> | null {
+	return historyClear?.promise ?? null;
+}
+
+/** Called only by retention's exclusive clear transaction. */
+export function beginHistoryClear(): () => void {
+	updateLogState({ historyEpoch: getLogState().historyEpoch + 1 });
+	const pending = Promise.withResolvers<void>();
+	historyClear = pending;
+	return () => {
+		if (historyClear !== pending) return;
+		historyClear = null;
+		pending.resolve();
+	};
+}
 
 function filePath(name: string): string {
 	return join(settingsDir ?? process.cwd(), name);

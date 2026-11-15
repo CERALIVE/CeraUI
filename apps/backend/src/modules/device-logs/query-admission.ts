@@ -1,4 +1,5 @@
 import { JournalReadError } from "./reader.ts";
+import { getLogState, historyClearing } from "./settings.ts";
 
 interface Slot {
 	readonly controller: AbortController;
@@ -10,11 +11,19 @@ export async function withQuerySlot<T>(
 	conn: object,
 	run: (signal: AbortSignal) => Promise<T>,
 ): Promise<T | { readonly ok: false; readonly error: "BUSY" | "READ_FAILED" }> {
-	let previous = running.get(conn);
-	while (previous) {
+	const epoch = getLogState().historyEpoch;
+	for (;;) {
+		const gate = historyClearing();
+		if (epoch !== getLogState().historyEpoch)
+			throw new JournalReadError("READ_FAILED");
+		if (gate) {
+			await gate;
+			continue;
+		}
+		const previous = running.get(conn);
+		if (!previous) break;
 		previous.controller.abort();
 		await previous.settled;
-		previous = running.get(conn);
 	}
 	if (running.size >= 2) return { ok: false, error: "BUSY" };
 	const controller = new AbortController();

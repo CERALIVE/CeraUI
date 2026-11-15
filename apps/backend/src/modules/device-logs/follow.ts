@@ -1,3 +1,4 @@
+// allow: SIZE_OK - Socket lifetime state machine; the clear fence shares slot ownership.
 import {
 	LOG_FOLLOW_EVENT,
 	type LogFollowMessage,
@@ -26,6 +27,7 @@ import {
 	JournalReadError,
 	scanJournal,
 } from "./reader.ts";
+import { getLogState, historyClearing } from "./settings.ts";
 
 interface FollowOptions extends Pick<WatcherOptions, "spawn"> {
 	readonly clock?: Pick<JournalClock, "setTimeout" | "clearTimeout">;
@@ -65,8 +67,19 @@ export async function startFollow(
 	input: LogFollowStartInput,
 	options: FollowOptions = {},
 ): Promise<LogFollowStartOutput> {
+	const epoch = getLogState().historyEpoch;
 	const filter = logFollowStartInputSchema.parse(input);
-	while (running.has(conn)) await stopFollow(conn);
+	for (;;) {
+		const gate = historyClearing();
+		if (epoch !== getLogState().historyEpoch)
+			return { ok: false, error: "READ_FAILED" };
+		if (gate) {
+			await gate;
+			continue;
+		}
+		if (!running.has(conn)) break;
+		await stopFollow(conn);
+	}
 	if (running.size >= 4) return { ok: false, error: "BUSY" };
 	const bootId = currentBootId();
 	if (bootId === undefined) return { ok: false, error: "BOOT_UNAVAILABLE" };
@@ -78,9 +91,13 @@ export async function startFollow(
 	const ready = Promise.withResolvers<LogFollowStartOutput>();
 	const subscriptionId = crypto.randomUUID();
 	let started = false;
+	let ended = false;
 	let cancelPending: (() => void) | undefined;
 	const cancelTimer = () => cancelPending?.();
 	const publish = (message: LogFollowMessage) => {
+		if (ended || (message.ended === undefined && controller.signal.aborted))
+			return;
+		if (message.ended !== undefined) ended = true;
 		try {
 			conn.send(buildMsg(LOG_FOLLOW_EVENT, message, getSocketSenderId(conn)));
 			slot.checkpoint = message.checkpointCursor;
