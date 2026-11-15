@@ -627,6 +627,7 @@ function stageApplyNowFields(
 	input: StreamingSetConfigInput,
 	config: RuntimeConfig,
 	sourceRouting: Extract<ResolveSourceRoutingResult, { ok: true }> | undefined,
+	inputMode: InputMode | undefined,
 ): InflightConfigMarker | undefined {
 	if (input.apply_now !== true) return undefined;
 	if (
@@ -643,14 +644,17 @@ function stageApplyNowFields(
 		...(input.source === undefined ? {} : { source: input.source }),
 		...(input.resolution === undefined ? {} : { resolution: input.resolution }),
 		...(input.framerate === undefined ? {} : { framerate: input.framerate }),
+		// The engine change-config contract cannot clear a codec; use its next-start default.
 		...(input.video_codec == null ? {} : { video_codec: input.video_codec }),
-		...(input.input_mode === undefined ? {} : { input_mode: input.input_mode }),
+		// The mode this save lands on, chosen or derived; a source switch can clear it.
+		...(input.input_mode === undefined && inputMode === config.input_mode
+			? {}
+			: { input_mode: inputMode ?? null }),
 		...(input.composition === undefined
 			? {}
 			: { composition: input.composition }),
-		...(sourceRouting?.pipeline === undefined
-			? {}
-			: { pipeline: sourceRouting.pipeline }),
+		// Routed from the source or the mode: it moves only with them.
+		...(input.pipeline === undefined ? {} : { pipeline: input.pipeline }),
 		...(sourceRouting?.selected_video_input === undefined
 			? {}
 			: { selected_video_input: sourceRouting.selected_video_input }),
@@ -676,12 +680,10 @@ function stageApplyNowFields(
 			: { selected_video_input: config.selected_video_input }),
 	};
 
-	// The engine change-config contract cannot clear a codec; use its next-start default.
-	for (const field of APPLY_NOW_FIELDS) {
-		if (field !== "video_codec" || input.video_codec !== null)
-			delete input[field];
-	}
-	if (sourceRouting !== undefined) delete input.pipeline;
+	// Everything the candidate holds is held back from the merge below, so a
+	// field it gains can never also be saved now.
+	for (const field of Object.keys(candidate) as (keyof StagedConfigFields)[])
+		delete input[field];
 
 	return {
 		attemptId: newAttemptId(),
@@ -994,7 +996,12 @@ export const setConfigProcedure = authedProcedure
 		// back (staged, never written) so `config.json` keeps describing what the
 		// engine is ACTUALLY running until the transaction says `applied`. Every
 		// other field in the same save persists immediately, exactly as before.
-		const marker = stageApplyNowFields(input, config, sourceRouting);
+		const marker = stageApplyNowFields(
+			input,
+			config,
+			sourceRouting,
+			effectiveInputMode,
+		);
 		if (marker !== undefined) sourceRouting = undefined;
 
 		if (input.srt_latency !== undefined)
@@ -1066,8 +1073,9 @@ export const setConfigProcedure = authedProcedure
 			noteSourceSelectionWrite(input.source, sourcesSnapshot);
 		}
 		// Written even when it resolves to `undefined`: that is the CLEAR, and it is
-		// what stops a mode chosen for one camera governing the next one.
-		config.input_mode = effectiveInputMode;
+		// what stops a mode chosen for one camera governing the next one. A staged
+		// change carries any new mode in its candidate instead.
+		if (marker === undefined) config.input_mode = effectiveInputMode;
 		if (input.bitrate_overlay !== undefined)
 			config.bitrate_overlay = input.bitrate_overlay;
 
@@ -1222,10 +1230,12 @@ export const setConfigProcedure = authedProcedure
 				...(staged.selected_video_input === undefined
 					? {}
 					: { input_id: staged.selected_video_input }),
-				...(staged.pipeline === undefined ? {} : { pipeline: staged.pipeline }),
-				...(staged.input_mode === undefined
+				// Only a source switch hands the engine a pipeline; a mode switch is the
+				// engine's own transaction, and the pipeline it routes to is ours to save.
+				...(staged.source === undefined || staged.pipeline === undefined
 					? {}
-					: { input_mode: staged.input_mode }),
+					: { pipeline: staged.pipeline }),
+				...(staged.input_mode == null ? {} : { input_mode: staged.input_mode }),
 				...(staged.composition === undefined
 					? {}
 					: { composition: staged.composition }),
@@ -1258,6 +1268,10 @@ export const setConfigProcedure = authedProcedure
 		if (staged.framerate !== undefined) applied.framerate = persisted.framerate;
 		if (staged.video_codec !== undefined)
 			applied.video_codec = persisted.video_codec;
+		if (staged.input_mode !== undefined) {
+			applied.input_mode = persisted.input_mode;
+			applied.pipeline = persisted.pipeline;
+		}
 		if (staged.source !== undefined) {
 			applied.source = persisted.source;
 			applied.pipeline = persisted.pipeline;

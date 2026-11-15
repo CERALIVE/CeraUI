@@ -11,17 +11,32 @@
  * does: the guarantee has to hold for a direct RPC call, not just the dialog.
  */
 
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import {
+	afterAll,
+	afterEach,
+	beforeAll,
+	beforeEach,
+	describe,
+	expect,
+	spyOn,
+	test,
+} from "bun:test";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	type GetCapabilitiesResult,
 	SCHEMA_VERSION,
 } from "@ceralive/cerastream";
-import type { ConfigChangeResult } from "@ceraui/rpc/schemas";
+import {
+	CONFIG_CHANGE_REASON_REJECTED,
+	type ConfigChangeResult,
+	type LifecycleState,
+	type StreamingSetConfigInput,
+} from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 
+import { initMockService, stopMockService } from "../mocks/mock-service.ts";
 import {
 	getConfig,
 	getConfigFilePath,
@@ -34,6 +49,7 @@ import {
 import { clearCapabilitiesCache } from "../modules/streaming/capabilities.ts";
 import {
 	type ApplyNowGate,
+	createApplyNowGate,
 	setApplyNowGateForTest,
 } from "../modules/streaming/config-change-bridge.ts";
 import { reconcileInflightConfigChange } from "../modules/streaming/config-change-persistence.ts";
@@ -45,13 +61,24 @@ import {
 	readInflightMarker,
 	type StagingDeps,
 } from "../modules/streaming/config-change-staging.ts";
-import { initPipelines } from "../modules/streaming/pipelines.ts";
+import {
+	initPipelines,
+	setMockHardware,
+} from "../modules/streaming/pipelines.ts";
+import {
+	applyObservedEngineDevices,
+	resetEngineDeviceCache,
+} from "../modules/streaming/sources.ts";
 import {
 	createStreamSessionOrchestrator,
 	type EngineConfigChangeOutcome,
+	type StreamConfigChangeDelta,
+	type StreamSessionOrchestrator,
 } from "../modules/streaming/stream-session-orchestrator.ts";
+import type { EngineRuntimeState } from "../modules/streaming/streaming-backend.ts";
 import { setConfigProcedure } from "../rpc/procedures/streaming.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
+import { osmo } from "./helpers/dual-mode-camera.ts";
 
 function makeContext(): RPCContext {
 	const ws = {
@@ -499,6 +526,105 @@ const OVERLAP_CAPS: GetCapabilitiesResult = {
 	audio_backends: { supported: ["alsa", "pipewire"], active: "pipewire" },
 };
 
+/** An engine answer that never arrives, holding a lifecycle state open. */
+const HELD = new Promise<never>(() => {});
+
+type Session = {
+	orchestrator: StreamSessionOrchestrator;
+	/** The engine's answers, swappable per case. */
+	engine: {
+		change: () => Promise<EngineConfigChangeOutcome>;
+		stop: () => Promise<void>;
+		query: () => Promise<EngineRuntimeState>;
+	};
+	/** Every change the engine was asked to apply. */
+	deltas: StreamConfigChangeDelta[];
+	reached: (state: LifecycleState) => Promise<void>;
+};
+
+/** An idle session behind the production apply-now gate and the real orchestrator. */
+function session(): Session {
+	let attempts = 0;
+	const waiting = new Map<LifecycleState, () => void>();
+	const s: Session = {
+		orchestrator: undefined as unknown as StreamSessionOrchestrator,
+		engine: {
+			change: async () => ({ phase: "applied" }),
+			stop: async () => {},
+			query: async () => "idle",
+		},
+		deltas: [],
+		reached: (state) =>
+			s.orchestrator.snapshot().state === state
+				? Promise.resolve()
+				: new Promise((resolve) => {
+						waiting.set(state, resolve);
+					}),
+	};
+	s.orchestrator = createStreamSessionOrchestrator({
+		createAttemptId: () => `engine-${++attempts}`,
+		setStreamingStatus: () => {},
+		setLifecycleState: (state) => waiting.get(state)?.(),
+		stopRuntime: () => s.engine.stop(),
+		queryRuntime: () => s.engine.query(),
+		scheduleTimeout: () => 0,
+		cancelTimeout: () => {},
+		scheduleLaunchDeadline: () => 0,
+		cancelLaunchDeadline: () => {},
+		changeRuntimeConfig: (delta) => {
+			s.deltas.push(delta);
+			return s.engine.change();
+		},
+	});
+	setApplyNowGateForTest(createApplyNowGate(s.orchestrator));
+	return s;
+}
+
+const stream = (s: Session) =>
+	s.orchestrator.start({ origin: "ui", launch: async () => {} });
+
+/**
+ * Puts a session in each lifecycle state through its real methods. Keyed by the
+ * full state type, so a new state cannot compile without a way to reach it.
+ * `reconfiguring` is reached by admitting `competing`, which then never settles.
+ */
+const ENTER: Record<
+	LifecycleState,
+	(s: Session, competing: StreamingSetConfigInput) => Promise<unknown>
+> = {
+	idle: async () => {},
+	starting: (s) => {
+		void s.orchestrator.start({ origin: "ui", launch: () => HELD });
+		return s.reached("starting");
+	},
+	streaming: stream,
+	reconfiguring: async (s, competing) => {
+		await stream(s);
+		s.engine.change = () => HELD;
+		void call(setConfigProcedure, competing, { context: makeContext() });
+		await s.reached("reconfiguring");
+	},
+	stopping: async (s) => {
+		await stream(s);
+		s.engine.stop = () => HELD;
+		void s.orchestrator.stop("engine_loss");
+		await s.reached("stopping");
+	},
+	stop_failed: async (s) => {
+		await stream(s);
+		s.engine.stop = async () => {
+			throw new Error("stop-ack-unavailable");
+		};
+		await s.orchestrator.stop("engine_loss");
+	},
+	reconciling: async (s) => {
+		await stream(s);
+		s.engine.query = () => HELD;
+		void s.orchestrator.reconcile();
+		await s.reached("reconciling");
+	},
+};
+
 describe("two overlapping apply-now saves", () => {
 	let dir: string;
 	let priorPath: string;
@@ -553,36 +679,32 @@ describe("two overlapping apply-now saves", () => {
 		await rm(dir, { recursive: true, force: true });
 	});
 
-	test("the change admitted first keeps its stage; the other is busy and retires nothing", async () => {
-		// Given a live session behind the real orchestrator admission, whose engine
-		// holds a change open until the test answers it.
-		let attempts = 0;
-		let answerEngine: (outcome: EngineConfigChangeOutcome) => void = () => {};
+	/** A streaming session whose engine holds a change open until `answer`. */
+	async function liveSession(): Promise<{
+		asked: Promise<void>;
+		answer: (outcome: EngineConfigChangeOutcome) => void;
+	}> {
+		const s = session();
+		await stream(s);
 		let engineCalled: () => void = () => {};
-		const engineAsked = new Promise<void>((resolve) => {
-			engineCalled = resolve;
-		});
-		const orchestrator = createStreamSessionOrchestrator({
-			createAttemptId: () => `engine-${++attempts}`,
-			setStreamingStatus: () => {},
-			stopRuntime: async () => {},
-			queryRuntime: async () => "idle",
-			scheduleTimeout: () => 0,
-			cancelTimeout: () => {},
-			scheduleLaunchDeadline: () => 0,
-			cancelLaunchDeadline: () => {},
-			changeRuntimeConfig: () => {
-				engineCalled();
-				return new Promise((resolve) => {
-					answerEngine = resolve;
-				});
-			},
-		});
-		await orchestrator.start({ origin: "ui", launch: async () => {} });
-		setApplyNowGateForTest({
-			isStreamLive: () => orchestrator.snapshot().state === "streaming",
-			dispatch: (delta) => orchestrator.changeConfig(delta),
-		});
+		const engine = {
+			asked: new Promise<void>((resolve) => {
+				engineCalled = resolve;
+			}),
+			answer: (_outcome: EngineConfigChangeOutcome): void => {},
+		};
+		s.engine.change = () => {
+			engineCalled();
+			return new Promise((resolve) => {
+				engine.answer = resolve;
+			});
+		};
+		return engine;
+	}
+
+	test("the change admitted first keeps its stage; the other is busy and retires nothing", async () => {
+		// Given a live session whose engine holds a change open.
+		const engine = await liveSession();
 		// And the Bluetooth refresh an audio-backend save awaits held open, which
 		// parks that save after it chose apply-now and before admission.
 		let releaseBluetooth: () => void = () => {};
@@ -618,7 +740,7 @@ describe("two overlapping apply-now saves", () => {
 			{ resolution: "720p", apply_now: true },
 			{ context: makeContext() },
 		);
-		await engineAsked;
+		await engine.asked;
 		releaseBluetooth();
 		const firstResult = await first;
 
@@ -630,12 +752,290 @@ describe("two overlapping apply-now saves", () => {
 		);
 
 		// And B's applied change is the one persisted, with nothing left staged.
-		answerEngine({ phase: "applied" });
+		engine.answer({ phase: "applied" });
 		const secondResult = await second;
 		expect(secondResult.configChange?.result).toBe("applied");
 		expect(getConfig().resolution).toBe("720p");
 		expect(getConfig().audio_backend).toBe("alsa");
 		expect(getStagedConfigChange()).toBeUndefined();
 		expect(readInflightMarker()).toBeUndefined();
+	});
+
+	test("a save arriving while another change is applying is busy and persists no restart field", async () => {
+		// Given change A admitted and still applying.
+		const engine = await liveSession();
+		const first = call(
+			setConfigProcedure,
+			{ resolution: "2160p", apply_now: true },
+			{ context: makeContext() },
+		);
+		await engine.asked;
+
+		// When save B arrives while A is applying.
+		const second = await call(
+			setConfigProcedure,
+			{ resolution: "720p", apply_now: true },
+			{ context: makeContext() },
+		);
+
+		// Then B is busy, its resolution is not saved, and A keeps its stage.
+		expect(second.configChange).toEqual({ result: "busy" });
+		expect(getConfig().resolution).toBe("1080p");
+		expect(getStagedConfigChange()?.candidate).toEqual({ resolution: "2160p" });
+
+		// And once A reverts, the device is left on the values it runs.
+		engine.answer({ phase: "reverted", reason: CONFIG_CHANGE_REASON_REJECTED });
+		expect((await first).configChange?.result).toBe("reverted");
+		expect(getConfig().resolution).toBe("1080p");
+		expect(readInflightMarker()).toBeUndefined();
+	});
+
+	/**
+	 * What a 720p apply-now save gets in each lifecycle state. Keyed by the full
+	 * state type, so a new state cannot compile without a row here.
+	 */
+	const BY_STATE: Record<
+		LifecycleState,
+		{
+			answer: "applied" | "busy" | undefined;
+			saved: "720p" | "1080p";
+			dispatched: 0 | 1;
+		}
+	> = {
+		idle: { answer: undefined, saved: "720p", dispatched: 0 },
+		starting: { answer: "busy", saved: "1080p", dispatched: 0 },
+		streaming: { answer: "applied", saved: "720p", dispatched: 1 },
+		reconfiguring: { answer: "busy", saved: "1080p", dispatched: 0 },
+		stopping: { answer: "busy", saved: "1080p", dispatched: 0 },
+		stop_failed: { answer: "busy", saved: "1080p", dispatched: 0 },
+		reconciling: { answer: "busy", saved: "1080p", dispatched: 0 },
+	};
+
+	for (const [state, row] of Object.entries(BY_STATE) as [
+		LifecycleState,
+		(typeof BY_STATE)[LifecycleState],
+	][]) {
+		test(`an apply-now save while ${state}: ${row.answer ?? "saved for the next start"}`, async () => {
+			// Given a session held in this lifecycle state.
+			const s = session();
+			await ENTER[state](s, { resolution: "2160p", apply_now: true });
+			expect(s.orchestrator.snapshot().state).toBe(state);
+			const before = s.deltas.length;
+
+			// When an apply-now save arrives.
+			const result = await call(
+				setConfigProcedure,
+				{ resolution: "720p", apply_now: true },
+				{ context: makeContext() },
+			);
+
+			// Then only settled idle saves it for the next start, only streaming
+			// applies it, and every other state refuses it with nothing saved.
+			expect(result.configChange?.result).toBe(row.answer);
+			expect(getConfig().resolution).toBe(row.saved);
+			expect(s.deltas.length - before).toBe(row.dispatched);
+			expect(getStagedConfigChange()?.candidate.resolution).not.toBe("720p");
+		});
+	}
+});
+
+// Both USB pipelines are offered, so the Osmo's MJPEG mode is routable at all.
+const CAMERA_CAPS: GetCapabilitiesResult = {
+	platform: {
+		supports_h265: true,
+		hardware_accelerated: true,
+		max_resolution: "2160p",
+	},
+	encoder: {
+		codecs: ["h264", "h265"],
+		bitrate_range: { min: 500, max: 50000, unit: "kbps" },
+	},
+	sources: ["hdmi", "libuvch264", "usb_mjpeg", "test"].map((id) => ({
+		id,
+		supports_audio: true,
+		supports_resolution_override: true,
+		supports_framerate_override: true,
+		default_resolution: "1080p",
+		default_framerate: 30,
+	})),
+};
+
+describe("a capture-mode switch in each lifecycle state", () => {
+	const savedMockMode = process.env.MOCK_MODE;
+	let dir: string;
+	let priorPath: string;
+	let prior: Pick<
+		ReturnType<typeof getConfig>,
+		| "source"
+		| "source_stable_id"
+		| "input_mode"
+		| "pipeline"
+		| "selected_video_input"
+		| "last_seen_devices"
+		| "resolution"
+		| "framerate"
+	>;
+	let marker: string | undefined;
+
+	/** The mode and pipeline as config.json on disk holds them. */
+	const onDisk = async () => {
+		const saved = JSON.parse(await readFile(join(dir, "config.json"), "utf8"));
+		return { input_mode: saved.input_mode, pipeline: saved.pipeline };
+	};
+
+	beforeAll(() => {
+		process.env.MOCK_MODE = "true";
+		initMockService("caps-full");
+		setMockHardware("rk3588");
+	});
+
+	afterAll(async () => {
+		stopMockService();
+		setMockHardware("rk3588");
+		clearCapabilitiesCache();
+		await initPipelines();
+		if (savedMockMode === undefined) delete process.env.MOCK_MODE;
+		else process.env.MOCK_MODE = savedMockMode;
+	});
+
+	beforeEach(async () => {
+		dir = await mkdtemp(join(tmpdir(), "apply-now-mode-"));
+		priorPath = getConfigFilePath();
+		setConfigFilePath(join(dir, "config.json"));
+		const config = getConfig();
+		prior = {
+			source: config.source,
+			source_stable_id: config.source_stable_id,
+			input_mode: config.input_mode,
+			pipeline: config.pipeline,
+			selected_video_input: config.selected_video_input,
+			last_seen_devices: config.last_seen_devices,
+			resolution: config.resolution,
+			framerate: config.framerate,
+		};
+		marker = undefined;
+		spyOn(defaultStagingDeps, "readMarker").mockImplementation(() => marker);
+		spyOn(defaultStagingDeps, "writeMarker").mockImplementation(
+			(_path, contents) => {
+				marker = contents;
+			},
+		);
+		spyOn(defaultStagingDeps, "removeMarker").mockImplementation(() => {
+			marker = undefined;
+		});
+		clearCapabilitiesCache();
+		await initPipelines({
+			fetchEngineCapabilities: async () => ({
+				caps: CAMERA_CAPS,
+				schemaVersion: SCHEMA_VERSION,
+			}),
+			fetchEngineDevices: async () => ({ devices: [] }),
+		});
+		resetEngineDeviceCache();
+		applyObservedEngineDevices([osmo()]);
+		Object.assign(config, {
+			source: undefined,
+			source_stable_id: undefined,
+			input_mode: undefined,
+			pipeline: undefined,
+			selected_video_input: undefined,
+			last_seen_devices: undefined,
+			resolution: "1080p",
+			framerate: 30,
+		});
+		// The dual-format camera is saved in H.264 while idle.
+		session();
+		const seeded = await call(
+			setConfigProcedure,
+			{ source: "video1", input_mode: "uvc_h264" },
+			{ context: makeContext() },
+		);
+		expect(seeded.success).toBe(true);
+		expect(await onDisk()).toEqual(H264);
+	});
+
+	afterEach(async () => {
+		setApplyNowGateForTest(null);
+		clearStagedConfigChange();
+		spyOn(defaultStagingDeps, "readMarker").mockRestore();
+		spyOn(defaultStagingDeps, "writeMarker").mockRestore();
+		spyOn(defaultStagingDeps, "removeMarker").mockRestore();
+		resetEngineDeviceCache();
+		clearCapabilitiesCache();
+		Object.assign(getConfig(), prior);
+		setConfigFilePath(priorPath);
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	const H264 = { input_mode: "uvc_h264", pipeline: "libuvch264" } as const;
+	const MJPEG = { input_mode: "mjpeg", pipeline: "usb_mjpeg" } as const;
+
+	/** What an apply-now switch to MJPEG gets in each lifecycle state. */
+	const MODE_BY_STATE: Record<
+		LifecycleState,
+		{
+			answer: "applied" | "busy" | undefined;
+			saved: typeof H264 | typeof MJPEG;
+			engineAsked: StreamConfigChangeDelta[];
+		}
+	> = {
+		idle: { answer: undefined, saved: MJPEG, engineAsked: [] },
+		starting: { answer: "busy", saved: H264, engineAsked: [] },
+		streaming: {
+			answer: "applied",
+			saved: MJPEG,
+			engineAsked: [{ input_mode: "mjpeg" }],
+		},
+		reconfiguring: { answer: "busy", saved: H264, engineAsked: [] },
+		stopping: { answer: "busy", saved: H264, engineAsked: [] },
+		stop_failed: { answer: "busy", saved: H264, engineAsked: [] },
+		reconciling: { answer: "busy", saved: H264, engineAsked: [] },
+	};
+
+	for (const [state, row] of Object.entries(MODE_BY_STATE) as [
+		LifecycleState,
+		(typeof MODE_BY_STATE)[LifecycleState],
+	][]) {
+		test(`a switch to MJPEG while ${state}: ${row.answer ?? "saved for the next start"}`, async () => {
+			// Given the camera saved in H.264 and a session held in this state.
+			const s = session();
+			await ENTER[state](s, { resolution: "720p", apply_now: true });
+			expect(s.orchestrator.snapshot().state).toBe(state);
+			const before = s.deltas.length;
+
+			// When an apply-now switch to MJPEG arrives.
+			const result = await call(
+				setConfigProcedure,
+				{ input_mode: "mjpeg", apply_now: true },
+				{ context: makeContext() },
+			);
+
+			// Then the mode and the pipeline it routes to move together, and only
+			// where the save is not refused: config.json never holds half of it.
+			expect(result.configChange?.result).toBe(row.answer);
+			expect(await onDisk()).toEqual(row.saved);
+			expect(s.deltas.slice(before)).toEqual(row.engineAsked);
+		});
+	}
+
+	test("a live switch to MJPEG the engine reverts leaves H.264 saved", async () => {
+		// Given a streaming session whose engine refuses the new mode.
+		const s = session();
+		await stream(s);
+		s.engine.change = async () => ({
+			phase: "reverted",
+			reason: CONFIG_CHANGE_REASON_REJECTED,
+		});
+
+		// When an apply-now switch to MJPEG is made.
+		const result = await call(
+			setConfigProcedure,
+			{ input_mode: "mjpeg", apply_now: true },
+			{ context: makeContext() },
+		);
+
+		// Then nothing of the refused mode is saved.
+		expect(result.configChange?.result).toBe("reverted");
+		expect(await onDisk()).toEqual(H264);
 	});
 });
