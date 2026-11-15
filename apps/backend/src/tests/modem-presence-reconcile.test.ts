@@ -51,7 +51,7 @@ function fm350(): Modem {
 		sim_network: "Movistar",
 		model: "FM350-GL",
 		manufacturer: "Fibocom Wireless Inc.",
-		iccid: "8957123102400060892",
+		iccid: "8900000000000000003",
 		network_type: { supported: {}, active: null },
 	} as unknown as Modem;
 }

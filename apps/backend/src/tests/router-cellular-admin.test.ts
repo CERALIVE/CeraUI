@@ -155,12 +155,12 @@ describe("Qualcomm 4G UFI readings", () => {
 	});
 
 	it("reads a SEATED card, which this firmware calls `ok` and not `valid`", () => {
-		// Verbatim `getallstatus` from the bench UFI with a real SIM inserted
+		// Captured `getallstatus` from the bench UFI; the IMSI is synthetic.
 		// (ceralive2, 2026-08-18). Knowing only `valid` reported this card as
 		// `unknown`, i.e. no SIM segment on the row at all, while the SAME
-		// payload carried a real IMSI.
+		// payload carried an IMSI.
 		const seated =
-			'{"reply":"ok","params":{"signalStrength":-88,"carrier":"Emergency calls only","internetState":"disconnected","imsi":"732123704103087","simCardState":"ok","wifiapstatus":"on"}}';
+			'{"reply":"ok","params":{"signalStrength":-88,"carrier":"Emergency calls only","internetState":"disconnected","imsi":"001010000012345","simCardState":"ok","wifiapstatus":"on"}}';
 		expect(
 			parseUfi("http://192.168.100.1", { shell: UFI_SHELL, status: seated })
 				.sim,
