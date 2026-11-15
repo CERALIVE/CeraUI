@@ -58,6 +58,7 @@ import { getms } from "../../helpers/time.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import {
 	mintLinkId,
+	type PhysicalDeviceRecord,
 	resolvePhysicalDevice,
 	setPresentPhysicalDevices,
 	usableUsbSerial,
@@ -619,6 +620,7 @@ let sharedSerialHashes = new Set<string>();
 let coveredIfnames = new Set<string>();
 const netdevRemovalEpochs = new Map<string, number>();
 const scanCommittedListeners = new Set<() => void>();
+const readingInvalidatedListeners = new Set<() => void>();
 const identityFirstPublishedAt = new Map<string, number>();
 const identityDeadlineWarnings = new Set<string>();
 
@@ -629,20 +631,40 @@ export function usbNetScanCovers(ifname: string): boolean {
 	return coveredIfnames.has(ifname);
 }
 
-/** Creation adopts its covering read; only observed removal invalidates it. */
+/** The present-device view is exactly the descriptors of the surviving names. */
+function presentDeviceRecords(): PhysicalDeviceRecord[] {
+	return [...physicalDescriptors.values()].map((descriptor) =>
+		resolvePhysicalDevice(descriptor),
+	);
+}
+
+/**
+ * Creation adopts its covering read; only observed removal invalidates it.
+ *
+ * Deleting the committed state is invisible to the scan's own change detection
+ * — the next sweep starts from the already-emptied caches — so listeners are
+ * told here, or the roster would keep the removed dongle until an unrelated
+ * broadcast.
+ */
 export function invalidateUsbNetReading(ifname: string, epoch: number): void {
 	netdevRemovalEpochs.set(ifname, epoch);
-	coveredIfnames.delete(ifname);
-	physicalDescriptors.delete(ifname);
-	markers.delete(ifname);
-	modemNetMarkers.delete(ifname);
+	const coverage = coveredIfnames.delete(ifname);
+	const descriptor = physicalDescriptors.delete(ifname);
+	const marker = markers.delete(ifname);
+	const modemMarker = modemNetMarkers.delete(ifname);
 	identityFirstPublishedAt.delete(ifname);
 	identityDeadlineWarnings.delete(ifname);
-	setPresentPhysicalDevices(
-		[...physicalDescriptors.values()].map((descriptor) =>
-			resolvePhysicalDevice(descriptor),
-		),
-	);
+	if (!(coverage || descriptor || marker || modemMarker)) return;
+	setPresentPhysicalDevices(presentDeviceRecords());
+	for (const listener of readingInvalidatedListeners) listener();
+}
+
+/** Fired once per removal that actually discarded committed USB state. */
+export function onUsbNetReadingInvalidated(listener: () => void): () => void {
+	readingInvalidatedListeners.add(listener);
+	return () => {
+		readingInvalidatedListeners.delete(listener);
+	};
 }
 
 /** The publication clock is shared by every identity-minting consumer. */
@@ -802,11 +824,7 @@ async function runUsbNetScan(
 		modemNetMarkers = scanned.modemNet;
 		physicalDescriptors = scanned.physical;
 		coveredIfnames = new Set(ifnames.filter((name) => !stale.has(name)));
-		setPresentPhysicalDevices(
-			[...physicalDescriptors.values()].map((descriptor) =>
-				resolvePhysicalDevice(descriptor),
-			),
-		);
+		setPresentPhysicalDevices(presentDeviceRecords());
 		const changed = snapshotKey(cachedSets()) !== before;
 		if (changed) {
 			for (const listener of scanCommittedListeners) listener();

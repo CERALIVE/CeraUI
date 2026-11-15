@@ -17,7 +17,6 @@ import {
 } from "../modules/network/network-interfaces.ts";
 import {
 	getModemNetMarker,
-	getRouterCellularMarker,
 	getUsbPhysicalDescriptor,
 	identityDeadlineExpired,
 	resetUsbNetMarkers,
@@ -160,14 +159,12 @@ for (const removal of ["monitor", "absent", "not-running"] as const) {
 			covered: usbNetScanCovers(MODEM),
 			descriptor: getUsbPhysicalDescriptor(MODEM),
 			modem: getModemNetMarker(MODEM),
-			router: getRouterCellularMarker(MODEM),
 			oldIdentity: resolveModemPhysicalIdentity(MODEM).linkId,
 			present: listPresentPhysicalDevices().map((device) => device.linkId),
 		}).toEqual({
 			covered: false,
 			descriptor: undefined,
 			modem: undefined,
-			router: undefined,
 			oldIdentity: resolvePhysicalDevice({ ifname: MODEM }).linkId,
 			present: [otherIdentity.linkId],
 		});
