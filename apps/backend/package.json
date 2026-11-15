@@ -15,7 +15,7 @@
 		"@ceraui/rpc": "workspace:*",
 		"@ceraui/srtla-send": "workspace:*",
 		"@httptoolkit/dbus-native": "0.1.5",
-		"@orpc/server": "2.0.0-beta.49",
+		"@orpc/server": "2.0.0-beta.50",
 		"zod": "catalog:",
 		"winston": "^3.19.0",
 		"xml2js": "^0.6.2"
