@@ -240,8 +240,18 @@
 		--spacing-touch-scale: 1.25;
 	}
 
+	/* A phone is thumbed even in the default layout, so below `sm` the Live
+	   screen's operator regions (Audio, layout, Live bar: `data-touch-region`)
+	   take the touch target through the rules below; spacing keeps its scale. */
+	@media (width < 40rem) {
+		[data-touch-region] {
+			--touch-target-min: 44px;
+		}
+	}
+
 	/* used height = max(height, min-height) regardless of specificity, so this
-	   lifts compact h-* controls to 44px in touch mode; default mode token is 0px.
+	   lifts compact h-* controls to 44px in touch mode and in a phone-width touch
+	   region; elsewhere the token is 0px.
 
 	   A control carrying `data-touch-target="hit-area"` is EXCLUDED, and reaches
 	   the target through the overlay below instead. Two reasons, both measured:
@@ -250,7 +260,7 @@
 	   32px dialog close button grown to 44px pushes its box 6px past a 52px
 	   header into the scrollable body beneath it, where it would own the first
 	   pixels of a scroll gesture. */
-	[data-layout-mode='touch'] :is(
+	:is([data-layout-mode='touch'], [data-touch-region]) :is(
 		[data-slot='button'],
 		[data-slot='alert-dialog-action'],
 		[data-slot='alert-dialog-cancel'],
@@ -275,7 +285,7 @@
    UNLAYERED on purpose. The inset it overrides is Tailwind's `after:-inset-y-2`,
    which lives in `@layer utilities` — layer order beats specificity, so the same
    rule inside `@layer base` loses no matter how it is written. */
-[data-layout-mode='touch'] [data-slot='switch']::after {
+:is([data-layout-mode='touch'], [data-touch-region]) [data-slot='switch']::after {
 	inset-block: min(-0.5rem, calc((100% - var(--touch-target-min)) / 2));
 	inset-inline: min(-0.75rem, calc((100% - var(--touch-target-min)) / 2));
 }
@@ -283,7 +293,7 @@
 /* A slider thumb must not grow either: it is a 12px dot positioned by its own
    centre. Its shipped `after:-inset-2` overlay is widened to the token on both
    axes instead, by the same reasoning and for the same layer reason as above. */
-[data-layout-mode='touch'] [data-slot='slider-thumb']::after {
+:is([data-layout-mode='touch'], [data-touch-region]) [data-slot='slider-thumb']::after {
 	inset: min(-0.5rem, calc((100% - var(--touch-target-min)) / 2));
 }
 

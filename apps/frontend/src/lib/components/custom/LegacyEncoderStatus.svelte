@@ -190,7 +190,7 @@ const WELL = 'min-w-0 overflow-hidden rounded-lg border';
 const TONE_TEXT: Record<ActivityTone, string> = {
 	live: 'text-primary',
 	quiet: 'text-foreground',
-	absent: 'text-muted-foreground/75',
+	absent: 'text-muted-foreground',
 };
 
 /**

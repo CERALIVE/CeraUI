@@ -55,10 +55,10 @@ const DESKTOP = VIEWPORTS[2];
 const KIOSK = VIEWPORTS[3];
 
 const TARGET_PX = 44;
-const WCAG_MIN_TARGET_PX = 24;
+const PHONES = [PHONE, { width: 360, height: 640 }, { width: 320, height: 640 }];
 const TOUCH_REGIONS = ['audio-card', 'layout-controls', 'live-bar'] as const;
 const CONTROLS =
-	'button, [role="slider"], [role="switch"], [role="radio"], [role="combobox"], input:not([type="hidden"]), summary';
+	'button, [role="slider"], [role="switch"], [role="radio"], [role="combobox"], input:not([type="hidden"]), select, a[href], summary';
 
 type State = 'idle' | 'live';
 
@@ -120,7 +120,10 @@ async function axe(page: Page, include: string, rules: string[]) {
 	const results = await new AxeBuilder({ page }).include(include).withRules(rules).analyze();
 	return results.violations.map((violation) => ({
 		id: violation.id,
-		nodes: violation.nodes.map((node) => node.target.join(' ')),
+		nodes: violation.nodes.map((node) => {
+			const ratio = (node.any[0]?.data as { contrastRatio?: number } | undefined)?.contrastRatio;
+			return ratio === undefined ? node.target.join(' ') : `${node.target.join(' ')} (${ratio}:1)`;
+		}),
 	}));
 }
 
@@ -229,22 +232,39 @@ test.describe('@a11y Live screen design pass — caps-full', () => {
 		expect(grown, 'slider thumbs grown instead of given a hit area').toEqual([]);
 	});
 
-	test('default layout keeps every Audio, layout and Live bar control at the WCAG 24 px minimum on a phone @a11y', async ({ page }) => {
-		await page.setViewportSize(PHONE);
-		await openLive(page);
-		await enableComposition(page);
+	for (const theme of ['dark', 'light'] as const) {
+	test(`default layout gives every Audio, layout and Live bar control a 44 px target on a phone, ${theme} @a11y`, async ({ page }) => {
+		test.setTimeout(300_000);
 		const short: string[] = [];
-		for (const state of ['idle', 'live'] as State[]) {
-			if (state === 'live') await goLive(page);
-			for (const area of await regionTargets(page)) {
-				if (Math.min(area.hitWidth, area.hitHeight) < WCAG_MIN_TARGET_PX - 0.5) {
-					short.push(`${state} ${area.region} ${area.name}: ${Math.round(area.hitWidth)}x${Math.round(area.hitHeight)}`);
+		const seen = new Set<string>();
+		{
+			for (const locale of ['en', 'es', 'ar'] as const) {
+				await page.setViewportSize(PHONE);
+				await openLive(page, { theme, locale });
+				await expect(page.locator('html')).not.toHaveAttribute('data-layout-mode', 'touch');
+				await enableComposition(page);
+				for (const state of ['idle', 'live'] as State[]) {
+					if (state === 'live') await goLive(page);
+					for (const viewport of PHONES) {
+						await page.setViewportSize(viewport);
+						for (const area of await regionTargets(page)) {
+							seen.add(area.region);
+							if (Math.min(area.hitWidth, area.hitHeight) < TARGET_PX - 0.5) {
+								short.push(
+									`${theme} ${locale} ${viewport.width}x${viewport.height} ${state} ${area.region} ${area.name}: ${Math.round(area.hitWidth)}x${Math.round(area.hitHeight)}`,
+								);
+							}
+						}
+					}
+					await page.setViewportSize(PHONE);
+					if (state === 'live') await goIdle(page);
 				}
 			}
-			if (state === 'live') await goIdle(page);
 		}
-		expect(short).toEqual([]);
+		expect([...seen].sort()).toEqual([...TOUCH_REGIONS].sort());
+		expect(short, 'controls below the 44 px target').toEqual([]);
 	});
+	}
 
 	test('sliders, buttons and fields carry names, and text meets AA contrast in dark and light @a11y', async ({ page }) => {
 		test.setTimeout(240_000);
@@ -259,6 +279,9 @@ test.describe('@a11y Live screen design pass — caps-full', () => {
 				for (const viewport of [DESKTOP, PHONE]) {
 					await page.setViewportSize(viewport);
 					await expect(page.locator(root)).toBeVisible();
+					// The encoder cell joins the live cockpit with the first load reading (a 2 s
+					// tick); scan only once it is there, so its text is always measured.
+					if (state === 'live') await expect(page.locator(root).getByTestId('encoder-status-headline')).toBeVisible();
 					const violations = await axe(page, root, [
 						'aria-input-field-name',
 						'button-name',

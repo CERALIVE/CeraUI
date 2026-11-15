@@ -384,8 +384,15 @@ no control's effect; it set these rules, each pinned by
 - In touch layout a slider thumb keeps its 12 px dot and reaches 44 px through
   its `::after` hit area, the switch mechanism in `app.css`; an info button
   does the same through `data-touch-target="hit-area"`.
+- Below 640 px (`sm`) every control in the Audio card, the layout controls
+  and the Live bar is at least 44 px on its shorter side in the default layout
+  too: those regions carry `data-touch-region`, which sets
+  `--touch-target-min` to 44 px there, and the touch-layout rules in `app.css`
+  (button `min-height`, switch and slider-thumb `::after`) apply to them.
+  Spacing keeps its default scale; no component hard-codes 44 px.
 - Text meets AA in dark and light: the preview encoding helper, the target
-  bitrate in the telemetry card and a muted strip's Mute label use full
+  bitrate in the telemetry card, the encoder cell's "not reported" text and a
+  muted strip's Mute label use full
   `text-muted-foreground` or `text-foreground`; a muted strip keeps its warning
   tint and icon.
 - At phone width the Output card's Edit buttons keep their words for screen

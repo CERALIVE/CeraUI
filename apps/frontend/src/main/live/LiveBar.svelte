@@ -52,7 +52,7 @@ $effect(() => {
 	bind:this={bar}
 	class="live-bar bg-background fixed inset-x-0 z-30 border-t"
 	data-state={status === undefined ? undefined : blocked ? 'blocked' : 'ready'}
-	data-testid="live-bar"
+	data-testid="live-bar" data-touch-region
 >
 	<!-- Below 640 px the line takes the full width above the action: a blocking
 	     reason runs to 84 characters (fr), more than two lines beside the button. -->
