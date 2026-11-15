@@ -5,22 +5,15 @@ import {
 	hotspotToggleOutputSchema,
 } from "@ceraui/rpc/schemas";
 import { getConfig } from "../../../src/modules/config.ts";
-import {
-	nmConnGetFields,
-	nmDeviceProp,
-} from "../../../src/modules/network/network-manager.ts";
+import { nmDeviceProp } from "../../../src/modules/network/network-manager.ts";
 import {
 	getHotspotCredentials,
 	getPendingHotspotCreation,
 	rememberHotspotCredentials,
 } from "../../../src/modules/wifi/hotspot-credentials.ts";
-import {
-	addWifiInterface,
-	removeWifiInterface,
-} from "../../../src/modules/wifi/wifi-connections.ts";
+import { removeWifiInterface } from "../../../src/modules/wifi/wifi-connections.ts";
 import { wifiHotspotStart } from "../../../src/modules/wifi/wifi-hotspot-activation.ts";
 import { wifiHotspotStop } from "../../../src/modules/wifi/wifi-hotspot-config.ts";
-import type { WifiInterfaceWithHotspot } from "../../../src/modules/wifi/wifi-hotspot-types.ts";
 import {
 	getMacAddressForWifiInterface,
 	getWifiIdToMacAddress,
@@ -33,7 +26,10 @@ import { addClient, removeClient } from "../../../src/rpc/events.ts";
 import type { SocketData } from "../../../src/rpc/types.ts";
 import type { FirstApCheckpoint } from "./first-ap-diagnostics.ts";
 import type { NativeNmcliProbe } from "./first-ap-nmcli-shim.ts";
-import { observeSavedProfileRadio } from "./first-ap-radio.ts";
+import {
+	observeSavedProfileRadio,
+	seedObservedRadioRow,
+} from "./first-ap-radio.ts";
 import { nativeRecoveryCase } from "./first-ap-recovery.ts";
 
 /** Backend entry coverage; RPC transport/admission is covered by the RPC unit suites. */
@@ -49,9 +45,7 @@ export async function savedProfileBackendCycle(
 	checkpoint("saved.setup");
 	assert.equal(process.env.HWSIM_REPO, "/repo", "Use the isolated native VM");
 	assert.equal(process.getuid?.(), 0, "Run as root inside the native VM");
-	const ids = getWifiIdToMacAddress();
-	let id = 0;
-	while (ids[id] !== undefined) id++;
+	let id: number | undefined;
 	let server: Bun.Server<SocketData> | undefined;
 	let client: WebSocket | undefined;
 	let openDeadline: ReturnType<typeof setTimeout> | undefined;
@@ -83,40 +77,17 @@ export async function savedProfileBackendCycle(
 			...getConfig().wifi_modes,
 			[target.owner]: "hotspot",
 		};
-		const observed = await nmDeviceProp(
-			target.ifname,
-			"GENERAL.STATE,GENERAL.CON-UUID",
-		);
-		assert(observed?.[0], "Native device state is unreadable");
-		const active =
-			Number.parseInt(observed[0], 10) === 100 ? observed[1] || null : null;
-		const mode = active
-			? (await nmConnGetFields(active, ["802-11-wireless.mode"] as const))?.[0]
-			: undefined;
-		// The resolved-adapter fixture has no invented vendor/product or identity overrides.
-		const row: WifiInterfaceWithHotspot = {
-			id,
+		const row = await seedObservedRadioRow({
 			ifname: target.ifname,
-			hw: "",
-			conn: active,
-			activeConn: active,
-			activeMode: mode === "ap" || mode === "infrastructure" ? mode : "unknown",
-			available: new Map(),
-			saved: {},
-			savedAll: {},
-			hotspot: {
-				conn: target.uuid,
-				name: credentials.ssid,
-				password: credentials.password,
-				channel: "ch_6",
-				availableChannels: ["ch_6"],
-				warnings: {},
-			},
-		};
-		addWifiInterface(target.owner, row);
+			owner: target.owner,
+			uuid: target.uuid,
+			ssid: credentials.ssid,
+			password: credentials.password,
+		});
+		id = row.id;
 		checkpoint("saved.identity");
 		await observeSavedProfileRadio(target.ifname);
-		assert.equal(getMacAddressForWifiInterface(id), target.owner);
+		assert.equal(getMacAddressForWifiInterface(row.id), target.owner);
 		await wifiRadioIdentity.discover([{ ifname: target.ifname, row }]);
 		const identity = wifiRadioIdentity.state.rows.get(target.ifname);
 		assert.equal(
@@ -173,7 +144,7 @@ export async function savedProfileBackendCycle(
 				!start ||
 				typeof start !== "object" ||
 				!("device" in start) ||
-				String(start.device) !== String(id)
+				String(start.device) !== String(row.id)
 			)
 				return;
 			const parsed = hotspotToggleOutputSchema.safeParse(start);
@@ -191,7 +162,7 @@ export async function savedProfileBackendCycle(
 				() => pending.resolve(undefined),
 				60000,
 			);
-			const started = await wifiHotspotStart({ device: id });
+			const started = await wifiHotspotStart({ device: row.id });
 			checkpoint(phase, started);
 			assert(started.success, "Native backend saved Start failed");
 			const confirmed = await pending.promise;
@@ -203,7 +174,7 @@ export async function savedProfileBackendCycle(
 			clearTimeout(confirmationDeadline);
 			confirmation = undefined;
 			await observeSavedProfileRadio(target.ifname);
-			assert.equal(getMacAddressForWifiInterface(id), target.owner);
+			assert.equal(getMacAddressForWifiInterface(row.id), target.owner);
 			const state = await nmDeviceProp(
 				target.ifname,
 				"GENERAL.STATE,GENERAL.CON-UUID",
@@ -222,7 +193,7 @@ export async function savedProfileBackendCycle(
 		checkpoint("saved.confirm");
 		await startConfirmed("saved.confirm");
 		checkpoint("saved.stop");
-		const stopped = await wifiHotspotStop({ device: id });
+		const stopped = await wifiHotspotStop({ device: row.id });
 		checkpoint("saved.stop", stopped);
 		assert(stopped.success, "Native backend Stop failed");
 		const inactive = await nmDeviceProp(
@@ -254,6 +225,7 @@ export async function savedProfileBackendCycle(
 		wifiRadioObservation.stop();
 		removeWifiInterface(target.owner);
 		const currentIds = getWifiIdToMacAddress();
-		if (currentIds[id] === target.owner) delete currentIds[id];
+		if (id !== undefined && currentIds[id] === target.owner)
+			delete currentIds[id];
 	}
 }

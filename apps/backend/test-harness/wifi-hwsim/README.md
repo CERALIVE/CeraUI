@@ -445,6 +445,22 @@ to assert on from a wrapper.
 
 ---
 
+## Hybrid upgrade readiness
+
+`checks/hybrid-upgrade.ts` gates every explicit profile activation, including
+the uplink activation after NetworkManager restart, on fresh
+`DEVICE,TYPE,STATE` observations. The selected device must be Wi-Fi and in a
+managed state other than unavailable. There is no readiness sleep or activation
+retry. A 30-second abort deadline bounds the state reads; timeout fails with an
+`UPGRADE-WIFI-READINESS` receipt containing the device inventory, rfkill list,
+hwsim interface state and NetworkManager general status. Each diagnostic command
+has a separate two-second bound, and credential values are redacted.
+
+Run `bun apps/backend/test-harness/wifi-hwsim/checks/hybrid-upgrade.ts --selftest`
+without a VM to cover immediate readiness, several non-ready state changes and
+a never-ready device failing with the bounded diagnostic receipt. The existing
+native upgrade, unrelated-profile and Stop assertions remain unchanged.
+
 ## Troubleshooting
 
 | Symptom | Likely cause / fix |
