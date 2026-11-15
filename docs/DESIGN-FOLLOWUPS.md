@@ -245,6 +245,8 @@ Each was surfaced by the owning todo's own work and deliberately left unfixed.
   `vite preview`) the nav button does not exist, so the click times out.
 - **Exit condition:** either gate the spec on a dev build, or drive the field-sync
   states through a production-reachable surface.
+- **Resolved:** the test is tagged `@dev-only`, so it runs only in the `desktop-dev`
+  project, against a Vite dev server (`apps/frontend/playwright.config.ts`).
 
 ### DF-12 — CI never runs the `@visual` or `@a11y` lanes (root cause of DF-9…DF-11)
 

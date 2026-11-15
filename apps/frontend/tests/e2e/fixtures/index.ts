@@ -19,8 +19,12 @@ export { PageRpc } from './page-rpc.js';
 
 const CI_PREVIEW_ROUTING_COOKIE = 'ceraui_e2e_backend_port';
 
+function ciPreviewPort(): number {
+	return Number(process.env.E2E_PORT ?? '6173');
+}
+
 function ciPreviewOrigin(): string {
-	return `http://localhost:${process.env.E2E_PORT ?? '6173'}`;
+	return `http://localhost:${ciPreviewPort()}`;
 }
 
 type WorkerFixtures = {
@@ -98,11 +102,16 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
 					sameSite: 'Strict',
 				},
 			]);
-		} else {
-			await page.addInitScript((port: number) => {
-				(window as { __ceraSocketPort?: number }).__ceraSocketPort = port;
-			}, workerBackend.port);
 		}
+		// Only the Vite dev build reads this; the built app ignores it. Locally it is
+		// the worker backend. In CI a @dev-only page dials the preview proxy instead,
+		// which routes it to the worker backend by the cookie above.
+		await page.addInitScript(
+			(port: number) => {
+				(window as { __ceraSocketPort?: number }).__ceraSocketPort = port;
+			},
+			usesCiPreviewRouting ? ciPreviewPort() : workerBackend.port,
+		);
 
 		// Screenshots are permitted only in @visual (visual-regression baselines)
 		// and @gallery (docs screenshot gallery) tests; every other test gets a

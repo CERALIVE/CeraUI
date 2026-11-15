@@ -17,7 +17,7 @@ import { evidencePath } from "../helpers/index.js";
 async function openDevTools(page: Page): Promise<void> {
 	const tab = page
 		.getByRole("navigation", { name: "Main navigation" })
-		.getByRole("button", { name: /devtools/i });
+		.getByRole("button", { name: "Dev Tools", exact: true });
 	await tab.click();
 	await expect(tab).toHaveAttribute("aria-current", "page");
 }
@@ -25,14 +25,14 @@ async function openDevTools(page: Page): Promise<void> {
 test.describe("@visual field-sync state", () => {
 	test.beforeEach(async ({ page: _page }, testInfo) => {
 		test.skip(
-			testInfo.project.name !== "desktop",
+			testInfo.project.name !== "desktop-dev",
 			"desktop viewport owns evidence",
 		);
 	});
 
 	test(
 		"applying: InlineSpinner during an in-flight write",
-		{ tag: "@visual" },
+		{ tag: ["@visual", "@dev-only"] },
 		async ({ authedPage: page }) => {
 			await openDevTools(page);
 

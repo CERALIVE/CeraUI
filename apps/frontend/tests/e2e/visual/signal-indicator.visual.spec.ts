@@ -58,7 +58,7 @@ const BONDED_STABILIZE =
 test.describe('@visual LinkIndicator surfaces', () => {
 	test(
 		'@visual signal-indicator showcase grid',
-		{ tag: '@visual' },
+		{ tag: ['@visual', '@dev-only'] },
 		async ({ authedPage: page }) => {
 			const devtools = new DevToolsPage(page);
 			await devtools.open();
