@@ -283,3 +283,20 @@ describe("BondedLinksSection — binary presence (todo 48)", () => {
 		expect(cardFor(container, "eth0").className).toContain("opacity-50");
 	});
 });
+
+describe("BondedLinksSection — scanning label", () => {
+	it("names a searching modem even while it reports signal", () => {
+		const link = {
+			...linkFor("usb0", 0),
+			connectionState: "scanning" as const,
+			isConnected: false,
+			throughputKbps: 0,
+		};
+		const { container } = render(BondedLinksSection, {
+			props: { links: [link], modemEntries: [], linkTelemetry: null },
+		});
+		const card = cardFor(container, "usb0");
+		expect(card.textContent).toContain("Scanning");
+		expect(card.textContent).toContain("72%");
+	});
+});
