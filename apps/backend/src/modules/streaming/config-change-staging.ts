@@ -24,7 +24,8 @@ const stagedFieldsSchema = z.object({
 	video_codec: videoCodecSchema.optional(),
 	// Switching a dual-format camera between H.264 and MJPEG rebuilds the capture
 	// leg, so it is a transaction like the axes above — never a live reload.
-	input_mode: inputModeSchema.optional(),
+	// `null` is the clear a switch to a different camera makes, as for composition.
+	input_mode: inputModeSchema.nullable().optional(),
 });
 export type StagedConfigFields = z.infer<typeof stagedFieldsSchema>;
 

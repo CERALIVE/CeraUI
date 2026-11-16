@@ -17,7 +17,7 @@ type MutableConfig = Record<string, unknown>;
 function writeFields(fields: StagedConfigFields): void {
 	const config = getConfig() as unknown as MutableConfig;
 	for (const [key, value] of Object.entries(fields)) {
-		if (key === "composition" && value === null) delete config[key];
+		if (value === null) delete config[key];
 		else if (value !== undefined) config[key] = value;
 	}
 	saveConfig();

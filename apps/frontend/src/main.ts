@@ -72,5 +72,6 @@ prefetchDeferredNamespaces();
 
 // Signal successful bundle mount to the boot watchdog
 window.__ceraAppMounted = true;
+document.getElementById("js-failed")?.style.setProperty("display", "none");
 
 export default app;
