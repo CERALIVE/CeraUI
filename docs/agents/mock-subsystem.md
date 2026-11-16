@@ -34,6 +34,8 @@ and the D-Bus modem view reads the same `modemSignals` the mmcli provider does, 
 visual baselines that draw signal bars are byte-stable. Throughput, sensors, relay
 RTT and streaming stats still fluctuate. To move a signal, write it into
 `mockState` and call `runMockFeedbackBroadcast()`.
+The feedback tick compares the complete Wi-Fi wire payload, so hotspot and
+connection changes still reach clients when signal strength is unchanged.
 
 **`updateMockState(partial)` — single write path:**
 All writes to `mockState` funnel through the typed `updateMockState(partial)` mutator

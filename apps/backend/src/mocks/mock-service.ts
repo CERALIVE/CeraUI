@@ -218,7 +218,7 @@ let rttBroadcastInterval: ReturnType<typeof setInterval> | null = null;
 // mockState (by tests and dev seams) to clients. Signals never drift on their own.
 let feedbackBroadcastInterval: ReturnType<typeof setInterval> | null = null;
 
-// Dedupe caches: the last modem/wifi signal fingerprint actually emitted, so a
+// Dedupe caches: the last modem/wifi state fingerprint actually emitted, so a
 // tick with no observable change broadcasts nothing.
 let lastEmittedModemFingerprint: string | null = null;
 let lastEmittedWifiFingerprint: string | null = null;
@@ -500,15 +500,7 @@ function computeModemSignalFingerprint(): string {
 	return parts.join("|");
 }
 
-function computeWifiSignalFingerprint(): string {
-	const parts: string[] = [];
-	for (const ssid of [...mockState.wifiSignals.keys()].sort()) {
-		parts.push(`${ssid}:${Math.round(mockState.wifiSignals.get(ssid) ?? 0)}`);
-	}
-	return parts.join("|");
-}
-
-// Refresh modem status so the fluctuated mock signal enters modemsState, THEN
+// Refresh modem status so the current mock signal enters modemsState, THEN
 // broadcast (broadcastModems serializes the already-populated modemsState; the
 // mock signal is only pulled in when the mmcli provider rebuilds modem info).
 // Lazy-imported to avoid a static import cycle with modem-update-loop.
@@ -519,15 +511,9 @@ async function refreshAndBroadcastModems(): Promise<void> {
 	await runModemStatusPoll();
 }
 
-// wifiBuildMsg reads mock signal state directly, so wifi needs no refresh step.
-async function broadcastMockWifi(): Promise<void> {
-	const { wifiBuildMsg } = await import("../modules/wifi/wifi.ts");
-	broadcastMsg("status", { wifi: wifiBuildMsg() });
-}
-
 /**
- * Coalesced feedback tick (5s): surface modem + wifi signal changes to
- * connected clients. Each surface emits ONLY when its rounded signal fingerprint
+ * Coalesced feedback tick (5s): surface modem + wifi state changes to
+ * connected clients. Each surface emits ONLY when its wire-state fingerprint
  * changed since the last emit. No-op unless shouldUseMocks(). Exported for tests.
  */
 export async function runMockFeedbackBroadcast(): Promise<void> {
@@ -539,10 +525,13 @@ export async function runMockFeedbackBroadcast(): Promise<void> {
 		await refreshAndBroadcastModems();
 	}
 
-	const wifiFingerprint = computeWifiSignalFingerprint();
+	const { wifiBuildMsg } = await import("../modules/wifi/wifi.ts");
+	const wifi = wifiBuildMsg();
+	// Hotspot mode and connection changes must not depend on signal jitter.
+	const wifiFingerprint = JSON.stringify(wifi);
 	if (wifiFingerprint !== lastEmittedWifiFingerprint) {
 		lastEmittedWifiFingerprint = wifiFingerprint;
-		await broadcastMockWifi();
+		broadcastMsg("status", { wifi });
 	}
 }
 
