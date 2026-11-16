@@ -1,3 +1,5 @@
+import { isBackendSocket } from "../helpers/backend-socket.js";
+
 import fs from "node:fs";
 import path from "node:path";
 
@@ -25,7 +27,7 @@ import { probeContainment } from "../helpers/modem-containment.js";
  */
 
 const TASK24_DIR = path.resolve(import.meta.dirname, "../../../test-results/task-24-visual");
-const WS_PATTERN = /:(3002|31\d\d|6173|8090|8091)\//;
+const WS_PATTERN = isBackendSocket;
 
 async function openHud(page: Page): Promise<Page> {
 	await page.locator("[data-hud-region]").first().click();

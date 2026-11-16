@@ -1,3 +1,5 @@
+import { isBackendSocket } from "../helpers/backend-socket.js";
+
 import type { WebSocketRoute } from "@playwright/test";
 
 import { expect, test } from "../fixtures/index.js";
@@ -20,7 +22,7 @@ test.describe("@visual source education affordances", () => {
 		pageWs = null;
 		// Proxy the WS so the spec can inject snapshots (config to clear the Live
 		// empty state; a capabilities tier flag) on top of the live mock stream.
-		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(isBackendSocket, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 			ws.onMessage((m) => server.send(m));

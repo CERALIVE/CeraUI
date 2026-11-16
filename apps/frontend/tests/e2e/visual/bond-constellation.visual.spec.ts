@@ -1,3 +1,5 @@
+import { isBackendSocket } from "../helpers/backend-socket.js";
+
 import path from "node:path";
 
 import type { Page } from "@playwright/test";
@@ -32,7 +34,7 @@ async function openLiveHud(page: Page): Promise<void> {
 }
 
 function forceStreaming(page: Page): Promise<void> {
-	return page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
+	return page.routeWebSocket(isBackendSocket, (ws) => {
 		const server = ws.connectToServer();
 		ws.onMessage((m) => server.send(m));
 		server.onMessage((m) => {

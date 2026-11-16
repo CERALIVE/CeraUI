@@ -1,3 +1,5 @@
+import { isBackendSocket } from "./backend-socket.js";
+
 import type { Page, WebSocketRoute } from "@playwright/test";
 
 /**
@@ -194,7 +196,7 @@ export async function installBluetoothWire(
 		}
 	};
 
-	await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
+	await page.routeWebSocket(isBackendSocket, (ws) => {
 		route = ws;
 		const server = ws.connectToServer();
 

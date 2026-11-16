@@ -1,3 +1,5 @@
+import { isBackendSocket } from "../helpers/backend-socket.js";
+
 import type { Page, WebSocketRoute } from "@playwright/test";
 
 interface RpcResponse {
@@ -42,7 +44,7 @@ export class PageRpc {
 
 	async install(page: Page): Promise<void> {
 		await page.routeWebSocket(
-			/:(3002|31\d\d|6173|8090|8091)\/ws(?:\?|$)/,
+			(url) => isBackendSocket(url) && url.pathname === "/ws",
 			(socket) => {
 				const server = socket.connectToServer();
 				this.bindConnectionLifecycle(socket, server);

@@ -1,3 +1,5 @@
+import { isBackendSocket } from "../helpers/backend-socket.js";
+
 import path from "node:path";
 
 import type { Page, WebSocketRoute } from "@playwright/test";
@@ -40,7 +42,7 @@ test.describe("@visual ingest session summary + export", () => {
 		pageWs = null;
 		streaming = true;
 
-		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(isBackendSocket, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 			ws.onMessage((m) => server.send(m));

@@ -1,3 +1,5 @@
+import { isBackendSocket } from "./backend-socket.js";
+
 import type { Page, WebSocketRoute } from "@playwright/test";
 
 import type {
@@ -235,7 +237,7 @@ export async function installUpdateWire(
 		return !("pipelines" in frame) && !("sources" in frame);
 	};
 
-	await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\/ws(?:\?|$)/, (ws) => {
+	await page.routeWebSocket((url) => isBackendSocket(url) && url.pathname === "/ws", (ws) => {
 		route = ws;
 		const server = ws.connectToServer();
 		ws.onMessage((message) => {
