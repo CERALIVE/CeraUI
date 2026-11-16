@@ -58,7 +58,10 @@ import {
 } from "./wifi-connections.ts";
 import { captureWifiFrameIncarnation } from "./wifi-frame-binding.ts";
 import { hotspotOwnershipGuard } from "./wifi-hotspot-discovery.ts";
-import { syncWifiStateCache } from "./wifi-hotspot-monitor.ts";
+import {
+	beginHotspotTransition,
+	syncWifiStateCache,
+} from "./wifi-hotspot-monitor.ts";
 import {
 	type HotspotOutcomePublisher,
 	publishHotspotOutcome,
@@ -573,7 +576,7 @@ async function reconfigureHotspotLocked(
 		return "saving";
 	}
 	// Restart the connection with the updated config
-	wifiInterface.hotspot.transition = "activating";
+	beginHotspotTransition(wifiInterface, "activating");
 	deps.broadcastState();
 
 	if (isHotspotConfigComplete(wifiInterface)) {

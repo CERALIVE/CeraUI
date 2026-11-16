@@ -2,9 +2,12 @@ import type { WifiAdapterMode } from "@ceraui/rpc/schemas";
 import type { nmConnSetFields } from "../network/network-manager.ts";
 import type { AdapterModeOutcomePublisher } from "./wifi-adapter-mode-outcome.ts";
 import type { HotspotStopResult } from "./wifi-hotspot-config.ts";
-import type { HotspotStartResult } from "./wifi-hotspot-types.ts";
+import type {
+	HotspotStartResult,
+	WifiInterfaceWithHotspot,
+} from "./wifi-hotspot-types.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
-import type { RadioIdentity } from "./wifi-radio-identity.ts";
+import type { RadioIdentity, RadioLifetime } from "./wifi-radio-identity.ts";
 
 export type WifiPolicyObservation = {
 	readonly identities: ReadonlyMap<string, RadioIdentity>;
@@ -22,6 +25,9 @@ export type WifiRestoreEdge = {
 	readonly discovery: number;
 	readonly attempt?: object;
 	readonly retryAfter?: number;
+	readonly loss: number;
+	readonly lifetime: RadioLifetime | undefined;
+	readonly recovering: boolean;
 };
 
 export type WifiRestoreCycle = {
@@ -30,7 +36,7 @@ export type WifiRestoreCycle = {
 };
 
 export type WifiRestoreRequest = {
-	readonly row: WifiInterface;
+	readonly row: WifiInterfaceWithHotspot;
 	readonly desired: string | undefined;
 	readonly signature: string;
 	readonly cycle?: WifiRestoreCycle;

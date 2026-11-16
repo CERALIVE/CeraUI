@@ -49,7 +49,10 @@ import {
 	wifiAdapterLockKey,
 	withWifiAdapterLock,
 } from "./wifi-adapter-lock.ts";
-import { notifyWifiAdapterModeDiscovery } from "./wifi-adapter-mode-events.ts";
+import {
+	notifyWifiAdapterModeDiscovery,
+	observeWifiHotspotLoss,
+} from "./wifi-adapter-mode-events.ts";
 import {
 	cancelWifiAdapterReconciliation,
 	clearWifiAdapterReconcile,
@@ -85,6 +88,7 @@ import { handleHotspotConn } from "./wifi-hotspot-discovery.ts";
 import {
 	canHotspot,
 	isApMode,
+	isConcurrentHotspot,
 	type WifiHotspot,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
@@ -564,6 +568,9 @@ async function discoverWifiDevices() {
 	let classificationComplete = true;
 	const signal = discoveryController.signal;
 	const previousIdentities = wifiRadioIdentity.state.rows;
+	const activeBefore = Object.values(getWifiInterfacesByMacAddress()).filter(
+		(row) => isApMode(row) || isConcurrentHotspot(row),
+	);
 	const activityBefore = new Map(
 		Object.values(getWifiInterfacesByMacAddress()).map((row) => [
 			row,
@@ -1148,6 +1155,9 @@ async function discoverWifiDevices() {
 
 	for (const key of Object.keys(getWifiInterfacesByMacAddress()))
 		clearWifiAdapterReconcile(wifiAdapterLockKey(key), "discovery");
+	for (const row of activeBefore)
+		if (!isApMode(row) && !isConcurrentHotspot(row))
+			observeWifiHotspotLoss(row);
 	queueMicrotask(() => {
 		void notifyWifiAdapterModeDiscovery();
 	});

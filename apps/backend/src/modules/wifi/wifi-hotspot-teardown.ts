@@ -8,7 +8,11 @@ import type {
 	HotspotStopDeps,
 	HotspotStopResult,
 } from "./wifi-hotspot-config.ts";
-import { settlePending, syncWifiStateCache } from "./wifi-hotspot-monitor.ts";
+import {
+	beginHotspotTransition,
+	settlePending,
+	syncWifiStateCache,
+} from "./wifi-hotspot-monitor.ts";
 import {
 	isHotspotActive,
 	type WifiInterfaceWithHotspot,
@@ -53,7 +57,7 @@ export async function teardownHotspotLocked(
 	const activeMode = wifiInterface.activeMode;
 	settlePending(wifiInterface.ifname, false);
 
-	wifiInterface.hotspot.transition = "deactivating";
+	beginHotspotTransition(wifiInterface, "deactivating");
 	deps.broadcastState();
 	syncWifiStateCache(macAddress, wifiInterface);
 

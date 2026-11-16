@@ -24,7 +24,10 @@ import {
 	withWifiAdapterLock,
 } from "./wifi-adapter-lock.ts";
 import { observedWifiAdapterMode } from "./wifi-adapter-mode.ts";
-import { getWifiAdapterModeDiscoveryRevision } from "./wifi-adapter-mode-events.ts";
+import {
+	getWifiAdapterModeDiscoveryRevision,
+	wifiHotspotLossVersion,
+} from "./wifi-adapter-mode-events.ts";
 
 import {
 	beginWifiAdapterOwnerObservation,
@@ -32,6 +35,7 @@ import {
 } from "./wifi-adapter-owner.ts";
 import {
 	clearWifiAdapterReconcile,
+	rearmWifiAdapterReconcile,
 	retryWifiAdapterReconcile,
 } from "./wifi-adapter-reconcile-retry.ts";
 import type {
@@ -49,7 +53,7 @@ import {
 export { retryWifiAdapterReconcile } from "./wifi-adapter-reconcile-retry.ts";
 
 import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
-import { wifiRadioIdentity } from "./wifi-radio-identity.ts";
+import { sameRadioLifetime, wifiRadioIdentity } from "./wifi-radio-identity.ts";
 
 /**
  * The caller holds the logical owner's lock. Every owned profile participates
@@ -132,7 +136,7 @@ export async function reconcileWifiAdapterStopLocked(
 	return result;
 }
 
-/** Boot and runtime restore share the same owner, checked executor and retry timer. */
+/** Physical recovery episodes share boot confirmation and the same owner retry state. */
 export async function reconcileWifiAdapterRestoreLocked(
 	owner: string,
 	request: WifiRestoreRequest,
@@ -148,63 +152,84 @@ export async function reconcileWifiAdapterRestoreLocked(
 		return;
 	}
 	const previous = cycle?.edges.get(owner);
-	if (observedWifiAdapterMode(row) !== "station") {
-		cycle?.edges.set(owner, {
-			row,
-			desired,
-			signature,
-			completed: true,
-			attempts: 0,
-			discovery: getWifiAdapterModeDiscoveryRevision(),
-		});
-		clearWifiAdapterReconcile(owner, "restore");
-		return;
-	}
-	if (
-		previous?.row === row &&
-		previous.completed &&
-		previous.desired === desired
-	)
-		return;
-	const discovery = getWifiAdapterModeDiscoveryRevision();
-	if (
-		previous?.row === row &&
-		previous.desired === desired &&
-		previous.retryAfter !== undefined &&
-		getms() < previous.retryAfter
-	)
-		return;
-	if (
-		previous?.row === row &&
-		previous.desired === desired &&
-		previous.attempts >= 3
-	) {
-		markBootDegraded(`wifi-hotspot-restore:${owner}`);
-		return;
-	}
-	const same = previous?.row === row && previous.signature === signature;
-	if (
-		same &&
-		(previous.attempts === 0 ||
-			previous.discovery === discovery ||
-			(previous.attempts ?? 0) >= 3)
-	)
-		return;
+	const identity = wifiRadioIdentity.state.rows.get(row.ifname);
+	const observedLifetime =
+		identity?.row === row ? identity.lifetime : undefined;
+	const lifetime = observedLifetime ?? previous?.lifetime;
+	const loss = wifiHotspotLossVersion(row);
+	const active = observedWifiAdapterMode(row) !== "station";
+	const lost =
+		previous !== undefined &&
+		((previous.row === row ? loss > previous.loss : loss > 0) ||
+			(previous.completed && !active));
+	const replaced =
+		previous?.lifetime !== undefined &&
+		observedLifetime !== undefined &&
+		!sameRadioLifetime(previous.lifetime, observedLifetime);
+	const newEpisode =
+		previous !== undefined &&
+		(previous.desired !== desired || lost || replaced);
+	const recovering =
+		newEpisode || (previous?.recovering ?? false) || (!previous && loss > 0);
 	const edge: WifiRestoreEdge = {
 		row,
 		desired,
 		signature,
 		completed: false,
-		attempts:
-			previous?.row === row && previous.desired === desired
-				? previous.attempts
-				: 0,
-		discovery,
+		attempts: newEpisode ? 0 : (previous?.attempts ?? 0),
+		discovery: getWifiAdapterModeDiscoveryRevision(),
+		loss,
+		lifetime,
+		recovering,
+		...(!newEpisode && previous?.attempt ? { attempt: previous.attempt } : {}),
+		...(!newEpisode && previous?.retryAfter !== undefined
+			? { retryAfter: previous.retryAfter }
+			: {}),
 	};
+	if (active) {
+		cycle?.edges.set(owner, {
+			...edge,
+			completed: true,
+			attempts: 0,
+			recovering: false,
+		});
+		clearWifiAdapterReconcile(owner, "restore");
+		return;
+	}
+	if (newEpisode) rearmWifiAdapterReconcile(owner);
+	if (
+		row.hotspot.transition ||
+		row.removed ||
+		(row.degradedReason && row.degradedReason !== "permanent-mac-unresolved") ||
+		identity?.degradedReason === "unavailable"
+	) {
+		if (recovering) {
+			cycle?.edges.set(owner, { ...edge, signature: "" });
+			retryWifiAdapterReconcile(owner, undefined, "restore");
+		}
+		return;
+	}
+	if (edge.retryAfter !== undefined && getms() < edge.retryAfter) return;
+	if (edge.attempts >= 3) {
+		markBootDegraded(`wifi-hotspot-restore:${owner}`);
+		return;
+	}
+	const same =
+		previous?.signature === signature && previous.desired === desired;
+	if (
+		same &&
+		!newEpisode &&
+		(previous.discovery === edge.discovery || previous.attempts === 0)
+	) {
+		if (recovering && previous.discovery !== edge.discovery)
+			retryWifiAdapterReconcile(owner, undefined, "restore");
+		return;
+	}
 	const attempted = {
 		...edge,
-		attempts: (edge.attempts ?? 0) + 1,
+		attempts: edge.attempts + 1,
 		attempt: {},
+		recovering: true,
 	};
 	cycle?.edges.set(owner, attempted);
 	const settle = (confirmed: boolean): void => {
@@ -221,9 +246,10 @@ export async function reconcileWifiAdapterRestoreLocked(
 			...current,
 			completed,
 			attempts: completed ? 0 : current.attempts,
+			recovering: !completed,
 		});
 		if (completed) clearWifiAdapterReconcile(owner, "restore");
-		else if ((current.attempts ?? 0) >= 3)
+		else if (current.attempts >= 3)
 			markBootDegraded(`wifi-hotspot-restore:${owner}`);
 		else retryWifiAdapterReconcile(owner, undefined, "restore");
 	};
@@ -233,10 +259,11 @@ export async function reconcileWifiAdapterRestoreLocked(
 		if (cycle?.stopped()) return;
 		if (result === undefined) {
 			cycle?.edges.set(owner, edge);
+			if (recovering) retryWifiAdapterReconcile(owner, undefined, "restore");
 			return;
 		}
 		if (!result.success && result.error === "DEVICE_BUSY") {
-			cycle?.edges.set(owner, { ...edge, signature: "" });
+			cycle?.edges.set(owner, { ...edge, signature: "", recovering: true });
 			retryWifiAdapterReconcile(owner, undefined, "restore");
 			return;
 		}

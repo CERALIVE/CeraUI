@@ -98,6 +98,25 @@ export function settlePending(ifname: string, confirmed: boolean): void {
 	if (pending) settleCaptured(pending, confirmed);
 }
 
+/** Supersede older observers before another transaction owns the transition. */
+export function beginHotspotTransition(
+	wifiInterface: WifiInterfaceWithHotspot,
+	transition: NonNullable<WifiInterfaceWithHotspot["hotspot"]["transition"]>,
+): void {
+	for (const previous of [
+		pendingByRow.get(wifiInterface),
+		pendingHotspots.get(wifiInterface.ifname),
+	]) {
+		if (!previous) continue;
+		previous.controller.abort();
+		if (pendingHotspots.get(previous.ifname) === previous)
+			pendingHotspots.delete(previous.ifname);
+		if (pendingByRow.get(previous.row) === previous)
+			pendingByRow.delete(previous.row);
+	}
+	wifiInterface.hotspot.transition = transition;
+}
+
 /** Events trigger selected-AP observation; names or parent connectivity are not proof. */
 export async function handleWifiMonitorEvent(
 	event: MonitorEvent,
@@ -165,16 +184,18 @@ export function registerPendingConfirmation(
 		deps.publishOutcome?.("start", device, { success: true });
 	};
 	const giveUp = (): void => {
-		if (ownsCache()) {
+		if (wifiInterface.hotspot === hotspot) {
 			delete hotspot.transition;
-			const binding = wifiInterface.concurrentHotspot;
-			if (
-				virtual &&
-				binding?.ifname === target.ifname &&
-				(binding.activeConn === null || binding.activeConn === target.uuid)
-			)
-				transitionVirtualBinding(wifiInterface, { kind: "clear" });
-			if (!virtual) deps.setDupIpSuppression(ifname, false);
+			if (ownsCache()) {
+				const binding = wifiInterface.concurrentHotspot;
+				if (
+					virtual &&
+					binding?.ifname === target.ifname &&
+					(binding.activeConn === null || binding.activeConn === target.uuid)
+				)
+					transitionVirtualBinding(wifiInterface, { kind: "clear" });
+				if (!virtual) deps.setDupIpSuppression(ifname, false);
+			}
 			deps.broadcastState();
 			syncWifiStateCache(target.macAddress, wifiInterface);
 		}
@@ -224,17 +245,6 @@ export function registerPendingConfirmation(
 		confirm,
 		giveUp,
 	};
-	for (const previous of [
-		pendingByRow.get(wifiInterface),
-		pendingHotspots.get(ifname),
-	]) {
-		if (!previous) continue;
-		previous.controller.abort();
-		if (pendingHotspots.get(previous.ifname) === previous)
-			pendingHotspots.delete(previous.ifname);
-		if (pendingByRow.get(previous.row) === previous)
-			pendingByRow.delete(previous.row);
-	}
 	pendingHotspots.set(ifname, pending);
 	pendingByRow.set(wifiInterface, pending);
 	if (deps.pollHotspotActive) {

@@ -59,7 +59,6 @@ async function applyWifiAdapterModes(
 						preferences,
 						Object.values(deps.resolveInterfaces()).filter(canHotspot).length,
 					);
-			if (verified && key === undefined) continue;
 			const owner = key ?? observedOwner;
 			const lock = await withWifiAdapterLock(
 				wifiAdapterLockKey(owner),
@@ -68,12 +67,6 @@ async function applyWifiAdapterModes(
 						return;
 					const desired =
 						key === undefined ? undefined : readPreferences()[key];
-					if (
-						row.hotspot.transition &&
-						desired !== "station" &&
-						desired !== undefined
-					)
-						return;
 					if (!verified) limitedVisited = true;
 					const capability = wifiAdapterModeCapability(
 						row,

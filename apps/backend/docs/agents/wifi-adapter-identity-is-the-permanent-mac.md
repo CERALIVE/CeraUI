@@ -557,6 +557,18 @@ selection and lifetime must still match after the read. A held old poll cannot
 settle its replacement or manufacture state using the row's newer UUID.
 The existing poll helper retains queued discovery; its status boolean is only a
 candidate for the pending monitor's mandatory AP-specific check.
+If discovery discards a vanished virtual target and its cached UUID, the exact
+current pending record still retires its own transition. Cache/binding cleanup
+keeps its separate UUID fence, so replacement state is preserved. The abandoned
+transition cannot block bounded recovery until the retry window expires:
+failed confirmation continues toward three attempts and owner degradation.
+Every new activating/deactivating transaction supersedes prior confirmation
+observers synchronously before it claims the transition flag. This ownership
+handoff occurs before awaited NM activation/deactivation, not at later confirmation registration.
+An old failed poll therefore cannot clear a replacement Start's flag while its
+NM request is pending. Start, reconfigure and Stop share the claim operation;
+Stop retains its existing terminal settlement before claiming deactivation.
+No new registry, timer or wire field is involved.
 
 Each attempt re-reads current
 intent and the registry under the adapter lock, never calls the persisting mode
@@ -567,6 +579,14 @@ An unchanged capability edge cannot dispatch an immediate duplicate; scheduled
 retries follow failed activation. A late adapter,
 capability arrival or cleared stream re-arms pending work. Pending accepted
 activations are not duplicated by unrelated edges; failed confirmation can retry.
+Observed AP loss or a positively changed physical lifetime re-arms recovery.
+Its budget is keyed by (ifindex, wiphy, phyPath), not the availability token.
+Unknown samples retain the prior physical witness; token churn alone cannot
+refill exhausted attempts or the recovery window. Accepted, unconfirmed starts
+consume the same three-attempt budget. Busy/pending work defers without charge,
+station intent cancels it, and observed success clears only owner restoration
+health. No name-based deletion or expanded D12 activation authority is added.
+
 Capability edges come only from successful cache publication or an invalidation
 that changes evidence. A failed read retaining the same expired cache emits no
 edge, so a pending restore cannot turn one discovery event into an endless probe

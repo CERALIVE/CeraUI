@@ -114,6 +114,13 @@ never reported the AP up, which is a different thing to tell someone.
 point is up". Wire contract: `hotspotToggleErrorSchema` (six members, none
 collapsible) + `hotspotToggleOutputSchema` in `@ceraui/rpc`.
 
+Transition ownership begins before awaited NM activation. The shared
+`beginHotspotTransition` cancels and removes previous confirmation observers
+and sets the new flag in one synchronous operation under the adapter lock.
+Registration after NM acceptance adds proof observation without reacquiring
+ownership. An older observer cannot retire a newer unregistered transition;
+an unsuperseded observer still retires its own abandoned target.
+
 The adapter-mode wrapper places a bounded terminal watchdog around that promise.
 If the delegated publisher is lost entirely, the mode operation settles once as
 typed `not-confirmed`; a late publisher is fenced and cannot emit a second mode

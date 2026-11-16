@@ -44,11 +44,19 @@ import {
 	wifiAdapterLockKey,
 } from "./wifi-adapter-lock.ts";
 import {
+	notifyWifiAdapterModeEdge,
+	observeWifiHotspotLoss,
+} from "./wifi-adapter-mode-events.ts";
+import {
 	type HotspotClientsTimers,
 	setHotspotClientsChangeListener,
 	startHotspotClientsPoll,
 } from "./wifi-hotspot-clients.ts";
-import { canHotspot } from "./wifi-hotspot-types.ts";
+import {
+	canHotspot,
+	isApMode,
+	isConcurrentHotspot,
+} from "./wifi-hotspot-types.ts";
 import type { WifiInterface, WifiInterfaceId } from "./wifi-interfaces.ts";
 import {
 	recordWifiRadioShadowFailure,
@@ -194,6 +202,9 @@ export function wifiStateInit(
   a real diff). Modem events are not our concern here.
 */
 export function handleWifiMonitorEvent(event: MonitorEvent): void {
+	const active = Object.values(wifiInterfacesByMacAddress).filter(
+		(row) => isApMode(row) || isConcurrentHotspot(row),
+	);
 	switch (event.type) {
 		case "connection-state":
 			handleConnectionStateEvent(event.connection, event.state);
@@ -219,6 +230,13 @@ export function handleWifiMonitorEvent(event: MonitorEvent): void {
 		default:
 			break;
 	}
+	let changed = false;
+	for (const row of active) {
+		if (isApMode(row) || isConcurrentHotspot(row)) continue;
+		observeWifiHotspotLoss(row);
+		changed = true;
+	}
+	if (changed) void notifyWifiAdapterModeEdge();
 }
 
 /* Mark the given SSID as the active connection on an interface (immutably). */

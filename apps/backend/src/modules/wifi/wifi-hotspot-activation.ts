@@ -63,6 +63,7 @@ import {
 	rememberHotspotProfilePin,
 } from "./wifi-hotspot-discovery.ts";
 import {
+	beginHotspotTransition,
 	registerPendingConfirmation,
 	syncWifiStateCache,
 } from "./wifi-hotspot-monitor.ts";
@@ -541,7 +542,7 @@ export async function startHotspotLocked(
 
 		// Begin the transition: broadcast `activating` immediately (responsive UI),
 		// suppress dup-IP warnings for the window, but DO NOT flip mode yet.
-		wifiInterface.hotspot.transition = "activating";
+		beginHotspotTransition(wifiInterface, "activating");
 		if (!concurrentInterface) deps.setDupIpSuppression(ifname, true);
 		deps.broadcastState();
 		syncWifiStateCache(macAddress, wifiInterface); // still station (isHotspot false)

@@ -39,6 +39,12 @@ export function clearWifiAdapterReconcile(
 	if (owners.size === 0) clearWifiDiscoveryRetry();
 }
 
+/** A genuine loss or new incarnation gets a fresh bounded recovery window. */
+export function rearmWifiAdapterReconcile(owner: string): void {
+	const state = owners.get(owner);
+	if (state) state.deadline = getms() + 5 * 60 * 1000;
+}
+
 /** Discovery termination and restart retire its retry budgets with its timers. */
 export function cancelWifiAdapterReconciliation(): void {
 	owners.clear();

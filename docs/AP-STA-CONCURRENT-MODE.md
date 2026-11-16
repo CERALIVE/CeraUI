@@ -105,7 +105,7 @@ Every rejected policy write, including the write after activation, and every
 failed restore uses the same bounded discovery retry mechanism. Recovery state
 is keyed by the exact logical owner. Successful policy work cannot cancel a
 pending identity transfer or another owner's retry. Failed boot restoration has
-at most three activation attempts per unchanged restore edge; capability and
+at most three activation attempts for its chosen mode before observed success; capability and
 streaming prerequisites remain pending without an activation. Exhaustion marks
 that owner's restore health degraded, and observed AP success clears it.
 Accepted activation remains pending until confirmation; a failed confirmation
@@ -113,6 +113,30 @@ keeps bounded recovery. Inactive same-MAC twins resolve their own logical
 owners from compatible literal path/interface pins, and activation keeps that
 owner separate from the physical MAC used for NetworkManager pins.
 Stop still reports the actual disconnect result under the contract above.
+
+### Hotspot loss recovery [EXISTS; host-tested only]
+
+An NM loss event or completed discovery that observes a previously active AP
+disappear re-arms the same reconciler when saved intent is hotspot or hybrid.
+A reprobed adapter gets a fresh recovery budget on its current physical
+lifetime and interface. An unchanged active AP is left alone; a driver event by itself
+does not prove loss.
+
+Recovery makes at most three activation attempts per loss or changed physical
+`(ifindex, wiphy, phyPath)` tuple. Availability-token rotation alone cannot refill
+the attempt budget or its recovery window; unknown samples retain the prior
+physical witness. Recovery continues
+using the existing bounded discovery timer. Accepted activations that never
+confirm also consume this budget. Busy locks, pending operations, unavailable
+identity, streaming and capability prerequisites cannot dispatch another
+activation or consume an activation attempt. Explicit Stop or station intent
+keeps the AP off. D12's limited-adapter activation authority is unchanged.
+Exhaustion degrades that logical owner's restore health; observed success clears
+only its restore entry. No interface is deleted by name to force recovery.
+
+This detects observed AP loss. It does not detect silent client-traffic failure
+while NetworkManager still reports an active AP, or qualify encrypted-client
+recovery after a firmware reset.
 
 If support is absent, CeraUI retains the existing exclusive station-to-hotspot
 switch. The UI states that starting the hotspot will disconnect WiFi and remove
