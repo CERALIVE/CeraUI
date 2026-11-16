@@ -39,6 +39,7 @@ import { WIDE_DESKTOP_QUERY } from '$lib/layout';
 import { rpc } from '$lib/rpc/client';
 
 import BootPicker from './BootPicker.svelte';
+import EventsPanel from './EventsPanel.svelte';
 import LegacyLogDownloads from './LegacyLogDownloads.svelte';
 import { LogDownloads } from './log-downloads.svelte';
 import RawLogsPanel from './RawLogsPanel.svelte';
@@ -142,6 +143,9 @@ $effect(() => {
 				</div>
 				{#each tabs as tab (tab)}
 					<Tabs.Content class="min-h-0 overflow-y-auto" data-testid="system-logs-panel-{tab}" value={tab}>
+						{#if tab === 'events' && current === 'events'}
+							<EventsPanel onviewraw={() => (selected = 'raw')} />
+						{/if}
 						{#if tab === 'storage' && current === 'storage'}
 							<div class="divide-y">
 								{@render storageRegion()}

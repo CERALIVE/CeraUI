@@ -850,10 +850,13 @@ html[data-theme='eink'] *::after {
 	background-color: transparent;
 }
 
+/* A pressed toggle inverts the neutral pair: its label stays at WCAG AA on the
+   fill and the fill stands apart from the surface in every palette, with no
+   lime outside the live pill. */
 [data-slot='toggle'][data-state='on'],
 [data-slot='toggle'][aria-pressed='true'] {
-	background-color: color-mix(in oklab, var(--primary) 20%, var(--switch-off));
-	color: var(--foreground);
+	background-color: var(--foreground);
+	color: var(--background);
 }
 
 /* ── Pointer-cursor affordance for interactive controls ──
