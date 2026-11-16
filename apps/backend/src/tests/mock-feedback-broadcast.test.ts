@@ -191,6 +191,33 @@ describe("mock feedback broadcast — signal fluctuations reach clients on a 5s 
 		}
 	});
 
+	test("hotspot start and stop reach clients without a signal change", async () => {
+		const sink: Array<Record<string, unknown>> = [];
+		const client = makeRecordingClient(sink);
+		addClient(client);
+		try {
+			await runMockFeedbackBroadcast();
+			getMockState().wifiModes.wlan0 = "hotspot";
+			await runMockFeedbackBroadcast();
+			getMockState().wifiModes.wlan0 = "station";
+			await runMockFeedbackBroadcast();
+
+			expect(wifiStatuses(sink).map((status) => status.wifi)).toEqual([
+				expect.objectContaining({
+					"0": expect.not.objectContaining({ hotspot: expect.anything() }),
+				}),
+				expect.objectContaining({
+					"0": expect.objectContaining({ hotspot: expect.any(Object) }),
+				}),
+				expect.objectContaining({
+					"0": expect.not.objectContaining({ hotspot: expect.anything() }),
+				}),
+			]);
+		} finally {
+			removeClient(client);
+		}
+	});
+
 	test("no wifi broadcast when the wifi signal is unchanged (dedupe)", async () => {
 		const sink: Array<Record<string, unknown>> = [];
 		const client = makeRecordingClient(sink);

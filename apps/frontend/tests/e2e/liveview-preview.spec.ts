@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { Page, WebSocketRoute } from '@playwright/test';
 
 import { expect, test } from './fixtures/index.js';
+import { isBackendSocket } from './helpers/backend-socket.js';
 import { ensureAuthenticated, navigateTo } from './helpers/index.js';
 
 /**
@@ -80,7 +81,7 @@ function mockPreviewSocket(ws: WebSocketRoute): void {
  * browser's `VideoDecoder` to `error` instead of `waiting`.
  */
 async function routeBackend(page: Page): Promise<void> {
-	await page.routeWebSocket(/:(3002|31\d\d|6173)/, (ws) => {
+	await page.routeWebSocket(isBackendSocket, (ws) => {
 		if (ws.url().includes('/preview')) {
 			mockPreviewSocket(ws);
 			return;

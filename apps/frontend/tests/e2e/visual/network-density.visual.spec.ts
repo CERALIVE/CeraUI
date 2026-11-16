@@ -1,3 +1,5 @@
+import { isBackendSocket } from "../helpers/backend-socket.js";
+
 import path from "node:path";
 
 import { expect, type Page, test } from "../fixtures/index.js";
@@ -158,7 +160,7 @@ function withWifiCapabilities(frame: Record<string, unknown>): Record<string, un
 }
 
 async function installCapabilityPatch(page: Page): Promise<void> {
-	await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
+	await page.routeWebSocket(isBackendSocket, (ws) => {
 		const server = ws.connectToServer();
 		ws.onMessage((message) => server.send(message));
 		server.onMessage((message) => {

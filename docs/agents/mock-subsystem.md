@@ -27,6 +27,16 @@ pristine snapshot. `resetMockState()` restores that snapshot AND clears all time
 scenario's seeded state with no leaked intervals or cross-test bleed. Use in
 `afterEach` for any test that mutates mock state.
 
+**Signals are fixed seeds:**
+`initMockService()` seeds modem signals at 90/85/80 (excellent, three bars) and
+each Wi-Fi network at its fixture `signal`. The periodic tick never moves them,
+and the D-Bus modem view reads the same `modemSignals` the mmcli provider does, so
+visual baselines that draw signal bars are byte-stable. Throughput, sensors, relay
+RTT and streaming stats still fluctuate. To move a signal, write it into
+`mockState` and call `runMockFeedbackBroadcast()`.
+The feedback tick compares the complete Wi-Fi wire payload, so hotspot and
+connection changes still reach clients when signal strength is unchanged.
+
 **`updateMockState(partial)` — single write path:**
 All writes to `mockState` funnel through the typed `updateMockState(partial)` mutator
 (Object.assign top-level merge). The four named setters (`setMockModemConfig`,

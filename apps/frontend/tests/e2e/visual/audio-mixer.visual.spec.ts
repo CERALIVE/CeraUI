@@ -1,3 +1,5 @@
+import { isBackendSocket } from "../helpers/backend-socket.js";
+
 import type { Page } from '@playwright/test';
 
 import { expect, test } from '../fixtures/index.js';
@@ -48,7 +50,7 @@ async function installNarrowedSocket(
 		acceptServerMessage(message: string | Buffer): void;
 	},
 ): Promise<void> {
-	await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
+	await page.routeWebSocket(isBackendSocket, (ws) => {
 		const server = ws.connectToServer();
 		pageRpc.bindConnectionLifecycle(ws, server);
 		ws.onMessage((message) => server.send(message));
