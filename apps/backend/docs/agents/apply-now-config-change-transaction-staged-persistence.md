@@ -165,6 +165,40 @@ fields; the ordinary idle/next-start save and its own residue cleanup are
 unchanged. Before this, a busy or reverted source switch deleted the running
 source's saved geometry before admission could refuse it.
 
+**A SOURCE COMMIT INCLUDES ITS SELECTION METADATA.** The candidate captures
+`selected_video_input` and `source_stable_id` from the operator's resolved source
+snapshot before dispatch. `resolveSelectionAnchor` remains the identity resolver;
+neither commit nor recovery guesses an anchor from a later discovery view.
+Explicit local nulls clear the previous capture input or anchor; omitted fields
+remain unknown and leave existing metadata alone. A null capture input never
+becomes a null producer `input_id`.
+
+Legacy markers can state a source and capture input without a captured anchor.
+That source label cannot identify the intended hardware, even when it matches
+the previous label: a different camera may now hold the same node. While the
+engine runs, recovery retains such markers undecided before either outcome
+match, without writing selection metadata or advancing its token. It never
+reconstructs the missing anchor from later discovery. A stopped engine remains
+authoritative to retain the previous config; legacy geometry-only markers keep
+their existing recovery rules.
+
+The existing `noteSourceSelectionWrite` owner accepts that captured anchor at
+commit and recovery, writes or clears it, and advances the selection token before
+the atomic config save. A probe requested before that write remains stale.
+Busy and reverted changes call neither the selection owner nor its writer.
+A failed config save releases the stage but retains the complete marker and
+in-memory selection for recovery, as for the other staged fields.
+
+A local capture-input clear, like a geometry clear, is not proven by a running
+snapshot. Its guard runs before both outcome matches: unknown or retained live
+input cannot confirm the clear or discard the marker. A stopped engine retains
+the previous configuration. Concrete capture-input changes still reconcile
+through their reported active input. This does not add mode/pipeline evidence
+to the snapshot or repair the separate producer capture-mode omission contract.
+Coverage: `applied-source-selection.test.ts` and
+`applied-source-selection-recovery.test.ts`, through the real procedure,
+production admission, marker, config writer and persisted-selection router.
+
 **THE STAGE BELONGS TO ONE ATTEMPT.** Each apply-now save builds its marker with
 its own `attemptId` and stages it only at dispatch, after every await in
 `setConfig` and in the same synchronous stretch as the orchestrator's admission.

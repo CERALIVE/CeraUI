@@ -1278,6 +1278,8 @@ describe("a source switch owns its derived override residue", () => {
 			pipeline: "rtmp",
 			input_mode: null,
 			resolution: null,
+			selected_video_input: null,
+			source_stable_id: null,
 		});
 		expect(result.configChange?.result).toBe("applied");
 		expect(await onDiskOwned()).toEqual(INGEST);
@@ -1479,6 +1481,7 @@ describe("a source switch owns its derived override residue", () => {
 							source: "cam1",
 							pipeline: "camlink",
 							selected_video_input: "cam1",
+							source_stable_id: "usb:camlink",
 						}
 					: previous,
 			);
