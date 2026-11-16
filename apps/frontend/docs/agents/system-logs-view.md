@@ -732,7 +732,7 @@ everywhere in the app.
 
 | Width | Header | Tabs and side column | Filter bars | Rows | Boot picker |
 |---|---|---|---|---|---|
-| 375 (phone) | Title and close on row 1; pill and boot button wrap to a second header line | Events, Raw logs, Storage tabs at full width; no side column | Raw: row 1 Level (full width, labels may wrap to two lines inside equal segments); row 2 Search (fills), Filters button, Follow. Source, Time and Order fold into the in-flow Filters panel. Events: Filter button unfolds family chips and Problems only | Events: time under the title. Raw: two-line rows | Header button, nested sheet |
+| 375 (phone) | Title and close on row 1; pill and boot button wrap to a second header line | Events, Raw logs, Storage tabs at full width; no side column | Raw: row 1 Level (full width, labels may wrap to two lines inside equal segments; a segment is never narrower than its longest word, so a long translation such as French "Avertissements" widens its own segment instead of running under the next; under touch every segment is at least 44 x 44 px, so short CJK labels do not shrink the target); row 2 Search (fills), Filters button, Follow. Source, Time and Order fold into the in-flow Filters panel. Events: Filter button unfolds family chips and Problems only | Events: time under the title. Raw: two-line rows | Header button, nested sheet |
 | 768 (tablet) | One row: title, pill, boot button, close | Three tabs; no side column | Raw: Level, Search, Follow on row 1; Source, Time, Order inline on row 2 (panel at least 720 px wide and viewport taller than 600 px); Events: chips and toggle inline, wrapping | One-line raw rows; event time at the inline end | Header button, nested centered dialog or sheet per `AppDialog` |
 | 1024x600 (kiosk, touch) | One row: title, pill, close (no boot button) | Events, Raw logs; 320 px side column with Boots, Storage, Downloads, scrolling on its own | Panel is about 704 px and the viewport is 600 px tall, so both tabs use the folded bars: Raw is one row (Level, Search, Filters, Follow); Events folds its chips behind Filter. Budget: header about 56 px, tabs 44, bar about 60, leaving about 440 px of list | One-line raw rows | First side-column region |
 | 1280 (desktop) | One row: title, pill, close | Events, Raw logs; side column | Raw: two rows, everything inline; Events: chips inline | Full density, one-line rows | First side-column region |
@@ -810,6 +810,45 @@ everywhere in the app.
   `update_failed`, `modem_connected` and `engine_lost` follow the enums the
   registry ships. A value with no sentence here shows the title alone until
   copy for it is added in all ten locales.
-- **Long lists.** A virtual list (`@tanstack/svelte-virtual`) or plain rows with
-  `content-visibility: auto` is decided when the Raw logs tab is built and
-  recorded here.
+- **Long lists (decided).** The Raw logs list is a virtual list
+  (`@tanstack/svelte-virtual` 3.13, whose peer range accepts the repo's Svelte
+  5) with measured rows, so wrapped and expanded rows keep their height; it
+  stays a plain `ul`, never a live region. `@tanstack/virtual-core` is also a
+  direct dependency: with `preserveSymlinks`, the frontend's type check finds
+  the virtualizer's types only through its own dependencies, and without them
+  every virtualizer value is silently `any`. The Raw logs tab loads as its own
+  chunk through `lazyDialog`, so opening the view on Events fetches neither
+  the tab nor the virtualizer.
+- **List order (decided).** One list holds every Raw logs row in journal order;
+  entries held while reading away are a boundary inside it, never a second
+  list. Nothing sorts rows by time or by cursor text:
+  - The first page that lists an entry after a head read (first query, Keep
+    searching from the head, reset, filter change) replaces the list. Follow is
+    detached for the whole read, so the page is the newest run and nothing
+    arrives meanwhile. A dropped marker leaves exactly then, or on a reset or
+    the row cap, so markers describe only holes no page has filled.
+  - Every other page extends its own edge with entries not listed yet; a
+    Follow batch goes on top.
+  - While following, Keep searching reads on with Follow detached until a page
+    lists an entry or stops moving. If Follow attaches while a search is still
+    empty, the bottom edge reads from the head again.
+  - After a head read, Follow resumes from the page's newest entry only if that
+    entry was not listed before, so it never rewinds into entries it dropped.
+  - With no position (no entry listed, no checkpoint), Follow starts once to
+    learn the device head, stops, reads the head again, then starts after the
+    page's newest entry or that head. A null head means the boot has no record
+    yet, and that first follow stays: it reads the boot from its start. A
+    failed read leaves no position, so the next Follow learns the head again.
+    Follow and Pause are disabled while a head read runs.
+  - Accepted limits: a dropped marker marks the run of the batch it came with,
+    not the exact gap, because the wire carries only a count; after a replay
+    whose page is shorter than the listed run, older rows leave the view until
+    the next Load more.
+- **One Follow owner (decided).** A socket has one follow (a new start stops
+  the socket's older one) and the app has one follow listener. Only the view
+  that made the latest start stops the device follow or clears the listener;
+  `dispose` runs once, and a disposed view never starts Follow again. A stale
+  view's dispose, Pause or late start reply therefore leaves a newer view's
+  Follow running. Accepted limit: the app never has two Raw logs views live at
+  once (leaving the tab destroys it before a new one mounts); if two were, the
+  later start would win and the earlier view would not be told.

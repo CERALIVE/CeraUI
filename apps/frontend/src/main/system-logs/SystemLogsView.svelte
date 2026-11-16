@@ -35,6 +35,7 @@ import { rpc } from '$lib/rpc/client';
 
 import LegacyLogDownloads from './LegacyLogDownloads.svelte';
 import { LogDownloads } from './log-downloads.svelte';
+import RawLogsPanel from './RawLogsPanel.svelte';
 
 const TAB_LABELS: Record<ShellTab, () => string> = {
 	events: () => m['systemLogs.tabs.events'](),
@@ -133,6 +134,9 @@ $effect(() => {
 								{@render storageRegion()}
 								{@render downloadsRegion()}
 							</div>
+						{/if}
+						{#if tab === 'raw' && current === 'raw'}
+							<RawLogsPanel />
 						{/if}
 					</Tabs.Content>
 				{/each}
