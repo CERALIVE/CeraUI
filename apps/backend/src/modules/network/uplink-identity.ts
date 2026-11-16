@@ -17,6 +17,7 @@
  */
 
 import { routerCellularDisplayName } from "../modems/physical-identity.ts";
+import { isSupportedWifiIfname } from "../wifi/wifi-concurrent-interface.ts";
 import {
 	getModemNetMarker,
 	getRouterCellularMarker,
@@ -41,7 +42,7 @@ export interface UplinkIdentity {
 const CELLULAR_NAME_FALLBACK = /^(?:ww|ppp|usb)/;
 
 function nameFallbackKind(iface: string): UplinkKind {
-	if (iface.startsWith("wl")) return "wifi";
+	if (isSupportedWifiIfname(iface)) return "wifi";
 	if (CELLULAR_NAME_FALLBACK.test(iface)) return "cellular";
 	if (/^(?:eth|en)/.test(iface)) return "ethernet";
 	return "other";

@@ -44,9 +44,27 @@ their original route while only new flows see the new weights.
 
 **Startup readiness preserves recovered sharing.** The first OS netif snapshot
 must exist before planning, including when it is empty. A snapshot with no
-`wlan*` interface needs no Wi-Fi discovery; otherwise a completed Wi-Fi device
+`wl*` interface needs no Wi-Fi discovery; otherwise a completed Wi-Fi device
 refresh must classify every such interface. A device with no active connection
 is classified; an active connection needs mode `ap` or `infrastructure`.
+Names are candidates, not radio-type evidence: a fresh NM listing excludes
+interfaces explicitly typed as non-Wi-Fi. Empty or unknown types still wait.
+Each discovery clears these exclusions before reading NM, so a pending or failed
+listing cannot reuse a previous non-Wi-Fi verdict.
+Both radio classifications and non-Wi-Fi exclusions carry the OS parser's
+presence epoch. Appearance, disappearance, ifindex changes and observed MAC
+changes advance that epoch before publishing the snapshot. Ordinary polls retain
+it. A type read captures the topology generation before calling NM; changed
+topology discards a stale listing and schedules a fresh read. Per-device awaits
+also check that generation before recording classification. Removed or replaced
+names cannot inherit either type verdict, and exclusions are pruned on readiness.
+Monitor-only placeholders have no parser identity yet. Their first OS metadata
+advances the topology generation while adopting the monitor's lifetime, preserving
+its covering bus read and rejecting type reads begun before that publication.
+Discovery, the netif parser, readiness and uplink planning share
+`isSupportedWifiIfname` in `wifi-concurrent-interface.ts`. Virtual `clap-*` AP
+legs remain client zones by name and do not require station classification;
+any present `wl*` parent still does.
 A failed nmcli listing, skipped device, per-device read error or `unknown` mode
 leaves readiness pending. This check precedes the empty-client-zone branch.
 Pending performs no apply, availability publication, retry, failure-backoff
