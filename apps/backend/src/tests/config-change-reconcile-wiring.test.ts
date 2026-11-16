@@ -24,8 +24,14 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs, { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { activeEncodeSchema } from "@ceralive/cerastream";
 
-import { getConfig } from "../modules/config.ts";
+import {
+	getConfig,
+	getConfigFilePath,
+	saveConfig,
+	setConfigFilePath,
+} from "../modules/config.ts";
 import { commitStagedConfigChange } from "../modules/streaming/config-change-persistence.ts";
 import {
 	buildEngineEncodeSnapshot,
@@ -35,9 +41,13 @@ import {
 } from "../modules/streaming/config-change-reconcile-wiring.ts";
 import {
 	clearStagedConfigChange,
+	defaultStagingDeps,
 	type EngineEncodeSnapshot,
 	getStagedConfigChange,
 	type InflightConfigMarker,
+	type PreviousConfigFields,
+	releaseStagedConfigChange,
+	type StagedConfigFields,
 	type StagingDeps,
 	stageConfigChange,
 } from "../modules/streaming/config-change-staging.ts";
@@ -376,6 +386,166 @@ describe("F11 — crash-window reconciliation is wired into production", () => {
 		expect(verdict).toBe("persisted_candidate");
 		expect(markerOnDisk()).toBe(false);
 		expect(getStagedConfigChange()?.attemptId).toBe("live");
+	});
+});
+
+describe("unproven crash recovery preserves real config and marker bytes", () => {
+	let priorPath: string;
+	let prior: ReturnType<typeof getConfig>;
+	const previous: PreviousConfigFields = {
+		source: "video1",
+		selected_video_input: "video1",
+		resolution: "1080p",
+		framerate: 30,
+		input_mode: "uvc_h264",
+		pipeline: "libuvch264",
+	};
+
+	beforeEach(() => {
+		markerDir = mkdtempSync(join(tmpdir(), "ceraui-mode-recovery-"));
+		markerPath = join(markerDir, "config.inflight.json");
+		priorPath = getConfigFilePath();
+		prior = { ...getConfig() };
+		setConfigFilePath(join(markerDir, "config.json"));
+		Object.assign(getConfig(), previous, { video_codec: "h265" });
+		saveConfig();
+	});
+
+	afterEach(() => {
+		clearStagedConfigChange(fileStagingDeps());
+		const config = getConfig();
+		config.source = prior.source;
+		config.selected_video_input = prior.selected_video_input;
+		config.resolution = prior.resolution;
+		config.framerate = prior.framerate;
+		config.input_mode = prior.input_mode;
+		config.pipeline = prior.pipeline;
+		config.video_codec = prior.video_codec;
+		setConfigFilePath(priorPath);
+		rmSync(markerDir, { recursive: true, force: true });
+	});
+
+	const cases: ReadonlyArray<{
+		name: string;
+		candidate: StagedConfigFields;
+		previous?: PreviousConfigFields;
+		resolution?: string;
+	}> = [
+		{
+			name: "H264 to MJPEG with identical input and geometry",
+			candidate: { input_mode: "mjpeg", pipeline: "usb_mjpeg" },
+		},
+		{
+			name: "MJPEG to H264 with identical input and geometry",
+			candidate: { input_mode: "uvc_h264", pipeline: "libuvch264" },
+			previous: { ...previous, input_mode: "mjpeg", pipeline: "usb_mjpeg" },
+		},
+		{
+			name: "a mode clear with identical input and geometry",
+			candidate: { input_mode: null },
+		},
+		{
+			name: "a mode whose previous value was omitted",
+			candidate: { input_mode: "uvc_h265" },
+			previous: { resolution: "1080p", framerate: 30 },
+		},
+		{
+			name: "a pipeline change without a mode field",
+			candidate: { pipeline: "usb_mjpeg" },
+		},
+		{
+			name: "candidate geometry without evidence of its new capture mode",
+			candidate: { resolution: "2160p", input_mode: "mjpeg" },
+			resolution: "3840x2160",
+		},
+		{
+			name: "previous geometry without evidence of either capture mode",
+			candidate: { resolution: "2160p", input_mode: "mjpeg" },
+		},
+		{
+			name: "identical compared facts on both sides",
+			candidate: { resolution: "1080p", framerate: 30 },
+		},
+		{
+			name: "candidate geometry with an unknown previous override",
+			candidate: { resolution: "2160p" },
+			previous: {},
+			resolution: "3840x2160",
+		},
+	];
+
+	test.each(cases)("defers $name", async (row) => {
+		// Release only memory to model a new process; the real marker survives.
+		Object.assign(getConfig(), row.previous ?? previous);
+		saveConfig();
+		stageConfigChange(
+			{
+				attemptId: "mode-recovery",
+				startedAt: 1,
+				candidate: row.candidate,
+				previous: row.previous ?? previous,
+			},
+			{ ...defaultStagingDeps, markerPath },
+		);
+		releaseStagedConfigChange();
+		const configBytes = fs.readFileSync(getConfigFilePath());
+		const markerBytes = fs.readFileSync(markerPath);
+		const snapshot = buildEngineEncodeSnapshot({
+			lifecycle: () => "streaming",
+			activeEncode: () =>
+				activeEncodeSchema.parse({
+					codec: "h264",
+					input_codec: "h264",
+					active_input: "video1",
+					resolution: row.resolution ?? "1920x1080",
+					framerate: 30,
+				}),
+			liveness: () => ({ pipelinePlaying: true, framesEmitted: 120 }),
+		});
+
+		const verdict = await runInflightConfigChangeReconciliation(
+			harness([snapshot]),
+		);
+
+		expect(verdict).toBe("deferred");
+		expect(fs.readFileSync(getConfigFilePath())).toEqual(configBytes);
+		expect(fs.readFileSync(markerPath)).toEqual(markerBytes);
+		expect(getConfig().video_codec).toBe("h265");
+	});
+
+	test.each([
+		{ state: "idle", expected: "retained_previous" },
+		{ state: "reconciling", expected: "deferred" },
+		{ state: "starting", expected: "deferred" },
+		{ state: "stopping", expected: "deferred" },
+	] as const)("a mode marker with engine $state is $expected", async (row) => {
+		stageConfigChange(
+			{
+				attemptId: "mode-state",
+				startedAt: 1,
+				candidate: { input_mode: "mjpeg", pipeline: "usb_mjpeg" },
+				previous,
+			},
+			{ ...defaultStagingDeps, markerPath },
+		);
+		releaseStagedConfigChange();
+		const configBytes = fs.readFileSync(getConfigFilePath());
+		const markerBytes = fs.readFileSync(markerPath);
+		const snapshot = buildEngineEncodeSnapshot({
+			lifecycle: () => row.state,
+			activeEncode: () => null,
+			liveness: () => undefined,
+		});
+
+		const verdict = await runInflightConfigChangeReconciliation(
+			harness([snapshot]),
+		);
+
+		expect(verdict).toBe(row.expected);
+		expect(fs.readFileSync(getConfigFilePath())).toEqual(configBytes);
+		if (row.expected === "deferred")
+			expect(fs.readFileSync(markerPath)).toEqual(markerBytes);
+		else expect(markerOnDisk()).toBe(false);
 	});
 });
 
