@@ -280,3 +280,36 @@ describe("a socket-only loss after the page connected", () => {
 		expect(pollArmCount()).toBe(0);
 	});
 });
+
+describe("initial connectivity probe", () => {
+	function failProbe(): void {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(() => Promise.reject(new TypeError("Failed to fetch"))),
+		);
+	}
+
+	it("does not take the screen when the socket connected before the probe failed", async () => {
+		// Given a favicon probe that fails (slow or unreachable origin)...
+		failProbe();
+		const mod = await load();
+
+		// ...while the socket reaches the device before the probe settles.
+		emit("connected");
+		await vi.advanceTimersByTimeAsync(1000);
+
+		// Then the takeover must not claim the device is unreachable.
+		expect(mod.getOfflinePageRequest()).toBe("none");
+		expect(mod.getShouldShowOfflinePage()).toBe(false);
+	});
+
+	it("still shows the takeover when the probe fails and nothing connected", async () => {
+		failProbe();
+		const mod = await load();
+
+		await vi.advanceTimersByTimeAsync(1000);
+
+		expect(mod.getOfflinePageRequest()).toBe("immediate");
+		expect(mod.getShouldShowOfflinePage()).toBe(true);
+	});
+});

@@ -322,7 +322,12 @@ async function checkInitialConnectivity() {
 
 	await new Promise((r) => setTimeout(r, 200));
 	const canConnect = await checkConnection(true);
-	if (!canConnect) requestImmediateOfflinePage();
+	// The probe races the socket. A socket that connected meanwhile has already
+	// proven the device reachable, so a slow or failed favicon fetch must not
+	// put up a "can't reach the device" takeover over a live connection.
+	if (!canConnect && connectionState !== "connected") {
+		requestImmediateOfflinePage();
+	}
 }
 
 // ============================================

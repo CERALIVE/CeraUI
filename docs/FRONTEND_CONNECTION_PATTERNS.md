@@ -297,6 +297,8 @@ There is deliberately no connection-lost TOAST. The retired `showConnectionLostT
 
 The band's visibility folds both losses into one verdict, but its wording does not. `getConnectionLossCause()` (pure core `deriveConnectionLossCause(browserOfflineSince)`) names the cause: `"browser-offline"` while the browser's own network is down shows "You're offline" (`pwa.offline`); otherwise `"device-unreachable"` shows "Not connected to the device · Trying again…" (`pwa.deviceNotConnected*`). A dropped socket on a working network only means the device cannot be reached from this browser; the device may still be streaming, so the band must not say the operator is offline or suggest the stream stopped.
 
+The full-page `OfflinePage` follows the same cause. It also appears while the browser is online when the page has never reached the device since loading (for example an installed app opened while the device is off). There it reads "Can't reach the device · Trying again…" (`offline.unreachable*`) with checks for the device's power and for being on its network or hotspot, and a failed manual retry says so instead of "Still Offline". Only `"browser-offline"` keeps "You're Offline" and its internet-connection checklist. The first-load origin probe races the socket, so a probe that fails after the socket has already connected no longer requests the takeover.
+
 ### Banner modes
 
 | Mode | Condition |
