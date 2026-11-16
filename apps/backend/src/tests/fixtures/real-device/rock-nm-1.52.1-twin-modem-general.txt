@@ -1,19 +1,48 @@
-# CONSTRUCTED replay, not a connected-bearer capture.
-# Built from the captured NetworkManager 1.52.1 allowed fields/device-show shapes
-# and the control-port/data-interface mismatch reported in CeraUI issue #431.
-# Neither bench modem had a connected data bearer; connected states and IP
-# interfaces below are constructed. A real connected-bearer capture will be
-# added later as an additional fixture. No device identities were copied.
+# Board: Radxa Rock 5B+ (RK3588); OS: Debian GNU/Linux 13 (trixie); kernel: 7.2.0-ceralive-rk3588.
+# Tools: nmcli 1.52.1; CeraUI package: ceralive-device 2026.11.2-20261110T235725.31b06d5.
+# Captured: 2026-11-15T16:37:06Z; twin connected cellular bearers and complete device inventory.
+# Command (mirrors the #528 production query; capture invocation not recorded): nmcli -t -f GENERAL.DEVICE,GENERAL.IP-IFACE,GENERAL.TYPE,GENERAL.STATE,GENERAL.METERED device show
+# Normalisation: none; no substitutions were needed in this section; whitespace retained.
 
 ##### twin-modem-general
+GENERAL.DEVICE:eth0
+GENERAL.IP-IFACE:eth0
+GENERAL.TYPE:ethernet
+GENERAL.STATE:100 (connected)
+GENERAL.METERED:no (guessed)
+
 GENERAL.DEVICE:cdc-wdm0
-GENERAL.IP-IFACE:wwan0
+GENERAL.IP-IFACE:wwu1u4u3i2
 GENERAL.TYPE:gsm
 GENERAL.STATE:100 (connected)
-GENERAL.METERED:yes
+GENERAL.METERED:yes (guessed)
 
 GENERAL.DEVICE:cdc-wdm1
-GENERAL.IP-IFACE:wwan1
+GENERAL.IP-IFACE:wwu1u4u2i2
 GENERAL.TYPE:gsm
 GENERAL.STATE:100 (connected)
-GENERAL.METERED:yes
+GENERAL.METERED:yes (guessed)
+
+GENERAL.DEVICE:lo
+GENERAL.IP-IFACE:lo
+GENERAL.TYPE:loopback
+GENERAL.STATE:100 (connected (externally))
+GENERAL.METERED:no (guessed)
+
+GENERAL.DEVICE:wlan0
+GENERAL.IP-IFACE:
+GENERAL.TYPE:wifi
+GENERAL.STATE:30 (disconnected)
+GENERAL.METERED:unknown
+
+GENERAL.DEVICE:p2p-dev-wlan0
+GENERAL.IP-IFACE:
+GENERAL.TYPE:wifi-p2p
+GENERAL.STATE:30 (disconnected)
+GENERAL.METERED:unknown
+
+GENERAL.DEVICE:clap-wlan0
+GENERAL.IP-IFACE:
+GENERAL.TYPE:wifi
+GENERAL.STATE:20 (unavailable)
+GENERAL.METERED:unknown
