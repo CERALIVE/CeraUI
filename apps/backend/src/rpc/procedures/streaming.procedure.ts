@@ -633,6 +633,7 @@ type StageApplyNowFieldsInput = {
 		| Extract<ResolveSourceRoutingResult, { ok: true }>
 		| undefined;
 	readonly inputMode: InputMode | undefined;
+	readonly sources: readonly StreamSource[];
 	/** Overrides the destination pipeline cannot honor; the candidate clears them. */
 	readonly derivedClears: readonly PipelineOverrideField[];
 };
@@ -642,6 +643,7 @@ function stageApplyNowFields({
 	config,
 	sourceRouting,
 	inputMode,
+	sources,
 	derivedClears,
 }: StageApplyNowFieldsInput): InflightConfigMarker | undefined {
 	if (input.apply_now !== true) return undefined;
@@ -656,7 +658,16 @@ function stageApplyNowFields({
 	if (!getApplyNowGate().isStreamLive()) return undefined;
 
 	const candidate: StagedConfigFields = {
-		...(input.source === undefined ? {} : { source: input.source }),
+		...(input.source === undefined
+			? {}
+			: {
+					source: input.source,
+					source_stable_id:
+						resolveSelectionAnchor(
+							sourceRouting?.selected_video_input ?? input.source,
+							sources,
+						) ?? null,
+				}),
 		...(input.resolution === undefined ? {} : { resolution: input.resolution }),
 		...(input.framerate === undefined ? {} : { framerate: input.framerate }),
 		// Residue the DESTINATION pipeline cannot honor belongs to this change: a
@@ -674,15 +685,18 @@ function stageApplyNowFields({
 			: { composition: input.composition }),
 		// Routed from the source or the mode: it moves only with them.
 		...(input.pipeline === undefined ? {} : { pipeline: input.pipeline }),
-		...(sourceRouting?.selected_video_input === undefined
+		...(sourceRouting === undefined
 			? {}
-			: { selected_video_input: sourceRouting.selected_video_input }),
+			: { selected_video_input: sourceRouting.selected_video_input ?? null }),
 	};
 	const previous: InflightConfigMarker["previous"] = {
 		...(input.composition === undefined
 			? {}
 			: { composition: config.composition ?? null }),
 		...(config.source === undefined ? {} : { source: config.source }),
+		...(config.source_stable_id === undefined
+			? {}
+			: { source_stable_id: config.source_stable_id }),
 		...(config.resolution === undefined
 			? {}
 			: { resolution: config.resolution }),
@@ -701,8 +715,8 @@ function stageApplyNowFields({
 
 	// Everything the candidate holds is held back from the merge below, so a
 	// field it gains can never also be saved now.
-	for (const field of Object.keys(candidate) as (keyof StagedConfigFields)[])
-		delete input[field];
+	for (const field of Object.keys(candidate))
+		Reflect.deleteProperty(input, field);
 
 	return {
 		attemptId: newAttemptId(),
@@ -1020,6 +1034,7 @@ export const setConfigProcedure = authedProcedure
 			config,
 			sourceRouting,
 			inputMode: effectiveInputMode,
+			sources: sourcesSnapshot,
 			derivedClears: staleOverrides,
 		});
 		if (marker !== undefined) sourceRouting = undefined;
@@ -1246,7 +1261,7 @@ export const setConfigProcedure = authedProcedure
 				...(staged.video_codec === undefined
 					? {}
 					: { video_codec: staged.video_codec }),
-				...(staged.selected_video_input === undefined
+				...(staged.selected_video_input == null
 					? {}
 					: { input_id: staged.selected_video_input }),
 				// Only a source switch hands the engine a pipeline; a mode switch is the

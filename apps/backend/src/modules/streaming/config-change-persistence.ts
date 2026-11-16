@@ -11,15 +11,19 @@ import {
 	type StagedConfigFields,
 	type StagingDeps,
 } from "./config-change-staging.ts";
+import { noteSourceSelectionWrite } from "./sources.ts";
 
 type MutableConfig = Record<string, unknown>;
 
 function writeFields(fields: StagedConfigFields): void {
 	const config = getConfig() as unknown as MutableConfig;
-	for (const [key, value] of Object.entries(fields)) {
+	const { source_stable_id, ...values } = fields;
+	for (const [key, value] of Object.entries(values)) {
 		if (value === null) delete config[key];
 		else if (value !== undefined) config[key] = value;
 	}
+	if (fields.source !== undefined && source_stable_id !== undefined)
+		noteSourceSelectionWrite(fields.source, { stableId: source_stable_id });
 	saveConfig();
 }
 

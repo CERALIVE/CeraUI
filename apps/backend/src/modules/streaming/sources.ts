@@ -1063,20 +1063,25 @@ let engineViewSelectionToken = 0;
  * that persists a stated selection — `streaming.setConfig`, the `start` path's
  * `updateConfig`, and the durable live `switchInput` follow — must call this, or
  * the reconciler may still overrule that selection from a stale view.
+ * An applied transaction supplies the anchor resolved from its operator snapshot;
+ * commit and recovery must never re-resolve that pick from a later device view.
  */
 export function noteSourceSelectionWrite(
 	sourceId?: string,
-	sources?: readonly StreamSource[],
+	sources?: readonly StreamSource[] | { readonly stableId: string | null },
 ): void {
 	sourceSelectionToken += 1;
 	if (sourceId === undefined) return;
 	// A selection with no stable identity writes `undefined`, which CLEARS the
 	// previous device's anchor — leaving it would let a retired camera govern the
 	// resolution of a pick it has nothing to do with.
-	getConfig().source_stable_id = resolveSelectionAnchor(
-		sourceId,
-		sources ?? getSourcesMessage().sources,
-	);
+	getConfig().source_stable_id =
+		sources !== undefined && "stableId" in sources
+			? (sources.stableId ?? undefined)
+			: resolveSelectionAnchor(
+					sourceId,
+					sources ?? getSourcesMessage().sources,
+				);
 }
 
 /**

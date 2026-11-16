@@ -18,7 +18,9 @@ const stagedFieldsSchema = z.object({
 	composition: compositionConfigSchema.nullable().optional(),
 	source: z.string().optional(),
 	pipeline: z.string().optional(),
-	selected_video_input: z.string().optional(),
+	selected_video_input: z.string().nullable().optional(),
+	// Captured from the operator's source snapshot; omission is unknown, null clears.
+	source_stable_id: z.string().nullable().optional(),
 	// `null` is the local storage clear a source switch derives for an override
 	// the destination pipeline cannot honor — never a value sent to the engine.
 	resolution: z.string().nullable().optional(),
@@ -32,14 +34,15 @@ const stagedFieldsSchema = z.object({
 export type StagedConfigFields = z.infer<typeof stagedFieldsSchema>;
 
 /**
- * What the candidate must beat: concrete geometry only. A `null` clear exists
- * only in a candidate, never in the state that was running before it.
+ * What the candidate must beat: concrete geometry and capture input only. A
+ * `null` clear exists only in a candidate, never in the preceding running state.
  */
 const previousFieldsSchema = stagedFieldsSchema
-	.omit({ resolution: true, framerate: true })
+	.omit({ resolution: true, framerate: true, selected_video_input: true })
 	.extend({
 		resolution: z.string().optional(),
 		framerate: z.number().optional(),
+		selected_video_input: z.string().optional(),
 	});
 export type PreviousConfigFields = z.infer<typeof previousFieldsSchema>;
 
@@ -222,15 +225,18 @@ function paramsMatch(
 }
 
 /**
- * Whether a candidate's geometry is CONCRETE. A `null` is a local clear, and no
- * running-engine snapshot can prove it: an ingest publisher may report exactly
- * the geometry the previous source ran, so neither match distinguishes the two
- * sources. Only a stopped engine is authoritative about what it retained.
+ * A local geometry or capture-input clear is not an engine measurement. A
+ * publisher may share the preceding geometry, and an absent active input cannot
+ * confirm that capture selection was cleared. Keep those markers undecided.
  */
-function hasConcreteGeometry(
+function hasConcreteParams(
 	fields: StagedConfigFields,
 ): fields is PreviousConfigFields {
-	return fields.resolution !== null && fields.framerate !== null;
+	return (
+		fields.resolution !== null &&
+		fields.framerate !== null &&
+		fields.selected_video_input !== null
+	);
 }
 
 /**
@@ -257,7 +263,13 @@ export function judgeInflightMarker(
 	// previous-geometry match would retire evidence that cannot prove the switch
 	// failed. A stopped engine was already answered above.
 	const candidate = marker.candidate;
-	if (!hasConcreteGeometry(candidate)) return { action: "wait" };
+	// A source label, even unchanged, cannot recover an uncaptured hardware pick.
+	if (
+		candidate.source !== undefined &&
+		candidate.source_stable_id === undefined
+	)
+		return { action: "wait" };
+	if (!hasConcreteParams(candidate)) return { action: "wait" };
 
 	// Published status measures neither capture mode nor routed pipeline.
 	if (
