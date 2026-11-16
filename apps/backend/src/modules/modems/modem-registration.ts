@@ -671,7 +671,7 @@ async function registerModem(id: number) {
 
 	// Some firmware answers ModemManager's identity query with a bare numeral —
 	// board-measured `manufacturer: 1` / `model: 0`, which rendered as the row
-	// title "0 - 54863". modemHardwareName falls back to another string the SAME
+	// title "0 - 12345". modemHardwareName falls back to another string the SAME
 	// device reported; nothing here is ever invented. See modem-identity.ts.
 	const hwName = modemHardwareName({
 		model: modemInfo["modem.generic.model"],

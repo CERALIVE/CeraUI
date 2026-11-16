@@ -74,7 +74,7 @@ function hilink(): Modem {
 			apn: "3gnet",
 			firmware: "22.333.01.00.00",
 			imei: "000000000089012",
-			serial: "Y4QDU17621000872",
+			serial: "X0XXX00000000111",
 		},
 	} as Modem;
 }
@@ -217,7 +217,7 @@ describe("the secondary disclosure holds everything that moved, and loses nothin
 			"3gnet",
 			"22.333.01.00.00",
 			"000000000089012",
-			"Y4QDU17621000872",
+			"X0XXX00000000111",
 			"192.168.8.1",
 		]) {
 			expect(text, `${reading} is no longer reachable`).toContain(reading);

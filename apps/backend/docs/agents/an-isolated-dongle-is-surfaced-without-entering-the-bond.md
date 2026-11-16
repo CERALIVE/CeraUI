@@ -689,10 +689,10 @@ rather than generalised:**
    runtime (`webpackJsonp`/`__webpack_require__`), so an unrelated `.p="/"` is
    out of reach.
 
-**Board-proven end to end, twice.** (2026-08-18, two Huawei E3372 twins): each
+**Board-proven end to end, twice (serials below are synthetic).** (2026-08-18, two Huawei E3372 twins): each
 twin's button opens its own session, the vendor SPA runs its full API sequence
 through the proxy with ZERO page errors, and each lands on its own unit —
-`Y4QDU17621000872` (`enx0c5b8f279a64`) and `Y4QDU17621000793` (`eth1`).
+`X0XXX00000000111` (`enx0c5b8f279a64`) and `X0XXX00000000222` (`eth1`).
 (2026-08-18, Qualcomm 4G UFI `enx020a53313630`, fresh Playwright context with
 `serviceWorkers: 'block'`): the button RENDERS the vendor SPA instead of
 downloading it — `content-type: text/html`, zero downloads — the operator logs

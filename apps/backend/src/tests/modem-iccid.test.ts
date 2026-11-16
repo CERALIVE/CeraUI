@@ -58,17 +58,17 @@ import { setModemsState } from "../modules/modems/state/modems-state-cache.ts";
 import { modemObjects } from "./support/mm-tree-fixture.ts";
 
 /**
- * The bench Quectel RM530N-GL's REAL ICCID, read live off `ceralive2` on
- * 2026-08-18 by BOTH clients at the same instant:
+ * Synthetic ICCID for the captured board-shaped modem fixtures below.
+ * It retains the 19-digit format and a valid Luhn check digit.
  *
- *   mmcli -i /org/freedesktop/ModemManager1/SIM/2  ->  iccid: 8957123102400060892
- *   busctl … /SIM/2 org.freedesktop.ModemManager1.Sim SimIdentifier
- *                                                  ->  s "8957123102400060892"
+ * The same example must pass through both adapters without alteration:
+ *   mmcli sim.properties.iccid -> 8900000000000000003
+ *   D-Bus SimIdentifier       -> 8900000000000000003
  *
- * Unlike the SIM's own number it is NOT redacted anywhere, so the real value is
- * the right fixture: it is printed on the card and read aloud to carrier support.
+ * The regression needs the captured topology and field-presence cases,
+ * not a subscriber's actual identifier.
  */
-const BOARD_ICCID = "8957123102400060892";
+const BOARD_ICCID = "8900000000000000003";
 
 function baseModem(overrides: Partial<Modem> = {}): Modem {
 	return {
@@ -101,7 +101,7 @@ function projectOne(modem: Modem) {
 }
 
 describe("the mmcli backend projects the ICCID", () => {
-	test("the board's own ICCID reaches the wire entry", () => {
+	test("the fixture's ICCID reaches the wire entry", () => {
 		expect(projectOne(baseModem({ iccid: BOARD_ICCID }))?.iccid).toBe(
 			BOARD_ICCID,
 		);

@@ -58,8 +58,8 @@ vi.mock("svelte-sonner", () => ({
 	toast: { error: vi.fn(), success: vi.fn() },
 }));
 
-/** The bench Quectel RM530N-GL's own SIM, as `mmcli -m 3` reported it live. */
-const BOARD_OWN_NUMBER = "+573115422359";
+/** Synthetic E.164-shaped number with the captured fixture's length. */
+const BOARD_OWN_NUMBER = "+999000000005";
 const SECOND_OWN_NUMBER = "+573001112233";
 
 function modemWith(overrides: Partial<Modem> = {}): Modem {
@@ -124,7 +124,7 @@ describe("hidden by default", () => {
 		).textContent?.trim();
 		shortView.unmount();
 
-		mount(modemWith({ own_numbers: ["+573115422359999"] }), "4");
+		mount(modemWith({ own_numbers: ["+999000000005000"] }), "4");
 		const long = (
 			await screen.findByTestId("modem-own-number-value-0")
 		).textContent?.trim();

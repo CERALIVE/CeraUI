@@ -486,7 +486,7 @@ test.describe("modem UX a11y gate (modem-stack Phase B)", () => {
 							signal_bars: 3,
 							signal_max_bars: 5,
 							apn: "3gnet",
-							serial: "Y4QDU17621000872",
+							serial: "X0XXX00000000111",
 							controls: [
 								{
 									id: "mobile_data",

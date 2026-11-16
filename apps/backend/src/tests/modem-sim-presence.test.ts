@@ -343,7 +343,7 @@ describe("the SIM signals a Quectel row carries all agree", () => {
 				? "modem.messaging.sms.length : 1\nmodem.messaging.sms.value[1] : /org/freedesktop/ModemManager1/SMS/0\n"
 				: [
 						"sms.dbus-path : /org/freedesktop/ModemManager1/SMS/0",
-						"sms.content.number : +573115422359",
+						"sms.content.number : +999000000005",
 						"sms.content.text : hola",
 						"sms.properties.state : received",
 						"sms.properties.pdu-type : deliver",

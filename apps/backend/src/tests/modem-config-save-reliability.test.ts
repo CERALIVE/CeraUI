@@ -46,7 +46,7 @@ function conn(
 		state,
 		uuid,
 		deviceId: "b59f0594669e9a71267b592f4bfeff95d5d8f40b",
-		simId: "89571017025053051654",
+		simId: "89000000000000000004",
 		operatorId: "",
 		apn: "internet",
 		username: "",
