@@ -1247,6 +1247,34 @@ describe("SourceSection — audio source single vs multiple (kept)", () => {
 		expect(audio?.textContent).not.toContain("Coming soon");
 	});
 
+	it("selects another audio device from the Live screen picker before Start", async () => {
+		const onSelectAudioSource = vi.fn();
+		const { getByRole, findByRole } = mount({
+			sources: sourcesMsg([HDMI_CAPTURE]),
+			config: {
+				source: HDMI_CAPTURE.id,
+				pipeline: HDMI_CAPTURE.pipelineId,
+				asrc: "alsa:usbaudio",
+			},
+			isStreaming: false,
+			audioSources: ["alsa:usbaudio", "alsa:hdmi"],
+			selectedAudioSource: "alsa:usbaudio",
+			onSelectAudioSource,
+		});
+
+		const picker = getByRole("combobox", { name: "alsa:usbaudio" });
+		await fireEvent.keyDown(picker, { key: "ArrowDown" });
+		const hdmi = await findByRole("option", {
+			name: "alsa:hdmi",
+			exact: true,
+		});
+		await fireEvent.pointerUp(hdmi);
+		await fireEvent.click(hdmi);
+
+		expect(onSelectAudioSource).toHaveBeenCalledTimes(1);
+		expect(onSelectAudioSource).toHaveBeenCalledWith("alsa:hdmi");
+	});
+
 	it("shows an explanatory placeholder when no audio source is reported", () => {
 		const { container } = mount({ audioSources: [] });
 		expect(
