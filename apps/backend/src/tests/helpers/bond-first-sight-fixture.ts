@@ -4,6 +4,7 @@ import * as time from "../../helpers/time.ts";
 import { resolvePhysicalDevice } from "../../modules/modems/physical-identity.ts";
 import {
 	defaultRouterCellularScanDeps,
+	type RouterCellularScanDeps,
 	refreshUsbNetMarkers,
 } from "../../modules/network/router-cellular-scan.ts";
 import {
@@ -43,10 +44,11 @@ export function firstSightScan(
 		blocked?: readonly string[];
 		buses?: Readonly<Record<string, string>>;
 		devices?: typeof constructedTwins;
+		usbReader?: RouterCellularScanDeps;
 	} = {},
 ) {
 	const clock = { now: 0 };
-	const fixture = constructedTwinDeps(options.devices);
+	const fixture = options.usbReader ?? constructedTwinDeps(options.devices);
 	const reads = new Map<
 		string,
 		{

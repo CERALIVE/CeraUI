@@ -64,7 +64,7 @@ const DEVICE_ID = "41";
 function carrierRejectedModem(config?: Modem["config"]): Modem {
 	return {
 		ifname: "wwan2",
-		name: "RM530N-GL - 16855",
+		name: "RM530N-GL - 23456",
 		model: "RM530N-GL",
 		manufacturer: "Quectel",
 		network_type: {

@@ -3,16 +3,15 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-	handleNetifMonitorEvent,
 	netIfBuildMsg,
 	processIfconfigOutput,
-	refreshRouterCellularState,
 	resetBondOptOut,
 	resetNetifSnapshotForTest,
 	updateNetif,
 } from "../modules/network/network-interfaces.ts";
 import {
 	defaultRouterCellularScanDeps,
+	refreshUsbNetMarkers,
 	resetUsbNetMarkers,
 	usbNetScanCovers,
 } from "../modules/network/router-cellular-scan.ts";
@@ -241,13 +240,8 @@ test("B4 a smaller periodic scan cannot re-hold an admitted USB incarnation", as
 	});
 	await scan.settle();
 	await updateNetif();
-	handleNetifMonitorEvent({
-		type: "device-state",
-		device: MODEM,
-		state: "disconnected",
-	});
 	scan.block("eth9");
-	const periodic = refreshRouterCellularState();
+	const periodic = refreshUsbNetMarkers(["eth9"]);
 	try {
 		await scan.enteredFor("eth9");
 		await updateNetif();

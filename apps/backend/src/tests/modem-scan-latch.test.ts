@@ -51,7 +51,7 @@ const SCAN_SOURCE = new TextDecoder().decode(
 function seedScanningModem(): Modem {
 	const modem: Modem = {
 		ifname: "wwan2",
-		name: "RM530N-GL - 16855",
+		name: "RM530N-GL - 23456",
 		sim_network: "Claro",
 		network_type: { supported: { "4g": "4g" }, active: "4g" },
 		config: {

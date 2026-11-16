@@ -26,7 +26,7 @@ const HILINK_INFORMATION = `<?xml version="1.0" encoding="UTF-8"?>
 <response>
 <DeviceName>E3372</DeviceName>
 <SerialNumber>Y4QDU17621000872</SerialNumber>
-<Imei>866850029360451</Imei>
+<Imei>000000000089012</Imei>
 <Imsi></Imsi>
 <Iccid></Iccid>
 <Msisdn></Msisdn>
@@ -296,7 +296,7 @@ const UFI_OVERVIEW = JSON.stringify({
 	params: {
 		SYSVER: "UFI_HM_SIM1_V016_240828",
 		HWVER: "HW1.0",
-		IMEI: "862901072672633",
+		IMEI: "000000000078901",
 		SSID: "4G-UFI-9627",
 		IMSI: "732123704103087",
 		WANIP: "-",
