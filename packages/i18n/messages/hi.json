@@ -2032,6 +2032,8 @@
 	"osActions.sshResetFailed": "SSH पासवर्ड रीसेट नहीं हो सका। कृपया पुनः प्रयास करें।",
 	"osActions.sshToggleFailed": "SSH सर्वर की स्थिति बदली नहीं जा सकी। कृपया पुनः प्रयास करें।",
 	"osActions.updateFailed": "सॉफ़्टवेयर अपडेट शुरू नहीं हो सका। कृपया पुनः प्रयास करें।",
+	"pwa.deviceNotConnected": "डिवाइस से कनेक्ट नहीं है",
+	"pwa.deviceNotConnectedDescription": "फिर से कोशिश हो रही है…",
 	"pwa.installAndroidDescription": "होम स्क्रीन पर जोड़ने के लिए \"इंस्टॉल\" पर टैप करें",
 	"pwa.installAndroidMenuDescription": "\"होम स्क्रीन पर जोड़ें\" के लिए ब्राउज़र मेनू का उपयोग करें",
 	"pwa.installButton": "इंस्टॉल",

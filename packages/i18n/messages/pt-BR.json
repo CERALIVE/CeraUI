@@ -2035,6 +2035,8 @@
 	"osActions.sshResetFailed": "Não foi possível redefinir a senha SSH. Tente novamente.",
 	"osActions.sshToggleFailed": "Não foi possível alterar o servidor SSH. Tente novamente.",
 	"osActions.updateFailed": "Não foi possível iniciar a atualização de software. Tente novamente.",
+	"pwa.deviceNotConnected": "Sem conexão com o dispositivo",
+	"pwa.deviceNotConnectedDescription": "Tentando novamente…",
 	"pwa.installAndroidDescription": "Toque em \"Instalar\" para adicionar à tela inicial",
 	"pwa.installAndroidMenuDescription": "Use o menu do navegador para \"Adicionar à tela inicial\"",
 	"pwa.installButton": "Instalar",

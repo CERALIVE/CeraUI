@@ -2035,6 +2035,8 @@
 	"osActions.sshResetFailed": "Échec de la réinitialisation du mot de passe SSH. Veuillez réessayer.",
 	"osActions.sshToggleFailed": "Impossible de modifier l'état du serveur SSH. Veuillez réessayer.",
 	"osActions.updateFailed": "Impossible de démarrer la mise à jour logicielle. Veuillez réessayer.",
+	"pwa.deviceNotConnected": "Pas connecté à l'appareil",
+	"pwa.deviceNotConnectedDescription": "Nouvelle tentative…",
 	"pwa.installAndroidDescription": "Appuyez sur \"Installer\" pour ajouter à l'écran d'accueil",
 	"pwa.installAndroidMenuDescription": "Utilisez le menu du navigateur pour \"Ajouter à l'écran d'accueil\"",
 	"pwa.installButton": "Installer",

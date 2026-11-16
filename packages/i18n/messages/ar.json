@@ -2044,6 +2044,8 @@
 	"osActions.sshResetFailed": "فشلت إعادة تعيين كلمة مرور SSH. يرجى المحاولة مرة أخرى.",
 	"osActions.sshToggleFailed": "فشل تغيير حالة خادم SSH. يرجى المحاولة مرة أخرى.",
 	"osActions.updateFailed": "فشل بدء تحديث البرنامج. يرجى المحاولة مرة أخرى.",
+	"pwa.deviceNotConnected": "غير متصل بالجهاز",
+	"pwa.deviceNotConnectedDescription": "جارٍ إعادة المحاولة…",
 	"pwa.installAndroidDescription": "اضغط على \"تثبيت\" للإضافة إلى الشاشة الرئيسية",
 	"pwa.installAndroidMenuDescription": "استخدم قائمة المتصفح لـ \"إضافة إلى الشاشة الرئيسية\"",
 	"pwa.installButton": "تثبيت",

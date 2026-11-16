@@ -1987,6 +1987,8 @@
 	"osActions.sshResetFailed": "无法重置 SSH 密码。请重试。",
 	"osActions.sshToggleFailed": "无法更改 SSH 服务器状态。请重试。",
 	"osActions.updateFailed": "无法开始软件更新。请重试。",
+	"pwa.deviceNotConnected": "未连接到设备",
+	"pwa.deviceNotConnectedDescription": "正在重试…",
 	"pwa.installAndroidDescription": "点击\"安装\"以添加到主屏幕",
 	"pwa.installAndroidMenuDescription": "使用浏览器菜单\"添加到主屏幕\"",
 	"pwa.installButton": "安装",

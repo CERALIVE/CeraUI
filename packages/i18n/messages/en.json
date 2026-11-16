@@ -2032,6 +2032,8 @@
 	"osActions.sshResetFailed": "Failed to reset the SSH password. Please try again.",
 	"osActions.sshToggleFailed": "Failed to change the SSH server. Please try again.",
 	"osActions.updateFailed": "Failed to start the software update. Please try again.",
+	"pwa.deviceNotConnected": "Not connected to the device",
+	"pwa.deviceNotConnectedDescription": "Trying again…",
 	"pwa.installAndroidDescription": "Tap \"Install\" to add to home screen",
 	"pwa.installAndroidMenuDescription": "Use browser menu to \"Add to Home Screen\"",
 	"pwa.installButton": "Install",

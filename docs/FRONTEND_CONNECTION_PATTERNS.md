@@ -295,6 +295,8 @@ An `immediate` request (a page load that could not reach its own origin, or the 
 
 There is deliberately no connection-lost TOAST. The retired `showConnectionLostToast` was byte-identically `showOfflineBanner`, and `PWAStatus` renders that banner unconditionally, so the toast said nothing the band was not already saying, at the same instant. A socket that reconnects inside the window is silent across authenticated and pre-auth UI; a sustained drop reveals the existing treatments after the window.
 
+The band's visibility folds both losses into one verdict, but its wording does not. `getConnectionLossCause()` (pure core `deriveConnectionLossCause(browserOfflineSince)`) names the cause: `"browser-offline"` while the browser's own network is down shows "You're offline" (`pwa.offline`); otherwise `"device-unreachable"` shows "Not connected to the device · Trying again…" (`pwa.deviceNotConnected*`). A dropped socket on a working network only means the device cannot be reached from this browser; the device may still be streaming, so the band must not say the operator is offline or suggest the stream stopped.
+
 ### Banner modes
 
 | Mode | Condition |

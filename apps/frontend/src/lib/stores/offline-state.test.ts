@@ -26,6 +26,7 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 import type { HudSources, HudTimestamps } from "../types/hud";
 
 import {
+	deriveConnectionLossCause,
 	deriveConnectionSurfaceUx,
 	deriveConnectionUx,
 	effectiveDisconnectedSince,
@@ -193,6 +194,18 @@ describe("browser-offline grace input", () => {
 
 		// Then browser loss starts the one grace window; no second timer is created.
 		expect(stamp).toBe(browserOfflineSince);
+	});
+});
+
+describe("deriveConnectionLossCause", () => {
+	it("names the browser as offline only while the browser has no network", () => {
+		expect(deriveConnectionLossCause(CONN_T0)).toBe("browser-offline");
+	});
+
+	it("names the device as unreachable when the browser is online", () => {
+		// A dropped device socket on a working network is not "you're offline":
+		// the device may well still be streaming.
+		expect(deriveConnectionLossCause(null)).toBe("device-unreachable");
 	});
 });
 

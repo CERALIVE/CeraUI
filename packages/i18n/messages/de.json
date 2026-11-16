@@ -2032,6 +2032,8 @@
 	"osActions.sshResetFailed": "Das SSH-Passwort konnte nicht zurückgesetzt werden. Bitte versuchen Sie es erneut.",
 	"osActions.sshToggleFailed": "Der SSH-Server konnte nicht umgeschaltet werden. Bitte versuchen Sie es erneut.",
 	"osActions.updateFailed": "Das Software-Update konnte nicht gestartet werden. Bitte versuchen Sie es erneut.",
+	"pwa.deviceNotConnected": "Nicht mit dem Gerät verbunden",
+	"pwa.deviceNotConnectedDescription": "Wird erneut versucht…",
 	"pwa.installAndroidDescription": "Tippen Sie auf \"Installieren\", um zum Startbildschirm hinzuzufügen",
 	"pwa.installAndroidMenuDescription": "Verwenden Sie das Browser-Menü für \"Zum Startbildschirm hinzufügen\"",
 	"pwa.installButton": "Installieren",

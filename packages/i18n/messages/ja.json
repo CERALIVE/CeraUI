@@ -1987,6 +1987,8 @@
 	"osActions.sshResetFailed": "SSHパスワードをリセットできませんでした。もう一度お試しください。",
 	"osActions.sshToggleFailed": "SSHサーバーを開始または停止できませんでした。もう一度お試しください。",
 	"osActions.updateFailed": "ソフトウェア更新を開始できませんでした。もう一度お試しください。",
+	"pwa.deviceNotConnected": "デバイスに接続されていません",
+	"pwa.deviceNotConnectedDescription": "再試行中…",
 	"pwa.installAndroidDescription": "「インストール」をタップしてホーム画面に追加",
 	"pwa.installAndroidMenuDescription": "ブラウザメニューから「ホーム画面に追加」を使用",
 	"pwa.installButton": "インストール",
