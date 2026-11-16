@@ -59,6 +59,8 @@ const ERROR_KEY: Record<string, string> = {
 	unsupported: "network.wifiMode.error.unsupported",
 	"capability-unproven": "network.wifiMode.error.capabilityUnproven",
 	"activation-failed": "network.wifiMode.error.activationFailed",
+	"hybrid-channel-not-permitted":
+		"network.wifiMode.error.hybridChannelNotPermitted",
 	"not-confirmed": "network.wifiMode.error.notConfirmed",
 	"deactivation-failed": "network.wifiMode.error.deactivationFailed",
 };

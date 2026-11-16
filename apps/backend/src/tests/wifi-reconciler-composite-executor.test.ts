@@ -17,12 +17,14 @@ import {
 	MAC,
 	PROFILE,
 } from "./helpers/wifi-autoconnect-fixture.ts";
+import { mockQualifiedHybridActivation } from "./helpers/wifi-hotspot-test-setup.ts";
 
 const f = autoconnectFixture();
 
 test.each(["hotspot", "hybrid"] as const)(
 	"r5 default executor restores composite %s intent with physical NM pins",
 	async (mode) => {
+		if (mode === "hybrid") mockQualifiedHybridActivation();
 		const owner = `${MAC}@phy0`;
 		const confirmed = Promise.withResolvers<void>();
 		spyOn(defaultAdapterModeDeps, "publishHotspotOutcome").mockImplementation(

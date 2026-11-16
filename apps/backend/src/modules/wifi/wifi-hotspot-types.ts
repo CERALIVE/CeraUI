@@ -35,6 +35,12 @@ import type {
 	DerivedApChannel,
 	WifiChannel,
 } from "./wifi-channels.ts";
+import type {
+	confirmHybridActivation,
+	HYBRID_CHANNEL_REFUSAL,
+	readHybridStationChannel,
+	revalidateConcurrentApInterface,
+} from "./wifi-concurrent-interface.ts";
 import type { HotspotOutcomePublisher } from "./wifi-hotspot-outcome.ts";
 import {
 	DEFAULT_HOTSPOT_SECURITY,
@@ -228,7 +234,15 @@ export type HotspotActivationDeps = {
 	pruneHotspotConns: (macAddress: string, keepUuid: string) => Promise<void>;
 	ensureConcurrentInterface?: (
 		ifname: string,
-	) => Promise<{ ifname: string; created: boolean } | undefined>;
+		admitted?: () => boolean,
+	) => Promise<
+		| { ifname: string; created: boolean }
+		| typeof HYBRID_CHANNEL_REFUSAL
+		| undefined
+	>;
+	readHybridChannel?: typeof readHybridStationChannel;
+	validateConcurrentInterface?: typeof revalidateConcurrentApInterface;
+	confirmHybridActivation?: typeof confirmHybridActivation;
 	releaseConcurrentInterface?: (ifname: string) => Promise<void>;
 	rollbackConcurrentInterface?: (target: {
 		ifname: string;

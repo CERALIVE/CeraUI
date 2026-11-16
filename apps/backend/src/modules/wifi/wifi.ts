@@ -88,6 +88,7 @@ import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 
 export { currentHotspotApIfnames } from "./wifi-hotspot-clients.ts";
 
+import { isQualifiedNmManagedHybrid } from "./wifi-concurrent-interface.ts";
 import { captureWifiFrameIncarnation } from "./wifi-frame-binding.ts";
 import { wifiHotspotConfig, wifiHotspotStop } from "./wifi-hotspot-config.ts";
 import { handleHotspotConn } from "./wifi-hotspot-discovery.ts";
@@ -334,7 +335,10 @@ export function wifiBuildMsg() {
 		if (wifiInterface.degradedReason !== undefined) {
 			entry.degraded_reason = wifiInterface.degradedReason;
 		}
-		if (wifiInterface.supportsApStaConcurrency === true) {
+		if (
+			wifiInterface.supportsApStaConcurrency === true &&
+			isQualifiedNmManagedHybrid(wifiInterface.ifname)
+		) {
 			entry.supports_ap_sta_concurrency = true;
 		}
 		ifs[id] = entry;

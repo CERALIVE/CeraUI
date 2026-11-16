@@ -28,6 +28,10 @@ import { canHotspot } from "../../modules/wifi/wifi-hotspot-types.ts";
 import * as interfaces from "../../modules/wifi/wifi-interfaces.ts";
 import { wifiRadioObservation } from "../../modules/wifi/wifi-radio-observation.ts";
 import { nmcliFieldNames, nmcliFieldOutput } from "./nmcli-field-output.ts";
+import {
+	mockQualifiedHybridDriver,
+	qualifiedHybridEvidence,
+} from "./wifi-hybrid-qualification.ts";
 import type { RadioFixture } from "./wifi-radio-equivalence.ts";
 import { fakeShadowSysfs } from "./wifi-radio-equivalence-shadow.ts";
 
@@ -50,6 +54,7 @@ export const bindingVirtual: BindingRadio = {
 };
 
 export async function virtualBindingFixture() {
+	mockQualifiedHybridDriver();
 	jest.useFakeTimers();
 	const priorModes = getConfig().wifi_modes;
 	getConfig().wifi_modes = {};
@@ -202,6 +207,11 @@ export async function virtualBindingFixture() {
 			} = defaultHotspotDeps;
 			return startHotspotForInterface(BINDING_MAC, row(), {
 				...defaults,
+				...qualifiedHybridEvidence,
+				ensureConcurrentInterface: async () => ({
+					ifname: concurrent.concurrentApIfname(row().ifname),
+					created: false,
+				}),
 				readCapabilities: () => ({ staApCombo: { supported: true } }),
 				credentials: { get: () => undefined, remember: () => undefined },
 				findHotspotConn: async () => undefined,

@@ -56,6 +56,7 @@ export {
 } from "./wifi-adapter-mode-intent.ts";
 
 import { getWifiCapabilitiesForInterface } from "./wifi-capabilities.ts";
+import { isQualifiedNmManagedHybrid } from "./wifi-concurrent-interface.ts";
 import {
 	canHotspot,
 	isApMode,
@@ -143,10 +144,14 @@ export function wifiAdapterModeCapability(
 	) => { staApCombo: { supported: boolean } } | undefined = (ifname) =>
 		getWifiCapabilitiesForInterface(ifname),
 ): WifiAdapterModeCapability {
+	const supported = readCapabilities(wifiInterface.ifname)?.staApCombo
+		.supported;
 	return {
 		supportsHotspot: canHotspot(wifiInterface),
-		staApComboSupported: readCapabilities(wifiInterface.ifname)?.staApCombo
-			.supported,
+		staApComboSupported:
+			supported === true && !isQualifiedNmManagedHybrid(wifiInterface.ifname)
+				? undefined
+				: supported,
 	};
 }
 

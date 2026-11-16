@@ -141,7 +141,7 @@ test.each(["hotspot", "station"] as const)(
 			await f.discover();
 
 			expect(profile()["connection.autoconnect"]).toBe("no");
-			expect(allocate).toHaveBeenCalledTimes(1);
+			expect(allocate).not.toHaveBeenCalled();
 			expect(f.publications).toContain("no");
 			expect(f.publications).not.toContain("yes");
 		} finally {

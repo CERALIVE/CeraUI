@@ -25,8 +25,12 @@ import {
 	retryWifiAdapterReconcile,
 	type WifiRestoreCycle,
 } from "./wifi-adapter-reconciler.ts";
-import { withoutWifiRequestBinding } from "./wifi-binding.ts";
-import { getWifiCapabilityEvidenceRevision } from "./wifi-capabilities.ts";
+import { admitWifiRequest, withoutWifiRequestBinding } from "./wifi-binding.ts";
+import {
+	getWifiCapabilitiesForInterface,
+	getWifiCapabilityEvidenceRevision,
+} from "./wifi-capabilities.ts";
+import { HYBRID_CHANNEL_REFUSAL } from "./wifi-concurrent-interface.ts";
 import { canHotspot } from "./wifi-hotspot-types.ts";
 import { restoreLimitedHotspot } from "./wifi-limited-hotspot-restore.ts";
 import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
@@ -68,9 +72,12 @@ async function applyWifiAdapterModes(
 					const desired =
 						key === undefined ? undefined : readPreferences()[key];
 					if (!verified) limitedVisited = true;
+					const readCapabilities =
+						deps.readCapabilities ?? getWifiCapabilitiesForInterface;
+					const rawCapability = readCapabilities(row.ifname);
 					const capability = wifiAdapterModeCapability(
 						row,
-						deps.readCapabilities,
+						() => rawCapability,
 					);
 					const signature = JSON.stringify([
 						key,
@@ -91,39 +98,58 @@ async function applyWifiAdapterModes(
 							deps.resolveInterfaces()[registryKey] === row &&
 							(key === undefined ? undefined : readPreferences()[key]) ===
 								desired,
-						activate: async (settle) => {
-							if (!verified)
-								return restoreLimitedHotspot(
-									row,
-									deps,
-									readPreferences,
-									cycle?.stopped,
-								);
-							if (desired === undefined || desired === "station")
-								return undefined;
-							if (
-								!isWifiAdapterModeAvailable(
-									desired,
-									wifiAdapterModeOptions(capability),
-								)
-							) {
-								logger.warn(
-									`wifi mode restore: activation-failed on ${row.ifname}; leaving ${desired} pending`,
-								);
-								return undefined;
-							}
-							if (desired === "hotspot" && row.conn && getIsStreaming()) {
-								logger.warn(
-									`wifi mode restore: streaming keeps the station link on ${row.ifname}; leaving hotspot pending`,
-								);
-								return undefined;
-							}
-							return deps.startHotspot(row.id, (...args) => {
-								deps.publishHotspotOutcome(...args);
-								if (args[2].success || args[2].error !== "DEVICE_BUSY")
-									settle(args[2].success);
-							});
-						},
+						activate: (settle) =>
+							admitWifiRequest(
+								row,
+								async () => {
+									if (!verified)
+										return restoreLimitedHotspot(
+											row,
+											deps,
+											readPreferences,
+											cycle?.stopped,
+										);
+									if (desired === undefined || desired === "station")
+										return undefined;
+									if (
+										!isWifiAdapterModeAvailable(
+											desired,
+											wifiAdapterModeOptions(capability),
+										)
+									) {
+										if (
+											desired === "hybrid" &&
+											rawCapability?.staApCombo.supported === true &&
+											capability.staApComboSupported !== true
+										) {
+											const refusal = {
+												success: false,
+												error: "activation-failed",
+												reason: HYBRID_CHANNEL_REFUSAL,
+											} as const;
+											deps.publishHotspotOutcome("start", row.id, refusal);
+											settle(false);
+											return refusal;
+										}
+										logger.warn(
+											`wifi mode restore: activation-failed on ${row.ifname}; leaving ${desired} pending`,
+										);
+										return undefined;
+									}
+									if (desired === "hotspot" && row.conn && getIsStreaming()) {
+										logger.warn(
+											`wifi mode restore: streaming keeps the station link on ${row.ifname}; leaving hotspot pending`,
+										);
+										return undefined;
+									}
+									return deps.startHotspot(row.id, (...args) => {
+										deps.publishHotspotOutcome(...args);
+										if (args[2].success || args[2].error !== "DEVICE_BUSY")
+											settle(args[2].success);
+									});
+								},
+								(refusal) => refusal,
+							),
 					});
 				},
 			);

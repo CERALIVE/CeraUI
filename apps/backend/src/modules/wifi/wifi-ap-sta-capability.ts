@@ -8,6 +8,8 @@
     (at your option) any later version.
 */
 
+import { realpathSync } from "node:fs";
+import { basename } from "node:path";
 import { argMatch, ID_RE } from "../../helpers/run.ts";
 import { runIw } from "./regdomain.ts";
 
@@ -169,4 +171,23 @@ export function setApStaCapabilityRunnerForTest(
 export function resetApStaCapabilityStateForTest(): void {
 	capabilityRunner = defaultRunner;
 	cachedPhySupport.clear();
+}
+
+/** Product qualification, separate from the driver's combinations and legality. */
+export function isQualifiedNmManagedHybrid(
+	ifname: string,
+	frequency?: number,
+): boolean {
+	try {
+		const driver = basename(
+			realpathSync(`/sys/class/net/${argMatch(ID_RE, ifname)}/device/driver`),
+		);
+		// Lift the frequency clause only after the corresponding band is board-qualified.
+		return (
+			driver === "mt7925e" &&
+			(frequency === undefined || (frequency >= 2400 && frequency < 2500))
+		);
+	} catch {
+		return false;
+	}
 }

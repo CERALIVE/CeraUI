@@ -53,6 +53,7 @@ import type {
 	WifiInterfaceWithHotspot,
 } from "../modules/wifi/wifi-hotspot-types.ts";
 import type { WifiInterface } from "../modules/wifi/wifi-interfaces.ts";
+import { mockQualifiedHybridDriver } from "./helpers/wifi-hybrid-qualification.ts";
 
 const MAC = "dc:a6:32:aa:bb:c0";
 const SECOND_MAC = "dc:a6:32:aa:bb:c1";
@@ -72,7 +73,7 @@ function makeIface(
 		id: over.id ?? 0,
 		ifname: over.ifname ?? "wlan0",
 		conn: over.conn ?? null,
-		hw: "Realtek RTL8852BE",
+		hw: "MT7925 fixture radio",
 		available: new Map(),
 		saved: {},
 		savedAll: {},
@@ -157,7 +158,9 @@ const terminalFrames = (recorder: Recorder) =>
 
 let previousConfigFile = "";
 
+let driver: ReturnType<typeof mockQualifiedHybridDriver> | undefined;
 beforeEach(() => {
+	driver = mockQualifiedHybridDriver();
 	previousConfigFile = getConfigFilePath();
 	setConfigFilePath(
 		`${process.env.TMPDIR ?? "/tmp"}/ceraui-wifi-mode-${process.pid}.json`,
@@ -168,6 +171,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+	driver?.mockRestore();
 	getConfig().wifi_modes = undefined;
 	setConfigFilePath(previousConfigFile);
 });

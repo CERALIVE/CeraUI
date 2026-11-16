@@ -55,6 +55,7 @@ import {
 	uplinkFlowsResetEventSchema,
 } from "@ceraui/rpc/schemas";
 import { downloadLog } from "$lib/helpers/SystemHelper";
+import { wifiFailureReason } from "$lib/helpers/wifi-mode-outcome";
 import { isSameWireValue, preserveWireIdentity } from "$lib/rpc/value-identity";
 import { authStatusStore } from "$lib/stores/auth-status.svelte";
 import { ingestBuffering } from "$lib/stores/buffering.svelte";
@@ -900,7 +901,7 @@ function handleMessage(
 					if (config.success) {
 						confirmOperation(key);
 					} else {
-						failOperation(key, config.error ?? "failed");
+						failOperation(key, wifiFailureReason(config) ?? "failed");
 					}
 				}
 			}
@@ -924,7 +925,10 @@ function handleMessage(
 				} else if (wifiData.adapter_mode.error !== undefined) {
 					// A reconnect can clear the latch before its terminal arrives.
 					if (getOperationPhase(key) === "idle") beginOperation(key);
-					failOperation(key, wifiData.adapter_mode.error);
+					failOperation(
+						key,
+						wifiFailureReason(wifiData.adapter_mode) ?? "failed",
+					);
 				} else if (wifiData.adapter_mode.success === true) {
 					if (getOperationPhase(key) === "idle")
 						beginOperation(key, wifiData.adapter_mode.mode);

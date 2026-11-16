@@ -94,6 +94,7 @@ let beforeWrite: ((args: readonly string[]) => Promise<void>) | undefined;
 let unreadableSettings = false;
 let restoreShadow: () => Promise<void>;
 let resources: ReturnType<typeof firstApInstances>;
+let settleDiscoveryRace: (() => Promise<void>) | undefined;
 
 function profile(mac = "", ifname = "wlan0"): Record<string, string> {
 	return {
@@ -187,6 +188,7 @@ beforeEach(async () => {
 	afterWrite = undefined;
 	beforeWrite = undefined;
 	unreadableSettings = false;
+	settleDiscoveryRace = undefined;
 	devices = "wlan0:wifi:disconnected:";
 	restoreShadow = await fakeShadowSysfs(() => [
 		{
@@ -320,6 +322,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+	await settleDiscoveryRace?.();
 	stopWifiUpdateLoopForTest();
 	wifiCancelScanRefresh();
 	wifiRadioObservation.stop();
@@ -732,6 +735,8 @@ test("the same owner's normalized UUID hint remains usable", async () => {
 test("pending prepare cannot repair a UUID claimed by competing discovery", async () => {
 	jest.useFakeTimers();
 	const iface = radio();
+	const candidateProfile = profile(B);
+	profiles.set(FOREIGN, candidateProfile);
 	addWifiInterface(A, {
 		...iface,
 		id: 1,
@@ -740,36 +745,39 @@ test("pending prepare cannot repair a UUID claimed by competing discovery", asyn
 	});
 	const lookupGate = Promise.withResolvers<void>();
 	const lookupEntered = Promise.withResolvers<void>();
-	const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
-	const entered = [
-		Promise.withResolvers<void>(),
-		Promise.withResolvers<void>(),
-	];
-	let priorityCalls = 0;
+	const priorityGate = Promise.withResolvers<void>();
+	const priorityEntered = Promise.withResolvers<void>();
 	beforeWrite = async (args) => {
 		if (args[3] !== "connection.autoconnect-priority") return;
-		const index = priorityCalls++;
-		entered[index]?.resolve();
-		await gates[index]?.promise;
+		priorityEntered.resolve();
+		await priorityGate.promise;
 	};
 	const deps = activationDeps();
 	deps.findHotspotConn = async (mac, stored) => {
+		const candidate = await discovery.findHotspotConnForAdapter(mac, stored);
 		lookupEntered.resolve();
 		await lookupGate.promise;
-		return discovery.findHotspotConnForAdapter(mac, stored);
+		return candidate;
 	};
 
 	const prepare = prepareHotspotForInterface(B, iface, {}, deps);
+	const pending: Promise<unknown>[] = [prepare];
+	settleDiscoveryRace = async () => {
+		lookupGate.resolve();
+		priorityGate.resolve();
+		await Promise.allSettled(pending);
+	};
 	await lookupEntered.promise;
+	candidateProfile["802-11-wireless.mac-address"] = "";
 	const claimA = discovery.handleHotspotConn(A, FOREIGN, { active: true });
-	await entered[0]?.promise;
+	pending.push(claimA);
+	await priorityEntered.promise;
+	priorityGate.resolve();
+	await claimA;
 	const claimB = discovery.handleHotspotConn(undefined, FOREIGN, {
 		active: true,
 	});
-	await entered[1]?.promise;
-	gates[0]?.resolve();
-	await claimA;
-	gates[1]?.resolve();
+	pending.push(claimB);
 	await claimB;
 	lookupGate.resolve();
 	const result = await prepare;
@@ -819,6 +827,7 @@ for (const complete of [false, true]) {
 test("pending prepare still adopts a legitimate single-adapter discovery", async () => {
 	jest.useFakeTimers();
 	const iface = radio();
+	profiles.set(FOREIGN, profile(B));
 	const lookupGate = Promise.withResolvers<void>();
 	const lookupEntered = Promise.withResolvers<void>();
 	const deps = activationDeps();
@@ -831,6 +840,8 @@ test("pending prepare still adopts a legitimate single-adapter discovery", async
 	await lookupEntered.promise;
 	await discovery.handleHotspotConn(undefined, FOREIGN, { active: true });
 	lookupGate.resolve();
+	await prepare;
+	await discovery.handleHotspotConn(undefined, FOREIGN, { active: true });
 
 	expect(await prepare).toEqual({
 		success: true,

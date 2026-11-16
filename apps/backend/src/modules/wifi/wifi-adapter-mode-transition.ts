@@ -65,6 +65,11 @@ export { defaultAdapterModeDeps } from "./wifi-adapter-mode-deps.ts";
 
 import { resolveWifiAdapterOwner } from "./wifi-adapter-owner.ts";
 import { admitWifiRequest, withoutWifiRequestBinding } from "./wifi-binding.ts";
+import { getWifiCapabilitiesForInterface } from "./wifi-capabilities.ts";
+import {
+	HYBRID_CHANNEL_REFUSAL,
+	type readHybridStationChannel,
+} from "./wifi-concurrent-interface.ts";
 import { captureWifiFrameIncarnation } from "./wifi-frame-binding.ts";
 import { withWifiFrameIncarnation } from "./wifi-frame-incarnation.ts";
 
@@ -82,6 +87,7 @@ export {
 } from "./wifi-adapter-mode-restore.ts";
 
 export interface AdapterModeTransitionDeps {
+	readonly readHybridChannel?: typeof readHybridStationChannel;
 	readonly resolveInterfaces: () => Readonly<Record<string, WifiInterface>>;
 	readonly readCapabilities?: (
 		ifname: string,
@@ -136,7 +142,11 @@ function chainModeTerminal(
 			device,
 			outcome.success
 				? { success: true, mode: target }
-				: { success: false, error: outcome.error },
+				: {
+						success: false,
+						error: outcome.error,
+						...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
+					},
 		);
 	};
 }
@@ -212,10 +222,26 @@ export async function setWifiAdapterMode(
 				wifiInterface.degradedReason === "permanent-mac-unresolved")
 		)
 			return refuse(id, "radio-unverified", publishRefusal);
-		const options = wifiAdapterModeOptions(
-			wifiAdapterModeCapability(wifiInterface, deps.readCapabilities),
+		const rawCapability = (
+			deps.readCapabilities ?? getWifiCapabilitiesForInterface
+		)(wifiInterface.ifname);
+		const capability = wifiAdapterModeCapability(
+			wifiInterface,
+			() => rawCapability,
 		);
+		const options = wifiAdapterModeOptions(capability);
 		if (!isWifiAdapterModeAvailable(target, options)) {
+			if (
+				target === "hybrid" &&
+				rawCapability?.staApCombo.supported === true &&
+				capability.staApComboSupported !== true
+			)
+				return refuse(
+					id,
+					"activation-failed",
+					publishRefusal,
+					HYBRID_CHANNEL_REFUSAL,
+				);
 			const reason = options.find((option) => option.mode === target)?.reason;
 			return refuse(
 				id,
@@ -223,6 +249,17 @@ export async function setWifiAdapterMode(
 				publishRefusal,
 			);
 		}
+		if (
+			target === "hybrid" &&
+			deps.readHybridChannel &&
+			!(await deps.readHybridChannel(wifiInterface.ifname))
+		)
+			return refuse(
+				wifiInterface.id,
+				"activation-failed",
+				publishRefusal,
+				HYBRID_CHANNEL_REFUSAL,
+			);
 
 		const current = observedWifiAdapterMode(wifiInterface);
 		if (

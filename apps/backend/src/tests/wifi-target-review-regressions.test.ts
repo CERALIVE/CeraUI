@@ -87,7 +87,8 @@ test("a replacement cannot inherit a retained adoption record", async () => {
 	expect(f.objects.get("clap-wlan0")?.ifindex).toBe(99);
 });
 
-test("a lost receipt without a discovery witness grants no adoption authority", async () => {
+test("a lost creation receipt grants neither creation nor deletion authority", async () => {
+	// Production ordering: first discovery (no leg) precedes the lost-receipt leftover.
 	const f = await targetFixture({ existing: false });
 	concurrent.setConcurrentInterfaceDepsForTest(
 		async (command, args) => {
@@ -95,11 +96,30 @@ test("a lost receipt without a discovery witness grants no adoption authority", 
 			return args.includes("add") ? "" : result;
 		},
 		async () => true,
+		async () => "fixture-boot",
 	);
 	expect(await concurrent.ensureConcurrentApInterface("wlan0")).toBeUndefined();
 	expect(f.objects.has("clap-wlan0")).toBe(true);
-	concurrent.resetConcurrentInterfaceDepsForTest();
-	concurrent.setConcurrentInterfaceDepsForTest(f.run, async () => true);
+	f.calls.length = 0;
+	expect((await concurrent.selectConcurrentApInterface("wlan0"))?.created).toBe(
+		false,
+	);
+	await concurrent.releaseConcurrentApInterface("clap-wlan0");
+	expect(
+		f.calls.filter((args) => args.includes("add") || args.at(-1) === "del"),
+	).toEqual([]);
+	expect([...f.objects.keys()]).toEqual([
+		"wlan0",
+		"clap-sentinel",
+		"clap-wlan0",
+	]);
+});
+
+test("a same-index replacement of a witnessed leg cannot be adopted", async () => {
+	const f = await targetFixture();
+	const witnessed = f.objects.get("clap-wlan0");
+	if (!witnessed) throw new Error("Missing witnessed fixture leg");
+	f.objects.set("clap-wlan0", { ...witnessed, wdev: "0x77" });
 	f.calls.length = 0;
 	expect(await concurrent.selectConcurrentApInterface("wlan0")).toBeUndefined();
 	expect(
@@ -108,9 +128,5 @@ test("a lost receipt without a discovery witness grants no adoption authority", 
 				args[0] === "nmcli" || args.includes("add") || args.at(-1) === "del",
 		),
 	).toEqual([]);
-	expect([...f.objects.keys()]).toEqual([
-		"wlan0",
-		"clap-sentinel",
-		"clap-wlan0",
-	]);
+	expect(f.objects.get("clap-wlan0")?.wdev).toBe("0x77");
 });

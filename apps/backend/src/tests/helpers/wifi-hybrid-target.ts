@@ -50,7 +50,9 @@ export async function targetFixture(
 	const bindings = new Map<string, string>();
 	let state = "30 (disconnected)";
 	let active = "";
+	let station = "station-uuid";
 	let frequency = 2412;
+	let channel = 1;
 	let flags = "";
 	let reg =
 		"global\ncountry 00: DFS-UNSET\n (2402 - 2472 @ 40), (6, 20), (N/A)";
@@ -59,8 +61,13 @@ export async function targetFixture(
 		options.permanentMac === null
 			? undefined
 			: (options.permanentMac ?? "dc:a6:32:aa:bb:c0");
-	let reportedTarget: { ifindex?: number; wiphy?: number; ifname?: string } =
-		{};
+	let reportedTarget: {
+		ifindex?: number;
+		wiphy?: number;
+		ifname?: string;
+		frequency?: number;
+		channel?: number;
+	} = {};
 	let reportedParentIndex: number | undefined;
 	const driver = spyOn(fs, "realpathSync").mockReturnValue(
 		"/sys/bus/pci/drivers/mt7925e",
@@ -90,7 +97,7 @@ export async function targetFixture(
 			if (field === "GENERAL.NM-MANAGED")
 				return name === "wlan0" || managed ? "yes" : "no";
 			if (field === "GENERAL.CON-UUID")
-				return name === "wlan0" ? "station-uuid" : active;
+				return name === "wlan0" ? station : active;
 			if (field === "GENERAL.AUTOCONNECT") return autoconnect;
 			return "";
 		}),
@@ -127,7 +134,7 @@ export async function targetFixture(
 		}
 		if (args[0] === "reg") return reg;
 		if (args[0] === "phy")
-			return `Wiphy phy0\n ${combination}\n Band 1:\n * ${frequency} MHz [${frequency === 2412 ? 1 : 128}] (20.0 dBm) ${flags}\n`;
+			return `Wiphy phy0\n ${combination}\n Band 1:\n * ${frequency} MHz [${channel}] (20.0 dBm) ${flags}\n`;
 		if (args.length === 1 && args[0] === "dev")
 			return [...objects]
 				.map(
@@ -145,7 +152,7 @@ export async function targetFixture(
 		if (!entry) throw new Error("Fixture interface absent");
 		const [name, value] = entry;
 		const reported = name === "clap-wlan0" ? reportedTarget : {};
-		return `Interface ${reported.ifname ?? name}\n ifindex ${name === "wlan0" ? (reportedParentIndex ?? value.ifindex) : (reported.ifindex ?? value.ifindex)}\n wdev ${value.wdev}\n wiphy ${reported.wiphy ?? 0}\n type ${value.type}\n channel ${frequency === 2412 ? 1 : 128} (${frequency} MHz)\n`;
+		return `Interface ${reported.ifname ?? name}\n ifindex ${name === "wlan0" ? (reportedParentIndex ?? value.ifindex) : (reported.ifindex ?? value.ifindex)}\n wdev ${value.wdev}\n wiphy ${reported.wiphy ?? 0}\n type ${value.type}\n channel ${reported.channel ?? channel} (${reported.frequency ?? frequency} MHz)\n`;
 	};
 	concurrent.setConcurrentInterfaceDepsForTest(
 		run,
@@ -200,17 +207,29 @@ export async function targetFixture(
 				{ ifname: "wlan0", ...(row ? { row } : {}) },
 			]),
 		autoconnect: () => autoconnect,
+		/** An operator or external tool changing the device setting, not a CeraUI write. */
+		externalAutoconnect: (value: string) => {
+			autoconnect = value;
+		},
 		state: (value: string) => {
 			state = value;
 		},
 		active: (value: string) => {
 			active = value;
 		},
+		station: (value: string) => {
+			station = value;
+		},
 		driver: (value: string) => {
 			driver.mockReturnValue(`/sys/bus/pci/drivers/${value}`);
 		},
-		frequency: (value: number, restrictions = "") => {
+		frequency: (
+			value: number,
+			restrictions = "",
+			announcedChannel = value === 2412 ? 1 : 128,
+		) => {
 			frequency = value;
+			channel = announcedChannel;
 			flags = restrictions;
 		},
 		reg: (value: string) => {

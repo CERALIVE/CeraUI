@@ -21,6 +21,7 @@ import {
 	addWifiInterface,
 	removeWifiInterface,
 } from "../modules/wifi/wifi-connections.ts";
+import { mockQualifiedHybridDriver } from "./helpers/wifi-hybrid-qualification.ts";
 
 afterEach(resetApStaCapabilityStateForTest);
 
@@ -168,6 +169,7 @@ describe("AP+STA capability wire projection", () => {
 			savedAll: {},
 		});
 
+		const driver = mockQualifiedHybridDriver();
 		try {
 			const message = wifiBuildMsg();
 			expect(message[21]?.supports_ap_sta_concurrency).toBe(true);
@@ -176,8 +178,47 @@ describe("AP+STA capability wire projection", () => {
 			expect(message[21]?.hotspot?.name).toBe("CERALIVE_TEST");
 			expect(message[22]?.supports_ap_sta_concurrency).toBeUndefined();
 		} finally {
+			driver.mockRestore();
 			removeWifiInterface(capableMac);
 			removeWifiInterface(legacyMac);
 		}
 	});
+
+	for (const driver of ["missing", "rtw89_8852be"] as const) {
+		test(`withholds hybrid capability for a ${driver} driver while retaining the station`, () => {
+			const mac = "dc:a6:32:00:00:21";
+			const driverRead = mockQualifiedHybridDriver();
+			if (driver === "missing") {
+				const missingDriver = () => {
+					throw Object.assign(new Error("Fixture driver is absent"), {
+						code: "ENOENT",
+					});
+				};
+				driverRead.mockImplementation(
+					Object.assign(missingDriver, { native: missingDriver }),
+				);
+			} else {
+				driverRead.mockReturnValue(`/sys/bus/pci/drivers/${driver}`);
+			}
+			addWifiInterface(mac, {
+				id: 21,
+				ifname: "wlan21",
+				conn: "station-uuid",
+				hw: "capable",
+				available: new Map(),
+				saved: {},
+				savedAll: {},
+				supportsApStaConcurrency: true,
+			});
+
+			try {
+				const message = wifiBuildMsg();
+				expect(message[21]?.supports_ap_sta_concurrency).toBeUndefined();
+				expect(message[21]?.conn).toBe("station-uuid");
+			} finally {
+				driverRead.mockRestore();
+				removeWifiInterface(mac);
+			}
+		});
+	}
 });

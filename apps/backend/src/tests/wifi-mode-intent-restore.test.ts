@@ -195,7 +195,7 @@ async function publishRealCapabilities(): Promise<void> {
 	const fixture = (name: string) =>
 		readFile(join(import.meta.dir, "fixtures", "wifi", name), "utf8");
 	const [phy, reg, dev] = await Promise.all([
-		fixture("iw-phy-rock5bplus-rtl8852be.txt"),
+		fixture("iw-phy-mt7925-nm-hybrid.txt"),
 		fixture("iw-reg-get-rock5bplus.txt"),
 		fixture("iw-dev-rock5bplus.txt"),
 	]);

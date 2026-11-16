@@ -11,9 +11,11 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { WifiAdapterMode } from "@ceraui/rpc/schemas";
+import { run } from "../helpers/run.ts";
 import * as config from "../modules/config.ts";
 import * as nm from "../modules/network/network-manager.ts";
 import * as streaming from "../modules/streaming/streaming.ts";
+import { runIw } from "../modules/wifi/regdomain.ts";
 import {
 	onWifiChange,
 	setWifiState,
@@ -34,6 +36,7 @@ import {
 } from "../modules/wifi/wifi-adapter-mode-transition.ts";
 import * as legacy from "../modules/wifi/wifi-ap-sta-capability.ts";
 import * as caps from "../modules/wifi/wifi-capabilities.ts";
+import * as concurrent from "../modules/wifi/wifi-concurrent-interface.ts";
 import * as connections from "../modules/wifi/wifi-connections.ts";
 import * as devices from "../modules/wifi/wifi-device-list.ts";
 import {
@@ -83,7 +86,7 @@ async function prove(
 	const fixture = (name: string) =>
 		readFile(join(import.meta.dir, "fixtures/wifi", name), "utf8");
 	const [phy, reg, dev] = await Promise.all([
-		fixture("iw-phy-rock5bplus-rtl8852be.txt"),
+		fixture("iw-phy-mt7925-nm-hybrid.txt"),
 		fixture("iw-reg-get-rock5bplus.txt"),
 		fixture("iw-dev-rock5bplus.txt"),
 	]);
@@ -97,8 +100,8 @@ async function prove(
 							phyName === "phy0" ? "wiphy index: 0" : "wiphy index: 1",
 						)
 						.replace(
-							"total <= 2, #channels <= 1",
-							`total <= ${supported ? 2 : 1}, #channels <= 1`,
+							"total <= 3, #channels <= 1",
+							`total <= ${supported ? 3 : 1}, #channels <= 1`,
 						)
 				: args[0] === "reg"
 					? reg
@@ -113,6 +116,12 @@ async function prove(
 
 beforeEach(async () => {
 	jest.useFakeTimers();
+	// Only the first-discovery wdev witness read is faked; other platform reads are unchanged.
+	concurrent.setConcurrentInterfaceDepsForTest(async (command, args) => {
+		if (command === "iw" && args[1]?.startsWith("clap-") && args[2] === "info")
+			throw new Error("No platform wdev in this suite");
+		return command === "iw" ? runIw(args) : run(command, args);
+	}, null);
 	restoreShadow = await fakeShadowSysfs(() => [
 		{
 			ifname: "wlan0",
@@ -201,6 +210,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+	concurrent.setConcurrentInterfaceDepsForTest(null, null);
 	cancel?.();
 	cancel = undefined;
 	unsubscribe?.();

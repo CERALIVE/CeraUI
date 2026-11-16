@@ -18,6 +18,10 @@ import type { HotspotActivationDeps } from "../../modules/wifi/wifi-hotspot-type
 import { firstApInstances } from "./wifi-first-ap-instances.ts";
 import { decodeProfile, encodeProfile } from "./wifi-first-ap-keyfile-codec.ts";
 import { wifiFrameFixture } from "./wifi-frame-fixture.ts";
+import {
+	mockQualifiedHybridDriver,
+	qualifiedHybridEvidence,
+} from "./wifi-hybrid-qualification.ts";
 
 export const MAC = "dc:a6:32:aa:bb:c0";
 export const OTHER_UUID = "11111111-1111-4111-8111-111111111111";
@@ -37,6 +41,7 @@ export async function firstAp(
 	hybrid = false,
 ) {
 	const state = await wifiFrameFixture(false);
+	if (hybrid) mockQualifiedHybridDriver();
 	const secret = `synthetic-${crypto.randomUUID()}`;
 	delete state.row.hotspot.conn;
 	state.row.hotspot.name = "First AP";
@@ -221,6 +226,7 @@ export async function firstAp(
 	});
 	const deps: HotspotActivationDeps = {
 		...defaultHotspotDeps,
+		...(hybrid ? qualifiedHybridEvidence : {}),
 		readCapabilities: () => ({ staApCombo: { supported: hybrid } }),
 		preferConcurrentAp: () => hybrid,
 		ensureConcurrentInterface: async () => ({

@@ -18,7 +18,7 @@ const bindingFields = {
 	"802-11-wireless-security.key-mgmt": "wpa-psk",
 	"802-11-wireless-security.pmf": "disable",
 };
-// Keep the recorded baseline immutable; replace only the approved B5 bindings.
+// Keep the recorded baseline immutable; apply the approved bindings and refresh.
 const verifiedTranscript = {
 	...golden.transcripts["verified fresh"],
 	calls: golden.transcripts["verified fresh"].calls.map((call, index) =>
@@ -32,9 +32,11 @@ const transcripts: Readonly<
 	"verified fresh": verifiedTranscript,
 	rename: {
 		...golden.transcripts.rename,
-		calls: golden.transcripts.rename.calls.map((call, index) =>
-			index === 9 || index === 20 ? [call[0], call[1], bindingFields] : call,
-		),
+		calls: golden.transcripts.rename.calls.flatMap((call, index) => {
+			if (index === 20)
+				return [["wifiUpdateSavedConns"], [call[0], call[1], bindingFields]];
+			return [index === 9 ? [call[0], call[1], bindingFields] : call];
+		}),
 	},
 	replug: {
 		...golden.transcripts.replug,
@@ -165,6 +167,10 @@ for (const fixture of radioEquivalenceCases) {
 			return;
 		}
 		const bytes = JSON.stringify(transcript);
+		if (fixture.name === "rename")
+			expect(JSON.stringify(transcript.frames)).toBe(
+				JSON.stringify(golden.transcripts.rename.frames),
+			);
 		expect(bytes).toBe(
 			JSON.stringify(firstApTranscript(transcripts[fixture.name])),
 		);

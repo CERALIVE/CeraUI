@@ -46,6 +46,7 @@
   matching a key an existing caller (or test) already holds.
 */
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { MacAddress } from "../network/network-manager.ts";
 import {
 	type DeviceLockResult,
@@ -60,6 +61,19 @@ import type { WifiInterface } from "./wifi-interfaces.ts";
 
 /** Opaque-by-convention lock key. Never build one by hand. */
 export type WifiAdapterLockKey = string;
+type WifiLockOwner = {
+	readonly key: string;
+	live: boolean;
+	readonly parent: WifiLockOwner | undefined;
+};
+const lockOwner = new AsyncLocalStorage<WifiLockOwner>();
+
+/** Awaited normalization may run inline only for the transaction holding this key. */
+export function ownsWifiAdapterLock(key: WifiAdapterLockKey): boolean {
+	for (let owner = lockOwner.getStore(); owner; owner = owner.parent)
+		if (owner.live && owner.key === key) return true;
+	return false;
+}
 
 /**
  * Derive the canonical lock key for an adapter from its permanent hardware
@@ -124,13 +138,19 @@ export function withWifiAdapterLock<T>(
 	fn: () => Promise<T>,
 ): Promise<DeviceLockResult<T>> {
 	return withDeviceLock(key, async () => {
+		const owner: WifiLockOwner = {
+			key,
+			live: true,
+			parent: lockOwner.getStore(),
+		};
 		const release = retainWifiAdapterOwners(
 			key,
 			getWifiInterfacesByMacAddress(),
 		);
 		try {
-			return await fn();
+			return await lockOwner.run(owner, fn);
 		} finally {
+			owner.live = false;
 			release();
 		}
 	});

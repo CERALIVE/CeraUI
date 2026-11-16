@@ -59,6 +59,7 @@ import {
 	PORT,
 	PROFILE,
 } from "./wifi-autoconnect-network.ts";
+import { mockQualifiedHybridDriver } from "./wifi-hybrid-qualification.ts";
 import { isolateWifiRegistry, restoreWifiRegistry } from "./wifi-registry.ts";
 
 export {
@@ -180,6 +181,7 @@ export function autoconnectFixture() {
 	}
 
 	beforeEach(async () => {
+		mockQualifiedHybridDriver();
 		inherited = isolateWifiRegistry();
 		wifiRadioObservation.stop();
 		await wifiRadioObservation.settled;

@@ -155,7 +155,7 @@ owner keys and `wifi_modes`.
 Hybrid profiles explicitly remain autoconnect off. Direct Starts retain their
 mode intent even when no safe autoconnect path exists; B2 restores that intent.
 
-Before discovery creates virtual interfaces or publishes rows, it examines
+Before discovery publishes rows, it examines
 every persisted current and historical owned AP UUID under Start's canonical
 adapter lock, including the profile read, policy check and write. A busy lock
 withholds the discovery pass until a later refresh. Unsafe autonomous
@@ -210,6 +210,40 @@ does not autoconnect there. Bound restore rewrites the port pin. Rolling back
 to an older backend retains that pin, so a moved USB adapter may require a
 fresh hotspot Start. Hybrid and pathless restore depend on CeraUI starting.
 These are host-tested policies, not physical NetworkManager qualification.
+
+### Concurrent target reuse [PARTIAL; host-tested, VM/W6 pending]
+
+`wifi-concurrent-interface.ts` retains the public import surface; the one
+NM-managed hybrid selector lives in `wifi-hybrid-target-selector.ts`.
+Driver combinations, grouped/total/P2P occupancy and exact-phy derived AP
+channels are necessary; the separate card qualification check is also required.
+Neither a board model nor a parser-positive unqualified card enables hybrid.
+Discovery only observes capability and existing AP UUID/phy associations.
+Saved hybrid restore or an admitted hybrid Start may adopt the existing eligible
+leg using the immutable first-discovery boot/ifindex witness. Its same-boot record
+must match on later reuse. An admitted Start or saved restore can create an absent
+leg after the same qualification, occupancy, parent and binding checks. A leg
+appearing after absence was admitted is foreign and cannot be borrowed. Missing
+identity or foreign evidence still refuses with O3. Exact nl80211 replies alone
+own creation cleanup; parent and exact-object continuity also fence the created
+leg's autoconnect write and later lifecycle checks.
+Adoption and name recognition never confer deletion authority.
+Selection binds the record to the object it admitted and rechecks identity and
+bindings under the lock around its device write; Start rechecks before each
+profile write, so a replacement or foreign binding is refused before mutation.
+
+The selected leg's runtime device-autoconnect change records its prior value.
+Stop/rollback restore only that exact current object and retain its netdev.
+Retained created legs remain disarmed. The existing record store, runtime policy
+and station/regulatory checks have separate modules without a second reconciler.
+Legacy AP details and UUID Stop remain available independently of offering.
+Profile priority/binding normalization finishes under the shared adapter lock;
+background discovery defers while it is busy, while owned refresh runs inline.
+SCC comes from `#channels`; its effective channel comes from the live associated
+station and current regulatory derivation. Saved channel intent is preserved.
+An illegal or unqualified associated channel refuses AP up through the existing
+reason field, without changing the station or country. See
+`docs/AP-STA-CONCURRENT-MODE.md` for the lifecycle and remaining qualification.
 
 Configure RPC awaits the shared configuration transaction before returning its
 existing acknowledgement. The shared dispatcher returns that completion while

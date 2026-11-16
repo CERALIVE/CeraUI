@@ -79,3 +79,32 @@ export function createdInterfaceReceipt(
 		? { ifindex: String(ifindex), wdev: `0x${wdev.toString(16)}` }
 		: undefined;
 }
+
+/** Wi-Fi name candidates; NM determines radio type, and clap AP legs are separate. */
+export function isSupportedWifiIfname(ifname: string): boolean {
+	return ifname.startsWith("wl");
+}
+
+export function concurrentApIfname(parentIfname: string): string {
+	return `clap-${parentIfname}`.slice(0, 15);
+}
+
+export function isConcurrentApIfname(ifname: string): boolean {
+	return ifname.startsWith("clap-");
+}
+
+export function concurrentHotspotBindingFields(
+	ifname: string,
+): Record<string, string> {
+	return {
+		"connection.interface-name": concurrentApIfname(ifname),
+		"802-11-wireless.mac-address": "",
+		"802-11-wireless-security.pmf": "disable",
+	};
+}
+
+export function interfaceIdentity(info: string): CreatedInterface | undefined {
+	const ifindex = info.match(/^\s*ifindex\s+([1-9]\d*)\s*$/m)?.[1];
+	const wdev = info.match(/^\s*wdev\s+(0x[0-9a-f]+)\s*$/im)?.[1];
+	return ifindex && wdev ? { ifindex, wdev } : undefined;
+}

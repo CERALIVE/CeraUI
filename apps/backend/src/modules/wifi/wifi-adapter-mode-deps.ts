@@ -9,6 +9,7 @@ import {
 } from "./wifi-adapter-mode.ts";
 import { publishAdapterModeOutcome } from "./wifi-adapter-mode-outcome.ts";
 import type { AdapterModeTransitionDeps } from "./wifi-adapter-mode-transition.ts";
+import { readHybridStationChannel } from "./wifi-concurrent-interface.ts";
 import { getWifiInterfacesByMacAddress } from "./wifi-connections.ts";
 import {
 	defaultHotspotDeps,
@@ -36,6 +37,7 @@ async function probeAdapterBusy(macAddress: string): Promise<boolean> {
 }
 
 export const defaultAdapterModeDeps: AdapterModeTransitionDeps = {
+	readHybridChannel: readHybridStationChannel,
 	resolveInterfaces: getWifiInterfacesByMacAddress,
 	isAdapterBusy: probeAdapterBusy,
 	startHotspot: async (device, publish) => {

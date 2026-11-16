@@ -49,6 +49,7 @@ import {
 import { appRouter } from "../rpc/router.ts";
 import { statusClient } from "./helpers/status-client.ts";
 import { fixture, guarded, request } from "./helpers/wifi-entry-fixture.ts";
+import { mockQualifiedHybridActivation } from "./helpers/wifi-hotspot-test-setup.ts";
 import { wifiProtocolContext } from "./helpers/wifi-protocol-context.ts";
 
 for (const mocked of [false, true]) {
@@ -230,6 +231,11 @@ for (const kind of guarded) {
 
 test("an admitted mode transition does not re-admit its start after the AP teardown", async () => {
 	const state = await fixture();
+	mockQualifiedHybridActivation();
+	spyOn(defaultHotspotDeps, "ensureConcurrentInterface").mockResolvedValue({
+		ifname: "clap-wlan0",
+		created: false,
+	});
 	spyOn(capabilities, "getWifiCapabilitiesForInterface").mockReturnValue({
 		phy: "phy1",
 		generation: "wifi6",
@@ -337,6 +343,11 @@ for (const kind of guarded) {
 
 test("an admitted transition's teardown, prune, poll and terminal timer run without the request admission", async () => {
 	const state = await fixture();
+	mockQualifiedHybridActivation();
+	spyOn(defaultHotspotDeps, "ensureConcurrentInterface").mockResolvedValue({
+		ifname: "clap-wlan0",
+		created: false,
+	});
 	jest.useRealTimers();
 	spyOn(capabilities, "getWifiCapabilitiesForInterface").mockReturnValue({
 		phy: "phy1",

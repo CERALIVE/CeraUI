@@ -83,6 +83,8 @@ describe("wifiHotspotStart — AP+STA concurrent mode", () => {
 			"802-11-wireless-security.pmf": "disable",
 			"match.path": "",
 			"connection.autoconnect": "no",
+			"connection.autoconnect-priority": "999",
+			"802-11-wireless-security.key-mgmt": "wpa-psk",
 		});
 		expect(iface.conn).toBe("station-uuid");
 		expect(dupCalls).toEqual([]);

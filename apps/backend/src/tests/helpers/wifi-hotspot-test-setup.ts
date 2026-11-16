@@ -5,10 +5,26 @@ import type {
 
 /** These suites deliver their trusted confirmation explicitly with settlePending. */
 export function mockHotspotConfirmationPoll(): void {
+	mockQualifiedHybridActivation();
 	spyOn(defaultHotspotDeps, "pollHotspotActive").mockResolvedValue(true);
 	// These adapters do not model NM files; never probe the workstation's NM.
 	spyOn(defaultHotspotDeps, "readProfileInstance").mockResolvedValue(undefined);
 	spyOn(nm, "nmDevices").mockResolvedValue([]);
+}
+
+/** The caller supplies the fake allocation; these inputs establish its admitted card/channel. */
+export function mockQualifiedHybridActivation(): void {
+	mockQualifiedHybridDriver();
+	spyOn(defaultHotspotDeps, "readHybridChannel").mockImplementation(
+		qualifiedHybridEvidence.readHybridChannel,
+	);
+	spyOn(defaultAdapterModeDeps, "readHybridChannel").mockImplementation(
+		qualifiedHybridEvidence.readHybridChannel,
+	);
+	spyOn(defaultHotspotDeps, "validateConcurrentInterface").mockResolvedValue(
+		true,
+	);
+	spyOn(defaultHotspotDeps, "confirmHybridActivation").mockResolvedValue(true);
 }
 
 export function makeHotspotIface(opts: {
@@ -58,4 +74,9 @@ export function makeDeps(
 
 import { spyOn } from "bun:test";
 import * as nm from "../../modules/network/network-manager.ts";
+import { defaultAdapterModeDeps } from "../../modules/wifi/wifi-adapter-mode-deps.ts";
 import { defaultHotspotDeps } from "../../modules/wifi/wifi-hotspot-activation.ts";
+import {
+	mockQualifiedHybridDriver,
+	qualifiedHybridEvidence,
+} from "./wifi-hybrid-qualification.ts";

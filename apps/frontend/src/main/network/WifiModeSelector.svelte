@@ -41,6 +41,7 @@ import { Ban, Loader2, RadioTower, Waypoints, Wifi } from '@lucide/svelte';
 import { onDestroy, untrack } from 'svelte';
 
 import { Button } from '$lib/components/ui/button';
+import { classifyWifiMutation } from '$lib/helpers/wifi-mode-outcome';
 import { osCommand } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
 import { getLinkEpoch } from '$lib/rpc/session-epoch.svelte';
@@ -157,6 +158,7 @@ async function apply(mode: WifiAdapterMode, incarnation = view.incarnation) {
 	gated = undefined;
 	await osCommand({
 		key: wifiModeOpKey(binding.device, incarnation),
+		classify: classifyWifiMutation,
 		target: mode,
 		rpc: async (handoff) => {
 			const invoke = (token?: string) => rpc.wifi.setAdapterMode({

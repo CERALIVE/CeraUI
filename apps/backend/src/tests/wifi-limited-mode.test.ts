@@ -66,6 +66,7 @@ import {
 	nmcliFieldNames,
 	nmcliFieldOutput,
 } from "./helpers/nmcli-field-output.ts";
+import { limitedHybridFixture } from "./helpers/wifi-limited-hybrid.ts";
 import { wifiProtocolContext } from "./helpers/wifi-protocol-context.ts";
 import {
 	isolateWifiRegistry,
@@ -91,6 +92,7 @@ let streamingOn: boolean;
 let originalConfigPath: string;
 let scratch: string;
 let originalIds: Record<number, string>;
+let limitedKernel: Awaited<ReturnType<typeof limitedHybridFixture>> | undefined;
 
 function radio(id = 0): WifiInterfaceWithHotspot {
 	return {
@@ -176,6 +178,7 @@ beforeEach(async () => {
 	);
 	spyOn(nm, "nmConnect").mockImplementation(async (uuid) => {
 		effects.push(`up:${uuid}`);
+		limitedKernel?.connected(uuid);
 		return true;
 	});
 	spyOn(nm, "nmConnSetFields").mockImplementation(async () => {
@@ -213,6 +216,12 @@ beforeEach(async () => {
 		() => {},
 	);
 	spyOn(defaultHotspotStopDeps, "rescan").mockImplementation(async () => {});
+	limitedKernel = await limitedHybridFixture();
+	spyOn(nm, "nmDisconnect").mockImplementation(async (uuid) => {
+		effects.push(`down:${uuid}`);
+		limitedKernel?.disconnected();
+		return true;
+	});
 });
 
 afterEach(async () => {
@@ -820,7 +829,9 @@ for (const outcome of [
 			if (outcome === "replacement")
 				fixture.targets.set("clap-wlan0", { ifindex: 99, wdev: "0x99" });
 			if (outcome === "cancel") cancel();
-			return outcome === "success" || outcome === "cancel";
+			const accepted = outcome === "success" || outcome === "cancel";
+			if (accepted) limitedKernel?.connected(UUID);
+			return accepted;
 		});
 		const feed = restoreFeed();
 		cancel = startWifiAdapterModeRestore(
@@ -887,7 +898,14 @@ for (const outcome of [
 			(error) => error,
 		);
 		if (throws) expect(result).toBeInstanceOf(Error);
-		else expect(result).toEqual({ success: false, error: "activation-failed" });
+		else
+			expect(result).toEqual({
+				success: false,
+				error: "activation-failed",
+				...(outcome === "reuse"
+					? { reason: "hybrid-channel-not-permitted" }
+					: {}),
+			});
 		if (throws) expect(result).toBe(creationError);
 		expect(row.hotspot.transition).toBeUndefined();
 		expect(row.concurrentHotspot).toBeUndefined();
@@ -902,7 +920,7 @@ for (const outcome of [
 }
 
 for (const reused of [false, true]) {
-	test(`round five: discovery abort retains allocation ownership reused=${reused}`, async () => {
+	test(`round five: discovery preserves targets without allocating reused=${reused}`, async () => {
 		connections.clearWifiInterfacesForTest();
 		wifiRadioObservation.reopenForTest();
 		wifiRadioObservation.stop();
@@ -944,7 +962,9 @@ for (const reused of [false, true]) {
 					? new Map([["clap-wlan0", { ifindex: 20, wdev: "0x20" }]])
 					: new Map(),
 			);
-			expect(connections.getWifiInterfacesByMacAddress()).toEqual({});
+			expect(Object.keys(connections.getWifiInterfacesByMacAddress())).toEqual([
+				MAC,
+			]);
 		} finally {
 			interfaces.resetWifiInterfaceDiscoveryForTest();
 			wifiRadioObservation.stop();
@@ -1020,6 +1040,22 @@ test("limited Stop and station selection cannot clear another present radio's in
 });
 
 test("limited hybrid restore preserves the station and uses only the already bound profile", async () => {
+	const saved = {
+		ssid: NAME,
+		password: PASSWORD,
+		conn: UUID,
+		channel: "ch_11" as const,
+	};
+	spyOn(credentials, "getHotspotCredentials").mockImplementation((key) =>
+		key === MAC ? saved : undefined,
+	);
+	spyOn(credentials, "rememberHotspotCredentials").mockImplementation(
+		(_key, value) => {
+			effects.push("store-write");
+			Object.assign(saved, value);
+		},
+	);
+	row.hotspot.channel = saved.channel;
 	getConfig().wifi_modes = { [MAC]: "hybrid" };
 	row.conn = "station-uplink";
 	streamingOn = true;
@@ -1027,14 +1063,16 @@ test("limited hybrid restore preserves the station and uses only the already bou
 	spyOn(concurrent, "ensureConcurrentApInterface").mockImplementation(
 		async () => {
 			effects.push("iw-add");
-			return { ifname: "clap-wlan0", created: true, type: "managed" };
+			return { ifname: "clap-wlan0", created: false, type: "managed" };
 		},
 	);
 	await reconcileWifiAdapterModes({
 		...defaultAdapterModeDeps,
 		readCapabilities: () => ({ staApCombo: { supported: true } }),
 	});
-	expect(effects).toEqual(["iw-add", `up:${UUID}`]);
+	expect(effects).toEqual(["iw-add", "direct-modify", `up:${UUID}`]);
+	expect(saved.channel).toBe("ch_11");
+	expect(row.hotspot.channel).toBe("ch_11");
 	expect(row.conn).toBe("station-uplink");
 	expect(warnings).toEqual([
 		"hotspot restored on an adapter that could not be identified",

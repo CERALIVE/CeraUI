@@ -54,6 +54,7 @@ import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import { copyToClipboard } from '$lib/helpers/clipboard';
 import { generateWifiQr, hotspotQrSecurity } from '$lib/helpers/NetworkHelper';
+import { classifyWifiMutation, wifiFailureReason } from '$lib/helpers/wifi-mode-outcome';
 import {
 	confirmOperation,
 	getOperationPhase,
@@ -142,6 +143,7 @@ const modeView = $derived(
 				entry: getWifiAdapterModeEntry(deviceId),
 				phase: getOperationPhase(wifiModeOpKey(deviceId, radioToken)),
 				target: wifiModeTarget(getOperationTarget(wifiModeOpKey(deviceId, radioToken))),
+				failureReason: getOperationReason(wifiModeOpKey(deviceId, radioToken)),
 			})
 		: undefined,
 );
@@ -155,6 +157,10 @@ const configKey = $derived(wifiHotspotConfigOpKey(deviceId, radioToken));
 const toggling = $derived(getOperationPhase(toggleKey) === 'pending');
 const configuring = $derived(getOperationPhase(configKey) === 'pending');
 const configFailure = $derived(getOperationReason(configKey));
+const toggleFailure = $derived(getOperationReason(toggleKey));
+const followsStationChannel = $derived(
+	modeView?.desiredMode === 'hybrid' && iface?.capabilities?.staApCombo.sameChannelOnly === true,
+);
 
 $effect(() => {
 	if (!configAdmissionKey) return;
@@ -311,6 +317,7 @@ async function handleSave() {
 	configAdmissionKey = wifiHotspotConfigOpKey(binding.device, binding.incarnation);
 	await osCommand({
 		key: wifiHotspotConfigOpKey(binding.device, binding.incarnation),
+		classify: classifyWifiMutation,
 		rpc: async (handoff) => {
 			const result = await withWifiEntryRetry(original,
 				(incarnation, unobserved) => withWifiConfigReceipt(
@@ -341,7 +348,9 @@ async function handleSave() {
 				reloadForm();
 			}
 		},
-		failMessage: (result) => result?.error === 'radio-unverified'
+		failMessage: (result) => wifiFailureReason(result ?? {}) === 'hybrid-channel-not-permitted'
+			? m['network.wifiMode.error.hybridChannelNotPermitted']()
+			: result?.error === 'radio-unverified'
 			? m['hotspotConfigurator.radioUnverified']() : m["network.os.operationFailed"](),
 		busyMessage: () => m["network.os.deviceBusy"](),
 		// NO confirmOnResolve — confirm comes from the deferred hotspot.config event.
@@ -385,6 +394,7 @@ async function startConfirmed(incarnation: string) {
 	await osCommand({
 		key: toggleKey,
 		target: 'hotspot',
+		classify: classifyWifiMutation,
 		rpc: async (handoff) => {
 			const result = await withWifiEntryRetry(original,
 				(token) => rpc.wifi.hotspotStart({ device: original.device, incarnation: token }),
@@ -412,7 +422,9 @@ async function startConfirmed(incarnation: string) {
 				confirmingStart = true;
 			}
 		},
-		failMessage: (result) => result?.error === 'radio-unverified'
+		failMessage: (result) => wifiFailureReason(result ?? {}) === 'hybrid-channel-not-permitted'
+			? m['network.wifiMode.error.hybridChannelNotPermitted']()
+			: result?.error === 'radio-unverified'
 			? m['hotspotConfirm.radioUnverified']() : m["network.os.operationFailed"](),
 		busyMessage: () => m["network.os.deviceBusy"](),
 	});
@@ -471,10 +483,10 @@ async function copyPassword() {
 				{radioReason ? m['hotspotConfigurator.radioUnverified']() : m['hotspotConfirm.bindingUnsupported']()}
 			</p>
 		{/if}
-		{#if configFailure === 'radio-unverified'}
-			<p class="text-muted-foreground text-xs" role="status">
-				{m['hotspotConfigurator.radioUnverified']()}
-			</p>
+		{#if configFailure === 'hybrid-channel-not-permitted' || toggleFailure === 'hybrid-channel-not-permitted'}
+			<p class="text-muted-foreground text-xs" role="status">{m['network.wifiMode.error.hybridChannelNotPermitted']()}</p>
+		{:else if configFailure === 'radio-unverified'}
+			<p class="text-muted-foreground text-xs" role="status">{m['hotspotConfigurator.radioUnverified']()}</p>
 		{:else if configFailure === 'radio-changed' || configFailure === 'binding-required' || configFailure === 'activating'}
 			<p class="text-muted-foreground text-xs" role="status">
 				{configFailure === 'activating' ? m['hotspotConfigurator.saveInterrupted']() : m['hotspotConfigurator.saveRefused']()}
@@ -659,7 +671,9 @@ async function copyPassword() {
 					{/each}
 				</Select.Content>
 			</Select.Root>
-			<p class="text-muted-foreground text-xs">{m["hotspotConfigurator.help.channelHelp"]()}</p>
+			<p class="text-muted-foreground text-xs" data-testid={followsStationChannel ? 'hotspot-hybrid-channel-hint' : undefined}>
+				{followsStationChannel ? m['hotspotConfigurator.help.hybridChannel']() : m["hotspotConfigurator.help.channelHelp"]()}
+			</p>
 		</div>
 
 		<!--
