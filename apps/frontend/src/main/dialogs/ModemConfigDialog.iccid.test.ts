@@ -117,7 +117,7 @@ describe("rendered plainly", () => {
 	});
 
 	it("offers NO reveal toggle — that is the own-number field's contract, not this one", async () => {
-		mount(modemWith({ iccid: BOARD_ICCID, own_numbers: ["+573115422359"] }));
+		mount(modemWith({ iccid: BOARD_ICCID, own_numbers: ["+999000000005"] }));
 
 		await screen.findByTestId("modem-iccid");
 

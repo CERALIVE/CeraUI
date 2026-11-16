@@ -76,7 +76,7 @@ function dongle(admin: Record<string, unknown> = {}): Modem {
 function radio(): Modem {
 	return {
 		ifname: "wwan2",
-		name: "RM530N-GL - 16855",
+		name: "RM530N-GL - 23456",
 		network_type: { supported: ["4g", "5g"], active: "5g" },
 		status: { connection: "connected", network: "Movistar", signal: 81 },
 	} as unknown as Modem;

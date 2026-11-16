@@ -605,7 +605,7 @@ for (const condition of CONDITIONS) {
 		test("the SIM own-number is masked until revealed, and absent when unpublished", {
 			tag: "@visual",
 		}, async ({ page }) => {
-			const OWN_NUMBER = "+573115422359";
+			const OWN_NUMBER = "+999000000005";
 			serverConfig({ modem_provisioning: true });
 			sendModems({
 				[MM_HEALTHY_ID]: mmManaged({

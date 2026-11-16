@@ -65,14 +65,38 @@ describe("LinkBadge", () => {
 		).toContain("eth1");
 	});
 
+	it("row variant names a live state on the kind line, ahead of the twin discriminator", () => {
+		const { getByTestId } = render(LinkBadge, {
+			props: {
+				link: link(),
+				typeLabel: "5G",
+				state: "Scanning",
+				identity: "usb0",
+			},
+		});
+		const state = getByTestId("link-badge-state");
+		expect(state.textContent?.trim()).toBe("Scanning");
+		// The line truncates at its end, so the discriminator must follow the state.
+		expect(
+			state.compareDocumentPosition(getByTestId("bonded-link-identity")) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).not.toBe(0);
+	});
+
 	it("compact variant stays at TWO facts — the HUD strip's scope is deliberate", () => {
 		// The persistent strip carries exactly four facts by product decision
 		// (`docs/agents/device-first-source-model-go-live-card.md` → HUD 4-fact scope). A name or a kind label here would
 		// smuggle a fifth in, so their absence is a contract, not an oversight.
 		const { queryByTestId, container } = render(LinkBadge, {
-			props: { link: link(), variant: "compact", typeLabel: "LTE" },
+			props: {
+				link: link(),
+				variant: "compact",
+				typeLabel: "LTE",
+				state: "Scanning",
+			},
 		});
 		expect(queryByTestId("link-badge-label")).toBeNull();
+		expect(queryByTestId("link-badge-state")).toBeNull();
 		expect(container.textContent).not.toContain("LTE");
 		expect(container.textContent).not.toContain("ZTE MF79U");
 	});

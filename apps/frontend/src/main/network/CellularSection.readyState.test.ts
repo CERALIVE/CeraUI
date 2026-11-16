@@ -38,7 +38,7 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 function registeredModem(): Modem {
 	return {
 		ifname: "wwan2",
-		name: "RM530N-GL - 16855",
+		name: "RM530N-GL - 23456",
 		network_type: { supported: ["4G", "5G"], active: "4G" },
 		device_class: "usb",
 		sim_lock: { required: "sim-pin2" },
@@ -57,7 +57,7 @@ function registeredModem(): Modem {
 function searchingModem(): Modem {
 	return {
 		ifname: "wwan0",
-		name: "SIMCOM_SIM7600G-H - 15136",
+		name: "SIMCOM_SIM7600G-H - 45678",
 		network_type: { supported: ["4G"], active: "4G" },
 		device_class: "usb",
 		status: { connection: "searching", signal: 12, roaming: false },

@@ -37,8 +37,8 @@ default via 192.168.8.1 dev eth1 proto dhcp src 192.168.8.100 metric 105 `;
 const HILINK_INFORMATION = `<?xml version="1.0" encoding="UTF-8"?>
 <response>
 <DeviceName>E3372</DeviceName>
-<SerialNumber>Y4QDU17621000793</SerialNumber>
-<Imei>866850029359669</Imei>
+<SerialNumber>X0XXX00000000222</SerialNumber>
+<Imei>000000000056789</Imei>
 <Imsi></Imsi>
 <HardwareVersion>CL2E3372HM</HardwareVersion>
 <SoftwareVersion>22.333.01.00.00</SoftwareVersion>
@@ -89,7 +89,7 @@ describe("Qualcomm 4G UFI readings", () => {
 	const UFI_SHELL =
 		"<!DOCTYPE html><html><head><title>4G UFI</title></head><body><div id=app></div></body></html>";
 	const UFI_OVERVIEW =
-		'{"reply":"ok","params":{"SYSVER":"UFI_HM_SIM1_V020_251125","HWVER":"HW1.0","IMEI":"868837088254863"}}';
+		'{"reply":"ok","params":{"SYSVER":"UFI_HM_SIM1_V020_251125","HWVER":"HW1.0","IMEI":"000000000012345"}}';
 	const UFI_SYSINFO =
 		'{"reply":"ok","params":{"sysruntime":13952,"bsid":"25002"}}';
 	const UFI_STATUS =
@@ -110,7 +110,7 @@ describe("Qualcomm 4G UFI readings", () => {
 			admin_url: "http://192.168.100.1",
 			reachable: true,
 			model: "4G UFI",
-			imei: "868837088254863",
+			imei: "000000000012345",
 			firmware: "UFI_HM_SIM1_V020_251125",
 			hardware: "HW1.0",
 			sim: "absent",
@@ -223,7 +223,7 @@ describe("HiLink readings", () => {
 	});
 
 	it("carries the serial that separates the twin units", () => {
-		expect(reading.serial).toBe("Y4QDU17621000793");
+		expect(reading.serial).toBe("X0XXX00000000222");
 		expect(reading.model).toBe("E3372");
 	});
 
@@ -633,7 +633,7 @@ describe("identity fields the naming depends on", () => {
 			status: HILINK_STATUS,
 		});
 
-		expect(reading.imei).toBe("866850029359669");
+		expect(reading.imei).toBe("000000000056789");
 		expect(reading.firmware).toBe("22.333.01.00.00");
 		expect(reading.hardware).toBe("CL2E3372HM");
 	});
@@ -645,13 +645,13 @@ describe("identity fields the naming depends on", () => {
 				modem_main_state: "modem_sim_undetected",
 				ppp_status: "ppp_disconnected",
 				model_name: "MF79U",
-				imei: "862882046298749",
+				imei: "000000000067890",
 				wa_inner_version: "BD_XCBZHKMF79UV1.0.0B03",
 			}),
 		);
 
 		expect(reading.model).toBe("MF79U");
-		expect(reading.imei).toBe("862882046298749");
+		expect(reading.imei).toBe("000000000067890");
 		expect(reading.firmware).toBe("BD_XCBZHKMF79UV1.0.0B03");
 	});
 

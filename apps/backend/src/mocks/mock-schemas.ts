@@ -60,7 +60,7 @@ const iccidSchema = z
 	.regex(/^\d{19,20}$/, "ICCID must be 19–20 digits");
 
 // MSISDN in E.164: a leading `+`, then 1–15 digits with no leading zero. The
-// board's own SIM (`+573115422359`) is the shape this pins; a fixture value must
+// synthetic example (`+999000000005`) pins the shape; a fixture value must
 // stay in a reserved/fictional range so a dev binary never carries a real one.
 const msisdnSchema = z
 	.string()

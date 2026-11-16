@@ -1,8 +1,8 @@
 /*
  * Hardware naming for mmcli-managed modems, proven against REAL `mmcli -K -m N`
  * output captured from the bench board on 2026-08-17 — all four modems that
- * were attached at the time, verbatim (the Quectel's own-number is the single
- * redaction, it plays no part in naming).
+ * were attached at the time (subscriber numbers are redacted; equipment IDs
+ * use synthetic digits while five-digit suffix behavior stays covered).
  *
  * The fixtures are the point of this suite: the garbage-identity rule has to be
  * narrow enough that three real SKUs keep the exact titles they already had, so
@@ -50,24 +50,24 @@ describe("real bench hardware — mmcli -K fixtures", () => {
 		);
 	});
 
-	it("names the garbage-identity modem by its firmware, never '0 - 54863'", () => {
+	it("names the garbage-identity modem by its firmware, never '0 - 12345'", () => {
 		const name = nameOf(realModem("himi-u01"));
-		expect(name).toBe("HIMI_U01_MODEM_V1.0 - 54863");
-		expect(name).not.toBe("0 - 54863");
+		expect(name).toBe("HIMI_U01_MODEM_V1.0 - 12345");
+		expect(name).not.toBe("0 - 12345");
 	});
 
 	it("leaves the Quectel RM530N-GL title untouched", () => {
-		expect(nameOf(realModem("quectel-rm530n-gl"))).toBe("RM530N-GL - 16855");
+		expect(nameOf(realModem("quectel-rm530n-gl"))).toBe("RM530N-GL - 23456");
 	});
 
 	it("leaves the SIMCom SIM7600G-H title untouched", () => {
 		expect(nameOf(realModem("simcom-sim7600g-h"))).toBe(
-			"SIMCOM_SIM7600G-H - 15136",
+			"SIMCOM_SIM7600G-H - 45678",
 		);
 	});
 
 	it("leaves the Fibocom FM350-GL title untouched", () => {
-		expect(nameOf(realModem("fibocom-fm350-gl"))).toBe("FM350-GL - 01765");
+		expect(nameOf(realModem("fibocom-fm350-gl"))).toBe("FM350-GL - 34567");
 	});
 });
 
@@ -105,7 +105,7 @@ describe("isUninformativeIdentity", () => {
 
 	it("does not flag a long digit run, which identifies something", () => {
 		expect(isUninformativeIdentity("81600")).toBe(false);
-		expect(isUninformativeIdentity("868837088254863")).toBe(false);
+		expect(isUninformativeIdentity("000000000012345")).toBe(false);
 	});
 });
 
@@ -144,9 +144,9 @@ describe("modemHardwareName fallback order", () => {
 				model: "0",
 				manufacturer: "Quectel",
 				firmwareRevision: "81600.0000.00.19.17.10",
-				equipmentId: "867978050016855",
+				equipmentId: "000000000023456",
 			}),
-		).toBe("Quectel - 16855");
+		).toBe("Quectel - 23456");
 	});
 
 	it("says only what is certain when every identity field is garbage", () => {
@@ -154,9 +154,9 @@ describe("modemHardwareName fallback order", () => {
 			modemHardwareName({
 				model: "0",
 				manufacturer: "1",
-				equipmentId: "868837088254863",
+				equipmentId: "000000000012345",
 			}),
-		).toBe("Cellular modem - 54863");
+		).toBe("Cellular modem - 12345");
 	});
 
 	it("drops the separator when the device published no IMEI", () => {

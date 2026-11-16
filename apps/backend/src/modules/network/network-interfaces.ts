@@ -18,6 +18,7 @@
 
 /* Network interface list */
 import { EventEmitter } from "node:events";
+import { existsSync } from "node:fs";
 import { isSimlessForBond } from "@ceraui/rpc";
 import type {
 	EthernetRole,
@@ -84,6 +85,7 @@ import {
 	invalidateUsbNetReading,
 	type NetdevBus,
 	notePublishedNetifSnapshot,
+	onUsbNetReadingInvalidated,
 	onUsbNetScanCommitted,
 	readNetdevBus,
 	refreshUsbNetMarkers,
@@ -214,6 +216,16 @@ function installScanSettlement(): void {
 			triggerNetworkInterfacesChange();
 			broadcastNetif();
 		}
+	});
+	onUsbNetReadingInvalidated(() => {
+		// The deferred publication keeps the monitor path honest: it invalidates
+		// before dropping the netif entry, so publishing inline would repeat the
+		// removed name. These are the frames the scan's own commit edge used to
+		// emit for the removal, and the roster must not keep the dongle's row.
+		queueMicrotask(() => {
+			broadcastNetif();
+			void broadcastModemRoster();
+		});
 	});
 }
 
@@ -676,6 +688,22 @@ function isNetifUpState(state: string): boolean {
 	return s === "up" || s.startsWith("connected");
 }
 
+/**
+ * The kernel's own netdev list, which is the only evidence that a name still
+ * names an incarnation. A monitor down-state on a name found here is an NM
+ * link-state flap on a plugged-in device, not a removal. Tests override this
+ * OS boundary; production reads sysfs.
+ */
+export const netdevPresence = {
+	inSysfs(name: string): boolean {
+		try {
+			return existsSync(`/sys/class/net/${name}`);
+		} catch {
+			return false;
+		}
+	},
+};
+
 function isNetifDownState(state: string): boolean {
 	const s = state.toLowerCase();
 	return (
@@ -709,7 +737,9 @@ export function handleNetifMonitorEvent(event: MonitorEvent): void {
 			mutated = true;
 		}
 	} else if (isNetifDownState(event.state)) {
-		bumpPresence(name, true);
+		// A modem that loses its connection is still plugged in: its committed
+		// identity belongs to that present incarnation and must survive the flap.
+		bumpPresence(name, !netdevPresence.inSysfs(name));
 		if (netif[name]) {
 			delete netif[name];
 			mutated = true;

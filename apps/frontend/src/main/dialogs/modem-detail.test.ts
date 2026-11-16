@@ -340,7 +340,7 @@ describe("hasModemDetail", () => {
 		expect(hasModemDetail({ cell_info: { rsrp: -90 } })).toBe(true);
 		expect(hasModemDetail({ esim: { sim_type: "esim" } })).toBe(true);
 		expect(hasModemDetail({ firmware_revision: "RM520NGL_1.0" })).toBe(true);
-		expect(hasModemDetail({ own_numbers: ["+573115422359"] })).toBe(true);
+		expect(hasModemDetail({ own_numbers: ["+999000000005"] })).toBe(true);
 		expect(hasModemDetail({ own_numbers: [] })).toBe(false);
 		expect(hasModemDetail({ iccid: "8900000000000000003" })).toBe(true);
 		expect(hasModemDetail({ iccid: "   " })).toBe(false);
@@ -379,8 +379,8 @@ describe("isStandingUsbRefusal", () => {
 });
 
 describe("ownNumbers", () => {
-	// The bench Quectel RM530N-GL's own SIM, as `mmcli -m 3` reported it live.
-	const BOARD = "+573115422359";
+	// Synthetic E.164-shaped number with the captured fixture's length.
+	const BOARD = "+999000000005";
 
 	it("carries every number the carrier published, in order", () => {
 		expect(ownNumbers([BOARD, "+573001112233"])).toEqual([
