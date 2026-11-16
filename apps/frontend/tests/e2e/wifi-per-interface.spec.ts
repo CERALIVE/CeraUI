@@ -46,7 +46,7 @@ const STATION_RADIO_COUNT = 2;
 /** The WiFi <section> located by its level-2 heading. */
 function wifiSection(page: Page) {
 	return page
-		.getByRole('heading', { name: 'WiFi', level: 2 })
+		.getByRole('heading', { name: 'Wi-Fi', level: 2 })
 		.locator('xpath=ancestor::section[1]');
 }
 
@@ -75,7 +75,7 @@ test.describe('Per-interface WiFi connect', () => {
 		// The section HEADER (the div wrapping the WiFi heading) contains NO
 		// Connect button — the former header-level Connect was removed.
 		const header = page
-			.getByRole('heading', { name: 'WiFi', level: 2 })
+			.getByRole('heading', { name: 'Wi-Fi', level: 2 })
 			.locator('xpath=parent::div');
 		await expect(header.getByTestId('open-wifi-selector-dialog')).toHaveCount(0);
 	});

@@ -93,14 +93,14 @@ export const scenarios: Record<MockScenario, ScenarioConfig> = {
 		modems: 1,
 		wifi: false,
 		streaming: false,
-		description: "Single LTE modem, no WiFi, idle state",
+		description: "Single LTE modem, no Wi-Fi, idle state",
 	},
 	"multi-modem-wifi": {
 		modems: 3,
 		wifi: true,
 		streaming: false,
 		description:
-			"3 modems (4G/5G mix), WiFi with hotspot capability, Bluetooth on with nothing paired",
+			"3 modems (4G/5G mix), Wi-Fi with hotspot capability, Bluetooth on with nothing paired",
 		// Dev default resolves the FULL engine profile (H265 + hw accel +
 		// audio-capable HDMI source) so the Live UI exercises every capability-gated
 		// control out of the box. engine-starting / engine-unavailable keep the floor.
@@ -129,7 +129,7 @@ export const scenarios: Record<MockScenario, ScenarioConfig> = {
 		wifi: false,
 		streaming: false,
 		description:
-			"2 modems, WiFi off — modem 0 SIM PIN-locked (fixture PIN 0000) to exercise the SIM unlock/PUK flow in dev",
+			"2 modems, Wi-Fi off — modem 0 SIM PIN-locked (fixture PIN 0000) to exercise the SIM unlock/PUK flow in dev",
 		// modem 0 seeded lock:"pin-locked" scenario-conditionally in initMockService
 		// (mock-service.ts); no other scenario seeds a locked SIM (would auto-open SimUnlockDialog).
 	},

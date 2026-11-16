@@ -25,12 +25,12 @@ test('single-modem: no WiFi radios → empty state, zero Connect buttons', async
 	await navigateTo(page, 'network');
 
 	const section = page
-		.getByRole('heading', { name: 'WiFi', level: 2 })
+		.getByRole('heading', { name: 'Wi-Fi', level: 2 })
 		.locator('xpath=ancestor::section[1]');
 	await expect(section).toBeVisible();
 
 	// The calm empty state renders instead of any radio rows.
-	await expect(section.getByText('No WiFi interfaces found')).toBeVisible();
+	await expect(section.getByText('No Wi-Fi interfaces found')).toBeVisible();
 
 	// No radios ⇒ no per-row Connect trigger anywhere on the page.
 	await expect(page.getByTestId('open-wifi-selector-dialog')).toHaveCount(0);

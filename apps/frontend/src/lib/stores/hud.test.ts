@@ -1240,7 +1240,7 @@ describe("S6 — wifi/ethernet null signal is valid, not an error", () => {
 			expect(link.isConnected).toBe(false);
 			expect(link.connectionState).toBe("disconnected");
 			// Generic fallback label when no active SSID.
-			expect(link.label).toBe("WiFi");
+			expect(link.label).toBe("Wi-Fi");
 		}
 	});
 
