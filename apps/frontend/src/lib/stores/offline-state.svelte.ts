@@ -322,10 +322,11 @@ async function checkInitialConnectivity() {
 
 	await new Promise((r) => setTimeout(r, 200));
 	const canConnect = await checkConnection(true);
-	// The probe races the socket. A socket that connected meanwhile has already
-	// proven the device reachable, so a slow or failed favicon fetch must not
-	// put up a "can't reach the device" takeover over a live connection.
-	if (!canConnect && connectionState !== "connected") {
+	// The probe races the socket. Once the socket has connected at all, the
+	// device was reached and any later loss belongs to the debounced band, so a
+	// slow or failed favicon fetch must not request the immediate takeover:
+	// not over a live socket, and not over a brief drop still inside its grace.
+	if (!canConnect && !getHasConnected()) {
 		requestImmediateOfflinePage();
 	}
 }

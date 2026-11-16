@@ -303,6 +303,38 @@ describe("initial connectivity probe", () => {
 		expect(mod.getShouldShowOfflinePage()).toBe(false);
 	});
 
+	it("leaves a brief drop after a first connect to the grace when the probe fails late", async () => {
+		// Given a first-load probe that is still pending...
+		let rejectProbe: (reason: unknown) => void = () => {};
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(
+				() =>
+					new Promise<Response>((_resolve, reject) => {
+						rejectProbe = reject;
+					}),
+			),
+		);
+		const mod = await load();
+		await vi.advanceTimersByTimeAsync(200);
+
+		// ...the socket reaches the device, then drops 50 ms later with the
+		// browser still online...
+		emit("connected");
+		await vi.advanceTimersByTimeAsync(50);
+		emit("disconnected");
+
+		// ...and only then does the probe fail.
+		rejectProbe(new TypeError("Failed to fetch"));
+		await vi.advanceTimersByTimeAsync(1);
+
+		// Then the device was reached: no immediate takeover, no recovery poll,
+		// and the drop stays inside the shared grace.
+		expect(mod.getOfflinePageRequest()).not.toBe("immediate");
+		expect(mod.getShouldShowOfflinePage()).toBe(false);
+		expect(pollArmCount()).toBe(0);
+	});
+
 	it("still shows the takeover when the probe fails and nothing connected", async () => {
 		failProbe();
 		const mod = await load();
