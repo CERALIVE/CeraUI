@@ -30,7 +30,7 @@ describe("duplicate-IP bond eligibility from the device's wire projection", () =
 	});
 
 	it.each([
-		"Wi-Fi hotspot",
+		"WiFi hotspot",
 		"no SIM",
 		"shared LAN",
 		"unknown error",
