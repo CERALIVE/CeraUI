@@ -36,12 +36,15 @@ import {
 } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 
+import { runtimeConfigSchema } from "../helpers/config-schemas.ts";
 import { initMockService, stopMockService } from "../mocks/mock-service.ts";
+import { setMockNetworkIngestActive } from "../mocks/providers/network-ingest.ts";
 import {
 	getConfig,
 	getConfigFilePath,
 	setConfigFilePath,
 } from "../modules/config.ts";
+import { refreshNetworkIngestInfo } from "../modules/network/network-ingest.ts";
 import {
 	resetBluetoothAudioForTest,
 	setBluetoothAudioDepsForTest,
@@ -58,7 +61,9 @@ import {
 	defaultStagingDeps,
 	getStagedConfigChange,
 	type InflightConfigMarker,
+	judgeInflightMarker,
 	readInflightMarker,
+	releaseStagedConfigChange,
 	type StagingDeps,
 } from "../modules/streaming/config-change-staging.ts";
 import {
@@ -67,6 +72,7 @@ import {
 } from "../modules/streaming/pipelines.ts";
 import {
 	applyObservedEngineDevices,
+	getSourcesMessage,
 	resetEngineDeviceCache,
 } from "../modules/streaming/sources.ts";
 import {
@@ -78,7 +84,7 @@ import {
 import type { EngineRuntimeState } from "../modules/streaming/streaming-backend.ts";
 import { setConfigProcedure } from "../rpc/procedures/streaming.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
-import { osmo } from "./helpers/dual-mode-camera.ts";
+import { engineDevice, osmo } from "./helpers/dual-mode-camera.ts";
 
 function makeContext(): RPCContext {
 	const ws = {
@@ -850,10 +856,10 @@ const CAMERA_CAPS: GetCapabilitiesResult = {
 		codecs: ["h264", "h265"],
 		bitrate_range: { min: 500, max: 50000, unit: "kbps" },
 	},
-	sources: ["hdmi", "libuvch264", "usb_mjpeg", "test"].map((id) => ({
+	sources: ["hdmi", "libuvch264", "usb_mjpeg", "test", "rtmp"].map((id) => ({
 		id,
 		supports_audio: true,
-		supports_resolution_override: true,
+		supports_resolution_override: id !== "rtmp",
 		supports_framerate_override: true,
 		default_resolution: "1080p",
 		default_framerate: 30,
@@ -1038,4 +1044,447 @@ describe("a capture-mode switch in each lifecycle state", () => {
 		expect(result.configChange?.result).toBe("reverted");
 		expect(await onDisk()).toEqual(H264);
 	});
+});
+
+/**
+ * A source switch to an ingest pipeline derives stale geometry cleanup for the
+ * DESTINATION. That clear describes a source the engine has not accepted yet,
+ * so it must ride the staged transaction: before this, a busy or reverted
+ * switch deleted the running source's saved resolution before admission
+ * refused it. The applied/idle cases stay alongside as controls, so the fix
+ * cannot drift into an unconditional deferral of ordinary residue cleanup.
+ * Selection/anchor metadata on an APPLIED write remains row 59's contract.
+ */
+describe("a source switch owns its derived override residue", () => {
+	const savedMockMode = process.env.MOCK_MODE;
+	const savedSourceSchema = runtimeConfigSchema.pick({
+		source: true,
+		source_stable_id: true,
+		pipeline: true,
+		selected_video_input: true,
+		input_mode: true,
+		resolution: true,
+		framerate: true,
+	});
+	// Row 57 owns the source-derived restart fields and the residue clears. The
+	// selection/anchor that an APPLIED source write must also commit is row 59's
+	// contract, so these cases read it only where a refusal has to preserve it.
+	const savedOwnedSchema = runtimeConfigSchema.pick({
+		source: true,
+		pipeline: true,
+		input_mode: true,
+		resolution: true,
+		framerate: true,
+	});
+	let dir: string;
+	let priorPath: string;
+	let priorMarkerPath: string;
+	let prior: ReturnType<typeof getConfig>;
+
+	const onDisk = async () =>
+		savedSourceSchema.parse(
+			JSON.parse(await readFile(join(dir, "config.json"), "utf8")),
+		);
+	const onDiskOwned = async () =>
+		savedOwnedSchema.parse(
+			JSON.parse(await readFile(join(dir, "config.json"), "utf8")),
+		);
+
+	beforeAll(() => {
+		process.env.MOCK_MODE = "true";
+		initMockService("caps-full");
+		setMockHardware("rk3588");
+	});
+
+	beforeEach(async () => {
+		dir = await mkdtemp(join(tmpdir(), "source-residue-"));
+		priorPath = getConfigFilePath();
+		priorMarkerPath = defaultStagingDeps.markerPath;
+		setConfigFilePath(join(dir, "config.json"));
+		// Redirect the production marker writer, without replacing its IO.
+		Object.defineProperty(defaultStagingDeps, "markerPath", {
+			value: join(dir, "config.inflight.json"),
+			configurable: true,
+			enumerable: true,
+			writable: true,
+		});
+		prior = { ...getConfig() };
+		setMockHardware("rk3588");
+		clearCapabilitiesCache();
+		await initPipelines({
+			fetchEngineCapabilities: async () => ({
+				caps: CAMERA_CAPS,
+				schemaVersion: SCHEMA_VERSION,
+			}),
+			fetchEngineDevices: async () => ({ devices: [] }),
+		});
+		resetEngineDeviceCache();
+		applyObservedEngineDevices([osmo()]);
+		// Source availability comes from the network-ingest snapshot, not the
+		// start gate's own mock flag.
+		setMockNetworkIngestActive("rtmp", true);
+		await refreshNetworkIngestInfo();
+		Object.assign(getConfig(), {
+			source: undefined,
+			source_stable_id: undefined,
+			input_mode: undefined,
+			pipeline: undefined,
+			selected_video_input: undefined,
+			last_seen_devices: undefined,
+			resolution: "720p",
+			framerate: 30,
+		});
+	});
+
+	afterEach(async () => {
+		setApplyNowGateForTest(null);
+		clearStagedConfigChange();
+		Object.defineProperty(defaultStagingDeps, "markerPath", {
+			value: priorMarkerPath,
+			configurable: true,
+			enumerable: true,
+			writable: true,
+		});
+		Object.assign(getConfig(), prior);
+		setConfigFilePath(priorPath);
+		resetEngineDeviceCache();
+		clearCapabilitiesCache();
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	afterAll(async () => {
+		stopMockService();
+		setMockHardware("rk3588");
+		await initPipelines();
+		if (savedMockMode === undefined) delete process.env.MOCK_MODE;
+		else process.env.MOCK_MODE = savedMockMode;
+	});
+
+	// Actual RK3588 RTMP descriptor: resolution=false, framerate=true.
+	const INGEST = { source: "rtmp", pipeline: "rtmp", framerate: 30 } as const;
+	const PICKS: readonly StreamingSetConfigInput[] = [
+		{ source: "hdmi" },
+		{ source: "video1" },
+		{ source: "video1", input_mode: "uvc_h264" },
+	];
+
+	async function seed(pick: StreamingSetConfigInput) {
+		session();
+		const result = await call(setConfigProcedure, pick, {
+			context: makeContext(),
+		});
+		expect(result.success).toBe(true);
+		expect(
+			getSourcesMessage().sources.find((source) => source.id === "rtmp")
+				?.available,
+		).toBe(true);
+		return onDisk();
+	}
+
+	for (const pick of PICKS) {
+		for (const state of Object.keys(ENTER) as LifecycleState[]) {
+			test(`${pick.source}/${pick.input_mode ?? "auto"} to ingest while ${state} keeps source-derived fields coupled`, async () => {
+				const previous = await seed(pick);
+				const s = session();
+				await ENTER[state](s, { resolution: "1080p", apply_now: true });
+				expect(s.orchestrator.snapshot().state).toBe(state);
+				const held = readInflightMarker();
+				const before = s.deltas.length;
+
+				const result = await call(
+					setConfigProcedure,
+					{ source: "rtmp", apply_now: true, bitrate_overlay: true },
+					{ context: makeContext() },
+				);
+
+				const moves = state === "idle" || state === "streaming";
+				expect(result.configChange?.result).toBe(
+					state === "idle" ? undefined : moves ? "applied" : "busy",
+				);
+				if (moves) {
+					// The source, its pipeline, the mode and the overrides the new
+					// ingest cannot honor all move with the transaction.
+					expect(await onDiskOwned()).toEqual(INGEST);
+				} else {
+					// A refusal keeps EVERY source-derived field, including the stale
+					// geometry whose clear belongs to the rejected destination.
+					expect(await onDisk()).toEqual(previous);
+				}
+				// Unrelated immediate fields still save.
+				expect(getConfig().bitrate_overlay).toBe(true);
+				expect(s.deltas.slice(before)).toEqual(
+					state === "streaming" ? [{ pipeline: "rtmp" }] : [],
+				);
+				// Refusal may not replace or retire A's genuine on-disk marker.
+				expect(readInflightMarker()).toEqual(held);
+				expect(getStagedConfigChange()?.attemptId).toBe(held?.attemptId);
+			});
+		}
+
+		test(`${pick.source}/${pick.input_mode ?? "auto"} reverted ingest switch preserves saved geometry and routing`, async () => {
+			const previous = await seed(pick);
+			const s = session();
+			await stream(s);
+			s.engine.change = async () => ({
+				phase: "reverted",
+				reason: CONFIG_CHANGE_REASON_REJECTED,
+			});
+
+			const result = await call(
+				setConfigProcedure,
+				{ source: "rtmp", apply_now: true },
+				{ context: makeContext() },
+			);
+
+			expect(result.configChange?.result).toBe("reverted");
+			expect(await onDisk()).toEqual(previous);
+			expect(readInflightMarker()).toBeUndefined();
+			expect(s.deltas).toEqual([{ pipeline: "rtmp" }]);
+		});
+	}
+
+	test("an applied ingest switch holds all clears off disk until the engine answers", async () => {
+		const previous = await seed({
+			source: "video1",
+			input_mode: "uvc_h264",
+		});
+		const s = session();
+		await stream(s);
+		let during:
+			| {
+					disk: Awaited<ReturnType<typeof onDisk>>;
+					candidate: InflightConfigMarker["candidate"] | undefined;
+			  }
+			| undefined;
+		s.engine.change = async () => {
+			during = {
+				disk: await onDisk(),
+				candidate: readInflightMarker()?.candidate,
+			};
+			return { phase: "applied" };
+		};
+
+		const result = await call(
+			setConfigProcedure,
+			{ source: "rtmp", apply_now: true },
+			{ context: makeContext() },
+		);
+
+		// The clear travels in the candidate: disk still holds the running source
+		// until the engine has actually applied the switch.
+		expect(during?.disk).toEqual(previous);
+		expect(during?.candidate).toEqual({
+			source: "rtmp",
+			pipeline: "rtmp",
+			input_mode: null,
+			resolution: null,
+		});
+		expect(result.configChange?.result).toBe("applied");
+		expect(await onDiskOwned()).toEqual(INGEST);
+		expect(s.deltas).toEqual([{ pipeline: "rtmp" }]);
+	});
+
+	test("a next-start source save still clears obsolete capture fields while streaming", async () => {
+		await seed({ source: "video1", input_mode: "uvc_h264" });
+		const s = session();
+		await stream(s);
+
+		const result = await call(
+			setConfigProcedure,
+			{ source: "rtmp" },
+			{ context: makeContext() },
+		);
+
+		expect(result.success).toBe(true);
+		expect(result.configChange).toBeUndefined();
+		expect(await onDisk()).toEqual(INGEST);
+		expect(s.deltas).toEqual([]);
+	});
+
+	test("a source-clear marker cannot infer applied from publisher geometry", async () => {
+		const previous = await seed({ source: "video1" });
+		const s = session();
+		await stream(s);
+		let during:
+			| {
+					disk: Awaited<ReturnType<typeof onDisk>>;
+					verdict: ReturnType<typeof reconcileInflightConfigChange>;
+			  }
+			| undefined;
+		s.engine.change = async () => {
+			// Model only the leftover marker, not a process crash or engine restart.
+			releaseStagedConfigChange();
+			during = {
+				disk: await onDisk(),
+				verdict: reconcileInflightConfigChange({
+					streaming: true,
+					resolution: "1920x1080",
+					framerate: 60,
+					pipelinePlaying: true,
+					framesEmitted: 120,
+				}),
+			};
+			return { phase: "reverted", reason: CONFIG_CHANGE_REASON_REJECTED };
+		};
+
+		const result = await call(
+			setConfigProcedure,
+			{ source: "rtmp", apply_now: true },
+			{ context: makeContext() },
+		);
+
+		// A cleared override is a storage instruction, not a value the publisher's
+		// geometry can confirm: the marker must stay undecided, and disk untouched.
+		expect(during?.verdict).toBe("deferred");
+		expect(during?.disk).toEqual(previous);
+		expect(readInflightMarker()?.candidate.resolution).toBeNull();
+		expect(result.configChange?.result).toBe("reverted");
+	});
+
+	test("a geometry clear on equal publisher geometry stays undecided and keeps the marker", async () => {
+		// An ingest publisher can report EXACTLY the geometry the old source was
+		// running. Neither match can then prove which source the engine accepted.
+		const previous = await seed({ source: "hdmi" });
+		const s = session();
+		await stream(s);
+		let during:
+			| {
+					judged: ReturnType<typeof judgeInflightMarker>["action"];
+					verdict: ReturnType<typeof reconcileInflightConfigChange>;
+					bytesBefore: string;
+					bytesAfter: string;
+					markerAfter: InflightConfigMarker | undefined;
+					stoppedVerdict: ReturnType<typeof reconcileInflightConfigChange>;
+					stoppedMarker: InflightConfigMarker | undefined;
+			  }
+			| undefined;
+		s.engine.change = async () => {
+			const marker = readInflightMarker();
+			if (marker === undefined) throw new Error("expected a staged marker");
+			expect(marker.candidate.resolution).toBeNull();
+			const bytesBefore = await readFile(join(dir, "config.json"), "utf8");
+			// Model only the leftover marker, not a process crash or engine restart.
+			releaseStagedConfigChange();
+			// The publisher's own output: same geometry the previous source ran, and
+			// the coarse HDMI previous state carries no active-input expectation.
+			const snapshot = {
+				streaming: true,
+				resolution: "1280x720",
+				framerate: 30,
+				pipelinePlaying: true,
+				framesEmitted: 120,
+			};
+			during = {
+				judged: judgeInflightMarker(marker, snapshot).action,
+				verdict: reconcileInflightConfigChange(snapshot),
+				bytesBefore,
+				bytesAfter: await readFile(join(dir, "config.json"), "utf8"),
+				markerAfter: readInflightMarker(),
+				stoppedVerdict: reconcileInflightConfigChange({ streaming: false }),
+				stoppedMarker: readInflightMarker(),
+			};
+			return { phase: "reverted", reason: CONFIG_CHANGE_REASON_REJECTED };
+		};
+
+		const result = await call(
+			setConfigProcedure,
+			{ source: "rtmp", apply_now: true },
+			{ context: makeContext() },
+		);
+
+		// Undecided while the engine runs; the evidence is retained byte-for-byte.
+		// One assertion so a failure reports the whole recovery outcome.
+		expect({
+			judged: during?.judged,
+			verdict: during?.verdict,
+			markerPresent: during?.markerAfter !== undefined,
+			bytesUnchanged: during?.bytesAfter === during?.bytesBefore,
+			stoppedVerdict: during?.stoppedVerdict,
+			stoppedMarkerRemoved: during?.stoppedMarker === undefined,
+		}).toEqual({
+			judged: "wait",
+			verdict: "deferred",
+			markerPresent: true,
+			bytesUnchanged: true,
+			// A STOPPED engine is still authoritative: the existing retain contract.
+			stoppedVerdict: "retained_previous",
+			stoppedMarkerRemoved: true,
+		});
+		expect(during?.bytesBefore).toBe(
+			await readFile(join(dir, "config.json"), "utf8"),
+		);
+		expect(await onDisk()).toEqual(previous);
+		expect(result.configChange?.result).toBe("reverted");
+	});
+
+	for (const outcome of ["applied", "reverted", "busy"] as const) {
+		test(`Generic camlink's real no-override descriptor clears both axes only when ${outcome}`, async () => {
+			setMockHardware("generic");
+			clearCapabilitiesCache();
+			await initPipelines({
+				fetchEngineCapabilities: async () => ({
+					caps: {
+						platform: {
+							supports_h265: false,
+							hardware_accelerated: false,
+							max_resolution: "1080p",
+						},
+						encoder: {
+							codecs: ["h264"],
+							bitrate_range: { min: 500, max: 50000, unit: "kbps" },
+						},
+						sources: [
+							{
+								id: "camlink",
+								supports_audio: true,
+								supports_resolution_override: false,
+								supports_framerate_override: false,
+								default_resolution: "1080p",
+								default_framerate: 30,
+							},
+							...CAMERA_CAPS.sources.filter((source) => source.id === "test"),
+						],
+					} satisfies GetCapabilitiesResult,
+					schemaVersion: SCHEMA_VERSION,
+				}),
+				fetchEngineDevices: async () => ({ devices: [] }),
+			});
+			applyObservedEngineDevices([
+				engineDevice("cam1", "camlink", [], "Cam Link 4K", "usb:camlink"),
+			]);
+			session();
+			await call(
+				setConfigProcedure,
+				{ source: "test" },
+				{ context: makeContext() },
+			);
+			const previous = await onDisk();
+			const s = session();
+			await ENTER[outcome === "busy" ? "starting" : "streaming"](s, {});
+			s.engine.change = async () =>
+				outcome === "reverted"
+					? { phase: "reverted", reason: CONFIG_CHANGE_REASON_REJECTED }
+					: { phase: "applied" };
+
+			const result = await call(
+				setConfigProcedure,
+				{ source: "cam1", apply_now: true },
+				{ context: makeContext() },
+			);
+
+			expect(result.configChange?.result).toBe(outcome);
+			expect(await onDisk()).toEqual(
+				outcome === "applied"
+					? {
+							source: "cam1",
+							pipeline: "camlink",
+							selected_video_input: "cam1",
+						}
+					: previous,
+			);
+			expect(s.deltas).toEqual(
+				outcome === "busy" ? [] : [{ input_id: "cam1", pipeline: "camlink" }],
+			);
+		});
+	}
 });
