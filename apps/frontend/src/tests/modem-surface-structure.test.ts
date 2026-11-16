@@ -233,7 +233,7 @@ function routerDongle(): Modem {
 			signal_max_bars: 5,
 			apn: "3gnet",
 			firmware: "22.333.01.00.00",
-			imei: "866850029360451",
+			imei: "000000000089012",
 			serial: "Y4QDU17621000872",
 			details: { network_type: "LTE", provider: "Claro", band: "B4" },
 		},

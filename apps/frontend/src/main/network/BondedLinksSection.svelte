@@ -94,6 +94,13 @@ const totalStale = $derived(
 				{const color = $derived(`var(--link-${link.linkIndex + 1})`)}
 				{const hasSignal = $derived(link.signal !== null)}
 				{const identity = $derived(linkDisambiguation(link, entry, ambiguousLabels))}
+				<!-- A searching modem usually still reports a signal reading, so the
+				     scanning state is named on its own rather than only in place of one. -->
+				{const state = $derived(
+					link.type === 'modem' && link.connectionState === 'scanning'
+						? m["network.modem.scanning"]()
+						: undefined,
+				)}
 				<div
 					data-testid="bonded-link-card"
 					data-link-id={link.id}
@@ -108,7 +115,7 @@ const totalStale = $derived(
 					     shared with the HUD strip so the two surfaces cannot disagree
 					     about which glyph a link gets — which is exactly how a
 					     self-managed dongle came to draw a different one here. -->
-					<LinkBadge {link} typeLabel={linkTypeLabel(link)} {identity} />
+					<LinkBadge {link} typeLabel={linkTypeLabel(link)} {identity} {state} />
 					<!-- The instruments travel as ONE unit so a wrap cannot strand the
 					     speed badge on a line away from the telemetry it belongs with, and
 					     so the group wraps whole rather than item by item. Every member is
@@ -116,9 +123,11 @@ const totalStale = $derived(
 					     the identity column above out of existence. -->
 					<div class="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-2.5">
 						{#if hasSignal}
+							<!-- Fixed-width numeric columns (`ch` of the mono face) so the
+							     percentages and speeds line up from card to card. -->
 							<span
 								data-live-value
-								class="shrink-0 font-mono text-xs tabular-nums"
+								class="min-w-[4ch] shrink-0 text-end font-mono text-xs tabular-nums"
 								style="color: {color};"
 							>
 								{link.signal}%
@@ -142,13 +151,14 @@ const totalStale = $derived(
 							<span class="text-muted-foreground shrink-0 text-[10px] uppercase tracking-wide">
 								{m["network.view.noSimLink"]()}
 							</span>
-						{:else if link.type === 'modem' && link.connectionState === 'scanning'}
-							<span class="text-muted-foreground shrink-0 text-[10px] uppercase tracking-wide">
-								{m["network.modem.scanning"]()}
-							</span>
 						{/if}
 						<!-- per-link throughput (Task 18) -->
-						<Badge variant="speed" class="shrink-0" kbps={linkUpKbps(link)} stale={link.isStale} />
+						<Badge
+							variant="speed"
+							class="min-w-[9ch] shrink-0 justify-end"
+							kbps={linkUpKbps(link)}
+							stale={link.isStale}
+						/>
 
 						<!-- per-link srtla telemetry: RTT / NAK / weight (Task 22) — rides
 						     the same row via a left divider, at reduced size (Task 19). -->
@@ -166,14 +176,15 @@ const totalStale = $derived(
 		<!-- total bonded bandwidth (Task 18) — dims with its links when stale -->
 		<div
 			class={cn(
-				'mt-2 flex items-center justify-between border-t pt-2 text-xs transition-opacity',
+				'mt-2 flex items-center justify-between gap-3 border-t pt-2 text-xs transition-opacity',
 				totalStale && 'opacity-50',
 			)}
 		>
 			<span class="text-muted-foreground uppercase tracking-wide"
 				>{m["network.view.totalBandwidth"]()}</span
 			>
-			<span class="flex items-baseline gap-2.5">
+			<!-- The readings never wrap; on a phone the label takes the second line. -->
+			<span class="flex shrink-0 items-baseline gap-2.5">
 				<span
 					data-live-value
 					data-testid="total-bandwidth-up"
