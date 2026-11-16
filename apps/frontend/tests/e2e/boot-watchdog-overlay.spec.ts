@@ -21,6 +21,8 @@ test("a late app mount hides the boot failure screen and restores navigation", a
 		await expect(page.locator("#js-failed")).toBeVisible({ timeout: 15_000 });
 	} finally {
 		release.resolve();
+		// Drain held script handlers before disabling favicon interception.
+		await page.unrouteAll({ behavior: "wait" });
 	}
 
 	await page.waitForFunction(
@@ -29,6 +31,16 @@ test("a late app mount hides the boot failure screen and restores navigation", a
 		{ timeout: 30_000 },
 	);
 	await expect(page.locator("#js-failed")).toBeHidden();
+	// Favicon responses are hidden from Playwright's network events.
+	await page.waitForFunction(() =>
+		performance.getEntriesByType("resource").some(
+			(entry) =>
+				entry instanceof PerformanceResourceTiming &&
+				new URL(entry.name).pathname === "/favicon.ico" &&
+				entry.initiatorType === "fetch" &&
+				entry.responseStatus === 200,
+		),
+	);
 	await ensureAuthenticated(page);
 	await navigateTo(page, "network");
 });
