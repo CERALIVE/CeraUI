@@ -15,6 +15,7 @@ import { Cpu, Loader2, Server } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 import { LazyDialog, LazyDialogFallback, lazyDialog } from '$lib/components/dialogs';
 import { platformCapsForHardware } from '$lib/components/streaming/ValidationAdapter';
+import { viewLogsToast } from '$lib/device-logs/view-logs';
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
 import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
@@ -100,7 +101,7 @@ import {
 	resolvedAudioLabel,
 } from '$lib/streaming/sourceSummary';
 import { pipelinesFromSources } from '$lib/streaming/sources-view-model';
-import { startFailureMessage } from '$lib/streaming/start-failure-copy';
+import { startFailureMessage, startFailureRetryKey } from '$lib/streaming/start-failure-copy';
 import { buildStartConfig } from '$lib/streaming/startStreaming';
 import { showUnconfirmedStreamStop, startOptimismSuperseded } from '$lib/streaming/unconfirmed-stream';
 import {
@@ -307,7 +308,10 @@ function startFailedMessage(code: string): string {
 // both, so the typed branch wins and only one toast fires per failure.
 $effect(() => {
 	if (streamingStartFailure) {
-		toast.error(startFailureMessage(streamingStartFailure));
+		toast.error(
+			startFailureMessage(streamingStartFailure),
+			viewLogsToast(startFailureRetryKey(streamingStartFailure)),
+		);
 		return;
 	}
 	if (streamingStopReason) {
@@ -589,8 +593,8 @@ async function handleEncoderSave(saved: EncoderConfig) {
 		if (result.configChange !== undefined) {
 			const report = configChangeReport(result.configChange, m);
 			if (report.level === 'success') toast.success(report.message);
-			else if (report.level === 'warning') toast.warning(report.message);
-			else toast.error(report.message);
+			else if (report.level === 'warning') toast.warning(report.message, viewLogsToast(report.reasonKey));
+			else toast.error(report.message, viewLogsToast(report.reasonKey));
 		} else if (result.success) toast.success(m["notifications.saved"]());
 		else toast.error(encoderSaveErrorMessage(result.error, m));
 	} catch {

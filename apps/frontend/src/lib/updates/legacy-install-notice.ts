@@ -15,13 +15,17 @@ import { m } from "@ceraui/i18n/svelte";
 import type { StatusMessage } from "@ceraui/rpc/schemas";
 import { toast } from "svelte-sonner";
 
+import { viewLogsToast } from "$lib/device-logs/view-logs";
+
 import { legacyInstall } from "./legacy-install";
 
 const announced = new WeakSet<object>();
 
+const sentNoReason = (reason: string): boolean => reason.trim() === "";
+
 /** The device's failure text, or one honest sentence when it sent none. */
 export function legacyFailureDescription(reason: string): string {
-	return reason.trim() === ""
+	return sentNoReason(reason)
 		? m["settings.updates.failedReasonGeneric"]()
 		: reason;
 }
@@ -36,6 +40,12 @@ export function announceLegacyInstallOutcome(
 	if (install.kind === "failed") {
 		toast.error(m["updatingOverlay.failedMessage"](), {
 			description: legacyFailureDescription(install.reason),
+			// The honest sentence for a missing reason points at System Logs.
+			...viewLogsToast(
+				sentNoReason(install.reason)
+					? "settings.updates.failedReasonGeneric"
+					: undefined,
+			),
 		});
 		return;
 	}

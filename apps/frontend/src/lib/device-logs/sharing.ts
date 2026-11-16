@@ -17,6 +17,8 @@ import {
 import { getBackendHttpUrl } from "$lib/env";
 import { RpcError } from "$lib/rpc/rpc-error";
 
+export { chineseWordChunks } from "./cjk-words";
+
 export type SharingProblem = "busy" | "failed";
 
 /** The Raw logs tab's opening view: this boot, errors through info, every source. */
@@ -81,34 +83,5 @@ export function startBackendDownload(path: string): void {
 		anchor.click();
 	} finally {
 		anchor.remove();
-	}
-}
-
-/**
- * Where fixed Chinese copy may wrap. The browser breaks Chinese between any two
- * characters, so a word such as 分享 can split across lines; this cuts the copy
- * at word boundaries (`Intl.Segmenter`) for `KeepWords` to join with <wbr>. A
- * chunk never starts with punctuation or a one-character word, so particles and
- * suffixes stay with the word before them. Other locales, a browser without a
- * working segmenter and any cut that would not join back to the exact copy get
- * the copy whole.
- */
-export function chineseWordChunks(text: string, locale: string): string[] {
-	if (!locale.startsWith("zh")) return [text];
-	// shortcut: ICU's dictionary decides what a word is, so an unknown compound can still break between its parts; upgrade if Chromium ships word-break: auto-phrase for Chinese.
-	try {
-		const chunks = [""];
-		let wordBefore = false;
-		for (const { segment, isWordLike = false } of new Intl.Segmenter(locale, {
-			granularity: "word",
-		}).segment(text)) {
-			if (isWordLike && wordBefore && segment.length > 1) chunks.push("");
-			chunks[chunks.length - 1] += segment;
-			wordBefore = isWordLike;
-		}
-		return chunks.join("") === text ? chunks : [text];
-	} catch {
-		// Without a working segmenter the browser's own line breaking applies.
-		return [text];
 	}
 }

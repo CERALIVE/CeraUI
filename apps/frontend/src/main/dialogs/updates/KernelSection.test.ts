@@ -4,8 +4,10 @@ import type {
 	UpdateOrchestratorPhase,
 	UpdateOrchestratorWireState,
 } from "@ceraui/rpc/schemas";
-import { cleanup, render, screen } from "@testing-library/svelte";
+import { cleanup, render, screen, within } from "@testing-library/svelte";
 import { afterEach, expect, it, vi } from "vitest";
+
+import { en } from "../../../tests/helpers/catalog";
 
 import KernelSection from "./KernelSection.svelte";
 
@@ -59,6 +61,28 @@ it.each(["downloading", "os-staging", "syncing"] as const)(
 		expect(screen.queryByRole("progressbar")).toBeNull();
 	},
 );
+
+it("offers View logs beside a kernel failure the device did not explain", () => {
+	show(undefined, { ...kernel, state: "failed", reason: null });
+
+	const status = screen.getByTestId("update-kernel-reason").parentElement;
+	if (!status) throw new Error("kernel reason has no container");
+	expect(
+		within(status).getByTestId("update-kernel-reason").textContent,
+	).toContain(en.settings.updates.kernel.reason.generic);
+	expect(within(status).getByTestId("view-logs-action")).toBeTruthy();
+});
+
+it("offers no View logs beside a kernel failure with a named reason", () => {
+	show(undefined, {
+		...kernel,
+		state: "failed",
+		reason: "kernel_download_failed",
+	});
+
+	expect(screen.getByTestId("update-kernel-reason")).toBeTruthy();
+	expect(screen.queryByTestId("view-logs-action")).toBeNull();
+});
 
 it("shows the percentage from the kernel's own live staging phase", () => {
 	// Given matching live kernel progress, when rendered, then the real percent shows.

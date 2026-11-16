@@ -215,6 +215,10 @@ export default defineConfig(({ mode }) => {
 							return i18nChunk;
 						}
 
+						if (id.endsWith("/packages/rpc/src/schemas/logs.schema.ts")) {
+							return "device-log-contract";
+						}
+
 						// Vendor chunks for external dependencies
 						if (id.includes("node_modules")) {
 							// Core Svelte framework (largest)

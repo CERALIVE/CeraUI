@@ -216,6 +216,52 @@ describe("CompositionCard — live layout, opacity and second input", () => {
 		expect(reason.closest('[role="alert"]')).not.toBeNull();
 	});
 
+	it("streaming: a refusal whose reason the device did not name offers View logs in its band", async () => {
+		setConfig.mockResolvedValue({
+			success: true,
+			applied: {},
+			configChange: { result: "reverted", attemptId: "attempt-1", reason: "x" },
+		});
+		renderCard(true);
+
+		await fireEvent.click(radio("pbp-left-right"));
+
+		const action = await screen.findByTestId("view-logs-action");
+		expect(action.closest('[role="alert"]')).not.toBeNull();
+		expect(action.className).toContain("mt-2");
+		// The sentence and its action share one shrinkable column, so a long
+		// reason wraps beside the icon instead of pushing the band wider.
+		const column = action.parentElement;
+		expect(column?.className).toContain("min-w-0");
+		expect(column?.querySelector("p")?.className).toContain("text-xs");
+	});
+
+	it("streaming: a named refusal, or a failed save, offers no View logs", async () => {
+		setConfig.mockResolvedValueOnce(REFUSED);
+		setConfig.mockResolvedValueOnce({ success: false, applied: {} });
+		renderCard(true);
+
+		await fireEvent.click(radio("pbp-left-right"));
+		await screen.findByText(/couldn't use those settings/);
+		expect(screen.queryByTestId("view-logs-action")).toBeNull();
+
+		await fireEvent.click(radio("pbp-left-right"));
+		await waitFor(() => expect(setConfig).toHaveBeenCalledTimes(2));
+		await screen.findByText("Failed to save");
+		expect(screen.queryByTestId("view-logs-action")).toBeNull();
+	});
+
+	it("streaming: a save that never got an answer says it failed, with no View logs", async () => {
+		setConfig.mockRejectedValue(new Error("socket closed"));
+		renderCard(true);
+
+		await fireEvent.click(radio("pbp-left-right"));
+
+		const sentence = await screen.findByText("Failed to save");
+		expect(sentence.closest('[role="alert"]')).not.toBeNull();
+		expect(screen.queryByTestId("view-logs-action")).toBeNull();
+	});
+
 	it("streaming: held arrow keys send one opacity write, when the key comes up", async () => {
 		setConfig.mockResolvedValue(APPLIED);
 		renderCard(true);

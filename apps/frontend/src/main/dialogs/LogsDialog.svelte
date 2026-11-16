@@ -19,6 +19,7 @@ import { bootSelection } from '$lib/device-logs/boot-selection.svelte';
 import { onHistoryChanged } from '$lib/device-logs/history-bus';
 import { WIDE_DESKTOP_QUERY } from '$lib/layout';
 import { rpc } from '$lib/rpc/client';
+import type { LogsDialogContext } from '$lib/stores/dialog-request.svelte';
 
 import BootButton from '../system-logs/BootButton.svelte';
 import StreamStatePill from '../system-logs/StreamStatePill.svelte';
@@ -26,9 +27,11 @@ import SystemLogsView from '../system-logs/SystemLogsView.svelte';
 
 interface Props {
 	open?: boolean;
+	/** Where the view opens, from a deep link; absent from the Settings entry. */
+	context?: LogsDialogContext;
 }
 
-let { open = $bindable(false) }: Props = $props();
+let { open = $bindable(false), context }: Props = $props();
 
 const wide = new MediaQuery(WIDE_DESKTOP_QUERY);
 
@@ -49,5 +52,5 @@ $effect(() => {
 			<BootButton />
 		{/if}
 	{/snippet}
-	<SystemLogsView />
+	<SystemLogsView {context} />
 </AppDialog>

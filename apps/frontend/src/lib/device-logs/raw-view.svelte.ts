@@ -1,3 +1,4 @@
+// allow: SIZE_OK - indivisible paging/follow state machine; publication stays at its two query owners.
 /**
  * State of one mounted Raw logs tab: its filter, rows, both paging ends,
  * anchor mode and the live follow. Data loads only in these methods, which
@@ -83,6 +84,8 @@ export interface RawAnnouncement {
 
 export interface RawViewDeps {
 	readonly logs: Pick<TypedRPC["logs"], "query" | "followStart" | "followStop">;
+	/** Publishes the fixed query before a read, including reads that fail. */
+	onQuery?(query: LogQueryInput): void;
 	setFollowListener(
 		listener: ((message: LogFollowMessage) => void) | undefined,
 	): void;
@@ -435,6 +438,7 @@ export class RawView {
 		const generation = ++this.#generation;
 		const live = this.#detachFollow();
 		const query = queryInput(this.filter, this.#deps.now());
+		this.#deps.onQuery?.(query);
 		const edge: RawEdge = {
 			query,
 			continuation: null,
@@ -486,6 +490,11 @@ export class RawView {
 	}
 
 	#openAnchor(around: AroundPage): void {
+		// The two paging edges together cover this one filter and time window.
+		this.#deps.onQuery?.({
+			...around.olderQuery,
+			until: around.newerQuery.until,
+		});
 		this.anchor = {
 			cursor: around.anchor?.cursor ?? null,
 			approximate: around.approximate,

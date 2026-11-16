@@ -6,7 +6,10 @@ import type {
 } from "@ceraui/rpc/schemas";
 
 import { rpc } from "$lib/rpc/client";
-import { configChangeReport } from "$lib/streaming/configChangeCopy";
+import {
+	type ConfigChangeReport,
+	configChangeReport,
+} from "$lib/streaming/configChangeCopy";
 
 /**
  * One ordered lane for this tab: every composition write (the layout card's
@@ -171,12 +174,15 @@ const REFUSAL_TOKENS = new Set([
 /** The keyed copy for a composition write the device or the engine did not apply. */
 export function compositionRefusal(
 	result: StreamingSetConfigOutput,
-): string | undefined {
+): Readonly<Pick<ConfigChangeReport, "message" | "reasonKey">> | undefined {
 	const change = result.configChange;
 	if (change !== undefined && change.result !== "applied")
-		return configChangeReport(change, m).message;
+		return configChangeReport(change, m);
 	if (result.success) return undefined;
-	return result.error !== undefined && REFUSAL_TOKENS.has(result.error)
-		? resolveMessageKey(`live.layout.error.${result.error}`)
-		: m["notifications.saveFailed"]();
+	return {
+		message:
+			result.error !== undefined && REFUSAL_TOKENS.has(result.error)
+				? resolveMessageKey(`live.layout.error.${result.error}`)
+				: m["notifications.saveFailed"](),
+	};
 }

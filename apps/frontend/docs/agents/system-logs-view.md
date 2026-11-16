@@ -1,8 +1,9 @@
-# System Logs view: shape brief [GREENFIELD]
+# System Logs view: shape brief [PARTIAL]
 
 Design basis for the full-viewport System Logs view opened from Settings ->
-System Logs. This remains the target for unfinished panels; the Storage
-implementation is recorded below. It works inside the incumbent visual world: `PRODUCT.md` and
+System Logs. Raw logs, sharing, message deep links, Events, Boots and Storage
+are integrated here; their implementation contracts are recorded below. It
+works inside the incumbent visual world: `PRODUCT.md` and
 `.impeccable.md` (Ground Control: graphite, phosphor lime for the live signal,
 amber and coral states) and the checkable rules in `DESIGN.md` sections 1-8.
 It is an Operate surface: familiar controls, brand only through tokens, type and
@@ -807,9 +808,18 @@ everywhere in the app.
   remounting and ends with the view.
 - Export this view sends `exportInput(sharing.view)`. `view` starts as the Raw
   logs tab's opening query (`RAW_OPENING_QUERY`: this boot, error through info,
-  every source). [PARTIAL] Binding it to the Raw logs tab's live filter belongs
-  to the Raw logs tab (todo 30): until that tab sets `sharing.view` to the query
-  it shows, Export this view saves the opening query.
+  every source). [EXISTS] `RawView` publishes each query through
+  `RawLogsTab.onquery` and `RawLogsPanel` to `sharing.view`, before the read.
+  Sources, levels, literal text, boot and the time bounds resolved at the start
+  of that query are therefore the export's filters, even if a read fails or the
+  Raw tab unmounts to show Storage. Paging never resolves the time preset again.
+  An around view publishes the union of its older and newer windows: the older
+  query's lower bound and the newer query's upper bound, with their shared
+  filter and boot. Until Raw logs is first opened, the opening query is kept.
+  `SharingFlow.bindView()` grants one Raw panel its publisher lifetime.
+  Detaching clears only that owner's capability, not a newer owner's, and
+  retains the snapshot for export from Storage. Closing the whole view clears
+  the snapshot and prevents every late or newly bound publisher from writing.
 - Both dialogs state what the file holds and that it may contain sensitive data
   before Download can be pressed; the bundle file carries no warning of its
   own. A ticket reaches the browser through a temporary anchor on the backend
@@ -881,6 +891,56 @@ failed read's band, and Retry stays disabled while its read runs.
 No journal limit, unknown usage, removed boot or secure erase is inferred.
 Host/mock verification is not device qualification. User documentation remains
 the English/es-419 release work assigned to the documentation todo.
+
+## Message deep links as built [EXISTS]
+
+- Integrated event links pass their already-read around page into Raw logs without
+  another read. Raw logs initializes from the shared boot picker and follows its
+  choices only while mounted; a returned around window keeps its own boot.
+- Shared log schemas have their own production chunk so the integrated Storage
+  and Sharing parsers do not enlarge the devtools chunk; build budgets stay unchanged.
+- The catalog-derived `LOG_POINTER_KEYS` allowlist controls `ViewLogsAction`
+  and the toast adapters. `notifications.viewLogs` is available at boot in all
+  ten locales. Existing message values and notification wire targets are
+  unchanged; direct refusal sites and the persistent, archived and transient
+  notification surfaces use the same frontend-only dialog request.
+- `SettingsView` passes a raw-tab context with the message's received time
+  when known, otherwise the action's time. `RawLogsPanel` resolves the running
+  boot with `logs.boots()` unless the context names a boot, then calls
+  `logs.around({ bootId, at })`. Both replies are parsed with producer schemas
+  at `raw-anchor.ts`; missing, null and mistyped members are failed reads.
+  Query input defaults are unwrapped at this output boundary: an absent boot,
+  level set, source set, direction or limit is never silently supplied.
+  Messages do not carry a trustworthy source or event id, so this is the
+  backend's approximate two-minute window across sources and levels, never a
+  guessed source or an invented exact match.
+- The real `RawLogsTab` consumes the returned pages and their paging queries.
+  An exact anchor receives its existing tonal highlight and row focus; an
+  approximate jump states that it is approximate and leaves focus on Raw logs.
+  A failed lookup shows the removed-boot, busy or read-failed message with
+  Retry and Back to latest entries. The low-disk banner opens Storage instead.
+  On wide screens that request focuses the Storage heading in the side column;
+  below 1024 px it selects the Storage tab.
+- Anchor mode keeps the operator's normal-query controls as its return view
+  (the Raw view's pinned reset/filter-change contract). Its pages and exports
+  use the around queries, not those return controls. Changing a filter leaves
+  anchor mode.
+- A new context replaces the raw panel's request lifetime. Leaving Raw logs,
+  closing the dialog or retrying aborts that lifetime; each awaited reply is
+  checked before the next request or state change. A late reply cannot open
+  old entries or replace a newer request. Choosing another tab discards the
+  opening anchor, so returning to Raw logs starts a fresh ordinary query.
+- The layout, tokens and primitives remain the existing view's. No shared
+  primitive, route, wire action or remote log command is added. Physical
+  journal timing, hardware volume and screen-reader qualification remain owed.
+- Notice and panel copy reuse `KeepWords`; `cjk-words.ts` owns the Chinese
+  word-boundary helper without pulling sharing RPC schemas into boot-time
+  notification rendering. Japanese uses auto-phrase, Korean keeps words, and
+  Chinese uses the helper's explicit word breaks. Toast message snippets use
+  the same renderer and release their own mounted component when removed.
+  Log-pointing toasts alone receive token-based touch height, an outline and
+  an 8 px gap. Their controls wrap below the message instead of squeezing it.
+  No shared Button or Sonner primitive is edited.
 
 ## Open decisions
 

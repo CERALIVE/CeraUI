@@ -1911,6 +1911,7 @@
 	"notifications.linksRecovered": "ボンディングリンクが回復しました。",
 	"notifications.modemRoaming": "{name} はローミング中です。提携ネットワークに登録されているため、データ通信にローミング料金がかかる場合があります。配信には影響しません。",
 	"notifications.openUpdates": "更新を開く",
+	"notifications.viewLogs": "ログを表示",
 	"notifications.updatesAvailableMessage": "更新があります。ソフトウェア更新で確認してください。",
 	"notifications.updateInstalled": "インストール済み: {packages}。",
 	"notifications.updateRefused": "更新は拒否されました。{reason}",

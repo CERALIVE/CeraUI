@@ -54,6 +54,7 @@ import {
 import { Activity, Loader2, PictureInPicture2 } from '@lucide/svelte';
 
 import LabeledSlider from '$lib/components/custom/LabeledSlider.svelte';
+import ViewLogsAction from '$lib/components/custom/ViewLogsAction.svelte';
 import * as Card from '$lib/components/ui/card';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
@@ -96,7 +97,7 @@ const persisted = $derived(config?.composition);
 // the answer lands it is dropped, so an applied change reads from the config
 // echo and a refused one falls back to the persisted, still-running values.
 let pending = $state<CompositionConfig | undefined>(undefined);
-let liveRefusal = $state<string | undefined>(undefined);
+let liveRefusal = $state<ReturnType<typeof compositionRefusal>>(undefined);
 // Live, the opacity previews while it moves and is sent as one change on
 // release. The slider reports a commit for every key press, so a keyboard
 // adjustment stays open while any adjusting key is held and ends when the
@@ -175,7 +176,7 @@ async function applyLive(next: CompositionConfig, input: StreamingSetConfigInput
 		const result = await sendCompositionWrite(input, getIsStreaming);
 		liveRefusal = result === undefined ? undefined : compositionRefusal(result);
 	} catch {
-		liveRefusal = m['notifications.saveFailed']();
+		liveRefusal = { message: m['notifications.saveFailed']() };
 	} finally {
 		pending = undefined;
 		saving = false;
@@ -437,7 +438,10 @@ function endAdjustment(): void {
 								class="border-status-warning/50 bg-status-warning/10 mt-5 flex items-start gap-3 rounded-lg border p-3"
 							>
 								<Activity aria-hidden={true} class="text-status-warning mt-0.5 size-4 shrink-0" />
-								<p class="text-foreground min-w-0 text-xs">{liveRefusal}</p>
+								<div class="min-w-0">
+									<p class="text-foreground text-xs">{liveRefusal.message}</p>
+									<ViewLogsAction class="mt-2" messageKey={liveRefusal.reasonKey} />
+								</div>
 							</div>
 						{/if}
 					</div>

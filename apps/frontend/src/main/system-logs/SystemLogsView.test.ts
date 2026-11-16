@@ -27,6 +27,7 @@ const rpc = vi.hoisted(
 			logs?: {
 				getStorage: () => Promise<unknown>;
 				deleteOlderFiles?: () => Promise<unknown>;
+				query: () => Promise<unknown>;
 			};
 		},
 );
@@ -37,6 +38,12 @@ const ensureNamespaces = vi.hoisted(() =>
 );
 
 vi.mock("$lib/rpc/client", () => ({ rpc }));
+vi.mock("$lib/rpc/subscriptions.svelte", async () => ({
+	...(await import(
+		"$lib/components/custom/__fixtures__/connection-state.svelte"
+	)),
+	setLogFollowListener: vi.fn(),
+}));
 vi.mock("$lib/helpers/SystemHelper", () => ({ getDeviceLog, getSystemLog }));
 vi.mock(
 	"@ceraui/i18n/svelte",
@@ -64,7 +71,10 @@ const missingProcedure = () =>
 	});
 
 beforeEach(() => {
-	rpc.logs = { getStorage };
+	rpc.logs = {
+		getStorage,
+		query: vi.fn().mockResolvedValue({ ok: false, error: "READ_FAILED" }),
+	};
 	getStorage.mockReset();
 	getStorage.mockResolvedValue(logStorage());
 	ensureNamespaces.mockReset();
@@ -463,7 +473,20 @@ describe("SystemLogsView — anatomy", () => {
 			expect(tokens(section)).toEqual(["flex", "flex-col", "gap-3", "p-4"]);
 			const heading = within(section).getByRole("heading");
 			expect(heading.tagName).toBe("H3");
-			expect(tokens(heading)).toEqual(["text-sm", "font-semibold"]);
+			expect(tokens(heading)).toEqual([
+				"text-sm",
+				"font-semibold",
+				...(id === "system-logs-storage"
+					? [
+							"outline-none",
+							"focus-visible:ring-ring/50",
+							"focus-visible:ring-3",
+						]
+					: []),
+			]);
+			expect(heading.getAttribute("tabindex")).toBe(
+				id === "system-logs-storage" ? "-1" : null,
+			);
 		}
 	});
 
@@ -738,7 +761,11 @@ describe("SystemLogsView — Storage region", () => {
 			bootsBefore: 2,
 			bootsAfter: 1,
 		});
-		rpc.logs = { getStorage, deleteOlderFiles };
+		rpc.logs = {
+			getStorage,
+			deleteOlderFiles,
+			query: vi.fn().mockResolvedValue({ ok: false, error: "READ_FAILED" }),
+		};
 		render(SystemLogsView);
 		await screen.findByRole("tablist");
 

@@ -8,10 +8,12 @@
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
+import type { LogQueryInput } from '@ceraui/rpc/schemas';
 import { TriangleAlert, WifiOff } from '@lucide/svelte';
 import { onDestroy, untrack } from 'svelte';
 
 import { Button } from '$lib/components/ui/button';
+import { bootSelection } from '$lib/device-logs/boot-selection.svelte';
 import { onHistoryChanged } from '$lib/device-logs/history-bus';
 import { type AroundPage, type RawAnnouncement, RawView, resetRawView } from '$lib/device-logs/raw-view.svelte';
 import { rpc } from '$lib/rpc/client';
@@ -20,7 +22,7 @@ import { getConnectionState, setLogFollowListener } from '$lib/rpc/subscriptions
 import RawLogList from './RawLogList.svelte';
 import RawLogsFilterBar from './RawLogsFilterBar.svelte';
 
-let { around }: { around?: AroundPage } = $props();
+let { around, onquery }: { around?: AroundPage; onquery?: (query: LogQueryInput) => void } = $props();
 
 const ANNOUNCE: Record<RawAnnouncement['kind'], (count: number) => string> = {
 	following: () => m['systemLogs.announce.following'](),
@@ -38,10 +40,20 @@ const ENDED = {
 	cleared: () => m['systemLogs.follow.endedCleared'](),
 };
 
-const view = new RawView({ logs: rpc.logs, setFollowListener: setLogFollowListener, now: () => Date.now() });
-void view.start(untrack(() => around));
+const view = new RawView({
+	logs: rpc.logs,
+	setFollowListener: setLogFollowListener,
+	now: () => Date.now(),
+	onQuery: (query) => onquery?.(query),
+});
+const initial = untrack(() => ({ around, bootId: bootSelection.bootId }));
+void (initial.around !== undefined || initial.bootId === null
+	? view.start(initial.around)
+	: view.chooseBoot(initial.bootId));
+const stopBoot = bootSelection.onChoose((bootId) => void view.chooseBoot(bootId));
 const stopHistory = onHistoryChanged(() => void resetRawView(view));
 onDestroy(() => {
+	stopBoot();
 	stopHistory();
 	view.dispose();
 });

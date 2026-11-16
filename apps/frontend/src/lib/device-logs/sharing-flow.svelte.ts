@@ -77,10 +77,26 @@ export class SharingFlow {
 	readonly #stopHistory: () => void;
 	#exportRun = 0;
 	#bundleRun = 0;
+	#viewOwner: object | undefined;
+	#disposed = false;
 
 	constructor(deps: SharingDeps) {
 		this.#deps = deps;
 		this.#stopHistory = onHistoryChanged(() => this.#historyChanged());
+	}
+
+	/** One mounted Raw panel publishes; its snapshot survives a switch to Storage. */
+	bindView(): { publish(query: LogQueryInput): void; dispose(): void } {
+		const owner = {};
+		if (!this.#disposed) this.#viewOwner = owner;
+		return {
+			publish: (query) => {
+				if (this.#viewOwner === owner) this.view = query;
+			},
+			dispose: () => {
+				if (this.#viewOwner === owner) this.#viewOwner = undefined;
+			},
+		};
 	}
 
 	openExport(): void {
@@ -146,6 +162,10 @@ export class SharingFlow {
 	}
 
 	dispose(): void {
+		if (this.#disposed) return;
+		this.#disposed = true;
+		this.#viewOwner = undefined;
+		this.view = RAW_OPENING_QUERY;
 		this.#stopHistory();
 		this.closeExport();
 		this.closeBundle();

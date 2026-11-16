@@ -14,6 +14,8 @@
 import { getLocale, m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { UpdateCheckClockSummary, UpdatePreflightReason, UpdateState, UpdateTransportSummary } from '@ceraui/rpc/schemas';
 import { AlertTriangle, CheckCircle2 } from '@lucide/svelte';
+
+import ViewLogsAction from '$lib/components/custom/ViewLogsAction.svelte';
 import { createDeadlineClock } from '$lib/updates/deadline-clock.svelte';
 import { checkedAtOf, isWithheld } from '$lib/updates/legacy-packages';
 import { actionablePackageOrigins } from '$lib/updates/update-dialog-view';
@@ -148,6 +150,10 @@ const checkFailureMessage = $derived.by(() => {
 				<p class="text-muted-foreground mt-1 text-sm break-words" data-testid="update-preflight-reason">
 					{preflightMessage}
 				</p>
+				<ViewLogsAction
+					class="mt-2"
+					messageKey={`settings.updates.update_preflight_failed.${preflightFailed.preflight_reason}`}
+				/>
 			</div>
 		</div>
 	{:else if failed}
@@ -158,6 +164,10 @@ const checkFailureMessage = $derived.by(() => {
 				<p class="text-muted-foreground mt-1 text-sm break-words" data-testid="update-failed-reason">
 					{failureMessage}
 				</p>
+				<ViewLogsAction
+					class="mt-2"
+					messageKey={FAILED_REASON_COPY[failed.reason] ? undefined : 'settings.updates.failedReasonGeneric'}
+				/>
 			</div>
 		</div>
 	{:else if succeeded}
@@ -170,6 +180,7 @@ const checkFailureMessage = $derived.by(() => {
 					<p class="text-muted-foreground mt-2 text-sm break-words" data-testid="update-cleanup-warning" role="status">
 						{m["settings.updates.cleanup_warning.post_clean_failed"]()}
 					</p>
+					<ViewLogsAction class="mt-2" messageKey={`settings.updates.cleanup_warning.${cleanupWarning}`} />
 				{/if}
 			</div>
 		</div>

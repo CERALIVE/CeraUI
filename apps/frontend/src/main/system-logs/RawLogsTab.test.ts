@@ -29,6 +29,8 @@ import {
 	resetConnectionState,
 	setConnectionState,
 } from "$lib/components/custom/__fixtures__/connection-state.svelte";
+import { fourBoots } from "$lib/device-logs/__fixtures__/boots";
+import { bootSelection } from "$lib/device-logs/boot-selection.svelte";
 import { notifyHistoryChanged } from "$lib/device-logs/history-bus";
 import { RawView } from "$lib/device-logs/raw-view.svelte";
 
@@ -185,7 +187,44 @@ beforeEach(() => {
 
 afterEach(() => {
 	cleanup();
+	bootSelection.reset();
 	vi.restoreAllMocks();
+});
+
+it("reads the selected boot on mount and follows later picker choices", async () => {
+	const boots = fourBoots();
+	const first = boots[1];
+	const next = boots[2];
+	if (!first || !next) throw new Error("boot fixtures missing");
+	bootSelection.choose(first);
+	logs.query.mockResolvedValue(page([]));
+	render(RawLogsTab);
+
+	await waitFor(() =>
+		expect(logs.query).toHaveBeenLastCalledWith({
+			...DEFAULT_INPUT,
+			boot: first.bootId,
+		}),
+	);
+	bootSelection.choose(next);
+	await waitFor(() =>
+		expect(logs.query).toHaveBeenLastCalledWith({
+			...DEFAULT_INPUT,
+			boot: next.bootId,
+		}),
+	);
+	bootSelection.choose(null);
+	await waitFor(() =>
+		expect(logs.query).toHaveBeenLastCalledWith({
+			...DEFAULT_INPUT,
+			boot: "all",
+		}),
+	);
+	cleanup();
+	const reads = logs.query.mock.calls.length;
+	bootSelection.choose(first);
+	await tick();
+	expect(logs.query).toHaveBeenCalledTimes(reads);
 });
 
 async function mounted(

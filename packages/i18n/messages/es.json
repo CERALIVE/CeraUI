@@ -1959,6 +1959,7 @@
 	"notifications.linksRecovered": "Enlaces combinados recuperados.",
 	"notifications.modemRoaming": "{name} está en itinerancia. Se ha registrado en una red asociada, por lo que los datos pueden facturarse con tarifas de itinerancia. La transmisión no se ve afectada.",
 	"notifications.openUpdates": "Abrir actualizaciones",
+	"notifications.viewLogs": "Ver registros",
 	"notifications.updatesAvailableMessage": "Hay actualizaciones disponibles. Revísalas en Actualizaciones de software.",
 	"notifications.updateInstalled": "Instalados: {packages}.",
 	"notifications.updateRefused": "Actualización rechazada. {reason}",

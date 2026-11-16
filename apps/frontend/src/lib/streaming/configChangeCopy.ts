@@ -13,6 +13,8 @@ type Messages = Readonly<Record<MessageKey, MessageFn>>;
 export type ConfigChangeReport = {
 	level: "success" | "warning" | "error";
 	message: string;
+	/** The reason sentence's key, when the message carries one. */
+	reasonKey?: MessageKey;
 };
 
 /**
@@ -23,16 +25,16 @@ export type ConfigChangeReport = {
  * paths, unit names) have shipped to an audience with no console. An unmapped
  * reason therefore points at the in-app log viewer rather than leaking itself.
  */
-function reasonSentence(reason: string | undefined, msg: Messages): string {
+function reasonKey(reason: string | undefined): MessageKey {
 	if (reason === CONFIG_CHANGE_REASON_TEARDOWN_TIMEOUT)
-		return msg["live.encoder.applyPhase.reasonTeardownTimeout"]();
+		return "live.encoder.applyPhase.reasonTeardownTimeout";
 	if (reason === CONFIG_CHANGE_REASON_DEADLINE)
-		return msg["live.encoder.applyPhase.reasonDeadlineExceeded"]();
+		return "live.encoder.applyPhase.reasonDeadlineExceeded";
 	if (reason === CONFIG_CHANGE_REASON_ENGINE_LOST)
-		return msg["live.encoder.applyPhase.reasonEngineLost"]();
+		return "live.encoder.applyPhase.reasonEngineLost";
 	if (reason === CONFIG_CHANGE_REASON_REJECTED)
-		return msg["live.encoder.applyPhase.reasonRejected"]();
-	return msg["live.encoder.applyPhase.reasonUnknown"]();
+		return "live.encoder.applyPhase.reasonRejected";
+	return "live.encoder.applyPhase.reasonUnknown";
 }
 
 export function configChangeReport(
@@ -46,15 +48,19 @@ export function configChangeReport(
 		};
 	}
 	if (change.result === "reverted") {
+		const key = reasonKey(change.reason);
 		return {
 			level: "warning",
-			message: `${msg["live.encoder.applyPhase.reverted"]()} ${reasonSentence(change.reason, msg)}`,
+			message: `${msg["live.encoder.applyPhase.reverted"]()} ${msg[key]()}`,
+			reasonKey: key,
 		};
 	}
 	if (change.result === "rollback_failed") {
+		const key = reasonKey(change.reason);
 		return {
 			level: "error",
-			message: `${msg["live.encoder.applyPhase.rollbackFailed"]()} ${reasonSentence(change.reason, msg)}`,
+			message: `${msg["live.encoder.applyPhase.rollbackFailed"]()} ${msg[key]()}`,
+			reasonKey: key,
 		};
 	}
 	// `busy` / `rejected` mean the transaction never started, so nothing about

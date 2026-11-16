@@ -27,12 +27,15 @@
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import XIcon from '@lucide/svelte/icons/x';
 
+import ViewLogsAction from '$lib/components/custom/ViewLogsAction.svelte';
 import { Button } from '$lib/components/ui/button';
+import { notificationLogKey } from '$lib/device-logs/log-pointer-keys';
 import { requestDialog } from '$lib/stores/dialog-request.svelte';
 import { getDisplayProfile, prefersEinkTheme } from '$lib/stores/display-profile.svelte';
 import { getPersistent } from '$lib/stores/notifications.svelte';
 import { cn } from '$lib/utils';
 
+import KeepWords from '../system-logs/KeepWords.svelte';
 import {
 	dismissPersistentNotification,
 	NOTIFICATION_BAND_CLASS,
@@ -68,12 +71,12 @@ const frozen = $derived(prefersEinkTheme(getDisplayProfile()));
 						aria-hidden="true"
 					/>
 					<div class="min-w-0 flex-1">
-						<p class="text-foreground text-sm leading-relaxed break-words">
-							{persistentNotificationText(item)}
+						<p class="text-foreground text-sm leading-relaxed break-words text-pretty [word-break:auto-phrase] [&:lang(ko)]:break-keep [&:lang(zh)]:break-keep [&:lang(zh)]:text-balance">
+							<KeepWords text={persistentNotificationText(item)} />
 						</p>
 						{#if item.action?.kind === 'navigate'}
 							<Button
-								class="mt-2 h-7 px-2 text-xs"
+								class="mt-2 me-2 h-7 px-2 text-xs"
 								size="sm"
 								variant="outline"
 								data-testid="persistent-notice-action"
@@ -85,6 +88,11 @@ const frozen = $derived(prefersEinkTheme(getDisplayProfile()));
 								{resolveMessageKey(item.action.labelKey)}
 							</Button>
 						{/if}
+						<ViewLogsAction
+							at={item.receivedAt}
+							class="mt-2 h-7 px-2 text-xs"
+							messageKey={notificationLogKey(item)}
+						/>
 					</div>
 					{#if item.isDismissable}
 						<Button

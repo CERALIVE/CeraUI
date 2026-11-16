@@ -9,7 +9,7 @@
 <script lang="ts">
 import { getLocale } from '@ceraui/i18n/svelte';
 
-import { chineseWordChunks } from '$lib/device-logs/sharing';
+import { chineseWordChunks } from '$lib/device-logs/cjk-words';
 
 let { text }: { text: string } = $props();
 

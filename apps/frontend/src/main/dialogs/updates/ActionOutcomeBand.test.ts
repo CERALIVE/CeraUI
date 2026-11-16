@@ -4,7 +4,7 @@
  * device can say "Not started"; a reply that never arrived says the outcome is
  * not confirmed, and carries no spinner that could run forever.
  */
-import { cleanup, render, screen } from "@testing-library/svelte";
+import { cleanup, render, screen, within } from "@testing-library/svelte";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { en } from "../../../tests/helpers/catalog";
@@ -44,6 +44,20 @@ describe("ActionOutcomeBand", () => {
 		expect(band.textContent).toContain(updates.refusal.title);
 		expect(band.textContent).toContain(updates.refusal.busy);
 		expect(screen.queryByTestId("update-action-unconfirmed")).toBeNull();
+		// A named refusal says what to do; it does not send the operator to the logs.
+		expect(screen.queryByTestId("view-logs-action")).toBeNull();
+	});
+
+	it("offers View logs beside a refusal the device did not explain", () => {
+		render(ActionOutcomeBand, {
+			refusal: { action: "install", reason: "dpkg lock held" },
+			unconfirmed: undefined,
+		});
+
+		const band = screen.getByTestId("update-action-refused");
+		expect(band.textContent).toContain(updates.refusal.generic);
+		const action = within(band).getByTestId("view-logs-action");
+		expect(action.className).toContain("mt-2");
 	});
 
 	it("renders nothing when there is no outcome to report", () => {

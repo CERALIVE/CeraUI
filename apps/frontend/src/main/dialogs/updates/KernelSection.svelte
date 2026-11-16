@@ -4,6 +4,7 @@ import { getLocale, m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { UpdateDetails, UpdateOrchestratorWireState } from '@ceraui/rpc/schemas';
 import { RefreshCw } from '@lucide/svelte';
 
+import ViewLogsAction from '$lib/components/custom/ViewLogsAction.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Progress } from '$lib/components/ui/progress';
 import { kernelInstallable, kernelReasonKey, kernelUpdatePhase } from '$lib/updates/kernel-update-view';
@@ -62,6 +63,7 @@ const showReason = $derived(reason != null || phase === 'kernel-rolled-back' || 
 				<p class="text-muted-foreground" data-testid="update-kernel-reason">
 					{resolveMessageKey(kernelReasonKey(reason))}
 				</p>
+				<ViewLogsAction messageKey={kernelReasonKey(reason)} />
 			{/if}
 			{#if percent !== undefined}
 				<div class="space-y-2">

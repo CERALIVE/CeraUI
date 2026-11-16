@@ -9,7 +9,7 @@
  * suffix tells the operator to start again then (C-m2). Nothing here retries
  * automatically; `retriable` stays the backend's verdict.
  */
-import { m } from "@ceraui/i18n/svelte";
+import { type MessageKey, m } from "@ceraui/i18n/svelte";
 
 export interface StartFailureCopyInput {
 	readonly class: string;
@@ -17,12 +17,15 @@ export interface StartFailureCopyInput {
 	readonly captureCause?: string;
 }
 
-function retryState(failure: StartFailureCopyInput): string {
+/** The retry-state suffix's key; two of the three send the operator to System Logs. */
+export function startFailureRetryKey(
+	failure: StartFailureCopyInput,
+): MessageKey {
 	if (failure.class === "update_in_progress")
-		return m["live.startFailure.waitForUpdate"]();
+		return "live.startFailure.waitForUpdate";
 	return failure.retriable
-		? m["live.startFailure.retriedThenFailed"]()
-		: m["live.startFailure.notRetriable"]();
+		? "live.startFailure.retriedThenFailed"
+		: "live.startFailure.notRetriable";
 }
 
 export function startFailureMessage(failure: StartFailureCopyInput): string {
@@ -33,5 +36,5 @@ export function startFailureMessage(failure: StartFailureCopyInput): string {
 	const cls = m[key];
 	const reason =
 		typeof cls === "function" ? cls() : m["live.startFailed.generic"]();
-	return `${reason} ${retryState(failure)}`;
+	return `${reason} ${m[startFailureRetryKey(failure)]()}`;
 }

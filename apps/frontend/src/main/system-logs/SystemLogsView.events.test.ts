@@ -35,6 +35,7 @@ const rpc = vi.hoisted(() => ({
 		getStorage: vi.fn<() => Promise<unknown>>(),
 		boots: vi.fn<() => Promise<LogBootInfo[]>>(),
 		around: vi.fn<() => Promise<LogAroundOutput>>(),
+		query: vi.fn(),
 	},
 	events: { list: vi.fn<() => Promise<EventListOutput>>() },
 }));
@@ -48,6 +49,7 @@ vi.mock("$lib/rpc/subscriptions.svelte", async () => ({
 		"$lib/components/custom/__fixtures__/connection-state.svelte"
 	)),
 	setEventFeedListener: vi.fn(),
+	setLogFollowListener: vi.fn(),
 }));
 
 const WIDE = "(min-width: 1024px)";
@@ -60,6 +62,8 @@ beforeEach(() => {
 	rpc.logs.boots.mockReset();
 	rpc.logs.boots.mockResolvedValue(fourBoots());
 	rpc.logs.around.mockReset();
+	rpc.logs.query.mockReset();
+	rpc.logs.query.mockResolvedValue(aroundPage().older);
 	rpc.events.list.mockReset();
 	rpc.events.list.mockResolvedValue(
 		eventPage([event(1, "device_started", {}, { severity: "info" })]),
@@ -107,5 +111,8 @@ describe("SystemLogsView — Events panel", () => {
 		expect(
 			screen.getByTestId("system-logs-panel-events").childElementCount,
 		).toBe(0);
+		expect(await screen.findByTestId("raw-anchor-empty")).toBeTruthy();
+		expect(rpc.logs.around).toHaveBeenCalledTimes(1);
+		expect(rpc.logs.query).not.toHaveBeenCalled();
 	});
 });

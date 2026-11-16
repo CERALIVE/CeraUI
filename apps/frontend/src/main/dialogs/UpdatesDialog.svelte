@@ -24,6 +24,7 @@ import { getLocale, m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import { Info, RefreshCw, RotateCw, ShieldAlert } from '@lucide/svelte';
 import { untrack } from 'svelte';
 
+import ViewLogsAction from '$lib/components/custom/ViewLogsAction.svelte';
 import { AppDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
 import { Progress } from '$lib/components/ui/progress';
@@ -105,6 +106,7 @@ const activityEta = $derived(activityPhase ? etaMinutes(orchestrator?.progress?.
 					     so the title never says the server rejected it. -->
 					<p class="text-sm font-medium">{m['settings.updates.credentials.unusableTitle']()}</p>
 					<p class="text-muted-foreground text-sm">{m['settings.updates.credentials.rejectedBody']()}</p>
+					<ViewLogsAction class="mt-2" messageKey="settings.updates.credentials.rejectedBody" />
 				</div>
 			</div>
 		{/if}

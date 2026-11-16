@@ -237,6 +237,10 @@ describe("sweep: a certificate verdict is not a server rejection", () => {
 			"The device's update certificate could not be used",
 		);
 		expect(band?.textContent).not.toContain("server rejected");
+		// Its body sends the operator to System Logs, so the action sits under it.
+		expect(
+			band?.querySelector('[data-testid="view-logs-action"]')?.className,
+		).toContain("mt-2");
 	});
 });
 

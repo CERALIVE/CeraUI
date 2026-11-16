@@ -24,6 +24,8 @@ import { MediaQuery } from 'svelte/reactivity';
 import { Button } from '$lib/components/ui/button';
 import { Skeleton } from '$lib/components/ui/skeleton';
 import * as Tabs from '$lib/components/ui/tabs';
+import type { RawAnchor } from '$lib/device-logs/raw-anchor';
+import type { AroundPage } from '$lib/device-logs/raw-view.svelte';
 import { startBackendDownload } from '$lib/device-logs/sharing';
 import { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 import {
@@ -37,6 +39,7 @@ import { checkLogViewer } from '$lib/device-logs/viewer-availability';
 import { ensureDialogNamespaces } from '$lib/i18n/namespace-activation';
 import { WIDE_DESKTOP_QUERY } from '$lib/layout';
 import { rpc } from '$lib/rpc/client';
+import type { LogsDialogContext } from '$lib/stores/dialog-request.svelte';
 
 import BootPicker from './BootPicker.svelte';
 import EventsPanel from './EventsPanel.svelte';
@@ -52,16 +55,33 @@ const TAB_LABELS: Record<ShellTab, () => string> = {
 	storage: () => m['systemLogs.tabs.storage'](),
 };
 
+interface Props {
+	/** A message's tab and moment; the Raw panel resolves its boot/window before mounting. */
+	context?: LogsDialogContext;
+}
+
+let { context }: Props = $props();
+
 const wide = new MediaQuery(WIDE_DESKTOP_QUERY);
 const uid = $props.id();
 
 let status = $state<ShellStatus>('loading');
-let selected = $state<string>();
+const legacyDownloads = new LogDownloads();
+// Each new deep link selects its tab again; the operator's own choice overrides it.
+let selected = $derived<string | undefined>(context?.tab);
+let anchor = $derived<RawAnchor | undefined>(
+	context?.tab === 'raw' && context.at !== undefined ? { at: context.at, bootId: context.bootId } : undefined,
+);
+let around = $state.raw<AroundPage>();
 let view = $state<HTMLElement>();
 let tabList = $state<HTMLElement | null>(null);
-const legacyDownloads = new LogDownloads();
+let storageHeading = $state<HTMLHeadingElement>();
+let checkRun = 0;
 const sharing = new SharingFlow({ logs: rpc.logs, download: startBackendDownload });
-onDestroy(() => sharing.dispose());
+onDestroy(() => {
+	checkRun++;
+	sharing.dispose();
+});
 
 const tabs = $derived(shellTabs(wide.current));
 const current = $derived(activeTab(selected, tabs));
@@ -70,10 +90,12 @@ const downloads = $derived(downloadsPlacement(status, wide.current));
 const hasCopy = $derived(status === 'ready' || status === 'unavailable');
 
 async function check(): Promise<void> {
-	status = await checkLogViewer(
+	const run = ++checkRun;
+	const result = await checkLogViewer(
 		() => ensureDialogNamespaces('systemLogs'),
 		() => rpc.logs.getStorage(),
 	);
+	if (run === checkRun) status = result;
 }
 
 function retry(): void {
@@ -83,11 +105,21 @@ function retry(): void {
 
 void check();
 
-// Initial focus on the selected tab so arrow keys work at once (bits-ui put it on
-// Close); never taken from where the operator already is in the view.
+function selectTab(value: string): void {
+	selected = value;
+	anchor = undefined;
+	around = undefined;
+}
+
+// Keep an approximate jump on its selected tab; an exact anchor focuses its row.
 $effect(() => {
 	if (!tabList || view?.contains(document.activeElement)) return;
 	tabList.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
+});
+
+// Storage is a side region rather than a tab on wide screens.
+$effect(() => {
+	if (context?.tab === 'storage' && wide.current) storageHeading?.focus();
 });
 </script>
 
@@ -100,7 +132,7 @@ $effect(() => {
 
 {#snippet storageRegion()}
 	<section aria-labelledby="{uid}-storage" class="flex flex-col gap-3 p-4" data-testid="system-logs-storage">
-		<h3 class="text-sm font-semibold" id="{uid}-storage">{m['systemLogs.storage.heading']()}</h3>
+		<h3 bind:this={storageHeading} class="text-sm font-semibold outline-none focus-visible:ring-ring/50 focus-visible:ring-3" id="{uid}-storage" tabindex="-1">{m['systemLogs.storage.heading']()}</h3>
 		<StorageSection />
 	</section>
 {/snippet}
@@ -124,7 +156,7 @@ $effect(() => {
 <div bind:this={view} class="flex min-h-0 flex-1" data-testid="system-logs-view">
 	<div class="flex min-h-0 min-w-0 flex-1 flex-col">
 		{#if status === 'ready'}
-			<Tabs.Root class="min-h-0 flex-1 gap-0" onValueChange={(value) => (selected = value)} value={current}>
+			<Tabs.Root class="min-h-0 flex-1 gap-0" onValueChange={selectTab} value={current}>
 				<div class="border-b px-4">
 					<Tabs.List
 						aria-label={m['systemLogs.tabs.label']()}
@@ -146,7 +178,7 @@ $effect(() => {
 				{#each tabs as tab (tab)}
 					<Tabs.Content class="min-h-0 overflow-y-auto" data-testid="system-logs-panel-{tab}" value={tab}>
 						{#if tab === 'events' && current === 'events'}
-							<EventsPanel onviewraw={() => (selected = 'raw')} />
+							<EventsPanel onviewraw={(page) => { around = page; selected = 'raw'; }} />
 						{/if}
 						{#if tab === 'storage' && current === 'storage'}
 							<div class="divide-y">
@@ -155,7 +187,9 @@ $effect(() => {
 							</div>
 						{/if}
 						{#if tab === 'raw' && current === 'raw'}
-							<RawLogsPanel />
+							{#key anchor}
+								<RawLogsPanel {anchor} {around} {sharing} />
+							{/key}
 						{/if}
 					</Tabs.Content>
 				{/each}
