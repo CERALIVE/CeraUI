@@ -49,7 +49,6 @@ import {
 	MOCK_FEEDBACK_BROADCAST_INTERVAL_MS,
 	MOCK_RELAY_POPULATE_DELAY_MS,
 	MOCK_RTT_INTERVAL_MS,
-	MODEM_SIGNAL_FLUCTUATION_PERCENT,
 	SENSOR_CURRENT_IDLE_A,
 	SENSOR_CURRENT_IDLE_RANGE_A,
 	SENSOR_CURRENT_STREAMING_A,
@@ -59,7 +58,6 @@ import {
 	SENSOR_TEMP_FLUCTUATION_C,
 	SENSOR_VOLTAGE_BASE_V,
 	SENSOR_VOLTAGE_RANGE_V,
-	WIFI_SIGNAL_FLUCTUATION_PERCENT,
 } from "./mock-constants.ts";
 import type {
 	MockEncoderConfigState,
@@ -216,9 +214,8 @@ let relayPopulateTimeout: ReturnType<typeof setTimeout> | null = null;
 // and re-emit `relays` on this cadence so the UI sees live, changing RTT values.
 let rttBroadcastInterval: ReturnType<typeof setInterval> | null = null;
 
-// Coalesced (5s) feedback tick: surfaces the 1s signal fluctuations to clients.
-// applyPeriodicFluctuations() mutates state every 1s but never broadcast it — this
-// timer is what actually pushes those changes on-screen, at the 5s cadence.
+// Coalesced (5s) feedback tick: pushes modem/wifi signal changes written into
+// mockState (by tests and dev seams) to clients. Signals never drift on their own.
 let feedbackBroadcastInterval: ReturnType<typeof setInterval> | null = null;
 
 // Dedupe caches: the last modem/wifi signal fingerprint actually emitted, so a
@@ -282,7 +279,9 @@ export function initMockService(scenarioName?: string): void {
 	lastEmittedWifiFingerprint = null;
 
 	for (let i = 0; i < config.modems; i++) {
-		mockState.modemSignals.set(i, 80 + Math.random() * 15);
+		// Fixed, never random: visual baselines draw these bars and must be
+		// byte-stable. Every seed is excellent (>= 75), which also draws three bars.
+		mockState.modemSignals.set(i, 90 - i * 5);
 		mockState.modemStates.set(i, "connected");
 	}
 
@@ -455,31 +454,16 @@ function startPeriodicUpdates(): void {
 }
 
 /**
- * Update mock state with realistic fluctuations
+ * Update mock state with realistic fluctuations. Modem and wifi signals are left
+ * alone on purpose: they stay at their seeds so screenshots are byte-stable.
  */
 function applyPeriodicFluctuations(): void {
 	const config = getScenarioConfig();
-
-	// Update modem signals (fluctuate ±MODEM_SIGNAL_FLUCTUATION_PERCENT%)
-	for (const [id, signal] of mockState.modemSignals) {
-		const fluctuation =
-			(Math.random() - 0.5) * (MODEM_SIGNAL_FLUCTUATION_PERCENT * 2);
-		const newSignal = Math.max(50, Math.min(100, signal + fluctuation));
-		mockState.modemSignals.set(id, newSignal);
-	}
 
 	// Update network traffic (simulate data transfer)
 	for (const [iface, bytes] of mockState.networkTraffic) {
 		const increment = Math.floor(Math.random() * 100000) + 50000;
 		mockState.networkTraffic.set(iface, bytes + increment);
-	}
-
-	// Update WiFi signals
-	for (const [ssid, signal] of mockState.wifiSignals) {
-		const fluctuation =
-			(Math.random() - 0.5) * (WIFI_SIGNAL_FLUCTUATION_PERCENT * 2);
-		const newSignal = Math.max(20, Math.min(100, signal + fluctuation));
-		mockState.wifiSignals.set(ssid, newSignal);
 	}
 
 	// Update sensors
@@ -542,7 +526,7 @@ async function broadcastMockWifi(): Promise<void> {
 }
 
 /**
- * Coalesced feedback tick (5s): surface modem + wifi signal fluctuations to
+ * Coalesced feedback tick (5s): surface modem + wifi signal changes to
  * connected clients. Each surface emits ONLY when its rounded signal fingerprint
  * changed since the last emit. No-op unless shouldUseMocks(). Exported for tests.
  */

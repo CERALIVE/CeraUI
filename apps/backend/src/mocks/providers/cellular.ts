@@ -45,7 +45,11 @@ import {
 	type DongleMetadata,
 } from "../../modules/network/dongle-metadata.ts";
 import { mockModems } from "../mock-config.ts";
-import { getScenarioConfig, shouldUseMocks } from "../mock-service.ts";
+import {
+	getModemSignal,
+	getScenarioConfig,
+	shouldUseMocks,
+} from "../mock-service.ts";
 
 /**
  * One synthetic RK3588 USB tree, shared by every fixture here so a dev modem
@@ -169,7 +173,8 @@ export function getMockDbusModemViews(): readonly DbusModemView[] {
 					modem.network_type.active === "5g" ? ["lte", "5gnr"] : ["lte"],
 				),
 			},
-			signal: 60 + modem.id * 10,
+			// The mmcli provider's own seed, so the two sources never disagree on screen.
+			signal: Math.round(getModemSignal(modem.id)),
 			operatorName: modem.carrier,
 			supportedNetworkTypes: modem.network_type.supported,
 			activeNetworkType: modem.network_type.active,

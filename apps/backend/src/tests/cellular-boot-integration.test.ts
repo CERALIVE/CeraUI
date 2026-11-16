@@ -121,19 +121,11 @@ function clearModems(): void {
 }
 
 /**
- * The wire with `status.signal` dropped.
- *
- * The mock scenario fluctuates signal on a timer to make the dev UI move, so a
- * raw `JSON.stringify` compare across two boots is flaky BY DESIGN of the
- * fixture — and reading that flake as "shadow changed the wire" is precisely the
- * wrong conclusion. Every other field, including the whole additive block and
- * the key ORDER, is still compared byte-for-byte.
+ * The whole wire, compared byte-for-byte across two boots: the mock seeds fixed
+ * signals, so `status.signal`, the additive block and the key ORDER all hold.
  */
 function stableWire(): string {
-	const wire = buildModemsWireMessage();
-	return JSON.stringify(wire, (key, value) =>
-		key === "signal" ? undefined : value,
-	);
+	return JSON.stringify(buildModemsWireMessage());
 }
 
 beforeEach(() => {

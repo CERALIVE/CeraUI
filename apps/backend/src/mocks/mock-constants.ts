@@ -14,11 +14,6 @@ export const RELAY_RTT_YELLOW_MS = 150; // 🟡 Acceptable latency threshold
 export const BITRATE_MIN_KBPS = 9000;
 export const BITRATE_MAX_KBPS = 12000;
 
-// ─── Signal Fluctuation Percentages ──────────────────────────────────────────
-// Used by mock-service.ts applyPeriodicFluctuations() for realistic signal variations
-export const MODEM_SIGNAL_FLUCTUATION_PERCENT = 5; // ±5% for modem signals
-export const WIFI_SIGNAL_FLUCTUATION_PERCENT = 6; // ±6% for WiFi signals
-
 // ─── Sensor Ranges ──────────────────────────────────────────────────────────
 // Used by mock-service.ts for SoC temperature and power simulation
 export const SENSOR_TEMP_BASE_IDLE_C = 48; // Base SoC temp when idle
@@ -37,8 +32,8 @@ export const MOCK_RELAY_POPULATE_DELAY_MS = 2000; // Delay before populating rel
 export const MOCK_RTT_INTERVAL_MS = 1500; // Interval for RTT rebroadcast
 
 // ─── Mock Feedback Broadcast Cadence ────────────────────────────────────────
-// Used by mock-service.ts to coalesce the 1s signal fluctuations into a 5s
-// modems/wifi broadcast (state mutation stays 1s; production polls untouched)
+// Used by mock-service.ts to push signal changes written into mock state as a
+// 5s modems/wifi broadcast (production polls untouched)
 export const MOCK_FEEDBACK_BROADCAST_INTERVAL_MS = 5000; // 5s coalesce window
 
 // ─── SIM Lock Retry Budgets ─────────────────────────────────────────────────
