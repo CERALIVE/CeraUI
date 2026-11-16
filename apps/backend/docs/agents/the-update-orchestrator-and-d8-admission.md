@@ -693,8 +693,8 @@ rule in the maintenance probes.
   key; duplicate original devices or malformed records reject the inventory.
   Modem-only devices therefore reach normal cellular download consent instead
   of losing their update candidates. Gatewayless PPP defaults remain pinnable.
-  Regression coverage includes a clearly constructed twin-modem replay;
-  connected-bearer hardware capture is still owed.
+  Regression coverage replays the real Rock 5B+ twin connected-bearer inventory
+  captured with NM 1.52.1 on 2026-11-15; completed update transfers remain unqualified.
   `run()` optionally refreshes selection after safe cleanup, preserving one
   three-distinct-pair budget and the exact 15-minute pair hold. Its cancellation
   and metered-approval hooks are opt-in; omitted hooks preserve existing callers.
