@@ -157,11 +157,6 @@ export type ReconciliationVerdict =
 	| { readonly action: "retain_previous" }
 	| { readonly action: "wait" };
 
-const matches = (
-	candidate: string | number | undefined,
-	actual: string | number | undefined,
-): boolean => candidate === undefined || candidate === actual;
-
 /**
  * The two axes where the marker and the engine can be RIGHT and still not be
  * `===`. `config.json` holds ladder rungs (`"2160p"`, `30`); the engine reports
@@ -176,22 +171,14 @@ const matches = (
  * equality is honoured first, so a value the ladder cannot place (an engine token
  * this build does not know) still matches itself and never silently widens.
  */
-const resolutionMatches = (
-	candidate: string | undefined,
-	actual: string | undefined,
-): boolean => {
-	if (matches(candidate, actual)) return true;
-	if (candidate === undefined || actual === undefined) return false;
+const resolutionMatches = (candidate: string, actual: string): boolean => {
+	if (candidate === actual) return true;
 	const rung = normalizeResolutionToRung(candidate);
 	return rung !== undefined && rung === normalizeResolutionToRung(actual);
 };
 
-const framerateMatches = (
-	candidate: number | undefined,
-	actual: number | undefined,
-): boolean => {
-	if (matches(candidate, actual)) return true;
-	if (candidate === undefined || actual === undefined) return false;
+const framerateMatches = (candidate: number, actual: number): boolean => {
+	if (candidate === actual) return true;
 	const rung = normalizeFramerateToRung(candidate);
 	return rung !== undefined && rung === normalizeFramerateToRung(actual);
 };
@@ -199,15 +186,39 @@ const framerateMatches = (
 function paramsMatch(
 	fields: PreviousConfigFields,
 	engine: EngineEncodeSnapshot,
-): boolean {
-	return (
-		(fields.composition === undefined ||
-			(fields.composition === null && engine.switching === true)) &&
-		resolutionMatches(fields.resolution, engine.resolution) &&
-		framerateMatches(fields.framerate, engine.framerate) &&
-		matches(fields.video_codec, engine.codec) &&
-		matches(fields.selected_video_input, engine.activeInput)
-	);
+	axes: PreviousConfigFields,
+): boolean | undefined {
+	// Compare the same transaction axes on both sides; missing facts are unknown.
+	const checks = [
+		axes.composition === undefined
+			? true
+			: fields.composition === undefined || engine.switching === undefined
+				? undefined
+				: fields.composition === null && engine.switching === true,
+		axes.resolution === undefined
+			? true
+			: fields.resolution === undefined || engine.resolution === undefined
+				? undefined
+				: resolutionMatches(fields.resolution, engine.resolution),
+		axes.framerate === undefined
+			? true
+			: fields.framerate === undefined || engine.framerate === undefined
+				? undefined
+				: framerateMatches(fields.framerate, engine.framerate),
+		axes.video_codec === undefined
+			? true
+			: fields.video_codec === undefined || engine.codec === undefined
+				? undefined
+				: fields.video_codec === engine.codec,
+		axes.selected_video_input === undefined
+			? true
+			: fields.selected_video_input === undefined ||
+					engine.activeInput === undefined
+				? undefined
+				: fields.selected_video_input === engine.activeInput,
+	];
+	if (checks.includes(false)) return false;
+	return checks.includes(undefined) ? undefined : true;
 }
 
 /**
@@ -248,10 +259,21 @@ export function judgeInflightMarker(
 	const candidate = marker.candidate;
 	if (!hasConcreteGeometry(candidate)) return { action: "wait" };
 
-	const onCandidate = paramsMatch(candidate, engine);
-	if (onCandidate) return { action: "persist_candidate" };
+	// Published status measures neither capture mode nor routed pipeline.
+	if (
+		(candidate.input_mode !== undefined &&
+			candidate.input_mode !== marker.previous.input_mode) ||
+		(candidate.pipeline !== undefined &&
+			candidate.pipeline !== marker.previous.pipeline)
+	)
+		return { action: "wait" };
 
-	const onPrevious = paramsMatch(marker.previous, engine);
+	const onCandidate = paramsMatch(candidate, engine, candidate);
+	const onPrevious = paramsMatch(marker.previous, engine, candidate);
 
-	return onPrevious ? { action: "retain_previous" } : { action: "wait" };
+	if (onCandidate === true && onPrevious === false)
+		return { action: "persist_candidate" };
+	if (onPrevious === true && onCandidate === false)
+		return { action: "retain_previous" };
+	return { action: "wait" };
 }

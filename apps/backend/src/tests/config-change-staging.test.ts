@@ -244,4 +244,46 @@ describe("crash-window reconciliation is MARKER-ONLY", () => {
 			),
 		).toEqual({ action: "retain_previous" });
 	});
+
+	test.each([
+		{
+			name: "missing runtime resolution cannot confirm an omitted previous override",
+			candidate: { resolution: "2160p" },
+			previous: {},
+			engine: { streaming: true, framesEmitted: 120 },
+			action: "wait",
+		},
+		{
+			name: "unrelated saved codec cannot distinguish identical geometry",
+			candidate: { resolution: "1080p" },
+			previous: { resolution: "1080p", video_codec: "h265" },
+			engine: liveOn("1920x1080", { codec: "h264" }),
+			action: "wait",
+		},
+		{
+			name: "unchanged capture settings permit proven candidate geometry",
+			candidate: {
+				resolution: "2160p",
+				input_mode: "uvc_h264",
+				pipeline: "libuvch264",
+			},
+			previous: {
+				resolution: "1080p",
+				input_mode: "uvc_h264",
+				pipeline: "libuvch264",
+			},
+			engine: liveOn("3840x2160"),
+			action: "persist_candidate",
+		},
+	] satisfies ReadonlyArray<{
+		name: string;
+		candidate: InflightConfigMarker["candidate"];
+		previous: InflightConfigMarker["previous"];
+		engine: EngineEncodeSnapshot;
+		action: "wait" | "persist_candidate";
+	}>)("$name", ({ candidate, previous, engine, action }) => {
+		expect(
+			judgeInflightMarker(marker({ candidate, previous }), engine),
+		).toEqual({ action });
+	});
 });
