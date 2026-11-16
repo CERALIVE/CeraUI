@@ -3,10 +3,12 @@
 ## APPLY-NOW CONFIG CHANGE — TRANSACTION + STAGED PERSISTENCE [EXISTS]
 
 Composition now follows the same staging/dispatch/outcome path, including explicit
-null. Both consumers now pin the verified published `@ceralive/cerastream@2026.11.1`,
-whose exported `ChangeConfigParams` and schema preserve null. The already-verified
-adapter retains its narrow raw-request path and producer-owned result validation;
-no local wire type is introduced. `composition-binding-contract.test.ts` fails
+null. Both consumers now pin the verified published `@ceralive/cerastream@2026.11.2`,
+whose exported `ChangeConfigParams` and schema preserve null. Nullable
+capture-selection clears, including combined composition clears, use the binding's
+validated `changeConfig`. Composition-only clears retain their established raw
+request and producer-owned result parsing. No local wire type is introduced.
+`composition-binding-contract.test.ts` fails
 against the former pin and guards the installed producer contract directly.
 The device engine separately needs the merged cerastream #170 correction.
 See [`docs/COMPOSITION-LIFECYCLE.md`](../../../../docs/COMPOSITION-LIFECYCLE.md).
@@ -141,7 +143,8 @@ pipeline the source or mode routes to. Every field the candidate holds is
 deleted from `input`, and the derived mode write is skipped, so the existing
 merge block saves none of them (ONE write path, no parallel one to drift).
 Before this, a busy or reverted capture-mode switch still saved its derived
-`input_mode` and `pipeline`. The engine delta is unchanged: it carries a
+`input_mode` and `pipeline`. `config-change-candidate.ts` owns this split.
+The engine delta carries a
 pipeline only for a source switch. Non-restart fields in the same save persist
 immediately, unchanged. `config.json` is written ONLY on `applied`
 (`commitStagedConfigChange`); `reverted`/`rollback_failed`/`busy`/`rejected` all
@@ -170,8 +173,8 @@ source's saved geometry before admission could refuse it.
 snapshot before dispatch. `resolveSelectionAnchor` remains the identity resolver;
 neither commit nor recovery guesses an anchor from a later discovery view.
 Explicit local nulls clear the previous capture input or anchor; omitted fields
-remain unknown and leave existing metadata alone. A null capture input never
-becomes a null producer `input_id`.
+remain unknown and leave existing metadata alone. An explicit capture-input
+clear becomes producer `input_id: null` after capability negotiation.
 
 Legacy markers can state a source and capture input without a captured anchor.
 That source label cannot identify the intended hardware, even when it matches
@@ -194,10 +197,53 @@ snapshot. Its guard runs before both outcome matches: unknown or retained live
 input cannot confirm the clear or discard the marker. A stopped engine retains
 the previous configuration. Concrete capture-input changes still reconcile
 through their reported active input. This does not add mode/pipeline evidence
-to the snapshot or repair the separate producer capture-mode omission contract.
+to the snapshot.
 Coverage: `applied-source-selection.test.ts` and
 `applied-source-selection-recovery.test.ts`, through the real procedure,
 production admission, marker, config writer and persisted-selection router.
+
+**CAPTURE CLEARS REQUIRE THE RUNNING ENGINE'S CAPABILITY [EXISTS].**
+The published schema 0.24.0 `ChangeConfigParams` owns nullable `input_mode` and
+`input_id`: omission retains, a concrete value replaces, and null clears.
+`StreamConfigChangeDelta` indexes those producer fields directly. The procedure
+forwards a staged mode clear and a non-capture selection's input clear through
+the existing orchestrator and bridge to the binding's validated `changeConfig`.
+Geometry clears remain local and are omitted from dispatch; START is unchanged.
+
+Before any config mutation, a clear-needing apply-now request requires a live
+capability snapshot whose features include the imported
+`CAPTURE_SELECTION_CLEAR_FEATURE`. Absent features, `input-mode` alone, and
+cached/unavailable snapshots cannot authorize it. Unsupported requests return
+the existing `rejected/change_config_unsupported` outcome with saved config,
+selection token and any other attempt's marker untouched. The production
+apply-now gate repeats negotiation at admission after asynchronous save work.
+Installing bindings does not upgrade a device engine.
+
+That live evidence belongs to the current engine connection. The existing
+capability owner tags accepted reads with its connection generation;
+`getCurrentCapabilities` requires that tag as well as availability. Acquiring or
+adopting a client revokes clear authorization without changing legacy START wire
+traffic or its display cache. Proven session connection loss also marks retained
+display data unavailable immediately.
+
+A clear-needing candidate prepares current-client capabilities through the
+existing apply-now gate before any config mutation or stage acquisition. The
+borrowed client remains open and unqueried device discovery stays unknown.
+Late successful or failed reads from a superseded generation cannot replace
+current evidence. There is no TTL or parallel feature cache. Missing current
+evidence or a failed read refuses the clear; a known current engine without the
+token is not queried repeatedly. `capture-engine-replacement.test.ts` drives real
+SDK/UDS connections, proven loss, fresh START, the procedure/bridge/orchestrator
+and config/marker bytes.
+
+`capture-selection-clears.test.ts` covers supported applied/busy/reverted
+camera and test/RTMP/SRT switches, unsupported and unavailable-engine refusal,
+explicit/absent/unrelated controls and capture through non-capture back to capture.
+It drives the real procedure, source builder, gate, orchestrator, bridge and file
+writer, checking deltas with the installed producer `changeConfigParamsSchema`.
+Producer cerastream #245 separately proves actual wire deserialization, merge,
+capture-default resolution, ownership barriers and rollback; consumer fake replies
+do not qualify those engine operations or hardware.
 
 **THE STAGE BELONGS TO ONE ATTEMPT.** Each apply-now save builds its marker with
 its own `attemptId` and stages it only at dispatch, after every await in
@@ -248,7 +294,7 @@ Missing runtime measurements and omitted previous values remain unknown; a
 decisive live verdict requires one side to match and the other to contradict the
 same observations. Identical compared facts defer in either direction.
 
-The published `@ceralive/cerastream@2026.11.1` status has no exact capture-mode or
+The published `@ceralive/cerastream@2026.11.2` status has no exact capture-mode or
 routed-pipeline measurement. Its output codec, incoming `input_codec`, geometry
 and active input cannot establish those request fields. If the candidate changes
 `input_mode` or `pipeline`, including a local mode clear, recovery therefore keeps

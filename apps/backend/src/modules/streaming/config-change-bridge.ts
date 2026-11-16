@@ -1,4 +1,5 @@
 import {
+	CAPTURE_SELECTION_CLEAR_FEATURE,
 	CerastreamRpcError,
 	type ChangeConfigResult,
 } from "@ceralive/cerastream";
@@ -17,6 +18,7 @@ import { logger } from "../../helpers/logger.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { changeMockComposition } from "../../mocks/providers/streaming.ts";
 import { broadcastMsg } from "../../rpc/compat.ts";
+import { getCurrentCapabilities } from "./capabilities.ts";
 import type { CerastreamBackend } from "./cerastream-backend.ts";
 import {
 	type ConfigChangePhaseEvent,
@@ -126,10 +128,20 @@ export function classifyConfigChangeDispatchError(
 
 export type ApplyNowGate = {
 	readonly isStreamLive: () => boolean;
+	readonly prepareCaptureSelectionClear?: () => Promise<void>;
 	readonly dispatch: (
 		delta: StreamConfigChangeDelta,
 	) => Promise<ConfigChangeResult>;
 };
+
+/** A registry binding permits the syntax; only a live engine permits the clear. */
+export function supportsCaptureSelectionClear(): boolean {
+	const caps = getCurrentCapabilities();
+	return (
+		caps?.engineUnavailable === false &&
+		caps.features?.includes(CAPTURE_SELECTION_CLEAR_FEATURE) === true
+	);
+}
 
 /**
  * Only a settled `idle` turns an apply-now save into an ordinary next-start
@@ -155,17 +167,31 @@ function applyNowMeetsLiveSession(state: LifecycleState): boolean {
 /** The apply-now gate over one stream session's lifecycle and admission. */
 export function createApplyNowGate(
 	session: Pick<StreamSessionOrchestrator, "snapshot" | "changeConfig">,
+	prepareCaptureSelectionClear?: () => Promise<void>,
 ): ApplyNowGate {
 	return {
 		isStreamLive: () => applyNowMeetsLiveSession(session.snapshot().state),
-		dispatch: (delta) => session.changeConfig(delta),
+		...(prepareCaptureSelectionClear === undefined
+			? {}
+			: { prepareCaptureSelectionClear }),
+		dispatch: (delta) =>
+			(delta.input_mode === null || delta.input_id === null) &&
+			!supportsCaptureSelectionClear()
+				? Promise.resolve({
+						result: "rejected",
+						reason: "change_config_unsupported",
+					})
+				: session.changeConfig(delta),
 	};
 }
 
-const productionGate = createApplyNowGate({
-	snapshot: getStreamSessionSnapshot,
-	changeConfig: changeStreamSessionConfig,
-});
+const productionGate = createApplyNowGate(
+	{
+		snapshot: getStreamSessionSnapshot,
+		changeConfig: changeStreamSessionConfig,
+	},
+	() => getStreamingBackend().refreshCapabilities(),
+);
 
 let activeGate: ApplyNowGate = productionGate;
 

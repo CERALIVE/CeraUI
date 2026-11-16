@@ -4,10 +4,7 @@
  */
 
 import { CerastreamRpcError } from "@ceralive/cerastream";
-import {
-	type PipelineOverrideField,
-	unsupportedPipelineOverrides,
-} from "@ceraui/rpc";
+import { unsupportedPipelineOverrides } from "@ceraui/rpc";
 import {
 	AUDIO_CODEC_UNSUPPORTED_TRANSPORT,
 	AUDIO_SOURCE_AUTO,
@@ -95,16 +92,16 @@ import {
 	isCompositionSupported,
 	resolveCompositionWrite,
 } from "../../modules/streaming/composition.ts";
-import { getApplyNowGate } from "../../modules/streaming/config-change-bridge.ts";
+import {
+	getApplyNowGate,
+	supportsCaptureSelectionClear,
+} from "../../modules/streaming/config-change-bridge.ts";
+import { stageApplyNowFields } from "../../modules/streaming/config-change-candidate.ts";
 import {
 	abandonStagedConfigChange,
 	commitStagedConfigChange,
 } from "../../modules/streaming/config-change-persistence.ts";
-import {
-	type InflightConfigMarker,
-	type StagedConfigFields,
-	stageConfigChange,
-} from "../../modules/streaming/config-change-staging.ts";
+import { stageConfigChange } from "../../modules/streaming/config-change-staging.ts";
 import { validatePersistedPipeline } from "../../modules/streaming/config-migration.ts";
 import {
 	DEVICE_MODE_UNSUPPORTED_ERROR,
@@ -140,7 +137,6 @@ import {
 } from "../../modules/streaming/sources.ts";
 import {
 	classifyStartFailure,
-	newAttemptId,
 	StreamStartFailure,
 	typedStartFailure,
 } from "../../modules/streaming/start-failure-taxonomy.ts";
@@ -608,123 +604,6 @@ export const getConfigProcedure = authedProcedure
  * updateConfig, minus the DNS resolution and pipeline requirements that only
  * apply when actually launching a stream.
  */
-const APPLY_NOW_FIELDS = [
-	"source",
-	"resolution",
-	"framerate",
-	"video_codec",
-	"input_mode",
-	"composition",
-] as const;
-
-/**
- * Move the restart-requiring fields off `input` and into a marker for this
- * attempt, returning `undefined` when this save is an ordinary "apply on next
- * start". The marker is staged later, at dispatch.
- *
- * It MUTATES `input` on purpose: deleting the fields is what makes the existing
- * merge block below skip them, so there is exactly one place that decides
- * whether a value is persisted now — no parallel write path to drift.
- */
-type StageApplyNowFieldsInput = {
-	readonly input: StreamingSetConfigInput;
-	readonly config: RuntimeConfig;
-	readonly sourceRouting:
-		| Extract<ResolveSourceRoutingResult, { ok: true }>
-		| undefined;
-	readonly inputMode: InputMode | undefined;
-	readonly sources: readonly StreamSource[];
-	/** Overrides the destination pipeline cannot honor; the candidate clears them. */
-	readonly derivedClears: readonly PipelineOverrideField[];
-};
-
-function stageApplyNowFields({
-	input,
-	config,
-	sourceRouting,
-	inputMode,
-	sources,
-	derivedClears,
-}: StageApplyNowFieldsInput): InflightConfigMarker | undefined {
-	if (input.apply_now !== true) return undefined;
-	if (
-		!APPLY_NOW_FIELDS.some((field) =>
-			field === "video_codec"
-				? input.video_codec != null
-				: input[field] !== undefined,
-		)
-	)
-		return undefined;
-	if (!getApplyNowGate().isStreamLive()) return undefined;
-
-	const candidate: StagedConfigFields = {
-		...(input.source === undefined
-			? {}
-			: {
-					source: input.source,
-					source_stable_id:
-						resolveSelectionAnchor(
-							sourceRouting?.selected_video_input ?? input.source,
-							sources,
-						) ?? null,
-				}),
-		...(input.resolution === undefined ? {} : { resolution: input.resolution }),
-		...(input.framerate === undefined ? {} : { framerate: input.framerate }),
-		// Residue the DESTINATION pipeline cannot honor belongs to this change: a
-		// refused or reverted switch must leave the running source's geometry alone.
-		...(derivedClears.includes("resolution") ? { resolution: null } : {}),
-		...(derivedClears.includes("framerate") ? { framerate: null } : {}),
-		// The engine change-config contract cannot clear a codec; use its next-start default.
-		...(input.video_codec == null ? {} : { video_codec: input.video_codec }),
-		// The mode this save lands on, chosen or derived; a source switch can clear it.
-		...(input.input_mode === undefined && inputMode === config.input_mode
-			? {}
-			: { input_mode: inputMode ?? null }),
-		...(input.composition === undefined
-			? {}
-			: { composition: input.composition }),
-		// Routed from the source or the mode: it moves only with them.
-		...(input.pipeline === undefined ? {} : { pipeline: input.pipeline }),
-		...(sourceRouting === undefined
-			? {}
-			: { selected_video_input: sourceRouting.selected_video_input ?? null }),
-	};
-	const previous: InflightConfigMarker["previous"] = {
-		...(input.composition === undefined
-			? {}
-			: { composition: config.composition ?? null }),
-		...(config.source === undefined ? {} : { source: config.source }),
-		...(config.source_stable_id === undefined
-			? {}
-			: { source_stable_id: config.source_stable_id }),
-		...(config.resolution === undefined
-			? {}
-			: { resolution: config.resolution }),
-		...(config.framerate === undefined ? {} : { framerate: config.framerate }),
-		...(config.video_codec === undefined
-			? {}
-			: { video_codec: config.video_codec }),
-		...(config.input_mode === undefined
-			? {}
-			: { input_mode: config.input_mode }),
-		...(config.pipeline === undefined ? {} : { pipeline: config.pipeline }),
-		...(config.selected_video_input === undefined
-			? {}
-			: { selected_video_input: config.selected_video_input }),
-	};
-
-	// Everything the candidate holds is held back from the merge below, so a
-	// field it gains can never also be saved now.
-	for (const field of Object.keys(candidate))
-		Reflect.deleteProperty(input, field);
-
-	return {
-		attemptId: newAttemptId(),
-		startedAt: Date.now(),
-		candidate,
-		previous,
-	};
-}
 
 /**
  * The typed refusal for an `input_mode` the selected device does not advertise.
@@ -1037,6 +916,26 @@ export const setConfigProcedure = authedProcedure
 			sources: sourcesSnapshot,
 			derivedClears: staleOverrides,
 		});
+		if (
+			marker !== undefined &&
+			(marker.candidate.input_mode === null ||
+				marker.candidate.selected_video_input === null)
+		) {
+			if (!supportsCaptureSelectionClear()) {
+				const prepare = getApplyNowGate().prepareCaptureSelectionClear;
+				if (prepare !== undefined) await prepare();
+			}
+			if (!supportsCaptureSelectionClear()) {
+				return {
+					success: false,
+					applied: {},
+					configChange: {
+						result: "rejected",
+						reason: "change_config_unsupported",
+					},
+				};
+			}
+		}
 		if (marker !== undefined) sourceRouting = undefined;
 
 		if (input.srt_latency !== undefined)
@@ -1261,7 +1160,7 @@ export const setConfigProcedure = authedProcedure
 				...(staged.video_codec === undefined
 					? {}
 					: { video_codec: staged.video_codec }),
-				...(staged.selected_video_input == null
+				...(staged.selected_video_input === undefined
 					? {}
 					: { input_id: staged.selected_video_input }),
 				// Only a source switch hands the engine a pipeline; a mode switch is the
@@ -1269,7 +1168,9 @@ export const setConfigProcedure = authedProcedure
 				...(staged.source === undefined || staged.pipeline === undefined
 					? {}
 					: { pipeline: staged.pipeline }),
-				...(staged.input_mode == null ? {} : { input_mode: staged.input_mode }),
+				...(staged.input_mode === undefined
+					? {}
+					: { input_mode: staged.input_mode }),
 				...(staged.composition === undefined
 					? {}
 					: { composition: staged.composition }),

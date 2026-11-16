@@ -29,6 +29,12 @@ Every row is one of four `origin` variants (`capture`/`coarse`/`virtual`/
   `streaming.setConfig` and `streaming.start` call BEFORE any config mutation
   or engine dispatch — `cerastream-backend.ts` is untouched by this entire
   model (a `git diff`-based regression test proves it byte-for-byte).
+  For an apply-now source transaction, the staged writer's explicit capture-input
+  clear is forwarded as producer `input_id: null` only after live engine feature
+  negotiation. START's optional selector and fallback remain unchanged. The saved
+  explicit mode is projected only onto the identity-resolved current selection,
+  never onto every capture row or the last-streamed slot; see
+  [per-device modes](one-row-per-physical-camera-per-device-mode-selection.md).
 - **Shim policy**: the legacy `devices` broadcast (`modules/streaming/
   devices.ts`), the `pipelines` broadcast (`rpc/procedures/
   streaming.procedure.ts`), and the coarse `capabilities.device_modes` field

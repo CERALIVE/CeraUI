@@ -2,7 +2,11 @@ import { onTestFinished } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { StreamingSetConfigInput } from "@ceraui/rpc/schemas";
+import { CAPTURE_SELECTION_CLEAR_FEATURE } from "@ceralive/cerastream";
+import type {
+	NetworkIngest,
+	StreamingSetConfigInput,
+} from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 import { runtimeConfigSchema } from "../../helpers/config-schemas.ts";
 import { initMockService, stopMockService } from "../../mocks/mock-service.ts";
@@ -34,6 +38,7 @@ import {
 	createStreamSessionOrchestrator,
 	type EngineConfigChangeOutcome,
 	type StreamConfigChangeDelta,
+	type StreamSessionOrchestratorDeps,
 } from "../../modules/streaming/stream-session-orchestrator.ts";
 import { createContext } from "../../rpc/context.ts";
 import {
@@ -48,7 +53,9 @@ export const SECOND_CAMERA = { ...osmo("video2"), stable_id: SECOND_STABLE };
 
 /** Real RPC, routing, admission, marker and atomic config writer; only device
  * discovery and the engine's eventual transaction answer are supplied. */
-export async function sourceSelectionFixture() {
+export async function sourceSelectionFixture(
+	changeRuntimeConfig?: StreamSessionOrchestratorDeps["changeRuntimeConfig"],
+) {
 	const dir = await mkdtemp(join(tmpdir(), "applied-selection-"));
 	const priorPath = getConfigFilePath();
 	const priorConfig = { ...getConfig() };
@@ -97,20 +104,32 @@ export async function sourceSelectionFixture() {
 	setMockHardware("rk3588");
 	clearCapabilitiesCache();
 	const capabilities = getMockEngineCapabilities();
+	capabilities.caps.features = [
+		...(capabilities.caps.features ?? []),
+		CAPTURE_SELECTION_CLEAR_FEATURE,
+	];
 	await initPipelines({
 		fetchEngineCapabilities: async () => capabilities,
 		fetchEngineDevices: async () => ({ devices: [] }),
 	});
 	resetEngineDeviceCache();
 	const devices = [osmo(), SECOND_CAMERA];
+	const networkIngest: NetworkIngest = { rtmp: null, srt: null };
 	applyObservedEngineDevices(devices);
-	const sources = () =>
-		buildSources({
+	const sources = () => {
+		const config = getConfig();
+		return buildSources({
 			sources: capabilities.caps.sources,
 			devices,
-			networkIngest: { rtmp: null, srt: null },
-			lastSeenDevices: getConfig().last_seen_devices ?? [],
+			networkIngest,
+			lastSeenDevices: config.last_seen_devices ?? [],
+			...(config.input_mode === undefined
+				? {}
+				: { inputMode: config.input_mode }),
+			selectedSource: config.source,
+			selectedSourceStableId: config.source_stable_id,
 		});
+	};
 	setStreamingProcedureDepsForTest({
 		getSourcesMessage: () => ({ hardware: "rk3588", sources: sources() }),
 	});
@@ -129,9 +148,9 @@ export async function sourceSelectionFixture() {
 		cancelTimeout: () => undefined,
 		scheduleLaunchDeadline: () => 0,
 		cancelLaunchDeadline: () => undefined,
-		changeRuntimeConfig: (delta) => {
+		changeRuntimeConfig: (delta, attemptId) => {
 			deltas.push(delta);
-			return change();
+			return changeRuntimeConfig?.(delta, attemptId) ?? change();
 		},
 	});
 	setApplyNowGateForTest(createApplyNowGate(orchestrator));
@@ -151,6 +170,8 @@ export async function sourceSelectionFixture() {
 	return {
 		dir,
 		devices,
+		capabilities,
+		networkIngest,
 		deltas,
 		orchestrator,
 		sources,

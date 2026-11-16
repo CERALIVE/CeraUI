@@ -58,7 +58,7 @@ test("an applied non-capture selection clears the saved capture input and anchor
 	expect(saved.selected_video_input).toBeUndefined();
 	expect(saved.source_stable_id).toBeUndefined();
 	expect(result.applied?.selected_video_input).toBeUndefined();
-	expect(f.deltas).toEqual([{ pipeline: "test" }]);
+	expect(f.deltas).toEqual([{ pipeline: "test", input_id: null }]);
 	expect(
 		resolveSourceRouting(
 			"test",

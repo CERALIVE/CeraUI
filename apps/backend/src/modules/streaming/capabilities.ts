@@ -119,10 +119,32 @@ export function getSupportedTransports(): string[] {
 
 /** Last full capability snapshot; sync source for the post-login broadcast. */
 let lastCapabilities: CapabilitiesResult | undefined;
+let capabilityEpoch = 0;
+let acceptedCapabilityEpoch: number | undefined;
 
 /** The last resolved capability snapshot, or `undefined` before the first fetch. */
 export function getLastCapabilities(): CapabilitiesResult | undefined {
 	return lastCapabilities;
+}
+
+/** Authorization requires a snapshot read after the current client was acquired. */
+export function getCurrentCapabilities(): CapabilitiesResult | undefined {
+	return acceptedCapabilityEpoch === capabilityEpoch &&
+		lastCapabilities?.engineUnavailable === false
+		? lastCapabilities
+		: undefined;
+}
+
+/** Preserve display/legacy capability data while revoking clear authorization. */
+export function beginCapabilitiesEpoch(): void {
+	capabilityEpoch += 1;
+}
+
+/** Retain display data while revoking evidence from a retired engine connection. */
+export function invalidateCapabilities(): void {
+	beginCapabilitiesEpoch();
+	if (lastCapabilities !== undefined)
+		lastCapabilities = { ...lastCapabilities, engineUnavailable: true };
 }
 
 /** Minimal logger surface (winston satisfies it; tests pass a silent stub). */
@@ -139,8 +161,9 @@ export interface CapabilitiesServiceDeps {
 	fetchEngineCapabilities: () => Promise<EngineCapabilitiesSnapshot>;
 	/** Fetch the engine's `list-devices` result over a short-lived probe (never
 	 *  the streaming backend's active-stream connection). A failure never blocks
-	 *  the capability broadcast — the caller logs and omits `device_modes`. */
-	fetchEngineDevices: () => Promise<ListDevicesResult>;
+	 *  the capability broadcast — the caller logs and omits `device_modes`.
+	 *  Undefined means discovery was not queried, rather than an empty roster. */
+	fetchEngineDevices: () => Promise<ListDevicesResult | undefined>;
 	/** The bindings' compiled-in `schema_version`, compared against the engine. */
 	bindingsSchemaVersion: string;
 	logger: CapabilitiesLogger;
@@ -177,10 +200,12 @@ export const MINIMAL_SAFE_CAPABILITIES: GetCapabilitiesResult = {
 /**
  * Default engine fetch: connect, read the negotiated `schema_version`, call
  * `get-capabilities`, and validate the result against the frozen Zod contract.
- * The connection is a short-lived probe — `close()` only drops our socket; it
- * never spawns or stops the systemd-owned engine.
+ * The default connection is a short-lived probe; a supplied session client is
+ * borrowed and never closed here. Neither path spawns or stops the engine.
  */
-async function defaultFetchEngineCapabilities(): Promise<EngineCapabilitiesSnapshot> {
+async function defaultFetchEngineCapabilities(
+	sessionClient?: CerastreamClient,
+): Promise<EngineCapabilitiesSnapshot> {
 	// Lazy import keeps the setup graph out of this module's load path; the
 	// socket override is only needed for the real on-device fetch.
 	const { setup } = await import("../setup.ts");
@@ -188,9 +213,9 @@ async function defaultFetchEngineCapabilities(): Promise<EngineCapabilitiesSnaps
 		? { socketPath: setup.cerastream_socket }
 		: {};
 
-	let client: CerastreamClient | undefined;
+	let client: CerastreamClient | undefined = sessionClient;
 	try {
-		client = await connect(connectOptions);
+		client ??= await connect(connectOptions);
 		const schemaVersion = client.hello.schema_version;
 		const raw = await client.getCapabilities();
 		const caps = getCapabilitiesResultSchema.parse(raw);
@@ -213,10 +238,12 @@ async function defaultFetchEngineCapabilities(): Promise<EngineCapabilitiesSnaps
 				: {}),
 		};
 	} finally {
-		try {
-			await client?.close();
-		} catch {
-			// Best-effort disconnect of a probe connection; never respawns the engine.
+		if (sessionClient === undefined) {
+			try {
+				await client?.close();
+			} catch {
+				// Best-effort disconnect of a probe connection; never respawns the engine.
+			}
 		}
 	}
 }
@@ -331,7 +358,8 @@ async function resolveDeviceModes(
 	deps: CapabilitiesServiceDeps,
 ): Promise<Record<string, DeviceModeGroup> | undefined> {
 	try {
-		return foldDeviceModes(await deps.fetchEngineDevices());
+		const devices = await deps.fetchEngineDevices();
+		return devices === undefined ? undefined : foldDeviceModes(devices);
 	} catch (err) {
 		deps.logger.warn(
 			"capabilities: list-devices failed; broadcasting capabilities without device_modes",
@@ -347,6 +375,8 @@ let lastKnownGood: GetCapabilitiesResult | undefined;
 
 /** Drop the cached snapshot. Test seam + a hook for an engine-incompatible boot. */
 export function clearCapabilitiesCache(): void {
+	capabilityEpoch += 1;
+	acceptedCapabilityEpoch = undefined;
 	lastKnownGood = undefined;
 	lastTransports = [...BASE_TRANSPORTS];
 	lastNetworkEmbeddedAudio = undefined;
@@ -356,6 +386,35 @@ export function clearCapabilitiesCache(): void {
 /** The cached last-known-good snapshot, or `undefined` if none yet. */
 export function getCachedCapabilities(): GetCapabilitiesResult | undefined {
 	return lastKnownGood;
+}
+
+function retainedCapabilities(): CapabilitiesResult {
+	return (
+		lastCapabilities ?? {
+			...structuredClone(MINIMAL_SAFE_CAPABILITIES),
+			engineUnavailable: true,
+			engineStarting: true,
+			transports: [...BASE_TRANSPORTS],
+		}
+	);
+}
+
+/** Read the acquired client's capabilities without closing it or scanning devices. */
+export async function refreshCapabilitiesFromClient(
+	client: CerastreamClient,
+	onFailure: (error: unknown) => void,
+): Promise<void> {
+	await getCapabilities({
+		fetchEngineCapabilities: async () => {
+			try {
+				return await defaultFetchEngineCapabilities(client);
+			} catch (error) {
+				onFailure(error);
+				throw error;
+			}
+		},
+		fetchEngineDevices: async () => undefined,
+	});
 }
 
 /**
@@ -368,6 +427,7 @@ export async function getCapabilities(
 	overrides: Partial<CapabilitiesServiceDeps> = {},
 ): Promise<CapabilitiesResult> {
 	const deps: CapabilitiesServiceDeps = { ...defaultDeps(), ...overrides };
+	const epoch = capabilityEpoch;
 
 	try {
 		const {
@@ -398,6 +458,7 @@ export async function getCapabilities(
 			},
 		};
 		const deviceModes = await resolveDeviceModes(deps);
+		if (epoch !== capabilityEpoch) return retainedCapabilities();
 		lastKnownGood = caps;
 		lastTransports = deriveTransports(transports);
 		lastNetworkEmbeddedAudio = networkEmbeddedAudio;
@@ -411,8 +472,10 @@ export async function getCapabilities(
 				? { network_embedded_audio: lastNetworkEmbeddedAudio }
 				: {}),
 		};
+		acceptedCapabilityEpoch = epoch;
 		return lastCapabilities;
 	} catch (err) {
+		if (epoch !== capabilityEpoch) return retainedCapabilities();
 		if (lastKnownGood) {
 			deps.logger.warn(
 				"capabilities: engine unavailable; serving last-known-good snapshot",

@@ -130,7 +130,13 @@ import {
 	effectiveAudioInputs,
 	engineAudioInputs,
 } from "./audio-inputs.ts";
-import { getLastCapabilities } from "./capabilities.ts";
+import {
+	beginCapabilitiesEpoch,
+	getCurrentCapabilities,
+	getLastCapabilities,
+	invalidateCapabilities,
+	refreshCapabilitiesFromClient,
+} from "./capabilities.ts";
 import {
 	clearSelectedCaptureDegraded,
 	noteSelectedCaptureDegraded,
@@ -804,6 +810,7 @@ export class CerastreamBackend implements StreamingBackend {
 				const streamingStatus = new Promise<void>((resolve) => {
 					confirmStreaming = resolve;
 				});
+				beginCapabilitiesEpoch();
 				const client = await launchTransaction.acquirePhase(
 					"connect",
 					() => this.deps.connect(this.deps.connectOptions),
@@ -812,6 +819,7 @@ export class CerastreamBackend implements StreamingBackend {
 				);
 				acquiredClient = client;
 				assertStreamLaunchOwnership();
+				beginCapabilitiesEpoch();
 				this.client = client;
 				const clientEpoch = ++this.clientEpoch;
 				this.runtimeEvidence = undefined;
@@ -1191,6 +1199,7 @@ export class CerastreamBackend implements StreamingBackend {
 				this.clientEpoch === clientEpoch &&
 				runtimeState === "streaming"
 			) {
+				beginCapabilitiesEpoch();
 				this.client = client;
 				adoptedEpoch = ++this.clientEpoch;
 				this.subscription = subscription;
@@ -1275,13 +1284,29 @@ export class CerastreamBackend implements StreamingBackend {
 		}
 	}
 
+	/** Refresh unknown clear authorization through the current session client only. */
+	async refreshCapabilities(): Promise<void> {
+		const client = this.client;
+		if (client === undefined || getCurrentCapabilities() !== undefined) return;
+		await refreshCapabilitiesFromClient(client, (error) =>
+			this.noteConnectionLoss(client, error, "get-capabilities"),
+		);
+	}
+
 	async changeConfig(
 		params: ChangeConfigParams,
 		clearComposition = false,
 	): Promise<ChangeConfigResult> {
-		if (!clearComposition)
+		// Preserve composition-only raw dispatch; nullable capture selectors need client validation.
+		if (
+			!clearComposition ||
+			params.input_mode === null ||
+			params.input_id === null
+		)
 			return this.withSessionClient("change-config", (client) =>
-				client.changeConfig(params),
+				client.changeConfig(
+					clearComposition ? { ...params, composition: null } : params,
+				),
 			);
 		const result = await this.withSessionClient("change-config", (client) =>
 			asRawRequestClient(client, "change-config").rawRequest("change-config", {
@@ -1695,6 +1720,7 @@ export class CerastreamBackend implements StreamingBackend {
 		if (!(error instanceof CerastreamConnectionError)) return;
 		if (client === undefined || client !== this.client) return;
 		if (!this.active) return;
+		invalidateCapabilities();
 
 		this.deps.logger.error(
 			"cerastream: session control connection lost; retiring the engine session",

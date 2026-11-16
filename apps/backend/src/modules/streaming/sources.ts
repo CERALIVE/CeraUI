@@ -47,10 +47,9 @@ import type {
 	GetCapabilitiesResult,
 	ListDevicesResult,
 } from "@ceralive/cerastream";
-import { deviceKindToPipelineId, pipelineIdForInputMode } from "@ceraui/rpc";
+import { deviceKindToPipelineId } from "@ceraui/rpc";
 import type {
 	CaptureDevice,
-	CaptureInputMode,
 	DevicesMessage,
 	Framerate,
 	InputMode,
@@ -64,11 +63,7 @@ import type {
 	StreamSource,
 	StreamSourceBase,
 } from "@ceraui/rpc/schemas";
-import {
-	framerateSchema,
-	inputModeSchema,
-	resolutionSchema,
-} from "@ceraui/rpc/schemas";
+import { framerateSchema, resolutionSchema } from "@ceraui/rpc/schemas";
 import type { LastSeenDevice } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
 import { broadcastMsg } from "../../rpc/compat.ts";
@@ -90,6 +85,10 @@ import { releasesV4l2Node } from "./held-devices.ts";
 import { applyOnboardVideoDisplayRule } from "./onboard-display-names.ts";
 import { reconcilePersistedDeviceMode } from "./persisted-mode-clamp.ts";
 import { getEffectiveHardware } from "./pipelines.ts";
+import {
+	buildInputModes,
+	resolveSelectedInputMode,
+} from "./source-capture-modes.ts";
 import { getConfiguredEngine } from "./streaming-engine.ts";
 
 /** One entry of the engine capability contract's `sources[]` array. */
@@ -292,8 +291,6 @@ function buildBaseEntry(
 interface CaptureEntryContext {
 	/** Pipeline ids the engine currently advertises as coarse capability sources. */
 	offeredPipelineIds: ReadonlySet<string>;
-	/** The operator's persisted `config.input_mode`, if any. */
-	persistedInputMode: InputMode | undefined;
 	/** The standing degraded-selected snapshot, if any. */
 	degraded: CaptureDegradedSnapshot | undefined;
 }
@@ -320,62 +317,6 @@ function degradedFor(
 	return { degraded: snapshot.state };
 }
 
-/**
- * The mode families this device exposes that the board can ACTUALLY open.
- *
- * A family is published only when its `pipeline_kind` bridges to a pipeline the
- * engine currently advertises as a coarse capability source — exactly the rule
- * `buildSources` already applies to a whole device. Without it a camera could
- * offer the operator an MJPEG mode on a board whose engine never offered
- * `usb_mjpeg`, and the pick would die at `pipeline_not_in_offered_set` after
- * they had already committed to it.
- *
- * Each family carries its OWN ladder, projected through the same `groupDeviceCaps`
- * the flat list uses, so the two can never disagree about a rung.
- */
-function buildInputModes(
-	device: CaptureDevice,
-	offeredPipelineIds: ReadonlySet<string>,
-): CaptureInputMode[] {
-	const out: CaptureInputMode[] = [];
-	for (const mode of device.modes ?? []) {
-		const pipelineId = pipelineIdForInputMode(mode.pipeline_kind);
-		if (pipelineId === undefined || !offeredPipelineIds.has(pipelineId))
-			continue;
-		out.push({
-			inputMode: mode.pipeline_kind,
-			mediaType: mode.media_type,
-			pipelineId,
-			modes: groupDeviceCaps(mode.caps),
-		});
-	}
-	return out;
-}
-
-/**
- * The format this device's leg will be opened under.
- *
- * The operator's persisted pick wins only while this device still advertises it
- * — a mode that disappeared (a different camera, a firmware change) must not
- * keep governing. Otherwise the answer is the engine's own scalar `kind`, which
- * IS its highest-precedence mode, so an operator who never chose gets H.264 on a
- * dual-format camera exactly as they did before modes existed.
- */
-function resolveSelectedInputMode(
-	device: CaptureDevice,
-	inputModes: readonly CaptureInputMode[],
-	persisted: InputMode | undefined,
-): InputMode | undefined {
-	if (
-		persisted !== undefined &&
-		inputModes.some((mode) => mode.inputMode === persisted)
-	) {
-		return persisted;
-	}
-	const parsed = inputModeSchema.safeParse(device.kind);
-	return parsed.success ? parsed.data : undefined;
-}
-
 /** Build one concrete `capture` entry, inheriting facets from its coarse entry. */
 function buildCaptureEntry(
 	device: CaptureDevice,
@@ -384,11 +325,7 @@ function buildCaptureEntry(
 	context: CaptureEntryContext,
 ): StreamSource {
 	const inputModes = buildInputModes(device, context.offeredPipelineIds);
-	const selectedInputMode = resolveSelectedInputMode(
-		device,
-		inputModes,
-		context.persistedInputMode,
-	);
+	const selectedInputMode = resolveSelectedInputMode(device, inputModes);
 	return {
 		id: device.input_id,
 		pipelineId,
@@ -532,6 +469,10 @@ export interface BuildSourcesInput {
 	lastSeenDevices?: readonly LastSeenDevice[];
 	/** The operator's persisted `config.input_mode`. Absent → engine precedence. */
 	inputMode?: InputMode;
+	/** Current configured selection, independent of the last-streamed slot. */
+	selectedSource?: string | undefined;
+	/** Identity captured by the existing source-selection writer. */
+	selectedSourceStableId?: string | undefined;
 	/** The standing degraded-selected snapshot. Absent → no row is degraded. */
 	degraded?: CaptureDegradedSnapshot;
 }
@@ -698,7 +639,6 @@ export function buildSources(input: BuildSourcesInput): StreamSource[] {
 	// a mode family has to answer to be publishable.
 	const captureContext: CaptureEntryContext = {
 		offeredPipelineIds: new Set(coarseByPipeline.keys()),
-		persistedInputMode: input.inputMode,
 		degraded: input.degraded,
 	};
 
@@ -814,6 +754,24 @@ export function buildSources(input: BuildSourcesInput): StreamSource[] {
 	// Appended last, and only ever ADDITIVE: these devices bridged to no offered
 	// coarse slot, so they displaced nothing above and cannot reorder it.
 	out.push(...unofferedCaptures);
+	if (input.inputMode !== undefined && input.selectedSource !== undefined) {
+		const selection = resolveSourceIdentityDetailed(
+			input.selectedSource,
+			out,
+			input.lastSeenDevices,
+			input.selectedSourceStableId,
+		);
+		const selected = out.find((row) => row.id === selection.id);
+		if (
+			!selection.takenOver &&
+			selected?.origin === "capture" &&
+			input.selectedSourceStableId !== undefined &&
+			selected.stableId === input.selectedSourceStableId &&
+			selected.inputModes?.some((mode) => mode.inputMode === input.inputMode)
+		) {
+			selected.selectedInputMode = input.inputMode;
+		}
+	}
 	return out;
 }
 
@@ -1697,6 +1655,12 @@ export function getSourcesMessage(): SourcesMessage {
 			? { lastStreamedStableId: config.last_streamed_source_stable_id }
 			: {}),
 		lastSeenDevices: config.last_seen_devices ?? [],
+		...(config.source === undefined
+			? {}
+			: {
+					selectedSource: config.source,
+					selectedSourceStableId: configuredSelectionAnchor(config.source),
+				}),
 		...(config.input_mode !== undefined
 			? { inputMode: config.input_mode }
 			: {}),
