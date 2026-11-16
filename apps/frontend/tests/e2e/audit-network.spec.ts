@@ -88,6 +88,7 @@ const record = (line: string) => findings.push(line);
 test.describe("Audit A2 — Network destination (multi-modem-wifi)", { tag: "@audit" }, () => {
 	test.skip(({ browserName }) => browserName !== "chromium", "single-browser audit walk");
 	let authoritativeNetif: Record<string, unknown> | undefined;
+	let holdScan: ((release: () => void) => void) | undefined;
 
 	test.beforeEach(async ({ page }, testInfo) => {
 		test.skip(
@@ -95,8 +96,19 @@ test.describe("Audit A2 — Network destination (multi-modem-wifi)", { tag: "@au
 			"desktop layout drives the Network destination audit",
 		);
 		authoritativeNetif = undefined;
+		holdScan = undefined;
 		await page.routeWebSocket(/\/ws(?:\?|$)/, (socket) => {
 			const server = socket.connectToServer();
+			socket.onMessage((message) => {
+				if (holdScan && typeof message === "string") {
+					const frame = JSON.parse(message);
+					if (Array.isArray(frame.path) && frame.path.join(".") === "wifi.scan") {
+						holdScan(() => server.send(message));
+						return;
+					}
+				}
+				server.send(message);
+			});
 			server.onMessage((message) => {
 				if (typeof message !== "string") {
 					socket.send(message);
@@ -160,6 +172,9 @@ test.describe("Audit A2 — Network destination (multi-modem-wifi)", { tag: "@au
 	});
 
 	test("WiFi scan dispatches through osCommand and shows an in-flight state", async ({ page }) => {
+		// The manual tap joins the opening scan; hold its real request until pending is observed.
+		const requested = Promise.withResolvers<() => void>();
+		holdScan = requested.resolve;
 		const trigger = page.getByTestId("open-wifi-selector-dialog").first();
 		await expect(trigger).toBeVisible();
 		// multi-modem-wifi has a WiFi radio → the per-row Connect trigger is enabled.
@@ -168,6 +183,7 @@ test.describe("Audit A2 — Network destination (multi-modem-wifi)", { tag: "@au
 
 		const dialog = page.getByRole("dialog");
 		await expect(dialog).toBeVisible({ timeout: 15_000 });
+		const releaseScan = await requested.promise;
 
 		const scan = page.getByTestId("wifi-scan-button");
 		await expect(scan).toBeEnabled();
@@ -176,8 +192,12 @@ test.describe("Audit A2 — Network destination (multi-modem-wifi)", { tag: "@au
 		// osCommand pending → the scan button disables + an in-flight spinner appears.
 		await expect(scan).toBeDisabled();
 		await expect(page.getByTestId("wifi-scan-status")).toBeVisible();
+		holdScan = undefined;
+		releaseScan();
+		await expect(scan).toBeEnabled();
+		await expect(page.getByTestId("wifi-scan-status")).toBeHidden();
 		record(
-			"#2 WiFi scan: dispatched via osCommand → button disabled + wifi-scan-status spinner shown (in-flight) — PASS",
+			"#2 WiFi scan: dispatched via osCommand → button disabled + wifi-scan-status spinner shown (in-flight), then enabled + spinner hidden after completion — PASS",
 		);
 	});
 
