@@ -686,7 +686,7 @@ describe("CellularSection — the real board roster", () => {
 		});
 
 		expect(container.textContent).toContain(
-			"This HIMI U01 stick's own router is using the mobile connection, so CeraLive can't start its data connection. Use router mode (USB network) or a regular modem. See docs.ceralive.tv/hardware/cellular-modems/.",
+			"This HIMI U01 stick couldn't start its data connection. Its own router may be using the mobile connection: use router mode (USB network) or a regular modem. See docs.ceralive.tv/hardware/cellular-modems/.",
 		);
 	});
 

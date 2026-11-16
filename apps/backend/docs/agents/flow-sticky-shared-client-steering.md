@@ -4,8 +4,9 @@
 
 `modules/network/uplink-steering/` is the desired-state controller for hotspot and
 Ethernet `shared-lan` client traffic. It owns only `inet ceralive_share`, the
-priority-110 namespaced fwmark rules, and private route tables 30000–95535. The
-image's `inet ceralive_ingest_fw` table (input hook priority -10) is foreign and is
+priority-110 namespaced fwmark rules, priority-100 IPv4 source rules selecting
+its managed tables, and private route tables 30000–95535. The image's
+`inet ceralive_ingest_fw` table (input hook priority -10) is foreign and is
 never named by generated rule text. The carrier effects are isolated in
 `modules/network/uplink-sharing.ts`: fsynced temp → `nft --check` → atomic rename
 → systemd start/reload, with prior-file reload on failure.
@@ -16,6 +17,17 @@ Everything below is how that is made structural rather than intentional. Wi-Fi
 station / hotspot / hybrid transitions run under the permanent-MAC adapter lock
 described in EVERY WIFI MUTATION SHARES ONE ADAPTER LOCK.
 Ethernet role changes are serialized per port and must not be nested.
+
+**Source-rule ownership is bounded.** `uplink-steering/route-planner.ts` reuses
+usable foreign source-routing tables without claiming them. Otherwise it plans
+identity-derived managed tables, adding priority-100 source rules only for unique
+source addresses; duplicate-address uplinks use separate fwmark tables without an
+ambiguous source rule. Stale references to other managed tables are ignored before
+checking foreign-table ambiguity. `uplink-steering/route-policy.ts` recognizes
+plain priority-100 IPv4 source rules only within the managed table range.
+`uplink-steering/route-manager.ts` provisions the planned source/fwmark rules,
+removes obsolete managed source rules, restores them on rollback, and removes
+owned source rules with retired route support.
 
 **Client provenance is structural.** New-flow selection, conntrack mark restore,
 and masquerade all require a positive registered client-zone `iifname`; NAT also
@@ -82,10 +94,13 @@ skips byte-identical state, and retries a newly failing state at 100/500 ms.
 After those retries fail, identical desired states leave the unavailable status
 untouched and skip apply for 5 seconds. Each later failed apply doubles that delay
 up to 60 seconds, with one apply per window. A different desired state or success
-clears the backoff. On process restart it
-inventories its priority-110 rules, publishes the latest model first, then flushes
-and removes stale support. Any overlap, mark collision, foreign priority owner,
-missing route, nft failure, or rollback failure is fail-soft and surfaces
+clears the backoff. On process restart,
+`uplink-steering/route-manager.ts` inventories its priority-110 rules and
+priority-100 managed-table source rules, including source-only crash remnants.
+It publishes the latest model first, then flushes and removes stale support.
+`uplink-steering/applier.ts` protects desired support by mark/table and retains
+cleanup work separately for each source address and priority. Any overlap, mark
+collision, foreign priority owner, missing route, nft failure, or rollback failure is fail-soft and surfaces
 `steering_unavailable`; it never blocks the already-bound WS server.
 
 Keep committed steering through stale-route cleanup failures: sharing, provisioned
