@@ -21,8 +21,16 @@ this is the CeraUI half.
 member of `streamingConfigInputSchema`, because it is never persisted and never
 echoed in `applied`). Absent/false is the unchanged apply-on-next-start path, so
 no existing caller changes behaviour and a save can never restart a live
-broadcast by itself. `apply_now` while NOT streaming degrades to an ordinary
-save — it never dispatches a transaction.
+broadcast by itself. `apply_now` degrades to an ordinary save — it never
+dispatches a transaction — only while the session is settled `idle`. Every
+other lifecycle state (`starting`, `streaming`, `reconfiguring`, `stopping`,
+`stop_failed`, `reconciling`) is a stream on air, an engine transaction in
+flight or a session not yet settled, so the save keeps its restart fields back
+and goes to admission, which applies it only while `streaming` and answers
+`busy` otherwise (`createApplyNowGate` in `config-change-bridge.ts`, an
+exhaustive switch over the state type, so a new state must choose a side).
+Saving it as a next-start edit there would acknowledge values the engine was
+never asked to run.
 
 Balancer settings and `video_codec: null` persist for the next start even with
 `apply_now`. The producer change-config contract accepts only a concrete codec,
@@ -126,9 +134,15 @@ lifecycle stays `streaming` and `stopRuntime` is never called.
 
 **STAGED PERSISTENCE — `config.json` describes what the ENGINE IS RUNNING.**
 `config-change-staging.ts` holds the apply-now candidate in memory plus an
-on-disk marker (`config.inflight.json`, atomic write); the restart-requiring
-fields are deleted from `input` so the existing merge block skips them (ONE write
-path, no parallel one to drift). Non-restart fields in the same save persist
+on-disk marker (`config.inflight.json`, atomic write). The candidate holds the
+restart-requiring fields AND what routing derives from them: the capture mode
+the save lands on (`null` when a switch to another camera clears it) and the
+pipeline the source or mode routes to. Every field the candidate holds is
+deleted from `input`, and the derived mode write is skipped, so the existing
+merge block saves none of them (ONE write path, no parallel one to drift).
+Before this, a busy or reverted capture-mode switch still saved its derived
+`input_mode` and `pipeline`. The engine delta is unchanged: it carries a
+pipeline only for a source switch. Non-restart fields in the same save persist
 immediately, unchanged. `config.json` is written ONLY on `applied`
 (`commitStagedConfigChange`); `reverted`/`rollback_failed`/`busy`/`rejected` all
 leave the persisted values byte-identical, because those values are still the
@@ -145,6 +159,11 @@ that throws still releases it. Before this, two overlapping saves (one parked on
 the Bluetooth refresh an `audio_backend` change awaits) shared one stage: the
 later save replaced the earlier candidate and marker, and the busy loser's
 abandon then removed the winner's, so an `applied` change was never persisted.
+A save that arrives after the other change was admitted takes the same path:
+`reconfiguring` is not idle, so the save holds its restart fields back and is
+refused at the stage. Before this, it was treated as idle, saved those fields as
+a next-start edit and reported success, leaving them on disk if the running
+change reverted, or overwritten if it applied the same field.
 
 **A FINISHED ATTEMPT NEVER KEEPS THE STAGE, EVEN WHEN ITS WRITE FAILS.** If
 `config.json` cannot be written after `applied`, the error still reaches the
@@ -230,6 +249,8 @@ marker/judgement table and the one-attempt stage),
 applied-writes vs reverted/rollback_failed-don't, the delta contents, both
 apply-now fallbacks, a throwing dispatch releasing the stage, a `config.json`
 write failing after `applied` (next save admitted, marker kept and later
-judged), two overlapping saves through the real orchestrator admission, and
+judged), a save in each lifecycle state (one row per state of the type), two
+overlapping saves through the production gate and the real orchestrator
+admission (the second arriving before and after the first is admitted), and
 marker-present vs marker-absent reconciliation).
 
