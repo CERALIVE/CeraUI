@@ -8,6 +8,8 @@
     (at your option) any later version.
 */
 
+import { existsSync } from "node:fs";
+
 import { argMatch, ID_RE } from "../../helpers/run.ts";
 import { nmDeviceProp } from "../network/network-manager.ts";
 import { runIw } from "./regdomain.ts";
@@ -28,9 +30,16 @@ const defaultWaiter: InterfaceWaiter = async (ifname) => {
 let interfaceRunner = defaultRunner;
 let interfaceWaiter = defaultWaiter;
 
-/** Wi-Fi name candidates; NM determines radio type, and clap AP legs are separate. */
+export const wifiInterfaceReaders = { pathExists: existsSync };
+
+/** Wi-Fi candidates by name or kernel evidence; clap AP legs are separate. */
 export function isSupportedWifiIfname(ifname: string): boolean {
-	return ifname.startsWith("wl");
+	return (
+		!isConcurrentApIfname(ifname) &&
+		(ifname.startsWith("wl") ||
+			wifiInterfaceReaders.pathExists(`/sys/class/net/${ifname}/wireless`) ||
+			wifiInterfaceReaders.pathExists(`/sys/class/net/${ifname}/phy80211`))
+	);
 }
 
 export function concurrentApIfname(parentIfname: string): string {
