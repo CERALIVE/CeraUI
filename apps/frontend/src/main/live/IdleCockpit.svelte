@@ -41,7 +41,7 @@ import { Shuffle, TriangleAlert, Volume2 } from '@lucide/svelte';
 import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import SourceSection from '$lib/components/custom/SourceSection.svelte';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
-import { compositionSupported } from '$lib/streaming/compositionSupport';
+import { compositionGeometrySupported, compositionSupported } from '$lib/streaming/compositionSupport';
 import type { ManagedIngestAccount } from '$lib/streaming/receiver-experience';
 import type { ResolvedAudioStatus } from '$lib/streaming/sourceSummary';
 
@@ -132,6 +132,7 @@ const {
 }: Props = $props();
 
 const canCompose = $derived(compositionSupported(capabilities));
+const canPlace = $derived(compositionGeometrySupported(capabilities));
 // A config saved while a composing engine was attached, now read by one that
 // cannot. Neither silently applying it nor silently keeping it is honest, so it
 // is stated here — the card itself is absent, so the notice cannot live in it.
@@ -163,15 +164,16 @@ const audioEmbeddedComingSoon = $derived(
 >
 	<!-- The picture leads. PreviewCanvas watches the APPLIED config.source and
 	     redials on a confirmed source change. -->
-	<ProgramDesk class="lg:col-span-3">
+	<ProgramDesk class="lg:col-span-3" placement={canPlace ? config?.composition : undefined}>
 		<!-- Composition: mounted ONLY while the engine advertises the feature, so a
 		     board that cannot compose renders no node at all rather than a disabled
 		     card. The stale-config notice is its counterpart on the absent branch. -->
 		{#if canCompose}
-			<div data-testid="layout-controls">
+			<div data-testid="layout-controls" data-touch-region>
 				<CompositionCard
 					captureCause={startFailureCaptureCause}
 					{config}
+					geometry={canPlace}
 					{isStreaming}
 					{sources}
 				/>

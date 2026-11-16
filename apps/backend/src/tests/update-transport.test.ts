@@ -262,18 +262,17 @@ describe("NetworkManager IP interface inventory (#431)", () => {
 		).toEqual([]);
 	});
 
-	it("replays the constructed twin modem fixture as two cellular candidates", () => {
+	it("replays the captured twin modem fixture as two cellular candidates", () => {
 		const fixture =
 			readFileSync(
-				new URL(
-					"./fixtures/real-device/rock-nm-1.52.1-twin-modem-general.txt",
-					import.meta.url,
-				),
+				`${import.meta.dir}/fixtures/real-device/rock-nm-1.52.1-twin-modem-general.txt`,
 				"utf8",
 			).split("##### twin-modem-general\n")[1] ?? "";
-		expect(discoverCandidates(["wwan0", "wwan1"], fixture, [], [])).toEqual([
-			cellular,
-			{ ...cellular, ifname: "wwan1" },
+		expect(
+			discoverCandidates(["wwu1u4u3i2", "wwu1u4u2i2"], fixture, [], []),
+		).toEqual([
+			{ ...cellular, ifname: "wwu1u4u3i2" },
+			{ ...cellular, ifname: "wwu1u4u2i2" },
 		]);
 	});
 

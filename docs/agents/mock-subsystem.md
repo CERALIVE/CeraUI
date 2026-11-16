@@ -27,6 +27,16 @@ pristine snapshot. `resetMockState()` restores that snapshot AND clears all time
 scenario's seeded state with no leaked intervals or cross-test bleed. Use in
 `afterEach` for any test that mutates mock state.
 
+**Signals are fixed seeds:**
+`initMockService()` seeds modem signals at 90/85/80 (excellent, three bars) and
+each Wi-Fi network at its fixture `signal`. The periodic tick never moves them,
+and the D-Bus modem view reads the same `modemSignals` the mmcli provider does, so
+visual baselines that draw signal bars are byte-stable. Throughput, sensors, relay
+RTT and streaming stats still fluctuate. To move a signal, write it into
+`mockState` and call `runMockFeedbackBroadcast()`.
+The feedback tick compares the complete Wi-Fi wire payload, so hotspot and
+connection changes still reach clients when signal strength is unchanged.
+
 **`updateMockState(partial)` — single write path:**
 All writes to `mockState` funnel through the typed `updateMockState(partial)` mutator
 (Object.assign top-level merge). The four named setters (`setMockModemConfig`,
@@ -113,6 +123,100 @@ leaves it absent. Active mock encodes report `route_reason: "not-compressed"` fo
 capture and `"adaptive-active"` for network ingest. Existing uppercase `codecs`
 values remain unchanged. `mock-capabilities-producer-schema.test.ts` checks every
 scenario through the installed producer parser and the RPC projection.
+
+**Audio mix and free geometry [EXISTS; host simulation].** Only `caps-full`
+adds `audio_mix` (four inputs, four tracks, -60 to 12 dB, up to 2000 ms),
+`audio-mix`, `composition` and `composition-geometry`, and a third audio device
+(the existing HDMI Input fixture name). Other scenarios retain their previous
+fields and omit these additions, including `multi-modem-wifi`.
+
+`startMockStreaming(params)` admits producer-owned `StartParams`, preserving
+`audio.inputs` and `composition.rect` in `mockState.engineStart`. The mock
+enforces the engine's empty/count/duplicate input, track membership/gaps,
+gain/delay, device/mode conflicts and embedded-network rules, then resolves
+audio registry identities before checking rectangle validity, compositor
+availability, secondary/alpha/capture admission and finally mix factory support. An unknown audio identity therefore
+outranks every composition refusal, including its capture causes.
+`setMockAudioMix` validates
+the whole batch before committing, preserves tracks, echoes applied defaults,
+and refuses a non-mix session with `audio-mix-inactive`. Unknown input errors
+carry `cerastream.audio.device_not_found`; `switchMockAudio` refuses a running
+mix with `audio-mix-active`. Stop and reset clear the admitted session.
+
+The live methods preserve their separate native admission orders.
+`setMockAudioMix` checks the admitted mix session, then each update's identity
+before its values, validating each update before proceeding to the next.
+`changeMockComposition` checks the running session, then rectangle validity,
+compositor availability and the same secondary/alpha/capture admission.
+Live mix writes and in-place composition edits retain the admitted audio.
+Enabling composition on a legacy session takes the rebuild transaction instead.
+
+`changeMockComposition` enforces missing/unexpected/range rectangle errors and
+the compositor availability gate for presets and custom layouts. At start and
+live, an unavailable compositor returns
+the native `composition-unsupported` refusal: numeric code `-32602`,
+`data.code: "cerastream.params.invalid"` and
+`data.capture_causes: [{ device: "composition", cause: "composition-unsupported" }]`.
+Rectangle validation precedes that refusal, so malformed geometry remains
+`composition-rect-range` without a capture cause. Frame-edge equality and the
+minimum size are inclusive; regression tests cover both sides of each bound
+through start and live admission.
+Geometry refusals and inactive live changes also retain the complete native
+message and `data.code`. `mock-audio-precedence.test.ts` pins paired failures,
+including audio shape versus composition, unknown audio versus composition,
+geometry versus availability, and live session/identity/value admission.
+Its simultaneous audio refusals pin count before device, device before mode none,
+mode none before duplicate identity, embedded eligibility before tracks, tracks
+before gain, and gain before delay. Count, device and mode are Start-only fields;
+live updates retain admitted membership and exercise gain/delay priority atomically.
+`providers/composition.ts` owns the shared native composition admission. After
+geometry and compositor availability it checks a blank secondary (Rust Unicode
+White_Space semantics), finite alpha in the inclusive range 0 to 1, secondary
+lookup in video captures only, then primary selection. An explicit primary must
+exist in that capture roster and differ from the secondary; automatic selection
+needs another capture. Secondary refusals retain `secondary-unavailable` and
+their exact capture cause; a missing explicit primary retains
+`cerastream.device.not_found`. Start refuses forced passthrough after selection;
+that policy is not part of the shared composition selector.
+The resolved primary is retained separately from operator Start intent so live
+composition changes cannot silently select another primary after hotplug or a
+secondary edit. Stop and scenario lifecycle clear that session identity.
+`mock-composition-admission.test.ts` pins the post-availability pairs, alpha
+boundaries, capture-only identities, automatic selection and retained primary.
+`changeMockComposition` returns the published `ChangeConfigResult`. A live
+preflight refusal still throws its native RPC envelope without tearing down the
+session. An admitted legacy rebuild uses the Start boundary; its failure becomes
+a transaction reason rather than a preflight RPC exception.
+With no confirmed target it returns `rollback_failed` / `idle`, appending
+`; no_known_good`. A single successful restore returns `reverted` / `streaming`
+with the original cause. Restore failure returns `rollback_failed` / `idle`,
+appending `; rollback: ` and the restore's native message.
+The mock confirms a target after a successful simulated rebuild or an existing
+health sample that proves two advancing frames with no active links. Without an
+egress counter, connected links do not constitute send proof. Plain Start only
+proposes a candidate; in-place edits do not invent outcome-gate proof.
+Physical frame/egress qualification is not claimed. The confirmed target and `cc-N` counter survive
+stream stops but clear with the mock process/scenario. Preflight failures consume
+their admitted attempt id, matching the native transaction claim order.
+`mock-composition-transaction.test.ts` covers these result boundaries and retains
+the earlier preflight pairs; the one former live force-exception expectation is
+corrected to the native rollback result without changing its Start counterpart.
+Presets never enter `custom`; the producer rectangle
+schema and minimum are exported separately by RPC. The preview socket adds
+`inputs[]` only for an admitted live mix, with synthetic post-gain/post-mute
+levels; its existing top-level meter remains unchanged. This simulates control
+and meter contracts, not GStreamer timing or hardware behavior. The settings
+RPC now records its mapped inputs through `startMockStreaming` and uses
+`setMockAudioMix` for live writes. The config-change bridge sends a live
+layout-only change to `changeMockComposition`; other live changes still go to
+the engine client (`mock-composition-live.test.ts`). Audio validation and unknown-input errors
+include the native message prefix and complete `data.code`; the live source
+switch retains the native mixing refusal message. The mixer UI drives these
+through the same RPCs; the mock does not bridge `audio-level` to the main
+socket, so per-input meters stay unavailable on the mock stack unless a test
+injects the frame. The layout designer drives the free rectangles through the
+same `setConfig` writes. See the
+[audio input contract](../../apps/backend/docs/agents/streaming-rpc-procedures.md#audio-inputs-exists).
 
 **`setMockEngineCapabilities(partial)` — test-only capability override seam (T5):**
 `setMockEngineCapabilities(partial)` (exported from `mocks/providers/streaming.ts`)

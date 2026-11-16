@@ -22,17 +22,20 @@ Full PR gate: `bun run test`, `bun run test:e2e`, `bun run check:tech-debt`,
 | Code path or task | Contract |
 |---|---|
 | Before changes, read the owning subsystem contract | [All backend contracts](docs/agents/README.md) |
-| Projection and modem roster | [an-isolated-dongle-is-surfaced-without-entering-the-bond.md](docs/agents/an-isolated-dongle-is-surfaced-without-entering-the-bond.md) |
+| Projection, modem roster and first-sight USB bond admission | [an-isolated-dongle-is-surfaced-without-entering-the-bond.md](docs/agents/an-isolated-dongle-is-surfaced-without-entering-the-bond.md) |
 | Cellular composition and wire projection | [the-cellular-subsystem-one-composition-root-one-wire.md](docs/agents/the-cellular-subsystem-one-composition-root-one-wire.md) |
 | Modem presence and exact-identity admission | [a-device-is-announced-before-any-modem-service-can-descri.md](docs/agents/a-device-is-announced-before-any-modem-service-can-descri.md) |
 | Modem mutation leases, journal and rollback | [the-modem-mutation-safety-contract.md](docs/agents/the-modem-mutation-safety-contract.md) |
+| Modem configuration normalization and applied receipts | [a-modem-save-spends-a-reconnect-only-when-it-must.md](docs/agents/a-modem-save-spends-a-reconnect-only-when-it-must.md) |
 | Modem feature gates | [the-capability-feature-gate-framework.md](docs/agents/the-capability-feature-gate-framework.md) |
 | Shared-client flow-sticky steering | [flow-sticky-shared-client-steering.md](docs/agents/flow-sticky-shared-client-steering.md) |
 | Streaming-first shaping and read-only NAT diagnostics | [streaming-first-uplink-shaping.md](docs/agents/streaming-first-uplink-shaping.md) |
 | Exact-name update roster and installation | [software-update-start-contract.md](docs/agents/software-update-start-contract.md) |
 | Update discovery and actionable entries | [software-update-check-contract.md](docs/agents/software-update-check-contract.md) |
 | Update orchestrator, D8, OS staging and slot mirroring | [the-update-orchestrator-and-d8-admission.md](docs/agents/the-update-orchestrator-and-d8-admission.md) |
-| Streaming RPC and lifecycle | [streaming-rpc-procedures.md](docs/agents/streaming-rpc-procedures.md) |
+| Streaming RPC, lifecycle, audio inputs | [streaming-rpc-procedures.md](docs/agents/streaming-rpc-procedures.md) |
+| Apply-now candidates, negotiated capture clears and applied-only persistence | [Staged persistence](docs/agents/apply-now-config-change-transaction-staged-persistence.md) |
+| Device-scoped saved capture modes and automatic defaults | [Per-device modes](docs/agents/one-row-per-physical-camera-per-device-mode-selection.md) |
 | Live capture and audio visibility | [a-live-capture-device-is-never-silently-dropped.md](docs/agents/a-live-capture-device-is-never-silently-dropped.md) |
 | Audio identity and naming | [audio-device-naming.md](docs/agents/audio-device-naming.md) |
 | Audio backend override | [the-audio-backend-is-an-override-and-absent-is-not-a-defa.md](docs/agents/the-audio-backend-is-an-override-and-absent-is-not-a-defa.md) |
@@ -48,7 +51,7 @@ Full PR gate: `bun run test`, `bun run test:e2e`, `bun run check:tech-debt`,
 
 ## HARD RULES
 - The update-orchestrator, recovery, D8 stream-admission, disruptive-action, OS-stage, journal and add-on helper hard rules are binding and live verbatim in [update-orchestrator-hard-rules.md](docs/agents/update-orchestrator-hard-rules.md); read it before touching those paths.
-- The projection is what reaches the wire: seed lifecycle state from the owner at composition before hydration, without broadcast or engine-query wait. Retained protection seeds reconciling; absent/unprotected boot seeds idle. The first safe transition still broadcasts, including same-state reconciliation. Runtime evidence is bound to its producing client/epoch and invalidated at new Start/acquisition/commit; old idle cannot establish new-session idle. Preserve producer identity and schema.
+- The projection is what reaches the wire; preserve producer identity and schema. Its lifecycle seeding and runtime-evidence rule is binding and lives verbatim in [lifecycle-projection-hard-rules.md](docs/agents/lifecycle-projection-hard-rules.md).
 - Streaming-first uplink shaping caps only shared clients; local stream egress stays uncapped. Foreign roots fail closed.
 - The two NAT layers are watched, never arbitrated: diagnostics are read-only, tri-state, and never gate streaming or mutate either layer.
 - Modem roster: exact triplets; RNDIS e0/01/03 admits; e0/01/01, e0/01/04 veto; ID_MM_DEVICE_IGNORE=1 excludes; weak retires, strong stays undriveable.

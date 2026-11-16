@@ -23,6 +23,7 @@ import { queueUpdateGw } from "../network/gateways.ts";
 import {
 	getNetworkInterfaces,
 	isBondCandidate,
+	isBondIdentityPending,
 	isDupIpOnly,
 	type NetworkInterface,
 } from "../network/network-interfaces.ts";
@@ -95,6 +96,7 @@ function collectBondEntries(
 	for (const name in networkInterfaces) {
 		const networkInterface = networkInterfaces[name];
 		if (!networkInterface?.ip) continue;
+		if (isBondIdentityPending(name, networkInterface)) continue;
 		if (!accept(name, networkInterface)) continue;
 		const entry = describeBondEntry(name, networkInterface.ip);
 		if (requireMappableDuplicate && !admitEntry(networkInterface, entry))

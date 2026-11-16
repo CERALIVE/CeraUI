@@ -681,7 +681,11 @@ async function handleSelectAudioSource(selection: string) {
 	};
 	markPending('asrc', asrc);
 	try {
-		await rpc.streaming.setConfig({ asrc });
+		// The backend adds the pick to the saved mix against its own current state.
+		const result = await rpc.streaming.setConfig({ asrc, audio_pick: true });
+		// A refused mix (a saved input since unplugged) must not lose the pick;
+		// Start still sends the new main input first.
+		if (!result.success) await rpc.streaming.setConfig({ asrc });
 	} catch {
 		toast.error(m["notifications.saveFailed"]());
 	} finally {

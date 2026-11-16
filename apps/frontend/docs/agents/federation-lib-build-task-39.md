@@ -23,9 +23,12 @@ via `bun run build:federation` from the CeraUI root (delegates to the frontend
   Paraglide with `outputStructure: "locale-modules"` into
   `node_modules/.cache/federation-i18n`; `vite.federation-i18n.ts` routes the
   generated barrels' direct message imports AND the runtime shim to that output.
-  All keys and ten locales remain bundled, with no externals or new catalog
-  chunks. The SPA keeps its direct imports, message-module compiler output and
-  lazy namespaces unchanged. Never route only messages: a second locale runtime
+  Only the namespaces the three dialogs render (`FEDERATION_NAMESPACES` in
+  `lib/federation/messages.ts`) are bundled, each in all ten locales, with no
+  externals or new catalog chunks; `tests/federation/federation-namespaces.test.ts`
+  fails when a built bundle references a key from any other namespace. The SPA
+  keeps its direct imports, message-module compiler output and lazy namespaces
+  unchanged. Never route only messages: a second locale runtime
   would ignore the host's locale. The final hosted artifacts use full Rolldown
   output minification rather than ES-library whitespace preservation.
 - **Size and parity gates:** after building both outputs, run

@@ -41,6 +41,7 @@ import {
 } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
 import { getStreamingAttemptGeneration, type StreamingOptimismState, supersedeStartingOptimism } from '$lib/rpc/streaming-optimism.svelte';
+import { sendSessionTransition } from '$lib/streaming/compositionWrites.svelte';
 import {
 	showUnconfirmedStreamStop,
 	stopConfirmedByDevice,
@@ -102,7 +103,7 @@ function handleStop() {
 	const generation = getStreamingAttemptGeneration();
 	void osCommand({
 		key: UNCONFIRMED_STOP_OPERATION,
-		rpc: () => rpc.streaming.stop(),
+		rpc: () => sendSessionTransition('idle', () => rpc.streaming.stop()),
 		classify: (r) =>
 			r.result === 'stop_failed' ? { ok: false, reason: r.reason } : { ok: r.success },
 		// D207: an acknowledged Stop is positive idle evidence for THIS press's

@@ -17,12 +17,14 @@
  *                 NOT usable here — it hides every [data-hud-region] span/svg,
  *                 including the bars under test.
  *   3. Bonded   — NetworkView BondedLinksSection. Identity-colored bars are
- *                 stable (mock signal is seeded, not random); the volatile
+ *                 stable (the mock seeds fixed modem and Wi-Fi signals in
+ *                 initMockService; periodic ticks never change them); the volatile
  *                 per-link throughput readouts carry [data-live-value] and are
  *                 neutralised by mask.css, while per-card staleness dimming
  *                 (`opacity-60`, timing-dependent) is pinned to opacity:1.
  *
- * Mock scenario: multi-modem-wifi (deterministic signal; only throughput ticks).
+ * Mock scenario: multi-modem-wifi (fixed signals; throughput still fluctuates and
+ * is masked).
  * Playwright disables CSS animations in toHaveScreenshot, so the scanning-link
  * pulse is frozen to its first frame.
  */
@@ -58,7 +60,7 @@ const BONDED_STABILIZE =
 test.describe('@visual LinkIndicator surfaces', () => {
 	test(
 		'@visual signal-indicator showcase grid',
-		{ tag: '@visual' },
+		{ tag: ['@visual', '@dev-only'] },
 		async ({ authedPage: page }) => {
 			const devtools = new DevToolsPage(page);
 			await devtools.open();

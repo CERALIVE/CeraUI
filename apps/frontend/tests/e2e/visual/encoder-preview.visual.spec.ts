@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "../fixtures/index.js";
 
 import { evidencePath, navigateTo } from "../helpers/index.js";
 import {

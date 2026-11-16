@@ -90,9 +90,9 @@ const showcaseBarStates: ShowcaseBarState[] = [
 	{ label: 'Bars filled 2', type: 'modem', signal: 50, connectionState: 'connected', linkIndex: 2 },
 	{ label: 'Bars filled 3', type: 'modem', signal: 80, connectionState: 'connected', linkIndex: 3 },
 	{ label: 'Ethernet', type: 'ethernet', signal: null, connectionState: 'connected', linkIndex: 5 },
-	{ label: 'WiFi connected', type: 'wifi', signal: 70, connectionState: 'connected', linkIndex: 0 },
+	{ label: 'Wi-Fi connected', type: 'wifi', signal: 70, connectionState: 'connected', linkIndex: 0 },
 	{
-		label: 'WiFi disconnected',
+		label: 'Wi-Fi disconnected',
 		type: 'wifi',
 		signal: null,
 		connectionState: 'disconnected',

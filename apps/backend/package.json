@@ -9,7 +9,7 @@
 		"bun": ">=1.3.0"
 	},
 	"dependencies": {
-		"@ceralive/cerastream": "2026.11.0",
+		"@ceralive/cerastream": "2026.11.2",
 		"@ceralive/control-protocol": "2026.7.0",
 		"@ceralive/modem-control": "1.4.0",
 		"@ceraui/rpc": "workspace:*",
@@ -38,6 +38,7 @@
 		"test": "bun test --parallel",
 		"modem-latency-harness": "bun scripts/modem-latency-harness.ts",
 		"check": "bun ../../scripts/tsc.mjs --noEmit && bash scripts/check-exec-guard.sh",
+		"check:tests": "bun ../../scripts/tsc.mjs -p tsconfig.tests.json",
 		"check:exec-guard": "bash scripts/check-exec-guard.sh",
 		"lint": "echo 'Backend linting handled by root Biome'",
 		"lint:fix": "echo 'Backend fixing handled by root Biome'",

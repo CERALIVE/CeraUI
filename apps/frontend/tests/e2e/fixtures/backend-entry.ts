@@ -22,6 +22,22 @@ await startUpdateOrchestrator({
 });
 
 await import('../../../../backend/src/main.js');
+const { getMockState } = await import('../../../../backend/src/mocks/mock-service.js');
+// Read-only: what the mock engine runs, for tests comparing it with what is saved.
+process.on('message', (message: unknown) => {
+	if (
+		typeof message !== 'object' || message === null ||
+		!('type' in message) || message.type !== 'mock-engine' || !('id' in message)
+	)
+		return;
+	const state = getMockState();
+	process.send?.({
+		type: 'mock-engine',
+		id: message.id,
+		streaming: state.streaming.isActive,
+		composition: state.engineStart?.composition ?? null,
+	});
+});
 const { getServer } = await import('../../../../backend/src/rpc/server.js');
 const { getMockPreviewServer } = await import('../../../../backend/src/mocks/providers/preview.js');
 const server = getServer();

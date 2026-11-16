@@ -1,16 +1,24 @@
-import { CerastreamRpcError } from "@ceralive/cerastream";
+import {
+	CAPTURE_SELECTION_CLEAR_FEATURE,
+	CerastreamRpcError,
+	type ChangeConfigResult,
+} from "@ceralive/cerastream";
 import {
 	CONFIG_CHANGE_EVENT,
 	CONFIG_CHANGE_REASON_ENGINE_LOST,
 	CONFIG_CHANGE_REASON_REJECTED,
 	type ConfigChangeResult,
+	type LifecycleState,
 	type Resolution,
 	resolutionSchema,
 	toEngineResolution,
 } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
+import { changeMockComposition } from "../../mocks/providers/streaming.ts";
 import { broadcastMsg } from "../../rpc/compat.ts";
+import { getCurrentCapabilities } from "./capabilities.ts";
 import type { CerastreamBackend } from "./cerastream-backend.ts";
 import {
 	type ConfigChangePhaseEvent,
@@ -18,6 +26,7 @@ import {
 	type EngineConfigChangeOutcome,
 	getStreamSessionSnapshot,
 	type StreamConfigChangeDelta,
+	type StreamSessionOrchestrator,
 } from "./stream-session-orchestrator.ts";
 import { getStreamingBackend } from "./streaming-engine.ts";
 
@@ -57,28 +66,34 @@ export async function changeEngineRuntimeConfig(
 	delta: StreamConfigChangeDelta,
 	attemptId: string,
 ): Promise<EngineConfigChangeOutcome> {
-	const backend: ChangeConfigCapableBackend = getStreamingBackend();
-	const dispatch = backend.changeConfig;
-	if (dispatch === undefined)
-		throw new Error("engine does not support change-config");
+	const params = {
+		...(delta.resolution === undefined
+			? {}
+			: { resolution: encodeResolutionForEngine(delta.resolution) }),
+		...(delta.framerate === undefined ? {} : { framerate: delta.framerate }),
+		...(delta.video_codec === undefined ? {} : { codec: delta.video_codec }),
+		...(delta.input_id === undefined ? {} : { input_id: delta.input_id }),
+		...(delta.pipeline === undefined ? {} : { pipeline: delta.pipeline }),
+		...(delta.input_mode === undefined ? {} : { input_mode: delta.input_mode }),
+		...(delta.composition == null ? {} : { composition: delta.composition }),
+	};
 
-	const result = await dispatch.call(
-		backend,
-		{
-			...(delta.resolution === undefined
-				? {}
-				: { resolution: encodeResolutionForEngine(delta.resolution) }),
-			...(delta.framerate === undefined ? {} : { framerate: delta.framerate }),
-			...(delta.video_codec === undefined ? {} : { codec: delta.video_codec }),
-			...(delta.input_id === undefined ? {} : { input_id: delta.input_id }),
-			...(delta.pipeline === undefined ? {} : { pipeline: delta.pipeline }),
-			...(delta.input_mode === undefined
-				? {}
-				: { input_mode: delta.input_mode }),
-			...(delta.composition == null ? {} : { composition: delta.composition }),
-		},
-		delta.composition === null,
-	);
+	// The mock engine answers a layout-only change, as it answers set-audio-mix;
+	// any other live change has no mock engine and stays an engine fault.
+	let result: ChangeConfigResult;
+	if (
+		shouldUseMocks() &&
+		params.composition !== undefined &&
+		Object.keys(params).length === 1
+	) {
+		result = changeMockComposition(params.composition);
+	} else {
+		const backend: ChangeConfigCapableBackend = getStreamingBackend();
+		const dispatch = backend.changeConfig;
+		if (dispatch === undefined)
+			throw new Error("engine does not support change-config");
+		result = await dispatch.call(backend, params, delta.composition === null);
+	}
 
 	logger.info("config change transaction settled", {
 		module: "streaming",
@@ -113,15 +128,70 @@ export function classifyConfigChangeDispatchError(
 
 export type ApplyNowGate = {
 	readonly isStreamLive: () => boolean;
+	readonly prepareCaptureSelectionClear?: () => Promise<void>;
 	readonly dispatch: (
 		delta: StreamConfigChangeDelta,
 	) => Promise<ConfigChangeResult>;
 };
 
-const productionGate: ApplyNowGate = {
-	isStreamLive: () => getStreamSessionSnapshot().state === "streaming",
-	dispatch: (delta) => changeStreamSessionConfig(delta),
-};
+/** A registry binding permits the syntax; only a live engine permits the clear. */
+export function supportsCaptureSelectionClear(): boolean {
+	const caps = getCurrentCapabilities();
+	return (
+		caps?.engineUnavailable === false &&
+		caps.features?.includes(CAPTURE_SELECTION_CLEAR_FEATURE) === true
+	);
+}
+
+/**
+ * Only a settled `idle` turns an apply-now save into an ordinary next-start
+ * save. Every other state is a stream on air, an engine transaction in flight
+ * or a session not yet settled, so the save keeps its restart fields back and
+ * goes to admission, which applies it only while `streaming` and answers
+ * `busy` otherwise. Exhaustive on purpose: a new state must choose a side.
+ */
+function applyNowMeetsLiveSession(state: LifecycleState): boolean {
+	switch (state) {
+		case "idle":
+			return false;
+		case "starting":
+		case "streaming":
+		case "reconfiguring":
+		case "stopping":
+		case "stop_failed":
+		case "reconciling":
+			return true;
+	}
+}
+
+/** The apply-now gate over one stream session's lifecycle and admission. */
+export function createApplyNowGate(
+	session: Pick<StreamSessionOrchestrator, "snapshot" | "changeConfig">,
+	prepareCaptureSelectionClear?: () => Promise<void>,
+): ApplyNowGate {
+	return {
+		isStreamLive: () => applyNowMeetsLiveSession(session.snapshot().state),
+		...(prepareCaptureSelectionClear === undefined
+			? {}
+			: { prepareCaptureSelectionClear }),
+		dispatch: (delta) =>
+			(delta.input_mode === null || delta.input_id === null) &&
+			!supportsCaptureSelectionClear()
+				? Promise.resolve({
+						result: "rejected",
+						reason: "change_config_unsupported",
+					})
+				: session.changeConfig(delta),
+	};
+}
+
+const productionGate = createApplyNowGate(
+	{
+		snapshot: getStreamSessionSnapshot,
+		changeConfig: changeStreamSessionConfig,
+	},
+	() => getStreamingBackend().refreshCapabilities(),
+);
 
 let activeGate: ApplyNowGate = productionGate;
 

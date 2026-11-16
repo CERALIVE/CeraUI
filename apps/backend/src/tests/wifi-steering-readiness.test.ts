@@ -4,6 +4,8 @@ import * as runner from "../helpers/run.ts";
 import { resolveModemPhysicalIdentity } from "../modules/modems/physical-identity-source.ts";
 import {
 	getNetworkInterfaces,
+	handleNetifMonitorEvent,
+	parseIpAddrShow,
 	processIfconfigOutput,
 	resetNetifSnapshotForTest,
 } from "../modules/network/network-interfaces.ts";
@@ -25,9 +27,12 @@ import {
 	resetWifiCapabilitiesForTest,
 	setWifiCapabilityDepsForTest,
 } from "../modules/wifi/wifi-capabilities.ts";
+import { concurrentApIfname } from "../modules/wifi/wifi-concurrent-interface.ts";
 import {
 	addWifiInterface,
 	clearWifiInterfacesForTest,
+	getWifiInterfaceByMacAddress,
+	getWifiInterfacesByMacAddress,
 	wifiCancelScanRefresh,
 } from "../modules/wifi/wifi-connections.ts";
 import * as hotspotDiscovery from "../modules/wifi/wifi-hotspot-discovery.ts";
@@ -48,6 +53,7 @@ import { constructedTwinDeps } from "./helpers/constructed-usb-twins.ts";
 
 const mac = "02:00:00:00:00:01";
 const ap = "test-ap-profile";
+const wifiIfnames = ["wlan0", "wlx020000000001", "wlp1s0"] as const;
 const snapshot = [
 	"wlan0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>",
 	"        inet 10.42.0.1  netmask 255.255.255.0",
@@ -126,6 +132,15 @@ afterEach(async () => {
 	jest.useRealTimers();
 });
 
+async function useWifiIfname(ifname: string) {
+	const wifi = getWifiInterfaceByMacAddress(mac);
+	if (!wifi) throw new Error("Missing fixture radio");
+	wifi.ifname = ifname;
+	processIfconfigOutput(snapshot.replace("wlan0", ifname));
+	await refreshUsbNetMarkers([ifname, "wwu1c2"], constructedTwinDeps());
+	spyOn(nm, "nmDevices").mockResolvedValue([`${ifname}:wifi:connected:${ap}`]);
+}
+
 function recovered() {
 	const identity = resolveModemPhysicalIdentity("wwu1c2").identityKey;
 	const effects: string[] = [];
@@ -195,14 +210,21 @@ function recovered() {
 	return { controller, effects, deadlines, bypassWarnings };
 }
 
-test.each([
-	"nmcli failure",
-	"unknown AP mode",
-	"skipped device",
-	"per-device error",
-] as const)(
-	"recovered sharing survives %s until the single 15 second bypass",
-	async (failure) => {
+test.each(
+	wifiIfnames.flatMap((ifname) =>
+		(
+			[
+				"nmcli failure",
+				"unknown AP mode",
+				"skipped device",
+				"per-device error",
+			] as const
+		).map((failure) => ({ ifname, failure })),
+	),
+)(
+	"$ifname recovered sharing survives $failure until the single 15 second bypass",
+	async ({ ifname, failure }) => {
+		await useWifiIfname(ifname);
 		if (failure === "nmcli failure")
 			spyOn(nm, "nmDevices").mockResolvedValue(undefined);
 		if (failure === "unknown AP mode")
@@ -230,25 +252,29 @@ test.each([
 	},
 );
 
-test("a failed first refresh followed by a classified AP keeps matching routes without a bypass warning", async () => {
-	const devices = spyOn(nm, "nmDevices").mockResolvedValue(undefined);
-	const h = recovered();
-	await h.controller.requestReconcile();
-	await wifiUpdateDevices();
-	await h.controller.requestReconcile();
-	devices.mockResolvedValue([`wlan0:wifi:connected:${ap}`]);
-	jest.advanceTimersByTime(10_000);
-	await wifiUpdateDevices();
-	expect(wifiZonesReady()).toBe(true);
-	await h.controller.requestReconcile();
-	expect(h.effects).toEqual(["ruleset"]);
-	expect(h.controller.appliedState()?.uplinks[0]?.identity).toStartWith(
-		"id-path:",
-	);
-	jest.advanceTimersByTime(5_000);
-	await h.deadlines[0]?.();
-	expect(h.bypassWarnings()).toHaveLength(0);
-});
+test.each(wifiIfnames)(
+	"%s failed first refresh followed by a classified AP keeps matching routes without a bypass warning",
+	async (ifname) => {
+		await useWifiIfname(ifname);
+		const devices = spyOn(nm, "nmDevices").mockResolvedValue(undefined);
+		const h = recovered();
+		await h.controller.requestReconcile();
+		await wifiUpdateDevices();
+		await h.controller.requestReconcile();
+		devices.mockResolvedValue([`${ifname}:wifi:connected:${ap}`]);
+		jest.advanceTimersByTime(10_000);
+		await wifiUpdateDevices();
+		expect(wifiZonesReady()).toBe(true);
+		await h.controller.requestReconcile();
+		expect(h.effects).toEqual(["ruleset"]);
+		expect(h.controller.appliedState()?.uplinks[0]?.identity).toStartWith(
+			"id-path:",
+		);
+		jest.advanceTimersByTime(5_000);
+		await h.deadlines[0]?.();
+		expect(h.bypassWarnings()).toHaveLength(0);
+	},
+);
 
 test("a promise-gated Wi-Fi refresh cannot publish an empty sharing state before AP classification", async () => {
 	const gate = Promise.withResolvers<string[]>();
@@ -270,3 +296,252 @@ test("a completed refresh with no active connection classifies the Wi-Fi device"
 	await wifiUpdateDevices();
 	expect(wifiZonesReady()).toBe(true);
 });
+
+test.each(wifiIfnames)(
+	"%s unclassified parent waits while its clap AP remains a client zone after the bypass",
+	async (ifname) => {
+		await useWifiIfname(ifname);
+		const virtualIfname = concurrentApIfname(ifname);
+		processIfconfigOutput(
+			[
+				snapshot
+					.replace("wlan0", ifname)
+					.replace("        inet 10.42.0.1  netmask 255.255.255.0", ""),
+				`${virtualIfname}: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>\n        inet 10.42.0.1  netmask 255.255.255.0`,
+			].join("\n\n"),
+		);
+		spyOn(nm, "nmDevices").mockResolvedValue(undefined);
+		const h = recovered();
+		await wifiUpdateDevices();
+		await h.controller.requestReconcile();
+		expect(wifiZonesReady()).toBe(false);
+		expect(h.effects).toEqual([]);
+		jest.advanceTimersByTime(15_000);
+		await h.deadlines[0]?.();
+		expect(h.effects).toEqual(["ruleset"]);
+		expect(h.controller.appliedState()?.clientZones).toEqual([
+			{ ifname: virtualIfname, ipv4Cidr: "10.42.0.0/24" },
+		]);
+		expect(h.bypassWarnings()).toHaveLength(1);
+	},
+);
+
+test("a clap AP without a parent netif needs no station classification and retains recovered sharing", async () => {
+	const virtualIfname = concurrentApIfname("wlp1s0");
+	processIfconfigOutput(snapshot.replace("wlan0", virtualIfname));
+	spyOn(nm, "nmDevices").mockResolvedValue(undefined);
+	await wifiUpdateDevices();
+	const h = recovered();
+	await h.controller.requestReconcile();
+	expect(wifiZonesReady()).toBe(true);
+	expect(h.effects).toEqual(["ruleset"]);
+	expect(h.controller.appliedState()?.clientZones).toEqual([
+		{ ifname: virtualIfname, ipv4Cidr: "10.42.0.0/24" },
+	]);
+	expect(h.bypassWarnings()).toHaveLength(0);
+});
+
+test.each([
+	{ ifname: "wlwg0", type: "wireguard" },
+	{ ifname: "wlvendor0", type: "ethernet" },
+	{ ifname: "wlp1s0.10", type: "vlan" },
+])(
+	"$ifname classified as $type does not delay a known AP and recovered modem route",
+	async ({ ifname, type }) => {
+		processIfconfigOutput(
+			`${snapshot}\n\n${ifname}: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>\n        inet 172.22.0.2  netmask 255.255.255.0\n        ether 02:00:00:00:00:02`,
+		);
+		spyOn(nm, "nmDevices").mockResolvedValue([
+			`wlan0:wifi:connected:${ap}`,
+			`${ifname}:${type}:connected:other-profile`,
+		]);
+		const h = recovered();
+		await wifiUpdateDevices();
+		expect(wifiZonesReady()).toBe(true);
+		await h.controller.requestReconcile();
+		expect(h.effects).toEqual(["ruleset"]);
+		expect(h.controller.appliedState()?.clientZones).toEqual([
+			{ ifname: "wlan0", ipv4Cidr: "10.42.0.0/24" },
+		]);
+		expect(
+			h.controller.appliedState()?.uplinks.map((entry) => entry.ifname),
+		).toEqual(["wwu1c2"]);
+		expect(h.deadlines).toHaveLength(0);
+		expect(h.bypassWarnings()).toHaveLength(0);
+	},
+);
+
+test("a known non-Wi-Fi candidate waits again while a new type listing is pending or fails", async () => {
+	processIfconfigOutput(
+		"wlwg0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>\n        inet 172.22.0.2  netmask 255.255.255.0",
+	);
+	const devices = spyOn(nm, "nmDevices").mockResolvedValue([
+		"wlwg0:wireguard:connected:vpn-profile",
+	]);
+	await wifiUpdateDevices();
+	expect(wifiZonesReady()).toBe(true);
+	const gate = Promise.withResolvers<string[] | undefined>();
+	devices.mockReturnValue(gate.promise);
+	const refreshing = wifiUpdateDevices();
+	expect(wifiZonesReady()).toBe(false);
+	gate.resolve(undefined);
+	await refreshing;
+	expect(wifiZonesReady()).toBe(false);
+});
+
+test.each(["", "unknown"])(
+	"a candidate with NM type '%s' still waits for radio classification",
+	async (type) => {
+		spyOn(nm, "nmDevices").mockResolvedValue([`wlan0:${type}:connected:${ap}`]);
+		await wifiUpdateDevices();
+		expect(wifiZonesReady()).toBe(false);
+	},
+);
+
+test("discovery ignores an NM Wi-Fi device outside supported radio and clap names", async () => {
+	processIfconfigOutput(
+		`${snapshot}\n\nath0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>\n        ether 02:00:00:00:00:02`,
+	);
+	spyOn(nm, "nmDevices").mockResolvedValue([
+		`wlan0:wifi:connected:${ap}`,
+		"ath0:wifi:disconnected:",
+	]);
+	await wifiUpdateDevices();
+	expect(
+		Object.values(getWifiInterfacesByMacAddress()).map((entry) => entry.ifname),
+	).toEqual(["wlan0"]);
+	expect(wifiZonesReady()).toBe(true);
+});
+
+test.each(
+	["wlwg0", "wlx020000000001"].flatMap((ifname) =>
+		(["disappearance", "ifindex replacement"] as const).flatMap((replacement) =>
+			[false, true].map((staleRead) => ({ ifname, replacement, staleRead })),
+		),
+	),
+)(
+	"$ifname $replacement revokes non-Wi-Fi evidence with stale read $staleRead",
+	async ({ ifname, replacement, staleRead }) => {
+		await useWifiIfname(ifname);
+		const output = snapshot.replace("wlan0", ifname);
+		processIfconfigOutput(
+			output,
+			undefined,
+			0,
+			undefined,
+			new Map([[ifname, 41]]),
+		);
+		const oldRow = `${ifname}:wireguard:connected:old-vpn`;
+		const devices = spyOn(nm, "nmDevices").mockResolvedValue([oldRow]);
+		await wifiUpdateDevices();
+		expect(wifiZonesReady()).toBe(true);
+		const gate = Promise.withResolvers<string[]>();
+		devices.mockReturnValue(gate.promise);
+		const refreshing = staleRead ? wifiUpdateDevices() : undefined;
+		if (staleRead) expect(wifiZonesReady()).toBe(false);
+		if (replacement === "disappearance")
+			processIfconfigOutput(snapshot.split("\n\n").slice(1).join("\n\n"));
+		processIfconfigOutput(
+			output,
+			undefined,
+			0,
+			undefined,
+			new Map([[ifname, 42]]),
+		);
+		if (refreshing) {
+			gate.resolve([oldRow]);
+			await refreshing;
+		}
+		const h = recovered();
+		await h.controller.requestReconcile();
+		expect(h.effects).toEqual([]);
+		expect(wifiZonesReady()).toBe(false);
+		expect(await readDesiredSteeringState()).toEqual({
+			pending: true,
+			netifReady: true,
+			reason: "zones",
+		});
+		expect(h.deadlines).toHaveLength(1);
+		expect(h.bypassWarnings()).toHaveLength(0);
+	},
+);
+
+test.each(["wlwg0", "wlx020000000001"])(
+	"%s keeps its non-Wi-Fi classification through an unchanged OS lifetime",
+	async (ifname) => {
+		const output = `${snapshot}\n\n${ifname}: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>\n        inet 172.22.0.2  netmask 255.255.255.0\n        ether 02:00:00:00:00:02`;
+		const ifindices = new Map([[ifname, 41]]);
+		processIfconfigOutput(output, undefined, 0, undefined, ifindices);
+		spyOn(nm, "nmDevices").mockResolvedValue([
+			`wlan0:wifi:connected:${ap}`,
+			`${ifname}:wireguard:connected:current-vpn`,
+		]);
+		await wifiUpdateDevices();
+		const h = recovered();
+		processIfconfigOutput(output, undefined, 100, undefined, ifindices);
+		await h.controller.requestReconcile();
+		expect(wifiZonesReady()).toBe(true);
+		expect(h.effects).toEqual(["ruleset"]);
+		expect(h.controller.appliedState()?.clientZones).toEqual([
+			{ ifname: "wlan0", ipv4Cidr: "10.42.0.0/24" },
+		]);
+		expect(h.deadlines).toHaveLength(0);
+		expect(h.bypassWarnings()).toHaveLength(0);
+	},
+);
+
+test.each(["wlwg0", "wlx020000000001"])(
+	"%s replacement cannot inherit a previous Wi-Fi classification either",
+	async (ifname) => {
+		await useWifiIfname(ifname);
+		const output = snapshot.replace("wlan0", ifname);
+		await wifiUpdateDevices();
+		processIfconfigOutput(snapshot.split("\n\n").slice(1).join("\n\n"));
+		processIfconfigOutput(output);
+		const h = recovered();
+		await h.controller.requestReconcile();
+		expect(h.effects).toEqual([]);
+		expect(wifiZonesReady()).toBe(false);
+	},
+);
+
+test("OS address parsing retains ifindices even before an interface has an address", () => {
+	const ifindices = new Map<string, number>();
+	const addresses = parseIpAddrShow(
+		"41: wlx020000000001: <BROADCAST,UP> mtu 1500\n42: wlp1s0.10@wlp1s0: <BROADCAST,UP> mtu 1500",
+		ifindices,
+	);
+	expect([...ifindices]).toEqual([
+		["wlx020000000001", 41],
+		["wlp1s0.10", 42],
+	]);
+	expect(addresses.size).toBe(0);
+});
+
+test.each(["wlwg0", "wlx020000000001"])(
+	"%s type reads from a monitor placeholder cannot classify its first OS publication",
+	async (ifname) => {
+		processIfconfigOutput(snapshot.split("\n\n").slice(1).join("\n\n"));
+		handleNetifMonitorEvent({
+			type: "device-state",
+			device: ifname,
+			state: "connected",
+		});
+		const gate = Promise.withResolvers<string[]>();
+		spyOn(nm, "nmDevices").mockReturnValue(gate.promise);
+		const refreshing = wifiUpdateDevices();
+		processIfconfigOutput(
+			snapshot.replace("wlan0", ifname),
+			undefined,
+			0,
+			undefined,
+			new Map([[ifname, 42]]),
+		);
+		gate.resolve([`${ifname}:wireguard:connected:old-vpn`]);
+		await refreshing;
+		const h = recovered();
+		await h.controller.requestReconcile();
+		expect(h.effects).toEqual([]);
+		expect(wifiZonesReady()).toBe(false);
+	},
+);

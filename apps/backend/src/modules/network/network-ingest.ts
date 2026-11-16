@@ -59,6 +59,7 @@ import { getLastCapabilities } from "../streaming/capabilities.ts";
 import type { GatewayProbe } from "../streaming/gateway-availability.ts";
 import { isRealDevice as defaultIsRealDevice } from "../system/device-detection.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import { isSupportedWifiIfname } from "../wifi/wifi-concurrent-interface.ts";
 import {
 	getNetworkInterfaces,
 	NETIF_ERR_HOTSPOT,
@@ -174,7 +175,6 @@ const LAN_PREFERRED_RE = /^(?:eth|en)/;
 // advertising one would be a lie. WiFi is handled separately (AP-mode included,
 // station excluded) so `wl` is deliberately absent here.
 const LAN_EXCLUDE_RE = /^(?:usb|ww|lo$|docker|veth|l4tbr|tun|tap)/;
-const WIFI_RE = /^wl/;
 
 function isHotspotIface(entry: { error?: number }): boolean {
 	return ((entry.error ?? 0) & NETIF_ERR_HOTSPOT) !== 0;
@@ -202,7 +202,7 @@ export function resolvePrimaryLanIp(netif: NetifLike): string | undefined {
 			continue;
 		}
 		if (LAN_EXCLUDE_RE.test(name)) continue;
-		if (WIFI_RE.test(name)) {
+		if (isSupportedWifiIfname(name)) {
 			if (isHotspotIface(entry)) hotspot ??= entry.ip;
 			continue;
 		}

@@ -84,8 +84,8 @@ vi.mock("svelte-sonner", () => ({
 
 vi.mock("$lib/helpers/clipboard", () => ({ copyToClipboard }));
 
-/** The bench Quectel's real ICCID — printed on the card, so not redacted. */
-const BOARD_ICCID = "8957123102400060892";
+/** Synthetic 19-digit ICCID with a valid Luhn check digit. */
+const BOARD_ICCID = "8900000000000000003";
 
 /** A subscriber number, invented: a real MSISDN identifies a real person. */
 const OWN_NUMBER = "+573001234567";

@@ -1,8 +1,11 @@
+import { isBackendSocket } from "../helpers/backend-socket.js";
+
 import path from "node:path";
 
 import { expect, type Page, test } from "../fixtures/index.js";
 import { ensureAuthenticated, navigateTo } from "../helpers/index.js";
 import { expectContained, probeContainment } from "../helpers/modem-containment.js";
+import { SHARED_LAN_IFNAME, withSharedLan } from "../helpers/sharing-wire.js";
 
 /**
  * @visual evidence for the NetworkView per-interface stack (WiFi → Cellular →
@@ -74,7 +77,7 @@ test.describe("@visual NetworkView density", () => {
 		const section = (name: string) =>
 			page.getByRole("heading", { name, level: 2 }).locator("xpath=ancestor::section[1]");
 
-		const wifi = section("WiFi");
+		const wifi = section("Wi-Fi");
 		const cellular = page.getByRole("heading", { name: "Cellular", level: 2 });
 		const ethernet = section("Ethernet");
 		await expect(wifi).toBeVisible();
@@ -114,8 +117,10 @@ test.describe("@visual NetworkView density", () => {
  *     that is unreachable, mis-nested or pointer-blocked.
  *   • No shipped mock scenario carries a per-adapter capability report, so
  *     without one `WifiSection` renders no capability disclosure at all and the
- *     assertion passes vacuously. `SharingSection` renders its diagnostics
- *     disclosure unconditionally and needs nothing.
+ *     assertion passes vacuously. `SharingSection` is quiet while no client
+ *     zone exists and then mounts no diagnostics disclosure at all, so a
+ *     shared-LAN port is declared on the device's own `netif` frame, the same
+ *     client zone `sharing-wire.ts` declares.
  *
  * The report is stamped onto the device's OWN roster by patching every inbound
  * `status.wifi` frame, rather than pushed once through `dev.emit`. A one-shot
@@ -155,13 +160,14 @@ function withWifiCapabilities(frame: Record<string, unknown>): Record<string, un
 }
 
 async function installCapabilityPatch(page: Page): Promise<void> {
-	await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
+	await page.routeWebSocket(isBackendSocket, (ws) => {
 		const server = ws.connectToServer();
 		ws.onMessage((message) => server.send(message));
 		server.onMessage((message) => {
 			const text = typeof message === "string" ? message : message.toString();
 			try {
-				const patched = withWifiCapabilities(JSON.parse(text) as Record<string, unknown>);
+				const frame = JSON.parse(text) as Record<string, unknown>;
+				const patched = withWifiCapabilities(frame) ?? withSharedLan(frame, SHARED_LAN_IFNAME);
 				if (patched !== null) {
 					ws.send(JSON.stringify(patched));
 					return;
@@ -191,6 +197,7 @@ test.describe("@visual NetworkView density — disclosures", () => {
 		await ensureAuthenticated(page);
 		await navigateTo(page, "network");
 		await expect(page.getByTestId("wifi-capabilities").first()).toBeAttached();
+		await expect(page.getByTestId("sharing-diagnostics")).toBeAttached();
 	});
 
 	test(

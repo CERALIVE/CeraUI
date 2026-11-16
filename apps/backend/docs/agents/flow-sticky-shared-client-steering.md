@@ -4,8 +4,9 @@
 
 `modules/network/uplink-steering/` is the desired-state controller for hotspot and
 Ethernet `shared-lan` client traffic. It owns only `inet ceralive_share`, the
-priority-110 namespaced fwmark rules, and private route tables 30000–95535. The
-image's `inet ceralive_ingest_fw` table (input hook priority -10) is foreign and is
+priority-110 namespaced fwmark rules, priority-100 IPv4 source rules selecting
+its managed tables, and private route tables 30000–95535. The image's
+`inet ceralive_ingest_fw` table (input hook priority -10) is foreign and is
 never named by generated rule text. The carrier effects are isolated in
 `modules/network/uplink-sharing.ts`: fsynced temp → `nft --check` → atomic rename
 → systemd start/reload, with prior-file reload on failure.
@@ -16,6 +17,17 @@ Everything below is how that is made structural rather than intentional. Wi-Fi
 station / hotspot / hybrid transitions run under the permanent-MAC adapter lock
 described in EVERY WIFI MUTATION SHARES ONE ADAPTER LOCK.
 Ethernet role changes are serialized per port and must not be nested.
+
+**Source-rule ownership is bounded.** `uplink-steering/route-planner.ts` reuses
+usable foreign source-routing tables without claiming them. Otherwise it plans
+identity-derived managed tables, adding priority-100 source rules only for unique
+source addresses; duplicate-address uplinks use separate fwmark tables without an
+ambiguous source rule. Stale references to other managed tables are ignored before
+checking foreign-table ambiguity. `uplink-steering/route-policy.ts` recognizes
+plain priority-100 IPv4 source rules only within the managed table range.
+`uplink-steering/route-manager.ts` provisions the planned source/fwmark rules,
+removes obsolete managed source rules, restores them on rollback, and removes
+owned source rules with retired route support.
 
 **Client provenance is structural.** New-flow selection, conntrack mark restore,
 and masquerade all require a positive registered client-zone `iifname`; NAT also
@@ -48,9 +60,27 @@ the deterministic cold-start rule above. Custom builder compositions supply
 
 **Startup readiness preserves recovered sharing.** The first OS netif snapshot
 must exist before planning, including when it is empty. A snapshot with no
-`wlan*` interface needs no Wi-Fi discovery; otherwise a completed Wi-Fi device
+`wl*` interface needs no Wi-Fi discovery; otherwise a completed Wi-Fi device
 refresh must classify every such interface. A device with no active connection
 is classified; an active connection needs mode `ap` or `infrastructure`.
+Names are candidates, not radio-type evidence: a fresh NM listing excludes
+interfaces explicitly typed as non-Wi-Fi. Empty or unknown types still wait.
+Each discovery clears these exclusions before reading NM, so a pending or failed
+listing cannot reuse a previous non-Wi-Fi verdict.
+Both radio classifications and non-Wi-Fi exclusions carry the OS parser's
+presence epoch. Appearance, disappearance, ifindex changes and observed MAC
+changes advance that epoch before publishing the snapshot. Ordinary polls retain
+it. A type read captures the topology generation before calling NM; changed
+topology discards a stale listing and schedules a fresh read. Per-device awaits
+also check that generation before recording classification. Removed or replaced
+names cannot inherit either type verdict, and exclusions are pruned on readiness.
+Monitor-only placeholders have no parser identity yet. Their first OS metadata
+advances the topology generation while adopting the monitor's lifetime, preserving
+its covering bus read and rejecting type reads begun before that publication.
+Discovery, the netif parser, readiness and uplink planning share
+`isSupportedWifiIfname` in `wifi-concurrent-interface.ts`. Virtual `clap-*` AP
+legs remain client zones by name and do not require station classification;
+any present `wl*` parent still does.
 A failed nmcli listing, skipped device, per-device read error or `unknown` mode
 leaves readiness pending. This check precedes the empty-client-zone branch.
 Pending performs no apply, availability publication, retry, failure-backoff
@@ -98,12 +128,15 @@ skips byte-identical state, and retries a newly failing state at 100/500 ms.
 After those retries fail, identical desired states leave the unavailable status
 untouched and skip apply for 5 seconds. Each later failed apply doubles that delay
 up to 60 seconds, with one apply per window. A different desired state or success
-clears the backoff. On process restart it
-inventories its priority-110 rules, publishes the latest model first, then flushes
-and removes stale support. Hash-slot collisions are resolved with an info log
-naming both interfaces; the distinct-mark assertion and `mark_collision` refusal
-remain as invariants. Any overlap, foreign priority owner, missing route, nft
-failure, or rollback failure is fail-soft and surfaces
+clears the backoff. On process restart,
+`uplink-steering/route-manager.ts` inventories its priority-110 rules and
+priority-100 managed-table source rules, including source-only crash remnants.
+It publishes the latest model first, then flushes and removes stale support.
+`uplink-steering/applier.ts` protects desired support by mark/table and retains
+cleanup work separately for each source address and priority. Hash-slot
+collisions are resolved with an info log naming both interfaces; the
+distinct-mark assertion and `mark_collision` refusal remain as invariants. Any
+overlap, foreign priority owner, missing route, nft failure, or rollback failure is fail-soft and surfaces
 `steering_unavailable`; it never blocks the already-bound WS server.
 
 Keep committed steering through stale-route cleanup failures: sharing, provisioned

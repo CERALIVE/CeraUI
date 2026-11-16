@@ -18,21 +18,39 @@ const stagedFieldsSchema = z.object({
 	composition: compositionConfigSchema.nullable().optional(),
 	source: z.string().optional(),
 	pipeline: z.string().optional(),
-	selected_video_input: z.string().optional(),
-	resolution: z.string().optional(),
-	framerate: z.number().optional(),
+	selected_video_input: z.string().nullable().optional(),
+	// Captured from the operator's source snapshot; omission is unknown, null clears.
+	source_stable_id: z.string().nullable().optional(),
+	// `null` is the local storage clear a source switch derives for an override
+	// the destination pipeline cannot honor — never a value sent to the engine.
+	resolution: z.string().nullable().optional(),
+	framerate: z.number().nullable().optional(),
 	video_codec: videoCodecSchema.optional(),
 	// Switching a dual-format camera between H.264 and MJPEG rebuilds the capture
 	// leg, so it is a transaction like the axes above — never a live reload.
-	input_mode: inputModeSchema.optional(),
+	// `null` is the clear a switch to a different camera makes, as for composition.
+	input_mode: inputModeSchema.nullable().optional(),
 });
 export type StagedConfigFields = z.infer<typeof stagedFieldsSchema>;
+
+/**
+ * What the candidate must beat: concrete geometry and capture input only. A
+ * `null` clear exists only in a candidate, never in the preceding running state.
+ */
+const previousFieldsSchema = stagedFieldsSchema
+	.omit({ resolution: true, framerate: true, selected_video_input: true })
+	.extend({
+		resolution: z.string().optional(),
+		framerate: z.number().optional(),
+		selected_video_input: z.string().optional(),
+	});
+export type PreviousConfigFields = z.infer<typeof previousFieldsSchema>;
 
 const inflightMarkerSchema = z.object({
 	attemptId: z.string(),
 	startedAt: z.number(),
 	candidate: stagedFieldsSchema,
-	previous: stagedFieldsSchema,
+	previous: previousFieldsSchema,
 });
 export type InflightConfigMarker = z.infer<typeof inflightMarkerSchema>;
 
@@ -73,11 +91,17 @@ export function getStagedConfigChange(): InflightConfigMarker | undefined {
  * values that are still running on the engine, so a `reverted` costs no disk
  * write at all and a crash mid-transaction cannot leave the device booting into
  * a config the hardware never accepted.
+ *
+ * The stage belongs to ONE attempt at a time. While another attempt holds it,
+ * this returns `false` and touches neither the held candidate nor the marker,
+ * so an overlapping change can never replace, or later retire, the one in
+ * flight.
  */
 export function stageConfigChange(
 	marker: InflightConfigMarker,
 	deps: StagingDeps = defaultStagingDeps,
-): void {
+): boolean {
+	if (staged !== undefined) return false;
 	staged = marker;
 	try {
 		deps.writeMarker(deps.markerPath, JSON.stringify(marker));
@@ -86,6 +110,15 @@ export function stageConfigChange(
 		// buys crash recovery, so failing to write it must not fail the change.
 		logger.warn("could not write the config-change in-flight marker", { err });
 	}
+	return true;
+}
+
+/**
+ * Free the in-memory stage but leave the marker on disk. With no change
+ * owning it any more, reconciliation judges that marker like a crash leftover.
+ */
+export function releaseStagedConfigChange(): void {
+	staged = undefined;
 }
 
 export function clearStagedConfigChange(
@@ -127,11 +160,6 @@ export type ReconciliationVerdict =
 	| { readonly action: "retain_previous" }
 	| { readonly action: "wait" };
 
-const matches = (
-	candidate: string | number | undefined,
-	actual: string | number | undefined,
-): boolean => candidate === undefined || candidate === actual;
-
 /**
  * The two axes where the marker and the engine can be RIGHT and still not be
  * `===`. `config.json` holds ladder rungs (`"2160p"`, `30`); the engine reports
@@ -146,37 +174,68 @@ const matches = (
  * equality is honoured first, so a value the ladder cannot place (an engine token
  * this build does not know) still matches itself and never silently widens.
  */
-const resolutionMatches = (
-	candidate: string | undefined,
-	actual: string | undefined,
-): boolean => {
-	if (matches(candidate, actual)) return true;
-	if (candidate === undefined || actual === undefined) return false;
+const resolutionMatches = (candidate: string, actual: string): boolean => {
+	if (candidate === actual) return true;
 	const rung = normalizeResolutionToRung(candidate);
 	return rung !== undefined && rung === normalizeResolutionToRung(actual);
 };
 
-const framerateMatches = (
-	candidate: number | undefined,
-	actual: number | undefined,
-): boolean => {
-	if (matches(candidate, actual)) return true;
-	if (candidate === undefined || actual === undefined) return false;
+const framerateMatches = (candidate: number, actual: number): boolean => {
+	if (candidate === actual) return true;
 	const rung = normalizeFramerateToRung(candidate);
 	return rung !== undefined && rung === normalizeFramerateToRung(actual);
 };
 
 function paramsMatch(
-	fields: StagedConfigFields,
+	fields: PreviousConfigFields,
 	engine: EngineEncodeSnapshot,
-): boolean {
+	axes: PreviousConfigFields,
+): boolean | undefined {
+	// Compare the same transaction axes on both sides; missing facts are unknown.
+	const checks = [
+		axes.composition === undefined
+			? true
+			: fields.composition === undefined || engine.switching === undefined
+				? undefined
+				: fields.composition === null && engine.switching === true,
+		axes.resolution === undefined
+			? true
+			: fields.resolution === undefined || engine.resolution === undefined
+				? undefined
+				: resolutionMatches(fields.resolution, engine.resolution),
+		axes.framerate === undefined
+			? true
+			: fields.framerate === undefined || engine.framerate === undefined
+				? undefined
+				: framerateMatches(fields.framerate, engine.framerate),
+		axes.video_codec === undefined
+			? true
+			: fields.video_codec === undefined || engine.codec === undefined
+				? undefined
+				: fields.video_codec === engine.codec,
+		axes.selected_video_input === undefined
+			? true
+			: fields.selected_video_input === undefined ||
+					engine.activeInput === undefined
+				? undefined
+				: fields.selected_video_input === engine.activeInput,
+	];
+	if (checks.includes(false)) return false;
+	return checks.includes(undefined) ? undefined : true;
+}
+
+/**
+ * A local geometry or capture-input clear is not an engine measurement. A
+ * publisher may share the preceding geometry, and an absent active input cannot
+ * confirm that capture selection was cleared. Keep those markers undecided.
+ */
+function hasConcreteParams(
+	fields: StagedConfigFields,
+): fields is PreviousConfigFields {
 	return (
-		(fields.composition === undefined ||
-			(fields.composition === null && engine.switching === true)) &&
-		resolutionMatches(fields.resolution, engine.resolution) &&
-		framerateMatches(fields.framerate, engine.framerate) &&
-		matches(fields.video_codec, engine.codec) &&
-		matches(fields.selected_video_input, engine.activeInput)
+		fields.resolution !== null &&
+		fields.framerate !== null &&
+		fields.selected_video_input !== null
 	);
 }
 
@@ -199,10 +258,34 @@ export function judgeInflightMarker(
 		engine.pipelinePlaying !== false && (engine.framesEmitted ?? 0) > 0;
 	if (!gateSatisfied) return { action: "wait" };
 
-	const onCandidate = paramsMatch(marker.candidate, engine);
-	if (onCandidate) return { action: "persist_candidate" };
+	// A clear-carrying candidate is undecidable from ANY running snapshot. It
+	// must stay undecided before both the candidate and previous branches, or a
+	// previous-geometry match would retire evidence that cannot prove the switch
+	// failed. A stopped engine was already answered above.
+	const candidate = marker.candidate;
+	// A source label, even unchanged, cannot recover an uncaptured hardware pick.
+	if (
+		candidate.source !== undefined &&
+		candidate.source_stable_id === undefined
+	)
+		return { action: "wait" };
+	if (!hasConcreteParams(candidate)) return { action: "wait" };
 
-	const onPrevious = paramsMatch(marker.previous, engine);
+	// Published status measures neither capture mode nor routed pipeline.
+	if (
+		(candidate.input_mode !== undefined &&
+			candidate.input_mode !== marker.previous.input_mode) ||
+		(candidate.pipeline !== undefined &&
+			candidate.pipeline !== marker.previous.pipeline)
+	)
+		return { action: "wait" };
 
-	return onPrevious ? { action: "retain_previous" } : { action: "wait" };
+	const onCandidate = paramsMatch(candidate, engine, candidate);
+	const onPrevious = paramsMatch(marker.previous, engine, candidate);
+
+	if (onCandidate === true && onPrevious === false)
+		return { action: "persist_candidate" };
+	if (onPrevious === true && onCandidate === false)
+		return { action: "retain_previous" };
+	return { action: "wait" };
 }

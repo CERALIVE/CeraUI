@@ -1,165 +1,63 @@
-import fs from "node:fs";
-import path from "node:path";
-
-import { expect, type Page, test } from "@playwright/test";
-
-import { evidencePath } from "../helpers/index.js";
+import { expect, test } from "../fixtures/index.js";
+import {
+	ensureAuthenticated,
+	evidencePath,
+	navigateTo,
+} from "../helpers/index.js";
 
 /**
- * Task 10 — live audio-switch is gated, audio sources show "coming soon".
+ * Task 10 — the live audio switch is gated: while streaming, the audio source is
+ * never an actionable switch when the engine advertises no live-audio capability.
  *
- * Proves, against the REAL frontend + mock backend, that while streaming an
- * audio capture source in the input picker renders a DISABLED "coming soon"
- * affordance (never an actionable Switch) when the engine has not advertised
- * `audio_live_switch`. Captures the section as repo-local evidence.
- *
- * Devices + streaming state are injected over the WebSocket via the dev `emit`
- * passthrough (same harness as input-picker.spec) so the proof needs no audio
- * hardware.
+ * Proves, against the REAL frontend + the per-worker mock backend, that a stream
+ * started on `multi-modem-wifi` (no `audio_live_switch`, no `audio_mix`) shows
+ * its audio read-only: the live audio line and its level meter in
+ * LiveSummaryStrip, no live Audio card and no audio switch control (the Live
+ * screen contract, docs/agents/live-screen.md). The coming-soon pill this spec
+ * once asserted (TD-live-audio-switch) is resolved and left the Live screen with
+ * InputPicker. Captures the summary strip as repo-local evidence.
  */
-
-const TOKEN: string = (() => {
-	const tokenPath = path.resolve(
-		import.meta.dirname,
-		"../../../../backend/.e2e-auth-token",
-	);
-	let token: string;
-	try {
-		token = fs.readFileSync(tokenPath, "utf8").trim();
-	} catch {
-		throw new Error(`No persistent auth token at ${tokenPath}`);
-	}
-	if (token.length === 0) {
-		throw new Error(`Empty persistent auth token at ${tokenPath}`);
-	}
-	return token;
-})();
-
-function installWsHarness(token: string): void {
-	// biome-ignore lint/suspicious/noExplicitAny: browser harness glue.
-	const w = window as any;
-	if (w.__cera) return;
-	const Real = w.WebSocket;
-	w.__cera = {
-		socket: null,
-		_seq: 0,
-		emit(type: string, payload: unknown) {
-			const s = w.__cera.socket;
-			if (s)
-				s.__realSend(
-					JSON.stringify({
-						id: `emit-${++w.__cera._seq}`,
-						path: ["dev", "emit"],
-						input: { type, payload },
-					}),
-				);
-		},
-	};
-	class HookedWS extends Real {
-		// biome-ignore lint/suspicious/noExplicitAny: native ctor signature.
-		constructor(url: string, protocols?: any) {
-			super(url, protocols);
-			w.__cera.socket = this;
-			this.__realSend = Real.prototype.send.bind(this);
-		}
-		// biome-ignore lint/suspicious/noExplicitAny: WebSocket.send payload union.
-		send(data: any) {
-			try {
-				const msg = JSON.parse(data);
-				if (Array.isArray(msg.path) && msg.path.join(".") === "auth.login") {
-					msg.input = { token, persistent_token: true };
-					return this.__realSend(JSON.stringify(msg));
-				}
-			} catch {
-				/* non-RPC frame */
-			}
-			return this.__realSend(data);
-		}
-	}
-	w.WebSocket = HookedWS;
-	try {
-		localStorage.setItem("auth", "e2e-token-marker");
-		localStorage.setItem("engine", "cerastream");
-	} catch {
-		/* storage unavailable */
-	}
-}
-
-function emit(page: Page, type: string, payload: unknown): Promise<void> {
-	return page.evaluate(
-		([t, p]) =>
-			(
-				window as { __cera: { emit: (t: string, p: unknown) => void } }
-			).__cera.emit(t, p),
-		[type, payload] as const,
-	);
-}
-
-const DEVICES = {
-	engine: "cerastream",
-	active_input: "video0",
-	devices: [
-		{
-			input_id: "video0",
-			device_path: "/dev/video0",
-			display_name: "HDMI Capture",
-			media_class: "video",
-			kind: "hdmi",
-		},
-		{
-			input_id: "audio:usbaudio",
-			device_path: "alsa:usbaudio",
-			display_name: "USB Audio CODEC",
-			media_class: "audio",
-			kind: "audio",
-		},
-	],
-} as const;
-
 test.describe("@visual Task 10 — gated live audio switch", () => {
 	test(
-		"@visual audio source shows a disabled coming-soon affordance while streaming",
+		"@visual audio source is read-only while streaming, with no live switch",
 		{ tag: "@visual" },
-		async ({ page }, testInfo) => {
+		async ({ page, backendRpc }, testInfo) => {
 			test.skip(
 				testInfo.project.name !== "desktop",
 				"single-layout visual proof",
 			);
 
-			await page.addInitScript(installWsHarness, TOKEN);
+			// A capture source and a destination, so Start is ready whatever config
+			// the worker backend was seeded with.
+			await backendRpc.call(["streaming", "setConfig"], {
+				source: "usb",
+				srtla_addr: "127.0.0.1",
+				srtla_port: 5000,
+			});
 			await page.goto("/");
+			await ensureAuthenticated(page);
+			await navigateTo(page, "live");
 
-			const deferred = page.locator(
-				'[data-audio-switch-deferred="audio:usbaudio"]',
-			);
+			await page
+				.getByTestId("live-bar")
+				.getByRole("button", { name: "Start stream" })
+				.click();
+			const cockpit = page.getByTestId("live-cockpit");
+			await expect(cockpit).toBeVisible({ timeout: 15_000 });
 
-			await expect
-				.poll(
-					async () => {
-						await emit(page, "status", { is_streaming: true });
-						await emit(page, "devices", DEVICES);
-						return deferred.isVisible().catch(() => false);
-					},
-					{
-						timeout: 20_000,
-						message: "audio coming-soon affordance should render while streaming",
-					},
-				)
-				.toBe(true);
+			const strip = cockpit.getByTestId("live-summary-strip");
+			await expect(strip.locator('[data-live-value="audio"]')).toBeVisible();
+			await expect(strip.getByTestId("live-audio-meter")).toBeVisible();
+			await expect(cockpit.getByTestId("audio-card")).toHaveCount(0);
+			await expect(page.locator('[data-switch-input^="audio:"]')).toHaveCount(0);
 
-			await expect(deferred).toHaveAttribute(
-				"data-debt-id",
-				"TD-live-audio-switch",
-			);
-			await expect(
-				page.locator('[data-switch-input="audio:usbaudio"]'),
-			).toHaveCount(0);
-
-			const section = page.getByTestId("source-section");
-			await section.scrollIntoViewIfNeeded();
-			await section.screenshot({
+			await strip.screenshot({
 				path: evidencePath("task-10-audio-comingsoon.png"),
 			});
+			await page
+				.getByTestId("live-bar")
+				.getByRole("button", { name: "Stop stream" })
+				.click();
 		},
 	);
 });

@@ -15,6 +15,11 @@
 		// explicitly or every rune reads as TS2304 "Cannot find name '$state'".
 		"types": ["svelte", "bun"]
 	},
-	"include": ["src/**/*", "scripts/**/*", "tests/eager-registration.test.ts"],
+	"include": [
+		"src/**/*",
+		"scripts/**/*",
+		"tests/eager-registration.test.ts",
+		"tests/translation-quality.test.ts"
+	],
 	"exclude": ["node_modules", "src/**/*.test.ts"]
 }

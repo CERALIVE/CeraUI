@@ -4,6 +4,7 @@ import { parseDefaultRouteInterface } from "../connectivity-candidates.ts";
 import { parseDefaultRouteLine } from "../gateways.ts";
 import type { UplinkRoutePlan } from "./applier.ts";
 import { SOURCE_ROUTE_RULE_PRIORITY } from "./contracts.ts";
+import { isManagedUplinkTable, MANAGED_TABLE_BASE } from "./mark-layout.ts";
 import { asRouteError, routeUnavailable } from "./route-errors.ts";
 import {
 	isEthernetUplinkIface,
@@ -12,8 +13,8 @@ import {
 } from "./route-parsers.ts";
 import { assertFwmarkPriorityAvailable } from "./route-policy.ts";
 
-const MANAGED_TABLE_BASE = 30_000;
-const MANAGED_TABLE_MAX = MANAGED_TABLE_BASE + 0xffff;
+export { isManagedUplinkTable } from "./mark-layout.ts";
+
 const SAFE_TABLE_RE = /^[A-Za-z0-9_.][A-Za-z0-9_.-]*$/;
 const IPV4_RE = /^(?:\d{1,3}\.){3}\d{1,3}$/;
 
@@ -74,7 +75,12 @@ async function planUplinkRouteInner(
 					rule.src === candidate.sourceAddress ||
 					rule.src === `${candidate.sourceAddress}/32`,
 			)
-			.map((rule) => rule.table),
+			.map((rule) => rule.table)
+			.filter(
+				(table) =>
+					table === managedTable(candidate.mark) ||
+					!isManagedUplinkTable(table),
+			),
 	);
 	if (tables.size > 1) {
 		throw routeUnavailable(
@@ -288,10 +294,4 @@ function managedTable(mark: number): string {
 
 export function isModuleProvisionedUplink(ifname: string): boolean {
 	return isEthernetUplinkIface(ifname) || /^(?:ww|ppp)/.test(ifname);
-}
-
-export function isManagedUplinkTable(table: string): boolean {
-	if (!/^\d+$/.test(table)) return false;
-	const value = Number.parseInt(table, 10);
-	return value >= MANAGED_TABLE_BASE && value <= MANAGED_TABLE_MAX;
 }

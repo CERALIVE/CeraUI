@@ -319,7 +319,7 @@ function firstNamed(...candidates: (string | undefined)[]): string {
 const records = new Map<string, PhysicalDeviceRecord>();
 let presentDevices: readonly PhysicalDeviceRecord[] = [];
 
-/** Replaced only by a committed USB scan, including an empty scan. */
+/** Updated by committed USB scans and observed interface removals. */
 export function setPresentPhysicalDevices(
 	devices: readonly PhysicalDeviceRecord[],
 ): void {

@@ -54,7 +54,7 @@ function dongle(overrides: Partial<Modem> = {}): Modem {
 			admin_url: "http://192.168.8.1",
 			reachable: true,
 			model: "E3372",
-			serial: "Y4QDU17621000793",
+			serial: "X0XXX00000000222",
 			sim: "absent",
 			connection: "disconnected",
 			signal_bars: 0,
@@ -294,7 +294,7 @@ describe("configuration surface — exactly what the device reported", () => {
 		).toContain("0/5");
 		expect(
 			strip?.querySelector('[data-testid="router-admin-serial"]')?.textContent,
-		).toContain("Y4QDU17621000793");
+		).toContain("X0XXX00000000222");
 	});
 
 	it("omits a segment the dongle did not report, with no dangling separator", () => {

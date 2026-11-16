@@ -16,8 +16,9 @@
     keyboard alone.
   • The trigger carries an explicit `aria-label` (the bare "?" glyph has no
     accessible name otherwise) and a `title` for pointer hover.
-  • Hit target is ≥44px (touch) via padding around the small glyph; the
-    layout-mode CSS scales it further on kiosk.
+  • Hit target is ≥44px below 640px via padding around the small glyph; in
+    touch layout the token layer's `::after` hit area (`data-touch-target=
+    "hit-area"`) lifts the compact 24px trigger to 44px at every width.
 
   Reduced motion: the open/close transition is the AppDialog-class animation set,
   which the e-ink freeze + `prefers-reduced-motion` already neutralise globally.
@@ -82,10 +83,11 @@ const triggerLabel = $derived(ariaLabel ?? m["live.education.info"]({ field: tit
 	<Popover.Trigger
 		aria-label={triggerLabel}
 		class={cn(
-			'text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2.5 transition-colors outline-hidden focus-visible:ring-2 sm:min-h-0 sm:min-w-0 sm:p-1',
+			'text-muted-foreground hover:text-foreground focus-visible:ring-ring relative inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2.5 transition-colors outline-hidden focus-visible:ring-2 sm:min-h-0 sm:min-w-0 sm:p-1',
 			className,
 		)}
 		data-testid={testId}
+		data-touch-target="hit-area"
 		title={triggerLabel}
 		type="button"
 	>

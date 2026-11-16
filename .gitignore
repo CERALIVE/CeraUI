@@ -61,9 +61,6 @@ test-results/
 .playwright-mcp/
 f3-qa/
 
-# Playwright visual baseline snapshots — mobile viewport variants (not part of tracked baselines)
-*-mobile-linux.png
-
 # Agent orchestration state (local only)
 .omo/
 *.tsbuildinfo

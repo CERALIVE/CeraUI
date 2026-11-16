@@ -103,6 +103,7 @@ describe("ensureSshPasswordProvisioned — no password persisted yet", () => {
 		expect(getSshPasswordHash()).toBe("$6$new$freshhash");
 		expect(persisted).toBe(1);
 		expect(statusRefreshed).toBe(1);
+		expect(Object.hasOwn(getConfig(), "ssh_persistent")).toBe(false);
 	});
 });
 

@@ -273,7 +273,11 @@ multi-hour board-access outage.
 
 `setSshPersistent(enabled)` (`modules/system/ssh.ts`) is the second axis, and the
 two are DELIBERATELY NOT FUSED — an operator must still be able to run SSH for one
-session without committing it to boot. Six rules carry it:
+session without committing it to boot. Its optional boolean `ssh_persistent`
+lives in the existing `/data`-backed `config.json`, beside `ssh_pass`. The setter
+saves it only after a raw `is-enabled` re-probe confirms exactly `enabled` or
+`disabled`; an unreadable probe cannot commit a disable request. Start/Stop for
+one session never writes the choice. These rules carry it:
 
 - **`--now` is ABSENT and must stay absent.** The runner spawns exactly
   `systemctl enable|disable ssh`, so the running service is untouched in BOTH
@@ -304,6 +308,34 @@ session without committing it to boot. Six rules carry it:
   re-probe agrees, so a runner that resolved against a unit that did not take is
   reported as a failure rather than a silent success.
 
+The setter's complete command, confirmation/status probe and config save share
+one FIFO promise chain with boot reconciliation. The next writer starts only
+after the previous writer settles, so an older delayed status probe cannot save
+over a later confirmed choice. After successful queued requests, the unit and
+saved field reflect the last request. Failed or unconfirmed requests do not
+save; a rejection remains visible to its caller without poisoning the queue.
+
+At boot, `main.ts` awaits provisioning, then password sync, then
+`reconcileSshPersistence(passwordSynced)` before the status probe. The explicit
+sync outcome prevents enabling and starting SSH with a password that did not
+reach this slot. Reconciliation reads the raw unit state, because the boolean
+wire status intentionally maps both masks and probe failures to false:
+
+- With no saved choice, record only an exact `enabled` or `disabled` reading
+  without changing the unit. Damaged-config recovery discards non-credential
+  fields, so a rebuilt config follows the same adoption path.
+- Saved true plus disabled runs `enable ssh`, then `start ssh`, only with a
+  persisted `ssh_pass` and successful password sync on this boot.
+- Saved false plus enabled runs `disable ssh` and leaves any running session
+  alone. An already matching unit needs no command.
+- Masked, runtime-only and other non-enabled/disabled states are untouched.
+  Probe, command and config-save errors are logged and swallowed; under mocks
+  reconciliation performs no probe, command or write.
+
+The boot restore uses the existing service/persistence runners. It needs no
+image change, RAUC hook or extra state file. This is host-tested behavior, not
+physical slot-update qualification.
+
 The RPC is `system.sshSetPersistent` (`.strict()` input, same `authedProcedure` +
 streaming/updating gate as its sibling SSH mutations). Operator surface and its
 pessimistic-toggle contract: [`../frontend/AGENTS.md`](../../../frontend/AGENTS.md) →
@@ -317,12 +349,19 @@ non-zero-exit and unreadable-probe paths, the enabled-alone re-broadcast, and th
 `--now` source gate. Rule-E proof in three directions: adding `--now` reddens 1,
 fusing the axes onto the service runner reddens 5, and making `enabled`
 omitted-when-false reddens 6.
+The same suite also covers first-boot adoption, both slot-restore directions,
+masked/throwing probes, refused commands, missing passwords, failed password
+sync, damaged-config rebuilds and the temporary-session no-write contract.
+Deferred-probe regressions hold an older confirmation while submitting the next
+request: both opposite-value orders, both same-value orders, each boot/setter
+interleaving, and failed, unconfirmed or rejected request recovery. They verify
+the final unit and saved choice agree and a subsequent boot issues no command.
 
 ### SSH password sync on boot — OTA slot-swap fix [EXISTS]
 
 `ensureSshPasswordSynced()` (`modules/system/ssh.ts`, wired into `main.ts` via
-`guardNonCritical("ssh-password-sync", …)` immediately before the boot
-`getSshStatus()` probe) fixes an operator lockout confirmed on real Rock 5B+
+`guardNonCritical("ssh-password-sync", …)` before boot persistence reconciliation
+and the `getSshStatus()` probe) fixes an operator lockout confirmed on real Rock 5B+
 hardware: an OTA A/B slot swap silently invalidated SSH login. `config.json`
 (`ssh_pass` + `ssh_pass_hash`) is `/data`-persisted and survives the swap, but the
 OS-level `/etc/shadow` entry is **rootfs-local** — baked fresh into each image and
@@ -346,6 +385,10 @@ common same-slot boot). It NEVER generates a new password and NEVER calls
 Effectful surface (`readShadow` / `applyPassword`) is injected via
 `SshPasswordSyncDeps` (mirrors `SshStatusDeps`) so `tests/ssh-password-sync.test.ts`
 drives it without a real `passwd`/`/etc/shadow`.
+The result is now boolean: true when the live hash already matches or the
+persisted password was reapplied and its hash re-read; false for no password,
+mocks, an invalid user, an unreadable hash or a failed apply. An unreadable hash
+cannot match an absent cached hash and authorize a boot-time start.
 
 ### SSH password provisioning on first boot [EXISTS]
 

@@ -16,6 +16,7 @@
 //           timer — side-effect-clean, so each test starts from the scenario's
 //           seeded state with no leaked intervals or cross-test bleed.
 
+import type { StartParams } from "@ceralive/cerastream";
 import type {
 	AddonConfig,
 	AddonState,
@@ -48,7 +49,6 @@ import {
 	MOCK_FEEDBACK_BROADCAST_INTERVAL_MS,
 	MOCK_RELAY_POPULATE_DELAY_MS,
 	MOCK_RTT_INTERVAL_MS,
-	MODEM_SIGNAL_FLUCTUATION_PERCENT,
 	SENSOR_CURRENT_IDLE_A,
 	SENSOR_CURRENT_IDLE_RANGE_A,
 	SENSOR_CURRENT_STREAMING_A,
@@ -58,7 +58,6 @@ import {
 	SENSOR_TEMP_FLUCTUATION_C,
 	SENSOR_VOLTAGE_BASE_V,
 	SENSOR_VOLTAGE_RANGE_V,
-	WIFI_SIGNAL_FLUCTUATION_PERCENT,
 } from "./mock-constants.ts";
 import type {
 	MockEncoderConfigState,
@@ -94,6 +93,11 @@ export type {
 // Dynamic mock state that changes over time
 export interface MockState {
 	initialized: boolean;
+	engineStart: StartParams | null;
+	engineCompositionPrimaryInputId: string | null;
+	engineKnownGood: StartParams | null;
+	engineKnownGoodCandidate: StartParams | null;
+	engineChangeCounter: number;
 	modemSignals: Map<number, number>;
 	modemStates: Map<number, "registered" | "connected" | "searching">;
 	networkTraffic: Map<string, number>;
@@ -156,6 +160,11 @@ export interface MockState {
 
 const mockState: MockState = {
 	initialized: false,
+	engineStart: null,
+	engineCompositionPrimaryInputId: null,
+	engineKnownGood: null,
+	engineKnownGoodCandidate: null,
+	engineChangeCounter: 0,
 	modemSignals: new Map(),
 	modemStates: new Map(),
 	networkTraffic: new Map(),
@@ -205,12 +214,11 @@ let relayPopulateTimeout: ReturnType<typeof setTimeout> | null = null;
 // and re-emit `relays` on this cadence so the UI sees live, changing RTT values.
 let rttBroadcastInterval: ReturnType<typeof setInterval> | null = null;
 
-// Coalesced (5s) feedback tick: surfaces the 1s signal fluctuations to clients.
-// applyPeriodicFluctuations() mutates state every 1s but never broadcast it — this
-// timer is what actually pushes those changes on-screen, at the 5s cadence.
+// Coalesced (5s) feedback tick: pushes modem/wifi signal changes written into
+// mockState (by tests and dev seams) to clients. Signals never drift on their own.
 let feedbackBroadcastInterval: ReturnType<typeof setInterval> | null = null;
 
-// Dedupe caches: the last modem/wifi signal fingerprint actually emitted, so a
+// Dedupe caches: the last modem/wifi state fingerprint actually emitted, so a
 // tick with no observable change broadcasts nothing.
 let lastEmittedModemFingerprint: string | null = null;
 let lastEmittedWifiFingerprint: string | null = null;
@@ -256,6 +264,11 @@ export function initMockService(scenarioName?: string): void {
 	mockState.injectedStreamError = null;
 	mockState.relayValidateFault = null;
 	mockState.capabilityOverride = null;
+	mockState.engineStart = null;
+	mockState.engineCompositionPrimaryInputId = null;
+	mockState.engineKnownGood = null;
+	mockState.engineKnownGoodCandidate = null;
+	mockState.engineChangeCounter = 0;
 	mockState.gatewayActive = {};
 	mockState.networkIngestActive = { rtmp: true, srt: true };
 	mockState.networkIngestMediamtxSrt = false;
@@ -266,7 +279,9 @@ export function initMockService(scenarioName?: string): void {
 	lastEmittedWifiFingerprint = null;
 
 	for (let i = 0; i < config.modems; i++) {
-		mockState.modemSignals.set(i, 80 + Math.random() * 15);
+		// Fixed, never random: visual baselines draw these bars and must be
+		// byte-stable. Every seed is excellent (>= 75), which also draws three bars.
+		mockState.modemSignals.set(i, 90 - i * 5);
 		mockState.modemStates.set(i, "connected");
 	}
 
@@ -439,31 +454,16 @@ function startPeriodicUpdates(): void {
 }
 
 /**
- * Update mock state with realistic fluctuations
+ * Update mock state with realistic fluctuations. Modem and wifi signals are left
+ * alone on purpose: they stay at their seeds so screenshots are byte-stable.
  */
 function applyPeriodicFluctuations(): void {
 	const config = getScenarioConfig();
-
-	// Update modem signals (fluctuate ±MODEM_SIGNAL_FLUCTUATION_PERCENT%)
-	for (const [id, signal] of mockState.modemSignals) {
-		const fluctuation =
-			(Math.random() - 0.5) * (MODEM_SIGNAL_FLUCTUATION_PERCENT * 2);
-		const newSignal = Math.max(50, Math.min(100, signal + fluctuation));
-		mockState.modemSignals.set(id, newSignal);
-	}
 
 	// Update network traffic (simulate data transfer)
 	for (const [iface, bytes] of mockState.networkTraffic) {
 		const increment = Math.floor(Math.random() * 100000) + 50000;
 		mockState.networkTraffic.set(iface, bytes + increment);
-	}
-
-	// Update WiFi signals
-	for (const [ssid, signal] of mockState.wifiSignals) {
-		const fluctuation =
-			(Math.random() - 0.5) * (WIFI_SIGNAL_FLUCTUATION_PERCENT * 2);
-		const newSignal = Math.max(20, Math.min(100, signal + fluctuation));
-		mockState.wifiSignals.set(ssid, newSignal);
 	}
 
 	// Update sensors
@@ -500,15 +500,7 @@ function computeModemSignalFingerprint(): string {
 	return parts.join("|");
 }
 
-function computeWifiSignalFingerprint(): string {
-	const parts: string[] = [];
-	for (const ssid of [...mockState.wifiSignals.keys()].sort()) {
-		parts.push(`${ssid}:${Math.round(mockState.wifiSignals.get(ssid) ?? 0)}`);
-	}
-	return parts.join("|");
-}
-
-// Refresh modem status so the fluctuated mock signal enters modemsState, THEN
+// Refresh modem status so the current mock signal enters modemsState, THEN
 // broadcast (broadcastModems serializes the already-populated modemsState; the
 // mock signal is only pulled in when the mmcli provider rebuilds modem info).
 // Lazy-imported to avoid a static import cycle with modem-update-loop.
@@ -519,15 +511,9 @@ async function refreshAndBroadcastModems(): Promise<void> {
 	await runModemStatusPoll();
 }
 
-// wifiBuildMsg reads mock signal state directly, so wifi needs no refresh step.
-async function broadcastMockWifi(): Promise<void> {
-	const { wifiBuildMsg } = await import("../modules/wifi/wifi.ts");
-	broadcastMsg("status", { wifi: wifiBuildMsg() });
-}
-
 /**
- * Coalesced feedback tick (5s): surface modem + wifi signal fluctuations to
- * connected clients. Each surface emits ONLY when its rounded signal fingerprint
+ * Coalesced feedback tick (5s): surface modem + wifi state changes to
+ * connected clients. Each surface emits ONLY when its wire-state fingerprint
  * changed since the last emit. No-op unless shouldUseMocks(). Exported for tests.
  */
 export async function runMockFeedbackBroadcast(): Promise<void> {
@@ -539,10 +525,13 @@ export async function runMockFeedbackBroadcast(): Promise<void> {
 		await refreshAndBroadcastModems();
 	}
 
-	const wifiFingerprint = computeWifiSignalFingerprint();
+	const { wifiBuildMsg } = await import("../modules/wifi/wifi.ts");
+	const wifi = wifiBuildMsg();
+	// Hotspot mode and connection changes must not depend on signal jitter.
+	const wifiFingerprint = JSON.stringify(wifi);
 	if (wifiFingerprint !== lastEmittedWifiFingerprint) {
 		lastEmittedWifiFingerprint = wifiFingerprint;
-		await broadcastMockWifi();
+		broadcastMsg("status", { wifi });
 	}
 }
 
@@ -639,6 +628,9 @@ export function setStreamingState(isActive: boolean): void {
 		mockState.streaming.connectedRelays = config.modems;
 	} else {
 		mockState.streaming.connectedRelays = 0;
+		mockState.engineStart = null;
+		mockState.engineCompositionPrimaryInputId = null;
+		mockState.engineKnownGoodCandidate = null;
 	}
 }
 
@@ -703,6 +695,11 @@ function clearMockTimers(): void {
  */
 export function stopMockService(): void {
 	clearMockTimers();
+	mockState.engineStart = null;
+	mockState.engineCompositionPrimaryInputId = null;
+	mockState.engineKnownGood = null;
+	mockState.engineKnownGoodCandidate = null;
+	mockState.engineChangeCounter = 0;
 	setRelaysCacheMock(undefined);
 	mockState.initialized = false;
 	logger.info("🎭 Mock service stopped");

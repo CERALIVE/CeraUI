@@ -1,3 +1,5 @@
+import { isBackendSocket } from "../helpers/backend-socket.js";
+
 import path from "node:path";
 
 import type { WebSocketRoute } from "@playwright/test";
@@ -22,8 +24,9 @@ import { ensureAuthenticated, navigateTo, setLocale } from "../helpers/index.js"
  * `toHaveScreenshot` baselines, so no committed baseline drift.
  *
  * Determinism: the page socket is proxied so the spec injects its own config /
- * pipelines / devices snapshots and DROPS the backend's `devices` echoes — the
- * injected source list is authoritative regardless of mock churn.
+ * pipelines / devices / sources snapshots and DROPS the backend's `devices` and
+ * `sources` echoes — the injected source list is authoritative regardless of mock
+ * churn.
  */
 
 type Device = {
@@ -47,6 +50,37 @@ const USB: Device = {
 	display_name: "USB Capture",
 	media_class: "video",
 	kind: "usb",
+};
+
+// The unified device-first list reads the folded `sources` broadcast; each `id`
+// matches its device input_id so config.source selects the HDMI capture.
+function captureSource(id: string, kind: string, pipelineId: string, displayName: string) {
+	return {
+		origin: "capture",
+		id,
+		pipelineId,
+		kind,
+		displayName,
+		devicePath: `/dev/${id}`,
+		modes: [{ width: 1920, height: 1080, framerates: [30, 60] }],
+		supportsAudio: kind === "hdmi",
+		supportsResolutionOverride: true,
+		supportsFramerateOverride: true,
+		defaultResolution: "1080p",
+		defaultFramerate: 30,
+		audioKind: kind === "hdmi" ? "selectable" : "none",
+		available: true,
+	};
+}
+
+const SOURCES = {
+	sources: {
+		hardware: "rk3588",
+		sources: [
+			captureSource("video0", "hdmi", "hdmi", "HDMI Camera"),
+			captureSource("video1", "usb", "libuvch264", "USB Capture"),
+		],
+	},
 };
 
 const GENERIC_PIPELINES = {
@@ -94,6 +128,12 @@ for (const condition of CONDITIONS) {
 		const evidence = (surface: string): string =>
 			path.join(EVIDENCE_DIR, `${surface}-${condition.name}.png`);
 
+		// Outside beforeEach, whose reset narrows pageWs to null: TypeScript cannot
+		// see the route callback assign it.
+		const inject = (frame: object): void => {
+			pageWs?.send(JSON.stringify(frame));
+		};
+
 		test.beforeEach(async ({ page }, testInfo) => {
 			test.skip(
 				testInfo.project.name !== condition.project,
@@ -103,7 +143,7 @@ for (const condition of CONDITIONS) {
 
 			await page.setViewportSize(condition.viewport);
 
-			await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
+			await page.routeWebSocket(isBackendSocket, (ws) => {
 				pageWs = ws;
 				const server = ws.connectToServer();
 				ws.onMessage((m) => server.send(m));
@@ -111,8 +151,8 @@ for (const condition of CONDITIONS) {
 					const text = typeof m === "string" ? m : m.toString();
 					try {
 						const frame = JSON.parse(text) as Record<string, unknown>;
-						// Drop the backend device echoes so the injected list wins.
-						if (frame && typeof frame === "object" && "devices" in frame) return;
+						// Drop the backend device and source echoes so the injected lists win.
+						if (frame && typeof frame === "object" && ("devices" in frame || "sources" in frame)) return;
 					} catch {
 						/* non-JSON / binary frame */
 					}
@@ -128,25 +168,24 @@ for (const condition of CONDITIONS) {
 			await ensureAuthenticated(page);
 			await navigateTo(page, "live");
 
-			// A configured server + known pipeline leaves the empty state, seeds the
-			// encoder dialog's source, and renders the unified Source section.
-			pageWs?.send(
-				JSON.stringify({
-					config: {
-						srtla_addr: "127.0.0.1",
-						srtla_port: 5000,
-						srt_streamid: "e2e",
-						max_br: 6000,
-						pipeline: "hdmi",
-					},
-				}),
-			);
-			pageWs?.send(JSON.stringify(GENERIC_PIPELINES));
-			pageWs?.send(
-				JSON.stringify({
-					devices: { engine: "cerastream", active_input: "video0", devices: [HDMI, USB] },
-				}),
-			);
+			// A configured server + a selected source leaves the empty state, enables the
+			// encoder Edit (disabled while no source resolves) and renders the Source
+			// section with its audio card (hidden until an effective source exists).
+			inject({
+				config: {
+					srtla_addr: "127.0.0.1",
+					srtla_port: 5000,
+					srt_streamid: "e2e",
+					max_br: 6000,
+					pipeline: "hdmi",
+					source: "video0",
+				},
+			});
+			inject(SOURCES);
+			inject(GENERIC_PIPELINES);
+			inject({
+				devices: { engine: "cerastream", active_input: "video0", devices: [HDMI, USB] },
+			});
 		});
 
 		test("encoder surface", { tag: "@visual" }, async ({ page }) => {
@@ -195,9 +234,10 @@ for (const condition of CONDITIONS) {
 			await roadmap.locator("summary").click();
 
 			// Calm informational pills (not the disabled-with-reason warning), each
-			// bound to an open tech-debt id.
-			await expect(roadmap.locator('[data-debt-id="TD-pip"]')).toBeVisible();
+			// bound to an open tech-debt id. TD-pip is resolved (composition ships as
+			// the feature-gated CompositionCard), so its pill must stay gone.
 			await expect(roadmap.locator('[data-debt-id="TD-mode-fallback"]')).toBeVisible();
+			await expect(roadmap.locator('[data-debt-id="TD-pip"]')).toHaveCount(0);
 
 			await roadmap.screenshot({ path: evidence("comingsoon") });
 		});

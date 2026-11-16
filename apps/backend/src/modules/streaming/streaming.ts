@@ -29,6 +29,7 @@ import {
 	type Framerate,
 	type RelayProtocol,
 	type Resolution,
+	type RuntimeConfig,
 	runtimeConfigSchema,
 } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
@@ -49,6 +50,7 @@ import {
 } from "../ui/websocket-server.ts";
 import { notifyWifiAdapterModeEdge } from "../wifi/wifi-adapter-mode-events.ts";
 import { getAudioDevices } from "./audio.ts";
+import { getAudioMixActive } from "./audio-mix-status.ts";
 import { getLastCapabilities, getSupportedTransports } from "./capabilities.ts";
 import { isCompositionSupported } from "./composition.ts";
 import { validateBitrate } from "./encoder.ts";
@@ -74,6 +76,7 @@ export type ConfigParameters = {
 	srtla_port?: number | undefined;
 	srt_streamid?: string | undefined;
 	asrc?: string | undefined;
+	audio_inputs?: RuntimeConfig["audio_inputs"] | null;
 	bitrate_overlay?: boolean | undefined;
 	max_br?: number | undefined;
 	resolution?: Resolution | undefined;
@@ -101,7 +104,10 @@ export function updateStatus(status: boolean) {
 		}
 		isStreaming = status;
 		if (!status) void notifyWifiAdapterModeEdge();
-		broadcastMsg("status", { is_streaming: isStreaming });
+		broadcastMsg("status", {
+			is_streaming: isStreaming,
+			audio_mix_active: getAudioMixActive(),
+		});
 
 		return true;
 	}
@@ -141,6 +147,7 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 	// schema carries no null arm — so it is normalized BEFORE the parse rather
 	// than dropped after it, or a start would reject an operator's "off".
 	if (params.composition === null) delete params.composition;
+	if (params.audio_inputs === null) delete params.audio_inputs;
 
 	// Pre-validate with Zod schema for type safety and basic constraints
 	const schemaResult = runtimeConfigSchema.partial().safeParse(params);
@@ -307,6 +314,8 @@ export async function updateConfig(requestedParams: ConfigParameters) {
 	if (pipeline.supportsAudio && params.asrc) {
 		config.asrc = params.asrc;
 	}
+	if (params.audio_inputs !== undefined)
+		config.audio_inputs = params.audio_inputs ?? undefined;
 
 	if (params.relay_server) {
 		config.relay_server = params.relay_server;

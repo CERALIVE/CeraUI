@@ -66,8 +66,7 @@
 
 import { existsSync } from "node:fs";
 import {
-	type AudioBackend,
-	audioBackendSchema,
+	type AudioInputConfig,
 	CERASTREAM_BIN,
 	type CerastreamClient,
 	CerastreamConnectionError,
@@ -93,6 +92,8 @@ import {
 	type ReloadConfigResult,
 	type RuntimeErrorEvent,
 	SCHEMA_VERSION,
+	type SetAudioMixParams,
+	type SetAudioMixResult,
 	type StartParams,
 	type Subscription,
 	type SwitchAudioParams,
@@ -112,7 +113,7 @@ import type {
 	PreviewEncoderRealized,
 } from "@ceraui/rpc/schemas";
 import { activeEncodeSchema, toEngineResolution } from "@ceraui/rpc/schemas";
-import { z } from "zod";
+import type { z } from "zod";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import { logger as defaultLogger } from "../../helpers/logger.ts";
 import { ENGINE_STATE_RECONCILE_TIMEOUT } from "../../helpers/timing-constants.ts";
@@ -123,8 +124,19 @@ import {
 	notificationExists,
 	notificationRemove,
 } from "../ui/notifications.ts";
-import { type AudioMode, resolveAudioMode } from "./audio.ts";
-import { getLastCapabilities } from "./capabilities.ts";
+import { resolveAudioMode } from "./audio.ts";
+import {
+	audioInputEngineId,
+	effectiveAudioInputs,
+	engineAudioInputs,
+} from "./audio-inputs.ts";
+import {
+	beginCapabilitiesEpoch,
+	getCurrentCapabilities,
+	getLastCapabilities,
+	invalidateCapabilities,
+	refreshCapabilitiesFromClient,
+} from "./capabilities.ts";
 import {
 	clearSelectedCaptureDegraded,
 	noteSelectedCaptureDegraded,
@@ -285,6 +297,8 @@ function defaultBridge(): CerastreamBridge {
 					// on screen once the session it described is over.
 					broadcastMsg("status", {
 						is_streaming: getIsStreaming(),
+						audio_mix_active:
+							cerastreamBackend.getAudioMixInputs() !== undefined,
 						active_encode: getActiveEncodeStatus(),
 						engine_bitrate: getEngineBitrateStatus(),
 						preview_encoder_realized: getPreviewEncoderRealizedStatus(),
@@ -515,27 +529,8 @@ export function supportsMeterDevicePreference(
 	return major > 0 || (major === 0 && (minor ?? 0) >= 9);
 }
 
-// Local schema extension for the raw `start` bridge: the published client's
-// frozen `startParamsSchema` has no `audio.mode` or `video_passthrough`, so a
-// start carrying either is validated here and dispatched over the raw JSON-RPC
-// primitive (no npm publish).
-const audioModeSchema = z.enum(["none", "default", "device"]);
-const videoPassthroughRawSchema = z.enum(["auto", "force", "off"]);
-export const startParamsWithAudioModeSchema = startParamsSchema.extend({
-	audio: z
-		.object({
-			// `.extend` REPLACES the published `audio` object wholesale, so a field
-			// the frozen schema already carries has to be restated here or this
-			// local schema silently strips it off every start.
-			backend: audioBackendSchema.optional(),
-			mode: audioModeSchema.optional(),
-			device: z.string().optional(),
-			codec: z.string().optional(),
-			delay_ms: z.number().int().optional(),
-		})
-		.optional(),
-	video_passthrough: videoPassthroughRawSchema.optional(),
-});
+// Keep the compatibility export on the producer schema so additive fields survive.
+export const startParamsWithAudioModeSchema = startParamsSchema;
 export type StartParamsWithAudioMode = z.infer<
 	typeof startParamsWithAudioModeSchema
 >;
@@ -716,6 +711,7 @@ export class CerastreamBackend implements StreamingBackend {
 	private client: CerastreamClient | undefined;
 	private subscription: Subscription | undefined;
 	private active = false;
+	private audioMixInputs: Array<AudioInputConfig & { id: string }> | undefined;
 	private clientEpoch = 0;
 	private probeEpoch = 0;
 	private telemetry: EngineTelemetry | null = null;
@@ -789,6 +785,7 @@ export class CerastreamBackend implements StreamingBackend {
 		transaction?: LaunchTransaction,
 	): Promise<void> {
 		this.runtimeEvidence = undefined;
+		this.audioMixInputs = undefined;
 		this.active = true;
 		this.clearRecoveredEngineError();
 		const ownsLaunch = currentStreamLaunchOwner();
@@ -800,12 +797,20 @@ export class CerastreamBackend implements StreamingBackend {
 			transaction ?? createLaunchTransaction("backend-start");
 		try {
 			const params = this.buildStartParams(config, opts);
+			const audioMixInputs = params.audio?.inputs?.map((input) => ({
+				...structuredClone(input),
+				id:
+					effectiveAudioInputs(config)?.find(
+						(saved) => audioInputEngineId(saved.id, config) === input.input_id,
+					)?.id ?? input.input_id,
+			}));
 			await this.enqueue(async () => {
 				assertStreamLaunchOwnership();
 				let confirmStreaming: (() => void) | undefined;
 				const streamingStatus = new Promise<void>((resolve) => {
 					confirmStreaming = resolve;
 				});
+				beginCapabilitiesEpoch();
 				const client = await launchTransaction.acquirePhase(
 					"connect",
 					() => this.deps.connect(this.deps.connectOptions),
@@ -814,6 +819,7 @@ export class CerastreamBackend implements StreamingBackend {
 				);
 				acquiredClient = client;
 				assertStreamLaunchOwnership();
+				beginCapabilitiesEpoch();
 				this.client = client;
 				const clientEpoch = ++this.clientEpoch;
 				this.runtimeEvidence = undefined;
@@ -873,8 +879,10 @@ export class CerastreamBackend implements StreamingBackend {
 					if (parsed.state !== "streaming") await streamingStatus;
 				});
 				// Subscription replay predates this Start acknowledgement.
-				if (this.client === client && this.clientEpoch === clientEpoch)
+				if (this.client === client && this.clientEpoch === clientEpoch) {
+					this.audioMixInputs = audioMixInputs;
 					this.runtimeEvidence = undefined;
+				}
 			}, "start");
 		} catch (error) {
 			await launchTransaction.rollback();
@@ -1086,6 +1094,7 @@ export class CerastreamBackend implements StreamingBackend {
 	// and a retained realized pair leaves a fallback reason on screen explaining a
 	// stream that is no longer running.
 	private clearSessionScopedTelemetry(): void {
+		this.audioMixInputs = undefined;
 		this.runtimeEvidence = undefined;
 		const previous = this.telemetry;
 		if (previous === null) return;
@@ -1190,6 +1199,7 @@ export class CerastreamBackend implements StreamingBackend {
 				this.clientEpoch === clientEpoch &&
 				runtimeState === "streaming"
 			) {
+				beginCapabilitiesEpoch();
 				this.client = client;
 				adoptedEpoch = ++this.clientEpoch;
 				this.subscription = subscription;
@@ -1274,13 +1284,29 @@ export class CerastreamBackend implements StreamingBackend {
 		}
 	}
 
+	/** Refresh unknown clear authorization through the current session client only. */
+	async refreshCapabilities(): Promise<void> {
+		const client = this.client;
+		if (client === undefined || getCurrentCapabilities() !== undefined) return;
+		await refreshCapabilitiesFromClient(client, (error) =>
+			this.noteConnectionLoss(client, error, "get-capabilities"),
+		);
+	}
+
 	async changeConfig(
 		params: ChangeConfigParams,
 		clearComposition = false,
 	): Promise<ChangeConfigResult> {
-		if (!clearComposition)
+		// Preserve composition-only raw dispatch; nullable capture selectors need client validation.
+		if (
+			!clearComposition ||
+			params.input_mode === null ||
+			params.input_id === null
+		)
 			return this.withSessionClient("change-config", (client) =>
-				client.changeConfig(params),
+				client.changeConfig(
+					clearComposition ? { ...params, composition: null } : params,
+				),
 			);
 		const result = await this.withSessionClient("change-config", (client) =>
 			asRawRequestClient(client, "change-config").rawRequest("change-config", {
@@ -1328,6 +1354,30 @@ export class CerastreamBackend implements StreamingBackend {
 			),
 		);
 		return switchAudioResultSchema.parse(raw);
+	}
+
+	getAudioMixInputs():
+		| readonly (AudioInputConfig & { id: string })[]
+		| undefined {
+		return this.active && this.client && this.telemetry?.streaming !== false
+			? this.audioMixInputs
+			: undefined;
+	}
+
+	async setAudioMix(params: SetAudioMixParams): Promise<SetAudioMixResult> {
+		const inputs = this.audioMixInputs;
+		const result = await this.withSessionClient("set-audio-mix", (client) =>
+			client.setAudioMix(params),
+		);
+		if (this.audioMixInputs === inputs) {
+			for (const applied of result.inputs) {
+				const input = inputs?.find(
+					(input) => input.input_id === applied.input_id,
+				);
+				if (input) Object.assign(input, applied);
+			}
+		}
+		return result;
 	}
 
 	async reloadAudioDelay(delayMs: number): Promise<ReloadConfigResult> {
@@ -1670,6 +1720,7 @@ export class CerastreamBackend implements StreamingBackend {
 		if (!(error instanceof CerastreamConnectionError)) return;
 		if (client === undefined || client !== this.client) return;
 		if (!this.active) return;
+		invalidateCapabilities();
 
 		this.deps.logger.error(
 			"cerastream: session control connection lost; retiring the engine session",
@@ -1705,13 +1756,7 @@ export class CerastreamBackend implements StreamingBackend {
 		resolution?: string;
 		framerate?: number;
 		video_passthrough?: "auto" | "force" | "off";
-		audio?: {
-			backend?: AudioBackend;
-			mode?: AudioMode;
-			device?: string;
-			codec?: string;
-			delay_ms?: number;
-		};
+		audio?: StartParams["audio"];
 	} {
 		const inputId = config.selected_video_input ?? this.deps.getActiveInput();
 		// The operator's audio pick maps onto the engine's `audio.mode`
@@ -1739,6 +1784,11 @@ export class CerastreamBackend implements StreamingBackend {
 			...(config.acodec !== undefined ? { codec: config.acodec } : {}),
 			...(config.delay !== undefined ? { delay_ms: config.delay } : {}),
 		};
+		const inputs = engineAudioInputs(config);
+		if (inputs !== undefined) {
+			delete audio.device;
+			audio.mode = "default";
+		}
 		return {
 			...(inputId !== undefined ? { input_id: inputId } : {}),
 			...(config.video_codec !== undefined
@@ -1764,7 +1814,9 @@ export class CerastreamBackend implements StreamingBackend {
 			...(config.composition !== undefined
 				? { composition: config.composition }
 				: {}),
-			...(Object.keys(audio).length > 0 ? { audio } : {}),
+			...(Object.keys(audio).length > 0 || inputs !== undefined
+				? { audio: { ...audio, ...(inputs === undefined ? {} : { inputs }) } }
+				: {}),
 		};
 	}
 

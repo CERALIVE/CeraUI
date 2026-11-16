@@ -1,3 +1,5 @@
+import { isBackendSocket } from "../helpers/backend-socket.js";
+
 import fs from "node:fs";
 import path from "node:path";
 
@@ -378,7 +380,7 @@ for (const condition of CONDITIONS) {
 
 			await page.setViewportSize(condition.viewport);
 
-			await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
+			await page.routeWebSocket(isBackendSocket, (ws) => {
 				pageWs = ws;
 				const server = ws.connectToServer();
 
@@ -605,7 +607,7 @@ for (const condition of CONDITIONS) {
 		test("the SIM own-number is masked until revealed, and absent when unpublished", {
 			tag: "@visual",
 		}, async ({ page }) => {
-			const OWN_NUMBER = "+573115422359";
+			const OWN_NUMBER = "+999000000005";
 			serverConfig({ modem_provisioning: true });
 			sendModems({
 				[MM_HEALTHY_ID]: mmManaged({

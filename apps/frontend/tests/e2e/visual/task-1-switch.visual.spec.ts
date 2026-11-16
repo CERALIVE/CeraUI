@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { expect, type Locator, type Page, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '../fixtures/index.js';
 
 import { EVIDENCE_DIR, navigateTo, setTheme } from '../helpers/index.js';
 

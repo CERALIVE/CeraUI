@@ -1,3 +1,5 @@
+import { isBackendSocket } from "../helpers/backend-socket.js";
+
 import path from "node:path";
 
 import type { Page, WebSocketRoute } from "@playwright/test";
@@ -96,7 +98,7 @@ test.describe("@visual device telemetry v2", () => {
 		pageWs = null;
 		streaming = false;
 
-		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(isBackendSocket, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 			ws.onMessage((m) => server.send(m));
@@ -416,7 +418,11 @@ test.describe("@visual device telemetry v2", () => {
 			// The narrowest of the three mount sites, and it stacks like the others.
 			await expectCoresStackVertically(page, "telemetry-encoder");
 
-			const strip = page.locator('section:has([data-testid="telemetry-encoder"])');
+			// The strip sits inside the telemetry card's own section; scope to the card so
+			// `section:has` resolves to the strip alone.
+			const strip = page
+				.getByTestId("telemetry-card")
+				.locator('section:has([data-testid="telemetry-encoder"])');
 			await strip.screenshot({
 				path: path.join(EVIDENCE_DIR, `telemetry-v2-live-strip-${label}.png`),
 			});

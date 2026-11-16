@@ -18,6 +18,7 @@
 
 /* Network interface list */
 import { EventEmitter } from "node:events";
+import { existsSync } from "node:fs";
 import { isSimlessForBond } from "@ceraui/rpc";
 import type {
 	EthernetRole,
@@ -50,7 +51,10 @@ import {
 	notificationSend,
 } from "../ui/notifications.ts";
 import { broadcastMsg, buildMsg } from "../ui/websocket-server.ts";
-import { isConcurrentApIfname } from "../wifi/wifi-concurrent-interface.ts";
+import {
+	isConcurrentApIfname,
+	isSupportedWifiIfname,
+} from "../wifi/wifi-concurrent-interface.ts";
 import {
 	wifiDeviceListAdd,
 	wifiDeviceListEndUpdate,
@@ -80,7 +84,13 @@ import {
 	getModemNetMarker,
 	getRouterCellularMarker,
 	getRouterCellularMarkers,
+	identityDeadlineExpired,
+	invalidateUsbNetReading,
+	type NetdevBus,
 	notePublishedNetifSnapshot,
+	onUsbNetReadingInvalidated,
+	onUsbNetScanCommitted,
+	readNetdevBus,
 	refreshUsbNetMarkers,
 	type UsbModemNetMarker,
 	usbNetScanCovers,
@@ -93,6 +103,10 @@ import {
 } from "./unclaimed-adapters.ts";
 
 export type NetworkInterface = {
+	usb?: boolean;
+	busUnreadable?: boolean;
+	busReadWarned?: boolean;
+	identitySettled?: boolean;
 	ip?: string;
 	netmask?: string;
 	tp: number;
@@ -158,19 +172,86 @@ export const NETIF_ERR_NOSIM = 0x04;
 export const NETIF_ERR_SHAREDLAN = 0x08;
 
 let netif: Record<string, NetworkInterface> = {};
+const presenceEpoch = new Map<string, number>();
+const netifIdentities = new Map<
+	string,
+	{ readonly ifindex: number | undefined; readonly mac: string | undefined }
+>();
+type NetdevBusEvidence = {
+	readonly result: NetdevBus;
+	readonly seen: number;
+};
 let netifSnapshotReady = false;
 let netifRefreshGeneration = 0;
+let netifTopologyGeneration = 0;
 const scanPublicationWarnings = new Set<string>();
 
 export function hasNetifSnapshot(): boolean {
 	return netifSnapshotReady;
 }
 
+export function getNetifTopologyGeneration(): number {
+	return netifTopologyGeneration;
+}
+
+export function getNetworkInterfaceIncarnation(
+	name: string,
+): number | undefined {
+	return netif[name] && netifIdentities.has(name)
+		? presenceEpoch.get(name)
+		: undefined;
+}
+
 export function resetNetifSnapshotForTest(): void {
 	netif = {};
 	netifSnapshotReady = false;
 	netifRefreshGeneration++;
+	netifTopologyGeneration++;
 	scanPublicationWarnings.clear();
+	presenceEpoch.clear();
+	netifIdentities.clear();
+}
+
+function bumpPresence(name: string, removed = false): void {
+	const epoch = ++netifTopologyGeneration;
+	presenceEpoch.set(name, epoch);
+	if (removed) {
+		netifIdentities.delete(name);
+		invalidateUsbNetReading(name, epoch);
+	}
+}
+
+let scanSettlementInstalled = false;
+function installScanSettlement(): void {
+	if (scanSettlementInstalled) return;
+	scanSettlementInstalled = true;
+	onUsbNetScanCommitted(() => {
+		let released = false;
+		for (const [name, int] of Object.entries(netif)) {
+			if (
+				(int.usb || int.busUnreadable) &&
+				!int.identitySettled &&
+				usbNetScanCovers(name)
+			) {
+				int.identitySettled = true;
+				released = true;
+			}
+		}
+		if (released) {
+			triggerNetworkInterfacesChange();
+			broadcastNetif();
+		}
+	});
+	onUsbNetReadingInvalidated(() => {
+		// The deferred publication keeps the monitor path honest: it invalidates
+		// before dropping the netif entry, so publishing inline would repeat the
+		// removed name. These are the frames the scan's own commit edge used to
+		// emit for the removal, and the roster must not keep the dongle's row.
+		queueMicrotask(() => {
+			broadcastNetif();
+			void broadcastModemRoster();
+		});
+	});
 }
 
 // Interfaces excluded from dup-IPv4 detection during a station<->hotspot
@@ -228,6 +309,18 @@ export function isDupIpOnly(int: NetworkInterface): boolean {
 	return int.error === NETIF_ERR_DUPIPV4;
 }
 
+export function isBondIdentityPending(
+	name: string,
+	int: NetworkInterface,
+): boolean {
+	return (
+		(int.usb === true || int.busUnreadable === true) &&
+		!int.identitySettled &&
+		!usbNetScanCovers(name) &&
+		!identityDeadlineExpired(name)
+	);
+}
+
 /**
  * May this interface be offered to the bond?
  *
@@ -238,6 +331,7 @@ export function isDupIpOnly(int: NetworkInterface): boolean {
  */
 export function isBondCandidate(name: string, int: NetworkInterface): boolean {
 	if (!int.ip) return false;
+	if (isBondIdentityPending(name, int)) return false;
 	if (isConcurrentApIfname(name)) return false;
 	if (isSharedLanPort(name)) return false;
 	if ((int.error & ~NETIF_ERR_DUPIPV4) !== 0) return false;
@@ -619,6 +713,22 @@ function isNetifUpState(state: string): boolean {
 	return s === "up" || s.startsWith("connected");
 }
 
+/**
+ * The kernel's own netdev list, which is the only evidence that a name still
+ * names an incarnation. A monitor down-state on a name found here is an NM
+ * link-state flap on a plugged-in device, not a removal. Tests override this
+ * OS boundary; production reads sysfs.
+ */
+export const netdevPresence = {
+	inSysfs(name: string): boolean {
+		try {
+			return existsSync(`/sys/class/net/${name}`);
+		} catch {
+			return false;
+		}
+	},
+};
+
 function isNetifDownState(state: string): boolean {
 	const s = state.toLowerCase();
 	return (
@@ -648,9 +758,13 @@ export function handleNetifMonitorEvent(event: MonitorEvent): void {
 		if (!netif[name]) {
 			// New running interface; IP/throughput get filled in by the next poll.
 			netif[name] = { tp: 0, txb: 0, rxb: 0, enabled: true, error: 0 };
+			bumpPresence(name);
 			mutated = true;
 		}
 	} else if (isNetifDownState(event.state)) {
+		// A modem that loses its connection is still plugged in: its committed
+		// identity belongs to that present incarnation and must survive the flap.
+		bumpPresence(name, !netdevPresence.inSysfs(name));
 		if (netif[name]) {
 			delete netif[name];
 			mutated = true;
@@ -824,11 +938,11 @@ export function updateNetif() {
 // with a `scope`, letting us prefer the routable global-scope lease. ifconfig
 // still drives throughput, RUNNING flags, and the WiFi device list; a missing or
 // failing `ip` degrades to ifconfig-only (the prior single-address behavior).
-async function resolveIpAddrOverrides(): Promise<
-	Map<string, IpAddrSelection> | undefined
-> {
+async function resolveIpAddrOverrides(
+	ifindices: Map<string, number>,
+): Promise<Map<string, IpAddrSelection> | undefined> {
 	try {
-		return parseIpAddrShow(await run("ip", ["-4", "addr", "show"]));
+		return parseIpAddrShow(await run("ip", ["-4", "addr", "show"]), ifindices);
 	} catch (error: unknown) {
 		const message = error instanceof Error ? error.message : String(error);
 		logger.debug(`ip -4 addr show unavailable, using ifconfig IPs: ${message}`);
@@ -838,10 +952,11 @@ async function resolveIpAddrOverrides(): Promise<
 
 async function refreshNetifFromOs(): Promise<void> {
 	const generation = ++netifRefreshGeneration;
+	const ifindices = new Map<string, number>();
 	try {
 		const [ifconfigOut, ipOverrides] = await Promise.all([
 			run("ifconfig", []),
-			resolveIpAddrOverrides(),
+			resolveIpAddrOverrides(ifindices),
 		]);
 		if (generation !== netifRefreshGeneration) return;
 		const ifnames = ifconfigOut
@@ -851,6 +966,29 @@ async function refreshNetifFromOs(): Promise<void> {
 				(name) =>
 					name !== "" && name !== "lo" && !/^(?:docker|l4tbr)/.test(name),
 			);
+		const buses = new Map<string, NetdevBusEvidence>();
+		const reads = new Map<string, { seen: number; promise: Promise<void> }>();
+		const issue = (name: string): void => {
+			buses.delete(name);
+			const seen = presenceEpoch.get(name) ?? 0;
+			const promise = readNetdevBus(name).then(
+				(result) => {
+					if (reads.get(name)?.seen === seen) buses.set(name, { result, seen });
+				},
+				(error: unknown) => {
+					if (reads.get(name)?.seen === seen)
+						buses.set(name, {
+							result: { kind: "unreadable", code: "UNKNOWN" },
+							seen,
+						});
+					logger.debug("netdev bus read failed", { ifname: name, error });
+				},
+			);
+			reads.set(name, { seen, promise });
+		};
+		for (const name of ifnames) {
+			if (!netif[name]?.identitySettled && !netif[name]?.usb) issue(name);
+		}
 		if (ifnames.some((name) => !usbNetScanCovers(name))) {
 			let timer: ReturnType<typeof setTimeout> | undefined;
 			let expired = false;
@@ -881,7 +1019,56 @@ async function refreshNetifFromOs(): Promise<void> {
 				}
 			}
 		}
-		processIfconfigOutput(ifconfigOut, ipOverrides);
+		if (ifnames.some((name) => !usbNetScanCovers(name))) {
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			const stale = () =>
+				[...reads]
+					.filter(
+						([name, read]) =>
+							!usbNetScanCovers(name) &&
+							read.seen !== (presenceEpoch.get(name) ?? 0),
+					)
+					.map(([name]) => name);
+			if (stale().length > 0) {
+				let expired = false;
+				let timer: ReturnType<typeof setTimeout> | undefined;
+				const deadline = new Promise<void>((resolve) => {
+					timer = setTimeout(() => {
+						expired = true;
+						resolve();
+					}, 250);
+				});
+				try {
+					let names = stale();
+					while (!expired && names.length > 0) {
+						for (const name of names) issue(name);
+						await Promise.race([
+							Promise.all(names.map((name) => reads.get(name)?.promise)),
+							deadline,
+						]);
+						await new Promise<void>((resolve) => setImmediate(resolve));
+						names = stale();
+					}
+				} finally {
+					clearTimeout(timer);
+				}
+			}
+			for (const [name, read] of reads) {
+				if (!buses.has(name) && !usbNetScanCovers(name))
+					buses.set(name, {
+						result: { kind: "unreadable", code: "TIMEOUT" },
+						seen: read.seen,
+					});
+			}
+		}
+		if (generation !== netifRefreshGeneration) return;
+		processIfconfigOutput(
+			ifconfigOut,
+			ipOverrides,
+			undefined,
+			buses,
+			ifindices,
+		);
 	} catch (error: unknown) {
 		const message = error instanceof Error ? error.message : String(error);
 		logger.error(`Error getting ifconfig: ${message}`);
@@ -892,9 +1079,15 @@ export function processIfconfigOutput(
 	stdout: string,
 	ipOverrides?: Map<string, IpAddrSelection>,
 	now: number = getms(),
+	buses?: ReadonlyMap<string, NetdevBusEvidence>,
+	ifindices?: ReadonlyMap<string, number>,
 ) {
+	installScanSettlement();
+	const previousNetif = netif;
+	const previousIfnames = new Set(Object.keys(netif));
 	const firstSnapshot = !netifSnapshotReady;
 	let intsChanged = false;
+	let wifiIncarnationChanged = false;
 	const newInterfaces: Record<string, NetworkInterface> = {};
 
 	wifiDeviceListStartUpdate();
@@ -921,12 +1114,12 @@ export function processIfconfigOutput(
 
 			const flags = (int.match(/flags=\d+<([A-Z,]+)>/)?.[1] ?? "").split(",");
 			const isRunning = flags.includes("RUNNING");
+			const mac = int.match(/ether ([0-9a-f:]+)/)?.[1];
 
 			// update the list of WiFi devices
-			if (/^wl/.test(name)) {
-				const hwAddr = int.match(/ether ([0-9a-f:]+)/);
-				if (hwAddr?.[1]) {
-					wifiDeviceListAdd(name, hwAddr[1], isRunning ? inetAddr : null);
+			if (isSupportedWifiIfname(name)) {
+				if (mac) {
+					wifiDeviceListAdd(name, mac, isRunning ? inetAddr : null);
 				}
 			}
 
@@ -944,6 +1137,22 @@ export function processIfconfigOutput(
 			);
 
 			const previous = netif[name];
+			const ifindex = ifindices?.get(name);
+			const identity = netifIdentities.get(name);
+			if (previous && !identity) {
+				// Adopt the monitor's lifetime without invalidating its covering bus read.
+				netifTopologyGeneration++;
+			}
+			if (
+				previous &&
+				identity &&
+				(identity.ifindex !== ifindex || identity.mac !== mac)
+			) {
+				bumpPresence(name, true);
+				intsChanged = true;
+				if (isSupportedWifiIfname(name)) wifiIncarnationChanged = true;
+			}
+			netifIdentities.set(name, { ifindex, mac });
 			let tp = 0;
 			if (previous) {
 				tp = txBytes - previous.txb;
@@ -956,6 +1165,20 @@ export function processIfconfigOutput(
 
 			const enabled = !previous || previous.enabled;
 			const error = previous ? previous.error : 0;
+			const evidence = buses?.get(name);
+			const fresh =
+				evidence !== undefined &&
+				evidence.seen === (presenceEpoch.get(name) ?? 0);
+			const usb =
+				previous?.usb === true ||
+				(fresh &&
+					evidence.result.kind === "bus" &&
+					evidence.result.bus === "usb");
+			const busUnreadable =
+				!previous?.identitySettled &&
+				(evidence !== undefined
+					? !fresh || evidence.result.kind === "unreadable"
+					: previous?.busUnreadable === true);
 			newInterfaces[name] = {
 				...(inetAddr !== undefined ? { ip: inetAddr } : {}),
 				...(netmask !== undefined ? { netmask } : {}),
@@ -967,7 +1190,28 @@ export function processIfconfigOutput(
 				tp,
 				enabled,
 				error,
+				...(usb ? { usb } : {}),
+				...(busUnreadable ? { busUnreadable } : {}),
+				...(previous?.busReadWarned ? { busReadWarned: true } : {}),
+				...(previous?.identitySettled ? { identitySettled: true } : {}),
 			};
+			const entry = newInterfaces[name];
+			if (
+				entry.busUnreadable &&
+				!entry.busReadWarned &&
+				isBondIdentityPending(name, entry)
+			) {
+				const code = !fresh
+					? "STALE"
+					: evidence.result.kind === "unreadable"
+						? evidence.result.code
+						: "UNKNOWN";
+				logger.warn(
+					"netdev bus link unreadable; holding first-sight identity until scan coverage or deadline",
+					{ ifname: name, code },
+				);
+				entry.busReadWarned = true;
+			}
 
 			// Detect interfaces that are new or with a different address
 			if (!netif[name] || netif[name].ip !== inetAddr) {
@@ -1013,19 +1257,31 @@ export function processIfconfigOutput(
 	// no frame.
 	publishDupIpNotice(dupIpGroups);
 
-	if (wifiDeviceListEndUpdate()) {
+	if (wifiDeviceListEndUpdate() || wifiIncarnationChanged) {
 		logger.info("updated wifi devices");
 		// a delay seems to be needed before NM registers new devices
 		scheduleWifiUpdate(1000);
 	}
 
 	netif = newInterfaces;
+	for (const name of new Set([...previousIfnames, ...Object.keys(netif)])) {
+		if (previousIfnames.has(name) !== (netif[name] !== undefined))
+			bumpPresence(name, previousIfnames.has(name));
+	}
 	netifSnapshotReady = true;
 	notePublishedNetifSnapshot(Object.keys(netif));
 
-	if (intsChanged || firstSnapshot) {
+	let released = false;
+	for (const [name, int] of Object.entries(netif)) {
+		if (int.ip && !int.identitySettled && !isBondIdentityPending(name, int)) {
+			if (int.usb || previousNetif[name]?.busUnreadable) released = true;
+			int.identitySettled = true;
+		}
+	}
+	if (intsChanged || firstSnapshot || released) {
 		triggerNetworkInterfacesChange();
-		notifyTopologyChange();
+		if (intsChanged || firstSnapshot) notifyTopologyChange();
+		if (released) broadcastNetif();
 	}
 
 	// Reconcile + broadcast (covers throughput-only deltas too); no-op when the
@@ -1076,14 +1332,18 @@ function prefixToNetmask(prefix: number): string {
  * prefer the routable global lease over an RFC-3927 link-local when a link has
  * both — the fix for a board that would otherwise advertise its link-local.
  */
-export function parseIpAddrShow(stdout: string): Map<string, IpAddrSelection> {
+export function parseIpAddrShow(
+	stdout: string,
+	ifindices?: Map<string, number>,
+): Map<string, IpAddrSelection> {
 	const byIface = new Map<string, ScopedAddress[]>();
 	let current: string | undefined;
 
 	for (const line of stdout.split("\n")) {
-		const header = line.match(/^\d+:\s+([^:@\s]+)/);
-		if (header?.[1]) {
-			current = header[1];
+		const header = line.match(/^(\d+):\s+([^:@\s]+)/);
+		if (header?.[1] && header[2]) {
+			current = header[2];
+			ifindices?.set(current, Number.parseInt(header[1], 10));
 			continue;
 		}
 		if (current === undefined) continue;

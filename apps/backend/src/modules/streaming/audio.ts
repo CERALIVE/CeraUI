@@ -114,6 +114,7 @@ export interface AudioModeSelection {
 export function resolveAudioMode(
 	asrc: string,
 	embeddedAudioActive: boolean,
+	devices: Record<string, string> = audioDevices,
 ): AudioModeSelection {
 	if (asrc === NO_AUDIO_ID) return { mode: "none" };
 	if (asrc === DEFAULT_AUDIO_ID) return { mode: "default" };
@@ -126,7 +127,7 @@ export function resolveAudioMode(
 	// resolved the same way: the two can no longer disagree about a pick.
 	return {
 		mode: "device",
-		device: resolveAudioCaptureDevice(asrc),
+		device: resolveAudioCaptureDevice(asrc, devices),
 	};
 }
 
@@ -334,8 +335,11 @@ function toAlsaCaptureDevice(cardId: string): string {
 // so this is byte-identical; the PipeWire arm names the card by its ALSA PCM id,
 // where a `hw:CARD=<kernel id>` matches no candidate — the meter ignores the pick
 // and the program leg fails `audio-device-unavailable`.
-function resolveAudioCaptureDevice(asrc: string): string {
-	const target = audioDevices[asrc] ?? getAudioSrcId(asrc);
+function resolveAudioCaptureDevice(
+	asrc: string,
+	devices: Record<string, string> = audioDevices,
+): string {
+	const target = devices[asrc] ?? getAudioSrcId(asrc);
 	if (isBluetoothAudioSourceId(asrc)) return target;
 	const alsaDevice = toAlsaCaptureDevice(target);
 	return engineAudioDeviceString(

@@ -40,10 +40,8 @@ import { logger } from "../../helpers/logger.ts";
 import { pollWithBackoff } from "../../helpers/retry.ts";
 import {
 	type NetworkManagerConnection,
-	type NetworkManagerConnectionModemConfig,
 	nmConnAdd,
 } from "../network/network-manager.ts";
-import { resolveGsmAutoconfigSupport } from "./gsm-autoconfig.ts";
 import { getGsmConnections, resetGsmConnections } from "./gsm-connections.ts";
 import {
 	defaultGsmReconcileDeps,
@@ -63,7 +61,8 @@ import {
 	parseModemUnlockInfo,
 	type SimInfo,
 } from "./mmcli.ts";
-import { modemHardwareName } from "./modem-identity.ts";
+import { isHimiUfiRouter, modemHardwareName } from "./modem-identity.ts";
+import { sanitizeModemConfigForNetworkManager } from "./modem-nm-config.ts";
 import {
 	getModem,
 	type Modem,
@@ -97,6 +96,7 @@ export type ModemStatus = {
 	packet_service_state?: string;
 	registration_rejection?: ModemRegistrationRejection;
 	radio_power?: ModemRadioPower;
+	himi_ufi_router?: true;
 };
 
 // Bounded retry for transient mmcli failures (mock mode never retries — the
@@ -186,6 +186,12 @@ function buildModemStatus(
 
 	return {
 		connection,
+		...(isHimiUfiRouter({
+			model: modemInfo["modem.generic.model"],
+			firmwareRevision: modemInfo["modem.generic.revision"],
+		})
+			? { himi_ufi_router: true }
+			: {}),
 		...(network !== undefined ? { network } : {}),
 		network_type,
 		signal,
@@ -267,37 +273,6 @@ function buildSimLock(modemInfo: Readonly<ModemInfo>): SimLockReading {
 				? { required: info.required }
 				: { required: info.required, remainingAttempts },
 	};
-}
-
-function applyAutoconfigToModemConfig(
-	config: ModemConfig,
-	autoConfig: boolean,
-) {
-	if (autoConfig) {
-		config.apn = "";
-		config.username = "";
-		config.password = "";
-	} else {
-		config.autoconfig = false;
-	}
-}
-
-export function sanitizeModemConfigForNetworkManager(config: ModemConfig) {
-	const autoConfig = resolveGsmAutoconfigSupport() && config.autoconfig;
-
-	const fields: NetworkManagerConnectionModemConfig = {
-		"gsm.apn": config.apn || "", // Empty string fallback; Bun runtime limitation with empty CLI args
-		"gsm.username": config.username || "", // Empty string fallback; Bun runtime limitation with empty CLI args
-		"gsm.password": config.password || "", // Empty string fallback; Bun runtime limitation with empty CLI args
-		"gsm.password-flags": !config.password ? "4" : "0",
-		"gsm.home-only": config.roaming ? "no" : "yes",
-		"gsm.network-id": config.roaming ? config.network : "",
-		"gsm.auto-config": autoConfig ? "yes" : "no",
-	};
-
-	applyAutoconfigToModemConfig(config, autoConfig);
-
-	return fields;
 }
 
 async function addConnectionForModem(
@@ -696,7 +671,7 @@ async function registerModem(id: number) {
 
 	// Some firmware answers ModemManager's identity query with a bare numeral —
 	// board-measured `manufacturer: 1` / `model: 0`, which rendered as the row
-	// title "0 - 54863". modemHardwareName falls back to another string the SAME
+	// title "0 - 12345". modemHardwareName falls back to another string the SAME
 	// device reported; nothing here is ever invented. See modem-identity.ts.
 	const hwName = modemHardwareName({
 		model: modemInfo["modem.generic.model"],

@@ -332,6 +332,19 @@ catalog debt. Every other federation and SPA budget remains unchanged.
 `publish-release.yml` enforces both measured limits after federation build and
 before signing/upload. The catalog footprint remains documented, open debt.
 
+**2026-11-15 — the federation catalog is scoped to the dialogs' namespaces.**
+On `be1b880a` toast-host measured 700,075 B gzip, 11,532 B over its 688,543 B
+ceiling. Since `85d2b20a`, 81 new keys (69 under `live.*`) and the nine-locale
+translation fixes added 20,197 B gzip of catalog JSON, and the bundle carried
+every namespace, including ones no dialog renders. Federation now registers only
+the 14 namespaces the Encoder, Audio and Server dialogs render, each in all ten
+locales (`FEDERATION_NAMESPACES` in `apps/frontend/src/lib/federation/messages.ts`).
+`tests/federation/federation-namespaces.test.ts` fails when a built bundle
+references a key outside them. Toast-host now measures 628,355 B gzip
+(2,646,629 B raw, down from 2,940,628 B). The baseline, allowance and ceiling are
+unchanged. The debt stays open, because the scoped catalog is still static and is
+still most of the chunk.
+
 ```debt
 id: TD-pip
 title: Picture-in-picture / source compositing
@@ -676,10 +689,18 @@ resolved_at: 2026-06-17
 unblock: cerastream switch-audio IPC (Track 2 Task 18)
 ```
 
-Resolved in Task 25. `isAudioLiveSwitchEnabled(caps)` now returns `true` when the
-engine advertises `audio_live_switch`. The live picker's audio entries render with
-an enabled Switch button; the `coming-soon` affordance and `data-debt-id` marker
-are removed from `InputPicker.svelte`.
+Resolved in Task 25. `isAudioLiveSwitchEnabled(caps)` returns `true` when the
+engine advertises `audio_live_switch`, and the `coming-soon` affordance and
+`data-debt-id` marker are gone from `InputPicker.svelte`.
+
+Today no live picker offers an audio entry. `InputPicker` has not been mounted on
+the Live screen since #137. The live source switch (`LiveSourceSwitch.svelte`)
+lists the session's published `switch_targets` as capture, synthetic (test
+pattern) and network rows (`lib/streaming/live-switch-rows.ts`), and falls back to
+the discovered capture sources only when no roster is reported. None of those rows
+is an `audio:*` id, so `LiveView`'s `handleSwitchAudio` is unreachable from the UI. Live audio is controlled in the Audio card's mixer strips (enable, gain,
+mute, delay, tracks) when the engine advertises `audio_mix`; see
+`docs/agents/live-screen.md`, "The Audio card's mixer".
 
 ```debt
 id: TD-live-audio-delay

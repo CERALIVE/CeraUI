@@ -3,10 +3,12 @@
 ## APPLY-NOW CONFIG CHANGE — TRANSACTION + STAGED PERSISTENCE [EXISTS]
 
 Composition now follows the same staging/dispatch/outcome path, including explicit
-null. Both consumers now pin the verified published `@ceralive/cerastream@2026.11.0`,
-whose exported `ChangeConfigParams` and schema preserve null. The already-verified
-adapter retains its narrow raw-request path and producer-owned result validation;
-no local wire type is introduced. `composition-binding-contract.test.ts` fails
+null. Both consumers now pin the verified published `@ceralive/cerastream@2026.11.2`,
+whose exported `ChangeConfigParams` and schema preserve null. Nullable
+capture-selection clears, including combined composition clears, use the binding's
+validated `changeConfig`. Composition-only clears retain their established raw
+request and producer-owned result parsing. No local wire type is introduced.
+`composition-binding-contract.test.ts` fails
 against the former pin and guards the installed producer contract directly.
 The device engine separately needs the merged cerastream #170 correction.
 See [`docs/COMPOSITION-LIFECYCLE.md`](../../../../docs/COMPOSITION-LIFECYCLE.md).
@@ -21,8 +23,16 @@ this is the CeraUI half.
 member of `streamingConfigInputSchema`, because it is never persisted and never
 echoed in `applied`). Absent/false is the unchanged apply-on-next-start path, so
 no existing caller changes behaviour and a save can never restart a live
-broadcast by itself. `apply_now` while NOT streaming degrades to an ordinary
-save — it never dispatches a transaction.
+broadcast by itself. `apply_now` degrades to an ordinary save — it never
+dispatches a transaction — only while the session is settled `idle`. Every
+other lifecycle state (`starting`, `streaming`, `reconfiguring`, `stopping`,
+`stop_failed`, `reconciling`) is a stream on air, an engine transaction in
+flight or a session not yet settled, so the save keeps its restart fields back
+and goes to admission, which applies it only while `streaming` and answers
+`busy` otherwise (`createApplyNowGate` in `config-change-bridge.ts`, an
+exhaustive switch over the state type, so a new state must choose a side).
+Saving it as a next-start edit there would acknowledge values the engine was
+never asked to run.
 
 Balancer settings and `video_codec: null` persist for the next start even with
 `apply_now`. The producer change-config contract accepts only a concrete codec,
@@ -126,13 +136,156 @@ lifecycle stays `streaming` and `stopRuntime` is never called.
 
 **STAGED PERSISTENCE — `config.json` describes what the ENGINE IS RUNNING.**
 `config-change-staging.ts` holds the apply-now candidate in memory plus an
-on-disk marker (`config.inflight.json`, atomic write); the restart-requiring
-fields are deleted from `input` so the existing merge block skips them (ONE write
-path, no parallel one to drift). Non-restart fields in the same save persist
+on-disk marker (`config.inflight.json`, atomic write). The candidate holds the
+restart-requiring fields AND what routing derives from them: the capture mode
+the save lands on (`null` when a switch to another camera clears it) and the
+pipeline the source or mode routes to. Every field the candidate holds is
+deleted from `input`, and the derived mode write is skipped, so the existing
+merge block saves none of them (ONE write path, no parallel one to drift).
+Before this, a busy or reverted capture-mode switch still saved its derived
+`input_mode` and `pipeline`. `config-change-candidate.ts` owns this split.
+The engine delta carries a
+pipeline only for a source switch. Non-restart fields in the same save persist
 immediately, unchanged. `config.json` is written ONLY on `applied`
 (`commitStagedConfigChange`); `reverted`/`rollback_failed`/`busy`/`rejected` all
 leave the persisted values byte-identical, because those values are still the
 ones the engine is running.
+
+The same candidate owns the **source-derived override residue**. A switch to a
+non-override ingest pipeline makes the running source's saved
+`resolution`/`framerate` residue (`unsupportedPipelineOverrides`), and the
+candidate carries them as `null` clears. `null` here is a LOCAL storage clear:
+the engine delta omits it, so the producer never sees a null geometry. A marker
+whose candidate carries one is undecided from ANY running-engine snapshot —
+including one that matches the previous geometry, because an ingest publisher
+can report exactly what the old source ran. Recovery keeps the marker instead
+of retiring it on the candidate OR previous branch; only a stopped engine's
+authoritative retain-previous, or the transaction's own applied/abandoned
+outcome, ends it. That is the deliberate limit: a crash during a clear-carrying
+source switch stays deferred across reconnects rather than persisting or
+discarding an outcome the snapshot cannot prove. Only `applied` deletes the
+fields; the ordinary idle/next-start save and its own residue cleanup are
+unchanged. Before this, a busy or reverted source switch deleted the running
+source's saved geometry before admission could refuse it.
+
+**A SOURCE COMMIT INCLUDES ITS SELECTION METADATA.** The candidate captures
+`selected_video_input` and `source_stable_id` from the operator's resolved source
+snapshot before dispatch. `resolveSelectionAnchor` remains the identity resolver;
+neither commit nor recovery guesses an anchor from a later discovery view.
+Explicit local nulls clear the previous capture input or anchor; omitted fields
+remain unknown and leave existing metadata alone. An explicit capture-input
+clear becomes producer `input_id: null` after capability negotiation.
+
+Legacy markers can state a source and capture input without a captured anchor.
+That source label cannot identify the intended hardware, even when it matches
+the previous label: a different camera may now hold the same node. While the
+engine runs, recovery retains such markers undecided before either outcome
+match, without writing selection metadata or advancing its token. It never
+reconstructs the missing anchor from later discovery. A stopped engine remains
+authoritative to retain the previous config; legacy geometry-only markers keep
+their existing recovery rules.
+
+The existing `noteSourceSelectionWrite` owner accepts that captured anchor at
+commit and recovery, writes or clears it, and advances the selection token before
+the atomic config save. A probe requested before that write remains stale.
+Busy and reverted changes call neither the selection owner nor its writer.
+A failed config save releases the stage but retains the complete marker and
+in-memory selection for recovery, as for the other staged fields.
+
+A local capture-input clear, like a geometry clear, is not proven by a running
+snapshot. Its guard runs before both outcome matches: unknown or retained live
+input cannot confirm the clear or discard the marker. A stopped engine retains
+the previous configuration. Concrete capture-input changes still reconcile
+through their reported active input. This does not add mode/pipeline evidence
+to the snapshot.
+Coverage: `applied-source-selection.test.ts` and
+`applied-source-selection-recovery.test.ts`, through the real procedure,
+production admission, marker, config writer and persisted-selection router.
+
+**CAPTURE CLEARS REQUIRE THE RUNNING ENGINE'S CAPABILITY [EXISTS].**
+The published schema 0.24.0 `ChangeConfigParams` owns nullable `input_mode` and
+`input_id`: omission retains, a concrete value replaces, and null clears.
+`StreamConfigChangeDelta` indexes those producer fields directly. The procedure
+forwards a staged mode clear and a non-capture selection's input clear through
+the existing orchestrator and bridge to the binding's validated `changeConfig`.
+Geometry clears remain local and are omitted from dispatch; START is unchanged.
+
+A live automatic source apply always stages `input_mode: null`, even when the
+saved mode is already absent. An ordinary next-start source save can remove the
+saved mode while the running engine still retains its explicit selection.
+Saved absence therefore cannot prove live absence. Unrelated changes still omit
+the mode, and concrete mode choices retain their existing replacement semantics.
+The producer resolves the destination default after the clear; CeraUI does not
+choose a concrete capture family.
+
+Before any config mutation, a clear-needing apply-now request requires a live
+capability snapshot whose features include the imported
+`CAPTURE_SELECTION_CLEAR_FEATURE`. Absent features, `input-mode` alone, and
+cached/unavailable snapshots cannot authorize it. Unsupported requests return
+the existing `rejected/change_config_unsupported` outcome with saved config,
+selection token and any other attempt's marker untouched. The production
+apply-now gate repeats negotiation at admission after asynchronous save work.
+Installing bindings does not upgrade a device engine.
+
+That live evidence belongs to the current engine connection. The existing
+capability owner tags accepted reads with its connection generation;
+`getCurrentCapabilities` requires that tag as well as availability. Acquiring or
+adopting a client revokes clear authorization without changing legacy START wire
+traffic or its display cache. Proven session connection loss also marks retained
+display data unavailable immediately.
+
+A clear-needing candidate prepares current-client capabilities through the
+existing apply-now gate before any config mutation or stage acquisition. The
+borrowed client remains open and unqueried device discovery stays unknown.
+Late successful or failed reads from a superseded generation cannot replace
+current evidence. There is no TTL or parallel feature cache. Missing current
+evidence or a failed read refuses the clear; a known current engine without the
+token is not queried repeatedly. `capture-engine-replacement.test.ts` drives real
+SDK/UDS connections, proven loss, fresh START, the procedure/bridge/orchestrator
+and config/marker bytes.
+
+`capture-selection-clears.test.ts` covers supported applied/busy/reverted
+camera and test/RTMP/SRT switches, unsupported and unavailable-engine refusal,
+explicit/absent/unrelated controls and capture through non-capture back to capture.
+It drives the real procedure, source builder, gate, orchestrator, bridge and file
+writer, checking deltas with the installed producer `changeConfigParamsSchema`.
+Producer cerastream #245 separately proves actual wire deserialization, merge,
+capture-default resolution, ownership barriers and rollback; consumer fake replies
+do not qualify those engine operations or hardware.
+`capture-mode-next-start.test.ts` follows a live explicit mode through an ordinary
+next-start source save and a later automatic apply, using the real procedure,
+bridge and file writer. Its engine boundary models the producer's mode merge
+semantics, paired with #245's native `capture_defaults` omission/clear resolution
+tests. It also covers older, missing and cached capability evidence, busy and
+reverted outcomes, unrelated changes and concrete replacements.
+
+**THE STAGE BELONGS TO ONE ATTEMPT.** Each apply-now save builds its marker with
+its own `attemptId` and stages it only at dispatch, after every await in
+`setConfig` and in the same synchronous stretch as the orchestrator's admission.
+`stageConfigChange` refuses (returns `false`, writing nothing) while another
+attempt holds the stage, and `setConfig` answers that save `busy`, exactly as
+admission would. `commitStagedConfigChange(attemptId)` and
+`abandonStagedConfigChange(attemptId)` retire only that attempt, and a dispatch
+that throws still releases it. Before this, two overlapping saves (one parked on
+the Bluetooth refresh an `audio_backend` change awaits) shared one stage: the
+later save replaced the earlier candidate and marker, and the busy loser's
+abandon then removed the winner's, so an `applied` change was never persisted.
+A save that arrives after the other change was admitted takes the same path:
+`reconfiguring` is not idle, so the save holds its restart fields back and is
+refused at the stage. Before this, it was treated as idle, saved those fields as
+a next-start edit and reported success, leaving them on disk if the running
+change reverted, or overwritten if it applied the same field.
+
+**A FINISHED ATTEMPT NEVER KEEPS THE STAGE, EVEN WHEN ITS WRITE FAILS.** If
+`config.json` cannot be written after `applied`, the error still reaches the
+caller, but `commitStagedConfigChange` first releases the in-memory stage
+(`releaseStagedConfigChange`) and leaves the marker on disk. The engine runs the
+candidate and the in-memory config already holds it, so the next successful
+config write of any kind persists it. Until then the marker is recovery evidence
+that no running change owns, so the next boot or engine reconnect judges it like
+a crash leftover and completes the write. The next apply-now save is admitted
+normally; its own marker replaces the old one, and its commit writes the whole
+in-memory config, the earlier candidate included.
 
 **CRASH-WINDOW RECONCILIATION IS MARKER-ONLY.** `reconcileInflightConfigChange`
 does nothing at all without the marker. A bare params-vs-config mismatch WITHOUT
@@ -143,7 +296,27 @@ the CANDIDATE + outcome gate satisfied (`pipeline_playing` and frames advancing)
 ⇒ persist the candidate; engine on the PREVIOUS params or idle ⇒ retain the old
 values; transitional/unreachable/neither ⇒ write NOTHING and KEEP the marker for
 the next reconnect. Guessing in either direction persists a config the operator
-never got or discards one they did.
+never got or discards one they did. A marker whose `attemptId` is the one this
+process has staged belongs to a change still running, not to a crash: it is
+never judged (`no_marker`), and a judged marker is removed alone, never the
+stage of a change running now.
+
+**A LIVE MATCH MUST DISTINGUISH BOTH SIDES.** The judge compares only the
+candidate's transaction axes against each side's recorded values. An unrelated
+saved next-start codec is not evidence that the previous session was replaced.
+Missing runtime measurements and omitted previous values remain unknown; a
+decisive live verdict requires one side to match and the other to contradict the
+same observations. Identical compared facts defer in either direction.
+
+The published `@ceralive/cerastream@2026.11.2` status has no exact capture-mode or
+routed-pipeline measurement. Its output codec, incoming `input_codec`, geometry
+and active input cannot establish those request fields. If the candidate changes
+`input_mode` or `pipeline`, including a local mode clear, recovery therefore keeps
+the config and marker bytes unchanged until decisive evidence is available.
+Unchanged capture settings still permit proven geometry, codec or input recovery.
+The local nullable geometry clears remain storage intent, never engine
+measurements; their existing deferral gate precedes both live verdicts.
+Authoritative idle still retains the previous config and retires the marker.
 
 **AND IT IS ARMED — `config-change-reconcile-wiring.ts` is what calls it.** For
 one wave the paragraph above described behaviour that could not happen: the only
@@ -193,12 +366,21 @@ Coverage: `tests/config-change-reconcile-wiring.test.ts` (a REAL on-disk marker
 through the REAL writer and REAL `config.json`: persist-candidate, retain-previous,
 the undecided-then-decisive re-ask, the never-decisive defer that keeps the marker,
 the no-marker zero-side-effect case, double-apply, the overlapping-run join, the
-config-space normalization table, and the two call-site locks),
+config-space normalization table, the two call-site locks, and a running change's
+stage surviving both hooks; real-file capture-mode/pipeline ambiguity in both
+directions, mode clears, unknown previous values, unchanged saved next-start
+intent, and idle/transitional controls),
 `tests/config-change-orchestrator.test.ts` (admission, the four typed
 outcomes, stop-during-applying, stop-during-rollback, the teardown_timeout →
 engine-exit escalation chain, attempt fencing, deadline reconcile, and the
 deadline-sizing assertion), `tests/config-change-staging.test.ts` (the pure
-marker/judgement table), `tests/config-change-persistence.test.ts` (the REAL
-procedure: applied-writes vs reverted/rollback_failed-don't, the delta contents,
-both apply-now fallbacks, and marker-present vs marker-absent reconciliation).
+marker/judgement table and the one-attempt stage),
+`tests/config-change-persistence.test.ts` (the REAL procedure:
+applied-writes vs reverted/rollback_failed-don't, the delta contents, both
+apply-now fallbacks, a throwing dispatch releasing the stage, a `config.json`
+write failing after `applied` (next save admitted, marker kept and later
+judged), a save in each lifecycle state (one row per state of the type), two
+overlapping saves through the production gate and the real orchestrator
+admission (the second arriving before and after the first is admitted), and
+marker-present vs marker-absent reconciliation).
 

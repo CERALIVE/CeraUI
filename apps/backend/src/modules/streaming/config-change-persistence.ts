@@ -2,22 +2,28 @@ import { logger } from "../../helpers/logger.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import {
 	clearStagedConfigChange,
+	defaultStagingDeps,
 	type EngineEncodeSnapshot,
 	getStagedConfigChange,
 	judgeInflightMarker,
 	readInflightMarker,
+	releaseStagedConfigChange,
 	type StagedConfigFields,
 	type StagingDeps,
 } from "./config-change-staging.ts";
+import { noteSourceSelectionWrite } from "./sources.ts";
 
 type MutableConfig = Record<string, unknown>;
 
 function writeFields(fields: StagedConfigFields): void {
 	const config = getConfig() as unknown as MutableConfig;
-	for (const [key, value] of Object.entries(fields)) {
-		if (key === "composition" && value === null) delete config[key];
+	const { source_stable_id, ...values } = fields;
+	for (const [key, value] of Object.entries(values)) {
+		if (value === null) delete config[key];
 		else if (value !== undefined) config[key] = value;
 	}
+	if (fields.source !== undefined && source_stable_id !== undefined)
+		noteSourceSelectionWrite(fields.source, { stableId: source_stable_id });
 	saveConfig();
 }
 
@@ -25,17 +31,30 @@ function writeFields(fields: StagedConfigFields): void {
  * `applied` is the ONLY path that touches `config.json`. Every other outcome
  * leaves the persisted values exactly as they were, because those values are
  * still what the engine is running.
+ *
+ * Both retire only `attemptId`'s stage: an attempt that never held it has
+ * nothing to commit or abandon, whatever another attempt has staged.
  */
-export function commitStagedConfigChange(): StagedConfigFields | undefined {
+export function commitStagedConfigChange(
+	attemptId: string,
+): StagedConfigFields | undefined {
 	const marker = getStagedConfigChange();
-	if (marker === undefined) return undefined;
-	writeFields(marker.candidate);
+	if (marker?.attemptId !== attemptId) return undefined;
+	try {
+		writeFields(marker.candidate);
+	} catch (err) {
+		// The engine already runs the candidate and the in-memory config holds it;
+		// only the disk write failed. The finished attempt must not keep the stage,
+		// but its marker stays so reconciliation can still complete the write.
+		releaseStagedConfigChange();
+		throw err;
+	}
 	clearStagedConfigChange();
 	return marker.candidate;
 }
 
-export function abandonStagedConfigChange(): void {
-	if (getStagedConfigChange() === undefined) return;
+export function abandonStagedConfigChange(attemptId: string): void {
+	if (getStagedConfigChange()?.attemptId !== attemptId) return;
 	clearStagedConfigChange();
 }
 
@@ -54,10 +73,14 @@ export type InflightReconciliation =
  */
 export function reconcileInflightConfigChange(
 	engine: EngineEncodeSnapshot | undefined,
-	deps?: StagingDeps,
+	deps: StagingDeps = defaultStagingDeps,
 ): InflightReconciliation {
-	const marker = deps ? readInflightMarker(deps) : readInflightMarker();
+	const marker = readInflightMarker(deps);
 	if (marker === undefined) return "no_marker";
+	// A marker this process staged belongs to a change still running here, not to
+	// a crashed one; that change's own outcome retires it.
+	if (marker.attemptId === getStagedConfigChange()?.attemptId)
+		return "no_marker";
 
 	const verdict = judgeInflightMarker(marker, engine);
 	if (verdict.action === "wait") {
@@ -88,8 +111,8 @@ export function reconcileInflightConfigChange(
 		});
 	}
 
-	if (deps) clearStagedConfigChange(deps);
-	else clearStagedConfigChange();
+	// Retire only the judged marker; a change running now keeps its stage.
+	deps.removeMarker(deps.markerPath);
 
 	return verdict.action === "persist_candidate"
 		? "persisted_candidate"

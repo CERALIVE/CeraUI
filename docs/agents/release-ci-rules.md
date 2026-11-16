@@ -57,6 +57,17 @@ the functional page backend. Local Vite dev does not enable cookie routing. The
 semantic YAML contract is
 `bun run test:build-check-shape`.
 
+The ordinary backend lane requires the steering kernel suites listed in
+`apps/backend/src/tests/kernel-suites.json`: `check:tests` typechecks their explicit
+compiler inputs, and `scripts/ci/check-kernel-receipts.ts inputs` rejects an empty
+or incomplete input set. Tests require working `unshare -Urn`, `ip` and `nft`;
+missing namespace support fails instead of skipping. Every scenario must return
+a receipt after its child assertions. CI creates `apps/backend/dist` before the
+JUnit reporter, requires a non-empty report, and checks each manifest file's
+descendant cases and receipt-set test with zero skips or failures. The checker
+unit tests run separately from backend discovery. Add future kernel files to both
+the manifest and `apps/backend/tsconfig.tests.json`.
+
 Four further Build Check facts, all landed 2026-08-14:
 
 - **The frontend Vitest lane runs on BUN; the Playwright lanes stay on Node 26**

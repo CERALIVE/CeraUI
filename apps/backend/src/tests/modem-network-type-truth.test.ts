@@ -68,7 +68,7 @@ function boardPayload(currentModes?: string): ModemInfo {
 			? { "modem.generic.current-modes": currentModes }
 			: {}),
 		"modem.generic.supported-modes": BOARD_SUPPORTED_MODES,
-		"modem.generic.equipment-identifier": "867978050016855",
+		"modem.generic.equipment-identifier": "000000000023456",
 		"modem.generic.device-identifier":
 			"b59f0594669e9a71267b592f4bfeff95d5d8f40b",
 		"modem.generic.access-technologies": [],
@@ -80,7 +80,7 @@ function boardPayload(currentModes?: string): ModemInfo {
 function latchedModem(): Modem {
 	return {
 		ifname: "wwan0",
-		name: "RM530N-GL - 16855",
+		name: "RM530N-GL - 23456",
 		sim_network: "Movistar",
 		network_type: {
 			supported: { "5g4g": { allowed: "4g|5g", preferred: "5g" } },
@@ -182,7 +182,7 @@ describe("a status refresh replaces the latched mode", () => {
 		);
 
 		expect(merged.ifname).toBe("wwan0");
-		expect(merged.name).toBe("RM530N-GL - 16855");
+		expect(merged.name).toBe("RM530N-GL - 23456");
 		expect(merged.config?.conn).toBe("11ab26e2");
 		expect(merged.status?.connection).toBe("searching");
 	});

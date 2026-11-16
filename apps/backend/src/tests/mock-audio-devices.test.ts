@@ -65,7 +65,10 @@ describe("getMockAudioDevices — scenario seeding", () => {
 
 	test("seeds the realistic dual-dongle map for caps-full", () => {
 		initMockService("caps-full");
-		expect(getMockAudioDevices()).toEqual(REALISTIC_AUDIO_DEVICES);
+		expect(getMockAudioDevices()).toEqual({
+			...REALISTIC_AUDIO_DEVICES,
+			"HDMI Input": "rockchiphdmiin",
+		});
 	});
 
 	test("seeds nothing for single-modem", () => {

@@ -1,13 +1,14 @@
-## LIVE SCREEN: CONTRACT AND DESIGN BRIEF [PARTIAL]
+## LIVE SCREEN: CONTRACT AND DESIGN BRIEF [EXISTS]
 
 This file is the target structure of the Live destination, written before any
 of it was built.
 
-Status: changes 1 to 3 below have landed — the regions, both orders, the Live
+Status: all six changes below have landed — the regions, both orders, the Live
 bar, the two-column layout and the preview's open state exist as described, the
-layout, the opacity and the second input change while live, and the Encoder
-dialog has the automatic format, the adaptive switch and the route line.
-Changes 4-6 are still to come.
+layout, the opacity and the second input change while live, the Encoder
+dialog has the automatic format, the adaptive switch and the route line, the
+Audio card has a strip per input, the second input is placed on the preview,
+and the final design pass has set the rules in "The final design pass" below.
 
 How to read it:
 
@@ -127,6 +128,9 @@ must contain the `source-audio` block with its ids unchanged.
 - Idle, it must show the first blocking reason from `deriveGoLiveReadiness` as
   visible text, or a ready state, and Start.
 - Live, it must show the bitrate control and Stop.
+- While it is mounted, the document's `scroll-padding-bottom` is the bar's
+  height (plus the mobile dock below desktop chrome), so a control reached with
+  Tab or scrolled into view stops above the bar, never under it (WCAG 2.4.11).
 
 #### Screen sizes
 
@@ -201,6 +205,210 @@ must keep that ABI.
   `encoder-legacy-passthrough-reset`, which saves `video_passthrough: 'auto'` on
   its own. The federated Encoder bundle reads the host's `balancer` and
   `video_passthrough` and resets through `host.setConfig`; the ABI stays 1.
+
+#### The Audio card's mixer [EXISTS]
+
+- `AudioMixer` (`audio-mixer`) renders only when the capabilities carry
+  `audio_mix`; without it the idle `audio-card` is today's picker and meter and
+  the live screen has no `audio-card`. Idle, it sits in `audio-card` under
+  `source-audio`; live, in the `audio-card` that `LiveCockpit` renders after
+  `program-desk`, in the cards column, never in the post-stream summary window.
+- One strip per selectable audio device in `status.audio_sources` (no
+  pseudo-source, no row with an `unavailable_reason`), plus the embedded audio
+  of a network source when the engine routes it, saved under the source id.
+  Each strip, `audio-strip-<id>`, holds the switch `audio-strip-enable-<id>`;
+  while it is on, the level slider `audio-strip-gain-<id>` (the capability's
+  `gain_db_min` to `gain_db_max`, steps of 1) with `audio-strip-gain-reset-<id>`,
+  the mute button `audio-strip-mute-<id>` (`aria-pressed`), the delay field
+  `audio-strip-delay-<id>` (0 to `delay_ms_max` ms, steps of 10) and one chip
+  per track, `audio-strip-track-<id>-<n>` for 1 to `max_tracks`
+  (`aria-pressed`). `audio-strip-reason-<id>` says why a switch is disabled and
+  `audio-strip-error-<id>` (`role="alert"`, always mounted) shows a refusal.
+  Under the strips, `audio-mixer-track-hint` says most receivers play Track 1.
+- The main input is the backend's: the picker's input, Auto's resolution, or
+  the embedded audio when the picker defers to the source. Its strip is always
+  on and its switch disabled with the reason beside it. Without a main input,
+  no other strip can be turned on. At `max_inputs` inputs in the mix (a saved
+  input with no strip, gone or unavailable, still counts), the others cannot be
+  turned on and say the mix is full.
+- The main input is always in the mix Start sends, decided where it is used,
+  never by a follow-up save: the backend's `effectiveAudioInputs` adds a main
+  input outside the saved mix first at its defaults on Track 1 (the old main
+  input stays an ordinary input), or in a full mix gives it the first entry's
+  place and tracks. The strips show the same mix. Opening Live never saves;
+  only an edit of an audio control saves, and it saves the mix shown.
+- A pick in the audio picker sends only `setConfig({ asrc, audio_pick: true })`.
+  The backend decides the membership in the same synchronous write, against its
+  own current saved mix and current main input (Auto's resolution included):
+  a device outside the mix joins it, and in a full mix it replaces the main
+  input it actually replaces and takes its tracks. Quick successive picks and a
+  stale second tab therefore compose. A refused mix retries with `asrc` alone,
+  so the pick is never lost; a pick already in the mix changes only `asrc`.
+- The rule itself is `audioMixWithPrimary` in `@ceraui/rpc/schemas`, shared by
+  the backend and the strips.
+- Meters: before going live, the main strip carries today's meter (the
+  picker's meter moves into it, so the card never shows the same bars twice)
+  and every other strip says its level shows once live. Live on a mix session,
+  every enabled strip shows that input's own level from the `inputs[]` of the
+  `audio-level` message, which reads unavailable when the input has no reading
+  or the socket is down; a muted input reads silent. Today's meter stays in
+  `LiveSummaryStrip` while live.
+- Idle, a change sends only that input's delta to `streaming.setAudioMix`: a
+  level, mute or delay value, one track on or off (`track`), or the input in or
+  out (`include`). The client never sends a whole `audio_inputs` array: the
+  device composes each delta on its own current saved mix in one synchronous
+  write (main input first, `audio_inputs` cleared once only the main input is
+  left at its defaults), so edits and picks from several tabs never drop one
+  another. An unanswered edit shows as the choice; a refused one puts the
+  previous state back.
+- Live on a session whose status says `audio_mix_active`, level, mute and
+  delay call `streaming.setAudioMix` with only the changed field (the level
+  at most every 100 ms while dragging and once on release), and the values the
+  device applied win. A level still queued when the mix session ends (Stop, or
+  the session stops mixing) or the mixer unmounts is dropped, never sent. The switches and chips are disabled and described by
+  `audio-mixer-next-start` ("Applies on next start"). Live on a session started
+  without the mix, every strip control is disabled with that text. While a mix
+  session runs, the source picker is read-only with `audio-source-mix-locked`.
+- Every refusal shown is the keyed copy of one backend token
+  (`live.audioMixer.error.<token>` for `audio_mix_unsupported`,
+  `audio_input_unknown`, `audio_input_primary`, `audio_inputs_empty`, `audio_input_duplicate`,
+  `audio_inputs_too_many`, `audio_tracks_invalid`, `audio_tracks_gap`,
+  `audio_gain_range`, `audio_delay_range` and `audio_mix_active`); any other
+  token, such as an engine refusal, reads as a generic refusal and never as the
+  raw token. The UI refuses a track change or a delay the backend would refuse,
+  in the backend's order and with the same copy, and sends nothing. The track
+  check reads the whole mix, saved inputs with no strip included.
+- The mock backend does not bridge `audio-level` to the main socket (its meter
+  bridge is skipped under mocks), so `audio-mixer.spec.ts` injects that frame
+  when it checks the per-input meters.
+
+#### The layout designer [EXISTS]
+
+- `LayoutDesigner` draws the inset `layout-inset` over the preview picture in
+  `program-desk`, only while composition is on (a saved `composition`), the
+  engine advertises `composition-geometry` and `preview-disclosure` is open.
+  It covers the picture's letterboxed area (`videoBox`); while the preview is
+  off or unavailable, `PreviewCanvas` gives it an empty 16:9 stage, so placing
+  never needs the preview to play. Without the capability no designer node
+  exists. The canvas renders `compact`: the disclosure supplies the card chrome.
+- The inset is where the compositor puts the second input: the saved `rect`
+  for `custom`, else the preset's own rectangle (`presetRect`: half of each
+  axis, a 5% margin for the four insets). It drags with pointer capture,
+  resizes from four corners and, focused, moves with the arrow keys by 1%
+  (Shift 5%) and resizes
+  with Alt and the arrow keys. It is a native button with an accessible name
+  and a polite live description of its position, size and keys, including
+  that Escape before letting go puts it back; during a
+  pointer drag the description keeps the starting position. Rectangles are
+  fractions of the output frame, so they never mirror right to left.
+- Each corner resizes from a 44 px box centred on it
+  (`layout-inset-handle-<corner>`, `data-corner`) that sits under the inset,
+  plus a cap in the inset's own corner (`data-corner-cap`) of at most 22 px and
+  at most a quarter of each side. Each cap extends across the inset's 2 px
+  border, so the border at a corner resizes rather than moving the inset.
+  On a normal inset the corner keeps its whole
+  44 px zone; at the smallest size on a 375 px phone (about 30 by 17 px) the
+  caps stay small, so most of the inset, its middle included, still moves it.
+  The caps and the boxes share one pointer path on the picture-area layer; the
+  keyboard path is the focused inset button.
+- The rectangle moves locally while a pointer or an arrow key is held and is
+  sent once, on release, already clamped (`clampRect`: inside the frame, each
+  side at least `COMPOSITION_RECT_MIN`), as
+  `streaming.setConfig({ composition_rect })`, with `apply_now: true` while
+  live. A press that does not move it sends nothing. Escape during a pointer
+  drag or a held key puts it back, lets the pointer go and sends nothing.
+- The device decides the composition. `resolveCompositionWrite` composes the
+  placement onto the composition it has saved now, in the same synchronous
+  write (`layout: 'custom'` and the rectangle; the second input and the
+  opacity stay the device's). The layout card sends each of its changes the
+  same way, as that one field (`composition_patch`: layout, second input or
+  opacity) merged onto the saved composition; only turning composition on or
+  off sends the whole `composition`. Quick drags and a stale second tab
+  therefore compose with every other change; no client sends its own copy of
+  the other fields. A rectangle is accepted only with `custom`, only with
+  `composition-geometry` and only when it fits the frame
+  (`compositionRectFits` in `@ceraui/rpc/schemas`); a rectangle sent with an
+  explicit preset layout is a contradiction and is refused. Every refusal
+  happens before anything is written: `composition_geometry_unsupported`,
+  `composition_rect_invalid`, `composition_unsupported`, or `composition_off`
+  for a change to a composition the device no longer has.
+- Every composition write of a tab, from the card and the designer alike,
+  goes through one ordered lane (`lib/streaming/compositionWrites.svelte.ts`):
+  one write in flight at a time, in the order made. A placement released
+  before the answer waits for it and replaces any older waiting placement; any
+  newer write (a layout, second input, opacity, on or off) drops a placement
+  still waiting, unsent, so an older drag can never undo a newer choice. While
+  waiting or in flight, the newest placement is what the inset shows. A
+  refused write shows the keyed copy of its token (`live.layout.error.<token>`)
+  or the engine's outcome; the designer then falls back to the device's saved
+  rectangle, in an alert over the picture that is mounted for the whole
+  session.
+- Start and Stop go through the same lane (`SystemHelper.startStreaming` and
+  `stopStreaming`, which the Live bar, the stop watchdog, its Retry and the
+  toast host all use, and `UnconfirmedStreamBand`'s Stop). One rule holds at
+  every session change: a Start or a Stop drops nothing; a write made before it
+  is sent before it and one made after it is sent after its answer. So a
+  placement released just before Start is saved first and Start runs it; one
+  released just before Stop changes the running stream first and the next
+  Start begins from it. A Start or a Stop waits only for a write, never for an
+  earlier Start or Stop, so a redispatched Stop still reaches a device that has
+  not answered the first. Only a newer composition write drops a waiting
+  placement, the round-2 rule, wherever the transitions fall.
+- Whether a write changes the running stream is decided when the lane SENDS
+  it: `apply_now: true` while the device reports a live stream
+  (`getIsStreaming`) or right after this tab's Start was answered, before that
+  status arrives. Callers pass no directive. Sending `apply_now` to an idle
+  device only saves; a live write without it would be saved for the next Start
+  only, which is the split this rule prevents. A session that ends or starts on
+  its own (engine failure, a dropped socket, another tab) reaches the lane
+  through the device's status. Only this tab's writes are ordered: a Start from
+  another tab or the cloud, or the device's own restart, can still land between
+  another write and the engine reading the saved composition.
+- With `composition-geometry`, `composition-layout-selector` gains a seventh
+  radio, `composition-layout-custom`. Choosing it sends `custom` alone; the
+  device takes the rectangle of the preset it has saved. With the preview
+  closed the radio is described by `live.layout.openPreviewToPlace`.
+- Under mocks, a live layout-only change reaches the mock engine
+  (`changeMockComposition`), as `set-audio-mix` does.
+
+#### The final design pass [EXISTS]
+
+An audit of the screen as changes 1 to 5 left it, idle and live, at the four
+sizes, in both themes and in English, Spanish and Arabic. It changed no region,
+order or test id, reworded no string (it added one, the Escape hint) and changed
+no control's effect; it set these rules, each pinned by
+`apps/frontend/tests/e2e/live-design-a11y.spec.ts`:
+
+- Every slider on the screen and in the Encoder dialog is a `LabeledSlider`
+  (`apps/frontend/src/lib/components/custom/LabeledSlider.svelte`): its name,
+  description and value text sit on the thumb, the element that takes focus,
+  and it runs with the reading direction, so in Arabic the maximum is on the
+  left like the Live bar's plus button. The shadcn `Slider` primitive put the
+  name on its root and drew no track or fill (its `data-horizontal:` classes
+  never match bits-ui's `data-orientation`).
+- In touch layout a slider thumb keeps its 12 px dot and reaches 44 px through
+  its `::after` hit area, the switch mechanism in `app.css`; an info button
+  does the same through `data-touch-target="hit-area"`.
+- Below 640 px (`sm`) every control in the Audio card, the layout controls
+  and the Live bar is at least 44 px on its shorter side in the default layout
+  too: those regions carry `data-touch-region`, which sets
+  `--touch-target-min` to 44 px there, and the touch-layout rules in `app.css`
+  (button `min-height`, switch and slider-thumb `::after`) apply to them.
+  Spacing keeps its default scale; no component hard-codes 44 px.
+- Text meets AA in dark and light: the preview encoding helper, the target
+  bitrate in the telemetry card, the encoder cell's "not reported" text and a
+  muted strip's Mute label use full
+  `text-muted-foreground` or `text-foreground`; a muted strip keeps its warning
+  tint and icon.
+- At phone width the Output card's Edit buttons keep their words for screen
+  readers, and the destination check shows its words, not only its dot. Setup
+  values and reasons wrap instead of being cut: a row's text keeps at least
+  12rem, and when its actions do not fit beside that they wrap under it at the
+  inline end. A source tile's name wraps to two lines.
+- Under `prefers-reduced-motion: reduce` nothing on the screen keeps animating;
+  the live dot in the summary stays lit and still.
+
+Deliberately left, with reasons, in `docs/DESIGN-FOLLOWUPS.md` section 5.
 
 ### 1. Job and audience
 
@@ -338,9 +546,12 @@ The screen must handle each of these states:
   `packages/i18n/messages/*.json` file, written natively per locale. A change
   must not alter the text of a key it did not add, and nothing may write
   `packages/i18n/tests/fixtures/*.rendered.json`.
-- **Open for the final design pass.** Whether the desk column stays pinned while
-  the cards column scrolls on wide screens, and the width split between the two
-  columns. Until then both columns must scroll with the page.
+- **Decided in the final design pass.** Both columns scroll with the page and
+  the split stays three fifths for the desk, two for the cards. Pinning the desk
+  was rejected: live at 1024x600 the desk (preview, now-streaming summary, source
+  switch, layout controls) is taller than the space between the header and the
+  Live bar, so a pinned desk would hold its own lower controls out of reach
+  until the cards column ended.
 
 #### Assumptions made without an interview
 

@@ -11,6 +11,7 @@ import {
 	UPLINK_MARK_MASK,
 	WEIGHT_BUCKET_MODULUS,
 } from "./contracts.ts";
+import { markForSlot } from "./mark-layout.ts";
 
 const IPV4_CIDR_RE =
 	/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d|[12]\d|3[0-2])$/;
@@ -18,10 +19,6 @@ const SAFE_NFT_IFNAME_RE = /^[A-Za-z0-9_.][A-Za-z0-9_.-]{0,14}$/;
 
 /** Deterministic FNV-1a mark: stable across reweights and backend restarts. */
 export function stableUplinkMark(identity: string): number {
-	return markForSlot(slotForIdentity(identity));
-}
-
-export function slotForIdentity(identity: string): number {
 	if (identity.length === 0)
 		throw new Error("uplink identity must not be empty");
 	let hash = 0x811c9dc5;
@@ -29,13 +26,7 @@ export function slotForIdentity(identity: string): number {
 		hash ^= byte;
 		hash = Math.imul(hash, 0x01000193) >>> 0;
 	}
-	let slot = ((hash >>> 16) ^ hash) & 0xffff;
-	if (slot === 0) slot = 1;
-	return slot;
-}
-
-export function markForSlot(slot: number): number {
-	return (CLIENT_FLOW_NAMESPACE | (slot << 8)) >>> 0;
+	return markForSlot(((hash >>> 16) ^ hash) & 0xffff);
 }
 
 export function buildShareRuleset(state: ShareRulesetState): string {

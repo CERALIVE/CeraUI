@@ -1240,7 +1240,7 @@ describe("S6 — wifi/ethernet null signal is valid, not an error", () => {
 			expect(link.isConnected).toBe(false);
 			expect(link.connectionState).toBe("disconnected");
 			// Generic fallback label when no active SSID.
-			expect(link.label).toBe("WiFi");
+			expect(link.label).toBe("Wi-Fi");
 		}
 	});
 
@@ -1322,6 +1322,10 @@ describe("connectionState — per-modem backend mapping", () => {
 
 	it("maps 'scanning' to 'scanning'", () => {
 		expect(stateFor("scanning")).toBe("scanning");
+	});
+
+	it("maps a searching modem with a signal reading to scanning", () => {
+		expect(stateFor("searching")).toBe("scanning");
 	});
 
 	it("collapses 'failed' to 'disconnected'", () => {

@@ -1,9 +1,22 @@
 # CeraUI
 
+**Modem configuration acknowledgement [EXISTS; host-tested].** Automatic APN,
+credentials and operator selection are normalized before NetworkManager writes.
+`modems.configure.applied` reports the saved values, including automatic APN
+disabled by the device capability gate. See the
+[modem save contract](apps/backend/docs/agents/a-modem-save-spends-a-reconnect-only-when-it-must.md#applied-configuration-receipts-exists).
+
 **Streaming settings RPC [EXISTS].** Settings clients can save the producer's
 balancer selection or clear a saved codec with `video_codec: null` for the next
 start. Saved keys, defaults and passthrough choices remain unchanged. See the
 [settings contract](apps/backend/docs/agents/streaming-rpc-procedures.md#format-settings-exists).
+
+**Audio input backend [EXISTS; hardware qualification owed].** Capable engines
+can receive saved inputs and tracks, with gain, mute and delay updates while a
+mix session runs. The single-source default retains its existing engine path.
+The Audio card shows a strip per input on such engines. See the
+[audio input contract](apps/backend/docs/agents/streaming-rpc-procedures.md#audio-inputs-exists)
+and the [mixer contract](docs/agents/live-screen.md#the-audio-cards-mixer-exists).
 
 **Destination navigation [EXISTS].** The desktop rail and mobile dock accept
 successive destinations without a wall-clock throttle, including in e-ink mode.
@@ -413,6 +426,10 @@ The app is organized into three primary destinations:
 
 A dev-only DevTools destination is available in development builds.
 
+The SSH-at-boot choice is stored in the existing device config and restored on
+each OS slot after password sync. Temporary Start/Stop remains independent.
+See the [SSH persistence contract](apps/backend/docs/agents/dev-mock-seams.md#ssh-boot-persistence-is-a-second-axis-not-a-side-effect-exists).
+
 ### Other Highlights
 
 - **Live session source switching**: the cockpit can offer engine-reported
@@ -625,10 +642,15 @@ original entry; any repair/restore error warns without failing configure. See
 [retention and mount limits](docs/BUILD_PIPELINE.md#frontend-link-repair-exists-host-tested-board-proof-owed).
 To check a device: `readlink /opt/ceralive/public` must print `/var/www/ceralive`.
 
-CeraUI pins the published `@ceralive/cerastream@2026.11.0` in both
-the backend and shared RPC package, carrying schema 0.22.0's optional
+CeraUI pins the published `@ceralive/cerastream@2026.11.1` in both
+the backend and shared RPC package, carrying schema 0.23.0's optional
 `encoder.default_codec` and `active_encode.route_reason` alongside capture status,
 failover-rate policy, raw-input classifications, and source-mode session-switch fields.
+Optional `audio_mix` capabilities and per-input audio levels now survive the RPC
+boundary. The mock models audio mix admission, live controls and free composition
+rectangles; the six preset choices stay unchanged. See the
+[mock contract](docs/agents/mock-subsystem.md). The Audio card's mixer and the
+layout designer drive them, and a live layout-only change reaches the mock engine.
 The producer's exported
 `ChangeConfigParams` and installed schema are regression-tested directly.
 The bindings-skew gate checks the schema version and preservation of the three

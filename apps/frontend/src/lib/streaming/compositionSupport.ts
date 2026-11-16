@@ -1,6 +1,7 @@
 import {
 	type CapabilitiesMessage,
 	COMPOSITION_FEATURE,
+	COMPOSITION_GEOMETRY_FEATURE,
 } from "@ceraui/rpc/schemas";
 
 /**
@@ -13,4 +14,14 @@ export function compositionSupported(
 	capabilities: CapabilitiesMessage | undefined,
 ): boolean {
 	return capabilities?.features?.includes(COMPOSITION_FEATURE) === true;
+}
+
+/** Whether the second input can also be placed freely (`custom`), same fail-closed rule. */
+export function compositionGeometrySupported(
+	capabilities: CapabilitiesMessage | undefined,
+): boolean {
+	return (
+		compositionSupported(capabilities) &&
+		capabilities?.features?.includes(COMPOSITION_GEOMETRY_FEATURE) === true
+	);
 }

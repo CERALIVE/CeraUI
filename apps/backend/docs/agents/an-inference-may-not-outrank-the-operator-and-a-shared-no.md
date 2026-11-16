@@ -30,6 +30,10 @@ been refreshed, is not a verdict. The fix is a compare-and-set on a monotonic
   persists a STATED selection — `streaming.setConfig`, the `start` path's
   `updateConfig` (`streaming.ts`), and the durable live `switchInput` follow. Miss
   one and the reconciler can still overrule that selection.
+  Applied `setConfig` commits and confirmed crash recovery use the same owner,
+  supplying the anchor captured from the operator's source snapshot. A later
+  device cache cannot reinterpret that pick. Refused or reverted candidates
+  advance no token and preserve the previous anchor.
 - `engineViewSelectionToken` records the token as it stood when the evidence
   behind the current view was **REQUESTED**. It is captured inside
   `probeEngineDevices` BEFORE the round-trip and carried on the probe to

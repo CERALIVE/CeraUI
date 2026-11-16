@@ -61,6 +61,10 @@ uses an address inside a client prefix.
 
 ## Route support
 
+`uplink-steering/route-table-ownership.ts` owns managed table provisioning,
+partial-failure rollback, and flushing; `route-manager.ts` coordinates route
+discovery and the source/fwmark rule lifecycle.
+
 Existing usable foreign source-routing tables are reused without claiming them.
 Every supported uplink class (`wl*`, `usb*`, `eth*`, `en*`/`enx*`, `ww*`, and
 `ppp*`) without a source rule gets a private, identity-derived table. A table
@@ -101,6 +105,15 @@ change or rollback leaves one default. Neither path flushes or touches another
 uplink's table. An identical route needs no replacement and, when its rules
 already exist, reports no change.
 
+When a managed table has one plain default on another device, a failed reload
+restores that replaced route and its attributes instead of flushing the table,
+including when the replacement changes the metric. Other inventories are reconciled
+by the planned route's prefix, TOS and metric: stale defaults and host routes are
+removed, while an installed planned route is retained. Typed defaults also use
+this complete-key path, so rollback restores their type and the previous inventory.
+The ordinary single-default path requires the planned TOS; an installed
+TOS-specific plan remains a no-op.
+
 For `ip -4 route show default dev <ifname>`, iproute2 omits the `dev` clause.
 The planner supplies that query's interface when absent and rejects a conflicting
 `dev`; unfiltered table output must explicitly name the matching interface.
@@ -121,6 +134,17 @@ On backend restart, the module inventories its namespaced priority-110 rules. It
 publishes the latest ruleset first, then flushes conntrack and removes stale rules
 and private tables. Desired mark/table support is retained even when the old route
 temporarily lacks an interface name.
+
+Recovery also inventories priority-100 source rules in managed tables, including
+source-only support left by a crash. Planning ignores stale managed references
+before checking foreign-table ambiguity; provisioning removes obsolete source
+rules and restores them on rollback. Cleanup retries retain each source rule
+independently while desired support remains protected by mark and table.
+
+An in-place interface rename retains the continuing identity's table and fwmark
+rule without flushing its flows, including when final ruleset publication fails.
+Route retention matches identity, table, and mark; the interface name is mutable.
+A departing identity still follows the hard-down drain below.
 
 Once the latest ruleset is committed, a stale-route cleanup failure keeps the live
 ruleset and newly provisioned routes intact, completes the forwarding step, and

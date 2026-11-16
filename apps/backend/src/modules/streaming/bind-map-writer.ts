@@ -175,7 +175,7 @@ export async function publishBondMapping(
 		await publishAtomically(deps, deps.ipsFile, ipsContent);
 	} catch (error) {
 		logger.error("bind-map: failed to publish the IP list", { error });
-		return { ok: false, reason: "ips_write_failed", changed };
+		return { ok: false, reason: "ips_write_failed", changed: false };
 	}
 
 	// The IP list is what the legacy path runs on, so it is published even when

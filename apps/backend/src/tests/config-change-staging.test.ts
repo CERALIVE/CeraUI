@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 
+import { abandonStagedConfigChange } from "../modules/streaming/config-change-persistence.ts";
 import {
 	clearStagedConfigChange,
 	type EngineEncodeSnapshot,
@@ -80,6 +81,26 @@ describe("staging holds the candidate off disk", () => {
 		expect(deps.file()).toBeUndefined();
 	});
 
+	test("a second attempt cannot take the stage, and retiring it leaves the first intact", () => {
+		// Given an accepted attempt holding the stage while its change applies.
+		stageConfigChange(marker({ attemptId: "accepted-A" }), deps);
+
+		// When an overlapping attempt tries to stage, and is then abandoned as busy.
+		const claimed = stageConfigChange(
+			marker({
+				attemptId: "rejected-busy-B",
+				candidate: { resolution: "1280x720", framerate: 30 },
+			}),
+			deps,
+		);
+		abandonStagedConfigChange("rejected-busy-B");
+
+		// Then the accepted attempt still owns the held candidate and the marker.
+		expect(getStagedConfigChange()?.attemptId).toBe("accepted-A");
+		expect(readInflightMarker(deps)?.attemptId).toBe("accepted-A");
+		expect(claimed).toBe(false);
+	});
+
 	test("an unreadable marker is discarded rather than trusted", () => {
 		// Given a corrupt marker on disk.
 		deps.writeMarker(deps.markerPath, "{not json");
@@ -94,6 +115,42 @@ describe("staging holds the candidate off disk", () => {
 });
 
 describe("crash-window reconciliation is MARKER-ONLY", () => {
+	for (const clears of [
+		{ resolution: null },
+		{ framerate: null },
+		{ resolution: null, framerate: null },
+	] as const) {
+		test(`local geometry clears ${Object.keys(clears)} survive marker parsing but stay undecided on any running snapshot`, () => {
+			const deps = memoryDeps();
+			const pending = marker({
+				candidate: { source: "rtmp", pipeline: "rtmp", ...clears },
+				previous: {
+					selected_video_input: "video1",
+					resolution: "720p",
+					framerate: 30,
+				},
+			});
+			deps.writeMarker(deps.markerPath, JSON.stringify(pending));
+
+			const recovered = readInflightMarker(deps);
+
+			expect(recovered).toEqual(pending);
+			expect(
+				judgeInflightMarker(pending, liveOn("1920x1080", { framerate: 60 })),
+			).toEqual({ action: "wait" });
+			expect(
+				judgeInflightMarker(
+					pending,
+					liveOn("1280x720", { activeInput: "video1" }),
+				),
+			).toEqual({ action: "wait" });
+			// A stopped engine is still authoritative about what it retained.
+			expect(judgeInflightMarker(pending, { streaming: false })).toEqual({
+				action: "retain_previous",
+			});
+		});
+	}
+
 	test("no marker ⇒ no verdict at all, whatever the engine reports", () => {
 		// Given an apply-on-next-start mismatch and NO marker: the engine runs
 		// 1080p while config.json already holds the operator's 2160p intent.
@@ -186,5 +243,47 @@ describe("crash-window reconciliation is MARKER-ONLY", () => {
 				liveOn("1920x1080", { activeInput: "/dev/video0" }),
 			),
 		).toEqual({ action: "retain_previous" });
+	});
+
+	test.each([
+		{
+			name: "missing runtime resolution cannot confirm an omitted previous override",
+			candidate: { resolution: "2160p" },
+			previous: {},
+			engine: { streaming: true, framesEmitted: 120 },
+			action: "wait",
+		},
+		{
+			name: "unrelated saved codec cannot distinguish identical geometry",
+			candidate: { resolution: "1080p" },
+			previous: { resolution: "1080p", video_codec: "h265" },
+			engine: liveOn("1920x1080", { codec: "h264" }),
+			action: "wait",
+		},
+		{
+			name: "unchanged capture settings permit proven candidate geometry",
+			candidate: {
+				resolution: "2160p",
+				input_mode: "uvc_h264",
+				pipeline: "libuvch264",
+			},
+			previous: {
+				resolution: "1080p",
+				input_mode: "uvc_h264",
+				pipeline: "libuvch264",
+			},
+			engine: liveOn("3840x2160"),
+			action: "persist_candidate",
+		},
+	] satisfies ReadonlyArray<{
+		name: string;
+		candidate: InflightConfigMarker["candidate"];
+		previous: InflightConfigMarker["previous"];
+		engine: EngineEncodeSnapshot;
+		action: "wait" | "persist_candidate";
+	}>)("$name", ({ candidate, previous, engine, action }) => {
+		expect(
+			judgeInflightMarker(marker({ candidate, previous }), engine),
+		).toEqual({ action });
 	});
 });

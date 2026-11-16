@@ -245,6 +245,8 @@ Each was surfaced by the owning todo's own work and deliberately left unfixed.
   `vite preview`) the nav button does not exist, so the click times out.
 - **Exit condition:** either gate the spec on a dev build, or drive the field-sync
   states through a production-reachable surface.
+- **Resolved:** the test is tagged `@dev-only`, so it runs only in the `desktop-dev`
+  project, against a Vite dev server (`apps/frontend/playwright.config.ts`).
 
 ### DF-12 — CI never runs the `@visual` or `@a11y` lanes (root cause of DF-9…DF-11)
 
@@ -350,3 +352,79 @@ command. Registering them there would mean inventing markers for work that has n
 - **What:** this is DF-1 above, listed here only so a reader arriving from the effort's
   named follow-up list finds it. Do not open a second entry for it.
 - **Exit condition:** DF-1's.
+
+## 5. Findings left by the Live screen design pass
+
+The final design pass on the Live screen and the Encoder dialog
+([`docs/agents/live-screen.md`](agents/live-screen.md), "The final design
+pass") fixed every finding its audit rated blocking or serious. These findings were
+rated minor or polish. Each open entry states why it is deferred; resolved
+entries record the follow-up that removed their blocker.
+
+### DF-18 — Inset panels inside cards on the Live screen
+
+- **What:** the detector flags three bordered, muted panels that sit inside a
+  card: the preview's hardware-encode control, the second input's opacity
+  control, and the encoder-load block of the telemetry card.
+- **Why it is deferred:** each is the system's inset panel (`bg-muted/40
+  rounded-lg border`) for a control and its outcome, the same pattern the
+  Encoder dialog's bitrate control uses. Dropping it on one screen would split
+  the pattern; changing it everywhere is a system decision, not a polish fix.
+- **Where:** `apps/frontend/src/main/live/PreviewEncodeControl.svelte`,
+  `apps/frontend/src/main/live/CompositionCard.svelte`,
+  `apps/frontend/src/lib/components/custom/IngestStats.svelte`.
+- **Exit condition:** a DESIGN.md rule on whether an inset panel is allowed inside
+  a card; then apply it to every user at once.
+
+### DF-19 — Small type in the now-streaming summary and the mixer notes
+
+- **What:** the "Now streaming" label is 10.4 px uppercase, the "Simulated" badge
+  is as small, and the mixer's "Meter unavailable" and "Level shows once you go
+  live" notes are 11 px monospace.
+- **Why it is deferred:** readable and AA in contrast; moving them to the 12 px
+  step changes the summary strip's rhythm, which wants a look of its own.
+- **Where:** `apps/frontend/src/main/live/LiveSummaryStrip.svelte`,
+  `apps/frontend/src/main/live/AudioMixer.svelte`.
+- **Exit condition:** the labels use the type scale's smallest step (`text-xs`)
+  and the strip is re-checked at 375 px and 1024x600.
+
+### DF-20 — Encoder dialog details in Arabic and at phone width
+
+- **What:** in Arabic the detected-capability chips (`1920×1080 @ 30 H.264`)
+  are laid out right to left, which the bidi algorithm does correctly but reads
+  reversed at a glance; at 375 px the active source's long name is cut with no
+  way to read the rest in the dialog.
+- **Why it is deferred:** neither hides a control or a state; the full source
+  name is on the Live screen's source tile.
+- **Where:** `apps/frontend/src/main/dialogs/EncoderDialog.svelte` (the
+  `probed-caps` chips and `encoder-active-source`).
+- **Exit condition:** the chips are isolated left to right (`dir="ltr"`, as the
+  mixer's dB values are) and the name wraps or carries its full text.
+
+### DF-22 — The preview's own card sits inside the preview disclosure card (resolved)
+
+- **What:** the desk drew `PreviewCanvas`'s card inside `preview-disclosure`'s card
+  (the brief's "no card inside a card"). Rendering it `compact` removes the inner
+  card, but moves the picture by its padding, and that exposed a latent designer
+  defect: the inset's 2 px border at each corner is a move zone, not a resize zone,
+  so a press at the exact corner resizes or moves depending on sub-pixel layout
+  (`layout-designer.spec.ts`, right-edge drag, failed deterministically).
+- **Resolution:** the corner caps cover the inset's 2 px border as well as its
+  interior, so a border press resizes consistently. The preview uses its existing
+  `compact` variant and the disclosure supplies the card chrome.
+- **Where:** `apps/frontend/src/main/live/PreviewDisclosure.svelte`,
+  `apps/frontend/src/main/live/LayoutDesigner.svelte` (`CAP_POSITION`).
+- **Coverage:** `layout-designer.spec.ts` checks resizing from every corner's
+  border and the preview's single card border; its existing phone case checks
+  that the smallest inset still moves from its middle.
+
+### DF-21 — "Preview" is said twice in the desk
+
+- **What:** the disclosure's summary and the preview's own heading both read
+  "Preview".
+- **Why it is deferred:** removing either moves a string out of a place a test or
+  a user doc points at; the pass changed no string.
+- **Where:** `apps/frontend/src/main/live/PreviewDisclosure.svelte`,
+  `apps/frontend/src/lib/components/preview/PreviewCanvas.svelte`.
+- **Exit condition:** one of the two is dropped in a change that updates its
+  tests and the user docs together.

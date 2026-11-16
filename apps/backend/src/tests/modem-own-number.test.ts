@@ -80,11 +80,11 @@ const NO_OWN_NUMBER = [
 ] as const;
 
 /**
- * The board's REAL subscriber number, as `mmcli -m 3` reported it live. Used
- * only where the E.164 shape itself is under test; it is never written into a
- * shipped fixture.
+ * Synthetic E.164-shaped subscriber number used by these fixtures.
+ * It preserves the captured number's plus sign and digit count.
+ * Masking, revealing and copying must not depend on a real subscriber.
  */
-const BOARD_OWN_NUMBER = "+573115422359";
+const BOARD_OWN_NUMBER = "+999000000005";
 
 async function loadModemInfo(fixture: string): Promise<ModemInfo> {
 	const path = new URL(`./fixtures/network/${fixture}`, import.meta.url);

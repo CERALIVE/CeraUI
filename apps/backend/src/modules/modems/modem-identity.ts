@@ -21,14 +21,14 @@
   WHY THIS EXISTS: a modem's `manufacturer` / `model` are whatever its firmware
   answers to ModemManager's identity query, and some firmware answers garbage.
   Board-measured on the bench (2026-08-17), a Qualcomm reference-design QMI stick
-  (`05c6:9091`, IMEI 868837088254863) reports, verbatim:
+  (`05c6:9091`, synthetic IMEI 000000000012345) reports, verbatim:
 
       manufacturer: 1
       model: 0
       firmware revision: HIMI_U01_MODEM_V1.0  1  [Sep 09 2015 10:00:00]
 
   The row title is built as `<model> - <last 5 IMEI digits>`, so the operator saw
-  a modem called "0 - 54863" — two numbers, neither of which names anything.
+  a modem called "0 - 12345" — two numbers, neither of which names anything.
 
   The rule below is deliberately NARROW. A false positive is worse than the bug:
   it would replace a LEGITIMATE short model name with a fallback. The three other
@@ -116,6 +116,19 @@ export type MmcliHardwareIdentity = {
 	/** `modem.generic.equipment-identifier` (the IMEI). */
 	readonly equipmentId?: string | undefined;
 };
+
+/**
+ * Identify the HiMI U01 family; this alone says nothing about data connectivity.
+ * Some units run their own router in QMI mode. The shared Qualcomm USB ID,
+ * numeric model and ADB interface alone do not identify this firmware family.
+ */
+export function isHimiUfiRouter(
+	identity: Pick<MmcliHardwareIdentity, "model" | "firmwareRevision">,
+): boolean {
+	return [identity.firmwareRevision, identity.model].some((value) =>
+		value?.trim().startsWith("HIMI_U01_MODEM_"),
+	);
+}
 
 /**
  * Last-resort label. Not a vendor claim and not a name — it states the ONE thing

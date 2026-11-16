@@ -1,6 +1,9 @@
 import { logger } from "../../../helpers/logger.ts";
 import { resolveModemPhysicalIdentity } from "../../modems/physical-identity-source.ts";
-import { isConcurrentApIfname } from "../../wifi/wifi-concurrent-interface.ts";
+import {
+	isConcurrentApIfname,
+	isSupportedWifiIfname,
+} from "../../wifi/wifi-concurrent-interface.ts";
 import { getWifiInterfacesByMacAddress } from "../../wifi/wifi-connections.ts";
 import { wifiZonesReady } from "../../wifi/wifi-interfaces.ts";
 import { isSharedLanPort } from "../ethernet-role.ts";
@@ -25,12 +28,13 @@ import {
 	SteeringUnavailableError,
 	type SteeringUplink,
 } from "./contracts.ts";
+import { markForSlot } from "./mark-layout.ts";
 import {
 	discoverOwnedUplinkRoutes,
 	planUplinkRoute,
 	type UplinkRouteCandidate,
 } from "./route-manager.ts";
-import { markForSlot, stableUplinkMark } from "./ruleset.ts";
+import { stableUplinkMark } from "./ruleset.ts";
 import { cidrsOverlap, subnetCidr } from "./subnet.ts";
 
 type NetworkSnapshot = Record<string, NetworkInterface | undefined>;
@@ -198,7 +202,7 @@ function collectUplinkCandidates(
 		const record = health.get(ifname);
 		if (record?.state === "down") continue;
 		const wifiId = deps.wifiIdentity(ifname);
-		if (ifname.startsWith("wl") && wifiId === undefined) continue;
+		if (isSupportedWifiIfname(ifname) && wifiId === undefined) continue;
 		if (
 			wifiId === undefined &&
 			!deps.identityCovered(ifname) &&
@@ -314,5 +318,5 @@ function wifiIdentity(ifname: string): string | undefined {
 }
 
 function isSupportedUplink(ifname: string): boolean {
-	return /^(?:wl|ww|ppp|usb|eth|en)/.test(ifname);
+	return isSupportedWifiIfname(ifname) || /^(?:ww|ppp|usb|eth|en)/.test(ifname);
 }

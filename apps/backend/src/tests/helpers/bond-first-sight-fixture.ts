@@ -4,6 +4,7 @@ import * as time from "../../helpers/time.ts";
 import { resolvePhysicalDevice } from "../../modules/modems/physical-identity.ts";
 import {
 	defaultRouterCellularScanDeps,
+	type RouterCellularScanDeps,
 	refreshUsbNetMarkers,
 } from "../../modules/network/router-cellular-scan.ts";
 import {
@@ -37,17 +38,42 @@ export function firstSightPhysicalDevice() {
 }
 
 /** The real OS publication and USB reader, with only OS reads and time injected. */
-export function firstSightScan(output: string) {
-	const gate = Promise.withResolvers<void>();
-	const entered = Promise.withResolvers<void>();
+export function firstSightScan(
+	output: string,
+	options: {
+		blocked?: readonly string[];
+		buses?: Readonly<Record<string, string>>;
+		devices?: typeof constructedTwins;
+		usbReader?: RouterCellularScanDeps;
+	} = {},
+) {
 	const clock = { now: 0 };
-	const fixture = constructedTwinDeps();
+	const fixture = options.usbReader ?? constructedTwinDeps(options.devices);
+	const reads = new Map<
+		string,
+		{
+			gate: ReturnType<typeof Promise.withResolvers<void>>;
+			entered: ReturnType<typeof Promise.withResolvers<void>>;
+		}
+	>();
+	const block = (name: string) => {
+		reads.set(name, {
+			gate: Promise.withResolvers<void>(),
+			entered: Promise.withResolvers<void>(),
+		});
+	};
+	for (const name of options.blocked ?? [FIRST_SIGHT_IFACE]) block(name);
+	const busReplies = new Map<string, () => Promise<string | undefined>>();
+	const busCounts = new Map<string, number>();
+	for (const [name, bus] of Object.entries(options.buses ?? {}))
+		busReplies.set(name, async () => bus);
 	spyOn(time, "getms").mockImplementation(() => clock.now);
 	spyOn(defaultRouterCellularScanDeps, "resolveLink").mockImplementation(
 		async (path) => {
-			if (path === `/sys/class/net/${FIRST_SIGHT_IFACE}/device`) {
-				entered.resolve();
-				await gate.promise;
+			const parked = reads.get(path.split("/").at(-2) ?? "");
+			if (parked) {
+				parked.entered.resolve();
+				await parked.gate.promise;
 			}
 			return fixture.resolveLink(path);
 		},
@@ -61,13 +87,36 @@ export function firstSightScan(output: string) {
 	spyOn(defaultRouterCellularScanDeps, "readLinkName").mockImplementation(
 		fixture.readLinkName,
 	);
+	spyOn(defaultRouterCellularScanDeps, "readLinkResult").mockImplementation(
+		async (path) => {
+			if (!path.endsWith("/device/subsystem"))
+				return { ok: true, target: "/sys/devices/virtual/net/fixture" };
+			const name = path.split("/").at(-3) ?? "";
+			busCounts.set(name, (busCounts.get(name) ?? 0) + 1);
+			const bus = await busReplies.get(name)?.();
+			return bus === undefined
+				? { ok: false, code: "ENOENT" }
+				: { ok: true, target: `/sys/bus/${bus}` };
+		},
+	);
 	spyOn(runner, "run").mockImplementation(async (bin) =>
 		bin === "ifconfig" ? output : "",
 	);
 	return {
 		clock,
-		entered: entered.promise,
-		release: () => gate.resolve(),
+		block,
+		busCounts,
+		entered: reads.get(FIRST_SIGHT_IFACE)?.entered.promise ?? Promise.resolve(),
+		enteredFor: (name: string) =>
+			reads.get(name)?.entered.promise ?? Promise.resolve(),
+		setOutput: (next: string) => {
+			output = next;
+		},
+		setBus: (name: string, reply: () => Promise<string | undefined>) =>
+			busReplies.set(name, reply),
+		release: () => {
+			for (const read of reads.values()) read.gate.resolve();
+		},
 		settle: () =>
 			refreshUsbNetMarkers(
 				output.split("\n\n").map((entry) => entry.split(":")[0] ?? ""),

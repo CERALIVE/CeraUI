@@ -70,6 +70,36 @@ async function settle(): Promise<void> {
 	await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+/**
+ * Resolves once nothing in the document matches `selector`. Call it before the
+ * action that removes the node; the test timeout bounds the wait.
+ */
+function removal(selector: string): Promise<void> {
+	return new Promise((resolve) => {
+		const observer = new MutationObserver(() => {
+			if (document.querySelector(selector) !== null) return;
+			observer.disconnect();
+			resolve();
+		});
+		observer.observe(document.body, { childList: true, subtree: true });
+	});
+}
+
+/**
+ * Resolves once the document's text contains `text`. Call it before the action
+ * that renders it; the test timeout bounds the wait.
+ */
+function appearance(text: string): Promise<void> {
+	return new Promise((resolve) => {
+		const observer = new MutationObserver(() => {
+			if (!document.body.textContent?.includes(text)) return;
+			observer.disconnect();
+			resolve();
+		});
+		observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+	});
+}
+
 async function mountInto(
 	module: FederationModule,
 	options: FederationMountOptions,
@@ -263,8 +293,9 @@ describe("federation encoder bundle — the host's saved format settings", () =>
 		expect(byId("encoder-adaptive")?.getAttribute("aria-checked")).toBe("false");
 		expect(byId("encoder-legacy-passthrough")?.getAttribute("data-setting")).toBe("force");
 
+		const reset = removal('[data-testid="encoder-legacy-passthrough"]');
 		(byId("encoder-legacy-passthrough-reset") as HTMLButtonElement | null)?.click();
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		await reset;
 
 		expect(writes).toEqual([{ video_passthrough: "auto" }]);
 		expect(byId("encoder-legacy-passthrough")).toBeNull();
@@ -313,16 +344,6 @@ describe("federation save-failure surface", () => {
 			}),
 		});
 
-		// A Save only writes what changed, so change one setting first.
-		(document.querySelector('[data-testid="encoder-adaptive"]') as HTMLElement | null)?.click();
-		const save = [...document.querySelectorAll("button")].find((button) =>
-			/save|حفظ/i.test(button.textContent ?? ""),
-		);
-		expect(save, "the encoder dialog renders no save control").toBeDefined();
-		save?.click();
-		await new Promise((resolve) => setTimeout(resolve, 100));
-
-		expect(failures).toEqual([{ balancer: "fixed" }]);
 		const catalog = JSON.parse(
 			readFileSync(
 				join(ROOT, "packages", "i18n", "messages", "en.json"),
@@ -331,6 +352,18 @@ describe("federation save-failure surface", () => {
 		) as Record<string, string>;
 		const expected = catalog["live.encoder.deviceModeUnsupported"];
 		expect(expected).toBeTypeOf("string");
+
+		// A Save only writes what changed, so change one setting first.
+		(document.querySelector('[data-testid="encoder-adaptive"]') as HTMLElement | null)?.click();
+		const save = [...document.querySelectorAll("button")].find((button) =>
+			/save|حفظ/i.test(button.textContent ?? ""),
+		);
+		expect(save, "the encoder dialog renders no save control").toBeDefined();
+		const surfaced = appearance(expected);
+		save?.click();
+		await surfaced;
+
+		expect(failures).toEqual([{ balancer: "fixed" }]);
 		expect(document.body.textContent ?? "").toContain(expected);
 
 		await handle.destroy();

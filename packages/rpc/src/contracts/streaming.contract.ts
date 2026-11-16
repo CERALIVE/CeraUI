@@ -14,6 +14,8 @@ import {
 	pipelinesSchema,
 	reloadAudioDelayInputSchema,
 	reloadAudioDelayOutputSchema,
+	setAudioMixInputSchema,
+	setAudioMixOutputSchema,
 	setMockDeviceAttachedInputSchema,
 	setMockDeviceAttachedOutputSchema,
 	setMockHardwareInputSchema,
@@ -126,6 +128,7 @@ export const streamingContract = oc.router({
 	 * `audio_live_switch` capability; returns the glitch-free gap in ms.
 	 */
 	switchAudio: oc.input(switchAudioInputSchema).output(switchAudioOutputSchema),
+	setAudioMix: oc.input(setAudioMixInputSchema).output(setAudioMixOutputSchema),
 
 	/**
 	 * Hot-apply the audio delay (Phase 1.5) via reload-config — no stream restart.

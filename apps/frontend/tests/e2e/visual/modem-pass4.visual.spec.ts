@@ -1,3 +1,5 @@
+import { isBackendSocket } from "../helpers/backend-socket.js";
+
 import fs from "node:fs";
 import path from "node:path";
 
@@ -763,7 +765,7 @@ test.describe("@visual DESIGN.md pass 4 — modem surface confirmation", () => {
 		pageWs = null;
 		fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
 
-		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(isBackendSocket, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 

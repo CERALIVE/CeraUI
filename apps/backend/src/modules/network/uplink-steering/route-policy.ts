@@ -4,6 +4,7 @@ import {
 	SOURCE_ROUTE_RULE_PRIORITY,
 	UPLINK_MARK_MASK,
 } from "./contracts.ts";
+import { isManagedUplinkTable } from "./mark-layout.ts";
 import { routeUnavailable } from "./route-errors.ts";
 
 export interface OwnedFwmarkRule {
@@ -66,6 +67,24 @@ export function findManagedSourceRule(
 		};
 	}
 	return undefined;
+}
+
+export function parseSteeringSourceRules(
+	output: string,
+): (ManagedSourceRule & { readonly table: string })[] {
+	const rules: (ManagedSourceRule & { readonly table: string })[] = [];
+	for (const line of output.split("\n")) {
+		const match = line.match(
+			/^\s*100:\s+from\s+(\d+(?:\.\d+){3})(?:\/32)?\s+lookup\s+(\S+)\s*$/,
+		);
+		if (!match?.[1] || !match[2] || !isManagedUplinkTable(match[2])) continue;
+		rules.push({
+			sourceAddress: match[1],
+			table: match[2],
+			priority: SOURCE_ROUTE_RULE_PRIORITY,
+		});
+	}
+	return rules;
 }
 
 export function assertFwmarkPriorityAvailable(

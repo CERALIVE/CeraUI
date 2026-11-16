@@ -52,7 +52,7 @@ $effect(() => {
 	bind:this={bar}
 	class="live-bar bg-background fixed inset-x-0 z-30 border-t"
 	data-state={status === undefined ? undefined : blocked ? 'blocked' : 'ready'}
-	data-testid="live-bar"
+	data-testid="live-bar" data-touch-region
 >
 	<!-- Below 640 px the line takes the full width above the action: a blocking
 	     reason runs to 84 characters (fr), more than two lines beside the button. -->
@@ -81,10 +81,23 @@ $effect(() => {
 		bottom: calc(var(--mobile-dock-height) + env(safe-area-inset-bottom, 0px));
 	}
 
+	/* While the bar is on screen, a control reached with Tab or scrolled into view
+	   stops above it instead of under it (WCAG 2.4.11): the document's scroll
+	   padding covers everything fixed below the content. */
+	:global(html:has(.live-bar)) {
+		scroll-padding-bottom: calc(
+			var(--live-bar-height, 0px) + var(--mobile-dock-height) + env(safe-area-inset-bottom, 0px)
+		);
+	}
+
 	@media (min-width: 1024px), (min-width: 768px) and (max-height: 600px) {
 		.live-bar {
 			bottom: 0;
 			padding-bottom: env(safe-area-inset-bottom, 0px);
+		}
+
+		:global(html:has(.live-bar)) {
+			scroll-padding-bottom: var(--live-bar-height, 0px);
 		}
 	}
 </style>

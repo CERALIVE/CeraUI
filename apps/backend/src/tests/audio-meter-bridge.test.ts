@@ -272,6 +272,20 @@ describe("audio-meter bridge — forwards engine audio-level over the main WS", 
 });
 
 describe("toAudioLevelMessage — envelope projection", () => {
+	test("retains per-input levels through the RPC boundary", () => {
+		const inputs = [
+			{
+				input_id: "embedded",
+				channels: 2,
+				rms_db: [-21, -22],
+				peak_db: [-11, -12],
+			},
+		];
+		expect(toAudioLevelMessage({ ...levelEvent, inputs })).toEqual({
+			...toAudioLevelMessage(levelEvent),
+			inputs,
+		});
+	});
 	test("keeps every level field and drops type/seq", () => {
 		expect(toAudioLevelMessage(levelEvent)).toEqual({
 			source: { identity: "card:usbaudio", owner: "sidecar" },

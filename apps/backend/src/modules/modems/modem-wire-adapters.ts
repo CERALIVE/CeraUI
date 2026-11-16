@@ -83,7 +83,7 @@ import type {
 	DongleMetadata,
 	DongleState,
 } from "../network/dongle-metadata.ts";
-import { modemHardwareName } from "./modem-identity.ts";
+import { isHimiUfiRouter, modemHardwareName } from "./modem-identity.ts";
 import type {
 	ProjectedModemAdditive,
 	ProjectedModemConfig,
@@ -102,6 +102,8 @@ export { routerCellularDisplayName } from "./physical-identity.ts";
 // ── mmcli adapter ────────────────────────────────────────────────────────────
 
 export interface MmcliAdapterOptions {
+	/** Existing network-interface cache reports an address for this data interface. */
+	readonly hasAddress?: boolean;
 	/**
 	 * The device's udev `ID_PATH`, resolved from `modem.generic.device` / sysfs
 	 * by the caller. Absent ⇒ no `stable_key` is emitted, which is exactly the
@@ -202,6 +204,14 @@ export function fromMmcliModem(
 	// The wire `status` block is byte-locked against the pre-Phase-B builder, so
 	// these two must travel as additive top-level fields and never inside it.
 	const additive: Mutable<ProjectedModemAdditive> = {};
+	if (modem.status.himi_ufi_router === true) {
+		additive.availability_reason =
+			modem.data_connection_failed === true &&
+			modem.status.connection !== "connected" &&
+			options.hasAddress !== true
+				? "himi_ufi_router"
+				: "";
+	}
 	if (modem.status.registration_rejection !== undefined) {
 		additive.registration_rejection = modem.status.registration_rejection;
 	}
@@ -367,6 +377,9 @@ export interface DbusModemView {
 	readonly recommendedUsbMode?: UsbCompositionMode;
 	readonly dataUsage?: ModemDataUsage;
 	readonly firmwareRevision?: string;
+	/** Composition-root enrichment from the existing activation result and netif cache. */
+	readonly dataConnectionFailed?: boolean;
+	readonly hasAddress?: boolean;
 	readonly esim?: ModemEsim;
 	readonly cellInfo?: ModemCellInfo;
 }
@@ -460,7 +473,15 @@ function buildDbusAdditive(
 		additive.device_class = view.deviceClass;
 		observed = true;
 	}
-	if (view.availabilityReason !== undefined) {
+	if (isHimiUfiRouter(view)) {
+		additive.availability_reason =
+			view.dataConnectionFailed === true &&
+			view.mmState !== "connected" &&
+			view.hasAddress !== true
+				? "himi_ufi_router"
+				: "";
+		observed = true;
+	} else if (view.availabilityReason !== undefined) {
 		additive.availability_reason = view.availabilityReason;
 		observed = true;
 	}
@@ -542,7 +563,7 @@ function buildDbusAdditive(
  * path was silently absent on the D-Bus one — and `"dbus"` is the DEFAULT
  * backend, so the fallback reached no shipped device at all. Board-measured on
  * `ceralive2` (2026-08-18): the Qualcomm reference-design stick reporting
- * `manufacturer: 1` / `model: 0` was still titled **"0 - 54863"** with the fix
+ * `manufacturer: 1` / `model: 0` was still titled **"0 - 12345"** with the fix
  * present in the binary, because this composer is the one the wire went through.
  */
 function buildDbusName(view: DbusModemView): string {

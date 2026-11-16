@@ -381,6 +381,24 @@ test("a failed activation is consumed and never retried", async () => {
 	expect(activations()).toHaveLength(1);
 });
 
+test("a failed activation records data-call evidence for the modem warning", async () => {
+	activationFails = true;
+
+	await runModemStatusPoll();
+
+	expect(getModem(2)?.data_connection_failed).toBe(true);
+});
+
+test("a successful connection clears failed data-call evidence", async () => {
+	activationFails = true;
+	await runModemStatusPoll();
+	mmState = "connected";
+
+	await runModemStatusPoll();
+
+	expect(getModem(2)?.data_connection_failed).toBeUndefined();
+});
+
 test("a SIM readable after registration resolves the existing UUID without creation", async () => {
 	simReadable = false;
 	realRegistration = true;

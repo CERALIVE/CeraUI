@@ -36,7 +36,7 @@ Host regression coverage does not qualify image activation on either board.
 At boot and after an engine reconnect, `reconcileRuntimeState()` subscribes to the
 engine's actual status and adopts an engine-held session. Only concordant
 `streaming` or `idle` status is authoritative. A successful subscription that sees
-no event for 2.5 seconds remains UNKNOWN: the published 2026.11.0 client has no
+no event for 2.5 seconds remains UNKNOWN: the published 2026.11.1 client has no
 current-status snapshot and the engine heartbeat is streaming-only. Query failure,
 transitional state and contradictory fields also remain `reconciling`. An explicit
 operator Stop uses a fresh connection even without a locally owned session; only

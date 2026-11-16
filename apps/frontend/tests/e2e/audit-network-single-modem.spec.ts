@@ -44,9 +44,9 @@ test.describe("Audit A2 — Network destination (single-modem)", { tag: "@audit"
 		// control at all — the WiFi section renders its calm empty state instead,
 		// which is the strongest form of the "never a silent dead control" rule.
 		const wifiSection = page
-			.getByRole("heading", { name: "WiFi", level: 2 })
+			.getByRole("heading", { name: "Wi-Fi", level: 2 })
 			.locator("xpath=ancestor::section[1]");
-		await expect(wifiSection.getByText("No WiFi interfaces found")).toBeVisible();
+		await expect(wifiSection.getByText("No Wi-Fi interfaces found")).toBeVisible();
 		await expect(page.getByTestId("open-wifi-selector-dialog")).toHaveCount(0);
 
 		// The sole-telemetry rule still holds with a single link.

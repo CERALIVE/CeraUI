@@ -29,6 +29,7 @@ import { appRouter } from "../router.ts";
 import type { AppWebSocket, RPCContext } from "../types.ts";
 import {
 	reloadAudioDelayProcedure,
+	setAudioMixProcedure,
 	setBitrateProcedure,
 	setConfigProcedure,
 	setMockDeviceAttachedProcedure,
@@ -106,6 +107,11 @@ const MUTATIONS: ReadonlyArray<{
 		name: "switchAudio",
 		procedure: switchAudioProcedure,
 		args: { audio_input_id: "default" },
+	},
+	{
+		name: "setAudioMix",
+		procedure: setAudioMixProcedure,
+		args: { id: "default", gain_db: 0 },
 	},
 	{
 		name: "reloadAudioDelay",

@@ -42,7 +42,7 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 function refusedRadio(): Modem {
 	return {
 		ifname: "wwan0",
-		name: "RM530N-GL - 16855",
+		name: "RM530N-GL - 23456",
 		device_class: "usb",
 		slot_label: "SIM 1",
 		network_type: { supported: ["5G", "4G"], active: "4G" },
@@ -73,8 +73,8 @@ function hilink(): Modem {
 			signal_max_bars: 5,
 			apn: "3gnet",
 			firmware: "22.333.01.00.00",
-			imei: "866850029360451",
-			serial: "Y4QDU17621000872",
+			imei: "000000000089012",
+			serial: "X0XXX00000000111",
 		},
 	} as Modem;
 }
@@ -216,8 +216,8 @@ describe("the secondary disclosure holds everything that moved, and loses nothin
 		for (const reading of [
 			"3gnet",
 			"22.333.01.00.00",
-			"866850029360451",
-			"Y4QDU17621000872",
+			"000000000089012",
+			"X0XXX00000000111",
 			"192.168.8.1",
 		]) {
 			expect(text, `${reading} is no longer reachable`).toContain(reading);

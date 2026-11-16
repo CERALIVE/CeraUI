@@ -72,6 +72,47 @@ const REFERENCE_BACKEND_PORT = 3003;
 export const EVIDENCE_DIR = path.resolve(import.meta.dirname, 'test-results');
 const ciManagesServers = Boolean(process.env.CI);
 
+// @dev-only tests open views only the Vite dev build has: import.meta.env.DEV
+// compiles the Identity and Dev Tools destinations out of production. CI serves
+// the built preview on DEV_PORT, so they get a dev server of their own beside it;
+// locally DEV_PORT already is the dev server.
+const DEV_ONLY_PORT = ciManagesServers ? DEV_PORT + 1 : DEV_PORT;
+const DEV_ONLY_PROJECTS = ['desktop-dev', 'mobile-dev'];
+
+// Playwright has no per-project webServer, so CI starts the dev server only when
+// the CLI selects a -dev project: the hosted functional and a11y lanes pass
+// --project=desktop|mobile and must not depend on it. Follows Playwright's
+// --project rules (variadic, case-insensitive, none selects every project); any
+// '*' pattern counts as selecting them.
+function devOnlyProjectsSelected(argv: readonly string[]): boolean {
+	const filters: string[] = [];
+	for (let i = 0; i < argv.length; i++) {
+		if (argv[i].startsWith('--project=')) {
+			filters.push(argv[i].slice('--project='.length));
+		} else if (argv[i] === '--project') {
+			while (i + 1 < argv.length && !argv[i + 1].startsWith('-')) filters.push(argv[++i]);
+		}
+	}
+	return (
+		filters.length === 0 ||
+		filters.some((name) => name.includes('*') || DEV_ONLY_PROJECTS.includes(name.toLocaleLowerCase()))
+	);
+}
+
+// The CI lane starts the preview and the backend itself.
+const ciWebServers = devOnlyProjectsSelected(process.argv)
+	? [
+			{
+				command: `bun run --filter frontend dev -- --port ${DEV_ONLY_PORT} --strictPort`,
+				port: DEV_ONLY_PORT,
+				reuseExistingServer: false,
+				timeout: 120_000,
+			},
+		]
+	: [];
+const desktop = { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } };
+const mobile = { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 } };
+
 export default defineConfig({
   testDir: 'tests/e2e',
   outputDir: EVIDENCE_DIR,
@@ -95,12 +136,27 @@ export default defineConfig({
     trace: 'retain-on-failure',
     video: 'off',
   },
+  // A test that proves one layout only is tagged @desktop-only or @mobile-only;
+  // the other project leaves it out instead of skipping it at run time. A test
+  // tagged @dev-only runs only in the -dev projects, on the Vite dev server.
   projects: [
-    { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
-    { name: 'mobile', use: { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 } } },
+    { name: 'desktop', grepInvert: /@mobile-only|@dev-only/, use: desktop },
+    { name: 'mobile', grepInvert: /@desktop-only|@dev-only/, use: mobile },
+    {
+      name: 'desktop-dev',
+      grep: /@dev-only/,
+      grepInvert: /@mobile-only/,
+      use: { ...desktop, baseURL: `http://localhost:${DEV_ONLY_PORT}` },
+    },
+    {
+      name: 'mobile-dev',
+      grep: /@dev-only/,
+      grepInvert: /@desktop-only/,
+      use: { ...mobile, baseURL: `http://localhost:${DEV_ONLY_PORT}` },
+    },
   ],
   webServer: ciManagesServers
-    ? []
+    ? ciWebServers
     : [
         {
           command: 'bun run --filter frontend dev',

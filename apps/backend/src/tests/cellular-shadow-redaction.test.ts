@@ -242,7 +242,8 @@ describe("the persisted JSONL on disk carries no PII", () => {
 					mmcliModemToShadowState,
 				),
 			log: () => undefined,
-			evidence: { baseDir: dir },
+			// Keep timestamp digits from matching synthetic PII in raw-byte scans.
+			evidence: { baseDir: dir, now: () => Date.UTC(2026, 7, 1) },
 			schedule: (fn) => {
 				heartbeat = fn;
 				return () => undefined;
@@ -279,7 +280,7 @@ describe("the persisted JSONL on disk carries no PII", () => {
 					pin: { mmcli: PII.simPin, dbus: PII.simPin },
 				},
 			},
-			{ baseDir: dir },
+			{ baseDir: dir, now: () => Date.UTC(2026, 7, 1) },
 		);
 		const raw = readFileSync(shadowEvidencePath(dir), "utf8");
 		expectNoPii(raw, "append-seam");

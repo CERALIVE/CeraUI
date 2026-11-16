@@ -22,7 +22,7 @@ import {
 	PREVIEW_CLOSE_UPSTREAM_UNAVAILABLE,
 } from '@ceraui/rpc/schemas';
 import { Eye, EyeOff, Loader, LoaderCircle, Play, ServerOff } from '@lucide/svelte';
-import { onDestroy, untrack } from 'svelte';
+import { onDestroy, type Snippet, untrack } from 'svelte';
 
 import AudioLevelMeter from '$lib/components/preview/AudioLevelMeter.svelte';
 import {
@@ -70,12 +70,19 @@ interface Props {
 	 * for hosts with no collapse (e.g. the EncoderDialog modal).
 	 */
 	hostActive?: boolean;
+	/**
+	 * Drawn over the picture, given the picture's own size (0 while unknown).
+	 * While the preview is off or unavailable it gets an empty 16:9 stage of
+	 * its own, so it never depends on the preview playing.
+	 */
+	overlay?: Snippet<[{ width: number; height: number }]>;
 }
 
 const {
 	class: className = undefined,
 	compact = false,
 	hostActive = true,
+	overlay = undefined,
 }: Props = $props();
 
 type PreviewStatus =
@@ -139,6 +146,7 @@ let peakDb = $state<number[]>([]);
 
 let canvasEl = $state<HTMLCanvasElement | null>(null);
 let videoEl = $state<HTMLVideoElement | null>(null);
+let picture = $state({ width: 0, height: 0 });
 
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -219,6 +227,7 @@ function paintFrame(frame: VideoFrame): void {
 	if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
 		canvas.width = frame.displayWidth;
 		canvas.height = frame.displayHeight;
+		picture = { width: frame.displayWidth, height: frame.displayHeight };
 	}
 	const ctx = canvas.getContext('2d');
 	if (ctx) ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
@@ -1144,6 +1153,12 @@ const tierLabel = $derived.by(() => {
 						class="h-full w-full object-contain"
 						autoplay
 						muted
+						onresize={(event) => {
+							picture = {
+								width: event.currentTarget.videoWidth,
+								height: event.currentTarget.videoHeight,
+							};
+						}}
 						playsinline
 					></video>
 				{/if}
@@ -1192,6 +1207,8 @@ const tierLabel = $derived.by(() => {
 						{overlayText}
 					</div>
 				{/if}
+
+				{@render overlay?.(activeTier ? picture : { width: 0, height: 0 })}
 			</div>
 
 			<div class="mt-3">
@@ -1202,5 +1219,11 @@ const tierLabel = $derived.by(() => {
 		<p data-testid="preview-off" class="text-muted-foreground text-sm">
 			{m["live.preview.off"]()}
 		</p>
+	{/if}
+
+	{#if overlay !== undefined && (!enabled || previewUnavailable)}
+		<div class="bg-muted/40 relative mt-3 aspect-video w-full overflow-hidden rounded-lg">
+			{@render overlay({ width: 0, height: 0 })}
+		</div>
 	{/if}
 </section>

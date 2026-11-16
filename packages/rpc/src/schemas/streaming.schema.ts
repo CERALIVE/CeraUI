@@ -8,8 +8,16 @@
 // browser-safe package cannot pull into the frontend graph. `types.js` imports
 // nothing but zod, and the package ships no `exports` map to forbid the path.
 import { failoverRatePolicyInputSchema } from '@ceralive/cerastream/dist/capture-status.js';
-import { COMPOSITION_FEATURE } from '@ceralive/cerastream/dist/constants.js';
 import {
+	COMPOSITION_FEATURE,
+	COMPOSITION_GEOMETRY_FEATURE,
+	COMPOSITION_RECT_MIN,
+} from '@ceralive/cerastream/dist/constants.js';
+import { rpcErrorSchema } from '@ceralive/cerastream/dist/envelope.js';
+import {
+	audioMixCapsSchema,
+	audioMixStateSchema,
+	audioMixUpdateSchema,
 	type EncoderCapability,
 	encoderCapabilitySchema,
 	encoderCapsSchema,
@@ -17,11 +25,14 @@ import {
 	videoSourceCapSchema,
 } from '@ceralive/cerastream/dist/messages.js';
 import {
+	audioInputConfigSchema,
 	balancerAlgorithmSchema,
 	type CompositionConfig,
 	type CompositionLayout,
+	type CompositionRect,
 	compositionConfigSchema,
 	compositionLayoutSchema,
+	compositionRectSchema,
 } from '@ceralive/cerastream/dist/types.js';
 import { z } from 'zod';
 import { configChangeResultSchema } from './config-change.schema';
@@ -31,10 +42,14 @@ import { regulatoryCountrySchema } from './wifi.schema';
 export {
 	balancerAlgorithmSchema,
 	COMPOSITION_FEATURE,
+	COMPOSITION_GEOMETRY_FEATURE,
+	COMPOSITION_RECT_MIN,
 	type CompositionConfig,
 	type CompositionLayout,
+	type CompositionRect,
 	compositionConfigSchema,
 	compositionLayoutSchema,
+	compositionRectSchema,
 	type EncoderCapability,
 	encoderCapabilitySchema,
 	encoderCapsSchema,
@@ -43,16 +58,65 @@ export {
 	videoSourceCapSchema,
 };
 
-// Derived from the imported enum, never re-typed. The element's seventh nick
-// `custom` is deliberately absent from the wire — it needs four geometry
-// properties per pad that no schema carries — so a seventh option here would be
-// one the engine always refuses.
-export const COMPOSITION_LAYOUTS: readonly CompositionLayout[] = compositionLayoutSchema.options;
+// Free geometry is placed on the preview; it is never a one-tap preset.
+export const COMPOSITION_LAYOUTS = compositionLayoutSchema.options.filter(
+	(layout) => layout !== 'custom',
+);
 
 const [firstCompositionLayout] = COMPOSITION_LAYOUTS;
 if (firstCompositionLayout === undefined)
 	throw new Error('compositionLayoutSchema advertises no layout options');
 export const COMPOSITION_LAYOUT_DEFAULT: CompositionLayout = firstCompositionLayout;
+
+const RECT_UNIT = 10_000;
+
+/**
+ * Where the compositor puts the second input for a preset: half of each axis and
+ * a 5% margin for the four insets (`gstrgacompositor.c`). In whole
+ * ten-thousandths, so every value is exact. Shared by the backend, which turns a
+ * preset into `custom` from the device's own layout, and the designer.
+ */
+export function presetRect(layout: Exclude<CompositionLayout, 'custom'>): CompositionRect {
+	const half = RECT_UNIT / 2;
+	const margin = RECT_UNIT / 20;
+	const far = RECT_UNIT - margin - half;
+	const rect = (x: number, y: number, width: number, height: number) => ({
+		x: x / RECT_UNIT,
+		y: y / RECT_UNIT,
+		width: width / RECT_UNIT,
+		height: height / RECT_UNIT,
+	});
+	switch (layout) {
+		case 'pip-top-right':
+			return rect(far, margin, half, half);
+		case 'pip-top-left':
+			return rect(margin, margin, half, half);
+		case 'pip-bottom-right':
+			return rect(far, far, half, half);
+		case 'pip-bottom-left':
+			return rect(margin, far, half, half);
+		case 'pbp-left-right':
+			return rect(half, 0, RECT_UNIT - half, RECT_UNIT);
+		case 'pbp-top-bottom':
+			return rect(0, half, RECT_UNIT, RECT_UNIT - half);
+	}
+}
+
+/**
+ * The engine's own admission rule for a free rectangle (fractions of the output
+ * frame): finite, inside the frame, every side at least `COMPOSITION_RECT_MIN`.
+ * Shared by the backend's save gate and the designer's clamp.
+ */
+export function compositionRectFits(rect: CompositionRect): boolean {
+	const { x, y, width, height } = rect;
+	return (
+		[x, y, width, height].every((value) => Number.isFinite(value) && value >= 0) &&
+		x + width <= 1 &&
+		y + height <= 1 &&
+		width >= COMPOSITION_RECT_MIN &&
+		height >= COMPOSITION_RECT_MIN
+	);
+}
 
 export const COMPOSITION_ALPHA_MIN = 0;
 export const COMPOSITION_ALPHA_MAX = 1;
@@ -170,6 +234,61 @@ export function audioCodecAllowedForTransport(codec: AudioCodec, protocol: Relay
 // USB same-physical-device → pipeline-default). Additive: the constant is the EXACT wire
 // string, so `config.asrc === AUDIO_SOURCE_AUTO` opts into auto resolution.
 export const AUDIO_SOURCE_AUTO = 'Auto';
+
+// CeraUI stores picker ids; only the engine adapter resolves them to input_id.
+export const audioInputSettingSchema = audioInputConfigSchema.omit({ input_id: true }).extend({
+	id: z.string(),
+	tracks: z.array(z.number()),
+	gain_db: z.number(),
+	mute: z.boolean().default(false),
+	delay_ms: z.number(),
+});
+export type AudioInputSetting = z.infer<typeof audioInputSettingSchema>;
+
+export function defaultAudioInput(id: string): AudioInputSetting {
+	return { id, tracks: [1], gain_db: 0, mute: false, delay_ms: 0 };
+}
+
+/**
+ * The audio mix with `primary` in it: the one rule the backend (Start, live and
+ * idle admission, an explicit pick) and the Live strips share. A primary outside
+ * the saved mix joins first on Track 1; in a full mix it takes the place and the
+ * tracks of `previous`, the primary it replaces, or of the first entry (the UI
+ * saves the primary first) when `previous` is not in the mix.
+ */
+export function audioMixWithPrimary(
+	saved: readonly AudioInputSetting[] | null | undefined,
+	primary: string | undefined,
+	maxInputs: number,
+	previous?: string,
+): AudioInputSetting[] | undefined {
+	if (!saved?.length) return undefined;
+	if (primary === undefined || saved.some((input) => input.id === primary)) return [...saved];
+	if (saved.length < maxInputs) return [defaultAudioInput(primary), ...saved];
+	const replaced = saved.find((input) => input.id === previous) ?? saved[0];
+	return [
+		{ ...defaultAudioInput(primary), tracks: [...(replaced?.tracks ?? [1])] },
+		...saved.filter((input) => input !== replaced),
+	];
+}
+
+export const setAudioMixInputSchema = audioMixUpdateSchema.omit({ input_id: true }).extend({
+	id: z.string(),
+	delay_ms: z.number().optional(),
+	// One strip's membership or track edit; the device composes it on its own saved
+	// mix, and it applies at the next start.
+	include: z.boolean().optional(),
+	track: z.object({ number: z.number().int(), on: z.boolean() }).optional(),
+});
+export const setAudioMixOutputSchema = z.object({
+	success: z.boolean(),
+	applied: audioMixStateSchema.omit({ input_id: true }).extend({ id: z.string() }).optional(),
+	applies_next_start: z.boolean().optional(),
+	error: z.string().optional(),
+	engine_error: rpcErrorSchema.shape.error.optional(),
+});
+export type SetAudioMixInput = z.infer<typeof setAudioMixInputSchema>;
+export type SetAudioMixOutput = z.infer<typeof setAudioMixOutputSchema>;
 
 // The `auto` kind (T5) is APPENDED to the existing variants: it tags the "Auto"
 // pseudo-source. Existing variants (device/none/pipeline_default) are unchanged and
@@ -355,6 +474,10 @@ export const streamingConfigInputSchema = z.object({
 	// stable id across re-pushes that move the slot to a new host/port.
 	selected_ingest_endpoint: z.string().optional(),
 	asrc: z.string().optional(),
+	audio_inputs: z.array(audioInputSettingSchema).nullable().optional(),
+	// An explicit audio-picker pick of `asrc`: the backend adds it to the saved
+	// mix against its own current mix and main input (`audioMixWithPrimary`).
+	audio_pick: z.boolean().optional(),
 	bitrate_overlay: z.boolean().optional(),
 	max_br: z.number().int().min(BITRATE_MIN).max(BITRATE_MAX).optional(),
 	balancer: balancerAlgorithmSchema.optional(),
@@ -412,6 +535,15 @@ export const streamingConfigInputSchema = z.object({
 	// token. `null` is an explicit CLEAR — absent means "leave the persisted value
 	// alone", so without it an operator could never turn composition back off.
 	composition: compositionConfigSchema.nullable().optional(),
+	// Places the second input: the backend writes `layout: 'custom'` and this
+	// rectangle onto the composition IT has saved, so a placement never carries
+	// the sender's possibly stale copy of the other composition fields.
+	composition_rect: compositionRectSchema.optional(),
+	// Changes only the stated fields of the saved composition (layout, second
+	// input, opacity), merged by the backend onto the composition it has saved,
+	// for the same reason. A preset drops the rectangle; `custom` takes the
+	// device's own preset rectangle.
+	composition_patch: compositionConfigSchema.omit({ rect: true }).partial().optional(),
 });
 export type StreamingConfigInput = z.infer<typeof streamingConfigInputSchema>;
 
@@ -681,6 +813,7 @@ export const capabilitiesMessageSchema = z.object({
 	// silently ignoring the field) never applies a semantic the caller assumed.
 	// Absent on every fallback rung, which is what keeps the gate fail-closed.
 	features: z.array(z.string()).optional(),
+	audio_mix: audioMixCapsSchema.optional(),
 	// Per-device capture modes (Task 4), keyed by the device's list-devices
 	// input_id; each entry carries the device `kind` (the bridge to a pipeline id)
 	// and its concrete {width,height,framerates} modes. Additive + optional — an
@@ -897,6 +1030,7 @@ import {
 export const configMessageSchema = z.object({
 	balancer: balancerAlgorithmSchema.optional(),
 	asrc: z.string().optional(),
+	audio_inputs: z.array(audioInputSettingSchema).optional(),
 	ssh_pass: z.string().optional(),
 	max_br: z.number().optional(),
 	acodec: audioCodecSchema.optional(),
@@ -1254,6 +1388,7 @@ export const SWITCH_AUDIO_ERRORS = {
 	SWITCH_FAILED: 'SWITCH_FAILED',
 } as const;
 export const switchAudioErrorSchema = z.enum([
+	'audio_mix_active',
 	SWITCH_AUDIO_ERRORS.AUDIO_DEVICE_NOT_FOUND,
 	SWITCH_AUDIO_ERRORS.NOT_LIVE_SWITCHABLE,
 	SWITCH_AUDIO_ERRORS.NOT_STREAMING,

@@ -8,6 +8,7 @@ import {
 } from "../modules/network/uplink-steering/applier.ts";
 import type { SteeringAvailability } from "../modules/network/uplink-steering/contracts.ts";
 import { UplinkSteeringCoordinator } from "../modules/network/uplink-steering/coordinator.ts";
+import { markForSlot } from "../modules/network/uplink-steering/mark-layout.ts";
 import {
 	discoverOwnedUplinkRoutes,
 	ensureUplinkRoute,
@@ -17,7 +18,6 @@ import {
 } from "../modules/network/uplink-steering/route-manager.ts";
 import {
 	buildShareRuleset,
-	markForSlot,
 	stableUplinkMark,
 } from "../modules/network/uplink-steering/ruleset.ts";
 import {

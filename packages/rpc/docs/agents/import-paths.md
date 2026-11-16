@@ -5,7 +5,7 @@
 `status.schema.ts` imports `sessionSwitchTargetSchema` and re-exports
 `SessionSwitchTarget` from the producer's browser-safe `dist/session-switch.js`.
 The additive optional `active_encode.switch_targets` is session state, not discovery.
-Both consumers pin published 2026.11.0/schema 0.22.0. The roster keeps the producer's
+Both consumers pin published 2026.11.1/schema 0.23.0. The roster keeps the producer's
 `input_id`/`kind` and optional source-mode fields; no local availability or label wire field is invented.
 See [contract](../../../../docs/LIVE-SESSION-SWITCHING.md).
 

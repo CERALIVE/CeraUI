@@ -66,7 +66,7 @@ async function requestMode(hardware: boolean): Promise<void> {
 					{m["live.preview.encode.label"]()}
 				</p>
 				<p class="text-muted-foreground text-xs">{m["live.preview.encode.description"]()}</p>
-				<p class="text-muted-foreground/80 mt-0.5 text-xs" data-testid="preview-encode-helper">
+				<p class="text-muted-foreground mt-0.5 text-xs" data-testid="preview-encode-helper">
 					{m["live.preview.encode.helper"]()}
 				</p>
 			</div>

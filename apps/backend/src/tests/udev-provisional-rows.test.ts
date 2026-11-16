@@ -886,7 +886,7 @@ describe("the optimistic row on the REAL modems payload", () => {
 		// ModemManager anchors it — a raw sysfs DEVPATH, not an ID_PATH.
 		setModem(21, {
 			ifname: "wwan2",
-			name: "0 - 72633",
+			name: "0 - 78901",
 			sim_network: "",
 			network_type: { supported: {}, active: "4g" },
 			status: {
