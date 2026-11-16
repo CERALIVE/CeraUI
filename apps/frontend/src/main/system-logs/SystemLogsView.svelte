@@ -44,6 +44,7 @@ import LegacyLogDownloads from './LegacyLogDownloads.svelte';
 import { LogDownloads } from './log-downloads.svelte';
 import RawLogsPanel from './RawLogsPanel.svelte';
 import SharingSection from './SharingSection.svelte';
+import StorageSection from './StorageSection.svelte';
 
 const TAB_LABELS: Record<ShellTab, () => string> = {
 	events: () => m['systemLogs.tabs.events'](),
@@ -100,6 +101,7 @@ $effect(() => {
 {#snippet storageRegion()}
 	<section aria-labelledby="{uid}-storage" class="flex flex-col gap-3 p-4" data-testid="system-logs-storage">
 		<h3 class="text-sm font-semibold" id="{uid}-storage">{m['systemLogs.storage.heading']()}</h3>
+		<StorageSection />
 	</section>
 {/snippet}
 

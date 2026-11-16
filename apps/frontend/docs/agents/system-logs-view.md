@@ -1,8 +1,8 @@
 # System Logs view: shape brief [GREENFIELD]
 
 Design basis for the full-viewport System Logs view opened from Settings ->
-System Logs. Nothing here is built yet; this file is rewritten to as-built when
-the view ships. It works inside the incumbent visual world: `PRODUCT.md` and
+System Logs. This remains the target for unfinished panels; the Storage
+implementation is recorded below. It works inside the incumbent visual world: `PRODUCT.md` and
 `.impeccable.md` (Ground Control: graphite, phosphor lime for the live signal,
 amber and coral states) and the checkable rules in `DESIGN.md` sections 1-8.
 It is an Operate surface: familiar controls, brand only through tokens, type and
@@ -848,6 +848,39 @@ everywhere in the app.
 - The CI e2e preview server proxies only `/ws` and `/preview`, so a download
   from `/api/logs/*` reaches the backend in the dev topology and on devices
   (same origin), not through `vite preview`.
+
+## Storage implementation [EXISTS, unreleased]
+
+`StorageSection.svelte` fills the shell's Storage placeholder and owns initial
+reads and Retry. `StorageUsage`, `StorageLimits` and `StorageCleanup` separate
+readout, staged limits and destructive actions. Only Save calls `setRetention`;
+unknown ceilings disable both limit selects with a reason, not Detail.
+Each successful raw clear, older-file deletion or event clear notifies the
+existing history bus once. Refusals and failed calls preserve the last readout
+and render an inline Retry; destructive retries ask for confirmation again.
+The readout uses neutral meters with the same numbers stated in text.
+Cleanup labels and limit values wrap inside the column instead of widening it
+in long locales; both confirmations use the wider dialog so a long confirm
+label fits beside Cancel, and on a phone their footer buttons wrap a long label
+inside the button. Storage, both confirmations and both option lists
+break Japanese between phrases (`word-break: auto-phrase`), Korean only
+between words (`keep-all` under `:lang(ko)`) and Chinese only at the word gaps
+the Storage messages mark (`keep-all` under `:lang(zh)`; a zero-width space
+between two words of two or more characters, never beside a one-character word
+or inside a number and its unit), avoid a lone final character
+(`text-wrap: pretty`) and still wrap an over-long word; every formatted size,
+day count and date joins its parts with no-break spaces, and the decorative
+volume bars give way before a source name has to break. A storage reply's
+unknown, newer fields are ignored; every known field is still required and validated.
+Every action's successful reply is read against that action's shared output schema
+(storage reading, boot counts, the events `success` flag): one that leaves out or
+garbles anything it promises is the action's failure, with its retry band and the
+previous reading kept. Only the newest storage read is shown: a read that answers
+after a newer read or a newer action reply is dropped, a newer reading retires a
+failed read's band, and Retry stays disabled while its read runs.
+No journal limit, unknown usage, removed boot or secure erase is inferred.
+Host/mock verification is not device qualification. User documentation remains
+the English/es-419 release work assigned to the documentation todo.
 
 ## Open decisions
 

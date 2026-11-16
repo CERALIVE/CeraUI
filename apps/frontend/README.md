@@ -4,6 +4,12 @@ Svelte 5 PWA for CeraUI — the on-device control plane for CeraLive streaming h
 
 **Status**: [EXISTS] — active development, part of the `ceralive-workspace` Bun monorepo.
 
+**System Logs Storage [EXISTS, unreleased].** The Storage region owns its RPC
+reads, explicit retention Save, and confirmed raw-log/event cleanup. Unknown
+usage and device ceilings remain unknown; cleanup reports observed results.
+The other System Logs panels are separate work. See the
+[view contract](docs/agents/system-logs-view.md#storage-implementation-exists-unreleased).
+
 **Hotspot draft binding [EXISTS].** The confirmation gate and live editor retain
 typed values across same-device, same-incarnation updates. A different radio,
 connection or dialog session reloads the current details and withdraws consent.

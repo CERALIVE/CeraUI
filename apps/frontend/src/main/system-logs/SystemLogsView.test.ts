@@ -4,6 +4,7 @@ import {
 	fireEvent,
 	render,
 	screen,
+	waitFor,
 	within,
 } from "@testing-library/svelte";
 import { tick } from "svelte";
@@ -17,10 +18,17 @@ import {
 	type MediaQueryControl,
 } from "../../tests/helpers/media-query";
 
+import { logStorage, MIB } from "./__fixtures__/log-storage";
 import SystemLogsView from "./SystemLogsView.svelte";
 
 const rpc = vi.hoisted(
-	() => ({}) as { logs?: { getStorage: () => Promise<unknown> } },
+	() =>
+		({}) as {
+			logs?: {
+				getStorage: () => Promise<unknown>;
+				deleteOlderFiles?: () => Promise<unknown>;
+			};
+		},
 );
 const getDeviceLog = vi.hoisted(() => vi.fn());
 const getSystemLog = vi.hoisted(() => vi.fn());
@@ -58,6 +66,7 @@ const missingProcedure = () =>
 beforeEach(() => {
 	rpc.logs = { getStorage };
 	getStorage.mockReset();
+	getStorage.mockResolvedValue(logStorage());
 	ensureNamespaces.mockReset();
 	ensureNamespaces.mockResolvedValue(undefined);
 	getDeviceLog.mockReset();
@@ -97,9 +106,9 @@ describe("SystemLogsView — Downloads never wait", () => {
 		},
 	);
 
-	it("loads the dialog's own copy and probes the device once", async () => {
+	it("loads the dialog's own copy, probes it, then lets Storage read its own data", async () => {
 		viewport(true);
-		getStorage.mockResolvedValue({});
+		getStorage.mockResolvedValue(logStorage());
 		render(SystemLogsView);
 
 		await screen.findByRole("tablist");
@@ -107,14 +116,14 @@ describe("SystemLogsView — Downloads never wait", () => {
 			"systemLogs",
 			"timeline",
 		]);
-		expect(getStorage).toHaveBeenCalledTimes(1);
+		expect(getStorage).toHaveBeenCalledTimes(2);
 	});
 });
 
 describe("SystemLogsView — wide layout (>= 1024 px)", () => {
 	beforeEach(() => {
 		viewport(true);
-		getStorage.mockResolvedValue({});
+		getStorage.mockResolvedValue(logStorage());
 	});
 
 	it("opens on Events with Raw logs beside it and no Storage tab", async () => {
@@ -231,7 +240,7 @@ describe("SystemLogsView — wide layout (>= 1024 px)", () => {
 describe("SystemLogsView — narrow layout (< 1024 px)", () => {
 	beforeEach(() => {
 		viewport(false);
-		getStorage.mockResolvedValue({});
+		getStorage.mockResolvedValue(logStorage());
 	});
 
 	it("opens on Events with a Storage tab and no side column", async () => {
@@ -354,7 +363,7 @@ describe("SystemLogsView — check failures", () => {
 			getStorage.mockRejectedValueOnce(
 				new Error("Request timeout: logs.getStorage"),
 			);
-			getStorage.mockResolvedValueOnce({});
+			getStorage.mockResolvedValueOnce(logStorage());
 			render(SystemLogsView);
 
 			const band = await screen.findByTestId("system-logs-check-failed");
@@ -374,7 +383,7 @@ describe("SystemLogsView — check failures", () => {
 
 			expect(await screen.findByRole("tablist")).toBeTruthy();
 			expect(screen.queryByTestId("system-logs-check-failed")).toBeNull();
-			expect(getStorage).toHaveBeenCalledTimes(2);
+			expect(getStorage).toHaveBeenCalledTimes(wide ? 3 : 2);
 			expect(ensureNamespaces).toHaveBeenCalledTimes(2);
 		},
 	);
@@ -398,7 +407,7 @@ describe("SystemLogsView — check failures", () => {
 		viewport(false);
 		vi.spyOn(console, "error").mockImplementation(() => {});
 		ensureNamespaces.mockRejectedValueOnce(new Error("chunk fetch failed"));
-		getStorage.mockResolvedValue({});
+		getStorage.mockResolvedValue(logStorage());
 		render(SystemLogsView);
 
 		expect(await screen.findByTestId("system-logs-check-failed")).toBeTruthy();
@@ -416,7 +425,7 @@ function tokens(element: Element | null | undefined): string[] {
 describe("SystemLogsView — anatomy", () => {
 	it("gives each tab panel and the side column their own scroll, and pads each region", async () => {
 		viewport(true);
-		getStorage.mockResolvedValue({});
+		getStorage.mockResolvedValue(logStorage());
 		render(SystemLogsView);
 
 		const list = await screen.findByRole("tablist");
@@ -697,5 +706,84 @@ describe("SystemLogsView — Downloads keep their state across the check", () =>
 		await fireEvent.click(tab(en.systemLogs.tabs.storage));
 
 		await expectWorkingRetry();
+	});
+});
+
+describe("SystemLogsView — Storage region", () => {
+	const usage = () =>
+		screen.getByTestId("storage-usage-text").textContent?.trim();
+	const used = (size: string) =>
+		en.systemLogs.storage.used
+			.replace("{used}", size)
+			.replace("{limit}", "256\u00a0MB");
+
+	it("fills the placeholder with a component-owned storage read", async () => {
+		viewport(true);
+		getStorage.mockResolvedValue(logStorage({ journalBytes: 64 * MIB }));
+		render(SystemLogsView);
+		await screen.findByRole("tablist");
+
+		const storage = region("system-logs-storage");
+		expect(within(storage).getByTestId("storage-section")).toBeTruthy();
+		expect(usage()).toBe(used("64\u00a0MB"));
+		expect(getStorage).toHaveBeenCalledTimes(2);
+	});
+
+	it("shows the latest storage reply when the Storage tab opens again", async () => {
+		viewport(false);
+		getStorage.mockResolvedValue(logStorage());
+		const deleteOlderFiles = vi.fn().mockResolvedValue({
+			ok: true,
+			storage: logStorage({ journalBytes: 12 * MIB }),
+			bootsBefore: 2,
+			bootsAfter: 1,
+		});
+		rpc.logs = { getStorage, deleteOlderFiles };
+		render(SystemLogsView);
+		await screen.findByRole("tablist");
+
+		await fireEvent.click(tab(en.systemLogs.tabs.storage));
+		expect(usage()).toBe(used("48\u00a0MB"));
+		await fireEvent.click(screen.getByTestId("storage-delete-older"));
+		await waitFor(() => expect(usage()).toBe(used("12\u00a0MB")));
+
+		getStorage.mockResolvedValue(logStorage({ journalBytes: 12 * MIB }));
+		await fireEvent.click(tab(en.systemLogs.tabs.events));
+		expect(screen.queryByTestId("storage-section")).toBeNull();
+		await fireEvent.click(tab(en.systemLogs.tabs.storage));
+
+		await waitFor(() => expect(usage()).toBe(used("12\u00a0MB")));
+		expect(getStorage).toHaveBeenCalledTimes(3);
+	});
+
+	it("reports an invalid Storage reply without breaking the shell", async () => {
+		viewport(true);
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		getStorage.mockResolvedValue(undefined);
+		render(SystemLogsView);
+		await screen.findByRole("tablist");
+
+		const storage = region("system-logs-storage");
+		expect(within(storage).getByRole("heading").textContent?.trim()).toBe(
+			en.systemLogs.storage.heading,
+		);
+		expect(
+			await within(storage).findByTestId("storage-load-failed"),
+		).toBeTruthy();
+	});
+
+	it("shows the reply of a retried check", async () => {
+		viewport(true);
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		getStorage.mockRejectedValueOnce(
+			new Error("Request timeout: logs.getStorage"),
+		);
+		getStorage.mockResolvedValue(logStorage({ journalBytes: 32 * MIB }));
+		render(SystemLogsView);
+
+		await fireEvent.click(await screen.findByTestId("system-logs-check-retry"));
+		await screen.findByRole("tablist");
+
+		expect(usage()).toBe(used("32\u00a0MB"));
 	});
 });
