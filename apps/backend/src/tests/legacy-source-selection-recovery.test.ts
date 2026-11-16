@@ -29,6 +29,8 @@ import { OSMO_STABLE, osmo } from "./helpers/dual-mode-camera.ts";
 
 async function pendingSelection(sameId: boolean, legacy: boolean) {
 	const f = await sourceSelectionFixture();
+	// Keep mode unchanged so missing identity is the only unmeasured selection axis.
+	await f.write({ input_mode: "uvc_h264" });
 	if (sameId)
 		f.devices.splice(0, 2, osmo("video3"), {
 			...SECOND_CAMERA,
@@ -47,6 +49,7 @@ async function pendingSelection(sameId: boolean, legacy: boolean) {
 	const destination = sameId ? "video1" : "video2";
 	const request = f.write({
 		source: destination,
+		input_mode: "uvc_h264",
 		...(sameId ? { resolution: "720p" as const } : {}),
 		apply_now: true,
 	});

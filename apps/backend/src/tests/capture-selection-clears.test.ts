@@ -218,7 +218,7 @@ test("an unrelated same-device live save does not pin the automatic mode or send
 	expect((await f.read()).input_mode).toBeUndefined();
 });
 
-test("a legacy absent mode stays absent during a supported camera switch", async () => {
+test("a legacy absent mode stays automatic with a negotiated live clear", async () => {
 	const f = await captureSelectionFixture();
 	getConfig().input_mode = undefined;
 	await f.write({ source: "video1" });
@@ -226,7 +226,9 @@ test("a legacy absent mode stays absent during a supported camera switch", async
 
 	await f.write({ source: "video2", apply_now: true });
 
-	expect(f.wire).toEqual([{ input_id: "video2", pipeline: "libuvch264" }]);
+	expect(f.wire).toEqual([
+		{ input_id: "video2", pipeline: "libuvch264", input_mode: null },
+	]);
 	expect((await f.read()).input_mode).toBeUndefined();
 });
 
@@ -247,7 +249,7 @@ test("capture through non-capture back to capture never resurrects the old expli
 
 	expect(f.wire).toEqual([
 		{ input_id: null, pipeline: "test", input_mode: null },
-		{ input_id: "video2", pipeline: "libuvch264" },
+		{ input_id: "video2", pipeline: "libuvch264", input_mode: null },
 	]);
 	expect((await f.read()).input_mode).toBeUndefined();
 	expect((await f.read()).source_stable_id).toBe(SECOND_STABLE);

@@ -18,6 +18,8 @@ import {
 
 test("recovery commits the selected camera identity from the staged operator snapshot", async () => {
 	const f = await sourceSelectionFixture();
+	// Identity recovery requires no changed mode that the snapshot cannot measure.
+	await f.write({ input_mode: "uvc_h264" });
 	await f.start();
 	const asked = Promise.withResolvers<void>();
 	const answer = Promise.withResolvers<EngineConfigChangeOutcome>();
@@ -25,7 +27,11 @@ test("recovery commits the selected camera identity from the staged operator sna
 		asked.resolve();
 		return answer.promise;
 	});
-	const request = f.write({ source: "video2", apply_now: true });
+	const request = f.write({
+		source: "video2",
+		input_mode: "uvc_h264",
+		apply_now: true,
+	});
 	await asked.promise;
 	const before = getSourceSelectionTokens().selection;
 	releaseStagedConfigChange();
@@ -92,6 +98,7 @@ for (const activeInput of [undefined, "video1"]) {
 
 test("recovery on the previous capture input retains its metadata", async () => {
 	const f = await sourceSelectionFixture();
+	await f.write({ input_mode: "uvc_h264" });
 	await f.start();
 	const asked = Promise.withResolvers<void>();
 	const answer = Promise.withResolvers<EngineConfigChangeOutcome>();
@@ -99,7 +106,11 @@ test("recovery on the previous capture input retains its metadata", async () => 
 		asked.resolve();
 		return answer.promise;
 	});
-	const request = f.write({ source: "video2", apply_now: true });
+	const request = f.write({
+		source: "video2",
+		input_mode: "uvc_h264",
+		apply_now: true,
+	});
 	await asked.promise;
 	const saved = await f.read();
 	const before = getSourceSelectionTokens();
@@ -154,6 +165,7 @@ test("legacy omitted selection metadata remains unknown during recovery", async 
 
 test("an applied source whose file write fails retains complete recovery metadata", async () => {
 	const f = await sourceSelectionFixture();
+	await f.write({ input_mode: "uvc_h264" });
 	await f.start();
 	f.setChange(async () => {
 		setConfigFilePath(join(f.dir, "missing", "config.json"));
@@ -161,7 +173,11 @@ test("an applied source whose file write fails retains complete recovery metadat
 	});
 
 	await expect(
-		f.write({ source: "video2", apply_now: true }),
+		f.write({
+			source: "video2",
+			input_mode: "uvc_h264",
+			apply_now: true,
+		}),
 	).rejects.toThrow();
 	setConfigFilePath(join(f.dir, "config.json"));
 	const before = getSourceSelectionTokens().selection;

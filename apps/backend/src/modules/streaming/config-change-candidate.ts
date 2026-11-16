@@ -84,8 +84,11 @@ export function stageApplyNowFields({
 		...(derivedClears.includes("framerate") ? { framerate: null } : {}),
 		// The engine change-config contract cannot clear a codec; use its next-start default.
 		...(input.video_codec == null ? {} : { video_codec: input.video_codec }),
-		// The mode this save lands on, chosen or derived; a source switch can clear it.
-		...(input.input_mode === undefined && inputMode === config.input_mode
+		// A next-start save may clear only the saved mode. An automatic source
+		// apply must also clear any explicit mode retained by the live engine.
+		...(input.input_mode === undefined &&
+		inputMode === config.input_mode &&
+		(input.source === undefined || inputMode !== undefined)
 			? {}
 			: { input_mode: inputMode ?? null }),
 		...(input.composition === undefined

@@ -58,7 +58,9 @@ test("an applied non-capture selection clears the saved capture input and anchor
 	expect(saved.selected_video_input).toBeUndefined();
 	expect(saved.source_stable_id).toBeUndefined();
 	expect(result.applied?.selected_video_input).toBeUndefined();
-	expect(f.deltas).toEqual([{ pipeline: "test", input_id: null }]);
+	expect(f.deltas).toEqual([
+		{ pipeline: "test", input_id: null, input_mode: null },
+	]);
 	expect(
 		resolveSourceRouting(
 			"test",
@@ -80,7 +82,9 @@ test("an applied unidentified camera clears the previous identity without cleari
 	expect((await f.read()).source).toBe("video2");
 	expect((await f.read()).selected_video_input).toBe("video2");
 	expect((await f.read()).source_stable_id).toBeUndefined();
-	expect(f.deltas).toEqual([{ input_id: "video2", pipeline: "libuvch264" }]);
+	expect(f.deltas).toEqual([
+		{ input_id: "video2", pipeline: "libuvch264", input_mode: null },
+	]);
 });
 
 for (const source of ["video2", "test"]) {

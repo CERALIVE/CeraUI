@@ -210,6 +210,14 @@ forwards a staged mode clear and a non-capture selection's input clear through
 the existing orchestrator and bridge to the binding's validated `changeConfig`.
 Geometry clears remain local and are omitted from dispatch; START is unchanged.
 
+A live automatic source apply always stages `input_mode: null`, even when the
+saved mode is already absent. An ordinary next-start source save can remove the
+saved mode while the running engine still retains its explicit selection.
+Saved absence therefore cannot prove live absence. Unrelated changes still omit
+the mode, and concrete mode choices retain their existing replacement semantics.
+The producer resolves the destination default after the clear; CeraUI does not
+choose a concrete capture family.
+
 Before any config mutation, a clear-needing apply-now request requires a live
 capability snapshot whose features include the imported
 `CAPTURE_SELECTION_CLEAR_FEATURE`. Absent features, `input-mode` alone, and
@@ -244,6 +252,12 @@ writer, checking deltas with the installed producer `changeConfigParamsSchema`.
 Producer cerastream #245 separately proves actual wire deserialization, merge,
 capture-default resolution, ownership barriers and rollback; consumer fake replies
 do not qualify those engine operations or hardware.
+`capture-mode-next-start.test.ts` follows a live explicit mode through an ordinary
+next-start source save and a later automatic apply, using the real procedure,
+bridge and file writer. Its engine boundary models the producer's mode merge
+semantics, paired with #245's native `capture_defaults` omission/clear resolution
+tests. It also covers older, missing and cached capability evidence, busy and
+reverted outcomes, unrelated changes and concrete replacements.
 
 **THE STAGE BELONGS TO ONE ATTEMPT.** Each apply-now save builds its marker with
 its own `attemptId` and stages it only at dispatch, after every await in

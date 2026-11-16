@@ -1220,9 +1220,7 @@ describe("a source switch owns its derived override residue", () => {
 								{
 									pipeline: "rtmp",
 									input_id: null,
-									...(pick.input_mode === undefined
-										? {}
-										: { input_mode: null }),
+									input_mode: null,
 								},
 							]
 						: [],
@@ -1255,7 +1253,7 @@ describe("a source switch owns its derived override residue", () => {
 				{
 					pipeline: "rtmp",
 					input_id: null,
-					...(pick.input_mode === undefined ? {} : { input_mode: null }),
+					input_mode: null,
 				},
 			]);
 		});
@@ -1450,6 +1448,7 @@ describe("a source switch owns its derived override residue", () => {
 			await initPipelines({
 				fetchEngineCapabilities: async () => ({
 					caps: {
+						features: [CAPTURE_SELECTION_CLEAR_FEATURE],
 						platform: {
 							supports_h265: false,
 							hardware_accelerated: false,
@@ -1510,7 +1509,9 @@ describe("a source switch owns its derived override residue", () => {
 					: previous,
 			);
 			expect(s.deltas).toEqual(
-				outcome === "busy" ? [] : [{ input_id: "cam1", pipeline: "camlink" }],
+				outcome === "busy"
+					? []
+					: [{ input_id: "cam1", pipeline: "camlink", input_mode: null }],
 			);
 		});
 	}
