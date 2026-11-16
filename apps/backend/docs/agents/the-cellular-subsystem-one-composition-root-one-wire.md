@@ -98,8 +98,11 @@ observed. The existing partial modem frame carries the warning and an explicit
 empty reason on recovery so the merging frontend retracts it.
 
 HIMI U01 remains Verified in the modem documentation: QMI works when its own
-router is not holding the connection. The conditional guidance recommends router
-(USB network) mode or a regular modem and names the cellular modem docs page.
+router is not holding the connection. The conditional guidance states only the
+measured failed data call and names the stick's own router as a likely cause,
+because a failed activation (for example a SIM without a data plan) looks the
+same. It recommends router (USB network) mode or a regular modem and names the
+cellular modem docs page.
 CeraUI changes no stick settings and does not try to disable its embedded data
 call or SIM-switch watchdog. The EN/es-419 docs note accompanies the release docs
 update; the Verified row stays.

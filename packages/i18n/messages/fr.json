@@ -1006,7 +1006,7 @@
 	"network.cellular.initializingTitle": "Le module cellulaire démarre",
 	"network.cellular.reason.initializing": "Modem détecté — en attente de sa description par le service modem.",
 	"network.cellular.reason.undriveable": "Cet appareil est toujours connecté, mais aucun service modem ne peut le contrôler.",
-	"network.cellular.reason.himiUfiRouter": "Le routeur intégré de cette clé HIMI U01 utilise la connexion mobile, ce qui empêche CeraLive d'établir sa connexion de données. Passez en mode routeur (réseau USB) ou utilisez un modem classique. Voir docs.ceralive.tv/hardware/cellular-modems/.",
+	"network.cellular.reason.himiUfiRouter": "Cette clé HIMI U01 n'a pas pu établir sa connexion de données. Son routeur intégré utilise peut-être la connexion mobile : passez en mode routeur (réseau USB) ou utilisez un modem classique. Voir docs.ceralive.tv/hardware/cellular-modems/.",
 	"network.cellular.reason.routerControlsUnverified": "Cette clé n'a jamais confirmé qu'un changement de réglage s'applique réellement, donc rien n'est proposé ici. Utilisez sa propre interface web.",
 	"network.cellular.reason.routerManaged": "La clé gère cette connexion elle-même. Ses réglages réseau se trouvent dans sa propre interface web, pas ici.",
 	"network.cellular.reason.unknown": "Cet appareil ne peut pas être configuré ici.",
