@@ -383,7 +383,8 @@ describe("known-down uplink rejoin", () => {
 
 	test("keeps a returned-address uplink out on passive evidence before and after dwell", async () => {
 		const { engine, h, interfaces, observe } = fixture();
-		interfaces.wlan0 = { ...netif("192.168.2.8"), ip: undefined };
+		interfaces.wlan0 = netif("192.168.2.8");
+		delete interfaces.wlan0.ip;
 		observe("definitive_loss", lostAt);
 		interfaces.wlan0 = netif("192.168.2.8");
 

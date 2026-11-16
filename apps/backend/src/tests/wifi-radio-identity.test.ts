@@ -215,7 +215,10 @@ describe("pair-scoped cache and shadow identities", () => {
 			await producer.discover([{ ifname: "wlan0" }]);
 			const predecessor = producer.state.rows.get("wlan0");
 			files.netdevs.set("wlan0", { ifindex: "12", phy: PHY });
-			files.phys.set(PHY, { index: "0", mac });
+			files.phys.set(PHY, {
+				index: "0",
+				...(mac === undefined ? {} : { mac }),
+			});
 			await producer.discover([
 				{ ifname: "wlan0", degradedReason: "unavailable" },
 			]);

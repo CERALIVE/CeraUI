@@ -141,12 +141,14 @@ describe("wifiHotspotStart — AP+STA concurrent mode", () => {
 		await stopHotspotForInterface(mac, iface, {
 			nmConnSetFields: async () => true,
 			nmDisconnect: async () => true,
-			releaseConcurrentInterface: async (ifname) => released.push(ifname),
+			releaseConcurrentInterface: async (ifname) => {
+				released.push(ifname);
+			},
 			broadcastState: () => {},
 			setDupIpSuppression: () => {
 				throw new Error("station suppression must stay untouched");
 			},
-			rescan: async () => true,
+			rescan: async () => {},
 		});
 
 		expect(iface.conn).toBe("station-uuid");

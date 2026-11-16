@@ -2,6 +2,10 @@
 	"extends": "./tsconfig.json",
 	"include": [
 		"src/tests/helpers/**/*.ts",
+		"src/tests/uplink-steering-state.test.ts",
+		"src/tests/wifi-hotspot-terminal-outcomes.test.ts",
+		"src/tests/wifi-hotspot.test.ts",
+		"src/tests/wifi-radio-identity.test.ts",
 		"src/tests/bond-identity-scan-parity.test.ts",
 		"src/tests/modem-credential-ownership.test.ts",
 		"src/tests/usb-net-committed-incarnation.test.ts",

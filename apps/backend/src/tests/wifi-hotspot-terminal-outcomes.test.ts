@@ -141,7 +141,7 @@ function makeStopDeps(over: Partial<HotspotStopDeps>): HotspotStopDeps {
 		releaseConcurrentInterface: async () => {},
 		broadcastState: () => {},
 		setDupIpSuppression: () => {},
-		rescan: async () => true,
+		rescan: async () => {},
 		publishOutcome: capture,
 		...over,
 	};
