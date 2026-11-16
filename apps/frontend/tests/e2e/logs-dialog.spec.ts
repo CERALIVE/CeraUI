@@ -86,6 +86,14 @@ test.beforeEach(async ({ page, browserName }, testInfo) => {
 	test.skip(testInfo.project.name !== 'desktop', 'desktop layout drives the settings list');
 	await page.addInitScript(installWsHarness, { token: TOKEN });
 	await page.goto('/');
+	// A mount slower than 5s leaves index.html's #js-failed watchdog over a working app (a separate product
+	// defect). Waiting for the mount and removing it isolates the download contract; it is not late-mount coverage.
+	await page.waitForFunction(
+		() => (window as { __ceraAppMounted?: boolean }).__ceraAppMounted === true,
+		undefined,
+		{ timeout: 60_000 },
+	);
+	await page.evaluate(() => document.getElementById('js-failed')?.remove());
 	await navigateTo(page, 'settings');
 });
 

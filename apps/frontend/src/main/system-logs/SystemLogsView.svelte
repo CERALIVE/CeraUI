@@ -38,6 +38,7 @@ import { ensureDialogNamespaces } from '$lib/i18n/namespace-activation';
 import { WIDE_DESKTOP_QUERY } from '$lib/layout';
 import { rpc } from '$lib/rpc/client';
 
+import BootPicker from './BootPicker.svelte';
 import LegacyLogDownloads from './LegacyLogDownloads.svelte';
 import { LogDownloads } from './log-downloads.svelte';
 import RawLogsPanel from './RawLogsPanel.svelte';
@@ -91,6 +92,7 @@ $effect(() => {
 {#snippet bootsRegion()}
 	<section aria-labelledby="{uid}-boots" class="flex flex-col gap-3 p-4" data-testid="system-logs-boots">
 		<h3 class="text-sm font-semibold" id="{uid}-boots">{m['systemLogs.boots.heading']()}</h3>
+		<BootPicker />
 	</section>
 {/snippet}
 
