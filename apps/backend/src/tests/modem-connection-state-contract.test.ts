@@ -74,7 +74,7 @@ function cleanupModems(): void {
 function makeModem(overrides: Partial<Modem> = {}): Modem {
 	return {
 		ifname: "wwan0",
-		name: "RM530N-GL - 16855",
+		name: "RM530N-GL - 23456",
 		network_type: {
 			supported: { "5g": { allowed: "5g", preferred: "none" } },
 			active: "5g",

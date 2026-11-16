@@ -33,7 +33,7 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 function directModem(): Modem {
 	return {
 		ifname: "wwan0",
-		name: "SIMCOM_SIM7600G-H - 15136",
+		name: "SIMCOM_SIM7600G-H - 45678",
 		network_type: { supported: ["4G"], active: null },
 		device_class: "usb",
 		no_sim: true,

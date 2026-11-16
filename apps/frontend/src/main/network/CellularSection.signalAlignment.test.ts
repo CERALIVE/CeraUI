@@ -75,7 +75,7 @@ function dongle(ifname: string): Modem {
 function radio(ifname: string): Modem {
 	return {
 		ifname,
-		name: "RM530N-GL - 16855",
+		name: "RM530N-GL - 23456",
 		network_type: { supported: ["4g", "5g"], active: "5g" },
 		status: { connection: "connected", network: "Claro", signal: 81 },
 	} as unknown as Modem;

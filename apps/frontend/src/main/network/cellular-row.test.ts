@@ -278,7 +278,7 @@ describe("the router link-state badge names the LINK, not the connection", () =>
 describe("registered is its own register (board fixture)", () => {
 	const rm530n = modem({
 		ifname: "wwan2",
-		name: "RM530N-GL - 16855",
+		name: "RM530N-GL - 23456",
 		device_class: "usb",
 		sim_lock: { required: "sim-pin2" },
 		packet_service_state: "attached",
@@ -912,7 +912,7 @@ describe("cellular-row — SIM-lock routing (todo 46)", () => {
  */
 const QUECTEL_SEARCHING: Modem = {
 	ifname: "wwan0",
-	name: "RM530N-GL - 16855",
+	name: "RM530N-GL - 23456",
 	model: "RM530N-GL",
 	network_type: { supported: ["4g3g"], active: "4g3g" },
 	status: {

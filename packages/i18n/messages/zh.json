@@ -958,7 +958,7 @@
 	"network.cellular.initializingTitle": "蜂窝网络正在启动",
 	"network.cellular.reason.initializing": "已检测到调制解调器 — 正在等待调制解调器服务识别它。",
 	"network.cellular.reason.undriveable": "此设备仍处于连接状态，但没有调制解调器服务能够控制它。",
-	"network.cellular.reason.himiUfiRouter": "此 HIMI U01 上网卡的内置路由器正在占用移动连接，导致 CeraLive 无法建立数据连接。请改用路由器模式（USB 网络）或常规调制解调器。详见 docs.ceralive.tv/hardware/cellular-modems/。",
+	"network.cellular.reason.himiUfiRouter": "此 HIMI U01 上网卡未能建立数据连接。其内置路由器可能正在占用移动连接。请改用路由器模式（USB 网络）或常规调制解调器。详见 docs.ceralive.tv/hardware/cellular-modems/。",
 	"network.cellular.reason.routerControlsUnverified": "此随身路由从未确认设置更改会真正生效，因此这里不提供任何设置。请改用它自己的网页界面。",
 	"network.cellular.reason.routerManaged": "该随身路由自行管理此连接。它的网络设置位于自己的网页界面中，而非此处。",
 	"network.cellular.reason.unknown": "无法在此处配置该设备。",
