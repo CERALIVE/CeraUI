@@ -34,6 +34,8 @@ Full PR gate: `bun run test`, `bun run test:e2e`, `bun run check:tech-debt`,
 | Update discovery and actionable entries | [software-update-check-contract.md](docs/agents/software-update-check-contract.md) |
 | Update orchestrator, D8, OS staging and slot mirroring | [the-update-orchestrator-and-d8-admission.md](docs/agents/the-update-orchestrator-and-d8-admission.md) |
 | Streaming RPC, lifecycle, audio inputs | [streaming-rpc-procedures.md](docs/agents/streaming-rpc-procedures.md) |
+| Apply-now candidates, negotiated capture clears and applied-only persistence | [Staged persistence](docs/agents/apply-now-config-change-transaction-staged-persistence.md) |
+| Device-scoped saved capture modes and automatic defaults | [Per-device modes](docs/agents/one-row-per-physical-camera-per-device-mode-selection.md) |
 | Live capture and audio visibility | [a-live-capture-device-is-never-silently-dropped.md](docs/agents/a-live-capture-device-is-never-silently-dropped.md) |
 | Audio identity and naming | [audio-device-naming.md](docs/agents/audio-device-naming.md) |
 | Audio backend override | [the-audio-backend-is-an-override-and-absent-is-not-a-defa.md](docs/agents/the-audio-backend-is-an-override-and-absent-is-not-a-defa.md) |

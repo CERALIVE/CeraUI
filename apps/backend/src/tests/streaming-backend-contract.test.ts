@@ -1088,6 +1088,19 @@ describe("CerastreamBackend RPC passthroughs", () => {
 
 		const devices = await backend.listDevices();
 		expect(devices.devices).toHaveLength(1);
+
+		// Combined clears must use the binding's validated changeConfig method.
+		const changed = await backend.changeConfig(
+			{ input_mode: null, input_id: null },
+			true,
+		);
+		expect(changed.phase).toBe("applied");
+		expect(fake.calls.filter((call) => call.op === "change-config")).toEqual([
+			{
+				op: "change-config",
+				params: { input_mode: null, input_id: null, composition: null },
+			},
+		]);
 	});
 
 	test("a passthrough without an active connection rejects", async () => {

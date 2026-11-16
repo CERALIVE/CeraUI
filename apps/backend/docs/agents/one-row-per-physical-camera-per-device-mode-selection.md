@@ -38,9 +38,20 @@ map.** "Per device" is satisfied by scoping: an operator pick that lands on
 DIFFERENT hardware (compared by stable identity — node paths are recycled) CLEARS
 the mode, so a choice made for one camera can never govern another. A keyed map
 would need its own retention/eviction policy and would silently evict a stated
-intent. Absent ⇒ the engine's own precedence, which is H.264 first — byte-identical
-to every start before modes existed. Only an operator who explicitly picked a mode
-sends one.
+intent. Absent preserves the producer's automatic resolver, including its output
+codec matching; CeraUI never turns it into a concrete format pick.
+
+`buildSources` resolves `selectedSource` using `resolveSourceIdentityDetailed`,
+the current selection anchor and remembered identities before projecting that
+saved mode. Only the resolved capture row may inherit it, and only while the
+row advertises that family. The row must have a stable identity equal to the
+captured anchor: a missing stable identity or a legacy selection without an
+anchor keeps the row's own default. A reused or matching node path is not
+positive identity proof and cannot lend a saved format to another camera.
+Every other row keeps its own engine-derived default. `source-capture-modes.ts`
+owns per-family projection; missing per-device mode or kind data invents no
+selector. `last_streamed_source` remains the remembered slot, never the current
+selection. `getSourcesMessage` supplies current selection context from config.
 
 **Routing is mode-aware, because the two formats are two pipelines.** The same
 camera reaches the engine through `libuvch264` in H.264 mode and `usb_mjpeg` in
@@ -65,5 +76,8 @@ dropped — a refusal answers the operator's own action, but applying it to a va
 they are not touching would let a device that stopped advertising a mode block
 every unrelated save.
 
-Coverage: `tests/one-row-per-camera.test.ts`.
+Coverage: `tests/one-row-per-camera.test.ts`, `tests/source-mode-isolation.test.ts`,
+`tests/source-mode-positive-identity.test.ts` (real builder and source-save router).
+Negotiated live clears follow
+[the staged-persistence contract](apply-now-config-change-transaction-staged-persistence.md).
 

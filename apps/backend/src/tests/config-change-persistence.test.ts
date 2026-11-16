@@ -25,6 +25,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+	CAPTURE_SELECTION_CLEAR_FEATURE,
 	type GetCapabilitiesResult,
 	SCHEMA_VERSION,
 } from "@ceralive/cerastream";
@@ -847,6 +848,7 @@ describe("two overlapping apply-now saves", () => {
 
 // Both USB pipelines are offered, so the Osmo's MJPEG mode is routable at all.
 const CAMERA_CAPS: GetCapabilitiesResult = {
+	features: [CAPTURE_SELECTION_CLEAR_FEATURE],
 	platform: {
 		supports_h265: true,
 		hardware_accelerated: true,
@@ -1213,7 +1215,17 @@ describe("a source switch owns its derived override residue", () => {
 				// Unrelated immediate fields still save.
 				expect(getConfig().bitrate_overlay).toBe(true);
 				expect(s.deltas.slice(before)).toEqual(
-					state === "streaming" ? [{ pipeline: "rtmp" }] : [],
+					state === "streaming"
+						? [
+								{
+									pipeline: "rtmp",
+									input_id: null,
+									...(pick.input_mode === undefined
+										? {}
+										: { input_mode: null }),
+								},
+							]
+						: [],
 				);
 				// Refusal may not replace or retire A's genuine on-disk marker.
 				expect(readInflightMarker()).toEqual(held);
@@ -1239,7 +1251,13 @@ describe("a source switch owns its derived override residue", () => {
 			expect(result.configChange?.result).toBe("reverted");
 			expect(await onDisk()).toEqual(previous);
 			expect(readInflightMarker()).toBeUndefined();
-			expect(s.deltas).toEqual([{ pipeline: "rtmp" }]);
+			expect(s.deltas).toEqual([
+				{
+					pipeline: "rtmp",
+					input_id: null,
+					...(pick.input_mode === undefined ? {} : { input_mode: null }),
+				},
+			]);
 		});
 	}
 
@@ -1283,7 +1301,13 @@ describe("a source switch owns its derived override residue", () => {
 		});
 		expect(result.configChange?.result).toBe("applied");
 		expect(await onDiskOwned()).toEqual(INGEST);
-		expect(s.deltas).toEqual([{ pipeline: "rtmp" }]);
+		expect(s.deltas).toEqual([
+			{
+				pipeline: "rtmp",
+				input_id: null,
+				input_mode: null,
+			},
+		]);
 	});
 
 	test("a next-start source save still clears obsolete capture fields while streaming", async () => {
