@@ -115,6 +115,42 @@ describe("staging holds the candidate off disk", () => {
 });
 
 describe("crash-window reconciliation is MARKER-ONLY", () => {
+	for (const clears of [
+		{ resolution: null },
+		{ framerate: null },
+		{ resolution: null, framerate: null },
+	] as const) {
+		test(`local geometry clears ${Object.keys(clears)} survive marker parsing but stay undecided on any running snapshot`, () => {
+			const deps = memoryDeps();
+			const pending = marker({
+				candidate: { source: "rtmp", pipeline: "rtmp", ...clears },
+				previous: {
+					selected_video_input: "video1",
+					resolution: "720p",
+					framerate: 30,
+				},
+			});
+			deps.writeMarker(deps.markerPath, JSON.stringify(pending));
+
+			const recovered = readInflightMarker(deps);
+
+			expect(recovered).toEqual(pending);
+			expect(
+				judgeInflightMarker(pending, liveOn("1920x1080", { framerate: 60 })),
+			).toEqual({ action: "wait" });
+			expect(
+				judgeInflightMarker(
+					pending,
+					liveOn("1280x720", { activeInput: "video1" }),
+				),
+			).toEqual({ action: "wait" });
+			// A stopped engine is still authoritative about what it retained.
+			expect(judgeInflightMarker(pending, { streaming: false })).toEqual({
+				action: "retain_previous",
+			});
+		});
+	}
+
 	test("no marker ⇒ no verdict at all, whatever the engine reports", () => {
 		// Given an apply-on-next-start mismatch and NO marker: the engine runs
 		// 1080p while config.json already holds the operator's 2160p intent.

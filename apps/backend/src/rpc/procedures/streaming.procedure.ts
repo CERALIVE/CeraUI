@@ -4,7 +4,10 @@
  */
 
 import { CerastreamRpcError } from "@ceralive/cerastream";
-import { unsupportedPipelineOverrides } from "@ceraui/rpc";
+import {
+	type PipelineOverrideField,
+	unsupportedPipelineOverrides,
+} from "@ceraui/rpc";
 import {
 	AUDIO_CODEC_UNSUPPORTED_TRANSPORT,
 	AUDIO_SOURCE_AUTO,
@@ -623,12 +626,24 @@ const APPLY_NOW_FIELDS = [
  * merge block below skip them, so there is exactly one place that decides
  * whether a value is persisted now — no parallel write path to drift.
  */
-function stageApplyNowFields(
-	input: StreamingSetConfigInput,
-	config: RuntimeConfig,
-	sourceRouting: Extract<ResolveSourceRoutingResult, { ok: true }> | undefined,
-	inputMode: InputMode | undefined,
-): InflightConfigMarker | undefined {
+type StageApplyNowFieldsInput = {
+	readonly input: StreamingSetConfigInput;
+	readonly config: RuntimeConfig;
+	readonly sourceRouting:
+		| Extract<ResolveSourceRoutingResult, { ok: true }>
+		| undefined;
+	readonly inputMode: InputMode | undefined;
+	/** Overrides the destination pipeline cannot honor; the candidate clears them. */
+	readonly derivedClears: readonly PipelineOverrideField[];
+};
+
+function stageApplyNowFields({
+	input,
+	config,
+	sourceRouting,
+	inputMode,
+	derivedClears,
+}: StageApplyNowFieldsInput): InflightConfigMarker | undefined {
 	if (input.apply_now !== true) return undefined;
 	if (
 		!APPLY_NOW_FIELDS.some((field) =>
@@ -644,6 +659,10 @@ function stageApplyNowFields(
 		...(input.source === undefined ? {} : { source: input.source }),
 		...(input.resolution === undefined ? {} : { resolution: input.resolution }),
 		...(input.framerate === undefined ? {} : { framerate: input.framerate }),
+		// Residue the DESTINATION pipeline cannot honor belongs to this change: a
+		// refused or reverted switch must leave the running source's geometry alone.
+		...(derivedClears.includes("resolution") ? { resolution: null } : {}),
+		...(derivedClears.includes("framerate") ? { framerate: null } : {}),
 		// The engine change-config contract cannot clear a codec; use its next-start default.
 		...(input.video_codec == null ? {} : { video_codec: input.video_codec }),
 		// The mode this save lands on, chosen or derived; a source switch can clear it.
@@ -659,7 +678,7 @@ function stageApplyNowFields(
 			? {}
 			: { selected_video_input: sourceRouting.selected_video_input }),
 	};
-	const previous: StagedConfigFields = {
+	const previous: InflightConfigMarker["previous"] = {
 		...(input.composition === undefined
 			? {}
 			: { composition: config.composition ?? null }),
@@ -996,12 +1015,13 @@ export const setConfigProcedure = authedProcedure
 		// back (staged, never written) so `config.json` keeps describing what the
 		// engine is ACTUALLY running until the transaction says `applied`. Every
 		// other field in the same save persists immediately, exactly as before.
-		const marker = stageApplyNowFields(
+		const marker = stageApplyNowFields({
 			input,
 			config,
 			sourceRouting,
-			effectiveInputMode,
-		);
+			inputMode: effectiveInputMode,
+			derivedClears: staleOverrides,
+		});
 		if (marker !== undefined) sourceRouting = undefined;
 
 		if (input.srt_latency !== undefined)
@@ -1026,14 +1046,17 @@ export const setConfigProcedure = authedProcedure
 		if (input.framerate !== undefined) config.framerate = input.framerate;
 		for (const field of staleOverrides) {
 			logger.warn(
-				`setConfig: clearing stale ${field} override — pipeline '${overridePipeline?.name}' cannot honor it`,
+				`setConfig: ${
+					marker === undefined ? "clearing" : "staging the clear of"
+				} stale ${field} override — pipeline '${overridePipeline?.name}' cannot honor it`,
 				{
 					module: "streaming",
 					pipeline: overridePipeline?.name,
 					dropped: String(config[field]),
 				},
 			);
-			config[field] = undefined;
+			// Staged clears are owned by the candidate and written only on `applied`.
+			if (marker === undefined) config[field] = undefined;
 		}
 		if (input.video_codec !== undefined)
 			config.video_codec = input.video_codec ?? undefined;
@@ -1218,12 +1241,8 @@ export const setConfigProcedure = authedProcedure
 		const staged = marker.candidate;
 		const outcome = await getApplyNowGate()
 			.dispatch({
-				...(staged.resolution === undefined
-					? {}
-					: { resolution: staged.resolution }),
-				...(staged.framerate === undefined
-					? {}
-					: { framerate: staged.framerate }),
+				...(staged.resolution == null ? {} : { resolution: staged.resolution }),
+				...(staged.framerate == null ? {} : { framerate: staged.framerate }),
 				...(staged.video_codec === undefined
 					? {}
 					: { video_codec: staged.video_codec }),

@@ -148,6 +148,23 @@ immediately, unchanged. `config.json` is written ONLY on `applied`
 leave the persisted values byte-identical, because those values are still the
 ones the engine is running.
 
+The same candidate owns the **source-derived override residue**. A switch to a
+non-override ingest pipeline makes the running source's saved
+`resolution`/`framerate` residue (`unsupportedPipelineOverrides`), and the
+candidate carries them as `null` clears. `null` here is a LOCAL storage clear:
+the engine delta omits it, so the producer never sees a null geometry. A marker
+whose candidate carries one is undecided from ANY running-engine snapshot —
+including one that matches the previous geometry, because an ingest publisher
+can report exactly what the old source ran. Recovery keeps the marker instead
+of retiring it on the candidate OR previous branch; only a stopped engine's
+authoritative retain-previous, or the transaction's own applied/abandoned
+outcome, ends it. That is the deliberate limit: a crash during a clear-carrying
+source switch stays deferred across reconnects rather than persisting or
+discarding an outcome the snapshot cannot prove. Only `applied` deletes the
+fields; the ordinary idle/next-start save and its own residue cleanup are
+unchanged. Before this, a busy or reverted source switch deleted the running
+source's saved geometry before admission could refuse it.
+
 **THE STAGE BELONGS TO ONE ATTEMPT.** Each apply-now save builds its marker with
 its own `attemptId` and stages it only at dispatch, after every await in
 `setConfig` and in the same synchronous stretch as the orchestrator's admission.

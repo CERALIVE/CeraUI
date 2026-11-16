@@ -19,8 +19,10 @@ const stagedFieldsSchema = z.object({
 	source: z.string().optional(),
 	pipeline: z.string().optional(),
 	selected_video_input: z.string().optional(),
-	resolution: z.string().optional(),
-	framerate: z.number().optional(),
+	// `null` is the local storage clear a source switch derives for an override
+	// the destination pipeline cannot honor — never a value sent to the engine.
+	resolution: z.string().nullable().optional(),
+	framerate: z.number().nullable().optional(),
 	video_codec: videoCodecSchema.optional(),
 	// Switching a dual-format camera between H.264 and MJPEG rebuilds the capture
 	// leg, so it is a transaction like the axes above — never a live reload.
@@ -29,11 +31,23 @@ const stagedFieldsSchema = z.object({
 });
 export type StagedConfigFields = z.infer<typeof stagedFieldsSchema>;
 
+/**
+ * What the candidate must beat: concrete geometry only. A `null` clear exists
+ * only in a candidate, never in the state that was running before it.
+ */
+const previousFieldsSchema = stagedFieldsSchema
+	.omit({ resolution: true, framerate: true })
+	.extend({
+		resolution: z.string().optional(),
+		framerate: z.number().optional(),
+	});
+export type PreviousConfigFields = z.infer<typeof previousFieldsSchema>;
+
 const inflightMarkerSchema = z.object({
 	attemptId: z.string(),
 	startedAt: z.number(),
 	candidate: stagedFieldsSchema,
-	previous: stagedFieldsSchema,
+	previous: previousFieldsSchema,
 });
 export type InflightConfigMarker = z.infer<typeof inflightMarkerSchema>;
 
@@ -183,7 +197,7 @@ const framerateMatches = (
 };
 
 function paramsMatch(
-	fields: StagedConfigFields,
+	fields: PreviousConfigFields,
 	engine: EngineEncodeSnapshot,
 ): boolean {
 	return (
@@ -194,6 +208,18 @@ function paramsMatch(
 		matches(fields.video_codec, engine.codec) &&
 		matches(fields.selected_video_input, engine.activeInput)
 	);
+}
+
+/**
+ * Whether a candidate's geometry is CONCRETE. A `null` is a local clear, and no
+ * running-engine snapshot can prove it: an ingest publisher may report exactly
+ * the geometry the previous source ran, so neither match distinguishes the two
+ * sources. Only a stopped engine is authoritative about what it retained.
+ */
+function hasConcreteGeometry(
+	fields: StagedConfigFields,
+): fields is PreviousConfigFields {
+	return fields.resolution !== null && fields.framerate !== null;
 }
 
 /**
@@ -215,7 +241,14 @@ export function judgeInflightMarker(
 		engine.pipelinePlaying !== false && (engine.framesEmitted ?? 0) > 0;
 	if (!gateSatisfied) return { action: "wait" };
 
-	const onCandidate = paramsMatch(marker.candidate, engine);
+	// A clear-carrying candidate is undecidable from ANY running snapshot. It
+	// must stay undecided before both the candidate and previous branches, or a
+	// previous-geometry match would retire evidence that cannot prove the switch
+	// failed. A stopped engine was already answered above.
+	const candidate = marker.candidate;
+	if (!hasConcreteGeometry(candidate)) return { action: "wait" };
+
+	const onCandidate = paramsMatch(candidate, engine);
 	if (onCandidate) return { action: "persist_candidate" };
 
 	const onPrevious = paramsMatch(marker.previous, engine);
