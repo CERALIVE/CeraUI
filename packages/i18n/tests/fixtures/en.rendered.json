@@ -1017,7 +1017,7 @@
 	"notifications.engineCrashed": "The streaming engine stopped unexpectedly. Recovering…",
 	"notifications.engineRecovered": "The streaming engine recovered.",
 	"notifications.error": "Error",
-	"notifications.hdmiError": "HDMI signal issues detected. This is usually caused either by EMI or a by a faulty cable. Try to move any modems away from the HDMI cable and the encoder. If that fails, try out a different HDMI cable or to manually set a lower HDMI resolution/framerate on your camera",
+	"notifications.hdmiError": "HDMI signal issues detected. This is usually caused either by EMI or by a faulty cable. Try to move any modems away from the HDMI cable and the encoder. If that fails, try out a different HDMI cable or to manually set a lower HDMI resolution/framerate on your camera",
 	"notifications.installCancelled": "Installation Cancelled",
 	"notifications.installCancelledDescription": "You can install the app later from your browser menu.",
 	"notifications.installFailed": "Installation Failed",

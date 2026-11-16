@@ -18,6 +18,7 @@
 
 /* Network interface list */
 import { EventEmitter } from "node:events";
+import { existsSync } from "node:fs";
 import { isSimlessForBond } from "@ceraui/rpc";
 import type {
 	EthernetRole,
@@ -50,7 +51,10 @@ import {
 	notificationSend,
 } from "../ui/notifications.ts";
 import { broadcastMsg, buildMsg } from "../ui/websocket-server.ts";
-import { isConcurrentApIfname } from "../wifi/wifi-concurrent-interface.ts";
+import {
+	isConcurrentApIfname,
+	isSupportedWifiIfname,
+} from "../wifi/wifi-concurrent-interface.ts";
 import {
 	wifiDeviceListAdd,
 	wifiDeviceListEndUpdate,
@@ -84,6 +88,7 @@ import {
 	invalidateUsbNetReading,
 	type NetdevBus,
 	notePublishedNetifSnapshot,
+	onUsbNetReadingInvalidated,
 	onUsbNetScanCommitted,
 	readNetdevBus,
 	refreshUsbNetMarkers,
@@ -168,30 +173,52 @@ export const NETIF_ERR_SHAREDLAN = 0x08;
 
 let netif: Record<string, NetworkInterface> = {};
 const presenceEpoch = new Map<string, number>();
+const netifIdentities = new Map<
+	string,
+	{ readonly ifindex: number | undefined; readonly mac: string | undefined }
+>();
 type NetdevBusEvidence = {
 	readonly result: NetdevBus;
 	readonly seen: number;
 };
 let netifSnapshotReady = false;
 let netifRefreshGeneration = 0;
+let netifTopologyGeneration = 0;
 const scanPublicationWarnings = new Set<string>();
 
 export function hasNetifSnapshot(): boolean {
 	return netifSnapshotReady;
 }
 
+export function getNetifTopologyGeneration(): number {
+	return netifTopologyGeneration;
+}
+
+export function getNetworkInterfaceIncarnation(
+	name: string,
+): number | undefined {
+	return netif[name] && netifIdentities.has(name)
+		? presenceEpoch.get(name)
+		: undefined;
+}
+
 export function resetNetifSnapshotForTest(): void {
 	netif = {};
 	netifSnapshotReady = false;
 	netifRefreshGeneration++;
+	netifTopologyGeneration++;
 	scanPublicationWarnings.clear();
 	presenceEpoch.clear();
+	netifIdentities.clear();
 }
 
 function bumpPresence(name: string, removed = false): void {
-	const epoch = (presenceEpoch.get(name) ?? 0) + 1;
+	const epoch = ++netifTopologyGeneration;
 	presenceEpoch.set(name, epoch);
-	if (removed) invalidateUsbNetReading(name, epoch);
+	if (removed) {
+		netifIdentities.delete(name);
+		invalidateUsbNetReading(name, epoch);
+	}
 }
 
 let scanSettlementInstalled = false;
@@ -214,6 +241,16 @@ function installScanSettlement(): void {
 			triggerNetworkInterfacesChange();
 			broadcastNetif();
 		}
+	});
+	onUsbNetReadingInvalidated(() => {
+		// The deferred publication keeps the monitor path honest: it invalidates
+		// before dropping the netif entry, so publishing inline would repeat the
+		// removed name. These are the frames the scan's own commit edge used to
+		// emit for the removal, and the roster must not keep the dongle's row.
+		queueMicrotask(() => {
+			broadcastNetif();
+			void broadcastModemRoster();
+		});
 	});
 }
 
@@ -676,6 +713,22 @@ function isNetifUpState(state: string): boolean {
 	return s === "up" || s.startsWith("connected");
 }
 
+/**
+ * The kernel's own netdev list, which is the only evidence that a name still
+ * names an incarnation. A monitor down-state on a name found here is an NM
+ * link-state flap on a plugged-in device, not a removal. Tests override this
+ * OS boundary; production reads sysfs.
+ */
+export const netdevPresence = {
+	inSysfs(name: string): boolean {
+		try {
+			return existsSync(`/sys/class/net/${name}`);
+		} catch {
+			return false;
+		}
+	},
+};
+
 function isNetifDownState(state: string): boolean {
 	const s = state.toLowerCase();
 	return (
@@ -709,7 +762,9 @@ export function handleNetifMonitorEvent(event: MonitorEvent): void {
 			mutated = true;
 		}
 	} else if (isNetifDownState(event.state)) {
-		bumpPresence(name, true);
+		// A modem that loses its connection is still plugged in: its committed
+		// identity belongs to that present incarnation and must survive the flap.
+		bumpPresence(name, !netdevPresence.inSysfs(name));
 		if (netif[name]) {
 			delete netif[name];
 			mutated = true;
@@ -883,11 +938,11 @@ export function updateNetif() {
 // with a `scope`, letting us prefer the routable global-scope lease. ifconfig
 // still drives throughput, RUNNING flags, and the WiFi device list; a missing or
 // failing `ip` degrades to ifconfig-only (the prior single-address behavior).
-async function resolveIpAddrOverrides(): Promise<
-	Map<string, IpAddrSelection> | undefined
-> {
+async function resolveIpAddrOverrides(
+	ifindices: Map<string, number>,
+): Promise<Map<string, IpAddrSelection> | undefined> {
 	try {
-		return parseIpAddrShow(await run("ip", ["-4", "addr", "show"]));
+		return parseIpAddrShow(await run("ip", ["-4", "addr", "show"]), ifindices);
 	} catch (error: unknown) {
 		const message = error instanceof Error ? error.message : String(error);
 		logger.debug(`ip -4 addr show unavailable, using ifconfig IPs: ${message}`);
@@ -897,10 +952,11 @@ async function resolveIpAddrOverrides(): Promise<
 
 async function refreshNetifFromOs(): Promise<void> {
 	const generation = ++netifRefreshGeneration;
+	const ifindices = new Map<string, number>();
 	try {
 		const [ifconfigOut, ipOverrides] = await Promise.all([
 			run("ifconfig", []),
-			resolveIpAddrOverrides(),
+			resolveIpAddrOverrides(ifindices),
 		]);
 		if (generation !== netifRefreshGeneration) return;
 		const ifnames = ifconfigOut
@@ -1006,7 +1062,13 @@ async function refreshNetifFromOs(): Promise<void> {
 			}
 		}
 		if (generation !== netifRefreshGeneration) return;
-		processIfconfigOutput(ifconfigOut, ipOverrides, undefined, buses);
+		processIfconfigOutput(
+			ifconfigOut,
+			ipOverrides,
+			undefined,
+			buses,
+			ifindices,
+		);
 	} catch (error: unknown) {
 		const message = error instanceof Error ? error.message : String(error);
 		logger.error(`Error getting ifconfig: ${message}`);
@@ -1018,12 +1080,14 @@ export function processIfconfigOutput(
 	ipOverrides?: Map<string, IpAddrSelection>,
 	now: number = getms(),
 	buses?: ReadonlyMap<string, NetdevBusEvidence>,
+	ifindices?: ReadonlyMap<string, number>,
 ) {
 	installScanSettlement();
 	const previousNetif = netif;
 	const previousIfnames = new Set(Object.keys(netif));
 	const firstSnapshot = !netifSnapshotReady;
 	let intsChanged = false;
+	let wifiIncarnationChanged = false;
 	const newInterfaces: Record<string, NetworkInterface> = {};
 
 	wifiDeviceListStartUpdate();
@@ -1050,12 +1114,12 @@ export function processIfconfigOutput(
 
 			const flags = (int.match(/flags=\d+<([A-Z,]+)>/)?.[1] ?? "").split(",");
 			const isRunning = flags.includes("RUNNING");
+			const mac = int.match(/ether ([0-9a-f:]+)/)?.[1];
 
 			// update the list of WiFi devices
-			if (/^wl/.test(name)) {
-				const hwAddr = int.match(/ether ([0-9a-f:]+)/);
-				if (hwAddr?.[1]) {
-					wifiDeviceListAdd(name, hwAddr[1], isRunning ? inetAddr : null);
+			if (isSupportedWifiIfname(name)) {
+				if (mac) {
+					wifiDeviceListAdd(name, mac, isRunning ? inetAddr : null);
 				}
 			}
 
@@ -1073,6 +1137,22 @@ export function processIfconfigOutput(
 			);
 
 			const previous = netif[name];
+			const ifindex = ifindices?.get(name);
+			const identity = netifIdentities.get(name);
+			if (previous && !identity) {
+				// Adopt the monitor's lifetime without invalidating its covering bus read.
+				netifTopologyGeneration++;
+			}
+			if (
+				previous &&
+				identity &&
+				(identity.ifindex !== ifindex || identity.mac !== mac)
+			) {
+				bumpPresence(name, true);
+				intsChanged = true;
+				if (isSupportedWifiIfname(name)) wifiIncarnationChanged = true;
+			}
+			netifIdentities.set(name, { ifindex, mac });
 			let tp = 0;
 			if (previous) {
 				tp = txBytes - previous.txb;
@@ -1177,7 +1257,7 @@ export function processIfconfigOutput(
 	// no frame.
 	publishDupIpNotice(dupIpGroups);
 
-	if (wifiDeviceListEndUpdate()) {
+	if (wifiDeviceListEndUpdate() || wifiIncarnationChanged) {
 		logger.info("updated wifi devices");
 		// a delay seems to be needed before NM registers new devices
 		scheduleWifiUpdate(1000);
@@ -1252,14 +1332,18 @@ function prefixToNetmask(prefix: number): string {
  * prefer the routable global lease over an RFC-3927 link-local when a link has
  * both — the fix for a board that would otherwise advertise its link-local.
  */
-export function parseIpAddrShow(stdout: string): Map<string, IpAddrSelection> {
+export function parseIpAddrShow(
+	stdout: string,
+	ifindices?: Map<string, number>,
+): Map<string, IpAddrSelection> {
 	const byIface = new Map<string, ScopedAddress[]>();
 	let current: string | undefined;
 
 	for (const line of stdout.split("\n")) {
-		const header = line.match(/^\d+:\s+([^:@\s]+)/);
-		if (header?.[1]) {
-			current = header[1];
+		const header = line.match(/^(\d+):\s+([^:@\s]+)/);
+		if (header?.[1] && header[2]) {
+			current = header[2];
+			ifindices?.set(current, Number.parseInt(header[1], 10));
 			continue;
 		}
 		if (current === undefined) continue;

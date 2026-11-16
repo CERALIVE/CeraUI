@@ -958,7 +958,7 @@
 	"network.cellular.initializingTitle": "セルラーを起動しています",
 	"network.cellular.reason.initializing": "モデムを検出しました — モデムサービスがこの機器を認識するのを待っています。",
 	"network.cellular.reason.undriveable": "この機器は接続されたままですが、どのモデムサービスからも制御できません。",
-	"network.cellular.reason.himiUfiRouter": "この HIMI U01 の内蔵ルーターがモバイル接続を占有しているため、CeraLive はデータ接続を開始できません。ルーターモード（USB ネットワーク）に切り替えるか、通常のモデムをお使いください。詳しくは docs.ceralive.tv/hardware/cellular-modems/ をご覧ください。",
+	"network.cellular.reason.himiUfiRouter": "この HIMI U01 はデータ接続を開始できませんでした。内蔵ルーターがモバイル接続を占有している可能性があります。ルーターモード（USB ネットワーク）に切り替えるか、通常のモデムをお使いください。詳しくは docs.ceralive.tv/hardware/cellular-modems/ をご覧ください。",
 	"network.cellular.reason.routerControlsUnverified": "このドングルは、設定変更が実際に反映されることを一度も確認できませんでした。そのためここでは何も提供しません。ドングル自身の Web インターフェースを使用してください。",
 	"network.cellular.reason.routerManaged": "この接続はドングル自身が管理します。ネットワーク設定はドングル自身の Web インターフェースにあり、ここにはありません。",
 	"network.cellular.reason.unknown": "このデバイスはここからは設定できません。",

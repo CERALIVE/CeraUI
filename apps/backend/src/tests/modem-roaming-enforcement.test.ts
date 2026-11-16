@@ -39,7 +39,7 @@ import {
 import type { NetworkManagerConnectionModemConfig } from "../modules/network/network-manager.ts";
 
 const DEVICE_ID = "b59f0594669e9a71267b592f4bfeff95d5d8f40b";
-const SIM_ID = "89571017025053051654";
+const SIM_ID = "89000000000000000004";
 const KEEP = "091ca73b-9f75-42bd-a737-2c447ca44533";
 
 function audit(over: Partial<GsmProfileAudit> = {}): GsmProfileAudit {

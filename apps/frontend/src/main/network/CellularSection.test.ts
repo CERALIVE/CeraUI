@@ -686,7 +686,7 @@ describe("CellularSection — the real board roster", () => {
 		});
 
 		expect(container.textContent).toContain(
-			"This HIMI U01 stick's own router is using the mobile connection, so CeraLive can't start its data connection. Use router mode (USB network) or a regular modem. See docs.ceralive.tv/hardware/cellular-modems/.",
+			"This HIMI U01 stick couldn't start its data connection. Its own router may be using the mobile connection: use router mode (USB network) or a regular modem. See docs.ceralive.tv/hardware/cellular-modems/.",
 		);
 	});
 
@@ -695,7 +695,7 @@ describe("CellularSection — the real board roster", () => {
 			"2",
 			modem({
 				ifname: "wwan0",
-				name: "RM530N-GL - 16855",
+				name: "RM530N-GL - 23456",
 				status: {
 					connection: "enabled",
 					signal: 0,
@@ -743,7 +743,7 @@ describe("CellularSection — the real board roster", () => {
 			...container.querySelectorAll('[data-testid="modem-state-badge"]'),
 		].map((n) => n.textContent?.trim());
 
-		expect(names).toEqual(["RM530N-GL - 16855", "SIMCOM_SIM7600G-H"]);
+		expect(names).toEqual(["RM530N-GL - 23456", "SIMCOM_SIM7600G-H"]);
 		expect(states[0]).toBe("Enabled");
 		expect(states[1]).toBe("No SIM");
 	});
@@ -918,7 +918,7 @@ describe("CellularSection — SIM-lock affordance (todo 46)", () => {
 describe("a searching modem renders its real signal and the real refusal", () => {
 	const quectel = {
 		ifname: "wwan0",
-		name: "RM530N-GL - 16855",
+		name: "RM530N-GL - 23456",
 		model: "RM530N-GL",
 		network_type: { supported: ["4g3g"], active: "4g3g" },
 		status: {

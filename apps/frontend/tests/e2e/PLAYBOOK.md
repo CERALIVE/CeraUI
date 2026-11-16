@@ -193,7 +193,13 @@ Baseline images are committed to the repo, the mobile project's `*-mobile-linux.
 
 Record baselines against the built preview (`bun run build:frontend`), with `CI=true` exported before the preview and the backend start, as the visual gate runs. The Vite dev server adds dev-only navigation (Identity, Dev Tools) and the Svelte inspector button, so a baseline recorded there fails against the built app.
 
-The exception is a test tagged `@dev-only`: it opens the Identity or Dev Tools destination, which `import.meta.env.DEV` compiles out of the built app. Only the `desktop-dev` and `mobile-dev` projects list it, and they run it on a Vite dev server: in CI mode Playwright starts one on `E2E_PORT + 1` (6174) beside the preview, whose proxy still routes the page's socket to its worker backend. Record its baselines (`*-desktop-dev-linux.png`, `*-mobile-dev-linux.png`) with `--project=desktop-dev --project=mobile-dev`.
+For an alternate preview port, set `E2E_PORT` before starting Playwright and start
+the preview on that same port. Socket interception uses `helpers/backend-socket.ts`
+so the RPC, sharing, Bluetooth, update and visual fixtures follow `E2E_PORT`
+instead of silently missing the socket. The existing direct-backend ports remain
+supported.
+
+The exception is a test tagged `@dev-only`: it opens the Identity or Dev Tools destination, which `import.meta.env.DEV` compiles out of the built app. Only the `desktop-dev` and `mobile-dev` projects list it, and they run it on a Vite dev server: in CI mode, when the run selects a `-dev` project (no `--project`, a `-dev` name or a `*` pattern), Playwright starts one on `E2E_PORT + 1` (6174) beside the preview, whose proxy still routes the page's socket to its worker backend. Record its baselines (`*-desktop-dev-linux.png`, `*-mobile-dev-linux.png`) with `--project=desktop-dev --project=mobile-dev`.
 
 ---
 

@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { expect, type Page, test } from "../fixtures/index.js";
 
+import { isBackendSocket } from "../helpers/backend-socket.js";
 import { evidencePath, navigateTo } from "../helpers/index.js";
 
 /**
@@ -164,6 +165,26 @@ test.describe("@visual Task 13 quick wins", () => {
 			"desktop layout drives the encoder dialog",
 		);
 		await page.addInitScript(installWsHarness, TOKEN);
+		// The backend refreshes its own board profile after boot; this test owns
+		// these three topics so the generic 720p option cannot disappear mid-click.
+		await page.routeWebSocket(isBackendSocket, (socket) => {
+			const server = socket.connectToServer();
+			socket.onMessage((message) => server.send(message));
+			server.onMessage((message) => {
+				if (typeof message !== "string") {
+					socket.send(message);
+					return;
+				}
+				const frame = JSON.parse(message);
+				if ("pipelines" in frame) frame.pipelines = GENERIC_PIPELINES;
+				if ("sources" in frame) frame.sources = GENERIC_SOURCES;
+				if ("capabilities" in frame) frame.capabilities = GENERIC_CAPS;
+				if (frame.status?.capabilities) {
+					frame.status.capabilities = GENERIC_CAPS;
+				}
+				socket.send(JSON.stringify(frame));
+			});
+		});
 		await page.goto("/");
 		await navigateTo(page, "live");
 		await expect

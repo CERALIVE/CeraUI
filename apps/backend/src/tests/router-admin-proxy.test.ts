@@ -43,9 +43,9 @@ const PREFIX = "/dongle-admin";
   gateway — i.e. as their admin address. Every fixture below is this output, so
   a proxy that resolved by address rather than by interface cannot pass.
 
-  Measured through each binding, the two答 with DIFFERENT serials:
-    enx0c5b8f279a64 -> Y4QDU17621000872
-    eth1            -> Y4QDU17621000793
+  Each binding returns a distinct serial; the examples below are synthetic:
+    enx0c5b8f279a64 -> X0XXX00000000111
+    eth1            -> X0XXX00000000222
 */
 const BENCH_DEFAULT_ROUTES = [
 	"default via 192.168.0.1 dev enx344b50000000 proto dhcp src 192.168.0.169 metric 103",

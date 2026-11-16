@@ -537,7 +537,7 @@ describe('connection status covers the real ModemManager state space', () => {
 	function withState(state: string) {
 		return {
 			ifname: 'wwan0',
-			name: 'RM530N-GL - 16855',
+			name: 'RM530N-GL - 23456',
 			network_type: { supported: ['5G'], active: '5G' },
 			status: { connection: state, network_type: '5G', signal: 0, roaming: false },
 		};

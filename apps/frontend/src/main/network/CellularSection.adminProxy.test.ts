@@ -93,8 +93,8 @@ function renderRoster(entries: [string, Modem][]) {
 describe("the admin-UI affordance on a router-ethernet row", () => {
 	it("renders once per router-ethernet dongle, keyed on the ROW ID", () => {
 		const { container } = renderRoster([
-			["7", twin("enx0c5b8f279a64", "Y4QDU17621000872")],
-			["8", twin("eth1", "Y4QDU17621000793")],
+			["7", twin("enx0c5b8f279a64", "X0XXX00000000111")],
+			["8", twin("eth1", "X0XXX00000000222")],
 		]);
 
 		const buttons = container.querySelectorAll<HTMLElement>(
@@ -122,7 +122,7 @@ describe("the admin-UI affordance on a router-ethernet row", () => {
 	});
 
 	it("is absent when the dongle's admin API was never read", () => {
-		const bare = twin("eth1", "Y4QDU17621000793");
+		const bare = twin("eth1", "X0XXX00000000222");
 		const { router_admin: _dropped, ...withoutAdmin } = bare as Modem & {
 			router_admin?: unknown;
 		};
@@ -135,7 +135,7 @@ describe("the admin-UI affordance on a router-ethernet row", () => {
 	it("still renders for a dongle whose admin API did not answer", () => {
 		// The address is a ROUTING fact, so it is worth offering even when the
 		// last read failed — the device may simply have been busy.
-		const unreachable = twin("eth1", "Y4QDU17621000793");
+		const unreachable = twin("eth1", "X0XXX00000000222");
 		(unreachable as Modem).router_admin = {
 			admin_url: "http://192.168.8.1",
 			reachable: false,

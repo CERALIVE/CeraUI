@@ -16,7 +16,9 @@ seeds the sidecar before that point, and global setup adds its digest to the
 worker-backend seed only after proving a genuine remember-me login. It never
 rotates the captured sidecar token. CI's separate preview routing and seeded
 credential path are unchanged; in CI mode Playwright starts only the Vite dev
-server for the `@dev-only` projects, on `E2E_PORT + 1`. Local Vite-dev runs use
+server for the `@dev-only` projects, on `E2E_PORT + 1`, and only when the run
+selects one of them (no `--project`, a `-dev` name or a `*` pattern), so the
+hosted `--project=desktop|mobile` lanes never start it. Local Vite-dev runs use
 one worker (full suite 448 pass); CI's production-preview lanes keep four, with
 the same test bodies, timeouts and skip conditions.
 

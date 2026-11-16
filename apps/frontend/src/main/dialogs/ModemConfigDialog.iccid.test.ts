@@ -56,11 +56,11 @@ vi.mock("svelte-sonner", () => ({
 vi.mock("$lib/helpers/clipboard", () => ({ copyToClipboard }));
 
 /**
- * The bench Quectel RM530N-GL's REAL ICCID, read live off `ceralive2`. Unlike
- * the own-number fixture beside it this is NOT redacted — the value is printed
- * on the card and is meant to be read aloud.
+ * Synthetic 19-digit ICCID with a valid Luhn check digit.
+ * Keeps the captured fixture's format without retaining subscriber identity.
+ * The dialog must display and copy the exact value.
  */
-const BOARD_ICCID = "8957123102400060892";
+const BOARD_ICCID = "8900000000000000003";
 
 function modemWith(overrides: Partial<Modem> = {}): Modem {
 	return {
@@ -117,7 +117,7 @@ describe("rendered plainly", () => {
 	});
 
 	it("offers NO reveal toggle — that is the own-number field's contract, not this one", async () => {
-		mount(modemWith({ iccid: BOARD_ICCID, own_numbers: ["+573115422359"] }));
+		mount(modemWith({ iccid: BOARD_ICCID, own_numbers: ["+999000000005"] }));
 
 		await screen.findByTestId("modem-iccid");
 

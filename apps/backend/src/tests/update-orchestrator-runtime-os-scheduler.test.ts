@@ -120,17 +120,14 @@ describe("metered scheduled checks", () => {
 	}
 
 	test("real metered inventory preserves unmetered Ethernet alongside modem control ports", async () => {
-		replayInventory(
-			`GENERAL.DEVICE:eth0\nGENERAL.IP-IFACE:eth0\nGENERAL.TYPE:ethernet\nGENERAL.STATE:100 (connected)\nGENERAL.METERED:no\n\n${twinInventory}`,
-			["eth0", "wwan0", "wwan1"],
-		);
+		replayInventory(twinInventory, ["eth0", "wwu1u4u3i2", "wwu1u4u2i2"]);
 		expect(
 			await defaultOrchestratorRuntimeDeps.onlyMeteredCandidateExists(),
 		).toBe(false);
 	});
 
 	test("modem-only inventory reaches cellular download consent without repos_unreachable (#431)", async () => {
-		replayInventory(twinInventory, ["wwan0", "wwan1"]);
+		replayInventory(twinInventory, ["wwu1u4u3i2", "wwu1u4u2i2"]);
 		const h = harness([], {
 			loadSettings: async () => ({
 				packagesAuto: true,

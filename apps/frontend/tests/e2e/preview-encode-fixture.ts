@@ -1,3 +1,5 @@
+import { isBackendSocket } from "./helpers/backend-socket.js";
+
 import type { Page, WebSocketRoute } from '@playwright/test';
 
 import { expect } from './fixtures/index.js';
@@ -107,7 +109,7 @@ export async function routePreviewEncode(
 		(window as { RTCPeerConnection?: unknown }).RTCPeerConnection = undefined;
 	});
 
-	await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
+	await page.routeWebSocket(isBackendSocket, (ws) => {
 		if (ws.url().includes('/preview')) {
 			mockPreviewSocket(ws);
 			return;

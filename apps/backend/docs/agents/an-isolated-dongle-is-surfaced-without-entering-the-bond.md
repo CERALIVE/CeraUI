@@ -689,10 +689,10 @@ rather than generalised:**
    runtime (`webpackJsonp`/`__webpack_require__`), so an unrelated `.p="/"` is
    out of reach.
 
-**Board-proven end to end, twice.** (2026-08-18, two Huawei E3372 twins): each
+**Board-proven end to end, twice (serials below are synthetic).** (2026-08-18, two Huawei E3372 twins): each
 twin's button opens its own session, the vendor SPA runs its full API sequence
 through the proxy with ZERO page errors, and each lands on its own unit —
-`Y4QDU17621000872` (`enx0c5b8f279a64`) and `Y4QDU17621000793` (`eth1`).
+`X0XXX00000000111` (`enx0c5b8f279a64`) and `X0XXX00000000222` (`eth1`).
 (2026-08-18, Qualcomm 4G UFI `enx020a53313630`, fresh Playwright context with
 `serviceWorkers: 'block'`): the button RENDERS the vendor SPA instead of
 downloading it — `content-type: text/html`, zero downloads — the operator logs
@@ -942,8 +942,14 @@ once, when its twin is first seen, and remains there after the twin is removed.
 Affected devices change link id and steering mark once. The rejected serial's
 opaque `legacyLinkId` preserves an existing bond opt-out; toggling one twin first
 migrates the old exclusion to every present twin so its sibling stays excluded.
-Router login credentials re-key automatically only when exactly one present
-physical device owns the legacy id. Twins must re-enter credentials once.
+Router login credentials are read only under the device's exact resolved
+`linkId`. A rejected serial's legacy id has no durable binding to a port, so it
+cannot transfer a login, even if only one twin remains or the backend restarts.
+Legacy entries are retained without assignment; exact-key owners keep their
+credentials. An affected user may need to re-enter a router login once through
+the existing credential dialog. Coverage:
+`tests/modem-credential-ownership.test.ts` (twin removal, restart, and present
+owner retention) and `tests/modem-physical-identity.test.ts` (singleton refusal).
 Remove any sysfs serial bind mount before upgrading.
 
 **`stable_key` is NOT `identityKey`, and this todo did not re-key it.** The wire's
@@ -1034,14 +1040,34 @@ is installed once on the first publication, avoiding import-time calls through
 the network/scan/registry dependency cycle.
 
 Each USB descriptor reading records the name's last observed removal epoch from
-the producer's presence counter. A monitor down/removal event, including one
-before first publication, or a poll that drops an existing entry invalidates its
-pending reading. At commit, a reading with a changed epoch loses its descriptor,
-markers and coverage for that name and a fresh scan is requested; other names can
-still commit. Previously committed snapshots retain their existing lifecycle.
+the producer's presence counter. A monitor removal — a down state for a name the
+kernel no longer lists in `/sys/class/net` — including one before first
+publication, or a poll that drops an existing entry invalidates its pending
+reading and immediately removes its committed descriptor, markers and coverage.
+A monitor down state on a name still present in sysfs is a link flap on a
+plugged-in device and keeps that incarnation's committed identity. An unplug
+whose sysfs node lingers past the monitor event is therefore not invalidated by
+the next poll: the monitor already dropped the netif entry, so the poll no
+longer reports a removal. Its committed coverage and descriptor survive until
+the next periodic USB scan (at most 5 s), and a flapping modem keeps its
+identity only until that scan. Removal republishes `netif` and the modem roster
+itself, the edge the following scan used to report, so a removed router
+dongle's row is retracted on the same tick rather than a later sweep. The
+present-device view used to carry a legacy shared-serial bond opt-out to every
+present twin is rebuilt from the surviving descriptors, and the removed name's
+readiness clock and warning are cleared. At commit, a reading with a changed epoch loses its descriptor, markers and
+coverage for that name and a fresh scan is requested; other names can still
+commit. A replacement reusing the name must obtain its own covering read or
+reach its own readiness deadline before identity-dependent admission.
 First publication and monitor creation adopt the covering reading without
 invalidating it. `tests/usb-net-incarnation.test.ts` exercises these paths with
 parked reads and both USB and non-USB replacements.
+`tests/usb-net-committed-incarnation.test.ts` covers completed scans followed by
+monitor, absent-poll and non-RUNNING removal, with the replacement scan blocked
+and no fixture cache clearing. `tests/usb-net-router-removal.test.ts` covers a
+router-cellular dongle's roster retraction and the link-flap exemption. Both
+SRTLA collectors and steering exclude the replacement until its fresh descriptor
+commits; surviving interfaces retain their coverage and identity.
 
 The classifier preserves error codes through the optional `readLinkResult`
 dependency; existing descriptor/driver reads still use `readLinkName`. A bus
@@ -1066,9 +1092,9 @@ this is not a promise of one total warning across all owners.
 A completed scan covers even a rejected descriptor read, so that commit can
 release a USB entry weakly before 15 seconds. A weak identity is still refused
 for durable bond preferences and modem credentials. Coverage, descriptors and
-the readiness clock remain name-keyed; their existing committed-snapshot and
-deadline limitations remain even after observed reuse. Rapid replug that is not
-observed within one poll cadence is outside the incarnation fence.
+the readiness clock remain name-keyed, but observed removal ends their lifetime.
+Rapid replug that is not observed within one poll cadence is outside the
+incarnation fence.
 
 Residuals include rename/unregister after the OS snapshot, ordinary parent
 teardown, drivers without a USB parent, vendor ordering differences, and missing,

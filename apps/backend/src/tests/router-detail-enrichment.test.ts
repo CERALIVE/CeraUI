@@ -25,8 +25,8 @@ import {
 const HILINK_INFORMATION = `<?xml version="1.0" encoding="UTF-8"?>
 <response>
 <DeviceName>E3372</DeviceName>
-<SerialNumber>Y4QDU17621000872</SerialNumber>
-<Imei>866850029360451</Imei>
+<SerialNumber>X0XXX00000000111</SerialNumber>
+<Imei>000000000089012</Imei>
 <Imsi></Imsi>
 <Iccid></Iccid>
 <Msisdn></Msisdn>
@@ -290,17 +290,17 @@ const UFI_SYSINFO = JSON.stringify({
 	},
 });
 
-/** VERBATIM: `getoverview` on the same unit. */
+/** Captured `getoverview`, with synthetic IMSI and ICCID. */
 const UFI_OVERVIEW = JSON.stringify({
 	reply: "ok",
 	params: {
 		SYSVER: "UFI_HM_SIM1_V016_240828",
 		HWVER: "HW1.0",
-		IMEI: "862901072672633",
+		IMEI: "000000000078901",
 		SSID: "4G-UFI-9627",
-		IMSI: "732123704103087",
+		IMSI: "001010000012345",
 		WANIP: "-",
-		ICCID: "8957123302538483871",
+		ICCID: "8900000000000000011",
 		WEBVER: "WEB1.1",
 		SIGNAL: -88,
 	},
@@ -322,8 +322,8 @@ describe("the Qualcomm UFI detail read", () => {
 
 		expect(details).toEqual({
 			ssid: "4G-UFI-9627",
-			imsi: "732123704103087",
-			iccid: "8957123302538483871",
+			imsi: "001010000012345",
+			iccid: "8900000000000000011",
 			web_version: "WEB1.1",
 			cell_id: "134318388",
 			station_id: "25002",

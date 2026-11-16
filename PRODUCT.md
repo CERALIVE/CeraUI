@@ -1,8 +1,6 @@
 # Product
 
-## Register
-
-product
+<!-- impeccable:product-schema 1 -->
 
 ## Users
 
@@ -13,6 +11,10 @@ Live streamers, broadcasters, and content creators — from professional broadca
 CeraUI is the on-device control plane for CeraLive streaming hardware. It lets operators configure, monitor, and control an active stream from a browser PWA. Success: a user can arrive cold, configure their encoder and network connections, start a bonded multi-link stream, and monitor it live — all without consulting docs or making a support call. The persistent live HUD (bitrate, signal, SoC telemetry) keeps the operator informed throughout.
 
 3-destination information architecture: **Live** (streaming + encoder config), **Network** (connectivity), **Settings** (system configuration). Heavy dialog usage for all secondary flows.
+
+## Positioning
+
+CeraUI runs on the CeraLive encoder itself rather than in a cloud dashboard: it drives the device's own hardware encoder and bonds its cellular, Wi-Fi and Ethernet uplinks over SRTLA, so an operator sets up and goes live from any browser that can reach the device. It is open source under GPL-3.0.
 
 ## Brand Personality
 

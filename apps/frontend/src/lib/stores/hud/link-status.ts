@@ -27,9 +27,10 @@ import { MAX_LINKS } from "./constants";
 /**
  * Map a modem's backend `status.connection` + `no_sim` flag onto the HUD's
  * simplified {@link LinkSignal.connectionState}. `no_sim` wins over everything
- * (a SIM-less modem can never be connected); otherwise `connected`/`scanning`
- * pass through and every other backend state (failed/registered/connecting or
- * a missing status) collapses to `disconnected`.
+ * (a SIM-less modem can never be connected); otherwise `connected` passes
+ * through, and both ModemManager's `searching` and CeraUI's own `scanning`
+ * map to `scanning`. Every other backend state (failed/registered/connecting
+ * or a missing status) collapses to `disconnected`.
  */
 export function modemConnectionState(
 	modem: Modem,
@@ -38,6 +39,7 @@ export function modemConnectionState(
 	switch (modem.status?.connection) {
 		case "connected":
 			return "connected";
+		case "searching":
 		case "scanning":
 			return "scanning";
 		default:

@@ -60,7 +60,7 @@ const SESSION =
 const HILINK_INFORMATION = `<?xml version="1.0" encoding="UTF-8"?>
 <response>
 <DeviceName>E3372</DeviceName>
-<SerialNumber>Y4QDU17621000793</SerialNumber>
+<SerialNumber>X0XXX00000000222</SerialNumber>
 <SoftwareVersion>22.333.01.00.00</SoftwareVersion>
 </response>`;
 

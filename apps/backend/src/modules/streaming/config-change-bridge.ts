@@ -7,6 +7,7 @@ import {
 	CONFIG_CHANGE_REASON_ENGINE_LOST,
 	CONFIG_CHANGE_REASON_REJECTED,
 	type ConfigChangeResult,
+	type LifecycleState,
 	type Resolution,
 	resolutionSchema,
 	toEngineResolution,
@@ -23,6 +24,7 @@ import {
 	type EngineConfigChangeOutcome,
 	getStreamSessionSnapshot,
 	type StreamConfigChangeDelta,
+	type StreamSessionOrchestrator,
 } from "./stream-session-orchestrator.ts";
 import { getStreamingBackend } from "./streaming-engine.ts";
 
@@ -129,10 +131,41 @@ export type ApplyNowGate = {
 	) => Promise<ConfigChangeResult>;
 };
 
-const productionGate: ApplyNowGate = {
-	isStreamLive: () => getStreamSessionSnapshot().state === "streaming",
-	dispatch: (delta) => changeStreamSessionConfig(delta),
-};
+/**
+ * Only a settled `idle` turns an apply-now save into an ordinary next-start
+ * save. Every other state is a stream on air, an engine transaction in flight
+ * or a session not yet settled, so the save keeps its restart fields back and
+ * goes to admission, which applies it only while `streaming` and answers
+ * `busy` otherwise. Exhaustive on purpose: a new state must choose a side.
+ */
+function applyNowMeetsLiveSession(state: LifecycleState): boolean {
+	switch (state) {
+		case "idle":
+			return false;
+		case "starting":
+		case "streaming":
+		case "reconfiguring":
+		case "stopping":
+		case "stop_failed":
+		case "reconciling":
+			return true;
+	}
+}
+
+/** The apply-now gate over one stream session's lifecycle and admission. */
+export function createApplyNowGate(
+	session: Pick<StreamSessionOrchestrator, "snapshot" | "changeConfig">,
+): ApplyNowGate {
+	return {
+		isStreamLive: () => applyNowMeetsLiveSession(session.snapshot().state),
+		dispatch: (delta) => session.changeConfig(delta),
+	};
+}
+
+const productionGate = createApplyNowGate({
+	snapshot: getStreamSessionSnapshot,
+	changeConfig: changeStreamSessionConfig,
+});
 
 let activeGate: ApplyNowGate = productionGate;
 
