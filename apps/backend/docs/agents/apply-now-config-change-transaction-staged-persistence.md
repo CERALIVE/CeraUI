@@ -207,6 +207,23 @@ process has staged belongs to a change still running, not to a crash: it is
 never judged (`no_marker`), and a judged marker is removed alone, never the
 stage of a change running now.
 
+**A LIVE MATCH MUST DISTINGUISH BOTH SIDES.** The judge compares only the
+candidate's transaction axes against each side's recorded values. An unrelated
+saved next-start codec is not evidence that the previous session was replaced.
+Missing runtime measurements and omitted previous values remain unknown; a
+decisive live verdict requires one side to match and the other to contradict the
+same observations. Identical compared facts defer in either direction.
+
+The published `@ceralive/cerastream@2026.11.1` status has no exact capture-mode or
+routed-pipeline measurement. Its output codec, incoming `input_codec`, geometry
+and active input cannot establish those request fields. If the candidate changes
+`input_mode` or `pipeline`, including a local mode clear, recovery therefore keeps
+the config and marker bytes unchanged until decisive evidence is available.
+Unchanged capture settings still permit proven geometry, codec or input recovery.
+The local nullable geometry clears remain storage intent, never engine
+measurements; their existing deferral gate precedes both live verdicts.
+Authoritative idle still retains the previous config and retires the marker.
+
 **AND IT IS ARMED — `config-change-reconcile-wiring.ts` is what calls it.** For
 one wave the paragraph above described behaviour that could not happen: the only
 importer of `reconcileInflightConfigChange` was its own unit test, so a marker
@@ -256,7 +273,9 @@ through the REAL writer and REAL `config.json`: persist-candidate, retain-previo
 the undecided-then-decisive re-ask, the never-decisive defer that keeps the marker,
 the no-marker zero-side-effect case, double-apply, the overlapping-run join, the
 config-space normalization table, the two call-site locks, and a running change's
-stage surviving both hooks),
+stage surviving both hooks; real-file capture-mode/pipeline ambiguity in both
+directions, mode clears, unknown previous values, unchanged saved next-start
+intent, and idle/transitional controls),
 `tests/config-change-orchestrator.test.ts` (admission, the four typed
 outcomes, stop-during-applying, stop-during-rollback, the teardown_timeout →
 engine-exit escalation chain, attempt fencing, deadline reconcile, and the
