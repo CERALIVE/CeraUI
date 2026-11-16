@@ -563,7 +563,7 @@ function buildDbusAdditive(
  * path was silently absent on the D-Bus one — and `"dbus"` is the DEFAULT
  * backend, so the fallback reached no shipped device at all. Board-measured on
  * `ceralive2` (2026-08-18): the Qualcomm reference-design stick reporting
- * `manufacturer: 1` / `model: 0` was still titled **"0 - 54863"** with the fix
+ * `manufacturer: 1` / `model: 0` was still titled **"0 - 12345"** with the fix
  * present in the binary, because this composer is the one the wire went through.
  */
 function buildDbusName(view: DbusModemView): string {

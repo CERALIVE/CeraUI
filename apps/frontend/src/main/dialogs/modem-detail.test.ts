@@ -340,9 +340,9 @@ describe("hasModemDetail", () => {
 		expect(hasModemDetail({ cell_info: { rsrp: -90 } })).toBe(true);
 		expect(hasModemDetail({ esim: { sim_type: "esim" } })).toBe(true);
 		expect(hasModemDetail({ firmware_revision: "RM520NGL_1.0" })).toBe(true);
-		expect(hasModemDetail({ own_numbers: ["+573115422359"] })).toBe(true);
+		expect(hasModemDetail({ own_numbers: ["+999000000005"] })).toBe(true);
 		expect(hasModemDetail({ own_numbers: [] })).toBe(false);
-		expect(hasModemDetail({ iccid: "8957123102400060892" })).toBe(true);
+		expect(hasModemDetail({ iccid: "8900000000000000003" })).toBe(true);
 		expect(hasModemDetail({ iccid: "   " })).toBe(false);
 	});
 });
@@ -379,8 +379,8 @@ describe("isStandingUsbRefusal", () => {
 });
 
 describe("ownNumbers", () => {
-	// The bench Quectel RM530N-GL's own SIM, as `mmcli -m 3` reported it live.
-	const BOARD = "+573115422359";
+	// Synthetic E.164-shaped number with the captured fixture's length.
+	const BOARD = "+999000000005";
 
 	it("carries every number the carrier published, in order", () => {
 		expect(ownNumbers([BOARD, "+573001112233"])).toEqual([
@@ -406,10 +406,10 @@ describe("ownNumbers", () => {
 });
 
 describe("simIccid", () => {
-	// The bench Quectel RM530N-GL's real ICCID, read live off `ceralive2`. It is
-	// deliberately unredacted: an ICCID is printed on the card, unlike the
+	// Synthetic 19-digit ICCID with a valid Luhn check digit.
+	// The helper still returns the whole value, unlike the masked
 	// subscriber number above.
-	const BOARD = "8957123102400060892";
+	const BOARD = "8900000000000000003";
 
 	it("carries the value verbatim — there is no mask for this field", () => {
 		expect(simIccid(BOARD)).toBe(BOARD);

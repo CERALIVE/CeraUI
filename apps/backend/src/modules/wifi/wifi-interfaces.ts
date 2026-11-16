@@ -18,6 +18,8 @@
 import { logger } from "../../helpers/logger.ts";
 import { getms } from "../../helpers/time.ts";
 import {
+	getNetifTopologyGeneration,
+	getNetworkInterfaceIncarnation,
 	getNetworkInterfaces,
 	NETIF_ERR_HOTSPOT,
 	setNetifHotspot,
@@ -51,6 +53,7 @@ import {
 	concurrentApIfname,
 	ensureConcurrentApInterface,
 	isConcurrentApIfname,
+	isSupportedWifiIfname,
 } from "./wifi-concurrent-interface.ts";
 import {
 	addWifiInterface,
@@ -216,19 +219,26 @@ let wifiIfId = 0;
 const wifiUpdateTimers = new Set<ReturnType<typeof setTimeout>>();
 let discoveryController = new AbortController();
 let wifiDeviceRefreshCompleted = false;
-let classifiedWifiIfnames = new Set<string>();
+const classifiedWifiIfnames = new Map<string, number>();
+const nonWifiIfnames = new Map<string, number>();
 
 /** Only a completed device refresh can classify the current netif snapshot. */
 export function wifiZonesReady(): boolean {
-	const names = Object.keys(getNetworkInterfaces()).filter((name) =>
-		name.startsWith("wlan"),
+	for (const [name, incarnation] of nonWifiIfnames) {
+		if (getNetworkInterfaceIncarnation(name) !== incarnation)
+			nonWifiIfnames.delete(name);
+	}
+	const names = Object.keys(getNetworkInterfaces()).filter(
+		(name) => isSupportedWifiIfname(name) && !nonWifiIfnames.has(name),
 	);
 	if (names.length === 0) return true;
 	if (!wifiDeviceRefreshCompleted) return false;
 	const wifi = Object.values(getWifiInterfacesByMacAddress());
-	return names.every(
-		(ifname) =>
-			classifiedWifiIfnames.has(ifname) &&
+	return names.every((ifname) => {
+		const incarnation = getNetworkInterfaceIncarnation(ifname);
+		return (
+			incarnation !== undefined &&
+			classifiedWifiIfnames.get(ifname) === incarnation &&
 			wifi.some(
 				(entry) =>
 					entry.ifname === ifname &&
@@ -236,8 +246,9 @@ export function wifiZonesReady(): boolean {
 					(entry.activeConn === null ||
 						entry.activeMode === "ap" ||
 						entry.activeMode === "infrastructure"),
-			),
-	);
+			)
+		);
+	});
 }
 
 export function scheduleWifiUpdate(delayMs: number): void {
@@ -267,6 +278,7 @@ export function resetWifiInterfaceDiscoveryForTest(): void {
 	wifiIfId = 0;
 	wifiDeviceRefreshCompleted = false;
 	classifiedWifiIfnames.clear();
+	nonWifiIfnames.clear();
 }
 
 export function recordDegradedWifiInterface(
@@ -392,7 +404,8 @@ export function wifiUpdateDevices(): Promise<boolean | undefined> {
 
 async function discoverWifiDevices() {
 	wifiDeviceRefreshCompleted = false;
-	classifiedWifiIfnames = new Set();
+	classifiedWifiIfnames.clear();
+	nonWifiIfnames.clear();
 	let classificationComplete = true;
 	const signal = discoveryController.signal;
 	let observation: number | undefined;
@@ -409,8 +422,13 @@ async function discoverWifiDevices() {
 	let statusChange = false;
 	let unavailableDevices = false;
 
+	const topologyGeneration = getNetifTopologyGeneration();
 	const networkDevices = await nmDevices("device,type,state,con-uuid");
 	if (signal.aborted) return;
+	if (topologyGeneration !== getNetifTopologyGeneration()) {
+		scheduleWifiUpdate(0);
+		return;
+	}
 	if (!networkDevices) {
 		if (observation !== undefined) {
 			try {
@@ -454,11 +472,22 @@ async function discoverWifiDevices() {
 				string,
 			];
 
-			if (type !== "wifi") continue;
+			if (type !== "wifi") {
+				const incarnation = getNetworkInterfaceIncarnation(ifname);
+				if (
+					type &&
+					type !== "unknown" &&
+					incarnation !== undefined &&
+					topologyGeneration === getNetifTopologyGeneration()
+				)
+					nonWifiIfnames.set(ifname, incarnation);
+				continue;
+			}
 			if (isConcurrentApIfname(ifname)) {
 				concurrentDevices.set(ifname, connUuid !== "" ? connUuid : null);
 				continue;
 			}
+			if (!isSupportedWifiIfname(ifname)) continue;
 			if (state === "unavailable") {
 				classificationComplete = false;
 				unavailableDevices = true;
@@ -611,7 +640,12 @@ async function discoverWifiDevices() {
 				) {
 					statusChange = true;
 				}
-				classifiedWifiIfnames.add(ifname);
+				const incarnation = getNetworkInterfaceIncarnation(ifname);
+				if (
+					incarnation !== undefined &&
+					topologyGeneration === getNetifTopologyGeneration()
+				)
+					classifiedWifiIfnames.set(ifname, incarnation);
 				if (
 					activeConn !== null &&
 					updatedInterface.activeMode !== "ap" &&
@@ -767,6 +801,8 @@ async function discoverWifiDevices() {
 		void notifyWifiAdapterModeDiscovery();
 	});
 	wifiDeviceRefreshCompleted = classificationComplete;
+	if (topologyGeneration !== getNetifTopologyGeneration())
+		scheduleWifiUpdate(0);
 	triggerNetworkInterfacesChange();
 	return statusChange;
 }

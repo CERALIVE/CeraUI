@@ -683,7 +683,7 @@ export function rowNoteKeys(input: {
  * The carrier is deliberately NOT a candidate here, and that ordering is the
  * fix for a reported defect rather than a preference. `status.network` used to
  * outrank every device field, so the moment a radio registered, the operator's
- * modem — `RM530N-GL - 16855` — was replaced in the title by `Movistar` and
+ * modem — `RM530N-GL - 23456` — was replaced in the title by `Movistar` and
  * demoted to a dim secondary line: the carrier covered the device name and its
  * identifier exactly when the row mattered most. A row identifies its HARDWARE,
  * because that is the thing an operator unplugs, moves between slots and owns

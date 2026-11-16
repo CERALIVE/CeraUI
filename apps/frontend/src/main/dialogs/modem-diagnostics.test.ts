@@ -23,7 +23,7 @@ import {
 import { modemDiagnosticRows } from "./modem-diagnostics";
 
 const ICCID = "8931086518104172482";
-const OWN_NUMBER = "+573115422359";
+const OWN_NUMBER = "+999000000005";
 
 function modem(overrides: Partial<Modem> = {}): Modem {
 	return {

@@ -270,7 +270,7 @@ function routerDongle(
 			connection: "connected",
 			model: "E3372",
 			firmware: "22.333.01.00.00",
-			serial: "Y4QDU17621000872",
+			serial: "X0XXX00000000111",
 			apn: "3gnet",
 			controls: { mobile_data: true, roaming_autoconnect: false },
 			details: {

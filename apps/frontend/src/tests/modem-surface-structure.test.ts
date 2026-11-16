@@ -234,7 +234,7 @@ function routerDongle(): Modem {
 			apn: "3gnet",
 			firmware: "22.333.01.00.00",
 			imei: "000000000089012",
-			serial: "Y4QDU17621000872",
+			serial: "X0XXX00000000111",
 			details: { network_type: "LTE", provider: "Claro", band: "B4" },
 		},
 	} as unknown as Modem;

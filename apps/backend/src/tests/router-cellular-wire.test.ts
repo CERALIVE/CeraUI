@@ -159,7 +159,7 @@ describe("projection onto the numeric wire", () => {
 					admin: {
 						admin_url: "http://192.168.8.1",
 						reachable: true,
-						serial: "Y4QDU17621000793",
+						serial: "X0XXX00000000222",
 					},
 				}),
 			],
@@ -167,7 +167,7 @@ describe("projection onto the numeric wire", () => {
 		);
 
 		const entry = Object.values(message)[0];
-		expect(entry?.router_admin?.serial).toBe("Y4QDU17621000793");
+		expect(entry?.router_admin?.serial).toBe("X0XXX00000000222");
 	});
 });
 
