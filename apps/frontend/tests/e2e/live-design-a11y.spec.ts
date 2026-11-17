@@ -2,6 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 
 import { expect, test } from './fixtures/index.js';
+import { focusMainContent } from './helpers/focus-main-content.js';
 import { measureHitAreas } from './helpers/hit-area.js';
 import { ensureAuthenticated, navigateTo, setLocale, setTheme } from './helpers/index.js';
 
@@ -143,8 +144,8 @@ async function regionTargets(page: Page) {
  * Tab through the cockpit and report every stop outside the Live bar whose
  * bottom edge falls below the bar's top edge.
  */
-async function focusStopsUnderTheBar(page: Page): Promise<string[]> {
-	await page.locator('#main-content').focus();
+async function focusStopsUnderTheBar(page: Page, configuration: string): Promise<string[]> {
+	await focusMainContent(page, configuration);
 	const hidden: string[] = [];
 	let entered = false;
 	for (let press = 0; press < 160; press += 1) {
@@ -326,7 +327,7 @@ test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-on
 			for (const viewport of [DESKTOP, KIOSK, PHONE]) {
 				await page.setViewportSize(viewport);
 				await page.evaluate(() => window.scrollTo(0, 0));
-				for (const stop of await focusStopsUnderTheBar(page)) {
+				for (const stop of await focusStopsUnderTheBar(page, `${state} ${viewport.width}x${viewport.height}`)) {
 					hidden.push(`${state} ${viewport.width}x${viewport.height} ${stop}`);
 				}
 			}
