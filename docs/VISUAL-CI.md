@@ -61,6 +61,15 @@ Only the Bun dependency store is cached, separately from ordinary Ubuntu jobs.
 No host image deletion is needed to establish that path. A cold pull's time
 belongs to the hosted job's real elapsed time.
 
+## Measured hosted timing
+
+Build Check run [44001423704](https://github.com/CERALIVE/CeraUI/actions/runs/44001423704)
+on #636 measured 115 s for the visual job, about 1.92 runner-minutes:
+container start 28 s, bootstrap 6 s and comparison 50 s. It selected 34 cases
+on 2 workers: 25 passed, 9 existing skips and 0 failed. The Bun cache missed
+on this first run. The job finished 5 min 14 s before the slowest E2E lane,
+so it added no wall time to that run.
+
 ## Recording and image bumps
 
 Use a disposable checkout and the exact image above, on Linux amd64 with the same
