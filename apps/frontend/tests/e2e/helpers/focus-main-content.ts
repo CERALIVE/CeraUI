@@ -1,4 +1,5 @@
 import { errors, expect, type Page, test } from '@playwright/test';
+import { captureFocusStall, diagnosticUrl } from './focus-stall-evidence.js';
 
 export async function focusMainContent(page: Page, configuration: string): Promise<void> {
 	const probe = async <T>(name: string, read: () => Promise<T>) => {
@@ -8,6 +9,7 @@ export async function focusMainContent(page: Page, configuration: string): Promi
 			return {
 				status: error instanceof Error && error.name === 'TimeoutError' ? 'timeout' as const : 'error' as const,
 				error: error instanceof Error ? error.message : String(error),
+				errorName: error instanceof Error ? error.name : 'UnknownError',
 			};
 		}
 	};
@@ -45,7 +47,8 @@ export async function focusMainContent(page: Page, configuration: string): Promi
 		const elementsAtPoint = point ? document.elementsFromPoint(point.x, point.y) : [];
 		const bootShell = document.querySelector('[data-boot-shell]');
 		return {
-			url: location.href,
+			url: location.protocol === 'http:' || location.protocol === 'https:'
+				? `${location.origin}${location.pathname}` : location.protocol,
 			readyState: document.readyState,
 			online: navigator.onLine,
 			appMounted: '__ceraAppMounted' in window ? window.__ceraAppMounted : null,
@@ -78,26 +81,62 @@ export async function focusMainContent(page: Page, configuration: string): Promi
 			await main.focus({ timeout: 5_000 });
 		} catch (error) {
 			if (!(error instanceof errors.TimeoutError)) throw error;
-			const javascript = await probe('Renderer JavaScript liveness', () => page.evaluate(() => performance.now()));
-			const animationFrame = await probe('Renderer animation-frame liveness', () => page.evaluate(
-				() => new Promise<number>((resolve) => requestAnimationFrame(resolve)),
-			));
-			const after = await readState();
-			error.message += `\n${configuration}: JavaScript=${javascript.status}, animationFrame=${animationFrame.status}, pageState=${after.status}; see main-focus-state.`;
-			// A stalled renderer cannot answer another DOM read; retain the last responsive state too.
-			await test.info().attach('main-focus-state', {
-				body: JSON.stringify({
-					configuration,
-					focusTimeoutMs: 5_000,
-					url: page.url(),
-					viewport: page.viewportSize(),
-					before,
-					liveness: { javascript, animationFrame },
-					after,
-				}, null, 2),
-				contentType: 'application/json',
-			});
-			throw error;
+			try {
+				const [javascript, animationFrame, after] = await Promise.all([
+					probe('Renderer JavaScript liveness', () => page.evaluate(() => performance.now())),
+					probe('Renderer animation-frame liveness', () => page.evaluate(
+						() => new Promise<number>((resolve) => requestAnimationFrame(resolve)),
+					)),
+					readState(),
+				]);
+				const outOfPage = await captureFocusStall(page);
+				const screenshot = await (async () => {
+					if (outOfPage.screenshot.status !== 'ok') return outOfPage.screenshot;
+					const captured = outOfPage.screenshot.value;
+					if (captured.truncated) return {
+						status: 'truncated' as const, truncated: true,
+						originalBytes: captured.bytes, bytes: 0, limitBytes: captured.limitBytes,
+					};
+					const attachment = await probe('Attach CDP focus screenshot', () => test.info().attach('main-focus-cdp-screenshot', {
+						body: captured.body,
+						contentType: 'image/png',
+					}));
+					return attachment.status === 'ok'
+						? {
+							status: 'ok' as const, attachment: 'main-focus-cdp-screenshot',
+							bytes: captured.bytes, limitBytes: captured.limitBytes, truncated: false,
+						}
+						: {
+							status: attachment.status, error: attachment.errorName,
+							capture: { status: 'ok', bytes: captured.bytes, limitBytes: captured.limitBytes },
+							attachment: { status: attachment.status, error: attachment.errorName },
+						};
+				})();
+				error.message += `\n${configuration}: JavaScript=${javascript.status}, animationFrame=${animationFrame.status}, pageState=${after.status}; see main-focus-state.`;
+				// A stalled renderer cannot answer another DOM read; retain the last responsive state too.
+				const jsonAttachment = await probe('Attach main focus state', () => test.info().attach('main-focus-state', {
+					body: JSON.stringify({
+						configuration,
+						focusTimeoutMs: 5_000,
+						url: diagnosticUrl(page.url()),
+						viewport: page.viewportSize(),
+						before,
+						liveness: { javascript, animationFrame },
+						after,
+						outOfPage: {
+							...outOfPage,
+							screenshot,
+						},
+					}, null, 2),
+					contentType: 'application/json',
+				}));
+				if (jsonAttachment.status !== 'ok') {
+					error.message += `\nmain-focus-state attachment=${jsonAttachment.status} ${jsonAttachment.errorName}; diagnostic JSON unavailable.`;
+				}
+			} finally {
+				// Attachment, protocol and teardown failures must never replace the focus timeout.
+				throw error;
+			}
 		}
 		await expect(main).toBeFocused();
 	});

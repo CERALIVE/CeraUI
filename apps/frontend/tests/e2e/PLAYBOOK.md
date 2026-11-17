@@ -427,8 +427,8 @@ idle and live layouts. Before each viewport's Tab traversal, it waits for the
 main landmark to be visible and carry `tabindex="-1"`, then gives focus five
 seconds and verifies that it actually reached the landmark. Only a focus
 timeout is caught and rethrown, with `main-focus-state` attached. First,
-one-second JavaScript and animation-frame probes distinguish an unresponsive
-renderer from a focus-specific failure. The attachment includes the configuration,
+one-second JavaScript, animation-frame and DOM probes run concurrently and record
+whether the page answers. The attachment includes the configuration,
 active element, target, ancestors, centre hit-test stack, viewport/scroll offsets,
 Live bar and offline/update/boot surfaces. Each DOM capture has its own
 one-second deadline; if the renderer cannot answer, the attachment retains the
@@ -438,6 +438,60 @@ presence, state, computed display/position/z-index, bounds and centre-hit-stack
 membership, and is identified in both the surface and hit-test lists.
 This bounds and diagnoses recurrence of the unresolved hosted stall; it does
 not prove its cause.
+
+The same timeout path also records `outOfPage` evidence, with a shared 2.5-second
+collection deadline and at most 450 ms for best-effort debugger resume, disable
+and session detach. A fresh page CDP session requests a V8 pause and records only
+the reason and call-frame names, sanitized script URLs and source coordinates;
+it never records scope objects, locals or source. `pauseRequested` distinguishes
+a new pause request from observing an existing pause. A missing pause is explicitly
+timed out. Browser CDP process CPU times and Linux `/proc` thread states/ticks
+are sampled consecutively before either debugger command, without a sleep. The
+`cpuInterval` records the difference between the second and first process-reply
+timestamps, its calculation and ordering, and zero overlap with the collector's
+own pause. These are cumulative process observations, not an inferred stall cause.
+Each sample also retains its monotonic reply timestamp, and `processDeltas`
+derives CPU seconds for PIDs present in both samples. Zero measured deltas remain
+valid; unavailable sample pairs do not invent deltas.
+A short
+browser trace retains only the exact main-frame-to-renderer PID mapping; all
+renderer candidates remain visible if that mapping is unavailable. Missing CDP
+or `/proc` data stays unavailable. No command line, environment or trace payload
+is attached. URLs omit credentials, queries and fragments.
+
+`Page.captureScreenshot` is requested directly over CDP under its own bound
+before the collector enables/pauses the debugger,
+with a successful PNG attached as `main-focus-cdp-screenshot`; this is stall
+evidence, not a screenshot assertion or baseline. Captures above 256 KiB are
+omitted before decoding/attachment and recorded as `truncated`, with their
+original size, zero attached bytes and the ceiling. Successful capture and
+failed attachment are separate outcomes; attachment failure records its class
+and never reports successful delivery. Each attachment is also bounded, and
+failures always rethrow the original focus timeout.
+`cleanup` retains resume, disable and detach outcomes per session, including
+timeouts when the page cannot answer. This is an acknowledgement record, not a
+claim that a timed-out detach completed within its budget.
+`main-focus-a11y.spec.ts` retains the public CDP event/function breakpoints and
+modal-dialog stand-in. It also covers a collector-initiated pause in a yielding
+animation-frame callback, a rejected screenshot attachment and an oversized
+capture. Before the observer is disabled, every case proves that both collector
+sessions reject commands as closed and that JavaScript and the focus event
+progress. The modal case first releases its intentional dialog block, allowing
+an already-requested detach to finish; it does not use observer debugger teardown
+to establish this proof. `main-focus-cleanup-witness` records the independent
+closure/responsiveness proof and whether the modal was released first. These
+controls validate the diagnostic, not the hosted stall's cause.
+
+The stand-in/session setup is owned by `fixtures/focus-stall.ts`; delivered
+artifact and cleanup assertions remain in the spec. The CPU assertions in
+`helpers/focus-stall-cpu.ts` compare both delivered samples with independently
+cloned real browser replies, require positive intervals and nonzero real
+browser/renderer counters, recompute deltas, and observe that both replies
+precede every collector debugger request. Labels alone cannot satisfy them.
+`main-focus-cpu-witness` retains those independent replies and request times
+for review, separately from the collector's derived fields.
+A seventh control rejects the JSON attachment itself and requires the original
+focus error to report its delivery status and error class.
 
 ## navigateTo Helper
 
