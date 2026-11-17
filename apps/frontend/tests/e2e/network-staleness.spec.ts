@@ -230,26 +230,60 @@ test.describe("Task 22 — consistent loading feedback", () => {
 	);
 
 	test("WiFi scan shows a loading indicator that then resolves", async ({
-		authedPage: page,
+		page,
 	}, testInfo) => {
 		test.skip(testInfo.project.name !== "desktop", "desktop layout drives the dialog");
 
+		// Hold the opening scan until both pending-state assertions have observed it.
+		const scanCapture: { state: string; release?: () => void } = {
+			state: "WebSocket route not opened",
+		};
+		let holdScan = true;
+		await page.routeWebSocket(/\/ws(?:\?|$)/, (socket) => {
+			const server = socket.connectToServer();
+			scanCapture.state = "WebSocket route opened; waiting for wifi.scan";
+			socket.onMessage((message) => {
+				if (holdScan && typeof message === "string") {
+					const frame = JSON.parse(message);
+					if (Array.isArray(frame.path) && frame.path.join(".") === "wifi.scan") {
+						scanCapture.release = () => {
+							holdScan = false;
+							server.send(message);
+						};
+						scanCapture.state = "opening wifi.scan captured";
+						return;
+					}
+				}
+				server.send(message);
+			});
+		});
+		await page.goto("/");
+		await ensureAuthenticated(page);
 		await navigateTo(page, "network");
 
 		const open = page.getByTestId("open-wifi-selector-dialog").first();
 		await expect(open).toBeEnabled({ timeout: 15_000 });
-		await open.click();
 
 		const dialog = page.getByRole("dialog", { name: "Available Networks" });
-		await expect(dialog).toBeVisible();
-
 		const scanButton = page.getByTestId("wifi-scan-button");
 		const scanStatus = page.getByTestId("wifi-scan-status");
 
-		await scanButton.click();
-		// Loading indicator appears (the standard InlineSpinner, role=status).
-		await expect(scanStatus).toBeVisible();
-		await expect(scanButton).toBeDisabled();
+		try {
+			await open.click();
+			await expect(dialog).toBeVisible();
+			await expect
+				.poll(() => scanCapture.state, {
+					message: "capture the dialog's opening wifi.scan request before clicking Scan",
+				})
+				.toBe("opening wifi.scan captured");
+
+			await scanButton.click();
+			// Loading indicator appears (the standard InlineSpinner, role=status).
+			await expect(scanStatus).toBeVisible();
+			await expect(scanButton).toBeDisabled();
+		} finally {
+			scanCapture.release?.();
+		}
 
 		// …then resolves once fresh scan results land (or the safety net fires).
 		await expect(scanStatus).toBeHidden({ timeout: 22_000 });

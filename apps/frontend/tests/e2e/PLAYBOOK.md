@@ -94,6 +94,14 @@ Avoid committing `html` reporter config. It generates large artifacts and is not
 
 ## Source component prerequisites
 
+The WiFi loading case in `network-staleness.spec.ts` holds the dialog's opening
+`wifi.scan` request on its WebSocket route. The manual tap promotes that pending
+scan; release the real request only after observing both the spinner and disabled
+button. An unheld mock scan can finish between those assertions. Keep the final
+hidden-spinner and enabled-button assertions after release. The capture
+expectation names the awaited request and reports the last observed socket state;
+release the captured request in `finally`, including on assertion failure.
+
 `pull-to-refresh.component.spec.ts` mounts the real component on a private
 ephemeral component server. The main E2E application still runs from the
 production build through `vite preview`; its `dist/public` artifact does not
