@@ -422,6 +422,23 @@ Do not modify `field-lock.spec.ts`. It is a deterministic integration proof and 
 - All three tests are tagged `@a11y`; the dedicated CI step runs them and the broad Functional E2E step grep-inverts `@a11y` to avoid duplicate coverage against the same preview server.
 - To prove the gate works, seed a violation with a rule id NOT already baselined (e.g. an `<img>` without `alt` → `image-alt`). Seeding more `color-contrast` will be tolerated — it is the baselined rule.
 
+`live-design-a11y.spec.ts` measures keyboard stops against the fixed Live bar in
+idle and live layouts. Before each viewport's Tab traversal, it waits for the
+main landmark to be visible and carry `tabindex="-1"`, then gives focus five
+seconds and verifies that it actually reached the landmark. Only a focus
+timeout is caught and rethrown, with `main-focus-state` attached. First,
+one-second JavaScript and animation-frame probes distinguish an unresponsive
+renderer from a focus-specific failure. The attachment includes the configuration,
+active element, target, ancestors, centre hit-test stack, viewport/scroll offsets,
+Live bar and offline/update/boot surfaces. Each DOM capture has its own
+one-second deadline; if the renderer cannot answer, the attachment retains the
+pre-focus state and marks the unavailable reads. The error names failed probes.
+The actual `[data-boot-shell]` overlay has a named `bootShell` record with its
+presence, state, computed display/position/z-index, bounds and centre-hit-stack
+membership, and is identified in both the surface and hit-test lists.
+This bounds and diagnoses recurrence of the unresolved hosted stall; it does
+not prove its cause.
+
 ## navigateTo Helper
 
 `navigateTo(page, destination)` from `helpers/index.ts` is the only correct way to navigate between the three primary destinations in specs.
