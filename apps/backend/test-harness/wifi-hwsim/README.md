@@ -17,8 +17,11 @@ physical Wi-Fi hardware**.
 
 ## Local VM without host root
 
-`vm/run-vm.sh` runs the same harness in a disposable Debian 12 **generic**
+`vm/run-vm.sh` runs the same harness in a disposable Debian 13 trixie **generic**
 amd64 guest with its full kernel, NetworkManager, wpa_supplicant and hostapd.
+The generic flavour includes `mac80211_hwsim`; genericcloud does not.
+Both VM and container provisioning include `dnsmasq-base` for NetworkManager's
+shared-IPv4 hotspot profiles; the container uses `debian:trixie-slim`.
 It requires Linux with readable/writable `/dev/kvm`, QEMU (`qemu-system-x86_64`
 and `qemu-img`), xorriso, OpenSSH, curl, coreutils, find, flock, tar, Git and Python
 with `os.pidfd_open`/`signal.pidfd_send_signal` support (Linux, Python 3.9+).
@@ -60,7 +63,8 @@ Flags:
 | Flag | Effect |
 |---|---|
 | `--radios N` | Create 2 to 100 radios, default 2. |
-| `--repo PATH` | Normalize PATH to its Git work-tree root, export committed `HEAD` to `/repo`, copy workstation Bun 1.4.4, and run `bun install --frozen-lockfile --linker=hoisted` in the guest. Hoisting makes workspace dependencies available to root-level gate imports. Commands start in `/repo`; `HWSIM_REPO=/repo` is available. Uncommitted files, workstation dependencies and submodules are excluded. |
+| `--repo PATH` | Normalize PATH to its Git work-tree root, export one committed revision (default `HEAD`) to `/repo`, copy workstation Bun 1.4.4, and run `bun install --frozen-lockfile --linker=hoisted` in the guest. Hoisting makes workspace dependencies available to root-level gate imports. Commands start in `/repo`; `HWSIM_REPO=/repo` is available. Uncommitted files, workstation dependencies and submodules are excluded. |
+| `--ref REV` | With `--repo`, select a commit from that repository's object store without checking it out or changing any worktree. The resolved commit supplies both checks and product code. |
 | `--no-install` | Skip the guest dependency install for self-contained repository commands. Without `--repo`, commands start in `/harness`. |
 | `--keep` | After a successful command, print the SSH command and hold the VM up for inspection until the runner is interrupted or one hour elapses. Keep the runner alive in its terminal; it still owns cleanup. |
 
@@ -71,10 +75,21 @@ bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh --radios 2 --repo "$PWD" 
   bun -e "import 'zod'; import 'winston'; console.log('deps-ok')"
 ```
 
-Later plan commands such as
-`bun apps/backend/test-harness/wifi-hwsim/checks/first-ap.ts` likewise run from
-`/repo` when `--repo` is used; those gate files are supplied by their later plan
-steps. The guest initializes local Git metadata solely so the archived
+For a reviewed gate that is not on the current branch, select its revision:
+
+```bash
+bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh --radios 4 \
+  --repo "$PWD" --ref "$REVIEWED_COMMIT" -- \
+  bun apps/backend/test-harness/wifi-hwsim/checks/first-ap.ts
+```
+
+The selected commit must contain the gate and its product imports together;
+do not overlay checks from another revision. Before any download, VM state
+creation or boot, the runner rejects an invalid revision or a direct
+`bun path.ts` / `bun path.js` command whose script is absent from that commit.
+The same check covers JSX/TSX and CommonJS/ESM script extensions.
+It does not inspect imports embedded in `bun -e` or shell commands.
+The guest initializes local Git metadata solely so the archived
 repository's install hooks can configure hooks; it does not invent a commit.
 The exported application SHA is printed separately. An install failure is an
 infrastructure failure, before the requested command runs.
@@ -143,8 +158,8 @@ The Debian image cache is the only persistent VM artifact. A completed run
 prints its QEMU PID and removed run directory as cleanup receipts. Do not
 commit images, overlays or seed ISOs.
 
-Parity verified on November 12, 2026 with the generic image's
-`6.1.0-54-amd64` kernel: the unchanged `integration-test.sh` exited 0 with
+Historical association parity was verified on November 12, 2026 with the
+previous image's `6.1.0-54-amd64` kernel: the unchanged `integration-test.sh` exited 0 with
 `GENERAL.STATE:100 (connected)`. The host's hwsim module count was 0 before
 and after, and the owned QEMU process and run directory were removed.
 The VM path is available for simulated-radio checks; no owner-run fallback
@@ -155,8 +170,9 @@ NetworkManager, iw and wpa_supplicant versions, and the exported application SHA
 with `--repo`. These receipts identify the actual environment: `latest` and
 guest package updates can change it between runs.
 
-The device receipt is kernel `7.2.0-ceralive-rk3588` and NetworkManager `1.52.1`;
-this Debian 12 simulator uses kernel `6.1` and NetworkManager `1.42.4`.
+The device receipt is kernel `7.2.0-ceralive-rk3588` and NetworkManager `1.52.1`.
+The simulator now uses Debian 13 trixie to match the device OS and its
+NetworkManager `1.52.x` series; its generic amd64 kernel remains different.
 Device qualification remains separate. hwsim does not model physical driver,
 firmware, RF, USB/PCI topology or physical interface limits, so a passing VM gate
 does not prove slot-limit behavior. Duplicate-address behavior is unqualified
@@ -177,7 +193,8 @@ bash apps/backend/test-harness/wifi-hwsim/vm/selftest.sh
 
 This compact local regression test uses a whitelist PATH and verifies executable
 VM/network stubs before each case. It checks foreign-parent PID rejection,
-cleanup-entry TERM/INT and redirected state rejection. It never boots a VM or
+cleanup-entry TERM/INT, incompatible-revision rejection before VM creation,
+selected-revision bootstrap and redirected state rejection. It never boots a VM or
 loads a host module and remains outside shared CI.
 
 ### Later gates
@@ -222,13 +239,13 @@ No second runner or product identity bypass is introduced.
 The check removes only its recorded
 profile UUIDs.
 
-The guest needs `dnsmasq-base` for NetworkManager's shared IPv4 mode; the
-baseline association harness does not install it. Provision that package
-inside the disposable guest before the check:
+The guest provisioning includes `dnsmasq-base` for NetworkManager's shared
+IPv4 mode. Select one reviewed revision for the check and its product code:
 
 ```bash
-bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh --radios 4 --repo "$PWD" -- \
-  bash -c 'apt-get install -y dnsmasq-base && bun apps/backend/test-harness/wifi-hwsim/checks/first-ap.ts'
+bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh --radios 4 \
+  --repo "$PWD" --ref "$REVIEWED_COMMIT" -- \
+  bun apps/backend/test-harness/wifi-hwsim/checks/first-ap.ts
 ```
 
 The four radios must belong to `mac80211_hwsim`. Root and the VM runner's

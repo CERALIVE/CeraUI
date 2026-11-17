@@ -4,7 +4,6 @@ set -euo pipefail
 umask 077
 : "${TMPDIR:?set TMPDIR outside /tmp and Git work trees}"
 runner=$(realpath "$(dirname "${BASH_SOURCE[0]}")/run-vm.sh")
-repo=$(GIT_MASTER=1 git rev-parse --show-toplevel)
 root=$(mktemp -d "$TMPDIR/hwsim-selftest.XXXXXXXX")
 bin="$root/bin"
 fifo=
@@ -38,7 +37,8 @@ curl)
 		case "$1" in -o) out=$2; shift 2 ;; https:*) url=$1; shift ;; *) shift ;; esac
 	done
 	if [[ "$url" == */SHA512SUMS ]]; then
-		printf '%s  debian-12-generic-amd64.qcow2\n' "$FAKE_DIGEST" >"$out"
+		[[ "$url" == https://cloud.debian.org/images/cloud/trixie/latest/SHA512SUMS ]]
+		printf '%s  debian-13-generic-amd64.qcow2\n' "$FAKE_DIGEST" >"$out"
 	else printf 'fixture\n' >"$out"; fi ;;
 qemu-img) : >"${@: -2:1}" ;;
 ssh-keygen)
@@ -133,15 +133,42 @@ for mode in explicit automatic; do for sig in TERM INT; do
 		{ cat "$CASE_DIR/log"; echo "FAIL: $mode cleanup entry $sig leaked state" >&2; exit 1; }
 	echo "PASS: $mode cleanup entry $sig leaves no fake QEMU or run directory"
 done; done
+repo="$root/repo"
+mkdir -p "$repo/apps/backend"
+GIT_MASTER=1 git init -q "$repo"
+for value in selected head; do
+	printf '{"revision":"%s"}\n' "$value" >"$repo/apps/backend/setup.json"
+	GIT_MASTER=1 git -C "$repo" add -- apps/backend/setup.json
+	GIT_MASTER=1 git -C "$repo" -c user.name=Fixture -c user.email=fixture@example.invalid \
+		-c commit.gpgSign=false -c core.hooksPath=/dev/null commit -qm "$value"
+done
+revision=$(GIT_MASTER=1 git -C "$repo" rev-parse HEAD^)
+GIT_MASTER=1 git -C "$repo" cat-file -p "$revision:apps/backend/setup.json" >"$root/selected-setup.json"
+GIT_MASTER=1 git -C "$repo" cat-file -p HEAD:apps/backend/setup.json >"$root/head-setup.json"
+new_case incompatible
+rc=0
+TMPDIR="$CASE_DIR/tmp" bash "$runner" --repo "$repo" --ref "$revision" -- \
+	bun apps/backend/test-harness/wifi-hwsim/checks/selftest-missing.ts >"$CASE_DIR/log" 2>&1 || rc=$?
+[[ "$rc" == 1 && ! -e "$CASE_DIR/pid" && ! -e "$CASE_DIR/tmp/hwsim-vm" ]]
+grep -Fq "repository command 'apps/backend/test-harness/wifi-hwsim/checks/selftest-missing.ts' is absent from $revision" "$CASE_DIR/log"
+grep -Fq 'no VM started' "$CASE_DIR/log"
+echo "PASS: incompatible revision rejected before VM state or QEMU creation"
 new_case bootstrap
 mkdir -p "$CASE_DIR/guest/root" "$CASE_DIR/guest/usr/local/bin" "$CASE_DIR/guest/run"
 printf 'wlan1\n' >"$CASE_DIR/guest/run/hwsim-client"
-if ! TMPDIR="$CASE_DIR/tmp" BOOTSTRAP=1 EXPECTED_CWD="$CASE_DIR/guest/repo" bash "$runner" --repo "$repo" --no-install -- \
+if ! TMPDIR="$CASE_DIR/tmp" BOOTSTRAP=1 EXPECTED_CWD="$CASE_DIR/guest/repo" bash "$runner" --repo "$repo" --ref "$revision" --no-install -- \
 	bash -c 'test "$PWD" = "$EXPECTED_CWD" && printf "%s\n" "$PWD" >"$CASE_DIR/user-cwd"' >"$CASE_DIR/log" 2>&1; then
 	cat "$CASE_DIR/log"; echo "FAIL: repository bootstrap before user command" >&2; exit 1
 fi
 [[ $(<"$CASE_DIR/user-cwd") == "$CASE_DIR/guest/repo" ]]
-echo "PASS: committed setup and fresh config exist before user command; cwd is repo"
+grep -Fq "run-vm.sh: application_sha=$revision" "$CASE_DIR/log"
+cmp "$root/selected-setup.json" "$CASE_DIR/guest/repo/apps/backend/setup.json" ||
+	{ echo "FAIL: exported setup does not match selected revision object" >&2; exit 1; }
+if cmp -s "$root/head-setup.json" "$CASE_DIR/guest/repo/apps/backend/setup.json"; then
+	echo "FAIL: exported setup matches HEAD instead of selected revision" >&2
+	exit 1
+fi
+echo "PASS: selected revision supplies committed setup and fresh config; cwd is repo"
 new_case symlink
 mkdir -p "$CASE_DIR/tmp/hwsim-vm" "$CASE_DIR/target"
 ln -s "$CASE_DIR/target" "$CASE_DIR/tmp/hwsim-vm/runs"
