@@ -265,13 +265,14 @@ async function onSubmit(event: SubmitEvent) {
 					{setPassword ? m["auth.newPassword"]() : m["auth.password"]()}
 				</Label>
 
+				<!-- The field is dir="ltr"; the toggle follows the page, so in RTL its space is the field's start (rtl: reads <html dir>). -->
 				<div class="relative">
 					<Input
 						id="password"
 						aria-describedby={passwordError ? 'password-error' : undefined}
 						aria-invalid={Boolean(passwordError)}
 						class={cn(
-							'h-11 w-full pe-12',
+							'h-11 w-full pe-12 rtl:ps-12 rtl:pe-2.5',
 							passwordError && 'border-destructive focus-visible:border-destructive',
 						)}
 						autocapitalize="none"
