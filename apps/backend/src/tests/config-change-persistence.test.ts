@@ -553,38 +553,39 @@ type Session = {
 function session(): Session {
 	let attempts = 0;
 	const waiting = new Map<LifecycleState, () => void>();
-	const s: Session = {
-		orchestrator: undefined as unknown as StreamSessionOrchestrator,
-		engine: {
-			change: async () => ({ phase: "applied" }),
-			stop: async () => {},
-			query: async () => "idle",
-		},
-		deltas: [],
-		reached: (state) =>
-			s.orchestrator.snapshot().state === state
-				? Promise.resolve()
-				: new Promise((resolve) => {
-						waiting.set(state, resolve);
-					}),
+	const engine: Session["engine"] = {
+		change: async () => ({ phase: "applied" }),
+		stop: async () => {},
+		query: async () => "idle",
 	};
-	s.orchestrator = createStreamSessionOrchestrator({
+	const deltas: StreamConfigChangeDelta[] = [];
+	const orchestrator = createStreamSessionOrchestrator({
 		createAttemptId: () => `engine-${++attempts}`,
 		setStreamingStatus: () => {},
 		setLifecycleState: (state) => waiting.get(state)?.(),
-		stopRuntime: () => s.engine.stop(),
-		queryRuntime: () => s.engine.query(),
+		stopRuntime: () => engine.stop(),
+		queryRuntime: () => engine.query(),
 		scheduleTimeout: () => 0,
 		cancelTimeout: () => {},
 		scheduleLaunchDeadline: () => 0,
 		cancelLaunchDeadline: () => {},
 		changeRuntimeConfig: (delta) => {
-			s.deltas.push(delta);
-			return s.engine.change();
+			deltas.push(delta);
+			return engine.change();
 		},
 	});
-	setApplyNowGateForTest(createApplyNowGate(s.orchestrator));
-	return s;
+	setApplyNowGateForTest(createApplyNowGate(orchestrator));
+	return {
+		orchestrator,
+		engine,
+		deltas,
+		reached: (state) =>
+			orchestrator.snapshot().state === state
+				? Promise.resolve()
+				: new Promise((resolve) => {
+						waiting.set(state, resolve);
+					}),
+	};
 }
 
 const stream = (s: Session) =>
