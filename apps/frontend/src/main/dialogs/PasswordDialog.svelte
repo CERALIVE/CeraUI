@@ -48,8 +48,15 @@ async function save() {
 	if (!canSave) return;
 	saving = true;
 	try {
-		await savePassword(password);
+		const saved = await savePassword(password);
+		if (!saved) {
+			toast.error(m["advanced.copyFailed"]());
+			return;
+		}
 		toast.success(m["advanced.passwordCopied"]());
+		password = '';
+		confirm = '';
+		show = false;
 		open = false;
 	} catch (error) {
 		console.error('Failed to set device password:', error);

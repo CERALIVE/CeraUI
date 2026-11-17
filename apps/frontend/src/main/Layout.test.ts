@@ -175,10 +175,13 @@ describe("Layout — auth-check timeout surface", () => {
 		// When Layout renders.
 		render(Layout);
 
-		// Then the takeover owns the screen and the pre-auth gate is gone — the
+		// Then the takeover owns the screen and the retained auth gate is inert — the
 		// verdict is consumed verbatim, never re-composed against a raw request.
 		expect(screen.getByTestId("offline-page")).not.toBeNull();
-		expect(screen.queryByTestId("auth-screen")).toBeNull();
+		const retained = screen.getByTestId("auth-screen");
+		const owner = retained.closest<HTMLElement>('[aria-hidden="true"]');
+		expect(owner?.hidden).toBe(true);
+		expect(owner?.inert).toBe(true);
 	});
 
 	it("keeps the auth recovery card silent while the shared reconnect grace suppresses it", async () => {

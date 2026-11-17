@@ -1,5 +1,13 @@
 # CeraUI
 
+**Sign-in draft lifetime [EXISTS; host-tested].** An offline takeover keeps the
+same login form in memory, hidden and inert, then returns it masked with its
+remember choice and pending request intact. Auth-owned menus close on takeover.
+Setup fields are cleared on takeover.
+Sign-in success, session retirement, mode changes and page exit clear the fields;
+a reload starts blank. Nothing stores the draft. See the
+[auth lifecycle contract](docs/agents/auth-state-connection-store-consolidation.md#sign-in-interaction-lifetime-exists).
+
 **Modem configuration acknowledgement [EXISTS; host-tested].** Automatic APN,
 credentials and operator selection are normalized before NetworkManager writes.
 `modems.configure.applied` reports the saved values, including automatic APN

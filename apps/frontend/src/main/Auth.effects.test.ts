@@ -48,6 +48,8 @@ vi.mock("$lib/rpc/subscriptions.svelte", async () => {
 vi.mock("$lib/stores/auth-status.svelte", () => ({
 	authenticate,
 	createPassword,
+	clearAuthInteraction: vi.fn(),
+	subscribeAuthStatus: () => () => undefined,
 }));
 
 vi.mock("$lib/stores/connection-ux.svelte", () => ({
@@ -70,7 +72,7 @@ beforeEach(() => {
 	authenticate.mockReset();
 	createPassword.mockReset();
 	authenticate.mockResolvedValue({ kind: "ok" });
-	createPassword.mockResolvedValue(undefined);
+	createPassword.mockResolvedValue(true);
 });
 
 afterEach(() => {

@@ -37,6 +37,7 @@
 // allow: SIZE_OK — one connection UX state machine; pure transitions and their sole reactive owner stay co-located.
 import type { ConnectionState } from "$lib/rpc/client";
 import { rpcClient } from "$lib/rpc/client";
+import { clearAuthInteraction } from "./auth-status.svelte";
 import { createStalenessClock } from "./hud/staleness";
 
 // ============================================
@@ -547,6 +548,7 @@ export function clearRebooting(): void {
 
 /** Flag that the auth token expired mid-session. */
 export function markSessionExpired(): void {
+	clearAuthInteraction();
 	store().markSessionExpired();
 }
 

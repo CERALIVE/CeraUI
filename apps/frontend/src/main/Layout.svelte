@@ -109,6 +109,8 @@ function runAuthCheck() {
 					isCheckingAuthStatus = false;
 					authTimedOut = true;
 					return;
+				case 'cancelled':
+					return;
 			}
 		});
 	} else {
@@ -221,6 +223,12 @@ $effect(() => {
 </script>
 
 <Tooltip.Provider>
+	{#if !authStatus && !connectionSurfaces.showAuthTimeout && !isCheckingAuthStatus}
+		<!-- Stable owner through the offline presentation; only one active surface. -->
+		<div hidden={showOfflinePage} inert={showOfflinePage} aria-hidden={showOfflinePage}>
+			<Auth offline={showOfflinePage} />
+		</div>
+	{/if}
 	{#if showOfflinePage}
 		<OfflinePage />
 	{:else if authStatus}
@@ -263,9 +271,7 @@ $effect(() => {
 				</div>
 			</div>
 		</div>
-	{:else if !isCheckingAuthStatus}
-		<Auth></Auth>
-	{:else}
+	{:else if isCheckingAuthStatus}
 		<!-- Loading state while checking auth - show a basic loading indicator -->
 		<div class="flex min-h-screen items-center justify-center">
 			<div class="text-center">

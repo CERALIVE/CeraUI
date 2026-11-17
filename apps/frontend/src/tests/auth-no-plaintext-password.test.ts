@@ -51,8 +51,8 @@ const revokeToken = vi.fn();
 vi.mock("$lib/rpc/client", () => ({
 	rpc: {
 		auth: {
-			login: (input: unknown) => login(input),
-			setPassword: (input: unknown) => setPassword(input),
+			login: (input: unknown) => login(structuredClone(input)),
+			setPassword: (input: unknown) => setPassword(structuredClone(input)),
 			revokeToken: (input: unknown) => revokeToken(input),
 		},
 	},
@@ -186,12 +186,27 @@ describe("remember-me persists a token, not a password", () => {
 		setPassword.mockResolvedValue({ success: true });
 
 		const { savePassword } = await import("../lib/helpers/SystemHelper");
-		await savePassword("a-brand-new-password");
+		const saved = await savePassword("a-brand-new-password");
 
+		expect(saved).toBe(true);
 		expect(setPassword).toHaveBeenCalledWith({
 			password: "a-brand-new-password",
 		});
 		expect(localStorage.getItem("auth")).toBeNull();
+	});
+
+	it("a refused password change returns failure without retiring the saved credential", async () => {
+		localStorage.setItem("auth", ISSUED_TOKEN);
+		setPassword.mockResolvedValue({ success: false });
+		const { savePassword } = await import("../lib/helpers/SystemHelper");
+		const mod = await authStatus();
+		const previousAuth = mod.getAuthStatus();
+
+		const saved = await savePassword(crypto.randomUUID());
+
+		expect(saved).toBe(false);
+		expect(localStorage.getItem("auth")).toBe(ISSUED_TOKEN);
+		expect(mod.getAuthStatus()).toBe(previousAuth);
 	});
 
 	it("revokePersistentToken retires the credential on the DEVICE", async () => {
