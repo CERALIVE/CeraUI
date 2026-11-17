@@ -1,5 +1,10 @@
 # CeraUI
 
+**Visual gates [EXISTS].** `bun run test:e2e:visual` compares host-owned visual
+specs. `bun run test:e2e:visual:container` compares the six container-owned files
+in the workflow's pinned image. Both are needed for complete local visual
+coverage; setup and environment limits are in [Visual CI](docs/VISUAL-CI.md).
+
 **Sign-in draft lifetime [EXISTS; host-tested].** An offline takeover keeps the
 same login form in memory, hidden and inert, then returns it masked with its
 remember choice and pending request intact. Auth-owned menus close on takeover.

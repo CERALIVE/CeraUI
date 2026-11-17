@@ -1,5 +1,8 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { file, Glob, YAML } from 'bun';
 import { assertBuildCheckContract } from './build-check-contract.mjs';
 import { visualSpecs } from './visual-pr.mjs';
@@ -115,6 +118,61 @@ test('visual selection keeps the six files and adds changed snapshot owners once
 		]),
 	).toEqual([...subset, 'tests/e2e/visual/preview-toggle.visual.spec.ts']);
 });
+
+test('the host command discovers exactly the visual cases outside the CI-owned subset', () => {
+	const temporary = mkdtempSync(join(tmpdir(), 'visual-selection-'));
+	try {
+		const discover = (command, name) => {
+			const report = join(temporary, `${name}.json`);
+			const run = spawnSync('bun', ['run', ...command, '--list', '--reporter=json'], {
+				cwd: new URL('../../', import.meta.url),
+				env: {
+					...process.env,
+					CI: '',
+					E2E_VISUAL_HOST: '',
+					PLAYWRIGHT_JSON_OUTPUT_NAME: report,
+				},
+				encoding: 'utf8',
+			});
+			expect(run.status, run.stdout + run.stderr).toBe(0);
+			const collect = (suite, parents = []) => [
+				...(suite.specs ?? []).flatMap((spec) =>
+					spec.tests.map((entry) => ({
+						file: `tests/e2e/${spec.file}`,
+						case: JSON.stringify([
+							entry.projectName,
+							spec.file,
+							spec.line,
+							spec.column,
+							...parents,
+							suite.title ?? '',
+							spec.title,
+						]),
+					})),
+				),
+				...(suite.suites ?? []).flatMap((child) => collect(child, [...parents, suite.title ?? ''])),
+			];
+			return collect(JSON.parse(readFileSync(report, 'utf8')));
+		};
+		const all = discover(['--filter', 'frontend', 'test:e2e', '--', '--grep', '@visual'], 'all');
+		const host = discover(['test:e2e:visual', '--'], 'host');
+		const owned = visualSpecs([]);
+		expect(new Set(all.map((entry) => entry.case)).size).toBe(all.length);
+		expect(
+			[
+				...new Set(all.filter((entry) => owned.includes(entry.file)).map((entry) => entry.file)),
+			].sort(),
+		).toEqual([...owned].sort());
+		expect(host.map((entry) => entry.case).sort()).toEqual(
+			all
+				.filter((entry) => !owned.includes(entry.file))
+				.map((entry) => entry.case)
+				.sort(),
+		);
+	} finally {
+		rmSync(temporary, { recursive: true });
+	}
+}, 30_000);
 
 for (const input of [null, ['../outside.png'], [1]]) {
 	test(`visual selection rejects invalid snapshot input ${JSON.stringify(input)}`, () => {

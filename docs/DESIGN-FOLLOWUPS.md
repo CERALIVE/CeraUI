@@ -214,7 +214,8 @@ Each was surfaced by the owning todo's own work and deliberately left unfixed.
   forbids re-baselining a golden to make a lane pass.
 - **Exit condition:** re-baseline each golden **from the owning todo's scope**, with
   the diff visually reviewed (not blind `--update-snapshots`), then
-  `bun run test:e2e:visual` is green on both projects.
+  both the host-owned `bun run test:e2e:visual` and the container-owned
+  `bun run test:e2e:visual:container` are green; see [Visual CI](VISUAL-CI.md).
 
 ### DF-10 — Five `@visual` specs predate the PR-#137 removal of `#encoder-source`
 

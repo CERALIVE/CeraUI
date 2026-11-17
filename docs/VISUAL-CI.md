@@ -31,6 +31,76 @@ The owner must mark **Visual subset (pinned container)** required in branch
 protection; the existing summary must remain required. This change does not
 modify repository settings.
 
+## Local host and container gates
+
+The file list has one owner: `visualSpecs([])` in `scripts/ci/visual-pr.mjs`.
+The hosted selector adds changed snapshot owners to that list.
+`bun run test:e2e:visual` sets `E2E_VISUAL_HOST=1`; Playwright's `testIgnore`
+derives exact file globs from the same list. It compares every other `@visual`
+spec across all configured projects against its host-recorded baselines.
+It proves only the host-owned portion. The raw frontend `test:e2e` command
+does not apply this environment split.
+
+Run from the repository root on Linux amd64 with Docker, Bun 1.4.4 and Node 26.
+The Docker bind mount must be writable as the invoking UID/GID. Ordinary Linux
+Engine without user-namespace remapping and Docker Desktop support this setup;
+a remapped/rootless daemon must provide equivalent bind-mount permissions.
+Prepare the same frontend and checksum/metadata-checked sender artifacts as CI:
+
+```bash
+set -euo pipefail
+bun install --frozen-lockfile
+bun run build:frontend
+sender_step="$(bun scripts/ci/visual-container.mjs sender)"
+bash -euo pipefail -c "$sender_step"
+
+# Host-owned visual comparisons, with the production preview and reference backend
+bash scripts/ci/run-visual-pr.sh \
+  bun run test:e2e:visual -- --workers=2 --retries=0 --update-snapshots=none
+
+# Exactly the six container-owned files, in the hosted renderer
+bun run test:e2e:visual:container
+```
+
+The container wrapper reads its image digest directly from Build Check's
+`test-visual.container.image`. It copies the current source and prepared
+artifacts into a fresh `node_modules/.cache/visual-container/run.*` directory
+(outside Bun's test discovery), mounts the
+verified host Bun/Node binaries read-only, and installs the locked dependencies
+inside the container. Host dependencies and baselines are not modified.
+All workflow extractions are checked assignments; missing, empty or malformed
+values fail before Docker starts. The identity body runs with
+`bash -euo pipefail`, so an intermediate assertion or pipeline failure aborts.
+Source copying omits genuine working-tree deletions while retaining other
+filesystem and tar failures, including unreadable files.
+
+The container runs as the invoking UID/GID, including on failure. Its writable
+HOME and Bun cache are inside the retained workspace. The host precreates the
+Bun bind target so the daemon need not create a root-owned file there.
+It executes the workflow's rendering-identity block, then the
+existing `run-visual-pr.sh` helper and `test:e2e:visual:pr` with
+`CHANGED_SNAPSHOTS=[]`. That selects exactly `visualSpecs([])`, two workers,
+zero retries and no snapshot writes. Reports and server logs remain in the
+printed copy's `apps/frontend/test-results/` directory.
+
+The hosted job's image user is root (the image declares no user, and the job
+does not override it); its bootstrap asserts UID 0 to install only `unzip` for
+`setup-bun`. It does not switch users afterward. Local execution mounts an
+already installed Bun and therefore needs neither that installer nor unzip;
+it installs no system packages and performs no root bootstrap.
+Changing UID does not change the image's Chromium, glibc, system fonts or launch
+options. Playwright's default Chromium launch disables its sandbox for both
+users. The reused identity checks still log the font hash and exact versions,
+and the real comparison must pass the unchanged container baselines.
+The local user change is explicit; it is not a claim that the hosted UID changed.
+
+Complete local visual coverage requires **both** commands. The six files have
+container-recorded baselines; comparing them on the host produces renderer
+mismatches. Other files retain host-recorded baselines and are not moved into
+the container by this split. When CI additionally selects a changed snapshot
+owner outside the six files, its baseline must also match the CI environment;
+the host exclusion list still derives only from the six-file owner.
+
 ## Rendering environment
 
 The image is
