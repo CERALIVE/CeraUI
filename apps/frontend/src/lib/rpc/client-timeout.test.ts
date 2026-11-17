@@ -76,6 +76,30 @@ describe("RPC per-procedure timeout", () => {
 		expect(timeout).toBeGreaterThan(60_000);
 	});
 
+	it.each(["previewBundle", "createBundle"] as const)(
+		"calls logs.%s with a timeout above the bundle's 60s device deadline",
+		(procedure) => {
+			const spy = vi
+				.spyOn(rpcClient, "call")
+				.mockResolvedValue({ ok: false, error: "BUSY" } as never);
+			void rpc.logs[procedure]();
+			expect(spy).toHaveBeenCalledTimes(1);
+			expect(spy.mock.calls[0]?.[0]).toEqual(["logs", procedure]);
+			const timeout = spy.mock.calls[0]?.[2] as number | undefined;
+			expect(typeof timeout).toBe("number");
+			expect(timeout).toBeGreaterThan(60_000);
+		},
+	);
+
+	it("leaves the quick ticket of logs.createExport on the default timeout", () => {
+		const spy = vi
+			.spyOn(rpcClient, "call")
+			.mockResolvedValue({ ok: false, error: "BUSY" } as never);
+		void rpc.logs.createExport({ filter: {} });
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(spy.mock.calls[0]?.[2]).toBeUndefined();
+	});
+
 	it("leaves other procedures on the default timeout (no explicit arg)", () => {
 		const spy = vi
 			.spyOn(rpcClient, "call")

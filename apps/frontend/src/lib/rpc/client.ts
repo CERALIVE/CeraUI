@@ -42,6 +42,7 @@ import type {
 	LogAroundInput,
 	LogAroundOutput,
 	LogBootInfo,
+	LogBundleManifest,
 	LogDeleteOlderFilesOutput,
 	LogExportInput,
 	LogExportOutput,
@@ -583,9 +584,14 @@ class RPCClient {
  * `failure` payload, so it is raised above the retry budget (and kept below the
  * 90s optimism start-watchdog, so the awaited reply stays the primary signal and
  * the watchdog is only the lost-signal backstop).
+ *
+ * `logs.previewBundle` and `logs.createBundle` run the support-bundle pipeline
+ * up to its 60s device deadline before they reply.
  */
 const PROCEDURE_TIMEOUT_MS: Readonly<Record<string, number>> = {
 	"streaming.start": 75_000,
+	"logs.previewBundle": 75_000,
+	"logs.createBundle": 75_000,
 };
 
 function createRPCProxy<T extends object>(
@@ -959,6 +965,8 @@ export interface TypedRPC {
 		deleteLegacyDebug: () => Promise<LogStorageOutput>;
 		clearAll: () => Promise<LogStorageOutput>;
 		createExport: (input: LogExportInput) => Promise<LogExportOutput>;
+		previewBundle: () => Promise<LogBundleManifest>;
+		createBundle: () => Promise<LogExportOutput>;
 	};
 	pairing: {
 		generateClaimCode: () => Promise<ClaimCodeOutput>;

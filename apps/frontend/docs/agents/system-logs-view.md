@@ -797,6 +797,58 @@ everywhere in the app.
   logical order; raw text keeps `dir="ltr"` so mixed-direction lines read
   correctly.
 
+## Sharing as built [EXISTS]
+
+- `SharingSection.svelte` renders the second Downloads group once the viewer
+  is ready; `ExportDialog.svelte` and `BundleDialog.svelte` are its nested
+  dialogs. Their state is one `SharingFlow`
+  (`F/lib/device-logs/sharing-flow.svelte.ts`) per open view, created and
+  disposed by `SystemLogsView`, so a request survives the Downloads region
+  remounting and ends with the view.
+- Export this view sends `exportInput(sharing.view)`. `view` starts as the Raw
+  logs tab's opening query (`RAW_OPENING_QUERY`: this boot, error through info,
+  every source). [PARTIAL] Binding it to the Raw logs tab's live filter belongs
+  to the Raw logs tab (todo 30): until that tab sets `sharing.view` to the query
+  it shows, Export this view saves the opening query.
+- Both dialogs state what the file holds and that it may contain sensitive data
+  before Download can be pressed; the bundle file carries no warning of its
+  own. A ticket reaches the browser through a temporary anchor on the backend
+  origin (`getBackendHttpUrl`); the page never reads the file.
+- One request per step. Cancel, Escape, the close button, deleted history
+  (`onHistoryChanged`) and closing the view discard a late reply; a ticket the
+  device minted for it expires there within 60 s, and until then another export
+  reads as busy. No timer is kept.
+- A refused preview (`BUSY`, or `READ_FAILED`, which includes the fail-closed
+  identifier collision) shows the amber band with Retry. A refused creation
+  keeps the manifest, and Download is the retry.
+- Every reply is parsed with its shared wire schema before use
+  (`logExportOutputSchema`, `logBundleManifestSchema`). A missing, partial or
+  mistyped reply, a call that throws and a download the browser refuses are
+  logged once and read as the failed band, with the confirmation or the
+  preview kept for another try; Download stays unavailable without a valid
+  manifest. A ticket must be exactly the path the device mints for that flow
+  (`/api/logs/export|bundle?ticket=<64 lowercase hex>`, `ticketReply`) before it
+  is joined to the backend origin, and a manifest naming a section twice is
+  refused (`bundleManifestReply`), never merged or rendered. The temporary anchor is removed even when its click throws.
+- The group and both dialog bodies break Japanese at phrases
+  (`[word-break:auto-phrase]`), Korean only at spaces
+  (`[&:lang(ko)]:break-keep`) and Chinese only between words: `KeepWords.svelte`
+  marks the gaps with `<wbr>` from `chineseWordChunks`
+  (`F/lib/device-logs/cjk-words.ts`, `Intl.Segmenter`; a chunk never starts
+  with punctuation or a one-character word) and `[&:lang(zh)]:break-keep`
+  allows no other break. `[&:lang(zh)]:text-balance` keeps an ending from
+  sitting alone; with `wrap-break-word` and `text-pretty`, narrow widths
+  neither split a word nor overflow. The two legacy rows above the group
+  (`LegacyLogDownloads.svelte`, todo 28) keep their own wrapping.
+- Not shown on screen: whether a file was cut short. Neither the manifest nor
+  the ticket reports it; the export's last line (`# complete:` or
+  `# incomplete:`) and the bundle's end record say so inside the file.
+- `logs.previewBundle` and `logs.createBundle` wait 75 s for their reply; the
+  device deadline is 60 s.
+- The CI e2e preview server proxies only `/ws` and `/preview`, so a download
+  from `/api/logs/*` reaches the backend in the dev topology and on devices
+  (same origin), not through `vite preview`.
+
 ## Open decisions
 
 - **Clock evidence.** The clock-not-synced marker uses only backwards-running

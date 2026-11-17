@@ -7,7 +7,9 @@
   Boots and Storage regions wait for this view's lazy copy and one logs probe;
   Downloads (the two shipped downloads) renders at once and never waits. An older
   backend gets one calm notice instead of the tabs, with Downloads below it and
-  no side column; any other failure a recovery band with Retry. A panel's
+  no side column; any other failure a recovery band with Retry. Once the tabs
+  are ready Downloads adds Sharing (export this view, support bundle), whose
+  flows live here and are disposed with the view. A panel's
   content mounts only while its tab is active, so a hidden tab never reads logs.
   Each panel owns its scroll. The downloads' state lives here, so a failed
   download keeps its retry band wherever the Downloads region remounts. When the
@@ -16,11 +18,14 @@
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
 import { Info, RefreshCw, TriangleAlert } from '@lucide/svelte';
+import { onDestroy } from 'svelte';
 import { MediaQuery } from 'svelte/reactivity';
 
 import { Button } from '$lib/components/ui/button';
 import { Skeleton } from '$lib/components/ui/skeleton';
 import * as Tabs from '$lib/components/ui/tabs';
+import { startBackendDownload } from '$lib/device-logs/sharing';
+import { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 import {
 	activeTab,
 	downloadsPlacement,
@@ -36,6 +41,7 @@ import { rpc } from '$lib/rpc/client';
 import LegacyLogDownloads from './LegacyLogDownloads.svelte';
 import { LogDownloads } from './log-downloads.svelte';
 import RawLogsPanel from './RawLogsPanel.svelte';
+import SharingSection from './SharingSection.svelte';
 
 const TAB_LABELS: Record<ShellTab, () => string> = {
 	events: () => m['systemLogs.tabs.events'](),
@@ -51,6 +57,8 @@ let selected = $state<string>();
 let view = $state<HTMLElement>();
 let tabList = $state<HTMLElement | null>(null);
 const legacyDownloads = new LogDownloads();
+const sharing = new SharingFlow({ logs: rpc.logs, download: startBackendDownload });
+onDestroy(() => sharing.dispose());
 
 const tabs = $derived(shellTabs(wide.current));
 const current = $derived(activeTab(selected, tabs));
@@ -102,6 +110,9 @@ $effect(() => {
 			<h3 class="text-sm font-semibold" id="{uid}-downloads">{m['systemLogs.sharing.heading']()}</h3>
 		{/if}
 		<LegacyLogDownloads downloads={legacyDownloads} />
+		{#if status === 'ready'}
+			<SharingSection {sharing} />
+		{/if}
 	</section>
 {/snippet}
 
