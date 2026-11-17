@@ -16,15 +16,27 @@ await Bun.sleep(1000);
 `;
 const script = `
 set -euo pipefail
+umask 077
 ulimit -c 0
 mount -t tmpfs -o mode=1777,nosuid,nodev tmpfs /var/tmp
 mount -t tmpfs -o mode=0755,nosuid,nodev,noexec tmpfs /run
 mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs /usr/local/bin
-touch /usr/local/bin/bun
-mount --bind "$1" /usr/local/bin/bun
+install -m 755 "$1" /usr/local/bin/bun
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 mkdir /var/tmp/lifecycle
 cd /var/tmp/lifecycle
 export HWSIM_REPO=/repo
+export HWSIM_BUN_STAT="$(stat -Lc '%d:%i:%s:%a:%u:%g' /usr/local/bin/bun)"
+export HWSIM_PID_NS="$(readlink /proc/self/ns/pid)"
+bash "$2/apps/backend/test-harness/wifi-hwsim/native-exec.sh" bash -c '
+	test "$(stat -Lc "%d:%i:%s:%a:%u:%g" /usr/local/bin/bun)" = "$HWSIM_BUN_STAT" &&
+	test "$(readlink /proc/self/ns/pid)" = "$HWSIM_PID_NS" &&
+	test "$(id -u)" = 0 &&
+	test "$PWD" = /var/tmp/lifecycle &&
+	test ! -e /proc/self/fd/9 &&
+	test "$(bun -e "process.stdout.write(process.execPath)")" = /usr/local/bin/bun &&
+	test "$(bun --version)" = 1.4.4
+'
 for mode in throw term; do
 	set +e
 	bun -e "$3" "$mode" >"/var/tmp/$mode.log" 2>&1

@@ -24,16 +24,7 @@ for name in bun nmcli NetworkManager iw hostapd wpa_supplicant dnsmasq systemctl
 	command -v "$name" || { printf "MISSING=%s\n" "$name"; rc=1; }
 done
 exit "$rc"'
-probe versions bash -c '
-rc=0
-test "$(bun --version)" = 1.4.4 || rc=1
-test "$(NetworkManager --version)" = 1.52.1 || rc=1
-/usr/bin/nmcli --version || rc=1
-iw --version || rc=1
-hostapd -v 2>&1 || rc=1
-wpa_supplicant -v || rc=1
-dnsmasq --version >/dev/null || rc=1
-exit "$rc"'
+probe versions bash "$harness/guest-versions.sh"
 probe environment bash -c '
 printf "NODE_ENV=%s MOCK_MODE=%s LC_ALL=%s PATH=%s\n" "${NODE_ENV:-}" "${MOCK_MODE:-}" "${LC_ALL:-}" "$PATH"
 test "${NODE_ENV:-}" = production && test "${MOCK_MODE:-}" = false && test "${LC_ALL:-}" = C'

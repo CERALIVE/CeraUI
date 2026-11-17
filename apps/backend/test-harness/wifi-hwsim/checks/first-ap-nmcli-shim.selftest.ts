@@ -32,10 +32,11 @@ const child = Bun.spawn(
 		'-c',
 		`
 set -euo pipefail
+umask 077
 mount -t tmpfs -o mode=0755,nosuid,nodev,noexec tmpfs /run
 mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs /usr/local/bin
-touch /usr/local/bin/bun
-mount --bind "$1" /usr/local/bin/bun
+install -m 755 "$1" /usr/local/bin/bun
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 exec /usr/local/bin/bun --eval "$2"
 `,
 		'native-shim-offline',

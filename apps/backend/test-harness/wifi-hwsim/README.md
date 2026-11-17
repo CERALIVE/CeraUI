@@ -554,6 +554,32 @@ without a VM to cover immediate readiness, several non-ready state changes and
 a never-ready device failing with the bounded diagnostic receipt. The existing
 native upgrade, unrelated-profile and Stop assertions remain unchanged.
 
+## Guest execution and version proof
+
+The offline namespace checks install Bun as a regular mode-0755 file at
+`/usr/local/bin/bun`, use the guest's exact PATH and umask 077, and keep `/run`
+noexec. A host Bun path outside the private bin mount does not exercise the
+guest layout. The lifecycle proof compares the executable's device, inode,
+size, mode and owner before/after the wrapper; it also checks CWD, root UID,
+the unchanged PID namespace and closure of the saved descriptor.
+
+The wrapper opens descriptor 9 after entering its mount namespace, then binds
+it with `mount --no-canonicalize`. A descriptor opened before `unshare` still
+references the previous mount tree and cannot be cloned by the new mount API.
+Without disabling canonicalization,
+libmount resolves `/proc/self/fd/9` back to `/usr/local/bin/bun` after that
+directory is covered, binding the new empty placeholder instead of Bun.
+Adding execute permission to the placeholder would not repair that inode error.
+
+`guest-versions.sh` prints every command's exit status and verdict. A valid
+hostapd version banner may accompany exit 1 on Debian 13's hostapd 2.10;
+that property applies only to this version probe. Other tool failures still
+fail the group, and the exact Bun/NM daemon pins remain 1.4.4/1.52.1.
+
+```bash
+taskset -c 0-3 bash apps/backend/test-harness/wifi-hwsim/guest-versions.selftest.sh
+```
+
 ## Troubleshooting
 
 | Symptom | Likely cause / fix |
