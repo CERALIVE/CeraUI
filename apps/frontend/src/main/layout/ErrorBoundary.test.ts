@@ -35,6 +35,16 @@ describe("ErrorBoundary — top-level recoverable fallback (Task 30)", () => {
 		expect(queryByRole("button", { name: "Try again" })).not.toBeNull();
 	});
 
+	it("keeps the crashed app's one main landmark around the alert", () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+
+		const { getAllByRole } = render(BoundaryHarness);
+
+		const mains = getAllByRole("main");
+		expect(mains).toHaveLength(1);
+		expect(mains[0]?.querySelector('[role="alert"]')).not.toBeNull();
+	});
+
 	it("logs the error instead of swallowing it", () => {
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 

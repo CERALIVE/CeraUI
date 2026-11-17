@@ -42,6 +42,12 @@ export function zipFolderForImage(image: ScreenshotImage): string {
 	return "features/";
 }
 
+// The mobile capture copies the app's mount root so the shell chrome (header,
+// HUD, dock) comes with the destination; the main landmark is the content only.
+export function mobileCaptureRoot(doc: Document): HTMLElement | null {
+	return doc.getElementById("app");
+}
+
 // Global screenshot state using Svelte 5 runes
 let screenshotImagesState = $state<ScreenshotImage[]>([]);
 let isCapturingState = $state(false);

@@ -56,9 +56,7 @@ test.describe('Live destination', () => {
 		await shell.assertAuthedShell();
 
 		// Main region is mounted (structural, no live numeric values).
-		// Mobile nests an inner <main> inside the PWA pull-to-refresh shell, so
-		// scope to the first match rather than asserting a unique role.
-		await expect(page.getByRole('main').first()).toBeVisible();
+		await expect(page.getByRole('main')).toBeVisible();
 
 		// Stream control is reachable by role+name — "Start Stream"/"Stop Stream"
 		// both contain "Stream"; this proves the control is present without

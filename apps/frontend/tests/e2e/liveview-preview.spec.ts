@@ -217,10 +217,7 @@ test.describe('LiveView preview placement (#72)', () => {
 		await expect(page.getByTestId('preview-canvas')).toBeVisible();
 		await expect(page.getByTestId('preview').getByTestId('audio-level-meter')).toBeVisible();
 
-		await page
-			.getByRole('main')
-			.first()
-			.screenshot({ path: path.join(EVIDENCE_DIR, '72-liveview-verify.png') });
+		await page.locator('#app').screenshot({ path: path.join(EVIDENCE_DIR, '72-liveview-verify.png') });
 	});
 
 	test('@visual evidence: waiting state', { tag: '@visual' }, async ({ page }, testInfo) => {

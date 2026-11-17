@@ -23,9 +23,7 @@ test.describe('Settings destination', () => {
 		const shell = new ShellPage(page);
 		await shell.navigate('settings');
 		await shell.assertAuthedShell();
-		// Two <main> elements exist (PWA pull-to-refresh wrapper + content);
-		// assert the outer landmark is visible.
-		await expect(page.getByRole('main').first()).toBeVisible();
+		await expect(page.getByRole('main')).toBeVisible();
 	});
 
 	// Non-destructive dialogs: open → assert structure → close. PowerDialog is
