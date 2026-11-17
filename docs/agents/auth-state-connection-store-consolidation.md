@@ -19,11 +19,12 @@ component).
 ```ts
 export function ingestAuth(message: LoginOutput | undefined): void;   // THE writer
 export function getAuthMessage(): LoginOutput | undefined;             // THE reader
-export type AuthAttempt = { kind: 'ok' } | { kind: 'rejected' } |
+export type AuthAttempt = { kind: 'ok' } | { kind: 'rejected' } | { kind: 'cancelled' } |
   { kind: 'unreachable'; cause: 'socket-not-ready' | 'rpc-error' | 'timeout' };
-export function authenticate(password: string, persistentToken: boolean): Promise<AuthAttempt>;
+export function authenticate(password: string, persistentToken: boolean, signal?: AbortSignal): Promise<AuthAttempt>;
 export function authenticateWithToken(token: string): Promise<AuthAttempt>;
-export async function createPassword(password: string): Promise<void>;
+export async function createPassword(password: string, signal?: AbortSignal): Promise<boolean>;
+export function clearAuthInteraction(): void;
 export const authStatusStore: { value: boolean; set(b): void; subscribe(cb) };
 ```
 
@@ -43,7 +44,75 @@ effect — it can unmount on the auth flip before such an effect runs.
 The device returns success without rotating the token, so a successful restore
 retains it. `createPassword()` clears the old credential after confirmed success,
 matching the device's all-token revocation; `SystemHelper.savePassword()` delegates
-to it. Explicit session clearing also best-effort revokes the token on the device.
+to it and returns its boolean verdict. Settings closes the password dialog,
+clears its fields and reports success only on true. A false verdict keeps the
+dialog and editable fields open with the existing failure message; thrown
+failures follow that same visible error path. The Auth setup caller separately
+clears setup fields on refusal and never proceeds to login without true.
+Explicit session clearing also best-effort revokes the token on the device.
+
+### Sign-in interaction lifetime [EXISTS]
+
+Layout keeps one Auth instance at a stable position during a same-document
+offline takeover. Its wrapper is hidden, inert and inaccessible while the
+offline page owns the screen. Password, remember choice, rejected-value equality
+and the pending attempt stay private to that instance. Visibility resets to
+masked on both edges. Auth's locale/theme controls unmount during takeover so
+their portalled menus and focus scopes retire too; the password input stays
+mounted. No password store, serialization, automatic resubmission
+or second auth feed is introduced. Native input, paste, composition and autofill
+continue to use the original field.
+
+Only login drafts survive the presentation swap. Entering or leaving the
+device-selected setup mode clears both fields, remember, reveal and rejection
+before showing the other mode. Setup also clears on takeover and terminal
+completion; a refused setup result is not success and never starts login.
+Successful setup is awaited before the existing explicit login.
+
+Auth status publication clears the interaction synchronously, including live
+input properties. Explicit clear-saved-session and logout use that same local
+boundary before any best-effort revocation; confirmed session expiry clears too.
+`clearAuthInteraction()` retires the current abort lifetime without changing the
+authenticated boolean. Attempts check that lifetime and their optional caller
+signal after socket readiness and before applying a reply, persisting a token or
+publishing authentication. Aborted unsent waits release their timer/subscription.
+Mutable login/setup wire input is cleared immediately after the client's
+synchronous serialization, and on retirement before dispatch. Only the
+non-secret remember choice is needed after the reply. Setup's expected transport
+failures return an unsuccessful verdict; unexpected defects propagate, with
+field cleanup in the form's finally block.
+Cancelled results are distinct from rejection and transport unreachability.
+A sent request may still execute on the device; local retirement cannot undo it.
+
+The auth owner handles pagehide for both persisted values and pageshow from
+BFCache. Its subscriber clears the form's reactive fields and live DOM values
+synchronously, even while offline. Actual Auth teardown unregisters its subscriber,
+retires outstanding work and clears its fields. Notification rejection is bound
+to the submitted value and retires that pending attempt; editing away hides the
+error, and editing back shows it again. Loading or a transport error alone does
+not clear a login draft.
+
+The trade-off is a longer in-memory lifetime for the current login, including
+while hidden. Each document has its own private interaction. A full reload,
+navigation or a new tab starts blank; PWA/manual recovery that reloads the
+document intentionally loses the draft. This makes no cross-tab invalidation,
+password-manager storage, forensic zeroization or XSS-isolation claim. No draft
+enters Web Storage, cookies, IndexedDB, URLs/history, logs, telemetry or DOM
+attributes. Remember-me still stores only the device-issued token.
+
+The real Layout/Auth behavioral matrix is `Layout.auth-draft.test.ts`; the
+canonical dispatch/late-reply guards are in `auth-status.test.ts`.
+`auth-draft-offline.spec.ts` covers real offline events, repeated recovery,
+mobile/RTL, reload and history navigation with generated disposable input.
+Credential-bearing browser capture is disabled before typing, and assertions
+report equality booleans rather than secret values. Disposable browser input is
+created and edited inside a page callback: no secret is passed to a recorded
+fill/type/press/evaluate argument. Raw JSON/JSONL reports must be audited as
+well as screenshots/traces because reporters retain action arguments even with
+capture disabled. Cleanup scrubs the form before failure-context collection.
+EN/es-419 user guidance must
+describe the same-document scope and reload trade-off in the release that ships
+this behavior, alongside the existing release documentation handoff.
 
 **The rule for all future frontend work:** ONLY `subscriptions.svelte.ts` (non-auth
 reactive state + connection state) and `auth-status.svelte.ts` (auth mutation state) own

@@ -112,7 +112,9 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 
 vi.mock("$lib/stores/auth-status.svelte", () => ({
 	authenticate: vi.fn(),
-	createPassword: vi.fn(),
+	createPassword: vi.fn(() => Promise.resolve(true)),
+	clearAuthInteraction: vi.fn(),
+	subscribeAuthStatus: () => () => undefined,
 }));
 
 vi.mock("$lib/stores/connection-ux.svelte", () => ({

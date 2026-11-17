@@ -9,12 +9,15 @@
  * the reader, and `authenticate`/`createPassword` are the typed `rpc.auth.*`
  * dispatchers that route through `ingestAuth`.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { LoginInput, SetPasswordInput } from "@ceraui/rpc/schemas";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConnectionState } from "../rpc/client";
 
 const login = vi.fn();
 const setPassword = vi.fn();
+let liveLoginInput: LoginInput | undefined;
+let liveSetupInput: SetPasswordInput | undefined;
 
 let seedConnectionState: ConnectionState = "connected";
 let onConnectionChangeHandler: ((state: ConnectionState) => void) | undefined;
@@ -22,8 +25,14 @@ let onConnectionChangeHandler: ((state: ConnectionState) => void) | undefined;
 vi.mock("$lib/rpc/client", () => ({
 	rpc: {
 		auth: {
-			login: (input: unknown) => login(input),
-			setPassword: (input: unknown) => setPassword(input),
+			login: (input: LoginInput) => {
+				liveLoginInput = input;
+				return login(structuredClone(input));
+			},
+			setPassword: (input: SetPasswordInput) => {
+				liveSetupInput = input;
+				return setPassword(structuredClone(input));
+			},
 		},
 	},
 	rpcClient: {
@@ -50,10 +59,111 @@ beforeEach(() => {
 	onConnectionChangeHandler = undefined;
 	login.mockReset();
 	setPassword.mockReset();
+	liveLoginInput = undefined;
+	liveSetupInput = undefined;
 	localStorage.clear();
 });
 
 describe("auth-status — single mutation path", () => {
+	it("classifies a refused setup dispatch without swallowing a programming defect", async () => {
+		const mod = await loadAuthStatus();
+		const { NotSentError } = await import("../rpc/rpc-error");
+		setPassword.mockRejectedValueOnce(new NotSentError());
+		expect(await mod.createPassword(crypto.randomUUID())).toBe(false);
+		const defect = new TypeError("setup programming defect");
+		setPassword.mockRejectedValueOnce(defect);
+		await expect(mod.createPassword(crypto.randomUUID())).rejects.toBe(defect);
+	});
+	it.each(["login", "setup"] as const)(
+		"releases the %s wire plaintext before a retired held reply settles",
+		async (operation) => {
+			const mod = await loadAuthStatus();
+			const reply = Promise.withResolvers<{ success: boolean }>();
+			login.mockReturnValue(reply.promise);
+			setPassword.mockReturnValue(reply.promise);
+			const pending =
+				operation === "login"
+					? mod.authenticate(crypto.randomUUID(), false)
+					: mod.createPassword(crypto.randomUUID());
+			try {
+				await vi.waitFor(() =>
+					expect(login.mock.calls.length + setPassword.mock.calls.length).toBe(
+						1,
+					),
+				);
+				mod.clearAuthInteraction();
+				const request = operation === "login" ? liveLoginInput : liveSetupInput;
+				expect(request?.password === "").toBe(true);
+				expect(mod.getAuthStatus()).toBe(false);
+			} finally {
+				reply.resolve({ success: false });
+				await pending;
+			}
+		},
+	);
+	it.each(["interaction", "signal"] as const)(
+		"cancels an unsent socket-ready wait through %s retirement",
+		async (boundary) => {
+			seedConnectionState = "connecting";
+			const mod = await loadAuthStatus();
+			const controller = new AbortController();
+			const pending = mod.authenticate(
+				crypto.randomUUID(),
+				true,
+				controller.signal,
+			);
+			if (boundary === "interaction") mod.clearAuthInteraction();
+			else controller.abort();
+			expect(await pending).toEqual({ kind: "cancelled" });
+			expect(login.mock.calls.length).toBe(0);
+		},
+	);
+
+	it.each(["interaction", "signal"] as const)(
+		"ignores an already-sent successful response after %s retirement",
+		async (boundary) => {
+			const mod = await loadAuthStatus();
+			const result = Promise.withResolvers<{
+				success: boolean;
+				auth_token: string;
+			}>();
+			login.mockReturnValue(result.promise);
+			const controller = new AbortController();
+			const pending = mod.authenticate(
+				crypto.randomUUID(),
+				true,
+				controller.signal,
+			);
+			await vi.waitFor(() => expect(login).toHaveBeenCalledTimes(1));
+			if (boundary === "interaction") mod.clearAuthInteraction();
+			else controller.abort();
+			result.resolve({ success: true, auth_token: "issued-too-late" });
+			expect(await pending).toEqual({ kind: "cancelled" });
+			expect(mod.getAuthStatus()).toBe(false);
+			expect(mod.getAuthMessage()).toBeUndefined();
+			expect(localStorage.getItem("auth")).toBeNull();
+		},
+	);
+
+	it("returns the device's setup verdict without treating refusal as success", async () => {
+		const mod = await loadAuthStatus();
+		setPassword.mockResolvedValue({ success: false });
+		expect(await mod.createPassword(crypto.randomUUID())).toBe(false);
+	});
+
+	it("ignores setup completion after retirement without deleting a later credential", async () => {
+		const mod = await loadAuthStatus();
+		const result = Promise.withResolvers<{ success: boolean }>();
+		setPassword.mockReturnValue(result.promise);
+		const pending = mod.createPassword(crypto.randomUUID());
+		await vi.waitFor(() => expect(setPassword).toHaveBeenCalledTimes(1));
+		mod.clearAuthInteraction();
+		localStorage.setItem("auth", "new-interaction-token");
+		result.resolve({ success: true });
+		expect(await pending).toBe(false);
+		expect(localStorage.getItem("auth")).toBe("new-interaction-token");
+	});
+
 	it("reads back the last ingested LoginOutput via getAuthMessage()", async () => {
 		const mod = await loadAuthStatus();
 		expect(mod.getAuthMessage()).toBeUndefined();
