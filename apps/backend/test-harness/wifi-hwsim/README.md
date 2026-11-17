@@ -15,6 +15,31 @@ physical Wi-Fi hardware**.
 
 ---
 
+## Offline native-shim preflight
+
+The first-AP shim installs an exclusive `/usr/local/bin/nmcli` link to its
+private executable and removes that link on close. That directory is already
+on the guest's startup PATH. Bun 1.4.4's env-less product execution path retains
+the startup PATH, while the stdin runner receives the current environment;
+prepending a private directory after startup alone does not intercept both.
+An existing `/usr/local/bin/nmcli` is never overwritten.
+
+Run the exact two-runner preflight without a VM:
+
+```bash
+taskset -c 0-3 bun \
+  apps/backend/test-harness/wifi-hwsim/checks/first-ap-nmcli-shim.selftest.ts
+```
+
+This requires Linux with unprivileged user and mount namespaces enabled.
+The test mounts temporary `/run` and `/usr/local/bin` filesystems only inside
+its private namespace, preserves the real Bun executable with a private bind
+mount, and invokes the real installer and product runners against the real
+`nmcli --version`. It verifies two receipts and launcher cleanup. It is an
+explicit selftest outside normal backend test discovery. No host root,
+NetworkManager daemon, VM or shared lock is used. This proves instrumentation,
+not native Wi-Fi behavior.
+
 ## Local VM without host root
 
 `vm/run-vm.sh` runs the same harness in a disposable Debian 13 trixie **generic**

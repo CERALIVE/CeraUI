@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { appendFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+	appendFile,
+	mkdtemp,
+	readFile,
+	rm,
+	symlink,
+	writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 
 type Schedule = "restore" | "atomic" | "before" | "version";
@@ -126,6 +133,14 @@ await runNativeNmcliShim(${JSON.stringify(root)});
 `,
 		{ mode: 0o700 },
 	);
+	// Bun's env-less product runner resolves commands against its startup PATH.
+	const launcher = "/usr/local/bin/nmcli";
+	try {
+		await symlink(join(root, "nmcli"), launcher);
+	} catch (error) {
+		await rm(root, { recursive: true, force: true });
+		throw error;
+	}
 	process.env.PATH = `${root}:${prior ?? ""}`;
 	return {
 		schedule: async (uuid: string, filename: string, schedule: Schedule) => {
@@ -162,6 +177,7 @@ await runNativeNmcliShim(${JSON.stringify(root)});
 		close: async () => {
 			if (prior === undefined) delete process.env.PATH;
 			else process.env.PATH = prior;
+			await rm(launcher);
 			await rm(root, { recursive: true, force: true });
 		},
 	};
