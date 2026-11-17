@@ -24,6 +24,13 @@ record parsing and logger-ring mock scan/follow adapters. These are internal
 building blocks for the planned viewer. See the
 [reader contract](apps/backend/docs/agents/device-journal-reader.md).
 
+**Support bundle backend [EXISTS].** Authenticated local clients can preview a
+manifest and download a bounded, redacted support bundle. Privacy validation
+finishes before a download ticket is issued; a secret colliding with structured
+metadata refuses the operation. This reduces sensitive data without guaranteeing
+an anonymous file. See the
+[bundle contract](apps/backend/docs/agents/device-log-bundle.md).
+
 **Boot version context [EXISTS].** After revisions initialize, the backend records
 one structured `device started` line with the running versions, journal boot ID,
 OS image, active slot and board. Optional unreadable sources remain null; RAUC

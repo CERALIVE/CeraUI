@@ -5,6 +5,7 @@ import {
 	logQueryInputSchema,
 } from "@ceraui/rpc/schemas";
 import { currentBootId } from "./boot-id.ts";
+import { abortLogBundles } from "./bundle.ts";
 import type { ParsedQuery } from "./continuation.ts";
 import { EXPORT_TIME_MS, exportChunks } from "./export-body.ts";
 import { exportFilename } from "./export-format.ts";
@@ -171,6 +172,7 @@ export async function handleLogExportRequest(
 }
 
 export async function abortLogExports(): Promise<void> {
+	await abortLogBundles();
 	for (const ticket of tickets.values()) ticket.lease.release();
 	tickets.clear();
 	for (const controller of active.keys()) controller.abort("cleared");

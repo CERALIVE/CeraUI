@@ -2,6 +2,7 @@ import {
 	logAroundInputSchema,
 	logAroundOutputSchema,
 	logBootInfoSchema,
+	logBundleManifestSchema,
 	logDeleteOlderFilesOutputSchema,
 	logExportInputSchema,
 	logExportOutputSchema,
@@ -14,12 +15,17 @@ import {
 	logStorageOutputSchema,
 	logStorageSchema,
 } from "@ceraui/rpc/schemas";
-import { os } from "@orpc/server";
+import { ORPCError, os } from "@orpc/server";
 import { z } from "zod";
+import {
+	createBundle,
+	previewBundle,
+} from "../../modules/device-logs/bundle.ts";
 import { listBoots } from "../../modules/device-logs/classified-boots.ts";
 import { createExport } from "../../modules/device-logs/export.ts";
 import { startFollow, stopFollow } from "../../modules/device-logs/follow.ts";
 import { locateAround, queryLogs } from "../../modules/device-logs/query.ts";
+import { BundleReadError } from "../../modules/device-logs/redaction.ts";
 import {
 	clearAll,
 	deleteLegacyDebug,
@@ -80,3 +86,21 @@ export const createLogExportProcedure = authedProcedure
 	.input(logExportInputSchema)
 	.output(logExportOutputSchema)
 	.handler(({ context, input }) => createExport(context.ws, input));
+
+export const previewLogBundleProcedure = authedProcedure
+	.input(z.void())
+	.output(logBundleManifestSchema)
+	.handler(async () => {
+		try {
+			return await previewBundle();
+		} catch (error) {
+			const code =
+				error instanceof BundleReadError ? error.code : "READ_FAILED";
+			throw new ORPCError(code, { message: code });
+		}
+	});
+
+export const createLogBundleProcedure = authedProcedure
+	.input(z.void())
+	.output(logExportOutputSchema)
+	.handler(({ context }) => createBundle(context.ws));

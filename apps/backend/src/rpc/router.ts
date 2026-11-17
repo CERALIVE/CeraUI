@@ -42,6 +42,7 @@ import {
 import {
 	aroundLogsProcedure,
 	clearAllLogsProcedure,
+	createLogBundleProcedure,
 	createLogExportProcedure,
 	deleteLegacyDebugProcedure,
 	deleteOlderLogFilesProcedure,
@@ -49,6 +50,7 @@ import {
 	followStopProcedure,
 	getLogStorageProcedure,
 	logBootsProcedure,
+	previewLogBundleProcedure,
 	queryLogsProcedure,
 	setLogRetentionProcedure,
 } from "./procedures/logs.procedure.ts";
@@ -197,6 +199,8 @@ const stableRoutes = {
 		deleteLegacyDebug: deleteLegacyDebugProcedure,
 		clearAll: clearAllLogsProcedure,
 		createExport: createLogExportProcedure,
+		previewBundle: previewLogBundleProcedure,
+		createBundle: createLogBundleProcedure,
 	}),
 	events: base.router({
 		list: listEventsProcedure,

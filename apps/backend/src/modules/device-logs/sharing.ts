@@ -6,8 +6,8 @@ export function reserveLogSharing(now = Date.now()) {
 	const lease = { expiresAt: now + 60_000 };
 	owner = lease;
 	return {
-		start() {
-			lease.expiresAt = Infinity;
+		start(expiresAt = Infinity) {
+			lease.expiresAt = expiresAt;
 		},
 		release() {
 			if (owner === lease) owner = null;
