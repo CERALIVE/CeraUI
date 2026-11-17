@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { execSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { defineConfig, devices } from '@playwright/test';
+import { visualSpecs } from '../../scripts/ci/visual-pr.mjs';
 import { clearInputPickerHardwareArtifacts } from './tests/e2e/helpers/input-picker-hardware-preflight.js';
 
 clearInputPickerHardwareArtifacts();
@@ -115,6 +116,7 @@ const mobile = { ...devices['Desktop Chrome'], viewport: { width: 390, height: 8
 
 export default defineConfig({
   testDir: 'tests/e2e',
+  testIgnore: process.env.E2E_VISUAL_HOST === '1' ? visualSpecs([]).map((spec) => `**/${spec}`) : [],
   outputDir: EVIDENCE_DIR,
   // Specs read auth_tokens.json at module-load time, so beforeEach is too late;
   // globalSetup runs after webServer and before spec collection. See that file.

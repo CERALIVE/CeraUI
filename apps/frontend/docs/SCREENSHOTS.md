@@ -123,13 +123,18 @@ NOT documentation — a diff here fails a test. Regenerate deliberately, and onl
 the surfaces a change actually touched:
 
 ```bash
-# every @visual spec
-bun run --filter frontend test:e2e:visual -- --update-snapshots
+# Host-owned @visual specs, from the repository root
+bun run test:e2e:visual -- --update-snapshots
 
-# one surface, both viewport projects
-bun run --filter frontend test:e2e -- tests/e2e/visual/<spec>.visual.spec.ts \
+# One host-owned surface, both viewport projects
+E2E_VISUAL_HOST=1 bun run --filter frontend test:e2e -- tests/e2e/visual/<spec>.visual.spec.ts \
   --project=desktop --project=mobile --update-snapshots
 ```
+
+The six container-owned files must be recorded inside the workflow's pinned
+image. The host command excludes them; both environments are required for
+complete visual coverage. See [Visual CI](../../../docs/VISUAL-CI.md) for
+comparison commands, artifact preparation and container recording.
 
 ### Network destination
 

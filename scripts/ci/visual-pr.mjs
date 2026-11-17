@@ -1,5 +1,4 @@
 import { existsSync } from 'node:fs';
-import { spawn } from 'bun';
 
 const SUBSET = [
 	'audio-mixer',
@@ -31,6 +30,7 @@ export function visualSpecs(changedSnapshots) {
 }
 
 if (import.meta.main) {
+	const { spawn } = await import('bun');
 	const specs = visualSpecs(JSON.parse(process.env.CHANGED_SNAPSHOTS ?? '[]'));
 	process.stdout.write(`Visual PR specs:\n${specs.join('\n')}\n`);
 	const child = spawn(
