@@ -388,6 +388,9 @@ rather than a false Cam Link identity. Both consumers now pin published bindings
 [![CI](https://github.com/CERALIVE/CeraUI/actions/workflows/build-check.yml/badge.svg)](https://github.com/CERALIVE/CeraUI/actions/workflows/build-check.yml)
 [![Release](https://github.com/CERALIVE/CeraUI/actions/workflows/publish-release.yml/badge.svg)](https://github.com/CERALIVE/CeraUI/actions/workflows/publish-release.yml)
 
+Build Check includes a path-filtered visual subset in a digest-pinned container.
+See [Visual CI](docs/VISUAL-CI.md) for its scope and baseline recording procedure.
+
 Web-based control interface for live video streaming with cellular bonding. Built with Svelte 5 (frontend) and Bun (backend).
 
 ## Quick Start

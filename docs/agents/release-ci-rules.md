@@ -98,6 +98,13 @@ Four further Build Check facts, all landed 2026-08-14:
   `@visual|@a11y|@gallery|@premigration-upgrade`; change one and you must change
   the other (and the workspace manifest legs with it).
 
+The additional `test-visual` job uses its own positive OR scope and a
+digest-pinned rendering image. It consumes `setup-e2e` artifacts and runs the
+six-file subset plus changed snapshot owners with two workers, zero retries and
+no snapshot writes. The summary permits its skip only when `visual=false`; its
+failure or cancellation always blocks. Scope, recording and image bumps:
+[Visual CI](../VISUAL-CI.md).
+
 Any change to this workflow's jobs or run steps also changes the workspace
 manifest — the build-check manifest and execution contract tests model the job set and
 per-job run-step digests with SET EQUALITY and fail on anything unmodeled.

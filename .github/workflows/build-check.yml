@@ -48,6 +48,8 @@ jobs:
     # skips — a misleading green rather than a failure.
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      visual: ${{ steps.filter.outputs.code == 'true' && steps.visual.outputs.visual == 'true' }}
+      snapshots: ${{ steps.visual.outputs.snapshots_files }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -68,6 +70,29 @@ jobs:
               - '!.github/PULL_REQUEST_TEMPLATE.md'
               - '!.github/ISSUE_TEMPLATE/**'
               - '!inspiration/**'
+
+      # Positive scopes use OR semantics in their own step, never `every`.
+      - name: Detect visual inputs
+        uses: dorny/paths-filter@v4
+        id: visual
+        with:
+          list-files: json
+          filters: |
+            visual:
+              - 'apps/frontend/src/**'
+              - 'apps/frontend/public/**'
+              - 'apps/frontend/tests/e2e/**/*.{ts,js,css,png}'
+              - 'apps/frontend/*.{ts,js,json,jsonc,html}'
+              - 'packages/{i18n,rpc}/**/*.{ts,js,json,css}'
+              - 'package.json'
+              - 'bun.lock'
+              - '.bun-version'
+              - '.env*'
+              - 'scripts/ci/*visual*'
+              - 'scripts/ci/build-check-*'
+              - '.github/workflows/build-check.yml'
+            snapshots:
+              - 'apps/frontend/tests/e2e/**/*-snapshots/*.png'
 
   # Deliberately has NO `Setup Node.js` step, unlike every other job here: every
   # command it runs is Bun (vitest via `bun --bun`, the rest `bun`/`bun test`), and
@@ -707,6 +732,114 @@ jobs:
           if-no-files-found: ignore
           retention-days: 1
 
+  test-visual:
+    name: Visual subset (pinned container)
+    needs: [changes, setup-e2e]
+    if: ${{ needs.changes.outputs.visual == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      # v1.65.0-noble's linux/amd64 manifest, resolved from MCR.
+      # Recording and comparison must move together; see docs/VISUAL-CI.md.
+      image: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:f6fe3cf9a493670b9a20f33597a807262abb25c40c31839ba4ac1dbc51fe7366
+      options: --platform=linux/amd64 --ipc=host --init
+    defaults:
+      run:
+        shell: bash
+        working-directory: CeraUI
+    env:
+      CI: "true"
+      TZ: UTC
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      # The image's own browser build, never the Ubuntu lanes' ~/.cache copy.
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      E2E_PASSWORD: "12345678"
+      MOCK_SCENARIO: multi-modem-wifi
+      CHANGED_SNAPSHOTS: ${{ needs.changes.outputs.snapshots }}
+      PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/visual-pr.json
+      PLAYWRIGHT_BLOB_OUTPUT_DIR: test-results/blob-report-visual-pr
+    steps:
+      # The image omits unzip, which setup-bun needs. Install only that package;
+      # any other package change would alter the recorded rendering environment.
+      - name: Visual container bootstrap
+        working-directory: .
+        run: |
+          test "$(id -u)" = 0
+          before="$RUNNER_TEMP/visual-packages-before"
+          after="$RUNNER_TEMP/visual-packages-after"
+          dpkg-query -W -f "\${binary:Package}=\${Version}\n" | sort > "$before"
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends unzip
+          dpkg-query -W -f "\${binary:Package}=\${Version}\n" | sort > "$after"
+          test -z "$(comm -23 "$before" "$after")"
+          added="$(comm -13 "$before" "$after")"
+          [[ -z "$added" || "$added" =~ ^unzip(:amd64)?=[^[:space:]]+$ ]]
+          command -v unzip
+          # Root uses the runner-owned workspace inside this container.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/CeraUI"
+
+      - name: Visual checkout
+        uses: actions/checkout@v7
+        with:
+          path: CeraUI
+
+      - name: Visual Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Visual Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - name: Visual Bun cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: visual-noble-amd64-bun-${{ hashFiles('CeraUI/bun.lock') }}
+          restore-keys: |
+            visual-noble-amd64-bun-
+
+      - name: Visual dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Visual frontend artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-dist
+          path: CeraUI/dist/public
+
+      - name: Visual sender artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: srtla-send-runtime-amd64-v4.2.0
+          path: CeraUI/dist/ci-runtime
+
+      - name: Visual rendering identity
+        run: |
+          node --version
+          bun --version
+          test "$(command -v bun)" = "$HOME/.bun/bin/bun"
+          test "$(bun --version)" = 1.4.4
+          test "$(bun pm cache)" = "$HOME/.bun/install/cache"
+          fc-list | sort | sha256sum
+          ldd --version
+          node --input-type=module -e 'import { createRequire } from "node:module"; import { resolve } from "node:path"; const require = createRequire(resolve("apps/frontend/package.json")); console.log("Playwright " + require("@playwright/test/package.json").version); const { chromium } = require("@playwright/test"); const executable = chromium.executablePath(); if (!executable.startsWith(process.env.PLAYWRIGHT_BROWSERS_PATH + "/")) throw new Error("Chromium is not the image browser: " + executable); const b = await chromium.launch(); console.log("Chromium " + b.version() + " " + executable); await b.close();'
+
+      - name: Visual comparisons
+        run: bash scripts/ci/run-visual-pr.sh
+
+      - name: Visual artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-pr-results
+          path: CeraUI/apps/frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
   merge-e2e-reports:
     name: Merge E2E blob reports
     if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
@@ -778,6 +911,7 @@ jobs:
       - setup-e2e
       - test-e2e
       - merge-e2e-reports
+      - test-visual
       - build
     runs-on: ubuntu-latest
     steps:
@@ -786,6 +920,7 @@ jobs:
       - name: Verify every gated job reported
         env:
           CODE_CHANGED: ${{ needs.changes.outputs.code }}
+          VISUAL_CHANGED: ${{ needs.changes.outputs.visual }}
           RESULTS: >-
             changes=${{ needs.changes.result }}
             test-fe=${{ needs['test-fe'].result }}
@@ -795,16 +930,29 @@ jobs:
             setup-e2e=${{ needs['setup-e2e'].result }}
             test-e2e=${{ needs['test-e2e'].result }}
             merge-e2e-reports=${{ needs['merge-e2e-reports'].result }}
+            test-visual=${{ needs['test-visual'].result }}
             build=${{ needs.build.result }}
         run: |
           set -euo pipefail
+          case "${CODE_CHANGED}:${VISUAL_CHANGED}" in
+            true:true|true:false|false:false) ;;
+            *) echo "::error::invalid change-detection outputs"; exit 1 ;;
+          esac
           echo "dependency results: ${RESULTS}"
           failed=""
           skipped=""
           for entry in ${RESULTS}; do
             case "${entry#*=}" in
               success) ;;
-              skipped) skipped="${skipped} ${entry%%=*}" ;;
+              skipped)
+                if [ "${entry%%=*}" = "test-visual" ]; then
+                  if [ "${VISUAL_CHANGED}" != "false" ]; then
+                    failed="${failed} ${entry}"
+                  fi
+                else
+                  skipped="${skipped} ${entry%%=*}"
+                fi
+                ;;
               *) failed="${failed} ${entry}" ;;
             esac
           done

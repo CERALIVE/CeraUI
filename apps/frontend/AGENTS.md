@@ -32,6 +32,7 @@ bun run test:federation-abi
 
 | Task / code scope | Contract |
 |---|---|
+| Required visual subset and container baseline recording | [Visual CI](../../docs/VISUAL-CI.md) |
 | Before changing anything else here, open docs/agents/README.md and read the contract for the subsystem you touch | [Contract index](docs/agents/README.md) |
 | Preamble / ROLE | [Contract 1](docs/agents/overview.md); [Contract 2](docs/agents/role.md) |
 | STRUCTURE / CRITICAL: initSubscriptions() must be called at startup | [Contract 3](docs/agents/structure.md); [Contract 4](docs/agents/critical-initsubscriptions-must-be-called-at-startup.md) |

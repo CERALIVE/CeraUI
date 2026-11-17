@@ -105,6 +105,9 @@ test.describe('@visual audio mixer', () => {
 		const card = page.getByTestId('live-cockpit').getByTestId('audio-card');
 		await expect(card.getByTestId('audio-mixer-next-start')).toBeVisible({ timeout: 15_000 });
 		await expect(page.getByTestId(`audio-strip-gain-${MAIN}`).getByRole('slider')).toBeEnabled();
+		// The idle-to-live swap leaves a timing-dependent scroll offset; frame the card
+		// from its top so every run captures the same pixels.
+		await card.evaluate((element) => element.scrollIntoView({ block: 'start' }));
 		await expect(card).toHaveScreenshot('audio-mixer-live.png', { maxDiffPixels: 100 });
 		await page.getByTestId('live-bar').getByRole('button', { name: 'Stop stream' }).click();
 	});

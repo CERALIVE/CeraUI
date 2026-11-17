@@ -157,8 +157,10 @@ The November 9 held-package retry corrects product accessibility gaps:
 - **The federation catalog remains oversized.** The prior budget breaches are
   now explicitly rebaselined and enforced before publication, as detailed below.
   `TD-federation-i18n-catalog-size` in `docs/TECHNICAL_DEBT.md` remains open.
-- **Hosted functional E2E covers functionality; no hosted visual job exists.**
-  `build-check.yml` runs functional E2E with `@visual` excluded. The dependency
+- **The dependency-refresh visual comparison remains historical.**
+  Functional E2E still excludes `@visual`; the later
+  [container visual PR subset](../VISUAL-CI.md) supplies scoped hosted coverage,
+  not a rerun of the dependency-refresh comparison. The dependency
   refresh's qualified visual parity assessment comes from the base-versus-merged
   comparison of `116cba73` and `3c669487`: **239/45/144** versus **240/46/142**
   pass/fail/skip. No persistent introduced regression was reproduced. The only
@@ -166,8 +168,8 @@ The November 9 held-package retry corrects product accessibility gaps:
   when run alone. The Sharing degraded captures differ by 6–17 pixels at a
   maximum channel delta of 1/255; the cause remains unproven, so exact raster
   parity remains unresolved. The retained dependency-refresh visual comparison
-  records the full results and serial controls; hosted CI does not establish
-  visual parity.
+  records the full results and serial controls; the scoped hosted gate does not
+  establish complete visual parity for that historical refresh.
 
 ### Federation budgets and size analysis
 

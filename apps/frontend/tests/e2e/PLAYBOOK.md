@@ -191,6 +191,12 @@ bun run test:e2e:visual
 
 Baseline images are committed to the repo, the mobile project's `*-mobile-linux.png` included. A PR that changes them requires a deliberate `--update-snapshots` run and a reviewer sign-off that the visual change was intentional.
 
+The required PR subset uses a digest-pinned Linux amd64 container. Its six files
+and any changed snapshot's owning spec run through `bun run test:e2e:visual:pr`
+after the CI servers start. Record these baselines in that same container, not
+with a workstation browser; follow [Visual CI](../../../../docs/VISUAL-CI.md).
+The complete visual entrypoint remains available for explicitly broader work.
+
 Record baselines against the built preview (`bun run build:frontend`), with `CI=true` exported before the preview and the backend start, as the visual gate runs. The Vite dev server adds dev-only navigation (Identity, Dev Tools) and the Svelte inspector button, so a baseline recorded there fails against the built app.
 
 For an alternate preview port, set `E2E_PORT` before starting Playwright and start
