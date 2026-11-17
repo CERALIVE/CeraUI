@@ -179,17 +179,22 @@ tests/e2e/gallery/*.visual.spec.ts    — tag @gallery (docs screenshot gallery)
 `@visual` files use `toHaveScreenshot()` with committed baseline images. `@gallery` files use raw `page.screenshot()` to write documentation PNGs and are NOT a regression gate — they run only via `bun run screenshots` and are grep-inverted out of every functional entrypoint. The fixture screenshot guard permits BOTH tags; every other test gets a throwing screenshot stub.
 
 ```bash
-# Update baselines after an intentional visual change
-bun run --filter frontend test:e2e:visual -- --update-snapshots
-
-# Run the visual suite
-bun run --filter frontend test:e2e:visual
-
-# From the workspace root
+# Host-owned visual specs, from the repository root
 bun run test:e2e:visual
+
+# The six container-owned files, after preparing the CI artifacts
+bun run test:e2e:visual:container
 ```
 
 Baseline images are committed to the repo, the mobile project's `*-mobile-linux.png` included. A PR that changes them requires a deliberate `--update-snapshots` run and a reviewer sign-off that the visual change was intentional.
+
+The required PR subset uses a digest-pinned Linux amd64 container. Its six files
+and any changed snapshot's owning spec run through `bun run test:e2e:visual:pr`
+after the CI servers start. Record these baselines in that same container, not
+with a workstation browser; follow [Visual CI](../../../../docs/VISUAL-CI.md).
+The host command excludes exactly that six-file list through Playwright
+`testIgnore`; complete local coverage requires both environments. The raw
+frontend `test:e2e` command does not select a baseline environment.
 
 Record baselines against the built preview (`bun run build:frontend`), with `CI=true` exported before the preview and the backend start, as the visual gate runs. The Vite dev server adds dev-only navigation (Identity, Dev Tools) and the Svelte inspector button, so a baseline recorded there fails against the built app.
 

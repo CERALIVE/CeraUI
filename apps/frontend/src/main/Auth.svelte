@@ -1,7 +1,8 @@
 <script lang="ts">
+// allow: SIZE_OK - fields and cleanup belong to this single mounted form.
 import { m } from '@ceraui/i18n/svelte';
 import { AlertCircle, Eye, EyeOff, LoaderCircle } from '@lucide/svelte';
-import { untrack } from 'svelte';
+import { onDestroy, untrack } from 'svelte';
 import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
 import ModeToggle from '$lib/components/custom/mode-toggle.svelte';
 import Logo from '$lib/components/icons/Logo.svelte';
@@ -13,13 +14,16 @@ import { deviceName, siteName } from '$lib/config';
 import { getNotifications, getStatus } from '$lib/rpc/subscriptions.svelte';
 import {
 	authenticate,
+	clearAuthInteraction,
 	createPassword,
+	subscribeAuthStatus,
 } from '$lib/stores/auth-status.svelte';
 import { getSessionExpired } from '$lib/stores/connection-ux.svelte';
 import { getConnectionState } from '$lib/stores/offline-state.svelte';
 import { cn } from '$lib/utils.js';
 
 const MIN_PASSWORD_LENGTH = 8;
+let { offline = false }: { offline?: boolean } = $props();
 
 let password: string = $state('');
 let confirmPassword: string = $state('');
@@ -28,11 +32,58 @@ let showPassword: boolean = $state(false);
 
 let isLoading = $state(false);
 let setPassword: boolean = $state(false);
+let passwordInput = $state<HTMLInputElement | null>(null);
+let confirmInput = $state<HTMLInputElement | null>(null);
+let composing = false;
+let attempt: { controller: AbortController; password: string } | undefined;
 
 // The password value that produced the most recent auth rejection. While the
 // field still holds it, the inline "incorrect password" error stays visible;
 // the moment the operator edits the field it clears. No toast, no live device data.
 let rejectedPassword: string | null = $state(null);
+
+function clearFields() {
+	password = '';
+	confirmPassword = '';
+	rejectedPassword = null;
+	remember = false;
+	showPassword = false;
+	composing = false;
+	// pagehide must scrub the live DOM before a deferred render or BFCache freeze.
+	if (passwordInput) {
+		passwordInput.value = '';
+		passwordInput.type = 'password';
+	}
+	if (confirmInput) {
+		confirmInput.value = '';
+		confirmInput.type = 'password';
+	}
+}
+
+function resetInteraction() {
+	attempt?.controller.abort();
+	if (attempt) attempt.password = '';
+	attempt = undefined;
+	isLoading = false;
+	clearFields();
+}
+
+const unsubscribeAuth = subscribeAuthStatus(resetInteraction);
+onDestroy(() => {
+	unsubscribeAuth();
+	clearAuthInteraction();
+	resetInteraction();
+});
+
+// Login survives presentation changes; setup secrets do not.
+$effect.pre(() => {
+	const hidden = offline;
+	untrack(() => {
+		showPassword = false;
+		composing = false;
+		if (hidden && setPassword) clearAuthInteraction();
+	});
+});
 
 // ── Inline validation (errors only — no per-keystroke affirmations) ──
 const passwordTooShort = $derived(
@@ -85,12 +136,13 @@ const connection = $derived.by(() => {
 // clearing the flag re-runs the effect, which re-reads the same status frame,
 // puts the create-password form straight back on screen and deletes the
 // credential `authenticate()` had just persisted.
-$effect(() => {
+$effect.pre(() => {
 	const status = getStatus();
 	if (!status) return;
 	const asksForPassword = status.set_password ?? false;
 	untrack(() => {
 		if (asksForPassword === setPassword) return;
+		clearAuthInteraction();
 		setPassword = asksForPassword;
 		if (asksForPassword) {
 			localStorage.removeItem('auth');
@@ -107,44 +159,53 @@ $effect(() => {
 	const messages = getNotifications();
 	if (!messages?.show?.some((message) => message.name === 'auth')) return;
 	untrack(() => {
+		if (!attempt || setPassword) return;
 		isLoading = false;
 		localStorage.removeItem('auth');
 		// Surface the failure inline beneath the field instead of a toast.
-		rejectedPassword = password;
+		rejectedPassword = attempt.password;
+		attempt.controller.abort();
+		attempt.password = '';
+		attempt = undefined;
 	});
 });
 
-function login(password: string, remember: boolean) {
+async function login() {
+	const submitted = { controller: new AbortController(), password };
+	attempt = submitted;
 	isLoading = true;
-	if (setPassword) {
-		void createPassword(password).catch((err) => {
-			console.error('Failed to set password:', err);
-		});
-	}
-	setPassword = false;
-	void authenticate(password, remember).then((attempt) => {
-		switch (attempt.kind) {
-			case 'ok':
-				return;
-			case 'rejected':
-				isLoading = false;
-				rejectedPassword = password;
-				return;
-			case 'unreachable':
-				isLoading = false;
-				return;
+	const persistent = remember;
+	const setup = setPassword;
+	try {
+		if (setPassword) {
+			const created = await createPassword(submitted.password, submitted.controller.signal);
+			if (attempt !== submitted || submitted.controller.signal.aborted) return;
+			clearFields();
+			if (!created) return;
+			setPassword = false;
 		}
-	});
+		const result = await authenticate(submitted.password, persistent, submitted.controller.signal);
+		if (attempt !== submitted || submitted.controller.signal.aborted) return;
+		if (result.kind === 'rejected') rejectedPassword = submitted.password;
+	} finally {
+		if (attempt === submitted) {
+			if (setup) clearFields();
+			isLoading = false;
+			submitted.password = '';
+			attempt = undefined;
+		}
+	}
 }
 
 async function onSubmit(event: SubmitEvent) {
 	event.preventDefault();
-	if (!isFormValid || isLoading) return;
-	login(password, remember);
+	if (!isFormValid || isLoading || offline || composing) return;
+	await login();
 }
 </script>
 
-<div class="bg-background relative grid min-h-dvh place-items-center overflow-hidden px-4 py-12">
+<!-- clip, not hidden: a hidden box is still a scroll container that a script can slide sideways -->
+<div class="bg-background relative grid min-h-dvh place-items-center overflow-clip px-4 py-12">
 	<!-- Instrument ambiance: a single faint phosphor glow, not glassmorphism -->
 	<div aria-hidden="true" class="pointer-events-none absolute inset-0">
 		<div
@@ -165,8 +226,10 @@ async function onSubmit(event: SubmitEvent) {
 
 	<!-- Locale + theme controls -->
 	<div class="absolute end-4 top-4 z-10 flex items-center gap-1 md:end-6 md:top-6">
-		<LocaleSelector />
-		<ModeToggle />
+		{#if !offline}
+			<LocaleSelector />
+			<ModeToggle />
+		{/if}
 	</div>
 
 	<!-- Auth card -->
@@ -203,13 +266,14 @@ async function onSubmit(event: SubmitEvent) {
 					{setPassword ? m["auth.newPassword"]() : m["auth.password"]()}
 				</Label>
 
+				<!-- The field is dir="ltr"; the toggle follows the page, so in RTL its space is the field's start (rtl: reads <html dir>). -->
 				<div class="relative">
 					<Input
 						id="password"
 						aria-describedby={passwordError ? 'password-error' : undefined}
 						aria-invalid={Boolean(passwordError)}
 						class={cn(
-							'h-11 w-full pe-12',
+							'h-11 w-full pe-12 rtl:ps-12 rtl:pe-2.5',
 							passwordError && 'border-destructive focus-visible:border-destructive',
 						)}
 						autocapitalize="none"
@@ -221,7 +285,13 @@ async function onSubmit(event: SubmitEvent) {
 							? m["auth.placeholderNewPassword"]()
 							: m["auth.placeholderPassword"]()}
 						type={showPassword ? 'text' : 'password'}
+						bind:ref={passwordInput}
 						bind:value={password}
+						oncompositionstart={() => (composing = true)}
+						oncompositionend={() => (composing = false)}
+						onkeydown={(event) => {
+							if (event.key === 'Enter' && event.isComposing) event.preventDefault();
+						}}
 					/>
 
 					<Button
@@ -275,7 +345,13 @@ async function onSubmit(event: SubmitEvent) {
 						disabled={isLoading}
 						placeholder={m["auth.placeholderConfirmPassword"]()}
 						type={showPassword ? 'text' : 'password'}
+						bind:ref={confirmInput}
 						bind:value={confirmPassword}
+						oncompositionstart={() => (composing = true)}
+						oncompositionend={() => (composing = false)}
+						onkeydown={(event) => {
+							if (event.key === 'Enter' && event.isComposing) event.preventDefault();
+						}}
 					/>
 					{#if confirmError}
 						<p

@@ -105,9 +105,9 @@ export const saveRemoteConfig = async (params: RemoteConfigParams) => {
 	}
 };
 
-export const savePassword = async (password: string) => {
+export const savePassword = async (password: string): Promise<boolean> => {
 	try {
-		await createPassword(password);
+		return await createPassword(password);
 	} catch (error) {
 		console.error("Failed to save password:", error);
 		throw error;

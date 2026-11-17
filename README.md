@@ -1,5 +1,18 @@
 # CeraUI
 
+**Visual gates [EXISTS].** `bun run test:e2e:visual` compares host-owned visual
+specs. `bun run test:e2e:visual:container` compares the six container-owned files
+in the workflow's pinned image. Both are needed for complete local visual
+coverage; setup and environment limits are in [Visual CI](docs/VISUAL-CI.md).
+
+**Sign-in draft lifetime [EXISTS; host-tested].** An offline takeover keeps the
+same login form in memory, hidden and inert, then returns it masked with its
+remember choice and pending request intact. Auth-owned menus close on takeover.
+Setup fields are cleared on takeover.
+Sign-in success, session retirement, mode changes and page exit clear the fields;
+a reload starts blank. Nothing stores the draft. See the
+[auth lifecycle contract](docs/agents/auth-state-connection-store-consolidation.md#sign-in-interaction-lifetime-exists).
+
 **Modem configuration acknowledgement [EXISTS; host-tested].** Automatic APN,
 credentials and operator selection are normalized before NetworkManager writes.
 `modems.configure.applied` reports the saved values, including automatic APN
@@ -387,6 +400,9 @@ rather than a false Cam Link identity. Both consumers now pin published bindings
 
 [![CI](https://github.com/CERALIVE/CeraUI/actions/workflows/build-check.yml/badge.svg)](https://github.com/CERALIVE/CeraUI/actions/workflows/build-check.yml)
 [![Release](https://github.com/CERALIVE/CeraUI/actions/workflows/publish-release.yml/badge.svg)](https://github.com/CERALIVE/CeraUI/actions/workflows/publish-release.yml)
+
+Build Check includes a path-filtered visual subset in a digest-pinned container.
+See [Visual CI](docs/VISUAL-CI.md) for its scope and baseline recording procedure.
 
 Web-based control interface for live video streaming with cellular bonding. Built with Svelte 5 (frontend) and Bun (backend).
 

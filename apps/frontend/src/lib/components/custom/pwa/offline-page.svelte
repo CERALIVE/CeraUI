@@ -1,14 +1,21 @@
 <script lang="ts">
 import { rtlLanguages } from '@ceraui/i18n';
 import { getLocale, m } from '@ceraui/i18n/svelte';
-import { RefreshCw, Smartphone, WifiOff } from '@lucide/svelte';
+import { LoaderCircle, RefreshCw, Smartphone, WifiOff } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
+import { getConnectionLossCause } from '$lib/stores/connection-ux.svelte';
 import { manualConnectionCheck } from '$lib/stores/offline-state.svelte';
 
 // RTL support (for future enhancements)
 const _isRTL = $derived(rtlLanguages.includes(getLocale()));
+
+// The takeover also appears when the browser is online but the page has never
+// reached the device since it loaded (an installed app opened while the device
+// is off). That is not "you're offline", and it says nothing about whether the
+// device is streaming, so it gets its own wording and checklist.
+const browserOffline = $derived(getConnectionLossCause() === 'browser-offline');
 
 let isCheckingConnection = $state(false);
 let connectionCheckFailed = $state(false);
@@ -54,18 +61,32 @@ function goBack() {
 	<Card class="mx-auto w-full max-w-md">
 		<CardHeader class="text-center">
 			<div class="bg-muted mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full">
-				<WifiOff class="text-muted-foreground h-8 w-8" />
+				{#if browserOffline}
+					<WifiOff class="text-muted-foreground h-8 w-8" />
+				{:else}
+					<LoaderCircle class="text-muted-foreground h-8 w-8 motion-safe:animate-spin" />
+				{/if}
 			</div>
-			<CardTitle class="text-xl">{m["offline.title"]()}</CardTitle>
-			<CardDescription>{m["offline.description"]()}</CardDescription>
+			{#if browserOffline}
+				<CardTitle class="text-xl">{m["offline.title"]()}</CardTitle>
+				<CardDescription>{m["offline.description"]()}</CardDescription>
+			{:else}
+				<CardTitle class="text-xl">{m["offline.unreachableTitle"]()}</CardTitle>
+				<CardDescription>{m["offline.unreachableDescription"]()}</CardDescription>
+			{/if}
 		</CardHeader>
 		<CardContent class="space-y-4">
 			<div class="text-muted-foreground space-y-2 text-sm">
 				<p>{m["offline.checkTitle"]()}</p>
 				<ul class="ml-2 list-inside list-disc space-y-1">
-					<li>{m["offline.checkWifi"]()}</li>
-					<li>{m["offline.checkNetwork"]()}</li>
-					<li>{m["offline.checkDevice"]()}</li>
+					{#if browserOffline}
+						<li>{m["offline.checkWifi"]()}</li>
+						<li>{m["offline.checkNetwork"]()}</li>
+						<li>{m["offline.checkDevice"]()}</li>
+					{:else}
+						<li>{m["offline.unreachableCheckPower"]()}</li>
+						<li>{m["offline.unreachableCheckNetwork"]()}</li>
+					{/if}
 				</ul>
 			</div>
 
@@ -80,7 +101,7 @@ function goBack() {
 					{#if isCheckingConnection}
 						{m["offline.checking"]()}
 					{:else if connectionCheckFailed}
-						{m["offline.checkFailed"]()}
+						{browserOffline ? m["offline.checkFailed"]() : m["offline.unreachableCheckFailed"]()}
 					{:else}
 						{m["offline.tryAgain"]()}
 					{/if}

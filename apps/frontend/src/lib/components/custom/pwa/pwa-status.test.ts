@@ -10,7 +10,8 @@
  *   · a mobile browser that is not already installed gets the install banner;
  *   · an installed (standalone) launch and a desktop browser get none;
  *   · dismissing it withdraws it AND tells the PWA store;
- *   · the offline band follows the ONE shared reconnect-grace verdict.
+ *   · the offline band follows the ONE shared reconnect-grace verdict, and
+ *     says "offline" only for the browser, naming the device otherwise.
  *
  * Green on the pre-change tree — refactor lock, not a bug fix. Copy is compared
  * against the catalog rather than hardcoded, so a translation change cannot
@@ -22,7 +23,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import PwaStatus from "./pwa-status.svelte";
 
-const surface = vi.hoisted(() => ({ showOfflineBanner: false }));
+const surface = vi.hoisted(() => ({
+	showOfflineBanner: false,
+	cause: "device-unreachable" as "browser-offline" | "device-unreachable",
+}));
 const setShowIOSInstallPrompt = vi.hoisted(() => vi.fn());
 const installApp = vi.hoisted(() => vi.fn());
 
@@ -30,6 +34,7 @@ vi.mock("$lib/stores/connection-ux.svelte", () => ({
 	deriveConnectionSurfaceUx: () => ({
 		showOfflineBanner: surface.showOfflineBanner,
 	}),
+	getConnectionLossCause: () => surface.cause,
 	getDisconnectedSince: () => null,
 	getGraceNow: () => 0,
 }));
@@ -69,9 +74,12 @@ function setStandalone(matches: boolean): void {
 
 const installBanner = () => screen.queryByText(m["pwa.installTitle"]());
 const offlineBanner = () => screen.queryByText(m["pwa.offline"]());
+const deviceBanner = () => screen.queryByText(m["pwa.deviceNotConnected"]());
+const lossBanner = () => offlineBanner() ?? deviceBanner();
 
 beforeEach(() => {
 	surface.showOfflineBanner = false;
+	surface.cause = "device-unreachable";
 	setUserAgent(DESKTOP_UA);
 	setStandalone(false);
 	setShowIOSInstallPrompt.mockReset();
@@ -129,12 +137,12 @@ describe("pwa-status — the install banner", () => {
 describe("pwa-status — the offline band", () => {
 	it("renders only when the shared grace verdict says so", () => {
 		const first = render(PwaStatus);
-		expect(offlineBanner()).toBeNull();
+		expect(lossBanner()).toBeNull();
 		first.unmount();
 
 		surface.showOfflineBanner = true;
 		render(PwaStatus);
-		expect(offlineBanner()).not.toBeNull();
+		expect(lossBanner()).not.toBeNull();
 	});
 
 	it("is gated independently of the install banner", () => {
@@ -142,7 +150,28 @@ describe("pwa-status — the offline band", () => {
 		setUserAgent(IPHONE_UA);
 		setStandalone(true);
 		render(PwaStatus);
-		expect(offlineBanner()).not.toBeNull();
+		expect(lossBanner()).not.toBeNull();
 		expect(installBanner()).toBeNull();
+	});
+
+	it("says the browser is offline only when the browser has no network", () => {
+		surface.showOfflineBanner = true;
+		surface.cause = "browser-offline";
+		render(PwaStatus);
+		expect(offlineBanner()).not.toBeNull();
+		expect(deviceBanner()).toBeNull();
+	});
+
+	it("names the device, not the browser, when only the device is unreachable", () => {
+		surface.showOfflineBanner = true;
+		surface.cause = "device-unreachable";
+		render(PwaStatus);
+		expect(deviceBanner()).not.toBeNull();
+		expect(
+			screen.queryByText(m["pwa.deviceNotConnectedDescription"](), {
+				exact: false,
+			}),
+		).not.toBeNull();
+		expect(offlineBanner()).toBeNull();
 	});
 });

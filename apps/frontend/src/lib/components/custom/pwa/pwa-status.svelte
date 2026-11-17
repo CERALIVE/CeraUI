@@ -34,11 +34,12 @@
 
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
-import { Download, Share, WifiOff } from '@lucide/svelte';
+import { Download, LoaderCircle, Share, WifiOff } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
 import {
 	deriveConnectionSurfaceUx,
+	getConnectionLossCause,
 	getDisconnectedSince,
 	getGraceNow,
 } from '$lib/stores/connection-ux.svelte';
@@ -55,6 +56,10 @@ const showOfflineBanner = $derived(
 		getGraceNow(),
 	).showOfflineBanner,
 );
+// The same banner covers two different losses. Only a browser without network
+// is "offline"; a dropped device socket on a working network is named as such,
+// and its wording must not suggest the device stopped streaming.
+const browserOffline = $derived(getConnectionLossCause() === 'browser-offline');
 
 // Reactive derived values for PWA state
 const canInstallApp = $derived(getCanInstall());
@@ -171,9 +176,15 @@ async function handleMobileInstall() {
 		class="bg-destructive text-destructive-foreground animate-in slide-in-from-top fixed top-0 right-0 left-0 z-50 p-3 text-center"
 	>
 		<div class="flex items-center justify-center gap-2">
-			<WifiOff class="h-4 w-4" />
-			<span class="text-sm font-medium">{m["pwa.offline"]()}</span>
-			<span class="text-xs opacity-80">• {m["pwa.offlineDescription"]()}</span>
+			{#if browserOffline}
+				<WifiOff class="h-4 w-4" />
+				<span class="text-sm font-medium">{m["pwa.offline"]()}</span>
+				<span class="text-xs opacity-80">• {m["pwa.offlineDescription"]()}</span>
+			{:else}
+				<LoaderCircle class="h-4 w-4 motion-safe:animate-spin" />
+				<span class="text-sm font-medium">{m["pwa.deviceNotConnected"]()}</span>
+				<span class="text-xs opacity-80">• {m["pwa.deviceNotConnectedDescription"]()}</span>
+			{/if}
 		</div>
 	</div>
 {/if}

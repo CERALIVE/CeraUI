@@ -37,6 +37,7 @@
 // allow: SIZE_OK — one connection UX state machine; pure transitions and their sole reactive owner stay co-located.
 import type { ConnectionState } from "$lib/rpc/client";
 import { rpcClient } from "$lib/rpc/client";
+import { clearAuthInteraction } from "./auth-status.svelte";
 import { createStalenessClock } from "./hud/staleness";
 
 // ============================================
@@ -96,6 +97,15 @@ export interface ConnectionSurfaceUx {
 	showOfflineBanner: boolean;
 	showAuthTimeout: boolean;
 }
+
+/**
+ * Why the connection-loss banner is up. The banner's visibility folds both
+ * causes into one debounced verdict, but its words must not: "you're offline"
+ * is only true when the browser itself has no network. A dropped device socket
+ * while the browser is online means the device cannot be reached from here,
+ * which says nothing about whether the device is still streaming.
+ */
+export type ConnectionLossCause = "browser-offline" | "device-unreachable";
 
 export interface ConnectionSurfaceUxInput {
 	authTimedOut: boolean;
@@ -320,6 +330,19 @@ export function deriveConnectionSurfaceUx(
 }
 
 /**
+ * Which loss the banner names. The browser's own offline state wins: while it
+ * lasts the socket cannot connect either, and "you're offline" is the one fix
+ * the operator can act on. Otherwise the device is the part we cannot reach.
+ */
+export function deriveConnectionLossCause(
+	browserOfflineSince: number | null,
+): ConnectionLossCause {
+	return browserOfflineSince === null
+		? "device-unreachable"
+		: "browser-offline";
+}
+
+/**
  * Whether the grace clock still needs to tick. It runs ONLY inside the grace
  * window: before it, nothing can transition; after it, the banner is already up
  * and no further tick can change anything. Mirrors `isClockTickNeeded`'s
@@ -371,6 +394,7 @@ interface ConnectionUxStore {
 	getIsRebooting(): boolean;
 	getSessionExpired(): boolean;
 	getDisconnectedSince(): number | null;
+	getConnectionLossCause(): ConnectionLossCause;
 	getGraceNow(): number;
 	isGraceClockRunning(): boolean;
 	markRebooting(): void;
@@ -445,6 +469,8 @@ function createConnectionUxStore(): ConnectionUxStore {
 		getIsRebooting: () => reconnect.rebooting,
 		getSessionExpired: () => sessionExpired,
 		getDisconnectedSince: disconnectedSince,
+		getConnectionLossCause: () =>
+			deriveConnectionLossCause(browserOfflineSince),
 		getGraceNow: () => graceNow,
 		isGraceClockRunning: () => graceClock.isRunning(),
 		markRebooting: () => {
@@ -519,6 +545,11 @@ export function getDisconnectedSince(): number | null {
 	return store().getDisconnectedSince();
 }
 
+/** Whether a current loss is the browser being offline or the device being unreachable. */
+export function getConnectionLossCause(): ConnectionLossCause {
+	return store().getConnectionLossCause();
+}
+
 /** The grace clock's current reading — advances only while a drop is inside its window. */
 export function getGraceNow(): number {
 	return store().getGraceNow();
@@ -547,6 +578,7 @@ export function clearRebooting(): void {
 
 /** Flag that the auth token expired mid-session. */
 export function markSessionExpired(): void {
+	clearAuthInteraction();
 	store().markSessionExpired();
 }
 

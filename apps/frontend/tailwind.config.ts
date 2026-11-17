@@ -60,6 +60,9 @@ const config: Config = {
 					ring: "var(--sidebar-ring)",
 				},
 				status: {
+					live: "var(--status-live)",
+					standby: "var(--status-standby)",
+					idle: "var(--status-idle)",
 					success: {
 						DEFAULT: "var(--status-success)",
 						foreground: "var(--status-success-foreground)",

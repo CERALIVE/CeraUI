@@ -18,6 +18,11 @@ test('configuration bootstrap keeps the shared seed complete during publication'
 	]) {
 		fs.copyFileSync(path.join(frontend, file), path.join(sandboxFrontend, file));
 	}
+	fs.mkdirSync(path.resolve(sandboxFrontend, '../../scripts/ci'), { recursive: true });
+	fs.copyFileSync(
+		path.resolve(frontend, '../../scripts/ci/visual-pr.mjs'),
+		path.resolve(sandboxFrontend, '../../scripts/ci/visual-pr.mjs'),
+	);
 	fs.symlinkSync(path.join(frontend, 'node_modules'), path.join(sandboxFrontend, 'node_modules'), 'dir');
 	const configPath = path.join(sandboxBackend, 'config.json');
 	const configModule = path.join(sandboxFrontend, 'playwright.config.ts');

@@ -200,8 +200,8 @@ const mutations = [
 		apply: (source) =>
 			replaceExactly(
 				source,
-				'    needs: [changes, setup-e2e]',
-				'    # needs: [changes, setup-e2e]\n    needs: [changes, test-fe]',
+				`    name: E2E (${matrixProject} shard ${matrixShard}/${matrixTotal})\n    needs: [changes, setup-e2e]`,
+				`    name: E2E (${matrixProject} shard ${matrixShard}/${matrixTotal})\n    # needs: [changes, setup-e2e]\n    needs: [changes, test-fe]`,
 			),
 	},
 	{

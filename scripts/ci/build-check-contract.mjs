@@ -50,7 +50,7 @@ const GATED_JOBS = [
 	'merge-e2e-reports',
 	'build',
 ];
-const SUMMARY_NEEDS = ['changes', ...GATED_JOBS];
+const SUMMARY_NEEDS = ['changes', ...GATED_JOBS.slice(0, -1), 'test-visual', 'build'];
 const SRTLA_RUNTIME_ARTIFACT = 'srtla-send-runtime-amd64-v4.2.0';
 const SRTLA_RUNTIME_URL =
 	'https://github.com/CERALIVE/srtla-send-rs/releases/download/v4.2.0/srtla_4.2.0_amd64.deb';
@@ -377,6 +377,11 @@ function assertSummary(finalTest) {
 		expression('needs.changes.outputs.code'),
 		'test summary code input',
 	);
+	assertExact(
+		env.VISUAL_CHANGED,
+		expression('needs.changes.outputs.visual'),
+		'test summary visual input',
+	);
 	// A result this step never reads is a job whose failure it cannot see.
 	for (const jobId of SUMMARY_NEEDS) {
 		const reference = /^[A-Za-z_][A-Za-z0-9_]*$/u.test(jobId)
@@ -403,6 +408,120 @@ function assertSummary(finalTest) {
 		`echo "::error::code changed but these jobs skipped:${shellVar('skipped')}"`,
 		'test summary unexplained-skip branch',
 	);
+}
+
+function assertVisualLane(jobs) {
+	const outputs = asRecord(jobs.changes.outputs, 'changes.outputs');
+	assertExact(
+		outputs.visual,
+		expression("steps.filter.outputs.code == 'true' && steps.visual.outputs.visual == 'true'"),
+		'changes visual output',
+	);
+	assertExact(
+		outputs.snapshots,
+		expression('steps.visual.outputs.snapshots_files'),
+		'changes snapshots output',
+	);
+	const filter = findStep(stepsOf(jobs.changes, 'changes'), 'Detect visual inputs', 'changes');
+	assertExact(filter.id, 'visual', 'visual filter id');
+	assertExact(filter.uses, 'dorny/paths-filter@v4', 'visual filter action');
+	const filterWith = withValues(filter, 'visual filter');
+	assertExact(filterWith['predicate-quantifier'] ?? 'some', 'some', 'visual OR quantifier');
+	assertExact(filterWith['list-files'], 'json', 'visual snapshot filenames');
+	const scopes = asRecord(YAML.parse(String(filterWith.filters)), 'visual scopes');
+	assertList(Object.keys(scopes), ['visual', 'snapshots'], 'visual scope names');
+	assertList(scopes.snapshots, ['apps/frontend/tests/e2e/**/*-snapshots/*.png'], 'snapshot scope');
+	if (asList(scopes.visual, 'visual paths').some((pattern) => pattern.startsWith('!'))) {
+		fail('visual paths must be a positive OR list');
+	}
+
+	const visual = asRecord(jobs['test-visual'], 'test-visual');
+	assertList(visual.needs, ['changes', 'setup-e2e'], 'test-visual.needs');
+	assertExact(visual.if, expression("needs.changes.outputs.visual == 'true'"), 'test-visual scope');
+	assertExact(visual['timeout-minutes'], 15, 'test-visual timeout');
+	assertExact(visual['continue-on-error'], undefined, 'test-visual failure policy');
+	const container = asRecord(visual.container, 'test-visual.container');
+	if (
+		!/^mcr\.microsoft\.com\/playwright:v\d+\.\d+\.\d+-noble@sha256:[a-f0-9]{64}$/u.test(
+			container.image,
+		)
+	) {
+		fail('test-visual requires a digest-pinned Playwright image');
+	}
+	assertExact(
+		container.options,
+		'--platform=linux/amd64 --ipc=host --init',
+		'test-visual container options',
+	);
+	const env = asRecord(visual.env, 'test-visual.env');
+	assertExact(env.CI, 'true', 'test-visual CI before startup');
+	assertExact(env.TZ, 'UTC', 'test-visual timezone');
+	assertExact(env.LANG, 'C.UTF-8', 'test-visual locale');
+	assertExact(
+		env.CHANGED_SNAPSHOTS,
+		expression('needs.changes.outputs.snapshots'),
+		'test-visual snapshot input',
+	);
+	assertExact(env.PLAYWRIGHT_BROWSERS_PATH, '/ms-playwright', 'test-visual image browsers');
+	const steps = stepsOf(visual, 'test-visual');
+	// setup-bun needs unzip, which the image omits; it must exist before that step.
+	const bootstrap = findStep(steps, 'Visual container bootstrap', 'test-visual');
+	assertExact(steps.indexOf(bootstrap), 0, 'test-visual bootstrap position');
+	assertExact(bootstrap['working-directory'], '.', 'test-visual bootstrap directory');
+	for (const command of [
+		'apt-get install -y --no-install-recommends unzip',
+		'git config --global --add safe.directory "$GITHUB_WORKSPACE/CeraUI"',
+	]) {
+		assertIncludes(bootstrap.run, command, 'test-visual bootstrap');
+	}
+	const identity = findStep(steps, 'Visual rendering identity', 'test-visual');
+	assertIncludes(
+		identity.run,
+		'test "$(bun pm cache)" = "$HOME/.bun/install/cache"',
+		'test-visual Bun cache path',
+	);
+	assertIncludes(identity.run, 'chromium.executablePath()', 'test-visual image browser');
+	assertExact(
+		findStep(steps, 'Visual Node.js', 'test-visual').with['node-version'],
+		expression('env.NODE_VERSION'),
+		'test-visual Node',
+	);
+	assertExact(
+		findStep(steps, 'Visual Bun', 'test-visual').with['bun-version'],
+		'1.4.4',
+		'test-visual Bun',
+	);
+	const cache = findStep(steps, 'Visual Bun cache', 'test-visual');
+	assertExact(cache.uses, 'actions/cache@v6', 'test-visual dependency cache');
+	assertExact(cache.with.path, '~/.bun/install/cache', 'test-visual cache path');
+	assertExact(
+		findStep(steps, 'Visual dependencies', 'test-visual').run,
+		'bun install --frozen-lockfile',
+		'test-visual frozen install',
+	);
+	for (const [name, artifact] of [
+		['Visual frontend artifact', 'frontend-dist'],
+		['Visual sender artifact', SRTLA_RUNTIME_ARTIFACT],
+	]) {
+		const download = findStep(steps, name, 'test-visual');
+		assertExact(download.uses, 'actions/download-artifact@v8', 'test-visual artifact action');
+		assertExact(download.with.name, artifact, 'test-visual artifact');
+	}
+	if (
+		steps.some((step) =>
+			/install-browser|install-deps|playwright install/u.test(String(step.run ?? '')),
+		)
+	) {
+		fail('test-visual must use the image browsers and system libraries');
+	}
+	const compare = findStep(steps, 'Visual comparisons', 'test-visual');
+	assertExact(compare.if, undefined, 'test-visual comparison condition');
+	assertExact(compare.run, 'bash scripts/ci/run-visual-pr.sh', 'test-visual comparison command');
+	assertExact(compare['continue-on-error'], undefined, 'test-visual comparison failure policy');
+	const upload = findStep(steps, 'Visual artifacts', 'test-visual');
+	assertExact(upload.if, 'always()', 'test-visual artifact condition');
+	assertExact(upload.uses, 'actions/upload-artifact@v7', 'test-visual artifact action');
+	assertExact(upload.with.path, 'CeraUI/apps/frontend/test-results/', 'test-visual artifact path');
 }
 
 function assertFrontendShards(frontendTest, mergeFe, guardrails) {
@@ -632,6 +751,7 @@ export function assertBuildCheckContract(source) {
 
 	assertChangesGate(jobs);
 	assertGatedJobs(jobs);
+	assertVisualLane(jobs);
 	assertSummary(finalTest);
 	assertFrontendShards(frontendTest, mergeFrontend, guardrails);
 	return root;

@@ -49,6 +49,7 @@ bun run test:release-package-contracts
 
 | Task / code scope | Contract |
 |---|---|
+| Host visual gate, required container subset and baseline recording | [Visual CI](docs/VISUAL-CI.md) |
 | Brand logo / favicons / PWA icons (vendored, lock-verified) | `brand-assets.lock.json`, `scripts/sync-brand-assets.ts`, `apps/frontend/src/lib/components/icons/Logo.svelte`, `BRAND-ASSETS-NOTICE.md` |
 | Build-time brand strings (vite/vitest/pwa) | `apps/frontend/brand.config.ts` (equality with `src/lib/config/branding.ts` enforced by `src/tests/brand-identity.test.ts`) |
 | Before changing anything else here, open docs/agents/README.md and read the contract for the subsystem you touch | [Contract index](docs/agents/README.md) |

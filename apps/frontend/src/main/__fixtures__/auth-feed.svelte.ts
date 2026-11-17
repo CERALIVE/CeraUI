@@ -9,14 +9,23 @@
  */
 import type { NotificationsMessage, StatusResponse } from "@ceraui/rpc/schemas";
 
-let statusFeed = $state<StatusResponse | undefined>(undefined);
+let statusFeed = $state<Partial<StatusResponse> | undefined>(undefined);
 let notificationsFeed = $state<NotificationsMessage | undefined>(undefined);
+let offlineFeed = $state(false);
 
-export function getStatusFeed(): StatusResponse | undefined {
+export function getOfflineFeed(): boolean {
+	return offlineFeed;
+}
+
+export function publishOffline(offline: boolean): void {
+	offlineFeed = offline;
+}
+
+export function getStatusFeed(): Partial<StatusResponse> | undefined {
 	return statusFeed;
 }
 
-export function publishStatus(next: StatusResponse | undefined): void {
+export function publishStatus(next: Partial<StatusResponse> | undefined): void {
 	statusFeed = next;
 }
 
@@ -33,4 +42,5 @@ export function publishNotifications(
 export function resetAuthFeeds(): void {
 	statusFeed = undefined;
 	notificationsFeed = undefined;
+	offlineFeed = false;
 }
