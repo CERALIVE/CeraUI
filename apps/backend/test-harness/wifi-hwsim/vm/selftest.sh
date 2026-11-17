@@ -135,10 +135,14 @@ for mode in explicit automatic; do for sig in TERM INT; do
 done; done
 repo="$root/repo"
 mkdir -p "$repo/apps/backend"
+mkdir -p "$repo/apps/backend/test-harness/wifi-hwsim"
+for name in run.sh check-env.sh integration-test.sh; do
+	cp "$(dirname "$runner")/../$name" "$repo/apps/backend/test-harness/wifi-hwsim/$name"
+done
 GIT_MASTER=1 git init -q "$repo"
 for value in selected head; do
 	printf '{"revision":"%s"}\n' "$value" >"$repo/apps/backend/setup.json"
-	GIT_MASTER=1 git -C "$repo" add -- apps/backend/setup.json
+	GIT_MASTER=1 git -C "$repo" add -- apps/backend/setup.json apps/backend/test-harness/wifi-hwsim
 	GIT_MASTER=1 git -C "$repo" -c user.name=Fixture -c user.email=fixture@example.invalid \
 		-c commit.gpgSign=false -c core.hooksPath=/dev/null commit -qm "$value"
 done
@@ -153,10 +157,19 @@ TMPDIR="$CASE_DIR/tmp" bash "$runner" --repo "$repo" --ref "$revision" -- \
 grep -Fq "repository command 'apps/backend/test-harness/wifi-hwsim/checks/selftest-missing.ts' is absent from $revision" "$CASE_DIR/log"
 grep -Fq 'no VM started' "$CASE_DIR/log"
 echo "PASS: incompatible revision rejected before VM state or QEMU creation"
+mkdir -p "$root/relocated"
+cp "$runner" "$root/relocated/run-vm.sh"
+new_case relocated
+rc=0
+TMPDIR="$CASE_DIR/tmp" bash "$root/relocated/run-vm.sh" -- true >"$CASE_DIR/log" 2>&1 || rc=$?
+[[ "$rc" == 1 && ! -e "$CASE_DIR/pid" ]]
+grep -Fq "invalid harness directory:" "$CASE_DIR/log"
+grep -Fq "no VM started" "$CASE_DIR/log"
+echo "PASS: misplaced standalone runner refuses packaging before QEMU creation"
 new_case bootstrap
 mkdir -p "$CASE_DIR/guest/root" "$CASE_DIR/guest/usr/local/bin" "$CASE_DIR/guest/run"
 printf 'wlan1\n' >"$CASE_DIR/guest/run/hwsim-client"
-if ! TMPDIR="$CASE_DIR/tmp" BOOTSTRAP=1 EXPECTED_CWD="$CASE_DIR/guest/repo" bash "$runner" --repo "$repo" --ref "$revision" --no-install -- \
+if ! TMPDIR="$CASE_DIR/tmp" BOOTSTRAP=1 EXPECTED_CWD="$CASE_DIR/guest/repo" bash "$root/relocated/run-vm.sh" --repo "$repo" --ref "$revision" --no-install -- \
 	bash -c 'test "$PWD" = "$EXPECTED_CWD" && printf "%s\n" "$PWD" >"$CASE_DIR/user-cwd"' >"$CASE_DIR/log" 2>&1; then
 	cat "$CASE_DIR/log"; echo "FAIL: repository bootstrap before user command" >&2; exit 1
 fi

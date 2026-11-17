@@ -18,7 +18,9 @@ physical Wi-Fi hardware**.
 ## Offline native-shim preflight
 
 The first-AP shim installs an exclusive `/usr/local/bin/nmcli` link to its
-private executable and removes that link on close. That directory is already
+private executable in the exported repository and removes its owned link on
+close, uncaught process exit, SIGINT and SIGTERM. `/run` may remain `noexec`.
+That launcher directory is already
 on the guest's startup PATH. Bun 1.4.4's env-less product execution path retains
 the startup PATH, while the stdin runner receives the current environment;
 prepending a private directory after startup alone does not intercept both.
@@ -32,13 +34,59 @@ taskset -c 0-3 bun \
 ```
 
 This requires Linux with unprivileged user and mount namespaces enabled.
-The test mounts temporary `/run` and `/usr/local/bin` filesystems only inside
-its private namespace, preserves the real Bun executable with a private bind
+The test mounts temporary `/run` (deliberately `noexec`) and `/usr/local/bin`
+filesystems only inside its private user/mount/PID namespace, preserves the real Bun executable with a private bind
 mount, and invokes the real installer and product runners against the real
 `nmcli --version`. It verifies two receipts and launcher cleanup. It is an
 explicit selftest outside normal backend test discovery. No host root,
 NetworkManager daemon, VM or shared lock is used. This proves instrumentation,
 not native Wi-Fi behavior.
+
+Before the four-radio native cases, run the aggregate guest preflight once:
+
+```bash
+export NODE_ENV=production MOCK_MODE=false LC_ALL=C
+bash apps/backend/test-harness/wifi-hwsim/guest-preflight.sh
+```
+
+Run it after installing any outer nmcli capture observer. It attempts every
+independent probe, prints every failure, and returns nonzero if any failed.
+It checks tools/versions, guest boundaries, writable and executable paths,
+backend imports, WebSocket loopback, both real product runners' shim receipts,
+four distinct hwsim radios and channel 6, managed-device readiness, virtual
+interface creation/deletion, shared-IPv4 AP activation on control radio B,
+NM framing/offline stdin, persisted file and D-Bus
+properties, an actual NM restart, and readiness after restart. Its two NM
+fixtures (a short-lived control AP and an inactive dummy profile) have generated
+UUIDs and are deleted only by those UUIDs. The control uses the public harness
+passphrase. It never calls a CeraUI hotspot entrypoint or runs a native scenario.
+Logs and fsynced results live in the printed `/var/tmp/ceraui-preflight.*`
+directory; copy or emit them before guest teardown. The check imports backend
+modules in a disposable process and exits explicitly to retire their pollers.
+
+Execute **each** native case through its own mount namespace:
+
+```bash
+bash apps/backend/test-harness/wifi-hwsim/native-exec.sh \
+  bun apps/backend/test-harness/wifi-hwsim/checks/first-ap.ts
+bash apps/backend/test-harness/wifi-hwsim/native-exec.sh \
+  bun apps/backend/test-harness/wifi-hwsim/checks/hybrid-upgrade.ts
+```
+
+The wrapper keeps the real Bun executable through an open descriptor, then
+mounts a private `/usr/local/bin`. Even an uncatchable process death cannot
+leave its launcher in the next case's namespace. It preserves the guest PID
+namespace, so NetworkManager audit PIDs remain comparable. A hard kill can
+leave private state files in the disposable repository; they are never reused.
+Do not use a PID namespace for native cases that compare NM audit PIDs.
+
+Offline lifecycle, aggregate-failure and type checks:
+
+```bash
+taskset -c 0-3 bun apps/backend/test-harness/wifi-hwsim/checks/native-exec.selftest.ts
+cd apps/backend/test-harness/wifi-hwsim
+taskset -c 0-3 bun ../../../../scripts/tsc.mjs -p tsconfig.json
+```
 
 ## Local VM without host root
 
@@ -108,13 +156,16 @@ bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh --radios 4 \
   bun apps/backend/test-harness/wifi-hwsim/checks/first-ap.ts
 ```
 
-The selected commit must contain the gate and its product imports together;
+The selected commit must contain the harness, gate and its product imports together;
 do not overlay checks from another revision. Before any download, VM state
 creation or boot, the runner rejects an invalid revision or a direct
 `bun path.ts` / `bun path.js` command whose script is absent from that commit.
 The same check covers JSX/TSX and CommonJS/ESM script extensions.
 It does not inspect imports embedded in `bun -e` or shell commands.
-The guest initializes local Git metadata solely so the archived
+All transfer archives and the command file are prepared before downloads or
+boot. With `--repo`, the harness archive comes from that same immutable commit,
+independent of the runner script's location. A misplaced standalone runner
+without a valid harness directory fails before QEMU. The guest initializes local Git metadata solely so the archived
 repository's install hooks can configure hooks; it does not invent a commit.
 The exported application SHA is printed separately. An install failure is an
 infrastructure failure, before the requested command runs.

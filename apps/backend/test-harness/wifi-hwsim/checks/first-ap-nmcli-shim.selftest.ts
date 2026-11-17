@@ -1,5 +1,5 @@
-import assert from "node:assert/strict";
-import { resolve } from "node:path";
+import assert from 'node:assert/strict';
+import { resolve } from 'node:path';
 
 const preflight = `
 import {run,runWithStdin} from "./apps/backend/src/helpers/run.ts";
@@ -19,33 +19,35 @@ console.log("R19_FIRST_AP_SHIM_CLEANUP=PASS");
 
 const child = Bun.spawn(
 	[
-		"unshare",
-		"--user",
-		"--map-root-user",
-		"--mount",
-		"--propagation",
-		"private",
-		"bash",
-		"-c",
+		'unshare',
+		'--user',
+		'--map-root-user',
+		'--mount',
+		'--pid',
+		'--fork',
+		'--mount-proc',
+		'--propagation',
+		'private',
+		'bash',
+		'-c',
 		`
 set -euo pipefail
-mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs /run
-touch /run/offline-bun
-mount --bind "$1" /run/offline-bun
+mount -t tmpfs -o mode=0755,nosuid,nodev,noexec tmpfs /run
 mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs /usr/local/bin
-ln -s /run/offline-bun /usr/local/bin/bun
-exec /run/offline-bun --eval "$2"
+touch /usr/local/bin/bun
+mount --bind "$1" /usr/local/bin/bun
+exec /usr/local/bin/bun --eval "$2"
 `,
-		"native-shim-offline",
+		'native-shim-offline',
 		process.execPath,
 		preflight,
 	],
 	{
-		cwd: resolve(import.meta.dir, "../../../../.."),
-		env: { ...process.env, HWSIM_REPO: "/repo", LC_ALL: "C" },
-		stdin: "ignore",
-		stdout: "pipe",
-		stderr: "pipe",
+		cwd: resolve(import.meta.dir, '../../../../..'),
+		env: { ...process.env, HWSIM_REPO: '/repo', LC_ALL: 'C' },
+		stdin: 'ignore',
+		stdout: 'pipe',
+		stderr: 'pipe',
 		timeout: 10_000,
 	},
 );
@@ -58,9 +60,8 @@ assert.deepEqual(
 	{ exit, stderr, stdout },
 	{
 		exit: 0,
-		stderr: "",
-		stdout:
-			"R19_FIRST_AP_SHIM_EXEC_PREFLIGHT=PASS\nR19_FIRST_AP_SHIM_CLEANUP=PASS\n",
+		stderr: '',
+		stdout: 'R19_FIRST_AP_SHIM_EXEC_PREFLIGHT=PASS\nR19_FIRST_AP_SHIM_CLEANUP=PASS\n',
 	},
 );
 process.stdout.write(stdout);

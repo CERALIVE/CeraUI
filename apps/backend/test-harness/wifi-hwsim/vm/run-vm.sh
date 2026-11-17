@@ -207,6 +207,28 @@ run_dir=$(mktemp -d "$root/runs/run.XXXXXXXX")
 honor_cancel
 echo "run-vm.sh: run_dir=$run_dir"
 
+# Prepare every transfer before downloads or boot; repository mode uses only the selected revision.
+if [[ -n "$repo" ]]; then
+	run 60 env GIT_MASTER=1 git -C "$repo" archive --format=tar -o "$run_dir/harness.tar" \
+		"$repo_sha:apps/backend/test-harness/wifi-hwsim"
+	run 60 env GIT_MASTER=1 git -C "$repo" archive --format=tar -o "$run_dir/repo.tar" "$repo_sha"
+	run 60 cp "$bun_path" "$run_dir/bun"
+else
+	[[ -f "$harness/integration-test.sh" && -f "$harness/check-env.sh" && -f "$harness/run.sh" ]] ||
+		die "invalid harness directory: $harness (no VM started)"
+	run 60 tar -C "$harness" -cf "$run_dir/harness.tar" .
+fi
+cat >"$run_dir/command.sh" <<'COMMAND'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ -d /repo ]]; then cd /repo; else cd /harness; fi
+export CERATEST_CLIENT_IF="$(cat /run/hwsim-client)"
+export HWSIM_REPO=/repo
+COMMAND
+printf '%q ' "$@" >>"$run_dir/command.sh"
+printf '\n' >>"$run_dir/command.sh"
+echo "run-vm.sh: preboot packaging ready"
+
 url=https://cloud.debian.org/images/cloud/trixie/latest
 image_name=debian-13-generic-amd64.qcow2
 run 60 curl -q --fail --location --proto '=https' --proto-redir '=https' \
@@ -295,20 +317,6 @@ run 610 ssh "${ssh_opts[@]}" root@127.0.0.1 \
 	'timeout -k 5 600 cloud-init status --wait --long' ||
 	die "cloud-init did not finish successfully within 600 seconds"
 
-run 60 tar -C "$harness" -cf "$run_dir/harness.tar" .
-if [[ -n "$repo" ]]; then
-	run 60 env GIT_MASTER=1 git -C "$repo" archive --format=tar -o "$run_dir/repo.tar" "$repo_sha"
-	run 60 cp "$bun_path" "$run_dir/bun"
-fi
-cat >"$run_dir/command.sh" <<'COMMAND'
-#!/usr/bin/env bash
-set -euo pipefail
-if [[ -d /repo ]]; then cd /repo; else cd /harness; fi
-export CERATEST_CLIENT_IF="$(cat /run/hwsim-client)"
-export HWSIM_REPO=/repo
-COMMAND
-printf '%q ' "$@" >>"$run_dir/command.sh"
-printf '\n' >>"$run_dir/command.sh"
 files=("$run_dir/harness.tar" "$run_dir/command.sh")
 [[ -z "$repo" ]] || files+=("$run_dir/repo.tar" "$run_dir/bun")
 run 180 scp -P "$port" "${ssh_opts[@]:2}" "${files[@]}" root@127.0.0.1:/root/
