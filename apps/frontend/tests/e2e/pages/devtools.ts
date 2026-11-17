@@ -22,7 +22,7 @@ export class DevToolsPage {
 	 * destinations, so the dev-only tab is clicked directly (desktop or mobile).
 	 */
 	async open(): Promise<this> {
-		await this.page.goto('/');
+		// The sole caller uses authedPage; reloading spends its cold mount budget twice.
 		await ensureAuthenticated(this.page);
 		const desktopTab = this.page.locator('#nav-tab-identity');
 		const mobileTab = this.page.locator('#mobile-nav-tab-identity');
