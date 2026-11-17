@@ -154,8 +154,7 @@ export async function ensureAuthenticated(page: Page): Promise<void> {
 		.catch(() => undefined);
 	await page.evaluate(() => document.getElementById('js-failed')?.remove());
 
-	// The app nests <header> inside <main>, so it has no implicit "banner" role;
-	// locate the app-shell header by tag (it is the first <header> in the DOM,
+	// Locate the app-shell header by tag (it is the first <header> in the DOM,
 	// ahead of any view-level headers). Its presence is the authed-shell signal.
 	const header = page.locator('header').first();
 

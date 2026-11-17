@@ -69,11 +69,11 @@ onMount(async () => {
 
 <ModeWatcher />
 
-<main>
+<div>
 	<ErrorBoundary>
 		<Layout />
 		{#if showBootShell}
 			<BootShell />
 		{/if}
 	</ErrorBoundary>
-</main>
+</div>

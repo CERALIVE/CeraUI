@@ -357,7 +357,7 @@ test.describe("Live destination coherence audit", { tag: "@audit" }, () => {
 
 		// No i18n dot-path leak and no undefined/NaN across the whole idle cockpit
 		// AND the Live header region.
-		const leaks = await scanForLeaks(page.getByRole("main").first());
+		const leaks = await scanForLeaks(page.locator("#app"));
 		expect(leaks.dotPaths, `i18n dot-path leaks: ${leaks.dotPaths.join(", ")}`).toEqual([]);
 		expect(leaks.badFragments, `undefined/NaN fragments: ${leaks.badFragments.join(", ")}`).toEqual(
 			[],
@@ -573,7 +573,7 @@ test.describe("Live destination coherence audit", { tag: "@audit" }, () => {
 		sendSources([SRC_HDMI_CAP]);
 
 		await expect(page.getByTestId("idle-cockpit")).toBeVisible({ timeout: 15_000 });
-		const leaks = await scanForLeaks(page.getByRole("main").first());
+		const leaks = await scanForLeaks(page.locator("#app"));
 		expect(leaks.dotPaths, `es dot-path leaks: ${leaks.dotPaths.join(", ")}`).toEqual([]);
 		expect(leaks.badFragments, `es undefined/NaN: ${leaks.badFragments.join(", ")}`).toEqual([]);
 
@@ -604,7 +604,7 @@ test.describe("Live destination coherence audit", { tag: "@audit" }, () => {
 		// Arabic flips the document to RTL — the layout contract every RTL surface relies on.
 		await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
 
-		const leaks = await scanForLeaks(page.getByRole("main").first());
+		const leaks = await scanForLeaks(page.locator("#app"));
 		expect(leaks.dotPaths, `ar dot-path leaks: ${leaks.dotPaths.join(", ")}`).toEqual([]);
 		expect(leaks.badFragments, `ar undefined/NaN: ${leaks.badFragments.join(", ")}`).toEqual([]);
 
