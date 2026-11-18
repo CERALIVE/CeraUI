@@ -8,8 +8,9 @@
     (at your option) any later version.
 */
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { RunTimeoutError } from "../helpers/run.ts";
+import * as nm from "../modules/network/network-manager.ts";
 import {
 	concurrentApIfname,
 	ensureConcurrentApInterface,
@@ -21,6 +22,7 @@ import {
 import { iwCreationReceipt } from "./helpers/iw-creation-receipt.ts";
 
 afterEach(resetConcurrentInterfaceDepsForTest);
+afterEach(() => mock.restore());
 
 describe("concurrent AP virtual interface", () => {
 	test("uses a deterministic Linux-safe interface name", () => {
@@ -80,6 +82,7 @@ for (const outcome of [
 	"success",
 ] as const) {
 	test(`creation-bound cleanup preserves kernel ownership after ${outcome}`, async () => {
+		spyOn(nm, "nmDeviceProp").mockResolvedValue(["yes"]);
 		const targets = new Map<string, { ifindex: number; wdev: string }>();
 		let created = false;
 		setConcurrentInterfaceDepsForTest(

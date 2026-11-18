@@ -232,7 +232,13 @@ create it again; a refused or failed delete keeps both.
 Adoption and name recognition never confer deletion authority.
 Selection binds the record to the object it admitted and rechecks identity and
 bindings under the lock around its device write; Start rechecks before each
-profile write, so a replacement or foreign binding is refused before mutation.
+profile write. Autoconnect writes read the prior value, perform a final identity
+check after profile scans and immediately check identity after the write. A
+mismatch refuses and compensates only while the setting is still our value.
+NM can address device-set only by name, leaving a one-call replacement window;
+the pre-write value and compensating write cannot prove a replacement's own
+history or exclude another replacement. The exact-object deletion fence remains
+unchanged; see `docs/AP-STA-CONCURRENT-MODE.md` for the residual windows.
 
 The selected leg's runtime device-autoconnect change records its prior value.
 Stop/rollback restore only that exact current object and retain its netdev.

@@ -22,6 +22,7 @@ import {
 	readConcurrentBootId as bootIdReader,
 	idleTarget,
 	runConcurrentInterface as interfaceRunner,
+	setConcurrentAutoconnect,
 } from "./wifi-concurrent-interface-io.ts";
 import {
 	connectionsPermitAdoption,
@@ -257,13 +258,12 @@ export async function selectConcurrentApInterface(
 			record,
 		});
 		if (policy !== "no") {
-			await interfaceRunner("nmcli", [
-				"device",
-				"set",
-				ifname,
-				"autoconnect",
-				"no",
-			]);
+			if (
+				!(await setConcurrentAutoconnect(ifname, "no", () =>
+					currentTarget(ifname, record),
+				))
+			)
+				return undefined;
 		}
 		if (!(await authorized())) return undefined;
 		retained = true;

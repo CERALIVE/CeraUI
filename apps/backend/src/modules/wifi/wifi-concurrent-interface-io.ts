@@ -9,7 +9,7 @@
 */
 
 import { readFileSync } from "node:fs";
-import { run } from "../../helpers/run.ts";
+import { argMatch, ID_RE, run } from "../../helpers/run.ts";
 import { nmDeviceProp } from "../network/network-manager.ts";
 import { runIw } from "./regdomain.ts";
 
@@ -61,6 +61,43 @@ export async function idleTarget(ifname: string): Promise<boolean> {
 		props[1] === "yes" &&
 		(props[2] === "" || props[2] === "--")
 	);
+}
+
+export async function setConcurrentAutoconnect(
+	ifname: string,
+	value: string,
+	matchesIdentity: () => Promise<boolean>,
+): Promise<boolean> {
+	const name = argMatch(ID_RE, ifname);
+	const previous = (await nmDeviceProp(name, "GENERAL.AUTOCONNECT"))?.[0];
+	if ((previous !== "yes" && previous !== "no") || !(await matchesIdentity()))
+		return false;
+	let matches = false;
+	try {
+		await interfaceRunner("nmcli", [
+			"device",
+			"set",
+			name,
+			"autoconnect",
+			value,
+		]);
+	} finally {
+		matches = await matchesIdentity();
+		// NM addresses this write only by name; undo our value if the object changed during that call.
+		if (
+			!matches &&
+			previous !== value &&
+			(await nmDeviceProp(name, "GENERAL.AUTOCONNECT"))?.[0] === value
+		)
+			await interfaceRunner("nmcli", [
+				"device",
+				"set",
+				name,
+				"autoconnect",
+				previous,
+			]);
+	}
+	return matches;
 }
 
 export function setConcurrentInterfaceDepsForTest(

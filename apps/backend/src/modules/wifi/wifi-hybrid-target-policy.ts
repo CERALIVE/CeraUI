@@ -8,7 +8,7 @@
     (at your option) any later version.
 */
 
-import { argMatch, ID_RE } from "../../helpers/run.ts";
+import { ID_RE } from "../../helpers/run.ts";
 import {
 	nmConnGetFields,
 	nmConnsGet,
@@ -23,7 +23,7 @@ import {
 } from "./wifi-concurrent-interface-creation.ts";
 import {
 	idleTarget,
-	runConcurrentInterface as interfaceRunner,
+	setConcurrentAutoconnect,
 } from "./wifi-concurrent-interface-io.ts";
 import {
 	currentTarget,
@@ -102,13 +102,12 @@ export async function releaseConcurrentApInterface(
 				selectedTargets.set(ifname, { ...stored, record: released });
 			return;
 		}
-		await interfaceRunner("nmcli", [
-			"device",
-			"set",
-			argMatch(ID_RE, ifname),
-			"autoconnect",
-			record.priorAutoconnect,
-		]);
+		if (
+			!(await setConcurrentAutoconnect(ifname, record.priorAutoconnect, () =>
+				currentTarget(ifname, record),
+			))
+		)
+			return;
 		selectedTargets.set(ifname, { ...stored, record: released });
 	} catch {
 		return;

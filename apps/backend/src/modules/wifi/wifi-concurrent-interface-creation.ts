@@ -19,6 +19,7 @@ import {
 	idleTarget,
 	runConcurrentInterface as interfaceRunner,
 	waitForConcurrentInterface as interfaceWaiter,
+	setConcurrentAutoconnect,
 } from "./wifi-concurrent-interface-io.ts";
 import {
 	type CreatedInterface,
@@ -118,41 +119,27 @@ export async function ensureConcurrentApInterface(
 		createdInterfaces.set(target, identity);
 		if (!admitted()) return undefined;
 		// This read observes the captured object; it never grants ownership.
-		const createdInfo = await interfaceRunner("iw", [
-			"wdev",
-			identity.wdev,
-			"info",
-		]);
-		const current = interfaceIdentity(createdInfo);
-		if (
-			current?.ifindex !== identity.ifindex ||
-			current.wdev !== identity.wdev ||
-			createdInfo.match(/^\s*Interface\s+(\S+)\s*$/m)?.[1] !== ifname
-		)
-			return undefined;
-		const visible = await interfaceWaiter(ifname);
-		if (!admitted()) return undefined;
-		if (visible) {
-			const readyInfo = await interfaceRunner("iw", [
+		const matchesIdentity = async () => {
+			const info = await interfaceRunner("iw", [
 				"wdev",
 				identity.wdev,
 				"info",
-			]);
-			const ready = interfaceIdentity(readyInfo);
-			if (
-				ready?.ifindex !== identity.ifindex ||
-				ready.wdev !== identity.wdev ||
-				/^\s*Interface\s+(\S+)\s*$/m.exec(readyInfo)?.[1] !== ifname
-			)
-				return undefined;
+			]).catch(() => "");
+			const current = interfaceIdentity(info);
+			return (
+				current?.ifindex === identity.ifindex &&
+				current.wdev === identity.wdev &&
+				/^\s*Interface\s+(\S+)\s*$/m.exec(info)?.[1] === ifname
+			);
+		};
+		if (!(await matchesIdentity())) return undefined;
+		const visible = await interfaceWaiter(ifname);
+		if (!admitted()) return undefined;
+		if (visible) {
+			if (!(await matchesIdentity())) return undefined;
 			if (creationPermit && !(await creationPermit(identity))) return undefined;
-			await interfaceRunner("nmcli", [
-				"device",
-				"set",
-				ifname,
-				"autoconnect",
-				"no",
-			]);
+			if (!(await setConcurrentAutoconnect(ifname, "no", matchesIdentity)))
+				return undefined;
 			if (!admitted()) return undefined;
 			handedOff = true;
 			return target;

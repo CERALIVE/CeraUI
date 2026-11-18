@@ -108,10 +108,17 @@ connection-binding authority are rechecked under the adapter lock immediately
 before and after the device-autoconnect write, and Start rechecks them before
 each profile write. A mismatch found before the adoption write refuses with
 `hybrid-channel-not-permitted` before any write. A mismatch arriving during the
-adoption write leaves the already-issued `autoconnect no`; release then restores
-the exact recorded prior value, unless an external change to that setting has
-been observed since our write. Otherwise a leg lost after adoption refuses with
-the same reason before the next write.
+adoption write refuses and restores the immediately pre-write autoconnect value
+only while the current value is still ours. Both created and borrowed writes,
+including release, read that value before a final identity check, issue the write
+with no intervening profile scan, then immediately check identity again.
+NetworkManager device-set is name-addressed, not wdev-addressed: a replacement
+within that one call can receive a transient write. The pre-write value cannot
+prove a replacement's own prior value if replacement occurs after that read, nor
+can the compensating name-addressed write exclude another replacement. These
+windows require an object-addressed or conditional NM API to eliminate; they do
+not grant deletion or activation authority. Otherwise a leg lost after adoption
+refuses with the same reason before the next write.
 The associated station is checked again after those awaits;
 NM's connected AP state, UUID, actual role and SCC frequency must agree after up.
 Configuration and safe rollback use the same station-derived channel. A roam
