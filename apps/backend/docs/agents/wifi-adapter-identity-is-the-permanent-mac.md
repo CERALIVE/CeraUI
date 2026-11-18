@@ -241,6 +241,12 @@ NM can address device-set only by name, leaving a one-call replacement window;
 the pre-write value and compensating write cannot prove a replacement's own
 history or exclude another replacement. The exact-object deletion fence remains
 unchanged; see `docs/AP-STA-CONCURRENT-MODE.md` for the residual windows.
+Restoring our pre-write `yes` can overwrite a replacement's own deliberate
+`autoconnect no`. Every compensation attempt logs WARN with the interface name,
+our pre-write/written values and identity-loss reason; unavailable post-write
+reads or failed restores log ERROR without raw command errors or secrets.
+Compensation failure preserves the normal hybrid Start refusal for either leg
+kind and the existing best-effort release behavior.
 
 The selected leg's runtime device-autoconnect change records its prior value.
 Stop/rollback restore only that exact current object and retain its netdev.

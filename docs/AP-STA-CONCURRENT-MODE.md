@@ -119,6 +119,14 @@ can the compensating name-addressed write exclude another replacement. These
 windows require an object-addressed or conditional NM API to eliminate; they do
 not grant deletion or activation authority. Otherwise a leg lost after adoption
 refuses with the same reason before the next write.
+Restoring our pre-write `yes` can overwrite a replacement's own deliberate
+`autoconnect no`: the replacement's prior value is unknowable. A new interface
+normally starts at `yes`, and skipping compensation would leave our `no`.
+Every compensating write emits a warning with the interface name, our pre-write
+and written values, and the identity-loss reason. An unavailable post-write
+property or failed restoring write emits an error with the same non-secret
+context. A failed compensation still produces the normal hybrid refusal for
+created and borrowed Start; release retains its best-effort completion.
 The associated station is checked again after those awaits;
 NM's connected AP state, UUID, actual role and SCC frequency must agree after up.
 Configuration and safe rollback use the same station-derived channel. A roam

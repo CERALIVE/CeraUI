@@ -9,6 +9,7 @@
 */
 
 import { readFileSync } from "node:fs";
+import { logger } from "../../helpers/logger.ts";
 import { argMatch, ID_RE, run } from "../../helpers/run.ts";
 import { nmDeviceProp } from "../network/network-manager.ts";
 import { runIw } from "./regdomain.ts";
@@ -84,18 +85,37 @@ export async function setConcurrentAutoconnect(
 	} finally {
 		matches = await matchesIdentity();
 		// NM addresses this write only by name; undo our value if the object changed during that call.
-		if (
-			!matches &&
-			previous !== value &&
-			(await nmDeviceProp(name, "GENERAL.AUTOCONNECT"))?.[0] === value
-		)
-			await interfaceRunner("nmcli", [
-				"device",
-				"set",
-				name,
-				"autoconnect",
-				previous,
-			]);
+		if (!matches && previous !== value) {
+			const metadata = {
+				ifname: name,
+				previousAutoconnect: previous,
+				writtenAutoconnect: value,
+				reason: "identity-lost",
+			};
+			const current = (await nmDeviceProp(name, "GENERAL.AUTOCONNECT"))?.[0];
+			if (current !== "yes" && current !== "no") {
+				logger.error(
+					"Wi-Fi hybrid autoconnect compensation read unavailable",
+					metadata,
+				);
+			} else if (current === value) {
+				logger.warn("Wi-Fi hybrid autoconnect compensating restore", metadata);
+				try {
+					await interfaceRunner("nmcli", [
+						"device",
+						"set",
+						name,
+						"autoconnect",
+						previous,
+					]);
+				} catch {
+					logger.error(
+						"Wi-Fi hybrid autoconnect compensating restore failed",
+						metadata,
+					);
+				}
+			}
+		}
 	}
 	return matches;
 }
