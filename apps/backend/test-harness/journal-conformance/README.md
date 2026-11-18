@@ -24,8 +24,9 @@ cleanup receipt. The final success line follows cleanup.
 Follower checks read exact journal events with bounded timeouts. Readiness uses
 a FIFO written by a systemd unit after journald and D-Bus start. The suppression
 check uses a systemd timer to cross the configured 30-second rate interval,
-then awaits a journal marker and inspects any suppression notice. No fixed sleeps
-or readiness polling are used. The overall runner has a 12-minute deadline; individual follower,
+then awaits a journal marker and inspects any suppression notice. `run.sh` and
+`live.sh` run no `sleep` command; the per-unit suppression case polls `journalctl`
+for its notice under a 15 s timeout (`live.sh:192-201`). The overall runner has a 12-minute deadline; individual follower,
 readiness, live-suite and shutdown waits have shorter deadlines.
 
 With `-n 0 --after-cursor`, systemd 257 defers cursor backlog until the next
@@ -39,8 +40,11 @@ the interval emits no suppression notice (`MESSAGE=null`, `MESSAGE_ID=null`).
 Journald scales burst limits with available disk space; the configured burst
 alone does not establish an effective 2,000-line ceiling. The suite asserts
 the observed count and absent notice rather than manufacturing a suppression
-record. Downstream dropped-record handling still needs a reproduced notice
-before its text or message id can be claimed as conformance evidence.
+record (`live.sh:136-166`). A second case sets a per-unit rate limit
+(`LogRateLimitBurst=1`, 2 s), asserts that fewer than 6,000 of 6,000 lines are
+stored, waits for the journal's notice with `MESSAGE_ID=a596d6fe7bfa4994828e72309e95d61e`
+and checks its message id, `N_DROPPED`, message text and a positive dropped
+count with `assert-suppression.sh` (`live.sh:168-206`).
 
 The predecessor directory is excluded from `journalctl --disk-usage` and
 vacuum, while `du` includes it. Injected boots can share an archived file:
@@ -83,22 +87,24 @@ priority restriction; their source relevance belongs to the reader.
 Run `cd apps/backend && bun test ./src/tests/device-logs-filter.test.ts`.
 `golden-argv.txt` is JSONL with `name`, `filter`, `bootId` and `matches` per row.
 Tests compare it without writing; regenerate explicitly with `UPDATE_GOLDEN=1`
-on the same test command. Paging and follow consumers add their option cases
-and journal replay assertions when those readers are implemented.
+on the same test command. `query/golden-argv.txt` holds the paging and
+around-seek option cases (`src/tests/device-logs-query-golden.test.ts:76-171`);
+`query/replay.sh` replays each row against a fixture journal.
 
 ## Retention and cleanup [EXISTS]
 
 `src/modules/device-logs/retention.ts` owns retention changes and serializes
 maintenance, older-file vacuum, legacy-file removal and clear. Settings and
-maintenance receipts use the existing atomic settings store. Unknown or invalid
-image ceilings disable retention changes; no image limit is assumed.
+maintenance receipts use the existing atomic settings store. With an unknown
+image ceiling, `setRetention` refuses any non-null limit; a save with both limits
+`null` (for example a Detail-only change) is accepted (`src/modules/device-logs/retention.ts:109-126`).
 
 The daily check runs only with an explicit user limit and a readable ceiling.
 It vacuums archived files without rotating. Its receipt reports whether observed
 size and oldest-entry age meet the target; active journal files may prevent that.
 Storage reports journalctl usage separately from recursive journal-directory
 bytes, including the image-owned predecessor directory. Recent source volume
-is a bounded sample, never a rate estimate.
+is a sample of up to 4096 records (`src/modules/device-logs/storage.ts:55-59`).
 
 Older-file cleanup rotates and vacuums using rounded uptime plus sixty seconds,
 then reports journal boot counts before and after. Files may contain more than
@@ -110,8 +116,8 @@ After another update-phase check, clear rotates and vacuums, removes only the si
 legacy debug files, and records its completion time. Admission stays closed
 through final storage readout; new requests wait and old pending requests use
 their existing cancellation outcome. Export queries share scan admission;
-their captured history epoch expires after clear. The event store and predecessor
-directory are never deleted. Export cancellation invalidates unused tickets and
+their captured history epoch expires after clear. Clear does not delete the
+event store or the predecessor directory (`src/modules/device-logs/retention.ts:171-217`). Export cancellation invalidates unused tickets and
 releases a paused download's sharing lease without requiring another client read.
 Mock operations use the logger ring without native
 journal commands or image/journal-directory reads; legacy unlink precedes the
@@ -122,8 +128,10 @@ the full-disk persistence limit, metadata readers outside admission, and the
 landed reader and follow-stream defects that retention cannot repair.
 
 `ceiling.ts`, `retention-files.ts` and `storage.ts` keep parsing, filesystem
-operations and readout separate. All journal commands reuse the registered,
-bounded argv-only `run()` helper; no new direct spawn site is introduced.
+operations and readout separate. Disk usage, rotation and vacuum run through the
+argv-only `run()` helper; the oldest-entry and recent-volume samples call
+`scanJournal` under the `deviceLogs.journalScan` policy
+(`src/modules/device-logs/storage.ts:19,29-38,48-71`; `src/helpers/spawn-policy.ts:337-353`).
 Tests are `src/tests/device-logs-retention*.test.ts`.
-RPC integration belongs to the later wiring todo. Board latency, CPU and streaming
+The 13 logs procedures are registered in `src/rpc/router.ts:189-203`. Board latency, CPU and streaming
 log volume remain unmeasured.

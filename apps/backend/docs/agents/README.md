@@ -6,6 +6,14 @@ Every original section is retained below, including appended `…AND` runs. Read
 
 | File | Original heading | Governed code paths |
 |---|---|---|
+| [device-logs.md](device-logs.md) | Device logs: the raw journal path [EXISTS] (entry contract) | `src/modules/device-logs/`, `src/rpc/procedures/logs.procedure.ts`, `src/rpc/server.ts`, `src/helpers/spawn-policy.ts`, `test-harness/journal-conformance/` |
+| [device-events.md](device-events.md) | Device events: the plain-language timeline [EXISTS] (entry contract) | `src/modules/events/`, `src/rpc/procedures/events.procedure.ts`, `src/modules/system/device-stats.ts` |
+| [event-timeline-rpc.md](event-timeline-rpc.md) | Device event timeline RPC [EXISTS] | `src/rpc/procedures/events.procedure.ts`, `src/main.ts`, `src/tests/events-procedures.test.ts`, `src/tests/events-startup.test.ts` |
+| [stream-lifecycle-events.md](stream-lifecycle-events.md) | Stream lifecycle events [EXISTS] | `src/tests/events-stream-emits.test.ts` |
+| [network-events.md](network-events.md) | Network timeline events [EXISTS] | `src/tests/events-network-emits.test.ts`, `src/tests/events-network-internet.test.ts` |
+| [cellular-events.md](cellular-events.md) | Cellular event history [EXISTS] | `src/modules/events/cellular-events.ts` |
+| [update-events.md](update-events.md) | Update events [EXISTS] | `src/tests/events-update-emits.test.ts`, `src/tests/events-update-recording.test.ts` |
+| [capture-events.md](capture-events.md) | Capture events [EXISTS] | `src/modules/streaming/lifecycle-indicators.ts`, `src/modules/streaming/capture-resilience.ts`, `src/tests/events-capture-*.test.ts` |
 | [device-log-retention.md](device-log-retention.md) | DEVICE LOG RETENTION AND CLEAR [PARTIAL] | `src/modules/device-logs/retention.ts`, `src/modules/device-logs/settings.ts`, `src/modules/device-logs/query-admission.ts`, `src/modules/device-logs/follow.ts`, `src/modules/device-logs/export.ts`, `src/tests/device-logs-retention*.test.ts` |
 | [device-log-bundle.md](device-log-bundle.md) | Redacted support bundle backend [EXISTS] | `src/modules/device-logs/bundle*.ts`, `src/modules/device-logs/redaction.ts`, `src/rpc/procedures/logs.procedure.ts`, `src/tests/device-logs-bundle*.test.ts`, `src/tests/device-logs-redaction.test.ts` |
 | [device-log-shutdown.md](device-log-shutdown.md) | DEVICE LOG SHUTDOWN CLASSIFICATION [EXISTS] | `src/modules/device-logs/shutdown-classifier.ts`, `src/modules/device-logs/shutdown-window.ts`, `src/modules/device-logs/classified-boots.ts`, `src/tests/device-logs-shutdown-classifier.test.ts`, `src/tests/device-logs-shutdown-window.test.ts`, `src/tests/device-logs-classified-boots.test.ts`, `src/tests/device-logs-suppression-conformance.test.ts`, `src/tests/fixtures/device-journal-suppression-257.json`, `test-harness/journal-conformance/assert-suppression.sh` |

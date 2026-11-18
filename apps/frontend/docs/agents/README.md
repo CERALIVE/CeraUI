@@ -5,6 +5,9 @@ Read the contract for the subsystem you touch before making changes. Every origi
 | Original heading | Contract | Governed paths / scope |
 |---|---|---|
 | Preamble | [overview.md](overview.md) | `../../AGENTS.md` |
+| System Logs view: planning-time design intent and code map | [system-logs-view.md](system-logs-view.md) | `main/dialogs/LogsDialog.svelte`, `main/system-logs/`, `lib/device-logs/` |
+| System Logs critique (todo 36 findings and their owners) | [system-logs-critique.md](system-logs-critique.md) | `main/system-logs/`, `lib/device-logs/` |
+| Device event timeline feed [EXISTS] | [event-timeline-feed.md](event-timeline-feed.md) | `lib/rpc/client.ts`, `lib/rpc/subscriptions.svelte.ts`, `lib/rpc/subscriptions-event-feed.test.ts` |
 | ROLE | [role.md](role.md) | ROLE |
 | STRUCTURE | [structure.md](structure.md) | STRUCTURE |
 | CRITICAL: initSubscriptions() must be called at startup | [critical-initsubscriptions-must-be-called-at-startup.md](critical-initsubscriptions-must-be-called-at-startup.md) | `lib/rpc/subscriptions.svelte.ts` |

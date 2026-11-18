@@ -38,15 +38,8 @@ origin-vetted APT discovery; legacy frames omit both and parse unchanged.
 shared `successResponseSchema`; it carries no timestamp or new producer-owned
 wire shape. The backend stamps receive time, not a client-supplied clock.
 
-Device logs wire contract [EXISTS; runtime handlers PLANNED]:
-`schemas/logs.schema.ts` owns the raw log filters, pages, follow checkpoints,
-boot versions, storage, retention and sharing shapes; `contracts/logs.contract.ts`
-registers the thirteen `appContract.logs` procedures. Boot ids use the journal's
-32 lowercase hex form. Search text is literal, limited to 256 UTF-8 bytes with
-no NUL. Inputs reject unknown keys, and input types use `z.input` so defaults
-remain optional to callers. Budget-limited pages retain `hasMore: null`;
-failures carry explicit error codes. `senderVersion` avoids the logger's
-sensitive `sender` key. Unknown image ceilings and historical versions stay
-null; retention upper bounds belong to the backend's observed image ceiling.
-Legacy `system.getLog` and `system.getSyslog` keep their existing shapes.
+Device logs wire contract [EXISTS]: `schemas/logs.schema.ts` and the thirteen
+`appContract.logs` procedures in `contracts/logs.contract.ts`; the backend
+handlers are registered. Shape rules: [device-logs-wire.md](device-logs-wire.md).
+Device events wire contract [EXISTS]: [device-events-wire.md](device-events-wire.md).
 

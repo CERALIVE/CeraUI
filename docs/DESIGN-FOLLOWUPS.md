@@ -441,7 +441,7 @@ The full table, evidence and the fixed findings are in
 [`apps/frontend/docs/agents/system-logs-critique.md`](../apps/frontend/docs/agents/system-logs-critique.md)
 (IDs SL-n).
 
-### DF-18: The helper's file is the last of four equal download rows (SL-3, P2)
+### DF-23: The helper's file is the last of four equal download rows (SL-3, P2)
 
 - **Where:** `apps/frontend/src/main/system-logs/SystemLogsView.svelte` (Downloads region;
   the Storage tab below 1024 px), `SharingSection.svelte`, `LegacyLogDownloads.svelte`.
@@ -452,7 +452,7 @@ The full table, evidence and the fixed findings are in
 - **Exit condition:** a decided placement and weight for the bundle, built and captured at
   375, 1024x600 and 1280 px.
 
-### DF-20: Destructive confirmation text is under 4.5:1 (SL-5, P2)
+### DF-25: Destructive confirmation text is under 4.5:1 (SL-5, P2)
 
 - **Where:** the shared `destructive` button variant as used by
   `lib/components/custom/simple-alert-dialog.svelte`.
@@ -465,7 +465,7 @@ The full table, evidence and the fixed findings are in
   variant `destructive`), used by every destructive confirmation in CeraUI, so raising it is the
   token decision DF-2 owns, taken once for the app rather than per surface.
 
-### DF-21: Spanish System Logs chrome wraps at 320 and 375 px (SL-6, P2)
+### DF-26: Spanish System Logs chrome wraps at 320 and 375 px (SL-6, P2)
 
 - **Where:** `SystemLogsView.svelte` tab triggers, `BootButton.svelte`, `RawLogsFilterBar.svelte`.
 - **What:** "Registros sin procesar" wraps to three lines (66 px tab strip, nothing clipped),
@@ -490,7 +490,7 @@ The full table, evidence and the fixed findings are in
   whether a shorter `systemLogs.tabs.raw` (and the matching `systemLogs.events.viewRaw`)
   replaces "Registros sin procesar". Exit: `es` at 320 px holds two lines.
 
-### DF-22: Undersized targets around System Logs (SL-7, P2)
+### DF-27: Undersized targets around System Logs (SL-7, P2)
 
 - **Where:** the toast action from `lib/device-logs/view-logs.ts` (Sonner default action),
   the default-pointer notice action, and the shared select item in touch layout.
@@ -506,9 +506,9 @@ The full table, evidence and the fixed findings are in
   layout, with their labels painted inside, and every option of the four System Logs selects
   (source 8, time 5, retention 5, size limit 4) at the 1024x600 kiosk in touch layout is at
   least 44 px tall. The toast's system font is not a
-  target size and belongs to every toast, so it moved to DF-31.
+  target size and belongs to every toast, so it moved to DF-36.
 
-### DF-23: A refused download keeps its ticket for 60 s (SL-8, P2)
+### DF-28: A refused download keeps its ticket for 60 s (SL-8, P2)
 
 - **Where:** `apps/backend/src/modules/device-logs/export.ts` and `bundle.ts` (ticket
   lifetime), `lib/device-logs/sharing-flow.svelte.ts`.
@@ -516,7 +516,7 @@ The full table, evidence and the fixed findings are in
 - **Owner:** the CeraUI device-logs backend owner; listed in the CeraUI PR follow-ups.
 - **Exit condition:** a retry after a refused download starts a new download.
 
-### DF-24: An approximate jump has no moment marker (SL-9, P2)
+### DF-29: An approximate jump has no moment marker (SL-9, P2)
 
 - **Where:** `RawLogsTab.svelte` (anchor band), `RawLogList.svelte` (end markers).
 - **What:** nothing marks where the message's moment falls; the newer end shows the
@@ -545,7 +545,7 @@ The full table, evidence and the fixed findings are in
   approximate-jump mock fixture, the previous note wrapped to 10 or 11 lines and painted
   outside its box in German, Spanish and Brazilian Portuguese.
 
-### DF-25: Confirmations do not open on Cancel (SL-11, P3)
+### DF-30: Confirmations do not open on Cancel (SL-11, P3)
 
 - **Where:** `StorageCleanup.svelte` through `simple-alert-dialog.svelte`.
 - **What:** focus opens on the dialog; contract section 7 says the focused default is Cancel.
@@ -557,7 +557,7 @@ The full table, evidence and the fixed findings are in
   `:173`), so `simple-alert-dialog.svelte` is unchanged. Proved by `StorageSection.test.ts`
   ("opens Clear all logs with focus on Cancel") and `apps/frontend/tests/e2e/system-logs-keyboard.spec.ts`.
 
-### DF-26: System Logs polish residuals (SL-12, P3)
+### DF-31: System Logs polish residuals (SL-12, P3)
 
 - **What:** two time formats, the Order label's offset, the repeated Storage heading on
   phones, the repeated unit in an expanded raw row, the wrapped "Boot started" prefix in
@@ -578,7 +578,7 @@ The full table, evidence and the fixed findings are in
     expanded raw row and the wrapped "Boot started" prefix: kept, each with its reason in
     `apps/frontend/docs/agents/system-logs-view.md` under Open decisions, Polish (todo 38).
 
-### DF-27: Confirmation backdrop and primary lime (SL-13, P3)
+### DF-32: Confirmation backdrop and primary lime (SL-13, P3)
 
 - **Where:** `simple-alert-dialog.svelte` overlay; filled default buttons in System Logs.
 - **What:** the confirmation's light wash brightens the dark UI unlike the view's dialogs;
@@ -586,14 +586,14 @@ The full table, evidence and the fixed findings are in
 - **Owner:** the CeraUI design-system owner.
 - **Exit condition:** one backdrop for nested dialogs and one written rule for lime.
 
-### DF-28: Two live Raw views at once (SL-14, P3)
+### DF-33: Two live Raw views at once (SL-14, P3)
 
 - **Where:** `lib/device-logs/raw-view.svelte.ts` follow ownership.
 - **What:** the later Follow would win. No surface mounts two Raw views today.
 - **Owner:** whoever adds a second Raw view surface.
 - **Exit condition:** follow ownership is per view before a second Raw view ships.
 
-### DF-29: A sequence-gap reload drops Events keyboard focus (SL-16, P2)
+### DF-34: A sequence-gap reload drops Events keyboard focus (SL-16, P2)
 
 - **Where:** `apps/frontend/src/lib/device-logs/events-view.svelte.ts:110-116,246-250`: a reload clears every Events row at once.
 - **What:** when the live feed skips a sequence number, the list reloads and its rows are cleared before the first page returns. A row action holding keyboard focus is disconnected even when its event is in the reloaded page, so focus moves to Close at 1280 px and to the boot picker at 375 px. The roving stop returns to that row after the reply; only focus is lost. Reproduced in both themes at both widths by the third-round review of todo 36.
@@ -615,7 +615,7 @@ The full table, evidence and the fixed findings are in
 
 ## 6. Found by the System Logs hardening pass (device-log-system todo 37)
 
-### DF-30: The page scrollbar track is a cool blue-black outside the graphite palette (todo 37)
+### DF-35: The page scrollbar track is a cool blue-black outside the graphite palette (todo 37)
 
 - **Where:** `apps/frontend/src/app.css`, `html` and `html.dark` `scrollbar-color`.
 - **What:** the track colours are `hsl(210 20% 98%)` and `hsl(222 30% 6%)`, hue 210 to 222
@@ -631,7 +631,7 @@ The full table, evidence and the fixed findings are in
   renders outside that subtree and keeps this page palette until this item's exit condition
   holds.
 
-### DF-31: Toasts are set in a system font stack, not the app typeface (todo 37)
+### DF-36: Toasts are set in a system font stack, not the app typeface (todo 37)
 
 - **Where:** `[data-sonner-toaster]` in svelte-sonner 1.2.3 (`dist/Toaster.svelte`, line 549
   sets `font-family: ui-sans-serif, system-ui, ...`); `app.css` does not override it.
@@ -642,7 +642,7 @@ The full table, evidence and the fixed findings are in
 - **Owner:** the CeraUI design-system owner (shared `Toaster`).
 - **Exit condition:** every toast's text computes to the app's font family.
 
-### DF-32: The shared relative-time formatter says "just now" in English in every locale (todo 37)
+### DF-37: The shared relative-time formatter says "just now" in English in every locale (todo 37)
 
 - **Where:** `packages/i18n/src/formatters.ts:123`, `formatRelativeTime`
   (`if (Math.abs(seconds) < 10) return "just now";`). Its callers outside System Logs:
@@ -660,7 +660,7 @@ The full table, evidence and the fixed findings are in
 - **Exit condition:** `formatRelativeTime` returns the locale's word for now in its recency
   window, its tests say so, and the override in `eventTime` is removed.
 
-### DF-33: The low-disk View logs action leaves keyboard focus off Storage on the mobile project (todo 37)
+### DF-38: The low-disk View logs action leaves keyboard focus off Storage on the mobile project (todo 37)
 
 - **Where:** `apps/frontend/tests/e2e/view-logs-action.spec.ts:107`, "the low-disk action
   focuses the Storage heading", Playwright mobile project; the low-disk View logs action and
@@ -686,7 +686,7 @@ The full table, evidence and the fixed findings are in
 
 ## 7. Left open by the System Logs polish and audit pass (device-log-system todo 38)
 
-### DF-34: Paging can drop keyboard focus when the action changes or disappears (todo 38, P3)
+### DF-39: Paging can drop keyboard focus when the action changes or disappears (todo 38, P3)
 
 - **Where:** `apps/frontend/src/main/system-logs/RawLogList.svelte` (Load more and Keep
   searching), `apps/frontend/src/main/system-logs/EventsTab.svelte` (Load older events).

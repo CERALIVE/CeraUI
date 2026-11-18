@@ -1,8 +1,10 @@
-# System Logs view: shape brief [PARTIAL]
+# System Logs view: planning-time design intent and code map
 
-Design basis for the full-viewport System Logs view opened from Settings ->
-System Logs. Raw logs, sharing, message deep links, Events, Boots and Storage
-are integrated here; their implementation contracts are recorded below. It
+Planning-time design intent (sections 1 to 6) and a code map (section 7) for the full-viewport
+System Logs view opened from Settings -> System Logs. Backend contracts:
+[device-logs.md](../../../backend/docs/agents/device-logs.md) and
+[device-events.md](../../../backend/docs/agents/device-events.md); event
+feed: [event-timeline-feed.md](event-timeline-feed.md). It
 works inside the incumbent visual world: `PRODUCT.md` and
 `.impeccable.md` (Ground Control: graphite, phosphor lime for the live signal,
 amber and coral states) and the checkable rules in `DESIGN.md` sections 1-8.
@@ -10,6 +12,9 @@ It is an Operate surface: familiar controls, brand only through tokens, type and
 density. It is not a redesign.
 
 ## Job, outcome and direction
+
+> Design intent recorded at planning time. It is not a description of the shipped
+> behaviour; see the Code map and system-logs-critique.md.
 
 - **Who arrives.** The operator in the field, under time pressure, on a phone
   (375 px), a tablet, a laptop or the 1024x600 touch kiosk, usually right after a
@@ -24,12 +29,12 @@ density. It is not a redesign.
   and each row's "View raw logs" is a quiet ghost action. Raw logs: Follow, the
   most prominent control of the tab, deliberately an `outline` button: a filled
   lime button reads as going live. Storage: Save limits (`default` variant, the
-  same Save vocabulary as every `AppDialog` footer), disabled until a limit
-  changes. Destructive actions are `outline` triggers; only their confirmation
+  same Save vocabulary as every `AppDialog` footer), disabled until a limit or Detail changes (`main/system-logs/StorageLimits.svelte:149-170`). Destructive actions are `outline` triggers; only their confirmation
   button uses the `destructive` variant.
-- **Signature move.** The boot separator. Every boot is a segment rule carrying
-  its start time, system image, slot and how it ended, sticky at the top of the
-  list while its rows are in view. A boot loop reads as a run of short segments
+- **Signature move.** The boot separator. In Events each boot group has a sticky
+  heading with its start time and the system image, slot and end mark that are
+  recorded (`main/system-logs/EventsTab.svelte:206-245`); Raw logs separates rows
+  by date and clock rows instead (`lib/device-logs/raw-rows.ts:120-147`). A boot loop reads as a run of short segments
   with unclean marks, which is what the operator must see first.
 - **Left out on purpose.** Stat tiles or counts above the lists, charts of error
   rates, a description line under the title, text search on Events (it has
@@ -37,10 +42,12 @@ density. It is not a redesign.
   icons on the family filter chips, any lime accent outside the live stream
   pill, glass or blurred panels, coloured side stripes on rows or bands.
 - **Owner decisions honored.** One full-viewport dialog, never a fourth
-  destination or a hash route; Events is the default tab; debug detail is
-  always stored and can be turned down; retention can only tighten the device's
+  destination or a hash route; Events is the default tab; Detail Full keeps
+  debug entries and Detail Reduced sets the production journal console level to
+  info, unless `LOG_LEVEL` overrides it (`apps/backend/src/helpers/logger.ts:706-714`); retention can only tighten the device's
   own limit; "Delete older log files" reports which boots remain instead of
-  promising they are gone; the two legacy downloads stay exactly as they are;
+  promising they are gone; the two legacy downloads keep their actions and their
+  rendering changed (critique SL-2);
   temperature events are out of scope.
 - **Assumptions (not confirmed by the owner).** Below 1024 px the boot picker
   lives only behind the header button and the Storage tab does not repeat it;
@@ -48,6 +55,9 @@ density. It is not a redesign.
   (see Open decisions).
 
 ## 1. Structure
+
+> Design intent recorded at planning time. It is not a description of the shipped
+> behaviour; see the Code map and system-logs-critique.md.
 
 - **Entry.** Settings -> System Logs opens `F/main/dialogs/LogsDialog.svelte`
   (same file, same lazy import, same `open` prop), now a thin shell in the
@@ -68,9 +78,9 @@ density. It is not a redesign.
   the title element, outside it, so the dialog's accessible name stays exactly
   "System Logs". No description line: `settings.index.logsDesc` stays the
   Settings entry's description, unchanged.
-- **Stream-state pill.** Reads the same state as the HUD (`getIsStreaming()` and
-  the offline store): Live reuses the HUD live indicator styling (the one place
-  lime appears, because it is the live stream signal), Idle and Offline are
+- **Stream-state pill.** Reads the HUD state (`getHudState()`,
+  `main/system-logs/StreamStatePill.svelte:22-23`): Live reuses the HUD live indicator styling (other lime uses:
+  critique SL-13), Idle and Offline are
   neutral pills; copy is the existing `hud.live`, `hud.idle`, `hud.offline`.
   Offline wins over Live, so a dropped connection never looks live.
 - **Tabs.** `F/lib/components/ui/tabs`: Events (default) | Raw logs, plus
@@ -82,7 +92,7 @@ density. It is not a redesign.
 - **Below 1024 px.** The Storage tab holds the Storage and Downloads regions;
   the boot picker is the header button showing the selected boot, opening a
   nested `AppDialog` (sheet on phones) listing boots; choosing one closes it.
-- **Downloads region.** First group: the two legacy rows moved verbatim (icon
+- **Downloads region.** First group: the two legacy rows (wrapping changed, critique SL-2; icon
   tile, title, description, outline Download button, inline amber retry band;
   testids `log-row-device`, `log-row-system`, `log-download-device`,
   `log-download-system`, `log-download-error`, `log-download-retry`; copy
@@ -91,7 +101,7 @@ density. It is not a redesign.
   `advanced.downloadFailed`, `advanced.retryDownload`). Second group, after a
   neutral rule, same row anatomy: Export this view, Support bundle; one line
   under it says files are saved by the browser. The Downloads region renders
-  immediately and never waits on namespaces or log RPCs.
+  immediately; the Sharing group renders only once the viewer check is ready (`main/system-logs/SystemLogsView.svelte:140-153`).
 - **Older backend.** If the log procedures are missing, the tabs and the Storage
   region are replaced by one calm notice ("not available on this device
   version"); Downloads still renders.
@@ -101,9 +111,10 @@ density. It is not a redesign.
   the low-disk banner keeps `settings.deviceStats.lowDiskAction` and opens
   Storage.
 - **Primitives.** `AppDialog`, `Button`, `Tabs`, `Select` (single and multiple),
-  `Input`, `Toggle` (single-choice groups), `Skeleton`, `Progress`,
-  `simple-alert-dialog.svelte` (confirmations), `CollapsibleSection`
-  (diagnostics disclosure), Lucide icons only. No edits under
+  `Input`, `Toggle` (single-choice groups), `Skeleton`,
+  `simple-alert-dialog.svelte` (confirmations), Lucide icons only. The Events
+  Diagnostics disclosure is a `Button` with a hidden region
+  (`main/system-logs/EventRow.svelte:103`). No edits under
   `F/lib/components/ui/`.
 
 Layout: System Logs view - a long reading list must share one viewport with
@@ -117,30 +128,33 @@ a filter bar that scrolls away with the list.
 
 ## 2. States per region
 
+> Design intent recorded at planning time. It is not a description of the shipped
+> behaviour; see the Code map and system-logs-critique.md.
+
 Every state is a rendered, testable node; none is a toast alone. Copy keys are
 in section 4.
 
-| State | Region | What renders | Announced (section 7) |
+| State | Region | What renders | Announced (design intent, not measured) |
 |---|---|---|---|
-| Loading | Events, Raw logs, Boots, Storage, bundle preview | Skeleton rows shaped like the real rows (glyph, two text lines), never a centered spinner; a visually hidden "Loading…" status | no |
+| Loading | Events, Raw logs, Boots, Storage, bundle preview | Skeleton placeholders (the bundle preview uses plain skeleton blocks and status text, `main/system-logs/BundleDialog.svelte:98-104`) | status role (section 7 map) |
 | Empty | Events | Title "No events recorded yet" plus a sentence naming what will appear (stream, links, modems, updates, restarts, capture) | no |
 | Empty | Raw logs | "No entries match" plus a hint that teaches the filter (fewer sources, wider level, longer time, shorter text) and a Show everything action resetting to defaults | no |
 | Empty (filtered) | Events | "No events match these filters" plus Show all events | no |
-| Error with recovery | every region | Inline band in the existing amber recovery style (`border-status-warning/30 bg-status-warning/10`, `role="alert"`) naming the problem, with Retry; the last good content stays visible behind the band where it exists | alert |
-| Busy | Raw logs, Sharing | "Another view is reading logs" (Raw, `BUSY`) or "Another export is running" (Sharing), with Retry | alert |
+| Error with recovery | regions using `RecoveryBand` (section 7 map) | Inline band in the existing amber recovery style (`border-status-warning/30 bg-status-warning/10`, `role="alert"`) naming the problem; which regions render `RecoveryBand` and its Retry: section 7 map | alert |
+| Busy | Raw logs, Sharing | "Another view is reading logs" (Raw, `BUSY`) or "Another export is running" (Sharing) | alert |
 | Expired position | Raw logs | `CURSOR_UNAVAILABLE` or `FILTER_CHANGED`: "This position is no longer stored" with Start from newest; rows already shown stay, paging toward the lost side is disabled | alert |
 | Keep searching | Raw logs | `hasMore: null`: a Keep searching button and a line saying only part of the stored logs was checked; never an end marker (the normal state for a time-bounded view once its entries are shown) | no |
 | End of results | Raw logs, Events | Raw logs shows an end marker at an exhausted, available edge after the first load when rows are present. The display-limit notice takes precedence at the bottom. Approximate-window markers name the time window. Events shows an end row when events are present and no older page or paging error remains. | no |
-| Row cap reached | Raw logs | At 2000 rows the far end is dropped and paging toward it is disabled with the stated reason | no |
-| Follow unavailable | Raw logs | Follow present, disabled, with an adjacent reason element (`data-testid` ending `-reason`) when the time is not This boot, the order is not Newest first, or the tab is in anchor mode (DESIGN.md CT-2) | no |
+| Row cap reached | Raw logs | `ROW_CAP` is 2000 journal entries, excluding marker rows. Only entries beyond the cap are dropped and stop older paging | no |
+| Follow unavailable | Raw logs | Follow present, disabled, with an adjacent reason element (`data-testid` ending `-reason`) when the time is not This boot, the order is not Newest first, or the tab is in anchor mode (DESIGN.md CT-2). Follow displays while connected and is aria-disabled while its request is busy | no |
 | Following | Raw logs | Follow becomes Pause; a state label "Following" in `--status-info` with a `motion-safe` pulse dot; static dot plus label under reduced motion or e-ink | polite |
 | New entries held | Raw logs | While scrolled away from the top, incoming entries wait (cap 500) behind a "New entries: {count}" button at the top of the list; selecting it merges them and scrolls to the top | polite, throttled |
-| Paused | Raw logs | Label "Paused", Resume action; the resumable position is kept, so nothing written during the pause is lost | polite |
+| Paused | Raw logs | Label "Paused", Resume action; checkpoint and resume code: `lib/device-logs/raw-view.svelte.ts:305-382`; backend catch-up limit: [device-logs.md](../../../backend/docs/agents/device-logs.md) | polite |
 | Gap marker | Raw logs | A full-width separator row (neutral 1 px rules either side of centered text) stating what was skipped and why: catch-up exceeded, position removed by cleanup, or entries dropped by the device | polite |
-| Dropped marker | Raw logs | `dropped > 0` in a follow batch: one separator row "Entries skipped while following: {count}"; also used for journald's own suppressed-messages record (`marker: 'suppressed'`), which is never shown as a log line | polite (as a gap) |
+| Dropped marker | Raw logs | `dropped > 0` in a follow batch: one separator row "Entries skipped while following: {count}". journald's suppressed-messages record (`marker: 'suppressed'`) is a separate marker row (`lib/device-logs/raw-rows.ts:90-105`, `main/system-logs/RawLogRow.svelte:59-68`) | polite (as a gap) |
 | Follower stopped | Raw logs | Label "Stopped" with its reason (reader ended, device restarted, logs cleared) and a Follow action; `ended: 'cleared'` also resets the list | polite |
-| Disconnected | Raw logs, Events, header pill | The socket dropped: follow state "Disconnected", a notice that entries may be out of date, rows dimmed to `text-muted-foreground`, the pill shows Offline, no pulse anywhere; stale, never fresh-looking. On reconnect a Resume action appears; nothing resumes by itself | polite |
-| Anchor | Raw logs | Opened from an event or a "View logs" action: the matching row has a tonal highlight (`bg-status-info/10`, no outline or stripe) and receives focus; "approximate" is stated when no exact entry matched; a Back to latest entries action leaves anchor mode | no |
+| Disconnected | Raw logs, Events, header pill | The socket dropped: follow state "Disconnected", a notice that entries may be out of date, rows dimmed to `text-muted-foreground`, the pill shows Offline, no pulse anywhere; stale, never fresh-looking. Raw logs shows Disconnected only when a follow was active, and on reconnect offers Resume (`lib/device-logs/raw-view.svelte.ts:408-418`, `main/system-logs/RawFollowControl.svelte:28-56`); Events reloads its first page on reconnect (`events-view.svelte.ts:150-156`) | polite |
+| Anchor | Raw logs | Opened from an event or a "View logs" action: the matching row has a tonal highlight (`bg-status-info/10`, no outline or stripe); an exact match receives focus and an approximate one leaves focus on the selected tab (`main/system-logs/SystemLogsView.svelte:114-123`, `main/system-logs/RawLogList.svelte:79-89`); "approximate" is stated when no exact entry matched; a Back to latest entries action leaves anchor mode | no |
 | Unknown event code | Events | A record from a newer version: the family icon, the title "Event recorded by a newer version", one honest detail sentence, View raw logs, and the raw code only inside a collapsed Diagnostics disclosure (`data-testid` containing `diagnostic`, DESIGN.md OL-3..OL-5). A known code with invalid params shows its title with no detail | no |
 | Logs removed for a boot | Boots, Events, Raw logs | Boot rows keep the boot with a "Logs removed" label (never hidden); View raw logs on such a boot shows "Raw logs for this boot were removed"; a Raw query with `BOOT_UNAVAILABLE` shows "Logs for this boot were removed" with Show this boot | alert (Raw only) |
 | Clock-not-synced marker | Raw logs, Events | Where two adjacent records of the same boot (journal order for raw, `seq` order for events) run backwards in time, a separator row says the device clock changed there and earlier times may be wrong. Times are never corrected or re-sorted | no |
@@ -152,6 +166,9 @@ in section 4.
 
 ## 3. Row anatomy
 
+> Design intent recorded at planning time. It is not a description of the shipped
+> behaviour; see the Code map and system-logs-critique.md.
+
 **Event row** (Events tab), a list item in a two-column grid:
 
 - Column 1: the severity glyph (section 5), 16 px, with its accessible name.
@@ -161,7 +178,7 @@ in section 4.
   inline start; time at the inline end: absolute (locale time, plus the date
   when not today) and relative ("2 minutes ago", `formatRelativeTime`; the last
   few seconds read as the locale's word for now, `eventTime` in
-  `lib/device-logs/timeline-copy.ts`, DESIGN-FOLLOWUPS DF-32) in
+  `lib/device-logs/timeline-copy.ts`, DESIGN-FOLLOWUPS DF-37) in
   `text-xs text-muted-foreground tabular-nums`, inside `<time datetime>`.
   Below 768 px the time moves under the title.
 - Line 2: one detail sentence (`text-sm text-muted-foreground`), data params in
@@ -172,19 +189,21 @@ in section 4.
   rules; no card per row, no nested cards.
 
 **Boot separator** (signature move), a heading row (`h3`) sticky at the top of
-the list while its boot's rows show: "Boot started {time}", then the system
-image and slot as data, the shutdown mark (glyph plus text, section 5), and a
+the list while its boot's rows show, when the boot record has them (otherwise a fallback line):
+"Boot started {time}", the system image, slot and shutdown mark (glyph plus
+text, section 5) (`main/system-logs/EventsTab.svelte:213-243`), and a
 "Changed" tag when the system image or slot differs from the previous boot.
 Surface: the next step of the surface ramp (`bg-muted`), neutral rules above
-and below; its focus ring stays visible below the sticky header.
+and below. Focus-ring visibility under the sticky heading is not measured.
 
 **Raw entry row** (Raw logs tab), one list item:
 
-- >= 768 px panel width, one grid line: level glyph (16 px) | time (locale time
+- From a 40rem container width (`@min-[40rem]`,
+  `main/system-logs/RawLogRow.svelte:86,100`), one grid line: level glyph (16 px) | time (locale time
   of day with seconds, `font-mono text-xs tabular-nums`) | unit (`text-xs
   text-muted-foreground`, max about 14ch, truncates; full value in the expanded
   row) | message (`font-mono text-xs`).
-- < 768 px, two lines: glyph, time and unit on line 1; message full width on
+- Below 40rem, two lines: glyph, time and unit on line 1; message full width on
   line 2.
 - The message wraps (`overflow-wrap: anywhere` for paths and hex runs); there is
   never horizontal scroll. Unit and message carry `dir="ltr"` inside RTL chrome.
@@ -195,7 +214,8 @@ and below; its focus ring stays visible below the sticky header.
 - The whole row is a button that expands it: full message, full unit, a
   "shortened" note when `truncated` is true, and Copy. Rows keep one box per
   state; expansion grows height only.
-- Marker rows (gap, dropped, suppressed, clock, end, cap) are separator rows with
+- Marker rows (gap, dropped, suppressed, clock, end) are separator rows (the cap
+  message is plain centered text, `RawLogList.svelte:133-136`) with
   centered `text-xs text-muted-foreground` text between neutral rules; never a
   coloured bar.
 
@@ -205,7 +225,7 @@ image and slot when known ("Versions not recorded for this boot" otherwise),
 carries a check glyph and a tonal wash, never an accent outline. "All boots"
 is the first row.
 
-**Storage**: usage as `Progress` plus text only when both used and limit are
+**Storage**: usage as a decorative meter (`main/system-logs/StorageUsage.svelte:29-33,50-52`) plus text only when both used and limit are
 known (otherwise text only, never a bar or a zero); the on-disk line when the
 directory total exceeds the journal's own count; oldest entry; event history
 size; "Recent volume by source" as a compact table (Source | Entries | Size,
@@ -214,6 +234,9 @@ limits form (Keep for, Maximum size, Detail with each option's one-line
 consequence, Save limits); then the four actions, destructive ones last.
 
 ## 4. Copy inventory
+
+> Design intent recorded at planning time. It is not a description of the shipped
+> behaviour; see the Code map and system-logs-critique.md.
 
 Rules for this copy:
 
@@ -254,7 +277,7 @@ Rules for this copy:
 | `systemLogs.tabs.storage` | Storage | Tab, below 1024 px only |
 | `systemLogs.unavailable.title` | Not available on this device version | Older backend notice |
 | `systemLogs.unavailable.body` | This device's software doesn't include the log viewer yet. The downloads below still work. | Older backend notice |
-| `systemLogs.action.retry` | Retry | Every recovery band |
+| `systemLogs.action.retry` | Retry | Region recovery bands (shell and chunk recovery use `errorBoundary.retry`) |
 | `systemLogs.loading.entries` | Loading entries… | Hidden status during Raw skeleton |
 | `systemLogs.loading.events` | Loading events… | Hidden status during Events skeleton |
 | `systemLogs.level.error` | Error | Raw level glyph name |
@@ -391,7 +414,7 @@ Rules for this copy:
 | `systemLogs.announce.gap` | Some log entries were skipped. | Live region |
 | `systemLogs.announce.disconnected` | Connection lost. Log entries may be out of date. | Live region |
 | `systemLogs.announce.newEntries` | New log entries: {count} | Live region, at most every 5 s |
-| `systemLogs.announce.newEvents` | New events: {count} | Live region, at most every 5 s |
+| `systemLogs.announce.newEvents` | New events: {count} | Not rendered by the code in this lane |
 
 ### Storage
 
@@ -703,6 +726,9 @@ the row's collapsed Diagnostics disclosure, never as a title or detail.
 
 ## 5. Severity encoding
 
+> Design intent recorded at planning time. It is not a description of the shipped
+> behaviour; see the Code map and system-logs-critique.md.
+
 Severity is always shape plus colour plus an accessible name, never colour
 alone. Glyphs follow `NOTIFICATION_ICONS` in
 `F/main/notifications/notification-presentation.ts`, so a warning is a triangle
@@ -721,8 +747,8 @@ everywhere in the app.
   measured the status-pill text tones below 4.5:1 for error (both themes) and
   neutral (dark).
 - The lime `--status-live` token is not used for any severity, state, marker,
-  bar or selection in this view. Its only appearance is the header pill's Live
-  state, which reuses the HUD's own live indicator.
+  bar or selection in this view. The header pill's Live state uses it; Save and
+  Download bundle use the default primary button (critique SL-13).
 - Following uses `--status-info`; Paused, Stopped and Disconnected are neutral
   (`--status-neutral` glyph, foreground text).
 - Shutdown marks: current `CircleDot` in `--status-info`, clean `Check` in
@@ -736,6 +762,12 @@ everywhere in the app.
   whole meaning; the pulse is frozen like every other e-ink animation.
 
 ## 6. Breakpoints
+
+> Design intent recorded at planning time. It is not a description of the shipped
+> behaviour; see the Code map and system-logs-critique.md.
+
+Rendered layout, overflow, touch geometry and RTL at these
+widths are not measured in this lane.
 
 | Width | Header | Tabs and side column | Filter bars | Rows | Boot picker |
 |---|---|---|---|---|---|
@@ -759,7 +791,7 @@ everywhere in the app.
   action elements in those cases and at 320x720 and 375x812 in all ten
   locales. At the tested widths of 375 px or above, the audited tab labels used
   at most two lines. The Spanish Raw logs label used three unclipped lines at
-  320 px (DESIGN-FOLLOWUPS DF-21). The 12 principal cases reported no critical
+  320 px (DESIGN-FOLLOWUPS DF-26). The 12 principal cases reported no critical
   or serious scoped axe violations in Events, Raw logs, or Storage. The
   separate color compositor checked the applicable AA text-contrast ratios for
   audited text using computed colors. It does not model CSS opacity. The narrow
@@ -786,220 +818,225 @@ everywhere in the app.
   holding a CJK character split across lines within one rendered text node
   (`tests/e2e/helpers/system-logs-audit.ts`, CJK check).
 
-## 7. Keyboard and screen reader
+## 7. Code map [EXISTS]
 
-- **Tab order.** Header (boot button below 1024 px, close) -> tab list (one stop;
-  arrow keys move and activate, Home and End jump; the tab panel itself is no
-  stop, `SystemLogsView.svelte:185`) -> the active panel's filter
-  bar in visual order (single-choice groups such as Level, Order and Detail are
-  one stop each, arrows move the choice) -> the list (one stop; Up and Down move
-  between rows, Home and End jump, Enter or Space expands a raw row, the row's
-  own actions such as View raw logs and Copy are reachable with Tab inside the
-  focused row) -> the paging button -> the side column (boot list as one
-  single-choice stop, then Storage controls, then Downloads rows).
-- **Busy controls [EXISTS].** While its page loads, a pressed paging button is
-  aria-disabled and aria-busy, never disabled, so it keeps focus
-  (`RawLogList.svelte:151`, `:165`; `EventsTab.svelte:281`); so is Follow while the
-  device answers (`RawFollowControl.svelte:46`). Follow is disabled only beside its
-  reason (`:49`).
-- **Events rows [EXISTS].** A row's stop is its first action, View raw logs: a
-  list item is not a control, so it never takes focus itself. Up, Down, Home
-  and End move the stop between rows; Tab reaches that row's Diagnostics; only
-  the stop row's actions are in the tab sequence. The stop follows focus, so a
-  pointer that focuses another row's action moves it there. While its request
-  is pending, View raw logs is aria-disabled and aria-busy, never disabled: it
-  keeps focus, the keys still cross its row, and a repeat press does nothing.
-  A boot section's key is its boot id and run number, so events arriving above
-  a row never rebuild it: the row keeps its element, focus and stop.
-- **Initial focus.** The selected tab, so arrow keys work at once. Anchor mode
-  moves focus to the highlighted row. A Storage request focuses the Storage
-  heading once (`SystemLogsView.svelte:120-127`).
-- **Escape.** It always closes the topmost layer: an open select, then a nested
-  sheet or dialog (boot picker, support bundle, confirmation), then the view.
-  It never clears the search field (the clear button does). On close, focus
-  returns to the Settings -> System Logs entry.
-- **Visible focus.** Every control shows the app's `:focus-visible` ring; sticky
-  boot separators and the fixed bars never cover a focused row (scroll padding
-  under the sticky regions).
-- **Enter.** Both clear confirmations initially focus Cancel, so pressing Enter
-  immediately after opening cancels (`StorageCleanup.svelte:55`).
-- **Lists.** Events and raw entries are plain lists (`ul`/`li`), never
-  `aria-live`. Boot separators are headings, so heading navigation jumps
-  between boots. Glyphs carry accessible names (section 4, `systemLogs.level.*`
-  and `systemLogs.severity.*`); times use `<time datetime>`.
-- **Polite status.** The Raw logs status announces Follow changes and new raw-entry
-  summaries (`RawLogsTab.svelte:28-36`, a visually hidden `role="status"` with
-  `aria-live="polite"` at `:136-140`). The Events tab exposes its loading status
-  (`EventsTab.svelte:192`). Neither reads log lines. Spoken timing and repetition are
-  unmeasured.
-- **Alerts.** Failures and refusals (read failed, busy, expired position, boot
-  removed, update in progress, export or bundle failure) render as inline bands
-  with `role="alert"`, announced once when they appear. Success is never
-  assertive.
-- **Reduced motion and e-ink.** The Following pulse becomes a static dot beside
-  the "Following" label; skeletons stop shimmering; no auto-scroll ever moves
-  the reading position (held entries wait behind the "New entries" button);
-  merging held entries jumps instead of animating. Every state stays
-  distinguishable by text and shape (DESIGN.md RM-1..RM-4).
-- **Screen readers in RTL.** Reading order follows the DOM, which follows
-  logical order; raw text keeps `dir="ltr"` so mixed-direction lines read
-  correctly.
+Pointers only. Behaviour is owned by the code and tests below and by
+[system-logs-critique.md](system-logs-critique.md) and
+[DESIGN-FOLLOWUPS.md](../../../../docs/DESIGN-FOLLOWUPS.md). Paths are under
+`apps/frontend/src/` unless they start with `apps/` or `docs/`. The component,
+module, test and fixture lists are generated from the directory listing of
+`main/system-logs/` and `lib/device-logs/` (subfolders included): files under
+`__fixtures__/` are test fixtures and are listed separately; `*.test.ts` files
+are tests; every other `.svelte` and `.ts` file is production code. Related
+tests under `tests/` are the files there whose text names either folder.
 
-## Sharing as built [EXISTS]
+### Components
 
-- `SharingSection.svelte` renders the second Downloads group once the viewer
-  is ready; `ExportDialog.svelte` and `BundleDialog.svelte` are its nested
-  dialogs. Their state is one `SharingFlow`
-  (`F/lib/device-logs/sharing-flow.svelte.ts`) per open view, created and
-  disposed by `SystemLogsView`, so a request survives the Downloads region
-  remounting and ends with the view.
-- Export this view sends `exportInput(sharing.view)`. `view` starts as the Raw
-  logs tab's opening query (`RAW_OPENING_QUERY`: this boot, error through info,
-  every source). [EXISTS] `RawView` publishes each query through
-  `RawLogsTab.onquery` and `RawLogsPanel` to `sharing.view`, before the read.
-  Sources, levels, literal text, boot and the time bounds resolved at the start
-  of that query are therefore the export's filters, even if a read fails or the
-  Raw tab unmounts to show Storage. Paging never resolves the time preset again.
-  An around view publishes the union of its older and newer windows: the older
-  query's lower bound and the newer query's upper bound, with their shared
-  filter and boot. Until Raw logs is first opened, the opening query is kept.
-  `SharingFlow.bindView()` grants one Raw panel its publisher lifetime.
-  Detaching clears only that owner's capability, not a newer owner's, and
-  retains the snapshot for export from Storage. Closing the whole view clears
-  the snapshot and prevents every late or newly bound publisher from writing.
-- Both dialogs state what the file holds and that it may contain sensitive data
-  before Download can be pressed; the bundle file carries no warning of its
-  own. A ticket reaches the browser through a temporary anchor on the backend
-  origin (`getBackendHttpUrl`); the page never reads the file.
-- One request per step. Cancel, Escape, the close button, deleted history
-  (`onHistoryChanged`) and closing the view discard a late reply; a ticket the
-  device minted for it expires there within 60 s, and until then another export
-  reads as busy. No timer is kept.
-- A refused preview (`BUSY`, or `READ_FAILED`, which includes the fail-closed
-  identifier collision) shows the amber band with Retry. A refused creation
-  keeps the manifest, and Download is the retry.
-- Every reply is parsed with its shared wire schema before use
-  (`logExportOutputSchema`, `logBundleManifestSchema`). A missing, partial or
-  mistyped reply, a call that throws and a download the browser refuses are
-  logged once and read as the failed band, with the confirmation or the
-  preview kept for another try; Download stays unavailable without a valid
-  manifest. A ticket must be exactly the path the device mints for that flow
-  (`/api/logs/export|bundle?ticket=<64 lowercase hex>`, `ticketReply`) before it
-  is joined to the backend origin, and a manifest naming a section twice is
-  refused (`bundleManifestReply`), never merged or rendered. The temporary anchor is removed even when its click throws.
-- The group and both dialog bodies break Japanese at phrases
-  (`[word-break:auto-phrase]`), Korean only at spaces
-  (`[&:lang(ko)]:break-keep`) and Chinese only between words: `KeepWords.svelte`
-  marks the gaps with `<wbr>` from `chineseWordChunks`
-  (`F/lib/device-logs/cjk-words.ts`, `Intl.Segmenter`; a chunk never starts
-  with punctuation or a one-character word) and `[&:lang(zh)]:break-keep`
-  allows no other break. `[&:lang(zh)]:text-balance` keeps an ending from
-  sitting alone; with `wrap-break-word` and `text-pretty`, narrow widths
-  neither split a word nor overflow. The two legacy rows above the group
-  (`LegacyLogDownloads.svelte`, todo 28) keep their own wrapping.
-- Not shown on screen: whether a file was cut short. Neither the manifest nor
-  the ticket reports it; the export's last line (`# complete:` or
-  `# incomplete:`) and the bundle's end record say so inside the file.
-- `logs.previewBundle` and `logs.createBundle` wait 75 s for their reply; the
-  device deadline is 60 s.
-- The CI e2e preview server proxies only `/ws` and `/preview`, so a download
-  from `/api/logs/*` reaches the backend in the dev topology and on devices
-  (same origin), not through `vite preview`.
+| Source | Props |
+|---|---|
+| `main/system-logs/BootButton.svelte` | no props |
+| `main/system-logs/BootPicker.svelte:30` | props |
+| `main/system-logs/BundleDialog.svelte:23` | props |
+| `main/system-logs/EventRow.svelte:38` | props |
+| `main/system-logs/EventsPanel.svelte:16` | props |
+| `main/system-logs/EventsTab.svelte:37` | props |
+| `main/system-logs/ExportDialog.svelte:16` | props |
+| `main/system-logs/KeepWords.svelte:14` | props |
+| `main/system-logs/LegacyLogDownloads.svelte:21` | props |
+| `main/system-logs/ParamText.svelte:8` | props |
+| `main/system-logs/RawFollowControl.svelte:17` | props |
+| `main/system-logs/RawLogList.svelte:22` | props |
+| `main/system-logs/RawLogRow.svelte:35` | props |
+| `main/system-logs/RawLogsFilterBar.svelte:23` | props |
+| `main/system-logs/RawLogsPanel.svelte:22` | props |
+| `main/system-logs/RawLogsTab.svelte:26` | props |
+| `main/system-logs/RecoveryBand.svelte:19` | props |
+| `main/system-logs/SegmentedChoice.svelte:27` | props |
+| `main/system-logs/SharingSection.svelte:21` | props |
+| `main/system-logs/ShutdownMark.svelte:21` | props |
+| `main/system-logs/StorageCleanup.svelte:37` | props |
+| `main/system-logs/StorageLimits.svelte:34` | props |
+| `main/system-logs/StorageSection.svelte:19` | props |
+| `main/system-logs/StorageUsage.svelte:17` | props |
+| `main/system-logs/StreamStatePill.svelte` | no props |
+| `main/system-logs/SystemLogsView.svelte:63` | props |
 
-## Storage implementation [EXISTS, unreleased]
+### Modules
 
-`StorageSection.svelte` fills the shell's Storage placeholder and owns initial
-reads and Retry. `StorageUsage`, `StorageLimits` and `StorageCleanup` separate
-readout, staged limits and destructive actions. Only Save calls `setRetention`;
-unknown ceilings disable both limit selects with a reason, not Detail.
-Each successful raw clear, older-file deletion or event clear notifies the
-existing history bus once. Refusals and failed calls preserve the last readout
-and render an inline Retry; destructive retries ask for confirmation again.
-The readout uses neutral meters with the same numbers stated in text.
-Cleanup labels and limit values wrap inside the column instead of widening it
-in long locales; both confirmations use the wider dialog so a long confirm
-label fits beside Cancel, and on a phone their footer buttons wrap a long label
-inside the button. Storage, both confirmations and both option lists
-break Japanese between phrases (`word-break: auto-phrase`), Korean only
-between words (`keep-all` under `:lang(ko)`) and Chinese only at the word gaps
-the Storage messages mark (`keep-all` under `:lang(zh)`; a zero-width space
-between two words of two or more characters, never beside a one-character word
-or inside a number and its unit), avoid a lone final character
-(`text-wrap: pretty`) and still wrap an over-long word; every formatted size,
-day count and date joins its parts with no-break spaces, and the decorative
-volume bars give way before a source name has to break. A storage reply's
-unknown, newer fields are ignored; every known field is still required and validated.
-Every action's successful reply is read against that action's shared output schema
-(storage reading, boot counts, the events `success` flag): one that leaves out or
-garbles anything it promises is the action's failure, with its retry band and the
-previous reading kept. Only the newest storage read is shown: a read that answers
-after a newer read or a newer action reply is dropped, a newer reading retires a
-failed read's band, and Retry stays disabled while its read runs.
-No journal limit, unknown usage, removed boot or secure erase is inferred.
-Host/mock verification is not device qualification. User documentation remains
-the English/es-419 release work assigned to the documentation todo.
+| Source |
+|---|
+| `main/system-logs/log-downloads.svelte.ts` |
+| `lib/device-logs/boot-list.svelte.ts` |
+| `lib/device-logs/boot-rows.ts` |
+| `lib/device-logs/boot-selection.svelte.ts` |
+| `lib/device-logs/cjk-words.ts` |
+| `lib/device-logs/events-view.svelte.ts` |
+| `lib/device-logs/history-bus.ts` |
+| `lib/device-logs/log-pointer-keys.ts` |
+| `lib/device-logs/param-parts.ts` |
+| `lib/device-logs/raw-anchor.ts` |
+| `lib/device-logs/raw-filter.ts` |
+| `lib/device-logs/raw-rows.ts` |
+| `lib/device-logs/raw-view.svelte.ts` |
+| `lib/device-logs/sharing-flow.svelte.ts` |
+| `lib/device-logs/sharing.ts` |
+| `lib/device-logs/shell-layout.ts` |
+| `lib/device-logs/storage-limits.ts` |
+| `lib/device-logs/storage-messages.ts` |
+| `lib/device-logs/storage-outcome.ts` |
+| `lib/device-logs/storage-readout.ts` |
+| `lib/device-logs/stream-pill.ts` |
+| `lib/device-logs/timeline-copy.ts` |
+| `lib/device-logs/timeline-details.ts` |
+| `lib/device-logs/timeline-groups.ts` |
+| `lib/device-logs/view-logs-secondary.ts` |
+| `lib/device-logs/view-logs.ts` |
+| `lib/device-logs/viewer-availability.ts` |
 
-## Message deep links as built [EXISTS]
+### Tests
 
-- Integrated event links pass their already-read around page into Raw logs without
-  another read. Raw logs initializes from the shared boot picker and follows its
-  choices only while mounted; a returned around window keeps its own boot.
-- Shared log schemas have their own production chunk so the integrated Storage
-  and Sharing parsers do not enlarge the devtools chunk; build budgets stay unchanged.
-- The catalog-derived `LOG_POINTER_KEYS` allowlist controls `ViewLogsAction`
-  and the toast adapters. `notifications.viewLogs` is available at boot in all
-  ten locales. Existing message values and notification wire targets are
-  unchanged; direct refusal sites and the persistent, archived and transient
-  notification surfaces use the same frontend-only dialog request.
-- `SettingsView` passes a raw-tab context with the message's received time
-  when known, otherwise the action's time. `RawLogsPanel` resolves the running
-  boot with `logs.boots()` unless the context names a boot, then calls
-  `logs.around({ bootId, at })`. Both replies are parsed with producer schemas
-  at `raw-anchor.ts`; missing, null and mistyped members are failed reads.
-  Query input defaults are unwrapped at this output boundary: an absent boot,
-  level set, source set, direction or limit is never silently supplied.
-  Messages do not carry a trustworthy source or event id, so this is the
-  backend's approximate two-minute window across sources and levels, never a
-  guessed source or an invented exact match.
-- The real `RawLogsTab` consumes the returned pages and their paging queries.
-  An exact anchor receives its existing tonal highlight and row focus; an
-  approximate jump states that it is approximate and leaves focus on Raw logs.
-  An approximate window marks the selected moment. When an end marker is shown, it names that side of the time window. The display-limit notice takes precedence at the older edge. Windows around exact entries use the stored-logs wording when their end markers are shown.
-  (`RawLogList.svelte:38-41`, `:142-187`).
-  A failed lookup shows the removed-boot, busy or read-failed message with
-  Retry and Back to latest entries. The low-disk banner opens Storage instead.
-  That request focuses the Storage heading once: in the side column on wide
-  screens, on the Storage tab below 1024 px (`SystemLogsView.svelte:120-127`).
-- Anchor mode keeps the operator's normal-query controls as its return view
-  (the Raw view's pinned reset/filter-change contract). Its pages and exports
-  use the around queries, not those return controls. Changing a filter leaves
-  anchor mode. While anchored, Level and Time state what the window reads, never
-  the return view: Level shows the narrowest position covering the window's
-  level set (`RawView.anchor.level`), Time shows Selected boot (`timeShown`) and
-  the folded Filters count includes it. Back to latest entries returns both to
-  the operator's choices.
-- A new context replaces the raw panel's request lifetime. Leaving Raw logs,
-  closing the dialog or retrying aborts that lifetime; each awaited reply is
-  checked before the next request or state change. A late reply cannot open
-  old entries or replace a newer request. Choosing another tab discards the
-  opening anchor, so returning to Raw logs starts a fresh ordinary query.
-- The layout, tokens and primitives remain the existing view's. No shared
-  primitive, route, wire action or remote log command is added. Physical
-  journal timing, hardware volume and screen-reader qualification remain owed.
-- Notice and panel copy reuse `KeepWords`; `cjk-words.ts` owns the Chinese
-  word-boundary helper without pulling sharing RPC schemas into boot-time
-  notification rendering. Japanese uses auto-phrase, Korean keeps words, and
-  Chinese uses the helper's explicit word breaks. Toast message snippets use
-  the same renderer and release their own mounted component when removed.
-  Log-pointing toasts alone receive token-based touch height, an outline and
-  an 8 px gap. Their controls wrap below the message instead of squeezing it.
-  No shared Button or Sonner primitive is edited.
+| Test file |
+|---|
+| `main/system-logs/BootButton.test.ts` |
+| `main/system-logs/BootPicker.test.ts` |
+| `main/system-logs/EventsPanel.test.ts` |
+| `main/system-logs/EventsTab.test.ts` |
+| `main/system-logs/KeepWords.test.ts` |
+| `main/system-logs/LegacyLogDownloads.test.ts` |
+| `main/system-logs/ParamText.test.ts` |
+| `main/system-logs/RawLogRow.test.ts` |
+| `main/system-logs/RawLogsPanel.test.ts` |
+| `main/system-logs/RawLogsTab.test.ts` |
+| `main/system-logs/SegmentedChoice.test.ts` |
+| `main/system-logs/SharingSection.test.ts` |
+| `main/system-logs/StorageSection.test.ts` |
+| `main/system-logs/StreamStatePill.reactive.test.ts` |
+| `main/system-logs/StreamStatePill.test.ts` |
+| `main/system-logs/SystemLogsView.boots.test.ts` |
+| `main/system-logs/SystemLogsView.deep-link.test.ts` |
+| `main/system-logs/SystemLogsView.events.test.ts` |
+| `main/system-logs/SystemLogsView.raw.test.ts` |
+| `main/system-logs/SystemLogsView.sharing.test.ts` |
+| `main/system-logs/SystemLogsView.test.ts` |
+| `lib/device-logs/boot-list.test.ts` |
+| `lib/device-logs/boot-rows.test.ts` |
+| `lib/device-logs/boot-selection.test.ts` |
+| `lib/device-logs/events-view.test.ts` |
+| `lib/device-logs/history-bus.test.ts` |
+| `lib/device-logs/param-parts.test.ts` |
+| `lib/device-logs/raw-anchor.test.ts` |
+| `lib/device-logs/raw-filter.test.ts` |
+| `lib/device-logs/raw-rows.test.ts` |
+| `lib/device-logs/raw-view.order.test.ts` |
+| `lib/device-logs/raw-view.test.ts` |
+| `lib/device-logs/sharing-flow.test.ts` |
+| `lib/device-logs/sharing-view.test.ts` |
+| `lib/device-logs/sharing.test.ts` |
+| `lib/device-logs/shell-layout.test.ts` |
+| `lib/device-logs/storage-limits.test.ts` |
+| `lib/device-logs/storage-messages.test.ts` |
+| `lib/device-logs/storage-outcome.test.ts` |
+| `lib/device-logs/storage-readout.test.ts` |
+| `lib/device-logs/stream-pill.test.ts` |
+| `lib/device-logs/timeline-copy.test.ts` |
+| `lib/device-logs/timeline-groups.test.ts` |
+| `lib/device-logs/view-logs.test.ts` |
+| `lib/device-logs/viewer-availability.test.ts` |
+| `tests/live-config-change-view-logs.test.ts` |
+| `tests/live-start-failed-reason.test.ts` |
+| `tests/log-pointer-keys.test.ts` |
+| `tests/persistent-notice-surface.test.ts` |
+| `tests/vite-federation-excluded-namespace.test.ts` |
+
+Related browser specs and their entry points:
+
+| Repository path |
+|---|
+| `apps/frontend/tests/e2e/helpers/system-logs-audit.ts` |
+| `apps/frontend/tests/e2e/helpers/system-logs-paint.ts` |
+| `apps/frontend/tests/e2e/logs-dialog.spec.ts` |
+| `apps/frontend/tests/e2e/pages/system-logs.ts` |
+| `apps/frontend/tests/e2e/system-logs-keyboard.spec.ts` |
+| `apps/frontend/tests/e2e/system-logs-responsive.spec.ts` |
+| `apps/frontend/tests/e2e/view-logs-action.spec.ts` |
+| `apps/frontend/tests/e2e/visual/system-logs.visual.spec.ts` |
+| `apps/frontend/tests/e2e/visual/view-logs-layout.visual.spec.ts` |
+
+### Test fixtures (excluded from the lists above)
+
+| Fixture file |
+|---|
+| `main/system-logs/__fixtures__/FakeEventsTab.svelte` |
+| `main/system-logs/__fixtures__/FakeRawLogsTab.svelte` |
+| `main/system-logs/__fixtures__/hud-feed.svelte.ts` |
+| `main/system-logs/__fixtures__/log-storage.ts` |
+| `lib/device-logs/__fixtures__/boots.ts` |
+| `lib/device-logs/__fixtures__/events.ts` |
+| `lib/device-logs/__fixtures__/sharing.ts` |
+
+### RecoveryBand call sites
+
+`main/system-logs/StorageCleanup.svelte:191`, `main/system-logs/StorageLimits.svelte:183`, `main/system-logs/StorageSection.svelte:60`.
+
+### role="status" elements
+
+`main/system-logs/BootPicker.svelte:165`, `main/system-logs/BundleDialog.svelte:98`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:192`, `main/system-logs/ExportDialog.svelte:50`, `main/system-logs/RawLogList.svelte:216`, `main/system-logs/RawLogRow.svelte:136`, `main/system-logs/RawLogsPanel.svelte:97`, `main/system-logs/RawLogsTab.svelte:136`, `main/system-logs/StorageCleanup.svelte:185`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:67`, `main/system-logs/SystemLogsView.svelte:204`.
+
+### Limits and constants
+
+| Name | Value | Source |
+|---|---|---|
+| PAGE | 100 | `lib/device-logs/events-view.svelte.ts:43` |
+| PAGE_LIMIT | 100 | `lib/device-logs/raw-filter.ts:57` |
+| SEARCH_MAX_BYTES | 256 | `lib/device-logs/raw-filter.ts:58` |
+| ROW_CAP | 2000 | `lib/device-logs/raw-rows.ts:9` |
+| SEARCH_DEBOUNCE_MS | 300 | `lib/device-logs/raw-view.svelte.ts:96` |
+| HELD_CAP | 500 | `lib/device-logs/raw-view.svelte.ts:97` |
+| NEW_ENTRIES_EVERY_MS | 5000 | `lib/device-logs/raw-view.svelte.ts:98` |
+
+Backend and wire limits: [device-logs.md](../../../backend/docs/agents/device-logs.md),
+[device-events.md](../../../backend/docs/agents/device-events.md).
+
+### Keyboard and focus code
+
+| Code | Source |
+|---|---|
+| Events list key map (ArrowDown, ArrowUp, Home, End) | `main/system-logs/EventsTab.svelte:44-47` |
+| Events focus move to a row button | `main/system-logs/EventsTab.svelte:95` |
+| Events row keydown hook | `main/system-logs/EventsTab.svelte:260` |
+| Events scroller scroll padding | `main/system-logs/EventsTab.svelte:189` |
+| View raw logs pending (aria-disabled) | `main/system-logs/EventRow.svelte:90` |
+| Event row tab stop | `main/system-logs/EventRow.svelte:95` |
+| Raw list focus on a row | `main/system-logs/RawLogList.svelte:94` |
+| Boot picker option focus | `main/system-logs/BootPicker.svelte:58` |
+| Segmented choice focus | `main/system-logs/SegmentedChoice.svelte:50` |
+| Selected tab focus | `main/system-logs/SystemLogsView.svelte:117` |
+| Storage heading focus | `main/system-logs/SystemLogsView.svelte:126` |
+| Cancel focus for clear confirmations | `main/system-logs/StorageCleanup.svelte:55` |
+| RecoveryBand Retry button | `main/system-logs/RecoveryBand.svelte:35` |
+
+### Recorded follow-ups
+
+| Id | Record |
+|---|---|
+| SL-2 | `apps/frontend/docs/agents/system-logs-critique.md:62` |
+| SL-7 | `apps/frontend/docs/agents/system-logs-critique.md:67` |
+| SL-11 | `apps/frontend/docs/agents/system-logs-critique.md:71` |
+| SL-13 | `apps/frontend/docs/agents/system-logs-critique.md:73` |
+| DF-27 | `docs/DESIGN-FOLLOWUPS.md:493` |
+| DF-30 | `docs/DESIGN-FOLLOWUPS.md:548` |
+| DF-34 | `docs/DESIGN-FOLLOWUPS.md:596` |
+
+### Not measured
+
+Physical journal timing and volume, hardware e-ink output, and assistive
+technology speech. Browser coverage is in the related specs above.
 
 ## Open decisions
 
 - **Critique residuals.** The todo 36 critique and the owner of every finding it
   did not fix are in [system-logs-critique.md](system-logs-critique.md).
-- **Polish (todo 38).** Four DF-26 items stay as they are:
+- **Polish (todo 38).** Four DF-31 items stay as they are:
   - Two time formats. Raw rows use a fixed two-digit hour (`RawLogList.svelte:47`)
     in a mono tabular column (`RawLogRow.svelte:102`), so times line up down the
     list. Events shows a relative time next to a localized clock for events dated
@@ -1019,27 +1056,27 @@ the English/es-419 release work assigned to the documentation todo.
 - **Settings entry description.** `settings.index.logsDesc` ("Download device
   and system logs for diagnostics") under-describes the new view. Changing it
   changes an existing message, so it stays as it is until the owner decides.
-- **Registry-owned variants.** The detail variants for `stream_reconfigured`,
-  `update_failed`, `modem_connected` and `engine_lost` follow the enums the
-  registry ships. A value with no sentence here shows the title alone until
-  copy for it is added in all ten locales.
-- **Long lists (decided).** The Raw logs list is a virtual list
-  (`@tanstack/svelte-virtual` 3.13, whose peer range accepts the repo's Svelte
-  5) with measured rows, so wrapped and expanded rows keep their height; it
-  stays a plain `ul`, never a live region. `@tanstack/virtual-core` is also a
-  direct dependency: with `preserveSymlinks`, the frontend's type check finds
-  the virtualizer's types only through its own dependencies, and without them
-  every virtualizer value is silently `any`. The Raw logs tab loads as its own
-  chunk through `lazyDialog`, so opening the view on Events fetches neither
-  the tab nor the virtualizer.
+- **Registry-owned variants.** `stream_reconfigured` and `update_failed` pick
+  their detail variant from the recorded `outcome` and `stage` values;
+  `engine_lost` and `modem_connected` pick it from a boolean (`streaming`:
+  streaming or idle; `roaming`: roaming or notRoaming)
+  (`lib/device-logs/timeline-details.ts:84,154,90,116`; `packages/rpc/src/schemas/events.schema.ts:65,162`).
+- **Long lists (decided).** The Raw logs list uses `@tanstack/svelte-virtual`
+  (`main/system-logs/RawLogList.svelte:3`). Chunk output and type-check effects are not measured in this lane.
 - **List order (decided).** One list holds every Raw logs row in journal order;
   entries held while reading away are a boundary inside it, never a second
   list. Nothing sorts rows by time or by cursor text:
   - The first page that lists an entry after a head read (first query, Keep
     searching from the head, reset, filter change) replaces the list. Follow is
     detached for the whole read, so the page is the newest run and nothing
-    arrives meanwhile. A dropped marker leaves exactly then, or on a reset or
-    the row cap, so markers describe only holes no page has filled.
+    arrives meanwhile. A dropped marker leaves then, on a reset or at the
+    entry cap. When the held cap (`HELD_CAP`) cuts held rows, each cut entry
+    and the count of each cut dropped marker are added to one held overflow
+    count, and the other cut markers stay at the boundary
+    (`lib/device-logs/raw-view.svelte.ts:565-574`); Show held rows adds that
+    count back as one dropped marker
+    (`lib/device-logs/raw-view.svelte.ts:389-400`; test
+    `lib/device-logs/raw-view.order.test.ts:1365`).
   - Every other page extends its own edge with entries not listed yet; a
     Follow batch goes on top.
   - While following, Keep searching reads on with Follow detached until a page

@@ -8,7 +8,7 @@ Svelte 5 PWA for CeraUI — the on-device control plane for CeraLive streaming h
 reads, explicit retention Save, and confirmed raw-log/event cleanup. Unknown
 usage and device ceilings remain unknown; cleanup reports observed results.
 The other System Logs panels are separate work. See the
-[view contract](docs/agents/system-logs-view.md#storage-implementation-exists-unreleased).
+[view code map](docs/agents/system-logs-view.md#7-code-map-exists).
 
 **Message-to-log navigation [EXISTS].** Log-pointing messages offer View logs,
 opening Raw logs around the message's time in its boot. Export this view uses

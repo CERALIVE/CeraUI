@@ -20,15 +20,15 @@ Full PR gate: `bun run test`, `bun run test:e2e`, `bun run check:tech-debt`,
 ## WHERE TO LOOK
 | Code path or task | Contract |
 |---|---|
-| Before changes, read the owning subsystem contract | [All backend contracts](docs/agents/README.md) |
+| Before changes, read the owning contract | [Index](docs/agents/README.md) |
 | Versions | [Contract](docs/agents/a-version-an-operator-reads-must-be-a-live-read.md) |
-| Events | [Emitter](docs/agents/event-emitter.md) |
-| Log filters | [Logs](test-harness/journal-conformance/README.md) |
+| Device events | [Contract](docs/agents/device-events.md) |
+| Device logs | [Contract](docs/agents/device-logs.md) |
 | Projection, modem roster and first-sight USB bond admission | [an-isolated-dongle-is-surfaced-without-entering-the-bond.md](docs/agents/an-isolated-dongle-is-surfaced-without-entering-the-bond.md) |
 | Cellular composition and wire projection | [the-cellular-subsystem-one-composition-root-one-wire.md](docs/agents/the-cellular-subsystem-one-composition-root-one-wire.md) |
 | Modem presence and exact-identity admission | [a-device-is-announced-before-any-modem-service-can-descri.md](docs/agents/a-device-is-announced-before-any-modem-service-can-descri.md) |
 | Modem mutation leases, journal and rollback | [the-modem-mutation-safety-contract.md](docs/agents/the-modem-mutation-safety-contract.md) |
-| Modem configuration normalization and applied receipts | [a-modem-save-spends-a-reconnect-only-when-it-must.md](docs/agents/a-modem-save-spends-a-reconnect-only-when-it-must.md) |
+| Modem configuration normalization and applied receipts | [Contract](docs/agents/a-modem-save-spends-a-reconnect-only-when-it-must.md) |
 | Modem feature gates | [the-capability-feature-gate-framework.md](docs/agents/the-capability-feature-gate-framework.md) |
 | Shared-client flow-sticky steering | [flow-sticky-shared-client-steering.md](docs/agents/flow-sticky-shared-client-steering.md) |
 | Streaming-first shaping and read-only NAT diagnostics | [streaming-first-uplink-shaping.md](docs/agents/streaming-first-uplink-shaping.md) |
@@ -37,10 +37,10 @@ Full PR gate: `bun run test`, `bun run test:e2e`, `bun run check:tech-debt`,
 | Update orchestrator, D8, OS staging and slot mirroring | [the-update-orchestrator-and-d8-admission.md](docs/agents/the-update-orchestrator-and-d8-admission.md) |
 | Streaming RPC, lifecycle, audio inputs | [streaming-rpc-procedures.md](docs/agents/streaming-rpc-procedures.md) |
 | Apply-now candidates, negotiated capture clears and applied-only persistence | [Staged persistence](docs/agents/apply-now-config-change-transaction-staged-persistence.md) |
-| Device-scoped saved capture modes and automatic defaults | [Per-device modes](docs/agents/one-row-per-physical-camera-per-device-mode-selection.md) |
-| Live capture and audio visibility | [a-live-capture-device-is-never-silently-dropped.md](docs/agents/a-live-capture-device-is-never-silently-dropped.md) |
-| Audio identity and naming | [audio-device-naming.md](docs/agents/audio-device-naming.md) |
-| Audio backend override | [the-audio-backend-is-an-override-and-absent-is-not-a-defa.md](docs/agents/the-audio-backend-is-an-override-and-absent-is-not-a-defa.md) |
+| Saved capture modes and automatic defaults | [Per-device modes](docs/agents/one-row-per-physical-camera-per-device-mode-selection.md) |
+| Live capture and audio visibility | [Contract](docs/agents/a-live-capture-device-is-never-silently-dropped.md) |
+| Audio identity and naming | [Contract](docs/agents/audio-device-naming.md) |
+| Audio backend override | [Contract](docs/agents/the-audio-backend-is-an-override-and-absent-is-not-a-defa.md) |
 | Preview origin and auth | [preview-websocket-proxy-single-origin-task-20.md](docs/agents/preview-websocket-proxy-single-origin-task-20.md) |
 | Engine IPC ownership | [streaming-engine-seam.md](docs/agents/streaming-engine-seam.md) |
 | Hotplug and cleanup | [sigusr2-udev-hotplug-hook.md](docs/agents/sigusr2-udev-hotplug-hook.md) |
@@ -53,7 +53,7 @@ Full PR gate: `bun run test`, `bun run test:e2e`, `bun run check:tech-debt`,
 
 ## HARD RULES
 - Update, recovery, D8, disruptive-action, OS-stage, journal and add-on helper rules are binding: read [the contract](docs/agents/update-orchestrator-hard-rules.md) before touching those paths.
-- The projection is what reaches the wire; preserve producer identity and schema. Its lifecycle seeding and runtime-evidence rule is binding and lives verbatim in [lifecycle-projection-hard-rules.md](docs/agents/lifecycle-projection-hard-rules.md).
+- Wire projection preserves producer identity and schema. Follow the binding [lifecycle seeding and runtime-evidence rules](docs/agents/lifecycle-projection-hard-rules.md).
 - Streaming-first uplink shaping caps only shared clients; local stream egress stays uncapped. Foreign roots fail closed.
 - The two NAT layers are watched, never arbitrated: diagnostics are read-only, tri-state, and never gate streaming or mutate either layer.
 - Modem roster: exact triplets; RNDIS e0/01/03 admits; e0/01/01, e0/01/04 veto; ID_MM_DEVICE_IGNORE=1 excludes; weak retires, strong stays undriveable.
