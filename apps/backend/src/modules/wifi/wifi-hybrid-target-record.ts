@@ -8,6 +8,7 @@
     (at your option) any later version.
 */
 
+import { logger } from "../../helpers/logger.ts";
 import { argMatch, ID_RE } from "../../helpers/run.ts";
 import { isQualifiedNmManagedHybrid } from "./wifi-ap-sta-capability.ts";
 import {
@@ -15,12 +16,21 @@ import {
 	runConcurrentInterface as interfaceRunner,
 	setConcurrentInterfaceDepsForTest,
 } from "./wifi-concurrent-interface-io.ts";
+import { wifiDeviceListGetMacAddress } from "./wifi-device-list.ts";
+import {
+	type HybridLegIdentity,
+	hybridDiagnosticTime,
+	hybridIwLegIdentity,
+	hybridLegIdentity,
+} from "./wifi-hybrid-target-diagnostics.ts";
 import {
 	type CreatedInterface,
 	concurrentApIfname,
 	interfaceIdentity,
 	isConcurrentApIfname,
+	isSupportedWifiIfname,
 } from "./wifi-interface-creation.ts";
+import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 import {
 	type RadioIdentity,
 	type RadioLifetime,
@@ -42,7 +52,10 @@ export type TargetRecord = {
 type StoredTarget = {
 	readonly boot: string;
 	readonly first: RadioLifetime | undefined;
-	readonly firstWireless?: Promise<CreatedInterface | undefined>;
+	readonly firstWireless?: {
+		readonly read: Promise<CreatedInterface | undefined>;
+		evidence: HybridLegIdentity;
+	};
 	readonly record?: TargetRecord;
 };
 
@@ -51,6 +64,11 @@ export const selectedTargets = new Map<string, StoredTarget>();
 export const targetRecords = new WeakMap<object, TargetRecord>();
 
 let discoveryBoot: string | null | undefined;
+let firstDiscoveryNames: ReadonlySet<string> | undefined;
+
+export function wasConcurrentTargetListed(ifname: string): boolean | null {
+	return firstDiscoveryNames?.has(ifname) ?? null;
+}
 
 /** First complete discovery is an immutable same-boot identity witness, not adoption. */
 export async function observeConcurrentInterfacesAtFirstDiscovery(
@@ -61,23 +79,84 @@ export async function observeConcurrentInterfacesAtFirstDiscovery(
 	const boot = (await bootIdReader())?.trim();
 	if (discoveryBoot !== undefined) return;
 	discoveryBoot = boot || null;
-	if (!boot) return;
-	for (const name of names) {
-		if (!isConcurrentApIfname(name)) continue;
-		const parent = names.find((entry) => concurrentApIfname(entry) === name);
-		// The wdev witness is read now but never delays discovery; adoption awaits it.
-		const firstWireless =
-			parent && ID_RE.test(name) && isQualifiedNmManagedHybrid(parent)
-				? interfaceRunner("iw", ["dev", name, "info"]).then(
-						interfaceIdentity,
-						() => undefined,
-					)
-				: undefined;
-		selectedTargets.set(name, {
-			boot,
-			first: identities.get(name)?.lifetime,
-			...(firstWireless ? { firstWireless } : {}),
-		});
+	firstDiscoveryNames = new Set(names);
+	if (boot)
+		for (const name of names) {
+			if (!isConcurrentApIfname(name)) continue;
+			const parent = names.find((entry) => concurrentApIfname(entry) === name);
+			const first = identities.get(name)?.lifetime;
+			let firstWireless: StoredTarget["firstWireless"];
+			if (parent && ID_RE.test(name) && isQualifiedNmManagedHybrid(parent)) {
+				const read = interfaceRunner("iw", ["dev", name, "info"]).then(
+					(info) => {
+						const wireless = interfaceIdentity(info);
+						if (firstWireless)
+							firstWireless.evidence = {
+								...hybridIwLegIdentity(info, first),
+								ifindex: first?.ifindex ?? null,
+								wiphy: first?.wiphy ?? null,
+							};
+						return wireless;
+					},
+					() => {
+						if (firstWireless)
+							firstWireless.evidence = hybridLegIdentity(
+								name,
+								first,
+								undefined,
+								"unavailable",
+							);
+						return undefined;
+					},
+				);
+				firstWireless = {
+					read,
+					evidence: hybridLegIdentity(name, first, undefined, "pending"),
+				};
+			}
+			selectedTargets.set(name, {
+				boot,
+				first,
+				...(firstWireless ? { firstWireless } : {}),
+			});
+		}
+	for (const parentIfname of firstDiscoveryNames) {
+		if (
+			!isSupportedWifiIfname(parentIfname) ||
+			!ID_RE.test(parentIfname) ||
+			!isQualifiedNmManagedHybrid(parentIfname)
+		)
+			continue;
+		const targetIfname = concurrentApIfname(parentIfname);
+		const targetListed = firstDiscoveryNames.has(targetIfname);
+		const identity = targetListed ? identities.get(targetIfname) : undefined;
+		const firstWireless = selectedTargets.get(targetIfname)?.firstWireless;
+		const fields = {
+			event: "wifi-hybrid-first-discovery",
+			parentIfname,
+			targetIfname,
+			targetListed,
+			operationalMac: targetListed
+				? (normalizeMacAddress(wifiDeviceListGetMacAddress(targetIfname)) ??
+					null)
+				: null,
+			permanentMac: identity?.permanentMac ?? null,
+			physicalPath: identity?.lifetime?.phyPath ?? null,
+			ifindex: identity?.lifetime?.ifindex ?? null,
+			wiphy: identity?.lifetime?.wiphy ?? null,
+			bootId: boot || null,
+			...hybridDiagnosticTime(),
+		};
+		const log = () =>
+			logger.info("Wi-Fi hybrid target at first discovery", {
+				...fields,
+				wdev: firstWireless?.evidence.wdev ?? null,
+				iwIfindex: firstWireless?.evidence.iwIfindex ?? null,
+				wirelessStatus: firstWireless?.evidence.wirelessStatus ?? "not-read",
+			});
+		// The diagnostic follows the original witness read without holding discovery.
+		if (firstWireless) void firstWireless.read.then(log);
+		else log();
 	}
 }
 
@@ -93,6 +172,7 @@ export function sameLifetime(
 export async function currentTarget(
 	ifname: string,
 	record: TargetRecord,
+	observe?: (identity: HybridLegIdentity) => void,
 ): Promise<boolean> {
 	const boot = await bootIdReader();
 	const parent = await sampleRadio(
@@ -109,14 +189,17 @@ export async function currentTarget(
 			parent?.permanentMac !== identity?.permanentMac) ||
 		!sameLifetime(parent?.lifetime, record.parent) ||
 		!sameLifetime(target?.lifetime, record.target)
-	)
+	) {
+		observe?.(hybridLegIdentity(target && ifname, target?.lifetime, undefined));
 		return false;
+	}
 	const info = await interfaceRunner("iw", [
 		"dev",
 		argMatch(ID_RE, ifname),
 		"info",
 	]).catch(() => "");
 	const wireless = interfaceIdentity(info);
+	observe?.(hybridIwLegIdentity(info, target?.lifetime));
 	return (
 		wireless?.ifindex === record.wireless.ifindex &&
 		Number(wireless.ifindex) === record.target.ifindex &&
@@ -182,4 +265,5 @@ export function resetConcurrentInterfaceDepsForTest(): void {
 	setConcurrentInterfaceDepsForTest(null, null);
 	selectedTargets.clear();
 	discoveryBoot = undefined;
+	firstDiscoveryNames = undefined;
 }

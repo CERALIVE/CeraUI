@@ -52,11 +52,15 @@ export const waitForConcurrentInterface: InterfaceWaiter = (ifname) =>
 	interfaceWaiter(ifname);
 export const readConcurrentBootId = () => bootIdReader();
 
-export async function idleTarget(ifname: string): Promise<boolean> {
+export async function idleTarget(
+	ifname: string,
+	observe?: (props: string[] | undefined) => void,
+): Promise<boolean> {
 	const props = await nmDeviceProp(
 		ifname,
 		"GENERAL.STATE,GENERAL.NM-MANAGED,GENERAL.CON-UUID",
 	);
+	observe?.(props);
 	return (
 		props?.[0] === "30 (disconnected)" &&
 		props[1] === "yes" &&

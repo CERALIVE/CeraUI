@@ -55,6 +55,7 @@ import { handleHotspotConn } from "../modules/wifi/wifi-hotspot-discovery.ts";
 import type { WifiInterfaceWithHotspot } from "../modules/wifi/wifi-hotspot-types.ts";
 import * as interfaces from "../modules/wifi/wifi-interfaces.ts";
 import { getWifiIdToMacAddress } from "../modules/wifi/wifi-interfaces.ts";
+import { restoreLimitedHotspot } from "../modules/wifi/wifi-limited-hotspot-restore.ts";
 import {
 	radioIdentityReaders,
 	wifiRadioIdentity,
@@ -876,7 +877,8 @@ for (const outcome of [
 		if (outcome === "reuse")
 			fixture.targets.set("clap-wlan0", { ifindex: 20, wdev: "0x20" });
 		spyOn(defaultHotspotDeps, "ensureConcurrentInterface").mockImplementation(
-			concurrent.ensureConcurrentApInterface,
+			(ifname, admitted) =>
+				concurrent.ensureConcurrentApInterface(ifname, admitted),
 		);
 		spyOn(defaultHotspotDeps, "readCapabilities").mockReturnValue({
 			staApCombo: { supported: true },
@@ -1122,6 +1124,106 @@ for (const scenario of [
 		expect(getConfig().wifi_modes).toEqual(before);
 	});
 }
+
+test.each(["initial", "target changed", "channel changed"] as const)(
+	"limited hybrid restore reports the structured %s failure",
+	async (stage) => {
+		getConfig().wifi_modes = { [MAC]: "hybrid" };
+		profileIfname = "clap-wlan0";
+		let channelReads = 0;
+		spyOn(concurrent, "readHybridStationChannel").mockImplementation(
+			async () =>
+				stage === "initial"
+					? undefined
+					: {
+							identity:
+								stage === "channel changed"
+									? String(++channelReads)
+									: "station",
+							frequency: 2412,
+							fields: {},
+							sameChannelOnly: true,
+						},
+		);
+		spyOn(concurrent, "revalidateConcurrentApInterface").mockResolvedValue(
+			stage !== "target changed",
+		);
+		const warnings: unknown[][] = [];
+		spyOn(logger, "warn").mockImplementation((...args: unknown[]) => {
+			warnings.push(args);
+			return logger;
+		});
+		await restoreLimitedHotspot(
+			row,
+			{
+				...defaultAdapterModeDeps,
+				readCapabilities: () => ({ staApCombo: { supported: true } }),
+			},
+			() => ({ [MAC]: "hybrid" }),
+			undefined,
+			{ attempt: 2, maxAttempts: 3 },
+		);
+		expect(warnings.map(([, fields]) => fields)).toEqual([
+			expect.objectContaining({
+				event: "wifi-hybrid-target-refused",
+				path: "limited-restore",
+				reasonCode:
+					stage === "initial"
+						? "station-channel-unavailable"
+						: "limited-hybrid-revalidation-failed",
+				subReason:
+					stage === "initial"
+						? "channel-read-unreported"
+						: stage === "target changed"
+							? "target-no-longer-valid"
+							: "station-channel-changed",
+				attempt: 2,
+				maxAttempts: 3,
+			}),
+		]);
+		expect(effects).toEqual(stage === "initial" ? [] : ["direct-modify"]);
+	},
+);
+
+test("limited hybrid revalidation identifies lost admission after binding", async () => {
+	getConfig().wifi_modes = { [MAC]: "hybrid" };
+	profileIfname = "clap-wlan0";
+	spyOn(concurrent, "readHybridStationChannel").mockResolvedValue({
+		identity: "station",
+		frequency: 2412,
+		fields: {},
+		sameChannelOnly: true,
+	});
+	let preference: "hybrid" | "station" = "hybrid";
+	spyOn(nm, "nmConnSetFields").mockImplementation(async () => {
+		preference = "station";
+		return true;
+	});
+	const warnings: unknown[][] = [];
+	spyOn(logger, "warn").mockImplementation((...args: unknown[]) => {
+		warnings.push(args);
+		return logger;
+	});
+	await restoreLimitedHotspot(
+		row,
+		{
+			...defaultAdapterModeDeps,
+			readCapabilities: () => ({ staApCombo: { supported: true } }),
+		},
+		() => ({ [MAC]: preference }),
+		undefined,
+		{ attempt: 2, maxAttempts: 3 },
+	);
+	expect(warnings.map(([, fields]) => fields)).toEqual([
+		expect.objectContaining({
+			event: "wifi-hybrid-target-refused",
+			path: "limited-restore",
+			reasonCode: "limited-hybrid-revalidation-failed",
+			subReason: "admission-lost",
+			attempt: 2,
+		}),
+	]);
+});
 
 test("regulatory change stops a limited live AP without profile or intent writes", async () => {
 	row.activeConn = UUID;

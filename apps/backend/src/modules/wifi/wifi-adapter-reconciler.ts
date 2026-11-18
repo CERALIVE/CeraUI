@@ -58,6 +58,8 @@ export { retryWifiAdapterReconcile } from "./wifi-adapter-reconcile-retry.ts";
 import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 import { sameRadioLifetime, wifiRadioIdentity } from "./wifi-radio-identity.ts";
 
+const MAX_RESTORE_ATTEMPTS = 3;
+
 /**
  * The caller holds the logical owner's lock. Every owned profile participates
  * in the pass; health clears only after the entire owner has converged.
@@ -231,7 +233,7 @@ export async function reconcileWifiAdapterRestoreLocked(
 		return;
 	}
 	if (edge.retryAfter !== undefined && getms() < edge.retryAfter) return;
-	if (edge.attempts >= 3) {
+	if (edge.attempts >= MAX_RESTORE_ATTEMPTS) {
 		markBootDegraded(`wifi-hotspot-restore:${owner}`);
 		return;
 	}
@@ -270,13 +272,16 @@ export async function reconcileWifiAdapterRestoreLocked(
 			recovering: !completed,
 		});
 		if (completed) clearWifiAdapterReconcile(owner, "restore");
-		else if (current.attempts >= 3)
+		else if (current.attempts >= MAX_RESTORE_ATTEMPTS)
 			markBootDegraded(`wifi-hotspot-restore:${owner}`);
 		else retryWifiAdapterReconcile(owner, undefined, "restore");
 	};
 	let accepted = false;
 	try {
-		const result = await request.activate(settle);
+		const result = await request.activate(settle, {
+			attempt: attempted.attempts,
+			maxAttempts: MAX_RESTORE_ATTEMPTS,
+		});
 		if (cycle?.stopped()) return;
 		if (result === undefined) {
 			cycle?.edges.set(owner, edge);

@@ -17,6 +17,12 @@ import {
 } from "./wifi-ap-sta-capability.ts";
 import { parseInterfaceCombination } from "./wifi-capabilities.ts";
 import { runConcurrentInterface as interfaceRunner } from "./wifi-concurrent-interface-io.ts";
+import {
+	type HybridChannelEvidence,
+	type HybridChannelRefusal,
+	type HybridQualificationFailure,
+	hybridFrequencyBand,
+} from "./wifi-hybrid-target-diagnostics.ts";
 import { sameLifetime } from "./wifi-hybrid-target-record.ts";
 import {
 	radioIdentityReaders,
@@ -37,14 +43,24 @@ export type HybridStationChannel = {
 /** Fresh association and exact-phy legality; cached scan/country data cannot admit up. */
 export async function readHybridStationChannel(
 	ifname: string,
+	onRefusal?: (evidence: HybridChannelRefusal) => void,
 ): Promise<HybridStationChannel | undefined> {
+	const evidence: HybridChannelEvidence = {
+		stationAssociated: null,
+		frequencyBand: null,
+		channelPermitted: null,
+	};
+	const refuse = (subReason: HybridChannelRefusal["subReason"]): undefined => {
+		onRefusal?.({ ...evidence, subReason });
+		return undefined;
+	};
 	try {
 		const parent = argMatch(ID_RE, ifname);
 		const before = await sampleRadio(parent, radioIdentityReaders, undefined);
-		if (!before) return undefined;
+		if (!before) return refuse("parent-sample-unavailable");
 		const radio = wifiRadioIdentity.state.rows.get(parent);
 		if (!radio?.lifetime || !sameLifetime(before.lifetime, radio.lifetime))
-			return undefined;
+			return refuse("parent-identity-mismatch");
 		const uuid = (await nmDeviceProp(parent, "GENERAL.CON-UUID"))?.[0];
 		const info = await interfaceRunner("iw", ["dev", parent, "info"]);
 		const link = await interfaceRunner("iw", ["dev", parent, "link"]);
@@ -55,6 +71,8 @@ export async function readHybridStationChannel(
 		const frequency = Number(
 			/^\s*freq:\s*(\d+(?:\.\d+)?)\s*$/m.exec(link)?.[1],
 		);
+		evidence.stationAssociated = Boolean(bssid && bssid[2] === parent);
+		evidence.frequencyBand = hybridFrequencyBand(frequency);
 		const channelInfo = /^\s*channel\s+(\d+)\s+\((\d+(?:\.\d+)?) MHz\)/m.exec(
 			info,
 		);
@@ -70,7 +88,13 @@ export async function readHybridStationChannel(
 			/^\s*Interface\s+(\S+)\s*$/m.exec(info)?.[1] !== parent ||
 			Number(/^\s*wiphy\s+(\d+)\s*$/m.exec(info)?.[1]) !== before.lifetime.wiphy
 		)
-			return undefined;
+			return refuse(
+				!bssid
+					? "not-associated"
+					: !uuid || uuid === "--"
+						? "station-connection-unavailable"
+						: "station-link-mismatch",
+			);
 		const phy = `phy${before.lifetime.wiphy}`;
 		const phyDump = await interfaceRunner("iw", ["phy", phy, "info"]);
 		const combination = fittingApStaCombination(
@@ -82,32 +106,45 @@ export async function readHybridStationChannel(
 			},
 			{ managed: 2, ap: 0, "p2p-device": 1 },
 		);
-		if (!combination) return undefined;
+		if (!combination) return refuse("interface-combination-refused");
 		const capability = parseInterfaceCombination(combination);
-		if (!capability.supported) return undefined;
+		if (!capability.supported) return refuse("interface-combination-refused");
 		const regulatory = await interfaceRunner("iw", ["reg", "get"]);
-		if (!parseRegulatoryDomain(regulatory)) return undefined;
+		if (!parseRegulatoryDomain(regulatory))
+			return refuse("regulatory-evidence-unavailable");
 		const rules = rulesForPhy(parseRegulatoryRules(regulatory), phy);
+		const coveringRules = rules.filter(
+			(rule) =>
+				rule.startMhz <= frequency - 10 && rule.endMhz >= frequency + 10,
+		);
 		if (
-			!rules.some(
+			!coveringRules.some(
 				(rule) =>
-					rule.startMhz <= frequency - 10 &&
-					rule.endMhz >= frequency + 10 &&
 					!rule.flags.some((flag) =>
 						["no ir", "passive scan", "no ibss", "dfs"].includes(flag),
 					),
 			)
-		)
-			return undefined;
+		) {
+			evidence.channelPermitted = false;
+			return refuse(
+				coveringRules.length ? "dfs-or-no-ir" : "no-permitting-regulatory-rule",
+			);
+		}
 		const derived = deriveApChannels(phyDump, phy, regulatory).find(
 			(entry) => entry.freqMhz === frequency,
 		);
+		if (!derived || derived.channel !== Number(channelInfo?.[1])) {
+			evidence.channelPermitted = false;
+			return refuse("ap-channel-unavailable");
+		}
+		evidence.channelPermitted = true;
+		let qualificationFailure: HybridQualificationFailure = "unclassified";
 		if (
-			!derived ||
-			derived.channel !== Number(channelInfo?.[1]) ||
-			!isQualifiedNmManagedHybrid(parent, frequency)
+			!isQualifiedNmManagedHybrid(parent, frequency, (reason) => {
+				qualificationFailure = reason;
+			})
 		)
-			return undefined;
+			return refuse(qualificationFailure);
 		const after = await sampleRadio(parent, radioIdentityReaders, undefined);
 		if (
 			!sameLifetime(after?.lifetime, before.lifetime) ||
@@ -115,7 +152,7 @@ export async function readHybridStationChannel(
 				radio.incarnation ||
 			(await nmDeviceProp(parent, "GENERAL.CON-UUID"))?.[0] !== uuid
 		)
-			return undefined;
+			return refuse("station-identity-changed");
 		return {
 			identity: JSON.stringify([
 				radio.incarnation,
@@ -134,7 +171,7 @@ export async function readHybridStationChannel(
 				: {},
 		};
 	} catch {
-		return undefined;
+		return refuse("channel-read-failed");
 	}
 }
 

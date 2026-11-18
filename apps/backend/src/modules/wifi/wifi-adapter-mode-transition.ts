@@ -77,6 +77,7 @@ import type { HotspotStopResult } from "./wifi-hotspot-config.ts";
 import type { HotspotOutcomePublisher } from "./wifi-hotspot-outcome.ts";
 import type { HotspotStartResult } from "./wifi-hotspot-types.ts";
 import { canHotspot, HOTSPOT_UP_TO } from "./wifi-hotspot-types.ts";
+import type { HybridRestoreAttempt } from "./wifi-hybrid-target-diagnostics.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
 import { takeWifiModeRequestRefusal } from "./wifi-mode-request.ts";
 import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
@@ -96,6 +97,7 @@ export interface AdapterModeTransitionDeps {
 	readonly startHotspot: (
 		device: number,
 		publish: HotspotOutcomePublisher,
+		restoreAttempt?: HybridRestoreAttempt,
 	) => Promise<HotspotStartResult>;
 	readonly stopHotspot: (
 		device: number,

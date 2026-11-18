@@ -64,6 +64,50 @@ qualification, boot, parent lifetime, capacity and profile ownership. Its exact
 nl80211 receipt grants creation authority; readiness and parent/object continuity
 precede the leg-only autoconnect write. A leg appearing after the absence check
 cannot be adopted. Prefixes and names confer no ownership.
+
+First discovery logs `meta.event=wifi-hybrid-first-discovery` for each qualified
+Wi-Fi parent. It records the expected leg name, whether NetworkManager listed
+it, the operational and permanent MACs, the sysfs phy path, ifindex and wiphy,
+and the `iw` witness's wdev and ifindex. The event uses the boot ID and the
+timing captured at discovery. Delivery follows the existing witness read
+without delaying discovery. On a default production device, this info-level
+event is available in the backend debug log. `LOG_LEVEL=info` also sends it to
+the journal.
+
+A selector or station-channel refusal logs `meta.event=wifi-hybrid-target-refused`
+once per restore attempt. An operator Start emits the same event with `attempt`
+and `maxAttempts` set to `null`. `path` identifies `activation` (ordinary
+restore), `limited-restore`, or `operator-start`. `processElapsedMs` measures
+time since the backend process started. `bootUptimeSeconds` measures time
+since OS boot.
+
+- `reasonCode` identifies the rejecting check. `subReason` identifies the
+  failing condition when a check combines several predicates. The five
+  compound selector codes are `parent-identity-mismatch`,
+  `target-witness-mismatch`, `target-iw-identity-mismatch`,
+  `allocated-target-not-ready`, and `target-allocation-failed`.
+  The stored witness reports `stored-boot-mismatch`, `live-target-unavailable`,
+  or `stored-lifetime-mismatch` according to the first failed predicate.
+- `witness` and `observed` show the stored and live target name, ifindex,
+  wiphy, wdev and phy path where available. `iwIfindex` and `iwWiphy`
+  distinguish the wireless read from sysfs. `wirelessStatus` distinguishes
+  `not-read`, `pending`, `unavailable` and `observed`.
+  `first-wireless-observation-unavailable` covers a missing live observation.
+  `first-wireless-witness-mismatch` covers a missing or mismatched stored witness.
+- `station-channel-unavailable` reports failures before target selection.
+  `limited-hybrid-revalidation-failed` reports the later limited-restore check.
+  `stationAssociated`, `frequencyBand` and `channelPermitted` reflect the
+  available association and AP regulatory evidence. Product band qualification
+  is separate from channel permission. `dfs-or-no-ir` comes from a covering
+  parsed regulatory rule. A channel missing from the derived AP list reports
+  `ap-channel-unavailable`. A failed driver lookup reports `unclassified`.
+- Null fields mark evidence that was not read or did not produce a verdict.
+  `targetSampled=false` means the live identity read did not produce a sample.
+  `targetListed` refers to first discovery.
+
+Profile secrets and station network identifiers are excluded. These diagnostics
+do not grant target ownership or change the retry limit.
+
 NetworkManager binds
 the hotspot profile to that interface while the physical interface keeps its
 station profile and bond membership. Start, confirmation, configuration, stop,

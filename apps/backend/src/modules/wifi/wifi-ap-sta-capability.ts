@@ -12,6 +12,7 @@ import { realpathSync } from "node:fs";
 import { basename } from "node:path";
 import { argMatch, ID_RE } from "../../helpers/run.ts";
 import { runIw } from "./regdomain.ts";
+import type { HybridQualificationFailure } from "./wifi-hybrid-target-diagnostics.ts";
 
 type CapabilityRunner = (command: string, args: string[]) => Promise<string>;
 
@@ -177,17 +178,23 @@ export function resetApStaCapabilityStateForTest(): void {
 export function isQualifiedNmManagedHybrid(
 	ifname: string,
 	frequency?: number,
+	onFailure?: (reason: HybridQualificationFailure) => void,
 ): boolean {
 	try {
 		const driver = basename(
 			realpathSync(`/sys/class/net/${argMatch(ID_RE, ifname)}/device/driver`),
 		);
 		// Lift the frequency clause only after the corresponding band is board-qualified.
-		return (
+		const qualified =
 			driver === "mt7925e" &&
-			(frequency === undefined || (frequency >= 2400 && frequency < 2500))
-		);
+			(frequency === undefined || (frequency >= 2400 && frequency < 2500));
+		if (!qualified)
+			onFailure?.(
+				driver === "mt7925e" ? "unqualified-band" : "radio-unqualified",
+			);
+		return qualified;
 	} catch {
+		onFailure?.("unclassified");
 		return false;
 	}
 }

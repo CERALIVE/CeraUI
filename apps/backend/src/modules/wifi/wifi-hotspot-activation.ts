@@ -111,6 +111,13 @@ import {
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
 import {
+	type HybridChannelRefusal,
+	type HybridRestoreAttempt,
+	type HybridTargetRefusal,
+	logHybridChannelRefusal,
+	logHybridTargetRefusal,
+} from "./wifi-hybrid-target-diagnostics.ts";
+import {
 	getMacAddressForWifiInterface,
 	wifiUpdateDevices,
 } from "./wifi-interfaces.ts";
@@ -139,8 +146,8 @@ export const defaultHotspotDeps: HotspotActivationDeps = {
 	pruneHotspotConns: async (macAddress, keepUuid) => {
 		await pruneDuplicateHotspotConns(macAddress, keepUuid);
 	},
-	ensureConcurrentInterface: async (ifname, admitted) =>
-		(await selectConcurrentApInterface(ifname, admitted, true)) ??
+	ensureConcurrentInterface: async (ifname, admitted, onRefusal) =>
+		(await selectConcurrentApInterface(ifname, admitted, true, onRefusal)) ??
 		HYBRID_CHANNEL_REFUSAL,
 	readHybridChannel: readHybridStationChannel,
 	validateConcurrentInterface: revalidateConcurrentApInterface,
@@ -543,6 +550,7 @@ export async function startHotspotLocked(
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotActivationDeps,
 	recordIntent?: (target: WifiAdapterMode) => void,
+	restoreAttempt?: HybridRestoreAttempt,
 ): Promise<HotspotStartResult> {
 	const owner = resolveWifiAdapterOwner(macAddress, wifiInterface);
 	if (!(await reconcileWifiAdapterTeardownLocked(owner)).complete)
@@ -587,9 +595,13 @@ export async function startHotspotLocked(
 	};
 	const useConcurrentAp =
 		concurrency === true && (deps.preferConcurrentAp?.(owner) ?? true);
+	const diagnosticPath = restoreAttempt ? "activation" : "operator-start";
+	let channelRefusal: HybridChannelRefusal | undefined;
 	const hybridChannel =
 		useConcurrentAp && deps.readHybridChannel
-			? await deps.readHybridChannel(ifname)
+			? await deps.readHybridChannel(ifname, (refusal) => {
+					channelRefusal = refusal;
+				})
 			: undefined;
 	if (!owned()) return { success: false, error: "activation-failed" };
 	if (useConcurrentAp && deps.readHybridChannel && !hybridChannel) {
@@ -597,6 +609,13 @@ export async function startHotspotLocked(
 		if (active && active === wifiInterface.hotspot.conn && owned(active)) {
 			await stopRejectedHybrid(active);
 		}
+		logHybridChannelRefusal(
+			`wifi hotspot start: hybrid-channel-not-permitted on ${ifname}`,
+			ifname,
+			diagnosticPath,
+			restoreAttempt,
+			channelRefusal,
+		);
 		return {
 			success: false,
 			error: "activation-failed",
@@ -665,8 +684,15 @@ export async function startHotspotLocked(
 		return { success: false, error: "DEVICE_BUSY" };
 	}
 	recordChosenMode(useConcurrentAp ? "hybrid" : "hotspot");
+	let targetRefusal: HybridTargetRefusal | undefined;
 	const allocation = useConcurrentAp
-		? await deps.ensureConcurrentInterface?.(ifname, () => owned())
+		? await deps.ensureConcurrentInterface?.(
+				ifname,
+				() => owned(),
+				(refusal) => {
+					targetRefusal = refusal;
+				},
+			)
 		: undefined;
 	const concurrentInterface =
 		allocation === HYBRID_CHANNEL_REFUSAL ? undefined : allocation;
@@ -698,13 +724,22 @@ export async function startHotspotLocked(
 	let refusal: HotspotStartResult | undefined;
 	let rollbackState: (() => HotspotStartResult) | undefined;
 	try {
-		if (!owned()) {
+		const stillOwned = owned();
+		const noTarget = useConcurrentAp && concurrentInterface === undefined;
+		if (noTarget && (stillOwned || targetRefusal)) {
+			logHybridTargetRefusal(
+				`wifi hotspot start: unreconciled hybrid target on ${ifname}`,
+				ifname,
+				diagnosticPath,
+				hybridChannel ? true : null,
+				restoreAttempt,
+				targetRefusal,
+			);
+		}
+		if (!stillOwned) {
 			return { success: false, error: "activation-failed" };
 		}
-		if (useConcurrentAp && concurrentInterface === undefined) {
-			logger.warn(
-				`wifi hotspot start: unreconciled hybrid target on ${ifname}`,
-			);
+		if (noTarget) {
 			return {
 				success: false,
 				error: "activation-failed",

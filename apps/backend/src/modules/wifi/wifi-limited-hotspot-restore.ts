@@ -39,6 +39,13 @@ import {
 	type HotspotStartResult,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
+import {
+	type HybridChannelRefusal,
+	type HybridRestoreAttempt,
+	type HybridTargetRefusal,
+	logHybridChannelRefusal,
+	logHybridTargetRefusal,
+} from "./wifi-hybrid-target-diagnostics.ts";
 
 /** Boot-only D12 path. Requests never receive this activation authority. */
 export async function restoreLimitedHotspot(
@@ -46,6 +53,7 @@ export async function restoreLimitedHotspot(
 	deps: AdapterModeTransitionDeps,
 	readPreferences: typeof getPersistedWifiAdapterModes,
 	stopped: () => boolean = () => false,
+	restoreAttempt?: HybridRestoreAttempt,
 ): Promise<HotspotStartResult | undefined> {
 	if (stopped()) return undefined;
 	let refusalLogged = false;
@@ -94,42 +102,42 @@ export async function restoreLimitedHotspot(
 	if (fields[0] !== "ap") return pending("owned AP profile missing");
 	const channel = channelFromNM(fields[1], fields[2]);
 	let hybridUnavailable = false;
-	const admitted = (): boolean => {
+	const admitted = (reject = refuse): boolean => {
 		if (stopped()) return false;
 		const current = Object.values(deps.resolveInterfaces()).filter(canHotspot);
 		if (current.length !== 1 || current[0] !== row)
-			return refuse("requires exactly one hotspot-capable adapter");
+			return reject("requires exactly one hotspot-capable adapter");
 		if (
 			row.degradedReason !== "permanent-mac-unresolved" ||
 			observedWifiAdapterMode(row) !== "station" ||
 			row.hotspot.transition
 		)
-			return refuse("adapter is no longer eligible");
+			return reject("adapter is no longer eligible");
 		const latest = readPreferences();
 		if (
 			resolveWifiAdapterModeIntentKey("limited", latest, 1) !== key ||
 			latest[key] !== desired
 		)
-			return refuse("logical intent changed");
+			return reject("logical intent changed");
 		refreshHotspotChannels(row.hotspot, getDerivedApChannels());
 		if (
 			desired !== "hybrid" &&
 			channel !== "auto" &&
 			!row.hotspot.availableChannels.includes(channel)
 		)
-			return refuse("stored channel is no longer permitted");
+			return reject("stored channel is no longer permitted");
 		const concurrency = wifiAdapterModeCapability(
 			row,
 			deps.readCapabilities,
 		).staApComboSupported;
 		if (desired === "hybrid" && concurrency !== true) {
 			hybridUnavailable = true;
-			return refuse("hybrid capability is not proven");
+			return reject("hybrid capability is not proven");
 		}
 		if (desired === "hybrid" && fields[3] !== concurrentApIfname(row.ifname))
-			return refuse("owned profile does not target the hybrid interface");
+			return reject("owned profile does not target the hybrid interface");
 		if (desired === "hotspot" && row.conn && getIsStreaming())
-			return refuse("streaming keeps the station link");
+			return reject("streaming keeps the station link");
 		return true;
 	};
 	if (!admitted())
@@ -159,17 +167,60 @@ export async function restoreLimitedHotspot(
 			},
 		});
 	};
+	let channelRefusal: HybridChannelRefusal | undefined;
+	const readChannel = () => {
+		channelRefusal = undefined;
+		return readHybridStationChannel(row.ifname, (refusal) => {
+			channelRefusal = refusal;
+		});
+	};
+	const logChannel = (
+		reason: string,
+		revalidation?: Parameters<typeof logHybridChannelRefusal>[5],
+	): false => {
+		if (!refusalLogged) {
+			logHybridChannelRefusal(
+				`limited restore: ${reason} on ${row.ifname}`,
+				row.ifname,
+				"limited-restore",
+				restoreAttempt,
+				channelRefusal,
+				revalidation,
+			);
+			refusalLogged = true;
+		}
+		return false;
+	};
 	try {
 		const hybridChannel =
-			desired === "hybrid"
-				? await readHybridStationChannel(row.ifname)
-				: undefined;
-		if (desired === "hybrid" && !hybridChannel)
+			desired === "hybrid" ? await readChannel() : undefined;
+		if (desired === "hybrid" && !hybridChannel) {
+			logChannel("hybrid-channel-not-permitted");
 			return refuseHybrid("hybrid-channel-not-permitted");
+		}
 		if (desired === "hybrid") {
-			target = await selectConcurrentApInterface(row.ifname, admitted, true);
+			let targetRefusal: HybridTargetRefusal | undefined;
+			target = await selectConcurrentApInterface(
+				row.ifname,
+				admitted,
+				true,
+				(refusal) => {
+					targetRefusal = refusal;
+				},
+			);
 			if (!admitted()) return undefined;
 			if (!target) {
+				if (!refusalLogged) {
+					logHybridTargetRefusal(
+						`limited restore: hybrid interface is unavailable on ${row.ifname}`,
+						row.ifname,
+						"limited-restore",
+						true,
+						restoreAttempt,
+						targetRefusal,
+					);
+					refusalLogged = true;
+				}
 				return refuseHybrid("hybrid interface is unavailable");
 			}
 			const selectedIfname = target.ifname;
@@ -191,13 +242,34 @@ export async function restoreLimitedHotspot(
 				).success
 			)
 				return pending("hybrid profile binding failed");
+			const initialFrequency = hybridChannel?.frequency;
 			if (
-				!admitted() ||
-				!(await revalidateConcurrentApInterface(target)) ||
-				(await readHybridStationChannel(row.ifname))?.identity !==
-					hybridChannel?.identity
-			)
+				!admitted((reason: string) =>
+					logChannel(reason, { subReason: "admission-lost", initialFrequency }),
+				)
+			) {
+				logChannel("hybrid-channel-not-permitted", {
+					subReason: "admission-lost",
+					initialFrequency,
+				});
 				return refuseHybrid("hybrid-channel-not-permitted");
+			}
+			if (!(await revalidateConcurrentApInterface(target))) {
+				logChannel("hybrid-channel-not-permitted", {
+					subReason: "target-no-longer-valid",
+					initialFrequency,
+				});
+				return refuseHybrid("hybrid-channel-not-permitted");
+			}
+			const observed = await readChannel();
+			if (observed?.identity !== hybridChannel?.identity) {
+				logChannel("hybrid-channel-not-permitted", {
+					subReason: "station-channel-changed",
+					initialFrequency,
+					observedFrequency: observed?.frequency,
+				});
+				return refuseHybrid("hybrid-channel-not-permitted");
+			}
 		}
 		if (!canUseHotspotConnection(key, stored.conn))
 			return pending("profile ownership changed");

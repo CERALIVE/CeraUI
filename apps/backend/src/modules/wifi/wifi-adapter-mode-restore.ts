@@ -98,7 +98,7 @@ async function applyWifiAdapterModes(
 							deps.resolveInterfaces()[registryKey] === row &&
 							(key === undefined ? undefined : readPreferences()[key]) ===
 								desired,
-						activate: (settle) =>
+						activate: (settle, attempt) =>
 							admitWifiRequest(
 								row,
 								async () => {
@@ -108,6 +108,7 @@ async function applyWifiAdapterModes(
 											deps,
 											readPreferences,
 											cycle?.stopped,
+											attempt,
 										);
 									if (desired === undefined || desired === "station")
 										return undefined;
@@ -142,11 +143,15 @@ async function applyWifiAdapterModes(
 										);
 										return undefined;
 									}
-									return deps.startHotspot(row.id, (...args) => {
-										deps.publishHotspotOutcome(...args);
-										if (args[2].success || args[2].error !== "DEVICE_BUSY")
-											settle(args[2].success);
-									});
+									return deps.startHotspot(
+										row.id,
+										(...args) => {
+											deps.publishHotspotOutcome(...args);
+											if (args[2].success || args[2].error !== "DEVICE_BUSY")
+												settle(args[2].success);
+										},
+										attempt,
+									);
 								},
 								(refusal) => refusal,
 							),

@@ -22,6 +22,12 @@ import {
 	setConcurrentAutoconnect,
 } from "./wifi-concurrent-interface-io.ts";
 import {
+	type AllocationFailure,
+	type HybridLegIdentity,
+	hybridIwLegIdentity,
+	hybridLegIdentity,
+} from "./wifi-hybrid-target-diagnostics.ts";
+import {
 	type CreatedInterface,
 	concurrentApIfname,
 	createdInterfaceReceipt,
@@ -64,21 +70,28 @@ export async function ensureConcurrentApInterface(
 	parentIfname: string,
 	admitted: () => boolean = () => true,
 	creationPermit?: ((created: CreatedInterface) => Promise<boolean>) | false,
+	onRefusal?: (reason: AllocationFailure) => void,
 ): Promise<ConcurrentApInterface | undefined> {
 	const parent = argMatch(ID_RE, parentIfname);
 	const ifname = argMatch(ID_RE, concurrentApIfname(parentIfname));
-	if (!admitted()) return undefined;
+	const refuse = (reason: AllocationFailure): undefined => {
+		onRefusal?.(reason);
+		return undefined;
+	};
+	if (!admitted()) return refuse("admission-lost-before-lookup");
 	const info = await interfaceRunner("iw", ["dev", ifname, "info"]).catch(
 		() => undefined,
 	);
-	if (!admitted()) return undefined;
+	if (!admitted()) return refuse("admission-lost-after-lookup");
 	if (info !== undefined) {
-		if (!/^\s*type\s+managed\s*$/m.test(info)) return undefined;
+		if (!/^\s*type\s+managed\s*$/m.test(info))
+			return refuse("borrowed-role-not-managed");
 		const visible = await interfaceWaiter(ifname);
-		if (!admitted() || !visible) return undefined;
+		if (!admitted()) return refuse("admission-lost-after-borrowed-wait");
+		if (!visible) return refuse("borrowed-nm-not-visible");
 		return { ifname, created: false, type: "managed" };
 	}
-	if (creationPermit === false) return undefined;
+	if (creationPermit === false) return refuse("create-forbidden");
 	const target: ConcurrentApInterface = {
 		ifname,
 		created: true,
@@ -86,6 +99,7 @@ export async function ensureConcurrentApInterface(
 	};
 	if (creationPermit) cleanupChecks.set(target, creationPermit);
 	let handedOff = false;
+	let createCommandFailed = false;
 	try {
 		const receipt = await interfaceRunner("iw", [
 			"--debug",
@@ -97,6 +111,7 @@ export async function ensureConcurrentApInterface(
 			"type",
 			"managed",
 		]).catch((error: unknown) => {
+			createCommandFailed = true;
 			const partial =
 				error instanceof RunTimeoutError || error instanceof RunAbortError
 					? error.partialStderr
@@ -114,10 +129,10 @@ export async function ensureConcurrentApInterface(
 			logger.warn(
 				`Wi-Fi interface creation receipt unavailable for ${ifname}; refusing ownership`,
 			);
-			return undefined;
+			return refuse("creation-receipt-unavailable");
 		}
 		createdInterfaces.set(target, identity);
-		if (!admitted()) return undefined;
+		if (!admitted()) return refuse("admission-lost-after-create");
 		// This read observes the captured object; it never grants ownership.
 		const matchesIdentity = async () => {
 			const info = await interfaceRunner("iw", [
@@ -132,24 +147,31 @@ export async function ensureConcurrentApInterface(
 				/^\s*Interface\s+(\S+)\s*$/m.exec(info)?.[1] === ifname
 			);
 		};
-		if (!(await matchesIdentity())) return undefined;
+		if (!(await matchesIdentity())) return refuse("created-identity-mismatch");
 		const visible = await interfaceWaiter(ifname);
-		if (!admitted()) return undefined;
+		if (!admitted()) return refuse("admission-lost-after-created-wait");
 		if (visible) {
-			if (!(await matchesIdentity())) return undefined;
-			if (creationPermit && !(await creationPermit(identity))) return undefined;
+			if (!(await matchesIdentity()))
+				return refuse("created-identity-changed-after-wait");
+			if (creationPermit && !(await creationPermit(identity)))
+				return refuse("creation-permit-refused");
 			if (!(await setConcurrentAutoconnect(ifname, "no", matchesIdentity)))
-				return undefined;
-			if (!admitted()) return undefined;
+				return refuse("created-autoconnect-refused");
+			if (!admitted())
+				return refuse("admission-lost-after-created-autoconnect");
 			handedOff = true;
 			return target;
 		}
 	} catch {
-		return undefined;
+		return refuse(
+			createCommandFailed
+				? "create-command-failed"
+				: "allocation-read-or-write-failed",
+		);
 	} finally {
 		if (!handedOff) await releaseCreatedConcurrentApInterface(target);
 	}
-	return undefined;
+	return refuse("created-nm-not-visible");
 }
 
 export async function revalidateCreatedConcurrentApInterface(
@@ -157,8 +179,10 @@ export async function revalidateCreatedConcurrentApInterface(
 		readonly ifname: string;
 	},
 	expected?: CreatedInterface,
+	observe?: (witness: HybridLegIdentity, observed?: HybridLegIdentity) => void,
 ): Promise<boolean> {
 	const created = createdInterfaces.get(target);
+	if (observe) observe(hybridLegIdentity(target.ifname, undefined, created));
 
 	if (
 		!created ||
@@ -178,6 +202,11 @@ export async function revalidateCreatedConcurrentApInterface(
 	]).catch(() => "");
 
 	const current = interfaceIdentity(info);
+	if (observe)
+		observe(
+			hybridLegIdentity(target.ifname, undefined, created),
+			hybridIwLegIdentity(info),
+		);
 
 	return (
 		current?.ifindex === created.ifindex &&

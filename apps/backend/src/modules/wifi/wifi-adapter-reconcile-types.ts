@@ -6,6 +6,7 @@ import type {
 	HotspotStartResult,
 	WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
+import type { HybridRestoreAttempt } from "./wifi-hybrid-target-diagnostics.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
 import type { RadioIdentity, RadioLifetime } from "./wifi-radio-identity.ts";
 
@@ -43,6 +44,7 @@ export type WifiRestoreRequest = {
 	readonly isCurrent?: () => boolean;
 	readonly activate: (
 		settle: (confirmed: boolean) => void,
+		attempt: HybridRestoreAttempt,
 	) => Promise<HotspotStartResult | undefined>;
 };
 

@@ -40,17 +40,20 @@ export const defaultAdapterModeDeps: AdapterModeTransitionDeps = {
 	readHybridChannel: readHybridStationChannel,
 	resolveInterfaces: getWifiInterfacesByMacAddress,
 	isAdapterBusy: probeAdapterBusy,
-	startHotspot: async (device, publish) => {
+	startHotspot: async (device, publish, restoreAttempt) => {
 		const found = findAdapterByDevice(device, getWifiInterfacesByMacAddress());
 		const { recordIntent: _recorder, ...deps } = defaultHotspotDeps;
 		const result: HotspotStartResult = !found
 			? { success: false, error: "no-device" }
 			: !canHotspot(found.wifiInterface)
 				? { success: false, error: "unsupported" }
-				: await startHotspotLocked(found.macAddress, found.wifiInterface, {
-						...deps,
-						publishOutcome: publish,
-					});
+				: await startHotspotLocked(
+						found.macAddress,
+						found.wifiInterface,
+						{ ...deps, publishOutcome: publish },
+						undefined,
+						restoreAttempt,
+					);
 		if (!result.success) publish("start", device, result);
 		return result;
 	},

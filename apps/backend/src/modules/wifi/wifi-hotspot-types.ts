@@ -47,6 +47,7 @@ import {
 	type HotspotSecurityId,
 	hotspotSecurityFields,
 } from "./wifi-hotspot-security.ts";
+import type { HybridTargetRefusal } from "./wifi-hybrid-target-diagnostics.ts";
 import type { BaseWifiInterface, WifiInterface } from "./wifi-interfaces.ts";
 import type { VirtualHotspotBinding } from "./wifi-virtual-binding.ts";
 
@@ -235,6 +236,7 @@ export type HotspotActivationDeps = {
 	ensureConcurrentInterface?: (
 		ifname: string,
 		admitted?: () => boolean,
+		onRefusal?: (refusal: HybridTargetRefusal) => void,
 	) => Promise<
 		| { ifname: string; created: boolean }
 		| typeof HYBRID_CHANNEL_REFUSAL
