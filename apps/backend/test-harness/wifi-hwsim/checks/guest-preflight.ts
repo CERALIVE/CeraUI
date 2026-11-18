@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, open, readdir, readFile, realpath, rm, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { run, runWithStdin } from '../../../src/helpers/run.ts';
 import { installNativeNmcliShim } from './first-ap-nmcli-shim.ts';
 import { probeNetworkManager } from './guest-preflight-nm.ts';
 import { waitForManagedWifiDevice } from './hybrid-readiness.ts';
+import { canonicalIwPhy } from './observations.ts';
 
 const secret = `preflight-${crypto.randomUUID()}`;
 const results: {
@@ -144,10 +145,22 @@ try {
 			const phy = await realpath(`/sys/class/net/${name}/phy80211`).catch(() => '');
 			if (!phy.includes('/mac80211_hwsim/')) continue;
 			radios.push(name);
+		}
+		const observations: { readonly phy: string; readonly raw: string }[] = [];
+		for (const name of radios) {
+			const phy = await realpath(`/sys/class/net/${name}/phy80211`);
+			const id = phy.split('/').at(-1) ?? '';
+			const raw = await run('iw', ['phy', id, 'info']);
+			const directory = process.argv[2];
+			if (!directory) throw new Error('Missing observation receipt directory');
+			await writeFile(join(directory, `iw-${id}-info.txt`), raw, { mode: 0o600 });
+			observations.push({ phy, raw });
+		}
+		for (const { phy, raw } of observations) {
 			const mac = (await readFile(`${phy}/macaddress`, 'utf8')).trim().toLowerCase();
 			assert(!macs.has(mac), 'Duplicate permanent radio MAC');
 			macs.add(mac);
-			const info = await run('iw', ['phy', phy.split('/').at(-1) ?? '', 'info']);
+			const info = canonicalIwPhy(raw);
 			assert.match(info, /\* AP\b/);
 			assert.match(info, /2437 MHz \[6\](?![^\n]*disabled)/);
 		}

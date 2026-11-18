@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { managedWifiState } from "./observations.ts";
 
 type ReadinessCommand = (
 	argv: string[],
@@ -21,14 +22,6 @@ export class WifiDeviceReadinessTimeout extends Error {
 		this.name = "WifiDeviceReadinessTimeout";
 	}
 }
-
-const managedStates = new Set([
-	"disconnected",
-	"connecting",
-	"connected",
-	"disconnecting",
-	"failed",
-]);
 
 /** Each read observes NM state; the deadline never supplies readiness or retries an activation. */
 export async function waitForManagedWifiDevice(
@@ -59,15 +52,7 @@ export async function waitForManagedWifiDevice(
 			continue;
 		}
 		if (signal.aborted) break;
-		const ready = lastDeviceStates
-			.split("\n")
-			.map((line) => line.split(":"))
-			.find(
-				([name, type, state]) =>
-					name === device &&
-					type === "wifi" &&
-					managedStates.has(state?.split(" ")[0] ?? ""),
-			)?.[2];
+		const ready = managedWifiState(lastDeviceStates, device);
 		if (ready) return ready;
 	}
 

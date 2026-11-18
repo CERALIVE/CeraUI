@@ -371,9 +371,7 @@ for ((attempt=0; attempt<20; attempt++)); do
 done
 grep -q AP-ENABLED /run/hwsim-hostapd.log || { cat /run/hwsim-hostapd.log >&2; exit 1; }
 # The AP supplies association only; static test addresses avoid needing DHCP.
-nmcli connection add type wifi ifname "$client" con-name CeraTest ssid CeraTest \
-	wifi-sec.key-mgmt wpa-psk wifi-sec.psk ceratest1234 \
-	ipv4.method manual ipv4.addresses 192.0.2.2/24 ipv6.method disabled
+HWSIM_REPO=/repo bash /harness/bootstrap-client.sh "$client"
 printf '%s\n' "$client" >/run/hwsim-client
 echo "run-vm.sh: AP CeraTest ready; client=$client"
 GUEST

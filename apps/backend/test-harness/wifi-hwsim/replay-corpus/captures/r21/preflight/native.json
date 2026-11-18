@@ -1,0 +1,122 @@
+[
+	{
+		"name": "native-boundary",
+		"passed": true,
+		"detail": ""
+	},
+	{
+		"name": "backend-imports",
+		"passed": true,
+		"detail": ""
+	},
+	{
+		"name": "check-syntax",
+		"passed": true,
+		"detail": ""
+	},
+	{
+		"name": "state-filesystem",
+		"passed": true,
+		"detail": ""
+	},
+	{
+		"name": "websocket-loopback",
+		"passed": true,
+		"detail": ""
+	},
+	{
+		"name": "shim-install",
+		"passed": true,
+		"detail": ""
+	},
+	{
+		"name": "shim-run",
+		"passed": true,
+		"detail": ""
+	},
+	{
+		"name": "shim-runWithStdin",
+		"passed": true,
+		"detail": ""
+	},
+	{
+		"name": "explicit-child-environment",
+		"passed": true,
+		"detail": ""
+	},
+	{
+		"name": "four-clean-radios",
+		"passed": false,
+		"detail": "The input did not match the regular expression /2437 MHz \\[6\\](?![^\\n]*disabled)/. Input:\n\n'Wiphy phy0\\n' +\n  '\\twiphy index: 0\\n' +\n  '\\tmax # scan SSIDs: 4\\n' +\n  '\\tmax scan IEs length: 2109 bytes\\n' +\n  '\\tmax # sched scan SSIDs: 0\\n' +\n  '\\tmax # match sets: 0\\n' +\n  '\\tRetry short limit: 7\\n' +\n  '\\tRetry long limit: 4\\n' +\n  '\\tCoverage class: 0 (up to 0m)\\n' +\n  '\\tDevice supports RSN-IBSS.\\n' +\n  '\\tDevice supports AP-side u-APSD.\\n' +\n  '\\tDevice supports T-DLS.\\n' +\n  '\\tSupported Ciphers:\\n' +\n  '\\t\\t* WEP40 (00-0f-ac:1)\\n' +\n  '\\t\\t* WEP104 (00-0f-ac:5)\\n' +\n  '\\t\\t* TKIP (00-0f-ac:2)\\n' +\n  '\\t\\t* CCMP-128 (00-0f-ac:4)\\n' +\n  '\\t\\t* CCMP-256 (00-0f-ac:10)\\n' +\n  '\\t\\t* GCMP-128 (00-0f-ac:8)\\n' +\n  '\\t\\t* GCMP-256 (00-0f-ac:9)\\n' +\n  '\\t\\t* CMAC (00-0f-ac:6)\\n' +\n  '\\t\\t* CMAC-256 (00-0f-ac:13)\\n' +\n  '\\t\\t* GMAC-128 (00-0f-ac:11)\\n' +\n  '\\t\\t* GMAC-256 (00-0f-ac:12)\\n' +\n  '\\tAvailable Antennas: TX 0 RX 0\\n' +\n  '\\tSupported interface modes:\\n' +\n  '\\t\\t * IBSS\\n' +\n  '\\t\\t * managed\\n' +\n  '\\t\\t * AP\\n' +\n  '\\t\\t * AP/VLAN\\n' +\n  '\\t\\t * monitor\\n' +\n  '\\t\\t * mesh point\\n' +\n  '\\t\\t * P2P-client\\n' +\n  '\\t\\t * P2P-GO\\n' +\n  '\\t\\t * P2P-device\\n' +\n  '\\t\\t * outside context of a BSS\\n' +\n  '\\tBand 1:\\n' +\n  '\\t\\tCapabilities: 0x107e\\n' +\n  '\\t\\t\\tHT20/HT40\\n' +\n  '\\t\\t\\tSM Power Save disabled\\n' +\n  '\\t\\t\\tRX Greenfield\\n' +\n  '\\t\\t\\tRX HT20 SGI\\n' +\n  '\\t\\t\\tRX HT40 SGI\\n' +\n  '\\t\\t\\tNo RX STBC\\n' +\n  '\\t\\t\\tMax AMSDU length: 3839 bytes\\n' +\n  '\\t\\t\\tDSSS/CCK HT40\\n' +\n  '\\t\\tMaximum RX AMPDU length 65535 bytes (exponent: 0x003)\\n' +\n  '\\t\\tMinimum RX AMPDU time spacing: 8 usec (0x06)\\n' +\n  '\\t\\tHT TX/RX MCS rate indexes supported: 0-15\\n' +\n  '\\t\\tHE Iftypes: managed, P2P-client\\n' +\n  '\\t\\t\\tHE MAC Capabilities (0x78011ac80040):\\n' +\n  '\\t\\t\\t\\t+HTC HE Supported\\n' +\n  '\\t\\t\\t\\tTrigger Frame MAC Padding Duration: 2\\n' +\n  '\\t\\t\\t\\tMulti-TID Aggregation Support: 7\\n' +\n  '\\t\\t\\t\\tBSR\\n' +\n  '\\t\\t\\t\\tMU Cascading\\n' +\n  '\\t\\t\\t\\tAck-Enabled Aggregation\\n' +\n  '\\t\\t\\t\\tOM Control\\n' +\n  '\\t\\t\\t\\tMaximum A-MPDU Length Exponent: 3\\n' +\n  '\\t\\t\\t\\tA-MSDU in A-MPDU\\n' +\n  '\\t\\t\\tHE PHY Capabilities: (0x02bfce0000000000000000):\\n' +\n  '\\t\\t\\t\\tHE40/2.4GHz\\n' +\n  '\\t\\t\\t\\tPunctured Preamble RX: 15\\n' +\n  '\\t\\t\\t\\tDevice Class: 1\\n' +\n  '\\t\\t\\t\\tLDPC Coding in Payload\\n' +\n  '\\t\\t\\t\\tMidamble Rx Max NSTS: 1\\n' +\n  '\\t\\t\\t\\tNDP with 4x HE-LTF and 3.2us GI\\n' +\n  '\\t\\t\\t\\tSTBC Tx <= 80MHz\\n' +\n  '\\t\\t\\t\\tSTBC Rx <= 80MHz\\n' +\n  '\\t\\t\\t\\tFull Bandwidth UL MU-MIMO\\n' +\n  '\\t\\t\\t\\tPartial Bandwidth UL MU-MIMO\\n' +\n  '\\t\\t\\tHE RX MCS and NSS set <= 80 MHz\\n' +\n  '\\t\\t\\t\\t1 streams: MCS 0-11\\n' +\n  '\\t\\t\\t\\t2 streams: MCS 0-11\\n' +\n  '\\t\\t\\t\\t3 streams: not supported\\n' +\n  '\\t\\t\\t\\t4 streams: not supported\\n' +\n  '\\t\\t\\t\\t5 streams: not supported\\n' +\n  '\\t\\t\\t\\t6 streams: not supported\\n' +\n  '\\t\\t\\t\\t7 streams: not supported\\n' +\n  '\\t\\t\\t\\t8 streams: not supported\\n' +\n  '\\t\\t\\tHE TX MCS and NSS set <= 80 MHz\\n' +\n  '\\t\\t\\t\\t1 streams: MCS 0-11\\n' +\n  '\\t\\t\\t\\t2 streams: MCS 0-11\\n' +\n  '\\t\\t\\t\\t3 streams: not supported\\n' +\n  '\\t\\t\\t\\t4 streams: not supported\\n' +\n  '\\t\\t\\t\\t5 streams: not supported\\n' +\n  '\\t\\t\\t\\t6 streams: not supported\\n' +\n  '\\t\\t\\t\\t7 streams: not supported\\n' +\n  '\\t\\t\\t\\t8 streams: not supported\\n' +\n  '\\t\\tEHT Iftypes: managed, P2P-client\\n' +\n  '\\t\\t\\tEHT MAC Capabilities (0x0700):\\n' +\n  '\\t\\t\\t\\tNSEP priority access Supported\\n' +\n  '\\t\\t\\t\\tEHT OM Control Supported\\n' +\n  '\\t\\t\\t\\tTriggered TXOP Sharing Supported\\n' +\n  '\\t\\t\\tEHT PHY Capabilities: (0x7c0000feffff7f01):\\n' +\n  '\\t\\t\\t\\t242-tone RU in BW wider than 20MHz Supported\\n' +\n  '\\t\\t\\t\\tNDP With  EHT-LTF And 3.2 µs GI\\n' +\n  '\\t\\t\\t\\tPartial Bandwidth UL MU-MIMO\\n' +\n  '\\t\\t\\t\\tSU Beamformer\\n' +\n  '\\t\\t\\t\\tSU Beamformee\\n' +\n  '\\t\\t\\t\\tNg = 16 SU Feedback\\n' +\n  '\\t\\t\\t\\tNg = 16 MU Feedback\\n' +\n  '\\t\\t\\t\\tCodebook size (4, 2) SU Feedback\\n' +\n  '\\t\\t\\t\\tCodebook size (7, 5) MU Feedback\\n' +\n  '\\t\\t\\t\\tTriggered SU Beamforming Feedback\\n' +\n  '\\t\\t\\t\\tTriggered MU Beamforming Partial BW Feedback\\n' +\n  '\\t\\t\\t\\tTriggered CQI Feedback\\n' +\n  '\\t\\t\\t\\tPartial Bandwidth DL MU-MIMO\\n' +\n  '\\t\\t\\t\\tPSR-Based SR Support\\n' +\n  '\\t\\t\\t\\tPower Boost Factor Support\\n' +\n  '\\t\\t\\t\\tEHT MU PPDU With 4 EHT-LTF And 0.8 µs GI\\n' +\n  '\\t\\t\\t\\tMax Nc: 15\\n' +\n  '\\t\\t\\t\\tNon-Triggered CQI Feedback\\n' +\n  '\\t\\t\\t\\tTx 1024-QAM And 4096-QAM < 242-tone RU\\n' +\n  '\\t\\t\\t\\tRx 1024-QAM And 4096-QAM < 242-tone RU\\n' +\n  '\\t\\t\\t\\tPPE Thresholds Present\\n' +\n  '\\t\\t\\t\\tCommon Nominal Packet Padding: 3\\n' +\n  '\\t\\t\\t\\tMaximum Number Of Supported EHT-LTFs: 31\\n' +\n  '\\t\\t\\t\\tSupport of MCS 15: 15\\n' +\n  '\\t\\t\\t\\tSupport For 20MHz Rx NDP With Wider Bandwidth\\n' +\n  '\\t\\t\\tEHT MCS/NSS: (0x88888800000000000000000000):\\n' +\n  '\\t\\t\\tEHT bw=20 MHz, max NSS for MCS 0-7: Rx=8, Tx=8\\n' +\n  '\\t\\t\\tEHT bw=20 MHz, max NSS for MCS 8-9: Rx=8, Tx=8\\n' +\n  '\\t\\t\\tEHT bw=20 MHz, max NSS for MCS 10-11: Rx=8, Tx=8\\n' +\n  '\\t\\t\\tEHT bw=20 MHz, max NSS for MCS 12-13: Rx=0, Tx=0\\n' +\n  '\\t\\t\\tEHT PPE Thresholds \\n' +\n  '\\t\\tHE Iftypes: AP, P2P-GO\\n' +\n  '\\t\\t\\tHE MAC Capabilities (0x78011ac80040):\\n' +\n  '\\t\\t\\t\\t+HTC HE Supported\\n' +\n  '\\t\\t\\t\\tTrigger Frame MAC Padding Duration: 2\\n' +\n  '\\t\\t\\t\\tMulti-TID Aggregation Support: 7\\n' +\n  '\\t\\t\\t\\tBSR\\n' +\n  '\\t\\t\\t\\tMU Cascading\\n' +\n  '\\t\\t\\t\\tAck-Enabled Aggregation\\n' +\n  '\\t\\t\\t\\tOM Control\\n' +\n  '\\t\\t\\t\\tMaximum A-MPDU Length Exponent: 3\\n' +\n  '\\t\\t\\t\\tA-MSDU in A-MPDU\\n' +\n  '\\t\\t\\tHE PHY Capabilities: (0x02bfce0000000000000000):\\n' +\n  '\\t\\t\\t\\tHE40/2.4GHz\\n' +\n  '\\t\\t\\t\\tPunctured Preamble RX: 15\\n' +\n  '\\t\\t\\t\\tDevice Class: 1\\n' +\n  '\\t\\t\\t\\tLDPC Coding in Payload\\n' +\n  '\\t\\t\\t\\tMidamble Rx Max NSTS: 1\\n' +\n  '\\t\\t\\t\\tNDP with 4x HE-LTF and 3.2us GI\\n' +\n  '\\t\\t\\t\\tSTBC Tx <= 80MHz\\n' +\n  '\\t\\t\\t\\tSTBC Rx <= 80MHz\\n' +\n  '\\t\\t\\t\\tFull Bandwidth UL MU-MIMO\\n' +\n  '\\t\\t\\t\\tPartial Bandwidth UL MU-MIMO\\n' +\n  '\\t\\t\\tHE RX MCS and NSS set <= 80 MHz\\n' +\n  '\\t\\t\\t\\t1 streams: MCS 0-11\\n' +\n  '\\t\\t\\t\\t2 streams: MCS 0-11\\n' +\n  '\\t\\t\\t\\t3 streams: not supported\\n' +\n  '\\t\\t\\t\\t4 streams: not supported\\n' +\n  '\\t\\t\\t\\t5 streams: not supported\\n' +\n  '\\t\\t\\t\\t6 streams: not supported\\n' +\n  '\\t\\t\\t\\t7 streams: not supported\\n' +\n  '\\t\\t\\t\\t8 streams: not supported\\n' +\n  '\\t\\t\\tHE TX MCS and NSS set <= 80 MHz\\n' +\n  '\\t\\t\\t\\t1 streams: MCS 0-11\\n' +\n  '\\t\\t\\t\\t2 streams: MCS 0-11\\n' +\n  '\\t\\t\\t\\t3 streams: not supported\\n' +\n  '\\t\\t\\t\\t4 streams: not supported\\n' +\n  '\\t\\t\\t\\t5 streams: not supported\\n' +\n  '\\t\\t\\t\\t6 streams: not supported\\n' +\n  '\\t\\t\\t\\t7 streams: not supported\\n' +\n  '\\t\\t\\t\\t8 streams: not supported\\n' +\n  '\\t\\tEHT Iftypes: AP, P2P-GO\\n' +\n  '\\t\\t\\tEHT MAC Capabilities (0x0700):\\n' +\n  '\\t\\t\\t\\tNSEP priority access Supported\\n' +\n  '\\t\\t\\t\\tEHT OM Control Supported\\n' +\n  '\\t\\t\\t\\tTriggered TXOP Sharing Supported\\n' +\n  '\\t\\t\\tEHT PHY Capabilities: (0x7c0000feffff7f01):\\n' +\n  '\\t\\t\\t\\t242-tone RU in BW wider than 20MHz Supported\\n' +\n  '\\t\\t\\t\\tNDP With  EHT-LTF And 3.2 µs GI\\n' +\n  '\\t\\t\\t\\tPartial Bandwidth UL MU-MIMO\\n' +\n  '\\t\\t\\t\\tSU Beamformer\\n' +\n  '\\t\\t\\t\\tSU Beamformee\\n' +\n  '\\t\\t\\t\\tNg = 16 SU Feedback\\n' +\n  '\\t\\t\\t\\tNg = 16 MU Feedback\\n' +\n  '\\t\\t\\t\\tCodebook size (4, 2) SU Feedback\\n' +\n  '\\t\\t\\t\\tCodebook size (7, 5) MU Feedback\\n' +\n  '\\t\\t\\t\\tTriggered SU Beamforming Feedback\\n' +\n  '\\t\\t\\t\\tTriggered MU Beamforming Partial BW Feedback\\n' +\n  '\\t\\t\\t\\tTriggered CQI Feedback\\n' +\n  '\\t\\t\\t\\tPartial Bandwidth DL MU-MIMO\\n' +\n  '\\t\\t\\t\\tPSR-Based SR Support\\n' +\n  '\\t\\t\\t\\tPower Boost Factor Support\\n' +\n  '\\t\\t\\t\\tEHT MU PPDU With 4 EHT-LTF And 0.8 µs GI\\n' +\n  '\\t\\t\\t\\tMax Nc: 15\\n' +\n  '\\t\\t\\t\\tNon-Triggered CQI Feedback\\n' +\n  '\\t\\t\\t\\tTx 1024-QAM And 4096-QAM < 242-tone RU\\n' +\n  '\\t\\t\\t\\tRx 1024-QAM And 4096-QAM < 242-tone RU\\n' +\n  '\\t\\t\\t\\tPPE Thresholds Present\\n' +\n  '\\t\\t\\t\\tCommon Nominal Packet Padding: 3\\n' +\n  '\\t\\t\\t\\tMaximum Number Of Supported EHT-LTFs: 31\\n' +\n  '\\t\\t\\t\\tSupport of MCS 15: 15\\n' +\n  '\\t\\t\\t\\tSupport For 20MHz Rx NDP With Wider Bandwidth\\n' +\n  '\\t\\t\\tEHT MCS/NSS: (0x88888800000000000000000000):\\n' +\n  '\\t\\t\\tEHT bw=20 MHz, max NSS for MCS 0-7: Rx=8, Tx=8\\n' +\n  '\\t\\t\\tEHT bw=20 MHz, max NSS for MCS 8-9: Rx=8, Tx=8\\n' +\n  '\\t\\t\\tEHT bw=20 MHz, max NSS for MCS 10-11: Rx=8, Tx=8\\n' +\n  '\\t\\t\\tEHT bw=20 MHz, max NSS for MCS 12-13: Rx=0, Tx=0\\n' +\n  '\\t\\t\\tEHT PPE Thresholds \\n' +\n  '\\t\\tHE Iftypes: mesh point\\n' +\n  '\\t\\t\\tHE MAC Capabilities (0x70011a800040):\\n' +\n  '\\t\\t\\t\\t+HTC HE Supported\\n' +\n  '\\t\\t\\t\\tMulti-TID Aggregation Support: 7\\n' +\n  '\\t\\t\\t\\tAck-Enabled Aggregation\\n' +\n  '\\t\\t\\t\\tOM Control\\n' +\n  '\\t\\t\\t\\tMaximum A-MPDU Length Exponent: 3\\n' +\n  '\\t\\t\\t\\tA-MSDU in A-MPDU\\n' +\n  '\\t\\t\\tHE PHY Capabilities: (0x02bf000000000000000000):\\n' +\n  '\\t\\t\\t\\tHE40/2.4GHz\\n' +\n  '\\t\\t\\t\\tPunctured Preamble RX: 15\\n' +\n  '\\t\\t\\t\\tDevice Class: 1\\n' +\n  '\\t\\t\\t\\tLDPC Coding in Payload\\n' +\n  '\\t\\t\\t\\tMidamble Rx Max NSTS: 1\\n' +\n  '\\t\\t\\tHE RX MCS and NSS set <= 80 MHz\\n' +\n  '\\t\\t\\t\\t1 streams: MCS 0-11\\n' +\n  '\\t\\t\\t\\t2 streams: MCS 0-11\\n' +\n  '\\t\\t\\t\\t3 streams: not supported\\n' +\n  '\\t\\t\\t\\t4 streams: not supported\\n' +\n  '\\t\\t\\t\\t5 streams: not supported\\n' +\n  '\\t\\t\\t\\t6 streams: not supported\\n' +\n  '\\t\\t\\t\\t7 streams: not supported\\n' +\n  '\\t\\t\\t\\t8 streams: not supported\\n' +\n  '\\t\\t\\tHE TX MCS and NSS set <= 80 MHz\\n' +\n  '\\t\\t\\t\\t1 streams: MCS 0-11\\n' +\n  '\\t\\t\\t\\t2 streams: MCS 0-11\\n' +\n  '\\t\\t\\t\\t3 streams: not supported\\n' +\n  '\\t\\t\\t\\t4 streams: not supported\\n' +\n  '\\t\\t\\t\\t5 streams: not supported\\n' +\n  '\\t\\t\\t\\t6 streams: not supported\\n' +\n  '\\t\\t\\t\\t7 streams: not supported\\n' +\n  '\\t\\t\\t\\t8 streams: not supported\\n' +\n  '\\t\\tBitrates (non-HT):\\n' +\n  '\\t\\t\\t* 1.0 Mbps\\n' +\n  '\\t\\t\\t* 2.0 Mbps (short preamble supported)\\n' +\n  '\\t\\t\\t* 5.5 Mbps (short preamble supported)\\n' +\n  '\\t\\t\\t* 11.0 Mbps (short preamble supported)\\n' +\n  '\\t\\t\\t* 6.0 Mbps\\n' +\n  '\\t\\t\\t* 9.0 Mbps\\n' +\n  '\\t\\t\\t* 12.0 Mbps\\n' +\n  '\\t\\t\\t* 18.0 Mbps\\n' +\n  '\\t\\t\\t* 24.0 Mbps\\n' +\n  '\\t\\t\\t* 36.0 Mbps\\n' +\n  '\\t\\t\\t* 48.0 Mbps\\n' +\n  '\\t\\t\\t* 54.0 Mbps\\n' +\n  '\\t\\tFrequencies:\\n' +\n  '\\t\\t\\t* 2412.0 MHz [1] (20.0 dBm)\\n' +\n  '\\t\\t\\t* 2417.0 MHz [2] (20.0 dBm)\\n' +\n  '\\t\\t\\t* 2422.0 MHz [3] (20.0 dBm)\\n' +\n  '\\t\\t\\t* 2427.0 MHz [4] (20.0 dBm)\\n' +\n  '\\t\\t\\t* 2432.0 MHz [5] (20.0 dBm)\\n' +\n  '\\t\\t\\t* 2437.0 MHz [6] (20.0 dBm)\\n' +\n  '\\t\\t\\t* 2442.0 MHz [7] (20.0 dBm)\\n' +\n  '\\t\\t\\t* 2447.0 MHz [8] (20.0 dBm)\\n' +\n  '\\t\\t\\t* 2452.0 MHz [9] (20.0 dBm)\\n' +\n  '\\t\\t\\t* 2457.0 MHz [10] (20.0 dBm)\\n' +\n  '\\t\\t\\t* 2462.0 MHz [11] (20.0 dBm)\\n' +\n  '\\t\\t\\t* 2467.0 MHz [12] (20.0 dBm) (no IR)\\n' +\n  '\\t\\t\\t* 2472.0 MHz [13] (20.0 dBm) (no IR)\\n' +\n  '\\t\\t\\t* 2484.0 MHz [14] (20.0 dBm) (no IR)\\n' +\n  '\\tBand 2:\\n' +\n  '\\t\\tCapabilities: 0x107e\\n' +\n  '\\t\\t\\tHT20/HT40\\n' +\n  '\\t\\t\\tSM Power Save disabled\\n' +\n  '\\t\\t\\tRX Greenfield\\n' +\n  '\\t\\t\\tRX HT20 SGI\\n' +\n  '\\t\\t\\tRX HT40 SGI\\n' +\n  '\\t\\t\\tNo RX STBC\\n' +\n  '\\t\\t\\tMax AMSDU length: 3839 bytes\\n' +\n  '\\t\\t\\tDSSS/CCK HT40\\n' +\n  '\\t\\tMaximum RX AMPDU length 65535 bytes (exponent: 0x003)\\n' +\n  '\\t\\tMinimum RX AMPDU time spacing: 8 usec (0x06)\\n' +\n  '\\t\\tHT TX/RX MCS rate indexes supported: 0-15\\n' +\n  '\\t\\tVHT Capabilities (0x038004fa):\\n' +\n  '\\t\\t\\tMax MPDU length: 11454\\n' +\n  '\\t\\t\\tSupported Channel Width: 160 MHz, 80+80 MHz\\n' +\n  '\\t\\t\\tRX LDPC\\n' +\n  '\\t\\t\\tshort GI (80 MHz)\\n' +\n  '\\t\\t\\tshort GI (160/80+80 MHz)\\n' +\n  '\\t\\t\\tTX STBC\\n' +\n  '\\t\\tVHT RX MCS set:\\n' +\n  '\\t\\t\\t1 streams: MCS 0-9\\n' +\n  '\\t\\t\\t2 streams: MCS 0-9\\n' +\n  '\\t\\t\\t3 streams: MCS 0-9\\n' +\n  '\\t\\t\\t4 streams: MCS 0-9\\n' +\n  '\\t\\t\\t5 streams: MCS 0-9\\n' +\n  '\\t\\t\\t6 streams: MCS 0-9\\n' +\n  '\\t\\t\\t7 streams: MCS 0-9\\n' +\n  '\\t\\t\\t8 streams: MCS 0-9\\n' +\n  '\\t\\tVHT RX highest supported: 0 Mbps\\n' +\n  '\\t\\tVHT TX MCS set:\\n' +\n  '\\t\\t\\t1 streams: MCS 0-9\\n' +\n  '\\t\\t\\t2 streams: MCS 0-9\\n' +\n  '\\t\\t\\t3 streams: MCS 0-9\\n' +\n  '\\t\\t\\t4 streams: MCS 0-9\\n' +\n  '\\t\\t\\t5 streams: MCS 0-9\\n' +\n  '\\t\\t\\t6 streams: MCS 0-9\\n' +\n  '\\t\\t\\t7 streams: MCS 0-9\\n' +\n  '\\t\\t\\t8 streams: MCS 0-9\\n' +\n  '\\t\\tVHT TX highest supported: 0 Mbps\\n' +\n  '\\t\\tVHT extended NSS: not supported\\n' +\n  '\\t\\tHE Iftypes: managed, P2P-client\\n' +\n  '\\t\\t\\tHE MAC Capabilities (0x78011ac80040):\\n' +\n  '\\t\\t\\t\\t+HTC HE Supported\\n' +\n  '\\t\\t\\t\\tTrigger Frame MAC Padding Duration: 2\\n' +\n  '\\t\\t\\t\\tMulti-TID Aggregation Support: 7\\n' +\n  '\\t\\t\\t\\tBSR\\n' +\n  '\\t\\t\\t\\tMU Cascading\\n' +\n  '\\t\\t\\t\\tAck-Enabled Aggregation\\n' +\n  '\\t\\t\\t\\tOM Control\\n' +\n  '\\t\\t\\t\\tMaximum A-MPDU Length Exponent: 3\\n' +\n  '\\t\\t\\t\\tA-MSDU in A-MPDU\\n' +\n  '\\t\\t\\tHE PHY Capabilities: (0x1cbfce0000000000000000):\\n' +\n  '\\t\\t\\t\\tHE40/HE80/5GHz\\n' +\n  '\\t\\t\\t\\tHE160/5GHz\\n' +\n  '\\t\\t\\t\\tHE160/HE80+80/5GHz\\n' +\n  '\\t\\t\\t\\tPunctured Preamble RX: 15\\n' +\n  '\\t\\t\\t\\tDevice Class: 1\\n' +\n  '\\t\\t\\t\\tLDPC Coding in Payload\\n' +\n  '\\t\\t\\t\\tMidamble Rx Max NSTS: 1\\n' +\n  '\\t\\t\\t\\tNDP with 4x HE-LTF and 3.2us GI\\n' +\n  '\\t\\t\\t\\tSTBC Tx <= 80MHz\\n' +\n  '\\t\\t\\t\\tSTBC Rx <= 80MHz\\n' +\n  '\\t\\t\\t\\tFull Bandwidth UL MU-MIMO\\n' +\n  '\\t\\t\\t\\tPartial Bandwidth UL MU-MIMO\\n' +\n  '\\t\\t\\tHE RX MCS and NSS set <= 80 MHz\\n' +\n  '\\t\\t\\t\\t1 streams: MCS 0-11\\n' +\n  '\\t\\t\\t\\t2 streams: MCS 0-11\\n' +\n  '\\t\\t\\t\\t3 streams: not supported\\n' +\n  '\\t\\t\\t\\t4 streams: not supported\\n' +\n  '\\t\\t\\t\\t5 streams: not supported\\n' +\n  '\\t\\t\\t\\t6 streams: not supported\\n' +\n  '\\t\\t\\t\\t7 streams: not supported\\n' +\n  '\\t\\t\\t\\t8 streams: not supported\\n' +\n  '\\t\\t\\tHE TX MCS and NSS set <= 80 MHz\\n' +\n  '\\t\\t\\t\\t1 streams: MCS 0-11\\n' +\n  '\\t\\t\\t\\t2 streams: MCS 0-11\\n' +\n  '\\t\\t\\t\\t3 streams: not supported\\n' +\n  '\\t\\t\\t\\t4 streams: not supported\\n' +\n  '\\t\\t\\t\\t5 streams: not supported\\n' +\n  '\\t\\t\\t\\t6 streams: not supported\\n' +\n  '\\t\\t\\t\\t7 streams: not supported\\n' +\n  '\\t\\t\\t\\t8 streams: not supported\\n' +\n  '\\t\\t\\tHE RX MCS and NSS set 160 MHz\\n' +\n  '\\t\\t\\t\\t1 streams: MCS 0-11\\n' +\n  '\\t\\t\\t\\t2 streams: MCS 0-11\\n' +\n  '\\t\\t\\t\\t3 streams: not supported\\n' +\n  '\\t\\t\\t\\t4 streams: not suppor'... 25867 more characters\n"
+	},
+	{
+		"name": "virtual-interface-create-delete",
+		"passed": false,
+		"detail": "Missing parent radio"
+	},
+	{
+		"name": "shared-ap-create",
+		"passed": false,
+		"detail": "Missing AP control radio"
+	},
+	{
+		"name": "shared-ap-runtime",
+		"passed": false,
+		"detail": "AP control creation failed"
+	},
+	{
+		"name": "shared-ap-cleanup",
+		"passed": true,
+		"detail": ""
+	},
+	{
+		"name": "nm-profile-create",
+		"passed": true,
+		"detail": ""
+	},
+	{
+		"name": "nm-framing-plain",
+		"passed": true,
+		"detail": ""
+	},
+	{
+		"name": "nm-framing-trailing-lf",
+		"passed": true,
+		"detail": ""
+	},
+	{
+		"name": "profile-file-dbus-path",
+		"passed": true,
+		"detail": ""
+	},
+	{
+		"name": "profile-version-id",
+		"passed": true,
+		"detail": ""
+	},
+	{
+		"name": "network-manager-restart",
+		"passed": true,
+		"detail": ""
+	},
+	{
+		"name": "restart-file-continuity",
+		"passed": true,
+		"detail": ""
+	},
+	{
+		"name": "offline-keyfile-stdin",
+		"passed": false,
+		"detail": "Missing parent radio"
+	},
+	{
+		"name": "nm-profile-cleanup",
+		"passed": true,
+		"detail": ""
+	},
+	{
+		"name": "shim-close",
+		"passed": true,
+		"detail": ""
+	}
+]

@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import {
-	type HotspotToggleOutput,
-	hotspotToggleOutputSchema,
-} from "@ceraui/rpc/schemas";
+import type { HotspotToggleOutput } from "@ceraui/rpc/schemas";
 import { getConfig } from "../../../src/modules/config.ts";
 import { nmDeviceProp } from "../../../src/modules/network/network-manager.ts";
 import {
@@ -31,6 +28,7 @@ import {
 	seedObservedRadioRow,
 } from "./first-ap-radio.ts";
 import { nativeRecoveryCase } from "./first-ap-recovery.ts";
+import { nativeStartConfirmation } from "./native-terminal.ts";
 
 /** Backend entry coverage; RPC transport/admission is covered by the RPC unit suites. */
 export async function savedProfileBackendCycle(
@@ -97,8 +95,8 @@ export async function savedProfileBackendCycle(
 		);
 		assert.equal(identity?.permanentMac, target.owner);
 		assert.equal(identity?.row, row);
-		console.log(
-			"first-ap: saved-profile backend fixture has real verified radio identity; vendor/product remain unknown",
+		process.stdout.write(
+			"first-ap: saved-profile backend fixture has real verified radio identity; vendor/product remain unknown\n",
 		);
 
 		const ready = Promise.withResolvers<void>();
@@ -130,26 +128,8 @@ export async function savedProfileBackendCycle(
 			5000,
 		);
 		client.onmessage = (event) => {
-			if (typeof event.data !== "string") return;
-			const envelope: unknown = JSON.parse(event.data);
-			if (!envelope || typeof envelope !== "object" || !("wifi" in envelope))
-				return;
-			const wifi = envelope.wifi;
-			if (!wifi || typeof wifi !== "object" || !("hotspot" in wifi)) return;
-			const hotspot = wifi.hotspot;
-			if (!hotspot || typeof hotspot !== "object" || !("start" in hotspot))
-				return;
-			const start = hotspot.start;
-			if (
-				!start ||
-				typeof start !== "object" ||
-				!("device" in start) ||
-				String(start.device) !== String(row.id)
-			)
-				return;
-			const parsed = hotspotToggleOutputSchema.safeParse(start);
-			if (parsed.success && parsed.data.accepted !== true)
-				confirmation?.resolve(parsed.data);
+			const terminal = nativeStartConfirmation(event.data, row.id);
+			if (terminal) confirmation?.resolve(terminal);
 		};
 		await ready.promise;
 		clearTimeout(openDeadline);
@@ -212,8 +192,8 @@ export async function savedProfileBackendCycle(
 			undefined,
 			"Confirmation did not retire creation authority",
 		);
-		console.log(
-			"first-ap: saved-profile backend Stop/Start confirmed; credential UUID remains bound",
+		process.stdout.write(
+			"first-ap: saved-profile backend Stop/Start confirmed; credential UUID remains bound\n",
 		);
 		await nativeRecoveryCase(target, row, probe, checkpoint);
 	} finally {

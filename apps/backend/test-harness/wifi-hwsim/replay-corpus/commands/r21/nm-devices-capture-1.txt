@@ -1,0 +1,7 @@
+ens3:ethernet:connecting (checking IP connectivity):Wired connection 1
+lo:loopback:connected (externally):lo
+wlan1:wifi:unavailable:
+wlan2:wifi:unavailable:
+wlan3:wifi:unavailable:
+hwsim0:unknown:unmanaged:
+wlan0:wifi:unmanaged:

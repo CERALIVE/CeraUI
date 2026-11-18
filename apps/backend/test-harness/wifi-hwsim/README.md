@@ -580,6 +580,27 @@ fail the group, and the exact Bun/NM daemon pins remain 1.4.4/1.52.1.
 taskset -c 0-3 bash apps/backend/test-harness/wifi-hwsim/guest-versions.selftest.sh
 ```
 
+## Recorded guest replay
+
+`replay-corpus/README.md` lists the real R19/R20/R21 captures, consumer coverage
+and explicit missing samples. The replay suite drives shared native decoders,
+the frozen literal matchers and actual bootstrap/version scripts. It never
+executes receipt contents or invokes host NetworkManager mutations.
+
+The guest setup now explicitly activates its reserved CeraTest station profile
+with one bounded NM activation before declaring the fixture ready. Profile
+creation and a running hostapd AP do not establish client association.
+Bootstrap diagnostics report every prerequisite and the selected device's
+actual state/profile.
+
+Capability replies are decoded as numeric MHz fields before the unchanged
+channel assertions, so both `2437` and `2437.0` represent the same frequency.
+Disabled flags and exact AP mode remain meaningful. All radio roles are
+collected before capability validation, and full safe iw replies are saved
+in the preflight receipt directory before assertions can truncate them.
+The tracked `framing.sh` is the unchanged B7 framing/od case for future
+same-revision controllers.
+
 ## Troubleshooting
 
 | Symptom | Likely cause / fix |

@@ -78,12 +78,7 @@ iw dev || rc=1
 rfkill list || rc=1
 nmcli --colors no -t -f DEVICE,TYPE,STATE device status || rc=1
 exit "$rc"'
-	probe bootstrap bash -c '
-test -f setup.json && test -f config.json && test -s /run/hwsim-client &&
-test -s /run/hwsim-hostapd.pid && kill -0 "$(cat /run/hwsim-hostapd.pid)" &&
-grep -q AP-ENABLED /run/hwsim-hostapd.log &&
-test "$(nmcli -g GENERAL.CONNECTION device show "$(cat /run/hwsim-client)")" = CeraTest &&
-case "$(nmcli -g GENERAL.STATE device show "$(cat /run/hwsim-client)")" in "100 "*) true;; *) false;; esac'
+	probe bootstrap bun "$harness/checks/bootstrap.ts"
 	probe native-runners bash "$harness/native-exec.sh" bun "$harness/checks/guest-preflight.ts" "$receipts"
 else
 	printf 'HWSIM-PREFLIGHT: guest-actions refused outside /repo root guest\n' | tee -a "$receipts/results"

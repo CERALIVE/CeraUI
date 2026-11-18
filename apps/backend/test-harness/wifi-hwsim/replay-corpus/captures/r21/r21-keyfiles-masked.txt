@@ -1,0 +1,195 @@
+R21_KEYFILE_CAPTURE_BEGIN timestamp=2026-11-17T23:21:49.584231+00:00 before_delete=true
+R21_MASKED_KEYFILE_BEGIN uuid=5b76f470-b9e5-415b-b169-22bef0d09f16 file="/etc/NetworkManager/system-connections/CeraPreflight-5b76f470-b9e5-415b-b169-22bef0d09f16.nmconnection" bytes=258 sha256=82a84a5ab9aecdec8c1e93fe63bc5f5b9a0e98da2afa45aca14fe108b90fc390 dev=65025 inode=174681 size=258 mtime_ns=1794957709226919436 ctime_ns=1794957709234925983
+[connection]
+id=CeraPreflight-5b76f470-b9e5-415b-b169-22bef0d09f16\n
+uuid=5b76f470-b9e5-415b-b169-22bef0d09f16
+type=dummy
+autoconnect=false
+interface-name=cera-preflight
+
+[dummy]
+
+[ipv4]
+method=disabled
+
+[ipv6]
+addr-gen-mode=default
+method=disabled
+
+[proxy]
+R21_MASKED_KEYFILE_END uuid=5b76f470-b9e5-415b-b169-22bef0d09f16
+R21_MASKED_KEYFILE_BEGIN uuid=6be5e068-43da-44f5-b399-ec1642cdf41a file="/etc/NetworkManager/system-connections/CeraTest.nmconnection" bytes=290 sha256=3b389e5ad2620006b72c4e6cfbc0594bdfb593c365f40b69d19c048ce300e5b9 dev=65025 inode=134967 size=290 mtime_ns=1794957705378636858 ctime_ns=1794957705378636858
+[connection]
+id=CeraTest
+uuid=6be5e068-43da-44f5-b399-ec1642cdf41a
+type=wifi
+interface-name=wlan1
+
+[wifi]
+mode=infrastructure
+ssid=CeraTest
+
+[wifi-security]
+key-mgmt=wpa-psk
+psk=<redacted>
+
+[ipv4]
+address1=192.0.2.2/24
+method=manual
+
+[ipv6]
+addr-gen-mode=default
+method=disabled
+
+[proxy]
+R21_MASKED_KEYFILE_END uuid=6be5e068-43da-44f5-b399-ec1642cdf41a
+R21_MASKED_KEYFILE_BEGIN uuid=aa1fd7ca-f187-31a1-9d58-a059a5e614cc file="/run/NetworkManager/system-connections/Wired connection 1.nmconnection" bytes=270 sha256=4d97ac0a256b1876f8ff00510834ea7fc818a5c5fbf91fd63785804e72dcca41 dev=25 inode=2073 size=270 mtime_ns=1794957699530052700 ctime_ns=1794957699530052700
+[connection]
+id=Wired connection 1
+uuid=aa1fd7ca-f187-31a1-9d58-a059a5e614cc
+type=ethernet
+autoconnect-priority=-999
+interface-name=ens3
+timestamp=1794957699
+
+[ethernet]
+
+[ipv4]
+method=auto
+
+[ipv6]
+addr-gen-mode=default
+method=auto
+
+[proxy]
+
+[.nmmeta]
+nm-generated=true
+R21_MASKED_KEYFILE_END uuid=aa1fd7ca-f187-31a1-9d58-a059a5e614cc
+R21_MASKED_KEYFILE_BEGIN uuid=3ca6fb3d-2a2a-4f09-94db-fbd48c3c057e file="/run/NetworkManager/system-connections/lo.nmconnection" bytes=314 sha256=0fac55cb59ed9ebca28c3f169a1dbb4a80bfefcf5273e557dde3ab1d095e062c dev=25 inode=2070 size=314 mtime_ns=1794957699526040255 ctime_ns=1794957699526040255
+[connection]
+id=lo
+uuid=3ca6fb3d-2a2a-4f09-94db-fbd48c3c057e
+type=loopback
+autoconnect=false
+interface-name=lo
+timestamp=1794957699
+
+[loopback]
+
+[ipv4]
+address1=127.0.0.1/8
+method=manual
+
+[ipv6]
+addr-gen-mode=default
+address1=::1/128
+method=manual
+
+[proxy]
+
+[.nmmeta]
+nm-generated=true
+volatile=true
+external=true
+R21_MASKED_KEYFILE_END uuid=3ca6fb3d-2a2a-4f09-94db-fbd48c3c057e
+R21_KEYFILE_CAPTURE_COMPLETE profiles=4 before_delete=true
+R21_NM_DEVICE_STATE_BEGIN
+ens3:ethernet:connecting (checking IP connectivity):Wired connection 1
+lo:loopback:connected (externally):lo
+wlan1:wifi:unavailable:
+wlan2:wifi:unavailable:
+wlan3:wifi:unavailable:
+hwsim0:unknown:unmanaged:
+wlan0:wifi:unmanaged:
+R21_NM_DEVICE_STATE_END exit=0
+R21_DELETE_DISPATCH timestamp=2026-11-17T23:21:49,611414650+00:00 pid=2602
+R21_KEYFILE_CAPTURE_BEGIN timestamp=2026-11-17T23:21:49.750017+00:00 before_delete=false
+R21_MASKED_KEYFILE_BEGIN uuid=6be5e068-43da-44f5-b399-ec1642cdf41a file="/etc/NetworkManager/system-connections/CeraTest.nmconnection" bytes=290 sha256=3b389e5ad2620006b72c4e6cfbc0594bdfb593c365f40b69d19c048ce300e5b9 dev=65025 inode=134967 size=290 mtime_ns=1794957705378636858 ctime_ns=1794957705378636858
+[connection]
+id=CeraTest
+uuid=6be5e068-43da-44f5-b399-ec1642cdf41a
+type=wifi
+interface-name=wlan1
+
+[wifi]
+mode=infrastructure
+ssid=CeraTest
+
+[wifi-security]
+key-mgmt=wpa-psk
+psk=<redacted>
+
+[ipv4]
+address1=192.0.2.2/24
+method=manual
+
+[ipv6]
+addr-gen-mode=default
+method=disabled
+
+[proxy]
+R21_MASKED_KEYFILE_END uuid=6be5e068-43da-44f5-b399-ec1642cdf41a
+R21_MASKED_KEYFILE_BEGIN uuid=aa1fd7ca-f187-31a1-9d58-a059a5e614cc file="/run/NetworkManager/system-connections/Wired connection 1.nmconnection" bytes=270 sha256=4d97ac0a256b1876f8ff00510834ea7fc818a5c5fbf91fd63785804e72dcca41 dev=25 inode=2073 size=270 mtime_ns=1794957699530052700 ctime_ns=1794957699530052700
+[connection]
+id=Wired connection 1
+uuid=aa1fd7ca-f187-31a1-9d58-a059a5e614cc
+type=ethernet
+autoconnect-priority=-999
+interface-name=ens3
+timestamp=1794957699
+
+[ethernet]
+
+[ipv4]
+method=auto
+
+[ipv6]
+addr-gen-mode=default
+method=auto
+
+[proxy]
+
+[.nmmeta]
+nm-generated=true
+R21_MASKED_KEYFILE_END uuid=aa1fd7ca-f187-31a1-9d58-a059a5e614cc
+R21_MASKED_KEYFILE_BEGIN uuid=3ca6fb3d-2a2a-4f09-94db-fbd48c3c057e file="/run/NetworkManager/system-connections/lo.nmconnection" bytes=314 sha256=0fac55cb59ed9ebca28c3f169a1dbb4a80bfefcf5273e557dde3ab1d095e062c dev=25 inode=2070 size=314 mtime_ns=1794957699526040255 ctime_ns=1794957699526040255
+[connection]
+id=lo
+uuid=3ca6fb3d-2a2a-4f09-94db-fbd48c3c057e
+type=loopback
+autoconnect=false
+interface-name=lo
+timestamp=1794957699
+
+[loopback]
+
+[ipv4]
+address1=127.0.0.1/8
+method=manual
+
+[ipv6]
+addr-gen-mode=default
+address1=::1/128
+method=manual
+
+[proxy]
+
+[.nmmeta]
+nm-generated=true
+volatile=true
+external=true
+R21_MASKED_KEYFILE_END uuid=3ca6fb3d-2a2a-4f09-94db-fbd48c3c057e
+R21_KEYFILE_CAPTURE_COMPLETE profiles=3 before_delete=false
+R21_NM_DEVICE_STATE_BEGIN
+ens3:ethernet:connected:Wired connection 1
+lo:loopback:connected (externally):lo
+wlan1:wifi:disconnected:
+wlan2:wifi:disconnected:
+wlan3:wifi:disconnected:
+p2p-dev-wlan1:wifi-p2p:disconnected:
+p2p-dev-wlan2:wifi-p2p:disconnected:
+p2p-dev-wlan3:wifi-p2p:disconnected:
+hwsim0:unknown:unmanaged:
+wlan0:wifi:unmanaged:
+R21_NM_DEVICE_STATE_END exit=0

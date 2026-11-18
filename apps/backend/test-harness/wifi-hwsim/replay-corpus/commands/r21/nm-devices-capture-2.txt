@@ -1,0 +1,10 @@
+ens3:ethernet:connected:Wired connection 1
+lo:loopback:connected (externally):lo
+wlan1:wifi:disconnected:
+wlan2:wifi:disconnected:
+wlan3:wifi:disconnected:
+p2p-dev-wlan1:wifi-p2p:disconnected:
+p2p-dev-wlan2:wifi-p2p:disconnected:
+p2p-dev-wlan3:wifi-p2p:disconnected:
+hwsim0:unknown:unmanaged:
+wlan0:wifi:unmanaged:

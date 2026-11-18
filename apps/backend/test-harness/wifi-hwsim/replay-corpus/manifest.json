@@ -1,0 +1,1028 @@
+{
+	"schema": 1,
+	"base": "a2498a96854f774e410989d0c6fa23a1685dec1a",
+	"sanitization": {
+		"knownHarnessPsk": "<redacted>",
+		"credentialAssignments": "<redacted>",
+		"hostEvidencePaths": "<evidence>",
+		"untrustedDataNeverExecuted": true,
+		"finalNewlineNormalization": true
+	},
+	"captures": [
+		{
+			"file": "captures/r20/r20-guest-preflight.log",
+			"origin": "task-21-22-integ-r20-guest-receipts.tar.gz:r20-guest-preflight.log",
+			"sha256": "59fcbb38578f2e759260aeccb3547068e37a29586cda9b0b6ccb65982d6b1704",
+			"sourceSha256": "59fcbb38578f2e759260aeccb3547068e37a29586cda9b0b6ccb65982d6b1704"
+		},
+		{
+			"file": "captures/r20/r20-keyfiles-masked.txt",
+			"origin": "task-21-22-integ-r20-guest-receipts.tar.gz:r20-keyfiles-masked.txt",
+			"sha256": "49f96fbec07c88c94fd463e82634e821bcd82de4f6267d4c594b06347ffc4e98",
+			"sourceSha256": "49f96fbec07c88c94fd463e82634e821bcd82de4f6267d4c594b06347ffc4e98"
+		},
+		{
+			"file": "captures/r20/processes.txt",
+			"origin": "task-21-22-integ-r20-guest-receipts.tar.gz:processes.txt",
+			"sha256": "3daf94bc1dd53fa781bfc1275d837b1da2172eeb1abea3565aafc5a3fb0049ec",
+			"sourceSha256": "3daf94bc1dd53fa781bfc1275d837b1da2172eeb1abea3565aafc5a3fb0049ec"
+		},
+		{
+			"file": "captures/r20/nm-journal.jsonl",
+			"origin": "task-21-22-integ-r20-guest-receipts.tar.gz:nm-journal.jsonl",
+			"sha256": "ee679cab58a6903d929cdeec3293f792023a721454d7278890251ebae1046393",
+			"sourceSha256": "ee679cab58a6903d929cdeec3293f792023a721454d7278890251ebae1046393"
+		},
+		{
+			"file": "captures/r20/r20-nmcli-pids.log",
+			"origin": "task-21-22-integ-r20-guest-receipts.tar.gz:r20-nmcli-pids.log",
+			"sha256": "92c555ba48de5129ebec018b7fa24f6e15c26b7adb615e9be184cc52b6b4344e",
+			"sourceSha256": "92c555ba48de5129ebec018b7fa24f6e15c26b7adb615e9be184cc52b6b4344e"
+		},
+		{
+			"file": "captures/r20/preflight/environment.log",
+			"origin": "task-21-22-integ-r20-guest-receipts.tar.gz:preflight/ceraui-preflight.uu6Hvefz/environment.log",
+			"sha256": "30509634db0a77dd34f53098d2806000dd89e981a256d3f7e8e22f29de45d904",
+			"sourceSha256": "30509634db0a77dd34f53098d2806000dd89e981a256d3f7e8e22f29de45d904"
+		},
+		{
+			"file": "captures/r20/preflight/systemd.log",
+			"origin": "task-21-22-integ-r20-guest-receipts.tar.gz:preflight/ceraui-preflight.uu6Hvefz/systemd.log",
+			"sha256": "7f32e633d3bedf157d1bac4cf30b36d1fe2d81faad185947be13e2ebfe3e6a5a",
+			"sourceSha256": "7f32e633d3bedf157d1bac4cf30b36d1fe2d81faad185947be13e2ebfe3e6a5a"
+		},
+		{
+			"file": "captures/r20/preflight/bootstrap.log",
+			"origin": "task-21-22-integ-r20-guest-receipts.tar.gz:preflight/ceraui-preflight.uu6Hvefz/bootstrap.log",
+			"sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+			"sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			"emptyCapture": true
+		},
+		{
+			"file": "captures/r20/preflight/tools.log",
+			"origin": "task-21-22-integ-r20-guest-receipts.tar.gz:preflight/ceraui-preflight.uu6Hvefz/tools.log",
+			"sha256": "ebfaa37052f263d3dc5ba39cd3b06c0cb826feb17d9e4b90911aae187207eea0",
+			"sourceSha256": "ebfaa37052f263d3dc5ba39cd3b06c0cb826feb17d9e4b90911aae187207eea0"
+		},
+		{
+			"file": "captures/r20/preflight/guest-boundary.log",
+			"origin": "task-21-22-integ-r20-guest-receipts.tar.gz:preflight/ceraui-preflight.uu6Hvefz/guest-boundary.log",
+			"sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+			"sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			"emptyCapture": true
+		},
+		{
+			"file": "captures/r20/preflight/native-runners.log",
+			"origin": "task-21-22-integ-r20-guest-receipts.tar.gz:preflight/ceraui-preflight.uu6Hvefz/native-runners.log",
+			"sha256": "9e51f0507698cc966e61a7d004a35d491713988ee3e2c9062b6f7b6a9bbc7164",
+			"sourceSha256": "9e51f0507698cc966e61a7d004a35d491713988ee3e2c9062b6f7b6a9bbc7164"
+		},
+		{
+			"file": "captures/r20/preflight/audit-json.log",
+			"origin": "task-21-22-integ-r20-guest-receipts.tar.gz:preflight/ceraui-preflight.uu6Hvefz/audit-json.log",
+			"sha256": "d6366ca97e0e73394a269ab3fe7da4e24d25c0e5e42d279c9bb29e7aa363db5c",
+			"sourceSha256": "d6366ca97e0e73394a269ab3fe7da4e24d25c0e5e42d279c9bb29e7aa363db5c"
+		},
+		{
+			"file": "captures/r20/preflight/permissions.log",
+			"origin": "task-21-22-integ-r20-guest-receipts.tar.gz:preflight/ceraui-preflight.uu6Hvefz/permissions.log",
+			"sha256": "c4ade40c6f284f6ff1766cbbb66a0b802723ceca73403c5f3136bddc4f506f42",
+			"sourceSha256": "c4ade40c6f284f6ff1766cbbb66a0b802723ceca73403c5f3136bddc4f506f42"
+		},
+		{
+			"file": "captures/r20/preflight/results",
+			"origin": "task-21-22-integ-r20-guest-receipts.tar.gz:preflight/ceraui-preflight.uu6Hvefz/results",
+			"sha256": "e8c1628ba342d30be7584b07bf586eba41962b5e0b2e8ddfa398c80e2d47dc77",
+			"sourceSha256": "e8c1628ba342d30be7584b07bf586eba41962b5e0b2e8ddfa398c80e2d47dc77"
+		},
+		{
+			"file": "captures/r20/preflight/versions.log",
+			"origin": "task-21-22-integ-r20-guest-receipts.tar.gz:preflight/ceraui-preflight.uu6Hvefz/versions.log",
+			"sha256": "ddca522f48bb1b9138424a2fdf2d76725762637349b84a8b86f02efffbdbc9b4",
+			"sourceSha256": "ddca522f48bb1b9138424a2fdf2d76725762637349b84a8b86f02efffbdbc9b4"
+		},
+		{
+			"file": "captures/r20/preflight/radios.log",
+			"origin": "task-21-22-integ-r20-guest-receipts.tar.gz:preflight/ceraui-preflight.uu6Hvefz/radios.log",
+			"sha256": "0b97c972272fa62c436ec4dd904c638c8ab69157661a4af5289a80d5b6f2d1f0",
+			"sourceSha256": "0b97c972272fa62c436ec4dd904c638c8ab69157661a4af5289a80d5b6f2d1f0"
+		},
+		{
+			"file": "captures/r20/preflight/os.log",
+			"origin": "task-21-22-integ-r20-guest-receipts.tar.gz:preflight/ceraui-preflight.uu6Hvefz/os.log",
+			"sha256": "8158db112c8c5d334349c6b33bf171193c52a799e6a47ec802dbc90c7420c7be",
+			"sourceSha256": "8158db112c8c5d334349c6b33bf171193c52a799e6a47ec802dbc90c7420c7be"
+		},
+		{
+			"file": "captures/r21/r21-guest-preflight.log",
+			"origin": "task-21-22-integ-r21-guest-receipts.tar.gz:r21-guest-preflight.log",
+			"sha256": "260d5950cfc0455d7a1c1ca47181bbff666267a105101daba3357b497a5f1a3c",
+			"sourceSha256": "260d5950cfc0455d7a1c1ca47181bbff666267a105101daba3357b497a5f1a3c"
+		},
+		{
+			"file": "captures/r21/processes.txt",
+			"origin": "task-21-22-integ-r21-guest-receipts.tar.gz:processes.txt",
+			"sha256": "87bc3eeedca859692cc2b3f35f9821488c2f641da794bfc43a83e0c75707b769",
+			"sourceSha256": "87bc3eeedca859692cc2b3f35f9821488c2f641da794bfc43a83e0c75707b769"
+		},
+		{
+			"file": "captures/r21/nm-journal.jsonl",
+			"origin": "task-21-22-integ-r21-guest-receipts.tar.gz:nm-journal.jsonl",
+			"sha256": "018232da227caa0ba8207885940905f87033a9fb88f1085e1ee273cc87bb8158",
+			"sourceSha256": "018232da227caa0ba8207885940905f87033a9fb88f1085e1ee273cc87bb8158"
+		},
+		{
+			"file": "captures/r21/r21-nmcli-pids.log",
+			"origin": "task-21-22-integ-r21-guest-receipts.tar.gz:r21-nmcli-pids.log",
+			"sha256": "c37c4038f0992bac4571de4412d44effc01f8f5c94b56599885a837ac2c5784c",
+			"sourceSha256": "c37c4038f0992bac4571de4412d44effc01f8f5c94b56599885a837ac2c5784c"
+		},
+		{
+			"file": "captures/r21/r21-keyfiles-masked.txt",
+			"origin": "task-21-22-integ-r21-guest-receipts.tar.gz:r21-keyfiles-masked.txt",
+			"sha256": "747556fa2f0fc542fb1374d3ea82dce9935c2b9edab4808d3952d42e46c7e92f",
+			"sourceSha256": "747556fa2f0fc542fb1374d3ea82dce9935c2b9edab4808d3952d42e46c7e92f"
+		},
+		{
+			"file": "captures/r21/preflight/environment.log",
+			"origin": "task-21-22-integ-r21-guest-receipts.tar.gz:preflight/ceraui-preflight.rEptrC8p/environment.log",
+			"sha256": "30509634db0a77dd34f53098d2806000dd89e981a256d3f7e8e22f29de45d904",
+			"sourceSha256": "30509634db0a77dd34f53098d2806000dd89e981a256d3f7e8e22f29de45d904"
+		},
+		{
+			"file": "captures/r21/preflight/systemd.log",
+			"origin": "task-21-22-integ-r21-guest-receipts.tar.gz:preflight/ceraui-preflight.rEptrC8p/systemd.log",
+			"sha256": "02924399c00fcc51ae10e79b87d405fa5733a0240075cd51ea846adde2acccde",
+			"sourceSha256": "02924399c00fcc51ae10e79b87d405fa5733a0240075cd51ea846adde2acccde"
+		},
+		{
+			"file": "captures/r21/preflight/bootstrap.log",
+			"origin": "task-21-22-integ-r21-guest-receipts.tar.gz:preflight/ceraui-preflight.rEptrC8p/bootstrap.log",
+			"sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+			"sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			"emptyCapture": true
+		},
+		{
+			"file": "captures/r21/preflight/native.json",
+			"origin": "task-21-22-integ-r21-guest-receipts.tar.gz:preflight/ceraui-preflight.rEptrC8p/native.json",
+			"sha256": "881d87ba7d2354ed359443c80258e648ee60a234bdc9f635a539cea8ef0d7a29",
+			"sourceSha256": "a1d9365a4944c0c231a14755d13c3ec44a276418980ddab43f0a633744e3cea7"
+		},
+		{
+			"file": "captures/r21/preflight/tools.log",
+			"origin": "task-21-22-integ-r21-guest-receipts.tar.gz:preflight/ceraui-preflight.rEptrC8p/tools.log",
+			"sha256": "ebfaa37052f263d3dc5ba39cd3b06c0cb826feb17d9e4b90911aae187207eea0",
+			"sourceSha256": "ebfaa37052f263d3dc5ba39cd3b06c0cb826feb17d9e4b90911aae187207eea0"
+		},
+		{
+			"file": "captures/r21/preflight/guest-boundary.log",
+			"origin": "task-21-22-integ-r21-guest-receipts.tar.gz:preflight/ceraui-preflight.rEptrC8p/guest-boundary.log",
+			"sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+			"sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			"emptyCapture": true
+		},
+		{
+			"file": "captures/r21/preflight/native-runners.log",
+			"origin": "task-21-22-integ-r21-guest-receipts.tar.gz:preflight/ceraui-preflight.rEptrC8p/native-runners.log",
+			"sha256": "8835ea1f4b7c306382d184f4adc146e4d492cb4cee3318ef5d0cce3e7fc715a3",
+			"sourceSha256": "8835ea1f4b7c306382d184f4adc146e4d492cb4cee3318ef5d0cce3e7fc715a3"
+		},
+		{
+			"file": "captures/r21/preflight/audit-json.log",
+			"origin": "task-21-22-integ-r21-guest-receipts.tar.gz:preflight/ceraui-preflight.rEptrC8p/audit-json.log",
+			"sha256": "d6366ca97e0e73394a269ab3fe7da4e24d25c0e5e42d279c9bb29e7aa363db5c",
+			"sourceSha256": "d6366ca97e0e73394a269ab3fe7da4e24d25c0e5e42d279c9bb29e7aa363db5c"
+		},
+		{
+			"file": "captures/r21/preflight/permissions.log",
+			"origin": "task-21-22-integ-r21-guest-receipts.tar.gz:preflight/ceraui-preflight.rEptrC8p/permissions.log",
+			"sha256": "c4ade40c6f284f6ff1766cbbb66a0b802723ceca73403c5f3136bddc4f506f42",
+			"sourceSha256": "c4ade40c6f284f6ff1766cbbb66a0b802723ceca73403c5f3136bddc4f506f42"
+		},
+		{
+			"file": "captures/r21/preflight/results",
+			"origin": "task-21-22-integ-r21-guest-receipts.tar.gz:preflight/ceraui-preflight.rEptrC8p/results",
+			"sha256": "73abd4a157c9603935c98aeefcbb932d6a101e4ff18f706cb9a9a70e42e74073",
+			"sourceSha256": "73abd4a157c9603935c98aeefcbb932d6a101e4ff18f706cb9a9a70e42e74073"
+		},
+		{
+			"file": "captures/r21/preflight/versions.log",
+			"origin": "task-21-22-integ-r21-guest-receipts.tar.gz:preflight/ceraui-preflight.rEptrC8p/versions.log",
+			"sha256": "7b8642fa9f7a16aceb0d52f92d4707970fe0a1e318f688e2d220bb981dc8c156",
+			"sourceSha256": "7b8642fa9f7a16aceb0d52f92d4707970fe0a1e318f688e2d220bb981dc8c156"
+		},
+		{
+			"file": "captures/r21/preflight/radios.log",
+			"origin": "task-21-22-integ-r21-guest-receipts.tar.gz:preflight/ceraui-preflight.rEptrC8p/radios.log",
+			"sha256": "0ad54fe1e3f14c659f0681dca35d5ac0d99f78c079abc8a3d43bba5adfb346b3",
+			"sourceSha256": "0ad54fe1e3f14c659f0681dca35d5ac0d99f78c079abc8a3d43bba5adfb346b3"
+		},
+		{
+			"file": "captures/r21/preflight/os.log",
+			"origin": "task-21-22-integ-r21-guest-receipts.tar.gz:preflight/ceraui-preflight.rEptrC8p/os.log",
+			"sha256": "8158db112c8c5d334349c6b33bf171193c52a799e6a47ec802dbc90c7420c7be",
+			"sourceSha256": "8158db112c8c5d334349c6b33bf171193c52a799e6a47ec802dbc90c7420c7be"
+		},
+		{
+			"file": "captures/r19/guest-console.txt",
+			"origin": "task-21-22-integ-combined-r19-native.log:guest-segment",
+			"sha256": "c87f1f30f18176681b6b59d9431b5afd1ef374a8d4d4fb0a96c44cd3786a4282",
+			"sourceSha256": "c87f1f30f18176681b6b59d9431b5afd1ef374a8d4d4fb0a96c44cd3786a4282"
+		},
+		{
+			"file": "captures/r20/guest-console.txt",
+			"origin": "task-21-22-integ-r20-native.log:guest-segment",
+			"sha256": "f33463e3dca8efaa6d0304b7ce0e3de9472fcb5c322af96777ad28b753ed5cd1",
+			"sourceSha256": "0ea9759d750851cf976f0d382600fc17481e1724b02fff77239486935e6bc11f"
+		},
+		{
+			"file": "captures/r21/guest-console.txt",
+			"origin": "task-21-22-integ-r21-native.log:guest-segment",
+			"sha256": "7b1f448e01c5dc49d8057c494eac13408ec424000676a886a9bc5c634f2c4941",
+			"sourceSha256": "4e0b1256d286932dbc443ab2bd3976c8f449f9fff82f0001772402cf632df4a0"
+		},
+		{
+			"file": "captures/r19/keyfiles-masked.txt",
+			"origin": "task-21-22-integ-combined-r19-keyfiles-masked.txt",
+			"sha256": "3d4249d49b5df30bb30e4fa01c9ad34f6da9b889348e341a8f34f3367b5ca332",
+			"sourceSha256": "3d4249d49b5df30bb30e4fa01c9ad34f6da9b889348e341a8f34f3367b5ca332"
+		},
+		{
+			"file": "captures/r19/cloud-init.txt",
+			"origin": "task-21-22-integ-combined-r19-native.log:cloud-init",
+			"sha256": "1a32efc5de5a1c02ee38284a163280eb694fdb12942e3d8906814e6757e85997",
+			"sourceSha256": "1a32efc5de5a1c02ee38284a163280eb694fdb12942e3d8906814e6757e85997"
+		},
+		{
+			"file": "captures/r20/cloud-init.txt",
+			"origin": "task-21-22-integ-r20-native.log:cloud-init",
+			"sha256": "517fce9e1a175508e8dcd12188dc4ff7d31bc913d97a0bce31dc89c370cf4f84",
+			"sourceSha256": "517fce9e1a175508e8dcd12188dc4ff7d31bc913d97a0bce31dc89c370cf4f84"
+		},
+		{
+			"file": "captures/r21/cloud-init.txt",
+			"origin": "task-21-22-integ-r21-native.log:cloud-init",
+			"sha256": "28707272329b48e1e58f303bfc1879300f811d2847a91ca3c7d8a0689983a761",
+			"sourceSha256": "28707272329b48e1e58f303bfc1879300f811d2847a91ca3c7d8a0689983a761"
+		}
+	],
+	"samples": [
+		{
+			"id": "r19/nmcli-add-33",
+			"run": "r19",
+			"kind": "nm-add",
+			"file": "commands/r19/nmcli-add-33.txt",
+			"sha256": "fde96b2776a166c297d86e4771566c2a04354f735278b5c2979473d4bbfa9c45",
+			"expected": {
+				"name": "CeraTest",
+				"uuid": "23fdf18c-3f07-406f-a417-3b889770fb43"
+			},
+			"origins": [
+				"task-21-22-integ-combined-r19-native.log:118"
+			]
+		},
+		{
+			"id": "r20/nmcli-add-33",
+			"run": "r20",
+			"kind": "nm-add",
+			"file": "commands/r20/nmcli-add-33.txt",
+			"sha256": "ae127d565227e5fca48674c9c2cf940b56fc733293d476a014efb880ec17675a",
+			"expected": {
+				"name": "CeraTest",
+				"uuid": "a2b22e29-0d7a-4bb9-a0a5-eb6ba3c36011"
+			},
+			"origins": [
+				"task-21-22-integ-r20-native.log:123"
+			]
+		},
+		{
+			"id": "r21/nmcli-add-33",
+			"run": "r21",
+			"kind": "nm-add",
+			"file": "commands/r21/nmcli-add-33.txt",
+			"sha256": "4cb022969e6b48efe77653e67db6b73c69c61256b2481ae471453215c1e25800",
+			"expected": {
+				"name": "CeraTest",
+				"uuid": "6be5e068-43da-44f5-b399-ec1642cdf41a"
+			},
+			"origins": [
+				"task-21-22-integ-r21-native.log:111"
+			]
+		},
+		{
+			"id": "r21/iw-phy0-info-prefix",
+			"run": "r21",
+			"kind": "iw-phy",
+			"file": "commands/r21/iw-phy0-info-prefix.txt",
+			"sha256": "b3ab6a1bfc0801bfef87fbf24c1e8321b6e62a47c77292bd616d644fedec5770",
+			"expected": {
+				"ap": true,
+				"channel6": true
+			},
+			"complete": false,
+			"capturedCharacters": 10000,
+			"omittedCharacters": 25867,
+			"finalNewlineAdded": true,
+			"origins": [
+				"preflight/native.json:four-clean-radios.detail"
+			]
+		},
+		{
+			"id": "r20/iw-dev",
+			"run": "r20",
+			"kind": "iw-dev",
+			"file": "commands/r20/iw-dev.txt",
+			"sha256": "691e75d98a6c5b9e8be3b5c3a0c7a09de728d304fd3436af6ee207969a85f5cc",
+			"expected": {
+				"apDevice": "wlan0",
+				"ssid": "CeraTest",
+				"channel": 6,
+				"devices": 4,
+				"channelDevices": [
+					"wlan1",
+					"wlan0"
+				]
+			},
+			"origins": [
+				"preflight/radios.log"
+			]
+		},
+		{
+			"id": "r20/rfkill",
+			"run": "r20",
+			"kind": "rfkill",
+			"file": "commands/r20/rfkill.txt",
+			"sha256": "44c14b8293ae6e663d05ace6c7b7266564cfb2b07a3bcdb76afb4cf21c684baf",
+			"expected": {
+				"softBlocked": false,
+				"hardBlocked": false
+			},
+			"origins": [
+				"preflight/radios.log"
+			]
+		},
+		{
+			"id": "r20/nm-devices",
+			"run": "r20",
+			"kind": "nm-devices",
+			"file": "commands/r20/nm-devices.txt",
+			"sha256": "71bf50eb995317c33c205ffafca41600bce2d700bd00bf0f60d74e30e464d2ca",
+			"expected": {
+				"client": "wlan1",
+				"state": "connected",
+				"bootstrap": false
+			},
+			"origins": [
+				"preflight/radios.log"
+			]
+		},
+		{
+			"id": "r20/os",
+			"run": "r20",
+			"kind": "os",
+			"file": "commands/r20/os.txt",
+			"sha256": "8158db112c8c5d334349c6b33bf171193c52a799e6a47ec802dbc90c7420c7be",
+			"expected": {},
+			"origins": [
+				"preflight/os.log"
+			]
+		},
+		{
+			"id": "r20/environment",
+			"run": "r20",
+			"kind": "environment",
+			"file": "commands/r20/environment.txt",
+			"sha256": "30509634db0a77dd34f53098d2806000dd89e981a256d3f7e8e22f29de45d904",
+			"expected": {},
+			"origins": [
+				"preflight/environment.log"
+			]
+		},
+		{
+			"id": "r20/permissions",
+			"run": "r20",
+			"kind": "permissions",
+			"file": "commands/r20/permissions.txt",
+			"sha256": "c4ade40c6f284f6ff1766cbbb66a0b802723ceca73403c5f3136bddc4f506f42",
+			"expected": {},
+			"origins": [
+				"preflight/permissions.log"
+			]
+		},
+		{
+			"id": "r20/systemd",
+			"run": "r20",
+			"kind": "systemd",
+			"file": "commands/r20/systemd.txt",
+			"sha256": "7f32e633d3bedf157d1bac4cf30b36d1fe2d81faad185947be13e2ebfe3e6a5a",
+			"expected": {},
+			"origins": [
+				"preflight/systemd.log"
+			]
+		},
+		{
+			"id": "r20/versions",
+			"run": "r20",
+			"kind": "versions",
+			"file": "commands/r20/versions.txt",
+			"sha256": "ddca522f48bb1b9138424a2fdf2d76725762637349b84a8b86f02efffbdbc9b4",
+			"expected": {},
+			"origins": [
+				"preflight/versions.log"
+			]
+		},
+		{
+			"id": "r20/audit-json",
+			"run": "r20",
+			"kind": "audit-json",
+			"file": "commands/r20/audit-json.txt",
+			"sha256": "d6366ca97e0e73394a269ab3fe7da4e24d25c0e5e42d279c9bb29e7aa363db5c",
+			"expected": {},
+			"origins": [
+				"preflight/audit-json.log"
+			]
+		},
+		{
+			"id": "r20/journal",
+			"run": "r20",
+			"kind": "journal",
+			"file": "commands/r20/journal.txt",
+			"sha256": "ee679cab58a6903d929cdeec3293f792023a721454d7278890251ebae1046393",
+			"expected": {
+				"hasAudit": true,
+				"audit": [
+					{
+						"at": 1794953175748.052,
+						"op": "device-managed",
+						"uuid": "?",
+						"pid": "2467",
+						"result": "success"
+					},
+					{
+						"at": 1794953175755.098,
+						"op": "device-managed",
+						"uuid": "?",
+						"pid": "2472",
+						"result": "success"
+					},
+					{
+						"at": 1794953175826.049,
+						"op": "connection-add",
+						"uuid": "a2b22e29-0d7a-4bb9-a0a5-eb6ba3c36011",
+						"pid": "2499",
+						"result": "success"
+					}
+				]
+			},
+			"origins": [
+				"nm-journal.jsonl"
+			]
+		},
+		{
+			"id": "r20/processes",
+			"run": "r20",
+			"kind": "ps",
+			"file": "commands/r20/processes.txt",
+			"sha256": "3daf94bc1dd53fa781bfc1275d837b1da2172eeb1abea3565aafc5a3fb0049ec",
+			"expected": {
+				"hostapd": true,
+				"networkManager": true
+			},
+			"origins": [
+				"processes.txt"
+			]
+		},
+		{
+			"id": "r21/iw-dev",
+			"run": "r21",
+			"kind": "iw-dev",
+			"file": "commands/r21/iw-dev.txt",
+			"sha256": "b93df8c38dbc3969bfd7301fc6149dfa5a1235994da4b1a2a94d479d5bd9bfb1",
+			"expected": {
+				"apDevice": "wlan0",
+				"ssid": "CeraTest",
+				"channel": 6,
+				"devices": 4,
+				"channelDevices": [
+					"wlan0"
+				]
+			},
+			"origins": [
+				"preflight/radios.log"
+			]
+		},
+		{
+			"id": "r21/rfkill",
+			"run": "r21",
+			"kind": "rfkill",
+			"file": "commands/r21/rfkill.txt",
+			"sha256": "44c14b8293ae6e663d05ace6c7b7266564cfb2b07a3bcdb76afb4cf21c684baf",
+			"expected": {
+				"softBlocked": false,
+				"hardBlocked": false
+			},
+			"origins": [
+				"preflight/radios.log"
+			]
+		},
+		{
+			"id": "r21/nm-devices",
+			"run": "r21",
+			"kind": "nm-devices",
+			"file": "commands/r21/nm-devices.txt",
+			"sha256": "1d31be6575ebce4387682a159a0f2861ba6bced21afd856d4d8c1c19775fe775",
+			"expected": {
+				"client": "wlan1",
+				"state": "disconnected",
+				"bootstrap": false
+			},
+			"origins": [
+				"preflight/radios.log"
+			]
+		},
+		{
+			"id": "r21/os",
+			"run": "r21",
+			"kind": "os",
+			"file": "commands/r21/os.txt",
+			"sha256": "8158db112c8c5d334349c6b33bf171193c52a799e6a47ec802dbc90c7420c7be",
+			"expected": {},
+			"origins": [
+				"preflight/os.log"
+			]
+		},
+		{
+			"id": "r21/environment",
+			"run": "r21",
+			"kind": "environment",
+			"file": "commands/r21/environment.txt",
+			"sha256": "30509634db0a77dd34f53098d2806000dd89e981a256d3f7e8e22f29de45d904",
+			"expected": {},
+			"origins": [
+				"preflight/environment.log"
+			]
+		},
+		{
+			"id": "r21/permissions",
+			"run": "r21",
+			"kind": "permissions",
+			"file": "commands/r21/permissions.txt",
+			"sha256": "c4ade40c6f284f6ff1766cbbb66a0b802723ceca73403c5f3136bddc4f506f42",
+			"expected": {},
+			"origins": [
+				"preflight/permissions.log"
+			]
+		},
+		{
+			"id": "r21/systemd",
+			"run": "r21",
+			"kind": "systemd",
+			"file": "commands/r21/systemd.txt",
+			"sha256": "02924399c00fcc51ae10e79b87d405fa5733a0240075cd51ea846adde2acccde",
+			"expected": {},
+			"origins": [
+				"preflight/systemd.log"
+			]
+		},
+		{
+			"id": "r21/versions",
+			"run": "r21",
+			"kind": "versions",
+			"file": "commands/r21/versions.txt",
+			"sha256": "7b8642fa9f7a16aceb0d52f92d4707970fe0a1e318f688e2d220bb981dc8c156",
+			"expected": {},
+			"origins": [
+				"preflight/versions.log"
+			]
+		},
+		{
+			"id": "r21/audit-json",
+			"run": "r21",
+			"kind": "audit-json",
+			"file": "commands/r21/audit-json.txt",
+			"sha256": "d6366ca97e0e73394a269ab3fe7da4e24d25c0e5e42d279c9bb29e7aa363db5c",
+			"expected": {},
+			"origins": [
+				"preflight/audit-json.log"
+			]
+		},
+		{
+			"id": "r21/journal",
+			"run": "r21",
+			"kind": "journal",
+			"file": "commands/r21/journal.txt",
+			"sha256": "018232da227caa0ba8207885940905f87033a9fb88f1085e1ee273cc87bb8158",
+			"expected": {
+				"hasAudit": true,
+				"audit": [
+					{
+						"at": 1794957705299.091,
+						"op": "device-managed",
+						"uuid": "?",
+						"pid": "2282",
+						"result": "success"
+					},
+					{
+						"at": 1794957705306.819,
+						"op": "device-managed",
+						"uuid": "?",
+						"pid": "2287",
+						"result": "success"
+					},
+					{
+						"at": 1794957705381.921,
+						"op": "connection-add",
+						"uuid": "6be5e068-43da-44f5-b399-ec1642cdf41a",
+						"pid": "2312",
+						"result": "success"
+					},
+					{
+						"at": 1794957709167.794,
+						"op": "connection-add",
+						"uuid": "5b76f470-b9e5-415b-b169-22bef0d09f16",
+						"pid": "2524",
+						"result": "success"
+					},
+					{
+						"at": 1794957709196.662,
+						"op": "connection-update",
+						"uuid": "5b76f470-b9e5-415b-b169-22bef0d09f16",
+						"pid": "2535",
+						"result": "success"
+					},
+					{
+						"at": 1794957709240.23,
+						"op": "connection-update",
+						"uuid": "5b76f470-b9e5-415b-b169-22bef0d09f16",
+						"pid": "2557",
+						"result": "success"
+					},
+					{
+						"at": 1794957709617.916,
+						"op": "connection-delete",
+						"uuid": "5b76f470-b9e5-415b-b169-22bef0d09f16",
+						"pid": "2602",
+						"result": "success"
+					}
+				]
+			},
+			"origins": [
+				"nm-journal.jsonl"
+			]
+		},
+		{
+			"id": "r21/processes",
+			"run": "r21",
+			"kind": "ps",
+			"file": "commands/r21/processes.txt",
+			"sha256": "87bc3eeedca859692cc2b3f35f9821488c2f641da794bfc43a83e0c75707b769",
+			"expected": {
+				"hostapd": true,
+				"networkManager": true
+			},
+			"origins": [
+				"processes.txt"
+			]
+		},
+		{
+			"id": "r20/nm-devices-capture-1",
+			"run": "r20",
+			"kind": "nm-devices",
+			"file": "commands/r20/nm-devices-capture-1.txt",
+			"sha256": "fdf20a3c27a8a69edbedf735efe283800cac0431d6d41ea434159d12783e872a",
+			"expected": {
+				"client": "wlan1",
+				"state": "connected",
+				"bootstrap": true
+			},
+			"origins": [
+				"captures/r20/r20-keyfiles-masked.txt"
+			]
+		},
+		{
+			"id": "r20/keyfile-captures-r20-r20-keyfiles-masked-txt-1",
+			"run": "r20",
+			"kind": "keyfile",
+			"file": "commands/r20/keyfile-captures-r20-r20-keyfiles-masked-txt-1.txt",
+			"sha256": "7e5cda36c849034ef7c90957cb7e64527ec775d748dcb1cf694e0b8f26e55f9e",
+			"expected": {
+				"uuid": "a2b22e29-0d7a-4bb9-a0a5-eb6ba3c36011",
+				"autoconnect": false,
+				"sha256": "7e5cda36c849034ef7c90957cb7e64527ec775d748dcb1cf694e0b8f26e55f9e"
+			},
+			"origins": [
+				"captures/r20/r20-keyfiles-masked.txt"
+			]
+		},
+		{
+			"id": "r20/keyfile-captures-r20-r20-keyfiles-masked-txt-2",
+			"run": "r20",
+			"kind": "keyfile",
+			"file": "commands/r20/keyfile-captures-r20-r20-keyfiles-masked-txt-2.txt",
+			"sha256": "ed419a47467f4b299a42320a8b90deebf3462be87cd9df95ec681d46a386230e",
+			"expected": {
+				"uuid": "189ccc7a-22d8-3d1c-b81b-2649a786d598",
+				"autoconnect": false,
+				"sha256": "ed419a47467f4b299a42320a8b90deebf3462be87cd9df95ec681d46a386230e"
+			},
+			"origins": [
+				"captures/r20/r20-keyfiles-masked.txt"
+			]
+		},
+		{
+			"id": "r20/keyfile-captures-r20-r20-keyfiles-masked-txt-3",
+			"run": "r20",
+			"kind": "keyfile",
+			"file": "commands/r20/keyfile-captures-r20-r20-keyfiles-masked-txt-3.txt",
+			"sha256": "d31996798f68c2c87f0ca0c31bf534302850644644fc62a7cc189eaa63e588e2",
+			"expected": {
+				"uuid": "af78f22e-23f5-4752-b138-0b574ae2413c",
+				"autoconnect": true,
+				"sha256": "d31996798f68c2c87f0ca0c31bf534302850644644fc62a7cc189eaa63e588e2"
+			},
+			"origins": [
+				"captures/r20/r20-keyfiles-masked.txt"
+			]
+		},
+		{
+			"id": "r21/nm-devices-capture-1",
+			"run": "r21",
+			"kind": "nm-devices",
+			"file": "commands/r21/nm-devices-capture-1.txt",
+			"sha256": "a59cd8b23a9017fbab25f21e19e92e40af29c64370f0ff24adfb9a2cbebf68a2",
+			"expected": {
+				"client": "wlan1",
+				"state": "unavailable",
+				"bootstrap": false
+			},
+			"origins": [
+				"captures/r21/r21-keyfiles-masked.txt"
+			]
+		},
+		{
+			"id": "r21/nm-devices-capture-2",
+			"run": "r21",
+			"kind": "nm-devices",
+			"file": "commands/r21/nm-devices-capture-2.txt",
+			"sha256": "b907555ceec091774b0f084daf4e1d36d1bbd837daaae1df2aeef88c5c955f73",
+			"expected": {
+				"client": "wlan1",
+				"state": "disconnected",
+				"bootstrap": false
+			},
+			"origins": [
+				"captures/r21/r21-keyfiles-masked.txt"
+			]
+		},
+		{
+			"id": "r21/keyfile-captures-r21-r21-keyfiles-masked-txt-1",
+			"run": "r21",
+			"kind": "keyfile",
+			"file": "commands/r21/keyfile-captures-r21-r21-keyfiles-masked-txt-1.txt",
+			"sha256": "82a84a5ab9aecdec8c1e93fe63bc5f5b9a0e98da2afa45aca14fe108b90fc390",
+			"expected": {
+				"uuid": "5b76f470-b9e5-415b-b169-22bef0d09f16",
+				"autoconnect": true,
+				"sha256": "82a84a5ab9aecdec8c1e93fe63bc5f5b9a0e98da2afa45aca14fe108b90fc390"
+			},
+			"origins": [
+				"captures/r21/r21-keyfiles-masked.txt"
+			]
+		},
+		{
+			"id": "r21/keyfile-captures-r21-r21-keyfiles-masked-txt-2",
+			"run": "r21",
+			"kind": "keyfile",
+			"file": "commands/r21/keyfile-captures-r21-r21-keyfiles-masked-txt-2.txt",
+			"sha256": "8b6496e688fbbd1192619428b51d679aa123dbc294ff17c6f3742278c898f7c0",
+			"expected": {
+				"uuid": "6be5e068-43da-44f5-b399-ec1642cdf41a",
+				"autoconnect": false,
+				"sha256": "8b6496e688fbbd1192619428b51d679aa123dbc294ff17c6f3742278c898f7c0"
+			},
+			"origins": [
+				"captures/r21/r21-keyfiles-masked.txt"
+			]
+		},
+		{
+			"id": "r21/keyfile-captures-r21-r21-keyfiles-masked-txt-3",
+			"run": "r21",
+			"kind": "keyfile",
+			"file": "commands/r21/keyfile-captures-r21-r21-keyfiles-masked-txt-3.txt",
+			"sha256": "4d97ac0a256b1876f8ff00510834ea7fc818a5c5fbf91fd63785804e72dcca41",
+			"expected": {
+				"uuid": "aa1fd7ca-f187-31a1-9d58-a059a5e614cc",
+				"autoconnect": false,
+				"sha256": "4d97ac0a256b1876f8ff00510834ea7fc818a5c5fbf91fd63785804e72dcca41"
+			},
+			"origins": [
+				"captures/r21/r21-keyfiles-masked.txt"
+			]
+		},
+		{
+			"id": "r21/keyfile-captures-r21-r21-keyfiles-masked-txt-4",
+			"run": "r21",
+			"kind": "keyfile",
+			"file": "commands/r21/keyfile-captures-r21-r21-keyfiles-masked-txt-4.txt",
+			"sha256": "0fac55cb59ed9ebca28c3f169a1dbb4a80bfefcf5273e557dde3ab1d095e062c",
+			"expected": {
+				"uuid": "3ca6fb3d-2a2a-4f09-94db-fbd48c3c057e",
+				"autoconnect": true,
+				"sha256": "0fac55cb59ed9ebca28c3f169a1dbb4a80bfefcf5273e557dde3ab1d095e062c"
+			},
+			"origins": [
+				"captures/r21/r21-keyfiles-masked.txt"
+			]
+		},
+		{
+			"id": "r21/keyfile-captures-r21-r21-keyfiles-masked-txt-5",
+			"run": "r21",
+			"kind": "keyfile",
+			"file": "commands/r21/keyfile-captures-r21-r21-keyfiles-masked-txt-5.txt",
+			"sha256": "8b6496e688fbbd1192619428b51d679aa123dbc294ff17c6f3742278c898f7c0",
+			"expected": {
+				"uuid": "6be5e068-43da-44f5-b399-ec1642cdf41a",
+				"autoconnect": false,
+				"sha256": "8b6496e688fbbd1192619428b51d679aa123dbc294ff17c6f3742278c898f7c0"
+			},
+			"origins": [
+				"captures/r21/r21-keyfiles-masked.txt"
+			]
+		},
+		{
+			"id": "r21/keyfile-captures-r21-r21-keyfiles-masked-txt-6",
+			"run": "r21",
+			"kind": "keyfile",
+			"file": "commands/r21/keyfile-captures-r21-r21-keyfiles-masked-txt-6.txt",
+			"sha256": "4d97ac0a256b1876f8ff00510834ea7fc818a5c5fbf91fd63785804e72dcca41",
+			"expected": {
+				"uuid": "aa1fd7ca-f187-31a1-9d58-a059a5e614cc",
+				"autoconnect": false,
+				"sha256": "4d97ac0a256b1876f8ff00510834ea7fc818a5c5fbf91fd63785804e72dcca41"
+			},
+			"origins": [
+				"captures/r21/r21-keyfiles-masked.txt"
+			]
+		},
+		{
+			"id": "r21/keyfile-captures-r21-r21-keyfiles-masked-txt-7",
+			"run": "r21",
+			"kind": "keyfile",
+			"file": "commands/r21/keyfile-captures-r21-r21-keyfiles-masked-txt-7.txt",
+			"sha256": "0fac55cb59ed9ebca28c3f169a1dbb4a80bfefcf5273e557dde3ab1d095e062c",
+			"expected": {
+				"uuid": "3ca6fb3d-2a2a-4f09-94db-fbd48c3c057e",
+				"autoconnect": true,
+				"sha256": "0fac55cb59ed9ebca28c3f169a1dbb4a80bfefcf5273e557dde3ab1d095e062c"
+			},
+			"origins": [
+				"captures/r21/r21-keyfiles-masked.txt"
+			]
+		},
+		{
+			"id": "r19/nm-devices-capture-1",
+			"run": "r19",
+			"kind": "nm-devices",
+			"file": "commands/r19/nm-devices-capture-1.txt",
+			"sha256": "fdf20a3c27a8a69edbedf735efe283800cac0431d6d41ea434159d12783e872a",
+			"expected": {
+				"client": "wlan1",
+				"state": "connected",
+				"bootstrap": true
+			},
+			"origins": [
+				"captures/r19/guest-console.txt",
+				"captures/r19/keyfiles-masked.txt"
+			]
+		},
+		{
+			"id": "r19/keyfile-captures-r19-guest-console-txt-1",
+			"run": "r19",
+			"kind": "keyfile",
+			"file": "commands/r19/keyfile-captures-r19-guest-console-txt-1.txt",
+			"sha256": "f603020b6ea9bc6238a52037b358697441d3967161ec7c56b764a3a60b948f5f",
+			"expected": {
+				"uuid": "23fdf18c-3f07-406f-a417-3b889770fb43",
+				"autoconnect": false,
+				"sha256": "f603020b6ea9bc6238a52037b358697441d3967161ec7c56b764a3a60b948f5f"
+			},
+			"origins": [
+				"captures/r19/guest-console.txt"
+			]
+		},
+		{
+			"id": "r19/keyfile-captures-r19-guest-console-txt-2",
+			"run": "r19",
+			"kind": "keyfile",
+			"file": "commands/r19/keyfile-captures-r19-guest-console-txt-2.txt",
+			"sha256": "85be60b347e61d32d14beeecd92552483173ef8e788f74950d05cbbc82beb8ea",
+			"expected": {
+				"uuid": "67c2e052-a256-3fbb-a642-7dc3714e4973",
+				"autoconnect": false,
+				"sha256": "85be60b347e61d32d14beeecd92552483173ef8e788f74950d05cbbc82beb8ea"
+			},
+			"origins": [
+				"captures/r19/guest-console.txt"
+			]
+		},
+		{
+			"id": "r19/keyfile-captures-r19-guest-console-txt-3",
+			"run": "r19",
+			"kind": "keyfile",
+			"file": "commands/r19/keyfile-captures-r19-guest-console-txt-3.txt",
+			"sha256": "6f04fe8d0e4e49eda7f2e56907e1a6b78674d0640d720922fa8bf13e446a6bcc",
+			"expected": {
+				"uuid": "04a8d233-c57c-4703-aef0-0b95b3ad1c20",
+				"autoconnect": true,
+				"sha256": "6f04fe8d0e4e49eda7f2e56907e1a6b78674d0640d720922fa8bf13e446a6bcc"
+			},
+			"origins": [
+				"captures/r19/guest-console.txt"
+			]
+		},
+		{
+			"id": "r19/keyfile-captures-r19-keyfiles-masked-txt-1",
+			"run": "r19",
+			"kind": "keyfile",
+			"file": "commands/r19/keyfile-captures-r19-keyfiles-masked-txt-1.txt",
+			"sha256": "f603020b6ea9bc6238a52037b358697441d3967161ec7c56b764a3a60b948f5f",
+			"expected": {
+				"uuid": "23fdf18c-3f07-406f-a417-3b889770fb43",
+				"autoconnect": false,
+				"sha256": "f603020b6ea9bc6238a52037b358697441d3967161ec7c56b764a3a60b948f5f"
+			},
+			"origins": [
+				"captures/r19/keyfiles-masked.txt"
+			]
+		},
+		{
+			"id": "r19/keyfile-captures-r19-keyfiles-masked-txt-2",
+			"run": "r19",
+			"kind": "keyfile",
+			"file": "commands/r19/keyfile-captures-r19-keyfiles-masked-txt-2.txt",
+			"sha256": "85be60b347e61d32d14beeecd92552483173ef8e788f74950d05cbbc82beb8ea",
+			"expected": {
+				"uuid": "67c2e052-a256-3fbb-a642-7dc3714e4973",
+				"autoconnect": false,
+				"sha256": "85be60b347e61d32d14beeecd92552483173ef8e788f74950d05cbbc82beb8ea"
+			},
+			"origins": [
+				"captures/r19/keyfiles-masked.txt"
+			]
+		},
+		{
+			"id": "r19/keyfile-captures-r19-keyfiles-masked-txt-3",
+			"run": "r19",
+			"kind": "keyfile",
+			"file": "commands/r19/keyfile-captures-r19-keyfiles-masked-txt-3.txt",
+			"sha256": "6f04fe8d0e4e49eda7f2e56907e1a6b78674d0640d720922fa8bf13e446a6bcc",
+			"expected": {
+				"uuid": "04a8d233-c57c-4703-aef0-0b95b3ad1c20",
+				"autoconnect": true,
+				"sha256": "6f04fe8d0e4e49eda7f2e56907e1a6b78674d0640d720922fa8bf13e446a6bcc"
+			},
+			"origins": [
+				"captures/r19/keyfiles-masked.txt"
+			]
+		},
+		{
+			"id": "r19/cloud-init",
+			"run": "r19",
+			"kind": "cloud-init",
+			"file": "commands/r19/cloud-init.txt",
+			"sha256": "1a32efc5de5a1c02ee38284a163280eb694fdb12942e3d8906814e6757e85997",
+			"expected": {
+				"status": "done"
+			},
+			"origins": [
+				"task-21-22-integ-combined-r19-native.log:cloud-init"
+			]
+		},
+		{
+			"id": "r20/cloud-init",
+			"run": "r20",
+			"kind": "cloud-init",
+			"file": "commands/r20/cloud-init.txt",
+			"sha256": "517fce9e1a175508e8dcd12188dc4ff7d31bc913d97a0bce31dc89c370cf4f84",
+			"expected": {
+				"status": "done"
+			},
+			"origins": [
+				"task-21-22-integ-r20-native.log:cloud-init"
+			]
+		},
+		{
+			"id": "r21/cloud-init",
+			"run": "r21",
+			"kind": "cloud-init",
+			"file": "commands/r21/cloud-init.txt",
+			"sha256": "28707272329b48e1e58f303bfc1879300f811d2847a91ca3c7d8a0689983a761",
+			"expected": {
+				"status": "done"
+			},
+			"origins": [
+				"task-21-22-integ-r21-native.log:cloud-init"
+			]
+		}
+	]
+}
