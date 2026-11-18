@@ -71,6 +71,11 @@ shape we knew how to read is gone. The second is a statement about the *read*, n
 about the hardware. Self-managed wiphys get a shorter TTL (60 s vs 5 min) because their
 domain moves with no operator action.
 
+Well-formed bands outside the represented 2.4/5/6 GHz schema are omitted rather
+than invalidating neighbouring radios. Their frequencies may omit channel
+suffixes, as S1G does in iw 6.9. Malformed frequency blocks and supported-band
+rows without channel numbers still fail.
+
 **Three degraded states, and collapsing any pair is the bug.** A radio that does not
 carry a band renders **zero** nodes. A radio that carries it under a non-permitting,
 non-self-managed domain keeps the chip, marks it `aria-disabled`, and offers "Set

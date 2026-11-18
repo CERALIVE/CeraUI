@@ -76,8 +76,9 @@ export type { WifiLinkTelemetry };
 const WIPHY_RE = /^Wiphy\s+(\S+)\s*$/;
 const WIPHY_INDEX_RE = /^wiphy index:\s*(\d+)\s*$/;
 const BAND_RE = /^Band\s+(\d+):\s*$/;
-/** `* 5180 MHz [36] (20.0 dBm)` — the decimal is optional (older `iw`). */
-const FREQUENCY_RE = /^\*\s*(\d+)(?:\.\d+)?\s*MHz\s*\[\d+\]/;
+/** Unrepresented bands such as S1G legitimately omit the channel suffix. */
+const FREQUENCY_RE =
+	/^\*\s*(\d+(?:\.\d+)?)\s*MHz(?:\s+\[(\d+)\])?(?:\s+\([^)]*\))*\s*$/;
 const IFTYPE_RE = /^\*\s*(\S+)\s*$/;
 const HEX_CAPS_RE = /\(0x([0-9a-fA-F]*)\)/;
 
@@ -102,6 +103,8 @@ export type WifiPhyCapabilities = {
 type BandBlock = {
 	lines: string[];
 	band: WifiCapabilityBand | undefined;
+	frequencies: string[];
+	frequencyDepth?: number;
 };
 
 function tabDepth(line: string): number {
@@ -283,7 +286,7 @@ function parsePhyBlock(block: PhyBlock): ParseResult<WifiPhyCapabilities> {
 		if (depth <= 1) {
 			const bandHeader = BAND_RE.exec(line);
 			if (bandHeader) {
-				currentBand = { lines: [], band: undefined };
+				currentBand = { lines: [], band: undefined, frequencies: [] };
 				bands.push(currentBand);
 				mode = "band";
 				continue;
@@ -309,10 +312,18 @@ function parsePhyBlock(block: PhyBlock): ParseResult<WifiPhyCapabilities> {
 
 		if (mode === "band" && currentBand) {
 			currentBand.lines.push(line);
-			const freq = FREQUENCY_RE.exec(line);
-			if (freq?.[1] && currentBand.band === undefined) {
-				currentBand.band = bandForFrequency(Number(freq[1]));
-			}
+			if (line === "Frequencies:") currentBand.frequencyDepth = depth;
+			else if (
+				currentBand.frequencyDepth !== undefined &&
+				depth > currentBand.frequencyDepth &&
+				line.startsWith("*")
+			)
+				currentBand.frequencies.push(line);
+			else if (
+				currentBand.frequencyDepth !== undefined &&
+				depth <= currentBand.frequencyDepth
+			)
+				delete currentBand.frequencyDepth;
 			continue;
 		}
 		if (mode === "iftypes") {
@@ -338,12 +349,30 @@ function parsePhyBlock(block: PhyBlock): ParseResult<WifiPhyCapabilities> {
 		);
 	}
 	for (const band of bands) {
-		if (band.band === undefined) {
+		if (band.frequencies.length === 0) {
 			return parseFail(
 				"parseIwPhyCapabilities",
 				`wiphy ${block.phy} has a band block with no recognisable frequency`,
 				band.lines.join("\n"),
 			);
+		}
+		for (const line of band.frequencies) {
+			const frequency = FREQUENCY_RE.exec(line);
+			const freqMhz = Number(frequency?.[1]);
+			const represented = bandForFrequency(freqMhz);
+			if (
+				!frequency ||
+				!Number.isFinite(freqMhz) ||
+				freqMhz <= 0 ||
+				(represented !== undefined &&
+					(!frequency[2] || Number(frequency[2]) <= 0))
+			)
+				return parseFail(
+					"parseIwPhyCapabilities",
+					`wiphy ${block.phy} has a malformed band frequency`,
+					band.lines.join("\n"),
+				);
+			band.band ??= represented;
 		}
 	}
 
