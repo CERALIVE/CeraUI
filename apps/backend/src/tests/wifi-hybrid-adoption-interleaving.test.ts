@@ -37,6 +37,7 @@ for (const [change, apply] of Object.entries(changes)) {
 	] as const) {
 		test(`a ${change} during ${window} refuses hybrid before the next write`, async () => {
 			const f = await hybridFixture();
+			const priorAutoconnect = f.target.autoconnect();
 			spyOn(nm, "nmConnGetFields").mockResolvedValue(["clap-wlan0", ""]);
 			if (window === "readiness")
 				concurrent.setConcurrentInterfaceDepsForTest(f.target.run, async () => {
@@ -74,10 +75,15 @@ for (const [change, apply] of Object.entries(changes)) {
 				).toEqual(
 					window === "readiness"
 						? []
-						: change === "foreign binding"
+						: change === "foreign binding" ||
+								(change === "replacement" && window === "adoption write")
 							? [adoptionWrite, restoreWrite]
 							: [adoptionWrite],
 				);
+				if (change === "replacement" && window === "adoption write")
+					expect(
+						f.target.calls.filter((args) => args[0] === "nmcli").at(-1),
+					).toEqual([...adoptionWrite.slice(0, -1), priorAutoconnect]);
 				if (window === "readiness" || change === "foreign binding")
 					expect(f.target.autoconnect()).toBe("yes");
 				expect(f.target.objects.has("clap-wlan0")).toBe(true);
