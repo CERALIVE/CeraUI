@@ -2,7 +2,8 @@
   LegacyLogDownloads.svelte — the two shipped log downloads, moved from LogsDialog
   into the System Logs Downloads region. Their state is a LogDownloads owned by
   SystemLogsView, so it outlives this component; long titles and descriptions
-  wrap, and a narrow row puts its button on a line of its own.
+  wrap (Japanese at phrases, Korean at spaces, Chinese between words), and a
+  narrow row puts its button on a line of its own.
 
   Both request the log over the system RPC (getLog / getSyslog); the backend
   pushes a `log` message which the subscription layer turns into a file download.
@@ -12,7 +13,9 @@ import { m } from '@ceraui/i18n/svelte';
 import { AlertTriangle, Download, FileText, Loader2, RefreshCw, Terminal } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
+import { LINE_BREAKS } from '$lib/device-logs/storage-readout';
 
+import KeepWords from './KeepWords.svelte';
 import type { LogDownloads } from './log-downloads.svelte';
 
 let { downloads }: { downloads: LogDownloads } = $props();
@@ -33,7 +36,7 @@ const logs = $derived([
 ]);
 </script>
 
-<div class="space-y-3">
+<div class="space-y-3 {LINE_BREAKS}">
 	{#each logs as log (log.id)}
 		{const Icon = $derived(log.icon)}
 		{const isDownloading = $derived(downloads.downloading === log.id)}
@@ -43,7 +46,7 @@ const logs = $derived([
 			</span>
 			<div class="min-w-0 grow basis-40">
 				<p class="text-sm font-semibold">{log.title}</p>
-				<p class="text-muted-foreground text-xs">{log.desc}</p>
+				<p class="text-muted-foreground text-xs"><KeepWords text={log.desc} /></p>
 			</div>
 			<Button
 				class="ms-auto shrink-0 gap-1.5"
@@ -72,7 +75,7 @@ const logs = $derived([
 			role="alert"
 		>
 			<AlertTriangle aria-hidden="true" class="text-status-warning size-4 shrink-0" />
-			<p class="text-status-warning min-w-0 flex-1 text-xs">{m["advanced.downloadFailed"]()}</p>
+			<p class="text-status-warning min-w-0 flex-1 text-xs"><KeepWords text={m["advanced.downloadFailed"]()} /></p>
 			<Button
 				class="shrink-0 gap-1.5"
 				data-testid="log-download-retry"

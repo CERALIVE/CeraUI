@@ -29,7 +29,8 @@ describe("timelineGroups", () => {
 			[BOOT_IDS.current, ["event"]],
 		]);
 		expect(new Set(groups.map((group) => group.key)).size).toBe(3);
-		expect(groups[0]?.key).toBe(`${BOOT_IDS.current}-${e(5).id}`);
+		expect(groups[0]?.key).toBe(`${BOOT_IDS.current}-0`);
+		expect(groups[2]?.key).toBe(`${BOOT_IDS.current}-1`);
 	});
 
 	it("marks where the device clock ran backwards between two records of one boot", () => {

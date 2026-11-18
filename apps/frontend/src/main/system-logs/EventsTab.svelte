@@ -5,7 +5,9 @@
   Filter on a narrow or short screen; the boot comes from the boot picker. Each
   mount builds its own view and reads the first page, listens for pushed events
   while mounted, and re-reads from the start when stored history is deleted.
-  The list region owns the scroll below the fixed filter bar. Korean breaks
+  The list region owns the scroll below the fixed filter bar and is one tab
+  stop, a row's first action: arrow keys, Home and End move it between rows,
+  and Tab reaches that row's other actions. Korean breaks
   between words, Japanese between phrases and Chinese lines are balanced, so no
   sentence ending is stranded; long recorded values still wrap inside their row.
 -->
@@ -38,10 +40,18 @@ let { onviewraw }: { onviewraw: (around: AroundPage) => void } = $props();
 const INLINE_FILTERS_QUERY = '(min-width: 768px) and (min-height: 601px)';
 const TAG = 'bg-secondary text-secondary-foreground rounded-sm px-1.5 py-0.5 font-medium';
 const CHIP = 'min-h-(--touch-target-min)';
+const NAVIGATION: Record<string, (index: number, last: number) => number> = {
+	ArrowDown: (index) => index + 1,
+	ArrowUp: (index) => index - 1,
+	Home: () => 0,
+	End: (_, last) => last,
+};
 
 const uid = $props.id();
 const inline = new MediaQuery(INLINE_FILTERS_QUERY);
 let filtersOpen = $state(false);
+let scroller = $state<HTMLDivElement>();
+let stopId = $state<string>();
 
 const view = new EventsView(
 	{
@@ -71,6 +81,19 @@ $effect(() => {
 const groups = $derived(timelineGroups(view.events));
 const names = $derived(modemNames(view.events));
 const bootInfo = $derived(new Map(bootRows(boots.boots ?? []).map((row) => [row.boot.bootId, row])));
+const rowIds = $derived(
+	groups.flatMap((group) => group.items.flatMap((item) => (item.kind === 'event' ? [item.event.id] : []))),
+);
+const tabStop = $derived(rowIds.find((id) => id === stopId) ?? rowIds[0]);
+
+// The stop follows focus (focusin on the row), so a row whose action cannot take focus keeps none.
+function navigate(event: KeyboardEvent, id: string): void {
+	const move = NAVIGATION[event.key];
+	if (move === undefined) return;
+	event.preventDefault();
+	const index = move(rowIds.indexOf(id), rowIds.length - 1);
+	scroller?.querySelectorAll<HTMLElement>('[data-testid="event-row"]')[index]?.querySelector('button')?.focus();
+}
 
 function showAll(): void {
 	view.showAll();
@@ -163,7 +186,7 @@ function showAll(): void {
 	{#if view.failed === 'first'}
 		{@render failure(() => void view.reload())}
 	{/if}
-	<div class="min-h-0 flex-1 scroll-pt-16 overflow-y-auto overscroll-contain" data-testid="events-scroller">
+	<div bind:this={scroller} class="min-h-0 flex-1 scroll-pt-16 overflow-y-auto overscroll-contain" data-testid="events-scroller">
 		{#if view.loading === 'first'}
 			<div aria-busy="true" data-testid="events-loading" role="status">
 				<span class="sr-only">{m['systemLogs.loading.events']()}</span>
@@ -232,9 +255,12 @@ function showAll(): void {
 							<EventRow
 								event={item.event}
 								{names}
+								onfocusin={() => (stopId = item.event.id)}
+								onkeydown={(keyEvent) => navigate(keyEvent, item.event.id)}
 								onviewraw={() => void view.viewRaw(item.event, onviewraw)}
 								rawLink={view.rawLink?.id === item.event.id ? view.rawLink.state : null}
 								stale={view.stale}
+								stop={item.event.id === tabStop}
 							/>
 						{/if}
 					{/each}

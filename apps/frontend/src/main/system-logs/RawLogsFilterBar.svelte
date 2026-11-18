@@ -13,7 +13,7 @@ import { Search, SlidersHorizontal, X } from '@lucide/svelte';
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import * as Select from '$lib/components/ui/select';
-import { foldedFilterCount, type RawLevel, type RawOrder, type RawTime } from '$lib/device-logs/raw-filter';
+import { foldedFilterCount, type RawLevel, type RawOrder, type RawTime, timeShown } from '$lib/device-logs/raw-filter';
 import type { RawView } from '$lib/device-logs/raw-view.svelte';
 import { cn } from '$lib/utils';
 
@@ -36,16 +36,17 @@ const orders = $derived<{ value: RawOrder; label: string }[]>([
 	{ value: 'newest', label: m['systemLogs.raw.orderNewest']() },
 	{ value: 'oldest', label: m['systemLogs.raw.orderOldest']() },
 ]);
+// An anchor window's Level and Time state what it reads; Back to latest returns to the operator's choices.
+const timeValue = $derived(timeShown(view.filter, view.anchor !== null));
 const times = $derived<{ value: RawTime | 'boot'; label: string }[]>([
 	{ value: 'current', label: m['systemLogs.raw.timeThisBoot']() },
 	{ value: '15m', label: m['systemLogs.raw.timeLast15m']() },
 	{ value: '1h', label: m['systemLogs.raw.timeLastHour']() },
 	{ value: '24h', label: m['systemLogs.raw.timeLast24h']() },
 	{ value: 'all', label: m['systemLogs.raw.timeAll']() },
-	...(view.filter.bootId === null ? [] : [{ value: 'boot' as const, label: m['systemLogs.raw.timeBoot']() }]),
+	...(timeValue === 'boot' ? [{ value: 'boot' as const, label: m['systemLogs.raw.timeBoot']() }] : []),
 ]);
-const timeValue = $derived(view.filter.bootId === null ? view.filter.time : 'boot');
-const folded = $derived(foldedFilterCount(view.filter));
+const folded = $derived(foldedFilterCount(view.filter, view.anchor !== null));
 const sourceCount = $derived(view.filter.sources.length);
 
 function chooseTime(value: string): void {
@@ -61,7 +62,7 @@ function chooseTime(value: string): void {
 			onSelect={(level) => view.setLevel(level)}
 			options={levels}
 			testid="raw-level"
-			value={view.filter.level}
+			value={view.anchor?.level ?? view.filter.level}
 		/>
 		<div class="relative min-w-32 flex-1">
 			<Search class="text-muted-foreground pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2" />

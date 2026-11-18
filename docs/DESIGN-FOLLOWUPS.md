@@ -6,7 +6,8 @@ Deferred **design** findings from the `ceraui-experience-stability` Wave-3 UI pa
 (todos 24–29), opened by todo 29 (C4 consolidation), plus the marker-less
 **engineering** deferrals from that same effort's other waves (§4, opened by todo 38).
 Both live here for the same reason: neither ships a source marker, so neither is
-admissible to the marker-bound register — see the next section.
+admissible to the marker-bound register (see the next section). §5 holds the System
+Logs critique residuals (device-log-system todo 36).
 
 ## Why this file and not `docs/TECHNICAL_DEBT.md`
 
@@ -429,3 +430,109 @@ entries record the follow-up that removed their blocker.
   `apps/frontend/src/lib/components/preview/PreviewCanvas.svelte`.
 - **Exit condition:** one of the two is dropped in a change that updates its
   tests and the user docs together.
+
+---
+
+## 6. System Logs critique residuals (device-log-system todo 36)
+
+The P2 and P3 findings of the System Logs critique that were not fixed in that pass.
+The full table, evidence and the fixed findings are in
+[`apps/frontend/docs/agents/system-logs-critique.md`](../apps/frontend/docs/agents/system-logs-critique.md)
+(IDs SL-n).
+
+### DF-18: The helper's file is the last of four equal download rows (SL-3, P2)
+
+- **Where:** `apps/frontend/src/main/system-logs/SystemLogsView.svelte` (Downloads region;
+  the Storage tab below 1024 px), `SharingSection.svelte`, `LegacyLogDownloads.svelte`.
+- **What:** Support bundle has the weight of the two legacy files and Export, and on phones
+  and the kiosk it sits under the Storage tab after limits and cleanup.
+- **Owner:** the System Logs product owner, as a layout decision before the view's next
+  iteration; the shape approved in todo 6 stays until then.
+- **Exit condition:** a decided placement and weight for the bundle, built and captured at
+  375, 1024x600 and 1280 px.
+
+### DF-20: Destructive confirmation text is under 4.5:1 (SL-5, P2)
+
+- **Where:** the shared `destructive` button variant as used by
+  `lib/components/custom/simple-alert-dialog.svelte`.
+- **What:** 3.07:1 dark, 3.84:1 light for the confirm label. App-wide, not System Logs only;
+  the frontend rules forbid hand-editing the shadcn primitive.
+- **Owner:** the CeraUI design-system owner, with DF-2.
+- **Exit condition:** the destructive confirm label measures at least 4.5:1 in both themes.
+
+### DF-21: Spanish System Logs chrome wraps at 320 and 375 px (SL-6, P2)
+
+- **Where:** `SystemLogsView.svelte` tab triggers, `BootButton.svelte`, `RawLogsFilterBar.svelte`.
+- **What:** "Registros sin procesar" wraps to three lines (66 px tab strip, nothing clipped),
+  "Todos los arranques" wraps in the header at 320 px, and the search placeholder
+  ellipsizes at 375 px.
+- **Owner:** device-log-system todo 37 (locales and viewports).
+- **Exit condition:** the todo 37 responsive spec covers `es` at 320 and 375 px and the tab
+  strip holds at most two lines.
+
+### DF-22: Undersized targets around System Logs (SL-7, P2)
+
+- **Where:** the toast action from `lib/device-logs/view-logs.ts` (Sonner default action),
+  the default-pointer notice action, and the shared select item in touch layout.
+- **What:** 69x24 px toast action in the system font; 28 px notice action; 28 px retention
+  option rows in touch layout.
+- **Owner:** device-log-system todo 37 (touch), through the `app.css` touch token layer.
+- **Exit condition:** every listed control meets 44 px in touch layout and 24 px elsewhere.
+
+### DF-23: A refused download keeps its ticket for 60 s (SL-8, P2)
+
+- **Where:** `apps/backend/src/modules/device-logs/export.ts` and `bundle.ts` (ticket
+  lifetime), `lib/device-logs/sharing-flow.svelte.ts`.
+- **What:** after the browser refuses a download, Retry reads Busy until the ticket expires.
+- **Owner:** the CeraUI device-logs backend owner; listed in the CeraUI PR follow-ups.
+- **Exit condition:** a retry after a refused download starts a new download.
+
+### DF-24: An approximate jump has no moment marker (SL-9, P2)
+
+- **Where:** `RawLogsTab.svelte` (anchor band), `RawLogList.svelte` (end markers).
+- **What:** nothing marks where the message's moment falls; the newer end shows the
+  generic end text above the newest rows; the approximate note is muted extra-small text.
+- **Owner:** device-log-system todo 38 (polish); a new copy key needs all ten locales.
+- **Exit condition:** an approximate jump shows where the moment falls and a newer-end
+  text that cannot read as an empty result.
+
+### DF-25: Confirmations do not open on Cancel (SL-11, P3)
+
+- **Where:** `StorageCleanup.svelte` through `simple-alert-dialog.svelte`.
+- **What:** focus opens on the dialog; contract section 7 says the focused default is Cancel.
+- **Owner:** device-log-system todo 38 (keyboard audit).
+- **Exit condition:** opening either clear confirmation focuses Cancel.
+
+### DF-26: System Logs polish residuals (SL-12, P3)
+
+- **What:** two time formats, the Order label's offset, the repeated Storage heading on
+  phones, the repeated unit in an expanded raw row, the wrapped "Boot started" prefix in
+  side boot rows, an empty usage bar under 1 %, "All sources" in placeholder grey, and the
+  recessed checked segment in dark.
+- **Owner:** device-log-system todo 38 (polish).
+- **Exit condition:** each item fixed or explicitly kept in `system-logs-view.md`.
+
+### DF-27: Confirmation backdrop and primary lime (SL-13, P3)
+
+- **Where:** `simple-alert-dialog.svelte` overlay; filled default buttons in System Logs.
+- **What:** the confirmation's light wash brightens the dark UI unlike the view's dialogs;
+  Save and Download are filled lime while Follow avoids lime.
+- **Owner:** the CeraUI design-system owner.
+- **Exit condition:** one backdrop for nested dialogs and one written rule for lime.
+
+### DF-28: Two live Raw views at once (SL-14, P3)
+
+- **Where:** `lib/device-logs/raw-view.svelte.ts` follow ownership.
+- **What:** the later Follow would win. No surface mounts two Raw views today.
+- **Owner:** whoever adds a second Raw view surface.
+- **Exit condition:** follow ownership is per view before a second Raw view ships.
+
+### DF-29: A sequence-gap reload drops Events keyboard focus (SL-16, P2)
+
+- **Where:** `apps/frontend/src/lib/device-logs/events-view.svelte.ts:110-116,246-250`: a reload clears every Events row at once.
+- **What:** when the live feed skips a sequence number, the list reloads and its rows are cleared before the first page returns. A row action holding keyboard focus is disconnected even when its event is in the reloaded page, so focus moves to Close at 1280 px and to the boot picker at 375 px. The roving stop returns to that row after the reply; only focus is lost. Reproduced in both themes at both widths by the third-round review of todo 36.
+- **Repro:** focus View raw logs on row 2 of Events, deliver an event push that skips a sequence number, and answer `events.list` with the same first page.
+- **Severity:** P2.
+- **Why deferred:** a rare path (the live feed missed events and the list reloads); the focused row survives and the stop returns to it, only focus is lost. The fix changes the reload path, outside the critique pass.
+- **Owner:** device-log-system todo 38 (Polish and audit: accessibility, keyboard), which runs before the final reviews and must fix it.
+- **Exit condition:** a sequence-gap reload that keeps the focused event keeps focus on its action, proved by a Chromium spec.

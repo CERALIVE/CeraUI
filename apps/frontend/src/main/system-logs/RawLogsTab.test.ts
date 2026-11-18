@@ -1831,6 +1831,33 @@ describe("RawLogsTab — anchor mode", () => {
 		expect(screen.getByTestId("raw-end-bottom")).toBeTruthy();
 	});
 
+	it("shows the window's own level and boot, never the return view's", async () => {
+		const result = around();
+		const all = { levels: ["error", "warning", "info", "debug"] };
+		await mounted(
+			page([]),
+			around({
+				olderQuery: {
+					...result.olderQuery,
+					...all,
+				} as AroundPage["olderQuery"],
+				newerQuery: {
+					...result.newerQuery,
+					...all,
+				} as AroundPage["newerQuery"],
+			}),
+		);
+		expect(
+			within(screen.getByTestId("raw-level"))
+				.getByRole("radio", { checked: true })
+				.textContent?.trim(),
+		).toBe(en.systemLogs.raw.levelEverything);
+		expect(screen.getByTestId("raw-time").textContent?.trim()).toBe(
+			en.systemLogs.raw.timeBoot,
+		);
+		expect(screen.getByTestId("raw-filters-toggle").textContent).toContain("1");
+	});
+
 	it("states an approximate match", async () => {
 		await mounted(page([]), around({ anchor: null, approximate: true }));
 		expect(

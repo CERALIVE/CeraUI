@@ -977,7 +977,11 @@ describe("RawView — anchor mode", () => {
 		h.view.start(around());
 		expect(h.query).not.toHaveBeenCalled();
 		expect(keys(h.view)).toEqual(["s=7", "s=6", "s=5", "s=4", "s=3"]);
-		expect(h.view.anchor).toEqual({ cursor: "s=5", approximate: false });
+		expect(h.view.anchor).toEqual({
+			cursor: "s=5",
+			approximate: false,
+			level: "info",
+		});
 		expect(h.view.newestFirst).toBe(true);
 		expect(h.view.loading).toBeNull();
 		expect(h.view.followBusy).toBe(false);
@@ -1004,7 +1008,11 @@ describe("RawView — anchor mode", () => {
 	it("states an approximate anchor with no exact entry", () => {
 		const h = harness();
 		h.view.start(around({ anchor: null, approximate: true }));
-		expect(h.view.anchor).toEqual({ cursor: null, approximate: true });
+		expect(h.view.anchor).toEqual({
+			cursor: null,
+			approximate: true,
+			level: "info",
+		});
 		expect(keys(h.view)).toEqual(["s=7", "s=6", "s=4", "s=3"]);
 	});
 
@@ -1065,6 +1073,23 @@ describe("RawView — anchor mode", () => {
 		await h.view.setLevel("errors");
 		expect(h.view.anchor).toBeNull();
 		expect(h.view.followBlocked).toBeNull();
+	});
+
+	it("shows the level its window reads, then the operator's level for the latest entries", async () => {
+		const h = harness();
+		const levels = ["error", "warning", "info", "debug"] as const;
+		const result = around();
+		h.view.start({
+			...result,
+			olderQuery: { ...result.olderQuery, levels: [...levels] },
+			newerQuery: { ...result.newerQuery, levels: [...levels] },
+		});
+		expect(h.view.anchor?.level).toBe("everything");
+		expect(h.view.filter.level).toBe("info");
+		h.query.mockResolvedValueOnce(page(["s=20"]));
+		await h.view.reset();
+		expect(h.query).toHaveBeenLastCalledWith(DEFAULT_INPUT);
+		expect(h.view.anchor).toBeNull();
 	});
 
 	it("goes back to the latest entries", async () => {

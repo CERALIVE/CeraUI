@@ -161,6 +161,9 @@ export class EventsView {
 		event: DeviceEvent,
 		open: (page: AroundPage) => void,
 	): Promise<void> {
+		// The pending action stays focusable (aria-disabled), so a repeat press lands here.
+		if (this.rawLink?.id === event.id && this.rawLink.state === "pending")
+			return;
 		const request = {};
 		this.#rawRequest = request;
 		this.rawLink = { id: event.id, state: "pending" };

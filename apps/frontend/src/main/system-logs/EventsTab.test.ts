@@ -672,7 +672,18 @@ describe("EventsTab — View raw logs", () => {
 		});
 		await fireEvent.click(action);
 
-		expect(action.hasAttribute("disabled")).toBe(true);
+		// aria-disabled, not disabled: the button keeps keyboard focus while it waits.
+		expect(action.getAttribute("aria-disabled")).toBe("true");
+		expect(action.getAttribute("aria-busy")).toBe("true");
+		expect(action.hasAttribute("disabled")).toBe(false);
+		expect(tokens(action)).toEqual(
+			expect.arrayContaining([
+				"aria-disabled:pointer-events-none",
+				"aria-disabled:opacity-50",
+			]),
+		);
+		await fireEvent.click(action);
+		expect(around).toHaveBeenCalledOnce();
 		expect(
 			within(row("stream_stopped")).queryByTestId("event-raw-note"),
 		).toBeNull();
@@ -1315,5 +1326,119 @@ describe("EventsTab — layout", () => {
 			"after:h-px",
 			"after:flex-1",
 		);
+	});
+});
+
+describe("EventsTab: keyboard", () => {
+	// Contract section 7: the list is one tab stop; Up and Down move between rows,
+	// Home and End jump, and Tab reaches the focused row's own actions. A row's
+	// stop is its first action, View raw logs.
+	const viewRaw = (scope: HTMLElement) =>
+		within(scope).getByRole("button", { name: ev.viewRaw });
+	const diagnostics = (scope: HTMLElement) =>
+		within(scope).getByTestId("event-diagnostics-toggle");
+	const refused = (seq: number) =>
+		event(seq, "update_refused", { id: "u1", reason: "streaming_active" });
+	const tabIndexes = (all: HTMLElement[]) =>
+		all.map((element) =>
+			[...element.querySelectorAll("button")].map((button) => button.tabIndex),
+		);
+	const press = (key: string) =>
+		fireEvent.keyDown(document.activeElement as HTMLElement, { key });
+
+	it("moves focus between rows with the arrow keys, Home and End", async () => {
+		await shown([stopped(4), refused(3), stopped(2), stopped(1)]);
+		const all = rows() as HTMLElement[];
+		viewRaw(all[0] as HTMLElement).focus();
+
+		// The list takes the key, so the scroller does not also scroll.
+		expect(await press("ArrowDown")).toBe(false);
+		expect(document.activeElement).toBe(viewRaw(all[1] as HTMLElement));
+		diagnostics(all[1] as HTMLElement).focus();
+		await press("ArrowDown");
+		expect(document.activeElement).toBe(viewRaw(all[2] as HTMLElement));
+		await press("End");
+		expect(document.activeElement).toBe(viewRaw(all[3] as HTMLElement));
+		await press("ArrowDown");
+		expect(document.activeElement).toBe(viewRaw(all[3] as HTMLElement));
+		await press("ArrowUp");
+		expect(document.activeElement).toBe(viewRaw(all[2] as HTMLElement));
+		await press("Home");
+		expect(document.activeElement).toBe(viewRaw(all[0] as HTMLElement));
+		await press("ArrowUp");
+		expect(document.activeElement).toBe(viewRaw(all[0] as HTMLElement));
+		// Other keys keep their meaning: Enter still activates the action.
+		expect(await press("Enter")).toBe(true);
+	});
+
+	it("keeps only the focused row's actions in the tab sequence", async () => {
+		await shown([stopped(3), refused(2), stopped(1)]);
+		const all = rows() as HTMLElement[];
+		expect(tabIndexes(all)).toEqual([[0], [-1, -1], [-1]]);
+
+		viewRaw(all[0] as HTMLElement).focus();
+		await press("ArrowDown");
+		await tick();
+		expect(tabIndexes(all)).toEqual([[-1], [0, 0], [-1]]);
+
+		// A pointer can focus any row's action; that row becomes the stop.
+		viewRaw(all[2] as HTMLElement).focus();
+		await fireEvent.focusIn(viewRaw(all[2] as HTMLElement));
+		await tick();
+		expect(tabIndexes(all)).toEqual([[-1], [-1, -1], [0]]);
+	});
+
+	it("keeps a pending row's View raw logs focusable, so the keys still cross it", async () => {
+		await shown([stopped(3), stopped(2), stopped(1)]);
+		const held = Promise.withResolvers<LogAroundOutput>();
+		around.mockReturnValueOnce(held.promise);
+		const all = rows() as HTMLElement[];
+		const pending = viewRaw(all[1] as HTMLElement);
+		pending.focus();
+		await fireEvent.click(pending);
+		await tick();
+		expect(document.activeElement).toBe(pending);
+
+		await press("ArrowDown");
+		expect(document.activeElement).toBe(viewRaw(all[2] as HTMLElement));
+		await press("ArrowUp");
+		expect(document.activeElement).toBe(pending);
+		await press("ArrowUp");
+		expect(document.activeElement).toBe(viewRaw(all[0] as HTMLElement));
+		await press("ArrowDown");
+		expect(document.activeElement).toBe(pending);
+		await press("End");
+		expect(document.activeElement).toBe(viewRaw(all[2] as HTMLElement));
+		await press("Home");
+		await press("ArrowDown");
+		expect(document.activeElement).toBe(pending);
+
+		// The reply settles as a failure: focus and the stop stay on the row.
+		held.resolve({ ok: false, error: "BUSY" });
+		await within(all[1] as HTMLElement).findByTestId("event-raw-note");
+		expect(document.activeElement).toBe(pending);
+		expect(pending.hasAttribute("aria-disabled")).toBe(false);
+		expect(tabIndexes(all)).toEqual([[-1], [0], [-1]]);
+		await press("ArrowDown");
+		expect(document.activeElement).toBe(viewRaw(all[2] as HTMLElement));
+		// Settled, the action works again: a retry asks once more.
+		around.mockReturnValueOnce(new Promise(() => {}));
+		await fireEvent.click(pending);
+		expect(around).toHaveBeenCalledTimes(2);
+	});
+
+	it("keeps focus and the stop on a row when a newer event of its boot arrives", async () => {
+		await shown([stopped(3), stopped(2), stopped(1)]);
+		const held = viewRaw(rows()[1] as HTMLElement);
+		held.focus();
+		await fireEvent.focusIn(held);
+
+		feed.listener?.([stopped(4)]);
+		await tick();
+		expect(rows()).toHaveLength(4);
+		expect(document.activeElement).toBe(held);
+		expect(tabIndexes(rows())).toEqual([[-1], [-1], [0], [-1]]);
+		await press("ArrowUp");
+		expect(document.activeElement).toBe(viewRaw(rows()[1] as HTMLElement));
 	});
 });

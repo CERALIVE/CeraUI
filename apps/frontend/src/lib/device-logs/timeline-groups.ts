@@ -38,7 +38,11 @@ export function timelineGroups(
 			group.items.push(item);
 			group.at = event.at;
 		} else {
-			const key = `${event.bootId}-${event.id}`;
+			// A boot's nth run keeps its key as newer events join it, so its rows keep their DOM and focus.
+			const run = groups.filter(
+				(other) => other.bootId === event.bootId,
+			).length;
+			const key = `${event.bootId}-${run}`;
 			groups.push({ key, bootId: event.bootId, items: [item], at: event.at });
 		}
 	}

@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+
 import { expect, test, type BackendRpc } from './fixtures/index.js';
 
-import { EVIDENCE_DIR, navigateTo } from './helpers/index.js';
+import { EVIDENCE_DIR, navigateTo, pressAndExpectRow } from './helpers/index.js';
 
 /**
  * Task 13 — observable logs end-to-end (S8).
@@ -149,4 +150,28 @@ test('LogsDialog downloads a real, observable backend journal', async ({ page, b
 		].join('\n'),
 		'utf8',
 	);
+});
+
+test('Events rows are one tab stop that the arrow keys, Home and End move between', async ({ page }) => {
+	await page.getByRole('button', { name: 'System Logs' }).first().click();
+	const dialog = page.getByRole('dialog', { name: 'System Logs' });
+	const rows = dialog.getByTestId('event-row');
+	await expect(rows.nth(2)).toBeVisible();
+
+	await rows.first().getByRole('button', { name: 'View raw logs' }).focus();
+	await pressAndExpectRow(page, 'ArrowDown');
+	await pressAndExpectRow(page, 'End');
+	await pressAndExpectRow(page, 'ArrowUp');
+	await pressAndExpectRow(page, 'Home');
+
+	// A row's stop is its first action; Tab reaches the row's other actions, then
+	// leaves the list without stopping on another row's actions.
+	const first = dialog.locator('[data-expected-row]');
+	const actions = await first.getByRole('button').count();
+	for (let step = 1; step < actions; step++) {
+		await page.keyboard.press('Tab');
+		await expect(first.locator(':focus')).toHaveCount(1);
+	}
+	await page.keyboard.press('Tab');
+	expect(await page.evaluate(() => Boolean(document.activeElement?.closest('[data-testid="event-row"]')))).toBe(false);
 });

@@ -6,9 +6,11 @@ import {
 	followBlock,
 	followInput,
 	LEVEL_SETS,
+	levelCovering,
 	queryInput,
 	type RawFilter,
 	searchText,
+	timeShown,
 } from "./raw-filter";
 
 const NOW = 1_800_000_000_000;
@@ -142,20 +144,49 @@ describe("raw-filter — follow", () => {
 
 describe("raw-filter — folded filter count", () => {
 	it("counts Source, Time and Order when they differ from the defaults", () => {
-		expect(foldedFilterCount(DEFAULT_RAW_FILTER)).toBe(0);
-		expect(foldedFilterCount(filter({ sources: ["engine"] }))).toBe(1);
-		expect(foldedFilterCount(filter({ time: "1h" }))).toBe(1);
-		expect(foldedFilterCount(filter({ bootId: BOOT }))).toBe(1);
-		expect(foldedFilterCount(filter({ order: "oldest" }))).toBe(1);
+		expect(foldedFilterCount(DEFAULT_RAW_FILTER, false)).toBe(0);
+		expect(foldedFilterCount(filter({ sources: ["engine"] }), false)).toBe(1);
+		expect(foldedFilterCount(filter({ time: "1h" }), false)).toBe(1);
+		expect(foldedFilterCount(filter({ bootId: BOOT }), false)).toBe(1);
+		expect(foldedFilterCount(filter({ order: "oldest" }), false)).toBe(1);
 		expect(
 			foldedFilterCount(
 				filter({ sources: ["app"], time: "all", order: "oldest" }),
+				false,
 			),
 		).toBe(3);
 	});
 
 	it("does not count the level or the search text, which stay visible", () => {
-		expect(foldedFilterCount(filter({ level: "errors", text: "x" }))).toBe(0);
+		expect(
+			foldedFilterCount(filter({ level: "errors", text: "x" }), false),
+		).toBe(0);
+	});
+
+	it("counts an anchor window's boot under Time once", () => {
+		expect(foldedFilterCount(DEFAULT_RAW_FILTER, true)).toBe(1);
+		expect(foldedFilterCount(filter({ time: "1h" }), true)).toBe(1);
+	});
+});
+
+describe("raw-filter: what the controls show for an anchor window", () => {
+	it.each([
+		[["error"], "errors"],
+		[["error", "warning"], "warnings"],
+		[["error", "warning", "info"], "info"],
+		[["info"], "info"],
+		[["debug"], "everything"],
+		[["error", "warning", "info", "debug"], "everything"],
+	] as const)("levels %j read as the %s position", (levels, level) => {
+		expect(levelCovering(levels)).toBe(level);
+	});
+
+	it("shows the chosen time, or the one boot an anchor window reads", () => {
+		expect(timeShown(DEFAULT_RAW_FILTER, false)).toBe("current");
+		expect(timeShown(filter({ time: "1h" }), false)).toBe("1h");
+		expect(timeShown(filter({ bootId: BOOT }), false)).toBe("boot");
+		expect(timeShown(DEFAULT_RAW_FILTER, true)).toBe("boot");
+		expect(timeShown(filter({ time: "all" }), true)).toBe("boot");
 	});
 });
 

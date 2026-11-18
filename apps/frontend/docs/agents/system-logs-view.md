@@ -330,7 +330,7 @@ Rules for this copy:
 | `systemLogs.raw.timeLastHour` | Last hour | Time option |
 | `systemLogs.raw.timeLast24h` | Last 24 hours | Time option |
 | `systemLogs.raw.timeAll` | All stored | Time option |
-| `systemLogs.raw.timeBoot` | Selected boot | Time select when the boot picker chose a boot |
+| `systemLogs.raw.timeBoot` | Selected boot | Time select when the boot picker chose a boot, and in anchor mode |
 | `systemLogs.raw.searchLabel` | Search messages | Search input accessible name |
 | `systemLogs.raw.searchClear` | Clear search | Search clear button |
 | `systemLogs.raw.orderLabel` | Order | Order control label |
@@ -765,6 +765,15 @@ everywhere in the app.
   own actions such as View raw logs and Copy are reachable with Tab inside the
   focused row) -> the paging button -> the side column (boot list as one
   single-choice stop, then Storage controls, then Downloads rows).
+- **Events rows [EXISTS].** A row's stop is its first action, View raw logs: a
+  list item is not a control, so it never takes focus itself. Up, Down, Home
+  and End move the stop between rows; Tab reaches that row's Diagnostics; only
+  the stop row's actions are in the tab sequence. The stop follows focus, so a
+  pointer that focuses another row's action moves it there. While its request
+  is pending, View raw logs is aria-disabled and aria-busy, never disabled: it
+  keeps focus, the keys still cross its row, and a repeat press does nothing.
+  A boot section's key is its boot id and run number, so events arriving above
+  a row never rebuild it: the row keeps its element, focus and stop.
 - **Initial focus.** The selected tab, so arrow keys work at once. Anchor mode
   moves focus to the highlighted row.
 - **Escape.** It always closes the topmost layer: an open select, then a nested
@@ -924,7 +933,11 @@ the English/es-419 release work assigned to the documentation todo.
 - Anchor mode keeps the operator's normal-query controls as its return view
   (the Raw view's pinned reset/filter-change contract). Its pages and exports
   use the around queries, not those return controls. Changing a filter leaves
-  anchor mode.
+  anchor mode. While anchored, Level and Time state what the window reads, never
+  the return view: Level shows the narrowest position covering the window's
+  level set (`RawView.anchor.level`), Time shows Selected boot (`timeShown`) and
+  the folded Filters count includes it. Back to latest entries returns both to
+  the operator's choices.
 - A new context replaces the raw panel's request lifetime. Leaving Raw logs,
   closing the dialog or retrying aborts that lifetime; each awaited reply is
   checked before the next request or state change. A late reply cannot open
@@ -943,6 +956,9 @@ the English/es-419 release work assigned to the documentation todo.
   No shared Button or Sonner primitive is edited.
 
 ## Open decisions
+
+- **Critique residuals.** The todo 36 critique and the owner of every finding it
+  did not fix are in [system-logs-critique.md](system-logs-critique.md).
 
 - **Clock evidence.** The clock-not-synced marker uses only backwards-running
   times between adjacent records of one boot. It never guesses from forward

@@ -21,6 +21,7 @@ import {
 	DEFAULT_RAW_FILTER,
 	followBlock,
 	followInput,
+	levelCovering,
 	queryInput,
 	type RawFilter,
 	type RawLevel,
@@ -140,9 +141,12 @@ export class RawView {
 	top = $state.raw<RawEdge | null>(null);
 	/** The row cap cut the bottom of the list, so it cannot page further. */
 	capped = $state(false);
-	anchor = $state.raw<{ cursor: string | null; approximate: boolean } | null>(
-		null,
-	);
+	/** An open anchor window: its exact entry, whether it is approximate, and the Level position it reads. */
+	anchor = $state.raw<{
+		cursor: string | null;
+		approximate: boolean;
+		level: RawLevel;
+	} | null>(null);
 	failure = $state.raw<RawFailure | null>(null);
 	follow = $state<FollowState>("idle");
 	ended = $state<NonNullable<LogFollowMessage["ended"]> | null>(null);
@@ -498,6 +502,7 @@ export class RawView {
 		this.anchor = {
 			cursor: around.anchor?.cursor ?? null,
 			approximate: around.approximate,
+			level: levelCovering(around.olderQuery.levels),
 		};
 		this.top = {
 			query: around.newerQuery,

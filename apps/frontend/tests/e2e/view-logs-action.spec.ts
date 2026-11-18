@@ -5,12 +5,17 @@ import { type LogQueryInput, deviceStatsSchema, logAroundOutputSchema, logQueryI
 
 import { expect, type PageRpc, test } from './fixtures/index.js';
 
-import { EVIDENCE_DIR, ensureAuthenticated, navigateTo } from './helpers/index.js';
+import { EVIDENCE_DIR, ensureAuthenticated, navigateTo, pressAndExpectRow } from './helpers/index.js';
 
 const exports = new WeakMap<Page, { promise: Promise<unknown>; resolve(value: unknown): void }>();
 const exactAnchor = new WeakSet<Page>();
 const lowDisk = new WeakSet<Page>();
 const queries = new WeakMap<Page, LogQueryInput[]>();
+/** Holds a page's `logs.around` reply until the test releases it, then answers BUSY. */
+/** The newest listed event and the page's socket, so a test can push the next live event. */
+const newestEvent = new WeakMap<Page, { event: Record<string, unknown>; headSeq: number }>();
+const pushToPage = new WeakMap<Page, (message: string) => void>();
+const heldAround = new WeakMap<Page, { release: PromiseWithResolvers<void>; sent: number }>();
 
 /**
  * "View logs" beside a message that sends the operator to System Logs (mock
@@ -35,6 +40,11 @@ test.beforeEach(async ({ page, pageRpc }) => {
 	await page.routeWebSocket(/\/ws(?:\?|$)/, socket => {
 		const server = socket.connectToServer();
 		const aroundIds = new Set<string>();
+		const listIds = new Set<string>();
+		pushToPage.set(page, message => {
+			socket.send(message);
+			pageRpc.acceptServerMessage(message);
+		});
 		pageRpc.bindConnectionLifecycle(socket, server);
 		socket.onMessage(message => {
 			server.send(message);
@@ -44,10 +54,27 @@ test.beforeEach(async ({ page, pageRpc }) => {
 				exported.resolve(frame.input);
 			if (Array.isArray(frame.path) && frame.path.join('.') === 'logs.around')
 				aroundIds.add(frame.id);
+			if (Array.isArray(frame.path) && frame.path.join('.') === 'events.list') listIds.add(frame.id);
+			const counted = heldAround.get(page);
+			if (counted && Array.isArray(frame.path) && frame.path.join('.') === 'logs.around') counted.sent += 1;
 			if (Array.isArray(frame.path) && frame.path.join('.') === 'logs.query')
 				reads.push(logQueryInputSchema.parse(frame.input));
 		});
 		server.onMessage(message => {
+			if (typeof message === 'string' && listIds.size > 0) {
+				const frame = JSON.parse(message);
+				const newest = listIds.has(frame.id) ? frame.result?.events?.[0] : undefined;
+				if (newest) newestEvent.set(page, { event: newest, headSeq: frame.result.headSeq });
+			}
+			const held = heldAround.get(page);
+			if (held && typeof message === 'string' && aroundIds.has(JSON.parse(message).id)) {
+				const reply = JSON.stringify({ ...JSON.parse(message), result: { ok: false, error: 'BUSY' } });
+				void held.release.promise.then(() => {
+					socket.send(reply);
+					pageRpc.acceptServerMessage(reply);
+				});
+				return;
+			}
 			if (typeof message === 'string' && (exactAnchor.has(page) || lowDisk.has(page))) {
 				const frame = JSON.parse(message);
 				if (lowDisk.has(page) && frame['device-stats'] !== undefined) {
@@ -191,4 +218,65 @@ test('a notice that does not point to the logs offers no View logs', async ({ pa
 	);
 	await expect(notice).toBeVisible();
 	await expect(notice.getByTestId('view-logs-action')).toHaveCount(0);
+});
+
+test('a pending View raw logs keeps keyboard focus, and the arrow keys still cross its row', async ({ page }) => {
+	const held = { release: Promise.withResolvers<void>(), sent: 0 };
+	heldAround.set(page, held);
+	await navigateTo(page, 'settings');
+	await page.getByRole('button', { name: 'System Logs' }).first().click();
+	const dialog = page.getByRole('dialog', { name: 'System Logs' });
+	const rows = dialog.getByTestId('event-row');
+	await expect(rows.nth(2)).toBeVisible();
+	await rows.nth(1).evaluate((row) => row.setAttribute('data-held-row', ''));
+	const pending = dialog.locator('[data-held-row]').getByRole('button', { name: 'View raw logs' });
+
+	await pending.focus();
+	await page.keyboard.press('Enter');
+	await expect(pending).toBeFocused();
+	await expect(pending).toHaveAttribute('aria-disabled', 'true');
+	await page.keyboard.press('Enter');
+	await pressAndExpectRow(page, 'ArrowDown');
+	await pressAndExpectRow(page, 'ArrowUp');
+	await expect(pending).toBeFocused();
+	await pressAndExpectRow(page, 'ArrowUp');
+	await pressAndExpectRow(page, 'ArrowDown');
+	await expect(pending).toBeFocused();
+	await pressAndExpectRow(page, 'End');
+	await pressAndExpectRow(page, 'Home');
+	await pressAndExpectRow(page, 'ArrowDown');
+	await expect(pending).toBeFocused();
+
+	// The held reply settles as BUSY: focus and the stop stay on the row.
+	held.release.resolve();
+	await expect(dialog.locator('[data-held-row]').getByTestId('event-raw-note')).toBeVisible();
+	await expect(pending).toBeFocused();
+	await expect(pending).not.toHaveAttribute('aria-disabled');
+	await pressAndExpectRow(page, 'ArrowDown');
+	expect(held.sent).toBe(1);
+});
+
+test('a live event above the focused row keeps keyboard focus and the stop on that row', async ({ page }) => {
+	await navigateTo(page, 'settings');
+	await page.getByRole('button', { name: 'System Logs' }).first().click();
+	const dialog = page.getByRole('dialog', { name: 'System Logs' });
+	const rows = dialog.getByTestId('event-row');
+	await expect(rows.nth(2)).toBeVisible();
+	const before = await rows.count();
+	await rows.nth(1).evaluate((row) => row.setAttribute('data-held-row', ''));
+	const held = dialog.locator('[data-held-row]').getByRole('button', { name: 'View raw logs' });
+	await held.focus();
+
+	const newest = newestEvent.get(page);
+	if (!newest) throw new Error('The Events list reply was not observed');
+	pushToPage.get(page)?.(JSON.stringify({
+		event: { append: [{ ...newest.event, id: 'live-insert-witness', seq: newest.headSeq + 1 }] },
+	}));
+	await expect(rows).toHaveCount(before + 1);
+	expect(await page.evaluate(() => document.activeElement?.closest('[data-testid="event-row"]') !== null)).toBe(true);
+	await expect(held).toBeFocused();
+	await expect(held).toHaveAttribute('tabindex', '0');
+	await pressAndExpectRow(page, 'ArrowUp');
+	await pressAndExpectRow(page, 'ArrowDown');
+	await expect(held).toBeFocused();
 });

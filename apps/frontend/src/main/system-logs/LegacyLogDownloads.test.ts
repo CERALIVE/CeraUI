@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { setLocale } from "@ceraui/i18n/svelte";
 import {
 	cleanup,
 	fireEvent,
@@ -6,9 +7,10 @@ import {
 	screen,
 	within,
 } from "@testing-library/svelte";
+import { tick } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { en } from "../../tests/helpers/catalog";
+import { en, zh } from "../../tests/helpers/catalog";
 
 import LegacyLogDownloads from "./LegacyLogDownloads.svelte";
 import { LogDownloads } from "./log-downloads.svelte";
@@ -38,6 +40,7 @@ beforeEach(() => {
 
 afterEach(() => {
 	cleanup();
+	setLocale("en");
 	vi.restoreAllMocks();
 });
 
@@ -91,8 +94,15 @@ describe("LegacyLogDownloads — the shipped anatomy", () => {
 		getDeviceLog.mockReturnValue(pending.promise);
 		mount();
 
+		// Japanese breaks at phrases, Korean only at spaces, Chinese only between the
+		// words its copy marks with <wbr> (C5 at 320/375 px).
 		expect(tokens(screen.getByTestId("log-row-device").parentElement)).toEqual([
 			"space-y-3",
+			"[word-break:auto-phrase]",
+			"[&:lang(ko)]:break-keep",
+			"[&:lang(zh)]:break-keep",
+			"wrap-break-word",
+			"text-pretty",
 		]);
 		for (const kind of ["device", "system"] as const) {
 			const row = screen.getByTestId(`log-row-${kind}`);
@@ -146,6 +156,26 @@ describe("LegacyLogDownloads — the shipped anatomy", () => {
 		);
 		pending.resolve();
 		await expect.poll(() => button("device").disabled).toBe(false);
+	});
+
+	it("lets Chinese descriptions and the failure line wrap only between words", async () => {
+		getDeviceLog.mockRejectedValue(new Error("refused"));
+		mount();
+		setLocale("zh");
+		await tick();
+		await fireEvent.click(button("device"));
+		const wraps = (text: string) =>
+			screen.getByText(text).querySelectorAll("wbr").length;
+		await expect
+			.poll(() => screen.queryByTestId("log-download-error"))
+			.not.toBeNull();
+		for (const text of [
+			zh.advanced.ceraliveLogTooltip,
+			zh.advanced.systemLogTooltip,
+			zh.advanced.downloadFailed,
+		]) {
+			expect(wraps(text)).toBeGreaterThan(0);
+		}
 	});
 
 	it("keeps the retry band's icon, text and small outline Retry", async () => {

@@ -41,6 +41,13 @@ export const LEVEL_SETS: Readonly<Record<RawLevel, readonly LogLevel[]>> = {
 	everything: ["error", "warning", "info", "debug"],
 };
 
+/** The narrowest Level position that shows every level in `levels`. */
+export function levelCovering(levels: readonly LogLevel[]): RawLevel {
+	for (const level of ["errors", "warnings", "info"] as const)
+		if (levels.every((one) => LEVEL_SETS[level].includes(one))) return level;
+	return "everything";
+}
+
 const WINDOW_MS: Partial<Record<RawTime, number>> = {
 	"15m": 15 * 60_000,
 	"1h": 60 * 60_000,
@@ -91,11 +98,22 @@ export function followBlock(
 	return thisBoot && filter.order === "newest" ? null : "filter";
 }
 
+/** What Time shows: a chosen boot, or the one boot an anchor window reads. */
+export function timeShown(
+	filter: RawFilter,
+	anchored: boolean,
+): RawTime | "boot" {
+	return anchored || filter.bootId !== null ? "boot" : filter.time;
+}
+
 /** Source, Time and Order fold behind the Filters button on small screens. */
-export function foldedFilterCount(filter: RawFilter): number {
+export function foldedFilterCount(
+	filter: RawFilter,
+	anchored: boolean,
+): number {
 	return [
 		filter.sources.length > 0,
-		filter.time !== "current" || filter.bootId !== null,
+		timeShown(filter, anchored) !== "current",
 		filter.order !== "newest",
 	].filter(Boolean).length;
 }

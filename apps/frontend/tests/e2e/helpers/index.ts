@@ -188,3 +188,20 @@ export async function ensureAuthenticated(page: Page): Promise<void> {
 	await page.locator('form button[type="submit"]').click();
 	await expect(header).toBeVisible({ timeout: 15_000 });
 }
+
+/**
+ * Mark the row a key should move focus to, from the rows as they stand, so an
+ * event pushed meanwhile cannot change which row the assertion expects.
+ */
+export async function pressAndExpectRow(page: Page, key: 'ArrowDown' | 'ArrowUp' | 'Home' | 'End'): Promise<void> {
+	await page.evaluate((key) => {
+		const rows = [...document.querySelectorAll('[data-testid="event-row"]')];
+		const current = document.activeElement?.closest('[data-testid="event-row"]');
+		const at = current ? rows.indexOf(current) : -1;
+		const next = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: rows.length - 1 }[key];
+		for (const row of rows) row.removeAttribute('data-expected-row');
+		rows[Math.max(0, Math.min(next, rows.length - 1))]?.setAttribute('data-expected-row', '');
+	}, key);
+	await page.keyboard.press(key);
+	await expect(page.locator('[data-expected-row]').getByRole('button').first()).toBeFocused();
+}

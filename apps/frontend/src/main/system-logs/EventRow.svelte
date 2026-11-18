@@ -8,7 +8,8 @@
   until opened, never a card nested in the row. Below 768 px the time moves
   under the title. A long unbroken value wraps inside the row, whole and still
   isolated, never scrolling the list sideways. Chinese titles and details
-  balance their lines so a sentence ending never stands alone.
+  balance their lines so a sentence ending never stands alone. The row's
+  actions are tab stops only while the row holds the list's one stop.
 -->
 <script lang="ts">
 import { getLocale, m } from '@ceraui/i18n/svelte';
@@ -27,9 +28,14 @@ interface Props {
 	stale: boolean;
 	rawLink: RawLinkState | null;
 	onviewraw: () => void;
+	/** This row holds the list's one tab stop. */
+	stop: boolean;
+	/** The list moves focus between rows with the arrow keys, Home and End. */
+	onkeydown: (event: KeyboardEvent) => void;
+	onfocusin: () => void;
 }
 
-let { event, names, stale, rawLink, onviewraw }: Props = $props();
+let { event, names, stale, rawLink, onviewraw, stop, onkeydown, onfocusin }: Props = $props();
 
 const RAW_NOTES = {
 	removed: () => m['systemLogs.events.rawRemoved'](),
@@ -47,6 +53,7 @@ const time = $derived(eventTime(event.at, getLocale()));
 	class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 px-4 py-3"
 	data-code={event.code}
 	data-testid="event-row"
+	{onfocusin}
 >
 	<span aria-label={copy.glyph.label} class="flex h-5 items-center" role="img">
 		<copy.glyph.icon class="size-4 {copy.glyph.tone}" />
@@ -77,11 +84,15 @@ const time = $derived(eventTime(event.at, getLocale()));
 					/></span
 				>
 			{/if}
+			<!-- aria-disabled, not disabled: a pending button keeps focus, so the list's keys still reach it. -->
 			<Button
-				class="-ms-2.5"
-				disabled={rawLink === 'pending'}
+				aria-busy={rawLink === 'pending' ? 'true' : undefined}
+				aria-disabled={rawLink === 'pending' ? 'true' : undefined}
+				class="-ms-2.5 aria-disabled:pointer-events-none aria-disabled:opacity-50"
 				onclick={onviewraw}
+				{onkeydown}
 				size="sm"
+				tabindex={stop ? 0 : -1}
 				variant="ghost"
 			>
 				{m['systemLogs.events.viewRaw']()}
@@ -93,7 +104,9 @@ const time = $derived(eventTime(event.at, getLocale()));
 					class="text-muted-foreground gap-1"
 					data-testid="event-diagnostics-toggle"
 					onclick={() => (diagnosticsOpen = !diagnosticsOpen)}
+					{onkeydown}
 					size="sm"
+					tabindex={stop ? 0 : -1}
 					variant="ghost"
 				>
 					{m['systemLogs.events.diagnostics']()}
