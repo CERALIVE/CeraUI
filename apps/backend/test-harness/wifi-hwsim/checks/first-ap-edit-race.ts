@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { run } from "../../../src/helpers/run.ts";
 import {
 	nmApConnAdd,
 	nmConnDelete,
@@ -17,6 +18,49 @@ import { runHotspotProfileOperation } from "../../../src/modules/wifi/wifi-hotsp
 import { hotspotBindingFields } from "../../../src/modules/wifi/wifi-hotspot-types.ts";
 import type { FirstApCheckpoint } from "./first-ap-diagnostics.ts";
 import type { NativeNmcliProbe } from "./first-ap-nmcli-shim.ts";
+
+type EditSchedule = Parameters<NativeNmcliProbe["schedule"]>[2];
+type PreservedProfile = {
+	readonly uuid: string;
+	readonly filename: string;
+	readonly foreign: Buffer;
+};
+
+export async function runEditSchedules(
+	ifname: string,
+	race: (schedule: EditSchedule) => Promise<PreservedProfile | undefined>,
+): Promise<void> {
+	const restored: PreservedProfile[] = [];
+	for (const schedule of ["restore", "atomic", "before", "version"] as const) {
+		const profile = await race(schedule);
+		if (schedule === "restore" || schedule === "atomic") {
+			assert(profile, "Restored race keyfile missing");
+			restored.push(profile);
+		}
+	}
+	// A manual activation can re-enable the device. Keep it idle while NM imports the yes-files.
+	await run("nmcli", ["device", "set", ifname, "autoconnect", "no"]);
+	await run("nmcli", [
+		"connection",
+		"load",
+		...restored.map(({ filename }) => filename),
+	]);
+	for (const { uuid, filename, foreign } of restored) {
+		const live = await run("nmcli", [
+			"-g",
+			"connection.autoconnect",
+			"connection",
+			"show",
+			"uuid",
+			uuid,
+		]);
+		assert.equal(live.trimEnd(), "yes", `Restored ${uuid} did not load`);
+		assert(
+			(await readFile(filename)).equals(foreign),
+			`Load changed the preserved keyfile for ${uuid}`,
+		);
+	}
+}
 
 export async function nativeEditRaceCases(
 	target: {
@@ -81,7 +125,7 @@ export async function nativeEditRaceCases(
 			})
 		).success,
 	);
-	for (const schedule of ["restore", "atomic", "before", "version"] as const) {
+	await runEditSchedules(target.ifname, async (schedule) => {
 		checkpoint("modify.foreign");
 		const uuid = await create();
 		assert((await modify(uuid, { "connection.autoconnect": "yes" })).success);
@@ -103,10 +147,12 @@ export async function nativeEditRaceCases(
 			assert.equal(Number.parseInt(active?.[0] ?? "", 10), 100);
 			assert.equal(active?.[1], uuid);
 			assert.equal(getPendingHotspotCreation(target.owner), uuid);
-			console.log("first-ap: activation VersionId is diagnostic only", {
-				before: versionBefore?.toString() ?? null,
-				after: (await readNmVersionId(before.path))?.toString() ?? null,
-			});
+			process.stdout.write(
+				`first-ap: activation VersionId is diagnostic only ${JSON.stringify({
+					before: versionBefore?.toString() ?? null,
+					after: (await readNmVersionId(before.path))?.toString() ?? null,
+				})}\n`,
+			);
 			assert(
 				(
 					await runHotspotProfileOperation({
@@ -116,7 +162,7 @@ export async function nativeEditRaceCases(
 					})
 				).success,
 			);
-			continue;
+			return;
 		}
 		assert.equal(result.checked, false, "Native foreign bytes were adopted");
 		assert.equal(result.success, false);
@@ -149,8 +195,9 @@ export async function nativeEditRaceCases(
 				.filter((event) => event.uuid === uuid && event.kind !== "read").length,
 			0,
 		);
-	}
-	console.log(
-		"first-ap: native serializer parity and foreign-write retirement passed",
+		return { uuid, filename: before.file.filename, foreign };
+	});
+	process.stdout.write(
+		"first-ap: native serializer parity and foreign-write retirement passed\n",
 	);
 }

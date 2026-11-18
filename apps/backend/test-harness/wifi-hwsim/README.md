@@ -361,9 +361,15 @@ activation must preserve authority when the predicted bytes match; VersionId
 is a diagnostic measurement, never equality evidence. On NM 1.42.4 the same
 activation control runs without that unsupported property.
 Foreign results must be preserved with no later product mutation and visible
-authority degradation. Exact daemon/offline byte parity remains unverified
-until the owner clears the expanded VM candidate. The NM 1.52.1 guest decision
-is pending; no run on that version is claimed.
+authority degradation. After the refused deletes and activation control,
+first-AP disables device autoconnect on A and loads the two exact keyfiles
+restored after NM's reply. It checks that NM reports autoconnect `yes` for
+both UUIDs and that their foreign bytes survive. A separate hybrid invocation
+in the same guest can then compare every unrelated profile through its NM
+restart. Hybrid also runs independently in a fresh guest.
+
+The NM 1.52.1 guest passed the serializer and foreign-edit controls in R26.
+The exact-file handoff still needs a combined native run.
 
 Retiring product readbacks now emit a sanitized WARN with changed field names,
 two-read stat witnesses, path/run flags and optional VersionId. The console
