@@ -134,12 +134,8 @@ export async function ensureConcurrentApInterface(
 		createdInterfaces.set(target, identity);
 		if (!admitted()) return refuse("admission-lost-after-create");
 		// This read observes the captured object; it never grants ownership.
-		const matchesIdentity = async () => {
-			const info = await interfaceRunner("iw", [
-				"wdev",
-				identity.wdev,
-				"info",
-			]).catch(() => "");
+		const readIdentity = () => interfaceRunner("iw", ["dev", ifname, "info"]);
+		const matchesReceipt = (info: string) => {
 			const current = interfaceIdentity(info);
 			return (
 				current?.ifindex === identity.ifindex &&
@@ -147,7 +143,13 @@ export async function ensureConcurrentApInterface(
 				/^\s*Interface\s+(\S+)\s*$/m.exec(info)?.[1] === ifname
 			);
 		};
-		if (!(await matchesIdentity())) return refuse("created-identity-mismatch");
+		const infoAfterCreate = await readIdentity().catch(() => undefined);
+		if (infoAfterCreate === undefined)
+			return refuse("created-identity-query-failed");
+		if (!matchesReceipt(infoAfterCreate))
+			return refuse("created-identity-mismatch");
+		const matchesIdentity = async () =>
+			matchesReceipt(await readIdentity().catch(() => ""));
 		const visible = await interfaceWaiter(ifname);
 		if (!admitted()) return refuse("admission-lost-after-created-wait");
 		if (visible) {
@@ -195,11 +197,11 @@ export async function revalidateCreatedConcurrentApInterface(
 
 	if (check && !(await check(created))) return false;
 
-	const info = await interfaceRunner("iw", [
-		"wdev",
-		created.wdev,
-		"info",
-	]).catch(() => "");
+	const ifname = target.ifname;
+	if (!ID_RE.test(ifname)) return false;
+	const info = await interfaceRunner("iw", ["dev", ifname, "info"]).catch(
+		() => "",
+	);
 
 	const current = interfaceIdentity(info);
 	if (observe)
@@ -211,8 +213,8 @@ export async function revalidateCreatedConcurrentApInterface(
 	return (
 		current?.ifindex === created.ifindex &&
 		current.wdev === created.wdev &&
-		/^\s*Interface\s+(\S+)\s*$/m.exec(info)?.[1] === target.ifname &&
+		/^\s*Interface\s+(\S+)\s*$/m.exec(info)?.[1] === ifname &&
 		/^\s*type\s+managed\s*$/m.test(info) &&
-		(await idleTarget(target.ifname))
+		(await idleTarget(ifname))
 	);
 }

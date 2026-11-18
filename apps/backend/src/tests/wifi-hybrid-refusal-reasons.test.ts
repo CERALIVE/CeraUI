@@ -25,6 +25,7 @@ type AllocationCase = {
 	admission?: number;
 	visible?: boolean;
 	badIdentityRead?: number;
+	failIdentityQuery?: boolean;
 	add?: "throw" | "no-receipt";
 	policy?: "deny" | "throw" | "autoconnect-unavailable";
 	creationForbidden?: boolean;
@@ -41,6 +42,10 @@ const allocationCases = {
 	"create-command-failed": { add: "throw" },
 	"creation-receipt-unavailable": { add: "no-receipt" },
 	"admission-lost-after-create": { admission: 3 },
+	"created-identity-query-failed": {
+		badIdentityRead: 1,
+		failIdentityQuery: true,
+	},
 	"created-identity-mismatch": { badIdentityRead: 1 },
 	"admission-lost-after-created-wait": { admission: 4 },
 	"created-nm-not-visible": { visible: false },
@@ -69,11 +74,16 @@ test.each(Object.entries<AllocationCase>(allocationCases))(
 				const result = await f.run(command, args);
 				if (fixture.add === "no-receipt" && args.includes("add")) return "";
 				if (
-					args[0] === "wdev" &&
-					args.at(-1) === "info" &&
+					command === "iw" &&
+					args.join(" ") === "dev clap-wlan0 info" &&
 					++identityReads === fixture.badIdentityRead
-				)
+				) {
+					if (fixture.failIdentityQuery)
+						throw Object.assign(new Error("fixture iw query failed"), {
+							code: 1,
+						});
 					return "";
+				}
 				return result;
 			},
 			async () => fixture.visible ?? true,

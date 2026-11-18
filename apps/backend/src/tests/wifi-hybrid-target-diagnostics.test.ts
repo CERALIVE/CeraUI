@@ -233,8 +233,12 @@ const refusals: ReadonlyArray<
 	[
 		"created-target-changed",
 		(f) => {
+			let createdReads = 0;
 			overrideIw(f, (args, text) =>
-				args[0] === "wdev" ? text.replace("type managed", "type AP") : text,
+				// The eighth successful by-name read is the final created revalidation.
+				args.join(" ") === "dev clap-wlan0 info" && ++createdReads === 8
+					? text.replace("type managed", "type AP")
+					: text,
 			);
 		},
 		{ existing: false, create: true },
@@ -495,11 +499,11 @@ test.each(["retained", "borrowed", "created"] as const)(
 			expect(
 				await concurrent.selectConcurrentApInterface("wlan0"),
 			).toBeDefined();
-		let wdevReads = 0;
+		let createdReads = 0;
 		overrideIw(f, (args, text) => {
 			if (
-				(origin === "created" && args[0] === "wdev" && ++wdevReads === 5) ||
-				(origin !== "created" && args.join(" ") === "dev clap-wlan0 info")
+				args.join(" ") === "dev clap-wlan0 info" &&
+				(origin !== "created" || ++createdReads === 8)
 			)
 				return text.replace("wdev 0x7", "wdev 0x77");
 			return text;

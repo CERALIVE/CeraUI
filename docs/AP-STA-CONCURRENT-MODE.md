@@ -61,9 +61,12 @@ Unreadable or contradictory evidence refuses with
 `hybrid-channel-not-permitted` before mutation. When the leg is absent, the same
 admitted Start or saved restore reaches the creation primitive after checking
 qualification, boot, parent lifetime, capacity and profile ownership. Its exact
-nl80211 receipt grants creation authority; readiness and parent/object continuity
-precede the leg-only autoconnect write. A leg appearing after the absence check
-cannot be adopted. Prefixes and names confer no ownership.
+nl80211 receipt grants creation authority. Created-leg reads use
+`iw dev <leg-name> info`, which iw 6.9 on the Orange Pi accepts. The returned
+name, ifindex and wdev must match the creation receipt and expected name.
+Readiness and parent/object continuity precede the leg-only autoconnect write.
+Receipt-owned deletion stays addressed by wdev. A leg appearing after the
+absence check cannot be adopted. Prefixes and names confer no ownership.
 
 First discovery logs `meta.event=wifi-hybrid-first-discovery` for each qualified
 Wi-Fi parent. It records the expected leg name, whether NetworkManager listed
@@ -88,6 +91,9 @@ since OS boot.
   `allocated-target-not-ready`, and `target-allocation-failed`.
   The stored witness reports `stored-boot-mismatch`, `live-target-unavailable`,
   or `stored-lifetime-mismatch` according to the first failed predicate.
+  For a new leg, `created-identity-query-failed` means the initial `iw` read
+  failed. `created-identity-mismatch` means it returned unusable or
+  nonmatching identity data.
 - `witness` and `observed` show the stored and live target name, ifindex,
   wiphy, wdev and phy path where available. `iwIfindex` and `iwWiphy`
   distinguish the wireless read from sysfs. `wirelessStatus` distinguishes

@@ -141,6 +141,7 @@ export type AllocationFailure =
 	| "create-command-failed"
 	| "creation-receipt-unavailable"
 	| "admission-lost-after-create"
+	| "created-identity-query-failed"
 	| "created-identity-mismatch"
 	| "admission-lost-after-created-wait"
 	| "created-nm-not-visible"

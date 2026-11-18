@@ -127,8 +127,7 @@ test("a post-create same-name replacement cannot become the created leg's select
 			const result = await f.run(command, args);
 			if (
 				command === "iw" &&
-				args[0] === "wdev" &&
-				args.at(-1) === "info" &&
+				args.join(" ") === "dev clap-wlan0 info" &&
 				!replaced &&
 				f.calls.some(
 					(call) =>

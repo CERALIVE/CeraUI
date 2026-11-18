@@ -1,0 +1,11 @@
+{
+	"source": "Orange Pi 5 Plus Run 2, iw 6.9. The managed by-name stdout is from orange-restored-live.log. The usage stdout retains the lines selected by orange-iw-addressing-control.log, with its recorded exit status.",
+	"byName": {
+		"exitCode": 0,
+		"stdout": "Interface clap-wlan0\n\tifindex 8\n\twdev 0x6\n\taddr aa:de:12:61:3f:30\n\ttype managed\n\twiphy 0\n\ttxpower 64.00 dBm\n\tmulticast TXQ:\n\t\tqsz-byt\tqsz-pkt\tflows\tdrops\tmarks\toverlmt\thashcol\ttx-bytes\ttx-packets\n\t\t0\t0\t0\t0\t0\t0\t0\t0\t\t0\n"
+	},
+	"byWdev": {
+		"exitCode": 1,
+		"stdout": "Usage:\t/usr/sbin/iw [options] command\n\twdev <idx> nan add_func type <publish|subscribe|followup> [active] [solicited] [unsolicited] [bcast] [close_range] name <name> [info <info>] [flw_up_id <id> flw_up_req_id <id> flw_up_dest <mac>] [ttl <ttl>] [srf <include|exclude> <bf|list> [bf_idx] [bf_len] <mac1;mac2...>] [rx_filter <str1:str2...>] [tx_filter <str1:str2...>]\n\twdev <idx> nan rm_func cookie <cookie>\n\twdev <idx> nan config [pref <pref>] [bands [2GHz] [5GHz]]\n\twdev <idx> nan stop \n\twdev <idx> nan start pref <pref> [bands [2GHz] [5GHz]]\n\twdev <idx> p2p stop \n\twdev <idx> p2p start \n"
+	}
+}
