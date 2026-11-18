@@ -75,7 +75,9 @@ Normal Stop deactivates that UUID and retains the netdev.
 Created and adopted handles remain distinct. Adoption grants reuse only,
 never deletion. The retained creation primitive grants ownership only through
 the exact nl80211 create reply; failed allocation can delete only that
-operation's captured wireless object. EEXIST, an intent, a later name lookup or
+operation's captured wireless object. That deletion also retires the selection
+record bound to the deleted object, so the next admitted Start or saved restore
+may create the leg again; a refused or failed delete keeps both. EEXIST, an intent, a later name lookup or
 a process restart grant no deletion authority. There is no target journal and
 the credential store remains version 2. Device autoconnect is disabled on the
 exact borrowed leg, with its prior value recorded privately. Stop/rollback

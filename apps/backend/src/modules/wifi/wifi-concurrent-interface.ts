@@ -24,6 +24,7 @@ export {
 } from "./wifi-hybrid-channel.ts";
 export {
 	releaseConcurrentApInterface,
+	releaseCreatedHybridTarget,
 	revalidateConcurrentApInterface,
 } from "./wifi-hybrid-target-policy.ts";
 export {

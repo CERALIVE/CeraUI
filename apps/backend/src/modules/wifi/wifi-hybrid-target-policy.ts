@@ -17,7 +17,10 @@ import {
 } from "../network/network-manager.ts";
 import { getHotspotCredentialOwners } from "./hotspot-credentials.ts";
 import { wifiAdapterLockKey } from "./wifi-adapter-lock.ts";
-import { revalidateCreatedConcurrentApInterface } from "./wifi-concurrent-interface-creation.ts";
+import {
+	releaseCreatedConcurrentApInterface,
+	revalidateCreatedConcurrentApInterface,
+} from "./wifi-concurrent-interface-creation.ts";
 import {
 	idleTarget,
 	runConcurrentInterface as interfaceRunner,
@@ -66,6 +69,19 @@ export async function revalidateConcurrentApInterface(target: {
 		(await idleTarget(target.ifname)) &&
 		(await connectionsPermitAdoption(record.parentIfname, target.ifname))
 	);
+}
+
+/** Deleting a created leg retires the selection bound to that object, so its name is again never-selected. */
+export async function releaseCreatedHybridTarget(target: {
+	ifname: string;
+	created: boolean;
+}): Promise<void> {
+	const bound = targetRecords.get(target)?.wireless;
+	if (!(await releaseCreatedConcurrentApInterface(target)) || !bound) return;
+	// Autoconnect release may have replaced the record object; the deleted object's identity is what binds it.
+	const stored = selectedTargets.get(target.ifname)?.record?.wireless;
+	if (stored?.wdev === bound.wdev && stored.ifindex === bound.ifindex)
+		selectedTargets.delete(target.ifname);
 }
 
 export async function releaseConcurrentApInterface(

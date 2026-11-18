@@ -16,7 +16,6 @@ import {
 import {
 	type ConcurrentApInterface,
 	ensureConcurrentApInterface,
-	releaseCreatedConcurrentApInterface,
 	revalidateCreatedConcurrentApInterface,
 } from "./wifi-concurrent-interface-creation.ts";
 import {
@@ -27,6 +26,7 @@ import {
 import {
 	connectionsPermitAdoption,
 	releaseConcurrentApInterface,
+	releaseCreatedHybridTarget,
 } from "./wifi-hybrid-target-policy.ts";
 import {
 	currentTarget,
@@ -270,7 +270,7 @@ export async function selectConcurrentApInterface(
 		return target;
 	} finally {
 		if (!retained) {
-			if (target.created) await releaseCreatedConcurrentApInterface(target);
+			if (target.created) await releaseCreatedHybridTarget(target);
 			else await releaseConcurrentApInterface(ifname);
 		}
 	}

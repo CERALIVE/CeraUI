@@ -40,21 +40,22 @@ const cleanupChecks = new WeakMap<
 	(created: CreatedInterface) => Promise<boolean>
 >();
 
-/** Creation owns cleanup even after activation admission has been retired. */
+/** Creation owns cleanup even after activation admission has been retired; true only once its object is deleted. */
 export async function releaseCreatedConcurrentApInterface(target: {
 	ifname: string;
 	created: boolean;
-}): Promise<void> {
+}): Promise<boolean> {
 	const owned = createdInterfaces.get(target);
-	if (!owned) return;
+	if (!owned) return false;
 	try {
 		const check = cleanupChecks.get(target);
-		if (check && !(await check(owned))) return;
+		if (check && !(await check(owned))) return false;
 		// Stable wireless-device addressing cannot delete a same-name replacement.
 		await interfaceRunner("iw", ["wdev", owned.wdev, "del"]);
 		createdInterfaces.delete(target);
+		return true;
 	} catch {
-		return;
+		return false;
 	}
 }
 

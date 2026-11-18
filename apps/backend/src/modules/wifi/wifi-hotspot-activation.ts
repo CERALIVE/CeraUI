@@ -72,7 +72,7 @@ import {
 	HYBRID_CHANNEL_REFUSAL,
 	readHybridStationChannel,
 	releaseConcurrentApInterface,
-	releaseCreatedConcurrentApInterface,
+	releaseCreatedHybridTarget,
 	revalidateConcurrentApInterface,
 	selectConcurrentApInterface,
 } from "./wifi-concurrent-interface.ts";
@@ -146,7 +146,7 @@ export const defaultHotspotDeps: HotspotActivationDeps = {
 	validateConcurrentInterface: revalidateConcurrentApInterface,
 	confirmHybridActivation,
 	releaseConcurrentInterface: releaseConcurrentApInterface,
-	rollbackConcurrentInterface: releaseCreatedConcurrentApInterface,
+	rollbackConcurrentInterface: releaseCreatedHybridTarget,
 	preferConcurrentAp: (macAddress) =>
 		getPersistedWifiAdapterMode(macAddress) !== "hotspot",
 	publishOutcome: publishHotspotOutcome,

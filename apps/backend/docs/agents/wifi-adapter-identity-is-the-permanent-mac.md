@@ -226,7 +226,9 @@ leg after the same qualification, occupancy, parent and binding checks. A leg
 appearing after absence was admitted is foreign and cannot be borrowed. Missing
 identity or foreign evidence still refuses with O3. Exact nl80211 replies alone
 own creation cleanup; parent and exact-object continuity also fence the created
-leg's autoconnect write and later lifecycle checks.
+leg's autoconnect write and later lifecycle checks. Deleting a rolled-back created
+leg retires the record bound to that object, so a later admitted attempt may
+create it again; a refused or failed delete keeps both.
 Adoption and name recognition never confer deletion authority.
 Selection binds the record to the object it admitted and rechecks identity and
 bindings under the lock around its device write; Start rechecks before each

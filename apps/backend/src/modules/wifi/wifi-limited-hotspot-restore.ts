@@ -28,7 +28,7 @@ import {
 	readHybridStationChannel,
 	readHybridTargetIdentity,
 	releaseConcurrentApInterface,
-	releaseCreatedConcurrentApInterface,
+	releaseCreatedHybridTarget,
 	revalidateConcurrentApInterface,
 	selectConcurrentApInterface,
 } from "./wifi-concurrent-interface.ts";
@@ -255,7 +255,7 @@ export async function restoreLimitedHotspot(
 	} finally {
 		if (!accepted && target) {
 			await releaseConcurrentApInterface(target.ifname);
-			if (target.created) await releaseCreatedConcurrentApInterface(target);
+			if (target.created) await releaseCreatedHybridTarget(target);
 		}
 	}
 }
