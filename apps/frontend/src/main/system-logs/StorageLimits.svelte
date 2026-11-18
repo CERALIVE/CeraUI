@@ -127,7 +127,7 @@ async function save(): Promise<void> {
 					</Select.Trigger>
 					<Select.Content class={LINE_BREAKS}>
 						{#each [null, ...limit.options] as option (option)}
-							<Select.Item label={limit.describe(option)} value={limitValue(option)} />
+							<Select.Item class="min-h-(--touch-target-min)" label={limit.describe(option)} value={limitValue(option)} />
 						{/each}
 					</Select.Content>
 				</Select.Root>

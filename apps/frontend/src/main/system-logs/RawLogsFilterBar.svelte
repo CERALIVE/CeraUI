@@ -126,6 +126,7 @@ function chooseTime(value: string): void {
 					<Select.Content>
 						{#each LOG_SOURCES as source (source)}
 							<Select.Item
+								class="min-h-(--touch-target-min)"
 								data-testid="raw-source-option-{source}"
 								label={m[`systemLogs.source.${source}`]()}
 								value={source}
@@ -142,7 +143,12 @@ function chooseTime(value: string): void {
 					</Select.Trigger>
 					<Select.Content>
 						{#each times as time (time.value)}
-							<Select.Item data-testid="raw-time-option-{time.value}" label={time.label} value={time.value} />
+							<Select.Item
+								class="min-h-(--touch-target-min)"
+								data-testid="raw-time-option-{time.value}"
+								label={time.label}
+								value={time.value}
+							/>
 						{/each}
 					</Select.Content>
 				</Select.Root>

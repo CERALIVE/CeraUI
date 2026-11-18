@@ -36,6 +36,8 @@
     children own layout and scrolling. An inline `translate: none` cancels the
     centering translate, which app.css's unlayered ≤500px rule would otherwise
     force back, and which lands half a pixel off on an odd viewport width.
+    While it is open app.css drops the page's stable scrollbar gutter, which a
+    fixed surface cannot cover, so the view spans the whole viewport.
 
   API
   ----
@@ -239,6 +241,7 @@ const fullscreenSurfaceClass = 'inset-0 max-h-none max-w-none rounded-none ring-
 	<Dialog.Root bind:open>
 		<Dialog.Content
 			class={cn(surfaceClass, fullscreen ? fullscreenSurfaceClass : 'sm:max-w-lg', contentClass)}
+			data-app-dialog-fullscreen={fullscreen ? '' : undefined}
 			showCloseButton={false}
 			style={fullscreen ? 'translate: none' : undefined}
 		>

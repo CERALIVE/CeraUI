@@ -36,7 +36,7 @@
 | **Repo conventions (incl. tech-debt register)** | `docs/CONVENTIONS.md` |
 | **Technical-debt register (machine-checkable ledger)** | `docs/TECHNICAL_DEBT.md` + `scripts/check-tech-debt.mjs` |
 | **Test topology — how each suite is actually executed** | Frontend: two Vitest `projects` (`apps/frontend/vitest.config.ts` + `scripts/ci/vitest-classify.mjs`), two project-scoped setup files, a four-way CI shard lane, a `min(16, availableParallelism())` worker budget, and native i18n loading — sections below → "THE FRONTEND VITEST LANE IS SHARDED FOUR WAYS" + DEP BASELINE, measurements in `docs/FRONTEND-SETUP-COST.md`. Backend: `bun test --parallel` with per-file `mkdtemp` fixture roots and two `fetch-depth: 0` CI jobs — [`apps/backend/AGENTS.md`](../../apps/backend/AGENTS.md) → DEV MOCK SEAMS → "Backend per-file test isolation" |
-| **Design-pass follow-up register (prose findings with no shipped marker, NOT the tech-debt ledger)** | `docs/DESIGN-FOLLOWUPS.md` (DF-1…DF-29) |
+| **Design-pass follow-up register (prose findings with no shipped marker, NOT the tech-debt ledger)** | `docs/DESIGN-FOLLOWUPS.md` (DF-1…DF-33) |
 | Touch/kiosk CSS spec | `docs/TOUCHSCREEN.md` |
 | **Kiosk capability + inert-by-default model** | `docs/ON_DEVICE_DISPLAY.md` (cross-repo arch) |
 | Kiosk state machine (DC-2) | `docs/KIOSK_STATE_MACHINE.md` |

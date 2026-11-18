@@ -177,6 +177,29 @@ describe("AppDialog — fullscreen", () => {
 		},
 	);
 
+	it.each([
+		[true, true],
+		[false, true],
+		[false, false],
+	])(
+		"marks the page for the gutter rule only when fullscreen (fullscreen=%s, desktop=%s)",
+		(fullscreen, desktop) => {
+			viewport(desktop);
+			render(AppDialog, {
+				props: {
+					open: true,
+					fullscreen,
+					title: "Settings entry",
+					children: body,
+				},
+			});
+
+			expect(surface().hasAttribute("data-app-dialog-fullscreen")).toBe(
+				fullscreen,
+			);
+		},
+	);
+
 	it("gives the body to its children: no padding, no scroll of its own", () => {
 		viewport(true);
 		render(AppDialog, {

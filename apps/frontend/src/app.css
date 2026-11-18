@@ -327,6 +327,12 @@
 		-webkit-tap-highlight-color: rgba(128, 138, 150, 0.35);
 	}
 
+	/* A fullscreen dialog is fixed to the viewport, which excludes the reserved
+	   gutter; while one is open the page cannot scroll, so the gutter goes. */
+	html:has([data-app-dialog-fullscreen]) {
+		scrollbar-gutter: auto;
+	}
+
 	body {
 		@apply bg-background text-foreground;
 		font-synthesis-weight: none;

@@ -7,7 +7,8 @@ Deferred **design** findings from the `ceraui-experience-stability` Wave-3 UI pa
 **engineering** deferrals from that same effort's other waves (§4, opened by todo 38).
 Both live here for the same reason: neither ships a source marker, so neither is
 admissible to the marker-bound register (see the next section). §5 holds the System
-Logs critique residuals (device-log-system todo 36).
+Logs critique residuals (device-log-system todo 36), §6 what its hardening pass (todo 37)
+found outside System Logs.
 
 ## Why this file and not `docs/TECHNICAL_DEBT.md`
 
@@ -459,6 +460,10 @@ The full table, evidence and the fixed findings are in
   the frontend rules forbid hand-editing the shadcn primitive.
 - **Owner:** the CeraUI design-system owner, with DF-2.
 - **Exit condition:** the destructive confirm label measures at least 4.5:1 in both themes.
+- **Todo 37 decision:** kept here, owner unchanged. The label colour is the shared variant's
+  `text-destructive` on its 10 % (light) or 20 % (dark) wash (`lib/components/ui/button/button.svelte`,
+  variant `destructive`), used by every destructive confirmation in CeraUI, so raising it is the
+  token decision DF-2 owns, taken once for the app rather than per surface.
 
 ### DF-21: Spanish System Logs chrome wraps at 320 and 375 px (SL-6, P2)
 
@@ -469,6 +474,21 @@ The full table, evidence and the fixed findings are in
 - **Owner:** device-log-system todo 37 (locales and viewports).
 - **Exit condition:** the todo 37 responsive spec covers `es` at 320 and 375 px and the tab
   strip holds at most two lines.
+- **Todo 37:** fixed at the measured sizes from 375 px up; re-recorded at 320 px. Two causes were fixed: the
+  page kept its stable scrollbar gutter beside the fullscreen view (15 px in a browser with
+  classic scrollbars, `app.css` `html:has([data-app-dialog-fullscreen])`), and below 640 px the
+  three tabs took equal widths, so "Eventos" held room "Registros sin procesar" needed
+  (`SystemLogsView.svelte`, `max-sm:flex-auto` on the tab triggers). At the measured sizes
+  from 375 px up (375 px in all ten locales; 768, 1024 and 1280 px in en, ar and de) every
+  tab label holds at most two lines, and at 320 and 375 px every label is painted inside its
+  control (`apps/frontend/tests/e2e/system-logs-responsive.spec.ts`). At
+  320 px Spanish still needs three lines: once "Eventos" (69 px) and "Almacenamiento" (128 px)
+  take their own widths the raw tab keeps 78 px, 64 px of text, and "sin procesar" is 83 px;
+  nothing is clipped. The boot button wrap and the search placeholder ellipsis stay as
+  designed, inside their own controls.
+- **Owner (320 px, Spanish):** the Spanish copy review for CeraUI (`packages/i18n`), deciding
+  whether a shorter `systemLogs.tabs.raw` (and the matching `systemLogs.events.viewRaw`)
+  replaces "Registros sin procesar". Exit: `es` at 320 px holds two lines.
 
 ### DF-22: Undersized targets around System Logs (SL-7, P2)
 
@@ -478,6 +498,15 @@ The full table, evidence and the fixed findings are in
   option rows in touch layout.
 - **Owner:** device-log-system todo 37 (touch), through the `app.css` touch token layer.
 - **Exit condition:** every listed control meets 44 px in touch layout and 24 px elsewhere.
+- **Todo 37: closed.** The System Logs select options (retention in `StorageLimits.svelte`,
+  source and time in `RawLogsFilterBar.svelte`) carry `min-h-(--touch-target-min)`, which is
+  44 px in touch layout and 0 elsewhere (`app.css`), so the shared select item is unchanged.
+  Measured by `apps/frontend/tests/e2e/system-logs-responsive.spec.ts`: the notice and toast
+  View logs actions are at least 24 x 24 px outside touch layouts and 44 x 44 px in touch
+  layout, with their labels painted inside, and every option of the four System Logs selects
+  (source 8, time 5, retention 5, size limit 4) at the 1024x600 kiosk in touch layout is at
+  least 44 px tall. The toast's system font is not a
+  target size and belongs to every toast, so it moved to DF-31.
 
 ### DF-23: A refused download keeps its ticket for 60 s (SL-8, P2)
 
@@ -536,3 +565,61 @@ The full table, evidence and the fixed findings are in
 - **Why deferred:** a rare path (the live feed missed events and the list reloads); the focused row survives and the stop returns to it, only focus is lost. The fix changes the reload path, outside the critique pass.
 - **Owner:** device-log-system todo 38 (Polish and audit: accessibility, keyboard), which runs before the final reviews and must fix it.
 - **Exit condition:** a sequence-gap reload that keeps the focused event keeps focus on its action, proved by a Chromium spec.
+
+---
+
+## 6. Found by the System Logs hardening pass (device-log-system todo 37)
+
+### DF-30: The page scrollbar track is a cool blue-black outside the graphite palette (todo 37)
+
+- **Where:** `apps/frontend/src/app.css`, `html` and `html.dark` `scrollbar-color`.
+- **What:** the track colours are `hsl(210 20% 98%)` and `hsl(222 30% 6%)`, hue 210 to 222
+  rather than the warm graphite hue 150 every surface uses (PRODUCT.md rules out the old cool
+  identity). Todo 37 found it as the 15 px strip beside the fullscreen System Logs view; that
+  strip is gone, the track still shows on every scrolling page with classic scrollbars.
+- **Owner:** the CeraUI design-system owner (app shell tokens).
+- **Exit condition:** the scrollbar track and thumb come from the graphite tokens in both
+  themes.
+
+### DF-31: Toasts are set in a system font stack, not the app typeface (todo 37)
+
+- **Where:** `[data-sonner-toaster]` in svelte-sonner 1.2.3 (`dist/Toaster.svelte`, line 549
+  sets `font-family: ui-sans-serif, system-ui, ...`); `app.css` does not override it.
+- **What:** every toast in the app, the System Logs View logs toast included, is drawn in the
+  platform's system font while the rest of the UI uses the app typeface. Todo 37 measured it on
+  the View logs toast; `font-family: inherit` on the toaster fixes it, but that changes every
+  toast in the app, so todo 37 left it to this owner.
+- **Owner:** the CeraUI design-system owner (shared `Toaster`).
+- **Exit condition:** every toast's text computes to the app's font family.
+
+### DF-32: The shared relative-time formatter says "just now" in English in every locale (todo 37)
+
+- **Where:** `packages/i18n/src/formatters.ts:123`, `formatRelativeTime`
+  (`if (Math.abs(seconds) < 10) return "just now";`). Its callers outside System Logs:
+  `apps/frontend/src/main/HudBar.svelte:189` (`lastSeen()`, shown on the offline last-seen
+  line and on the sensor freshness line at `HudBar.svelte:723-724`) and
+  `apps/frontend/src/main/dialogs/ModemConfigDialog.svelte:2201` (the observed-at time).
+- **What:** for the first 10 s after a timestamp every locale reads the English "just now";
+  from the tenth second on, Intl speaks the locale ("hace 10 segundos"). The locale's own
+  word is `Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(0, "second")`: en
+  "now", es "ahora", de "jetzt", fr "maintenant", pt-BR "agora", ja "今", ko "지금", zh "现在",
+  ar "الآن", hi "अब". System Logs Events already shows that word through a local override
+  (`apps/frontend/src/lib/device-logs/timeline-copy.ts`, `eventTime`); todo 37 left the
+  shared formatter and its other callers unchanged, because changing it changes their copy.
+- **Owner:** the CeraUI design-system and i18n owner (`packages/i18n`).
+- **Exit condition:** `formatRelativeTime` returns the locale's word for now in its recency
+  window, its tests say so, and the override in `eventTime` is removed.
+
+### DF-33: The low-disk View logs action leaves keyboard focus off Storage on the mobile project (todo 37)
+
+- **Where:** `apps/frontend/tests/e2e/view-logs-action.spec.ts:107`, "the low-disk action opens
+  wide Storage with keyboard focus @visual", Playwright mobile project; the low-disk View logs
+  action and the Storage heading of System Logs.
+- **What:** after Enter on the low-disk action the System Logs dialog opens, but the Storage
+  heading (the `h3` with `tabindex="-1"` inside `system-logs-storage`) is not focused:
+  `Expected: focused`, `Received: inactive`. The desktop project passes. It fails the same way
+  on the unchanged base `8cad9dd0` and with todo 37's changes, so todo 37 did not cause it;
+  its `@visual` tag keeps it out of CI's functional set.
+- **Owner:** device-log-system todo 38 (keyboard and focus audit).
+- **Exit condition:** on the mobile project the low-disk action lands keyboard focus on the
+  Storage heading and the test passes.

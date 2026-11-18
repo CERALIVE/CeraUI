@@ -157,6 +157,7 @@ $effect(() => {
 	<div class="flex min-h-0 min-w-0 flex-1 flex-col">
 		{#if status === 'ready'}
 			<Tabs.Root class="min-h-0 flex-1 gap-0" onValueChange={selectTab} value={current}>
+				<!-- Below 640 px each tab takes its label's width, so a long label (Spanish at 375 px) keeps to two lines. -->
 				<div class="border-b px-4">
 					<Tabs.List
 						aria-label={m['systemLogs.tabs.label']()}
@@ -167,7 +168,7 @@ $effect(() => {
 						{#each tabs as tab (tab)}
 							<!-- bits-ui sets data-state, not the primitive's data-active, so the selected look is set here. -->
 							<Tabs.Trigger
-								class="h-auto min-h-(--touch-target-min) whitespace-normal text-center sm:whitespace-nowrap data-[state=active]:text-foreground dark:data-[state=active]:text-foreground data-[state=active]:after:opacity-100"
+								class="h-auto min-h-(--touch-target-min) whitespace-normal text-center max-sm:flex-auto sm:whitespace-nowrap data-[state=active]:text-foreground dark:data-[state=active]:text-foreground data-[state=active]:after:opacity-100"
 								value={tab}
 							>
 								{TAB_LABELS[tab]()}

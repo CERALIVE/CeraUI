@@ -159,7 +159,9 @@ in section 4.
   cellular `SignalHigh`, update `Download`, device `Cpu`, capture `Video`).
 - Column 2, line 1: title (`text-sm font-semibold`, `text-foreground`) at the
   inline start; time at the inline end: absolute (locale time, plus the date
-  when not today) and relative ("2 minutes ago", `formatRelativeTime`) in
+  when not today) and relative ("2 minutes ago", `formatRelativeTime`; the last
+  few seconds read as the locale's word for now, `eventTime` in
+  `lib/device-logs/timeline-copy.ts`, DESIGN-FOLLOWUPS DF-32) in
   `text-xs text-muted-foreground tabular-nums`, inside `<time datetime>`.
   Below 768 px the time moves under the title.
 - Line 2: one detail sentence (`text-sm text-muted-foreground`), data params in
@@ -187,7 +189,7 @@ and below; its focus ring stays visible below the sticky header.
 - The message wraps (`overflow-wrap: anywhere` for paths and hex runs); there is
   never horizontal scroll. Unit and message carry `dir="ltr"` inside RTL chrome.
 - Info messages use `text-foreground`; debug messages use
-  `text-muted-foreground` (the "dimmer" step, still AA).
+  `text-muted-foreground` (the "dimmer" step).
 - A date separator row (formatted date, neutral rules) appears at the top and
   wherever the local date changes between adjacent rows.
 - The whole row is a button that expands it: full message, full unit, a
@@ -742,18 +744,43 @@ everywhere in the app.
   `en`, `ar` and `de` (DESIGN.md BP-1..BP-3, LO-5); state, severity and action
   elements are never clipped; long units truncate with the full value in the
   expanded row.
+- Design rule: the view spans the whole viewport; while it is open the page
+  drops its stable scrollbar gutter (`app.css`,
+  `html:has([data-app-dialog-fullscreen])`). Below 640 px each tab grows from
+  its label's width (`SystemLogsView.svelte:171`, `max-sm:flex-auto`).
+- Measured (`tests/e2e/system-logs-responsive.spec.ts`): in Chromium against
+  the mock backend, the dialog width matched the viewport width in the 12 EN,
+  AR and DE cases at 375x812, 768x1024, 1280x800, and touch 1024x600. The audit
+  checked horizontal overflow and the bounds of visible state, severity, and
+  action elements in those cases and at 320x720 and 375x812 in all ten
+  locales. At the tested widths of 375 px or above, the audited tab labels used
+  at most two lines. The Spanish Raw logs label used three unclipped lines at
+  320 px (DESIGN-FOLLOWUPS DF-21). The 12 principal cases reported no critical
+  or serious scoped axe violations in Events, Raw logs, or Storage. The
+  separate color compositor checked the applicable AA text-contrast ratios for
+  audited text using computed colors. It does not model CSS opacity. The narrow
+  matrix and open select portals use the compositor alone.
+- The other bullets in this section, "Every width" included, are design rules:
+  the 800x480 kiosk and the widths between the measured ones are not measured.
 - An 800x480 kiosk follows the 768 column with the folded bars, since it is
   below 1024 px wide and at most 600 px tall.
 - Touch layout (`[data-layout-mode='touch']`): every interactive element reaches
-  `--touch-target-min` through the existing touch layer or the
-  `data-touch-target="hit-area"` overlay, with at least 8 px between neighbours;
+  `--touch-target-min` through the existing touch layer, the
+  `data-touch-target="hit-area"` overlay or, for the select options in
+  `StorageLimits.svelte` and `RawLogsFilterBar.svelte`, a local
+  `min-h-(--touch-target-min)` class, with at least 8 px between neighbours;
   disabled controls keep their full size (DESIGN.md TT-1..TT-5). Never a
-  hard-coded 44px.
+  hard-coded 44px. The spec measures the gap only between distinct controls:
+  members of one radiogroup, listbox, Raw list or boot picker, nested hit
+  areas, and targets scrolled partly out of view are not paired
+  (`tests/e2e/helpers/system-logs-audit.ts`, spacing check).
 - RTL (`ar`): logical properties only; the close button sits at the inline end;
   the side column sits at the inline end; chevrons mirror (`rtl:-scale-x-100`);
   raw unit and message keep `dir="ltr"`; data params in `<bdi>`.
-- CJK (`ja`, `ko`, `zh`): system fallback fonts render (no tofu); no forced
-  mid-token breaks in titles.
+- CJK (`ja`, `ko`, `zh`): system fallback fonts render (no tofu); at 320 and
+  375 px the spec finds no `Intl.Segmenter` word of two or more characters
+  holding a CJK character split across lines within one rendered text node
+  (`tests/e2e/helpers/system-logs-audit.ts`, CJK check).
 
 ## 7. Keyboard and screen reader
 

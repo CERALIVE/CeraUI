@@ -800,4 +800,13 @@ describe("eventTime", () => {
 			new Intl.RelativeTimeFormat("de", { numeric: "auto" }).format(-1, "day"),
 		);
 	});
+
+	it("says the locale's own word for now in the last few seconds", () => {
+		vi.useFakeTimers({ toFake: ["Date"] });
+		vi.setSystemTime(EVENT_AT + 2_000);
+		expect(eventTime(EVENT_AT, "en").relative).toBe("now");
+		expect(eventTime(EVENT_AT, "es").relative).toBe("ahora");
+		expect(eventTime(EVENT_AT, "ar").relative).toBe("الآن");
+		expect(eventTime(EVENT_AT, "ja").relative).toBe("今");
+	});
 });
