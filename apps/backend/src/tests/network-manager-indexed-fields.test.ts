@@ -63,3 +63,44 @@ test("duplicate indexed labels still reject the entire observation", async () =>
 		await nmDeviceProp("wlan1", "GENERAL.HWADDR,IP4.ADDRESS"),
 	).toBeUndefined();
 });
+
+for (const [first, second] of [
+	["IP4.ADDRESS[1]", "IP4.ADDRESS[01]"],
+	["IP4.ADDRESS[002]", "ip4.address[2]"],
+	["IP4.ADDRESS", "IP4.ADDRESS[1]"],
+	["IP4.ADDRESS[01]", "IP4.ADDRESS"],
+	["IP6.ADDRESS[1]", "IP6.ADDRESS[001]"],
+	["IP6.ADDRESS", "IP6.ADDRESS[1]"],
+] as const) {
+	test(`logical duplicate labels refuse the observation: ${first} and ${second}`, async () => {
+		spyOn(exec, "execFileP").mockResolvedValue({
+			stdout: `GENERAL.HWADDR:${mac}\n${first}:first\n${second}:second\n`,
+			stderr: "",
+		});
+		expect(
+			await nmDeviceProp(
+				"wlan1",
+				`GENERAL.HWADDR,${first.startsWith("IP4") ? "IP4" : "IP6"}.ADDRESS`,
+			),
+		).toBeUndefined();
+	});
+}
+
+test("canonical duplicate detection preserves distinct large indices and original named labels", async () => {
+	spyOn(exec, "execFileP").mockResolvedValue({
+		stdout: `GENERAL.HWADDR:${mac}\nIP4.ADDRESS[01]:first\nIP4.ADDRESS[9007199254740992]:second\nIP4.ADDRESS[9007199254740993]:third\n`,
+		stderr: "",
+	});
+	expect(await nmDeviceProp("wlan1", "GENERAL.HWADDR,IP4.ADDRESS")).toEqual([
+		mac,
+		"first\nsecond\nthird",
+	]);
+	expect(
+		await nmDeviceProp("wlan1", "GENERAL.HWADDR,IP4.ADDRESS", "multiline"),
+	).toEqual([
+		`GENERAL.HWADDR:${mac}`,
+		"IP4.ADDRESS[01]:first",
+		"IP4.ADDRESS[9007199254740992]:second",
+		"IP4.ADDRESS[9007199254740993]:third",
+	]);
+});

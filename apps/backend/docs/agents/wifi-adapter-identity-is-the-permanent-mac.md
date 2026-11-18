@@ -51,7 +51,9 @@ only the whitelisted rejecting-check code.
 Mixed-section device reads project indexed fields to their requested base
 field in producer order, joining multiple values with a newline. Named multiline
 mode retains the original indexed labels; missing fields still yield an empty
-scalar and duplicate labels reject the entire reply.
+scalar. Duplicate detection uses a canonical index without leading zeros, with
+the bare label equivalent to index 1. Logical duplicates reject the entire reply
+without merging their values or rewriting the retained named labels.
 
 NM 1.42.4 and 1.52.1 both provide the offline stdin/keyfile serializer; native
 daemon/offline byte parity is a separate gate and mismatches fail closed.

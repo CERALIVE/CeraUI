@@ -24,6 +24,7 @@ export function parseNmcliFields(
 ): ReadonlyMap<string, string> | undefined {
 	const requested = fields.map((field) => field.toLowerCase());
 	const row = new Map<string, string>();
+	const labels = new Set<string>();
 	let current: string | undefined;
 	let valueStart = 0;
 	const finish = (end: number) => {
@@ -42,7 +43,11 @@ export function parseNmcliFields(
 			const base = key.replace(/\[\d+\]$/, "");
 			if (requested.includes(base)) {
 				finish(start);
-				if (row.has(key)) return undefined;
+				const index =
+					/\[(\d+)\]$/.exec(key)?.[1]?.replace(/^0+(?=\d)/, "") ?? "1";
+				const label = `${base}[${index}]`;
+				if (labels.has(label)) return undefined;
+				labels.add(label);
 				current = key;
 				valueStart = start + separator + 1;
 			} else if (
