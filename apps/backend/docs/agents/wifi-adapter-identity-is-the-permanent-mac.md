@@ -55,6 +55,12 @@ scalar. Duplicate detection uses a canonical index without leading zeros, with
 the bare label equivalent to index 1. Logical duplicates reject the entire reply
 without merging their values or rewriting the retained named labels.
 
+Native positional `--get-values` device and profile reads consume exactly one
+final LF before splitting. A blank record remains an empty string, including
+at the end of a tuple. An entirely empty stdout retains the scalar result
+`[""]`. Spaces and carriage returns belong to the value. Explicit multiline
+device reads keep their labelled-line format.
+
 NM 1.42.4 and 1.52.1 both provide the offline stdin/keyfile serializer; native
 daemon/offline byte parity is a separate gate and mismatches fail closed.
 Byte-identical foreign writes after NM's rename and whole-file replacement

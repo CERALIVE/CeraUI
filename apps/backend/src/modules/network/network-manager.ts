@@ -157,6 +157,11 @@ export async function nmConnsGet(fields: string) {
 	return undefined;
 }
 
+/** Native --get-values terminates each record with LF, including empty values. */
+function splitNmValues(stdout: string): string[] {
+	return (stdout.endsWith("\n") ? stdout.slice(0, -1) : stdout).split("\n");
+}
+
 export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
 	uuid: ConnectionUUID,
 	fields: Tupel,
@@ -205,7 +210,7 @@ export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
 			"show",
 			argMatch(ID_RE, uuid),
 		]);
-		return stdout.split("\n") as {
+		return splitNmValues(stdout) as {
 			[K in keyof Tupel]: string;
 		};
 	} catch {
@@ -412,7 +417,7 @@ export async function nmDeviceProp(
 			"show",
 			argMatch(ID_RE, device),
 		]);
-		return stdout.split("\n");
+		return mode === "multiline" ? stdout.split("\n") : splitNmValues(stdout);
 	} catch (err) {
 		if (
 			typeof err === "object" &&
