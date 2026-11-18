@@ -74,7 +74,9 @@ domain moves with no operator action.
 Well-formed bands outside the represented 2.4/5/6 GHz schema are omitted rather
 than invalidating neighbouring radios. Their frequencies may omit channel
 suffixes, as S1G does in iw 6.9. Malformed frequency blocks and supported-band
-rows without channel numbers still fail.
+rows without channel numbers still fail. Grouped interface limits use the same
+slot accounting as concurrency discovery: managed and AP need two slots, even
+inside a shared group, and each alternative retains its own total/channel bounds.
 
 **Three degraded states, and collapsing any pair is the bug.** A radio that does not
 carry a band renders **zero** nodes. A radio that carries it under a non-permitting,

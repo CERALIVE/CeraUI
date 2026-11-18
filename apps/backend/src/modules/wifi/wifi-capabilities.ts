@@ -67,6 +67,7 @@ import {
 } from "../system/cli-parse.ts";
 import { runIw } from "./regdomain.ts";
 import { notifyWifiAdapterModeEdge } from "./wifi-adapter-mode-events.ts";
+import { parseApStaConcurrencySupport } from "./wifi-ap-sta-capability.ts";
 import { parseRegulatoryRuleLine } from "./wifi-regulatory-rules.ts";
 
 export type { WifiLinkTelemetry };
@@ -178,41 +179,30 @@ function deriveGeneration(
 	return "wifi4";
 }
 
-const COMBO_GROUP_RE = /#\{([^}]*)\}\s*<=\s*(\d+)/g;
-
 /**
  * STA+AP concurrency from the wiphy's `valid interface combinations`.
  *
- * A combination qualifies only when `managed` and an AP-bearing group are
- * SEPARATE groups that can each be instantiated and the total permits both —
- * one group holding both at `<= 1` is a choice between them, not concurrency.
- * `#channels <= 1` is what pins the AP to the station's channel.
+ * The slot-accounting parser owns role capacity. Keep each alternative intact
+ * so an unusable entry cannot lend roles or channel capacity to another.
  */
 export function parseInterfaceCombination(entry: string): {
 	supported: boolean;
 	sameChannelOnly: boolean;
 } {
-	COMBO_GROUP_RE.lastIndex = 0;
-	let managed = false;
-	let ap = false;
-	for (const match of entry.matchAll(COMBO_GROUP_RE)) {
-		const members = (match[1] ?? "").split(",").map((m) => m.trim());
-		const limit = Number(match[2] ?? "0");
-		if (limit < 1) continue;
-		const hasManaged = members.includes("managed");
-		const hasAp = members.includes("AP");
-		if (hasManaged && hasAp) continue;
-		if (hasManaged) managed = true;
-		if (hasAp) ap = true;
-	}
-
-	const total = Number(/total\s*<=\s*(\d+)/.exec(entry)?.[1] ?? "0");
-	const channels = Number(/#channels\s*<=\s*(\d+)/.exec(entry)?.[1] ?? "0");
-	const supported = managed && ap && total >= 2;
-
-	// When concurrency is refused, the channel constraint describes nothing, so
-	// it reports the restrictive value rather than implying multi-channel.
-	return { supported, sameChannelOnly: supported ? channels <= 1 : true };
+	const alternatives = entry
+		.split(/\*\s+(?=#\{)/)
+		.filter((alternative) =>
+			parseApStaConcurrencySupport(
+				`valid interface combinations:\n * ${alternative}`,
+			),
+		);
+	return {
+		supported: alternatives.length > 0,
+		sameChannelOnly: alternatives.every(
+			(alternative) =>
+				Number(/#channels\s*<=\s*(\d+)/.exec(alternative)?.[1]) === 1,
+		),
+	};
 }
 
 type PhyBlock = { phy: string; lines: string[] };
