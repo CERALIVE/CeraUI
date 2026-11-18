@@ -28,7 +28,8 @@ const rows = $derived(volumeRows(storage.recentVolume));
 
 {#snippet meter(percent: number, testid: string)}
 	<span aria-hidden="true" class="bg-muted block h-1.5 min-w-0 grow overflow-hidden rounded-full" data-testid={testid}>
-		<span class="bg-status-neutral block h-full rounded-full" style:width="{percent}%"></span>
+		<!-- A share under 1 % still draws a sliver; only a zero share leaves the track empty. -->
+		<span class={['bg-status-neutral block h-full rounded-full', percent > 0 && 'min-w-1']} style:width="{percent}%"></span>
 	</span>
 {/snippet}
 

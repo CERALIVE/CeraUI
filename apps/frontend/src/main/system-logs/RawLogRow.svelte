@@ -2,8 +2,9 @@
   RawLogRow.svelte — one row of the Raw logs list. An entry is a button that
   expands to the full message, the full unit and Copy; raw text stays dir="ltr"
   inside RTL chrome and wraps instead of scrolling. Gaps, journald's own
-  suppression notice, day changes and a clock that moved back are separator
-  rows between neutral rules, never log lines and never coloured bars.
+  suppression notice, day changes, a clock that moved back and the selected
+  moment of an approximate window are separator rows between neutral rules,
+  never log lines and never coloured bars.
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
@@ -14,6 +15,8 @@ import { Button } from '$lib/components/ui/button';
 import type { DisplayRow, MarkerKind } from '$lib/device-logs/raw-rows';
 import { copyToClipboard } from '$lib/helpers/clipboard';
 import { cn } from '$lib/utils';
+
+import ParamText from './ParamText.svelte';
 
 interface Props {
 	row: DisplayRow;
@@ -62,6 +65,12 @@ async function copy(text: string): Promise<void> {
 	</div>
 {:else if row.kind === 'clock'}
 	<div class={SEPARATOR} data-testid="raw-clock">{m['systemLogs.marker.clockChanged']()}</div>
+{:else if row.kind === 'moment'}
+	<div class={SEPARATOR} data-testid="raw-moment">
+		<time class="tabular-nums" datetime={new Date(row.ts).toISOString()}
+			><ParamText format={(time) => m['systemLogs.anchor.moment']({ time })} value={formatTime(row.ts)} /></time
+		>
+	</div>
 {:else if row.kind === 'marker'}
 	<div class={SEPARATOR} data-marker={row.marker} data-testid="raw-marker">{MARKER[row.marker](row.count)}</div>
 {:else if row.entry.marker === 'suppressed'}

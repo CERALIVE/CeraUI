@@ -14,13 +14,14 @@ import { SvelteSet } from 'svelte/reactivity';
 
 import { Button } from '$lib/components/ui/button';
 import { Skeleton } from '$lib/components/ui/skeleton';
-import { type DisplayRow, displayRows, ROW_CAP } from '$lib/device-logs/raw-rows';
+import { type DisplayRow, displayRows, ROW_CAP, withMoment } from '$lib/device-logs/raw-rows';
 import type { RawEdge, RawEnd, RawView } from '$lib/device-logs/raw-view.svelte';
 
 import RawLogRow from './RawLogRow.svelte';
 
 let { view }: { view: RawView } = $props();
 
+const BUSY = 'aria-disabled:pointer-events-none aria-disabled:opacity-50';
 const NAVIGATION: Record<string, (index: number, last: number) => number> = {
 	ArrowDown: (index) => index + 1,
 	ArrowUp: (index) => index - 1,
@@ -33,7 +34,12 @@ let focusKey = $state<string>();
 let pendingFocus = $state(untrack(() => view.anchor?.cursor ?? undefined));
 const expanded = new SvelteSet<string>();
 
-const rows = $derived(displayRows(view.rows, view.newestFirst));
+// An approximate window's older half reads up to the selected moment, so that bound marks where it falls.
+const moment = $derived(view.anchor?.approximate ? view.bottom?.query.until : undefined);
+const rows = $derived.by(() => {
+	const display = displayRows(view.rows, view.newestFirst);
+	return moment === undefined ? display : withMoment(display, moment);
+});
 const entryKeys = $derived(
 	rows.flatMap((row) => (row.kind === 'entry' && row.entry.marker === null ? [row.key] : [])),
 );
@@ -128,22 +134,41 @@ function showHeld(): void {
 {/snippet}
 
 {#snippet edge(end: RawEnd, state: RawEdge | null)}
-	{#if view.loading === end}
+	{const busy = $derived(view.loading === end ? 'true' : undefined)}
+	<!-- aria-disabled, not disabled, while this end loads: the pressed button keeps keyboard focus. -->
+	{#if busy}
 		<div data-testid="raw-loading-{end}">{@render skeletonRows(2)}</div>
-	{:else if end === 'bottom' && view.capped}
+	{/if}
+	{#if end === 'bottom' && view.capped}
 		<p class="text-muted-foreground px-4 py-3 text-center text-xs" data-testid="raw-cap">
 			{m['systemLogs.raw.capReached']({ count: ROW_CAP })}
 		</p>
 	{:else if state !== null && !state.lost && view.loading !== 'first'}
 		{#if state.hasMore === true}
 			<div class="flex justify-center px-4 py-3">
-				<Button data-testid="raw-load-more-{end}" onclick={() => view.loadMore(end)} size="sm" variant="outline">
+				<Button
+					aria-busy={busy}
+					aria-disabled={busy}
+					class={BUSY}
+					data-testid="raw-load-more-{end}"
+					onclick={() => view.loadMore(end)}
+					size="sm"
+					variant="outline"
+				>
 					{m['systemLogs.raw.loadMore']()}
 				</Button>
 			</div>
 		{:else if state.hasMore === null}
 			<div class="flex flex-col items-center gap-2 px-4 py-3 text-center">
-				<Button data-testid="raw-keep-searching-{end}" onclick={() => view.loadMore(end)} size="sm" variant="outline">
+				<Button
+					aria-busy={busy}
+					aria-disabled={busy}
+					class={BUSY}
+					data-testid="raw-keep-searching-{end}"
+					onclick={() => view.loadMore(end)}
+					size="sm"
+					variant="outline"
+				>
 					{m['systemLogs.raw.keepSearching']()}
 				</Button>
 				<p class="text-muted-foreground max-w-prose text-xs">{m['systemLogs.raw.keepSearchingHint']()}</p>
@@ -153,7 +178,13 @@ function showHeld(): void {
 				class="text-muted-foreground flex items-center gap-3 px-4 py-3 text-xs before:bg-border before:h-px before:flex-1 after:bg-border after:h-px after:flex-1"
 				data-testid="raw-end-{end}"
 			>
-				{m['systemLogs.raw.end']()}
+				<!-- The top edge exists only in a window around a moment, and pages toward newer entries. An approximate
+				     window reads a bounded time range on each side, so its ends speak only for that range. -->
+				{#if view.anchor?.approximate}
+					{end === 'top' ? m['systemLogs.raw.endNewerWindow']() : m['systemLogs.raw.endOlderWindow']()}
+				{:else}
+					{end === 'top' ? m['systemLogs.raw.endNewer']() : m['systemLogs.raw.end']()}
+				{/if}
 			</p>
 		{/if}
 	{/if}

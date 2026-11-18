@@ -1,11 +1,9 @@
 import type { Page } from '@playwright/test';
-import fs from 'node:fs';
-import path from 'node:path';
 import { type LogQueryInput, deviceStatsSchema, logAroundOutputSchema, logQueryInputSchema } from '@ceraui/rpc/schemas';
 
 import { expect, type PageRpc, test } from './fixtures/index.js';
 
-import { EVIDENCE_DIR, ensureAuthenticated, navigateTo, pressAndExpectRow } from './helpers/index.js';
+import { ensureAuthenticated, navigateTo, pressAndExpectRow } from './helpers/index.js';
 
 const exports = new WeakMap<Page, { promise: Promise<unknown>; resolve(value: unknown): void }>();
 const exactAnchor = new WeakSet<Page>();
@@ -15,6 +13,7 @@ const queries = new WeakMap<Page, LogQueryInput[]>();
 /** The newest listed event and the page's socket, so a test can push the next live event. */
 const newestEvent = new WeakMap<Page, { event: Record<string, unknown>; headSeq: number }>();
 const pushToPage = new WeakMap<Page, (message: string) => void>();
+const listReplies = new WeakMap<Page, PromiseWithResolvers<void>>();
 const heldAround = new WeakMap<Page, { release: PromiseWithResolvers<void>; sent: number }>();
 
 /**
@@ -65,6 +64,7 @@ test.beforeEach(async ({ page, pageRpc }) => {
 				const frame = JSON.parse(message);
 				const newest = listIds.has(frame.id) ? frame.result?.events?.[0] : undefined;
 				if (newest) newestEvent.set(page, { event: newest, headSeq: frame.result.headSeq });
+				if (listIds.has(frame.id)) listReplies.get(page)?.resolve();
 			}
 			const held = heldAround.get(page);
 			if (held && typeof message === 'string' && aroundIds.has(JSON.parse(message).id)) {
@@ -104,7 +104,7 @@ test.beforeEach(async ({ page, pageRpc }) => {
 	await navigateTo(page, 'live');
 });
 
-test('the low-disk action opens wide Storage with keyboard focus @visual', async ({ page, pageRpc }) => {
+test('the low-disk action focuses the Storage heading', async ({ page, pageRpc }) => {
 	lowDisk.add(page);
 	await navigateTo(page, 'settings');
 	await pageRpc.call(['dev', 'emit'], { type: 'device-stats', payload: deviceStatsSchema.parse({
@@ -117,8 +117,6 @@ test('the low-disk action opens wide Storage with keyboard focus @visual', async
 	const dialog = page.getByRole('dialog', { name: 'System Logs' });
 	await expect(dialog.getByTestId('system-logs-storage').getByRole('heading', { name: 'Storage', exact: true })).toBeFocused();
 	await expect(dialog.getByTestId('raw-logs')).toHaveCount(0);
-	fs.mkdirSync(path.join(EVIDENCE_DIR, 'view-logs-focus'), { recursive: true });
-	await page.screenshot({ path: path.join(EVIDENCE_DIR, 'view-logs-focus/storage-1280.png') });
 });
 
 test('a message opens the returned exact anchor row and gives it keyboard focus', async ({ page, pageRpc }) => {
@@ -274,6 +272,32 @@ test('a live event above the focused row keeps keyboard focus and the stop on th
 	}));
 	await expect(rows).toHaveCount(before + 1);
 	expect(await page.evaluate(() => document.activeElement?.closest('[data-testid="event-row"]') !== null)).toBe(true);
+	await expect(held).toBeFocused();
+	await expect(held).toHaveAttribute('tabindex', '0');
+	await pressAndExpectRow(page, 'ArrowUp');
+	await pressAndExpectRow(page, 'ArrowDown');
+	await expect(held).toBeFocused();
+});
+
+test('a sequence-gap reload that keeps the focused event keeps keyboard focus on its action', async ({ page }) => {
+	await navigateTo(page, 'settings');
+	await page.getByRole('button', { name: 'System Logs' }).first().click();
+	const dialog = page.getByRole('dialog', { name: 'System Logs' });
+	const rows = dialog.getByTestId('event-row');
+	await expect(rows.nth(2)).toBeVisible();
+	await rows.nth(1).evaluate((row) => row.setAttribute('data-held-row', ''));
+	const held = dialog.locator('[data-held-row]').getByRole('button', { name: 'View raw logs' });
+	await held.focus();
+
+	const newest = newestEvent.get(page);
+	if (!newest) throw new Error('The Events list reply was not observed');
+	const relisted = Promise.withResolvers<void>();
+	listReplies.set(page, relisted);
+	// One seq skipped: the list reads its first page again, which still holds the focused event.
+	pushToPage.get(page)?.(JSON.stringify({
+		event: { append: [{ ...newest.event, id: 'gap-reload-witness', seq: newest.headSeq + 2 }] },
+	}));
+	await relisted.promise;
 	await expect(held).toBeFocused();
 	await expect(held).toHaveAttribute('tabindex', '0');
 	await pressAndExpectRow(page, 'ArrowUp');

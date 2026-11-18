@@ -13,7 +13,15 @@ import {
 	within,
 } from "@testing-library/svelte";
 import { tick } from "svelte";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeAll,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vitest";
 import { SharingFlow } from "$lib/device-logs/sharing-flow.svelte";
 
 import { en } from "../../tests/helpers/catalog";
@@ -81,6 +89,12 @@ const around = logAroundOutputSchema.parse({
 	},
 });
 let media: MediaQueryControl;
+
+// RawLogsPanel loads the Raw tab as a lazy chunk; loading it here keeps its first,
+// cold transform out of the first test's bounded wait when the whole suite runs.
+beforeAll(async () => {
+	await import("./RawLogsTab.svelte");
+});
 
 beforeEach(() => {
 	media = installMediaQueries((query) => query === "(min-width: 1024px)");

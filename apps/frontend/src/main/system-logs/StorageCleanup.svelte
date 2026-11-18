@@ -1,8 +1,8 @@
 <!--
   StorageCleanup.svelte — the cleanup actions, destructive ones last. Deleting
   older files reports which boots remain instead of promising they are gone.
-  Clear all logs and Clear event history each ask first; a refusal or failure is
-  an inline band whose Retry asks again. A success that removed stored history
+  Clear all logs and Clear event history each ask first, opening on Cancel; a
+  refusal or failure is an inline band whose Retry asks again. A success that removed stored history
   tells the other System Logs regions through the history bus.
 -->
 <script lang="ts">
@@ -49,6 +49,22 @@ const CONFIRM_BUTTONS =
 	'[&_[data-slot=alert-dialog-footer]>button]:h-auto [&_[data-slot=alert-dialog-footer]>button]:min-h-[max(2.5rem,var(--touch-target-min))] [&_[data-slot=alert-dialog-footer]>button]:whitespace-normal [&_[data-slot=alert-dialog-footer]>button]:text-center';
 
 const locale = $derived(getLocale());
+const uid = $props.id();
+
+/** Focus Cancel when a clear confirmation opens. */
+function openOnCancel(id: string) {
+	return {
+		id,
+		// The dialog's own open focus is turned off; Cancel takes focus instead.
+		onOpenAutoFocus: (event: Event) => {
+			event.preventDefault();
+			document
+				.getElementById(id)
+				?.querySelector<HTMLElement>('[data-slot="alert-dialog-cancel"]')
+				?.focus({ preventScroll: true });
+		},
+	};
+}
 
 let running = $state<Action>();
 let boots = $state<{ before: number; after: number }>();
@@ -136,6 +152,7 @@ const RETRY: Record<Action, () => unknown> = {
 			buttonText={m['systemLogs.storage.clearAll']()}
 			confirmButtonText={m['systemLogs.storage.clearAllConfirm']()}
 			confirmVariant="destructive"
+			contentProps={openOnCancel(`${uid}-clear-all`)}
 			extraButtonClasses="min-h-(--touch-target-min)"
 			onconfirm={clearAll}
 		>
@@ -153,6 +170,7 @@ const RETRY: Record<Action, () => unknown> = {
 			buttonText={m['systemLogs.storage.clearEvents']()}
 			confirmButtonText={m['systemLogs.storage.clearEventsConfirm']()}
 			confirmVariant="destructive"
+			contentProps={openOnCancel(`${uid}-clear-events`)}
 			extraButtonClasses="min-h-(--touch-target-min)"
 			onconfirm={clearEvents}
 		>

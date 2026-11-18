@@ -2,7 +2,8 @@
  * The Events tab's state: the event history, newest first and always in `seq`
  * order (never by time), its filters and paging, and the events the device
  * pushes while the tab is open. A push that skips a `seq` re-reads the list
- * instead of guessing what was missed; a disconnect marks the list stale and
+ * instead of guessing what was missed, keeping the rows shown until the first
+ * page replaces them; a disconnect marks the list stale and
  * the reconnect re-reads it. Only the newest read may settle, and a push that
  * arrives while the first page is read joins that page unless the page already
  * covers it. Disposing drops every reply still in flight and stops listening
@@ -112,10 +113,9 @@ export class EventsView {
 
 	/** The first page again, from the newest event, dropping every row shown. */
 	reload(): Promise<void> {
-		this.#generation += 1;
 		this.events = [];
 		this.nextBeforeSeq = null;
-		return this.#read("first");
+		return this.#reread();
 	}
 
 	loadOlder(): Promise<void> {
@@ -210,6 +210,12 @@ export class EventsView {
 		void this.reload();
 	}
 
+	/** The first page again; the rows shown stay until it replaces them. */
+	#reread(): Promise<void> {
+		this.#generation += 1;
+		return this.#read("first");
+	}
+
 	async #read(end: End): Promise<void> {
 		const generation = this.#generation;
 		this.loading = end;
@@ -221,12 +227,16 @@ export class EventsView {
 			);
 			if (generation !== this.#generation) return;
 			this.#head = Math.max(this.#head, page.headSeq);
-			this.events = merge(this.events, page.events);
+			this.events = merge(end === "first" ? [] : this.events, page.events);
 			this.nextBeforeSeq = page.nextBeforeSeq;
 			newer = this.#held.splice(0).filter((event) => event.seq > page.headSeq);
 		} catch (error) {
 			if (generation !== this.#generation) return;
 			console.error("System Logs could not read the event history:", error);
+			if (end === "first") {
+				this.events = [];
+				this.nextBeforeSeq = null;
+			}
 			this.failed = end;
 		}
 		this.loading = null;
@@ -245,7 +255,7 @@ export class EventsView {
 		const admitted: DeviceEvent[] = [];
 		for (const event of batch) {
 			if (event.seq > this.#head + 1) {
-				void this.reload();
+				void this.#reread();
 				return;
 			}
 			this.#head = Math.max(this.#head, event.seq);

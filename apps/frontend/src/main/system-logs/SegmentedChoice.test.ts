@@ -53,6 +53,13 @@ describe("SegmentedChoice", () => {
 		expect(radio("Gamma").tabIndex).toBe(-1);
 	});
 
+	it("raises the checked segment above its track in dark, where the background token is darker than the track", () => {
+		show();
+		expect(radio("Alpha").className.split(/\s+/)).toContain(
+			"dark:aria-checked:bg-accent",
+		);
+	});
+
 	it("styles the checked segment tonally and keeps touch targets", () => {
 		show();
 		const segment = radio("Alpha");

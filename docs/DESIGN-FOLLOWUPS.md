@@ -8,7 +8,7 @@ Deferred **design** findings from the `ceraui-experience-stability` Wave-3 UI pa
 Both live here for the same reason: neither ships a source marker, so neither is
 admissible to the marker-bound register (see the next section). §5 holds the System
 Logs critique residuals (device-log-system todo 36), §6 what its hardening pass (todo 37)
-found outside System Logs.
+found outside System Logs, §7 what its polish and audit pass (todo 38) left open.
 
 ## Why this file and not `docs/TECHNICAL_DEBT.md`
 
@@ -524,6 +524,26 @@ The full table, evidence and the fixed findings are in
 - **Owner:** device-log-system todo 38 (polish); a new copy key needs all ten locales.
 - **Exit condition:** an approximate jump shows where the moment falls and a newer-end
   text that cannot read as an empty result.
+- **Todo 38: closed.** An approximate window shows a separator row, "Selected moment:
+  {time}" (`systemLogs.anchor.moment`), above the first entry recorded at or before the
+  moment, moving above its date separator when one directly precedes it, or at the end when
+  no entry at or before the moment was found (`apps/frontend/src/lib/device-logs/raw-rows.ts:156`,
+  `withMoment`). The list places it from the window's older bound
+  (`apps/frontend/src/main/system-logs/RawLogList.svelte:38-41`), which the backend sets to
+  the moment (`apps/backend/src/modules/device-logs/around.ts:54`). Each side of an
+  approximate window reads a bounded time range (`around.ts:53`, `:65-68`).
+  When an approximate edge shows an end marker, it uses the corresponding time-window message: "No additional entries match on the newer side of this time window." or "No additional entries match on the older side of this time window."
+  (`systemLogs.raw.endNewerWindow`, `systemLogs.raw.endOlderWindow`). A window around an
+  exact entry reads on to the ends of the boot's stored logs (`around.ts:50-51`, `:62-63`).
+  When an exact edge shows an end marker, it uses the corresponding stored-logs message: "No newer entries match in the stored logs." (`systemLogs.raw.endNewer`) or "No more entries match in the stored logs." (`systemLogs.raw.end`) (`RawLogList.svelte:142-187`).
+  At the older edge, the display-limit notice takes precedence.
+  The new keys are in all ten locales. The approximate note keeps its colour and size; it now
+  keeps a flex basis in a wrapping row, so it takes its own line, with Back to latest entries
+  below it, when the two do not fit side by side,
+  and adds explicit Chinese word-boundary breaks when segmentation is available. The browser still controls punctuation breaks and supplies the fallback without segmentation.
+  (`apps/frontend/src/main/system-logs/RawLogsTab.svelte:104-108`). At 320 px in the
+  approximate-jump mock fixture, the previous note wrapped to 10 or 11 lines and painted
+  outside its box in German, Spanish and Brazilian Portuguese.
 
 ### DF-25: Confirmations do not open on Cancel (SL-11, P3)
 
@@ -531,6 +551,11 @@ The full table, evidence and the fixed findings are in
 - **What:** focus opens on the dialog; contract section 7 says the focused default is Cancel.
 - **Owner:** device-log-system todo 38 (keyboard audit).
 - **Exit condition:** opening either clear confirmation focuses Cancel.
+- **Todo 38: closed.** Both clear confirmations open with focus on Cancel:
+  `apps/frontend/src/main/system-logs/StorageCleanup.svelte:55` (`openOnCancel`) hands an
+  `onOpenAutoFocus` to the shared dialog through its existing `contentProps` (`:155`,
+  `:173`), so `simple-alert-dialog.svelte` is unchanged. Proved by `StorageSection.test.ts`
+  ("opens Clear all logs with focus on Cancel") and `apps/frontend/tests/e2e/system-logs-keyboard.spec.ts`.
 
 ### DF-26: System Logs polish residuals (SL-12, P3)
 
@@ -540,6 +565,18 @@ The full table, evidence and the fixed findings are in
   recessed checked segment in dark.
 - **Owner:** device-log-system todo 38 (polish).
 - **Exit condition:** each item fixed or explicitly kept in `system-logs-view.md`.
+- **Todo 38 decisions:**
+  - The Order label's offset: fixed. The folded filters align on their top edge
+    (`apps/frontend/src/main/system-logs/RawLogsFilterBar.svelte:109`, `items-start`).
+  - An empty usage bar under 1 %: fixed. A share above zero draws a sliver
+    (`apps/frontend/src/main/system-logs/StorageUsage.svelte:32`, `min-w-1`).
+  - "All sources" in placeholder grey: fixed. The trigger shows it in the value colour
+    (`RawLogsFilterBar.svelte:124`).
+  - The recessed checked segment in dark: fixed. In dark it takes the accent surface, lighter
+    than its track (`apps/frontend/src/main/system-logs/SegmentedChoice.svelte:66`).
+  - The two time formats, the repeated Storage heading on phones, the repeated unit in an
+    expanded raw row and the wrapped "Boot started" prefix: kept, each with its reason in
+    `apps/frontend/docs/agents/system-logs-view.md` under Open decisions, Polish (todo 38).
 
 ### DF-27: Confirmation backdrop and primary lime (SL-13, P3)
 
@@ -565,6 +602,14 @@ The full table, evidence and the fixed findings are in
 - **Why deferred:** a rare path (the live feed missed events and the list reloads); the focused row survives and the stop returns to it, only focus is lost. The fix changes the reload path, outside the critique pass.
 - **Owner:** device-log-system todo 38 (Polish and audit: accessibility, keyboard), which runs before the final reviews and must fix it.
 - **Exit condition:** a sequence-gap reload that keeps the focused event keeps focus on its action, proved by a Chromium spec.
+- **Todo 38: closed.** A re-read for a skipped seq keeps the rows shown until its first
+  page replaces them (`apps/frontend/src/lib/device-logs/events-view.svelte.ts:214`,
+  `#reread`, called at `:258`; the page replaces the rows at `:230`), and Events draws no
+  loading rows over kept rows (`apps/frontend/src/main/system-logs/EventsTab.svelte:191`).
+  A failed re-read keeps no rows, as a failed reload does (`events-view.svelte.ts:236`).
+  Proved in Chromium by `apps/frontend/tests/e2e/view-logs-action.spec.ts` ("a sequence-gap
+  reload that keeps the focused event keeps keyboard focus on its action") on the desktop
+  and mobile projects.
 
 ---
 
@@ -580,6 +625,11 @@ The full table, evidence and the fixed findings are in
 - **Owner:** the CeraUI design-system owner (app shell tokens).
 - **Exit condition:** the scrollbar track and thumb come from the graphite tokens in both
   themes.
+- **Todo 38:** System Logs takes the palette for selection and scrollbars inside its dialog
+  subtree only (`apps/frontend/src/main/dialogs/LogsDialog.svelte:37-39`). A portalled select
+  list, such as Sources (`apps/frontend/src/main/system-logs/RawLogsFilterBar.svelte:127`),
+  renders outside that subtree and keeps this page palette until this item's exit condition
+  holds.
 
 ### DF-31: Toasts are set in a system font stack, not the app typeface (todo 37)
 
@@ -612,14 +662,41 @@ The full table, evidence and the fixed findings are in
 
 ### DF-33: The low-disk View logs action leaves keyboard focus off Storage on the mobile project (todo 37)
 
-- **Where:** `apps/frontend/tests/e2e/view-logs-action.spec.ts:107`, "the low-disk action opens
-  wide Storage with keyboard focus @visual", Playwright mobile project; the low-disk View logs
-  action and the Storage heading of System Logs.
+- **Where:** `apps/frontend/tests/e2e/view-logs-action.spec.ts:107`, "the low-disk action
+  focuses the Storage heading", Playwright mobile project; the low-disk View logs action and
+  the Storage heading of System Logs.
 - **What:** after Enter on the low-disk action the System Logs dialog opens, but the Storage
   heading (the `h3` with `tabindex="-1"` inside `system-logs-storage`) is not focused:
   `Expected: focused`, `Received: inactive`. The desktop project passes. It fails the same way
-  on the unchanged base `8cad9dd0` and with todo 37's changes, so todo 37 did not cause it;
-  its `@visual` tag keeps it out of CI's functional set.
+  on the unchanged base `8cad9dd0` and with todo 37's changes, so todo 37 did not cause it.
+  At todo 37, its @visual tag excluded it from the functional CI set.
 - **Owner:** device-log-system todo 38 (keyboard and focus audit).
 - **Exit condition:** on the mobile project the low-disk action lands keyboard focus on the
   Storage heading and the test passes.
+- **Todo 38: closed.** A Storage request focuses the Storage heading once, in the side
+  column or on the Storage tab (`apps/frontend/src/main/system-logs/SystemLogsView.svelte:120-127`);
+  coming back to the Storage tab later leaves focus on the tab. "the low-disk action
+  focuses the Storage heading" passes on the mobile and desktop projects, and
+  `apps/frontend/src/main/dialogs/LogsDialog.context.test.ts` covers both widths. The test
+  no longer carries `@visual` and takes no screenshot, so CI's functional job runs it
+  (`apps/frontend/tests/e2e/view-logs-action.spec.ts:107`); its Storage capture moved to
+  `apps/frontend/tests/e2e/visual/system-logs.visual.spec.ts`.
+
+---
+
+## 7. Left open by the System Logs polish and audit pass (device-log-system todo 38)
+
+### DF-34: Paging can drop keyboard focus when the action changes or disappears (todo 38, P3)
+
+- **Where:** `apps/frontend/src/main/system-logs/RawLogList.svelte` (Load more and Keep
+  searching), `apps/frontend/src/main/system-logs/EventsTab.svelte` (Load older events).
+- **What:** while its page loads, a pressed paging button keeps focus (`aria-disabled` and
+  `aria-busy`, `RawLogList.svelte:151`, `:165`; `EventsTab.svelte:281`). When the page that
+  lands turns Load more into Keep searching (`RawLogList.svelte:147-175`), or is the last one
+  so the end text replaces the button (`RawLogList.svelte:176`, `EventsTab.svelte:288`), the
+  pressed button leaves the page and focus leaves the list. With a mocked budget response,
+  focus landed on the dialog's Close control.
+- **Owner:** the System Logs product owner, with the end-to-end flows of device-log-system
+  todo 39.
+- **Exit condition:** Keep focus on the successor paging action, or inside the list when no
+  action remains, proved by Chromium tests.

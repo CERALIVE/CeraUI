@@ -4,7 +4,8 @@
   translation widens its own segment instead of running under the next, and under
   touch none is narrower than the 44 px target. One tab stop on the checked segment; arrow keys move
   the choice and wrap, Home and End jump, horizontal arrows follow the reading
-  direction. The checked segment is a raised tonal surface, never the accent.
+  direction. The checked segment is a raised tonal surface, lighter than its
+  track in both themes, never the primary colour.
 -->
 <script generics="T extends string" lang="ts">
 import { cn } from '$lib/utils';
@@ -62,7 +63,7 @@ function onkeydown(event: KeyboardEvent & { currentTarget: HTMLDivElement }): vo
 		<!-- biome-ignore lint/a11y/useSemanticElements: a segment is a pressable surface with roving focus; native radios would need a label wrapper per segment and lose the equal-width grid. -->
 		<button
 			aria-checked={option.value === value}
-			class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 aria-checked:bg-background aria-checked:text-foreground min-h-[max(2rem,var(--touch-target-min))] min-w-(--touch-target-min) rounded-md px-2 py-1 text-xs leading-tight font-medium whitespace-normal outline-none transition-colors focus-visible:ring-3 aria-checked:shadow-sm"
+			class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 aria-checked:bg-background dark:aria-checked:bg-accent aria-checked:text-foreground min-h-[max(2rem,var(--touch-target-min))] min-w-(--touch-target-min) rounded-md px-2 py-1 text-xs leading-tight font-medium whitespace-normal outline-none transition-colors focus-visible:ring-3 aria-checked:shadow-sm"
 			data-value={option.value}
 			onclick={() => choose(option.value)}
 			role="radio"

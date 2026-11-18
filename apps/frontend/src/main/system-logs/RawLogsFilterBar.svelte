@@ -106,7 +106,7 @@ function chooseTime(value: string): void {
 		<RawFollowControl {view} />
 		<div
 			class={cn(
-				'basis-full flex-wrap items-end gap-3 @min-[45rem]:[@media(min-height:601px)]:flex',
+				'basis-full flex-wrap items-start gap-3 @min-[45rem]:[@media(min-height:601px)]:flex',
 				open ? 'flex' : 'hidden',
 			)}
 			data-open={open}
@@ -120,7 +120,8 @@ function chooseTime(value: string): void {
 					type="multiple"
 					value={[...view.filter.sources]}
 				>
-					<Select.Trigger aria-labelledby="{uid}-sources" class="w-full" data-testid="raw-sources">
+					<!-- No source chosen reads All sources, a choice in the value colour rather than placeholder grey. -->
+					<Select.Trigger aria-labelledby="{uid}-sources" class="w-full data-placeholder:text-foreground" data-testid="raw-sources">
 						{sourceCount === 0 ? m['systemLogs.raw.sourceAll']() : m['systemLogs.raw.sourceCount']({ count: sourceCount })}
 					</Select.Trigger>
 					<Select.Content>

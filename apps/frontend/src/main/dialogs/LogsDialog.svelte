@@ -34,6 +34,9 @@ interface Props {
 let { open = $bindable(false), context }: Props = $props();
 
 const wide = new MediaQuery(WIDE_DESKTOP_QUERY);
+// Use the System Logs palette for selection and scrollbars inside the dialog subtree.
+const SURFACES =
+	'selection:bg-status-info/30 selection:text-foreground [scrollbar-color:color-mix(in_oklch,var(--muted-foreground)_45%,transparent)_transparent]';
 
 $effect(() => {
 	if (!open) return;
@@ -45,7 +48,7 @@ $effect(() => {
 });
 </script>
 
-<AppDialog bind:open fullscreen hideFooter title={m["settings.index.logs"]()}>
+<AppDialog bind:open contentClass={SURFACES} fullscreen hideFooter title={m["settings.index.logs"]()}>
 	{#snippet headerAside()}
 		<StreamStatePill />
 		{#if !wide.current}

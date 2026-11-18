@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { setLocale } from "@ceraui/i18n/svelte";
 import type {
 	LogAroundOutput,
 	LogEntry,
@@ -390,6 +391,14 @@ describe("RawLogsTab — filters", () => {
 		expect(logs.query).toHaveBeenCalledTimes(1);
 	});
 
+	it("shows All sources in the value colour and lines the folded filters' labels up along their top", async () => {
+		await mounted();
+		const sources = screen.getByTestId("raw-sources");
+		expect(sources.textContent?.trim()).toBe(en.systemLogs.raw.sourceAll);
+		has(sources, "data-placeholder:text-foreground");
+		has(screen.getByTestId("raw-filters-panel"), "items-start");
+	});
+
 	it("folds Source, Time and Order behind Filters and counts the changed ones", async () => {
 		await mounted();
 		const toggle = screen.getByTestId("raw-filters-toggle");
@@ -675,16 +684,39 @@ describe("RawLogsTab — paging", () => {
 		expect(screen.getByTestId("raw-end-bottom")).toBeTruthy();
 	});
 
-	it("shows skeleton rows below the list while the next page loads", async () => {
+	it("shows skeleton rows below the list while the next page loads, and Load more keeps focus, busy and unavailable", async () => {
 		await mounted(page(["s=2"], { hasMore: true, continuation: "c1" }));
 		logs.query.mockReturnValueOnce(new Promise(() => {}));
-		await fireEvent.click(screen.getByTestId("raw-load-more-bottom"));
+		const more = screen.getByTestId("raw-load-more-bottom");
+		more.focus();
+		await fireEvent.click(more);
 		expect(
 			screen
 				.getByTestId("raw-loading-bottom")
 				.querySelectorAll('[data-slot="skeleton"]').length,
 		).toBeGreaterThan(0);
-		expect(screen.queryByTestId("raw-load-more-bottom")).toBeNull();
+		expect(document.activeElement).toBe(more);
+		expect(more.getAttribute("aria-disabled")).toBe("true");
+		expect(more.getAttribute("aria-busy")).toBe("true");
+		has(more, "aria-disabled:pointer-events-none", "aria-disabled:opacity-50");
+		await fireEvent.click(more);
+		expect(logs.query).toHaveBeenCalledTimes(2);
+		expect(screen.queryByTestId("raw-end-bottom")).toBeNull();
+	});
+
+	it("keeps Keep searching focused, busy and unavailable while it reads on", async () => {
+		await mounted(page(["s=2"], { hasMore: null, continuation: "c1" }));
+		logs.query.mockReturnValueOnce(new Promise(() => {}));
+		const keep = screen.getByTestId("raw-keep-searching-bottom");
+		keep.focus();
+		await fireEvent.click(keep);
+		expect(screen.getByTestId("raw-loading-bottom")).toBeTruthy();
+		expect(document.activeElement).toBe(keep);
+		expect(keep.getAttribute("aria-disabled")).toBe("true");
+		expect(keep.getAttribute("aria-busy")).toBe("true");
+		has(keep, "aria-disabled:pointer-events-none", "aria-disabled:opacity-50");
+		await fireEvent.click(keep);
+		expect(logs.query).toHaveBeenCalledTimes(2);
 	});
 
 	it.each(["CURSOR_UNAVAILABLE", "FILTER_CHANGED"] as const)(
@@ -923,13 +955,21 @@ describe("RawLogsTab — follow", () => {
 		);
 	});
 
-	it("disables the button while the device answers", async () => {
+	it("keeps the button focusable but busy and unavailable while the device answers", async () => {
 		await mounted();
 		logs.followStart.mockReturnValueOnce(new Promise(() => {}));
-		await fireEvent.click(screen.getByTestId("raw-follow-button"));
-		expect(
-			screen.getByTestId("raw-follow-button").hasAttribute("disabled"),
-		).toBe(true);
+		const button = screen.getByTestId("raw-follow-button");
+		await fireEvent.click(button);
+		expect(button.hasAttribute("disabled")).toBe(false);
+		expect(button.getAttribute("aria-disabled")).toBe("true");
+		expect(button.getAttribute("aria-busy")).toBe("true");
+		has(
+			button,
+			"aria-disabled:pointer-events-none",
+			"aria-disabled:opacity-50",
+		);
+		await fireEvent.click(button);
+		expect(logs.followStart).toHaveBeenCalledTimes(1);
 		expect(screen.queryByTestId("raw-follow-reason")).toBeNull();
 	});
 
@@ -1856,6 +1896,94 @@ describe("RawLogsTab — anchor mode", () => {
 			en.systemLogs.raw.timeBoot,
 		);
 		expect(screen.getByTestId("raw-filters-toggle").textContent).toContain("1");
+	});
+
+	it("marks where the selected moment falls in an approximate window, and names the newer end", async () => {
+		const at = Date.UTC(2026, 10, 15, 12, 0, 0);
+		const window = around({ anchor: null, approximate: true });
+		await mounted(
+			page([]),
+			around({
+				anchor: null,
+				approximate: true,
+				older: { ...page([]), entries: [entry("s=4", { ts: at - 1000 })] },
+				newer: { ...page([]), entries: [entry("s=6", { ts: at + 1000 })] },
+				olderQuery: { ...window.olderQuery, until: at },
+			}),
+		);
+
+		const list = screen.getByTestId("raw-list");
+		const order = [
+			...list.querySelectorAll<HTMLElement>(
+				'[data-testid="raw-row"], [data-testid="raw-moment"]',
+			),
+		].map((row) => row.dataset.cursor ?? row.dataset.testid);
+		expect(order).toEqual(["s=6", "raw-moment", "s=4"]);
+		const time = new Intl.DateTimeFormat("en", {
+			hour: "2-digit",
+			minute: "2-digit",
+			second: "2-digit",
+		}).format(at);
+		expect(screen.getByTestId("raw-moment").textContent?.trim()).toBe(
+			en.systemLogs.anchor.moment.replace("{time}", time),
+		);
+		const stamp = screen.getByTestId("raw-moment").querySelector("time");
+		expect(stamp?.getAttribute("datetime")).toBe(new Date(at).toISOString());
+		has(stamp, "tabular-nums");
+		// Each side of an approximate window reads only a bounded time range, so neither end speaks for the stored logs.
+		expect(screen.getByTestId("raw-end-top").textContent?.trim()).toBe(
+			en.systemLogs.raw.endNewerWindow,
+		);
+		expect(screen.getByTestId("raw-end-bottom").textContent?.trim()).toBe(
+			en.systemLogs.raw.endOlderWindow,
+		);
+	});
+
+	it("keeps the stored-logs wording at both ends of a window around an exact entry", async () => {
+		await mounted(
+			page([]),
+			around({ newer: page(["s=6"], { hasMore: false }) }),
+		);
+		expect(screen.getByTestId("raw-end-top").textContent?.trim()).toBe(
+			en.systemLogs.raw.endNewer,
+		);
+		expect(screen.getByTestId("raw-end-bottom").textContent?.trim()).toBe(
+			en.systemLogs.raw.end,
+		);
+	});
+
+	it("lets the approximate note take its own line beside a long action, and wrap Chinese only between words", async () => {
+		await mounted(page([]), around({ anchor: null, approximate: true }));
+		has(
+			screen.getByTestId("raw-anchor-approximate"),
+			"basis-48",
+			"[&:lang(zh)]:break-keep",
+		);
+		setLocale("zh");
+		try {
+			await tick();
+			expect(
+				screen.getByTestId("raw-anchor-approximate").querySelectorAll("wbr")
+					.length,
+			).toBeGreaterThan(0);
+		} finally {
+			setLocale("en");
+		}
+	});
+
+	it("marks no moment when the window holds the exact entry", async () => {
+		const window = around();
+		await mounted(
+			page([]),
+			around({
+				olderQuery: {
+					...window.olderQuery,
+					until: Date.UTC(2026, 10, 15, 12, 0, 0),
+				},
+			}),
+		);
+		expect(screen.getAllByTestId("raw-row")).toHaveLength(3);
+		expect(screen.queryByTestId("raw-moment")).toBeNull();
 	});
 
 	it("states an approximate match", async () => {

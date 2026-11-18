@@ -39,11 +39,14 @@ const stateLabel = $derived(STATE_LABEL[view.follow]);
 
 <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1" data-testid="raw-follow">
 	{#if view.connected}
+		<!-- aria-disabled, not disabled, while the device answers: the pressed button keeps keyboard focus. -->
 		<Button
+			aria-busy={view.followBusy ? 'true' : undefined}
 			aria-describedby={reason === undefined ? undefined : `${uid}-reason`}
-			class="gap-1.5"
+			aria-disabled={view.followBusy ? 'true' : undefined}
+			class="gap-1.5 aria-disabled:pointer-events-none aria-disabled:opacity-50"
 			data-testid="raw-follow-button"
-			disabled={reason !== undefined || view.followBusy}
+			disabled={reason !== undefined}
 			onclick={() => (following ? view.pauseFollow() : view.startFollow())}
 			size="sm"
 			variant="outline"

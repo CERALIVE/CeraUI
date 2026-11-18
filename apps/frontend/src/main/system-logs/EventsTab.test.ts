@@ -861,18 +861,26 @@ describe("EventsTab — states", () => {
 		expect(list).toHaveBeenLastCalledWith({ limit: 100, beforeSeq: 9 });
 	});
 
-	it("shows placeholder rows while an older page loads", async () => {
+	it("shows placeholder rows while an older page loads, and Load older keeps focus, busy and unavailable", async () => {
 		await shown([stopped(9)], { nextBeforeSeq: 9 });
 		list.mockReturnValueOnce(new Promise(() => {}));
+		const older = screen.getByRole("button", { name: ev.loadOlder });
+		older.focus();
 
-		await fireEvent.click(screen.getByRole("button", { name: ev.loadOlder }));
+		await fireEvent.click(older);
 
 		expect(
 			screen
 				.getByTestId("events-loading-older")
 				.querySelector('[data-slot="skeleton"]'),
 		).toBeTruthy();
-		expect(screen.queryByRole("button", { name: ev.loadOlder })).toBeNull();
+		expect(document.activeElement).toBe(older);
+		expect(older.getAttribute("aria-disabled")).toBe("true");
+		expect(older.getAttribute("aria-busy")).toBe("true");
+		has(older, "aria-disabled:pointer-events-none", "aria-disabled:opacity-50");
+		await fireEvent.click(older);
+		expect(list).toHaveBeenCalledTimes(2);
+		expect(screen.queryByText(ev.noOlder)).toBeNull();
 	});
 
 	it("reads the history and the boots again from the start when stored history is deleted", async () => {
@@ -1440,5 +1448,27 @@ describe("EventsTab: keyboard", () => {
 		expect(tabIndexes(rows())).toEqual([[-1], [-1], [0], [-1]]);
 		await press("ArrowUp");
 		expect(document.activeElement).toBe(viewRaw(rows()[1] as HTMLElement));
+	});
+
+	it("keeps focus on a row's action through a re-read for a skipped seq whose first page still lists the row", async () => {
+		await shown([stopped(3), stopped(2), stopped(1)]);
+		const held = viewRaw(rows()[1] as HTMLElement);
+		held.focus();
+		await fireEvent.focusIn(held);
+		const reply = Promise.withResolvers<EventListOutput>();
+		list.mockReturnValueOnce(reply.promise);
+
+		feed.listener?.([stopped(5)]);
+		await tick();
+		expect(list).toHaveBeenCalledTimes(2);
+		expect(screen.queryByTestId("events-loading")).toBeNull();
+		expect(document.activeElement).toBe(held);
+
+		reply.resolve(
+			eventPage([stopped(5), stopped(4), stopped(3), stopped(2), stopped(1)]),
+		);
+		await waitFor(() => expect(rows()).toHaveLength(5));
+		expect(document.activeElement).toBe(held);
+		expect(tabIndexes(rows())).toEqual([[-1], [-1], [-1], [0], [-1]]);
 	});
 });

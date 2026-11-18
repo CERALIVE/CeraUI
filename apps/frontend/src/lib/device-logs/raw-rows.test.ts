@@ -11,6 +11,7 @@ import {
 	placeRows,
 	type RawRow,
 	ROW_CAP,
+	withMoment,
 } from "./raw-rows";
 
 const BOOT_A = "66d8d1808694489b8c3a3fb4795cab24";
@@ -362,5 +363,55 @@ describe("raw-rows — displayRows", () => {
 
 	it("returns nothing for no rows", () => {
 		expect(displayRows([], true, day)).toEqual([]);
+	});
+});
+
+describe("raw-rows: withMoment", () => {
+	const day = (ts: number) => String(Math.floor(ts / 100));
+	const newestFirst = (...entries: LogEntry[]) =>
+		displayRows(entryRows(entries), true, day);
+
+	it("puts the selected moment between the newer entries and the first entry at or before it", () => {
+		const display = newestFirst(
+			entry("s=3", { ts: 130 }),
+			entry("s=2", { ts: 120 }),
+			entry("s=1", { ts: 110 }),
+		);
+		const marked = withMoment(display, 120);
+		expect(keys(marked)).toEqual(["date-s=3", "s=3", "moment", "s=2", "s=1"]);
+		expect(marked[2]).toEqual({ kind: "moment", key: "moment", ts: 120 });
+	});
+
+	it("puts it above the date row that opens the first older entry's day", () => {
+		const display = newestFirst(
+			entry("s=2", { ts: 210 }),
+			entry("s=1", { ts: 120 }),
+		);
+		expect(keys(withMoment(display, 150))).toEqual([
+			"date-s=2",
+			"s=2",
+			"moment",
+			"date-s=1",
+			"s=1",
+		]);
+	});
+
+	it("puts it last when every entry is newer, and first when none is", () => {
+		const display = newestFirst(
+			entry("s=2", { ts: 120 }),
+			entry("s=1", { ts: 110 }),
+		);
+		expect(keys(withMoment(display, 100))).toEqual([
+			"date-s=2",
+			"s=2",
+			"s=1",
+			"moment",
+		]);
+		expect(keys(withMoment(display, 130))).toEqual([
+			"moment",
+			"date-s=2",
+			"s=2",
+			"s=1",
+		]);
 	});
 });

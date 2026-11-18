@@ -633,6 +633,19 @@ describe("SystemLogsView — initial focus", () => {
 		await screen.findByTestId("system-logs-unavailable");
 		expect(document.activeElement).toBe(before);
 	});
+
+	it("keeps every tab panel out of the Tab order, so Tab moves from the tabs to the panel's first control", async () => {
+		viewport(false);
+		render(SystemLogsView);
+		await screen.findByRole("tablist");
+
+		const panels = screen.getAllByRole("tabpanel", { hidden: true });
+		expect(panels.map((panel) => panel.getAttribute("tabindex"))).toEqual([
+			"-1",
+			"-1",
+			"-1",
+		]);
+	});
 });
 
 describe("SystemLogsView — Downloads keep their state across the check", () => {

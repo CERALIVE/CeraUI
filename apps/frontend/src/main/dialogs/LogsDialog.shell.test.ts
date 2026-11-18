@@ -49,6 +49,19 @@ describe("LogsDialog — the System Logs shell", () => {
 		expect(within(dialog).getByTestId("log-row-device")).toBeTruthy();
 	});
 
+	it("themes text selection and scrollbars inside the dialog subtree from the palette", () => {
+		render(LogsDialog, { props: { open: true } });
+
+		const dialog = screen.getByRole("dialog", { name: en.settings.index.logs });
+		expect(dialog.className.split(/\s+/)).toEqual(
+			expect.arrayContaining([
+				"selection:bg-status-info/30",
+				"selection:text-foreground",
+				"[scrollbar-color:color-mix(in_oklch,var(--muted-foreground)_45%,transparent)_transparent]",
+			]),
+		);
+	});
+
 	it("has no title icon, description line or footer", () => {
 		render(LogsDialog, { props: { open: true } });
 

@@ -163,6 +163,44 @@ describe("LogsDialog — opened with a deep-link context", () => {
 		expect(within(panel).getByTestId("system-logs-storage")).toBeTruthy();
 	});
 
+	it("lands keyboard focus on the Storage heading below 1024 px for the low-disk banner", async () => {
+		media?.restore();
+		viewport(false);
+		render(LogsDialog, { props: { open: true, context: { tab: "storage" } } });
+
+		await screen.findByRole("tablist");
+		const panel = screen.getByTestId("system-logs-panel-storage");
+		await waitFor(() =>
+			expect(document.activeElement).toBe(
+				within(panel).getByRole("heading", {
+					name: en.systemLogs.storage.heading,
+				}),
+			),
+		);
+	});
+
+	it("leaves focus on the Storage tab when the operator returns to it after that request", async () => {
+		media?.restore();
+		viewport(false);
+		render(LogsDialog, { props: { open: true, context: { tab: "storage" } } });
+		await screen.findByRole("tablist");
+		const heading = () =>
+			within(screen.getByTestId("system-logs-panel-storage")).getByRole(
+				"heading",
+				{ name: en.systemLogs.storage.heading },
+			);
+		await waitFor(() => expect(document.activeElement).toBe(heading()));
+
+		const tab = (name: string) => screen.getByRole("tab", { name });
+		await fireEvent.click(tab(en.systemLogs.tabs.events));
+		tab(en.systemLogs.tabs.storage).focus();
+		await fireEvent.click(tab(en.systemLogs.tabs.storage));
+		await tick();
+
+		expect(heading()).toBeTruthy();
+		expect(document.activeElement).toBe(tab(en.systemLogs.tabs.storage));
+	});
+
 	it("keeps Storage in view at 1024 px and up, where it is the side column", async () => {
 		render(LogsDialog, { props: { open: true, context: { tab: "storage" } } });
 

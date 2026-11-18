@@ -130,7 +130,7 @@ in section 4.
 | Busy | Raw logs, Sharing | "Another view is reading logs" (Raw, `BUSY`) or "Another export is running" (Sharing), with Retry | alert |
 | Expired position | Raw logs | `CURSOR_UNAVAILABLE` or `FILTER_CHANGED`: "This position is no longer stored" with Start from newest; rows already shown stay, paging toward the lost side is disabled | alert |
 | Keep searching | Raw logs | `hasMore: null`: a Keep searching button and a line saying only part of the stored logs was checked; never an end marker (the normal state for a time-bounded view once its entries are shown) | no |
-| End of results | Raw logs, Events | `hasMore: false` / `nextBeforeSeq: null`: a neutral end row ("No more entries match in the stored logs", "No older events are stored") | no |
+| End of results | Raw logs, Events | Raw logs shows an end marker at an exhausted, available edge after the first load when rows are present. The display-limit notice takes precedence at the bottom. Approximate-window markers name the time window. Events shows an end row when events are present and no older page or paging error remains. | no |
 | Row cap reached | Raw logs | At 2000 rows the far end is dropped and paging toward it is disabled with the stated reason | no |
 | Follow unavailable | Raw logs | Follow present, disabled, with an adjacent reason element (`data-testid` ending `-reason`) when the time is not This boot, the order is not Newest first, or the tab is in anchor mode (DESIGN.md CT-2) | no |
 | Following | Raw logs | Follow becomes Pause; a state label "Following" in `--status-info` with a `motion-safe` pulse dot; static dot plus label under reduced motion or e-ink | polite |
@@ -341,7 +341,10 @@ Rules for this copy:
 | `systemLogs.raw.loadMore` | Load more | hasMore: true |
 | `systemLogs.raw.keepSearching` | Keep searching | hasMore: null |
 | `systemLogs.raw.keepSearchingHint` | Only part of the stored logs was checked. Keep searching to check further. | hasMore: null |
-| `systemLogs.raw.end` | No more entries match in the stored logs. | hasMore: false |
+| `systemLogs.raw.end` | No more entries match in the stored logs. | Visible end marker at the bottom of an unanchored list or at the older edge of an exact window |
+| `systemLogs.raw.endNewer` | No newer entries match in the stored logs. | Visible end marker at the newer edge of an exact window |
+| `systemLogs.raw.endNewerWindow` | No additional entries match on the newer side of this time window. | Visible end marker at the newer edge of an approximate window |
+| `systemLogs.raw.endOlderWindow` | No additional entries match on the older side of this time window. | Visible end marker at the older edge of an approximate window |
 | `systemLogs.raw.capReached` | Display limit reached: {count} entries. Narrow the filters to reach entries further away. | Row cap |
 | `systemLogs.raw.emptyTitle` | No entries match | Empty state |
 | `systemLogs.raw.emptyHint` | Try fewer sources, a wider level, a longer time range or shorter search text. Search matches exact text. | Empty state |
@@ -354,6 +357,7 @@ Rules for this copy:
 | `systemLogs.anchor.approximate` | No entry matches exactly; showing entries from around the same time. | Anchor mode with approximate: true |
 | `systemLogs.anchor.empty` | No raw entries remain around this time. | Anchor mode, both pages empty |
 | `systemLogs.anchor.leave` | Back to latest entries | Leaves anchor mode |
+| `systemLogs.anchor.moment` | Selected moment: {time} | Separator row at the moment of an approximate window |
 | `systemLogs.error.expiredTitle` | This position is no longer stored | CURSOR_UNAVAILABLE, FILTER_CHANGED |
 | `systemLogs.error.expiredBody` | Log cleanup or a filter change removed the place this list was reading from. | Same |
 | `systemLogs.error.startFromNewest` | Start from newest | Same, action |
@@ -785,13 +789,19 @@ everywhere in the app.
 ## 7. Keyboard and screen reader
 
 - **Tab order.** Header (boot button below 1024 px, close) -> tab list (one stop;
-  arrow keys move and activate, Home and End jump) -> the active panel's filter
+  arrow keys move and activate, Home and End jump; the tab panel itself is no
+  stop, `SystemLogsView.svelte:185`) -> the active panel's filter
   bar in visual order (single-choice groups such as Level, Order and Detail are
   one stop each, arrows move the choice) -> the list (one stop; Up and Down move
   between rows, Home and End jump, Enter or Space expands a raw row, the row's
   own actions such as View raw logs and Copy are reachable with Tab inside the
   focused row) -> the paging button -> the side column (boot list as one
   single-choice stop, then Storage controls, then Downloads rows).
+- **Busy controls [EXISTS].** While its page loads, a pressed paging button is
+  aria-disabled and aria-busy, never disabled, so it keeps focus
+  (`RawLogList.svelte:151`, `:165`; `EventsTab.svelte:281`); so is Follow while the
+  device answers (`RawFollowControl.svelte:46`). Follow is disabled only beside its
+  reason (`:49`).
 - **Events rows [EXISTS].** A row's stop is its first action, View raw logs: a
   list item is not a control, so it never takes focus itself. Up, Down, Home
   and End move the stop between rows; Tab reaches that row's Diagnostics; only
@@ -802,7 +812,8 @@ everywhere in the app.
   A boot section's key is its boot id and run number, so events arriving above
   a row never rebuild it: the row keeps its element, focus and stop.
 - **Initial focus.** The selected tab, so arrow keys work at once. Anchor mode
-  moves focus to the highlighted row.
+  moves focus to the highlighted row. A Storage request focuses the Storage
+  heading once (`SystemLogsView.svelte:120-127`).
 - **Escape.** It always closes the topmost layer: an open select, then a nested
   sheet or dialog (boot picker, support bundle, confirmation), then the view.
   It never clears the search field (the clear button does). On close, focus
@@ -810,17 +821,17 @@ everywhere in the app.
 - **Visible focus.** Every control shows the app's `:focus-visible` ring; sticky
   boot separators and the fixed bars never cover a focused row (scroll padding
   under the sticky regions).
-- **Enter.** It never confirms a destructive action; in confirmations the
-  focused default is Cancel.
+- **Enter.** Both clear confirmations initially focus Cancel, so pressing Enter
+  immediately after opening cancels (`StorageCleanup.svelte:55`).
 - **Lists.** Events and raw entries are plain lists (`ul`/`li`), never
   `aria-live`. Boot separators are headings, so heading navigation jumps
   between boots. Glyphs carry accessible names (section 4, `systemLogs.level.*`
   and `systemLogs.severity.*`); times use `<time datetime>`.
-- **One polite status region.** `role="status"`, `aria-live="polite"`, visually
-  hidden, mounted with the view before any follow can start. It announces each
-  follow state change exactly once (following, paused, resumed, stopped, gap,
-  disconnected), and at most one "New log entries" or "New events" summary
-  every 5 seconds while entries or events arrive. It never reads log lines.
+- **Polite status.** The Raw logs status announces Follow changes and new raw-entry
+  summaries (`RawLogsTab.svelte:28-36`, a visually hidden `role="status"` with
+  `aria-live="polite"` at `:136-140`). The Events tab exposes its loading status
+  (`EventsTab.svelte:192`). Neither reads log lines. Spoken timing and repetition are
+  unmeasured.
 - **Alerts.** Failures and refusals (read failed, busy, expired position, boot
   removed, update in progress, export or bundle failure) render as inline bands
   with `role="alert"`, announced once when they appear. Success is never
@@ -953,10 +964,12 @@ the English/es-419 release work assigned to the documentation todo.
 - The real `RawLogsTab` consumes the returned pages and their paging queries.
   An exact anchor receives its existing tonal highlight and row focus; an
   approximate jump states that it is approximate and leaves focus on Raw logs.
+  An approximate window marks the selected moment. When an end marker is shown, it names that side of the time window. The display-limit notice takes precedence at the older edge. Windows around exact entries use the stored-logs wording when their end markers are shown.
+  (`RawLogList.svelte:38-41`, `:142-187`).
   A failed lookup shows the removed-boot, busy or read-failed message with
   Retry and Back to latest entries. The low-disk banner opens Storage instead.
-  On wide screens that request focuses the Storage heading in the side column;
-  below 1024 px it selects the Storage tab.
+  That request focuses the Storage heading once: in the side column on wide
+  screens, on the Storage tab below 1024 px (`SystemLogsView.svelte:120-127`).
 - Anchor mode keeps the operator's normal-query controls as its return view
   (the Raw view's pinned reset/filter-change contract). Its pages and exports
   use the around queries, not those return controls. Changing a filter leaves
@@ -986,6 +999,18 @@ the English/es-419 release work assigned to the documentation todo.
 
 - **Critique residuals.** The todo 36 critique and the owner of every finding it
   did not fix are in [system-logs-critique.md](system-logs-critique.md).
+- **Polish (todo 38).** Four DF-26 items stay as they are:
+  - Two time formats. Raw rows use a fixed two-digit hour (`RawLogList.svelte:47`)
+    in a mono tabular column (`RawLogRow.svelte:102`), so times line up down the
+    list. Events shows a relative time next to a localized clock for events dated
+    today, or a localized date and time for older events (`timeline-copy.ts:168-174`).
+  - The Storage heading under the Storage tab on phones. It names the Storage
+    region (`SystemLogsView.svelte:138`) and is where a Storage request puts focus
+    (`:139`, `:126`).
+  - The unit in an expanded raw row. The row's unit truncates (`RawLogRow.svelte:105`);
+    the expanded detail shows it whole and wrapped (`:127`).
+  - "Boot started" may wrap in the side column. Keep the full localized timestamp and
+    allow prettier line wrapping (`BootPicker.svelte:123`).
 
 - **Clock evidence.** The clock-not-synced marker uses only backwards-running
   times between adjacent records of one boot. It never guesses from forward

@@ -117,9 +117,13 @@ $effect(() => {
 	tabList.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
 });
 
-// Storage is a side region rather than a tab on wide screens.
+// A Storage request focuses its heading once, in the side column or on the Storage tab;
+// coming back to the tab later leaves focus on the tab.
+let storageFocusedFor: LogsDialogContext | undefined;
 $effect(() => {
-	if (context?.tab === 'storage' && wide.current) storageHeading?.focus();
+	if (context?.tab !== 'storage' || !storageHeading || storageFocusedFor === context) return;
+	storageFocusedFor = context;
+	storageHeading.focus();
 });
 </script>
 
@@ -177,7 +181,8 @@ $effect(() => {
 					</Tabs.List>
 				</div>
 				{#each tabs as tab (tab)}
-					<Tabs.Content class="min-h-0 overflow-y-auto" data-testid="system-logs-panel-{tab}" value={tab}>
+					<!-- Tab goes from the tabs straight to the panel's controls; the panel itself is no stop. -->
+					<Tabs.Content class="min-h-0 overflow-y-auto" data-testid="system-logs-panel-{tab}" tabindex={-1} value={tab}>
 						{#if tab === 'events' && current === 'events'}
 							<EventsPanel onviewraw={(page) => { around = page; selected = 'raw'; }} />
 						{/if}

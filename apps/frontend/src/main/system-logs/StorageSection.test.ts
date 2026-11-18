@@ -214,6 +214,19 @@ describe("StorageSection — usage readout", () => {
 		);
 	});
 
+	it("draws a sliver for usage under 1 %, and an empty track only when nothing is used", () => {
+		const fill = () =>
+			screen.getByTestId("storage-usage-meter")
+				.firstElementChild as HTMLElement;
+		const small = mount(logStorage({ journalBytes: 16_000 }));
+		expect(fill().classList.contains("min-w-1")).toBe(true);
+		small.unmount();
+
+		mount(logStorage({ journalBytes: 0 }));
+		expect(fill().style.width).toBe("0%");
+		expect(fill().classList.contains("min-w-1")).toBe(false);
+	});
+
 	it("measures against a saved size limit", () => {
 		mount(
 			logStorage({
@@ -940,6 +953,26 @@ describe("StorageSection — cleanup", () => {
 		expect(rpcCalls()).toBe(0);
 	});
 
+	it.each([
+		[copy.clearAll, copy.clearAllTitle],
+		[copy.clearEvents, copy.clearEventsTitle],
+	])(
+		"opens %s with focus on Cancel, so an immediate Enter cancels",
+		async (trigger, title) => {
+			mount();
+
+			await fireEvent.click(screen.getByRole("button", { name: trigger }));
+			const dialog = await screen.findByRole("alertdialog");
+			expect(within(dialog).getByText(title)).toBeTruthy();
+
+			await waitFor(() =>
+				expect(document.activeElement).toBe(
+					within(dialog).getByRole("button", { name: en.dialog.cancel }),
+				),
+			);
+		},
+	);
+
 	it("does nothing when Clear all is cancelled, and the readout stays listed", async () => {
 		mount();
 
@@ -1322,6 +1355,7 @@ describe("StorageSection — anatomy", () => {
 			"block",
 			"h-full",
 			"rounded-full",
+			"min-w-1",
 		]);
 		expect(meter.parentElement).toBe(text.parentElement);
 	});

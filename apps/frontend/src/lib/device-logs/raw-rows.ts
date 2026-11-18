@@ -22,7 +22,8 @@ export type RawRow =
 export type DisplayRow =
 	| RawRow
 	| { readonly kind: "date"; readonly key: string; readonly ts: number }
-	| { readonly kind: "clock"; readonly key: string };
+	| { readonly kind: "clock"; readonly key: string }
+	| { readonly kind: "moment"; readonly key: string; readonly ts: number };
 
 const GAP_MARKERS: Partial<
 	Record<NonNullable<LogFollowMessage["gap"]>, MarkerKind>
@@ -145,4 +146,29 @@ export function displayRows(
 		display.push(row);
 	}
 	return display;
+}
+
+/**
+ * Newest-first display rows with a row for the selected moment of an
+ * approximate window: above the first entry recorded at or before it, or above
+ * the date row directly over that entry, and last when every entry is newer.
+ */
+export function withMoment(
+	rows: readonly DisplayRow[],
+	moment: number,
+): DisplayRow[] {
+	const first = rows.findIndex(
+		(row) => row.kind === "entry" && row.entry.ts <= moment,
+	);
+	const at =
+		first === -1
+			? rows.length
+			: rows[first - 1]?.kind === "date"
+				? first - 1
+				: first;
+	return [
+		...rows.slice(0, at),
+		{ kind: "moment", key: "moment", ts: moment },
+		...rows.slice(at),
+	];
 }

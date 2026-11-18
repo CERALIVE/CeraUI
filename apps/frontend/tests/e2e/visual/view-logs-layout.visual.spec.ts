@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test } from './fixtures/index.js';
-import { EVIDENCE_DIR, ensureAuthenticated } from './helpers/index.js';
-import { runAxe } from './helpers/axe.js';
+import { expect, test } from '../fixtures/index.js';
+import { EVIDENCE_DIR, ensureAuthenticated } from '../helpers/index.js';
+import { runAxe } from '../helpers/axe.js';
 
 const LOCALES = ['en', 'es', 'de', 'fr', 'pt-BR', 'ja', 'ko', 'zh', 'ar', 'hi'] as const;
 const OUT = path.join(EVIDENCE_DIR, `view-logs-layout-${process.env.DLS35_LAYOUT_PHASE ?? 'after'}`);

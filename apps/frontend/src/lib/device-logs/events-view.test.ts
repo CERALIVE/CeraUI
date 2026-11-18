@@ -374,6 +374,38 @@ describe("EventsView — pushed events", () => {
 		expect(ids(view)).toEqual([5, 4, 3]);
 	});
 
+	it("keeps the shown rows through a gap re-read until its first page replaces them", async () => {
+		const { view, push, list } = await ready([e(2), e(1)], { headSeq: 2 });
+		const reply = Promise.withResolvers<EventListOutput>();
+		list.mockReturnValueOnce(reply.promise);
+		const shown = view.events;
+
+		push(e(5));
+		expect(view.loading).toBe("first");
+		expect(view.events).toBe(shown);
+
+		reply.resolve(eventPage([e(5), e(4)], { nextBeforeSeq: 4 }));
+		await vi.waitFor(() => expect(view.loading).toBeNull());
+		expect(ids(view)).toEqual([5, 4]);
+		expect(view.nextBeforeSeq).toBe(4);
+	});
+
+	it("keeps no rows from before a gap re-read that fails", async () => {
+		const { view, push, list } = await ready([e(2), e(1)], {
+			headSeq: 2,
+			nextBeforeSeq: 1,
+		});
+		quietErrors();
+		list.mockRejectedValueOnce(new Error("down"));
+
+		push(e(5));
+		await vi.waitFor(() => expect(view.loading).toBeNull());
+
+		expect(view.failed).toBe("first");
+		expect(view.events).toEqual([]);
+		expect(view.nextBeforeSeq).toBeNull();
+	});
+
 	it("checks for a gap on every event of a batch", async () => {
 		const { push, list } = await ready([e(3)]);
 		list.mockReturnValue(new Promise(() => {}));

@@ -19,6 +19,7 @@ import { type AroundPage, type RawAnnouncement, RawView, resetRawView } from '$l
 import { rpc } from '$lib/rpc/client';
 import { getConnectionState, setLogFollowListener } from '$lib/rpc/subscriptions.svelte';
 
+import KeepWords from './KeepWords.svelte';
 import RawLogList from './RawLogList.svelte';
 import RawLogsFilterBar from './RawLogsFilterBar.svelte';
 
@@ -102,8 +103,9 @@ const band = $derived.by(() => {
 	{#if view.anchor !== null}
 		<div class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2" data-testid="raw-anchor">
 			{#if view.anchor.approximate}
-				<p class="text-muted-foreground min-w-0 flex-1 text-xs" data-testid="raw-anchor-approximate">
-					{m['systemLogs.anchor.approximate']()}
+				<!-- A basis, so a long Back to latest entries label wraps below the note instead of squeezing the note into a narrow column. -->
+				<p class="text-muted-foreground min-w-0 flex-1 basis-48 text-xs [&:lang(zh)]:break-keep" data-testid="raw-anchor-approximate">
+					<KeepWords text={m['systemLogs.anchor.approximate']()} />
 				</p>
 			{/if}
 			<Button class="ms-auto" data-testid="raw-anchor-leave" onclick={() => view.reset()} size="sm" variant="ghost">

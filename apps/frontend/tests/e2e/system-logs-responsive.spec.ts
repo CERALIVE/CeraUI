@@ -331,13 +331,3 @@ test('Japanese renders in a resolved CJK font without missing glyphs', async ({ 
 	expect(cjk.length, `the Japanese tab label resolved only to ${fonts.map((font) => font.familyName).join(', ')}`).toBeGreaterThan(0);
 	expect(cjk.reduce((sum, font) => sum + font.glyphCount, 0)).toBeGreaterThanOrEqual([...label].length);
 });
-
-test('Japanese System Logs evidence capture @visual', async ({ page }) => {
-	const logs = new SystemLogsPage(page);
-	await logs.open({ locale: 'ja', size: { width: 375, height: 812 }, touch: false, scheme: 'dark' });
-	fs.mkdirSync(OUT, { recursive: true });
-	for (const view of ['events', 'raw', 'storage'] as const) {
-		await logs.show(view);
-		await page.screenshot({ path: path.join(OUT, `ja-375-${view}.png`) });
-	}
-});

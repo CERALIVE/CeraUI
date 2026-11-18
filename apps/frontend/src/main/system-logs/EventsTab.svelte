@@ -187,7 +187,8 @@ function showAll(): void {
 		{@render failure(() => void view.reload())}
 	{/if}
 	<div bind:this={scroller} class="min-h-0 flex-1 scroll-pt-16 overflow-y-auto overscroll-contain" data-testid="events-scroller">
-		{#if view.loading === 'first'}
+		<!-- A re-read for a skipped seq keeps its rows until the page arrives, with no loading rows above them. -->
+		{#if view.loading === 'first' && view.events.length === 0}
 			<div aria-busy="true" data-testid="events-loading" role="status">
 				<span class="sr-only">{m['systemLogs.loading.events']()}</span>
 				{@render skeletonRows(4)}
@@ -269,11 +270,20 @@ function showAll(): void {
 		{/each}
 		{#if view.loading === 'older'}
 			<div data-testid="events-loading-older">{@render skeletonRows(2)}</div>
-		{:else if view.failed === 'older'}
+		{/if}
+		{#if view.failed === 'older'}
 			{@render failure(() => void view.loadOlder())}
 		{:else if view.nextBeforeSeq !== null}
 			<div class="flex justify-center px-4 py-3">
-				<Button onclick={() => void view.loadOlder()} size="sm" variant="outline">{m['systemLogs.events.loadOlder']()}</Button>
+				<!-- aria-disabled, not disabled, while its page loads: the pressed button keeps keyboard focus. -->
+				<Button
+					aria-busy={view.loading === 'older' ? 'true' : undefined}
+					aria-disabled={view.loading === 'older' ? 'true' : undefined}
+					class="aria-disabled:pointer-events-none aria-disabled:opacity-50"
+					onclick={() => void view.loadOlder()}
+					size="sm"
+					variant="outline">{m['systemLogs.events.loadOlder']()}</Button
+				>
 			</div>
 		{:else if view.events.length > 0}
 			<p
