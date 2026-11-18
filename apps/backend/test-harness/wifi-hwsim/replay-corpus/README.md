@@ -11,11 +11,21 @@ journal JSON, safe process/PID inventories, masked keyfiles and diagnostics.
 Command samples select the independently replayable replies from those
 transcripts. Outputs that the producer did not retain cannot be reconstructed.
 
-The only retained phy output is the first 10,000 characters of phy0, recovered
+For R19-R21, the only retained phy output is the first 10,000 characters of phy0, recovered
 from an assertion's string-literal representation without evaluating it.
 The producer truncated another 25,867 characters. The sample is explicitly
 incomplete, has a final newline added, and still contains the real supported
 AP mode and `2437.0 MHz [6] (20.0 dBm)` row. No phy1/2/3 reply is invented.
+
+R22 adds four complete, unchanged 35,879-byte iw 6.9 replies in
+`manifest.json.additionalSamples`. The original 42 captures and 49 samples
+remain unchanged. Each new entry records its archive/member origin and exact
+SHA-256; the archive hash is
+`6e86342c9388fb3eb72925e4d43f7c97125080eedbdd91b3e242520f3e9dc145`.
+The R22 replay runs the production capability and channel parsers on all four
+full replies, covering S1G omission, shared managed/AP capacity, decimal MHz,
+no-IR/disabled restrictions and preserved channel 6. These replies also exist
+as backend regression fixtures so the parser fixes can be backported alone.
 
 Sanitization replaces the known harness PSK and credential assignments with
 `<redacted>`, replaces host evidence paths with `<evidence>`, normalizes final
@@ -61,11 +71,10 @@ contract; namespace tests cover filesystem/execution mechanics separately.
 
 ## Explicit missing observations
 
-No native framing, first-AP or hybrid case ran in these three attempts.
+No native framing, first-AP or hybrid case ran in R19-R21.
 Positive real samples are therefore unavailable for:
 
 - `iw dev <client> link` and wrong-radio activation stderr.
-- Full untruncated phy0 and all phy1/2/3 capability replies.
 - NM named multiline field stdout, escaped FILENAME/DBUS-PATH summaries,
   numeric `GENERAL.STATE` replies and raw VersionId replies. Success markers
   do not supply their missing bytes.

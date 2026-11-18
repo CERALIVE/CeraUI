@@ -554,6 +554,19 @@ without a VM to cover immediate readiness, several non-ready state changes and
 a never-ready device failing with the bounded diagnostic receipt. The existing
 native upgrade, unrelated-profile and Stop assertions remain unchanged.
 
+The native row helper derives channel 6 through the normal exact-phy channel
+initialization and records the observed NM band offering. It retains indexed
+IPv4 values through the real named-field boundary. Hybrid AP observations use
+the verified current row and the matching profile interface pin.
+
+Cold NM/netdev loss is a negative qualification control: mac80211_hwsim remains
+outside the MT7925 gate, so the AP must stay inactive, hybrid intent pending and
+the station uplink unchanged, with `hybrid-channel-not-permitted`. Stop runs
+while the adopted AP is still live, before this cold control; the saved hybrid
+configuration is then restored as cold-test setup. Offline isolated MT7925
+fixtures prove positive missing-leg restore. A simulated radio does not qualify
+physical MT7925 restore; that remains in the board gate.
+
 ## Guest execution and version proof
 
 The offline namespace checks install Bun as a regular mode-0755 file at

@@ -16,6 +16,7 @@ import {
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
+import type { HotspotToggleOutcome } from "../../../src/modules/wifi/wifi-hotspot-outcome.ts";
 import {
 	selftestWifiReadiness,
 	waitForManagedWifiDevice,
@@ -282,6 +283,9 @@ async function candidate(phase: string): Promise<void> {
 	const { reconcileWifiAdapterModes } = await import(
 		"../../../src/modules/wifi/wifi-adapter-mode-restore.ts"
 	);
+	const { defaultAdapterModeDeps } = await import(
+		"../../../src/modules/wifi/wifi-adapter-mode-deps.ts"
+	);
 	const { refreshWifiCapabilities } = await import(
 		"../../../src/modules/wifi/wifi-capabilities.ts"
 	);
@@ -384,7 +388,14 @@ async function candidate(phase: string): Promise<void> {
 			"Missing restored hybrid intent",
 		);
 		await refreshWifiCapabilities(radios);
-		await reconcileWifiAdapterModes();
+		const outcomes: { device: number | string; outcome: HotspotToggleOutcome }[] = [];
+		await reconcileWifiAdapterModes({
+			...defaultAdapterModeDeps,
+			publishHotspotOutcome: (kind, device, outcome) => {
+				if (kind === "start") outcomes.push({ device, outcome });
+				defaultAdapterModeDeps.publishHotspotOutcome(kind, device, outcome);
+			},
+		});
 		await interfaces.wifiUpdateDevices();
 		assert.equal(
 			(
@@ -397,14 +408,47 @@ async function candidate(phase: string): Promise<void> {
 	assert(row, `${phase}: candidate did not discover the owned radio`);
 	assert.equal(
 		observedWifiAdapterMode(row),
-		"hybrid",
+		phase === "reboot" ? "station" : "hybrid",
 		`${phase}: active hybrid AP disappeared`,
 	);
 	assert.equal(
-		row.concurrentHotspot?.activeConn,
-		state.ap,
+		row.concurrentHotspot?.activeConn ?? null,
+		phase === "reboot" ? null : state.ap,
 		`${phase}: candidate lost the live AP UUID`,
 	);
+	assert.equal(
+		(await nmDeviceProp(state.parent, "GENERAL.CON-UUID"))?.[0],
+		state.uplink,
+		`${phase}: hybrid operation dropped the station uplink`,
+	);
+	if (phase === "reboot") {
+		assert(
+			outcomes.some(({ device, outcome }) =>
+				device === row.id && !outcome.success &&
+				outcome.error === "activation-failed" &&
+				outcome.reason === "hybrid-channel-not-permitted",
+			),
+			"reboot: unqualified hwsim must publish the documented qualification refusal",
+		);
+		assert.equal(wifiBuildMsg()[row.id]?.hotspot, undefined, "reboot: refused AP is advertised as active");
+		assert.equal(await Bun.file(`/sys/class/net/${state.virtual}/ifindex`).exists(), false, "reboot: unqualified hwsim created a hybrid leg");
+		assert.deepEqual(
+			(await readdir("/sys/class/net")).filter((name) => name.startsWith("clap-")),
+			[],
+			"reboot: unqualified hwsim left a fresh-name hybrid leg",
+		);
+		interfaces.terminateWifiDiscovery();
+		process.stdout.write("hybrid-upgrade: reboot passed (hwsim qualification refusal; hybrid intent remains pending)\n");
+		return;
+	}
+	const currentTarget = row.concurrentHotspot?.ifname;
+	assert(currentTarget, `${phase}: active AP has no verified row target`);
+	assert.equal(
+		(await nmConnGetFields(state.ap, ["connection.interface-name"] as const))?.[0],
+		currentTarget,
+		`${phase}: active AP profile pin differs from its verified row target`,
+	);
+	state.virtual = currentTarget;
 	const wire = wifiBuildMsg()[row.id];
 	assert(wire?.hotspot, `${phase}: AP missing from operator status`);
 	assert.equal(
@@ -415,11 +459,6 @@ async function candidate(phase: string): Promise<void> {
 	assert(
 		wire.hotspot.password === password,
 		`${phase}: operator status changed the synthetic credential`,
-	);
-	assert.equal(
-		(await nmDeviceProp(state.parent, "GENERAL.CON-UUID"))?.[0],
-		state.uplink,
-		`${phase}: hybrid operation dropped the station uplink`,
 	);
 	assert.match(
 		await command(["iw", "dev", state.virtual, "info"]),
@@ -457,6 +496,7 @@ async function candidate(phase: string): Promise<void> {
 			"Stop did not remember station intent",
 		);
 	}
+	await writeFile(join(root, "state.json"), JSON.stringify(state), { mode: 0o600 });
 	interfaces.terminateWifiDiscovery();
 	process.stdout.write(`hybrid-upgrade: ${phase} passed\n`);
 }
@@ -524,6 +564,9 @@ async function main(): Promise<void> {
 			{ ...env, HWSIM_UPGRADE_GUARD: guard ? "1" : "0" },
 		);
 		process.stdout.write(`${redacted(output)}\n`);
+		state.virtual = stateSchema.parse(
+			JSON.parse(await readFile(join(root, "state.json"), "utf8")),
+		).virtual;
 	};
 	const add = async (
 		uuid: string,
@@ -766,9 +809,15 @@ async function main(): Promise<void> {
 			),
 		);
 
+		// Prove Stop while the legacy AP is still live; hwsim may not recreate it.
+		const hybridConfig = await readFile(join(root, "config.json"), "utf8");
+		await runCandidate("stop");
+		process.stdout.write(
+			"UPGRADE-AP-RETAINED: PASS (startup/restart retained visible AP; operator Stop succeeded)\n",
+		);
+		await writeFile(join(root, "config.json"), hybridConfig, { mode: 0o600 });
 		// The SSH-owned runner cannot survive a guest OS reboot. Simulate loss of
 		// NM and the virtual netdev, retaining only disk and the physical radios.
-		await command([nmcli, "connection", "down", state.ap]);
 		await command(["iw", "dev", state.virtual, "del"]);
 		await command(["systemctl", "restart", "NetworkManager"]);
 		await activate(state.uplink, parent);
@@ -780,11 +829,7 @@ async function main(): Promise<void> {
 		);
 		await runCandidate("reboot");
 		process.stdout.write(
-			"UPGRADE-REBOOT: PASS (cold NM/netdev state and fresh candidate process; no OS reboot)\n",
-		);
-		await runCandidate("stop");
-		process.stdout.write(
-			"UPGRADE-AP-RETAINED: PASS (startup/restart retained visible AP; operator Stop succeeded)\n",
+			"UPGRADE-REBOOT: PASS (cold hwsim refuses unqualified restore; no OS reboot or MT7925 qualification)\n",
 		);
 		await explainProfileChange([], async () =>
 			assert.deepEqual(

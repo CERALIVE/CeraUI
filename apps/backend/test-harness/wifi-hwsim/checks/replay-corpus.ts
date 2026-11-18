@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 const sampleSchema = z.object({
 	id: z.string(),
-	run: z.enum(['r19', 'r20', 'r21']),
+	run: z.enum(['r19', 'r20', 'r21', 'r22']),
 	kind: z.enum([
 		'nm-add',
 		'iw-phy',
@@ -43,6 +43,7 @@ const corpusSchema = z.object({
 		}),
 	),
 	samples: z.array(sampleSchema),
+	additionalSamples: z.array(sampleSchema).optional(),
 });
 export type ReplaySample = z.infer<typeof sampleSchema>;
 export type ReplayCorpus = {
@@ -56,7 +57,7 @@ export async function loadReplayCorpus(): Promise<ReplayCorpus> {
 		JSON.parse(await readFile(resolve(root, 'manifest.json'), 'utf8')),
 	);
 	const text = new Map<string, string>();
-	for (const entry of [...manifest.captures, ...manifest.samples]) {
+	for (const entry of [...manifest.captures, ...manifest.samples, ...(manifest.additionalSamples ?? [])]) {
 		const path = resolve(root, entry.file);
 		if (!path.startsWith(`${root}/`)) throw new Error('Replay path escapes corpus');
 		const data = await readFile(path, 'utf8');
@@ -70,7 +71,8 @@ export async function loadReplayCorpus(): Promise<ReplayCorpus> {
 			throw new Error(`Unsafe replay bytes: ${entry.file}`);
 		text.set(entry.file, data);
 	}
-	if (new Set(manifest.samples.map((sample) => sample.id)).size !== manifest.samples.length)
+	const samples = [...manifest.samples, ...(manifest.additionalSamples ?? [])];
+	if (new Set(samples.map((sample) => sample.id)).size !== samples.length)
 		throw new Error('Duplicate replay sample ID');
 	return { manifest, text };
 }

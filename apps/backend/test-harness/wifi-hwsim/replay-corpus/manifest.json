@@ -8,6 +8,88 @@
 		"untrustedDataNeverExecuted": true,
 		"finalNewlineNormalization": true
 	},
+	"additionalSamples": [
+		{
+			"id": "r22/iw-phy0-info",
+			"run": "r22",
+			"kind": "iw-phy",
+			"file": "commands/r22/iw-phy0-info.txt",
+			"origins": [
+				"task-21-22-integ-r22-guest-receipts.tar.gz:preflight/ceraui-preflight.U2aMjLL4/iw-phy0-info.txt"
+			],
+			"sha256": "d3b128659b038076713bad294e427cb33e928fd95318fa3025598089b9b22237",
+			"expected": {
+				"ap": true,
+				"bands": [
+					"2.4",
+					"5",
+					"6"
+				],
+				"sharedApSta": true
+			},
+			"complete": true
+		},
+		{
+			"id": "r22/iw-phy1-info",
+			"run": "r22",
+			"kind": "iw-phy",
+			"file": "commands/r22/iw-phy1-info.txt",
+			"origins": [
+				"task-21-22-integ-r22-guest-receipts.tar.gz:preflight/ceraui-preflight.U2aMjLL4/iw-phy1-info.txt"
+			],
+			"sha256": "0dcd50d13d7dfa3c09a94ba9749e728dda20a42b329ef9fc4595ec70c6a044ef",
+			"expected": {
+				"ap": true,
+				"bands": [
+					"2.4",
+					"5",
+					"6"
+				],
+				"sharedApSta": true
+			},
+			"complete": true
+		},
+		{
+			"id": "r22/iw-phy2-info",
+			"run": "r22",
+			"kind": "iw-phy",
+			"file": "commands/r22/iw-phy2-info.txt",
+			"origins": [
+				"task-21-22-integ-r22-guest-receipts.tar.gz:preflight/ceraui-preflight.U2aMjLL4/iw-phy2-info.txt"
+			],
+			"sha256": "50a371d59062d1791f12e5b5b08667205f7087a9126917a03d37cb65b808b7e4",
+			"expected": {
+				"ap": true,
+				"bands": [
+					"2.4",
+					"5",
+					"6"
+				],
+				"sharedApSta": true
+			},
+			"complete": true
+		},
+		{
+			"id": "r22/iw-phy3-info",
+			"run": "r22",
+			"kind": "iw-phy",
+			"file": "commands/r22/iw-phy3-info.txt",
+			"origins": [
+				"task-21-22-integ-r22-guest-receipts.tar.gz:preflight/ceraui-preflight.U2aMjLL4/iw-phy3-info.txt"
+			],
+			"sha256": "3b1ea2eda3b7862e3749468f9b1f45500dd8c7468edff094456178a3e7544405",
+			"expected": {
+				"ap": true,
+				"bands": [
+					"2.4",
+					"5",
+					"6"
+				],
+				"sharedApSta": true
+			},
+			"complete": true
+		}
+	],
 	"captures": [
 		{
 			"file": "captures/r20/r20-guest-preflight.log",

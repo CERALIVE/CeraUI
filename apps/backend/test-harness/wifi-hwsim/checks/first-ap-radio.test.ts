@@ -1,4 +1,5 @@
-import { expect, jest, mock, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, expect, jest, mock, spyOn, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import * as exec from "../../../src/helpers/exec.ts";
 import * as nm from "../../../src/modules/network/network-manager.ts";
 import { onWifiChange } from "../../../src/modules/wifi/state/wifi-state.ts";
@@ -23,10 +24,27 @@ import {
 	wifiUpdateDevices,
 } from "../../../src/modules/wifi/wifi-interfaces.ts";
 import { wifiFrameFixture } from "../../../src/tests/helpers/wifi-frame-fixture.ts";
+import { nmcliFieldOutput } from "../../../src/tests/helpers/nmcli-field-output.ts";
+import {
+	resetRegdomainStateForTest,
+	setRegdomainRunner,
+} from "../../../src/modules/wifi/regdomain.ts";
+import { getWifiChannelMap } from "../../../src/modules/wifi/wifi-channels.ts";
 import {
 	observeSavedProfileRadio,
 	seedObservedRadioRow,
 } from "./first-ap-radio.ts";
+
+beforeEach(() => {
+	resetRegdomainStateForTest();
+	setRegdomainRunner(async (_binary, args) =>
+		args[0] === "phy"
+			? readFileSync(new URL("../../../src/tests/fixtures/wifi/iw-phy-r22-phy1.txt", import.meta.url), "utf8")
+			: "global\ncountry 00: DFS-UNSET\n (2402 - 2472 @ 40), (6, 20), (N/A)\n",
+	);
+});
+
+afterEach(() => resetRegdomainStateForTest());
 
 for (const populated of [false, true]) {
 	test(`native discovery ${populated ? "keeps the ID with observed MAC/IP" : "refuses Stop with an empty operational cache"}`, async () => {
@@ -98,6 +116,8 @@ for (const seeded of [false, true]) {
 			spyOn(nm, "nmDeviceProp").mockImplementation(async (_ifname, fields) =>
 				fields === "GENERAL.STATE,GENERAL.CON-UUID"
 					? ["100", "uplink-uuid"]
+					: fields === "WIFI-PROPERTIES.2GHZ,WIFI-PROPERTIES.5GHZ"
+						? ["yes", "yes"]
 					: fields === "GENERAL.HWADDR,IP4.ADDRESS"
 						? ["DC:A6:32:AA:BB:C0", "192.0.2.10/24"]
 						: ["", "", "yes", "yes", "yes"],
@@ -145,7 +165,11 @@ test("a seeded row keeps its public hotspot when discovery records another adapt
 		removeWifiInterface(owner);
 		const ids = getWifiIdToMacAddress();
 		for (const key of Object.keys(ids)) delete ids[Number(key)];
-		spyOn(nm, "nmDeviceProp").mockResolvedValue(["100", "test-ap"]);
+		spyOn(nm, "nmDeviceProp").mockImplementation(async (_ifname, fields) =>
+			fields === "WIFI-PROPERTIES.2GHZ,WIFI-PROPERTIES.5GHZ"
+				? ["yes", "yes"]
+				: ["100", "test-ap"],
+		);
 		spyOn(nm, "nmConnGetFields").mockResolvedValue(["ap"]);
 
 		const row = await seedObservedRadioRow({
@@ -166,6 +190,47 @@ test("a seeded row keeps its public hotspot when discovery records another adapt
 	} finally {
 		removeWifiInterface(owner);
 		removeWifiInterface("degraded:wlan1");
+		stopWifiUpdateLoopForTest();
+		wifiDeviceListStartUpdate();
+		wifiDeviceListEndUpdate();
+		await fixture.restore();
+		mock.restore();
+	}
+});
+
+test("native row observation keeps the active AP UUID and channel label through real indexed NM decoding", async () => {
+	const fixture = await wifiFrameFixture(true);
+	jest.useRealTimers();
+	const owner = "dc:a6:32:aa:bb:c0";
+	try {
+		resetWifiInterfaceDiscoveryForTest();
+		spyOn(exec, "execFileP").mockImplementation(async (_binary, args = []) => ({
+			stdout: args.includes("GENERAL.HWADDR,IP4.ADDRESS")
+				? `GENERAL.HWADDR:${owner.toUpperCase()}\nIP4.ADDRESS[1]:10.42.0.1/24\n`
+				: nmcliFieldOutput([...args], (field) => {
+						if (field === "GENERAL.HWADDR") return owner.toUpperCase();
+						if (field === "GENERAL.STATE") return "100 (connected)";
+						if (field === "GENERAL.CON-UUID") return "test-ap";
+						if (field === "802-11-wireless.mode") return "ap";
+						if (field.startsWith("WIFI-PROPERTIES.")) return "yes";
+						return "";
+					}),
+			stderr: "",
+		}));
+		spyOn(nm, "nmDevices").mockResolvedValue(["wlan0:wifi:connected:test-ap"]);
+		spyOn(nm, "nmScanResults").mockResolvedValue([]);
+		spyOn(nm, "nmConnsGet").mockResolvedValue([]);
+		spyOn(capabilities, "refreshWifiCapabilities").mockResolvedValue(undefined);
+		const row = await seedObservedRadioRow({
+			ifname: "wlan0", owner, uuid: "test-ap", ssid: "CeraTest", password: "synthetic",
+		});
+		await observeSavedProfileRadio("wlan0");
+		expect(wifiDeviceListGetInetAddress("wlan0")).toBe("10.42.0.1");
+		expect(row.conn).toBe("test-ap");
+		expect(getWifiChannelMap(row.hotspot.availableChannels, row.hotspot.derivedChannels).ch_6).toEqual({
+			name: "Channel 6 (2.4 GHz)",
+		});
+	} finally {
 		stopWifiUpdateLoopForTest();
 		wifiDeviceListStartUpdate();
 		wifiDeviceListEndUpdate();

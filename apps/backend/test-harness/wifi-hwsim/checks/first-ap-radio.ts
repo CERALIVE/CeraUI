@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
+import { basename } from "node:path";
 import {
 	nmConnGetFields,
 	nmDeviceProp,
 } from "../../../src/modules/network/network-manager.ts";
 import { addWifiInterface } from "../../../src/modules/wifi/wifi-connections.ts";
+import {
+	refreshDerivedApChannels,
+	refreshHotspotChannels,
+} from "../../../src/modules/wifi/regdomain.ts";
+import { radioIdentityReaders } from "../../../src/modules/wifi/wifi-radio-identity.ts";
+import type { AutoWifiChannel } from "../../../src/modules/wifi/wifi-channels.ts";
 import {
 	wifiDeviceListAdd,
 	wifiDeviceListEndUpdate,
@@ -38,6 +45,24 @@ export async function seedObservedRadioRow(target: {
 	const mode = active
 		? (await nmConnGetFields(active, ["802-11-wireless.mode"] as const))?.[0]
 		: undefined;
+	const phyPath = await radioIdentityReaders.realpath(
+		`/sys/class/net/${target.ifname}/phy80211`,
+	);
+	assert(phyPath, "Native radio phy is unreadable");
+	const phy = basename(phyPath);
+	const derived = await refreshDerivedApChannels(phy);
+	assert(
+		derived.some((channel) => channel.channel === 6 && channel.freqMhz === 2437),
+		"Native radio does not offer the scenario's channel 6",
+	);
+	const bands = await nmDeviceProp(
+		target.ifname,
+		"WIFI-PROPERTIES.2GHZ,WIFI-PROPERTIES.5GHZ",
+	);
+	const bandCapability: AutoWifiChannel[] = ["auto"];
+	assert(bands?.length === 2 && bands.every((value) => value === "yes" || value === "no"), "Native radio bands are unreadable");
+	if (bands[0] === "yes") bandCapability.push("auto_24");
+	if (bands[1] === "yes") bandCapability.push("auto_50");
 	// recordDegradedWifiInterface is the existing export that advances the allocator; the row below replaces its placeholder under the same key.
 	const { id } = recordDegradedWifiInterface(
 		target.ifname,
@@ -59,10 +84,11 @@ export async function seedObservedRadioRow(target: {
 			name: target.ssid,
 			password: target.password,
 			channel: "ch_6",
-			availableChannels: ["ch_6"],
+			availableChannels: [...bandCapability],
 			warnings: {},
 		},
 	};
+	refreshHotspotChannels(row.hotspot, derived);
 	addWifiInterface(target.owner, row);
 	return row;
 }
