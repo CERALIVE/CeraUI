@@ -11,6 +11,12 @@ export const EXPORT_TIME_MS = 120_000;
 const MAX_BYTES = 64 * 1024 * 1024;
 const FOOTER_RESERVE = 64;
 
+export function exportAbortReason(signal: AbortSignal): string {
+	return signal.reason === "cleared" || signal.reason === "time_limit"
+		? signal.reason
+		: "client_aborted";
+}
+
 export async function* exportChunks(
 	query: ParsedQuery,
 	bootId: string | null,
@@ -25,12 +31,7 @@ export async function* exportChunks(
 	const stopped = () => {
 		if (getLogState().historyEpoch !== epoch) return "cleared";
 		if (Date.now() - createdAt >= EXPORT_TIME_MS) return "time_limit";
-		if (signal.aborted)
-			return signal.reason === "cleared"
-				? "cleared"
-				: signal.reason === "time_limit"
-					? "time_limit"
-					: "client_aborted";
+		if (signal.aborted) return exportAbortReason(signal);
 		return null;
 	};
 	const encode = (text: string) => {

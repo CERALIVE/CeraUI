@@ -39,10 +39,11 @@ failures cannot undo deletion that already happened.
 
 ## Admission and terminal ownership
 
-Validated queries, around requests, follows, export creation and export-ticket
-consumption arriving during clear wait for its gate, then use normal admission
-and capacity checks. The gate check stays inside each replacement/wait loop,
-with no yield between an open gate and ownership registration.
+Validated queries, around requests, follows, filtered exports and support
+bundles arriving during clear wait for its gate, then use normal admission and
+capacity checks. The gate check stays inside each replacement/wait loop, with
+no yield between an open gate and ownership registration. Bundle preview,
+creation and download deadlines include time spent at the gate.
 
 Calls capture the epoch at entry. An older call still pending after a bump uses
 the existing cancellation outcome instead of waiting on a gate whose drain may

@@ -1,8 +1,9 @@
 import type { LogBundleManifest, LogExportOutput } from "@ceraui/rpc/schemas";
-import { buildBundle } from "./bundle-body.ts";
+import { BUNDLE_TIME_MS, buildBundle } from "./bundle-body.ts";
 import { BundleReadError } from "./redaction.ts";
 import { getLogState } from "./settings.ts";
 import { reserveLogSharing } from "./sharing.ts";
+import { withHistoryAdmission } from "./sharing-admission.ts";
 
 type Prepared = Awaited<ReturnType<typeof buildBundle>>;
 type Lease = NonNullable<ReturnType<typeof reserveLogSharing>>;
@@ -35,28 +36,49 @@ async function prepare(
 	signal?: AbortSignal,
 ): Promise<LogExportOutput | PreviewResult> {
 	const now = Date.now();
+	const controller = new AbortController();
+	const combined = AbortSignal.any(
+		signal ? [signal, controller.signal] : [controller.signal],
+	);
+	const timer = setTimeout(
+		() => controller.abort("time_limit"),
+		BUNDLE_TIME_MS,
+	);
+	try {
+		return (
+			(await withHistoryAdmission(combined, (epoch) =>
+				collectAndIssue(keep, { signal: combined, now, epoch }, controller),
+			)) ?? { ok: false, error: "READ_FAILED" }
+		);
+	} catch {
+		// This boundary never propagates exceptions, causes, or abort reasons.
+		return { ok: false, error: "READ_FAILED" };
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+async function collectAndIssue(
+	keep: boolean,
+	{ signal, now, epoch }: BundleWindow,
+	controller: AbortController,
+): Promise<LogExportOutput | PreviewResult> {
+	const admittedAt = Date.now();
 	for (const [key, ticket] of tickets) {
-		if (ticket.expiresAt <= now) {
+		if (ticket.expiresAt <= admittedAt) {
 			tickets.delete(key);
 			ticket.lease.release();
 		}
 	}
-	const lease = reserveLogSharing(now);
+	const lease = reserveLogSharing(admittedAt);
 	if (!lease) return { ok: false, error: "BUSY" } as const;
 	lease.start();
-	const controller = new AbortController();
 	const done = Promise.withResolvers<void>();
 	active.set(controller, done.promise);
-	const combined = AbortSignal.any(
-		signal ? [signal, controller.signal] : [controller.signal],
-	);
-	const timer = setTimeout(() => controller.abort("time_limit"), 60_000);
 	try {
-		if (combined.aborted) throw new BundleReadError();
-		const epoch = getLogState().historyEpoch;
-		const body = await buildBundle(combined, now, epoch, keep);
+		const body = await buildBundle({ signal, createdAt: now, epoch }, keep);
 		if (
-			(combined.aborted && combined.reason !== "time_limit") ||
+			(signal.aborted && signal.reason !== "time_limit") ||
 			getLogState().historyEpoch !== epoch
 		)
 			throw new BundleReadError();
@@ -72,15 +94,19 @@ async function prepare(
 		tickets.set(key, { body, lease, expiresAt, epoch });
 		return { ok: true, url: `/api/logs/bundle?ticket=${key}`, expiresAt };
 	} catch {
-		// This boundary never propagates exceptions, causes, or abort reasons.
 		lease.release();
-		return { ok: false, error: "READ_FAILED" } as const;
+		throw new BundleReadError();
 	} finally {
-		clearTimeout(timer);
 		active.delete(controller);
 		done.resolve();
 	}
 }
+
+type BundleWindow = {
+	readonly signal: AbortSignal;
+	readonly now: number;
+	readonly epoch: number;
+};
 
 export async function previewBundle(
 	signal?: AbortSignal,
@@ -102,30 +128,57 @@ export async function handleLogBundleRequest(
 ): Promise<Response> {
 	if (request.method !== "GET") return new Response(null, { status: 405 });
 	const key = new URL(request.url).searchParams.get("ticket") ?? "";
-	const ticket = tickets.get(key);
-	tickets.delete(key);
-	if (!ticket) return new Response(null, { status: 403 });
-	if (ticket.expiresAt <= Date.now()) {
-		ticket.lease.release();
-		return new Response(null, { status: 403 });
-	}
-	let epoch: number;
-	try {
-		epoch = getLogState().historyEpoch;
-	} catch {
-		ticket.lease.release();
-		return new Response(null, { status: 500 });
-	}
-	if (ticket.epoch !== epoch || request.signal.aborted) {
-		ticket.lease.release();
-		return new Response(null, { status: 409 });
-	}
-	ticket.lease.start();
 	const controller = new AbortController();
+	const signal = AbortSignal.any([request.signal, controller.signal]);
+	const timeout = setTimeout(
+		() => controller.abort("time_limit"),
+		BUNDLE_TIME_MS,
+	);
+	let response: Response | undefined;
+	try {
+		response = await withHistoryAdmission(signal, (epoch) => {
+			const ticket = tickets.get(key);
+			tickets.delete(key);
+			if (!ticket) return new Response(null, { status: 403 });
+			if (ticket.expiresAt <= Date.now()) {
+				ticket.lease.release();
+				return new Response(null, { status: 403 });
+			}
+			if (ticket.epoch !== epoch) {
+				ticket.lease.release();
+				return new Response(null, { status: 409 });
+			}
+			return streamTicket(ticket, { controller, signal, timeout });
+		});
+		return (
+			response ?? new Response(null, { status: tickets.has(key) ? 409 : 403 })
+		);
+	} catch {
+		return new Response(null, { status: 500 });
+	} finally {
+		if (!response?.ok) clearTimeout(timeout);
+		if (!response) {
+			tickets.get(key)?.lease.release();
+			tickets.delete(key);
+		}
+	}
+}
+
+function streamTicket(
+	ticket: Ticket,
+	{
+		controller,
+		signal,
+		timeout,
+	}: {
+		readonly controller: AbortController;
+		readonly signal: AbortSignal;
+		readonly timeout: ReturnType<typeof setTimeout>;
+	},
+): Response {
+	ticket.lease.start();
 	const done = Promise.withResolvers<void>();
 	active.set(controller, done.promise);
-	const signal = AbortSignal.any([request.signal, controller.signal]);
-	const timeout = setTimeout(() => controller.abort("time_limit"), 60_000);
 	let sink: ReadableStreamDefaultController<Uint8Array>;
 	let position = 0;
 	let finished = false;

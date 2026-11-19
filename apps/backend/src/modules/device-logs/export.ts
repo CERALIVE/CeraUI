@@ -7,10 +7,15 @@ import {
 import { currentBootId } from "./boot-id.ts";
 import { abortLogBundles } from "./bundle.ts";
 import type { ParsedQuery } from "./continuation.ts";
-import { EXPORT_TIME_MS, exportChunks } from "./export-body.ts";
+import {
+	EXPORT_TIME_MS,
+	exportAbortReason,
+	exportChunks,
+} from "./export-body.ts";
 import { exportFilename } from "./export-format.ts";
-import { getLogState, historyClearing } from "./settings.ts";
+import { getLogState } from "./settings.ts";
 import { reserveLogSharing } from "./sharing.ts";
+import { withHistoryAdmission } from "./sharing-admission.ts";
 
 interface Ticket {
 	readonly query: ParsedQuery;
@@ -25,16 +30,17 @@ const active = new Map<AbortController, Promise<void>>();
 export async function createExport(
 	_conn: object,
 	input: LogExportInput,
+	signal?: AbortSignal,
 ): Promise<LogExportOutput> {
-	const epoch = getLogState().historyEpoch;
 	const parsed = logExportInputSchema.parse(input);
-	for (;;) {
-		const gate = historyClearing();
-		if (epoch !== getLogState().historyEpoch)
-			return { ok: false, error: "READ_FAILED" };
-		if (!gate) break;
-		await gate;
-	}
+	return (
+		(await withHistoryAdmission(signal, (epoch) =>
+			issueTicket(parsed, epoch),
+		)) ?? { ok: false, error: "READ_FAILED" }
+	);
+}
+
+function issueTicket(parsed: LogExportInput, epoch: number): LogExportOutput {
 	const query = logQueryInputSchema.parse({
 		...parsed.filter,
 		boot: parsed.boot,
@@ -77,27 +83,62 @@ export async function handleLogExportRequest(
 	request: Request,
 ): Promise<Response> {
 	if (request.method !== "GET") return new Response(null, { status: 405 });
-	const epoch = getLogState().historyEpoch;
-	for (;;) {
-		const gate = historyClearing();
-		if (epoch !== getLogState().historyEpoch)
-			return new Response(null, { status: 403 });
-		if (!gate) break;
-		await gate;
-	}
 	const key = new URL(request.url).searchParams.get("ticket") ?? "";
+	const response = await withHistoryAdmission(request.signal, (epoch) =>
+		redeemTicket(request.signal, key, epoch),
+	);
+	if (response) return response;
+	if (request.signal.aborted) {
+		const ticket = takeTicket(key);
+		if (ticket)
+			return interruptedExport(
+				ticket,
+				ticket.epoch !== getLogState().historyEpoch
+					? "cleared"
+					: exportAbortReason(request.signal),
+			);
+	}
+	return new Response(null, { status: 403 });
+}
+
+function takeTicket(key: string): Ticket | undefined {
 	const ticket = tickets.get(key);
 	tickets.delete(key);
-	if (!ticket) return new Response(null, { status: 403 });
-	if (ticket.expiresAt <= Date.now()) {
+	if (ticket && ticket.expiresAt <= Date.now()) {
 		ticket.lease.release();
-		return new Response(null, { status: 403 });
+		return;
 	}
+	return ticket;
+}
+
+function interruptedExport(ticket: Ticket, reason: string): Response {
+	ticket.lease.release();
+	return new Response(`# incomplete: ${reason}\n`, {
+		headers: exportHeaders(ticket, Date.now()),
+	});
+}
+
+function exportHeaders(ticket: Ticket, createdAt: number) {
+	return {
+		"Content-Disposition": `attachment; filename="${exportFilename(ticket.bootId, createdAt)}"`,
+		"Cache-Control": "no-store",
+		"Content-Type": "text/plain; charset=utf-8",
+	};
+}
+
+function redeemTicket(
+	requestSignal: AbortSignal,
+	key: string,
+	epoch: number,
+): Response {
+	const ticket = takeTicket(key);
+	if (!ticket) return new Response(null, { status: 403 });
+	if (ticket.epoch !== epoch) return interruptedExport(ticket, "cleared");
 	ticket.lease.start();
 	const controller = new AbortController();
 	const done = Promise.withResolvers<void>();
 	active.set(controller, done.promise);
-	const signal = AbortSignal.any([request.signal, controller.signal]);
+	const signal = AbortSignal.any([requestSignal, controller.signal]);
 	const createdAt = Date.now();
 	const iterator = exportChunks(
 		ticket.query,
@@ -162,19 +203,13 @@ export async function handleLogExportRequest(
 		},
 		{ highWaterMark: 0 },
 	);
-	return new Response(stream, {
-		headers: {
-			"Content-Disposition": `attachment; filename="${exportFilename(ticket.bootId, createdAt)}"`,
-			"Cache-Control": "no-store",
-			"Content-Type": "text/plain; charset=utf-8",
-		},
-	});
+	return new Response(stream, { headers: exportHeaders(ticket, createdAt) });
 }
 
 export async function abortLogExports(): Promise<void> {
-	await abortLogBundles();
+	const bundles = abortLogBundles();
 	for (const ticket of tickets.values()) ticket.lease.release();
 	tickets.clear();
 	for (const controller of active.keys()) controller.abort("cleared");
-	await Promise.all(active.values());
+	await Promise.all([bundles, ...active.values()]);
 }

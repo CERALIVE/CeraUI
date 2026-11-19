@@ -91,14 +91,16 @@ export const clearAllLogsProcedure = authedProcedure
 export const createLogExportProcedure = authedProcedure
 	.input(logExportInputSchema)
 	.output(logExportOutputSchema)
-	.handler(({ context, input }) => createExport(context.ws, input));
+	.handler(({ context, input, signal }) =>
+		createExport(context.ws, input, signal),
+	);
 
 export const previewLogBundleProcedure = authedProcedure
 	.input(z.void())
 	.output(logBundleManifestSchema)
-	.handler(async () => {
+	.handler(async ({ signal }) => {
 		try {
-			return await previewBundle();
+			return await previewBundle(signal);
 		} catch (error) {
 			const code =
 				error instanceof BundleReadError ? error.code : "READ_FAILED";
@@ -109,4 +111,4 @@ export const previewLogBundleProcedure = authedProcedure
 export const createLogBundleProcedure = authedProcedure
 	.input(z.void())
 	.output(logExportOutputSchema)
-	.handler(({ context }) => createBundle(context.ws));
+	.handler(({ context, signal }) => createBundle(context.ws, signal));

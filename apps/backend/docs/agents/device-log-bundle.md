@@ -95,8 +95,9 @@ consuming it. The response uses attachment/no-store/application-gzip headers and
 no Content-Length. Request abort and cancellation release download ownership;
 throwing consumers cannot leak errors or retain a lease. The existing
 `abortLogExports()` clear hook also joins bundle preparation/downloads and
-invalidates tickets. Epoch checks fence preparation and downloads. No retention
-implementation or wire schema is changed.
+invalidates tickets. Preview, creation and GET redemption share the filtered
+export history gate. A clear blocks admission before any snapshot or ticket
+redemption, and the sixty-second deadlines include the gate wait.
 Download finalization is idempotent: an abort followed by a throwing consumer
 cannot repeat timer cleanup, listener removal or lease retirement.
 

@@ -12,12 +12,19 @@ import { getLogState } from "./settings.ts";
 const MAX_PLAIN = 32 * 1024 * 1024;
 const MAX_COMPRESSED = 8 * 1024 * 1024;
 const TAIL_RESERVE = 512;
+export const BUNDLE_TIME_MS = 60_000;
 type Section = LogBundleManifest["sections"][number]["id"];
 
 export async function buildBundle(
-	signal: AbortSignal,
-	createdAt: number,
-	epoch: number,
+	{
+		signal,
+		createdAt,
+		epoch,
+	}: {
+		readonly signal: AbortSignal;
+		readonly createdAt: number;
+		readonly epoch: number;
+	},
 	keep: boolean,
 ): Promise<{
 	readonly manifest: LogBundleManifest;
@@ -50,7 +57,7 @@ export async function buildBundle(
 		if (getLogState().historyEpoch !== epoch) throw new BundleReadError();
 		if (signal.aborted && signal.reason !== "time_limit")
 			throw new BundleReadError();
-		return signal.aborted || Date.now() - createdAt >= 60_000
+		return signal.aborted || Date.now() - createdAt >= BUNDLE_TIME_MS
 			? "time_limit"
 			: null;
 	};
