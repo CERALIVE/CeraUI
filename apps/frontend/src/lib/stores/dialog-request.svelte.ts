@@ -1,5 +1,6 @@
 import type { NotificationActionTarget } from "@ceraui/rpc/schemas";
 
+import type { EventMatch } from "$lib/device-logs/raw-anchor";
 import type { ShellTab } from "$lib/device-logs/shell-layout";
 
 // A single-slot request bus so an allowlisted notification action, or a "View
@@ -10,11 +11,12 @@ import type { ShellTab } from "$lib/device-logs/shell-layout";
 // toast host and SettingsView must share ONE slot.
 export type DialogTarget = NotificationActionTarget | "logs";
 
-/** Where System Logs opens: a tab, and the boot and moment its raw entries surround. */
+/** Where System Logs opens: a tab, and the boot, moment or event its raw entries surround. */
 export interface LogsDialogContext {
 	tab?: ShellTab;
 	bootId?: string;
 	at?: number;
+	event?: EventMatch;
 }
 
 interface DialogRequest {

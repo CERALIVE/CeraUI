@@ -1,11 +1,13 @@
 import type {
+	DeviceEvent,
+	EventListInput,
 	LogAroundInput,
 	LogAroundOutput,
 	LogBootInfo,
 } from "@ceraui/rpc/schemas";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { locateAround } from "./raw-anchor";
+import { type EventMatch, locateAround, locateMoment } from "./raw-anchor";
 
 const RUNNING = "66d8d1808694489b8c3a3fb4795cab24";
 const EARLIER = "0123456789abcdef0123456789abcdef";
@@ -81,8 +83,156 @@ function logs(boots: unknown, reply: unknown) {
 	};
 }
 
+const REFUSED: EventMatch = {
+	family: "update",
+	code: "update_refused",
+	id: "txn-1",
+};
+
+function updateEvent(seq: number, code: string, id: string): DeviceEvent {
+	return {
+		id: `event-${seq}`,
+		seq,
+		bootId: EARLIER,
+		at: AT - seq * 1000,
+		code,
+		family: "update",
+		severity: "warning",
+		params: { id, reason: "dpkg lock held" },
+	};
+}
+
+function eventPage(events: DeviceEvent[], nextBeforeSeq: number | null = null) {
+	return { events, nextBeforeSeq, headSeq: 20, retainedFromSeq: 1 };
+}
+
+function sources(...pages: unknown[]) {
+	const list = vi.fn((_input: EventListInput) =>
+		Promise.resolve<unknown>(null),
+	);
+	for (const page of pages) list.mockResolvedValueOnce(page);
+	return { logs: logs([running], aroundPage()), events: { list } };
+}
+
 afterEach(() => {
 	vi.restoreAllMocks();
+});
+
+describe("locateMoment", () => {
+	it("opens the exact entry of the newest event the message emitted, in that event's boot", async () => {
+		const deps = sources(
+			eventPage([
+				updateEvent(9, "update_installed", "txn-1"),
+				updateEvent(8, "update_refused", "txn-2"),
+				updateEvent(7, "update_refused", "txn-1"),
+				updateEvent(6, "update_refused", "txn-1"),
+			]),
+		);
+
+		expect(await locateMoment(deps, { at: AT, event: REFUSED })).toEqual(
+			aroundPage(),
+		);
+		expect(deps.events.list).toHaveBeenCalledExactlyOnceWith({
+			families: ["update"],
+			limit: 200,
+		});
+		expect(deps.logs.around).toHaveBeenCalledExactlyOnceWith({
+			bootId: EARLIER,
+			at: AT - 7000,
+			eventId: "event-7",
+		});
+		expect(deps.logs.boots).not.toHaveBeenCalled();
+	});
+
+	it("reads older pages until it reaches the event", async () => {
+		const deps = sources(
+			eventPage([updateEvent(12, "update_installed", "txn-1")], 11),
+			eventPage([updateEvent(3, "update_refused", "txn-1")]),
+		);
+
+		await locateMoment(deps, { event: REFUSED });
+
+		expect(deps.events.list.mock.calls).toEqual([
+			[{ families: ["update"], limit: 200 }],
+			[{ families: ["update"], limit: 200, beforeSeq: 11 }],
+		]);
+		expect(deps.logs.around).toHaveBeenCalledExactlyOnceWith({
+			bootId: EARLIER,
+			at: AT - 3000,
+			eventId: "event-3",
+		});
+	});
+
+	it("falls back to the message's own moment when no stored event matches", async () => {
+		const deps = sources(
+			eventPage([updateEvent(2, "update_refused", "other")]),
+		);
+
+		expect(await locateMoment(deps, { at: AT, event: REFUSED })).toEqual(
+			aroundPage(),
+		);
+		expect(deps.logs.around).toHaveBeenCalledExactlyOnceWith({
+			bootId: RUNNING,
+			at: AT,
+		});
+	});
+
+	it("asks for no window when neither the event nor the message's moment is known", async () => {
+		const deps = sources(eventPage([]));
+
+		expect(await locateMoment(deps, { event: REFUSED })).toBeNull();
+		expect(deps.logs.boots).not.toHaveBeenCalled();
+		expect(deps.logs.around).not.toHaveBeenCalled();
+	});
+
+	it("opens a moment without an event as before, without reading events", async () => {
+		const deps = sources();
+
+		expect(await locateMoment(deps, { at: AT })).toEqual(aroundPage());
+		expect(deps.events.list).not.toHaveBeenCalled();
+		expect(deps.logs.around).toHaveBeenCalledExactlyOnceWith({
+			bootId: RUNNING,
+			at: AT,
+		});
+	});
+
+	it.each([
+		["an event list call that throws", new Error("socket closed")],
+		["an event list that is not a list", { events: "none" }],
+	])(
+		"reads %s as a failed read and asks for no entries",
+		async (_case, reply) => {
+			const error = vi.spyOn(console, "error").mockImplementation(() => {});
+			const deps = sources();
+			if (reply instanceof Error) deps.events.list.mockRejectedValueOnce(reply);
+			else deps.events.list.mockResolvedValueOnce(reply);
+
+			expect(await locateMoment(deps, { at: AT, event: REFUSED })).toEqual({
+				ok: false,
+				error: "READ_FAILED",
+			});
+			expect(deps.logs.around).not.toHaveBeenCalled();
+			expect(error).toHaveBeenCalledTimes(1);
+		},
+	);
+
+	it("discards an event list reply after its request is cancelled", async () => {
+		const deps = sources();
+		const reply = Promise.withResolvers<unknown>();
+		deps.events.list.mockReturnValueOnce(reply.promise);
+		const controller = new AbortController();
+		const result = locateMoment(
+			deps,
+			{ at: AT, event: REFUSED },
+			controller.signal,
+		);
+
+		controller.abort();
+		reply.resolve(eventPage([updateEvent(1, "update_refused", "txn-1")]));
+
+		expect(await result).toBeNull();
+		expect(deps.logs.around).not.toHaveBeenCalled();
+	});
 });
 
 describe("locateAround", () => {

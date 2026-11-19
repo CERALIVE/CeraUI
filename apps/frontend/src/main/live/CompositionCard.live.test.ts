@@ -28,8 +28,20 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/svelte";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeAll,
+	describe,
+	expect,
+	it,
+	onTestFinished,
+	vi,
+} from "vitest";
 
+import {
+	clearRequestedDialog,
+	getRequestedDialogContext,
+} from "$lib/stores/dialog-request.svelte";
 import type { ConfigChangeView } from "$lib/streaming/configChangePhase";
 
 const setConfig = vi.hoisted(() =>
@@ -53,6 +65,9 @@ const session = vi.hoisted(() => ({ streaming: false }));
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getConfigChange: () => configChange.view,
 	getIsStreaming: () => session.streaming,
+}));
+vi.mock("$lib/stores/navigation-lazy", () => ({
+	navigateToDestination: () => undefined,
 }));
 
 import CompositionCard from "./CompositionCard.svelte";
@@ -234,6 +249,31 @@ describe("CompositionCard — live layout, opacity and second input", () => {
 		const column = action.parentElement;
 		expect(column?.className).toContain("min-w-0");
 		expect(column?.querySelector("p")?.className).toContain("text-xs");
+	});
+
+	it("streaming: View logs opens the logs at the moment the refusal arrived, not at the click", async () => {
+		const answeredAt = 1_800_000_000_000;
+		vi.useFakeTimers({ now: answeredAt, toFake: ["Date"] });
+		onTestFinished(() => {
+			vi.useRealTimers();
+			clearRequestedDialog();
+		});
+		setConfig.mockResolvedValue({
+			success: true,
+			applied: {},
+			configChange: { result: "reverted", attemptId: "attempt-1", reason: "x" },
+		});
+		renderCard(true);
+
+		await fireEvent.click(radio("pbp-left-right"));
+		const action = await screen.findByTestId("view-logs-action");
+		vi.setSystemTime(answeredAt + 45_000);
+		await fireEvent.click(action);
+
+		expect(getRequestedDialogContext()).toEqual({
+			tab: "raw",
+			at: answeredAt,
+		});
 	});
 
 	it("streaming: a named refusal, or a failed save, offers no View logs", async () => {

@@ -101,15 +101,21 @@ density. It is not a redesign.
   `advanced.downloadFailed`, `advanced.retryDownload`). Second group, after a
   neutral rule, same row anatomy: Export this view, Support bundle; one line
   under it says files are saved by the browser. The Downloads region renders
-  immediately; the Sharing group renders only once the viewer check is ready (`main/system-logs/SystemLogsView.svelte:140-153`).
+  immediately; the Sharing group renders only once the viewer check is ready (`main/system-logs/SystemLogsView.svelte:172-174`).
 - **Older backend.** If the log procedures are missing, the tabs and the Storage
   region are replaced by one calm notice ("not available on this device
   version"); Downloads still renders.
 - **Deep links.** The "View logs" action next to log-pointing messages uses the
   key `notifications.viewLogs` in the boot-time `notifications` namespace (not in
-  this inventory) and opens this view on Raw logs around the message's time;
-  the low-disk banner keeps `settings.deviceStats.lowDiskAction` and opens
-  Storage.
+  this inventory) and opens this view on Raw logs at the message's moment: a
+  toast at its arrival, and a refusal band at the moment the device answered.
+  The device replays its standing notices to every connection it opens, so a
+  standing notice opens at the exact entry of the timeline event it emitted
+  (an update notice named `update:<kind>:<id>` emits `update_<kind>` with that
+  id), else around its arrival when it arrived live, else at the newest
+  entries with no anchor (`lib/device-logs/view-logs.ts`,
+  `lib/device-logs/raw-anchor.ts`). The low-disk banner keeps
+  `settings.deviceStats.lowDiskAction` and opens Storage.
 - **Primitives.** `AppDialog`, `Button`, `Tabs`, `Select` (single and multiple),
   `Input`, `Toggle` (single-choice groups), `Skeleton`,
   `simple-alert-dialog.svelte` (confirmations), Lucide icons only. The Events
@@ -155,7 +161,7 @@ in section 4.
 | Dropped marker | Raw logs | `dropped > 0` in a follow batch: one separator row "Entries skipped while following: {count}". journald's suppressed-messages record (`marker: 'suppressed'`) is a separate marker row (`lib/device-logs/raw-rows.ts:90-105`, `main/system-logs/RawLogRow.svelte:59-68`) | polite (as a gap) |
 | Follower stopped | Raw logs | Label "Stopped" with its reason (reader ended, device restarted, logs cleared) and a Follow action; `ended: 'cleared'` also resets the list | polite |
 | Disconnected | Raw logs, Events, header pill | The socket dropped: follow state "Disconnected", a notice that entries may be out of date, rows dimmed to `text-muted-foreground`, the pill shows Offline, no pulse anywhere; stale, never fresh-looking. Raw logs shows Disconnected only when a follow was active, and on reconnect offers Resume (`lib/device-logs/raw-follow-session.svelte.ts:91-100`, `main/system-logs/RawFollowControl.svelte:28-56`); Events reloads its first page on reconnect (`events-view.svelte.ts:150-156`) | polite |
-| Anchor | Raw logs | Opened from an event or a "View logs" action: the matching row has a tonal highlight (`bg-status-info/10`, no outline or stripe); an exact match receives focus and an approximate one leaves focus on the selected tab (`main/system-logs/SystemLogsView.svelte:114-123`, `main/system-logs/RawLogList.svelte:79-89`); "approximate" is stated when no exact entry matched; a Back to latest entries action leaves anchor mode | no |
+| Anchor | Raw logs | Opened from an event or a "View logs" action: the matching row has a tonal highlight (`bg-status-info/10`, no outline or stripe); an exact match receives focus and an approximate one leaves focus on the selected tab (`main/system-logs/SystemLogsView.svelte:132-136`, `main/system-logs/RawLogList.svelte:79-89`); "approximate" is stated when no exact entry matched; a Back to latest entries action leaves anchor mode | no |
 | Unknown event code | Events | A record from a newer version: the family icon, the title "Event recorded by a newer version", one honest detail sentence, View raw logs, and the raw code only inside a collapsed Diagnostics disclosure (`data-testid` containing `diagnostic`, DESIGN.md OL-3..OL-5). A known code with invalid params shows its title with no detail | no |
 | Logs removed for a boot | Boots, Events, Raw logs | Boot rows keep the boot with a "Logs removed" label (never hidden); View raw logs on such a boot shows "Raw logs for this boot were removed"; a Raw query with `BOOT_UNAVAILABLE` shows "Logs for this boot were removed" with Show this boot | alert (Raw only) |
 | Clock-not-synced marker | Raw logs, Events | Where two adjacent records of the same boot (journal order for raw, `seq` order for events) run backwards in time, a separator row says the device clock changed there and earlier times may be wrong. Times are never corrected or re-sorted | no |
@@ -870,7 +876,7 @@ live-region announcements.
 | `main/system-logs/RawLogList.svelte:22` | props |
 | `main/system-logs/RawLogRow.svelte:35` | props |
 | `main/system-logs/RawLogsFilterBar.svelte:23` | props |
-| `main/system-logs/RawLogsPanel.svelte:22` | props |
+| `main/system-logs/RawLogsPanel.svelte:23` | props |
 | `main/system-logs/RawLogsTab.svelte:26` | props |
 | `main/system-logs/RecoveryBand.svelte:19` | props |
 | `main/system-logs/SegmentedChoice.svelte:27` | props |
@@ -956,6 +962,7 @@ live-region announcements.
 | `lib/device-logs/param-parts.test.ts` |
 | `lib/device-logs/raw-anchor.test.ts` |
 | `lib/device-logs/raw-filter.test.ts` |
+| `lib/device-logs/raw-follow-session.test.ts` |
 | `lib/device-logs/raw-rows.test.ts` |
 | `lib/device-logs/raw-view.order.test.ts` |
 | `lib/device-logs/raw-view.test.ts` |
@@ -976,6 +983,7 @@ live-region announcements.
 | `tests/live-start-failed-reason.test.ts` |
 | `tests/log-pointer-keys.test.ts` |
 | `tests/persistent-notice-surface.test.ts` |
+| `tests/view-logs-notice-moment.test.ts` |
 | `tests/vite-federation-excluded-namespace.test.ts` |
 
 Related browser specs and their entry points:
@@ -1011,7 +1019,7 @@ Related browser specs and their entry points:
 
 ### role="status" elements
 
-`main/system-logs/BootPicker.svelte:165`, `main/system-logs/BundleDialog.svelte:98`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:201`, `main/system-logs/ExportDialog.svelte:50`, `main/system-logs/RawLogList.svelte:241`, `main/system-logs/RawLogRow.svelte:136`, `main/system-logs/RawLogsPanel.svelte:97`, `main/system-logs/RawLogsTab.svelte:136`, `main/system-logs/StorageCleanup.svelte:191`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:220`.
+`main/system-logs/BootPicker.svelte:165`, `main/system-logs/BundleDialog.svelte:98`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:201`, `main/system-logs/ExportDialog.svelte:50`, `main/system-logs/RawLogList.svelte:241`, `main/system-logs/RawLogRow.svelte:136`, `main/system-logs/RawLogsPanel.svelte:98`, `main/system-logs/RawLogsTab.svelte:136`, `main/system-logs/StorageCleanup.svelte:191`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:222`.
 
 ### Limits and constants
 
@@ -1046,8 +1054,8 @@ Backend and wire limits: [device-logs.md](../../../backend/docs/agents/device-lo
 | Raw paging focus handoff | `main/system-logs/RawLogList.svelte:109` |
 | Boot picker option focus | `main/system-logs/BootPicker.svelte:58` |
 | Segmented choice focus | `main/system-logs/SegmentedChoice.svelte:50` |
-| Selected tab focus | `main/system-logs/SystemLogsView.svelte:133` |
-| Storage heading focus | `main/system-logs/SystemLogsView.svelte:142` |
+| Selected tab focus | `main/system-logs/SystemLogsView.svelte:135` |
+| Storage heading focus | `main/system-logs/SystemLogsView.svelte:144` |
 | Cancel focus for clear confirmations | `main/system-logs/StorageCleanup.svelte:64` |
 | RecoveryBand Retry button | `main/system-logs/RecoveryBand.svelte:35` |
 

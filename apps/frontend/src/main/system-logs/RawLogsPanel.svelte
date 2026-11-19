@@ -3,8 +3,9 @@
   live follow) is its own chunk, loaded through the house lazy registry when the
   panel first mounts, so opening System Logs on Events never fetches it. A slow
   chunk shows loading rows; a failed one states it with Retry. A message's
-  moment resolves to a validated around page before the tab mounts; closing or
-  replacing the request discards its late reply.
+  moment (its event, else its own time) resolves to a validated around page
+  before the tab mounts, and to the newest entries when neither is known;
+  closing or replacing the request discards its late reply.
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
@@ -15,11 +16,11 @@ import { onDestroy, untrack } from 'svelte';
 import { lazyDialog } from '$lib/components/dialogs/lazy-dialog.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Skeleton } from '$lib/components/ui/skeleton';
-import { locateAround, type RawAnchor } from '$lib/device-logs/raw-anchor';
+import { locateMoment, type RawMoment } from '$lib/device-logs/raw-anchor';
 import type { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 import { rpc } from '$lib/rpc/client';
 
-let { anchor, around, sharing }: { anchor?: RawAnchor; around?: Extract<LogAroundOutput, { ok: true }>; sharing?: SharingFlow } = $props();
+let { anchor, around, sharing }: { anchor?: RawMoment; around?: Extract<LogAroundOutput, { ok: true }>; sharing?: SharingFlow } = $props();
 const publisher = untrack(() => sharing?.bindView());
 let result = $state.raw<LogAroundOutput | null>(untrack(() => around ?? null));
 let pending = $state(false);
@@ -32,7 +33,7 @@ async function locate(): Promise<void> {
 	request = current;
 	result = null;
 	pending = true;
-	const reply = await locateAround(rpc.logs, anchor, current.signal);
+	const reply = await locateMoment(rpc, anchor, current.signal);
 	if (current.signal.aborted) return;
 	result = reply;
 	pending = false;

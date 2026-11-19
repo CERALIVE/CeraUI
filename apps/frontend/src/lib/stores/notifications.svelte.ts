@@ -51,7 +51,7 @@ import {
 
 /** A render-ready notification: text already resolved, duration in ms. */
 export interface ActiveNotification
-	extends Pick<Notification, "key" | "params"> {
+	extends Pick<Notification, "key" | "params" | "revision"> {
 	/** Stable dedup key (== {@link Notification.name}). */
 	name: string;
 	/** Toast severity. */
@@ -64,8 +64,13 @@ export interface ActiveNotification
 	isPersistent: boolean;
 	/** Auto-dismiss duration in **milliseconds** (`duration` seconds × 1000). */
 	durationMs: number;
-	/** When this entry was pushed (ms epoch). */
+	/** When this page first saw this revision (ms epoch); a replay keeps it. */
 	receivedAt: number;
+	/**
+	 * Whether it arrived as it happened, not in the replay of standing notices a
+	 * connection opens with: only then is {@link receivedAt} its moment.
+	 */
+	arrivedLive: boolean;
 	/** Optional versioned deep-link affordance (Todo 24) — undefined for legacy notifications. */
 	action?: NotificationAction;
 }
@@ -195,20 +200,47 @@ export function toActiveNotification(
 		...(notification.params !== undefined
 			? { params: notification.params }
 			: {}),
+		...(notification.revision !== undefined
+			? { revision: notification.revision }
+			: {}),
 		isDismissable: notification.is_dismissable,
 		isPersistent: notification.is_persistent,
 		durationMs: notification.duration * 1000,
 		receivedAt: now,
+		arrivedLive: true,
 		...(notification.action !== undefined
 			? { action: notification.action }
 			: {}),
 	};
 }
 
+// The device sends a standing notice again, at the same revision, to every
+// connection it opens; that is not a new arrival.
+function fold(
+	active: ReadonlyMap<string, ActiveNotification>,
+	entry: ActiveNotification,
+): Map<string, ActiveNotification> {
+	const prior = active.get(entry.name);
+	const next = new Map(active);
+	next.set(
+		entry.name,
+		prior !== undefined &&
+			entry.revision !== undefined &&
+			prior.revision === entry.revision
+			? {
+					...entry,
+					receivedAt: prior.receivedAt,
+					arrivedLive: prior.arrivedLive,
+				}
+			: entry,
+	);
+	return next;
+}
+
 /**
- * Fold a notification into the active map, deduplicated by `name` (a repeat
- * name replaces the prior entry rather than appending). Returns a new map; the
- * input is never mutated.
+ * Fold a notification that arrived as it happened into the active map,
+ * deduplicated by `name` (a repeat name replaces the prior entry rather than
+ * appending). Returns a new map; the input is never mutated.
  */
 export function pushNotification(
 	active: ReadonlyMap<string, ActiveNotification>,
@@ -216,12 +248,24 @@ export function pushNotification(
 	translations: unknown,
 	now: number,
 ): Map<string, ActiveNotification> {
-	const next = new Map(active);
-	next.set(
-		notification.name,
-		toActiveNotification(notification, translations, now),
-	);
-	return next;
+	return fold(active, toActiveNotification(notification, translations, now));
+}
+
+/**
+ * Fold a notification from the replay a connection opens with: like
+ * {@link pushNotification}, but an entry this page had not seen did not arrive
+ * live, so its arrival is not its moment.
+ */
+export function replayNotification(
+	active: ReadonlyMap<string, ActiveNotification>,
+	notification: Notification,
+	translations: unknown,
+	now: number,
+): Map<string, ActiveNotification> {
+	return fold(active, {
+		...toActiveNotification(notification, translations, now),
+		arrivedLive: false,
+	});
 }
 
 /**
@@ -243,6 +287,7 @@ export function dismissNotification(
 
 interface NotificationStore {
 	push(notification: Notification): void;
+	replay(notification: Notification): void;
 	dismiss(name: string): void;
 	getActive(): ActiveNotification[];
 	getPersistent(): ActiveNotification[];
@@ -276,6 +321,9 @@ function createNotificationStore(): NotificationStore {
 	return {
 		push: (notification) => {
 			active = pushNotification(active, notification, m, Date.now());
+		},
+		replay: (notification) => {
+			active = replayNotification(active, notification, m, Date.now());
 		},
 		dismiss: (name) => {
 			active = dismissNotification(active, name);
@@ -325,6 +373,11 @@ function store(): NotificationStore {
 /** Push a notification, resolving its text now and deduping by `name`. */
 export function push(notification: Notification): void {
 	store().push(notification);
+}
+
+/** Push a notification from the replay of standing notices a connection opens with. */
+export function pushReplayed(notification: Notification): void {
+	store().replay(notification);
 }
 
 /** Dismiss the active notification with the given `name`. */

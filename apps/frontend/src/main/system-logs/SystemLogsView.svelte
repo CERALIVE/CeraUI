@@ -25,7 +25,7 @@ import { MediaQuery } from 'svelte/reactivity';
 import { Button } from '$lib/components/ui/button';
 import { Skeleton } from '$lib/components/ui/skeleton';
 import * as Tabs from '$lib/components/ui/tabs';
-import type { RawAnchor } from '$lib/device-logs/raw-anchor';
+import type { RawMoment } from '$lib/device-logs/raw-anchor';
 import type { AroundPage } from '$lib/device-logs/raw-view.svelte';
 import { startBackendDownload } from '$lib/device-logs/sharing';
 import { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
@@ -72,8 +72,10 @@ let storage = $state.raw<LogStorage | null>();
 const legacyDownloads = new LogDownloads();
 // Each new deep link selects its tab again; the operator's own choice overrides it.
 let selected = $derived<string | undefined>(context?.tab);
-let anchor = $derived<RawAnchor | undefined>(
-	context?.tab === 'raw' && context.at !== undefined ? { at: context.at, bootId: context.bootId } : undefined,
+let anchor = $derived<RawMoment | undefined>(
+	context?.tab === 'raw' && (context.at !== undefined || context.event !== undefined)
+		? { at: context.at, bootId: context.bootId, event: context.event }
+		: undefined,
 );
 let around = $state.raw<AroundPage>();
 let view = $state<HTMLElement>();

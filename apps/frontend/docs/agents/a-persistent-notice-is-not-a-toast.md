@@ -69,6 +69,15 @@ toasts. Literal device messages without a key stay literal; an unknown key
 falls back to the stored `text`. Transient toasts keep their push-time text,
 and the dismiss control reuses `notifications.panel.dismiss`.
 
+The device replays every standing notice to each connection it opens, in the
+first `show` frame after the connect edge (`subscriptions.svelte.ts`). The
+store keeps a revision's first arrival (`receivedAt`) when the same revision
+comes back, so the bands keep their order, and it marks a notice first seen in
+a replay as not arrived live (`arrivedLive`). View logs on a notice uses that
+mark: only a live arrival is the notice's moment
+([system-logs-view.md](system-logs-view.md), Deep links). Coverage:
+`src/tests/view-logs-notice-moment.test.ts`.
+
 `src/tests/notification-locale.test.ts` covers both persistent surfaces,
 parameter translation, stable entries and rows across a locale switch, and
 literal device messages.

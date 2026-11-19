@@ -478,6 +478,8 @@ const reconnectExpected = $derived(
 // save used to vanish before an operator could read it (the UpdatesDialog
 // precedent). Cleared on the next dispatch and on the open edge.
 let saveRefusal = $state<ModemConfigRefusal | undefined>(undefined);
+// When the refusal arrived, so View logs opens at it, not at the click.
+let saveRefusedAt = $state<number>();
 // Resolved through the SHARED refusal taxonomy rather than interpolated into
 // `saveRefused.<token>`: a seventeenth `modemConfigRefusalSchema` member used to
 // render its own dotted path at the operator, and now fails the build instead.
@@ -638,6 +640,7 @@ async function handleSave() {
 	if (result && result.success === false) {
 		saveExpected = undefined;
 		saveRefusal = result.error ?? 'write_failed';
+		saveRefusedAt = Date.now();
 		return;
 	}
 	// Release the echo baseline to the server-APPLIED (post-clamp) config, never
@@ -703,6 +706,8 @@ const stableKey = $derived(modem.stable_key ?? '');
 const usbSwitchTrackable = $derived(canTrackUsbModeSwitch(modem));
 
 let usbFlow = $state<UsbModeFlow | undefined>(undefined);
+// When the device answered the last switch, so View logs opens at that answer.
+let usbAnsweredAt = $state<number>();
 
 const activeUsbMode = $derived(
 	displayedUsbMode(getModems(), stableKey, usbFlow) ?? modem.usb_mode,
@@ -1052,6 +1057,7 @@ async function handleUsbModeSwitch() {
 	} catch {
 		if (usbFlow) usbFlow = failUsbModeFlow(usbFlow);
 	}
+	usbAnsweredAt = Date.now();
 }
 
 // A refusal the device will repeat verbatim on every retry (`uncertified`,
@@ -1425,7 +1431,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 					>
 						{t(saveRefusalKey)}
 					</p>
-					<ViewLogsAction class="mt-2" messageKey={saveRefusalKey} />
+					<ViewLogsAction at={saveRefusedAt} class="mt-2" messageKey={saveRefusalKey} />
 				</div>
 			</div>
 		{/if}
@@ -2925,7 +2931,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 					</div>
 				{/if}
 				<!-- Under whichever band above states the refused switch. -->
-				<ViewLogsAction messageKey={usbReasonKey} />
+				<ViewLogsAction at={usbAnsweredAt} messageKey={usbReasonKey} />
 		</CapabilitySection>
 
 		<ModemFccUnlockSection

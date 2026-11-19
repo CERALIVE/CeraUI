@@ -98,6 +98,8 @@ const persisted = $derived(config?.composition);
 // echo and a refused one falls back to the persisted, still-running values.
 let pending = $state<CompositionConfig | undefined>(undefined);
 let liveRefusal = $state<ReturnType<typeof compositionRefusal>>(undefined);
+// When the device answered, so View logs opens at the refusal, not at the click.
+let liveAnsweredAt = $state<number>();
 // Live, the opacity previews while it moves and is sent as one change on
 // release. The slider reports a commit for every key press, so a keyboard
 // adjustment stays open while any adjusting key is held and ends when the
@@ -174,6 +176,7 @@ async function applyLive(next: CompositionConfig, input: StreamingSetConfigInput
 	liveRefusal = undefined;
 	try {
 		const result = await sendCompositionWrite(input, getIsStreaming);
+		liveAnsweredAt = Date.now();
 		liveRefusal = result === undefined ? undefined : compositionRefusal(result);
 	} catch {
 		liveRefusal = { message: m['notifications.saveFailed']() };
@@ -440,7 +443,7 @@ function endAdjustment(): void {
 								<Activity aria-hidden={true} class="text-status-warning mt-0.5 size-4 shrink-0" />
 								<div class="min-w-0">
 									<p class="text-foreground text-xs">{liveRefusal.message}</p>
-									<ViewLogsAction class="mt-2" messageKey={liveRefusal.reasonKey} />
+									<ViewLogsAction at={liveAnsweredAt} class="mt-2" messageKey={liveRefusal.reasonKey} />
 								</div>
 							</div>
 						{/if}

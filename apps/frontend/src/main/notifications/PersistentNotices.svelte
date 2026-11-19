@@ -89,9 +89,9 @@ const frozen = $derived(prefersEinkTheme(getDisplayProfile()));
 							</Button>
 						{/if}
 						<ViewLogsAction
-							at={item.receivedAt}
 							class="mt-2 h-7 px-2 text-xs"
 							messageKey={notificationLogKey(item)}
+							notice={item}
 						/>
 					</div>
 					{#if item.isDismissable}

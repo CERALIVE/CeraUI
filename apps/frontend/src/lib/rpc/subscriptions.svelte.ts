@@ -65,6 +65,7 @@ import {
 import {
 	dismiss as dismissNotification,
 	push as pushNotification,
+	pushReplayed as pushReplayedNotification,
 } from "$lib/stores/notifications.svelte";
 import {
 	resetPairingState,
@@ -324,6 +325,10 @@ let isConnectedState = $state<boolean>(false);
 // then never reverts. Event-driven with NO timeout — remote first-connect is
 // legitimately slow and must never be failed by a clock (Oracle Q7).
 let connectionReadyState = $state<boolean>(false);
+
+// The device opens every authenticated connection with one `show` frame that
+// replays its standing notices; a notice first seen there did not arrive live.
+let noticeReplayPending = false;
 
 // ============================================
 // Reactive Getters (Svelte 5 Pattern)
@@ -1021,8 +1026,11 @@ function handleMessage(
 			if (!parsed.success) break;
 			const message = parsed.data;
 			notificationsState = message;
+			const replayed = noticeReplayPending && message.show !== undefined;
+			if (replayed) noticeReplayPending = false;
 			for (const notification of message.show ?? []) {
-				pushNotification(notification);
+				if (replayed) pushReplayedNotification(notification);
+				else pushNotification(notification);
 			}
 			for (const entry of message.remove ?? []) {
 				dismissNotification(entry.id);
@@ -1234,6 +1242,7 @@ function handleConnectionChange(state: ConnectionState): void {
 		// `previous !== "connected"` keeps steady connected ticks inert.
 		if (previous !== "connected") {
 			seqTracker.resetOnReconnect();
+			noticeReplayPending = true;
 		}
 		// Recovery toast: only emit when reconnecting after a prior drop (wasAuthenticated).
 		// Suppress the initial connect of a page-load — that's owned by Layout's login flow.
@@ -1328,6 +1337,7 @@ export function resetState(): void {
 	devicesState = [];
 	activeInputState = undefined;
 	connectionReadyState = false;
+	noticeReplayPending = false;
 	resetPairingState();
 	resetWifiAdapterModes();
 

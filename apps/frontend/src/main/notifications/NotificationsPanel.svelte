@@ -119,9 +119,9 @@ const TONES: Record<NotificationType, string> = {
 							</Button>
 						{/if}
 						<ViewLogsAction
-							at={item.receivedAt}
 							class="mt-2 h-7 px-2 text-xs"
 							messageKey={notificationLogKey(item)}
+							notice={item}
 							onViewLogs={() => (open = false)}
 						/>
 					</div>
