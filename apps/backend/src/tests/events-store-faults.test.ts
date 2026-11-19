@@ -202,7 +202,7 @@ test.each([
 			readBoots: [],
 			tailSeq: 0,
 			eventsBytes: 0,
-			clearEvents: undefined,
+			clearEvents: false,
 		}[operation],
 	);
 	expect(deps.warnings).toHaveLength(1);

@@ -13,8 +13,9 @@ sequence only when another matching record remains; otherwise it is null.
 filters and pagination, and are zero when the ring is empty.
 
 `boots` reads the separate boot ring, including stored version contexts.
-`clear` removes event records and leaves boot records intact. All three
-procedures use the existing authentication middleware.
+`clear` attempts every event generation and leaves boot records intact. It
+returns `success: false` if any removal fails, even when other generations
+were removed. All three procedures use the existing authentication middleware.
 
 After the local control server binds, `src/main.ts` registers the emitter sink
 with `broadcastMsgLocal(EVENT_PUSH, { append: [event] }, 0, undefined, true)`.

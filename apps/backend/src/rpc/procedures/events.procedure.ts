@@ -45,7 +45,4 @@ export const eventBootsProcedure = authedProcedure
 
 export const clearEventsProcedure = authedProcedure
 	.output(successResponseSchema)
-	.handler(() => {
-		clearEvents();
-		return { success: true };
-	});
+	.handler(() => ({ success: clearEvents() }));

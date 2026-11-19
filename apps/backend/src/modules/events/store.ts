@@ -197,13 +197,20 @@ export function tailSeq(deps: EventStoreDeps = {}): number {
 	);
 }
 
-export function clearEvents(deps: EventStoreDeps = {}): void {
-	contain(deps, undefined, () => {
+export function clearEvents(deps: EventStoreDeps = {}): boolean {
+	return contain(deps, false, () => {
 		const io = deps.fs ?? fs;
 		const base = deps.baseDir ?? resolveEventsDir();
+		let failure: { readonly error: unknown } | undefined;
 		for (let gen = 0; gen < EVENTS.files; gen += 1) {
-			io.rmSync(filePath(base, EVENTS, gen), { force: true });
+			try {
+				io.rmSync(filePath(base, EVENTS, gen), { force: true });
+			} catch (error) {
+				failure ??= { error };
+			}
 		}
+		if (failure) throw failure.error;
+		return true;
 	});
 }
 

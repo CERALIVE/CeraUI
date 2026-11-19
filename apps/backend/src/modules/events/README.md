@@ -2,8 +2,9 @@
 
 `store.ts` owns two independent JSONL rings on the data partition. Events retain
 eight files of at most 512 KiB each; boot records retain two files of at most
-128 KiB each. `clearEvents` only removes event generations. `eventsBytes`
-counts event generations only. Boot versions remain available after event cleanup.
+128 KiB each. `clearEvents` attempts every event generation and returns false
+if any removal fails. `eventsBytes` counts event generations only. Boot
+versions remain available after event cleanup.
 
 The directory resolves from `CERALIVE_EVENTS_DIR`, then
 `CERALIVE_DATA_DIR/ceralive/events`, then the shared development detector's
@@ -31,7 +32,8 @@ numbers remain safe integers (including negative values), timestamps remain fini
 numbers, and codes remain strings as specified by the wire schema.
 Oversized new records are rejected before any write or rotation; oversized
 existing files are skipped by readers and refuse further appends. I/O failures
-produce one warning per operation and return an empty result or void.
+produce one warning per operation and return an empty result, false for clear,
+or void for appends.
 
 The byte caps include the JSONL newline and all params or version strings.
 There is no separate params-size, character-count, line-length or record-count
