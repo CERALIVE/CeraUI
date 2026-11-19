@@ -168,6 +168,45 @@ it("retries an older page after pushes fill the display and revisits rows evicte
 });
 
 it.each([
+	{ outcome: "events", target: copy.viewRaw },
+	{ outcome: "empty", target: copy.filter },
+	{ outcome: "failure", target: action.retry },
+	{ outcome: "events after the operator moves focus", target: copy.filter },
+])(
+	"hands off Start from newest focus on $outcome",
+	async ({ outcome, target }) => {
+		await openHistory(301, false);
+		await loadOlder();
+		await loadOlder();
+		await loadOlder();
+		const newest = screen.getByRole("button", { name: error.startFromNewest });
+		const filter = screen.getByRole("button", { name: copy.filter });
+		const reply = Promise.withResolvers<EventListOutput>();
+		list.mockReturnValueOnce(reply.promise);
+		newest.focus();
+
+		await fireEvent.click(newest);
+		if (outcome === "events after the operator moves focus") filter.focus();
+		if (outcome === "failure") {
+			vi.spyOn(console, "error").mockImplementation(() => {});
+			reply.reject(new Error("down"));
+		} else {
+			reply.resolve(
+				eventPage(outcome === "empty" ? [] : [stopped(302), stopped(301)]),
+			);
+		}
+		await waitFor(() => {
+			expect(
+				screen.queryByRole("button", { name: error.startFromNewest }),
+			).toBeNull();
+			expect(document.activeElement).toBe(
+				screen.getAllByRole("button", { name: target })[0],
+			);
+		});
+	},
+);
+
+it.each([
 	{ reset: "a filter change", empty: copy.emptyFiltered },
 	{ reset: "a history clear", empty: copy.emptyTitle },
 ])(

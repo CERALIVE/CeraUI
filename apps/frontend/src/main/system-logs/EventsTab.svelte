@@ -14,8 +14,8 @@
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
 import type { DeviceEvent } from '@ceraui/rpc/schemas';
-import { RefreshCw, TriangleAlert, WifiOff } from '@lucide/svelte';
-import { onDestroy, untrack } from 'svelte';
+import { WifiOff } from '@lucide/svelte';
+import { onDestroy, tick, untrack } from 'svelte';
 
 import { Button } from '$lib/components/ui/button';
 import { Skeleton } from '$lib/components/ui/skeleton';
@@ -32,6 +32,7 @@ import { getConnectionState, setEventFeedListener } from '$lib/rpc/subscriptions
 import EventRow from './EventRow.svelte';
 import EventsBootHeading from './EventsBootHeading.svelte';
 import EventsFilters from './EventsFilters.svelte';
+import EventsLoadFailure from './EventsLoadFailure.svelte';
 
 let { onviewraw }: { onviewraw: (around: AroundPage) => void } = $props();
 
@@ -46,6 +47,7 @@ const uid = $props.id();
 let scroller = $state<HTMLDivElement>();
 let stopId = $state<string>();
 let focusedRow = $state.raw<DeviceEvent>();
+let returningToNewest = $state(false);
 
 const view = new EventsView(
 	{
@@ -77,7 +79,7 @@ $effect.pre(() => {
 	untrack(() => {
 		if (keepShownFocus && view.events.some((event) => event.id === focusedRow?.id)) return;
 		if (focusedRow && document.activeElement?.closest('[data-testid="event-row"]'))
-			scroller?.parentElement?.querySelector<HTMLButtonElement>('[data-testid="events-filters"] button')?.focus();
+			firstFilter()?.focus();
 		focusedRow = stopId = undefined;
 	});
 });
@@ -96,8 +98,26 @@ const rowIds = $derived(
 );
 const tabStop = $derived(rowIds.find((id) => id === stopId) ?? rowIds[0]);
 
-function focusEvent(index: number): void {
-	scroller?.querySelectorAll<HTMLElement>('[data-testid="event-row"]')[index]?.querySelector('button')?.focus();
+function firstFilter(): HTMLButtonElement | null | undefined {
+	return scroller?.parentElement?.querySelector<HTMLButtonElement>('[data-testid="events-filters"] button');
+}
+
+function eventAction(index: number): HTMLButtonElement | null | undefined {
+	return scroller?.querySelectorAll('[data-testid="event-row"]')[index]?.querySelector('button');
+}
+
+async function returnToNewest(event: MouseEvent): Promise<void> {
+	if (returningToNewest) return;
+	const button = event.currentTarget;
+	// Keep the focused control mounted until its replacement is ready.
+	returningToNewest = true;
+	await view.reload();
+	await tick();
+	if (document.activeElement === button) {
+		const retry = scroller?.parentElement?.querySelector<HTMLButtonElement>('[data-first-retry]');
+		(eventAction(0) ?? retry ?? firstFilter())?.focus();
+	}
+	returningToNewest = false;
 }
 
 // The stop follows focus (focusin on the row), so a row whose action cannot take focus keeps none.
@@ -105,7 +125,7 @@ function navigate(event: KeyboardEvent, id: string): void {
 	const move = NAVIGATION[event.key];
 	if (move === undefined) return;
 	event.preventDefault();
-	focusEvent(move(rowIds.indexOf(id), rowIds.length - 1));
+	eventAction(move(rowIds.indexOf(id), rowIds.length - 1))?.focus();
 }
 
 // Set, a new object per landing, when an older-page control held focus as its page landed: focus
@@ -123,8 +143,8 @@ $effect(() => {
 	untrack(() => {
 		const next = scroller?.querySelector<HTMLElement>('[data-paging]');
 		if (next) next.focus();
-		else if (view.browsingHistory) focusEvent(rowIds.length - 1);
-		else if (tabStop !== undefined) focusEvent(rowIds.indexOf(tabStop));
+		else if (view.browsingHistory) eventAction(rowIds.length - 1)?.focus();
+		else if (tabStop !== undefined) eventAction(rowIds.indexOf(tabStop))?.focus();
 	});
 });
 
@@ -142,28 +162,6 @@ $effect(() => {
 	{/each}
 {/snippet}
 
-{#snippet failure(retry: () => void, paging = false)}
-	<div
-		class="border-status-warning/30 bg-status-warning/10 m-3 flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center"
-		role="alert"
-	>
-		<TriangleAlert class="text-status-warning size-4 shrink-0" />
-		<p class="min-w-0 flex-1 text-sm">{m['systemLogs.events.loadFailed']()}</p>
-		<Button
-			aria-busy={paging && view.loading === 'older' ? 'true' : undefined}
-			aria-disabled={paging && view.loading === 'older' ? 'true' : undefined}
-			class="shrink-0 gap-1.5 aria-disabled:pointer-events-none aria-disabled:opacity-50"
-			data-paging={paging || undefined}
-			onclick={retry}
-			size="sm"
-			variant="outline"
-		>
-			<RefreshCw class="size-4" />
-			{m['systemLogs.action.retry']()}
-		</Button>
-	</div>
-{/snippet}
-
 <div
 	class="flex h-full min-h-0 flex-col [&:lang(ja)]:[word-break:auto-phrase] [&:lang(ko)]:break-keep [&:lang(zh)]:text-balance"
 >
@@ -175,16 +173,15 @@ $effect(() => {
 		</div>
 	{/if}
 	{#if view.failed === 'first'}
-		{@render failure(() => void view.reload())}
+		<EventsLoadFailure retry={() => void view.reload()} />
 	{/if}
-	{#if view.browsingHistory}
+	{#if view.browsingHistory || returningToNewest}
 		<div class="flex justify-center border-b px-4 py-2">
 			<Button
-				onclick={async (event) => {
-					const focused = document.activeElement === event.currentTarget;
-					await view.reload();
-					if (focused && document.activeElement === document.body) focusEvent(0);
-				}}
+				aria-busy={returningToNewest || undefined}
+				aria-disabled={returningToNewest || undefined}
+				class="aria-disabled:pointer-events-none aria-disabled:opacity-50"
+				onclick={returnToNewest}
 				size="sm"
 				variant="outline">{m['systemLogs.error.startFromNewest']()}</Button
 			>
@@ -246,7 +243,7 @@ $effect(() => {
 			<div data-testid="events-loading-older">{@render skeletonRows(2)}</div>
 		{/if}
 		{#if view.failed === 'older'}
-			{@render failure(() => void view.loadOlder(), true)}
+			<EventsLoadFailure busy={view.loading === 'older'} paging retry={() => void view.loadOlder()} />
 		{:else if view.nextBeforeSeq !== null}
 			<div class="flex justify-center px-4 py-3">
 				<!-- aria-disabled, not disabled, while its page loads: the pressed button keeps keyboard focus. -->

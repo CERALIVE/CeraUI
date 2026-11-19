@@ -33,7 +33,7 @@ density. It is not a redesign.
   button uses the `destructive` variant.
 - **Signature move.** The boot separator. In Events each boot group has a sticky
   heading with its start time and the system image, slot and end mark that are
-  recorded (`main/system-logs/EventsTab.svelte:206-245`); Raw logs separates rows
+  recorded (`main/system-logs/EventsTab.svelte:213-241`); Raw logs separates rows
   by date and clock rows instead (`lib/device-logs/raw-rows.ts:120-147`). A boot loop reads as a run of short segments
   with unclean marks, which is what the operator must see first.
 - **Left out on purpose.** Stat tiles or counts above the lists, charts of error
@@ -192,7 +192,7 @@ in section 4.
 **Boot separator** (signature move), a heading row (`h3`) sticky at the top of
 the list while its boot's rows show, when the boot record has them (otherwise a fallback line):
 "Boot started {time}", the system image, slot and shutdown mark (glyph plus
-text, section 5) (`main/system-logs/EventsTab.svelte:213-243`), and a
+  text, section 5) (`main/system-logs/EventsTab.svelte:213-241`), and a
 "Changed" tag when the system image or slot differs from the previous boot.
 Surface: the next step of the surface ramp (`bg-muted`), neutral rules above
 and below. Focus-ring visibility under the sticky heading is not measured.
@@ -835,6 +835,10 @@ Paging keeps focus on the next action at that end or transfers it to the list
 when the action disappears. See DF-39 and `system-logs.spec.ts` below for the
 mock-backend flows and keyboard coverage on desktop and mobile.
 
+Start from newest keeps its button focusable during the Events reload. If the
+button still owns focus when the reload finishes, focus moves to the first
+event action, Retry on failure, or the first visible filter when empty.
+
 `RawView` exposes the tab's operator actions. `RawPaging` owns query
 generations, continuations and head replay. `RawFollowSession` owns the
 socket listener, subscription and resume checkpoint. `RawRowWindow` owns
@@ -851,8 +855,9 @@ live-region announcements.
 | `main/system-logs/EventRow.svelte:38` | props |
 | `main/system-logs/EventsBootHeading.svelte:11` | props |
 | `main/system-logs/EventsFilters.svelte:11` | props |
+| `main/system-logs/EventsLoadFailure.svelte:11` | props |
 | `main/system-logs/EventsPanel.svelte:16` | props |
-| `main/system-logs/EventsTab.svelte:36` | props |
+| `main/system-logs/EventsTab.svelte:37` | props |
 | `main/system-logs/ExportDialog.svelte:16` | props |
 | `main/system-logs/KeepWords.svelte:14` | props |
 | `main/system-logs/LegacyLogDownloads.svelte:21` | props |
@@ -1024,12 +1029,13 @@ Backend and wire limits: [device-logs.md](../../../backend/docs/agents/device-lo
 
 | Code | Source |
 |---| --- |
-| Events list key map (ArrowDown, ArrowUp, Home, End) | `main/system-logs/EventsTab.svelte:39-42` |
-| Events focus move to a row button | `main/system-logs/EventsTab.svelte:100` |
-| Events row keydown hook | `main/system-logs/EventsTab.svelte:234` |
-| Events scroller scroll padding | `main/system-logs/EventsTab.svelte:193` |
-| Events paging focus handoff | `main/system-logs/EventsTab.svelte:124` |
-| Events focus recovery on row reset | `main/system-logs/EventsTab.svelte:76` |
+| Events list key map (ArrowDown, ArrowUp, Home, End) | `main/system-logs/EventsTab.svelte:40-43` |
+| Events row action lookup | `main/system-logs/EventsTab.svelte:105` |
+| Events row keydown hook | `main/system-logs/EventsTab.svelte:231` |
+| Events scroller scroll padding | `main/system-logs/EventsTab.svelte:190` |
+| Events paging focus handoff | `main/system-logs/EventsTab.svelte:144` |
+| Events focus recovery on row reset | `main/system-logs/EventsTab.svelte:78` |
+| Start from newest focus handoff | `main/system-logs/EventsTab.svelte:109` |
 | View raw logs pending (aria-disabled) | `main/system-logs/EventRow.svelte:90` |
 | Event row tab stop | `main/system-logs/EventRow.svelte:95` |
 | Raw list focus on a row | `main/system-logs/RawLogList.svelte:116` |
