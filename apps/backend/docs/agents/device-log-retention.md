@@ -25,10 +25,11 @@ rejection or timeout returns `READ_FAILED`, reopens admission, deletes nothing
 and never rolls the epoch back. Timeout does not repair an owner that still
 cannot settle or release its existing capacity.
 
-After joining, clear checks the update phase again immediately before rotation
-or mock deletion. An update that started during the drain returns
+After joining, clear checks update ownership and takes the shared disruptive
+action reservation in the same turn. An update that started during the drain returns
 `UPDATE_IN_PROGRESS` without deletion; the epoch increment and cancellations
-already happened and remain in force.
+already happened and remain in force. Update admission stays closed through
+rotation, vacuum and legacy file deletion, including when a command fails.
 
 Native clear rotates, vacuums and removes legacy debug files. Mock clear removes
 legacy files before wiping the ring and immediately recording the clear marker,

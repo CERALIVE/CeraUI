@@ -13,6 +13,8 @@ import {
 import { run } from "../../helpers/run.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { updatePhaseBusyReasons } from "../system/disruptive-action-gate.ts";
+import { reserveUpdateEvidenceDeletion } from "../system/disruptive-action-reservation.ts";
+import { isUpdating } from "../system/software-updates.ts";
 import { getOrchestratorState } from "../system/update-orchestrator/runtime.ts";
 import { listBoots } from "./boots.ts";
 import { readJournalCeiling } from "./ceiling.ts";
@@ -172,7 +174,10 @@ export function clearAll(): Promise<LogStorageOutput> {
 	return exclusive(async () => {
 		let reopen: (() => void) | undefined;
 		try {
-			if (updatePhaseBusyReasons(getOrchestratorState().phase).length > 0)
+			if (
+				isUpdating() ||
+				updatePhaseBusyReasons(getOrchestratorState().phase).length > 0
+			)
 				return { ok: false, error: "UPDATE_IN_PROGRESS" };
 			reopen = beginHistoryClear();
 			const stopping = [
@@ -197,14 +202,21 @@ export function clearAll(): Promise<LogStorageOutput> {
 			)
 				return { ok: false, error: "READ_FAILED" };
 			const mock = shouldUseMocks();
-			if (updatePhaseBusyReasons(getOrchestratorState().phase).length > 0)
-				return { ok: false, error: "UPDATE_IN_PROGRESS" };
-			if (!mock) {
-				await run("journalctl", ["--rotate"]);
-				await run("journalctl", ["--vacuum-time=1s"]);
+			const deletion = reserveUpdateEvidenceDeletion(
+				isUpdating() ||
+					updatePhaseBusyReasons(getOrchestratorState().phase).length > 0,
+			);
+			if (!deletion.allowed) return { ok: false, error: "UPDATE_IN_PROGRESS" };
+			try {
+				if (!mock) {
+					await run("journalctl", ["--rotate"]);
+					await run("journalctl", ["--vacuum-time=1s"]);
+				}
+				await deleteLegacyDebugFiles();
+				if (mock) clearRecentLogLines();
+			} finally {
+				deletion.reservation.releaseAfterCompletion();
 			}
-			await deleteLegacyDebugFiles();
-			if (mock) clearRecentLogLines();
 			logger.info("device logs cleared", { module: "device-logs" });
 			updateLogState({ lastClearedAt: Date.now() });
 			return { ok: true, storage: await getStorage() };
