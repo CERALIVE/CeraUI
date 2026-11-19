@@ -352,13 +352,20 @@ test.each(notices)(
 			getPersistentNotifications(true)
 				.show.filter((message) => message.name === name)
 				.map(({ revision: _revision, ...message }) => message);
+		const updateRegistry = () =>
+			getPersistentNotifications(true)
+				.show.filter((message) => message.name.startsWith("update:"))
+				.map(({ revision: _revision, ...message }) => message)
+				.sort((left, right) => left.name.localeCompare(right.name));
 		const expected = snapshot();
+		const expectedRegistry = updateRegistry();
 		expect(expected).toHaveLength(1);
 		clearNotices();
 		calls.length = 0;
 		emitterFault = new Error("recording-emitter-fault");
 		expect(() => notifyUpdate(notice)).not.toThrow();
 		expect(snapshot()).toEqual(expected);
+		expect(updateRegistry()).toEqual(expectedRegistry);
 	},
 );
 

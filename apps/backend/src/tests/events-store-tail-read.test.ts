@@ -33,6 +33,10 @@ test.each(["\n", '{"v":1,"id":"torn'] as const)(
 		} finally {
 			inspect.mockRestore();
 		}
+		const separator = tail === "\n" ? "" : "\n";
+		expect(fs.readFileSync(file)).toEqual(
+			Buffer.from(`${retained}${separator}${line(event(2))}`),
+		);
 		expect(readEvents(deps)).toEqual([event(1), event(2)]);
 	},
 );
