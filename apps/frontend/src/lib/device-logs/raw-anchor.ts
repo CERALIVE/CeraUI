@@ -25,6 +25,9 @@ const aroundReply = logAroundOutputSchema.options[0]
 	.or(logAroundOutputSchema.options[1]);
 
 const EVENT_PAGE = 200;
+// Bounds the walk over a long or slowly answering event history; each read
+// also has its own RPC timeout.
+const EVENT_LOOKUP_MS = 10_000;
 
 interface Logs {
 	boots(): Promise<unknown>;
@@ -87,6 +90,11 @@ export async function locateAround(
 	}
 }
 
+/**
+ * The newest stored event that matches, reading older pages. `undefined` when
+ * the stored history ends without it or the walk is cancelled; a cursor that
+ * does not move back is a broken reply and throws.
+ */
 async function newestEvent(
 	events: Events,
 	match: EventMatch,
@@ -94,21 +102,26 @@ async function newestEvent(
 ): Promise<DeviceEvent | undefined> {
 	let beforeSeq: number | null = null;
 	do {
-		const page = eventListOutputSchema.parse(
-			await events.list({
-				families: [match.family],
-				limit: EVENT_PAGE,
-				...(beforeSeq === null ? {} : { beforeSeq }),
-			}),
-		);
 		if (signal.aborted) return undefined;
+		const reply = await events.list({
+			families: [match.family],
+			limit: EVENT_PAGE,
+			...(beforeSeq === null ? {} : { beforeSeq }),
+		});
+		if (signal.aborted) return undefined;
+		const page = eventListOutputSchema.parse(reply);
 		const found = page.events.find(
 			(event) =>
 				event.code === match.code &&
 				(match.id === undefined || event.params.id === match.id),
 		);
 		if (found !== undefined) return found;
-		beforeSeq = page.nextBeforeSeq;
+		const next = page.nextBeforeSeq;
+		if (next !== null && beforeSeq !== null && next >= beforeSeq)
+			throw new Error(
+				`The event list cursor did not move back from ${beforeSeq} (next ${next}).`,
+			);
+		beforeSeq = next;
 	} while (beforeSeq !== null);
 	return undefined;
 }
@@ -125,12 +138,31 @@ export async function locateMoment(
 ): Promise<LogAroundOutput | null> {
 	let event: DeviceEvent | undefined;
 	if (moment.event !== undefined) {
+		const deadline = new AbortController();
+		const timeout = Promise.withResolvers<undefined>();
+		const timer = setTimeout(() => {
+			deadline.abort();
+			if (!signal.aborted)
+				console.warn(
+					"System Logs stopped looking for the message's event at the lookup deadline.",
+				);
+			timeout.resolve(undefined);
+		}, EVENT_LOOKUP_MS);
 		try {
-			event = await newestEvent(sources.events, moment.event, signal);
+			event = await Promise.race([
+				newestEvent(
+					sources.events,
+					moment.event,
+					AbortSignal.any([signal, deadline.signal]),
+				),
+				timeout.promise,
+			]);
 		} catch (error) {
 			if (signal.aborted) return null;
 			console.error("System Logs could not find the message's event:", error);
 			return { ok: false, error: "READ_FAILED" };
+		} finally {
+			clearTimeout(timer);
 		}
 		if (signal.aborted) return null;
 	}

@@ -115,6 +115,7 @@ function sources(...pages: unknown[]) {
 }
 
 afterEach(() => {
+	vi.useRealTimers();
 	vi.restoreAllMocks();
 });
 
@@ -244,6 +245,83 @@ describe("locateMoment", () => {
 		},
 	);
 
+	it.each([
+		["the message's own moment", { at: AT }, { bootId: RUNNING, at: AT }],
+		["the newest entries", {}, undefined],
+	])(
+		"falls back to %s once the stored history ends without the event",
+		async (_case, own, expected) => {
+			const deps = sources(
+				eventPage([updateEvent(12, "update_refused", "txn-2")], 11),
+				eventPage([updateEvent(5, "update_installed", "txn-1")]),
+			);
+
+			const result = await locateMoment(deps, { ...own, event: REFUSED });
+
+			expect(deps.events.list).toHaveBeenCalledTimes(2);
+			if (expected === undefined) {
+				expect(result).toBeNull();
+				expect(deps.logs.around).not.toHaveBeenCalled();
+			} else expect(deps.logs.around).toHaveBeenCalledExactlyOnceWith(expected);
+		},
+	);
+
+	it.each([
+		["repeats", 11],
+		["moves forward", 15],
+	])(
+		"stops at an event cursor that %s and reads it as a failed read",
+		async (_case, next) => {
+			const error = vi.spyOn(console, "error").mockImplementation(() => {});
+			const deps = sources(
+				eventPage([updateEvent(12, "update_installed", "txn-1")], 11),
+				eventPage([updateEvent(10, "update_installed", "txn-2")], next),
+				eventPage([updateEvent(3, "update_refused", "txn-1")]),
+			);
+
+			expect(await locateMoment(deps, { at: AT, event: REFUSED })).toEqual({
+				ok: false,
+				error: "READ_FAILED",
+			});
+			expect(deps.events.list).toHaveBeenCalledTimes(2);
+			expect(deps.logs.around).not.toHaveBeenCalled();
+			expect(error).toHaveBeenCalledTimes(1);
+		},
+	);
+
+	it("stops reading older events after the lookup deadline and falls back to the message's own moment", async () => {
+		vi.useFakeTimers();
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const deps = sources();
+		let seq = 1200;
+		// Six slow pages of a long history that never holds the event.
+		deps.events.list.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					setTimeout(() => {
+						seq -= 200;
+						resolve(
+							eventPage(
+								[updateEvent(seq + 1, "update_installed", "txn-1")],
+								seq === 0 ? null : seq,
+							),
+						);
+					}, 4000);
+				}),
+		);
+
+		const lookup = locateMoment(deps, { at: AT, event: REFUSED });
+		await vi.advanceTimersByTimeAsync(12_000);
+		await lookup;
+
+		expect(deps.events.list).toHaveBeenCalledTimes(3);
+		expect(deps.logs.around).toHaveBeenCalledExactlyOnceWith({
+			bootId: RUNNING,
+			at: AT,
+		});
+		expect(warn).toHaveBeenCalledTimes(1);
+	});
+
 	it("discards an event list reply after its request is cancelled", async () => {
 		const deps = sources();
 		const reply = Promise.withResolvers<unknown>();
@@ -259,6 +337,26 @@ describe("locateMoment", () => {
 		reply.resolve(eventPage([updateEvent(1, "update_refused", "txn-1")]));
 
 		expect(await result).toBeNull();
+		expect(deps.logs.around).not.toHaveBeenCalled();
+	});
+
+	it("does not wait past the lookup deadline for an in-flight page", async () => {
+		vi.useFakeTimers();
+		vi.spyOn(console, "warn").mockImplementation(() => {});
+		const deps = sources();
+		const reply = Promise.withResolvers<unknown>();
+		deps.events.list.mockReturnValueOnce(reply.promise);
+		const lookup = locateMoment(deps, { event: REFUSED });
+		const settled = vi.fn();
+		void lookup.then(settled);
+
+		await vi.advanceTimersByTimeAsync(10_000);
+		try {
+			expect(settled).toHaveBeenCalledExactlyOnceWith(null);
+		} finally {
+			reply.resolve(eventPage([updateEvent(1, "update_refused", "txn-1")]));
+			await lookup;
+		}
 		expect(deps.logs.around).not.toHaveBeenCalled();
 	});
 });

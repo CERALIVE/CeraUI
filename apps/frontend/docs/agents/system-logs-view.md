@@ -123,7 +123,11 @@ density. It is not a redesign.
   click: an unexplained package failure opens the newest `update_failed` entry,
   a kernel rollback the newest `update_kernel_rolled_back` and the credentials
   band the newest `update_credentials_expired` (an event match without an id
-  takes the newest event with that code); a preflight refusal, a cleanup
+  takes the newest event with that code). The event lookup reads older pages
+  of 200 until the stored history ends, for at most `EVENT_LOOKUP_MS`; a page
+  cursor that does not move back is a failed read, and the end of the history
+  or the deadline falls back to the message's own time, else the newest
+  entries. A preflight refusal, a cleanup
   warning, a kernel failure and an action refusal emit no event, so they open
   the newest entries with `momentUnknown`. When neither the event nor the
   message's own time is known, one muted line above the list says so
@@ -1071,6 +1075,7 @@ Related browser specs and their entry points:
 | HELD_CAP | 500 | `lib/device-logs/raw-row-window.svelte.ts:14` |
 | NEW_ENTRIES_EVERY_MS | 5000 | `lib/device-logs/raw-feedback.svelte.ts:23` |
 | MOMENT_EXPORT_HALF_MS | 300000 | `lib/device-logs/raw-paging.svelte.ts:51` |
+| EVENT_LOOKUP_MS | 10000 | `lib/device-logs/raw-anchor.ts:30` |
 
 Backend and wire limits: [device-logs.md](../../../backend/docs/agents/device-logs.md),
 [device-events.md](../../../backend/docs/agents/device-events.md).
