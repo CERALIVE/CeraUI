@@ -222,7 +222,8 @@ export function clearAll(): Promise<LogStorageOutput> {
 			} finally {
 				const release = deletion.reservation.releaseAfterCompletion;
 				// The RPC may finish before a timed-out child has left the journal.
-				if (childExit) void childExit.then(release);
+				// The collector diagnoses a rejected observation. It is not exit proof.
+				if (childExit) void childExit.then(release, () => undefined);
 				else release();
 			}
 			logger.info("device logs cleared", { module: "device-logs" });
