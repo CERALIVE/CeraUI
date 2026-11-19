@@ -670,12 +670,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p apps/frontend/test-results
+          # A fresh events directory per run, so no earlier run's events are listed.
+          events_dir="$(mktemp -d)"
 
           VITE_DEVICE_HOST=127.0.0.1 VITE_DEVICE_PORT=3002 bun run --filter frontend preview -- --host 127.0.0.1 --port 6173 \
             > "apps/frontend/test-results/vite-preview-${{ matrix.project }}-${{ matrix.shard }}.log" 2>&1 &
           echo "$!" > apps/frontend/test-results/vite-preview.pid
 
-          MOCK_SCENARIO=multi-modem-wifi NODE_ENV=development bun run --filter backend dev:e2e \
+          CERALIVE_EVENTS_DIR="$events_dir" MOCK_SCENARIO=multi-modem-wifi NODE_ENV=development bun run --filter backend dev:e2e \
             > "apps/frontend/test-results/backend-${{ matrix.project }}-${{ matrix.shard }}.log" 2>&1 &
           echo "$!" > apps/frontend/test-results/backend.pid
 

@@ -90,6 +90,28 @@ $effect(() => {
 	untrack(() => $virtualizer.scrollToIndex(rows.findIndex((row) => row.key === key), { align: 'auto' }));
 });
 
+// The end whose paging button held focus as its page landed, a new object per landing: focus
+// moves to that end's paging button after the page, else to the row stop, Reset filters or the list.
+let pressed = $state.raw<{ end: RawEnd }>();
+let top = $state<HTMLDivElement>();
+
+$effect.pre(() => {
+	if (view.loading !== null) return;
+	const end = document.activeElement?.getAttribute('data-paging');
+	untrack(() => (pressed = end === 'top' || end === 'bottom' ? { end } : undefined));
+});
+
+$effect(() => {
+	const landed = pressed;
+	if (landed === undefined) return;
+	untrack(() => {
+		const next = (landed.end === 'top' ? top : scroller)?.querySelector<HTMLElement>('[data-paging]');
+		if (next) next.focus();
+		else if (tabKey !== undefined) pendingFocus = tabKey;
+		else (scroller?.querySelector<HTMLElement>('[data-testid="raw-reset-filters"]') ?? scroller)?.focus();
+	});
+});
+
 function focusRow(node: HTMLLIElement): void {
 	node.querySelector('button')?.focus();
 	pendingFocus = undefined;
@@ -150,6 +172,7 @@ function showHeld(): void {
 					aria-busy={busy}
 					aria-disabled={busy}
 					class={BUSY}
+					data-paging={end}
 					data-testid="raw-load-more-{end}"
 					onclick={() => view.loadMore(end)}
 					size="sm"
@@ -164,6 +187,7 @@ function showHeld(): void {
 					aria-busy={busy}
 					aria-disabled={busy}
 					class={BUSY}
+					data-paging={end}
 					data-testid="raw-keep-searching-{end}"
 					onclick={() => view.loadMore(end)}
 					size="sm"
@@ -191,7 +215,7 @@ function showHeld(): void {
 {/snippet}
 
 {#if view.top !== null}
-	<div class="border-b" data-testid="raw-top">{@render edge('top', view.top)}</div>
+	<div bind:this={top} class="border-b" data-testid="raw-top">{@render edge('top', view.top)}</div>
 {/if}
 <div class="relative flex min-h-0 flex-1 flex-col">
 	{#if heldCount > 0}
@@ -207,10 +231,11 @@ function showHeld(): void {
 	{/if}
 	<div
 		bind:this={scroller}
-		class="@container min-h-0 flex-1 overflow-y-auto overscroll-contain"
+		class="@container focus-visible:ring-ring/50 min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none focus-visible:ring-3 focus-visible:ring-inset"
 		data-raw-scroller
 		data-testid="raw-scroller"
 		onscroll={(event) => view.setAtTop(event.currentTarget.scrollTop < 8)}
+		tabindex="-1"
 	>
 		{#if view.loading === 'first'}
 			<div aria-busy="true" data-testid="raw-loading" role="status">

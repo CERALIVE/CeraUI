@@ -719,6 +719,70 @@ describe("RawLogsTab — paging", () => {
 		expect(logs.query).toHaveBeenCalledTimes(2);
 	});
 
+	it("hands focus to the row stop when the page that lands replaces Load more with the end", async () => {
+		await mounted(page(["s=2"], { hasMore: true, continuation: "c1" }));
+		const next = Promise.withResolvers<QueryPage>();
+		logs.query.mockReturnValueOnce(next.promise);
+		const more = screen.getByTestId("raw-load-more-bottom");
+		more.focus();
+		await fireEvent.click(more);
+
+		next.resolve(page(["s=1"]));
+		await screen.findByTestId("raw-end-bottom");
+		await waitFor(() =>
+			expect(
+				document.activeElement?.closest<HTMLElement>('[data-testid="raw-row"]')
+					?.dataset.cursor,
+			).toBe("s=2"),
+		);
+		expect(document.activeElement?.getAttribute("tabindex")).toBe("0");
+	});
+
+	it("hands focus to Load more when the page Keep searching lands has more", async () => {
+		await mounted(page(["s=2"], { hasMore: null, continuation: "c1" }));
+		const next = Promise.withResolvers<QueryPage>();
+		logs.query.mockReturnValueOnce(next.promise);
+		const keep = screen.getByTestId("raw-keep-searching-bottom");
+		keep.focus();
+		await fireEvent.click(keep);
+
+		next.resolve(page(["s=1"], { hasMore: true, continuation: "c2" }));
+		const more = await screen.findByTestId("raw-load-more-bottom");
+		await waitFor(() => expect(document.activeElement).toBe(more));
+	});
+
+	it("hands focus to Reset filters when Keep searching lands on an empty end", async () => {
+		await mounted(
+			page([], { hasMore: null, termination: "budget", continuation: null }),
+		);
+		const next = Promise.withResolvers<QueryPage>();
+		logs.query.mockReturnValueOnce(next.promise);
+		const keep = screen.getByTestId("raw-keep-searching-bottom");
+		keep.focus();
+		await fireEvent.click(keep);
+
+		next.resolve(page([]));
+		const reset = await screen.findByTestId("raw-reset-filters");
+		await waitFor(() => expect(document.activeElement).toBe(reset));
+	});
+
+	it("hands focus to the list when the page that lands leaves it no action", async () => {
+		await mounted(
+			page([], { hasMore: null, termination: "budget", continuation: "c1" }),
+		);
+		const next = Promise.withResolvers<LogQueryOutput>();
+		logs.query.mockReturnValueOnce(next.promise);
+		const keep = screen.getByTestId("raw-keep-searching-bottom");
+		keep.focus();
+		await fireEvent.click(keep);
+
+		next.resolve({ ok: false, error: "CURSOR_UNAVAILABLE" });
+		await screen.findByRole("alert");
+		await waitFor(() =>
+			expect(document.activeElement).toBe(screen.getByTestId("raw-scroller")),
+		);
+	});
+
 	it.each(["CURSOR_UNAVAILABLE", "FILTER_CHANGED"] as const)(
 		"states the expired position after %s and starts from newest",
 		async (code) => {

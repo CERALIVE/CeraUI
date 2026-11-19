@@ -883,6 +883,53 @@ describe("EventsTab — states", () => {
 		expect(screen.queryByText(ev.noOlder)).toBeNull();
 	});
 
+	it("hands focus to the row stop when the older page that lands is the last", async () => {
+		await shown([stopped(9)], { nextBeforeSeq: 9 });
+		const next = Promise.withResolvers<EventListOutput>();
+		list.mockReturnValueOnce(next.promise);
+		const older = screen.getByRole("button", { name: ev.loadOlder });
+		older.focus();
+		await fireEvent.click(older);
+
+		next.resolve(eventPage([stopped(4)], { headSeq: 9 }));
+		await screen.findByText(ev.noOlder);
+		await waitFor(() =>
+			expect(document.activeElement?.closest('[data-testid="event-row"]')).toBe(
+				rows()[0],
+			),
+		);
+	});
+
+	it("hands focus to Retry when an older page fails, keeps it there while it reads again, then moves it to a row", async () => {
+		quietErrors();
+		await shown([stopped(9)], { nextBeforeSeq: 9 });
+		list.mockRejectedValueOnce(new Error("down"));
+		const older = screen.getByRole("button", { name: ev.loadOlder });
+		older.focus();
+		await fireEvent.click(older);
+		const band = await screen.findByRole("alert");
+		const retry = within(band).getByRole("button", {
+			name: en.systemLogs.action.retry,
+		});
+		await waitFor(() => expect(document.activeElement).toBe(retry));
+
+		const next = Promise.withResolvers<EventListOutput>();
+		list.mockReturnValueOnce(next.promise);
+		await fireEvent.click(retry);
+		expect(document.activeElement).toBe(retry);
+		expect(retry.getAttribute("aria-busy")).toBe("true");
+		expect(retry.getAttribute("aria-disabled")).toBe("true");
+		has(retry, "aria-disabled:pointer-events-none", "aria-disabled:opacity-50");
+
+		next.resolve(eventPage([stopped(3)]));
+		await screen.findByText(ev.noOlder);
+		await waitFor(() =>
+			expect(document.activeElement?.closest('[data-testid="event-row"]')).toBe(
+				rows()[0],
+			),
+		);
+	});
+
 	it("reads the history and the boots again from the start when stored history is deleted", async () => {
 		await shown([stopped(2)]);
 		list.mockResolvedValueOnce(eventPage([]));

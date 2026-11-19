@@ -315,6 +315,26 @@ describe("EventsView — Load older", () => {
 		expect(ids(view)).toEqual([3, 2]);
 	});
 
+	it("keeps an older failure while its retry reads, and clears it when the page lands", async () => {
+		const { view, list } = setup();
+		quietErrors();
+		list.mockResolvedValueOnce(eventPage([e(3)], { nextBeforeSeq: 3 }));
+		await view.reload();
+		list.mockRejectedValueOnce(new Error("down"));
+		await view.loadOlder();
+		const next = Promise.withResolvers<EventListOutput>();
+		list.mockReturnValueOnce(next.promise);
+
+		const retry = view.loadOlder();
+		expect(view.loading).toBe("older");
+		expect(view.failed).toBe("older");
+
+		next.resolve(eventPage([e(2)]));
+		await retry;
+		expect(view.failed).toBeNull();
+		expect(ids(view)).toEqual([3, 2]);
+	});
+
 	it("drops an older page that arrives after the list was read again", async () => {
 		const { view, list } = setup();
 		list.mockResolvedValueOnce(eventPage([e(3)], { nextBeforeSeq: 3 }));

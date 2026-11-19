@@ -86,14 +86,36 @@ const rowIds = $derived(
 );
 const tabStop = $derived(rowIds.find((id) => id === stopId) ?? rowIds[0]);
 
+function focusEvent(index: number): void {
+	scroller?.querySelectorAll<HTMLElement>('[data-testid="event-row"]')[index]?.querySelector('button')?.focus();
+}
+
 // The stop follows focus (focusin on the row), so a row whose action cannot take focus keeps none.
 function navigate(event: KeyboardEvent, id: string): void {
 	const move = NAVIGATION[event.key];
 	if (move === undefined) return;
 	event.preventDefault();
-	const index = move(rowIds.indexOf(id), rowIds.length - 1);
-	scroller?.querySelectorAll<HTMLElement>('[data-testid="event-row"]')[index]?.querySelector('button')?.focus();
+	focusEvent(move(rowIds.indexOf(id), rowIds.length - 1));
 }
+
+// Set, a new object per landing, when an older-page control held focus as its page landed: focus
+// moves to Load older events or Retry after the page, or to the list's row stop when neither is shown.
+let pressed = $state.raw<object>();
+
+$effect.pre(() => {
+	if (view.loading !== null) return;
+	const paging = document.activeElement?.hasAttribute('data-paging');
+	untrack(() => (pressed = paging ? {} : undefined));
+});
+
+$effect(() => {
+	if (pressed === undefined) return;
+	untrack(() => {
+		const next = scroller?.querySelector<HTMLElement>('[data-paging]');
+		if (next) next.focus();
+		else if (tabStop !== undefined) focusEvent(rowIds.indexOf(tabStop));
+	});
+});
 
 function showAll(): void {
 	view.showAll();
@@ -138,14 +160,22 @@ function showAll(): void {
 	</Toggle>
 {/snippet}
 
-{#snippet failure(retry: () => void)}
+{#snippet failure(retry: () => void, paging = false)}
 	<div
 		class="border-status-warning/30 bg-status-warning/10 m-3 flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center"
 		role="alert"
 	>
 		<TriangleAlert class="text-status-warning size-4 shrink-0" />
 		<p class="min-w-0 flex-1 text-sm">{m['systemLogs.events.loadFailed']()}</p>
-		<Button class="shrink-0 gap-1.5" onclick={retry} size="sm" variant="outline">
+		<Button
+			aria-busy={paging && view.loading === 'older' ? 'true' : undefined}
+			aria-disabled={paging && view.loading === 'older' ? 'true' : undefined}
+			class="shrink-0 gap-1.5 aria-disabled:pointer-events-none aria-disabled:opacity-50"
+			data-paging={paging || undefined}
+			onclick={retry}
+			size="sm"
+			variant="outline"
+		>
 			<RefreshCw class="size-4" />
 			{m['systemLogs.action.retry']()}
 		</Button>
@@ -272,7 +302,7 @@ function showAll(): void {
 			<div data-testid="events-loading-older">{@render skeletonRows(2)}</div>
 		{/if}
 		{#if view.failed === 'older'}
-			{@render failure(() => void view.loadOlder())}
+			{@render failure(() => void view.loadOlder(), true)}
 		{:else if view.nextBeforeSeq !== null}
 			<div class="flex justify-center px-4 py-3">
 				<!-- aria-disabled, not disabled, while its page loads: the pressed button keeps keyboard focus. -->
@@ -280,6 +310,7 @@ function showAll(): void {
 					aria-busy={view.loading === 'older' ? 'true' : undefined}
 					aria-disabled={view.loading === 'older' ? 'true' : undefined}
 					class="aria-disabled:pointer-events-none aria-disabled:opacity-50"
+					data-paging
 					onclick={() => void view.loadOlder()}
 					size="sm"
 					variant="outline">{m['systemLogs.events.loadOlder']()}</Button

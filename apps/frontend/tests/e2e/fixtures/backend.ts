@@ -290,6 +290,8 @@ async function spawnWorkerBackend(
 		PREVIEW_PORT: "0",
 		// The host and sibling devices must never share this worker's OTA guard.
 		CERALIVE_STREAMING_MARKER: streamingMarkerPath,
+		// Events from an earlier run or another worker must not reach this backend's Events tab.
+		CERALIVE_EVENTS_DIR: path.join(stateDir, "events"),
 	};
 	if (process.env.CI === "true") {
 		childEnv.E2E_WORKER_PROXY_SECRET = proxySecret;

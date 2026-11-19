@@ -829,10 +829,14 @@ module, test and fixture lists are generated from the directory listing of
 are tests; every other `.svelte` and `.ts` file is production code. Related
 tests under `tests/` are the files there whose text names either folder.
 
+Paging keeps focus on the next action at that end or transfers it to the list
+when the action disappears. See DF-39 and `system-logs.spec.ts` below for the
+mock-backend flows and keyboard coverage on desktop and mobile.
+
 ### Components
 
 | Source | Props |
-|---|---|
+|---| --- |
 | `main/system-logs/BootButton.svelte` | no props |
 | `main/system-logs/BootPicker.svelte:30` | props |
 | `main/system-logs/BundleDialog.svelte:23` | props |
@@ -957,6 +961,7 @@ Related browser specs and their entry points:
 | `apps/frontend/tests/e2e/pages/system-logs.ts` |
 | `apps/frontend/tests/e2e/system-logs-keyboard.spec.ts` |
 | `apps/frontend/tests/e2e/system-logs-responsive.spec.ts` |
+| `apps/frontend/tests/e2e/system-logs.spec.ts` |
 | `apps/frontend/tests/e2e/view-logs-action.spec.ts` |
 | `apps/frontend/tests/e2e/visual/system-logs.visual.spec.ts` |
 | `apps/frontend/tests/e2e/visual/view-logs-layout.visual.spec.ts` |
@@ -979,12 +984,12 @@ Related browser specs and their entry points:
 
 ### role="status" elements
 
-`main/system-logs/BootPicker.svelte:165`, `main/system-logs/BundleDialog.svelte:98`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:192`, `main/system-logs/ExportDialog.svelte:50`, `main/system-logs/RawLogList.svelte:216`, `main/system-logs/RawLogRow.svelte:136`, `main/system-logs/RawLogsPanel.svelte:97`, `main/system-logs/RawLogsTab.svelte:136`, `main/system-logs/StorageCleanup.svelte:185`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:67`, `main/system-logs/SystemLogsView.svelte:204`.
+`main/system-logs/BootPicker.svelte:165`, `main/system-logs/BundleDialog.svelte:98`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:222`, `main/system-logs/ExportDialog.svelte:50`, `main/system-logs/RawLogList.svelte:241`, `main/system-logs/RawLogRow.svelte:136`, `main/system-logs/RawLogsPanel.svelte:97`, `main/system-logs/RawLogsTab.svelte:136`, `main/system-logs/StorageCleanup.svelte:185`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:67`, `main/system-logs/SystemLogsView.svelte:204`.
 
 ### Limits and constants
 
 | Name | Value | Source |
-|---|---|---|
+|---| --- |---|
 | PAGE | 100 | `lib/device-logs/events-view.svelte.ts:43` |
 | PAGE_LIMIT | 100 | `lib/device-logs/raw-filter.ts:57` |
 | SEARCH_MAX_BYTES | 256 | `lib/device-logs/raw-filter.ts:58` |
@@ -999,25 +1004,27 @@ Backend and wire limits: [device-logs.md](../../../backend/docs/agents/device-lo
 ### Keyboard and focus code
 
 | Code | Source |
-|---|---|
+|---| --- |
 | Events list key map (ArrowDown, ArrowUp, Home, End) | `main/system-logs/EventsTab.svelte:44-47` |
-| Events focus move to a row button | `main/system-logs/EventsTab.svelte:95` |
-| Events row keydown hook | `main/system-logs/EventsTab.svelte:260` |
-| Events scroller scroll padding | `main/system-logs/EventsTab.svelte:189` |
+| Events focus move to a row button | `main/system-logs/EventsTab.svelte:90` |
+| Events row keydown hook | `main/system-logs/EventsTab.svelte:290` |
+| Events scroller scroll padding | `main/system-logs/EventsTab.svelte:219` |
+| Events paging focus handoff | `main/system-logs/EventsTab.svelte:115` |
 | View raw logs pending (aria-disabled) | `main/system-logs/EventRow.svelte:90` |
 | Event row tab stop | `main/system-logs/EventRow.svelte:95` |
-| Raw list focus on a row | `main/system-logs/RawLogList.svelte:94` |
+| Raw list focus on a row | `main/system-logs/RawLogList.svelte:116` |
+| Raw paging focus handoff | `main/system-logs/RawLogList.svelte:109` |
 | Boot picker option focus | `main/system-logs/BootPicker.svelte:58` |
 | Segmented choice focus | `main/system-logs/SegmentedChoice.svelte:50` |
 | Selected tab focus | `main/system-logs/SystemLogsView.svelte:117` |
 | Storage heading focus | `main/system-logs/SystemLogsView.svelte:126` |
-| Cancel focus for clear confirmations | `main/system-logs/StorageCleanup.svelte:55` |
+| Cancel focus for clear confirmations | `main/system-logs/StorageCleanup.svelte:64` |
 | RecoveryBand Retry button | `main/system-logs/RecoveryBand.svelte:35` |
 
 ### Recorded follow-ups
 
 | Id | Record |
-|---|---|
+|---| --- |
 | SL-2 | `apps/frontend/docs/agents/system-logs-critique.md:62` |
 | SL-7 | `apps/frontend/docs/agents/system-logs-critique.md:67` |
 | SL-11 | `apps/frontend/docs/agents/system-logs-critique.md:71` |
@@ -1025,6 +1032,7 @@ Backend and wire limits: [device-logs.md](../../../backend/docs/agents/device-lo
 | DF-27 | `docs/DESIGN-FOLLOWUPS.md:493` |
 | DF-30 | `docs/DESIGN-FOLLOWUPS.md:548` |
 | DF-34 | `docs/DESIGN-FOLLOWUPS.md:596` |
+| DF-39 | `docs/DESIGN-FOLLOWUPS.md:689` |
 
 ### Not measured
 

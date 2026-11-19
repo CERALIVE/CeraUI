@@ -535,7 +535,7 @@ The full table, evidence and the fixed findings are in
   When an approximate edge shows an end marker, it uses the corresponding time-window message: "No additional entries match on the newer side of this time window." or "No additional entries match on the older side of this time window."
   (`systemLogs.raw.endNewerWindow`, `systemLogs.raw.endOlderWindow`). A window around an
   exact entry reads on to the ends of the boot's stored logs (`around.ts:50-51`, `:62-63`).
-  When an exact edge shows an end marker, it uses the corresponding stored-logs message: "No newer entries match in the stored logs." (`systemLogs.raw.endNewer`) or "No more entries match in the stored logs." (`systemLogs.raw.end`) (`RawLogList.svelte:142-187`).
+  When an exact edge shows an end marker, it uses the corresponding stored-logs message: "No newer entries match in the stored logs." (`systemLogs.raw.endNewer`) or "No more entries match in the stored logs." (`systemLogs.raw.end`) (`RawLogList.svelte:164-211`).
   At the older edge, the display-limit notice takes precedence.
   The new keys are in all ten locales. The approximate note keeps its colour and size; it now
   keeps a flex basis in a wrapping row, so it takes its own line, with Back to latest entries
@@ -595,7 +595,7 @@ The full table, evidence and the fixed findings are in
 
 ### DF-34: A sequence-gap reload drops Events keyboard focus (SL-16, P2)
 
-- **Where:** `apps/frontend/src/lib/device-logs/events-view.svelte.ts:110-116,246-250`: a reload clears every Events row at once.
+- **Where:** `apps/frontend/src/lib/device-logs/events-view.svelte.ts:110-116,248-252`: a reload clears every Events row at once.
 - **What:** when the live feed skips a sequence number, the list reloads and its rows are cleared before the first page returns. A row action holding keyboard focus is disconnected even when its event is in the reloaded page, so focus moves to Close at 1280 px and to the boot picker at 375 px. The roving stop returns to that row after the reply; only focus is lost. Reproduced in both themes at both widths by the third-round review of todo 36.
 - **Repro:** focus View raw logs on row 2 of Events, deliver an event push that skips a sequence number, and answer `events.list` with the same first page.
 - **Severity:** P2.
@@ -604,9 +604,9 @@ The full table, evidence and the fixed findings are in
 - **Exit condition:** a sequence-gap reload that keeps the focused event keeps focus on its action, proved by a Chromium spec.
 - **Todo 38: closed.** A re-read for a skipped seq keeps the rows shown until its first
   page replaces them (`apps/frontend/src/lib/device-logs/events-view.svelte.ts:214`,
-  `#reread`, called at `:258`; the page replaces the rows at `:230`), and Events draws no
-  loading rows over kept rows (`apps/frontend/src/main/system-logs/EventsTab.svelte:191`).
-  A failed re-read keeps no rows, as a failed reload does (`events-view.svelte.ts:236`).
+  `#reread`, called at `:260`; the page replaces the rows at `:232`), and Events draws no
+  loading rows over kept rows (`apps/frontend/src/main/system-logs/EventsTab.svelte:221`).
+  A failed re-read keeps no rows, as a failed reload does (`events-view.svelte.ts:238`).
   Proved in Chromium by `apps/frontend/tests/e2e/view-logs-action.spec.ts` ("a sequence-gap
   reload that keeps the focused event keeps keyboard focus on its action") on the desktop
   and mobile projects.
@@ -691,12 +691,25 @@ The full table, evidence and the fixed findings are in
 - **Where:** `apps/frontend/src/main/system-logs/RawLogList.svelte` (Load more and Keep
   searching), `apps/frontend/src/main/system-logs/EventsTab.svelte` (Load older events).
 - **What:** while its page loads, a pressed paging button keeps focus (`aria-disabled` and
-  `aria-busy`, `RawLogList.svelte:151`, `:165`; `EventsTab.svelte:281`). When the page that
-  lands turns Load more into Keep searching (`RawLogList.svelte:147-175`), or is the last one
-  so the end text replaces the button (`RawLogList.svelte:176`, `EventsTab.svelte:288`), the
+  `aria-busy`, `RawLogList.svelte:172-173`, `:187-188`; `EventsTab.svelte:310-311`). When the page that
+  lands turns Load more into Keep searching (`RawLogList.svelte:169-199`), or is the last one
+  so the end text replaces the button (`RawLogList.svelte:200`, `EventsTab.svelte:319`), the
   pressed button leaves the page and focus leaves the list. With a mocked budget response,
   focus landed on the dialog's Close control.
 - **Owner:** the System Logs product owner, with the end-to-end flows of device-log-system
   todo 39.
 - **Exit condition:** Keep focus on the successor paging action, or inside the list when no
   action remains, proved by Chromium tests.
+- **Todo 39: closed.** When the page that lands replaces a pressed Load more, Keep searching,
+  Load older events or older-page Retry, focus moves to the next paging button at that end;
+  when that end shows none, it moves to the list's row stop, then to Reset filters on an empty
+  Raw result, then to the Raw list itself
+  (`apps/frontend/src/main/system-logs/RawLogList.svelte:93-113`,
+  `apps/frontend/src/main/system-logs/EventsTab.svelte:101-118`). An older Events page keeps
+  its failure while Retry reads it again, so Retry stays mounted and busy
+  (`apps/frontend/src/lib/device-logs/events-view.svelte.ts:222-223`,
+  `EventsTab.svelte:171-172`). The six tests under "a paging button that its page replaces
+  hands keyboard focus on" in `apps/frontend/tests/e2e/system-logs.spec.ts` pass on the
+  desktop and mobile projects; on the desktop project they fail against the unchanged todo 38
+  components, as do the component tests whose titles begin "hands focus" in
+  `RawLogsTab.test.ts` and `EventsTab.test.ts`.

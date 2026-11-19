@@ -219,13 +219,15 @@ export class EventsView {
 	async #read(end: End): Promise<void> {
 		const generation = this.#generation;
 		this.loading = end;
-		this.failed = null;
+		// An older page's failure stays while it is read again, so its Retry keeps focus.
+		if (end === "first") this.failed = null;
 		let newer: DeviceEvent[] = [];
 		try {
 			const page = await this.#deps.list(
 				listInput(this.filter, end === "older" ? this.nextBeforeSeq : null),
 			);
 			if (generation !== this.#generation) return;
+			this.failed = null;
 			this.#head = Math.max(this.#head, page.headSeq);
 			this.events = merge(end === "first" ? [] : this.events, page.events);
 			this.nextBeforeSeq = page.nextBeforeSeq;
