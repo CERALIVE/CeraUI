@@ -2936,7 +2936,7 @@
 	"systemLogs.error.readFailed": "Impossible de lire les journaux.",
 	"systemLogs.marker.suppressed": "L'appareil a ignoré des entrées ici, car trop d'entrées ont été écrites en même temps.",
 	"systemLogs.marker.dropped": "Entrées ignorées pendant le suivi : {count}",
-	"systemLogs.marker.catchupExceeded": "Le suivi était en pause et trop d'entrées ont été écrites pour toutes les afficher à la reprise. Elles restent enregistrées.",
+	"systemLogs.marker.catchupExceeded": "À la reprise du suivi, il y avait trop de nouvelles entrées pour toutes les afficher. Elles sont toujours enregistrées.",
 	"systemLogs.marker.showSkipped": "Afficher les entrées ignorées",
 	"systemLogs.marker.recoveryLimit": "La liste a atteint sa limite de récupération. Utilisez les filtres pour retrouver les entrées qui ne peuvent pas être ouvertes ici.",
 	"systemLogs.marker.cursorUnavailable": "Un nettoyage des journaux a supprimé la position de suivi, des entrées peuvent donc manquer.",

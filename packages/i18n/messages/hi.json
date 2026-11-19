@@ -2933,7 +2933,7 @@
 	"systemLogs.error.readFailed": "लॉग नहीं पढ़े जा सके।",
 	"systemLogs.marker.suppressed": "डिवाइस ने यहाँ एंट्री छोड़ दीं क्योंकि एक साथ बहुत सारी लिखी गई थीं।",
 	"systemLogs.marker.dropped": "फ़ॉलो करते समय छोड़ी गई एंट्री: {count}",
-	"systemLogs.marker.catchupExceeded": "लॉग का फ़ॉलो रुका था, तब इतनी एंट्री दर्ज हुईं कि दोबारा शुरू करने पर सभी नहीं दिखाई जा सकीं। वे अब भी सेव हैं।",
+	"systemLogs.marker.catchupExceeded": "इतनी नई एंट्री दर्ज हुईं कि फ़ॉलो फिर से शुरू होने पर सभी नहीं दिखाई जा सकीं। वे अब भी सेव हैं।",
 	"systemLogs.marker.showSkipped": "छूटी हुई एंट्री दिखाएँ",
 	"systemLogs.marker.recoveryLimit": "सूची में छूटी हुई एंट्री वापस दिखाने की सीमा पूरी हो गई है। बाकी एंट्री ढूँढने के लिए फ़िल्टर का इस्तेमाल करें।",
 	"systemLogs.marker.cursorUnavailable": "लॉग की सफ़ाई ने फ़ॉलो की स्थिति हटा दी, इसलिए कुछ एंट्री गायब हो सकती हैं।",

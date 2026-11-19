@@ -2945,7 +2945,7 @@
 	"systemLogs.error.readFailed": "تعذّرت قراءة السجلات.",
 	"systemLogs.marker.suppressed": "أسقط الجهاز إدخالات هنا لأن عددًا كبيرًا منها كُتب دفعة واحدة.",
 	"systemLogs.marker.dropped": "إدخالات تم تخطيها أثناء المتابعة: {count}",
-	"systemLogs.marker.catchupExceeded": "أثناء توقف المتابعة مؤقتًا، سُجّلت إدخالات أكثر مما أمكن عرضه عند استئنافها. لا تزال هذه الإدخالات محفوظة.",
+	"systemLogs.marker.catchupExceeded": "عند استئناف المتابعة، تعذّر عرض جميع الإدخالات الجديدة. لا تزال هذه الإدخالات محفوظة.",
 	"systemLogs.marker.showSkipped": "عرض الإدخالات التي تم تخطيها",
 	"systemLogs.marker.recoveryLimit": "بلغت القائمة حد استعادة الإدخالات. استخدم عوامل التصفية للعثور على الإدخالات التي لا يمكن فتحها هنا.",
 	"systemLogs.marker.cursorUnavailable": "أزال تنظيف السجلات موضع المتابعة، لذا قد تكون بعض الإدخالات مفقودة.",

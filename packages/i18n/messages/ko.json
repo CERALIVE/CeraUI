@@ -2888,7 +2888,7 @@
 	"systemLogs.error.readFailed": "로그를 읽을 수 없습니다.",
 	"systemLogs.marker.suppressed": "한 번에 너무 많이 기록되어 기기가 여기에서 항목을 버렸습니다.",
 	"systemLogs.marker.dropped": "따라가는 동안 건너뛴 항목: {count}",
-	"systemLogs.marker.catchupExceeded": "팔로우를 일시 중지한 동안 많은 항목이 기록되어 다시 시작할 때 모두 표시하지 못했습니다. 이 항목들은 여전히 저장되어 있습니다.",
+	"systemLogs.marker.catchupExceeded": "새로 기록된 항목이 많아 팔로우를 다시 시작할 때 모두 표시하지 못했습니다. 해당 항목은 여전히 저장되어 있습니다.",
 	"systemLogs.marker.showSkipped": "건너뛴 항목 표시",
 	"systemLogs.marker.recoveryLimit": "목록에서 건너뛴 구간을 불러올 수 있는 한도에 도달했습니다. 나머지 항목은 필터를 사용해 찾으세요.",
 	"systemLogs.marker.cursorUnavailable": "로그 정리로 따라가기 위치가 삭제되어 일부 항목이 빠졌을 수 있습니다.",

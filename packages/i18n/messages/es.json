@@ -2936,7 +2936,7 @@
 	"systemLogs.error.readFailed": "No se pudieron leer los registros.",
 	"systemLogs.marker.suppressed": "El dispositivo descartó entradas aquí porque se escribieron demasiadas a la vez.",
 	"systemLogs.marker.dropped": "Entradas omitidas durante el seguimiento: {count}",
-	"systemLogs.marker.catchupExceeded": "Mientras el seguimiento estuvo en pausa, se escribieron más registros de los que se pudieron recuperar al reanudarlo. Siguen guardados.",
+	"systemLogs.marker.catchupExceeded": "Se escribieron más entradas de las que se pudieron cargar al reanudar el seguimiento. Siguen guardadas.",
 	"systemLogs.marker.showSkipped": "Mostrar registros omitidos",
 	"systemLogs.marker.recoveryLimit": "Algunos tramos omitidos no se pueden abrir aquí porque la lista llegó a su límite de recuperación. Usa los filtros para encontrar esas entradas.",
 	"systemLogs.marker.cursorUnavailable": "La limpieza de registros eliminó la posición de seguimiento, así que pueden faltar algunas entradas.",
