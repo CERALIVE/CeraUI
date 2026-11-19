@@ -414,7 +414,6 @@ Rules for this copy:
 | `systemLogs.announce.gap` | Some log entries were skipped. | Live region |
 | `systemLogs.announce.disconnected` | Connection lost. Log entries may be out of date. | Live region |
 | `systemLogs.announce.newEntries` | New log entries: {count} | Live region, at most every 5 s |
-| `systemLogs.announce.newEvents` | New events: {count} | Not rendered by the code in this lane |
 
 ### Storage
 

@@ -2955,7 +2955,6 @@
 	"systemLogs.announce.gap": "Some log entries were skipped.",
 	"systemLogs.announce.disconnected": "Connection lost. Log entries may be out of date.",
 	"systemLogs.announce.newEntries": "New log entries: {count}",
-	"systemLogs.announce.newEvents": "New events: {count}",
 	"systemLogs.storage.heading": "Storage",
 	"systemLogs.storage.used": "Logs use {used} of {limit}",
 	"systemLogs.storage.usedNoLimit": "Logs use {used}",

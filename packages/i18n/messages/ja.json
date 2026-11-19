@@ -2910,7 +2910,6 @@
 	"systemLogs.announce.gap": "一部のログエントリーをスキップしました。",
 	"systemLogs.announce.disconnected": "接続が切れました。ログエントリーは古い可能性があります。",
 	"systemLogs.announce.newEntries": "新しいログエントリー: {count}",
-	"systemLogs.announce.newEvents": "新しいイベント: {count}",
 	"systemLogs.storage.heading": "ストレージ",
 	"systemLogs.storage.used": "ログの使用量: {used} / {limit}",
 	"systemLogs.storage.usedNoLimit": "ログの使用量: {used}",

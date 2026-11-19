@@ -2910,7 +2910,6 @@
 	"systemLogs.announce.gap": "일부 로그 항목을 건너뛰었습니다.",
 	"systemLogs.announce.disconnected": "연결이 끊어졌습니다. 로그 항목이 최신이 아닐 수 있습니다.",
 	"systemLogs.announce.newEntries": "새 로그 항목: {count}",
-	"systemLogs.announce.newEvents": "새 이벤트: {count}",
 	"systemLogs.storage.heading": "저장 공간",
 	"systemLogs.storage.used": "로그 사용량: {used} / {limit}",
 	"systemLogs.storage.usedNoLimit": "로그 사용량: {used}",

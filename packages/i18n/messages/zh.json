@@ -2910,7 +2910,6 @@
 	"systemLogs.announce.gap": "跳过了部分日志条目。",
 	"systemLogs.announce.disconnected": "连接已断开。日志条目可能已过时。",
 	"systemLogs.announce.newEntries": "新的日志条目：{count}",
-	"systemLogs.announce.newEvents": "新事件：{count}",
 	"systemLogs.storage.heading": "存储",
 	"systemLogs.storage.used": "日志占用：{used} / {limit}",
 	"systemLogs.storage.usedNoLimit": "日志占用：{used}",

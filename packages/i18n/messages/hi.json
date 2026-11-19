@@ -2955,7 +2955,6 @@
 	"systemLogs.announce.gap": "कुछ लॉग एंट्री छोड़ दी गईं।",
 	"systemLogs.announce.disconnected": "कनेक्शन टूट गया। लॉग एंट्री पुरानी हो सकती हैं।",
 	"systemLogs.announce.newEntries": "नई लॉग एंट्री: {count}",
-	"systemLogs.announce.newEvents": "नए इवेंट: {count}",
 	"systemLogs.storage.heading": "स्टोरेज",
 	"systemLogs.storage.used": "लॉग {limit} में से {used} उपयोग करते हैं",
 	"systemLogs.storage.usedNoLimit": "लॉग {used} उपयोग करते हैं",

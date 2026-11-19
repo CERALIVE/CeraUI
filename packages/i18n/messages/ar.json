@@ -2967,7 +2967,6 @@
 	"systemLogs.announce.gap": "تم تخطي بعض إدخالات السجل.",
 	"systemLogs.announce.disconnected": "انقطع الاتصال. قد تكون إدخالات السجل قديمة.",
 	"systemLogs.announce.newEntries": "إدخالات سجل جديدة: {count}",
-	"systemLogs.announce.newEvents": "أحداث جديدة: {count}",
 	"systemLogs.storage.heading": "التخزين",
 	"systemLogs.storage.used": "تستخدم السجلات {used} من {limit}",
 	"systemLogs.storage.usedNoLimit": "تستخدم السجلات {used}",
