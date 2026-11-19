@@ -38,7 +38,7 @@
  */
 
 import { SpawnAbortError, SpawnTimeoutError } from "./bounded-spawn.ts";
-import { execFileP } from "./exec.ts";
+import { type ChildExitObserver, execFileP } from "./exec.ts";
 import { logger } from "./logger.ts";
 
 /** Default stdout/stderr ceiling for buffered (execFile) commands: 10 MiB. */
@@ -67,7 +67,7 @@ export type RunOpts = {
 	 * the child is ever spawned.
 	 */
 	signal?: AbortSignal;
-};
+} & ChildExitObserver;
 
 /**
  * Rejection raised when a command exceeds its {@link RunOpts.timeout} budget.
@@ -345,9 +345,9 @@ export async function run(
 
 	try {
 		const { stdout } = await execFileP(bin, [...args], {
+			...opts,
 			maxBuffer: opts?.maxBuffer ?? DEFAULT_MAX_BUFFER,
 			timeout: opts?.timeout ?? DEFAULT_TIMEOUT_MS,
-			...(opts?.signal ? { signal: opts.signal } : {}),
 		});
 		return stdout;
 	} catch (err) {

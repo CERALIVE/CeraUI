@@ -10,7 +10,7 @@ import {
 	logger,
 	setJournalDetail,
 } from "../../helpers/logger.ts";
-import { run } from "../../helpers/run.ts";
+import { type RunOpts, run } from "../../helpers/run.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { updatePhaseBusyReasons } from "../system/disruptive-action-gate.ts";
 import { reserveUpdateEvidenceDeletion } from "../system/disruptive-action-reservation.ts";
@@ -205,16 +205,25 @@ export function clearAll(): Promise<LogStorageOutput> {
 					updatePhaseBusyReasons(getOrchestratorState().phase).length > 0,
 			);
 			if (!deletion.allowed) return { ok: false, error: "UPDATE_IN_PROGRESS" };
+			let childExit: Promise<number> | undefined;
+			const command: RunOpts = {
+				onChildExit(exited) {
+					childExit = exited;
+				},
+			};
 			try {
 				if (!mock) {
-					await run("journalctl", ["--rotate"]);
-					await run("journalctl", ["--vacuum-time=1s"]);
+					await run("journalctl", ["--rotate"], command);
+					await run("journalctl", ["--vacuum-time=1s"], command);
 				}
 				await deleteLegacyDebugFiles();
 				// Mock Clear empties the captured ring before writing its first new marker.
 				if (mock) clearRecentLogLines();
 			} finally {
-				deletion.reservation.releaseAfterCompletion();
+				const release = deletion.reservation.releaseAfterCompletion;
+				// The RPC may finish before a timed-out child has left the journal.
+				if (childExit) void childExit.then(release);
+				else release();
 			}
 			logger.info("device logs cleared", { module: "device-logs" });
 			updateLogState({ lastClearedAt: Date.now() });
