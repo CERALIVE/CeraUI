@@ -24,10 +24,11 @@ cleanup receipt. The final success line follows cleanup.
 Follower checks read exact journal events with bounded timeouts. Readiness uses
 a FIFO written by a systemd unit after journald and D-Bus start. The suppression
 check uses a systemd timer to cross the configured 30-second rate interval,
-then awaits a journal marker and inspects any suppression notice. `run.sh` and
-`live.sh` run no `sleep` command; the per-unit suppression case polls `journalctl`
-for its notice under a 15 s timeout (`live.sh:192-201`). The overall runner has a 12-minute deadline; individual follower,
-readiness, live-suite and shutdown waits have shorter deadlines.
+then awaits a journal marker and inspects any suppression notice. The per-unit
+case reads a readiness marker from its journal follower before scheduling the
+release that triggers the notice. It then allows 15 s for the notice to arrive.
+The overall runner has a 12-minute deadline. Individual follower, readiness,
+live-suite and shutdown waits have shorter deadlines.
 
 With `-n 0 --after-cursor`, systemd 257 defers cursor backlog until the next
 journal event. That check subscribes to the follower's stdout epoll registration
@@ -44,7 +45,7 @@ record (`live.sh:136-166`). A second case sets a per-unit rate limit
 (`LogRateLimitBurst=1`, 2 s), asserts that fewer than 6,000 of 6,000 lines are
 stored, waits for the journal's notice with `MESSAGE_ID=a596d6fe7bfa4994828e72309e95d61e`
 and checks its message id, `N_DROPPED`, message text and a positive dropped
-count with `assert-suppression.sh` (`live.sh:168-206`).
+count with `assert-suppression.sh` (`live.sh:168-209`).
 
 The predecessor directory is excluded from `journalctl --disk-usage` and
 vacuum, while `du` includes it. Injected boots can share an archived file:

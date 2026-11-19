@@ -186,24 +186,27 @@ limited_count="$("${J[@]}" _SYSTEMD_UNIT=rate-limited-flood.service |
 	jq -rs '[.[] | select(.MESSAGE | startswith("limited-flood "))] | length')"
 (( limited_count > 0 && limited_count < 6000 )) ||
 	fail "per-unit limit stored $limited_count of 6000 entries"
+suppression_id=a596d6fe7bfa4994828e72309e95d61e
+# Read the readiness marker from the same subscription before releasing the flood.
+start_follow --lines=all --grep='(rate-limit-ready|rate-limited-flood\.service)$' \
+	"MESSAGE_ID=$suppression_id" + SYSLOG_IDENTIFIER=rate-limit-subscription
+emit rate-limit-subscription rate-limit-ready
+next_message rate-limit-ready
 # The same live unit writes after its interval; that write emits the drop receipt.
 systemd-run --quiet --unit=rate-limit-release --on-active=3s --timer-property=AccuracySec=1us \
 	sh -ec 'printf "resume\n" >/state/rate-limit-release'
-if ! timeout --kill-after=2s 15s bash -euc '
-	while :; do
-		journalctl --no-pager --all -o json MESSAGE_ID=a596d6fe7bfa4994828e72309e95d61e |
-			jq -ces "map(select(.MESSAGE | endswith(\"rate-limited-flood.service\"))) |
-				select(length == 1) | .[0]" >/state/suppression-limited.jsonl && exit 0
-	done
-'; then
+if ! IFS= read -r -t 15 suppression <&"$follow_fd"; then
 	"${J[@]}" --grep='Suppressed|limited-flood'
 	fail 'timed out awaiting the per-unit suppression MESSAGE_ID'
 fi
+stop_follow
 bash /conformance/assert-suppression.sh rate-limited-flood.service 6000 "$limited_count" \
-	</state/suppression-limited.jsonl || fail 'suppression ID, message or dropped count mismatch'
-echo "PASS live: suppression MESSAGE_ID a596d6fe7bfa4994828e72309e95d61e"
+	<<<"$suppression" || fail 'suppression ID, message or dropped count mismatch'
+equal 'one per-unit suppression notice' \
+	"$("${J[@]}" "MESSAGE_ID=$suppression_id" --grep='rate-limited-flood\.service$' | jq -s length)" 1
+echo "PASS live: suppression MESSAGE_ID $suppression_id"
 echo "SUPPRESSION_LIMITED stored=$limited_count written=6000"
-echo "SUPPRESSION_LIMITED_JSON $(jq -c . /state/suppression-limited.jsonl)"
+echo "SUPPRESSION_LIMITED_JSON $(jq -c . <<<"$suppression")"
 exec {rate_release_fd}<&-
 rm /state/rate-limit-release
 
