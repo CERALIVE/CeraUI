@@ -49,12 +49,14 @@ deepStrictEqual(records, [
 ]);
 console.log("PASS fixture: CeraUI reader preserves projected fields and a long message");
 
-for (const [source, expected] of [
-	["bonding", ["srtla_send: link ready", "receiver ready"]],
-	["app", ["app startup"]],
+for (const [source, level, expected] of [
+	["bonding", "info", ["srtla_send: link ready", "receiver ready"]],
+	["app", "info", ["app startup", "srtla_send: app quotes sender"]],
+	["bonding", "error", ["srtla_send: 2026-11-19T10:00:00.000000Z ERROR warning: no available connections"]],
+	["bonding", "debug", ["srtla_send: 2026-11-19T10:00:00.000000Z TRACE retry failed"]],
+	["app", "error", []],
 ] as const) {
-	const filter = { sources: [source], levels: ["info"] as const };
-	const selected = { ...filter, levels: [...filter.levels] };
+	const selected = { sources: [source], levels: [level] };
 	const messages: string[] = [];
 	const scan = await scanJournal({
 		options: [`--file=${file}`, "--since=@1700000002"],

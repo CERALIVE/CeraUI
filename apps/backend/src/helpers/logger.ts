@@ -441,8 +441,8 @@ export function formatConsoleEntry(
 /**
  * Fixed production log schema. One shape for the file transport AND the prod
  * console so journal/log shippers parse a single record format:
- *   { ts, level, msg, module?, meta? }
- * `ts` is ISO-8601 UTC; `module` is lifted out of the metadata when present;
+ *   { ts, level, msg, module?, processSource?, meta? }
+ * `ts` is ISO-8601 UTC; `module` and the owned process role are top-level;
  * every remaining non-reserved field is folded under `meta`.
  */
 export interface ProdLogRecord {
@@ -450,6 +450,7 @@ export interface ProdLogRecord {
 	level: string;
 	msg: string;
 	module?: string;
+	processSource?: "srtla_send";
 	meta?: Record<string, unknown>;
 }
 
@@ -461,13 +462,13 @@ export interface StructuredLogInfo {
 	[key: string]: unknown;
 }
 
-// `module` joins the console reserved set: it is promoted to a top-level schema
-// field, so it must not also appear inside `meta`.
+// Promoted fields must not also appear inside `meta`.
 const STRUCTURED_RESERVED_KEYS = new Set([
 	"level",
 	"message",
 	"timestamp",
 	"module",
+	"processSource",
 ]);
 
 // winston's timestamp() default is already ISO-8601, but a caller-supplied
@@ -504,6 +505,8 @@ export function formatProdEntry(info: StructuredLogInfo): string {
 	if (info.module !== undefined && info.module !== null) {
 		record.module = String(info.module);
 	}
+	if (info.processSource === "srtla_send")
+		record.processSource = info.processSource;
 
 	const meta: Record<string, unknown> = {};
 	for (const key of Object.keys(info)) {

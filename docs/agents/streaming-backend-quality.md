@@ -151,10 +151,10 @@ ANSI escapes.
 **Prod JSON schema (file transport + prod console):**
 `formatProdEntry(info)` serializes to a single-line JSON record with a fixed shape:
 ```ts
-{ ts: string, level: string, msg: string, module?: string, meta?: Record<string, unknown> }
+{ ts: string, level: string, msg: string, module?: string, processSource?: "srtla_send", meta?: Record<string, unknown> }
 ```
-`ts` is ISO-8601 UTC; `module` is promoted to top-level (not buried in `meta`); all other
-non-reserved fields fold under `meta`. `jsonReplacer` surfaces `Error` objects as
+`ts` is ISO-8601 UTC. `module` and the owned `processSource` are top-level.
+Other non-reserved fields fold under `meta`. `jsonReplacer` surfaces `Error` objects as
 `{name, message, stack}` rather than `{}`. Both the file transport and the production
 console use this same schema so log shippers parse one format.
 

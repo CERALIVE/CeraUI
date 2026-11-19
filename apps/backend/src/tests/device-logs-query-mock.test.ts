@@ -15,7 +15,13 @@ afterEach(() => {
 });
 
 test.each([
-	["app", [["app", "startup complete"]]],
+	[
+		"app",
+		[
+			["app", "srtla_send: quoted"],
+			["app", "startup complete"],
+		],
+	],
 	["bonding", [["bonding", "srtla_send: link ready"]]],
 ] as const)(
 	"mock query for %s separates sender and app journal entries",
@@ -23,7 +29,10 @@ test.each([
 		spyOn(mocks, "shouldUseMocks").mockReturnValue(true);
 		logging.clearRecentLogLines();
 		logging.logger.info("startup complete");
-		logging.logger.info("srtla_send: link ready");
+		logging.logger.info("srtla_send: quoted");
+		logging.logger.info("srtla_send: link ready", {
+			processSource: "srtla_send",
+		});
 		const result = await queryLogs(socket(), {
 			sources: [source],
 			levels: ["info"],

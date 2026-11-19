@@ -5,25 +5,53 @@ import { matchesResidual } from "../modules/device-logs/residual.ts";
 import { record } from "./helpers/device-query.ts";
 
 test.each([
-	["ceralive.service", "srtla_send: link ready", "bonding", false, true],
+	[
+		"ceralive.service",
+		"srtla_send: link ready",
+		"srtla_send",
+		"bonding",
+		false,
+		true,
+	],
+	["ceralive.service", "srtla_send: quoted", undefined, "app", true, false],
 	[
 		"ceralive.service",
 		"app mentions srtla_send: link ready",
+		undefined,
 		"app",
 		true,
 		false,
 	],
-	["srtla.service", "receiver accepted a connection", "bonding", false, true],
-	["NetworkManager.service", "srtla_send: quoted", "network", false, false],
+	[
+		"srtla.service",
+		"receiver accepted a connection",
+		undefined,
+		"bonding",
+		false,
+		true,
+	],
+	[
+		"NetworkManager.service",
+		"srtla_send: quoted",
+		"srtla_send",
+		"network",
+		false,
+		false,
+	],
 ] as const)(
-	"%s message %s is attributed to %s and filtered accordingly",
-	(unit, msg, source, inApp, inBonding) => {
+	"%s message %s with producer %s is attributed to %s",
+	(unit, msg, producer, source, inApp, inBonding) => {
 		const entry = parseRecord({
 			__CURSOR: "fixture=1",
 			__REALTIME_TIMESTAMP: "1000",
 			_BOOT_ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			_SYSTEMD_UNIT: unit,
-			MESSAGE: JSON.stringify({ ts: "2026-01-01", msg, module: "fixture" }),
+			MESSAGE: JSON.stringify({
+				ts: "2026-01-01",
+				msg,
+				module: "fixture",
+				processSource: producer,
+			}),
 		});
 		if (!entry) throw new Error("invalid journal fixture");
 		const included = (sources: LogSource[]) =>
@@ -100,3 +128,16 @@ test.each([
 		).toBe(expected);
 	},
 );
+
+test("shared-unit suppression is relevant to the sender even without a producer tag", () => {
+	expect(
+		matchesResidual(
+			{
+				...record(1),
+				marker: "suppressed",
+				message: "ceralive.service dropped",
+			},
+			{ sources: ["bonding"] },
+		),
+	).toBe(true);
+});

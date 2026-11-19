@@ -21,11 +21,9 @@
 // state — every other module reaches it through the exported helpers so the
 // mutable list never leaks across module boundaries.
 
-import { basename } from "node:path";
 import { logger } from "../../../helpers/logger.ts";
 import { periodicCheckForSoftwareUpdates } from "../../system/software-updates.ts";
 import {
-	SENDER_LOG_PREFIX,
 	SHUTDOWN_SIGKILL_TIMEOUT_MS,
 	SHUTDOWN_SIGTERM_GRACE_MS,
 } from "../constants.ts";
@@ -35,12 +33,13 @@ import {
 } from "../health.ts";
 import { stopLinkTelemetry } from "../link-telemetry.ts";
 import { updateStatus } from "../streaming.ts";
+import { captureSenderOutput } from "./sender-output.ts";
 
 // Bun.Subprocess is not an EventEmitter, so the exit lifecycle is modeled here:
 // `exitListeners` replaces .on("exit")/.removeAllListeners("exit") and fires once
 // when `proc.exited` resolves; `spawnfile` replaces ChildProcess.spawnfile.
 export type StreamingProcess = {
-	proc: Bun.Subprocess<"inherit", "inherit", "pipe">;
+	proc: Bun.Subprocess<"inherit", "inherit" | "pipe", "pipe">;
 	spawnfile: string;
 	exitListeners: Array<() => void>;
 };
@@ -55,14 +54,17 @@ export function getStreamingProcesses(): Array<StreamingProcess> {
 }
 
 export function spawnStreamingLoop(
-	command: string,
+	launch: string | { readonly command: string; readonly role: "srtla_send" },
 	args: Array<string>,
 	errCallback: (data: string) => void,
 ): StreamingProcess {
+	const command = typeof launch === "string" ? launch : launch.command;
+	const sender = typeof launch !== "string" && launch.role === "srtla_send";
 	const proc = Bun.spawn([command, ...args], {
 		stdin: "inherit",
-		stdout: "inherit",
+		stdout: sender ? "pipe" : "inherit",
 		stderr: "pipe",
+		...(sender ? { env: { ...process.env, NO_COLOR: "1" } } : {}),
 	});
 
 	const streamingProcess: StreamingProcess = {
@@ -72,39 +74,22 @@ export function spawnStreamingLoop(
 	};
 	streamingProcesses.push(streamingProcess);
 
-	if (errCallback) {
+	if (proc.stdout) {
+		void captureSenderOutput(
+			{ stdout: proc.stdout, stderr: proc.stderr },
+			errCallback,
+		);
+	} else {
 		// Drain stderr by async iteration: chunks arrive in order, matching the
 		// previous stderr.on("data") delivery. Each chunk is decoded on its own,
 		// preserving the per-chunk pattern matching the errCallback relies on.
-		(async () => {
+		void (async () => {
 			const decoder = new TextDecoder();
-			const sender = basename(command) === "srtla_send";
-			const lineDecoder = new TextDecoder();
-			let tail = "";
-			const logSenderLine = (line: string) => {
-				const message = line.trimEnd();
-				if (message.length === 0) return;
-				const level = /\bwarn(?:ing)?\b/i.test(message)
-					? "warn"
-					: /\b(?:error|fatal|failed|cannot|could not|unable)\b/i.test(message)
-						? "error"
-						: "info";
-				logger[level](`${SENDER_LOG_PREFIX}${message}`);
-			};
 			for await (const chunk of proc.stderr) {
 				const dataStr = decoder.decode(chunk);
-				if (sender) {
-					const lines = (
-						tail + lineDecoder.decode(chunk, { stream: true })
-					).split("\n");
-					tail = lines.pop() ?? "";
-					for (const line of lines) logSenderLine(line);
-				} else {
-					logger.debug(`${streamingProcess.spawnfile} stderr: ${dataStr}`);
-				}
+				logger.debug(`${streamingProcess.spawnfile} stderr: ${dataStr}`);
 				errCallback(dataStr);
 			}
-			if (sender) logSenderLine(tail + lineDecoder.decode());
 		})().catch((err) => {
 			// stderr is torn down when the process is killed; that surfaces here
 			// as a benign cancellation, not a subprocess error to report.
@@ -136,7 +121,7 @@ export function spawnStreamingLoop(
 		// remove the dead process from the supervised list
 		removeProc(streamingProcess);
 		// srtla_send is the telemetry producer; its exit ends the stats stream.
-		if (streamingProcess.spawnfile.endsWith("srtla_send")) {
+		if (sender) {
 			stopLinkTelemetry();
 		}
 		// notify health state: the stream is now dead until systemd respawns it

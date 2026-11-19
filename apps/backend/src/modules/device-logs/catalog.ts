@@ -1,5 +1,4 @@
 import { LOG_SOURCES, type LogSource } from "@ceraui/rpc/schemas";
-import { SENDER_LOG_PREFIX } from "../streaming/constants.ts";
 
 const APP_UNIT = "ceralive.service";
 
@@ -69,9 +68,11 @@ export const JOURNAL_SOURCE_UNITS = {
 	bonding: [APP_UNIT, ...SOURCE_UNITS.bonding],
 } satisfies Readonly<Record<LogSource, readonly string[]>>;
 
-export function sourceOfUnit(unit: string, message = ""): LogSource | null {
-	if (unit === APP_UNIT && message.startsWith(SENDER_LOG_PREFIX))
-		return "bonding";
+export function sourceOfUnit(
+	unit: string,
+	processSource?: "srtla_send",
+): LogSource | null {
+	if (unit === APP_UNIT && processSource === "srtla_send") return "bonding";
 	return (
 		LOG_SOURCES.find((source) => SOURCE_UNITS[source].includes(unit)) ?? null
 	);

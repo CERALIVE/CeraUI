@@ -69,13 +69,14 @@ export function parseRecord(input: unknown): RawJournalRecord | null {
 	}
 	let truncated = message === undefined;
 	let text = message ?? "";
-	let sourceMessage = text;
+	let processSource: "srtla_send" | undefined;
 	if (text.startsWith('{"ts":')) {
 		try {
 			const structured = objectSchema.safeParse(JSON.parse(text));
 			if (structured.success && typeof structured.data.msg === "string") {
 				const data = structured.data;
-				sourceMessage = structured.data.msg;
+				if (data.processSource === "srtla_send")
+					processSource = data.processSource;
 				text = `${typeof data.module === "string" && data.module ? `[${data.module}] ` : ""}${data.msg}${
 					data.meta !== null && typeof data.meta === "object"
 						? ` ${JSON.stringify(data.meta)}`
@@ -111,7 +112,10 @@ export function parseRecord(input: unknown): RawJournalRecord | null {
 		source:
 			obj._TRANSPORT === "kernel"
 				? "kernel"
-				: sourceOfUnit(systemUnit ?? identifier ?? "", sourceMessage),
+				: sourceOfUnit(
+						systemUnit ?? identifier ?? "",
+						systemUnit ? processSource : undefined,
+					),
 		message: text,
 		truncated,
 		marker:

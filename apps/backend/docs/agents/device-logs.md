@@ -56,7 +56,7 @@ Level to priority: error 0-3, warning 4, info 5-6, debug 7 (`filter.ts:9-14`).
 | Source | Journal candidates | Recent volume attribution |
 |---|---|---|
 | CeraLive app | `ceralive.service` | App records without the sender prefix |
-| Bonding sender | `ceralive.service`, `srtla-send.service`, `srtla.service` | `srtla_send: ` messages from `ceralive.service`, plus entries from the two standalone receiver units when present |
+| Bonding sender | `ceralive.service`, `srtla-send.service`, `srtla.service` | `ceralive.service` records tagged `processSource: "srtla_send"` by the backend logger, plus entries from the two standalone receiver units when present |
 
 The shared unit is matched once when both sources are selected. Source
 membership uses the message prefix before display formatting. A suppression
@@ -143,15 +143,31 @@ example origins:
 `live.sh` runs through `bun run test:journal-conformance` (`package.json:32`).
 `src/tests/device-logs-*.test.ts` hold the other unit tests.
 
-## Child-process stderr
+## Bonding sender output
 
-`src/modules/streaming/streamloop/process-runner.ts` logs each nonempty sender
-stderr line with the `srtla_send: ` prefix. Warn or warning wins, failure
-keywords map to error, and the remaining lines are info. Notifications still
-receive the original stderr chunks. In production `setJournalDetail`
-sets the console level (`src/helpers/logger.ts:707-714`); it is called from
-`initLogSettings` (`settings.ts:96`, run at `src/main.ts:446`) and from
-`setRetention` (`retention.ts:124`).
+The streaming launcher assigns the sender role explicitly. Only that launch
+pipes both stdout and stderr and sets `NO_COLOR=1`. Rust tracing normally writes
+to stdout. `sender-output.ts` reads both streams, preserves their explicit
+tracing levels (TRACE and DEBUG both map to debug), and uses words to classify
+unstructured lines. Notifications still receive only the original stderr
+chunks. Sending stdout to that matcher would add notifications for runtime
+traces such as `no available connections`.
+
+Each pipe retains up to 8 KiB per line. Overlong lines are marked `[truncated]`
+and their remaining bytes are skipped through the next newline. The two pipes
+share a budget of 32 lines per one-second window for the sender process. An
+additional warning reports how many lines were dropped when the window ends or
+both pipes close.
+
+The logger supplies the top-level `processSource` field from the launch role.
+Subprocess text goes inside the message string, so a priority prefix or JSON
+inside it cannot set the journal priority or source. The native reader and mock
+ring use the same journal parser. Earlier prefix-only records from
+`ceralive.service` appear under CeraLive app. Shared-unit journald suppression
+notices still appear under either source. Production `setJournalDetail` sets
+the console level through `initLogSettings` and `setRetention`. Reduced detail
+omits debug output. Full detail keeps debug emitted by the sender, subject to
+the local line budget. It does not change the sender's `RUST_LOG` or CLI flags.
 
 ## Not qualified on hardware
 

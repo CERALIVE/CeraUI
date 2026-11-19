@@ -610,7 +610,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		id: "streamloop.srtlaSend",
 		file: "modules/streaming/streamloop/process-runner.ts",
 		symbol: "spawnStreamingLoop",
-		command: "[command, ...args] (e.g. srtla_send)",
+		command: "[command, ...args] (owned srtla_send launch pipes both outputs)",
 		class: "supervised-worker",
 		contract: {
 			timed: false,
