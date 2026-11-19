@@ -60,9 +60,8 @@ All guarded Wi-Fi router procedures use one admission middleware. It establishes
 the request binding exactly once, including an explicitly missing client token.
 Transaction checks consume that context; its absence means no incoming guarded
 request is being admitted. Internal callers do not acquire a token requirement.
-A mode change to hotspot or hybrid is checked at the transition's lock entry,
-and the start it runs trusts that admission, so a change during the AP teardown
-never refuses after effects; in-operation fencing is separate work. The request
+A mode change to hotspot or hybrid is checked at the transition's lock entry.
+Its delegates use the proof captured by that transaction. The request
 admission is one-shot: the transaction lock-entry check consumes it whether it
 admits or refuses. It applies only to the recorded device; another adapter's
 internal transaction does not inherit it. Middleware retires the record in
@@ -144,11 +143,19 @@ Without exact activation evidence, ordinary bounded confirmation still
 applies. Start rollback restores only its own cache entry.
 
 Prepare rechecks after resolving credentials and inside the shared repair or
-Save write callback, then checks again before returning credentials or
-committing the Save. Mode to hotspot or hybrid checks before recording the
-intent. The regulatory restart captures a verified row's lifetime and checks
-it before writing, reactivation, rollback, and credential publication. The
-limited-radio regulatory Stop continues to use its existing UUID authority.
+Save callback. It checks again before returning credentials or committing the
+Save. Active Configure and regulatory restart use the same writer. It checks
+the selected radio and profile before the forward write, reactivation, any
+rollback, and the credential commit. If proof is lost before dispatch, the
+operation refuses without effects. If a write may already have changed the
+profile, Configure reports `activating` and suppresses further writes and Up.
+The limited-radio regulatory Stop retains its UUID-based authority.
+
+Mode to hotspot or hybrid checks before recording intent, then passes the
+captured row and lifetime through Down and Start. A replacement after a
+confirmed Down blocks Start and settles the original mode operation with
+`radio-changed`. A failed Down remains `deactivation-failed`. A refusal can
+restore only the intent written by that operation under the held owner lock.
 
 The frontend keeps a `current-unobserved` request pending for the next Wi-Fi
 status frame containing that row, for at most three seconds. It sends the same

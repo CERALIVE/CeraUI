@@ -47,7 +47,6 @@ import type {
 } from "./wifi-hotspot-types.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
 import {
-	bindingForRow,
 	matchesWifiOperationRadio,
 	sampleWifiOperationRadio,
 	type WifiOperationBinding,
@@ -224,8 +223,7 @@ export function registerPendingConfirmation(
 	const virtual = target.ifname !== ifname;
 	const lifetime = wifiRadioIdentity.state.rows.get(ifname)?.lifetime;
 	const apLifetime = wifiRadioIdentity.state.rows.get(target.ifname)?.lifetime;
-	const binding =
-		target.binding ?? bindingForRow(target.macAddress, wifiInterface);
+	const binding = target.binding;
 	const ownsCache = (): boolean =>
 		wifiInterface.hotspot === hotspot && hotspot.conn === target.uuid;
 	const matches = (): boolean =>
@@ -337,27 +335,33 @@ export function registerPendingConfirmation(
 				const exact = activation?.profile || activation?.activePath;
 				if (exact && !(await exactActivation(activation))) return false;
 				if (!binding || !current(pending)) return current(pending) && matches();
-				const radio = await sampleWifiOperationRadio(target.ifname);
-				const parent = virtual
-					? await sampleWifiOperationRadio(binding.ifname)
-					: radio;
+				const targetLifetime = target.targetRadio?.lifetime ?? apLifetime;
+				const radio =
+					virtual && targetLifetime
+						? await sampleWifiOperationRadio(target.ifname)
+						: undefined;
+				const parent = await sampleWifiOperationRadio(binding.ifname);
 				if (
 					!current(pending) ||
 					!ownsCache() ||
 					pending.activation !== activation
 				)
 					return false;
-				const targetLifetime = target.targetRadio?.lifetime ?? apLifetime;
-				if (!parent || (targetLifetime && !radio)) return false;
+				if (!parent || (virtual && targetLifetime && !radio)) return false;
 				const sameTarget =
 					!virtual ||
-					(!targetLifetime && !exact) ||
+					!targetLifetime ||
 					sameRadioLifetime(targetLifetime, radio?.lifetime);
 				if (sameTarget && matchesWifiOperationRadio(binding, parent)) {
 					settleCaptured(pending, true);
 					return true;
 				}
-				if (!exact || !activation) return false;
+				// The absence of a witness is not evidence that the activated leg changed.
+				const physicalChange =
+					!sameTarget ||
+					!sameRadioLifetime(binding.lifetime, parent.lifetime) ||
+					(!parent.macReadFailed && parent.permanentMac !== binding.mac);
+				if (!physicalChange || !exact || !activation) return false;
 				const lock = await withWifiAdapterLock(
 					wifiAdapterLockKey(owner),
 					async () => {

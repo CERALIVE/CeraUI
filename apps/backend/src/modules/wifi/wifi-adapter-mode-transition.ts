@@ -81,7 +81,9 @@ import type { HybridRestoreAttempt } from "./wifi-hybrid-target-diagnostics.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
 import { takeWifiModeRequestRefusal } from "./wifi-mode-request.ts";
 import {
+	bindingForRow,
 	type WifiOperationBinding,
+	wifiOperationChanged,
 	wifiOperationGuard,
 } from "./wifi-operation-binding.ts";
 import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
@@ -102,10 +104,12 @@ export interface AdapterModeTransitionDeps {
 		device: number,
 		publish: HotspotOutcomePublisher,
 		restoreAttempt?: HybridRestoreAttempt,
+		binding?: WifiOperationBinding,
 	) => Promise<HotspotStartResult>;
 	readonly stopHotspot: (
 		device: number,
 		publish: HotspotOutcomePublisher,
+		binding?: WifiOperationBinding,
 	) => Promise<HotspotStopResult>;
 	readonly publishOutcome: AdapterModeOutcomePublisher;
 	readonly publishHotspotOutcome: HotspotOutcomePublisher;
@@ -213,7 +217,9 @@ export async function setWifiAdapterMode(
 		return refuse(wifiInterface.id, "DEVICE_BUSY", publishRefusal);
 	}
 	const transition = async (
-		binding?: WifiOperationBinding,
+		binding = target === "station"
+			? undefined
+			: bindingForRow(macAddress, wifiInterface),
 	): Promise<SetWifiAdapterModeOutput> => {
 		const id = wifiInterface.id;
 		const owner = resolveWifiAdapterOwner(macAddress, wifiInterface);
@@ -299,14 +305,26 @@ export async function setWifiAdapterMode(
 				publishPending: () => {
 					deps.publishOutcome(id, { pending: true, mode: target });
 				},
-				start: () => deps.startHotspot(id, chainModeTerminal(id, target, deps)),
-				stop: (terminal) =>
-					deps.stopHotspot(
-						id,
-						terminal
-							? chainModeTerminal(id, target, deps)
-							: deps.publishHotspotOutcome,
-					),
+				start: async () => {
+					if (binding && (!(await operation.check()) || !operation.current())) {
+						deps.publishOutcome(id, wifiOperationChanged);
+						return wifiOperationChanged;
+					}
+					const publish = chainModeTerminal(id, target, deps);
+					return binding
+						? deps.startHotspot(id, publish, undefined, binding)
+						: deps.startHotspot(id, publish);
+				},
+				stop: async (terminal) => {
+					if (binding && (!(await operation.check()) || !operation.current()))
+						return wifiOperationChanged;
+					const publish = terminal
+						? chainModeTerminal(id, target, deps)
+						: deps.publishHotspotOutcome;
+					return binding
+						? deps.stopHotspot(id, publish, binding)
+						: deps.stopHotspot(id, publish);
+				},
 			});
 			succeeded = result.success;
 			return result;

@@ -13,6 +13,7 @@ import {
 	settlePending,
 	syncWifiStateCache,
 } from "../modules/wifi/wifi-hotspot-monitor.ts";
+import { bindingForRow } from "../modules/wifi/wifi-operation-binding.ts";
 import { radioIdentityReaders } from "../modules/wifi/wifi-radio-identity.ts";
 import { request } from "./helpers/wifi-entry-fixture.ts";
 import { wifiFrameFixture } from "./helpers/wifi-frame-fixture.ts";
@@ -167,6 +168,7 @@ test.each([true, false])(
 				uuid: "test-ap",
 				ifname: "wlan0",
 				activation: { profile: instance, activePath },
+				binding: bindingForRow(key, fixture.row),
 			},
 			fixture.row,
 			{ ...defaultHotspotDeps, pollHotspotActive: undefined },

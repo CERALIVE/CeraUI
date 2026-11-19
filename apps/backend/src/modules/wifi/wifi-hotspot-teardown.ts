@@ -18,6 +18,10 @@ import {
 	isHotspotActive,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
+import {
+	wifiOperationChanged,
+	type wifiOperationGuard,
+} from "./wifi-operation-binding.ts";
 import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
@@ -26,6 +30,7 @@ export async function teardownHotspotLocked(
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotStopDeps,
 	conn: ConnectionUUID | undefined,
+	operation?: ReturnType<typeof wifiOperationGuard>,
 ): Promise<HotspotStopResult> {
 	if (!conn) return { success: true };
 	if (
@@ -47,6 +52,8 @@ export async function teardownHotspotLocked(
 			return { success: true };
 	}
 
+	if (operation && (!(await operation.check()) || !operation.current()))
+		return wifiOperationChanged;
 	// Read BEFORE the teardown clears it: the dup-IP suppression release below has
 	// to pair with whichever interface took it on the way in, and a capable radio
 	// hosting an EXCLUSIVE hotspot has no virtual netdev at all.
@@ -62,14 +69,31 @@ export async function teardownHotspotLocked(
 	deps.broadcastState();
 	syncWifiStateCache(macAddress, wifiInterface);
 
+	let dispatched = false;
 	const disconnected = (
 		await runHotspotProfileOperation({
 			uuid: conn,
 			kind: "down",
 			selected: true,
-			run: () => deps.nmDisconnect(conn),
+			run: async () => {
+				if (operation && (!(await operation.check()) || !operation.current()))
+					return false;
+				dispatched = true;
+				return deps.nmDisconnect(conn);
+			},
 		})
 	).success;
+	if (!dispatched && operation?.changed) {
+		delete wifiInterface.hotspot.transition;
+		return wifiOperationChanged;
+	}
+	const result: HotspotStopResult = disconnected
+		? { success: true }
+		: { success: false, error: "deactivation-failed" };
+	if (operation && (!(await operation.check()) || !operation.current())) {
+		delete wifiInterface.hotspot.transition;
+		return result;
+	}
 	if (disconnected) {
 		const sameObservation =
 			wifiInterface.activeConn === activeConn &&
@@ -107,7 +131,5 @@ export async function teardownHotspotLocked(
 	void deps.rescan();
 	// The transition is cleared either way, so the state broadcast above looks
 	// identical for both outcomes — only this return distinguishes them.
-	return disconnected
-		? { success: true }
-		: { success: false, error: "deactivation-failed" };
+	return result;
 }
