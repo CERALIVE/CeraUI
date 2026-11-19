@@ -2923,6 +2923,7 @@
 	"systemLogs.anchor.empty": "इस समय के आसपास कोई रॉ एंट्री नहीं बची है।",
 	"systemLogs.anchor.leave": "नवीनतम एंट्री पर लौटें",
 	"systemLogs.anchor.moment": "चुना गया समय: {time}",
+	"systemLogs.anchor.unknown": "इस संदेश का समय पता नहीं है, इसलिए नवीनतम एंट्री दिखाई जा रही हैं।",
 	"systemLogs.error.expiredTitle": "यह स्थिति अब सहेजी नहीं है",
 	"systemLogs.error.expiredBody": "लॉग की सफ़ाई या फ़िल्टर बदलने से वह जगह हट गई जहाँ से यह सूची पढ़ रही थी।",
 	"systemLogs.error.startFromNewest": "नवीनतम से शुरू करें",

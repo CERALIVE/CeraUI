@@ -35,6 +35,9 @@ export function viewNoticeLogs(notice: NoticeMoment): void {
 		tab: "raw",
 		...(notice.arrivedLive ? { at: notice.receivedAt } : {}),
 		...(event === undefined ? {} : { event }),
+		...(notice.arrivedLive || event !== undefined
+			? {}
+			: { momentUnknown: true as const }),
 	});
 }
 

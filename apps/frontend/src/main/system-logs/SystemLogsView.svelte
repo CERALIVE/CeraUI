@@ -77,6 +77,7 @@ let anchor = $derived<RawMoment | undefined>(
 		? { at: context.at, bootId: context.bootId, event: context.event }
 		: undefined,
 );
+let momentUnknown = $derived(context?.tab === 'raw' && context.momentUnknown === true);
 let around = $state.raw<AroundPage>();
 let view = $state<HTMLElement>();
 let tabList = $state<HTMLElement | null>(null);
@@ -126,6 +127,7 @@ void check();
 function selectTab(value: string): void {
 	selected = value;
 	anchor = undefined;
+	momentUnknown = false;
 	around = undefined;
 }
 
@@ -212,7 +214,7 @@ $effect(() => {
 						{/if}
 						{#if tab === 'raw' && current === 'raw'}
 							{#key anchor}
-								<RawLogsPanel {anchor} {around} {sharing} />
+								<RawLogsPanel {anchor} {around} {momentUnknown} {sharing} />
 							{/key}
 						{/if}
 					</Tabs.Content>

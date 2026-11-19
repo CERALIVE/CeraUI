@@ -80,6 +80,7 @@ import {
 import { clearNotifications } from "$lib/stores/notifications.svelte";
 import PersistentNotices from "$main/notifications/PersistentNotices.svelte";
 import SystemLogsView from "$main/system-logs/SystemLogsView.svelte";
+import { en } from "./helpers/catalog";
 import {
 	installMediaQueries,
 	type MediaQueryControl,
@@ -222,6 +223,44 @@ describe("View logs on a standing notice opens its own moment", () => {
 			expect(screen.queryByTestId("raw-anchor")).toBeNull();
 		},
 	);
+
+	it.each([
+		["a replayed notice that emits no event", RECOVERY_FAILED, []],
+		[
+			"a replayed update notice whose event is gone",
+			REFUSED,
+			[event(3, "update_refused", { id: "txn-0", reason: "x" })],
+		],
+	])(
+		"says above the newest entries that the moment of %s isn't known",
+		async (_case, notice, stored) => {
+			events.list.mockResolvedValue(eventPage(stored));
+			at(REPLAY_AT, () => connectAndReplay([notice]));
+
+			render(SystemLogsView, { props: { context: await viewLogs() } });
+
+			const line = await screen.findByTestId("raw-moment-unknown");
+			expect(line.textContent?.trim()).toBe(en.systemLogs.anchor.unknown);
+			expect(line.className).toContain("text-muted-foreground");
+			expect(
+				line.compareDocumentPosition(screen.getByTestId("raw-scroller")) &
+					Node.DOCUMENT_POSITION_FOLLOWING,
+			).toBeTruthy();
+		},
+	);
+
+	it("says nothing about the moment of a notice that arrived live", async () => {
+		at(REPLAY_AT, () => connectAndReplay([]));
+		at(LIVE_AT, () =>
+			handlers.message?.("notification", { show: [RECOVERY_FAILED] }),
+		);
+
+		render(SystemLogsView, { props: { context: await viewLogs() } });
+
+		await waitFor(() => expect(logs.around).toHaveBeenCalledTimes(1));
+		await screen.findByTestId("raw-logs");
+		expect(screen.queryByTestId("raw-moment-unknown")).toBeNull();
+	});
 
 	it("keeps the arrival of a notice that came live, after the replay", async () => {
 		at(REPLAY_AT, () => connectAndReplay([]));

@@ -4,8 +4,8 @@
   panel first mounts, so opening System Logs on Events never fetches it. A slow
   chunk shows loading rows; a failed one states it with Retry. A message's
   moment (its event, else its own time) resolves to a validated around page
-  before the tab mounts, and to the newest entries when neither is known;
-  closing or replacing the request discards its late reply.
+  before the tab mounts, and to the newest entries when neither is known, which
+  the tab then says; closing or replacing the request discards its late reply.
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
@@ -20,10 +20,12 @@ import { locateMoment, type RawMoment } from '$lib/device-logs/raw-anchor';
 import type { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 import { rpc } from '$lib/rpc/client';
 
-let { anchor, around, sharing }: { anchor?: RawMoment; around?: Extract<LogAroundOutput, { ok: true }>; sharing?: SharingFlow } = $props();
+let { anchor, around, momentUnknown = false, sharing }: { anchor?: RawMoment; around?: Extract<LogAroundOutput, { ok: true }>; momentUnknown?: boolean; sharing?: SharingFlow } = $props();
 const publisher = untrack(() => sharing?.bindView());
 let result = $state.raw<LogAroundOutput | null>(untrack(() => around ?? null));
 let pending = $state(false);
+// The lookup found neither the message's event nor its own time.
+let missed = $state(false);
 let request: AbortController | undefined;
 
 async function locate(): Promise<void> {
@@ -36,6 +38,7 @@ async function locate(): Promise<void> {
 	const reply = await locateMoment(rpc, anchor, current.signal);
 	if (current.signal.aborted) return;
 	result = reply;
+	missed = reply === null;
 	pending = false;
 }
 
@@ -77,7 +80,7 @@ const RawLogsTab = $derived(chunk.current);
 		</div>
 	</div>
 {:else if RawLogsTab && !pending}
-	<RawLogsTab around={result?.ok ? result : undefined} onquery={publisher?.publish} />
+	<RawLogsTab around={result?.ok ? result : undefined} momentUnknown={momentUnknown || missed} onquery={publisher?.publish} />
 {:else if chunk.failed}
 	<div
 		class="border-status-warning/30 bg-status-warning/10 m-4 flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center"

@@ -2923,6 +2923,7 @@
 	"systemLogs.anchor.empty": "Zu diesem Zeitpunkt sind keine Roheinträge mehr vorhanden.",
 	"systemLogs.anchor.leave": "Zurück zu den neuesten Einträgen",
 	"systemLogs.anchor.moment": "Gewählter Zeitpunkt: {time}",
+	"systemLogs.anchor.unknown": "Der Zeitpunkt dieser Meldung ist nicht bekannt, daher werden die neuesten Einträge angezeigt.",
 	"systemLogs.error.expiredTitle": "Diese Position ist nicht mehr gespeichert",
 	"systemLogs.error.expiredBody": "Eine Protokollbereinigung oder eine Filteränderung hat die Stelle entfernt, an der diese Liste gelesen hat.",
 	"systemLogs.error.startFromNewest": "Bei den neuesten beginnen",

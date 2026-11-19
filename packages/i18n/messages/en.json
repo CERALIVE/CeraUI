@@ -2923,6 +2923,7 @@
 	"systemLogs.anchor.empty": "No raw entries remain around this time.",
 	"systemLogs.anchor.leave": "Back to latest entries",
 	"systemLogs.anchor.moment": "Selected moment: {time}",
+	"systemLogs.anchor.unknown": "This message's time isn't known, so the newest entries are shown.",
 	"systemLogs.error.expiredTitle": "This position is no longer stored",
 	"systemLogs.error.expiredBody": "Log cleanup or a filter change removed the place this list was reading from.",
 	"systemLogs.error.startFromNewest": "Start from newest",

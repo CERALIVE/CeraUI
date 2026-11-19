@@ -2935,6 +2935,7 @@
 	"systemLogs.anchor.empty": "لم تبقَ إدخالات خام حول هذا الوقت.",
 	"systemLogs.anchor.leave": "العودة إلى أحدث الإدخالات",
 	"systemLogs.anchor.moment": "اللحظة المحددة: {time}",
+	"systemLogs.anchor.unknown": "وقت هذه الرسالة غير معروف، لذا تُعرض أحدث الإدخالات.",
 	"systemLogs.error.expiredTitle": "هذا الموضع لم يعد محفوظًا",
 	"systemLogs.error.expiredBody": "أزال تنظيف السجلات أو تغيير عامل التصفية الموضع الذي كانت هذه القائمة تقرأ منه.",
 	"systemLogs.error.startFromNewest": "البدء من الأحدث",

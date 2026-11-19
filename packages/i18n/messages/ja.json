@@ -2878,6 +2878,7 @@
 	"systemLogs.anchor.empty": "この時刻付近の生エントリーは残っていません。",
 	"systemLogs.anchor.leave": "最新のエントリーに戻る",
 	"systemLogs.anchor.moment": "選択した時刻: {time}",
+	"systemLogs.anchor.unknown": "このメッセージの時刻が不明なため、最新のエントリーを表示しています。",
 	"systemLogs.error.expiredTitle": "この位置はもう保存されていません",
 	"systemLogs.error.expiredBody": "ログの整理またはフィルターの変更により、この一覧が読んでいた位置が削除されました。",
 	"systemLogs.error.startFromNewest": "最新から始める",

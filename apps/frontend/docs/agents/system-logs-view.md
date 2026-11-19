@@ -105,7 +105,7 @@ density. It is not a redesign.
   there it saves the 10 minutes around the anchored entry with the window's
   levels, and the confirmation says so (`lib/device-logs/raw-paging.svelte.ts`).
   The Downloads region renders
-  immediately; the Sharing group renders only once the viewer check is ready (`main/system-logs/SystemLogsView.svelte:172-174`).
+  immediately; the Sharing group renders only once the viewer check is ready (`main/system-logs/SystemLogsView.svelte:174-176`).
 - **Older backend.** If the log procedures are missing, the tabs and the Storage
   region are replaced by one calm notice ("not available on this device
   version"); Downloads still renders.
@@ -118,7 +118,9 @@ density. It is not a redesign.
   (an update notice named `update:<kind>:<id>` emits `update_<kind>` with that
   id), else around its arrival when it arrived live, else at the newest
   entries with no anchor (`lib/device-logs/view-logs.ts`,
-  `lib/device-logs/raw-anchor.ts`). The low-disk banner keeps
+  `lib/device-logs/raw-anchor.ts`). When neither the event nor the message's
+  own time is known, one muted line above the list says so
+  (`systemLogs.anchor.unknown`, `main/system-logs/RawLogsTab.svelte`). The low-disk banner keeps
   `settings.deviceStats.lowDiskAction` and opens Storage.
 - **Primitives.** `AppDialog`, `Button`, `Tabs`, `Select` (single and multiple),
   `Input`, `Toggle` (single-choice groups), `Skeleton`,
@@ -166,7 +168,8 @@ in section 4.
 | Dropped marker | Raw logs | `dropped > 0` in a follow batch: one separator row "Entries skipped while following: {count}". journald's suppressed-messages record (`marker: 'suppressed'`) is a separate marker row (`lib/device-logs/raw-rows.ts:90-105`, `main/system-logs/RawLogRow.svelte:59-68`) | polite (as a gap) |
 | Follower stopped | Raw logs | Label "Stopped" with its reason (reader ended, device restarted, logs cleared) and a Follow action; `ended: 'cleared'` also resets the list | polite |
 | Disconnected | Raw logs, Events, header pill | The socket dropped: follow state "Disconnected", a notice that entries may be out of date, rows dimmed to `text-muted-foreground`, the pill shows Offline, no pulse anywhere; stale, never fresh-looking. Raw logs shows Disconnected only when a follow was active, and on reconnect offers Resume (`lib/device-logs/raw-follow-session.svelte.ts:91-100`, `main/system-logs/RawFollowControl.svelte:28-56`); Events reloads its first page on reconnect (`events-view.svelte.ts:150-156`) | polite |
-| Anchor | Raw logs | Opened from an event or a "View logs" action: the matching row has a tonal highlight (`bg-status-info/10`, no outline or stripe); an exact match receives focus and an approximate one leaves focus on the selected tab (`main/system-logs/SystemLogsView.svelte:132-136`, `main/system-logs/RawLogList.svelte:79-89`); "approximate" is stated when no exact entry matched; a Back to latest entries action leaves anchor mode | no |
+| Anchor | Raw logs | Opened from an event or a "View logs" action: the matching row has a tonal highlight (`bg-status-info/10`, no outline or stripe); an exact match receives focus and an approximate one leaves focus on the selected tab (`main/system-logs/SystemLogsView.svelte:134-138`, `main/system-logs/RawLogList.svelte:79-89`); "approximate" is stated when no exact entry matched; a Back to latest entries action leaves anchor mode | no |
+| Moment unknown | Raw logs | A "View logs" action whose message has no known moment (a notice first seen in a replay with no timeline event, or an event no longer stored) opens the newest entries with one muted line above the list saying the time is not known; choosing another tab drops it (`main/system-logs/RawLogsPanel.svelte`, `main/system-logs/RawLogsTab.svelte`) | no |
 | Unknown event code | Events | A record from a newer version: the family icon, the title "Event recorded by a newer version", one honest detail sentence, View raw logs, and the raw code only inside a collapsed Diagnostics disclosure (`data-testid` containing `diagnostic`, DESIGN.md OL-3..OL-5). A known code with invalid params shows its title with no detail | no |
 | Logs removed for a boot | Boots, Events, Raw logs | Boot rows keep the boot with a "Logs removed" label (never hidden); View raw logs on such a boot shows "Raw logs for this boot were removed"; a Raw query with `BOOT_UNAVAILABLE` shows "Logs for this boot were removed" with Show this boot | alert (Raw only) |
 | Clock-not-synced marker | Raw logs, Events | Where two adjacent records of the same boot (journal order for raw, `seq` order for events) run backwards in time, a separator row says the device clock changed there and earlier times may be wrong. Times are never corrected or re-sorted | no |
@@ -393,6 +396,7 @@ Rules for this copy:
 | `systemLogs.anchor.empty` | No raw entries remain around this time. | Anchor mode, both pages empty |
 | `systemLogs.anchor.leave` | Back to latest entries | Leaves anchor mode |
 | `systemLogs.anchor.moment` | Selected moment: {time} | Separator row at the moment of an approximate window |
+| `systemLogs.anchor.unknown` | This message's time isn't known, so the newest entries are shown. | Moment unknown |
 | `systemLogs.error.expiredTitle` | This position is no longer stored | CURSOR_UNAVAILABLE, FILTER_CHANGED |
 | `systemLogs.error.expiredBody` | Log cleanup or a filter change removed the place this list was reading from. | Same |
 | `systemLogs.error.startFromNewest` | Start from newest | Expired Raw position or return to the live edge of Events |
@@ -801,7 +805,7 @@ widths are not measured in this lane.
 - Design rule: the view spans the whole viewport; while it is open the page
   drops its stable scrollbar gutter (`app.css`,
   `html:has([data-app-dialog-fullscreen])`). Below 640 px each tab grows from
-  its label's width (`SystemLogsView.svelte:171`, `max-sm:flex-auto`).
+  its label's width (`SystemLogsView.svelte:195`, `max-sm:flex-auto`).
 - Measured (`tests/e2e/system-logs-responsive.spec.ts`): in Chromium against
   the mock backend, the desktop and mobile projects each run the 12 EN, AR and
   DE cases at 375x812, 768x1024, 1280x800, and touch 1024x600. The dialog width
@@ -902,7 +906,7 @@ recovered entry if the operator is still on the disappearing button.
 | `main/system-logs/RawLogRow.svelte:37` | props |
 | `main/system-logs/RawLogsFilterBar.svelte:23` | props |
 | `main/system-logs/RawLogsPanel.svelte:23` | props |
-| `main/system-logs/RawLogsTab.svelte:27` | props |
+| `main/system-logs/RawLogsTab.svelte:28` | props |
 | `main/system-logs/RecoveryBand.svelte:19` | props |
 | `main/system-logs/SegmentedChoice.svelte:27` | props |
 | `main/system-logs/SharingSection.svelte:21` | props |
@@ -1045,7 +1049,7 @@ Related browser specs and their entry points:
 
 ### role="status" elements
 
-`main/system-logs/BootPicker.svelte:166`, `main/system-logs/BundleDialog.svelte:102`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:198`, `main/system-logs/ExportDialog.svelte:51`, `main/system-logs/RawLogList.svelte:251`, `main/system-logs/RawLogRow.svelte:161`, `main/system-logs/RawLogsPanel.svelte:98`, `main/system-logs/RawLogsTab.svelte:149`, `main/system-logs/StorageCleanup.svelte:202`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:222`.
+`main/system-logs/BootPicker.svelte:166`, `main/system-logs/BundleDialog.svelte:102`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:198`, `main/system-logs/ExportDialog.svelte:51`, `main/system-logs/RawLogList.svelte:251`, `main/system-logs/RawLogRow.svelte:161`, `main/system-logs/RawLogsPanel.svelte:101`, `main/system-logs/RawLogsTab.svelte:155`, `main/system-logs/StorageCleanup.svelte:202`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:224`.
 
 ### Limits and constants
 
@@ -1082,8 +1086,8 @@ Backend and wire limits: [device-logs.md](../../../backend/docs/agents/device-lo
 | Raw gap recovery focus | `main/system-logs/RawLogList.svelte:145` |
 | Boot picker option focus | `main/system-logs/BootPicker.svelte:54` |
 | Segmented choice focus | `main/system-logs/SegmentedChoice.svelte:50` |
-| Selected tab focus | `main/system-logs/SystemLogsView.svelte:135` |
-| Storage heading focus | `main/system-logs/SystemLogsView.svelte:144` |
+| Selected tab focus | `main/system-logs/SystemLogsView.svelte:137` |
+| Storage heading focus | `main/system-logs/SystemLogsView.svelte:146` |
 | Cancel focus for clear confirmations | `main/system-logs/StorageCleanup.svelte:64` |
 | RecoveryBand Retry button | `main/system-logs/RecoveryBand.svelte:35` |
 
@@ -1115,8 +1119,8 @@ technology speech. Browser coverage is in the related specs above.
     list. Events shows a relative time next to a localized clock for events dated
     today, or a localized date and time for older events (`timeline-copy.ts:168-174`).
   - The Storage heading under the Storage tab on phones. It names the Storage
-    region (`SystemLogsView.svelte:138`) and is where a Storage request puts focus
-    (`:139`, `:126`).
+    region (`SystemLogsView.svelte:140`) and is where a Storage request puts focus
+    (`:141`, `:127`).
   - The unit in an expanded raw row. The row's unit truncates (`RawLogRow.svelte:105`);
     the expanded detail shows it whole and wrapped (`:127`).
   - "Boot started" may wrap in the side column. Keep the full localized timestamp and

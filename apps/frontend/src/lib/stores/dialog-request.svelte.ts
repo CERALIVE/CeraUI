@@ -17,6 +17,8 @@ export interface LogsDialogContext {
 	bootId?: string;
 	at?: number;
 	event?: EventMatch;
+	/** The message's moment is not known, so Raw logs say why they show the newest entries. */
+	momentUnknown?: true;
 }
 
 interface DialogRequest {

@@ -2926,6 +2926,7 @@
 	"systemLogs.anchor.empty": "No quedan entradas sin procesar cerca de este momento.",
 	"systemLogs.anchor.leave": "Volver a las entradas más recientes",
 	"systemLogs.anchor.moment": "Momento seleccionado: {time}",
+	"systemLogs.anchor.unknown": "No se conoce la hora de este mensaje, así que se muestran las entradas más recientes.",
 	"systemLogs.error.expiredTitle": "Esta posición ya no está guardada",
 	"systemLogs.error.expiredBody": "La limpieza de registros o un cambio de filtro eliminó el punto desde el que leía esta lista.",
 	"systemLogs.error.startFromNewest": "Empezar desde lo más reciente",

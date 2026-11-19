@@ -2878,6 +2878,7 @@
 	"systemLogs.anchor.empty": "此时间附近已没有原始条目。",
 	"systemLogs.anchor.leave": "返回最新条目",
 	"systemLogs.anchor.moment": "所选时间：{time}",
+	"systemLogs.anchor.unknown": "此消息的时间未知，因此显示最新条目。",
 	"systemLogs.error.expiredTitle": "此位置已不再保存",
 	"systemLogs.error.expiredBody": "日志清理或筛选条件变化删除了此列表正在读取的位置。",
 	"systemLogs.error.startFromNewest": "从最新开始",

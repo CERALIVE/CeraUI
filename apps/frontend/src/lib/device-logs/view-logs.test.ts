@@ -86,6 +86,7 @@ describe("viewNoticeLogs", () => {
 
 		expect(requestDialog).toHaveBeenCalledExactlyOnceWith("logs", {
 			tab: "raw",
+			momentUnknown: true,
 		});
 	});
 });

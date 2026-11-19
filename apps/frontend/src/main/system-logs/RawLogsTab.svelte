@@ -2,7 +2,8 @@
   RawLogsTab.svelte: the Raw logs panel of System Logs: a fixed filter bar,
   state notices, and the list that owns the scroll. Each mount builds its own
   view and runs a fresh first query (or opens on a `logs.around` result), and
-  unmounting stops any follow, so a hidden tab never reads logs. One polite
+  unmounting stops any follow, so a hidden tab never reads logs. A message whose
+  moment is not known opens on the newest entries with one line saying so. One polite
   status region, mounted before anything can follow, announces follow states;
   failures are inline alert bands with their recovery.
 -->
@@ -24,7 +25,7 @@ import KeepWords from './KeepWords.svelte';
 import RawLogList from './RawLogList.svelte';
 import RawLogsFilterBar from './RawLogsFilterBar.svelte';
 
-let { around, onquery }: { around?: AroundPage; onquery?: (query: LogQueryInput, span?: ExportSpan) => void } = $props();
+let { around, momentUnknown = false, onquery }: { around?: AroundPage; momentUnknown?: boolean; onquery?: (query: LogQueryInput, span?: ExportSpan) => void } = $props();
 
 const ANNOUNCE: Record<RawAnnouncement['kind'], (count: number) => string> = {
 	following: () => m['systemLogs.announce.following'](),
@@ -115,6 +116,11 @@ const band = $derived.by(() => {
 	{/if}
 	{#if view.follow === 'stopped' && view.ended !== null}
 		<p class="text-muted-foreground border-b px-4 py-2 text-xs" data-testid="raw-follow-ended">{ENDED[view.ended]()}</p>
+	{/if}
+	{#if momentUnknown}
+		<p class="text-muted-foreground border-b px-4 py-2 text-xs [&:lang(zh)]:break-keep" data-testid="raw-moment-unknown">
+			<KeepWords text={m['systemLogs.anchor.unknown']()} />
+		</p>
 	{/if}
 	{#if view.anchor !== null}
 		<div class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2" data-testid="raw-anchor">

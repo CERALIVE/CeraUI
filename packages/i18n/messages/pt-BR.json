@@ -2926,6 +2926,7 @@
 	"systemLogs.anchor.empty": "Não restam entradas brutas perto deste momento.",
 	"systemLogs.anchor.leave": "Voltar às entradas mais recentes",
 	"systemLogs.anchor.moment": "Momento selecionado: {time}",
+	"systemLogs.anchor.unknown": "O horário desta mensagem não é conhecido, então são mostradas as entradas mais recentes.",
 	"systemLogs.error.expiredTitle": "Esta posição não está mais armazenada",
 	"systemLogs.error.expiredBody": "Uma limpeza de logs ou uma mudança de filtro removeu o ponto em que esta lista estava lendo.",
 	"systemLogs.error.startFromNewest": "Começar pelas mais recentes",
