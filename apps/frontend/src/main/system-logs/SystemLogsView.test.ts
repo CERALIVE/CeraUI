@@ -116,7 +116,7 @@ describe("SystemLogsView: Downloads never wait", () => {
 		},
 	);
 
-	it("loads the dialog's own copy, probes it, then lets Storage read its own data", async () => {
+	it("loads the dialog's own copy and makes one storage RPC on desktop", async () => {
 		viewport(true);
 		getStorage.mockResolvedValue(logStorage());
 		render(SystemLogsView);
@@ -126,7 +126,7 @@ describe("SystemLogsView: Downloads never wait", () => {
 			"systemLogs",
 			"timeline",
 		]);
-		expect(getStorage).toHaveBeenCalledTimes(2);
+		expect(getStorage).toHaveBeenCalledTimes(1);
 	});
 });
 
@@ -393,7 +393,7 @@ describe("SystemLogsView: check failures", () => {
 
 			expect(await screen.findByRole("tablist")).toBeTruthy();
 			expect(screen.queryByTestId("system-logs-check-failed")).toBeNull();
-			expect(getStorage).toHaveBeenCalledTimes(wide ? 3 : 2);
+			expect(getStorage).toHaveBeenCalledTimes(2);
 			expect(ensureNamespaces).toHaveBeenCalledTimes(2);
 		},
 	);
@@ -753,7 +753,7 @@ describe("SystemLogsView: Storage region", () => {
 			.replace("{used}", size)
 			.replace("{limit}", "256\u00a0MB");
 
-	it("fills the placeholder with a component-owned storage read", async () => {
+	it("fills the storage region from the same RPC that opens the tabs", async () => {
 		viewport(true);
 		getStorage.mockResolvedValue(logStorage({ journalBytes: 64 * MIB }));
 		render(SystemLogsView);
@@ -762,7 +762,7 @@ describe("SystemLogsView: Storage region", () => {
 		const storage = region("system-logs-storage");
 		expect(within(storage).getByTestId("storage-section")).toBeTruthy();
 		expect(usage()).toBe(used("64\u00a0MB"));
-		expect(getStorage).toHaveBeenCalledTimes(2);
+		expect(getStorage).toHaveBeenCalledTimes(1);
 	});
 
 	it("shows the latest storage reply when the Storage tab opens again", async () => {
@@ -787,13 +787,12 @@ describe("SystemLogsView: Storage region", () => {
 		await fireEvent.click(screen.getByTestId("storage-delete-older"));
 		await waitFor(() => expect(usage()).toBe(used("12\u00a0MB")));
 
-		getStorage.mockResolvedValue(logStorage({ journalBytes: 12 * MIB }));
 		await fireEvent.click(tab(en.systemLogs.tabs.events));
 		expect(screen.queryByTestId("storage-section")).toBeNull();
 		await fireEvent.click(tab(en.systemLogs.tabs.storage));
 
 		await waitFor(() => expect(usage()).toBe(used("12\u00a0MB")));
-		expect(getStorage).toHaveBeenCalledTimes(3);
+		expect(getStorage).toHaveBeenCalledTimes(1);
 	});
 
 	it("reports an invalid Storage reply without breaking the shell", async () => {

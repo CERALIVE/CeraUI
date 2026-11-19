@@ -1,7 +1,7 @@
 <!--
   StorageSection.svelte: the Storage region of System Logs: what logs use, the
   retention limits and the cleanup actions, over the logs storage RPCs. It owns
-  its reads so the shell only needs to fill its Storage placeholder.
+  its refreshes and reuses the shell's initial reading.
 -->
 <script lang="ts">
 import type { LogStorage } from '@ceraui/rpc/schemas';
@@ -16,7 +16,8 @@ import StorageCleanup from './StorageCleanup.svelte';
 import StorageLimits from './StorageLimits.svelte';
 import StorageUsage from './StorageUsage.svelte';
 
-let { storage = $bindable() }: { storage?: LogStorage } = $props();
+// null means the shell received a malformed reply, so offer Retry without a second scan.
+let { storage = $bindable() }: { storage?: LogStorage | null } = $props();
 
 /**
  * The reading on screen when the newest read failed (null: none failed). The
@@ -24,7 +25,7 @@ let { storage = $bindable() }: { storage?: LogStorage } = $props();
  * reading, from a read or an action's reply, retires it.
  */
 let failedOn = $state.raw<LogStorage | undefined | null>(null);
-const readFailed = $derived(failedOn === storage);
+const readFailed = $derived(storage === null || failedOn === storage);
 let reading = $state(false);
 let latestRead = 0;
 

@@ -17,6 +17,7 @@
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
+import type { LogStorage } from '@ceraui/rpc/schemas';
 import { Info, RefreshCw, TriangleAlert } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
 import { MediaQuery } from 'svelte/reactivity';
@@ -35,6 +36,7 @@ import {
 	type ShellTab,
 	shellTabs,
 } from '$lib/device-logs/shell-layout';
+import { parseStorage } from '$lib/device-logs/storage-readout';
 import { checkLogViewer } from '$lib/device-logs/viewer-availability';
 import { ensureDialogNamespaces } from '$lib/i18n/namespace-activation';
 import { WIDE_DESKTOP_QUERY } from '$lib/layout';
@@ -66,6 +68,7 @@ const wide = new MediaQuery(WIDE_DESKTOP_QUERY);
 const uid = $props.id();
 
 let status = $state<ShellStatus>('loading');
+let storage = $state.raw<LogStorage | null>();
 const legacyDownloads = new LogDownloads();
 // Each new deep link selects its tab again; the operator's own choice overrides it.
 let selected = $derived<string | undefined>(context?.tab);
@@ -91,11 +94,24 @@ const hasCopy = $derived(status === 'ready' || status === 'unavailable');
 
 async function check(): Promise<void> {
 	const run = ++checkRun;
+	let reading: unknown;
 	const result = await checkLogViewer(
 		() => ensureDialogNamespaces('systemLogs'),
-		() => rpc.logs.getStorage(),
+		async () => {
+			reading = await rpc.logs.getStorage();
+		},
 	);
-	if (run === checkRun) status = result;
+	if (run !== checkRun) return;
+	if (result === 'ready') {
+		try {
+			storage = parseStorage(reading);
+		} catch (error) {
+			// The procedure exists, so keep the tabs and let Storage offer Retry.
+			console.error('System Logs storage read failed:', error);
+			storage = null;
+		}
+	}
+	status = result;
 }
 
 function retry(): void {
@@ -137,7 +153,7 @@ $effect(() => {
 {#snippet storageRegion()}
 	<section aria-labelledby="{uid}-storage" class="flex flex-col gap-3 p-4" data-testid="system-logs-storage">
 		<h3 bind:this={storageHeading} class="text-sm font-semibold outline-none focus-visible:ring-ring/50 focus-visible:ring-3" id="{uid}-storage" tabindex="-1">{m['systemLogs.storage.heading']()}</h3>
-		<StorageSection />
+		<StorageSection bind:storage />
 	</section>
 {/snippet}
 
