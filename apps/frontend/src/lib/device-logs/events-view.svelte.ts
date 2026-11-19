@@ -148,7 +148,8 @@ export class EventsView {
 			this.stale = true;
 		} else if (this.stale) {
 			this.stale = false;
-			void this.reload();
+			if (this.browsingHistory) void this.#read("first", "live-edge");
+			else void this.reload();
 		}
 	}
 
@@ -211,20 +212,24 @@ export class EventsView {
 		this.rawLink = null;
 	}
 
-	async #read(end: End, keepShownFocus = false): Promise<void> {
+	async #read(
+		end: End,
+		mode: "replace" | "gap" | "live-edge" = "replace",
+	): Promise<void> {
 		const generation = end === "first" ? ++this.#generation : this.#generation;
 		const beforeSeq = end === "older" ? this.nextBeforeSeq : null;
 		const startingRows = this.events;
 		this.loading = end;
 		// An older page's failure stays while it is read again, so its Retry keeps focus.
-		if (end === "first") this.failed = null;
+		if (end === "first" && mode !== "live-edge") this.failed = null;
 		let newer: DeviceEvent[] = [];
 		try {
 			const page = await this.#deps.list(listInput(this.filter, beforeSeq));
 			if (generation !== this.#generation) return;
-			this.failed = null;
 			this.#head = Math.max(this.#head, page.headSeq);
 			this.#retainedFrom = page.retainedFromSeq;
+			if (mode === "live-edge") return;
+			this.failed = null;
 			// If pushes passed the request's edge, join the reply to its original
 			// window. Joining to the live window would leave a hole between them.
 			const liveEdgeMoved = end === "older" && beforeSeq !== this.nextBeforeSeq;
@@ -243,22 +248,28 @@ export class EventsView {
 		} catch (error) {
 			if (generation !== this.#generation) return;
 			console.error("System Logs could not read the event history:", error);
+			if (mode === "live-edge") return;
 			if (end === "first") {
 				this.events = [];
 				this.nextBeforeSeq = null;
 			}
 			this.failed = end;
+		} finally {
+			if (generation === this.#generation) {
+				if (mode === "live-edge") this.#held.length = 0;
+				this.loading = null;
+			}
 		}
-		this.loading = null;
+		if (generation !== this.#generation) return;
 		this.#receive(newer);
-		if (keepShownFocus) {
+		if (mode === "gap") {
 			const link = this.rawLink;
 			if (
 				link?.state === "pending" &&
 				!this.events.some(({ id }) => id === link.id)
 			)
 				this.#clearRawLink();
-			this.rowReset = { keepShownFocus };
+			this.rowReset = { keepShownFocus: true };
 		}
 	}
 
@@ -274,7 +285,7 @@ export class EventsView {
 		const admitted: DeviceEvent[] = [];
 		for (const event of batch) {
 			if (event.seq > this.#head + 1) {
-				void this.#read("first", true);
+				void this.#read("first", "gap");
 				return;
 			}
 			this.#head = Math.max(this.#head, event.seq);

@@ -24,6 +24,10 @@ latest page again. At the live edge, pushes keep the newest 300 rows and move
 the older-query boundary when they evict rows, so Load older or Retry can
 recover those rows if they are still stored.
 
+Reconnect while browsing older events refreshes only the live-edge metadata.
+It leaves the displayed rows, paging cursor and focus in place even if that
+refresh fails. At the live edge, reconnect loads the newest page.
+
 Each list reply's `retainedFromSeq` expires older rows already shown. Push
 frames carry events only, so between list replies the view uses the last known
 retained boundary. A row evicted within the current window's generation

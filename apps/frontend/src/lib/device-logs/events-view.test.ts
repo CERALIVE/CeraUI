@@ -550,6 +550,35 @@ describe("EventsView: pushed events", () => {
 });
 
 describe("EventsView: connection", () => {
+	it("keeps older events and their paging position during and after reconnect", async () => {
+		const { view, list } = setup();
+		const range = (high: number) =>
+			Array.from({ length: 100 }, (_, i) => e(high - i));
+		for (const high of [500, 400, 300, 200])
+			list.mockResolvedValueOnce(
+				eventPage(range(high), {
+					headSeq: 500,
+					nextBeforeSeq: high - 99,
+				}),
+			);
+		await view.reload();
+		for (const _page of [1, 2, 3]) await view.loadOlder();
+		expect(view.browsingHistory).toBe(true);
+		const expected = Array.from({ length: 300 }, (_, i) => 400 - i);
+		const reply = Promise.withResolvers<EventListOutput>();
+		list.mockReturnValueOnce(reply.promise);
+		view.connectionChanged("disconnected");
+
+		view.connectionChanged("connected");
+		expect(ids(view)).toEqual(expected);
+		reply.resolve(eventPage([e(501)], { headSeq: 501, nextBeforeSeq: 501 }));
+		await vi.waitFor(() => expect(view.loading).toBeNull());
+		expect(ids(view)).toEqual(expected);
+		expect(view.browsingHistory).toBe(true);
+		expect(view.nextBeforeSeq).toBe(101);
+		expect(list).toHaveBeenLastCalledWith({ limit: 100 });
+	});
+
 	it("marks the list stale while disconnected and reads it again on reconnect", async () => {
 		const { view, list } = setup();
 		list.mockResolvedValue(eventPage([e(1)]));
