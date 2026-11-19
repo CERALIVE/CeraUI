@@ -5,9 +5,11 @@
  * instead of guessing what was missed, keeping the rows shown until the first
  * page replaces them; a disconnect marks the list stale and
  * the reconnect re-reads it. While browsing older events, the reconnect instead
- * checks the live edge: the list stays stale until a check succeeds, and that
- * check removes only rows below the new retention floor, keeping the window,
- * its paging and every other row's action. Pushes leave a browsed window in
+ * checks the live edge: the list stays stale until a check on the current
+ * connection succeeds, and that check removes only rows the ring no longer
+ * holds, keeping the window, its paging and every other row's action. A check
+ * that proves the ring was cleared replaces the window with the newest page.
+ * A drop retires the check in flight. Pushes leave a browsed window in
  * place and only count the new events Start from newest will show; a skipped
  * `seq` reads the live edge for that count. Only the newest read may settle,
  * and a push that arrives while the first page is read joins that page unless
@@ -99,6 +101,7 @@ export class EventsView {
 	);
 	readonly #deps: EventsViewDeps;
 	#generation = 0;
+	#connection = 0;
 	#head = 0;
 	#retainedFrom = 0;
 	#held: DeviceEvent[] = [];
@@ -163,6 +166,7 @@ export class EventsView {
 	connectionChanged(state: ConnectionState): void {
 		this.#connected = state === "connected";
 		if (!this.#connected) {
+			this.#connection += 1;
 			this.stale = true;
 			this.liveEdgeFailed = false;
 		} else if (this.stale) {
@@ -235,6 +239,11 @@ export class EventsView {
 		mode: "replace" | "gap" | "live-edge" = "replace",
 	): Promise<void> {
 		const generation = end === "first" ? ++this.#generation : this.#generation;
+		const connection = this.#connection;
+		// Only the newest read settles, and an edge check only on the connection it checked.
+		const current = () =>
+			generation === this.#generation &&
+			(mode !== "live-edge" || connection === this.#connection);
 		const beforeSeq = end === "older" ? this.nextBeforeSeq : null;
 		const startingRows = this.events;
 		this.loading = end;
@@ -244,21 +253,34 @@ export class EventsView {
 		let settleRows = mode === "gap";
 		try {
 			const page = await this.#deps.list(listInput(this.filter, beforeSeq));
-			if (generation !== this.#generation) return;
+			if (!current()) return;
 			const seen = this.#head;
 			this.#head = Math.max(this.#head, page.headSeq);
 			this.#retainedFrom = page.retainedFromSeq;
 			if (mode === "live-edge") {
-				// shortcut: counts at most one page of unseen events, so a gap or outage
-				// longer than PAGE undercounts; page toward the head if that becomes routine.
-				this.newWhileBrowsing += page.events.filter(
-					(event) => event.seq > seen,
-				).length;
 				const kept = this.events.filter(
-					(event) => event.seq >= this.#retainedFrom,
+					(event) =>
+						event.seq >= page.retainedFromSeq && event.seq <= page.headSeq,
 				);
-				settleRows = kept.length < this.events.length;
-				if (settleRows) this.events = kept;
+				// Seq only grows while the ring is kept, so a lower head with no shown row
+				// left proves a clear, after which seq can restart at 1.
+				// shortcut: a clear and restart that refill seq up to a shown row keep that
+				// row; give events.list a ring identity if that must be proven too.
+				if (kept.length === 0 && page.headSeq < seen) {
+					this.#head = page.headSeq;
+					this.events = page.events;
+					this.nextBeforeSeq = page.nextBeforeSeq;
+					this.newWhileBrowsing = 0;
+					settleRows = true;
+				} else {
+					// shortcut: counts at most one page of unseen events, so a gap or outage
+					// longer than PAGE undercounts; page toward the head if that becomes routine.
+					this.newWhileBrowsing += page.events.filter(
+						(event) => event.seq > seen,
+					).length;
+					settleRows = kept.length < this.events.length;
+					if (settleRows) this.events = kept;
+				}
 				this.stale = false;
 				this.liveEdgeFailed = false;
 			} else {
@@ -281,7 +303,7 @@ export class EventsView {
 			}
 			newer = this.#held.splice(0).filter((event) => event.seq > page.headSeq);
 		} catch (error) {
-			if (generation !== this.#generation) return;
+			if (!current()) return;
 			console.error("System Logs could not read the event history:", error);
 			if (mode === "live-edge") {
 				// Offline, the next reconnect checks again, so Retry waits for the link.

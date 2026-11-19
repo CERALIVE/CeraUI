@@ -342,6 +342,30 @@ it.each([
 	},
 );
 
+it("shows the empty list, retires a pending raw action and hands focus to the filter bar when a reconnect finds history cleared", async () => {
+	await browseToOldest();
+	const raw = screen.getAllByRole("button", { name: copy.viewRaw }).at(-1);
+	const reply = Promise.withResolvers<LogAroundOutput>();
+	around.mockReturnValueOnce(reply.promise);
+	raw?.focus();
+	if (raw) await fireEvent.click(raw);
+	list.mockResolvedValueOnce(eventPage([], { headSeq: 0, retainedFromSeq: 0 }));
+
+	setConnectionState("disconnected");
+	await screen.findByTestId("events-disconnected");
+	setConnectionState("connected");
+
+	expect(await screen.findByText(copy.emptyTitle)).toBeTruthy();
+	expect(renderedTimes()).toEqual([]);
+	expect(screen.queryByRole("button", { name: copy.loadOlder })).toBeNull();
+	expect(document.activeElement).toBe(
+		screen.getByRole("button", { name: copy.filter }),
+	);
+	reply.resolve(aroundPage());
+	await tick();
+	expect(onViewRaw).not.toHaveBeenCalled();
+});
+
 it("names the new events on Start from newest while browsing, in place, until it returns to newest", async () => {
 	const retained = await browseToOldest();
 	const newest = screen.getByRole("button", { name: error.startFromNewest });

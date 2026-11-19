@@ -28,9 +28,19 @@ the older-query boundary when they evict rows, so Load older or Retry can
 recover those rows if they are still stored.
 
 Reconnect while browsing older events checks the live edge without moving the
-window, its paging cursor or scroll. The list stays stale until a check
-succeeds. A successful check removes only displayed rows below the reply's
-`retainedFromSeq` and settles them as a gap refresh does (next paragraph).
+window, its paging cursor or scroll. The list stays stale until a check on
+the current connection succeeds: a drop retires the check in flight, so its
+late reply settles nothing and the next reconnect checks again. A successful
+check removes only displayed rows outside the ring the reply describes, below
+its `retainedFromSeq` or above its `headSeq`, and settles them as a gap
+refresh does (next paragraph). An empty filtered reply keeps every row those
+bounds still cover. Seq only grows while the ring is kept, so a reply whose
+`headSeq` is below one already seen, with no displayed row left, proves the
+ring was cleared; an empty ring reports zero for both bounds. Seq can then
+restart at 1, so the newest page replaces the window, its paging cursor and
+the seen head, and the new-event count restarts. A clear and restart that
+refill seq up to a displayed row keep that row until Start from newest;
+proving that case needs a ring identity on `events.list`.
 A failed check keeps every row and adds the load-failure band, whose Retry
 checks again. The band is withdrawn while disconnected, because the next
 reconnect checks by itself, and Start from newest or any other reload also
