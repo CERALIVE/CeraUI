@@ -91,6 +91,12 @@ import {
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
 import { getMacAddressForWifiInterface } from "./wifi-interfaces.ts";
+import {
+	bindingForRow,
+	type WifiOperationBinding,
+	wifiOperationChanged,
+	wifiOperationGuard,
+} from "./wifi-operation-binding.ts";
 import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
@@ -331,6 +337,7 @@ function nmConnSetHotspotFields(
 	offeredSecurity: readonly HotspotSecurityId[],
 	deps: HotspotConfigDeps,
 	hybridFields?: Record<string, string>,
+	permit?: () => Promise<boolean>,
 ) {
 	// An underived channel has no band/number mapping BY CONSTRUCTION, so an
 	// illegal channel can never reach nmcli even if validation were bypassed.
@@ -357,7 +364,8 @@ function nmConnSetHotspotFields(
 		uuid,
 		kind: "modify",
 		fields: settingsToChange,
-		run: (fields) => deps.nmConnSetFields(uuid, fields),
+		run: async (fields) =>
+			(!permit || (await permit())) && deps.nmConnSetFields(uuid, fields),
 	}).then((result) => result.success);
 }
 
@@ -591,6 +599,7 @@ export async function reconfigureHotspotForRegdomain(
 	wifiInterface: WifiInterfaceWithHotspot,
 	channel: WifiChannel,
 	deps: HotspotConfigDeps = defaultHotspotConfigDeps,
+	binding = bindingForRow(macAddress, wifiInterface),
 ): Promise<boolean> {
 	const { name, password } = wifiInterface.hotspot;
 	if (!name || !password) return false;
@@ -611,6 +620,7 @@ export async function reconfigureHotspotForRegdomain(
 					channel,
 					security,
 					deps,
+					binding,
 				),
 			(refusal): ReconfigureResult => refusal,
 		),
@@ -638,7 +648,11 @@ async function reconfigureHotspotLocked(
 	channel: string,
 	security: HotspotSecurityId,
 	deps: HotspotConfigDeps,
+	binding?: WifiOperationBinding,
 ): Promise<ReconfigureResult> {
+	const operation = wifiOperationGuard(binding);
+	const admitted = async () =>
+		!binding || ((await operation.check()) && operation.current());
 	const owned = hotspotOwnershipGuard(
 		macAddress,
 		wifiInterface,
@@ -673,6 +687,7 @@ async function reconfigureHotspotLocked(
 				wifiInterface.ifname,
 				virtual.ifname,
 			)) === targetIdentity);
+	if (binding && !(await admitted())) return wifiOperationChanged;
 	if (!(await targetCurrent())) return "saving";
 	const channelRefusal = async () => {
 		const uuid = wifiInterface.hotspot.conn;
@@ -685,13 +700,15 @@ async function reconfigureHotspotLocked(
 							if (
 								!owned() ||
 								wifiInterface.hotspot.conn !== uuid ||
-								!(await targetCurrent())
+								!(await targetCurrent()) ||
+								(binding && !(await admitted()))
 							)
 								return false;
 							return deps.nmDisconnect?.(uuid);
 						},
 					})
 				: undefined;
+		if (operation.changed) return wifiOperationChanged;
 		if (stopped?.success) {
 			if (wifiInterface.concurrentHotspot === virtual)
 				transitionVirtualBinding(wifiInterface, { kind: "retire" });
@@ -723,11 +740,22 @@ async function reconfigureHotspotLocked(
 	const restorableSecurity = offeredSecurity.includes(previousSecurity)
 		? offeredSecurity
 		: [...offeredSecurity, previousSecurity];
+	let dispatched = false;
+	const allowWrite = binding
+		? async () => {
+				if (!(await admitted()) || !operation.current() || !owned())
+					return false;
+				dispatched = true;
+				return true;
+			}
+		: undefined;
+	const interrupted = () =>
+		dispatched ? ("activating" as const) : wifiOperationChanged;
 
 	// Update the NM connection
-	if (
-		wifiInterface.hotspot.conn &&
-		!(await nmConnSetHotspotFields(
+	const wrote =
+		!wifiInterface.hotspot.conn ||
+		(await nmConnSetHotspotFields(
 			wifiInterface.hotspot.conn,
 			name,
 			password,
@@ -737,10 +765,10 @@ async function reconfigureHotspotLocked(
 			offeredSecurity,
 			deps,
 			hybridChannel?.sameChannelOnly ? hybridChannel.fields : undefined,
-		))
-	) {
-		return "saving";
-	}
+			allowWrite,
+		));
+	if (binding && !(await admitted())) return interrupted();
+	if (!wrote) return "saving";
 
 	if (!owned()) {
 		return "saving";
@@ -763,6 +791,8 @@ async function reconfigureHotspotLocked(
 				readiness.failure = "target";
 				return false;
 			}
+			if (binding && (!(await admitted()) || !operation.current() || !owned()))
+				return false;
 			return deps.nmConnect(restartUuid, HOTSPOT_UP_TO);
 		};
 		const restarted = (
@@ -772,6 +802,10 @@ async function reconfigureHotspotLocked(
 				run: connectCurrentTarget,
 			})
 		).success;
+		if (binding && !(await admitted())) {
+			delete wifiInterface.hotspot.transition;
+			return interrupted();
+		}
 		if (readiness.failure === "channel") return channelRefusal();
 		if (readiness.failure === "target") {
 			delete wifiInterface.hotspot.transition;
@@ -806,7 +840,12 @@ async function reconfigureHotspotLocked(
 				restorableSecurity,
 				deps,
 				hybridChannel?.sameChannelOnly ? hybridChannel.fields : undefined,
+				allowWrite,
 			);
+			if (operation.changed) {
+				delete wifiInterface.hotspot.transition;
+				return interrupted();
+			}
 			if (!owned()) {
 				delete wifiInterface.hotspot.transition;
 				return "saving";
@@ -817,6 +856,10 @@ async function reconfigureHotspotLocked(
 				kind: "up",
 				run: connectCurrentTarget,
 			});
+			if (binding && !(await admitted())) {
+				delete wifiInterface.hotspot.transition;
+				return interrupted();
+			}
 			if (readiness.failure === "channel") return channelRefusal();
 			if (readiness.failure === "target") {
 				delete wifiInterface.hotspot.transition;
@@ -835,6 +878,14 @@ async function reconfigureHotspotLocked(
 	}
 
 	// Successfully brought up the hotspot with the new settings, reload the conn.
+	if (binding) {
+		await deps.wifiUpdateSavedConns();
+		if (!(await admitted()) || !operation.current()) {
+			delete wifiInterface.hotspot.transition;
+			return interrupted();
+		}
+		if (!owned()) return "saving";
+	}
 	delete wifiInterface.hotspot.transition;
 	wifiInterface.hotspot.security = security;
 	// The operator's chosen credentials are now the adapter's durable identity —
@@ -849,7 +900,7 @@ async function reconfigureHotspotLocked(
 				: {}),
 		});
 	}
-	await deps.wifiUpdateSavedConns();
+	if (!binding) await deps.wifiUpdateSavedConns();
 	if (!owned()) return "saving";
 	deps.broadcastState();
 	syncWifiStateCache(macAddress, wifiInterface);

@@ -143,6 +143,13 @@ stopped by its captured profile UUID under the same adapter lock. It publishes
 Without exact activation evidence, ordinary bounded confirmation still
 applies. Start rollback restores only its own cache entry.
 
+Prepare rechecks after resolving credentials and inside the shared repair or
+Save write callback, then checks again before returning credentials or
+committing the Save. Mode to hotspot or hybrid checks before recording the
+intent. The regulatory restart captures a verified row's lifetime and checks
+it before writing, reactivation, rollback, and credential publication. The
+limited-radio regulatory Stop continues to use its existing UUID authority.
+
 The frontend keeps a `current-unobserved` request pending for the next Wi-Fi
 status frame containing that row, for at most three seconds. It sends the same
 call once with that frame's token. A frame without a token, or the absence of a

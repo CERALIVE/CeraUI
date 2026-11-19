@@ -1,0 +1,97 @@
+import assert from "node:assert/strict";
+import { readdir, readFile, realpath } from "node:fs/promises";
+import { run } from "../../../src/helpers/run.ts";
+import { getConfig } from "../../../src/modules/config.ts";
+import {
+	nmApConnAdd,
+	nmConnDelete,
+	nmDisconnect,
+} from "../../../src/modules/network/network-manager.ts";
+import {
+	initHotspotCredentials,
+	rememberHotspotCredentials,
+} from "../../../src/modules/wifi/hotspot-credentials.ts";
+import { withWifiRequestBinding } from "../../../src/modules/wifi/wifi-binding.ts";
+import {
+	defaultHotspotDeps,
+	wifiHotspotStart,
+} from "../../../src/modules/wifi/wifi-hotspot-activation.ts";
+import { hotspotBindingFields } from "../../../src/modules/wifi/wifi-hotspot-types.ts";
+import { terminateWifiDiscovery } from "../../../src/modules/wifi/wifi-interfaces.ts";
+import { wifiRadioIdentity } from "../../../src/modules/wifi/wifi-radio-identity.ts";
+import { projectWifiRadioIncarnation } from "../../../src/modules/wifi/wifi-radio-publication.ts";
+import { observeSavedProfileRadio, seedObservedRadioRow } from "./first-ap-radio.ts";
+
+async function main() {
+	assert.equal(process.env.HWSIM_REPO, "/repo", "Use the isolated native VM");
+	assert.equal(process.getuid?.(), 0);
+	const radios: string[] = [];
+	for (const name of (await readdir("/sys/class/net")).sort()) {
+		const phy = await realpath(`/sys/class/net/${name}/phy80211`).catch(() => "");
+		if (phy.includes("/mac80211_hwsim/")) radios.push(name);
+	}
+	assert.equal(radios.length, 4);
+	const [, a, b] = radios;
+	assert(a && b);
+	const address = async (name: string) =>
+		(await readFile(`/sys/class/net/${name}/phy80211/macaddress`, "utf8")).trim();
+	const owner = await address(a);
+	const other = await address(b);
+	assert.notEqual(owner, other);
+	const identity = {
+		name: "CeraUI replacement check",
+		password: crypto.randomUUID(),
+	};
+	await initHotspotCredentials();
+	for (const name of [a, b]) {
+		await run("nmcli", ["device", "set", name, "managed", "yes"]);
+		await run("nmcli", ["device", "set", name, "autoconnect", "no"]);
+	}
+	const uuid = await nmApConnAdd(a, identity, hotspotBindingFields(owner));
+	assert(uuid, "Fixture profile was not created");
+	try {
+		rememberHotspotCredentials(owner, { ssid: identity.name, password: identity.password, conn: uuid });
+		getConfig().wifi_modes = { [owner]: "hotspot" };
+		const row = await seedObservedRadioRow({ ifname: a, owner, uuid, ssid: identity.name, password: identity.password });
+		await observeSavedProfileRadio(a);
+		await wifiRadioIdentity.discover([{ ifname: a, row }]);
+		const token = projectWifiRadioIncarnation(row, wifiRadioIdentity.state.rows.get(a));
+		assert(token, "Fixture radio has no current incarnation");
+		let swapped = false;
+		let upCalls = 0;
+		const result = await withWifiRequestBinding(
+			{ device: String(row.id), expected: token, kind: "config" },
+			() => wifiHotspotStart({ device: row.id }, {
+				...defaultHotspotDeps,
+				nmConnSetFields: async (id, fields) => {
+					const written = await defaultHotspotDeps.nmConnSetFields(id, fields);
+					if (!written || swapped) return written;
+					for (const name of [a, b]) await run("ip", ["link", "set", name, "down"]);
+					await run("ip", ["link", "set", a, "name", "swap-temp"]);
+					await run("ip", ["link", "set", b, "name", a]);
+					await run("ip", ["link", "set", "swap-temp", "name", b]);
+					assert.equal(await address(a), other);
+					assert.equal(await address(b), owner);
+					swapped = true;
+					return written;
+				},
+				nmConnect: (...args) => {
+					upCalls++;
+					return defaultHotspotDeps.nmConnect(...args);
+				},
+			}),
+		);
+		assert(swapped, "The pin write did not reach the swap fixture");
+		assert.deepEqual(result, { success: false, error: "radio-changed" });
+		assert.equal(upCalls, 0);
+		for (const name of [a, b])
+			assert.doesNotMatch(await run("iw", ["dev", name, "info"]), /\btype AP\b/);
+		process.stdout.write("B8 replacement: native swap refused, zero Up calls and neither radio hosts an AP\n");
+	} finally {
+		terminateWifiDiscovery();
+		await nmDisconnect(uuid);
+		assert(await nmConnDelete(uuid), "Fixture profile cleanup failed");
+	}
+}
+
+await main();

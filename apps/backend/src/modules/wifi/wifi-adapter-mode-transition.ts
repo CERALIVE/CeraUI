@@ -80,6 +80,10 @@ import { canHotspot, HOTSPOT_UP_TO } from "./wifi-hotspot-types.ts";
 import type { HybridRestoreAttempt } from "./wifi-hybrid-target-diagnostics.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
 import { takeWifiModeRequestRefusal } from "./wifi-mode-request.ts";
+import {
+	type WifiOperationBinding,
+	wifiOperationGuard,
+} from "./wifi-operation-binding.ts";
 import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 
 export {
@@ -208,7 +212,9 @@ export async function setWifiAdapterMode(
 	if (await deps.isAdapterBusy(macAddress)) {
 		return refuse(wifiInterface.id, "DEVICE_BUSY", publishRefusal);
 	}
-	const transition = async (): Promise<SetWifiAdapterModeOutput> => {
+	const transition = async (
+		binding?: WifiOperationBinding,
+	): Promise<SetWifiAdapterModeOutput> => {
 		const id = wifiInterface.id;
 		const owner = resolveWifiAdapterOwner(macAddress, wifiInterface);
 		const intentKey = normalizeMacAddress(owner.split("@")[0])
@@ -276,6 +282,9 @@ export async function setWifiAdapterMode(
 			return refuse(id, "DEVICE_BUSY", publishRefusal);
 		}
 
+		const operation = wifiOperationGuard(binding);
+		if (binding && (!(await operation.check()) || !operation.current()))
+			return refuse(id, "radio-changed", publishRefusal);
 		const undo = recordWifiAdapterModeIntent(intentKey, target, {
 			read: deps.readPersistedMode,
 			persist: deps.persistMode,

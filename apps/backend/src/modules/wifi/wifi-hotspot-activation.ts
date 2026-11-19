@@ -386,7 +386,8 @@ export async function prepareHotspotForInterface(
 	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
 		admitWifiRequest(
 			wifiInterface,
-			() => prepareHotspotLocked(macAddress, wifiInterface, msg, deps),
+			(binding) =>
+				prepareHotspotLocked(macAddress, wifiInterface, msg, deps, binding),
 			(refusal) => refusal,
 		),
 	);
@@ -402,6 +403,7 @@ async function prepareHotspotLocked(
 	wifiInterface: WifiInterfaceWithHotspot,
 	msg: { name?: string; password?: string },
 	deps: HotspotActivationDeps,
+	binding = bindingForRow(macAddress, wifiInterface),
 ): Promise<HotspotPrepareResult> {
 	if (
 		!normalizeMacAddress(macAddress) ||
@@ -410,7 +412,18 @@ async function prepareHotspotLocked(
 		return { success: false, error: "radio-unverified" };
 	const owner = resolveWifiAdapterOwner(macAddress, wifiInterface);
 	const owned = hotspotOwnershipGuard(owner, wifiInterface);
-	const identity = await resolveHotspotIdentity(owner, wifiInterface, deps);
+	const operation = wifiOperationGuard(binding);
+	const identity = await resolveHotspotIdentity(
+		owner,
+		wifiInterface,
+		deps,
+		binding ? operation : undefined,
+	);
+	if (
+		operation.changed ||
+		(binding && (!(await operation.check()) || !operation.current()))
+	)
+		return wifiOperationChanged;
 	if (!identity || !owned(identity.conn, identity.profileMac)) {
 		return { success: false, error: "activation-failed" };
 	}
@@ -452,12 +465,19 @@ async function prepareHotspotLocked(
 					"802-11-wireless.ssid": chosen.name,
 					"802-11-wireless-security.psk": chosen.password,
 				},
-				run: (fields) => deps.nmConnSetFields(credentialUuid, fields),
+				run: async (fields) =>
+					(!binding || ((await operation.check()) && operation.current())) &&
+					owned(credentialUuid, identity.profileMac) &&
+					deps.nmConnSetFields(credentialUuid, fields),
 			})
 		).success
 	) {
-		return { success: false, error: "activation-failed" };
+		return operation.changed
+			? wifiOperationChanged
+			: { success: false, error: "activation-failed" };
 	}
+	if (binding && (!(await operation.check()) || !operation.current()))
+		return wifiOperationChanged;
 	if (!owned(identity.conn, identity.profileMac)) {
 		return { success: false, error: "activation-failed" };
 	}
