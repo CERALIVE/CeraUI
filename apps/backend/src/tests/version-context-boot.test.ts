@@ -49,14 +49,6 @@ describe("journal boot identity", () => {
 });
 
 describe("version context", () => {
-	// Importing main would bind servers and start hardware loops in this unit suite.
-	test("the entrypoint starts a non-blocking guarded record after revisions resolve", async () => {
-		const main = await Bun.file(new URL("../main.ts", import.meta.url)).text();
-		expect(main).toMatch(
-			/void guardNonCritical\("boot-record", async \(\) => \{\s*await initRevisions\(\);\s*await logBootRecord\(\);\s*await recordDeviceStart\(\);\s*\}\);/,
-		);
-	});
-
 	test("logBootRecord emits once and keeps senderVersion through the real logger chain", async () => {
 		const sources = deps();
 		const original = { ...defaultVersionContextDeps };

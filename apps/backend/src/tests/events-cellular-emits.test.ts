@@ -243,15 +243,3 @@ test("stopping and starting owns exactly one subscription and fresh presence", (
 		{ code: "modem_added", params: { modemKey: KEY, name: "Test modem" } },
 	]);
 });
-
-test("startup registers cellular events once before modem discovery", async () => {
-	const main = await Bun.file(new URL("../main.ts", import.meta.url)).text();
-	expect(main).toContain(
-		'import { initCellularEvents } from "./modules/events/cellular-events.ts";',
-	);
-	const calls = [...main.matchAll(/initCellularEvents\(\);/g)];
-	expect(calls).toHaveLength(1);
-	expect(calls[0]?.index).toBeLessThan(
-		main.indexOf("void initModemUpdateLoop({ monitor: networkMonitor })"),
-	);
-});

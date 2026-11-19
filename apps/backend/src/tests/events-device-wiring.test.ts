@@ -1,5 +1,9 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { emitDeviceEvent } from "../modules/events/device-emit.ts";
 import * as emitter from "../modules/events/emit.ts";
@@ -34,57 +38,44 @@ function declaration(path: string, name: string): string {
 	return node.getText(file).replace(/^export /, "");
 }
 
-test("main boot guard logs versions before recording device start", async () => {
-	const file = source("../main.ts");
-	let expression: ts.CallExpression | undefined;
-	const visit = (node: ts.Node): void => {
-		if (
-			ts.isCallExpression(node) &&
-			node.expression.getText(file) === "guardNonCritical" &&
-			node.arguments[0] &&
-			ts.isStringLiteral(node.arguments[0]) &&
-			node.arguments[0].text === "boot-record"
-		)
-			expression = node;
-		ts.forEachChild(node, visit);
-	};
-	visit(file);
-	if (!expression) throw new Error("missing boot guard");
-	const calls: string[] = [];
-	const started = Promise.withResolvers<void>();
-	const finish = Promise.withResolvers<void>();
-	const boot = evaluate(`return ${expression.getText(file)}`, {
-		guardNonCritical: async (name: string, run: () => Promise<void>) => {
-			calls.push(name);
-			await run();
-			calls.push("guard-complete");
-		},
-		initRevisions: async () => {
-			calls.push("revisions");
-		},
-		logBootRecord: async () => {
-			calls.push("log");
-		},
-		recordDeviceStart: async () => {
-			calls.push("start");
-			started.resolve();
-			await finish.promise;
-			calls.push("recorded");
-		},
-	});
-	await started.promise;
-	expect(calls).toEqual(["boot-record", "revisions", "log", "start"]);
-	finish.resolve();
-	await boot;
-	expect(calls).toEqual([
-		"boot-record",
-		"revisions",
-		"log",
-		"start",
-		"recorded",
-		"guard-complete",
-	]);
-});
+test("boot observes ready modem discovery once while the guarded version record is pending", async () => {
+	const cwd = await mkdtemp(join(tmpdir(), "ceraui-event-boot-"));
+	try {
+		await Bun.write(join(cwd, "setup.json"), '{"hw":"n100"}');
+		const boot = Bun.spawn(
+			[
+				process.execPath,
+				fileURLToPath(
+					new URL("./helpers/events-boot-probe.ts", import.meta.url),
+				),
+			],
+			{
+				cwd,
+				env: {
+					...process.env,
+					NODE_ENV: "development",
+					MOCK_SCENARIO: "single-modem",
+					CERALIVE_DEVICE_TYPE: "emulated",
+					CERALIVE_EVENTS_DIR: join(cwd, "events"),
+					CERALIVE_STREAMING_MARKER: join(cwd, "streaming"),
+					NOTIFY_SOCKET: "",
+				},
+				stdin: "ignore",
+				stdout: "ignore",
+				stderr: "pipe",
+				timeout: 8_000,
+				killSignal: "SIGKILL",
+			},
+		);
+		const [exitCode, stderr] = await Promise.all([
+			boot.exited,
+			new Response(boot.stderr).text(),
+		]);
+		expect(exitCode, stderr || "mock boot did not finish").toBe(0);
+	} finally {
+		await rm(cwd, { recursive: true, force: true });
+	}
+}, 12_000);
 
 for (const enabled of [false, true]) {
 	for (const failed of [false, true]) {
