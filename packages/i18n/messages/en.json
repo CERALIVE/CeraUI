@@ -2992,6 +2992,7 @@
 	"systemLogs.storage.deleteOlderTitle": "Delete older log files?",
 	"systemLogs.storage.deleteOlderBody": "This permanently deletes older log files that the device has already closed. Logs from this boot are kept. Some logs from earlier boots may remain. Downloads that are running are cancelled.",
 	"systemLogs.storage.unverifiedArchivesKept": "Some log files were kept because the device couldn't verify that they contain only logs from earlier boots.",
+	"systemLogs.storage.legacyArchivesKept": "A log file from an older system version can't be checked. It was kept.",
 	"systemLogs.storage.deleteOlderResult": "Boots stored: {before} before, {after} now.",
 	"systemLogs.storage.deleteLegacy": "Delete leftover debug files ({size})",
 	"systemLogs.storage.clearAll": "Clear all logs",

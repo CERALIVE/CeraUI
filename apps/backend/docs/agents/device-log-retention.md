@@ -72,7 +72,10 @@ nor invokes vacuum. Directory descriptors anchor the paths. For each candidate,
 archived header in the local machine scope, and a complete record stream must
 agree on a single different boot. The header's tail boot ID alone cannot rule
 out a mixed file. Unclean archives, unreadable evidence and scans over the
-time or output limits are kept.
+time or output limits are kept. Legacy headers without `TAIL_ENTRY_BOOT_ID`
+also need a tail realtime earlier than the first retained entry of the current
+boot. The timestamp is an additional requirement and never proves membership
+by itself. A separate outcome reports legacy files that could not be checked.
 The result counts retained journal boots before and after cleanup.
 
 ## Admission and terminal ownership

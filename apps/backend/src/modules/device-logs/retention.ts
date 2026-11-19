@@ -142,8 +142,13 @@ export function setRetention(next: LogRetention): Promise<LogStorageOutput> {
 export function deleteOlderFiles(): Promise<LogDeleteOlderFilesOutput> {
 	return withDestructiveRetention(false, async () => {
 		const mock = shouldUseMocks();
-		const bootsBefore = mock ? 1 : await countStoredBoots();
-		const warnings = mock ? {} : await deleteOlderJournal();
+		const before = mock
+			? []
+			: (await listBoots()).filter((boot) => boot.logsAvailable);
+		const warnings = mock
+			? {}
+			: await deleteOlderJournal(before.find((boot) => boot.current)?.firstTs);
+		const bootsBefore = mock ? 1 : before.length;
 		const bootsAfter = mock ? 1 : await countStoredBoots();
 		return {
 			ok: true,

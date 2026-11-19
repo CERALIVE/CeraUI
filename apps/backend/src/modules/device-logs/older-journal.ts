@@ -22,6 +22,7 @@ const headerSchema = z.object({
 		.regex(/^[1-9]\d*$/)
 		.transform(Number)
 		.pipe(z.number().int().safe()),
+	tail: z.string().regex(/^[0-9a-f]{1,16}$/),
 });
 const entry = z.object({ _BOOT_ID: id, __CURSOR: z.string() });
 
@@ -40,14 +41,16 @@ export function parseArchiveHeader(output: string) {
 		flags: field("Compatible flags"),
 		boot: field("Boot ID")?.trim(),
 		count: field("Entry objects")?.trim(),
+		tail: / \(([0-9a-f]+)\)$/.exec(field("Tail realtime timestamp") ?? "")?.[1],
 	});
 	return parsed.success ? parsed.data : null;
 }
 
-type ArchiveDecision = "delete" | "keep" | "unverified";
+type ArchiveDecision = "delete" | "keep" | "unverified" | "legacy";
 type BootEvidence = {
 	readonly boot: string;
 	readonly machine: string;
+	readonly firstTs: number | undefined;
 };
 
 async function inspectArchive(
@@ -57,13 +60,20 @@ async function inspectArchive(
 ): Promise<ArchiveDecision> {
 	const read = (options: string[]) =>
 		run("journalctl", [`--file=${path}`, "--no-pager", ...options], { signal });
+	let kept: ArchiveDecision = "unverified";
 	try {
 		const header = parseArchiveHeader(await read(["--header"]));
 		if (header?.path !== path || header.machine !== evidence.machine)
 			return "unverified";
-		if (!header.flags.split(" ").includes("TAIL_ENTRY_BOOT_ID"))
-			return "unverified";
-		if (header.boot === evidence.boot) return "keep";
+		const modern = header.flags.split(" ").includes("TAIL_ENTRY_BOOT_ID");
+		if (!modern) kept = "legacy";
+		if (modern && header.boot === evidence.boot) return "keep";
+		if (
+			!modern &&
+			(evidence.firstTs === undefined ||
+				BigInt(`0x${header.tail}`) >= BigInt(evidence.firstTs) * 1000n)
+		)
+			return "legacy";
 
 		const output = await read([
 			"-o",
@@ -73,35 +83,41 @@ async function inspectArchive(
 			"--output-fields=_BOOT_ID",
 		]);
 		const lines = output.trim().split("\n");
-		if (lines.length !== header.count) return "unverified";
-		const previous = header.boot;
+		if (lines.length !== header.count) return kept;
+		let previous: string | undefined = modern ? header.boot : undefined;
 		for (const line of lines) {
 			const parsed = entry.safeParse(JSON.parse(line));
 			if (
 				!parsed.success ||
 				journalCursorBoot(parsed.data.__CURSOR) !== parsed.data._BOOT_ID
 			)
-				return "unverified";
+				return kept;
 			const boot = parsed.data._BOOT_ID;
-			if (boot === evidence.boot || boot !== previous) return "keep";
+			if (
+				boot === evidence.boot ||
+				(previous !== undefined && boot !== previous)
+			)
+				return modern ? "keep" : "legacy";
+			previous = boot;
 		}
 		return "delete";
 	} catch (error) {
-		if (error instanceof Error) return "unverified";
+		if (error instanceof Error) return kept;
 		throw error;
 	}
 }
 
-export async function deleteOlderJournal() {
+export async function deleteOlderJournal(firstTs?: number) {
 	const boot = currentBootId();
 	if (boot === undefined) throw new JournalReadError("READ_FAILED");
 	const { machine, directories } = journalArchiveScope();
 	const signal = AbortSignal.timeout(30_000);
 	let unverifiedArchivesKept = false;
+	let legacyArchivesKept = false;
 	await withJournalArchiveSnapshot(directories, async (archive) => {
 		const result = archive.unclean
 			? "unverified"
-			: await inspectArchive(archive.path, { boot, machine }, signal);
+			: await inspectArchive(archive.path, { boot, machine, firstTs }, signal);
 		switch (result) {
 			case "keep":
 				break;
@@ -110,6 +126,9 @@ export async function deleteOlderJournal() {
 				break;
 			case "unverified":
 				unverifiedArchivesKept = true;
+				break;
+			case "legacy":
+				legacyArchivesKept = true;
 				break;
 			default: {
 				const unreachable: never = result;
@@ -121,5 +140,6 @@ export async function deleteOlderJournal() {
 		...(unverifiedArchivesKept
 			? { unverifiedArchivesKept: true as const }
 			: {}),
+		...(legacyArchivesKept ? { legacyArchivesKept: true as const } : {}),
 	};
 }

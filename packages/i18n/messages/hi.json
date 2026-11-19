@@ -2992,6 +2992,7 @@
 	"systemLogs.storage.deleteOlderTitle": "पुरानी लॉग फ़ाइलें हटाएँ?",
 	"systemLogs.storage.deleteOlderBody": "इससे वे पुरानी लॉग फ़ाइलें हमेशा के लिए हट जाएँगी जिन्हें डिवाइस पहले ही बंद कर चुका है। इस बूट के लॉग सुरक्षित रहेंगे। पिछले बूट के कुछ लॉग बचे रह सकते हैं। चल रहे डाउनलोड रद्द हो जाएँगे।",
 	"systemLogs.storage.unverifiedArchivesKept": "कुछ लॉग फ़ाइलें रखी गईं क्योंकि डिवाइस यह जाँच नहीं सका कि उनमें सिर्फ़ पिछले बूट के लॉग हैं।",
+	"systemLogs.storage.legacyArchivesKept": "सिस्टम के पुराने वर्शन की एक लॉग फ़ाइल की जाँच नहीं हो सकी। उसे रखा गया है।",
 	"systemLogs.storage.deleteOlderResult": "सहेजे गए बूट: पहले {before}, अब {after}।",
 	"systemLogs.storage.deleteLegacy": "बची हुई डीबग फ़ाइलें हटाएँ ({size})",
 	"systemLogs.storage.clearAll": "सभी लॉग साफ़ करें",

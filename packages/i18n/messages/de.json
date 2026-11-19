@@ -2992,6 +2992,7 @@
 	"systemLogs.storage.deleteOlderTitle": "Ältere Protokolldateien löschen?",
 	"systemLogs.storage.deleteOlderBody": "Ältere Protokolldateien, die das Gerät bereits geschlossen hat, werden dauerhaft gelöscht. Die Protokolle des aktuellen Systemstarts bleiben erhalten. Einige Protokolle früherer Systemstarts können erhalten bleiben. Laufende Downloads werden abgebrochen.",
 	"systemLogs.storage.unverifiedArchivesKept": "Einige Protokolldateien wurden behalten, weil das Gerät nicht prüfen konnte, ob sie nur Protokolle früherer Systemstarts enthalten.",
+	"systemLogs.storage.legacyArchivesKept": "Eine Protokolldatei aus einer älteren Systemversion konnte nicht geprüft werden und wurde behalten.",
 	"systemLogs.storage.deleteOlderResult": "Gespeicherte Systemstarts: vorher {before}, jetzt {after}.",
 	"systemLogs.storage.deleteLegacy": "Übrige Debug-Dateien löschen ({size})",
 	"systemLogs.storage.clearAll": "Alle Protokolle löschen",

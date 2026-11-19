@@ -49,6 +49,14 @@ entry "$old" 1000000 "$prior" unknown-header | archive "$unknown"
 printf '\377' | dd of="$unknown" bs=1 seek=16 conv=notrunc status=none
 previous="$(new_archive "$local_dir" 6 "$old")"
 entry "$old" 1000000 "$prior" previous-only | archive "$previous"
+legacy_old="$(new_archive "$local_dir" 9 "$old")"
+entry "$old" 1000000 "$prior" previous-legacy | archive "$legacy_old"
+legacy_late="$(new_archive "$local_dir" 10 "$now")"
+entry "$now" 1000000 "$prior" late-legacy | archive "$legacy_late"
+for file in "$legacy_old" "$legacy_late"; do
+	# Model earlier systemd headers without the tail-boot flag.
+	printf '\0' | dd of="$file" bs=1 seek=8 conv=notrunc status=none
+done
 mkdir -p "$foreign_dir" "$namespace_dir"
 foreign="$(new_archive "$foreign_dir" 7 "$old")"
 namespace="$(new_archive "$namespace_dir" 8 "$old")"
@@ -64,7 +72,9 @@ printf '%s\n' "$(find /usr/lib -name libfaketime.so.1 -print -quit)" >/state/old
 cp /conformance/older-journalctl.sh /state/older-argv/journalctl
 chmod +x /state/older-argv/journalctl
 stat -c '%d:%i' "$local_dir/system.journal" >/state/older-active
-PATH="/state/older-argv:$PATH" /state/retention-probe
+start_ms="$((now / 1000))"
+receipt="$(PATH="/state/older-argv:$PATH" /state/retention-probe "$start_ms")"
+jq -e '.legacyArchivesKept == true and .unverifiedArchivesKept == true' <<<"$receipt" >/dev/null
 [[ -s /state/older-rotated ]] || { echo 'FAIL live: inventory did not rotate the active file' >&2; exit 1; }
 mapfile -t matching < <(find "$local_dir" -name 'system@*.journal' -exec stat -c '%d:%i %n' {} +)
 rotated=
@@ -78,6 +88,8 @@ assert_file 'preserves a current archive when the old vacuum client clock would 
 assert_file 'preserves a mixed archive with a previous-boot tail' kept "$mixed"
 assert_file 'preserves an unrecognized archive header' kept "$unknown"
 assert_file 'removes a verified previous-boot archive' removed "$previous"
+assert_file 'removes a legacy archive with an older tail and verified entries' removed "$legacy_old"
+assert_file 'reports and keeps a legacy archive without earlier tail evidence' kept "$legacy_late"
 [[ "$scope_hashes" == "$(sha256sum "$foreign" "$namespace")" ]]
 echo 'PASS live: Older cleanup preserves foreign machine and namespace bytes'
 [[ "$(journalctl --file="$rotated" --no-pager -o json "_BOOT_ID=$boot" SYSLOG_IDENTIFIER=older-cleanup | jq -s length)" == 3 ]]

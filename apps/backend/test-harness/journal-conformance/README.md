@@ -116,7 +116,7 @@ removes only files proven to contain records from a single earlier boot.
 The native probe covers cross-boot active and mixed archived files, a rotation
 during inspection, backward archive naming, older creation-time metadata,
 clock movement at vacuum launch, and foreign machine and namespace directories.
-It also checks retained unknown headers.
+It also checks retained unknown headers and both legacy archive outcomes.
 Both cleanup actions report journal boot counts before and after. Both refuse
 during a busy update phase, persist a new history epoch
 and close admission in one synchronous step. Both cancel exports and queries,

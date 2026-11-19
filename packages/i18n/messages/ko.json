@@ -2947,6 +2947,7 @@
 	"systemLogs.storage.deleteOlderTitle": "오래된 로그 파일을 삭제할까요?",
 	"systemLogs.storage.deleteOlderBody": "기기가 이미 닫은 오래된 로그 파일을 영구적으로 삭제합니다. 이번 부팅의 로그는 보존됩니다. 이전 부팅의 로그가 일부 남을 수 있습니다. 진행 중인 다운로드는 취소됩니다.",
 	"systemLogs.storage.unverifiedArchivesKept": "이전 부팅의 로그만 들어 있는지 확인할 수 없어 일부 로그 파일을 보존했습니다.",
+	"systemLogs.storage.legacyArchivesKept": "이전 시스템 버전의 로그 파일을 확인할 수 없어 해당 파일을 보존했습니다.",
 	"systemLogs.storage.deleteOlderResult": "저장된 부팅: 이전 {before}, 현재 {after}.",
 	"systemLogs.storage.deleteLegacy": "남은 디버그 파일 삭제({size})",
 	"systemLogs.storage.clearAll": "모든 로그 지우기",

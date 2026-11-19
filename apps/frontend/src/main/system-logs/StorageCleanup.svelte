@@ -205,6 +205,9 @@ const RETRY: Record<Action, () => unknown> = {
 			{#if cleanup.unverifiedArchivesKept}
 				<p>{m['systemLogs.storage.unverifiedArchivesKept']()}</p>
 			{/if}
+			{#if cleanup.legacyArchivesKept}
+				<p>{m['systemLogs.storage.legacyArchivesKept']()}</p>
+			{/if}
 		{/if}
 	</div>
 	{#if failure}

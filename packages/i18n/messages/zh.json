@@ -2947,6 +2947,7 @@
 	"systemLogs.storage.deleteOlderTitle": "要删除较早的日志文件吗？",
 	"systemLogs.storage.deleteOlderBody": "此操作会永久删除设备已关闭的旧日志文件。本次启动的日志将保留，之前启动时的部分日志也可能保留。正在进行的下载将取消。",
 	"systemLogs.storage.unverifiedArchivesKept": "设备无法确认部分文件是否只包含之前启动时的日志，因此保留了这些文件。",
+	"systemLogs.storage.legacyArchivesKept": "无法检查旧版系统留下的一个日志文件，因此保留了该文件。",
 	"systemLogs.storage.deleteOlderResult": "已保存的启动：之前 {before}，现在 {after}。",
 	"systemLogs.storage.deleteLegacy": "删除残留的调试文件（{size}）",
 	"systemLogs.storage.clearAll": "清除所有日志",

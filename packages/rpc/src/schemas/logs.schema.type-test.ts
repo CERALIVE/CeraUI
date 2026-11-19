@@ -140,6 +140,7 @@ type Outputs = {
 				bootsBefore: number;
 				bootsAfter: number;
 				unverifiedArchivesKept?: true | undefined;
+				legacyArchivesKept?: true | undefined;
 		  }
 		| Failure;
 	logExportInputSchema: TimeRange & { filter: Filter; boot: Boot };

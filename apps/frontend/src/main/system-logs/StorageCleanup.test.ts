@@ -61,6 +61,34 @@ it("reports the boot counts returned after clearing all logs", async () => {
 	);
 });
 
+it("announces skipped legacy archives alongside the completed cleanup counts", async () => {
+	rpc.logs.deleteOlderFiles.mockResolvedValue({
+		ok: true,
+		storage: logStorage(),
+		bootsBefore: 3,
+		bootsAfter: 2,
+		legacyArchivesKept: true,
+	});
+	render(StorageCleanup, {
+		props: { storage: logStorage(), onrefresh: async () => {} },
+	});
+	await fireEvent.click(screen.getByRole("button", { name: copy.deleteOlder }));
+	const dialog = await screen.findByRole("alertdialog");
+	await fireEvent.click(
+		within(dialog).getByRole("button", { name: copy.deleteOlder }),
+	);
+	await waitFor(() => {
+		const status = screen.getByRole("status");
+		expect(status.textContent).toContain(
+			copy.deleteOlderResult.replace("{before}", "3").replace("{after}", "2"),
+		);
+		expect(status.textContent).toContain(
+			"A log file from an older system version can't be checked.",
+		);
+	});
+	expect(screen.queryByTestId("storage-cleanup-failed")).toBeNull();
+});
+
 it.each([
 	[copy.clearAll, copy.clearAllConfirm, rpc.logs.clearAll],
 	[copy.clearEvents, copy.clearEventsConfirm, rpc.events.clear],

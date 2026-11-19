@@ -2995,6 +2995,7 @@
 	"systemLogs.storage.deleteOlderTitle": "Supprimer les anciens fichiers journaux ?",
 	"systemLogs.storage.deleteOlderBody": "Cette action supprime définitivement les anciens fichiers journaux déjà fermés par l’appareil. Les journaux du démarrage actuel sont conservés. Certains journaux des démarrages précédents peuvent subsister. Les téléchargements en cours sont annulés.",
 	"systemLogs.storage.unverifiedArchivesKept": "Certains fichiers journaux ont été conservés, car l’appareil n’a pas pu vérifier qu’ils ne contenaient que des journaux de démarrages précédents.",
+	"systemLogs.storage.legacyArchivesKept": "Un fichier journal d’une ancienne version du système n’a pas pu être vérifié. Il a été conservé.",
 	"systemLogs.storage.deleteOlderResult": "Démarrages enregistrés : {before} avant, {after} maintenant.",
 	"systemLogs.storage.deleteLegacy": "Supprimer les fichiers de débogage restants ({size})",
 	"systemLogs.storage.clearAll": "Effacer tous les journaux",
