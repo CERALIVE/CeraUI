@@ -25,6 +25,7 @@ import { keepWhole, LINE_BREAKS } from '$lib/device-logs/storage-readout';
 import { rpc } from '$lib/rpc/client';
 import { cn } from '$lib/utils';
 
+import ParamText from './ParamText.svelte';
 import RecoveryBand from './RecoveryBand.svelte';
 
 interface Props {
@@ -123,7 +124,10 @@ const RETRY: Record<Action, () => unknown> = {
 			size="sm"
 			variant="outline"
 		>
-			{m['systemLogs.storage.deleteLegacy']({ size: keepWhole(formatBytes(locale)(storage.legacyDebugBytes)) })}
+			<ParamText
+				format={(size) => m['systemLogs.storage.deleteLegacy']({ size })}
+				value={keepWhole(formatBytes(locale)(storage.legacyDebugBytes))}
+			/>
 		</Button>
 	{/if}
 	<div class="flex flex-wrap gap-2">

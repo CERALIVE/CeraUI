@@ -3,13 +3,15 @@
   journal data journalctl does not count, the oldest entry, the event history,
   and recent volume by source labelled as the sample it is. An unknown value
   says so and is never drawn as zero. Bars are neutral and decorative; the text
-  beside each carries the number.
+  beside each carries the number. Each size sits in its own <bdi>, so right-to-left
+  text keeps a value before its Latin unit.
 -->
 <script lang="ts">
 import { formatBytes } from '@ceraui/i18n/formatters';
 import { getLocale, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { LogStorage } from '@ceraui/rpc/schemas';
 
+import { markParam, paramPieces } from '$lib/device-logs/param-parts';
 import { m } from '$lib/device-logs/storage-messages';
 import { keepWhole, onDiskTotal, usageReadout, volumeRows } from '$lib/device-logs/storage-readout';
 import { formatUpdateTime } from '$lib/updates/update-view';
@@ -19,12 +21,15 @@ let { storage }: { storage: LogStorage } = $props();
 const uid = $props.id();
 const locale = $derived(getLocale());
 const bytes = $derived((value: number) => keepWhole(formatBytes(locale)(value)));
+const size = $derived((value: number) => markParam(bytes(value)));
 const usage = $derived(usageReadout(storage));
 const onDisk = $derived(onDiskTotal(storage));
 const oldest = $derived(keepWhole(formatUpdateTime(storage.oldestEntryTs, locale)));
 const cleared = $derived(keepWhole(formatUpdateTime(storage.lastClearedAt, locale)));
 const rows = $derived(volumeRows(storage.recentVolume));
 </script>
+
+{#snippet sentence(text: string)}{#each paramPieces(text) as piece, i (i)}{#if piece.param}<bdi>{piece.text}</bdi>{:else}{piece.text}{/if}{/each}{/snippet}
 
 {#snippet meter(percent: number, testid: string)}
 	<span aria-hidden="true" class="bg-muted block h-1.5 min-w-0 grow overflow-hidden rounded-full" data-testid={testid}>
@@ -43,9 +48,9 @@ const rows = $derived(volumeRows(storage.recentVolume));
 			{#if usage.used === null}
 				{m['systemLogs.storage.notReported']()}
 			{:else if usage.limit === null}
-				{m['systemLogs.storage.usedNoLimit']({ used: bytes(usage.used) })}
+				{@render sentence(m['systemLogs.storage.usedNoLimit']({ used: size(usage.used) }))}
 			{:else}
-				{m['systemLogs.storage.used']({ used: bytes(usage.used), limit: bytes(usage.limit) })}
+				{@render sentence(m['systemLogs.storage.used']({ used: size(usage.used), limit: size(usage.limit) }))}
 			{/if}
 		</p>
 		{#if usage.percent !== null}
@@ -53,7 +58,7 @@ const rows = $derived(volumeRows(storage.recentVolume));
 		{/if}
 		{#if onDisk !== null}
 			<p class="text-muted-foreground text-xs" data-testid="storage-on-disk">
-				{m['systemLogs.storage.onDisk']({ total: bytes(onDisk) })}
+				{@render sentence(m['systemLogs.storage.onDisk']({ total: size(onDisk) }))}
 			</p>
 		{/if}
 	</div>
@@ -62,7 +67,7 @@ const rows = $derived(volumeRows(storage.recentVolume));
 		<p data-state={oldest === undefined ? 'unknown' : 'reported'} data-testid="storage-oldest">
 			{oldest === undefined ? m['systemLogs.storage.oldestUnknown']() : m['systemLogs.storage.oldest']({ date: oldest })}
 		</p>
-		<p data-testid="storage-events">{m['systemLogs.storage.events']({ size: bytes(storage.eventsBytes) })}</p>
+		<p data-testid="storage-events">{@render sentence(m['systemLogs.storage.events']({ size: size(storage.eventsBytes) }))}</p>
 		{#if cleared !== undefined}
 			<p data-testid="storage-last-cleared">{m['systemLogs.storage.lastCleared']({ time: cleared })}</p>
 		{/if}
@@ -94,7 +99,7 @@ const rows = $derived(volumeRows(storage.recentVolume));
 							<td class="py-1.5">
 								<span class="flex items-center gap-2">
 									{@render meter(row.share, 'storage-volume-meter')}
-									<span class="w-14 shrink-0 text-end tabular-nums">{bytes(row.bytes)}</span>
+									<span class="w-14 shrink-0 text-end tabular-nums"><bdi>{bytes(row.bytes)}</bdi></span>
 								</span>
 							</td>
 						</tr>

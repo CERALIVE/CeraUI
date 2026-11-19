@@ -29,7 +29,7 @@ density. It is not a redesign.
   and each row's "View raw logs" is a quiet ghost action. Raw logs: Follow, the
   most prominent control of the tab, deliberately an `outline` button: a filled
   lime button reads as going live. Storage: Save limits (`default` variant, the
-  same Save vocabulary as every `AppDialog` footer), disabled until a limit or Detail changes (`main/system-logs/StorageLimits.svelte:149-170`). Destructive actions are `outline` triggers; only their confirmation
+  same Save vocabulary as every `AppDialog` footer), disabled until a limit or Detail changes (`main/system-logs/StorageLimits.svelte:162-183`). Destructive actions are `outline` triggers; only their confirmation
   button uses the `destructive` variant.
 - **Signature move.** The boot separator. In Events each boot group has a sticky
   heading with its start time and the system image, slot and end mark that are
@@ -254,7 +254,7 @@ image and slot when known ("Versions not recorded for this boot" otherwise),
 carries a check glyph and a tonal wash, never an accent outline. "All boots"
 is the first row.
 
-**Storage**: usage as a decorative meter (`main/system-logs/StorageUsage.svelte:29-33,50-52`) plus text only when both used and limit are
+**Storage**: usage as a decorative meter (`main/system-logs/StorageUsage.svelte:34-38,55-57`) plus text only when both used and limit are
 known (otherwise text only, never a bar or a zero); the on-disk line when the
 directory total exceeds the journal's own count; oldest entry; event history
 size; "Recent volume by source" as a compact table (Source | Entries | Size,
@@ -834,7 +834,9 @@ widths are not measured in this lane.
   matrix and open select portals use the compositor alone. It also checks both Clear
   confirmations at rest, on hover and on keyboard focus, in dark and light at
   1440x900. The Raw search placeholder is measured against its field in all
-  ten locales at 320x720, 390x844, 1440x900 and touch 1024x600.
+  ten locales at 320x720, 390x844, 1440x900 and touch 1024x600. In Arabic at
+  390x844, in dark and light, every Storage size and size-limit option is
+  checked to paint its value before its unit.
 - The other bullets in this section, "Every width" included, are design rules:
   the 800x480 kiosk and the widths between the measured ones are not measured.
 - An 800x480 kiosk follows the 768 column with the folded bars, since it is
@@ -855,7 +857,8 @@ widths are not measured in this lane.
   (`RawLogsFilterBar.svelte`).
 - RTL (`ar`): logical properties only; the close button sits at the inline end;
   the side column sits at the inline end; chevrons mirror (`rtl:-scale-x-100`);
-  raw unit and message keep `dir="ltr"`; data params in `<bdi>`.
+  raw unit and message keep `dir="ltr"`; data params in `<bdi>`, Storage sizes
+  included, so each value stays before its Latin unit.
 - CJK (`ja`, `ko`, `zh`): system fallback fonts render (no tofu); at 320 and
   375 px the spec finds no `Intl.Segmenter` word of two or more characters
   holding a CJK character split across lines within one rendered text node
@@ -952,10 +955,10 @@ button disappears, provided the operator has not moved focus.
 | `main/system-logs/SegmentedChoice.svelte:27` | props |
 | `main/system-logs/SharingSection.svelte:21` | props |
 | `main/system-logs/ShutdownMark.svelte:21` | props |
-| `main/system-logs/StorageCleanup.svelte:35` | props |
-| `main/system-logs/StorageLimits.svelte:34` | props |
+| `main/system-logs/StorageCleanup.svelte:36` | props |
+| `main/system-logs/StorageLimits.svelte:36` | props |
 | `main/system-logs/StorageSection.svelte:20` | props |
-| `main/system-logs/StorageUsage.svelte:17` | props |
+| `main/system-logs/StorageUsage.svelte:19` | props |
 | `main/system-logs/StreamStatePill.svelte` | no props |
 | `main/system-logs/SystemLogsView.svelte:65` | props |
 
@@ -1089,11 +1092,11 @@ Related browser specs and their entry points:
 
 ### RecoveryBand call sites
 
-`main/system-logs/StorageCleanup.svelte:175`, `main/system-logs/StorageLimits.svelte:183`, `main/system-logs/StorageSection.svelte:61`.
+`main/system-logs/StorageCleanup.svelte:179`, `main/system-logs/StorageLimits.svelte:196`, `main/system-logs/StorageSection.svelte:61`.
 
 ### role="status" elements
 
-`main/system-logs/BootPicker.svelte:166`, `main/system-logs/BundleDialog.svelte:102`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:211`, `main/system-logs/ExportDialog.svelte:51`, `main/system-logs/RawLogList.svelte:251`, `main/system-logs/RawLogRow.svelte:163`, `main/system-logs/RawLogsPanel.svelte:101`, `main/system-logs/RawLogsTab.svelte:158`, `main/system-logs/StorageCleanup.svelte:169`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:224`.
+`main/system-logs/BootPicker.svelte:166`, `main/system-logs/BundleDialog.svelte:102`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:211`, `main/system-logs/ExportDialog.svelte:51`, `main/system-logs/RawLogList.svelte:251`, `main/system-logs/RawLogRow.svelte:163`, `main/system-logs/RawLogsPanel.svelte:101`, `main/system-logs/RawLogsTab.svelte:158`, `main/system-logs/StorageCleanup.svelte:173`, `main/system-logs/StorageLimits.svelte:186`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:224`.
 
 ### Limits and constants
 
@@ -1135,7 +1138,7 @@ Backend and wire limits: [device-logs.md](../../../backend/docs/agents/device-lo
 | Segmented choice focus | `main/system-logs/SegmentedChoice.svelte:50` |
 | Selected tab focus | `main/system-logs/SystemLogsView.svelte:137` |
 | Storage heading focus | `main/system-logs/SystemLogsView.svelte:146` |
-| Cancel focus for clear confirmations | `main/system-logs/StorageCleanup.svelte:53` |
+| Cancel focus for clear confirmations | `main/system-logs/StorageCleanup.svelte:54` |
 | RecoveryBand Retry button | `main/system-logs/RecoveryBand.svelte:35` |
 
 ### Recorded follow-ups
@@ -1164,7 +1167,7 @@ technology speech. Browser coverage is in the related specs above.
   - Two time formats. Raw rows use a fixed two-digit hour (`RawLogList.svelte:47`)
     in a mono tabular column (`RawLogRow.svelte:129`), so times line up down the
     list. Events shows a relative time next to a localized clock for events dated
-    today, or a localized date and time for older events (`timeline-copy.ts:168-174`).
+    today, or a localized date and time for older events (`timeline-copy.ts:153-159`).
   - The Storage heading under the Storage tab on phones. It names the Storage
     region (`SystemLogsView.svelte:158`) and is where a Storage request puts focus
     (`:146`).

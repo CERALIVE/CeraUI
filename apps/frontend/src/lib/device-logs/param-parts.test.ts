@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { paramParts } from "./param-parts";
+import { markParam, paramParts, paramPieces } from "./param-parts";
 
 describe("paramParts", () => {
 	it("splits a message around its data param", () => {
@@ -28,6 +28,25 @@ describe("paramParts", () => {
 		expect(paramParts((value) => `${printable}${value}${printable}`)).toEqual([
 			printable,
 			printable,
+		]);
+	});
+});
+
+describe("paramPieces", () => {
+	it("keeps each marked param apart, in the order the translation places it", () => {
+		const used = markParam("48 MB");
+		const limit = markParam("256 MB");
+		expect(paramPieces(`${limit}${used} :الحد`)).toEqual([
+			{ text: "256 MB", param: true },
+			{ text: "48 MB", param: true },
+			{ text: " :الحد", param: false },
+		]);
+	});
+
+	it("keeps a value that holds the mark inside its own param", () => {
+		expect(paramPieces(`Logs use ${markParam("a\u0000b")}`)).toEqual([
+			{ text: "Logs use ", param: false },
+			{ text: "a\uFFFDb", param: true },
 		]);
 	});
 });

@@ -4,7 +4,8 @@
   limit deletes stored logs. Every offered limit stays inside the device's own
   ceiling; when the device does not report it, both limits stay visible but
   disabled with the reason beside them, and only Detail can change. After Save
-  it states what the cleanup that this Save ran achieved.
+  it states what the cleanup that this Save ran achieved. Each limit value sits
+  in its own <bdi>, so right-to-left text keeps a size before its Latin unit.
 -->
 <script lang="ts">
 import { formatBytes } from '@ceraui/i18n/formatters';
@@ -15,6 +16,7 @@ import { untrack } from 'svelte';
 import { Button } from '$lib/components/ui/button';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
+import { markParam, paramPieces } from '$lib/device-logs/param-parts';
 import {
 	keepForOptions,
 	limitFromValue,
@@ -67,7 +69,7 @@ const limits = $derived([
 		describe: (days: number | null) =>
 			days === null
 				? m['systemLogs.storage.keepForDevice']({
-						value: ceiling === null ? unknown : keepWhole(formatDayCount(ceiling.maxAgeDays, locale)),
+						value: markParam(ceiling === null ? unknown : keepWhole(formatDayCount(ceiling.maxAgeDays, locale))),
 					})
 				: m['systemLogs.storage.keepForDays']({ count: days }),
 	},
@@ -78,11 +80,18 @@ const limits = $derived([
 		describe: (mb: number | null) =>
 			mb === null
 				? m['systemLogs.storage.maxSizeDevice']({
-						value: ceiling === null ? unknown : bytes(ceiling.maxSizeMb * MIB),
+						value: markParam(ceiling === null ? unknown : bytes(ceiling.maxSizeMb * MIB)),
 					})
-				: bytes(mb * MIB),
+				: markParam(bytes(mb * MIB)),
 	},
 ] as const);
+
+/** A described limit as plain text, for the option's typeahead label. */
+function plain(text: string): string {
+	return paramPieces(text)
+		.map((piece) => piece.text)
+		.join('');
+}
 
 function stage(patch: Partial<LogRetention>): void {
 	draft = { ...draft, ...patch };
@@ -105,6 +114,8 @@ async function save(): Promise<void> {
 }
 </script>
 
+{#snippet sentence(text: string)}{#each paramPieces(text) as piece, i (i)}{#if piece.param}<bdi>{piece.text}</bdi>{:else}{piece.text}{/if}{/each}{/snippet}
+
 <fieldset class="min-w-0" data-testid="storage-limits">
 	<legend class="text-sm font-medium">{m['systemLogs.storage.limitsHeading']()}</legend>
 	<div class="mt-3 flex flex-col gap-4">
@@ -123,11 +134,13 @@ async function save(): Promise<void> {
 						data-testid="storage-{limit.key}-select"
 						id="{uid}-{limit.key}"
 					>
-						{limit.describe(draft[limit.key])}
+						{@render sentence(limit.describe(draft[limit.key]))}
 					</Select.Trigger>
 					<Select.Content class={LINE_BREAKS}>
 						{#each [null, ...limit.options] as option (option)}
-							<Select.Item class="min-h-(--touch-target-min)" label={limit.describe(option)} value={limitValue(option)} />
+							<Select.Item class="min-h-(--touch-target-min)" label={plain(limit.describe(option))} value={limitValue(option)}>
+								{@render sentence(limit.describe(option))}
+							</Select.Item>
 						{/each}
 					</Select.Content>
 				</Select.Root>

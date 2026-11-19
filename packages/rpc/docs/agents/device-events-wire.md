@@ -30,7 +30,7 @@ A record with a param value outside those types fails the schema. The store
 reader skips records that fail its `v: 1` schema
 (`apps/backend/src/modules/events/store.ts:160-161,186`). The Events tab
 renders an unknown code with `timeline.unknown.title`
-(`apps/frontend/src/lib/device-logs/timeline-copy.ts:139-140`).
+(`apps/frontend/src/lib/device-logs/timeline-copy.ts:124-125`).
 
 ## Writer checks
 

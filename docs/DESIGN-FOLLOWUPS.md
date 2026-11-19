@@ -554,9 +554,9 @@ The full table, evidence and the fixed findings are in
 - **Owner:** device-log-system todo 38 (keyboard audit).
 - **Exit condition:** opening either clear confirmation focuses Cancel.
 - **Todo 38: closed.** Both clear confirmations open with focus on Cancel:
-  `apps/frontend/src/main/system-logs/StorageCleanup.svelte:53` (`openOnCancel`) hands an
-  `onOpenAutoFocus` to the shared dialog through its existing `contentProps` (`:137`,
-  `:156`), so `simple-alert-dialog.svelte` is unchanged. Proved by `StorageSection.test.ts`
+  `apps/frontend/src/main/system-logs/StorageCleanup.svelte:54` (`openOnCancel`) hands an
+  `onOpenAutoFocus` to the shared dialog through its existing `contentProps` (`:141`,
+  `:160`), so `simple-alert-dialog.svelte` is unchanged. Proved by `StorageSection.test.ts`
   ("opens Clear all logs with focus on Cancel") and `apps/frontend/tests/e2e/system-logs-keyboard.spec.ts`.
 
 ### DF-31: System Logs polish residuals (SL-12, P3)
@@ -571,7 +571,7 @@ The full table, evidence and the fixed findings are in
   - The Order label's offset: fixed. The folded filters align on their top edge
     (`apps/frontend/src/main/system-logs/RawLogsFilterBar.svelte:125`, `items-start`).
   - An empty usage bar under 1 %: fixed. A share above zero draws a sliver
-    (`apps/frontend/src/main/system-logs/StorageUsage.svelte:32`, `min-w-1`).
+    (`apps/frontend/src/main/system-logs/StorageUsage.svelte:37`, `min-w-1`).
   - "All sources" in placeholder grey: fixed. The trigger shows it in the value colour
     (`RawLogsFilterBar.svelte:140`).
   - The recessed checked segment in dark: fixed. In dark it takes the accent surface, lighter

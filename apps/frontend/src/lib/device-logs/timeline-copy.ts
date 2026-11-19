@@ -31,6 +31,7 @@ import type { Component } from "svelte";
 import { NOTIFICATION_ICONS } from "$main/notifications/notification-presentation";
 
 import { formatBootTime } from "./boot-rows";
+import { markParam, type ParamPiece, paramPieces } from "./param-parts";
 import {
 	DETAILS,
 	DIAGNOSTIC_PARAMS,
@@ -39,10 +40,7 @@ import {
 } from "./timeline-details";
 
 /** One piece of a detail sentence; a data param renders inside a <bdi>. */
-export interface DetailPart {
-	readonly text: string;
-	readonly param: boolean;
-}
+export type DetailPart = ParamPiece;
 
 export interface EventGlyph {
 	readonly icon: Component;
@@ -80,24 +78,11 @@ const FAMILY_ICONS: Record<EventFamily, Component> = {
 
 // Every enum value the registry accepts has copy (timeline-copy-completeness.test.ts),
 // and a newer device's value fails this registry's schema, so every key exists.
-const MARK = "\u0000";
-
 function parts({ key, values = {} }: Sentence): DetailPart[] {
 	const marked = Object.fromEntries(
-		Object.entries(values).map(([name, value]) => [
-			name,
-			`${MARK}${value.replaceAll(MARK, "\uFFFD")}${MARK}`,
-		]),
+		Object.entries(values).map(([name, value]) => [name, markParam(value)]),
 	);
-	return t(key, marked)
-		.split(MARK)
-		.flatMap((text, index): DetailPart[] =>
-			index % 2 === 1
-				? [{ text, param: true }]
-				: text === ""
-					? []
-					: [{ text, param: false }],
-		);
+	return paramPieces(t(key, marked));
 }
 
 function isEventCode(code: string): code is EventCode {

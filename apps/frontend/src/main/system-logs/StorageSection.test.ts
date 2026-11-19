@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { formatBytes } from "@ceraui/i18n/formatters";
 import { setLocale } from "@ceraui/i18n/svelte";
 import type { LogStorage } from "@ceraui/rpc/schemas";
 import {
@@ -14,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { onHistoryChanged } from "$lib/device-logs/history-bus";
 
-import { de, en, es, zh } from "../../tests/helpers/catalog";
+import { ar, de, en, es, zh } from "../../tests/helpers/catalog";
 
 import { logStorage, MIB } from "./__fixtures__/log-storage";
 import StorageSection from "./StorageSection.svelte";
@@ -193,6 +194,47 @@ describe("StorageSection: survivor regressions", () => {
 			expect(
 				screen.getByTestId("storage-save-status").textContent?.trim(),
 			).toBe(copy.saved),
+		);
+	});
+});
+
+describe("StorageSection: sizes in right-to-left text", () => {
+	it("isolates every size with its unit in its own bdi under Arabic", async () => {
+		setLocale("ar");
+		expect(document.documentElement.dir).toBe("rtl");
+		mount(logStorage({ journalDirBytes: 300 * MIB }));
+		const size = (bytes: number) => whole(formatBytes("ar")(bytes));
+		const isolated = (element: Element) =>
+			[...element.querySelectorAll("bdi")].map((node) => node.textContent);
+
+		const usage = screen.getByTestId("storage-usage-text");
+		expect(isolated(usage)).toEqual([size(48 * MIB), size(256 * MIB)]);
+		expect(usage.textContent?.trim()).toBe(
+			fill(ar.systemLogs.storage.used, {
+				used: size(48 * MIB),
+				limit: size(256 * MIB),
+			}),
+		);
+		expect(isolated(screen.getByTestId("storage-on-disk"))).toEqual([
+			size(300 * MIB),
+		]);
+		expect(isolated(screen.getByTestId("storage-events"))).toEqual([
+			size(18_432),
+		]);
+		expect(screen.getAllByTestId("storage-volume-row").map(isolated)).toEqual([
+			[size(300_000)],
+			[size(90_000)],
+			[size(10_000)],
+		]);
+
+		const limit = screen.getByRole("combobox", {
+			name: ar.systemLogs.storage.maxSizeLabel,
+		});
+		expect(isolated(limit)).toEqual([size(256 * MIB)]);
+		await fireEvent.keyDown(limit, { key: "ArrowDown" });
+		const options = await screen.findAllByRole("option");
+		expect(options.map(isolated)).toEqual(
+			[256, 32, 64, 128].map((mb) => [size(mb * MIB)]),
 		);
 	});
 });
