@@ -50,9 +50,19 @@ async function main() {
 	const uuid = await nmApConnAdd(a, identity, hotspotBindingFields(owner));
 	assert(uuid, "Fixture profile was not created");
 	try {
-		rememberHotspotCredentials(owner, { ssid: identity.name, password: identity.password, conn: uuid });
+		rememberHotspotCredentials(owner, {
+			ssid: identity.name,
+			password: identity.password,
+			conn: uuid,
+		});
 		getConfig().wifi_modes = { [owner]: "hotspot" };
-		const row = await seedObservedRadioRow({ ifname: a, owner, uuid, ssid: identity.name, password: identity.password });
+		const row = await seedObservedRadioRow({
+			ifname: a,
+			owner,
+			uuid,
+			ssid: identity.name,
+			password: identity.password,
+		});
 		await observeSavedProfileRadio(a);
 		await wifiRadioIdentity.discover([{ ifname: a, row }]);
 		const token = projectWifiRadioIncarnation(row, wifiRadioIdentity.state.rows.get(a));
@@ -61,32 +71,40 @@ async function main() {
 		let upCalls = 0;
 		const result = await withWifiRequestBinding(
 			{ device: String(row.id), expected: token, kind: "config" },
-			() => wifiHotspotStart({ device: row.id }, {
-				...defaultHotspotDeps,
-				nmConnSetFields: async (id, fields) => {
-					const written = await defaultHotspotDeps.nmConnSetFields(id, fields);
-					if (!written || swapped) return written;
-					for (const name of [a, b]) await run("ip", ["link", "set", name, "down"]);
-					await run("ip", ["link", "set", a, "name", "swap-temp"]);
-					await run("ip", ["link", "set", b, "name", a]);
-					await run("ip", ["link", "set", "swap-temp", "name", b]);
-					assert.equal(await address(a), other);
-					assert.equal(await address(b), owner);
-					swapped = true;
-					return written;
-				},
-				nmConnect: (...args) => {
-					upCalls++;
-					return defaultHotspotDeps.nmConnect(...args);
-				},
-			}),
+			() =>
+				wifiHotspotStart(
+					{ device: row.id },
+					{
+						...defaultHotspotDeps,
+						wifiUpdateSavedConns: async () => {
+							await defaultHotspotDeps.wifiUpdateSavedConns();
+							if (swapped) return;
+							for (const name of [a, b]) await run("ip", ["link", "set", name, "down"]);
+							await run("ip", ["link", "set", a, "name", "swap-temp"]);
+							await run("ip", ["link", "set", b, "name", a]);
+							await run("ip", ["link", "set", "swap-temp", "name", b]);
+							assert.equal(await address(a), other);
+							assert.equal(await address(b), owner);
+							swapped = true;
+						},
+						nmConnect: (...args) => {
+							upCalls++;
+							return defaultHotspotDeps.nmConnect(...args);
+						},
+					},
+				),
 		);
-		assert(swapped, "The pin write did not reach the swap fixture");
+		assert(
+			swapped,
+			`The profile refresh did not reach the swap fixture (Start: ${result.success ? "accepted" : result.error}, Up calls: ${upCalls})`,
+		);
 		assert.deepEqual(result, { success: false, error: "radio-changed" });
 		assert.equal(upCalls, 0);
 		for (const name of [a, b])
 			assert.doesNotMatch(await run("iw", ["dev", name, "info"]), /\btype AP\b/);
-		process.stdout.write("B8 replacement: native swap refused, zero Up calls and neither radio hosts an AP\n");
+		process.stdout.write(
+			"B8 replacement: native swap refused, zero Up calls and neither radio hosts an AP\n",
+		);
 	} finally {
 		terminateWifiDiscovery();
 		await nmDisconnect(uuid);
