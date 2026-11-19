@@ -885,6 +885,8 @@ live-region announcements.
 After reconnect, a previously attached Raw follow checks the running boot
 before offering a usable Resume. A changed boot stops the follow with the
 restart notice and reloads This boot from its newest retained entry.
+If the boot check cannot answer, a Follow reply with a checkpoint from a
+different boot takes the same stop and reload path before applying any batch.
 While Raw is open, the boot picker checks Running now for This boot and
 checks All boots only for All stored. Choosing Running now keeps Follow
 available under the normal filters. Choosing All boots can change the Raw

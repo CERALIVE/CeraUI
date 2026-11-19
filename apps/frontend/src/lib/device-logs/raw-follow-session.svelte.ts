@@ -1,5 +1,5 @@
 import {
-	journalCursorBoot,
+	followCheckpointBoot,
 	LOG_FOLLOW_BOOT_START_PREFIX,
 	type LogFollowMessage,
 	type LogFollowStopOutput,
@@ -111,13 +111,8 @@ export class RawFollowSession {
 	async #checkBoot(): Promise<void> {
 		const { readCurrentBoot } = this.deps;
 		if (readCurrentBoot === undefined) return;
-		const checkpoint = this.#checkpoint;
 		const boot =
-			(checkpoint?.startsWith(LOG_FOLLOW_BOOT_START_PREFIX)
-				? checkpoint.split(":")[1]
-				: checkpoint === null
-					? undefined
-					: journalCursorBoot(checkpoint)) ?? this.context.rows.newestBoot;
+			followCheckpointBoot(this.#checkpoint) ?? this.context.rows.newestBoot;
 		if (boot === undefined) return;
 		const token = ++this.#token;
 		this.busy = true;
@@ -208,6 +203,17 @@ export class RawFollowSession {
 			this.#forget();
 			this.state = "idle";
 			feedback.failure = { code: reply.error, op: "follow" };
+			return;
+		}
+		const previousBoot = followCheckpointBoot(position) ?? rows.newestBoot;
+		const runningBoot = followCheckpointBoot(reply.checkpointCursor);
+		if (
+			previousBoot !== undefined &&
+			runningBoot !== undefined &&
+			runningBoot !== previousBoot
+		) {
+			void this.#stop();
+			this.#end("boot_changed");
 			return;
 		}
 		// The device may have written entries since the last read. Re-read before

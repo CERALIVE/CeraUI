@@ -171,7 +171,7 @@ test("native boot start with unprovable retention reports a gap and reads retain
 });
 
 test.each(["boot", "epoch"] as const)(
-	"stale boot-start %s falls back to the current head",
+	"uses the expected replay position for a stale boot-start %s",
 	async (part) => {
 		f.scan.mockResolvedValueOnce({
 			status: "eof",
@@ -188,11 +188,25 @@ test.each(["boot", "epoch"] as const)(
 						/:\d+$/,
 						`:${getLogState().historyEpoch + 1}`,
 					);
-		expect((await start({ afterCursor: stale })).checkpointCursor).toBe("s=1");
-		expect(f.messages.map((message) => message.gap)).toEqual([
-			"cursor_unavailable",
-		]);
-		expect(f.argv[1]).toContain("--cursor=s=1");
+		const resumed = await start({ afterCursor: stale });
+		if (part === "epoch") {
+			expect(resumed.checkpointCursor).toBe("s=1");
+			expect(f.messages.map((message) => message.gap)).toEqual([
+				"cursor_unavailable",
+			]);
+			expect(f.argv[1]).toContain("--cursor=s=1");
+			return;
+		}
+		expect(resumed.checkpointCursor).toBe(checkpointCursor);
+		expect(f.argv[1]?.filter((arg) => arg.startsWith("--cursor"))).toEqual([]);
+		await child().emit([record(1), record(2)]);
+		f.time.advance(250);
+		expect(
+			f.messages.map(({ gap, entries }) => [
+				gap,
+				entries.map(({ cursor }) => cursor),
+			]),
+		).toEqual([[undefined, ["s=1", "s=2"]]]);
 	},
 );
 

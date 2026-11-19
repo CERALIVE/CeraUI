@@ -98,6 +98,10 @@ Maintenance runs when a ceiling is readable and a limit is set
 | Follows | a new start on a socket stops its previous one; `BUSY` at 4 running | `follow.ts:80-83` |
 | Follow batch | flush delay 0 at 200 entries or 64 KiB, else 250 ms; an entry past 200 entries or 256 KiB is counted in `dropped` | `follow-batch.ts:23,34` |
 | Follow catch-up | more than 2000 records examined before the first flush restarts the follower with `gap: "catchup_exceeded"` | `follow-delivery.ts:47-50`; `follow.ts:206-213` |
+
+Follow reads from the running boot's retained start when either checkpoint
+format identifies a previous boot. This path does not signal log cleanup.
+Same-boot checkpoints still require the existing epoch and retention evidence.
 | Export | 64 MiB, 120 s; ticket 60 s, deleted on use | `export-body.ts:10-11`; `export.ts:65,90` |
 | Bundle | 32 MiB plain, 8 MiB compressed; 60 s to prepare, 60 s to download | `bundle-body.ts:12-13`; `bundle.ts:53,70,128` |
 | Sharing slot | one lease at a time | `sharing.ts:4-15` |

@@ -1247,6 +1247,55 @@ describe("RawLogsTab: follow", () => {
 		expect(logs.followStart).toHaveBeenCalledTimes(1);
 	});
 
+	it("waits for a held boot check and replaces stale rows when the server finds the reboot", async () => {
+		const running = fourBoots().find(({ current }) => current);
+		if (!running) throw new Error("missing running boot fixture");
+		const oldCursor = `s=3;b=${BOOT};m=123`;
+		const newCursor = `s=2;b=${running.bootId};m=124`;
+		await mounted(page([oldCursor]));
+		logs.followStart.mockResolvedValueOnce({
+			ok: true,
+			subscriptionId: "sub-1",
+			checkpointCursor: oldCursor,
+		});
+		await fireEvent.click(screen.getByTestId("raw-follow-button"));
+		await screen.findByText(en.systemLogs.follow.following);
+		setConnectionState("disconnected");
+		await screen.findByTestId("raw-disconnected");
+
+		const check = Promise.withResolvers<never>();
+		logs.boots.mockReturnValueOnce(check.promise);
+		setConnectionState("connected");
+		const resume = await screen.findByRole("button", {
+			name: en.systemLogs.follow.resume,
+		});
+		expect(resume.getAttribute("aria-busy")).toBe("true");
+		await fireEvent.click(resume);
+		expect(logs.followStart).toHaveBeenCalledTimes(1);
+		check.reject(new Error("boot check was unavailable"));
+		await waitFor(() => expect(resume.hasAttribute("aria-busy")).toBe(false));
+
+		logs.followStart.mockResolvedValueOnce({
+			ok: true,
+			subscriptionId: "sub-2",
+			checkpointCursor: `boot-start:${running.bootId}:0`,
+		});
+		logs.query.mockResolvedValueOnce(
+			page([], {
+				bootId: running.bootId,
+				entries: [entry(newCursor, { bootId: running.bootId })],
+			}),
+		);
+		await fireEvent.click(resume);
+
+		expect((await screen.findByTestId("raw-follow-ended")).textContent).toBe(
+			en.systemLogs.follow.endedBoot,
+		);
+		await waitFor(() => expect(cursors()).toEqual([newCursor]));
+		expect(logs.followStop).toHaveBeenCalledTimes(1);
+		expect(logs.followStart).toHaveBeenCalledTimes(2);
+	});
+
 	it("pages skipped rows in place and transfers focus when the gap is filled", async () => {
 		await mounted();
 		await startFollowing();

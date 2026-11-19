@@ -57,10 +57,12 @@ payload through their strict schema.
 A follow started on a verified empty boot returns a boot-start checkpoint in
 the existing `checkpointCursor` field. Clients echo it as `afterCursor` to
 replay from the beginning of retained history for that boot, even on another
-socket. The checkpoint carries the boot ID and history epoch. A stale boot-start
-checkpoint reports `cursor_unavailable` and attaches at the current head.
-An ordinary journal checkpoint from a different boot attaches at the retained
-start of the running boot.
+socket. The checkpoint carries the boot ID and history epoch. Both boot-start
+and ordinary journal checkpoints from another boot attach at the retained
+start of the running boot without a cleanup gap. A boot-start checkpoint for
+the current boot with an old history epoch reports `cursor_unavailable` and
+attaches at the current head. A matching epoch with an unprovable retention
+boundary reports the gap and reads from the retained start.
 
 ## Shapes
 
