@@ -9,6 +9,7 @@ import {
 	SETUP_CONFIG_DEFAULTS,
 	setupConfigSchema,
 } from "../helpers/config-schemas.ts";
+import { setCredentialStoreState } from "../helpers/credential-store-state.ts";
 import { setStreamReconciliationCompletedForTest } from "../modules/system/stream-reconciliation-latch.ts";
 
 // Isolated globals still share /run; seed ownership only from this file's sentinel.
@@ -28,6 +29,9 @@ mock.module("../modules/setup.ts", () => ({ setup }));
 // A test process models a booted backend whose stream reconciliation returned;
 // suites that exercise the pre-reconciliation window close the latch themselves.
 setStreamReconciliationCompletedForTest(true);
+// The same for the credential stores the log export waits for.
+setCredentialStoreState("hotspot", "ready");
+setCredentialStoreState("modem", "ready");
 
 const createUsbEnumerator = modemControl.createUsbEnumerator;
 function isolateModemEnumeration(): void {
