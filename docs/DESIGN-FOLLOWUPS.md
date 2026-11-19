@@ -486,9 +486,11 @@ The full table, evidence and the fixed findings are in
   take their own widths the raw tab keeps 78 px, 64 px of text, and "sin procesar" is 83 px;
   nothing is clipped. The boot button wrap and the search placeholder ellipsis stay as
   designed, inside their own controls.
-- **Owner (320 px, Spanish):** the Spanish copy review for CeraUI (`packages/i18n`), deciding
-  whether a shorter `systemLogs.tabs.raw` (and the matching `systemLogs.events.viewRaw`)
-  replaces "Registros sin procesar". Exit: `es` at 320 px holds two lines.
+- **Spanish copy (decided):** `systemLogs.tabs.raw` now reads "Logs" and
+  `systemLogs.events.viewRaw` "Ver logs" (es-419 keeps the anglicism logs). The narrow audit
+  measures the Spanish tab at one line at 320 px (54 px) and 375 px, and every locale at
+  most two lines at 320 px, so `system-logs-responsive.spec.ts` now caps tab labels at two
+  lines at 320 px too. The boot button wrap and the search placeholder ellipsis are unchanged.
 
 ### DF-27: Undersized targets around System Logs (SL-7, P2)
 

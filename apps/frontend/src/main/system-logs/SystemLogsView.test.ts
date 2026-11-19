@@ -166,8 +166,8 @@ describe("SystemLogsView: wide layout (>= 1024 px)", () => {
 		// 8 px between touch tabs (TT-2); the line variant's own gap-1 is 4 px.
 		expect(list.className.split(/\s+/)).toContain("gap-2");
 		expect(list.className.split(/\s+/)).not.toContain("gap-1");
-		// A long label (es "Registros sin procesar" at 375 px) wraps inside its segment
-		// instead of pushing the first tab off-screen; segments share one height.
+		// A long translated label wraps inside its segment instead of pushing the
+		// first tab off-screen; segments share one height.
 		expect(list.className.split(/\s+/)).toContain("items-stretch");
 		expect(list.className.split(/\s+/)).not.toContain("items-center");
 		expect(list.parentElement?.className).toContain("border-b");

@@ -157,7 +157,7 @@ for (const [sizeIndex, size] of NARROW.entries()) {
 			const audits: Audited[] = [];
 			try {
 				await logs.open({ locale, size, touch: false, scheme });
-				audits.push(...(await logs.auditViews({ locale, touch: false, ...(size.width >= 375 ? { tabLines: 2 } : {}) })));
+				audits.push(...(await logs.auditViews({ locale, touch: false, tabLines: 2 })));
 			} finally {
 				writeEvidence(`narrow-${locale}-${size.width}-${scheme}.json`, { locale, size, scheme, audits });
 			}
