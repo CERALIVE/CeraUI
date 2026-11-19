@@ -330,3 +330,45 @@ test('Japanese renders in a resolved CJK font without missing glyphs', async ({ 
 	expect(cjk.length, `the Japanese tab label resolved only to ${fonts.map((font) => font.familyName).join(', ')}`).toBeGreaterThan(0);
 	expect(cjk.reduce((sum, font) => sum + font.glyphCount, 0)).toBeGreaterThanOrEqual([...label].length);
 });
+
+for (const scheme of ['dark', 'light'] as const) {
+	test(`${scheme}: the Clear confirmations keep their labels at AA at rest, on hover and on keyboard focus`, async ({ page }) => {
+		test.setTimeout(120_000);
+		const logs = new SystemLogsPage(page);
+		const audits: Audited[] = [];
+		try {
+			await logs.open({ locale: 'en', size: { width: 1440, height: 900 }, touch: false, scheme });
+			await logs.show('storage');
+			for (const [trigger, confirm] of [
+				['systemLogs.storage.clearAll', 'systemLogs.storage.clearAllConfirm'],
+				['systemLogs.storage.clearEvents', 'systemLogs.storage.clearEventsConfirm'],
+			] as const) {
+				await page.getByRole('button', { name: en[trigger], exact: true }).click();
+				const dialog = page.getByRole('alertdialog');
+				const action = dialog.getByRole('button', { name: en[confirm], exact: true });
+				await expect(action).toBeVisible();
+				await logs.settle();
+				const audit = async (state: string) => {
+					const result = await logs.audit(`${trigger}-${state}`, { locale: 'en', touch: false, portals: ['[role="alertdialog"]'] });
+					audits.push(result);
+					expect(result.contrast.map((entry) => entry.name)).toContain(`button "${en[confirm]}"`);
+				};
+				await audit('rest');
+				await action.hover();
+				await logs.settle();
+				await audit('hover');
+				await page.mouse.move(0, 0);
+				// The dialog opens on Cancel; Tab moves keyboard focus to the action.
+				await page.keyboard.press('Tab');
+				await expect(action).toBeFocused();
+				await logs.settle();
+				await audit('focus');
+				await page.keyboard.press('Escape');
+				await expect(dialog).toHaveCount(0);
+			}
+		} finally {
+			writeEvidence(`clear-confirm-${scheme}.json`, audits);
+		}
+		expect(findings(audits)).toEqual([]);
+	});
+}

@@ -830,7 +830,9 @@ widths are not measured in this lane.
   or serious scoped axe violations in Events, Raw logs, or Storage. The
   separate color compositor checked the applicable AA text-contrast ratios for
   audited text using computed colors. It does not model CSS opacity. The narrow
-  matrix and open select portals use the compositor alone.
+  matrix and open select portals use the compositor alone. It also checks both Clear
+  confirmations at rest, on hover and on keyboard focus, in dark and light at
+  1440x900.
 - The other bullets in this section, "Every width" included, are design rules:
   the 800x480 kiosk and the widths between the measured ones are not measured.
 - An 800x480 kiosk follows the 768 column with the folded bars, since it is

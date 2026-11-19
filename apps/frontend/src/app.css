@@ -865,6 +865,25 @@ html[data-theme='eink'] *::after {
 	color: var(--background);
 }
 
+/* ── Destructive button label ──
+   The CLI-managed destructive recipe sets its label in --destructive over a
+   tint of the same red: 3.1:1 on the dark card. Mixing the label toward
+   --foreground holds WCAG AA 4.5:1 on the recipe's resting, focus and hover
+   tints in every palette, and the red tint and hue still mark the action as
+   destructive. Disabled drops the 50% fade, which would fail AA, and reads
+   quieter through a fainter tint and a less contrasted label. Keyed on the
+   recipe's own tint class, so the ui/ primitives stay untouched; unlayered so
+   it beats their utilities. destructive-button-contrast.test.ts measures it. */
+:is([data-slot='button'], [data-slot='alert-dialog-action'])[class~='bg-destructive/10'] {
+	color: color-mix(in oklab, var(--destructive) 60%, var(--foreground));
+}
+
+:is([data-slot='button'], [data-slot='alert-dialog-action'])[class~='bg-destructive/10']:disabled {
+	opacity: 1;
+	background-color: color-mix(in oklab, var(--destructive) 4%, var(--card));
+	color: color-mix(in oklab, var(--destructive) 75%, var(--foreground));
+}
+
 /* ── Pointer-cursor affordance for interactive controls ──
    Enabled interactive controls signal clickability with a pointer
    cursor. Keyed on the roles / data-slots the bits-ui v2 primitives
