@@ -181,7 +181,7 @@ test.each([false, true])(
 		const kill = held.child.kill;
 		held.child.kill = (signal) => {
 			kill(signal);
-			if (throwing) throw new Error("cancel consumer failed");
+			if (throwing) throw new Error("TERM signal failed");
 		};
 		scan = spyOn(reader, "scanJournal").mockImplementationOnce((input) => {
 			entered.resolve();
