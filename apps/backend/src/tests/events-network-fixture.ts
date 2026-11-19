@@ -8,6 +8,11 @@ import {
 	setEventSink,
 } from "../modules/events/emit.ts";
 import { appendEvent, readEvents } from "../modules/events/store.ts";
+import { NO_INTERNET_NOTIFICATION } from "../modules/network/gateways.ts";
+import {
+	notificationExists,
+	notificationRemove,
+} from "../modules/ui/notifications.ts";
 
 export function networkEventsFixture() {
 	const baseDir = mkdtempSync(join(tmpdir(), "network-events-"));
@@ -34,6 +39,8 @@ export function networkEventsFixture() {
 	setEventSink((event) => pushed.push(event));
 	onTestFinished(() => {
 		resetEventEmitterForTest();
+		if (notificationExists(NO_INTERNET_NOTIFICATION))
+			notificationRemove(NO_INTERNET_NOTIFICATION);
 		rmSync(baseDir, { recursive: true, force: true });
 		expect(warnings).toEqual([]);
 	});

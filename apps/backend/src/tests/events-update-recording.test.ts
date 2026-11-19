@@ -346,20 +346,19 @@ test.each(notices)(
 	"a throwing emitter preserves the %s notification",
 	(_code, notice) => {
 		expect(notifyUpdate(notice)).toBe(true);
-		// Revisions identify deliveries; compare the notification's unchanged presentation and identity.
-		const expected = getPersistentNotifications(true).show.map(
-			({ revision: _revision, ...message }) => message,
-		);
-		expect(expected[0]?.name).toBe(`update:${notice.kind}:${notice.id}`);
+		const name = `update:${notice.kind}:${notice.id}`;
+		// Revisions identify deliveries. Compare every other field of the named notice.
+		const snapshot = () =>
+			getPersistentNotifications(true)
+				.show.filter((message) => message.name === name)
+				.map(({ revision: _revision, ...message }) => message);
+		const expected = snapshot();
+		expect(expected).toHaveLength(1);
 		clearNotices();
 		calls.length = 0;
 		emitterFault = new Error("recording-emitter-fault");
 		expect(() => notifyUpdate(notice)).not.toThrow();
-		expect(
-			getPersistentNotifications(true).show.map(
-				({ revision: _revision, ...message }) => message,
-			),
-		).toEqual(expected);
+		expect(snapshot()).toEqual(expected);
 	},
 );
 
