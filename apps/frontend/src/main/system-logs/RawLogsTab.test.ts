@@ -416,6 +416,63 @@ describe("RawLogsTab: filters", () => {
 		expect((search as HTMLInputElement).value).toBe("");
 	});
 
+	it("shortens the search placeholder while the filters are folded and keeps the full name", async () => {
+		// The Filters button renders only while the bar folds its filters; browsers report its size through ResizeObserver.
+		let report: ((width: number) => void) | undefined;
+		class FoldObserver {
+			readonly #callback: ResizeObserverCallback;
+			constructor(callback: ResizeObserverCallback) {
+				this.#callback = callback;
+			}
+			observe(target: Element): void {
+				if (target !== screen.queryByTestId("raw-filters-toggle")) return;
+				report = (width) =>
+					this.#callback(
+						[
+							{
+								target,
+								borderBoxSize: [],
+								contentBoxSize: [],
+								devicePixelContentBoxSize: [],
+								contentRect: new DOMRect(0, 0, width, 32),
+							},
+						],
+						this,
+					);
+			}
+			unobserve(): void {}
+			disconnect(): void {}
+		}
+		const view = document.defaultView as unknown as Record<string, unknown>;
+		view.ResizeObserver = FoldObserver;
+		try {
+			await mounted();
+			const search = screen.getByRole("textbox", {
+				name: en.systemLogs.raw.searchLabel,
+			});
+			expect(search.getAttribute("placeholder")).toBe(
+				en.systemLogs.raw.searchLabel,
+			);
+
+			report?.(96);
+			await tick();
+			expect(search.getAttribute("placeholder")).toBe(
+				en.systemLogs.raw.searchShort,
+			);
+			expect(search.getAttribute("aria-label")).toBe(
+				en.systemLogs.raw.searchLabel,
+			);
+
+			report?.(0);
+			await tick();
+			expect(search.getAttribute("placeholder")).toBe(
+				en.systemLogs.raw.searchLabel,
+			);
+		} finally {
+			delete view.ResizeObserver;
+		}
+	});
+
 	it("ignores keys other than Enter in the search box", async () => {
 		await mounted();
 		const search = screen.getByRole("textbox", {

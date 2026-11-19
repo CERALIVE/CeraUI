@@ -569,11 +569,11 @@ The full table, evidence and the fixed findings are in
 - **Exit condition:** each item fixed or explicitly kept in `system-logs-view.md`.
 - **Todo 38 decisions:**
   - The Order label's offset: fixed. The folded filters align on their top edge
-    (`apps/frontend/src/main/system-logs/RawLogsFilterBar.svelte:109`, `items-start`).
+    (`apps/frontend/src/main/system-logs/RawLogsFilterBar.svelte:125`, `items-start`).
   - An empty usage bar under 1 %: fixed. A share above zero draws a sliver
     (`apps/frontend/src/main/system-logs/StorageUsage.svelte:32`, `min-w-1`).
   - "All sources" in placeholder grey: fixed. The trigger shows it in the value colour
-    (`RawLogsFilterBar.svelte:124`).
+    (`RawLogsFilterBar.svelte:140`).
   - The recessed checked segment in dark: fixed. In dark it takes the accent surface, lighter
     than its track (`apps/frontend/src/main/system-logs/SegmentedChoice.svelte:66`).
   - The two time formats, the repeated Storage heading on phones, the repeated unit in an
@@ -629,7 +629,7 @@ The full table, evidence and the fixed findings are in
   themes.
 - **Todo 38:** System Logs takes the palette for selection and scrollbars inside its dialog
   subtree only (`apps/frontend/src/main/dialogs/LogsDialog.svelte:37-39`). A portalled select
-  list, such as Sources (`apps/frontend/src/main/system-logs/RawLogsFilterBar.svelte:127`),
+  list, such as Sources (`apps/frontend/src/main/system-logs/RawLogsFilterBar.svelte:143`),
   renders outside that subtree and keeps this page palette until this item's exit condition
   holds.
 

@@ -2900,6 +2900,7 @@
 	"systemLogs.raw.timeAll": "सब सहेजा हुआ",
 	"systemLogs.raw.timeBoot": "चुना गया बूट",
 	"systemLogs.raw.searchLabel": "संदेशों में खोजें",
+	"systemLogs.raw.searchShort": "लॉग खोजें",
 	"systemLogs.raw.searchClear": "खोज साफ़ करें",
 	"systemLogs.raw.orderLabel": "क्रम",
 	"systemLogs.raw.orderNewest": "नवीनतम पहले",

@@ -2855,6 +2855,7 @@
 	"systemLogs.raw.timeAll": "저장된 전체",
 	"systemLogs.raw.timeBoot": "선택한 부팅",
 	"systemLogs.raw.searchLabel": "메시지 검색",
+	"systemLogs.raw.searchShort": "로그 검색",
 	"systemLogs.raw.searchClear": "검색 지우기",
 	"systemLogs.raw.orderLabel": "정렬",
 	"systemLogs.raw.orderNewest": "최신순",

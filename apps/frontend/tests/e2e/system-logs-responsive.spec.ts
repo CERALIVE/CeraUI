@@ -372,3 +372,47 @@ for (const scheme of ['dark', 'light'] as const) {
 		expect(findings(audits)).toEqual([]);
 	});
 }
+
+for (const locale of ALL_LOCALES) {
+	test(`${locale}: the Raw search placeholder is painted whole and the field keeps its full name`, async ({ page }) => {
+		test.setTimeout(120_000);
+		const logs = new SystemLogsPage(page);
+		const measured: { size: string; name: string | null; placeholder: string; width: number; room: number }[] = [];
+		try {
+			for (const [size, touch] of [
+				[{ width: 320, height: 720 }, false],
+				[{ width: 390, height: 844 }, false],
+				[{ width: 1440, height: 900 }, false],
+				// Touch layout persists across loads, so the touch kiosk comes last.
+				[{ width: 1024, height: 600 }, true],
+			] as const) {
+				await logs.open({ locale, size, touch, scheme: 'dark' });
+				await logs.show('raw');
+				const fit = await page.getByTestId('raw-search').evaluate((input: HTMLInputElement) => {
+					const style = getComputedStyle(input);
+					const ctx = document.createElement('canvas').getContext('2d');
+					if (ctx === null) throw new Error('Chromium gave no 2D canvas context');
+					ctx.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+					ctx.letterSpacing = style.letterSpacing;
+					return {
+						name: input.getAttribute('aria-label'),
+						placeholder: input.placeholder,
+						width: ctx.measureText(input.placeholder).width,
+						room: ['borderLeftWidth', 'paddingLeft', 'paddingRight', 'borderRightWidth'].reduce(
+							(room, side) => room - Number.parseFloat(style.getPropertyValue(side.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`))),
+							input.getBoundingClientRect().width,
+						),
+					};
+				});
+				measured.push({ size: `${size.width}x${size.height}`, ...fit });
+			}
+		} finally {
+			writeEvidence(`raw-search-placeholder-${locale}.json`, measured);
+		}
+		expect(measured.filter((entry) => entry.width > entry.room + 0.5)).toEqual([]);
+		expect(new Set(measured.map((entry) => entry.name)).size).toBe(1);
+		// The wide layout has room for the full label, so it stays the placeholder there.
+		const wide = measured.find((entry) => entry.size === '1440x900');
+		expect(wide?.placeholder).toBe(wide?.name);
+	});
+}

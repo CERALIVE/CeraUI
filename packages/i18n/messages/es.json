@@ -2903,6 +2903,7 @@
 	"systemLogs.raw.timeAll": "Todo lo guardado",
 	"systemLogs.raw.timeBoot": "Arranque seleccionado",
 	"systemLogs.raw.searchLabel": "Buscar en los mensajes",
+	"systemLogs.raw.searchShort": "Buscar logs",
 	"systemLogs.raw.searchClear": "Borrar búsqueda",
 	"systemLogs.raw.orderLabel": "Orden",
 	"systemLogs.raw.orderNewest": "Más recientes primero",

@@ -4,6 +4,8 @@
   when the panel is at least 720 px wide and the viewport is taller than 600 px,
   and fold behind a Filters button otherwise (the 1024x600 kiosk, phones). The
   fold is a container query on this bar, so the 320 px side column counts.
+  While folded, Search shares its row with Filters and Follow, so its
+  placeholder is the short form; its accessible name stays the full label.
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
@@ -25,6 +27,19 @@ let { view }: { view: RawView } = $props();
 const uid = $props.id();
 
 let open = $state(false);
+let filtersToggle = $state<HTMLElement | null>(null);
+// The Filters button renders only while the container query folds the filters.
+let compact = $state(false);
+
+// Absent ResizeObserver (jsdom) keeps the full placeholder.
+$effect(() => {
+	if (filtersToggle === null || typeof ResizeObserver === 'undefined') return;
+	const observer = new ResizeObserver((entries) => {
+		compact = entries.some((entry) => entry.contentRect.width > 0);
+	});
+	observer.observe(filtersToggle);
+	return () => observer.disconnect();
+});
 
 const levels = $derived<{ value: RawLevel; label: string }[]>([
 	{ value: 'errors', label: m['systemLogs.raw.levelErrors']() },
@@ -75,7 +90,7 @@ function chooseTime(value: string): void {
 				onkeydown={(event) => {
 					if (event.key === 'Enter') void view.applyDraft();
 				}}
-				placeholder={m['systemLogs.raw.searchLabel']()}
+				placeholder={compact ? m['systemLogs.raw.searchShort']() : m['systemLogs.raw.searchLabel']()}
 				value={view.draft}
 			/>
 			{#if view.draft !== ''}
@@ -92,6 +107,7 @@ function chooseTime(value: string): void {
 			{/if}
 		</div>
 		<Button
+			bind:ref={filtersToggle}
 			aria-controls="{uid}-filters"
 			aria-expanded={open}
 			class="gap-1.5 @min-[45rem]:[@media(min-height:601px)]:hidden"

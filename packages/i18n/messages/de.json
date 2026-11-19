@@ -2900,6 +2900,7 @@
 	"systemLogs.raw.timeAll": "Alles Gespeicherte",
 	"systemLogs.raw.timeBoot": "Ausgewählter Systemstart",
 	"systemLogs.raw.searchLabel": "Meldungen durchsuchen",
+	"systemLogs.raw.searchShort": "Suchen",
 	"systemLogs.raw.searchClear": "Suche löschen",
 	"systemLogs.raw.orderLabel": "Reihenfolge",
 	"systemLogs.raw.orderNewest": "Neueste zuerst",

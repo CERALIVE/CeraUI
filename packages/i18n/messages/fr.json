@@ -2903,6 +2903,7 @@
 	"systemLogs.raw.timeAll": "Tout l'historique enregistré",
 	"systemLogs.raw.timeBoot": "Démarrage sélectionné",
 	"systemLogs.raw.searchLabel": "Rechercher dans les messages",
+	"systemLogs.raw.searchShort": "Chercher",
 	"systemLogs.raw.searchClear": "Effacer la recherche",
 	"systemLogs.raw.orderLabel": "Ordre",
 	"systemLogs.raw.orderNewest": "Plus récentes d'abord",

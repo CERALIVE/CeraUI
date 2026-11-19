@@ -386,7 +386,8 @@ Rules for this copy:
 | `systemLogs.raw.timeLast24h` | Last 24 hours | Time option |
 | `systemLogs.raw.timeAll` | All stored | Time option |
 | `systemLogs.raw.timeBoot` | Selected boot | Time select when the boot picker chose a boot, and in anchor mode |
-| `systemLogs.raw.searchLabel` | Search messages | Search input accessible name |
+| `systemLogs.raw.searchLabel` | Search messages | Search input accessible name, and its placeholder while the filters are inline |
+| `systemLogs.raw.searchShort` | Search logs | Search placeholder while the filters are folded |
 | `systemLogs.raw.searchClear` | Clear search | Search clear button |
 | `systemLogs.raw.orderLabel` | Order | Order control label |
 | `systemLogs.raw.orderNewest` | Newest first | Order option (default) |
@@ -832,7 +833,8 @@ widths are not measured in this lane.
   audited text using computed colors. It does not model CSS opacity. The narrow
   matrix and open select portals use the compositor alone. It also checks both Clear
   confirmations at rest, on hover and on keyboard focus, in dark and light at
-  1440x900.
+  1440x900. The Raw search placeholder is measured against its field in all
+  ten locales at 320x720, 390x844, 1440x900 and touch 1024x600.
 - The other bullets in this section, "Every width" included, are design rules:
   the 800x480 kiosk and the widths between the measured ones are not measured.
 - An 800x480 kiosk follows the 768 column with the folded bars, since it is
@@ -847,6 +849,10 @@ widths are not measured in this lane.
   members of one radiogroup, listbox, Raw list or boot picker, nested hit
   areas, and targets scrolled partly out of view are not paired
   (`tests/e2e/helpers/system-logs-audit.ts`, spacing check).
+- Folded Raw bar: while the Filters button shows, Search uses the short
+  placeholder (`systemLogs.raw.searchShort`) and keeps the full label as its
+  accessible name; with the filters inline the full label is the placeholder
+  (`RawLogsFilterBar.svelte`).
 - RTL (`ar`): logical properties only; the close button sits at the inline end;
   the side column sits at the inline end; chevrons mirror (`rtl:-scale-x-100`);
   raw unit and message keep `dir="ltr"`; data params in `<bdi>`.
@@ -939,7 +945,7 @@ button disappears, provided the operator has not moved focus.
 | `main/system-logs/RawFollowControl.svelte:17` | props |
 | `main/system-logs/RawLogList.svelte:22` | props |
 | `main/system-logs/RawLogRow.svelte:37` | props |
-| `main/system-logs/RawLogsFilterBar.svelte:23` | props |
+| `main/system-logs/RawLogsFilterBar.svelte:25` | props |
 | `main/system-logs/RawLogsPanel.svelte:23` | props |
 | `main/system-logs/RawLogsTab.svelte:28` | props |
 | `main/system-logs/RecoveryBand.svelte:19` | props |
