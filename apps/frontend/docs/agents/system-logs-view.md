@@ -149,11 +149,11 @@ in section 4.
 | Follow unavailable | Raw logs | Follow present, disabled, with an adjacent reason element (`data-testid` ending `-reason`) when the time is not This boot, the order is not Newest first, or the tab is in anchor mode (DESIGN.md CT-2). Follow displays while connected and is aria-disabled while its request is busy | no |
 | Following | Raw logs | Follow becomes Pause; a state label "Following" in `--status-info` with a `motion-safe` pulse dot; static dot plus label under reduced motion or e-ink | polite |
 | New entries held | Raw logs | While scrolled away from the top, incoming entries wait (cap 500) behind a "New entries: {count}" button at the top of the list; selecting it merges them and scrolls to the top | polite, throttled |
-| Paused | Raw logs | Label "Paused", Resume action; checkpoint and resume code: `lib/device-logs/raw-view.svelte.ts:305-382`; backend catch-up limit: [device-logs.md](../../../backend/docs/agents/device-logs.md) | polite |
+| Paused | Raw logs | Label "Paused", Resume action; checkpoint and resume code: `lib/device-logs/raw-follow-session.svelte.ts:62-88`; backend catch-up limit: [device-logs.md](../../../backend/docs/agents/device-logs.md) | polite |
 | Gap marker | Raw logs | A full-width separator row (neutral 1 px rules either side of centered text) stating what was skipped and why: catch-up exceeded, position removed by cleanup, or entries dropped by the device | polite |
 | Dropped marker | Raw logs | `dropped > 0` in a follow batch: one separator row "Entries skipped while following: {count}". journald's suppressed-messages record (`marker: 'suppressed'`) is a separate marker row (`lib/device-logs/raw-rows.ts:90-105`, `main/system-logs/RawLogRow.svelte:59-68`) | polite (as a gap) |
 | Follower stopped | Raw logs | Label "Stopped" with its reason (reader ended, device restarted, logs cleared) and a Follow action; `ended: 'cleared'` also resets the list | polite |
-| Disconnected | Raw logs, Events, header pill | The socket dropped: follow state "Disconnected", a notice that entries may be out of date, rows dimmed to `text-muted-foreground`, the pill shows Offline, no pulse anywhere; stale, never fresh-looking. Raw logs shows Disconnected only when a follow was active, and on reconnect offers Resume (`lib/device-logs/raw-view.svelte.ts:408-418`, `main/system-logs/RawFollowControl.svelte:28-56`); Events reloads its first page on reconnect (`events-view.svelte.ts:150-156`) | polite |
+| Disconnected | Raw logs, Events, header pill | The socket dropped: follow state "Disconnected", a notice that entries may be out of date, rows dimmed to `text-muted-foreground`, the pill shows Offline, no pulse anywhere; stale, never fresh-looking. Raw logs shows Disconnected only when a follow was active, and on reconnect offers Resume (`lib/device-logs/raw-follow-session.svelte.ts:91-100`, `main/system-logs/RawFollowControl.svelte:28-56`); Events reloads its first page on reconnect (`events-view.svelte.ts:150-156`) | polite |
 | Anchor | Raw logs | Opened from an event or a "View logs" action: the matching row has a tonal highlight (`bg-status-info/10`, no outline or stripe); an exact match receives focus and an approximate one leaves focus on the selected tab (`main/system-logs/SystemLogsView.svelte:114-123`, `main/system-logs/RawLogList.svelte:79-89`); "approximate" is stated when no exact entry matched; a Back to latest entries action leaves anchor mode | no |
 | Unknown event code | Events | A record from a newer version: the family icon, the title "Event recorded by a newer version", one honest detail sentence, View raw logs, and the raw code only inside a collapsed Diagnostics disclosure (`data-testid` containing `diagnostic`, DESIGN.md OL-3..OL-5). A known code with invalid params shows its title with no detail | no |
 | Logs removed for a boot | Boots, Events, Raw logs | Boot rows keep the boot with a "Logs removed" label (never hidden); View raw logs on such a boot shows "Raw logs for this boot were removed"; a Raw query with `BOOT_UNAVAILABLE` shows "Logs for this boot were removed" with Show this boot | alert (Raw only) |
@@ -834,6 +834,12 @@ Paging keeps focus on the next action at that end or transfers it to the list
 when the action disappears. See DF-39 and `system-logs.spec.ts` below for the
 mock-backend flows and keyboard coverage on desktop and mobile.
 
+`RawView` exposes the tab's operator actions. `RawPaging` owns query
+generations, continuations and head replay. `RawFollowSession` owns the
+socket listener, subscription and resume checkpoint. `RawRowWindow` owns
+the held boundary and caps, and `RawFeedback` owns recovery state and
+live-region announcements.
+
 ### Components
 
 | Source | Props |
@@ -860,10 +866,10 @@ mock-backend flows and keyboard coverage on desktop and mobile.
 | `main/system-logs/ShutdownMark.svelte:21` | props |
 | `main/system-logs/StorageCleanup.svelte:37` | props |
 | `main/system-logs/StorageLimits.svelte:34` | props |
-| `main/system-logs/StorageSection.svelte:19` | props |
+| `main/system-logs/StorageSection.svelte:20` | props |
 | `main/system-logs/StorageUsage.svelte:17` | props |
 | `main/system-logs/StreamStatePill.svelte` | no props |
-| `main/system-logs/SystemLogsView.svelte:63` | props |
+| `main/system-logs/SystemLogsView.svelte:65` | props |
 
 ### Modules
 
@@ -879,8 +885,13 @@ mock-backend flows and keyboard coverage on desktop and mobile.
 | `lib/device-logs/log-pointer-keys.ts` |
 | `lib/device-logs/param-parts.ts` |
 | `lib/device-logs/raw-anchor.ts` |
+| `lib/device-logs/raw-feedback.svelte.ts` |
 | `lib/device-logs/raw-filter.ts` |
+| `lib/device-logs/raw-follow-session.svelte.ts` |
+| `lib/device-logs/raw-paging.svelte.ts` |
+| `lib/device-logs/raw-row-window.svelte.ts` |
 | `lib/device-logs/raw-rows.ts` |
+| `lib/device-logs/raw-view-rpc.ts` |
 | `lib/device-logs/raw-view.svelte.ts` |
 | `lib/device-logs/sharing-flow.svelte.ts` |
 | `lib/device-logs/sharing.ts` |
@@ -913,6 +924,7 @@ mock-backend flows and keyboard coverage on desktop and mobile.
 | `main/system-logs/RawLogsTab.test.ts` |
 | `main/system-logs/SegmentedChoice.test.ts` |
 | `main/system-logs/SharingSection.test.ts` |
+| `main/system-logs/StorageCleanup.test.ts` |
 | `main/system-logs/StorageSection.test.ts` |
 | `main/system-logs/StreamStatePill.reactive.test.ts` |
 | `main/system-logs/StreamStatePill.test.ts` |
@@ -981,11 +993,11 @@ Related browser specs and their entry points:
 
 ### RecoveryBand call sites
 
-`main/system-logs/StorageCleanup.svelte:191`, `main/system-logs/StorageLimits.svelte:183`, `main/system-logs/StorageSection.svelte:60`.
+`main/system-logs/StorageCleanup.svelte:197`, `main/system-logs/StorageLimits.svelte:183`, `main/system-logs/StorageSection.svelte:61`.
 
 ### role="status" elements
 
-`main/system-logs/BootPicker.svelte:165`, `main/system-logs/BundleDialog.svelte:98`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:222`, `main/system-logs/ExportDialog.svelte:50`, `main/system-logs/RawLogList.svelte:241`, `main/system-logs/RawLogRow.svelte:136`, `main/system-logs/RawLogsPanel.svelte:97`, `main/system-logs/RawLogsTab.svelte:136`, `main/system-logs/StorageCleanup.svelte:185`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:67`, `main/system-logs/SystemLogsView.svelte:204`.
+`main/system-logs/BootPicker.svelte:165`, `main/system-logs/BundleDialog.svelte:98`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:234`, `main/system-logs/ExportDialog.svelte:50`, `main/system-logs/RawLogList.svelte:241`, `main/system-logs/RawLogRow.svelte:136`, `main/system-logs/RawLogsPanel.svelte:97`, `main/system-logs/RawLogsTab.svelte:136`, `main/system-logs/StorageCleanup.svelte:191`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:220`.
 
 ### Limits and constants
 
@@ -995,9 +1007,9 @@ Related browser specs and their entry points:
 | PAGE_LIMIT | 100 | `lib/device-logs/raw-filter.ts:57` |
 | SEARCH_MAX_BYTES | 256 | `lib/device-logs/raw-filter.ts:58` |
 | ROW_CAP | 2000 | `lib/device-logs/raw-rows.ts:9` |
-| SEARCH_DEBOUNCE_MS | 300 | `lib/device-logs/raw-view.svelte.ts:96` |
-| HELD_CAP | 500 | `lib/device-logs/raw-view.svelte.ts:97` |
-| NEW_ENTRIES_EVERY_MS | 5000 | `lib/device-logs/raw-view.svelte.ts:98` |
+| SEARCH_DEBOUNCE_MS | 300 | `lib/device-logs/raw-view.svelte.ts:22` |
+| HELD_CAP | 500 | `lib/device-logs/raw-row-window.svelte.ts:13` |
+| NEW_ENTRIES_EVERY_MS | 5000 | `lib/device-logs/raw-feedback.svelte.ts:23` |
 
 Backend and wire limits: [device-logs.md](../../../backend/docs/agents/device-logs.md),
 [device-events.md](../../../backend/docs/agents/device-events.md).
@@ -1007,18 +1019,18 @@ Backend and wire limits: [device-logs.md](../../../backend/docs/agents/device-lo
 | Code | Source |
 |---| --- |
 | Events list key map (ArrowDown, ArrowUp, Home, End) | `main/system-logs/EventsTab.svelte:44-47` |
-| Events focus move to a row button | `main/system-logs/EventsTab.svelte:90` |
-| Events row keydown hook | `main/system-logs/EventsTab.svelte:290` |
-| Events scroller scroll padding | `main/system-logs/EventsTab.svelte:219` |
-| Events paging focus handoff | `main/system-logs/EventsTab.svelte:115` |
+| Events focus move to a row button | `main/system-logs/EventsTab.svelte:96` |
+| Events row keydown hook | `main/system-logs/EventsTab.svelte:302` |
+| Events scroller scroll padding | `main/system-logs/EventsTab.svelte:226` |
+| Events paging focus handoff | `main/system-logs/EventsTab.svelte:121` |
 | View raw logs pending (aria-disabled) | `main/system-logs/EventRow.svelte:90` |
 | Event row tab stop | `main/system-logs/EventRow.svelte:95` |
 | Raw list focus on a row | `main/system-logs/RawLogList.svelte:116` |
 | Raw paging focus handoff | `main/system-logs/RawLogList.svelte:109` |
 | Boot picker option focus | `main/system-logs/BootPicker.svelte:58` |
 | Segmented choice focus | `main/system-logs/SegmentedChoice.svelte:50` |
-| Selected tab focus | `main/system-logs/SystemLogsView.svelte:117` |
-| Storage heading focus | `main/system-logs/SystemLogsView.svelte:126` |
+| Selected tab focus | `main/system-logs/SystemLogsView.svelte:133` |
+| Storage heading focus | `main/system-logs/SystemLogsView.svelte:142` |
 | Cancel focus for clear confirmations | `main/system-logs/StorageCleanup.svelte:64` |
 | RecoveryBand Retry button | `main/system-logs/RecoveryBand.svelte:35` |
 
@@ -1081,9 +1093,9 @@ technology speech. Browser coverage is in the related specs above.
     entry cap. When the held cap (`HELD_CAP`) cuts held rows, each cut entry
     and the count of each cut dropped marker are added to one held overflow
     count, and the other cut markers stay at the boundary
-    (`lib/device-logs/raw-view.svelte.ts:565-574`); Show held rows adds that
+    (`lib/device-logs/raw-row-window.svelte.ts:92-103`). Show held rows adds that
     count back as one dropped marker
-    (`lib/device-logs/raw-view.svelte.ts:389-400`; test
+    (`lib/device-logs/raw-row-window.svelte.ts:69-86`, tested in
     `lib/device-logs/raw-view.order.test.ts:1365`).
   - Every other page extends its own edge with entries not listed yet; a
     Follow batch goes on top.
@@ -1107,6 +1119,8 @@ technology speech. Browser coverage is in the related specs above.
   that made the latest start stops the device follow or clears the listener;
   `dispose` runs once, and a disposed view never starts Follow again. A stale
   view's dispose, Pause or late start reply therefore leaves a newer view's
-  Follow running. Accepted limit: the app never has two Raw logs views live at
-  once (leaving the tab destroys it before a new one mounts); if two were, the
-  later start would win and the earlier view would not be told.
+  Follow running. Messages that arrive before the start reply wait for its
+  subscription ID. The start announcement precedes replay, so a queued end
+  leaves Stopped as the live-region announcement. The app mounts one Raw logs
+  view at a time. If two were mounted, the later start would win and the earlier
+  view would not be told.

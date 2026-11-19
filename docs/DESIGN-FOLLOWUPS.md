@@ -588,7 +588,7 @@ The full table, evidence and the fixed findings are in
 
 ### DF-33: Two live Raw views at once (SL-14, P3)
 
-- **Where:** `lib/device-logs/raw-view.svelte.ts` follow ownership.
+- **Where:** `lib/device-logs/raw-follow-session.svelte.ts` socket follow ownership.
 - **What:** the later Follow would win. No surface mounts two Raw views today.
 - **Owner:** whoever adds a second Raw view surface.
 - **Exit condition:** follow ownership is per view before a second Raw view ships.

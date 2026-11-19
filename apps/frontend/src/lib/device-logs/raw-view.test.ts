@@ -2088,6 +2088,23 @@ describe("RawView: connection", () => {
 });
 
 describe("RawView: announcements", () => {
+	it("announces Stopped when the follower ends before its start reply", async () => {
+		const h = await loaded(["s=2"]);
+		const reply = deferred<LogFollowStartOutput>();
+		h.followStart.mockReturnValueOnce(reply.promise);
+		const starting = h.view.startFollow();
+		h.push({ ended: "follower_exit" });
+
+		reply.resolve({
+			ok: true,
+			subscriptionId: "sub-1",
+			checkpointCursor: "s=2",
+		});
+		await starting;
+
+		expect(h.view.announcement).toMatchObject({ kind: "stopped" });
+	});
+
 	it("summarises new entries at most every 5 seconds", async () => {
 		const h = await following([]);
 		h.push({ entries: [entry("a")], checkpointCursor: "a" });
