@@ -98,7 +98,9 @@ test("a reaped follower with a frozen stream cancel hook releases its slot and a
 	try {
 		await bounded(process.cancelled);
 		expect((await bounded(clearing)).ok).toBe(true);
-		expect(h.f.run.mock.calls.slice(0, 2)).toEqual([
+		expect(
+			h.f.run.mock.calls.slice(0, 2).map(([bin, args]) => [bin, args]),
+		).toEqual([
 			["journalctl", ["--rotate"]],
 			["journalctl", ["--vacuum-time=1s"]],
 		]);

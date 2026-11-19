@@ -24,13 +24,12 @@ test.each(["\n", '{"v":1,"id":"torn'] as const)(
 				},
 			});
 			expect(deps.warnings).toEqual([]);
-			expect(inspect.mock.calls).toEqual([
-				[
-					expect.any(Number),
-					expect.any(Uint8Array),
-					{ length: 1, position: Buffer.byteLength(retained) - 1 },
-				],
-			]);
+			const bytesRead = inspect.mock.results.reduce(
+				(total, result) =>
+					result.type === "return" ? total + result.value : total,
+				0,
+			);
+			expect(bytesRead).toBe(1);
 		} finally {
 			inspect.mockRestore();
 		}

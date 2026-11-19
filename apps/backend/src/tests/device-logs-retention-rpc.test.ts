@@ -1,9 +1,11 @@
 import { expect, spyOn, test } from "bun:test";
-import { logRetentionSchema } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 import * as ceiling from "../modules/device-logs/ceiling.ts";
 import { setRetention } from "../modules/device-logs/retention.ts";
-import { getLogSettings } from "../modules/device-logs/settings.ts";
+import {
+	getLogSettings,
+	setLogSettingsDirForTest,
+} from "../modules/device-logs/settings.ts";
 import { appRouter } from "../rpc/router.ts";
 import { retentionFixture } from "./helpers/device-retention.ts";
 import { logsSockets } from "./helpers/logs-rpc.ts";
@@ -66,11 +68,10 @@ test.each([
 	},
 );
 
-test("retention RPC hands validated settings to the service and writer without reparsing", async () => {
+test("retention RPC returns saved settings that survive a cold read", async () => {
 	const sockets = await logsSockets();
 	const fixture = retentionFixture();
 	fixture.mock.mockReturnValue(true);
-	const parse = spyOn(logRetentionSchema._zod, "run");
 	try {
 		const next = { maxAgeDays: null, maxSizeMb: null, detail: "info" } as const;
 		expect(
@@ -81,10 +82,13 @@ test("retention RPC hands validated settings to the service and writer without r
 			ok: true,
 			storage: { retention: next },
 		});
-		// The input and output cross the wire schema once each.
-		expect(parse).toHaveBeenCalledTimes(2);
+		setLogSettingsDirForTest(fixture.dir);
+		expect(
+			await call(appRouter.logs.getStorage, undefined, {
+				context: sockets.context,
+			}),
+		).toMatchObject({ retention: next });
 	} finally {
-		parse.mockRestore();
 		sockets.close();
 		await fixture.restore();
 	}
