@@ -63,7 +63,8 @@ export const eventListOutputSchema = z.strictObject({
 	nextBeforeSeq: z.number().int().nullable(),
 	headSeq: z.number().int(),
 	retainedFromSeq: z.number().int(),
-	// Absent when the store cannot keep one; readers then compare seq alone.
+	// When absent, refresh or validate the visible window without losing paging.
+	// A changed epoch identifies a history clear.
 	epoch: eventRingEpochSchema.optional(),
 });
 export type EventListOutput = z.infer<typeof eventListOutputSchema>;
