@@ -31,6 +31,7 @@ import { getLogState, historyClearing } from "./settings.ts";
 
 interface FollowOptions extends Pick<WatcherOptions, "spawn"> {
 	readonly clock?: Pick<JournalClock, "setTimeout" | "clearTimeout">;
+	readonly sessionSignal?: AbortSignal;
 }
 interface FollowSlot {
 	readonly controller: AbortController;
@@ -69,16 +70,21 @@ export async function startFollow(
 ): Promise<LogFollowStartOutput> {
 	const epoch = getLogState().historyEpoch;
 	const filter = logFollowStartInputSchema.parse(input);
-	for (;;) {
-		const gate = historyClearing();
-		if (epoch !== getLogState().historyEpoch)
-			return { ok: false, error: "READ_FAILED" };
-		if (gate) {
-			await gate;
-			continue;
+	const { sessionSignal } = options;
+	const revoked = Promise.withResolvers<void>();
+	const revoke = () => revoked.resolve();
+	sessionSignal?.addEventListener("abort", revoke, { once: true });
+	try {
+		for (;;) {
+			if (sessionSignal?.aborted || epoch !== getLogState().historyEpoch)
+				return { ok: false, error: "READ_FAILED" };
+			const gate = historyClearing();
+			const wait = gate ?? (running.has(conn) ? stopFollow(conn) : undefined);
+			if (!wait) break;
+			await Promise.race([wait, revoked.promise]);
 		}
-		if (!running.has(conn)) break;
-		await stopFollow(conn);
+	} finally {
+		sessionSignal?.removeEventListener("abort", revoke);
 	}
 	if (running.size >= 4) return { ok: false, error: "BUSY" };
 	const bootId = currentBootId();
@@ -94,8 +100,16 @@ export async function startFollow(
 	let ended = false;
 	let cancelPending: (() => void) | undefined;
 	const cancelTimer = () => cancelPending?.();
+	const retireSession = () => {
+		cancelTimer();
+		controller.abort();
+	};
 	const publish = (message: LogFollowMessage) => {
-		if (ended || (message.ended === undefined && controller.signal.aborted))
+		if (
+			sessionSignal?.aborted ||
+			ended ||
+			(message.ended === undefined && controller.signal.aborted)
+		)
 			return;
 		if (message.ended !== undefined) ended = true;
 		try {
@@ -120,6 +134,7 @@ export async function startFollow(
 				ended,
 			}),
 	};
+	sessionSignal?.addEventListener("abort", retireSession, { once: true });
 	running.set(conn, slot);
 	const position = (cursor?: string) =>
 		resolveFollowPosition(scan, { bootId, signal: controller.signal }, cursor);
@@ -228,6 +243,7 @@ export async function startFollow(
 				});
 		} finally {
 			cancelTimer();
+			sessionSignal?.removeEventListener("abort", retireSession);
 			running.delete(conn);
 			settled.resolve();
 		}

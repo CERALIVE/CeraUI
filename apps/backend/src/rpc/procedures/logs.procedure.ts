@@ -33,6 +33,7 @@ import {
 	getStorage,
 	setRetention,
 } from "../../modules/device-logs/retention.ts";
+import { socketSessionSignal } from "../context.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
 
@@ -53,9 +54,14 @@ export const logBootsProcedure = authedProcedure
 	.handler(() => listBoots());
 
 export const followStartProcedure = authedProcedure
+	.use(({ context, next }) =>
+		next({ context: { sessionSignal: socketSessionSignal(context.ws) } }),
+	)
 	.input(logFollowStartInputSchema)
 	.output(logFollowStartOutputSchema)
-	.handler(({ context, input }) => startFollow(context.ws, input));
+	.handler(({ context, input }) =>
+		startFollow(context.ws, input, { sessionSignal: context.sessionSignal }),
+	);
 
 export const followStopProcedure = authedProcedure
 	.output(logFollowStopOutputSchema)

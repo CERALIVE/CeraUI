@@ -59,7 +59,9 @@ and replies. The router registers the eleven procedures under `logs`; bundle
 procedures belong to the subsequent bundle work. The frontend's `TypedRPC.logs`
 imports the same shared input and output types.
 
-A socket owns its follow until `followStop` or socket close. The subscription
+A socket's authenticated session owns its follow until `followStop`, logout,
+credential revocation or socket close. Ending the session cancels queued
+replacement starts and stops the current follower before further delivery. The subscription
 listener retains no messages, ignores malformed frames silently and contains
 throwing consumers. Mock mode uses the logger ring without systemd. Startup
 awaits guarded retention initialization immediately after log settings; failure

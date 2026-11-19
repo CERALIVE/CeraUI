@@ -6,6 +6,7 @@ import * as exporting from "../modules/device-logs/export.ts";
 import * as following from "../modules/device-logs/follow.ts";
 import * as querying from "../modules/device-logs/query.ts";
 import * as retention from "../modules/device-logs/retention.ts";
+import { socketSessionSignal } from "../rpc/context.ts";
 import { appRouter } from "../rpc/router.ts";
 import type { RPCContext } from "../rpc/types.ts";
 import { logsSockets } from "./helpers/logs-rpc.ts";
@@ -91,7 +92,11 @@ const cases = [
 		spy: () => spyOn(following, "startFollow"),
 		invoke: (context: RPCContext) =>
 			call(appRouter.logs.followStart, followInput, { context }),
-		args: (context: RPCContext) => [context.ws, followInput],
+		args: (context: RPCContext) => [
+			context.ws,
+			followInput,
+			{ sessionSignal: socketSessionSignal(context.ws) },
+		],
 		invalid: () => spyOn(following, "startFollow").mockResolvedValue(invalid),
 	},
 	{

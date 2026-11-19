@@ -20,7 +20,11 @@ import {
 	createPreviewWebSocketHandler,
 	isPreviewSocket,
 } from "../modules/ui/preview-proxy.ts";
-import { createContext, initSocketData } from "./context.ts";
+import {
+	closeSocketSession,
+	createContext,
+	initSocketData,
+} from "./context.ts";
 import { extractValidationDetails } from "./error-enrichment.ts";
 import {
 	addClient,
@@ -283,6 +287,7 @@ export function createWebSocketHandler(): WebSocketHandler<SocketData> {
 		},
 
 		async close(ws: AppWebSocket, code: number, reason: string) {
+			closeSocketSession(ws);
 			logger.debug(`WebSocket client disconnected: ${code} ${reason}`);
 			removeClient(ws);
 			await stopFollow(ws);

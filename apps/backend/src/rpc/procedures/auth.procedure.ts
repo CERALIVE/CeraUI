@@ -17,6 +17,8 @@ import type { AuthTokens } from "../../helpers/config-schemas.ts";
 import { randomBase64 } from "../../helpers/crypto.ts";
 import { logger } from "../../helpers/logger.ts";
 import { isDevelopment } from "../../mocks/mock-config.ts";
+import { createContext } from "../context.ts";
+import { getAuthenticatedClients } from "../events.ts";
 import { getPasswordHash, setPasswordHash } from "../state/password.ts";
 import { PersistentTokenStore } from "../state/persistent-token-store.ts";
 import type { RPCContext } from "../types.ts";
@@ -136,6 +138,8 @@ function knownToken(token: string): boolean {
 }
 
 function invalidateToken(token: string): number {
+	for (const ws of getAuthenticatedClients())
+		if (ws.data.authToken === token) createContext(ws).deauthenticate();
 	let revoked = 0;
 	if (tempTokens[token]) {
 		delete tempTokens[token];
@@ -146,6 +150,8 @@ function invalidateToken(token: string): number {
 }
 
 function invalidateAllTokens(): number {
+	for (const ws of getAuthenticatedClients())
+		if (ws.data.authToken !== undefined) createContext(ws).deauthenticate();
 	let revoked = 0;
 	for (const token of Object.keys(tempTokens)) {
 		delete tempTokens[token];
@@ -270,10 +276,10 @@ export const logoutProcedure = baseProcedure
 	.handler(async ({ context }) => {
 		await tokenStore.settle();
 		const token = context.ws.data.authToken;
+		context.deauthenticate();
 		if (token) {
 			invalidateToken(token);
 		}
-		context.deauthenticate();
 		logger.info("Auth: logout successful");
 		return { success: true };
 	});
@@ -291,8 +297,8 @@ export const revokeTokenProcedure = baseProcedure
 		}
 
 		if (input.scope === "all") {
-			const revoked = invalidateAllTokens();
 			context.deauthenticate();
+			const revoked = invalidateAllTokens();
 			logger.info(`Auth: revoked all ${revoked} credential(s)`);
 			return { success: true, revoked };
 		}
@@ -302,12 +308,12 @@ export const revokeTokenProcedure = baseProcedure
 			return { success: true, revoked: 0 };
 		}
 
-		const revoked = invalidateToken(target);
 		// Only a socket revoking its OWN credential loses its session; retiring
 		// some other browser's token must not sign the caller out.
 		if (target === context.ws.data.authToken) {
 			context.deauthenticate();
 		}
+		const revoked = invalidateToken(target);
 		logger.info(`Auth: revoked ${revoked} credential record(s)`);
 		return { success: true, revoked };
 	});

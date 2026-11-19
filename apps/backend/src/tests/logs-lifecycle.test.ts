@@ -6,6 +6,7 @@ import { createContext } from "../rpc/context.ts";
 import * as events from "../rpc/events.ts";
 import { appRouter } from "../rpc/router.ts";
 import { followFixture, record } from "./helpers/device-follow.ts";
+import { turn } from "./helpers/history-clear.ts";
 import { logsSockets } from "./helpers/logs-rpc.ts";
 
 let f: ReturnType<typeof followFixture>;
@@ -14,8 +15,8 @@ const start = follow.startFollow;
 beforeEach(async () => {
 	f = followFixture();
 	sockets = await logsSockets();
-	spyOn(follow, "startFollow").mockImplementation((conn, input) =>
-		start(conn, input, f.options),
+	spyOn(follow, "startFollow").mockImplementation((conn, input, options) =>
+		start(conn, input, { ...options, ...f.options }),
 	);
 });
 afterEach(async () => {
@@ -130,5 +131,79 @@ test("a throwing push consumer retires its follow and clears pending timers", as
 		expect(f.time.timers.size).toBe(0);
 	} finally {
 		sent.mockRestore();
+	}
+});
+
+test("logout retires a follow and blocks records while its child is reaping", async () => {
+	expect(
+		await call(appRouter.logs.followStart, {}, { context: sockets.context }),
+	).toMatchObject({ ok: true });
+	const child = f.children[0];
+	if (!child) throw new Error("missing watcher");
+	const kill = spyOn(child.proc, "kill").mockImplementation(() => undefined);
+	const send = spyOn(sockets.ws, "send");
+	try {
+		await call(appRouter.auth.logout, undefined, { context: sockets.context });
+		const consumed = child.emit([record(2)]);
+		await Promise.race([consumed, turn()]);
+		f.time.advance(250);
+		expect(send.mock.calls).toEqual([]);
+		expect(kill.mock.calls).toEqual([["SIGTERM"], ["SIGKILL"]]);
+	} finally {
+		child.finish();
+		send.mockRestore();
+		kill.mockRestore();
+	}
+});
+
+test("revoking a credential retires a follow on another socket using it", async () => {
+	const peer = await sockets.connect();
+	const peerContext = createContext(peer);
+	const credential = crypto.randomUUID();
+	peerContext.authenticate(credential);
+	events.addClient(peer);
+	try {
+		expect(
+			await call(appRouter.logs.followStart, {}, { context: peerContext }),
+		).toMatchObject({ ok: true });
+		const child = f.children[0];
+		if (!child) throw new Error("missing watcher");
+		await call(
+			appRouter.auth.revokeToken,
+			{ scope: "token", token: credential },
+			{ context: sockets.context },
+		);
+		expect(peerContext.isAuthenticated()).toBe(false);
+		expect(child.signals).toEqual(["SIGTERM"]);
+		expect(sockets.context.isAuthenticated()).toBe(true);
+	} finally {
+		events.removeClient(peer);
+	}
+});
+
+test("a replacement waiting for the previous child cannot start after logout", async () => {
+	expect(
+		await call(appRouter.logs.followStart, {}, { context: sockets.context }),
+	).toMatchObject({ ok: true });
+	const child = f.children[0];
+	if (!child) throw new Error("missing watcher");
+	const term = Promise.withResolvers<void>();
+	const kill = spyOn(child.proc, "kill").mockImplementation(() =>
+		term.resolve(),
+	);
+	const replacement = call(
+		appRouter.logs.followStart,
+		{},
+		{ context: sockets.context },
+	);
+	try {
+		await term.promise;
+		await call(appRouter.auth.logout, undefined, { context: sockets.context });
+		child.finish();
+		expect(await replacement).toEqual({ ok: false, error: "READ_FAILED" });
+		expect(f.children).toHaveLength(1);
+	} finally {
+		child.finish();
+		kill.mockRestore();
 	}
 });
