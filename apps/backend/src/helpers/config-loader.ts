@@ -323,25 +323,40 @@ export async function loadCacheFile<T extends z.ZodTypeAny>(
 	schema: T,
 	emptyDefault: z.infer<T> = {} as z.infer<T>,
 ): Promise<z.infer<T>> {
+	return (await loadCacheFileWithStatus(filePath, schema, emptyDefault)).data;
+}
+
+/**
+ * {@link loadCacheFile}, also saying whether the empty default stands for a
+ * missing file (`failed: false`) or for one that exists but could not be read,
+ * parsed or validated (`failed: true`). A caller that must not mistake "nothing
+ * stored" for "unknown contents" checks `failed`.
+ */
+export async function loadCacheFileWithStatus<T extends z.ZodTypeAny>(
+	filePath: string,
+	schema: T,
+	emptyDefault: z.infer<T> = {} as z.infer<T>,
+): Promise<{ data: z.infer<T>; failed: boolean }> {
 	try {
 		const contents = await Bun.file(filePath).text();
 		const data = JSON.parse(contents);
 		const result = schema.safeParse(data);
 
 		if (result.success) {
-			return result.data;
+			return { data: result.data, failed: false };
 		}
 
 		logger.warn(
 			`Invalid cache file ${filePath}, starting with empty cache: ${result.error.message}`,
 		);
 	} catch (err) {
-		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-			logger.warn(`Failed to load cache file ${filePath}: ${err}`);
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+			return { data: emptyDefault, failed: false };
 		}
+		logger.warn(`Failed to load cache file ${filePath}: ${err}`);
 	}
 
-	return emptyDefault;
+	return { data: emptyDefault, failed: true };
 }
 
 /**
